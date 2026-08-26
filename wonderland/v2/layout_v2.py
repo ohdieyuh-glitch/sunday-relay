@@ -1,22 +1,35 @@
-"""The Golden Arrival composition, authored from the founder's reference.
+"""The Golden Arrival composition, reconstructed from the Marble panorama.
 
-Pure data. World origin = the centre of the portal; +Y is forward (into the
-picture); screen-right is -X. Distances in uu (cm). Every entry names an ASSET
-from assets_v2 by key, a position, a yaw, a scale and a material instance. The
-builder places them; nothing here is procedural.
+Pure data. World origin = the panorama's VIEWPOINT (V). +Y is forward (into
+the picture); screen-right is -X. Distances in uu. Every position below is
+derived in v2/reference/ANALYSIS.md from the panorama's own pixel geometry
+(azimuth, elevation, eye height 2.62 m), then rounded to a buildable plan.
 
-Reference structure (the founder's own reading of the image):
+Restraint is the design: a clean plaza, one open corridor, organised bands.
+Nothing is scattered on the plaza. PCG (later) respects the path exclusion.
 
-    BOTTOM FOREGROUND   the purple rune portal, cut by the bottom edge
-    LOWER CENTRE        wide detailed cobblestone path, open travel corridor
-    LEFT                gold gate, giant mushrooms, foliage, dark framing tree
-    CENTRE              open corridor, garden arch, stairs up to the city
-    RIGHT               heart topiary, tea installation, giant mushroom, clock tree
-    UPPER CENTRE        dense fairy city
-    UPPER EDGES         trees / foliage framing
+    BEHIND (−9 m)      one gate, open, urns at its feet; the plaza continues past it
+    PLAZA (−15 … +9 m) large pale slabs in a loose cream/grey checker, sparse petals
+    SIDES (±8 m)       low cream walls, raised beds, hedges, roses, the two rose cones
+    CORRIDOR (+9 m →)  dark stone path 4.4 m wide, three steps at +15 m, rising gently
+    GARDEN LEFT        the GIANT mushroom (clock on its stem, ivy on its cap), medium
+                       mushrooms, a garden tree, planters
+    GARDEN RIGHT       the clock tree, flowering shrubs, topiary balls, the heart on a terrace
+    ARCH (+45 m)       the stone gateway that ends the corridor
+    TOWERS (55–70 m)   white towers with dark caps, left and right
+    CITY (90–400 m)    five depth layers, cream masonry, muted pink roofs, gold finials
+    SKY                the panorama itself above +8° of elevation; two keys and the teapot, high
 """
 
-import math
+
+def _rnd(*key):
+    """Deterministic 0..1 from integers -- the geometry kernel's hash, kept
+    local so this data module imports with no path setup."""
+    ints = [int(round(float(k) * 1024.0)) for k in key] + [0, 0, 0]
+    h = (ints[0] * 374761393 + ints[1] * 668265263 + ints[2] * 2147483647 + len(key) * 1274126177) & 0xFFFFFFFF
+    h = (h ^ (h >> 13)) & 0xFFFFFFFF
+    h = (h * 1274126177) & 0xFFFFFFFF
+    return ((h ^ (h >> 16)) & 0xFFFFFFFF) / 4294967296.0
 
 
 def _band(name, items):
@@ -29,231 +42,283 @@ def A(asset, x, y, z=0.0, yaw=0.0, s=1.0, mat=None, label=None, sxyz=None, pitch
 
 
 # ---------------------------------------------------------------------------
-# FOREGROUND  0-15 m
+# THE GATE (behind the viewpoint) AND THE PLAZA EDGE
 # ---------------------------------------------------------------------------
-FOREGROUND = _band("V2_Arrival", [
-    # the portal: ring geometry + rune disc, at the origin
-    A("portal_disc", 0, 0, 2.0, mat="MI_V2_PortalRunes", label="Portal_Runes"),
-    A("portal_ring", 0, 0, 3.0, s=1.0, mat="MI_V2_PortalGlow", label="Portal_RingOuter"),
-    A("portal_ring", 0, 0, 3.0, s=0.78, mat="MI_V2_PortalGlow", label="Portal_RingMid"),
-    A("portal_ring", 0, 0, 3.0, s=0.52, mat="MI_V2_PortalGlow", label="Portal_RingInner"),
-    # the clock tree, right edge: trunk enters below the frame, leaves above it
-    A("tree_clock_trunk", -1380, -120, 0, yaw=100, s=1.0, mat="MI_V2_Bark", label="ClockTree_Trunk"),
-    A("clock_ornate", -1230, -285, 700, yaw=0, s=1.0, mat="MI_V2_Gold", label="ClockTree_ClockA"),
-    A("clock_ornate", -1300, -250, 1160, yaw=-15, s=0.7, mat="MI_V2_Gold", label="ClockTree_ClockB"),
-    A("canopy_large", -1350, 250, 1650, yaw=30, s=1.0, mat="MI_V2_LeafDark", label="ClockTree_Canopy0"),
-    A("canopy_large", -900, 500, 1500, yaw=140, s=0.8, mat="MI_V2_LeafMid", label="ClockTree_Canopy1"),
-    A("canopy_large", -1750, 100, 1520, yaw=260, s=0.75, mat="MI_V2_LeafDark", label="ClockTree_Canopy2"),
-    A("vine_hanging", -1250, -230, 1250, yaw=20, s=1.0, mat="MI_V2_LeafMid", label="ClockTree_Vine0"),
-    A("vine_hanging", -1120, -170, 1200, yaw=80, s=0.9, mat="MI_V2_LeafDark", label="ClockTree_Vine1"),
-    A("vine_hanging", -1500, -260, 1300, yaw=150, s=1.1, mat="MI_V2_LeafMid", label="ClockTree_Vine2"),
-    # the framing tree, left: a mature dark tree whose crown fills the top-left
-    A("tree_mature_trunk", 2250, 900, 0, yaw=200, s=1.0, mat="MI_V2_Bark", label="LeftTree_Trunk"),
-    A("canopy_large", 2050, 950, 1500, yaw=0, s=1.3, mat="MI_V2_LeafDark", label="LeftTree_Canopy0"),
-    A("canopy_large", 1500, 1200, 1350, yaw=90, s=1.0, mat="MI_V2_LeafMid", label="LeftTree_Canopy1"),
-    A("canopy_large", 2500, 600, 1300, yaw=200, s=0.9, mat="MI_V2_LeafDark", label="LeftTree_Canopy2"),
-    A("blossom_cluster", 1700, 1050, 1420, s=1.0, mat="MI_V2_RosePink", label="LeftTree_Blossom0"),
-    A("blossom_cluster", 2350, 800, 1560, s=0.8, mat="MI_V2_PetalViolet", label="LeftTree_Blossom1"),
-    A("blossom_cluster", 1950, 1300, 1250, s=0.9, mat="MI_V2_RosePink", label="LeftTree_Blossom2"),
-    # flower banks in both bottom corners: dark mass first, blooms on top
-    A("hedge_mass", 820, 520, 0, yaw=20, s=1.2, mat="MI_V2_LeafDark", label="FgBank_L_Mass0"),
-    A("hedge_mass", 1150, 700, 0, yaw=200, s=1.0, mat="MI_V2_LeafDark", label="FgBank_L_Mass1"),
-    A("hedge_mass", -860, 640, 0, yaw=80, s=1.1, mat="MI_V2_LeafDark", label="FgBank_R_Mass0"),
-    A("hedge_mass", -1150, 850, 0, yaw=300, s=0.9, mat="MI_V2_LeafDark", label="FgBank_R_Mass1"),
-] + [
-    A("rose_bloom", 700 + 90 * (i % 4) + 30 * (i // 4), 420 + 110 * (i // 4) + 40 * (i % 3), 60 + 40 * (i % 3),
-      yaw=47 * i, s=0.9 + 0.25 * (i % 3), mat=("MI_V2_RosePink", "MI_V2_PetalViolet", "MI_V2_RoseRed")[i % 3],
-      label="FgBank_L_Rose%d" % i) for i in range(9)
-] + [
-    A("rose_bloom", -700 - 100 * (i % 4) - 20 * (i // 4), 520 + 120 * (i // 4) + 30 * (i % 3), 60 + 40 * (i % 3),
-      yaw=61 * i, s=0.9 + 0.25 * (i % 3), mat=("MI_V2_PetalViolet", "MI_V2_RosePink", "MI_V2_RoseRed")[i % 3],
-      label="FgBank_R_Rose%d" % i) for i in range(9)
-] + [
-    A("flower_cluster", 640 + 130 * i, 380 + 60 * (i % 2), 20, yaw=33 * i, s=1.0,
-      mat=("MI_V2_PetalPink", "MI_V2_PetalViolet")[i % 2], label="FgBank_L_Flowers%d" % i) for i in range(4)
-] + [
-    A("flower_cluster", -640 - 130 * i, 480 + 60 * (i % 2), 20, yaw=71 * i, s=1.0,
-      mat=("MI_V2_PetalViolet", "MI_V2_PetalPink")[i % 2], label="FgBank_R_Flowers%d" % i) for i in range(4)
+GATE = _band("V2_Arrival", [
+    A("gate_pier", 230, -910, 0, s=1.4, mat="MI_V2_IvoryStone", label="Gate_PierL"),
+    A("gate_pier", -230, -910, 0, s=1.4, mat="MI_V2_IvoryStone", label="Gate_PierR"),
+    # leaves OPEN: hinged at the piers, swung 80 degrees toward the plaza
+    A("gate_leaf", 170, -870, 0, yaw=80, s=0.5, sxyz=(0.5, 0.5, 1.25), mat="MI_V2_Gold", label="Gate_LeafL"),
+    A("gate_leaf", -170, -870, 0, yaw=100, s=0.5, sxyz=(-0.5, 0.5, 1.25), mat="MI_V2_Gold", label="Gate_LeafR"),
+    A("gate_finial_ball", 230, -910, 910, s=1.3, mat="MI_V2_Gold", label="Gate_FinialL"),
+    A("gate_finial_ball", -230, -910, 910, s=1.3, mat="MI_V2_Gold", label="Gate_FinialR"),
+    A("garden_urn", 330, -880, 0, s=1.0, mat="MI_V2_Ceramic", label="Gate_UrnL"),
+    A("garden_urn", -330, -880, 0, s=1.0, mat="MI_V2_Ceramic", label="Gate_UrnR"),
+    A("flower_cluster", 330, -880, 150, s=0.6, mat="MI_V2_PetalPink", label="Gate_UrnFlowersL"),
+    A("flower_cluster", -330, -880, 150, s=0.6, mat="MI_V2_PetalViolet", label="Gate_UrnFlowersR"),
+    # the plaza's rear wall either side of the gate, ivied
+    A("garden_wall", 580, -910, 0, s=1.0, mat="MI_V2_IvoryStone", label="Rear_WallL0"),
+    A("garden_wall", 1080, -910, 0, s=1.0, mat="MI_V2_IvoryStone", label="Rear_WallL1"),
+    A("garden_wall", -580, -910, 0, s=1.0, mat="MI_V2_IvoryStone", label="Rear_WallR0"),
+    A("garden_wall", -1080, -910, 0, s=1.0, mat="MI_V2_IvoryStone", label="Rear_WallR1"),
+    A("ivy_drape", 700, -880, 250, s=0.7, mat="MI_V2_LeafMid", label="Rear_IvyL"),
+    A("ivy_drape", -800, -880, 250, s=0.7, mat="MI_V2_LeafDark", label="Rear_IvyR"),
+    A("hedge_block", 800, -1060, 0, yaw=0, s=1.2, mat="MI_V2_LeafDark", label="Rear_HedgeL"),
+    A("hedge_block", -900, -1060, 0, yaw=0, s=1.1, mat="MI_V2_LeafMid", label="Rear_HedgeR"),
+    A("vine_wall", 580, -870, 60, s=1.0, mat="MI_V2_LeafMid", label="Rear_WallIvyL0"),
+    A("vine_wall", -1080, -870, 60, s=0.9, mat="MI_V2_LeafDark", label="Rear_WallIvyR1"),
 ])
 
 # ---------------------------------------------------------------------------
-# COURTYARD  15-50 m
+# THE SIDES: walls, raised beds, rose cones — balanced, not mirrored
 # ---------------------------------------------------------------------------
-COURTYARD = _band("V2_Arrival", [
-    # the gold gate, left: two piers, two leaves, finials, wall running outward
-    A("gate_pier", 1900, 2200, 0, yaw=0, s=1.0, mat="MI_V2_IvoryStone", label="Gate_PierInner"),
-    A("gate_pier", 2700, 2200, 0, yaw=0, s=1.0, mat="MI_V2_IvoryStone", label="Gate_PierOuter"),
-    A("gate_leaf", 2100, 2200, 0, yaw=0, s=1.0, mat="MI_V2_Gold", label="Gate_LeafInner"),
-    A("gate_leaf", 2500, 2200, 0, yaw=180, s=1.0, mat="MI_V2_Gold", label="Gate_LeafOuter"),
-    A("gate_finial_heart", 1900, 2200, 680, yaw=0, s=1.0, mat="MI_V2_Gold", label="Gate_FinialHeart"),
-    A("gate_finial_ball", 2700, 2200, 680, s=1.0, mat="MI_V2_Gold", label="Gate_FinialBall"),
-    A("garden_wall", 3150, 2200, 0, yaw=0, s=1.0, mat="MI_V2_IvoryStone", label="Gate_Wall0"),
-    A("garden_wall", 3650, 2200, 0, yaw=0, s=1.0, mat="MI_V2_IvoryStone", label="Gate_Wall1"),
-    A("ivy_drape", 1900, 2130, 600, yaw=0, s=1.0, mat="MI_V2_LeafMid", label="Gate_IvyInner"),
-    A("ivy_drape", 2700, 2130, 600, yaw=0, s=1.1, mat="MI_V2_LeafDark", label="Gate_IvyOuter"),
-    A("ivy_drape", 3150, 2130, 320, yaw=0, s=0.8, mat="MI_V2_LeafMid", label="Gate_WallIvy0"),
-    A("ivy_drape", 3650, 2130, 320, yaw=0, s=0.9, mat="MI_V2_LeafDark", label="Gate_WallIvy1"),
-    A("rose_bloom", 1840, 2120, 520, yaw=20, s=0.6, mat="MI_V2_RoseRed", label="Gate_Rose0"),
-    A("rose_bloom", 1960, 2120, 380, yaw=140, s=0.55, mat="MI_V2_RosePink", label="Gate_Rose1"),
-    A("rose_bloom", 2650, 2120, 450, yaw=80, s=0.6, mat="MI_V2_RoseRed", label="Gate_Rose2"),
-    A("rose_bloom", 2760, 2120, 300, yaw=200, s=0.55, mat="MI_V2_RosePink", label="Gate_Rose3"),
-    A("hedge_mass", 2000, 2550, 0, yaw=0, s=1.4, mat="MI_V2_LeafDark", label="Gate_HedgeBehind0"),
-    A("hedge_mass", 2500, 2600, 0, yaw=90, s=1.3, mat="MI_V2_LeafMid", label="Gate_HedgeBehind1"),
-    A("hedge_mass", 3200, 2500, 0, yaw=45, s=1.5, mat="MI_V2_LeafDark", label="Gate_HedgeBehind2"),
-    # mushrooms by the gate, left
-    A("mushroom_medium", 2150, 1650, 0, yaw=30, s=1.0, mat="MI_V2_MushRed", label="GateMush_Red0"),
-    A("mushroom_medium", 2380, 1500, 0, yaw=200, s=0.75, mat="MI_V2_MushRed", label="GateMush_Red1"),
-    A("mushroom_small", 2020, 1520, 0, yaw=90, s=1.0, mat="MI_V2_MushPurple", label="GateMush_Purple0"),
-    A("mushroom_small", 1860, 1720, 0, yaw=250, s=0.8, mat="MI_V2_MushPurple", label="GateMush_Purple1"),
-    A("mushroom_small", 760, 1380, 0, yaw=10, s=1.1, mat="MI_V2_MushPurple", label="PathMush_Purple0"),
-    A("mushroom_small", 640, 1520, 0, yaw=120, s=0.7, mat="MI_V2_MushPurple", label="PathMush_Purple1"),
-    # the tea installation, right
-    A("tea_plinth", -820, 1900, 0, s=1.0, mat="MI_V2_Stone", label="Tea_Plinth"),
-    A("tea_saucer", -820, 1900, 96, s=1.0, mat="MI_V2_Ceramic", label="Tea_Saucer0"),
-    A("tea_saucer", -820, 1900, 118, s=0.8, mat="MI_V2_Ceramic", label="Tea_Saucer1"),
-    A("tea_cup", -820, 1900, 136, yaw=205, s=1.0, mat="MI_V2_Ceramic", label="Tea_Cup"),
-    A("tea_heart", -980, 1780, 330, yaw=-60, s=1.0, mat="MI_V2_RoseRed", label="Tea_Heart0"),
-    A("tea_heart", -700, 1760, 300, yaw=40, s=0.8, mat="MI_V2_RoseRed", label="Tea_Heart1"),
-    A("tea_plinth", -1180, 2280, 0, s=0.7, mat="MI_V2_Stone", label="Teapot_Plinth"),
-    A("tea_pot", -1180, 2280, 70, yaw=160, s=1.0, mat="MI_V2_Ceramic", label="Teapot"),
-    A("tea_saucer", -520, 2150, 0, s=0.6, mat="MI_V2_Ceramic", label="Tea_SaucerSmall"),
-    A("tea_cup", -520, 2150, 12, yaw=90, s=0.55, mat="MI_V2_Ceramic", label="Tea_CupSmall"),
-    A("rose_bloom", -1080, 2190, 60, yaw=30, s=0.7, mat="MI_V2_RosePink", label="Tea_Rose0"),
-    A("rose_bloom", -660, 2020, 40, yaw=110, s=0.6, mat="MI_V2_PetalViolet", label="Tea_Rose1"),
-    # urns and hedges edging the court
-    A("garden_urn", 1350, 800, 0, s=1.0, mat="MI_V2_Ceramic", label="Urn_L"),
-    A("garden_urn", -1350, 1000, 0, s=1.0, mat="MI_V2_Ceramic", label="Urn_R"),
+SIDES = _band("V2_Arrival", [
+    A("topiary_cone_roses", 860, -45, 85, yaw=10, s=1.0, mat="MI_V2_LeafMid", label="RoseCone_L"),
+    A("topiary_cone_roses", -770, 250, 85, yaw=200, s=1.04, mat="MI_V2_LeafMid", label="RoseCone_R"),
+    A("planter_box", 860, -45, 0, s=1.4, mat="MI_V2_IvoryStone", label="RoseCone_L_Planter"),
+    A("planter_box", -770, 250, 0, s=1.4, mat="MI_V2_IvoryStone", label="RoseCone_R_Planter"),
 ] + [
-    A("hedge_mass", side * (1500 + 60 * (i % 2)), 700 + 300 * i, 0, yaw=40 * i, s=1.1,
-      mat=("MI_V2_LeafDark", "MI_V2_LeafMid")[i % 2], label="CourtHedge%d_%d" % (side, i))
-    for side in (-1, 1) for i in range(6) if not (side > 0 and 1900 < 700 + 300 * i < 2500)
+    A("retaining_wall", 800, -700 + 400 * i, 0, yaw=90, s=1.0, mat="MI_V2_IvoryStone", label="SideWall_L%d" % i) for i in range(5)
+] + [
+    A("retaining_wall", -800, -640 + 400 * i, 0, yaw=90, s=1.0, mat="MI_V2_IvoryStone", label="SideWall_R%d" % i) for i in range(5)
+] + [
+    A(("hedge_block", "shrub_flowering", "hedge_mass")[i % 3], 1010 + 60 * (i % 2), -600 + 330 * i, 60, yaw=(90 if i % 3 == 0 else 41 * i), s=0.9,
+      mat=("MI_V2_LeafMid", "MI_V2_LeafDark")[i % 2], label="SideBed_L_Hedge%d" % i) for i in range(6)
+] + [
+    A(("shrub_flowering", "hedge_block", "hedge_mass")[i % 3], -1010 - 60 * (i % 2), -540 + 330 * i, 60, yaw=(90 if i % 3 == 1 else 67 * i), s=0.9,
+      mat=("MI_V2_LeafDark", "MI_V2_LeafMid")[i % 2], label="SideBed_R_Hedge%d" % i) for i in range(6)
+] + [
+    A("rose_bush", 940, -300 + 600 * i, 85, yaw=30 * i, s=0.9, mat="MI_V2_LeafMid", label="SideBed_L_RoseBush%d" % i) for i in range(2)
+] + [
+    A("rose_bush", -940, -200 + 600 * i, 85, yaw=50 * i, s=0.9, mat="MI_V2_LeafMid", label="SideBed_R_RoseBush%d" % i) for i in range(2)
+] + [
+    A("ground_flowers", 1120, -450 + 220 * i, 85, yaw=23 * i, s=1.0, mat=("MI_V2_PetalPink", "MI_V2_PetalBlue", "MI_V2_PetalViolet")[i % 3], label="SideBed_L_Ground%d" % i) for i in range(7)
+] + [
+    A("ground_flowers", -1120, -400 + 220 * i, 85, yaw=31 * i, s=1.0, mat=("MI_V2_PetalViolet", "MI_V2_PetalPink", "MI_V2_RosePink")[i % 3], label="SideBed_R_Ground%d" % i) for i in range(7)
+] + [
+    A("rose_bloom", 900 + 90 * (i % 3), -520 + 300 * i, 110, yaw=53 * i, s=0.55, mat=("MI_V2_RosePink", "MI_V2_RoseRed", "MI_V2_PetalPink")[i % 3], label="SideBed_L_Rose%d" % i) for i in range(6)
+] + [
+    A("rose_bloom", -900 - 90 * (i % 3), -460 + 300 * i, 110, yaw=71 * i, s=0.55, mat=("MI_V2_PetalViolet", "MI_V2_RosePink", "MI_V2_PetalBlue")[i % 3], label="SideBed_R_Rose%d" % i) for i in range(6)
+] + [
+    A("flower_cluster", 940 + 80 * (i % 2), -400 + 260 * i, 90, yaw=29 * i, s=0.8, mat=("MI_V2_PetalPink", "MI_V2_PetalBlue", "MI_V2_PetalViolet")[i % 3], label="SideBed_L_Flowers%d" % i) for i in range(6)
+] + [
+    A("flower_cluster", -940 - 80 * (i % 2), -340 + 260 * i, 90, yaw=37 * i, s=0.8, mat=("MI_V2_PetalViolet", "MI_V2_PetalPink", "MI_V2_RosePink")[i % 3], label="SideBed_R_Flowers%d" % i) for i in range(6)
 ])
 
 # ---------------------------------------------------------------------------
-# GARDEN  50-120 m
+# THE CORRIDOR: the front wall line at +9 m, the steps, the path (laid by the builder)
 # ---------------------------------------------------------------------------
-GARDEN = _band("V2_Garden", [
-    A("floral_arch", 0, 4200, 0, yaw=0, s=1.0, mat="MI_V2_LeafMid", label="FloralArch"),
-    A("rose_bloom", -470, 4130, 620, yaw=0, s=0.7, mat="MI_V2_RosePink", label="FloralArch_Rose0"),
-    A("rose_bloom", 460, 4130, 560, yaw=60, s=0.7, mat="MI_V2_RoseRed", label="FloralArch_Rose1"),
-    A("rose_bloom", 0, 4120, 900, yaw=120, s=0.8, mat="MI_V2_RosePink", label="FloralArch_Rose2"),
-    A("rose_bloom", -260, 4125, 840, yaw=180, s=0.6, mat="MI_V2_PetalViolet", label="FloralArch_Rose3"),
-    A("rose_bloom", 280, 4125, 830, yaw=240, s=0.6, mat="MI_V2_RosePink", label="FloralArch_Rose4"),
-    # the heart topiary, right
-    A("heart_topiary", -1150, 3300, 0, yaw=10, s=1.0, mat="MI_V2_LeafMid", label="HeartTopiary"),
-    A("hedge_mass", -1400, 3450, 0, yaw=0, s=1.2, mat="MI_V2_LeafDark", label="Heart_Base0"),
-    A("hedge_mass", -900, 3500, 0, yaw=90, s=1.0, mat="MI_V2_LeafDark", label="Heart_Base1"),
-    # the clock tower behind it
-    A("tower_clock", -1700, 5300, 0, yaw=0, s=1.0, mat="MI_V2_IvoryStone", label="ClockTower"),
-    A("clock_ornate", -1700, 5150, 900, yaw=0, s=1.0, mat="MI_V2_Gold", label="ClockTower_Clock"),
-    A("roof_bell", -1700, 5300, 1180, s=1.0, mat="MI_V2_RoofPink", label="ClockTower_Roof"),
-    # giant mushrooms: left-mid behind the gate, right-mid behind the heart
-    A("mushroom_landmark", 1700, 4200, 0, yaw=20, s=1.0, mat="MI_V2_MushRed", label="Landmark_Mushroom_L"),
-    A("mushroom_landmark", -2300, 4900, 0, yaw=160, s=1.15, mat="MI_V2_MushRed", label="Landmark_Mushroom_R"),
-    A("mushroom_medium", 1300, 3700, 0, yaw=70, s=1.2, mat="MI_V2_MushCream", label="Garden_Mush_Cream0"),
-    A("mushroom_medium", -1900, 4300, 0, yaw=300, s=0.9, mat="MI_V2_MushPurple", label="Garden_Mush_Purple0"),
-    A("mushroom_medium", -2600, 4400, 0, yaw=120, s=1.1, mat="MI_V2_MushRed", label="Garden_Mush_Red0"),
-    # garden trees behind the gate (left) and behind the heart (right)
-    A("tree_mature_trunk", 2100, 3400, 0, yaw=40, s=1.1, mat="MI_V2_Bark", label="GardenTree_L_Trunk"),
-    A("canopy_large", 2100, 3400, 1350, yaw=0, s=1.4, mat="MI_V2_LeafMid", label="GardenTree_L_Canopy0"),
-    A("canopy_large", 1700, 3600, 1200, yaw=120, s=1.0, mat="MI_V2_LeafDark", label="GardenTree_L_Canopy1"),
-    A("canopy_large", 2500, 3250, 1250, yaw=240, s=1.0, mat="MI_V2_LeafMid", label="GardenTree_L_Canopy2"),
-    A("blossom_cluster", 1900, 3500, 1400, s=1.0, mat="MI_V2_RosePink", label="GardenTree_L_Blossom0"),
-    A("blossom_cluster", 2400, 3300, 1500, s=0.9, mat="MI_V2_PetalViolet", label="GardenTree_L_Blossom1"),
-    A("tree_mature_trunk", -2900, 5200, 0, yaw=300, s=0.9, mat="MI_V2_Bark", label="GardenTree_R_Trunk"),
-    A("canopy_large", -2900, 5200, 1150, yaw=0, s=1.1, mat="MI_V2_LeafMid", label="GardenTree_R_Canopy0"),
-    A("canopy_large", -2500, 5400, 1050, yaw=150, s=0.9, mat="MI_V2_LeafDark", label="GardenTree_R_Canopy1"),
-    # stairs up to the palace terrace, and the portal at the top
-    A("stairs_broad", 0, 6600, 0, s=1.0, mat="MI_V2_Stone", label="Stairs_Flight0"),
-    A("stairs_broad", 0, 6950, 180, s=1.0, mat="MI_V2_Stone", label="Stairs_Flight1"),
-    A("stairs_broad", 0, 7300, 360, s=1.0, mat="MI_V2_Stone", label="Stairs_Flight2"),
-    A("balustrade", 420, 6650, 0, yaw=90, s=1.0, mat="MI_V2_IvoryStone", label="Stairs_Balustrade_L0"),
-    A("balustrade", -420, 6650, 0, yaw=90, s=1.0, mat="MI_V2_IvoryStone", label="Stairs_Balustrade_R0"),
-    A("balustrade", 420, 7000, 180, yaw=90, s=1.0, mat="MI_V2_IvoryStone", label="Stairs_Balustrade_L1"),
-    A("balustrade", -420, 7000, 180, yaw=90, s=1.0, mat="MI_V2_IvoryStone", label="Stairs_Balustrade_R1"),
-    A("garden_urn", 560, 6450, 0, s=1.2, mat="MI_V2_Ceramic", label="Stairs_Urn_L"),
-    A("garden_urn", -560, 6450, 0, s=1.2, mat="MI_V2_Ceramic", label="Stairs_Urn_R"),
-    A("terrace_platform", 0, 8300, 540, s=1.0, mat="MI_V2_Stone", label="Terrace"),
-    A("column_ornate", 520, 8250, 600, s=1.0, mat="MI_V2_IvoryStone", label="Terrace_Column_L"),
-    A("column_ornate", -520, 8250, 600, s=1.0, mat="MI_V2_IvoryStone", label="Terrace_Column_R"),
-    A("arch_stone", 0, 8250, 600, yaw=0, s=1.0, mat="MI_V2_IvoryStone", label="Terrace_Arch"),
-    A("gate_finial_heart", 0, 8250, 1480, s=1.2, mat="MI_V2_Gold", label="Terrace_Heart"),
+CORRIDOR = _band("V2_Garden", [
+    A("path_steps", 0, 1470, 0, s=1.0, mat="MI_V2_Stone", label="Path_Steps"),
+    A("balustrade", 300, 1520, 60, yaw=90, s=0.9, mat="MI_V2_IvoryStone", label="Steps_BalustradeL"),
+    A("balustrade", -300, 1520, 60, yaw=90, s=0.9, mat="MI_V2_IvoryStone", label="Steps_BalustradeR"),
+    A("garden_urn", 330, 1330, 0, s=0.9, mat="MI_V2_Ceramic", label="Steps_UrnL"),
+    A("garden_urn", -330, 1330, 0, s=0.9, mat="MI_V2_Ceramic", label="Steps_UrnR"),
 ] + [
-    # hedged verges either side of the path, flowers at the stone
-    A("hedge_mass", side * (560 + 40 * (i % 3)), 2800 + 300 * i, 0, yaw=37 * i, s=0.9 + 0.1 * (i % 2),
-      mat=("MI_V2_LeafDark", "MI_V2_LeafMid")[i % 2], label="Verge_Hedge%d_%d" % (side, i))
-    for side in (-1, 1) for i in range(12)
+    A("retaining_wall", 280 + 400 * (i + 1), 900, 0, yaw=0, s=1.0, mat="MI_V2_IvoryStone", label="FrontWall_L%d" % i) for i in range(4)
 ] + [
-    A("flower_cluster", side * (240 + 60 * (i % 3)), 2700 + 260 * i, 10, yaw=53 * i, s=0.8 + 0.2 * (i % 2),
-      mat=("MI_V2_PetalPink", "MI_V2_PetalViolet", "MI_V2_RosePink")[i % 3], label="Verge_Flowers%d_%d" % (side, i))
-    for side in (-1, 1) for i in range(14)
+    A("retaining_wall", -280 - 400 * (i + 1), 900, 0, yaw=0, s=1.0, mat="MI_V2_IvoryStone", label="FrontWall_R%d" % i) for i in range(4)
 ] + [
-    A("rose_bloom", side * (330 + 90 * (i % 2)), 2850 + 420 * i, 70, yaw=29 * i, s=0.55,
-      mat=("MI_V2_RoseRed", "MI_V2_RosePink")[i % 2], label="Verge_Rose%d_%d" % (side, i))
-    for side in (-1, 1) for i in range(9)
+    A("hedge_mass", 560 + 380 * i, 1100, 60, yaw=33 * i, s=1.0, mat=("MI_V2_LeafDark", "MI_V2_LeafMid")[i % 2], label="FrontBed_L_Hedge%d" % i) for i in range(4)
 ] + [
-    A("mushroom_small", side * (700 + 80 * (i % 2)), 3000 + 900 * i, 0, yaw=97 * i, s=0.9,
-      mat=("MI_V2_MushRed", "MI_V2_MushPurple", "MI_V2_MushCream")[i % 3], label="Verge_Mush%d_%d" % (side, i))
-    for side in (-1, 1) for i in range(4)
+    A("hedge_mass", -560 - 380 * i, 1100, 60, yaw=59 * i, s=1.0, mat=("MI_V2_LeafMid", "MI_V2_LeafDark")[i % 2], label="FrontBed_R_Hedge%d" % i) for i in range(4)
+] + [
+    A("flower_cluster", 420 + 300 * i, 1000, 90, yaw=17 * i, s=0.9, mat=("MI_V2_PetalPink", "MI_V2_PetalBlue", "MI_V2_RoseRed", "MI_V2_PetalViolet")[i % 4], label="FrontBed_L_Flowers%d" % i) for i in range(5)
+] + [
+    A("flower_cluster", -420 - 300 * i, 1000, 90, yaw=23 * i, s=0.9, mat=("MI_V2_PetalViolet", "MI_V2_RosePink", "MI_V2_PetalBlue", "MI_V2_PetalPink")[i % 4], label="FrontBed_R_Flowers%d" % i) for i in range(5)
+] + [
+    # hedges flanking the path beyond the steps, then the garden opens
+    A("hedge_mass", side * (330 + 30 * (i % 2)), 1750 + 320 * i, 60 + 24 * i, yaw=41 * i + (0 if side > 0 else 180), s=0.85,
+      mat=("MI_V2_LeafMid", "MI_V2_LeafDark")[i % 2], label="PathHedge%d_%d" % (side, i))
+    for side in (-1, 1) for i in range(8)
+] + [
+    A("rose_bloom", side * (300 + 40 * (i % 2)), 1850 + 420 * i, 130 + 24 * i, yaw=31 * i, s=0.5,
+      mat=("MI_V2_RoseRed", "MI_V2_RosePink")[(i + (0 if side > 0 else 1)) % 2], label="PathRose%d_%d" % (side, i))
+    for side in (-1, 1) for i in range(6)
+] + [
+    A("garden_arch_stone", 0, 4500, 220, s=1.0, mat="MI_V2_IvoryStone", label="Corridor_Arch"),
+    A("ivy_drape", 350, 4460, 620, s=0.8, mat="MI_V2_LeafMid", label="Corridor_ArchIvyL"),
+    A("ivy_drape", -350, 4460, 620, s=0.8, mat="MI_V2_LeafDark", label="Corridor_ArchIvyR"),
+    A("rose_bloom", 0, 4440, 870, s=0.7, mat="MI_V2_RosePink", label="Corridor_ArchRose"),
 ])
 
 # ---------------------------------------------------------------------------
-# PALACE DISTRICT  120-400 m  (3D castle kit, layered in depth)
+# GARDEN LEFT: the giant mushroom and its grounds
+# ---------------------------------------------------------------------------
+GARDEN_L = _band("V2_Garden", [
+    # the LEFT GARDEN GATE: gold leaves between cream piers at the entrance to
+    # the left garden, beyond the front wall (reprojected view: az -25, ~18 m)
+    A("gate_pier", 1080, 1700, 0, s=1.0, mat="MI_V2_IvoryStone", label="GardenGate_PierL"),
+    A("gate_pier", 700, 1700, 0, s=1.0, mat="MI_V2_IvoryStone", label="GardenGate_PierR"),
+    A("gate_leaf", 1030, 1690, 0, yaw=180, s=0.45, sxyz=(-0.45, 0.45, 0.95), mat="MI_V2_Gold", label="GardenGate_LeafL"),
+    A("gate_leaf", 750, 1690, 0, yaw=0, s=0.45, sxyz=(0.45, 0.45, 0.95), mat="MI_V2_Gold", label="GardenGate_LeafR"),
+    A("gate_finial_heart", 1080, 1700, 650, s=0.9, mat="MI_V2_Gold", label="GardenGate_FinialL"),
+    A("gate_finial_ball", 700, 1700, 650, s=1.0, mat="MI_V2_Gold", label="GardenGate_FinialR"),
+    A("vine_wall", 1090, 1660, 80, yaw=0, s=0.5, mat="MI_V2_LeafMid", label="GardenGate_IvyL"),
+    A("mushroom_giant", 1960, 1000, 0, yaw=15, s=1.0, mat="MI_V2_MushTerracotta", label="GiantMushroom"),
+    A("clock_ornate", 1780, 800, 850, yaw=-10, s=1.1, mat="MI_V2_Gold", label="GiantMushroom_Clock"),
+    A("canopy_large", 1960, 1000, 1640, yaw=0, s=1.3, sxyz=(1.5, 1.5, 0.55), mat="MI_V2_LeafMid", label="GiantMushroom_Ivy0"),
+    A("canopy_large", 2400, 1200, 1600, yaw=120, s=1.0, sxyz=(1.1, 1.1, 0.5), mat="MI_V2_LeafDark", label="GiantMushroom_Ivy1"),
+    A("vine_hanging", 2500, 700, 1380, s=0.9, mat="MI_V2_LeafMid", label="GiantMushroom_Vine0"),
+    A("vine_hanging", 1500, 1300, 1380, s=0.8, mat="MI_V2_LeafDark", label="GiantMushroom_Vine1"),
+    A("hedge_mass", 1700, 600, 0, yaw=30, s=1.4, mat="MI_V2_LeafDark", label="GiantMushroom_Foot0"),
+    A("hedge_mass", 2300, 700, 0, yaw=150, s=1.3, mat="MI_V2_LeafMid", label="GiantMushroom_Foot1"),
+    A("hedge_mass", 1900, 1500, 0, yaw=250, s=1.2, mat="MI_V2_LeafDark", label="GiantMushroom_Foot2"),
+    A("mushroom_medium", 1450, 1750, 0, yaw=40, s=1.0, mat="MI_V2_MushRed", label="Garden_L_Mush0"),
+    A("mushroom_medium", 2600, 1500, 0, yaw=200, s=0.8, mat="MI_V2_MushCream", label="Garden_L_Mush1"),
+    A("mushroom_small", 1300, 1200, 0, yaw=90, s=1.0, mat="MI_V2_MushPurple", label="Garden_L_Mush2"),
+    A("mushroom_small", 1200, 2150, 0, yaw=300, s=0.9, mat="MI_V2_MushRed", label="Garden_L_Mush3"),
+    A("tree_mature_trunk", 1500, 2600, 0, yaw=180, s=0.9, mat="MI_V2_Bark", label="Garden_L_Tree_Trunk"),
+    A("canopy_large", 1500, 2600, 1150, yaw=0, s=1.1, mat="MI_V2_LeafMid", label="Garden_L_Tree_Canopy0"),
+    A("canopy_large", 1200, 2800, 1050, yaw=130, s=0.85, mat="MI_V2_LeafDark", label="Garden_L_Tree_Canopy1"),
+    A("canopy_large", 1850, 2500, 1000, yaw=250, s=0.8, mat="MI_V2_LeafLight", label="Garden_L_Tree_Canopy2"),
+    A("blossom_cluster", 1400, 2700, 1200, s=0.9, mat="MI_V2_RosePink", label="Garden_L_Tree_Blossom"),
+    A("topiary_ball", 1100, 1600, 0, s=1.0, mat="MI_V2_LeafMid", label="Garden_L_Ball0"),
+    A("topiary_spiral", 2200, 2200, 0, s=1.1, mat="MI_V2_LeafDark", label="Garden_L_Spiral"),
+    A("topiary_cone_plain", 1250, 3100, 0, s=1.0, mat="MI_V2_LeafMid", label="Garden_L_Cone"),
+    A("rose_bush", 1000, 2300, 0, yaw=40, s=1.0, mat="MI_V2_LeafMid", label="Garden_L_RoseBush"),
+    A("shrub_flowering", 2600, 2700, 0, yaw=120, s=1.1, mat="MI_V2_LeafDark", label="Garden_L_FlowerShrub"),
+    A("tree_slender_trunk", 2900, 2200, 0, yaw=70, s=1.0, mat="MI_V2_Bark", label="Garden_L_Slender_Trunk"),
+    A("canopy_medium", 2900, 2200, 800, yaw=0, s=1.1, mat="MI_V2_LeafLight", label="Garden_L_Slender_Canopy"),
+    A("tower_capped", 5000, 3300, 0, s=1.2, mat="MI_V2_IvoryStone", label="Tower_L"),
+    A("roof_cone_steep", 5000, 3300, 1320, s=1.2, mat="MI_V2_RoofNavy", label="Tower_L_Cap"),
+    A("balcony_ring", 5000, 3300, 700, s=0.6, mat="MI_V2_IvoryStone", label="Tower_L_Balcony"),
+])
+
+# ---------------------------------------------------------------------------
+# GARDEN RIGHT: the clock tree, flowering shrubs, the heart on its terrace
+# ---------------------------------------------------------------------------
+GARDEN_R = _band("V2_Garden", [
+    A("tree_clock_trunk", -2900, 1600, 0, yaw=200, s=0.62, mat="MI_V2_Bark", label="ClockTree_Trunk"),
+    A("clock_ornate", -2760, 1440, 520, yaw=-20, s=0.9, mat="MI_V2_Gold", label="ClockTree_Clock"),
+    A("canopy_large", -2900, 1650, 1060, yaw=0, s=1.1, mat="MI_V2_LeafMid", label="ClockTree_Canopy0"),
+    A("canopy_large", -2500, 1850, 950, yaw=140, s=0.9, mat="MI_V2_LeafDark", label="ClockTree_Canopy1"),
+    A("canopy_large", -3300, 1400, 980, yaw=260, s=0.85, mat="MI_V2_LeafLight", label="ClockTree_Canopy2"),
+    A("vine_hanging", -2750, 1450, 760, s=0.6, mat="MI_V2_LeafMid", label="ClockTree_Vine"),
+    A("hedge_mass", -1400, 1500, 60, yaw=20, s=1.3, mat="MI_V2_LeafDark", label="Garden_R_Hedge0"),
+    A("hedge_mass", -1900, 1300, 0, yaw=200, s=1.2, mat="MI_V2_LeafMid", label="Garden_R_Hedge1"),
+    A("hedge_mass", -2300, 2200, 0, yaw=70, s=1.4, mat="MI_V2_LeafDark", label="Garden_R_Hedge2"),
+    A("hedge_mass", -1600, 2700, 100, yaw=300, s=1.1, mat="MI_V2_LeafMid", label="Garden_R_Hedge3"),
+    A("blossom_cluster", -1500, 1450, 260, s=1.1, mat="MI_V2_PetalPink", label="Garden_R_Bloom0"),
+    A("blossom_cluster", -2300, 2150, 220, s=1.0, mat="MI_V2_PetalViolet", label="Garden_R_Bloom1"),
+    A("topiary_ball", -1200, 1900, 0, s=1.1, mat="MI_V2_LeafMid", label="Garden_R_Ball0"),
+    A("topiary_spiral", -1900, 2600, 0, s=1.0, mat="MI_V2_LeafDark", label="Garden_R_Spiral"),
+    A("topiary_cone_plain", -1050, 2500, 0, s=0.9, mat="MI_V2_LeafMid", label="Garden_R_Cone"),
+    A("rose_bush", -1500, 2150, 0, yaw=200, s=1.0, mat="MI_V2_LeafMid", label="Garden_R_RoseBush0"),
+    A("rose_bush", -2500, 2900, 0, yaw=80, s=0.9, mat="MI_V2_LeafMid", label="Garden_R_RoseBush1"),
+    A("shrub_flowering", -1800, 1800, 0, yaw=300, s=1.0, mat="MI_V2_LeafDark", label="Garden_R_FlowerShrub"),
+    A("tree_slender_trunk", -2200, 3300, 0, yaw=150, s=1.1, mat="MI_V2_Bark", label="Garden_R_Slender_Trunk"),
+    A("canopy_medium", -2200, 3300, 880, yaw=0, s=1.2, mat="MI_V2_LeafMid", label="Garden_R_Slender_Canopy"),
+    A("blossom_cluster", -2100, 3400, 980, s=0.9, mat="MI_V2_PetalPink", label="Garden_R_Slender_Blossom"),
+    A("mushroom_medium", -2200, 1000, 0, yaw=120, s=0.9, mat="MI_V2_MushRed", label="Garden_R_Mush0"),
+    A("mushroom_small", -1250, 1250, 0, yaw=10, s=0.9, mat="MI_V2_MushPurple", label="Garden_R_Mush1"),
+    A("mushroom_small", -3300, 2400, 0, yaw=220, s=1.0, mat="MI_V2_MushCream", label="Garden_R_Mush2"),
+    # the heart on a low terrace
+    A("terrace_platform", -1300, 3250, 0, s=1.0, sxyz=(0.7, 0.7, 2.5), mat="MI_V2_IvoryStone", label="Heart_Terrace"),
+    A("heart_topiary", -1300, 3250, 300, yaw=15, s=0.6, mat="MI_V2_LeafMid", label="HeartTopiary"),
+    A("hedge_mass", -1650, 3350, 300, yaw=0, s=1.0, mat="MI_V2_LeafDark", label="Heart_Base0"),
+    A("hedge_mass", -950, 3400, 300, yaw=90, s=0.9, mat="MI_V2_LeafDark", label="Heart_Base1"),
+    A("tower_capped", -4200, 4200, 0, s=1.0, mat="MI_V2_IvoryStone", label="Tower_R0"),
+    A("roof_cone_steep", -4200, 4200, 1100, s=1.0, mat="MI_V2_RoofNavy", label="Tower_R0_Cap"),
+    A("balcony_ring", -4200, 4200, 620, s=0.5, mat="MI_V2_IvoryStone", label="Tower_R0_Balcony"),
+    A("tower_capped", -5200, 5400, 0, s=1.4, mat="MI_V2_IvoryStone", label="Tower_R1"),
+    A("roof_cone_steep", -5200, 5400, 1540, s=1.4, mat="MI_V2_RoofBlue", label="Tower_R1_Cap"),
+    A("tree_mature_trunk", -3600, 3600, 0, yaw=60, s=0.8, mat="MI_V2_Bark", label="Garden_R_Tree_Trunk"),
+    A("canopy_large", -3600, 3600, 1050, yaw=0, s=1.0, mat="MI_V2_LeafMid", label="Garden_R_Tree_Canopy0"),
+    A("canopy_large", -3200, 3800, 950, yaw=150, s=0.8, mat="MI_V2_LeafLight", label="Garden_R_Tree_Canopy1"),
+])
+
+# ---------------------------------------------------------------------------
+# THE CITY IN DEPTH
 # ---------------------------------------------------------------------------
 
 
 def _castle_group(x, y, seed, scale=1.0, layer="V2_Castle"):
-    """One asymmetric palace mass: a hall, three towers of different heights
-    and roofs, a bridge, a dome. Nothing is a lone tower."""
+    """One palace mass with REAL variation: the tower bodies rotate through
+    round / square / octagon / slender, the roofs through ogee / bell / steep
+    cone / flat-crenellated / dome, halls carry facade bays and an arcade,
+    finials alternate ball / spire, heights and widths differ per tower, and
+    the cluster's footprint and yaw change with the seed. Ten groups do not
+    read as ten copies."""
     k = seed
+    h = _rnd
+    roofs = ("MI_V2_RoofPink", "MI_V2_RoofRose", "MI_V2_RoofNavy", "MI_V2_RoofPink", "MI_V2_RoofLilac")
+    bodies = ("castle_tower", "castle_tower_square", "castle_tower_octagon", "castle_tower_slender")
+    body_h = {"castle_tower": 1700.0, "castle_tower_square": 1700.0, "castle_tower_octagon": 1800.0, "castle_tower_slender": 2000.0}
+    caps = {"castle_tower": ("roof_ogee", "roof_bell"), "castle_tower_square": ("roof_flat_crenellated", "roof_hip"),
+            "castle_tower_octagon": ("roof_cone_steep", "roof_bell"), "castle_tower_slender": ("roof_cone_steep", "roof_ogee")}
+    yaw = (k * 37) % 40 - 20
     items = [
-        A("castle_hall", x, y, 0, yaw=(k * 37) % 30 - 15, s=scale, mat="MI_V2_IvoryStone", label="Castle%d_Hall" % k),
-        A("roof_hip", x, y, 900 * scale, yaw=(k * 37) % 30 - 15, s=scale, mat=("MI_V2_RoofPink", "MI_V2_RoofRose")[k % 2], label="Castle%d_HallRoof" % k),
-        A("castle_tower", x + 700 * scale, y + 200 * scale, 0, s=scale * 1.0, mat="MI_V2_IvoryStone", label="Castle%d_TowerA" % k),
-        A("roof_ogee", x + 700 * scale, y + 200 * scale, 1700 * scale, s=scale * 1.0, mat="MI_V2_RoofPink", label="Castle%d_TowerA_Roof" % k),
-        A("castle_tower", x - 600 * scale, y - 100 * scale, 0, s=scale * 0.8, mat="MI_V2_IvoryStone", label="Castle%d_TowerB" % k),
-        A("roof_bell", x - 600 * scale, y - 100 * scale, 1360 * scale, s=scale * 0.8, mat=("MI_V2_RoofLilac", "MI_V2_RoofBlue")[k % 2], label="Castle%d_TowerB_Roof" % k),
-        A("castle_tower", x + 100 * scale, y + 800 * scale, 0, s=scale * 1.35, mat="MI_V2_IvoryStone", label="Castle%d_TowerC" % k),
-        A("roof_ogee", x + 100 * scale, y + 800 * scale, 2300 * scale, s=scale * 1.35, mat="MI_V2_RoofRose", label="Castle%d_TowerC_Roof" % k),
-        A("castle_dome", x - 250 * scale, y + 450 * scale, 900 * scale, s=scale, mat="MI_V2_Gold", label="Castle%d_Dome" % k),
-        A("castle_bridge", x + 400 * scale, y + 500 * scale, 1000 * scale, yaw=35, s=scale, mat="MI_V2_IvoryStone", label="Castle%d_Bridge" % k),
-        A("balcony_ring", x + 700 * scale, y + 200 * scale, 1100 * scale, s=scale * 1.0, mat="MI_V2_IvoryStone", label="Castle%d_BalconyA" % k),
-        A("balcony_ring", x + 100 * scale, y + 800 * scale, 1500 * scale, s=scale * 1.35, mat="MI_V2_IvoryStone", label="Castle%d_BalconyC" % k),
-        A("gate_finial_ball", x + 700 * scale, y + 200 * scale, 2650 * scale, s=scale * 0.9, mat="MI_V2_Gold", label="Castle%d_FinialA" % k),
-        A("gate_finial_ball", x + 100 * scale, y + 800 * scale, 3580 * scale, s=scale * 1.2, mat="MI_V2_Gold", label="Castle%d_FinialC" % k),
+        A("castle_hall", x, y, 0, yaw=yaw, s=scale, mat="MI_V2_IvoryStone", label="City%d_Hall" % k),
+        A(("roof_hip", "roof_flat_crenellated")[k % 2], x, y, 900 * scale, yaw=yaw, s=scale, mat=roofs[k % 5], label="City%d_HallRoof" % k),
+        A("castle_arcade", x, y - 430 * scale, 0, yaw=yaw, s=scale * 1.6, mat="MI_V2_IvoryStone", label="City%d_Arcade" % k),
     ]
+    for f in range(3):
+        items.append(A("facade_panel", x - 400 * scale + 400 * scale * f, y - 402 * scale, 420 * scale, yaw=yaw, s=scale,
+                       mat="MI_V2_IvoryStone", label="City%d_Bay%d" % (k, f)))
+    towers = (((700, 200), 1.0, 0), ((-600, -100), 0.8, 1), ((100, 800), 1.35, 2), ((-900, 600), 1.1, 3))
+    for t, ((ox, oy), ts, bi) in enumerate(towers):
+        body = bodies[(k + bi) % 4]
+        cap = caps[body][(k + t) % 2]
+        ts2 = ts * (0.85 + 0.3 * h(k, t, 1)) * scale
+        tx, ty = x + ox * scale, y + oy * scale
+        items.append(A(body, tx, ty, 0, yaw=yaw + 20 * t, s=ts2, mat="MI_V2_IvoryStone", label="City%d_Tower%d" % (k, t)))
+        zt = body_h[body] * ts2
+        items.append(A(cap, tx, ty, zt, yaw=yaw + 20 * t, s=ts2 * (1.15 if body == "castle_tower_slender" else 1.0),
+                       mat=roofs[(k + t + 1) % 5], label="City%d_Tower%d_Roof" % (k, t)))
+        if body in ("castle_tower", "castle_tower_octagon") and t % 2 == 0:
+            items.append(A("balcony_ring", tx, ty, zt * 0.62, s=ts2, mat="MI_V2_IvoryStone", label="City%d_Tower%d_Balcony" % (k, t)))
+        finial = ("gate_finial_ball", "finial_spire")[(k + t) % 2]
+        cap_h = {"roof_ogee": 800.0, "roof_bell": 640.0, "roof_cone_steep": 560.0, "roof_flat_crenellated": 110.0, "roof_hip": 430.0}[cap]
+        if cap != "roof_flat_crenellated":
+            items.append(A(finial, tx, ty, zt + cap_h * ts2 * (1.15 if body == "castle_tower_slender" else 1.0),
+                           s=ts2 * 0.9, mat="MI_V2_Gold", label="City%d_Tower%d_Finial" % (k, t)))
+    items.append(A("castle_dome", x - 250 * scale, y + 450 * scale, 900 * scale, s=scale,
+                   mat=("MI_V2_Gold", "MI_V2_RoofRose", "MI_V2_RoofNavy")[k % 3], label="City%d_Dome" % k))
+    items.append(A("castle_bridge", x + 400 * scale, y + 500 * scale, 1000 * scale, yaw=35 + yaw, s=scale,
+                   mat="MI_V2_IvoryStone", label="City%d_Bridge" % k))
     return _band(layer, items)
 
 
-PALACE = (
-    _castle_group(2600, 9800, 1, 1.0) + _castle_group(-2900, 10400, 2, 1.1) +
-    _castle_group(0, 11800, 3, 1.3) + _castle_group(4600, 12600, 4, 1.4) +
-    _castle_group(-5200, 13400, 5, 1.5) + _castle_group(1800, 15200, 6, 1.9, "V2_Skyline") +
-    _castle_group(-2400, 17000, 7, 2.2, "V2_Skyline") + _castle_group(6500, 18500, 8, 2.4, "V2_Skyline") +
-    _castle_group(-7800, 19800, 9, 2.6, "V2_Skyline") + _castle_group(300, 22500, 10, 3.2, "V2_Skyline")
+CITY = (
+    # LAYER 3: mid-distance city, 90-140 m
+    _castle_group(2400, 9500, 1, 1.0) + _castle_group(-2600, 10200, 2, 1.1) + _castle_group(300, 11500, 3, 1.25)
+    + _castle_group(5200, 12200, 4, 1.3) + _castle_group(-5600, 13000, 5, 1.4)
+    # LAYER 4: large skyline towers, 150-220 m
+    + _castle_group(1800, 15500, 6, 2.0, "V2_Skyline") + _castle_group(-3200, 17500, 7, 2.3, "V2_Skyline")
+    + _castle_group(7500, 19000, 8, 2.4, "V2_Skyline") + _castle_group(-8500, 20500, 9, 2.6, "V2_Skyline")
+    # LAYER 5: soft distant structures, 250-400 m (fog does the softening)
+    + _castle_group(500, 26000, 10, 3.4, "V2_Skyline") + _castle_group(-12000, 30000, 11, 3.8, "V2_Skyline")
+    + _castle_group(11000, 33000, 12, 4.0, "V2_Skyline") + _castle_group(-4000, 40000, 13, 4.6, "V2_Skyline")
 )
 
 # ---------------------------------------------------------------------------
-# SKY  (hover props + the Marble skyline dome)
+# SKY: the panorama dome (sky only) and restrained floating props
 # ---------------------------------------------------------------------------
 SKY = _band("V2_Skyline", [
-    A("sky_dome", 0, 0, -200, yaw=0, s=1.0, mat="MI_V2_SkyPano", label="Skyline_MarbleDome"),
+    A("sky_dome", 0, 0, -200, yaw=0, s=1.0, mat="MI_V2_SkyPano", label="Sky_MarblePanorama"),
 ])
 HOVER = _band("V2_Props", [
-    A("key_ornate", 650, 2400, 1500, yaw=20, s=1.0, mat="MI_V2_Gold", label="FloatKey0"),
-    A("key_ornate", -300, 3300, 1800, yaw=140, s=0.9, mat="MI_V2_Gold", label="FloatKey1"),
-    A("key_ornate", 1100, 4600, 2100, yaw=260, s=1.1, mat="MI_V2_Gold", label="FloatKey2"),
-    A("tea_pot", 350, 5200, 2400, yaw=30, s=1.3, mat="MI_V2_Ceramic", label="FloatTeapot"),
+    A("key_ornate", 900, 2600, 2100, yaw=20, s=0.8, mat="MI_V2_Gold", label="FloatKey0"),
+    A("key_ornate", -1400, 4200, 2400, yaw=160, s=0.8, mat="MI_V2_Gold", label="FloatKey1"),
+    A("tea_pot", 400, 6000, 2900, yaw=30, s=1.1, mat="MI_V2_Ceramic", label="FloatTeapot"),
 ])
 
-ALL = FOREGROUND + COURTYARD + GARDEN + PALACE + SKY + HOVER
+FOREGROUND = GATE + SIDES
+COURTYARD = []
+GARDEN = CORRIDOR + GARDEN_L + GARDEN_R
+PALACE = CITY
+ALL = FOREGROUND + GARDEN + PALACE + SKY + HOVER
 
-#: The path: a spline from behind the portal to the stairs. The builder lays
-#: irregular cobble slabs along it (Phase "ground first").
-PATH_SPLINE = [(0.0, -800.0, 0.0), (0.0, 0.0, 0.0), (40.0, 1400.0, 0.0),
-               (-30.0, 3000.0, 0.0), (0.0, 4400.0, 0.0), (0.0, 6500.0, 0.0)]
-PATH_WIDTH_NEAR, PATH_WIDTH_FAR = 640.0, 300.0
-PLAZA_RADIUS = 1500.0
+#: The dark path: from the front wall line to the arch, 4.4 m narrowing to 3 m,
+#: rising 0.6 m at the steps then 2%. The builder lays it.
+PATH_SPLINE = [(0.0, 850.0, 0.0), (0.0, 1420.0, 0.0), (0.0, 1560.0, 60.0), (20.0, 2600.0, 82.0),
+               (-15.0, 3600.0, 102.0), (0.0, 4450.0, 118.0)]
+PATH_WIDTH_NEAR, PATH_WIDTH_FAR = 440.0, 300.0
+#: The pale plaza: from behind the gate to the front wall, 16 m wide.
+PLAZA_RECT = (-1400.0, 1400.0, -1600.0, 880.0)      # x0, x1, y0, y1
+PLAZA_SLAB = 130.0
+PETALS = 36
 
 
 def summary():

@@ -48,6 +48,23 @@ Not migrated: `generate-hub-level.py` (the V1 scene), `hub-layout.json`,
 | `../infra/lightning/v2-build.sh` | CPU: run `build_v2.py` in the editor commandlet, cook and package the V2 map |
 | `../infra/lightning/v2-shot.sh` | GPU: capture `HeroCam_V2_Arrival` from the packaged V2 build |
 
+## The PRIMARY reference (2026-08-25, second directive)
+
+`reference/marble-royal-garden-backdrop-panorama.jpg` — the original
+4608 × 2304 Marble equirectangular, byte-identical, with `PROVENANCE.md`
+(world id, operation, prompt hash, credits, viewpoint height) and
+`ANALYSIS.md` (every major feature measured to azimuth / elevation / distance
+/ world position). It overrides the illustrated references. Its palette is
+cream, pale stone, green, muted pink, gold; its light is a high warm-white
+sun; its plaza is CLEAN. V2's layout, cameras, materials and lighting are
+derived from it, not from the earlier images.
+
+**The seam finding.** The panorama's "gates at both edges" are ONE gate 4.2 m
+wide, 9.3 m behind the viewpoint — an equirect wraps at its edges. So V2
+builds two locked cameras and the founder chooses: `HeroCam_V2_MarbleReference`
+(HeroCam0; at the viewpoint, level, 100°) and `HeroCam_V2_GateView`
+(HeroCam1; behind the open gate, looking through it).
+
 ## The Marble world — "make it just like this photo"
 
 The founder pointed at the Marble panorama and said make it just like this.
@@ -60,16 +77,13 @@ correction (roll 180; without it the world is upside down), the artistic yaw
 (180 — decided from two rendered frames), and that the export is
 `KHR_materials_unlit` with its lighting baked in.
 
-So V2 places that world as its scenery: the Marble mesh, at true metric scale,
-its reconstruction viewpoint ON HeroCam_V2_Arrival (so every ray from the hero
-camera is exactly the panorama's), its floor at z = 0, collision OFF, under
-`/Game/WonderlandV2/Marble`. In front of it stand the V2 hero assets the photo
-has nothing for at close range: the portal, the flagstone plaza, the corner
-flower banks, the clock tree at the right edge, the framing tree at the left,
-the hovering keys and teapot. `WONDERLAND_V2_LOOK=marbleWorld=0` builds the
-castle kit + garden instead (every recipe exists and is exercised); the two are
-not mixed by default because the Marble world already contains the gate, the
-heart, the arch, the tea and the city, and doubling them is clutter.
+Per the second directive the Marble mesh is a SCAFFOLD, not the world: V2
+imports it at true metric scale with its viewpoint on the world origin, floor
+at z = 0, collision off, **hidden in game** (`marbleVisible=0`), so the editor
+holds the measured proportions beside the authored assets. The foreground and
+midground are legitimate Unreal geometry (the V2 kit); the distant city is the
+V2 castle layers with the panorama's own sky above +8° of elevation
+(`skyHorizonV`). `marbleVisible=1` shows the shell for a direct comparison.
 
 Marble is a backdrop for a fixed camera: a single-viewpoint shell tolerates
 about 1.7 m of movement at metric scale before parallax smears it. Walkable V2

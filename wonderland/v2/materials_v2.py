@@ -25,37 +25,48 @@ import v2_config as C
 
 #: name -> (family, base tint, metallic, roughness, rough_vary, specular, emissive, emissive_strength)
 INSTANCES = {
-    "MI_V2_IvoryStone": ("plaster", (0.72, 0.62, 0.64), 0.0, 0.55, 0.45, 0.35, None, 0.0),
-    "MI_V2_Stone":      ("ashlar",  (0.44, 0.39, 0.37), 0.0, 0.85, 0.80, 0.30, None, 0.0),
-    "MI_V2_Cobble":     ("cobble",  (0.34, 0.24, 0.21), 0.0, 0.78, 0.90, 0.28, None, 0.0),
-    "MI_V2_CobbleHero": ("cobble",  (0.40, 0.29, 0.26), 0.0, 0.72, 0.90, 0.30, None, 0.0),
-    "MI_V2_Moss":       ("sward",   (0.10, 0.16, 0.07), 0.0, 0.80, 0.60, 0.20, None, 0.0),
-    "MI_V2_Gold":       ("metal",   (1.00, 0.72, 0.36), 0.92, 0.32, 0.35, 0.60, None, 0.0),
-    "MI_V2_RoofPink":   ("roof",    (0.72, 0.42, 0.47), 0.0, 0.62, 0.60, 0.30, None, 0.0),
-    "MI_V2_RoofRose":   ("roof",    (0.58, 0.34, 0.39), 0.0, 0.64, 0.60, 0.30, None, 0.0),
-    "MI_V2_RoofLilac":  ("roof",    (0.56, 0.46, 0.72), 0.0, 0.62, 0.60, 0.30, None, 0.0),
-    "MI_V2_RoofBlue":   ("roof",    (0.34, 0.46, 0.80), 0.0, 0.62, 0.60, 0.30, None, 0.0),
-    "MI_V2_Bark":       ("bark",    (0.20, 0.12, 0.09), 0.0, 0.88, 1.00, 0.20, None, 0.0),
-    "MI_V2_Ceramic":    ("glaze",   (0.92, 0.88, 0.86), 0.0, 0.18, 0.15, 0.55, None, 0.0),
-    "MI_V2_MushRed":    ("cap",     (0.56, 0.14, 0.15), 0.0, 0.48, 0.50, 0.40, None, 0.0),
-    "MI_V2_MushPurple": ("cap",     (0.36, 0.18, 0.58), 0.0, 0.50, 0.50, 0.40, None, 0.0),
-    "MI_V2_MushCream":  ("cap",     (0.90, 0.80, 0.66), 0.0, 0.52, 0.50, 0.40, None, 0.0),
-    "MI_V2_MushStem":   ("glaze",   (0.90, 0.82, 0.70), 0.0, 0.62, 0.40, 0.30, None, 0.0),
-    "MI_V2_Spot":       ("glaze",   (0.98, 0.94, 0.88), 0.0, 0.50, 0.30, 0.35, None, 0.0),
-    # foliage family (M_V2_Foliage)
-    "MI_V2_LeafDark":   ("leaf",    (0.05, 0.10, 0.05), 0.0, 0.70, 0.60, 0.15, None, 0.0),
-    "MI_V2_LeafMid":    ("leaf",    (0.09, 0.17, 0.08), 0.0, 0.66, 0.60, 0.15, None, 0.0),
-    "MI_V2_LeafLight":  ("leaf",    (0.14, 0.24, 0.11), 0.0, 0.62, 0.60, 0.15, None, 0.0),
-    "MI_V2_RosePink":   ("petal",   (0.96, 0.42, 0.62), 0.0, 0.58, 0.40, 0.25, None, 0.0),
-    "MI_V2_RoseRed":    ("petal",   (0.74, 0.12, 0.26), 0.0, 0.58, 0.40, 0.25, None, 0.0),
-    "MI_V2_PetalPink":  ("petal",   (0.94, 0.48, 0.70), 0.0, 0.60, 0.40, 0.25, None, 0.0),
-    "MI_V2_PetalViolet": ("petal",  (0.54, 0.30, 0.86), 0.0, 0.60, 0.40, 0.25, None, 0.0),
-    # portal family (M_V2_Portal)
-    "MI_V2_PortalRunes": ("runes",  (0.66, 0.36, 1.00), 0.0, 0.40, 0.0, 0.2, (0.66, 0.36, 1.00), 1.0),
-    "MI_V2_PortalGlow":  ("runes",  (0.72, 0.42, 1.00), 0.0, 0.40, 0.0, 0.2, (0.72, 0.42, 1.00), 1.4),
+    # ---- stone: cream and pale grey, warm variation, never white -------------
+    "MI_V2_IvoryStone": ("plaster", (0.74, 0.70, 0.62), 0.0, 0.58, 0.50, 0.32, None, 0.0),
+    "MI_V2_Stone":      ("ashlar",  (0.50, 0.46, 0.41), 0.0, 0.82, 0.80, 0.30, None, 0.0),
+    "MI_V2_PlazaCream": ("ashlar",  (0.70, 0.66, 0.57), 0.0, 0.74, 0.85, 0.30, None, 0.0),
+    "MI_V2_PlazaGrey":  ("ashlar",  (0.50, 0.52, 0.48), 0.0, 0.76, 0.85, 0.30, None, 0.0),
+    "MI_V2_PathStone":  ("cobble",  (0.30, 0.29, 0.27), 0.0, 0.80, 0.90, 0.28, None, 0.0),
+    "MI_V2_Cobble":     ("cobble",  (0.36, 0.30, 0.26), 0.0, 0.78, 0.90, 0.28, None, 0.0),
+    "MI_V2_CobbleHero": ("cobble",  (0.33, 0.31, 0.28), 0.0, 0.74, 0.90, 0.30, None, 0.0),
+    "MI_V2_Moss":       ("sward",   (0.12, 0.20, 0.08), 0.0, 0.82, 0.60, 0.20, None, 0.0),
+    "MI_V2_Soil":       ("sward",   (0.20, 0.15, 0.10), 0.0, 0.90, 0.50, 0.15, None, 0.0),
+    # ---- gold: metallic, restrained, aged in the recesses ---------------------
+    "MI_V2_Gold":       ("metal",   (0.92, 0.70, 0.36), 0.90, 0.42, 0.45, 0.60, None, 0.0),
+    # ---- roofs: muted pink, some dark navy caps, gold finials -----------------
+    "MI_V2_RoofPink":   ("roof",    (0.64, 0.40, 0.42), 0.0, 0.64, 0.60, 0.30, None, 0.0),
+    "MI_V2_RoofRose":   ("roof",    (0.56, 0.34, 0.37), 0.0, 0.66, 0.60, 0.30, None, 0.0),
+    "MI_V2_RoofLilac":  ("roof",    (0.52, 0.44, 0.62), 0.0, 0.64, 0.60, 0.30, None, 0.0),
+    "MI_V2_RoofBlue":   ("roof",    (0.28, 0.36, 0.62), 0.0, 0.62, 0.60, 0.30, None, 0.0),
+    "MI_V2_RoofNavy":   ("roof",    (0.10, 0.12, 0.24), 0.0, 0.60, 0.60, 0.34, None, 0.0),
+    "MI_V2_Bark":       ("bark",    (0.24, 0.16, 0.11), 0.0, 0.86, 1.00, 0.20, None, 0.0),
+    "MI_V2_Ceramic":    ("glaze",   (0.90, 0.87, 0.82), 0.0, 0.22, 0.20, 0.55, None, 0.0),
+    # ---- mushrooms: muted terracotta-pink, purple, cream --------------------
+    "MI_V2_MushRed":    ("cap",     (0.58, 0.24, 0.20), 0.0, 0.54, 0.50, 0.38, None, 0.0),
+    "MI_V2_MushTerracotta": ("cap", (0.60, 0.30, 0.24), 0.0, 0.56, 0.50, 0.38, None, 0.0),
+    "MI_V2_MushPurple": ("cap",     (0.38, 0.22, 0.52), 0.0, 0.54, 0.50, 0.38, None, 0.0),
+    "MI_V2_MushCream":  ("cap",     (0.86, 0.78, 0.64), 0.0, 0.56, 0.50, 0.38, None, 0.0),
+    "MI_V2_MushStem":   ("glaze",   (0.84, 0.76, 0.64), 0.0, 0.66, 0.40, 0.30, None, 0.0),
+    "MI_V2_Spot":       ("glaze",   (0.95, 0.92, 0.86), 0.0, 0.54, 0.30, 0.35, None, 0.0),
+    # ---- foliage (M_V2_Foliage): readable greens, not near-black ---------------
+    "MI_V2_LeafDark":   ("leaf",    (0.08, 0.16, 0.07), 0.0, 0.70, 0.60, 0.15, None, 0.0),
+    "MI_V2_LeafMid":    ("leaf",    (0.14, 0.26, 0.10), 0.0, 0.66, 0.60, 0.15, None, 0.0),
+    "MI_V2_LeafLight":  ("leaf",    (0.22, 0.36, 0.14), 0.0, 0.62, 0.60, 0.15, None, 0.0),
+    "MI_V2_RosePink":   ("petal",   (0.88, 0.40, 0.56), 0.0, 0.60, 0.40, 0.25, None, 0.0),
+    "MI_V2_RoseRed":    ("petal",   (0.70, 0.14, 0.24), 0.0, 0.60, 0.40, 0.25, None, 0.0),
+    "MI_V2_PetalPink":  ("petal",   (0.90, 0.52, 0.68), 0.0, 0.62, 0.40, 0.25, None, 0.0),
+    "MI_V2_PetalViolet": ("petal",  (0.50, 0.32, 0.78), 0.0, 0.62, 0.40, 0.25, None, 0.0),
+    "MI_V2_PetalBlue":  ("petal",   (0.42, 0.50, 0.86), 0.0, 0.62, 0.40, 0.25, None, 0.0),
+    # ---- portal (M_V2_Portal): restrained -------------------------------------
+    "MI_V2_PortalRunes": ("runes",  (0.62, 0.40, 0.92), 0.0, 0.40, 0.0, 0.2, (0.62, 0.40, 0.92), 1.0),
+    "MI_V2_PortalGlow":  ("runes",  (0.68, 0.46, 0.94), 0.0, 0.40, 0.0, 0.2, (0.68, 0.46, 0.94), 1.2),
 }
 FOLIAGE = ("MI_V2_LeafDark", "MI_V2_LeafMid", "MI_V2_LeafLight", "MI_V2_RosePink",
-           "MI_V2_RoseRed", "MI_V2_PetalPink", "MI_V2_PetalViolet")
+           "MI_V2_RoseRed", "MI_V2_PetalPink", "MI_V2_PetalViolet", "MI_V2_PetalBlue")
 PORTAL = ("MI_V2_PortalRunes", "MI_V2_PortalGlow")
 
 #: texture family -> (albedo, normal, roughness) file stems from gen-textures.py
@@ -356,6 +367,7 @@ def build_materials(unreal, log, texs):
                 mel.set_material_instance_texture_parameter_value(mi, "Panorama", texs["T_V2_SkyPano"])
             mel.set_material_instance_scalar_parameter_value(mi, "SkyGain", float(C.LOOK["skyGain"]))
             mel.set_material_instance_scalar_parameter_value(mi, "FlipV", float(C.LOOK["skyFlipV"]))
+            mel.set_material_instance_scalar_parameter_value(mi, "HorizonV", float(C.LOOK["skyHorizonV"]))
             eal.save_asset(path, only_if_is_dirty=False)
             out[name] = mi
         except Exception as exc:

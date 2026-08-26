@@ -896,3 +896,514 @@ def build_assets(ctx, keys=None, log=print):
         except Exception as exc:
             log("V2 ASSET cobble_slab_%d FAILED: %s" % (v, exc))
     return out
+
+
+# ==========================================================================
+# MARBLE-REFERENCE ADDITIONS (2026-08-25): the plaza, the garden language,
+# the white capped towers, the giant mushroom as the panorama draws it
+# ==========================================================================
+
+
+def plaza_slab(ctx, variant):
+    """A large pale plaza slab, ~1.3 m, near-rectangular with slightly
+    irregular edges, a subtle bevel and a worn top. The reference's plaza is
+    big slabs in a loose cream/grey checker with wide seams."""
+    m = ctx.mesh("plaza_slab_%d" % variant)
+    w, d = 128.0 * (0.94 + 0.12 * _h(variant, 1)), 124.0 * (0.94 + 0.12 * _h(variant, 2))
+    poly = []
+    for i, (sx, sy) in enumerate(((-1, -1), (1, -1), (1, 1), (-1, 1))):
+        poly.append((sx * w * 0.5 + (_h(variant, i, 3) - 0.5) * 6.0, sy * d * 0.5 + (_h(variant, i, 4) - 0.5) * 6.0))
+    m.extrude(poly, 12.0)
+    m.subdivide(2)
+    m.perlin(1.1, 0.04, seed=300 + variant)
+    m.smooth(1, 0.3)
+    m.split_normals(45.0)
+    return m
+
+
+def path_steps(ctx):
+    """Three low steps across the path, 4.6 m wide, 0.2 m rise each."""
+    m = ctx.mesh("path_steps")
+    for k in range(3):
+        d = 90.0 * (3 - k)
+        m.box(460.0, d, 20.0, at=(0.0, 90.0 * k + d * 0.5, 20.0 * (k + 0.5)), chamfer=2.5)
+    m.perlin(0.8, 0.05, seed=311)
+    return m
+
+
+def retaining_wall(ctx):
+    """A low cream garden wall, 4 m long, 0.85 m high: coursed blocks, a
+    rolled cap. The reference's beds sit behind these."""
+    m = ctx.mesh("retaining_wall")
+    for c in range(3):
+        for k in range(4):
+            w = 100.0
+            x = -200.0 + (50.0 if c % 2 else 0.0) + 100.0 * k + w * 0.5
+            if x + w * 0.5 > 200.0:
+                w -= (x + w * 0.5 - 200.0)
+                x = 200.0 - w * 0.5
+            m.box(w, 60.0 + 3.0 * _h(c, k, 1), 24.0, at=(x, 0.0, 12.0 + 24.0 * c), chamfer=2.0)
+    m.box(410.0, 70.0, 12.0, at=(0, 0, 78.0), chamfer=4.0)
+    m.perlin(0.8, 0.05, seed=321)
+    return m
+
+
+def planter_box(ctx):
+    """A raised stone planter, 2 x 2 m, with a soil fill the beds sit on."""
+    m = ctx.mesh("planter_box")
+    m.box(200.0, 200.0, 60.0, at=(0, 0, 30.0), chamfer=4.0)
+    m.box(210.0, 210.0, 10.0, at=(0, 0, 65.0), chamfer=3.0)
+    return m
+
+
+def topiary_cone_roses(ctx):
+    """The reference's signature garden form: a clipped conical shrub ~5.7 m
+    tall with roses studded over it. Organic, not a cone: a lofted profile
+    with Perlin at two frequencies, subdivided, and 40 rose heads."""
+    m = ctx.mesh("topiary_cone_roses")
+    prof = [(0.0, 0.0)]
+    for i in range(12):
+        t = i / 11.0
+        r = 190.0 * (1.0 - t) ** 0.75 + 12.0
+        prof.append((r * (1.0 + 0.05 * math.sin(t * 9.0)), 60.0 + 500.0 * t))
+    prof.append((0.0, 570.0))
+    m.revolve(prof, steps=28)
+    m.cylinder(30.0, 70.0, at=(0, 0, 0), steps=10)
+    for i in range(40):
+        t = _h(21, i, 1)
+        a = 2.0 * math.pi * _h(21, i, 2)
+        r = 190.0 * (1.0 - t) ** 0.75 + 12.0
+        m.sphere(16.0 + 10.0 * _h(21, i, 3), at=(math.cos(a) * r * 1.02, math.sin(a) * r * 1.02, 60.0 + 500.0 * t), steps=8)
+    m.perlin(14.0, 0.012, seed=331)
+    m.perlin(5.0, 0.05, seed=332)
+    m.subdivide(1)
+    m.smooth(1, 0.25)
+    return m
+
+
+def topiary_ball(ctx):
+    """A clipped ball, 1.6 m: a sphere that reads as foliage because its
+    surface is leaf-noisy at two scales, not smooth."""
+    m = ctx.mesh("topiary_ball")
+    m.sphere(80.0, at=(0, 0, 100.0), steps=16)
+    m.cylinder(10.0, 30.0, at=(0, 0, 0), steps=8)
+    m.perlin(6.0, 0.02, seed=341)
+    m.perlin(2.5, 0.08, seed=342)
+    m.subdivide(1)
+    return m
+
+
+def tower_capped(ctx):
+    """The reference's white garden tower: a slender white drum with a string
+    course, small windows, a balcony ring, and a steep dark conical cap with
+    a gold finial (cap placed by the layout: roof_cone_steep)."""
+    m = ctx.mesh("tower_capped")
+    prof = []
+    for i in range(9):
+        t = i / 8.0
+        prof.append((150.0 * (1.0 - 0.08 * t), 1100.0 * t))
+    m.revolve([(0.0, 0.0)] + prof + [(0.0, 1100.0)], steps=28)
+    m.torus(152.0, 14.0, at=(0, 0, 24.0), major=28, minor=7)
+    m.revolve([(136.0, 560.0), (168.0, 572.0), (170.0, 596.0), (136.0, 610.0)], steps=28)
+    m.revolve([(132.0, 1040.0), (176.0, 1052.0), (178.0, 1080.0), (132.0, 1100.0)], steps=28)
+    for row, z in ((0, 320.0), (1, 800.0)):
+        for k in range(4):
+            a = 2.0 * math.pi * (k + 0.5 * row) / 4 + 0.4
+            r = 150.0 * (1.0 - 0.08 * z / 1100.0)
+            m.box(40.0, 10.0, 90.0, at=(math.cos(a) * r, math.sin(a) * r, z), rot=(0.0, math.degrees(a) + 90.0, 0.0), chamfer=2.0)
+            m.torus(20.0, 5.0, at=(math.cos(a) * r, math.sin(a) * r, z + 42.0), rot=(0.0, math.degrees(a) + 90.0, 90.0), major=12, minor=5, arc=180.0)
+    return m
+
+
+def roof_cone_steep(ctx):
+    """A steep dark cap for tower_capped: 1.9 m radius, 5 m tall, with a
+    rolled eave, four dormer ridges and a gold finial base."""
+    m = ctx.mesh("roof_cone_steep")
+    m.revolve([(0.0, 0.0), (192.0, 0.0), (188.0, 14.0), (120.0, 200.0), (52.0, 400.0), (8.0, 500.0), (0.0, 520.0)], steps=28)
+    m.torus(186.0, 14.0, at=(0, 0, 8.0), major=28, minor=6)
+    for k in range(4):
+        pts = [(r * 1.02 * math.cos(math.radians(90.0 * k + 45.0)), r * 1.02 * math.sin(math.radians(90.0 * k + 45.0)), z)
+               for (r, z) in ((188.0, 14.0), (120.0, 200.0), (52.0, 400.0), (8.0, 500.0))]
+        m.tube(pts, [7.0, 6.0, 5.0, 4.0], sides=5)
+    m.revolve([(0.0, 510.0), (14.0, 516.0), (10.0, 540.0), (18.0, 556.0), (0.0, 600.0)], steps=12)
+    return m
+
+
+def mushroom_giant(ctx):
+    """THE landmark: the panorama's giant mushroom -- a broad, thick,
+    slightly drooping cap ~20 m across on a massive 3.5 m stem, 13 m to the
+    underside, ivy on top, a clock face on the stem. Thick rim, visible
+    gills, organic sag; nothing about it is a cap on a pole."""
+    m = ctx.mesh("mushroom_giant")
+    stem_h = 1150.0
+    path = [(30.0 * (i / 8.0) ** 2, 0.0, -40.0 + stem_h * i / 8.0) for i in range(9)]
+    radii = [175.0 * (1.0 + 0.7 * math.exp(-i * 0.6)) * (1.0 - 0.12 * i / 8.0) for i in range(9)]
+    m.tube(path, radii, sides=24)
+    R, ch = 1000.0, 420.0
+    cap = [(0.0, ch), (0.22 * R, ch * 0.97), (0.48 * R, ch * 0.86), (0.72 * R, ch * 0.66), (0.90 * R, ch * 0.42),
+           (1.00 * R, ch * 0.18), (0.99 * R, 0.0), (0.93 * R, -ch * 0.06), (0.86 * R, -ch * 0.02), (0.84 * R, ch * 0.10),
+           (0.60 * R, ch * 0.14), (0.30 * R, ch * 0.16), (200.0, ch * 0.16), (200.0, ch * 0.04), (0.0, ch * 0.04)]
+    m.revolve(cap, steps=48, at=(30.0, 0.0, stem_h - ch * 0.05))
+    for g in range(56):
+        a = 360.0 * g / 56
+        m.extrude([(210.0, 0.0), (0.84 * R, 0.0), (0.84 * R, -22.0), (210.0, -9.0)], 5.0,
+                  at=(30.0, 0.0, stem_h + ch * 0.10), rot=(90.0, a, 0.0))
+    m.perlin(26.0, 0.006, seed=351)
+    m.perlin(8.0, 0.03, seed=352)
+    m.subdivide(1)
+    m.smooth(1, 0.2)
+    m.split_normals(55.0)
+    return m
+
+
+def garden_arch_stone(ctx):
+    """The gateway at the end of the garden corridor: a stone arch on
+    pilasters with a moulded cap, 7 m wide."""
+    m = ctx.mesh("garden_arch_stone")
+    R, T, D = 350.0, 60.0, 90.0
+    for k in range(13):
+        a = math.pi * (k + 0.5) / 13
+        m.box(2.0 * math.pi * R / 13 * 0.94, D, T, at=(math.cos(a) * R, 0.0, math.sin(a) * R + 320.0),
+              rot=(90.0 - math.degrees(a), 0.0, 0.0), chamfer=3.0)
+    m.box(80.0, D + 14.0, T + 30.0, at=(0.0, 0.0, R + 320.0 + 8.0), chamfer=4.0)
+    for s in (-1, 1):
+        m.box(90.0, D + 10.0, 320.0, at=(s * R, 0.0, 160.0), chamfer=4.0)
+        m.box(120.0, D + 30.0, 24.0, at=(s * R, 0.0, 320.0), chamfer=4.0)
+        m.box(120.0, D + 30.0, 20.0, at=(s * R, 0.0, 10.0), chamfer=4.0)
+    return m
+
+
+RECIPES.update({
+    "path_steps": (path_steps, "stairs", True, True),
+    "retaining_wall": (retaining_wall, "gates", True, True),
+    "planter_box": (planter_box, "garden_props", True, True),
+    "topiary_cone_roses": (topiary_cone_roses, "topiary", False, True),
+    "topiary_ball": (topiary_ball, "topiary", False, False),
+    "tower_capped": (tower_capped, "castle", True, True),
+    "roof_cone_steep": (roof_cone_steep, "castle", True, False),
+    "mushroom_giant": (mushroom_giant, "mush_landmark", True, True),
+    "garden_arch_stone": (garden_arch_stone, "garden_arch", True, True),
+})
+PLAZA_VARIANTS = 4
+
+_old_build_assets = build_assets
+
+
+def build_assets(ctx, keys=None, log=print):
+    out = _old_build_assets(ctx, keys, log)
+    for v in range(PLAZA_VARIANTS):
+        try:
+            mb = plaza_slab(ctx, v)
+            path = mb.to_asset(F["cobble"], "plaza_slab_%d" % v, nanite=bool(C.LOOK["nanite"]), collision=True)
+            if path:
+                out["plaza_slab_%d" % v] = path
+        except Exception as exc:
+            log("V2 ASSET plaza_slab_%d FAILED: %s" % (v, exc))
+    return out
+
+
+# ==========================================================================
+# THE CITY LANGUAGE (permanent directive): real modular variation
+# ==========================================================================
+
+
+def _window_arched(m, x, y, z, yaw, w=44.0, h=100.0, d=10.0):
+    m.box(w, d, h, at=(x, y, z), rot=(0.0, yaw, 0.0), chamfer=2.0)
+    m.torus(w * 0.5, 5.0, at=(x, y, z + h * 0.5 - 4.0), rot=(0.0, yaw, 90.0), major=12, minor=5, arc=180.0)
+    m.box(w + 16.0, d + 6.0, 7.0, at=(x, y, z - h * 0.5 - 4.0), rot=(0.0, yaw, 0.0))
+
+
+def _window_rect(m, x, y, z, yaw, w=40.0, h=80.0, d=10.0):
+    m.box(w, d, h, at=(x, y, z), rot=(0.0, yaw, 0.0), chamfer=2.0)
+    m.box(w + 12.0, d + 8.0, 8.0, at=(x, y, z + h * 0.5 + 4.0), rot=(0.0, yaw, 0.0), chamfer=1.5)
+    m.box(w + 14.0, d + 6.0, 7.0, at=(x, y, z - h * 0.5 - 4.0), rot=(0.0, yaw, 0.0))
+
+
+def _window_round(m, x, y, z, yaw, r=24.0, d=10.0):
+    m.torus(r, 6.0, at=(x, y, z), rot=(0.0, yaw, 90.0), major=18, minor=6)
+
+
+def _cornice_ring(m, r, z, steps=32, dentils=True):
+    m.revolve([(r - 6.0, z), (r + 20.0, z + 10.0), (r + 24.0, z + 30.0), (r - 6.0, z + 42.0)], steps=steps)
+    if dentils:
+        for k in range(24):
+            a = 2.0 * math.pi * k / 24
+            m.box(10.0, 12.0, 12.0, at=(math.cos(a) * (r + 6.0), math.sin(a) * (r + 6.0), z - 8.0), rot=(0.0, math.degrees(a), 0.0))
+
+
+def castle_tower_square(ctx):
+    """A square tower, 5 x 5 x 16 m: battered base, quoins, two window rows
+    (arched below, rectangular above), a cornice and a crenellated parapet."""
+    m = ctx.mesh("castle_tower_square")
+    m.box(560.0, 560.0, 120.0, at=(0, 0, 60.0), chamfer=6.0)
+    m.box(500.0, 500.0, 1480.0, at=(0, 0, 120.0 + 740.0), chamfer=8.0)
+    for c in range(12):
+        for (sx, sy) in ((-1, -1), (1, -1), (1, 1), (-1, 1)):
+            m.box(50.0, 50.0, 58.0, at=(sx * 240.0, sy * 240.0, 160.0 + 120.0 * c + (30.0 if c % 2 else 0.0)), chamfer=3.0)
+    for yaw, (nx, ny) in ((0.0, (0, -1)), (90.0, (1, 0)), (180.0, (0, 1)), (270.0, (-1, 0))):
+        for k in range(2):
+            x = nx * 254.0 + (ny * (-90.0 + 180.0 * k))
+            y = ny * 254.0 + (nx * (-90.0 + 180.0 * k))
+            _window_arched(m, x, y, 420.0, yaw)
+            _window_rect(m, x, y, 900.0, yaw)
+        _window_round(m, nx * 254.0, ny * 254.0, 1300.0, yaw)
+    m.box(560.0, 560.0, 36.0, at=(0, 0, 1600.0 + 18.0), chamfer=5.0)
+    for k in range(24):
+        m.box(18.0, 18.0, 30.0, at=(-260.0 + 22.6 * k, 268.0, 1640.0), chamfer=2.0)
+    for s in (-1, 1):
+        for k in range(6):
+            m.box(60.0, 60.0, 90.0, at=(s * 250.0, -250.0 + 100.0 * k, 1680.0), chamfer=4.0)
+            m.box(60.0, 60.0, 90.0, at=(-250.0 + 100.0 * k, s * 250.0, 1680.0), chamfer=4.0)
+    return m
+
+
+def castle_tower_octagon(ctx):
+    """An octagonal tower, 6 m across, 18 m: a string course, arched windows
+    on alternate faces, a corbelled top and a parapet ring."""
+    m = ctx.mesh("castle_tower_octagon")
+    octo = [(math.cos(math.pi / 8 + math.pi * i / 4) * 300.0, math.sin(math.pi / 8 + math.pi * i / 4) * 300.0) for i in range(8)]
+    m.extrude([(p[0] * 1.1, p[1] * 1.1) for p in octo], 100.0)
+    m.extrude(octo, 1600.0, at=(0, 0, 100.0))
+    _cornice_ring(m, 300.0, 700.0, steps=8)
+    for i in range(0, 8, 2):
+        a = math.pi / 8 + math.pi * i / 4 + math.pi / 8
+        for z in (450.0, 1050.0):
+            _window_arched(m, math.cos(a) * 300.0, math.sin(a) * 300.0, z, math.degrees(a) + 90.0)
+    m.extrude([(p[0] * 1.14, p[1] * 1.14) for p in octo], 60.0, at=(0, 0, 1660.0))
+    for k in range(16):
+        a = 2.0 * math.pi * k / 16
+        m.box(50.0, 50.0, 80.0, at=(math.cos(a) * 320.0, math.sin(a) * 320.0, 1760.0), rot=(0.0, math.degrees(a), 0.0), chamfer=3.0)
+    return m
+
+
+def castle_tower_slender(ctx):
+    """A slender round tower, 2.4 m across, 20 m: the reference's white
+    spires. Entasis, three string courses, small windows, a corbel crown."""
+    m = ctx.mesh("castle_tower_slender")
+    prof = []
+    for i in range(11):
+        t = i / 10.0
+        prof.append((120.0 * (1.0 - 0.06 * math.sin(math.pi * t) - 0.16 * t), 2000.0 * t))
+    m.revolve([(0.0, 0.0)] + prof + [(0.0, 2000.0)], steps=24)
+    m.torus(122.0, 12.0, at=(0, 0, 20.0), major=24, minor=6)
+    for z in (600.0, 1200.0, 1700.0):
+        r = 120.0 * (1.0 - 0.16 * z / 2000.0)
+        m.revolve([(r - 4.0, z), (r + 14.0, z + 8.0), (r + 14.0, z + 22.0), (r - 4.0, z + 30.0)], steps=24)
+    for row, z in ((0, 400.0), (1, 900.0), (2, 1450.0)):
+        for k in range(3):
+            a = 2.0 * math.pi * (k + 0.33 * row) / 3
+            r = 120.0 * (1.0 - 0.16 * z / 2000.0)
+            _window_arched(m, math.cos(a) * r, math.sin(a) * r, z, math.degrees(a) + 90.0, w=28.0, h=64.0, d=8.0)
+    for k in range(12):
+        a = 2.0 * math.pi * k / 12
+        m.box(24.0, 24.0, 40.0, at=(math.cos(a) * 110.0, math.sin(a) * 110.0, 1960.0), rot=(0.0, math.degrees(a), 0.0), chamfer=2.0)
+    return m
+
+
+def roof_flat_crenellated(ctx):
+    """A flat parapet roof for the square tower and halls: crenellations."""
+    m = ctx.mesh("roof_flat_crenellated")
+    m.box(520.0, 520.0, 24.0, at=(0, 0, 12.0), chamfer=4.0)
+    for s in (-1, 1):
+        for k in range(6):
+            m.box(60.0, 40.0, 80.0, at=(-230.0 + 92.0 * k, s * 240.0, 64.0), chamfer=4.0)
+            m.box(40.0, 60.0, 80.0, at=(s * 240.0, -230.0 + 92.0 * k, 64.0), chamfer=4.0)
+    return m
+
+
+def facade_panel(ctx):
+    """A palace facade bay, 4 x 6 m: pilasters, an arched window with a
+    balcony, a cornice. Tiled along halls to give a real facade rhythm."""
+    m = ctx.mesh("facade_panel")
+    m.box(400.0, 60.0, 600.0, at=(0, 0, 300.0), chamfer=4.0)
+    for s in (-1, 1):
+        m.box(36.0, 80.0, 560.0, at=(s * 180.0, -10.0, 300.0), chamfer=3.0)
+        m.box(52.0, 90.0, 24.0, at=(s * 180.0, -10.0, 580.0), chamfer=3.0)
+    _window_arched(m, 0.0, -34.0, 380.0, 0.0, w=110.0, h=220.0, d=12.0)
+    m.box(200.0, 70.0, 16.0, at=(0, -50.0, 262.0), chamfer=3.0)
+    for k in range(7):
+        m.revolve([(0.0, 0.0), (7.0, 0.0), (7.0, 4.0), (4.0, 10.0), (6.0, 34.0), (8.0, 50.0), (5.0, 62.0), (7.0, 66.0)],
+                  steps=8, at=(-84.0 + 28.0 * k, -78.0, 270.0))
+    m.box(220.0, 12.0, 8.0, at=(0, -78.0, 340.0), chamfer=2.0)
+    m.box(440.0, 90.0, 30.0, at=(0, -8.0, 615.0), chamfer=4.0)
+    return m
+
+
+def castle_arcade(ctx):
+    """A ground-floor arcade, 6 m long: three arches on columns."""
+    m = ctx.mesh("castle_arcade")
+    m.box(600.0, 120.0, 40.0, at=(0, 0, 400.0), chamfer=4.0)
+    for k in range(4):
+        x = -300.0 + 200.0 * k
+        m.revolve([(0.0, 0.0), (26.0, 0.0), (26.0, 8.0), (20.0, 14.0), (18.0, 300.0), (24.0, 330.0), (30.0, 345.0), (0.0, 345.0)], steps=14, at=(x, 0.0, 0.0))
+    for k in range(3):
+        x = -200.0 + 200.0 * k
+        for j in range(9):
+            a = math.pi * (j + 0.5) / 9
+            m.box(2.0 * math.pi * 90.0 / 9 * 0.9, 100.0, 30.0, at=(x + math.cos(a) * 90.0, 0.0, 300.0 + math.sin(a) * 90.0), rot=(90.0 - math.degrees(a), 0.0, 0.0), chamfer=2.0)
+    return m
+
+
+def finial_spire(ctx):
+    """A tall gold spire finial, 3 m."""
+    m = ctx.mesh("finial_spire")
+    m.revolve([(0.0, 0.0), (28.0, 0.0), (28.0, 14.0), (16.0, 22.0), (22.0, 60.0), (10.0, 120.0), (14.0, 140.0), (4.0, 240.0), (0.0, 300.0)], steps=12)
+    m.sphere(12.0, at=(0, 0, 150.0), steps=8)
+    return m
+
+
+RECIPES.update({
+    "castle_tower_square": (castle_tower_square, "castle", True, True),
+    "castle_tower_octagon": (castle_tower_octagon, "castle", True, True),
+    "castle_tower_slender": (castle_tower_slender, "castle", True, True),
+    "roof_flat_crenellated": (roof_flat_crenellated, "castle", True, False),
+    "facade_panel": (facade_panel, "castle", True, True),
+    "castle_arcade": (castle_arcade, "castle", True, True),
+    "finial_spire": (finial_spire, "castle", True, False),
+})
+
+
+# ==========================================================================
+# THE VEGETATION FAMILIES (permanent directive): variation per family
+# ==========================================================================
+
+
+def tree_slender_trunk(ctx):
+    """A slender garden tree, 9 m: straight, a fork at 5 m, fine limbs."""
+    m, path = _trunk(ctx, "tree_slender_trunk", 900.0, 70.0, 40.0, 30.0, seed=81, roots=4, sides=16)
+    p = path[int(len(path) * 0.55)]
+    for k, ang in enumerate((0.4, 2.5, 4.4)):
+        _limb(m, (p[0], p[1], 520.0), (math.cos(ang) * 0.75, math.sin(ang) * 0.75, 0.65), 380.0, 26.0, 0, 90 + k)
+    return m
+
+
+def canopy_medium(ctx):
+    """A 4 m leaf mass, six lumps, for garden trees and the giant mushroom's ivy."""
+    m = ctx.mesh("canopy_medium")
+    for i, (x, y, z, r) in enumerate(((0, 0, 20, 200), (160, 60, -30, 150), (-150, 90, -10, 160), (60, -160, -20, 150), (-90, -120, 60, 130), (30, 130, 110, 120))):
+        m.sphere(r, at=(x, y, z), steps=12)
+    m.perlin(24.0, 0.007, seed=93)
+    m.perlin(7.0, 0.03, seed=94)
+    m.subdivide(1)
+    m.smooth(1, 0.3)
+    m.split_normals(70.0)
+    return m
+
+
+def topiary_cone_plain(ctx):
+    """A clipped cone without roses, 3 m, leaf-noisy."""
+    m = ctx.mesh("topiary_cone_plain")
+    prof = [(0.0, 0.0)] + [(105.0 * (1.0 - i / 10.0) ** 0.8 + 8.0, 40.0 + 260.0 * i / 10.0) for i in range(11)] + [(0.0, 300.0)]
+    m.revolve(prof, steps=22)
+    m.cylinder(16.0, 44.0, at=(0, 0, 0), steps=8)
+    m.perlin(8.0, 0.02, seed=101)
+    m.perlin(3.0, 0.08, seed=102)
+    m.subdivide(1)
+    return m
+
+
+def topiary_spiral(ctx):
+    """A spiral-clipped topiary, 3.2 m: a cone cut by a helical groove."""
+    m = ctx.mesh("topiary_spiral")
+    pts, rr = [], []
+    for i in range(40):
+        t = i / 39.0
+        a = t * 5.0 * 2.0 * math.pi
+        r = 90.0 * (1.0 - t) + 10.0
+        pts.append((math.cos(a) * r * 0.55, math.sin(a) * r * 0.55, 50.0 + 270.0 * t))
+        rr.append(r * 0.62 + 6.0)
+    m.tube(pts, rr, sides=12)
+    m.cylinder(14.0, 54.0, at=(0, 0, 0), steps=8)
+    m.perlin(6.0, 0.03, seed=111)
+    m.perlin(2.5, 0.09, seed=112)
+    m.subdivide(1)
+    return m
+
+
+def rose_bush(ctx):
+    """A rose bush, 1.4 m: a leafy mass with nine blooms standing proud."""
+    m = ctx.mesh("rose_bush")
+    for i, (x, y, z, r) in enumerate(((0, 0, 70, 70), (50, 20, 50, 55), (-45, 30, 60, 52), (20, -50, 55, 50))):
+        m.sphere(r, at=(x, y, z), steps=10)
+    m.perlin(9.0, 0.03, seed=121)
+    for i in range(9):
+        a = i * 2.39996
+        rad = 40.0 + 50.0 * _h(12, i, 1)
+        x, y = math.cos(a) * rad, math.sin(a) * rad
+        z = 95.0 + 40.0 * _h(12, i, 2)
+        m.tube([(x * 0.6, y * 0.6, z - 40.0), (x, y, z)], [3.0, 2.2], sides=5)
+        _cup(m, 0.36, (x, y, z), 40.0 * i, -20.0 + 40.0 * _h(12, i, 3))
+        _cup(m, 0.25, (x, y, z + 4.0), 40.0 * i + 25.0, 0.0)
+    m.subdivide(1)
+    return m
+
+
+def shrub_flowering(ctx):
+    """A flowering shrub, 2 m: hedge mass plus blossom clumps on its crown."""
+    m = ctx.mesh("shrub_flowering")
+    for i, (x, y, z, r) in enumerate(((0, 0, 110, 110), (90, 40, 90, 85), (-80, 60, 95, 90), (30, -90, 80, 80))):
+        m.sphere(r, at=(x, y, z), steps=11)
+    m.perlin(12.0, 0.015, seed=131)
+    m.perlin(4.0, 0.06, seed=132)
+    for i in range(14):
+        a = i * 2.39996
+        el = 0.3 + 0.6 * _h(13, i, 1)
+        m.sphere(18.0 + 10.0 * _h(13, i, 2), at=(math.cos(a) * math.cos(el) * 150.0, math.sin(a) * math.cos(el) * 150.0, 100.0 + math.sin(el) * 120.0), steps=8)
+    m.subdivide(1)
+    return m
+
+
+def hedge_block(ctx):
+    """A clipped rectangular hedge, 3 x 1 x 1.2 m, with a leaf-noisy surface."""
+    m = ctx.mesh("hedge_block")
+    m.box(300.0, 100.0, 120.0, at=(0, 0, 60.0), chamfer=14.0)
+    m.subdivide(2)
+    m.perlin(5.0, 0.03, seed=141)
+    m.perlin(2.0, 0.09, seed=142)
+    m.smooth(1, 0.2)
+    return m
+
+
+def ground_flowers(ctx):
+    """Low ground flowers, 1 m patch: many small blooms on a leafy mat."""
+    m = ctx.mesh("ground_flowers")
+    m.sphere(60.0, at=(0, 0, -25.0), steps=10)
+    m.scale(1.6, 1.4, 0.5)
+    for i in range(16):
+        a = i * 2.39996
+        rad = 15.0 + 60.0 * _h(14, i, 1)
+        x, y = math.cos(a) * rad, math.sin(a) * rad
+        h = 16.0 + 14.0 * _h(14, i, 2)
+        m.tube([(x, y, 0.0), (x + 2, y, h)], [1.6, 1.2], sides=4)
+        for p in range(5):
+            m.extrude([(0, 0), (5, 5), (4, 14), (0, 18), (-4, 14), (-5, 5)], 1.0, at=(x + 2, y, h), rot=(-25.0, 72.0 * p + 30.0 * i, 0.0))
+    return m
+
+
+def vine_wall(ctx):
+    """Ivy over a wall face, 3 x 2 m: strands and leaf clumps on a plane."""
+    m = ctx.mesh("vine_wall")
+    for k in range(7):
+        pts, rr = [], []
+        for i in range(8):
+            t = i / 7.0
+            pts.append((-140.0 + 46.0 * k + 22.0 * math.sin(t * 6.0 + k), -8.0 - 6.0 * math.sin(t * 4.0), 200.0 - 200.0 * t))
+            rr.append(4.0 - 2.0 * t)
+        m.tube(pts, rr, sides=5)
+        for i in range(8):
+            m.sphere(16.0 + 10.0 * _h(15, k, i), at=(pts[i][0] + 6.0, -18.0, pts[i][2]), steps=7)
+    m.perlin(4.0, 0.04, seed=151)
+    return m
+
+
+RECIPES.update({
+    "tree_slender_trunk": (tree_slender_trunk, "trees", True, True),
+    "canopy_medium": (canopy_medium, "trees", False, False),
+    "topiary_cone_plain": (topiary_cone_plain, "topiary", False, True),
+    "topiary_spiral": (topiary_spiral, "topiary", False, True),
+    "rose_bush": (rose_bush, "roses", False, False),
+    "shrub_flowering": (shrub_flowering, "shrubs", False, False),
+    "hedge_block": (hedge_block, "shrubs", False, True),
+    "ground_flowers": (ground_flowers, "flowers", False, False),
+    "vine_wall": (vine_wall, "ivy", False, False),
+})

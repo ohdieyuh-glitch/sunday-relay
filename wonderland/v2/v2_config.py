@@ -45,58 +45,65 @@ FOLDERS = {
 DATA_LAYERS = ("V2_Arrival", "V2_Garden", "V2_Castle", "V2_Skyline",
                "V2_Vegetation", "V2_Props", "V2_VFX")
 
-# ---- THE HERO CAMERA, LOCKED ------------------------------------------------
+# ---- THE HERO CAMERAS, LOCKED -------------------------------------------
 #
-# Framed against the reference and not inherited from V1. The world's origin
-# is the CENTRE OF THE PORTAL; the camera stands 9 m behind it at 3.8 m,
-# looking along +Y, pitched 5 degrees down. With an 82-degree horizontal field
-# (vertical ~52 at 16:9) the bottom ray meets the ground 6.3 m out, so the
-# portal's near rim falls below the frame and the circle is cut by the bottom
-# edge exactly as the reference cuts it; the horizon sits at ~44% from the top
-# where the castle bases sit; the castle tops reach the top edge.
+# Reconstructed from the Marble panorama (v2/reference/ANALYSIS.md). The
+# world origin is the panorama's VIEWPOINT; eye height 2.62 m (1.24 native
+# units x the measured metric scale); the horizon sits at mid-frame, so the
+# camera is LEVEL. The panorama's "gates at both edges" are one gate 9.3 m
+# BEHIND the viewpoint (the equirect seam), so two cameras are built and the
+# founder chooses:
 #
-# SCREEN HANDEDNESS: looking along +Y, screen-right is -X. Every "left"/"right"
-# in layout_v2.py is the screen's.
-HERO_CAM = {
-    "name": "HeroCam_V2_Arrival",
-    "location": (0.0, -900.0, 380.0),
-    "rotation": (-5.0, 90.0, 0.0),      # pitch, yaw, roll
-    "fov": 82.0,
-    "tags": ("HeroCam_V2_Arrival", "HeroCam0"),   # HeroCam0 = the capture path's default
-}
+#   HeroCam_V2_MarbleReference  at the viewpoint, 100 deg horizontal -- the
+#       widest a hero frame carries without fisheye; from 1.5 m behind V the
+#       rose cones (+/-47 deg), giant mushroom (-49), clock tree (+45), heart
+#       (+22), steps, path, towers and city sit where the panorama puts them.
+#   HeroCam_V2_GateView  5.5 m behind the gate, looking through its open
+#       leaves -- the flattened panorama's framing, with a coherent world.
+#
+# SCREEN HANDEDNESS: looking along +Y, screen-right is -X.
+HERO_CAMS = [
+    {"name": "HeroCam_V2_MarbleReference", "location": (0.0, -150.0, 262.0),
+     "rotation": (-2.0, 90.0, 0.0), "fov": 100.0,
+     "tags": ("HeroCam_V2_MarbleReference", "HeroCam0")},
+    {"name": "HeroCam_V2_GateView", "location": (0.0, -1460.0, 262.0),
+     "rotation": (-3.0, 90.0, 0.0), "fov": 95.0,
+     "tags": ("HeroCam_V2_GateView", "HeroCam1")},
+]
+HERO_CAM = HERO_CAMS[0]
 
 #: Env knobs. WONDERLAND_TEXTURE_DIR is shared with V1's texture synthesiser.
 TEXTURE_DIR = os.environ.get("WONDERLAND_TEXTURE_DIR", "/opt/wonderland/textures")
 MARBLE_PANO = os.environ.get("WLV2_MARBLE_PANO", "")   # set by v2-build.sh
 MARBLE_GLB = os.environ.get("WLV2_MARBLE_GLB", "")     # the 3,500-credit textured mesh, on the Studio
 LOOK = {
-    # PHYSICAL LIGHT UNITS, ON PURPOSE. V1 lit its world with a ~1,000-lux sun
-    # because its exposure was inert, and then fought a black sky (the
-    # atmosphere is calibrated for a real sun) and emissives that climbed the
-    # tonemapper. V2 uses a golden-hour sun of 40,000 lux, a real-time-captured
-    # sky light, histogram auto-exposure with an extended luminance range, and
-    # emissive/light values in the same physical regime -- self-consistent,
-    # and every one of them a knob for the first render to correct.
-    "sunPitch": -30.0, "sunYaw": 215.0, "sunLux": 40000.0, "sunTemperatureK": 5200.0,
+    # THE IMAGE CONTROLS LIGHTING. Sun measured in the panorama at azimuth +79
+    # (viewer's right-front) and elevation +58: a high, warm-white late-morning
+    # sun, not golden hour. Light TRAVELS from it: yaw -11 in the UE frame,
+    # pitch -55. Physical units, histogram auto-exposure, extended range.
+    "sunPitch": -55.0, "sunYaw": -11.0, "sunLux": 60000.0, "sunTemperatureK": 5600.0,
     "skyLightIntensity": 1.0, "exposureBias": 0.0,
-    "fogDensity": 0.012, "fogFalloff": 0.20, "fogStartDistance": 2500.0,
-    "fogInscattering": (0.62, 0.55, 0.84),
-    "volumetricFog": 1, "fogScattering": 0.35,
-    "portalGlow": 6000.0, "portalLightIntensity": 60000.0, "skyGain": 9000.0, "skyFlipV": 0.0,
-    "bloomIntensity": 0.55, "bloomThreshold": 1.0,
-    "gradeShadows": (1.02, 0.96, 1.10), "gradeMidtones": (1.03, 1.00, 0.96),
-    "gradeHighlights": (1.04, 1.00, 0.93),
-    "skyDome": 1, "castleKit": 1, "nanite": 1,
-    # ---- THE MARBLE WORLD ---------------------------------------------------
-    # marbleWorld 1 = place the Marble HQ mesh (if v2-build.sh found it) as the
-    # scenery and build only the V2 FOREGROUND in front of it; 0 = the full V2
-    # kit (courtyard, garden, palace) with no Marble. kitWithMarble 1 = both,
-    # which doubles the gate/heart/arch/tea and is for comparison only.
-    # marbleScale 2.1145 = TRUE METRIC (measured: UE's glTF import already
-    # converts metres); 12.687 = V1's 6x backdrop lever for roam tolerance.
-    # marbleGain = the unlit shell's BaseColorFactor; V1 measured 100 under a
-    # 1,000-lux sun; V2 lights at 40,000 lux so it starts at the sky dome's gain.
-    "marbleWorld": 1, "kitWithMarble": 0, "marbleScale": 2.1145339, "marbleGain": 9000.0,
+    # a clear bright day with subtle haze -- pale blue-white, NOT lavender
+    "fogDensity": 0.005, "fogFalloff": 0.18, "fogStartDistance": 4000.0,
+    "fogInscattering": (0.74, 0.80, 0.92),
+    "volumetricFog": 1, "fogScattering": 0.20,
+    # restrained magic: a small rune disc at the viewpoint, low glow
+    "portal": 1, "portalRadius": 250.0, "portalGlow": 1200.0, "portalLightIntensity": 8000.0,
+    # bloom low; grade NEUTRAL (the reference is not purple-shadowed)
+    "bloomIntensity": 0.35, "bloomThreshold": 1.2,
+    "gradeShadows": (1.0, 1.0, 1.02), "gradeMidtones": (1.01, 1.0, 0.99),
+    "gradeHighlights": (1.02, 1.0, 0.98),
+    # the panorama dome supplies the SKY ONLY: everything below +8 deg of
+    # elevation is masked (v = 0.5 - 8/180 = 0.4556) so the 3D castle city and
+    # gardens own the horizon and no giant panorama mushroom ghosts the sky
+    "skyDome": 1, "skyGain": 9000.0, "skyFlipV": 0.0, "skyHorizonV": 0.4556,
+    "castleKit": 1, "nanite": 1,
+    # ---- THE MARBLE WORLD -----------------------------------------------------
+    # marbleWorld: "scaffold" = import and place the HQ mesh HIDDEN in game
+    # (composition/proportion scaffold in the editor; it is not the final
+    # world); "visible" = show it (backdrop mode, for comparison); "off".
+    # Registration from V1's live measurement; scale 2.1145 = true metric.
+    "marbleWorld": 1, "marbleVisible": 0, "marbleScale": 2.1145339, "marbleGain": 9000.0,
     "marbleRollDeg": 180.0, "marbleYawDeg": 180.0, "marbleGroundOffsetM": 1.2398534,
 }
 

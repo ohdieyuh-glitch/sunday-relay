@@ -309,40 +309,46 @@ class Placer(object):
 
 
 def lay_ground(placer, actors, eal, assets, mats, layers, plaza_only=False):
-    """Flagstones on the plaza and along the path, batched if the C++ batch
-    actor is in the build, as actors otherwise."""
-    slabs = [k for k in sorted(assets) if k.startswith("cobble_slab_")]
-    if not slabs:
-        LOG("V2 GROUND: no cobble slabs built; the path is missing")
+    """The pale plaza (large slabs, loose cream/grey checker, sparse petals)
+    and the dark stone path from the front wall to the arch, rising at the
+    steps. Batched through the C++ batch actor when it is in the build."""
+    plaza = [k for k in sorted(assets) if k.startswith("plaza_slab_")]
+    setts = [k for k in sorted(assets) if k.startswith("cobble_slab_")]
+    if not plaza and not setts:
+        LOG("V2 GROUND: no slabs built; the plaza is missing")
         return 0
     placements = []
-    # the plaza: a running-bond field inside PLAZA_RADIUS, clear of the portal
-    tile, shrink = 72.0, 0.86
-    pitch = tile / shrink
-    R = LAYOUT.PLAZA_RADIUS
-    nrow = int(2 * R / pitch)
-    for row in range(nrow):
-        y = -R + pitch * (row + 0.5)
-        stagger = 0.5 * pitch if row % 2 else 0.0
-        for k in range(nrow + 1):
-            x = -R + pitch * k + stagger
-            if x * x + y * y > R * R or x * x + y * y < 660.0 ** 2:
+    x0, x1, y0, y1 = LAYOUT.PLAZA_RECT
+    tile = LAYOUT.PLAZA_SLAB
+    pitch = tile * 1.06                      # a 8 uu seam
+    cols = int((x1 - x0) / pitch) + 1
+    rows = int((y1 - y0) / pitch) + 1
+    if plaza:
+        for r in range(rows):
+            y = y0 + pitch * (r + 0.5)
+            for c in range(cols):
+                x = x0 + pitch * (c + 0.5)
+                if x > x1 or y > y1:
+                    continue
+                h = LT.mk.rnd(r, c, 21)
+                # the loose checker: every third diagonal is the grey slab
+                grey = ((r + c) % 3 == 0) if h > 0.18 else ((r + c) % 3 != 0)
+                s_ = 0.97 + 0.05 * LT.mk.rnd(r, c, 22)
+                placements.append((plaza[int(h * len(plaza)) % len(plaza)], x + (LT.mk.rnd(r, c, 23) - 0.5) * 3.0,
+                                   y + (LT.mk.rnd(r, c, 24) - 0.5) * 3.0, -1.0 + 1.5 * LT.mk.rnd(r, c, 25),
+                                   (LT.mk.rnd(r, c, 26) - 0.5) * 2.5, s_, s_, 1.0,
+                                   "MI_V2_PlazaGrey" if grey else "MI_V2_PlazaCream"))
+    if setts and not plaza_only:
+        sp = LT.Spline(LAYOUT.PATH_SPLINE)
+        for st in LT.lay_stones(sp, width=LAYOUT.PATH_WIDTH_NEAR * 0.92, tile=58.0, shrink=0.86, seed=5, kerb=False):
+            # narrow with distance: drop the outer stones as the path recedes
+            frac = st["d"] / max(1.0, sp.length)
+            half = 0.5 * (LAYOUT.PATH_WIDTH_NEAR + (LAYOUT.PATH_WIDTH_FAR - LAYOUT.PATH_WIDTH_NEAR) * frac)
+            if abs(st["x"] - sp.at(st["d"])[0][0]) > half:
                 continue
-            h = LT.mk.rnd(row, k, 9)
-            jx, jy = (LT.mk.rnd(row, k, 10) - 0.5) * 5.0, (LT.mk.rnd(row, k, 11) - 0.5) * 5.0
-            s = shrink * (0.94 + 0.12 * LT.mk.rnd(row, k, 12))
-            placements.append((slabs[int(h * len(slabs)) % len(slabs)], x + jx, y + jy, -2.0 + 3.0 * LT.mk.rnd(row, k, 13),
-                               (LT.mk.rnd(row, k, 14) - 0.5) * 16.0, tile / 100.0 * s, tile / 100.0 * s, 1.0,
-                               "MI_V2_CobbleHero" if abs(x) < 360.0 else "MI_V2_Cobble"))
-    # the path beyond the plaza (not when the Marble world supplies its own path)
-    sp = LT.Spline(LAYOUT.PATH_SPLINE)
-    for st in ([] if plaza_only else LT.lay_stones(sp, width=LAYOUT.PATH_WIDTH_NEAR * 0.75, tile=66.0, shrink=0.86, seed=5, kerb=False)):
-        if st["x"] ** 2 + st["y"] ** 2 < (R - 40.0) ** 2:
-            continue
-        v = int(LT.mk.rnd(st["d"], st["x"], 3) * len(slabs)) % len(slabs)
-        placements.append((slabs[v], st["x"], st["y"], st["z"] - 2.0, st["yaw"], st["sx"] * 1.05, st["sy"] * 1.05, 1.0,
-                           "MI_V2_CobbleHero"))
-    # batch if possible
+            v = int(LT.mk.rnd(st["d"], st["x"], 3) * len(setts)) % len(setts)
+            placements.append((setts[v], st["x"], st["y"], st["z"] - 2.0, st["yaw"], st["sx"] * 0.95, st["sy"] * 0.95, 0.8,
+                               "MI_V2_PathStone"))
     cls = None
     try:
         cls = unreal.load_class(None, "/Script/Wonderland.WonderlandInstancedBatch")
@@ -380,19 +386,32 @@ def lay_ground(placer, actors, eal, assets, mats, layers, plaza_only=False):
                 except Exception:
                     continue
             try:
-                a.set_folder_path(unreal.Name("V2/V2_Arrival"))
+                a.set_folder_path(unreal.Name("V2/Ground"))
             except Exception:
                 pass
             assign_layer(a, "V2_Arrival", layers)
             placed += len(xf) // 9
-        LOG("V2 GROUND: %d flagstones in %d batches (WonderlandInstancedBatch)" % (placed, len(by)))
+        LOG("V2 GROUND: %d slabs in %d batches (WonderlandInstancedBatch): plaza %dx%d of %s uu, path %s"
+            % (placed, len(by), cols, rows, tile, "laid" if (setts and not plaza_only) else "not laid"))
     else:
         for (key, x, y, z, yaw, sx, sy, sz, mat) in placements:
             it = {"asset": key, "pos": (x, y, z), "rot": (0.0, yaw, 0.0), "scale": (sx, sy, sz),
                   "mat": mat, "label": None, "band": "V2_Arrival"}
             if placer.place(it) is not None:
                 placed += 1
-        LOG("V2 GROUND: %d flagstones as actors (no batch class in this build)" % placed)
+        LOG("V2 GROUND: %d slabs as actors (no batch class in this build)" % placed)
+    # sparse petals on the plaza -- the reference's only plaza dressing
+    petals = 0
+    if "flower_cluster" in assets:
+        for i in range(LAYOUT.PETALS):
+            x = x0 + (x1 - x0) * LT.mk.rnd(31, i, 1)
+            y = y0 + (y1 - y0) * LT.mk.rnd(31, i, 2)
+            it = {"asset": "flower_cluster", "pos": (x, y, 12.0), "rot": (0.0, 360.0 * LT.mk.rnd(31, i, 3), 0.0),
+                  "scale": (0.09, 0.09, 0.03), "mat": ("MI_V2_PetalPink", "MI_V2_RosePink", "MI_V2_PetalViolet")[i % 3],
+                  "label": "Plaza_Petal%d" % i, "band": "V2_Arrival"}
+            if placer.place(it) is not None:
+                petals += 1
+    LOG("V2 GROUND: %d petals on the plaza" % petals)
     return placed
 
 
@@ -469,13 +488,14 @@ def marble_world(actors, eal, layers):
     # scale); roll 180 corrects the axis; yaw 180 is the artistic facing
     # decided from two rendered frames.
     S = float(L["marbleScale"])
-    cam = C.HERO_CAM["location"]
     z = float(L["marbleGroundOffsetM"]) * 100.0 * S
-    loc = (cam[0], cam[1], z)
+    loc = (0.0, 0.0, z)          # the world origin IS the panorama viewpoint
     actor = None
     try:
         actor = tool.place(path, mesh, loc, (float(L["marbleRollDeg"]), 0.0, float(L["marbleYawDeg"])), S,
-                           "V2_MarbleWorld", ["Marble", "V2_Skyline", "NoCollision"])
+                           "V2_MarbleWorld_Scaffold" if not int(L["marbleVisible"]) else "V2_MarbleWorld",
+                           ["Marble", "V2_Skyline", "NoCollision", "Scaffold" if not int(L["marbleVisible"]) else "Visible"],
+                           visible=bool(int(L["marbleVisible"])))
     except Exception as exc:
         LOG("V2 MARBLE: place failed (%s)" % exc)
     if actor is not None:
@@ -487,9 +507,10 @@ def marble_world(actors, eal, layers):
     MANIFEST["marble"] = {"glb": glb, "asset": path, "scale": S, "origin": loc,
                           "rotation_rpy": (L["marbleRollDeg"], 0.0, L["marbleYawDeg"]),
                           "gain": L["marbleGain"], "materials_repaired": repaired, "placed": actor is not None}
-    LOG("V2 MARBLE: %s placed at %s scale %.4f roll %.0f yaw %.0f gain %.0f (%d material(s) two-sided+gain); "
-        "viewpoint ON HeroCam_V2_Arrival, floor at z=0"
-        % (path, loc, S, L["marbleRollDeg"], L["marbleYawDeg"], L["marbleGain"], repaired))
+    LOG("V2 MARBLE: %s placed %s at %s scale %.4f roll %.0f yaw %.0f gain %.0f (%d material(s) two-sided+gain); "
+        "viewpoint at the world origin, floor at z=0"
+        % (path, "as a HIDDEN composition SCAFFOLD (marbleVisible=0)" if not int(L["marbleVisible"]) else "VISIBLE",
+           loc, S, L["marbleRollDeg"], L["marbleYawDeg"], L["marbleGain"], repaired))
     return actor
 
 
@@ -548,7 +569,7 @@ def light_and_air(actors, layers):
     pl = actors.spawn_actor_from_class(unreal.PointLight, vec((0, 0, 140)), rot(0, 0, 0))
     pl.set_actor_label("V2_PortalLight")
     pc = pl.get_component_by_class(unreal.PointLightComponent)
-    if pc is not None:
+    if pc is not None and int(L["portal"]):
         try:
             pc.set_mobility(unreal.ComponentMobility.MOVABLE)
         except Exception:
@@ -607,33 +628,37 @@ def _grade(s):
 
 
 def hero_camera(actors, layers):
-    H = C.HERO_CAM
-    cam = actors.spawn_actor_from_class(unreal.CameraActor, vec(H["location"]), rot(*H["rotation"]))
-    cam.set_actor_label(H["name"])
-    cc = cam.get_component_by_class(unreal.CameraComponent)
-    if cc is not None:
+    """Every camera in v2_config.HERO_CAMS, locked. HeroCam0 is the capture
+    default (the reconstruction viewpoint); HeroCam1 looks through the gate."""
+    cams = []
+    for H in C.HERO_CAMS:
+        cam = actors.spawn_actor_from_class(unreal.CameraActor, vec(H["location"]), rot(*H["rotation"]))
+        cam.set_actor_label(H["name"])
+        cc = cam.get_component_by_class(unreal.CameraComponent)
+        if cc is not None:
+            try:
+                cc.set_field_of_view(float(H["fov"]))
+            except Exception:
+                set_prop(cc, "FieldOfView", float(H["fov"]))
+            try:
+                pp = cc.get_editor_property("post_process_settings")
+                _grade(pp)
+                cc.set_editor_property("post_process_settings", pp)
+                cc.set_editor_property("post_process_blend_weight", 1.0)
+            except Exception as exc:
+                LOG("V2 CAMERA: post-process not applied (%s)" % exc)
         try:
-            cc.set_field_of_view(float(H["fov"]))
+            cam.set_editor_property("tags", [unreal.Name(t) for t in H["tags"]])
         except Exception:
-            set_prop(cc, "FieldOfView", float(H["fov"]))
+            pass
         try:
-            pp = cc.get_editor_property("post_process_settings")
-            _grade(pp)
-            cc.set_editor_property("post_process_settings", pp)
-            cc.set_editor_property("post_process_blend_weight", 1.0)
-        except Exception as exc:
-            LOG("V2 CAMERA: post-process not applied (%s)" % exc)
-    try:
-        cam.set_editor_property("tags", [unreal.Name(t) for t in H["tags"]])
-    except Exception:
-        pass
-    try:
-        cam.set_folder_path(unreal.Name("V2/Camera"))
-    except Exception:
-        pass
-    LOG("V2 CAMERA: %s at %s rot %s fov %.0f tags %s -- LOCKED"
-        % (H["name"], H["location"], H["rotation"], H["fov"], "/".join(H["tags"])))
-    return cam
+            cam.set_folder_path(unreal.Name("V2/Camera"))
+        except Exception:
+            pass
+        LOG("V2 CAMERA: %s at %s rot %s fov %.0f tags %s -- LOCKED"
+            % (H["name"], H["location"], H["rotation"], H["fov"], "/".join(H["tags"])))
+        cams.append(cam)
+    return cams
 
 
 # ==========================================================================
@@ -708,18 +733,24 @@ def main():
     phase("marble")
     marble = marble_world(actors, eal, layers)
     MANIFEST["actors"]["flagstones"] = lay_ground(placer, actors, eal, asset_paths, mats, layers,
-                                                  plaza_only=(marble is not None))
+                                                  plaza_only=(marble is not None and int(C.LOOK["marbleVisible"])))
 
     phase("composition")
-    bands = [LAYOUT.FOREGROUND]
-    if marble is None or int(C.LOOK["kitWithMarble"]):
-        bands += [LAYOUT.COURTYARD, LAYOUT.GARDEN, LAYOUT.PALACE]
-    else:
-        LOG("V2 COMPOSITION: Marble world is the scenery -- courtyard, garden and palace kit placements "
-            "are NOT placed (kitWithMarble=0); the foreground, sky and hover props are")
+    bands = [LAYOUT.FOREGROUND, LAYOUT.COURTYARD, LAYOUT.GARDEN, LAYOUT.PALACE]
+    if marble is not None and int(C.LOOK["marbleVisible"]):
+        bands = [LAYOUT.FOREGROUND]
+        LOG("V2 COMPOSITION: Marble world VISIBLE -- only the foreground is placed in front of it")
     for band in bands:
         for item in band:
             placer.place(item)
+    if int(C.LOOK["portal"]) and "portal_disc" in asset_paths:
+        r = float(C.LOOK["portalRadius"]) / 630.0
+        for key, sc, lb in (("portal_disc", r, "Portal_Runes"), ("portal_ring", r * 1.0, "Portal_RingOuter"),
+                            ("portal_ring", r * 0.7, "Portal_RingInner")):
+            placer.place({"asset": key, "pos": (0.0, 0.0, 2.0 if key == "portal_disc" else 3.0), "rot": (0, 0, 0),
+                          "scale": (sc, sc, 1.0), "mat": "MI_V2_PortalRunes" if key == "portal_disc" else "MI_V2_PortalGlow",
+                          "label": lb, "band": "V2_VFX"})
+        LOG("V2 PORTAL: restrained rune disc, radius %.0f uu, at the viewpoint" % C.LOOK["portalRadius"])
     for item in LAYOUT.SKY:
         if int(C.LOOK["skyDome"]) and "MI_V2_SkyPano" in mats:
             placer.place(item)
