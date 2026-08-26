@@ -34,8 +34,13 @@ if [ -n "${WLV2_MARBLE_GLB:-}" ]; then
 else
   wl_warn "Marble HQ mesh NOT FOUND on this Studio; V2 builds the castle kit + panorama dome instead"
 fi
-if [ -f "$WL_SRC/$WORLD/assets/panorama.jpg" ]; then
-  export WLV2_MARBLE_PANO="$WL_SRC/$WORLD/assets/panorama.jpg"
+# marble/worlds/*/assets/ is gitignored (the export dir), so a fresh checkout
+# has no panorama there; V2's byte-identical reference copy IS tracked.
+for cand in "$WL_SRC/$WORLD/assets/panorama.jpg" \
+            "$WL_SRC/wonderland/v2/reference/marble-royal-garden-backdrop-panorama.jpg" "${WLV2_MARBLE_PANO:-}"; do
+  if [ -n "$cand" ] && [ -f "$cand" ]; then export WLV2_MARBLE_PANO="$cand"; break; fi
+done
+if [ -n "${WLV2_MARBLE_PANO:-}" ]; then
   wl_say "Marble panorama: $WLV2_MARBLE_PANO"
 else
   wl_warn "Marble panorama not in the checkout; no skyline dome"
