@@ -939,7 +939,11 @@ def marble_cutouts(marble_actor, actors, eal, layers, gsctx):
             path = folder + "/" + name
             if eal.does_asset_exist(path):
                 eal.delete_asset(path)
-            sm = u.AssetToolsHelpers.get_asset_tools().create_asset(name, folder, u.StaticMesh, u.StaticMeshFactoryNew())
+            # factory-free empty asset (StaticMeshFactoryNew does not exist in
+            # 5.8 Python): a copy of the engine cube, replaced entirely below
+            sm = eal.duplicate_asset("/Engine/BasicShapes/Cube", folder + "/" + name)
+            if sm is None:
+                raise RuntimeError("duplicate_asset returned None for %s" % name)
             opts = u.GeometryScriptCopyMeshToAssetOptions()
             for prop, val in (("enable_recompute_normals", False), ("emit_transaction", False), ("replace_materials", True)):
                 try:
