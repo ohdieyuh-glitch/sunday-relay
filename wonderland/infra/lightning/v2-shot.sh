@@ -21,8 +21,12 @@ N=$(( $(cat "$COUNTER" 2>/dev/null || echo 0) + 1 ))
 echo "$N" > "$COUNTER"
 PASS="$(printf 'V2_PASS_%03d' "$N")"
 wl_say "$PASS: capturing HeroCam$WL_HERO_CAM"
-bash "$HERE/native-shot.sh" "$@"
-LATEST="$(ls -t "$WL_OUT"/shots/*.png 2>/dev/null | head -1 || true)"
+# native-shot prints the frame it validated as its LAST line and writes it
+# under $WL_ROOT/proof/native/ -- not $WL_OUT/shots. Reading shots/ here made
+# the first live pass register nothing and the second register a stale file.
+LATEST="$(bash "$HERE/native-shot.sh" "$@" | tee /dev/stderr | tail -1 || true)"
+[ -n "$LATEST" ] && [ -s "$LATEST" ] || { wl_warn "$PASS: no validated native frame (see native-shot's output above); nothing registered"; LATEST=""; }
+mkdir -p "$WL_OUT/shots"
 if [ -n "$LATEST" ]; then
   DST="$WL_OUT/shots/${PASS}_cam${WL_HERO_CAM}_$(basename "$LATEST")"
   cp "$LATEST" "$DST"
