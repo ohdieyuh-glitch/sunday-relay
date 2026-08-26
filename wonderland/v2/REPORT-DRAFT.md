@@ -33,7 +33,9 @@ LUMEN / ATMOSPHERE: SM6 + Lumen + VSM config; SkyAtmosphere + height fog + volum
 
 REAL UNREAL RENDERS CREATED:
 - SM6 package (479eccf): 3 HighResShot captures (cam0 lit, cam0 unlit, cam0 post-off) and 7 Pixel-Streaming/Chrome captures (cam0, cam1 gate view, cam5 elevated; then cam0 with post-processing off, Lumen+VSM off, unlit, Nanite off) — ALL all-zero frames: the measured SM6 finding (kept as SM6_BLACK_* evidence, not as pictures).
-- SM5 package (b797e89): (passes listed as captured)
+- SM5 package (5f2bef1): 3 stream captures (cam0 kit ×2, cam0 with the tag-count switch) — black; the switch logged `shown=0`: the packaged world held NO authored actors.
+- ROOT CAUSE (proven): the World Partition level's external actor packages were never saved (0 in `__ExternalActors__`, 11 KB map). Fixed in 05506d8 (`save_dirty_packages` + a tripwire that refuses to cook below 90% actor packages). The SM6 verdict was reached against an empty world and is withdrawn to "retest".
+- Rebuild (0499cbf): (passes listed as captured)
 GAUNTLETS COMPLETED: 1. 2. 3. 4. 5. 6. 7. (filled as run)
 MARBLE PERFORMANCE COST / UNREAL PERFORMANCE / FPS / GPU / VRAM: build 479eccf at HeroCam0, 1080p, L4: median 9.05 ms = 110.6 fps, mean 9.64 ms, p95 15.4 ms (CSV profiler, no HLOD proxies built); Marble scaffold hidden (no cost), distant ring not yet placed (fix a4caabc).
 FIVE LARGEST REMAINING DIFFERENCES: (from diff_v2 on the latest pass)
