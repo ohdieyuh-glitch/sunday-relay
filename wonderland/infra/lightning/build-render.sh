@@ -130,7 +130,7 @@ wl_knob_pairs() {
               WLV2_MARBLE_GLB \
               WLV2_MARBLE_PANO \
               WLV2_MANIFEST \
-              WLV2_FORCE_FALLBACK WLV2_PARTITIONED \
+              WLV2_FORCE_FALLBACK WLV2_PARTITIONED WL_SKIP_GENERATE \
               WL_GENERATOR \
               WL_COOK_MAP WL_BUILD_HLOD \
               WONDERLAND_HISM \

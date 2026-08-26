@@ -386,10 +386,20 @@ if [ -x "$UE_EDITOR_CMD" ]; then
   # engine screenshot path returns success and writes an empty buffer here, and
   # Niagara templates cook and place fine while drawing nothing. Unproven is not
   # the same as broken, but it is not a default either.
+  # WL_SKIP_GENERATE=1: the generated world is already on disk (the map AND
+  # its external actor packages); cook it as it is. Saves the ~10-minute
+  # generator run when only the cook/package needs redoing.
+  _v2_map_dir="$(dirname "$PROJECT")/Content/WonderlandV2/Maps"
+  _v2_actors="$(dirname "$PROJECT")/Content/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival"
+  if [ "${WL_SKIP_GENERATE:-0}" = "1" ] && [ -f "$_v2_map_dir/WL_V2_GoldenArrival.umap" ] \
+     && [ "$(find "$_v2_actors" -name '*.uasset' 2>/dev/null | wc -l)" -gt 100 ]; then
+    log "WL_SKIP_GENERATE=1: cooking the world already on disk ($(find "$_v2_actors" -name '*.uasset' | wc -l) actor packages)"
+  else
   # shellcheck disable=SC2086
   if ! run_step "generate-hub-level" "$UE_EDITOR_CMD" "$PROJECT" -run=pythonscript \
         -script="$GEN_SCRIPT" -unattended -nop4 ${WL_GENERATOR_EXTRA:-}; then
     LEVEL_OK=0
+  fi
   fi
 else
   log "WARNING: $UE_EDITOR_CMD not present; skipping level generation"
@@ -572,6 +582,14 @@ fi
 # map means a cook that omits WonderlandHub fails here instead of being
 # discovered from a browser.
 COOK_MAP="${WL_COOK_MAP:-/Game/Wonderland/Maps/WonderlandHub}"
+# A FORCED build gets a CLEAN cook. On 2026-08-26 the cooker reused its
+# previous result for the World Partition map (byte-identical pak, no
+# GenerateStreaming line) after 448 new external actor packages appeared,
+# and shipped the empty world a fourth time.
+if [ "$FORCE_REBUILD" = "1" ] && [ -d "$(dirname "$PROJECT")/Saved/Cooked" ]; then
+  log "FORCE_REBUILD=1: removing $(dirname "$PROJECT")/Saved/Cooked for a clean cook"
+  rm -rf "$(dirname "$PROJECT")/Saved/Cooked"
+fi
 run_step "build-cook-run" "$RUNUAT" BuildCookRun \
   -project="$PROJECT" \
   -platform="$PLATFORM" \
