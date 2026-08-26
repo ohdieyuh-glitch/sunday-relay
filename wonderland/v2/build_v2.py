@@ -1372,8 +1372,21 @@ def main():
             LOG("V2 SAVE: %d external actor package(s) under %s" % (ext_count, ext_dir))
     except Exception as exc:
         LOG("V2 SAVE: external actor count unavailable (%s)" % exc)
+    # The other legitimate shape: actors INSIDE the map package (a classic
+    # level, or a partitioned level whose actors were not made external). Then
+    # the .umap itself carries them and grows from ~11 KB to megabytes.
+    umap_bytes = None
+    try:
+        cdir = str(unreal.Paths.project_content_dir())
+        umap = os.path.join(cdir, C.CONTENT_ROOT.replace("/Game/", ""), "Maps", C.MAP_PATH.rsplit("/", 1)[-1] + ".umap")
+        if os.path.isfile(umap):
+            umap_bytes = os.path.getsize(umap)
+            LOG("V2 SAVE: %s is %d bytes" % (umap, umap_bytes))
+    except Exception as exc:
+        LOG("V2 SAVE: umap size unavailable (%s)" % exc)
     MANIFEST["saved"] = saved
     MANIFEST["external_actor_packages"] = ext_count
+    MANIFEST["umap_bytes"] = umap_bytes
     # the final actor list, for the outliner evidence
     final = []
     try:
@@ -1385,9 +1398,12 @@ def main():
     v1_in_final = [n for n in final if any(m in n for m in V1_CLASS_MARKERS[1:] + ("SkyCity", "PlazaBed", "RelayDog", "HDAR_"))]
     MANIFEST["v1_actors_in_final"] = v1_in_final
     MANIFEST["seconds"] = round(time.time() - t0, 1)
-    if ext_count is not None and len(final) > 20 and ext_count < int(0.9 * len(final)):
-        raise RuntimeError("V2 SAVE: only %d external actor packages on disk for %d actors -- the level would cook EMPTY; refusing"
-                           % (ext_count, len(final)))
+    actors_in_map = umap_bytes is not None and umap_bytes > 1000000
+    if ext_count is not None and len(final) > 20 and ext_count < int(0.9 * len(final)) and not actors_in_map:
+        raise RuntimeError("V2 SAVE: only %d external actor packages on disk for %d actors and the map is %s bytes -- the level would cook EMPTY; refusing"
+                           % (ext_count, len(final), umap_bytes))
+    LOG("V2 SAVE: actors on disk as %s" % ("%d external packages" % ext_count if (ext_count or 0) >= int(0.9 * len(final))
+                                            else "the map package (%s bytes)" % umap_bytes if actors_in_map else "NOTHING"))
     MANIFEST["performance"] = PERF
     LOG("V2 PERFORMANCE: hlod layers %s; grid %s; actors by band %s"
         % (", ".join(sorted(PERF["layers"].values())) or "none", PERF["grid"],
