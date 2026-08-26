@@ -19,6 +19,16 @@ def log(msg):
     unreal.log_warning("DIAG " + msg)
 
 
+def rot(pitch, yaw, roll=0.0):
+    """unreal.Rotator's POSITIONAL order is (roll, pitch, yaw) -- the first
+    diagnostic camera looked straight up because of it. Always by property."""
+    r = unreal.Rotator()
+    r.set_editor_property("pitch", float(pitch))
+    r.set_editor_property("yaw", float(yaw))
+    r.set_editor_property("roll", float(roll))
+    return r
+
+
 def unlit(name, rgb):
     tools = unreal.AssetToolsHelpers.get_asset_tools()
     eal = unreal.EditorAssetLibrary
@@ -48,17 +58,17 @@ def main():
     white = unlit("M_DiagUnlitWhite", (1.0, 1.0, 1.0))
     cube = eal.load_asset("/Engine/BasicShapes/Cube")
     sphere = eal.load_asset("/Engine/BasicShapes/Sphere")
-    a = actors.spawn_actor_from_class(unreal.StaticMeshActor, unreal.Vector(0.0, 600.0, 200.0), unreal.Rotator(0, 0, 0))
+    a = actors.spawn_actor_from_class(unreal.StaticMeshActor, unreal.Vector(0.0, 600.0, 200.0), rot(0, 0))
     a.static_mesh_component.set_static_mesh(cube)
     a.set_actor_scale3d(unreal.Vector(20.0, 4.0, 20.0))
     a.static_mesh_component.set_material(0, magenta)
     a.set_actor_label("DIAG_MagentaCube")
-    b = actors.spawn_actor_from_class(unreal.StaticMeshActor, unreal.Vector(900.0, 900.0, 200.0), unreal.Rotator(0, 0, 0))
+    b = actors.spawn_actor_from_class(unreal.StaticMeshActor, unreal.Vector(900.0, 900.0, 200.0), rot(0, 0))
     b.static_mesh_component.set_static_mesh(sphere)
     b.set_actor_scale3d(unreal.Vector(6.0, 6.0, 6.0))
     b.static_mesh_component.set_material(0, white)
     b.set_actor_label("DIAG_WhiteSphere")
-    cam = actors.spawn_actor_from_class(unreal.CameraActor, unreal.Vector(0.0, 0.0, 200.0), unreal.Rotator(0.0, 90.0, 0.0))
+    cam = actors.spawn_actor_from_class(unreal.CameraActor, unreal.Vector(0.0, 0.0, 200.0), rot(0.0, 90.0))
     cam.set_actor_label("DIAG_Camera")
     cam.set_editor_property("tags", [unreal.Name("HeroCam0"), unreal.Name("arrival_hero_view"), unreal.Name("DIAG")])
     try:
@@ -66,7 +76,7 @@ def main():
     except Exception as exc:
         log("fov not set (%s)" % exc)
     # a directional light too, so a LIT object would also show if unlit somehow failed
-    sun = actors.spawn_actor_from_class(unreal.DirectionalLight, unreal.Vector(0, 0, 1000), unreal.Rotator(-50, 0, 0))
+    sun = actors.spawn_actor_from_class(unreal.DirectionalLight, unreal.Vector(0, 0, 1000), rot(-50, 0))
     sun.set_actor_label("DIAG_Sun")
     saved = les.save_current_level()
     unreal.EditorLoadingAndSavingUtils.save_dirty_packages(True, True)

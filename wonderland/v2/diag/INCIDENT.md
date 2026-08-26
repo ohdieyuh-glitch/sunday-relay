@@ -12,5 +12,6 @@ frame-check.py; HighResShot is known to be a phantom here).
 | T0d | save via save_dirty_packages | files | 0 files | not dirty | save by handle |
 | T0e | save_packages(448, only_dirty=False) | files | **448 on disk** (8.8 MB) | saved | cook |
 | T0f | cook + capture (build eca66cd) | world | BLACK; `shown=0`; pak byte-identical to the empty one, no GenerateStreaming line | cooker reused the stale WP result | clean cook |
-| T0g | clean cook (Saved/Cooked removed), WL_SKIP_GENERATE=1 (build bd6374e) | world | *pending* | — | if black → T1 |
-| T1 | diagnostic classic map: camera (0,0,200) yaw 90, 20 m unlit magenta cube at (0,600,200), white sphere, sun | magenta pixels | *pending* | — | per tree |
+| T0g | clean cook (Saved/Cooked removed), WL_SKIP_GENERATE=1 (build bd6374e) | world | ABORTED — clang segfault in the preflight compile, AutomationTool idle 15 min | full pipeline unreliable + too expensive | stop full builds; cheapest pixel path |
+| T1/A′ | diagnostic classic map rendered IN THE EDITOR COMMANDLET (SceneCapture2D → render target → export PNG, 640×360, no cook, no game) | magenta pixels | **MAGENTA PIXELS** (`DIAG_A_editor_rt_640x360.png`, 158 KB) — camera aimed up by the Rotator positional bug, cube still fills a third of the frame | **SUCCESS 1: renderer + scene work (Vulkan SM5 in the container)**; the black is in the packaged/capture path or the V2 map | T B: same scene through the packaged capture path |
+| T1 bug | `unreal.Rotator(0, 90, 0)` | pitch 0 yaw 90 | pitch 90 yaw 0 (positional order is roll, pitch, yaw) | diag scripts fixed (by property); V2's `rot()` already sets by property — V2 cameras were correct (`HERO_CAM_ROT=-2,90,0`) | — |

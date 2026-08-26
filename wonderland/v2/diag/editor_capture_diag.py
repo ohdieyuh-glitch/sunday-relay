@@ -21,6 +21,16 @@ def log(msg):
     unreal.log_warning("DIAG " + msg)
 
 
+def rot(pitch, yaw, roll=0.0):
+    """unreal.Rotator's POSITIONAL order is (roll, pitch, yaw) -- the first
+    diagnostic camera looked straight up because of it. Always by property."""
+    r = unreal.Rotator()
+    r.set_editor_property("pitch", float(pitch))
+    r.set_editor_property("yaw", float(yaw))
+    r.set_editor_property("roll", float(roll))
+    return r
+
+
 def unlit(name, rgb):
     tools = unreal.AssetToolsHelpers.get_asset_tools()
     eal = unreal.EditorAssetLibrary
@@ -52,20 +62,20 @@ def main():
     white = unlit("M_DiagUnlitWhite", (1.0, 1.0, 1.0))
     cube = eal.load_asset("/Engine/BasicShapes/Cube")
     sphere = eal.load_asset("/Engine/BasicShapes/Sphere")
-    a = actors.spawn_actor_from_class(unreal.StaticMeshActor, unreal.Vector(0.0, 600.0, 200.0), unreal.Rotator(0, 0, 0))
+    a = actors.spawn_actor_from_class(unreal.StaticMeshActor, unreal.Vector(0.0, 600.0, 200.0), rot(0, 0))
     a.static_mesh_component.set_static_mesh(cube)
     a.set_actor_scale3d(unreal.Vector(20.0, 4.0, 20.0))
     a.static_mesh_component.set_material(0, magenta)
     a.set_actor_label("DIAG_MagentaCube")
-    b = actors.spawn_actor_from_class(unreal.StaticMeshActor, unreal.Vector(900.0, 900.0, 200.0), unreal.Rotator(0, 0, 0))
+    b = actors.spawn_actor_from_class(unreal.StaticMeshActor, unreal.Vector(900.0, 900.0, 200.0), rot(0, 0))
     b.static_mesh_component.set_static_mesh(sphere)
     b.set_actor_scale3d(unreal.Vector(6.0, 6.0, 6.0))
     b.static_mesh_component.set_material(0, white)
     b.set_actor_label("DIAG_WhiteSphere")
-    cam = actors.spawn_actor_from_class(unreal.CameraActor, unreal.Vector(0.0, 0.0, 200.0), unreal.Rotator(0.0, 90.0, 0.0))
+    cam = actors.spawn_actor_from_class(unreal.CameraActor, unreal.Vector(0.0, 0.0, 200.0), rot(0.0, 90.0))
     cam.set_actor_label("DIAG_Camera")
     cam.set_editor_property("tags", [unreal.Name("HeroCam0"), unreal.Name("arrival_hero_view"), unreal.Name("DIAG")])
-    sun = actors.spawn_actor_from_class(unreal.DirectionalLight, unreal.Vector(0, 0, 1000), unreal.Rotator(-50, 0, 0))
+    sun = actors.spawn_actor_from_class(unreal.DirectionalLight, unreal.Vector(0, 0, 1000), rot(-50, 0))
     sun.set_actor_label("DIAG_Sun")
     # camera/object proof: the cube centre is 6 m straight ahead (+Y) of a camera looking +Y
     cl, ol = cam.get_actor_location(), a.get_actor_location()
@@ -74,6 +84,9 @@ def main():
     dist = d.length()
     dot = (d.x * fwd.x + d.y * fwd.y + d.z * fwd.z) / max(dist, 1e-6)
     log("CAMERA loc=%s rot=%s fwd=%s | CUBE loc=%s dist=%.0f dot(fwd)=%.3f" % (cl, cam.get_actor_rotation(), fwd, ol, dist, dot))
+    saved = les.save_current_level()
+    unreal.EditorLoadingAndSavingUtils.save_dirty_packages(True, True)
+    log("saved=%s (before the capture, so a crash after it cannot lose the map)" % saved)
     # ---- the render-target readback (no viewport, no game) ----
     if not os.path.isdir(OUT_DIR):
         os.makedirs(OUT_DIR)
@@ -102,14 +115,7 @@ def main():
         log("EXPORTED %s (%s bytes)" % (p, os.path.getsize(p) if os.path.exists(p) else "MISSING"))
     except Exception as exc:
         log("export_render_target failed (%s)" % exc)
-    # also try the editor's own high-res screenshot request for comparison (may be a phantom)
-    try:
-        unreal.AutomationLibrary.take_high_res_screenshot(W, H, "diag_editor_hrs.png", cam)
-        log("take_high_res_screenshot requested (Saved/Screenshots)")
-    except Exception as exc:
-        log("take_high_res_screenshot failed (%s)" % exc)
-    saved = les.save_current_level()
-    unreal.EditorLoadingAndSavingUtils.save_dirty_packages(True, True)
+    # (AutomationLibrary.take_high_res_screenshot SEGFAULTS in the commandlet: null viewport. Not used.)
     log("SUMMARY map=%s classic saved=%s" % (MAP, saved))
 
 
