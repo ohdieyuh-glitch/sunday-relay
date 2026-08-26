@@ -674,10 +674,15 @@ def marble_cutouts(marble_actor, actors, eal, layers, gsctx):
                 bmax = u.Vector(max(p.x for p in lp), max(p.y for p in lp), max(p.z for p in lp))
             else:
                 bmin, bmax = u.Vector(*lo), u.Vector(*hi)
-            try:
-                box = u.Box(bmin, bmax, True)        # is_valid=True, or the box selects nothing
-            except Exception:
-                box = u.Box(bmin, bmax)
+            # VERIFIED: unreal.Box(min, max) -- is_valid is a PROPERTY that
+            # defaults to False, and an invalid box selects nothing
+            box = u.Box(bmin, bmax)
+            for setter in (lambda: box.set_editor_property("is_valid", True), lambda: setattr(box, "is_valid", True)):
+                try:
+                    setter()
+                    break
+                except Exception:
+                    continue
             # VERIFIED 5.5 API: select_mesh_elements_in_box(target, box,
             # selection_type, invert, min_num_triangle_points) RETURNS
             # (mesh, selection) -- `invert=True` selects everything OUTSIDE
