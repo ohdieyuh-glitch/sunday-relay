@@ -859,7 +859,7 @@ def marble_distant_ring(marble_actor, actors, eal, layers, gsctx):
 #: placements it REPLACES. Boxes come from ANALYSIS.md positions with room.
 MARBLE_CUTOUTS = {
     "GiantMushroom": ((600.0, -200.0, -50.0), (3400.0, 2400.0, 2600.0),
-                      ("GiantMushroom", "GiantMushroom_Base", "GiantMushroom_Clock", "GiantMushroom_Ivy0",
+                      ("GiantMushroom", "GiantMushroom_Gills", "GiantMushroom_Base", "GiantMushroom_Clock", "GiantMushroom_Ivy0",
                        "GiantMushroom_Ivy1", "GiantMushroom_Vine0", "GiantMushroom_Vine1")),
     "RoseCone_L": ((550.0, -400.0, 40.0), (1250.0, 350.0, 700.0), ("RoseCone_L", "RoseCone_L_Planter")),
     "RoseCone_R": ((-1250.0, -100.0, 40.0), (-450.0, 650.0, 700.0), ("RoseCone_R", "RoseCone_R_Planter")),

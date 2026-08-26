@@ -838,6 +838,27 @@ def sky_dome(ctx):
 # registry
 # ==========================================================================
 
+def mushroom_giant_gills(ctx):
+    """The giant mushroom's underside: a pale gill ring (56 radial blades
+    under the cap rim) and the thin underside skin between stem and rim. Same
+    transform as `mushroom_giant`; its own material (MI_V2_MushCream)."""
+    m = ctx.mesh("mushroom_giant_gills")
+    stem_h = 1150.0
+    R, ch = 1000.0, 420.0
+    z = stem_h + ch * 0.10
+    # the underside skin: a shallow revolved dish from the stem to the rim
+    m.revolve([(200.0, 8.0), (0.30 * R, 10.0), (0.60 * R, 6.0), (0.84 * R, 0.0), (0.84 * R, -2.0),
+               (0.60 * R, 2.0), (0.30 * R, 4.0), (200.0, 2.0)], steps=48, at=(30.0, 0.0, z))
+    for g in range(56):
+        a = 360.0 * g / 56
+        m.extrude([(210.0, 0.0), (0.84 * R, 0.0), (0.84 * R, -22.0), (210.0, -9.0)], 5.0,
+                  at=(30.0, 0.0, z), rot=(90.0, a, 0.0))
+    m.perlin(6.0, 0.02, seed=353)
+    m.split_normals(50.0)
+    return m
+
+
+
 RECIPES = {
     "portal_disc": (portal_disc, "vfx_portal", True, False),
     "portal_ring": (portal_ring, "vfx_portal", True, False),
@@ -864,6 +885,7 @@ RECIPES = {
     "stairs_broad": (stairs_broad, "stairs", True, True),
     "balustrade": (balustrade, "stairs", True, True),
     "terrace_platform": (terrace_platform, "stairs", True, True),
+    "mushroom_giant_gills": (mushroom_giant_gills, "mush_landmark", True, False),
     "garden_lawn": (garden_lawn, "terrain", True, True),
     "column_ornate": (column_ornate, "castle", True, True),
     "arch_stone": (arch_stone, "castle", True, True),
@@ -1061,10 +1083,9 @@ def mushroom_giant(ctx):
            (1.00 * R, ch * 0.18), (0.99 * R, 0.0), (0.93 * R, -ch * 0.06), (0.86 * R, -ch * 0.02), (0.84 * R, ch * 0.10),
            (0.60 * R, ch * 0.14), (0.30 * R, ch * 0.16), (200.0, ch * 0.16), (200.0, ch * 0.04), (0.0, ch * 0.04)]
     m.revolve(cap, steps=48, at=(30.0, 0.0, stem_h - ch * 0.05))
-    for g in range(56):
-        a = 360.0 * g / 56
-        m.extrude([(210.0, 0.0), (0.84 * R, 0.0), (0.84 * R, -22.0), (210.0, -9.0)], 5.0,
-                  at=(30.0, 0.0, stem_h + ch * 0.10), rot=(90.0, a, 0.0))
+    # the gills and the underside are a SEPARATE recipe (mushroom_giant_gills)
+    # placed at the same transform, so they wear the pale cream material the
+    # reference shows under the red cap -- the arrival camera looks UP at it
     m.perlin(26.0, 0.006, seed=351)
     m.perlin(8.0, 0.03, seed=352)
     m.subdivide(1)
