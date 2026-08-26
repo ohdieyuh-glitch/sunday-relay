@@ -82,6 +82,16 @@ pass changed, and what remains unverifiable until the Studio runs.
   (`capture-hero-shots.sh`); its prerequisites had to be reinstalled after the
   Studio restart (Playwright 1.62.1, Wilbur `npm ci`).
 
+## The SM6 finding (2026-08-26)
+
+Six captures of the `479eccf` package were all-zero from every camera
+(HeroCam0, GateView, Elevated) through BOTH capture paths; a four-step
+diagnostic chain through the stream — post-processing off, Lumen+VSM off,
+`viewmode unlit`, Nanite off — stayed black at every step. Nothing reaches the
+frame under VULKAN_SM6 (bindless) on this driver, while SM5 rendered
+structured frames on this L4 on 2026-08-22. V2 ships SM5 (`17ed56e`); Nanite
+and VSM are the open SM6 item, Lumen software GI still runs.
+
 ## Real Unreal renders this session
 
 **None.** The Studio `aquala-wonderland` was stopped for the whole session
