@@ -30,6 +30,74 @@ def _h(*k):
     return mk.rnd(*k)
 
 
+
+# ==========================================================================
+# FOLIAGE: leaves, not blobs (vegetation pass 1, 2026-08-26)
+# ==========================================================================
+#
+# The approved foundation render showed every plant as a smooth sphere cluster.
+# A silhouette made of spheres reads as blockout no matter what the material
+# does, so foliage is now built from LEAF BLADES scattered in CLUMPS over an
+# envelope: the outline is broken at leaf scale, light gets between the
+# clusters, and the interior core only stops you seeing through. Positions,
+# footprints and the composition are untouched -- only what the meshes look
+# like changes.
+
+
+def _leaf_blade(m, at, yaw, pitch, roll, size):
+    """One leaf: a tapered blade with a shoulder and a point, ~1 mm thick."""
+    s = float(size)
+    poly = [(0.0, -0.10 * s), (0.26 * s, 0.16 * s), (0.34 * s, 0.55 * s), (0.18 * s, 0.90 * s),
+            (0.0, 1.02 * s), (-0.18 * s, 0.90 * s), (-0.34 * s, 0.55 * s), (-0.26 * s, 0.16 * s)]
+    m.extrude(poly, max(1.0, 0.05 * s), at=at, rot=(pitch, yaw, roll))
+
+
+def _leaf_shell(m, centre, radii, count, size, seed, elev=(-0.75, 1.0), jitter=0.20, clump=3, droop=26.0):
+    """Scatter `count` leaves over an ellipsoid in clumps of `clump`. Each leaf
+    points outward with angular jitter and a downward droop, so the mass reads
+    as many small surfaces rather than one big one."""
+    cx, cy, cz = centre
+    rx, ry, rz = radii
+    anchors = max(1, int(count) // max(1, clump))
+    for i in range(anchors):
+        t = (i + 0.5) / anchors
+        el = math.asin(max(-1.0, min(1.0, elev[0] + (elev[1] - elev[0]) * t)))
+        a = i * 2.3999632
+        for j in range(clump):
+            ja = a + (_h(seed, i, j, 1) - 0.5) * 0.6
+            je = el + (_h(seed, i, j, 2) - 0.5) * 0.5
+            rr = 1.0 - jitter * _h(seed, i, j, 3)
+            ca, sa, ce, se = math.cos(ja), math.sin(ja), math.cos(je), math.sin(je)
+            _leaf_blade(m, (cx + ca * ce * rx * rr, cy + sa * ce * ry * rr, cz + se * rz * rr),
+                        math.degrees(ja) - 90.0 + 70.0 * (_h(seed, i, j, 4) - 0.5),
+                        -math.degrees(je) - droop * (0.3 + 0.7 * _h(seed, i, j, 5)),
+                        360.0 * _h(seed, i, j, 6),
+                        size * (0.70 + 0.60 * _h(seed, i, j, 7)))
+
+
+def _twigs(m, centre, radii, count, seed, r0=7.0):
+    """Short branches from the canopy heart to its shell, so the leaves have
+    something to hang from where the eye can see between clumps."""
+    cx, cy, cz = centre
+    rx, ry, rz = radii
+    for i in range(count):
+        a = i * 2.3999632
+        el = -0.5 + 1.4 * _h(seed, i, 1)
+        ca, sa, ce, se = math.cos(a), math.sin(a), math.cos(el), math.sin(el)
+        f = 0.55 + 0.40 * _h(seed, i, 2)
+        m.tube([(cx, cy, cz - rz * 0.25), (cx + ca * ce * rx * f * 0.5, cy + sa * ce * ry * f * 0.5, cz + se * rz * f * 0.5),
+                (cx + ca * ce * rx * f, cy + sa * ce * ry * f, cz + se * rz * f)],
+               [r0, r0 * 0.6, r0 * 0.3], sides=5)
+
+
+def _petal_ring(m, centre, n, size, seed, tilt=48.0, z=0.0):
+    """A small open flower: petals as blades around a centre, not a sphere."""
+    cx, cy, cz = centre
+    for i in range(n):
+        a = 2.0 * math.pi * i / n + _h(seed, i, 9) * 0.4
+        _leaf_blade(m, (cx + math.cos(a) * size * 0.18, cy + math.sin(a) * size * 0.18, cz + z),
+                    math.degrees(a) - 90.0, -tilt - 16.0 * _h(seed, i, 8), 0.0, size)
+
 def _heart_pts(scale, n=48, z=0.0):
     out = []
     for i in range(n + 1):
@@ -165,42 +233,55 @@ def tree_mature_trunk(ctx):
 
 
 def canopy_large(ctx):
-    """An organic leaf mass ~7 m across: nine overlapping masses displaced at
-    two frequencies and smoothed, so the outline is ragged and re-entrant."""
+    """A ~10 m garden canopy: a dark interior core, twigs, and three asymmetric
+    leaf lobes of clumped blades. The silhouette is leaves, not spheres."""
     m = ctx.mesh("canopy_large")
-    for i, (x, y, z, r) in enumerate(((0, 0, 40, 330), (280, 90, -60, 250), (-240, 150, -20, 270),
-                                      (90, -280, -40, 250), (-150, -220, 90, 220), (200, 200, 180, 200),
-                                      (-260, -60, 200, 190), (40, 240, 240, 210), (0, -60, -240, 230))):
-        m.sphere(r, at=(x, y, z), steps=14)
-    m.perlin(38.0, 0.0045, seed=11)
-    m.perlin(9.0, 0.02, seed=12)
-    m.subdivide(1)
-    m.smooth(2, 0.3)
-    m.split_normals(70.0)
+    for (x, y, z, r) in ((0, 0, 30, 175), (200, 90, -50, 130), (-190, 130, 10, 140), (60, -200, -30, 125)):
+        m.sphere(r, at=(x, y, z), steps=10)
+    m.perlin(34.0, 0.005, seed=11)
+    m.smooth(1, 0.3)
+    _twigs(m, (0, 0, 20), (430, 400, 360), 16, 1101, r0=9.0)
+    for k, (c, rad, n, sz) in enumerate((((30, 20, 60), (470, 430, 400), 300, 62.0),
+                                         ((-230, 150, -40), (300, 290, 260), 220, 56.0),
+                                         ((180, -170, -20), (280, 270, 240), 210, 56.0),
+                                         ((30, 20, 40), (330, 300, 280), 200, 52.0))):
+        _leaf_shell(m, c, rad, n, sz, 1110 + k, elev=(-0.7, 1.0), jitter=0.30, clump=3)
+    m.split_normals(62.0)
     return m
 
 
 def blossom_cluster(ctx):
+    """A blossom clump ~1.8 m: leaf clumps carrying open five-petal flowers."""
     m = ctx.mesh("blossom_cluster")
-    for i in range(8):
-        a = i * 2.39996
-        r = 40.0 + 30.0 * _h(3, i, 1)
-        m.sphere(r, at=(math.cos(a) * 70.0 * _h(3, i, 2), math.sin(a) * 70.0 * _h(3, i, 3), 60.0 * _h(3, i, 4)), steps=10)
-    m.perlin(8.0, 0.03, seed=21)
-    m.subdivide(1)
+    for i in range(5):
+        a = i * 2.3999632
+        m.sphere(22.0 + 10.0 * _h(3, i, 1), at=(math.cos(a) * 52.0, math.sin(a) * 52.0, 40.0 * _h(3, i, 2)), steps=9)
+    m.perlin(6.0, 0.035, seed=21)
+    _leaf_shell(m, (0, 0, 30), (86, 100, 84), 150, 23.0, 2110, elev=(-0.5, 1.0), jitter=0.26, clump=3, droop=22.0)
+    for i in range(9):
+        a = i * 2.3999632
+        el = 0.1 + 0.8 * _h(3, i, 5)
+        _petal_ring(m, (math.cos(a) * math.cos(el) * 78.0, math.sin(a) * math.cos(el) * 88.0, 34.0 + math.sin(el) * 70.0),
+                    5, 24.0 + 8.0 * _h(3, i, 6), 2200 + i)
+    m.split_normals(58.0)
     return m
 
 
 def hedge_mass(ctx):
+    """An informal hedge mass ~6 m: a lumpy core under clumped leaf cover."""
     m = ctx.mesh("hedge_mass")
-    for i, (x, y, z, r) in enumerate(((0, 0, 130, 200), (170, 60, 110, 150), (-150, 90, 120, 160),
-                                      (60, -150, 100, 150), (-100, -120, 140, 130))):
-        m.sphere(r, at=(x, y, z), steps=12)
-    m.scale(1.0, 1.0, 0.75)
-    m.perlin(20.0, 0.008, seed=71)
-    m.perlin(6.0, 0.03, seed=72)
-    m.subdivide(1)
-    m.smooth(1, 0.3)
+    for (x, y, z, r) in ((0, 0, 120, 78), (150, 50, 100, 60), (-135, 80, 110, 62), (55, -135, 95, 60)):
+        m.sphere(r, at=(x, y, z), steps=10)
+    m.scale(1.0, 1.0, 0.78)
+    m.perlin(16.0, 0.009, seed=71)
+    m.smooth(1, 0.25)
+    for k, (c, rad, n) in enumerate((((0, 0, 105), (290, 255, 150), 260, ),
+                                     ((160, 60, 95), (170, 150, 110), 140),
+                                     ((-150, 90, 100), (175, 155, 112), 140),
+                                     ((60, -140, 92), (165, 145, 108), 130),
+                                     ((0, 0, 100), (240, 210, 130), 180))):
+        _leaf_shell(m, c[0:3] if len(c) > 2 else c, rad, n * 2, 24.0, 7100 + k, elev=(-0.4, 1.0), jitter=0.26, clump=3, droop=20.0)
+    m.split_normals(58.0)
     return m
 
 
@@ -242,22 +323,30 @@ def ivy_drape(ctx):
 
 
 def heart_topiary(ctx):
-    """The hero topiary: the heart curve swept as a thick clipped hedge with
-    Perlin unevenness, roses at the lobes, a short trunk."""
+    """The heart topiary, ~10 m: the heart armature stays exactly where it is;
+    its surface becomes clipped foliage with roses along the crown."""
     m = ctx.mesh("heart_topiary")
-    pts = _heart_pts(27.0, n=56, z=480.0)
-    radii = [112.0 * (1.0 + 0.18 * math.sin(i * 0.9)) for i in range(len(pts))]
-    m.tube(pts, radii, sides=14)
-    m.cylinder(42.0, 140.0, at=(0, 0, 0), steps=12)
-    for i in range(12):
-        t = 2.0 * math.pi * _h(9, i, 1)
-        x = 16.0 * math.sin(t) ** 3 * 27.0
-        z = (13.0 * math.cos(t) - 5.0 * math.cos(2 * t) - 2.0 * math.cos(3 * t) - math.cos(4 * t)) * 27.0 + 480.0
-        m.sphere(34.0 + 14.0 * _h(9, i, 2), at=(x * 1.02, -118.0, z * 1.0), steps=8)
-    m.perlin(18.0, 0.012, seed=101)
-    m.perlin(6.0, 0.05, seed=102)
-    m.subdivide(1)
-    m.smooth(1, 0.25)
+    pts, rr = [], []
+    N = 96
+    for i in range(N + 1):
+        t = 2.0 * math.pi * i / N
+        x = 16.0 * math.sin(t) ** 3
+        y = 13.0 * math.cos(t) - 5.0 * math.cos(2 * t) - 2.0 * math.cos(3 * t) - math.cos(4 * t)
+        pts.append((x * 30.0, 0.0, y * 30.0 + 470.0))
+        rr.append(52.0)
+    m.tube(pts, rr, sides=12)
+    for i in range(0, N, 2):
+        t = 2.0 * math.pi * i / N
+        x = 16.0 * math.sin(t) ** 3
+        y = 13.0 * math.cos(t) - 5.0 * math.cos(2 * t) - 2.0 * math.cos(3 * t) - math.cos(4 * t)
+        _leaf_shell(m, (x * 30.0, 0.0, y * 30.0 + 470.0), (66.0, 60.0, 66.0), 26, 22.0,
+                    24400 + i, elev=(-0.9, 1.0), jitter=0.12, clump=3, droop=16.0)
+    for i in range(14):
+        t = 2.0 * math.pi * (i + 0.3) / 14.0
+        x = 16.0 * math.sin(t) ** 3
+        y = 13.0 * math.cos(t) - 5.0 * math.cos(2 * t) - 2.0 * math.cos(3 * t) - math.cos(4 * t)
+        _cup(m, 0.34, (x * 30.0, -46.0, y * 30.0 + 470.0), 90.0, -20.0 + 40.0 * _h(244, i, 1))
+    m.split_normals(58.0)
     return m
 
 
@@ -918,8 +1007,13 @@ COBBLE_VARIANTS = 4
 REUSE_ASSETS = os.environ.get("WLV2_REUSE_ASSETS", "0") == "1"
 
 
+#: WLV2_REBUILD=key,key: rebuild these even when reuse is on -- the vegetation
+#: pass changes ten recipes; the other 73 meshes are unchanged and cost minutes.
+REBUILD_KEYS = set(k.strip() for k in os.environ.get("WLV2_REBUILD", "").split(",") if k.strip())
+
+
 def _existing_asset(ctx, folder, key):
-    if not REUSE_ASSETS:
+    if not REUSE_ASSETS or key in REBUILD_KEYS:
         return None
     path = F[folder] + "/SM_" + key
     try:
@@ -1028,39 +1122,36 @@ def planter_box(ctx):
 
 
 def topiary_cone_roses(ctx):
-    """The reference's signature garden form: a clipped conical shrub ~5.7 m
-    tall with roses studded over it. Organic, not a cone: a lofted profile
-    with Perlin at two frequencies, subdivided, and 40 rose heads."""
+    """The reference's rose cone, ~4 m: a clipped cone of leaves with roses
+    threaded through it, on a short clear stem."""
     m = ctx.mesh("topiary_cone_roses")
-    prof = [(0.0, 0.0)]
-    for i in range(12):
-        t = i / 11.0
-        r = 190.0 * (1.0 - t) ** 0.75 + 12.0
-        prof.append((r * (1.0 + 0.05 * math.sin(t * 9.0)), 60.0 + 500.0 * t))
-    prof.append((0.0, 570.0))
-    m.revolve(prof, steps=28)
-    m.cylinder(30.0, 70.0, at=(0, 0, 0), steps=10)
-    for i in range(40):
-        t = _h(21, i, 1)
-        a = 2.0 * math.pi * _h(21, i, 2)
-        r = 190.0 * (1.0 - t) ** 0.75 + 12.0
-        m.sphere(16.0 + 10.0 * _h(21, i, 3), at=(math.cos(a) * r * 1.02, math.sin(a) * r * 1.02, 60.0 + 500.0 * t), steps=8)
-    m.perlin(14.0, 0.012, seed=331)
-    m.perlin(5.0, 0.05, seed=332)
-    m.subdivide(1)
-    m.smooth(1, 0.25)
+    prof = [(0.0, 0.0)] + [(92.0 * (1.0 - i / 10.0) ** 0.82 + 6.0, 40.0 + 420.0 * i / 10.0) for i in range(11)] + [(0.0, 486.0)]
+    m.revolve(prof, steps=22)
+    m.cylinder(18.0, 60.0, at=(0, 0, 0), steps=8)
+    for k in range(16):
+        t = k / 15.0
+        z = 46.0 + 424.0 * t
+        r = 128.0 * (1.0 - t) ** 0.82 + 10.0
+        _leaf_shell(m, (0, 0, z), (r, r, 24.0), 60, 21.0, 10300 + k, elev=(-0.35, 0.5), jitter=0.10, clump=4, droop=14.0)
+    for i in range(22):
+        a = i * 2.3999632
+        t = 0.12 + 0.80 * _h(103, i, 1)
+        r = (128.0 * (1.0 - t) ** 0.82 + 10.0) * 0.92
+        z = 46.0 + 424.0 * t
+        _cup(m, 0.30, (math.cos(a) * r, math.sin(a) * r, z), math.degrees(a), 30.0 - 60.0 * _h(103, i, 2))
+    m.split_normals(58.0)
     return m
 
 
 def topiary_ball(ctx):
-    """A clipped ball, 1.6 m: a sphere that reads as foliage because its
-    surface is leaf-noisy at two scales, not smooth."""
+    """A clipped ball topiary, 1.6 m: trimmed foliage -- a tight, even leaf
+    shell over a small core, short leaves, little droop."""
     m = ctx.mesh("topiary_ball")
-    m.sphere(80.0, at=(0, 0, 100.0), steps=16)
-    m.cylinder(10.0, 30.0, at=(0, 0, 0), steps=8)
-    m.perlin(6.0, 0.02, seed=341)
-    m.perlin(2.5, 0.08, seed=342)
-    m.subdivide(1)
+    m.cylinder(11.0, 30.0, at=(0, 0, 0), steps=8)
+    m.sphere(44.0, at=(0, 0, 78.0), steps=12)
+    _leaf_shell(m, (0, 0, 78.0), (72, 73, 58), 300, 22.0, 5501, elev=(-0.85, 1.0), jitter=0.10, clump=4, droop=12.0)
+    _leaf_shell(m, (0, 0, 78.0), (80, 81, 64), 240, 20.0, 5502, elev=(-0.8, 1.0), jitter=0.08, clump=3, droop=10.0)
+    m.split_normals(58.0)
     return m
 
 
@@ -1352,89 +1443,108 @@ def tree_slender_trunk(ctx):
 
 
 def canopy_medium(ctx):
-    """A 4 m leaf mass, six lumps, for garden trees and the giant mushroom's ivy."""
+    """A ~6 m canopy: core, twigs and two leaf lobes."""
     m = ctx.mesh("canopy_medium")
-    for i, (x, y, z, r) in enumerate(((0, 0, 20, 200), (160, 60, -30, 150), (-150, 90, -10, 160), (60, -160, -20, 150), (-90, -120, 60, 130), (30, 130, 110, 120))):
-        m.sphere(r, at=(x, y, z), steps=12)
-    m.perlin(24.0, 0.007, seed=93)
-    m.perlin(7.0, 0.03, seed=94)
-    m.subdivide(1)
+    for (x, y, z, r) in ((0, 0, 15, 105), (120, 50, -25, 80), (-110, 70, 5, 84)):
+        m.sphere(r, at=(x, y, z), steps=10)
+    m.perlin(20.0, 0.007, seed=93)
     m.smooth(1, 0.3)
-    m.split_normals(70.0)
+    _twigs(m, (0, 0, 10), (270, 250, 200), 11, 9301, r0=6.0)
+    for k, (c, rad, n, sz) in enumerate((((10, 10, 30), (300, 275, 210), 240, 52.0),
+                                         ((-140, 90, -20), (190, 180, 150), 170, 46.0),
+                                         ((10, 10, 20), (210, 195, 155), 150, 44.0))):
+        _leaf_shell(m, c, rad, n, sz, 9310 + k, elev=(-0.7, 1.0), jitter=0.30, clump=3)
+    m.split_normals(62.0)
     return m
 
 
 def topiary_cone_plain(ctx):
-    """A clipped cone without roses, 3 m, leaf-noisy."""
+    """A clipped cone topiary, 3 m: tight leaf cover in stacked tiers."""
     m = ctx.mesh("topiary_cone_plain")
-    prof = [(0.0, 0.0)] + [(105.0 * (1.0 - i / 10.0) ** 0.8 + 8.0, 40.0 + 260.0 * i / 10.0) for i in range(11)] + [(0.0, 300.0)]
-    m.revolve(prof, steps=22)
-    m.cylinder(16.0, 44.0, at=(0, 0, 0), steps=8)
-    m.perlin(8.0, 0.02, seed=101)
-    m.perlin(3.0, 0.08, seed=102)
-    m.subdivide(1)
+    prof = [(0.0, 0.0)] + [(56.0 * (1.0 - i / 10.0) ** 0.8 + 4.0, 30.0 + 250.0 * i / 10.0) for i in range(11)] + [(0.0, 290.0)]
+    m.revolve(prof, steps=20)
+    m.cylinder(15.0, 42.0, at=(0, 0, 0), steps=8)
+    for k in range(14):
+        t = k / 13.0
+        z = 36.0 + 254.0 * t
+        r = 100.0 * (1.0 - t) ** 0.8 + 9.0
+        _leaf_shell(m, (0, 0, z), (r, r, 22.0), 56, 19.0, 10100 + k, elev=(-0.35, 0.5), jitter=0.08, clump=4, droop=14.0)
+    m.split_normals(58.0)
     return m
 
 
 def topiary_spiral(ctx):
-    """A spiral-clipped topiary, 3.2 m: a cone cut by a helical groove."""
+    """A spiral-clipped topiary, 3.2 m: the helix stays, the surface is leaves."""
     m = ctx.mesh("topiary_spiral")
     pts, rr = [], []
     for i in range(40):
         t = i / 39.0
         a = t * 5.0 * 2.0 * math.pi
-        r = 90.0 * (1.0 - t) + 10.0
-        pts.append((math.cos(a) * r * 0.55, math.sin(a) * r * 0.55, 50.0 + 270.0 * t))
-        rr.append(r * 0.62 + 6.0)
-    m.tube(pts, rr, sides=12)
-    m.cylinder(14.0, 54.0, at=(0, 0, 0), steps=8)
-    m.perlin(6.0, 0.03, seed=111)
-    m.perlin(2.5, 0.09, seed=112)
-    m.subdivide(1)
+        r = 80.0 * (1.0 - t) + 9.0
+        pts.append((math.cos(a) * r * 0.55, math.sin(a) * r * 0.55, 50.0 + 268.0 * t))
+        rr.append(r * 0.58 + 5.0)
+    m.tube(pts, rr, sides=10)
+    m.cylinder(13.0, 52.0, at=(0, 0, 0), steps=8)
+    for i in range(0, 40, 1):
+        t = i / 39.0
+        a = t * 5.0 * 2.0 * math.pi
+        r = 80.0 * (1.0 - t) + 9.0
+        _leaf_shell(m, (math.cos(a) * r * 0.55, math.sin(a) * r * 0.55, 50.0 + 268.0 * t),
+                    (r * 0.70 + 7.0, r * 0.70 + 7.0, 20.0), 20, 17.0, 11100 + i, elev=(-0.5, 0.8), jitter=0.10, clump=3, droop=12.0)
+    m.split_normals(58.0)
     return m
 
 
 def rose_bush(ctx):
-    """A rose bush, 1.4 m: a leafy mass with nine blooms standing proud."""
+    """A rose bush, 2 m: arching stems, leaf clumps, nine blooms proud of them."""
     m = ctx.mesh("rose_bush")
-    for i, (x, y, z, r) in enumerate(((0, 0, 70, 70), (50, 20, 50, 55), (-45, 30, 60, 52), (20, -50, 55, 50))):
-        m.sphere(r, at=(x, y, z), steps=10)
-    m.perlin(9.0, 0.03, seed=121)
+    for (x, y, z, r) in ((0, 0, 62, 36), (42, 18, 46, 30), (-38, 26, 54, 28)):
+        m.sphere(r, at=(x, y, z), steps=9)
+    m.perlin(7.0, 0.035, seed=121)
+    _leaf_shell(m, (0, 0, 66), (96, 92, 70), 190, 21.0, 12100, elev=(-0.4, 1.0), jitter=0.24, clump=3, droop=24.0)
     for i in range(9):
-        a = i * 2.39996
-        rad = 40.0 + 50.0 * _h(12, i, 1)
+        a = i * 2.3999632
+        rad = 38.0 + 46.0 * _h(12, i, 1)
         x, y = math.cos(a) * rad, math.sin(a) * rad
-        z = 95.0 + 40.0 * _h(12, i, 2)
+        z = 92.0 + 38.0 * _h(12, i, 2)
         m.tube([(x * 0.6, y * 0.6, z - 40.0), (x, y, z)], [3.0, 2.2], sides=5)
         _cup(m, 0.36, (x, y, z), 40.0 * i, -20.0 + 40.0 * _h(12, i, 3))
         _cup(m, 0.25, (x, y, z + 4.0), 40.0 * i + 25.0, 0.0)
-    m.subdivide(1)
+    m.split_normals(58.0)
     return m
 
 
 def shrub_flowering(ctx):
-    """A flowering shrub, 2 m: hedge mass plus blossom clumps on its crown."""
+    """A flowering shrub ~3.5 m across: leafy mass with open blossoms."""
     m = ctx.mesh("shrub_flowering")
-    for i, (x, y, z, r) in enumerate(((0, 0, 110, 110), (90, 40, 90, 85), (-80, 60, 95, 90), (30, -90, 80, 80))):
-        m.sphere(r, at=(x, y, z), steps=11)
-    m.perlin(12.0, 0.015, seed=131)
-    m.perlin(4.0, 0.06, seed=132)
-    for i in range(14):
-        a = i * 2.39996
-        el = 0.3 + 0.6 * _h(13, i, 1)
-        m.sphere(18.0 + 10.0 * _h(13, i, 2), at=(math.cos(a) * math.cos(el) * 150.0, math.sin(a) * math.cos(el) * 150.0, 100.0 + math.sin(el) * 120.0), steps=8)
-    m.subdivide(1)
+    for (x, y, z, r) in ((0, 0, 100, 62), (75, 35, 82, 48), (-68, 50, 86, 50), (25, -75, 72, 46)):
+        m.sphere(r, at=(x, y, z), steps=10)
+    m.perlin(10.0, 0.018, seed=131)
+    _twigs(m, (0, 0, 90), (150, 140, 100), 9, 13100, r0=5.0)
+    _leaf_shell(m, (0, 0, 100), (168, 152, 108), 280, 27.0, 13110, elev=(-0.4, 1.0), jitter=0.24, clump=3, droop=22.0)
+    _leaf_shell(m, (0, 0, 94), (128, 116, 86), 170, 25.0, 13111, elev=(-0.5, 1.0), jitter=0.20, clump=3, droop=20.0)
+    for i in range(13):
+        a = i * 2.3999632
+        el = 0.25 + 0.65 * _h(13, i, 1)
+        _petal_ring(m, (math.cos(a) * math.cos(el) * 140.0, math.sin(a) * math.cos(el) * 128.0, 96.0 + math.sin(el) * 96.0),
+                    5, 26.0 + 8.0 * _h(13, i, 2), 13200 + i)
+    m.split_normals(58.0)
     return m
 
 
 def hedge_block(ctx):
-    """A clipped rectangular hedge, 3 x 1 x 1.2 m, with a leaf-noisy surface."""
+    """A clipped rectangular hedge, 3 x 1 x 1.2 m: a trimmed box whose faces
+    are leaves -- an uneven crown, dense sides, dark between the clumps."""
     m = ctx.mesh("hedge_block")
-    m.box(300.0, 100.0, 120.0, at=(0, 0, 60.0), chamfer=14.0)
-    m.subdivide(2)
-    m.perlin(5.0, 0.03, seed=141)
-    m.perlin(2.0, 0.09, seed=142)
-    m.smooth(1, 0.2)
+    m.box(268.0, 70.0, 92.0, at=(0, 0, 50.0), chamfer=10.0)
+    m.subdivide(1)
+    m.perlin(4.0, 0.04, seed=141)
+    for i in range(15):
+        x = -140.0 + 280.0 * i / 14.0
+        _leaf_shell(m, (x, 0.0, 104.0), (24.0, 50.0, 16.0), 26, 18.0, 14100 + i, elev=(-0.2, 1.0), jitter=0.12, clump=3, droop=16.0)
+        for sgn in (-1, 1):
+            _leaf_shell(m, (x, sgn * 44.0, 56.0), (22.0, 12.0, 46.0), 22, 17.0, 14200 + i * 2 + (sgn > 0), elev=(-0.7, 0.7), jitter=0.10, clump=2, droop=18.0)
+    m.split_normals(58.0)
     return m
 
 

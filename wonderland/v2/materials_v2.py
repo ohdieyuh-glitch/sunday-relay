@@ -369,6 +369,17 @@ def build_materials(unreal, log, texs):
             log("V2 MATERIAL master %s FAILED: %s" % (name, exc))
     out = {}
     pkg = C.FOLDERS["mat_instances"]
+    # THE GREY WORLD (2026-08-26): the masters were created under -nullrhi, saved
+    # with NO shadermap, and the cook logged "Failed to compile Material for
+    # platform SF_VULKAN_SM5, Default Material will be used in game" -- every
+    # surface in the approved foundation render was the engine's grey checker.
+    # Compile them explicitly (and run the generator WITH rendering, not nullrhi).
+    for _n, _m in list(masters.items()):
+        try:
+            mel.recompile_material(_m)
+            log("V2 MATERIAL master %s compiled" % _n)
+        except Exception as exc:
+            log("V2 MATERIAL master %s COMPILE FAILED: %s" % (_n, exc))
     means = texture_means(log)
     for name, (fam, tint, met, rough, vary, spec, emi, es) in INSTANCES.items():
         kind = "portal" if name in PORTAL else ("foliage" if name in FOLIAGE else "surface")
@@ -402,6 +413,10 @@ def build_materials(unreal, log, texs):
             for pname, stem in (("Albedo", stems[0]), ("Normal", stems[1]), ("RoughnessMap", stems[2])):
                 if stem and stem in texs:
                     mel.set_material_instance_texture_parameter_value(mi, pname, texs[stem])
+            try:
+                mel.recompile_material(mi)
+            except Exception:
+                pass
             eal.save_asset(path, only_if_is_dirty=False)
             out[name] = mi
         except Exception as exc:

@@ -54,7 +54,11 @@ ue() {  # log-name, then the editor arguments
 }
 if [ "$STEP" = all ] || [ "$STEP" = build ]; then
   wl_say "1/4 building the V2 world into CLASSIC staging map $MAP"
-  WLV2_PARTITIONED=0 ue build "-run=pythonscript" "-script=$WL_SRC/wonderland/v2/diag/../build_v2.py" -nullrhi
+  # NOT -nullrhi: materials created without an RHI are saved with no shadermap
+  # and the cook then falls back to the DEFAULT GREY MATERIAL for the whole
+  # world (measured 2026-08-26: "Failed to compile Material for platform
+  # SF_VULKAN_SM5, Default Material will be used in game").
+  WLV2_PARTITIONED="${WLV2_PARTITIONED:-0}" ue build "-run=pythonscript" "-script=$WL_SRC/wonderland/v2/build_v2.py" -AllowCommandletRendering -RenderOffscreen
   grep -E "V2 (ASSETS|SAVE|SUMMARY|MAP)" "$WL_LOG/wp-build.log" | sed 's/.*LogPython: Warning: //' | sort -u | tail -8 | cut -c1-200
 fi
 if [ "$STEP" = all ] || [ "$STEP" = validate-staging ]; then
