@@ -355,8 +355,16 @@ if [ -n "$WL_UBT_ARGS" ]; then
   log "passing to UnrealBuildTool: $WL_UBT_ARGS"
 fi
 
+# WL_SKIP_BUILD_EDITOR=1: the editor module is already compiled (its .so is
+# on disk) and nothing in Source/ changed -- skip the compile. A clang
+# segfault inside UBA wedged a build for 15 minutes on 2026-08-26; during a
+# cook-only diagnostic the compile is pure risk.
+if [ "${WL_SKIP_BUILD_EDITOR:-0}" = "1" ] && ls "$(dirname "$PROJECT")"/Binaries/Linux/libUnrealEditor-Wonderland*.so >/dev/null 2>&1; then
+  log "WL_SKIP_BUILD_EDITOR=1: editor module binaries present; skipping build-editor"
+else
 run_step "build-editor" "$RUNUAT" BuildEditor -project="$PROJECT" -notools \
   "${UBT_PASSTHROUGH[@]+"${UBT_PASSTHROUGH[@]}"}"
+fi
 
 # --------------------------------------------------- 3. generate the starter Hub level
 # Milestone-1 placeholder content via Editor Python, so the packaged build
