@@ -68,6 +68,38 @@ def main():
         bearing = abs(math.degrees(math.atan2(dx, dy)))
         if bearing > half:
             fails.append("%s at bearing %.0f is outside cam0's half-fov %.0f" % (lb, bearing, half))
+    # THE SECOND LOCKED CAMERA looks back through the open gate (cam1): both
+    # piers must be inside its frame, the leaves must be swung clear of the
+    # axis, and nothing may stand on the axis between the camera and the plaza.
+    cam1 = C.HERO_CAMS[1]
+    c1x, c1y = cam1["location"][0], cam1["location"][1]
+    half1 = cam1["fov"] * 0.5
+    for lb in ("Gate_PierL", "Gate_PierR", "GiantMushroom"):
+        it = next((i for i in L.ALL if i["label"] == lb), None)
+        if it is None:
+            fails.append("landmark %s missing (cam1)" % lb)
+            continue
+        dx, dy = it["pos"][0] - c1x, it["pos"][1] - c1y
+        r = inner.get(lb, 0.0)
+        dx = dx - r if dx > 0 else dx + r
+        if dy <= 0:
+            fails.append("%s is behind cam1" % lb)
+            continue
+        bearing = abs(math.degrees(math.atan2(dx, dy)))
+        if bearing > half1:
+            fails.append("%s at bearing %.0f is outside cam1's half-fov %.0f" % (lb, bearing, half1))
+    for it in L.ALL:
+        x, y = it["pos"][0], it["pos"][1]
+        if abs(x) < 120.0 and c1y < y < -700.0 and it["asset"] not in ("gate_leaf",):
+            fails.append("%s (%s) stands on the gate-view axis at (%d, %d)" % (it["label"], it["asset"], x, y))
+    for it in L.ALL:
+        # only the ARRIVAL gate's leaves (labels Gate_Leaf*): the garden's own
+        # gate on the left stands closed across its wall, as in the reference
+        if it["asset"] == "gate_leaf" and it["label"].startswith("Gate_Leaf"):
+            yaw = it["rot"][1] % 360.0
+            # a leaf flat across the opening (yaw ~0 or ~180) closes the view
+            if min(abs(yaw), abs(yaw - 180.0), abs(yaw - 360.0)) < 30.0:
+                fails.append("%s is swung across the opening (yaw %.0f)" % (it["label"], yaw))
     seqs = {}
     for it in L.CITY:
         if "_Tower" in it["label"] and "Roof" not in it["label"] and "Balcony" not in it["label"] and "Finial" not in it["label"]:
@@ -79,13 +111,14 @@ def main():
         if k in seen:
             fails.append("city group %s repeats %s's tower sequence %s" % (g, seen[k], k))
         seen[k] = g
-    print("V2 LAYOUT: %d placements, %d city groups, cam0 %s fov %.0f" % (len(L.ALL), len(seqs), cam["name"], cam["fov"]))
+    print("V2 LAYOUT: %d placements, %d city groups, cam0 %s fov %.0f, cam1 %s fov %.0f"
+          % (len(L.ALL), len(seqs), cam["name"], cam["fov"], cam1["name"], cam1["fov"]))
     if fails:
         print("FAIL:")
         for f in fails:
             print("  " + f)
         return 1
-    print("PASS: recipes and materials resolve; corridor open; plaza clean; hover props high; landmarks in frame; city groups vary")
+    print("PASS: recipes and materials resolve; corridor open; plaza clean; hover props high; landmarks in both cameras; gate view clear; city groups vary")
     return 0
 
 
