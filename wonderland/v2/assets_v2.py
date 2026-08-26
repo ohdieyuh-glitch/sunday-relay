@@ -1407,3 +1407,61 @@ RECIPES.update({
     "ground_flowers": (ground_flowers, "flowers", False, False),
     "vine_wall": (vine_wall, "ivy", False, False),
 })
+
+
+
+# ==========================================================================
+# FROM THE FOUNDER'S GUIDE VIEW (cam0 reprojection): the sunken plaza's side
+# steps, the pedestals with gold finials, the mushroom's stone base, a cup
+# ==========================================================================
+
+
+def side_steps(ctx):
+    """Three low steps rising away from the plaza along its side, a 4 m
+    module: the plaza is sunken and the terraces are two steps up."""
+    m = ctx.mesh("side_steps")
+    for k in range(3):
+        m.box(400.0, 60.0 * (3 - k), 20.0, at=(0.0, 30.0 * k + 30.0 * (3 - k), 20.0 * (k + 0.5)), chamfer=2.5)
+    m.perlin(0.7, 0.05, seed=361)
+    return m
+
+
+def pedestal_finial(ctx):
+    """A cream stone pedestal, 1.2 m, with a moulded cap -- the gold finial
+    (gate_finial_ball) is placed on it by the layout."""
+    m = ctx.mesh("pedestal_finial")
+    m.box(70.0, 70.0, 16.0, at=(0, 0, 8.0), chamfer=3.0)
+    m.box(56.0, 56.0, 84.0, at=(0, 0, 58.0), chamfer=4.0)
+    for yaw in (0.0, 90.0, 180.0, 270.0):
+        m.box(34.0, 6.0, 60.0, at=(math.sin(math.radians(yaw)) * -30.0, math.cos(math.radians(yaw)) * 30.0, 58.0), rot=(0.0, yaw, 0.0), chamfer=1.5)
+    m.revolve([(0.0, 100.0), (36.0, 100.0), (40.0, 108.0), (34.0, 116.0), (22.0, 122.0), (0.0, 124.0)], steps=16)
+    return m
+
+
+def stone_ring_base(ctx):
+    """A low round stone platform, 5 m across, two tiers: what the giant
+    mushroom's stem stands on in the reference."""
+    m = ctx.mesh("stone_ring_base")
+    m.revolve([(0.0, 0.0), (250.0, 0.0), (254.0, 30.0), (246.0, 40.0), (0.0, 40.0)], steps=32)
+    m.revolve([(0.0, 40.0), (190.0, 40.0), (194.0, 66.0), (186.0, 76.0), (0.0, 76.0)], steps=32)
+    m.perlin(1.2, 0.03, seed=371)
+    return m
+
+
+def tea_cup_small(ctx):
+    """A floating teacup with its saucer, for the sky."""
+    m = ctx.mesh("tea_cup_small")
+    m.revolve([(0.0, 0.0), (60.0, 0.0), (64.0, 8.0), (54.0, 12.0), (100.0, 18.0), (130.0, 26.0), (128.0, 32.0), (90.0, 24.0), (0.0, 22.0)], steps=28)
+    m.revolve([(0.0, 22.0), (40.0, 22.0), (44.0, 34.0), (34.0, 40.0), (62.0, 80.0), (86.0, 140.0), (98.0, 200.0), (104.0, 212.0),
+               (96.0, 216.0), (82.0, 150.0), (56.0, 82.0), (28.0, 52.0), (0.0, 50.0)], steps=28)
+    m.torus(46.0, 10.0, at=(124.0, 0.0, 140.0), rot=(0.0, 0.0, 90.0), major=20, minor=8, arc=250.0)
+    m.subdivide(1)
+    return m
+
+
+RECIPES.update({
+    "side_steps": (side_steps, "stairs", True, True),
+    "pedestal_finial": (pedestal_finial, "garden_props", True, True),
+    "stone_ring_base": (stone_ring_base, "mush_landmark", True, True),
+    "tea_cup_small": (tea_cup_small, "tea", True, False),
+})

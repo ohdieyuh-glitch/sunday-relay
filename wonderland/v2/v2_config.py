@@ -98,6 +98,8 @@ LOOK = {
     # gardens own the horizon and no giant panorama mushroom ghosts the sky
     "skyDome": 1, "skyGain": 9000.0, "skyFlipV": 0.0, "skyHorizonV": 0.4556,
     "castleKit": 1, "nanite": 1,
+    # secondary dressing (the PCG-equivalent): garden zones only, after the authored layout
+    "dressing": 1, "dressingDensity": 1.0,
     # ---- THE MARBLE WORLD -----------------------------------------------------
     # marbleWorld: "scaffold" = import and place the HQ mesh HIDDEN in game
     # (composition/proportion scaffold in the editor; it is not the final

@@ -30,7 +30,9 @@ INSTANCES = {
     "MI_V2_Stone":      ("ashlar",  (0.50, 0.46, 0.41), 0.0, 0.82, 0.80, 0.30, None, 0.0),
     "MI_V2_PlazaCream": ("ashlar",  (0.70, 0.66, 0.57), 0.0, 0.74, 0.85, 0.30, None, 0.0),
     "MI_V2_PlazaGrey":  ("ashlar",  (0.50, 0.52, 0.48), 0.0, 0.76, 0.85, 0.30, None, 0.0),
-    "MI_V2_PathStone":  ("cobble",  (0.30, 0.29, 0.27), 0.0, 0.80, 0.90, 0.28, None, 0.0),
+    # the central path in the founder's view is PALE grey-blue stone, a step
+    # cooler and a touch darker than the cream plaza -- not a dark road
+    "MI_V2_PathStone":  ("cobble",  (0.50, 0.53, 0.56), 0.0, 0.76, 0.90, 0.30, None, 0.0),
     "MI_V2_Cobble":     ("cobble",  (0.36, 0.30, 0.26), 0.0, 0.78, 0.90, 0.28, None, 0.0),
     "MI_V2_CobbleHero": ("cobble",  (0.33, 0.31, 0.28), 0.0, 0.74, 0.90, 0.30, None, 0.0),
     "MI_V2_Moss":       ("sward",   (0.12, 0.20, 0.08), 0.0, 0.82, 0.60, 0.20, None, 0.0),

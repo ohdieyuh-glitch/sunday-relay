@@ -48,6 +48,7 @@ import layout_v2 as LAYOUT         # noqa: E402
 import materials_v2 as MAT         # noqa: E402
 import assets_v2 as ASSETS         # noqa: E402
 import gs                          # noqa: E402
+import dressing_v2 as DRESS        # noqa: E402
 import layout_tools as LT          # noqa: E402  (engineering, migrated)
 
 LOG = unreal.log_warning           # warning level survives the packaged log filter
@@ -237,6 +238,13 @@ def assign_layer(actor, band, layers, sub_cache=[None]):
 # ==========================================================================
 
 
+#: Repeated small assets are INSTANCED through the C++ batch actor rather than
+#: spawned as actors: one draw per (mesh, material) instead of one per plant.
+BATCHABLE = {"ground_flowers", "flower_cluster", "rose_bloom", "hedge_block", "hedge_mass", "rose_bush",
+             "shrub_flowering", "topiary_ball", "mushroom_small", "blossom_cluster", "vine_wall", "ivy_drape",
+             "side_steps", "retaining_wall", "balustrade"}
+
+
 class Placer(object):
     def __init__(self, actors, eal, asset_paths, mats, layers):
         self.actors = actors
@@ -252,6 +260,13 @@ class Placer(object):
         except Exception:
             self.hover_cls = None
         self._mesh_cache = {}
+        self.pending = {}          # (asset, mat, band) -> transforms
+        self.batch_cls = None
+        try:
+            self.batch_cls = unreal.load_class(None, "/Script/Wonderland.WonderlandInstancedBatch")
+        except Exception:
+            self.batch_cls = None
+        self.batched = 0
 
     def mesh(self, key):
         path = self.assets.get(key)
@@ -262,7 +277,15 @@ class Placer(object):
             self._mesh_cache[key] = self.eal.load_asset(path)
         return self._mesh_cache[key]
 
-    def place(self, item, hover=False):
+    def place(self, item, hover=False, batch=True):
+        if batch and self.batch_cls and item["asset"] in BATCHABLE and item["asset"] in self.assets:
+            loc, r, sc = item["pos"], item["rot"], item["scale"]
+            self.pending.setdefault((item["asset"], item.get("mat"), item["band"]), []).extend(
+                [float(loc[0]), float(loc[1]), float(loc[2]), float(r[0]), float(r[1]), float(r[2]),
+                 float(sc[0]), float(sc[1]), float(sc[2])])
+            self.count[item["band"]] = self.count.get(item["band"], 0) + 1
+            self.batched += 1
+            return True
         sm = self.mesh(item["asset"])
         if sm is None:
             return None
@@ -301,6 +324,47 @@ class Placer(object):
         assign_layer(actor, item["band"], self.layers)
         self.count[item["band"]] = self.count.get(item["band"], 0) + 1
         return actor
+
+
+    def flush(self):
+        """Emit one batch actor per (asset, material, band)."""
+        made = 0
+        for (key, mat, band), xf in self.pending.items():
+            a = self.actors.spawn_actor_from_class(self.batch_cls, vec((0, 0, 0)), rot(0, 0, 0))
+            if a is None:
+                continue
+            a.set_actor_label("V2Batch_%s_%s" % (key, mat or "default"))
+            set_prop(a, "MeshPath", self.assets[key])
+            set_prop(a, "Mesh", self.eal.load_asset(self.assets[key]))
+            mi = self.mats.get(mat) if mat else None
+            if mi is not None:
+                set_prop(a, "Material", mi)
+                set_prop(a, "MaterialPath", mi.get_path_name())
+            set_prop(a, "BatchName", unreal.Name("V2_%s" % key))
+            set_prop(a, "bHierarchical", True)
+            set_prop(a, "bCastShadow", True)
+            set_prop(a, "bCollides", key in ("side_steps", "retaining_wall", "balustrade", "hedge_block"))
+            for payload in (xf, None):
+                try:
+                    if payload is None:
+                        arr = unreal.Array(float)
+                        for v in xf:
+                            arr.append(float(v))
+                        payload = arr
+                    if set_prop(a, "Transforms", payload):
+                        break
+                except Exception:
+                    continue
+            try:
+                a.set_folder_path(unreal.Name("V2/" + band + "/Batches"))
+            except Exception:
+                pass
+            assign_layer(a, band, self.layers)
+            made += 1
+        LOG("V2 BATCHES: %d instances in %d batch actors (%s)" % (self.batched, made,
+            ", ".join(sorted(set(k for (k, _, _) in self.pending)))))
+        self.pending = {}
+        return made
 
 
 # ==========================================================================
@@ -757,7 +821,19 @@ def main():
         else:
             LOG("V2 SKY: dome skipped (%s)" % ("skyDome=0" if not int(C.LOOK["skyDome"]) else "no panorama material"))
     for item in LAYOUT.HOVER:
-        placer.place(item, hover=True)
+        placer.place(item, hover=True, batch=False)
+
+    phase("dressing")
+    dressed = 0
+    if int(C.LOOK.get("dressing", 1)):
+        plan = DRESS.plan(density=float(C.LOOK.get("dressingDensity", 1.0)))
+        for item in plan:
+            if placer.place(item) is not None:
+                dressed += 1
+        LOG("V2 DRESSING: %d secondary placements in the garden zones (%s); plaza and corridor excluded"
+            % (dressed, DRESS.summary(plan)))
+    MANIFEST["actors"]["dressing"] = dressed
+    MANIFEST["actors"]["batches"] = placer.flush() if placer.batch_cls else 0
     MANIFEST["actors"].update(placer.count)
     if placer.missing:
         LOG("V2 COMPOSITION: placements skipped for assets that did not build: %s"

@@ -73,14 +73,29 @@ GATE = _band("V2_Arrival", [
 # THE SIDES: walls, raised beds, rose cones — balanced, not mirrored
 # ---------------------------------------------------------------------------
 SIDES = _band("V2_Arrival", [
-    A("topiary_cone_roses", 860, -45, 85, yaw=10, s=1.0, mat="MI_V2_LeafMid", label="RoseCone_L"),
-    A("topiary_cone_roses", -770, 250, 85, yaw=200, s=1.04, mat="MI_V2_LeafMid", label="RoseCone_R"),
-    A("planter_box", 860, -45, 0, s=1.4, mat="MI_V2_IvoryStone", label="RoseCone_L_Planter"),
-    A("planter_box", -770, 250, 0, s=1.4, mat="MI_V2_IvoryStone", label="RoseCone_R_Planter"),
+    # the plaza is SUNKEN: three steps rise to the side terraces along both
+    # edges, and cream pedestals with gold finials stand at the path's mouth
+    A("pedestal_finial", 290, 720, 0, s=1.0, mat="MI_V2_IvoryStone", label="Pedestal_L"),
+    A("pedestal_finial", -290, 720, 0, s=1.0, mat="MI_V2_IvoryStone", label="Pedestal_R"),
+    A("gate_finial_ball", 290, 720, 124, s=0.55, mat="MI_V2_Gold", label="Pedestal_L_Finial"),
+    A("gate_finial_ball", -290, 720, 124, s=0.55, mat="MI_V2_Gold", label="Pedestal_R_Finial"),
 ] + [
-    A("retaining_wall", 800, -700 + 400 * i, 0, yaw=90, s=1.0, mat="MI_V2_IvoryStone", label="SideWall_L%d" % i) for i in range(5)
+    A("side_steps", 660, -700 + 400 * i, 0, yaw=-90, s=1.0, mat="MI_V2_PlazaCream", label="SideSteps_L%d" % i) for i in range(5)
 ] + [
-    A("retaining_wall", -800, -640 + 400 * i, 0, yaw=90, s=1.0, mat="MI_V2_IvoryStone", label="SideWall_R%d" % i) for i in range(5)
+    A("side_steps", -660, -640 + 400 * i, 0, yaw=90, s=1.0, mat="MI_V2_PlazaCream", label="SideSteps_R%d" % i) for i in range(5)
+] + [
+    A("side_steps", -280 - 400 * (i + 1), 800, 0, yaw=0, s=1.0, mat="MI_V2_PlazaCream", label="FrontSteps_R%d" % i) for i in range(3)
+] + [
+    A("side_steps", 280 + 400 * (i + 1), 800, 0, yaw=0, s=1.0, mat="MI_V2_PlazaCream", label="FrontSteps_L%d" % i) for i in range(3)
+] + [
+    A("topiary_cone_roses", 860, -45, 145, yaw=10, s=1.0, mat="MI_V2_LeafMid", label="RoseCone_L"),
+    A("topiary_cone_roses", -770, 250, 145, yaw=200, s=1.04, mat="MI_V2_LeafMid", label="RoseCone_R"),
+    A("planter_box", 860, -45, 60, s=1.4, mat="MI_V2_IvoryStone", label="RoseCone_L_Planter"),
+    A("planter_box", -770, 250, 60, s=1.4, mat="MI_V2_IvoryStone", label="RoseCone_R_Planter"),
+] + [
+    A("retaining_wall", 800, -700 + 400 * i, 60, yaw=90, s=1.0, mat="MI_V2_IvoryStone", label="SideWall_L%d" % i) for i in range(5)
+] + [
+    A("retaining_wall", -800, -640 + 400 * i, 60, yaw=90, s=1.0, mat="MI_V2_IvoryStone", label="SideWall_R%d" % i) for i in range(5)
 ] + [
     A(("hedge_block", "shrub_flowering", "hedge_mass")[i % 3], 1010 + 60 * (i % 2), -600 + 330 * i, 60, yaw=(90 if i % 3 == 0 else 41 * i), s=0.9,
       mat=("MI_V2_LeafMid", "MI_V2_LeafDark")[i % 2], label="SideBed_L_Hedge%d" % i) for i in range(6)
@@ -155,7 +170,11 @@ GARDEN_L = _band("V2_Garden", [
     A("gate_finial_heart", 1080, 1700, 650, s=0.9, mat="MI_V2_Gold", label="GardenGate_FinialL"),
     A("gate_finial_ball", 700, 1700, 650, s=1.0, mat="MI_V2_Gold", label="GardenGate_FinialR"),
     A("vine_wall", 1090, 1660, 80, yaw=0, s=0.5, mat="MI_V2_LeafMid", label="GardenGate_IvyL"),
-    A("mushroom_giant", 1960, 1000, 0, yaw=15, s=1.0, mat="MI_V2_MushTerracotta", label="GiantMushroom"),
+    A("stone_ring_base", 1960, 1000, 0, s=1.0, mat="MI_V2_IvoryStone", label="GiantMushroom_Base"),
+    A("mushroom_giant", 1960, 1000, 76, yaw=15, s=1.0, mat="MI_V2_MushTerracotta", label="GiantMushroom"),
+    # the small red mushroom on a pedestal at the left terrace edge
+    A("pedestal_finial", 900, 520, 60, s=1.3, mat="MI_V2_IvoryStone", label="LeftBollard_Pedestal"),
+    A("mushroom_small", 900, 520, 220, yaw=40, s=0.55, mat="MI_V2_MushRed", label="LeftBollard_Mushroom"),
     A("clock_ornate", 1780, 800, 850, yaw=-10, s=1.1, mat="MI_V2_Gold", label="GiantMushroom_Clock"),
     A("canopy_large", 1960, 1000, 1640, yaw=0, s=1.3, sxyz=(1.5, 1.5, 0.55), mat="MI_V2_LeafMid", label="GiantMushroom_Ivy0"),
     A("canopy_large", 2400, 1200, 1600, yaw=120, s=1.0, sxyz=(1.1, 1.1, 0.5), mat="MI_V2_LeafDark", label="GiantMushroom_Ivy1"),
@@ -189,12 +208,17 @@ GARDEN_L = _band("V2_Garden", [
 # GARDEN RIGHT: the clock tree, flowering shrubs, the heart on its terrace
 # ---------------------------------------------------------------------------
 GARDEN_R = _band("V2_Garden", [
-    A("tree_clock_trunk", -2900, 1600, 0, yaw=200, s=0.62, mat="MI_V2_Bark", label="ClockTree_Trunk"),
-    A("clock_ornate", -2760, 1440, 520, yaw=-20, s=0.9, mat="MI_V2_Gold", label="ClockTree_Clock"),
-    A("canopy_large", -2900, 1650, 1060, yaw=0, s=1.1, mat="MI_V2_LeafMid", label="ClockTree_Canopy0"),
-    A("canopy_large", -2500, 1850, 950, yaw=140, s=0.9, mat="MI_V2_LeafDark", label="ClockTree_Canopy1"),
-    A("canopy_large", -3300, 1400, 980, yaw=260, s=0.85, mat="MI_V2_LeafLight", label="ClockTree_Canopy2"),
-    A("vine_hanging", -2750, 1450, 760, s=0.6, mat="MI_V2_LeafMid", label="ClockTree_Vine"),
+    # MEASURED ON THE REPROJECTED cam0 VIEW, not the flat panorama: the clock
+    # sits at +45 deg, the trunk spans +42..+52, and the foliage fills the
+    # top-right corner -- so the tree is 16 m tall, 28 m out, at +47 deg.
+    A("tree_clock_trunk", -2050, 1900, 0, yaw=200, s=0.8, mat="MI_V2_Bark", label="ClockTree_Trunk"),
+    A("clock_ornate", -1900, 1720, 640, yaw=-25, s=1.0, mat="MI_V2_Gold", label="ClockTree_Clock"),
+    A("canopy_large", -2100, 1950, 1380, yaw=0, s=1.4, mat="MI_V2_LeafMid", label="ClockTree_Canopy0"),
+    A("canopy_large", -1600, 2100, 1260, yaw=140, s=1.1, mat="MI_V2_LeafDark", label="ClockTree_Canopy1"),
+    A("canopy_large", -2550, 1650, 1300, yaw=260, s=1.0, mat="MI_V2_LeafLight", label="ClockTree_Canopy2"),
+    A("canopy_medium", -1700, 1650, 1000, yaw=30, s=1.2, mat="MI_V2_LeafMid", label="ClockTree_Canopy3"),
+    A("vine_hanging", -1880, 1700, 900, s=0.7, mat="MI_V2_LeafMid", label="ClockTree_Vine0"),
+    A("vine_hanging", -2200, 1750, 980, s=0.6, mat="MI_V2_LeafDark", label="ClockTree_Vine1"),
     A("hedge_mass", -1400, 1500, 60, yaw=20, s=1.3, mat="MI_V2_LeafDark", label="Garden_R_Hedge0"),
     A("hedge_mass", -1900, 1300, 0, yaw=200, s=1.2, mat="MI_V2_LeafMid", label="Garden_R_Hedge1"),
     A("hedge_mass", -2300, 2200, 0, yaw=70, s=1.4, mat="MI_V2_LeafDark", label="Garden_R_Hedge2"),
@@ -258,8 +282,13 @@ def _castle_group(x, y, seed, scale=1.0, layer="V2_Castle"):
                        mat="MI_V2_IvoryStone", label="City%d_Bay%d" % (k, f)))
     towers = (((700, 200), 1.0, 0), ((-600, -100), 0.8, 1), ((100, 800), 1.35, 2), ((-900, 600), 1.1, 3))
     for t, ((ox, oy), ts, bi) in enumerate(towers):
-        body = bodies[(k + bi) % 4]
-        cap = caps[body][(k + t) % 2]
+        # a distinct PERMUTATION of the four bodies per group (24 exist, 13
+        # groups), so no two groups share a tower sequence -- a hash pick
+        # produced two collisions in thirteen
+        import itertools
+        perm = list(itertools.permutations(bodies))[(k * 5) % 24]
+        body = perm[t]
+        cap = caps[body][int(h(k, t, 8) * 2) % 2]
         ts2 = ts * (0.85 + 0.3 * h(k, t, 1)) * scale
         tx, ty = x + ox * scale, y + oy * scale
         items.append(A(body, tx, ty, 0, yaw=yaw + 20 * t, s=ts2, mat="MI_V2_IvoryStone", label="City%d_Tower%d" % (k, t)))
@@ -302,6 +331,7 @@ HOVER = _band("V2_Props", [
     A("key_ornate", 900, 2600, 2100, yaw=20, s=0.8, mat="MI_V2_Gold", label="FloatKey0"),
     A("key_ornate", -1400, 4200, 2400, yaw=160, s=0.8, mat="MI_V2_Gold", label="FloatKey1"),
     A("tea_pot", 400, 6000, 2900, yaw=30, s=1.1, mat="MI_V2_Ceramic", label="FloatTeapot"),
+    A("tea_cup_small", -300, 5000, 3300, yaw=200, s=1.0, mat="MI_V2_Ceramic", label="FloatCup"),
 ])
 
 FOREGROUND = GATE + SIDES
@@ -316,7 +346,7 @@ PATH_SPLINE = [(0.0, 850.0, 0.0), (0.0, 1420.0, 0.0), (0.0, 1560.0, 60.0), (20.0
                (-15.0, 3600.0, 102.0), (0.0, 4450.0, 118.0)]
 PATH_WIDTH_NEAR, PATH_WIDTH_FAR = 440.0, 300.0
 #: The pale plaza: from behind the gate to the front wall, 16 m wide.
-PLAZA_RECT = (-1400.0, 1400.0, -1600.0, 880.0)      # x0, x1, y0, y1
+PLAZA_RECT = (-650.0, 650.0, -1500.0, 800.0)        # x0, x1, y0, y1 -- the sunken floor between the side steps
 PLAZA_SLAB = 130.0
 PETALS = 36
 

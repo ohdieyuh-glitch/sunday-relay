@@ -33,7 +33,7 @@ viewpoint cannot contain the gate. Two cameras are therefore built (below).
 | central path (dark stone) | 0.500 | 0° | 0.588 (near edge) | 15.8° | from 9 m | (0, 900 →) | width 120 px = 27° at 9.3 m → **4.4 m**, narrowing with distance |
 | steps across the path | 0.500 | 0° | 0.556 | 10.1° | 14.7 m | (0, 1470) | 3 low steps; the garden rises beyond (features' bases sit above the horizon) |
 | GIANT mushroom | 0.325 (cap 0.25–0.40) | −63° (cap −90…−36°) | base hidden (v 0.49) | — | ~22 m (from cap geometry) | (+1960, 1000) | cap 54° wide → **~20 m across**; underside el +22° → ~11 m up; top el +51°; clock on the stem at el +21°; ivy on the cap |
-| clock tree (right) | 0.669 | +61° | 0.525 | 4.5° | 33 m | (−2900, 1600) | ~12 m tall, clock on the trunk at el +9° |
+| clock tree (right) | 0.669 (flat) / **+45° in the cam0 reprojection** | +47° (corrected) | 0.525 | 4.5° | ~28 m | (−2050, 1900) | ~16 m tall, foliage fills the top-right of the 100° view; clock on the trunk at el +9°. The flat-panorama reading (+61°) was wrong by 14° — measure landmarks on the REPROJECTED view for the camera being built |
 | heart topiary | 0.563 | +22° | base above horizon (v 0.469) | — | ~35 m, on a terrace ~3 m up | (−1300, 3250) | ~5 m wide |
 | white tower, dark-blue cap (left) | 0.225 | −99° | hidden | — | ~55–65 m | (+5000, 3300) | ~14 m; windows; dark navy conical cap |
 | white towers, blue caps (right) | 0.765 / 0.787 | +72° / +80° | hidden | — | ~55–70 m | (−4200, 4200), (−5200, 5400) | two, different heights |
@@ -41,6 +41,17 @@ viewpoint cannot contain the gate. Two cameras are therefore built (below).
 | castle city | 0.30–0.80 | −70…+110° | horizon band v 0.375–0.50 | el 0…22° | 90–170 m (Marble p90 118 m, max 169 m) | y 9,000–17,000 | cream masonry, muted pink + some dark caps, gold finials; recedes into haze |
 | sun | 0.720 | +79° | v 0.175 | el **+58°** | — | — | high, right-front; warm-white late-morning daylight |
 | horizon | — | — | v 0.500 | 0° | — | — | camera is LEVEL |
+
+## Second-pass reading of the cam0 reprojection (the founder's guide view)
+
+* The central path is PALE grey-blue stone, a step cooler than the plaza — not a dark road.
+* The plaza is SUNKEN: three low steps rise to the side terraces along both edges; the
+  beds, walls and rose cones stand on those terraces (+0.6 m).
+* Cream stone pedestals with GOLD ball finials stand at the path's mouth (±2.9 m, +7 m).
+* A second ornate GOLD GATE stands at the left garden entrance (az −25°, ~18 m).
+* The giant mushroom's stem rises from a round two-tier STONE BASE; a small red mushroom
+  stands on a pedestal at the left terrace edge.
+* Floating: two gold keys, a teapot AND a teacup, high over the garden.
 
 ## What the image says about restraint
 
