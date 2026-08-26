@@ -33,5 +33,5 @@ LUMEN / ATMOSPHERE: SM6 + Lumen + VSM config; SkyAtmosphere + height fog + volum
 
 REAL UNREAL RENDERS CREATED: (list of V2_PASS_nnn with camera and what changed)
 GAUNTLETS COMPLETED: 1. 2. 3. 4. 5. 6. 7. (filled as run)
-MARBLE PERFORMANCE COST / UNREAL PERFORMANCE / FPS / GPU / VRAM: (from measure-fps per pass; HLOD_BUILT stamp)
+MARBLE PERFORMANCE COST / UNREAL PERFORMANCE / FPS / GPU / VRAM: build 479eccf at HeroCam0, 1080p, L4: median 9.05 ms = 110.6 fps, mean 9.64 ms, p95 15.4 ms (CSV profiler, no HLOD proxies built); Marble scaffold hidden (no cost), distant ring not yet placed (fix a4caabc).
 FIVE LARGEST REMAINING DIFFERENCES: (from diff_v2 on the latest pass)
