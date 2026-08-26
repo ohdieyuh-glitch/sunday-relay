@@ -480,9 +480,24 @@ fi
 if [ "${WL_BUILD_HLOD:-0}" = "1" ] && [ "$LEVEL_OK" = "1" ] && [ -x "$UE_EDITOR_CMD" ]; then
   HLOD_MAP="${WL_COOK_MAP:-}"
   if [ -n "$HLOD_MAP" ]; then
-    # shellcheck disable=SC2086
-    run_step "build-hlod" "$UE_EDITOR_CMD" "$PROJECT" "$HLOD_MAP" -run=WorldPartitionBuilderCommandlet \
-      -Builder=WorldPartitionHLODsBuilder -SetupHLODs -BuildHLODs -unattended -nop4 ${WL_GENERATOR_EXTRA:-}
+    # The first live run answered the question in the comment above: the
+    # builder REFUSES without -AllowCommandletRendering ("must be provided for
+    # the WorldPartitionHLODsBuilder process to work"), so it gets it, and it
+    # does NOT get -nullrhi. An HLOD that fails to build is a performance
+    # setting that did not happen, not missing content: it is reported loudly
+    # and stamped, and the cook goes on -- the fps line will say HLOD_BUILT=0.
+    set +e
+    "$UE_EDITOR_CMD" "$PROJECT" "$HLOD_MAP" -run=WorldPartitionBuilderCommandlet \
+      -Builder=WorldPartitionHLODsBuilder -SetupHLODs -BuildHLODs -AllowCommandletRendering -unattended -nop4 \
+      2>&1 | tee "$LOG_DIR/build-hlod.log"
+    hlod_rc="${PIPESTATUS[0]}"
+    set -e
+    if [ "$hlod_rc" -eq 0 ] && ! grep -Eq "Commandlet->Main return this error code: [1-9]|Exiting abnormally" "$LOG_DIR/build-hlod.log"; then
+      log "build-hlod: OK"; echo "HLOD_BUILT=1" > "$OUT/hlod.stamp"
+    else
+      log "WARNING: build-hlod FAILED (rc=$hlod_rc) -- the world cooks WITHOUT HLOD proxies; see $LOG_DIR/build-hlod.log"
+      echo "HLOD_BUILT=0" > "$OUT/hlod.stamp"
+    fi
   else
     log "WARNING: WL_BUILD_HLOD=1 but WL_COOK_MAP is unset; skipping the HLOD build"
   fi
