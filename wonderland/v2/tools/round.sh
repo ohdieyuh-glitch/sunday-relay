@@ -22,7 +22,7 @@ R=/teamspace/studios/this_studio/wonderland
 SRC=$R/src
 MARBLE_ARGS='-WLShowTags=MARBLE_REFERENCE_ONLY -WLHideTags=UNREAL_PRODUCTION,MARBLE_DISTANT_SCENIC'
 say() { printf '\033[1;36m[round]\033[0m %s\n' "$*"; }
-SHA="$(ssh "$HOST" "cat $R/packaged/packaged.sha 2>/dev/null | head -1" 2>/dev/null | grep -v hostkeys | tr -dc 'a-f0-9')"
+SHA="$(ssh "$HOST" "cat $R/packaged/logs/packaged.sha 2>/dev/null | head -1" 2>/dev/null | grep -v hostkeys | tr -dc 'a-f0-9')"
 [ -n "$SHA" ] || { echo "no packaged.sha on $HOST -- nothing to capture from"; exit 1; }
 say "packaged build $SHA"
 shoot() {  # cam, extra-args, label -> registers a pass; prints its name
