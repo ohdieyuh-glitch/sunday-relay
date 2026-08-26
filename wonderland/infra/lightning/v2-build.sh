@@ -64,7 +64,9 @@ if [ "${SKIP_V2_TEXTURES:-0}" != "1" ]; then
   ( cd "$WL_SRC" && python3 wonderland/v2/verify_v2_textures.py "$WONDERLAND_TEXTURE_DIR" ) \
     || wl_die "V2 texture gate failed -- not building on a broken set"
 fi
-bash "$HERE/cpu-build-all.sh"
+# compile-preflight.sh has just run prepare.sh (checkout, gates, V1 textures,
+# engine image); running it again inside cpu-build-all cost ~5 min per build.
+SKIP_PREPARE="${SKIP_PREPARE:-1}" bash "$HERE/cpu-build-all.sh"
 
 LOG="$(ls -t "$WL_OUT"/logs/generate-hub-level.log 2>/dev/null | head -1 || true)"
 if [ -n "$LOG" ]; then
