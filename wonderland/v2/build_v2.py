@@ -813,10 +813,17 @@ def marble_distant_ring(marble_actor, actors, eal, layers, gsctx):
                 nopts.set_editor_property(prop, val)
             except Exception:
                 pass
+        LOG("V2 MARBLE DISTANT: %s triangles in the scaffold, %s beyond %.0f m (local box %s .. %s)"
+            % (n0, n1, R / 100.0, (round(bmin.x), round(bmin.y), round(bmin.z)), (round(bmax.x), round(bmax.y), round(bmax.z))))
+        if not isinstance(n1, int) or n1 < 100:
+            LOG("V2 MARBLE DISTANT: nothing left beyond the radius -- the inner box is wrong or the world is smaller than %.0f m; no ring" % (R / 100.0))
+            return None
         r2 = gsctx.gs("newasset", "create_new_static_mesh_asset_from_mesh", dm, path, nopts)
         sm = r2[0] if isinstance(r2, (tuple, list)) else r2
         if sm is None:
-            LOG("V2 MARBLE DISTANT: asset not created (%s)" % gsctx.caps.errors.get("newasset.create_new_static_mesh_asset_from_mesh"))
+            LOG("V2 MARBLE DISTANT: asset not created (outcome %s; error %s)"
+                % (r2[1] if isinstance(r2, (tuple, list)) and len(r2) > 1 else r2,
+                   gsctx.caps.errors.get("newasset.create_new_static_mesh_asset_from_mesh")))
             return None
         # the scaffold's repaired materials (two-sided, unlit gain) carry over
         try:
