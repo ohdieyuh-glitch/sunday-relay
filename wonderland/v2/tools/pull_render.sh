@@ -13,8 +13,8 @@ mkdir -p "$OUT"
 HOST="${WL_HOST:-wonderland-l4}"
 ROOT="${WL_REMOTE_ROOT:-/teamspace/studios/this_studio/wonderland}"
 # the history also carries "PASS FPS ..." lines (v2-shot.sh); the render line is the one with a path
-LINE="$(ssh "$HOST" "grep -v ' FPS ' $ROOT/run/v2-render-history.txt 2>/dev/null | tail -1" 2>/dev/null | grep -v hostkeys || true)"
-FPS_LINE="$(ssh "$HOST" "grep ' FPS ' $ROOT/run/v2-render-history.txt 2>/dev/null | tail -1" 2>/dev/null | grep -v hostkeys || true)"
+LINE="$(ssh "$HOST" "grep -E '^V2_PASS_[0-9]+ /' $ROOT/run/v2-render-history.txt 2>/dev/null | tail -1" 2>/dev/null | grep -v hostkeys || true)"
+FPS_LINE="$(ssh "$HOST" "grep -E '^(V2_PASS_[0-9]+ )?FPS' $ROOT/run/v2-render-history.txt 2>/dev/null | tail -1" 2>/dev/null | grep -v hostkeys || true)"
 [ -n "$LINE" ] || { echo "no V2 render history on $HOST"; exit 1; }
 PASS="${LINE%% *}"; REMOTE="${LINE#* }"
 scp -q "$HOST:$REMOTE" "$OUT/$PASS.png" 2>/dev/null
