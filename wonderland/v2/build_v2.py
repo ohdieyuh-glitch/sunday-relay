@@ -1312,7 +1312,35 @@ def main():
         eal.save_directory(C.CONTENT_ROOT, only_if_is_dirty=False, recursive=True)
     except Exception as exc:
         LOG("V2 SAVE: save_directory %s" % exc)
+    # THE ACTORS OF A WORLD PARTITION LEVEL ARE EXTERNAL PACKAGES. save_current_level
+    # writes the 11 KB map and save_directory writes assets; neither writes
+    # __ExternalActors__, so the first three packages cooked an EMPTY world
+    # (runtime: WL_TAG_VISIBILITY shown=0, every frame black). VERIFIED 5.5 API:
+    # EditorLoadingAndSavingUtils.save_dirty_packages(save_map_packages,
+    # save_content_packages) saves every dirty package, actors included.
+    ext_saved = None
+    try:
+        util = getattr(unreal, "EditorLoadingAndSavingUtils", None)
+        if util is not None:
+            ext_saved = bool(util.save_dirty_packages(True, True))
+            LOG("V2 SAVE: save_dirty_packages(map, content) -> %s" % ext_saved)
+    except Exception as exc:
+        LOG("V2 SAVE: save_dirty_packages %s" % exc)
+    # TRIPWIRE: count the actor packages on disk. A world that saved no actors
+    # must not cook -- that is a black frame forty minutes later.
+    ext_count = None
+    try:
+        cdir = str(unreal.Paths.project_content_dir())
+        ext_dir = os.path.join(cdir, C.CONTENT_ROOT.replace("/Game/", ""), "Maps", "__ExternalActors__")
+        if os.path.isdir(os.path.dirname(ext_dir)):
+            ext_count = 0
+            for _root, _dirs, files in os.walk(ext_dir):
+                ext_count += sum(1 for f in files if f.endswith(".uasset"))
+            LOG("V2 SAVE: %d external actor package(s) under %s" % (ext_count, ext_dir))
+    except Exception as exc:
+        LOG("V2 SAVE: external actor count unavailable (%s)" % exc)
     MANIFEST["saved"] = saved
+    MANIFEST["external_actor_packages"] = ext_count
     # the final actor list, for the outliner evidence
     final = []
     try:
@@ -1324,6 +1352,9 @@ def main():
     v1_in_final = [n for n in final if any(m in n for m in V1_CLASS_MARKERS[1:] + ("SkyCity", "PlazaBed", "RelayDog", "HDAR_"))]
     MANIFEST["v1_actors_in_final"] = v1_in_final
     MANIFEST["seconds"] = round(time.time() - t0, 1)
+    if ext_count is not None and len(final) > 20 and ext_count < int(0.9 * len(final)):
+        raise RuntimeError("V2 SAVE: only %d external actor packages on disk for %d actors -- the level would cook EMPTY; refusing"
+                           % (ext_count, len(final)))
     MANIFEST["performance"] = PERF
     LOG("V2 PERFORMANCE: hlod layers %s; grid %s; actors by band %s"
         % (", ".join(sorted(PERF["layers"].values())) or "none", PERF["grid"],
