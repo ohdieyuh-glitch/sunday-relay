@@ -104,6 +104,20 @@ def main():
                 for y in (lo[1] * sy_, hi[1] * sy_):
                     for z in (lo[2] * sz_, hi[2] * sz_):
                         corners.append((px_ + x * math.cos(yw) - y * math.sin(yw), py_ + x * math.sin(yw) + y * math.cos(yw), pz_ + z))
+        if "_box" in it:
+            # ground quads reach behind the camera: clip each corner to the
+            # near plane by pulling it toward the camera position
+            clipped = []
+            for c in corners:
+                dx, dy = c[0] - cx, c[1] - cy
+                fwd = -dx * math.sin(yaw) + dy * math.cos(yaw)
+                if fwd < 40.0:
+                    t = (40.0 - fwd) / max(1e-6, (40.0 - fwd) + (fwd - (-1e9)))  # placeholder
+                    # move the corner along the view direction until fwd == 40
+                    dxv, dyv = -math.sin(yaw), math.cos(yaw)
+                    c = (c[0] + dxv * (40.0 - fwd), c[1] + dyv * (40.0 - fwd), c[2])
+                clipped.append(c)
+            corners = clipped
         pts = [project(c) for c in corners]
         if any(p is None for p in pts):
             continue
