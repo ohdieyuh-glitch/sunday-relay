@@ -25,6 +25,8 @@ pass changed, and what remains unverifiable until the Studio runs.
 7. **Recipe sheet** — every recipe rendered on the fallback backend; tree limbs and vines corrected from it.
 8. **Ship path** — `ship_v2.sh` (whole-branch bundle over ssh, md5-verified, build pinned to the shipped head) + its fake-ssh test; compile preflight first in `v2-build.sh`.
 9. **Neutral textures** — measured that the shared albedos carry colour (ashlar 0.39/0.34/0.24, roof 0.51/0.11/0.16 linear) and the master multiplies them by the tint, so cream would render brown: `textures_v2.py` (T_V2_*, linear-neutralised, sidecar means, plaza slab + path flag families), `verify_v2_textures.py`, tint/mean correction in `materials_v2.py`, generated and gated in `v2-build.sh`.
+10. **Measured comparison** — `diff_v2.py` ranks the five largest regional differences (luma/chroma/hue/edges/bright/blue on a 6×4 grid) between a render and the reference view at the same camera; `pull_render.sh` runs it and records the fps median `v2-shot.sh` now measures per pass.
+11. **Performance (gauntlet G)** — two INSTANCING HLOD layers (far: always loaded, castle/skyline; near: garden bands) as the World Partition default, `is_spatially_loaded`/`hlod_layer` by band on every actor, an opt-in `build-hlod` commandlet step in the shared build, a `V2 PERFORMANCE` manifest line. API names verified against Epic's 5.5 docs; the runtime hash grids are not scriptable and the log says so.
 
 ## Real Unreal renders this session
 
