@@ -250,6 +250,116 @@ def make_data_layers():
     return layers, ("data-layers" if layers else "tags")
 
 
+# ==========================================================================
+# 3b. performance: HLOD layers + streaming policy (gauntlet G)
+# ==========================================================================
+#
+# VERIFIED 5.5 API (Epic python docs): HLODLayer editor properties layer_type
+# (HLODLayerType.INSTANCING / MESH_MERGE / MESH_SIMPLIFY / MESH_APPROXIMATE /
+# CUSTOM), cell_size (int), loading_range (double), is_spatially_loaded,
+# parent_layer; HLODLayerFactory exists; Actor.hlod_layer, Actor.is_spatially_
+# loaded, Actor.runtime_grid; WorldSettings.world_partition (read-only object)
+# with WorldPartition.default_hlod_layer. The runtime spatial-hash grids are
+# NOT exposed to Python (their class pages 404), so grid cell sizes stay at
+# the engine defaults and this says so in the log.
+#
+# Policy by band (the map is small and every band is visible from the hero
+# camera, so the lever is DRAW CALLS, not unloading):
+#   V2_Arrival   hero foreground: full detail, no HLOD, spatially loaded
+#   V2_Garden / V2_Vegetation / V2_Props   near HLOD (INSTANCING) so the
+#                far side of the garden collapses into one ISM per cell
+#   V2_Castle / V2_Skyline   far HLOD (INSTANCING, big cells) and ALWAYS
+#                loaded: a tower that pops in at the skyline is a defect
+#   V2_VFX       spatially loaded, no HLOD
+# INSTANCING needs no commandlet rendering, so the HLOD build runs on CPU.
+PERF_POLICY = {
+    "V2_Arrival":    {"hlod": None,   "spatial": True},
+    "V2_Garden":     {"hlod": "near", "spatial": True},
+    "V2_Vegetation": {"hlod": "near", "spatial": True},
+    "V2_Props":      {"hlod": "near", "spatial": True},
+    "V2_Castle":     {"hlod": "far",  "spatial": False},
+    "V2_Skyline":    {"hlod": "far",  "spatial": False},
+    "V2_VFX":        {"hlod": None,   "spatial": True},
+}
+HLOD_SPECS = {
+    # name, type, cell (uu), loading range (uu), spatially loaded
+    "far":  ("HLOD_V2_Far",  "INSTANCING", 51200, 409600, False),
+    "near": ("HLOD_V2_Near", "INSTANCING", 12800, 102400, True),
+}
+PERF = {"layers": {}, "counts": {}, "grid": "engine default (runtime hash not scriptable)"}
+
+
+def make_hlod_layers(world):
+    """Create the two HLOD layer assets under the V2 root and make the near one
+    the world's default. Tolerant: if the classes are absent (stub engine or
+    an engine without World Partition HLOD), the build logs it and goes on
+    with no HLOD -- the performance line says so."""
+    layer_cls = getattr(unreal, "HLODLayer", None)
+    fac_cls = getattr(unreal, "HLODLayerFactory", None)
+    if layer_cls is None or fac_cls is None:
+        LOG("V2 HLOD: HLODLayer/HLODLayerFactory unavailable -- no HLOD layers (draw calls stay per-actor)")
+        return {}
+    tools = unreal.AssetToolsHelpers.get_asset_tools()
+    eal = unreal.EditorAssetLibrary
+    pkg = C.FOLDERS.get("hlod", C.CONTENT_ROOT + "/HLOD")
+    made = {}
+    for key in ("far", "near"):        # far first: it is the near layer's parent
+        name, ltype, cell, rng, spatial = HLOD_SPECS[key]
+        path = pkg + "/" + name
+        try:
+            if eal.does_asset_exist(path):
+                eal.delete_asset(path)
+            layer = tools.create_asset(name, pkg, layer_cls, fac_cls())
+            if layer is None:
+                LOG("V2 HLOD: create_asset returned None for %s" % name)
+                continue
+            layer.set_editor_property("layer_type", getattr(unreal.HLODLayerType, ltype))
+            layer.set_editor_property("cell_size", int(cell))
+            layer.set_editor_property("loading_range", float(rng))
+            layer.set_editor_property("is_spatially_loaded", bool(spatial))
+            if key == "near" and "far" in made:
+                layer.set_editor_property("parent_layer", made["far"])
+            eal.save_asset(path, only_if_is_dirty=False)
+            made[key] = layer
+            LOG("V2 HLOD: %s %s cell %d range %d spatial %s" % (name, ltype, cell, rng, spatial))
+        except Exception as exc:
+            LOG("V2 HLOD: %s FAILED: %s" % (name, exc))
+    if "near" in made:
+        try:
+            ws = world.get_world_settings()
+            wp = ws.get_editor_property("world_partition")
+            if wp is not None:
+                wp.set_editor_property("default_hlod_layer", made["near"])
+                LOG("V2 HLOD: default_hlod_layer = HLOD_V2_Near")
+            else:
+                LOG("V2 HLOD: world has no WorldPartition object; default layer not set")
+        except Exception as exc:
+            LOG("V2 HLOD: default layer not set (%s)" % exc)
+    PERF["layers"] = {k: HLOD_SPECS[k][0] for k in made}
+    return made
+
+
+def apply_perf(actor, band):
+    pol = PERF_POLICY.get(band)
+    if pol is None:
+        return
+    key = "%s:%s" % (band, "hlod-" + pol["hlod"] if pol["hlod"] and pol["hlod"] in PERF["layers"] else "no-hlod")
+    PERF["counts"][key] = PERF["counts"].get(key, 0) + 1
+    try:
+        actor.set_editor_property("is_spatially_loaded", bool(pol["spatial"]))
+    except Exception:
+        pass
+    layer = _HLOD.get(pol["hlod"]) if pol["hlod"] else None
+    if layer is not None:
+        try:
+            actor.set_editor_property("hlod_layer", layer)
+        except Exception:
+            pass
+
+
+_HLOD = {}
+
+
 def assign_layer(actor, band, layers, sub_cache=[None]):
     try:
         cur = list(actor.get_editor_property("tags") or [])
@@ -257,6 +367,7 @@ def assign_layer(actor, band, layers, sub_cache=[None]):
         actor.set_editor_property("tags", cur)
     except Exception:
         pass
+    apply_perf(actor, band)
     inst = layers.get(band)
     if inst is None:
         return
@@ -925,6 +1036,8 @@ def main():
     phase("data-layers")
     layers, layer_mode = make_data_layers()
     MANIFEST["data_layers"] = layer_mode
+    phase("hlod")
+    _HLOD.update(make_hlod_layers(world))
 
     phase("materials")
     texs = MAT.import_textures(unreal, LOG)
@@ -1056,6 +1169,10 @@ def main():
     v1_in_final = [n for n in final if any(m in n for m in V1_CLASS_MARKERS[1:] + ("SkyCity", "PlazaBed", "RelayDog", "HDAR_"))]
     MANIFEST["v1_actors_in_final"] = v1_in_final
     MANIFEST["seconds"] = round(time.time() - t0, 1)
+    MANIFEST["performance"] = PERF
+    LOG("V2 PERFORMANCE: hlod layers %s; grid %s; actors by band %s"
+        % (", ".join(sorted(PERF["layers"].values())) or "none", PERF["grid"],
+           ", ".join("%s=%d" % kv for kv in sorted(PERF["counts"].items())) or "none"))
     out = os.environ.get("WLV2_MANIFEST", "/tmp/wlv2-manifest.json")
     try:
         with open(out, "w") as f:

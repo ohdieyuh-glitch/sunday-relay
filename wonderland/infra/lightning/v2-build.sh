@@ -19,6 +19,7 @@ export WL_BRANCH="${WL_BRANCH:-relay/wonderland-v2}"
 export WL_GENERATOR="${WL_GENERATOR:-wonderland/v2/build_v2.py}"
 export WL_COOK_MAP="${WL_COOK_MAP:-/Game/WonderlandV2/Maps/WL_V2_GoldenArrival}"
 export WLV2_MANIFEST="${WLV2_MANIFEST:-$WL_RUN/wlv2-manifest.json}"
+export WL_BUILD_HLOD="${WL_BUILD_HLOD:-1}"      # World Partition HLODs (INSTANCING, CPU)
 
 # THE MARBLE WORLD. The 3,500-credit textured mesh was downloaded on this
 # Studio (manifest: "Downloaded on the L4"); it is not in git. Find it, or say

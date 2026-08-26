@@ -467,6 +467,27 @@ Check $GEN_LOG for 'WonderlandInstancedBatch is not in this build'."
   fi
 fi
 
+# --------------------------------------------------- 3a. World Partition HLODs (V2)
+# Opt-in (WL_BUILD_HLOD=1, set by v2-build.sh): build the HLOD actors for the
+# map's HLOD layers with the World Partition builder commandlet. Epic's
+# documented line is "Project Map -run=WorldPartitionBuilderCommandlet
+# -AllowCommandletRendering -Builder=WorldPartitionHLODsBuilder"; V2 omits
+# -AllowCommandletRendering because it runs under -nullrhi on CPU and its
+# layers are INSTANCING (no proxy mesh to render) -- whether that holds is
+# decided by the build-hlod log, not by this comment. A failure here is a
+# failure: an HLOD setup that silently did not build would make every fps
+# number a lie.
+if [ "${WL_BUILD_HLOD:-0}" = "1" ] && [ "$LEVEL_OK" = "1" ] && [ -x "$UE_EDITOR_CMD" ]; then
+  HLOD_MAP="${WL_COOK_MAP:-}"
+  if [ -n "$HLOD_MAP" ]; then
+    # shellcheck disable=SC2086
+    run_step "build-hlod" "$UE_EDITOR_CMD" "$PROJECT" "$HLOD_MAP" -run=WorldPartitionBuilderCommandlet \
+      -Builder=WorldPartitionHLODsBuilder -SetupHLODs -BuildHLODs -unattended -nop4 ${WL_GENERATOR_EXTRA:-}
+  else
+    log "WARNING: WL_BUILD_HLOD=1 but WL_COOK_MAP is unset; skipping the HLOD build"
+  fi
+fi
+
 # --------------------------------------------------- 3b. the Marble visual layer
 # OFF unless a world slug is named. WONDERLAND_MARBLE_IMPORT=royal-garden-backdrop
 # adds World Labs geometry to the level as SCENERY: collision disabled, tagged,

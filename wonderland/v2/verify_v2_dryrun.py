@@ -49,7 +49,8 @@ summary = [w for w in warnings if w.startswith("V2 SUMMARY")]
 print("\n".join(w for w in warnings if w.startswith(("V2 PHASE", "V2 MAP", "V2 EMPTY", "V2 WORLD", "V2 DATA",
                                                     "V2 TEXTURES", "V2 MATERIALS", "V2 MESH", "GS CAP",
                                                     "V2 ASSETS", "V2 GROUND", "V2 COMPOSITION", "V2 LIGHT",
-                                                    "V2 CAMERA", "V2 SUMMARY", "V2 MARBLE", "V2 SKY"))))
+                                                    "V2 CAMERA", "V2 SUMMARY", "V2 MARBLE", "V2 SKY",
+                                                    "V2 HLOD", "V2 PERFORMANCE", "V2 TEXTURES"))))
 fails = [w for w in warnings if "FAILED" in w]
 print("warnings: %d  failures: %d  errors: %d" % (len(warnings), len(fails), len(errors)))
 for f in fails[:12]:

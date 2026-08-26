@@ -37,6 +37,7 @@ FOLDERS = {
     "mat_functions": CONTENT_ROOT + "/Materials/Functions",
     "mat_instances": CONTENT_ROOT + "/Materials/Instances",
     "textures": CONTENT_ROOT + "/Materials/Textures",
+    "hlod": CONTENT_ROOT + "/HLOD",
     "vfx_portal": CONTENT_ROOT + "/VFX/Portal",
     "vfx_ambient": CONTENT_ROOT + "/VFX/Ambient",
     "pcg": CONTENT_ROOT + "/PCG",

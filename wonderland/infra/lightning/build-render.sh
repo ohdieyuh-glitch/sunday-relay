@@ -132,7 +132,7 @@ wl_knob_pairs() {
               WLV2_MANIFEST \
               WLV2_FORCE_FALLBACK \
               WL_GENERATOR \
-              WL_COOK_MAP \
+              WL_COOK_MAP WL_BUILD_HLOD \
               WONDERLAND_HISM \
               WONDERLAND_LODS \
               WONDERLAND_LOOK \
