@@ -37,9 +37,13 @@ def unlit(name, rgb):
     mel = unreal.MaterialEditingLibrary
     path = PKG + "/" + name
     if eal.does_asset_exist(path):
-        # reuse: recreating the material means a fresh shadermap and ~8 min of
-        # shader compile per run, which is most of a diagnostic's cost
-        return eal.load_asset(path)
+        # reuse (a recreation costs ~8 min of shader compile) -- but a loaded
+        # material's shaders compile asynchronously and a capture taken before
+        # they are ready is BLACK (measured 12:26Z); recompile_material blocks
+        # until the shadermap exists
+        m = eal.load_asset(path)
+        mel.recompile_material(m)
+        return m
     m = tools.create_asset(name, PKG, unreal.Material, unreal.MaterialFactoryNew())
     m.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_UNLIT)
     c = mel.create_material_expression(m, unreal.MaterialExpressionConstant3Vector, -300, 0)
