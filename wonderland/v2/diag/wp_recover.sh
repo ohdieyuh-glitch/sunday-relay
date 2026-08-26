@@ -22,7 +22,18 @@ STEP="${WP_STEP:-all}"
 gpuflag=""
 if wl_have_gpu; then
   gpuflag="--gpus all -e NVIDIA_DRIVER_CAPABILITIES=all"
-  [ -f "$WL_RUN/nvidia_icd.json" ] && gpuflag="$gpuflag -v $WL_RUN/nvidia_icd.json:/etc/vulkan/icd.d/nvidia_icd.json:ro -e VK_ICD_FILENAMES=/etc/vulkan/icd.d/nvidia_icd.json -e VK_DRIVER_FILES=/etc/vulkan/icd.d/nvidia_icd.json"
+  # -AllowCommandletRendering NEEDS a Vulkan driver ("Failed to load Vulkan
+  # Driver which is required to run the engine", 2026-08-26 16:46Z). The
+  # container toolkit injects the library but no ICD manifest; ask common.sh
+  # for the host's manifest (generating it if this host has none) and mount it.
+  ICD="$(wl_vulkan_icd_files 2>/dev/null | head -1)"
+  [ -n "${ICD:-}" ] && [ -f "$ICD" ] || ICD="$WL_RUN/nvidia_icd.json"
+  if [ -f "$ICD" ]; then
+    gpuflag="$gpuflag -v $ICD:/etc/vulkan/icd.d/nvidia_icd.json:ro -e VK_ICD_FILENAMES=/etc/vulkan/icd.d/nvidia_icd.json -e VK_DRIVER_FILES=/etc/vulkan/icd.d/nvidia_icd.json"
+    wl_say "Vulkan ICD for the container: $ICD"
+  else
+    wl_warn "no Vulkan ICD manifest on this host; a rendering commandlet will refuse to start"
+  fi
 fi
 ue() {  # log-name, then the editor arguments
   local name="$1"; shift
@@ -55,6 +66,10 @@ if [ "$STEP" = all ] || [ "$STEP" = validate-staging ]; then
   fi
 fi
 if [ "$STEP" = all ] || [ "$STEP" = convert ]; then
+  # the conversion is IN PLACE: back the staging map up first, so a bad
+  # conversion costs a copy rather than a 10-minute regeneration
+  _umap="$WL_SRC/wonderland/Content/WonderlandV2/Maps/$MAPNAME.umap"
+  [ -f "$_umap" ] && cp -f "$_umap" "$WL_RUN/$MAPNAME.umap.classic-backup" && wl_say "staging map backed up to $WL_RUN/$MAPNAME.umap.classic-backup"
   wl_say "3/4 converting $MAPNAME with WorldPartitionConvertCommandlet (in place; the broken map is untouched)"
   ue convert "-run=WorldPartitionConvertCommandlet" "$MAPNAME" -AllowCommandletRendering -Verbose
   grep -iE "LogWorldPartitionConvert|converted|actors|error|warning: .*partition" "$WL_LOG/wp-convert.log" | tail -12 | cut -c1-200
