@@ -171,6 +171,14 @@ run_container() {
   # is compute,utility), and the World Partition HLOD builder needs an RHI
   # ("Could not initialize SDL: No available video device", rc=1 without it).
   wl_have_gpu && gpuflag="--gpus all -e NVIDIA_DRIVER_CAPABILITIES=all"
+  # The capability injects the driver library but NOT a Vulkan ICD manifest:
+  # the HLOD builder died with VK_ERROR_INCOMPATIBLE_DRIVER (no ICD found)
+  # even so. The host's manifest (written by wl_vulkan_generate_icd / the
+  # capture path) names the same library path the toolkit injects, so mount
+  # it where the container's loader looks and point the loader at it.
+  if wl_have_gpu && [ -f "$WL_RUN/nvidia_icd.json" ]; then
+    gpuflag="$gpuflag -v $WL_RUN/nvidia_icd.json:/etc/vulkan/icd.d/nvidia_icd.json:ro -e VK_ICD_FILENAMES=/etc/vulkan/icd.d/nvidia_icd.json -e VK_DRIVER_FILES=/etc/vulkan/icd.d/nvidia_icd.json"
+  fi
 
   # MOUNT WHAT THE GENERATOR WILL READ. $WL_ROOT is bound at the same path
   # inside, so anything under it is already visible; an asset directory
