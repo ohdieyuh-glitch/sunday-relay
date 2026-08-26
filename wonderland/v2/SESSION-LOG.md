@@ -29,6 +29,21 @@ pass changed, and what remains unverifiable until the Studio runs.
 11. **Performance (gauntlet G)** — two INSTANCING HLOD layers (far: always loaded, castle/skyline; near: garden bands) as the World Partition default, `is_spatially_loaded`/`hlod_layer` by band on every actor, an opt-in `build-hlod` commandlet step in the shared build, a `V2 PERFORMANCE` manifest line. API names verified against Epic's 5.5 docs; the runtime hash grids are not scriptable and the log says so.
 12. **Audit + lawn** — derived-number audit of every unit-bearing comment (sun pitch −55 vs measured +58 → −58; camera bearings recomputed, the rose cones are outside the frame as in the panorama; clock tree 21.6 m → 16 m measured; plaza width prose); the layout gate now checks the gate-view camera and every recipe's folder key; `compare_v2` labels diagnostics NOT A RENDER; the garden floor is a noise-displaced lawn mesh per side (`garden_lawn`, `MI_V2_Lawn`) instead of the flat moss plane.
 
+## Live run (2026-08-26, Studio on the L4 — founder: "L4 is on")
+
+- Studio came back on CPU first, then on the L4 (8 cores, 23 GB); docker
+  image wiped by the restart, checkout still on relay/wonderland-marble.
+- `ship_v2.sh` v1 launched `v2-build.sh` from a checkout that did not have it
+  (the fetch lived INSIDE the script): fixed — the ship step now moves the
+  checkout to the shipped head first, saving the Studio's local edits
+  (35-line DefaultEngine.ini diff) as a patch in run/.
+- The gitignored `marble/worlds/*/assets/` meant no panorama in a fresh
+  checkout: `v2-build.sh` now falls back to the tracked v2/reference copy.
+- Engine restore chose the 69 GB tar-load (its guard: 2 × tar = 138 GB
+  "needed", 220 GB free) — the memory records that exact path running the
+  shared volume to 0 bytes and rolling back. Killed it, pruned, and pulled
+  `ghcr.io/epicgames/unreal-engine:dev-5.8` instead (peak disk far lower).
+
 ## Real Unreal renders this session
 
 **None.** The Studio `aquala-wonderland` was stopped for the whole session
