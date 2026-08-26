@@ -68,6 +68,20 @@ pass changed, and what remains unverifiable until the Studio runs.
   (in the build). The API key is not present on either machine — the splat
   download is founder-gated. See `reference/MarbleCanonical/MULTIVIEW-RESEARCH.md`.
 
+## First captures (2026-08-26)
+
+- Build `479eccf` packaged (447 actors, 82/82 assets, 455 flagstones, HLOD
+  proxies not built: the builder needs commandlet rendering + the graphics
+  driver capability — fixed for the next build). Performance at HeroCam0:
+  **median 9.05 ms = 110.6 fps, p95 15.4 ms** (CSV profiler, 1080p).
+- `V2_PASS_001`/`002`/`003` via native-shot were ALL-ZERO frames: HighResShot
+  is a phantom in the offscreen path here too (memory 2026-08-15); frame-check
+  said FAIL, native-shot read only its exit code — fixed (`e9ffec0`), and
+  `v2-shot` now registers the frame native-shot validated (`5331cc6`).
+- Ground truth = the Pixel-Streaming capture in real Chrome
+  (`capture-hero-shots.sh`); its prerequisites had to be reinstalled after the
+  Studio restart (Playwright 1.62.1, Wilbur `npm ci`).
+
 ## Real Unreal renders this session
 
 **None.** The Studio `aquala-wonderland` was stopped for the whole session
