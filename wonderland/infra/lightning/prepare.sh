@@ -163,7 +163,7 @@ done
 # gate and the offline build check must pass before Studio time is spent.
 V2_DIR="$WL_SRC/wonderland/v2"
 if [ -d "$V2_DIR" ]; then
-  for g in "$WL_SRC/wonderland/tools/v1_guard.py --since HEAD~1" "$V2_DIR/verify_v2_layout.py" "$V2_DIR/verify_v2_dryrun.py"; do
+  for g in "$WL_SRC/wonderland/tools/v1_guard.py --since HEAD~1" "$V2_DIR/verify_v2_layout.py" "$V2_DIR/verify_v2_marble_paths.py" "$V2_DIR/verify_v2_dryrun.py"; do
     if (cd "$WL_SRC" && python3 $g >>"$WL_LOG/gates.log" 2>&1); then
       wl_say "V2 gate ok: $(basename "${g%% *}")"
     else
