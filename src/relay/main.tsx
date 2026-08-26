@@ -12,6 +12,7 @@ import './ui/mission-control.css';
 import './ui/pixel-dog/pixel-dog.css';
 import './ui/relay-dog-motion/relay-dog-motion.css';
 import './ui/entry-home/relay-entry-home.css';
+import './ui/landing/relay-landing.css';
 import './ui/project-workspace/relay-project-workspace.css';
 import './ui/project-settings/relay-project-settings.css';
 import './ui/chrome/relay-chrome.css';

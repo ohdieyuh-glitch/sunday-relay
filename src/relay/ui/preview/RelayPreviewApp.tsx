@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { MissionControl } from '../MissionControl';
 import { RelayEntryHome } from '../entry-home';
+import { RelayLanding } from '../landing';
 import {
   DEFAULT_CONNECTION_STATUSES,
   FIXTURE_GUIDE_MESSAGES,
@@ -122,6 +123,8 @@ import './relay-preview.css';
  */
 
 export type PreviewRoute =
+  /** The public landing experience — the site's front door, at the bare URL. */
+  | { screen: 'landing' }
   | { screen: 'home' }
   | { screen: 'settings'; projectId: string }
   | { screen: 'console' }
@@ -134,7 +137,10 @@ export type PreviewRoute =
 export function parsePreviewHash(hash: string): PreviewRoute {
   const clean = hash.replace(/^#/, '');
   const parts = clean.split('/').filter(Boolean);
-  if (parts[0] !== 'relay') return { screen: 'home' };
+  // ANYTHING OUTSIDE `#/relay/*` IS THE LANDING, including the bare URL. The
+  // landing is the front door; `#/relay` remains the in-product Entry Home, so
+  // the C.A.R.D.-first flow is reached exactly as before and is not displaced.
+  if (parts[0] !== 'relay') return { screen: 'landing' };
   if (parts[1] === 'console') return { screen: 'console' };
   // Back-compat: bare settings route resolves to the active project later.
   if (parts[1] === 'live-reach') return { screen: 'live-reach' };
@@ -1251,6 +1257,11 @@ export function RelayPreviewApp() {
     demoSimulation.exit();
     demoProjectIdRef.current = null;
   };
+
+  // The landing is a full-viewport experience with its own fixed canvas and
+  // its own chrome. It renders ALONE — wrapping it in the product shell would
+  // put a scrolling app frame around a page whose camera owns the viewport.
+  if (route.screen === 'landing') return <RelayLanding />;
 
   return (
     <div className="rpv">
