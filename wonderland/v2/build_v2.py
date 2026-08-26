@@ -1364,8 +1364,10 @@ def main():
     ext_count = None
     try:
         cdir = str(unreal.Paths.project_content_dir())
-        ext_dir = os.path.join(cdir, C.CONTENT_ROOT.replace("/Game/", ""), "Maps", "__ExternalActors__")
-        if os.path.isdir(os.path.dirname(ext_dir)):
+        # UE 5.x keeps them under Content/__ExternalActors__/<map folder>/<map>/
+        # (the log's package names prove it), not under the map's own folder.
+        ext_dir = os.path.join(cdir, "__ExternalActors__", C.CONTENT_ROOT.replace("/Game/", ""), "Maps", C.MAP_PATH.rsplit("/", 1)[-1])
+        if os.path.isdir(cdir):
             ext_count = 0
             for _root, _dirs, files in os.walk(ext_dir):
                 ext_count += sum(1 for f in files if f.endswith(".uasset"))
