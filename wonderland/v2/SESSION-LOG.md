@@ -97,6 +97,13 @@ and VSM are the open SM6 item, Lumen software GI still runs.
   triangles` error made the generator commandlet exit 1 → build stopped.
   Guarded (`6aad622`), radius 90 m (`5f2bef1`), rebuilt.
 
+- SM5 build 2 (5f2bef1): generator clean (449 actors); the ring's box
+  selected nothing (`is_valid` trap → guarded, `72e67d7`), so the whole Marble
+  world is placed visible in this package — hidden at capture time with
+  `-WLHideTags=MARBLE_DISTANT_SCENIC`. HLOD builder: `VK_ERROR_INCOMPATIBLE_
+  DRIVER` inside the build container (no Vulkan ICD reaches it even with
+  NVIDIA_DRIVER_CAPABILITIES=all) → non-fatal, cook continues; OPEN (gauntlet G).
+
 ## Real Unreal renders this session
 
 **None.** The Studio `aquala-wonderland` was stopped for the whole session
