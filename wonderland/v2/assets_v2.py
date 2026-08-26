@@ -363,7 +363,7 @@ def _mushroom(ctx, name, height, cap_w, seed, gills=36, spots=7, lean=0.18):
     for g in range(gills):
         a = 360.0 * g / gills
         m.extrude([(r0 * 1.15, 0.0), (0.86 * R, 0.0), (0.86 * R, -ch * 0.05), (r0 * 1.15, -ch * 0.02)], 1.2 * height / 300.0,
-                  at=(top[0], top[1], stem_h + ch * 0.06), rot=(90.0, a, 0.0))
+                  at=(top[0], top[1], stem_h + ch * 0.06), rot=(0.0, a, 90.0))   # roll: the blade's depth hangs DOWN (pitch put it vertical, inside the stem)
     m.perlin(R * 0.025, 0.05 * 300.0 / height, seed=seed)
     m.subdivide(1)
     m.smooth(1, 0.2)
@@ -852,7 +852,7 @@ def mushroom_giant_gills(ctx):
     for g in range(56):
         a = 360.0 * g / 56
         m.extrude([(210.0, 0.0), (0.84 * R, 0.0), (0.84 * R, -22.0), (210.0, -9.0)], 5.0,
-                  at=(30.0, 0.0, z), rot=(90.0, a, 0.0))
+                  at=(30.0, 0.0, z), rot=(0.0, a, 90.0))   # roll: the blade's depth hangs DOWN (pitch put it vertical, inside the stem)
     m.perlin(6.0, 0.02, seed=353)
     m.split_normals(50.0)
     return m
