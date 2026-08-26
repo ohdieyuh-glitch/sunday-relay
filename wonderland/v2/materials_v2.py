@@ -241,7 +241,15 @@ def _master(unreal, log, name, kind, texs=None):
             e.set_editor_property("sampler_type", getattr(unreal.MaterialSamplerType, sampler))
         except Exception:
             pass
-        # THE DEFAULT TEXTURE IS NOT OPTIONAL (see _TEX_DEFAULTS above).
+        # THE DEFAULT TEXTURE IS NOT OPTIONAL. The node is born holding
+        # /Engine/EngineResources/DefaultTexture, a COLOUR texture, and the
+        # compiler refuses it under a Normal or Grayscale sampler:
+        #   "(Node TextureSampleParameter2D) Sampler type is Normal, should be
+        #    Color for .../DefaultTexture"
+        # -- the master fails, and every instance under it renders as the
+        # engine's grey checker. set_editor_property alone did NOT stick here,
+        # so the assignment is made both ways and READ BACK; if it still will
+        # not take, the sampler drops to Color so the master at least compiles.
         want, fallback = _TEX_DEFAULTS.get(sampler, (None, "/Engine/EngineResources/WhiteSquareTexture"))
         tex = None
         for key in ((stem,) if stem else ()) + ((want,) if want else ()):
@@ -253,13 +261,34 @@ def _master(unreal, log, name, kind, texs=None):
                 tex = eal.load_asset(fallback)
             except Exception:
                 tex = None
+        got = None
         if tex is not None:
+            for setter in (lambda: setattr(e, "texture", tex),
+                           lambda: e.set_editor_property("texture", tex)):
+                try:
+                    setter()
+                except Exception:
+                    continue
+                try:
+                    got = e.get_editor_property("texture")
+                except Exception:
+                    got = None
+                if got is not None and got.get_name() == tex.get_name():
+                    break
+            # assigning a texture can re-derive the sampler; re-assert it
             try:
-                e.set_editor_property("texture", tex)
-            except Exception as exc:
-                log("V2 MATERIAL %s: default texture for %s not set (%s)" % (name, pname, exc))
+                e.set_editor_property("sampler_type", getattr(unreal.MaterialSamplerType, sampler))
+            except Exception:
+                pass
+        if got is None or (tex is not None and got.get_name() != tex.get_name()):
+            log("V2 MATERIAL %s: %s keeps %s -- dropping its sampler to COLOR so the master compiles"
+                % (name, pname, got.get_name() if got is not None else "no texture"))
+            try:
+                e.set_editor_property("sampler_type", unreal.MaterialSamplerType.SAMPLERTYPE_COLOR)
+            except Exception:
+                pass
         else:
-            log("V2 MATERIAL %s: NO default texture for %s -- this master will not compile" % (name, pname))
+            log("V2 MATERIAL %s: %s default texture %s (%s)" % (name, pname, got.get_name(), sampler))
         return e
 
     if kind in ("surface", "foliage", "portal"):
