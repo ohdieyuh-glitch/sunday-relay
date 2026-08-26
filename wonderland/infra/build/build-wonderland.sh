@@ -399,7 +399,12 @@ if [ -x "$UE_EDITOR_CMD" ]; then
   # generator run when only the cook/package needs redoing.
   _v2_map_dir="$(dirname "$PROJECT")/Content/WonderlandV2/Maps"
   _v2_actors="$(dirname "$PROJECT")/Content/__ExternalActors__/WonderlandV2/Maps/WL_V2_GoldenArrival"
-  if [ "${WL_SKIP_GENERATE:-0}" = "1" ] && [ -f "$_v2_map_dir/WL_V2_GoldenArrival.umap" ] \
+  # A DIAGNOSTIC map is self-contained: the .umap named by WL_COOK_MAP carries
+  # its own actors, so "already on disk" is that one file existing.
+  _cook_umap="$(dirname "$PROJECT")/Content/${WL_COOK_MAP#/Game/}.umap"
+  if [ "${WL_SKIP_GENERATE:-0}" = "1" ] && [ -f "$_cook_umap" ] && [ "${WL_COOK_MAP}" != "/Game/WonderlandV2/Maps/WL_V2_GoldenArrival" ]; then
+    log "WL_SKIP_GENERATE=1: cooking the self-contained map already on disk ($_cook_umap, $(stat -c%s "$_cook_umap") bytes)"
+  elif [ "${WL_SKIP_GENERATE:-0}" = "1" ] && [ -f "$_v2_map_dir/WL_V2_GoldenArrival.umap" ] \
      && [ "$(find "$_v2_actors" -name '*.uasset' 2>/dev/null | wc -l)" -gt 100 ]; then
     log "WL_SKIP_GENERATE=1: cooking the world already on disk ($(find "$_v2_actors" -name '*.uasset' | wc -l) actor packages)"
   else
