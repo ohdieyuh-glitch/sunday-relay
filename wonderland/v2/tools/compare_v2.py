@@ -37,7 +37,12 @@ def main():
                         "--yaw=%s" % (cam["rotation"][1] - 90.0), "--pitch=%s" % cam["rotation"][0],
                         "--fov=%s" % cam["fov"]], check=True)
     a, b = os.path.join(tmp, "_a.png"), os.path.join(tmp, "_b.png")
-    label(render, "%s - REAL UNREAL V2 RENDER (%s)" % (tag, cam["name"]), a)
+    # The left label is a CLAIM. Only a numbered pass capture from v2-shot.sh
+    # is a real render; anything else (the layout projector, a sheet) is
+    # labelled as what it is, so a diagnostic can never be mistaken for proof.
+    is_real = tag.startswith("V2_PASS") and "DIAG" not in os.path.basename(render).upper()
+    kind = "REAL UNREAL V2 RENDER" if is_real else "DIAGNOSTIC PROJECTION -- NOT A RENDER"
+    label(render, "%s - %s (%s)" % (tag, kind, cam["name"]), a)
     label(ref, "MARBLE REFERENCE, same lens", b)
     subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", a, "-i", b,
                     "-filter_complex", "[0][1]hstack=inputs=2", out], check=True)
