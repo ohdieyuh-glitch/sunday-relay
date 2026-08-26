@@ -47,6 +47,17 @@ wl_say "V2 BUILD: branch=$WL_BRANCH generator=$WL_GENERATOR map=$WL_COOK_MAP"
 if [ -x "$HERE/compile-preflight.sh" ] && [ "${SKIP_COMPILE_PREFLIGHT:-0}" != "1" ]; then
   bash "$HERE/compile-preflight.sh" || wl_die "C++ compile preflight failed -- fix Source/ before building V2"
 fi
+# THE V2 TEXTURE SET. Neutral detail maps (textures_v2.py) — the shared V1 set
+# carries its own colour and would turn the cream plaza brown under the tint.
+# Written next to the V1 set (distinct T_V2_ stems) and gated before the build.
+export WONDERLAND_TEXTURE_DIR="${WONDERLAND_TEXTURE_DIR:-$WL_ROOT/textures}"
+if [ "${SKIP_V2_TEXTURES:-0}" != "1" ]; then
+  wl_say "V2 textures -> $WONDERLAND_TEXTURE_DIR"
+  ( cd "$WL_SRC" && python3 wonderland/v2/textures_v2.py "$WONDERLAND_TEXTURE_DIR" ) \
+    || wl_die "textures_v2.py failed"
+  ( cd "$WL_SRC" && python3 wonderland/v2/verify_v2_textures.py "$WONDERLAND_TEXTURE_DIR" ) \
+    || wl_die "V2 texture gate failed -- not building on a broken set"
+fi
 bash "$HERE/cpu-build-all.sh"
 
 LOG="$(ls -t "$WL_OUT"/logs/generate-hub-level.log 2>/dev/null | head -1 || true)"

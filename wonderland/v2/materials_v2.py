@@ -19,6 +19,7 @@ The per-instance values were measured from the reference by pixel population
 cobble 1:0.68:0.64, gold 1:0.70:0.38, cap red with G == B, near-black foliage.
 """
 
+import json
 import os
 
 import v2_config as C
@@ -28,11 +29,11 @@ INSTANCES = {
     # ---- stone: cream and pale grey, warm variation, never white -------------
     "MI_V2_IvoryStone": ("plaster", (0.74, 0.70, 0.62), 0.0, 0.58, 0.50, 0.32, None, 0.0),
     "MI_V2_Stone":      ("ashlar",  (0.50, 0.46, 0.41), 0.0, 0.82, 0.80, 0.30, None, 0.0),
-    "MI_V2_PlazaCream": ("ashlar",  (0.70, 0.66, 0.57), 0.0, 0.74, 0.85, 0.30, None, 0.0),
-    "MI_V2_PlazaGrey":  ("ashlar",  (0.50, 0.52, 0.48), 0.0, 0.76, 0.85, 0.30, None, 0.0),
+    "MI_V2_PlazaCream": ("plaza",   (0.70, 0.66, 0.57), 0.0, 0.74, 0.85, 0.30, None, 0.0),
+    "MI_V2_PlazaGrey":  ("plaza",   (0.50, 0.52, 0.48), 0.0, 0.76, 0.85, 0.30, None, 0.0),
     # the central path in the founder's view is PALE grey-blue stone, a step
     # cooler and a touch darker than the cream plaza -- not a dark road
-    "MI_V2_PathStone":  ("cobble",  (0.50, 0.53, 0.56), 0.0, 0.76, 0.90, 0.30, None, 0.0),
+    "MI_V2_PathStone":  ("pathstone", (0.50, 0.53, 0.56), 0.0, 0.76, 0.90, 0.30, None, 0.0),
     "MI_V2_Cobble":     ("cobble",  (0.36, 0.30, 0.26), 0.0, 0.78, 0.90, 0.28, None, 0.0),
     "MI_V2_CobbleHero": ("cobble",  (0.33, 0.31, 0.28), 0.0, 0.74, 0.90, 0.30, None, 0.0),
     "MI_V2_Moss":       ("sward",   (0.12, 0.20, 0.08), 0.0, 0.82, 0.60, 0.20, None, 0.0),
@@ -71,24 +72,69 @@ FOLIAGE = ("MI_V2_LeafDark", "MI_V2_LeafMid", "MI_V2_LeafLight", "MI_V2_RosePink
            "MI_V2_RoseRed", "MI_V2_PetalPink", "MI_V2_PetalViolet", "MI_V2_PetalBlue")
 PORTAL = ("MI_V2_PortalRunes", "MI_V2_PortalGlow")
 
-#: texture family -> (albedo, normal, roughness) file stems from gen-textures.py
+#: texture family -> (albedo, normal, roughness) file stems from textures_v2.py.
+#: These are NEUTRAL detail maps (linear mean ~0.92 per channel): the tint sets
+#: the colour, the texture sets the structure. The shared V1 set is not used —
+#: its albedos carry their own colour (ashlar mean 0.39/0.34/0.24, roof
+#: 0.51/0.11/0.16) and tinting on top of that turns cream into brown.
 FAMILY_FILES = {
-    "cobble": ("T_cobble_a", "T_cobble_n", "T_cobble_r"),
-    "ashlar": ("T_ashlar_a", "T_ashlar_n", "T_ashlar_r"),
-    "plaster": ("T_plaster_a", "T_plaster_n", "T_plaster_r"),
-    "sward": ("T_sward_a", "T_sward_n", "T_sward_r"),
-    "bark": ("T_bark_a", "T_bark_n", "T_bark_r"),
-    "roof": ("T_roof_a", "T_roof_n", "T_roof_r"),
-    "metal": ("T_metal_a", "T_metal_n", "T_metal_r"),
-    "glaze": ("T_glaze_a", "T_glaze_n", "T_glaze_r"),
-    "cap": ("T_cap_a", "T_cap_n", "T_cap_r"),
-    "petal": ("T_petal_a", "T_petal_n", "T_petal_r"),
-    "leaf": ("T_leafcard_a", "T_leafcard_n", None),
-    "runes": ("T_runes_a", "T_runes_n", "T_runes_r"),
+    "plaza": ("T_V2_plaza_a", "T_V2_plaza_n", "T_V2_plaza_r"),
+    "pathstone": ("T_V2_pathstone_a", "T_V2_pathstone_n", "T_V2_pathstone_r"),
+    "cobble": ("T_V2_cobble_a", "T_V2_cobble_n", "T_V2_cobble_r"),
+    "ashlar": ("T_V2_ashlar_a", "T_V2_ashlar_n", "T_V2_ashlar_r"),
+    "plaster": ("T_V2_plaster_a", "T_V2_plaster_n", "T_V2_plaster_r"),
+    "sward": ("T_V2_sward_a", "T_V2_sward_n", "T_V2_sward_r"),
+    "bark": ("T_V2_bark_a", "T_V2_bark_n", "T_V2_bark_r"),
+    "roof": ("T_V2_roof_a", "T_V2_roof_n", "T_V2_roof_r"),
+    "metal": ("T_V2_metal_a", "T_V2_metal_n", "T_V2_metal_r"),
+    "glaze": ("T_V2_glaze_a", "T_V2_glaze_n", "T_V2_glaze_r"),
+    "cap": ("T_V2_cap_a", "T_V2_cap_n", "T_V2_cap_r"),
+    "petal": ("T_V2_petal_a", "T_V2_petal_n", "T_V2_petal_r"),
+    "leaf": ("T_V2_leafcard_a", "T_V2_leafcard_n", None),
+    "runes": ("T_V2_runes_a", "T_V2_runes_n", "T_V2_runes_r"),
 }
-TEX_SCALE = {"cobble": 0.0034, "ashlar": 0.0026, "plaster": 0.0050, "sward": 0.0090,
-             "bark": 0.0070, "roof": 0.0070, "metal": 0.0090, "glaze": 0.0060,
-             "cap": 0.0060, "petal": 0.0100, "leaf": 0.0080, "runes": 0.0010}
+#: 1/uu per tile. plaza: 2 slabs of 130 uu per 1024 px tile -> 1/260;
+#: pathstone: ~3 flags of 90 uu per 512 px tile -> 1/270.
+TEX_SCALE = {"plaza": 0.0038, "pathstone": 0.0037, "cobble": 0.0034, "ashlar": 0.0026,
+             "plaster": 0.0050, "sward": 0.0090, "bark": 0.0070, "roof": 0.0070,
+             "metal": 0.0090, "glaze": 0.0060, "cap": 0.0060, "petal": 0.0100,
+             "leaf": 0.0080, "runes": 0.0010}
+
+
+def texture_means(log=None):
+    """Achieved linear means per family from textures_v2.json, or {} if the
+    set was not generated (then tints are used as-is and the log says so)."""
+    p = os.path.join(C.TEXTURE_DIR, "textures_v2.json")
+    try:
+        with open(p) as fh:
+            meta = json.load(fh)
+    except (OSError, ValueError):
+        if log:
+            log("V2 TEXTURES: no textures_v2.json in %s -- tints applied without mean correction" % C.TEXTURE_DIR)
+        return {}
+    if meta.get("fast") and log:
+        log("V2 TEXTURES: WARNING the set in %s was generated --fast (quarter size)" % C.TEXTURE_DIR)
+    return {fam: rec["mean"] for fam, rec in meta.get("families", {}).items() if rec.get("neutral", True)}
+
+
+def corrected_tint(fam, tint, means, log=None, name=""):
+    """tint / texture mean, so texture*tint averages to the measured albedo.
+    Clamped at 1.0 per channel with a log line, because a tint the texture
+    cannot reach is a fact the render will show."""
+    m = means.get("leafcard" if fam == "leaf" else fam)
+    if not m:
+        return tint
+    out = []
+    clipped = False
+    for c in range(3):
+        v = tint[c] / m[c] if m[c] > 1e-6 else tint[c]
+        if v > 1.0:
+            clipped = True
+            v = 1.0
+        out.append(v)
+    if clipped and log:
+        log("V2 MATERIAL %s: tint %s exceeds the texture's reach after mean correction; clamped" % (name, tuple(round(t, 2) for t in tint)))
+    return tuple(out)
 
 
 def import_textures(unreal, log):
@@ -322,6 +368,7 @@ def build_materials(unreal, log, texs):
             log("V2 MATERIAL master %s FAILED: %s" % (name, exc))
     out = {}
     pkg = C.FOLDERS["mat_instances"]
+    means = texture_means(log)
     for name, (fam, tint, met, rough, vary, spec, emi, es) in INSTANCES.items():
         kind = "portal" if name in PORTAL else ("foliage" if name in FOLIAGE else "surface")
         master = masters.get(kind) or masters.get("surface")
@@ -340,7 +387,8 @@ def build_materials(unreal, log, texs):
                 mel.set_material_instance_parent(mi, master)
             except Exception:
                 pass
-            mel.set_material_instance_vector_parameter_value(mi, "BaseColor", unreal.LinearColor(tint[0], tint[1], tint[2], 1))
+            ct = corrected_tint(fam, tint, means, log, name)
+            mel.set_material_instance_vector_parameter_value(mi, "BaseColor", unreal.LinearColor(ct[0], ct[1], ct[2], 1))
             mel.set_material_instance_scalar_parameter_value(mi, "Metallic", float(met))
             mel.set_material_instance_scalar_parameter_value(mi, "Roughness", float(rough))
             mel.set_material_instance_scalar_parameter_value(mi, "RoughVary", float(vary))

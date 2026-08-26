@@ -29,6 +29,16 @@ stub.log = lambda m: None
 # the stub has no Geometry Script; the build must take the FALLBACK and say so
 sys.modules["unreal"] = stub
 os.environ.setdefault("WLV2_MANIFEST", "/tmp/wlv2-dryrun-manifest.json")
+# A FAST V2 texture set, so the import path, the sidecar and the tint/mean
+# correction are exercised rather than skipped. WLV2_DRYRUN_TEXTURES=0 skips it.
+if "WONDERLAND_TEXTURE_DIR" not in os.environ and os.environ.get("WLV2_DRYRUN_TEXTURES", "1") != "0":
+    import subprocess
+    import tempfile
+    _td = os.path.join(tempfile.gettempdir(), "wlv2-dryrun-textures")
+    if not os.path.exists(os.path.join(_td, "textures_v2.json")):
+        subprocess.run([sys.executable, os.path.join(HERE, "textures_v2.py"), _td, "--fast"], check=True,
+                       stdout=subprocess.DEVNULL)
+    os.environ["WONDERLAND_TEXTURE_DIR"] = _td
 os.environ.setdefault("WONDERLAND_TEXTURE_DIR", "/nonexistent")
 
 src = io.open(os.path.join(HERE, "build_v2.py"), encoding="utf8").read()
