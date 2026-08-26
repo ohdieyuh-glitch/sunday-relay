@@ -4,6 +4,7 @@
 #
 #   bash wonderland/v2/tools/ship_v2.sh            # ship + build (detached on the Studio)
 #   bash wonderland/v2/tools/ship_v2.sh --ship-only
+#   WL_EXTRA_ENV="WLV2_PARTITIONED=0" bash wonderland/v2/tools/ship_v2.sh   # env for the remote build
 #
 # Why a bundle: the Studio has no GitHub credential for the private repo, and
 # scp to it has silently no-op'd before — so the bundle goes over `ssh cat >`
@@ -57,7 +58,7 @@ ssh "$HOST" "set -e; R=/teamspace/studios/this_studio/wonderland; mkdir -p \$R/r
   | grep -q checkout-ok || die "the Studio checkout is not at $HEAD_SHA with v2-build.sh present"
 say "starting v2-build.sh on the Studio, pinned to $HEAD_SHA"
 ssh "$HOST" "mkdir -p $(dirname "$REMOTE_LOG"); cd /teamspace/studios/this_studio/wonderland/src; \
-  WL_BUNDLE=$REMOTE_BUNDLE WL_BRANCH=$BRANCH WL_REQUIRE_SHA=$HEAD_SHA \
+  ${WL_EXTRA_ENV:-} WL_BUNDLE=$REMOTE_BUNDLE WL_BRANCH=$BRANCH WL_REQUIRE_SHA=$HEAD_SHA \
   nohup bash wonderland/infra/lightning/v2-build.sh > $REMOTE_LOG 2>&1 < /dev/null & \
   echo started pid \$!"
 say "log: ssh $HOST tail -f $REMOTE_LOG"
