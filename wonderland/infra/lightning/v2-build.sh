@@ -41,6 +41,12 @@ else
 fi
 
 wl_say "V2 BUILD: branch=$WL_BRANCH generator=$WL_GENERATOR map=$WL_COOK_MAP"
+# The C++ hover component and prop have never been compiled; a compile
+# failure must be the first thing this run reports, not something found
+# after a 40-minute cook.
+if [ -x "$HERE/compile-preflight.sh" ] && [ "${SKIP_COMPILE_PREFLIGHT:-0}" != "1" ]; then
+  bash "$HERE/compile-preflight.sh" || wl_die "C++ compile preflight failed -- fix Source/ before building V2"
+fi
 bash "$HERE/cpu-build-all.sh"
 
 LOG="$(ls -t "$WL_OUT"/logs/generate-hub-level.log 2>/dev/null | head -1 || true)"

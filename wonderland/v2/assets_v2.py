@@ -146,9 +146,10 @@ def tree_clock_trunk(ctx):
     buttress roots, four boughs high up. Clocks and vines are separate assets
     so the layout can place them against the bole."""
     m, path = _trunk(ctx, "tree_clock_trunk", 2000.0, 170.0, 95.0, 260.0, seed=31, roots=7, sides=26)
-    for k, (ang, z, ln) in enumerate(((0.3, 1350.0, 520.0), (2.3, 1500.0, 480.0), (4.2, 1650.0, 560.0), (1.4, 1850.0, 440.0))):
+    for k, (ang, z, ln) in enumerate(((0.3, 1150.0, 620.0), (2.3, 1400.0, 560.0), (4.2, 1600.0, 640.0),
+                                      (1.4, 1800.0, 520.0), (3.3, 900.0, 420.0))):
         p = path[int(len(path) * z / 2000.0)]
-        _limb(m, (p[0], p[1], z), (math.cos(ang) * 0.85, math.sin(ang) * 0.85, 0.45), ln, 46.0, 0, 40 + k)
+        _limb(m, (p[0], p[1], z), (math.cos(ang) * 0.85, math.sin(ang) * 0.85, 0.40), ln, 88.0, 0, 40 + k)
     return m
 
 
@@ -156,9 +157,9 @@ def tree_mature_trunk(ctx):
     """The left framing tree and the garden trees: 14 m, heavier, three limbs
     spreading into the crown."""
     m, path = _trunk(ctx, "tree_mature_trunk", 1400.0, 160.0, 100.0, -120.0, seed=57, roots=6)
-    for k, (ang, z, ln) in enumerate(((0.6, 900.0, 520.0), (2.7, 1000.0, 560.0), (4.6, 1100.0, 500.0))):
+    for k, (ang, z, ln) in enumerate(((0.6, 900.0, 560.0), (2.7, 1000.0, 600.0), (4.6, 1100.0, 540.0), (1.7, 760.0, 440.0))):
         p = path[int(len(path) * z / 1400.0)]
-        _limb(m, (p[0], p[1], z), (math.cos(ang) * 0.8, math.sin(ang) * 0.8, 0.55), ln, 52.0, 0, 60 + k)
+        _limb(m, (p[0], p[1], z), (math.cos(ang) * 0.8, math.sin(ang) * 0.8, 0.50), ln, 76.0, 0, 60 + k)
     return m
 
 
@@ -205,17 +206,19 @@ def hedge_mass(ctx):
 def vine_hanging(ctx):
     """Hanging vines: five swaying strands with leaf clumps, 6 m drop."""
     m = ctx.mesh("vine_hanging")
-    for k in range(5):
-        a = 2.0 * math.pi * k / 5
+    for k in range(9):
+        a = 2.0 * math.pi * k / 9
         pts, rr = [], []
-        for i in range(12):
-            t = i / 11.0
-            pts.append((math.cos(a) * 60.0 + 40.0 * math.sin(t * 6.0 + k),
-                        math.sin(a) * 60.0 + 30.0 * math.cos(t * 5.0 + k), -600.0 * t))
-            rr.append(6.0 - 3.5 * t)
-        m.tube(pts, rr, sides=6)
-        for i in range(0, 12, 2):
-            m.sphere(22.0 + 8.0 * _h(k, i, 1), at=(pts[i][0] + 14.0, pts[i][1], pts[i][2]), steps=8)
+        for i in range(14):
+            t = i / 13.0
+            pts.append((math.cos(a) * 70.0 + 30.0 * math.sin(t * 6.0 + k),
+                        math.sin(a) * 70.0 + 24.0 * math.cos(t * 5.0 + k), -(520.0 + 160.0 * _h(k, 9)) * t))
+            rr.append(4.5 - 2.8 * t)
+        m.tube(pts, rr, sides=5)
+        for i in range(1, 14, 2):
+            leaf = [(0, 0), (7, 6), (9, 16), (5, 26), (0, 30), (-5, 26), (-9, 16), (-7, 6)]
+            m.extrude(leaf, 1.2, at=(pts[i][0] + 6.0, pts[i][1], pts[i][2]), rot=(60.0 + 30.0 * _h(k, i, 2), 360.0 * _h(k, i, 3), 0.0))
+            m.sphere(9.0 + 5.0 * _h(k, i, 1), at=(pts[i][0] - 4.0, pts[i][1] + 3.0, pts[i][2] - 6.0), steps=6)
     m.perlin(5.0, 0.03, seed=81)
     return m
 
@@ -1273,7 +1276,7 @@ def tree_slender_trunk(ctx):
     m, path = _trunk(ctx, "tree_slender_trunk", 900.0, 70.0, 40.0, 30.0, seed=81, roots=4, sides=16)
     p = path[int(len(path) * 0.55)]
     for k, ang in enumerate((0.4, 2.5, 4.4)):
-        _limb(m, (p[0], p[1], 520.0), (math.cos(ang) * 0.75, math.sin(ang) * 0.75, 0.65), 380.0, 26.0, 0, 90 + k)
+        _limb(m, (p[0], p[1], 520.0), (math.cos(ang) * 0.75, math.sin(ang) * 0.75, 0.65), 380.0, 38.0, 0, 90 + k)
     return m
 
 
