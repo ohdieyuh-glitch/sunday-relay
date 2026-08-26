@@ -1414,7 +1414,10 @@ def main():
     v1_in_final = [n for n in final if any(m in n for m in V1_CLASS_MARKERS[1:] + ("SkyCity", "PlazaBed", "RelayDog", "HDAR_"))]
     MANIFEST["v1_actors_in_final"] = v1_in_final
     MANIFEST["seconds"] = round(time.time() - t0, 1)
-    actors_in_map = umap_bytes is not None and umap_bytes > 1000000
+    # An EMPTY level package is 6-11 KB; the classic V2 world with 445 actors
+    # measured 877,890 bytes. 100 KB separates them with room to spare (the
+    # first threshold was 1 MB and refused a perfectly good map).
+    actors_in_map = umap_bytes is not None and umap_bytes > 100000
     if ext_count is not None and len(final) > 20 and ext_count < int(0.9 * len(final)) and not actors_in_map:
         raise RuntimeError("V2 SAVE: only %d external actor packages on disk for %d actors and the map is %s bytes -- the level would cook EMPTY; refusing"
                            % (ext_count, len(final), umap_bytes))
