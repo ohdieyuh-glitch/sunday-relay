@@ -19,11 +19,14 @@ FPS_LINE="$(ssh "$HOST" "grep ' FPS ' $ROOT/run/v2-render-history.txt 2>/dev/nul
 PASS="${LINE%% *}"; REMOTE="${LINE#* }"
 scp -q "$HOST:$REMOTE" "$OUT/$PASS.png" 2>/dev/null
 [ -s "$OUT/$PASS.png" ] || { echo "download failed for $REMOTE"; exit 1; }
-CAM=0; case "$REMOTE" in *cam1*) CAM=1;; esac
-python3 "$HERE/compare_v2.py" "$OUT/$PASS.png" "$OUT/${PASS}_vs_reference.png" "--pass=$PASS" "--cam=$CAM"
+CAM="$(basename "$REMOTE" | sed -n 's/^V2_PASS_[0-9]*_cam\([0-9]*\)_.*/\1/p')"; CAM="${CAM:-0}"
+# WL_REF_IMAGE: compare against an explicit image (the Marble-mesh render of the
+# same camera) instead of the panorama reprojection -- cams 2/5/6/7 have moved
+# away from the panorama's viewpoint, so only a same-camera render is fair.
+python3 "$HERE/compare_v2.py" "$OUT/$PASS.png" "$OUT/${PASS}_vs_reference.png" "--pass=$PASS" "--cam=$CAM" ${WL_REF_IMAGE:+"--ref=$WL_REF_IMAGE"}
 # the MEASURED diff against the same reference view compare_v2 just used
-REFVIEW="$OUT/reference_view_cam${CAM}.png"
-if [ ! -s "$REFVIEW" ]; then
+REFVIEW="${WL_REF_IMAGE:-$OUT/reference_view_cam${CAM}.png}"
+if [ ! -s "$REFVIEW" ] && [ "$CAM" -le 4 ]; then
   # the same camera as the capture: yaw relative to +Y forward, pitch, fov from v2_config
   read -r YAW PITCH FOV < <(cd "$HERE/.." && python3 -c "import v2_config as C; c=C.HERO_CAMS[$CAM]; print(c['rotation'][1]-90.0, c['rotation'][0], c['fov'])")
   python3 "$HERE/reproject_reference.py" "$REFVIEW" "--yaw=$YAW" "--pitch=$PITCH" "--fov=$FOV" --size=1920x1080 >/dev/null

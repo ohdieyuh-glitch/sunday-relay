@@ -31,7 +31,7 @@ def main():
     cam = C.HERO_CAMS[int(opt.get("cam", 0))]
     tag = opt.get("pass", "V2")
     tmp = os.path.dirname(os.path.abspath(out)) or "."
-    ref = os.path.join(tmp, "reference_view_cam%s.png" % opt.get("cam", 0))
+    ref = opt.get("ref") or os.path.join(tmp, "reference_view_cam%s.png" % opt.get("cam", 0))
     if not os.path.exists(ref):
         subprocess.run([sys.executable, os.path.join(HERE, "reproject_reference.py"), ref,
                         "--yaw=%s" % (cam["rotation"][1] - 90.0), "--pitch=%s" % cam["rotation"][0],
@@ -43,7 +43,7 @@ def main():
     is_real = tag.startswith("V2_PASS") and "DIAG" not in os.path.basename(render).upper()
     kind = "REAL UNREAL V2 RENDER" if is_real else "DIAGNOSTIC PROJECTION -- NOT A RENDER"
     label(render, "%s - %s (%s)" % (tag, kind, cam["name"]), a)
-    label(ref, "MARBLE REFERENCE, same lens", b)
+    label(ref, ("MARBLE MESH RENDER, same camera (reference)" if opt.get("ref") else "MARBLE REFERENCE, same lens"), b)
     subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-i", a, "-i", b,
                     "-filter_complex", "[0][1]hstack=inputs=2", out], check=True)
     print("wrote", out)
