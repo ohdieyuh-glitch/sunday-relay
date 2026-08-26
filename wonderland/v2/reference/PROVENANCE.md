@@ -6,7 +6,7 @@ secondary inspiration for small details only).
 
 | field | value |
 |---|---|
-| file | `marble-royal-garden-backdrop-panorama.jpg` — **byte-identical copy** of `marble/worlds/royal-garden-backdrop/assets/panorama.jpg` (sha256 `13bc580b0059551b…`, 14,150,112 bytes) |
+| file | `marble-royal-garden-backdrop-panorama.png` — **byte-identical copy** of `marble/worlds/royal-garden-backdrop/assets/panorama.jpg` (sha256 `13bc580b0059551b…`, 14,150,112 bytes) |
 | dimensions / projection | 4608 × 2304, **equirectangular 360° × 180°** (u → azimuth, v → elevation; u = 0.5 is straight ahead; the left and right edges are the SAME direction, behind the viewer) |
 | generator | Marble `marble-1.1`, world id `ae83acaa-df79-4e92-b31f-53af690d5deb`, operation `0de3c95d-f056-442c-9fcd-8198c9a2d059`, generated 2026-08-21T16:25:39Z |
 | prompt | image prompt (the founder's reference) + text prompt, sha256 `b4fdbfb6…` — recorded in `marble/worlds/royal-garden-backdrop/intent.json` |
@@ -19,3 +19,13 @@ secondary inspiration for small details only).
 
 **Do not recompress the panorama.** Tools that need a smaller copy make it in a
 scratch directory.
+
+## Format note (2026-08-26, found by the first Unreal import)
+
+The Marble export named this file `panorama.jpg`, but its bytes are a PNG
+(`file`: PNG image data, 4608 x 2304, 8-bit RGB). Unreal's Interchange picks
+the translator by extension and the JPEG translator "Failed to decode JPEG",
+so the first V2 build ran without its sky panorama. The file is preserved
+byte-identical (same sha256 as recorded above) under the truthful `.png`
+name; nothing was re-encoded.
+

@@ -1,7 +1,7 @@
 # Wonderland V2 — visual specification (the world bible)
 
 **Foundation:** the Marble-generated world `ae83acaa-df79-4e92-b31f-53af690d5deb`
-(`marble-royal-garden-backdrop-panorama.jpg`, this directory). Not inspiration:
+(`marble-royal-garden-backdrop-panorama.png`, this directory). Not inspiration:
 the starting universe. Every future district inherits this grammar unless the
 founder establishes a deliberate new biome.
 

@@ -19,7 +19,7 @@ import sys
 import zlib
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-PANO = os.path.join(HERE, "..", "reference", "marble-royal-garden-backdrop-panorama.jpg")
+PANO = os.path.join(HERE, "..", "reference", "marble-royal-garden-backdrop-panorama.png")
 
 
 def load(path, w, h):

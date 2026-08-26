@@ -37,7 +37,7 @@ fi
 # marble/worlds/*/assets/ is gitignored (the export dir), so a fresh checkout
 # has no panorama there; V2's byte-identical reference copy IS tracked.
 for cand in "$WL_SRC/$WORLD/assets/panorama.jpg" \
-            "$WL_SRC/wonderland/v2/reference/marble-royal-garden-backdrop-panorama.jpg" "${WLV2_MARBLE_PANO:-}"; do
+            "$WL_SRC/wonderland/v2/reference/marble-royal-garden-backdrop-panorama.png" "${WLV2_MARBLE_PANO:-}"; do
   if [ -n "$cand" ] && [ -f "$cand" ]; then export WLV2_MARBLE_PANO="$cand"; break; fi
 done
 if [ -n "${WLV2_MARBLE_PANO:-}" ]; then

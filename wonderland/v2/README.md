@@ -69,7 +69,7 @@ Not migrated: `generate-hub-level.py` (the V1 scene), `hub-layout.json`,
 
 ## The PRIMARY reference (2026-08-25, second directive)
 
-`reference/marble-royal-garden-backdrop-panorama.jpg` — the original
+`reference/marble-royal-garden-backdrop-panorama.png` — the original
 4608 × 2304 Marble equirectangular, byte-identical, with `PROVENANCE.md`
 (world id, operation, prompt hash, credits, viewpoint height) and
 `ANALYSIS.md` (every major feature measured to azimuth / elevation / distance
