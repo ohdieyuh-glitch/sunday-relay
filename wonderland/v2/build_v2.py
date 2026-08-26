@@ -112,24 +112,44 @@ def new_map(actors, eal, lsu):
             LOG("V2 MAP: could not delete the old map (%s); continuing" % exc)
     how = None
     world = None
-    for tpl in C.OPEN_WORLD_TEMPLATES:
-        if how is not None:
-            break
-        if not eal.does_asset_exist(tpl):
-            LOG("V2 MAP: template %s not present" % tpl)
-            continue
+    # VERIFIED 5.5 API: LevelEditorSubsystem.new_level(asset_path,
+    # is_partitioned_world=False) -> bool. A genuinely EMPTY World Partition
+    # level, no template actors, no landscape -- exactly what the directive
+    # asks for. The template route (new_map_from_template takes
+    # (template, save_existing_map: bool), not a destination) is the fallback,
+    # then a plain empty level; the log says which one was taken.
+    try:
+        les = unreal.get_editor_subsystem(unreal.LevelEditorSubsystem)
+    except Exception:
+        les = None
+    if les is not None:
         try:
-            ok = lsu.new_map_from_template(tpl, C.MAP_PATH)
-            if ok:
-                how = "template %s (World Partition)" % tpl.rsplit("/", 1)[-1]
+            if les.new_level(C.MAP_PATH, True):
+                how = "empty World Partition level (LevelEditorSubsystem.new_level, partitioned)"
+        except TypeError:
+            try:
+                if les.new_level(C.MAP_PATH):
+                    how = "empty level (LevelEditorSubsystem.new_level; partition flag unsupported)"
+            except Exception as exc:
+                LOG("V2 MAP: new_level failed (%s)" % exc)
         except Exception as exc:
-            LOG("V2 MAP: template %s failed (%s)" % (tpl, exc))
+            LOG("V2 MAP: partitioned new_level failed (%s)" % exc)
+    if how is None:
+        for tpl in C.OPEN_WORLD_TEMPLATES:
+            if not eal.does_asset_exist(tpl):
+                continue
+            try:
+                if les is not None and les.new_level_from_template(C.MAP_PATH, tpl):
+                    how = "template %s (World Partition)" % tpl.rsplit("/", 1)[-1]
+                    break
+            except Exception as exc:
+                LOG("V2 MAP: template %s failed (%s)" % (tpl, exc))
     if how is None:
         try:
             ok = unreal.EditorLevelLibrary.new_level(C.MAP_PATH)
-            how = "empty level (no template)" if ok else None
+            how = "empty level (EditorLevelLibrary.new_level)" if ok else None
         except Exception as exc:
-            LOG("V2 MAP: new_level failed (%s)" % exc)
+            LOG("V2 MAP: EditorLevelLibrary.new_level failed (%s)" % exc)
     if how is None:
         raise RuntimeError("could not create %s by any method" % C.MAP_PATH)
     try:
@@ -211,6 +231,16 @@ def make_data_layers():
                 params = unreal.DataLayerCreationParameters()
                 set_prop(params, "DataLayerAsset", asset)
                 inst = sub.create_data_layer_instance(params)
+            if inst is None and hasattr(sub, "create_data_layer"):
+                # VERIFIED 5.5 API: create_data_layer(parent_data_layer=None) -> DataLayerInstance
+                inst = sub.create_data_layer()
+                if inst is not None:
+                    for prop in ("data_layer_label", "DataLayerLabel"):
+                        try:
+                            inst.set_editor_property(prop, unreal.Name(name))
+                            break
+                        except Exception:
+                            continue
             if inst is not None:
                 layers[name] = inst
         except Exception as exc:
@@ -644,15 +674,19 @@ def marble_cutouts(marble_actor, actors, eal, layers, gsctx):
                 bmax = u.Vector(max(p.x for p in lp), max(p.y for p in lp), max(p.z for p in lp))
             else:
                 bmin, bmax = u.Vector(*lo), u.Vector(*hi)
-            box = u.Box(bmin, bmax) if hasattr(u, "Box") else None
-            sel = u.GeometryScriptMeshSelection()
-            gsctx.gs("selection", "select_mesh_elements_in_box", dm, box, sel,
-                     u.GeometryScriptMeshSelectionType.TRIANGLES, False)
-            # delete everything OUTSIDE the box: invert the selection
-            inv_sel = u.GeometryScriptMeshSelection()
-            gsctx.gs("selection", "invert_selection", dm, sel, inv_sel, True)
-            gsctx.gs("edit", "delete_selected_triangles", dm, inv_sel, False)
-            n_tri = gsctx.gs("queries", "get_num_triangles", dm)
+            try:
+                box = u.Box(bmin, bmax, True)        # is_valid=True, or the box selects nothing
+            except Exception:
+                box = u.Box(bmin, bmax)
+            # VERIFIED 5.5 API: select_mesh_elements_in_box(target, box,
+            # selection_type, invert, min_num_triangle_points) RETURNS
+            # (mesh, selection) -- `invert=True` selects everything OUTSIDE
+            # the box, which is exactly what is deleted.
+            res = gsctx.gs("selection", "select_mesh_elements_in_box", dm, box,
+                           u.GeometryScriptMeshSelectionType.TRIANGLES, True, 3)
+            outside = res[1] if isinstance(res, (tuple, list)) and len(res) > 1 else res
+            gsctx.gs("edit", ("delete_selected_triangles_from_mesh", "delete_selected_triangles"), dm, outside)
+            n_tri = gsctx.gs("queries", ("get_num_triangle_i_ds", "get_num_triangle_ids", "get_num_triangles"), dm)
             if not isinstance(n_tri, int) or n_tri < 50:
                 LOG("V2 MARBLE CUTOUT %s: %s triangles in the box; skipped" % (label, n_tri))
                 continue

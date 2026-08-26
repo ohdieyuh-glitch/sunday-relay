@@ -140,8 +140,14 @@ class MeshBuilder(object):
                 ro.set_editor_property("revolve_degrees", float(arc))
             except Exception:
                 pass
+            # VERIFIED against the 5.5 API: append_revolve_polygon(target,
+            # options, transform, polygon_vertices, revolve_options,
+            # radius=100.0, steps=8). `radius` OFFSETS the polygon from the
+            # axis and defaults to 100 -- every profile here already carries
+            # its own radius in X, so it must be 0 or every tower, cap and cup
+            # comes out a metre too wide.
             self.ctx.gs("primitives", "append_revolve_polygon", self.dm, self.ctx.prim_opts(), _xf(self.u, at, rot),
-                        poly, ro, steps=int(steps))
+                        poly, ro, radius=0.0, steps=int(steps))
         else:
             self._merge(mk.lathe(list(profile), seg=steps, arc=arc), at, rot)
         return self
@@ -165,6 +171,21 @@ class MeshBuilder(object):
             # a swept polygon along path transforms; radius by per-transform scale
             circle = [self.u.Vector2D(math.cos(2 * math.pi * k / sides), math.sin(2 * math.pi * k / sides))
                       for k in range(sides)]
+            # VERIFIED against the 5.5 API: append_sweep_polygon(target,
+            # options, transform, polygon_vertices, sweep_path, loop=False,
+            # capped=True, start_scale=1.0, end_scale=1.0,
+            # rotation_angle_deg=0.0, miter_limit=1.0). The first draft used
+            # `cap_ends`/`scale`; the positional retry would then have fed
+            # rotation_angle_deg (0.0) into start_scale and every tube would
+            # have collapsed to a point at its root.
+            #
+            # FRAME CONVENTION. The polygon is swept in each transform's local
+            # XY plane, so the local Z axis must point along the path. For a
+            # unit tangent d: pitch = acos(d.z), yaw = atan2(d.y, d.x) + 180.
+            # WLV2_SWEEP_FRAME=x switches to X-along-path if the first render
+            # shows ribbons instead of tubes -- one env var, not a rebuild of
+            # the recipes.
+            mode = os.environ.get("WLV2_SWEEP_FRAME", "z")
             xfs = []
             for i, p in enumerate(pts):
                 nxt = pts[min(i + 1, len(pts) - 1)]
@@ -172,13 +193,17 @@ class MeshBuilder(object):
                 d = (nxt[0] - prv[0], nxt[1] - prv[1], nxt[2] - prv[2])
                 L = math.sqrt(sum(c * c for c in d)) or 1.0
                 d = (d[0] / L, d[1] / L, d[2] / L)
-                yaw = math.degrees(math.atan2(d[1], d[0]))
-                pitch = math.degrees(math.asin(max(-1.0, min(1.0, d[2]))))
-                # the polygon lies in the transform's local YZ plane, so the X
-                # axis is the sweep direction
-                xfs.append(_xf(self.u, p, (pitch, yaw, 0.0), (1.0, radii[i], radii[i])))
+                if mode == "x":
+                    yaw = math.degrees(math.atan2(d[1], d[0]))
+                    pitch = math.degrees(math.asin(max(-1.0, min(1.0, d[2]))))
+                    xfs.append(_xf(self.u, p, (pitch, yaw, 0.0), (1.0, radii[i], radii[i])))
+                else:
+                    pitch = math.degrees(math.acos(max(-1.0, min(1.0, d[2]))))
+                    yaw = math.degrees(math.atan2(d[1], d[0])) + 180.0
+                    xfs.append(_xf(self.u, p, (pitch, yaw, 0.0), (radii[i], radii[i], 1.0)))
             self.ctx.gs("primitives", "append_sweep_polygon", self.dm, self.ctx.prim_opts(), _xf(self.u, at, rot),
-                        circle, xfs, loop=False, cap_ends=True, rotation_angle_deg=0.0, scale=1.0)
+                        circle, xfs, loop=False, capped=True, start_scale=1.0, end_scale=1.0,
+                        rotation_angle_deg=0.0, miter_limit=1.0)
         else:
             self._merge(mk.tube(pts, radii, sides=sides), at, rot)
         return self
@@ -248,7 +273,7 @@ class MeshBuilder(object):
 
     def append(self, other, at=(0, 0, 0), rot=(0, 0, 0), scale=(1, 1, 1)):
         if self.backend == Backend.GS and other.backend == Backend.GS:
-            self.ctx.gs("edit", "append_mesh", self.dm, other.dm, _xf(self.u, at, rot, scale), delete_input=False)
+            self.ctx.gs("edit", "append_mesh", self.dm, other.dm, _xf(self.u, at, rot, scale))
         elif self.backend == Backend.MESHKIT and other.backend == Backend.MESHKIT:
             m = other.mesh.copy()
             m.scale(*scale)
@@ -299,7 +324,9 @@ class MeshBuilder(object):
     def box_uvs(self, size=100.0):
         if self.backend == Backend.GS:
             try:
-                self.ctx.gs("uvs", "set_mesh_uvs_from_box_projection", self.dm, 0,
+                # VERIFIED: GeometryScript_UVs.set_mesh_u_vs_from_box_projection(
+                #   target, uv_set_index, box_transform, selection, min_island_tri_count)
+                self.ctx.gs("uvs", ("set_mesh_u_vs_from_box_projection", "set_mesh_uvs_from_box_projection"), self.dm, 0,
                             _xf(self.u, (0, 0, 0), (0, 0, 0), (size, size, size)),
                             self.u.GeometryScriptMeshSelection(), 2)
             except Exception as exc:
@@ -310,8 +337,9 @@ class MeshBuilder(object):
 
     def tri_count(self):
         if self.backend == Backend.GS:
-            n = self.ctx.gs("queries", "get_num_triangles", self.dm)
-            return int(n) if isinstance(n, int) else -1
+            # VERIFIED: the count is spelled get_num_triangle_i_ds in 5.5
+            n = self.ctx.gs("queries", ("get_num_triangle_i_ds", "get_num_triangle_ids", "get_num_triangles"), self.dm)
+            return int(n) if isinstance(n, int) and not isinstance(n, bool) else -1
         return self.mesh.tri_count()
 
     def to_asset(self, folder, name, nanite=True, collision=False, lods=True):
@@ -373,20 +401,26 @@ def _laplacian(m, iterations, alpha):
 # the context: engine seam, capability probing, asset saving
 # ==========================================================================
 
+# VERIFIED AGAINST EPIC'S 5.5 PYTHON API DOCS (2026-08-25), first name in
+# each tuple; the alternates are kept for builds that expose the older
+# ScriptName. The first draft guessed "GeometryScript_MeshBasicEdit",
+# "GeometryScript_MeshNormals" and "GeometryScript_MeshSelectionFunctions",
+# none of which exist -- three libraries that would have silently fallen
+# back to meshkit while the capability line said MISSING.
 _LIBS = {
-    "primitives": "GeometryScript_Primitives",
-    "deformers": "GeometryScript_MeshDeformers",
-    "subdivide": "GeometryScript_MeshSubdivide",
-    "smoothing": "GeometryScript_MeshSmoothing",
-    "booleans": "GeometryScript_MeshBooleans",
-    "edit": "GeometryScript_MeshBasicEdit",
-    "transforms": "GeometryScript_MeshTransforms",
-    "normals": "GeometryScript_MeshNormals",
-    "uvs": "GeometryScript_MeshUVs",
-    "queries": "GeometryScript_MeshQueries",
-    "assets": "GeometryScript_AssetUtils",
-    "collision": "GeometryScript_CollisionFunctions",
-    "selection": "GeometryScript_MeshSelectionFunctions",
+    "primitives": ("GeometryScript_Primitives",),
+    "deformers": ("GeometryScript_MeshDeformers",),
+    "subdivide": ("GeometryScript_MeshSubdivide",),
+    "smoothing": ("GeometryScript_MeshSmoothing", "GeometryScript_Smoothing"),
+    "booleans": ("GeometryScript_MeshBooleans",),
+    "edit": ("GeometryScript_MeshEdits", "GeometryScript_MeshBasicEdit"),
+    "transforms": ("GeometryScript_MeshTransforms",),
+    "normals": ("GeometryScript_Normals", "GeometryScript_MeshNormals"),
+    "uvs": ("GeometryScript_UVs", "GeometryScript_MeshUVs"),
+    "queries": ("GeometryScript_MeshQueries",),
+    "assets": ("GeometryScript_AssetUtils",),
+    "collision": ("GeometryScript_Collision", "GeometryScript_CollisionFunctions"),
+    "selection": ("GeometryScript_MeshSelection", "GeometryScript_MeshSelectionFunctions"),
 }
 
 
@@ -405,10 +439,17 @@ class Context(object):
 
     # ---- probing ---------------------------------------------------------
 
+    def _lib(self, key):
+        for name in _LIBS[key]:
+            lib = getattr(self.unreal, name, None)
+            if lib is not None:
+                return lib
+        return None
+
     def _probe(self):
         u = self.unreal
-        for key, lib in _LIBS.items():
-            self.caps.ok[key] = hasattr(u, lib)
+        for key in _LIBS:
+            self.caps.ok[key] = self._lib(key) is not None
         core = all(self.caps.ok.get(k) for k in ("primitives", "transforms", "edit", "assets"))
         if not core:
             return False
@@ -430,14 +471,19 @@ class Context(object):
         return None
 
     def gs(self, lib_key, fn, *args, **kw):
-        u = self.unreal
-        lib = getattr(u, _LIBS[lib_key], None)
+        lib = self._lib(lib_key)
         if lib is None:
             self.caps.ok[lib_key] = False
             return None
-        f = getattr(lib, fn, None)
+        names = fn if isinstance(fn, (tuple, list)) else (fn,)
+        f = None
+        for nm in names:
+            f = getattr(lib, nm, None)
+            if f is not None:
+                fn = nm
+                break
         if f is None:
-            self.caps.errors["%s.%s" % (lib_key, fn)] = "missing"
+            self.caps.errors["%s.%s" % (lib_key, names[0])] = "missing"
             return None
         try:
             out = f(*args, **kw)
@@ -462,9 +508,17 @@ class Context(object):
         except Exception:
             return None
 
-    def revolve_opts(self):
+    def revolve_opts(self, degrees=360.0):
+        """RevolveOptions with revolve_degrees stated. The Python docs list its
+        default as 0.0 (a doc placeholder; the C++ default is 360) -- stating
+        it costs nothing and a zero-degree revolve is an invisible torus."""
         try:
-            return self.unreal.GeometryScriptRevolveOptions()
+            ro = self.unreal.GeometryScriptRevolveOptions()
+            try:
+                ro.set_editor_property("revolve_degrees", float(degrees))
+            except Exception:
+                pass
+            return ro
         except Exception:
             return None
 
@@ -521,7 +575,8 @@ class Context(object):
                 if collision:
                     try:
                         co = u.GeometryScriptCollisionFromMeshOptions()
-                        self.gs("collision", "set_static_mesh_collision_from_mesh", mb.dm, sm, co)
+                        smo = u.GeometryScriptSetStaticMeshCollisionOptions()
+                        self.gs("collision", "set_static_mesh_collision_from_mesh", mb.dm, sm, co, smo)
                     except Exception:
                         pass
             else:
