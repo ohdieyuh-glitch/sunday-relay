@@ -790,9 +790,21 @@ def marble_distant_ring(marble_actor, actors, eal, layers, gsctx):
         lp = [inv.transform_location(u.Vector(*c)) for c in corners] if inv is not None else [u.Vector(*c) for c in corners]
         bmin = u.Vector(min(v.x for v in lp), min(v.y for v in lp), min(v.z for v in lp))
         bmax = u.Vector(max(v.x for v in lp), max(v.y for v in lp), max(v.z for v in lp))
-        box = u.Box(bmin, bmax)
+        # is_valid defaults to False and an invalid box selects NOTHING (the
+        # 90 m ring "selected" 0 of 592,580 triangles): same guard as the
+        # cut-out code -- constructor kwarg, then both setters, then a check.
+        box = None
         try:
-            box.set_editor_property("is_valid", True)
+            box = u.Box(bmin, bmax, True)
+        except Exception:
+            box = u.Box(bmin, bmax)
+        for setter in (lambda: box.set_editor_property("is_valid", True), lambda: setattr(box, "is_valid", True)):
+            try:
+                setter()
+            except Exception:
+                continue
+        try:
+            LOG("V2 MARBLE DISTANT: box is_valid=%s" % box.get_editor_property("is_valid"))
         except Exception:
             pass
         res = gsctx.gs("selection", "select_mesh_elements_in_box", dm, box, u.GeometryScriptMeshSelectionType.TRIANGLES, False, 1)
@@ -817,6 +829,10 @@ def marble_distant_ring(marble_actor, actors, eal, layers, gsctx):
             % (n0, n1, R / 100.0, (round(bmin.x), round(bmin.y), round(bmin.z)), (round(bmax.x), round(bmax.y), round(bmax.z))))
         if not isinstance(n1, int) or n1 < 100:
             LOG("V2 MARBLE DISTANT: nothing left beyond the radius -- the inner box is wrong or the world is smaller than %.0f m; no ring" % (R / 100.0))
+            return None
+        if isinstance(n0, int) and n1 == n0:
+            LOG("V2 MARBLE DISTANT: the inner box selected NOTHING (%d = %d) -- an invalid box or a wrong local transform; "
+                "placing the whole scaffold visible would not be a ring, so no ring" % (n0, n1))
             return None
         r2 = gsctx.gs("newasset", "create_new_static_mesh_asset_from_mesh", dm, path, nopts)
         sm = r2[0] if isinstance(r2, (tuple, list)) else r2

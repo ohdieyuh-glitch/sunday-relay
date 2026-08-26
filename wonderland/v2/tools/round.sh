@@ -49,8 +49,8 @@ for CAM in $CAMS; do
     REF="$(ls -t "$OUT"/V2_PASS_*_cam${CAM}_marble.png 2>/dev/null | head -1)"
     [ -n "$REF" ] && cp "$REF" "$OUT/marble_view_cam${CAM}.png" && say "marble view -> $OUT/marble_view_cam${CAM}.png"
   fi
-  say "cam $CAM: the authored kit"
-  shoot "$CAM" "" kit
+  say "cam $CAM: the authored kit${WL_KIT_ARGS:+ ($WL_KIT_ARGS)}"
+  shoot "$CAM" "${WL_KIT_ARGS:-}" kit
   WL_REF_IMAGE="${REF:+$OUT/marble_view_cam${CAM}.png}" bash "$HERE/pull_render.sh" "$OUT" || true
 done
 say "renders in $OUT"
