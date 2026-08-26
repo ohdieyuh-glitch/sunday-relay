@@ -20,6 +20,10 @@ export WL_GENERATOR="${WL_GENERATOR:-wonderland/v2/build_v2.py}"
 export WL_COOK_MAP="${WL_COOK_MAP:-/Game/WonderlandV2/Maps/WL_V2_GoldenArrival}"
 export WLV2_MANIFEST="${WLV2_MANIFEST:-$WL_RUN/wlv2-manifest.json}"
 export WL_BUILD_HLOD="${WL_BUILD_HLOD:-1}"      # World Partition HLODs (INSTANCING, CPU)
+# A V2 build regenerates the world from source every time; the shared build
+# script's idempotence stamp skipped an entire rebuild on 2026-08-26 after
+# the generator changed, leaving the previous (empty) package in place.
+export FORCE_REBUILD="${FORCE_REBUILD:-1}"
 
 # THE MARBLE WORLD. The 3,500-credit textured mesh was downloaded on this
 # Studio (manifest: "Downloaded on the L4"); it is not in git. Find it, or say
