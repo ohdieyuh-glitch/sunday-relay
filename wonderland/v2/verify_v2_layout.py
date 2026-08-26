@@ -47,6 +47,11 @@ def main():
         if x0 + 100 < x < x1 - 100 and y0 + 100 < y < y1 - 100 and it["asset"] not in PLAZA_OK \
                 and it["band"] not in ("V2_Props", "V2_Skyline"):
             fails.append("%s (%s) stands ON the plaza at (%d, %d)" % (it["label"], it["asset"], x, y))
+    # every recipe's folder key must exist: a missing key is a KeyError at
+    # asset time and a silently absent mesh in the level ("ground" was one)
+    for key, spec in A.RECIPES.items():
+        if spec[1] not in C.FOLDERS:
+            fails.append("recipe %s names folder %r which is not in FOLDERS" % (key, spec[1]))
     for it in L.HOVER:
         if it["pos"][2] < 1200.0:
             fails.append("%s hovers too low (%d)" % (it["label"], it["pos"][2]))

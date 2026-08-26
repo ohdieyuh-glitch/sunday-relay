@@ -174,6 +174,9 @@ CORRIDOR = _band("V2_Garden", [
 # GARDEN LEFT: the giant mushroom and its grounds
 # ---------------------------------------------------------------------------
 GARDEN_L = _band("V2_Garden", [
+    # the garden floor first, so everything else stands on it (z -2 so slab
+    # and wall bases at 0 stay proud of the lawn)
+    A("garden_lawn", 3800, 2600, -2, mat="MI_V2_Lawn", label="Lawn_L"),
     # the LEFT GARDEN GATE: gold leaves between cream piers at the entrance to
     # the left garden, beyond the front wall (reprojected view: az -25, ~18 m)
     A("gate_pier", 1080, 1700, 0, s=1.0, mat="MI_V2_IvoryStone", label="GardenGate_PierL"),
@@ -225,6 +228,7 @@ GARDEN_L = _band("V2_Garden", [
 # GARDEN RIGHT: the clock tree, flowering shrubs, the heart on its terrace
 # ---------------------------------------------------------------------------
 GARDEN_R = _band("V2_Garden", [
+    A("garden_lawn", -3800, 2600, -2, mat="MI_V2_Lawn", label="Lawn_R"),
     # MEASURED ON THE REPROJECTED cam0 VIEW, not the flat panorama: the clock
     # sits at +45 deg, the trunk spans +42..+52, and the foliage fills the
     # top-right corner -- so the tree is 16 m tall, 28 m out, at +47 deg.

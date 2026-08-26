@@ -515,6 +515,19 @@ def balustrade(ctx):
     return m
 
 
+def garden_lawn(ctx):
+    """The garden floor: one 60 x 72 m slab per side, its top a 48 x 48 grid
+    displaced by low-frequency noise (a lawn's gentle rise and settle, +/-9 cm)
+    so raking sunlight and the sward normal map have something to shade. Sits
+    2 cm under the beds and walls; the moss ground slab stays beneath as
+    terrain. A flat plane here is the founder's "flat colour" in one actor."""
+    m = ctx.mesh("garden_lawn")
+    m.box(6000.0, 7200.0, 24.0, at=(0, 0, -12.0), steps=48)
+    m.perlin(9.0, 0.0025, seed=31)
+    m.box_uvs(200.0)
+    return m
+
+
 def terrace_platform(ctx):
     m = ctx.mesh("terrace_platform")
     m.box(1400.0, 700.0, 120.0, at=(0, 0, 60.0), chamfer=8.0)
@@ -851,6 +864,7 @@ RECIPES = {
     "stairs_broad": (stairs_broad, "stairs", True, True),
     "balustrade": (balustrade, "stairs", True, True),
     "terrace_platform": (terrace_platform, "stairs", True, True),
+    "garden_lawn": (garden_lawn, "terrain", True, True),
     "column_ornate": (column_ornate, "castle", True, True),
     "arch_stone": (arch_stone, "castle", True, True),
     "castle_tower": (castle_tower, "castle", True, True),
