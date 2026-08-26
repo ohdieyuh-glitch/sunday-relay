@@ -102,6 +102,13 @@ def vec(p):
 # ==========================================================================
 
 
+#: WLV2_PARTITIONED=0 builds a CLASSIC level (actors inside the .umap) -- the
+#: fallback if a partitioned level's external actor packages cannot be saved
+#: from the commandlet; the founder's World Partition requirement is served by
+#: the partitioned default.
+WP_PARTITIONED = os.environ.get("WLV2_PARTITIONED", "1") != "0"
+
+
 def new_map(actors, eal, lsu):
     """Create the V2 level. Returns (world, how)."""
     if eal.does_asset_exist(C.MAP_PATH):
@@ -124,7 +131,7 @@ def new_map(actors, eal, lsu):
         les = None
     if les is not None:
         try:
-            if les.new_level(C.MAP_PATH, True):
+            if les.new_level(C.MAP_PATH, WP_PARTITIONED):
                 how = "empty World Partition level (LevelEditorSubsystem.new_level, partitioned)"
         except TypeError:
             try:
@@ -1326,6 +1333,32 @@ def main():
             LOG("V2 SAVE: save_dirty_packages(map, content) -> %s" % ext_saved)
     except Exception as exc:
         LOG("V2 SAVE: save_dirty_packages %s" % exc)
+    # save_dirty_packages returned True and wrote NOTHING (0 actor packages for
+    # 448 actors, 2026-08-26 10:20Z): programmatically spawned actors' external
+    # packages are not flagged dirty. So: take every actor's package by handle
+    # and save the lot regardless of the dirty flag (VERIFIED 5.5 API:
+    # EditorLoadingAndSavingUtils.save_packages(packages, only_dirty)). Log
+    # where the packages live -- a /Temp or transient outer is a different bug.
+    try:
+        util = getattr(unreal, "EditorLoadingAndSavingUtils", None)
+        pkgs, names = [], []
+        for a in actors.get_all_level_actors():
+            try:
+                pk = a.get_outermost()
+            except Exception:
+                continue
+            if pk is None:
+                continue
+            nm = pk.get_name() if hasattr(pk, "get_name") else str(pk)
+            if nm not in names:
+                names.append(nm)
+                pkgs.append(pk)
+        LOG("V2 SAVE: %d distinct actor package(s); e.g. %s" % (len(pkgs), " | ".join(names[:3])))
+        if util is not None and pkgs:
+            ok = util.save_packages(pkgs, False)
+            LOG("V2 SAVE: save_packages(%d, only_dirty=False) -> %s" % (len(pkgs), ok))
+    except Exception as exc:
+        LOG("V2 SAVE: explicit package save failed (%s)" % exc)
     # TRIPWIRE: count the actor packages on disk. A world that saved no actors
     # must not cook -- that is a black frame forty minutes later.
     ext_count = None
