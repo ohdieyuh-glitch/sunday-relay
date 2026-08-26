@@ -761,7 +761,7 @@ def marble_cutouts(marble_actor, actors, eal, layers, gsctx):
     u = unreal
     try:
         smc = marble_actor.get_component_by_class(u.StaticMeshComponent)
-        src_mesh = smc.get_static_mesh()
+        src_mesh = smc.get_editor_property("static_mesh")   # no get_static_mesh() in 5.8 Python
         xf = marble_actor.get_actor_transform()
     except Exception as exc:
         LOG("V2 MARBLE CUTOUTS: cannot read the scaffold (%s)" % exc)

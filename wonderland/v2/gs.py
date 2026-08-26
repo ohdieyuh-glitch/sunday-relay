@@ -419,6 +419,9 @@ _LIBS = {
     "uvs": ("GeometryScript_UVs", "GeometryScript_MeshUVs"),
     "queries": ("GeometryScript_MeshQueries",),
     "assets": ("GeometryScript_AssetUtils",),
+    # VERIFIED 5.5 docs: create_new_static_mesh_asset_from_mesh(from_dynamic_mesh,
+    # asset_path_and_name, options, debug=None) -> (StaticMesh, outcome)
+    "newasset": ("GeometryScript_NewAssetUtils",),
     "collision": ("GeometryScript_Collision", "GeometryScript_CollisionFunctions"),
     "selection": ("GeometryScript_MeshSelection", "GeometryScript_MeshSelectionFunctions"),
 }
@@ -548,10 +551,51 @@ class Context(object):
         try:
             if eal.does_asset_exist(path):
                 eal.delete_asset(path)
-            sm = tools.create_asset(asset_name, folder, u.StaticMesh, u.StaticMeshFactoryNew())
-            if sm is None:
-                raise RuntimeError("create_asset returned None")
+            # THE FIRST LIVE RUN FAILED EVERY ASSET HERE: unreal.StaticMeshFactoryNew
+            # does not exist in 5.8's Python, so the empty asset was never made.
+            # Geometry Script's own asset creator makes the mesh AND the asset in
+            # one verified call; the duplicate-a-cube path is the factory-free
+            # way to get an empty StaticMesh for the copy/fallback routes.
+            sm = None
+            created_by = None
             if mb.backend == Backend.GS:
+                nopts = None
+                try:
+                    nopts = u.GeometryScriptCreateNewStaticMeshAssetOptions()
+                    for prop, val in (("enable_recompute_normals", False), ("enable_recompute_tangents", True),
+                                      ("enable_nanite", bool(nanite)), ("enable_collision", bool(collision))):
+                        try:
+                            nopts.set_editor_property(prop, val)
+                        except Exception:
+                            pass
+                    if collision:
+                        try:
+                            nopts.set_editor_property("collision_mode", u.CollisionTraceFlag.CTF_USE_COMPLEX_AS_SIMPLE)
+                        except Exception:
+                            pass
+                except Exception:
+                    nopts = None
+                if nopts is not None:
+                    res = self.gs("newasset", "create_new_static_mesh_asset_from_mesh", mb.dm, path, nopts)
+                    if isinstance(res, (tuple, list)):
+                        sm = res[0] if res else None
+                        outcome = res[1] if len(res) > 1 else None
+                        if outcome is not None and "SUCCESS" not in str(outcome).upper():
+                            sm = None
+                    elif res is not None:
+                        sm = res
+                    if sm is not None:
+                        created_by = "newasset"
+            if sm is None:
+                # factory-free empty asset: a copy of the engine cube, whose mesh
+                # is replaced entirely below
+                sm = eal.duplicate_asset("/Engine/BasicShapes/Cube", path)
+                if sm is None:
+                    raise RuntimeError("could not create %s (NewAssetUtils %s; duplicate_asset returned None)"
+                                       % (path, self.caps.errors.get("newasset.create_new_static_mesh_asset_from_mesh", "unavailable")))
+                created_by = "duplicate+copy"
+            mb.notes.append("asset:" + created_by)
+            if mb.backend == Backend.GS and created_by == "duplicate+copy":
                 opts = u.GeometryScriptCopyMeshToAssetOptions()
                 for prop, val in (("enable_recompute_normals", False), ("enable_recompute_tangents", True),
                                   ("enable_remove_degenerates", True), ("emit_transaction", False),
@@ -579,7 +623,7 @@ class Context(object):
                         self.gs("collision", "set_static_mesh_collision_from_mesh", mb.dm, sm, co, smo)
                     except Exception:
                         pass
-            else:
+            elif mb.backend != Backend.GS:
                 import ue_bridge as B
                 chain = mk.lod_chain(mb.mesh) if lods else [mb.mesh]
                 B._fill_description(u, sm, chain, collision)
