@@ -59,7 +59,17 @@ banner "2/8  UNREAL 5.8"
 # This never reaches the network. A missing image plus a missing archive is a
 # failure to report, not a problem to solve by downloading Unreal onto a
 # running GPU.
-wl_ensure_ue_image
+# The packaged game runs NATIVELY (run-stream.sh launches the binary on the
+# host); the engine image is only needed to build. After a Studio restart the
+# image is gone and restoring it here (69 GB tar-load) blocked a capture for
+# 25 minutes on 2026-08-26 -- and would have filled the disk. SKIP_IMAGE=1
+# with a staged package skips the check; SKIP_BUILD is implied by it.
+if [ "${SKIP_IMAGE:-0}" = "1" ] && [ -x "$WL_OUT/Linux/Wonderland/Binaries/Linux/Wonderland" ]; then
+  wl_say "SKIP_IMAGE=1 -- the packaged game runs natively; the engine image is not needed for this launch"
+  SKIP_BUILD=1
+else
+  wl_ensure_ue_image
+fi
 
 # ------------------------------------------------- 3. source, gates, assets
 banner "3/8  PREPARE (cpu)"
