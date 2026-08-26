@@ -346,10 +346,18 @@ def make_hlod_layers(world):
     return made
 
 
+#: WLV2_ALL_ALWAYS_LOADED=1: every actor is_spatially_loaded=False -- the World
+#: Partition streaming bypass (P0 TEST 5). The world then lives entirely in
+#: the always-loaded set the editor and the runtime load without cells.
+ALL_ALWAYS_LOADED = os.environ.get("WLV2_ALL_ALWAYS_LOADED", "0") == "1"
+
+
 def apply_perf(actor, band):
     pol = PERF_POLICY.get(band)
     if pol is None:
         return
+    if ALL_ALWAYS_LOADED:
+        pol = dict(pol, spatial=False)
     key = "%s:%s" % (band, "hlod-" + pol["hlod"] if pol["hlod"] and pol["hlod"] in PERF["layers"] else "no-hlod")
     PERF["counts"][key] = PERF["counts"].get(key, 0) + 1
     try:
