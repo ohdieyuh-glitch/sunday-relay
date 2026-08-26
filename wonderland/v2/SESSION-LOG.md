@@ -104,6 +104,19 @@ and VSM are the open SM6 item, Lumen software GI still runs.
   DRIVER` inside the build container (no Vulkan ICD reaches it even with
   NVIDIA_DRIVER_CAPABILITIES=all) → non-fatal, cook continues; OPEN (gauntlet G).
 
+## THE ROOT CAUSE OF EVERY BLACK FRAME (2026-08-26, proven)
+
+The SM5 package was black too. `-WLShowTags=UNREAL_PRODUCTION` through the
+new C++ switch logged `shown=0`: **no authored actor existed in the runtime
+world**. On disk: the map is 11 KB and `__ExternalActors__` holds 0 packages.
+A World Partition level stores each actor as an external package;
+`save_current_level` + `save_directory` never wrote them, so three cooks
+packaged an empty world and every capture (HighResShot and stream, SM6 and
+SM5, all view modes) was black. Fix: `EditorLoadingAndSavingUtils.
+save_dirty_packages(True, True)` + a tripwire that counts the actor packages
+and refuses to cook below 90% (`commit above`). SM6 is therefore NOT proven
+guilty — it was tested against an empty world; it returns to the retest list.
+
 ## Real Unreal renders this session
 
 **None.** The Studio `aquala-wonderland` was stopped for the whole session
