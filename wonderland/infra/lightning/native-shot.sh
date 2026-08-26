@@ -153,10 +153,14 @@ cp "$FOUND" "$DEST"
 # A FILE IS NOT A FRAME. The phantom screenshot path returns success and writes
 # an empty buffer, so the only way to know this is a picture of Wonderland is to
 # look at its structure.
-if ! python3 "$HERE/frame-check.py" "$DEST" >/dev/null 2>&1; then
-  wl_warn "frame-check could not validate $DEST — treating it as SUSPECT"
+# frame-check exits 0 whether the frame is good or bad -- the verdict is in its
+# output. Reading only the exit code "validated" two all-zero frames on
+# 2026-08-26 (HighResShot's phantom backbuffer), so the verdict is read.
+_fc="$(python3 "$HERE/frame-check.py" "$DEST" 2>/dev/null || true)"
+if [ -z "$_fc" ] || ! grep -q "^verdict=" <<<"$_fc" || grep -q "^verdict=FAIL" <<<"$_fc"; then
+  wl_warn "frame-check: $(grep -E '^(verdict|note|luma_mean)=' <<<"$_fc" | tr '\n' ' ')"
   mv "$DEST" "$DEST.suspect"
-  wl_die "the native frame has no real image structure. It is $DEST.suspect and must not be compared against anything."
+  wl_die "the native frame has no real image structure (HighResShot phantom?). It is $DEST.suspect and must not be compared against anything."
 fi
 
 wl_ok "native frame (no encoder in the path): $DEST"
