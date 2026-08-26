@@ -196,7 +196,20 @@ def import_textures(unreal, log):
     return texs
 
 
-def _master(unreal, log, name, kind):
+#: A TextureSampleParameter2D with NO texture fails to compile -- the whole
+#: master fails and every instance under it renders as the engine's default
+#: grey checker. That is exactly what the first visible V2 render showed.
+#: Every texture parameter therefore gets a default of the right sampler type:
+#: the V2 set when it is imported, engine textures otherwise.
+_TEX_DEFAULTS = {
+    "SAMPLERTYPE_COLOR": ("T_V2_plaster_a", "/Engine/EngineResources/WhiteSquareTexture"),
+    "SAMPLERTYPE_NORMAL": ("T_V2_plaster_n", "/Engine/EngineMaterials/DefaultNormal"),
+    "SAMPLERTYPE_LINEAR_GRAYSCALE": ("T_V2_plaster_r", "/Engine/EngineResources/WhiteSquareTexture"),
+    "SAMPLERTYPE_MASKS": ("T_V2_leafcard_m", "/Engine/EngineResources/WhiteSquareTexture"),
+}
+
+
+def _master(unreal, log, name, kind, texs=None):
     """Build one master. kind: surface | foliage | portal | sky."""
     tools = unreal.AssetToolsHelpers.get_asset_tools()
     mel = unreal.MaterialEditingLibrary
@@ -221,13 +234,32 @@ def _master(unreal, log, name, kind):
         e.set_editor_property("default_value", default)
         return e
 
-    def tex_param(pname, y, sampler):
+    def tex_param(pname, y, sampler, stem=None):
         e = mel.create_material_expression(m, unreal.MaterialExpressionTextureSampleParameter2D, -700, y)
         e.set_editor_property("parameter_name", pname)
         try:
             e.set_editor_property("sampler_type", getattr(unreal.MaterialSamplerType, sampler))
         except Exception:
             pass
+        # THE DEFAULT TEXTURE IS NOT OPTIONAL (see _TEX_DEFAULTS above).
+        want, fallback = _TEX_DEFAULTS.get(sampler, (None, "/Engine/EngineResources/WhiteSquareTexture"))
+        tex = None
+        for key in ((stem,) if stem else ()) + ((want,) if want else ()):
+            if texs and key in texs:
+                tex = texs[key]
+                break
+        if tex is None:
+            try:
+                tex = eal.load_asset(fallback)
+            except Exception:
+                tex = None
+        if tex is not None:
+            try:
+                e.set_editor_property("texture", tex)
+            except Exception as exc:
+                log("V2 MATERIAL %s: default texture for %s not set (%s)" % (name, pname, exc))
+        else:
+            log("V2 MATERIAL %s: NO default texture for %s -- this master will not compile" % (name, pname))
         return e
 
     if kind in ("surface", "foliage", "portal"):
@@ -364,7 +396,7 @@ def build_materials(unreal, log, texs):
     for name, kind in (("M_V2_Surface", "surface"), ("M_V2_Foliage", "foliage"),
                        ("M_V2_Portal", "portal"), ("M_V2_SkyDome", "sky")):
         try:
-            masters[kind] = _master(unreal, log, name, kind)
+            masters[kind] = _master(unreal, log, name, kind, texs)
         except Exception as exc:
             log("V2 MATERIAL master %s FAILED: %s" % (name, exc))
     out = {}
