@@ -44,6 +44,30 @@ pass changed, and what remains unverifiable until the Studio runs.
   shared volume to 0 bytes and rolling back. Killed it, pruned, and pulled
   `ghcr.io/epicgames/unreal-engine:dev-5.8` instead (peak disk far lower).
 
+## Pipeline correction (founder, 2026-08-26) and the first generator runs
+
+- **Directive:** Marble = concept architect / spatial reference / distant
+  accelerator; Unreal = the authoritative world; Band A (<50 m) and B (<200 m)
+  are authored Unreal content, Band C (>200 m) may use Marble geometry if the
+  render approves it. Applied at `6767a6b`: Marble quarantined under
+  `/Game/WonderlandV2/Scenic/Marble` with `MARBLE_REFERENCE_ONLY` /
+  `MARBLE_DISTANT_SCENIC`, every kit actor `UNREAL_PRODUCTION` + `BAND_A/B/C`,
+  cut-outs OFF, the distant-ring experiment ON, six `MarbleView_*` cameras,
+  `-WLShowTags/-WLHideTags` in the packaged game (C++), the world-bible
+  package `v2/reference/MarbleCanonical/`.
+- **First generator run (266d211 base):** empty WP level, 7 real Data Layers,
+  HLOD layers, 42 textures — but 0/78 assets: `unreal.StaticMeshFactoryNew`
+  does not exist in 5.8's Python. Fixed with the verified
+  `GeometryScript_NewAssetUtils.create_new_static_mesh_asset_from_mesh`
+  (`GS CAPABILITY … newasset OK`); second run: **82/82 assets, 441 actors,
+  455 flagstones in 12 instanced batches, 0 V1 actors, 222 s.** The panorama
+  was a PNG named `.jpg` (Unreal: "Failed to decode JPEG") — renamed.
+- **Marble multi-view research (4 agents, verified):** no Marble operation
+  re-renders an existing world; consistent extra views come free from the
+  splat (API GET, MIT client + gsplat on the L4) or from the HQ mesh in Unreal
+  (in the build). The API key is not present on either machine — the splat
+  download is founder-gated. See `reference/MarbleCanonical/MULTIVIEW-RESEARCH.md`.
+
 ## Real Unreal renders this session
 
 **None.** The Studio `aquala-wonderland` was stopped for the whole session
