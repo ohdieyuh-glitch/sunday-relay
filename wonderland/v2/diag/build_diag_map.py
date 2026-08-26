@@ -80,7 +80,7 @@ def main():
     # a directional light too, so a LIT object would also show if unlit somehow failed
     sun = actors.spawn_actor_from_class(unreal.DirectionalLight, unreal.Vector(0, 0, 1000), rot(-50, 0))
     sun.set_actor_label("DIAG_Sun")
-    saved = les.save_current_level()
+    saved = unreal.EditorLoadingAndSavingUtils.save_map(unreal.EditorLevelLibrary.get_editor_world(), MAP)
     unreal.EditorLoadingAndSavingUtils.save_dirty_packages(True, True)
     n = len(actors.get_all_level_actors())
     log("saved=%s actors=%d camera at (0,0,200) yaw 90; cube 20m wide at (0,600,200); sphere at (900,900,200)" % (saved, n))

@@ -86,14 +86,20 @@ def main():
     dist = d.length()
     dot = (d.x * fwd.x + d.y * fwd.y + d.z * fwd.z) / max(dist, 1e-6)
     log("CAMERA loc=%s rot=%s fwd=%s | CUBE loc=%s dist=%.0f dot(fwd)=%.3f" % (cl, cam.get_actor_rotation(), fwd, ol, dist, dot))
-    saved = les.save_current_level()
+    # a fresh level has no filename: save_current_level refuses ("Use
+    # EditorLoadingAndSavingUtils"); save_map(world, path) names and writes it
+    world = unreal.EditorLevelLibrary.get_editor_world()
+    saved = unreal.EditorLoadingAndSavingUtils.save_map(world, MAP)
     unreal.EditorLoadingAndSavingUtils.save_dirty_packages(True, True)
-    log("saved=%s (before the capture, so a crash after it cannot lose the map)" % saved)
+    log("saved=%s via save_map (before the capture, so a crash after it cannot lose the map)" % saved)
     # ---- the render-target readback (no viewport, no game) ----
     if not os.path.isdir(OUT_DIR):
         os.makedirs(OUT_DIR)
     W, H = 640, 360
-    rt = unreal.RenderingLibrary.create_render_target2d(world, W, H, unreal.TextureRenderTargetFormat.RTF_RGBA8, unreal.LinearColor(0, 0, 0, 1), False)
+    # world-context object: a live actor in the world (passing the World object
+    # itself failed to nativize after the save)
+    ctx = cam
+    rt = unreal.RenderingLibrary.create_render_target2d(ctx, W, H, unreal.TextureRenderTargetFormat.RTF_RGBA8, unreal.LinearColor(0, 0, 0, 1), False)
     cap = actors.spawn_actor_from_class(unreal.SceneCapture2D, cl, cam.get_actor_rotation())
     comp = cap.get_editor_property("capture_component2d")
     comp.set_editor_property("texture_target", rt)
@@ -112,7 +118,7 @@ def main():
         log("capture_scene failed (%s)" % exc)
     name = "diag_editor_rt_%dx%d.png" % (W, H)
     try:
-        unreal.RenderingLibrary.export_render_target(world, rt, OUT_DIR, name)
+        unreal.RenderingLibrary.export_render_target(ctx, rt, OUT_DIR, name)
         p = os.path.join(OUT_DIR, name)
         log("EXPORTED %s (%s bytes)" % (p, os.path.getsize(p) if os.path.exists(p) else "MISSING"))
     except Exception as exc:
