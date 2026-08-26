@@ -32,4 +32,11 @@ if [ -s "${REFVIEW:-/nonexistent}" ]; then
   python3 "$HERE/diff_v2.py" "$OUT/$PASS.png" "$REFVIEW" "--json=$OUT/${PASS}_diff.json" | tee "$OUT/${PASS}_diff.txt"
 fi
 [ -n "$FPS_LINE" ] && echo "$FPS_LINE" | tee -a "$OUT/${PASS}_diff.txt"
+# the build's own account of itself, next to the picture: the manifest and
+# the generator's V2 lines (GS CAPABILITY, EMPTY MAP, MARBLE, HLOD, SUMMARY)
+scp -q "$HOST:$ROOT/run/wlv2-manifest.json" "$OUT/${PASS}_manifest.json" 2>/dev/null || true
+ssh "$HOST" "grep -hE 'GS CAPABILITY|V2 (EMPTY MAP|WORLD PARTITION|MARBLE|HLOD|TEXTURES|MATERIAL|ASSETS|ASSET .*FAILED|MESH BACKEND|PERFORMANCE|SUMMARY|CAMERA)' \
+  \$(ls -t $ROOT/packaged/logs/generate-hub-level.log $ROOT/run/v2-build.log 2>/dev/null | head -1) 2>/dev/null | tail -60" \
+  2>/dev/null | grep -v hostkeys > "$OUT/${PASS}_build-lines.txt" || true
+echo "build lines: $(wc -l < "$OUT/${PASS}_build-lines.txt") -> $OUT/${PASS}_build-lines.txt"
 echo "$OUT/${PASS}_vs_reference.png"
