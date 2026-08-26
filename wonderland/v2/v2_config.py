@@ -82,9 +82,12 @@ MARBLE_GLB = os.environ.get("WLV2_MARBLE_GLB", "")     # the 3,500-credit textur
 LOOK = {
     # THE IMAGE CONTROLS LIGHTING. Sun measured in the panorama at azimuth +79
     # (viewer's right-front) and elevation +58: a high, warm-white late-morning
-    # sun, not golden hour. Light TRAVELS from it: yaw -11 in the UE frame,
-    # pitch -55. Physical units, histogram auto-exposure, extended range.
-    "sunPitch": -55.0, "sunYaw": -11.0, "sunLux": 60000.0, "sunTemperatureK": 5600.0,
+    # sun, not golden hour. Light TRAVELS from it: yaw -11 in the UE frame
+    # (sun bearing +79 with screen-right = -X -> the light's forward is -11),
+    # pitch -58 = minus the measured elevation. (This carried -55 with a
+    # comment saying +58: a derived number that did not match its source.)
+    # Physical units, histogram auto-exposure, extended range.
+    "sunPitch": -58.0, "sunYaw": -11.0, "sunLux": 60000.0, "sunTemperatureK": 5600.0,
     "skyLightIntensity": 1.0, "exposureBias": 0.0,
     # a clear bright day with subtle haze -- pale blue-white, NOT lavender
     "fogDensity": 0.005, "fogFalloff": 0.18, "fogStartDistance": 4000.0,
