@@ -57,6 +57,7 @@ import type {
 import type {
   JuliusApprovalRecord, JuliusApprovalStore, JuliusLifecycleStore,
 } from './julius-lifecycle-runtime';
+import type { JuliusTimelineEntry, JuliusTimelineReader } from './julius-runtime-api';
 
 interface TaskRow extends JuliusTask {
   runId: string;
@@ -74,7 +75,8 @@ interface ResultRow {
 }
 
 export interface JuliusMemoryStore
-  extends JuliusRuntimeStore, JuliusSubagentStore, JuliusGauntletStore, JuliusApprovalStore, JuliusLifecycleStore {
+  extends JuliusRuntimeStore, JuliusSubagentStore, JuliusGauntletStore,
+  JuliusApprovalStore, JuliusLifecycleStore, JuliusTimelineReader {
   /* ---- seeding, for tests and offline runs ---- */
   seedRun(run: JuliusRunRow): void;
   seedTask(runId: string, task: JuliusTask): void;
@@ -109,6 +111,17 @@ export function createJuliusMemoryStore(): JuliusMemoryStore {
   const resultGenerations = new Set<string>();
   const eventLog: JuliusOperationalEvent[] = [];
   const eventIds = new Set<string>();
+  /**
+   * PER-STREAM SEQUENCES, ASSIGNED ON APPEND.
+   *
+   * The event LEDGER allocates a sequence — `JuliusEventPostgresRepository`
+   * does it with `stream_sequences` — while `JuliusOperationalEvent` itself
+   * carries none. That is the right split (a sequence is a fact about the
+   * ledger, not about the thing that happened) and it means a model that does
+   * not assign one cannot serve a cursor-based timeline at all.
+   */
+  const eventSequences = new Map<string, number>();
+  const sequenceOf = new Map<string, number>();
   const trajectoryLog: JuliusTrajectoryEvent[] = [];
   const trajectoryKeys = new Set<string>();
   const contexts: JuliusContextSnapshot[] = [];
@@ -331,8 +344,36 @@ export function createJuliusMemoryStore(): JuliusMemoryStore {
     async appendEvent(event) {
       if (eventIds.has(event.eventId)) return false;
       eventIds.add(event.eventId);
+      const next = (eventSequences.get(event.runId) ?? 0) + 1;
+      eventSequences.set(event.runId, next);
+      sequenceOf.set(event.eventId, next);
       eventLog.push({ ...event });
       return true;
+    },
+
+    /**
+     * The safe timeline, from the ledger, scoped by BOTH run and project.
+     *
+     * Only `facts` crosses — never a payload, a prompt or a provider response,
+     * because there is no field on the event that could hold one.
+     */
+    async timeline(input) {
+      const run = runs.get(input.runId);
+      if (run === undefined || run.projectId !== input.projectId) return { entries: [], hasMore: false };
+      const matching = eventLog
+        .filter((event) => event.runId === input.runId && (sequenceOf.get(event.eventId) ?? 0) > input.sinceSequence)
+        .sort((a, b) => (sequenceOf.get(a.eventId) ?? 0) - (sequenceOf.get(b.eventId) ?? 0));
+      const page = matching.slice(0, input.limit);
+      const entries: JuliusTimelineEntry[] = page.map((event) => ({
+        eventId: event.eventId,
+        sequence: sequenceOf.get(event.eventId) ?? 0,
+        type: event.type,
+        taskId: event.taskId,
+        workerId: event.workerId,
+        occurredAt: event.occurredAt,
+        facts: event.facts,
+      }));
+      return { entries, hasMore: matching.length > page.length };
     },
 
     async appendTrajectory(event) {

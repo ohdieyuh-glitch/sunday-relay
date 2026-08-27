@@ -10,11 +10,12 @@ import { JuliusReadPostgresRepository } from './julius-read-postgres';
 import { JuliusSubagentPostgresRepository } from './julius-subagent-postgres';
 import { JuliusGauntletPostgresRepository } from './julius-gauntlet-postgres';
 import { JuliusLifecyclePostgresRepository } from './julius-lifecycle-postgres';
+import { JuliusTimelinePostgresRepository } from './julius-timeline-postgres';
 import { createJuliusMemoryStore } from '../mission/julius';
 import type {
   JuliusClaimedTask, JuliusContextWriter, JuliusEventWriter, JuliusResultReceiptRow,
   JuliusResultWriter, JuliusRunRow, JuliusRunWriter, JuliusRuntimeReader,
-  JuliusApprovalStore, JuliusGauntletStore, JuliusLifecycleStore,
+  JuliusApprovalStore, JuliusGauntletStore, JuliusLifecycleStore, JuliusTimelineReader,
   JuliusRuntimeStore, JuliusSubagentStore, JuliusTrajectoryWriter,
 } from '../mission/julius';
 
@@ -75,6 +76,9 @@ const gauntlets: JuliusGauntletStore = new JuliusGauntletPostgresRepository(pool
 
 /** One repository satisfies both lifecycle ports: approvals and run lifecycle. */
 const lifecycle: JuliusApprovalStore & JuliusLifecycleStore = new JuliusLifecyclePostgresRepository(pool);
+
+/** The timeline reader satisfies the API's read port directly. */
+const timeline: JuliusTimelineReader = new JuliusTimelinePostgresRepository(pool);
 
 /**
  * THE TWO LEDGERS NEED A ONE-LINE ADAPTER, AND THAT IS THE POINT.
@@ -146,7 +150,7 @@ describe('the Julius runtime ports and the PostgreSQL repositories agree', () =>
     const required = Object.keys(memory).filter((key) =>
       !['seedRun', 'seedTask', 'seedCriteria', 'seedFinding', 'seedBrain',
         'taskRow', 'events', 'trajectory', 'contexts', 'results', 'restart',
-        'lifecycleOf'].includes(key));
+        'lifecycleOf', 'timeline'].includes(key));
     expect(required.length).toBeGreaterThan(15);
     for (const method of required) {
       expect(typeof (composed as unknown as Record<string, unknown>)[method], method).toBe('function');
@@ -157,10 +161,14 @@ describe('the Julius runtime ports and the PostgreSQL repositories agree', () =>
     // A drift-detector with a number in it: if a future repository stops
     // satisfying its port directly, this count changes and the reason has to be
     // written down rather than absorbed.
-    const direct = [runWriter, resultWriter, contextWriter, reader, subagents, gauntlets, lifecycle];
-    expect(direct).toHaveLength(7);
+    const direct = [runWriter, resultWriter, contextWriter, reader, subagents, gauntlets, lifecycle, timeline];
+    expect(direct).toHaveLength(8);
     expect(typeof eventWriter.appendEvent).toBe('function');
     expect(typeof trajectoryWriter.appendTrajectory).toBe('function');
+  });
+
+  it('satisfies the timeline reader with no adapter', () => {
+    expect(typeof timeline.timeline).toBe('function');
   });
 
   it('satisfies the approval and lifecycle stores with no adapter', () => {
