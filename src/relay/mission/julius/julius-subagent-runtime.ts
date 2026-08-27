@@ -42,6 +42,9 @@ import { evaluateJuliusPolicy, type JuliusCardPolicy } from './julius-policy';
 import type { JuliusTask, JuliusWorkerRole } from './julius-runtime';
 import type { JuliusBudgetPort, JuliusClock, JuliusEventWriter, JuliusIdFactory, JuliusRunRow } from './julius-runtime-ports';
 import { validateJuliusEvent, type JuliusOperationalEventType } from './julius-events';
+import { JULIUS_RUNTIME_VERSION } from './julius-runtime';
+import { validateTrajectoryEvent } from './julius-trajectory';
+import type { JuliusTrajectoryWriter } from './julius-runtime-ports';
 
 /* --------------------------------------------------------------- records */
 
@@ -127,6 +130,31 @@ export interface JuliusSubagentDependencies {
    * events silently went nowhere.
    */
   readonly events?: JuliusEventWriter;
+  /** Optional for the same reason `events` is: absent means no facts, visibly. */
+  readonly trajectory?: JuliusTrajectoryWriter;
+}
+
+/** One SUBAGENT trajectory fact, when a trajectory sink is attached. */
+async function trace(
+  deps: Pick<JuliusSubagentDependencies, 'trajectory' | 'clock' | 'ids'>,
+  run: JuliusRunRow,
+  input: { requestId: string; taskId: string | null; outcome: string; usdMicros: number | null; facts: Record<string, string | number | boolean | null> },
+): Promise<void> {
+  if (deps.trajectory === undefined) return;
+  const event = {
+    trajectoryEventId: deps.ids.next('trajectory:SUBAGENT'),
+    runId: run.runId, projectId: run.projectId, kind: 'SUBAGENT' as const,
+    taskId: input.taskId, workerId: null, providerId: null, contextId: null,
+    runtimeVersion: JULIUS_RUNTIME_VERSION, policyVersion: run.cardRevision,
+    cardRevision: run.cardRevision, missionContractRevision: run.missionContractRevision,
+    projectBrainRevision: run.projectBrainRevision,
+    durationMs: null, usdMicros: input.usdMicros, inputTokens: null, outputTokens: null,
+    outcome: input.outcome, safeFacts: input.facts,
+    idempotencyKey: `subagent:${input.requestId}:${input.outcome}`,
+    occurredAt: deps.clock.now(),
+  };
+  validateTrajectoryEvent(event);
+  await deps.trajectory.appendTrajectory(event);
 }
 
 /** Emit one sub-agent event, when a ledger is attached. */
@@ -253,6 +281,11 @@ export async function spawnJuliusSubagent(
   await emit(deps, input.run, 'subagent.spawned', {
     requestId: input.requestId, taskId: childTask.taskId, parentTaskId: record.parentTaskId,
     depth: record.depth, capability: record.capability, permissions: record.permissions.length,
+  });
+  await trace(deps, input.run, {
+    requestId: input.requestId, taskId: childTask.taskId, outcome: 'AUTHORIZED',
+    usdMicros: input.usdMicros,
+    facts: { depth: record.depth, capability: record.capability, permissions: record.permissions.length },
   });
   return { authorized: true, duplicate: stored.duplicate, record, childTask };
 }

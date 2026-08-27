@@ -36,6 +36,9 @@ import { evaluateJuliusPolicy, type JuliusCardPolicy } from './julius-policy';
 import type { JuliusTask } from './julius-runtime';
 import type { JuliusClock, JuliusEventWriter, JuliusIdFactory, JuliusRunRow } from './julius-runtime-ports';
 import { validateJuliusEvent, type JuliusOperationalEventType } from './julius-events';
+import { JULIUS_RUNTIME_VERSION } from './julius-runtime';
+import { validateTrajectoryEvent } from './julius-trajectory';
+import type { JuliusTrajectoryWriter } from './julius-runtime-ports';
 
 /* -------------------------------------------------------------- records */
 
@@ -94,6 +97,38 @@ export interface JuliusGauntletDependencies {
   /** Optional, and its absence is visible: no ledger, no events. */
   readonly events?: JuliusEventWriter;
   readonly ids?: JuliusIdFactory;
+  /** Optional for the same reason `events` is: absent means no facts, visibly. */
+  readonly trajectory?: JuliusTrajectoryWriter;
+}
+
+/**
+ * One GAUNTLET_ROUND trajectory fact.
+ *
+ * The eval summary counts gauntlet rounds and successful gauntlets from these,
+ * so a round that settles without one is a round no eval can see. The duration
+ * and spend are the ROUND'S MEASURED totals, not estimates.
+ */
+async function trace(
+  deps: JuliusGauntletDependencies,
+  run: { runId: string; projectId: string; cardRevision: string; missionContractRevision: number; projectBrainRevision: number },
+  input: { gauntletId: string; round: number; phase: GauntletPhase; outcome: string; durationMs: number; usdMicros: number },
+): Promise<void> {
+  if (deps.trajectory === undefined || deps.ids === undefined) return;
+  const event = {
+    trajectoryEventId: deps.ids.next('trajectory:GAUNTLET_ROUND'),
+    runId: run.runId, projectId: run.projectId, kind: 'GAUNTLET_ROUND' as const,
+    taskId: null, workerId: null, providerId: null, contextId: null,
+    runtimeVersion: JULIUS_RUNTIME_VERSION, policyVersion: run.cardRevision,
+    cardRevision: run.cardRevision, missionContractRevision: run.missionContractRevision,
+    projectBrainRevision: run.projectBrainRevision,
+    durationMs: input.durationMs, usdMicros: input.usdMicros, inputTokens: null, outputTokens: null,
+    outcome: input.outcome,
+    safeFacts: { gauntletId: input.gauntletId, round: input.round, phase: input.phase },
+    idempotencyKey: `gauntlet:${input.gauntletId}:${input.round}:${input.phase}`,
+    occurredAt: deps.clock.now(),
+  };
+  validateTrajectoryEvent(event);
+  await deps.trajectory.appendTrajectory(event);
 }
 
 type GauntletEventType = Extract<JuliusOperationalEventType,
@@ -358,6 +393,13 @@ export async function advanceJuliusGauntletRound(
     };
   }
 
+  await trace(deps, input.run, {
+    gauntletId: next.gauntletId, round: current.round, phase: input.phase,
+    // CLEARED is what the eval counts a successful gauntlet by, so it is the
+    // gauntlet's state rather than the phase's outcome that is recorded.
+    outcome: next.state === 'CLEARED' ? 'CLEARED' : next.state,
+    durationMs: roundDurationMs, usdMicros: roundUsdMicros,
+  });
   await emit(deps, input.run, 'gauntlet.round.completed', {
     gauntletId: next.gauntletId, round: current.round, phase: input.phase,
     outcome: input.outcome, state: next.state,

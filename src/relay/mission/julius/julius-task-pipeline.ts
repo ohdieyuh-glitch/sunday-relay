@@ -277,6 +277,18 @@ export async function runClaimedTask(
 
   let contextId: string | null = null;
   if (worker !== null) {
+    // WORKER_SELECTED and PROVIDER_SELECTED were declared trajectory kinds
+    // that nothing emitted, so an eval could not tell WHICH worker or provider
+    // a run had used — the two facts routing effectiveness is measured from.
+    await ledger.trajectory('WORKER_SELECTED', {
+      taskId: task.taskId, workerId: worker.workerId,
+      policyRevision: request.policy.revision, outcome: 'SELECTED',
+      facts: { role: worker.role, adapterId: worker.adapterId },
+    });
+    await ledger.trajectory('PROVIDER_SELECTED', {
+      taskId: task.taskId, workerId: worker.workerId, providerId: worker.providerId,
+      policyRevision: request.policy.revision, outcome: 'SELECTED',
+    });
     const [evidence, findings, criteria, brain] = await Promise.all([
       deps.store.evidenceForRun(run.runId, run.projectId),
       deps.store.findingsForRun(run.runId, run.projectId),

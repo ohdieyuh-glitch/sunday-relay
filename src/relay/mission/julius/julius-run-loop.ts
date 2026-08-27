@@ -38,6 +38,8 @@ import { runClaimedTask, type JuliusPipelineDependencies, type JuliusTaskOutcome
 import { continuationConcurrency } from './julius-continuation';
 import type { JuliusClaimedTask, JuliusRecoveryDriver, JuliusRunRow } from './julius-runtime-ports';
 import { validateJuliusEvent } from './julius-events';
+import { JULIUS_RUNTIME_VERSION } from './julius-runtime';
+import { validateTrajectoryEvent, type JuliusTrajectoryEvent, type JuliusTrajectoryKind } from './julius-trajectory';
 
 /* ---------------------------------------------------------- policy source */
 
@@ -260,6 +262,44 @@ export class JuliusRunLoop {
   }
 
   /**
+   * One trajectory fact about a run, with the versions every eval groups by.
+   *
+   * `#`-private: it is not part of the loop's surface, and a `private` helper
+   * would still be callable from JavaScript.
+   */
+  async #trajectory(
+    run: JuliusRunRow,
+    kind: JuliusTrajectoryKind,
+    input: {
+      taskId?: string | null; outcome?: string | null; durationMs?: number | null;
+      usdMicros?: number | null; facts?: Record<string, string | number | boolean | null>;
+    },
+  ): Promise<void> {
+    const event: JuliusTrajectoryEvent = {
+      trajectoryEventId: this.deps.ids.next(`trajectory:${kind}`),
+      runId: run.runId, projectId: run.projectId, kind,
+      taskId: input.taskId ?? null, workerId: null, providerId: null, contextId: null,
+      runtimeVersion: JULIUS_RUNTIME_VERSION,
+      // The run's own C.A.R.D. revision doubles as the policy version here:
+      // nothing stores a separate policy version, and inventing one would put
+      // a value in every eval that means nothing.
+      policyVersion: run.cardRevision,
+      cardRevision: run.cardRevision,
+      missionContractRevision: run.missionContractRevision,
+      projectBrainRevision: run.projectBrainRevision,
+      // UNKNOWN IS NULL. A duration or cost this loop did not observe is not
+      // zero, and writing zero would make an eval average a lie.
+      durationMs: input.durationMs ?? null, usdMicros: input.usdMicros ?? null,
+      inputTokens: null, outputTokens: null,
+      outcome: input.outcome ?? null, safeFacts: input.facts ?? {},
+      idempotencyKey: `${run.runId}:${kind}:${run.version}`,
+      occurredAt: this.deps.clock.now(),
+    };
+    validateTrajectoryEvent(event);
+    await this.deps.store.appendTrajectory(event);
+  }
+
+  /**
    * ONE BOUNDED RECOVERY SWEEP.
    *
    * `recoverExpired` was written in #173 and never called. The runtime works
@@ -302,6 +342,10 @@ export class JuliusRunLoop {
       };
       validateJuliusEvent(event);
       await this.deps.store.appendEvent(event);
+      await this.#trajectory(run, 'RECOVERY', {
+        taskId: action.taskId, outcome: action.action,
+        facts: { reasonCode: action.reasonCode },
+      });
     }
     return { actions: actions.length, requeued, abandoned };
   }
@@ -324,6 +368,17 @@ export class JuliusRunLoop {
       this.deps.store.decisionsForRun(runId, projectId),
     ]);
     const target = targetRunState(tasks, decisions);
+    // The graph's SHAPE, recorded once per run version so an eval can relate
+    // cost and latency to how big the mission actually was. Idempotent by
+    // version, so re-advancing writes nothing new.
+    await this.#trajectory(run, 'TASK_TOPOLOGY', {
+      outcome: run.state,
+      facts: {
+        tasks: tasks.length,
+        edges: tasks.reduce((total, item) => total + item.dependencyIds.length, 0),
+        roles: new Set(tasks.map((item) => item.role)).size,
+      },
+    });
     const path = planRunStatePath(run.state, target.state);
     if (path.length === 0) {
       return { runId, from: run.state, to: run.state, changed: false, reasonCode: target.reasonCode };
@@ -351,6 +406,22 @@ export class JuliusRunLoop {
           changed: current.state !== run.state, reasonCode: 'CONCURRENT_ADVANCE',
         };
       }
+    }
+    /**
+     * THE COMPLETION FACT THE EVALS ARE COUNTED FROM.
+     *
+     * `JuliusTrajectoryPostgresRepository.summarize` counts a verified
+     * completion by looking for a COMPLETION trajectory event whose outcome is
+     * VERIFIED — and nothing emitted one, so `verifiedCompletionRate` was
+     * structurally zero for every project and every runtime version. An eval
+     * that always reports zero is worse than no eval, because it looks like a
+     * measurement.
+     */
+    if (current.state === 'COMPLETED' || current.state === 'FAILED' || current.state === 'CANCELLED') {
+      await this.#trajectory(run, 'COMPLETION', {
+        outcome: current.state === 'COMPLETED' ? 'VERIFIED' : current.state,
+        facts: { reasonCode: target.reasonCode, tasks: tasks.length, decisions: decisions.length },
+      });
     }
     if (current.state === 'COMPLETED' || current.state === 'FAILED') {
       const event = {
