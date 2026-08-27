@@ -64,6 +64,7 @@
     "react-dom": "^18.3.1",
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
+    "three": "^0.185.1",
     "zustand": "^4.5.5"
   },
   "devDependencies": {
@@ -72,6 +73,7 @@
     "@types/pg": "^8.23.1",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
+    "@types/three": "^0.185.4",
     "@vitejs/plugin-react": "^5.2.0",
     "esbuild": "^0.25.12",
     "jsdom": "^29.1.1",

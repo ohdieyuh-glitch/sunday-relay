@@ -1,0 +1,270 @@
+/* ==========================================================================
+   RELAY EXPERIENCE — Compound Agent creation, in the landing's language.
+
+   This sheet exists because the old Entry Home is no longer the destination of
+   ENTER RELAY. Everything here continues the landing: near-black canvas, ivory
+   type, gold used once, technical telemetry, a 3D centrepiece and controls
+   pushed to the viewport edges.
+
+   The rule that governs it: NOTHING MAY COVER THE DOG. Configuration lives in a
+   left rail and a right telemetry column; the centre of the viewport belongs to
+   the character. A modal, a centred form card or a full-width panel would each
+   break the premise that the user is standing in front of their agent.
+   ========================================================================== */
+
+.rx {
+  --rx-void: #05060a;
+  --rx-cream: #f4efe3;
+  --rx-dim: #8f897b;
+  --rx-faint: #5c5850;
+  --rx-gold: #d8a83c;
+  --rx-hairline: rgba(244, 239, 227, 0.14);
+  --rx-glass: rgba(244, 239, 227, 0.05);
+  --rx-pad: 24px;
+  --rx-ease: ease;
+
+  position: fixed;
+  inset: 0;
+  /* TRANSPARENT. The void is painted by the world's shared canvas, which now
+     sits BEHIND this layer rather than inside it. An opaque background here
+     covers the entire scene — the Relay Dog included — and the screen renders
+     as chrome on black with the character nowhere to be seen. */
+  background: transparent;
+  color: var(--rx-cream);
+  font-family: var(--font-brand, system-ui, sans-serif);
+  overflow: hidden;
+}
+
+.rx-label {
+  font-family: var(--font, ui-monospace, monospace);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--rx-dim);
+  line-height: 1.4;
+}
+
+.rx-brand {
+  position: absolute;
+  top: var(--rx-pad);
+  left: var(--rx-pad);
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.rx-mark {
+  width: 15px; height: 15px;
+  border: 1.5px solid var(--rx-cream);
+  border-radius: 50%;
+  position: relative;
+}
+.rx-mark::after {
+  content: '';
+  position: absolute; left: 2px; right: 2px; top: 8px; height: 1.5px;
+  background: var(--rx-cream); border-radius: 2px;
+}
+.rx-wordmark {
+  font-family: var(--font, ui-monospace, monospace);
+  font-size: 12px; letter-spacing: 0.22em; font-weight: 500;
+}
+.rx-nogl { position: absolute; top: var(--rx-pad); right: var(--rx-pad); z-index: 3; }
+
+/* ---- the configuration rail --------------------------------------------- */
+.rx-panel {
+  position: absolute;
+  left: var(--rx-pad);
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 3;
+  width: min(340px, 34vw);
+  max-height: 76vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  /* No panel background. The rail is type on the void — a filled card here
+     would read as the old dashboard's panel soup. */
+}
+.rx-step { color: var(--rx-faint); }
+.rx-title {
+  margin: 2px 0 0;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-weight: 400;
+  font-size: clamp(1.6rem, 2.6vw, 2.3rem);
+  line-height: 1;
+  letter-spacing: -0.015em;
+}
+.rx-hint { margin: 0; font-size: 13px; line-height: 1.5; color: var(--rx-dim); }
+
+.rx-field { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
+.rx-input {
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--rx-hairline);
+  color: var(--rx-cream);
+  font-family: var(--font, ui-monospace, monospace);
+  font-size: 20px;
+  letter-spacing: 0.1em;
+  padding: 6px 2px;
+  outline: none;
+}
+.rx-input:focus { border-bottom-color: var(--rx-gold); }
+.rx-input::placeholder { color: var(--rx-faint); }
+
+/* ---- slot options ------------------------------------------------------- */
+.rx-options { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.rx-option {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-areas: 'name chip' 'provider chip';
+  gap: 0 10px;
+  align-items: center;
+  text-align: left;
+  padding: 8px 12px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--rx-cream);
+  cursor: pointer;
+  transition: background 200ms var(--rx-ease), border-color 200ms var(--rx-ease);
+}
+.rx-option:hover:not(:disabled) { background: var(--rx-glass); }
+.rx-option[data-selected='true'] { border-color: var(--rx-gold); background: rgba(216, 168, 60, 0.09); }
+.rx-option:disabled { opacity: 0.34; cursor: not-allowed; }
+.rx-option-name { grid-area: name; font-size: 14px; }
+.rx-option-provider {
+  grid-area: provider;
+  font-family: var(--font, ui-monospace, monospace);
+  font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--rx-faint);
+}
+.rx-chip {
+  grid-area: chip;
+  font-family: var(--font, ui-monospace, monospace);
+  font-size: 8px; letter-spacing: 0.1em; color: var(--rx-dim);
+  border: 1px solid var(--rx-hairline); border-radius: 500px; padding: 3px 8px; white-space: nowrap;
+}
+
+/* ---- segmented controls ------------------------------------------------- */
+.rx-group { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
+.rx-seg { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 4px; }
+.rx-seg-btn {
+  font-family: var(--font, ui-monospace, monospace);
+  font-size: 9px; letter-spacing: 0.1em;
+  padding: 6px 10px; border-radius: 500px;
+  border: 1px solid var(--rx-hairline); background: transparent; color: var(--rx-dim);
+  cursor: pointer; transition: all 200ms var(--rx-ease);
+}
+.rx-seg-btn[data-selected='true'] { border-color: var(--rx-gold); color: var(--rx-cream); background: rgba(216, 168, 60, 0.1); }
+
+/* ---- review ------------------------------------------------------------- */
+.rx-review {
+  margin: 6px 0 0; display: grid; grid-template-columns: auto 1fr; gap: 4px 14px;
+  font-family: var(--font, ui-monospace, monospace); font-size: 10px; letter-spacing: 0.08em;
+}
+.rx-review dt { color: var(--rx-faint); text-transform: uppercase; }
+.rx-review dd { margin: 0; color: var(--rx-cream); text-transform: uppercase; }
+
+/* ---- actions ------------------------------------------------------------ */
+.rx-cta {
+  align-self: flex-start;
+  margin-top: 12px;
+  padding: 10px 26px;
+  border-radius: 500px;
+  border: 1px solid var(--rx-gold);
+  background: rgba(20, 20, 26, 0.55);
+  color: var(--rx-cream);
+  font-family: var(--font, ui-monospace, monospace);
+  font-size: 11px; letter-spacing: 0.18em;
+  cursor: pointer;
+  transition: background 240ms var(--rx-ease), transform 240ms var(--rx-ease), opacity 240ms var(--rx-ease);
+}
+.rx-cta:hover:not(:disabled) { background: rgba(216, 168, 60, 0.14); transform: translateY(-1px); }
+.rx-cta:disabled { opacity: 0.32; cursor: not-allowed; border-color: var(--rx-hairline); }
+.rx-ghost {
+  align-self: flex-start; margin-top: 6px; padding: 6px 0;
+  background: none; border: 0; border-bottom: 1px solid var(--rx-hairline);
+  color: var(--rx-dim); font-family: var(--font, ui-monospace, monospace);
+  font-size: 10px; letter-spacing: 0.14em; cursor: pointer;
+}
+
+/* ---- spatial system nodes ----------------------------------------------- */
+.rx-nodes { position: absolute; inset: 0; z-index: 2; pointer-events: none; }
+.rx-node {
+  position: absolute; top: 0; left: 0;
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 6px 11px;
+  border: 1px solid var(--rx-hairline);
+  border-radius: 500px;
+  background: rgba(20, 20, 26, 0.5);
+  white-space: nowrap;
+  opacity: 0.5;
+  transition: opacity 320ms var(--rx-ease), border-color 320ms var(--rx-ease);
+}
+.rx-node[data-filled='true'] { opacity: 1; border-color: rgba(216, 168, 60, 0.4); }
+.rx-node-label {
+  font-family: var(--font, ui-monospace, monospace);
+  font-size: 8px; letter-spacing: 0.14em; color: var(--rx-faint);
+}
+.rx-node-value {
+  font-family: var(--font, ui-monospace, monospace);
+  font-size: 10px; letter-spacing: 0.1em; color: var(--rx-cream); text-transform: uppercase;
+}
+
+/* ---- telemetry + step index --------------------------------------------- */
+.rx-telemetry {
+  position: absolute; right: var(--rx-pad); top: 50%; transform: translateY(-50%);
+  z-index: 3; display: grid; grid-template-columns: auto; gap: 2px; text-align: right;
+}
+.rx-telemetry strong {
+  font-weight: 400; color: var(--rx-cream); font-size: 11px; letter-spacing: 0.1em; margin-bottom: 8px;
+}
+.rx-steps {
+  position: absolute; left: 50%; bottom: var(--rx-pad); transform: translateX(-50%);
+  z-index: 3; display: flex; gap: 8px;
+}
+.rx-tick {
+  background: none; border: 0; padding: 2px 3px; cursor: pointer;
+  font-family: var(--font, ui-monospace, monospace); font-size: 10px; letter-spacing: 0.1em;
+  color: var(--rx-faint); transition: color 240ms var(--rx-ease);
+}
+.rx-tick[data-active='true'] { color: var(--rx-cream); }
+
+/* ---- mobile: reflow AROUND the Dog, never over it ------------------------
+   The rail becomes a bottom sheet and the telemetry moves to the top, leaving
+   the middle band of the viewport clear so the character stays visible while
+   configuration happens. Covering the Dog with a form is the one thing the
+   founder ruled out by name. */
+@media (max-width: 860px) {
+  .rx { --rx-pad: 16px; }
+  .rx-panel {
+    left: var(--rx-pad); right: var(--rx-pad);
+    top: auto; bottom: calc(var(--rx-pad) + 26px);
+    transform: none;
+    width: auto;
+    max-height: 46vh;
+    background: linear-gradient(to top, var(--rx-void) 62%, rgba(5, 6, 10, 0.82) 88%, rgba(5, 6, 10, 0));
+    padding-top: 26px;
+  }
+  .rx-title { font-size: clamp(1.35rem, 6vw, 1.9rem); }
+  .rx-telemetry {
+    top: calc(var(--rx-pad) + 26px); right: var(--rx-pad); transform: none;
+  }
+  .rx-steps { bottom: var(--rx-pad); }
+  .rx-node { padding: 4px 8px; }
+  .rx-node-value { font-size: 9px; }
+  .rx-options { max-height: 26vh; overflow-y: auto; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rx-option, .rx-seg-btn, .rx-cta, .rx-node, .rx-tick { transition: none; }
+  .rx-cta:hover:not(:disabled) { transform: none; }
+}
+
+/* Guarded exactly as the landing's glass is: without `backdrop-filter` the flat
+   plate above stands, rather than degrading to a bare tint over the Dog. */
+@supports (backdrop-filter: blur(1px)) {
+  .rx-cta { background: var(--rx-glass); backdrop-filter: blur(6px); }
+  .rx-node { background: var(--rx-glass); backdrop-filter: blur(7px); }
+}

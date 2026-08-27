@@ -1,0 +1,66 @@
+/* ==========================================================================
+   RELAY WORLD — the one persistent scene, and the passage through it.
+
+   Aquala and Relay are two stages of a single mounted experience, so this sheet
+   owns the things that must not belong to either: the canvas, the transition
+   veil, and the two chrome layers that cross-fade over it.
+   ========================================================================== */
+
+.rw {
+  position: relative;
+  background: #05060a;
+}
+
+/* ONE canvas, fixed for the whole journey. It is never unmounted, so it is
+   never re-created, so there is no context loss to hide. */
+.rw-canvas {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  display: block;
+  z-index: 0;
+  /* The artifact IS the control, so the cursor has to say so. The hit test runs
+     against real geometry each frame; this only reflects its answer. */
+  cursor: default;
+  touch-action: manipulation;
+}
+.rw[data-portal='hot'] .rw-canvas { cursor: pointer; }
+
+.rw-track {
+  position: relative;
+  width: 100%;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Chrome layers. Opacity only — the spatial motion belongs to the camera. */
+.rw-layer {
+  position: relative;
+  z-index: 2;
+}
+
+/* The passage's light. Aquala's baby-blue, radial from the portal, capped well
+   below opaque so the scene is continuously visible THROUGH it. A hard white
+   flash would be the cheap way to conceal a cut; there is no cut to conceal. */
+.rw-veil {
+  position: fixed;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 50% 46%,
+      rgba(223, 242, 255, 0.92) 0%,
+      rgba(159, 216, 245, 0.6) 26%,
+      rgba(70, 132, 178, 0.24) 52%,
+      rgba(5, 6, 10, 0) 78%);
+  will-change: opacity;
+}
+
+/* During the passage the chrome is inert AND unclickable, so a stray tap
+   cannot reach a control that is fading out from under the pointer. */
+.rw[data-stage='transition'] .rw-layer { pointer-events: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .rw-veil { transition: none; }
+}

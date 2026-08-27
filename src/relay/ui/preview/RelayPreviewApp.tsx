@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { MissionControl } from '../MissionControl';
 import { RelayEntryHome } from '../entry-home';
+import { RelayWorld } from '../relay-world';
 import {
   DEFAULT_CONNECTION_STATUSES,
   FIXTURE_GUIDE_MESSAGES,
@@ -122,6 +123,10 @@ import './relay-preview.css';
  */
 
 export type PreviewRoute =
+  /** The public landing experience — the site's front door, at the bare URL. */
+  | { screen: 'landing' }
+  /** The Relay experience: Compound Agent creation with the persistent 3D Dog. */
+  | { screen: 'experience' }
   | { screen: 'home' }
   | { screen: 'settings'; projectId: string }
   | { screen: 'console' }
@@ -134,7 +139,22 @@ export type PreviewRoute =
 export function parsePreviewHash(hash: string): PreviewRoute {
   const clean = hash.replace(/^#/, '');
   const parts = clean.split('/').filter(Boolean);
-  if (parts[0] !== 'relay') return { screen: 'home' };
+  // ANYTHING OUTSIDE `#/relay/*` IS THE LANDING, including the bare URL. The
+  // landing is the front door; `#/relay` remains the in-product Entry Home, so
+  // the C.A.R.D.-first flow is reached exactly as before and is not displaced.
+  if (parts[0] !== 'relay') return { screen: 'landing' };
+  // `#/relay` IS THE RELAY EXPERIENCE NOW.
+  //
+  // It used to be the Entry Home — the blue terminal shell with its tab bar,
+  // its project dashboard and its 2D WANDERING sprite. The founder superseded
+  // that as the post-ENTER-RELAY destination: entering Relay continues the same
+  // cinematic 3D language and begins Compound Agent creation.
+  //
+  // The old screen is not deleted — it still holds working product surfaces and
+  // its own tests — but it is OFF THE ONBOARDING PATH, reachable only at an
+  // explicit legacy route that nothing in the new flow links to.
+  if (parts.length === 1) return { screen: 'experience' };
+  if (parts[1] === 'home-legacy') return { screen: 'home' };
   if (parts[1] === 'console') return { screen: 'console' };
   // Back-compat: bare settings route resolves to the active project later.
   if (parts[1] === 'live-reach') return { screen: 'live-reach' };
@@ -1251,6 +1271,19 @@ export function RelayPreviewApp() {
     demoSimulation.exit();
     demoProjectIdRef.current = null;
   };
+
+  // The landing is a full-viewport experience with its own fixed canvas and
+  // its own chrome. It renders ALONE — wrapping it in the product shell would
+  // put a scrolling app frame around a page whose camera owns the viewport.
+  // ONE COMPONENT FOR BOTH ROUTES, and that is the mechanism rather than a
+  // tidiness choice: returning the same element type for the bare URL and for
+  // `#/relay` lets React reconcile it instead of remounting, so the canvas, the
+  // WebGL context, the Relay Dog and the camera all survive entering Relay.
+  // Returning two different components here is what made the transition a page
+  // navigation with a 3D costume on.
+  if (route.screen === 'landing' || route.screen === 'experience') {
+    return <RelayWorld initialStage={route.screen === 'experience' ? 'relay' : 'aquala'} />;
+  }
 
   return (
     <div className="rpv">

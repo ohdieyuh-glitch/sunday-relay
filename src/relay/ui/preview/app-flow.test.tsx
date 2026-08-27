@@ -16,7 +16,7 @@ import { createDefaultSettingsDraft } from '../project-settings/defaults';
 beforeEach(() => {
   window.localStorage.clear();
   getRelayAppStore().resetAll();
-  window.location.hash = '#/relay';
+  window.location.hash = '#/relay/home-legacy';
 });
 afterEach(cleanup);
 
@@ -24,7 +24,7 @@ const renderApp = () => render(createElement(RelayPreviewApp));
 
 describe('hash routing', () => {
   it('parses the product routes', () => {
-    expect(parsePreviewHash('#/relay')).toEqual({ screen: 'home' });
+    expect(parsePreviewHash('#/relay/home-legacy')).toEqual({ screen: 'home' });
     expect(parsePreviewHash('#/relay/project/rly-002/settings')).toEqual({
       screen: 'settings',
       projectId: 'rly-002',

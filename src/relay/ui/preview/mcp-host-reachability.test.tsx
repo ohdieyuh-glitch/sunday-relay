@@ -35,7 +35,7 @@ const it = (name: string, fn: () => void | Promise<void>) => baseIt(name, fn, 12
 beforeEach(() => {
   window.localStorage.clear();
   getRelayAppStore().resetAll();
-  window.location.hash = '#/relay';
+  window.location.hash = '#/relay/home-legacy';
 });
 afterEach(cleanup);
 

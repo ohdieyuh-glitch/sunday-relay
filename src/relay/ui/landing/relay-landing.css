@@ -1,0 +1,399 @@
+/* ==========================================================================
+   RELAY LANDING — the 3D landing experience.
+
+   SURFACE-SCOPED PALETTE. Relay's shared token sheet carries the product's
+   iridescent periwinkle brand channel, and this file does NOT touch it. The
+   landing is its own surface with its own `--rl3-*` palette, exactly as
+   `--reh-*` and `--rpw-*` are, which is what lets the landing carry aged gold
+   and Aquala baby-blue without redefining what those tokens mean anywhere else
+   in the product. No material or motion token is redeclared here.
+
+   COLOUR OWNERSHIP is the one rule that governs everything below, taken from
+   both references: Aquala's baby-blue and Relay's gold live in the RENDER.
+   Chrome is cream on near-black and nothing else. There is exactly one place
+   gold touches the DOM — the CTA's hairline — and it is doing the job the
+   render cannot.
+   ========================================================================== */
+
+.rl3 {
+  --rl3-void: #05060a;
+  --rl3-cream: #f4efe3;
+  --rl3-dim: #8f897b;
+  --rl3-faint: #5c5850;
+  --rl3-gold: #d8a83c;
+  --rl3-hairline: rgba(244, 239, 227, 0.14);
+  --rl3-glass: rgba(244, 239, 227, 0.045);
+
+  /* Reference B's 4px rhythm. Compactness is the aesthetic. */
+  --rl3-gap: 4px;
+  --rl3-pad: 24px;
+
+  /* Reference A's two motion tiers: chrome is quick, scene is gravitational. */
+  --rl3-chrome: 320ms;
+  --rl3-ease: ease;
+
+  position: relative;
+  background: var(--rl3-void);
+  color: var(--rl3-cream);
+  font-family: var(--font-brand, system-ui, sans-serif);
+  /* `clip`, never `hidden`. `overflow-x: hidden` forces the OTHER axis to
+     compute as `auto`, silently making this a scroll container — a mistake this
+     repository has already paid for three times, and one that would break the
+     fixed canvas outright. */
+  overflow-x: clip;
+}
+
+/* ---- shared micro-label, Reference B's telemetry register ---------------- */
+.rl3-label {
+  font-family: var(--font, ui-monospace, monospace);
+  font-size: 11px;
+  line-height: 1.25;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--rl3-dim);
+}
+
+/* ---- corner-anchored chrome (Reference B's z-pattern) -------------------- */
+.rl3-brand,
+.rl3-copy,
+.rl3-telemetry,
+.rl3-index,
+.rl3-nogl {
+  position: fixed;
+  z-index: 3;
+}
+
+.rl3-brand {
+  top: var(--rl3-pad);
+  left: var(--rl3-pad);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* A small ring-and-wave glyph echoing the Aquala mark, drawn in CSS. No <img>
+   and no CSS-fetched image — this frontend forbids both, and a fetched logo is
+   one more way a page can render broken. */
+.rl3-mark {
+  width: 15px;
+  height: 15px;
+  border: 1.5px solid var(--rl3-cream);
+  border-radius: 50%;
+  position: relative;
+}
+.rl3-mark::after {
+  content: '';
+  position: absolute;
+  left: 2px;
+  right: 2px;
+  top: 8px;
+  height: 1.5px;
+  background: var(--rl3-cream);
+  border-radius: 2px;
+}
+
+.rl3-wordmark {
+  font-family: var(--font, ui-monospace, monospace);
+  font-size: 12px;
+  letter-spacing: 0.22em;
+  font-weight: 500;
+}
+
+.rl3-brand-sub {
+  padding-left: 10px;
+  border-left: 1px solid var(--rl3-hairline);
+  font-size: 10px;
+}
+
+/* ---- the beat's copy ----------------------------------------------------- */
+.rl3-copy {
+  left: var(--rl3-pad);
+  bottom: calc(var(--rl3-pad) + 34px);
+  max-width: min(46ch, 52vw);
+  display: flex;
+  flex-direction: column;
+  gap: var(--rl3-gap);
+  transition: opacity var(--rl3-chrome) var(--rl3-ease);
+}
+
+.rl3-eyebrow {
+  color: var(--rl3-faint);
+  margin: 0 0 8px;
+}
+
+/* Editorial display type against technical mono chrome — Reference A's
+   deliberate counterpoint, translated rather than copied: Relay's own serif and
+   its own mono, not Times and nbarchitekt. Compressed leading is Reference B's
+   signature, relaxed here to 0.94 because a serif at 0.70 collides. */
+.rl3-headline {
+  margin: 0;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-weight: 400;
+  font-size: clamp(2rem, 5.4vw, 4.4rem);
+  line-height: 0.94;
+  letter-spacing: -0.015em;
+  color: var(--rl3-cream);
+  text-wrap: balance;
+}
+
+.rl3-body {
+  margin: 10px 0 0;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--rl3-dim);
+  max-width: 42ch;
+}
+
+/* The one pill. Reference A's rule: full pill or sharp ghost, never between. */
+.rl3-cta {
+  align-self: flex-start;
+  margin-top: 18px;
+  padding: 10px 26px;
+  border-radius: 500px;
+  border: 1px solid var(--rl3-gold);
+  color: var(--rl3-cream);
+  background: rgba(20, 20, 26, 0.55);
+  font-family: var(--font, ui-monospace, monospace);
+  font-size: 12px;
+  letter-spacing: 0.18em;
+  text-decoration: none;
+  transition:
+    background var(--rl3-chrome) var(--rl3-ease),
+    border-color var(--rl3-chrome) var(--rl3-ease),
+    transform var(--rl3-chrome) var(--rl3-ease);
+}
+.rl3-cta:hover,
+.rl3-cta:focus-visible {
+  background: rgba(216, 168, 60, 0.14);
+  border-color: var(--rl3-cream);
+  /* Optical feedback, not a bounce. One pixel is enough to feel physical. */
+  transform: translateY(-1px);
+}
+
+/* ---- floating system chips ---------------------------------------------- */
+.rl3-nodes {
+  position: fixed;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+}
+
+/* Glass supports the spatial hierarchy; it is not the component. These chips
+   are the ONLY glass surfaces on the page, which is what keeps them reading as
+   depth rather than as a card style. */
+.rl3-node {
+  position: absolute;
+  top: 0;
+  left: 0;
+  padding: 5px 11px;
+  border: 1px solid var(--rl3-hairline);
+  border-radius: 500px;
+  background: rgba(20, 20, 26, 0.5);
+  font-family: var(--font, ui-monospace, monospace);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--rl3-cream);
+  white-space: nowrap;
+  will-change: transform, opacity;
+  /* No box-shadow anywhere on this page. Both references are explicit that
+     depth comes from translucency and occlusion; the void cannot cast a
+     shadow, and a drop-shadow over a rendered scene reads as a sticker. */
+}
+
+/* ---- telemetry + section index ------------------------------------------ */
+.rl3-telemetry {
+  left: var(--rl3-pad);
+  bottom: var(--rl3-pad);
+  display: flex;
+  gap: 14px;
+  color: var(--rl3-faint);
+}
+
+.rl3-index {
+  right: var(--rl3-pad);
+  bottom: var(--rl3-pad);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  text-align: right;
+}
+.rl3-tick {
+  color: var(--rl3-faint);
+  transition: color var(--rl3-chrome) var(--rl3-ease);
+}
+.rl3-tick[data-active='true'] {
+  color: var(--rl3-cream);
+}
+
+.rl3-nogl {
+  top: var(--rl3-pad);
+  right: var(--rl3-pad);
+}
+
+/* Copy for assistive technology and for any client that never runs the loop.
+   Clipped, never `display: none` — a hidden landmark is an absent one. */
+.rl3-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* ---- mobile --------------------------------------------------------------
+   The composition changes; the 3D does not go away. Copy moves to the bottom
+   with the index bar above it, the telemetry strip drops its most redundant
+   fields, and the chips shrink. Hiding the render on a phone would leave the
+   page as eight headlines on black. */
+@media (max-width: 760px) {
+  .rl3 {
+    --rl3-pad: 16px;
+  }
+  .rl3-copy {
+    left: var(--rl3-pad);
+    right: var(--rl3-pad);
+    bottom: calc(var(--rl3-pad) + 28px);
+    max-width: none;
+  }
+  .rl3-headline {
+    font-size: clamp(1.75rem, 8.4vw, 2.6rem);
+    line-height: 1;
+  }
+  .rl3-body {
+    font-size: 13px;
+    max-width: none;
+  }
+  /* The index moves to the TOP on a phone. Both strips are anchored bottom on
+     the desktop z-pattern, and in portrait they land on the same line and
+     overprint each other — the section numbers ran straight through the FPS
+     readout. */
+  .rl3-index {
+    flex-direction: row;
+    right: var(--rl3-pad);
+    top: var(--rl3-pad);
+    bottom: auto;
+    gap: 8px;
+  }
+  .rl3-telemetry {
+    gap: 10px;
+    font-size: 9px;
+  }
+  /* A scrim, not decoration. The copy sits over the render on a phone, where
+     there is no room to place it clear of the subject; this keeps the type
+     legible without dimming the scene behind it. */
+  .rl3-copy::before {
+    content: '';
+    position: absolute;
+    inset: -24px -24px -220px -24px;
+    background: linear-gradient(to top, var(--rl3-void) 34%, rgba(5, 6, 10, 0));
+    z-index: -1;
+    pointer-events: none;
+  }
+  .rl3-brand-sub {
+    display: none;
+  }
+  .rl3-node {
+    font-size: 9px;
+    padding: 4px 8px;
+  }
+}
+
+/* ---- reduced motion ------------------------------------------------------
+   The 3D quality, composition and hierarchy are PRESERVED. What is removed is
+   traversal: the camera holds each beat's composition instead of flying
+   between them (handled in `useLandingRuntime`), and chrome stops transitioning
+   here. A reduced-motion user gets the same page, held still. */
+@media (prefers-reduced-motion: reduce) {
+  .rl3-copy,
+  .rl3-cta,
+  .rl3-tick {
+    transition: none;
+  }
+  .rl3-cta:hover,
+  .rl3-cta:focus-visible {
+    transform: none;
+  }
+}
+
+/* ---- static mode ---------------------------------------------------------
+   No WebGL context means no animation loop, and the loop is what advances the
+   beats — so the fixed chrome would sit frozen on beat one and the call to
+   action at beat eight would be unreachable. In static mode the semantic
+   document becomes the visible page and the frozen chrome steps aside. The
+   page keeps its type, its hierarchy and its colour; it loses only the render. */
+.rl3[data-static='true'] .rl3-copy,
+.rl3[data-static='true'] .rl3-index,
+.rl3[data-static='true'] .rl3-nodes {
+  display: none;
+}
+
+.rl3[data-static='true'] .rl3-sr {
+  position: static;
+  width: auto;
+  height: auto;
+  overflow: visible;
+  clip-path: none;
+  white-space: normal;
+  max-width: 62ch;
+  margin: 0 auto;
+  padding: 96px var(--rl3-pad) 120px;
+  display: flex;
+  flex-direction: column;
+  gap: 72px;
+}
+
+.rl3[data-static='true'] .rl3-sr h2 {
+  margin: 8px 0 0;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-weight: 400;
+  font-size: clamp(1.75rem, 4.4vw, 3rem);
+  line-height: 1;
+  letter-spacing: -0.015em;
+}
+
+.rl3[data-static='true'] .rl3-sr p {
+  margin: 10px 0 0;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--rl3-dim);
+}
+
+.rl3[data-static='true'] .rl3-sr ul {
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.rl3[data-static='true'] .rl3-sr li {
+  padding: 5px 11px;
+  border: 1px solid var(--rl3-hairline);
+  border-radius: 500px;
+  font-family: var(--font, ui-monospace, monospace);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+/* The track exists only to give a camera distance to travel. With no camera it
+   is 800vh of empty scroll below the content. */
+
+
+/* Glass is GUARDED. A browser without `backdrop-filter` keeps the flat plate
+   declared above — a lowered opacity with no blur is a transparent panel, not a
+   frosted one, and over a moving 3D scene that reads as a bug rather than as a
+   material. */
+@supports (backdrop-filter: blur(1px)) {
+  .rl3-cta {
+    background: var(--rl3-glass);
+    backdrop-filter: blur(6px);
+  }
+  .rl3-node {
+    background: rgba(244, 239, 227, 0.07);
+    backdrop-filter: blur(7px);
+  }
+}
