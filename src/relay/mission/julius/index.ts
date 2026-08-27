@@ -8,3 +8,4 @@ export * from './julius-verification-runtime';
 export * from './julius-context-snapshot';
 export * from './julius-repair-runtime';
 export * from './julius-trajectory';
+export * from './julius-events';
