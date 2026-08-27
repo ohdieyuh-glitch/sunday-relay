@@ -17,7 +17,6 @@ import {
   projectJuliusEvent,
   projectJuliusEvents,
   redactBoundaryText,
-  type JuliusEventActor,
   type JuliusOperationalEvent,
 } from './index';
 
