@@ -5,7 +5,10 @@ import type { WonderlandExecutionSession } from '../mission/wonderland/wonderlan
 
 class FakePool {
   commands: string[] = []; released = 0; ended = false; rows: unknown[] = []; topRows: unknown[] = [];
-  async query(text: string) { this.commands.push(text); return { rows: this.topRows, rowCount: text.startsWith('UPDATE') ? 1 : this.topRows.length }; }
+  /** Bound parameters, so a test can assert what was actually stored and not
+   *  only which statement ran. */
+  values: unknown[][] = [];
+  async query(text: string, values?: readonly unknown[]) { this.commands.push(text); if (values) this.values.push([...values]); return { rows: this.topRows, rowCount: text.startsWith('UPDATE') ? 1 : this.topRows.length }; }
   async connect() { const pool = this; return { async query(text: string) { pool.commands.push(text); if (text.startsWith('SELECT snapshot')) return { rows: pool.rows, rowCount: pool.rows.length }; if (text.includes('RETURNING next_sequence-1')) return { rows: [{ sequence: '1' }], rowCount: 1 }; return { rows: [], rowCount: text.startsWith('UPDATE') || text.startsWith('INSERT') ? 1 : 0 }; }, release() { pool.released += 1; } }; }
   async end() { this.ended = true; }
 }
@@ -39,6 +42,19 @@ describe('Wonderland PostgreSQL migration', () => {
   it('persists gauntlets and makes duplicate round scheduling a schema impossibility',()=>{expect(WONDERLAND_MIGRATION_017).toContain('julius_gauntlets');expect(WONDERLAND_MIGRATION_017).toContain('UNIQUE(run_id,task_id)');expect(WONDERLAND_MIGRATION_017).toContain('PRIMARY KEY(gauntlet_id,round,phase)');expect(WONDERLAND_MIGRATION_017).toContain('CHECK(max_rounds>0)');});
   it('persists approvals with one pending request per gated operation',()=>{expect(WONDERLAND_MIGRATION_018).toContain('julius_approvals');expect(WONDERLAND_MIGRATION_018).toContain('julius_approval_one_pending');expect(WONDERLAND_MIGRATION_018).toContain("WHERE state='PENDING'");expect(WONDERLAND_MIGRATION_018).toContain('lifecycle_actor');});
   it('runs every checked-in migration through the configured PostgreSQL pool', async () => { const pool = new FakePool(); const db = database(pool); await db.migrate(); expect(pool.commands).toEqual([WONDERLAND_MIGRATION_001, WONDERLAND_MIGRATION_002, WONDERLAND_MIGRATION_003, WONDERLAND_MIGRATION_004, WONDERLAND_MIGRATION_005, WONDERLAND_MIGRATION_006, WONDERLAND_MIGRATION_007, WONDERLAND_MIGRATION_008, WONDERLAND_MIGRATION_009, WONDERLAND_MIGRATION_010, WONDERLAND_MIGRATION_011, WONDERLAND_MIGRATION_012, WONDERLAND_MIGRATION_013, WONDERLAND_MIGRATION_014, WONDERLAND_MIGRATION_015, WONDERLAND_MIGRATION_016, WONDERLAND_MIGRATION_017, WONDERLAND_MIGRATION_018]); });
+});
+
+describe('the outbox never stores a secret in its error', () => {
+  it('redacts a credential-shaped value out of a dead-letter error', async () => {
+    // A poison event's `last_error` is the one place a provider's own error
+    // string is persisted verbatim, and a provider error can quote the request
+    // that failed. `validateJuliusEvent` guards the PAYLOAD and guarded
+    // nothing here.
+    const pool = new FakePool();
+    await database(pool).failOutbox('w1', 'ob-1', 'dispatch failed: Authorization: Bearer sk-abcdefghijklmnopqrst', '2026-08-27T00:00:00.000Z');
+    const stored = JSON.stringify(pool.values);
+    expect(stored).not.toContain('sk-abcdefghijklmnopqrst');
+  });
 });
 
 describe('TransactionalWonderlandDatabase', () => {

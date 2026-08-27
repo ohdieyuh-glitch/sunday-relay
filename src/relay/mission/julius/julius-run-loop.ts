@@ -73,6 +73,8 @@ export interface JuliusTickReport {
   readonly runs: readonly JuliusRunAdvance[];
   /** Runs skipped because no policy could be resolved for them. */
   readonly unresolvedPolicyRunIds: readonly string[];
+  /** Tasks handed back so one run could not monopolize the tick. */
+  readonly yieldedForFairness: number;
   /**
    * Tasks claimed and handed straight back because the run was already at its
    * C.A.R.D. concurrency. Reported rather than hidden: a number that stays
@@ -94,6 +96,20 @@ export interface JuliusRunLoopConfig {
   readonly claimLimit: number;
   /** How long a claimed task's lease lasts, in milliseconds. */
   readonly leaseMs: number;
+  /**
+   * ADMISSION: the most tasks one RUN may take from a single tick.
+   *
+   * Without it, a run with three hundred runnable tasks fills every claim and
+   * a run with one waits behind it — not because it was lower priority but
+   * because it was smaller. The C.A.R.D. concurrency bound does not solve
+   * this: a generous C.A.R.D. is exactly the case where one run can take
+   * everything.
+   *
+   * `null` means no per-run share, which is right for a worker dedicated to
+   * one run and wrong for a shared pool. There is no default share, because a
+   * fairness policy nobody chose is a fairness policy nobody can reason about.
+   */
+  readonly perRunShare?: number | null;
 }
 
 /* ------------------------------------------------- the run state decision */
@@ -174,10 +190,50 @@ export class JuliusRunLoop {
   async tick(scope: { readonly projectId: string }, signal?: AbortSignal): Promise<JuliusTickReport> {
     const now = this.deps.clock.now();
     const leaseExpiresAt = new Date(Date.parse(now) + this.config.leaseMs).toISOString();
-    const claims = await this.deps.store.claimRunnable({
+    const claimed = await this.deps.store.claimRunnable({
       owner: this.deps.owner, now, leaseExpiresAt,
       limit: this.config.claimLimit, projectId: scope.projectId,
     });
+
+    /* ------------------------------------------------------- admission --- */
+    /**
+     * ROUND-ROBIN, NOT FIRST-COME. The claim query orders by run creation then
+     * ordinal, so a large old run is offered first and would take the whole
+     * tick. Interleaving by run before anything executes gives every run in
+     * the batch a turn, and the share caps how many turns one run gets.
+     *
+     * Anything over the share is handed BACK immediately rather than held, so
+     * another worker can take it in the same instant instead of waiting out a
+     * lease. `yieldedForFairness` reports how many, because a number that
+     * stays high means the claim limit is wider than the share.
+     */
+    const byRun = new Map<string, JuliusClaimedTask[]>();
+    for (const claim of claimed) {
+      const bucket = byRun.get(claim.runId);
+      if (bucket) bucket.push(claim); else byRun.set(claim.runId, [claim]);
+    }
+    const share = this.config.perRunShare ?? null;
+    const admitted: JuliusClaimedTask[] = [];
+    const yielded: JuliusClaimedTask[] = [];
+    let round = 0;
+    let remaining = true;
+    while (remaining) {
+      remaining = false;
+      for (const bucket of byRun.values()) {
+        const next = bucket[round];
+        if (next === undefined) continue;
+        remaining = true;
+        if (share !== null && round >= share) yielded.push(next); else admitted.push(next);
+      }
+      round += 1;
+    }
+    for (const claim of yielded) {
+      await this.deps.store.finishTask({
+        taskId: claim.taskId, owner: this.deps.owner, leaseGeneration: claim.leaseGeneration,
+        state: 'FAILED', now: this.deps.clock.now(), nextAttemptAt: this.deps.clock.now(),
+      });
+    }
+    const claims = admitted;
 
     const outcomes: JuliusTaskOutcome[] = [];
     const touchedRunIds = new Set<string>();
@@ -244,8 +300,12 @@ export class JuliusRunLoop {
     }
 
     return {
-      claimed: claims.length, outcomes, runs,
+      // The number the STORE handed over, not the number admitted. Reporting
+      // only the admitted count would hide the whole point of the share: that
+      // the claim limit is wider than the runs it serves.
+      claimed: claimed.length, outcomes, runs,
       unresolvedPolicyRunIds: [...unresolvedPolicyRunIds], yieldedForConcurrency,
+      yieldedForFairness: yielded.length,
     };
   }
 

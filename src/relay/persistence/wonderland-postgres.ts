@@ -1,4 +1,5 @@
 import { existsSync, readFileSync } from 'node:fs';
+import { sanitizeText } from './redaction';
 import { join } from 'node:path';
 import { Pool, type PoolConfig, type QueryResultRow } from 'pg';
 import type { ProviderUsageReceipt, WonderlandExecutionSession } from '../mission/wonderland/wonderland-execution';
@@ -231,7 +232,7 @@ export class TransactionalWonderlandDatabase {
     return result.rowCount === 1;
   }
   async failOutbox(workerId: string, outboxId: string, error: string, nextAttemptAt: string, maxAttempts = 8): Promise<boolean> {
-    const result = await this.pool.query(`UPDATE relay_wonderland.outbox SET status=CASE WHEN attempts>=$5 THEN 'DEAD' ELSE 'PENDING' END,claimed_by=NULL,claimed_until=NULL,last_error=$3,next_attempt_at=$4 WHERE outbox_id=$1 AND status='CLAIMED' AND claimed_by=$2`, [outboxId, workerId, error.slice(0, 500), nextAttemptAt, maxAttempts]);
+    const result = await this.pool.query(`UPDATE relay_wonderland.outbox SET status=CASE WHEN attempts>=$5 THEN 'DEAD' ELSE 'PENDING' END,claimed_by=NULL,claimed_until=NULL,last_error=$3,next_attempt_at=$4 WHERE outbox_id=$1 AND status='CLAIMED' AND claimed_by=$2`, [outboxId, workerId, sanitizeText(error, 500), nextAttemptAt, maxAttempts]);
     return result.rowCount === 1;
   }
   async transaction<T>(effect: (transaction: WonderlandTransaction) => Promise<T>, maxAttempts = 3): Promise<T> {
