@@ -11,6 +11,7 @@ import type { startBetaMission, pollBetaMission, shipBetaMission, listBetaMissio
 import type { listPsps } from './psp-client';
 import type { listConnectedRepositories, discoverInstallationRepositories, ConnectedRepository } from './repository-client';
 import { clearActiveMissions } from './active-mission';
+import { EMPTY_DRAFT, clearAgentDraft, saveAgentDraft } from '../relay-experience';
 import { clearConnectedRepository, saveConnectedRepository } from './connected-repository';
 import { clearConfiguredPsp, loadConfiguredPsp, saveConfiguredPsp } from './configured-psp';
 import type { LiveMissionUpdate } from './contracts';
@@ -58,7 +59,27 @@ const noComplete = (async () => ({ signedIn: false, message: null })) as typeof 
 const withInstall = (id: string) => (() => id) as typeof readInstallationFromReturn;
 const registerOk = (async () => ({ ok: true as const, key: 'github:github.com/beta-alice/their-app', message: null })) as typeof registerRepository;
 
-afterEach(() => { cleanup(); clearBridgeSession(); clearActiveMissions(); clearConnectedRepository(); clearConfiguredPsp(); });
+afterEach(() => {
+  cleanup(); clearBridgeSession(); clearActiveMissions();
+  clearConnectedRepository(); clearConfiguredPsp(); clearAgentDraft();
+});
+
+/**
+ * A participant who has already built their Compound Agent but not activated
+ * it. The live front door resumes them at the Relay stage of the same scene,
+ * where ACTIVATE RELAY is the control that carries them into the rest of the
+ * journey — so a test about sign-in can start where sign-in becomes reachable
+ * instead of replaying eight onboarding steps.
+ */
+function agentBuilt() {
+  saveAgentDraft({
+    ...EMPTY_DRAFT,
+    name: 'Test Agent',
+    promptArchitectId: 'openai_gpt_architect',
+    codingAgentId: 'claude_agent_sdk_hosted',
+    reviewerId: 'hermes_remote_service',
+  });
+}
 
 function signedIn() {
   saveBridgeSession({ token: 't', origin: '', expiresAt: '', scope: 'browser_control', participantId: 'ghu-4242' });
@@ -76,30 +97,45 @@ describe('RelayBetaEntry', () => {
     expect(screen.getByTestId('app')).toBeTruthy();
   });
 
-  it('AC-1/AC-3: a fresh live user lands in WONDERLAND with the Wandering Relay Dog — GitHub is deferred, no simulated data', async () => {
-    render(<RelayBetaEntry bridgeUrl={BRIDGE} completeImpl={noComplete}>{APP}</RelayBetaEntry>);
-    // The entrance is Wonderland, not a GitHub wall.
-    expect(await screen.findByText(/What are we building/i)).toBeTruthy();
-    // The Wandering Relay Dog is a real part of the experience.
-    expect(screen.getByText('WANDERING')).toBeTruthy();
-    expect(screen.getByText('RELAY DOG')).toBeTruthy();
-    // AC-3: the live entrance shows NO simulated data — no FIXTURE label, and the
-    // recent-projects surface is its honest empty state, never fixture projects.
+  it('AC-1/AC-3: a fresh live user lands in the RELAY EXPERIENCE — GitHub is deferred, no simulated data', async () => {
+    const { container } = render(<RelayBetaEntry bridgeUrl={BRIDGE} completeImpl={noComplete}>{APP}</RelayBetaEntry>);
+    // The front door is the persistent 3D scene, entered at Aquala.
+    await waitFor(() => expect(container.querySelector('.rw')).toBeTruthy());
+    expect(container.querySelectorAll('canvas.rw-canvas')).toHaveLength(1);
+    // AC-3: no simulated data on the live front door.
     expect(screen.queryByText(/FIXTURE/)).toBeNull();
-    expect(screen.getByText(/NO RELAY PROJECTS YET/i)).toBeTruthy();
-    // GitHub sign-in is DEFERRED — not shown until the user chooses to build.
+    // GitHub sign-in is DEFERRED — not shown until the Agent is brought online.
     expect(screen.queryByRole('button', { name: /Sign in with GitHub/i })).toBeNull();
-    // And the app itself is never shown at the entrance.
+    // And the demo/preview shell is never shown while the gate is live.
     expect(screen.queryByTestId('app')).toBeNull();
   });
 
-  it('AC-2: choosing to start building reveals CONFIGURE first, then sign-in — GitHub is never the entrance', async () => {
+  /**
+   * THE SUPERSEDED SHELL IS NOT THE FRONT DOOR.
+   *
+   * `RelayWonderlandEntrance` wrapped the Entry Home, and for a while it was
+   * what a live participant saw first — which meant production served the old
+   * shell no matter what the demo build rendered. This asserts the markers of
+   * that shell are absent from the live entrance, so the two builds cannot
+   * drift apart again without a test saying so.
+   */
+  it('never renders the superseded Entry Home shell as the live front door', async () => {
+    const { container } = render(<RelayBetaEntry bridgeUrl={BRIDGE} completeImpl={noComplete}>{APP}</RelayBetaEntry>);
+    await waitFor(() => expect(container.querySelector('.rw')).toBeTruthy());
+    expect(container.querySelector('.reh')).toBeNull();
+    for (const marker of ['What are we building', 'WANDERING', 'RELAY DOG', 'NO RELAY PROJECTS YET']) {
+      expect(container.innerHTML, `the live front door still shows "${marker}"`).not.toContain(marker);
+    }
+  });
+
+  it('AC-2: bringing the Agent online reveals CONFIGURE first, then sign-in — GitHub is never the entrance', async () => {
+    agentBuilt();
     render(<RelayBetaEntry bridgeUrl={BRIDGE} completeImpl={noComplete}>{APP}</RelayBetaEntry>);
-    const startBuilding = await screen.findByRole('button', { name: /CONNECT EXISTING PROJECT/i });
-    // Still no GitHub wall while exploring Wonderland.
+    const startBuilding = await screen.findByRole('button', { name: /ACTIVATE RELAY/i });
+    // Still no GitHub wall while the participant is in the world.
     expect(screen.queryByRole('button', { name: /Sign in with GitHub/i })).toBeNull();
-    // Choosing to start building lands on the CONFIGURE step — the Compound PSP
-    // Agent is configured BEFORE any GitHub. Sign-in is not shown yet.
+    // Bringing the Agent online lands on the CONFIGURE step — the Compound PSP
+    // Agent is persisted BEFORE any GitHub. Sign-in is not shown yet.
     fireEvent.click(startBuilding);
     expect(await screen.findByText(/Configure your Compound PSP Agent/i)).toBeTruthy();
     expect(screen.queryByRole('button', { name: /Sign in with GitHub/i })).toBeNull();
@@ -111,8 +147,9 @@ describe('RelayBetaEntry', () => {
 
   it('AC-4/AC-5: a config set BEFORE sign-in survives the OAuth reload and reaches the runner unchanged', async () => {
     // A fresh participant configures the Agent, diverging from the default.
+    agentBuilt();
     render(<RelayBetaEntry bridgeUrl={BRIDGE} completeImpl={noComplete}>{APP}</RelayBetaEntry>);
-    fireEvent.click(await screen.findByRole('button', { name: /CONNECT EXISTING PROJECT/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /ACTIVATE RELAY/i }));
     fireEvent.change(await screen.findByLabelText('Execution mode'), { target: { value: 'autonomous' } });
     fireEvent.change(screen.getByLabelText('Spend ceiling (USD)'), { target: { value: '3' } });
     // Start Building persists the configured Agent before the (redirecting) sign-in.

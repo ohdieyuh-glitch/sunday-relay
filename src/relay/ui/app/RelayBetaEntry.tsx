@@ -6,7 +6,8 @@ import {
 } from './bridge-session';
 import { RelayGitHubSignIn } from './RelayGitHubSignIn';
 import { RelayConnectRepository } from './RelayConnectRepository';
-import { RelayWonderlandEntrance } from './RelayWonderlandEntrance';
+import { RelayWorld } from '../relay-world';
+import { canActivate, loadAgentDraft } from '../relay-experience';
 import { RelayConfigureAgent } from './RelayConfigureAgent';
 import { RelayMissionRunner } from './RelayMissionRunner';
 import { loadConnectedRepository, saveConnectedRepository } from './connected-repository';
@@ -85,12 +86,17 @@ export function RelayBetaEntry({
   // The user asked to connect a DIFFERENT repository than the ones listed — the
   // existing connect flow, reached on demand from the picker.
   const [connectingNew, setConnectingNew] = useState(false);
-  // THE CANONICAL FLOW: Wonderland → CONFIGURE the Compound PSP Agent → sign-in.
-  // A fresh live participant begins in Wonderland with the Wandering Relay Dog;
-  // choosing to start building advances to the pre-GitHub Configure step (which
-  // persists the Agent to sessionStorage so it survives the OAuth redirect), and
-  // only THEN does the contextual GitHub sign-in appear. GitHub is never the
-  // entrance, and the Agent is always configured before any repository connects.
+  // THE CANONICAL FLOW: the Relay experience → CONFIGURE the Compound PSP Agent
+  // → sign-in. A fresh live participant begins in Aquala and builds their
+  // Compound Agent in the world; bringing it online advances to the pre-GitHub
+  // Configure step (which persists the Agent to sessionStorage so it survives
+  // the OAuth redirect), and only THEN does the contextual GitHub sign-in
+  // appear. GitHub is never the entrance, and the Agent is always configured
+  // before any repository connects.
+  //
+  // The first phase is still spelled `wonderland` because that is the name the
+  // persisted journey has always used; renaming it would change stored state
+  // for no behavioural gain. It means "before the Agent is online".
   const [phase, setPhase] = useState<'wonderland' | 'configure' | 'signin'>('wonderland');
   // The active Compound PSP Agent, rehydrated on mount and RE-READABLE thereafter.
   // The Configure step wrote it to sessionStorage before the redirect, and a fresh
@@ -155,12 +161,35 @@ export function RelayBetaEntry({
   }
 
   if (participant === null) {
-    // The Wonderland entrance, NOT a GitHub wall: the fresh participant explores
-    // here with the Wandering Relay Dog until they choose to start building.
+    // THE FRONT DOOR IS THE RELAY EXPERIENCE, not a GitHub wall.
+    //
+    // A fresh live participant arrives in Aquala, travels to Relay through the
+    // same persistent scene, and creates their Compound Agent there. GitHub
+    // stays deferred and contextual, exactly as it was.
+    //
+    // This replaced `RelayWonderlandEntrance`, a thin live wrapper whose only
+    // job was to make the superseded Entry Home the live front door. It is
+    // deleted rather than left unreferenced, because an unused component that
+    // renders the old shell is precisely how the old shell comes back. The
+    // Entry Home ITSELF is untouched — it still holds working surfaces and is
+    // still served at the explicit `#/relay/home-legacy` route that nothing in
+    // the product links to.
     if (phase === 'wonderland') {
-      // "Start building" from Wonderland advances to CONFIGURE, not sign-in: the
-      // Compound PSP Agent is set up BEFORE any GitHub, per the canonical flow.
-      return <RelayWonderlandEntrance onStartBuilding={() => setPhase('configure')} />;
+      // A participant who already built their Agent resumes at the Relay stage
+      // of the SAME scene rather than replaying the arrival — the world is
+      // continuous, so returning is a camera position, not a different screen.
+      // A first-time visitor gets the full passage from Aquala.
+      //
+      // The test is `canActivate`, not `isConfigured`: the second also requires
+      // activation, and someone who BUILT an Agent but has not brought it
+      // online is exactly the person who needs to land on the control that
+      // does.
+      const stage = canActivate(loadAgentDraft()) ? 'relay' : 'aquala';
+      // Bringing the Agent online advances to CONFIGURE, not sign-in: the
+      // Compound PSP Agent is persisted BEFORE any GitHub, per the canonical
+      // flow, and the runner reads that persisted record rather than the
+      // in-world draft.
+      return <RelayWorld initialStage={stage} onActivated={() => setPhase('configure')} />;
     }
     // CONFIGURE the Compound PSP Agent before Start Building. Its own Start
     // Building control persists the Agent to sessionStorage (so it survives the

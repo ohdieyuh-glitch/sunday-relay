@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { RelayLanding } from '../landing/RelayLanding';
 import { usePrefersReducedMotion } from '../landing/useLandingRuntime';
 import { SCENE_COUNT } from '../landing/choreography';
@@ -21,7 +21,20 @@ import type { WorldStage } from './world-stage';
  *
  * The old shell is not reachable from any of it.
  */
-export function RelayWorld({ initialStage }: { readonly initialStage: WorldStage }): JSX.Element {
+export function RelayWorld({ initialStage, onActivated }: {
+  readonly initialStage: WorldStage;
+  /**
+   * The participant brought their Compound Agent online during THIS visit.
+   *
+   * Optional, and fired once. The demo build passes nothing and behaves exactly
+   * as before; the live front door uses it to continue the private-beta journey
+   * once the Agent exists. It deliberately does NOT fire for someone arriving
+   * with an already-activated Agent — a returning visitor is here to look at
+   * the world, and bouncing them out of the landing page they just opened
+   * would make the front door unreachable for the people most likely to visit.
+   */
+  readonly onActivated?: () => void;
+}): JSX.Element {
   const reducedMotion = usePrefersReducedMotion();
   const [draft, setDraftState] = useState<CompoundAgentDraft>(() => loadAgentDraft());
   const [step, setStep] = useState<OnboardingStepId>(() => {
@@ -40,6 +53,20 @@ export function RelayWorld({ initialStage }: { readonly initialStage: WorldStage
   }, []);
 
   const world = useRelayWorld(initialStage, step, reducedMotion, onArrive);
+
+  // REPORT AN ONLINE AGENT, INCLUDING ONE THAT WAS ALREADY ONLINE.
+  //
+  // Reporting only the transition looked tidier, and it stranded the person it
+  // was supposed to protect: someone who activated on a previous visit came
+  // back to a world holding an Agent it would never announce, with no control
+  // left that advances anything. Whoever holds an activated Agent is past the
+  // front door, so say so once per mount and let the caller decide.
+  const announcedActivation = useRef(false);
+  useEffect(() => {
+    if (draft.activatedAt === null || announcedActivation.current) return;
+    announcedActivation.current = true;
+    onActivated?.();
+  }, [draft.activatedAt, onActivated]);
 
   const setDraft = useCallback((patch: Partial<CompoundAgentDraft>, react = false) => {
     setDraftState((prev) => {
