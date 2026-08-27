@@ -21,6 +21,11 @@
  * set is not zero; it does not exist, and saying zero is the specific lie that
  * makes an eval look like a measurement when it is a placeholder.
  *
+ * NOTHING HERE COUNTS A GAUNTLET. An earlier version carried
+ * `julius_gauntlet_rounds` and `julius_gauntlets_cleared`, which made Julius's
+ * own observability aware of a user-activated review command. The Gauntlet
+ * Loop measures itself, from its own records, on its own side of the boundary.
+ *
  * PURE. No clock, no I/O: it takes the events it is given and returns numbers.
  */
 
@@ -85,8 +90,6 @@ export const JULIUS_COUNTERS = [
   'julius_reroutes',
   'julius_fallbacks',
   'julius_subagents_spawned',
-  'julius_gauntlet_rounds',
-  'julius_gauntlets_cleared',
   'julius_findings_recorded',
   'julius_recoveries',
 ] as const;
@@ -96,7 +99,6 @@ export const JULIUS_HISTOGRAMS = [
   'julius_task_duration_ms',
   'julius_task_cost_usd_micros',
   'julius_context_characters',
-  'julius_gauntlet_round_duration_ms',
 ] as const;
 export type JuliusHistogramName = (typeof JULIUS_HISTOGRAMS)[number];
 
@@ -140,8 +142,6 @@ export function projectJuliusMetrics(
   // `julius_fallbacks` is the subset that crossed providers.
   counters.julius_reroutes = of('DISPATCH').filter((event) => event.outcome !== 'COMPLETED').length + of('FALLBACK').length;
   counters.julius_subagents_spawned = of('SUBAGENT').filter((event) => event.outcome === 'AUTHORIZED').length;
-  counters.julius_gauntlet_rounds = of('GAUNTLET_ROUND').length;
-  counters.julius_gauntlets_cleared = of('GAUNTLET_ROUND').filter((event) => event.outcome === 'CLEARED').length;
   counters.julius_findings_recorded = of('FINDING').length;
   counters.julius_recoveries = of('RECOVERY').length;
 
@@ -157,7 +157,6 @@ export function projectJuliusMetrics(
           return typeof value === 'number' ? value : null;
         }),
       ),
-      julius_gauntlet_round_duration_ms: summariseSamples(of('GAUNTLET_ROUND').map((event) => event.durationMs)),
     },
     sampledEvents: scoped.length,
   };
@@ -215,7 +214,5 @@ export function summariseJuliusEvals(
     fallbacks: metrics.counters.julius_fallbacks,
     repairs: metrics.counters.julius_repairs,
     recoveries: metrics.counters.julius_recoveries,
-    gauntletRounds: metrics.counters.julius_gauntlet_rounds,
-    successfulGauntlets: metrics.counters.julius_gauntlets_cleared,
   };
 }

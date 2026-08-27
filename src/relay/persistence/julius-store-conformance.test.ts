@@ -8,7 +8,6 @@ import { JuliusEventPostgresRepository } from './julius-event-postgres';
 import { JuliusTrajectoryPostgresRepository } from './julius-trajectory-postgres';
 import { JuliusReadPostgresRepository } from './julius-read-postgres';
 import { JuliusSubagentPostgresRepository } from './julius-subagent-postgres';
-import { JuliusGauntletPostgresRepository } from './julius-gauntlet-postgres';
 import { JuliusLifecyclePostgresRepository } from './julius-lifecycle-postgres';
 import { JuliusTimelinePostgresRepository } from './julius-timeline-postgres';
 import { JuliusVerificationPostgresRepository } from './julius-verification-postgres';
@@ -16,7 +15,7 @@ import { createJuliusMemoryStore } from '../mission/julius';
 import type {
   JuliusClaimedTask, JuliusContextWriter, JuliusEventWriter, JuliusResultReceiptRow,
   JuliusResultWriter, JuliusRunRow, JuliusRunWriter, JuliusRuntimeReader,
-  JuliusApprovalStore, JuliusFindingWriter, JuliusGauntletStore, JuliusLifecycleStore,
+  JuliusApprovalStore, JuliusFindingWriter, JuliusLifecycleStore,
   JuliusRecoveryDriver, JuliusTimelineReader,
   JuliusRuntimeStore, JuliusSubagentStore, JuliusTrajectoryWriter,
 } from '../mission/julius';
@@ -78,9 +77,6 @@ const reader: JuliusRuntimeReader = new JuliusReadPostgresRepository(pool);
 /** The sub-agent repository satisfies the sub-agent store port directly. */
 const subagents: JuliusSubagentStore = new JuliusSubagentPostgresRepository(pool);
 
-/** The gauntlet repository satisfies the gauntlet store port directly. */
-const gauntlets: JuliusGauntletStore = new JuliusGauntletPostgresRepository(pool);
-
 /** One repository satisfies both lifecycle ports: approvals and run lifecycle. */
 const lifecycle: JuliusApprovalStore & JuliusLifecycleStore = new JuliusLifecyclePostgresRepository(pool);
 
@@ -108,7 +104,7 @@ const trajectoryWriter: JuliusTrajectoryWriter = {
 };
 
 /** The whole runtime store, composed from the real repositories. */
-const composed: JuliusRuntimeStore & JuliusSubagentStore & JuliusGauntletStore
+const composed: JuliusRuntimeStore & JuliusSubagentStore
   & JuliusApprovalStore & JuliusLifecycleStore & JuliusRecoveryDriver = {
   loadRun: runWriter.loadRun.bind(runWriter),
   transition: runWriter.transition.bind(runWriter),
@@ -138,13 +134,6 @@ const composed: JuliusRuntimeStore & JuliusSubagentStore & JuliusGauntletStore
   loadSubagent: subagents.loadSubagent.bind(subagents),
   subagentsForRun: subagents.subagentsForRun.bind(subagents),
   setSubagentState: subagents.setSubagentState.bind(subagents),
-  createGauntlet: gauntlets.createGauntlet.bind(gauntlets),
-  loadGauntlet: gauntlets.loadGauntlet.bind(gauntlets),
-  gauntletForTask: gauntlets.gauntletForTask.bind(gauntlets),
-  saveGauntlet: gauntlets.saveGauntlet.bind(gauntlets),
-  recordRound: gauntlets.recordRound.bind(gauntlets),
-  settleRound: gauntlets.settleRound.bind(gauntlets),
-  roundsFor: gauntlets.roundsFor.bind(gauntlets),
   requestApproval: lifecycle.requestApproval.bind(lifecycle),
   loadApproval: lifecycle.loadApproval.bind(lifecycle),
   pendingApprovals: lifecycle.pendingApprovals.bind(lifecycle),
@@ -173,8 +162,8 @@ describe('the Julius runtime ports and the PostgreSQL repositories agree', () =>
     // A drift-detector with a number in it: if a future repository stops
     // satisfying its port directly, this count changes and the reason has to be
     // written down rather than absorbed.
-    const direct = [runWriter, resultWriter, contextWriter, reader, subagents, gauntlets, lifecycle, timeline, findings];
-    expect(direct).toHaveLength(9);
+    const direct = [runWriter, resultWriter, contextWriter, reader, subagents, lifecycle, timeline, findings];
+    expect(direct).toHaveLength(8);
     expect(typeof eventWriter.appendEvent).toBe('function');
     expect(typeof trajectoryWriter.appendTrajectory).toBe('function');
   });
@@ -198,12 +187,6 @@ describe('the Julius runtime ports and the PostgreSQL repositories agree', () =>
     }
   });
 
-  it('satisfies the gauntlet store with no adapter', () => {
-    for (const method of ['createGauntlet', 'loadGauntlet', 'gauntletForTask',
-      'saveGauntlet', 'recordRound', 'settleRound', 'roundsFor']) {
-      expect(typeof (gauntlets as unknown as Record<string, unknown>)[method], method).toBe('function');
-    }
-  });
 
   it('satisfies the sub-agent store with no adapter', () => {
     for (const method of ['subagentContext', 'recordSubagent', 'loadSubagent',

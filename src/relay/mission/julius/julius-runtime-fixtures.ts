@@ -169,7 +169,7 @@ export function cardPolicy(over: Partial<JuliusCardPolicy> = {}): JuliusCardPoli
     allowedProviders: [], capabilities: ['implement', 'review'],
     network: true, filesystemMutation: true, fallback: true, automaticRetry: true,
     subagents: { allowed: true, maxDepth: 2, maxActive: 2, maxTotal: 4 },
-    gauntlet: { allowed: true, maxRounds: 3 }, concurrency: 2, approvals: [],
+    iterativeReview: { allowed: true, maxRounds: 3 }, concurrency: 2, approvals: [],
     ...over,
   };
 }

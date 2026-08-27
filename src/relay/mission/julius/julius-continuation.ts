@@ -23,8 +23,8 @@
  * UNCHAINED IS NOT "PROTECTIONS OFF", and this module contains no branch that
  * could make it so. There is no code path here in which `autonomy` widens a
  * limit, admits a denied provider, permits a denied capability, raises a
- * budget, crosses a tenant, deepens a sub-agent tree or extends a gauntlet
- * past its C.A.R.D. round cap. Every one of those is asserted by a
+ * budget, crosses a tenant, deepens a sub-agent tree or extends iterative
+ * review past its C.A.R.D. round cap. Every one of those is asserted by a
  * bypass-attempt test rather than promised here.
  *
  * ON "HIGHER BOUNDED CONCURRENCY", stated honestly: UNCHAINED does not raise
@@ -51,7 +51,7 @@ export type JuliusContinuation =
   | { readonly kind: 'REROUTE'; readonly excludedWorkerIds: readonly string[]; readonly remainingWorkers: number }
   | { readonly kind: 'FALLBACK'; readonly providerId: string }
   | { readonly kind: 'REPAIR'; readonly round: number; readonly maxRounds: number }
-  | { readonly kind: 'GAUNTLET_ROUND'; readonly round: number }
+  | { readonly kind: 'ITERATIVE_REVIEW'; readonly round: number }
   | { readonly kind: 'SUBAGENT'; readonly depth: number; readonly active: number; readonly total: number };
 
 export type JuliusContinuationDecision =
@@ -85,7 +85,7 @@ const OPERATION_FOR: Readonly<Record<JuliusContinuation['kind'], JuliusPolicyOpe
   REROUTE: 'DISPATCH_WORKER',
   FALLBACK: 'FALLBACK_PROVIDER',
   REPAIR: 'DISPATCH_WORKER',
-  GAUNTLET_ROUND: 'CONTINUE_GAUNTLET',
+  ITERATIVE_REVIEW: 'CONTINUE_ITERATIVE_REVIEW',
   SUBAGENT: 'SPAWN_SUBAGENT',
 });
 
@@ -113,7 +113,7 @@ const policyChecks = (situation: JuliusContinuation): Parameters<typeof evaluate
         { operation },
         { operation: 'USE_PROVIDER', providerId: situation.providerId },
       ];
-    case 'GAUNTLET_ROUND': return [{ operation, round: situation.round }];
+    case 'ITERATIVE_REVIEW': return [{ operation, round: situation.round }];
     case 'SUBAGENT': return [{ operation, depth: situation.depth, active: situation.active, total: situation.total }];
     default: return [{ operation }];
   }

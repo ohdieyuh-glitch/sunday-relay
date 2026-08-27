@@ -10,10 +10,17 @@
  * WHAT WAS MISSING BEFORE THAT AUDIT EXISTED: `task.failed` was emitted by the
  * execution coordinator and absent from the list, and `task.runnable`,
  * `provider.failure`, `approval.requested`, `approval.decided`,
- * `recovery.action`, `context.compiled`, `subagent.denied`,
- * `gauntlet.started`, `gauntlet.cleared`, `gauntlet.halted` and
+ * `recovery.action`, `context.compiled`, `subagent.denied` and
  * `task.cancelled` were named in the product's own list of authoritative
  * transitions and had no type at all.
+ *
+ * NO GAUNTLET TYPE IS ON THIS LIST, and its absence is the architecture. The
+ * Gauntlet Loop is a USER-ACTIVATED COMMAND that lives in
+ * `src/relay/mission/gauntlet/**` and uses generic interfaces; Julius does not
+ * know a feature called Gauntlet Loop exists. An earlier version of this
+ * catalogue carried `gauntlet.started`, `gauntlet.round.started`,
+ * `gauntlet.round.completed`, `gauntlet.cleared` and `gauntlet.halted`, which
+ * made Julius aware of it. The gauntlet keeps its own ledger.
  *
  * ONE TYPE IS DELIBERATELY ABSENT. `autonomy.changed` belongs on this list and
  * is not on it, because C.A.R.D. POLICY IS NOT PERSISTED — `julius_runs`
@@ -40,8 +47,6 @@ export const JULIUS_OPERATIONAL_EVENT_TYPES=[
  'evidence.recorded','review.started','finding.recorded','verification.decided','repair.scheduled',
  /* bounded children */
  'subagent.spawned','subagent.denied','subagent.completed',
- /* gauntlet */
- 'gauntlet.started','gauntlet.round.started','gauntlet.round.completed','gauntlet.cleared','gauntlet.halted',
  /* budget */
  'budget.reserved','budget.settled','budget.denied',
  /* human gates and autonomy */

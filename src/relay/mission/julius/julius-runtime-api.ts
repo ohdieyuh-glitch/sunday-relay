@@ -14,7 +14,11 @@
  * check that will be.
  *
  * WHAT IT DOES NOT DO: it defines no Compound Agent configuration, no
- * integration registry and no mission authoring. Those are Relay's, they
+ * integration registry, no mission authoring, and NO GAUNTLET. An earlier
+ * version carried `inspectGauntlet`, which made a user-facing review command
+ * part of the Julius execution API. The Gauntlet Loop reads its own state
+ * through its own surface; Julius exposes only generic run, task, evidence,
+ * verification, sub-agent and approval reads. Those are Relay's, they
  * already exist on the Relay side of the boundary, and duplicating them here
  * would put two answers in the product for one question.
  *
@@ -27,7 +31,6 @@
 import type { JuliusEvidence, JuliusMissionState, JuliusTask, JuliusVerificationDecision } from './julius-runtime';
 import type { JuliusReviewerFinding } from './julius-verification-runtime';
 import type { JuliusSubagentRecord, JuliusSubagentStore } from './julius-subagent-runtime';
-import type { JuliusGauntletRecord, JuliusGauntletRoundRecord, JuliusGauntletStore } from './julius-gauntlet-runtime';
 import {
   cancelJuliusRun, decideJuliusApproval, pauseJuliusRun, resumeJuliusRun,
   type JuliusApprovalRecord, type JuliusApprovalStore, type JuliusApproverAuthority,
@@ -128,8 +131,7 @@ export interface JuliusTimelineReader {
 /* ------------------------------------------------------------ the surface */
 
 export interface JuliusRuntimeApiDependencies {
-  readonly store: JuliusRuntimeStore & JuliusSubagentStore & JuliusGauntletStore
-  & JuliusApprovalStore & JuliusLifecycleStore;
+  readonly store: JuliusRuntimeStore & JuliusSubagentStore & JuliusApprovalStore & JuliusLifecycleStore;
   readonly timeline: JuliusTimelineReader;
   readonly approvers: JuliusApproverAuthority;
   readonly clock: JuliusClock;
@@ -197,16 +199,6 @@ export class JuliusRuntimeApi {
     // a run the caller was allowed to name.
     const records = await this.deps.store.subagentsForRun(runId);
     return allow(records.filter((record) => record.projectId === identity.projectId));
-  }
-
-  async inspectGauntlet(identity: JuliusApiIdentity, runId: string, gauntletId: string): Promise<JuliusApiResult<{
-    readonly gauntlet: JuliusGauntletRecord; readonly rounds: readonly JuliusGauntletRoundRecord[];
-  } | null>> {
-    const run = await this.#authorizedRun(identity, runId, 'run:read');
-    if (!run.ok) return run;
-    const gauntlet = await this.deps.store.loadGauntlet(runId, gauntletId);
-    if (gauntlet === null || gauntlet.projectId !== identity.projectId) return allow(null);
-    return allow({ gauntlet, rounds: await this.deps.store.roundsFor(gauntletId) });
   }
 
   async inspectApprovals(identity: JuliusApiIdentity, runId: string): Promise<JuliusApiResult<readonly JuliusApprovalRecord[]>> {

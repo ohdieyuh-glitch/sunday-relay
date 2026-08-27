@@ -30,9 +30,9 @@ const RETRY: JuliusContinuation = { kind: 'RETRY', attempt: 1, maxAttempts: 3, e
 const REROUTE: JuliusContinuation = { kind: 'REROUTE', excludedWorkerIds: ['w1'], remainingWorkers: 2 };
 const FALLBACK: JuliusContinuation = { kind: 'FALLBACK', providerId: 'provider-a' };
 const REPAIR: JuliusContinuation = { kind: 'REPAIR', round: 1, maxRounds: 3 };
-const GAUNTLET: JuliusContinuation = { kind: 'GAUNTLET_ROUND', round: 1 };
+const ITERATIVE: JuliusContinuation = { kind: 'ITERATIVE_REVIEW', round: 1 };
 const SUBAGENT: JuliusContinuation = { kind: 'SUBAGENT', depth: 1, active: 0, total: 0 };
-const EVERY_SITUATION = [RETRY, REROUTE, FALLBACK, REPAIR, GAUNTLET, SUBAGENT];
+const EVERY_SITUATION = [RETRY, REROUTE, FALLBACK, REPAIR, ITERATIVE, SUBAGENT];
 
 /* ------------------------------------------------------- the three levels */
 
@@ -129,14 +129,14 @@ describe('Unchained never bypasses a hard protection', () => {
     }
   });
 
-  it('cannot extend a gauntlet past its C.A.R.D. round cap', () => {
+  it('cannot extend iterative review past its C.A.R.D. round cap', () => {
     const decision = decideJuliusContinuation(
-      unchained({ gauntlet: { allowed: true, maxRounds: 2 } }),
-      { kind: 'GAUNTLET_ROUND', round: 2 },
+      unchained({ iterativeReview: { allowed: true, maxRounds: 2 } }),
+      { kind: 'ITERATIVE_REVIEW', round: 2 },
     );
     expect(decision.proceed).toBe(false);
     if (decision.proceed) return;
-    expect(decision.reasonCode).toBe('CARD_GAUNTLET_LIMIT');
+    expect(decision.reasonCode).toBe('CARD_ITERATIVE_REVIEW_LIMIT');
   });
 
   it('cannot exceed a structural attempt or repair ceiling', () => {
@@ -176,7 +176,7 @@ describe('Unchained never bypasses a hard protection', () => {
       [{ fallback: false }, FALLBACK],
       [{ automaticRetry: false }, RETRY],
       [{ subagents: { allowed: false, maxDepth: 9, maxActive: 9, maxTotal: 9 } }, SUBAGENT],
-      [{ gauntlet: { allowed: false, maxRounds: 9 } }, GAUNTLET],
+      [{ iterativeReview: { allowed: false, maxRounds: 9 } }, ITERATIVE],
       [{ allowedProviders: [] }, FALLBACK],
     ];
     for (const [over, situation] of denials) {
@@ -209,11 +209,11 @@ describe('Unchained never bypasses a hard protection', () => {
   it('has no branch in which the autonomy level widens a number', () => {
     // Read the module's own answers rather than its source: for every bound,
     // the `limit` reported to an UNCHAINED caller equals the C.A.R.D. value.
-    const bounded = unchained({ concurrency: 4, subagents: { allowed: true, maxDepth: 4, maxActive: 4, maxTotal: 6 }, gauntlet: { allowed: true, maxRounds: 5 } });
+    const bounded = unchained({ concurrency: 4, subagents: { allowed: true, maxDepth: 4, maxActive: 4, maxTotal: 6 }, iterativeReview: { allowed: true, maxRounds: 5 } });
     const sub = decideJuliusContinuation(bounded, SUBAGENT);
     expect(sub.proceed && sub.limit).toBe(6);
-    const gauntlet = decideJuliusContinuation(bounded, GAUNTLET);
-    expect(gauntlet.proceed && gauntlet.limit).toBe(5);
+    const iterative = decideJuliusContinuation(bounded, ITERATIVE);
+    expect(iterative.proceed && iterative.limit).toBe(5);
     const dispatch = decideJuliusContinuation(bounded, REROUTE);
     expect(dispatch.proceed && dispatch.limit).toBe(4);
   });

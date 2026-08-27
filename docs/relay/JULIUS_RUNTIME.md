@@ -22,19 +22,19 @@ PostgreSQL is authoritative for Julius runs, tasks, dependencies, lifecycle tran
 
 Context is selected by role and task, bounded by a character budget, and excludes entries marked `SECRET`. The compiler applies defense-in-depth redaction, but callers must store credentials only in credential handles—not Project Brain. Decisions contain reason codes, safe summaries, and evidence references, never chain-of-thought.
 
-C.A.R.D. is the runtime policy input. Julius returns structured allow, deny, approval, or limited decisions for providers, capabilities, network, filesystem mutation, retries, fallbacks, sub-agents, gauntlet continuation, worker concurrency, and Unchained continuation. Unchained relaxes continuation behavior only: explicit network, provider, capability, sub-agent, gauntlet, and concurrency limits remain enforced.
+C.A.R.D. is the runtime policy input. Julius returns structured allow, deny, approval, or limited decisions for providers, capabilities, network, filesystem mutation, retries, fallbacks, sub-agents, ITERATIVE REVIEW continuation, worker concurrency, and Unchained continuation. Unchained relaxes continuation behavior only: explicit network, provider, capability, sub-agent, iterative-review, and concurrency limits remain enforced. `CONTINUE_ITERATIVE_REVIEW` is a GENERIC bound — a deployment may limit how many times work is reviewed again — and is deliberately not named after any feature that uses it.
 
 Provider routing resolves a typed role and capability through the worker registry, C.A.R.D., adapter availability, provider circuit state, and provider concurrency. Provider-specific dispatch stays behind adapters. Rate limits and timeouts are transient; authentication/configuration, policy denial, cancellation, and unknown worker failures are not blindly retried.
 
 ## Integration sequence
 
-The durable repository persists missions, task nodes/dependencies, transitions, evidence, leases, and idempotency keys alongside the existing outbox. The existing Wonderland budget reservation, provider receipts, realtime fanout, GVE, and swarm implementations remain intact. Julius authorizes sub-agent requests only after C.A.R.D. depth/count checks, a budget reservation, and strict permission narrowing; the result is a bounded child task, while swarms remain bounded parallel execution. The gauntlet domain is an explicit versioned scheduled-round machine with round, retry, spend, duration, cancellation, and stale-writer bounds. Durable gauntlet storage and round scheduling are now wired: migration 017 persists the gauntlet and every round, a round is an ordinary task the normal scheduler claims, and `PRIMARY KEY(gauntlet_id, round, phase)` makes duplicate round scheduling a schema impossibility.
+The durable repository persists missions, task nodes/dependencies, transitions, evidence, leases, and idempotency keys alongside the existing outbox. The existing Wonderland budget reservation, provider receipts, realtime fanout, GVE, and swarm implementations remain intact. Julius authorizes sub-agent requests only after C.A.R.D. depth/count checks, a budget reservation, and strict permission narrowing; the result is a bounded child task, while swarms remain bounded parallel execution. The Gauntlet Loop is NOT part of Julius. `/gauntletloop` is a user-activated review command living in `src/relay/mission/gauntlet/**`; it uses generic work and review interfaces declared on its own side, and Julius does not know a feature by that name exists. See the boundary section below.
 
 Recovery is database-driven. Expired task leases are selected with skip locking and either requeued, failed after retry exhaustion, or cancelled with their run. Worker results are unique per task lease generation and idempotency key; duplicate callbacks return their prior receipt, while stale generations and results arriving after cancellation are rejected. Result persistence and the authoritative task transition share one serializable transaction, so a restart cannot expose half of that boundary. Repair-cycle storage records the original and repair tasks, round, findings, evidence, and required budget reservation for subsequent runtime wiring.
 
 Verification repair decisions now materialize as bounded, parent-linked Coding Agent tasks only after a resource reservation exists. Repair scheduling atomically persists the child task, original-task/finding/evidence provenance, round number, and a versioned outbox event. Replayed scheduling is idempotent per original task and round; cancellation and terminal runs refuse new repair work, while scheduled or active cycles can be recovered after restart.
 
-Versioned trajectory events record bounded operational facts for topology, routing, contexts, dispatch, retry/fallback, sub-agents, gauntlets, findings, repairs, verification, recovery, and completion. They carry runtime, policy, C.A.R.D., Mission Contract, and Project Brain revisions plus trusted usage/latency fields; secret-shaped and oversized facts are rejected. Tenant- and runtime-scoped Julius Evals aggregate verified completion, cost, latency, retry, fallback, repair, recovery, and gauntlet outcomes without treating this instrumentation as model training.
+Versioned trajectory events record bounded operational facts for topology, routing, contexts, dispatch, retry/fallback, sub-agents, findings, repairs, verification, recovery, and completion. They carry runtime, policy, C.A.R.D., Mission Contract, and Project Brain revisions plus trusted usage/latency fields; secret-shaped and oversized facts are rejected. Tenant- and runtime-scoped Julius Evals aggregate verified completion, cost, latency, retry, fallback, repair, and recovery outcomes without treating this instrumentation as model training.
 
 The authoritative operational event source emits a closed, provider-neutral vocabulary through the existing sequenced event log and outbox in one serializable transaction. Events contain only bounded scalar facts, reject secret-shaped fields, enforce run/project ownership, and make exact replay idempotent while detecting event-ID payload conflicts. They contain no presentation wording or private reasoning; clients and terminal projections remain downstream consumers.
 
@@ -84,7 +84,6 @@ repository's truthfulness rules exist to prevent.
 | verification + findings | yes | yes | yes | — | yes | yes |
 | repair rounds | yes | yes | yes | — | yes | — |
 | sub-agents | yes | yes (016) | yes | yes | yes | yes |
-| gauntlet | yes | yes (017) | yes | yes | yes | yes |
 | approvals | yes | yes (018) | yes | — | yes | yes |
 | pause / resume / cancel | yes | yes (018) | yes | — | yes | yes |
 | Unchained continuation | yes | — | yes | — | — | — |
@@ -138,3 +137,54 @@ against a model that reproduces the claim exclusion, the lease generations, the
 compare-and-set on every writer, the five idempotency constraints, optimistic
 run versioning and the dependency predicate. It does not model durability, real
 isolation, deadlock, planner behaviour, or anything about a network.
+
+---
+
+## The Gauntlet Loop is not part of Julius
+
+`/gauntletloop` is a **user-activated review command**: a person opts into an
+intensified, repeated review, and the command runs an iterative Gauntlet
+process through the Independent Reviewer Harness. It is not a Julius runtime,
+subsystem, execution mode, lifecycle or default behaviour.
+
+```text
+USER ── /gauntletloop ──▶ Gauntlet command controller
+                                 │
+                                 ▼
+                    Independent Reviewer Harness
+                                 │  findings
+                                 ▼
+                    repair, through the generic work boundary
+                                 │
+                                 ▼
+                    review again, until a stopping rule ends it
+```
+
+The dependency runs one way only:
+
+```text
+Gauntlet  ──uses──▶  generic work / review interfaces      ALLOWED
+Julius    ──uses──▶  Gauntlet                              FORBIDDEN
+```
+
+It lives in `src/relay/mission/gauntlet/**` with its own tables
+(`relay_wonderland.gauntlet_runs`, `relay_wonderland.gauntlet_rounds`) whose
+foreign keys point AT Julius — the gauntlet depends on the work it reviews, and
+nothing in Julius references anything of the gauntlet's.
+
+**What Julius no longer carries**, and carried before this correction: a
+`julius-gauntlet-runtime.ts` module, `julius_gauntlets` and
+`julius_gauntlet_rounds` tables, five `gauntlet.*` operational event types, a
+`GAUNTLET_ROUND` trajectory kind, `gauntletRounds` and `successfulGauntlets`
+eval fields, `julius_gauntlet_rounds` and `julius_gauntlets_cleared` counters,
+an `inspectGauntlet` method on the execution API, a `gauntlet` field on the
+C.A.R.D. policy and a `CONTINUE_GAUNTLET` policy operation. The policy bound
+survives as the generic `iterativeReview` / `CONTINUE_ITERATIVE_REVIEW`,
+because limiting how many times work is reviewed again is a legitimate C.A.R.D.
+concern and is not a feature name.
+
+**The Independent Reviewer does not require the Gauntlet Loop.** A normal
+review is a single review through the reviewer slot. The gauntlet simply calls
+the same harness repeatedly, when a person asks it to — and
+`gauntlet-boundary.test.ts` reads both source trees and fails on an import in
+either direction.

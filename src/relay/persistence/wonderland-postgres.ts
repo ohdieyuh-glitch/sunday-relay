@@ -28,7 +28,7 @@ export const WONDERLAND_MIGRATION_013 = migration('013_julius_verification.sql')
 export const WONDERLAND_MIGRATION_014 = migration('014_julius_context_brain.sql');
 export const WONDERLAND_MIGRATION_015 = migration('015_julius_trajectories.sql');
 export const WONDERLAND_MIGRATION_016 = migration('016_julius_subagents.sql');
-export const WONDERLAND_MIGRATION_017 = migration('017_julius_gauntlet.sql');
+export const WONDERLAND_MIGRATION_017 = migration('017_gauntlet_command.sql');
 export const WONDERLAND_MIGRATION_018 = migration('018_julius_lifecycle.sql');
 export const WONDERLAND_MIGRATIONS = [WONDERLAND_MIGRATION_001, WONDERLAND_MIGRATION_002, WONDERLAND_MIGRATION_003, WONDERLAND_MIGRATION_004, WONDERLAND_MIGRATION_005, WONDERLAND_MIGRATION_006, WONDERLAND_MIGRATION_007, WONDERLAND_MIGRATION_008, WONDERLAND_MIGRATION_009, WONDERLAND_MIGRATION_010, WONDERLAND_MIGRATION_011, WONDERLAND_MIGRATION_012, WONDERLAND_MIGRATION_013, WONDERLAND_MIGRATION_014, WONDERLAND_MIGRATION_015, WONDERLAND_MIGRATION_016, WONDERLAND_MIGRATION_017, WONDERLAND_MIGRATION_018] as const;
 export interface ClaimedOutbox { outboxId: string; eventId: string; projectId: string; attempts: number; }

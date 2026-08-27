@@ -6,10 +6,8 @@ import { JULIUS_OPERATIONAL_EVENT_TYPES, validateJuliusEvent } from './julius-ev
 import { JuliusRunLoop } from './julius-run-loop';
 import { requestJuliusApproval, decideJuliusApproval, cancelJuliusRun } from './julius-lifecycle-runtime';
 import { spawnJuliusSubagent, settleJuliusSubagent } from './julius-subagent-runtime';
-import { advanceJuliusGauntletRound, startJuliusGauntlet } from './julius-gauntlet-runtime';
 import { cardPolicy, createJuliusHarness, seedRun, task, worker, verificationPolicy } from './julius-runtime-fixtures';
 import type { JuliusRunRow } from './julius-runtime-ports';
-import type { JuliusTask } from './julius-runtime';
 
 /**
  * THE CATALOGUE AND THE EMISSIONS MUST AGREE, IN BOTH DIRECTIONS.
@@ -219,42 +217,6 @@ describe('the runtime really emits them', () => {
     expect(types.has('subagent.spawned')).toBe(true);
     expect(types.has('subagent.completed')).toBe(true);
     expect(types.has('subagent.denied')).toBe(true);
-  });
-
-  it('emits the gauntlet family', async () => {
-    const harness = createJuliusHarness({ workers: [{ worker: CODER, script: [{ kind: 'succeed' }] }] });
-    seedRun(harness, { tasks: [task({ taskId: 'anchor' })] });
-    const deps = { store: harness.store, clock: harness.clock, ids: harness.ids, events: harness.store };
-    const policy = cardPolicy({ allowedProviders: [CODER.providerId] });
-    const anchor = task({ taskId: 'anchor' }) as JuliusTask;
-    await startJuliusGauntlet({
-      run: RUN, policy, gauntletId: 'g-1', anchor,
-      limits: { maxRounds: 2, maxRetries: 0, maxDurationMs: 60_000, maxUsdMicros: 10_000 },
-    }, deps);
-    await advanceJuliusGauntletRound({
-      run: RUN, policy, anchor, gauntletId: 'g-1', phase: 'EXECUTE', outcome: 'PASSED',
-      durationMs: 10, usdMicros: 10, evidenceIds: [], reviewerRequired: false,
-    }, deps);
-
-    const types = new Set(harness.store.events().map((event) => event.type));
-    expect(types.has('gauntlet.started')).toBe(true);
-    expect(types.has('gauntlet.round.started')).toBe(true);
-    expect(types.has('gauntlet.round.completed')).toBe(true);
-    expect(types.has('gauntlet.cleared')).toBe(true);
-
-    // And a halt, on a second gauntlet that runs out of retries.
-    const halting = createJuliusHarness({ workers: [{ worker: CODER, script: [{ kind: 'succeed' }] }] });
-    seedRun(halting, { tasks: [task({ taskId: 'anchor' })] });
-    const haltDeps = { store: halting.store, clock: halting.clock, ids: halting.ids, events: halting.store };
-    await startJuliusGauntlet({
-      run: RUN, policy, gauntletId: 'g-2', anchor,
-      limits: { maxRounds: 2, maxRetries: 0, maxDurationMs: 60_000, maxUsdMicros: 10_000 },
-    }, haltDeps);
-    await advanceJuliusGauntletRound({
-      run: RUN, policy, anchor, gauntletId: 'g-2', phase: 'EXECUTE', outcome: 'FAILED',
-      durationMs: 10, usdMicros: 10, evidenceIds: [], reviewerRequired: false,
-    }, haltDeps);
-    expect(halting.store.events().map((e) => e.type)).toContain('gauntlet.halted');
   });
 
   it('emits the approval family and task.cancelled', async () => {

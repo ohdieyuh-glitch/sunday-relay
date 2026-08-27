@@ -13,7 +13,6 @@ export * from './julius-state-path';
 export * from './julius-continuation';
 export * from './julius-runtime-ports';
 export * from './julius-subagent-runtime';
-export * from './julius-gauntlet-runtime';
 export * from './julius-lifecycle-runtime';
 export * from './julius-task-pipeline';
 export * from './julius-run-loop';

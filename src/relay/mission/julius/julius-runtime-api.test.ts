@@ -4,12 +4,10 @@ import {
   JULIUS_API_SCOPES, JULIUS_TIMELINE_PAGE_LIMIT, JuliusRuntimeApi,
   type JuliusApiIdentity,
 } from './julius-runtime-api';
-import { startJuliusGauntlet } from './julius-gauntlet-runtime';
 import { requestJuliusApproval } from './julius-lifecycle-runtime';
 import { spawnJuliusSubagent } from './julius-subagent-runtime';
 import { cardPolicy, createJuliusHarness, seedRun, task, worker } from './julius-runtime-fixtures';
 import type { JuliusRunRow } from './julius-runtime-ports';
-import type { JuliusTask } from './julius-runtime';
 
 /**
  * THE EXECUTION API, ATTACKED BEFORE IT IS USED.
@@ -75,35 +73,18 @@ describe('inspecting a run', () => {
     expect(verification.ok && verification.value.decisions.length).toBeGreaterThan(0);
   });
 
-  it('reports sub-agents and a gauntlet', async () => {
+  it('reports sub-agents', async () => {
     const ctx = build();
     await spawnJuliusSubagent({
       run: RUN, policy: cardPolicy({ allowedProviders: [CODER.providerId] }),
       requestId: 'req-1', parentTaskId: 'task-1', role: 'CODING_AGENT', taskType: 'audit',
       capability: 'implement', requestedPermissions: ['read'], runPermissions: ['read'], usdMicros: 100,
     }, { store: ctx.harness.store, budget: ctx.harness.budget, clock: ctx.harness.clock, ids: ctx.harness.ids });
-    await startJuliusGauntlet({
-      run: RUN, policy: cardPolicy({ allowedProviders: [CODER.providerId] }), gauntletId: 'g-1',
-      anchor: task({ taskId: 'task-1' }) as JuliusTask,
-      limits: { maxRounds: 2, maxRetries: 1, maxDurationMs: 60_000, maxUsdMicros: 10_000 },
-    }, { store: ctx.harness.store, clock: ctx.harness.clock });
 
     const subagents = await ctx.api.inspectSubagents(identity(), 'run-1');
     expect(subagents.ok && subagents.value.length).toBe(1);
-    const gauntlet = await ctx.api.inspectGauntlet(identity(), 'run-1', 'g-1');
-    expect(gauntlet.ok).toBe(true);
-    if (!gauntlet.ok) return;
-    expect(gauntlet.value?.gauntlet.round).toBe(1);
-    expect(gauntlet.value?.rounds.length).toBe(1);
   });
 
-  it('answers null for a gauntlet that is not this run\'s, rather than leaking it', async () => {
-    const ctx = build();
-    const gauntlet = await ctx.api.inspectGauntlet(identity(), 'run-1', 'g-nope');
-    expect(gauntlet.ok).toBe(true);
-    if (!gauntlet.ok) return;
-    expect(gauntlet.value).toBeNull();
-  });
 });
 
 /* --------------------------------------------------------- authorization */
@@ -120,8 +101,6 @@ describe('authorization is applied on every path', () => {
       expect(result.ok, method).toBe(false);
       expect(result.reason, method).toBe('scope_missing');
     }
-    const gauntlet = await ctx.api.inspectGauntlet(without, 'run-1', 'g-1');
-    expect(gauntlet.ok).toBe(false);
   });
 
   it('refuses every read for a project the caller does not hold', async () => {

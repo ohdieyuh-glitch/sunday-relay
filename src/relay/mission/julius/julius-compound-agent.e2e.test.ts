@@ -3,13 +3,11 @@ import { describe, expect, it } from 'vitest';
 import { JuliusRunLoop } from './julius-run-loop';
 import { JuliusRuntimeApi } from './julius-runtime-api';
 import { spawnJuliusSubagent } from './julius-subagent-runtime';
-import { advanceJuliusGauntletRound, openNextGauntletRound, startJuliusGauntlet } from './julius-gauntlet-runtime';
 import { summariseJuliusEvals, projectJuliusMetrics } from './julius-metrics';
 import {
   cardPolicy, createJuliusHarness, task, verificationPolicy, worker,
 } from './julius-runtime-fixtures';
 import type { JuliusRunRow } from './julius-runtime-ports';
-import type { JuliusTask } from './julius-runtime';
 
 /**
  * DO THE COMPONENTS FORM ONE SYSTEM?
@@ -307,7 +305,7 @@ describe('scenario 2 — a transient provider failure, a fallback, and a complet
 
 /* ============================ SCENARIO 3 ============================== */
 
-describe('scenario 3 — a sub-agent and a gauntlet, bounded, across a restart', () => {
+describe('scenario 3 — a bounded sub-agent, across a restart', () => {
   const build = () => {
     const harness = createJuliusHarness({
       workers: [{
@@ -317,7 +315,6 @@ describe('scenario 3 — a sub-agent and a gauntlet, bounded, across a restart',
       card: cardPolicy({
         allowedProviders: [CODER.providerId], autonomy: 'AUTONOMOUS',
         subagents: { allowed: true, maxDepth: 2, maxActive: 2, maxTotal: 3 },
-        gauntlet: { allowed: true, maxRounds: 2 },
       }),
       capabilityFor,
     });
@@ -326,11 +323,9 @@ describe('scenario 3 — a sub-agent and a gauntlet, bounded, across a restart',
     return harness;
   };
 
-  const anchor = task({ taskId: 'anchor', ordinal: 0 }) as JuliusTask;
   const policy = cardPolicy({
     allowedProviders: [CODER.providerId], autonomy: 'AUTONOMOUS',
     subagents: { allowed: true, maxDepth: 2, maxActive: 2, maxTotal: 3 },
-    gauntlet: { allowed: true, maxRounds: 2 },
   });
 
   it('spawns a bounded sub-agent that runs through the ordinary pipeline', async () => {
@@ -366,42 +361,7 @@ describe('scenario 3 — a sub-agent and a gauntlet, bounded, across a restart',
     expect(refused.authorized).toBe(false);
   });
 
-  it('runs a gauntlet to CLEARED across rounds, every round a real task', async () => {
-    const harness = build();
-    const deps = { store: harness.store, clock: harness.clock, ids: harness.ids, events: harness.store, trajectory: harness.store };
-    const started = await startJuliusGauntlet({
-      run: RUN, policy, gauntletId: 'g-1', anchor,
-      limits: { maxRounds: 2, maxRetries: 1, maxDurationMs: 600_000, maxUsdMicros: 1_000_000 },
-    }, deps);
-    expect(started.started).toBe(true);
-    if (!started.started) return;
-
-    // Round 1 fails and repairs.
-    await advanceJuliusGauntletRound({
-      run: RUN, policy, anchor, gauntletId: 'g-1', phase: 'EXECUTE', outcome: 'FAILED',
-      durationMs: 100, usdMicros: 100, evidenceIds: [], reviewerRequired: false,
-    }, deps);
-    await advanceJuliusGauntletRound({
-      run: RUN, policy, anchor, gauntletId: 'g-1', phase: 'REPAIR', outcome: 'PASSED',
-      durationMs: 100, usdMicros: 100, evidenceIds: [], reviewerRequired: false,
-    }, deps);
-    await openNextGauntletRound({ run: RUN, anchor, gauntletId: 'g-1' }, deps);
-    const cleared = await advanceJuliusGauntletRound({
-      run: RUN, policy, anchor, gauntletId: 'g-1', phase: 'EXECUTE', outcome: 'PASSED',
-      durationMs: 100, usdMicros: 100, evidenceIds: [], reviewerRequired: false,
-    }, deps);
-    expect(cleared.advanced).toBe(true);
-    if (!cleared.advanced) return;
-    expect(cleared.state).toBe('CLEARED');
-
-    // Every round was a real task in the graph.
-    const roundTasks = (await harness.store.tasksForRun('run-1', 'prj-1'))
-      .filter((item) => item.taskId.startsWith('gauntlet:'));
-    expect(roundTasks.length).toBeGreaterThanOrEqual(3);
-    expect(harness.store.events().map((event) => event.type)).toContain('gauntlet.cleared');
-  });
-
-  it('resumes both after a simulated restart, without re-running finished work', async () => {
+  it('resumes the sub-agent grant after a simulated restart, without re-running finished work', async () => {
     const harness = build();
     const deps = {
       store: harness.store, budget: harness.budget, clock: harness.clock,
@@ -411,10 +371,6 @@ describe('scenario 3 — a sub-agent and a gauntlet, bounded, across a restart',
       run: RUN, policy, requestId: 'sub-1', parentTaskId: 'anchor',
       role: 'CODING_AGENT', taskType: 'audit', capability: 'implement',
       requestedPermissions: ['read'], runPermissions: ['read'], usdMicros: 500,
-    }, deps);
-    await startJuliusGauntlet({
-      run: RUN, policy, gauntletId: 'g-1', anchor,
-      limits: { maxRounds: 2, maxRetries: 1, maxDurationMs: 600_000, maxUsdMicros: 1_000_000 },
     }, deps);
     await harness.loop.tick(scope);
     const dispatchesBefore = harness.adapters.get(CODER.adapterId)!.dispatches.length;
@@ -427,11 +383,8 @@ describe('scenario 3 — a sub-agent and a gauntlet, bounded, across a restart',
     );
     await drain(resumed);
 
-    // The sub-agent grant and the gauntlet both survived.
+    // The sub-agent grant survived the restart.
     expect(await harness.store.loadSubagent('run-1', 'sub-1')).not.toBeNull();
-    const gauntlet = await harness.store.loadGauntlet('run-1', 'g-1');
-    expect(gauntlet).not.toBeNull();
-    expect(gauntlet!.round).toBe(1);
     // Nothing that had already succeeded was dispatched a second time.
     const dispatched = harness.adapters.get(CODER.adapterId)!.dispatches.map((d) => d.taskId);
     expect(new Set(dispatched).size, 'a finished task was re-dispatched').toBe(dispatched.length);

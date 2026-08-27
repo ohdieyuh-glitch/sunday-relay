@@ -451,6 +451,42 @@ describe('review and repair actually enter the graph', () => {
   });
 });
 
+/* ------------------------------------------------------- without a gauntlet */
+
+describe('Julius works with no Gauntlet module loaded', () => {
+  const plain = () => {
+    const harness = createJuliusHarness({ workers: [{ worker: CODER, script: [{ kind: 'succeed' }] }] });
+    seedRun(harness, { tasks: [task({ taskId: 'task-1', ordinal: 0 })] });
+    return harness;
+  };
+
+  it('runs a mission to completion touching nothing gauntlet-shaped', async () => {
+    // The static half of this invariant is in
+    // `mission/gauntlet/gauntlet-boundary.test.ts`, which reads both source
+    // trees and fails on an import in either direction. This is the
+    // behavioural half: a whole run, and nothing in what it produced names a
+    // user-activated review command.
+    const harness = plain();
+    const report = await harness.loop.tick(scope);
+    expect(report.outcomes[0].kind).toBe('COMPLETED');
+    expect((await harness.store.loadRun('run-1', 'prj-1'))!.state).toBe('COMPLETED');
+
+    const everything = JSON.stringify({
+      events: harness.store.events(),
+      trajectory: harness.store.trajectory(),
+      contexts: harness.store.contexts(),
+    });
+    expect(everything.toLowerCase(), 'a run named a gauntlet').not.toContain('gauntlet');
+  });
+
+  it('exposes no gauntlet method on the store it was given', () => {
+    const harness = plain();
+    for (const method of Object.keys(harness.store)) {
+      expect(method.toLowerCase(), method).not.toContain('gauntlet');
+    }
+  });
+});
+
 /* ------------------------------------------------------------ boundedness */
 
 describe('the loop is bounded', () => {
