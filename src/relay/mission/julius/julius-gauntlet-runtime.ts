@@ -34,7 +34,8 @@
 import { advanceGauntlet, type GauntletLimits, type GauntletRun, type GauntletState } from './julius-bounded-runtime';
 import { evaluateJuliusPolicy, type JuliusCardPolicy } from './julius-policy';
 import type { JuliusTask } from './julius-runtime';
-import type { JuliusClock, JuliusRunRow } from './julius-runtime-ports';
+import type { JuliusClock, JuliusEventWriter, JuliusIdFactory, JuliusRunRow } from './julius-runtime-ports';
+import { validateJuliusEvent, type JuliusOperationalEventType } from './julius-events';
 
 /* -------------------------------------------------------------- records */
 
@@ -90,6 +91,29 @@ export interface JuliusGauntletDependencies {
     addTask(input: { commandId: string; runId: string; projectId: string; task: JuliusTask }): Promise<boolean>;
   };
   readonly clock: JuliusClock;
+  /** Optional, and its absence is visible: no ledger, no events. */
+  readonly events?: JuliusEventWriter;
+  readonly ids?: JuliusIdFactory;
+}
+
+type GauntletEventType = Extract<JuliusOperationalEventType,
+  'gauntlet.started' | 'gauntlet.round.started' | 'gauntlet.round.completed' | 'gauntlet.cleared' | 'gauntlet.halted'>;
+
+async function emit(
+  deps: JuliusGauntletDependencies,
+  run: { runId: string; projectId: string },
+  type: GauntletEventType,
+  facts: Record<string, string | number | boolean | null>,
+): Promise<void> {
+  if (deps.events === undefined || deps.ids === undefined) return;
+  const event = {
+    eventId: deps.ids.next(`event:${type}`), runId: run.runId, projectId: run.projectId,
+    type, taskId: typeof facts.taskId === 'string' ? facts.taskId : null, workerId: null,
+    correlationId: String(facts.gauntletId ?? run.runId), causationId: null,
+    occurredAt: deps.clock.now(), facts,
+  } as const;
+  validateJuliusEvent(event);
+  await deps.events.appendEvent(event);
 }
 
 /* --------------------------------------------------------------- naming */
@@ -211,6 +235,13 @@ export async function startJuliusGauntlet(
     outcome: null, durationMs: null, usdMicros: null, evidenceIds: [],
     startedAt: deps.clock.now(), completedAt: null,
   });
+  await emit(deps, input.run, 'gauntlet.started', {
+    gauntletId: started.gauntletId, taskId: input.anchor.taskId,
+    maxRounds: started.limits.maxRounds, maxRetries: started.limits.maxRetries,
+  });
+  await emit(deps, input.run, 'gauntlet.round.started', {
+    gauntletId: started.gauntletId, round: started.round, phase: 'EXECUTE', taskId: task.taskId,
+  });
   return { started: true, resumed: false, record: started, roundTask: task };
 }
 
@@ -327,6 +358,22 @@ export async function advanceJuliusGauntletRound(
     };
   }
 
+  await emit(deps, input.run, 'gauntlet.round.completed', {
+    gauntletId: next.gauntletId, round: current.round, phase: input.phase,
+    outcome: input.outcome, state: next.state,
+  });
+  if (next.state === 'CLEARED') {
+    await emit(deps, input.run, 'gauntlet.cleared', {
+      gauntletId: next.gauntletId, rounds: next.round, retries: next.retries,
+      usedUsdMicros: next.usedUsdMicros, usedDurationMs: next.usedDurationMs,
+    });
+  }
+  if (next.state === 'HALTED') {
+    await emit(deps, input.run, 'gauntlet.halted', {
+      gauntletId: next.gauntletId, rounds: next.round, haltReason: next.haltReason,
+    });
+  }
+
   const successor = await scheduleSuccessor(input, next, deps);
   return { advanced: true, state: next.state, round: next.round, nextTask: successor, haltReason: next.haltReason };
 }
@@ -406,6 +453,9 @@ export async function openNextGauntletRound(
     gauntletId: next.gauntletId, round: next.round, phase: 'EXECUTE', taskId: task.taskId,
     outcome: null, durationMs: null, usdMicros: null, evidenceIds: [],
     startedAt: deps.clock.now(), completedAt: null,
+  });
+  await emit(deps, input.run, 'gauntlet.round.started', {
+    gauntletId: next.gauntletId, round: next.round, phase: 'EXECUTE', taskId: task.taskId,
   });
   return { advanced: true, state: next.state, round: next.round, nextTask: task, haltReason: next.haltReason };
 }

@@ -300,6 +300,13 @@ export async function runClaimedTask(
     });
     await deps.store.persist({ projectId: run.projectId, snapshot });
     contextId = snapshot.contextId;
+    await ledger.event('context.compiled', {
+      taskId: task.taskId, workerId: worker.workerId,
+      facts: {
+        contextId, characterCount: snapshot.characterCount, truncated: snapshot.truncated,
+        redactionCount: snapshot.redactionCount, contentHash: snapshot.contentHash,
+      },
+    });
     await ledger.trajectory('CONTEXT_COMPILED', {
       taskId: task.taskId, workerId: worker.workerId, contextId,
       policyRevision: request.policy.revision,
@@ -320,10 +327,79 @@ export async function runClaimedTask(
   const resources = deps.resources.estimate({ taskId: claim.taskId, taskType: claim.taskType, role: claim.role, attempt: claim.attempt });
 
   const coordinator = new JuliusExecutionCoordinator(deps.router, executionPorts(deps, run, ledger));
-  const outcome = await coordinator.execute({
+
+  /* ------------------------------------------------- reroute and fallback */
+  /**
+   * TRY A DIFFERENT WORKER BEFORE GIVING THE TASK BACK.
+   *
+   * `reroute.selected` and `fallback.selected` were in the inherited event
+   * catalogue and NOTHING EMITTED THEM, because the runtime never rerouted:
+   * the router accepts `excludedWorkerIds` and no caller ever supplied any. A
+   * declared event nothing emits is a promise nobody keeps, so rather than
+   * deleting the types the behaviour they name is implemented.
+   *
+   * BOUNDED BY THE ELIGIBLE SET, not by a number. Each attempt excludes every
+   * worker already tried, so the loop can run at most once per eligible
+   * worker and terminates without a counter to get wrong. Each reroute is
+   * still put to `decideJuliusContinuation`, so a SUPERVISED run does not
+   * quietly try three providers before telling anyone.
+   */
+  const tried: string[] = [];
+  let outcome = await coordinator.execute({
     claim: executionClaim, policy: request.policy, role, taskType: claim.taskType,
     capability: request.capability, resources, operationId, signal: request.signal,
   });
+  let lastProviderId = deps.router.providerOf(outcome.status === 'COMPLETED' ? outcome.workerId : null);
+
+  while (outcome.status !== 'COMPLETED' && outcome.status !== 'DENIED') {
+    const selected = deps.router.eligibleWorkerIds({
+      role, taskType: claim.taskType, capability: request.capability,
+      policy: request.policy, excludedWorkerIds: tried,
+    });
+    if (selected.length === 0) break;
+    tried.push(selected[0]!);
+    const remaining = deps.router.eligibleWorkerIds({
+      role, taskType: claim.taskType, capability: request.capability,
+      policy: request.policy, excludedWorkerIds: tried,
+    });
+    if (remaining.length === 0) break;
+
+    await ledger.event('provider.failure', {
+      taskId: claim.taskId, facts: { code: outcome.code, triedWorkers: tried.length },
+    });
+
+    const carryOn = decideJuliusContinuation(request.policy, {
+      kind: 'REROUTE', excludedWorkerIds: tried, remainingWorkers: remaining.length,
+    });
+    if (!carryOn.proceed) break;
+
+    const nextProviderId = deps.router.providerOf(remaining[0]!);
+    // A REROUTE THAT CROSSES PROVIDERS IS A FALLBACK, and C.A.R.D. governs the
+    // two separately — `fallback` may be denied while rerouting inside one
+    // provider is allowed. So the crossing is checked before it is taken.
+    if (nextProviderId !== null && nextProviderId !== lastProviderId) {
+      const mayFallBack = decideJuliusContinuation(request.policy, { kind: 'FALLBACK', providerId: nextProviderId });
+      if (!mayFallBack.proceed) break;
+      await ledger.event('fallback.selected', {
+        taskId: claim.taskId, facts: { providerId: nextProviderId, reasonCode: mayFallBack.reasonCode },
+      });
+      await ledger.trajectory('FALLBACK', {
+        taskId: claim.taskId, providerId: nextProviderId,
+        policyRevision: request.policy.revision, outcome: 'SELECTED',
+      });
+    }
+    await ledger.event('reroute.selected', {
+      taskId: claim.taskId, facts: { excluded: tried.length, remaining: remaining.length, reasonCode: carryOn.reasonCode },
+    });
+
+    lastProviderId = nextProviderId;
+    outcome = await coordinator.execute({
+      claim: executionClaim, policy: request.policy, role, taskType: claim.taskType,
+      capability: request.capability, resources,
+      operationId: `${operationId}:reroute:${tried.length}`,
+      signal: request.signal, excludedWorkerIds: tried,
+    });
+  }
 
   if (outcome.status !== 'COMPLETED') {
     // The coordinator already released the reservation and emitted its own
@@ -404,6 +480,14 @@ function executionPorts(
         outputTokens: number('outputTokens'), toolCalls: number('toolCalls'), runtimeMs: number('runtimeMs'),
         receiptId: typeof usage.receiptId === 'string' ? usage.receiptId : null, now: deps.clock.now(),
       });
+      // The coordinator emits `budget.reserved` and `budget.denied` and has no
+      // event for the settlement, so the amount actually spent had no
+      // authoritative record. It does now, and it is the OBSERVED usage rather
+      // than the estimate that was reserved.
+      await ledger.event('budget.settled', {
+        taskId: null,
+        facts: { reservationId, usdMicros: number('usdMicros'), inputTokens: number('inputTokens'), outputTokens: number('outputTokens') },
+      });
     },
     release: async ({ reservationId, reason }) => {
       await deps.budget.release({ reservationId, reason, now: deps.clock.now() });
@@ -458,6 +542,54 @@ async function verifyExecutedTask(input: {
     deps.store.decisionsForRun(run.runId, run.projectId),
     deps.store.reviewCompletedFor(task.taskId, run.projectId),
   ]);
+
+  /**
+   * A REVIEWER'S FAILED EVIDENCE BECOMES A BLOCKING FINDING.
+   *
+   * `recordFinding` was written in #175 and nothing called it, so a review
+   * that failed produced FAILED evidence and no FINDING — and
+   * `evaluateJuliusVerification` counts BLOCKING FINDINGS, not failed
+   * evidence, when it decides whether to repair. A review could therefore fail
+   * and change nothing, which is the most expensive kind of no-op the product
+   * has: the paid review ran and its verdict was discarded.
+   *
+   * The finding is attributed to the task under review — a review task's
+   * parent — because that is the task a repair must be scheduled for. Its id
+   * is derived from the evidence id, so a re-run of the same reviewer produces
+   * the same finding rather than a second one.
+   */
+  if (task.role === 'INDEPENDENT_REVIEWER' && task.parentTaskId !== null) {
+    for (const item of evidence) {
+      if (item.taskId !== task.taskId || item.type !== 'REVIEW_FINDING' || item.status !== 'FAILED') continue;
+      const recorded = await deps.store.recordFinding({
+        projectId: run.projectId,
+        finding: {
+          findingId: `finding:${item.evidenceId}`,
+          runId: run.runId,
+          taskId: task.parentTaskId,
+          reviewerWorkerId: item.workerId,
+          severity: 'HIGH',
+          category: 'review',
+          claim: item.safeSummary,
+          criterionId: null,
+          evidenceIds: [item.evidenceId],
+          blocking: true,
+          status: 'OPEN',
+          createdAt: item.occurredAt,
+        },
+      });
+      if (recorded) {
+        await ledger.event('finding.recorded', {
+          taskId: task.parentTaskId, workerId: item.workerId,
+          facts: { findingId: `finding:${item.evidenceId}`, evidenceId: item.evidenceId, blocking: true },
+        });
+        await ledger.trajectory('FINDING', {
+          taskId: task.parentTaskId, workerId: item.workerId,
+          policyRevision: input.request.verification.revision, outcome: 'BLOCKING',
+        });
+      }
+    }
+  }
 
   const action = evaluateJuliusVerification({
     task, evidence, criteria, findings,
@@ -521,6 +653,30 @@ async function verifyExecutedTask(input: {
     return scheduleRepair({ ...input, decision, findings });
   }
   if (decision.action === 'ACCEPT' || decision.action === 'COMPLETE') {
+    /**
+     * DEPENDENCY WAKEUP, AS AN EVENT RATHER THAN AS A MECHANISM.
+     *
+     * The claim query is what actually makes a task claimable, and nothing
+     * here changes that — a second wakeup mechanism would race the first. What
+     * was missing is the OBSERVABILITY of it: `task.runnable` was in the
+     * catalogue and nothing emitted it, so a consumer could see a task claimed
+     * and never see the moment work became available. This announces the fact
+     * the claim query will act on, and moves nothing.
+     */
+    for (const dependent of tasks) {
+      if (!dependent.dependencyIds.includes(task.taskId)) continue;
+      if (dependent.state !== 'BLOCKED' && dependent.state !== 'RUNNABLE') continue;
+      const satisfied = dependent.dependencyIds.every((id) => {
+        if (id === task.taskId) return true;
+        const other = tasks.find((value) => value.taskId === id);
+        return other !== undefined && (other.state === 'SUCCEEDED' || other.state === 'SKIPPED');
+      });
+      if (!satisfied) continue;
+      await ledger.event('task.runnable', {
+        taskId: dependent.taskId,
+        facts: { unblockedBy: task.taskId, role: dependent.role, taskType: dependent.taskType },
+      });
+    }
     return { kind: 'COMPLETED', taskId: task.taskId, workerId: input.workerId, duplicate: input.duplicate, decision };
   }
   if (decision.action === 'RETRY') {

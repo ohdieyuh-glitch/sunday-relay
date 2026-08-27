@@ -40,6 +40,7 @@
  * system that is not durable.
  */
 
+import type { JuliusRecoveryAction } from './julius-recovery';
 import { transitionMission, type JuliusBrainEntry, type JuliusEvidence, type JuliusMissionState, type JuliusTask, type JuliusVerificationDecision } from './julius-runtime';
 import type { JuliusOperationalEvent } from './julius-events';
 import type { JuliusTrajectoryEvent } from './julius-trajectory';
@@ -69,6 +70,18 @@ interface TaskRow extends JuliusTask {
   version: number;
 }
 
+/**
+ * The attempt ceiling recovery requeues against.
+ *
+ * The inherited `recoverExpired` reads a `maxRetries` written as the SQL
+ * literal `2` inside its own query. That number is the same idea as the
+ * dispatch path's attempt ceiling and lives in two places; this model uses the
+ * dispatch path's, so a task cannot be requeued past the point at which the
+ * pipeline would refuse to retry it. Reconciling the two is recorded as a gap
+ * rather than fixed by editing the inherited SQL.
+ */
+const RECOVERY_MAX_ATTEMPTS = 3;
+
 interface ResultRow {
   readonly runId: string; readonly taskId: string; readonly leaseGeneration: number;
   readonly status: 'SUCCEEDED' | 'FAILED' | 'CANCELLED'; readonly idempotencyKey: string;
@@ -89,6 +102,8 @@ export interface JuliusMemoryStore
   trajectory(): readonly JuliusTrajectoryEvent[];
   contexts(): readonly JuliusContextSnapshot[];
   results(): readonly ResultRow[];
+  /** Reclaim expired leases, as the recovery repository does. */
+  recoverExpired(now: string, limit?: number, projectId?: string): Promise<readonly JuliusRecoveryAction[]>;
   /** The last recorded lifecycle change for a run, or null. */
   lifecycleOf(runId: string): { reason: string; actor: string; at: string } | null;
   /** Simulate a process restart: data survives, in-flight leases do not. */
@@ -166,6 +181,38 @@ export function createJuliusMemoryStore(): JuliusMemoryStore {
     trajectory() { return trajectoryLog.map((event) => ({ ...event })); },
     contexts() { return contexts.map((snapshot) => ({ ...snapshot })); },
     results() { return results.map((row) => ({ ...row })); },
+    /**
+     * The same shape `planJuliusRecovery` decides and the recovery repository
+     * applies: an expired lease is REQUEUED while attempts remain and
+     * ABANDONED once they do not. The attempt ceiling is the one the dispatch
+     * path uses, so a task cannot be requeued past the point at which the
+     * pipeline would refuse to retry it.
+     */
+    async recoverExpired(now, limit = 100, projectId) {
+      const actions: JuliusRecoveryAction[] = [];
+      for (const task of tasks.values()) {
+        if (actions.length >= limit) break;
+        if (task.state !== 'ACTIVE') continue;
+        if (task.leaseExpiresAt === null || task.leaseExpiresAt > now) continue;
+        const run = runs.get(task.runId);
+        if (run === undefined) continue;
+        if (projectId !== undefined && run.projectId !== projectId) continue;
+        const requeue = task.attempt < RECOVERY_MAX_ATTEMPTS;
+        task.state = requeue ? 'RUNNABLE' : 'FAILED';
+        task.leaseOwner = null;
+        task.leaseExpiresAt = null;
+        task.nextAttemptAt = now;
+        task.version += 1;
+        actions.push({
+          action: requeue ? 'REQUEUE' : 'FAIL_TASK',
+          runId: task.runId, taskId: task.taskId,
+          reasonCode: requeue ? 'LEASE_EXPIRED' : 'RETRIES_EXHAUSTED',
+          expectedLeaseGeneration: task.leaseGeneration,
+        });
+      }
+      return actions;
+    },
+
     lifecycleOf(runId) { const row = lifecycle.get(runId); return row ? { ...row } : null; },
     restart() {
       // Data survives; leases do not. Every ACTIVE task is left ACTIVE with an
@@ -317,6 +364,20 @@ export function createJuliusMemoryStore(): JuliusMemoryStore {
       if (evidenceKeys.has(key)) return false;
       evidenceKeys.add(key);
       evidence.push({ ...input.evidence });
+      return true;
+    },
+
+    async recordFinding(input) {
+      // The SQL refuses a finding whose evidence does not exist in the run;
+      // the model refuses the same, so a test cannot record a finding that
+      // production would reject.
+      if (input.finding.evidenceIds.length === 0) throw new Error('reviewer_finding_requires_evidence');
+      const run = runs.get(input.finding.runId);
+      if (run === undefined || run.projectId !== input.projectId) return false;
+      if (findings.some((row) => row.findingId === input.finding.findingId)) return false;
+      const known = new Set(evidence.map((row) => row.evidenceId));
+      if (input.finding.evidenceIds.some((id) => !known.has(id))) return false;
+      findings.push({ ...input.finding });
       return true;
     },
 

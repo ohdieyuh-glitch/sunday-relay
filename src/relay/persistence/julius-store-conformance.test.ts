@@ -11,11 +11,13 @@ import { JuliusSubagentPostgresRepository } from './julius-subagent-postgres';
 import { JuliusGauntletPostgresRepository } from './julius-gauntlet-postgres';
 import { JuliusLifecyclePostgresRepository } from './julius-lifecycle-postgres';
 import { JuliusTimelinePostgresRepository } from './julius-timeline-postgres';
+import { JuliusVerificationPostgresRepository } from './julius-verification-postgres';
 import { createJuliusMemoryStore } from '../mission/julius';
 import type {
   JuliusClaimedTask, JuliusContextWriter, JuliusEventWriter, JuliusResultReceiptRow,
   JuliusResultWriter, JuliusRunRow, JuliusRunWriter, JuliusRuntimeReader,
-  JuliusApprovalStore, JuliusGauntletStore, JuliusLifecycleStore, JuliusTimelineReader,
+  JuliusApprovalStore, JuliusFindingWriter, JuliusGauntletStore, JuliusLifecycleStore,
+  JuliusRecoveryDriver, JuliusTimelineReader,
   JuliusRuntimeStore, JuliusSubagentStore, JuliusTrajectoryWriter,
 } from '../mission/julius';
 
@@ -59,8 +61,13 @@ const pool = null as unknown as Pool;
 /** The main repository satisfies the run-writer port with no adapter at all. */
 const runWriter: JuliusRunWriter = new JuliusPostgresRepository(pool);
 
-/** The recovery repository satisfies the result-writer port directly. */
+/**
+ * ONE REPOSITORY, TWO PORTS. The recovery repository both accepts worker
+ * results and reclaims expired leases, and the runtime needs those separately:
+ * the pipeline writes results and only the recovery sweep reclaims.
+ */
 const resultWriter: JuliusResultWriter = new JuliusRecoveryPostgresRepository(pool);
+const recovery: JuliusRecoveryDriver = new JuliusRecoveryPostgresRepository(pool);
 
 /** The context repository satisfies the context port directly. */
 const contextWriter: JuliusContextWriter = new JuliusContextPostgresRepository(pool);
@@ -79,6 +86,9 @@ const lifecycle: JuliusApprovalStore & JuliusLifecycleStore = new JuliusLifecycl
 
 /** The timeline reader satisfies the API's read port directly. */
 const timeline: JuliusTimelineReader = new JuliusTimelinePostgresRepository(pool);
+
+/** The verification repository satisfies the finding-writer port directly. */
+const findings: JuliusFindingWriter = new JuliusVerificationPostgresRepository(pool);
 
 /**
  * THE TWO LEDGERS NEED A ONE-LINE ADAPTER, AND THAT IS THE POINT.
@@ -99,7 +109,7 @@ const trajectoryWriter: JuliusTrajectoryWriter = {
 
 /** The whole runtime store, composed from the real repositories. */
 const composed: JuliusRuntimeStore & JuliusSubagentStore & JuliusGauntletStore
-  & JuliusApprovalStore & JuliusLifecycleStore = {
+  & JuliusApprovalStore & JuliusLifecycleStore & JuliusRecoveryDriver = {
   loadRun: runWriter.loadRun.bind(runWriter),
   transition: runWriter.transition.bind(runWriter),
   addTask: runWriter.addTask.bind(runWriter),
@@ -121,6 +131,8 @@ const composed: JuliusRuntimeStore & JuliusSubagentStore & JuliusGauntletStore
   repairRoundsFor: reader.repairRoundsFor.bind(reader),
   reviewCompletedFor: reader.reviewCompletedFor.bind(reader),
   activeTaskCount: reader.activeTaskCount.bind(reader),
+  recordFinding: findings.recordFinding.bind(findings),
+  recoverExpired: recovery.recoverExpired.bind(recovery),
   subagentContext: subagents.subagentContext.bind(subagents),
   recordSubagent: subagents.recordSubagent.bind(subagents),
   loadSubagent: subagents.loadSubagent.bind(subagents),
@@ -161,10 +173,18 @@ describe('the Julius runtime ports and the PostgreSQL repositories agree', () =>
     // A drift-detector with a number in it: if a future repository stops
     // satisfying its port directly, this count changes and the reason has to be
     // written down rather than absorbed.
-    const direct = [runWriter, resultWriter, contextWriter, reader, subagents, gauntlets, lifecycle, timeline];
-    expect(direct).toHaveLength(8);
+    const direct = [runWriter, resultWriter, contextWriter, reader, subagents, gauntlets, lifecycle, timeline, findings];
+    expect(direct).toHaveLength(9);
     expect(typeof eventWriter.appendEvent).toBe('function');
     expect(typeof trajectoryWriter.appendTrajectory).toBe('function');
+  });
+
+  it('satisfies the recovery driver with no adapter', () => {
+    expect(typeof recovery.recoverExpired).toBe('function');
+  });
+
+  it('satisfies the finding writer with no adapter', () => {
+    expect(typeof findings.recordFinding).toBe('function');
   });
 
   it('satisfies the timeline reader with no adapter', () => {

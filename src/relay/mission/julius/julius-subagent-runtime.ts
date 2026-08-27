@@ -40,7 +40,8 @@
 import { authorizeSubagent, type JuliusSubagentRequest } from './julius-bounded-runtime';
 import { evaluateJuliusPolicy, type JuliusCardPolicy } from './julius-policy';
 import type { JuliusTask, JuliusWorkerRole } from './julius-runtime';
-import type { JuliusBudgetPort, JuliusClock, JuliusIdFactory, JuliusRunRow } from './julius-runtime-ports';
+import type { JuliusBudgetPort, JuliusClock, JuliusEventWriter, JuliusIdFactory, JuliusRunRow } from './julius-runtime-ports';
+import { validateJuliusEvent, type JuliusOperationalEventType } from './julius-events';
 
 /* --------------------------------------------------------------- records */
 
@@ -119,6 +120,31 @@ export interface JuliusSubagentDependencies {
   readonly budget: JuliusBudgetPort;
   readonly clock: JuliusClock;
   readonly ids: JuliusIdFactory;
+  /**
+   * OPTIONAL, AND THE ABSENCE IS HONEST. A caller with no ledger attached gets
+   * the authorization and the durable grant and no events — which is exactly
+   * what a test double wants, and is visibly different from a caller whose
+   * events silently went nowhere.
+   */
+  readonly events?: JuliusEventWriter;
+}
+
+/** Emit one sub-agent event, when a ledger is attached. */
+async function emit(
+  deps: Pick<JuliusSubagentDependencies, 'events' | 'clock' | 'ids'>,
+  run: JuliusRunRow,
+  type: Extract<JuliusOperationalEventType, 'subagent.spawned' | 'subagent.denied' | 'subagent.completed'>,
+  facts: Record<string, string | number | boolean | null>,
+): Promise<void> {
+  if (deps.events === undefined) return;
+  const event = {
+    eventId: deps.ids.next(`event:${type}`), runId: run.runId, projectId: run.projectId,
+    type, taskId: typeof facts.taskId === 'string' ? facts.taskId : null,
+    workerId: null, correlationId: String(facts.requestId ?? run.runId), causationId: null,
+    occurredAt: deps.clock.now(), facts,
+  } as const;
+  validateJuliusEvent(event);
+  await deps.events.appendEvent(event);
 }
 
 /**
@@ -146,6 +172,9 @@ export async function spawnJuliusSubagent(
   /* ---------------------------------- the policy gate, before anything */
   const gate = evaluateJuliusPolicy(input.policy, { operation: 'SPAWN_SUBAGENT' });
   if (gate.effect === 'REQUIRE_APPROVAL') {
+    await emit(deps, input.run, 'subagent.denied', {
+      requestId: input.requestId, taskId: input.parentTaskId, reasonCode: 'SUBAGENT_APPROVAL_REQUIRED',
+    });
     return { authorized: false, reasonCode: 'SUBAGENT_APPROVAL_REQUIRED', safeMessage: gate.safeRationale };
   }
 
@@ -160,6 +189,9 @@ export async function spawnJuliusSubagent(
     now: deps.clock.now(),
   });
   if (reservation.state === 'DENIED') {
+    await emit(deps, input.run, 'subagent.denied', {
+      requestId: input.requestId, taskId: input.parentTaskId, reasonCode: 'SUBAGENT_BUDGET_DENIED',
+    });
     return {
       authorized: false, reasonCode: 'SUBAGENT_BUDGET_DENIED',
       safeMessage: reservation.denialReason ?? 'The budget did not permit a sub-agent.',
@@ -184,6 +216,9 @@ export async function spawnJuliusSubagent(
   } catch (error) {
     await deps.budget.release({ reservationId, reason: 'SUBAGENT_DENIED', now: deps.clock.now() });
     const reasonCode = error instanceof Error ? error.message : 'subagent_denied';
+    await emit(deps, input.run, 'subagent.denied', {
+      requestId: input.requestId, taskId: input.parentTaskId, reasonCode,
+    });
     return { authorized: false, reasonCode, safeMessage: 'The sub-agent request was refused.' };
   }
 
@@ -215,6 +250,10 @@ export async function spawnJuliusSubagent(
   }
 
   const stored = await deps.store.recordSubagent(record);
+  await emit(deps, input.run, 'subagent.spawned', {
+    requestId: input.requestId, taskId: childTask.taskId, parentTaskId: record.parentTaskId,
+    depth: record.depth, capability: record.capability, permissions: record.permissions.length,
+  });
   return { authorized: true, duplicate: stored.duplicate, record, childTask };
 }
 
@@ -265,13 +304,21 @@ function childTaskFrom(record: JuliusSubagentRecord, input: JuliusSubagentSpawnI
  */
 export async function settleJuliusSubagent(
   input: { runId: string; requestId: string; state: Extract<JuliusSubagentState, 'SUCCEEDED' | 'FAILED' | 'CANCELLED'> },
-  deps: Pick<JuliusSubagentDependencies, 'store' | 'budget' | 'clock'>,
+  deps: Pick<JuliusSubagentDependencies, 'store' | 'budget' | 'clock' | 'ids' | 'events'>,
 ): Promise<{ readonly settled: boolean }> {
   const record = await deps.store.loadSubagent(input.runId, input.requestId);
   if (record === null) return { settled: false };
   const changed = await deps.store.setSubagentState(input.runId, input.requestId, input.state);
   if (input.state !== 'SUCCEEDED') {
     await deps.budget.release({ reservationId: record.budgetReservationId, reason: `SUBAGENT_${input.state}`, now: deps.clock.now() });
+  }
+  if (changed) {
+    await emit(
+      { events: deps.events, clock: deps.clock, ids: deps.ids },
+      { runId: record.runId, projectId: record.projectId } as never,
+      'subagent.completed',
+      { requestId: record.requestId, taskId: record.childTaskId, state: input.state, depth: record.depth },
+    );
   }
   return { settled: changed };
 }

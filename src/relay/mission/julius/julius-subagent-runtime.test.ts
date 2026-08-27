@@ -157,7 +157,7 @@ describe('the bounds come from the store, not the request', () => {
     const ctx = build({ subagents: { allowed: true, maxDepth: 4, maxActive: 1, maxTotal: 8 } });
     await spawn(ctx, { requestId: 'a' });
     await settleJuliusSubagent({ runId: 'run-1', requestId: 'a', state: 'SUCCEEDED' }, {
-      store: ctx.harness.store, budget: ctx.harness.budget, clock: ctx.harness.clock,
+      store: ctx.harness.store, budget: ctx.harness.budget, clock: ctx.harness.clock, ids: ctx.harness.ids,
     });
     expect((await spawn(ctx, { requestId: 'b' })).authorized).toBe(true);
     const context = await ctx.harness.store.subagentContext('run-1', 'parent');
@@ -268,12 +268,12 @@ describe('settling a sub-agent', () => {
     const before = ctx.harness.budget.remainingUsdMicros();
 
     await settleJuliusSubagent({ runId: 'run-1', requestId: 'bad', state: 'FAILED' }, {
-      store: ctx.harness.store, budget: ctx.harness.budget, clock: ctx.harness.clock,
+      store: ctx.harness.store, budget: ctx.harness.budget, clock: ctx.harness.clock, ids: ctx.harness.ids,
     });
     expect(ctx.harness.budget.remainingUsdMicros()).toBeGreaterThan(before);
 
     await settleJuliusSubagent({ runId: 'run-1', requestId: 'ok', state: 'SUCCEEDED' }, {
-      store: ctx.harness.store, budget: ctx.harness.budget, clock: ctx.harness.clock,
+      store: ctx.harness.store, budget: ctx.harness.budget, clock: ctx.harness.clock, ids: ctx.harness.ids,
     });
     expect((await ctx.harness.store.loadSubagent('run-1', 'ok'))!.state).toBe('SUCCEEDED');
   });
@@ -281,7 +281,7 @@ describe('settling a sub-agent', () => {
   it('reports honestly when there is nothing to settle', async () => {
     const ctx = build();
     const result = await settleJuliusSubagent({ runId: 'run-1', requestId: 'never', state: 'FAILED' }, {
-      store: ctx.harness.store, budget: ctx.harness.budget, clock: ctx.harness.clock,
+      store: ctx.harness.store, budget: ctx.harness.budget, clock: ctx.harness.clock, ids: ctx.harness.ids,
     });
     expect(result.settled).toBe(false);
   });

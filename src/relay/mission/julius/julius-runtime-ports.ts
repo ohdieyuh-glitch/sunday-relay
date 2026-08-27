@@ -38,6 +38,7 @@ import type {
   JuliusWorkerRole,
 } from './julius-runtime';
 import type { JuliusOperationalEvent } from './julius-events';
+import type { JuliusRecoveryAction } from './julius-recovery';
 import type { JuliusReviewerFinding, JuliusAcceptanceCriterion } from './julius-verification-runtime';
 import type { JuliusContextSnapshot } from './julius-context-snapshot';
 import type { JuliusTrajectoryEvent } from './julius-trajectory';
@@ -123,6 +124,22 @@ export interface JuliusRunWriter {
   }): Promise<boolean>;
 }
 
+/**
+ * RECLAIMING EXPIRED LEASES.
+ *
+ * `recoverExpired` exists on the recovery repository and nothing called it —
+ * the claim query happens to also pick up an expired ACTIVE task, so the
+ * runtime worked without recovery and lost every RECOVERY FACT: what was
+ * requeued, what was abandoned, how many attempts it had taken. Declaring the
+ * port is what lets the run loop run the sweep and record what it did.
+ */
+export interface JuliusRecoveryDriver {
+  // The action type is IMPORTED rather than restated. `taskId` is nullable on
+  // it — a `RESUME_RUN` action is about the run and names no task — and a port
+  // that declared it non-null would have compiled here and thrown there.
+  recoverExpired(now: string, limit?: number, projectId?: string): Promise<readonly JuliusRecoveryAction[]>;
+}
+
 export interface JuliusResultWriter {
   acceptWorkerResult(input: {
     resultId: string; idempotencyKey: string; runId: string; projectId: string;
@@ -130,6 +147,19 @@ export interface JuliusResultWriter {
     status: 'SUCCEEDED' | 'FAILED' | 'CANCELLED'; safeSummary: string;
     evidenceIds: readonly string[]; providerReceiptIds: readonly string[]; occurredAt: string;
   }): Promise<JuliusResultReceiptRow>;
+}
+
+/**
+ * RECORDING A REVIEWER'S FINDING.
+ *
+ * `JuliusVerificationPostgresRepository.recordFinding` was written in #175 and
+ * nothing called it, so `finding.recorded` sat in the event catalogue with no
+ * emitter and a reviewer's FAILED evidence never became a blocking finding —
+ * which meant `evaluateJuliusVerification` counted zero blocking findings for
+ * every run and no repair could ever be triggered by a review.
+ */
+export interface JuliusFindingWriter {
+  recordFinding(input: { projectId: string; finding: JuliusReviewerFinding }): Promise<boolean>;
 }
 
 export interface JuliusContextWriter {
@@ -212,7 +242,7 @@ export interface JuliusRuntimeReader {
 /** Everything the runtime writes and reads, in one bag the caller composes. */
 export interface JuliusRuntimeStore
   extends JuliusRunWriter, JuliusResultWriter, JuliusContextWriter,
-  JuliusEventWriter, JuliusTrajectoryWriter, JuliusRuntimeReader {}
+  JuliusEventWriter, JuliusTrajectoryWriter, JuliusRuntimeReader, JuliusFindingWriter {}
 
 /* --------------------------------------------------- role/task vocabulary */
 

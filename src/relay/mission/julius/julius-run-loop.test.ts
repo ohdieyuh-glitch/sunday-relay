@@ -146,17 +146,36 @@ describe('a single task, end to end', () => {
     expect(reservations[0].state).toBe('COMMITTED');
   });
 
-  it('advances the run to VERIFYING once every task is terminal', async () => {
+  it('carries the run all the way to COMPLETED, not just to VERIFYING', async () => {
+    // A run could never reach COMPLETED before the event-coverage audit found
+    // it: `missionMayComplete` existed and nothing called it, so every run
+    // stopped at VERIFYING — the last state before the one that matters.
     const harness = build();
     const report = await harness.loop.tick(scope);
     expect(report.runs).toHaveLength(1);
     expect(report.runs[0].changed).toBe(true);
     expect(report.runs[0].from).toBe('READY');
-    expect(report.runs[0].to).toBe('VERIFYING');
-    expect((await harness.store.loadRun('run-1', 'prj-1'))!.state).toBe('VERIFYING');
-    // Two versions were consumed, because the run really passed through
-    // EXECUTING rather than jumping a step the transition table forbids.
-    expect((await harness.store.loadRun('run-1', 'prj-1'))!.version).toBe(3);
+    expect(report.runs[0].to).toBe('COMPLETED');
+    expect(report.runs[0].reasonCode).toBe('MISSION_VERIFIED');
+    expect((await harness.store.loadRun('run-1', 'prj-1'))!.state).toBe('COMPLETED');
+    // The run really passed through EXECUTING and VERIFYING rather than
+    // jumping steps the transition table forbids.
+    expect((await harness.store.loadRun('run-1', 'prj-1'))!.version).toBe(4);
+    expect(harness.store.events().map((event) => event.type)).toContain('run.completed');
+  });
+
+  it('stops at VERIFYING when a decision is not an ACCEPT', async () => {
+    // The completion rule is #169's and is not restated by the loop: a single
+    // REPAIR or HALT among the decisions keeps the run in VERIFYING, which is
+    // the honest answer rather than a completion that ignores a decision.
+    const harness = build();
+    harness.store.seedFinding({
+      findingId: 'f-1', runId: 'run-1', taskId: 'task-1', reviewerWorkerId: 'reviewer',
+      severity: 'HIGH', category: 'correctness', claim: 'blocking', criterionId: null,
+      evidenceIds: ['task-1:1:0'], blocking: true, status: 'OPEN', createdAt: '2026-08-27T00:00:00.000Z',
+    });
+    await harness.loop.tick(scope);
+    expect((await harness.store.loadRun('run-1', 'prj-1'))!.state).not.toBe('COMPLETED');
   });
 
   it('emits the operational events the transition actually produced', async () => {

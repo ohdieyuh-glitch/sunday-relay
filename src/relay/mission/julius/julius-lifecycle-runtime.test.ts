@@ -4,6 +4,7 @@ import {
   cancelJuliusRun, decideJuliusApproval, pauseJuliusRun, requestJuliusApproval, resumeJuliusRun,
 } from './julius-lifecycle-runtime';
 import type { JuliusApproverAuthority } from './julius-lifecycle-runtime';
+import { JuliusRunLoop } from './julius-run-loop';
 import { cardPolicy, createJuliusHarness, seedRun, task, worker } from './julius-runtime-fixtures';
 import type { JuliusRunRow } from './julius-runtime-ports';
 
@@ -330,18 +331,33 @@ describe('cancel', () => {
 
   it('is idempotent and leaves already-terminal tasks alone', async () => {
     const ctx = build();
-    await ctx.harness.loop.tick(scope);           // one task succeeds
+    // One task at a time, so the run is still mid-flight rather than COMPLETED
+    // when the cancel arrives — a completed run is terminal and refuses one.
+    const narrow = new JuliusRunLoop(ctx.harness.deps, ctx.harness.policies, { claimLimit: 1, leaseMs: 60_000 });
+    await narrow.tick(scope);
+    const succeeded = ['task-1', 'task-2'].filter((id) => ctx.harness.store.taskRow(id)!.state === 'SUCCEEDED');
+    expect(succeeded.length).toBe(1);
+
     const first = await cancelJuliusRun({ runId: 'run-1', projectId: 'prj-1', actor: 'ghu-1', reason: 'stop' }, ctx.deps);
     expect(first.applied).toBe(true);
     if (!first.applied) return;
-    const succeeded = [...['task-1', 'task-2']].filter((id) => ctx.harness.store.taskRow(id)!.state === 'SUCCEEDED');
-    expect(succeeded.length).toBeGreaterThan(0);
+    expect(first.cancelledTasks).toBe(1);
 
     const again = await cancelJuliusRun({ runId: 'run-1', projectId: 'prj-1', actor: 'ghu-1', reason: 'stop again' }, ctx.deps);
     expect(again.applied).toBe(true);
     if (!again.applied) return;
     expect(again.duplicate).toBe(true);
     for (const id of succeeded) expect(ctx.harness.store.taskRow(id)!.state).toBe('SUCCEEDED');
+  });
+
+  it('refuses to cancel a run that already completed', async () => {
+    const ctx = build();
+    await ctx.harness.loop.tick(scope);
+    expect((await runRow(ctx.harness)).state).toBe('COMPLETED');
+    const cancelled = await cancelJuliusRun({ runId: 'run-1', projectId: 'prj-1', actor: 'ghu-1', reason: 'too late' }, ctx.deps);
+    expect(cancelled.applied).toBe(false);
+    if (cancelled.applied) return;
+    expect(cancelled.reasonCode).toBe('TRANSITION_NOT_LEGAL');
   });
 
   it('refuses a run in another project', async () => {

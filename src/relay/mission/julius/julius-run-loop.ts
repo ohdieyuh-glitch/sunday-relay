@@ -25,7 +25,7 @@
 
 import type { JuliusCardPolicy } from './julius-policy';
 import type { JuliusVerificationPolicy } from './julius-verification-runtime';
-import type { JuliusMissionState, JuliusTask } from './julius-runtime';
+import { missionMayComplete, type JuliusMissionState, type JuliusTask, type JuliusVerificationDecision } from './julius-runtime';
 import { planRunStatePath, transitionIsLegal } from './julius-state-path';
 
 /**
@@ -36,7 +36,8 @@ import { planRunStatePath, transitionIsLegal } from './julius-state-path';
 export { planRunStatePath, transitionIsLegal };
 import { runClaimedTask, type JuliusPipelineDependencies, type JuliusTaskOutcome } from './julius-task-pipeline';
 import { continuationConcurrency } from './julius-continuation';
-import type { JuliusClaimedTask, JuliusRunRow } from './julius-runtime-ports';
+import type { JuliusClaimedTask, JuliusRecoveryDriver, JuliusRunRow } from './julius-runtime-ports';
+import { validateJuliusEvent } from './julius-events';
 
 /* ---------------------------------------------------------- policy source */
 
@@ -115,13 +116,31 @@ export interface JuliusRunLoopConfig {
  *                          decision to COMPLETE is `missionMayComplete`'s and
  *                          is taken by the caller with the decisions in hand.
  */
-export function targetRunState(tasks: readonly JuliusTask[]): { state: JuliusMissionState; reasonCode: string } {
+export function targetRunState(
+  tasks: readonly JuliusTask[],
+  decisions: readonly JuliusVerificationDecision[] = [],
+): { state: JuliusMissionState; reasonCode: string } {
   if (tasks.length === 0) return { state: 'PLANNING', reasonCode: 'NO_TASKS_PLANNED' };
   if (tasks.some((task) => task.state === 'ACTIVE')) return { state: 'EXECUTING', reasonCode: 'TASKS_ACTIVE' };
   if (tasks.some((task) => task.state === 'RUNNABLE')) return { state: 'READY', reasonCode: 'TASKS_RUNNABLE' };
   if (tasks.some((task) => task.state === 'BLOCKED')) return { state: 'WAITING', reasonCode: 'TASKS_BLOCKED' };
   if (tasks.some((task) => task.state === 'FAILED')) return { state: 'FAILED', reasonCode: 'TASK_FAILED' };
   if (tasks.every((task) => task.state === 'SUCCEEDED' || task.state === 'SKIPPED')) {
+    /**
+     * A RUN COULD NEVER REACH COMPLETED, and the event-coverage audit is what
+     * found it: `run.completed` was in the catalogue and nothing emitted it,
+     * because nothing called `missionMayComplete`. Every run stopped at
+     * VERIFYING and stayed there — the last state before the one that matters.
+     *
+     * The rule is #169's and is not restated here. It requires the run to be
+     * VERIFYING, every task terminal, at least one decision, and EVERY
+     * decision an ACCEPT; a single REPAIR or HALT among them keeps the run in
+     * VERIFYING, which is the honest answer rather than a completion that
+     * ignores a decision.
+     */
+    if (missionMayComplete({ state: 'VERIFYING', tasks, decisions })) {
+      return { state: 'COMPLETED', reasonCode: 'MISSION_VERIFIED' };
+    }
     return { state: 'VERIFYING', reasonCode: 'ALL_TASKS_TERMINAL' };
   }
   return { state: 'BLOCKED', reasonCode: 'RUN_CANNOT_PROGRESS' };
@@ -241,6 +260,53 @@ export class JuliusRunLoop {
   }
 
   /**
+   * ONE BOUNDED RECOVERY SWEEP.
+   *
+   * `recoverExpired` was written in #173 and never called. The runtime works
+   * without it — the claim query also picks up an expired ACTIVE task — so its
+   * absence cost no correctness and lost every RECOVERY FACT: what was
+   * requeued, what was abandoned after too many attempts, and how a run came
+   * to be in the state an operator is looking at.
+   *
+   * Bounded, scoped to a project, and separate from `tick()` on purpose: a
+   * deployment decides how often to sweep, and a sweep that ran inside every
+   * tick would scan on a cadence set by how much work there happens to be.
+   */
+  async recover(
+    scope: { readonly projectId: string },
+    driver: JuliusRecoveryDriver,
+    limit = 100,
+  ): Promise<{ readonly actions: number; readonly requeued: number; readonly abandoned: number }> {
+    const now = this.deps.clock.now();
+    const actions = await driver.recoverExpired(now, limit, scope.projectId);
+    let requeued = 0;
+    let abandoned = 0;
+    for (const action of actions) {
+      if (action.action === 'REQUEUE') requeued += 1; else abandoned += 1;
+      // `RESUME_RUN` is about the run and names no task; the event still
+      // records it, with a null task, rather than being dropped for the shape
+      // of its subject.
+      const run = await this.deps.store.loadRun(action.runId, scope.projectId);
+      if (run === null) continue;    // another tenant's task; nothing is written
+      const event = {
+        eventId: this.deps.ids.next('event:recovery.action'),
+        runId: run.runId, projectId: run.projectId, type: 'recovery.action' as const,
+        taskId: action.taskId, workerId: null,
+        // A `RESUME_RUN` action names no task, so the run correlates it. A
+        // null correlation id would fail `validateJuliusEvent`, which is the
+        // right refusal — an event nothing can be correlated by is an event
+        // nobody can follow.
+        correlationId: action.taskId ?? run.runId, causationId: null,
+        occurredAt: this.deps.clock.now(),
+        facts: { action: action.action, reasonCode: action.reasonCode, owner: this.deps.owner },
+      };
+      validateJuliusEvent(event);
+      await this.deps.store.appendEvent(event);
+    }
+    return { actions: actions.length, requeued, abandoned };
+  }
+
+  /**
    * Move a run to the state its tasks imply, if that move is legal.
    *
    * Uses the run's own `version` as the expected version, so two loops
@@ -253,8 +319,11 @@ export class JuliusRunLoop {
     const run = await this.deps.store.loadRun(runId, projectId);
     if (run === null) return null;
 
-    const tasks = await this.deps.store.tasksForRun(runId, projectId);
-    const target = targetRunState(tasks);
+    const [tasks, decisions] = await Promise.all([
+      this.deps.store.tasksForRun(runId, projectId),
+      this.deps.store.decisionsForRun(runId, projectId),
+    ]);
+    const target = targetRunState(tasks, decisions);
     const path = planRunStatePath(run.state, target.state);
     if (path.length === 0) {
       return { runId, from: run.state, to: run.state, changed: false, reasonCode: target.reasonCode };
@@ -282,6 +351,17 @@ export class JuliusRunLoop {
           changed: current.state !== run.state, reasonCode: 'CONCURRENT_ADVANCE',
         };
       }
+    }
+    if (current.state === 'COMPLETED' || current.state === 'FAILED') {
+      const event = {
+        eventId: this.deps.ids.next(`event:run.${current.state.toLowerCase()}`),
+        runId, projectId, type: current.state === 'COMPLETED' ? 'run.completed' as const : 'run.failed' as const,
+        taskId: null, workerId: null, correlationId: runId, causationId: null,
+        occurredAt: this.deps.clock.now(),
+        facts: { reasonCode: target.reasonCode, tasks: tasks.length, decisions: decisions.length },
+      };
+      validateJuliusEvent(event);
+      await this.deps.store.appendEvent(event);
     }
     return { runId, from: run.state, to: current.state, changed: true, reasonCode: target.reasonCode };
   }

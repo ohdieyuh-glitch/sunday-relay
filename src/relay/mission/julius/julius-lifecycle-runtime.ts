@@ -31,7 +31,8 @@
 import type { JuliusMissionState } from './julius-runtime';
 import { planRunStatePath } from './julius-state-path';
 import type { JuliusPolicyOperation } from './julius-policy';
-import type { JuliusClock, JuliusRunRow, JuliusRunWriter } from './julius-runtime-ports';
+import type { JuliusClock, JuliusEventWriter, JuliusIdFactory, JuliusRunRow, JuliusRunWriter } from './julius-runtime-ports';
+import { validateJuliusEvent, type JuliusOperationalEventType } from './julius-events';
 
 /* ------------------------------------------------------------- approvals */
 
@@ -99,6 +100,35 @@ export type JuliusLifecycleOutcome =
 export interface JuliusLifecycleDependencies {
   readonly store: JuliusApprovalStore & JuliusLifecycleStore & Pick<JuliusRunWriter, 'loadRun' | 'transition'>;
   readonly clock: JuliusClock;
+  /** Optional, and its absence is visible: no ledger, no events. */
+  readonly events?: JuliusEventWriter;
+  readonly ids?: JuliusIdFactory;
+}
+
+type LifecycleEventType = Extract<JuliusOperationalEventType,
+  'approval.requested' | 'approval.decided' | 'task.cancelled'
+  | 'run.paused' | 'run.resumed' | 'run.cancelled'>;
+
+/** Which event a lifecycle target announces. Total, so a new state cannot be silent. */
+const LIFECYCLE_EVENT: Readonly<Partial<Record<JuliusMissionState, LifecycleEventType>>> = Object.freeze({
+  PAUSED: 'run.paused', READY: 'run.resumed', CANCELLED: 'run.cancelled',
+});
+
+async function emit(
+  deps: JuliusLifecycleDependencies,
+  run: { runId: string; projectId: string },
+  type: LifecycleEventType,
+  facts: Record<string, string | number | boolean | null>,
+): Promise<void> {
+  if (deps.events === undefined || deps.ids === undefined) return;
+  const event = {
+    eventId: deps.ids.next(`event:${type}`), runId: run.runId, projectId: run.projectId,
+    type, taskId: typeof facts.taskId === 'string' ? facts.taskId : null, workerId: null,
+    correlationId: String(facts.approvalId ?? run.runId), causationId: null,
+    occurredAt: deps.clock.now(), facts,
+  } as const;
+  validateJuliusEvent(event);
+  await deps.events.appendEvent(event);
 }
 
 /**
@@ -152,6 +182,10 @@ export async function requestJuliusApproval(
     safeSummary: `Waiting on an authorized approval for ${input.operation}.`,
   }, deps);
 
+  await emit(deps, input.run, 'approval.requested', {
+    approvalId: stored.record.approvalId, taskId: input.taskId, operation: input.operation,
+    reasonCode: input.reasonCode, duplicate: !stored.created,
+  });
   return { requested: true, record: stored.record, duplicate: !stored.created, runState: moved };
 }
 
@@ -220,6 +254,11 @@ export async function decideJuliusApproval(
   }
 
   /* ---------------------------------------------- what the run does next */
+  await emit(deps, run, 'approval.decided', {
+    approvalId: input.approvalId, taskId: approval.taskId, operation: approval.operation,
+    decision: input.decision, decidedBy: input.approverId,
+  });
+
   if (input.decision === 'DENIED') {
     const to = await moveRun(run, 'FAILED', {
       reasonCode: 'APPROVAL_DENIED',
@@ -326,6 +365,20 @@ async function lifecycle(
   const cancelled = cancelTasks
     ? await deps.store.cancelRunTasks(input.runId, input.projectId, deps.clock.now())
     : 0;
+  const announcement = LIFECYCLE_EVENT[to];
+  if (announcement !== undefined) {
+    await emit(deps, run, announcement, {
+      actor: input.actor, reason: input.reason.slice(0, 200), from: run.state,
+    });
+  }
+  if (cancelled > 0) {
+    // ONE EVENT FOR THE SWEEP, not one per task. A cancellation is a single
+    // decision, and a hundred events for a hundred tasks would bury the fact
+    // that one person cancelled one run.
+    await emit(deps, run, 'task.cancelled', {
+      cancelledTasks: cancelled, actor: input.actor, reason: input.reason.slice(0, 200),
+    });
+  }
   return { applied: true, from: run.state, to: state, cancelledTasks: cancelled, duplicate: false };
 }
 
