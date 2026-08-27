@@ -116,6 +116,7 @@ const composed: JuliusRuntimeStore & JuliusSubagentStore & JuliusGauntletStore
   brainEntriesForRun: reader.brainEntriesForRun.bind(reader),
   repairRoundsFor: reader.repairRoundsFor.bind(reader),
   reviewCompletedFor: reader.reviewCompletedFor.bind(reader),
+  activeTaskCount: reader.activeTaskCount.bind(reader),
   subagentContext: subagents.subagentContext.bind(subagents),
   recordSubagent: subagents.recordSubagent.bind(subagents),
   loadSubagent: subagents.loadSubagent.bind(subagents),
