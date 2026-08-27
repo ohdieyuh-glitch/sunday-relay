@@ -28,6 +28,6 @@ Provider routing resolves a typed role and capability through the worker registr
 
 ## Integration sequence
 
-The durable repository persists missions, task nodes/dependencies, transitions, evidence, leases, and idempotency keys alongside the existing outbox. The existing Wonderland budget reservation, provider receipts, realtime fanout, GVE, and swarm implementations remain intact. Sub-agents are not durable Julius primitives yet; their intended representation is bounded child tasks, while swarms remain bounded parallel execution. `/gauntletloop` is also not wired yet and must become a persisted scheduled iteration with maximum rounds, spend, duration, and retries—not recursion or an infinite loop.
+The durable repository persists missions, task nodes/dependencies, transitions, evidence, leases, and idempotency keys alongside the existing outbox. The existing Wonderland budget reservation, provider receipts, realtime fanout, GVE, and swarm implementations remain intact. Julius authorizes sub-agent requests only after C.A.R.D. depth/count checks, a budget reservation, and strict permission narrowing; the result is a bounded child task, while swarms remain bounded parallel execution. The gauntlet domain is an explicit versioned scheduled-round machine with round, retry, spend, duration, cancellation, and stale-writer bounds. Durable gauntlet checkpoint storage and scheduler wiring remain outstanding.
 
 Completion is valid only when Julius is verifying, all tasks are successful or explicitly skipped, and every required verification decision is `ACCEPT`.
