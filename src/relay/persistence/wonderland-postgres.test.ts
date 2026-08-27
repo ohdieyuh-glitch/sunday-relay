@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Pool } from 'pg';
-import { TransactionalWonderlandDatabase, WONDERLAND_MIGRATION_001, WONDERLAND_MIGRATION_002, WONDERLAND_MIGRATION_003, WONDERLAND_MIGRATION_004, WONDERLAND_MIGRATION_005, WONDERLAND_MIGRATION_006, WONDERLAND_MIGRATION_007, WONDERLAND_MIGRATION_008, WONDERLAND_MIGRATION_009, WONDERLAND_MIGRATION_010 } from './wonderland-postgres';
+import { TransactionalWonderlandDatabase, WONDERLAND_MIGRATION_001, WONDERLAND_MIGRATION_002, WONDERLAND_MIGRATION_003, WONDERLAND_MIGRATION_004, WONDERLAND_MIGRATION_005, WONDERLAND_MIGRATION_006, WONDERLAND_MIGRATION_007, WONDERLAND_MIGRATION_008, WONDERLAND_MIGRATION_009, WONDERLAND_MIGRATION_010, WONDERLAND_MIGRATION_011 } from './wonderland-postgres';
 import type { WonderlandExecutionSession } from '../mission/wonderland/wonderland-execution';
 
 class FakePool {
@@ -30,7 +30,8 @@ describe('Wonderland PostgreSQL migration', () => {
   it('defines lease-safe swarm runs and workers with recovery indexes',()=>{expect(WONDERLAND_MIGRATION_008).toContain('relay_wonderland.swarm_runs');expect(WONDERLAND_MIGRATION_008).toContain('relay_wonderland.swarm_workers');expect(WONDERLAND_MIGRATION_008).toContain('lease_generation');expect(WONDERLAND_MIGRATION_008).toContain('wonderland_swarm_worker_claim');});
   it('defines versioned GVE runs and forbids ineligible status scoring',()=>{expect(WONDERLAND_MIGRATION_009).toContain('relay_wonderland.gve_runs');expect(WONDERLAND_MIGRATION_009).toContain("NOT score_eligible OR status IN('PASSED','FAILED')");expect(WONDERLAND_MIGRATION_009).toContain('wonderland_gve_recovery');});
   it('persists only hidden-fixture metadata and an opaque server locator',()=>{expect(WONDERLAND_MIGRATION_010).toContain('relay_wonderland.hidden_test_fixtures');expect(WONDERLAND_MIGRATION_010).toContain('server_locator');expect(WONDERLAND_MIGRATION_010).not.toContain('fixture_body');});
-  it('runs every checked-in migration through the configured PostgreSQL pool', async () => { const pool = new FakePool(); const db = database(pool); await db.migrate(); expect(pool.commands).toEqual([WONDERLAND_MIGRATION_001, WONDERLAND_MIGRATION_002, WONDERLAND_MIGRATION_003, WONDERLAND_MIGRATION_004, WONDERLAND_MIGRATION_005, WONDERLAND_MIGRATION_006, WONDERLAND_MIGRATION_007, WONDERLAND_MIGRATION_008, WONDERLAND_MIGRATION_009, WONDERLAND_MIGRATION_010]); });
+  it('defines durable Julius runs, DAGs, leases, evidence, decisions and context metadata',()=>{for(const table of ['julius_runs','julius_tasks','julius_task_dependencies','julius_transitions','julius_evidence','julius_verification_decisions','julius_context_snapshots'])expect(WONDERLAND_MIGRATION_011).toContain(`relay_wonderland.${table}`);expect(WONDERLAND_MIGRATION_011).toContain('julius_task_claim');expect(WONDERLAND_MIGRATION_011).toContain("CHECK((state='ACTIVE')=(lease_owner IS NOT NULL))");expect(WONDERLAND_MIGRATION_011).toContain('UNIQUE(run_id,idempotency_key)');});
+  it('runs every checked-in migration through the configured PostgreSQL pool', async () => { const pool = new FakePool(); const db = database(pool); await db.migrate(); expect(pool.commands).toEqual([WONDERLAND_MIGRATION_001, WONDERLAND_MIGRATION_002, WONDERLAND_MIGRATION_003, WONDERLAND_MIGRATION_004, WONDERLAND_MIGRATION_005, WONDERLAND_MIGRATION_006, WONDERLAND_MIGRATION_007, WONDERLAND_MIGRATION_008, WONDERLAND_MIGRATION_009, WONDERLAND_MIGRATION_010, WONDERLAND_MIGRATION_011]); });
 });
 
 describe('TransactionalWonderlandDatabase', () => {

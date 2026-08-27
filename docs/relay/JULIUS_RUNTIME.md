@@ -14,7 +14,9 @@ Mission Contract -> Julius state + task graph -> registered worker adapter
                     verification decision -> next transition
 ```
 
-The initial kernel provides a validated mission state machine, provider-independent default and specialist roles, deterministic DAG readiness, compare-and-set task transitions, bounded role-specific Project Brain context, normalized evidence, and a verification/completion gate. It is pure domain code so durable adapters can persist transitions and graph snapshots through Relay's existing transactional outbox architecture.
+The kernel provides a validated mission state machine, provider-independent default and specialist roles, deterministic DAG readiness, compare-and-set task transitions, bounded role-specific Project Brain context, normalized evidence, and a verification/completion gate.
+
+PostgreSQL is authoritative for Julius runs, tasks, dependencies, lifecycle transitions, evidence, verification decisions, and reproducible context metadata. Run creation and lifecycle transitions commit their safe versioned event to Relay's existing event/outbox tables in the same serializable transaction. Runnable-task claims use `FOR UPDATE SKIP LOCKED`, a lease generation, expiry, and owner checks so multiple schedulers cannot successfully own the same generation. Expired active leases are reclaimable; stale heartbeats and completions fail their compare-and-set predicate.
 
 ## Safety and policy boundaries
 
@@ -24,6 +26,6 @@ C.A.R.D. remains the runtime policy input. Unchained may later relax approval fr
 
 ## Integration sequence
 
-Durable repositories should persist missions, task nodes/dependencies, transitions, evidence, leases, and idempotency keys in one transaction with outbox events. The existing Wonderland scheduler, budget reservation, provider receipts, realtime fanout, GVE, and swarm implementations should be adapted to these ports rather than replaced. Sub-agents are bounded child tasks; swarms are bounded parallel execution over task nodes. `/gauntletloop` should be a persisted scheduled iteration with maximum rounds, spend, duration, and retries—not recursion or an infinite loop.
+The durable repository persists missions, task nodes/dependencies, transitions, evidence, leases, and idempotency keys alongside the existing outbox. The existing Wonderland budget reservation, provider receipts, realtime fanout, GVE, and swarm implementations remain intact. Sub-agents are not durable Julius primitives yet; their intended representation is bounded child tasks, while swarms remain bounded parallel execution. `/gauntletloop` is also not wired yet and must become a persisted scheduled iteration with maximum rounds, spend, duration, and retries—not recursion or an infinite loop.
 
 Completion is valid only when Julius is verifying, all tasks are successful or explicitly skipped, and every required verification decision is `ACCEPT`.
