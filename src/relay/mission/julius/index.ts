@@ -9,3 +9,8 @@ export * from './julius-context-snapshot';
 export * from './julius-repair-runtime';
 export * from './julius-trajectory';
 export * from './julius-events';
+export * from './julius-runtime-ports';
+export * from './julius-task-pipeline';
+export * from './julius-run-loop';
+export * from './julius-memory-store';
+export * from './julius-runtime-fixtures';
