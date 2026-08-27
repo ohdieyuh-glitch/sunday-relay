@@ -18,3 +18,4 @@
  */
 
 export * from './compound-agent';
+export * from './registry';
