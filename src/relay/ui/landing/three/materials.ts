@@ -18,11 +18,11 @@ export type QualityTier = 'high' | 'medium' | 'low';
 
 export const LANDING_COLORS = Object.freeze({
   void: 0x05060a,
-  ivory: 0xfbf4e2,
+  ivory: 0xebe5d6,
   cream: 0xf4efe3,
-  visor: 0x07080a,
-  gold: 0xd8a83c,
-  goldDim: 0xa8792a,
+  visor: 0x050505,
+  gold: 0xf2c94c,
+  goldDim: 0xc9a23a,
   aqualaBody: 0xfaf8f3,
   aqualaLight: 0x9fd8f5,
   aqualaCore: 0xdff2ff,
@@ -42,17 +42,21 @@ export function createLandingMaterials(tier: QualityTier): LandingMaterials {
   // facets — a fully matte body loses every edge and the Dog reads as a
   // silhouette rather than a solid.
   const ivory = new THREE.MeshStandardMaterial({
+    // Canonical ivory, matte, and metal-free. Warm bone-white: not grey
+    // concrete, not clinical white, not yellow beige.
     color: LANDING_COLORS.ivory,
-    roughness: 0.55,
-    metalness: 0.02,
+    roughness: 0.72,
+    metalness: 0,
   });
 
   // Deep black with a tight specular. The reference visor catches one hard
   // highlight; a pure matte black would read as a hole cut in the head.
   const visor = new THREE.MeshStandardMaterial({
+    // Almost-black, and it must ABSORB light. Any real reflectivity turns the
+    // aperture into a glossy headset and the gold stops being the focal point.
     color: LANDING_COLORS.visor,
-    roughness: 0.26,
-    metalness: 0.15,
+    roughness: 0.55,
+    metalness: 0,
   });
 
   // RESTRAINED emissive. `emissiveIntensity` above ~1.6 with bloom on turns the
@@ -61,9 +65,11 @@ export function createLandingMaterials(tier: QualityTier): LandingMaterials {
   const eye = new THREE.MeshStandardMaterial({
     color: LANDING_COLORS.gold,
     emissive: new THREE.Color(LANDING_COLORS.goldDim),
-    emissiveIntensity: 1.15,
-    roughness: 0.35,
-    metalness: 0.25,
+    // Gold block FIRST, glow second. Enough emissive to read as lit, far too
+    // little to bloom into two blurry orbs — the rectangle must stay sharp.
+    emissiveIntensity: 0.9,
+    roughness: 0.4,
+    metalness: 0.1,
   });
 
   // The Aquala mark is a physical digital object: translucent body, internal

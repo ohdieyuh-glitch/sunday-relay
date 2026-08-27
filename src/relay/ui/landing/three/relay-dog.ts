@@ -1,36 +1,26 @@
 /**
- * THE ORIGINAL RELAY DOG — geometry authored from the founder's reference sheet.
+ * THE ORIGINAL RELAY DOG — canonical geometry.
  *
- * The supplied FRONT / SIDE / REAR / THREE-QUARTER renders are the source of
- * truth, and this file is a measured transcription of them, not an impression.
- * Substituting a Shiba, a corgi, a rounded mascot or any generic voxel animal is
- * explicitly out of bounds; so is importing a downloaded model.
+ * Reconstructed from the founder's reference sheet (hero/front, rear, and
+ * three-quarter). This is a brand asset and its proportions are treated like a
+ * logo: every dimension below is expressed as a multiple of HEAD_WIDTH, so the
+ * canonical ratios are enforced by construction rather than by eye, and
+ * `relay-dog.test.ts` checks each one against the canonical band.
  *
- * WHY PROCEDURAL BOXES RATHER THAN A GLB.
+ * THE SILHOUETTE RULE, which everything else serves:
  *
- *   - The Dog IS a box cluster. Every form in the reference is an axis-aligned
- *     rectangular prism. Authoring it as boxes is not an approximation of the
- *     reference — it is the reference's actual construction.
- *   - `no-broken-assets.test.tsx` forbids <img> and CSS `url()` on this
- *     frontend. A GLB is a fetched binary with its own failure mode (404,
- *     Draco decoder, CORS) on a page whose whole premise is that it always
- *     renders.
- *   - A box list is ~2 kB of source. A GLB of the same model, plus a Draco or
- *     Meshopt decoder, is hundreds of kB over the wire — on a landing page.
- *   - Proportions stay REVIEWABLE. A founder note like "the ears are too
- *     narrow" is a one-number edit here, and `relay-dog.test.ts` asserts the
- *     ratios against the reference so a later edit cannot silently redraw the
- *     character.
+ *   WIDE HEAD → NARROW BODY → LONG HANGING ARMS → THIN SEPARATED LEGS
+ *   → LARGE BLOCK FEET
  *
- * UNITS AND FRAME. One unit is one reference block. The Dog stands on y = 0 and
- * faces +Z, matching the FRONT reference. +X is the Dog's own left as the
- * viewer sees it on the right of frame. Height is ~21 units to the ear tips.
+ * The width contrast between the head and the body is the single strongest
+ * identifier of the character. An earlier build ran the torso at 0.89 of the
+ * head's width, the legs at 0.31 and the visor at 0.78 — which produced a
+ * barrel-chested, thick-legged humanoid that read as "another blocky white
+ * robot" rather than as this specific creature. The bands below exist to make
+ * that class of drift impossible to reintroduce quietly.
  *
- * PROPORTIONS, measured off the front reference as fractions of full height:
- * head+ears 40%, torso 33%, legs 26%. The head is the widest part of the
- * silhouette at 0.34 of the total height — the reference's most distinctive
- * property and the one a generic voxel dog always gets wrong by shrinking the
- * head.
+ * The character must survive as a black silhouette, with the eyes off, from
+ * front, rear and either three-quarter. Nothing here depends on materials.
  */
 
 /** Which surface a box belongs to. Drives material, not geometry. */
@@ -43,110 +33,208 @@ export type DogBox = {
   readonly name: string;
   readonly joint: DogJoint;
   readonly surface: DogSurface;
-  /** Box centre in Dog space, before the joint pivot is applied. */
   readonly center: readonly [number, number, number];
   readonly size: readonly [number, number, number];
 };
 
 /**
- * Joint pivots in Dog space. A joint rotates about its pivot, so the head turns
- * on the neck rather than swinging about the model origin — the difference
- * between a character and a bag of boxes.
+ * THE UNIT. Every dimension in this file is a multiple of the head's outer
+ * width, so the character can be rescaled without any ratio drifting.
  */
-export const DOG_PIVOTS: Readonly<Record<DogJoint, readonly [number, number, number]>> = Object.freeze({
-  root: [0, 0, 0],
-  head: [0, 13.8, 0],
-  armLeft: [-3.85, 13.2, 0],
-  armRight: [3.85, 13.2, 0],
-  legLeft: [-1.75, 5.7, 0],
-  legRight: [1.75, 5.7, 0],
-  tail: [2.6, 8.6, -2.0],
-});
+const W = 7.2;
 
 /**
- * MEASURED OFF THE SKIN SHEET, part by part. Proportions as fractions of the
- * 21.2-unit height: head block 35%, torso 38%, legs 27%; head width 34%; arm
- * span 42%.
- *
- * Three properties here were WRONG in the previous pass and are the reason the
- * character did not read as itself:
- *
- *   1. THE TORSO WIDENS DOWNWARD. It is narrow at the shoulders and broadest at
- *      the hip, finishing in a skirt — the silhouette the sheet calls the RELAY
- *      OG FORM. The previous model had a broad chest tapering to narrow hips,
- *      which is the opposite shape and made the Dog read as a generic humanoid.
- *   2. THE ARMS ARE WIDER THAN THE HEAD. The rear view is unambiguous: the arm
- *      columns sit outside the head's silhouette. An earlier rule forced them
- *      inside it, which pinned them against the body.
- *   3. THE HEAD HAS A CHAMFERED TOP. Its top slab is stepped in from the main
- *      mass before the ears rise, visible in every supplied view.
+ * The canonical proportion bands, as fractions of HEAD_WIDTH. These are the
+ * founder's figures; the values actually used sit inside each band and are
+ * asserted against it.
  */
+export const DOG_CANON = Object.freeze({
+  headWidth: 1.0,
+  torsoWidth: [0.55, 0.62],
+  legWidth: [0.17, 0.21],
+  legGap: [0.13, 0.18],
+  footWidth: [0.25, 0.3],
+  earWidth: [0.17, 0.21],
+  visorWidth: [0.62, 0.68],
+  eyeWidth: [0.12, 0.15],
+  /** Height distribution: head block, torso, legs+feet. */
+  heightSplit: { head: [0.32, 0.4], torso: [0.32, 0.4], legs: [0.24, 0.33] },
+});
+
+/* --------------------------------------------------------------- vertical */
+/* Ground at 0. Three regions, each roughly a third of the figure.           */
+const FOOT_TOP = 0.225 * W;      // feet are WIDE + DEEP + LOW, never boots
+const LEG_TOP = 0.8 * W;
+const PELVIS_TOP = 0.9875 * W;
+const LOWER_TORSO_TOP = 1.175 * W;
+const MID_TORSO_TOP = 1.475 * W;
+const TORSO_TOP = 1.8625 * W;    // where the head sits
+const JAW_TOP = 2.1125 * W;
+const VISOR_TOP = 2.4125 * W;
+const HEAD_TOP = 2.6625 * W;
+const EAR_TOP = 2.9025 * W;      // total height ≈ 2.9 × head width
+
+/* ------------------------------------------------------------ horizontal */
+const HEAD_HALF = 0.5 * W;
+const HEAD_DEPTH = 0.725 * W;
+const TORSO_W = 0.62 * W;        // canonical band 0.55–0.62 (top of band:
+                                 // at 0.60 the body read as a stick figure
+                                 // beside the head, which the sheet does not)
+const VISOR_W = 0.65 * W;        // canonical band 0.62–0.68
+const VISOR_HALF = VISOR_W / 2;
+const EAR_W = 0.19 * W;          // canonical band 0.17–0.21
+const EYE_W = 0.135 * W;         // canonical band 0.12–0.15
+const LEG_W = 0.19 * W;          // canonical band 0.17–0.21
+const LEG_GAP = 0.14 * W;        // canonical band 0.13–0.18
+const LEG_X = (LEG_GAP + LEG_W) / 2;
+const FOOT_W = 0.275 * W;        // canonical band 0.25–0.30
+
+/** Recess depth of the visor cavity — the opening has real depth, not a decal. */
+const FACE_Z = HEAD_DEPTH / 2;
+const VISOR_FLOOR_Z = FACE_Z - 0.22 * W;
+
+const mid = (a: number, b: number) => (a + b) / 2;
+const span = (a: number, b: number) => b - a;
+
+export const DOG_PIVOTS: Readonly<Record<DogJoint, readonly [number, number, number]>> = Object.freeze({
+  root: [0, 0, 0],
+  head: [0, TORSO_TOP, 0],
+  // Upper OUTSIDE corners of the narrow torso, never the centre of the chest.
+  armLeft: [-TORSO_W / 2, TORSO_TOP - 0.06 * W, 0],
+  armRight: [TORSO_W / 2, TORSO_TOP - 0.06 * W, 0],
+  legLeft: [-LEG_X, LEG_TOP, 0],
+  legRight: [LEG_X, LEG_TOP, 0],
+  tail: [0.2 * W, 1.0 * W, -0.2 * W],
+});
+
 export const DOG_BOXES: readonly DogBox[] = Object.freeze([
-  // ---- head ------------------------------------------------------------
-  // Built as a FRAME around a real aperture so the visor is a cavity with
-  // depth, not a panel — and so no thin side stripe appears at three-quarter.
-  // Extends BELOW the pivot, into the torso. The head pivots at the shoulder
-  // line, so a head whose bottom face sits exactly on that line opens a hole
-  // through the neck the moment it turns — which is what the first build did.
-  // The overlap is hidden inside the shoulders at every angle the rig allows.
-  { name: 'headBelow', joint: 'head', surface: 'ivory', center: [0, 14.15, 0], size: [7.2, 2.3, 6] },
-  { name: 'headAbove', joint: 'head', surface: 'ivory', center: [0, 17.85, 0], size: [7.2, 0.7, 6] },
-  { name: 'headLeft', joint: 'head', surface: 'ivory', center: [-3.2, 16.4, 0], size: [0.8, 2.2, 6] },
-  { name: 'headRight', joint: 'head', surface: 'ivory', center: [3.2, 16.4, 0], size: [0.8, 2.2, 6] },
-  { name: 'headBack', joint: 'head', surface: 'ivory', center: [0, 16.4, -0.4], size: [5.6, 2.2, 5.2] },
-  // The stepped top slab, narrower than the main mass.
-  { name: 'headTop', joint: 'head', surface: 'ivory', center: [0, 18.75, 0], size: [6.4, 1.1, 5.4] },
-  // Two upright rectangular ears rising from the stepped top, wide notch between.
-  { name: 'earLeft', joint: 'head', surface: 'ivory', center: [-2.15, 20.25, -0.1], size: [1.5, 1.9, 1.6] },
-  { name: 'earRight', joint: 'head', surface: 'ivory', center: [2.15, 20.25, -0.1], size: [1.5, 1.9, 1.6] },
-  // The cavity's black floor, set 0.7 back from the face plane.
-  { name: 'visorPlate', joint: 'head', surface: 'visor', center: [0, 16.4, 2.3], size: [5.6, 2.2, 0.16] },
-  // Two small square gold eyes deep in the opening, generous black around them.
-  { name: 'eyeLeft', joint: 'head', surface: 'eye', center: [-1.0, 16.4, 2.48], size: [1.0, 1.0, 0.22] },
-  { name: 'eyeRight', joint: 'head', surface: 'eye', center: [1.0, 16.4, 2.48], size: [1.0, 1.0, 0.22] },
+  /* ---- head: a thick rectangular FRAME around a real aperture -------------
+     Four heavy masses — brow, jaw, and two side frames — surround the visor.
+     The face is not a black screen glued to a cube; the frame is what makes
+     the character readable, and the jaw below the visor carries as much mass
+     as the brow above it. */
+  { name: 'headBrow', joint: 'head', surface: 'ivory',
+    center: [0, mid(VISOR_TOP, HEAD_TOP), 0], size: [W, span(VISOR_TOP, HEAD_TOP), HEAD_DEPTH] },
+  { name: 'headJaw', joint: 'head', surface: 'ivory',
+    // Stops exactly AT the shoulder line. The head is far wider than the torso,
+    // so any full-width extension below this point is not hidden — it shows as
+    // extra head and swallows the notches beneath the head's lower corners,
+    // which are one of the character's strongest identifiers.
+    center: [0, mid(TORSO_TOP, JAW_TOP), 0], size: [W, span(TORSO_TOP, JAW_TOP), HEAD_DEPTH] },
+  { name: 'headStub', joint: 'head', surface: 'ivory',
+    // The neck-gap fix, done NARROW so it stays inside the torso's silhouette:
+    // it closes the hole a head turn would otherwise open, without adding a
+    // pixel to the head's visible width.
+    center: [0, TORSO_TOP - 0.075 * W, 0], size: [0.3 * W, 0.15 * W, 0.3 * W] },
+  { name: 'headFrameLeft', joint: 'head', surface: 'ivory',
+    center: [-mid(VISOR_HALF, HEAD_HALF), mid(JAW_TOP, VISOR_TOP), 0],
+    size: [span(VISOR_HALF, HEAD_HALF), span(JAW_TOP, VISOR_TOP), HEAD_DEPTH] },
+  { name: 'headFrameRight', joint: 'head', surface: 'ivory',
+    center: [mid(VISOR_HALF, HEAD_HALF), mid(JAW_TOP, VISOR_TOP), 0],
+    size: [span(VISOR_HALF, HEAD_HALF), span(JAW_TOP, VISOR_TOP), HEAD_DEPTH] },
+  { name: 'headBack', joint: 'head', surface: 'ivory',
+    center: [0, mid(JAW_TOP, VISOR_TOP), mid(-FACE_Z, VISOR_FLOOR_Z)],
+    size: [VISOR_W, span(JAW_TOP, VISOR_TOP), span(-FACE_Z, VISOR_FLOOR_Z)] },
 
-  // ---- torso: narrow shoulders widening into the skirt ------------------
-  { name: 'shoulders', joint: 'root', surface: 'ivory', center: [0, 13.0, 0], size: [5.4, 1.6, 4.3] },
-  // A NECK. The head is wider than the shoulders and pivots at their top edge,
-  // so any turn swings its corners clear and opens a hole straight through the
-  // character. This block sits inside both and fills that gap at every angle
-  // the look layer can reach.
-  { name: 'neck', joint: 'root', surface: 'ivory', center: [0, 13.4, 0], size: [4.6, 1.8, 4.0] },
-  { name: 'chest', joint: 'root', surface: 'ivory', center: [0, 11.3, 0], size: [5.9, 1.8, 4.5] },
-  { name: 'lowerTorso', joint: 'root', surface: 'ivory', center: [0, 9.5, 0], size: [6.1, 1.8, 4.6] },
-  // The widest point of the body — the skirt.
-  { name: 'skirt', joint: 'root', surface: 'ivory', center: [0, 7.55, 0], size: [6.4, 2.1, 4.7] },
-  // A chamfer back in before the legs, as the rear view shows.
-  { name: 'hipChamfer', joint: 'root', surface: 'ivory', center: [0, 6.1, 0], size: [5.6, 0.8, 4.2] },
+  /* ---- ears: short, WIDE, chunky rectangular prisms ----------------------
+     Not antennas. Inset from the head's corners so ivory remains outside them,
+     with a gap between them far wider than either ear. */
+  { name: 'earLeft', joint: 'head', surface: 'ivory',
+    center: [-(HEAD_HALF - 0.085 * W - EAR_W / 2), mid(HEAD_TOP, EAR_TOP), -0.025 * W],
+    size: [EAR_W, span(HEAD_TOP, EAR_TOP), 0.2 * W] },
+  { name: 'earRight', joint: 'head', surface: 'ivory',
+    center: [HEAD_HALF - 0.085 * W - EAR_W / 2, mid(HEAD_TOP, EAR_TOP), -0.025 * W],
+    size: [EAR_W, span(HEAD_TOP, EAR_TOP), 0.2 * W] },
 
-  // ---- arms: outside the head's silhouette, gapped at the shoulder ------
-  { name: 'armLeftUpper', joint: 'armLeft', surface: 'ivory', center: [-3.85, 11.0, 0.15], size: [1.25, 4.2, 1.7] },
-  { name: 'armLeftHand', joint: 'armLeft', surface: 'ivory', center: [-3.85, 8.1, 0.35], size: [1.4, 1.6, 1.9] },
-  { name: 'armRightUpper', joint: 'armRight', surface: 'ivory', center: [3.85, 11.0, 0.15], size: [1.25, 4.2, 1.7] },
-  { name: 'armRightHand', joint: 'armRight', surface: 'ivory', center: [3.85, 8.1, 0.35], size: [1.4, 1.6, 1.9] },
+  /* ---- visor: a wide horizontal aperture with a floor set well back ------ */
+  { name: 'visorInterior', joint: 'head', surface: 'visor',
+    center: [0, mid(JAW_TOP, VISOR_TOP), VISOR_FLOOR_Z + 0.0125 * W],
+    size: [VISOR_W, span(JAW_TOP, VISOR_TOP), 0.025 * W] },
 
-  // ---- legs: straight blocks, substantial feet projecting forward -------
-  { name: 'legLeft', joint: 'legLeft', surface: 'ivory', center: [-1.75, 3.35, 0], size: [2.2, 4.7, 2.4] },
-  { name: 'footLeft', joint: 'legLeft', surface: 'ivory', center: [-1.75, 0.5, 0.6], size: [2.4, 1.0, 3.4] },
-  { name: 'legRight', joint: 'legRight', surface: 'ivory', center: [1.75, 3.35, 0], size: [2.2, 4.7, 2.4] },
-  { name: 'footRight', joint: 'legRight', surface: 'ivory', center: [1.75, 0.5, 0.6], size: [2.4, 1.0, 3.4] },
+  /* ---- eyes: two small gold blocks suspended in the cavity ---------------
+     Toward the LOWER half of the visor, with black above, between and outside.
+     They must never approach filling the opening. */
+  { name: 'eyeLeft', joint: 'head', surface: 'eye',
+    center: [-(0.055 * W + EYE_W / 2), JAW_TOP + 0.115 * W, VISOR_FLOOR_Z + 0.04 * W],
+    size: [EYE_W, EYE_W, 0.025 * W] },
+  { name: 'eyeRight', joint: 'head', surface: 'eye',
+    center: [0.055 * W + EYE_W / 2, JAW_TOP + 0.115 * W, VISOR_FLOOR_Z + 0.04 * W],
+    size: [EYE_W, EYE_W, 0.025 * W] },
 
-  // ---- tail: stepped, out to the Dog's right at hip height --------------
-  // The sheet puts it beside the right hand, stepping outward and down — not
-  // tucked behind the spine, where it vanishes from every view that matters.
-  { name: 'tail1', joint: 'tail', surface: 'ivory', center: [3.2, 8.5, -2.6], size: [1.5, 1.5, 1.6] },
-  { name: 'tail2', joint: 'tail', surface: 'ivory', center: [4.3, 8.0, -3.2], size: [1.3, 1.3, 1.4] },
-  { name: 'tail3', joint: 'tail', surface: 'ivory', center: [5.1, 7.4, -3.6], size: [1.05, 1.05, 1.2] },
+  /* ---- neck: short, narrow, blocky. Never a cylinder or a joint. --------- */
+  { name: 'neck', joint: 'root', surface: 'ivory',
+    center: [0, TORSO_TOP - 0.05 * W, 0], size: [0.325 * W, 0.175 * W, 0.325 * W] },
+
+  /* ---- torso: a LONG NARROW central slab, not a chest cube ---------------
+     0.60 of the head's width, so the head's lower corners overhang it by a
+     clear margin on both sides. Those two notches are load-bearing. */
+  { name: 'upperTorso', joint: 'root', surface: 'ivory',
+    center: [0, mid(MID_TORSO_TOP, TORSO_TOP), 0],
+    size: [TORSO_W, span(MID_TORSO_TOP, TORSO_TOP), 0.45 * W] },
+  { name: 'midTorso', joint: 'root', surface: 'ivory',
+    center: [0, mid(LOWER_TORSO_TOP, MID_TORSO_TOP), 0],
+    size: [TORSO_W, span(LOWER_TORSO_TOP, MID_TORSO_TOP), 0.45 * W] },
+
+  /* ---- lower torso: a STEPPED pixel taper, never one giant rectangle ----- */
+  { name: 'lowerTorso', joint: 'root', surface: 'ivory',
+    center: [0, mid(PELVIS_TOP, LOWER_TORSO_TOP), 0],
+    size: [0.4875 * W, span(PELVIS_TOP, LOWER_TORSO_TOP), 0.4 * W] },
+  { name: 'pelvisStep', joint: 'root', surface: 'ivory',
+    center: [0, mid(LEG_TOP - 0.025 * W, PELVIS_TOP), 0],
+    size: [0.3625 * W, span(LEG_TOP - 0.025 * W, PELVIS_TOP), 0.3375 * W] },
+
+  /* ---- arms: long, slender, SEGMENTED, hanging clear of the torso --------
+     Three stepped segments per side, drifting very slightly outward as they
+     descend, ending near the upper thigh. They begin BELOW the head's lower
+     edge so the notches under the head stay open. Their outer edge slightly exceeds
+     the head's width, which the reference allows. */
+  { name: 'armLeftUpper', joint: 'armLeft', surface: 'ivory',
+    center: [-0.44 * W, 1.5083 * W, 0], size: [0.2 * W, 0.4 * W, 0.2125 * W] },
+  { name: 'armLeftForearm', joint: 'armLeft', surface: 'ivory',
+    center: [-0.4525 * W, 1.1208 * W, 0.0125 * W], size: [0.19 * W, 0.375 * W, 0.2 * W] },
+  { name: 'armLeftHand', joint: 'armLeft', surface: 'ivory',
+    center: [-0.4625 * W, 0.8333 * W, 0.025 * W], size: [0.205 * W, 0.2 * W, 0.225 * W] },
+  { name: 'armRightUpper', joint: 'armRight', surface: 'ivory',
+    center: [0.44 * W, 1.5083 * W, 0], size: [0.2 * W, 0.4 * W, 0.2125 * W] },
+  { name: 'armRightForearm', joint: 'armRight', surface: 'ivory',
+    center: [0.4525 * W, 1.1208 * W, 0.0125 * W], size: [0.19 * W, 0.375 * W, 0.2 * W] },
+  { name: 'armRightHand', joint: 'armRight', surface: 'ivory',
+    center: [0.4625 * W, 0.8333 * W, 0.025 * W], size: [0.205 * W, 0.2 * W, 0.225 * W] },
+
+  /* ---- legs: thin vertical columns, clearly separated -------------------- */
+  { name: 'legLeft', joint: 'legLeft', surface: 'ivory',
+    center: [-LEG_X, mid(FOOT_TOP, LEG_TOP), 0], size: [LEG_W, span(FOOT_TOP, LEG_TOP), 0.225 * W] },
+  { name: 'legRight', joint: 'legRight', surface: 'ivory',
+    center: [LEG_X, mid(FOOT_TOP, LEG_TOP), 0], size: [LEG_W, span(FOOT_TOP, LEG_TOP), 0.225 * W] },
+
+  /* ---- feet: WIDE + DEEP + LOW, projecting forward and slightly outward -- */
+  { name: 'footLeft', joint: 'legLeft', surface: 'ivory',
+    center: [-(LEG_X + 0.0125 * W), FOOT_TOP / 2, 0.0625 * W],
+    size: [FOOT_W, FOOT_TOP, 0.375 * W] },
+  { name: 'footRight', joint: 'legRight', surface: 'ivory',
+    center: [LEG_X + 0.0125 * W, FOOT_TOP / 2, 0.0625 * W],
+    size: [FOOT_W, FOOT_TOP, 0.375 * W] },
+
+  /* ---- tail: a STEPPED 90° voxel hook ------------------------------------
+     Out of the rear/side of the hip, back, then bending upward in discrete
+     rectangular segments to a squared tip. Never a curve, tube or spline. */
+  { name: 'tail01', joint: 'tail', surface: 'ivory',
+    center: [0.2875 * W, 0.95 * W, -0.2375 * W], size: [0.1625 * W, 0.1625 * W, 0.175 * W] },
+  { name: 'tail02', joint: 'tail', surface: 'ivory',
+    center: [0.3875 * W, 0.9875 * W, -0.3375 * W], size: [0.1445 * W, 0.1445 * W, 0.157 * W] },
+  { name: 'tail03', joint: 'tail', surface: 'ivory',
+    center: [0.4625 * W, 1.075 * W, -0.4 * W], size: [0.125 * W, 0.125 * W, 0.1375 * W] },
+  { name: 'tail04', joint: 'tail', surface: 'ivory',
+    center: [0.5125 * W, 1.1875 * W, -0.4375 * W], size: [0.1125 * W, 0.1125 * W, 0.125 * W] },
+  { name: 'tailTip', joint: 'tail', surface: 'ivory',
+    center: [0.5375 * W, 1.2875 * W, -0.45 * W], size: [0.1 * W, 0.1 * W, 0.1125 * W] },
 ]);
 
-/** Overall reference measurements, asserted in `relay-dog.test.ts`. */
+/** Measurements the canonical bands are checked against. */
 export const DOG_METRICS = Object.freeze({
-  /** Ground to ear tips. */
-  height: 21.2,
-  /** Widest point of the silhouette — the skull. */
-  headWidth: 7.2,
-  /** Front-reference proportions as fractions of `height`. */
-  headBlockFraction: 0.35,
-  torsoFraction: 0.38,
-  legFraction: 0.27,
+  headWidth: W,
+  height: EAR_TOP,
+  torsoTop: TORSO_TOP,
+  legTop: LEG_TOP,
+  footTop: FOOT_TOP,
 });
