@@ -7,11 +7,12 @@ import { JuliusContextPostgresRepository } from './julius-context-postgres';
 import { JuliusEventPostgresRepository } from './julius-event-postgres';
 import { JuliusTrajectoryPostgresRepository } from './julius-trajectory-postgres';
 import { JuliusReadPostgresRepository } from './julius-read-postgres';
+import { JuliusSubagentPostgresRepository } from './julius-subagent-postgres';
 import { createJuliusMemoryStore } from '../mission/julius';
 import type {
   JuliusClaimedTask, JuliusContextWriter, JuliusEventWriter, JuliusResultReceiptRow,
   JuliusResultWriter, JuliusRunRow, JuliusRunWriter, JuliusRuntimeReader,
-  JuliusRuntimeStore, JuliusTrajectoryWriter,
+  JuliusRuntimeStore, JuliusSubagentStore, JuliusTrajectoryWriter,
 } from '../mission/julius';
 
 /**
@@ -63,6 +64,9 @@ const contextWriter: JuliusContextWriter = new JuliusContextPostgresRepository(p
 /** The reader satisfies the read port directly. */
 const reader: JuliusRuntimeReader = new JuliusReadPostgresRepository(pool);
 
+/** The sub-agent repository satisfies the sub-agent store port directly. */
+const subagents: JuliusSubagentStore = new JuliusSubagentPostgresRepository(pool);
+
 /**
  * THE TWO LEDGERS NEED A ONE-LINE ADAPTER, AND THAT IS THE POINT.
  *
@@ -81,7 +85,7 @@ const trajectoryWriter: JuliusTrajectoryWriter = {
 };
 
 /** The whole runtime store, composed from the real repositories. */
-const composed: JuliusRuntimeStore = {
+const composed: JuliusRuntimeStore & JuliusSubagentStore = {
   loadRun: runWriter.loadRun.bind(runWriter),
   transition: runWriter.transition.bind(runWriter),
   addTask: runWriter.addTask.bind(runWriter),
@@ -102,6 +106,11 @@ const composed: JuliusRuntimeStore = {
   brainEntriesForRun: reader.brainEntriesForRun.bind(reader),
   repairRoundsFor: reader.repairRoundsFor.bind(reader),
   reviewCompletedFor: reader.reviewCompletedFor.bind(reader),
+  subagentContext: subagents.subagentContext.bind(subagents),
+  recordSubagent: subagents.recordSubagent.bind(subagents),
+  loadSubagent: subagents.loadSubagent.bind(subagents),
+  subagentsForRun: subagents.subagentsForRun.bind(subagents),
+  setSubagentState: subagents.setSubagentState.bind(subagents),
 };
 
 describe('the Julius runtime ports and the PostgreSQL repositories agree', () => {
@@ -123,10 +132,17 @@ describe('the Julius runtime ports and the PostgreSQL repositories agree', () =>
     // A drift-detector with a number in it: if a future repository stops
     // satisfying its port directly, this count changes and the reason has to be
     // written down rather than absorbed.
-    const direct = [runWriter, resultWriter, contextWriter, reader];
-    expect(direct).toHaveLength(4);
+    const direct = [runWriter, resultWriter, contextWriter, reader, subagents];
+    expect(direct).toHaveLength(5);
     expect(typeof eventWriter.appendEvent).toBe('function');
     expect(typeof trajectoryWriter.appendTrajectory).toBe('function');
+  });
+
+  it('satisfies the sub-agent store with no adapter', () => {
+    for (const method of ['subagentContext', 'recordSubagent', 'loadSubagent',
+      'subagentsForRun', 'setSubagentState']) {
+      expect(typeof (subagents as unknown as Record<string, unknown>)[method], method).toBe('function');
+    }
   });
 
   it('holds the duplicated row shapes structurally identical', () => {

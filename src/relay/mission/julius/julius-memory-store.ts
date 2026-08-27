@@ -48,6 +48,9 @@ import type { JuliusAcceptanceCriterion, JuliusReviewerFinding } from './julius-
 import type {
   JuliusClaimedTask, JuliusResultReceiptRow, JuliusRunRow, JuliusRuntimeStore,
 } from './julius-runtime-ports';
+import type {
+  JuliusSubagentContext, JuliusSubagentRecord, JuliusSubagentState, JuliusSubagentStore,
+} from './julius-subagent-runtime';
 
 interface TaskRow extends JuliusTask {
   runId: string;
@@ -64,7 +67,7 @@ interface ResultRow {
   readonly status: 'SUCCEEDED' | 'FAILED' | 'CANCELLED'; readonly idempotencyKey: string;
 }
 
-export interface JuliusMemoryStore extends JuliusRuntimeStore {
+export interface JuliusMemoryStore extends JuliusRuntimeStore, JuliusSubagentStore {
   /* ---- seeding, for tests and offline runs ---- */
   seedRun(run: JuliusRunRow): void;
   seedTask(runId: string, task: JuliusTask): void;
@@ -102,6 +105,7 @@ export function createJuliusMemoryStore(): JuliusMemoryStore {
   const contexts: JuliusContextSnapshot[] = [];
   const contextKeys = new Set<string>();
   const repairRounds = new Map<string, number>();
+  const subagents = new Map<string, JuliusSubagentRecord>();
 
   /** The dependency predicate the claim query enforces. */
   const dependenciesSatisfied = (task: TaskRow): boolean =>
@@ -344,6 +348,46 @@ export function createJuliusMemoryStore(): JuliusMemoryStore {
     },
     async brainEntriesForRun(runId) { return (brain.get(runId) ?? []).map((entry) => ({ ...entry })); },
     async repairRoundsFor(taskId) { return repairRounds.get(taskId) ?? 0; },
+
+    /* --------------------------------------------------------- sub-agents */
+    async subagentContext(runId, parentTaskId): Promise<JuliusSubagentContext> {
+      const forRun = [...subagents.values()].filter((record) => record.runId === runId);
+      // The parent's own record, when the parent is itself a child. A root
+      // task has none, and its depth is 0 — read, never claimed by a request.
+      const parent = forRun.find((record) => record.childTaskId === parentTaskId) ?? null;
+      const ACTIVE_STATES: readonly JuliusSubagentState[] = ['AUTHORIZED', 'ACTIVE'];
+      return {
+        parentDepth: parent?.depth ?? 0,
+        activeChildren: forRun.filter((record) =>
+          record.parentTaskId === parentTaskId && ACTIVE_STATES.includes(record.state)).length,
+        totalChildren: forRun.length,
+        parentPermissions: parent?.permissions ?? [],
+      };
+    },
+
+    async recordSubagent(record) {
+      const key = `${record.runId}::${record.requestId}`;
+      if (subagents.has(key)) return { recorded: false, duplicate: true };
+      subagents.set(key, { ...record });
+      return { recorded: true, duplicate: false };
+    },
+
+    async loadSubagent(runId, requestId) {
+      const record = subagents.get(`${runId}::${requestId}`);
+      return record ? { ...record } : null;
+    },
+
+    async subagentsForRun(runId) {
+      return [...subagents.values()].filter((record) => record.runId === runId).map((record) => ({ ...record }));
+    },
+
+    async setSubagentState(runId, requestId, state) {
+      const key = `${runId}::${requestId}`;
+      const record = subagents.get(key);
+      if (record === undefined) return false;
+      subagents.set(key, { ...record, state });
+      return true;
+    },
     async reviewCompletedFor(taskId) {
       const review = tasks.get(`${taskId}:review`);
       return review !== undefined && review.state === 'SUCCEEDED';
