@@ -556,6 +556,46 @@ async function verifyExecutedTask(input: {
   ]);
 
   /**
+   * A REVIEW IS NOT REVIEWED, AND WITHOUT THIS THE CHAIN NEVER ENDS.
+   *
+   * `evaluateJuliusVerification` schedules a review for any task when policy
+   * requires one and none has completed. Applied to a REVIEWER's own task that
+   * produces `<task>:review:review`, then `<task>:review:review:review` — an
+   * unbounded chain of reviewers reviewing reviewers, each a real durable task
+   * and a real paid dispatch. The end-to-end scenario is what surfaced it: the
+   * architect's plan was reviewed, and the reviewer was then busy forever.
+   *
+   * Fixed by ANSWERING #175'S OWN QUESTION rather than bypassing its rule: for
+   * a reviewer's task, the review that policy asks about has already happened —
+   * it IS this task. So `reviewCompleted` is true, the evaluator takes its
+   * DECIDE branch, and the rule it applies is unchanged.
+   */
+  const reviewSatisfied = reviewCompleted || task.role === 'INDEPENDENT_REVIEWER';
+
+  /**
+   * A REVIEWER'S VERDICT IS ABOUT THE TASK IT REVIEWED, and treating it as a
+   * verdict about ITSELF schedules the repair on the wrong task.
+   *
+   * `verifyTask` counts FAILED evidence on a task as a reason to repair THAT
+   * task. For every worker that is right; for a reviewer it is exactly wrong.
+   * A review that found a problem SUCCEEDED — it did the job — and its FAILED
+   * `REVIEW_FINDING` evidence is a statement about the work under review.
+   *
+   * Before this, the end-to-end scenario produced a repair task named
+   * `repair:review:plan` — a coding agent asked to repair a REVIEW. No worker
+   * accepts that task type, so it failed, and the run stalled with the real
+   * defect unrepaired and a nonsense task in the graph.
+   *
+   * So a reviewer's completion re-verifies the task it reviewed, which now
+   * carries the blocking finding recorded above. The repair is then planned
+   * for the work, by the same evaluator, with no rule changed.
+   */
+  const reviewedTask = task.role === 'INDEPENDENT_REVIEWER' && task.parentTaskId !== null
+    ? tasks.find((item) => item.taskId === task.parentTaskId) ?? null
+    : null;
+  const subject = reviewedTask ?? task;
+
+  /**
    * A REVIEWER'S FAILED EVIDENCE BECOMES A BLOCKING FINDING.
    *
    * `recordFinding` was written in #175 and nothing called it, so a review
@@ -604,9 +644,15 @@ async function verifyExecutedTask(input: {
   }
 
   const action = evaluateJuliusVerification({
-    task, evidence, criteria, findings,
+    task: subject,
+    evidence,
+    criteria,
+    // The findings the reviewer just recorded are read back, because
+    // `findings` was loaded before this task ran and a decision made without
+    // them would be a decision about a review that had not happened yet.
+    findings: reviewedTask === null ? findings : await deps.store.findingsForRun(run.runId, run.projectId),
     policy: input.request.verification,
-    reviewCompleted,
+    reviewCompleted: reviewSatisfied,
     allTasks: tasks,
     priorDecisions: decisions,
   });
@@ -641,14 +687,14 @@ async function verifyExecutedTask(input: {
   await deps.store.appendDecision({
     decisionId: deps.ids.next('decision'),
     runId: run.runId,
-    taskId: task.taskId,
+    taskId: subject.taskId,
     policyRevision: input.request.verification.revision,
-    idempotencyKey: `${task.taskId}:${decision.action}:${decision.reasonCode}`,
+    idempotencyKey: `${subject.taskId}:${decision.action}:${decision.reasonCode}`,
     occurredAt: deps.clock.now(),
     decision,
   });
   await ledger.event('verification.decided', {
-    taskId: task.taskId, workerId: input.workerId,
+    taskId: subject.taskId, workerId: input.workerId,
     facts: {
       action: decision.action, reasonCode: decision.reasonCode,
       criteriaSatisfied: action.criteriaSatisfied.length, criteriaMissing: action.criteriaMissing.length,
@@ -656,13 +702,17 @@ async function verifyExecutedTask(input: {
     },
   });
   await ledger.trajectory('VERIFICATION', {
-    taskId: task.taskId, workerId: input.workerId,
+    taskId: subject.taskId, workerId: input.workerId,
     policyRevision: input.request.verification.revision, outcome: decision.action,
     facts: { reasonCode: decision.reasonCode, criteriaMissing: action.criteriaMissing.length },
   });
 
   if (decision.action === 'REPAIR') {
-    return scheduleRepair({ ...input, decision, findings });
+    // The repair is planned for the SUBJECT — the work — never for the review.
+    return scheduleRepair({
+      ...input, task: subject, decision,
+      findings: await deps.store.findingsForRun(run.runId, run.projectId),
+    });
   }
   if (decision.action === 'ACCEPT' || decision.action === 'COMPLETE') {
     /**
@@ -754,5 +804,26 @@ async function scheduleRepair(input: {
     taskId: plan.task.taskId, policyRevision: input.request.verification.revision,
     outcome: 'SCHEDULED', facts: { round: plan.round, repairsTaskId: task.taskId },
   });
+
+  /**
+   * THE ADMISSION RESERVATION IS RELEASED ONCE THE ROUND IS ADMITTED, and the
+   * end-to-end scenario is what caught it being held forever.
+   *
+   * This reservation exists to answer one question — can this run afford
+   * another repair round — and `planJuliusRepair` requires its id, which the
+   * repair record keeps as provenance for what admitted the round. It is NOT
+   * the reservation the repair spends against: when the repair task is
+   * claimed, the ordinary execution path reserves for its own dispatch. Holding
+   * both would count one round's budget twice, and holding this one with
+   * nothing ever settling it left it RESERVED for the life of the process.
+   *
+   * The narrow window this opens is stated rather than hidden: between the
+   * release here and the repair's own reservation, another task could take the
+   * budget, and the repair would then be denied when it is claimed — a refusal
+   * at dispatch instead of at scheduling. That is a worse message and not a
+   * worse outcome, and it is the honest cost of not double-counting.
+   */
+  await deps.budget.release({ reservationId, reason: 'REPAIR_ADMITTED', now: deps.clock.now() });
+
   return { kind: 'REPAIR_SCHEDULED', taskId: task.taskId, repairTaskId: plan.task.taskId, round: plan.round };
 }

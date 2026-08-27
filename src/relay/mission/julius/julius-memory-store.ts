@@ -364,6 +364,31 @@ export function createJuliusMemoryStore(): JuliusMemoryStore {
       if (evidenceKeys.has(key)) return false;
       evidenceKeys.add(key);
       evidence.push({ ...input.evidence });
+      /**
+       * THE EVENT IS PART OF THE WRITE, and the model was missing it.
+       * `JuliusPostgresRepository.appendEvidence` commits
+       * `julius.evidence.recorded` in the SAME transaction as the row, so
+       * production emits it and this model did not — a divergence the
+       * end-to-end scenario caught by asking the ledger for an event that
+       * exists in production and never in a test.
+       */
+      const sequence = (eventSequences.get(input.runId) ?? 0) + 1;
+      eventSequences.set(input.runId, sequence);
+      const eventId = `evidence:${input.evidence.evidenceId}`;
+      if (!eventIds.has(eventId)) {
+        eventIds.add(eventId);
+        sequenceOf.set(eventId, sequence);
+        eventLog.push({
+          eventId, runId: input.runId, projectId: input.projectId, type: 'evidence.recorded',
+          taskId: input.evidence.taskId, workerId: input.evidence.workerId,
+          correlationId: input.evidence.taskId, causationId: null,
+          occurredAt: input.evidence.occurredAt,
+          facts: {
+            evidenceId: input.evidence.evidenceId, evidenceType: input.evidence.type,
+            status: input.evidence.status, safeSummary: input.evidence.safeSummary,
+          },
+        });
+      }
       return true;
     },
 
