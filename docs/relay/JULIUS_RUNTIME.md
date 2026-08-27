@@ -22,7 +22,9 @@ PostgreSQL is authoritative for Julius runs, tasks, dependencies, lifecycle tran
 
 Context is selected by role and task, bounded by a character budget, and excludes entries marked `SECRET`. The compiler applies defense-in-depth redaction, but callers must store credentials only in credential handles—not Project Brain. Decisions contain reason codes, safe summaries, and evidence references, never chain-of-thought.
 
-C.A.R.D. remains the runtime policy input. Unchained may later relax approval frequency only inside hard authorization, tenancy, sandbox, network, and budget boundaries. It must never disable those boundaries.
+C.A.R.D. is the runtime policy input. Julius returns structured allow, deny, approval, or limited decisions for providers, capabilities, network, filesystem mutation, retries, fallbacks, sub-agents, gauntlet continuation, worker concurrency, and Unchained continuation. Unchained relaxes continuation behavior only: explicit network, provider, capability, sub-agent, gauntlet, and concurrency limits remain enforced.
+
+Provider routing resolves a typed role and capability through the worker registry, C.A.R.D., adapter availability, provider circuit state, and provider concurrency. Provider-specific dispatch stays behind adapters. Rate limits and timeouts are transient; authentication/configuration, policy denial, cancellation, and unknown worker failures are not blindly retried.
 
 ## Integration sequence
 
