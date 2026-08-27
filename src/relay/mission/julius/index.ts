@@ -4,3 +4,4 @@ export * from './julius-router';
 export * from './julius-bounded-runtime';
 export * from './julius-recovery';
 export * from './julius-execution-coordinator';
+export * from './julius-verification-runtime';

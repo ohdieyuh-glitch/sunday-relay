@@ -34,4 +34,6 @@ Recovery is database-driven. Expired task leases are selected with skip locking 
 
 Claimed work now passes through an authoritative execution coordinator: C.A.R.D.-filtered worker selection, resource reservation, provider-neutral dispatch, result validation, evidence persistence, generation-safe result acceptance, and reservation settlement. Denial prevents dispatch; transient provider failures retry only when policy permits; permanent and malformed failures release the reservation and fail safely. Provider adapters cannot directly complete missions or bypass evidence ingestion.
 
+Verification is a separate Julius-owned phase. Acceptance criteria map to normalized evidence types, reviewer policy can schedule the typed Independent Reviewer role, and reviewer findings must cite evidence that exists in the same run. Open blocking findings request repair; missing evidence halts; only Julius combines successful tasks, criteria, findings, and accepted decisions into a mission-completion eligibility decision. Reviewer approval alone never completes a run.
+
 Completion is valid only when Julius is verifying, all tasks are successful or explicitly skipped, and every required verification decision is `ACCEPT`.
