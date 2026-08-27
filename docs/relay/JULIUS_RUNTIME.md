@@ -36,4 +36,6 @@ Claimed work now passes through an authoritative execution coordinator: C.A.R.D.
 
 Verification is a separate Julius-owned phase. Acceptance criteria map to normalized evidence types, reviewer policy can schedule the typed Independent Reviewer role, and reviewer findings must cite evidence that exists in the same run. Open blocking findings request repair; missing evidence halts; only Julius combines successful tasks, criteria, findings, and accepted decisions into a mission-completion eligibility decision. Reviewer approval alone never completes a run.
 
+Every dispatch can now bind to a deterministic context snapshot containing the compiler version, role, Mission Contract/C.A.R.D./Project Brain revisions, selected Brain entry IDs, dependency tasks, evidence, findings, acceptance criteria, size, redaction count, and an integrity hash. PostgreSQL stores this bounded metadata rather than duplicating an arbitrary transcript. Julius Brain writes have a typed kind, task/worker/evidence provenance, and a unique run revision so stale concurrent writers cannot overwrite shared memory.
+
 Completion is valid only when Julius is verifying, all tasks are successful or explicitly skipped, and every required verification decision is `ACCEPT`.
