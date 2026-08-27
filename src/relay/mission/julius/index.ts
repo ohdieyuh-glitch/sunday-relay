@@ -21,3 +21,4 @@ export * from './julius-memory-store';
 export * from './julius-runtime-fixtures';
 export * from './julius-runtime-api';
 export * from './julius-metrics';
+export * from './julius-fault-injection';
