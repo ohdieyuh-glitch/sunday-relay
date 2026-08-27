@@ -549,6 +549,11 @@ export function createJuliusMemoryStore(): JuliusMemoryStore {
       subagents.set(key, { ...record, state });
       return true;
     },
+    async activeTaskCount(runId, projectId) {
+      if (!inProject(runId, projectId)) return 0;
+      return [...tasks.values()].filter((task) => task.runId === runId && task.state === 'ACTIVE').length;
+    },
+
     async reviewCompletedFor(taskId, projectId) {
       const parent = tasks.get(taskId);
       if (parent === undefined || !inProject(parent.runId, projectId)) return false;

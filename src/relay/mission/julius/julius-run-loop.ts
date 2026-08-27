@@ -35,6 +35,7 @@ import { planRunStatePath, transitionIsLegal } from './julius-state-path';
  */
 export { planRunStatePath, transitionIsLegal };
 import { runClaimedTask, type JuliusPipelineDependencies, type JuliusTaskOutcome } from './julius-task-pipeline';
+import { continuationConcurrency } from './julius-continuation';
 import type { JuliusClaimedTask, JuliusRunRow } from './julius-runtime-ports';
 
 /* ---------------------------------------------------------- policy source */
@@ -69,6 +70,12 @@ export interface JuliusTickReport {
   readonly runs: readonly JuliusRunAdvance[];
   /** Runs skipped because no policy could be resolved for them. */
   readonly unresolvedPolicyRunIds: readonly string[];
+  /**
+   * Tasks claimed and handed straight back because the run was already at its
+   * C.A.R.D. concurrency. Reported rather than hidden: a number that stays
+   * high means the claim limit is wider than the runs it serves.
+   */
+  readonly yieldedForConcurrency: number;
 }
 
 export interface JuliusRunAdvance {
@@ -156,6 +163,13 @@ export class JuliusRunLoop {
     const unresolvedPolicyRunIds = new Set<string>();
     const policyCache = new Map<string, { card: JuliusCardPolicy; verification: JuliusVerificationPolicy } | null>();
 
+    // Per-run in-flight counts, read ONCE before anything is executed. The
+    // C.A.R.D. concurrency bound is about a run, not about a worker process,
+    // so N workers each running the run's full allowance would be N times the
+    // width C.A.R.D. granted.
+    const inFlight = new Map<string, number>();
+    let yieldedForConcurrency = 0;
+
     for (const claim of claims) {
       touchedRunIds.add(claim.runId);
       const policy = await this.resolvePolicy(claim, scope, policyCache);
@@ -171,6 +185,28 @@ export class JuliusRunLoop {
         });
         continue;
       }
+      if (!inFlight.has(claim.runId)) {
+        // The claim itself already moved this task to ACTIVE, so the stored
+        // count includes it — the allowance is compared against the count
+        // BEFORE this tick's claims, which is what the subtraction recovers.
+        const active = await this.deps.store.activeTaskCount(claim.runId, scope.projectId);
+        inFlight.set(claim.runId, active - claims.filter((other) => other.runId === claim.runId).length);
+      }
+      const running = inFlight.get(claim.runId)!;
+      const allowance = continuationConcurrency(policy.card);
+      if (running >= allowance) {
+        // HANDED BACK, NOT HELD. The task returns to RUNNABLE immediately so
+        // another worker — or this one on its next tick — can take it as soon
+        // as the run has room, rather than waiting out the lease.
+        await this.deps.store.finishTask({
+          taskId: claim.taskId, owner: this.deps.owner, leaseGeneration: claim.leaseGeneration,
+          state: 'FAILED', now: this.deps.clock.now(), nextAttemptAt: this.deps.clock.now(),
+        });
+        yieldedForConcurrency += 1;
+        continue;
+      }
+      inFlight.set(claim.runId, running + 1);
+
       outcomes.push(await runClaimedTask({
         claim,
         policy: policy.card,
@@ -186,7 +222,10 @@ export class JuliusRunLoop {
       if (advance !== null) runs.push(advance);
     }
 
-    return { claimed: claims.length, outcomes, runs, unresolvedPolicyRunIds: [...unresolvedPolicyRunIds] };
+    return {
+      claimed: claims.length, outcomes, runs,
+      unresolvedPolicyRunIds: [...unresolvedPolicyRunIds], yieldedForConcurrency,
+    };
   }
 
   private async resolvePolicy(

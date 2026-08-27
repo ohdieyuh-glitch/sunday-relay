@@ -199,6 +199,14 @@ export interface JuliusRuntimeReader {
   repairRoundsFor(taskId: string, projectId: string): Promise<number>;
   /** Whether an INDEPENDENT_REVIEWER task for this task has already succeeded. */
   reviewCompletedFor(taskId: string, projectId: string): Promise<boolean>;
+  /**
+   * How many of this run's tasks are ACTIVE right now, across every worker.
+   *
+   * The C.A.R.D. concurrency bound is about a RUN, not about a worker process,
+   * so counting only what this tick claimed would let N workers each run the
+   * run's full allowance. This is the number the bound is checked against.
+   */
+  activeTaskCount(runId: string, projectId: string): Promise<number>;
 }
 
 /** Everything the runtime writes and reads, in one bag the caller composes. */

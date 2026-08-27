@@ -32,6 +32,7 @@
  */
 
 import { evaluateJuliusPolicy, type JuliusCardPolicy } from './julius-policy';
+import { decideJuliusContinuation } from './julius-continuation';
 import { JuliusExecutionCoordinator, type JuliusExecutionPorts, type JuliusExecutionClaim, type JuliusResourceRequest } from './julius-execution-coordinator';
 import type { JuliusProviderRouter } from './julius-router';
 import { createJuliusContextSnapshot } from './julius-context-snapshot';
@@ -51,6 +52,18 @@ import {
 } from './julius-runtime-ports';
 
 /* --------------------------------------------------------------- inputs */
+
+/**
+ * THE STRUCTURAL ATTEMPT CEILING.
+ *
+ * A task's own `attempt` counter is incremented by the claim, and nothing in
+ * the inherited stack bounded it — `planJuliusRecovery` uses a `maxRetries` of
+ * 2 written inline in a SQL literal, and the dispatch path had no ceiling at
+ * all. This is the dispatch path's ceiling, stated once. It is deliberately
+ * NOT a C.A.R.D. value: C.A.R.D. decides whether retrying is permitted, and
+ * this decides when a task has simply had enough turns.
+ */
+export const MAX_TASK_ATTEMPTS = 3;
 
 /**
  * HOW MUCH A TASK IS EXPECTED TO COST.
@@ -316,19 +329,35 @@ export async function runClaimedTask(
     // The coordinator already released the reservation and emitted its own
     // event. What it cannot do is move the TASK, because it has no store — so
     // that is done here, once, on the paths where no result was accepted.
-    const state = outcome.status === 'RETRY' ? undefined : 'FAILED' as const;
-    if (state === undefined) {
-      await deps.store.finishTask({
-        taskId: claim.taskId, owner: deps.owner, leaseGeneration: claim.leaseGeneration,
-        state: 'FAILED', now: deps.clock.now(), nextAttemptAt: deps.clock.now(),
+    //
+    // WHETHER A RETRYABLE FAILURE IS ACTUALLY RETRIED IS AN AUTONOMY QUESTION.
+    // The coordinator classifies the ERROR; whether the runtime carries on by
+    // itself is `decideJuliusContinuation`'s. A SUPERVISED run stops on a rate
+    // limit and waits for a person, which is what supervised means and what
+    // the inherited code — reading only `policy.automaticRetry` — never did.
+    let requeue = false;
+    if (outcome.status === 'RETRY') {
+      const carryOn = decideJuliusContinuation(request.policy, {
+        kind: 'RETRY', attempt: claim.attempt,
+        maxAttempts: MAX_TASK_ATTEMPTS, errorCode: outcome.code as never,
       });
-    } else {
-      await deps.store.finishTask({ taskId: claim.taskId, owner: deps.owner, leaseGeneration: claim.leaseGeneration, state, now: deps.clock.now() });
+      requeue = carryOn.proceed;
+      if (!carryOn.proceed) {
+        await ledger.event('task.failed', {
+          taskId: claim.taskId,
+          facts: { code: outcome.code, reasonCode: carryOn.reasonCode, awaitingHuman: carryOn.awaitingHuman },
+        });
+      }
     }
-    await ledger.trajectory(outcome.status === 'RETRY' ? 'RETRY' : 'DISPATCH', {
+    await deps.store.finishTask({
+      taskId: claim.taskId, owner: deps.owner, leaseGeneration: claim.leaseGeneration,
+      state: 'FAILED', now: deps.clock.now(),
+      ...(requeue ? { nextAttemptAt: deps.clock.now() } : {}),
+    });
+    await ledger.trajectory(requeue ? 'RETRY' : 'DISPATCH', {
       taskId: claim.taskId, contextId, policyRevision: request.policy.revision, outcome: outcome.code,
     });
-    if (outcome.status === 'RETRY') return { kind: 'RETRY', taskId: claim.taskId, code: outcome.code };
+    if (requeue) return { kind: 'RETRY', taskId: claim.taskId, code: outcome.code };
     if (outcome.status === 'DENIED') return { kind: 'DENIED', taskId: claim.taskId, reasonCode: outcome.code };
     return { kind: 'FAILED', taskId: claim.taskId, code: outcome.code };
   }

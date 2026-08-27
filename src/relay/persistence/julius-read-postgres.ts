@@ -172,6 +172,16 @@ export class JuliusReadPostgresRepository implements JuliusRuntimeReader {
     return Number(result.rows[0]?.rounds ?? 0);
   }
 
+  async activeTaskCount(runId: string, projectId: string): Promise<number> {
+    const result = await this.pool.query<{ active: string }>(
+      `SELECT count(*)::text AS active FROM relay_wonderland.julius_tasks t
+         JOIN relay_wonderland.julius_runs r ON r.run_id=t.run_id
+        WHERE t.run_id=$1 AND r.project_id=$2 AND t.state='ACTIVE'`,
+      [runId, projectId],
+    );
+    return Number(result.rows[0]?.active ?? 0);
+  }
+
   async reviewCompletedFor(taskId: string, projectId: string): Promise<boolean> {
     const result = await this.pool.query(
       `SELECT 1 FROM relay_wonderland.julius_tasks t
