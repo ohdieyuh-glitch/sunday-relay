@@ -302,7 +302,7 @@ describe('a sub-agent is not an alternate runtime', () => {
     // from the ordinary pipeline, none from a sub-agent-specific path.
     const childId = outcome.childTask.taskId;
     expect(ctx.harness.store.contexts().some((c) => c.taskId === childId)).toBe(true);
-    expect((await ctx.harness.store.evidenceForRun('run-1')).some((e) => e.taskId === childId)).toBe(true);
+    expect((await ctx.harness.store.evidenceForRun('run-1', 'prj-1')).some((e) => e.taskId === childId)).toBe(true);
     expect(ctx.harness.store.results().some((r) => r.taskId === childId)).toBe(true);
   });
 });

@@ -31,12 +31,22 @@ export class JuliusRecoveryPostgresRepository {
     } catch (error) { await client.query('ROLLBACK').catch(() => undefined); throw error; } finally { client.release(); }
   }
 
-  async recoverExpired(now: string, limit = 100): Promise<JuliusRecoveryAction[]> {
+  /**
+   * Reclaim expired leases.
+   *
+   * `projectId` is OPTIONAL and additive: omitted, this sweeps every project,
+   * which is what an operator-level recovery worker wants and what the
+   * inherited signature did unconditionally. Supplied, it scopes the sweep —
+   * so a per-tenant worker can exist without one tenant's recovery pass
+   * touching another's tasks. Adding the parameter rather than requiring it
+   * keeps every existing caller correct.
+   */
+  async recoverExpired(now: string, limit = 100, projectId?: string): Promise<JuliusRecoveryAction[]> {
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > 500) throw new Error('invalid_recovery_limit');
     const client = await this.pool.connect();
     try {
       await client.query('BEGIN ISOLATION LEVEL SERIALIZABLE');
-      const rows = await client.query<Record<string, unknown>>(`SELECT t.task_id,t.run_id,t.attempt,t.lease_generation,2 AS max_retries,r.project_id,r.state AS run_state FROM relay_wonderland.julius_tasks t JOIN relay_wonderland.julius_runs r ON r.run_id=t.run_id WHERE t.state='ACTIVE' AND t.lease_expires_at<=$1 ORDER BY t.lease_expires_at,t.created_at FOR UPDATE OF t SKIP LOCKED LIMIT $2`, [now,limit]);
+      const rows = await client.query<Record<string, unknown>>(`SELECT t.task_id,t.run_id,t.attempt,t.lease_generation,2 AS max_retries,r.project_id,r.state AS run_state FROM relay_wonderland.julius_tasks t JOIN relay_wonderland.julius_runs r ON r.run_id=t.run_id WHERE t.state='ACTIVE' AND t.lease_expires_at<=$1 AND ($3::text IS NULL OR r.project_id=$3) ORDER BY t.lease_expires_at,t.created_at FOR UPDATE OF t SKIP LOCKED LIMIT $2`, [now,limit,projectId??null]);
       const actions: JuliusRecoveryAction[] = [];
       for (const row of rows.rows) {
         const candidate: JuliusRecoveryCandidate = { runId:String(row.run_id),projectId:String(row.project_id),runState:String(row.run_state) as JuliusMissionState,taskId:String(row.task_id),attempt:Number(row.attempt),maxRetries:Number(row.max_retries),leaseGeneration:Number(row.lease_generation) };

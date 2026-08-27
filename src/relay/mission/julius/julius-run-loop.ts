@@ -270,7 +270,7 @@ export class JuliusRunLoop {
     const run = await this.deps.store.loadRun(runId, projectId);
     if (run === null) return null;
 
-    const tasks = await this.deps.store.tasksForRun(runId);
+    const tasks = await this.deps.store.tasksForRun(runId, projectId);
     const target = targetRunState(tasks);
     const path = planRunStatePath(run.state, target.state);
     if (path.length === 0) {

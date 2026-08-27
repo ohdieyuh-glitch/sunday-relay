@@ -119,9 +119,9 @@ describe('a single task, end to end', () => {
     // The provider was ACTUALLY reached.
     expect(harness.adapters.get(CODER.adapterId)!.dispatches).toHaveLength(1);
     // Evidence ACTUALLY landed.
-    expect(await harness.store.evidenceForRun('run-1')).toHaveLength(1);
+    expect(await harness.store.evidenceForRun('run-1', 'prj-1')).toHaveLength(1);
     // Verification ACTUALLY followed execution.
-    expect(await harness.store.decisionsForRun('run-1')).toHaveLength(1);
+    expect(await harness.store.decisionsForRun('run-1', 'prj-1')).toHaveLength(1);
     // The task ACTUALLY moved.
     expect(harness.store.taskRow('task-1')!.state).toBe('SUCCEEDED');
   });
@@ -319,7 +319,7 @@ describe('the runtime fails closed', () => {
     seedRun(harness, { tasks: [task({ taskId: 'task-1' })] });
     const report = await harness.loop.tick(scope);
     expect(report.outcomes[0].kind).toBe('FAILED');
-    expect(await harness.store.evidenceForRun('run-1')).toHaveLength(0);
+    expect(await harness.store.evidenceForRun('run-1', 'prj-1')).toHaveLength(0);
   });
 
   it('refuses a task whose role Julius cannot resolve', async () => {

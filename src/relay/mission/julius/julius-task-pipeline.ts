@@ -245,7 +245,7 @@ export async function runClaimedTask(
   }
 
   /* ------------------------------------- 2. context, compiled and stored */
-  const tasks = await deps.store.tasksForRun(run.runId);
+  const tasks = await deps.store.tasksForRun(run.runId, run.projectId);
   const task = tasks.find((value) => value.taskId === claim.taskId);
   if (task === undefined) {
     return { kind: 'HALTED', taskId: claim.taskId, reasonCode: 'TASK_NOT_FOUND', safeSummary: 'The claimed task no longer exists in the run.' };
@@ -265,10 +265,10 @@ export async function runClaimedTask(
   let contextId: string | null = null;
   if (worker !== null) {
     const [evidence, findings, criteria, brain] = await Promise.all([
-      deps.store.evidenceForRun(run.runId),
-      deps.store.findingsForRun(run.runId),
-      deps.store.criteriaForRun(run.runId),
-      deps.store.brainEntriesForRun(run.runId),
+      deps.store.evidenceForRun(run.runId, run.projectId),
+      deps.store.findingsForRun(run.runId, run.projectId),
+      deps.store.criteriaForRun(run.runId, run.projectId),
+      deps.store.brainEntriesForRun(run.runId, run.projectId),
     ]);
     const snapshot = createJuliusContextSnapshot({
       contextId: deps.ids.next('context'),
@@ -422,12 +422,12 @@ async function verifyExecutedTask(input: {
 }): Promise<JuliusTaskOutcome> {
   const { deps, run, ledger, task } = input;
   const [tasks, evidence, findings, criteria, decisions, reviewCompleted] = await Promise.all([
-    deps.store.tasksForRun(run.runId),
-    deps.store.evidenceForRun(run.runId),
-    deps.store.findingsForRun(run.runId),
-    deps.store.criteriaForRun(run.runId),
-    deps.store.decisionsForRun(run.runId),
-    deps.store.reviewCompletedFor(task.taskId),
+    deps.store.tasksForRun(run.runId, run.projectId),
+    deps.store.evidenceForRun(run.runId, run.projectId),
+    deps.store.findingsForRun(run.runId, run.projectId),
+    deps.store.criteriaForRun(run.runId, run.projectId),
+    deps.store.decisionsForRun(run.runId, run.projectId),
+    deps.store.reviewCompletedFor(task.taskId, run.projectId),
   ]);
 
   const action = evaluateJuliusVerification({
@@ -512,7 +512,7 @@ async function scheduleRepair(input: {
   findings: Awaited<ReturnType<JuliusRuntimeStore['findingsForRun']>>;
 }): Promise<JuliusTaskOutcome> {
   const { deps, run, ledger, task } = input;
-  const priorRounds = await deps.store.repairRoundsFor(task.taskId);
+  const priorRounds = await deps.store.repairRoundsFor(task.taskId, run.projectId);
 
   // A REPAIR IS BUDGETED WORK. Reserving before planning is what stops a run
   // from scheduling a repair it cannot pay for and discovering that when the

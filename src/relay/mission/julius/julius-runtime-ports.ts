@@ -189,16 +189,16 @@ export interface JuliusBudgetPort {
  * be invoked after execution, and it is a read port rather than a new table.
  */
 export interface JuliusRuntimeReader {
-  tasksForRun(runId: string): Promise<readonly JuliusTask[]>;
-  evidenceForRun(runId: string): Promise<readonly JuliusEvidence[]>;
-  findingsForRun(runId: string): Promise<readonly JuliusReviewerFinding[]>;
-  criteriaForRun(runId: string): Promise<readonly JuliusAcceptanceCriterion[]>;
-  decisionsForRun(runId: string): Promise<readonly JuliusVerificationDecision[]>;
-  brainEntriesForRun(runId: string): Promise<readonly JuliusBrainEntry[]>;
+  tasksForRun(runId: string, projectId: string): Promise<readonly JuliusTask[]>;
+  evidenceForRun(runId: string, projectId: string): Promise<readonly JuliusEvidence[]>;
+  findingsForRun(runId: string, projectId: string): Promise<readonly JuliusReviewerFinding[]>;
+  criteriaForRun(runId: string, projectId: string): Promise<readonly JuliusAcceptanceCriterion[]>;
+  decisionsForRun(runId: string, projectId: string): Promise<readonly JuliusVerificationDecision[]>;
+  brainEntriesForRun(runId: string, projectId: string): Promise<readonly JuliusBrainEntry[]>;
   /** How many repair rounds this task has already had. Zero, not null. */
-  repairRoundsFor(taskId: string): Promise<number>;
+  repairRoundsFor(taskId: string, projectId: string): Promise<number>;
   /** Whether an INDEPENDENT_REVIEWER task for this task has already succeeded. */
-  reviewCompletedFor(taskId: string): Promise<boolean>;
+  reviewCompletedFor(taskId: string, projectId: string): Promise<boolean>;
 }
 
 /** Everything the runtime writes and reads, in one bag the caller composes. */

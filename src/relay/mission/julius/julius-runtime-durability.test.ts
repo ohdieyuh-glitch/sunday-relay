@@ -55,7 +55,7 @@ describe('two schedulers, one task', () => {
   it('records evidence once, even though both loops ran', async () => {
     const { harness, second } = twoLoops();
     await Promise.all([harness.loop.tick(scope), second.tick(scope)]);
-    expect(await harness.store.evidenceForRun('run-1')).toHaveLength(1);
+    expect(await harness.store.evidenceForRun('run-1', 'prj-1')).toHaveLength(1);
   });
 
   it('reserves budget for one execution', async () => {
@@ -198,7 +198,7 @@ describe('duplicate delivery', () => {
     });
     expect(await write()).toBe(true);
     expect(await write()).toBe(false);
-    expect(await harness.store.evidenceForRun('run-1')).toHaveLength(1);
+    expect(await harness.store.evidenceForRun('run-1', 'prj-1')).toHaveLength(1);
   });
 
   it('refuses a result after cancellation instead of resurrecting the task', async () => {
@@ -241,7 +241,35 @@ describe('duplicate delivery', () => {
   });
 });
 
-describe('a run that is not this caller\'s', () => {
+describe('a run id is not an authorization', () => {
+  it('serves NOTHING to a reader holding the right run id and the wrong project', async () => {
+    // A run id alone is enough to FIND a row and not enough to be allowed to
+    // read it. The first version of the reader filtered on `run_id` alone
+    // while its own header claimed each query was scoped through
+    // `julius_runs` — a tenancy claim the SQL did not make.
+    const harness = createJuliusHarness({ workers: [{ worker: CODER, script: [{ kind: 'succeed' }] }] });
+    seedRun(harness, { projectId: 'prj-owner', tasks: [task({ taskId: 'task-1' })] });
+    await harness.loop.tick({ projectId: 'prj-owner' });
+
+    // The owner sees its own run.
+    expect(await harness.store.tasksForRun('run-1', 'prj-owner')).toHaveLength(1);
+    expect((await harness.store.evidenceForRun('run-1', 'prj-owner')).length).toBeGreaterThan(0);
+
+    // An intruder holding the same run id sees nothing at all.
+    for (const read of [
+      harness.store.tasksForRun('run-1', 'prj-intruder'),
+      harness.store.evidenceForRun('run-1', 'prj-intruder'),
+      harness.store.findingsForRun('run-1', 'prj-intruder'),
+      harness.store.criteriaForRun('run-1', 'prj-intruder'),
+      harness.store.decisionsForRun('run-1', 'prj-intruder'),
+      harness.store.brainEntriesForRun('run-1', 'prj-intruder'),
+    ]) {
+      expect(await read).toEqual([]);
+    }
+    expect(await harness.store.repairRoundsFor('task-1', 'prj-intruder')).toBe(0);
+    expect(await harness.store.reviewCompletedFor('task-1', 'prj-intruder')).toBe(false);
+  });
+
   it('is never claimed, executed, or written to', async () => {
     const harness = createJuliusHarness({ workers: [{ worker: CODER, script: [{ kind: 'succeed' }] }] });
     seedRun(harness, { projectId: 'prj-owner', tasks: [task({ taskId: 'task-1' })] });

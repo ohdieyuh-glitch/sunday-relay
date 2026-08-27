@@ -112,6 +112,10 @@ export function createJuliusMemoryStore(): JuliusMemoryStore {
   const gauntlets = new Map<string, JuliusGauntletRecord>();
   const gauntletRounds = new Map<string, JuliusGauntletRoundRecord>();
 
+  /** Whether a run belongs to a project. Every read consults this first. */
+  const inProject = (runId: string, projectId: string): boolean =>
+    runs.get(runId)?.projectId === projectId;
+
   /** The dependency predicate the claim query enforces. */
   const dependenciesSatisfied = (task: TaskRow): boolean =>
     task.dependencyIds.every((id) => {
@@ -331,7 +335,15 @@ export function createJuliusMemoryStore(): JuliusMemoryStore {
     },
 
     /* -------------------------------------------------------------- reads */
-    async tasksForRun(runId) {
+    /**
+     * EVERY READ TAKES THE PROJECT AND ENFORCES IT. A run id alone is enough
+     * to find a row and is not enough to be allowed to read it, so a read
+     * whose project does not match the run's returns nothing — the same answer
+     * the SQL gives, rather than a laxer one that would let a test pass where
+     * production refuses.
+     */
+    async tasksForRun(runId, projectId) {
+      if (!inProject(runId, projectId)) return [];
       return [...tasks.values()]
         .filter((task) => task.runId === runId)
         .sort((a, b) => a.ordinal - b.ordinal || a.taskId.localeCompare(b.taskId))
@@ -341,18 +353,30 @@ export function createJuliusMemoryStore(): JuliusMemoryStore {
           taskType: task.taskType, role: task.role, ordinal: task.ordinal, state: task.state,
         }));
     },
-    async evidenceForRun(runId) {
+    async evidenceForRun(runId, projectId) {
+      if (!inProject(runId, projectId)) return [];
       const ids = new Set([...tasks.values()].filter((task) => task.runId === runId).map((task) => task.taskId));
       return evidence.filter((value) => ids.has(value.taskId)).map((value) => ({ ...value }));
     },
-    async findingsForRun(runId) { return findings.filter((value) => value.runId === runId).map((value) => ({ ...value })); },
-    async criteriaForRun(runId) { return (criteria.get(runId) ?? []).map((value) => ({ ...value })); },
-    async decisionsForRun(runId) {
+    async findingsForRun(runId, projectId) {
+      return inProject(runId, projectId) ? findings.filter((value) => value.runId === runId).map((value) => ({ ...value })) : [];
+    },
+    async criteriaForRun(runId, projectId) {
+      return inProject(runId, projectId) ? (criteria.get(runId) ?? []).map((value) => ({ ...value })) : [];
+    },
+    async decisionsForRun(runId, projectId) {
+      if (!inProject(runId, projectId)) return [];
       const ids = new Set([...decisionRunIds.entries()].filter(([, value]) => value === runId).map(([key]) => key));
       return ids.size === 0 ? [] : decisions.map((value) => ({ ...value }));
     },
-    async brainEntriesForRun(runId) { return (brain.get(runId) ?? []).map((entry) => ({ ...entry })); },
-    async repairRoundsFor(taskId) { return repairRounds.get(taskId) ?? 0; },
+    async brainEntriesForRun(runId, projectId) {
+      return inProject(runId, projectId) ? (brain.get(runId) ?? []).map((entry) => ({ ...entry })) : [];
+    },
+    async repairRoundsFor(taskId, projectId) {
+      const task = tasks.get(taskId);
+      if (task === undefined || !inProject(task.runId, projectId)) return 0;
+      return repairRounds.get(taskId) ?? 0;
+    },
 
     /* --------------------------------------------------------- sub-agents */
     async subagentContext(runId, parentTaskId): Promise<JuliusSubagentContext> {
@@ -453,9 +477,14 @@ export function createJuliusMemoryStore(): JuliusMemoryStore {
       subagents.set(key, { ...record, state });
       return true;
     },
-    async reviewCompletedFor(taskId) {
-      const review = tasks.get(`${taskId}:review`);
-      return review !== undefined && review.state === 'SUCCEEDED';
+    async reviewCompletedFor(taskId, projectId) {
+      const parent = tasks.get(taskId);
+      if (parent === undefined || !inProject(parent.runId, projectId)) return false;
+      // Any INDEPENDENT_REVIEWER child that succeeded, however it was named —
+      // the gauntlet's review phase and the pipeline's `:review` task are both
+      // reviews of the same task and both must count.
+      return [...tasks.values()].some((task) =>
+        task.parentTaskId === taskId && task.role === 'INDEPENDENT_REVIEWER' && task.state === 'SUCCEEDED');
     },
   };
 }
