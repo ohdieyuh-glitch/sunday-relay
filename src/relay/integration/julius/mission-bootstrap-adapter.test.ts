@@ -104,6 +104,7 @@ function configuration(over: Partial<CompoundAgentConfiguration> = {}): Compound
       projectBrain: { referenceId: 'brain-1', revision: 'brain-r9' },
       missionDefaults: {
         executionMode: 'semi', reviewRequirement: 'independent', completionRule: 'strict',
+        requestedPermissions: ['read', 'write_worktree', 'commit'],
         limits: { runtimeMinutes: 45, agentCalls: null, spendUsd: 3, reviewCycles: 2, repairCycles: null },
       },
       activation: 'ACTIVE',
@@ -202,6 +203,13 @@ describe('compiling an authorized mission', () => {
   it('keeps an unset limit null rather than inventing a ceiling', () => {
     expect(compiled().limits.agentCalls).toBeNull();
     expect(compiled().limits.repairCycles).toBeNull();
+  });
+
+  it('carries the repository authority the Compound Agent requests', () => {
+    // Requested, never granted: the resolver narrows this against real grants
+    // and Julius narrows it again per worker. Carrying it is what lets Julius
+    // refuse a task needing authority the mission never asked for.
+    expect(compiled().requestedPermissions).toEqual(['read', 'write_worktree', 'commit']);
   });
 
   it('carries no credential, prompt or reasoning', () => {

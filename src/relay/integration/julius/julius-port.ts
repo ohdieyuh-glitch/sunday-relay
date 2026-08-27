@@ -25,6 +25,7 @@
  */
 
 import type { JuliusMissionState } from '../../mission/julius/julius-runtime';
+import type { RepositoryPermission } from '../../mission/repository-target';
 import type { CompoundAgentSlot, PinnedRevisionReference } from '../compound-agent';
 
 /** The wire version of everything this module declares. Bumped, never mutated. */
@@ -116,6 +117,14 @@ export interface JuliusBootstrapRequest {
   readonly workers: readonly JuliusWorkerRequest[];
   readonly card: PinnedRevisionReference;
   readonly projectBrain: PinnedRevisionReference;
+  /**
+   * The repository authority this run REQUESTS. Requested, never granted:
+   * Relay's repository resolver narrows it against what a human granted on the
+   * registration, and Julius narrows it again per worker and per sub-agent.
+   * Carrying it is what lets Julius refuse a task that needs authority the
+   * mission never asked for, instead of discovering it at the git call.
+   */
+  readonly requestedPermissions: readonly RepositoryPermission[];
 
   readonly executionMode: 'guided' | 'semi' | 'autonomous';
   readonly reviewRequirement: 'none' | 'independent' | 'security' | 'manual_founder';

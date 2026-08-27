@@ -22,3 +22,4 @@ export * from './registry';
 export * from './julius';
 export * from './commands';
 export * from './terminal';
+export * from './legacy';

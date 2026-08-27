@@ -305,6 +305,7 @@ export function compileJuliusBootstrapRequest(input: JuliusBootstrapInput): Juli
       workers,
       card: configuration.card,
       projectBrain: configuration.projectBrain,
+      requestedPermissions: configuration.missionDefaults.requestedPermissions,
       executionMode: configuration.missionDefaults.executionMode,
       reviewRequirement: configuration.missionDefaults.reviewRequirement,
       // THE COMPLETION RULE COMES FROM THE MISSION, not the Compound Agent.

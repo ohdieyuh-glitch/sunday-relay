@@ -33,6 +33,7 @@
  */
 
 import { JULIUS_DEFAULT_ROLES, type JuliusDefaultRole } from '../../mission/julius/julius-runtime';
+import type { RepositoryPermission } from '../../mission/repository-target';
 
 /* ------------------------------------------------------------- worker slots */
 
@@ -155,6 +156,22 @@ export interface CompoundAgentMissionDefaults {
   readonly executionMode: 'guided' | 'semi' | 'autonomous';
   readonly reviewRequirement: 'none' | 'independent' | 'security' | 'manual_founder';
   readonly completionRule: 'strict' | 'balanced' | 'custom';
+  /**
+   * The repository authority a run from this Compound Agent REQUESTS.
+   *
+   * Requested, never granted. The repository resolver narrows this against
+   * what a human actually granted on the registration, so a configuration can
+   * only ever ask for authority that already exists — which is why storing it
+   * here is safe and why widening it downstream is not a thing any code does.
+   *
+   * An UNKNOWN permission is REFUSED here, and `validateMissionConfig` drops
+   * one. The difference is deliberate and follows from what each record is
+   * for: a mission-start config is transient and narrowing it is harmless,
+   * while a Compound Agent is durable and user-owned — silently dropping
+   * `deploy_prod` (a misspelling of `deploy_production`) hands its owner an
+   * agent missing an authority they believe it has, discovered at run time.
+   */
+  readonly requestedPermissions: readonly RepositoryPermission[];
   readonly limits: {
     readonly runtimeMinutes: number | null;
     readonly agentCalls: number | null;
@@ -253,6 +270,7 @@ export const COMPOUND_AGENT_REFUSALS = [
   'invalid_revision_reference',
   'invalid_mission_defaults',
   'invalid_limit',
+  'invalid_permission',
   'stale_configuration_revision',
   'tenant_mismatch',
   'project_mismatch',

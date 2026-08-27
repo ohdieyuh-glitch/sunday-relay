@@ -25,6 +25,7 @@
  */
 
 import { reviewerIsIndependent } from '../../mission/entitlement';
+import { REPOSITORY_PERMISSIONS, isRepositoryPermission, type RepositoryPermission } from '../../mission/repository-target';
 import {
   COMPOUND_AGENT_ACTIVATIONS,
   COMPOUND_AGENT_SLOTS,
@@ -188,10 +189,35 @@ function parseMissionDefaults(
     limits[field] = value;
   }
 
+  // REFUSED, NOT DROPPED. See `CompoundAgentMissionDefaults.requestedPermissions`
+  // for why this layer differs from `validateMissionConfig` here.
+  const permissionsRaw = record.requestedPermissions;
+  const requestedPermissions: RepositoryPermission[] = [];
+  if (permissionsRaw !== undefined && !Array.isArray(permissionsRaw)) {
+    problems.push(problem(
+      'invalid_permission',
+      'missionDefaults.requestedPermissions',
+      'missionDefaults.requestedPermissions must be an array of repository permissions when present.',
+    ));
+  } else {
+    for (const value of (Array.isArray(permissionsRaw) ? permissionsRaw : [])) {
+      if (typeof value !== 'string' || !isRepositoryPermission(value)) {
+        problems.push(problem(
+          'invalid_permission',
+          'missionDefaults.requestedPermissions',
+          `"${String(value)}" is not a repository permission. Relay accepts: ${REPOSITORY_PERMISSIONS.join(', ')}. An unrecognised permission is refused rather than dropped, so a Compound Agent never quietly lacks authority its owner believes it has.`,
+        ));
+        continue;
+      }
+      if (!requestedPermissions.includes(value)) requestedPermissions.push(value);
+    }
+  }
+
   return {
     executionMode: pick(record.executionMode, EXECUTION_MODES, 'executionMode'),
     reviewRequirement: pick(record.reviewRequirement, REVIEW_REQUIREMENTS, 'reviewRequirement'),
     completionRule: pick(record.completionRule, COMPLETION_RULES, 'completionRule'),
+    requestedPermissions,
     limits: {
       runtimeMinutes: limits.runtimeMinutes,
       agentCalls: limits.agentCalls,

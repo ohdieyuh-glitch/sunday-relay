@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
 import { JULIUS_DEFAULT_ROLES } from '../../mission/julius/julius-runtime';
+import { validateMissionConfig } from '../../mission/mission-config';
+import { REPOSITORY_PERMISSIONS } from '../../mission/repository-target';
 import {
   COMPOUND_AGENT_SLOTS,
   authorizeCompoundAgentRead,
@@ -107,6 +109,7 @@ const DRAFT: CompoundAgentDraft = {
     executionMode: 'guided',
     reviewRequirement: 'independent',
     completionRule: 'strict',
+    requestedPermissions: ['read', 'write_worktree'],
     limits: { runtimeMinutes: 60, agentCalls: null, spendUsd: 5, reviewCycles: null, repairCycles: 3 },
   },
   activation: 'ACTIVE',
@@ -302,6 +305,52 @@ describe('parsing refuses rather than repairs', () => {
     }));
     expect(parsed.ok).toBe(true);
     if (parsed.ok) expect(parsed.draft.missionDefaults.limits.spendUsd).toBeNull();
+  });
+
+  it('refuses an unrecognised repository permission rather than dropping it', () => {
+    for (const bad of ['deploy_prod', 'admin', '', 42, null]) {
+      const parsed = parseCompoundAgentDraft(body({
+        missionDefaults: { ...DRAFT.missionDefaults, requestedPermissions: ['read', bad] },
+      }));
+      expect(parsed.ok, JSON.stringify(bad)).toBe(false);
+      if (!parsed.ok) expect(reasons(parsed.problems)).toContain('invalid_permission');
+    }
+  });
+
+  it('differs from the PSP validator here ON PURPOSE, and both are still true', () => {
+    // `validateMissionConfig` DROPS an unknown permission — right for a
+    // transient mission-start config, where narrowing is harmless. A Compound
+    // Agent is durable and user-owned, so silently dropping `deploy_prod`
+    // hands its owner an agent missing an authority they believe it has.
+    const legacy = validateMissionConfig({ permissions: ['read', 'deploy_prod'] });
+    expect(legacy.ok).toBe(true);
+    if (legacy.ok) expect(legacy.value.permissions).toEqual(['read']);
+
+    const parsed = parseCompoundAgentDraft(body({
+      missionDefaults: { ...DRAFT.missionDefaults, requestedPermissions: ['read', 'deploy_prod'] },
+    }));
+    expect(parsed.ok).toBe(false);
+  });
+
+  it('accepts every real repository permission, deduplicated', () => {
+    const parsed = parseCompoundAgentDraft(body({
+      missionDefaults: {
+        ...DRAFT.missionDefaults,
+        requestedPermissions: [...REPOSITORY_PERMISSIONS, 'read'],
+      },
+    }));
+    expect(parsed.ok).toBe(true);
+    if (parsed.ok) {
+      expect(parsed.draft.missionDefaults.requestedPermissions).toEqual([...REPOSITORY_PERMISSIONS]);
+    }
+  });
+
+  it('treats an absent permission list as asking for no extra authority', () => {
+    const withoutKey = { ...DRAFT.missionDefaults } as Record<string, unknown>;
+    delete withoutKey.requestedPermissions;
+    const parsed = parseCompoundAgentDraft(body({ missionDefaults: withoutKey }));
+    expect(parsed.ok).toBe(true);
+    if (parsed.ok) expect(parsed.draft.missionDefaults.requestedPermissions).toEqual([]);
   });
 
   it('refuses an id that is not path-safe', () => {
