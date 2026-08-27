@@ -176,30 +176,42 @@ const k = (at: number, value: number): Keyframe<number> => ({ at, value });
  * hero camera render nothing but sky.
  */
 export const CAMERA_POSITION: readonly [readonly Keyframe<number>[], readonly Keyframe<number>[], readonly Keyframe<number>[]] = [
-  [k(0, 0), k(0.125, 0), k(0.25, -14), k(0.375, -6), k(0.5, 10), k(0.625, 4), k(0.75, -2), k(1, 0)],
-  [k(0, 16), k(0.125, 16), k(0.25, 12), k(0.375, 15), k(0.5, 22), k(0.625, 14), k(0.75, 11), k(1, 13)],
-  [k(0, 30), k(0.125, 50), k(0.25, 54), k(0.375, 50), k(0.5, 60), k(0.625, 52), k(0.75, 46), k(1, 50)],
+  [k(0, 0), k(0.125, -3), k(0.25, -7), k(0.375, -4), k(0.5, 1), k(0.625, -2), k(0.75, -6), k(1, -3)],
+  [k(0, 20), k(0.125, 15), k(0.25, 13), k(0.375, 14), k(0.5, 16), k(0.625, 13), k(0.75, 12), k(1, 13.5)],
+  [k(0, 62), k(0.125, 50), k(0.25, 46), k(0.375, 48), k(0.5, 52), k(0.625, 47), k(0.75, 45), k(1, 48)],
 ];
 
 export const CAMERA_TARGET: readonly [readonly Keyframe<number>[], readonly Keyframe<number>[], readonly Keyframe<number>[]] = [
-  [k(0, 0), k(0.25, 0), k(0.5, 0), k(0.75, 2), k(1, 0)],
-  [k(0, 16), k(0.125, 15), k(0.25, 12.5), k(0.5, 14), k(0.75, 12), k(1, 13)],
-  [k(0, 0), k(0.25, 0), k(0.5, -4), k(0.75, -10), k(1, 0)],
+  [k(0, 2), k(0.125, 4), k(0.5, 5), k(0.75, 4), k(1, 4)],
+  [k(0, 17), k(0.125, 12.5), k(0.25, 12), k(0.5, 13), k(0.75, 12), k(1, 12.5)],
+  [k(0, 0), k(0.25, 0), k(0.5, -2), k(0.75, -3), k(1, 0)],
 ];
 
-/** Field of view. A gentle widen during the mission flow adds travel without moving. */
+/** Field of view. Held in a narrow cinematic band so the Dog's scale is stable. */
 export const CAMERA_FOV: readonly Keyframe<number>[] = [
-  k(0, 34), k(0.125, 30), k(0.375, 38), k(0.625, 34), k(1, 32),
+  k(0, 36), k(0.125, 32), k(0.375, 34), k(0.625, 32), k(1, 31),
 ];
 
 /** How present the Aquala mark is, 0..1. It anchors the first beat and the last. */
 export const AQUALA_PRESENCE: readonly Keyframe<number>[] = [
-  k(0, 1), k(0.16, 1), k(0.26, 0.06), k(0.7, 0.06), k(0.86, 0.3), k(1, 0.65),
+  k(0, 1), k(0.14, 1), k(0.26, 0.22), k(0.7, 0.2), k(0.86, 0.4), k(1, 0.7),
 ];
 
-/** How present the Dog is. It arrives in beat 2 and stays. */
+/**
+ * HOW PRESENT THE DOG IS — AND IT IS ALWAYS PRESENT.
+ *
+ * This is a hard UI invariant, not a curve with a taste value in it: once the
+ * experience begins the Relay Dog is a realtime 3D object on screen, at hero
+ * scale, for every beat. It previously faded in at beat two and the founder
+ * rejected that. The track is kept (rather than deleted) so the Dog can still
+ * settle in over the first fraction of a second rather than popping in on load,
+ * but it never returns to zero and never drops below hero presence.
+ *
+ * `dog-persistence.test.ts` samples this across the whole page and fails if any
+ * point falls below 1.
+ */
 export const DOG_PRESENCE: readonly Keyframe<number>[] = [
-  k(0, 0), k(0.13, 0), k(0.2, 1), k(1, 1),
+  k(0, 1), k(1, 1),
 ];
 
 /**
@@ -217,30 +229,33 @@ export type DogBeat = {
 };
 
 /**
- * THE DOG STANDS RIGHT OF CENTRE, ALWAYS.
+ * THE DOG IS THE CONSTANT. THE INFORMATION AROUND IT CHANGES.
  *
- * The copy is anchored bottom-LEFT (Reference B's z-pattern), so a Dog on the
- * centre line stands on the headline. Every mark below keeps it in the right
- * half of the frame, which is also why the camera's own x track sits negative:
- * the two together open the left third for type.
+ * Every mark below is within a couple of units of the same spot, right of the
+ * centre line so the bottom-left copy stays clear. The Dog no longer tours the
+ * page — the founder's direction is that the user should feel they are standing
+ * in front of their Compound Agent while it is configured, so the beats express
+ * intent through FACING, STATE and attention rather than through travel.
+ *
+ * Exactly one beat contains locomotion, and it is a single step.
  */
 export const DOG_BEATS: readonly DogBeat[] = Object.freeze([
-  // Offstage left, walking toward the frame before it is ever seen.
-  { state: 'WALK', x: -34, z: -6, yaw: Math.PI / 2, tracksPointer: false },
-  // Arrives, turns out of its walk to face the viewer, settles.
-  { state: 'WALK', x: 7, z: 2, yaw: 0.3, tracksPointer: true },
-  // Stands among the compound layers, watching the pointer.
-  { state: 'LOOK', x: 6, z: 0, yaw: 0.1, tracksPointer: true },
-  // Walks the mission loop alongside the flow.
-  { state: 'WALK', x: 12, z: -6, yaw: Math.PI * 0.18, tracksPointer: false },
-  // Pauses inside Project Brain's memory field.
-  { state: 'PAUSE', x: 8, z: -2, yaw: -0.3, tracksPointer: true },
-  // Turns to the configuration panels as they reconfigure.
-  { state: 'TURN', x: 6, z: 1, yaw: -0.55, tracksPointer: true },
-  // Faces the Wonderland opening and walks toward it.
-  { state: 'WALK', x: 9, z: -12, yaw: Math.PI, tracksPointer: false },
-  // Comes back to the viewer for the call to action.
-  { state: 'IDLE', x: 7, z: 4, yaw: 0, tracksPointer: true },
+  // Beat 1 — standing beneath the Aquala mark while the signal converges.
+  { state: 'IDLE', x: 5, z: 0, yaw: 0.08, tracksPointer: true },
+  // Beat 2 — Relay names itself; the Dog turns to the viewer.
+  { state: 'LOOK', x: 5, z: 1, yaw: 0.16, tracksPointer: true },
+  // Beat 3 — the compound faculties assemble around it.
+  { state: 'LOOK', x: 5, z: 1, yaw: 0, tracksPointer: true },
+  // Beat 4 — the mission loop. ONE step across, not a lap of the page.
+  { state: 'WALK', x: 6.5, z: 0, yaw: 0.2, tracksPointer: false },
+  // Beat 5 — Project Brain. It settles and holds.
+  { state: 'PAUSE', x: 6.5, z: 0, yaw: -0.12, tracksPointer: true },
+  // Beat 6 — C.A.R.D. It turns toward the configuration.
+  { state: 'TURN', x: 6, z: 1, yaw: -0.3, tracksPointer: true },
+  // Beat 7 — Wonderland. A quarter turn toward the opening, no departure.
+  { state: 'TURN', x: 5.5, z: 0, yaw: -0.65, tracksPointer: false },
+  // Beat 8 — back to the viewer for CREATE YOUR RELAY.
+  { state: 'IDLE', x: 5, z: 2, yaw: 0, tracksPointer: true },
 ]);
 
 /** Resolve the Dog's intent by blending the current beat toward the next. */
@@ -249,7 +264,7 @@ export function dogBeatAt(position: ScenePosition): DogBeat {
   const next = DOG_BEATS[Math.min(DOG_BEATS.length - 1, position.index + 1)];
   // Movement leads the copy: the Dog starts toward the next mark in the last
   // third of a beat, so it is already travelling when the headline changes.
-  const lead = smoothstep((position.local - 0.66) / 0.34);
+  const lead = smoothstep((position.local - 0.72) / 0.28);
   if (lead <= 0) return current;
   const moving = lead > 0.02 && lead < 0.98;
   return {

@@ -102,10 +102,17 @@ describe('the camera never loses the subject', () => {
 });
 
 describe('presence tracks', () => {
-  it('opens on Aquala and brings the Dog in afterwards', () => {
+  it('keeps the Relay Dog present at hero scale for EVERY beat', () => {
+    // HARD UI INVARIANT, not a taste setting. The Dog used to fade in at beat
+    // two; the founder rejected that outright. It is the constant character —
+    // the information around it is what changes.
+    for (let i = 0; i <= 200; i += 1) {
+      expect(sampleTrack(DOG_PRESENCE, i / 200), `dog presence at ${i / 200}`).toBe(1);
+    }
+  });
+
+  it('opens on the Aquala mark', () => {
     expect(sampleTrack(AQUALA_PRESENCE, 0)).toBe(1);
-    expect(sampleTrack(DOG_PRESENCE, 0)).toBe(0);
-    expect(sampleTrack(DOG_PRESENCE, 0.3)).toBe(1);
   });
 
   it('never fully extinguishes the Aquala mark — it is the anchor', () => {
@@ -120,11 +127,21 @@ describe('the Dog’s beats', () => {
     expect(DOG_BEATS).toHaveLength(SCENE_COUNT);
   });
 
+  it('keeps every mark within a small neighbourhood — no page tour', () => {
+    // "We no longer need the Dog constantly walking around the website."
+    const xs = DOG_BEATS.map((b) => b.x);
+    const zs = DOG_BEATS.map((b) => b.z);
+    expect(Math.max(...xs) - Math.min(...xs)).toBeLessThanOrEqual(3);
+    expect(Math.max(...zs) - Math.min(...zs)).toBeLessThanOrEqual(3);
+    // At most one beat carries locomotion.
+    expect(DOG_BEATS.filter((b) => b.state === 'WALK').length).toBeLessThanOrEqual(1);
+  });
+
   it('walks between marks rather than teleporting', () => {
     // Mid-beat the Dog holds its mark; late in a beat it is already moving to
     // the next one, so motion leads the copy instead of trailing it.
     expect(dogBeatAt({ index: 2, local: 0.3, progress: 0 }).state).toBe(DOG_BEATS[2].state);
-    expect(dogBeatAt({ index: 2, local: 0.85, progress: 0 }).state).toBe('WALK');
+    expect(dogBeatAt({ index: 2, local: 0.92, progress: 0 }).state).toBe('WALK');
   });
 
   it('interpolates position toward the next mark, never past it', () => {

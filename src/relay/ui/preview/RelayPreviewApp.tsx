@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { MissionControl } from '../MissionControl';
 import { RelayEntryHome } from '../entry-home';
 import { RelayLanding } from '../landing';
+import { RelayExperience } from '../relay-experience';
 import {
   DEFAULT_CONNECTION_STATUSES,
   FIXTURE_GUIDE_MESSAGES,
@@ -125,6 +126,8 @@ import './relay-preview.css';
 export type PreviewRoute =
   /** The public landing experience — the site's front door, at the bare URL. */
   | { screen: 'landing' }
+  /** The Relay experience: Compound Agent creation with the persistent 3D Dog. */
+  | { screen: 'experience' }
   | { screen: 'home' }
   | { screen: 'settings'; projectId: string }
   | { screen: 'console' }
@@ -141,6 +144,18 @@ export function parsePreviewHash(hash: string): PreviewRoute {
   // landing is the front door; `#/relay` remains the in-product Entry Home, so
   // the C.A.R.D.-first flow is reached exactly as before and is not displaced.
   if (parts[0] !== 'relay') return { screen: 'landing' };
+  // `#/relay` IS THE RELAY EXPERIENCE NOW.
+  //
+  // It used to be the Entry Home — the blue terminal shell with its tab bar,
+  // its project dashboard and its 2D WANDERING sprite. The founder superseded
+  // that as the post-ENTER-RELAY destination: entering Relay continues the same
+  // cinematic 3D language and begins Compound Agent creation.
+  //
+  // The old screen is not deleted — it still holds working product surfaces and
+  // its own tests — but it is OFF THE ONBOARDING PATH, reachable only at an
+  // explicit legacy route that nothing in the new flow links to.
+  if (parts.length === 1) return { screen: 'experience' };
+  if (parts[1] === 'home-legacy') return { screen: 'home' };
   if (parts[1] === 'console') return { screen: 'console' };
   // Back-compat: bare settings route resolves to the active project later.
   if (parts[1] === 'live-reach') return { screen: 'live-reach' };
@@ -1262,6 +1277,11 @@ export function RelayPreviewApp() {
   // its own chrome. It renders ALONE — wrapping it in the product shell would
   // put a scrolling app frame around a page whose camera owns the viewport.
   if (route.screen === 'landing') return <RelayLanding />;
+
+  // The Relay experience owns the whole viewport and mounts its own persistent
+  // WebGL scene. Wrapping it in the product shell would put the old chrome back
+  // around the very thing that replaced it.
+  if (route.screen === 'experience') return <RelayExperience />;
 
   return (
     <div className="rpv">

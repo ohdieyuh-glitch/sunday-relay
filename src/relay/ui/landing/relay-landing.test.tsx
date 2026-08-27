@@ -42,8 +42,8 @@ describe('the landing degrades without WebGL', () => {
     // The CTA lives at beat eight — it has to be reachable anyway.
     render(createElement(RelayLanding));
     const cta = screen.getByRole('link', { name: /ENTER RELAY/i });
-    // The CTA leads into the product's canonical entry, which is the
-    // C.A.R.D.-first Entry Home — not straight into a workspace.
+    // The CTA leads into the Relay experience — Compound Agent creation with
+    // the persistent 3D Dog, not the superseded Entry Home.
     expect(cta.getAttribute('href')).toBe('#/relay');
   });
 
@@ -81,10 +81,11 @@ describe('the landing is the front door', () => {
     expect(parsePreviewHash('#/landing')).toEqual({ screen: 'landing' });
   });
 
-  it('does not displace the in-product entry', () => {
-    // The C.A.R.D.-first flow is canonical founder direction. The landing is
-    // added in FRONT of it, never in place of it.
-    expect(parsePreviewHash('#/relay')).toEqual({ screen: 'home' });
+  it('hands ENTER RELAY to the new Relay experience, never the old shell', () => {
+    // The CTA's destination changed meaning: `#/relay` is now Compound Agent
+    // creation with the persistent 3D Dog. The old Entry Home is off the
+    // onboarding path entirely.
+    expect(parsePreviewHash('#/relay')).toEqual({ screen: 'experience' });
     expect(parsePreviewHash('#/relay/console')).toEqual({ screen: 'console' });
   });
 });

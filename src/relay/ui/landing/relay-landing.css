@@ -90,8 +90,8 @@
 }
 
 /* A small ring-and-wave glyph echoing the Aquala mark, drawn in CSS. No <img>
-   and no url() — this frontend forbids both, and a fetched logo is one more way
-   a page can render broken. */
+   and no CSS-fetched image — this frontend forbids both, and a fetched logo is
+   one more way a page can render broken. */
 .rl3-mark {
   width: 15px;
   height: 15px;
@@ -170,8 +170,7 @@
   border-radius: 500px;
   border: 1px solid var(--rl3-gold);
   color: var(--rl3-cream);
-  background: var(--rl3-glass);
-  backdrop-filter: blur(6px);
+  background: rgba(20, 20, 26, 0.55);
   font-family: var(--font, ui-monospace, monospace);
   font-size: 12px;
   letter-spacing: 0.18em;
@@ -207,8 +206,7 @@
   padding: 5px 11px;
   border: 1px solid var(--rl3-hairline);
   border-radius: 500px;
-  background: rgba(244, 239, 227, 0.07);
-  backdrop-filter: blur(7px);
+  background: rgba(20, 20, 26, 0.5);
   font-family: var(--font, ui-monospace, monospace);
   font-size: 11px;
   letter-spacing: 0.12em;
@@ -403,4 +401,19 @@
    is 800vh of empty scroll below the content. */
 .rl3[data-static='true'] .rl3-track {
   display: none;
+}
+
+/* Glass is GUARDED. A browser without `backdrop-filter` keeps the flat plate
+   declared above — a lowered opacity with no blur is a transparent panel, not a
+   frosted one, and over a moving 3D scene that reads as a bug rather than as a
+   material. */
+@supports (backdrop-filter: blur(1px)) {
+  .rl3-cta {
+    background: var(--rl3-glass);
+    backdrop-filter: blur(6px);
+  }
+  .rl3-node {
+    background: rgba(244, 239, 227, 0.07);
+    backdrop-filter: blur(7px);
+  }
 }

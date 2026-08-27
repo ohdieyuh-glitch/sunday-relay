@@ -18,7 +18,7 @@ export type QualityTier = 'high' | 'medium' | 'low';
 
 export const LANDING_COLORS = Object.freeze({
   void: 0x05060a,
-  ivory: 0xf8f4ea,
+  ivory: 0xfbf4e2,
   cream: 0xf4efe3,
   visor: 0x07080a,
   gold: 0xd8a83c,

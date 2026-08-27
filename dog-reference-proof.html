@@ -1,0 +1,49 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Relay Dog reference proof</title>
+<style>
+ body{margin:0;background:#0b0b0e;color:#f4efe3;font:11px ui-monospace,monospace;letter-spacing:.12em}
+ .grid{display:grid;grid-template-columns:repeat(4,320px);gap:0}
+ .cell{position:relative}
+ canvas{display:block;width:320px;height:420px}
+ .cap{position:absolute;bottom:6px;left:0;right:0;text-align:center;color:#8f897b}
+</style></head><body>
+<div class="grid">
+ <div class="cell"><canvas id="front"></canvas><div class="cap">FRONT</div></div>
+ <div class="cell"><canvas id="side"></canvas><div class="cap">SIDE</div></div>
+ <div class="cell"><canvas id="rear"></canvas><div class="cap">REAR</div></div>
+ <div class="cell"><canvas id="q"></canvas><div class="cap">3/4 VIEW</div></div>
+</div>
+<script type="module">
+import * as THREE from 'three';
+import { buildDogMesh } from '/src/relay/ui/landing/three/dog-mesh.ts';
+import { createLandingMaterials } from '/src/relay/ui/landing/three/materials.ts';
+import { NEUTRAL_POSE } from '/src/relay/ui/landing/three/dog-rig.ts';
+import { addLandingLights } from '/src/relay/ui/landing/three/engine.ts';
+
+// Renders the SHIPPING geometry module — not a copy — so this proof cannot
+// drift from what the site actually draws.
+function view(id, azimuth, elevation) {
+  const canvas = document.getElementById(id);
+  const r = new THREE.WebGLRenderer({ canvas, antialias: true });
+  r.setPixelRatio(2); r.setSize(320, 420, false);
+  r.setClearColor(0x0b0b0e, 1);
+  r.toneMapping = THREE.ACESFilmicToneMapping; r.toneMappingExposure = 1.25;
+  r.outputColorSpace = THREE.SRGBColorSpace;
+  const scene = new THREE.Scene();
+  const cam = new THREE.PerspectiveCamera(26, 320/420, 0.1, 400);
+  const dist = 58, cy = 10.5;
+  cam.position.set(Math.sin(azimuth)*dist*Math.cos(elevation), cy + Math.sin(elevation)*dist, Math.cos(azimuth)*dist*Math.cos(elevation));
+  cam.lookAt(0, cy, 0);
+  // The SITE'S OWN light rig — not a copy of it.
+  const core = addLandingLights(scene); core.intensity = 0;
+  const mats = createLandingMaterials('high');
+  const dog = buildDogMesh(mats);
+  dog.applyPose(NEUTRAL_POSE);
+  scene.add(dog.root);
+  r.render(scene, cam);
+}
+view('front', 0, 0.06);
+view('side', Math.PI/2, 0.06);
+view('rear', Math.PI, 0.06);
+view('q', Math.PI*0.28, 0.10);
+window.__dogProofReady = true;
+</script></body></html>

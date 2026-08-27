@@ -168,7 +168,7 @@ describe('Demo Simulation drives the SIMULATED usage ladder', () => {
       screen.getAllByText('You have used 70% of your five-hour allowance.'),
     ).toHaveLength(1);
     act(() => {
-      window.location.hash = '#/relay';
+      window.location.hash = '#/relay/home-legacy';
       window.dispatchEvent(new HashChangeEvent('hashchange'));
     });
     act(() => {

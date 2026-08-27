@@ -90,6 +90,23 @@ describe('relay dog motion boundary', () => {
     expect(/setInterval\(|setTimeout\(/u.test(controller)).toBe(false);
   });
 
+  /**
+   * THE 3D SCENE OWNERS.
+   *
+   * One loop per surface, and only these two may own one. The landing and the
+   * Relay experience each drive a persistent Three.js scene by founder
+   * direction — the Relay Dog is a realtime 3D object now, and a scene needs a
+   * frame loop. They never mount together, so at most one runs at a time.
+   *
+   * This list is the sanctioned way to add a loop, exactly as the CLI's import
+   * allow-list is: a NAME GOES HERE, deliberately, with a reason — the rule is
+   * not widened to a pattern that would let the next one in unnoticed.
+   */
+  const SCENE_LOOP_OWNERS = [
+    join('landing', 'useLandingRuntime.ts'),
+    join('relay-experience', 'useExperienceScene.ts'),
+  ];
+
   it('no other Relay UI module starts its own dog loop', () => {
     const uiRoot = join(process.cwd(), 'src', 'relay', 'ui');
     const offenders: string[] = [];
@@ -102,6 +119,7 @@ describe('relay dog motion boundary', () => {
         }
         if (!/\.tsx?$/u.test(entry.name) || /\.test\.tsx?$/u.test(entry.name)) continue;
         if (full.startsWith(dir)) continue;
+        if (SCENE_LOOP_OWNERS.some((owner) => full.endsWith(owner))) continue;
         if (/requestAnimationFrame\(/u.test(readFileSync(full, 'utf8'))) offenders.push(full);
       }
     };

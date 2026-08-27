@@ -37,7 +37,7 @@ describe('Project Settings stays inside the project experience', () => {
     }
     // And the home route is emphatically NOT a settings route — the value the
     // broken handler produced.
-    expect(parsePreviewHash('#/relay').screen).toBe('home');
+    expect(parsePreviewHash('#/relay/home-legacy').screen).toBe('home');
   });
 
   it('never sends a settings request to the Entry Home', () => {
@@ -51,7 +51,7 @@ describe('Project Settings stays inside the project experience', () => {
     expect(settings, 'the workspace exposes a Project Settings control').toBeTruthy();
     fireEvent.click(settings as HTMLElement);
 
-    expect(hash()).not.toBe('#/relay');
+    expect(hash()).not.toBe('#/relay/home-legacy');
     expect(hash()).toContain('rly-001');
   });
 

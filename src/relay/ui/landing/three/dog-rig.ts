@@ -247,9 +247,12 @@ export class DogAnimator {
 
     // Look layer. The head aims at the pointer within a comfortable cone; a Dog
     // that can crane 180° reads as a security camera, not a companion.
-    const lookYawTarget = intent.look ? intent.look.x * 0.6 : 0;
-    const lookPitchTarget = intent.look ? -intent.look.y * 0.3 : 0;
-    const attentive = this.state === 'LOOK' || this.state === 'REACT' ? 1.35 : 1;
+    // A NARROW CONE. At 0.6rad, plus an attentive boost, plus whatever the body
+    // was already doing, the head reached angles where it read as detached
+    // rather than attentive — a companion glancing over, not a turret.
+    const lookYawTarget = intent.look ? intent.look.x * 0.22 : 0;
+    const lookPitchTarget = intent.look ? -intent.look.y * 0.09 : 0;
+    const attentive = this.state === 'LOOK' || this.state === 'REACT' ? 1.15 : 1;
     const headYaw = springStep(this.pose.headYaw, lookYawTarget * attentive, this.v.headYaw, 0.45, step);
     const headPitch = springStep(this.pose.headPitch, lookPitchTarget * attentive, this.v.headPitch, 0.5, step);
 

@@ -20,7 +20,7 @@ import { createDefaultSettingsDraft } from '../project-settings/defaults';
 beforeEach(() => {
   window.localStorage.clear();
   getRelayAppStore().resetAll();
-  window.location.hash = '#/relay';
+  window.location.hash = '#/relay/home-legacy';
 });
 afterEach(cleanup);
 

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { createElement } from 'react';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { RelayDogMotionBoundary } from './RelayDogMotionBoundary';
@@ -756,10 +756,23 @@ describe('REGRESSION — untouched states stay untouched', () => {
   });
 
   it('adds no animation framework and no heavy asset', () => {
-    const pkg = JSON.parse(readFileSync(join(dir, '..', '..', '..', '..', 'package.json'), 'utf8'));
-    const deps = { ...pkg.dependencies, ...pkg.devDependencies };
+    // SCOPE NARROWED, INTENT KEPT.
+    //
+    // This used to ban `three` from package.json outright. That was correct
+    // while the Relay Dog was a CSS/DOM character: a 3D framework in the
+    // dependency tree could only have meant this decor had reached for one.
+    //
+    // The founder has since made the Dog a REALTIME 3D object — the landing and
+    // the Relay experience own a Three.js scene by direction. So the ban moves
+    // from "the product may never depend on three" to what it was always
+    // protecting: THIS module, the legacy 2D dog system, must stay CSS-only and
+    // must not pull in a renderer or an animation framework.
+    const legacySources = readdirSync(dir)
+      .filter((f) => /\.tsx?$/u.test(f) && !/\.test\.tsx?$/u.test(f))
+      .map((f) => readFileSync(join(dir, f), 'utf8'))
+      .join('\n');
     for (const banned of ['framer-motion', 'gsap', 'lottie-web', 'three', 'anime.js', 'react-spring']) {
-      expect(deps[banned], `${banned} was added`).toBeUndefined();
+      expect(legacySources, `${banned} reached the legacy dog motion system`).not.toContain(`'${banned}`);
     }
     const decorSource = readFileSync(join(dir, 'RelayDogOperationalDecor.tsx'), 'utf8');
     expect(decorSource).not.toContain('requestAnimationFrame');

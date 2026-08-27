@@ -65,6 +65,65 @@ export function chooseDpr(rawDpr: number, tier: QualityTier): number {
 const AQUALA_SCALE = 5.2;
 const AQUALA_ORIGIN = new THREE.Vector3(0, 16, 0);
 
+/**
+ * THE LIGHT RIG, exported so the Dog's reference-comparison renders use the
+ * SAME lights the site does. A proof lit differently from the product is not a
+ * proof — the first version of that harness carried its own copy of this rig
+ * and kept reporting a blue Dog after the blue had been fixed here.
+ */
+export function addLandingLights(scene: THREE.Scene): THREE.PointLight {
+  // ---- lighting --------------------------------------------------------
+  // ONE dominant key, a cool rim, and a fill kept FAR below the key. A fill at
+  // parity with the key means nothing in the frame can be in shade, and the
+  // whole image flattens into one material — a mistake already paid for once on
+  // this product, where a shadowless fill ran at 122% of the key.
+  // COOL-NEUTRAL, NOT WARM. A warm key over a warm ivory pushes the body
+  // through khaki into tan under ACES — the frame then reads as one brown
+  // material, which is a failure this product has diagnosed before. The warmth
+  // belongs to the gold eyes; the body's warmth is already in its albedo.
+  const key = new THREE.DirectionalLight(0xfffaf0, 3.4);
+  key.position.set(-14, 26, 18);
+  scene.add(key);
+
+  // THE BLUE RIM IS AN EDGE, NOT A LIGHT SOURCE.
+  //
+  // At 1.9 it was the only thing reaching the Dog's back and sides, so every
+  // view except the front rendered the character CYAN — the exact failure the
+  // founder ruled out by name. Baby-blue belongs to Aquala: it is the mark's
+  // illumination and the signal's colour, and it has no business being the key
+  // light on an ivory body.
+  const rim = new THREE.DirectionalLight(LANDING_COLORS.aqualaLight, 0.5);
+  rim.position.set(18, 12, -20);
+  scene.add(rim);
+
+  // A warm-neutral back fill so the far side of the Dog reads as ivory in
+  // shadow rather than as a blue silhouette. Kept well below the key so the
+  // form still has a lit side and a shaded side.
+  const backFill = new THREE.DirectionalLight(0xfff6e8, 1.25);
+  backFill.position.set(-8, 11, -24);
+  scene.add(backFill);
+
+  // A neutral side fill. Both the key and the back fill sit on -X, so without
+  // this the Dog's +X flank saw nothing but the blue rim and rendered slate —
+  // visible in the product at three-quarter, not only in the proof renders.
+  const sideFill = new THREE.DirectionalLight(0xf6f0e6, 0.95);
+  sideFill.position.set(22, 14, 8);
+  scene.add(sideFill);
+
+  // Soft NEUTRAL ambient. The previous sky colour was itself blue, which
+  // compounded the cast it was supposed to balance.
+  const fill = new THREE.HemisphereLight(0x5c5548, 0x101014, 0.7);
+  scene.add(fill);
+
+  // The mark's internal glow. A point light INSIDE the extrusion is what makes
+  // the translucent body light up from within instead of merely being lit.
+  const core = new THREE.PointLight(LANDING_COLORS.aqualaCore, 26, 42, 2);
+  core.position.copy(AQUALA_ORIGIN);
+  scene.add(core);
+
+  return core;
+}
+
 export function createLandingEngine(
   canvas: HTMLCanvasElement,
   tier: QualityTier,
@@ -93,31 +152,7 @@ export function createLandingEngine(
   const camera = new THREE.PerspectiveCamera(34, 1, 0.5, 400);
   const materials = createLandingMaterials(tier);
 
-  // ---- lighting --------------------------------------------------------
-  // ONE dominant key, a cool rim, and a fill kept FAR below the key. A fill at
-  // parity with the key means nothing in the frame can be in shade, and the
-  // whole image flattens into one material — a mistake already paid for once on
-  // this product, where a shadowless fill ran at 122% of the key.
-  // COOL-NEUTRAL, NOT WARM. A warm key over a warm ivory pushes the body
-  // through khaki into tan under ACES — the frame then reads as one brown
-  // material, which is a failure this product has diagnosed before. The warmth
-  // belongs to the gold eyes; the body's warmth is already in its albedo.
-  const key = new THREE.DirectionalLight(0xfffdf7, 3.4);
-  key.position.set(-14, 26, 18);
-  scene.add(key);
-
-  const rim = new THREE.DirectionalLight(LANDING_COLORS.aqualaLight, 1.9);
-  rim.position.set(16, 10, -22);
-  scene.add(rim);
-
-  const fill = new THREE.HemisphereLight(0x3d4a66, 0x0b0d13, 0.62);
-  scene.add(fill);
-
-  // The mark's internal glow. A point light INSIDE the extrusion is what makes
-  // the translucent body light up from within instead of merely being lit.
-  const core = new THREE.PointLight(LANDING_COLORS.aqualaCore, 26, 42, 2);
-  core.position.copy(AQUALA_ORIGIN);
-  scene.add(core);
+  const core = addLandingLights(scene);
 
   // ---- Aquala mark -----------------------------------------------------
   const aqualaGroup = new THREE.Group();

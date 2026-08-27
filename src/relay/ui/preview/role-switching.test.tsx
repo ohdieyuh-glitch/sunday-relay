@@ -22,7 +22,7 @@ import { WORKSPACE_FIXTURES } from '../project-workspace';
 beforeEach(() => {
   window.localStorage.clear();
   getRelayAppStore().resetAll();
-  window.location.hash = '#/relay';
+  window.location.hash = '#/relay/home-legacy';
 });
 afterEach(cleanup);
 
