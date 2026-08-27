@@ -1,13 +1,30 @@
-import { LANDING_SCENES, SCENE_COUNT, smoothstep } from './choreography';
-import { useLandingRuntime, usePrefersReducedMotion } from './useLandingRuntime';
+import { LANDING_SCENES, smoothstep, type ScenePosition } from './choreography';
+
+/** Screen-space anchor for a floating chip, projected by the world's engine. */
+export type LandingAnchor = { x: number; y: number; depth: number; visible: boolean };
+
+export type RelayLandingProps = {
+  readonly position: ScenePosition;
+  readonly telemetry: {
+    readonly width: number; readonly height: number; readonly dpr: number;
+    readonly tier: string; readonly fps: number; readonly webgl: boolean;
+  };
+  readonly anchors: readonly LandingAnchor[];
+  readonly reducedMotion: boolean;
+  /** Commit to the passage into Relay. */
+  readonly onEnterRelay: () => void;
+  /** Is the pointer over the Aquala artifact right now? */
+  readonly overPortal: boolean;
+};
 
 /**
  * THE RELAY LANDING EXPERIENCE.
  *
- * Structure follows the two references' shared conclusion: the render is the
- * page, and the chrome is corner-anchored around it. One fixed canvas, one tall
- * scroll track that exists only to give the camera somewhere to travel, and a
- * chrome layer that never scrolls.
+ * THE CHROME ONLY. The canvas, the renderer and the frame loop belong to
+ * `RelayWorld`, which keeps one scene alive across Aquala, the passage and
+ * Relay. This component draws the corner-anchored interface over it and never
+ * owns a context of its own — two contexts is what made entering Relay a page
+ * navigation in the first place.
  *
  * ALL DOM MOTION IS OPACITY AND A FEW PIXELS OF TRANSLATE. Reference A does
  * exactly this — "opacity is the primary transition property" — and it is the
@@ -15,9 +32,9 @@ import { useLandingRuntime, usePrefersReducedMotion } from './useLandingRuntime'
  * depth-sorted and lit. Sliding DOM panels around on top of a 3D scene is how a
  * page ends up with two contradictory ideas of where things are.
  */
-export function RelayLanding(): JSX.Element {
-  const reducedMotion = usePrefersReducedMotion();
-  const { canvasRef, scrollRef, position, telemetry, anchors } = useLandingRuntime(reducedMotion);
+export function RelayLanding({
+  position, telemetry, anchors, reducedMotion, onEnterRelay, overPortal,
+}: RelayLandingProps): JSX.Element {
   const scene = LANDING_SCENES[position.index];
 
   // A beat's copy holds full opacity across its middle and fades only at the
@@ -40,9 +57,8 @@ export function RelayLanding(): JSX.Element {
       data-scene={scene.id}
       data-reduced={reducedMotion ? 'true' : 'false'}
       data-static={telemetry.webgl ? 'false' : 'true'}
+      data-portal={overPortal ? 'hot' : 'idle'}
     >
-      <canvas className="rl3-canvas" ref={canvasRef} aria-hidden="true" />
-
       {!telemetry.webgl && (
         // Not an error state — a legible one. The page keeps its structure and
         // its copy; it loses only the render.
@@ -87,9 +103,13 @@ export function RelayLanding(): JSX.Element {
         <h1 className="rl3-headline">{scene.headline}</h1>
         <p className="rl3-body">{scene.body}</p>
         {scene.cta && telemetry.webgl && (
-          <a className="rl3-cta" href={scene.cta.href}>
+          // A BUTTON, not a link. Entering Relay is an authored camera move
+          // inside a live scene, not a document navigation — and this is also
+          // the keyboard and screen-reader path into the portal, which a 3D
+          // artifact cannot provide on its own.
+          <button type="button" className="rl3-cta" onClick={onEnterRelay}>
             {scene.cta.label}
-          </a>
+          </button>
         )}
       </div>
 
@@ -110,10 +130,6 @@ export function RelayLanding(): JSX.Element {
         ))}
       </nav>
 
-      {/* The scroll track. It carries no content — its only job is to give the
-          camera a distance to travel. Each beat is one viewport tall. */}
-      <div className="rl3-track" ref={scrollRef} style={{ height: `${SCENE_COUNT * 100}vh` }} aria-hidden="true" />
-
       {/* Every beat, in document order. This serves assistive technology AND
           it IS the page on any client that never runs the loop.
 
@@ -130,9 +146,9 @@ export function RelayLanding(): JSX.Element {
             <p>{s.body}</p>
             {s.nodes && <ul>{s.nodes.map((n) => <li key={n}>{n}</li>)}</ul>}
             {s.cta && (
-              <a className="rl3-cta" href={s.cta.href}>
+              <button type="button" className="rl3-cta" onClick={onEnterRelay}>
                 {s.cta.label}
-              </a>
+              </button>
             )}
           </section>
         ))}

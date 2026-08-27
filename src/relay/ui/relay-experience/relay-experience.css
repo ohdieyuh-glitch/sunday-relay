@@ -25,19 +25,14 @@
 
   position: fixed;
   inset: 0;
-  background: var(--rx-void);
+  /* TRANSPARENT. The void is painted by the world's shared canvas, which now
+     sits BEHIND this layer rather than inside it. An opaque background here
+     covers the entire scene — the Relay Dog included — and the screen renders
+     as chrome on black with the character nowhere to be seen. */
+  background: transparent;
   color: var(--rx-cream);
   font-family: var(--font-brand, system-ui, sans-serif);
   overflow: hidden;
-}
-
-.rx-canvas {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  display: block;
-  z-index: 0;
 }
 
 .rx-label {

@@ -1,6 +1,6 @@
 export { RelayExperience } from './RelayExperience';
 export {
-  ONBOARDING_STEPS, EMPTY_DRAFT, AGENT_STORAGE_KEY, activate, canActivate,
+  JULIUS, ONBOARDING_STEPS, EMPTY_DRAFT, AGENT_STORAGE_KEY, activate, canActivate,
   clearAgentDraft, firstIncompleteStep, isConfigured, loadAgentDraft,
   normaliseName, parseAgentDraft, saveAgentDraft, stepComplete,
 } from './onboarding';

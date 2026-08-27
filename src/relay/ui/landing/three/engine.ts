@@ -38,6 +38,21 @@ export type LandingEngine = {
   resize(width: number, height: number): void;
   /** Project a world anchor to CSS pixels, with a depth for layering. */
   project(anchor: Vec3): { x: number; y: number; depth: number; visible: boolean };
+  /**
+   * REAL 3D HIT-TESTING against the Aquala mark's own geometry.
+   *
+   * The portal has to be the artifact itself, not a transparent DOM rectangle
+   * laid over roughly where it appears. An earlier build implied a portal and
+   * had no picking at all; a DOM hotspot would go on lying about it, because
+   * the mark tilts with the pointer and drifts on two slow frequencies, so any
+   * fixed rectangle is wrong within a second of load.
+   *
+   * Takes normalised device coordinates (-1..1). Returns false when the mark is
+   * not currently present enough to be a target.
+   */
+  pickAquala(ndcX: number, ndcY: number): boolean;
+  /** Where the mark lives in world space — the transition flies at this. */
+  readonly aqualaOrigin: Vec3;
   readonly tier: QualityTier;
   dispose(): void;
 };
@@ -162,6 +177,22 @@ export function createLandingEngine(
   for (const geometry of aqualaGeometries) {
     aqualaGroup.add(new THREE.Mesh(geometry, materials.aquala));
   }
+  // A PICK TARGET THE SIZE OF THE WHOLE MARK.
+  //
+  // Ray-casting the extruded strokes alone means only the ring's outline and
+  // the crescents are hittable — on a phone that is a target a couple of pixels
+  // wide, and taps into the ring's hollow centre correctly miss. The artifact
+  // IS the control, so the disc it occupies is the control. Fully transparent,
+  // never depth-written, one quad: it costs nothing and it is still the mark's
+  // own geometry that defines where it is, because it rides inside the group
+  // and inherits every tilt, drift and scale.
+  const pickProxy = new THREE.Mesh(
+    new THREE.CircleGeometry(AQUALA_MARK_SPEC.ringOuterRadius, 24),
+    new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false }),
+  );
+  pickProxy.name = 'aquala-pick-proxy';
+  aqualaGroup.add(pickProxy);
+
   scene.add(aqualaGroup);
 
   // ---- signal ----------------------------------------------------------
@@ -212,6 +243,9 @@ export function createLandingEngine(
 
   const target = new THREE.Vector3();
   const projected = new THREE.Vector3();
+  const raycaster = new THREE.Raycaster();
+  const pointerNdc = new THREE.Vector2();
+  let markPresence = 0;
   let viewWidth = 1;
   let viewHeight = 1;
   let aspect = 1;
@@ -256,6 +290,7 @@ export function createLandingEngine(
       aqualaGroup.rotation.y = px * 0.3 + Math.sin(frame.elapsed * 0.17) * 0.05;
       aqualaGroup.position.y = AQUALA_ORIGIN.y + Math.sin(frame.elapsed * 0.33) * 0.35;
       aqualaGroup.visible = frame.aqualaPresence > 0.01;
+      markPresence = frame.aqualaPresence;
       aqualaGroup.scale.setScalar(AQUALA_SCALE * (0.86 + 0.14 * frame.aqualaPresence));
       core.intensity = 26 * frame.aqualaPresence;
 
@@ -271,6 +306,17 @@ export function createLandingEngine(
       groundMaterial.uniforms.uPresence.value = frame.dogPresence;
 
       renderer.render(scene, camera);
+    },
+    pickAquala(ndcX, ndcY) {
+      // A mark faded almost out of the scene is not a click target — otherwise
+      // the portal stays armed underneath the Relay interface.
+      if (markPresence < 0.25 || !aqualaGroup.visible) return false;
+      pointerNdc.set(ndcX, ndcY);
+      raycaster.setFromCamera(pointerNdc, camera);
+      return raycaster.intersectObject(aqualaGroup, true).length > 0;
+    },
+    get aqualaOrigin(): Vec3 {
+      return [AQUALA_ORIGIN.x, AQUALA_ORIGIN.y, AQUALA_ORIGIN.z];
     },
     project(anchor) {
       projected.set(anchor[0], anchor[1], anchor[2]).project(camera);
@@ -293,6 +339,8 @@ export function createLandingEngine(
     },
     dispose() {
       aqualaGeometries.forEach((g) => g.dispose());
+      pickProxy.geometry.dispose();
+      (pickProxy.material as THREE.Material).dispose();
       tracer.dispose();
       dog.dispose();
       ground.geometry.dispose();

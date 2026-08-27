@@ -6,8 +6,24 @@ import { createElement } from 'react';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { RelayLanding } from './RelayLanding';
-import { LANDING_SCENES } from './choreography';
+import { LANDING_SCENES, sceneAt } from './choreography';
 import { parsePreviewHash } from '../preview/RelayPreviewApp';
+
+/**
+ * The landing is CHROME now: `RelayWorld` owns the canvas, the renderer and the
+ * frame loop for the whole journey, and hands this component its state. These
+ * props stand in for that world with no WebGL available — which is also the
+ * real production path on a device that cannot create a context.
+ */
+const chrome = (over: Partial<Parameters<typeof RelayLanding>[0]> = {}) => ({
+  position: sceneAt(0),
+  telemetry: { width: 1440, height: 900, dpr: 1, tier: 'high', fps: 60, webgl: false },
+  anchors: [],
+  reducedMotion: false,
+  onEnterRelay: () => undefined,
+  overPortal: false,
+  ...over,
+});
 
 afterEach(cleanup);
 
@@ -21,16 +37,16 @@ afterEach(cleanup);
 
 describe('the landing degrades without WebGL', () => {
   it('renders rather than throwing when no context can be created', () => {
-    expect(() => render(createElement(RelayLanding))).not.toThrow();
+    expect(() => render(createElement(RelayLanding, chrome()))).not.toThrow();
   });
 
   it('says so, plainly, instead of showing an empty page', () => {
-    render(createElement(RelayLanding));
+    render(createElement(RelayLanding, chrome()));
     expect(screen.getByRole('status').textContent).toMatch(/STATIC MODE/i);
   });
 
   it('still carries every beat of copy', () => {
-    render(createElement(RelayLanding));
+    render(createElement(RelayLanding, chrome()));
     for (const scene of LANDING_SCENES) {
       expect(screen.getAllByText(scene.headline).length).toBeGreaterThan(0);
       expect(screen.getAllByText(scene.body).length).toBeGreaterThan(0);
@@ -40,15 +56,18 @@ describe('the landing degrades without WebGL', () => {
   it('still offers the call to action, reachable without a render loop', () => {
     // Without WebGL there is no loop, so nothing ever advances past beat one.
     // The CTA lives at beat eight — it has to be reachable anyway.
-    render(createElement(RelayLanding));
-    const cta = screen.getByRole('link', { name: /ENTER RELAY/i });
-    // The CTA leads into the Relay experience — Compound Agent creation with
-    // the persistent 3D Dog, not the superseded Entry Home.
-    expect(cta.getAttribute('href')).toBe('#/relay');
+    let entered = 0;
+    render(createElement(RelayLanding, chrome({ onEnterRelay: () => { entered += 1; } })));
+    const cta = screen.getByRole('button', { name: /ENTER RELAY/i });
+    // A BUTTON, not a link: entering Relay is an authored camera move inside a
+    // live scene, not a document navigation. It is also the keyboard path into
+    // a portal that is otherwise a 3D artifact.
+    cta.click();
+    expect(entered).toBe(1);
   });
 
   it('exposes the beats as real landmarks for assistive technology', () => {
-    render(createElement(RelayLanding));
+    render(createElement(RelayLanding, chrome()));
     for (const scene of LANDING_SCENES) {
       const section = screen.getByRole('region', { name: scene.eyebrow });
       expect(within(section).getByRole('heading', { level: 2 }).textContent).toBe(scene.headline);
@@ -57,7 +76,7 @@ describe('the landing degrades without WebGL', () => {
 });
 
 describe('asset safety', () => {
-  const html = renderToStaticMarkup(createElement(RelayLanding));
+  const html = renderToStaticMarkup(createElement(RelayLanding, chrome()));
   // Comments stripped: a comment EXPLAINING that no `url()` is used contains
   // the word, and an assertion that reads its own explanation tests nothing.
   const css = readFileSync(join(__dirname, 'relay-landing.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');

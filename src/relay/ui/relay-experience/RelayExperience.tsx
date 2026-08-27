@@ -1,14 +1,23 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback } from 'react';
 import { AGENT_OPTIONS } from '../project-settings';
 import type { AgentOption, WorkforceRole } from '../project-settings';
-import { usePrefersReducedMotion } from '../landing/useLandingRuntime';
-import { SYSTEM_ANCHORS, useExperienceScene } from './useExperienceScene';
 import { readinessLabel, wonderlandReadiness } from './wonderland-handoff';
 import {
-  ONBOARDING_STEPS, activate, canActivate, firstIncompleteStep, isConfigured,
-  loadAgentDraft, normaliseName, saveAgentDraft,
+  JULIUS, ONBOARDING_STEPS, activate, canActivate, normaliseName,
   type CompoundAgentDraft, type OnboardingStepId,
 } from './onboarding';
+
+export type ExperienceAnchor = { x: number; y: number; visible: boolean };
+
+export type RelayExperienceProps = {
+  readonly draft: CompoundAgentDraft;
+  readonly setDraft: (patch: Partial<CompoundAgentDraft>, react?: boolean) => void;
+  readonly step: OnboardingStepId;
+  readonly setStep: (step: OnboardingStepId) => void;
+  readonly returning: boolean;
+  readonly anchors: Readonly<Record<string, ExperienceAnchor>>;
+  readonly webgl: boolean;
+};
 
 /**
  * THE RELAY EXPERIENCE — what ENTER RELAY now leads to.
@@ -54,33 +63,16 @@ function optionName(id: string | null): string {
   return AGENT_OPTIONS.find((o) => o.id === id)?.name ?? id;
 }
 
-export function RelayExperience(): JSX.Element {
-  const reducedMotion = usePrefersReducedMotion();
-  const [draft, setDraft] = useState<CompoundAgentDraft>(() => loadAgentDraft());
-  // A returning user with an activated agent lands on their persistent Relay
-  // state, not at step one — but in the SAME visual language, never the old UI.
-  const [step, setStep] = useState<OnboardingStepId>(() => {
-    const stored = loadAgentDraft();
-    return isConfigured(stored) ? 'activate' : firstIncompleteStep(stored);
-  });
-  const returning = useMemo(() => isConfigured(loadAgentDraft()), []);
-  const scene = useExperienceScene(step, draft.activatedAt !== null, reducedMotion);
-
-  const update = useCallback((patch: Partial<CompoundAgentDraft>, react = false) => {
-    setDraft((prev) => {
-      const next = { ...prev, ...patch };
-      saveAgentDraft(next);
-      return next;
-    });
-    if (react) scene.pulse();
-  }, [scene]);
-
+export function RelayExperience({
+  draft, setDraft, step, setStep, returning, anchors, webgl,
+}: RelayExperienceProps): JSX.Element {
+  const update = setDraft;
   const current = ONBOARDING_STEPS.find((s) => s.id === step) ?? ONBOARDING_STEPS[0];
-  const goto = useCallback((id: OnboardingStepId) => setStep(id), []);
+  const goto = useCallback((id: OnboardingStepId) => setStep(id), [setStep]);
   const next = useCallback(() => {
     const i = ONBOARDING_STEPS.findIndex((s) => s.id === step);
     if (i < ONBOARDING_STEPS.length - 1) setStep(ONBOARDING_STEPS[i + 1].id);
-  }, [step]);
+  }, [step, setStep]);
 
   const onActivate = useCallback(() => {
     update({ activatedAt: activate(draft, new Date().toISOString()).activatedAt }, true);
@@ -135,10 +127,7 @@ export function RelayExperience(): JSX.Element {
 
   return (
     <div className="rx" data-step={step} data-activated={draft.activatedAt !== null ? 'true' : 'false'}>
-      {/* The persistent scene. Never unmounted by a step change. */}
-      <canvas className="rx-canvas" ref={scene.canvasRef} aria-hidden="true" />
-
-      {!scene.telemetry.webgl && (
+      {!webgl && (
         <p className="rx-label rx-nogl" role="status">STATIC MODE · 3D UNAVAILABLE ON THIS DEVICE</p>
       )}
 
@@ -158,8 +147,8 @@ export function RelayExperience(): JSX.Element {
           ['brain', 'PROJECT BRAIN', draft.activatedAt !== null ? 'CONNECTED' : 'STANDBY'],
           ['card', 'C.A.R.D.', MODE_LABEL[draft.mode]],
         ] as const).map(([key, label, value]) => {
-          const a = scene.anchors[key];
-          if (!a || !a.visible || !(key in SYSTEM_ANCHORS)) return null;
+          const a = anchors[key];
+          if (!a || !a.visible) return null;
           const filled = value !== '—';
           return (
             <span key={key} className="rx-node" data-filled={filled ? 'true' : 'false'}
@@ -262,6 +251,9 @@ export function RelayExperience(): JSX.Element {
       {/* Telemetry beside the Dog — the agent's state, never a sprite. */}
       <aside className="rx-telemetry rx-label">
         <span>AGENT</span><strong>{agentLabel}</strong>
+        {/* The harness, named. Julius surrounds the worker slots; it is never
+            one of them, and no single model is ever the orchestrator. */}
+        <span>HARNESS</span><strong>{JULIUS.name}</strong>
         <span>STATUS</span>
         <strong>{draft.activatedAt !== null ? 'ACTIVE' : canActivate(draft) ? 'READY' : 'FORMING'}</strong>
         <span>WONDERLAND</span><strong>{readinessLabel(readiness)}</strong>

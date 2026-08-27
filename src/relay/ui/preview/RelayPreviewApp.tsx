@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { MissionControl } from '../MissionControl';
 import { RelayEntryHome } from '../entry-home';
-import { RelayLanding } from '../landing';
-import { RelayExperience } from '../relay-experience';
+import { RelayWorld } from '../relay-world';
 import {
   DEFAULT_CONNECTION_STATUSES,
   FIXTURE_GUIDE_MESSAGES,
@@ -1276,12 +1275,15 @@ export function RelayPreviewApp() {
   // The landing is a full-viewport experience with its own fixed canvas and
   // its own chrome. It renders ALONE — wrapping it in the product shell would
   // put a scrolling app frame around a page whose camera owns the viewport.
-  if (route.screen === 'landing') return <RelayLanding />;
-
-  // The Relay experience owns the whole viewport and mounts its own persistent
-  // WebGL scene. Wrapping it in the product shell would put the old chrome back
-  // around the very thing that replaced it.
-  if (route.screen === 'experience') return <RelayExperience />;
+  // ONE COMPONENT FOR BOTH ROUTES, and that is the mechanism rather than a
+  // tidiness choice: returning the same element type for the bare URL and for
+  // `#/relay` lets React reconcile it instead of remounting, so the canvas, the
+  // WebGL context, the Relay Dog and the camera all survive entering Relay.
+  // Returning two different components here is what made the transition a page
+  // navigation with a 3D costume on.
+  if (route.screen === 'landing' || route.screen === 'experience') {
+    return <RelayWorld initialStage={route.screen === 'experience' ? 'relay' : 'aquala'} />;
+  }
 
   return (
     <div className="rpv">

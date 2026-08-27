@@ -34,8 +34,32 @@ export type OnboardingStep = {
   readonly hint: string;
 };
 
+/**
+ * JULIUS IS THE HARNESS, NOT A WORKER.
+ *
+ * The three slots the user configures — Prompt Architect, Coding Agent,
+ * Independent Reviewer — are replaceable workers. Julius is the Compound
+ * Agentic Harness around them: orchestration, durable mission state, Project
+ * Brain, routing, dispatch, verification transitions, repair, budgets,
+ * evidence, and the completion decision.
+ *
+ * This distinction is easy to lose in a UI, and losing it would misrepresent
+ * the product: presenting the Prompt Architect as "the orchestrator" would make
+ * a swappable model look like the control plane. Workers coordinate THROUGH
+ * Julius, never directly through one another. `onboarding.test.ts` asserts that
+ * Julius never appears among the selectable slots.
+ */
+export const JULIUS = Object.freeze({
+  name: 'JULIUS',
+  role: 'Compound Agentic Harness',
+  owns: Object.freeze([
+    'orchestration', 'durable mission state', 'Project Brain', 'routing',
+    'dispatch', 'verification', 'repair', 'budgets', 'evidence', 'completion',
+  ]),
+});
+
 export const ONBOARDING_STEPS: readonly OnboardingStep[] = Object.freeze([
-  { id: 'name', index: 0, eyebrow: 'STEP 01', title: 'Name your Relay.', hint: 'Your Compound Agent answers to this.' },
+  { id: 'name', index: 0, eyebrow: 'STEP 01', title: 'Create your Compound Agent.', hint: 'Name it. Julius will carry it from here.' },
   { id: 'architect', index: 1, eyebrow: 'STEP 02', title: 'Prompt Architect.', hint: 'The reasoning model that plans the mission.' },
   { id: 'coding', index: 2, eyebrow: 'STEP 03', title: 'Coding Agent.', hint: 'The agent that does the work.' },
   { id: 'reviewer', index: 3, eyebrow: 'STEP 04', title: 'Independent Reviewer.', hint: 'Judges the work. Never the same role that wrote it.' },

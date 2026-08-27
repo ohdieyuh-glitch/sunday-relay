@@ -93,19 +93,17 @@ describe('relay dog motion boundary', () => {
   /**
    * THE 3D SCENE OWNERS.
    *
-   * One loop per surface, and only these two may own one. The landing and the
-   * Relay experience each drive a persistent Three.js scene by founder
-   * direction — the Relay Dog is a realtime 3D object now, and a scene needs a
-   * frame loop. They never mount together, so at most one runs at a time.
+   * EXACTLY ONE, now. Aquala, the passage into Relay and the Relay screens are
+   * a single persistent Three.js scene, so there is a single frame loop for the
+   * whole product. This list was briefly two while the landing and the Relay
+   * experience each owned a renderer; consolidating them is what made entering
+   * Relay continuous rather than a page navigation.
    *
    * This list is the sanctioned way to add a loop, exactly as the CLI's import
    * allow-list is: a NAME GOES HERE, deliberately, with a reason — the rule is
    * not widened to a pattern that would let the next one in unnoticed.
    */
-  const SCENE_LOOP_OWNERS = [
-    join('landing', 'useLandingRuntime.ts'),
-    join('relay-experience', 'useExperienceScene.ts'),
-  ];
+  const SCENE_LOOP_OWNERS = [join('relay-world', 'useRelayWorld.ts')];
 
   it('no other Relay UI module starts its own dog loop', () => {
     const uiRoot = join(process.cwd(), 'src', 'relay', 'ui');

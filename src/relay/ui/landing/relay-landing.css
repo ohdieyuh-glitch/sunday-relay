@@ -43,24 +43,6 @@
   overflow-x: clip;
 }
 
-/* The render. Fixed, full-viewport, behind everything, never scrolls. */
-.rl3-canvas {
-  position: fixed;
-  inset: 0;
-  width: 100vw;
-  height: 100vh;
-  display: block;
-  z-index: 0;
-}
-
-/* The scroll track carries no content — only distance for the camera. */
-.rl3-track {
-  position: relative;
-  width: 100%;
-  pointer-events: none;
-  z-index: 1;
-}
-
 /* ---- shared micro-label, Reference B's telemetry register ---------------- */
 .rl3-label {
   font-family: var(--font, ui-monospace, monospace);
@@ -399,9 +381,7 @@
 
 /* The track exists only to give a camera distance to travel. With no camera it
    is 800vh of empty scroll below the content. */
-.rl3[data-static='true'] .rl3-track {
-  display: none;
-}
+
 
 /* Glass is GUARDED. A browser without `backdrop-filter` keeps the flat plate
    declared above — a lowered opacity with no blur is a transparent panel, not a

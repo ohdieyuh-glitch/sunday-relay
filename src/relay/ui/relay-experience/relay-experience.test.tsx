@@ -6,10 +6,11 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 const disabled = (el: HTMLElement): boolean => (el as HTMLButtonElement).disabled;
 import { renderToStaticMarkup } from 'react-dom/server';
 import { createElement } from 'react';
-import { RelayExperience } from './RelayExperience';
+import { RelayWorld } from '../relay-world';
 import { AGENT_STORAGE_KEY, activate, EMPTY_DRAFT, saveAgentDraft, type CompoundAgentDraft } from './onboarding';
 import { parsePreviewHash } from '../preview/RelayPreviewApp';
-import { RelayLanding } from '../landing';
+import { RelayLanding } from '../landing/RelayLanding';
+import { sceneAt } from '../landing/choreography';
 
 /**
  * jsdom has no WebGL, so the experience renders here on its no-context path.
@@ -53,34 +54,38 @@ describe('THE 2D RELAY DOG IS ABSENT FROM THE NEW EXPERIENCE', () => {
   const legacyMarkers = ['rpd-', 'reh-dog', 'WANDERING', 'pixel-dog'];
 
   it('renders no legacy Dog markup in the Relay experience', () => {
-    const html = renderToStaticMarkup(createElement(RelayExperience));
+    const html = renderToStaticMarkup(createElement(RelayWorld, { initialStage: 'relay' as const }));
     for (const marker of legacyMarkers) {
       expect(html, `legacy marker "${marker}" leaked into the Relay experience`).not.toContain(marker);
     }
   });
 
   it('renders no legacy Dog markup on the landing', () => {
-    const html = renderToStaticMarkup(createElement(RelayLanding));
+    const html = renderToStaticMarkup(createElement(RelayLanding, {
+      position: sceneAt(0),
+      telemetry: { width: 1440, height: 900, dpr: 1, tier: 'high', fps: 60, webgl: false },
+      anchors: [], reducedMotion: false, onEnterRelay: () => undefined, overPortal: false,
+    }));
     for (const marker of legacyMarkers) {
       expect(html, `legacy marker "${marker}" leaked into the landing`).not.toContain(marker);
     }
   });
 
   it('mounts a canvas for the Dog, never an image', () => {
-    const { container } = render(createElement(RelayExperience));
-    expect(container.querySelector('canvas.rx-canvas')).not.toBeNull();
+    const { container } = render(createElement(RelayWorld, { initialStage: 'relay' as const }));
+    expect(container.querySelector('canvas.rw-canvas')).not.toBeNull();
     expect(container.querySelectorAll('img')).toHaveLength(0);
   });
 });
 
 describe('creation flow', () => {
   it('opens on step one for a first-run user', () => {
-    render(createElement(RelayExperience));
-    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Name your Relay.');
+    render(createElement(RelayWorld, { initialStage: 'relay' as const }));
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Create your Compound Agent.');
   });
 
   it('will not advance past the name until one is given', () => {
-    render(createElement(RelayExperience));
+    render(createElement(RelayWorld, { initialStage: 'relay' as const }));
     const cta = screen.getByRole('button', { name: 'CONTINUE' });
     expect(disabled(cta)).toBe(true);
     fireEvent.change(screen.getByLabelText('Agent name'), { target: { value: 'Caesar' } });
@@ -88,14 +93,14 @@ describe('creation flow', () => {
   });
 
   it('shows the agent name as telemetry beside the Dog as it is typed', () => {
-    render(createElement(RelayExperience));
+    render(createElement(RelayWorld, { initialStage: 'relay' as const }));
     fireEvent.change(screen.getByLabelText('Agent name'), { target: { value: 'Caesar' } });
     expect(screen.getByText('Caesar')).toBeTruthy();
     expect(screen.getByText('FORMING')).toBeTruthy();
   });
 
   it('offers only role-appropriate, actually-selectable options in each slot', () => {
-    render(createElement(RelayExperience));
+    render(createElement(RelayWorld, { initialStage: 'relay' as const }));
     fireEvent.click(screen.getByRole('button', { name: '03' }));
     // The Coding Agent slot is coding tools — Claude Code is connected today.
     expect(disabled(screen.getByRole('button', { name: /Claude Code/ }))).toBe(false);
@@ -105,7 +110,7 @@ describe('creation flow', () => {
   });
 
   it('persists a selection immediately', () => {
-    render(createElement(RelayExperience));
+    render(createElement(RelayWorld, { initialStage: 'relay' as const }));
     fireEvent.click(screen.getByRole('button', { name: '04' }));
     fireEvent.click(screen.getByRole('button', { name: /Hermes/ }));
     const stored = JSON.parse(localStorage.getItem(AGENT_STORAGE_KEY)!) as CompoundAgentDraft;
@@ -113,14 +118,14 @@ describe('creation flow', () => {
   });
 
   it('gates ACTIVATE on a complete Compound Agent', () => {
-    render(createElement(RelayExperience));
+    render(createElement(RelayWorld, { initialStage: 'relay' as const }));
     fireEvent.click(screen.getByRole('button', { name: '08' }));
     expect(disabled(screen.getByRole('button', { name: 'ACTIVATE RELAY' }))).toBe(true);
   });
 
   it('activates a complete agent and offers Wonderland afterwards', () => {
     saveAgentDraft(complete());
-    render(createElement(RelayExperience));
+    render(createElement(RelayWorld, { initialStage: 'relay' as const }));
     fireEvent.click(screen.getByRole('button', { name: '08' }));
     const cta = screen.getByRole('button', { name: 'ACTIVATE RELAY' });
     expect(disabled(cta)).toBe(false);
@@ -133,7 +138,7 @@ describe('creation flow', () => {
     // The honest state: the agent is ready, the entrance is not reachable from
     // this browser. A button that navigates nowhere would be a false claim.
     saveAgentDraft(activate(complete(), '2026-08-26T00:00:00.000Z'));
-    render(createElement(RelayExperience));
+    render(createElement(RelayWorld, { initialStage: 'relay' as const }));
     expect(disabled(screen.getByRole('button', { name: 'ENTER WONDERLAND' }))).toBe(true);
     expect(screen.getByText(/ENTRANCE UNREACHABLE/)).toBeTruthy();
   });
@@ -142,18 +147,37 @@ describe('creation flow', () => {
 describe('returning users', () => {
   it('are not marched through creation again', () => {
     saveAgentDraft(activate(complete(), '2026-08-26T00:00:00.000Z'));
-    render(createElement(RelayExperience));
+    render(createElement(RelayWorld, { initialStage: 'relay' as const }));
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Activate Relay.');
     expect(screen.getByText('RETURNING')).toBeTruthy();
   });
 
   it('can still reconfigure, and stay in the new language while doing it', () => {
     saveAgentDraft(activate(complete(), '2026-08-26T00:00:00.000Z'));
-    const { container } = render(createElement(RelayExperience));
+    const { container } = render(createElement(RelayWorld, { initialStage: 'relay' as const }));
     fireEvent.click(screen.getByRole('button', { name: 'RECONFIGURE' }));
-    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Name your Relay.');
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Create your Compound Agent.');
     // Still the new experience — no fallback to the old shell.
     expect(container.querySelector('.rx')).not.toBeNull();
     expect(container.querySelector('.reh')).toBeNull();
+  });
+});
+
+describe('Julius is the harness, never a worker', () => {
+  it('is named in the telemetry beside the agent', () => {
+    render(createElement(RelayWorld, { initialStage: 'relay' as const }));
+    expect(screen.getByText('HARNESS')).toBeTruthy();
+    expect(screen.getByText('JULIUS')).toBeTruthy();
+  });
+
+  it('never appears as a selectable worker in any slot', () => {
+    // Julius surrounds the Prompt Architect, Coding Agent and Independent
+    // Reviewer — it coordinates them. Offering it as a choice among them would
+    // present the control plane as one of the things it controls.
+    render(createElement(RelayWorld, { initialStage: 'relay' as const }));
+    for (const tick of ['02', '03', '04']) {
+      fireEvent.click(screen.getByRole('button', { name: tick }));
+      expect(screen.queryByRole('button', { name: /^Julius/i })).toBeNull();
+    }
   });
 });
