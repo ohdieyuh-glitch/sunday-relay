@@ -7,3 +7,4 @@ export * from './julius-execution-coordinator';
 export * from './julius-verification-runtime';
 export * from './julius-context-snapshot';
 export * from './julius-repair-runtime';
+export * from './julius-trajectory';
