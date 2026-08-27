@@ -9,11 +9,13 @@ import { JuliusTrajectoryPostgresRepository } from './julius-trajectory-postgres
 import { JuliusReadPostgresRepository } from './julius-read-postgres';
 import { JuliusSubagentPostgresRepository } from './julius-subagent-postgres';
 import { JuliusGauntletPostgresRepository } from './julius-gauntlet-postgres';
+import { JuliusLifecyclePostgresRepository } from './julius-lifecycle-postgres';
 import { createJuliusMemoryStore } from '../mission/julius';
 import type {
   JuliusClaimedTask, JuliusContextWriter, JuliusEventWriter, JuliusResultReceiptRow,
   JuliusResultWriter, JuliusRunRow, JuliusRunWriter, JuliusRuntimeReader,
-  JuliusGauntletStore, JuliusRuntimeStore, JuliusSubagentStore, JuliusTrajectoryWriter,
+  JuliusApprovalStore, JuliusGauntletStore, JuliusLifecycleStore,
+  JuliusRuntimeStore, JuliusSubagentStore, JuliusTrajectoryWriter,
 } from '../mission/julius';
 
 /**
@@ -71,6 +73,9 @@ const subagents: JuliusSubagentStore = new JuliusSubagentPostgresRepository(pool
 /** The gauntlet repository satisfies the gauntlet store port directly. */
 const gauntlets: JuliusGauntletStore = new JuliusGauntletPostgresRepository(pool);
 
+/** One repository satisfies both lifecycle ports: approvals and run lifecycle. */
+const lifecycle: JuliusApprovalStore & JuliusLifecycleStore = new JuliusLifecyclePostgresRepository(pool);
+
 /**
  * THE TWO LEDGERS NEED A ONE-LINE ADAPTER, AND THAT IS THE POINT.
  *
@@ -89,7 +94,8 @@ const trajectoryWriter: JuliusTrajectoryWriter = {
 };
 
 /** The whole runtime store, composed from the real repositories. */
-const composed: JuliusRuntimeStore & JuliusSubagentStore & JuliusGauntletStore = {
+const composed: JuliusRuntimeStore & JuliusSubagentStore & JuliusGauntletStore
+  & JuliusApprovalStore & JuliusLifecycleStore = {
   loadRun: runWriter.loadRun.bind(runWriter),
   transition: runWriter.transition.bind(runWriter),
   addTask: runWriter.addTask.bind(runWriter),
@@ -122,6 +128,12 @@ const composed: JuliusRuntimeStore & JuliusSubagentStore & JuliusGauntletStore =
   recordRound: gauntlets.recordRound.bind(gauntlets),
   settleRound: gauntlets.settleRound.bind(gauntlets),
   roundsFor: gauntlets.roundsFor.bind(gauntlets),
+  requestApproval: lifecycle.requestApproval.bind(lifecycle),
+  loadApproval: lifecycle.loadApproval.bind(lifecycle),
+  pendingApprovals: lifecycle.pendingApprovals.bind(lifecycle),
+  decideApproval: lifecycle.decideApproval.bind(lifecycle),
+  cancelRunTasks: lifecycle.cancelRunTasks.bind(lifecycle),
+  recordLifecycle: lifecycle.recordLifecycle.bind(lifecycle),
 };
 
 describe('the Julius runtime ports and the PostgreSQL repositories agree', () => {
@@ -132,7 +144,8 @@ describe('the Julius runtime ports and the PostgreSQL repositories agree', () =>
     const memory = createJuliusMemoryStore();
     const required = Object.keys(memory).filter((key) =>
       !['seedRun', 'seedTask', 'seedCriteria', 'seedFinding', 'seedBrain',
-        'taskRow', 'events', 'trajectory', 'contexts', 'results', 'restart'].includes(key));
+        'taskRow', 'events', 'trajectory', 'contexts', 'results', 'restart',
+        'lifecycleOf'].includes(key));
     expect(required.length).toBeGreaterThan(15);
     for (const method of required) {
       expect(typeof (composed as unknown as Record<string, unknown>)[method], method).toBe('function');
@@ -143,10 +156,17 @@ describe('the Julius runtime ports and the PostgreSQL repositories agree', () =>
     // A drift-detector with a number in it: if a future repository stops
     // satisfying its port directly, this count changes and the reason has to be
     // written down rather than absorbed.
-    const direct = [runWriter, resultWriter, contextWriter, reader, subagents, gauntlets];
-    expect(direct).toHaveLength(6);
+    const direct = [runWriter, resultWriter, contextWriter, reader, subagents, gauntlets, lifecycle];
+    expect(direct).toHaveLength(7);
     expect(typeof eventWriter.appendEvent).toBe('function');
     expect(typeof trajectoryWriter.appendTrajectory).toBe('function');
+  });
+
+  it('satisfies the approval and lifecycle stores with no adapter', () => {
+    for (const method of ['requestApproval', 'loadApproval', 'pendingApprovals',
+      'decideApproval', 'cancelRunTasks', 'recordLifecycle']) {
+      expect(typeof (lifecycle as unknown as Record<string, unknown>)[method], method).toBe('function');
+    }
   });
 
   it('satisfies the gauntlet store with no adapter', () => {

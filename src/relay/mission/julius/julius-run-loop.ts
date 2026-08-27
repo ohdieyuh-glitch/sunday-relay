@@ -25,7 +25,15 @@
 
 import type { JuliusCardPolicy } from './julius-policy';
 import type { JuliusVerificationPolicy } from './julius-verification-runtime';
-import { JULIUS_MISSION_STATES, transitionMission, type JuliusMissionState, type JuliusTask } from './julius-runtime';
+import type { JuliusMissionState, JuliusTask } from './julius-runtime';
+import { planRunStatePath, transitionIsLegal } from './julius-state-path';
+
+/**
+ * Re-exported so the run loop's own tests and callers keep one import site.
+ * The rules themselves live in `julius-state-path.ts`, which the lifecycle
+ * runtime shares — two runtimes, one walk of one table.
+ */
+export { planRunStatePath, transitionIsLegal };
 import { runClaimedTask, type JuliusPipelineDependencies, type JuliusTaskOutcome } from './julius-task-pipeline';
 import type { JuliusClaimedTask, JuliusRunRow } from './julius-runtime-ports';
 
@@ -110,70 +118,6 @@ export function targetRunState(tasks: readonly JuliusTask[]): { state: JuliusMis
     return { state: 'VERIFYING', reasonCode: 'ALL_TASKS_TERMINAL' };
   }
   return { state: 'BLOCKED', reasonCode: 'RUN_CANNOT_PROGRESS' };
-}
-
-/**
- * Whether a state move is one `transitionMission` will accept, WITHOUT
- * performing it.
- *
- * The loop must not throw on a legal-but-unreachable target — a run in
- * EXECUTING whose tasks are all RUNNABLE again wants READY, and `EXECUTING →
- * READY` is not in the transition table. That is not an error; it is a target
- * this run cannot take right now, and the honest answer is to leave the run
- * where it is.
- *
- * Implemented by PROBING the domain's own transition function rather than by
- * keeping a copy of its table. A copy is a second source of truth for the one
- * rule the whole state machine rests on.
- */
-export function transitionIsLegal(from: JuliusMissionState, to: JuliusMissionState): boolean {
-  if (from === to) return false;
-  try {
-    transitionMission({
-      transitionId: 'probe', missionId: 'probe', current: from, to,
-      reasonCode: 'probe', safeSummary: 'probe', evidenceIds: [], occurredAt: '1970-01-01T00:00:00.000Z',
-    });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-/**
- * THE LEGAL PATH FROM ONE STATE TO ANOTHER, OR NOTHING.
- *
- * A tick can observe a run after several things have already happened to it. A
- * run sitting in READY whose only task both started and finished inside one
- * tick has a target of VERIFYING — and `READY → VERIFYING` is not in the
- * transition table, because a run reaches VERIFYING by EXECUTING first. The
- * first version of this loop treated that as "target unreachable, leave it
- * alone", which silently stranded every single-task run in READY forever.
- *
- * The honest answer is not to widen the transition table but to WALK it: the
- * run really did execute, so the intermediate transition really did happen and
- * belongs in the audit trail. This is a breadth-first search over the domain's
- * own legality check, so the shortest real path wins and no path is invented.
- * Bounded by the state count, which is why there is no visited-set subtlety
- * and no risk of a long walk.
- */
-export function planRunStatePath(
-  from: JuliusMissionState,
-  to: JuliusMissionState,
-): readonly JuliusMissionState[] {
-  if (from === to) return [];
-  const queue: JuliusMissionState[][] = [[from]];
-  const seen = new Set<JuliusMissionState>([from]);
-  while (queue.length > 0) {
-    const path = queue.shift()!;
-    const tail = path[path.length - 1]!;
-    for (const next of JULIUS_MISSION_STATES) {
-      if (seen.has(next) || !transitionIsLegal(tail, next)) continue;
-      if (next === to) return [...path.slice(1), next];
-      seen.add(next);
-      queue.push([...path, next]);
-    }
-  }
-  return [];
 }
 
 /* -------------------------------------------------------------- the loop */

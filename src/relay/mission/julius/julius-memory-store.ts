@@ -54,6 +54,9 @@ import type {
 import type {
   JuliusGauntletRecord, JuliusGauntletRoundRecord, JuliusGauntletStore,
 } from './julius-gauntlet-runtime';
+import type {
+  JuliusApprovalRecord, JuliusApprovalStore, JuliusLifecycleStore,
+} from './julius-lifecycle-runtime';
 
 interface TaskRow extends JuliusTask {
   runId: string;
@@ -70,7 +73,8 @@ interface ResultRow {
   readonly status: 'SUCCEEDED' | 'FAILED' | 'CANCELLED'; readonly idempotencyKey: string;
 }
 
-export interface JuliusMemoryStore extends JuliusRuntimeStore, JuliusSubagentStore, JuliusGauntletStore {
+export interface JuliusMemoryStore
+  extends JuliusRuntimeStore, JuliusSubagentStore, JuliusGauntletStore, JuliusApprovalStore, JuliusLifecycleStore {
   /* ---- seeding, for tests and offline runs ---- */
   seedRun(run: JuliusRunRow): void;
   seedTask(runId: string, task: JuliusTask): void;
@@ -83,6 +87,8 @@ export interface JuliusMemoryStore extends JuliusRuntimeStore, JuliusSubagentSto
   trajectory(): readonly JuliusTrajectoryEvent[];
   contexts(): readonly JuliusContextSnapshot[];
   results(): readonly ResultRow[];
+  /** The last recorded lifecycle change for a run, or null. */
+  lifecycleOf(runId: string): { reason: string; actor: string; at: string } | null;
   /** Simulate a process restart: data survives, in-flight leases do not. */
   restart(): void;
 }
@@ -111,6 +117,8 @@ export function createJuliusMemoryStore(): JuliusMemoryStore {
   const subagents = new Map<string, JuliusSubagentRecord>();
   const gauntlets = new Map<string, JuliusGauntletRecord>();
   const gauntletRounds = new Map<string, JuliusGauntletRoundRecord>();
+  const approvals = new Map<string, JuliusApprovalRecord>();
+  const lifecycle = new Map<string, { reason: string; actor: string; at: string }>();
 
   /** Whether a run belongs to a project. Every read consults this first. */
   const inProject = (runId: string, projectId: string): boolean =>
@@ -145,6 +153,7 @@ export function createJuliusMemoryStore(): JuliusMemoryStore {
     trajectory() { return trajectoryLog.map((event) => ({ ...event })); },
     contexts() { return contexts.map((snapshot) => ({ ...snapshot })); },
     results() { return results.map((row) => ({ ...row })); },
+    lifecycleOf(runId) { const row = lifecycle.get(runId); return row ? { ...row } : null; },
     restart() {
       // Data survives; leases do not. Every ACTIVE task is left ACTIVE with an
       // expired lease, which is exactly what a crashed worker leaves behind and
@@ -408,6 +417,69 @@ export function createJuliusMemoryStore(): JuliusMemoryStore {
 
     async subagentsForRun(runId) {
       return [...subagents.values()].filter((record) => record.runId === runId).map((record) => ({ ...record }));
+    },
+
+    /* ---------------------------------------------------------- approvals */
+    async requestApproval(record) {
+      const byKey = [...approvals.values()].find((row) =>
+        row.runId === record.runId && row.idempotencyKey === record.idempotencyKey);
+      if (byKey !== undefined) return { created: false, record: { ...byKey } };
+      // The partial unique index: ONE pending approval per gated operation.
+      // `?? ''` because NULL never equals NULL and a run-level gate would
+      // otherwise be duplicable — the same COALESCE the index uses.
+      const pending = [...approvals.values()].find((row) =>
+        row.state === 'PENDING' && row.runId === record.runId
+        && (row.taskId ?? '') === (record.taskId ?? '') && row.operation === record.operation);
+      if (pending !== undefined) return { created: false, record: { ...pending } };
+      approvals.set(record.approvalId, { ...record });
+      return { created: true, record: { ...record } };
+    },
+
+    async loadApproval(runId, approvalId, projectId) {
+      const record = approvals.get(approvalId);
+      return record !== undefined && record.runId === runId && record.projectId === projectId
+        ? { ...record } : null;
+    },
+
+    async pendingApprovals(runId, projectId) {
+      return [...approvals.values()]
+        .filter((row) => row.runId === runId && row.projectId === projectId && row.state === 'PENDING')
+        .map((row) => ({ ...row }));
+    },
+
+    async decideApproval(input) {
+      const record = approvals.get(input.approvalId);
+      if (record === undefined || record.runId !== input.runId || record.projectId !== input.projectId) return false;
+      // A decided approval stays decided; only PENDING is decidable.
+      if (record.state !== 'PENDING') return false;
+      approvals.set(input.approvalId, {
+        ...record, state: input.state, decidedAt: input.decidedAt,
+        decidedBy: input.decidedBy, decisionReason: input.decisionReason,
+      });
+      return true;
+    },
+
+    /* ---------------------------------------------------------- lifecycle */
+    async cancelRunTasks(runId, projectId, now) {
+      if (!inProject(runId, projectId)) return 0;
+      let cancelled = 0;
+      for (const task of tasks.values()) {
+        if (task.runId !== runId) continue;
+        if (['SUCCEEDED', 'FAILED', 'CANCELLED', 'SKIPPED'].includes(task.state)) continue;
+        task.state = 'CANCELLED';
+        task.leaseOwner = null;
+        task.leaseExpiresAt = null;
+        task.nextAttemptAt = now;
+        task.version += 1;
+        cancelled += 1;
+      }
+      return cancelled;
+    },
+
+    async recordLifecycle(input) {
+      if (!inProject(input.runId, input.projectId)) return false;
+      lifecycle.set(input.runId, { reason: input.reason, actor: input.actor, at: input.at });
+      return true;
     },
 
     /* ---------------------------------------------------------- gauntlets */

@@ -61,3 +61,4 @@ export { TransactionalWonderlandDatabase, postgresWonderlandDatabaseFromEnv, WON
 export { JULIUS_READ_LIMIT, JuliusReadPostgresRepository } from './julius-read-postgres';
 export { JuliusSubagentPostgresRepository } from './julius-subagent-postgres';
 export { JuliusGauntletPostgresRepository } from './julius-gauntlet-postgres';
+export { JuliusLifecyclePostgresRepository } from './julius-lifecycle-postgres';
