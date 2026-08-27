@@ -51,6 +51,9 @@ import type {
 import type {
   JuliusSubagentContext, JuliusSubagentRecord, JuliusSubagentState, JuliusSubagentStore,
 } from './julius-subagent-runtime';
+import type {
+  JuliusGauntletRecord, JuliusGauntletRoundRecord, JuliusGauntletStore,
+} from './julius-gauntlet-runtime';
 
 interface TaskRow extends JuliusTask {
   runId: string;
@@ -67,7 +70,7 @@ interface ResultRow {
   readonly status: 'SUCCEEDED' | 'FAILED' | 'CANCELLED'; readonly idempotencyKey: string;
 }
 
-export interface JuliusMemoryStore extends JuliusRuntimeStore, JuliusSubagentStore {
+export interface JuliusMemoryStore extends JuliusRuntimeStore, JuliusSubagentStore, JuliusGauntletStore {
   /* ---- seeding, for tests and offline runs ---- */
   seedRun(run: JuliusRunRow): void;
   seedTask(runId: string, task: JuliusTask): void;
@@ -106,6 +109,8 @@ export function createJuliusMemoryStore(): JuliusMemoryStore {
   const contextKeys = new Set<string>();
   const repairRounds = new Map<string, number>();
   const subagents = new Map<string, JuliusSubagentRecord>();
+  const gauntlets = new Map<string, JuliusGauntletRecord>();
+  const gauntletRounds = new Map<string, JuliusGauntletRoundRecord>();
 
   /** The dependency predicate the claim query enforces. */
   const dependenciesSatisfied = (task: TaskRow): boolean =>
@@ -379,6 +384,66 @@ export function createJuliusMemoryStore(): JuliusMemoryStore {
 
     async subagentsForRun(runId) {
       return [...subagents.values()].filter((record) => record.runId === runId).map((record) => ({ ...record }));
+    },
+
+    /* ---------------------------------------------------------- gauntlets */
+    async createGauntlet(record) {
+      // UNIQUE(run_id, task_id): a second /gauntletloop on one task resumes.
+      const byTask = [...gauntlets.values()].find((row) =>
+        row.runId === record.runId && row.taskId === record.taskId);
+      if (byTask !== undefined) return { created: false, record: { ...byTask } };
+      if (gauntlets.has(record.gauntletId)) {
+        return { created: false, record: { ...gauntlets.get(record.gauntletId)! } };
+      }
+      gauntlets.set(record.gauntletId, { ...record });
+      return { created: true, record: { ...record } };
+    },
+
+    async loadGauntlet(runId, gauntletId) {
+      const record = gauntlets.get(gauntletId);
+      return record !== undefined && record.runId === runId ? { ...record } : null;
+    },
+
+    async gauntletForTask(runId, taskId) {
+      const record = [...gauntlets.values()].find((row) => row.runId === runId && row.taskId === taskId);
+      return record ? { ...record } : null;
+    },
+
+    async saveGauntlet(record, expectedVersion) {
+      const stored = gauntlets.get(record.gauntletId);
+      // Compare-and-set against the version the caller read, mirroring
+      // `advanceGauntlet`'s own guard so both halves refuse the same race.
+      if (stored === undefined || stored.version !== expectedVersion) return false;
+      gauntlets.set(record.gauntletId, { ...record });
+      return true;
+    },
+
+    async recordRound(round) {
+      const key = `${round.gauntletId}::${round.round}::${round.phase}`;
+      if (gauntletRounds.has(key)) return { recorded: false, duplicate: true };
+      gauntletRounds.set(key, { ...round });
+      return { recorded: true, duplicate: false };
+    },
+
+    async settleRound(input) {
+      const key = `${input.gauntletId}::${input.round}::${input.phase}`;
+      const round = gauntletRounds.get(key);
+      if (round === undefined) return false;
+      // A settled round stays settled: a late second callback for one phase
+      // must not overwrite the outcome the first one recorded.
+      if (round.completedAt !== null) return false;
+      gauntletRounds.set(key, {
+        ...round, outcome: input.outcome, durationMs: input.durationMs,
+        usdMicros: input.usdMicros, evidenceIds: [...input.evidenceIds], completedAt: input.completedAt,
+      });
+      return true;
+    },
+
+    async roundsFor(gauntletId) {
+      return [...gauntletRounds.values()]
+        .filter((round) => round.gauntletId === gauntletId)
+        .sort((a, b) => a.round - b.round || a.phase.localeCompare(b.phase))
+        .map((round) => ({ ...round }));
     },
 
     async setSubagentState(runId, requestId, state) {

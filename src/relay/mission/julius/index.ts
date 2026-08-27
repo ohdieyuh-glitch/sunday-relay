@@ -11,6 +11,7 @@ export * from './julius-trajectory';
 export * from './julius-events';
 export * from './julius-runtime-ports';
 export * from './julius-subagent-runtime';
+export * from './julius-gauntlet-runtime';
 export * from './julius-task-pipeline';
 export * from './julius-run-loop';
 export * from './julius-memory-store';

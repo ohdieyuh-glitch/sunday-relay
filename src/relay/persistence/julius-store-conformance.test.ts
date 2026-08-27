@@ -8,11 +8,12 @@ import { JuliusEventPostgresRepository } from './julius-event-postgres';
 import { JuliusTrajectoryPostgresRepository } from './julius-trajectory-postgres';
 import { JuliusReadPostgresRepository } from './julius-read-postgres';
 import { JuliusSubagentPostgresRepository } from './julius-subagent-postgres';
+import { JuliusGauntletPostgresRepository } from './julius-gauntlet-postgres';
 import { createJuliusMemoryStore } from '../mission/julius';
 import type {
   JuliusClaimedTask, JuliusContextWriter, JuliusEventWriter, JuliusResultReceiptRow,
   JuliusResultWriter, JuliusRunRow, JuliusRunWriter, JuliusRuntimeReader,
-  JuliusRuntimeStore, JuliusSubagentStore, JuliusTrajectoryWriter,
+  JuliusGauntletStore, JuliusRuntimeStore, JuliusSubagentStore, JuliusTrajectoryWriter,
 } from '../mission/julius';
 
 /**
@@ -67,6 +68,9 @@ const reader: JuliusRuntimeReader = new JuliusReadPostgresRepository(pool);
 /** The sub-agent repository satisfies the sub-agent store port directly. */
 const subagents: JuliusSubagentStore = new JuliusSubagentPostgresRepository(pool);
 
+/** The gauntlet repository satisfies the gauntlet store port directly. */
+const gauntlets: JuliusGauntletStore = new JuliusGauntletPostgresRepository(pool);
+
 /**
  * THE TWO LEDGERS NEED A ONE-LINE ADAPTER, AND THAT IS THE POINT.
  *
@@ -85,7 +89,7 @@ const trajectoryWriter: JuliusTrajectoryWriter = {
 };
 
 /** The whole runtime store, composed from the real repositories. */
-const composed: JuliusRuntimeStore & JuliusSubagentStore = {
+const composed: JuliusRuntimeStore & JuliusSubagentStore & JuliusGauntletStore = {
   loadRun: runWriter.loadRun.bind(runWriter),
   transition: runWriter.transition.bind(runWriter),
   addTask: runWriter.addTask.bind(runWriter),
@@ -111,6 +115,13 @@ const composed: JuliusRuntimeStore & JuliusSubagentStore = {
   loadSubagent: subagents.loadSubagent.bind(subagents),
   subagentsForRun: subagents.subagentsForRun.bind(subagents),
   setSubagentState: subagents.setSubagentState.bind(subagents),
+  createGauntlet: gauntlets.createGauntlet.bind(gauntlets),
+  loadGauntlet: gauntlets.loadGauntlet.bind(gauntlets),
+  gauntletForTask: gauntlets.gauntletForTask.bind(gauntlets),
+  saveGauntlet: gauntlets.saveGauntlet.bind(gauntlets),
+  recordRound: gauntlets.recordRound.bind(gauntlets),
+  settleRound: gauntlets.settleRound.bind(gauntlets),
+  roundsFor: gauntlets.roundsFor.bind(gauntlets),
 };
 
 describe('the Julius runtime ports and the PostgreSQL repositories agree', () => {
@@ -132,10 +143,17 @@ describe('the Julius runtime ports and the PostgreSQL repositories agree', () =>
     // A drift-detector with a number in it: if a future repository stops
     // satisfying its port directly, this count changes and the reason has to be
     // written down rather than absorbed.
-    const direct = [runWriter, resultWriter, contextWriter, reader, subagents];
-    expect(direct).toHaveLength(5);
+    const direct = [runWriter, resultWriter, contextWriter, reader, subagents, gauntlets];
+    expect(direct).toHaveLength(6);
     expect(typeof eventWriter.appendEvent).toBe('function');
     expect(typeof trajectoryWriter.appendTrajectory).toBe('function');
+  });
+
+  it('satisfies the gauntlet store with no adapter', () => {
+    for (const method of ['createGauntlet', 'loadGauntlet', 'gauntletForTask',
+      'saveGauntlet', 'recordRound', 'settleRound', 'roundsFor']) {
+      expect(typeof (gauntlets as unknown as Record<string, unknown>)[method], method).toBe('function');
+    }
   });
 
   it('satisfies the sub-agent store with no adapter', () => {
