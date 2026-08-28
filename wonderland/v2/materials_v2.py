@@ -464,9 +464,16 @@ def _master(unreal, log, name, kind, texs=None):
         # its big tree (u 0.525-0.655) stand 10 m from the Marble camera and
         # reach 55 deg of elevation; projected to infinity they ghost the sky
         # behind our own mushroom and tree. Inside those two bands of azimuth
-        # the lookup is stretched from the clean zenith sky instead:
-        # v_s = v * NearFillK (0.38 = 0.19 / 0.5), so the band shows blue sky
-        # and cumulus down to the horizon. Band edges are soft over 0.01 u.
+        # the panorama is sampled from the CLEAN SKY COLUMNS beside them: the
+        # band [a0, a1] is mapped linearly onto the clean span [c0, c1] at the
+        # SAME v (u' = (u - a0) * NearScale + NearFill0, no vertical stretch),
+        # and the three samples are cross-faded by COLOUR over the 0.01-u band
+        # edge. PASS 04d lerped the lookup COORDINATE instead (v -> v * 0.38):
+        # across the band edge the lookup swept through the tower-ring rows
+        # and painted a white column down the sky at u 0.525, and the 2.6x
+        # vertical stretch smeared the zenith clouds into grey smudges
+        # (V2_PASS_024). A colour cross-fade can only show what one of its
+        # samples holds.
         def band(a0, a1, y):
             ea = node(unreal.MaterialExpressionSubtract, -800, y)
             link(um, "", ea, "A")
@@ -487,30 +494,51 @@ def _master(unreal, log, name, kind, texs=None):
             box = node(unreal.MaterialExpressionMultiply, -500, y + 60)
             link(ka, "", box, "A")
             link(kb, "", box, "B")
-            return box
+            return box, ea
+
+        def sample(u, y):
+            t = node(unreal.MaterialExpressionAppendVector, -450, y)
+            link(u, "", t, "A")
+            link(vl, "", t, "B")
+            p = tex_param("Panorama", y, "SAMPLERTYPE_COLOR")
+            link(t, "", p, "UVs")
+            return p
+
+        def refill(ea, scale, fill0, y):
+            # u' = (u - a0) * scale + fill0, wrapped
+            sc = node(unreal.MaterialExpressionMultiply, -700, y)
+            link(ea, "", sc, "A")
+            link(scale, "", sc, "B")
+            ad = node(unreal.MaterialExpressionAdd, -600, y)
+            link(sc, "", ad, "A")
+            link(fill0, "", ad, "B")
+            fr = node(unreal.MaterialExpressionFrac, -520, y)
+            link(ad, "", fr, "")
+            return fr
         na0 = param(unreal.MaterialExpressionScalarParameter, "NearA0", 600, 0.0, -1000)
         na1 = param(unreal.MaterialExpressionScalarParameter, "NearA1", 680, 0.0, -1000)
         nb0 = param(unreal.MaterialExpressionScalarParameter, "NearB0", 900, 0.0, -1000)
         nb1 = param(unreal.MaterialExpressionScalarParameter, "NearB1", 980, 0.0, -1000)
-        inside = node(unreal.MaterialExpressionMax, -400, 760)
-        link(band(na0, na1, 600), "", inside, "A")
-        link(band(nb0, nb1, 900), "", inside, "B")
-        fillk = param(unreal.MaterialExpressionScalarParameter, "NearFillK", 300, 1.0, -800)
-        vs0 = node(unreal.MaterialExpressionMultiply, -700, 260)
-        link(vl, "", vs0, "A")
-        link(fillk, "", vs0, "B")
-        vs = node(unreal.MaterialExpressionLinearInterpolate, -550, 200)
-        link(vl, "", vs, "A")
-        link(vs0, "", vs, "B")
-        link(inside, "", vs, "Alpha")
-        tc = node(unreal.MaterialExpressionAppendVector, -450, -200)
-        link(um, "", tc, "A")
-        link(vs, "", tc, "B")
-        pano = tex_param("Panorama", -200, "SAMPLERTYPE_COLOR")
-        link(tc, "", pano, "UVs")
+        band_a, ea_a = band(na0, na1, 600)
+        band_b, ea_b = band(nb0, nb1, 900)
+        fa0 = param(unreal.MaterialExpressionScalarParameter, "NearFillA0", 1200, 0.0, -1000)
+        fas = param(unreal.MaterialExpressionScalarParameter, "NearScaleA", 1280, 1.0, -1000)
+        fb0 = param(unreal.MaterialExpressionScalarParameter, "NearFillB0", 1360, 0.0, -1000)
+        fbs = param(unreal.MaterialExpressionScalarParameter, "NearScaleB", 1440, 1.0, -1000)
+        base = sample(um, -200)
+        fill_a = sample(refill(ea_a, fas, fa0, 1200), 1200)
+        fill_b = sample(refill(ea_b, fbs, fb0, 1440), 1440)
+        c1 = node(unreal.MaterialExpressionLinearInterpolate, -300, -100)
+        link(base, "", c1, "A")
+        link(fill_a, "", c1, "B")
+        link(band_a, "", c1, "Alpha")
+        c2 = node(unreal.MaterialExpressionLinearInterpolate, -200, -100)
+        link(c1, "", c2, "A")
+        link(fill_b, "", c2, "B")
+        link(band_b, "", c2, "Alpha")
         gain = param(unreal.MaterialExpressionScalarParameter, "SkyGain", 200, 1.0, -420)
-        pm = node(unreal.MaterialExpressionMultiply, -240, -100)
-        link(pano, "", pm, "A")
+        pm = node(unreal.MaterialExpressionMultiply, -100, -100)
+        link(c2, "", pm, "A")
         link(gain, "", pm, "B")
         mel.connect_material_property(pm, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
         # mask below the horizon on the TRUE elevation v: v > HorizonV -> clip
@@ -618,12 +646,16 @@ def build_materials(unreal, log, texs):
             mel.set_material_instance_scalar_parameter_value(mi, "FlipV", float(C.LOOK["skyFlipV"]))
             mel.set_material_instance_scalar_parameter_value(mi, "HorizonV", float(C.LOOK["skyHorizonV"]))
             mel.set_material_instance_scalar_parameter_value(mi, "YawOffset", float(C.LOOK["skyYawOffset"]))
-            mel.set_material_instance_scalar_parameter_value(mi, "NearFillK", float(C.LOOK["skyNearFillK"]))
             (a0, a1), (b0, b1) = C.LOOK["skyNearBands"]
-            for pname, val in (("NearA0", a0), ("NearA1", a1), ("NearB0", b0), ("NearB1", b1)):
+            (ca0, ca1), (cb0, cb1) = C.LOOK["skyNearFills"]
+            if not (a1 > a0 and b1 > b0 and ca1 > ca0 and cb1 > cb0):
+                raise RuntimeError("skyNearBands / skyNearFills must be increasing spans")
+            for pname, val in (("NearA0", a0), ("NearA1", a1), ("NearB0", b0), ("NearB1", b1),
+                               ("NearFillA0", ca0), ("NearScaleA", (ca1 - ca0) / (a1 - a0)),
+                               ("NearFillB0", cb0), ("NearScaleB", (cb1 - cb0) / (b1 - b0))):
                 mel.set_material_instance_scalar_parameter_value(mi, pname, float(val))
-            log("V2 SKY: panorama u=0.5 faces yaw %.0f; horizon v %.4f; near bands %s filled at v*%.2f"
-                % (C.LOOK["skyYawOffset"], C.LOOK["skyHorizonV"], C.LOOK["skyNearBands"], C.LOOK["skyNearFillK"]))
+            log("V2 SKY: panorama u=0.5 faces yaw %.0f; horizon v %.4f; near bands %s refilled from u %s (same v, colour cross-fade)"
+                % (C.LOOK["skyYawOffset"], C.LOOK["skyHorizonV"], C.LOOK["skyNearBands"], C.LOOK["skyNearFills"]))
             eal.save_asset(path, only_if_is_dirty=False)
             out[name] = mi
         except Exception as exc:

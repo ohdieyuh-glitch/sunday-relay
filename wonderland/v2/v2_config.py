@@ -138,10 +138,20 @@ LOOK = {
     # V2_PASS_022 was the panorama's giant mushroom, rotated and compressed by
     # the mesh UVs. skyHorizonV 0.5: masked at the true horizon; the near
     # objects that used to justify +8 deg are handled by skyNearBands: inside
-    # those two bands of u (the panorama's giant mushroom, its big tree) the
-    # lookup is v * skyNearFillK, i.e. the clean zenith sky stretched down.
-    "skyDome": 1, "skyGain": 9000.0, "skyFlipV": 0.0, "skyHorizonV": 0.5,
-    "skyYawOffset": 90.0, "skyNearBands": ((0.245, 0.435), (0.525, 0.655)), "skyNearFillK": 0.38,
+    # those two bands of u (the panorama's giant mushroom 0.245-0.435, its big
+    # tree 0.525-0.655, each widened by the 0.01 cross-fade) the panorama is
+    # sampled from the clean sky columns beside them, skyNearFills, at the same
+    # v (measured on the panorama, v 0.19-0.36: luma p10 91 / 92, blue-
+    # dominant; the mushroom's band is p10 21, the tree's p10 27). PASS 04e
+    # (2026-08-28): 04d stretched the zenith rows down instead, which smeared
+    # the clouds and swept a white column through the tower-ring rows at the
+    # band edge. skyGain 18000: V2_PASS_024 measured the sky at sRGB p50 79
+    # against the reference's 107 at the same pixels with the plaza already
+    # brighter than the reference's, i.e. the sky sat ~1 stop too dark
+    # relative to the sunlit geometry ((107/79)^2.2 = 1.95x).
+    "skyDome": 1, "skyGain": 18000.0, "skyFlipV": 0.0, "skyHorizonV": 0.5,
+    "skyYawOffset": 90.0, "skyNearBands": ((0.235, 0.445), (0.515, 0.665)),
+    "skyNearFills": ((0.06, 0.245), (0.805, 0.94)),
     "castleKit": 1, "nanite": 1,
     # secondary dressing (the PCG-equivalent): garden zones only, after the authored layout
     "dressing": 1, "dressingDensity": 1.0,
