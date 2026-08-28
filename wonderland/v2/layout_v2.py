@@ -20,6 +20,7 @@ Nothing is scattered on the plaza. PCG (later) respects the path exclusion.
     CITY (90–400 m)    five depth layers, cream masonry, muted pink roofs, gold finials
     SKY                the panorama's sky above the horizon (its near mushroom/tree bands refilled from the clean sky beside them); two keys and the teapot, high
 """
+import math
 
 
 def _rnd(*key):
@@ -344,7 +345,7 @@ GARDEN_R = _band("V2_Garden", [
 # ---------------------------------------------------------------------------
 
 
-def _castle_group(x, y, seed, scale=1.0, layer="V2_Castle"):
+def _castle_group(x, y, seed, scale=1.0, layer="V2_Castle", n_towers=4, dominant=1.0):
     """One palace mass with REAL variation: the tower bodies rotate through
     round / square / octagon / slender, the roofs through ogee / bell / steep
     cone / flat-crenellated / dome, halls carry facade bays and an arcade,
@@ -367,8 +368,10 @@ def _castle_group(x, y, seed, scale=1.0, layer="V2_Castle"):
     for f in range(3):
         items.append(A("facade_panel", x - 400 * scale + 400 * scale * f, y - 402 * scale, 420 * scale, yaw=yaw, s=scale,
                        mat="MI_V2_IvoryStone", label="City%d_Bay%d" % (k, f)))
-    towers = (((700, 200), 1.0, 0), ((-600, -100), 0.8, 1), ((100, 800), 1.35, 2), ((-900, 600), 1.1, 3))
+    towers = (((700, 200), 1.0, 0), ((-600, -100), 0.8, 1), ((100, 800), 1.35, 2), ((-900, 600), 1.1, 3))[:max(1, int(n_towers))]
     for t, ((ox, oy), ts, bi) in enumerate(towers):
+        if t == 0:
+            ts = ts * dominant   # PASS 06: one tower may rule its cluster
         # a distinct PERMUTATION of the four bodies per group (24 exist, 13
         # groups), so no two groups share a tower sequence -- a hash pick
         # produced two collisions in thirteen
@@ -397,15 +400,107 @@ def _castle_group(x, y, seed, scale=1.0, layer="V2_Castle"):
 
 
 CITY = (
-    # LAYER 3: mid-distance city, 90-140 m
+    # LAYER 3: the castle focal plane, 95-130 m -- the massing the founder
+    # approved (SUITE01); unchanged
     _castle_group(2400, 9500, 1, 1.0) + _castle_group(-2600, 10200, 2, 1.1) + _castle_group(300, 11500, 3, 1.7)
     + _castle_group(5200, 12200, 4, 1.3) + _castle_group(-5600, 13000, 5, 1.4)
-    # LAYER 4: large skyline towers, 150-220 m
-    + _castle_group(1800, 15500, 6, 2.0, "V2_Skyline") + _castle_group(-3200, 17500, 7, 2.3, "V2_Skyline")
-    + _castle_group(7500, 19000, 8, 2.4, "V2_Skyline") + _castle_group(-8500, 20500, 9, 2.6, "V2_Skyline")
-    # LAYER 5: soft distant structures, 250-400 m (fog does the softening)
-    + _castle_group(500, 26000, 10, 3.4, "V2_Skyline") + _castle_group(-12000, 30000, 11, 3.8, "V2_Skyline")
-    + _castle_group(11000, 33000, 12, 4.0, "V2_Skyline") + _castle_group(-4000, 40000, 13, 4.6, "V2_Skyline")
+    # PASS 06 (founder, 2026-08-28: "beyond the castle the world starts to
+    # look too deep and messy"). Layers 4 and 5 were eight groups of four
+    # towers at scale 2.0-4.6 stacked behind the castle on its own silhouette
+    # -- thirty-two giant tower tops and no hierarchy. Now:
+    # LAYER 4, 185-240 m: three DISTINCT silhouettes with clean air between
+    # them and nothing within 12 deg of the axis, so the castle's outline
+    # reads against sky. Each is one dominant tower with two attendants.
+    + _castle_group(-8800, 19500, 7, 2.2, "V2_Skyline", n_towers=3, dominant=1.5)
+    + _castle_group(9200, 21000, 8, 2.1, "V2_Skyline", n_towers=3, dominant=1.45)
+    # the on-axis anchor of the beyond: ONE great spire at 360 m, soft in fog
+    + _castle_group(0, 36000, 6, 3.6, "V2_Skyline", n_towers=1, dominant=1.7)
+    # LAYER 5, 300-420 m: a LOW continuous band of small clusters every ~17
+    # deg from -68 to +68 deg, two towers each, fog does the softening -- the
+    # city goes on, quietly
+    + _castle_group(-30000, 30500, 11, 1.7, "V2_Skyline", n_towers=2)
+    + _castle_group(-22500, 34000, 12, 1.6, "V2_Skyline", n_towers=2)
+    + _castle_group(-13500, 38500, 13, 1.8, "V2_Skyline", n_towers=2)
+    + _castle_group(-6500, 41500, 9, 1.5, "V2_Skyline", n_towers=2)
+    + _castle_group(7000, 41000, 10, 1.6, "V2_Skyline", n_towers=2)
+    + _castle_group(14500, 38000, 14, 1.7, "V2_Skyline", n_towers=2)
+    + _castle_group(23000, 33500, 20, 1.6, "V2_Skyline", n_towers=2)
+    + _castle_group(30500, 30000, 16, 1.8, "V2_Skyline", n_towers=2)
+)
+
+
+def _tree_group(x, y, seed, label, s=1.0):
+    """A garden tree: trunk and three canopies, the foreground recipe at
+    midground scale, so the flanks are furnished with the same language."""
+    h = _rnd
+    return [
+        A("tree_mature_trunk", x, y, 0, yaw=int(360 * h(seed, 1)), s=1.1 * s, mat="MI_V2_Bark", label=label + "_Trunk"),
+        A("canopy_large", x, y, 1450 * s, yaw=0, s=1.4 * s, mat="MI_V2_LeafMid", label=label + "_Canopy0"),
+        A("canopy_large", x - 320 * s, y + 220 * s, 1320 * s, yaw=130, s=1.05 * s, mat="MI_V2_LeafDark", label=label + "_Canopy1"),
+        A("canopy_large", x + 380 * s, y - 150 * s, 1280 * s, yaw=250, s=0.95 * s, mat="MI_V2_LeafLight", label=label + "_Canopy2"),
+    ]
+
+
+def _hedge_wall(x0, y0, x1, y1, n, label, s=1.3, mat="MI_V2_LeafDark"):
+    """n hedge masses along a line: a garden wall that gives the midground
+    an edge to read against."""
+    out = []
+    for i in range(n):
+        t = (i + 0.5) / n
+        out.append(A("hedge_mass", x0 + (x1 - x0) * t, y0 + (y1 - y0) * t, 0,
+                     yaw=int(math.degrees(math.atan2(y1 - y0, x1 - x0))), s=s, mat=mat, label="%s_%d" % (label, i)))
+    return out
+
+
+# PASS 06: THE FLANKS, 60-150 m. From every camera the ground beside and
+# behind the castle was a bare green plane. Garden masses in the kit's own
+# language: tree groups, hedge walls that make garden rooms, a landmark
+# mushroom each side, topiary rows. Left is +X.
+BEYOND_L = _band("V2_Castle",
+    _tree_group(4600, 6600, 61, "BeyondL_Tree0", 1.1) + _tree_group(6900, 9200, 62, "BeyondL_Tree1", 1.25)
+    + _tree_group(9400, 7200, 63, "BeyondL_Tree2", 1.0) + _tree_group(3900, 14800, 64, "BeyondL_Tree3", 1.3)
+    + _hedge_wall(3400, 4600, 6800, 4800, 6, "BeyondL_Wall0")
+    + _hedge_wall(7200, 5200, 7600, 9600, 7, "BeyondL_Wall1", mat="MI_V2_LeafMid")
+    + _hedge_wall(4200, 11200, 8800, 11600, 7, "BeyondL_Wall2")
+    + [A("mushroom_giant", 5800, 8000, 76, yaw=40, s=1.15, mat="MI_V2_MushRed", label="BeyondL_Mushroom"),
+       A("mushroom_medium", 8300, 6300, 0, yaw=200, s=1.3, mat="MI_V2_MushPurple", label="BeyondL_Mush1"),
+       A("mushroom_medium", 3600, 9800, 0, yaw=80, s=1.1, mat="MI_V2_MushCream", label="BeyondL_Mush2")]
+    + [A("topiary_cone_plain", 3600 + 600 * i, 5600, 0, s=1.3, mat="MI_V2_LeafMid", label="BeyondL_Cone%d" % i) for i in range(5)]
+    + [A("topiary_ball", 8000 + 500 * i, 10400, 0, s=1.5, mat="MI_V2_LeafLight", label="BeyondL_Ball%d" % i) for i in range(4)]
+)
+BEYOND_R = _band("V2_Castle",
+    _tree_group(-5000, 7200, 71, "BeyondR_Tree0", 1.2) + _tree_group(-7600, 9800, 72, "BeyondR_Tree1", 1.1)
+    + _tree_group(-9800, 6600, 73, "BeyondR_Tree2", 1.05) + _tree_group(-4400, 15200, 74, "BeyondR_Tree3", 1.35)
+    + _hedge_wall(-3600, 4800, -7400, 5000, 6, "BeyondR_Wall0", mat="MI_V2_LeafMid")
+    + _hedge_wall(-7800, 5400, -8200, 10200, 7, "BeyondR_Wall1")
+    + _hedge_wall(-4600, 11600, -9400, 12000, 7, "BeyondR_Wall2", mat="MI_V2_LeafMid")
+    + [A("mushroom_giant", -6400, 8600, 76, yaw=220, s=1.05, mat="MI_V2_MushRed", label="BeyondR_Mushroom"),
+       A("mushroom_medium", -3800, 6000, 0, yaw=10, s=1.2, mat="MI_V2_MushCream", label="BeyondR_Mush1"),
+       A("mushroom_medium", -9000, 8600, 0, yaw=140, s=1.3, mat="MI_V2_MushPurple", label="BeyondR_Mush2")]
+    + [A("topiary_cone_plain", -3800 - 600 * i, 6000, 0, s=1.3, mat="MI_V2_LeafMid", label="BeyondR_Cone%d" % i) for i in range(5)]
+    + [A("topiary_spiral", -8600 - 500 * i, 10800, 0, s=1.4, mat="MI_V2_LeafDark", label="BeyondR_Spiral%d" % i) for i in range(3)]
+)
+
+# PASS 06: BEHIND THE ARRIVAL GATE. ReverseCam03 and ScaleCam07 showed the
+# world ending at the gate with the panorama painted behind it. An avenue:
+# hedge rows and a tree line either side of the axis, a pair of towers where
+# the avenue meets the city behind, and a cluster beyond them.
+AVENUE = _band("V2_Arrival",
+    _hedge_wall(900, -2200, 900, -6200, 6, "Avenue_HedgeL", s=1.2, mat="MI_V2_LeafMid")
+    + _hedge_wall(-900, -2200, -900, -6200, 6, "Avenue_HedgeR", s=1.2, mat="MI_V2_LeafMid")
+    + [A("tree_slender_trunk", 1500, -2800 - 1100 * i, 0, yaw=40 * i, s=1.1, mat="MI_V2_Bark", label="Avenue_TreeL%d" % i) for i in range(3)]
+    + [A("canopy_medium", 1500, -2800 - 1100 * i, 880, yaw=30 * i, s=1.2, mat="MI_V2_LeafMid", label="Avenue_CanopyL%d" % i) for i in range(3)]
+    + [A("tree_slender_trunk", -1500, -3300 - 1100 * i, 0, yaw=50 * i, s=1.1, mat="MI_V2_Bark", label="Avenue_TreeR%d" % i) for i in range(3)]
+    + [A("canopy_medium", -1500, -3300 - 1100 * i, 880, yaw=70 * i, s=1.2, mat="MI_V2_LeafLight", label="Avenue_CanopyR%d" % i) for i in range(3)]
+    + [A("tower_capped", 2600, -8200, 0, s=1.3, mat="MI_V2_IvoryStone", label="Avenue_TowerL"),
+       A("roof_cone_steep", 2600, -8200, 1430, s=1.3, mat="MI_V2_RoofPink", label="Avenue_TowerL_Cap"),
+       A("gate_finial_ball", 2600, -8200, 1430 + 640 * 1.3, s=1.0, mat="MI_V2_Gold", label="Avenue_TowerL_Finial"),
+       A("tower_capped", -2600, -8200, 0, s=1.3, mat="MI_V2_IvoryStone", label="Avenue_TowerR"),
+       A("roof_cone_steep", -2600, -8200, 1430, s=1.3, mat="MI_V2_RoofLilac", label="Avenue_TowerR_Cap"),
+       A("gate_finial_ball", -2600, -8200, 1430 + 640 * 1.3, s=1.0, mat="MI_V2_Gold", label="Avenue_TowerR_Finial")]
+    + _castle_group(600, -16000, 17, 1.9, "V2_Skyline", n_towers=3, dominant=1.3)
+    + _castle_group(-9000, -14000, 18, 1.6, "V2_Skyline", n_towers=2)
+    + _castle_group(9500, -13500, 22, 1.6, "V2_Skyline", n_towers=2)
 )
 
 # ---------------------------------------------------------------------------
@@ -424,7 +519,7 @@ HOVER = _band("V2_Props", [
 FOREGROUND = GATE + SIDES
 COURTYARD = []
 GARDEN = CORRIDOR + GARDEN_L + GARDEN_R
-PALACE = CITY
+PALACE = CITY + BEYOND_L + BEYOND_R + AVENUE
 ALL = FOREGROUND + GARDEN + PALACE + SKY + HOVER
 
 #: The dark path: from the front wall line to the arch, 4.4 m narrowing to 3 m,

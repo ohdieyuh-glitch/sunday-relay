@@ -577,9 +577,31 @@ def _master(unreal, log, name, kind, texs=None):
         link(c1, "", c2, "A")
         link(fill_b, "", c2, "B")
         link(band_b, "", c2, "Alpha")
+        # PASS 06: HAZE INSTEAD OF ARCHITECTURE. Below HazeV0 the panorama's
+        # colour blends into HazeColor (fully by HazeV1) and stays haze to
+        # the true horizon, so no painted tower or mushroom reaches the
+        # frame; the 3D city stands in front of a quiet gradient.
+        hz0 = param(unreal.MaterialExpressionScalarParameter, "HazeV0", 1600, 0.30, -700)
+        hz1 = param(unreal.MaterialExpressionScalarParameter, "HazeV1", 1680, 0.36, -700)
+        hcol = param(unreal.MaterialExpressionVectorParameter, "HazeColor", 1760, unreal.LinearColor(0.56, 0.64, 0.80, 1), -700)
+        hd = node(unreal.MaterialExpressionSubtract, -560, 1620)
+        link(vl, "", hd, "A")
+        link(hz0, "", hd, "B")
+        hw = node(unreal.MaterialExpressionSubtract, -560, 1700)
+        link(hz1, "", hw, "A")
+        link(hz0, "", hw, "B")
+        hq = node(unreal.MaterialExpressionDivide, -460, 1640)
+        link(hd, "", hq, "A")
+        link(hw, "", hq, "B")
+        ha = node(unreal.MaterialExpressionSaturate, -380, 1640)
+        link(hq, "", ha, "")
+        c3 = node(unreal.MaterialExpressionLinearInterpolate, -200, 0)
+        link(c2, "", c3, "A")
+        link(hcol, "", c3, "B")
+        link(ha, "", c3, "Alpha")
         gain = param(unreal.MaterialExpressionScalarParameter, "SkyGain", 200, 1.0, -420)
         pm = node(unreal.MaterialExpressionMultiply, -100, -100)
-        link(c2, "", pm, "A")
+        link(c3, "", pm, "A")
         link(gain, "", pm, "B")
         mel.connect_material_property(pm, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
         # mask below the horizon on the TRUE elevation v: v > HorizonV -> clip
@@ -705,6 +727,10 @@ def build_materials(unreal, log, texs):
             mel.set_material_instance_scalar_parameter_value(mi, "FlipV", float(C.LOOK["skyFlipV"]))
             mel.set_material_instance_scalar_parameter_value(mi, "HorizonV", float(C.LOOK["skyHorizonV"]))
             mel.set_material_instance_scalar_parameter_value(mi, "YawOffset", float(C.LOOK["skyYawOffset"]))
+            mel.set_material_instance_scalar_parameter_value(mi, "HazeV0", float(C.LOOK["skyHazeV0"]))
+            mel.set_material_instance_scalar_parameter_value(mi, "HazeV1", float(C.LOOK["skyHazeV1"]))
+            hc = C.LOOK["skyHazeColor"]
+            mel.set_material_instance_vector_parameter_value(mi, "HazeColor", unreal.LinearColor(hc[0], hc[1], hc[2], 1))
             (a0, a1), (b0, b1) = C.LOOK["skyNearBands"]
             (ca0, ca1), (cb0, cb1) = C.LOOK["skyNearFills"]
             if not (a1 > a0 and b1 > b0 and ca1 > ca0 and cb1 > cb0):
@@ -713,8 +739,9 @@ def build_materials(unreal, log, texs):
                                ("NearFillA0", ca0), ("NearWidthA", ca1 - ca0), ("NearHalfPerA", 0.5 / (ca1 - ca0)),
                                ("NearFillB0", cb0), ("NearWidthB", cb1 - cb0), ("NearHalfPerB", 0.5 / (cb1 - cb0))):
                 mel.set_material_instance_scalar_parameter_value(mi, pname, float(val))
-            log("V2 SKY: panorama u=0.5 faces yaw %.0f; horizon v %.4f; near bands %s refilled from u %s (mirror-repeated at 1:1, same v, colour cross-fade)"
-                % (C.LOOK["skyYawOffset"], C.LOOK["skyHorizonV"], C.LOOK["skyNearBands"], C.LOOK["skyNearFills"]))
+            log("V2 SKY: panorama u=0.5 faces yaw %.0f; horizon v %.4f; near bands %s refilled from u %s (mirror-repeated at 1:1, same v, colour cross-fade); haze from v %.2f to %.2f"
+                % (C.LOOK["skyYawOffset"], C.LOOK["skyHorizonV"], C.LOOK["skyNearBands"], C.LOOK["skyNearFills"],
+                   C.LOOK["skyHazeV0"], C.LOOK["skyHazeV1"]))
             eal.save_asset(path, only_if_is_dirty=False)
             out[name] = mi
         except Exception as exc:

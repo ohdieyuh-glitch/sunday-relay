@@ -219,8 +219,18 @@ LOOK = {
     # correction. None restores auto-exposure.
     "exposurePinEV100": 13.5,
     # a clear bright day with subtle haze -- pale blue-white, NOT lavender
-    "fogDensity": 0.005, "fogFalloff": 0.18, "fogStartDistance": 4000.0,
+    # PASS 06: atmospheric perspective is what separates the castle focal
+    # plane (95-130 m) from the beyond (185-420 m). 0.005 left the far
+    # towers as crisp as the near ones; 0.009 is the single value tested, the
+    # inscattering stays the pale sky-blue the dome's haze band uses.
+    "fogDensity": 0.009, "fogFalloff": 0.18, "fogStartDistance": 4000.0,
     "fogInscattering": (0.74, 0.80, 0.92),
+    # PASS 06: 3D CLOUDS. The dome now shows no architecture (skyHaze*), so the
+    # low sky that HeroCam0 sees (5-35 deg of elevation) would be a bare
+    # gradient; a VolumetricCloud actor with the engine's default cloud
+    # material puts real, lit, 3D cumulus there. Tuned by measurement after
+    # the first render (coverage lives in the material instance).
+    "volumetricClouds": 1, "cloudLayerBottomKm": 4.0, "cloudLayerHeightKm": 6.0,
     "volumetricFog": 1, "fogScattering": 0.20,
     # restrained magic: a small rune disc at the viewpoint, low glow
     "portal": 1, "portalRadius": 250.0, "portalGlow": 1200.0, "portalLightIntensity": 8000.0,
@@ -255,6 +265,15 @@ LOOK = {
     # with continuous seams. skyGain 14000: 9000 rendered the sky at sRGB p50
     # 79 and 18000 at 128 against the reference's 107 at the same pixels;
     # interpolated, and V2_PASS_026 measured 105.
+    # PASS 06 (founder: "beyond the castle ... not a flat cheat"): the dome
+    # paints NO architecture any more. From skyHazeV0 (elevation 36 deg) to
+    # skyHazeV1 (25 deg) its colour blends into skyHazeColor -- the
+    # panorama's own horizon sky, in texture units before skyGain -- and
+    # stays haze down to the true horizon, where the ground slab takes over.
+    # The panorama's tower ring, far castle and near objects all lie below
+    # v 0.36; only sky and cloud remain above. What stands at the horizon is
+    # 3D: the city layers, fog-softened.
+    "skyHazeV0": 0.30, "skyHazeV1": 0.36, "skyHazeColor": (0.56, 0.64, 0.80),
     "skyDome": 1, "skyGain": 14000.0, "skyFlipV": 0.0, "skyHorizonV": 0.5,
     "skyYawOffset": 90.0, "skyNearBands": ((0.235, 0.445), (0.515, 0.665)),
     "skyNearFills": ((0.438, 0.520), (0.438, 0.520)),

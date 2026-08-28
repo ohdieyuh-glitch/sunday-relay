@@ -1250,6 +1250,27 @@ def light_and_air(actors, layers):
                 LOG("V2 LIGHT: sky light SourceType not set (%s)" % exc)
         set_prop(sc, "Intensity", float(L["skyLightIntensity"]))
         set_prop(sc, "bLowerHemisphereIsBlack", False)
+    # PASS 06: 3D clouds -- the dome paints sky only now, the low sky needs
+    # real cumulus. The engine's VolumetricCloud actor ships with its default
+    # cloud material; the layer sits 4-10 km up (LOOK cloudLayer*).
+    if int(L.get("volumetricClouds", 0)):
+        try:
+            vc = actors.spawn_actor_from_class(unreal.VolumetricCloud, vec((0, 0, 0)), rot(0, 0, 0))
+        except Exception as exc:
+            vc = None
+            LOG("V2 CLOUDS: VolumetricCloud not spawned (%s)" % exc)
+        if vc is not None:
+            vc.set_actor_label("V2_Clouds")
+            vcc = vc.get_component_by_class(unreal.VolumetricCloudComponent)
+            if vcc is not None:
+                set_prop(vcc, "LayerBottomAltitude", float(L["cloudLayerBottomKm"]))
+                set_prop(vcc, "LayerHeight", float(L["cloudLayerHeightKm"]))
+            try:
+                vc.set_folder_path(unreal.Name("V2/Light"))
+            except Exception:
+                pass
+            assign_layer(vc, "V2_Skyline", layers)
+            LOG("V2 CLOUDS: volumetric cloud layer %.1f-%.1f km" % (L["cloudLayerBottomKm"], L["cloudLayerBottomKm"] + L["cloudLayerHeightKm"]))
     fog = actors.spawn_actor_from_class(unreal.ExponentialHeightFog, vec((0, 0, 0)), rot(0, 0, 0))
     fog.set_actor_label("V2_HeightFog")
     fc = fog.get_component_by_class(unreal.ExponentialHeightFogComponent)
@@ -1490,7 +1511,9 @@ def main():
                 # the flagstones and beds, wearing moss, present only when the
                 # map has no landscape. It is terrain, not an art asset.
                 smc.set_static_mesh(cube)
-                g.set_actor_scale3d(vec((400.0, 400.0, 0.6)))
+                # PASS 06: +/- 600 m -- the far band stands at 300-420 m and
+                # the fog needs ground to fade into, not the atmosphere's floor
+                g.set_actor_scale3d(vec((1200.0, 1200.0, 0.6)))
                 if "MI_V2_Moss" in mats:
                     smc.set_material(0, mats["MI_V2_Moss"])
             assign_layer(g, "V2_Arrival", layers)
