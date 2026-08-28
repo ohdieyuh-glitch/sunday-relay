@@ -123,9 +123,15 @@ FAMILY_FILES = {
 }
 #: Engine maps pinned onto instances whose family carries no texture of that
 #: kind, so they do not inherit the MASTER's defaults (the plaster maps).
-PLAIN_MAPS = {"Albedo": "/Engine/EngineResources/WhiteSquareTexture",
-              "Normal": "/Engine/EngineMaterials/DefaultNormal",
-              "RoughnessMap": "/Engine/EngineResources/WhiteSquareTexture"}
+#: Candidates in order; the first that loads is used. The 5.8 image holds
+#: EngineMaterials/DefaultNormal.uasset and FlatNormal.uasset on disk, yet
+#: load_asset returned None for DefaultNormal in the commandlet (PASS 05e's
+#: first chain), so a V2 map of the right kind is the last resort.
+PLAIN_MAPS = {"Albedo": ("/Engine/EngineResources/WhiteSquareTexture",),
+              "Normal": ("/Engine/EngineMaterials/FlatNormal", "/Engine/EngineMaterials/DefaultNormal",
+                         "/Engine/EngineMaterials/T_Default_Normal"),
+              "RoughnessMap": ("/Engine/EngineResources/WhiteSquareTexture",)}
+PLAIN_FALLBACK = {"Albedo": None, "Normal": "T_V2_sward_n", "RoughnessMap": None}
 #: 1/uu per tile. plaza: 2 slabs of 130 uu per 1024 px tile -> 1/260;
 #: pathstone: ~3 flags of 90 uu per 512 px tile -> 1/270.
 TEX_SCALE = {"plaza": 0.0038, "pathstone": 0.0037, "cobble": 0.0034, "ashlar": 0.0026,
@@ -648,9 +654,22 @@ def build_materials(unreal, log, texs):
                 if stem and stem in texs:
                     mel.set_material_instance_texture_parameter_value(mi, pname, texs[stem])
                 elif stem is None and fam == "leaf":
-                    plain = eal.load_asset(PLAIN_MAPS[pname])
+                    plain, used = None, None
+                    for cand in PLAIN_MAPS[pname]:
+                        try:
+                            plain = eal.load_asset(cand)
+                        except Exception:
+                            plain = None
+                        if plain is not None:
+                            used = cand
+                            break
+                    if plain is None and PLAIN_FALLBACK.get(pname) in texs:
+                        plain, used = texs[PLAIN_FALLBACK[pname]], PLAIN_FALLBACK[pname] + " (V2 fallback)"
+                        log("V2 MATERIAL %s: no engine %s map loaded (%s); using %s"
+                            % (name, pname, ", ".join(PLAIN_MAPS[pname]), used))
                     if plain is None:
-                        raise RuntimeError("engine map %s did not load for %s" % (PLAIN_MAPS[pname], name))
+                        raise RuntimeError("no %s map for %s: engine %s did not load and no V2 fallback"
+                                           % (pname, name, ", ".join(PLAIN_MAPS[pname])))
                     mel.set_material_instance_texture_parameter_value(mi, pname, plain)
             try:
                 mel.recompile_material(mi)
@@ -702,5 +721,12 @@ def build_materials(unreal, log, texs):
             log("V2 MATERIAL MI_V2_SkyPano FAILED: %s" % exc)
     if int(C.LOOK["skyDome"]) and "MI_V2_SkyPano" not in out:
         raise RuntimeError("skyDome=1 but MI_V2_SkyPano was not built -- see the V2 MATERIAL lines above")
+    # A FOLIAGE INSTANCE THAT FAILS IS A COOKED WORLD WITHOUT VEGETATION
+    # MATERIALS (PASS 05e's first chain: four leaf instances failed on an
+    # engine map path, the generate returned 0, and the package rendered its
+    # canopies in the mesh default). Fail the generate instead.
+    missing = [n for n in FOLIAGE if n not in out]
+    if missing:
+        raise RuntimeError("foliage instances not built: %s -- see the V2 MATERIAL lines above" % ", ".join(missing))
     log("V2 MATERIALS: %d masters, %d instances" % (len(masters), len(out)))
     return out
