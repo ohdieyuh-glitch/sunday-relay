@@ -1179,6 +1179,11 @@ def marble_cutouts(marble_actor, actors, eal, layers, gsctx):
 # ==========================================================================
 
 
+#: The Dog's material instances by surface ("ivory", "visor", "eye"), filled
+#: by the materials phase when scaleDog is on; the Dog spawn assigns them.
+DOG_MATS = {}
+
+
 def light_and_air(actors, layers):
     L = C.LOOK
     sun = actors.spawn_actor_from_class(unreal.DirectionalLight, vec((0, 0, 2000)), rot(L["sunPitch"], L["sunYaw"], 0))
@@ -1449,6 +1454,30 @@ def hero_camera(actors, layers):
                 LOG("V2 SCALE DOG: spawn failed -- ScaleCam07 has NO scale reference")
             else:
                 dog.set_actor_label("Scale_CanonicalDog")
+                # THE BLUEPRINT CARRIES NO MATERIALS. Its static meshes default
+                # to /Engine/EngineMaterials/WorldGridMaterial and BP_RelayDog
+                # holds no MI_RelayDog reference at all (read from the
+                # .uassets after V2_PASS_062 showed a checkerboard Dog); the
+                # approved studio capture came from the fallback assembly that
+                # set materials at runtime. Assigned here per component from
+                # the mesh's surface suffix (SM_RelayDog_<joint>_<surface>) and
+                # saved with the map; a component that gets none is reported.
+                assigned, unmatched = 0, []
+                try:
+                    for comp in dog.get_components_by_class(unreal.StaticMeshComponent):
+                        mesh = comp.get_editor_property("static_mesh")
+                        mname = mesh.get_name() if mesh is not None else ""
+                        surf = mname.rsplit("_", 1)[-1].lower() if "_" in mname else ""
+                        mi = DOG_MATS.get(surf)
+                        if mi is None:
+                            unmatched.append(mname or comp.get_name())
+                            continue
+                        comp.set_material(0, mi)
+                        assigned += 1
+                except Exception as exc:
+                    unmatched.append("components not reachable (%s)" % exc)
+                LOG("V2 SCALE DOG: %d components given their canon materials%s"
+                    % (assigned, ("; UNMATCHED: " + ", ".join(unmatched)) if unmatched else ""))
                 # BP_RelayDog is a Character. This world has no gameplay
                 # collision under the plaza (only steps, walls, balustrades and
                 # hedge blocks collide), so at BeginPlay its capsule fell
@@ -1515,6 +1544,7 @@ def main():
         try:
             import dog_v2 as DOG
             dog_mats = DOG.build_materials()
+            DOG_MATS.update(dog_mats)
             LOG("V2 SCALE DOG: %d material instances rebuilt on the fresh masters" % len(dog_mats))
         except Exception as exc:
             LOG("V2 SCALE DOG FAILED: materials not rebuilt (%s) -- the Dog will render in the engine default" % exc)
