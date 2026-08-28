@@ -476,6 +476,8 @@ class Placer(object):
         self.mats = mats
         self.layers = layers
         self.count = {}
+        self.df_excluded = 0
+        self.df_failed = 0
         self.missing = {}
         self.hover_cls = None
         try:
@@ -540,6 +542,13 @@ class Placer(object):
                 smc.set_static_mesh(sm)
                 if mi is not None:
                     smc.set_material(0, mi)
+                if item.get("mat") in MAT.FOLIAGE and not int(C.LOOK.get("foliageDistanceFieldLighting", 1)):
+                    # PASS 05c: a leaf cloud's distance field is a solid blob
+                    # that occludes the sky light on the leaves themselves.
+                    if set_prop(smc, "bAffectDistanceFieldLighting", False):
+                        self.df_excluded += 1
+                    else:
+                        self.df_failed += 1
         try:
             actor.set_folder_path(unreal.Name("V2/" + item["band"]))
         except Exception:
@@ -1465,6 +1474,10 @@ def main():
             % (dressed, DRESS.summary(plan)))
     MANIFEST["actors"]["dressing"] = dressed
     MANIFEST["actors"]["batches"] = placer.flush() if placer.batch_cls else 0
+    if placer.df_excluded or placer.df_failed:
+        LOG("V2 FOLIAGE DF: %d foliage actors excluded from distance-field lighting, %d refused the property"
+            % (placer.df_excluded, placer.df_failed))
+    MANIFEST["actors"]["foliage_df_excluded"] = placer.df_excluded
     MANIFEST["actors"].update(placer.count)
     if placer.missing:
         LOG("V2 COMPOSITION: placements skipped for assets that did not build: %s"

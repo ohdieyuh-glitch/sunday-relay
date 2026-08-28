@@ -137,6 +137,22 @@ LOOK = {
     # 40-63 (albedo 0.26 x 6,000 lux / pi ~ 500 nits ~ sRGB 55).
     "bounceLight": 1 if os.environ.get("WLV2_PASS05", "0") == "1" else 0,
     "bounceLux": 6000.0, "bounceColor": (255, 235, 200), "bouncePitch": 90.0,
+    # PASS 05c (gated WLV2_PASS05=1): the bounce light WORKS (V2_PASS_027: the
+    # mushroom cap's underside p50 1 -> 26) but the canopy faces HeroCam0 sees
+    # are SHADOW SIDES -- both trees are backlit, the sun sits ahead-right-
+    # high -- and an upward light cannot reach a vertical face. What lights a
+    # shadow side is the SKY, and the sky light demonstrably works: an ivory
+    # post's camera-facing shadow face reads sRGB 118 while a leaf face two
+    # metres away reads 2. Same light, same orientation; the difference is
+    # that the leaf cloud OCCLUDES THE SKY ON ITSELF -- its mesh distance
+    # field is a solid blob (r.DistanceFieldAO=1 and Lumen's DF traces are
+    # both live in the packaged log). 0: foliage meshes no longer affect
+    # distance-field lighting, i.e. they neither self-occlude nor darken
+    # their neighbours; the architecture keeps its contact shading. Python
+    # reaches the canopies (plain StaticMeshActors); the batched hedges and
+    # beds need the same flag on the batch actor (C++), which follows once
+    # the canopies prove the mechanism.
+    "foliageDistanceFieldLighting": 0 if os.environ.get("WLV2_PASS05", "0") == "1" else 1,
     # PASS 01 (2026-08-28): exposure PINNED. Histogram auto-exposure metered
     # the frame to mid-grey and blew the ivory plaza to white (luma 0.33 vs the
     # reference's 0.16 at the engine's reported EV 12.5). min == max fixes
