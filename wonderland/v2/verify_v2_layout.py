@@ -97,6 +97,76 @@ def main():
         x, y = it["pos"][0], it["pos"][1]
         if abs(x) < 120.0 and c1y < y < -700.0 and it["asset"] not in ("gate_leaf",):
             fails.append("%s (%s) stands on the gate-view axis at (%d, %d)" % (it["label"], it["asset"], x, y))
+    # THE PERMANENT CAMERA SUITE (founder, 2026-08-28). Eight cameras, fixed
+    # names and indices, HeroCam0 frozen; each camera must hold the landmarks
+    # its job depends on, measured as a bearing RELATIVE TO ITS YAW (the
+    # earlier checks assume yaw 90). A camera that drifts fails here before
+    # it costs a render.
+    names = tuple(("HeroCam0" if i == 0 else c["name"]) for i, c in enumerate(C.HERO_CAMS))
+    if names != tuple(C.CAM_SUITE):
+        fails.append("camera suite is %s, must be %s in this order" % (names, C.CAM_SUITE))
+    for i, c in enumerate(C.HERO_CAMS):
+        if ("HeroCam%d" % i) not in c["tags"]:
+            fails.append("%s lacks its HeroCam%d tag (the capture tooling addresses cameras by it)" % (c["name"], i))
+        if i and C.CAM_SUITE[i] not in c["tags"]:
+            fails.append("%s lacks its own name among its tags" % c["name"])
+    c0 = C.HERO_CAMS[0]
+    if (tuple(c0["location"]), tuple(c0["rotation"]), float(c0["fov"])) != C.HERO_CAM0_FROZEN:
+        fails.append("HeroCam0 has drifted from its frozen transform %s" % (C.HERO_CAM0_FROZEN,))
+    for i in (1, 7):
+        z = C.HERO_CAMS[i]["location"][2]
+        if not 150.0 <= z <= 200.0 or C.HERO_CAMS[i]["fov"] > 95.0:
+            fails.append("%s must be a believable gameplay camera (eye 1.5-2.0 m, fov <= 95); has z %.0f fov %.0f"
+                         % (C.HERO_CAMS[i]["name"], z, C.HERO_CAMS[i]["fov"]))
+
+    def rel_bearing(cam, lb, inner=0.0):
+        it = next((i for i in L.ALL if i["label"] == lb), None)
+        if it is None:
+            return None
+        dx, dy = it["pos"][0] - cam["location"][0], it["pos"][1] - cam["location"][1]
+        d = math.hypot(dx, dy)
+        ang = math.degrees(math.atan2(dy, dx)) - cam["rotation"][1]
+        ang = (ang + 180.0) % 360.0 - 180.0
+        # the inner edge of a wide landmark enters the frame first
+        shrink = math.degrees(math.atan2(inner, d)) if inner and d > inner else 0.0
+        return max(0.0, abs(ang) - shrink)
+    must_see = {
+        2: ("Path_Steps", "Corridor_Arch"),
+        3: ("Gate_PierL", "Gate_PierR"),
+        4: ("GiantMushroom", "Garden_L_Tree_Trunk", "Corridor_Arch"),
+        5: ("ClockTree_Trunk", "ClockTree_Clock", "HeartTopiary", "Corridor_Arch"),
+        7: ("Gate_PierL", "Gate_PierR", "Gate_UrnR"),
+    }
+    # the gold garden-gate arches exist only under the PASS 03 gate
+    # (WLV2_PASS03=1, which every chain sets); require them when present
+    if getattr(L, "PASS03", False):
+        must_see[3] += ("GardenGate_ArchL", "GardenGate_ArchR")
+        must_see[4] += ("GardenGate_ArchL",)
+        must_see[5] += ("GardenGate_ArchR",)
+    inner_r = {"GiantMushroom": 1000.0}
+    for i, labels in must_see.items():
+        camx = C.HERO_CAMS[i]
+        for lb in labels:
+            b = rel_bearing(camx, lb, inner_r.get(lb, 0.0))
+            if b is None:
+                fails.append("%s: landmark %s missing" % (camx["name"], lb))
+            elif b > camx["fov"] * 0.5:
+                fails.append("%s: %s at relative bearing %.0f is outside its half-fov %.0f" % (camx["name"], lb, b, camx["fov"] * 0.5))
+    # the one scale Dog must stand behind HeroCam0 and inside ScaleCam07's frame
+    dog = C.LOOK.get("scaleDogPos")
+    if dog is not None:
+        if dog[1] >= C.HERO_CAMS[0]["location"][1]:
+            fails.append("the scale Dog at %s is in front of HeroCam0 (the benchmark must not gain a Dog)" % (dog,))
+        cam7 = C.HERO_CAMS[7]
+        dx, dy = dog[0] - cam7["location"][0], dog[1] - cam7["location"][1]
+        ang = (math.degrees(math.atan2(dy, dx)) - cam7["rotation"][1] + 180.0) % 360.0 - 180.0
+        if abs(ang) > cam7["fov"] * 0.5:
+            fails.append("the scale Dog at %s is outside ScaleCam07's frame (bearing %.0f)" % (dog, ang))
+        cam1 = C.HERO_CAMS[1]
+        dx, dy = dog[0] - cam1["location"][0], dog[1] - cam1["location"][1]
+        ang = (math.degrees(math.atan2(dy, dx)) - cam1["rotation"][1] + 180.0) % 360.0 - 180.0
+        if abs(ang) <= cam1["fov"] * 0.5:
+            fails.append("the scale Dog at %s is inside PlayerCam01's frame (bearing %.0f); keep gameplay views Dog-free" % (dog, ang))
     for it in L.ALL:
         # only the ARRIVAL gate's leaves (labels Gate_Leaf*): the garden's own
         # gate on the left stands closed across its wall, as in the reference

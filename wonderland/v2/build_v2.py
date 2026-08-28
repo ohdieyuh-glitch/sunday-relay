@@ -1363,6 +1363,52 @@ def hero_camera(actors, layers):
         LOG("V2 CAMERA: %s at %s rot %s fov %.0f tags %s -- LOCKED"
             % (H["name"], H["location"], H["rotation"], H["fov"], "/".join(H["tags"])))
         cams.append(cam)
+    # THE ARRIVAL SPAWN: a PlayerStart where PlayerCam01 stands, facing the
+    # gate, so "near the player spawn" is a fact of the map and not a guess.
+    try:
+        P1 = C.HERO_CAMS[1]
+        ps = actors.spawn_actor_from_class(unreal.PlayerStart, vec((P1["location"][0], P1["location"][1], 100.0)),
+                                           rot(0.0, P1["rotation"][1], 0.0))
+        if ps is not None:
+            ps.set_actor_label("V2_ArrivalSpawn")
+            try:
+                ps.set_folder_path(unreal.Name("V2/Camera"))
+            except Exception:
+                pass
+            LOG("V2 SPAWN: PlayerStart at %s yaw %.0f (PlayerCam01's point)" % (ps.get_actor_location(), P1["rotation"][1]))
+    except Exception as exc:
+        LOG("V2 SPAWN: PlayerStart not placed (%s)" % exc)
+    # THE SCALE REFERENCE: one canonical Relay Dog for ScaleCam07, loaded by
+    # class path; a missing class is reported, never silently skipped, and
+    # never replaced by a stand-in (the Dog is frozen; there is no other).
+    L = C.LOOK
+    MANIFEST["scale_dog"] = {"placed": False}
+    if int(L.get("scaleDog", 0)):
+        dog_cls = None
+        try:
+            dog_cls = unreal.load_class(None, str(L["scaleDogClass"]))
+        except Exception:
+            dog_cls = None
+        if dog_cls is None:
+            LOG("V2 SCALE DOG: class %s did not load -- ScaleCam07 has NO scale reference" % L["scaleDogClass"])
+        else:
+            dog = actors.spawn_actor_from_class(dog_cls, vec(L["scaleDogPos"]), rot(0.0, float(L["scaleDogYaw"]), 0.0))
+            if dog is None:
+                LOG("V2 SCALE DOG: spawn failed -- ScaleCam07 has NO scale reference")
+            else:
+                dog.set_actor_label("Scale_CanonicalDog")
+                try:
+                    dog.set_editor_property("tags", [unreal.Name("ScaleReference"), unreal.Name("CanonicalDog")])
+                except Exception:
+                    pass
+                try:
+                    dog.set_folder_path(unreal.Name("V2/Camera"))
+                except Exception:
+                    pass
+                assign_layer(dog, "V2_Arrival", layers)
+                MANIFEST["scale_dog"] = {"placed": True, "pos": list(L["scaleDogPos"]), "yaw": float(L["scaleDogYaw"])}
+                LOG("V2 SCALE DOG: one canonical Relay Dog at %s yaw %.0f, behind HeroCam0, for ScaleCam07"
+                    % (L["scaleDogPos"], L["scaleDogYaw"]))
     return cams
 
 

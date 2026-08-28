@@ -108,6 +108,35 @@ tree with the far-castle span `skyNearFills` -- the one direction whose content
 is distant only -- mirror-repeated at 1:1 at the same elevation).
 `marbleVisible=1` shows the shell for a direct comparison.
 
+## The permanent camera suite (visual regression)
+
+Eight LOCKED cameras (`v2_config.HERO_CAMS`, names in `CAM_SUITE`), each
+with a different job; the capture tooling addresses them by their `HeroCamN`
+tag (`WL_CAMS="0 1 4 5" bash wonderland/v2/tools/round.sh`):
+
+| idx | name | job |
+|---|---|---|
+| 0 | HeroCam0 | cinematic founder benchmark -- frozen (`HERO_CAM0_FROZEN`) |
+| 1 | PlayerCam01 | truthful gameplay POV at the arrival spawn (a PlayerStart stands there) |
+| 2 | PathCam02 | forward progression, 25 m along the corridor |
+| 3 | ReverseCam03 | backside truth test, looking back to the plaza and the arrival gate |
+| 4 | GardenLeft04 | secondary-space test inside the left garden |
+| 5 | GardenRight05 | object-language test: gate, heart, clock tree, arch, towers |
+| 6 | SkylineCam06 | world-scale test, 24 m up |
+| 7 | ScaleCam07 | proportion test at gameplay height, with the ONE canonical Relay Dog (`scaleDog`) |
+
+Cadence: a small iteration renders HeroCam0 only; a subsystem pass renders
+HeroCam0 + PlayerCam01 + the two or three cameras its work touches (path:
+2, 3; garden: 4, 5; skyline: 6; scale/architecture: 7, 2); a founder or
+district milestone renders all eight. Close-ups are temporary captures, never
+suite members. Cameras are not moved to flatter a pass -- the world is fixed
+instead; `verify_v2_layout` refuses a suite that drifts (names, indices, tags,
+HeroCam0's transform, gameplay-camera realism, and each camera's required
+landmarks by yaw-relative bearing). File milestone frames with
+`tools/file_suite.py PASSTAG RENDER_DIR 0=V2_PASS_nnn 1=V2_PASS_nnn ...`
+(`V2_GOLDENARRIVAL_<PASSTAG>_<CamName>_720p.png`; existing founder-review
+renders are never overwritten).
+
 Marble is a backdrop for a fixed camera: a single-viewpoint shell tolerates
 about 1.7 m of movement at metric scale before parallax smears it. Walkable V2
 means replacing it band by band with the kit — which is what the kit is for.

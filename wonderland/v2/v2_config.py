@@ -77,27 +77,61 @@ HERO_CAMS = [
     {"name": "HeroCam_V2_MarbleReference", "location": (0.0, -150.0, 262.0),
      "rotation": (-2.0, 90.0, 0.0), "fov": 100.0,
      "tags": ("HeroCam_V2_MarbleReference", "HeroCam0")},
-    {"name": "HeroCam_V2_GateView", "location": (0.0, -1460.0, 262.0),
-     "rotation": (-3.0, 90.0, 0.0), "fov": 95.0,
-     "tags": ("HeroCam_V2_GateView", "HeroCam1")},
-    # ADDITIONAL VIEWS OF THE SAME WORLD (founder, 2026-08-26): rendered in
-    # Unreal from the Marble mesh we already own (WL_EXTRA_ARGS="-WLShowTags=
-    # MARBLE_REFERENCE_ONLY -WLHideTags=UNREAL_PRODUCTION") and, with the kit
-    # visible, from the reconstruction -- zero Marble credits. Yaw 90 = +Y
-    # forward; screen-right is -X, so the LEFT garden is yaw > 90.
-    {"name": "MarbleView_Forward", "location": (0.0, 1500.0, 262.0), "rotation": (-2.0, 90.0, 0.0), "fov": 90.0,
-     "tags": ("MarbleView_Forward", "HeroCam2", "MARBLE_VIEW")},
-    {"name": "MarbleView_LeftGarden", "location": (0.0, -150.0, 262.0), "rotation": (-3.0, 145.0, 0.0), "fov": 90.0,
-     "tags": ("MarbleView_LeftGarden", "HeroCam3", "MARBLE_VIEW")},
-    {"name": "MarbleView_RightGarden", "location": (0.0, -150.0, 262.0), "rotation": (-3.0, 35.0, 0.0), "fov": 90.0,
-     "tags": ("MarbleView_RightGarden", "HeroCam4", "MARBLE_VIEW")},
-    {"name": "MarbleView_Elevated", "location": (0.0, -900.0, 1600.0), "rotation": (-28.0, 90.0, 0.0), "fov": 90.0,
-     "tags": ("MarbleView_Elevated", "HeroCam5", "MARBLE_VIEW")},
-    {"name": "MarbleView_CastleApproach", "location": (0.0, 4200.0, 300.0), "rotation": (-1.0, 90.0, 0.0), "fov": 90.0,
-     "tags": ("MarbleView_CastleApproach", "HeroCam6", "MARBLE_VIEW")},
-    {"name": "MarbleView_Reverse", "location": (0.0, 900.0, 262.0), "rotation": (-2.0, 270.0, 0.0), "fov": 90.0,
-     "tags": ("MarbleView_Reverse", "HeroCam7", "MARBLE_VIEW")},
+    # THE PERMANENT CAMERA SUITE (founder, 2026-08-28): eight LOCKED cameras,
+    # each with a different job, rendered on a fixed cadence so Wonderland is
+    # judged as a world and not as one screenshot. Names and indices are
+    # permanent; the capture tooling addresses a camera by its "HeroCamN" tag.
+    # Do not move a camera to make a pass look better -- fix the world. Once
+    # the founder approves the transforms they are frozen here, and
+    # verify_v2_layout refuses a drift. Eye heights: 262 = the panorama's eye
+    # (cinematic), 170 = a believable gameplay camera. Yaw 90 = +Y forward;
+    # screen-right is -X at yaw 90 (and +X at yaw 270).
+    #
+    #   idx name          job
+    #   0   HeroCam0      cinematic founder benchmark (unchanged since PASS 01)
+    #   1   PlayerCam01   truthful gameplay POV at the arrival spawn, 5.5 m
+    #                     behind the open gate, eye 1.7 m, 90 deg
+    #   2   PathCam02     forward progression, 25 m along the corridor, before
+    #                     the steps, looking at the arch and the castle
+    #   3   ReverseCam03  backside truth test: 27.5 m in, looking back over the
+    #                     garden gates to the plaza, the arrival gate, and what
+    #                     lies behind it
+    #   4   GardenLeft04  secondary space: inside the left garden strip between
+    #                     the wall and the giant mushroom, looking up-garden
+    #                     past the tree and the gold gate to the arch
+    #   5   GardenRight05 object language: inside the right garden, the gold
+    #                     gate, the heart terrace and the clock tree framing the
+    #                     corridor arch and the towers
+    #   6   SkylineCam06  world scale: 24 m up, 16.5 m behind the viewpoint,
+    #                     pitched to hold plaza, gardens, castle and city in one
+    #                     frame with a strip of sky
+    #   7   ScaleCam07    proportion test at gameplay height: from the viewpoint
+    #                     looking BACK at the arrival gate, urns and walls, with
+    #                     the one canonical Relay Dog (LOOK scaleDog) standing
+    #                     beside the right urn -- behind HeroCam0's field of view
+    {"name": "PlayerCam01", "location": (0.0, -1460.0, 170.0), "rotation": (-3.0, 90.0, 0.0), "fov": 90.0,
+     "tags": ("PlayerCam01", "HeroCam1", "HeroCam_V2_GateView")},
+    {"name": "PathCam02", "location": (0.0, 2400.0, 262.0), "rotation": (-2.0, 90.0, 0.0), "fov": 90.0,
+     "tags": ("PathCam02", "HeroCam2", "MARBLE_VIEW")},
+    {"name": "ReverseCam03", "location": (0.0, 2600.0, 262.0), "rotation": (-2.0, 270.0, 0.0), "fov": 90.0,
+     "tags": ("ReverseCam03", "HeroCam3", "MARBLE_VIEW")},
+    {"name": "GardenLeft04", "location": (1100.0, 400.0, 200.0), "rotation": (-3.0, 75.0, 0.0), "fov": 90.0,
+     "tags": ("GardenLeft04", "HeroCam4", "MARBLE_VIEW")},
+    {"name": "GardenRight05", "location": (-1500.0, 600.0, 200.0), "rotation": (-3.0, 90.0, 0.0), "fov": 90.0,
+     "tags": ("GardenRight05", "HeroCam5", "MARBLE_VIEW")},
+    {"name": "SkylineCam06", "location": (0.0, -1800.0, 2400.0), "rotation": (-22.0, 90.0, 0.0), "fov": 90.0,
+     "tags": ("SkylineCam06", "HeroCam6", "MARBLE_VIEW")},
+    {"name": "ScaleCam07", "location": (0.0, -150.0, 170.0), "rotation": (-3.0, 270.0, 0.0), "fov": 90.0,
+     "tags": ("ScaleCam07", "HeroCam7")},
 ]
+#: The suite's names by index -- the filing tool and the checkpoint report use
+#: them; the capture tooling uses the "HeroCamN" tags.
+CAM_SUITE = ("HeroCam0", "PlayerCam01", "PathCam02", "ReverseCam03",
+             "GardenLeft04", "GardenRight05", "SkylineCam06", "ScaleCam07")
+#: HeroCam0's frozen transform (the founder benchmark) -- verify_v2_layout
+#: refuses a drift of the entry above from these values.
+HERO_CAM0_FROZEN = ((0.0, -150.0, 262.0), (-2.0, 90.0, 0.0), 100.0)
+
 HERO_CAM = HERO_CAMS[0]
 
 #: Env knobs. WONDERLAND_TEXTURE_DIR is shared with V1's texture synthesiser.
@@ -216,6 +250,13 @@ LOOK = {
     "skyYawOffset": 90.0, "skyNearBands": ((0.235, 0.445), (0.515, 0.665)),
     "skyNearFills": ((0.438, 0.520), (0.438, 0.520)),
     "castleKit": 1, "nanite": 1,
+    # ONE canonical Relay Dog as ScaleCam07's scale reference (founder,
+    # 2026-08-28: "one Dog only for scale; do not populate"). The approved,
+    # frozen BP_RelayDog (174 cm) stands beside the right urn on the plaza,
+    # BEHIND HeroCam0 (dy < 0) and just outside PlayerCam01's half-fov
+    # (bearing 50.6 deg). Capsule half-height 87.1 puts its feet on z = 0.
+    "scaleDog": 1, "scaleDogClass": "/Game/WonderlandV2/Characters/RelayDog/BP_RelayDog.BP_RelayDog_C",
+    "scaleDogPos": (-560.0, -1000.0, 87.1), "scaleDogYaw": 60.0,
     # secondary dressing (the PCG-equivalent): garden zones only, after the authored layout
     "dressing": 1, "dressingDensity": 1.0,
     # ---- THE MARBLE WORLD -----------------------------------------------------
