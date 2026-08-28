@@ -1193,7 +1193,15 @@ def light_and_air(actors, layers):
             sc.set_mobility(unreal.ComponentMobility.MOVABLE)
         except Exception:
             pass
-        set_prop(sc, "bRealTimeCapture", True)
+        realtime = str(L.get("skyLightCapture", "realtime")) == "realtime"
+        set_prop(sc, "bRealTimeCapture", realtime)
+        if not realtime:
+            # one capture of the SCENE at load (sunlit plaza below = ground
+            # bounce); a Movable sky light captures when it registers
+            try:
+                set_prop(sc, "SourceType", unreal.SkyLightSourceType.SLS_CAPTURED_SCENE)
+            except Exception as exc:
+                LOG("V2 LIGHT: sky light SourceType not set (%s)" % exc)
         set_prop(sc, "Intensity", float(L["skyLightIntensity"]))
         set_prop(sc, "bLowerHemisphereIsBlack", False)
     fog = actors.spawn_actor_from_class(unreal.ExponentialHeightFog, vec((0, 0, 0)), rot(0, 0, 0))
@@ -1239,9 +1247,9 @@ def light_and_air(actors, layers):
         except Exception:
             pass
         assign_layer(a, band, layers)
-    LOG("V2 LIGHT: sun %.0f lux at pitch %.0f yaw %.0f, %dK; sky light %.1f; fog %.3f; portal light %.0f"
+    LOG("V2 LIGHT: sun %.0f lux at pitch %.0f yaw %.0f, %dK; sky light %.1f (%s capture); fog %.3f; portal light %.0f"
         % (L["sunLux"], L["sunPitch"], L["sunYaw"], L["sunTemperatureK"], L["skyLightIntensity"],
-           L["fogDensity"], L["portalLightIntensity"]))
+           L.get("skyLightCapture", "realtime"), L["fogDensity"], L["portalLightIntensity"]))
 
 
 def _grade(s):

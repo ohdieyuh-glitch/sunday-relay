@@ -114,6 +114,18 @@ LOOK = {
     # Physical units, histogram auto-exposure, extended range.
     "sunPitch": -58.0, "sunYaw": -11.0, "sunLux": 60000.0, "sunTemperatureK": 5600.0,
     "skyLightIntensity": 1.0, "exposureBias": 0.0,
+    # PASS 05 (2026-08-28, gated WLV2_PASS05=1 like the earlier passes): the
+    # vegetation's black interiors. V2_PASS_024 measured the canopies at luma
+    # p10 0 / p50 3-12 against the reference's 17-19 / 40-63 WITH the sky dome
+    # finally right, so ambient from above is not what is missing: what the
+    # camera sees under a canopy is leaf UNDERSIDES, and a real-time-capture
+    # SkyLight is SKY-ONLY -- its lower hemisphere holds the atmosphere's dark
+    # ground, so a downward-facing surface receives nothing, and no bounce
+    # shows up to replace it (a 200 fps frame is not a frame Lumen is doing
+    # much in). "scene": one capture at load from (0,0,500) that includes the
+    # sunlit plaza, i.e. ground bounce in the ambient. "realtime": the
+    # sky-only capture the passes before 05 rendered with.
+    "skyLightCapture": "scene" if os.environ.get("WLV2_PASS05", "0") == "1" else "realtime",
     # PASS 01 (2026-08-28): exposure PINNED. Histogram auto-exposure metered
     # the frame to mid-grey and blew the ivory plaza to white (luma 0.33 vs the
     # reference's 0.16 at the engine's reported EV 12.5). min == max fixes
