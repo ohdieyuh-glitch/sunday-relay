@@ -133,7 +133,10 @@ LOOK = {
     # the panorama dome supplies the SKY ONLY: everything below +8 deg of
     # elevation is masked (v = 0.5 - 8/180 = 0.4556) so the 3D castle city and
     # gardens own the horizon and no giant panorama mushroom ghosts the sky
-    "skyDome": 1, "skyGain": 9000.0, "skyFlipV": 0.0, "skyHorizonV": 0.4556,
+    # skyFlipV 1.0 (PASS 04c, 2026-08-28): the first dome render in the classic
+    # map showed the panorama's GROUND half across the sky -- the equirect's V
+    # runs the other way on this mesh backend, the case this scalar exists for.
+    "skyDome": 1, "skyGain": 9000.0, "skyFlipV": 1.0, "skyHorizonV": 0.4556,
     "castleKit": 1, "nanite": 1,
     # secondary dressing (the PCG-equivalent): garden zones only, after the authored layout
     "dressing": 1, "dressingDensity": 1.0,
