@@ -652,28 +652,63 @@ def lay_ground(placer, actors, eal, assets, mats, layers, plaza_only=False):
     tile = course
     flags = [k for k in sorted(assets) if k.startswith("path_flag_")]
     kerb = "kerb_stone" if "kerb_stone" in assets else None
-    if (flags or setts) and not plaza_only:
+    if flags and not plaza_only:
+        # THE PATH AS FITTED FLAGS IN RUNNING BOND (PASS 01b): courses across
+        # the way every (course + joint) along the spline, flags of three
+        # lengths laid across each course from a half-offset on alternate
+        # courses, 3 uu joints, the way narrowing with distance; cream kerb
+        # stones on a regular pitch along both edges. PASS 01's lay_stones
+        # (a cobble grid of irregular polygons) read as stepping-stones on grass.
         sp = LT.Spline(LAYOUT.PATH_SPLINE)
-        stones = flags or setts
-        # THE PATH AS FITTED FLAGS (PASS 01): ~1 m flags in running bond with
-        # tight joints and cream kerb stones along both edges -- the reference's
-        # dark stone path is large flags between kerbs, not a field of setts.
-        tile_uu, shrink = (110.0, 0.94) if flags else (58.0, 0.86)
-        for st in LT.lay_stones(sp, width=LAYOUT.PATH_WIDTH_NEAR * 0.92, tile=tile_uu, shrink=shrink, seed=5, kerb=bool(kerb)):
-            # narrow with distance: drop the outer stones as the path recedes
+        by_class = {}
+        for k in flags:
+            by_class.setdefault(ASSETS.path_flag_class(int(k.rsplit("_", 1)[1])), []).append(k)
+        course, joint = ASSETS.PATH_COURSE, 3.0
+        lengths = ASSETS.PATH_LENGTHS
+        total = sp.length
+        d, row, laid_flags, laid_kerbs = 0.0, 0, 0, 0
+        while d <= total:
+            p, t = sp.at(d)
+            yaw = math.degrees(math.atan2(t[1], t[0]))
+            frac = d / max(1.0, total)
+            half = 0.5 * (LAYOUT.PATH_WIDTH_NEAR + (LAYOUT.PATH_WIDTH_FAR - LAYOUT.PATH_WIDTH_NEAR) * frac) * 0.94
+            lat = -half - (lengths[0] * 0.5 if row % 2 else 0.0)
+            c = 0
+            while lat < half:
+                h = LT.mk.rnd(row, c, 31)
+                cls = 0 if h < 0.5 else (1 if h < 0.78 else 2)
+                if cls not in by_class:
+                    cls = sorted(by_class)[0]
+                length = lengths[cls]
+                centre = lat + length * 0.5
+                if centre - length * 0.35 >= -half and centre + length * 0.35 <= half:
+                    x, y, z = sp.offset_xy(d, centre)
+                    variants = by_class[cls]
+                    key = variants[int(LT.mk.rnd(row, c, 32) * len(variants)) % len(variants)]
+                    placements.append((key, x + (LT.mk.rnd(row, c, 33) - 0.5) * 1.2, y + (LT.mk.rnd(row, c, 34) - 0.5) * 1.2,
+                                       z - 2.0 + 0.6 * LT.mk.rnd(row, c, 35), yaw + 90.0 + (LT.mk.rnd(row, c, 36) - 0.5) * 1.0,
+                                       1.0, 1.0, 1.0, "MI_V2_PathStone"))
+                    laid_flags += 1
+                lat += length + joint
+                c += 1
+            if kerb and row % 2 == 0:            # kerb pitch = 2 courses = 150 uu for a 120 uu block
+                for sgn in (-1, 1):
+                    x, y, z = sp.offset_xy(d, sgn * (half + 22.0))
+                    placements.append((kerb, x, y, z - 1.0, yaw, 1.0, 1.0, 1.0, "MI_V2_Kerb"))
+                    laid_kerbs += 1
+            d += course + joint
+            row += 1
+        LOG("V2 GROUND: path %d flags in %d courses, %d kerb stones (running bond, PASS 01b)" % (laid_flags, row, laid_kerbs))
+    elif setts and not plaza_only:
+        sp = LT.Spline(LAYOUT.PATH_SPLINE)
+        for st in LT.lay_stones(sp, width=LAYOUT.PATH_WIDTH_NEAR * 0.92, tile=58.0, shrink=0.86, seed=5, kerb=False):
             frac = st["d"] / max(1.0, sp.length)
             half = 0.5 * (LAYOUT.PATH_WIDTH_NEAR + (LAYOUT.PATH_WIDTH_FAR - LAYOUT.PATH_WIDTH_NEAR) * frac)
-            lateral = abs(st["x"] - sp.at(st["d"])[0][0])
-            if st["kind"] == "kerb":
-                if lateral > half + tile_uu * 0.6:
-                    continue
-                placements.append((kerb, st["x"], st["y"], st["z"] - 1.0, st["yaw"], 1.0, 1.0, 1.0, "MI_V2_Kerb"))
+            if abs(st["x"] - sp.at(st["d"])[0][0]) > half:
                 continue
-            if lateral > half:
-                continue
-            v = int(LT.mk.rnd(st["d"], st["x"], 3) * len(stones)) % len(stones)
-            placements.append((stones[v], st["x"], st["y"], st["z"] - 2.0, st["yaw"], st["sx"] * 0.95, st["sy"] * 0.95,
-                               1.0 if flags else 0.8, "MI_V2_PathStone"))
+            v = int(LT.mk.rnd(st["d"], st["x"], 3) * len(setts)) % len(setts)
+            placements.append((setts[v], st["x"], st["y"], st["z"] - 2.0, st["yaw"], st["sx"] * 0.95, st["sy"] * 0.95, 0.8,
+                               "MI_V2_PathStone"))
     cls = None
     try:
         cls = unreal.load_class(None, "/Script/Wonderland.WonderlandInstancedBatch")

@@ -1109,18 +1109,27 @@ def plaza_slab(ctx, variant):
     return _worn_slab(m, poly, thick=10.0, lip=3.0, inset=0.965, seed=300 + variant, grain=0.9)
 
 
+#: The path's running bond (PASS 01b): one course across the way, three flag
+#: lengths along it. Rectangular, fitted, flat -- PASS 01's irregular polygons
+#: rendered as rounded stepping-stones on grass.
+PATH_COURSE = 72.0
+PATH_LENGTHS = (90.0, 60.0, 120.0)
+
+
+def path_flag_class(variant):
+    return variant % len(PATH_LENGTHS)
+
+
 def path_flag(ctx, variant):
-    """The arrival path's flag (PASS 01): an irregular 6-8-sided flagstone
-    about 1 m across, FLAT-topped with a worn chamfer -- larger and flatter
-    than a sett, so the path reads as fitted flags, not dots."""
+    """A fitted path flagstone: one of three lengths (0.9 / 0.6 / 1.2 m) at the
+    common course (0.72 m), nearly rectangular, FLAT, with a slight worn edge."""
     m = ctx.mesh("path_flag_%d" % variant)
-    n = 6 + (variant % 3)
+    w = PATH_LENGTHS[path_flag_class(variant)] * (0.985 + 0.03 * _h(variant, 1))
+    d = PATH_COURSE * (0.985 + 0.03 * _h(variant, 2))
     poly = []
-    for i in range(n):
-        a = 2.0 * math.pi * i / n + (_h(variant, i, 7) - 0.5) * 0.35
-        r = 52.0 * (0.86 + 0.20 * _h(variant, i, 8))
-        poly.append((math.cos(a) * r, math.sin(a) * r))
-    return _worn_slab(m, poly, thick=10.0, lip=3.0, inset=0.95, seed=330 + variant, grain=0.8)
+    for i, (sx, sy) in enumerate(((-1, -1), (1, -1), (1, 1), (-1, 1))):
+        poly.append((sx * w * 0.5 + (_h(variant, i, 5) - 0.5) * 3.0, sy * d * 0.5 + (_h(variant, i, 6) - 0.5) * 3.0))
+    return _worn_slab(m, poly, thick=9.0, lip=2.0, inset=0.975, seed=330 + variant, grain=0.6)
 
 
 def kerb_stone(ctx):
@@ -1300,7 +1309,7 @@ RECIPES.update({
     "garden_arch_stone": (garden_arch_stone, "garden_arch", True, True),
 })
 PLAZA_VARIANTS = 9       # three lengths x three variants each (PASS 01)
-PATH_FLAG_VARIANTS = 4
+PATH_FLAG_VARIANTS = 6       # three lengths x two variants (PASS 01b)
 
 _old_build_assets = build_assets
 

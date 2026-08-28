@@ -37,8 +37,11 @@ INSTANCES = {
     "MI_V2_Kerb":       ("plaza",   (0.64, 0.60, 0.52), 0.0, 0.70, 0.75, 0.30, None, 0.0),
     # the central path in the founder's view is PALE grey-blue stone, a step
     # cooler and a touch darker than the cream plaza -- not a dark road
-    # PASS 01: the reference path is a warm dark grey-brown, not a blue-grey.
-    "MI_V2_PathStone":  ("pathstone", (0.38, 0.36, 0.33), 0.0, 0.78, 0.90, 0.30, None, 0.0),
+    # PASS 01b: the reference path is a warm dark grey-brown. The `pathstone`
+    # sheet is a whole tile of bright faces AND dark mortar, and a single flag
+    # mesh shows only the faces, so the mean-corrected tint rendered pale; the
+    # near-uniform plaza sheet delivers the tint as the flag's actual albedo.
+    "MI_V2_PathStone":  ("plaza",   (0.30, 0.28, 0.25), 0.0, 0.80, 0.85, 0.30, None, 0.0),
     "MI_V2_Cobble":     ("cobble",  (0.36, 0.30, 0.26), 0.0, 0.78, 0.90, 0.28, None, 0.0),
     "MI_V2_CobbleHero": ("cobble",  (0.33, 0.31, 0.28), 0.0, 0.74, 0.90, 0.30, None, 0.0),
     "MI_V2_Moss":       ("sward",   (0.12, 0.20, 0.08), 0.0, 0.82, 0.60, 0.20, None, 0.0),
