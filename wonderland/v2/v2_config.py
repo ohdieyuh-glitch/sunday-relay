@@ -243,7 +243,7 @@ LOOK = {
     # layer gets its own instance: sparse cumulus over blue sky, a thinner
     # layer so the sun and the panorama's zenith stay visible.
     "volumetricClouds": 1, "cloudLayerBottomKm": 3.5, "cloudLayerHeightKm": 3.0,
-    "cloudCoverage": 0.32, "cloudDensity": 0.55,
+    "cloudCoverage": 0.42, "cloudDensity": 0.55,
     "volumetricFog": 1, "fogScattering": 0.20,
     # restrained magic: a small rune disc at the viewpoint, low glow
     "portal": 1, "portalRadius": 250.0, "portalGlow": 1200.0, "portalLightIntensity": 8000.0,
@@ -286,8 +286,17 @@ LOOK = {
     # The panorama's tower ring, far castle and near objects all lie below
     # v 0.36; only sky and cloud remain above. What stands at the horizon is
     # 3D: the city layers, fog-softened.
-    "skyHazeV0": 0.30, "skyHazeV1": 0.36, "skyHazeColor": (0.56, 0.64, 0.80),
-    "skyDome": 1, "skyGain": 14000.0, "skyFlipV": 0.0, "skyHorizonV": 0.5,
+    "skyHazeV0": 0.30, "skyHazeV1": 0.36, "skyHazeColor": (0.20, 0.27, 0.50),
+    # PASS 06c (2026-08-28): THE DOME IS RETIRED. Two measurements: (1) the
+    # haze band rendered near-white -- (0.56,0.64,0.80) x skyGain is ~9,000
+    # nits at EV 13.5, while the panorama's own low sky is ~(0.20,0.27,0.50)
+    # -- and (2) the volumetric clouds never showed at all: a cloud layer at
+    # 3.5 km sits behind an opaque dome at 450 m. The sky is now PHYSICAL:
+    # SkyAtmosphere (blue zenith, pale horizon by scattering) + 3D cumulus,
+    # which is also what the founder asked for -- nothing painted. The
+    # panorama stays the visual reference; skyDome=1 puts it back for a
+    # comparison render.
+    "skyDome": 0, "skyGain": 14000.0, "skyFlipV": 0.0, "skyHorizonV": 0.5,
     "skyYawOffset": 90.0, "skyNearBands": ((0.235, 0.445), (0.515, 0.665)),
     "skyNearFills": ((0.438, 0.520), (0.438, 0.520)),
     "castleKit": 1, "nanite": 1,
