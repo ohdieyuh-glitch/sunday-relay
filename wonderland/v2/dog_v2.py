@@ -255,12 +255,15 @@ def place_dog_fallback(actors, meshes, mats, at):
 
 
 # -------------------------------------------------------------------- studio
+# name, location, yaw (pitch 0), tag index. The Dog stands at the origin facing
+# +X. 4.5 m out at the Dog's mid-height with FOV 55 frames 2.6 m of height — the
+# 1.74 m figure with headroom and floor (cycle 1's 3.8 m / pitch -3 clipped the
+# ears in the FRONT and SIDE views).
 CAMERAS = [
-    # name, location, yaw (pitch -3), tag index. The Dog stands at the origin facing +X.
-    ("DogCam_Front", (380.0, 0.0, 92.0), 180.0),
-    ("DogCam_ThreeQuarter", (270.0, -270.0, 92.0), 135.0),
-    ("DogCam_Side", (0.0, 380.0, 92.0), -90.0),
-    ("DogCam_Rear", (-380.0, 0.0, 92.0), 0.0),
+    ("DogCam_Front", (450.0, 0.0, 100.0), 180.0),
+    ("DogCam_ThreeQuarter", (318.0, -318.0, 100.0), 135.0),
+    ("DogCam_Side", (0.0, 450.0, 100.0), -90.0),
+    ("DogCam_Rear", (-450.0, 0.0, 100.0), 0.0),
 ]
 
 
@@ -301,11 +304,12 @@ def build_studio(meshes, mats, dog_cls):
     except Exception:
         pass
     eal.save_asset(grey_path, only_if_is_dirty=False)
-    # A backdrop wide enough that no studio camera sees past its edge (the
-    # three-quarter camera looks 45 deg off axis at 3.8 m), and a second wall
-    # on the side camera's far side so no view opens onto the horizon.
-    for label, at, scale in (("Studio_Floor", (0, 0, -5), (60, 60, 0.1)), ("Studio_Backdrop", (-900, 0, 400), (0.2, 80, 8)),
-                             ("Studio_SideWall", (0, -900, 400), (80, 0.2, 8))):
+    # Four walls around the floor, so no studio camera opens onto the horizon
+    # (cycle 1: the SIDE, REAR and three-quarter views all did). Neutral grey,
+    # 8 m tall, 9 m out — the same matte material as the floor.
+    for label, at, scale in (("Studio_Floor", (0, 0, -5), (60, 60, 0.1)),
+                             ("Studio_Wall_Back", (-900, 0, 400), (0.2, 80, 8)), ("Studio_Wall_Front", (900, 0, 400), (0.2, 80, 8)),
+                             ("Studio_Wall_Left", (0, -900, 400), (80, 0.2, 8)), ("Studio_Wall_Right", (0, 900, 400), (80, 0.2, 8))):
         a = actors.spawn_actor_from_class(unreal.StaticMeshActor, vec(at), rot(0, 0))
         a.static_mesh_component.set_static_mesh(cube)
         a.set_actor_scale3d(vec(scale))
@@ -348,7 +352,7 @@ def build_studio(meshes, mats, dog_cls):
         root, n = place_dog_fallback(actors, meshes, mats, (0, 0, 0))
         placed = "FALLBACK(%d actors)" % n
     for i, (label, at, yaw) in enumerate(CAMERAS):
-        cam = actors.spawn_actor_from_class(unreal.CameraActor, vec(at), rot(-3.0, yaw))
+        cam = actors.spawn_actor_from_class(unreal.CameraActor, vec(at), rot(0.0, yaw))
         cam.set_actor_label(label)
         cam.set_editor_property("tags", [unreal.Name("HeroCam%d" % i), unreal.Name(label), unreal.Name("RELAY_DOG_STUDIO")])
         fov_set = False
