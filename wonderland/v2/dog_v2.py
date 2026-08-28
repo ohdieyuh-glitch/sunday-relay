@@ -87,8 +87,17 @@ def build_materials():
         path = DOG_FOLDER + "/" + name
         if eal.does_asset_exist(path):
             eal.delete_asset(path)
-        mi = mel.create_material_instance_asset(name, DOG_FOLDER, master)
-        mel.set_material_instance_parent(mi, master)
+        # 5.8's Python has no MaterialEditingLibrary.create_material_instance_asset
+        # (measured 2026-08-28); the asset-tools factory route is what works here.
+        mi = mel.create_material_instance_asset(name, DOG_FOLDER, master) if hasattr(mel, "create_material_instance_asset") \
+            else unreal.AssetToolsHelpers.get_asset_tools().create_asset(name, DOG_FOLDER, unreal.MaterialInstanceConstant,
+                                                                          unreal.MaterialInstanceConstantFactoryNew())
+        if mi is None:
+            raise RuntimeError("material instance %s was not created" % name)
+        try:
+            mel.set_material_instance_parent(mi, master)
+        except Exception:
+            mi.set_editor_property("parent", master)
         # FLAT canon colour: the masters multiply the albedo TEXTURE by the tint,
         # so the texture is white and the tint carries the exact web colour.
         for pname, tex in (("Albedo", white), ("RoughnessMap", white), ("Normal", flat_normal)):
@@ -248,7 +257,14 @@ def build_studio(meshes, mats, dog_cls):
     grey_path = DOG_FOLDER + "/MI_RelayDog_StudioGrey"
     if eal.does_asset_exist(grey_path):
         eal.delete_asset(grey_path)
-    grey = mel.create_material_instance_asset("MI_RelayDog_StudioGrey", DOG_FOLDER, eal.load_asset(MASTER_FOLDER + "/M_V2_Surface"))
+    surface_master = eal.load_asset(MASTER_FOLDER + "/M_V2_Surface")
+    grey = mel.create_material_instance_asset("MI_RelayDog_StudioGrey", DOG_FOLDER, surface_master) if hasattr(mel, "create_material_instance_asset") \
+        else unreal.AssetToolsHelpers.get_asset_tools().create_asset("MI_RelayDog_StudioGrey", DOG_FOLDER, unreal.MaterialInstanceConstant,
+                                                                      unreal.MaterialInstanceConstantFactoryNew())
+    try:
+        mel.set_material_instance_parent(grey, surface_master)
+    except Exception:
+        grey.set_editor_property("parent", surface_master)
     white = eal.load_asset("/Engine/EngineResources/WhiteSquareTexture")
     for pname, tex in (("Albedo", white), ("RoughnessMap", white), ("Normal", eal.load_asset("/Engine/EngineMaterials/DefaultNormal"))):
         if tex is not None:
