@@ -390,4 +390,9 @@ def main():
     LOG("SUMMARY meshes=%d materials=%d blueprint=%s studio=%s" % (len(meshes), len(mats), dog_cls is not None, ok))
 
 
-main()
+# Run as a commandlet script (-run=pythonscript -script=dog_v2.py) this file
+# IS __main__ and builds the Dog. Imported by build_v2 -- which needs only
+# build_materials(), to re-parent the Dog's instances after the V2 masters
+# are recreated -- it must not rebuild the frozen Dog on every generate.
+if __name__ == "__main__" or os.environ.get("WLV2_DOG_BUILD") == "1":
+    main()
