@@ -15,9 +15,16 @@ R=/teamspace/studios/this_studio/wonderland
 cd $R/src || exit 1
 echo "pass start $(date -u +%FT%TZ) head=$(git rev-parse --short HEAD) rebuild=${WLV2_REBUILD:-<none>}"
 WLV2_REUSE_ASSETS=1 WLV2_PARTITIONED=0 WP_STEP=build bash wonderland/v2/diag/wp_recover.sh; rc=$?
-echo "generate rc=$rc $(date -u +%T)"
-grep -aoE "LogPython: Warning: V2 (ASSETS|SUMMARY|GROUND|LIGHT|SAVE)[^\r]{0,200}" $R/logs/wp-build.log | sed 's/LogPython: Warning: //' | tail -8
-[ $rc -eq 0 ] || { echo "generate FAILED -- not cooking"; exit $rc; }
+echo "generate wrapper rc=$rc $(date -u +%T)"
+grep -a "LogPython" $R/logs/wp-build.log | grep -a "V2 \(ASSETS\|SUMMARY\|GROUND\|LIGHT\|SAVE\|MAP\)" | sed 's/.*LogPython: [A-Za-z]*: //' | cut -c1-200 | tail -10
+# THE GENERATOR'S OWN VERDICT, not the wrapper's: wp_recover.sh exits 0 after a
+# step that exited 255 (2026-08-28: the map could not be recreated and the
+# chain went on to cook the old world).
+if ! grep -aq "Python script executed successfully" $R/logs/wp-build.log || grep -aq "executed with errors" $R/logs/wp-build.log; then
+  echo "generate FAILED (the Python commandlet reported errors) -- not cooking"
+  grep -aE "Error: [A-Za-z]+Error|RuntimeError" $R/logs/wp-build.log | tail -3 | cut -c1-200
+  exit 3
+fi
 WL_COOK_MAP=/Game/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2 WL_SKIP_GENERATE=1 SKIP_COMPILE_PREFLIGHT=1 \
   WL_SKIP_BUILD_EDITOR=1 WL_BUILD_HLOD=0 SKIP_V2_TEXTURES=1 FORCE_REBUILD=1 WONDERLAND_MIN_PIECES=0 ALLOW_EMPTY_LEVEL=1 \
   WL_BRANCH=relay/wonderland-v2 WL_REQUIRE_SHA=$(git rev-parse HEAD) \

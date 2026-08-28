@@ -109,14 +109,59 @@ def vec(p):
 WP_PARTITIONED = os.environ.get("WLV2_PARTITIONED", "1") != "0"
 
 
+def _map_file_on_disk():
+    """The .umap this build writes, on disk -- /Game/X/Y -> <Content>/X/Y.umap."""
+    rel = C.MAP_PATH.split("/Game/", 1)[1]
+    return os.path.join(str(unreal.Paths.project_content_dir()), *rel.split("/")) + ".umap"
+
+
+def clear_old_map(eal):
+    """Remove the previous build's map so the level can be created fresh.
+
+    2026-08-28: `EditorAssetLibrary.delete_asset` returned False WITHOUT an
+    exception, the code never looked at its return value, and
+    `LevelEditorSubsystem.new_level` then refused: "Failed to validate the
+    destination. An asset already exists at this location." The build died
+    after announcing a rebuild. So: load a neutral map first (a loaded level
+    cannot be deleted), delete and LOG the result, and if the package is still
+    there remove the file and rescan the registry. Fail closed if it persists.
+    """
+    if not eal.does_asset_exist(C.MAP_PATH):
+        return
+    LOG("V2 MAP: %s exists from an earlier run; deleting it so this is a fresh level" % C.MAP_PATH)
+    try:
+        unreal.EditorLoadingAndSavingUtils.load_map("/Engine/Maps/Entry")
+    except Exception as exc:
+        LOG("V2 MAP: could not load the neutral map first (%s)" % exc)
+    deleted = False
+    try:
+        deleted = bool(eal.delete_asset(C.MAP_PATH))
+    except Exception as exc:
+        LOG("V2 MAP: delete_asset raised (%s)" % exc)
+    LOG("V2 MAP: delete_asset -> %s" % deleted)
+    if eal.does_asset_exist(C.MAP_PATH):
+        path = _map_file_on_disk()
+        removed = []
+        for p in (path, path.replace(".umap", "_BuiltData.uasset")):
+            if os.path.isfile(p):
+                try:
+                    os.remove(p)
+                    removed.append(os.path.basename(p))
+                except Exception as exc:
+                    LOG("V2 MAP: os.remove(%s) failed (%s)" % (p, exc))
+        try:
+            reg = unreal.AssetRegistryHelpers.get_asset_registry()
+            reg.scan_paths_synchronous([C.MAP_PATH.rsplit("/", 1)[0]], True)
+        except Exception as exc:
+            LOG("V2 MAP: registry rescan failed (%s)" % exc)
+        LOG("V2 MAP: removed on disk %s; asset exists now: %s" % (removed, eal.does_asset_exist(C.MAP_PATH)))
+    if eal.does_asset_exist(C.MAP_PATH) and os.path.isfile(_map_file_on_disk()):
+        raise RuntimeError("the previous map %s could not be removed; refusing to build over it" % C.MAP_PATH)
+
+
 def new_map(actors, eal, lsu):
     """Create the V2 level. Returns (world, how)."""
-    if eal.does_asset_exist(C.MAP_PATH):
-        LOG("V2 MAP: %s exists from an earlier run; deleting it so this is a fresh level" % C.MAP_PATH)
-        try:
-            eal.delete_asset(C.MAP_PATH)
-        except Exception as exc:
-            LOG("V2 MAP: could not delete the old map (%s); continuing" % exc)
+    clear_old_map(eal)
     how = None
     world = None
     # VERIFIED 5.5 API: LevelEditorSubsystem.new_level(asset_path,
