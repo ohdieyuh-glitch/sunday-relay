@@ -40,11 +40,14 @@ if [ "$STEP" = build ]; then
   exit $rc
 fi
 if [ "$STEP" = cook ]; then
+  # common.sh exports WL_BRANCH=relay/wonderland-marble by default, so a
+  # ${WL_BRANCH:-…} fallback never applies and the branch gate refuses
+  # (measured 2026-08-28). V2 is the only branch this script may cook.
   wl_say "cooking the studio map"
   cd "$WL_SRC" || exit 1
   WL_COOK_MAP=/Game/WonderlandV2/Maps/WL_V2_RelayDogStudio WL_SKIP_GENERATE=1 SKIP_COMPILE_PREFLIGHT=1 WL_SKIP_BUILD_EDITOR=1 \
     WL_BUILD_HLOD=0 SKIP_V2_TEXTURES=1 FORCE_REBUILD=1 WONDERLAND_MIN_PIECES=0 ALLOW_EMPTY_LEVEL=1 \
-    WL_BRANCH="${WL_BRANCH:-relay/wonderland-v2}" WL_REQUIRE_SHA="${WL_REQUIRE_SHA:-$(git rev-parse HEAD)}" \
+    WL_BRANCH=relay/wonderland-v2 WL_REQUIRE_SHA="${WL_REQUIRE_SHA:-$(git rev-parse HEAD)}" \
     bash wonderland/infra/lightning/v2-build.sh
   exit $?
 fi
