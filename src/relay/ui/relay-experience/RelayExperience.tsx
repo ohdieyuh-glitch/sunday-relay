@@ -3,7 +3,7 @@ import { AGENT_OPTIONS } from '../project-settings';
 import type { AgentOption, WorkforceRole } from '../project-settings';
 import { readinessLabel, wonderlandReadiness } from './wonderland-handoff';
 import {
-  JULIUS, ONBOARDING_STEPS, activate, canActivate, normaliseName,
+  JULIUS, ONBOARDING_STEPS, activate, canActivate, newCardForAgent, normaliseName, startNewCompoundAgent,
   type CompoundAgentDraft, type OnboardingStepId,
 } from './onboarding';
 
@@ -12,6 +12,8 @@ export type ExperienceAnchor = { x: number; y: number; visible: boolean };
 export type RelayExperienceProps = {
   readonly draft: CompoundAgentDraft;
   readonly setDraft: (patch: Partial<CompoundAgentDraft>, react?: boolean) => void;
+  /** Replace the whole record — the explicit NEW C.A.R.D. / NEW COMPOUND AGENT paths. */
+  readonly replaceDraft?: (next: CompoundAgentDraft) => void;
   readonly step: OnboardingStepId;
   readonly setStep: (step: OnboardingStepId) => void;
   readonly returning: boolean;
@@ -64,7 +66,7 @@ function optionName(id: string | null): string {
 }
 
 export function RelayExperience({
-  draft, setDraft, step, setStep, returning, anchors, webgl,
+  draft, setDraft, replaceDraft, step, setStep, returning, anchors, webgl,
 }: RelayExperienceProps): JSX.Element {
   const update = setDraft;
   const current = ONBOARDING_STEPS.find((s) => s.id === step) ?? ONBOARDING_STEPS[0];
@@ -78,8 +80,27 @@ export function RelayExperience({
     update({ activatedAt: activate(draft, new Date().toISOString()).activatedAt }, true);
   }, [draft, update]);
 
+  // EXPLICIT re-configuration paths — the only ways a C.A.R.D. is configured
+  // again. A new C.A.R.D. keeps the Agent and re-opens its operating profile
+  // under a fresh identity; a new Compound Agent starts from nothing. Neither
+  // is ever taken on the participant's behalf.
+  const onNewCard = useCallback(() => {
+    replaceDraft?.(newCardForAgent(new Date().toISOString()));
+    setStep('card');
+  }, [replaceDraft, setStep]);
+  const onNewAgent = useCallback(() => {
+    replaceDraft?.(startNewCompoundAgent(new Date().toISOString()));
+    setStep('name');
+  }, [replaceDraft, setStep]);
+
   const readiness = wonderlandReadiness(draft.activatedAt !== null);
   const agentLabel = normaliseName(draft.name) || 'UNNAMED';
+  const ceiling = (value: number | null, unit: string) => (value === null ? 'NOT SET' : `${unit}${value}`);
+  const ceilingInput = (raw: string): number | null => {
+    if (raw.trim() === '') return null; // cleared = not set, disclosed — never a silent 0
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+  };
 
   const slotPicker = (role: WorkforceRole, field: keyof CompoundAgentDraft) => (
     <ul className="rx-options">
@@ -198,13 +219,13 @@ export function RelayExperience({
           <div className="rx-group">
             <label className="rx-field">
               <span className="rx-label">SPEND LIMIT · USD</span>
-              <input className="rx-input" type="number" min={0} max={1000} value={draft.spendUsd}
-                onChange={(e) => update({ spendUsd: Number(e.target.value) })} aria-label="Spend limit in USD" />
+              <input className="rx-input" type="number" min={0} max={1000} value={draft.spendUsd ?? ''}
+                onChange={(e) => update({ spendUsd: ceilingInput(e.target.value) })} aria-label="Spend limit in USD" />
             </label>
             <label className="rx-field">
               <span className="rx-label">RUNTIME LIMIT · MINUTES</span>
-              <input className="rx-input" type="number" min={0} max={600} value={draft.runtimeMinutes}
-                onChange={(e) => update({ runtimeMinutes: Number(e.target.value) })} aria-label="Runtime limit in minutes" />
+              <input className="rx-input" type="number" min={0} max={600} value={draft.runtimeMinutes ?? ''}
+                onChange={(e) => update({ runtimeMinutes: ceilingInput(e.target.value) })} aria-label="Runtime limit in minutes" />
             </label>
           </div>
         )}
@@ -216,7 +237,8 @@ export function RelayExperience({
             <dt>CODING AGENT</dt><dd>{optionName(draft.codingAgentId)}</dd>
             <dt>INDEPENDENT REVIEWER</dt><dd>{optionName(draft.reviewerId)}</dd>
             <dt>C.A.R.D.</dt><dd>{MODE_LABEL[draft.mode]} · {NETWORK_LABEL[draft.network]} · {REVIEW_LABEL[draft.review]}</dd>
-            <dt>LIMITS</dt><dd>${draft.spendUsd} · {draft.runtimeMinutes} MIN</dd>
+            <dt>LIMITS</dt><dd>{ceiling(draft.spendUsd, '$')} · {draft.runtimeMinutes === null ? 'NOT SET' : `${draft.runtimeMinutes} MIN`}</dd>
+            {draft.revision > 0 && <><dt>C.A.R.D.</dt><dd title={draft.cardId}>REVISION {draft.revision}</dd></>}
           </dl>
         )}
 
@@ -235,7 +257,9 @@ export function RelayExperience({
                   disabled={readiness.kind !== 'ready'}>
                   ENTER WONDERLAND
                 </button>
-                <button type="button" className="rx-ghost" onClick={() => goto('name')}>RECONFIGURE</button>
+                <button type="button" className="rx-ghost" onClick={() => goto('name')}>EDIT C.A.R.D.</button>
+                <button type="button" className="rx-ghost" onClick={onNewCard}>NEW C.A.R.D.</button>
+                <button type="button" className="rx-ghost" onClick={onNewAgent}>NEW COMPOUND AGENT</button>
               </>
             )}
           </div>

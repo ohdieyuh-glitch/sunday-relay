@@ -117,6 +117,18 @@ describe('creation flow', () => {
     expect(stored.reviewerId).toBe('reviewer-hermes');
   });
 
+  it('keeps a cleared execution limit as NOT SET — never a silent zero', () => {
+    saveAgentDraft(complete());
+    render(createElement(RelayWorld, { initialStage: 'relay' as const }));
+    fireEvent.click(screen.getByRole('button', { name: '06' }));
+    fireEvent.change(screen.getByLabelText('Spend limit in USD'), { target: { value: '' } });
+    const stored = JSON.parse(localStorage.getItem(AGENT_STORAGE_KEY)!) as CompoundAgentDraft;
+    expect(stored.spendUsd).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: '07' }));
+    expect(screen.getByText(/NOT SET/)).toBeTruthy();
+    expect(screen.queryByText(/\$0\b/)).toBeNull();
+  });
+
   it('gates ACTIVATE on a complete Compound Agent', () => {
     render(createElement(RelayWorld, { initialStage: 'relay' as const }));
     fireEvent.click(screen.getByRole('button', { name: '08' }));
@@ -155,7 +167,7 @@ describe('returning users', () => {
   it('can still reconfigure, and stay in the new language while doing it', () => {
     saveAgentDraft(activate(complete(), '2026-08-26T00:00:00.000Z'));
     const { container } = render(createElement(RelayWorld, { initialStage: 'relay' as const }));
-    fireEvent.click(screen.getByRole('button', { name: 'RECONFIGURE' }));
+    fireEvent.click(screen.getByRole('button', { name: 'EDIT C.A.R.D.' }));
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Create your Compound Agent.');
     // Still the new experience — no fallback to the old shell.
     expect(container.querySelector('.rx')).not.toBeNull();
