@@ -1231,6 +1231,13 @@ def light_and_air(actors, layers):
         assign_layer(bl, "V2_Skyline", layers)
     sky = actors.spawn_actor_from_class(unreal.SkyAtmosphere, vec((0, 0, 0)), rot(0, 0, 0))
     sky.set_actor_label("V2_SkyAtmosphere")
+    sac = sky.get_component_by_class(unreal.SkyAtmosphereComponent)
+    if sac is not None:
+        f = float(L.get("skyLuminanceFactor", 1.0))
+        ok_l = set_prop(sac, "SkyLuminanceFactor", unreal.LinearColor(f, f, f, 1.0))
+        ok_m = set_prop(sac, "MieScatteringScale", float(L.get("mieScatteringScale", 0.003996)))
+        LOG("V2 ATMOSPHERE: sky luminance x%.2f %s, Mie scale %.4f %s"
+            % (f, "set" if ok_l else "NOT SET", float(L.get("mieScatteringScale", 0.003996)), "set" if ok_m else "NOT SET"))
     sl = actors.spawn_actor_from_class(unreal.SkyLight, vec((0, 0, 500)), rot(0, 0, 0))
     sl.set_actor_label("V2_SkyLight")
     sc = sl.get_component_by_class(unreal.SkyLightComponent)

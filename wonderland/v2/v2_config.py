@@ -245,7 +245,14 @@ LOOK = {
     # Cloud_GlobalDensity and Cloud_AlbedoColor (read from the .uasset); the
     # layer gets its own instance: sparse cumulus over blue sky, a thinner
     # layer so the sun and the panorama's zenith stay visible.
-    "volumetricClouds": 1, "cloudLayerBottomKm": 3.5, "cloudLayerHeightKm": 3.0,
+    # PASS 06d: the physical sky (V2_PASS_053) is a deep clear blue, sky
+    # top-centre p50 76 against the reference's 107 and a navy band at the
+    # horizon, and no cumulus showed at 3.5 km. SkyLuminanceFactor scales
+    # the atmosphere's sky luminance ((107/76)^2.2 = 2.1 -> 2.0), a larger
+    # Mie scale pales the horizon into haze, and the cloud layer drops to
+    # 2-4.5 km so cumulus sit in the 5-35 deg of elevation HeroCam0 sees.
+    "skyLuminanceFactor": 2.0, "mieScatteringScale": 0.006,
+    "volumetricClouds": 1, "cloudLayerBottomKm": 2.0, "cloudLayerHeightKm": 2.5,
     "cloudCoverage": 0.42, "cloudDensity": 0.55,
     "volumetricFog": 1, "fogScattering": 0.20,
     # restrained magic: a small rune disc at the viewpoint, low glow
