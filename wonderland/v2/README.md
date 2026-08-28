@@ -104,8 +104,9 @@ midground are legitimate Unreal geometry (the V2 kit); the distant city is the
 V2 castle layers with the panorama's own sky above the horizon
 (`skyHorizonV`; the lookup is computed from the view direction, `skyYawOffset`
 turns it, and `skyNearBands` replaces the panorama's giant near mushroom and
-tree with the clean sky columns beside them, `skyNearFills`, at the same
-elevation). `marbleVisible=1` shows the shell for a direct comparison.
+tree with the far-castle span `skyNearFills` -- the one direction whose content
+is distant only -- at the same elevation). `marbleVisible=1` shows the shell for
+a direct comparison.
 
 Marble is a backdrop for a fixed camera: a single-viewpoint shell tolerates
 about 1.7 m of movement at metric scale before parallax smears it. Walkable V2

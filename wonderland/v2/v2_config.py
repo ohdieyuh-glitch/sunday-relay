@@ -152,18 +152,23 @@ LOOK = {
     # objects that used to justify +8 deg are handled by skyNearBands: inside
     # those two bands of u (the panorama's giant mushroom 0.245-0.435, its big
     # tree 0.525-0.655, each widened by the 0.01 cross-fade) the panorama is
-    # sampled from the clean sky columns beside them, skyNearFills, at the same
-    # v (measured on the panorama, v 0.19-0.36: luma p10 91 / 92, blue-
-    # dominant; the mushroom's band is p10 21, the tree's p10 27). PASS 04e
-    # (2026-08-28): 04d stretched the zenith rows down instead, which smeared
-    # the clouds and swept a white column through the tower-ring rows at the
-    # band edge. skyGain 18000: V2_PASS_024 measured the sky at sRGB p50 79
-    # against the reference's 107 at the same pixels with the plaza already
-    # brighter than the reference's, i.e. the sky sat ~1 stop too dark
-    # relative to the sunlit geometry ((107/79)^2.2 = 1.95x).
-    "skyDome": 1, "skyGain": 18000.0, "skyFlipV": 0.0, "skyHorizonV": 0.5,
+    # sampled from skyNearFills at the same v, cross-faded by colour. PASS 04e
+    # (2026-08-28) took the columns BESIDE the objects (u 0.06-0.245 and
+    # 0.805-0.94) because their luma p10 was 91/92 -- and V2_PASS_025 painted
+    # the panorama's near pastel towers (the one at u 0.87 spans v 0.25-0.5)
+    # behind our castle and its rose beds behind the mushroom: a luma
+    # percentile cannot tell a bright tower from a cloud. PASS 04f: a skyline
+    # scan (per 0.02-u bin, first 6-row block >= 30% non-sky, sky = cool AND
+    # bright) finds ONE span with far content only, the far-castle direction
+    # u 0.438-0.520: 0-5% content at v 0.30 and 0.36, its towers begin at
+    # v ~0.38. Both bands map onto it (compressed 2.5x / 1.8x in u; a cloud's
+    # aspect is invisible through leaf gaps), so the gaps show sky, cloud and
+    # the DISTANT skyline. skyGain 14000: 9000 rendered the sky at sRGB p50
+    # 79 and 18000 at 128 against the reference's 107 at the same pixels;
+    # interpolated.
+    "skyDome": 1, "skyGain": 14000.0, "skyFlipV": 0.0, "skyHorizonV": 0.5,
     "skyYawOffset": 90.0, "skyNearBands": ((0.235, 0.445), (0.515, 0.665)),
-    "skyNearFills": ((0.06, 0.245), (0.805, 0.94)),
+    "skyNearFills": ((0.438, 0.520), (0.438, 0.520)),
     "castleKit": 1, "nanite": 1,
     # secondary dressing (the PCG-equivalent): garden zones only, after the authored layout
     "dressing": 1, "dressingDensity": 1.0,
