@@ -174,9 +174,11 @@ CORRIDOR = _band("V2_Garden", [
     A("lavender_heads", side * (500 + 200 * i), 1200, 70, yaw=40 * i, s=1.25, mat="MI_V2_Lavender", label="FrontBed%d_LavHeads%d" % (side, i))
     for side in (-1, 1) for i in range(10)
 ] + [
-    # roses spilling over the wall line at the plaza's mouth, either side of the pedestals
-    A("rose_bloom", side * (360 + 90 * i), 950, 110, yaw=45 * i, s=0.9, mat=("MI_V2_RosePink", "MI_V2_RoseRed", "MI_V2_PetalRose")[i % 3], label="WallRose%d_%d" % (side, i))
-    for side in (-1, 1) for i in range(6)
+    # rose BUSHES at the wall line either side of the pedestals (PASS 02c: a
+    # single rose_bloom at 0.9x rendered as a 1 m pink goblet on a stem --
+    # that recipe is one stylised bloom for 0.5x along the path)
+    A("rose_bush", side * (380 + 110 * i), 960, 60, yaw=45 * i, s=1.1, mat="MI_V2_LeafMid", label="WallRoseBush%d_%d" % (side, i))
+    for side in (-1, 1) for i in range(5)
 ] if PASS02 else [
     A("hedge_mass", 560 + 380 * i, 1100, 60, yaw=33 * i, s=1.0, mat=("MI_V2_LeafDark", "MI_V2_LeafMid")[i % 2], label="FrontBed_L_Hedge%d" % i) for i in range(4)
 ] + [
