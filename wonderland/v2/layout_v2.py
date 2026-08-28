@@ -155,18 +155,26 @@ CORRIDOR = _band("V2_Garden", [
 ] + [
     A("hedge_mass", -560 - 380 * i, 1360, 60, yaw=59 * i, s=0.75, mat=("MI_V2_LeafMid", "MI_V2_LeafDark")[i % 2], label="FrontBed_R_Hedge%d" % i) for i in range(4)
 ] + [
-    A("flower_bed_base_%d" % (i % 4), side * (430 + 250 * i), 1060, 60, yaw=23 * i + (0 if side > 0 else 90), s=1.0, mat=("MI_V2_LeafMid", "MI_V2_LeafGrey")[i % 2], label="FrontBed%d_Base%d" % (side, i))
-    for side in (-1, 1) for i in range(6)
+    # PASS 02b: the beds as ONE continuous colour band the height of the wall
+    # coping -- eleven beds per side on a 200 uu pitch, 1.35x, raised so the
+    # bloom crests clear the 0.85 m wall from the 2.6 m eye (PASS 02's six
+    # beds at 1.0x / z 60 only showed their crests).
+    A("flower_bed_base_%d" % (i % 4), side * (400 + 200 * i), 1050, 80, yaw=23 * i + (0 if side > 0 else 90), s=1.35, mat=("MI_V2_LeafMid", "MI_V2_LeafGrey")[i % 2], label="FrontBed%d_Base%d" % (side, i))
+    for side in (-1, 1) for i in range(11)
 ] + [
-    A("flower_bed_blooms_%d" % (i % 4), side * (430 + 250 * i), 1060, 60, yaw=23 * i + (0 if side > 0 else 90), s=1.0,
+    A("flower_bed_blooms_%d" % (i % 4), side * (400 + 200 * i), 1050, 80, yaw=23 * i + (0 if side > 0 else 90), s=1.35,
       mat=("MI_V2_PetalPink", "MI_V2_PetalWhite", "MI_V2_Lavender", "MI_V2_PetalRose", "MI_V2_PetalViolet", "MI_V2_RosePink")[(i + (0 if side > 0 else 3)) % 6], label="FrontBed%d_Blooms%d" % (side, i))
+    for side in (-1, 1) for i in range(11)
+] + [
+    A("lavender_stems", side * (500 + 200 * i), 1200, 70, yaw=40 * i, s=1.25, mat="MI_V2_LeafGrey", label="FrontBed%d_LavStems%d" % (side, i))
+    for side in (-1, 1) for i in range(10)
+] + [
+    A("lavender_heads", side * (500 + 200 * i), 1200, 70, yaw=40 * i, s=1.25, mat="MI_V2_Lavender", label="FrontBed%d_LavHeads%d" % (side, i))
+    for side in (-1, 1) for i in range(10)
+] + [
+    # roses spilling over the wall line at the plaza's mouth, either side of the pedestals
+    A("rose_bloom", side * (360 + 90 * i), 950, 110, yaw=45 * i, s=0.9, mat=("MI_V2_RosePink", "MI_V2_RoseRed", "MI_V2_PetalRose")[i % 3], label="WallRose%d_%d" % (side, i))
     for side in (-1, 1) for i in range(6)
-] + [
-    A("lavender_stems", side * (560 + 250 * i), 1180, 60, yaw=40 * i, s=1.0, mat="MI_V2_LeafGrey", label="FrontBed%d_LavStems%d" % (side, i))
-    for side in (-1, 1) for i in range(5)
-] + [
-    A("lavender_heads", side * (560 + 250 * i), 1180, 60, yaw=40 * i, s=1.0, mat="MI_V2_Lavender", label="FrontBed%d_LavHeads%d" % (side, i))
-    for side in (-1, 1) for i in range(5)
 ] if PASS02 else [
     A("hedge_mass", 560 + 380 * i, 1100, 60, yaw=33 * i, s=1.0, mat=("MI_V2_LeafDark", "MI_V2_LeafMid")[i % 2], label="FrontBed_L_Hedge%d" % i) for i in range(4)
 ] + [
@@ -177,18 +185,18 @@ CORRIDOR = _band("V2_Garden", [
     A("flower_cluster", -420 - 300 * i, 1000, 90, yaw=23 * i, s=0.9, mat=("MI_V2_PetalViolet", "MI_V2_RosePink", "MI_V2_PetalBlue", "MI_V2_PetalPink")[i % 4], label="FrontBed_R_Flowers%d" % i) for i in range(5)
 ]) + [
     # hedges flanking the path, then the garden opens
-    A("hedge_mass", side * (340 + 30 * (i % 2)), 1950 + 320 * i, 0 + (60 if 1950 + 320 * i > 2980 else 0), yaw=41 * i + (0 if side > 0 else 180), s=0.85,
+    A("hedge_mass", side * (390 + 30 * (i % 2)), 1950 + 320 * i, 0 + (60 if 1950 + 320 * i > 2980 else 0), yaw=41 * i + (0 if side > 0 else 180), s=(0.6 if PASS02 else 0.85),
       mat=("MI_V2_LeafMid", "MI_V2_LeafDark")[i % 2], label="PathHedge%d_%d" % (side, i))
     for side in (-1, 1) for i in range(8)
 ] + ([
     # PASS 02: colour along the corridor -- a massed bed between every other
     # pair of path hedges, on the verge behind the kerb.
-    A("flower_bed_base_%d" % (i % 4), side * 360, 2110 + 640 * i, (60 if 2110 + 640 * i > 2980 else 0), yaw=90 + 30 * i, s=0.8, mat="MI_V2_LeafMid", label="PathBed%d_Base%d" % (side, i))
-    for side in (-1, 1) for i in range(4)
+    A("flower_bed_base_%d" % (i % 4), side * 370, 1950 + 320 * i, (60 if 1950 + 320 * i > 2980 else 0), yaw=90 + 30 * i, s=1.1, mat="MI_V2_LeafMid", label="PathBed%d_Base%d" % (side, i))
+    for side in (-1, 1) for i in range(8)
 ] + [
-    A("flower_bed_blooms_%d" % (i % 4), side * 360, 2110 + 640 * i, (60 if 2110 + 640 * i > 2980 else 0), yaw=90 + 30 * i, s=0.8,
-      mat=("MI_V2_PetalRose", "MI_V2_PetalWhite", "MI_V2_PetalPink", "MI_V2_Lavender")[(i + (0 if side > 0 else 2)) % 4], label="PathBed%d_Blooms%d" % (side, i))
-    for side in (-1, 1) for i in range(4)
+    A("flower_bed_blooms_%d" % (i % 4), side * 370, 1950 + 320 * i, (60 if 1950 + 320 * i > 2980 else 0), yaw=90 + 30 * i, s=1.1,
+      mat=("MI_V2_PetalRose", "MI_V2_PetalWhite", "MI_V2_PetalPink", "MI_V2_Lavender", "MI_V2_RosePink", "MI_V2_PetalViolet")[(i + (0 if side > 0 else 3)) % 6], label="PathBed%d_Blooms%d" % (side, i))
+    for side in (-1, 1) for i in range(8)
 ] if PASS02 else []) + [
     A("rose_bloom", side * (300 + 40 * (i % 2)), 1850 + 420 * i, 70 + (60 if 1850 + 420 * i > 2980 else 0), yaw=31 * i, s=0.5,
       mat=("MI_V2_RoseRed", "MI_V2_RosePink")[(i + (0 if side > 0 else 1)) % 2], label="PathRose%d_%d" % (side, i))
