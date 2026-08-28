@@ -1499,6 +1499,18 @@ def main():
     phase("materials")
     texs = MAT.import_textures(unreal, LOG)
     mats = MAT.build_materials(unreal, LOG, texs)
+    # THE DOG'S MATERIALS. MI_RelayDog_Ivory / _Visor / _Eye are children of
+    # M_V2_Surface / M_V2_Portal, and the masters are deleted and recreated
+    # above on every generate -- so the Dog's instances were orphaned and
+    # ScaleCam07 (V2_PASS_052) showed a charcoal Dog. Rebuilt on the fresh
+    # masters here, from dog_canon, at the same asset paths the blueprint holds.
+    if int(C.LOOK.get("scaleDog", 0)):
+        try:
+            import dog_v2 as DOG
+            dog_mats = DOG.build_materials()
+            LOG("V2 SCALE DOG: %d material instances rebuilt on the fresh masters" % len(dog_mats))
+        except Exception as exc:
+            LOG("V2 SCALE DOG FAILED: materials not rebuilt (%s) -- the Dog will render in the engine default" % exc)
     MANIFEST["materials"] = len(mats)
 
     phase("assets")
