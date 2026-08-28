@@ -1707,6 +1707,79 @@ def lavender_heads(ctx):
 
 FLOWER_BED_VARIANTS = 4
 
+
+# ==========================================================================
+# PASS 03 (2026-08-28): LANDMARKS. The giant mushroom split into cap / spots /
+# gold rim so its cap reads as the reference's red-with-white-spots and its
+# edge carries gold; a gold arch over the left garden gate so the threshold
+# reads at 18 m; a gold trellis under the floral arch so the corridor's arch
+# is metalwork with roses, not a green hoop.
+# ==========================================================================
+
+
+def mushroom_giant_spots(ctx):
+    """The giant cap's white spots (the reference: red cap, cream spots): raised
+    domes on the cap surface, same transform as `mushroom_giant`."""
+    m = ctx.mesh("mushroom_giant_spots")
+    top, stem_h, R, ch = (30.0, 0.0, 1110.0), 1150.0, 1000.0, 420.0
+    _spots(m, top, stem_h, R, ch, 13, 171)
+    m.perlin(6.0, 0.02, seed=172)
+    m.smooth(1, 0.2)
+    return m
+
+
+def mushroom_giant_rim(ctx):
+    """A gold band round the giant cap's edge -- the board's 'gold rim'."""
+    m = ctx.mesh("mushroom_giant_rim")
+    stem_h, R, ch = 1150.0, 1000.0, 420.0
+    m.torus(R * 0.985, 16.0, at=(30.0, 0.0, stem_h - ch * 0.05 + ch * 0.06), major=72, minor=8)
+    return m
+
+
+def gate_arch_gold(ctx):
+    """A gold arch spanning a pair of gate piers 3.8 m apart: a main hoop, an
+    inner hoop, spandrel bars, and a heart finial at the crown. Origin at
+    the arch's centre on the ground; piers at x = +/-190."""
+    m = ctx.mesh("gate_arch_gold")
+    Rh = 190.0
+    for k, (rad, thick) in enumerate(((Rh, 9.0), (Rh - 34.0, 6.0))):
+        arc = [(math.cos(math.pi * i / 32) * rad, 0.0, math.sin(math.pi * i / 32) * rad + 560.0) for i in range(33)]
+        m.tube(arc, [thick] * 33, sides=8)
+    for i in range(1, 8):
+        a = math.pi * i / 8
+        m.tube([(math.cos(a) * (Rh - 34.0), 0.0, math.sin(a) * (Rh - 34.0) + 560.0),
+                (math.cos(a) * Rh, 0.0, math.sin(a) * Rh + 560.0)], [4.0, 4.0], sides=5)
+    for k in range(6):
+        pts = _spiral_pts(26.0, 1.5, 14, 1.1, plane="xz")
+        a = math.pi * (k + 0.5) / 6
+        pts = [(math.cos(a) * (Rh - 17.0) + p[0], 0.0, math.sin(a) * (Rh - 17.0) + 560.0 + p[2]) for p in pts]
+        m.tube(pts, [3.0 - 1.4 * i / 13.0 for i in range(14)], sides=5)
+    # crown: a heart outline in gold, 1.1 m
+    heart = [(16.0 * math.sin(t) ** 3 * 3.2, 0.0, (13.0 * math.cos(t) - 5.0 * math.cos(2 * t) - 2.0 * math.cos(3 * t) - math.cos(4 * t)) * 3.2 + 560.0 + Rh + 40.0)
+             for t in [2.0 * math.pi * i / 48 for i in range(49)]]
+    m.tube(heart, [5.0] * 49, sides=6)
+    return m
+
+
+def floral_arch_trellis(ctx):
+    """The corridor arch as gold trellis: two hoops 5 m across with lattice
+    bars between them; the roses and vines of the layout hang on it."""
+    m = ctx.mesh("floral_arch_trellis")
+    R = 500.0
+    for y in (-40.0, 40.0):
+        arc = [(math.cos(math.pi * i / 36) * R, y, math.sin(math.pi * i / 36) * R + 120.0) for i in range(37)]
+        m.tube(arc, [10.0] * 37, sides=8)
+    for i in range(0, 37, 3):
+        a = math.pi * i / 36
+        x, z = math.cos(a) * R, math.sin(a) * R + 120.0
+        m.tube([(x, -40.0, z), (x, 40.0, z)], [4.0, 4.0], sides=5)
+    for i in range(1, 36, 4):
+        a0, a1 = math.pi * i / 36, math.pi * (i + 2) / 36
+        m.tube([(math.cos(a0) * R, -40.0, math.sin(a0) * R + 120.0), (math.cos(a1) * R, 40.0, math.sin(a1) * R + 120.0)], [3.0, 3.0], sides=4)
+    for x in (-R, R):
+        m.box(40.0, 40.0, 130.0, at=(x, 0.0, 65.0))
+    return m
+
 #: Every VARIANT family the builder generates outside RECIPES: prefix ->
 #: (count, folder key). One registry, so the layout gate, the summary count and
 #: the build loop cannot disagree about which "<prefix>_<n>" keys exist.
@@ -1750,6 +1823,10 @@ RECIPES.update({
     "topiary_cone_plain": (topiary_cone_plain, "topiary", False, True),
     "kerb_stone": (kerb_stone, "cobble", False, True),
     "lavender_stems": (lavender_stems, "flowers", False, False),
+    "mushroom_giant_spots": (mushroom_giant_spots, "mush_landmark", False, False),
+    "mushroom_giant_rim": (mushroom_giant_rim, "mush_landmark", False, False),
+    "gate_arch_gold": (gate_arch_gold, "gates", False, True),
+    "floral_arch_trellis": (floral_arch_trellis, "garden_arch", False, True),
     "lavender_heads": (lavender_heads, "flowers", False, False),
     "topiary_spiral": (topiary_spiral, "topiary", False, True),
     "rose_bush": (rose_bush, "roses", False, False),

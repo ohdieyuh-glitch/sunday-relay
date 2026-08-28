@@ -35,6 +35,8 @@ def _rnd(*key):
 import os as _os
 #: PASS 02 (C3, garden colour layers) is gated so PASS 01 renders alone first.
 PASS02 = _os.environ.get("WLV2_PASS02", "0") == "1"
+#: PASS 03 (H1 threshold in frame, H2 landmarks) is gated the same way.
+PASS03 = _os.environ.get("WLV2_PASS03", "0") == "1"
 
 
 def _band(name, items):
@@ -202,7 +204,7 @@ CORRIDOR = _band("V2_Garden", [
       mat=("MI_V2_RoseRed", "MI_V2_RosePink")[(i + (0 if side > 0 else 1)) % 2], label="PathRose%d_%d" % (side, i))
     for side in (-1, 1) for i in range(6)
 ] + [
-    A("floral_arch", 0, 3600, 80, s=1.0, sxyz=(1.0, 1.0, 1.1), mat="MI_V2_LeafMid", label="Corridor_FloralArch"),
+    A(("floral_arch_trellis" if PASS03 else "floral_arch"), 0, 3600, 80, s=1.0, sxyz=(1.0, 1.0, 1.1), mat=("MI_V2_Gold" if PASS03 else "MI_V2_LeafMid"), label="Corridor_FloralArch"),
     A("rose_bloom", -470, 3560, 660, yaw=0, s=0.7, mat="MI_V2_RosePink", label="FloralArch_Rose0"),
     A("rose_bloom", 460, 3560, 620, yaw=60, s=0.7, mat="MI_V2_RoseRed", label="FloralArch_Rose1"),
     A("rose_bloom", 0, 3550, 780, yaw=120, s=0.8, mat="MI_V2_RosePink", label="FloralArch_Rose2"),
@@ -229,20 +231,39 @@ GARDEN_L = _band("V2_Garden", [
     A("gate_leaf", 750, 1690, 0, yaw=0, s=0.45, sxyz=(0.45, 0.45, 0.95), mat="MI_V2_Gold", label="GardenGate_LeafR"),
     A("gate_finial_heart", 1080, 1700, 650, s=0.9, mat="MI_V2_Gold", label="GardenGate_FinialL"),
     A("gate_finial_ball", 700, 1700, 650, s=1.0, mat="MI_V2_Gold", label="GardenGate_FinialR"),
+] + ([
+    # PASS 03 (H1): the threshold reads at 18 m -- a gold arch over the piers
+    # with a heart crown, and a mirrored gate on the right garden entrance.
+    A("gate_arch_gold", 890, 1700, 0, s=1.0, mat="MI_V2_Gold", label="GardenGate_ArchL"),
+    A("gate_pier", -1080, 1700, 0, s=1.0, mat="MI_V2_IvoryStone", label="GardenGateR_PierL"),
+    A("gate_pier", -700, 1700, 0, s=1.0, mat="MI_V2_IvoryStone", label="GardenGateR_PierR"),
+    A("gate_leaf", -1030, 1690, 0, yaw=180, s=0.45, sxyz=(-0.45, 0.45, 0.95), mat="MI_V2_Gold", label="GardenGateR_LeafL"),
+    A("gate_leaf", -750, 1690, 0, yaw=0, s=0.45, sxyz=(0.45, 0.45, 0.95), mat="MI_V2_Gold", label="GardenGateR_LeafR"),
+    A("gate_arch_gold", -890, 1700, 0, s=1.0, mat="MI_V2_Gold", label="GardenGate_ArchR"),
+    A("gate_finial_ball", -1080, 1700, 650, s=1.0, mat="MI_V2_Gold", label="GardenGateR_FinialL"),
+    A("gate_finial_heart", -700, 1700, 650, s=0.9, mat="MI_V2_Gold", label="GardenGateR_FinialR"),
+] if PASS03 else []) + [
     A("vine_wall", 1090, 1660, 80, yaw=0, s=0.5, mat="MI_V2_LeafMid", label="GardenGate_IvyL"),
     A("stone_ring_base", 1960, 1000, 0, s=1.0, mat="MI_V2_IvoryStone", label="GiantMushroom_Base"),
-    A("mushroom_giant", 1960, 1000, 76, yaw=15, s=1.0, mat="MI_V2_MushTerracotta", label="GiantMushroom"),
+    A("mushroom_giant", 1960, 1000, 76, yaw=15, s=1.0, mat=("MI_V2_MushRed" if PASS03 else "MI_V2_MushTerracotta"), label="GiantMushroom"),
     A("mushroom_giant_gills", 1960, 1000, 76, yaw=15, s=1.0, mat="MI_V2_MushCream", label="GiantMushroom_Gills"),
+] + ([
+    # PASS 03 (H2): the landmark cap is red with cream spots and a gold rim
+    A("mushroom_giant_spots", 1960, 1000, 76, yaw=15, s=1.0, mat="MI_V2_MushCream", label="GiantMushroom_Spots"),
+    A("mushroom_giant_rim", 1960, 1000, 76, yaw=15, s=1.0, mat="MI_V2_Gold", label="GiantMushroom_Rim"),
+] if PASS03 else []) + [
     # the small red mushroom on a pedestal at the left terrace edge
     A("pedestal_finial", 900, 520, 60, s=1.3, mat="MI_V2_IvoryStone", label="LeftBollard_Pedestal"),
     A("mushroom_small", 900, 520, 220, yaw=40, s=0.55, mat="MI_V2_MushRed", label="LeftBollard_Mushroom"),
     A("clock_ornate", 1780, 800, 850, yaw=-10, s=1.1, mat="MI_V2_Gold", label="GiantMushroom_Clock"),
     A("canopy_large", 1960, 1000, 1640, yaw=0, s=1.3, sxyz=(1.5, 1.5, 0.55), mat="MI_V2_LeafMid", label="GiantMushroom_Ivy0"),
     A("canopy_large", 2400, 1200, 1600, yaw=120, s=1.0, sxyz=(1.1, 1.1, 0.5), mat="MI_V2_LeafDark", label="GiantMushroom_Ivy1"),
-    A("vine_hanging", 2500, 700, 1380, s=0.9, mat="MI_V2_LeafMid", label="GiantMushroom_Vine0"),
+    # PASS 03: the clock's sightline from HeroCam0 is kept clear -- the vine
+    # and the foot hedges move off the line between the camera and the stem.
+    A("vine_hanging", (2700 if PASS03 else 2500), 700, 1380, s=0.9, mat="MI_V2_LeafMid", label="GiantMushroom_Vine0"),
     A("vine_hanging", 1500, 1300, 1380, s=0.8, mat="MI_V2_LeafDark", label="GiantMushroom_Vine1"),
-    A("hedge_mass", 1700, 600, 0, yaw=30, s=1.4, mat="MI_V2_LeafDark", label="GiantMushroom_Foot0"),
-    A("hedge_mass", 2300, 700, 0, yaw=150, s=1.3, mat="MI_V2_LeafMid", label="GiantMushroom_Foot1"),
+    A("hedge_mass", (1500 if PASS03 else 1700), 600, 0, yaw=30, s=(0.9 if PASS03 else 1.4), mat="MI_V2_LeafDark", label="GiantMushroom_Foot0"),
+    A("hedge_mass", 2300, 700, 0, yaw=150, s=(1.0 if PASS03 else 1.3), mat="MI_V2_LeafMid", label="GiantMushroom_Foot1"),
     A("hedge_mass", 1900, 1500, 0, yaw=250, s=1.2, mat="MI_V2_LeafDark", label="GiantMushroom_Foot2"),
     A("mushroom_medium", 1450, 1750, 0, yaw=40, s=1.0, mat="MI_V2_MushRed", label="Garden_L_Mush0"),
     A("mushroom_medium", 2600, 1500, 0, yaw=200, s=0.8, mat="MI_V2_MushCream", label="Garden_L_Mush1"),
@@ -308,7 +329,7 @@ GARDEN_R = _band("V2_Garden", [
     A("mushroom_small", -3300, 2400, 0, yaw=220, s=1.0, mat="MI_V2_MushCream", label="Garden_R_Mush2"),
     # the heart on a low terrace
     A("terrace_platform", -900, 2660, 0, s=1.0, sxyz=(0.7, 0.7, 2.1), mat="MI_V2_IvoryStone", label="Heart_Terrace"),
-    A("heart_topiary", -900, 2660, 250, yaw=15, s=0.7, mat="MI_V2_LeafMid", label="HeartTopiary"),
+    A("heart_topiary", -900, 2660, 250, yaw=15, s=0.7, mat=("MI_V2_LeafLight" if PASS03 else "MI_V2_LeafMid"), label="HeartTopiary"),
     A("hedge_mass", -1250, 2760, 250, yaw=0, s=1.0, mat="MI_V2_LeafDark", label="Heart_Base0"),
     A("hedge_mass", -600, 2800, 250, yaw=90, s=0.8, mat="MI_V2_LeafDark", label="Heart_Base1"),
     A("tower_capped", -2500, 4300, 0, s=1.2, mat="MI_V2_IvoryStone", label="Tower_R0"),
