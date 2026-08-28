@@ -504,17 +504,33 @@ def _master(unreal, log, name, kind, texs=None):
             link(t, "", p, "UVs")
             return p
 
-        def refill(ea, scale, fill0, y):
-            # u' = (u - a0) * scale + fill0, wrapped
-            sc = node(unreal.MaterialExpressionMultiply, -700, y)
-            link(ea, "", sc, "A")
-            link(scale, "", sc, "B")
-            ad = node(unreal.MaterialExpressionAdd, -600, y)
-            link(sc, "", ad, "A")
-            link(fill0, "", ad, "B")
-            fr = node(unreal.MaterialExpressionFrac, -520, y)
-            link(ad, "", fr, "")
-            return fr
+        def refill(ea, halfper, width, fill0, y):
+            # MIRROR-REPEAT AT 1:1 (PASS 04g): u' = fill0 + width * tri(ea),
+            # tri = abs(frac(ea / (2 width)) * 2 - 1), a triangle wave of
+            # period 2 * width. The span is neither stretched (04f mapped the
+            # 0.082 span over a 0.21 band, a 2.5x stretch that smeared the far
+            # castle across the left of V2_PASS_026) nor cut: each copy is
+            # the mirror of its neighbour, so the seams are continuous.
+            t = node(unreal.MaterialExpressionMultiply, -760, y)
+            link(ea, "", t, "A")
+            link(halfper, "", t, "B")
+            f = node(unreal.MaterialExpressionFrac, -690, y)
+            link(t, "", f, "")
+            g = node(unreal.MaterialExpressionMultiply, -620, y)
+            link(f, "", g, "A")
+            link(const(-690, y + 60, 2.0), "", g, "B")
+            h = node(unreal.MaterialExpressionAdd, -560, y)
+            link(g, "", h, "A")
+            link(const(-620, y + 60, -1.0), "", h, "B")
+            a = node(unreal.MaterialExpressionAbs, -500, y)
+            link(h, "", a, "")
+            s = node(unreal.MaterialExpressionMultiply, -440, y)
+            link(a, "", s, "A")
+            link(width, "", s, "B")
+            o = node(unreal.MaterialExpressionAdd, -380, y)
+            link(s, "", o, "A")
+            link(fill0, "", o, "B")
+            return o
         na0 = param(unreal.MaterialExpressionScalarParameter, "NearA0", 600, 0.0, -1000)
         na1 = param(unreal.MaterialExpressionScalarParameter, "NearA1", 680, 0.0, -1000)
         nb0 = param(unreal.MaterialExpressionScalarParameter, "NearB0", 900, 0.0, -1000)
@@ -522,12 +538,14 @@ def _master(unreal, log, name, kind, texs=None):
         band_a, ea_a = band(na0, na1, 600)
         band_b, ea_b = band(nb0, nb1, 900)
         fa0 = param(unreal.MaterialExpressionScalarParameter, "NearFillA0", 1200, 0.0, -1000)
-        fas = param(unreal.MaterialExpressionScalarParameter, "NearScaleA", 1280, 1.0, -1000)
-        fb0 = param(unreal.MaterialExpressionScalarParameter, "NearFillB0", 1360, 0.0, -1000)
-        fbs = param(unreal.MaterialExpressionScalarParameter, "NearScaleB", 1440, 1.0, -1000)
+        faw = param(unreal.MaterialExpressionScalarParameter, "NearWidthA", 1260, 1.0, -1000)
+        fah = param(unreal.MaterialExpressionScalarParameter, "NearHalfPerA", 1320, 0.5, -1000)
+        fb0 = param(unreal.MaterialExpressionScalarParameter, "NearFillB0", 1400, 0.0, -1000)
+        fbw = param(unreal.MaterialExpressionScalarParameter, "NearWidthB", 1460, 1.0, -1000)
+        fbh = param(unreal.MaterialExpressionScalarParameter, "NearHalfPerB", 1520, 0.5, -1000)
         base = sample(um, -200)
-        fill_a = sample(refill(ea_a, fas, fa0, 1200), 1200)
-        fill_b = sample(refill(ea_b, fbs, fb0, 1440), 1440)
+        fill_a = sample(refill(ea_a, fah, faw, fa0, 1200), 1200)
+        fill_b = sample(refill(ea_b, fbh, fbw, fb0, 1440), 1440)
         c1 = node(unreal.MaterialExpressionLinearInterpolate, -300, -100)
         link(base, "", c1, "A")
         link(fill_a, "", c1, "B")
@@ -651,10 +669,10 @@ def build_materials(unreal, log, texs):
             if not (a1 > a0 and b1 > b0 and ca1 > ca0 and cb1 > cb0):
                 raise RuntimeError("skyNearBands / skyNearFills must be increasing spans")
             for pname, val in (("NearA0", a0), ("NearA1", a1), ("NearB0", b0), ("NearB1", b1),
-                               ("NearFillA0", ca0), ("NearScaleA", (ca1 - ca0) / (a1 - a0)),
-                               ("NearFillB0", cb0), ("NearScaleB", (cb1 - cb0) / (b1 - b0))):
+                               ("NearFillA0", ca0), ("NearWidthA", ca1 - ca0), ("NearHalfPerA", 0.5 / (ca1 - ca0)),
+                               ("NearFillB0", cb0), ("NearWidthB", cb1 - cb0), ("NearHalfPerB", 0.5 / (cb1 - cb0))):
                 mel.set_material_instance_scalar_parameter_value(mi, pname, float(val))
-            log("V2 SKY: panorama u=0.5 faces yaw %.0f; horizon v %.4f; near bands %s refilled from u %s (same v, colour cross-fade)"
+            log("V2 SKY: panorama u=0.5 faces yaw %.0f; horizon v %.4f; near bands %s refilled from u %s (mirror-repeated at 1:1, same v, colour cross-fade)"
                 % (C.LOOK["skyYawOffset"], C.LOOK["skyHorizonV"], C.LOOK["skyNearBands"], C.LOOK["skyNearFills"]))
             eal.save_asset(path, only_if_is_dirty=False)
             out[name] = mi

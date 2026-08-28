@@ -122,10 +122,21 @@ LOOK = {
     # SkyLight is SKY-ONLY -- its lower hemisphere holds the atmosphere's dark
     # ground, so a downward-facing surface receives nothing, and no bounce
     # shows up to replace it (a 200 fps frame is not a frame Lumen is doing
-    # much in). "scene": one capture at load from (0,0,500) that includes the
-    # sunlit plaza, i.e. ground bounce in the ambient. "realtime": the
-    # sky-only capture the passes before 05 rendered with.
-    "skyLightCapture": "scene" if os.environ.get("WLV2_PASS05", "0") == "1" else "realtime",
+    # much in). "scene" was REFUTED by V2_PASS_026: the one-shot scene capture
+    # delivered LESS than the sky-only capture (hedges p50 27/46 -> 18/20,
+    # undersides still 0) -- in the packaged Vulkan SM5 game the movable sky
+    # light either never captured or captured black. "realtime" stays.
+    "skyLightCapture": "realtime",
+    # PASS 05b (gated WLV2_PASS05=1): GROUND BOUNCE AS A LIGHT. The plaza is
+    # ~0.33 albedo under 60,000 lux, i.e. it radiates ~6,000 nits upward; a
+    # leaf underside 5-8 m above it receives a few thousand lux of warm cream
+    # from below in reality, and here receives nothing (sky-only capture, no
+    # bounce). A shadowless DirectionalLight pointing straight UP supplies it:
+    # 10% of the sun, the plaza's colour, no atmosphere role, no volumetrics.
+    # Expected on HeroCam0: canopy undersides from p50 ~5 to the reference's
+    # 40-63 (albedo 0.26 x 6,000 lux / pi ~ 500 nits ~ sRGB 55).
+    "bounceLight": 1 if os.environ.get("WLV2_PASS05", "0") == "1" else 0,
+    "bounceLux": 6000.0, "bounceColor": (255, 235, 200), "bouncePitch": 90.0,
     # PASS 01 (2026-08-28): exposure PINNED. Histogram auto-exposure metered
     # the frame to mid-grey and blew the ivory plaza to white (luma 0.33 vs the
     # reference's 0.16 at the engine's reported EV 12.5). min == max fixes
@@ -161,11 +172,14 @@ LOOK = {
     # scan (per 0.02-u bin, first 6-row block >= 30% non-sky, sky = cool AND
     # bright) finds ONE span with far content only, the far-castle direction
     # u 0.438-0.520: 0-5% content at v 0.30 and 0.36, its towers begin at
-    # v ~0.38. Both bands map onto it (compressed 2.5x / 1.8x in u; a cloud's
-    # aspect is invisible through leaf gaps), so the gaps show sky, cloud and
-    # the DISTANT skyline. skyGain 14000: 9000 rendered the sky at sRGB p50
+    # v ~0.38. PASS 04f mapped each band linearly onto that span -- which is
+    # a 2.5x / 1.8x STRETCH (a 0.082 span over a 0.21 band), and V2_PASS_026
+    # smeared the far castle across the left of the frame. PASS 04g mirror-
+    # repeats the span at 1:1 instead (a triangle wave in u), so the gaps show
+    # the distant skyline and clouds at their true size, 2.5x / 1.8x copies
+    # with continuous seams. skyGain 14000: 9000 rendered the sky at sRGB p50
     # 79 and 18000 at 128 against the reference's 107 at the same pixels;
-    # interpolated.
+    # interpolated, and V2_PASS_026 measured 105.
     "skyDome": 1, "skyGain": 14000.0, "skyFlipV": 0.0, "skyHorizonV": 0.5,
     "skyYawOffset": 90.0, "skyNearBands": ((0.235, 0.445), (0.515, 0.665)),
     "skyNearFills": ((0.438, 0.520), (0.438, 0.520)),

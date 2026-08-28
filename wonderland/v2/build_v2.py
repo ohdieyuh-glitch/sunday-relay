@@ -1183,6 +1183,35 @@ def light_and_air(actors, layers):
         set_prop(dc, "bCastVolumetricShadow", True)
         set_prop(dc, "LightSourceAngle", 1.2)
         set_prop(dc, "DynamicShadowCascades", 4)
+    bounce = int(L.get("bounceLight", 0))
+    if bounce:
+        # PASS 05b: ground bounce as a shadowless light pointing UP (pitch
+        # +90 sends the light upward, so it reaches downward-facing surfaces:
+        # leaf undersides, cornices, the mushroom cap). See v2_config.LOOK.
+        bl = actors.spawn_actor_from_class(unreal.DirectionalLight, vec((0, 0, 300)), rot(L["bouncePitch"], 0, 0))
+        bl.set_actor_label("V2_GroundBounce")
+        bc = bl.get_component_by_class(unreal.DirectionalLightComponent)
+        if bc is not None:
+            try:
+                bc.set_mobility(unreal.ComponentMobility.MOVABLE)
+            except Exception:
+                pass
+            try:
+                bc.set_intensity(float(L["bounceLux"]))
+            except Exception:
+                set_prop(bc, "Intensity", float(L["bounceLux"]))
+            r, g, b = L["bounceColor"]
+            set_prop(bc, "LightColor", unreal.Color(int(r), int(g), int(b), 255))
+            set_prop(bc, "bUseTemperature", False)
+            set_prop(bc, "CastShadows", False)
+            set_prop(bc, "bAtmosphereSunLight", False)
+            set_prop(bc, "VolumetricScatteringIntensity", 0.0)
+            set_prop(bc, "bCastVolumetricShadow", False)
+        try:
+            bl.set_folder_path(unreal.Name("V2/Light"))
+        except Exception:
+            pass
+        assign_layer(bl, "V2_Skyline", layers)
     sky = actors.spawn_actor_from_class(unreal.SkyAtmosphere, vec((0, 0, 0)), rot(0, 0, 0))
     sky.set_actor_label("V2_SkyAtmosphere")
     sl = actors.spawn_actor_from_class(unreal.SkyLight, vec((0, 0, 500)), rot(0, 0, 0))
@@ -1247,9 +1276,10 @@ def light_and_air(actors, layers):
         except Exception:
             pass
         assign_layer(a, band, layers)
-    LOG("V2 LIGHT: sun %.0f lux at pitch %.0f yaw %.0f, %dK; sky light %.1f (%s capture); fog %.3f; portal light %.0f"
+    LOG("V2 LIGHT: sun %.0f lux at pitch %.0f yaw %.0f, %dK; sky light %.1f (%s capture); ground bounce %s; fog %.3f; portal light %.0f"
         % (L["sunLux"], L["sunPitch"], L["sunYaw"], L["sunTemperatureK"], L["skyLightIntensity"],
-           L.get("skyLightCapture", "realtime"), L["fogDensity"], L["portalLightIntensity"]))
+           L.get("skyLightCapture", "realtime"), ("%.0f lux up" % L["bounceLux"]) if bounce else "off",
+           L["fogDensity"], L["portalLightIntensity"]))
 
 
 def _grade(s):
