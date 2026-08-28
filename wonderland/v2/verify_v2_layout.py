@@ -133,7 +133,7 @@ def main():
     must_see = {
         2: ("Path_Steps", "Corridor_Arch"),
         3: ("Gate_PierL", "Gate_PierR"),
-        4: ("GiantMushroom", "Garden_L_Tree_Trunk", "Corridor_Arch"),
+        4: ("GiantMushroom", "Garden_L_Tree_Trunk", "Gate_PierL"),  # it looks BACK through the garden to the plaza
         5: ("ClockTree_Trunk", "ClockTree_Clock", "HeartTopiary", "Corridor_Arch"),  # the gold gate is 100 deg from the clock here
         7: ("Gate_PierL", "Gate_PierR", "Gate_UrnR"),
     }
@@ -164,7 +164,11 @@ def main():
         cam1 = C.HERO_CAMS[1]
         dx, dy = dog[0] - cam1["location"][0], dog[1] - cam1["location"][1]
         ang = (math.degrees(math.atan2(dy, dx)) - cam1["rotation"][1] + 180.0) % 360.0 - 180.0
-        if abs(ang) <= cam1["fov"] * 0.5:
+        # the gate's flanking walls (y = -910, |x| from the piers at 230 out
+        # to the side walls) hide anything on the plaza that is not in the
+        # opening, so a Dog beside an urn is invisible from the spawn
+        behind_gate_wall = dog[1] > -910.0 and abs(dog[0]) > 260.0 and cam1["location"][1] < -910.0
+        if abs(ang) <= cam1["fov"] * 0.5 and not behind_gate_wall:
             fails.append("the scale Dog at %s is inside PlayerCam01's frame (bearing %.0f); keep gameplay views Dog-free" % (dog, ang))
     for it in L.ALL:
         # only the ARRIVAL gate's leaves (labels Gate_Leaf*): the garden's own

@@ -120,9 +120,15 @@ HERO_CAMS = [
     # behind FrontWall_R2 (a coping across the bottom third). Moved onto the
     # open ground of each garden; the required landmarks below are checked
     # by verify_v2_layout from the new points.
-    {"name": "GardenLeft04", "location": (1300.0, 300.0, 190.0), "rotation": (-3.0, 80.0, 0.0), "fov": 90.0,
+    # Second placement (V2_PASS_042/043): (1300,300) stood behind the giant
+    # mushroom's foot hedge, (-1350,1250,190) INSIDE the lavender bed (a black
+    # frame). GardenLeft04 now stands in the garden's far corner looking back
+    # through mushroom, tree and gold gate to the plaza and the arrival gate --
+    # the secondary space with the world's depth behind it; GardenRight05
+    # keeps its point at the panorama's eye height so it sees over the beds.
+    {"name": "GardenLeft04", "location": (3000.0, 3000.0, 200.0), "rotation": (-3.0, 225.0, 0.0), "fov": 90.0,
      "tags": ("GardenLeft04", "HeroCam4", "MARBLE_VIEW")},
-    {"name": "GardenRight05", "location": (-1350.0, 1250.0, 190.0), "rotation": (-3.0, 100.0, 0.0), "fov": 90.0,
+    {"name": "GardenRight05", "location": (-1350.0, 1250.0, 270.0), "rotation": (-4.0, 100.0, 0.0), "fov": 90.0,
      "tags": ("GardenRight05", "HeroCam5", "MARBLE_VIEW")},
     {"name": "SkylineCam06", "location": (0.0, -1800.0, 2400.0), "rotation": (-22.0, 90.0, 0.0), "fov": 90.0,
      "tags": ("SkylineCam06", "HeroCam6", "MARBLE_VIEW")},
@@ -291,7 +297,11 @@ LOOK = {
     # BEHIND HeroCam0 (dy < 0) and just outside PlayerCam01's half-fov
     # (bearing 50.6 deg). Capsule half-height 87.1 puts its feet on z = 0.
     "scaleDog": 1, "scaleDogClass": "/Game/WonderlandV2/Characters/RelayDog/BP_RelayDog.BP_RelayDog_C",
-    "scaleDogPos": (-560.0, -1000.0, 87.1), "scaleDogYaw": 60.0,
+    # (-560,-1000) stood 0.9 m BEHIND the gate's flanking wall (y = -910):
+    # two ScaleCam07 renders without a Dog. Now inside the plaza, beside the
+    # right urn, 6 m from ScaleCam07 at bearing 33 deg; the same wall hides
+    # it from PlayerCam01, and HeroCam0 looks the other way.
+    "scaleDogPos": (-330.0, -650.0, 87.1), "scaleDogYaw": 56.0,
     # secondary dressing (the PCG-equivalent): garden zones only, after the authored layout
     "dressing": 1, "dressingDensity": 1.0,
     # ---- THE MARBLE WORLD -----------------------------------------------------
