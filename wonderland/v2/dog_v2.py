@@ -171,11 +171,20 @@ def build_blueprint(meshes, mats):
     def add(parent, cls, name):
         params = unreal.AddNewSubobjectParams(parent_handle=parent, new_class=cls, blueprint_context=bp)
         handle, why = sds.add_new_subobject(params)
-        if not handle.is_valid():
+        # A SubobjectDataHandle exposes no is_valid() to Python (measured 2026-08-28);
+        # the data record behind it is what says whether the add took.
+        data = sds.k2_find_subobject_data_from_handle(handle)
+        valid = False
+        try:
+            valid = bool(lib.is_valid(data))
+        except Exception:
+            valid = data is not None
+        if not valid:
             raise RuntimeError("add_new_subobject %s: %s" % (name, why))
         sds.rename_subobject(handle, unreal.Text(name))
-        data = sds.k2_find_subobject_data_from_handle(handle)
         obj = lib.get_object(data)
+        if obj is None:
+            raise RuntimeError("subobject %s has no template object" % name)
         return handle, obj
 
     half_height = D.height() * W_UU / 2.0
@@ -324,10 +333,16 @@ def build_studio(meshes, mats, dog_cls):
         cam = actors.spawn_actor_from_class(unreal.CameraActor, vec(at), rot(-3.0, yaw))
         cam.set_actor_label(label)
         cam.set_editor_property("tags", [unreal.Name("HeroCam%d" % i), unreal.Name(label), unreal.Name("RELAY_DOG_STUDIO")])
-        try:
-            cam.get_camera_component().set_editor_property("field_of_view", 55.0)
-        except Exception as exc:
-            LOG("fov not set (%s)" % exc)
+        fov_set = False
+        for getter in (lambda: cam.camera_component, lambda: cam.get_camera_component()):
+            try:
+                getter().set_editor_property("field_of_view", 55.0)
+                fov_set = True
+                break
+            except Exception:
+                continue
+        if not fov_set:
+            LOG("fov not set on %s -- the capture will use the engine default 90" % label)
     les.save_current_level()
     util.save_dirty_packages(True, True)
     cdir = str(unreal.Paths.project_content_dir())
