@@ -1265,6 +1265,29 @@ def light_and_air(actors, layers):
             if vcc is not None:
                 set_prop(vcc, "LayerBottomAltitude", float(L["cloudLayerBottomKm"]))
                 set_prop(vcc, "LayerHeight", float(L["cloudLayerHeightKm"]))
+                # PASS 06b: our own instance of the engine cloud material
+                try:
+                    mel = unreal.MaterialEditingLibrary
+                    parent = eal.load_asset("/Engine/EngineSky/VolumetricClouds/m_SimpleVolumetricCloud")
+                    pkg = C.FOLDERS["mat_inst"]
+                    cpath = pkg + "/MI_V2_Clouds"
+                    if eal.does_asset_exist(cpath):
+                        eal.delete_asset(cpath)
+                    cmi = unreal.AssetToolsHelpers.get_asset_tools().create_asset("MI_V2_Clouds", pkg, unreal.MaterialInstanceConstant,
+                                                                                  unreal.MaterialInstanceConstantFactoryNew())
+                    if parent is None or cmi is None:
+                        raise RuntimeError("cloud material parent or instance missing")
+                    try:
+                        mel.set_material_instance_parent(cmi, parent)
+                    except Exception:
+                        cmi.set_editor_property("parent", parent)
+                    mel.set_material_instance_scalar_parameter_value(cmi, "Cloud_GlobalCoverage", float(L["cloudCoverage"]))
+                    mel.set_material_instance_scalar_parameter_value(cmi, "Cloud_GlobalDensity", float(L["cloudDensity"]))
+                    eal.save_asset(cpath, only_if_is_dirty=False)
+                    set_prop(vcc, "Material", cmi)
+                    LOG("V2 CLOUDS: MI_V2_Clouds coverage %.2f density %.2f" % (L["cloudCoverage"], L["cloudDensity"]))
+                except Exception as exc:
+                    LOG("V2 CLOUDS: cloud instance not applied (%s) -- the engine default (overcast) stands" % exc)
             try:
                 vc.set_folder_path(unreal.Name("V2/Light"))
             except Exception:

@@ -230,7 +230,14 @@ LOOK = {
     # gradient; a VolumetricCloud actor with the engine's default cloud
     # material puts real, lit, 3D cumulus there. Tuned by measurement after
     # the first render (coverage lives in the material instance).
-    "volumetricClouds": 1, "cloudLayerBottomKm": 4.0, "cloudLayerHeightKm": 6.0,
+    # PASS 06b: the engine's default instance is an OVERCAST LID -- HeroCam0's
+    # sky went from blue (p50 108) to grey-white (183) and SkylineCam06's
+    # horizon to a dark grey band. The material exposes Cloud_GlobalCoverage,
+    # Cloud_GlobalDensity and Cloud_AlbedoColor (read from the .uasset); the
+    # layer gets its own instance: sparse cumulus over blue sky, a thinner
+    # layer so the sun and the panorama's zenith stay visible.
+    "volumetricClouds": 1, "cloudLayerBottomKm": 3.5, "cloudLayerHeightKm": 3.0,
+    "cloudCoverage": 0.32, "cloudDensity": 0.55,
     "volumetricFog": 1, "fogScattering": 0.20,
     # restrained magic: a small rune disc at the viewpoint, low glow
     "portal": 1, "portalRadius": 250.0, "portalGlow": 1200.0, "portalLightIntensity": 8000.0,
