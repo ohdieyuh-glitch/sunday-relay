@@ -28,7 +28,7 @@ if [ "$STEP" = build ]; then
   wl_say "building the canonical Relay Dog (assets, BP_RelayDog, WL_V2_RelayDogStudio)"
   # shellcheck disable=SC2086
   docker run --rm $gpuflag -v "$WL_ROOT:$WL_ROOT" \
-    -e WLV2_DOG_HEAD_WIDTH_UU="${WLV2_DOG_HEAD_WIDTH_UU:-60}" -e WLV2_DOG_SUN_LUX="${WLV2_DOG_SUN_LUX:-5000}" \
+    -e WLV2_DOG_HEAD_WIDTH_UU="${WLV2_DOG_HEAD_WIDTH_UU:-60}" -e WLV2_DOG_SUN_LUX="${WLV2_DOG_SUN_LUX:-2500}" \
     -e WLV2_DOG_EYE_EMISSIVE="${WLV2_DOG_EYE_EMISSIVE:-600}" \
     -w "$WL_SRC" "$WL_UE_IMAGE" /home/ue4/UnrealEngine/Engine/Binaries/Linux/UnrealEditor-Cmd "$PROJECT" \
     -run=pythonscript "-script=$WL_SRC/wonderland/v2/dog_v2.py" -AllowCommandletRendering -RenderOffscreen \
