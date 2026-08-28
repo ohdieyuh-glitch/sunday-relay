@@ -128,7 +128,10 @@ HERO_CAMS = [
     # keeps its point at the panorama's eye height so it sees over the beds.
     {"name": "GardenLeft04", "location": (3000.0, 3000.0, 200.0), "rotation": (-3.0, 225.0, 0.0), "fov": 90.0,
      "tags": ("GardenLeft04", "HeroCam4", "MARBLE_VIEW")},
-    {"name": "GardenRight05", "location": (-1350.0, 1250.0, 270.0), "rotation": (-4.0, 100.0, 0.0), "fov": 90.0,
+    # Third placement: (-1350,1250) at 2.7 m was boxed in by Garden_R_Hedge0
+    # and the blossom cluster at (-1500,1450,260) (V2_PASS_050, leaves only).
+    # The right garden's open lawn west of the clock tree: nothing within 7 m.
+    {"name": "GardenRight05", "location": (-2800.0, 1500.0, 200.0), "rotation": (-3.0, 50.0, 0.0), "fov": 90.0,
      "tags": ("GardenRight05", "HeroCam5", "MARBLE_VIEW")},
     {"name": "SkylineCam06", "location": (0.0, -1800.0, 2400.0), "rotation": (-22.0, 90.0, 0.0), "fov": 90.0,
      "tags": ("SkylineCam06", "HeroCam6", "MARBLE_VIEW")},
