@@ -1397,6 +1397,20 @@ def hero_camera(actors, layers):
                 LOG("V2 SCALE DOG: spawn failed -- ScaleCam07 has NO scale reference")
             else:
                 dog.set_actor_label("Scale_CanonicalDog")
+                # BP_RelayDog is a Character. This world has no gameplay
+                # collision under the plaza (only steps, walls, balustrades and
+                # hedge blocks collide), so at BeginPlay its capsule fell
+                # through the flagstones and SUITE01's ScaleCam07 showed no
+                # Dog. A scale reference does not walk: movement mode None,
+                # no gravity, it stands where it is placed.
+                cmc = dog.get_component_by_class(unreal.CharacterMovementComponent)
+                if cmc is not None:
+                    ok_mode = set_prop(cmc, "DefaultLandMovementMode", unreal.MovementMode.MOVE_NONE)
+                    ok_grav = set_prop(cmc, "GravityScale", 0.0)
+                    LOG("V2 SCALE DOG: movement None %s, gravity 0 %s (no collision under the plaza)"
+                        % ("set" if ok_mode else "NOT SET", "set" if ok_grav else "NOT SET"))
+                else:
+                    LOG("V2 SCALE DOG: no CharacterMovementComponent found -- it may fall through the plaza")
                 try:
                     dog.set_editor_property("tags", [unreal.Name("ScaleReference"), unreal.Name("CanonicalDog")])
                 except Exception:
