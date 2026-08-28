@@ -1270,7 +1270,7 @@ def light_and_air(actors, layers):
                     mel = unreal.MaterialEditingLibrary
                     eal_ = unreal.EditorAssetLibrary   # light_and_air has no eal of its own (main's is local)
                     parent = eal_.load_asset("/Engine/EngineSky/VolumetricClouds/m_SimpleVolumetricCloud")
-                    pkg = C.FOLDERS["mat_functions"]
+                    pkg = C.FOLDERS["mat_instances"]
                     cpath = pkg + "/MI_V2_Clouds"
                     if eal_.does_asset_exist(cpath):
                         eal_.delete_asset(cpath)
