@@ -153,6 +153,22 @@ LOOK = {
     # beds need the same flag on the batch actor (C++), which follows once
     # the canopies prove the mechanism.
     "foliageDistanceFieldLighting": 0 if os.environ.get("WLV2_PASS05", "0") == "1" else 1,
+    # PASS 05d (gated WLV2_PASS05=1): excluding the canopies from distance-
+    # field lighting moved the dense right canopy only from p50 2 to 6
+    # (V2_PASS_028; reference 37) -- the DF hypothesis is refuted for the
+    # canopies. What fits every measurement is Lumen's SCREEN-SPACE traces:
+    # from a leaf pixel nearly every ray hits a neighbouring leaf on screen,
+    # so the sky is counted as occluded; an ivory post's face traces off into
+    # the sky (118), the hedges' shadow parts, seen from above, escape partly
+    # (their p50 tracks every skyGain change), and the cap's underside takes
+    # the DIRECT bounce light (26). Distance-field flags cannot touch screen
+    # traces. The engine's knob for exactly this symptom is the post-process
+    # LumenSkylightLeaking: a fraction of the sky light applied without
+    # occlusion ("to keep areas from going fully black"). 0.5 is the single
+    # value tested; the dense right-canopy region (950-1250, 120-300) must move
+    # from p50 6 toward the reference's 37. If it does not move, Lumen is not
+    # the occluder and the leaf material is next.
+    "lumenSkylightLeaking": 0.5 if os.environ.get("WLV2_PASS05", "0") == "1" else 0.0,
     # PASS 01 (2026-08-28): exposure PINNED. Histogram auto-exposure metered
     # the frame to mid-grey and blew the ivory plaza to white (luma 0.33 vs the
     # reference's 0.16 at the engine's reported EV 12.5). min == max fixes

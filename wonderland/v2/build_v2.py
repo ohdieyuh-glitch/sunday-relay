@@ -576,6 +576,14 @@ class Placer(object):
             set_prop(a, "bHierarchical", True)
             set_prop(a, "bCastShadow", True)
             set_prop(a, "bCollides", key in ("side_steps", "retaining_wall", "balustrade", "hedge_block"))
+            if mat in MAT.FOLIAGE and not int(C.LOOK.get("foliageDistanceFieldLighting", 1)):
+                # PASS 05d: the batched hedges, beds and blossoms -- same
+                # reason as the canopies (see Placer.place); the property is
+                # AWonderlandInstancedBatch::bAffectDistanceFieldLighting.
+                if set_prop(a, "bAffectDistanceFieldLighting", False):
+                    self.df_excluded += 1
+                else:
+                    self.df_failed += 1
             for payload in (xf, None):
                 try:
                     if payload is None:
@@ -1289,6 +1297,8 @@ def light_and_air(actors, layers):
         % (L["sunLux"], L["sunPitch"], L["sunYaw"], L["sunTemperatureK"], L["skyLightIntensity"],
            L.get("skyLightCapture", "realtime"), ("%.0f lux up" % L["bounceLux"]) if bounce else "off",
            L["fogDensity"], L["portalLightIntensity"]))
+    LOG("V2 LUMEN: skylight leaking %.2f; foliage distance-field lighting %s"
+        % (float(L.get("lumenSkylightLeaking", 0.0)), "on" if int(L.get("foliageDistanceFieldLighting", 1)) else "OFF"))
 
 
 def _grade(s):
@@ -1306,7 +1316,8 @@ def _grade(s):
              ("auto_exposure_max_brightness", float(L["exposurePinEV100"]) if L.get("exposurePinEV100") is not None else None),
              ("override_lumen_final_gather_quality", True), ("lumen_final_gather_quality", 2.0),
              ("override_lumen_reflection_quality", True), ("lumen_reflection_quality", 2.0),
-             ("override_lumen_scene_detail", True), ("lumen_scene_detail", 2.0)]
+             ("override_lumen_scene_detail", True), ("lumen_scene_detail", 2.0),
+             ("override_lumen_skylight_leaking", True), ("lumen_skylight_leaking", float(L.get("lumenSkylightLeaking", 0.0)))]
     for n, v in pairs:
         if v is None:
             continue
