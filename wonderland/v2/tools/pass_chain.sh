@@ -14,6 +14,12 @@ set -uo pipefail
 R=/teamspace/studios/this_studio/wonderland
 cd $R/src || exit 1
 echo "pass start $(date -u +%FT%TZ) head=$(git rev-parse --short HEAD) rebuild=${WLV2_REBUILD:-<none>}"
+# THE PANORAMA DOME (PASS 04, 2026-08-28): the Marble export is gitignored, so a
+# fresh checkout has none and the generator logged "NO Marble panorama ->
+# V2 SKY: dome skipped" in every classic-map render. v2-build.sh falls back to
+# the tracked reference copy; this chain must too.
+export WLV2_MARBLE_PANO="${WLV2_MARBLE_PANO:-$R/src/wonderland/v2/reference/marble-royal-garden-backdrop-panorama.png}"
+[ -f "$WLV2_MARBLE_PANO" ] || echo "WARNING: panorama not found at $WLV2_MARBLE_PANO -- the sky dome will be skipped"
 WLV2_REUSE_ASSETS=1 WLV2_PARTITIONED=0 WP_STEP=build bash wonderland/v2/diag/wp_recover.sh; rc=$?
 echo "generate wrapper rc=$rc $(date -u +%T)"
 grep -a "LogPython" $R/logs/wp-build.log | grep -a "V2 \(ASSETS\|SUMMARY\|GROUND\|LIGHT\|SAVE\|MAP\)" | sed 's/.*LogPython: [A-Za-z]*: //' | cut -c1-200 | tail -10
