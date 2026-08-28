@@ -503,7 +503,19 @@ def build_materials(unreal, log, texs):
             path = pkg + "/" + name
             if eal.does_asset_exist(path):
                 eal.delete_asset(path)
-            mi = mel.create_material_instance_asset(name, pkg, masters["sky"])
+            # 5.8's Python has no MaterialEditingLibrary.create_material_instance_asset
+            # (measured 2026-08-28 -- this call is why the dome was skipped in
+            # every classic-map render: the instance raised, the log said
+            # "FAILED", and build_v2 saw no MI_V2_SkyPano).
+            mi = mel.create_material_instance_asset(name, pkg, masters["sky"]) if hasattr(mel, "create_material_instance_asset") \
+                else unreal.AssetToolsHelpers.get_asset_tools().create_asset(name, pkg, unreal.MaterialInstanceConstant,
+                                                                              unreal.MaterialInstanceConstantFactoryNew())
+            if mi is None:
+                raise RuntimeError("no material instance created")
+            try:
+                mel.set_material_instance_parent(mi, masters["sky"])
+            except Exception:
+                mi.set_editor_property("parent", masters["sky"])
             if "T_V2_SkyPano" in texs:
                 mel.set_material_instance_texture_parameter_value(mi, "Panorama", texs["T_V2_SkyPano"])
             mel.set_material_instance_scalar_parameter_value(mi, "SkyGain", float(C.LOOK["skyGain"]))
