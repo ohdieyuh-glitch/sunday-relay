@@ -134,7 +134,7 @@ def main():
         2: ("Path_Steps", "Corridor_Arch"),
         3: ("Gate_PierL", "Gate_PierR"),
         4: ("GiantMushroom", "Garden_L_Tree_Trunk", "Corridor_Arch"),
-        5: ("ClockTree_Trunk", "ClockTree_Clock", "HeartTopiary", "Corridor_Arch"),
+        5: ("ClockTree_Trunk", "ClockTree_Clock", "HeartTopiary", "Corridor_Arch"),  # the gold gate is 100 deg from the clock here
         7: ("Gate_PierL", "Gate_PierR", "Gate_UrnR"),
     }
     # the gold garden-gate arches exist only under the PASS 03 gate
@@ -142,7 +142,6 @@ def main():
     if getattr(L, "PASS03", False):
         must_see[3] += ("GardenGate_ArchL", "GardenGate_ArchR")
         must_see[4] += ("GardenGate_ArchL",)
-        must_see[5] += ("GardenGate_ArchR",)
     inner_r = {"GiantMushroom": 1000.0}
     for i, labels in must_see.items():
         camx = C.HERO_CAMS[i]

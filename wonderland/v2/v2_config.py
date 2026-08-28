@@ -115,9 +115,14 @@ HERO_CAMS = [
      "tags": ("PathCam02", "HeroCam2", "MARBLE_VIEW")},
     {"name": "ReverseCam03", "location": (0.0, 2600.0, 262.0), "rotation": (-2.0, 270.0, 0.0), "fov": 90.0,
      "tags": ("ReverseCam03", "HeroCam3", "MARBLE_VIEW")},
-    {"name": "GardenLeft04", "location": (1100.0, 400.0, 200.0), "rotation": (-3.0, 75.0, 0.0), "fov": 90.0,
+    # SUITE01 (V2_PASS_034/035) stood both garden cameras inside the side
+    # beds: GardenLeft04 in SideBed_L_Hedge3 (a wall of leaves), GardenRight05
+    # behind FrontWall_R2 (a coping across the bottom third). Moved onto the
+    # open ground of each garden; the required landmarks below are checked
+    # by verify_v2_layout from the new points.
+    {"name": "GardenLeft04", "location": (1300.0, 300.0, 190.0), "rotation": (-3.0, 80.0, 0.0), "fov": 90.0,
      "tags": ("GardenLeft04", "HeroCam4", "MARBLE_VIEW")},
-    {"name": "GardenRight05", "location": (-1500.0, 600.0, 200.0), "rotation": (-3.0, 90.0, 0.0), "fov": 90.0,
+    {"name": "GardenRight05", "location": (-1350.0, 1250.0, 190.0), "rotation": (-3.0, 100.0, 0.0), "fov": 90.0,
      "tags": ("GardenRight05", "HeroCam5", "MARBLE_VIEW")},
     {"name": "SkylineCam06", "location": (0.0, -1800.0, 2400.0), "rotation": (-22.0, 90.0, 0.0), "fov": 90.0,
      "tags": ("SkylineCam06", "HeroCam6", "MARBLE_VIEW")},
@@ -202,7 +207,11 @@ LOOK = {
     # value tested; the dense right-canopy region (950-1250, 120-300) must move
     # from p50 6 toward the reference's 37. If it does not move, Lumen is not
     # the occluder and the leaf material is next.
-    "lumenSkylightLeaking": 0.5 if os.environ.get("WLV2_PASS05", "0") == "1" else 0.0,
+    # PASS 05f: with the albedo fixed (V2_PASS_030: canopy p50 85 vs the
+    # reference's 37, hedges 94/98 vs 75/32) the leak is inflating every
+    # occluded area (castle eave 84 -> 113 in V2_PASS_029). Non-physical knob,
+    # cause gone: 0. The bounce light stays for this render (one change).
+    "lumenSkylightLeaking": 0.0,
     # PASS 01 (2026-08-28): exposure PINNED. Histogram auto-exposure metered
     # the frame to mid-grey and blew the ivory plaza to white (luma 0.33 vs the
     # reference's 0.16 at the engine's reported EV 12.5). min == max fixes
