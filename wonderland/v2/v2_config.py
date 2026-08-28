@@ -130,13 +130,18 @@ LOOK = {
     "bloomIntensity": 0.35, "bloomThreshold": 1.2,
     "gradeShadows": (1.0, 1.0, 1.02), "gradeMidtones": (1.01, 1.0, 0.99),
     "gradeHighlights": (1.02, 1.0, 0.98),
-    # the panorama dome supplies the SKY ONLY: everything below +8 deg of
-    # elevation is masked (v = 0.5 - 8/180 = 0.4556) so the 3D castle city and
-    # gardens own the horizon and no giant panorama mushroom ghosts the sky
-    # skyFlipV 1.0 (PASS 04c, 2026-08-28): the first dome render in the classic
-    # map showed the panorama's GROUND half across the sky -- the equirect's V
-    # runs the other way on this mesh backend, the case this scalar exists for.
-    "skyDome": 1, "skyGain": 9000.0, "skyFlipV": 1.0, "skyHorizonV": 0.4556,
+    # the panorama dome supplies the SKY: the lookup is computed from the view
+    # direction (PASS 04d, 2026-08-28), so u = 0.5 faces yaw skyYawOffset
+    # (90 = +Y, HeroCam0's forward) and the mesh's own UVs are irrelevant.
+    # skyFlipV 0: PASS 04c's flip painted the panorama's GROUND across the sky
+    # -- the vertical had been right all along, the "ground" read in
+    # V2_PASS_022 was the panorama's giant mushroom, rotated and compressed by
+    # the mesh UVs. skyHorizonV 0.5: masked at the true horizon; the near
+    # objects that used to justify +8 deg are handled by skyNearBands: inside
+    # those two bands of u (the panorama's giant mushroom, its big tree) the
+    # lookup is v * skyNearFillK, i.e. the clean zenith sky stretched down.
+    "skyDome": 1, "skyGain": 9000.0, "skyFlipV": 0.0, "skyHorizonV": 0.5,
+    "skyYawOffset": 90.0, "skyNearBands": ((0.245, 0.435), (0.525, 0.655)), "skyNearFillK": 0.38,
     "castleKit": 1, "nanite": 1,
     # secondary dressing (the PCG-equivalent): garden zones only, after the authored layout
     "dressing": 1, "dressingDensity": 1.0,

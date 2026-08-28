@@ -20,6 +20,7 @@ cobble 1:0.68:0.64, gold 1:0.70:0.38, cap red with G == B, near-black foliage.
 """
 
 import json
+import math
 import os
 
 import v2_config as C
@@ -383,48 +384,143 @@ def _master(unreal, log, name, kind, texs=None):
             except Exception:
                 continue
         m.set_editor_property("two_sided", True)
-        # equirectangular lookup from the view direction of the pixel
-        tc0 = mel.create_material_expression(m, unreal.MaterialExpressionTextureCoordinate, -1300, -200)
-        # v' = lerp(v, 1 - v, FlipV): which way up the equirect maps onto the
-        # sphere's UVs differs between the two mesh backends, and the founder
-        # must not pay a rebuild to find out -- it is a scalar on the instance.
-        flip = param(unreal.MaterialExpressionScalarParameter, "FlipV", -420, 0.0, -1300)
-        um = mel.create_material_expression(m, unreal.MaterialExpressionComponentMask, -1100, -260)
-        um.set_editor_property("r", True)
-        um.set_editor_property("g", False)
-        mel.connect_material_expressions(tc0, "", um, "")
-        vm = mel.create_material_expression(m, unreal.MaterialExpressionComponentMask, -1100, -160)
-        vm.set_editor_property("r", False)
-        vm.set_editor_property("g", True)
-        mel.connect_material_expressions(tc0, "", vm, "")
-        om = mel.create_material_expression(m, unreal.MaterialExpressionOneMinus, -1000, -120)
-        mel.connect_material_expressions(vm, "", om, "")
-        vl = mel.create_material_expression(m, unreal.MaterialExpressionLinearInterpolate, -900, -160)
-        mel.connect_material_expressions(vm, "", vl, "A")
-        mel.connect_material_expressions(om, "", vl, "B")
-        mel.connect_material_expressions(flip, "", vl, "Alpha")
-        tc = mel.create_material_expression(m, unreal.MaterialExpressionAppendVector, -800, -200)
-        mel.connect_material_expressions(um, "", tc, "A")
-        mel.connect_material_expressions(vl, "", tc, "B")
+        # EQUIRECT FROM THE VIEW DIRECTION, NOT THE MESH UVs (PASS 04d,
+        # 2026-08-28). The sphere's own lat-long UVs put the panorama on the
+        # dome rotated, mirrored and compressed (V2_PASS_022 showed the giant
+        # mushroom dead ahead at a third of its width); flipping V (PASS 04c)
+        # only proved the vertical was already right by painting the ground
+        # across the sky. So the lookup is computed per pixel from the world
+        # direction camera -> dome: u from atan2(y, x), v from asin(z).
+        # Orientation is then a matter of arithmetic, not of which backend
+        # built the sphere:  +Y (HeroCam0's forward) faces panorama u = 0.5
+        # when YawOffset = 90, and content right of the panorama's centre
+        # lands on the viewer's right (UE is left-handed: facing +Y, right is
+        # -X, atan2 = 180 deg, u = 0.75).
+        def link(a, ao, b, bi):
+            if not mel.connect_material_expressions(a, ao, b, bi):
+                raise RuntimeError("sky graph: cannot connect %s.%s -> %s.%s"
+                                   % (type(a).__name__, ao or "out", type(b).__name__, bi or "in"))
+
+        def node(cls, x, y):
+            return mel.create_material_expression(m, cls, x, y)
+
+        def const(x, y, value):
+            k = node(unreal.MaterialExpressionConstant, x, y)
+            k.set_editor_property("r", float(value))
+            return k
+
+        wpos = node(unreal.MaterialExpressionWorldPosition, -2200, -300)
+        cpos = node(unreal.MaterialExpressionCameraPositionWS, -2200, -180)
+        dvec = node(unreal.MaterialExpressionSubtract, -2000, -260)
+        link(wpos, "", dvec, "A")
+        link(cpos, "", dvec, "B")
+        dnrm = node(unreal.MaterialExpressionNormalize, -1850, -260)
+        link(dvec, "", dnrm, "")
+        dx = node(unreal.MaterialExpressionComponentMask, -1700, -360)
+        dx.set_editor_property("r", True); dx.set_editor_property("g", False); dx.set_editor_property("b", False)
+        dy = node(unreal.MaterialExpressionComponentMask, -1700, -260)
+        dy.set_editor_property("r", False); dy.set_editor_property("g", True); dy.set_editor_property("b", False)
+        dz = node(unreal.MaterialExpressionComponentMask, -1700, -160)
+        dz.set_editor_property("r", False); dz.set_editor_property("g", False); dz.set_editor_property("b", True)
+        for c_ in (dx, dy, dz):
+            link(dnrm, "", c_, "")
+        # u = frac(atan2(y, x) / 2pi + 0.5 - YawOffset / 360)
+        theta = node(unreal.MaterialExpressionArctangent2, -1550, -320)
+        link(dy, "", theta, "Y")
+        link(dx, "", theta, "X")
+        u0 = node(unreal.MaterialExpressionMultiply, -1400, -320)
+        link(theta, "", u0, "A")
+        link(const(-1550, -420, 1.0 / (2.0 * math.pi)), "", u0, "B")
+        yaw = param(unreal.MaterialExpressionScalarParameter, "YawOffset", -520, 0.0, -1550)
+        yawn = node(unreal.MaterialExpressionMultiply, -1400, -500)
+        link(yaw, "", yawn, "A")
+        link(const(-1550, -600, -1.0 / 360.0), "", yawn, "B")
+        u1 = node(unreal.MaterialExpressionAdd, -1250, -320)
+        link(u0, "", u1, "A")
+        link(const(-1400, -240, 0.5), "", u1, "B")
+        u2 = node(unreal.MaterialExpressionAdd, -1120, -320)
+        link(u1, "", u2, "A")
+        link(yawn, "", u2, "B")
+        um = node(unreal.MaterialExpressionFrac, -1000, -320)
+        link(u2, "", um, "")
+        # v = 0.5 - asin(z) / pi  (0 at the zenith, 0.5 at the horizon)
+        vz = node(unreal.MaterialExpressionArcsine, -1550, -160)
+        link(dz, "", vz, "")
+        v0 = node(unreal.MaterialExpressionMultiply, -1400, -160)
+        link(vz, "", v0, "A")
+        link(const(-1550, -60, -1.0 / math.pi), "", v0, "B")
+        vm = node(unreal.MaterialExpressionAdd, -1250, -160)
+        link(v0, "", vm, "A")
+        link(const(-1400, -80, 0.5), "", vm, "B")
+        # FlipV stays a scalar on the instance (default 0): v' = lerp(v, 1 - v, FlipV)
+        flip = param(unreal.MaterialExpressionScalarParameter, "FlipV", 40, 0.0, -1300)
+        om = node(unreal.MaterialExpressionOneMinus, -1100, -120)
+        link(vm, "", om, "")
+        vl = node(unreal.MaterialExpressionLinearInterpolate, -950, -160)
+        link(vm, "", vl, "A")
+        link(om, "", vl, "B")
+        link(flip, "", vl, "Alpha")
+        # THE PANORAMA'S NEAR OBJECTS. Its giant mushroom (u 0.245-0.435) and
+        # its big tree (u 0.525-0.655) stand 10 m from the Marble camera and
+        # reach 55 deg of elevation; projected to infinity they ghost the sky
+        # behind our own mushroom and tree. Inside those two bands of azimuth
+        # the lookup is stretched from the clean zenith sky instead:
+        # v_s = v * NearFillK (0.38 = 0.19 / 0.5), so the band shows blue sky
+        # and cumulus down to the horizon. Band edges are soft over 0.01 u.
+        def band(a0, a1, y):
+            ea = node(unreal.MaterialExpressionSubtract, -800, y)
+            link(um, "", ea, "A")
+            link(a0, "", ea, "B")
+            sa = node(unreal.MaterialExpressionMultiply, -700, y)
+            link(ea, "", sa, "A")
+            link(const(-800, y + 60, 100.0), "", sa, "B")
+            ka = node(unreal.MaterialExpressionSaturate, -600, y)
+            link(sa, "", ka, "")
+            eb = node(unreal.MaterialExpressionSubtract, -800, y + 120)
+            link(a1, "", eb, "A")
+            link(um, "", eb, "B")
+            sb = node(unreal.MaterialExpressionMultiply, -700, y + 120)
+            link(eb, "", sb, "A")
+            link(const(-800, y + 180, 100.0), "", sb, "B")
+            kb = node(unreal.MaterialExpressionSaturate, -600, y + 120)
+            link(sb, "", kb, "")
+            box = node(unreal.MaterialExpressionMultiply, -500, y + 60)
+            link(ka, "", box, "A")
+            link(kb, "", box, "B")
+            return box
+        na0 = param(unreal.MaterialExpressionScalarParameter, "NearA0", 600, 0.0, -1000)
+        na1 = param(unreal.MaterialExpressionScalarParameter, "NearA1", 680, 0.0, -1000)
+        nb0 = param(unreal.MaterialExpressionScalarParameter, "NearB0", 900, 0.0, -1000)
+        nb1 = param(unreal.MaterialExpressionScalarParameter, "NearB1", 980, 0.0, -1000)
+        inside = node(unreal.MaterialExpressionMax, -400, 760)
+        link(band(na0, na1, 600), "", inside, "A")
+        link(band(nb0, nb1, 900), "", inside, "B")
+        fillk = param(unreal.MaterialExpressionScalarParameter, "NearFillK", 300, 1.0, -800)
+        vs0 = node(unreal.MaterialExpressionMultiply, -700, 260)
+        link(vl, "", vs0, "A")
+        link(fillk, "", vs0, "B")
+        vs = node(unreal.MaterialExpressionLinearInterpolate, -550, 200)
+        link(vl, "", vs, "A")
+        link(vs0, "", vs, "B")
+        link(inside, "", vs, "Alpha")
+        tc = node(unreal.MaterialExpressionAppendVector, -450, -200)
+        link(um, "", tc, "A")
+        link(vs, "", tc, "B")
         pano = tex_param("Panorama", -200, "SAMPLERTYPE_COLOR")
-        mel.connect_material_expressions(tc, "", pano, "UVs")
+        link(tc, "", pano, "UVs")
         gain = param(unreal.MaterialExpressionScalarParameter, "SkyGain", 200, 1.0, -420)
-        pm = mel.create_material_expression(m, unreal.MaterialExpressionMultiply, -240, -100)
-        mel.connect_material_expressions(pano, "", pm, "A")
-        mel.connect_material_expressions(gain, "", pm, "B")
+        pm = node(unreal.MaterialExpressionMultiply, -240, -100)
+        link(pano, "", pm, "A")
+        link(gain, "", pm, "B")
         mel.connect_material_property(pm, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
-        # mask below the horizon: v > HorizonV -> clip. The dome's UVs put v=0.5
-        # at the horizon; a soft band of 0.03 above it fades the near objects
-        # the panorama holds at ground level.
-        hz = param(unreal.MaterialExpressionScalarParameter, "HorizonV", 440, 0.505, -700)
-        sub = mel.create_material_expression(m, unreal.MaterialExpressionSubtract, -420, 400)
-        mel.connect_material_expressions(hz, "", sub, "A")
-        mel.connect_material_expressions(vl, "", sub, "B")
-        k = mel.create_material_expression(m, unreal.MaterialExpressionConstant, -420, 500)
-        k.set_editor_property("r", 60.0)
-        sm = mel.create_material_expression(m, unreal.MaterialExpressionMultiply, -240, 420)
-        mel.connect_material_expressions(sub, "", sm, "A")
-        mel.connect_material_expressions(k, "", sm, "B")
+        # mask below the horizon on the TRUE elevation v: v > HorizonV -> clip
+        hz = param(unreal.MaterialExpressionScalarParameter, "HorizonV", 440, 0.5, -700)
+        sub = node(unreal.MaterialExpressionSubtract, -420, 400)
+        link(hz, "", sub, "A")
+        link(vl, "", sub, "B")
+        sm = node(unreal.MaterialExpressionMultiply, -240, 420)
+        link(sub, "", sm, "A")
+        link(const(-420, 500, 60.0), "", sm, "B")
         mel.connect_material_property(sm, "", unreal.MaterialProperty.MP_OPACITY_MASK)
     mel.recompile_material(m)
     eal.save_asset(path, only_if_is_dirty=False)
@@ -521,9 +617,18 @@ def build_materials(unreal, log, texs):
             mel.set_material_instance_scalar_parameter_value(mi, "SkyGain", float(C.LOOK["skyGain"]))
             mel.set_material_instance_scalar_parameter_value(mi, "FlipV", float(C.LOOK["skyFlipV"]))
             mel.set_material_instance_scalar_parameter_value(mi, "HorizonV", float(C.LOOK["skyHorizonV"]))
+            mel.set_material_instance_scalar_parameter_value(mi, "YawOffset", float(C.LOOK["skyYawOffset"]))
+            mel.set_material_instance_scalar_parameter_value(mi, "NearFillK", float(C.LOOK["skyNearFillK"]))
+            (a0, a1), (b0, b1) = C.LOOK["skyNearBands"]
+            for pname, val in (("NearA0", a0), ("NearA1", a1), ("NearB0", b0), ("NearB1", b1)):
+                mel.set_material_instance_scalar_parameter_value(mi, pname, float(val))
+            log("V2 SKY: panorama u=0.5 faces yaw %.0f; horizon v %.4f; near bands %s filled at v*%.2f"
+                % (C.LOOK["skyYawOffset"], C.LOOK["skyHorizonV"], C.LOOK["skyNearBands"], C.LOOK["skyNearFillK"]))
             eal.save_asset(path, only_if_is_dirty=False)
             out[name] = mi
         except Exception as exc:
             log("V2 MATERIAL MI_V2_SkyPano FAILED: %s" % exc)
+    if int(C.LOOK["skyDome"]) and "MI_V2_SkyPano" not in out:
+        raise RuntimeError("skyDome=1 but MI_V2_SkyPano was not built -- see the V2 MATERIAL lines above")
     log("V2 MATERIALS: %d masters, %d instances" % (len(masters), len(out)))
     return out

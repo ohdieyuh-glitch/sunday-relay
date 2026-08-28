@@ -18,7 +18,7 @@ Nothing is scattered on the plaza. PCG (later) respects the path exclusion.
     ARCH (+45 m)       the stone gateway that ends the corridor
     TOWERS (55–70 m)   white towers with dark caps, left and right
     CITY (90–400 m)    five depth layers, cream masonry, muted pink roofs, gold finials
-    SKY                the panorama itself above +8° of elevation; two keys and the teapot, high
+    SKY                the panorama's sky above the horizon (its near mushroom/tree bands filled with zenith sky); two keys and the teapot, high
 """
 
 

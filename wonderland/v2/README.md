@@ -101,8 +101,11 @@ imports it at true metric scale with its viewpoint on the world origin, floor
 at z = 0, collision off, **hidden in game** (`marbleVisible=0`), so the editor
 holds the measured proportions beside the authored assets. The foreground and
 midground are legitimate Unreal geometry (the V2 kit); the distant city is the
-V2 castle layers with the panorama's own sky above +8° of elevation
-(`skyHorizonV`). `marbleVisible=1` shows the shell for a direct comparison.
+V2 castle layers with the panorama's own sky above the horizon
+(`skyHorizonV`; the lookup is computed from the view direction, `skyYawOffset`
+turns it, and `skyNearBands` replaces the panorama's giant near mushroom and
+tree with its zenith sky). `marbleVisible=1` shows the shell for a direct
+comparison.
 
 Marble is a backdrop for a fixed camera: a single-viewpoint shell tolerates
 about 1.7 m of movement at metric scale before parallax smears it. Walkable V2
