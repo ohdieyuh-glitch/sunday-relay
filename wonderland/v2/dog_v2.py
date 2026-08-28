@@ -45,7 +45,7 @@ W_UU = float(os.environ.get("WLV2_DOG_HEAD_WIDTH_UU", "60"))
 #: Studio lighting: a moderate sun so the ivory reads as ivory, and an emissive
 #: for the eyes that reads as lit gold beside it, not as a torch. Calibrated on
 #: the first capture; both are logged.
-SUN_LUX = float(os.environ.get("WLV2_DOG_SUN_LUX", "5000"))
+SUN_LUX = float(os.environ.get("WLV2_DOG_SUN_LUX", "2500"))
 EYE_EMISSIVE = float(os.environ.get("WLV2_DOG_EYE_EMISSIVE", "600"))
 
 
@@ -99,10 +99,23 @@ def build_materials():
         except Exception:
             mi.set_editor_property("parent", master)
         # FLAT canon colour: the masters multiply the albedo TEXTURE by the tint,
-        # so the texture is white and the tint carries the exact web colour.
+        # so the texture is white and the tint carries the exact web colour. The
+        # masters sample every texture through WORLD-XY-projected UVs scaled by
+        # TexScale; the first studio capture (2026-08-28) showed the master's
+        # plaster NORMAL still streaking every vertical face, so the flat normal
+        # is READ BACK after assignment and TexScale is 0 -- a constant UV makes
+        # every sample one texel, i.e. flat, whatever texture is bound.
         for pname, tex in (("Albedo", white), ("RoughnessMap", white), ("Normal", flat_normal)):
-            if tex is not None:
-                mel.set_material_instance_texture_parameter_value(mi, pname, tex)
+            if tex is None:
+                LOG("MATERIAL %s: no engine texture for %s -- relying on TexScale 0" % (name, pname))
+                continue
+            mel.set_material_instance_texture_parameter_value(mi, pname, tex)
+            try:
+                got = mel.get_material_instance_texture_parameter_value(mi, pname)
+                LOG("MATERIAL %s: %s -> %s" % (name, pname, got.get_name() if got is not None else "NONE"))
+            except Exception as exc:
+                LOG("MATERIAL %s: %s read-back failed (%s)" % (name, pname, exc))
+        mel.set_material_instance_scalar_parameter_value(mi, "TexScale", 0.0)
         mel.set_material_instance_vector_parameter_value(mi, "BaseColor", lin(spec["color"]))
         mel.set_material_instance_scalar_parameter_value(mi, "Roughness", float(spec["roughness"]))
         mel.set_material_instance_scalar_parameter_value(mi, "RoughVary", 0.0)
@@ -282,12 +295,17 @@ def build_studio(meshes, mats, dog_cls):
     mel.set_material_instance_scalar_parameter_value(grey, "Roughness", 0.9)
     mel.set_material_instance_scalar_parameter_value(grey, "RoughVary", 0.0)
     mel.set_material_instance_scalar_parameter_value(grey, "Metallic", 0.0)
+    mel.set_material_instance_scalar_parameter_value(grey, "TexScale", 0.0)
     try:
         mel.recompile_material(grey)
     except Exception:
         pass
     eal.save_asset(grey_path, only_if_is_dirty=False)
-    for label, at, scale in (("Studio_Floor", (0, 0, -5), (40, 40, 0.1)), ("Studio_Backdrop", (-700, 0, 300), (0.2, 40, 6))):
+    # A backdrop wide enough that no studio camera sees past its edge (the
+    # three-quarter camera looks 45 deg off axis at 3.8 m), and a second wall
+    # on the side camera's far side so no view opens onto the horizon.
+    for label, at, scale in (("Studio_Floor", (0, 0, -5), (60, 60, 0.1)), ("Studio_Backdrop", (-900, 0, 400), (0.2, 80, 8)),
+                             ("Studio_SideWall", (0, -900, 400), (80, 0.2, 8))):
         a = actors.spawn_actor_from_class(unreal.StaticMeshActor, vec(at), rot(0, 0))
         a.static_mesh_component.set_static_mesh(cube)
         a.set_actor_scale3d(vec(scale))
