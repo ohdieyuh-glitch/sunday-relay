@@ -642,9 +642,12 @@ def lay_ground(placer, actors, eal, assets, mats, layers, plaza_only=False):
                 key = variants[int(LT.mk.rnd(r, c, 27) * len(variants)) % len(variants)]
                 blotch = LT.mk.rnd(r // 2, c // 3, 28) * 0.7 + LT.mk.rnd(r, c, 29) * 0.3
                 mat = "MI_V2_PlazaCream" if blotch < 0.55 else ("MI_V2_PlazaWarm" if blotch < 0.80 else "MI_V2_PlazaGrey")
-                placements.append((key, cx + (LT.mk.rnd(r, c, 23) - 0.5) * 1.5,
-                                   y + (LT.mk.rnd(r, c, 24) - 0.5) * 1.5, -1.0 + 0.8 * LT.mk.rnd(r, c, 25),
-                                   (LT.mk.rnd(r, c, 26) - 0.5) * 1.2, 1.0, 1.0, 1.0, mat))
+                # jitter small enough that a 2 m runner cannot overlap its
+                # neighbour's chamfer (PASS 01/01b showed dark wedge "cracks"
+                # at +/-1.2 deg): +/-0.4 deg, +/-0.8 uu.
+                placements.append((key, cx + (LT.mk.rnd(r, c, 23) - 0.5) * 0.8,
+                                   y + (LT.mk.rnd(r, c, 24) - 0.5) * 0.8, -1.0 + 0.6 * LT.mk.rnd(r, c, 25),
+                                   (LT.mk.rnd(r, c, 26) - 0.5) * 0.4, 1.0, 1.0, 1.0, mat))
                 laid += 1
                 x += length + joint
                 c += 1
