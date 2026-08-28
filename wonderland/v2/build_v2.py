@@ -561,36 +561,74 @@ def lay_ground(placer, actors, eal, assets, mats, layers, plaza_only=False):
         return 0
     placements = []
     x0, x1, y0, y1 = LAYOUT.PLAZA_RECT
-    tile = LAYOUT.PLAZA_SLAB
-    pitch = tile * 1.06                      # a 8 uu seam
-    cols = int((x1 - x0) / pitch) + 1
-    rows = int((y1 - y0) / pitch) + 1
-    if plaza:
+    # THE PLAZA AS MASONRY (PASS 01, 2026-08-28): courses of one height along
+    # +Y, slabs of three LENGTHS along X in running bond (alternate courses
+    # start half a slab in), 4 uu joints, three tints in a low-frequency
+    # blotch (never a checker), a hair of height and yaw jitter. The
+    # reference plaza is fitted flagstones; a grid of one square reads as
+    # tiles no matter what the material does.
+    course = ASSETS.PLAZA_COURSE
+    joint = 4.0
+    by_class = {}
+    for k in plaza:
+        by_class.setdefault(ASSETS.plaza_slab_class(int(k.rsplit("_", 1)[1])), []).append(k)
+    lengths = ASSETS.PLAZA_LENGTHS
+    rows = int((y1 - y0) / (course + joint)) + 1
+    laid = 0
+    if plaza and by_class:
         for r in range(rows):
-            y = y0 + pitch * (r + 0.5)
-            for c in range(cols):
-                x = x0 + pitch * (c + 0.5)
-                if x > x1 or y > y1:
-                    continue
+            y = y0 + (course + joint) * (r + 0.5)
+            if y + course * 0.5 > y1 + course * 0.25:
+                continue
+            x = x0 - (lengths[0] * 0.5 if r % 2 else 0.0)
+            c = 0
+            while x < x1:
                 h = LT.mk.rnd(r, c, 21)
-                # the loose checker: every third diagonal is the grey slab
-                grey = ((r + c) % 3 == 0) if h > 0.18 else ((r + c) % 3 != 0)
-                s_ = 0.97 + 0.05 * LT.mk.rnd(r, c, 22)
-                placements.append((plaza[int(h * len(plaza)) % len(plaza)], x + (LT.mk.rnd(r, c, 23) - 0.5) * 3.0,
-                                   y + (LT.mk.rnd(r, c, 24) - 0.5) * 3.0, -1.0 + 1.5 * LT.mk.rnd(r, c, 25),
-                                   (LT.mk.rnd(r, c, 26) - 0.5) * 2.5, s_, s_, 1.0,
-                                   "MI_V2_PlazaGrey" if grey else "MI_V2_PlazaCream"))
-    if setts and not plaza_only:
+                cls = 0 if h < 0.55 else (1 if h < 0.80 else 2)       # square 55 %, short 25 %, runner 20 %
+                if cls not in by_class:
+                    cls = sorted(by_class)[0]
+                length = lengths[cls]
+                cx = x + length * 0.5
+                if cx - length * 0.5 < x0 - length * 0.25 or cx + length * 0.5 > x1 + length * 0.25:
+                    x += length + joint
+                    c += 1
+                    continue
+                variants = by_class[cls]
+                key = variants[int(LT.mk.rnd(r, c, 27) * len(variants)) % len(variants)]
+                blotch = LT.mk.rnd(r // 2, c // 3, 28) * 0.7 + LT.mk.rnd(r, c, 29) * 0.3
+                mat = "MI_V2_PlazaCream" if blotch < 0.55 else ("MI_V2_PlazaWarm" if blotch < 0.80 else "MI_V2_PlazaGrey")
+                placements.append((key, cx + (LT.mk.rnd(r, c, 23) - 0.5) * 1.5,
+                                   y + (LT.mk.rnd(r, c, 24) - 0.5) * 1.5, -1.0 + 0.8 * LT.mk.rnd(r, c, 25),
+                                   (LT.mk.rnd(r, c, 26) - 0.5) * 1.2, 1.0, 1.0, 1.0, mat))
+                laid += 1
+                x += length + joint
+                c += 1
+    cols = laid // max(1, rows)
+    tile = course
+    flags = [k for k in sorted(assets) if k.startswith("path_flag_")]
+    kerb = "kerb_stone" if "kerb_stone" in assets else None
+    if (flags or setts) and not plaza_only:
         sp = LT.Spline(LAYOUT.PATH_SPLINE)
-        for st in LT.lay_stones(sp, width=LAYOUT.PATH_WIDTH_NEAR * 0.92, tile=58.0, shrink=0.86, seed=5, kerb=False):
+        stones = flags or setts
+        # THE PATH AS FITTED FLAGS (PASS 01): ~1 m flags in running bond with
+        # tight joints and cream kerb stones along both edges -- the reference's
+        # dark stone path is large flags between kerbs, not a field of setts.
+        tile_uu, shrink = (110.0, 0.94) if flags else (58.0, 0.86)
+        for st in LT.lay_stones(sp, width=LAYOUT.PATH_WIDTH_NEAR * 0.92, tile=tile_uu, shrink=shrink, seed=5, kerb=bool(kerb)):
             # narrow with distance: drop the outer stones as the path recedes
             frac = st["d"] / max(1.0, sp.length)
             half = 0.5 * (LAYOUT.PATH_WIDTH_NEAR + (LAYOUT.PATH_WIDTH_FAR - LAYOUT.PATH_WIDTH_NEAR) * frac)
-            if abs(st["x"] - sp.at(st["d"])[0][0]) > half:
+            lateral = abs(st["x"] - sp.at(st["d"])[0][0])
+            if st["kind"] == "kerb":
+                if lateral > half + tile_uu * 0.6:
+                    continue
+                placements.append((kerb, st["x"], st["y"], st["z"] - 1.0, st["yaw"], 1.0, 1.0, 1.0, "MI_V2_Kerb"))
                 continue
-            v = int(LT.mk.rnd(st["d"], st["x"], 3) * len(setts)) % len(setts)
-            placements.append((setts[v], st["x"], st["y"], st["z"] - 2.0, st["yaw"], st["sx"] * 0.95, st["sy"] * 0.95, 0.8,
-                               "MI_V2_PathStone"))
+            if lateral > half:
+                continue
+            v = int(LT.mk.rnd(st["d"], st["x"], 3) * len(stones)) % len(stones)
+            placements.append((stones[v], st["x"], st["y"], st["z"] - 2.0, st["yaw"], st["sx"] * 0.95, st["sy"] * 0.95,
+                               1.0 if flags else 0.8, "MI_V2_PathStone"))
     cls = None
     try:
         cls = unreal.load_class(None, "/Script/Wonderland.WonderlandInstancedBatch")
@@ -1132,6 +1170,10 @@ def _grade(s):
              ("override_color_gain_highlights", True), ("color_gain_highlights", unreal.Vector4(*(tuple(L["gradeHighlights"]) + (1.0,)))),
              ("override_auto_exposure_method", True), ("auto_exposure_method", getattr(getattr(unreal, "AutoExposureMethod", None), "AEM_HISTOGRAM", None)),
              ("override_auto_exposure_bias", True), ("auto_exposure_bias", float(L.get("exposureBias", 0.0))),
+             ("override_auto_exposure_min_brightness", L.get("exposurePinEV100") is not None),
+             ("auto_exposure_min_brightness", float(L["exposurePinEV100"]) if L.get("exposurePinEV100") is not None else None),
+             ("override_auto_exposure_max_brightness", L.get("exposurePinEV100") is not None),
+             ("auto_exposure_max_brightness", float(L["exposurePinEV100"]) if L.get("exposurePinEV100") is not None else None),
              ("override_lumen_final_gather_quality", True), ("lumen_final_gather_quality", 2.0),
              ("override_lumen_reflection_quality", True), ("lumen_reflection_quality", 2.0),
              ("override_lumen_scene_detail", True), ("lumen_scene_detail", 2.0)]

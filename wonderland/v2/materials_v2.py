@@ -30,10 +30,15 @@ INSTANCES = {
     "MI_V2_IvoryStone": ("plaster", (0.74, 0.70, 0.62), 0.0, 0.58, 0.50, 0.32, None, 0.0),
     "MI_V2_Stone":      ("ashlar",  (0.50, 0.46, 0.41), 0.0, 0.82, 0.80, 0.30, None, 0.0),
     "MI_V2_PlazaCream": ("plaza",   (0.70, 0.66, 0.57), 0.0, 0.74, 0.85, 0.30, None, 0.0),
-    "MI_V2_PlazaGrey":  ("plaza",   (0.50, 0.52, 0.48), 0.0, 0.76, 0.85, 0.30, None, 0.0),
+    "MI_V2_PlazaGrey":  ("plaza",   (0.54, 0.55, 0.51), 0.0, 0.76, 0.85, 0.30, None, 0.0),
+    # PASS 01: a warmer cream so the running bond carries three tints in a
+    # blotch, and a cream kerb a hair darker than the slabs.
+    "MI_V2_PlazaWarm":  ("plaza",   (0.72, 0.65, 0.52), 0.0, 0.74, 0.85, 0.30, None, 0.0),
+    "MI_V2_Kerb":       ("plaza",   (0.64, 0.60, 0.52), 0.0, 0.70, 0.75, 0.30, None, 0.0),
     # the central path in the founder's view is PALE grey-blue stone, a step
     # cooler and a touch darker than the cream plaza -- not a dark road
-    "MI_V2_PathStone":  ("pathstone", (0.50, 0.53, 0.56), 0.0, 0.76, 0.90, 0.30, None, 0.0),
+    # PASS 01: the reference path is a warm dark grey-brown, not a blue-grey.
+    "MI_V2_PathStone":  ("pathstone", (0.38, 0.36, 0.33), 0.0, 0.78, 0.90, 0.30, None, 0.0),
     "MI_V2_Cobble":     ("cobble",  (0.36, 0.30, 0.26), 0.0, 0.78, 0.90, 0.28, None, 0.0),
     "MI_V2_CobbleHero": ("cobble",  (0.33, 0.31, 0.28), 0.0, 0.74, 0.90, 0.30, None, 0.0),
     "MI_V2_Moss":       ("sward",   (0.12, 0.20, 0.08), 0.0, 0.82, 0.60, 0.20, None, 0.0),

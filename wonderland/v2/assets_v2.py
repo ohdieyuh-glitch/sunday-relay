@@ -1069,29 +1069,83 @@ def build_assets(ctx, keys=None, log=print):
 # ==========================================================================
 
 
+#: The plaza's running bond (PASS 01, 2026-08-28): one COURSE height, three
+#: slab LENGTHS. The reference plaza is large pale flagstones of mixed lengths
+#: laid in courses with tight dark joints -- never one repeated square.
+PLAZA_COURSE = 124.0
+PLAZA_LENGTHS = (128.0, 92.0, 200.0)   # square, short, runner (uu)
+
+
+def plaza_slab_class(variant):
+    return variant % len(PLAZA_LENGTHS)
+
+
+def _worn_slab(m, poly, thick=10.0, lip=3.0, inset=0.965, seed=0, grain=1.0):
+    """A flagstone: a full-size lower body, an inset top layer that reads as a
+    worn chamfer once smoothed, and a hair of grain. The Geometry Script box has
+    no chamfer, so the bevel is BUILT, not asked for."""
+    cx = sum(p[0] for p in poly) / len(poly)
+    cy = sum(p[1] for p in poly) / len(poly)
+    top = [(cx + (x - cx) * inset, cy + (y - cy) * inset) for (x, y) in poly]
+    m.extrude(poly, thick)
+    m.extrude(top, lip, at=(0.0, 0.0, thick))
+    m.subdivide(1)
+    m.perlin(grain, 0.05, seed=seed)
+    m.smooth(1, 0.35)
+    m.split_normals(38.0)
+    return m
+
+
 def plaza_slab(ctx, variant):
-    """A large pale plaza slab, ~1.3 m, near-rectangular with slightly
-    irregular edges, a subtle bevel and a worn top. The reference's plaza is
-    big slabs in a loose cream/grey checker with wide seams."""
+    """A large pale plaza flagstone of one of three LENGTHS (1.28 / 0.92 / 2.0 m)
+    at the common course height (1.24 m): near-rectangular with slightly
+    irregular edges, a built worn chamfer and a faint top camber."""
     m = ctx.mesh("plaza_slab_%d" % variant)
-    w, d = 128.0 * (0.94 + 0.12 * _h(variant, 1)), 124.0 * (0.94 + 0.12 * _h(variant, 2))
+    w = PLAZA_LENGTHS[plaza_slab_class(variant)] * (0.985 + 0.03 * _h(variant, 1))
+    d = PLAZA_COURSE * (0.985 + 0.03 * _h(variant, 2))
     poly = []
     for i, (sx, sy) in enumerate(((-1, -1), (1, -1), (1, 1), (-1, 1))):
-        poly.append((sx * w * 0.5 + (_h(variant, i, 3) - 0.5) * 6.0, sy * d * 0.5 + (_h(variant, i, 4) - 0.5) * 6.0))
-    m.extrude(poly, 12.0)
-    m.subdivide(2)
-    m.perlin(1.1, 0.04, seed=300 + variant)
+        poly.append((sx * w * 0.5 + (_h(variant, i, 3) - 0.5) * 4.0, sy * d * 0.5 + (_h(variant, i, 4) - 0.5) * 4.0))
+    return _worn_slab(m, poly, thick=10.0, lip=3.0, inset=0.965, seed=300 + variant, grain=0.9)
+
+
+def path_flag(ctx, variant):
+    """The arrival path's flag (PASS 01): an irregular 6-8-sided flagstone
+    about 1 m across, FLAT-topped with a worn chamfer -- larger and flatter
+    than a sett, so the path reads as fitted flags, not dots."""
+    m = ctx.mesh("path_flag_%d" % variant)
+    n = 6 + (variant % 3)
+    poly = []
+    for i in range(n):
+        a = 2.0 * math.pi * i / n + (_h(variant, i, 7) - 0.5) * 0.35
+        r = 52.0 * (0.86 + 0.20 * _h(variant, i, 8))
+        poly.append((math.cos(a) * r, math.sin(a) * r))
+    return _worn_slab(m, poly, thick=10.0, lip=3.0, inset=0.95, seed=330 + variant, grain=0.8)
+
+
+def kerb_stone(ctx):
+    """A cream kerb block edging the path, 1.2 m: a squared block with a
+    rolled top edge, the stone architecture the reference draws between path
+    and bed."""
+    m = ctx.mesh("kerb_stone")
+    m.box(120.0, 36.0, 22.0, at=(0, 0, 11.0))
+    m.box(116.0, 32.0, 6.0, at=(0, 0, 25.0))
+    m.subdivide(1)
+    m.perlin(0.6, 0.05, seed=341)
     m.smooth(1, 0.3)
-    m.split_normals(45.0)
+    m.split_normals(40.0)
     return m
 
 
 def path_steps(ctx):
-    """Three low steps across the path, 4.6 m wide, 0.2 m rise each."""
+    """Three low steps across the path, 4.6 m wide, 0.2 m rise each, each
+    with a NOSING -- the 4 uu lip that makes a step read as cut stone rather
+    than a stacked box (PASS 01)."""
     m = ctx.mesh("path_steps")
     for k in range(3):
         d = 90.0 * (3 - k)
         m.box(460.0, d, 20.0, at=(0.0, 90.0 * k + d * 0.5, 20.0 * (k + 0.5)), chamfer=2.5)
+        m.box(464.0, 10.0, 4.0, at=(0.0, 90.0 * k + 3.0, 20.0 * (k + 1) - 2.0))
     m.perlin(0.8, 0.05, seed=311)
     return m
 
@@ -1245,25 +1299,28 @@ RECIPES.update({
     "mushroom_giant": (mushroom_giant, "mush_landmark", True, True),
     "garden_arch_stone": (garden_arch_stone, "garden_arch", True, True),
 })
-PLAZA_VARIANTS = 4
+PLAZA_VARIANTS = 9       # three lengths x three variants each (PASS 01)
+PATH_FLAG_VARIANTS = 4
 
 _old_build_assets = build_assets
 
 
 def build_assets(ctx, keys=None, log=print):
     out = _old_build_assets(ctx, keys, log)
-    for v in range(PLAZA_VARIANTS):
-        have = _existing_asset(ctx, "cobble", "plaza_slab_%d" % v)
-        if have:
-            out["plaza_slab_%d" % v] = have
-            continue
-        try:
-            mb = plaza_slab(ctx, v)
-            path = mb.to_asset(F["cobble"], "plaza_slab_%d" % v, nanite=bool(C.LOOK["nanite"]), collision=True)
-            if path:
-                out["plaza_slab_%d" % v] = path
-        except Exception as exc:
-            log("V2 ASSET plaza_slab_%d FAILED: %s" % (v, exc))
+    for prefix, count, recipe in (("plaza_slab", PLAZA_VARIANTS, plaza_slab), ("path_flag", PATH_FLAG_VARIANTS, path_flag)):
+        for v in range(count):
+            key = "%s_%d" % (prefix, v)
+            have = _existing_asset(ctx, "cobble", key)
+            if have:
+                out[key] = have
+                continue
+            try:
+                mb = recipe(ctx, v)
+                path = mb.to_asset(F["cobble"], key, nanite=bool(C.LOOK["nanite"]), collision=True)
+                if path:
+                    out[key] = path
+            except Exception as exc:
+                log("V2 ASSET %s FAILED: %s" % (key, exc))
     return out
 
 
@@ -1584,6 +1641,7 @@ RECIPES.update({
     "tree_slender_trunk": (tree_slender_trunk, "trees", True, True),
     "canopy_medium": (canopy_medium, "trees", False, False),
     "topiary_cone_plain": (topiary_cone_plain, "topiary", False, True),
+    "kerb_stone": (kerb_stone, "cobble", False, True),
     "topiary_spiral": (topiary_spiral, "topiary", False, True),
     "rose_bush": (rose_bush, "roses", False, False),
     "shrub_flowering": (shrub_flowering, "shrubs", False, False),

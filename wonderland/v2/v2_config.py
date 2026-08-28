@@ -114,6 +114,12 @@ LOOK = {
     # Physical units, histogram auto-exposure, extended range.
     "sunPitch": -58.0, "sunYaw": -11.0, "sunLux": 60000.0, "sunTemperatureK": 5600.0,
     "skyLightIntensity": 1.0, "exposureBias": 0.0,
+    # PASS 01 (2026-08-28): exposure PINNED. Histogram auto-exposure metered
+    # the frame to mid-grey and blew the ivory plaza to white (luma 0.33 vs the
+    # reference's 0.16 at the engine's reported EV 12.5). min == max fixes
+    # EV100; 13.5 is one stop darker than what the metering chose, the measured
+    # correction. None restores auto-exposure.
+    "exposurePinEV100": 13.5,
     # a clear bright day with subtle haze -- pale blue-white, NOT lavender
     "fogDensity": 0.005, "fogFalloff": 0.18, "fogStartDistance": 4000.0,
     "fogInscattering": (0.74, 0.80, 0.92),
