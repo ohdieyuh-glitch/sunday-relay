@@ -1307,16 +1307,19 @@ _old_build_assets = build_assets
 
 def build_assets(ctx, keys=None, log=print):
     out = _old_build_assets(ctx, keys, log)
-    for prefix, count, recipe in (("plaza_slab", PLAZA_VARIANTS, plaza_slab), ("path_flag", PATH_FLAG_VARIANTS, path_flag)):
+    for prefix, count, recipe, folder in (("plaza_slab", PLAZA_VARIANTS, plaza_slab, "cobble"),
+                                          ("path_flag", PATH_FLAG_VARIANTS, path_flag, "cobble"),
+                                          ("flower_bed_base", FLOWER_BED_VARIANTS, flower_bed_base, "flowers"),
+                                          ("flower_bed_blooms", FLOWER_BED_VARIANTS, flower_bed_blooms, "flowers")):
         for v in range(count):
             key = "%s_%d" % (prefix, v)
-            have = _existing_asset(ctx, "cobble", key)
+            have = _existing_asset(ctx, folder, key)
             if have:
                 out[key] = have
                 continue
             try:
                 mb = recipe(ctx, v)
-                path = mb.to_asset(F["cobble"], key, nanite=bool(C.LOOK["nanite"]), collision=True)
+                path = mb.to_asset(F[folder], key, nanite=bool(C.LOOK["nanite"]), collision=(folder == "cobble"))
                 if path:
                     out[key] = path
             except Exception as exc:
@@ -1621,6 +1624,101 @@ def ground_flowers(ctx):
     return m
 
 
+# ==========================================================================
+# PASS 02 (2026-08-28): FLOWER BEDS AS COLOUR MASSES. A bed is TWO meshes placed
+# together -- a leaf mound (green) and its blooms (a petal colour) -- because a
+# static mesh here carries one material, and a bed built as one mesh was a
+# pink blob or a green one. The reference beds are massed colour over green.
+# ==========================================================================
+
+
+def _bed_footprint(variant):
+    return 88.0 * (0.9 + 0.25 * _h(50, variant, 1)), 60.0 * (0.9 + 0.25 * _h(50, variant, 2))
+
+
+def flower_bed_base(ctx, variant):
+    """The leaf mound under a bed, ~1.8 x 1.2 m, 0.45 m high: leaf-shelled so
+    its edge is broken, sitting on the bed soil."""
+    m = ctx.mesh("flower_bed_base_%d" % variant)
+    rx, ry = _bed_footprint(variant)
+    m.sphere(50.0, at=(0, 0, 0), steps=10)
+    m.scale(rx / 50.0, ry / 50.0, 0.62)
+    m.perlin(5.0, 0.03, seed=500 + variant)
+    _leaf_shell(m, (0, 0, 4.0), (rx * 1.04, ry * 1.04, 40.0), 150, 17.0, 5100 + variant, elev=(-0.1, 1.0), jitter=0.22, clump=3, droop=24.0)
+    m.split_normals(58.0)
+    return m
+
+
+def flower_bed_blooms(ctx, variant):
+    """The bed's blooms: ~44 open five-petal heads at two heights over the
+    mound, dense enough to read as a colour mass from the hero camera."""
+    m = ctx.mesh("flower_bed_blooms_%d" % variant)
+    rx, ry = _bed_footprint(variant)
+    n = 40 + int(8 * _h(51, variant, 1))
+    for i in range(n):
+        a = i * 2.3999632
+        r = math.sqrt(_h(51, variant, i + 2))
+        x, y = math.cos(a) * rx * 0.92 * r, math.sin(a) * ry * 0.92 * r
+        top = 30.0 * (1.0 - r * r) + 16.0 + 12.0 * _h(52, variant, i)
+        m.tube([(x, y, top - 18.0), (x + 1.5, y, top)], [1.2, 0.9], sides=4)
+        _petal_ring(m, (x + 1.5, y, top), 5, 13.0 + 5.0 * _h(53, variant, i), 5300 + variant * 97 + i, tilt=40.0)
+        m.sphere(2.4, at=(x + 1.5, y, top + 1.5), steps=5)
+    m.split_normals(60.0)
+    return m
+
+
+def lavender_stems(ctx):
+    """A lavender clump's stems and grey-green leaves, ~0.8 m wide, 0.7 m tall."""
+    m = ctx.mesh("lavender_stems")
+    for i in range(26):
+        a = i * 2.3999632
+        r = 34.0 * math.sqrt(_h(54, i, 1))
+        x, y = math.cos(a) * r, math.sin(a) * r
+        h = 52.0 + 26.0 * _h(54, i, 2)
+        lean = (_h(54, i, 3) - 0.5) * 14.0
+        m.tube([(x, y, 0.0), (x + lean * 0.5, y, h * 0.6), (x + lean, y, h)], [1.4, 1.1, 0.8], sides=4)
+    _leaf_shell(m, (0, 0, 14.0), (36.0, 36.0, 16.0), 60, 12.0, 5400, elev=(-0.3, 0.9), jitter=0.2, clump=3, droop=30.0)
+    m.split_normals(60.0)
+    return m
+
+
+def lavender_heads(ctx):
+    """The clump's flower spikes: an elongated head on every stem."""
+    m = ctx.mesh("lavender_heads")
+    for i in range(26):
+        a = i * 2.3999632
+        r = 34.0 * math.sqrt(_h(54, i, 1))
+        x, y = math.cos(a) * r, math.sin(a) * r
+        h = 52.0 + 26.0 * _h(54, i, 2)
+        lean = (_h(54, i, 3) - 0.5) * 14.0
+        m.tube([(x + lean * 0.9, y, h - 2.0), (x + lean, y, h + 14.0), (x + lean * 1.05, y, h + 24.0)], [3.6, 3.2, 1.4], sides=6)
+    m.split_normals(60.0)
+    return m
+
+
+FLOWER_BED_VARIANTS = 4
+
+#: Every VARIANT family the builder generates outside RECIPES: prefix ->
+#: (count, folder key). One registry, so the layout gate, the summary count and
+#: the build loop cannot disagree about which "<prefix>_<n>" keys exist.
+def variant_families():
+    return {
+        "cobble_slab": (COBBLE_VARIANTS, "cobble"),
+        "plaza_slab": (PLAZA_VARIANTS, "cobble"),
+        "path_flag": (PATH_FLAG_VARIANTS, "cobble"),
+        "flower_bed_base": (FLOWER_BED_VARIANTS, "flowers"),
+        "flower_bed_blooms": (FLOWER_BED_VARIANTS, "flowers"),
+    }
+
+
+def known_asset_keys():
+    """Every key a layout may name: the recipes plus every variant key."""
+    keys = set(RECIPES)
+    for prefix, (count, _folder) in variant_families().items():
+        keys.update("%s_%d" % (prefix, v) for v in range(count))
+    return keys
+
+
 def vine_wall(ctx):
     """Ivy over a wall face, 3 x 2 m: strands and leaf clumps on a plane."""
     m = ctx.mesh("vine_wall")
@@ -1642,6 +1740,8 @@ RECIPES.update({
     "canopy_medium": (canopy_medium, "trees", False, False),
     "topiary_cone_plain": (topiary_cone_plain, "topiary", False, True),
     "kerb_stone": (kerb_stone, "cobble", False, True),
+    "lavender_stems": (lavender_stems, "flowers", False, False),
+    "lavender_heads": (lavender_heads, "flowers", False, False),
     "topiary_spiral": (topiary_spiral, "topiary", False, True),
     "rose_bush": (rose_bush, "roses", False, False),
     "shrub_flowering": (shrub_flowering, "shrubs", False, False),

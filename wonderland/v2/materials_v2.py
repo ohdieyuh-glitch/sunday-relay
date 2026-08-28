@@ -70,12 +70,18 @@ INSTANCES = {
     "MI_V2_PetalPink":  ("petal",   (0.90, 0.52, 0.68), 0.0, 0.62, 0.40, 0.25, None, 0.0),
     "MI_V2_PetalViolet": ("petal",  (0.50, 0.32, 0.78), 0.0, 0.62, 0.40, 0.25, None, 0.0),
     "MI_V2_PetalBlue":  ("petal",   (0.42, 0.50, 0.86), 0.0, 0.62, 0.40, 0.25, None, 0.0),
+    # PASS 02: the reference beds are pink / rose / lavender / white masses.
+    "MI_V2_PetalWhite": ("petal",   (0.92, 0.90, 0.84), 0.0, 0.62, 0.40, 0.25, None, 0.0),
+    "MI_V2_PetalRose":  ("petal",   (0.84, 0.36, 0.48), 0.0, 0.62, 0.40, 0.25, None, 0.0),
+    "MI_V2_Lavender":   ("petal",   (0.60, 0.48, 0.86), 0.0, 0.64, 0.40, 0.25, None, 0.0),
+    "MI_V2_LeafGrey":   ("leaf",    (0.30, 0.38, 0.26), 0.0, 0.70, 0.60, 0.15, None, 0.0),
     # ---- portal (M_V2_Portal): restrained -------------------------------------
     "MI_V2_PortalRunes": ("runes",  (0.62, 0.40, 0.92), 0.0, 0.40, 0.0, 0.2, (0.62, 0.40, 0.92), 1.0),
     "MI_V2_PortalGlow":  ("runes",  (0.68, 0.46, 0.94), 0.0, 0.40, 0.0, 0.2, (0.68, 0.46, 0.94), 1.2),
 }
 FOLIAGE = ("MI_V2_LeafDark", "MI_V2_LeafMid", "MI_V2_LeafLight", "MI_V2_RosePink",
-           "MI_V2_RoseRed", "MI_V2_PetalPink", "MI_V2_PetalViolet", "MI_V2_PetalBlue")
+           "MI_V2_RoseRed", "MI_V2_PetalPink", "MI_V2_PetalViolet", "MI_V2_PetalBlue",
+           "MI_V2_PetalWhite", "MI_V2_PetalRose", "MI_V2_Lavender", "MI_V2_LeafGrey")
 PORTAL = ("MI_V2_PortalRunes", "MI_V2_PortalGlow")
 
 #: texture family -> (albedo, normal, roughness) file stems from textures_v2.py.

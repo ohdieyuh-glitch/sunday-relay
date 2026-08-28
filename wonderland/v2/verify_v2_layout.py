@@ -35,7 +35,7 @@ def main():
     fails = []
     mats = set(M.INSTANCES) | {"MI_V2_SkyPano"}
     for it in L.ALL:
-        if it["asset"] not in A.RECIPES:
+        if it["asset"] not in A.known_asset_keys():
             fails.append("%s: unknown asset %s" % (it["label"], it["asset"]))
         if it["mat"] and it["mat"] not in mats:
             fails.append("%s: unknown material %s" % (it["label"], it["mat"]))
