@@ -106,9 +106,26 @@ FAMILY_FILES = {
     "glaze": ("T_V2_glaze_a", "T_V2_glaze_n", "T_V2_glaze_r"),
     "cap": ("T_V2_cap_a", "T_V2_cap_n", "T_V2_cap_r"),
     "petal": ("T_V2_petal_a", "T_V2_petal_n", "T_V2_petal_r"),
-    "leaf": ("T_V2_leafcard_a", "T_V2_leafcard_n", None),
+    # PASS 05e (2026-08-28): the leaf family carried T_V2_leafcard_a -- ONE
+    # leaf on a transparent surround, made for masked leaf CARDS. Every V2
+    # leaf is a solid extruded blade (assets_v2._leaf_blade) whose UVs are the
+    # world XY projection, and the foliage master has no opacity mask, so each
+    # blade sampled a random patch of the card: inside the leaf, the tint
+    # (divided by the card's leaf-only mean, hence lime); in the surround,
+    # BLACK. That is the "black leaves beside bright leaves" of every canopy
+    # and hedge since PASS 02, which four lighting hypotheses (scene-capture
+    # sky light, upward bounce, distance-field exclusion, Lumen skylight
+    # leaking) could not move because it was never lighting. The blades now
+    # carry the engine's flat maps: the tint IS the albedo, uniform roughness,
+    # no mean correction (corrected_tint finds no "leaf" family in the means).
+    "leaf": (None, None, None),
     "runes": ("T_V2_runes_a", "T_V2_runes_n", "T_V2_runes_r"),
 }
+#: Engine maps pinned onto instances whose family carries no texture of that
+#: kind, so they do not inherit the MASTER's defaults (the plaster maps).
+PLAIN_MAPS = {"Albedo": "/Engine/EngineResources/WhiteSquareTexture",
+              "Normal": "/Engine/EngineMaterials/DefaultNormal",
+              "RoughnessMap": "/Engine/EngineResources/WhiteSquareTexture"}
 #: 1/uu per tile. plaza: 2 slabs of 130 uu per 1024 px tile -> 1/260;
 #: pathstone: ~3 flags of 90 uu per 512 px tile -> 1/270.
 TEX_SCALE = {"plaza": 0.0038, "pathstone": 0.0037, "cobble": 0.0034, "ashlar": 0.0026,
@@ -137,7 +154,7 @@ def corrected_tint(fam, tint, means, log=None, name=""):
     """tint / texture mean, so texture*tint averages to the measured albedo.
     Clamped at 1.0 per channel with a log line, because a tint the texture
     cannot reach is a fact the render will show."""
-    m = means.get("leafcard" if fam == "leaf" else fam)
+    m = means.get(fam)
     if not m:
         return tint
     out = []
@@ -630,6 +647,11 @@ def build_materials(unreal, log, texs):
             for pname, stem in (("Albedo", stems[0]), ("Normal", stems[1]), ("RoughnessMap", stems[2])):
                 if stem and stem in texs:
                     mel.set_material_instance_texture_parameter_value(mi, pname, texs[stem])
+                elif stem is None and fam == "leaf":
+                    plain = eal.load_asset(PLAIN_MAPS[pname])
+                    if plain is None:
+                        raise RuntimeError("engine map %s did not load for %s" % (PLAIN_MAPS[pname], name))
+                    mel.set_material_instance_texture_parameter_value(mi, pname, plain)
             try:
                 mel.recompile_material(mi)
             except Exception:
