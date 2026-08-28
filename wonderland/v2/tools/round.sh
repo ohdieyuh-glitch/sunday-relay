@@ -21,16 +21,23 @@ CAMS="${WL_CAMS:-0}"
 R=/teamspace/studios/this_studio/wonderland
 SRC=$R/src
 MARBLE_ARGS='-WLShowTags=MARBLE_REFERENCE_ONLY -WLHideTags=UNREAL_PRODUCTION,MARBLE_DISTANT_SCENIC'
+# THE MAP THE PACKAGE OPENS. The project's GameDefaultMap is the empty World
+# Partition container (WL_V2_GoldenArrival); the authoritative world is the
+# CLASSIC map beside it. Without this the packaged game boots the empty map,
+# finds no HeroCam0, and capture-hero-shots.sh rightly deletes the frame
+# (2026-08-27). WL_MAP overrides it (e.g. the Relay Dog studio map).
+MAP="${WL_MAP:-/Game/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2}"
 say() { printf '\033[1;36m[round]\033[0m %s\n' "$*"; }
 SHA="$(ssh "$HOST" "cat $R/packaged/logs/packaged.sha 2>/dev/null | head -1" 2>/dev/null | grep -v hostkeys | tr -dc 'a-f0-9')"
 [ -n "$SHA" ] || { echo "no packaged.sha on $HOST -- nothing to capture from"; exit 1; }
 say "packaged build $SHA"
 shoot() {  # cam, extra-args, label -> registers a pass; prints its name
   local cam="$1" extra="${2:-}" label="${3:-kit}"
-  ssh "$HOST" "cd $SRC && WL_HERO_CAMS=$cam WL_RES_X=${WL_RES_X:-1920} WL_RES_Y=${WL_RES_Y:-1080} WL_BRANCH=relay/wonderland-v2 \
+  ssh "$HOST" "cd $SRC && T0=\$(date +%s); WL_HERO_CAMS=$cam WL_RES_X=${WL_RES_X:-1920} WL_RES_Y=${WL_RES_Y:-1080} WL_BRANCH=relay/wonderland-v2 WL_MAP_ARG=$MAP \
       WL_REQUIRE_SHA=$SHA SKIP_PREPARE=1 SKIP_BUILD=1 WL_EXTRA_ARGS='$extra' WL_EXEC_CMDS='${WL_EXEC_CMDS:-}' \
       bash wonderland/infra/lightning/capture-hero-shots.sh 2>&1 | grep -E 'captured|could not be measured|ERROR|wl_die' | tail -2;
     F=\$(ls -t $R/proof/captures/hero${cam}-*.png 2>/dev/null | head -1); [ -n \"\$F\" ] || { echo NO-FRAME; exit 0; };
+    [ \$(stat -c %Y \"\$F\") -ge \$T0 ] || { echo \"STALE-FRAME \$F predates this capture -- NOT registered (the capture failed; read its ERROR above)\"; exit 0; };
     V=\$(python3 wonderland/infra/lightning/frame-check.py \"\$F\" | grep -E '^(verdict|luma_mean)=' | tr '\\n' ' ');
     N=\$(( \$(cat $R/run/v2-pass.counter 2>/dev/null || echo 0) + 1 )); echo \$N > $R/run/v2-pass.counter; P=\$(printf 'V2_PASS_%03d' \$N);
     mkdir -p $R/packaged/shots; D=$R/packaged/shots/\${P}_cam${cam}_${label}.png; cp \"\$F\" \"\$D\";
