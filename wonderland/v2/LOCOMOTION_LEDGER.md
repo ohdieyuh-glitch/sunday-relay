@@ -30,7 +30,9 @@ Out of scope this loop: world polish, clouds, combat, Djinn, backend, flight.
 | 5 | Generator: nested pivots, C++ parent class, ground collision, the Dog walks and is player-possessed | done, awaiting cook | |
 | 6 | **Founder playtest**: full rebuild, cook, Pixel Streaming URL | DELIVERED 13:51 UTC | package fbd414e, map WL_V2_GoldenArrival_WP2, `WLDOG BOUND: 11 joints`, `WLDOG INPUT bound`, page HTTP 200 |
 | 7 | Foot-ground easing moved into the arithmetic; stairs + articulation proven offline | done | 54/54 offline proofs |
-| 8 | Founder feedback → repair → the continuous capture video | waiting on the playtest | `capture_locomotion.sh` ready; `-wldemo` makes the played package the filmed one |
+| 8 | Founder feedback → repair | done | lag diagnosed and fixed at the stream; walk stride fixed from the founder's own telemetry |
+| 9 | Movement profiled in-engine | done | after warm-up: 12.42 ms median (81 fps), p99 15.96 ms, **0 of 132 frames over 2x median**; GPU-bound at 11.8 ms, game thread 2.2 ms |
+| 10 | Continuous capture | filmed twice, both surfaced defects; re-filming on the fixed build | 1,637 + 2,524 frames |
 
 ## Decisions
 

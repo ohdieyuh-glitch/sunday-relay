@@ -56,7 +56,8 @@ if the runtime still will not carry them.
 |---|------|-------|----------|
 | 1 | Static traversal + emptiness audit | done | above; no dead ends, 246× density gap on the approach |
 | 2 | Exploration route in the Dog (`-wlexplore`) | done, awaiting cook | `6d482bd` |
-| 3 | Gameplay traversal video + founder playtest of the fixed build | pending the cook | |
+| 3 | Gameplay traversal video | done — and it found what the audit could not | 1,637 and 2,524 frame captures; three route defects and one WORLD defect below |
+| 3b | W1b — the step the path forgot | authored, gated, cooking | layout verify PASS at 787 placements; dry run 0 failures |
 | 4 | W1 — the approach becomes a place | authored, gated, awaiting a build | 0 → 45 actors within ±25 m (one per 81 m²); layout verify PASS at 779 placements; dry run 112/112 assets, 0 failures; the walking axis stays clear by 15.8 m |
 
 ## W1, as built
@@ -80,3 +81,27 @@ The composition, large masses first:
 Nothing touches the castle, the skyline bands or the garden gates: the PASS 06/07 hierarchy is
 preserved and this fills the hole inside it. The approach is still airier than the plaza (81 m² per
 actor against 15) — which is correct for an approach; it is no longer a void.
+
+## What walking it found that measuring it could not
+
+The static audit said traversal was fine: every waypoint had clearance, no blocking actor sat on a
+route. That was true and it was not enough. Three things only a walk could show:
+
+1. **The castle approach was unreachable on foot.** `PATH_SPLINE` lifts the path 60 uu between
+   y = 2940 and y = 3060 and nothing was ever built to carry a walker up it — no steps, no ramp,
+   nothing within nine metres. The Dog met a 60 uu wall against a 26 uu step height and stopped;
+   six route legs gave up in a row, 2,221 uu short of the fountain and 5,021 short of the castle.
+   Everything W1 had just built was behind that wall. Fixed in W1b: two flights of `path_steps`
+   (three 20 uu risers, the plaza's own nosing) with balustrades and finialled plinths, and the
+   character's step height raised 26 → 30 because the world's treads carry perlin noise and at
+   exactly 26 the tallest of them were a coin toss.
+2. **The third-person camera ends up inside planting.** Vegetation has no collision, so the spring
+   arm has nothing to probe against and the view fills with leaves. Left as a finding rather than
+   fixed: giving every canopy collision would cost performance for a camera edge case, and the
+   better answer is keeping dense planting off the walkable routes (a W2 concern).
+3. **A garden waypoint sat inside a hedge**, which with no timeout hung a whole capture. The route
+   now gives each leg a finite budget and logs what it gave up on — which is what made defect 1
+   diagnosable instead of a silent stall.
+
+The lesson worth keeping: clearance at a point proves nothing about the ground BETWEEN points. The
+audit measured where things are; only the walk measured whether you can get there.
