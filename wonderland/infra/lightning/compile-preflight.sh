@@ -136,7 +136,7 @@ else
     -w "$WL_SRC" \
     "$WL_UE_IMAGE" \
     bash -lc '/home/ue4/UnrealEngine/Engine/Build/BatchFiles/RunUAT.sh BuildEditor \
-                -project="'"$PROJECT"'" -notools' 2>&1 | tee -a "$LOG"
+                -project="'"$PROJECT"'" -notools -ubtargs="'"${WL_UBT_ARGS--NoUBA}"'"' 2>&1 | tee -a "$LOG"
   RC="${PIPESTATUS[0]}"
   set -e
 fi
