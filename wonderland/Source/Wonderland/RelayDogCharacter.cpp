@@ -207,7 +207,14 @@ void ARelayDogCharacter::BuildDefaultRoute()
 	Add(0.0f, 0.0f, 120.0f, 1.0f, TEXT("walk onto the axis"));
 	Add(0.0f, 1400.0f, 120.0f, 1.2f, TEXT("walk up the steps"));
 	Add(0.0f, 3000.0f, 230.0f, 0.8f, TEXT("jog into the approach"));
-	Add(0.0f, 5200.0f, 330.0f, 0.6f, TEXT("run to the fountain court"));
+	// AROUND THE FOUNTAIN, NOT THROUGH IT. The basin stands on the axis at
+	// (0, 5400) -- which is where a fountain belongs, at the centre of its
+	// court -- so a route that walks the axis walks into three metres of
+	// stone. The Dog proved it by stopping 132 uu short of a waypoint it had
+	// otherwise reached. The court is wide; the path goes round.
+	Add(0.0f, 4900.0f, 330.0f, 0.4f, TEXT("run to the fountain court"));
+	Add(760.0f, 5400.0f, 300.0f, 0.3f, TEXT("round the fountain"));
+	Add(0.0f, 5900.0f, 330.0f, 0.3f, TEXT("back onto the axis"));
 	Add(0.0f, 8000.0f, 560.0f, 0.0f, TEXT("full anime run to the castle"));
 	Add(0.0f, 8600.0f, 0.0f, 2.5f, TEXT("run -> stop"));
 	// Turns at the court's cross-axis, where there is room either side.
@@ -265,6 +272,7 @@ void ARelayDogCharacter::BuildExplorationRoute()
 	// the garden gates to the castle front is some seventy metres with five
 	// actors in it, all of them on the flanks.
 	Add(0.0f, 3000.0f, 300.0f, 0.5f, TEXT("the castle approach begins"));
+	Add(760.0f, 5400.0f, 300.0f, 1.0f, TEXT("round the fountain court"));
 	Add(0.0f, 6000.0f, 330.0f, 0.5f, TEXT("halfway to the castle"));
 	Add(0.0f, 8200.0f, 300.0f, 3.0f, TEXT("at the castle front, look up"));
 	// And back, so the tour ends where a participant would turn around and see
