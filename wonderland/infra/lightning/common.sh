@@ -159,6 +159,12 @@ export WL_UE_ARCHIVE="${WL_UE_ARCHIVE:-$WL_ROOT/ue58-dev.tar}"
 # A docker save of UE 5.8 is tens of gigabytes. Anything far below this is a
 # truncated or aborted export, and loading it would fail late and confusingly.
 export WL_UE_ARCHIVE_MIN_GB="${WL_UE_ARCHIVE_MIN_GB:-20}"
+# What the archive UNPACKS to. Measured, not derived: the 2026-08-23 `docker
+# load` ran the shared 369 GB volume to 356 GB (archive 69 + studio 6 + layers)
+# before rolling back, so the image is at least ~200 GB resident. A load needs
+# the archive AND the image at once; a pull never holds more than one
+# compressed layer beside the layers it has already unpacked.
+export WL_UE_IMAGE_GB="${WL_UE_IMAGE_GB:-210}"
 # Machine floors the launcher refuses to start below. A UE 5.8 cook genuinely
 # needs this much — a 261 GiB sparse intermediate killed an export once — but
 # they live here as overridable constants rather than as literals inside an
@@ -376,6 +382,12 @@ wl_ue_status() {
 
 # Make the engine available, or fail closed. Idempotent: a present image is
 # left alone and the archive is not touched.
+# A pull of OUR image started by any shell on this box. The bracket keeps the
+# probe from matching its own command line.
+wl_ue_pull_in_flight() {
+  pgrep -f "docker pul[l] $WL_UE_IMAGE" >/dev/null 2>&1
+}
+
 wl_ensure_ue_image() {
   if [ -x "$WL_UE/Engine/Build/BatchFiles/RunUAT.sh" ]; then
     wl_ok "native Unreal Engine present at $WL_UE"
@@ -388,6 +400,23 @@ wl_ensure_ue_image() {
   command -v docker >/dev/null 2>&1 || {
     wl_die "no docker and no native engine; cannot obtain Unreal 5.8"
   }
+  # WAIT FOR A PULL IN FLIGHT (2026-08-29). Every Studio restart discards the
+  # image, and /var/lib/docker shares the 369 GB /teamspace volume with the
+  # 69 GB archive: a `docker load` needs archive + ~210 GB image resident at
+  # once and has already filled the disk and rolled back silently. A pull of
+  # the same image from ghcr frees each compressed layer as it unpacks, so
+  # the operator starts one on CPU (this launcher never downloads Unreal);
+  # when one is running, the right move is to wait for it, not to start the
+  # archive load beside it.
+  if wl_ue_pull_in_flight; then
+    wl_say "a pull of $WL_UE_IMAGE is already running on this box; waiting for it rather than loading the archive beside it"
+    while wl_ue_pull_in_flight; do sleep 20; done
+    if wl_ue_image_present; then
+      wl_ok "UE image pulled by the other shell: $WL_UE_IMAGE"
+      return 0
+    fi
+    wl_warn "that pull ended without the image; continuing"
+  fi
   # ONE RESTORE AT A TIME, AND ONLY WITH ROOM FOR IT.
   #
   # Both of these were learned the same afternoon on the L4. A build was
@@ -428,13 +457,15 @@ Wait for it, or kill it — but do not start a second. Nothing was restored."
     local need_gb avail_gb
     # Roughly twice the archive: docker writes the uncompressed layers while the
     # archive is still on the same volume.
-    need_gb=$(( $(du -BG "$WL_UE_ARCHIVE" 2>/dev/null | cut -dG -f1 | tr -dc '0-9') * 2 ))
+    need_gb=$(( $(du -BG "$WL_UE_ARCHIVE" 2>/dev/null | cut -dG -f1 | tr -dc '0-9') + WL_UE_IMAGE_GB ))
     avail_gb=$(df -BG --output=avail /var/lib/docker 2>/dev/null | tail -1 | tr -dc '0-9')
     if [ -n "${avail_gb:-}" ] && [ -n "${need_gb:-}" ] && [ "$avail_gb" -lt "$need_gb" ]; then
-      wl_die "restoring $WL_UE_ARCHIVE needs about ${need_gb} GB free on /var/lib/docker and there is ${avail_gb} GB.
+      wl_die "restoring $WL_UE_ARCHIVE needs about ${need_gb} GB free on /var/lib/docker (the archive plus the ~${WL_UE_IMAGE_GB} GB it unpacks to) and there is ${avail_gb} GB.
 A load that runs out of space leaves orphaned layers behind and no image, which looks
-exactly like a corrupt archive. Reclaim first: 'docker system prune -af' returned
-118 GB here when the image list was already empty. Nothing was restored."
+exactly like a corrupt archive. Reclaim first ('docker system prune -af' returned
+118 GB here when the image list was already empty) or pull $WL_UE_IMAGE from ghcr with
+the docker CLI instead, which never needs the archive and the image resident at once.
+Nothing was restored."
     fi
     wl_say "UE image absent; restoring from persistent archive"
     wl_say "  $WL_UE_ARCHIVE  ($(du -h "$WL_UE_ARCHIVE" 2>/dev/null | cut -f1)), ${avail_gb:-?} GB free"
@@ -449,7 +480,7 @@ exactly like a corrupt archive. Reclaim first: 'docker system prune -af' returne
     fi
     wl_die "docker load succeeded but $WL_UE_IMAGE is still not present — the archive holds a different image"
   fi
-  wl_die "no UE image and no usable archive at $WL_UE_ARCHIVE. This launcher will NOT download Unreal on a GPU machine; obtain it on CPU first (see prepare.sh)."
+  wl_die "no UE image and no usable archive at $WL_UE_ARCHIVE. This launcher will NOT download Unreal on a GPU machine; obtain it on CPU first: pull $WL_UE_IMAGE from ghcr with the docker CLI (peak disk far below a load of the archive; ghcr rate-limits bursts, so loop until it succeeds) or see prepare.sh."
 }
 
 # ------------------------------------- Pixel Streaming infrastructure (UE5.8)
