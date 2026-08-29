@@ -575,7 +575,23 @@ class Placer(object):
             set_prop(a, "BatchName", unreal.Name("V2_%s" % key))
             set_prop(a, "bHierarchical", True)
             set_prop(a, "bCastShadow", True)
-            set_prop(a, "bCollides", key in ("side_steps", "retaining_wall", "balustrade", "hedge_block"))
+            # WHAT A WALKER CAN STAND ON.
+            #
+            # path_steps was missing from this list, and the consequence was
+            # not cosmetic: the arrival path lifts 60 uu at y=2940, the flight
+            # of steps built to carry a walker up it had no collision, and the
+            # Dog met the bare flagstone lip instead. Six route legs in a row
+            # gave up and the entire castle approach -- the fountain court, the
+            # cross-axes, everything W1 built -- was unreachable on foot. A
+            # step the player can see and cannot climb is worse than no step.
+            #
+            # Every piece here is something a participant walks ON or INTO.
+            # Everything else stays collision-free: this world has tens of
+            # thousands of instanced pieces and collision on all of them is a
+            # cost with no gameplay behind it.
+            set_prop(a, "bCollides", key in ("side_steps", "path_steps", "stairs_broad",
+                                             "terrace_platform", "retaining_wall",
+                                             "balustrade", "hedge_block"))
             if mat in MAT.FOLIAGE and not int(C.LOOK.get("foliageDistanceFieldLighting", 1)):
                 # PASS 05d: the batched hedges, beds and blossoms -- same
                 # reason as the canopies (see Placer.place); the property is
