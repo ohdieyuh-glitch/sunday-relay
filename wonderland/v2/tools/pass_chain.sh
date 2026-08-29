@@ -45,7 +45,13 @@ if [ "${WLV2_SKIP_COMPILE:-0}" != "1" ]; then
   # any caller that has already sourced common.sh (playtest.sh does) turns a
   # `${WL_BRANCH:-relay/wonderland-v2}` into "marble". This chain only ever
   # builds V2, so it says so outright.
-  WL_BRANCH=relay/wonderland-v2 \
+  # SKIP_PREPARE=1 because the SOURCE IS ALREADY HERE. ship_v2.sh put this
+  # exact commit in the checkout over ssh as a git bundle, and the Studio has
+  # no GitHub credential by design, so prepare.sh's `git fetch origin` cannot
+  # succeed and would fail the compile over a source update that has already
+  # happened. This is the same flag v2-build.sh passes to cpu-build-all for
+  # the same reason.
+  WL_BRANCH=relay/wonderland-v2 SKIP_PREPARE=1 \
     bash wonderland/infra/lightning/compile-preflight.sh > $R/run/compile-preflight.log 2>&1; crc=$?
   echo "compile rc=$crc $(date -u +%T)"
   if [ $crc -ne 0 ]; then
