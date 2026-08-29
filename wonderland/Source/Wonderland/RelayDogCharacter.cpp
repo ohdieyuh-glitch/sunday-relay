@@ -176,43 +176,45 @@ bool ARelayDogCharacter::BindJoints()
 
 void ARelayDogCharacter::BuildDefaultRoute()
 {
-	// THE CAPTURE ROUTE, IN THE ORDER THE FOUNDER ASKED TO SEE IT.
+	// THE GAIT DEMO RUNS ALONG THE ARRIVAL AXIS, WHICH IS Y.
 	//
-	// Distances are in the Dog's own units so the route works at any scale, and
-	// every leg is long enough to hold its gait for a few strides — a two-metre
-	// dash through a speed band proves nothing about how that band looks.
-	const float Fwd = 1.0f;   // +X is the way the arrival path runs
+	// It used to march +X from the spawn because that is the Dog's own forward
+	// vector, and the first capture showed the result: the Dog walked sideways
+	// into the plaza's side steps and stood there pushing at a wall for fifty
+	// seconds. Golden Arrival's axis runs along Y -- the gate at y = -910, the
+	// castle beyond y = 9000 -- and the only stretch long enough for a sprint
+	// is the approach that W1 just built. So the demo uses the world's
+	// coordinates rather than the Dog's, exactly as the exploration route does.
 	const FVector Origin = SpawnLocation;
-	const float S = HeadWidthUU;
-
 	Route.Reset();
-	auto Add = [this](const FVector& To, float Speed, float Hold, const TCHAR* Label)
+	auto Add = [this](float X, float Y, float Speed, float Hold, const TCHAR* Label)
 	{
 		FRelayDogRouteLeg Leg;
-		Leg.Target = To;
+		Leg.Target = FVector(X, Y, SpawnLocation.Z);
 		Leg.SpeedUU = Speed;
 		Leg.HoldSeconds = Hold;
 		Leg.Label = Label;
 		Route.Add(Leg);
 	};
 
-	// Idle first, and long enough for the head to take the place in: the idle
-	// glance dwell is up to three seconds and the founder wants to see several.
-	Add(Origin, 0.0f, 9.0f, TEXT("idle: head life"));
-	Add(Origin + FVector(Fwd * 5.0f * S, 0.0f, 0.0f), 120.0f, 1.2f, TEXT("walk"));
-	Add(Origin + FVector(Fwd * 12.0f * S, 0.0f, 0.0f), 220.0f, 0.8f, TEXT("jog"));
-	Add(Origin + FVector(Fwd * 24.0f * S, 0.0f, 0.0f), 330.0f, 0.6f, TEXT("run"));
-	Add(Origin + FVector(Fwd * 42.0f * S, 0.0f, 0.0f), 560.0f, 0.0f, TEXT("full anime run"));
-	Add(Origin + FVector(Fwd * 46.0f * S, 0.0f, 0.0f), 0.0f, 2.5f, TEXT("run -> stop"));
-	// Turns, at two speeds, with the corner far enough out that the momentum
-	// bank has room to build and come back.
-	Add(Origin + FVector(Fwd * 52.0f * S, 8.0f * S, 0.0f), 300.0f, 0.4f, TEXT("running turn right"));
-	Add(Origin + FVector(Fwd * 58.0f * S, -8.0f * S, 0.0f), 300.0f, 0.4f, TEXT("running turn left"));
-	Add(Origin + FVector(Fwd * 62.0f * S, 0.0f, 0.0f), 130.0f, 0.6f, TEXT("walking turn"));
-	// Back down the path at a jog, which is also the elevation change: the
-	// arrival plaza rises toward the castle, so this leg crosses real steps.
-	Add(Origin + FVector(Fwd * 20.0f * S, 0.0f, 0.0f), 240.0f, 0.5f, TEXT("jog back over the steps"));
-	Add(Origin, 130.0f, 6.0f, TEXT("walk home, then idle"));
+	// Idle first, long enough for several glances: the dwell runs to three
+	// seconds and one glance proves nothing about variety.
+	Add(Origin.X, Origin.Y, 0.0f, 9.0f, TEXT("idle: head life"));
+	// Onto the axis, then the speed ladder up the approach, which is straight
+	// and now has something either side of it to move past.
+	Add(0.0f, 0.0f, 120.0f, 1.0f, TEXT("walk onto the axis"));
+	Add(0.0f, 1400.0f, 120.0f, 1.2f, TEXT("walk up the steps"));
+	Add(0.0f, 3000.0f, 230.0f, 0.8f, TEXT("jog into the approach"));
+	Add(0.0f, 5200.0f, 330.0f, 0.6f, TEXT("run to the fountain court"));
+	Add(0.0f, 8000.0f, 560.0f, 0.0f, TEXT("full anime run to the castle"));
+	Add(0.0f, 8600.0f, 0.0f, 2.5f, TEXT("run -> stop"));
+	// Turns at the court's cross-axis, where there is room either side.
+	Add(2000.0f, 5400.0f, 300.0f, 0.4f, TEXT("running turn left"));
+	Add(-2000.0f, 5400.0f, 300.0f, 0.4f, TEXT("running turn right"));
+	Add(0.0f, 4200.0f, 130.0f, 0.6f, TEXT("walking turn"));
+	// Back down over the steps -- the elevation change and the stairs.
+	Add(0.0f, 900.0f, 240.0f, 0.5f, TEXT("jog back over the steps"));
+	Add(Origin.X, Origin.Y, 130.0f, 6.0f, TEXT("walk home, then idle"));
 }
 
 void ARelayDogCharacter::BuildExplorationRoute()
