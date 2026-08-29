@@ -20,6 +20,33 @@ echo "pass start $(date -u +%FT%TZ) head=$(git rev-parse --short HEAD) rebuild=$
 # the tracked reference copy; this chain must too.
 export WLV2_MARBLE_PANO="${WLV2_MARBLE_PANO:-$R/src/wonderland/v2/reference/marble-royal-garden-backdrop-panorama.png}"
 [ -f "$WLV2_MARBLE_PANO" ] || echo "WARNING: panorama not found at $WLV2_MARBLE_PANO -- the sky dome will be skipped"
+
+# THE C++ IS COMPILED BEFORE THE WORLD IS GENERATED (2026-08-29).
+#
+# The generate step runs a Python commandlet INSIDE the editor, and that
+# commandlet asks for game classes by path: BP_RelayDog's parent is
+# /Script/Wonderland.RelayDogCharacter, the flagstones are batched through
+# /Script/Wonderland.WonderlandInstancedBatch. `unreal.load_class` on a class
+# whose module has not been compiled returns None -- it does not raise -- so a
+# chain that cooks C++ AFTER the generate bakes a world built against the
+# PREVIOUS binaries: a Dog with a plain ACharacter parent, canonical and
+# completely frozen, in a package whose module contains the animation code
+# that never gets a chance to run. That is precisely how this project lost
+# eight Dogs to a class nobody had written, and it nearly happened again the
+# first time the locomotion module was shipped.
+#
+# compile-preflight.sh is idempotent and costs seconds when nothing changed,
+# so the cheap fix is to always run it first.
+if [ "${WLV2_SKIP_COMPILE:-0}" != "1" ]; then
+  echo "compile $(date -u +%T): building the game module before the generate"
+  bash wonderland/infra/lightning/compile-preflight.sh > $R/run/compile-preflight.log 2>&1; crc=$?
+  echo "compile rc=$crc $(date -u +%T)"
+  if [ $crc -ne 0 ]; then
+    grep -aE "error:|Error:|wl_die|FAILED" $R/run/compile-preflight.log | tail -5 | cut -c1-200
+    echo "pass done $(date -u +%FT%TZ) (compile FAILED -- nothing generated, nothing cooked)"
+    exit 1
+  fi
+fi
 WLV2_REUSE_ASSETS=1 WLV2_PARTITIONED=0 WP_STEP=build bash wonderland/v2/diag/wp_recover.sh; rc=$?
 echo "generate wrapper rc=$rc $(date -u +%T)"
 grep -a "LogPython" $R/logs/wp-build.log | grep -a "V2 \(ASSETS\|SUMMARY\|GROUND\|LIGHT\|SAVE\|MAP\)" | sed 's/.*LogPython: [A-Za-z]*: //' | cut -c1-200 | tail -10
