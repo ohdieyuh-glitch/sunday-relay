@@ -566,6 +566,30 @@ def _approach_pair(y, half, seed, hedge_mat="MI_V2_LeafMid"):
     return out
 
 
+# W1b: THE STEP THE PATH FORGOT.
+#
+# PATH_SPLINE lifts the path 60 uu between y = 2940 and y = 3060 and nothing
+# was ever built to carry a walker up it. The first gait capture found it the
+# only way it could be found: the Dog walked north, met a 60 uu wall against
+# its 26 uu step height, and stood there -- six route legs in a row gave up,
+# 2,221 uu short of the fountain and 5,021 short of the castle. The approach
+# W1 had just furnished could not be reached on foot at all.
+#
+# path_steps is exactly the piece for it: three 20 uu risers, 4.6 m wide, with
+# the cut-stone nosing the plaza's own steps use. Two flights side by side span
+# the path's width, and a balustrade each side finishes the edge the way the
+# front steps do.
+APPROACH_STEPS = _band("V2_Arrival", [
+    A("path_steps", -230, 2940, 0, s=1.0, mat="MI_V2_PathStone", label="ApproachSteps_L"),
+    A("path_steps", 230, 2940, 0, s=1.0, mat="MI_V2_PathStone", label="ApproachSteps_R"),
+    A("balustrade", -520, 3010, 0, yaw=90, s=1.0, mat="MI_V2_IvoryStone", label="ApproachSteps_BalL"),
+    A("balustrade", 520, 3010, 0, yaw=90, s=1.0, mat="MI_V2_IvoryStone", label="ApproachSteps_BalR"),
+    A("pedestal_finial", -520, 2900, 0, s=0.9, mat="MI_V2_IvoryStone", label="ApproachSteps_PlinthL"),
+    A("pedestal_finial", 520, 2900, 0, s=0.9, mat="MI_V2_IvoryStone", label="ApproachSteps_PlinthR"),
+    A("gate_finial_ball", -520, 2900, 300, s=0.8, mat="MI_V2_Gold", label="ApproachSteps_FinialL"),
+    A("gate_finial_ball", 520, 2900, 300, s=0.8, mat="MI_V2_Gold", label="ApproachSteps_FinialR"),
+])
+
 APPROACH = _band("V2_Garden",
     # the corridor, narrowing as it climbs toward the castle
     _approach_pair(2400, 2600, 0)
@@ -607,7 +631,7 @@ APPROACH = _band("V2_Garden",
          label="Approach_BedFlowers%d" % i) for i in range(6)]
 )
 
-PALACE = CITY + BEYOND_L + BEYOND_R + AVENUE + APPROACH
+PALACE = CITY + BEYOND_L + BEYOND_R + AVENUE + APPROACH + APPROACH_STEPS
 ALL = FOREGROUND + GARDEN + PALACE + SKY + HOVER
 
 #: The dark path: from the front wall line to the arch, 4.4 m narrowing to 3 m,

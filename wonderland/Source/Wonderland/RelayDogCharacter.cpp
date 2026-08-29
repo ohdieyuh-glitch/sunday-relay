@@ -87,10 +87,12 @@ ARelayDogCharacter::ARelayDogCharacter()
 		Move->RotationRate = FRotator(0.0f, 260.0f, 0.0f);
 		Move->bOrientRotationToMovement = true;
 		Move->bUseControllerDesiredRotation = false;
-		// A 48 uu leg cannot lift onto a 45 uu step. The Golden Arrival stairs
-		// are authored well below that; this keeps the Dog from levitating up
-		// something it should have to walk around.
-		Move->MaxStepHeight = 26.0f;
+		// THE WORLD'S STEPS ARE 20 AND 26 uu, AND THEY CARRY PERLIN NOISE.
+		// At exactly 26 the tallest of them was a coin toss -- a tread whose
+		// noise pushed it a millimetre over stopped the Dog dead. Thirty gives
+		// the margin and still refuses the next thing up, which is a 120 uu
+		// terrace wall the Dog has no business climbing.
+		Move->MaxStepHeight = 30.0f;
 		Move->SetWalkableFloorAngle(46.0f);
 		Move->JumpZVelocity = 420.0f;
 		Move->AirControl = 0.35f;
