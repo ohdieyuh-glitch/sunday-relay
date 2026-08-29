@@ -58,7 +58,18 @@ else
   fi
   # The same chain the render passes use, so a playtest and a capture are
   # always looking at the same world.
-  WLV2_PASS02=1 WLV2_PASS03=1 WLV2_PASS05=1 bash "$HERE/pass_chain.sh"
+  # WL_COOK_MAP NAMES THE CLASSIC MAP, ALWAYS. Two maps exist under
+  # WonderlandV2/Maps and only one of them is Wonderland: WL_V2_GoldenArrival
+  # is the empty World Partition level the generator creates and immediately
+  # stops using (14 KB), and WL_V2_GoldenArrival_WP2 is the world (1.4 MB).
+  # The cook's default is the FORMER, so a cook that does not name the map
+  # packages an empty world -- and it does it silently, because an empty level
+  # cooks perfectly well. Caught by a profiling run that could not load the map
+  # it asked for, one step before the founder would have opened an empty
+  # Wonderland.
+  WLV2_PASS02=1 WLV2_PASS03=1 WLV2_PASS05=1 \
+    WL_COOK_MAP="${WL_COOK_MAP:-/Game/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2}" \
+    bash "$HERE/pass_chain.sh"
   PACKAGED="$(cat "$WL_OUT/logs/packaged.sha" 2>/dev/null | head -1 | tr -dc 'a-f0-9' || true)"
   [ "$PACKAGED" = "$HEAD_SHA" ] || wl_die "the chain finished but the package is ${PACKAGED:-none}, not $HEAD_SHA"
   wl_ok "packaged $HEAD_SHA"

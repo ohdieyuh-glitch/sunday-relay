@@ -31,6 +31,16 @@ export WL_BRANCH="${WL_BRANCH:-relay/wonderland-v2}"
 # shellcheck source=../../infra/lightning/common.sh
 . "$LIGHTNING/common.sh"
 
+# WHICH ROUTE THE DOG DRIVES WHILE IT IS MEASURED. `gait` is the locomotion
+# demo, `explore` the district tour -- the second costs more because it crosses
+# the gardens and the new approach, so both are worth a number.
+ROUTE="${WL_ROUTE:-gait}"
+case "$ROUTE" in
+  gait) ROUTE_FLAG="-wldemo" ;;
+  explore) ROUTE_FLAG="-wlexplore" ;;
+  *) wl_die "WL_ROUTE must be gait or explore, not '$ROUTE'" ;;
+esac
+
 SECS="${1:-60}"
 FRAMES=$(( SECS * 60 ))
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
@@ -41,32 +51,47 @@ SHA="$(head -1 "$WL_OUT/logs/packaged.sha" 2>/dev/null || echo unknown)"
 if pgrep -f "Binaries/Linux/Wonderlan[d]" >/dev/null 2>&1 && [ "${WL_TAKE_STREAM:-0}" != "1" ]; then
   wl_die "a Wonderland stream is already running -- someone may be playing. WL_TAKE_STREAM=1 to take it."
 fi
+pkill -f "Binaries/Linux/Wonderlan[d]" 2>/dev/null || true
+sleep 2
 
-wl_say "profiling $SECS s of the Dog's own route on build $SHA"
+# OFFSCREEN, WITH NO ENCODER IN THE PATH. This is measure-fps.sh's proven
+# launch, which matters: routed through Pixel Streaming with the same CSV flags
+# the game exited five seconds after start and wrote an empty capture. The
+# question here is what the RENDERER and the GAME THREAD cost while the Dog
+# moves, and a browser and an H264 encoder are not part of that question --
+# they were measured separately and fixed separately.
+APP="$(wl_find_first "$WL_OUT/Linux" -maxdepth 3 -name 'Wonderland.sh' -type f || true)"
+[ -n "${APP:-}" ] || wl_die "no packaged build under $WL_OUT/Linux"
+CSV_DIR="$(dirname "$APP")/Wonderland/Saved/Profiling/CSV"
+rm -rf "$CSV_DIR" 2>/dev/null || true
 
-# `stat unit` puts the four numbers on screen for the capture to show, and the
-# CSV profiler writes them per frame for the arithmetic. -csvCaptureFrames
-# starts the capture at launch, so the whole route is covered without a console.
-WL_MAP_ARG="${WL_MAP_ARG:-/Game/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2}" \
-WL_EXTRA_ARGS="${WL_EXTRA_ARGS:-} -wldemo -csvCaptureFrames=$FRAMES -csvGpuStats -statnamedevents" \
-WL_EXEC_CMDS="${WL_EXEC_CMDS:-stat unit}" \
-  bash "$LIGHTNING/run-stream.sh"
+wl_say "offscreen run: $FRAMES frames while the Dog drives its route"
+setsid nohup env $(wl_vulkan_env_pairs) "$APP" \
+  "${WL_MAP_ARG:-/Game/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2}" \
+  -RenderOffscreen -ForceRes "-ResX=${WL_RES_X:-1280}" "-ResY=${WL_RES_Y:-720}" \
+  -Unattended -stdout -FullStdOutLogOutput \
+  $ROUTE_FLAG \
+  "-csvCaptureFrames=$FRAMES" -csvGpuStats \
+  >"$WL_LOG/profile-run.log" 2>&1 </dev/null &
+APP_PID=$!
 
-wl_say "letting the Dog run its route for ${SECS}s"
-sleep "$SECS"
-sleep 12   # the CSV is flushed when the capture ends, not while it runs
+CSV=""
+for _ in $(seq 1 120); do
+  CSV="$( ( set +o pipefail; find "$CSV_DIR" -name '*.csv' -size +2k 2>/dev/null | head -1 ) || true)"
+  [ -n "$CSV" ] && break
+  kill -0 "$APP_PID" 2>/dev/null || break
+  sleep 5
+done
+kill "$APP_PID" 2>/dev/null || true
+pkill -f "Binaries/Linux/Wonderlan[d]" 2>/dev/null || true
 
-CSV="$(wl_find_first "$WL_ROOT" -name '*.csv' -newermt "-$((SECS + 300)) seconds" -path '*Profiling*' || true)"
-if [ -z "${CSV:-}" ]; then
-  CSV="$(wl_find_first "$WL_SRC/wonderland/Saved" -name '*.csv' -path '*CSV*' || true)"
-fi
 if [ -z "${CSV:-}" ]; then
   wl_warn "no CSV profile found; falling back to the app log's own frame timings"
-  grep -aE "FrameTime|GameThread|RenderThread|GPU " "$WL_LOG/app.log" | tail -40 > "$OUT/frames.txt" || true
+  tail -40 "$WL_LOG/profile-run.log" > "$OUT/run-tail.txt" || true
 else
   cp "$CSV" "$OUT/frames.csv"
   wl_ok "profile: $OUT/frames.csv"
 fi
 printf '%s\n' "$SHA" > "$OUT/packaged.sha"
-grep -a "WLDOG " "$WL_LOG/app.log" 2>/dev/null | tail -40 | sed 's/.*LogTemp: //' > "$OUT/dog-state.txt" || true
+grep -a "WLDOG " "$WL_LOG/profile-run.log" 2>/dev/null | tail -40 | sed 's/.*LogTemp: //' > "$OUT/dog-state.txt" || true
 printf '%s\n' "$OUT"

@@ -17,7 +17,13 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 
 export WL_BRANCH="${WL_BRANCH:-relay/wonderland-v2}"
 export WL_GENERATOR="${WL_GENERATOR:-wonderland/v2/build_v2.py}"
-export WL_COOK_MAP="${WL_COOK_MAP:-/Game/WonderlandV2/Maps/WL_V2_GoldenArrival}"
+# THE CLASSIC MAP IS THE WORLD. WL_V2_GoldenArrival is the empty World
+# Partition level the generator creates and abandons (14 KB on disk);
+# WL_V2_GoldenArrival_WP2 is Golden Arrival (1.4 MB). Defaulting to the former
+# packages an empty world and cooks it without a single warning, which is
+# exactly what happened on 2026-08-29 when a cook ran with the generate
+# skipped. The default is the world now; the empty one has to be asked for.
+export WL_COOK_MAP="${WL_COOK_MAP:-/Game/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2}"
 export WLV2_MANIFEST="${WLV2_MANIFEST:-$WL_RUN/wlv2-manifest.json}"
 export WL_BUILD_HLOD="${WL_BUILD_HLOD:-1}"      # World Partition HLODs (INSTANCING, CPU)
 # A V2 build regenerates the world from source every time; the shared build
