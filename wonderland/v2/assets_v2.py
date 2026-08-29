@@ -567,6 +567,65 @@ def garden_wall(ctx):
     return m
 
 
+def fountain_basin(ctx):
+    """THE ORNAMENTAL FOUNTAIN — the district's missing signature object.
+
+    Golden Arrival's kit has 82 pieces and not one of them holds water, which
+    is why the castle approach had nothing to anchor it: hedges and topiary can
+    shape a space but they cannot give a participant a reason to stop in the
+    middle of one. This is the Wonderland language rather than a garden-centre
+    fountain -- an octagonal royal basin in pale stone (the octagon is the gate
+    piers' own plan, so it belongs), a stepped plinth, a fluted stem, an upper
+    bowl, and a gold finial. The water is a separate piece so it can take its
+    own material and catch the sky.
+    """
+    m = ctx.mesh("fountain_basin")
+    octo = lambda r: [(math.cos(math.pi / 8 + math.pi * i / 4) * r,
+                       math.sin(math.pi / 8 + math.pi * i / 4) * r) for i in range(8)]
+    # The basin: a low octagonal wall on a broad step, with a rolled coping.
+    m.extrude(octo(300.0), 26.0)                       # the step the basin sits on
+    m.extrude(octo(268.0), 92.0, at=(0, 0, 26.0))      # the basin wall
+    for i in range(8):
+        a = math.pi / 8 + math.pi * i / 4
+        # A coping block per face, so the rim reads as masonry rather than a ring.
+        m.box(232.0, 46.0, 30.0,
+              at=(math.cos(a) * 250.0, math.sin(a) * 250.0, 118.0),
+              rot=(0.0, math.degrees(a) + 90.0, 0.0), chamfer=4.0)
+    # The centre: plinth, fluted stem, upper bowl.
+    m.extrude(octo(96.0), 44.0, at=(0, 0, 26.0))
+    m.revolve([(0.0, 70.0), (62.0, 70.0), (58.0, 96.0), (40.0, 150.0), (36.0, 220.0),
+               (44.0, 250.0), (30.0, 262.0)], steps=24)
+    for i in range(12):
+        a = 2.0 * math.pi * i / 12.0
+        m.tube([(math.cos(a) * 44.0, math.sin(a) * 44.0, 100.0),
+                (math.cos(a) * 34.0, math.sin(a) * 34.0, 214.0)], [5.0, 4.0], sides=5)
+    m.revolve([(0.0, 262.0), (150.0, 268.0), (156.0, 286.0), (140.0, 300.0),
+               (120.0, 296.0), (0.0, 288.0)], steps=28)
+    m.subdivide(1)
+    return m
+
+
+def fountain_finial(ctx):
+    """The gold crown of the fountain: a bud on a slender neck, the same family
+    as the gate finials so the two read as one civilisation."""
+    m = ctx.mesh("fountain_finial")
+    m.revolve([(0.0, 0.0), (26.0, 4.0), (20.0, 22.0), (12.0, 40.0), (18.0, 62.0),
+               (30.0, 92.0), (26.0, 120.0), (12.0, 140.0), (6.0, 152.0), (0.0, 164.0)], steps=20)
+    m.subdivide(1)
+    return m
+
+
+def fountain_water(ctx):
+    """The water: a still octagonal surface just below the coping. Flat on
+    purpose -- Wonderland is elegant, and a rippling mesh at this scale reads
+    as a hot tub."""
+    m = ctx.mesh("fountain_water")
+    octo = [(math.cos(math.pi / 8 + math.pi * i / 4) * 254.0,
+             math.sin(math.pi / 8 + math.pi * i / 4) * 254.0) for i in range(8)]
+    m.extrude(octo, 6.0, at=(0, 0, 96.0))
+    return m
+
+
 def garden_urn(ctx):
     m = ctx.mesh("garden_urn")
     m.revolve([(0.0, 0.0), (40.0, 0.0), (42.0, 12.0), (28.0, 24.0), (34.0, 36.0), (60.0, 72.0), (74.0, 112.0),
@@ -967,6 +1026,9 @@ RECIPES = {
     "mushroom_medium": (mushroom_medium, "mush_medium", True, True),
     "mushroom_landmark": (mushroom_landmark, "mush_landmark", True, True),
     "gate_pier": (gate_pier, "gates", True, True),
+    "fountain_basin": (fountain_basin, "garden_props", True, True),
+    "fountain_finial": (fountain_finial, "garden_props", True, False),
+    "fountain_water": (fountain_water, "garden_props", False, False),
     "gate_leaf": (gate_leaf, "gates", True, True),
     "gate_finial_heart": (gate_finial_heart, "gates", True, False),
     "gate_finial_ball": (gate_finial_ball, "gates", True, False),

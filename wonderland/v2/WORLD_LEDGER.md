@@ -57,4 +57,26 @@ if the runtime still will not carry them.
 | 1 | Static traversal + emptiness audit | done | above; no dead ends, 246× density gap on the approach |
 | 2 | Exploration route in the Dog (`-wlexplore`) | done, awaiting cook | `6d482bd` |
 | 3 | Gameplay traversal video + founder playtest of the fixed build | pending the cook | |
-| 4 | W1 — the approach becomes a place | | |
+| 4 | W1 — the approach becomes a place | authored, gated, awaiting a build | 0 → 45 actors within ±25 m (one per 81 m²); layout verify PASS at 779 placements; dry run 112/112 assets, 0 failures; the walking axis stays clear by 15.8 m |
+
+## W1, as built
+
+Three new kit pieces, because the district had 82 assets and not one of them held water: an octagonal
+royal **fountain** (basin + still water + gold finial) in the gate piers' own plan, and `MI_V2_Water` —
+low roughness so it takes the sky and the towers rather than glowing.
+
+The composition, large masses first:
+
+- **A corridor that narrows.** Paired hedge masses step from 26 m apart at the garden gates to 17 m at
+  the castle front. The castle grows as you walk without being moved, and the walk gains a direction
+  that open lawn cannot give it.
+- **A fountain court at the midpoint** — the one place on the route with a reason to stop — ringed by
+  rose topiary, four urns and their flowers.
+- **Two cross-axes at the court**, each ending in a stone arch and a landmark mushroom, so the approach
+  is a spine with exits rather than a corridor, and so the garden routes have somewhere to rejoin.
+- **Four tree pairs** between the masses for canopy overhead, and **six flower beds** at the hedges'
+  feet, so the eye has something at every height instead of only at the horizon.
+
+Nothing touches the castle, the skyline bands or the garden gates: the PASS 06/07 hierarchy is
+preserved and this fills the hole inside it. The approach is still airier than the plaza (81 m² per
+actor against 15) — which is correct for an approach; it is no longer a void.

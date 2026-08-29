@@ -58,6 +58,11 @@ INSTANCES = {
     "MI_V2_RoofNavy":   ("roof",    (0.10, 0.12, 0.24), 0.0, 0.60, 0.60, 0.34, None, 0.0),
     "MI_V2_Bark":       ("bark",    (0.24, 0.16, 0.11), 0.0, 0.86, 1.00, 0.20, None, 0.0),
     "MI_V2_Ceramic":    ("glaze",   (0.90, 0.87, 0.82), 0.0, 0.22, 0.20, 0.55, None, 0.0),
+    # Still fountain water. Low roughness so it takes the sky and the towers
+    # rather than glowing, a pale green-blue that belongs to the pastel palette,
+    # and specular high enough to read as a surface at a walking distance --
+    # Wonderland's water should look like a mirror in a garden, not a pool.
+    "MI_V2_Water":      ("glaze",   (0.36, 0.52, 0.55), 0.0, 0.06, 0.02, 0.85, None, 0.0),
     # ---- mushrooms: muted terracotta-pink, purple, cream --------------------
     "MI_V2_MushRed":    ("cap",     (0.58, 0.24, 0.20), 0.0, 0.54, 0.50, 0.38, None, 0.0),
     "MI_V2_MushTerracotta": ("cap", (0.60, 0.30, 0.24), 0.0, 0.56, 0.50, 0.38, None, 0.0),

@@ -527,7 +527,87 @@ HOVER = _band("V2_Props", [
 FOREGROUND = GATE + SIDES
 COURTYARD = []
 GARDEN = CORRIDOR + GARDEN_L + GARDEN_R
-PALACE = CITY + BEYOND_L + BEYOND_R + AVENUE
+# ---------------------------------------------------------------------------
+# W1: THE CASTLE APPROACH BECOMES A PLACE (2026-08-29)
+#
+# THE MEASUREMENT THAT MADE THIS PASS. From the garden gates (y = 17 m) to the
+# castle front (y = 90 m), within 25 m of the axis, this district held ZERO
+# actors across 3,650 square metres -- while the plaza it leads from holds one
+# every fifteen. The approach a participant walks toward the hero building was
+# 246 times emptier than the space they had just crossed, which is exactly why
+# the castle read as the last object at the edge of a set rather than a gateway
+# into more Wonderland.
+#
+# WHAT IS BUILT, AND WHY IN THIS ORDER. Large masses first, then medium
+# structure, then small detail -- never scatter:
+#
+#   * PAIRED HEDGE MASSES step inward as the approach rises (26 m apart at the
+#     bottom, 17 m at the top). A corridor that narrows makes the castle grow
+#     without moving it, and it gives the walk a direction that open lawn
+#     cannot.
+#   * A FOUNTAIN COURT at the midpoint: the one place on the whole route with
+#     a reason to stop, ringed by its own low kerb, benches of clipped topiary
+#     and four urns. It is also the district's first water.
+#   * TWO CROSS-AXES at the court, so the approach is not a corridor with no
+#     exits: each ends in an arch and a landmark mushroom, which is where the
+#     left and right garden routes rejoin.
+#   * TREE PAIRS between the masses for canopy overhead, and beds of flowers
+#     at their feet, so the eye has something at every height rather than only
+#     at the horizon.
+#
+# Nothing here touches the castle, the skyline bands or the garden gates: the
+# PASS 06/07 hierarchy is preserved and this fills the hole inside it.
+def _approach_pair(y, half, seed, hedge_mat="MI_V2_LeafMid"):
+    """One rung of the approach: a hedge mass either side at +-half."""
+    out = []
+    for side, tag in ((1.0, "L"), (-1.0, "R")):
+        out.append(A("hedge_mass", side * half, y, 0, yaw=(seed * 37 + (0 if side > 0 else 90)) % 360,
+                     s=1.25, mat=hedge_mat, label="Approach_Hedge%s%d" % (tag, seed)))
+    return out
+
+
+APPROACH = _band("V2_Garden",
+    # the corridor, narrowing as it climbs toward the castle
+    _approach_pair(2400, 2600, 0)
+    + _approach_pair(3400, 2500, 1, "MI_V2_LeafDark")
+    + _approach_pair(4400, 2400, 2)
+    + _approach_pair(6600, 2000, 5, "MI_V2_LeafDark")
+    + _approach_pair(7600, 1850, 6)
+    + _approach_pair(8500, 1700, 7, "MI_V2_LeafDark")
+    # trees between the masses: canopy overhead on the way up
+    + [A("tree_mature_trunk", 2050 * (1 if i % 2 == 0 else -1), 2900 + 1500 * i, 0,
+         yaw=31 * i, s=1.15, mat="MI_V2_Bark", label="Approach_Trunk%d" % i) for i in range(4)]
+    + [A("canopy_large", 2050 * (1 if i % 2 == 0 else -1), 2900 + 1500 * i, 940,
+         yaw=44 * i, s=1.2, mat=("MI_V2_LeafMid" if i % 2 else "MI_V2_LeafLight"),
+         label="Approach_Canopy%d" % i) for i in range(4)]
+    # THE FOUNTAIN COURT, at the midpoint of the climb
+    + [A("fountain_basin", 0, 5400, 0, s=1.0, mat="MI_V2_IvoryStone", label="Court_FountainBasin"),
+       A("fountain_water", 0, 5400, 0, s=1.0, mat="MI_V2_Water", label="Court_FountainWater"),
+       A("fountain_finial", 0, 5400, 300, s=1.0, mat="MI_V2_Gold", label="Court_FountainFinial")]
+    + [A("topiary_cone_roses", 620 * (1 if i < 2 else -1), 5400 + (330 if i % 2 else -330), 0,
+         yaw=45 * i, s=1.0, mat="MI_V2_LeafDark", label="Court_Topiary%d" % i) for i in range(4)]
+    + [A("garden_urn", 900 * (1 if i < 2 else -1), 5400 + (760 if i % 2 else -760), 0,
+         s=1.0, mat="MI_V2_Ceramic", label="Court_Urn%d" % i) for i in range(4)]
+    + [A("flower_cluster", 900 * (1 if i < 2 else -1), 5400 + (760 if i % 2 else -760), 150,
+         s=0.6, mat=("MI_V2_PetalRose" if i % 2 else "MI_V2_PetalWhite"),
+         label="Court_UrnFlowers%d" % i) for i in range(4)]
+    # the cross-axes out of the court, each ending in an arch and a landmark
+    + [A("garden_arch_stone", 2300, 5400, 0, yaw=90, s=1.0, mat="MI_V2_IvoryStone", label="Court_ArchL"),
+       A("garden_arch_stone", -2300, 5400, 0, yaw=90, s=1.0, mat="MI_V2_IvoryStone", label="Court_ArchR"),
+       A("mushroom_landmark", 3100, 5400, 0, s=1.1, mat="MI_V2_MushStem", label="Court_MushL"),
+       A("mushroom_giant", 3100, 5400, 0, s=1.1, mat="MI_V2_MushTerracotta", label="Court_MushLCap"),
+       A("mushroom_landmark", -3100, 5400, 0, s=1.05, mat="MI_V2_MushStem", label="Court_MushR"),
+       A("mushroom_giant", -3100, 5400, 0, s=1.05, mat="MI_V2_MushPurple", label="Court_MushRCap")]
+    # beds along the corridor, at the feet of the hedges
+    + [A("planter_box", 1750 * (1 if i % 2 == 0 else -1), 3000 + 900 * i, 0,
+         yaw=90, s=1.1, mat="MI_V2_IvoryStone", label="Approach_Bed%d" % i) for i in range(6)]
+    + [A("ground_flowers", 1750 * (1 if i % 2 == 0 else -1), 3000 + 900 * i, 60,
+         yaw=17 * i, s=1.0, mat=("MI_V2_PetalPink" if i % 3 == 0 else
+                                 "MI_V2_PetalViolet" if i % 3 == 1 else "MI_V2_PetalBlue"),
+         label="Approach_BedFlowers%d" % i) for i in range(6)]
+)
+
+PALACE = CITY + BEYOND_L + BEYOND_R + AVENUE + APPROACH
 ALL = FOREGROUND + GARDEN + PALACE + SKY + HOVER
 
 #: The dark path: from the front wall line to the arch, 4.4 m narrowing to 3 m,
