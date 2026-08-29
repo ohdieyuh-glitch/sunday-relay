@@ -198,7 +198,7 @@ run_container() {
   # matters. This is a two-second container run against the same image, mounts
   # and environment the real build will use.
   # shellcheck disable=SC2086
-  if ! docker run --rm $extra -v "$WL_ROOT:$WL_ROOT" \
+  if ! docker run --rm --shm-size="$WL_DOCKER_SHM" $extra -v "$WL_ROOT:$WL_ROOT" \
         -e WONDERLAND_TEXTURE_DIR="$WONDERLAND_TEXTURE_DIR" \
         -e WONDERLAND_AUDIO_DIR="$WONDERLAND_AUDIO_DIR" \
         "$WL_UE_IMAGE" bash -lc '
@@ -221,7 +221,7 @@ run_container() {
   # because the operator believes the sweep happened.
   local -a knob_args=()
   while IFS= read -r pair; do knob_args+=(-e "$pair"); done < <(wl_knob_pairs)
-  docker run --rm $gpuflag $extra \
+  docker run --rm --shm-size="$WL_DOCKER_SHM" $gpuflag $extra \
     -v "$WL_ROOT:$WL_ROOT" \
     -e UE_ROOT=/home/ue4/UnrealEngine \
     -e OUT="$WL_OUT" \

@@ -159,6 +159,19 @@ export WL_UE_ARCHIVE="${WL_UE_ARCHIVE:-$WL_ROOT/ue58-dev.tar}"
 # A docker save of UE 5.8 is tens of gigabytes. Anything far below this is a
 # truncated or aborted export, and loading it would fail late and confusingly.
 export WL_UE_ARCHIVE_MIN_GB="${WL_UE_ARCHIVE_MIN_GB:-20}"
+
+# SHARED MEMORY FOR THE BUILD CONTAINER (2026-08-29).
+#
+# Docker gives a container 64 MB of /dev/shm by default. Unreal Build
+# Accelerator wants at least 1 GB for its file mapping and, when it cannot get
+# it, falls back to a disk mapping AND to a memfd path that this sandbox
+# refuses (`pidfd_getfd errno=1`). The result is not a slower build: clang
+# crashes under the interception, and it crashes over and over -- 13,144
+# chained SIGSEGV traces and two object files in fifteen minutes, with the log
+# growing by three thousand lines every twenty-five seconds while nothing
+# compiled. The host has 16 GB of /dev/shm; the container just was not given
+# any of it.
+export WL_DOCKER_SHM="${WL_DOCKER_SHM:-2g}"
 # What a load of the archive COSTS beyond the archive itself. Measured TWICE
 # on 2026-08-29 with the same 73.7 GB OCI archive (uncompressed layers; UE
 # content barely compresses, so the image is the archive's size): the first

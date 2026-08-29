@@ -130,7 +130,7 @@ else
   # already adds the flag only when a GPU is present, so a CPU Studio was
   # always able to run this image — it was just never asked to.
   set +e
-  docker run --rm \
+  docker run --rm --shm-size="$WL_DOCKER_SHM" \
     -v "$WL_ROOT:$WL_ROOT" \
     -e UE_ROOT=/home/ue4/UnrealEngine \
     -w "$WL_SRC" \
