@@ -53,17 +53,25 @@ def A(asset, x, y, z=0.0, yaw=0.0, s=1.0, mat=None, label=None, sxyz=None, pitch
 # THE GATE (behind the viewpoint) AND THE PLAZA EDGE
 # ---------------------------------------------------------------------------
 GATE = _band("V2_Arrival", [
-    A("gate_pier", 230, -910, 0, s=1.4, mat="MI_V2_IvoryStone", label="Gate_PierL"),
-    A("gate_pier", -230, -910, 0, s=1.4, mat="MI_V2_IvoryStone", label="Gate_PierR"),
-    # leaves OPEN: hinged at the piers, swung 80 degrees toward the plaza
-    A("gate_leaf", 170, -870, 0, yaw=80, s=0.5, sxyz=(0.5, 0.5, 1.25), mat="MI_V2_Gold", label="Gate_LeafL"),
-    A("gate_leaf", -170, -870, 0, yaw=100, s=0.5, sxyz=(-0.5, 0.5, 1.25), mat="MI_V2_Gold", label="Gate_LeafR"),
-    A("gate_finial_ball", 230, -910, 910, s=1.3, mat="MI_V2_Gold", label="Gate_FinialL"),
-    A("gate_finial_ball", -230, -910, 910, s=1.3, mat="MI_V2_Gold", label="Gate_FinialR"),
-    A("garden_urn", 330, -880, 0, s=1.0, mat="MI_V2_Ceramic", label="Gate_UrnL"),
-    A("garden_urn", -330, -880, 0, s=1.0, mat="MI_V2_Ceramic", label="Gate_UrnR"),
-    A("flower_cluster", 330, -880, 150, s=0.6, mat="MI_V2_PetalPink", label="Gate_UrnFlowersL"),
-    A("flower_cluster", -330, -880, 150, s=0.6, mat="MI_V2_PetalViolet", label="Gate_UrnFlowersR"),
+    # PLAYER SCALE (PASS 07): at s=1.4 the piers were 9.1 m to the cap with a
+    # 2.9 m opening -- from the arrival spawn only the bottom third of a pier
+    # was in frame and the plinth alone stood chest-high on the 1.74 m Dog;
+    # the urns (2.0 m) were taller than the Dog. Same pieces, same language,
+    # at the scale the garden gates already use: 6.5 m piers (s=1.0, finials
+    # at z=650 as on the garden gate), centres +-260 for a 4.0 m opening
+    # between the shafts, leaves at their authored 5.6 m, urns 1.3 m and
+    # moved outside the plinths, standing 13 cm clear of the rear wall face.
+    A("gate_pier", 260, -910, 0, s=1.0, mat="MI_V2_IvoryStone", label="Gate_PierL"),
+    A("gate_pier", -260, -910, 0, s=1.0, mat="MI_V2_IvoryStone", label="Gate_PierR"),
+    # leaves OPEN: hinged at the shafts' inner faces, swung 80 degrees toward the plaza
+    A("gate_leaf", 200, -870, 0, yaw=80, s=0.5, sxyz=(0.5, 0.5, 1.0), mat="MI_V2_Gold", label="Gate_LeafL"),
+    A("gate_leaf", -200, -870, 0, yaw=100, s=0.5, sxyz=(-0.5, 0.5, 1.0), mat="MI_V2_Gold", label="Gate_LeafR"),
+    A("gate_finial_ball", 260, -910, 650, s=1.0, mat="MI_V2_Gold", label="Gate_FinialL"),
+    A("gate_finial_ball", -260, -910, 650, s=1.0, mat="MI_V2_Gold", label="Gate_FinialR"),
+    A("garden_urn", 420, -800, 0, s=0.65, mat="MI_V2_Ceramic", label="Gate_UrnL"),
+    A("garden_urn", -420, -800, 0, s=0.65, mat="MI_V2_Ceramic", label="Gate_UrnR"),
+    A("flower_cluster", 420, -800, 100, s=0.45, mat="MI_V2_PetalPink", label="Gate_UrnFlowersL"),
+    A("flower_cluster", -420, -800, 100, s=0.45, mat="MI_V2_PetalViolet", label="Gate_UrnFlowersR"),
     # the plaza's rear wall either side of the gate, ivied
     A("garden_wall", 580, -910, 0, s=1.0, mat="MI_V2_IvoryStone", label="Rear_WallL0"),
     A("garden_wall", 1080, -910, 0, s=1.0, mat="MI_V2_IvoryStone", label="Rear_WallL1"),
