@@ -248,13 +248,17 @@ void ARelayDogCharacter::BuildExplorationRoute()
 	Add(0.0f, 500.0f, 150.0f, 1.5f, TEXT("cross the plaza to the front steps"));
 	Add(0.0f, 1100.0f, 130.0f, 1.0f, TEXT("up the steps"));
 	// The left garden, in through its gate and around its room.
-	Add(890.0f, 1700.0f, 200.0f, 1.0f, TEXT("through the left garden gate"));
-	Add(2200.0f, 2600.0f, 200.0f, 1.5f, TEXT("into the left garden"));
-	Add(1200.0f, 1200.0f, 200.0f, 0.5f, TEXT("back out of the left garden"));
+	// THE GARDEN LEGS STAY ON OPEN GROUND. (2200, 2600) was inside a hedge
+	// mass; the Dog reached the planting and stopped. These sit on the lawn
+	// between the gate and the beds, which is where a participant would
+	// actually walk.
+	Add(890.0f, 1500.0f, 200.0f, 1.0f, TEXT("toward the left garden gate"));
+	Add(1500.0f, 2100.0f, 180.0f, 1.5f, TEXT("into the left garden"));
+	Add(700.0f, 1300.0f, 200.0f, 0.5f, TEXT("back out of the left garden"));
 	// And the right.
-	Add(-890.0f, 1700.0f, 200.0f, 1.0f, TEXT("through the right garden gate"));
-	Add(-2200.0f, 2600.0f, 200.0f, 1.5f, TEXT("into the right garden"));
-	Add(-1000.0f, 1500.0f, 200.0f, 0.5f, TEXT("back toward the axis"));
+	Add(-890.0f, 1500.0f, 200.0f, 1.0f, TEXT("toward the right garden gate"));
+	Add(-1500.0f, 2100.0f, 180.0f, 1.5f, TEXT("into the right garden"));
+	Add(-700.0f, 1300.0f, 200.0f, 0.5f, TEXT("back toward the axis"));
 	// THE CASTLE APPROACH. This is the leg that shows the empty ground: from
 	// the garden gates to the castle front is some seventy metres with five
 	// actors in it, all of them on the flanks.
@@ -278,6 +282,30 @@ FVector ARelayDogCharacter::StepRoute(float DeltaSeconds)
 
 	const FRelayDogRouteLeg& Leg = Route[RouteIndex];
 	const FVector Here = GetActorLocation();
+
+	// A LEG THAT CANNOT BE REACHED MUST NOT HANG THE WHOLE ROUTE.
+	//
+	// The first exploration capture spent most of its ninety seconds filming a
+	// Dog wedged in a hedge: one waypoint had been placed inside planting, the
+	// arrival tolerance was therefore never met, and the route pushed at it
+	// forever. Every later leg -- the castle approach, the turns, the look back
+	// -- never happened, and the video showed a wall of leaves instead. A
+	// waypoint can be wrong; a capture that silently films nothing for a minute
+	// is worse. Each leg now gets a generous but finite budget, and giving up
+	// says so in the log rather than quietly.
+	LegSeconds += DeltaSeconds;
+	const float LegBudget = FMath::Max(12.0f, Leg.HoldSeconds + 25.0f);
+	if (LegSeconds > LegBudget)
+	{
+		UE_LOG(LogTemp, Warning,
+		       TEXT("WLDOG ROUTE: gave up on leg %d/%d '%s' after %.0f s (%.0f uu short) -- moving on"),
+		       RouteIndex + 1, Route.Num(), *Leg.Label, LegSeconds,
+		       FVector::Dist2D(Here, Leg.Target));
+		RouteIndex = (RouteIndex + 1) % Route.Num();
+		RouteHold = 0.0f;
+		LegSeconds = 0.0f;
+		return FVector::ZeroVector;
+	}
 	FVector ToTarget = Leg.Target - Here;
 	ToTarget.Z = 0.0f;
 	const float Distance = ToTarget.Size();
@@ -306,6 +334,7 @@ FVector ARelayDogCharacter::StepRoute(float DeltaSeconds)
 		{
 			RouteIndex = (RouteIndex + 1) % Route.Num();
 			RouteHold = 0.0f;
+			LegSeconds = 0.0f;
 			const FRelayDogRouteLeg& Next = Route[RouteIndex];
 			UE_LOG(LogTemp, Log, TEXT("WLDOG ROUTE %d/%d: %s (%.0f uu/s)"),
 			       RouteIndex + 1, Route.Num(), *Next.Label, Next.SpeedUU);

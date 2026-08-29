@@ -227,6 +227,8 @@ private:
 	bool bWalkHeld = false;
 	int32 RouteIndex = 0;
 	float RouteHold = 0.0f;
+	/** How long the current leg has been attempted, seconds. */
+	float LegSeconds = 0.0f;
 	float LastLoggedSpeed = -1.0f;
 	FVector SpawnLocation = FVector::ZeroVector;
 	float SpawnYaw = 0.0f;
