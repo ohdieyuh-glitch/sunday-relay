@@ -168,7 +168,21 @@ def build_blueprint(meshes, mats):
     if eal.does_asset_exist(path):
         eal.delete_asset(path)
     factory = unreal.BlueprintFactory()
-    factory.set_editor_property("parent_class", unreal.Character)
+    # THE PARENT IS THE C++ DOG WHEN THERE IS ONE. ARelayDogCharacter is what
+    # drives the joints this Blueprint holds — it finds Pivot_<joint> by name at
+    # BeginPlay, writes the stride's angles onto them, traces the ground under
+    # each foot and carries the third-person camera. A plain ACharacter parent
+    # still produces a correct, canonical, COMPLETELY STILL Dog, so the fallback
+    # is announced loudly rather than left to be discovered in a render.
+    parent = unreal.load_class(None, "/Script/Wonderland.RelayDogCharacter")
+    if parent is None:
+        LOG("BLUEPRINT PARENT FAILED: /Script/Wonderland.RelayDogCharacter did not load -- "
+            "the module is stale or was not rebuilt. Falling back to plain Character: "
+            "the Dog will be canonical and WILL NOT ANIMATE.")
+        parent = unreal.Character
+    else:
+        LOG("BLUEPRINT PARENT: ARelayDogCharacter (locomotion available)")
+    factory.set_editor_property("parent_class", parent)
     bp = unreal.AssetToolsHelpers.get_asset_tools().create_asset(BP_NAME, DOG_FOLDER, None, factory)
     if bp is None:
         LOG("BLUEPRINT create_asset returned None")
@@ -205,12 +219,28 @@ def build_blueprint(meshes, mats):
     body_h, body = add(root, unreal.SceneComponent, "Body")
     body.set_editor_property("relative_location", vec((0, 0, -half_height)))   # ground at the capsule's foot
     pivots = D.pivots_unreal(W_UU)
+    # THE HIERARCHY IS NESTED, NOT FLAT. A forearm parented to the Body rather
+    # than to its own upper arm stays behind when the shoulder swings — the arm
+    # comes apart in mid-stride. dog_canon.PARENTS names the chain; each pivot
+    # is placed relative to ITS PARENT's pivot, which is what makes a rotation
+    # at the elbow rotate about the elbow.
+    handles = {"root": body_h}
     for joint in D.JOINTS:
         if joint == "root":
             parent_h = body_h
         else:
-            parent_h, pivot_obj = add(body_h, unreal.SceneComponent, "Pivot_" + joint)
-            pivot_obj.set_editor_property("relative_location", vec(pivots[joint]))
+            parent_joint = D.PARENTS[joint]
+            base_h = handles.get(parent_joint)
+            if base_h is None:
+                raise RuntimeError("joint %s wants parent %s, which has not been built" % (joint, parent_joint))
+            parent_h, pivot_obj = add(base_h, unreal.SceneComponent, "Pivot_" + joint)
+            here = pivots[joint]
+            there = pivots.get(parent_joint, (0.0, 0.0, 0.0)) if parent_joint != "root" else (0.0, 0.0, 0.0)
+            pivot_obj.set_editor_property(
+                "relative_location", vec((here[0] - there[0], here[1] - there[1], here[2] - there[2])))
+            handles[joint] = parent_h
+        # A joint's meshes are authored in ITS OWN frame, so they attach to its
+        # pivot and inherit every parent above it.
         for surface in D.SURFACES:
             sm = meshes.get((joint, surface))
             if sm is None:
@@ -231,7 +261,9 @@ def build_blueprint(meshes, mats):
     except Exception as exc:
         LOG("capsule size not set on the CDO (%s)" % exc)
     eal.save_asset(path, only_if_is_dirty=False)
-    LOG("BLUEPRINT %s parent=Character capsule r=%.1f hh=%.1f joints=%d" % (path, radius, half_height, len(D.JOINTS)))
+    LOG("BLUEPRINT %s parent=%s capsule r=%.1f hh=%.1f joints=%d (nested: %s)"
+        % (path, getattr(parent, "get_name", lambda: str(parent))(), radius, half_height, len(D.JOINTS),
+           ", ".join("%s<-%s" % (j, D.PARENTS[j]) for j in D.JOINTS if D.PARENTS[j] not in (None, "root"))))
     return cls
 
 

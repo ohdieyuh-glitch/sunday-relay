@@ -1478,20 +1478,34 @@ def hero_camera(actors, layers):
                     unmatched.append("components not reachable (%s)" % exc)
                 LOG("V2 SCALE DOG: %d components given their canon materials%s"
                     % (assigned, ("; UNMATCHED: " + ", ".join(unmatched)) if unmatched else ""))
-                # BP_RelayDog is a Character. This world has no gameplay
-                # collision under the plaza (only steps, walls, balustrades and
-                # hedge blocks collide), so at BeginPlay its capsule fell
-                # through the flagstones and SUITE01's ScaleCam07 showed no
-                # Dog. A scale reference does not walk: movement mode None,
-                # no gravity, it stands where it is placed.
+                # IT WALKS NOW (2026-08-29). Until the locomotion phase this
+                # Dog was frozen -- movement mode None, gravity 0 -- because
+                # the plaza had no floor from load and its capsule fell
+                # through. The ground slab collides now, so the Dog is a real
+                # Character again: gravity on, walking, and (unless the
+                # capture demo owns it) possessed by the player. ONE Dog: the
+                # founder's scale reference and the founder's avatar are the
+                # same animal, standing where ScaleCam07 has always seen it.
                 cmc = dog.get_component_by_class(unreal.CharacterMovementComponent)
                 if cmc is not None:
-                    ok_mode = set_prop(cmc, "DefaultLandMovementMode", unreal.MovementMode.MOVE_NONE)
-                    ok_grav = set_prop(cmc, "GravityScale", 0.0)
-                    LOG("V2 SCALE DOG: movement None %s, gravity 0 %s (no collision under the plaza)"
+                    ok_mode = set_prop(cmc, "DefaultLandMovementMode", unreal.MovementMode.MOVE_WALKING)
+                    ok_grav = set_prop(cmc, "GravityScale", 1.0)
+                    LOG("V2 DOG: movement Walking %s, gravity 1 %s"
                         % ("set" if ok_mode else "NOT SET", "set" if ok_grav else "NOT SET"))
                 else:
-                    LOG("V2 SCALE DOG: no CharacterMovementComponent found -- it may fall through the plaza")
+                    LOG("V2 DOG FAILED: no CharacterMovementComponent -- the Dog cannot walk")
+                # The locomotion properties live on ARelayDogCharacter; they
+                # are absent when the module is stale and the Blueprint fell
+                # back to plain ACharacter, which is worth saying out loud.
+                demo = int(os.environ.get("WLV2_DOG_DEMO", "0"))
+                ok_head = set_prop(dog, "HeadWidthUU", float(os.environ.get("WLV2_DOG_HEAD_WIDTH_UU", "60")))
+                ok_demo = set_prop(dog, "bAutoDemo", bool(demo))
+                if ok_head or ok_demo:
+                    LOG("V2 DOG: locomotion class present (head width %s, auto demo %s)"
+                        % ("set" if ok_head else "NOT SET", "on" if demo else "off"))
+                else:
+                    LOG("V2 DOG FAILED: ARelayDogCharacter properties not found on the spawned Dog -- "
+                        "BP_RelayDog fell back to plain Character and NOTHING WILL ANIMATE")
                 try:
                     dog.set_editor_property("tags", [unreal.Name("ScaleReference"), unreal.Name("CanonicalDog")])
                 except Exception:
@@ -1589,6 +1603,19 @@ def main():
                 g.set_actor_scale3d(vec((1200.0, 1200.0, 0.6)))
                 if "MI_V2_Moss" in mats:
                     smc.set_material(0, mats["MI_V2_Moss"])
+                # AND IT COLLIDES (2026-08-29, the locomotion phase). The
+                # flagstone batches carry their own collision, but they are
+                # instanced components built at BeginPlay, so a Character that
+                # spawns in the same frame can fall past them before they
+                # exist -- which is exactly what happened to the scale Dog in
+                # SUITE01. The slab is present from load, 60 uu thick with its
+                # top at z=0, so the world has a floor no race can remove.
+                try:
+                    smc.set_collision_profile_name("BlockAll")
+                    smc.set_collision_enabled(unreal.CollisionEnabled.QUERY_AND_PHYSICS)
+                    LOG("V2 GROUND: the slab collides (BlockAll) -- the world is walkable from load")
+                except Exception as exc:
+                    LOG("V2 GROUND FAILED: the slab could not be made to collide (%s)" % exc)
             assign_layer(g, "V2_Arrival", layers)
         LOG("V2 GROUND: no landscape in the map; a moss ground slab stands in for terrain")
     else:
