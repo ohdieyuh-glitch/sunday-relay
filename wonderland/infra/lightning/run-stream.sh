@@ -183,6 +183,31 @@ start_app() {
     exec_cmds="${WL_EXEC_CMDS:-}"
     wl_warn "no rendering profile resolver at $render_dir — launching with engine defaults"
   fi
+  # THE LINK, NOT THE RENDERER (2026-08-29). Measured from a browser ON THIS
+  # BOX the stream is 71 fps at 11.8 Mbps of 1080p with zero freezes — the
+  # encoder and the GPU are fine. The founder, several thousand kilometres
+  # away, reported that it "lags a lot when I start walking", which is exactly
+  # what those numbers do to a long-haul link: a still scene compresses to
+  # nearly nothing, and the moment the camera moves WebRTC tries to push its
+  # start-bitrate of 10 Mbps across the Pacific, floods the path, and stalls.
+  #
+  # So the caps are set for the VIEWER rather than for the machine. A start
+  # bitrate small enough to establish cleanly, a ceiling a distant link can
+  # actually hold, and a frame rate that spends the bits on smoothness instead
+  # of on 71 fps nobody's monitor shows. Every value is overridable, and
+  # WL_STREAM_TUNE=0 restores whatever the engine defaults are.
+  #
+  # The CVar names were checked against the packaged binary's own strings:
+  # PixelStreaming2.WebRTC.* exists in this build, PixelStreaming.WebRTC.* (the
+  # PS1 spelling) does not, and a CVar that does not exist fails silently.
+  if [ "${WL_STREAM_TUNE:-1}" = "1" ]; then
+    local tune="PixelStreaming2.WebRTC.StartBitrate ${WL_PS_START_BITRATE:-2000000}"
+    tune="$tune|PixelStreaming2.WebRTC.MaxBitrate ${WL_PS_MAX_BITRATE:-6000000}"
+    tune="$tune|PixelStreaming2.WebRTC.MinBitrate ${WL_PS_MIN_BITRATE:-400000}"
+    tune="$tune|PixelStreaming2.WebRTC.Fps ${WL_PS_FPS:-60}"
+    if [ -n "${exec_cmds:-}" ]; then exec_cmds="$exec_cmds|$tune"; else exec_cmds="$tune"; fi
+    wl_say "stream tuned for a distant viewer: start ${WL_PS_START_BITRATE:-2000000}, max ${WL_PS_MAX_BITRATE:-6000000}, ${WL_PS_FPS:-60} fps at ${WL_RES_X}x${WL_RES_Y}"
+  fi
   local exec_arg=()
   [ -n "${exec_cmds:-}" ] && exec_arg=(-ExecCmds="$exec_cmds")
 

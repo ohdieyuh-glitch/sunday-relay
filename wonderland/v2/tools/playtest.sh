@@ -70,6 +70,12 @@ banner "3/4  THE STREAM"
 # line — a founder dropped into an empty grey world would reasonably conclude
 # Wonderland was gone.
 export WL_MAP_ARG="${WL_MAP_ARG:-/Game/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2}"
+# 720p FOR A PLAY SESSION, not 1080p. The founder plays from the other side of
+# the world; halving the pixels halves what has to cross it, and a locomotion
+# review is about how the Dog moves rather than how many pixels it moves in.
+# Renders and captures still run at whatever they ask for.
+export WL_RES_X="${WL_RES_X:-1280}"
+export WL_RES_Y="${WL_RES_Y:-720}"
 bash "$LIGHTNING/run-stream.sh"
 
 banner "4/4  THE LINK"
