@@ -388,9 +388,12 @@ void ARelayDogCharacter::Tick(float DeltaSeconds)
 
 	const RelayDogStride::FDogPose& Pose = Animator.Update(In);
 
-	const RelayDogStride::FLegPose SolvedL = { Pose.LegLeft.HipDeg, Pose.LegLeft.KneeDeg };
-	const RelayDogStride::FLegPose SolvedR = { Pose.LegRight.HipDeg, Pose.LegRight.KneeDeg };
-	const float Weight = Pose.GaitWeight;
+	// THE POSE IS ALREADY BLENDED. FDogAnimator multiplies the solved leg
+	// angles by the gait weight before returning them, so weighting them again
+	// here would square the blend and leave the Dog half-striding through every
+	// start and stop.
+	const RelayDogStride::FLegPose& SolvedL = Pose.LegLeft;
+	const RelayDogStride::FLegPose& SolvedR = Pose.LegRight;
 
 	// ------------------------------------------------------------- the writing
 	//
@@ -414,10 +417,10 @@ void ARelayDogCharacter::Tick(float DeltaSeconds)
 	{
 		TailPivot->SetRelativeRotation(FRotator(Pose.TailPitchDeg, Pose.TailYawDeg, 0.0f));
 	}
-	if (LegLeft.Hip != nullptr) LegLeft.Hip->SetRelativeRotation(FRotator(SolvedL.HipDeg * Weight, 0.0f, 0.0f));
-	if (LegLeft.Shin != nullptr) LegLeft.Shin->SetRelativeRotation(FRotator(-SolvedL.KneeDeg * Weight, 0.0f, 0.0f));
-	if (LegRight.Hip != nullptr) LegRight.Hip->SetRelativeRotation(FRotator(SolvedR.HipDeg * Weight, 0.0f, 0.0f));
-	if (LegRight.Shin != nullptr) LegRight.Shin->SetRelativeRotation(FRotator(-SolvedR.KneeDeg * Weight, 0.0f, 0.0f));
+	if (LegLeft.Hip != nullptr) LegLeft.Hip->SetRelativeRotation(FRotator(SolvedL.HipDeg, 0.0f, 0.0f));
+	if (LegLeft.Shin != nullptr) LegLeft.Shin->SetRelativeRotation(FRotator(-SolvedL.KneeDeg, 0.0f, 0.0f));
+	if (LegRight.Hip != nullptr) LegRight.Hip->SetRelativeRotation(FRotator(SolvedR.HipDeg, 0.0f, 0.0f));
+	if (LegRight.Shin != nullptr) LegRight.Shin->SetRelativeRotation(FRotator(-SolvedR.KneeDeg, 0.0f, 0.0f));
 
 	auto WriteArm = [](const FRelayDogArm& Arm, const RelayDogStride::FArmPose& ArmPose)
 	{
