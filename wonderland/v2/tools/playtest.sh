@@ -1,0 +1,84 @@
+#!/usr/bin/env bash
+# ONE COMMAND, FROM A COLD STUDIO TO A URL THE FOUNDER CAN PLAY.
+#
+#   bash wonderland/v2/tools/playtest.sh              # on the Studio, in $WL_SRC
+#
+# The founder's ask (2026-08-29) is that entering Wonderland costs them one
+# link and nothing else — no paths, no logs, no dependency repair. Everything
+# between a Studio that has just come back and a playable Golden Arrival is
+# here, in order, and each step is skipped when it is already done:
+#
+#   1. after-restart.sh   the UE image, the bundled node's npm, Wilbur's
+#                         workspace node_modules, playwright/chrome, the
+#                         runtime libs, the TURN image — all of which a
+#                         Lightning machine change discards
+#   2. build + cook       only if the packaged build is not already the
+#                         checkout's HEAD (a rebuild costs ~40 minutes and a
+#                         playtest that did not need one should not pay it)
+#   3. run-stream.sh      the packaged game with Pixel Streaming, the
+#                         signalling server, coturn and a cloudflared tunnel
+#   4. the URL            printed alone on the last line, and left in
+#                         run/player-url.txt
+#
+# WHY IT IS NOT launch-wonderland.sh. That script is the capture pipeline: it
+# ends by taking a hero frame and verifying the world against the proof, which
+# is the right thing for a render and the wrong thing for a play session — it
+# spends GPU minutes on a screenshot the founder did not ask for and can fail
+# the run over a frame. This one stops at "there is a URL and the game is up".
+set -euo pipefail
+HERE="$(cd "$(dirname "$0")" && pwd)"
+LIGHTNING="$HERE/../../infra/lightning"
+# shellcheck source=../../infra/lightning/common.sh
+. "$LIGHTNING/common.sh"
+
+banner() { printf '\n\033[1;35m========== %s ==========\033[0m\n' "$1"; }
+
+banner "1/4  WHAT THE RESTART TOOK"
+bash "$LIGHTNING/after-restart.sh"
+
+banner "2/4  IS THE PACKAGE THE CODE"
+HEAD_SHA="$(git -C "$WL_SRC" rev-parse HEAD)"
+PACKAGED="$(cat "$WL_OUT/logs/packaged.sha" 2>/dev/null | head -1 | tr -dc 'a-f0-9' || true)"
+APP="$(wl_find_first "$WL_OUT/Linux" -maxdepth 3 -name 'Wonderland.sh' -type f || true)"
+if [ -n "${APP:-}" ] && [ "$PACKAGED" = "$HEAD_SHA" ]; then
+  wl_ok "the packaged build IS $HEAD_SHA — no rebuild needed"
+else
+  if [ -z "${APP:-}" ]; then
+    wl_say "no packaged build on disk; building and cooking (about 40 minutes)"
+  else
+    wl_say "packaged ${PACKAGED:-none} != checkout ${HEAD_SHA}; rebuilding and cooking (about 40 minutes)"
+  fi
+  # The same chain the render passes use, so a playtest and a capture are
+  # always looking at the same world.
+  WLV2_PASS02=1 WLV2_PASS03=1 WLV2_PASS05=1 bash "$HERE/pass_chain.sh"
+  PACKAGED="$(cat "$WL_OUT/logs/packaged.sha" 2>/dev/null | head -1 | tr -dc 'a-f0-9' || true)"
+  [ "$PACKAGED" = "$HEAD_SHA" ] || wl_die "the chain finished but the package is ${PACKAGED:-none}, not $HEAD_SHA"
+  wl_ok "packaged $HEAD_SHA"
+fi
+
+banner "3/4  THE STREAM"
+# THE MAP MUST BE NAMED. The package boots the engine's empty World Partition
+# GameDefaultMap unless the classic Golden Arrival map is passed on the command
+# line — a founder dropped into an empty grey world would reasonably conclude
+# Wonderland was gone.
+export WL_MAP_ARG="${WL_MAP_ARG:-/Game/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2}"
+bash "$LIGHTNING/run-stream.sh"
+
+banner "4/4  THE LINK"
+URL="$(cat "$WL_RUN/player-url.txt" 2>/dev/null || true)"
+if [ -z "$URL" ]; then
+  wl_die "the stream is up but no public URL was published; see $WL_LOG/tunnel.log"
+fi
+cat <<EOF
+
+  Wonderland V2 — Golden Arrival, playable.
+
+    $URL
+
+  Click the page once so it takes the keyboard, then:
+    W A S D / arrows   move        mouse   look
+    shift (hold)       run         ctrl (hold)   walk
+    space              jump
+
+EOF
+printf '%s\n' "$URL"
