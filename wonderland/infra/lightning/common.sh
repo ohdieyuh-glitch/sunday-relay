@@ -159,13 +159,15 @@ export WL_UE_ARCHIVE="${WL_UE_ARCHIVE:-$WL_ROOT/ue58-dev.tar}"
 # A docker save of UE 5.8 is tens of gigabytes. Anything far below this is a
 # truncated or aborted export, and loading it would fail late and confusingly.
 export WL_UE_ARCHIVE_MIN_GB="${WL_UE_ARCHIVE_MIN_GB:-20}"
-# What a load of the archive COSTS beyond the archive itself. Measured on
-# 2026-08-29: the 73.7 GB OCI archive (uncompressed layers; UE content barely
-# compresses, so the image is the archive's size) took the volume from 108 GB
-# to a 245 GB peak — +137 GB, tmp untar plus the layer store — and settled at
-# +69 GB. Two archives' worth (below) covers that with margin. The 2026-08-23
-# rollback at 356/369 GB happened on a disk that also held 118 GB of orphaned
-# layers, not because the image is bigger than this.
+# What a load of the archive COSTS beyond the archive itself. Measured TWICE
+# on 2026-08-29 with the same 73.7 GB OCI archive (uncompressed layers; UE
+# content barely compresses, so the image is the archive's size): the first
+# load peaked at +137 GB over its starting point, the second at +206 GB
+# (105 -> 311 GB used, 39 GB left on a 369 GB volume) -- tmp untar plus the
+# layer store plus whatever the daemon holds in between, and the difference
+# between the two runs is not explained. Three archives' worth (below) covers
+# the worse one with ~15 GB of margin. The 2026-08-23 rollback at 356/369 GB
+# happened on a disk that also held 118 GB of orphaned layers.
 # Machine floors the launcher refuses to start below. A UE 5.8 cook genuinely
 # needs this much — a 261 GiB sparse intermediate killed an export once — but
 # they live here as overridable constants rather than as literals inside an
@@ -456,10 +458,10 @@ Wait for it, or kill it — but do not start a second. Nothing was restored."
     local need_gb avail_gb
     # Roughly twice the archive: docker writes the uncompressed layers while the
     # archive is still on the same volume.
-    need_gb=$(( $(du -BG "$WL_UE_ARCHIVE" 2>/dev/null | cut -dG -f1 | tr -dc '0-9') * 2 ))
+    need_gb=$(( $(du -BG "$WL_UE_ARCHIVE" 2>/dev/null | cut -dG -f1 | tr -dc '0-9') * 3 ))
     avail_gb=$(df -BG --output=avail /var/lib/docker 2>/dev/null | tail -1 | tr -dc '0-9')
     if [ -n "${avail_gb:-}" ] && [ -n "${need_gb:-}" ] && [ "$avail_gb" -lt "$need_gb" ]; then
-      wl_die "restoring $WL_UE_ARCHIVE needs about ${need_gb} GB free on /var/lib/docker (tmp untar plus the layer store: measured +137 GB for a 74 GB archive) and there is ${avail_gb} GB.
+      wl_die "restoring $WL_UE_ARCHIVE needs about ${need_gb} GB free on /var/lib/docker (tmp untar plus the layer store: measured +137 GB and +206 GB for the same 74 GB archive) and there is ${avail_gb} GB.
 A load that runs out of space leaves orphaned layers behind and no image, which looks
 exactly like a corrupt archive. Reclaim first ('docker system prune -af' returned
 118 GB here when the image list was already empty) or pull $WL_UE_IMAGE from ghcr with
