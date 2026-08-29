@@ -28,6 +28,14 @@
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 LIGHTNING="$HERE/../../infra/lightning"
+# THE BRANCH IS DECIDED BEFORE common.sh IS SOURCED, and this is not a style
+# choice. common.sh exports WL_BRANCH=relay/wonderland-marble as its default;
+# once it has, every `${WL_BRANCH:-relay/wonderland-v2}` further down the chain
+# resolves to MARBLE, because the variable is set. So a V2 script that sources
+# common.sh and then relies on a :- default silently asks prepare.sh to switch
+# the checkout to the marble branch, and prepare.sh (rightly, loudly) refuses.
+# Setting it first makes every later default agree.
+export WL_BRANCH="${WL_BRANCH:-relay/wonderland-v2}"
 # shellcheck source=../../infra/lightning/common.sh
 . "$LIGHTNING/common.sh"
 

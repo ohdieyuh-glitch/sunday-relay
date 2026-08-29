@@ -39,12 +39,13 @@ export WLV2_MARBLE_PANO="${WLV2_MARBLE_PANO:-$R/src/wonderland/v2/reference/marb
 # so the cheap fix is to always run it first.
 if [ "${WLV2_SKIP_COMPILE:-0}" != "1" ]; then
   echo "compile $(date -u +%T): building the game module before the generate"
-  # WL_BRANCH IS PASSED, NOT ASSUMED. compile-preflight.sh defaults to the
-  # marble branch, and prepare.sh refuses to switch a checkout silently (as it
-  # should: a build that compiled the wrong source while reporting success at
-  # every stage is why that guard exists). v2-build.sh sets this for the same
-  # reason; the chain must set it too rather than inherit a default.
-  WL_BRANCH="${WL_BRANCH:-relay/wonderland-v2}" \
+  # WL_BRANCH IS FORCED, NOT DEFAULTED. compile-preflight.sh -> prepare.sh
+  # refuses to switch a checkout silently, which is the right guard; what makes
+  # it fire here is that common.sh exports the MARBLE branch as its default, so
+  # any caller that has already sourced common.sh (playtest.sh does) turns a
+  # `${WL_BRANCH:-relay/wonderland-v2}` into "marble". This chain only ever
+  # builds V2, so it says so outright.
+  WL_BRANCH=relay/wonderland-v2 \
     bash wonderland/infra/lightning/compile-preflight.sh > $R/run/compile-preflight.log 2>&1; crc=$?
   echo "compile rc=$crc $(date -u +%T)"
   if [ $crc -ne 0 ]; then
