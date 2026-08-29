@@ -62,8 +62,17 @@ WL_MAP_ARG="${WL_MAP_ARG:-/Game/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2}" \
 WL_EXTRA_ARGS="${WL_EXTRA_ARGS:-} $ROUTE_FLAG" \
   bash "$LIGHTNING/run-stream.sh"
 
-URL="$(cat "$WL_RUN/player-url.txt" 2>/dev/null || true)"
-[ -n "$URL" ] || wl_die "no player URL after run-stream; nothing to film"
+# FILM FROM LOCALHOST, NOT THROUGH THE TUNNEL.
+#
+# The screencast runs ON this box, so the public cloudflared URL buys nothing
+# and costs plenty: it adds DNS (which failed outright once --
+# ERR_NAME_NOT_RESOLVED on a tunnel that had just been created), a round trip
+# to Cloudflare and back, and the bitrate ceiling meant for a viewer on the
+# other side of the world. The player page is served on 8080 right here.
+LOCAL_URL="http://127.0.0.1:${WL_HTTP_PORT:-8080}/"
+PUBLIC_URL="$(cat "$WL_RUN/player-url.txt" 2>/dev/null || true)"
+URL="$LOCAL_URL"
+wl_say "filming from $URL (public URL for a human viewer: ${PUBLIC_URL:-none})"
 
 # 2. THE FRAMES. shot.cjs's sibling: one JPEG per painted frame, with the CDP
 #    timestamp, so a gap in the output can be told from a gap in the stream.
