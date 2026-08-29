@@ -1,6 +1,8 @@
 #include "RelayDogCharacter.h"
 
 #include "Camera/CameraComponent.h"
+#include "Misc/CommandLine.h"
+#include "Misc/Parse.h"
 #include "CollisionQueryParams.h"
 #include "Components/CapsuleComponent.h"
 #include "Components/InputComponent.h"
@@ -379,6 +381,19 @@ void ARelayDogCharacter::OnWalkReleased() { bWalkHeld = false; }
 void ARelayDogCharacter::BeginPlay()
 {
 	Super::BeginPlay();
+	// THE DEMO IS A LAUNCH FLAG, NOT A BUILD FLAG.
+	//
+	// bAutoDemo used to be baked into the map by the generator from an
+	// environment variable, which meant the capture build and the playable
+	// build were different cooks — 25 minutes apart, and impossible to have at
+	// once. The same package now does both: launched with -wldemo the Dog runs
+	// the scripted route for the founder's video, launched without it the Dog
+	// is the founder's to drive. Nothing about the world changes between them.
+	if (FParse::Param(FCommandLine::Get(), TEXT("wldemo")))
+	{
+		bAutoDemo = true;
+		UE_LOG(LogTemp, Log, TEXT("WLDOG DEMO: -wldemo on the command line; the Dog drives its capture route"));
+	}
 	SpawnLocation = GetActorLocation();
 	SpawnYaw = GetActorRotation().Yaw;
 	bJointsBound = BindJoints();
