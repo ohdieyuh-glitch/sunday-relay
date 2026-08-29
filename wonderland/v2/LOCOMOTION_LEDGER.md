@@ -28,8 +28,9 @@ Out of scope this loop: world polish, clouds, combat, Djinn, backend, flight.
 | 3 | Engine-free locomotion core + offline tests (g++ on the laptop) | done | `RelayDogStride.test.cpp` 46/46; foot lock 0.001 uu/frame, IK error 0.2 uu, continuity by refinement |
 | 4 | UE layer: `ARelayDogCharacter` — joint binding by name, foot ground traces (reusing V1 `PawGroundOffset`), spring-arm camera, player input, capture route | done, awaiting compile | |
 | 5 | Generator: nested pivots, C++ parent class, ground collision, the Dog walks and is player-possessed | done, awaiting cook | |
-| 6 | **Founder playtest** (added 2026-08-29 by founder): full rebuild, cook, Pixel Streaming URL | in progress | |
-| 7 | Capture video, inspect, repair, acceptance | | |
+| 6 | **Founder playtest**: full rebuild, cook, Pixel Streaming URL | DELIVERED 13:51 UTC | package fbd414e, map WL_V2_GoldenArrival_WP2, `WLDOG BOUND: 11 joints`, `WLDOG INPUT bound`, page HTTP 200 |
+| 7 | Foot-ground easing moved into the arithmetic; stairs + articulation proven offline | done | 54/54 offline proofs |
+| 8 | Founder feedback → repair → the continuous capture video | waiting on the playtest | `capture_locomotion.sh` ready; `-wldemo` makes the played package the filmed one |
 
 ## Decisions
 
@@ -58,3 +59,29 @@ current camera and collision, controlled live. What it needed that the capture p
 - **Input that survives cooking.** Explicit `BindAxisKey`/`BindKey` with real `FKeys`, which is
   what `AWonderlandDogPawn` learned the hard way on this streamed build: config axis mappings and
   Enhanced Input assets did not cook reliably here.
+
+## Acceptance, as it actually stands (2026-08-29 14:00 UTC)
+
+Proven offline (54 checks, `wonderland/tests/cpp/RelayDogStride.test.cpp`), and in the cooked build
+where noted. Nothing here is claimed from watching a stream.
+
+| Criterion | State | Evidence |
+|---|---|---|
+| canonical geometry/materials preserved | proven | `verify_dog_canon.py` PASS; hinges provably hidden at rest; live log `13 components given their canon materials` |
+| real readable elbow articulation | proven | seams are real pivots (`forearmLeft<-armLeft` in the built BP); elbow travels 3–21° walking |
+| idle head matches the landing personality | ported + proven varied | the landing rig's springs/cone/timings; 146 glances in 10 min, dwell 0.70–3.07 s, no side repeated 4× |
+| natural walk and jog | arithmetic proven, **needs eyes** | Froude bands (jog 153, run 266, anime 376 uu/s), stance-biased phase |
+| arms-back full-run silhouette | proven at the threshold | `ArmsBack` is 0 through walk and jog, 1.0 above 414 uu/s; both shoulders < −45° |
+| smooth gait transitions | proven | 4× frame rate quarters the largest step — continuity, not a magic threshold |
+| weighted starts/stops | proven | not fully formed on frame one; winds down without picking back up |
+| turns respect momentum | proven | bank scales with speed and decays; a walking turn banks < 60% of a running one |
+| no visible foot sliding | proven flat AND on stairs | 0.001 uu/frame flat, 0.0008 uu/frame while correcting 6.6 uu up a step |
+| stairs / uneven surfaces | proven offline, **needs eyes** | 14 uu riser profile walked in the test; `MaxStepHeight` 26 uu against a 48 uu leg |
+| gameplay camera / collision | **founder playtest** | ground slab collides from load; boom 420 uu at 95 uu socket height |
+| looks good inside Golden Arrival | **founder playtest** | — |
+| continuous founder-review capture | not yet | blocked on the founder's session ending (one GPU) |
+
+**Two fixes are committed but NOT in the build the founder is playing** (`fbd414e`): the foot-ground
+easing refactor, and a double-application of the gait weight to the legs that under-swings them
+during the first fraction of a second of acceleration. Both go into the next cook, together with
+whatever the playtest turns up — one rebuild, not three.
