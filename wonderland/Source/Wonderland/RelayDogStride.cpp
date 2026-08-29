@@ -79,10 +79,21 @@ namespace RelayDogStride
 
 		// THE HIP RIDES LOWER THE FASTER THE DOG GOES. See FStride::HipHeightUU:
 		// the canonical leg is straight at rest, so without this there is no
-		// reach and no knee bend to be had. Three percent to walk, eighteen at
-		// a full run — 1.4 uu and 8.6 uu on a 48 uu leg.
-		Out.HipHeightUU = Leg * (1.0f - 0.03f * SmoothStep(Speed, VStand, VJog)
-			- 0.15f * SmoothStep(Speed, VJog, VAnime));
+		// reach, no knee bend, and -- measured in the founder's own playtest --
+		// very little stride either. At a 3% drop the reach was +-11 uu, which
+		// capped the walk at a 39 uu stride and made the Dog take SEVEN STEPS A
+		// SECOND at 131 uu/s: a sewing machine, not a walk. The cap was doing
+		// its job; the crouch was too shallow to give the cap anything to work
+		// with.
+		//
+		// Twelve percent walking is also what bodies do -- a hip sits near 0.9
+		// of leg length through midstance, and the difference between that and
+		// a locked leg is most of the stride. It buys +-21 uu of reach, a 77 uu
+		// stride, and 3.4 steps a second at the same speed. Twenty-six at a
+		// full sprint keeps the cadence near six steps a second rather than a
+		// blur.
+		Out.HipHeightUU = Leg * (1.0f - 0.12f * SmoothStep(Speed, VStand, VJog)
+			- 0.14f * SmoothStep(Speed, VJog, VAnime));
 
 		// STRIDE LENGTH RISES WITH SPEED and is then CAPPED BY REACH. A stride
 		// the legs cannot make is not a stride: it silently clamps inside the

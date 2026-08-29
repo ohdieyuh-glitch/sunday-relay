@@ -168,6 +168,36 @@ int main()
 		Check("a full run has a flight phase", StrideForSpeed(700.0f, LegUU).DutyFactor < 0.5f);
 	}
 
+	std::printf("== the cadence is a body's, not a sewing machine's ==\n");
+	{
+		// THE FOUNDER'S PLAYTEST FOUND THIS, and it is arithmetic, so it is
+		// pinned here now. Stride is capped by how far a leg can reach, so a
+		// crouch that is too shallow forces the Dog to make the ground up with
+		// frequency instead: at a 3% hip drop the walk was a 39 uu stride and
+		// SEVEN STEPS A SECOND at 131 uu/s. Real gait sits between roughly two
+		// and seven steps a second across this whole range, and the walk is the
+		// end that gives it away.
+		struct FCase { const char* Name; float Speed; float MinSteps; float MaxSteps; };
+		const FCase Cases[] = {
+			{ "walk", 131.0f, 2.4f, 4.4f },
+			{ "jog", 220.0f, 3.2f, 5.6f },
+			{ "run", 400.0f, 4.0f, 6.8f },
+			{ "anime run", 560.0f, 4.4f, 7.4f },
+		};
+		for (const FCase& C : Cases)
+		{
+			const FStride S = StrideForSpeed(C.Speed, LegUU);
+			const float StepsPerSecond = 2.0f * C.Speed / (S.StrideLength > 1.0f ? S.StrideLength : 1.0f);
+			Check(std::string("the ") + C.Name + " takes a believable number of steps a second",
+			      StepsPerSecond >= C.MinSteps && StepsPerSecond <= C.MaxSteps,
+			      F(StepsPerSecond) + " steps/s at " + F(C.Speed) + " uu/s, stride " + F(S.StrideLength));
+		}
+		// And the stride is a real fraction of the body, not a shuffle.
+		Check("the walking stride is longer than the leg",
+		      StrideForSpeed(131.0f, LegUU).StrideLength > LegUU,
+		      F(StrideForSpeed(131.0f, LegUU).StrideLength) + " uu vs leg " + F(LegUU));
+	}
+
 	std::printf("== nothing snaps: the motion is continuous, not merely small ==\n");
 	{
 		// A SNAP IS A DISCONTINUITY, NOT A FAST MOVEMENT. A running leg
