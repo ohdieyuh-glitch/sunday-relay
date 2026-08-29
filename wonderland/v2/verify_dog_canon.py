@@ -24,6 +24,72 @@ def fail(msg):
     return 1
 
 
+def box_range(name, axis):
+    """(lo, hi) of one canonical box on one web axis."""
+    for bname, _joint, _surface, centre, size in D.BOXES:
+        if bname == name:
+            return centre[axis] - size[axis] / 2.0, centre[axis] + size[axis] / 2.0
+    raise KeyError(name)
+
+
+def check_seams():
+    """THE ELBOWS AND KNEES COST NOTHING IN SILHOUETTE — proven, not asserted.
+
+    Splitting a limb so it can pivot is only safe if the standing Dog is the
+    same object it was: the founder's rule is that the proportions ARE the
+    identity. Two things make that checkable:
+
+      1. each hinge block is strictly inside BOTH limbs it joins on the two
+         axes across the limb (it straddles the seam on the long axis by
+         design), so a straight arm hides it completely;
+      2. the two halves of a split limb TILE the original block exactly —
+         same outer bounds, and they meet at the seam with no gap and no
+         overlap. A gap would show as a slot in the leg; an overlap would
+         z-fight.
+
+    Both are arithmetic on the canon table, so they hold on this laptop with
+    no engine, and they fail loudly the moment someone nudges a seam.
+    """
+    rc = 0
+    for hinge, upper, lower in D.SEAMS:
+        for axis, label in ((0, "x"), (2, "z")):
+            h = box_range(hinge, axis)
+            for limb in (upper, lower):
+                lo, hi = box_range(limb, axis)
+                if not (lo - 1e-9 <= h[0] and h[1] <= hi + 1e-9):
+                    rc |= fail("hinge %s escapes %s on %s: %.4f..%.4f not inside %.4f..%.4f"
+                               % (hinge, limb, label, h[0], h[1], lo, hi))
+        hy = box_range(hinge, 1)
+        uy, ly = box_range(upper, 1), box_range(lower, 1)
+        if abs(uy[0] - ly[1]) > 1e-6:
+            rc |= fail("seam %s: %s bottom %.4f does not meet %s top %.4f" % (hinge, upper, uy[0], lower, ly[1]))
+        if not (ly[0] - 1e-9 <= hy[0] and hy[1] <= uy[1] + 1e-9):
+            rc |= fail("hinge %s reaches outside the limb pair on y: %.4f..%.4f" % (hinge, hy[0], hy[1]))
+        print("  seam %-14s hinge %.4f..%.4f hidden inside %s+%s (%.4f..%.4f), meeting at %.4f"
+              % (hinge, hy[0], hy[1], upper, lower, ly[0], uy[1], uy[0]))
+    # the legs must still be exactly the web's single block, in two pieces
+    for side, thigh, shin in (("Left", "legLeftThigh", "legLeftShin"), ("Right", "legRightThigh", "legRightShin")):
+        t, sh = box_range(thigh, 1), box_range(shin, 1)
+        if abs(sh[0] - D.FOOT_TOP) > 1e-9 or abs(t[1] - D.LEG_TOP) > 1e-9:
+            rc |= fail("leg %s no longer spans FOOT_TOP..LEG_TOP: %.4f..%.4f" % (side, sh[0], t[1]))
+        for axis, label in ((0, "x"), (2, "z")):
+            if box_range(thigh, axis) != box_range(shin, axis):
+                rc |= fail("leg %s halves disagree on %s" % (side, label))
+    # every joint must hang from a real parent, and every box belong to a joint
+    for joint, parent in D.PARENTS.items():
+        if joint not in D.JOINTS:
+            rc |= fail("PARENTS names %s, which is not a joint" % joint)
+        if parent is not None and parent not in D.JOINTS:
+            rc |= fail("joint %s hangs from %s, which is not a joint" % (joint, parent))
+    for joint in D.JOINTS:
+        if joint not in D.PARENTS:
+            rc |= fail("joint %s has no entry in PARENTS" % joint)
+    for _n, joint, _s, _c, _sz in D.BOXES:
+        if joint not in D.JOINTS:
+            rc |= fail("a box belongs to unknown joint %s" % joint)
+    return rc
+
+
 def main(argv):
     rc = 0
     m = D.measurements()
@@ -36,8 +102,9 @@ def main(argv):
         print("  band %-11s %.3f in [%.2f, %.2f] %s" % (key, v, lo, hi, "ok" if ok else "OUT OF BAND"))
         if not ok:
             rc |= fail("%s outside the canonical band" % key)
-    if len(D.BOXES) != 31:
-        rc |= fail("expected 31 canonical boxes, transcribed %d" % len(D.BOXES))
+    if len(D.BOXES) != 37:
+        rc |= fail("expected 37 canonical boxes (31 web boxes + 2 leg splits + 4 hinges), transcribed %d" % len(D.BOXES))
+    rc |= check_seams()
     # (2) mapping: sizes preserved, handedness flipped so shape is preserved
     scale = 60.0
     for name, joint, surface, centre, size in D.BOXES:

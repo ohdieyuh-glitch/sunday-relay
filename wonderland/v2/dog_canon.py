@@ -41,6 +41,29 @@ FOOT_W = 0.275 * W
 FACE_Z = HEAD_DEPTH / 2
 VISOR_FLOOR_Z = FACE_Z - 0.22 * W
 
+#: THE ARTICULATION SEAMS (2026-08-29, the locomotion phase).
+#:
+#: The web canon already draws each arm as three stacked boxes and each leg as
+#: one. Where the upper arm's underside meets the forearm's top face there is
+#: an exact plane — 1.3083 W, the same number from both directions — and that
+#: plane is where a real elbow is. Splitting the arm THERE adds no length, no
+#: width and no shoulder displacement: the same boxes hang in the same places,
+#: they simply belong to two joints instead of one, so the forearm can pivot.
+#: The knee is the same idea on a leg the web draws as a single block: the box
+#: is cut in half and the halves are re-stacked exactly where the whole was.
+#:
+#: Each seam carries a HINGE BLOCK, narrower and shallower than both limbs it
+#: joins and centred on the seam plane, so at rest it is entirely inside the
+#: limb (verify_dog_canon proves that) and the standing silhouette is unchanged
+#: — and the moment the joint bends it is revealed as a real geometric pivot
+#: rather than a painted line. No rounded joints; the block idiom holds.
+ELBOW_Y = 1.3083 * W          # upper-arm underside == forearm top face
+KNEE_Y = 0.5125 * W           # mid-shank, the leg block's own centre
+ARM_PIVOT_X = 0.4463 * W      # between the upper arm's and the forearm's centres
+ARM_PIVOT_Z = 0.0063 * W
+HINGE_ARM = (0.16 * W, 0.09 * W, 0.16 * W)   # inside arm 0.20/0.19 wide, 0.2125/0.20 deep
+HINGE_LEG = (0.15 * W, 0.08 * W, 0.18 * W)   # inside leg 0.19 wide, 0.225 deep
+
 mid = lambda a, b: (a + b) / 2  # noqa: E731
 span = lambda a, b: b - a       # noqa: E731
 
@@ -58,7 +81,24 @@ PIVOTS = {
     "armRight": (TORSO_W / 2, TORSO_TOP - 0.06 * W, 0.0),
     "legLeft": (-LEG_X, LEG_TOP, 0.0),
     "legRight": (LEG_X, LEG_TOP, 0.0),
+    "forearmLeft": (-ARM_PIVOT_X, ELBOW_Y, ARM_PIVOT_Z),
+    "forearmRight": (ARM_PIVOT_X, ELBOW_Y, ARM_PIVOT_Z),
+    "shinLeft": (-LEG_X, KNEE_Y, 0.0),
+    "shinRight": (LEG_X, KNEE_Y, 0.0),
     "tail": (0.2 * W, 1.0 * W, -0.2 * W),
+}
+
+#: joint -> the joint it hangs from. The hierarchy is what makes a shoulder
+#: carry its forearm and a hip carry its shin; a flat list of siblings would
+#: leave the forearm behind the moment the arm swung.
+PARENTS = {
+    "root": None,
+    "head": "root",
+    "armLeft": "root", "armRight": "root",
+    "forearmLeft": "armLeft", "forearmRight": "armRight",
+    "legLeft": "root", "legRight": "root",
+    "shinLeft": "legLeft", "shinRight": "legRight",
+    "tail": "root",
 }
 
 #: (name, joint, surface, centre(x,y,z), size(w,h,d)) -- web axes, ×W. 31 boxes.
@@ -89,15 +129,21 @@ BOXES = [
     ("pelvisStep", "root", "ivory", (0, mid(LEG_TOP - 0.025 * W, PELVIS_TOP), 0),
      (0.3625 * W, span(LEG_TOP - 0.025 * W, PELVIS_TOP), 0.3375 * W)),
     ("armLeftUpper", "armLeft", "ivory", (-0.44 * W, 1.5083 * W, 0), (0.2 * W, 0.4 * W, 0.2125 * W)),
-    ("armLeftForearm", "armLeft", "ivory", (-0.4525 * W, 1.1208 * W, 0.0125 * W), (0.19 * W, 0.375 * W, 0.2 * W)),
-    ("armLeftHand", "armLeft", "ivory", (-0.4625 * W, 0.8333 * W, 0.025 * W), (0.205 * W, 0.2 * W, 0.225 * W)),
+    ("armLeftElbow", "armLeft", "ivory", (-ARM_PIVOT_X, ELBOW_Y, ARM_PIVOT_Z), HINGE_ARM),
+    ("armLeftForearm", "forearmLeft", "ivory", (-0.4525 * W, 1.1208 * W, 0.0125 * W), (0.19 * W, 0.375 * W, 0.2 * W)),
+    ("armLeftHand", "forearmLeft", "ivory", (-0.4625 * W, 0.8333 * W, 0.025 * W), (0.205 * W, 0.2 * W, 0.225 * W)),
     ("armRightUpper", "armRight", "ivory", (0.44 * W, 1.5083 * W, 0), (0.2 * W, 0.4 * W, 0.2125 * W)),
-    ("armRightForearm", "armRight", "ivory", (0.4525 * W, 1.1208 * W, 0.0125 * W), (0.19 * W, 0.375 * W, 0.2 * W)),
-    ("armRightHand", "armRight", "ivory", (0.4625 * W, 0.8333 * W, 0.025 * W), (0.205 * W, 0.2 * W, 0.225 * W)),
-    ("legLeft", "legLeft", "ivory", (-LEG_X, mid(FOOT_TOP, LEG_TOP), 0), (LEG_W, span(FOOT_TOP, LEG_TOP), 0.225 * W)),
-    ("legRight", "legRight", "ivory", (LEG_X, mid(FOOT_TOP, LEG_TOP), 0), (LEG_W, span(FOOT_TOP, LEG_TOP), 0.225 * W)),
-    ("footLeft", "legLeft", "ivory", (-(LEG_X + 0.0125 * W), FOOT_TOP / 2, 0.0625 * W), (FOOT_W, FOOT_TOP, 0.375 * W)),
-    ("footRight", "legRight", "ivory", (LEG_X + 0.0125 * W, FOOT_TOP / 2, 0.0625 * W), (FOOT_W, FOOT_TOP, 0.375 * W)),
+    ("armRightElbow", "armRight", "ivory", (ARM_PIVOT_X, ELBOW_Y, ARM_PIVOT_Z), HINGE_ARM),
+    ("armRightForearm", "forearmRight", "ivory", (0.4525 * W, 1.1208 * W, 0.0125 * W), (0.19 * W, 0.375 * W, 0.2 * W)),
+    ("armRightHand", "forearmRight", "ivory", (0.4625 * W, 0.8333 * W, 0.025 * W), (0.205 * W, 0.2 * W, 0.225 * W)),
+    ("legLeftThigh", "legLeft", "ivory", (-LEG_X, mid(KNEE_Y, LEG_TOP), 0), (LEG_W, span(KNEE_Y, LEG_TOP), 0.225 * W)),
+    ("legRightThigh", "legRight", "ivory", (LEG_X, mid(KNEE_Y, LEG_TOP), 0), (LEG_W, span(KNEE_Y, LEG_TOP), 0.225 * W)),
+    ("legLeftKnee", "legLeft", "ivory", (-LEG_X, KNEE_Y, 0), HINGE_LEG),
+    ("legRightKnee", "legRight", "ivory", (LEG_X, KNEE_Y, 0), HINGE_LEG),
+    ("legLeftShin", "shinLeft", "ivory", (-LEG_X, mid(FOOT_TOP, KNEE_Y), 0), (LEG_W, span(FOOT_TOP, KNEE_Y), 0.225 * W)),
+    ("legRightShin", "shinRight", "ivory", (LEG_X, mid(FOOT_TOP, KNEE_Y), 0), (LEG_W, span(FOOT_TOP, KNEE_Y), 0.225 * W)),
+    ("footLeft", "shinLeft", "ivory", (-(LEG_X + 0.0125 * W), FOOT_TOP / 2, 0.0625 * W), (FOOT_W, FOOT_TOP, 0.375 * W)),
+    ("footRight", "shinRight", "ivory", (LEG_X + 0.0125 * W, FOOT_TOP / 2, 0.0625 * W), (FOOT_W, FOOT_TOP, 0.375 * W)),
     ("tail01", "tail", "ivory", (0.2875 * W, 0.95 * W, -0.2375 * W), (0.1625 * W, 0.1625 * W, 0.175 * W)),
     ("tail02", "tail", "ivory", (0.3875 * W, 0.9875 * W, -0.3375 * W), (0.1445 * W, 0.1445 * W, 0.157 * W)),
     ("tail03", "tail", "ivory", (0.4625 * W, 1.075 * W, -0.4 * W), (0.125 * W, 0.125 * W, 0.1375 * W)),
@@ -105,7 +151,18 @@ BOXES = [
     ("tailTip", "tail", "ivory", (0.5375 * W, 1.2875 * W, -0.45 * W), (0.1 * W, 0.1 * W, 0.1125 * W)),
 ]
 
-JOINTS = ("root", "head", "armLeft", "armRight", "legLeft", "legRight", "tail")
+JOINTS = ("root", "head", "armLeft", "forearmLeft", "armRight", "forearmRight",
+          "legLeft", "shinLeft", "legRight", "shinRight", "tail")
+
+#: The seams, as (hinge box, the two limb boxes it must hide inside). The gate
+#: proves each hinge is strictly contained in BOTH, which is what makes
+#: "the standing silhouette is unchanged" a checked claim rather than a hope.
+SEAMS = (
+    ("armLeftElbow", "armLeftUpper", "armLeftForearm"),
+    ("armRightElbow", "armRightUpper", "armRightForearm"),
+    ("legLeftKnee", "legLeftThigh", "legLeftShin"),
+    ("legRightKnee", "legRightThigh", "legRightShin"),
+)
 SURFACES = ("ivory", "visor", "eye")
 
 #: Web canon materials (sRGB hex, roughness, metalness, emissive hex × intensity)
