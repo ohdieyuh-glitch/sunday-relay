@@ -51,7 +51,13 @@ if [ "${WLV2_SKIP_COMPILE:-0}" != "1" ]; then
   # succeed and would fail the compile over a source update that has already
   # happened. This is the same flag v2-build.sh passes to cpu-build-all for
   # the same reason.
-  WL_BRANCH=relay/wonderland-v2 SKIP_PREPARE=1 \
+  # WL_REQUIRE_SHA names the commit ON PURPOSE. With no credential the Studio
+  # cannot see origin's head, so compile-preflight cannot prove the checkout is
+  # the branch tip and refuses to guess -- correctly, since compiling a stale
+  # checkout while reporting success is the failure that guard was written for.
+  # The ship placed this commit here minutes ago, so the chain says which one
+  # it means rather than switching the guard off.
+  WL_BRANCH=relay/wonderland-v2 SKIP_PREPARE=1 WL_REQUIRE_SHA="$(git rev-parse HEAD)" \
     bash wonderland/infra/lightning/compile-preflight.sh > $R/run/compile-preflight.log 2>&1; crc=$?
   echo "compile rc=$crc $(date -u +%T)"
   if [ $crc -ne 0 ]; then
