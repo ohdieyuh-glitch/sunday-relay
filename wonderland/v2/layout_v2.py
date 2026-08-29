@@ -636,7 +636,20 @@ ALL = FOREGROUND + GARDEN + PALACE + SKY + HOVER
 
 #: The dark path: from the front wall line to the arch, 4.4 m narrowing to 3 m,
 #: rising 0.6 m at the steps then 2%. The builder lays it.
-PATH_SPLINE = [(0.0, 850.0, 0.0), (10.0, 2000.0, 0.0), (0.0, 2940.0, 0.0), (0.0, 3060.0, 60.0),
+# THE PATH RAMPS; IT DOES NOT JUMP.
+#
+# This spline used to lift 60 uu between y = 2940 and y = 3060 -- sixty
+# centimetres across one metre twenty. The flagstones that follow it are about
+# 124 uu long, so ONE slab absorbed the whole rise and became a 60 uu vertical
+# face: measured at 60.0 uu per slab where every other segment of this path is
+# 2.0 to 2.3. That was a wall to any character, and it is why the Dog could not
+# reach the castle approach on foot -- six route legs gave up against it, and
+# neither adding steps nor raising the step height moved it, because the wall
+# was the path itself. Spread over 540 uu the same rise is 13 uu per slab and
+# six degrees underfoot: a ramp a participant walks up without noticing, and
+# the path still arrives at the court at exactly the same height.
+PATH_SPLINE = [(0.0, 850.0, 0.0), (10.0, 2000.0, 0.0), (0.0, 2760.0, 0.0),
+               (0.0, 3030.0, 30.0), (0.0, 3300.0, 60.0),
                (-10.0, 3700.0, 72.0), (0.0, 4450.0, 84.0)]
 PATH_WIDTH_NEAR, PATH_WIDTH_FAR = 440.0, 300.0
 #: The pale plaza: from behind the gate to the front wall, 16 m wall to wall
