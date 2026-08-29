@@ -1568,6 +1568,36 @@ def main():
     ctx = gs.Context(unreal, LOG, force_fallback=os.environ.get("WLV2_FORCE_FALLBACK", "0") == "1")
     MANIFEST["backend"] = ctx.backend
     MANIFEST["gs_capability"] = ctx.caps.report()
+    # THE DOG'S BODY AND BLUEPRINT ARE REBUILT WITH THE WORLD (2026-08-29).
+    #
+    # Only the Dog's MATERIALS used to be rebuilt here, so BP_RelayDog was
+    # whatever some earlier session had left on disk. That is how the first
+    # locomotion build produced a Dog with the OLD seven-joint flat hierarchy
+    # and a plain ACharacter parent inside a package whose module contained
+    # the whole animation system: the generator's own gate said so
+    # ("ARelayDogCharacter properties not found ... NOTHING WILL ANIMATE"),
+    # which is the only reason it was not discovered by watching a stream.
+    #
+    # An asset that the world depends on and the world does not build is an
+    # asset that drifts. The meshes carry the canon (including the elbow and
+    # knee seams) and the Blueprint carries the parent class, so both are made
+    # here, every pass, from dog_canon.
+    # The offline dry run executes this file against a stub engine that can
+    # emulate Geometry Script but cannot persist an asset, and dog_v2 rightly
+    # refuses to hand back a mesh it could not save. It runs the generator
+    # under its own module name, so the build is skipped there and SAID to be
+    # skipped rather than reported as a defect that is not one.
+    if int(C.LOOK.get("scaleDog", 0)) and __name__ != "__wl_v2_dryrun__":
+        try:
+            dog_meshes = DOG.build_meshes(ctx)
+            dog_class = DOG.build_blueprint(dog_meshes, DOG_MATS)
+            LOG("V2 DOG BUILD: %d joint meshes, blueprint %s"
+                % (len(dog_meshes), "rebuilt" if dog_class is not None else "NOT REBUILT"))
+        except Exception as exc:
+            LOG("V2 DOG BUILD FAILED: %s -- the world will use whatever BP_RelayDog was already on disk, "
+                "which may be a stale hierarchy that cannot animate" % exc)
+    elif int(C.LOOK.get("scaleDog", 0)):
+        LOG("V2 DOG BUILD: skipped under the offline dry run (the stub engine cannot save an asset)")
     asset_paths = ASSETS.build_assets(ctx, log=LOG)
     MANIFEST["assets"] = {k: v for k, v in asset_paths.items()}
     MANIFEST["asset_detail"] = [{"name": n, "path": p, "backend": b, "tris": t, "notes": notes}
