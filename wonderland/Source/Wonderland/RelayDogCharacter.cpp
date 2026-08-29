@@ -295,6 +295,81 @@ float ARelayDogCharacter::TraceFootGround(float ForwardUU, float LateralUU) cons
 	return Hit.ImpactPoint.Z - SoleZ;
 }
 
+void ARelayDogCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
+{
+	Super::SetupPlayerInputComponent(PlayerInputComponent);
+	if (PlayerInputComponent == nullptr) return;
+
+	// EXPLICIT KEYS, NOT A MAPPING CONTEXT. This is the lesson AWonderlandDogPawn
+	// already paid for on this exact streamed build: config +AxisMappings and
+	// Enhanced Input assets did not cook reliably, and a founder holding W in a
+	// browser with nothing moving cannot tell a broken binding from a broken
+	// game. BindAxisKey with real FKeys always cooks.
+	PlayerInputComponent->BindAxisKey(EKeys::W, this, &ARelayDogCharacter::MoveForwardAxis);
+	PlayerInputComponent->BindAxisKey(EKeys::Up, this, &ARelayDogCharacter::MoveForwardAxis);
+	PlayerInputComponent->BindAxisKey(EKeys::S, this, &ARelayDogCharacter::MoveBackwardAxis);
+	PlayerInputComponent->BindAxisKey(EKeys::Down, this, &ARelayDogCharacter::MoveBackwardAxis);
+	PlayerInputComponent->BindAxisKey(EKeys::D, this, &ARelayDogCharacter::MoveRightAxis);
+	PlayerInputComponent->BindAxisKey(EKeys::Right, this, &ARelayDogCharacter::MoveRightAxis);
+	PlayerInputComponent->BindAxisKey(EKeys::A, this, &ARelayDogCharacter::MoveLeftAxis);
+	PlayerInputComponent->BindAxisKey(EKeys::Left, this, &ARelayDogCharacter::MoveLeftAxis);
+	PlayerInputComponent->BindAxisKey(EKeys::MouseX, this, &ARelayDogCharacter::TurnAxis);
+	PlayerInputComponent->BindAxisKey(EKeys::MouseY, this, &ARelayDogCharacter::LookUpAxis);
+
+	PlayerInputComponent->BindKey(EKeys::LeftShift, IE_Pressed, this, &ARelayDogCharacter::OnRunPressed);
+	PlayerInputComponent->BindKey(EKeys::LeftShift, IE_Released, this, &ARelayDogCharacter::OnRunReleased);
+	PlayerInputComponent->BindKey(EKeys::RightShift, IE_Pressed, this, &ARelayDogCharacter::OnRunPressed);
+	PlayerInputComponent->BindKey(EKeys::RightShift, IE_Released, this, &ARelayDogCharacter::OnRunReleased);
+	PlayerInputComponent->BindKey(EKeys::LeftControl, IE_Pressed, this, &ARelayDogCharacter::OnWalkPressed);
+	PlayerInputComponent->BindKey(EKeys::LeftControl, IE_Released, this, &ARelayDogCharacter::OnWalkReleased);
+	PlayerInputComponent->BindKey(EKeys::SpaceBar, IE_Pressed, this, &ACharacter::Jump);
+	PlayerInputComponent->BindKey(EKeys::SpaceBar, IE_Released, this, &ACharacter::StopJumping);
+
+	// A possessed Dog steers with the mouse, so the boom follows the controller
+	// rather than the body; the capture demo keeps the body-locked boom.
+	if (CameraBoom != nullptr && !bAutoDemo)
+	{
+		CameraBoom->bUsePawnControlRotation = true;
+		CameraBoom->bInheritPitch = true;
+		CameraBoom->bInheritYaw = true;
+	}
+	UE_LOG(LogTemp, Log, TEXT("WLDOG INPUT bound on %s (WASD, mouse, shift=run, ctrl=walk, space=jump)"), *GetName());
+}
+
+void ARelayDogCharacter::MoveForwardAxis(float Value)
+{
+	if (Value == 0.0f || Controller == nullptr || bAutoDemo) return;
+	const FRotator YawOnly(0.0f, Controller->GetControlRotation().Yaw, 0.0f);
+	AddMovementInput(FRotationMatrix(YawOnly).GetUnitAxis(EAxis::X), Value);
+}
+
+void ARelayDogCharacter::MoveBackwardAxis(float Value) { MoveForwardAxis(-Value); }
+
+void ARelayDogCharacter::MoveRightAxis(float Value)
+{
+	if (Value == 0.0f || Controller == nullptr || bAutoDemo) return;
+	const FRotator YawOnly(0.0f, Controller->GetControlRotation().Yaw, 0.0f);
+	AddMovementInput(FRotationMatrix(YawOnly).GetUnitAxis(EAxis::Y), Value);
+}
+
+void ARelayDogCharacter::MoveLeftAxis(float Value) { MoveRightAxis(-Value); }
+
+void ARelayDogCharacter::TurnAxis(float Value)
+{
+	if (Value != 0.0f) AddControllerYawInput(Value);
+}
+
+void ARelayDogCharacter::LookUpAxis(float Value)
+{
+	// Inverted, as a camera pitch is: pushing the mouse forward looks down.
+	if (Value != 0.0f) AddControllerPitchInput(-Value);
+}
+
+void ARelayDogCharacter::OnRunPressed() { bRunHeld = true; }
+void ARelayDogCharacter::OnRunReleased() { bRunHeld = false; }
+void ARelayDogCharacter::OnWalkPressed() { bWalkHeld = true; }
+void ARelayDogCharacter::OnWalkReleased() { bWalkHeld = false; }
+
 void ARelayDogCharacter::BeginPlay()
 {
 	Super::BeginPlay();
