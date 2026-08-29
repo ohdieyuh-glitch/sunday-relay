@@ -215,6 +215,57 @@ void ARelayDogCharacter::BuildDefaultRoute()
 	Add(Origin, 130.0f, 6.0f, TEXT("walk home, then idle"));
 }
 
+void ARelayDogCharacter::BuildExplorationRoute()
+{
+	// THE DISTRICT, WALKED. World-space coordinates from layout_v2: the arrival
+	// gate stands at y = -910, the plaza runs x -650..650 and y -1500..800, the
+	// front steps are at y = 800, the garden gates at y = 1700 either side of
+	// the axis, and the castle front is beyond y = 9000. The route is the one
+	// the founder specified for world review, and it is deliberately walked and
+	// jogged rather than sprinted: this is about what the place is like to be
+	// in, not about how fast the Dog can cross it.
+	Route.Reset();
+	auto Add = [this](float X, float Y, float Speed, float Hold, const TCHAR* Label)
+	{
+		FRelayDogRouteLeg Leg;
+		// Z comes from wherever the Dog currently stands; the movement component
+		// and the ground traces put it on the surface.
+		Leg.Target = FVector(X, Y, SpawnLocation.Z);
+		Leg.SpeedUU = Speed;
+		Leg.HoldSeconds = Hold;
+		Leg.Label = Label;
+		Route.Add(Leg);
+	};
+
+	Add(SpawnLocation.X, SpawnLocation.Y, 0.0f, 4.0f, TEXT("spawn: stand and look around"));
+	// Out through the arrival gate, then turn and come back in — the arrival
+	// read, which is what a participant sees first.
+	Add(0.0f, -1300.0f, 150.0f, 0.5f, TEXT("walk out through the arrival gate"));
+	Add(0.0f, -2200.0f, 240.0f, 2.0f, TEXT("the avenue behind the gate, then turn"));
+	Add(0.0f, -600.0f, 240.0f, 0.5f, TEXT("back in through the gate"));
+	Add(0.0f, 500.0f, 150.0f, 1.5f, TEXT("cross the plaza to the front steps"));
+	Add(0.0f, 1100.0f, 130.0f, 1.0f, TEXT("up the steps"));
+	// The left garden, in through its gate and around its room.
+	Add(890.0f, 1700.0f, 200.0f, 1.0f, TEXT("through the left garden gate"));
+	Add(2200.0f, 2600.0f, 200.0f, 1.5f, TEXT("into the left garden"));
+	Add(1200.0f, 1200.0f, 200.0f, 0.5f, TEXT("back out of the left garden"));
+	// And the right.
+	Add(-890.0f, 1700.0f, 200.0f, 1.0f, TEXT("through the right garden gate"));
+	Add(-2200.0f, 2600.0f, 200.0f, 1.5f, TEXT("into the right garden"));
+	Add(-1000.0f, 1500.0f, 200.0f, 0.5f, TEXT("back toward the axis"));
+	// THE CASTLE APPROACH. This is the leg that shows the empty ground: from
+	// the garden gates to the castle front is some seventy metres with five
+	// actors in it, all of them on the flanks.
+	Add(0.0f, 3000.0f, 300.0f, 0.5f, TEXT("the castle approach begins"));
+	Add(0.0f, 6000.0f, 330.0f, 0.5f, TEXT("halfway to the castle"));
+	Add(0.0f, 8200.0f, 300.0f, 3.0f, TEXT("at the castle front, look up"));
+	// And back, so the tour ends where a participant would turn around and see
+	// the district behind them.
+	Add(0.0f, 3000.0f, 420.0f, 0.5f, TEXT("run back down the approach"));
+	Add(0.0f, 400.0f, 300.0f, 2.5f, TEXT("look back toward the gate and the skyline"));
+	Add(SpawnLocation.X, SpawnLocation.Y, 150.0f, 5.0f, TEXT("home, and idle"));
+}
+
 FVector ARelayDogCharacter::StepRoute(float DeltaSeconds)
 {
 	if (Route.Num() == 0) return FVector::ZeroVector;
@@ -386,12 +437,18 @@ void ARelayDogCharacter::BeginPlay()
 		bAutoDemo = true;
 		UE_LOG(LogTemp, Log, TEXT("WLDOG DEMO: -wldemo on the command line; the Dog drives its capture route"));
 	}
+	if (FParse::Param(FCommandLine::Get(), TEXT("wlexplore")))
+	{
+		bAutoDemo = true;
+		bExplorationRoute = true;
+		UE_LOG(LogTemp, Log, TEXT("WLDOG DEMO: -wlexplore; the Dog tours the district for the world review"));
+	}
 	SpawnLocation = GetActorLocation();
 	SpawnYaw = GetActorRotation().Yaw;
 	bJointsBound = BindJoints();
 	if (bAutoDemo && bUseDefaultRoute)
 	{
-		BuildDefaultRoute();
+		if (bExplorationRoute) BuildExplorationRoute(); else BuildDefaultRoute();
 		UE_LOG(LogTemp, Log, TEXT("WLDOG DEMO: %d route legs from (%.0f, %.0f, %.0f)"),
 		       Route.Num(), SpawnLocation.X, SpawnLocation.Y, SpawnLocation.Z);
 	}

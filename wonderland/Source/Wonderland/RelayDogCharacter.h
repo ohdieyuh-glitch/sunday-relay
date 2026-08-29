@@ -111,6 +111,17 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Relay Dog")
 	bool bAutoDemo = false;
 
+	/** Drive the EXPLORATION route instead of the locomotion demo: the founder's
+	 *  review circuit through the real district — spawn, out through the
+	 *  arrival gate, back across the plaza, the left garden, the right garden,
+	 *  the castle approach, and a look back the way it came. It is the review
+	 *  method the founder asked for once there was a Dog to walk: still frames
+	 *  hide dead ends, blocked paths and empty ground, and a locked camera
+	 *  cannot tell you where the eye wants to go. -wlexplore on the command
+	 *  line, so the same package plays, films a gait demo, or films a tour. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Relay Dog")
+	bool bExplorationRoute = false;
+
 	/** When set, the demo route is built relative to the Dog's spawn point by
 	 *  BuildDefaultRoute() rather than authored in the level. */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Relay Dog")
@@ -168,6 +179,9 @@ protected:
 	/** Build the standard capture route relative to where the Dog spawned:
 	 *  stand, walk, jog, run, anime run, stop, turns, stairs. */
 	void BuildDefaultRoute();
+
+	/** Build the exploration circuit through Golden Arrival's real landmarks. */
+	void BuildExplorationRoute();
 
 	/** Advance the scripted route and return the velocity the Dog should have. */
 	FVector StepRoute(float DeltaSeconds);
