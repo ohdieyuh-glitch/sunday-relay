@@ -170,6 +170,18 @@ namespace RelayDogStride
 		return DistanceTravelled + Foot.Forward;
 	}
 
+	float FootGroundOffset(float CurrentOffset, float GroundDelta, bool bStance,
+	                       float MaxOffset, float DeltaSeconds, float HalfLifeSeconds)
+	{
+		// A SWINGING FOOT IS RELEASED, not snapped: it eases back to zero over
+		// the same half-life, so the correction that carried it up a step does
+		// not vanish in one frame the moment it lifts.
+		const float Target = bStance ? Clamp(GroundDelta, -MaxOffset, MaxOffset) : 0.0f;
+		if (DeltaSeconds <= 0.0f || HalfLifeSeconds <= 0.0f) return Target;
+		const float Alpha = 1.0f - std::pow(2.0f, -DeltaSeconds / HalfLifeSeconds);
+		return CurrentOffset + (Target - CurrentOffset) * Alpha;
+	}
+
 	float ReachHalfSpan(float LegLengthUU, float HipHeightUU)
 	{
 		const float Leg = LegLengthUU > 0.1f ? LegLengthUU : 0.1f;
@@ -424,8 +436,24 @@ namespace RelayDogStride
 
 		const FFootPose FootL = FootPose(Current.StridePhase, Stride.StrideLength, Stride.LiftHeight, Stride.DutyFactor);
 		const FFootPose FootR = FootPose(Current.StridePhase + 0.5f, Stride.StrideLength, Stride.LiftHeight, Stride.DutyFactor);
-		const FLegPose RawL = LegPose(FootL, ThighUU, ShinUU, Stride.HipHeightUU);
-		const FLegPose RawR = LegPose(FootR, ThighUU, ShinUU, Stride.HipHeightUU);
+		// THE GROUND UNDER EACH FOOT, eased. On the flat both deltas are zero
+		// and this changes nothing; on a stair the planted foot is placed on
+		// the step it is actually over instead of hanging in the air or sinking
+		// into the stone.
+		const float MaxFootOffset = LegLengthUU * 0.45f;
+		FootOffsetLeft = FootGroundOffset(FootOffsetLeft, In.GroundDeltaLeft, FootL.bStance, MaxFootOffset, Dt);
+		FootOffsetRight = FootGroundOffset(FootOffsetRight, In.GroundDeltaRight, FootR.bStance, MaxFootOffset, Dt);
+		FFootPose GroundedL = FootL;
+		FFootPose GroundedR = FootR;
+		GroundedL.Lift += FootOffsetLeft;
+		GroundedR.Lift += FootOffsetRight;
+		Current.FootOffsetLeft = FootOffsetLeft;
+		Current.FootOffsetRight = FootOffsetRight;
+		Current.FootLeft = GroundedL;
+		Current.FootRight = GroundedR;
+
+		const FLegPose RawL = LegPose(GroundedL, ThighUU, ShinUU, Stride.HipHeightUU);
+		const FLegPose RawR = LegPose(GroundedR, ThighUU, ShinUU, Stride.HipHeightUU);
 		// Blended by weight against the standing pose (0,0), so easing out of a
 		// walk eases the stride down rather than freezing a leg mid-air.
 		Current.LegLeft = { RawL.HipDeg * Weight, RawL.KneeDeg * Weight };

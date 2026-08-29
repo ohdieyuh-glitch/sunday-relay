@@ -150,6 +150,9 @@ int32 AWonderlandInstancedBatch::BuildInstances()
 	}
 	Instances->SetGenerateOverlapEvents(false);
 	Instances->SetCastShadow(bCastShadow);
+	// Before registration, like mobility: the distance-field scene reads this
+	// flag when the primitive is added.
+	Instances->bAffectDistanceFieldLighting = bAffectDistanceFieldLighting;
 	Instances->RegisterComponent();
 
 	// THE MATERIAL GOES ON AFTER REGISTRATION, and this is the whole reason

@@ -13,7 +13,6 @@
 #include "InputCoreTypes.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/SpringArmComponent.h"
-#include "WonderlandDogGait.h"
 
 namespace
 {
@@ -264,119 +263,37 @@ FVector ARelayDogCharacter::StepRoute(float DeltaSeconds)
 	return ToTarget.GetSafeNormal() * Leg.SpeedUU;
 }
 
-void ARelayDogCharacter::UpdateFootGround(FRelayDogLeg& Leg, float ForwardUU, bool bStance, float DeltaSeconds)
+float ARelayDogCharacter::TraceFootGround(float ForwardUU, float LateralUU) const
 {
-	if (Leg.Hip == nullptr) return;
-	UWorld* World = GetWorld();
-	if (World == nullptr) return;
+	const UWorld* World = GetWorld();
+	if (World == nullptr) return 0.0f;
 
-	// Where this foot is about to be put, in world space: the hip's position
-	// plus the stride's forward offset along the body's facing, at the lateral
-	// offset the canon gives the leg.
+	// Where this foot is about to be put, in world space: along the body's
+	// facing by the stride's offset, at the lateral offset the canon gives the
+	// leg, and the sole is a leg's length below the hip.
 	const FTransform BodyXform = GetActorTransform();
-	const FVector HipWorld = Leg.Hip->GetComponentLocation();
-	const FVector FootWorld = HipWorld + BodyXform.GetUnitAxis(EAxis::X) * ForwardUU;
-
-	// Trace from knee height to a leg's depth below the sole: far enough to
-	// find a step down, short enough that a hole in the collision cannot pull
-	// the foot to the floor below.
 	const float LegLengthUU = 0.8f * HeadWidthUU;
-	const FVector Start = FootWorld + FVector(0.0f, 0.0f, LegLengthUU * 0.6f);
-	const FVector End = FootWorld - FVector(0.0f, 0.0f, LegLengthUU * 0.9f);
+	const FVector FootWorld = GetActorLocation()
+		+ BodyXform.GetUnitAxis(EAxis::X) * ForwardUU
+		+ BodyXform.GetUnitAxis(EAxis::Y) * LateralUU;
+	const float SoleZ = GetActorLocation().Z - GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
+
+	// From knee height down to a leg's depth below the sole: far enough to find
+	// a step down, short enough that a gap in the collision cannot pull the
+	// foot to whatever is underneath the world.
+	const FVector Start(FootWorld.X, FootWorld.Y, SoleZ + LegLengthUU * 0.6f);
+	const FVector End(FootWorld.X, FootWorld.Y, SoleZ - LegLengthUU * 0.9f);
 
 	FHitResult Hit;
 	FCollisionQueryParams Params(FName(TEXT("RelayDogFoot")), false, this);
 	Params.bTraceComplex = false;
-	float GroundDelta = 0.0f;
-	if (World->LineTraceSingleByChannel(Hit, Start, End, ECC_Visibility, Params))
+	if (!World->LineTraceSingleByChannel(Hit, Start, End, ECC_Visibility, Params))
 	{
-		// Positive means the ground is ABOVE where the foot would otherwise go,
-		// which is what WonderlandGait::PawGroundOffset expects.
-		GroundDelta = Hit.ImpactPoint.Z - (FootWorld.Z - LegLengthUU);
+		return 0.0f;
 	}
-
-	// REUSED, NOT RE-DERIVED. The V1 gait already worked out the rules for this
-	// — only a planted foot is placed, only vertically, clamped, and eased by
-	// half-life so it behaves the same at 20 fps and 60 — and re-deriving them
-	// here would be a second copy to keep in step with the first.
-	Leg.GroundOffset = WonderlandGait::PawGroundOffset(
-		Leg.GroundOffset, GroundDelta, bStance, LegLengthUU * 0.45f, DeltaSeconds);
+	// Positive means the ground is ABOVE where the foot would otherwise go.
+	return Hit.ImpactPoint.Z - SoleZ;
 }
-
-void ARelayDogCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
-{
-	Super::SetupPlayerInputComponent(PlayerInputComponent);
-	if (PlayerInputComponent == nullptr) return;
-
-	// EXPLICIT KEYS, NOT A MAPPING CONTEXT. This is the lesson AWonderlandDogPawn
-	// already paid for on this exact streamed build: config +AxisMappings and
-	// Enhanced Input assets did not cook reliably, and a founder holding W in a
-	// browser with nothing moving cannot tell a broken binding from a broken
-	// game. BindAxisKey with real FKeys always cooks.
-	PlayerInputComponent->BindAxisKey(EKeys::W, this, &ARelayDogCharacter::MoveForwardAxis);
-	PlayerInputComponent->BindAxisKey(EKeys::Up, this, &ARelayDogCharacter::MoveForwardAxis);
-	PlayerInputComponent->BindAxisKey(EKeys::S, this, &ARelayDogCharacter::MoveBackwardAxis);
-	PlayerInputComponent->BindAxisKey(EKeys::Down, this, &ARelayDogCharacter::MoveBackwardAxis);
-	PlayerInputComponent->BindAxisKey(EKeys::D, this, &ARelayDogCharacter::MoveRightAxis);
-	PlayerInputComponent->BindAxisKey(EKeys::Right, this, &ARelayDogCharacter::MoveRightAxis);
-	PlayerInputComponent->BindAxisKey(EKeys::A, this, &ARelayDogCharacter::MoveLeftAxis);
-	PlayerInputComponent->BindAxisKey(EKeys::Left, this, &ARelayDogCharacter::MoveLeftAxis);
-	PlayerInputComponent->BindAxisKey(EKeys::MouseX, this, &ARelayDogCharacter::TurnAxis);
-	PlayerInputComponent->BindAxisKey(EKeys::MouseY, this, &ARelayDogCharacter::LookUpAxis);
-
-	PlayerInputComponent->BindKey(EKeys::LeftShift, IE_Pressed, this, &ARelayDogCharacter::OnRunPressed);
-	PlayerInputComponent->BindKey(EKeys::LeftShift, IE_Released, this, &ARelayDogCharacter::OnRunReleased);
-	PlayerInputComponent->BindKey(EKeys::RightShift, IE_Pressed, this, &ARelayDogCharacter::OnRunPressed);
-	PlayerInputComponent->BindKey(EKeys::RightShift, IE_Released, this, &ARelayDogCharacter::OnRunReleased);
-	PlayerInputComponent->BindKey(EKeys::LeftControl, IE_Pressed, this, &ARelayDogCharacter::OnWalkPressed);
-	PlayerInputComponent->BindKey(EKeys::LeftControl, IE_Released, this, &ARelayDogCharacter::OnWalkReleased);
-	PlayerInputComponent->BindKey(EKeys::SpaceBar, IE_Pressed, this, &ACharacter::Jump);
-	PlayerInputComponent->BindKey(EKeys::SpaceBar, IE_Released, this, &ACharacter::StopJumping);
-
-	// A possessed Dog steers with the mouse, so the boom follows the controller
-	// rather than the body; the capture demo keeps the body-locked boom.
-	if (CameraBoom != nullptr && !bAutoDemo)
-	{
-		CameraBoom->bUsePawnControlRotation = true;
-		CameraBoom->bInheritPitch = true;
-		CameraBoom->bInheritYaw = true;
-	}
-	UE_LOG(LogTemp, Log, TEXT("WLDOG INPUT bound on %s (WASD, mouse, shift=run, ctrl=walk, space=jump)"), *GetName());
-}
-
-void ARelayDogCharacter::MoveForwardAxis(float Value)
-{
-	if (Value == 0.0f || Controller == nullptr || bAutoDemo) return;
-	const FRotator YawOnly(0.0f, Controller->GetControlRotation().Yaw, 0.0f);
-	AddMovementInput(FRotationMatrix(YawOnly).GetUnitAxis(EAxis::X), Value);
-}
-
-void ARelayDogCharacter::MoveBackwardAxis(float Value) { MoveForwardAxis(-Value); }
-
-void ARelayDogCharacter::MoveRightAxis(float Value)
-{
-	if (Value == 0.0f || Controller == nullptr || bAutoDemo) return;
-	const FRotator YawOnly(0.0f, Controller->GetControlRotation().Yaw, 0.0f);
-	AddMovementInput(FRotationMatrix(YawOnly).GetUnitAxis(EAxis::Y), Value);
-}
-
-void ARelayDogCharacter::MoveLeftAxis(float Value) { MoveRightAxis(-Value); }
-
-void ARelayDogCharacter::TurnAxis(float Value)
-{
-	if (Value != 0.0f) AddControllerYawInput(Value);
-}
-
-void ARelayDogCharacter::LookUpAxis(float Value)
-{
-	// Inverted, as a camera pitch is: pushing the mouse forward looks down.
-	if (Value != 0.0f) AddControllerPitchInput(-Value);
-}
-
-void ARelayDogCharacter::OnRunPressed() { bRunHeld = true; }
-void ARelayDogCharacter::OnRunReleased() { bRunHeld = false; }
-void ARelayDogCharacter::OnWalkPressed() { bWalkHeld = true; }
-void ARelayDogCharacter::OnWalkReleased() { bWalkHeld = false; }
 
 void ARelayDogCharacter::BeginPlay()
 {
@@ -459,29 +376,20 @@ void ARelayDogCharacter::Tick(float DeltaSeconds)
 	In.DesiredHeadingDeg = Ground.IsNearlyZero()
 		? In.HeadingDeg
 		: FMath::RadiansToDegrees(FMath::Atan2(Ground.Y, Ground.X));
+	// THE TRACE IS THE ONLY PART OF FOOT PLACEMENT THAT NEEDS AN ENGINE, and it
+	// is all this class does about it: where the ground is under the place each
+	// foot is about to be put. Everything after that -- clamping, easing by
+	// half-life, releasing a swinging foot -- lives in the arithmetic, where a
+	// staircase can be walked in a test instead of judged from a stream.
+	// Measured from last frame's stride positions, which is what the feet were
+	// over when the world was last stepped.
+	In.GroundDeltaLeft = TraceFootGround(Animator.Pose().FootLeft.Forward, LegLeft.LateralUU);
+	In.GroundDeltaRight = TraceFootGround(Animator.Pose().FootRight.Forward, LegRight.LateralUU);
 
 	const RelayDogStride::FDogPose& Pose = Animator.Update(In);
 
-	// --------------------------------------------------------- ground under it
-	const RelayDogStride::FFootPose FootL = RelayDogStride::FootPose(
-		Pose.StridePhase, Pose.Stride.StrideLength, Pose.Stride.LiftHeight, Pose.Stride.DutyFactor);
-	const RelayDogStride::FFootPose FootR = RelayDogStride::FootPose(
-		Pose.StridePhase + 0.5f, Pose.Stride.StrideLength, Pose.Stride.LiftHeight, Pose.Stride.DutyFactor);
-	UpdateFootGround(LegLeft, FootL.Forward, FootL.bStance, DeltaSeconds);
-	UpdateFootGround(LegRight, FootR.Forward, FootR.bStance, DeltaSeconds);
-
-	// The ground correction is folded back into the IK as extra lift, so a foot
-	// on a higher step is REACHED for by the leg rather than translated into
-	// the stone.
-	RelayDogStride::FFootPose GroundedL = FootL;
-	RelayDogStride::FFootPose GroundedR = FootR;
-	GroundedL.Lift += LegLeft.GroundOffset;
-	GroundedR.Lift += LegRight.GroundOffset;
-	const float ThighUU = (0.8f - 0.5125f) * HeadWidthUU;
-	const float ShinUU = 0.5125f * HeadWidthUU;
-	const float HipHeight = Pose.Stride.HipHeightUU > 1.0f ? Pose.Stride.HipHeightUU : 0.8f * HeadWidthUU;
-	const RelayDogStride::FLegPose SolvedL = RelayDogStride::LegPose(GroundedL, ThighUU, ShinUU, HipHeight);
-	const RelayDogStride::FLegPose SolvedR = RelayDogStride::LegPose(GroundedR, ThighUU, ShinUU, HipHeight);
+	const RelayDogStride::FLegPose SolvedL = { Pose.LegLeft.HipDeg, Pose.LegLeft.KneeDeg };
+	const RelayDogStride::FLegPose SolvedR = { Pose.LegRight.HipDeg, Pose.LegRight.KneeDeg };
 	const float Weight = Pose.GaitWeight;
 
 	// ------------------------------------------------------------- the writing

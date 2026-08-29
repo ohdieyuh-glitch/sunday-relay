@@ -157,6 +157,24 @@ namespace RelayDogStride
 	 *  @param HipHeightUU  how far the hip rides above the sole right now. */
 	FLegPose LegPose(const FFootPose& Foot, float ThighUU, float ShinUU, float HipHeightUU);
 
+	/** Ease a foot onto the ground under it.
+	 *
+	 *  The rules are the V1 gait's, and they are right for the same reasons:
+	 *  ONLY A PLANTED FOOT is placed (gluing a swinging foot to the terrain
+	 *  cancels the swing and the Dog shuffles), only VERTICALLY (moving it
+	 *  sideways would fight the foot lock everything rests on), CLAMPED so one
+	 *  bad trace cannot stretch a leg to the horizon, and eased by HALF-LIFE so
+	 *  it behaves the same at 20 fps and at 60. What is new is that it lives
+	 *  here rather than in the actor, so a staircase can be walked up in a test
+	 *  on a laptop instead of judged from a stream.
+	 *
+	 *  @param CurrentOffset  what was applied last frame, uu.
+	 *  @param GroundDelta    traced ground minus the foot's height, uu.
+	 *  @param bStance        is the foot planted right now.
+	 *  @param MaxOffset      furthest a foot may be moved, uu. */
+	float FootGroundOffset(float CurrentOffset, float GroundDelta, bool bStance,
+	                       float MaxOffset, float DeltaSeconds, float HalfLifeSeconds = 0.09f);
+
 	/** The furthest a foot may be placed either side of the hip, given how high
 	 *  the hip is riding: the leg is a rigid pair of blocks and cannot reach
 	 *  past its own length. Used to CAP the stride, so no pose is ever asked
@@ -338,6 +356,15 @@ namespace RelayDogStride
 
 		float SwayUU = 0.0f;
 		float BobUU = 0.0f;
+
+		/** The eased vertical correction actually applied to each foot, uu. */
+		float FootOffsetLeft = 0.0f;
+		float FootOffsetRight = 0.0f;
+		/** Where each foot is in the stride right now, so the caller can trace
+		 *  under the place the foot is about to be put rather than where it
+		 *  was last frame. */
+		FFootPose FootLeft;
+		FFootPose FootRight;
 	};
 
 	/** Everything the actor measures each frame. */
@@ -353,6 +380,13 @@ namespace RelayDogStride
 		/** Yaw the body is facing, degrees, and the yaw it wants. */
 		float HeadingDeg = 0.0f;
 		float DesiredHeadingDeg = 0.0f;
+		/** Traced ground height minus the height that foot would otherwise be
+		 *  planted at, uu. Positive means the ground is ABOVE the foot — a step
+		 *  up. The TRACE needs an engine; what to do with it does not, so the
+		 *  easing lives here where it can be proven on stairs without one. */
+		float GroundDeltaLeft = 0.0f;
+		float GroundDeltaRight = 0.0f;
+
 		/** Optional runtime look target, degrees relative to the body. When
 		 *  bHasLookTarget is false the interest scheduler chooses. */
 		bool bHasLookTarget = false;
@@ -384,6 +418,8 @@ namespace RelayDogStride
 		FDogPose Current;
 		FInterest Interest;
 		FSpring GaitBlend, HeadYaw, HeadPitch, Lean, TurnRoll, SpeedFilter;
+		float FootOffsetLeft = 0.0f;
+		float FootOffsetRight = 0.0f;
 		float Distance = 0.0f;
 		float Phase = 0.0f;
 		float Elapsed = 0.0f;

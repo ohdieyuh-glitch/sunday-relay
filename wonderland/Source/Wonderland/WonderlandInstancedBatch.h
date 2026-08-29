@@ -145,6 +145,16 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Batch")
 	bool bCollides = false;
 
+	/** Whether the instances feed the mesh distance fields that occlude the
+	 *  sky light (DFAO) and Lumen's software traces. Default true, the engine's
+	 *  own default. The generator turns it OFF for foliage: a hedge or a bed of
+	 *  leaf blades has a distance field like a solid block, and that block
+	 *  occludes the sky on the very leaves it is made of -- measured on
+	 *  HeroCam0 as sRGB 2 on a leaf's shadow side beside an ivory post's 118
+	 *  (V2_PASS_027, PASS 05c). Architecture keeps it on for contact shading. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Wonderland|Batch")
+	bool bAffectDistanceFieldLighting = true;
+
 	/** How many instances were actually created. The world proof reads this. */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "Wonderland|Batch")
 	int32 BuiltInstances = 0;

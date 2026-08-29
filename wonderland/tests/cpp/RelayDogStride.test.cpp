@@ -440,6 +440,105 @@ int main()
 		            F(MinKnee).c_str(), F(MaxKnee).c_str(), F(WorstErr).c_str());
 	}
 
+	std::printf("== stairs: a planted foot is placed on the step it is over ==\n");
+	{
+		// A STAIRCASE, WALKED UP. Golden Arrival's path rises at the steps, and
+		// the failure the founder would see is a foot hanging in the air on the
+		// higher tread or buried in the lower one. The trace needs an engine;
+		// the easing does not, so it is exercised here against a real profile.
+		FDogAnimator Dog;
+		Dog.Configure(LegUU, ThighUU, ShinUU, ScaleUU);
+		FDogInput In;
+		In.DeltaSeconds = 1.0f / 60.0f;
+		In.SpeedUU = 130.0f;                       // a walk, up the stairs
+		In.DistanceUU = 130.0f / 60.0f;
+		const float RiserUU = 14.0f;               // one tread of the arrival steps
+		float Travelled = 0.0f;
+		float WorstPlantedDrift = 0.0f;
+		float MaxOffsetSeen = 0.0f;
+		float PrevWorldL = 0.0f;
+		bool bHadStanceL = false;
+		bool bOffsetSane = true;
+		for (int i = 0; i < 1200; ++i)
+		{
+			Travelled += In.DistanceUU;
+			// Ground under each foot: a step every 60 uu of travel. The left
+			// foot leads, so the two feet are on different treads for part of
+			// every cycle — which is the case that exposes a shared offset.
+			const FDogPose& Peek = Dog.Pose();
+			const float FootLX = Travelled + Peek.FootLeft.Forward;
+			const float FootRX = Travelled + Peek.FootRight.Forward;
+			const float GroundL = std::floor(FootLX / 60.0f) * RiserUU;
+			const float GroundR = std::floor(FootRX / 60.0f) * RiserUU;
+			const float BodyGround = std::floor(Travelled / 60.0f) * RiserUU;
+			In.GroundDeltaLeft = GroundL - BodyGround;
+			In.GroundDeltaRight = GroundR - BodyGround;
+			const FDogPose& P = Dog.Update(In);
+
+			if (std::fabs(P.FootOffsetLeft) > MaxOffsetSeen) MaxOffsetSeen = std::fabs(P.FootOffsetLeft);
+			if (std::fabs(P.FootOffsetLeft) > LegUU * 0.45f + 1e-3f) bOffsetSane = false;
+			if (std::fabs(P.FootOffsetRight) > LegUU * 0.45f + 1e-3f) bOffsetSane = false;
+			// FOOT LOCK STILL HOLDS. The vertical correction must not move the
+			// foot along the ground: only the height is allowed to change.
+			const float WorldL = Travelled + P.FootLeft.Forward;
+			if (P.FootLeft.bStance && bHadStanceL && P.GaitWeight > 0.9f)
+			{
+				const float Drift = std::fabs(WorldL - PrevWorldL);
+				if (Drift > WorstPlantedDrift) WorstPlantedDrift = Drift;
+			}
+			bHadStanceL = P.FootLeft.bStance;
+			PrevWorldL = WorldL;
+		}
+		Check("the ground correction stays inside its clamp", bOffsetSane);
+		Check("a step is actually corrected for", MaxOffsetSeen > 3.0f, "max " + F(MaxOffsetSeen) + " uu");
+		Check("and a planted foot still does not slide on stairs", WorstPlantedDrift < 0.05f,
+		      "worst " + F(WorstPlantedDrift) + " uu/frame");
+		std::printf("       stair correction up to %s uu, planted drift %s uu per frame\n",
+		            F(MaxOffsetSeen).c_str(), F(WorstPlantedDrift).c_str());
+	}
+	{
+		// FRAME-RATE INDEPENDENCE of the easing, for the same reason the springs
+		// have it: the same second of a step must land in the same place at
+		// 20 fps and 60.
+		float Slow = 0.0f, Fast = 0.0f;
+		for (int i = 0; i < 20; ++i) Slow = FootGroundOffset(Slow, 12.0f, true, 30.0f, 1.0f / 20.0f);
+		for (int i = 0; i < 60; ++i) Fast = FootGroundOffset(Fast, 12.0f, true, 30.0f, 1.0f / 60.0f);
+		Check("a foot eases onto a step identically at 20 and 60 fps", std::fabs(Slow - Fast) < 0.05f,
+		      F(Slow) + " vs " + F(Fast));
+		Check("a swinging foot is released rather than glued",
+		      FootGroundOffset(10.0f, 12.0f, false, 30.0f, 0.5f) < 4.0f);
+		Check("one absurd trace cannot stretch the leg",
+		      FootGroundOffset(0.0f, 5000.0f, true, 21.6f, 1.0f) <= 21.6f + 1e-3f);
+	}
+
+	std::printf("== the elbow is a joint, and it is used ==\n");
+	{
+		// REAL, READABLE ARTICULATION. The seam exists so the arm bends; a seam
+		// that never moves is the painted line the founder ruled out. Walk a
+		// full cycle and measure how far the elbow actually travels, and check
+		// the knee the same way.
+		FDogAnimator Dog;
+		Dog.Configure(LegUU, ThighUU, ShinUU, ScaleUU);
+		FDogInput In;
+		In.DeltaSeconds = 1.0f / 60.0f;
+		In.SpeedUU = 130.0f;
+		In.DistanceUU = 130.0f / 60.0f;
+		for (int i = 0; i < 120; ++i) Dog.Update(In);   // settle into the walk
+		float ElbowLo = 1e9f, ElbowHi = -1e9f, KneeLo = 1e9f, KneeHi = -1e9f;
+		for (int i = 0; i < 240; ++i)
+		{
+			const FDogPose& P = Dog.Update(In);
+			ElbowLo = std::fmin(ElbowLo, P.ArmLeft.ElbowDeg); ElbowHi = std::fmax(ElbowHi, P.ArmLeft.ElbowDeg);
+			KneeLo = std::fmin(KneeLo, P.LegLeft.KneeDeg); KneeHi = std::fmax(KneeHi, P.LegLeft.KneeDeg);
+		}
+		Check("the elbow swings a readable amount while walking", (ElbowHi - ElbowLo) > 8.0f,
+		      F(ElbowLo) + ".." + F(ElbowHi) + " deg");
+		Check("the knee swings a readable amount while walking", (KneeHi - KneeLo) > 15.0f,
+		      F(KneeLo) + ".." + F(KneeHi) + " deg");
+		std::printf("       walking: elbow %s..%s deg, knee %s..%s deg\n",
+		            F(ElbowLo).c_str(), F(ElbowHi).c_str(), F(KneeLo).c_str(), F(KneeHi).c_str());
+	}
+
 	std::printf("== the springs behave like the landing's ==\n");
 	{
 		FSpring S;

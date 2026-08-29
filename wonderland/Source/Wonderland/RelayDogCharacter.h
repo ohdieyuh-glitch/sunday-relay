@@ -45,8 +45,6 @@ struct FRelayDogLeg
 	UPROPERTY(Transient)
 	TObjectPtr<USceneComponent> Shin = nullptr;
 
-	/** Smoothed vertical correction from the ground trace, uu. */
-	float GroundOffset = 0.0f;
 	/** Lateral position of this foot in the body's frame, uu. */
 	float LateralUU = 0.0f;
 };
@@ -174,8 +172,11 @@ protected:
 	/** Advance the scripted route and return the velocity the Dog should have. */
 	FVector StepRoute(float DeltaSeconds);
 
-	/** Trace the ground under one foot and ease the correction. */
-	void UpdateFootGround(FRelayDogLeg& Leg, float ForwardUU, bool bStance, float DeltaSeconds);
+	/** Where the ground is under the place a foot is about to be put, relative
+	 *  to the sole's current height. Positive is a step up. The only part of
+	 *  foot placement that needs an engine; the easing is arithmetic and lives
+	 *  in RelayDogStride, where stairs are provable without one. */
+	float TraceFootGround(float ForwardUU, float LateralUU) const;
 
 private:
 	RelayDogStride::FDogAnimator Animator;
