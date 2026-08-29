@@ -36,10 +36,17 @@ else
   [ -n "$node" ] || wl_die "no bundled node under $WL_PS_INFRA; run prepare.sh on CPU first"
   ndir="$(dirname "$(dirname "$node")")"
   full="$WL_RUN/node22"
-  if [ ! -x "$full/bin/npm" ] || [ "$("$full/bin/node" -v 2>/dev/null || true)" != "$required" ]; then
-    wl_say "fetching node $required (full distribution, for its npm) into $full"
+  # The tarball is KEPT beside the extraction: the sync that drops node_modules
+  # on a machine change drops the extracted lib/node_modules too, and a kept
+  # archive is a 5-second restore instead of a download.
+  tarball="$WL_RUN/node-$required-linux-x64.tar.xz"
+  if [ ! -d "$full/lib/node_modules/npm" ] || [ "$("$full/bin/node" -v 2>/dev/null || true)" != "$required" ]; then
+    if [ ! -s "$tarball" ]; then
+      wl_say "fetching node $required (full distribution, for its npm) into $tarball"
+      curl -fsSL -o "$tarball" "https://nodejs.org/dist/$required/node-$required-linux-x64.tar.xz"
+    fi
     rm -rf "$full"; mkdir -p "$full"
-    curl -fsSL "https://nodejs.org/dist/$required/node-$required-linux-x64.tar.xz" | tar -xJ -C "$full" --strip-components=1
+    tar -xJ -C "$full" --strip-components=1 -f "$tarball"
   fi
   mkdir -p "$ndir/lib"
   rm -rf "$ndir/lib/node_modules"
@@ -50,6 +57,12 @@ else
   wl_node_install_usable "$node" "$required" && wl_ok "bundled node repaired: $(PATH="$(dirname "$node"):$PATH" npm -v) npm beside node $required" \
     || wl_die "the bundled node still has no working npm after the repair; look at $ndir/bin"
 fi
+
+# 2b. Wilbur's dependencies. The signalling server is an npm workspace whose
+#     node_modules (root + per package) vanish with every machine change; the
+#     launcher restores them from the root-relative archive and, with the
+#     opt-in, runs npm ci at the root and writes that archive for next time.
+WL_ALLOW_NPM_INSTALL=1 PATH="$(dirname "$node"):$PATH" wl_require_wilbur_modules
 
 # 3. the capture browser. shot.cjs requires playwright from $WL_TOOLS and a
 #    real Chrome (H264 for the Pixel-Streaming frame).

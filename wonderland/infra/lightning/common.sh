@@ -1011,10 +1011,21 @@ wl_wilbur_missing_modules() {
 }
 
 # Restore a saved node_modules if one exists. No network, same rule as coturn.
+# ROOT-RELATIVE (2026-08-29). The infrastructure is an npm WORKSPACE: `npm ci`
+# hoists express and every other dependency into $WL_PS_INFRA/node_modules
+# and leaves SignallingWebServer/node_modules nearly empty (the archive this
+# used to write from there was 200 KB and restored nothing, while the die
+# below said "no archive"). Lightning's storage sync drops every
+# node_modules directory on a machine change, so the archive is the ONLY
+# thing that survives; it is written and read at the workspace root and
+# holds the root node_modules plus each package's own.
+wl_wilbur_archive_list() {
+  ( cd "$WL_PS_INFRA" && ls -d node_modules */node_modules 2>/dev/null ) || true
+}
 wl_restore_wilbur_modules() {
   [ -f "$WL_WILBUR_MODULES_ARCHIVE" ] || return 1
   wl_say "restoring Wilbur node_modules from $WL_WILBUR_MODULES_ARCHIVE"
-  ( cd "$WL_PS_SIG" && tar -xf "$WL_WILBUR_MODULES_ARCHIVE" ) || return 1
+  ( cd "$WL_PS_INFRA" && tar -xf "$WL_WILBUR_MODULES_ARCHIVE" ) || return 1
   [ -z "$(wl_wilbur_missing_modules)" ]
 }
 
@@ -1032,17 +1043,18 @@ wl_require_wilbur_modules() {
     # EXPLICIT OPT-IN ONLY, and `npm ci` rather than `npm install`: ci installs
     # exactly the lockfile and touches nothing else. No audit fix — that
     # rewrites dependencies on a machine that is billing by the minute.
-    wl_say "WL_ALLOW_NPM_INSTALL=1 — running npm ci in $WL_PS_SIG"
-    ( cd "$WL_PS_SIG" && npm ci ) || wl_die "npm ci failed in $WL_PS_SIG"
+    wl_say "WL_ALLOW_NPM_INSTALL=1 — running npm ci at the workspace root $WL_PS_INFRA"
+    ( cd "$WL_PS_INFRA" && npm_config_audit=false npm ci --no-fund ) || wl_die "npm ci failed in $WL_PS_INFRA"
     missing="$(wl_wilbur_missing_modules)"
     [ -z "$missing" ] || wl_die "npm ci finished but these still do not resolve: $(printf '%s' "$missing" | tr '\n' ' ')"
     wl_ok "wilbur dependencies installed"
-    # Save them so the next machine switch is free.
-    ( cd "$WL_PS_SIG" && tar -cf "$WL_WILBUR_MODULES_ARCHIVE" node_modules ) 2>/dev/null \
-      && wl_ok "saved node_modules to $WL_WILBUR_MODULES_ARCHIVE for the next machine switch"
+    # Save them so the next machine switch is free: the root node_modules and
+    # each workspace package's own, relative to the root.
+    ( cd "$WL_PS_INFRA" && tar -cf "$WL_WILBUR_MODULES_ARCHIVE" $(wl_wilbur_archive_list) ) 2>/dev/null \
+      && wl_ok "saved $(wl_wilbur_archive_list | tr '\n' ' ')to $WL_WILBUR_MODULES_ARCHIVE for the next machine switch"
     return 0
   fi
-  wl_die "Wilbur's dependencies are missing and there is no archive at $WL_WILBUR_MODULES_ARCHIVE. This happens after a CPU->GPU machine switch. Either re-run with WL_ALLOW_NPM_INSTALL=1 (this downloads on the GPU), or run 'cd $WL_PS_SIG && npm ci' on CPU first."
+  wl_die "Wilbur's dependencies are missing and the archive at $WL_WILBUR_MODULES_ARCHIVE is absent or did not supply them. This happens after a CPU->GPU machine switch. Either re-run with WL_ALLOW_NPM_INSTALL=1 (this downloads on the GPU), or run 'cd $WL_PS_SIG && npm ci' on CPU first."
 }
 
 # READY | RESTORABLE | MISSING, for the CPU readiness report.
