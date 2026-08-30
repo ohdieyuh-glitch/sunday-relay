@@ -352,14 +352,30 @@ def heart_topiary(ctx):
         x = 16.0 * math.sin(t) ** 3
         y = 13.0 * math.cos(t) - 5.0 * math.cos(2 * t) - 2.0 * math.cos(3 * t) - math.cos(4 * t)
         pts.append((x * 30.0, 0.0, y * 30.0 + 470.0))
-        rr.append(52.0)
+        rr.append(96.0)
     m.tube(pts, rr, sides=12)
+    # SCULPTED VOLUME, NOT A WIRE (PASS 09b). The founder's gap list has
+    # carried "heart topiary readability -- it only reads as a wire/outline"
+    # since PASS 07, and the recipe measures out exactly that: a 52 uu tube
+    # with ONE row of 66 uu leaf shells along it, so the frame was ~130 uu
+    # thick on a 1,124 uu heart -- 12% -- and 159 uu deep against 1,124 wide,
+    # which is a flat hoop however good the leaves on it are. In the reference
+    # boards the heart is a HEDGE clipped into a heart: you see through the
+    # middle, but the frame is a substantial body of foliage, nearer a quarter
+    # of the heart's width, with roses worked along its crown.
+    #
+    # The armature keeps its curve and its position. The frame is built out:
+    # the tube doubles, the shells nearly double, and they are laid in THREE
+    # rows offset in Y so the heart has depth as well as thickness. Leaf count
+    # per shell drops 26 -> 17 to pay for the extra rows, which costs nothing
+    # visible because there are now three times as many shells.
     for i in range(0, N, 2):
         t = 2.0 * math.pi * i / N
         x = 16.0 * math.sin(t) ** 3
         y = 13.0 * math.cos(t) - 5.0 * math.cos(2 * t) - 2.0 * math.cos(3 * t) - math.cos(4 * t)
-        _leaf_shell(m, (x * 30.0, 0.0, y * 30.0 + 470.0), (66.0, 60.0, 66.0), 26, 22.0,
-                    24400 + i, elev=(-0.9, 1.0), jitter=0.12, clump=3, droop=16.0)
+        for row, dy in enumerate((-78.0, 0.0, 78.0)):
+            _leaf_shell(m, (x * 30.0, dy, y * 30.0 + 470.0), (118.0, 104.0, 118.0), 17, 24.0,
+                        24400 + i + 811 * row, elev=(-0.9, 1.0), jitter=0.14, clump=3, droop=16.0)
     for i in range(14):
         t = 2.0 * math.pi * (i + 0.3) / 14.0
         x = 16.0 * math.sin(t) ** 3

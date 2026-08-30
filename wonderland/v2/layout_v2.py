@@ -899,6 +899,43 @@ def _flank(sgn, tag):
     out += _grove(sgn, sgn * 5450, 3650, 4400 if sgn > 0 else 4500, "%s_Grove" % tag)
     out += _mushroom_cluster(sgn, sgn * 4900, 6900, 4600 if sgn > 0 else 4700, "%s_Mush" % tag)
     out += _boundary(sgn, 7700, -1200, 8300, 4800, "%s_Edge" % tag)
+    # WONDERLAND, NOT A FORMAL GARDEN. The flanks as built read as a competent
+    # royal parterre and nothing in them says which world it is -- the boards
+    # list clocks, hearts, keys and tea things as the signatures, and the brief
+    # is equally clear that they need HIERARCHY rather than a gimmick every
+    # five metres. So: ONE major landmark per flank at the end of its walk,
+    # where the eye already travels; one small vignette beside the room; and an
+    # arch over the way in for vertical structure. Nothing else.
+    if sgn > 0:
+        # a clock monument, its face turned back down the walk
+        out += [
+            A("gate_pier", sgn * 3050, 6400, 0, s=0.55, mat="MI_V2_IvoryStone",
+              label="%s_ClockPier" % tag),
+            A("clock_ornate", sgn * 3050, 6285, 330, yaw=90, s=1.6, mat="MI_V2_Gold",
+              label="%s_Clock" % tag),
+            A("gate_finial_ball", sgn * 3050, 6400, 372, s=0.5, mat="MI_V2_Gold",
+              label="%s_ClockFinial" % tag),
+        ]
+    else:
+        # the heart, on the same beat on the other side
+        out += [
+            A("heart_topiary", sgn * 3050, 6400, 0, yaw=0, s=0.85, mat="MI_V2_LeafDark",
+              label="%s_Heart" % tag),
+            A("rose_bush", sgn * 3050, 6180, 60, s=0.8, mat="MI_V2_LeafMid",
+              label="%s_HeartRoses" % tag),
+        ]
+    out += [
+        # the tea vignette: a plinth beside the room with a pot and two cups,
+        # at the scale that reads as somebody left them there
+        A("tea_plinth", sgn * 5200, 1600, 0, s=0.9, mat="MI_V2_IvoryStone", label="%s_TeaPlinth" % tag),
+        A("tea_pot", sgn * 5200, 1600, 86, yaw=30 * sgn, s=0.55, mat="MI_V2_Ceramic", label="%s_TeaPot" % tag),
+        A("tea_cup", sgn * 5320, 1520, 86, yaw=-40 * sgn, s=0.5, mat="MI_V2_Ceramic", label="%s_TeaCupA" % tag),
+        A("tea_cup_small", sgn * 5090, 1690, 86, yaw=70 * sgn, s=0.5, mat="MI_V2_Ceramic", label="%s_TeaCupB" % tag),
+        # floral arch over the way in: floral_arch is 1094 along X, so yaw 90
+        # spans it ACROSS a walk that runs along X
+        A("floral_arch", sgn * 3115, 520, 0, yaw=90, s=0.6, mat="MI_V2_LeafMid",
+          label="%s_EntryFloralArch" % tag),
+    ]
     return out
 
 
