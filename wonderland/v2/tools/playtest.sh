@@ -103,7 +103,12 @@ cat <<EOF
   Click the page once so it takes the keyboard, then:
     W A S D / arrows   move        mouse   look
     shift (hold)       run         ctrl (hold)   walk
-    space              jump
+
+    SPACE              the LIVE TERMINAL
+    ESC                back to the world
+
+  The Relay Dog does not jump. Space is the front door: it opens the terminal
+  over the live world, and inside it Space types a space like anywhere else.
 
 EOF
 printf '%s\n' "$URL"
