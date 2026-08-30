@@ -170,7 +170,11 @@ LOOK = {
     # is neutral daylight; the reference reads as a warm late-morning sun, so
     # the KEY carries the warmth (a lit surface warms, sky-lit shade stays
     # cool) rather than a grade painting it on flat.
-    "sunPitch": -58.0, "sunYaw": -11.0, "sunLux": 60000.0, "sunTemperatureK": 5150.0,
+    # PASS 08b: 5150 K OVERSHOT. Measured on the PASS 08 frame against the
+    # same reference: the warm arc went from 1.6% to 36.2% of the frame where
+    # the reference holds 26.7%, and foreground chroma landed at 1.67x the
+    # reference. The direction was right and the amount was not. 5350 K.
+    "sunPitch": -58.0, "sunYaw": -11.0, "sunLux": 60000.0, "sunTemperatureK": 5350.0,
     # PASS 08: THE LIGHT BUDGET, not the exposure. Nothing in the frame
     # clips (0.01% above sRGB 240, the reference 0.00%) so the world is not
     # over-exposed -- it is UNSHADED: 9.9% of our pixels sit below sRGB 40
@@ -183,7 +187,12 @@ LOOK = {
     # skyLuminanceFactor's job and is already correct (upper sky p50
     # (109,141,173) against (95,118,171)), so the two are separated here
     # instead of one knob moving both.
-    "skyLightIntensity": 0.45, "exposureBias": 0.0,
+    # PASS 08b: 0.45 OVERSHOT too -- deep pixels went from 7.6% to 30.4%
+    # against the reference's 23.0%, and on ReverseCam03 the foreground hedge
+    # mass dropped from median 82 to 46. Shade that deep stops being shade and
+    # becomes the "dark masses swallowing architecture" the brief warns about.
+    # 0.58 keeps most of the shadow structure PASS 08 recovered.
+    "skyLightIntensity": 0.58, "exposureBias": 0.0,
     # PASS 05 (2026-08-28, gated WLV2_PASS05=1 like the earlier passes): the
     # vegetation's black interiors. V2_PASS_024 measured the canopies at luma
     # p10 0 / p50 3-12 against the reference's 17-19 / 40-63 WITH the sky dome
@@ -324,8 +333,10 @@ LOOK = {
     # the-lamp-posts-were-the-key-light), and the check for it is each
     # material's BRIGHTEST decile, not the frame mean.
     "bloomIntensity": 0.35, "bloomThreshold": 1.2,
-    "gradeShadows": (0.90, 0.85, 0.80), "gradeMidtones": (1.06, 1.00, 0.92),
-    "gradeHighlights": (1.03, 1.00, 0.95),
+    # PASS 08b: half the warm gain. See sunTemperatureK above -- the grade and
+    # the sun were both moved warm in PASS 08 and together they overshot.
+    "gradeShadows": (0.94, 0.90, 0.86), "gradeMidtones": (1.035, 1.00, 0.955),
+    "gradeHighlights": (1.015, 1.00, 0.975),
     # the panorama dome supplies the SKY: the lookup is computed from the view
     # direction (PASS 04d, 2026-08-28), so u = 0.5 faces yaw skyYawOffset
     # (90 = +Y, HeroCam0's forward) and the mesh's own UVs are irrelevant.

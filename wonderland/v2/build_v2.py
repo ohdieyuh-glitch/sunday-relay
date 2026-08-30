@@ -709,19 +709,29 @@ def lay_ground(placer, actors, eal, assets, mats, layers, plaza_only=False):
                     continue
                 variants = by_class[cls]
                 key = variants[int(LT.mk.rnd(r, c, 27) * len(variants)) % len(variants)]
-                blotch = LT.mk.rnd(r // 2, c // 3, 28) * 0.7 + LT.mk.rnd(r, c, 29) * 0.3
-                # PASS 08: four tints, and the darkest one is picked per SLAB
-                # rather than by the low-frequency blotch. The blotch alone
-                # gives a plaza large soft regions of one tint, which is the
-                # patchwork a real pavement has -- but it cannot put a dark
-                # stone next to a pale one, and that adjacency is what the
-                # measured tonal span (44 against the reference's 119) is
-                # short of. The blotch keeps the regions; a per-slab draw
-                # sprinkles the dark stone through all of them.
-                mat = ("MI_V2_PlazaCream" if blotch < 0.55
-                       else ("MI_V2_PlazaWarm" if blotch < 0.80 else "MI_V2_PlazaGrey"))
-                if LT.mk.rnd(r, c, 41) < 0.11:
-                    mat = "MI_V2_PlazaShade"
+                # THE THRESHOLDS DID NOT MEAN WHAT THEY SAID (PASS 08b).
+                #
+                # The tint used to be chosen from `blotch`, a weighted sum
+                # 0.7*U1 + 0.3*U2 of two uniform draws, against thresholds
+                # picked as if blotch were itself uniform. A sum of uniforms
+                # is not uniform -- it concentrates around its mean -- so the
+                # tail categories were starved. Counted off the packaged
+                # runtime's own batch report, the plaza came out Cream 59.3%,
+                # Warm 30.2%, Grey 3.7%, Shade 6.8% against an intended
+                # 49/22/18/11: the grey stone, meant to be nearly a fifth of
+                # the pavement, was one slab in twenty-seven.
+                #
+                # A single uniform per-slab draw makes each threshold mean its
+                # own share. The low-frequency blotch is dropped rather than
+                # recalibrated: its purpose was soft regions of one tint, and
+                # across three passes it has never been visible in a frame,
+                # while what the measurements actually want -- a dark stone
+                # beside a pale one -- is exactly what it prevents.
+                u = LT.mk.rnd(r, c, 28)
+                mat = ("MI_V2_PlazaCream" if u < 0.34
+                       else "MI_V2_PlazaWarm" if u < 0.60
+                       else "MI_V2_PlazaGrey" if u < 0.84
+                       else "MI_V2_PlazaShade")
                 # jitter small enough that a 2 m runner cannot overlap its
                 # neighbour's chamfer (PASS 01/01b showed dark wedge "cracks"
                 # at +/-1.2 deg): +/-0.4 deg, +/-0.8 uu.

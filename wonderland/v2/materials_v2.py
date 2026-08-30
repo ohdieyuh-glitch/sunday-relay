@@ -41,15 +41,15 @@ INSTANCES = {
     # shading that the albedo cannot.
     "MI_V2_IvoryStone": ("plaster", (0.56, 0.51, 0.43), 0.0, 0.58, 0.50, 0.32, None, 0.0),
     "MI_V2_Stone":      ("ashlar",  (0.44, 0.40, 0.34), 0.0, 0.82, 0.80, 0.30, None, 0.0),
-    "MI_V2_PlazaCream": ("plaza",   (0.48, 0.45, 0.38), 0.0, 0.74, 0.85, 0.30, None, 0.0),
-    "MI_V2_PlazaGrey":  ("plaza",   (0.34, 0.34, 0.31), 0.0, 0.76, 0.85, 0.30, None, 0.0),
+    "MI_V2_PlazaCream": ("plaza",   (0.50, 0.47, 0.40), 0.0, 0.74, 0.85, 0.30, None, 0.0),
+    "MI_V2_PlazaGrey":  ("plaza",   (0.40, 0.39, 0.35), 0.0, 0.76, 0.85, 0.30, None, 0.0),
     # PASS 01: a warmer cream so the running bond carries three tints in a
     # blotch, and a cream kerb a hair darker than the slabs.
     "MI_V2_PlazaWarm":  ("plaza",   (0.56, 0.48, 0.35), 0.0, 0.74, 0.85, 0.30, None, 0.0),
     # PASS 08: a fourth, DARK stone. Three tints inside 0.18 of each other
     # cannot make a course read as separate stones however good the bond is;
     # the reference's paving has stones two stops apart sitting side by side.
-    "MI_V2_PlazaShade": ("plaza",   (0.24, 0.22, 0.19), 0.0, 0.78, 0.85, 0.30, None, 0.0),
+    "MI_V2_PlazaShade": ("plaza",   (0.30, 0.28, 0.24), 0.0, 0.78, 0.85, 0.30, None, 0.0),
     "MI_V2_Kerb":       ("plaza",   (0.46, 0.42, 0.35), 0.0, 0.70, 0.75, 0.30, None, 0.0),
     # the central path in the founder's view is PALE grey-blue stone, a step
     # cooler and a touch darker than the cream plaza -- not a dark road
@@ -75,8 +75,14 @@ INSTANCES = {
     # lighter) and move to a warm, natural range. This does not fill the empty
     # ground -- that is authored content and its own pass -- it stops the
     # emptiness being the loudest colour in the frame.
-    "MI_V2_Moss":       ("sward",   (0.15, 0.17, 0.09), 0.0, 0.82, 0.60, 0.20, None, 0.0),
-    "MI_V2_Lawn":       ("sward",   (0.21, 0.25, 0.11), 0.0, 0.86, 0.60, 0.20, None, 0.0),
+    # PASS 08b: PASS 08 traded a green void for a BROWN one. On SkylineCam06
+    # the green arc fell 45.5% -> 19.3%, which is the intended direction, but
+    # it moved into the warm arc (2.1% -> 27.0%) and the ground read as barren
+    # dirt rather than meadow -- worse, not better, for that camera. The
+    # desaturation was right; taking the green out from under a warm sun and a
+    # warm grade at the same time was not. Green restored, saturation kept low.
+    "MI_V2_Moss":       ("sward",   (0.13, 0.18, 0.10), 0.0, 0.82, 0.60, 0.20, None, 0.0),
+    "MI_V2_Lawn":       ("sward",   (0.18, 0.25, 0.12), 0.0, 0.86, 0.60, 0.20, None, 0.0),
     "MI_V2_Soil":       ("sward",   (0.20, 0.15, 0.10), 0.0, 0.90, 0.50, 0.15, None, 0.0),
     # ---- gold: metallic, restrained, aged in the recesses ---------------------
     "MI_V2_Gold":       ("metal",   (0.92, 0.70, 0.36), 0.90, 0.42, 0.45, 0.60, None, 0.0),
@@ -121,8 +127,15 @@ INSTANCES = {
     # CONSTANT (the founder's no-global-pulse rule) and safe against the
     # emissive-area trap because this world's exposure is pinned, so more
     # emissive area cannot re-meter the frame.
-    "MI_V2_Cloud":      ("cloud",   (0.88, 0.88, 0.90), 0.0, 1.00, 0.0, 0.02, (0.62, 0.66, 0.76), 2200.0),
-    "MI_V2_CloudVeil":  ("cloud",   (0.82, 0.83, 0.88), 0.0, 1.00, 0.0, 0.02, (0.58, 0.62, 0.74), 1500.0),
+    # PASS 08b: whiter, and less self-lit. The first clouds read grey and flat.
+    # Grey because at 2.6-13.5 km the height fog blends them toward its pale
+    # inscattering; flat because a constant emissive lifts the shaded side
+    # toward the lit one, which is the opposite of what gives a cumulus its
+    # form. Albedo up so the sun does more of the work and the fog has
+    # something brighter to wash, emissive down so the shaded side stays a
+    # shaded side.
+    "MI_V2_Cloud":      ("cloud",   (0.96, 0.96, 0.97), 0.0, 1.00, 0.0, 0.02, (0.60, 0.64, 0.75), 1300.0),
+    "MI_V2_CloudVeil":  ("cloud",   (0.90, 0.91, 0.95), 0.0, 1.00, 0.0, 0.02, (0.56, 0.60, 0.72), 950.0),
     # ---- portal (M_V2_Portal): restrained -------------------------------------
     "MI_V2_PortalRunes": ("runes",  (0.62, 0.40, 0.92), 0.0, 0.40, 0.0, 0.2, (0.62, 0.40, 0.92), 1.0),
     "MI_V2_PortalGlow":  ("runes",  (0.68, 0.46, 0.94), 0.0, 0.40, 0.0, 0.2, (0.68, 0.46, 0.94), 1.2),

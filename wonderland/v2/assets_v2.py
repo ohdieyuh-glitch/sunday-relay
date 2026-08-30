@@ -1057,9 +1057,17 @@ def _billow(m, lobes, seed):
     silhouette rounded rather than lumpy."""
     for (x, y, z, r) in lobes:
         m.sphere(r, at=(x, y, z), steps=12)
-    m.perlin(0.16 * max(r for (_, _, _, r) in lobes), 0.0022, seed=seed)
-    m.smooth(2, 0.32)
-    m.split_normals(70.0)
+    # PASS 08b: MORE CAULIFLOWER. The first cumulus rendered as smooth grey
+    # blobs -- recognisably clouds, and recognisably clip-art. A cumulus reads
+    # as a cumulus because its lit side breaks into many small bulges that
+    # each catch the sun; one gentle perlin over a sphere cluster cannot do
+    # that. Two octaves: a coarse one that deforms the lobes and a fine one
+    # that roughens the surface they present to the light.
+    big = max(r for (_, _, _, r) in lobes)
+    m.perlin(0.24 * big, 0.0016, seed=seed)
+    m.perlin(0.075 * big, 0.0075, seed=seed + 17)
+    m.smooth(1, 0.22)
+    m.split_normals(52.0)
     return m
 
 
