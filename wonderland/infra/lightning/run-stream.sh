@@ -201,11 +201,18 @@ start_app() {
   # PixelStreaming2.WebRTC.* exists in this build, PixelStreaming.WebRTC.* (the
   # PS1 spelling) does not, and a CVar that does not exist fails silently.
   if [ "${WL_STREAM_TUNE:-1}" = "1" ]; then
+    # COMMAS. -ExecCmds separates commands with commas, and the render profile
+    # next door has always emitted them that way. These four were joined with
+    # pipes, so the engine received one malformed command and applied NONE of
+    # them -- silently, because an unknown console command is not an error.
+    # Measured from a browser afterwards: 17.3 Mbps at 720p against a 6 Mbps
+    # cap that was never in force. The resolution drop is what had helped; the
+    # ceiling had done nothing at all.
     local tune="PixelStreaming2.WebRTC.StartBitrate ${WL_PS_START_BITRATE:-2000000}"
-    tune="$tune|PixelStreaming2.WebRTC.MaxBitrate ${WL_PS_MAX_BITRATE:-6000000}"
-    tune="$tune|PixelStreaming2.WebRTC.MinBitrate ${WL_PS_MIN_BITRATE:-400000}"
-    tune="$tune|PixelStreaming2.WebRTC.Fps ${WL_PS_FPS:-60}"
-    if [ -n "${exec_cmds:-}" ]; then exec_cmds="$exec_cmds|$tune"; else exec_cmds="$tune"; fi
+    tune="$tune,PixelStreaming2.WebRTC.MaxBitrate ${WL_PS_MAX_BITRATE:-6000000}"
+    tune="$tune,PixelStreaming2.WebRTC.MinBitrate ${WL_PS_MIN_BITRATE:-400000}"
+    tune="$tune,PixelStreaming2.WebRTC.Fps ${WL_PS_FPS:-60}"
+    if [ -n "${exec_cmds:-}" ]; then exec_cmds="$exec_cmds,$tune"; else exec_cmds="$tune"; fi
     wl_say "stream tuned for a distant viewer: start ${WL_PS_START_BITRATE:-2000000}, max ${WL_PS_MAX_BITRATE:-6000000}, ${WL_PS_FPS:-60} fps at ${WL_RES_X}x${WL_RES_Y}"
   fi
   local exec_arg=()
