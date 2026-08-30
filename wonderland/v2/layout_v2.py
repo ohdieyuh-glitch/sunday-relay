@@ -3372,6 +3372,94 @@ NORTH_WAY = ((-25.0, 6925.0), (425.0, 9475.0), (1775.0, 11275.0), (1175.0, 15025
              (1025.0, 20725.0), (9875.0, 19225.0), (10925.0, 20875.0), (11075.0, 23125.0))
 
 
+def _crosses_quarter(x0, y0, x1, y1, sites, skip=1200.0):
+    """Does this leg pass through a quarter it does not end at?
+
+    Written once because three different road builders need it and the first
+    two each learned it the hard way -- the road audit found a ring leg
+    through C40_clockyard, and the north way's first draft went through an
+    approved hedge wall.
+    """
+    bx, by = x1 - x0, y1 - y0
+    ll = bx * bx + by * by or 1.0
+    for s in sites:
+        if math.hypot(s["x"] - x0, s["y"] - y0) < skip or \
+           math.hypot(s["x"] - x1, s["y"] - y1) < skip:
+            continue
+        t = max(0.0, min(1.0, ((s["x"] - x0) * bx + (s["y"] - y0) * by) / ll))
+        d = math.hypot(s["x"] - (x0 + t * bx), s["y"] - (y0 + t * by))
+        if d < _body(s["kind"], _squeezed(HIER(s["x"], s["y"]),
+                                          s.get("squeeze", 1.0))) * 0.85:
+            return True
+    return False
+
+
+def _district_lanes(sites):
+    """LANES INSIDE A DISTRICT, so a district is a neighbourhood.
+
+    The road tree joins every quarter to the nearest one closer in, and the
+    ring closes loops at two radii. Both are about getting ACROSS the world.
+    Neither makes the seven clockyards of the Clock Quarter feel like one
+    place: they are seven separate destinations that happen to share a name.
+
+    A lane is narrower than a road (1.8 m against 3), it links quarters of the
+    same district in a nearest-neighbour chain, and it skips any leg that
+    would cross a third quarter or that a road already covers. The boards'
+    stone-path panel is exactly this: the narrow way between two garden rooms,
+    not the avenue between two districts.
+    """
+    by_district = {}
+    for s in sites:
+        by_district.setdefault(s.get("district", "?"), []).append(s)
+    out = []
+    n_lane = 0
+    for name, group in sorted(by_district.items()):
+        if len(group) < 2:
+            continue
+        # a nearest-neighbour chain from the innermost, which is how a
+        # neighbourhood actually grew rather than how a graph is drawn
+        rest = sorted(group, key=lambda s: math.hypot(s["x"], s["y"]))
+        chain = [rest.pop(0)]
+        while rest:
+            last = chain[-1]
+            nxt = min(rest, key=lambda s: math.hypot(s["x"] - last["x"], s["y"] - last["y"]))
+            rest.remove(nxt)
+            chain.append(nxt)
+        for i in range(len(chain) - 1):
+            a, b = chain[i], chain[i + 1]
+            d = math.hypot(b["x"] - a["x"], b["y"] - a["y"])
+            if d > 16000.0:
+                continue                      # not a lane, a journey
+            ra = _reach(a["kind"], _squeezed(HIER(a["x"], a["y"]), a.get("squeeze", 1.0)))
+            rb = _reach(b["kind"], _squeezed(HIER(b["x"], b["y"]), b.get("squeeze", 1.0)))
+            ux, uy = (b["x"] - a["x"]) / d, (b["y"] - a["y"]) / d
+            x0, y0 = a["x"] + ux * ra * 0.92, a["y"] + uy * ra * 0.92
+            x1, y1 = b["x"] - ux * rb * 0.92, b["y"] - uy * rb * 0.92
+            if math.hypot(x1 - x0, y1 - y0) < 900.0:
+                continue                      # they already touch
+            if _crosses_quarter(x0, y0, x1, y1, sites):
+                continue
+            n_lane += 1
+            tag = "Lane%02d" % n_lane
+            out += _road(x0, y0, x1, y1, 180.0, tag,
+                         n=max(1, int(math.hypot(x1 - x0, y1 - y0) / 1800.0)))
+            out += _road_verge(x0, y0, x1, y1, tag, 6100 + 23 * n_lane)
+            # a waymark at each end, the garden version: a plinth and a ball
+            for k, (px, py) in enumerate(((x0, y0), (x1, y1))):
+                out += [
+                    A("pedestal_finial", px - uy * 220.0, py + ux * 220.0, 0, s=0.62,
+                      mat="MI_V2_IvoryStone", label="%s_Post%d" % (tag, k)),
+                    A("gate_finial_ball", px - uy * 220.0, py + ux * 220.0, 88.0, s=0.36,
+                      mat="MI_V2_Gold", label="%s_Ball%d" % (tag, k)),
+                ]
+    LANE_NOTES.append("district lanes: %d" % n_lane)
+    return out
+
+
+#: Filled by _district_lanes, printed by the layout gate.
+LANE_NOTES = []
+
+
 def _north_way():
     """THE WAY PAST THE CASTLE.
 
@@ -3530,6 +3618,7 @@ def _outer_world():
         out += _quarter_edge(s, H)
     out += _road_tree(SITES)
     out += _ring_roads(SITES)
+    out += _district_lanes(SITES)
     out += _north_way()
     out += _country()
     out += _district_cam_foregrounds()
@@ -4181,9 +4270,91 @@ PROCESSIONAL_BORDER = _band("V2_Garden", _processional_border())
 #: counted 305 new placements and passed while the generator placed four. A
 #: gate reading a different list from the builder reports the world it was
 #: shown, not the world that gets made.
+# ---------------------------------------------------------------------------
+# THE GROUND BESIDE THE CASTLE APPROACH  (ledger: "empty lawn between the
+# garden gates and the castle", carried HIGH since the environment checkpoint)
+# ---------------------------------------------------------------------------
+#
+# Measured, per hectare of solid placements:
+#
+#   the approach corridor      |x| < 25 m, y 17-95 m     713
+#   LEFT of it                 x 25-70 m                 362
+#   RIGHT of it                x -70..-25 m              330
+#   the flank beside the plaza x 25-70 m, y -60..17 m    505
+#
+# So the ground either side of the processional way is 1.4x thinner than the
+# same offset beside the plaza -- the founder's complaint, in numbers. W1 gave
+# the approach a fountain court, hedge masses and cross-axes and those are on
+# the AXIS; its shoulders were never planted.
+#
+# This is an ADDED BAND, not an edit. Everything W1 and the flanks put down is
+# untouched and still hashes identical; this fills between them, in their own
+# language, and stops 28 m clear of the corridor the layout gate protects.
+
+def _approach_sides():
+    out = []
+    for side in (1, -1):
+        tag = "ApproachSide%s" % ("L" if side > 0 else "R")
+        seed = 3300 if side > 0 else 3400
+        for i in range(30):
+            u = (i + 0.5) / 30.0
+            y = 2300.0 + 6500.0 * u + 400.0 * (_rnd(i, seed, 1) - 0.5)
+            x = side * (2900.0 + 3500.0 * _rnd(i, seed, 2))
+            pick = _rnd(i, seed, 3)
+            if pick < 0.26:
+                t = 1.05 + 0.4 * _rnd(i, seed, 4)
+                out += [
+                    A("tree_mature_trunk", x, y, 0, yaw=_rnd(i, seed, 5) * 360.0, s=t,
+                      mat="MI_V2_Bark", label="%s_Trunk%d" % (tag, i)),
+                    A("canopy_large", x, y, 1320.0 * t, yaw=_rnd(i, seed, 6) * 360.0,
+                      s=t * 1.12,
+                      mat=("MI_V2_LeafMid", "MI_V2_LeafDark", "MI_V2_LeafLight")[i % 3],
+                      label="%s_Canopy%d" % (tag, i)),
+                ]
+            elif pick < 0.50:
+                out.append(A("hedge_mass", x, y, 0, yaw=_rnd(i, seed, 7) * 40.0,
+                             s=1.1 + 0.5 * _rnd(i, seed, 8),
+                             mat=("MI_V2_LeafDark", "MI_V2_LeafMid")[i % 2],
+                             label="%s_Hedge%d" % (tag, i)))
+            elif pick < 0.70:
+                out += _ground_patch(x, y, 0, _rnd(i, seed, 9) * 360.0, 1.1,
+                                     ("MI_V2_PetalPink", "MI_V2_PetalViolet",
+                                      "MI_V2_PetalWhite", "MI_V2_RosePink")[i % 4],
+                                     "%s_Bed%d" % (tag, i))
+            elif pick < 0.86:
+                out.append(A(("topiary_cone_plain", "topiary_ball", "shrub_flowering")[i % 3],
+                             x, y, 0, yaw=30 * i,
+                             s=0.85 + 0.35 * _rnd(i, seed, 10),
+                             mat=("MI_V2_LeafDark", "MI_V2_LeafMid")[i % 2],
+                             label="%s_Green%d" % (tag, i)))
+            else:
+                # ornament on the processional way's shoulder: the boards put
+                # plinthed urns down the length of every royal walk
+                out += [
+                    A("pedestal_finial", x, y, 0, s=0.85, mat="MI_V2_IvoryStone",
+                      label="%s_Plinth%d" % (tag, i)),
+                    A("garden_urn", x, y, 124.0, s=0.55, mat="MI_V2_Ceramic",
+                      label="%s_Urn%d" % (tag, i)),
+                    A("flower_cluster", x, y, 210.0, s=0.45,
+                      mat=("MI_V2_PetalPink", "MI_V2_Lavender")[i % 2],
+                      label="%s_UrnFlowers%d" % (tag, i)),
+                ]
+        # a lawn under it, so the band has its own tone rather than the slab's
+        for k in range(3):
+            out.append(A("garden_lawn", side * 4600.0, 3200.0 + 2700.0 * k, -2,
+                         yaw=90.0 * (k % 2), sxyz=(0.62, 0.52, 1.0),
+                         mat=("MI_V2_Lawn", "MI_V2_Meadow", "MI_V2_Lawn")[k],
+                         label="%s_Ground%d" % (tag, k)))
+    return _declutter(out, also=[it for band in (GARDEN, PALACE, FLANKS, REARWORLD)
+                                 for it in band if it["asset"] in _PROTECT])
+
+
+APPROACH_SIDES = _band("V2_Garden", _approach_sides())
+
+
 BUILD_BANDS = [FOREGROUND, COURTYARD, GARDEN, PALACE, FLANK_GROUND, FLANKS,
                REARWORLD, CAM_FOREGROUNDS, GROUND_QUILT, OUTER_WORLD, PLAZA_ORNAMENT,
-               PROCESSIONAL_BORDER, HORIZON]
+               PROCESSIONAL_BORDER, HORIZON, APPROACH_SIDES]
 
 #: Everything the layout declares: what the builder walks, plus the two bands
 #: it places by their own rules (SKY is the dome/atmosphere, HOVER is lifted

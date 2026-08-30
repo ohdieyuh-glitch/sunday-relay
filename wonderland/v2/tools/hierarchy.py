@@ -379,7 +379,12 @@ def main():
     roads = {}
     for p in LAYOUT.ALL:
         lab = p.get("label") or ""
-        if p["asset"] != "terrace_platform" or ("_Road" not in lab and "RingRoad" not in lab):
+        # ANY road, by the one thing they all share. This matched "_Road" and
+        # "RingRoad" only, so the north way and the district lanes -- 32 roads
+        # between them -- were never audited for crossings at all. Every road
+        # this layout lays comes out of `_road`, and `_road` names its pieces
+        # "<tag>_Seg<n>".
+        if p["asset"] != "terrace_platform" or "_Seg" not in lab:
             continue
         roads.setdefault(lab.rsplit("_Seg", 1)[0], []).append(p["pos"])
     crossing, segs = [], 0
