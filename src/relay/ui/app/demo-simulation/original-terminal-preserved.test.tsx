@@ -79,7 +79,10 @@ describe('Demo Simulation keeps the original Live Terminal renderer', () => {
     const relay = screen.getByRole('region', { name: 'JULIUS activity' });
     expect(architect.textContent).toContain('Prompt Architect');
     expect(coding.textContent).toContain('Coding Agent');
-    expect(relay.textContent).toMatch(/Reviewer|Relay/);
+    // The catch-all lane carries the orchestration rows, and those are
+    // JULIUS since the 2026-08-30 canon correction; a Reviewer row can land
+    // here too when no reviewer lane is showing.
+    expect(relay.textContent).toMatch(/Reviewer|Julius/);
 
     // Truthful compact source marker inside the existing status row.
     expect(after.textContent).toContain('DEMO SIMULATION');

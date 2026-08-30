@@ -126,7 +126,11 @@ describe('live agent work (founder photo storyline)', () => {
 
   it('Relay preserves context and compiles the handoff with the context id', () => {
     const html = render('implementing');
-    expect(html).toContain('Relay:');
+    // JULIUS, not Relay (founder canon 2026-08-30): the orchestration rows are
+    // the harness above the workers speaking, and the interface has to make
+    // that hierarchy readable.
+    expect(html).toContain('Julius:');
+    expect(html).not.toContain('Relay:');
     expect(html).toContain('context preserved');
     expect(html).toContain('handoff compiled');
     expect(html).toContain('Architect → Coding Agent transition successful');

@@ -1,0 +1,197 @@
+/* ==========================================================================
+   WONDERLAND PLAYER — the streamed world, with the Live Terminal over it.
+   
+   The terminal is the founder-approved Relay panel, not a new design: the
+   same tokens, the same letterspaced identity, the same traffic-light chrome,
+   the same stacked role sections with gold squares and dim sub-lines, the
+   same `>_` prompt. It is drawn here in plain CSS instead of React because
+   this page has no bundler and must load next to a Pixel Streaming client --
+   so the VALUES are copied deliberately from
+   src/relay/ui/project-workspace/relay-project-workspace.css and any change
+   to the approved look belongs in both.
+   
+   The one thing that is NOT the same: this panel floats over a live world.
+   It is translucent and rectangular, so Wonderland stays visible behind and
+   around it. Not cards, not tabs, not columns, not a HUD.
+   ========================================================================== */
+
+:root {
+  --wl-bg: #07080b;
+  --wl-panel: #0b0d12;
+  --wl-line: #1c2230;
+  --wl-gold: #d9a441;
+  --wl-gold-dim: rgba(217, 164, 65, 0.4);
+  --wl-cream: #ece7dd;
+  --wl-dim: #8b8578;
+  --wl-faint: #5d584e;
+  --wl-green: #6fbf73;
+  --wl-mono: 'Fira Code', ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+* { box-sizing: border-box; }
+html, body {
+  margin: 0; height: 100%; background: var(--wl-bg); color: var(--wl-cream);
+  font-family: var(--wl-mono); font-size: 14px; line-height: 1.55;
+  /* The world owns the viewport. Nothing here scrolls the page -- which is
+     also the second half of the Space-scroll fix in keys.js. */
+  overflow: hidden;
+}
+
+/* ----------------------------------------------------------------- world */
+#wl-world {
+  position: fixed; inset: 0; background: #05060a;
+  display: flex; align-items: center; justify-content: center;
+}
+#wl-video { width: 100%; height: 100%; object-fit: contain; background: #05060a; }
+/* The streamed canvas must be focusable so "world focus" is a real thing the
+   browser agrees with, and not something this page merely believes. */
+#wl-world:focus { outline: none; }
+#wl-world:focus-visible { outline: 2px solid var(--wl-gold-dim); outline-offset: -2px; }
+
+/* The one piece of chrome over the world when the terminal is closed. */
+#wl-hint {
+  position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%);
+  font-size: 10px; letter-spacing: 0.18em; color: var(--wl-cream);
+  background: rgba(7, 8, 11, 0.66); border: 1px solid var(--wl-gold-dim);
+  padding: 6px 14px; pointer-events: none;
+  transition: opacity 0.4s ease;
+}
+#wl-hint kbd {
+  font: inherit; color: var(--wl-gold); border: 1px solid var(--wl-gold-dim);
+  padding: 0 5px; margin-right: 4px;
+}
+body[data-terminal='open'] #wl-hint { opacity: 0; }
+
+/* -------------------------------------------------------------- terminal */
+/* A rectangle over the world, not a takeover: the world reads around all
+   four edges, and through the panel itself. */
+#wl-terminal {
+  position: fixed; inset: 0; display: none;
+  align-items: center; justify-content: center;
+  padding: 2vh 3vw;
+  /* No full-screen scrim: dimming the whole frame would hide the world the
+     participant is standing in, and the world is the point. */
+  pointer-events: none;
+}
+body[data-terminal='open'] #wl-terminal { display: flex; }
+
+.wl-tm-window {
+  pointer-events: auto;
+  width: min(1100px, 100%); max-height: 96vh;
+  display: flex; flex-direction: column;
+  border: 1px solid var(--wl-line); border-radius: 14px;
+  background: rgba(11, 13, 18, 0.82);
+  backdrop-filter: blur(9px);
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.55);
+  padding: 0 22px 14px; overflow: hidden;
+}
+
+.wl-tm-titlebar {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap;
+  border-bottom: 1px solid var(--wl-line); padding: 12px 0 10px;
+}
+.wl-tm-lights { display: inline-flex; align-items: center; gap: 8px; }
+.wl-tm-light { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
+.wl-tm-light--r { background: #d9564a; }
+.wl-tm-light--y { background: #e0b25c; }
+.wl-tm-light--g { background: #58b862; }
+.wl-tm-brand { font-size: 12px; letter-spacing: 0.28em; color: var(--wl-cream); }
+.wl-tm-chip {
+  font-size: 9px; letter-spacing: 0.16em; color: var(--wl-gold);
+  border: 1px solid var(--wl-gold-dim); padding: 3px 9px;
+}
+
+.wl-tm-statusrow {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap; padding: 9px 0 3px;
+}
+.wl-tm-left { display: inline-flex; align-items: center; gap: 14px; }
+.wl-tm-live {
+  font-size: 10px; letter-spacing: 0.16em; padding: 4px 10px;
+  border: 1px solid var(--wl-line); color: var(--wl-dim);
+}
+.wl-tm-live--on { color: var(--wl-green); border-color: rgba(111, 191, 115, 0.5); }
+.wl-tm-mission { font-size: 11px; letter-spacing: 0.14em; color: var(--wl-cream); }
+.wl-tm-meta { display: inline-flex; gap: 18px; flex-wrap: wrap; font-size: 11px; }
+.wl-tm-metakey { color: var(--wl-gold); letter-spacing: 0.1em; }
+
+/* Stacked role sections -- one per role, in order. Not tabs, not columns. */
+.wl-tm-panels {
+  display: flex; flex-direction: column; gap: 8px; padding: 5px 0;
+  overflow-y: auto; min-height: 0;
+}
+.wl-tmpanel {
+  border: 1px solid var(--wl-gold-dim); border-radius: 8px;
+  background: rgba(11, 13, 18, 0.45);
+}
+.wl-tmpanel-head {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: 10px; flex-wrap: wrap;
+  padding: 8px 16px; border-bottom: 1px solid var(--wl-line);
+}
+.wl-tmpanel-title {
+  font-size: 12px; font-weight: 700; letter-spacing: 0.2em; color: var(--wl-gold);
+}
+.wl-tmpanel-status { font-size: 10px; letter-spacing: 0.18em; color: var(--wl-gold); }
+.wl-tmpanel-feed { list-style: none; margin: 0; padding: 4px 16px 8px; }
+.wl-tmpanel-empty {
+  margin: 0; padding: 8px 16px 10px; font-size: 11px; color: var(--wl-faint);
+}
+
+.wl-tmrow {
+  position: relative; display: flex; gap: 12px; align-items: baseline; padding: 5px 0;
+}
+.wl-tmrow::before {
+  content: ''; position: absolute; left: 4px; top: 26px; bottom: -4px;
+  width: 1px; background: rgba(217, 164, 65, 0.16);
+}
+.wl-tmrow:last-child::before { display: none; }
+.wl-tmrow-square { color: var(--wl-gold); font-size: 9px; flex: 0 0 auto; }
+.wl-tmrow--done .wl-tmrow-square,
+.wl-tmrow--evidence .wl-tmrow-square { color: var(--wl-green); }
+.wl-tmrow-time { color: var(--wl-faint); font-size: 11px; min-width: 62px; }
+.wl-tmrow-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.wl-tmrow-headline { margin: 0; font-size: 13px; color: var(--wl-cream); overflow-wrap: anywhere; }
+.wl-tmrow--done .wl-tmrow-headline,
+.wl-tmrow--evidence .wl-tmrow-headline { color: var(--wl-green); }
+.wl-tmrow-role { color: var(--wl-gold); }
+.wl-tmrow-detail { margin: 0; font-size: 11px; color: var(--wl-dim); overflow-wrap: anywhere; }
+.wl-tmrow-op {
+  font-size: 10px; letter-spacing: 0.08em; color: var(--wl-gold);
+  flex: 0 0 auto; max-width: 40%; text-align: right;
+}
+
+.wl-tm-input {
+  display: flex; align-items: center; gap: 10px;
+  border: 1px solid var(--wl-gold-dim); border-radius: 8px;
+  padding: 5px 5px 5px 14px; margin: 7px 0 9px;
+}
+.wl-tm-prompt { color: var(--wl-gold); letter-spacing: 0.06em; }
+.wl-tm-input input {
+  flex: 1; min-width: 0; background: transparent; color: var(--wl-cream);
+  border: 0; font-family: var(--wl-mono); font-size: 13px; padding: 8px 0;
+}
+.wl-tm-input input:focus-visible { outline: 2px solid var(--wl-gold); outline-offset: 1px; }
+.wl-tm-send {
+  font-family: var(--wl-mono); font-size: 10px; letter-spacing: 0.14em;
+  color: var(--wl-gold); background: transparent;
+  border: 1px solid var(--wl-gold-dim); border-radius: 6px;
+  padding: 8px 12px; cursor: pointer;
+}
+.wl-tm-send:hover, .wl-tm-send:focus-visible { color: var(--wl-cream); border-color: var(--wl-gold); }
+
+.wl-tm-footer {
+  display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+  border-top: 1px solid var(--wl-line); padding-top: 8px;
+  font-size: 10px; letter-spacing: 0.1em; color: var(--wl-faint);
+}
+
+@media (max-width: 720px) {
+  .wl-tm-window { padding: 0 14px 12px; max-height: 96vh; }
+  .wl-tmrow { flex-wrap: wrap; }
+  .wl-tmrow-op { max-width: 100%; text-align: left; }
+}
+@media (prefers-reduced-motion: reduce) {
+  #wl-hint { transition: none; }
+}
