@@ -487,9 +487,23 @@ def assign_layer(actor, band, layers, sub_cache=[None]):
 
 #: Repeated small assets are INSTANCED through the C++ batch actor rather than
 #: spawned as actors: one draw per (mesh, material) instead of one per plant.
-BATCHABLE = {"ground_flowers", "flower_cluster", "rose_bloom", "hedge_block", "hedge_mass", "rose_bush",
-             "shrub_flowering", "topiary_ball", "mushroom_small", "blossom_cluster", "vine_wall", "ivy_drape",
-             "side_steps", "retaining_wall", "balustrade"}
+#: PASS 19: kerb_stone, garden_wall, ground_blooms and lavender_heads join the
+#: batch. The district went from 787 placements to 4,410 building the outer
+#: world, and a count of what it is made of says where the cost went:
+#: kerb_stone 290, hedge_block 267, flower_cluster 266, garden_wall 266,
+#: shrub_flowering 203, ground_flowers 202, ground_blooms 196. Four of those
+#: seven were spawning as individual StaticMeshActors -- about 900 of them --
+#: because nobody added them here when they started being placed in bulk.
+#: The brief asks for instancing as density rises, and this is the whole of
+#: it: one line, ~900 actors becoming a handful of instanced batches.
+#:
+#: terrace_platform is deliberately NOT here. It is paving a participant walks
+#: on, batches are built at BeginPlay, and this project has already lost a Dog
+#: through flagstones that did not exist yet in the frame it spawned.
+BATCHABLE = {"ground_flowers", "ground_blooms", "flower_cluster", "rose_bloom", "hedge_block",
+             "hedge_mass", "rose_bush", "shrub_flowering", "topiary_ball", "mushroom_small",
+             "blossom_cluster", "vine_wall", "ivy_drape", "side_steps", "retaining_wall",
+             "balustrade", "kerb_stone", "garden_wall", "lavender_heads"}
 
 
 class Placer(object):
