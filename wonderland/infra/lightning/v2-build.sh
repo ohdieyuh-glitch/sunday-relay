@@ -12,10 +12,24 @@
 #   grep -E "V2 (SUMMARY|EMPTY MAP|ASSETS|MESH BACKEND)|GS CAPABILITY|MARBLE" <log>
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
+# CAPTURED BEFORE common.sh, WHICH ALREADY DEFAULTED IT.
+#
+# common.sh exports WL_BRANCH=relay/wonderland-marble, so the
+# `${WL_BRANCH:-relay/wonderland-v2}` that used to stand below the source
+# could never fire: the variable was always already set. This script's own
+# header says it pins the branch, and for as long as that line stood the
+# header was false -- every v2-build refused at the branch gate with
+# "asked for relay/wonderland-marble" while the checkout was correct.
+#
+# The gate was right to refuse; it is the reason this was a stopped build and
+# not a marble package labelled as V2. Keeping the distinction between "the
+# caller asked for a branch" and "common.sh filled one in" is what makes the
+# default reachable again.
+_WL_BRANCH_ASKED="${WL_BRANCH:-}"
 # shellcheck source=common.sh
 . "$HERE/common.sh"
 
-export WL_BRANCH="${WL_BRANCH:-relay/wonderland-v2}"
+export WL_BRANCH="${_WL_BRANCH_ASKED:-relay/wonderland-v2}"
 export WL_GENERATOR="${WL_GENERATOR:-wonderland/v2/build_v2.py}"
 # THE CLASSIC MAP IS THE WORLD. WL_V2_GoldenArrival is the empty World
 # Partition level the generator creates and abandons (14 KB on disk);

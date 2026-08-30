@@ -428,6 +428,45 @@ def main():
     for k, t in crossing[:8]:
         print("    %-26s through %s" % (k, t))
 
+    # WAYFINDING. A road is not only a surface to walk on; it is the thing
+    # that tells a player where they are and where to go next. The founder's
+    # word for this is that the world must be READABLE, and the failure it
+    # names is standing somewhere with nothing to walk toward.
+    #
+    # The measure is deliberately blunt and honest: from every road segment,
+    # how far is the nearest LANDMARK -- the tall, named things a place is
+    # known by. It cannot see occlusion and does not claim to; what it finds
+    # is stretches of road with no beacon within sight at all, which is a
+    # different and much more common failure than a beacon behind a tree.
+    marks = [(p["pos"][0], p["pos"][1]) for p in LAYOUT.ALL if is_landmark(p["asset"])]
+    SIGHT = 12000.0          # 120 m: the far arc is 340 m, quarters ~50 m
+    per_road, blind = {}, []
+    for key, pl in roads.items():
+        ds = []
+        for q in pl:
+            d = min(math.hypot(q[0] - mx, q[1] - my) for (mx, my) in marks)
+            ds.append(d)
+            if d > SIGHT:
+                blind.append((d, key, q[0], q[1]))
+        per_road[key] = (min(ds), sum(ds) / len(ds), max(ds), len(ds))
+    alld = sorted(d for key, pl in roads.items() for d in
+                  [min(math.hypot(q[0] - mx, q[1] - my) for (mx, my) in marks) for q in pl])
+    def pct(f):
+        return alld[min(len(alld) - 1, int(len(alld) * f))] / 100.0 if alld else 0.0
+    print("\nWAYFINDING (distance from a road to the nearest landmark)")
+    print("  %d landmarks; road median %.0f m, p90 %.0f m, worst %.0f m"
+          % (len(marks), pct(0.5), pct(0.9), alld[-1] / 100.0 if alld else 0.0))
+    print("  segments with NO landmark within %.0f m: %d of %d (%.1f%%)"
+          % (SIGHT / 100.0, len(blind), len(alld), 100.0 * len(blind) / max(1, len(alld))))
+    # A ROAD IS BLIND ALONG ITS WHOLE LENGTH OR IT IS NOT BLIND. One segment
+    # past the threshold on a road that is otherwise well served is a corner,
+    # not a wayfinding hole; a road whose CLOSEST point is past it is a
+    # stretch a player walks with nothing to aim at.
+    whole = sorted(((v[0], k, v[3]) for k, v in per_road.items() if v[0] > SIGHT), reverse=True)
+    print("  roads whose every segment is beyond it: %d of %d" % (len(whole), len(roads)))
+    for (d, k, n) in whole[:8]:
+        print("    %-26s %2d segments, nearest landmark %.0f m" % (k, n, d / 100.0))
+
     solid = [p for p in pts if p["k"] != "surface"]
     print("\nWORLD: %d solid placements, %d surface, %d landmarks, %d quarters"
           % (len(solid), len(pts) - len(solid),
