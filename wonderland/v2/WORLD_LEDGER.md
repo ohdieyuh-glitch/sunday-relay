@@ -1080,3 +1080,50 @@ identity and a landmark and then stopped:
 Golden Arrival's eleven composition bands still hash byte-identical to the
 commit before this phase. Four bands are added (GROUND_QUILT extended, SKY's
 balloons, HORIZON, APPROACH_SIDES, PLAZA_WALL_DRESS) and each is recorded.
+
+## PASS 23 h-i — the two props that do a job, and water at the right scale
+
+**Signposts and benches.** "SIGNS" is a panel on the boards' object-language
+page and this kit had no sign of any kind. It is also the one prop that DOES
+something: the founder's test for a road network is that a player believes
+they can keep going, and a fingerpost at a junction is how a garden tells
+them where. 54, one at every quarter's approach turned so a finger points
+back down the road it arrived by, one at each ring marker, one at the north
+gate. And "social spaces" is the last line of the founder's list for what a
+quarter can have -- a social space with nowhere to sit is a lawn. 50 seats.
+
+**The lake.** Twelve fountains is a lot of water and none of it is big. There
+was no room to put a lake between the quarters -- searched, and the widest
+clear spot in the southern half measures under 25 m -- so a lake is a KIND.
+The sheet is `garden_lawn` wearing MI_V2_Water: 48 x 48 of displaced grid,
+which under a water material is ripple rather than plate. Island, fountain,
+broken balustrade rim with a slipway, reeds, a walk right round, three seats
+facing in, and a bridge, because `castle_bridge` had been used exactly once
+in this world and a lake is what a bridge is for.
+
+`_REACH["lake"]` was guessed at 2,600 and both candidates fell back to a
+fountain -- the kind existed and the world had none of it. Measured off the
+builder it is 1,900, and two lakes stand. The district's palette also drops
+"garden": a district called the Water Gardens should arrive at a garden by
+FALLING BACK to one, not by choosing it.
+
+## Standing at the end of PASS 23
+
+| | phase start | now |
+|---|---|---|
+| placements | 4,590 | **9,830** |
+| **actors** | 2,123 | **612** |
+| quarters | 32, three kinds | **60, eleven kinds, fourteen named districts** |
+| recipes | 117 | **121** (balloons, signpost, bench) |
+| populated 50 m bands | 4 of 7 (0-350 m) | **13 of 13 (0-650 m)** |
+| cameras | 13 | **21** |
+| roads | 70 | **139**, 0 crossing a quarter they do not serve |
+| unreachable | 0 of 18 destinations | **0 of 30 destinations, 0 of 60 quarters** |
+
+The object language, counted:
+
+    tower_clock 7 · clock_ornate 25 · fountain_basin 12 · lakes 2 · tea_plinth 7
+    column_ornate 22 · arch_stone 8 · key_ornate 11 · topiary_spiral 41
+    mushroom_giant 31 · balloon 24 · signpost 54 · bench 50 · gate_arch_gold 8
+
+against 11 placements between the first eight of those at the phase start.
