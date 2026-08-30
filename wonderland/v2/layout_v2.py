@@ -1022,6 +1022,53 @@ def _flank(sgn, tag):
     return out
 
 
+def _cam_foreground(cx, cy, yaw_deg, d0, d1, seed, tag):
+    """Planting in the band a camera's frame actually opens on.
+
+    camera_framing.py measures where each camera's picture of the ground
+    begins; this fills the stretch from there outward for the two garden
+    cameras, which it reported as the thinnest in the suite (8 and 10
+    placements against 20 for the new flank cameras). Laid ACROSS the view
+    rather than along it, low at the centre and taller at the edges, so it
+    frames the composition those cameras already have instead of blocking it
+    -- they are a regression system and their subject is behind this.
+    """
+    out = []
+    f = (math.cos(math.radians(yaw_deg)), math.sin(math.radians(yaw_deg)))
+    r = (-f[1], f[0])
+    for i in range(11):
+        along = d0 + (d1 - d0) * ((i % 4) / 3.0)
+        across = (-1.0 + 2.0 * (i / 10.0)) * (d1 * 0.85)
+        x = cx + f[0] * along + r[0] * across
+        y = cy + f[1] * along + r[1] * across
+        edge = abs(i - 5) / 5.0                       # 0 at centre, 1 at the edges
+        if edge > 0.62:
+            out += [
+                A("tree_slender_trunk", x, y, 0, yaw=_rnd(i, seed, 1) * 360.0, s=0.95,
+                  mat="MI_V2_Bark", label="%s_EdgeTrunk%d" % (tag, i)),
+                A("canopy_medium", x, y, 780, yaw=_rnd(i, seed, 2) * 360.0, s=1.15,
+                  mat=("MI_V2_LeafMid", "MI_V2_LeafDark")[i % 2],
+                  label="%s_EdgeCanopy%d" % (tag, i)),
+            ]
+        else:
+            out.append(A(("topiary_ball", "shrub_flowering", "rose_bush", "hedge_block")[i % 4],
+                         x, y, 0, yaw=30 * i, s=0.75,
+                         mat=("MI_V2_LeafDark", "MI_V2_LeafMid")[i % 2],
+                         label="%s_Low%d" % (tag, i)))
+        if i % 3 == 0:
+            out += _ground_patch(x + 120, y - 90, 0, 40 * i, 0.9,
+                                 ("MI_V2_PetalPink", "MI_V2_Lavender", "MI_V2_PetalWhite")[i % 3],
+                                 "%s_Ground%d" % (tag, i))
+    return out
+
+
+#: The two garden cameras' near fields, sized from camera_framing.py: each
+#: sees the ground from 3.2 m and its foreground band runs to 9.5 m.
+CAM_FOREGROUNDS = _band("V2_Garden",
+                        _cam_foreground(3000.0, 3000.0, 225.0, 380.0, 900.0, 6100, "GL04_Fore")
+                        + _cam_foreground(-2800.0, 1500.0, 50.0, 380.0, 900.0, 6200, "GR05_Fore"))
+
+
 FLANKS = _band("V2_Garden", _flank(1, "FlankL") + _flank(-1, "FlankR"))
 
 
@@ -1123,7 +1170,7 @@ REARWORLD = _band("V2_Garden", [
 #: counted 305 new placements and passed while the generator placed four. A
 #: gate reading a different list from the builder reports the world it was
 #: shown, not the world that gets made.
-BUILD_BANDS = [FOREGROUND, COURTYARD, GARDEN, PALACE, FLANKS, REARWORLD]
+BUILD_BANDS = [FOREGROUND, COURTYARD, GARDEN, PALACE, FLANKS, REARWORLD, CAM_FOREGROUNDS]
 
 #: Everything the layout declares: what the builder walks, plus the two bands
 #: it places by their own rules (SKY is the dome/atmosphere, HOVER is lifted
