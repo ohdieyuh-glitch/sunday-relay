@@ -86,3 +86,60 @@ branch. `WL_STUDIO_FULL=1` forces the old behaviour.
 - **Art and navigation together**: every environment pass keeps the routes
   walkable, and clearance at a point proves nothing about the ground between
   points — only a walk does.
+
+
+---
+
+# Update — 2026-08-30, end of the world-development stretch
+
+## The three tools that now decide things
+
+Each was written after making the same mistake twice, and each immediately
+found something I had not.
+
+| tool | question it answers | what it caught |
+|---|---|---|
+| `tools/gap_v2.py RENDER [REF]` | does the frame read as the reference? | the world was unshaded and cool, not over-exposed — which redirected PASS 08 away from the carried gap list |
+| `tools/camera_framing.py` | where does a camera's picture of the ground begin? | two passes of foreground planting placed **under the lens** and therefore invisible |
+| `tools/walkable.py [--routes]` | can the Dog get there, and by what route? | a landmark placed **inside a tower**, and both flanks being cul-de-sacs |
+
+Run all three before believing a plan. `--routes` also derives the flank walk's
+waypoints; `FLANK_ROUTE` in layout_v2 is that output and must be regenerated
+if the flank planting changes.
+
+## Arithmetic worth not re-deriving
+
+- A camera's ground begins at `eye_z / tan(-(pitch - vfov/2))`. Nearer than
+  that is invisible.
+- At 90° horizontal fov the visible half-width **equals** the depth. A clump
+  30 m off-axis at 8 m out is not in the picture.
+- `yaw=90` swaps which scale axis is which. terrace_platform is 1,440 along X
+  and 740 along Y; turned, its X extent comes from `sy`.
+- `garden_lawn`'s top surface is at its local z=0 with all thickness below.
+
+## Build
+
+```bash
+bash wonderland/v2/tools/ship_v2.sh --ship-only        # incremental, seconds
+ssh wonderland-l4 'cd .../src && WLV2_REUSE_MATERIALS=1 \
+  WLV2_REBUILD="<recipes that changed>" \
+  setsid nohup bash wonderland/v2/tools/pass_chain.sh > ../run/pass.log 2>&1 &'
+WL_CAMS="8 9 10" WL_RES_X=1280 WL_RES_Y=720 WL_V2_FPS=0 \
+  bash wonderland/v2/tools/round.sh
+```
+
+`WLV2_REUSE_MATERIALS=1` takes the generate from ~15 min to ~6 by skipping the
+master rebuild and shader recompile. Use it on any pass that does not change a
+tint or a master graph. **Do not ship while a capture round is running** — the
+source pin will correctly refuse the frame, which cost one capture.
+
+## State
+
+Golden Arrival has two flank gardens and a rear world where there was lawn.
+1,479+ placements against 787 at PASS 08; flank density 1 per 178 m² → 1 per
+41. Eleven cameras (the original eight unmoved, plus FlankLeftCam08,
+FlankRightCam09, RearWorldCam10). 0 of 18 named destinations unreachable.
+
+Open, in order: the ground BETWEEN the garden rooms is still plain lawn; the
+distant world beyond the 1.2 km ground slab still ends at a visible edge;
+`palette.rose` remains ~0.45× the reference.
