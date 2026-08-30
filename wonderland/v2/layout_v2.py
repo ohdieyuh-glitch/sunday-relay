@@ -969,7 +969,8 @@ def _grove(sgn, cx, cy, seed, tag, count=5, H=None):
             # them was right and was not enough, because the canopy was hung
             # too low to meet them. 1,320 x sc puts the leaf top at 1,759.
             out.append(A("canopy_large", x, y, 1320 * sc, yaw=_rnd(i, seed, 8) * 360.0, s=sc * 1.05,
-                         mat=("MI_V2_LeafMid", "MI_V2_LeafDark", "MI_V2_LeafLight")[i % 3],
+                         mat=_leaf(i, seed, 3) if H is not None else
+                             ("MI_V2_LeafMid", "MI_V2_LeafDark", "MI_V2_LeafLight")[i % 3],
                          label="%s_Canopy%d" % (tag, i)))
         else:
             out.append(A("tree_slender_trunk", x, y, 0, yaw=_rnd(i, seed, 9) * 360.0, s=sc,
@@ -1902,15 +1903,13 @@ def _quarter_wood(cx, cy, sgn, seed, tag, H=None):
             out.append(A("tree_mature_trunk", x, y, 0, yaw=_rnd(i, seed, 25) * 360.0,
                          s=t * sc, mat="MI_V2_Bark", label="%s_Trunk%d" % (tag, i)))
             out.append(A("canopy_large", x, y, 1320 * t * sc, yaw=_rnd(i, seed, 26) * 360.0,
-                         s=t * sc * 1.25,
-                         mat=("MI_V2_LeafMid", "MI_V2_LeafDark", "MI_V2_LeafLight")[i % 3],
+                         s=t * sc * 1.25, mat=_leaf(i, seed),
                          label="%s_Canopy%d" % (tag, i)))
         else:
             out.append(A("tree_slender_trunk", x, y, 0, yaw=_rnd(i, seed, 27) * 360.0,
                          s=t * sc, mat="MI_V2_Bark", label="%s_Slim%d" % (tag, i)))
             out.append(A("canopy_medium", x, y, 800 * t * sc, yaw=_rnd(i, seed, 28) * 360.0,
-                         s=t * sc * 1.3,
-                         mat=("MI_V2_LeafLight", "MI_V2_LeafMid")[i % 2],
+                         s=t * sc * 1.3, mat=_leaf(i, seed, 5),
                          label="%s_SlimCanopy%d" % (tag, i)))
     # the ridge: a mass along the wood's long axis that gives it a top edge
     for i in range(_n(6, 0.6 + 0.7 * H["veg"], 3)):
@@ -2584,8 +2583,7 @@ def _quarter_meadow(cx, cy, sgn, seed, tag, H=None):
             A("tree_mature_trunk", x, y, 0, yaw=_rnd(i, seed, 16) * 360.0, s=t,
               mat="MI_V2_Bark", label="%s_Tree%d" % (tag, i)),
             A("canopy_large", x, y, 1320.0 * t, yaw=_rnd(i, seed, 17) * 360.0, s=t * 1.2,
-              mat=("MI_V2_LeafMid", "MI_V2_LeafLight", "MI_V2_LeafDark")[i % 3],
-              label="%s_TreeCanopy%d" % (tag, i)),
+              mat=_leaf(i, seed, 2), label="%s_TreeCanopy%d" % (tag, i)),
         ]
     # drifts, not beds: long smears of one colour, which is what a meadow is
     for i in range(_n(7, 0.6 + 0.9 * H["veg"], 3)):
@@ -3457,6 +3455,25 @@ _QUARTER_BUILDERS = {"garden": _quarter_garden, "towers": _quarter_towers,
                      "lake": _quarter_lake}
 
 
+#: BLOSSOM. The reference boards' vegetation panel is not one green: it shows
+#: flowering trees through the gardens and the woods, and the first world
+#: render came back with a canopy that is uniformly mid-green from 50 m to the
+#: horizon. `canopy_large` wearing a petal material IS a blossom tree -- the
+#: same trick `blossom_cluster` already uses -- so a share of every wood's
+#: crowns flower. Kept to a fifth: the boards' blossom is an accent through
+#: green, not an orchard.
+_BLOSSOM = ("MI_V2_PetalPink", "MI_V2_RosePink", "MI_V2_PetalWhite",
+            "MI_V2_PetalViolet")
+_BLOSSOM_SHARE = 0.20
+
+
+def _leaf(i, seed, salt=0):
+    """The material for one crown: mostly leaf, sometimes flower."""
+    if _rnd(i, seed, 160 + salt) < _BLOSSOM_SHARE:
+        return _BLOSSOM[int(_rnd(i, seed, 161 + salt) * 4) % 4]
+    return ("MI_V2_LeafMid", "MI_V2_LeafDark", "MI_V2_LeafLight")[i % 3]
+
+
 def _quarter_edge(s, H):
     """The band that turns a quarter into a PLACE with an outside.
 
@@ -3494,7 +3511,7 @@ def _quarter_edge(s, H):
                 A("tree_slender_trunk", x, y, 0, yaw=_rnd(i, seed, 76) * 360.0, s=t,
                   mat="MI_V2_Bark", label="%s_EdgeTrunk%d" % (tag, i)),
                 A("canopy_medium", x, y, 800.0 * t, yaw=_rnd(i, seed, 77) * 360.0,
-                  s=t * 1.25, mat=("MI_V2_LeafMid", "MI_V2_LeafDark", "MI_V2_LeafLight")[i % 3],
+                  s=t * 1.25, mat=_leaf(i, seed, 7),
                   label="%s_EdgeCanopy%d" % (tag, i)),
             ]
         elif pick < 0.72:
@@ -4243,8 +4260,7 @@ def _country():
                             A("tree_mature_trunk", x, y, 0, yaw=_rnd(i, k, 100) * 360.0,
                               s=t, mat="MI_V2_Bark", label="%s_Trunk%d" % (tag, i)),
                             A("canopy_large", x, y, 1320.0 * t, yaw=_rnd(i, k, 101) * 360.0,
-                              s=t * 1.22,
-                              mat=("MI_V2_LeafMid", "MI_V2_LeafDark", "MI_V2_LeafLight")[i % 3],
+                              s=t * 1.22, mat=_leaf(i, k),
                               label="%s_Canopy%d" % (tag, i)),
                         ]
                     else:
@@ -4252,7 +4268,7 @@ def _country():
                             A("tree_slender_trunk", x, y, 0, yaw=_rnd(i, k, 102) * 360.0,
                               s=t, mat="MI_V2_Bark", label="%s_Slim%d" % (tag, i)),
                             A("canopy_medium", x, y, 800.0 * t, yaw=_rnd(i, k, 103) * 360.0,
-                              s=t * 1.3, mat=("MI_V2_LeafLight", "MI_V2_LeafMid")[i % 2],
+                              s=t * 1.3, mat=_leaf(i, k, 6),
                               label="%s_SlimCanopy%d" % (tag, i)),
                         ]
             elif pick < 0.70:
@@ -4394,8 +4410,7 @@ def _horizon():
                 cy2 = y + rx * math.sin(lean) + ry * math.cos(lean)
                 s = 3.4 + 2.2 * _rnd(i, k, 148)
                 out.append(A("canopy_large", cx2, cy2, 900.0 * s, s=s,
-                             mat=("MI_V2_LeafDark", "MI_V2_LeafMid", "MI_V2_LeafLight")[i % 3],
-                             label="%s_Crown%d" % (tag, i)))
+                             mat=_leaf(i, k, 4), label="%s_Crown%d" % (tag, i)))
         elif pick < 0.88:
             # a far tower group: three or four, one dominant, fog does the rest
             n = 3 + int(2 * _rnd(k, 141, 7))
@@ -4633,8 +4648,7 @@ def _approach_sides():
                     A("tree_mature_trunk", x, y, 0, yaw=_rnd(i, seed, 5) * 360.0, s=t,
                       mat="MI_V2_Bark", label="%s_Trunk%d" % (tag, i)),
                     A("canopy_large", x, y, 1320.0 * t, yaw=_rnd(i, seed, 6) * 360.0,
-                      s=t * 1.12,
-                      mat=("MI_V2_LeafMid", "MI_V2_LeafDark", "MI_V2_LeafLight")[i % 3],
+                      s=t * 1.12, mat=_leaf(i, seed, 8),
                       label="%s_Canopy%d" % (tag, i)),
                 ]
             elif pick < 0.50:
