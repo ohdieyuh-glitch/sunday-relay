@@ -1788,14 +1788,45 @@ def _quarter_grove(cx, cy, sgn, seed, tag, H=None):
                                      "MI_V2_MushPurple")[seed % 3])
     out += _mushroom_cluster(sgn, cx - sgn * 900.0 * sp, cy - 800.0 * sp, seed + 30,
                              "%s_M" % tag, H=H)
-    for i in range(_n(3, H["density"], 0)):
-        a = 6.283 * i / 3.0 + _rnd(i, seed, 7) * 0.9
+    for i in range(_n(6, H["density"], 2)):
+        a = 6.283 * i / 6.0 + _rnd(i, seed, 7) * 0.9
         r = (1300.0 + 500.0 * _rnd(i, seed, 8)) * sp
-        out.append(A("mushroom_small", cx + math.cos(a) * r, cy + math.sin(a) * r, 0,
+        out.append(A(("mushroom_small", "mushroom_medium")[i % 2],
+                     cx + math.cos(a) * r, cy + math.sin(a) * r, 0,
                      yaw=_rnd(i, seed, 9) * 360.0,
                      s=(0.8 + 0.4 * _rnd(i, seed, 10)) * H["scale"],
                      mat=("MI_V2_MushRed", "MI_V2_MushCream", "MI_V2_MushPurple")[i % 3],
                      label="%s_SmallCap%d" % (tag, i)))
+    # A WINDING PATH, which is the founder's own word for what a mushroom
+    # wood needs -- "dense but navigable understory". A straight road through
+    # a wood is a firebreak; a path that bends is a wood you walk in.
+    turn = _rnd(seed, 12, 1) * 6.283
+    prev = None
+    for i in range(7):
+        t = i / 6.0
+        a = turn + 1.9 * math.sin(t * 3.4) + t * 1.1
+        r = 260.0 + 2100.0 * t
+        px, py = cx + math.cos(a) * r * sp, cy + math.sin(a) * r * sp
+        if prev is not None:
+            d = math.hypot(px - prev[0], py - prev[1]) or 1.0
+            out.append(A("terrace_platform", (px + prev[0]) * 0.5, (py + prev[1]) * 0.5,
+                         -18.0, yaw=math.degrees(math.atan2(py - prev[1], px - prev[0])),
+                         sxyz=(d / 1440.0, 0.15, 0.35), mat="MI_V2_PlazaCream",
+                         label="%s_Path%d" % (tag, i)))
+        prev = (px, py)
+        # understory at the path's edge, which is where a walker sees it
+        out.append(A(("shrub_flowering", "rose_bush", "topiary_ball")[i % 3],
+                     px + 260.0 * math.cos(a + 1.57), py + 260.0 * math.sin(a + 1.57), 0,
+                     yaw=_rnd(i, seed, 13) * 360.0,
+                     s=(0.8 + 0.4 * _rnd(i, seed, 14)) * H["scale"],
+                     mat=("MI_V2_LeafMid", "MI_V2_LeafDark")[i % 2],
+                     label="%s_Under%d" % (tag, i)))
+        if i % 2 == 0:
+            out += _ground_patch(px + 300.0 * math.cos(a - 1.57),
+                                 py + 300.0 * math.sin(a - 1.57), 0,
+                                 _rnd(i, seed, 15) * 360.0, 1.0,
+                                 ("MI_V2_PetalViolet", "MI_V2_PetalWhite")[i % 2],
+                                 "%s_PathBed%d" % (tag, i))
     return out
 
 
@@ -2003,11 +2034,47 @@ def _quarter_clockyard(cx, cy, sgn, seed, tag, H=None):
             out.append(A("arch_stone", cx + math.cos(a) * r, cy + math.sin(a) * r, 0,
                          yaw=math.degrees(a) + 90.0, s=0.8 * sc,
                          mat="MI_V2_IvoryStone", label="%s_Gate%d" % (tag, i)))
-    for i in range(_n(3, H["veg"], 1)):
-        out += _ground_patch(cx + math.cos(2.1 * i) * 1150.0 * sp,
-                             cy + math.sin(2.1 * i) * 1150.0 * sp, 0, 55 * i, 1.0,
-                             ("MI_V2_PetalViolet", "MI_V2_PetalWhite", "MI_V2_PetalPink")[i % 3],
+    for i in range(_n(5, H["veg"], 2)):
+        a = 6.283 * i / 5.0 + 0.7
+        out += _ground_patch(cx + math.cos(a) * 1150.0 * sp,
+                             cy + math.sin(a) * 1150.0 * sp, 0, 55 * i, 1.0,
+                             ("MI_V2_PetalViolet", "MI_V2_PetalWhite", "MI_V2_PetalPink",
+                              "MI_V2_Lavender")[i % 4],
                              "%s_Bed%d" % (tag, i))
+    # THE HOUR RING. A clock quarter's ground should say what it is: twelve
+    # kerbs on a circle, the four quarter-hours marked by a plinth, which is
+    # the geometric planting the boards put under every ornamental clock and
+    # costs sixteen instanced pieces.
+    if H["court_p"] > 0.30:
+        for i in range(12):
+            a = 6.283 * i / 12.0
+            r = 560.0 * sp
+            out.append(A("kerb_stone", cx + math.cos(a) * r, cy + math.sin(a) * r, 0,
+                         yaw=math.degrees(a) + 90.0, sxyz=(1.6, 1.0, 0.55),
+                         mat="MI_V2_Kerb", label="%s_Hour%d" % (tag, i)))
+            if i % 3 == 0:
+                out += [
+                    A("pedestal_finial", cx + math.cos(a) * r * 1.24,
+                      cy + math.sin(a) * r * 1.24, 0, s=0.5 * sc,
+                      mat="MI_V2_IvoryStone", label="%s_Quarter%d" % (tag, i)),
+                    A("gate_finial_ball", cx + math.cos(a) * r * 1.24,
+                      cy + math.sin(a) * r * 1.24, 70.0 * sc, s=0.3 * sc,
+                      mat="MI_V2_Gold", label="%s_QuarterCap%d" % (tag, i)),
+                ]
+    # A COLONNADE on one side of the yard: the boards' "columns & ornaments",
+    # and what turns a tower on grass into a tower in a courtyard.
+    if H["court_p"] > 0.45:
+        cyaw = math.radians((seed * 53) % 360)
+        for i in range(_n(5, H["density"], 3)):
+            t = -0.5 + (i + 0.5) / _n(5, H["density"], 3)
+            px = cx + math.cos(cyaw) * 1560.0 * sp - math.sin(cyaw) * t * 2400.0 * sp
+            py = cy + math.sin(cyaw) * 1560.0 * sp + math.cos(cyaw) * t * 2400.0 * sp
+            out += [
+                A("column_ornate", px, py, 0, s=0.78 * sc, mat="MI_V2_IvoryStone",
+                  label="%s_Column%d" % (tag, i)),
+                A("gate_finial_ball", px, py, 780.0 * 0.78 * sc, s=0.4 * sc,
+                  mat="MI_V2_Gold", label="%s_ColumnCap%d" % (tag, i)),
+            ]
     return out
 
 
@@ -2068,6 +2135,40 @@ def _quarter_water(cx, cy, sgn, seed, tag, H=None):
         out.append(A("topiary_ball", cx + math.cos(a + 0.4) * r * 1.18,
                      cy + math.sin(a + 0.4) * r * 1.18, 0, s=0.7 * sc,
                      mat="MI_V2_LeafDark", label="%s_Ball%d" % (tag, i)))
+    # A RILL AND A SECOND BASIN. One fountain in a lawn is an object; a
+    # fountain, a channel running away from it and a lower basin at the end
+    # is a WATER GARDEN, which is what the boards' panel shows and what the
+    # district is named for. The rill is paving with water paving over it.
+    ra = math.radians(35.0 + (seed % 4) * 90.0)
+    for i in range(5):
+        d = 1900.0 + 520.0 * i
+        out += [
+            A("terrace_platform", cx + math.cos(ra) * d, cy + math.sin(ra) * d, -18.0,
+              yaw=math.degrees(ra), sxyz=(0.40 * sp, 0.14 * sp, 0.35),
+              mat="MI_V2_PlazaCream", label="%s_Rill%d" % (tag, i)),
+            A("terrace_platform", cx + math.cos(ra) * d, cy + math.sin(ra) * d, -6.0,
+              yaw=math.degrees(ra), sxyz=(0.30 * sp, 0.07 * sp, 0.30),
+              mat="MI_V2_Water", label="%s_RillWater%d" % (tag, i)),
+        ]
+    lx = cx + math.cos(ra) * 4600.0
+    ly = cy + math.sin(ra) * 4600.0
+    out += [
+        A("stone_ring_base", lx, ly, -4, s=1.2 * fs, mat="MI_V2_Stone",
+          label="%s_LowerRing" % tag),
+        A("fountain_basin", lx, ly, 0, s=0.62 * fs, mat="MI_V2_IvoryStone",
+          label="%s_LowerBasin" % tag),
+        A("fountain_water", lx, ly, 0, s=0.62 * fs, mat="MI_V2_Water",
+          label="%s_LowerWater" % tag),
+    ]
+    for i in range(_n(4, H["prop"], 1)):
+        a = ra + 1.57 * (1 if i % 2 else -1)
+        d = 2400.0 + 900.0 * (i // 2)
+        out += [
+            A("pedestal_finial", cx + math.cos(a) * d, cy + math.sin(a) * d, 0,
+              s=0.7 * sc, mat="MI_V2_IvoryStone", label="%s_Post%d" % (tag, i)),
+            A("garden_urn", cx + math.cos(a) * d, cy + math.sin(a) * d, 100.0 * sc,
+              s=0.5 * sc, mat="MI_V2_Ceramic", label="%s_PostUrn%d" % (tag, i)),
+        ]
     out.append(A("garden_lawn", cx, cy, -2, sxyz=(0.62 * sp, 0.55 * sp, 1.0),
                  mat="MI_V2_Lawn", label="%s_Ground" % tag))
     return out
@@ -2113,6 +2214,32 @@ def _quarter_tea(cx, cy, sgn, seed, tag, H=None):
                      mat="MI_V2_LeafDark", label="%s_Spiral%d" % (tag, i)))
     out.append(A("floral_arch", cx, cy - 1500.0 * sp, 0, yaw=0, s=1.0 * sc,
                  mat="MI_V2_LeafMid", label="%s_Arch" % tag))
+    # A RAIL ROUND THE TERRACE, and lanterns on it. A raised floor with
+    # nothing at its edge reads as a slab; the boards' terraces all have a
+    # balustrade, and it is the piece that says "this is a room outdoors".
+    n_rail = _n(10, 0.6 + 0.7 * H["density"], 6)
+    for i in range(n_rail):
+        a = 6.283 * i / n_rail + 0.31
+        if 0.42 < (i / float(n_rail)) < 0.58:
+            continue                          # the way in, under the arch
+        r = 1030.0 * sp
+        out.append(A("balustrade", cx + math.cos(a) * r, cy + math.sin(a) * r, 0,
+                     yaw=math.degrees(a) + 90.0, s=0.95 * sc,
+                     mat="MI_V2_IvoryStone", label="%s_Rail%d" % (tag, i)))
+        if i % 3 == 0:
+            out += [
+                A("pedestal_finial", cx + math.cos(a) * r, cy + math.sin(a) * r, 0,
+                  s=0.55 * sc, mat="MI_V2_IvoryStone", label="%s_Post%d" % (tag, i)),
+                A("gate_finial_ball", cx + math.cos(a) * r, cy + math.sin(a) * r, 78.0 * sc,
+                  s=0.34 * sc, mat="MI_V2_Gold", label="%s_Lamp%d" % (tag, i)),
+            ]
+    # the rest of the service, set out on the floor rather than stacked
+    for i in range(_n(3, H["prop"], 1)):
+        a = 2.1 * i + 1.4
+        r = 380.0 * sp
+        out.append(A(("tea_saucer", "tea_cup_small", "tea_cup")[i % 3],
+                     cx + math.cos(a) * r, cy + math.sin(a) * r, 0, yaw=40 * i,
+                     s=ts * 0.7, mat="MI_V2_Ceramic", label="%s_Set%d" % (tag, i)))
     for i in range(_n(4, H["veg"], 1)):
         out += _ground_patch(cx + (i - 1.5) * 620.0 * sp, cy + 1300.0 * sp, 0,
                              40 * i, 1.0,
@@ -2220,11 +2347,32 @@ def _quarter_hamlet(cx, cy, sgn, seed, tag, H=None):
             A(("roof_hip", "roof_bell", "roof_ogee")[i % 3], x, y, 900.0 * hs,
               yaw=yaw, s=hs, mat=roofs[(i + seed) % 5], label="%s_HouseRoof%d" % (tag, i)),
         ]
-        if _rnd(i, seed, 10) < 0.45:
-            out.append(A("hedge_mass", x + math.cos(a) * 420.0 * sc,
-                         y + math.sin(a) * 420.0 * sc, 0, yaw=yaw,
-                         s=0.85 * sc, mat="MI_V2_LeafDark",
+        # A FRONT GARDEN. A house on grass is a model; a house with a kerb, a
+        # bed and a hedge in front of it is somewhere somebody lives, and it
+        # is four pieces. This is what took the hamlet from 44 placements to
+        # something that reads at walking distance.
+        fx = x + math.cos(a) * 430.0 * sc
+        fy = y + math.sin(a) * 430.0 * sc
+        if _rnd(i, seed, 10) < 0.72:
+            out.append(A("hedge_mass", fx, fy, 0, yaw=yaw, s=0.8 * sc,
+                         mat=("MI_V2_LeafDark", "MI_V2_LeafMid")[i % 2],
                          label="%s_Hedge%d" % (tag, i)))
+        out.append(A("kerb_stone", fx, fy, 0, yaw=yaw, sxyz=(3.0, 1.0, 0.5),
+                     mat="MI_V2_Kerb", label="%s_Kerb%d" % (tag, i)))
+        out += _ground_patch(fx - math.cos(a) * 130.0, fy - math.sin(a) * 130.0, 0,
+                             _rnd(i, seed, 11) * 360.0, 0.85,
+                             ("MI_V2_PetalPink", "MI_V2_PetalWhite", "MI_V2_Lavender",
+                              "MI_V2_RosePink")[i % 4],
+                             "%s_Bed%d" % (tag, i))
+        if _rnd(i, seed, 12) < 0.5:
+            out.append(A("topiary_ball", fx + math.sin(a) * 190.0 * sc,
+                         fy - math.cos(a) * 190.0 * sc, 0, s=0.55 * sc,
+                         mat="MI_V2_LeafDark", label="%s_Ball%d" % (tag, i)))
+        # and the lane that runs to its door
+        out.append(A("terrace_platform", (x + cx) * 0.5, (y + cy) * 0.5, -18.0,
+                     yaw=math.degrees(a),
+                     sxyz=(math.hypot(x - cx, y - cy) / 1600.0, 0.16, 0.35),
+                     mat="MI_V2_PlazaCream", label="%s_Lane%d" % (tag, i)))
     # the village tower, and the well the lane runs to
     th = (0.72 + 0.22 * _rnd(seed, 4, 1)) * sc * (0.75 + 0.25 * H["skyline"])
     out += [
@@ -2245,6 +2393,23 @@ def _quarter_hamlet(cx, cy, sgn, seed, tag, H=None):
     out.append(A("terrace_platform", cx, cy, -18.0, yaw=(seed * 17) % 90,
                  sxyz=(0.62 * sp, 0.62 * sp, 0.35), mat="MI_V2_PlazaWarm",
                  label="%s_Square" % tag))
+    # the market cross, and an arch on the way in: a village square wants a
+    # thing at its middle and a threshold to arrive through
+    out += [
+        A("pedestal_finial", cx - sgn * 700.0 * sp, cy + 620.0 * sp, 0, s=1.1 * sc,
+          mat="MI_V2_IvoryStone", label="%s_Cross" % tag),
+        A("gate_finial_heart", cx - sgn * 700.0 * sp, cy + 620.0 * sp, 160.0 * sc,
+          s=0.7 * sc, mat="MI_V2_Gold", label="%s_CrossHeart" % tag),
+        A("garden_arch_stone", cx + sgn * 1500.0 * sp, cy - 1350.0 * sp, 0,
+          yaw=math.degrees(math.atan2(-1350.0, sgn * 1500.0)) + 90.0, s=0.8 * sc,
+          mat="MI_V2_IvoryStone", label="%s_Arch" % tag),
+    ]
+    for i in range(_n(4, H["veg"], 2)):
+        a2 = 6.283 * i / 4.0 + 0.9
+        out.append(A(("shrub_flowering", "rose_bush")[i % 2],
+                     cx + math.cos(a2) * 620.0 * sp, cy + math.sin(a2) * 620.0 * sp, 0,
+                     yaw=40 * i, s=0.85 * sc, mat="MI_V2_LeafMid",
+                     label="%s_SquareGreen%d" % (tag, i)))
     for i in range(_n(3, H["prop"], 0)):
         a = 2.4 * i + 0.7
         out += _ground_patch(cx + math.cos(a) * 780.0 * sp, cy + math.sin(a) * 780.0 * sp,
