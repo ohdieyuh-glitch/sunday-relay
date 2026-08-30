@@ -916,15 +916,21 @@ def _flank(sgn, tag):
     ] + [
         # a flowering bank across the near approach, low so it does not wall
         # the room off -- the eye goes over it to the parterre beyond
+        # -700, not -900. Same arithmetic as RearWorldCam10: FlankLeftCam08's
+        # eye is at 2.65 m with a 58.7 deg vertical field pitched -4, so its
+        # lower edge meets the ground at 2.65 / tan(33.4) = 4.0 m. At y = -900
+        # this bank stood 3.5 m out -- under the lens, invisible, and it is
+        # why the first fix for "the camera stands on bare lawn" only half
+        # worked: the mid band at 8.2 m showed and this did not.
         A(("shrub_flowering", "hedge_block", "rose_bush")[i % 3],
-          sgn * (3400 + 420 * i), -900 + 90 * ((i % 2) * 2 - 1), 0,
+          sgn * (3400 + 420 * i), -700 + 90 * ((i % 2) * 2 - 1), 0,
           yaw=90 + 12 * i, s=0.9,
           mat=("MI_V2_LeafMid", "MI_V2_LeafDark", "MI_V2_LeafMid")[i % 3],
           label="%s_NearBank%d" % (tag, i))
         for i in range(7)
     ] + [
         g for i in range(5)
-        for g in _ground_patch(sgn * (3600 + 560 * i), -640, 0, 55 * i, 1.05,
+        for g in _ground_patch(sgn * (3600 + 560 * i), -520, 0, 55 * i, 1.05,
                                ("MI_V2_PetalViolet", "MI_V2_PetalWhite", "MI_V2_PetalPink")[i % 3],
                                "%s_NearFlowers%d" % (tag, i))
     ]
@@ -1082,14 +1088,27 @@ REARWORLD = _band("V2_Garden", [
     # LOW planting only -- the eye is at 3.2 m and this view's whole value is
     # the line of depth through the rear gate to the castle, so nothing here
     # may stand tall enough to interrupt it.
+    # PLACED WHERE THE CAMERA CAN SEE IT. The first attempt at this band sat
+    # at y = -9,180 and -9,020, which is 2.2 m and 3.8 m in front of
+    # RearWorldCam10 -- and the render came back with the same bare foreground
+    # as before, because that content was UNDER THE LENS. The camera eye is at
+    # 3.2 m with a 58.7 deg vertical field pitched -3, so its lower edge meets
+    # the ground at 3.2 / tan(32.4) = 5.0 m. Nothing closer than five metres
+    # is in the picture at all. "Near the camera" and "in the near field of
+    # the frame" are not the same thing, and only one of them is measurable
+    # from the camera's own numbers.
+    #
+    # Three rows at 6, 9 and 12 m, which is the band the frame actually shows
+    # between its bottom edge and the groves at 17 m.
     A(("topiary_ball", "shrub_flowering", "hedge_block", "rose_bush")[i % 4],
-      -3400 + 850 * i, -9180 + 60 * ((i % 3) - 1), 0, yaw=28 * i, s=0.72,
+      -3600 + 900 * (i % 9), (-8800, -8500, -8200)[i // 9] + 50 * ((i % 3) - 1), 0,
+      yaw=28 * i, s=0.78,
       mat=("MI_V2_LeafDark", "MI_V2_LeafMid")[i % 2],
       label="Rear_NearBand%d" % i)
-    for i in range(9)
+    for i in range(27)
 ] + [
-    g for i in range(5)
-    for g in _ground_patch(-2600 + 1300 * i, -9020, 0, 50 * i, 0.9,
+    g for i in range(8)
+    for g in _ground_patch(-3100 + 900 * (i % 8), (-8650, -8350)[i // 8], 0, 50 * i, 0.95,
                            ("MI_V2_PetalPink", "MI_V2_PetalWhite", "MI_V2_Lavender")[i % 3],
                            "Rear_NearGround%d" % i)
 ])
