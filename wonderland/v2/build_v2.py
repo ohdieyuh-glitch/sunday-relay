@@ -533,7 +533,8 @@ BATCHABLE = {"ground_flowers", "ground_blooms", "flower_cluster", "rose_bloom", 
              "garden_lawn", "gate_pier", "garden_urn", "stone_ring_base",
              "topiary_spiral", "facade_panel", "finial_spire", "balcony_ring",
              "roof_cone_steep", "roof_bell", "roof_hip", "roof_ogee",
-             "roof_flat_crenellated", "planter_box", "column_ornate"}
+             "roof_flat_crenellated", "planter_box", "column_ornate",
+             "balloon_envelope", "balloon_basket"}
 
 #: BATCHED ONLY IN THESE BANDS. terrace_platform is paving a participant walks
 #: on and batches are built at BeginPlay, which is how this project lost a Dog
@@ -1910,11 +1911,22 @@ def main():
                           "scale": (sc, sc, 1.0), "mat": "MI_V2_PortalRunes" if key == "portal_disc" else "MI_V2_PortalGlow",
                           "label": lb, "band": "V2_VFX"})
         LOG("V2 PORTAL: restrained rune disc, radius %.0f uu, at the viewpoint" % C.LOOK["portalRadius"])
+    # THE BAND IS NOT ALL DOME. This loop gated every item in LAYOUT.SKY on
+    # `skyDome`, which was true while the band held one placement; PASS 23 put
+    # twenty-four balloons in it and all forty-eight of their pieces were
+    # silently skipped, forty-nine times, under a log line that says "dome
+    # skipped". The asset decides, not the band.
+    skipped_dome = 0
     for item in LAYOUT.SKY:
-        if int(C.LOOK["skyDome"]) and "MI_V2_SkyPano" in mats:
-            placer.place(item)
-        else:
-            LOG("V2 SKY: dome skipped (%s)" % ("skyDome=0" if not int(C.LOOK["skyDome"]) else "no panorama material"))
+        if item["asset"] == "sky_dome":
+            if int(C.LOOK["skyDome"]) and "MI_V2_SkyPano" in mats:
+                placer.place(item)
+            else:
+                skipped_dome += 1
+            continue
+        placer.place(item)
+    if skipped_dome:
+        LOG("V2 SKY: dome skipped (%s)" % ("skyDome=0" if not int(C.LOOK["skyDome"]) else "no panorama material"))
     for item in LAYOUT.HOVER:
         placer.place(item, hover=True, batch=False)
 

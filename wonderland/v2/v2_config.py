@@ -177,13 +177,56 @@ HERO_CAMS = [
     # ring, so the quarters read as PLACES rather than as a texture
     {"name": "WorldCam12", "location": (-13500.0, -13500.0, 6200.0), "rotation": (-16.0, 45.0, 0.0),
      "fov": 92.0, "tags": ("WorldCam12", "HeroCam12")},
+    # ---- THE DISTRICTS (PASS 23) -----------------------------------------
+    #
+    # Golden Arrival's eight cameras are a REGRESSION SYSTEM for Golden
+    # Arrival and they answer nothing about the rest of Wonderland: every one
+    # of them stands inside the arrival plaza. The world now has fourteen
+    # named districts, and a district that no camera has ever pointed at is a
+    # district nobody has ever seen.
+    #
+    # These are permanent, and they are chosen from the WORLD rather than by
+    # eye: each stands on the line between the district and the origin, at the
+    # distance its subject needs, looking at the nearest quarter of that
+    # district's signature kind. They move only if the founder asks.
+    #
+    # A clock tower is 11.8 m to its cornice and its spire another 6, so its
+    # camera stands 46 m back and pitches UP 1.5 degrees; a water garden is
+    # ground furniture and its camera pitches down.
+    {"name": "ClockQuarterCam13", "location": (6719.0, 1560.0, 300.0), "rotation": (1.5, 13.1, 0.0),
+     "fov": 90.0, "tags": ("ClockQuarterCam13", "HeroCam13")},
+    {"name": "MushroomGroveCam14", "location": (8311.0, -7655.0, 300.0), "rotation": (1.0, -42.6, 0.0),
+     "fov": 92.0, "tags": ("MushroomGroveCam14", "HeroCam14")},
+    {"name": "WaterGardenCam15", "location": (-4256.0, -6404.0, 270.0), "rotation": (-2.0, -123.6, 0.0),
+     "fov": 90.0, "tags": ("WaterGardenCam15", "HeroCam15")},
+    {"name": "TeaTerraceCam16", "location": (-5860.0, -3807.0, 240.0), "rotation": (-2.0, -147.0, 0.0),
+     "fov": 90.0, "tags": ("TeaTerraceCam16", "HeroCam16")},
+    {"name": "HamletCam17", "location": (-14732.0, 2617.0, 280.0), "rotation": (-1.0, 169.9, 0.0),
+     "fov": 90.0, "tags": ("HamletCam17", "HeroCam17")},
+    # ON A ROAD, at the Dog's own eye height, looking out along it to the
+    # quarter it serves. The founder's test for the road network is that a
+    # player believes they can keep going; this is the frame that answers it.
+    {"name": "GroveRoadCam18", "location": (5000.0, -5300.0, 170.0), "rotation": (-1.5, -39.1, 0.0),
+     "fov": 90.0, "tags": ("GroveRoadCam18", "HeroCam18")},
+    # THE WORLD FROM BEYOND THE CASTLE, looking back: the castle plane, the
+    # district behind it, and the far city over the shoulder. It is the only
+    # view of the world-to-city transition the boards keep drawing.
+    {"name": "WorldNorthCam19", "location": (0.0, 42000.0, 11000.0), "rotation": (-20.0, 270.0, 0.0),
+     "fov": 95.0, "tags": ("WorldNorthCam19", "HeroCam19")},
+    # and out past the castle's shoulder to the East Reach towers, which are
+    # the first real destination BEYOND the castle rather than in front of it
+    {"name": "EastReachCam20", "location": (4200.0, 19500.0, 900.0), "rotation": (-3.0, 66.0, 0.0),
+     "fov": 92.0, "tags": ("EastReachCam20", "HeroCam20")},
 ]
 #: The suite's names by index -- the filing tool and the checkpoint report use
 #: them; the capture tooling uses the "HeroCamN" tags.
 CAM_SUITE = ("HeroCam0", "PlayerCam01", "PathCam02", "ReverseCam03",
              "GardenLeft04", "GardenRight05", "SkylineCam06", "ScaleCam07",
              "FlankLeftCam08", "FlankRightCam09", "RearWorldCam10",
-             "WorldCam11", "WorldCam12")
+             "WorldCam11", "WorldCam12",
+             "ClockQuarterCam13", "MushroomGroveCam14", "WaterGardenCam15",
+             "TeaTerraceCam16", "HamletCam17", "GroveRoadCam18",
+             "WorldNorthCam19", "EastReachCam20")
 #: HeroCam0's frozen transform (the founder benchmark) -- verify_v2_layout
 #: refuses a drift of the entry above from these values.
 HERO_CAM0_FROZEN = ((0.0, -150.0, 262.0), (-2.0, 90.0, 0.0), 100.0)

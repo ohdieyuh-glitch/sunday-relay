@@ -129,7 +129,19 @@ def main():
         ("R lane y=1500", -3225, 1500), ("R lane y=2500", -3225, 2500),
         ("R lane y=3500", -3225, 3500), ("R lane y=4500", -2975, 4500),
         ("R lane y=5200", -2900, 5200),
+        # PASS 23: the way past the castle. Reaching a quarter by walking all
+        # the way round is reachability; walking out of the castle court and
+        # continuing is a ROUTE, and only one of those is a world.
+        #
+        # THE TARGETS ARE THE WAY'S OWN WAYPOINTS, read from layout_v2 rather
+        # than restated: written out by hand they went stale the moment the
+        # route was re-solved, and this tool then reported a turn unreachable
+        # that the world no longer had.
+        ("north gate", int(LAYOUT.NORTH_WAY[0][0]), int(LAYOUT.NORTH_WAY[0][1])),
     ]
+    if win == "world":
+        for wi, (wx, wy) in enumerate(LAYOUT.NORTH_WAY[1:]):
+            targets.append(("north way %d" % (wi + 1), int(wx), int(wy)))
 
     print("walkable flood from the spawn: %d cells of %d uu (%.0f%% of the sampled ground)"
           % (n, cell, 100.0 * n / float(nx * ny)))
@@ -218,7 +230,15 @@ def main():
                 ("LEFT flank entry -> landmark", 2650, 400, 2750, 5650),
                 ("RIGHT flank entry -> landmark", -2650, 400, -2750, 5650),
                 ("LEFT entry -> parterre walk", 2650, 400, 3115, 520),
-                ("LEFT parterre -> grove", 3115, 520, 5450, 3650)):
+                ("LEFT parterre -> grove", 3115, 520, 5450, 3650),
+                # PASS 23: the way past the castle, derived rather than drawn.
+                # Written by hand it ran into the BeyondL hedge wall (which
+                # stands at x 7,229-7,571 from y 5,514 to 9,286) and the audit
+                # reported its first turn unreachable. The flank walk was
+                # solved the same way in PASS 12 and the lesson holds: ask for
+                # the route a walker takes, then pave THAT.
+                ("castle court -> north milestone", 0, 6900,
+                 int(LAYOUT.NORTH_WAY[-1][0]), int(LAYOUT.NORTH_WAY[-1][1]))):
             path = _route(idx(float(ax), float(ay)), idx(float(bx), float(by)),
                           blocked, nx, ny)
             if path is None:

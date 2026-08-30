@@ -583,9 +583,44 @@ AVENUE = _band("V2_Arrival",
 # ---------------------------------------------------------------------------
 # SKY: the panorama dome (sky only) and restrained floating props
 # ---------------------------------------------------------------------------
+def _balloons():
+    """The boards' skyline, which this world's sky did not have.
+
+    Hot-air balloons appear in the hero frame of all three reference boards,
+    in the skyline panel of two, and have a panel of their own ("SKYLINE &
+    FLOATING ELEMENTS"). Wonderland's sky held clouds and a dome -- and the
+    sky is the half of every wide frame that no amount of garden can fill.
+
+    Sited by hand-written rules rather than scattered: they drift over the
+    CITY and the outer districts, never over the plaza (where they would sit
+    in HeroCam0's castle sightline at the height the castle occupies), and
+    their altitude rises with distance so the far ones read against sky rather
+    than against the skyline they are meant to sit above.
+    """
+    silks = ("MI_V2_RoofPink", "MI_V2_RoofLilac", "MI_V2_RoofBlue",
+             "MI_V2_RoofRose", "MI_V2_RoofNavy", "MI_V2_PetalViolet")
+    out = []
+    for i in range(24):
+        b = (360.0 * i / 24.0 + 41.0 * _rnd(i, 77, 1)) % 360.0
+        r = 9000.0 + 30000.0 * _rnd(i, 77, 2) ** 0.7
+        a = math.radians(b)
+        x, y = math.cos(a) * r, math.sin(a) * r
+        # higher the further out, so a distant balloon is not lost in the city
+        z = 2600.0 + 4200.0 * (r / 39000.0) + 1800.0 * _rnd(i, 77, 3)
+        s = 0.85 + 0.85 * _rnd(i, 77, 4)
+        yaw = _rnd(i, 77, 5) * 360.0
+        out += [
+            A("balloon_envelope", x, y, z, yaw=yaw, s=s, mat=silks[i % 6],
+              label="Balloon%02d" % i),
+            A("balloon_basket", x, y, z, yaw=yaw, s=s, mat="MI_V2_Bark",
+              label="Balloon%02d_Basket" % i),
+        ]
+    return out
+
+
 SKY = _band("V2_Skyline", [
     A("sky_dome", 0, 0, -200, yaw=0, s=1.0, mat="MI_V2_SkyPano", label="Sky_MarblePanorama"),
-])
+] + _balloons())
 HOVER = _band("V2_Props", [
     A("key_ornate", 900, 2600, 2100, yaw=20, s=0.8, mat="MI_V2_Gold", label="FloatKey0"),
     A("key_ornate", -1400, 4200, 2400, yaw=160, s=0.8, mat="MI_V2_Gold", label="FloatKey1"),
@@ -3295,6 +3330,106 @@ def _road_tree(sites):
     return out
 
 
+#: The way's own waypoints, exported so the audit reads them rather than
+#: keeping a second copy: walkable.py had one, the route was re-solved, and
+#: the tool spent two runs reporting a turn the world no longer had.
+NORTH_WAY = ((-25.0, 6925.0), (425.0, 9475.0), (1775.0, 11275.0), (1175.0, 15025.0),
+             (2075.0, 16375.0), (1175.0, 18175.0), (-25.0, 18925.0), (125.0, 20125.0),
+             (1025.0, 20725.0), (9875.0, 19225.0), (10925.0, 20875.0), (11075.0, 23125.0))
+
+
+def _north_way():
+    """THE WAY PAST THE CASTLE.
+
+    Everything a walker can reach beyond the castle plane, they reach by going
+    round -- the audit says every quarter is reachable and says nothing about
+    whether a player would ever believe it. The approach ends AT the castle;
+    the boards' world does not.
+
+    So an authored route leaves the district on the castle's east shoulder,
+    threads between the approved focal-plane groups (the easternmost stands at
+    (5200, 12200), and this passes well outside it), and runs out to the East
+    Reach. It is authored rather than generated because its whole job is to
+    miss five specific approved masses and keep the castle sightline clear,
+    which is a composition decision and not a rule.
+
+    A gate where it leaves, markers along it, and lanterns at the turns: a
+    road nobody can see the start of is not a destination, it is a shortcut.
+    """
+    # ROUTED, NOT DRAWN -- twice over, because the first attempt was drawn.
+    #
+    # Written by hand from the district's east shoulder, this ran straight
+    # into the BeyondL hedge wall (seven pieces at x 7,229-7,571 from y 5,514
+    # to 9,286) and walkable.py reported its first turn UNREACHABLE. Asked
+    # instead for the route a walker takes, the flood came back going up the
+    # castle approach and turning east behind the plane -- a different shape
+    # entirely -- and squeezing past a court urn at 1.3 m, which is a walk and
+    # not a road.
+    #
+    # So the corridor was solved rather than sampled: a widest-path search
+    # (Dijkstra maximising the MINIMUM clearance) from the castle court to the
+    # milestone, then simplified by extending each leg only while the straight
+    # line still clears 250 uu. The answer is 2.6 m of clear air either side
+    # for the whole run, which carries a 3 m road with a metre to spare, and
+    # it says something the eye could not: the way past the castle goes UP THE
+    # AXIS behind the focal plane and turns east at 200 m, because the flanks
+    # and the beyond gardens close every other side.
+    #
+    # It starts at the CASTLE COURT, not at the plaza. The approach is already
+    # the route from the plaza; this is what happens when you get there.
+    way = NORTH_WAY
+    out = []
+    for i in range(len(way) - 1):
+        (x0, y0), (x1, y1) = way[i], way[i + 1]
+        out += _road(x0, y0, x1, y1, 280.0, "NorthWay%d" % i)
+        out += _road_verge(x0, y0, x1, y1, "NorthWay%d" % i, 4400 + 17 * i)
+        # a lantern pair at every turn, so the way reads at dusk and at range
+        for k, side in enumerate((-1, 1)):
+            dx, dy = x1 - x0, y1 - y0
+            d = math.hypot(dx, dy) or 1.0
+            nx, ny = -dy / d, dx / d
+            out += [
+                A("pedestal_finial", x1 + nx * 300.0 * side, y1 + ny * 300.0 * side, 0,
+                  s=0.9, mat="MI_V2_IvoryStone", label="NorthWay%d_Post%d" % (i, k)),
+                A("gate_finial_ball", x1 + nx * 300.0 * side, y1 + ny * 300.0 * side, 128.0,
+                  s=0.55, mat="MI_V2_Gold", label="NorthWay%d_Lamp%d" % (i, k)),
+            ]
+    # THE NORTH GATE, where it leaves the court: the same gold language as the
+    # arrival gate, at the scale of a garden gate rather than a portal
+    gx, gy = way[0]
+    yaw = math.degrees(math.atan2(way[1][1] - gy, way[1][0] - gx)) + 90.0
+    c, s0 = math.cos(math.radians(yaw)), math.sin(math.radians(yaw))
+    for k, side in enumerate((-1, 1)):
+        px, py = gx + c * 260.0 * side, gy + s0 * 260.0 * side
+        out += [
+            A("gate_pier", px, py, 0, yaw=yaw, s=1.0, mat="MI_V2_IvoryStone",
+              label="NorthGate_Pier%d" % k),
+            A("gate_finial_ball", px, py, 300.0, s=0.7, mat="MI_V2_Gold",
+              label="NorthGate_Finial%d" % k),
+        ]
+    out += [
+        A("gate_arch_gold", gx, gy, 0, yaw=yaw, s=0.95, mat="MI_V2_Gold",
+          label="NorthGate_Arch"),
+        A("garden_urn", gx + c * 620.0, gy + s0 * 620.0, 0, s=0.85, mat="MI_V2_Ceramic",
+          label="NorthGate_UrnL"),
+        A("garden_urn", gx - c * 620.0, gy - s0 * 620.0, 0, s=0.85, mat="MI_V2_Ceramic",
+          label="NorthGate_UrnR"),
+    ]
+    # and a MILESTONE at the far end, so the way arrives somewhere named
+    ex, ey = way[-1]
+    out += [
+        A("stone_ring_base", ex, ey, -2, s=1.4, mat="MI_V2_Stone",
+          label="NorthWay_EndRing"),
+        A("pedestal_finial", ex, ey, 0, s=1.6, mat="MI_V2_IvoryStone",
+          label="NorthWay_EndPlinth"),
+        A("clock_ornate", ex, ey, 240.0, yaw=250.0, s=1.8, mat="MI_V2_Gold",
+          label="NorthWay_EndClock"),
+        A("garden_arch_stone", ex - 300.0, ey - 900.0, 220, yaw=250.0, s=1.0,
+          mat="MI_V2_IvoryStone", label="NorthWay_EndArch"),
+    ]
+    return out
+
+
 def _ring_roads(sites):
     """The legs that close the loops, at two radii.
 
@@ -3341,11 +3476,102 @@ def _outer_world():
         out += _quarter_edge(s, H)
     out += _road_tree(SITES)
     out += _ring_roads(SITES)
+    out += _north_way()
     out += _country()
+    out += _district_cam_foregrounds()
     protected = [it for band in (FOREGROUND, GARDEN, PALACE, FLANK_GROUND, FLANKS,
                                  REARWORLD, CAM_FOREGROUNDS)
                  for it in band if it["asset"] in _PROTECT]
     return _declutter(out, also=protected)
+
+
+# ---------------------------------------------------------------------------
+# WHAT THE DISTRICT CAMERAS STAND IN
+# ---------------------------------------------------------------------------
+#
+# The eight new cameras were placed at the distance their SUBJECT needs, and
+# camera_framing immediately said what that costs: 2 to 19 placements in the
+# near band, against 42 for the flank cameras that were built for. A frame
+# whose bottom third is bare lawn reads as a screenshot of an asset, not as a
+# place -- which is the exact failure PASS 09-12 spent three passes on.
+#
+# This is that fix done once, in arithmetic rather than by eye. For every
+# camera tagged as a district camera it reads the camera's OWN transform,
+# computes where its picture of the ground begins
+#
+#     d_near = eye_z / tan(-(pitch - vfov/2))
+#
+# and lays a clump between there and 2.6x it, inside the visible half-width
+# (which at 90 deg fov equals the depth), on both sides of the axis with the
+# middle left open so the subject is never hidden. Nothing it places can be
+# under a lens, because the lens is what decides where it goes.
+
+#: Cameras that get one. The eight world/district cameras; Golden Arrival's
+#: own eleven are authored ground and are not touched.
+_CAM_FOREGROUND_TAGS = ("HeroCam13", "HeroCam14", "HeroCam15", "HeroCam16",
+                        "HeroCam17", "HeroCam18")
+
+
+def _district_cam_foregrounds():
+    try:
+        import v2_config as _C
+    except Exception:                          # the layout must import alone
+        return []
+    out = []
+    aspect = 16.0 / 9.0
+    for cam in getattr(_C, "HERO_CAMS", ()):
+        tags = tuple(cam.get("tags", ()))
+        if not any(t in _CAM_FOREGROUND_TAGS for t in tags):
+            continue
+        x, y, z = cam["location"]
+        pitch, yaw = cam["rotation"][0], cam["rotation"][1]
+        hfov = math.radians(float(cam["fov"]))
+        vfov = 2.0 * math.atan(math.tan(hfov / 2.0) / aspect)
+        lower = math.radians(pitch) - vfov / 2.0
+        if lower >= -1e-6:
+            continue
+        d_near = z / math.tan(-lower)
+        fwd = (math.cos(math.radians(yaw)), math.sin(math.radians(yaw)))
+        side = (-fwd[1], fwd[0])
+        seed = int(abs(x) + abs(y)) % 9973
+        tag = cam["name"]
+        n = 13
+        for i in range(n):
+            # depth 1.15x to 2.6x d_near; the near end is the bottom of frame
+            t = 1.15 + 1.45 * _rnd(i, seed, 121)
+            depth = d_near * t
+            # off-axis, but never across the middle third: the subject is there
+            half = depth * math.tan(hfov / 2.0)
+            lat = (0.34 + 0.52 * _rnd(i, seed, 122)) * half * (1 if i % 2 else -1)
+            px = x + fwd[0] * depth + side[0] * lat
+            py = y + fwd[1] * depth + side[1] * lat
+            pick = _rnd(i, seed, 123)
+            if pick < 0.30:
+                s = 1.0 + 0.35 * _rnd(i, seed, 124)
+                out += [
+                    A("tree_slender_trunk", px, py, 0, yaw=_rnd(i, seed, 125) * 360.0,
+                      s=s, mat="MI_V2_Bark", label="%s_FgTrunk%d" % (tag, i)),
+                    A("canopy_medium", px, py, 800.0 * s, yaw=_rnd(i, seed, 126) * 360.0,
+                      s=s * 1.2, mat=("MI_V2_LeafMid", "MI_V2_LeafDark")[i % 2],
+                      label="%s_FgCanopy%d" % (tag, i)),
+                ]
+            elif pick < 0.58:
+                out.append(A(("shrub_flowering", "rose_bush", "topiary_ball")[i % 3],
+                             px, py, 0, yaw=_rnd(i, seed, 127) * 360.0,
+                             s=0.85 + 0.4 * _rnd(i, seed, 128),
+                             mat=("MI_V2_LeafMid", "MI_V2_LeafDark")[i % 2],
+                             label="%s_FgShrub%d" % (tag, i)))
+            elif pick < 0.82:
+                out += _ground_patch(px, py, 0, _rnd(i, seed, 129) * 360.0, 1.15,
+                                     ("MI_V2_PetalPink", "MI_V2_PetalViolet",
+                                      "MI_V2_PetalWhite", "MI_V2_Lavender")[i % 4],
+                                     "%s_FgBed%d" % (tag, i))
+            else:
+                out.append(A("hedge_mass", px, py, 0,
+                             yaw=math.degrees(math.atan2(side[1], side[0])),
+                             s=1.0 + 0.4 * _rnd(i, seed, 130),
+                             mat="MI_V2_LeafDark", label="%s_FgHedge%d" % (tag, i)))
+    return out
 
 
 #: THE GROUND BETWEEN THE QUARTERS. The world render shows one flat green

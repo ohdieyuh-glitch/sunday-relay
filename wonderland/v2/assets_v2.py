@@ -1138,7 +1138,56 @@ def cloud_veil(ctx):
     return m
 
 
+def balloon_envelope(ctx):
+    """A HOT-AIR BALLOON, 9 m across -- the boards' skyline, finally in the kit.
+
+    Every one of the three reference boards puts balloons over Wonderland:
+    the primary world bible has three in its hero frame, the skyline panel has
+    two, "SKYLINE & FLOATING ELEMENTS" is a panel of its own. The world had a
+    sky with clouds in it and nothing else, and the sky is the half of every
+    wide frame that Golden Arrival's cameras cannot fill with garden.
+
+    The envelope is a revolve: a rounded shoulder, a full belly, a gathered
+    throat. It is one mesh so the whole balloon is one instanced draw, and the
+    gores are read from the material rather than modelled -- at 40 to 200 m
+    away, which is where these live, a modelled seam is invisible and a
+    coloured one is the entire silhouette.
+    """
+    m = ctx.mesh("balloon_envelope")
+    R, Hh = 450.0, 620.0
+    prof = [(0.0, Hh), (0.16 * R, Hh * 0.995), (0.42 * R, Hh * 0.96), (0.68 * R, Hh * 0.88),
+            (0.88 * R, Hh * 0.76), (0.98 * R, Hh * 0.62), (1.00 * R, Hh * 0.48),
+            (0.96 * R, Hh * 0.34), (0.84 * R, Hh * 0.22), (0.64 * R, Hh * 0.12),
+            (0.42 * R, Hh * 0.05), (0.26 * R, 0.0), (0.24 * R, -30.0), (0.0, -30.0)]
+    m.revolve(prof, steps=28)
+    m.subdivide(1)
+    m.smooth(1, 0.2)
+    return m
+
+
+def balloon_basket(ctx):
+    """The basket and its rigging: a woven box, a hoop, four risers.
+
+    Separate from the envelope so the two wear different materials -- the
+    basket is wicker and the envelope is painted silk, and one mesh cannot be
+    both. Modelled at the size the reference shows relative to a 9 m envelope.
+    """
+    m = ctx.mesh("balloon_basket")
+    m.box(150.0, 150.0, 130.0, at=(0, 0, -195.0), chamfer=10.0)
+    m.box(162.0, 162.0, 14.0, at=(0, 0, -128.0), chamfer=4.0)
+    m.torus(120.0, 10.0, at=(0, 0, -95.0), major=20, minor=6)
+    for k in range(4):
+        a = math.radians(90.0 * k + 45.0)
+        m.box(9.0, 9.0, 120.0, at=(math.cos(a) * 105.0, math.sin(a) * 105.0, -155.0))
+        m.box(9.0, 9.0, 100.0, at=(math.cos(a) * 118.0, math.sin(a) * 118.0, -45.0),
+              rot=(math.degrees(math.atan2(30.0, 100.0)) * math.cos(a),
+                   0.0, math.degrees(math.atan2(30.0, 100.0)) * math.sin(a)))
+    return m
+
+
 RECIPES = {
+    "balloon_envelope": (balloon_envelope, "sky", False, False),
+    "balloon_basket": (balloon_basket, "sky", False, False),
     "portal_disc": (portal_disc, "vfx_portal", True, False),
     "cloud_cumulus_a": (cloud_cumulus_a, "sky", False, False),
     "cloud_cumulus_b": (cloud_cumulus_b, "sky", False, False),
