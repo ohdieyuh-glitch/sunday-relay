@@ -49,6 +49,55 @@ def A(asset, x, y, z=0.0, yaw=0.0, s=1.0, mat=None, label=None, sxyz=None, pitch
             "scale": sxyz if sxyz is not None else (s, s, s), "mat": mat, "label": label}
 
 
+def _dress_wall(x, y, yaw, length, tag, planters=True, side=1.0):
+    """Give a plain wall run depth: pilasters, a cap course, and planting at
+    its foot.
+
+    The founder has named the plaza-side walls twice -- "ReverseCam03
+    currently exposes plain walls", and "plain walls and unfinished backsides
+    are not acceptable merely because HeroCam0 cannot see them". A garden_wall
+    is 510 x 100 x 263 uu of flat ashlar, and a run of them is a flat ribbon
+    however good the material is. What the boards show on the same surface is
+    RELIEF: a vertical rhythm of pilasters, a horizontal line capping it, and
+    the garden meeting its foot rather than stopping at it. None of this is
+    decoration laid over blank geometry -- it is the wall having a section.
+    """
+    out = []
+    c, sn = math.cos(math.radians(yaw)), math.sin(math.radians(yaw))
+    n = max(2, int(length / 500.0))
+    for i in range(n + 1):
+        t = -0.5 + i / float(n)
+        px, py = x + c * length * t, y + sn * length * t
+        # a pilaster: a narrow tall block standing proud of the wall face
+        out.append(A("gate_pier", px, py, 0, yaw=yaw, sxyz=(0.34, 0.30, 0.42),
+                     mat="MI_V2_IvoryStone", label="%s_Pilaster%d" % (tag, i)))
+        if i % 2 == 0:
+            out.append(A("gate_finial_ball", px, py, 273, s=0.34, mat="MI_V2_Gold",
+                         label="%s_PilasterCap%d" % (tag, i)))
+    # the cap course, a thin run along the top
+    out.append(A("kerb_stone", x, y, 258, yaw=yaw,
+                 sxyz=(length / 120.0, 1.5, 0.34), mat="MI_V2_IvoryStone",
+                 label="%s_Cap" % tag))
+    if planters:
+        for i in range(max(2, n // 2)):
+            t = -0.42 + 0.84 * (i / float(max(1, (n // 2) - 1)) if n > 3 else i)
+            # `side` puts the planters on the GARDEN face. The first version
+            # had no such argument and offset them one way for every wall,
+            # which put four of them on the plaza -- caught by the layout
+            # gate's plaza-clean check before it reached a render, which is
+            # what that check is for.
+            px = x + c * length * t - sn * 150.0 * side
+            py = y + sn * length * t + c * 150.0 * side
+            out += [
+                A("planter_box", px, py, 0, yaw=yaw, s=0.85, mat="MI_V2_IvoryStone",
+                  label="%s_Planter%d" % (tag, i)),
+                A("flower_cluster", px, py, 62, yaw=30 * i, s=0.5,
+                  mat=("MI_V2_PetalPink", "MI_V2_Lavender", "MI_V2_PetalWhite")[i % 3],
+                  label="%s_PlanterFlowers%d" % (tag, i)),
+            ]
+    return out
+
+
 def _ground_patch(x, y, z, yaw, sc, petal, label):
     """A ground-flower patch: the green leaf MAT and its coloured BLOOMS, on
     the same spot. Two meshes because one mesh is one material -- placing
@@ -89,6 +138,14 @@ GATE = _band("V2_Arrival", [
     A("garden_wall", 1080, -910, 0, s=1.0, mat="MI_V2_IvoryStone", label="Rear_WallL1"),
     A("garden_wall", -580, -910, 0, s=1.0, mat="MI_V2_IvoryStone", label="Rear_WallR0"),
     A("garden_wall", -1080, -910, 0, s=1.0, mat="MI_V2_IvoryStone", label="Rear_WallR1"),
+# PILASTERS AND A CAP, NO PLANTERS. This wall stands INSIDE PLAZA_RECT
+# (x +-650, y -1500..800), so a planter row at its foot lands on the arrival
+# floor -- which the layout gate's plaza-clean check said twice, once for each
+# side I tried. It is right: that floor is where participants arrive and
+# gather, and the founder's brief asks for open gathering areas and clear
+# movement lanes there. The wall gets its section; the plaza keeps its floor.
+] + _dress_wall(830, -910, 0.0, 1000.0, "Rear_WallL", planters=False) \
+  + _dress_wall(-830, -910, 0.0, 1000.0, "Rear_WallR", planters=False) + [
     A("ivy_drape", 700, -880, 250, s=0.7, mat="MI_V2_LeafMid", label="Rear_IvyL"),
     A("ivy_drape", -800, -880, 250, s=0.7, mat="MI_V2_LeafDark", label="Rear_IvyR"),
     A("hedge_block", 800, -1060, 0, yaw=0, s=1.2, mat="MI_V2_LeafDark", label="Rear_HedgeL"),
@@ -718,6 +775,15 @@ def _parterre(sgn, cx, cy, seed, tag):
         # +3 puts it just proud of the slab (0) and of the garden lawn (-2).
         out.append(A("garden_lawn", bx, by, 3.0, sxyz=(0.1033, 0.0862, 0.5),
                      mat="MI_V2_Soil", label="%s_Bed%d_Soil" % (tag, i)))
+        # STONE BORDERS. The brief asks for premium stone borders and formal
+        # geometry, and the boards show every bed held by a kerb -- it is the
+        # line that makes a bed a BED rather than a patch of planting. Four
+        # kerb runs on the bed's own square, laid at its edge and low enough
+        # to read as an edging course rather than a wall.
+        for k, (dx, dy, kyaw) in enumerate(((0, -1, 0), (0, 1, 0), (-1, 0, 90), (1, 0, 90))):
+            out.append(A("kerb_stone", bx + dx * (q * 0.5 + 34.0), by + dy * (q * 0.5 + 34.0), 0,
+                         yaw=kyaw, sxyz=(5.4, 1.0, 0.62), mat="MI_V2_Kerb",
+                         label="%s_Bed%d_Kerb%d" % (tag, i, k)))
         # what fills it
         out.append(A("rose_bush", bx, by, 60, yaw=40 * i, s=0.85,
                      mat="MI_V2_LeafMid", label="%s_Bed%d_Rose" % (tag, i)))
@@ -760,10 +826,37 @@ def _parterre(sgn, cx, cy, seed, tag):
         A("garden_urn", cx, cy, 124, s=0.6, mat="MI_V2_Ceramic", label="%s_Centre_Urn" % tag),
         A("flower_cluster", cx, cy, 210, s=0.5, mat="MI_V2_PetalPink", label="%s_Centre_Flowers" % tag),
     ]
-    # cones at the room's outer corners, so it has a silhouette from the plaza
+    # cones at the room's outer corners, so it has a silhouette from the plaza,
+    # and a PLINTHED URN beside each -- the boards put ornament at the corners
+    # of a formal room, and a cone alone is a shape rather than a decision
     for i, (qx, qy) in enumerate(((-1, -1), (-1, 1), (1, -1), (1, 1))):
-        out.append(A("topiary_cone_plain", cx + sgn * qx * (off + q * 0.62), cy + qy * (off + q * 0.62), 0,
-                     s=0.9, mat="MI_V2_LeafDark", label="%s_Cone%d" % (tag, i)))
+        ox, oy = cx + sgn * qx * (off + q * 0.62), cy + qy * (off + q * 0.62)
+        out.append(A("topiary_cone_plain", ox, oy, 0, s=0.9, mat="MI_V2_LeafDark",
+                     label="%s_Cone%d" % (tag, i)))
+        out += [
+            A("pedestal_finial", ox + sgn * qx * 300.0, oy + qy * 300.0, 0, s=0.8,
+              mat="MI_V2_IvoryStone", label="%s_CornerPlinth%d" % (tag, i)),
+            A("garden_urn", ox + sgn * qx * 300.0, oy + qy * 300.0, 100, s=0.5,
+              mat="MI_V2_Ceramic", label="%s_CornerUrn%d" % (tag, i)),
+            A("flower_cluster", ox + sgn * qx * 300.0, oy + qy * 300.0, 172, s=0.42,
+              mat=("MI_V2_PetalPink", "MI_V2_PetalViolet", "MI_V2_PetalWhite",
+                   "MI_V2_RosePink")[i % 4],
+              label="%s_CornerFlowers%d" % (tag, i)),
+        ]
+    # THE ROOM HAS A RIM. A low wall along the room's outer square, broken at
+    # the four walk entrances, so the garden room is enclosed by architecture
+    # the way the boards enclose theirs -- hedges alone read as planting, a
+    # stone line reads as a built room.
+    rim = off + q * 0.5 + 190.0
+    for k in range(16):
+        side, t = k // 4, (k % 4) / 3.0
+        if 0.34 <= t <= 0.66:                 # the gap a walk passes through
+            continue
+        u = -rim + 2.0 * rim * t
+        px, py = ((u, -rim), (u, rim), (-rim, u), (rim, u))[side]
+        out.append(A("garden_wall", cx + sgn * px, cy + py, 0,
+                     yaw=(0.0, 0.0, 90.0, 90.0)[side], sxyz=(0.72, 1.0, 0.46),
+                     mat="MI_V2_IvoryStone", label="%s_Rim%d" % (tag, k)))
     return out
 
 
@@ -878,6 +971,8 @@ def _boundary(sgn, x, y0, y1, seed, tag):
         y = y0 + 500.0 * (i + 0.5)
         out.append(A("garden_wall", sgn * x, y, 0, yaw=90, s=1.0,
                      mat="MI_V2_IvoryStone", label="%s_Wall%d" % (tag, i)))
+        if i % 3 == 0:
+            out += _dress_wall(sgn * x, y, 90.0, 1400.0, "%s_W%d" % (tag, i), planters=False)
         if i % 4 == 0:
             out.append(A("gate_pier", sgn * x, y - 250, 0, s=0.62,
                          mat="MI_V2_IvoryStone", label="%s_Pier%d" % (tag, i)))
