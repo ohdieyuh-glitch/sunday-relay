@@ -105,9 +105,9 @@ impression. 69 offline proofs pass (`wonderland/tests/cpp/RelayDogStride.test.cp
 | turns respect momentum | met | bank scales with speed and decays; a walking turn banks <60% of a running one |
 | no visible foot sliding | met | 0.001 uu/frame flat, 0.0008 uu/frame while climbing a 14 uu stair profile |
 | stairs / uneven surfaces | met | the 60 uu path riser removed (13.8 uu per slab now); walkable kit given collision; the Dog climbs the approach in-world |
-| gameplay camera / collision | fixed, awaiting the founder's eyes | boom raised/shortened/pitched down after the capture caught it collapsing into the Dog; a geometric sweep of the exploration circuit now puts the boom inside a collidable piece at only 6 of ~100 samples, clustered at the spawn (beside the plaza side steps) — localised, not pervasive |
-| movement looks good inside Golden Arrival | **founder verdict** | — |
-| continuous founder-review capture | produced | 56 s take on 1b4cbc2 covering idle → walk → jog → run → arms-back sprint → stop → turns |
+| gameplay camera / collision | **founder approved 2026-08-30** | boom raised/shortened/pitched down after the capture caught it collapsing into the Dog; a geometric sweep of the exploration circuit now puts the boom inside a collidable piece at only 6 of ~100 samples, clustered at the spawn (beside the plaza side steps) — localised, not pervasive |
+| movement looks good inside Golden Arrival | **founder approved 2026-08-30** | "everything is good i aprove" — after a session of 1,068 moving samples across all five bands |
+| continuous founder-review capture | produced on the approved build | 24 s take on a745f04: all five bands, 559 uu/s, armsback=1.00, centred tail, counter-rotating walk, raised camera |
 
 ### Performance, before and after
 
@@ -163,3 +163,15 @@ arrived.
   not been filmed specifically.
 - The idle look-target hook exists (`bHasLookTarget`) with nothing yet driving it — camera,
   participants and Djinn are the intended sources later.
+
+## Closed — founder approved 2026-08-30
+
+The founder's own play session is the last piece of evidence: 1,068 moving samples across all five
+bands (391 walk, 354 jog, 189 anime run, 81 run, 70 idle), stride rising monotonically with speed
+(23→4, 43→21, 86→52 uu), and 17 near-zero samples in 1,068 — no sticking, no stalls. Verdict:
+*"everything is good i aprove"*.
+
+**13 of 13 acceptance criteria met.** No CRITICAL or HIGH gaps. Carried forward to the world phase:
+the camera can still be pulled in by architecture at a handful of points (6 of ~100 route samples,
+clustered at the spawn); dash is a foundation only; the idle look-target hook has nothing driving it
+yet. Next phase is WORLD DEVELOPMENT, not combat — see [[wonderland-world-before-combat]].
