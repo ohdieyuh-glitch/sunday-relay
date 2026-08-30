@@ -1328,3 +1328,50 @@ verify_v2_dryrun PASS (625 actors) · verify_dog_canon PASS.
 Still open from the standing list: 1 (dark frames — PASS 24 lit them, unjudged
 in a fresh capture), 2, 3, 4, 5, 6. Item 7 closed. Item 8 half-closed: the
 route is solved and written, but it has not been RUN on hardware.
+
+---
+
+## THE LIVE TERMINAL (2026-08-30)
+
+Founder canon: Wonderland is an AI creation platform wrapped in an open-world
+interface. SPACE is the Live Terminal. The Relay Dog does not jump. RELAY
+SYSTEM is JULIUS, the orchestration layer ABOVE the three workers.
+
+Built at `wonderland/web/player/`. Two decisions are structural rather than
+habits, because both fail silently:
+
+**Who owns the keyboard** (`keys.js`). Space is a character before it is a
+shortcut, so the global binding fires only when world input owns focus -- never
+from an input, textarea, select, contenteditable or textbox role -- and the
+terminal focuses its input the moment it opens. `preventDefault` is false for
+typing (the space still types) and true when we claim the key (the page never
+scrolls).
+
+**What it may say** (`feed.js`). `normalizeEvent` reads six named fields and
+ignores the rest, so chain-of-thought, hidden prompts, secrets and internal
+reasoning cannot reach the panel by default -- a producer that grows a
+`reasoning` field leaks nothing, because the field is never read. With no
+source connected the terminal says NO AUTHORITATIVE FEED CONNECTED and shows
+nothing; a command typed with nowhere to send it says so rather than being
+answered. It projects execution; it does not invent it.
+
+**The defect the standalone harness could not have found.** Standing it up
+against a page shaped like Epic's Pixel Streaming frontend showed the game
+receiving the opening Space and every character of "walk south". Listeners on
+the same target in the same phase fire in REGISTRATION ORDER, so a client that
+binds window-capture first cannot be stopped by any amount of
+stopImmediatePropagation -- capture phase was necessary and nowhere near
+sufficient. `claimKeyboard()` now runs at MODULE EVALUATION with no DOM, and
+`install-overlay.sh` puts the tag BEFORE player.js. Reversing those two lines
+reproduces the failure exactly, which is why the harness keeps both orders.
+
+The panel's markup lives once, in `mount.js`, and `index.html` mounts the same
+thing: two copies of an approved design is two designs.
+
+97 offline assertions, 24 through real Chrome across both pages. The bridge
+that carries real Julius execution into `window.wonderlandTerminal.connect()`
+is the next piece of work, and until it exists the panel says so.
+
+Also corrected: `playtest.sh` printed "space  jump" beside the URL the founder
+opens -- the first thing they read, teaching the canon that had just been
+overturned.
