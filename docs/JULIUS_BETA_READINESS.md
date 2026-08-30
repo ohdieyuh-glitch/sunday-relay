@@ -62,3 +62,19 @@ A separate reviewer found Critical/High gaps after the first infrastructure comm
 ## Exit decision
 
 **NOT BETA-READY.** This change materially closes architecture and durability gaps and creates a real-infrastructure proof path, with real PostgreSQL and basic Docker proof, but no live provider mission or complete hostile-code/chaos proof exists.
+
+## PR #203 follow-on closure checkpoint (2026-08-30)
+
+The follow-on branch `codex/julius-beta-closure` adds migration 020 rather than rewriting published migration 019. It introduces explicit effect classes, durable executor-receipt and sandbox-ownership schemas, a fail-closed reconciliation decision, recovery claims for expired `DISPATCHING`/`RUNNING` work, opaque Docker discovery labels, and physical sandbox discovery/quarantine operations. Dispatch and completion now revalidate the live task lease and C.A.R.D. revision; completion rejects mismatched invocation and artifact references. The bounded provider loop now enforces a real wall-clock abort rather than checking time only between turns.
+
+These changes move crash-after-effect handling from **ABSENT** to **IMPLEMENTED**, not `DURABLE` or `REAL_INFRA_PROVEN`. In particular, arbitrary shell work with an unknown outcome is blocked from automatic replay, but the Docker executor does not yet write terminal receipts independently of the orchestrator process. Persistent sandbox rows and physical discovery exist, but deployment composition does not yet run the complete DB↔Docker reconciler. Migration 020's settlement ledger establishes exactly-once schema identity, but a single transaction that commits budget, evidence, trajectory, event, task outcome, and artifact metadata is still open.
+
+No live provider credential is present in this environment. `OPENAI_BASE_URL` and `OPENAI_CLUSTER` without `OPENAI_API_KEY` do not authorize a request; no Anthropic/xAI credential is present. Therefore no first real provider mission, reviewer-triggered repair, or honest beta claim is recorded here.
+
+### Fresh validation on this follow-on
+
+A fresh full repository run with one worker completed 462 files: 460 passed, 1 infrastructure-only suite remained skipped/todo without credentials, and `relay-bridge/loop-routes.test.ts` had one 5-second timeout (8,727 passed, 1 failed, 4 todo). The failed file immediately passed in isolation (39/39), classifying it as suite-load/resource contention rather than a Julius regression. An earlier parallel full run also exposed the newly added migration/test-accounting updates plus a boundary-scanner timeout; the migration/accounting defects were fixed, and the boundary scanner then passed alone (209/209). The full matrix is therefore not represented as unconditionally green and Julius remains not beta-ready.
+
+### Independent security review
+
+A genuinely separate reviewing agent audited the effective follow-on diff and its revisions. Final review found **0 Critical** findings. The revision closed DB-clock lease fencing, pre-execution stale authority, scoped receipt/sandbox constraints, terminal-result integrity, hard provider deadlines, and exclusive generation-fenced recovery claims. Remaining High findings are explicitly blocking: executor-side before/after receipts plus a composed recovery worker; one atomic budget/evidence/artifact/event/trajectory/task settlement; and composition of the durable sandbox repository into Docker lifecycle/restart handling. No beta-readiness claim is made.

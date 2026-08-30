@@ -114,3 +114,7 @@ The inherited persistence suite contains SQL/model conformance and migration-cha
 ## Independent review
 
 A genuinely separate Codex sub-agent reviewed the final-direction diff. It found Critical issues in forgeable isolation attestations, final-component symlink writes, and cross-tenant idempotency, plus High issues in cancellation, bounds, atomicity, production wiring, and overclaimed documentation. This revision fixed final-component symlink refusal, tenant/run-scoped request-bound idempotency, pre-abort cancellation, one total output cap, reserved environment projection, reservation scoping, and the boundary placement. It corrected the capability matrix and security claims. The OS sandbox, durable transactional settlement, fully awaited descendant proof, bounded streaming filesystem search, artifacts, and production wiring remain open; therefore **this candidate is not merge-ready and must not be merged**.
+
+## Beta closure follow-on
+
+A reviewable follow-on from PR #203 uses migration 020 to avoid altering published schema history. It adds fail-closed crash-after-effect semantics and durable sandbox/receipt/settlement records while retaining the #198 dependency boundary. This is a material safety improvement, not a beta declaration: no provider credentials were available, Docker/PostgreSQL are unavailable in this checkout, and the full real mission and chaos matrix remain unexecuted. Founder action remains review only; do not merge #202 or #203 until the remaining beta blockers in `JULIUS_BETA_READINESS.md` are closed.

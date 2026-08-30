@@ -57,10 +57,12 @@ export {
   type PspConfigStore,
   type SavedPsp,
 } from './psp-config-node';
-export { TransactionalWonderlandDatabase, postgresWonderlandDatabaseFromEnv, WONDERLAND_MIGRATION_001, WONDERLAND_MIGRATION_002, WONDERLAND_MIGRATION_003, WONDERLAND_MIGRATION_004, WONDERLAND_MIGRATION_005, WONDERLAND_MIGRATION_006, WONDERLAND_MIGRATION_007, WONDERLAND_MIGRATION_008, WONDERLAND_MIGRATION_009, WONDERLAND_MIGRATION_010, WONDERLAND_MIGRATION_019, WONDERLAND_MIGRATIONS, type WonderlandTransaction, type ClaimedOutbox, type BudgetAmounts, type BudgetReservation, type DurableEvalRuntime, type ClaimedSwarmWorker, type CreateSwarmRun } from './wonderland-postgres';
+export { TransactionalWonderlandDatabase, postgresWonderlandDatabaseFromEnv, WONDERLAND_MIGRATION_001, WONDERLAND_MIGRATION_002, WONDERLAND_MIGRATION_003, WONDERLAND_MIGRATION_004, WONDERLAND_MIGRATION_005, WONDERLAND_MIGRATION_006, WONDERLAND_MIGRATION_007, WONDERLAND_MIGRATION_008, WONDERLAND_MIGRATION_009, WONDERLAND_MIGRATION_010, WONDERLAND_MIGRATION_019, WONDERLAND_MIGRATION_020, WONDERLAND_MIGRATIONS, type WonderlandTransaction, type ClaimedOutbox, type BudgetAmounts, type BudgetReservation, type DurableEvalRuntime, type ClaimedSwarmWorker, type CreateSwarmRun } from './wonderland-postgres';
 export { JULIUS_READ_LIMIT, JuliusReadPostgresRepository } from './julius-read-postgres';
 export { JuliusSubagentPostgresRepository } from './julius-subagent-postgres';
 export { JuliusLifecyclePostgresRepository } from './julius-lifecycle-postgres';
 export { JuliusTimelinePostgresRepository } from './julius-timeline-postgres';
 export { GauntletPostgresRepository } from './gauntlet-postgres';
 export { JuliusToolPostgresRepository } from './julius-tool-postgres';
+
+export { JuliusToolRecoveryPostgresRepository } from './julius-tool-recovery-postgres';

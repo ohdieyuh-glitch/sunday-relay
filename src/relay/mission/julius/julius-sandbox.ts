@@ -1,11 +1,12 @@
 import type { ToolInvocationRequest, ToolInvocationResult } from './julius-tools';
 
-export type JuliusSandboxState='CREATING'|'READY'|'RUNNING'|'DESTROYING'|'DESTROYED'|'FAILED'|'EXPIRED';
+export type JuliusSandboxState='CREATING'|'READY'|'RUNNING'|'RECONCILING'|'DESTROYING'|'DESTROYED'|'FAILED'|'EXPIRED'|'LOST';
 export interface JuliusSandboxIdentity {readonly sandboxId:string;readonly tenantId:string;readonly projectId:string;readonly runId:string;readonly taskId:string;readonly leaseGeneration:number;readonly policyRevision:string;readonly createdAt:string;readonly expiresAt:string;}
 export interface JuliusSandboxLimits {readonly cpuCount:number;readonly memoryBytes:number;readonly pids:number;readonly openFiles:number;readonly workspaceBytes:number;readonly outputBytes:number;readonly wallClockMs:number;readonly concurrentProcesses:number;}
 export interface JuliusSandboxPolicy {readonly readWorkspace:boolean;readonly mutateWorkspace:boolean;readonly executeProcess:boolean;readonly network:'DENY'|'MEDIATED';readonly allowedTools:readonly string[];}
 export interface JuliusSandboxRecord extends JuliusSandboxIdentity {readonly state:JuliusSandboxState;readonly workspaceRef:string|null;readonly runtimeKind:string;readonly limits:JuliusSandboxLimits;readonly policy:JuliusSandboxPolicy;readonly safeFailure:string|null;}
 export interface JuliusSandboxInspection {readonly record:JuliusSandboxRecord;readonly alive:boolean;readonly processCount:number|null;readonly workspaceBytes:number|null;}
+export interface JuliusPhysicalSandbox {readonly sandboxId:string;readonly runtimeId:string;readonly state:string;readonly labels:Readonly<Record<string,string>>;}
 export interface JuliusCollectedArtifact {readonly path:string;readonly kind:string;readonly contentType:string;readonly byteSize:number;readonly contentHash:string;}
 
 /** Provider-neutral boundary. Julius never imports a container implementation. */
@@ -17,6 +18,16 @@ export interface SandboxExecutionPort {
  destroySandbox(input:{sandboxId:string;expectedLeaseGeneration:number;reason:string}):Promise<boolean>;
  inspectSandbox(input:{sandboxId:string;tenantId:string;projectId:string}):Promise<JuliusSandboxInspection|null>;
  collectArtifacts(input:{sandboxId:string;invocationId:string;expectedLeaseGeneration:number}):Promise<readonly JuliusCollectedArtifact[]>;
+ discoverSandboxes():Promise<readonly JuliusPhysicalSandbox[]>;
+ quarantineSandbox(input:{runtimeId:string;reason:string}):Promise<boolean>;
+}
+
+export interface JuliusSandboxRecoveryClaim {readonly record:JuliusSandboxRecord;readonly recoveryGeneration:number;readonly claimedUntil:string;}
+export interface JuliusSandboxStore {
+ save(record:JuliusSandboxRecord&{readonly invocationId:string;readonly runtimeInstanceId:string;readonly containerId:string|null;readonly imageDigest:string;readonly lastHeartbeatAt:string}):Promise<boolean>;
+ heartbeat(input:{sandboxId:string;runtimeInstanceId:string;leaseGeneration:number;now:string;expiresAt:string;state:'READY'|'RUNNING'}):Promise<boolean>;
+ listRecoverable(input:{runtimeInstanceId:string;now:string;limit:number}):Promise<readonly JuliusSandboxRecoveryClaim[]>;
+ transition(input:{sandboxId:string;runtimeInstanceId:string;leaseGeneration:number;recoveryGeneration:number;from:readonly JuliusSandboxState[];to:JuliusSandboxState;now:string;safeFailure?:string|null}):Promise<boolean>;
 }
 
 export function assertSandboxIdentity(identity:JuliusSandboxIdentity):void {if(!identity.sandboxId.trim()||!identity.tenantId.trim()||!identity.projectId.trim()||!identity.runId.trim()||!identity.taskId.trim()||!identity.policyRevision.trim())throw new Error('sandbox_identity_required');if(!Number.isSafeInteger(identity.leaseGeneration)||identity.leaseGeneration<1)throw new Error('sandbox_lease_generation_invalid');if(Date.parse(identity.expiresAt)<=Date.parse(identity.createdAt))throw new Error('sandbox_expiry_invalid');}

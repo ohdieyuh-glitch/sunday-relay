@@ -82,3 +82,9 @@ Legend: **Y** proven in the candidate; **P** partial/model-only; **N** absent or
 6. **Resource controls:** process count, CPU, memory, disk quota, and allowed executable sets require the deployment sandbox. Timeout/output/tool-call controls alone are not a complete hostile-code boundary.
 
 These gaps prevent describing the local adapter as a production hostile-code sandbox. The consolidation is founder-reviewable architecture and a tested local execution substrate; production enablement must remain off until gaps 1, 2, 3, 5, and 6 are closed.
+
+## Crash-after-effect follow-on
+
+Migration 020 classifies effects and persists scoped sandbox ownership, execution receipts, workspace-state digests, and a one-row-per-invocation settlement identity. Recovery policy is deliberately fail-closed: read-only work may retry only when never started or the sandbox is known gone; a durable terminal receipt or verified after-state may settle; an unknown non-idempotent/process effect requires an authorized reconciliation decision and is never blindly replayed. Docker containers now carry only opaque sandbox/run/task/image labels and can be enumerated or quarantined after adapter restart.
+
+This is not yet end-to-end crash proof. The executor receipt must still be emitted by a component that survives orchestrator death, and the durable reconciler must be composed into the production worker. Production object storage, atomic cross-record settlement, live provider routes, and the real repair mission remain blockers.
