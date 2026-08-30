@@ -208,12 +208,21 @@ start_app() {
     # Measured from a browser afterwards: 17.3 Mbps at 720p against a 6 Mbps
     # cap that was never in force. The resolution drop is what had helped; the
     # ceiling had done nothing at all.
-    local tune="PixelStreaming2.WebRTC.StartBitrate ${WL_PS_START_BITRATE:-2000000}"
-    tune="$tune,PixelStreaming2.WebRTC.MaxBitrate ${WL_PS_MAX_BITRATE:-6000000}"
-    tune="$tune,PixelStreaming2.WebRTC.MinBitrate ${WL_PS_MIN_BITRATE:-400000}"
+    # THE ENCODER IS DRIVEN AT A FIXED RATE, and that is the setting that
+    # mattered. With only a WebRTC ceiling the encoder holds resolution and
+    # DROPS FRAMES to stay under it -- measured on this box: 4.2 Mbps bought
+    # 21 fps, 7.1 Mbps bought 34, and the uncapped stream ran 17.3 Mbps for 80.
+    # Telling the encoder its target instead makes it trade image quality
+    # rather than frames: 4.3 Mbps at 74 fps, a quarter of the bandwidth for
+    # nearly all of the smoothness. That is what a distant viewer needs, and
+    # it is why the ceiling alone was not enough.
+    local tune="PixelStreaming2.Encoder.TargetBitrate ${WL_PS_TARGET_BITRATE:-6000000}"
+    tune="$tune,PixelStreaming2.WebRTC.StartBitrate ${WL_PS_START_BITRATE:-4000000}"
+    tune="$tune,PixelStreaming2.WebRTC.MaxBitrate ${WL_PS_MAX_BITRATE:-8000000}"
+    tune="$tune,PixelStreaming2.WebRTC.MinBitrate ${WL_PS_MIN_BITRATE:-1500000}"
     tune="$tune,PixelStreaming2.WebRTC.Fps ${WL_PS_FPS:-60}"
     if [ -n "${exec_cmds:-}" ]; then exec_cmds="$exec_cmds,$tune"; else exec_cmds="$tune"; fi
-    wl_say "stream tuned for a distant viewer: start ${WL_PS_START_BITRATE:-2000000}, max ${WL_PS_MAX_BITRATE:-6000000}, ${WL_PS_FPS:-60} fps at ${WL_RES_X}x${WL_RES_Y}"
+    wl_say "stream tuned for a distant viewer: encoder target ${WL_PS_TARGET_BITRATE:-6000000}, WebRTC ${WL_PS_MIN_BITRATE:-1500000}..${WL_PS_MAX_BITRATE:-8000000}, ${WL_PS_FPS:-60} fps at ${WL_RES_X}x${WL_RES_Y}"
   fi
   local exec_arg=()
   [ -n "${exec_cmds:-}" ] && exec_arg=(-ExecCmds="$exec_cmds")
