@@ -81,8 +81,26 @@ INSTANCES = {
     # dirt rather than meadow -- worse, not better, for that camera. The
     # desaturation was right; taking the green out from under a warm sun and a
     # warm grade at the same time was not. Green restored, saturation kept low.
-    "MI_V2_Moss":       ("sward",   (0.13, 0.18, 0.10), 0.0, 0.82, 0.60, 0.20, None, 0.0),
+    # PASS 23: THE QUILT DID NOT READ, and the reason is arithmetic. Moss and
+    # Lawn differ by 1.39x in luma (0.155 against 0.216 by Rec.709), and 28
+    # displaced lawn meshes laid on a moss slab at a 1.4x step are invisible
+    # at world distance -- the mechanism worked and the contrast did not,
+    # which is what the ledger has been carrying since PASS 20.
+    #
+    # Moss darkens by 12% and a THIRD sward joins them: a dry, yellower
+    # meadow green used only in the outer world. Lawn does NOT move -- it is
+    # the district's own grass, the founder has judged it, and the same ledger
+    # says the district already reads about 1.3x brighter than the reference.
+    #
+    #   Moss   0.137   Lawn 0.216   Meadow 0.285      moss:meadow 2.08x
+    #
+    # The one to watch is Moss: it is also the terrain slab, so this darkens
+    # the whole world's base ground by an eighth. That is the intent -- the
+    # complaint the quilt exists to answer is "one flat green plane from the
+    # district to the horizon", and fields read against a darker ground.
+    "MI_V2_Moss":       ("sward",   (0.11, 0.155, 0.09), 0.0, 0.82, 0.60, 0.20, None, 0.0),
     "MI_V2_Lawn":       ("sward",   (0.18, 0.25, 0.12), 0.0, 0.86, 0.60, 0.20, None, 0.0),
+    "MI_V2_Meadow":     ("sward",   (0.27, 0.30, 0.15), 0.0, 0.88, 0.62, 0.20, None, 0.0),
     "MI_V2_Soil":       ("sward",   (0.20, 0.15, 0.10), 0.0, 0.90, 0.50, 0.15, None, 0.0),
     # ---- gold: metallic, restrained, aged in the recesses ---------------------
     "MI_V2_Gold":       ("metal",   (0.92, 0.70, 0.36), 0.90, 0.42, 0.45, 0.60, None, 0.0),

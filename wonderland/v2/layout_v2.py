@@ -1904,7 +1904,7 @@ def _quarter_wood(cx, cy, sgn, seed, tag, H=None):
                      cy + (0.5 - k) * 2600.0 * sp, -2,
                      yaw=(seed * 13 + 40 * k) % 90,
                      sxyz=(1.25 * sp, 1.05 * sp, 1.0),
-                     mat=("MI_V2_Lawn", "MI_V2_Moss")[k % 2],
+                     mat=("MI_V2_Meadow", "MI_V2_Moss")[k % 2],
                      label="%s_Ground%d" % (tag, k)))
     return out
 
@@ -2274,7 +2274,7 @@ def _quarter_meadow(cx, cy, sgn, seed, tag, H=None):
                      cy + math.sin(lean + 2.1 * k) * 2200.0 * sp, -2,
                      yaw=(seed * 11 + 37 * k) % 90,
                      sxyz=(1.15 * sp, 1.0 * sp, 1.0),
-                     mat=("MI_V2_Lawn", "MI_V2_Moss", "MI_V2_Lawn")[k],
+                     mat=("MI_V2_Meadow", "MI_V2_Moss", "MI_V2_Lawn")[k],
                      label="%s_Ground%d" % (tag, k)))
     # a hedgerow, which is what makes open ground read as FIELDS
     n_h = _n(7, 0.7 + 0.6 * H["veg"], 4)
@@ -3813,7 +3813,7 @@ def _country():
                                          "%s_Drift%d" % (tag, i))
                 out.append(A("garden_lawn", cx, cy, -3, yaw=(k * 37) % 90,
                              sxyz=(1.1, 0.95, 1.0),
-                             mat=("MI_V2_Lawn", "MI_V2_Moss")[k % 2],
+                             mat=("MI_V2_Meadow", "MI_V2_Lawn", "MI_V2_Moss")[k % 3],
                              label="%s_Ground" % tag))
             elif pick < 0.93:
                 # ONE SILHOUETTE. Rare, and it is why the horizon has shape.
@@ -3844,6 +3844,121 @@ def _country():
     return out
 
 
+# ---------------------------------------------------------------------------
+# THE HORIZON
+# ---------------------------------------------------------------------------
+#
+# Ledger item: "the horizon still ends at a hard line against the sea band."
+# Measured, that is precise: the approved CITY layer 5 stands at 300-420 m and
+# occupies bearings 22-158 degrees -- the castle's hemisphere and nothing else
+# -- so in five of the eight sectors the world's last object is at 345 m and
+# beyond it is flat slab meeting fog.
+#
+# This is the scenic band, and it is deliberately NOT more world: it lies past
+# `_WORLD_EDGE`, nothing here is reachable, nothing carries collision, nothing
+# has a road. It is silhouette at the distance silhouette is all that survives
+# -- wooded ridges, the occasional far tower group -- placed all the way round
+# and skipped where the approved city already holds the ground.
+#
+# The founder's rule for going outward is that expansion only counts if it
+# produces meaningful spatial structure. A horizon IS structure: it is the
+# difference between a world that continues and a diorama on a table.
+
+#: uu. The scenic band, past everything walkable -- and past the quarters'
+#: OUTERMOST PIECES, not just their centres. At 39,000 it began 45 m inside
+#: the reach of the furthest woods and the audit found a horizon ridge growing
+#: through a meadow's landmark and a far wood's trunk standing in a horizon
+#: tower. A quarter at the world edge (34,500) reaches about 6,000 uu.
+_HORIZON_BAND = (43000.0, 58000.0)
+#: How many to try around it; the spacing rule keeps what fits.
+_HORIZON_TRIES = 150
+#: uu. Minimum spacing between horizon masses -- they are big and few.
+_HORIZON_SPACING = 9000.0
+
+
+def _horizon():
+    r0, r1 = _HORIZON_BAND
+    kept, out = [], []
+    for k in range(_HORIZON_TRIES):
+        u = (k + 0.5) / _HORIZON_TRIES
+        r = math.sqrt(r0 * r0 + (r1 * r1 - r0 * r0) * u)
+        b = (k * 137.50776405 + 9.0 * _rnd(k, 141, 1)) % 360.0
+        a = math.radians(b)
+        x, y = math.cos(a) * r, math.sin(a) * r
+        if any((qx - x) ** 2 + (qy - y) ** 2 < _HORIZON_SPACING ** 2 for (qx, qy) in kept):
+            continue
+        if any((px - x) ** 2 + (py - y) ** 2 < 11000.0 ** 2 for (px, py) in _CITY_POINTS):
+            continue                          # the approved city holds this
+        if any(math.hypot(s["x"] - x, s["y"] - y) < s.get("reach", 3000.0) + 4000.0
+               for s in SITES):
+            continue                          # and a quarter holds this
+        kept.append((x, y))
+        tag = "Horizon%03d" % len(kept)
+        pick = _rnd(k, 141, 2)
+        if pick < 0.62:
+            # A WOODED RIDGE. hedge_mass at 4-7x is a 13-22 m green mass, and
+            # a line of them at this range is a treeline: the cheapest object
+            # in the kit that reads at half a kilometre.
+            lean = _rnd(k, 141, 3) * 3.1416
+            n = 7 + int(6 * _rnd(k, 141, 4))
+            for i in range(n):
+                t = -0.5 + i / float(n - 1)
+                rx = t * (9000.0 + 6000.0 * _rnd(k, 141, 5))
+                ry = (_rnd(i, k, 142) - 0.5) * 2600.0
+                s = 4.0 + 3.0 * _rnd(i, k, 143)
+                out.append(A("hedge_mass",
+                             x + rx * math.cos(lean) - ry * math.sin(lean),
+                             y + rx * math.sin(lean) + ry * math.cos(lean), -200.0,
+                             yaw=math.degrees(lean) + 20.0 * _rnd(i, k, 144),
+                             sxyz=(s, s * 0.8, s * (0.55 + 0.3 * _rnd(i, k, 145))),
+                             mat=("MI_V2_LeafDark", "MI_V2_LeafMid")[i % 2],
+                             label="%s_Ridge%d" % (tag, i)))
+            # a few crowns standing above the ridge line
+            for i in range(2 + int(3 * _rnd(k, 141, 6))):
+                rx = (_rnd(i, k, 146) - 0.5) * 9000.0
+                ry = (_rnd(i, k, 147) - 0.5) * 2200.0
+                cx2 = x + rx * math.cos(lean) - ry * math.sin(lean)
+                cy2 = y + rx * math.sin(lean) + ry * math.cos(lean)
+                s = 3.4 + 2.2 * _rnd(i, k, 148)
+                out.append(A("canopy_large", cx2, cy2, 900.0 * s, s=s,
+                             mat=("MI_V2_LeafDark", "MI_V2_LeafMid", "MI_V2_LeafLight")[i % 3],
+                             label="%s_Crown%d" % (tag, i)))
+        elif pick < 0.88:
+            # a far tower group: three or four, one dominant, fog does the rest
+            n = 3 + int(2 * _rnd(k, 141, 7))
+            for i in range(n):
+                a2 = 6.283 * i / n + _rnd(i, k, 149)
+                rr = (700.0 + 1900.0 * _rnd(i, k, 150))
+                tx, ty = x + math.cos(a2) * rr, y + math.sin(a2) * rr
+                h = (2.6 if i == 0 else 1.5 + 1.0 * _rnd(i, k, 151))
+                out += [
+                    A("tower_capped", tx, ty, 0, yaw=_rnd(i, k, 152) * 360.0, s=h,
+                      mat="MI_V2_IvoryStone", label="%s_Tower%d" % (tag, i)),
+                    A("roof_cone_steep", tx, ty, 1100.0 * h, s=h,
+                      mat=("MI_V2_RoofPink", "MI_V2_RoofLilac", "MI_V2_RoofNavy",
+                           "MI_V2_RoofBlue")[i % 4], label="%s_TowerCap%d" % (tag, i)),
+                ]
+            for i in range(4):
+                a2 = 6.283 * i / 4.0 + 0.4
+                s = 4.5 + 2.0 * _rnd(i, k, 153)
+                out.append(A("hedge_mass", x + math.cos(a2) * 3200.0,
+                             y + math.sin(a2) * 3200.0, -200.0,
+                             sxyz=(s, s * 0.8, s * 0.6), mat="MI_V2_LeafDark",
+                             label="%s_Skirt%d" % (tag, i)))
+        else:
+            # and once in a while, a giant on the skyline
+            out.append(A("stone_ring_base", x, y, -2, s=3.0, mat="MI_V2_Stone",
+                         label="%s_Ring" % tag))
+            out += _giant_mushroom(x, y, 15000 + k, "%s_Giant" % tag,
+                                   s=2.6 + 1.0 * _rnd(k, 141, 8),
+                                   tint=("MI_V2_MushRed", "MI_V2_MushPurple",
+                                         "MI_V2_MushTerracotta")[k % 3])
+    return out
+
+
+HORIZON = _band("V2_Skyline", _horizon())
+
+
 def _ground_quilt():
     # ACROSS THE WHOLE WORLD, not the district's shoulders. The quilt was a
     # 7 x 5 grid reaching about 170 m, laid when that was the whole world; the
@@ -3868,7 +3983,10 @@ def _ground_quilt():
                          yaw=90.0 * (k % 4),
                          sxyz=(0.98 + 0.10 * _rnd(gx, gy, 73),
                                0.98 + 0.10 * _rnd(gx, gy, 74), 1.0),
-                         mat=("MI_V2_Lawn", "MI_V2_Moss", "MI_V2_Lawn")[k % 3],
+                         # NOT MOSS. The slab IS moss, so a moss quilt tile is
+                         # an invisible tile: the quilt's whole job is lighter
+                         # fields ON a darker ground.
+                         mat=("MI_V2_Lawn", "MI_V2_Meadow", "MI_V2_Lawn")[k % 3],
                          label="Quilt_%d_%d" % (gx, gy)))
             k += 1
     return out
@@ -4007,7 +4125,7 @@ PROCESSIONAL_BORDER = _band("V2_Garden", _processional_border())
 #: shown, not the world that gets made.
 BUILD_BANDS = [FOREGROUND, COURTYARD, GARDEN, PALACE, FLANK_GROUND, FLANKS,
                REARWORLD, CAM_FOREGROUNDS, GROUND_QUILT, OUTER_WORLD, PLAZA_ORNAMENT,
-               PROCESSIONAL_BORDER]
+               PROCESSIONAL_BORDER, HORIZON]
 
 #: Everything the layout declares: what the builder walks, plus the two bands
 #: it places by their own rules (SKY is the dome/atmosphere, HOVER is lifted

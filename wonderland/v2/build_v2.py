@@ -534,7 +534,24 @@ BATCHABLE = {"ground_flowers", "ground_blooms", "flower_cluster", "rose_bloom", 
              "topiary_spiral", "facade_panel", "finial_spire", "balcony_ring",
              "roof_cone_steep", "roof_bell", "roof_hip", "roof_ogee",
              "roof_flat_crenellated", "planter_box", "column_ornate",
-             "balloon_envelope", "balloon_basket"}
+             "balloon_envelope", "balloon_basket",
+             # PASS 23c: the silhouette itself. It was held back on the
+             # grounds that these are "the pieces a later pass wants to touch
+             # one at a time", and at 45 quarters plus a 368-piece horizon
+             # band that is no longer true: 71 tower_capped, 34 castle_hall,
+             # 30 giant mushrooms with three companion meshes each. 422
+             # actors, none of which anyone will ever select individually.
+             #
+             # Every one of them that walkable.py treats as an obstacle keeps
+             # its collision inside the batch (see bCollides) -- the traversal
+             # model of this world stays exactly true, which is the same rule
+             # the trunks joined under.
+             "tower_capped", "tower_clock", "castle_hall", "castle_tower",
+             "castle_tower_square", "castle_tower_octagon", "castle_tower_slender",
+             "castle_dome", "castle_arcade", "castle_bridge",
+             "mushroom_giant", "mushroom_giant_gills", "mushroom_giant_spots",
+             "mushroom_giant_rim", "mushroom_landmark", "clock_ornate",
+             "garden_arch_stone", "gate_arch_gold", "key_ornate"}
 
 #: BATCHED ONLY IN THESE BANDS. terrace_platform is paving a participant walks
 #: on and batches are built at BeginPlay, which is how this project lost a Dog
@@ -681,7 +698,13 @@ class Placer(object):
                                              "terrace_platform", "retaining_wall",
                                              "balustrade", "hedge_block",
                                              "tree_mature_trunk", "tree_slender_trunk",
-                                             "gate_pier", "garden_wall"))
+                                             "gate_pier", "garden_wall",
+                                             "tower_capped", "tower_clock",
+                                             "castle_hall", "castle_tower",
+                                             "castle_tower_square",
+                                             "castle_tower_octagon",
+                                             "castle_tower_slender",
+                                             "mushroom_giant", "mushroom_landmark"))
             if mat in MAT.FOLIAGE and not int(C.LOOK.get("foliageDistanceFieldLighting", 1)):
                 # PASS 05d: the batched hedges, beds and blossoms -- same
                 # reason as the canopies (see Placer.place); the property is

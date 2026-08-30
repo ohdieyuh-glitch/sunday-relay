@@ -843,3 +843,178 @@ frame will say.
     inside `Garden_R_Hedge0` and `Tower_R0` inside `Approach_HedgeR2`. Both
     predate this pass (the twelve approved bands are byte-identical), both are
     approved ground, and neither is mine to move without being asked.
+
+---
+
+# PASS 23 — WONDERLAND BECOMES A PLACE
+
+The founder's directive: the architecture phase has earned its keep, now turn
+it into Wonderland; use the three reference boards; resolve the far-world gap;
+give quarters identity; build woods as forests; expand roads and destinations;
+keep the actor count disciplined. Instrumentation is a minority of the time.
+
+## What the boards said that the world was not doing
+
+The boards' world-layout overview is a MAP WITH NAMES ON IT -- ROYAL CASTLE,
+CLOCK TOWER DISTRICT, GOLDEN GATES, ROYAL GARDENS, MUSHROOM GROVE, ARRIVAL
+PLAZA, WATER FEATURES, OUTER DISTRICTS -- and their object language is clocks,
+keys, teapots, fountains, columns, gold arches, topiary sculpture and hot-air
+balloons. Counted against the world as it stood:
+
+| the boards' signature | recipe exists? | placements before | after |
+|---|---|---|---|
+| clock tower | `tower_clock` | **0** | 7 |
+| ornamental clock | `clock_ornate` | 3 | 25 |
+| fountain | `fountain_basin` | 1 | 8 |
+| tea service | `tea_plinth` | 2 | 7 |
+| columns | `column_ornate` | **0** | 18 |
+| stone arch | `arch_stone` | **0** | 19 |
+| keys | `key_ornate` | 2 | 11 |
+| topiary sculpture | `topiary_spiral` | 5 | 41 |
+| giant mushroom | `mushroom_giant` | 4 | **30** |
+| hot-air balloon | *none* | 0 | **24** |
+
+Eight of the ten recipes already existed and the world used them eleven times
+in 4,590 placements. The gap between Wonderland and the reference was not
+mostly a modelling gap.
+
+## Seven new kinds, and geography to decide them
+
+`_district_of(x, y)` -- fourteen named seeds at a bearing and a radius, joined
+by a metric blending angle and distance so districts are wedges and sectors
+rather than circles, with a noise term so their borders are not arcs. A
+quarter's KIND now comes from the district it stands in. Authored POSITIONS
+are untouched; the `kind` column in those tables is advisory.
+
+CLOCKYARD (a clock tower over a geometric yard, keys on plinths) · WATER
+GARDEN (fountain, balustrade, radial walks, columns) · TEA TERRACE (service at
+garden scale under spiral topiary, a vine arch to come in by) · walled COURT
+(colonnade, gold arch, parterre inside) · HAMLET (small houses, a lane, a
+well, a village tower) · MEADOW (hedgerow, drifts, single trees, one marker) ·
+and the woods, which now stand under real 20 m giants.
+
+Plus one thing every kind was missing: an EDGE. A broken ring of hedge, tree
+and shrub, beds at its foot, and a short paved approach with a marker either
+side on the bearing its road arrives from. Written once, applied to all ten.
+
+## The country, the horizon, and the way past the castle
+
+**The country.** Twenty quarters is all the far band holds at its own spacing.
+The rest of the distance is landscape: a jittered grid of tree masses,
+hedgerows, drifts, lone towers and lone giants, density from the same `HIER`,
+kept off the quarters and off the castle sightline. 118 clusters, 1,400
+placements, all instanced.
+
+**The horizon** (ledger item 7, "the horizon still ends at a hard line"). The
+approved CITY layer 5 stands at 300-420 m and occupies bearings 22-158 --
+the castle's hemisphere and nothing else -- so in five of eight sectors the
+world's last object was at 345 m. A scenic band now runs 430-580 m all the way
+round: wooded ridges, far tower groups, the occasional giant. Nothing in it is
+reachable, nothing collides, nothing has a road. It is silhouette at the range
+where silhouette is all that survives.
+
+**The way past the castle.** Written by hand it ran into the BeyondL hedge
+wall and walkable reported its first turn unreachable. Asked for the route a
+walker takes, the flood came back squeezing past a court urn at 1.3 m -- a
+walk, not a road. So the corridor was SOLVED: Dijkstra maximising the minimum
+clearance from the castle court to a milestone at 256 m, then simplified by
+extending each leg only while the straight line still clears 250 uu. 2.6 m of
+clear air the whole run, and it says what no eye could: the way north goes UP
+THE AXIS behind the focal plane and turns east at 200 m, because the flanks
+and the beyond gardens close every other side.
+
+## Eight permanent district cameras
+
+Golden Arrival's thirteen all stand in the arrival plaza. Eight more now stand
+in the Clock Quarter, the Mushroom Grove, the Water Gardens, the Tea Terraces
+and the Lantern Hamlets, on a road at the Dog's eye height, high beyond the
+castle looking back over the world-to-city transition, and past the castle's
+shoulder to the East Reach. Their transforms are computed from the world, and
+`_district_cam_foregrounds` gives each one a near field derived from its own
+frame arithmetic -- 2-19 placements in band became 20-37, and nothing it
+places can be under a lens because the lens decides where it goes.
+
+## The quilt finally has contrast (ledger item 2)
+
+Measured: Moss and Lawn differed by **1.39x** in luma, and 28 displaced lawn
+meshes on a moss slab at a 1.4x step are invisible at world distance. Moss
+darkens 12% (it is also the terrain slab, and fields read against a darker
+ground), a third sward `MI_V2_Meadow` joins at 0.285, and the quilt no longer
+uses Moss at all -- lighter fields ON a darker ground. **2.08x** now. Lawn does
+not move: it is the district's own grass and the founder has judged it.
+
+## Numbers
+
+| | PASS 22 | PASS 23 |
+|---|---|---|
+| placements | 7,115 | **7,824** |
+| **actors** | 859 | **584** |
+| quarters | 44 | 45, in 12 named districts |
+| kinds | 4 | **10** |
+| world emptiness (tier-scaled) | 2,896 m2 | 2,336 m2 of 40.7 ha |
+| populated 50 m bands | 0-350 m | **0-600 m, all 12, monotone** |
+| outer density per ha, 100 -> 350 m | 202/87/46/40/39 | 197/139/87/57/40 |
+| GROUND core:far (outer) | 5.19x | 4.90x |
+| destinations / quarters unreachable | 0 of 18 / 0 of 44 | **0 of 30 / 0 of 45** |
+| nested quarters, roads through quarters | 0, 0 | 0, 0 |
+| cameras | 13 | **21** |
+| assets / materials | 117 / 47 | 119 / 48 |
+
+Actors fell 32% while the world grew 10% and gained a 420-piece horizon,
+because the silhouette itself is instanced now: 71 tower_capped, 34
+castle_hall, 30 giant mushrooms with three companion meshes each. Everything
+walkable.py treats as an obstacle keeps its collision inside the batch.
+
+## Defects found by a measurement, not by looking
+
+| found by | defect |
+|---|---|
+| dry-run warning count | LAYOUT.SKY's loop gated EVERY item on `skyDome` -- true while the band held one placement. All 48 balloon pieces were silently skipped, 49 times, under a log line saying "dome skipped" |
+| `hierarchy` embedded landmarks | 15 landmarks standing in hedges the moment the edge dressing and the country layer existed; then 3 more when the filter guarded only its own band; then 2 more when the horizon overlapped the outer quarters |
+| `walkable` | the north way's first turn unreachable -- the hand-drawn road ran into an approved hedge wall |
+| `walkable` again | the derived route squeezed past a court urn at 1.3 m, so the corridor had to be solved rather than sampled |
+| `camera_framing` | the eight new cameras opened onto bare ground, 2-19 in band against 42 for the flanks |
+| the FOOT table | setting `mushroom_giant` to its CAP radius (20 m) made three Golden Arrival destinations unreachable in one edit. The cap is 13 m in the air; the stem is the obstacle |
+
+## Traps worth not re-learning
+
+1. **A band is not homogeneous.** A loop that gates every item in a band on
+   one item's flag is correct exactly until the band holds two things.
+2. **Containment is not overlap.** `_declutter` first asked "is the hedge's
+   centre inside the landmark", and a 3.2 m hedge can contain a 4 m tower's
+   centre while its own centre is outside. The Minkowski sum is symmetric.
+3. **Clearance is not corridor width.** A widest-path search reporting 1.5 m
+   means the tightest approach to ANY object is 1.5 m, which is exactly enough
+   for a 3 m road. Half an hour was spent believing the world was sealed.
+4. **A measured table has one home.** `FOOT` moved into layout_v2 and
+   walkable.py reads it, and the north way's waypoints are exported as
+   `NORTH_WAY` for the same reason -- the tool spent two runs reporting a turn
+   the world no longer had.
+
+## Renders worth inspecting
+
+`V2_WORLD_PLAN_PASS23.png` (the districts, coloured by name and kind, with the
+road network) and `V2_WORLD_PLAN_PASS23_horizon.png` (out to 600 m, showing
+the scenic band). **Nothing rendered on a GPU.** The next session should
+capture 0 / 6 / 11 / 12 for the world, then 13-18 for the districts.
+
+## The list
+
+1. ~~Quarter hierarchy~~ · 2. ~~The ground quilt does not read~~ (contrast now
+   2.08x; needs a frame to confirm) · 3. ~~Far-world emptiness~~ ·
+   4. ~~Destinations beyond the castle~~ · 5. ~~The horizon ends at a hard line~~
+   (band placed; needs a frame)
+6. **Ten authored sites still could not be placed** and are named in the build
+   log. Their ground is covered by neighbours; each is a discarded decision.
+7. **The 50-75 m band is Golden Arrival's own thin outskirt** -- 282 per
+   hectare against 723 inside and 305 outside. Founder decision: closing it
+   means re-planting approved ground.
+8. Mushrooms may still out-shout the architecture. 30 giants now, but spread
+   1/4/2/5/6/4/3 across the 50 m bands and evenly split across three tints --
+   a distribution rather than a pile. Needs a frame.
+9. `palette.rose` ~0.46x the reference on the flank cameras. Needs a frame.
+10. The plaza medallion reads as a scribed ring rather than inlay.
+11. Performance unprofiled: 584 actors now, against 2,123 when this item was
+    written. `measure-fps.sh` has still never been run.
+12. Two landmarks stand inside hedges in Golden Arrival (`ClockTree_Clock`,
+    `Tower_R0`). Both predate this work and both are approved ground.
