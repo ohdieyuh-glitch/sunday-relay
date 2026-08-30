@@ -1801,18 +1801,47 @@ def hedge_block(ctx):
 
 
 def ground_flowers(ctx):
-    """Low ground flowers, 1 m patch: many small blooms on a leafy mat."""
+    """The leaf MAT of a ground-flower patch, ~1.9 m: green, low, irregular.
+
+    This used to be the mat AND its blooms in one mesh, which means one
+    material for both -- so a patch placed with a petal colour rendered its
+    entire mound in that colour, and FlankLeftCam08 showed a smooth white
+    dome sitting on the lawn like a golf ball. The recipe immediately below
+    this one already states the rule this breaks: a bed is TWO meshes, a leaf
+    mound and its blooms, BECAUSE one mesh can only be one colour. This one
+    predates that rule. The mound stays here and goes green; the blooms move
+    to ground_blooms and carry the colour.
+
+    Flatter than it was (0.5 -> 0.30) and perlin-broken, because the thing it
+    is standing in for is a spread of low planting, not a hummock.
+    """
     m = ctx.mesh("ground_flowers")
-    m.sphere(60.0, at=(0, 0, -25.0), steps=10)
-    m.scale(1.6, 1.4, 0.5)
-    for i in range(16):
+    m.sphere(60.0, at=(0, 0, -22.0), steps=10)
+    m.scale(1.6, 1.4, 0.30)
+    m.perlin(7.0, 0.030, seed=1407)
+    for i in range(7):
         a = i * 2.39996
-        rad = 15.0 + 60.0 * _h(14, i, 1)
+        rad = 30.0 + 55.0 * _h(15, i, 1)
+        m.sphere(16.0 + 9.0 * _h(15, i, 2), at=(math.cos(a) * rad, math.sin(a) * rad, -4.0), steps=6)
+    m.smooth(1, 0.25)
+    m.split_normals(64.0)
+    return m
+
+
+def ground_blooms(ctx):
+    """The BLOOMS of a ground-flower patch: stems and petals only, so the
+    petal colour lands on the flowers and nothing else. Placed on the same
+    spot as ground_flowers."""
+    m = ctx.mesh("ground_blooms")
+    for i in range(22):
+        a = i * 2.39996
+        rad = 15.0 + 66.0 * _h(14, i, 1)
         x, y = math.cos(a) * rad, math.sin(a) * rad
-        h = 16.0 + 14.0 * _h(14, i, 2)
+        h = 18.0 + 16.0 * _h(14, i, 2)
         m.tube([(x, y, 0.0), (x + 2, y, h)], [1.6, 1.2], sides=4)
         for p in range(5):
-            m.extrude([(0, 0), (5, 5), (4, 14), (0, 18), (-4, 14), (-5, 5)], 1.0, at=(x + 2, y, h), rot=(-25.0, 72.0 * p + 30.0 * i, 0.0))
+            m.extrude([(0, 0), (5, 5), (4, 14), (0, 18), (-4, 14), (-5, 5)], 1.0,
+                      at=(x + 2, y, h), rot=(-25.0, 72.0 * p + 30.0 * i, 0.0))
     return m
 
 
@@ -2016,6 +2045,7 @@ RECIPES.update({
     "shrub_flowering": (shrub_flowering, "shrubs", False, False),
     "hedge_block": (hedge_block, "shrubs", False, True),
     "ground_flowers": (ground_flowers, "flowers", False, False),
+    "ground_blooms": (ground_blooms, "flowers", False, False),
     "vine_wall": (vine_wall, "ivy", False, False),
 })
 

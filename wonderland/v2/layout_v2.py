@@ -49,6 +49,18 @@ def A(asset, x, y, z=0.0, yaw=0.0, s=1.0, mat=None, label=None, sxyz=None, pitch
             "scale": sxyz if sxyz is not None else (s, s, s), "mat": mat, "label": label}
 
 
+def _ground_patch(x, y, z, yaw, sc, petal, label):
+    """A ground-flower patch: the green leaf MAT and its coloured BLOOMS, on
+    the same spot. Two meshes because one mesh is one material -- placing
+    ground_flowers alone with a petal colour paints its whole mound that
+    colour, which is the white dome FlankLeftCam08 showed sitting on the lawn.
+    """
+    return [
+        A("ground_flowers", x, y, z, yaw=yaw, s=sc, mat="MI_V2_LeafMid", label=label),
+        A("ground_blooms", x, y, z, yaw=yaw, s=sc, mat=petal, label=label + "_Blooms"),
+    ]
+
+
 # ---------------------------------------------------------------------------
 # THE GATE (behind the viewpoint) AND THE PLAZA EDGE
 # ---------------------------------------------------------------------------
@@ -123,9 +135,9 @@ SIDES = _band("V2_Arrival", [
 ] + [
     A("rose_bush", -940, -200 + 600 * i, 85, yaw=50 * i, s=0.9, mat="MI_V2_LeafMid", label="SideBed_R_RoseBush%d" % i) for i in range(2)
 ] + [
-    A("ground_flowers", 1120, -450 + 220 * i, 85, yaw=23 * i, s=1.0, mat=("MI_V2_PetalPink", "MI_V2_PetalBlue", "MI_V2_PetalViolet")[i % 3], label="SideBed_L_Ground%d" % i) for i in range(7)
+    g for i in range(7) for g in _ground_patch(1120, -450 + 220 * i, 85, 23 * i, 1.0, ("MI_V2_PetalPink", "MI_V2_PetalBlue", "MI_V2_PetalViolet")[i % 3], "SideBed_L_Ground%d" % i)
 ] + [
-    A("ground_flowers", -1120, -400 + 220 * i, 85, yaw=31 * i, s=1.0, mat=("MI_V2_PetalViolet", "MI_V2_PetalPink", "MI_V2_RosePink")[i % 3], label="SideBed_R_Ground%d" % i) for i in range(7)
+    g for i in range(7) for g in _ground_patch(-1120, -400 + 220 * i, 85, 31 * i, 1.0, ("MI_V2_PetalViolet", "MI_V2_PetalPink", "MI_V2_RosePink")[i % 3], "SideBed_R_Ground%d" % i)
 ] + [
     A("rose_bloom", 900 + 90 * (i % 3), -520 + 300 * i, 110, yaw=53 * i, s=0.55, mat=("MI_V2_RosePink", "MI_V2_RoseRed", "MI_V2_PetalPink")[i % 3], label="SideBed_L_Rose%d" % i) for i in range(6)
 ] + [
@@ -792,10 +804,10 @@ def _grove(sgn, cx, cy, seed, tag, count=5):
                      label="%s_Shrub%d" % (tag, i)))
     for k in range(4):
         a = 6.283 * k / 4 + 0.4
-        out.append(A("ground_flowers", cx + sgn * math.cos(a) * 720.0, cy + math.sin(a) * 720.0, 0,
-                     yaw=_rnd(k, seed, 14) * 360.0, s=1.0,
-                     mat=("MI_V2_PetalViolet", "MI_V2_PetalWhite")[k % 2],
-                     label="%s_Ground%d" % (tag, k)))
+        out += _ground_patch(cx + sgn * math.cos(a) * 720.0, cy + math.sin(a) * 720.0, 0,
+                             _rnd(k, seed, 14) * 360.0, 1.0,
+                             ("MI_V2_PetalViolet", "MI_V2_PetalWhite")[k % 2],
+                             "%s_Ground%d" % (tag, k))
     return out
 
 
@@ -911,11 +923,29 @@ def _flank(sgn, tag):
           label="%s_NearBank%d" % (tag, i))
         for i in range(7)
     ] + [
-        A("ground_flowers", sgn * (3600 + 560 * i), -640, 0, yaw=55 * i, s=1.05,
-          mat=("MI_V2_PetalViolet", "MI_V2_PetalWhite", "MI_V2_PetalPink")[i % 3],
-          label="%s_NearFlowers%d" % (tag, i))
-        for i in range(5)
+        g for i in range(5)
+        for g in _ground_patch(sgn * (3600 + 560 * i), -640, 0, 55 * i, 1.05,
+                               ("MI_V2_PetalViolet", "MI_V2_PetalWhite", "MI_V2_PetalPink")[i % 3],
+                               "%s_NearFlowers%d" % (tag, i))
     ]
+    # and the band between the near bank and the parterre, which
+    # FlankLeftCam08 still showed as open lawn across the middle of the frame:
+    # the bank sits at y = -900 and the parterre's outer edge at y = -144, so
+    # six and a half metres of nothing at exactly the depth perspective makes
+    # widest. Low planting, so it fills the ground without walling the room
+    # off -- the eye still travels over it to the parterre.
+    out += [
+        A(("topiary_ball", "shrub_flowering", "rose_bush")[i % 3],
+          sgn * (3250 + 480 * i), -430 + 70 * ((i % 2) * 2 - 1), 0,
+          yaw=35 * i, s=0.8,
+          mat=("MI_V2_LeafDark", "MI_V2_LeafMid", "MI_V2_LeafMid")[i % 3],
+          label="%s_MidBand%d" % (tag, i))
+        for i in range(7)
+    ]
+    for i in range(4):
+        out += _ground_patch(sgn * (3500 + 720 * i), -250, 0, 40 * i, 0.95,
+                             ("MI_V2_PetalPink", "MI_V2_Lavender", "MI_V2_PetalWhite")[i % 3],
+                             "%s_MidGround%d" % (tag, i))
     out += _mushroom_cluster(sgn, sgn * 6400, -1750, 4900 if sgn > 0 else 5000, "%s_NearMush" % tag)
     out += _parterre(sgn, sgn * 4350, 700, 4100 if sgn > 0 else 4200, "%s_Parterre" % tag)
     out += _rose_walk(sgn, 3050, 1900, 5900, 4300, "%s_Walk" % tag)
@@ -1041,10 +1071,27 @@ REARWORLD = _band("V2_Garden", [
       label="Rear_FarHedge%d_%d" % (side, i))
     for side in (1, -1) for i in range(3)
 ] + [
-    A("ground_flowers", side * 1900, -8750, 0, yaw=40 * side, s=1.1,
-      mat=("MI_V2_PetalViolet", "MI_V2_PetalWhite")[(side + 1) // 2],
-      label="Rear_FarFlowers%d" % side)
-    for side in (1, -1)
+    g for side in (1, -1)
+    for g in _ground_patch(side * 1900, -8750, 0, 40 * side, 1.1,
+                           ("MI_V2_PetalViolet", "MI_V2_PetalWhite")[(side + 1) // 2],
+                           "Rear_FarFlowers%d" % side)
+] + [
+    # RearWorldCam10's NEAR ground. The framing groves sit 17 m out, which
+    # closed the 34 m void but left the bottom half of the frame as lawn: a
+    # camera needs something at three to eight metres, not only at seventeen.
+    # LOW planting only -- the eye is at 3.2 m and this view's whole value is
+    # the line of depth through the rear gate to the castle, so nothing here
+    # may stand tall enough to interrupt it.
+    A(("topiary_ball", "shrub_flowering", "hedge_block", "rose_bush")[i % 4],
+      -3400 + 850 * i, -9180 + 60 * ((i % 3) - 1), 0, yaw=28 * i, s=0.72,
+      mat=("MI_V2_LeafDark", "MI_V2_LeafMid")[i % 2],
+      label="Rear_NearBand%d" % i)
+    for i in range(9)
+] + [
+    g for i in range(5)
+    for g in _ground_patch(-2600 + 1300 * i, -9020, 0, 50 * i, 0.9,
+                           ("MI_V2_PetalPink", "MI_V2_PetalWhite", "MI_V2_Lavender")[i % 3],
+                           "Rear_NearGround%d" % i)
 ])
 
 
