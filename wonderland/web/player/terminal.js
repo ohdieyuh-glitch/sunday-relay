@@ -19,13 +19,21 @@ const SECTIONS = [
 const ROWS_PER_SECTION = 4;
 
 const el = (id) => document.getElementById(id);
+
+/** The element the stream renders into. Set by mount(); falls back to the id. */
+let worldEl = null;
+export function setWorld(node) { worldEl = node; }
 let open = false;
 let state = feedStatus();          // starts cold, on purpose
 
 /** The world is focusable, so "world focus" is something the browser agrees with. */
 function focusWorld() {
-  const world = el('wl-world');
-  if (world) world.focus({ preventScroll: true });
+  // BY REFERENCE, NOT BY ID. Epic's stream container already HAS an id, so
+  // renaming it would break the client's own lookups and not renaming it left
+  // this returning null -- Escape then handed focus to nothing and the next
+  // Space was swallowed by whatever the client had focused.
+  const world = worldEl || el('wl-world');
+  if (world && typeof world.focus === 'function') world.focus({ preventScroll: true });
 }
 
 function openTerminal() {
@@ -168,22 +176,49 @@ function submit() {
 function onKeyDown(ev) {
   const verdict = classifyKey(ev, open);
   if (shouldPreventDefault(verdict)) ev.preventDefault();
-  if (shouldStopGameInput(verdict, open)) ev.stopPropagation();
+  if (shouldStopGameInput(verdict, open)) stop(ev);
   if (verdict === 'open-terminal') openTerminal();
   else if (verdict === 'close-terminal') closeTerminal();
 }
 
-export function install(root = window) {
-  // CAPTURE PHASE. The Pixel Streaming client binds its own window listeners
-  // to forward keys to the game; capture is how the terminal gets there first.
+/** stopImmediatePropagation, so a client listener on the SAME target is cut
+ *  off too -- plain stopPropagation only stops the next target down. */
+function stop(ev) {
+  ev.stopPropagation();
+  if (typeof ev.stopImmediatePropagation === 'function') ev.stopImmediatePropagation();
+}
+
+let claimed = false;
+
+/**
+ * Take the keyboard. NO DOM REQUIRED, AND THAT IS THE POINT.
+ *
+ * Listeners on the same target in the same phase fire in REGISTRATION ORDER,
+ * so a streaming client that binds window-capture before us cannot be stopped
+ * by any amount of stopImmediatePropagation -- its handler has already run.
+ * The only defence is to register first, which means at module evaluation,
+ * before the client's script has run and long before the panel exists.
+ *
+ * Proven by wonderland/web/player/capture.mjs against a page that registers
+ * keydown on window (both phases) and document capture BEFORE this module: it
+ * forwarded the opening Space and every character of "walk south" to the game
+ * until this ran first.
+ */
+export function claimKeyboard(root = window) {
+  if (claimed) return;
+  claimed = true;
   root.addEventListener('keydown', onKeyDown, true);
-  // keyup/keypress are swallowed on the same terms, or the game receives the
-  // release of a key it never received the press of.
   for (const type of ['keyup', 'keypress']) {
     root.addEventListener(type, (ev) => {
-      if (shouldStopGameInput('pass', open)) ev.stopPropagation();
+      if (shouldStopGameInput('pass', open)) stop(ev);
     }, true);
   }
+}
+
+export function install(root = window) {
+  // The keyboard may already be claimed (overlay.js claims it at module
+  // evaluation, before the panel exists); claimKeyboard is idempotent.
+  claimKeyboard(root);
   const send = el('wl-tm-send');
   if (send) send.addEventListener('click', submit);
   const input = el('wl-tm-input');

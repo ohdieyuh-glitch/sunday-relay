@@ -29,15 +29,24 @@ done
 [ -f "$WWW/player.html.orig" ] || cp "$WWW/player.html" "$WWW/player.html.orig"
 cp "$WWW/player.html.orig" "$WWW/player.html"
 
-# AFTER player.js, so the stream client has registered its own listeners
-# before ours goes on in the capture phase and gets there first anyway.
+# BEFORE player.js, AND THE ORDER IS LOAD-BEARING.
+#
+# Key listeners on the same target in the same phase fire in REGISTRATION
+# ORDER. Deferred classic scripts and module scripts both run after parsing, in
+# document order -- so the overlay's tag must come FIRST for its window-capture
+# listener to register before the stream client's. Placed after, the client
+# forwards the opening Space and every character typed into the terminal
+# straight to Unreal, and no amount of stopImmediatePropagation helps because
+# its handler has already run. Measured, not assumed: capture.mjs runs both
+# orders against a page shaped like Epic's.
 python3 - "$WWW/player.html" "$TAG" <<'PY'
 import sys
 path, tag = sys.argv[1], sys.argv[2]
 s = open(path).read()
 anchor = '<script defer src="player.js"></script>'
 assert anchor in s, "player.js script tag not found -- Epic's frontend changed shape"
-s = s.replace(anchor, anchor + '\n' + tag, 1)
+s = s.replace(anchor, tag + '\n' + anchor, 1)
+assert s.index(tag) < s.index(anchor), "the overlay must load BEFORE the stream client"
 open(path, 'w').write(s)
 PY
 

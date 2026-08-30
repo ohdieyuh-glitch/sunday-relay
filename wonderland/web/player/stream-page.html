@@ -1,0 +1,19 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Wonderland — stream page harness</title>
+<!--
+  A STAND-IN FOR EPIC'S PIXEL STREAMING FRONTEND, in its real script shape:
+  a container the stream fills and a DEFERRED CLASSIC SCRIPT that forwards
+  keystrokes to Unreal.
+
+  The tag order below is the order install-overlay.sh produces, and it is
+  load-bearing: deferred classic scripts and module scripts both run after
+  parsing, in DOCUMENT ORDER, so the overlay's module evaluates before the
+  client's script and its window-capture listener registers first. Reverse
+  these two lines and the game receives the opening Space and every character
+  typed into the terminal.
+-->
+<style>html,body{margin:0;height:100%;background:#05060a}#videoElementParent{position:fixed;inset:0}</style>
+<div id="videoElementParent"><video id="streamVideo" playsinline autoplay muted></video></div>
+<script type="module" src="./overlay.js"></script>
+<script defer src="./stream-client-stub.js"></script>

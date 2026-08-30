@@ -112,6 +112,51 @@ check('a connected feed reads LIVE', (await page.textContent('#wl-tm-live')).inc
 check('orchestration is attributed to Julius', body.includes('Julius: Evidence recorded'));
 check('PRIVATE REASONING IS NOT ON SCREEN', !body.includes('PRIVATE REASONING'));
 
+// 6. THE STREAM PAGE. The one thing that can actually go wrong on Epic's
+// frontend is the overlay losing the race for the keyboard, so this mounts
+// onto a page shaped like it -- a stream container plus window-level key
+// listeners registered BEFORE ours, in both phases -- and checks what the
+// "client" would have forwarded to Unreal.
+const sp = await browser.newPage({ viewport: { width: 1280, height: 720 } });
+sp.on('console', (m) => { if (m.type() === 'error') console.log('  stream page error:', m.text()); });
+await sp.goto(`${BASE}${rel(join(HERE, 'stream-page.html'))}`);
+await sp.waitForSelector('#wl-terminal', { state: 'attached', timeout: 5000 });
+check('the terminal mounts on a page with no markup of its own',
+      await sp.evaluate(() => !!document.querySelector('.wl-tm-window')));
+check('the stream container was made focusable, keeping its own id',
+      await sp.evaluate(() => {
+        const c = document.getElementById('videoElementParent');
+        return !!c && c.getAttribute('tabindex') === '0';
+      }));
+await sp.click('#videoElementParent');
+await sp.keyboard.press('Space');
+await sp.waitForTimeout(200);
+check('space opened it over the stream',
+      await sp.evaluate(() => document.body.dataset.terminal === 'open'));
+check('AND THE GAME NEVER SAW THE SPACE',
+      await sp.evaluate(() => !window.wl_forwarded.includes(' ')),
+      await sp.evaluate(() => window.wl_forwarded));
+await sp.keyboard.type('walk south');
+await sp.waitForTimeout(150);
+check('typing reached the terminal, not the world',
+      (await sp.inputValue('#wl-tm-input')) === 'walk south');
+check('and the game received NOTHING while the terminal was open',
+      (await sp.evaluate(() => window.wl_forwarded.length)) === 0,
+      await sp.evaluate(() => window.wl_forwarded));
+await sp.screenshot({ path: join(OUT, 'WL_TERMINAL_6_stream_page.png') });
+await sp.keyboard.press('Escape');
+await sp.waitForTimeout(200);
+check('escape returned the world',
+      await sp.evaluate(() => document.body.dataset.terminal === 'closed'));
+check('and focus landed back on the stream container itself',
+      await sp.evaluate(() => document.activeElement?.id === 'videoElementParent'),
+      await sp.evaluate(() => document.activeElement?.id));
+await sp.keyboard.press('KeyW');
+await sp.waitForTimeout(120);
+check('and W now reaches the game again',
+      await sp.evaluate(() => window.wl_forwarded.includes('w')),
+      await sp.evaluate(() => window.wl_forwarded));
+
 await browser.close();
 server.close();
 

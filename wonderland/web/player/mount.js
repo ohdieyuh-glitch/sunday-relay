@@ -8,7 +8,7 @@
 //
 // This file therefore owns the markup once, and index.html's copy is checked
 // against it by page.test.mjs.
-import { install } from './terminal.js';
+import { install, setWorld } from './terminal.js';
 
 const SECTION_MARKUP = `
   <div class="wl-tm-titlebar">
@@ -65,11 +65,15 @@ export function mount({ cssHref = './player.css', worldSelector = '#videoElement
   // element gets the id the terminal expects and a tabindex so it can hold
   // focus; if the client has not built it yet, the body stands in and the
   // hand-off still works because focus() on <body> is a real focus.
+  // BY REFERENCE. Epic's container already has an id (#videoElementParent) and
+  // the client looks itself up by it, so renaming it would break the client
+  // and leaving it alone left the terminal with no world to hand focus back
+  // to. The element is handed over directly instead.
   const streamed = document.querySelector(worldSelector) || document.body;
-  if (!streamed.id) streamed.id = 'wl-world';
   if (streamed !== document.body && !streamed.hasAttribute('tabindex')) {
     streamed.setAttribute('tabindex', '0');
   }
+  setWorld(streamed);
 
   const hint = document.createElement('p');
   hint.id = 'wl-hint';
