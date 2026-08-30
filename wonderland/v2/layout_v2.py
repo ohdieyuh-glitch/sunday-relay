@@ -997,16 +997,27 @@ def _flank(sgn, tag):
         # clipped balls and low flowering shrubs at knee to waist, with the
         # height kept for the masses at 9-12 m. hedge_block leaves this mix --
         # it is a 1.27 m hedge and at 5.5 m that is a fence.
-        A(("topiary_ball", "shrub_flowering", "rose_bush", "topiary_ball")[k % 4],
+        # COLOUR, measured on this very frame. gap_v2 against the founder
+        # reference: the green arc holds 25.6% of ours and 4.8% of theirs
+        # (5.3x), the rose arc 1.8% against 6.8% (0.26x), and the foreground
+        # sits at p50 61 against 151. A royal garden in the boards is BLOOM
+        # with green between it; this had become green with a little bloom in
+        # it -- which is what happens when three passes in a row are spent
+        # fixing how MUCH planting there is and none on what colour it is.
+        # Every other piece now carries a petal colour, and the greens include
+        # LeafLight so the mass is not one tone.
+        A(("topiary_ball", "blossom_cluster", "shrub_flowering", "flower_cluster",
+           "topiary_ball", "lavender_heads")[k % 6],
           sgn * (bx + (-130 + 105 * (k % 3))), -700 + 85 * ((k % 2) * 2 - 1) + 45 * (k % 3), 0,
           yaw=90 + 37 * k, s=0.50 + 0.11 * ((k % 3) / 2.0),
-          mat=("MI_V2_LeafMid", "MI_V2_LeafDark")[k % 2],
+          mat=("MI_V2_LeafMid", "MI_V2_PetalPink", "MI_V2_LeafLight",
+               "MI_V2_PetalViolet", "MI_V2_LeafDark", "MI_V2_Lavender")[k % 6],
           label="%s_NearClump%d_%d" % (tag, bi, k))
         # same frustum rule: FlankLeftCam08 sits at x = 4,350, and at the
         # 5.5 m depth of this bank the frame is 5.5 m wide, so a clump must
         # stand within 550 uu of the camera's x to be in it at all.
         for bi, bx in enumerate((3980, 4350, 4720))
-        for k in range(5)
+        for k in range(6)
     ] + [
         g for i in range(5)
         for g in _ground_patch(sgn * (3600 + 560 * i), -520, 0, 55 * i, 1.05,
@@ -1020,12 +1031,14 @@ def _flank(sgn, tag):
     # widest. Low planting, so it fills the ground without walling the room
     # off -- the eye still travels over it to the parterre.
     out += [
-        A(("topiary_ball", "shrub_flowering", "rose_bush")[i % 3],
+        A(("topiary_ball", "rose_bush", "blossom_cluster", "shrub_flowering",
+           "flower_cluster", "topiary_ball", "lavender_heads")[i % 7],
           sgn * (3250 + 480 * i), -430 + 70 * ((i % 2) * 2 - 1), 0,
           yaw=35 * i, s=0.8,
-          mat=("MI_V2_LeafDark", "MI_V2_LeafMid", "MI_V2_LeafMid")[i % 3],
+          mat=("MI_V2_LeafDark", "MI_V2_RosePink", "MI_V2_PetalPink", "MI_V2_LeafLight",
+               "MI_V2_PetalWhite", "MI_V2_LeafMid", "MI_V2_Lavender")[i % 7],
           label="%s_MidBand%d" % (tag, i))
-        for i in range(7)
+        for i in range(9)
     ]
     for i in range(4):
         out += _ground_patch(sgn * (3500 + 720 * i), -250, 0, 40 * i, 0.95,
