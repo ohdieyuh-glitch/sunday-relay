@@ -107,9 +107,15 @@ INSTANCES = {
     "MI_V2_MushStem":   ("glaze",   (0.84, 0.76, 0.64), 0.0, 0.66, 0.40, 0.30, None, 0.0),
     "MI_V2_Spot":       ("glaze",   (0.95, 0.92, 0.86), 0.0, 0.54, 0.30, 0.35, None, 0.0),
     # ---- foliage (M_V2_Foliage): readable greens, not near-black ---------------
-    "MI_V2_LeafDark":   ("leaf",    (0.08, 0.16, 0.07), 0.0, 0.70, 0.60, 0.15, None, 0.0),
-    "MI_V2_LeafMid":    ("leaf",    (0.14, 0.26, 0.10), 0.0, 0.66, 0.60, 0.15, None, 0.0),
-    "MI_V2_LeafLight":  ("leaf",    (0.22, 0.36, 0.14), 0.0, 0.62, 0.60, 0.15, None, 0.0),
+    # LIFTED. 0.08 green is a leaf in deep shade, not a leaf -- and with the
+    # district now several times more planted than when these were set, that
+    # albedo is what turns massed foliage into the near-black wall the founder
+    # is seeing on the right. Real sunlit leaves sit nearer 0.18-0.30 in
+    # green. Raised in step so the three tones keep their order and the
+    # canopies stay distinguishable from the hedges.
+    "MI_V2_LeafDark":   ("leaf",    (0.11, 0.21, 0.09), 0.0, 0.70, 0.60, 0.15, None, 0.0),
+    "MI_V2_LeafMid":    ("leaf",    (0.18, 0.32, 0.13), 0.0, 0.66, 0.60, 0.15, None, 0.0),
+    "MI_V2_LeafLight":  ("leaf",    (0.27, 0.42, 0.17), 0.0, 0.62, 0.60, 0.15, None, 0.0),
     "MI_V2_RosePink":   ("petal",   (0.88, 0.40, 0.56), 0.0, 0.60, 0.40, 0.25, None, 0.0),
     "MI_V2_RoseRed":    ("petal",   (0.70, 0.14, 0.24), 0.0, 0.60, 0.40, 0.25, None, 0.0),
     "MI_V2_PetalPink":  ("petal",   (0.90, 0.52, 0.68), 0.0, 0.62, 0.40, 0.25, None, 0.0),

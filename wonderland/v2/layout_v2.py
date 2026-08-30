@@ -1293,6 +1293,177 @@ REARWORLD = _band("V2_Garden", [
 ])
 
 
+# ---------------------------------------------------------------------------
+# THE OUTER WORLD — Wonderland beyond Golden Arrival
+# ---------------------------------------------------------------------------
+#
+# tools/emptiness.py grids the whole district and ranks what is empty. The
+# answer was not subtle and it was not where three passes of work had gone:
+#
+#   1,691 cells   27,056 m2   x -118..118 m, y -118..138 m
+#
+# ONE region, wrapping the entire built district. Golden Arrival occupies
+# roughly 160 x 180 m and everything outside it is void — which is precisely
+# the founder's "Wonderland must stop feeling like a single isolated set", and
+# it is two orders of magnitude larger than the lawn patches inside the
+# district that had been absorbing the effort. A camera shows what it points
+# at; the audit shows where the world is not.
+#
+# So the kit that built the flanks now builds QUARTERS, on a ring at 95-175 m,
+# with roads out to them. Each quarter is composed rather than scattered — it
+# has a type, a centre, a landmark and an edge — and the types alternate so
+# the ring is not twelve copies of one garden. Authored decisions: where the
+# quarters sit, what type each is, which bearings carry roads. Generated: the
+# planting and module placement inside each, from the same functions the
+# flanks use.
+
+
+def _quarter_garden(cx, cy, sgn, seed, tag):
+    """A formal garden quarter: parterre, grove, landmark, hedged edge."""
+    return (_parterre(sgn, cx, cy, seed, tag + "_P")
+            + _grove(sgn, cx + sgn * 1800, cy + 1500, seed + 11, tag + "_G", count=5)
+            + _mushroom_cluster(sgn, cx - sgn * 1600, cy - 1400, seed + 21, tag + "_M"))
+
+
+def _quarter_towers(cx, cy, sgn, seed, tag):
+    """A neighbourhood: a cluster of towers with courts and walls between."""
+    out = []
+    for i, (dx, dy, h, roof) in enumerate((
+            (0, 0, 1.35, "MI_V2_RoofPink"), (1500, 900, 1.0, "MI_V2_RoofLilac"),
+            (-1300, 1100, 1.15, "MI_V2_RoofBlue"), (700, -1500, 0.85, "MI_V2_RoofRose"),
+            (-1600, -900, 1.05, "MI_V2_RoofNavy"))):
+        x, y = cx + sgn * dx, cy + dy
+        out += [
+            A("tower_capped", x, y, 0, yaw=_rnd(i, seed, 1) * 360.0, s=h,
+              mat="MI_V2_IvoryStone", label="%s_Tower%d" % (tag, i)),
+            A("roof_cone_steep", x, y, 1100.0 * h, s=h, mat=roof,
+              label="%s_TowerCap%d" % (tag, i)),
+            A("balcony_ring", x, y, 585.0 * h, s=0.65 * h, mat="MI_V2_IvoryStone",
+              label="%s_TowerBalcony%d" % (tag, i)),
+            A("finial_spire", x, y, 1560.0 * h, s=0.7 * h, mat="MI_V2_Gold",
+              label="%s_TowerSpire%d" % (tag, i)),
+        ]
+    # a court between them, with its own planting
+    for i in range(6):
+        a = 6.283 * i / 6.0 + 0.4
+        out.append(A(("topiary_cone_plain", "shrub_flowering", "topiary_ball")[i % 3],
+                     cx + math.cos(a) * 950.0, cy + math.sin(a) * 950.0, 0,
+                     yaw=40 * i, s=0.85, mat=("MI_V2_LeafDark", "MI_V2_LeafMid")[i % 2],
+                     label="%s_Court%d" % (tag, i)))
+    for i in range(3):
+        out += _ground_patch(cx + 500 - 500 * i, cy - 700, 0, 60 * i, 1.0,
+                             ("MI_V2_PetalPink", "MI_V2_Lavender", "MI_V2_PetalWhite")[i % 3],
+                             "%s_CourtGround%d" % (tag, i))
+    return out
+
+
+def _quarter_grove(cx, cy, sgn, seed, tag):
+    """A mushroom wood: the organic, exploratory end of the language."""
+    out = _grove(sgn, cx, cy, seed, tag + "_G", count=7)
+    for i in range(4):
+        a = 6.283 * i / 4.0 + _rnd(i, seed, 5) * 0.7
+        r = 900.0 + 700.0 * _rnd(i, seed, 6)
+        out += _mushroom_cluster(sgn, cx + math.cos(a) * r, cy + math.sin(a) * r,
+                                 seed + 30 + i, "%s_M%d" % (tag, i))
+    return out
+
+
+def _road(x0, y0, x1, y1, width, tag, n=None):
+    """A paved way between two points, laid as segments along its run.
+
+    Roads are what make a ring of quarters a WORLD rather than a set of
+    islands: the founder's test is that a player should feel 'I can keep
+    going', and that is a question about connection, not about content.
+    """
+    out = []
+    dx, dy = x1 - x0, y1 - y0
+    length = math.hypot(dx, dy)
+    if n is None:
+        n = max(1, int(length / 1400.0))
+    yaw = math.degrees(math.atan2(dy, dx))
+    for i in range(n):
+        t0, t1 = i / float(n), (i + 1) / float(n)
+        cx, cy = x0 + dx * (t0 + t1) * 0.5, y0 + dy * (t0 + t1) * 0.5
+        seg = length / n
+        out.append(A("terrace_platform", cx, cy, -18.0, yaw=yaw,
+                     sxyz=(seg / 1440.0, width / 740.0, 0.35),
+                     mat=("MI_V2_PlazaCream", "MI_V2_PlazaWarm")[i % 2],
+                     label="%s_Seg%d" % (tag, i)))
+    return out
+
+
+#: THE RING. Twelve quarters by bearing and radius, each with a type and a
+#: seed. Bearings avoid the castle axis (90 deg) so the castle sightline the
+#: founder approved in PASS 06/07 stays open, and radii alternate so the ring
+#: is a landscape rather than a fence.
+_QUARTERS = [
+    (200.0, 11000, "garden"), (232.0, 13500, "towers"), (263.0, 10200, "grove"),
+    (295.0, 14000, "garden"), (326.0, 11200, "towers"), (356.0, 13000, "grove"),
+    (25.0, 11500, "garden"), (56.0, 13800, "towers"), (128.0, 12500, "grove"),
+    (152.0, 10800, "garden"), (176.0, 14200, "towers"), (108.0, 15500, "garden"),
+]
+
+#: PLACED AT THE MEASURED CENTRES, not at guessed bearings. After the first
+#: ring the audit re-ran and the 27,056 m2 void had broken into pieces, the
+#: largest two being 7,216 and 6,816 m2 in the REAR quadrants -- ground the
+#: ring's bearings skirted. These sites are the audit's own reported centres
+#: for every remaining region over ~400 m2, which is the difference between
+#: filling a world and filling the part of it somebody happened to look at.
+_QUARTER_SITES = [
+    (7751, -5529, "garden", 8100), (-7826, -5083, "towers", 8200),
+    (10316, 11105, "grove", 8300), (-10535, 11443, "garden", 8400),
+    (1708, 13010, "towers", 8500), (-4210, 8887, "grove", 8600),
+    (4296, 8776, "garden", 8700), (9600, -9800, "grove", 8800),
+    (-9400, -9500, "garden", 8900), (11200, 2600, "towers", 9000),
+    (-11400, 2200, "grove", 9100), (0, -10600, "garden", 9200),
+]
+
+
+def _outer_world():
+    out = []
+    for qi, (bearing, radius, kind) in enumerate(_QUARTERS):
+        a = math.radians(bearing)
+        cx, cy = math.cos(a) * radius, math.sin(a) * radius
+        sgn = 1 if cx >= 0 else -1
+        seed = 7000 + 137 * qi
+        tag = "Q%02d_%s" % (qi, kind)
+        if kind == "garden":
+            out += _quarter_garden(cx, cy, sgn, seed, tag)
+        elif kind == "towers":
+            out += _quarter_towers(cx, cy, sgn, seed, tag)
+        else:
+            out += _quarter_grove(cx, cy, sgn, seed, tag)
+        # the road in, from the district edge toward the quarter
+        ix, iy = math.cos(a) * 8200.0, math.sin(a) * 8200.0
+        out += _road(ix, iy, cx - math.cos(a) * 1600.0, cy - math.sin(a) * 1600.0,
+                     300.0, "%s_Road" % tag)
+        # a threshold where the road meets the quarter
+        out += [
+            A("garden_arch_stone", cx - math.cos(a) * 1900.0, cy - math.sin(a) * 1900.0, 220,
+              yaw=bearing + 90.0, s=0.9, mat="MI_V2_IvoryStone", label="%s_Threshold" % tag),
+            A("gate_finial_ball", cx - math.cos(a) * 1900.0, cy - math.sin(a) * 1900.0, 470,
+              s=0.55, mat="MI_V2_Gold", label="%s_ThresholdFinial" % tag),
+        ]
+    # the sites the audit named, each with a road back toward the district
+    for qi, (cx, cy, kind, seed) in enumerate(_QUARTER_SITES):
+        sgn = 1 if cx >= 0 else -1
+        tag = "S%02d_%s" % (qi, kind)
+        if kind == "garden":
+            out += _quarter_garden(cx, cy, sgn, seed, tag)
+        elif kind == "towers":
+            out += _quarter_towers(cx, cy, sgn, seed, tag)
+        else:
+            out += _quarter_grove(cx, cy, sgn, seed, tag)
+        d = math.hypot(cx, cy) or 1.0
+        ux, uy = cx / d, cy / d
+        out += _road(ux * 8000.0, uy * 8000.0, cx - ux * 1700.0, cy - uy * 1700.0,
+                     280.0, "%s_Road" % tag)
+    return out
+
+
+OUTER_WORLD = _band("V2_Skyline", _outer_world())
+
+
 #: THE BANDS THE BUILDER WALKS. One list, so `ALL` and build_v2 cannot drift.
 #:
 #: They already had. build_v2 kept its own hand-written list and `ALL` kept
@@ -1303,7 +1474,7 @@ REARWORLD = _band("V2_Garden", [
 #: gate reading a different list from the builder reports the world it was
 #: shown, not the world that gets made.
 BUILD_BANDS = [FOREGROUND, COURTYARD, GARDEN, PALACE, FLANK_GROUND, FLANKS,
-               REARWORLD, CAM_FOREGROUNDS]
+               REARWORLD, CAM_FOREGROUNDS, OUTER_WORLD]
 
 #: Everything the layout declares: what the builder walks, plus the two bands
 #: it places by their own rules (SKY is the dome/atmosphere, HOVER is lifted

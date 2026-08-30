@@ -215,7 +215,15 @@ LOOK = {
     # mass dropped from median 82 to 46. Shade that deep stops being shade and
     # becomes the "dark masses swallowing architecture" the brief warns about.
     # 0.58 keeps most of the shadow structure PASS 08 recovered.
-    "skyLightIntensity": 0.58, "exposureBias": 0.0,
+    # 0.72. The founder reports the right side reading "excessively dark" and
+    # the measurement agrees: the dark arc holds 39.4% of the flank frame
+    # against the reference's 23.0% (1.71x) and the foreground sits at p50 39
+    # against 151. PASS 08 cut the shadowless fill from a budget where it was
+    # most of the key, PASS 08b put a little back, and the vegetation added
+    # since has been compounding shade on shade. Shadow STRUCTURE is worth
+    # keeping -- it is what PASS 08 bought and the frame was flat without it --
+    # so this lifts the hemisphere rather than flattening the sun.
+    "skyLightIntensity": 0.72, "exposureBias": 0.0,
     # PASS 05 (2026-08-28, gated WLV2_PASS05=1 like the earlier passes): the
     # vegetation's black interiors. V2_PASS_024 measured the canopies at luma
     # p10 0 / p50 3-12 against the reference's 17-19 / 40-63 WITH the sky dome
@@ -358,7 +366,7 @@ LOOK = {
     "bloomIntensity": 0.35, "bloomThreshold": 1.2,
     # PASS 08b: half the warm gain. See sunTemperatureK above -- the grade and
     # the sun were both moved warm in PASS 08 and together they overshot.
-    "gradeShadows": (0.94, 0.90, 0.86), "gradeMidtones": (1.035, 1.00, 0.955),
+    "gradeShadows": (1.02, 0.98, 0.94), "gradeMidtones": (1.035, 1.00, 0.955),
     "gradeHighlights": (1.015, 1.00, 0.975),
     # the panorama dome supplies the SKY: the lookup is computed from the view
     # direction (PASS 04d, 2026-08-28), so u = 0.5 faces yaw skyYawOffset
