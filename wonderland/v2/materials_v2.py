@@ -935,8 +935,21 @@ def build_materials(unreal, log, texs):
                 elif stem is None and fam == "leaf":
                     plain, used = None, None
                     for cand in PLAIN_MAPS[pname]:
+                        # ASK BEFORE LOADING. load_asset on a missing path LOGS
+                        # AN ERROR, and the pythonscript commandlet exits
+                        # non-zero if any error was logged during the run --
+                        # so probing three engine paths that are absent in this
+                        # build made a completely successful generate
+                        # (121/121 assets, 628 actors, saved=True, both maps
+                        # written) come back as exit 1, and build-wonderland
+                        # stopped before the cook. Twelve self-inflicted error
+                        # lines cost a thirteen-minute run.
+                        #
+                        # does_asset_exist first is the idiom the rest of this
+                        # file already uses; the try/except stays for the paths
+                        # that exist in the registry but fail to load.
                         try:
-                            plain = eal.load_asset(cand)
+                            plain = eal.load_asset(cand) if eal.does_asset_exist(cand) else None
                         except Exception:
                             plain = None
                         if plain is not None:

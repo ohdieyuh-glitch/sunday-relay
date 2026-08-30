@@ -120,7 +120,20 @@ def make_unreal():
 
     class _EAL(object):
         def does_asset_exist(self, p):
-            return str(p) in _imported
+            # ENGINE BUILT-INS EXIST. Anything under /Engine/ ships with the
+            # editor, so a stub that says otherwise models a machine nobody
+            # has and hides the mainline: code that asks before loading would
+            # take its fallback branch here every time and its ENGINE branch
+            # would have no offline coverage at all.
+            #
+            # (The V2 build has met one real exception -- the commandlet's
+            # asset registry has not scanned EngineMaterials, so the engine
+            # normal maps are on disk and still do not resolve. That is a
+            # measured property of that one process, handled by an explicit
+            # fallback, and it is not what a control-flow stub should model
+            # as the default.)
+            q = str(p)
+            return q.startswith("/Engine/") or q in _imported
 
         def does_directory_exist(self, p):
             return False
