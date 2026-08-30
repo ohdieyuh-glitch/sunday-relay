@@ -1511,6 +1511,11 @@ _QUARTER_SITES = [
     (4296, 8776, "garden", 8700), (9600, -9800, "grove", 8800),
     (-9400, -9500, "garden", 8900), (11200, 2600, "towers", 9000),
     (-11400, 2200, "grove", 9100), (0, -10600, "garden", 9200),
+    # third round, again from the audit's own centres after the ring roads
+    (7045, -4870, "towers", 9300), (-4919, -8967, "grove", 9400),
+    (-9464, 48, "garden", 9500), (-4060, -2898, "grove", 9600),
+    (9293, 13573, "towers", 9700), (10424, 8536, "garden", 9800),
+    (11400, -10500, "grove", 9900), (-11000, -11200, "towers", 10000),
 ]
 
 
@@ -1553,6 +1558,33 @@ def _outer_world():
         ux, uy = cx / d, cy / d
         out += _road(ux * 8000.0, uy * 8000.0, cx - ux * 1700.0, cy - uy * 1700.0,
                      280.0, "%s_Road" % tag)
+
+    # A RING, not just spokes. Radial roads make twelve places you can reach
+    # FROM the district and not one you can reach from another -- a wheel, not
+    # a world. The founder's test is that a player keeps going, and going
+    # means onward rather than back. Adjacent quarters on the outer ring are
+    # linked, so the outer world is a circuit a participant can walk without
+    # ever returning to the plaza.
+    ring = []
+    for (bearing, radius, _k) in _QUARTERS:
+        a = math.radians(bearing)
+        ring.append((bearing % 360.0, math.cos(a) * radius, math.sin(a) * radius))
+    ring.sort()
+    for i in range(len(ring)):
+        _b0, x0, y0 = ring[i]
+        _b1, x1, y1 = ring[(i + 1) % len(ring)]
+        # skip the leg that would cross the castle axis, so the approach and
+        # its sightline stay clear
+        if (x0 * x1 < 0) and (y0 > 6000 and y1 > 6000):
+            continue
+        out += _road(x0, y0, x1, y1, 240.0, "RingRoad%02d" % i)
+        # a marker where two legs meet, so the circuit has a rhythm
+        out += [
+            A("pedestal_finial", x0, y0 - 900.0, 0, s=0.9, mat="MI_V2_IvoryStone",
+              label="RingMarker%02d" % i),
+            A("gate_finial_ball", x0, y0 - 900.0, 124, s=0.55, mat="MI_V2_Gold",
+              label="RingMarkerCap%02d" % i),
+        ]
     return out
 
 
