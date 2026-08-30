@@ -785,10 +785,52 @@ def _master(unreal, log, name, kind, texs=None):
     return m
 
 
+#: PASS 09b: WLV2_REUSE_MATERIALS=1 loads the existing masters and instances
+#: instead of recreating them. Every generate deletes and recreates all four
+#: masters, which gives them fresh GUIDs, which invalidates their shadermaps,
+#: which makes the editor recompile the lot -- measured at ~5 minutes of a
+#: ~15-minute generate once the surface master became triplanar and its
+#: permutations tripled. That is the right price when a tint or the master
+#: graph changed and pure waste on a pass that only moved actors, which most
+#: passes are. It is OPT-IN and it verifies: if any expected asset is missing
+#: it falls back to a full rebuild and says so, because a half-loaded material
+#: set is the grey world again.
+REUSE_MATERIALS = os.environ.get("WLV2_REUSE_MATERIALS", "0") == "1"
+
+
+def _load_existing(unreal, log):
+    """Every master and instance from disk, or None if any is missing."""
+    eal = unreal.EditorAssetLibrary
+    pkg = C.FOLDERS["mat_instances"]
+    mpkg = C.FOLDERS["mat_master"]
+    out = {}
+    for name in ("M_V2_Surface", "M_V2_Foliage", "M_V2_Portal", "M_V2_SkyDome"):
+        if not eal.does_asset_exist(mpkg + "/" + name):
+            log("V2 MATERIALS REUSE: %s missing -- rebuilding all" % name)
+            return None
+    for name in INSTANCES:
+        path = pkg + "/" + name
+        if not eal.does_asset_exist(path):
+            log("V2 MATERIALS REUSE: %s missing -- rebuilding all" % name)
+            return None
+        mi = eal.load_asset(path)
+        if mi is None:
+            log("V2 MATERIALS REUSE: %s would not load -- rebuilding all" % name)
+            return None
+        out[name] = mi
+    return out
+
+
 def build_materials(unreal, log, texs):
     """Create the masters and every instance. Returns name -> instance."""
     mel = unreal.MaterialEditingLibrary
     eal = unreal.EditorAssetLibrary
+    if REUSE_MATERIALS:
+        existing = _load_existing(unreal, log)
+        if existing is not None:
+            log("V2 MATERIALS: %d instances REUSED from disk (WLV2_REUSE_MATERIALS=1) -- "
+                "no master rebuild, no shader recompile" % len(existing))
+            return existing
     masters = {}
     for name, kind in (("M_V2_Surface", "surface"), ("M_V2_Foliage", "foliage"),
                        ("M_V2_Portal", "portal"), ("M_V2_SkyDome", "sky")):
