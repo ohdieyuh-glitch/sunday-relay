@@ -680,9 +680,15 @@ def _parterre(sgn, cx, cy, seed, tag):
         bx, by = cx + sgn * qx * off, cy + qy * off
         # the bed's clipped edge: four low runs, the gaps at the corners read
         # as the box hedge a parterre has rather than as a solid green brick
+        # MEASURED, not guessed: hedge_block is 353 x 150 x 127 uu. At the
+        # uniform s=0.52 this first carried, each "edge" was 184 uu against a
+        # 620 uu bed side -- 30% of it -- so the bed would have read as four
+        # small green lumps with gaps between them rather than as a clipped
+        # border. Stretched along its run instead: 618 x 135 x 108, a low
+        # continuous edge at knee height, which is what a parterre has.
         for k, (dx, dy, yaw) in enumerate(((0, -1, 0), (0, 1, 0), (-1, 0, 90), (1, 0, 90))):
             out.append(A("hedge_block", bx + dx * q * 0.5, by + dy * q * 0.5, 0,
-                         yaw=yaw, s=0.52,
+                         yaw=yaw, sxyz=(1.75, 0.90, 0.85),
                          mat=("MI_V2_LeafDark", "MI_V2_LeafMid")[(i + k) % 2],
                          label="%s_Bed%d_Edge%d" % (tag, i, k)))
         # what fills it
@@ -844,8 +850,11 @@ REARWORLD = _band("V2_Garden", [
 ] + [
     # a hedged avenue leading to it, narrowing as it goes, so the gate reads
     # as a destination from the plaza
-    A("hedge_block", side * (1100 - 55 * i), -2600 - 430 * i, 0, yaw=0,
-      s=0.95, mat=("MI_V2_LeafDark", "MI_V2_LeafMid")[i % 2],
+    # yaw 90 so the 353 uu run lies ALONG the avenue, stretched to 459 against
+    # a 430 uu pitch: the hedges meet. At yaw 0 they lay across it, 335 wide
+    # every 430, and the avenue would have been a dashed line of blocks.
+    A("hedge_block", side * (1100 - 55 * i), -2600 - 430 * i, 0, yaw=90,
+      sxyz=(1.30, 0.95, 0.95), mat=("MI_V2_LeafDark", "MI_V2_LeafMid")[i % 2],
       label="Rear_Avenue%d_%d" % (side, i))
     for side in (1, -1) for i in range(8)
 ] + _grove(1, 3100, -4400, 5100, "Rear_GroveL", count=4)
