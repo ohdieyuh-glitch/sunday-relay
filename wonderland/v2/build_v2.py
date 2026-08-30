@@ -628,6 +628,18 @@ class Placer(object):
 # ==========================================================================
 
 
+def _path_tint(LT, row, c):
+    """PASS 08: the path's stone-to-stone tint. Every flag on the main axis
+    carried the single MI_V2_PathStone, so the one surface the player walks
+    and looks straight down at had no variation at all -- the measured
+    p10..p90 tonal span over the walking surface was 44 against the
+    reference's 119. Three tints on a per-flag draw, weighted to the base."""
+    h = LT.mk.rnd(row, c, 43)
+    if h < 0.62:
+        return "MI_V2_PathStone"
+    return "MI_V2_PathWarm" if h < 0.85 else "MI_V2_PathPale"
+
+
 def lay_ground(placer, actors, eal, assets, mats, layers, plaza_only=False):
     """The pale plaza (large slabs, loose cream/grey checker, sparse petals)
     and the dark stone path from the front wall to the arch, rising at the
@@ -674,7 +686,18 @@ def lay_ground(placer, actors, eal, assets, mats, layers, plaza_only=False):
                 variants = by_class[cls]
                 key = variants[int(LT.mk.rnd(r, c, 27) * len(variants)) % len(variants)]
                 blotch = LT.mk.rnd(r // 2, c // 3, 28) * 0.7 + LT.mk.rnd(r, c, 29) * 0.3
-                mat = "MI_V2_PlazaCream" if blotch < 0.55 else ("MI_V2_PlazaWarm" if blotch < 0.80 else "MI_V2_PlazaGrey")
+                # PASS 08: four tints, and the darkest one is picked per SLAB
+                # rather than by the low-frequency blotch. The blotch alone
+                # gives a plaza large soft regions of one tint, which is the
+                # patchwork a real pavement has -- but it cannot put a dark
+                # stone next to a pale one, and that adjacency is what the
+                # measured tonal span (44 against the reference's 119) is
+                # short of. The blotch keeps the regions; a per-slab draw
+                # sprinkles the dark stone through all of them.
+                mat = ("MI_V2_PlazaCream" if blotch < 0.55
+                       else ("MI_V2_PlazaWarm" if blotch < 0.80 else "MI_V2_PlazaGrey"))
+                if LT.mk.rnd(r, c, 41) < 0.11:
+                    mat = "MI_V2_PlazaShade"
                 # jitter small enough that a 2 m runner cannot overlap its
                 # neighbour's chamfer (PASS 01/01b showed dark wedge "cracks"
                 # at +/-1.2 deg): +/-0.4 deg, +/-0.8 uu.
@@ -723,7 +746,7 @@ def lay_ground(placer, actors, eal, assets, mats, layers, plaza_only=False):
                     key = variants[int(LT.mk.rnd(row, c, 32) * len(variants)) % len(variants)]
                     placements.append((key, x + (LT.mk.rnd(row, c, 33) - 0.5) * 1.2, y + (LT.mk.rnd(row, c, 34) - 0.5) * 1.2,
                                        z - 2.0 + 0.6 * LT.mk.rnd(row, c, 35), yaw + 90.0 + (LT.mk.rnd(row, c, 36) - 0.5) * 1.0,
-                                       1.0, 1.0, 1.0, "MI_V2_PathStone"))
+                                       1.0, 1.0, 1.0, _path_tint(LT, row, c)))
                     laid_flags += 1
                 lat += length + joint
                 c += 1
@@ -1405,6 +1428,77 @@ def _grade(s):
 # ==========================================================================
 
 
+def mesh_clouds(placer):
+    """PASS 08: the sky, as geometry at a real altitude.
+
+    A ring of cumulus around the district plus a higher, thinner veil. The
+    ring is deliberately UNIFORM in azimuth: eight locked cameras look eight
+    ways and a sky authored for HeroCam0 alone would be a set again -- the
+    thing this phase exists to stop. Every placement is a seeded draw, so the
+    same commit builds the same sky, and every value below is a real-world
+    dimension rather than a screen fraction.
+
+    Returns the number of cloud actors placed.
+    """
+    L = C.LOOK
+    if not int(L.get("meshClouds", 0)):
+        return 0
+    KM = 100000.0                                    # uu per kilometre
+    made = 0
+
+    def band(kind, count, ring, alt, scale, assets, seed0):
+        nonlocal made
+        r0, r1 = ring
+        a0, a1 = alt
+        s0, s1 = scale
+        for i in range(int(count)):
+            # Azimuth: an even share of the circle, jittered by up to two
+            # thirds of a share, so the ring never reads as a clock face and
+            # never leaves a camera looking at a bare quadrant.
+            share = 360.0 / max(1, int(count))
+            az = math.radians(share * (i + 0.5) + (LT.mk.rnd(i, 1, seed0) - 0.5) * share * 0.66)
+            # sqrt keeps the draw even over AREA rather than over radius,
+            # which otherwise crowds every cloud onto the inner ring.
+            rad = (r0 + (r1 - r0) * math.sqrt(LT.mk.rnd(i, 2, seed0))) * KM
+            z = (a0 + (a1 - a0) * LT.mk.rnd(i, 3, seed0)) * KM
+            sc = s0 + (s1 - s0) * LT.mk.rnd(i, 4, seed0)
+            key = assets[int(LT.mk.rnd(i, 5, seed0) * len(assets)) % len(assets)]
+            if key not in placer.assets:
+                continue
+            a = placer.place({"asset": key,
+                              "pos": (math.cos(az) * rad, math.sin(az) * rad, z),
+                              "rot": (0.0, LT.mk.rnd(i, 6, seed0) * 360.0, 0.0),
+                              # a little squash or stretch per cloud, so one
+                              # recipe does not repeat as one silhouette
+                              "scale": (sc * (0.86 + 0.30 * LT.mk.rnd(i, 7, seed0)), sc,
+                                        sc * (0.62 + 0.34 * LT.mk.rnd(i, 8, seed0))),
+                              "band": "V2_Skyline",
+                              "mat": "MI_V2_CloudVeil" if kind == "veil" else "MI_V2_Cloud",
+                              "label": "V2_Cloud_%s_%02d" % (kind, i)},
+                             batch=False)
+            if a is None or a is True:
+                continue
+            smc = a.get_component_by_class(unreal.StaticMeshComponent)
+            if smc is not None:
+                set_prop(smc, "CastShadow", False)
+                # A cloud must never be something the Dog can stand on or the
+                # camera's spring arm can probe against.
+                try:
+                    smc.set_collision_enabled(unreal.CollisionEnabled.NO_COLLISION)
+                except Exception:
+                    set_prop(smc, "BodyInstance", None)
+            made += 1
+
+    band("cumulus", L.get("cloudCount", 0), L["cloudRingKm"], L["cloudAltKm"], L["cloudScale"],
+         ("cloud_cumulus_a", "cloud_cumulus_b", "cloud_cumulus_c"), 8801)
+    band("veil", L.get("cloudVeilCount", 0), L["cloudVeilRingKm"], L["cloudVeilAltKm"],
+         L["cloudVeilScale"], ("cloud_veil",), 8807)
+    LOG("V2 CLOUDS MESH: %d cloud actors (cumulus %d, veil %d) at %.1f-%.1f km, altitude %.1f-%.1f km"
+        % (made, L.get("cloudCount", 0), L.get("cloudVeilCount", 0),
+           L["cloudRingKm"][0], L["cloudRingKm"][1], L["cloudAltKm"][0], L["cloudVeilAltKm"][1]))
+    return made
+
+
 def hero_camera(actors, layers):
     """Every camera in v2_config.HERO_CAMS, locked. HeroCam0 is the capture
     default (the reconstruction viewpoint); HeroCam1 looks through the gate."""
@@ -1726,6 +1820,7 @@ def main():
 
     phase("light")
     light_and_air(actors, layers)
+    MANIFEST["actors"]["clouds"] = mesh_clouds(placer)
 
     phase("camera")
     hero_camera(actors, layers)

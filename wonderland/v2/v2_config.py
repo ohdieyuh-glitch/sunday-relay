@@ -160,8 +160,30 @@ LOOK = {
     # pitch -58 = minus the measured elevation. (This carried -55 with a
     # comment saying +58: a derived number that did not match its source.)
     # Physical units, histogram auto-exposure, extended range.
-    "sunPitch": -58.0, "sunYaw": -11.0, "sunLux": 60000.0, "sunTemperatureK": 5600.0,
-    "skyLightIntensity": 1.0, "exposureBias": 0.0,
+    # PASS 08 (2026-08-30): TEMPERATURE. Measured on HeroCam0 against the
+    # founder reference at matched regions: every non-sky surface in the
+    # reference is WARM and ours is not -- paving R-B +21 against +36, the
+    # left canopy (66,96,57) against (83,68,39), and in the whole-frame
+    # palette the warm arc holds 26.7% of the reference and 1.6% of ours
+    # while the neutral-pale arc holds 2.7% of the reference and 27.5% of
+    # ours. The same surface is warm stone there and near-white here. 5600 K
+    # is neutral daylight; the reference reads as a warm late-morning sun, so
+    # the KEY carries the warmth (a lit surface warms, sky-lit shade stays
+    # cool) rather than a grade painting it on flat.
+    "sunPitch": -58.0, "sunYaw": -11.0, "sunLux": 60000.0, "sunTemperatureK": 5150.0,
+    # PASS 08: THE LIGHT BUDGET, not the exposure. Nothing in the frame
+    # clips (0.01% above sRGB 240, the reference 0.00%) so the world is not
+    # over-exposed -- it is UNSHADED: 9.9% of our pixels sit below sRGB 40
+    # against the reference's 25.7%. The sun is 60,000 lux and the
+    # shadowless fill (a real-time sky capture at 1.0 with the atmosphere's
+    # luminance doubled, plus the 6,000-lux upward bounce below) is most of
+    # the key again -- the third time this class has cost Wonderland its
+    # shade (see the light-budget memory). 0.45 pulls the hemisphere back to
+    # roughly a clear day's true sky/sun ratio. The sky's own APPEARANCE is
+    # skyLuminanceFactor's job and is already correct (upper sky p50
+    # (109,141,173) against (95,118,171)), so the two are separated here
+    # instead of one knob moving both.
+    "skyLightIntensity": 0.45, "exposureBias": 0.0,
     # PASS 05 (2026-08-28, gated WLV2_PASS05=1 like the earlier passes): the
     # vegetation's black interiors. V2_PASS_024 measured the canopies at luma
     # p10 0 / p50 3-12 against the reference's 17-19 / 40-63 WITH the sky dome
@@ -183,8 +205,17 @@ LOOK = {
     # 10% of the sun, the plaza's colour, no atmosphere role, no volumetrics.
     # Expected on HeroCam0: canopy undersides from p50 ~5 to the reference's
     # 40-63 (albedo 0.26 x 6,000 lux / pi ~ 500 nits ~ sRGB 55).
-    "bounceLight": 1 if os.environ.get("WLV2_PASS05", "0") == "1" else 0,
-    "bounceLux": 6000.0, "bounceColor": (255, 235, 200), "bouncePitch": 90.0,
+    # PASS 08: the bounce stays, at a fifth of its strength, and UNGATED.
+    # It was sized in PASS 05b for leaf undersides that read p50 1 -- and
+    # PASS 05f then fixed the leaf albedo, which is what actually lit them;
+    # its own note says "the bounce light stays for this render (one
+    # change)" and nobody came back to it. 6,000 shadowless lux against a
+    # 60,000-lux key is 10% of the budget arriving in every shadow with no
+    # occlusion at all. 1,200 keeps a downward face off zero and lets the
+    # shade read. Ungated because a build's LOOK must not depend on an env
+    # var that the capture path sets and the playtest path does not.
+    "bounceLight": 1,
+    "bounceLux": 1200.0, "bounceColor": (255, 235, 200), "bouncePitch": 90.0,
     # PASS 05c (gated WLV2_PASS05=1): the bounce light WORKS (V2_PASS_027: the
     # mushroom cap's underside p50 1 -> 26) but the canopy faces HeroCam0 sees
     # are SHADOW SIDES -- both trees are backlit, the sun sits ahead-right-
@@ -200,7 +231,14 @@ LOOK = {
     # reaches the canopies (plain StaticMeshActors); the batched hedges and
     # beds need the same flag on the batch actor (C++), which follows once
     # the canopies prove the mechanism.
-    "foliageDistanceFieldLighting": 0 if os.environ.get("WLV2_PASS05", "0") == "1" else 1,
+    # PASS 08: RESTORED to 1, and ungated. PASS 05c turned this off to stop
+    # foliage self-occluding when the canopies read p50 2 against the
+    # reference's 37; PASS 05d then measured that it moved them only to 6
+    # and recorded the hypothesis as refuted. The albedo fix that followed
+    # overshot the other way (its own note: canopy p50 85 against 37), so
+    # the world now needs that self-occlusion back -- a canopy with a dark
+    # interior is most of the reference's 25.7% of deep pixels.
+    "foliageDistanceFieldLighting": 1,
     # PASS 05d (gated WLV2_PASS05=1): excluding the canopies from distance-
     # field lighting moved the dense right canopy only from p50 2 to 6
     # (V2_PASS_028; reference 37) -- the DF hypothesis is refuted for the
@@ -254,13 +292,40 @@ LOOK = {
     "skyLuminanceFactor": 2.0, "mieScatteringScale": 0.006,
     "volumetricClouds": 1, "cloudLayerBottomKm": 2.0, "cloudLayerHeightKm": 2.5,
     "cloudCoverage": 0.42, "cloudDensity": 0.55,
+    # PASS 08 (2026-08-30): MESH CLOUDS, because the volumetric ones do not
+    # arrive. Measured on HeroCam0: 1.3% of the sky band is cloud against the
+    # reference's 12.4%, while the build log says the VolumetricCloud actor
+    # spawned, MI_V2_Clouds took coverage 0.42, and the shadermap compiled --
+    # the second failure of the feature on this Vulkan SM5 runtime after PASS
+    # 06d moved the layer from 3.5 km to 2.0 km and changed nothing. The
+    # volumetric actor STAYS (it costs nothing while it renders nothing, and
+    # it is the thing to re-test on a future engine or driver); the sky the
+    # player actually sees is geometry. Sizes are the real thing: cumulus 0.7
+    # to 1.6 km across with bases at 1.3-2.3 km, which is what puts them in
+    # the 5-32 deg of elevation HeroCam0 frames. They cast no shadow -- a
+    # kilometre of shadow-mapped cloud is a cost with an unpredictable effect
+    # on a world whose light budget was just measured.
+    "meshClouds": 1, "cloudCount": 38,
+    "cloudRingKm": (2.6, 13.5), "cloudAltKm": (1.30, 2.30), "cloudScale": (5.0, 12.0),
+    "cloudVeilCount": 8, "cloudVeilRingKm": (5.0, 17.0), "cloudVeilAltKm": (3.2, 4.4),
+    "cloudVeilScale": (14.0, 26.0),
     "volumetricFog": 1, "fogScattering": 0.20,
     # restrained magic: a small rune disc at the viewpoint, low glow
     "portal": 1, "portalRadius": 250.0, "portalGlow": 1200.0, "portalLightIntensity": 8000.0,
-    # bloom low; grade NEUTRAL (the reference is not purple-shadowed)
+    # bloom low. PASS 08: the grade stops being a no-op. It was (1.00, 1.00,
+    # 1.02)/(1.01, 1.00, 0.99)/(1.02, 1.00, 0.98) -- neutral to three
+    # decimal places -- while the reference is warm across every non-sky
+    # surface it has. These are colour GAINS: the shadows also come down in
+    # level, because deepening shade is the measured gap (9.9% against
+    # 25.7% below sRGB 40) and a gain is the one lever that reaches the
+    # shadows without touching the sky, which already matches. Warm here is
+    # a shift of about 12% R over B, not a sepia wash -- the failure mode to
+    # watch is the whole world reading as one tan material (memory:
+    # the-lamp-posts-were-the-key-light), and the check for it is each
+    # material's BRIGHTEST decile, not the frame mean.
     "bloomIntensity": 0.35, "bloomThreshold": 1.2,
-    "gradeShadows": (1.0, 1.0, 1.02), "gradeMidtones": (1.01, 1.0, 0.99),
-    "gradeHighlights": (1.02, 1.0, 0.98),
+    "gradeShadows": (0.90, 0.85, 0.80), "gradeMidtones": (1.06, 1.00, 0.92),
+    "gradeHighlights": (1.03, 1.00, 0.95),
     # the panorama dome supplies the SKY: the lookup is computed from the view
     # direction (PASS 04d, 2026-08-28), so u = 0.5 faces yaw skyYawOffset
     # (90 = +Y, HeroCam0's forward) and the mesh's own UVs are irrelevant.

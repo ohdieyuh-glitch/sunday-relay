@@ -192,6 +192,21 @@ def _trunk(ctx, name, h, r_base, r_top, lean, seed, roots=6, sides=22):
     return m, path
 
 
+#: PASS 08 (2026-08-30): LIMBS MUST END INSIDE THE LEAVES. A trunk and its
+#: canopy are separate assets placed at the same spot, and nothing ever
+#: checked that one fits inside the other. Measured from the recipes: a mature
+#: trunk's limb runs 0.8 x length horizontally and then recurses twice at 0.66
+#: and 0.436, so a 600 uu limb reaches roughly 700-800 uu from the bole --
+#: while canopy_large's leaf shells stop at 500-530 uu. Every tree in the
+#: district therefore wore two or three metres of bare branch sticking out
+#: past its own foliage, which is the spray of dead brown spikes visible on
+#: every camera in the SUITE and PASS renders. 0.60 brings the reach inside
+#: the leaves; the branching depth is kept, because the fine limbs are what
+#: stops a canopy reading as a ball on a stick -- they simply live under the
+#: leaves now, as a tree's do.
+LIMB_REACH = 0.60
+
+
 def _limb(m, start, direction, length, r0, depth, seed):
     pts, rr = [], []
     for i in range(6):
@@ -218,7 +233,8 @@ def tree_clock_trunk(ctx):
     for k, (ang, z, ln) in enumerate(((0.3, 1150.0, 620.0), (2.3, 1400.0, 560.0), (4.2, 1600.0, 640.0),
                                       (1.4, 1800.0, 520.0), (3.3, 900.0, 420.0))):
         p = path[int(len(path) * z / 2000.0)]
-        _limb(m, (p[0], p[1], z), (math.cos(ang) * 0.85, math.sin(ang) * 0.85, 0.40), ln, 88.0, 0, 40 + k)
+        _limb(m, (p[0], p[1], z), (math.cos(ang) * 0.85, math.sin(ang) * 0.85, 0.40),
+              ln * LIMB_REACH, 88.0, 0, 40 + k)
     return m
 
 
@@ -228,7 +244,8 @@ def tree_mature_trunk(ctx):
     m, path = _trunk(ctx, "tree_mature_trunk", 1400.0, 160.0, 100.0, -120.0, seed=57, roots=6)
     for k, (ang, z, ln) in enumerate(((0.6, 900.0, 560.0), (2.7, 1000.0, 600.0), (4.6, 1100.0, 540.0), (1.7, 760.0, 440.0))):
         p = path[int(len(path) * z / 1400.0)]
-        _limb(m, (p[0], p[1], z), (math.cos(ang) * 0.8, math.sin(ang) * 0.8, 0.50), ln, 76.0, 0, 60 + k)
+        _limb(m, (p[0], p[1], z), (math.cos(ang) * 0.8, math.sin(ang) * 0.8, 0.50),
+              ln * LIMB_REACH, 76.0, 0, 60 + k)
     return m
 
 
@@ -241,10 +258,12 @@ def canopy_large(ctx):
     m.perlin(34.0, 0.005, seed=11)
     m.smooth(1, 0.3)
     _twigs(m, (0, 0, 20), (430, 400, 360), 16, 1101, r0=9.0)
-    for k, (c, rad, n, sz) in enumerate((((30, 20, 60), (470, 430, 400), 300, 62.0),
-                                         ((-230, 150, -40), (300, 290, 260), 220, 56.0),
-                                         ((180, -170, -20), (280, 270, 240), 210, 56.0),
-                                         ((30, 20, 40), (330, 300, 280), 200, 52.0))):
+    # PASS 08: the shells grow ~15% so the foliage covers where the shortened
+    # limbs now end, and the canopy keeps a silhouette wider than its trunk.
+    for k, (c, rad, n, sz) in enumerate((((30, 20, 60), (540, 495, 460), 340, 62.0),
+                                         ((-230, 150, -40), (345, 335, 300), 250, 56.0),
+                                         ((180, -170, -20), (322, 310, 276), 240, 56.0),
+                                         ((30, 20, 40), (380, 345, 322), 230, 52.0))):
         _leaf_shell(m, c, rad, n, sz, 1110 + k, elev=(-0.7, 1.0), jitter=0.30, clump=3)
     m.split_normals(62.0)
     return m
@@ -1008,8 +1027,85 @@ def mushroom_giant_gills(ctx):
 
 
 
+# ==========================================================================
+# CLOUDS AS GEOMETRY (PASS 08, 2026-08-30)
+# ==========================================================================
+#
+# The sky is a quarter of every camera in the suite and it holds 1.3% cloud
+# against the reference's 12.4% -- measured, not impressions. VolumetricCloud
+# has now failed twice on this Vulkan SM5 runtime: the actor spawns, the
+# material instance takes its coverage, the shadermap compiles, and no cumulus
+# reaches the frame (PASS 06d moved the layer 3.5 km -> 2.0 km and the second
+# render was as empty as the first). The founder's instruction is explicit --
+# investigate efficiently, and if the runtime will not carry it, implement an
+# alternative that still feels three-dimensional; do not restore the panorama
+# dome to get clouds.
+#
+# So the clouds are MESHES: real geometry, in the world, at a real altitude.
+# They parallax against the skyline as the player walks, they are lit by the
+# same sun as the castle (bright tops, shaded undersides -- the form comes
+# from the light, not from a painted gradient), they read from all eight
+# cameras and from any camera a later district adds, and nothing about them is
+# a flat card facing the viewer. They are built at ~100 m across and placed
+# with a scale multiplier, so one recipe covers a 200 m puff and a 900 m bank.
+
+
+def _billow(m, lobes, seed):
+    """Cumulus lobes: overlapping spheres whose centres sit ON or ABOVE the
+    base plane, so the cloud keeps the flat bottom a cumulus has while its
+    top billows. Perlin then breaks the spheres and a light smooth keeps the
+    silhouette rounded rather than lumpy."""
+    for (x, y, z, r) in lobes:
+        m.sphere(r, at=(x, y, z), steps=12)
+    m.perlin(0.16 * max(r for (_, _, _, r) in lobes), 0.0022, seed=seed)
+    m.smooth(2, 0.32)
+    m.split_normals(70.0)
+    return m
+
+
+def cloud_cumulus_a(ctx):
+    """A wide, low cumulus bank: one long body, three rising heads. ~120 m."""
+    m = ctx.mesh("cloud_cumulus_a")
+    return _billow(m, ((0, 0, 0, 2600), (3100, 300, 400, 2100), (-3000, -200, 250, 1950),
+                       (900, 400, 1900, 1750), (-1400, -300, 1700, 1500), (5200, -100, -150, 1300)), 7301)
+
+
+def cloud_cumulus_b(ctx):
+    """A tall, compact cumulus -- the vertical one that gives a sky its
+    scale. ~80 m wide, half as tall again."""
+    m = ctx.mesh("cloud_cumulus_b")
+    return _billow(m, ((0, 0, 0, 2300), (600, 200, 1800, 1950), (-500, -300, 3200, 1600),
+                       (300, 100, 4400, 1150), (-1900, 400, 300, 1400), (2000, -300, 500, 1500)), 7307)
+
+
+def cloud_cumulus_c(ctx):
+    """A small, torn fair-weather puff for the gaps between the banks. ~55 m."""
+    m = ctx.mesh("cloud_cumulus_c")
+    return _billow(m, ((0, 0, 0, 1500), (1500, 200, 200, 1050), (-1300, -150, 150, 950),
+                       (200, 300, 900, 800)), 7311)
+
+
+def cloud_veil(ctx):
+    """A thin, wide sheet for the high sky -- the flat stratus band that sits
+    behind the cumulus and stops the zenith reading as bare gradient. Flat
+    enough to be nearly two-dimensional in section, but it is still a solid at
+    a real altitude, so it parallaxes and it is never a card facing anyone."""
+    m = ctx.mesh("cloud_veil")
+    for (x, y, r) in ((0, 0, 3400), (4200, 600, 2500), (-4000, -500, 2600), (7600, -400, 1700)):
+        m.sphere(r, at=(x, y, 0), steps=10)
+    m.perlin(340.0, 0.0018, seed=7317)
+    m.smooth(2, 0.34)
+    m.scale(1.0, 1.0, 0.17)
+    m.split_normals(70.0)
+    return m
+
+
 RECIPES = {
     "portal_disc": (portal_disc, "vfx_portal", True, False),
+    "cloud_cumulus_a": (cloud_cumulus_a, "sky", False, False),
+    "cloud_cumulus_b": (cloud_cumulus_b, "sky", False, False),
+    "cloud_cumulus_c": (cloud_cumulus_c, "sky", False, False),
+    "cloud_veil": (cloud_veil, "sky", False, False),
     "portal_ring": (portal_ring, "vfx_portal", True, False),
     "tree_clock_trunk": (tree_clock_trunk, "trees", True, True),
     "tree_mature_trunk": (tree_mature_trunk, "trees", True, True),
@@ -1569,7 +1665,8 @@ def tree_slender_trunk(ctx):
     m, path = _trunk(ctx, "tree_slender_trunk", 900.0, 70.0, 40.0, 30.0, seed=81, roots=4, sides=16)
     p = path[int(len(path) * 0.55)]
     for k, ang in enumerate((0.4, 2.5, 4.4)):
-        _limb(m, (p[0], p[1], 520.0), (math.cos(ang) * 0.75, math.sin(ang) * 0.75, 0.65), 380.0, 38.0, 0, 90 + k)
+        _limb(m, (p[0], p[1], 520.0), (math.cos(ang) * 0.75, math.sin(ang) * 0.75, 0.65),
+              380.0 * LIMB_REACH, 38.0, 0, 90 + k)
     return m
 
 

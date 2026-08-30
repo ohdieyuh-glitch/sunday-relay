@@ -28,25 +28,55 @@ import v2_config as C
 #: name -> (family, base tint, metallic, roughness, rough_vary, specular, emissive, emissive_strength)
 INSTANCES = {
     # ---- stone: cream and pale grey, warm variation, never white -------------
-    "MI_V2_IvoryStone": ("plaster", (0.74, 0.70, 0.62), 0.0, 0.58, 0.50, 0.32, None, 0.0),
-    "MI_V2_Stone":      ("ashlar",  (0.50, 0.46, 0.41), 0.0, 0.82, 0.80, 0.30, None, 0.0),
-    "MI_V2_PlazaCream": ("plaza",   (0.70, 0.66, 0.57), 0.0, 0.74, 0.85, 0.30, None, 0.0),
-    "MI_V2_PlazaGrey":  ("plaza",   (0.54, 0.55, 0.51), 0.0, 0.76, 0.85, 0.30, None, 0.0),
+    # PASS 08 (2026-08-30): THE STONE COMES DOWN AND SPREADS OUT. Measured
+    # on HeroCam0 against the founder reference over the same mid-frame
+    # walking surface: ours p50 luma 212 against 162 (the founder's "~1.3x
+    # brighter", confirmed at 1.31x in sRGB) and -- the larger finding -- a
+    # p10..p90 tonal span of 44 against 119. The plaza is not merely bright,
+    # it is UNIFORM: 2.7x less tonal range than the reference, which is what
+    # makes fitted masonry read as one poured sheet. Nothing clips (0.01% of
+    # the frame above sRGB 240), so this is albedo and spread, not exposure.
+    # The four tints below span 0.24..0.56 where the old three spanned
+    # 0.54..0.72, and the light budget (v2_config PASS 08) supplies the
+    # shading that the albedo cannot.
+    "MI_V2_IvoryStone": ("plaster", (0.56, 0.51, 0.43), 0.0, 0.58, 0.50, 0.32, None, 0.0),
+    "MI_V2_Stone":      ("ashlar",  (0.44, 0.40, 0.34), 0.0, 0.82, 0.80, 0.30, None, 0.0),
+    "MI_V2_PlazaCream": ("plaza",   (0.48, 0.45, 0.38), 0.0, 0.74, 0.85, 0.30, None, 0.0),
+    "MI_V2_PlazaGrey":  ("plaza",   (0.34, 0.34, 0.31), 0.0, 0.76, 0.85, 0.30, None, 0.0),
     # PASS 01: a warmer cream so the running bond carries three tints in a
     # blotch, and a cream kerb a hair darker than the slabs.
-    "MI_V2_PlazaWarm":  ("plaza",   (0.72, 0.65, 0.52), 0.0, 0.74, 0.85, 0.30, None, 0.0),
-    "MI_V2_Kerb":       ("plaza",   (0.64, 0.60, 0.52), 0.0, 0.70, 0.75, 0.30, None, 0.0),
+    "MI_V2_PlazaWarm":  ("plaza",   (0.56, 0.48, 0.35), 0.0, 0.74, 0.85, 0.30, None, 0.0),
+    # PASS 08: a fourth, DARK stone. Three tints inside 0.18 of each other
+    # cannot make a course read as separate stones however good the bond is;
+    # the reference's paving has stones two stops apart sitting side by side.
+    "MI_V2_PlazaShade": ("plaza",   (0.24, 0.22, 0.19), 0.0, 0.78, 0.85, 0.30, None, 0.0),
+    "MI_V2_Kerb":       ("plaza",   (0.46, 0.42, 0.35), 0.0, 0.70, 0.75, 0.30, None, 0.0),
     # the central path in the founder's view is PALE grey-blue stone, a step
     # cooler and a touch darker than the cream plaza -- not a dark road
     # PASS 01b: the reference path is a warm dark grey-brown. The `pathstone`
     # sheet is a whole tile of bright faces AND dark mortar, and a single flag
     # mesh shows only the faces, so the mean-corrected tint rendered pale; the
     # near-uniform plaza sheet delivers the tint as the flag's actual albedo.
-    "MI_V2_PathStone":  ("plaza",   (0.30, 0.28, 0.25), 0.0, 0.80, 0.85, 0.30, None, 0.0),
+    "MI_V2_PathStone":  ("plaza",   (0.31, 0.28, 0.23), 0.0, 0.80, 0.85, 0.30, None, 0.0),
+    # PASS 08: two companions so the way is laid stone by stone rather than
+    # poured. Kept close to the base -- the path reads as ONE pavement with
+    # varied stones, not as three pavements.
+    "MI_V2_PathWarm":   ("plaza",   (0.38, 0.33, 0.26), 0.0, 0.79, 0.85, 0.30, None, 0.0),
+    "MI_V2_PathPale":   ("plaza",   (0.45, 0.41, 0.34), 0.0, 0.81, 0.85, 0.30, None, 0.0),
     "MI_V2_Cobble":     ("cobble",  (0.36, 0.30, 0.26), 0.0, 0.78, 0.90, 0.28, None, 0.0),
     "MI_V2_CobbleHero": ("cobble",  (0.33, 0.31, 0.28), 0.0, 0.74, 0.90, 0.30, None, 0.0),
-    "MI_V2_Moss":       ("sward",   (0.12, 0.20, 0.08), 0.0, 0.82, 0.60, 0.20, None, 0.0),
-    "MI_V2_Lawn":       ("sward",   (0.17, 0.30, 0.10), 0.0, 0.86, 0.60, 0.20, None, 0.0),
+    # PASS 08: THE GROUND STOPS BEING A GREEN SCREEN. Whole-frame palette
+    # against the founder reference: the green arc holds 25.3% of our frame
+    # and 4.8% of the reference's -- 5.2x. Most of that is one actor, the
+    # 1.2 km moss cube that stands in for terrain, and a saturated blue-green
+    # at (0.12, 0.20, 0.08) is what makes an elevated camera read the district
+    # as a model sitting on a lawn. Real sunlit meadow is YELLOW-green and far
+    # less saturated; these keep their relative order (moss darker, lawn
+    # lighter) and move to a warm, natural range. This does not fill the empty
+    # ground -- that is authored content and its own pass -- it stops the
+    # emptiness being the loudest colour in the frame.
+    "MI_V2_Moss":       ("sward",   (0.15, 0.17, 0.09), 0.0, 0.82, 0.60, 0.20, None, 0.0),
+    "MI_V2_Lawn":       ("sward",   (0.21, 0.25, 0.11), 0.0, 0.86, 0.60, 0.20, None, 0.0),
     "MI_V2_Soil":       ("sward",   (0.20, 0.15, 0.10), 0.0, 0.90, 0.50, 0.15, None, 0.0),
     # ---- gold: metallic, restrained, aged in the recesses ---------------------
     "MI_V2_Gold":       ("metal",   (0.92, 0.70, 0.36), 0.90, 0.42, 0.45, 0.60, None, 0.0),
@@ -84,6 +114,15 @@ INSTANCES = {
     "MI_V2_PetalRose":  ("petal",   (0.84, 0.36, 0.48), 0.0, 0.62, 0.40, 0.25, None, 0.0),
     "MI_V2_Lavender":   ("petal",   (0.60, 0.48, 0.86), 0.0, 0.64, 0.40, 0.25, None, 0.0),
     "MI_V2_LeafGrey":   ("leaf",    (0.30, 0.38, 0.26), 0.0, 0.70, 0.60, 0.15, None, 0.0),
+    # ---- clouds (PASS 08): lit geometry, not a painted sky ------------------
+    # High albedo, fully rough, no specular -- a cumulus must not glint. The
+    # emissive is the multiple scattering a surface material cannot do: without
+    # it a lit sphere reads as a marshmallow, bright side and dead side. It is
+    # CONSTANT (the founder's no-global-pulse rule) and safe against the
+    # emissive-area trap because this world's exposure is pinned, so more
+    # emissive area cannot re-meter the frame.
+    "MI_V2_Cloud":      ("cloud",   (0.88, 0.88, 0.90), 0.0, 1.00, 0.0, 0.02, (0.62, 0.66, 0.76), 2200.0),
+    "MI_V2_CloudVeil":  ("cloud",   (0.82, 0.83, 0.88), 0.0, 1.00, 0.0, 0.02, (0.58, 0.62, 0.74), 1500.0),
     # ---- portal (M_V2_Portal): restrained -------------------------------------
     "MI_V2_PortalRunes": ("runes",  (0.62, 0.40, 0.92), 0.0, 0.40, 0.0, 0.2, (0.62, 0.40, 0.92), 1.0),
     "MI_V2_PortalGlow":  ("runes",  (0.68, 0.46, 0.94), 0.0, 0.40, 0.0, 0.2, (0.68, 0.46, 0.94), 1.2),
@@ -92,6 +131,12 @@ FOLIAGE = ("MI_V2_LeafDark", "MI_V2_LeafMid", "MI_V2_LeafLight", "MI_V2_RosePink
            "MI_V2_RoseRed", "MI_V2_PetalPink", "MI_V2_PetalViolet", "MI_V2_PetalBlue",
            "MI_V2_PetalWhite", "MI_V2_PetalRose", "MI_V2_Lavender", "MI_V2_LeafGrey")
 PORTAL = ("MI_V2_PortalRunes", "MI_V2_PortalGlow")
+#: Instances whose EmissiveStrength is ABSOLUTE. Every emissive instance used
+#: to be multiplied by LOOK["portalGlow"], which is the portal's own dial:
+#: anything else that ever needed emissive would have had its brightness
+#: silently tied to a rune disc. The portal keeps the scale it was tuned with;
+#: these carry their own value.
+EMISSIVE_ABSOLUTE = ("MI_V2_Cloud", "MI_V2_CloudVeil")
 
 #: texture family -> (albedo, normal, roughness) file stems from textures_v2.py.
 #: These are NEUTRAL detail maps (linear mean ~0.92 per channel): the tint sets
@@ -124,6 +169,9 @@ FAMILY_FILES = {
     # carry the engine's flat maps: the tint IS the albedo, uniform roughness,
     # no mean correction (corrected_tint finds no "leaf" family in the means).
     "leaf": (None, None, None),
+    # PASS 08: clouds carry no detail map. A tiled stone or leaf texture on a
+    # 300 m cumulus reads as a pattern painted on the sky.
+    "cloud": (None, None, None),
     "runes": ("T_V2_runes_a", "T_V2_runes_n", "T_V2_runes_r"),
 }
 #: Engine maps pinned onto instances whose family carries no texture of that
@@ -142,7 +190,7 @@ PLAIN_FALLBACK = {"Albedo": None, "Normal": "T_V2_sward_n", "RoughnessMap": None
 TEX_SCALE = {"plaza": 0.0038, "pathstone": 0.0037, "cobble": 0.0034, "ashlar": 0.0026,
              "plaster": 0.0050, "sward": 0.0090, "bark": 0.0070, "roof": 0.0070,
              "metal": 0.0090, "glaze": 0.0060, "cap": 0.0060, "petal": 0.0100,
-             "leaf": 0.0080, "runes": 0.0010}
+             "leaf": 0.0080, "cloud": 0.0004, "runes": 0.0010}
 
 
 def texture_means(log=None):
@@ -252,6 +300,11 @@ _TEX_DEFAULTS = {
 }
 
 
+#: PASS 08: triplanar world projection on the surface master. WLV2_TRIPLANAR=0
+#: restores the old world-XY projection for a comparison render.
+TRIPLANAR = os.environ.get("WLV2_TRIPLANAR", "1") != "0"
+
+
 def _master(unreal, log, name, kind, texs=None):
     """Build one master. kind: surface | foliage | portal | sky."""
     tools = unreal.AssetToolsHelpers.get_asset_tools()
@@ -335,22 +388,109 @@ def _master(unreal, log, name, kind, texs=None):
         return e
 
     if kind in ("surface", "foliage", "portal"):
-        # UVs: world-position-based scale so one sheet reads at one size on every mesh
+        # THE VERTICAL SMEAR (PASS 08, 2026-08-30).
+        #
+        # This block used to mask WorldPosition to (X, Y) and feed that to
+        # every sampler as the UV. On a floor that is correct and it is why
+        # the plaza always looked like stone. On anything VERTICAL it is a
+        # silent catastrophe: climb a column and X and Y do not change, so
+        # the UV does not change, so the texture is sampled from one line and
+        # smeared upward for the height of the surface. Every column, gate
+        # pier, wall, tower, step riser and plinth in Wonderland was wearing
+        # the same infinite vertical streak -- the corrugated look on
+        # PlayerCam01's gate columns and ReverseCam03's plaza-side walls, and
+        # the reason premium ivory stone read as ribbed plastic. The streaks
+        # run on across separate objects at different depths because all of
+        # them shared one world projection, which is the tell.
+        #
+        # The fix is triplanar: sample on all three world planes and blend by
+        # the surface normal, so a wall is textured from XZ/YZ and a floor
+        # from XY, at ONE consistent world scale (which is what the original
+        # world projection was for and is kept). It costs three samples where
+        # there was one, on the `surface` master only -- foliage and portal
+        # instances carry flat maps, so blending them would be three samples
+        # of the same white pixel.
+        #
+        # It is guarded. A master that fails to build renders every surface as
+        # the engine's grey checker (2026-08-26 cost three cooks to that), so
+        # any failure here falls back to the old XY projection and says so.
         wpos = mel.create_material_expression(m, unreal.MaterialExpressionWorldPosition, -1300, -100)
-        mask = mel.create_material_expression(m, unreal.MaterialExpressionComponentMask, -1150, -100)
-        mask.set_editor_property("r", True)
-        mask.set_editor_property("g", True)
-        mask.set_editor_property("b", False)
-        mel.connect_material_expressions(wpos, "", mask, "")
         scale = param(unreal.MaterialExpressionScalarParameter, "TexScale", -40, 0.005, -1150)
-        uv = mel.create_material_expression(m, unreal.MaterialExpressionMultiply, -980, -80)
-        mel.connect_material_expressions(mask, "", uv, "A")
-        mel.connect_material_expressions(scale, "", uv, "B")
-        alb = tex_param("Albedo", -260, "SAMPLERTYPE_COLOR")
-        nrm = tex_param("Normal", 120, "SAMPLERTYPE_NORMAL")
-        rgh = tex_param("RoughnessMap", 420, "SAMPLERTYPE_LINEAR_GRAYSCALE")
-        for s in (alb, nrm, rgh):
-            mel.connect_material_expressions(uv, "", s, "UVs")
+        uvw = mel.create_material_expression(m, unreal.MaterialExpressionMultiply, -1150, -180)
+        mel.connect_material_expressions(wpos, "", uvw, "A")
+        mel.connect_material_expressions(scale, "", uvw, "B")
+
+        def _mask(src, r, g, b, x, y):
+            e = mel.create_material_expression(m, unreal.MaterialExpressionComponentMask, x, y)
+            e.set_editor_property("r", r)
+            e.set_editor_property("g", g)
+            e.set_editor_property("b", b)
+            mel.connect_material_expressions(src, "", e, "")
+            return e
+
+        uv = _mask(uvw, True, True, False, -980, -80)          # XY: the floor plane
+        tri = None
+        if kind == "surface" and TRIPLANAR:
+            try:
+                uv_xz = _mask(uvw, True, False, True, -980, -20)
+                uv_yz = _mask(uvw, False, True, True, -980, 40)
+                nrm_ws = mel.create_material_expression(m, unreal.MaterialExpressionVertexNormalWS, -1300, 200)
+                absn = mel.create_material_expression(m, unreal.MaterialExpressionAbs, -1150, 200)
+                mel.connect_material_expressions(nrm_ws, "", absn, "")
+                # Sharpen the blend so the seams between planes are narrow;
+                # a linear blend by |n| leaves a wide mushy band on every
+                # 45-degree chamfer, which this world has on every slab.
+                pw = mel.create_material_expression(m, unreal.MaterialExpressionPower, -1020, 200)
+                mel.connect_material_expressions(absn, "", pw, "Base")
+                pexp = mel.create_material_expression(m, unreal.MaterialExpressionConstant, -1150, 270)
+                pexp.set_editor_property("r", 4.0)
+                mel.connect_material_expressions(pexp, "", pw, "Exp")
+                # normalise so the three weights sum to one at every angle
+                ones = mel.create_material_expression(m, unreal.MaterialExpressionConstant3Vector, -1020, 300)
+                ones.set_editor_property("constant", unreal.LinearColor(1.0, 1.0, 1.0, 1.0))
+                dot = mel.create_material_expression(m, unreal.MaterialExpressionDotProduct, -880, 240)
+                mel.connect_material_expressions(pw, "", dot, "A")
+                mel.connect_material_expressions(ones, "", dot, "B")
+                wn = mel.create_material_expression(m, unreal.MaterialExpressionDivide, -740, 220)
+                mel.connect_material_expressions(pw, "", wn, "A")
+                mel.connect_material_expressions(dot, "", wn, "B")
+                tri = (uv_xz, uv_yz,
+                       _mask(wn, True, False, False, -600, 180),     # weight for the X plane (YZ uv)
+                       _mask(wn, False, True, False, -600, 240),     # weight for the Y plane (XZ uv)
+                       _mask(wn, False, False, True, -600, 300))     # weight for the Z plane (XY uv)
+            except Exception as exc:
+                tri = None
+                log("V2 MATERIAL %s: TRIPLANAR UNAVAILABLE (%s) -- falling back to the world XY "
+                    "projection, which smears every vertical surface" % (name, exc))
+
+        def sampled(pname, y, sampler, stem=None):
+            """One texture, projected correctly. Returns the node to read."""
+            if tri is None:
+                e = tex_param(pname, y, sampler, stem)
+                mel.connect_material_expressions(uv, "", e, "UVs")
+                return e
+            uv_xz, uv_yz, wx, wy, wz = tri
+            acc = None
+            for uvn, w, dy in ((uv_yz, wx, 0), (uv_xz, wy, 40), (uv, wz, 80)):
+                sm = tex_param(pname, y + dy, sampler, stem)
+                mel.connect_material_expressions(uvn, "", sm, "UVs")
+                mul = mel.create_material_expression(m, unreal.MaterialExpressionMultiply, -520, y + dy)
+                mel.connect_material_expressions(sm, "", mul, "A")
+                mel.connect_material_expressions(w, "", mul, "B")
+                if acc is None:
+                    acc = mul
+                else:
+                    add = mel.create_material_expression(m, unreal.MaterialExpressionAdd, -440, y + dy)
+                    mel.connect_material_expressions(acc, "", add, "A")
+                    mel.connect_material_expressions(mul, "", add, "B")
+                    acc = add
+            return acc
+
+        alb = sampled("Albedo", -260, "SAMPLERTYPE_COLOR")
+        nrm = sampled("Normal", 120, "SAMPLERTYPE_NORMAL")
+        rgh = sampled("RoughnessMap", 420, "SAMPLERTYPE_LINEAR_GRAYSCALE")
+        log("V2 MATERIAL %s: %s projection" % (name, "TRIPLANAR (world, normal-blended)" if tri is not None
+                                               else "world XY (vertical surfaces smear)"))
         tint = param(unreal.MaterialExpressionVectorParameter, "BaseColor", -420, unreal.LinearColor(1, 1, 1, 1), -420)
         bmul = mel.create_material_expression(m, unreal.MaterialExpressionMultiply, -240, -300)
         mel.connect_material_expressions(tint, "", bmul, "A")
@@ -675,7 +815,8 @@ def build_materials(unreal, log, texs):
             mel.set_material_instance_scalar_parameter_value(mi, "TexScale", float(TEX_SCALE.get(fam, 0.005)))
             if emi is not None:
                 mel.set_material_instance_vector_parameter_value(mi, "Emissive", unreal.LinearColor(emi[0], emi[1], emi[2], 1))
-                mel.set_material_instance_scalar_parameter_value(mi, "EmissiveStrength", float(es) * float(C.LOOK["portalGlow"]))
+                _scale = 1.0 if name in EMISSIVE_ABSOLUTE else float(C.LOOK["portalGlow"])
+                mel.set_material_instance_scalar_parameter_value(mi, "EmissiveStrength", float(es) * _scale)
             stems = FAMILY_FILES.get(fam, (None, None, None))
             for pname, stem in (("Albedo", stems[0]), ("Normal", stems[1]), ("RoughnessMap", stems[2])):
                 if stem and stem in texs:
