@@ -17,6 +17,13 @@ frame reads as the reference world:
               the world, and a mean colour cannot see that (memory:
               removing-a-cast-can-remove-the-colour).
   cloud       fraction of the sky band that is cloud rather than gradient.
+              CAVEAT, measured 2026-08-30: on a camera whose sky band is
+              mostly the pale horizon haze rather than open sky -- SkylineCam06
+              pitches down 22 deg and sees about 7 deg of sky -- the haze is
+              bright and weakly blue and scores as cloud. SUITE03's
+              SkylineCam06 reads 0.175 with no cloud in the frame at all. The
+              number is only meaningful on a camera with real sky above the
+              horizon (HeroCam0, PlayerCam01, ReverseCam03).
   variation   piece-to-piece colour variation of the ground: the mean
               spread of 16x16 tile means inside the foreground band. A
               repeated prototype slab scores near zero however detailed one

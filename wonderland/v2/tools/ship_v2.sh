@@ -14,8 +14,22 @@
 set -euo pipefail
 HOST="${WL_STUDIO_HOST:-wonderland-l4}"
 BRANCH="${WL_BRANCH:-relay/wonderland-v2}"
-# No base: the whole branch (19.6 MB) goes, so the fetch can never fail on
-# a prerequisite the Studio's checkout (last on relay/wonderland-marble) lacks.
+# THE BUNDLE IS INCREMENTAL WHEN IT SAFELY CAN BE (2026-08-30).
+#
+# This used to send the whole branch every time, on the reasoning that a
+# complete bundle can never fail on a prerequisite the Studio's checkout
+# lacks. That was right when the branch was 19.6 MB and wrong now: the branch
+# carries the reference panorama and every filed render, and a full bundle no
+# longer finishes inside a ten-minute timeout on this uplink -- PASS 08's
+# first ship was killed at 600 s having transferred nothing usable. The same
+# eight commits as an incremental bundle are 32 KB and land in about a second.
+#
+# The safety the full bundle bought is kept by ASKING the Studio what it has
+# and proving locally that it is an ancestor of what is being shipped. If the
+# Studio cannot be reached, or answers with a commit this repository does not
+# contain (a checkout on another branch, a Studio rebuilt from scratch), the
+# base is dropped and the whole branch goes as before. WL_STUDIO_BASE still
+# overrides, and WL_STUDIO_FULL=1 forces the complete bundle.
 BASE="${WL_STUDIO_BASE:-}"
 REPO="$(cd "$(dirname "$0")/../../.." && pwd)"
 SCRATCH="${WL_SCRATCH:-${TMPDIR:-/tmp}}"
@@ -26,6 +40,18 @@ REMOTE_LOG="/teamspace/studios/this_studio/wonderland/run/v2-build.log"
 say() { printf '\033[1;36m[ship-v2]\033[0m %s\n' "$*"; }
 die() { printf '\033[1;31m[ship-v2] %s\033[0m\n' "$*" >&2; exit 1; }
 
+if [ -z "$BASE" ] && [ "${WL_STUDIO_FULL:-0}" != "1" ]; then
+  REMOTE_HEAD="$(timeout 25 ssh -o ConnectTimeout=12 -o BatchMode=yes "$HOST" \
+    'cd /teamspace/studios/this_studio/wonderland/src 2>/dev/null && git rev-parse HEAD 2>/dev/null' 2>/dev/null \
+    | tr -dc 'a-f0-9' | head -c 40)"
+  if [ -n "$REMOTE_HEAD" ] && git -C "$REPO" cat-file -e "$REMOTE_HEAD^{commit}" 2>/dev/null \
+     && git -C "$REPO" merge-base --is-ancestor "$REMOTE_HEAD" "$BRANCH" 2>/dev/null; then
+    BASE="$REMOTE_HEAD"
+    say "Studio is at ${REMOTE_HEAD:0:9} and it is an ancestor -- shipping incrementally"
+  else
+    say "Studio head unknown or not an ancestor -- shipping the whole branch"
+  fi
+fi
 HEAD_SHA="$(git -C "$REPO" rev-parse "$BRANCH")"
 RANGE="$BRANCH"; [ -n "$BASE" ] && RANGE="$BASE..$BRANCH"
 say "bundling $RANGE ($HEAD_SHA)"
