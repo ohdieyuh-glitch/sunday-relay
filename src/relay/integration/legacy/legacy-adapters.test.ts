@@ -333,9 +333,9 @@ describe('pre-Julius ledger events render in the same terminal', () => {
   });
 
   it('gives a legacy event the SAME redaction the Julius path gets', () => {
-    const leaky = legacy({ safeSummary: 'pushed with ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ012345' });
+    const leaky = legacy({ safeSummary: 'pushed with ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ012345' /* relay-boundary:allow-fixture */ });
     const entry = projectJuliusEvent(adaptLegacyTerminalEvent(leaky, 'run-1'));
-    expect(entry.line).not.toContain('ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ012345');
+    expect(entry.line).not.toContain('ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ012345' /* relay-boundary:allow-fixture */);
     expect(entry.redactionsApplied).toBeGreaterThan(0);
     // And the legacy projector agreed it was a secret, so this is a
     // continuation of the existing rule rather than a new one.

@@ -22,3 +22,4 @@ export * from './julius-runtime-api';
 export * from './julius-metrics';
 export * from './julius-fault-injection';
 export * from './julius-lease-protocol';
+export * from './julius-tools';

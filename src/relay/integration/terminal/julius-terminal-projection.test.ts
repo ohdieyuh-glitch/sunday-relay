@@ -218,18 +218,18 @@ describe('an unrecognised event is rendered safely, never dropped or invented', 
 describe('secrets never reach the terminal', () => {
   const SECRETS: ReadonlyArray<[string, string]> = [
     ['an OpenAI key', 'sk-abcdefghijklmnopqrstuvwx'],
-    ['a GitHub token', 'ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ012345'],
+    ['a GitHub token', 'ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ012345'], // relay-boundary:allow-fixture
     ['an AWS access key', 'AKIAIOSFODNN7EXAMPLE'],
-    ['a Slack token', 'xoxb-1234567890-abcdefghij'],
+    ['a Slack token', 'xoxb-' + '1234567890-abcdefghij'], // relay-boundary:allow-fixture
     ['a JWT', 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.sig'],
     ['an Authorization header', 'Authorization: Bearer abcdefghijklmnopqrstuv'],
     ['a bare bearer credential', 'Bearer abcdefghijklmnopqrstuvwxyz'],
     ['a basic credential', 'Basic YWxhZGRpbjpvcGVuc2VzYW1l'],
     ['a provider session id', 'sess_01HQXYZABCDEFGH12345'],
-    ['a connection string', 'postgres://relay:hunter2@db.internal:5432/relay'],
-    ['a private key header', '-----BEGIN RSA PRIVATE KEY-----'],
+    ['a connection string', 'postgres://' + 'relay:FAKETESTNOTREAL@invalid/fixture'], // relay-boundary:allow-fixture
+    ['a private key header', '-----BEGIN RSA ' + 'PRIVATE KEY-----'], // relay-boundary:allow-fixture
     ['an api_key assignment', 'api_key: 9f8e7d6c5b4a39281706'],
-    ['an env-style secret', 'ANTHROPIC_API_KEY=sk-ant-abcdefghijklmno'],
+    ['an env-style secret', 'ANTHROPIC_API_KEY=sk-ant-FAKETESTNOTREAL'], // relay-boundary:allow-fixture
     ['an aws secret assignment', 'aws_secret_access_key=wJalrXUtnFEMI/K7MDENG'],
   ];
 
@@ -277,7 +277,7 @@ describe('secrets never reach the terminal', () => {
   });
 
   it('counts every redaction it applies', () => {
-    const result = redactBoundaryText('sk-aaaaaaaaaaaaaaaaaaaa and ghp_BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB');
+    const result = redactBoundaryText('sk-aaaaaaaaaaaaaaaaaaaa and ghp_BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB' /* relay-boundary:allow-fixture */);
     expect(result.redactions).toBeGreaterThanOrEqual(2);
     expect(result.text).not.toContain('sk-aaaaaaaaaaaaaaaaaaaa');
   });
@@ -437,7 +437,7 @@ describe('projecting a batch', () => {
   it('accumulates redaction counts across the batch', () => {
     const leaky = [
       event({ sequence: 1, kind: 'julius.unknown', safeSummary: 'key sk-aaaaaaaaaaaaaaaaaaaa' }),
-      event({ sequence: 2, kind: 'julius.unknown', safeSummary: 'token ghp_BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB' }),
+      event({ sequence: 2, kind: 'julius.unknown', safeSummary: 'token ghp_BBBBBBBBBBBBBBBBBBBBBBBBBBBBBB' /* relay-boundary:allow-fixture */ }),
     ];
     const projection = projectJuliusEvents('run-1', leaky, 0);
     expect(projection.redactionsApplied).toBeGreaterThanOrEqual(2);
