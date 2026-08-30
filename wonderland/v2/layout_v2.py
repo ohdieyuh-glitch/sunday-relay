@@ -4517,9 +4517,32 @@ def _approach_sides():
 APPROACH_SIDES = _band("V2_Garden", _approach_sides())
 
 
+# ---------------------------------------------------------------------------
+# THE PLAZA-SIDE WALLS  (ledger, MEDIUM: "plain plaza-side walls (cam3)")
+# ---------------------------------------------------------------------------
+#
+# `_dress_wall` was written for exactly this complaint -- the founder named it
+# twice, "ReverseCam03 currently exposes plain walls" and "plain walls and
+# unfinished backsides are not acceptable merely because HeroCam0 cannot see
+# them" -- and it was then used on the rear wall and the flank edges and never
+# on the walls it was written for. SideWall runs at x = +/-800 from y -700 to
+# 960; FrontWall runs along y = 900 from x +/-680 to +/-1880. Both are in
+# ReverseCam03's frame and both are flat ashlar ribbons.
+#
+# An ADDED band again: the eighteen retaining_wall pieces are untouched and
+# still hash identical. `side` puts the planters on the GARDEN face -- at
+# x = +800 the garden is +x, so the planters go to -1; the plaza-clean gate is
+# what caught this being backwards the first time `_dress_wall` was used.
+PLAZA_WALL_DRESS = _band("V2_Arrival",
+    _dress_wall(800.0, 130.0, 90.0, 2060.0, "SideWallL", side=-1.0)
+    + _dress_wall(-800.0, 160.0, 90.0, 2060.0, "SideWallR", side=1.0)
+    + _dress_wall(1280.0, 900.0, 0.0, 1600.0, "FrontWallL", side=1.0)
+    + _dress_wall(-1280.0, 900.0, 0.0, 1600.0, "FrontWallR", side=1.0))
+
+
 BUILD_BANDS = [FOREGROUND, COURTYARD, GARDEN, PALACE, FLANK_GROUND, FLANKS,
                REARWORLD, CAM_FOREGROUNDS, GROUND_QUILT, OUTER_WORLD, PLAZA_ORNAMENT,
-               PROCESSIONAL_BORDER, HORIZON, APPROACH_SIDES]
+               PROCESSIONAL_BORDER, HORIZON, APPROACH_SIDES, PLAZA_WALL_DRESS]
 
 #: Everything the layout declares: what the builder walks, plus the two bands
 #: it places by their own rules (SKY is the dome/atmosphere, HOVER is lifted
