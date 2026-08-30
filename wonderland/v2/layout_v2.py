@@ -924,9 +924,19 @@ def _flank(sgn, tag):
         # worked: the mid band at 8.2 m showed and this did not.
         # massed for the same reason as the rear band: an even row of seven
         # reads as a fence of separate objects, three groups read as planting
-        A(("shrub_flowering", "hedge_block", "rose_bush", "topiary_ball")[k % 4],
+        # LOW AT THE FRONT. Massing this bank fixed the polka dots and went
+        # straight past the mark: at s 0.82-0.96, five and a half metres from
+        # a 2.65 m eye, it became a WALL of foliage across the bottom 45% of
+        # the frame with the garden hidden behind it -- the brief's "dense
+        # does not mean cluttered" and "dark masses swallowing architecture"
+        # in a single edit, after two passes spent making this ground NOT
+        # bare. The nearest planting must be something the eye goes OVER:
+        # clipped balls and low flowering shrubs at knee to waist, with the
+        # height kept for the masses at 9-12 m. hedge_block leaves this mix --
+        # it is a 1.27 m hedge and at 5.5 m that is a fence.
+        A(("topiary_ball", "shrub_flowering", "rose_bush", "topiary_ball")[k % 4],
           sgn * (bx + (-130 + 105 * (k % 3))), -700 + 85 * ((k % 2) * 2 - 1) + 45 * (k % 3), 0,
-          yaw=90 + 37 * k, s=0.82 + 0.14 * ((k % 3) / 2.0),
+          yaw=90 + 37 * k, s=0.50 + 0.11 * ((k % 3) / 2.0),
           mat=("MI_V2_LeafMid", "MI_V2_LeafDark")[k % 2],
           label="%s_NearClump%d_%d" % (tag, bi, k))
         # same frustum rule: FlankLeftCam08 sits at x = 4,350, and at the
