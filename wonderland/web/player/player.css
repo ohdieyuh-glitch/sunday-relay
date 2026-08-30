@@ -51,6 +51,7 @@ html, body {
 /* The one piece of chrome over the world when the terminal is closed. */
 #wl-hint {
   position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%);
+  font-family: var(--wl-mono);
   font-size: 10px; letter-spacing: 0.18em; color: var(--wl-cream);
   background: rgba(7, 8, 11, 0.66); border: 1px solid var(--wl-gold-dim);
   padding: 6px 14px; pointer-events: none;
@@ -65,6 +66,18 @@ body[data-terminal='open'] #wl-hint { opacity: 0; }
 /* -------------------------------------------------------------- terminal */
 /* A rectangle over the world, not a takeover: the world reads around all
    four edges, and through the panel itself. */
+/* THE OVERLAY CARRIES ITS OWN TYPE.
+   This stylesheet set the font on `html, body`, which is right on the
+   standalone page and useless on Epic's: their <body> declares
+   font-family: 'Montserrat' as an INLINE style, and an inline style beats a
+   stylesheet rule no matter how it is written. The founder-approved terminal
+   came up in Montserrat on the live link -- correct layout, wrong typeface,
+   and nothing in the markup to explain it. An overlay injected into someone
+   else's page has to be self-contained about type, colour and box model. */
+#wl-terminal, #wl-terminal * {
+  font-family: var(--wl-mono);
+  box-sizing: border-box;
+}
 #wl-terminal {
   position: fixed; inset: 0; display: none;
   align-items: center; justify-content: center;

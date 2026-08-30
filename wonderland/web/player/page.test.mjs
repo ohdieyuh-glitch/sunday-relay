@@ -56,6 +56,14 @@ ok(/input\.focus\(/.test(js), 'opening focuses the input, so Space becomes a cha
 ok(/preventScroll: true/.test(js), 'focus never scrolls the page');
 ok(/overflow: hidden/.test(css), 'the page itself cannot scroll');
 
+// AN OVERLAY INJECTED INTO SOMEONE ELSE'S PAGE CARRIES ITS OWN TYPE.
+// Epic's <body> declares font-family: 'Montserrat' inline, and an inline
+// style beats any stylesheet rule -- the approved terminal came up on the
+// live link in the wrong typeface with nothing in the markup to explain it.
+ok(/#wl-terminal, #wl-terminal \* \{[\s\S]{0,120}font-family/.test(css),
+   'the terminal sets its own font on itself, not only on body');
+ok(/#wl-hint \{[\s\S]{0,200}font-family/.test(css), 'and so does the hint');
+
 // --- honest state -----------------------------------------------------------
 ok(/NO AUTHORITATIVE FEED CONNECTED/.test(markup),
    'the shipped markup starts in the honest state, not a live-looking one');
