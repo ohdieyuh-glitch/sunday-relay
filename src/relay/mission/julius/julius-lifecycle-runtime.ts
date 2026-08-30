@@ -64,6 +64,8 @@ export interface JuliusApprovalStore {
    * workers reaching the same gate produce one request for a human.
    */
   requestApproval(record: JuliusApprovalRecord): Promise<{ readonly created: boolean; readonly record: JuliusApprovalRecord }>;
+  /** Production stores atomically persist the gate and make the run non-claimable. */
+  requestApprovalAndBlock?(input:{record:JuliusApprovalRecord;expectedRunVersion:number}):Promise<{created:boolean;record:JuliusApprovalRecord;runState:JuliusMissionState}>;
   loadApproval(runId: string, approvalId: string, projectId: string): Promise<JuliusApprovalRecord | null>;
   pendingApprovals(runId: string, projectId: string): Promise<readonly JuliusApprovalRecord[]>;
   /** Decides only a PENDING approval. A decided one stays decided. */
@@ -175,12 +177,9 @@ export async function requestJuliusApproval(
     state: 'PENDING', requestedAt: now, decidedAt: null, decidedBy: null,
     decisionReason: null, idempotencyKey: input.idempotencyKey,
   };
-  const stored = await deps.store.requestApproval(record);
-
-  const moved = await moveRun(input.run, 'BLOCKED', {
-    reasonCode: 'APPROVAL_REQUIRED',
-    safeSummary: `Waiting on an authorized approval for ${input.operation}.`,
-  }, deps);
+  const atomic=deps.store.requestApprovalAndBlock;
+  const stored=atomic===undefined?await deps.store.requestApproval(record):await atomic.call(deps.store,{record,expectedRunVersion:input.run.version});
+  const moved:JuliusMissionState='runState'in stored?stored.runState as JuliusMissionState:await moveRun(input.run, 'BLOCKED', {reasonCode:'APPROVAL_REQUIRED',safeSummary:`Waiting on an authorized approval for ${input.operation}.`}, deps);
 
   await emit(deps, input.run, 'approval.requested', {
     approvalId: stored.record.approvalId, taskId: input.taskId, operation: input.operation,

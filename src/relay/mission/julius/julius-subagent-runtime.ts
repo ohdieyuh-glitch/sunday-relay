@@ -85,6 +85,8 @@ export interface JuliusSubagentStore {
   subagentContext(runId: string, parentTaskId: string): Promise<JuliusSubagentContext>;
   /** Idempotent by `requestId`: a retried spawn returns the first grant. */
   recordSubagent(record: JuliusSubagentRecord): Promise<{ readonly recorded: boolean; readonly duplicate: boolean }>;
+  /** Production transaction: locks the run, rechecks bounds, and inserts task+grant together. */
+  recordSubagentAndTaskWithinLimits?(input:{record:JuliusSubagentRecord;task:JuliusTask;maxActive:number;maxTotal:number;maxDepth:number}):Promise<{recorded:boolean;duplicate:boolean;denialReason:string|null}>;
   loadSubagent(runId: string, requestId: string): Promise<JuliusSubagentRecord | null>;
   subagentsForRun(runId: string): Promise<readonly JuliusSubagentRecord[]>;
   setSubagentState(runId: string, requestId: string, state: JuliusSubagentState): Promise<boolean>;
@@ -265,10 +267,13 @@ export async function spawnJuliusSubagent(
   };
   const childTask = childTaskFrom(record, input);
 
-  const inserted = await deps.store.addTask({
+  const atomic=deps.store.recordSubagentAndTaskWithinLimits;
+  const atomicStored=atomic===undefined?null:await atomic.call(deps.store,{record,task:childTask,maxActive:input.policy.subagents.maxActive,maxTotal:input.policy.subagents.maxTotal,maxDepth:input.policy.subagents.maxDepth});
+  if(atomicStored?.denialReason){await deps.budget.release({reservationId,reason:atomicStored.denialReason,now:deps.clock.now()});return{authorized:false,reasonCode:atomicStored.denialReason,safeMessage:'The durable sub-agent bound was reached.'};}
+  const inserted = atomicStored===null?await deps.store.addTask({
     commandId: `subagent:${input.requestId}`,
     runId: input.run.runId, projectId: input.run.projectId, task: childTask,
-  });
+  }):true;
   if (!inserted) {
     await deps.budget.release({ reservationId, reason: 'SUBAGENT_TASK_EXISTS', now: deps.clock.now() });
     return {
@@ -277,7 +282,7 @@ export async function spawnJuliusSubagent(
     };
   }
 
-  const stored = await deps.store.recordSubagent(record);
+  const stored = atomicStored??await deps.store.recordSubagent(record);
   await emit(deps, input.run, 'subagent.spawned', {
     requestId: input.requestId, taskId: childTask.taskId, parentTaskId: record.parentTaskId,
     depth: record.depth, capability: record.capability, permissions: record.permissions.length,

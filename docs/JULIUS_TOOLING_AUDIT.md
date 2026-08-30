@@ -67,18 +67,18 @@ Legend: **Y** proven in the candidate; **P** partial/model-only; **N** absent or
 - Absolute paths, `..` traversal, and symlink escapes are rejected after resolving the real workspace root and existing parent.
 - A no-mutation C.A.R.D. denies Bash/process execution before budget reservation or spawn; therefore denied operations have zero filesystem effects.
 - A no-network C.A.R.D. denies all general processes before spawn. Shell command inspection is intentionally not used as a security boundary.
-- Bash uses `/bin/bash --noprofile --norc -lc`, a deliberate minimal environment, workspace HOME/TMPDIR, a bounded cwd, separate stdout/stderr caps, timeout/cancellation, and process-group SIGTERM/SIGKILL.
+- Bash uses `/bin/bash --noprofile --norc -lc`, a deliberate minimal environment, workspace HOME/TMPDIR, a bounded cwd, a combined stdout/stderr cap, timeout/cancellation, and process-group SIGTERM/SIGKILL.
 - Secret-shaped output is redacted before normalized results/evidence facts leave the adapter.
 - Concurrent duplicate idempotency keys share one promise; completed duplicates return the original result and do not settle budget twice.
 - Sub-agent permission narrowing remains in the inherited Julius runtime; a child cannot widen parent permissions.
 
 ## Explicit production gaps
 
-1. **Durable tool invocation/outbox:** idempotency and lifecycle are process-local. Add tenant-scoped invocation rows, unique `(project_id, idempotency_key)`, lease generation, atomic budget/outbox settlement, and restart replay.
-2. **Deployment sandbox:** the adapter fails closed unless composition declares workspace-only filesystem isolation and mediated network. The production deployment must mint those attestations from a container/microVM runtime, not from worker input. This CI host reports `unshare: Operation not permitted`; no host-level network-denial claim is made.
-3. **Artifacts:** output caps are real, but oversized logs are truncated rather than streamed to a durable artifact store. Add encrypted tenant-scoped artifacts and references.
+1. **Durable tool invocation/outbox:** migration 019 and the PostgreSQL repository now provide tenant/run/lease/digest identity, a serializable invocation+dispatch-intent transaction, `SKIP LOCKED` claims and generation-fenced completion. A disposable PostgreSQL 16 run now proves the migration, duplicate/digest/stale-lease, SKIP LOCKED dispatch, concurrent task claim, heartbeat and completion fences; atomic budget/evidence settlement and connection-loss recovery remain open.
+2. **Deployment sandbox:** a provider-neutral port and fail-closed Docker adapter now compile policy into read-only root/mount/network/capability and CPU/memory/PID/nofile/tmpfs limits. This host has no Docker and cannot prove it; the real-infrastructure CI job must pass before production enablement.
+3. **Artifacts:** a provider-neutral port, tenant-scoped local durable adapter, and PostgreSQL metadata now exist. Production object storage and streaming overflow integration remain open.
 4. **Patch artifacts:** `fs.patch` performs an exact, unique-context replacement with optional optimistic before-hash and records before/after hashes. Persisting the equivalent patch as an artifact remains required.
-5. **Provider loop:** existing provider adapters have not yet been translated to emit/consume this tool protocol. The local E2E proves the substrate, not live-model integration.
+5. **Provider loop:** a bounded provider-neutral model/tool turn loop now exists and proves two interchangeable fake adapters, but existing live providers have not yet been translated to it. No live-model pass is claimed.
 6. **Resource controls:** process count, CPU, memory, disk quota, and allowed executable sets require the deployment sandbox. Timeout/output/tool-call controls alone are not a complete hostile-code boundary.
 
 These gaps prevent describing the local adapter as a production hostile-code sandbox. The consolidation is founder-reviewable architecture and a tested local execution substrate; production enablement must remain off until gaps 1, 2, 3, 5, and 6 are closed.

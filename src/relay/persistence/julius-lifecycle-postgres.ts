@@ -52,6 +52,14 @@ export class JuliusLifecyclePostgresRepository implements JuliusApprovalStore, J
     return pending.rows[0] ? { created: false, record: this.map(pending.rows[0]) } : { created: false, record };
   }
 
+  async requestApprovalAndBlock(input:{record:JuliusApprovalRecord;expectedRunVersion:number}):Promise<{created:boolean;record:JuliusApprovalRecord;runState:'BLOCKED'}>{
+    const client=await this.pool.connect();try{await client.query('BEGIN ISOLATION LEVEL SERIALIZABLE');const locked=await client.query('SELECT state,version FROM relay_wonderland.julius_runs WHERE run_id=$1 AND project_id=$2 FOR UPDATE',[input.record.runId,input.record.projectId]);if(!locked.rows[0])throw new Error('julius_run_not_found');if(Number(locked.rows[0].version)!==input.expectedRunVersion)throw new Error('julius_run_version_conflict');if(['COMPLETED','FAILED','CANCELLED'].includes(String(locked.rows[0].state)))throw new Error('julius_run_terminal');
+      const inserted=await client.query(`INSERT INTO relay_wonderland.julius_approvals(approval_id,run_id,project_id,task_id,operation,policy_revision,reason_code,safe_rationale,state,requested_at,idempotency_key) VALUES($1,$2,$3,$4,$5,$6,$7,$8,'PENDING',$9,$10) ON CONFLICT DO NOTHING RETURNING *`,[input.record.approvalId,input.record.runId,input.record.projectId,input.record.taskId,input.record.operation,input.record.policyRevision,input.record.reasonCode,input.record.safeRationale,input.record.requestedAt,input.record.idempotencyKey]);
+      let record=input.record;if(!inserted.rows[0]){const existing=await client.query<Record<string,unknown>>(`SELECT * FROM relay_wonderland.julius_approvals WHERE run_id=$1 AND (idempotency_key=$2 OR (COALESCE(task_id,'')=COALESCE($3,'') AND operation=$4 AND state='PENDING')) ORDER BY requested_at LIMIT 1 FOR UPDATE`,[input.record.runId,input.record.idempotencyKey,input.record.taskId,input.record.operation]);if(existing.rows[0])record=this.map(existing.rows[0]);}
+      const moved=await client.query(`UPDATE relay_wonderland.julius_runs SET state='BLOCKED',version=version+1,updated_at=$3 WHERE run_id=$1 AND project_id=$2 AND version=$4`,[input.record.runId,input.record.projectId,input.record.requestedAt,input.expectedRunVersion]);if(moved.rowCount!==1)throw new Error('julius_run_version_conflict');await client.query('COMMIT');return{created:inserted.rowCount===1,record,runState:'BLOCKED'};
+    }catch(error){await client.query('ROLLBACK').catch(()=>undefined);throw error;}finally{client.release();}
+  }
+
   async loadApproval(runId: string, approvalId: string, projectId: string): Promise<JuliusApprovalRecord | null> {
     const result = await this.pool.query<Record<string, unknown>>(
       'SELECT * FROM relay_wonderland.julius_approvals WHERE run_id=$1 AND approval_id=$2 AND project_id=$3',

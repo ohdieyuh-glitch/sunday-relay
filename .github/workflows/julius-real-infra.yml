@@ -1,0 +1,31 @@
+name: Julius real infrastructure
+on:
+  pull_request:
+    paths: ['src/relay/mission/julius/**','src/relay/persistence/**','src/relay/workspace/julius-tools/**','.github/workflows/julius-real-infra.yml']
+  workflow_dispatch:
+jobs:
+  postgres-and-sandbox:
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16-bookworm
+        env: { POSTGRES_USER: julius, POSTGRES_PASSWORD: julius, POSTGRES_DB: julius }
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U julius" --health-interval 5s --health-timeout 5s --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20', cache: npm }
+      - run: npm ci
+      - id: image
+        run: docker pull node:20-bookworm-slim && echo "id=$(docker image inspect node:20-bookworm-slim --format '{{.Id}}')" >> "$GITHUB_OUTPUT"
+      - run: npx vitest run src/relay/persistence/real-infra-julius.test.ts
+        env:
+          JULIUS_REAL_INFRA: '1'
+          JULIUS_SANDBOX_IMAGE: ${{ steps.image.outputs.id }}
+          PGHOST: 127.0.0.1
+          PGPORT: '5432'
+          PGUSER: julius
+          PGPASSWORD: julius
+          PGDATABASE: julius

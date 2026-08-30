@@ -1,5 +1,7 @@
 # Julius consolidation report
 
+> Beta hardening continues in `docs/JULIUS_BETA_READINESS.md`. That report supersedes this document for current sandbox, durable-tool, artifact, provider, and infrastructure status; Julius is still not beta-ready.
+
 ## Executive record
 
 - **Open PR count inspected:** 38/38; the complete record is in `OPEN_PR_MERGE_LEDGER.md`.
