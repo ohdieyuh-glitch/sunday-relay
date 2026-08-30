@@ -105,7 +105,7 @@ impression. 69 offline proofs pass (`wonderland/tests/cpp/RelayDogStride.test.cp
 | turns respect momentum | met | bank scales with speed and decays; a walking turn banks <60% of a running one |
 | no visible foot sliding | met | 0.001 uu/frame flat, 0.0008 uu/frame while climbing a 14 uu stair profile |
 | stairs / uneven surfaces | met | the 60 uu path riser removed (13.8 uu per slab now); walkable kit given collision; the Dog climbs the approach in-world |
-| gameplay camera / collision | fixed, awaiting the founder's eyes | boom raised/shortened/pitched down after the capture caught it collapsing into the Dog |
+| gameplay camera / collision | fixed, awaiting the founder's eyes | boom raised/shortened/pitched down after the capture caught it collapsing into the Dog; a geometric sweep of the exploration circuit now puts the boom inside a collidable piece at only 6 of ~100 samples, clustered at the spawn (beside the plaza side steps) — localised, not pervasive |
 | movement looks good inside Golden Arrival | **founder verdict** | — |
 | continuous founder-review capture | produced | 56 s take on 1b4cbc2 covering idle → walk → jog → run → arms-back sprint → stop → turns |
 
