@@ -1659,6 +1659,54 @@ def _plaza_ornament():
 PLAZA_ORNAMENT = _band("V2_Arrival", _plaza_ornament())
 
 
+# ---------------------------------------------------------------------------
+# THE PROCESSIONAL BORDER — flower colour on the route the player walks
+# ---------------------------------------------------------------------------
+#
+# gap_v2 has said the same thing about every frame it has measured: the rose
+# arc holds 1.8-3.1% of ours against 6.8% of the founder reference, while the
+# green arc runs 5x theirs. The flanks got their bloom; the ARRIVAL AXIS did
+# not, and it is the surface HeroCam0 and PlayerCam01 look straight down --
+# the one view the whole district is composed around, and the one the primary
+# reference is a picture of.
+#
+# In that reference the path is lined, both sides, the whole way: a continuous
+# flowering border between the kerb and the hedge, dense enough to read as
+# colour rather than as individual plants. That is what this is. It runs
+# OUTSIDE the walking corridor (|x| > 260 is the corridor check's own bound)
+# and stops short of the fountain court so the court keeps its own
+# composition.
+
+
+def _processional_border():
+    out = []
+    petals = ("MI_V2_PetalPink", "MI_V2_RosePink", "MI_V2_PetalViolet",
+              "MI_V2_PetalWhite", "MI_V2_Lavender", "MI_V2_PetalRose")
+    for side in (1, -1):
+        # the border hugs the corridor as it narrows toward the castle
+        for i in range(22):
+            t = i / 21.0
+            y = 900.0 + 7400.0 * t
+            x = side * (700.0 - 190.0 * t)          # 7.0 m out, closing to 5.1
+            kind = ("blossom_cluster", "flower_cluster", "rose_bush",
+                    "lavender_heads", "flower_cluster", "blossom_cluster")[i % 6]
+            out.append(A(kind, x, y, 30, yaw=37 * i + 90 * side, s=0.62 + 0.16 * ((i % 3) / 2.0),
+                         mat=petals[(i + (0 if side > 0 else 3)) % 6],
+                         label="Procession_%d_Bloom%d" % (side, i)))
+            if i % 3 == 0:
+                # a clipped ball every third station, so the border has a beat
+                out.append(A("topiary_ball", side * (x / side + 150.0), y + 120.0, 0,
+                             s=0.52, mat="MI_V2_LeafDark",
+                             label="Procession_%d_Ball%d" % (side, i)))
+            if i % 4 == 1:
+                out += _ground_patch(side * (x / side - 130.0), y - 90.0, 0, 45 * i, 0.8,
+                                     petals[(i + 2) % 6], "Procession_%d_Ground%d" % (side, i))
+    return out
+
+
+PROCESSIONAL_BORDER = _band("V2_Garden", _processional_border())
+
+
 #: THE BANDS THE BUILDER WALKS. One list, so `ALL` and build_v2 cannot drift.
 #:
 #: They already had. build_v2 kept its own hand-written list and `ALL` kept
@@ -1669,7 +1717,8 @@ PLAZA_ORNAMENT = _band("V2_Arrival", _plaza_ornament())
 #: gate reading a different list from the builder reports the world it was
 #: shown, not the world that gets made.
 BUILD_BANDS = [FOREGROUND, COURTYARD, GARDEN, PALACE, FLANK_GROUND, FLANKS,
-               REARWORLD, CAM_FOREGROUNDS, OUTER_WORLD, PLAZA_ORNAMENT]
+               REARWORLD, CAM_FOREGROUNDS, OUTER_WORLD, PLAZA_ORNAMENT,
+               PROCESSIONAL_BORDER]
 
 #: Everything the layout declares: what the builder walks, plus the two bands
 #: it places by their own rules (SKY is the dome/atmosphere, HOVER is lifted
