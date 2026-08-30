@@ -1204,3 +1204,63 @@ through Pixel Streaming, with 9,830 placements in ~600 actors. The ledger's
 performance item has never had a number before; it has one now. Note the
 measured caveat already in this file: the encoder and the network are the
 known bottlenecks on this path, not the renderer, so this is a floor.
+
+## PASS 23C — the district cameras, re-aimed after their first frame
+
+Their first render said three things at once and all three were mine.
+
+**WaterGardenCam15 pointed at a tower.** The transforms were computed against
+the site list as it stood, and the kinds had changed under them since -- the
+fallback chain turns a water garden into a garden where there is no room, so
+the camera aimed at a quarter that had become something else. They are aimed
+now at the quarter of the district's SIGNATURE kind whose radius is closest to
+the district's own seed radius: representative rather than innermost, which is
+also why TeaTerraceCam16 no longer stands 18 m from the plaza.
+
+**ClockQuarterCam13's clock tower was behind its own quarter's edge planting**
+at 46 m. Back to 79 m and up to 5.2 m of eye, each camera nudged to the
+clearest spot on a 5x5 search, with the clearance recorded beside it in
+v2_config: 2.5 to 12.6 m.
+
+**HamletCam17 was inside a bush, and GroveRoadCam18 had a trunk on the lens.**
+That is the failure this project spent PASS 09 to PASS 12 on and wrote down --
+"massed at s 0.82-0.96 five metres from a 2.65 m eye, so a bank of foliage
+filled the bottom 45% and hid the garden" -- reproduced by a foreground rule
+that placed trees at 1.15x d_near, which is 5.5 m from a 2.8 m eye. **Reading
+a lesson is not the same as applying it.**
+
+`_district_cam_foregrounds` starts at 1.6x d_near now, and a TREE needs 2.2x
+AND to be past 0.58 of the visible half-width; anything nearer or more central
+is knee-height planting. GroveRoadCam18 was measured onto the road instead of
+placed beside it: every road segment between 90 m and 220 m scored for clear
+air at the camera and 6-18 m ahead along its own bearing, and the best is the
+outer ring in the Mushroom Grove at 182 m -- 10.2 m here, 6.0 m ahead.
+
+camera_framing after: 17 to 106 placements in band, 0 to 5 under.
+
+## The list, at the end of PASS 23
+
+Closed this phase: quarter hierarchy · far-world emptiness · the ground quilt
+(it was the SLAB, not the contrast) · destinations beyond the castle · the
+horizon's hard line · the empty lawn beside the approach · the plain
+plaza-side walls · performance, which now has a number.
+
+1. **The frames are dark.** The district cameras stand in heavy shade and the
+   near planting reads almost black. Neither the sun angle nor the fill has
+   been looked at since the world tripled in vegetation, and 12 % of the
+   canopy is now blossom that a dark frame cannot show.
+2. **One authored site still cannot be placed** (`Q08_towers`) and is named in
+   the build log.
+3. **The 50-75 m band is Golden Arrival's own thin outskirt** -- 282 per
+   hectare against 723 inside and 305 outside. Founder decision: closing it
+   means re-planting approved ground.
+4. Mushrooms may still out-shout the architecture: 31 giants, spread across
+   the 50 m bands and evenly split across three tints, but unjudged in frame.
+5. `palette.rose` ~0.46x the reference on the flank cameras.
+6. The plaza medallion reads as a scribed ring rather than inlay.
+7. Two landmarks stand inside hedges in Golden Arrival (`ClockTree_Clock`,
+   `Tower_R0`). Both predate this work and both are approved ground.
+8. The Relay Dog has not been walked through any of this. `walkable.py` is a
+   plan-view flood and the locomotion phase already proved that only walking
+   finds a 60 uu riser. `playtest.sh` exists and has not been run against the
+   district world.
