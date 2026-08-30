@@ -22,9 +22,9 @@ States are strictly cumulative: `ABSENT`, `DOMAIN_ONLY`, `IMPLEMENTED`, `WIRED`,
 | Docker sandbox adapter | IMPLEMENTED | Digest-addressed image, no shell in host launcher, read-only root, dropped capabilities, no-new-privileges, unprivileged user, controlled bind mount/network, CPU/memory/PID/nofile/tmpfs/wall/output limits. Current host has no Docker, so it is not locally proven. |
 | Production host-shell prevention | IMPLEMENTED | Production adapter is explicitly disabled unless trusted composition enables it. The old Node adapter remains development-only and is not a hostile-code boundary. |
 | OS filesystem/network isolation | IMPLEMENTED | Docker flags compile policy into mounts and `--network none`; real proof is in the new CI job and remains pending until GitHub runs it. |
-| Durable invocation lifecycle | DURABLE | Migration 019 and PostgreSQL repository persist identity/digest/lease/policy/state/sandbox/result/evidence/artifacts. Real database proof is pending CI. |
-| Transactional dispatch intent | DURABLE | Invocation and `julius_tool_outbox` insert share one serializable transaction; `SKIP LOCKED` claims are fenced by dispatch generation. Real database proof is pending CI. |
-| Durable artifact metadata | DURABLE | Migration 019 stores tenant-scoped content hashes and object-style references. |
+| Durable invocation lifecycle | IMPLEMENTED | Migration 019 and PostgreSQL repository persist the lifecycle and real PostgreSQL tests pass, but crash-after-effect result recovery and atomic budget/evidence settlement are not solved. |
+| Transactional dispatch intent | IMPLEMENTED | Invocation and dispatch intent share a transaction and real `SKIP LOCKED` claims pass. Expired `DISPATCHING`/`RUNNING` recovery deliberately does not replay destructive work and currently requires reconciliation; it is not recoverable yet. |
+| Durable artifact metadata | DOMAIN_ONLY | Migration 019 defines composite-scoped metadata and references, but no production metadata repository/atomic completion integration exists. |
 | Artifact bytes | IMPLEMENTED | Local adapter atomically stores 0600 content and metadata, validates tenant/project scope and hash, and keeps blobs outside hot DB rows. Production object storage is absent. |
 | Provider-neutral turn loop | IMPLEMENTED | Bounded model-turn/tool-call/runtime/observation loop supports interchangeable adapters. No provider adapter is wired to it. |
 | Live Prompt Architect | DOMAIN_ONLY | Existing provider path exists elsewhere; not composed into this durable tool loop. |
@@ -45,6 +45,10 @@ The repository now includes a GitHub Actions job with another disposable Postgre
 ## Credentials and provider status
 
 No `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `XAI_API_KEY`, Relay operator token, or safe provider-specific credential is present. `OPENAI_BASE_URL`/cluster routing variables alone do not authorize a live call. A live beta proof requires an explicitly scoped credential and configured worker route for each role; no fake pass is recorded.
+
+## Independent hardening review
+
+A separate reviewer found Critical/High gaps after the first infrastructure commit. This follow-up enforces `READ_FILESYSTEM=false` with no workspace bind, rejects unsupported mediated networking, checks sandbox expiry/cwd/invocation-specific cancellation, validates current tenant membership/worker/lease expiry/policy on durable requests, validates completion references, makes artifact scope run/task/invocation-specific, and repairs approval/sub-agent duplicate behavior. The reviewer also confirmed that destructive dispatch recovery, fully transactional budget/evidence completion, persistent sandbox ownership, workspace disk accounting, production artifact metadata, and real-provider composition remain open.
 
 ## Blockers remaining
 

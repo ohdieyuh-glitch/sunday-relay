@@ -270,6 +270,7 @@ export async function spawnJuliusSubagent(
   const atomic=deps.store.recordSubagentAndTaskWithinLimits;
   const atomicStored=atomic===undefined?null:await atomic.call(deps.store,{record,task:childTask,maxActive:input.policy.subagents.maxActive,maxTotal:input.policy.subagents.maxTotal,maxDepth:input.policy.subagents.maxDepth});
   if(atomicStored?.denialReason){await deps.budget.release({reservationId,reason:atomicStored.denialReason,now:deps.clock.now()});return{authorized:false,reasonCode:atomicStored.denialReason,safeMessage:'The durable sub-agent bound was reached.'};}
+  if(atomicStored?.duplicate){await deps.budget.release({reservationId,reason:'SUBAGENT_DUPLICATE',now:deps.clock.now()});const durable=await deps.store.loadSubagent(input.run.runId,input.requestId);if(durable===null)throw new Error('subagent_duplicate_missing');return{authorized:true,duplicate:true,record:durable,childTask:childTaskFrom(durable,input)};}
   const inserted = atomicStored===null?await deps.store.addTask({
     commandId: `subagent:${input.requestId}`,
     runId: input.run.runId, projectId: input.run.projectId, task: childTask,
