@@ -21,8 +21,38 @@ route is the defect.
 |---|---|
 | `keys.js` | who owns the keyboard — the only place that answers it |
 | `feed.js` | what the terminal is allowed to say, and whether it is live |
-| `terminal.js` | DOM wiring; deliberately dull, because the two above are tested |
-| `index.html` / `player.css` | the approved panel, drawn over the world |
+| `terminal.js` | claims the keyboard, wires the panel |
+| `mount.js` | the approved panel's markup, once, for both pages |
+| `overlay.js` | the entry Epic's frontend loads |
+| `install-overlay.sh` | puts it on the served page, reproducibly |
+| `index.html` / `player.css` | the standalone harness, and the look |
+
+## The two pages
+
+`index.html` is the harness: a `<video>` and the same mount. The page the
+founder actually opens is Epic's Pixel Streaming frontend — `player.html` plus
+a 2.5 MB bundle that builds its video at run time — so `mount.js` owns the
+panel's markup and builds it onto that page instead. Two copies of an approved
+design is two designs, and the second one drifts.
+
+`pixel-streaming-infra` lives outside this repository, so the edit to the
+served page is `install-overlay.sh` rather than a hand-edit: idempotent (it
+keeps a pristine `player.html.orig` and re-patches from it), it fails if Epic's
+frontend changes shape, and it asserts the tag order it produced.
+
+## Load order is load-bearing
+
+The overlay's script tag goes **before** `player.js`. Key listeners on the same
+target in the same phase fire in *registration order*, so a client that binds
+window-capture before us cannot be stopped by any amount of
+`stopImmediatePropagation` — its handler has already run. Capture phase is
+necessary and nowhere near sufficient. So `claimKeyboard()` runs at module
+evaluation with no DOM at all, and the panel is built later on
+`DOMContentLoaded`.
+
+Placed after `player.js`, the game receives the opening Space and every
+character typed into the terminal. That is measured, not assumed:
+`stream-page.html` reproduces it exactly by swapping those two lines.
 
 ## The two rules that are structural, not habits
 
@@ -71,12 +101,14 @@ tells the truth about that.
 ## Verifying
 
 ```sh
-./test.sh                 # 94 offline assertions, no browser
-node capture.mjs [out]    # real Chrome: world → SPACE → type → ESC → live feed
+./test.sh                 # 97 offline assertions, no browser
+node capture.mjs [out]    # real Chrome, 24 checks, both pages
 ```
 
 `capture.mjs` serves the page (ES modules are blocked over `file://`), stands a
 rendered Wonderland frame in for the stream, and photographs the sequence while
-checking fifteen behaviours — including that a space typed into the input is a
-space, that the panel never blinks while typing, and that private material
-handed to a connected feed does not appear on screen.
+checking twenty-four behaviours across both pages — that a space typed into
+the input is a space, that the panel never blinks while typing, that private
+material handed to a connected feed never appears on screen, and that a stream
+client which registers keydown on window in both phases and on document
+capture receives *nothing* while the terminal is open.
