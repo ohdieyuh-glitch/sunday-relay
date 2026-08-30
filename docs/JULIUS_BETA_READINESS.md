@@ -21,7 +21,7 @@ States are strictly cumulative: `ABSENT`, `DOMAIN_ONLY`, `IMPLEMENTED`, `WIRED`,
 | Sandbox domain port | IMPLEMENTED | Provider-neutral create/prepare/execute/cancel/destroy/inspect/collect contract includes tenant, run, task, lease, policy, expiry, and resource ceilings. |
 | Docker sandbox adapter | REAL_INFRA_PROVEN | Digest-addressed image, no shell in host launcher, read-only root, dropped capabilities, no-new-privileges, unprivileged user, controlled bind mount/network, CPU/memory/PID/nofile/tmpfs/wall/output limits. GitHub run `33327055137` passed with the real Docker engine and PostgreSQL service; the adversarial matrix remains incomplete. |
 | Production host-shell prevention | IMPLEMENTED | Production adapter is explicitly disabled unless trusted composition enables it. The old Node adapter remains development-only and is not a hostile-code boundary. |
-| OS filesystem/network isolation | IMPLEMENTED | Docker flags compile policy into mounts and `--network none`; real proof is in the new CI job and remains pending until GitHub runs it. |
+| OS filesystem/network isolation | IMPLEMENTED | Docker flags compile policy into mounts and `--network none`; the basic real Docker path passed in GitHub run `33327055137`, while the complete adversarial matrix remains open. |
 | Durable invocation lifecycle | IMPLEMENTED | Migration 019 and PostgreSQL repository persist the lifecycle and real PostgreSQL tests pass, but crash-after-effect result recovery and atomic budget/evidence settlement are not solved. |
 | Transactional dispatch intent | IMPLEMENTED | Invocation and dispatch intent share a transaction and real `SKIP LOCKED` claims pass. Expired `DISPATCHING`/`RUNNING` recovery deliberately does not replay destructive work and currently requires reconciliation; it is not recoverable yet. |
 | Durable artifact metadata | DOMAIN_ONLY | Migration 019 defines composite-scoped metadata and references, but no production metadata repository/atomic completion integration exists. |
@@ -40,7 +40,7 @@ States are strictly cumulative: `ABSENT`, `DOMAIN_ONLY`, `IMPLEMENTED`, `WIRED`,
 
 Available executables: `unshare`, `systemd-run`, `systemctl`, `prlimit`, and `setpriv`. PostgreSQL 16 was installed into this disposable environment and the real integration suite passed. Missing sandbox executables remain: Docker, Podman, containerd/ctr, nerdctl, Bubblewrap, nsjail, Firejail, and cgexec. The cgroup v2 filesystem is not writable. This host therefore cannot honestly prove the Docker boundary or establish a safe alternative. Production execution stays disabled here.
 
-The repository now includes a GitHub Actions job with another disposable PostgreSQL 16 service and Docker engine. It builds a content-addressed local sandbox image and runs the real-infrastructure suite. A passing remote job is required before either capability moves to `REAL_INFRA_PROVEN`.
+The repository now includes a GitHub Actions job with another disposable PostgreSQL 16 service and Docker engine. It builds a content-addressed local sandbox image and runs the real-infrastructure suite. GitHub run `33327055137` passed this basic path; the broader security/chaos exit criteria remain open.
 
 ## Credentials and provider status
 
@@ -61,4 +61,4 @@ A separate reviewer found Critical/High gaps after the first infrastructure comm
 
 ## Exit decision
 
-**NOT BETA-READY.** This change materially closes architecture and durability gaps and creates a real-infrastructure proof path, but no remote CI result or live provider mission is claimed in advance.
+**NOT BETA-READY.** This change materially closes architecture and durability gaps and creates a real-infrastructure proof path, with real PostgreSQL and basic Docker proof, but no live provider mission or complete hostile-code/chaos proof exists.
