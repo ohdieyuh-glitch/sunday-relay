@@ -588,3 +588,63 @@ unreachable.** Generate down from ~15 min to ~6 with `WLV2_REUSE_MATERIALS=1`.
 Open, in order: the rose share is still the largest measured gap (the bloom
 pass is unrendered); the ground between garden rooms; and whether the flanks
 need their own camera-suite checkpoint once the founder has judged them.
+
+---
+
+# STOPPING POINT — 2026-08-30, world-development phase
+
+Clean state. `relay/wonderland-v2` HEAD `1db48cb`; Studio packaged
+`d35e58e`; working tree clean; 50 commits this session; V1 untouched (41
+changed paths, 0 legacy). All gates green: layout PASS, dry run 117/117 assets
+and 0 failures, walkability 0 of 18 destinations unreachable. GPU idle.
+
+## What the world is now
+
+| | start of phase | now |
+|---|---|---|
+| placements | 787 | **4,564** |
+| actors (after instancing) | 689 | 2,123 |
+| empty ground | 30,176 m² | **4,832 m²** |
+| flank density | 1 per 178 m² | 1 per 41 m² |
+| cameras | 8 | 13 |
+
+Golden Arrival has two flank gardens, a rear world, a processional flower
+border the length of its axis, a plaza with a medallion and border course,
+stone-edged parterres with rim walls, and walls with pilasters and cap
+courses. Outside it stand **24 quarters** — formal gardens, tower
+neighbourhoods with perimeter walls and paved courts, and mushroom woods —
+joined by radial roads and a ring circuit.
+
+## The four tools this phase produced
+
+Each was written after making the same mistake twice, and each then found
+something no camera had:
+
+| tool | what it answers | what it caught |
+|---|---|---|
+| `gap_v2.py` | does the frame read as the reference? | the world was unshaded and cool, not over-exposed |
+| `camera_framing.py` | where does a camera's ground begin? | two passes of planting placed **under the lens** |
+| `walkable.py` | can the Dog get there, by what route? | a landmark inside a tower; both flanks cul-de-sacs |
+| `emptiness.py` | where is the world *not*? | **27,056 m² in one region**, wrapping the whole district |
+
+`emptiness.py` is the one that mattered most and the one written last. Three
+passes went into a twenty-metre patch a camera happened to show while two
+orders of magnitude more empty ground sat outside every camera's frame. **A
+camera shows what it points at; only an audit shows where the world is not.**
+
+## Known open items, in priority order
+
+1. **Quarter hierarchy.** The quarters are all roughly one size at roughly one
+   spacing. The reference has a dense core fading through midground to
+   atmospheric distance; ours tiles uniformly. This is the largest remaining
+   difference from the boards.
+2. **The ground quilt does not read.** 28 displaced lawn meshes are in place
+   and invisible at world distance — the Lawn and Moss tints are too close.
+   The mechanism works; the contrast does not.
+3. **Mushrooms still out-shout the architecture** at 35 giant caps, because
+   terracotta is the highest-contrast colour in the frame.
+4. **The horizon still ends** at a hard line against the sea band.
+5. `palette.rose` remains ~0.46× the reference on the flank cameras.
+6. The plaza medallion reads as a scribed ring rather than inlay.
+7. Performance is unprofiled at this density — `measure-fps.sh` is fixed and
+   has not been run against the 4,564-placement world.
