@@ -1802,7 +1802,19 @@ def main():
                                                   plaza_only=(marble is not None and int(C.LOOK["marbleVisible"])))
 
     phase("composition")
-    bands = [LAYOUT.FOREGROUND, LAYOUT.COURTYARD, LAYOUT.GARDEN, LAYOUT.PALACE]
+    # THE BUILDER'S BAND LIST IS THE AUTHORITY, NOT layout_v2.ALL.
+    #
+    # This is a hand-maintained list and `ALL` is a different hand-maintained
+    # list, and PASS 09 walked straight into the gap: 305 new placements were
+    # added to `ALL`, the layout gate counted 787 -> 1092 and passed, and the
+    # generator placed four of them, because FLANKS and REARWORLD were not
+    # named here. A gate that reads one list while the builder reads another
+    # cannot see the difference -- it reported the world it was shown.
+    #
+    # Adding the names is the fix for today; the two lists agreeing by
+    # construction is the fix for the class, and verify_v2_layout now asserts
+    # that every band in ALL is one the builder actually walks.
+    bands = list(LAYOUT.BUILD_BANDS)
     if marble is not None and int(C.LOOK["marbleVisible"]):
         bands = [LAYOUT.FOREGROUND]
         LOG("V2 COMPOSITION: Marble world VISIBLE -- only the foreground is placed in front of it")

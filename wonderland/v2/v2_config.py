@@ -137,11 +137,34 @@ HERO_CAMS = [
      "tags": ("SkylineCam06", "HeroCam6", "MARBLE_VIEW")},
     {"name": "ScaleCam07", "location": (0.0, -150.0, 170.0), "rotation": (-3.0, 270.0, 0.0), "fov": 90.0,
      "tags": ("ScaleCam07", "HeroCam7")},
+    # ---- PASS 09: THREE CAMERAS FOR THE GROUND THAT WAS EMPTY -------------
+    #
+    # The eight above are the regression suite and none of them moves. But all
+    # eight look at the arrival axis, which is why every render for three
+    # passes has shown the same place -- and the flanks and the rear world are
+    # now districts in their own right rather than lawn. The brief's rule is
+    # that a new area gets its own small permanent suite once it has a real
+    # composition; these three are that suite, and from here they are as
+    # locked as the others.
+    #
+    # 8 and 9 stand at the flank's near end at eye height and look ALONG it,
+    # so one frame carries the whole sequence the flank was authored as:
+    # threshold, parterre, rose walk, grove, landmark. 10 stands well behind
+    # the spawn looking in, which is the only view that answers "does
+    # Wonderland continue behind you" -- it reads the rear gate, the avenue,
+    # the arrival gate, the plaza and the castle in one line of depth.
+    {"name": "FlankLeftCam08", "location": (4350.0, -1250.0, 265.0), "rotation": (-4.0, 90.0, 0.0),
+     "fov": 90.0, "tags": ("FlankLeftCam08", "HeroCam8")},
+    {"name": "FlankRightCam09", "location": (-4350.0, -1250.0, 265.0), "rotation": (-4.0, 90.0, 0.0),
+     "fov": 90.0, "tags": ("FlankRightCam09", "HeroCam9")},
+    {"name": "RearWorldCam10", "location": (0.0, -9400.0, 320.0), "rotation": (-3.0, 90.0, 0.0),
+     "fov": 90.0, "tags": ("RearWorldCam10", "HeroCam10")},
 ]
 #: The suite's names by index -- the filing tool and the checkpoint report use
 #: them; the capture tooling uses the "HeroCamN" tags.
 CAM_SUITE = ("HeroCam0", "PlayerCam01", "PathCam02", "ReverseCam03",
-             "GardenLeft04", "GardenRight05", "SkylineCam06", "ScaleCam07")
+             "GardenLeft04", "GardenRight05", "SkylineCam06", "ScaleCam07",
+             "FlankLeftCam08", "FlankRightCam09", "RearWorldCam10")
 #: HeroCam0's frozen transform (the founder benchmark) -- verify_v2_layout
 #: refuses a drift of the entry above from these values.
 HERO_CAM0_FROZEN = ((0.0, -150.0, 262.0), (-2.0, 90.0, 0.0), 100.0)

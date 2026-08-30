@@ -382,3 +382,26 @@ question of where Wonderland ends:
 
 Not in this pass: districts beyond Golden Arrival. The founder's sequencing is
 that Golden Arrival reaches founder-quality first.
+
+## PASS 08b predictions — recorded before its capture
+
+Same discipline as PASS 08: stated first, scored after.
+
+| metric | PASS 08 | 08b target | reference |
+|---|---|---|---|
+| warm arc | 36.2% | **26–30%** | 26.7% |
+| deep pixels | 30.4% | **23–27%** | 23.0% |
+| foreground chroma vs ref | 1.67× | **≤1.35×** | — |
+| `ground_variation` | 39.4 | **≥55** | 73.5 |
+| `fg_span` | 87 | **≥100** | 128 |
+| SkylineCam06 green arc | 19.3% | **28–36%** (green again, not brown) | — |
+| SkylineCam06 warm arc | 27.0% | **≤15%** | — |
+
+One prediction against my own change: **`fg_p50` will get slightly WORSE, to
+about 183 from 178** (reference 151). Raising the sky light 0.45 → 0.58 adds
+~4% to a sun-dominated surface, and the widened tint set averages 2.7%
+brighter than the one it replaces. Both were done for other reasons — shade
+depth and stone spread — and both push this number the wrong way. If it lands
+where predicted, the plaza albedo comes down ~10% in PASS 09; if it lands
+higher than 190, the light change is doing more than the arithmetic says and
+that is the thing to look at, not the albedo.

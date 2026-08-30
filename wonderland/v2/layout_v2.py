@@ -632,7 +632,253 @@ APPROACH = _band("V2_Garden",
 )
 
 PALACE = CITY + BEYOND_L + BEYOND_R + AVENUE + APPROACH + APPROACH_STEPS
-ALL = FOREGROUND + GARDEN + PALACE + SKY + HOVER
+# ---------------------------------------------------------------------------
+# PASS 09 — THE FLANKS AND THE REAR WORLD BECOME PLACES
+# ---------------------------------------------------------------------------
+#
+# Measured off this file before a line of it was written. W1 closed the
+# founder's "empty lawn between garden gates and castle": the castle approach
+# went from 0 actors over 3,650 m2 to 199, one per 18 m2. The emptiness did
+# not go away, it moved outward.
+#
+#   plaza / arrival      257 actors   1,600 m2    1 per   6 m2
+#   castle approach      199 actors   3,650 m2    1 per  18 m2
+#   left flank            34 actors   6,050 m2    1 per 178 m2
+#   right flank           38 actors   6,050 m2    1 per 159 m2
+#   behind spawn          30 actors  11,200 m2    1 per 373 m2
+#
+# 23,300 m2 at ten to sixty times the plaza's sparsity, against the plaza's
+# 1,600 -- that is the expanse SkylineCam06 shows, and it is 45% of that
+# frame. It is what makes an elevated camera read the district as a model on a
+# lawn rather than as part of a world.
+#
+# The language is the reference's, not a scatter: gardens here are ORGANISED.
+# Beds have edges. Quarters have centres. Hedges make rooms and the gaps
+# between them are the walks. Landmarks sit at the ends of things, so the eye
+# is led rather than filled. Nothing here is a new visual idea -- every piece
+# is from the kit Golden Arrival already established, which is the point: this
+# is the first use of that kit as a KIT, and the flanks are where it has to
+# prove it travels.
+#
+# Density targets, in the same units the audit used: flanks 1 per 50 m2 (a
+# garden -- airier than a plaza, denser than a lawn), behind the spawn 1 per
+# 90 m2 (scenic, off the primary route). Those are targets, not quotas: the
+# brief's rule is that dense does not mean cluttered, and every walk through
+# these rooms stays open for a social space.
+
+
+def _parterre(sgn, cx, cy, seed, tag):
+    """A formal quadrant garden: four hedged beds around a centrepiece, with
+    the walks between them left open. This is the unit the reference's royal
+    gardens are made of -- geometry first, then colour inside it."""
+    out = []
+    q = 620.0                      # quadrant side
+    w = 150.0                      # half-width of the cross walk
+    off = q / 2.0 + w
+    petals = ("MI_V2_PetalPink", "MI_V2_PetalViolet", "MI_V2_PetalWhite", "MI_V2_PetalRose")
+    for i, (qx, qy) in enumerate(((-1, -1), (-1, 1), (1, -1), (1, 1))):
+        bx, by = cx + sgn * qx * off, cy + qy * off
+        # the bed's clipped edge: four low runs, the gaps at the corners read
+        # as the box hedge a parterre has rather than as a solid green brick
+        for k, (dx, dy, yaw) in enumerate(((0, -1, 0), (0, 1, 0), (-1, 0, 90), (1, 0, 90))):
+            out.append(A("hedge_block", bx + dx * q * 0.5, by + dy * q * 0.5, 0,
+                         yaw=yaw, s=0.52,
+                         mat=("MI_V2_LeafDark", "MI_V2_LeafMid")[(i + k) % 2],
+                         label="%s_Bed%d_Edge%d" % (tag, i, k)))
+        # what fills it
+        out.append(A("rose_bush", bx, by, 60, yaw=40 * i, s=0.85,
+                     mat="MI_V2_LeafMid", label="%s_Bed%d_Rose" % (tag, i)))
+        for k in range(3):
+            a = _rnd(i, k, seed) * 6.283
+            out.append(A("flower_cluster",
+                         bx + math.cos(a) * 175.0, by + math.sin(a) * 175.0, 40,
+                         yaw=_rnd(i, k, seed + 1) * 360.0, s=0.55 + 0.2 * _rnd(i, k, seed + 2),
+                         mat=petals[(i + k) % 4], label="%s_Bed%d_Flower%d" % (tag, i, k)))
+        # a ball of clipped box at the bed's inner corner: the rhythm that
+        # tells the eye the four beds are one composition
+        out.append(A("topiary_ball", bx - sgn * qx * q * 0.42, by - qy * q * 0.42, 0,
+                     s=0.62, mat="MI_V2_LeafDark", label="%s_Bed%d_Ball" % (tag, i)))
+    # the centrepiece the walks run to
+    out += [
+        A("pedestal_finial", cx, cy, 0, s=1.0, mat="MI_V2_IvoryStone", label="%s_Centre_Plinth" % tag),
+        A("garden_urn", cx, cy, 124, s=0.6, mat="MI_V2_Ceramic", label="%s_Centre_Urn" % tag),
+        A("flower_cluster", cx, cy, 210, s=0.5, mat="MI_V2_PetalPink", label="%s_Centre_Flowers" % tag),
+    ]
+    # cones at the room's outer corners, so it has a silhouette from the plaza
+    for i, (qx, qy) in enumerate(((-1, -1), (-1, 1), (1, -1), (1, 1))):
+        out.append(A("topiary_cone_plain", cx + sgn * qx * (off + q * 0.62), cy + qy * (off + q * 0.62), 0,
+                     s=0.9, mat="MI_V2_LeafDark", label="%s_Cone%d" % (tag, i)))
+    return out
+
+
+def _grove(sgn, cx, cy, seed, tag, count=5):
+    """A loose group of trees with underplanting -- the canopy that stops a
+    flank reading as open ground, placed as a GROUP with a centre and an edge
+    rather than as a row."""
+    out = []
+    for i in range(count):
+        a = 6.283 * i / count + _rnd(i, seed, 3) * 0.9
+        r = 320.0 + 520.0 * _rnd(i, seed, 4)
+        x, y = cx + sgn * math.cos(a) * r, cy + math.sin(a) * r
+        tall = _rnd(i, seed, 5) > 0.45
+        sc = 0.92 + 0.3 * _rnd(i, seed, 6)
+        if tall:
+            out.append(A("tree_mature_trunk", x, y, 0, yaw=_rnd(i, seed, 7) * 360.0, s=sc,
+                         mat="MI_V2_Bark", label="%s_Trunk%d" % (tag, i)))
+            out.append(A("canopy_large", x, y, 1180 * sc, yaw=_rnd(i, seed, 8) * 360.0, s=sc * 1.05,
+                         mat=("MI_V2_LeafMid", "MI_V2_LeafDark", "MI_V2_LeafLight")[i % 3],
+                         label="%s_Canopy%d" % (tag, i)))
+        else:
+            out.append(A("tree_slender_trunk", x, y, 0, yaw=_rnd(i, seed, 9) * 360.0, s=sc,
+                         mat="MI_V2_Bark", label="%s_SlimTrunk%d" % (tag, i)))
+            out.append(A("canopy_medium", x, y, 800 * sc, yaw=_rnd(i, seed, 10) * 360.0, s=sc * 1.1,
+                         mat=("MI_V2_LeafLight", "MI_V2_LeafMid")[i % 2],
+                         label="%s_SlimCanopy%d" % (tag, i)))
+        # what grows at its foot
+        out.append(A("shrub_flowering", x + 190 - 380 * _rnd(i, seed, 11), y + 190 - 380 * _rnd(i, seed, 12), 0,
+                     yaw=_rnd(i, seed, 13) * 360.0, s=0.8, mat="MI_V2_LeafMid",
+                     label="%s_Shrub%d" % (tag, i)))
+    for k in range(4):
+        a = 6.283 * k / 4 + 0.4
+        out.append(A("ground_flowers", cx + sgn * math.cos(a) * 720.0, cy + math.sin(a) * 720.0, 0,
+                     yaw=_rnd(k, seed, 14) * 360.0, s=1.0,
+                     mat=("MI_V2_PetalViolet", "MI_V2_PetalWhite")[k % 2],
+                     label="%s_Ground%d" % (tag, k)))
+    return out
+
+
+def _mushroom_cluster(sgn, cx, cy, seed, tag):
+    """A landmark and its family. Wonderland's mushrooms are architecture, so
+    one is large and sited, and the rest read as its grounds."""
+    out = [
+        A("stone_ring_base", cx, cy, -2, s=0.85, mat="MI_V2_Stone", label="%s_Ring" % tag),
+        A("mushroom_landmark", cx, cy, 0, yaw=_rnd(seed, 1, 2) * 360.0, s=1.15,
+          mat="MI_V2_MushTerracotta", label="%s_Landmark" % tag),
+    ]
+    for i in range(3):
+        a = 6.283 * i / 3 + _rnd(i, seed, 15) * 0.8
+        r = 420.0 + 260.0 * _rnd(i, seed, 16)
+        out.append(A(("mushroom_medium", "mushroom_small", "mushroom_medium")[i],
+                     cx + sgn * math.cos(a) * r, cy + math.sin(a) * r, 0,
+                     yaw=_rnd(i, seed, 17) * 360.0, s=0.8 + 0.35 * _rnd(i, seed, 18),
+                     mat=("MI_V2_MushRed", "MI_V2_MushPurple", "MI_V2_MushCream")[i % 3],
+                     label="%s_Cap%d" % (tag, i)))
+    return out
+
+
+def _rose_walk(sgn, x, y0, y1, seed, tag):
+    """A rhythm along the flank's inner edge: clipped box and roses
+    alternating, which is what turns open ground into a WAY rather than a
+    field, and what the eye follows from the plaza toward the castle."""
+    out = []
+    n = int((y1 - y0) / 620.0)
+    for i in range(n):
+        y = y0 + 620.0 * (i + 0.5)
+        if i % 2 == 0:
+            out.append(A("topiary_cone_roses", sgn * x, y, 0, yaw=25 * i, s=0.78,
+                         mat="MI_V2_LeafMid", label="%s_Cone%d" % (tag, i)))
+        else:
+            out.append(A("rose_bush", sgn * x, y, 70, yaw=45 * i, s=0.85,
+                         mat="MI_V2_LeafMid", label="%s_Rose%d" % (tag, i)))
+            out.append(A("lavender_heads", sgn * (x + 150), y, 0, yaw=15 * i, s=0.9,
+                         mat="MI_V2_Lavender", label="%s_Lav%d" % (tag, i)))
+    return out
+
+
+def _boundary(sgn, x, y0, y1, seed, tag):
+    """The district needs an EDGE, not a fade. A low garden wall with piers on
+    a regular pitch, ivied, so the flank ends in architecture instead of in
+    the ground slab running out."""
+    out = []
+    n = int((y1 - y0) / 500.0)
+    for i in range(n):
+        y = y0 + 500.0 * (i + 0.5)
+        out.append(A("garden_wall", sgn * x, y, 0, yaw=90, s=1.0,
+                     mat="MI_V2_IvoryStone", label="%s_Wall%d" % (tag, i)))
+        if i % 4 == 0:
+            out.append(A("gate_pier", sgn * x, y - 250, 0, s=0.62,
+                         mat="MI_V2_IvoryStone", label="%s_Pier%d" % (tag, i)))
+            out.append(A("gate_finial_ball", sgn * x, y - 250, 405, s=0.6,
+                         mat="MI_V2_Gold", label="%s_Finial%d" % (tag, i)))
+        if i % 3 == 1:
+            out.append(A("ivy_drape", sgn * (x - 40), y, 180, yaw=90, s=0.9,
+                         mat="MI_V2_LeafDark", label="%s_Ivy%d" % (tag, i)))
+    return out
+
+
+def _flank(sgn, tag):
+    """One flank, near to far: a threshold off the plaza, a parterre, a walk
+    that leads along it, a grove, a landmark at the end, and a wall that says
+    where the district stops."""
+    out = []
+    # the threshold, on the cross axis from the plaza's side steps
+    out += [
+        A("garden_arch_stone", sgn * 2650, 400, 220, yaw=90, s=0.95,
+          mat="MI_V2_IvoryStone", label="%s_EntryArch" % tag),
+        A("topiary_cone_plain", sgn * 2650, 40, 0, s=0.85, mat="MI_V2_LeafDark", label="%s_EntryConeA" % tag),
+        A("topiary_cone_plain", sgn * 2650, 760, 0, s=0.85, mat="MI_V2_LeafDark", label="%s_EntryConeB" % tag),
+    ]
+    out += _parterre(sgn, sgn * 4350, 700, 4100 if sgn > 0 else 4200, "%s_Parterre" % tag)
+    out += _rose_walk(sgn, 3050, 1900, 5900, 4300, "%s_Walk" % tag)
+    out += _grove(sgn, sgn * 5450, 3650, 4400 if sgn > 0 else 4500, "%s_Grove" % tag)
+    out += _mushroom_cluster(sgn, sgn * 4900, 6900, 4600 if sgn > 0 else 4700, "%s_Mush" % tag)
+    out += _boundary(sgn, 7700, -1200, 8300, 4800, "%s_Edge" % tag)
+    return out
+
+
+FLANKS = _band("V2_Garden", _flank(1, "FlankL") + _flank(-1, "FlankR"))
+
+
+# The ground BEHIND the spawn. A participant who turns round at the arrival
+# gate should see Wonderland continuing, not the edge of the set -- and this
+# is also the first thing a second participant walks through to reach the
+# plaza, so it is a route as well as a view.
+REARWORLD = _band("V2_Garden", [
+    # a second gate on the axis, smaller than the arrival gate and read
+    # through it: depth by repetition of the same motif at another scale
+    A("gate_pier", 300, -6000, 0, s=0.8, mat="MI_V2_IvoryStone", label="Rear_GatePierL"),
+    A("gate_pier", -300, -6000, 0, s=0.8, mat="MI_V2_IvoryStone", label="Rear_GatePierR"),
+    A("gate_arch_gold", 0, -6000, 0, s=0.85, mat="MI_V2_Gold", label="Rear_GateArch"),
+    A("gate_finial_heart", 300, -6000, 520, s=0.75, mat="MI_V2_Gold", label="Rear_GateFinialL"),
+    A("gate_finial_ball", -300, -6000, 520, s=0.8, mat="MI_V2_Gold", label="Rear_GateFinialR"),
+] + [
+    # a hedged avenue leading to it, narrowing as it goes, so the gate reads
+    # as a destination from the plaza
+    A("hedge_block", side * (1100 - 55 * i), -2600 - 430 * i, 0, yaw=0,
+      s=0.95, mat=("MI_V2_LeafDark", "MI_V2_LeafMid")[i % 2],
+      label="Rear_Avenue%d_%d" % (side, i))
+    for side in (1, -1) for i in range(8)
+] + _grove(1, 3100, -4400, 5100, "Rear_GroveL", count=4)
+  + _grove(-1, -3300, -4900, 5200, "Rear_GroveR", count=4)
+  + _grove(1, 2600, -7600, 5300, "Rear_GroveF", count=3)
+  + _mushroom_cluster(-1, -5000, -5600, 5400, "Rear_Mush")
+  + [
+    # a pair of urns on the axis where the avenue begins: the arrival gate
+    # framed from behind
+    A("pedestal_finial", 700, -2300, 0, s=0.9, mat="MI_V2_IvoryStone", label="Rear_PlinthL"),
+    A("pedestal_finial", -700, -2300, 0, s=0.9, mat="MI_V2_IvoryStone", label="Rear_PlinthR"),
+    A("garden_urn", 700, -2300, 112, s=0.55, mat="MI_V2_Ceramic", label="Rear_UrnL"),
+    A("garden_urn", -700, -2300, 112, s=0.55, mat="MI_V2_Ceramic", label="Rear_UrnR"),
+    A("flower_cluster", 700, -2300, 190, s=0.45, mat="MI_V2_PetalWhite", label="Rear_UrnFlowersL"),
+    A("flower_cluster", -700, -2300, 190, s=0.45, mat="MI_V2_PetalViolet", label="Rear_UrnFlowersR"),
+])
+
+
+#: THE BANDS THE BUILDER WALKS. One list, so `ALL` and build_v2 cannot drift.
+#:
+#: They already had. build_v2 kept its own hand-written list and `ALL` kept
+#: another, and the two never matched: COURTYARD was built and absent from
+#: `ALL`, so the layout gate had never checked a single actor in it -- and
+#: PASS 09 added FLANKS and REARWORLD to `ALL` alone, whereupon the gate
+#: counted 305 new placements and passed while the generator placed four. A
+#: gate reading a different list from the builder reports the world it was
+#: shown, not the world that gets made.
+BUILD_BANDS = [FOREGROUND, COURTYARD, GARDEN, PALACE, FLANKS, REARWORLD]
+
+#: Everything the layout declares: what the builder walks, plus the two bands
+#: it places by their own rules (SKY is the dome/atmosphere, HOVER is lifted
+#: props). Derived from BUILD_BANDS rather than restated.
+ALL = [it for band in BUILD_BANDS for it in band] + SKY + HOVER
 
 #: The dark path: from the front wall line to the arch, 4.4 m narrowing to 3 m,
 #: rising 0.6 m at the steps then 2%. The builder lays it.
