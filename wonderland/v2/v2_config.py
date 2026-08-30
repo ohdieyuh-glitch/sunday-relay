@@ -211,16 +211,29 @@ HERO_CAMS = [
     # clearest spot on a 5x5 search -- the clearance is printed beside it.
     # Never inside 40 m of the origin, because a district camera standing in
     # the arrival plaza is not a district camera.
-    {"name": "ClockQuarterCam13", "location": (4668.7, -2703.3, 520.0), "rotation": (2.5, -4.9, 0.0),
-     "fov": 90.0, "tags": ("ClockQuarterCam13", "HeroCam13")},      # clockyard 130 m, 79 m back, 12.6 m clear
-    {"name": "MushroomGroveCam14", "location": (5449.8, -6922.9, 420.0), "rotation": (2.0, -31.0, 0.0),
-     "fov": 92.0, "tags": ("MushroomGroveCam14", "HeroCam14")},     # grove 155 m, 69 m back, 4.8 m clear
-    {"name": "WaterGardenCam15", "location": (-4731.9, -4764.1, 420.0), "rotation": (-1.5, -121.9, 0.0),
-     "fov": 90.0, "tags": ("WaterGardenCam15", "HeroCam15")},       # the LAKE at 125 m, 58 m back, 6.5 m clear
-    {"name": "TeaTerraceCam16", "location": (-5401.8, -1839.1, 340.0), "rotation": (-1.0, -126.8, 0.0),
-     "fov": 90.0, "tags": ("TeaTerraceCam16", "HeroCam16")},        # tea 93 m, 40 m back, 2.5 m clear
-    {"name": "HamletCam17", "location": (-13093.3, -1889.8, 460.0), "rotation": (0.0, 167.1, 0.0),
-     "fov": 90.0, "tags": ("HamletCam17", "HeroCam17")},            # hamlet 184 m, 54 m back, 5.0 m clear
+    # SITED ON WHAT THEY CAN SEE, not on the nearest thing to them.
+    #
+    # "Clearance" is the distance to the nearest obstacle's EDGE and it does
+    # not say how much of a frame that obstacle fills. WaterGardenCam15 was
+    # sited at 6.5 m of clearance and its frame is half filled by a giant
+    # mushroom's stem: 3.5 m of stem at 6.5 m subtends thirty degrees, and the
+    # 20 m CAP thirteen metres up is not in the footprint table at all.
+    #
+    # Each of these is the best of 91 candidate stations (13 distances x 7
+    # lateral offsets) scored by the 20th-percentile free distance along 24
+    # rays through the forward +/-35 degree cone, with `mushroom_giant` given
+    # its cap radius rather than its stem. One close object tanks that score,
+    # which is the property "nearest edge" lacks. 15 to 34 m of open cone.
+    {"name": "ClockQuarterCam13", "location": (8514.0, 820.0, 520.0), "rotation": (2.5, -46.0, 0.0),
+     "fov": 90.0, "tags": ("ClockQuarterCam13", "HeroCam13")},      # 50 m back, 34 m of open cone
+    {"name": "MushroomGroveCam14", "location": (3763.9, -5506.0, 420.0), "rotation": (2.0, -33.2, 0.0),
+     "fov": 92.0, "tags": ("MushroomGroveCam14", "HeroCam14")},     # 90 m back, 27 m
+    {"name": "WaterGardenCam15", "location": (-3604.5, -9265.1, 420.0), "rotation": (-1.5, -173.8, 0.0),
+     "fov": 90.0, "tags": ("WaterGardenCam15", "HeroCam15")},       # 30 m back, 21 m
+    {"name": "TeaTerraceCam16", "location": (-1579.4, -4603.1, 340.0), "rotation": (-1.0, -175.6, 0.0),
+     "fov": 90.0, "tags": ("TeaTerraceCam16", "HeroCam16")},        # 55 m back, 15 m
+    {"name": "HamletCam17", "location": (-11262.9, -2672.1, 460.0), "rotation": (0.0, 164.3, 0.0),
+     "fov": 90.0, "tags": ("HamletCam17", "HeroCam17")},            # 70 m back, 21 m
     # ON A ROAD, at the Dog's own eye height, looking out along it to the
     # quarter it serves. The founder's test for the road network is that a
     # player believes they can keep going; this is the frame that answers it.
