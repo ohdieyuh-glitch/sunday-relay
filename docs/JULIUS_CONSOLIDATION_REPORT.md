@@ -4,7 +4,7 @@
 
 - **Open PR count inspected:** 38/38; the complete record is in `OPEN_PR_MERGE_LEDGER.md`.
 - **Current main used:** `96451fc0c8da59de792d973113c4e203ddab6f01`.
-- **Integration branch:** `codex/julius-consolidation` (final SHA is recorded after the final validation commit).
+- **Integration branch:** `codex/julius-consolidation`; validated integration-content SHA `d370b41c060198a9be9fd457f4132c4d3d996d4c` (the following documentation-only commit records that SHA).
 - **Included effective tips:** #198 (contains #170–#179 and #186–#198), #185 (contains #180–#185), and #201.
 - **History strategy:** non-fast-forward merge the effective tips into a new branch from current main. Published stack history was not rewritten. The knowingly invalid #188 architecture is never proposed as an independently mergeable main state; #198’s correction arrives in the same effective tip.
 - **Existing PR actions:** none merged, closed, rebased, or force-pushed.
