@@ -1,4 +1,5 @@
 import { existsSync, readFileSync } from 'node:fs';
+import { sanitizeText } from './redaction';
 import { join } from 'node:path';
 import { Pool, type PoolConfig, type QueryResultRow } from 'pg';
 import type { ProviderUsageReceipt, WonderlandExecutionSession } from '../mission/wonderland/wonderland-execution';
@@ -21,7 +22,15 @@ export const WONDERLAND_MIGRATION_007 = migration('007_wonderland_provider_opera
 export const WONDERLAND_MIGRATION_008 = migration('008_wonderland_swarm_scheduler.sql');
 export const WONDERLAND_MIGRATION_009 = migration('009_wonderland_gve_runs.sql');
 export const WONDERLAND_MIGRATION_010 = migration('010_wonderland_hidden_fixtures.sql');
-export const WONDERLAND_MIGRATIONS = [WONDERLAND_MIGRATION_001, WONDERLAND_MIGRATION_002, WONDERLAND_MIGRATION_003, WONDERLAND_MIGRATION_004, WONDERLAND_MIGRATION_005, WONDERLAND_MIGRATION_006, WONDERLAND_MIGRATION_007, WONDERLAND_MIGRATION_008, WONDERLAND_MIGRATION_009, WONDERLAND_MIGRATION_010] as const;
+export const WONDERLAND_MIGRATION_011 = migration('011_julius_runtime.sql');
+export const WONDERLAND_MIGRATION_012 = migration('012_julius_recovery.sql');
+export const WONDERLAND_MIGRATION_013 = migration('013_julius_verification.sql');
+export const WONDERLAND_MIGRATION_014 = migration('014_julius_context_brain.sql');
+export const WONDERLAND_MIGRATION_015 = migration('015_julius_trajectories.sql');
+export const WONDERLAND_MIGRATION_016 = migration('016_julius_subagents.sql');
+export const WONDERLAND_MIGRATION_017 = migration('017_gauntlet_command.sql');
+export const WONDERLAND_MIGRATION_018 = migration('018_julius_lifecycle.sql');
+export const WONDERLAND_MIGRATIONS = [WONDERLAND_MIGRATION_001, WONDERLAND_MIGRATION_002, WONDERLAND_MIGRATION_003, WONDERLAND_MIGRATION_004, WONDERLAND_MIGRATION_005, WONDERLAND_MIGRATION_006, WONDERLAND_MIGRATION_007, WONDERLAND_MIGRATION_008, WONDERLAND_MIGRATION_009, WONDERLAND_MIGRATION_010, WONDERLAND_MIGRATION_011, WONDERLAND_MIGRATION_012, WONDERLAND_MIGRATION_013, WONDERLAND_MIGRATION_014, WONDERLAND_MIGRATION_015, WONDERLAND_MIGRATION_016, WONDERLAND_MIGRATION_017, WONDERLAND_MIGRATION_018] as const;
 export interface ClaimedOutbox { outboxId: string; eventId: string; projectId: string; attempts: number; }
 export interface BudgetAmounts { inputTokens: number; cachedTokens: number; outputTokens: number; usdMicros: number; toolCalls: number; computeMs: number; runtimeMs: number; swarmWorkers: number; }
 export interface BudgetReservation { reservationId: string; executionId: string; state: 'RESERVED' | 'COMMITTED' | 'RELEASED' | 'EXPIRED' | 'DENIED'; requested: BudgetAmounts; committed: BudgetAmounts | null; expiresAt: string; receiptId: string | null; denialReason: string | null; }
@@ -223,7 +232,7 @@ export class TransactionalWonderlandDatabase {
     return result.rowCount === 1;
   }
   async failOutbox(workerId: string, outboxId: string, error: string, nextAttemptAt: string, maxAttempts = 8): Promise<boolean> {
-    const result = await this.pool.query(`UPDATE relay_wonderland.outbox SET status=CASE WHEN attempts>=$5 THEN 'DEAD' ELSE 'PENDING' END,claimed_by=NULL,claimed_until=NULL,last_error=$3,next_attempt_at=$4 WHERE outbox_id=$1 AND status='CLAIMED' AND claimed_by=$2`, [outboxId, workerId, error.slice(0, 500), nextAttemptAt, maxAttempts]);
+    const result = await this.pool.query(`UPDATE relay_wonderland.outbox SET status=CASE WHEN attempts>=$5 THEN 'DEAD' ELSE 'PENDING' END,claimed_by=NULL,claimed_until=NULL,last_error=$3,next_attempt_at=$4 WHERE outbox_id=$1 AND status='CLAIMED' AND claimed_by=$2`, [outboxId, workerId, sanitizeText(error, 500), nextAttemptAt, maxAttempts]);
     return result.rowCount === 1;
   }
   async transaction<T>(effect: (transaction: WonderlandTransaction) => Promise<T>, maxAttempts = 3): Promise<T> {
