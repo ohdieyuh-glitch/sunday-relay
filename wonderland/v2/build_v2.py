@@ -56,6 +56,30 @@ V1_CLASS_MARKERS = ("WonderlandInstancedBatch", "WonderlandStrollingDog", "Wonde
                     "WonderlandInteractable")
 V1_LABEL_MARKERS = ("SkyCity", "PlazaBed", "Tile", "RelayDog", "GreatTree", "Batch_", "HDAR_", "Orn")
 
+def _is_v1_actor(entry):
+    """Is this final-actor entry ("ClassName:ActorLabel") a V1 leak?
+
+    The markers used to be tested against the whole "class:label" string, so a
+    LABEL marker could match a CLASS name. "RelayDog" is a label marker -- it
+    is there for V1's strolling dogs, which were labelled RelayDog_nn -- and
+    the canonical V2 Dog's CLASS is BP_RelayDog_C. Every V2 build with a scale
+    Dog in it therefore reported v1_actors=1 and had done since the Dog was
+    added. Nothing was wrong with the world; the alarm was. It matters because
+    "no V1 regression" is a milestone checkbox in this phase, and a check that
+    cries wolf on every single build is one nobody will read on the day it is
+    right.
+
+    Class markers are matched against the class, label markers against the
+    label. WonderlandInstancedBatch is skipped because V2 legitimately batches
+    its flagstones through it -- which is the same kind of collision, already
+    handled by hand.
+    """
+    cls, _, label = entry.partition(":")
+    if any(m in cls for m in V1_CLASS_MARKERS[1:]):
+        return True
+    return any(m in label for m in ("SkyCity", "PlazaBed", "RelayDog", "GreatTree", "HDAR_"))
+
+
 MANIFEST = {"map": C.MAP_PATH, "content_root": C.CONTENT_ROOT, "phases": {}, "assets": {},
             "actors": {}, "empty_map_actors": [], "world_partition": "unknown", "backend": None,
             "materials": 0, "failures": []}
@@ -1922,7 +1946,7 @@ def main():
     except Exception:
         pass
     MANIFEST["final_actors"] = final
-    v1_in_final = [n for n in final if any(m in n for m in V1_CLASS_MARKERS[1:] + ("SkyCity", "PlazaBed", "RelayDog", "HDAR_"))]
+    v1_in_final = [n for n in final if _is_v1_actor(n)]
     MANIFEST["v1_actors_in_final"] = v1_in_final
     MANIFEST["seconds"] = round(time.time() - t0, 1)
     # An EMPTY level package is 6-11 KB; the classic V2 world with 445 actors
