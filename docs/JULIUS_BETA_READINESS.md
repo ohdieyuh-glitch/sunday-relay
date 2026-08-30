@@ -19,7 +19,7 @@ States are strictly cumulative: `ABSENT`, `DOMAIN_ONLY`, `IMPLEMENTED`, `WIRED`,
 | Effective #202 architecture | IMPLEMENTED | Consolidated tree exists; founder has not authorized merge. |
 | #198 dependency boundary | IMPLEMENTED | Structural boundary suite remains authoritative. |
 | Sandbox domain port | IMPLEMENTED | Provider-neutral create/prepare/execute/cancel/destroy/inspect/collect contract includes tenant, run, task, lease, policy, expiry, and resource ceilings. |
-| Docker sandbox adapter | IMPLEMENTED | Digest-addressed image, no shell in host launcher, read-only root, dropped capabilities, no-new-privileges, unprivileged user, controlled bind mount/network, CPU/memory/PID/nofile/tmpfs/wall/output limits. Current host has no Docker, so it is not locally proven. |
+| Docker sandbox adapter | REAL_INFRA_PROVEN | Digest-addressed image, no shell in host launcher, read-only root, dropped capabilities, no-new-privileges, unprivileged user, controlled bind mount/network, CPU/memory/PID/nofile/tmpfs/wall/output limits. GitHub run `33327055137` passed with the real Docker engine and PostgreSQL service; the adversarial matrix remains incomplete. |
 | Production host-shell prevention | IMPLEMENTED | Production adapter is explicitly disabled unless trusted composition enables it. The old Node adapter remains development-only and is not a hostile-code boundary. |
 | OS filesystem/network isolation | IMPLEMENTED | Docker flags compile policy into mounts and `--network none`; real proof is in the new CI job and remains pending until GitHub runs it. |
 | Durable invocation lifecycle | IMPLEMENTED | Migration 019 and PostgreSQL repository persist the lifecycle and real PostgreSQL tests pass, but crash-after-effect result recovery and atomic budget/evidence settlement are not solved. |
@@ -52,7 +52,7 @@ A separate reviewer found Critical/High gaps after the first infrastructure comm
 
 ## Blockers remaining
 
-1. Obtain a passing real-infrastructure CI run and independently attack its container boundary, including parent/child/grandchild survival and disk/PID exhaustion.
+1. Extend the passing real-infrastructure CI run to independently attack its container boundary, including parent/child/grandchild survival and disk/PID exhaustion.
 2. Replace the development Node executor in every production composition with the sandbox port; keep the enable switch fail-closed.
 3. Add production object-store artifact bytes and transactional linkage between artifact metadata, invocation completion, budget settlement, evidence, and events.
 4. Wire a real provider adapter into the bounded turn loop, then wire Prompt Architect, Coding Agent, and Independent Reviewer through the durable runtime.
