@@ -1809,8 +1809,6 @@ def _quarter_towers(cx, cy, sgn, seed, tag, H=None):
     # as isolated architectural fragments standing on lawn -- the brief's
     # "architectural fragments" was meant as a kind of place, not as debris.
     # A neighbourhood has ground under it, a wall around it and a way in.
-    out.append(A("garden_lawn", cx, cy, GROUND_Z, sxyz=(0.62 * sp, 0.52 * sp, 1.0),
-                 mat="MI_V2_Lawn", label="%s_Ground" % tag))
     # THE WALL IS THE FIRST THING DISTANCE TAKES. A perimeter wall is a line
     # of 14 pieces that subtends about a pixel at 300 m; a tower is a
     # silhouette. Walls, pilasters and the paved court belong to `court_p`.
@@ -2082,8 +2080,6 @@ def _quarter_clockyard(cx, cy, sgn, seed, tag, H=None):
             A("key_ornate", px, py, 128.0 * sc, yaw=40 * i, s=0.9 * sc, mat="MI_V2_Gold",
               label="%s_Key%d" % (tag, i)),
         ]
-    out.append(A("garden_lawn", cx, cy, GROUND_Z, sxyz=(0.55 * sp, 0.48 * sp, 1.0),
-                 mat="MI_V2_Lawn", label="%s_Ground" % tag))
     for k, yaw in enumerate((0.0, 90.0)):
         out.append(A("terrace_platform", cx, cy, -18.0, yaw=yaw,
                      sxyz=(1.15 * sp, 0.34 * sp, 0.35), mat="MI_V2_PlazaCream",
@@ -2238,8 +2234,6 @@ def _quarter_water(cx, cy, sgn, seed, tag, H=None):
             A("garden_urn", cx + math.cos(a) * d, cy + math.sin(a) * d, 100.0 * sc,
               s=0.5 * sc, mat="MI_V2_Ceramic", label="%s_PostUrn%d" % (tag, i)),
         ]
-    out.append(A("garden_lawn", cx, cy, GROUND_Z, sxyz=(0.62 * sp, 0.55 * sp, 1.0),
-                 mat="MI_V2_Lawn", label="%s_Ground" % tag))
     return out
 
 
@@ -2407,8 +2401,6 @@ def _quarter_tea(cx, cy, sgn, seed, tag, H=None):
                              40 * i, 1.0,
                              ("MI_V2_RosePink", "MI_V2_PetalWhite", "MI_V2_PetalViolet")[i % 3],
                              "%s_Bed%d" % (tag, i))
-    out.append(A("garden_lawn", cx, cy, GROUND_Z, sxyz=(0.5 * sp, 0.45 * sp, 1.0),
-                 mat="MI_V2_Lawn", label="%s_Ground" % tag))
     return out
 
 
@@ -2477,9 +2469,6 @@ def _quarter_court(cx, cy, sgn, seed, tag, H=None):
             A("clock_ornate", lx, ly, 150.0 * sc, yaw=yaw0 + 180, s=1.35 * sc,
               mat="MI_V2_Gold", label="%s_Clock" % tag),
         ]
-    out.append(A("garden_lawn", cx, cy, GROUND_Z, yaw=yaw0,
-                 sxyz=(w / 2800.0, d / 2400.0, 1.0),
-                 mat="MI_V2_Lawn", label="%s_Ground" % tag))
     return out
 
 
@@ -2578,8 +2567,6 @@ def _quarter_hamlet(cx, cy, sgn, seed, tag, H=None):
                              0, 45 * i, 1.0,
                              ("MI_V2_PetalPink", "MI_V2_PetalWhite", "MI_V2_Lavender")[i % 3],
                              "%s_Bed%d" % (tag, i))
-    out.append(A("garden_lawn", cx, cy, GROUND_Z, sxyz=(0.58 * sp, 0.52 * sp, 1.0),
-                 mat="MI_V2_Lawn", label="%s_Ground" % tag))
     return out
 
 
@@ -3654,6 +3641,52 @@ def _tree(x, y, seed, i, tag, sc=1.0, mix="wood"):
     return out
 
 
+#: WHAT IS UNDER THE PLAYER, PER PLACE TYPE.
+#:
+#: The aerial cameras keep showing long stretches of one continuous green, and
+#: the slab discovery proved that some of the intended variation was literally
+#: buried. The rest of it is that every quarter of every kind laid the same
+#: single `MI_V2_Lawn` tile: the ground said nothing about where you were.
+#:
+#: A place type is recognisable from its floor before it is recognisable from
+#: its skyline -- a wood has leaf litter, a village has worn earth in its
+#: lanes, a formal garden has mown lawn and a meadow has rough pasture -- so
+#: each kind gets a palette rather than a colour, laid as two or three
+#: overlapping tiles at different scales and angles so no seam repeats.
+#:
+#: (material, scale multiplier, offset multiplier) per tile.
+_GROUND_LANG = {
+    "garden":    (("MI_V2_Lawn", 1.00, 0.0), ("MI_V2_Meadow", 0.62, 0.55)),
+    "court":     (("MI_V2_Lawn", 1.00, 0.0), ("MI_V2_Lawn", 0.55, 0.62),
+                  ("MI_V2_Soil", 0.34, 0.70)),
+    "clockyard": (("MI_V2_Lawn", 0.92, 0.0), ("MI_V2_Meadow", 0.50, 0.60)),
+    "water":     (("MI_V2_Lawn", 1.00, 0.0), ("MI_V2_Moss", 0.58, 0.58)),
+    "lake":      (("MI_V2_Moss", 1.05, 0.0), ("MI_V2_Meadow", 0.60, 0.72)),
+    "tea":       (("MI_V2_Lawn", 0.92, 0.0), ("MI_V2_Meadow", 0.52, 0.58)),
+    "hamlet":    (("MI_V2_Meadow", 0.95, 0.0), ("MI_V2_Dirt", 0.52, 0.42),
+                  ("MI_V2_Lawn", 0.46, 0.68)),
+    "towers":    (("MI_V2_Lawn", 0.95, 0.0), ("MI_V2_Dirt", 0.44, 0.60)),
+    "grove":     (("MI_V2_Mulch", 0.95, 0.0), ("MI_V2_Moss", 0.62, 0.55)),
+    "wood":      (("MI_V2_Mulch", 1.10, 0.0), ("MI_V2_Mulch", 0.66, 0.62),
+                  ("MI_V2_Moss", 0.52, 0.78)),
+    "meadow":    (("MI_V2_Meadow", 1.15, 0.0), ("MI_V2_Meadow", 0.70, 0.66),
+                  ("MI_V2_Lawn", 0.48, 0.80)),
+}
+
+
+def _quarter_ground(cx, cy, kind, seed, tag, sp):
+    """The floor of one quarter, in its own kind's language."""
+    out = []
+    for i, (mat, ms, off) in enumerate(_GROUND_LANG.get(kind, _GROUND_LANG["garden"])):
+        a = 6.283 * _rnd(i, seed, 190)
+        r = off * 1800.0 * sp
+        out.append(A("garden_lawn", cx + math.cos(a) * r, cy + math.sin(a) * r,
+                     GROUND_Z - i, yaw=(seed * 23 + 47 * i) % 180,
+                     sxyz=(0.62 * sp * ms, 0.55 * sp * ms, 1.0),
+                     mat=mat, label="%s_Ground%d" % (tag, i)))
+    return out
+
+
 def _quarter_edge(s, H):
     """The band that turns a quarter into a PLACE with an outside.
 
@@ -4138,6 +4171,8 @@ def _outer_world():
     for s in SITES:
         H = _squeezed(HIER(s["x"], s["y"]), s.get("squeeze", 1.0))
         sgn = 1 if s["x"] >= 0 else -1
+        out += _quarter_ground(s["x"], s["y"], s["kind"], s["seed"], s["tag"],
+                               H["spacing"])
         out += _QUARTER_BUILDERS[s["kind"]](s["x"], s["y"], sgn, s["seed"], s["tag"], H=H)
         out += _quarter_edge(s, H)
     out += _road_tree(SITES)
@@ -4449,6 +4484,17 @@ def _country():
                     x = cx + math.cos(a) * rad * (1.0 + 0.6 * math.cos(lean))
                     y = cy + math.sin(a) * rad
                     out += _tree(x, y, k, i, "%s_Tree" % tag, sc=sc, mix="country")
+                # MULCH UNDER DENSE PLANTING. The founder's ground list names
+                # it and it is the cheapest way a tree mass reads as woodland
+                # from above rather than as trees standing on a lawn: two dark
+                # organic tiles under the canopy, at different angles.
+                for m in range(2):
+                    out.append(A("garden_lawn", cx + (m - 0.5) * 1500.0,
+                                 cy + (0.5 - m) * 1200.0, GROUND_Z - m,
+                                 yaw=(k * 31 + 53 * m) % 180,
+                                 sxyz=(0.72 - 0.18 * m, 0.62 - 0.15 * m, 1.0),
+                                 mat=("MI_V2_Mulch", "MI_V2_Moss")[m],
+                                 label="%s_Floor%d" % (tag, m)))
             elif pick < 0.70:
                 # A HEDGEROW, which is what turns open ground into fields
                 lean = _rnd(gx, gy, 104) * 3.1416
@@ -4550,6 +4596,13 @@ _HORIZON_TRIES = 150
 _HORIZON_SPACING = 9000.0
 
 
+#: The near band's own centres, so the far band can clear them. Their ridges
+#: reach 15,000 uu and the far band's reach 21,000, so two bands that merely
+#: do not overlap in RADIUS still put a tower through a hill -- the audit
+#: caught two.
+_HORIZON_AT = []
+
+
 def _horizon():
     r0, r1 = _HORIZON_BAND
     kept, out = [], []
@@ -4567,6 +4620,7 @@ def _horizon():
                for s in SITES):
             continue                          # and a quarter holds this
         kept.append((x, y))
+        _HORIZON_AT.append((x, y))
         tag = "Horizon%03d" % len(kept)
         pick = _rnd(k, 141, 2)
         if pick < 0.62:
@@ -4629,7 +4683,79 @@ def _horizon():
     return out
 
 
-HORIZON = _band("V2_Skyline", _horizon())
+# ---------------------------------------------------------------------------
+# THE FAR HORIZON  (founder: "a broad flat outer plane beyond the developed
+# environment ... it should NOT look like developed Wonderland -> abrupt green
+# development plane -> horizon")
+# ---------------------------------------------------------------------------
+#
+# The scenic band runs to 580 m and the GROUND SLAB runs to 1,500 m, so beyond
+# the last ridge there is nearly a kilometre of flat green in every direction
+# before the world ends at a line. Fog alone has not closed it: the aerial
+# frames read developed world, then plane, then a hard edge against the sea
+# band.
+#
+# The answer is not another five kilometres of Wonderland. It is FORM at the
+# distance where only form survives: a handful of very large, very sparse
+# masses from 650 m to 1,150 m -- wooded ridges and the odd tall silhouette at
+# eight to fourteen times normal scale, which at that range read as hills with
+# trees on them. Twenty of them, every piece instanced.
+
+_FAR_HORIZON_BAND = (72000.0, 118000.0)
+_FAR_HORIZON_TRIES = 90
+_FAR_HORIZON_SPACING = 26000.0
+
+
+def _far_horizon():
+    r0, r1 = _FAR_HORIZON_BAND
+    kept, out = [], []
+    for k in range(_FAR_HORIZON_TRIES):
+        u = (k + 0.5) / _FAR_HORIZON_TRIES
+        r = math.sqrt(r0 * r0 + (r1 * r1 - r0 * r0) * u)
+        b = (k * 137.50776405 + 7.0 * _rnd(k, 151, 1)) % 360.0
+        a = math.radians(b)
+        x, y = math.cos(a) * r, math.sin(a) * r
+        if any((qx - x) ** 2 + (qy - y) ** 2 < _FAR_HORIZON_SPACING ** 2
+               for (qx, qy) in kept):
+            continue
+        if any((qx - x) ** 2 + (qy - y) ** 2 < 36000.0 ** 2
+               for (qx, qy) in _HORIZON_AT):
+            continue                          # the near band holds this ground
+        kept.append((x, y))
+        tag = "FarHorizon%03d" % len(kept)
+        lean = _rnd(k, 151, 2) * 3.1416
+        # A RIDGE, at the scale that reads at a kilometre. hedge_mass is 6.4 m
+        # across at scale 1; at 8-14 it is a 50-90 m wooded mass, which is a
+        # hill with trees on it and costs one instance.
+        n = 6 + int(5 * _rnd(k, 151, 3))
+        for i in range(n):
+            t = -0.5 + i / float(n - 1)
+            rx = t * (26000.0 + 16000.0 * _rnd(k, 151, 4))
+            ry = (_rnd(i, k, 152) - 0.5) * 7000.0
+            s = 8.0 + 6.0 * _rnd(i, k, 153)
+            out.append(A("hedge_mass",
+                         x + rx * math.cos(lean) - ry * math.sin(lean),
+                         y + rx * math.sin(lean) + ry * math.cos(lean), -900.0,
+                         yaw=math.degrees(lean) + 14.0 * _rnd(i, k, 154),
+                         sxyz=(s, s * 0.72, s * (0.40 + 0.30 * _rnd(i, k, 155))),
+                         mat=("MI_V2_LeafDark", "MI_V2_LeafMid")[i % 2],
+                         label="%s_Ridge%d" % (tag, i)))
+        # and now and then something standing on one
+        if _rnd(k, 151, 6) < 0.34:
+            for i in range(2):
+                h = 5.0 + 3.0 * _rnd(i, k, 157)
+                tx = x + (i - 0.5) * 3400.0
+                out += [
+                    A("tower_capped", tx, y, 0, yaw=_rnd(i, k, 158) * 360.0, s=h,
+                      mat="MI_V2_IvoryStone", label="%s_Tower%d" % (tag, i)),
+                    A("roof_cone_steep", tx, y, 1100.0 * h, s=h,
+                      mat=("MI_V2_RoofPink", "MI_V2_RoofNavy")[i % 2],
+                      label="%s_TowerCap%d" % (tag, i)),
+                ]
+    return out
+
+
+HORIZON = _band("V2_Skyline", _horizon() + _far_horizon())
 
 
 def _ground_quilt():
