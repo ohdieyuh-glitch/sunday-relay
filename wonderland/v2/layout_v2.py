@@ -694,12 +694,20 @@ def _parterre(sgn, cx, cy, seed, tag):
         # what fills it
         out.append(A("rose_bush", bx, by, 60, yaw=40 * i, s=0.85,
                      mat="MI_V2_LeafMid", label="%s_Bed%d_Rose" % (tag, i)))
-        for k in range(3):
+        # SEVEN, not three. FlankLeftCam08's first render showed a bed of
+        # three blooms reading as three pink dots sitting on grass -- the
+        # reference's beds are FULL, the planting is the bed. Filled to the
+        # edges with a mix of clusters, blossom and lavender so the bed has
+        # colour AND texture rather than four copies of one puff.
+        for k in range(7):
             a = _rnd(i, k, seed) * 6.283
-            out.append(A("flower_cluster",
-                         bx + math.cos(a) * 175.0, by + math.sin(a) * 175.0, 40,
-                         yaw=_rnd(i, k, seed + 1) * 360.0, s=0.55 + 0.2 * _rnd(i, k, seed + 2),
-                         mat=petals[(i + k) % 4], label="%s_Bed%d_Flower%d" % (tag, i, k)))
+            r = 90.0 + 145.0 * _rnd(i, k, seed + 20)
+            kind = ("flower_cluster", "blossom_cluster", "lavender_heads")[k % 3]
+            out.append(A(kind,
+                         bx + math.cos(a) * r, by + math.sin(a) * r, 40,
+                         yaw=_rnd(i, k, seed + 1) * 360.0, s=0.5 + 0.24 * _rnd(i, k, seed + 2),
+                         mat=petals[(i + k) % 4] if kind != "lavender_heads" else "MI_V2_Lavender",
+                         label="%s_Bed%d_Flower%d" % (tag, i, k)))
         # a ball of clipped box at the bed's inner corner: the rhythm that
         # tells the eye the four beds are one composition
         out.append(A("topiary_ball", bx - sgn * qx * q * 0.42, by - qy * q * 0.42, 0,
@@ -852,6 +860,40 @@ def _flank(sgn, tag):
         A("topiary_cone_plain", sgn * 2650, 40, 0, s=0.85, mat="MI_V2_LeafDark", label="%s_EntryConeA" % tag),
         A("topiary_cone_plain", sgn * 2650, 760, 0, s=0.85, mat="MI_V2_LeafDark", label="%s_EntryConeB" % tag),
     ]
+    # THE FLANK CAMERAS STOOD ON BARE GROUND. FlankLeftCam08 sits at
+    # y = -1,250 and the flank's first content was the parterre's near bed at
+    # y = -70: twelve metres of empty lawn across the bottom 40% of the first
+    # frame. Exactly the defect the offline preview caught for RearWorldCam10
+    # an hour earlier -- and I fixed that one and did not think to check these
+    # two, which is the same mistake as fixing an instance instead of a class.
+    # The near field is now the start of the sequence rather than the run-up
+    # to it: a flowering bank across the approach, trees framing both sides,
+    # and a mushroom at the outer corner.
+    out += [
+        A("tree_mature_trunk", sgn * 3150, -1450, 0, yaw=200, s=1.05, mat="MI_V2_Bark",
+          label="%s_NearTreeA_Trunk" % tag),
+        A("canopy_large", sgn * 3150, -1450, 1240, yaw=40, s=1.1, mat="MI_V2_LeafMid",
+          label="%s_NearTreeA_Canopy" % tag),
+        A("tree_slender_trunk", sgn * 6000, -1350, 0, yaw=70, s=1.0, mat="MI_V2_Bark",
+          label="%s_NearTreeB_Trunk" % tag),
+        A("canopy_medium", sgn * 6000, -1350, 810, yaw=120, s=1.15, mat="MI_V2_LeafLight",
+          label="%s_NearTreeB_Canopy" % tag),
+    ] + [
+        # a flowering bank across the near approach, low so it does not wall
+        # the room off -- the eye goes over it to the parterre beyond
+        A(("shrub_flowering", "hedge_block", "rose_bush")[i % 3],
+          sgn * (3400 + 420 * i), -900 + 90 * ((i % 2) * 2 - 1), 0,
+          yaw=90 + 12 * i, s=0.9,
+          mat=("MI_V2_LeafMid", "MI_V2_LeafDark", "MI_V2_LeafMid")[i % 3],
+          label="%s_NearBank%d" % (tag, i))
+        for i in range(7)
+    ] + [
+        A("ground_flowers", sgn * (3600 + 560 * i), -640, 0, yaw=55 * i, s=1.05,
+          mat=("MI_V2_PetalViolet", "MI_V2_PetalWhite", "MI_V2_PetalPink")[i % 3],
+          label="%s_NearFlowers%d" % (tag, i))
+        for i in range(5)
+    ]
+    out += _mushroom_cluster(sgn, sgn * 6400, -1750, 4900 if sgn > 0 else 5000, "%s_NearMush" % tag)
     out += _parterre(sgn, sgn * 4350, 700, 4100 if sgn > 0 else 4200, "%s_Parterre" % tag)
     out += _rose_walk(sgn, 3050, 1900, 5900, 4300, "%s_Walk" % tag)
     out += _grove(sgn, sgn * 5450, 3650, 4400 if sgn > 0 else 4500, "%s_Grove" % tag)
