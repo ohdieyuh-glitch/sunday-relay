@@ -329,3 +329,56 @@ LOW:
 - the fps harness opens the default map and reports BATCHES=0 -- the numbers
   above came from the capture runs, which report 117; worth fixing before the
   fps figures are trusted for a world-density decision.
+
+---
+
+# PASS 09 — the ground becomes a place (scoped, not started)
+
+The HIGH gap after PASS 08 is that the ground reads as a void from any
+elevated camera. That is content, not tint, and PASS 08b's colour correction
+does not touch it. Measured off the layout, the way the castle approach was
+measured before W1:
+
+| region | actors | area | density |
+|---|---|---|---|
+| plaza / arrival (\|x\|<25 m, y −15…17) | 257 | 1,600 m² | 1 per **6 m²** |
+| castle approach (\|x\|<25 m, y 17…90) | 199 | 3,650 m² | 1 per **18 m²** |
+| left flank (x 25…80, y −20…90) | 34 | 6,050 m² | 1 per **178 m²** |
+| right flank (x −80…−25, y −20…90) | 38 | 6,050 m² | 1 per **159 m²** |
+| behind spawn (\|x\|<80, y −90…−20) | 30 | 11,200 m² | 1 per **373 m²** |
+
+**W1 worked.** The castle approach was 0 actors over 3,650 m² when it was
+audited; it is now 199, one per 18 m², and the founder's "empty lawn between
+garden gates and castle" is closed. The emptiness did not go away, it moved
+outward: the flanks and the ground behind the spawn are 10–60× sparser than
+the plaza and cover **23,300 m²** against the plaza's 1,600. That is the green
+(now brown) expanse SkylineCam06 shows, and it is 45% of that camera's frame.
+
+Targets, in the same units, chosen so each region reads as what it is rather
+than as a copy of the plaza:
+
+- flanks: 1 per **50 m²** — a garden, airier than a plaza, denser than a lawn.
+  About +87 actors each.
+- behind spawn: 1 per **90 m²** — scenic, off the primary route. About +94.
+
+Roughly 270 new placements from the existing kit, no new asset language:
+hedge rooms, flowering beds, tree groups, topiary, mushroom clusters,
+secondary gates, low walls, and paths that connect them so the space is
+walkable rather than looked at. Density is not the goal and the number is not
+a quota — the founder's rule is that dense does not mean cluttered, and the
+flanks must keep breathing room and clear movement lanes for a social space.
+
+Two things must be settled in the same pass, because they are the same
+question of where Wonderland ends:
+
+1. **The 1.2 km ground slab's edge is visible** at frame right on
+   SkylineCam06. Filling the flanks moves the eye but does not remove an edge.
+2. **Terrain.** The ground is one flat engine cube. Real land would let the
+   flanks read as landscape rather than as objects on a table — but any
+   undulation has to keep every route walkable, and the locomotion phase
+   already proved that a 60 uu riser nobody planned makes a district
+   unreachable. Terrain is therefore proposed, not assumed, and it comes with
+   a traversal re-check.
+
+Not in this pass: districts beyond Golden Arrival. The founder's sequencing is
+that Golden Arrival reaches founder-quality first.
