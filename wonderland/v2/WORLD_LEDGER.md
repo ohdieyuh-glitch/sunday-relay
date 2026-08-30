@@ -1018,3 +1018,65 @@ capture 0 / 6 / 11 / 12 for the world, then 13-18 for the districts.
     written. `measure-fps.sh` has still never been run.
 12. Two landmarks stand inside hedges in Golden Arrival (`ClockTree_Clock`,
     `Tower_R0`). Both predate this work and both are approved ground.
+
+## PASS 23 e-g — routes, the approach's shoulders, and the kinds that were thin
+
+**District lanes.** The road tree gets you across the world and the ring closes
+its loops; neither makes the seven clockyards of the Clock Quarter feel like
+one place. A lane is 1.8 m against a road's 3, links quarters of the same
+district in a nearest-neighbour chain, skips any leg that would cross a third
+quarter, and carries a waymark at each end. 21 of them.
+
+`_crosses_quarter` is written once now and used by the ring and the lanes,
+because the first two road builders each learned it separately. And the road
+audit was matching two label forms, so the north way and the lanes -- 32 roads
+-- had never been checked at all. It matches `_Seg` now: **403 segments in 139
+roads, 0 crossings.**
+
+**The approach's shoulders** (ledger item: "empty lawn between the garden gates
+and the castle"). Measured per hectare of solid placements:
+
+| | before | after |
+|---|---|---|
+| the corridor, \|x\| < 25 m, y 17-95 m | 713 | 713 (untouched) |
+| LEFT of it, x 25-70 m | 362 | **444** |
+| RIGHT of it | 330 | **427** |
+| the flank beside the plaza, same offset | 505 | 505 |
+
+W1 gave the approach a fountain court, hedge masses and cross-axes and every
+one of them is ON the axis; its shoulders were never planted. `APPROACH_SIDES`
+is an added BAND, not an edit, and stops 28 m clear of the corridor.
+
+**The plaza-side walls** (ledger, MEDIUM). `_dress_wall` was written for this
+exact complaint, made twice by the founder, and had been used on the rear wall
+and the flank edges and never on SideWall or FrontWall -- both of which are in
+ReverseCam03's frame. 48 pieces of pilaster, cap course and planting, again as
+an added band; the plaza-clean gate confirms nothing entered PLAZA_RECT.
+
+**The thin kinds.** Mean placements per quarter by kind said which ones had an
+identity and a landmark and then stopped:
+
+| kind | before | after | what it gained |
+|---|---|---|---|
+| hamlet | 44 | **65** | a front garden and a lane per house; a market cross; an arch |
+| tea | 52 | **70** | a balustrade round the terrace, lanterns, the rest of the service |
+| water | 59 | **75** | a rill and a lower basin -- one fountain in a lawn is an object |
+| clockyard | 58 | **77** | the HOUR RING (twelve kerbs, four quarter-hour plinths) and a colonnade |
+| grove | 52 | **73** | a WINDING PATH -- the founder's own word -- with understory at its edge |
+
+## Standing at the end of PASS 23
+
+| | phase start | now |
+|---|---|---|
+| placements | 4,590 | **9,734** |
+| **actors** | 2,123 | **608** |
+| quarters | 32, three kinds | **61, ten kinds, fourteen named districts** |
+| populated 50 m bands | 4 of 7 (0-350 m) | **12 of 12 (0-600 m)** |
+| world emptiness (tier-scaled) | not measurable | 3,168 m2 of 40.7 ha |
+| cameras | 13 | **21** |
+| roads | 70 | **139, 0 crossing a quarter they do not serve** |
+| destinations / quarters unreachable | 0 of 18 / n/a | **0 of 30 / 0 of 61** |
+
+Golden Arrival's eleven composition bands still hash byte-identical to the
+commit before this phase. Four bands are added (GROUND_QUILT extended, SKY's
+balloons, HORIZON, APPROACH_SIDES, PLAZA_WALL_DRESS) and each is recorded.
