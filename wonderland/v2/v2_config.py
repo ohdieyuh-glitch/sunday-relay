@@ -159,12 +159,31 @@ HERO_CAMS = [
      "fov": 90.0, "tags": ("FlankRightCam09", "HeroCam9")},
     {"name": "RearWorldCam10", "location": (0.0, -9400.0, 320.0), "rotation": (-3.0, 90.0, 0.0),
      "fov": 90.0, "tags": ("RearWorldCam10", "HeroCam10")},
+    # ---- THE WORLD, not the district -------------------------------------
+    #
+    # SkylineCam06 pitches down 22 degrees from 24 m and its frame is filled
+    # by the near district: it is the right camera for Golden Arrival's
+    # composition and the wrong one for asking whether Wonderland is a world.
+    # The outer quarters stand at 95-175 m and barely reach its edges. This
+    # one stands high and far enough back to hold the district, the ring of
+    # quarters, the roads between them and the horizon in one frame -- which
+    # is the only view that answers the question the founder keeps asking.
+    #
+    # It does not replace SkylineCam06 and SkylineCam06 does not move. A
+    # regression camera and a world camera are different instruments.
+    {"name": "WorldCam11", "location": (0.0, -21000.0, 9500.0), "rotation": (-19.0, 90.0, 0.0),
+     "fov": 95.0, "tags": ("WorldCam11", "HeroCam11")},
+    # and one from directly above the district's shoulder, looking across the
+    # ring, so the quarters read as PLACES rather than as a texture
+    {"name": "WorldCam12", "location": (-13500.0, -13500.0, 6200.0), "rotation": (-16.0, 45.0, 0.0),
+     "fov": 92.0, "tags": ("WorldCam12", "HeroCam12")},
 ]
 #: The suite's names by index -- the filing tool and the checkpoint report use
 #: them; the capture tooling uses the "HeroCamN" tags.
 CAM_SUITE = ("HeroCam0", "PlayerCam01", "PathCam02", "ReverseCam03",
              "GardenLeft04", "GardenRight05", "SkylineCam06", "ScaleCam07",
-             "FlankLeftCam08", "FlankRightCam09", "RearWorldCam10")
+             "FlankLeftCam08", "FlankRightCam09", "RearWorldCam10",
+             "WorldCam11", "WorldCam12")
 #: HeroCam0's frozen transform (the founder benchmark) -- verify_v2_layout
 #: refuses a drift of the entry above from these values.
 HERO_CAM0_FROZEN = ((0.0, -150.0, 262.0), (-2.0, 90.0, 0.0), 100.0)
