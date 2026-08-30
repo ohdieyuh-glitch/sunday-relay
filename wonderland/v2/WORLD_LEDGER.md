@@ -1111,8 +1111,8 @@ FALLING BACK to one, not by choosing it.
 
 | | phase start | now |
 |---|---|---|
-| placements | 4,590 | **9,830** |
-| **actors** | 2,123 | **612** |
+| placements | 4,590 | **9,839** |
+| **actors** | 2,123 | **620** |
 | quarters | 32, three kinds | **60, eleven kinds, fourteen named districts** |
 | recipes | 117 | **121** (balloons, signpost, bench) |
 | populated 50 m bands | 4 of 7 (0-350 m) | **13 of 13 (0-650 m)** |
