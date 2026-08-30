@@ -1397,6 +1397,41 @@ def light_and_air(actors, layers):
         except Exception:
             pass
         assign_layer(bl, "V2_Skyline", layers)
+    # THE CANOPY FILL: shadowless, from the anti-sun direction, slightly down.
+    # See v2_config.LOOK -- an upward bounce cannot light a vertical shadow
+    # side, and under a canopy the SkyLight is occluded by the leaves
+    # themselves, so a shadow side of a leaf receives nothing at all.
+    if float(L.get("canopyFillLux", 0.0)) > 0.0:
+        cf = actors.spawn_actor_from_class(
+            unreal.DirectionalLight, vec((0, 0, 900)),
+            rot(float(L["canopyFillPitch"]), float(L["sunYaw"]) + 180.0, 0))
+        cf.set_actor_label("V2_CanopyFill")
+        cc = cf.get_component_by_class(unreal.DirectionalLightComponent)
+        if cc is not None:
+            try:
+                cc.set_mobility(unreal.ComponentMobility.MOVABLE)
+            except Exception:
+                pass
+            try:
+                cc.set_intensity(float(L["canopyFillLux"]))
+            except Exception:
+                set_prop(cc, "Intensity", float(L["canopyFillLux"]))
+            r, g, b = L["canopyFillColor"]
+            set_prop(cc, "LightColor", unreal.Color(int(r), int(g), int(b), 255))
+            set_prop(cc, "bUseTemperature", False)
+            set_prop(cc, "CastShadows", False)
+            set_prop(cc, "bAtmosphereSunLight", False)
+            set_prop(cc, "VolumetricScatteringIntensity", 0.0)
+            set_prop(cc, "bCastVolumetricShadow", False)
+        try:
+            cf.set_folder_path(unreal.Name("V2/Light"))
+        except Exception:
+            pass
+        assign_layer(cf, "V2_Skyline", layers)
+        LOG("V2 LIGHT: canopy fill %.0f lux from yaw %.0f pitch %.0f, shadowless"
+            % (float(L["canopyFillLux"]), float(L["sunYaw"]) + 180.0,
+               float(L["canopyFillPitch"])))
+
     sky = actors.spawn_actor_from_class(unreal.SkyAtmosphere, vec((0, 0, 0)), rot(0, 0, 0))
     sky.set_actor_label("V2_SkyAtmosphere")
     sac = sky.get_component_by_class(unreal.SkyAtmosphereComponent)

@@ -325,7 +325,11 @@ LOOK = {
     # since has been compounding shade on shade. Shadow STRUCTURE is worth
     # keeping -- it is what PASS 08 bought and the frame was flat without it --
     # so this lifts the hemisphere rather than flattening the sun.
-    "skyLightIntensity": 0.72, "exposureBias": 0.0,
+    # PASS 24: 0.95. The world tripled its vegetation since 0.72 was chosen and
+    # open shade went with it; this lifts the hemisphere again rather than
+    # flattening the sun, which is the same call PASS 08c made for the same
+    # reason. It cannot reach under a canopy -- that is the canopy fill's job.
+    "skyLightIntensity": 0.95, "exposureBias": 0.0,
     # PASS 05 (2026-08-28, gated WLV2_PASS05=1 like the earlier passes): the
     # vegetation's black interiors. V2_PASS_024 measured the canopies at luma
     # p10 0 / p50 3-12 against the reference's 17-19 / 40-63 WITH the sky dome
@@ -357,7 +361,38 @@ LOOK = {
     # shade read. Ungated because a build's LOOK must not depend on an env
     # var that the capture path sets and the playtest path does not.
     "bounceLight": 1,
-    "bounceLux": 1200.0, "bounceColor": (255, 235, 200), "bouncePitch": 90.0,
+    # PASS 24: 2,400, and less warm. The bounce is the only light that reaches
+    # a downward-facing surface here and the world has tripled its canopy since
+    # this was set; the tint moves off cream because what bounces up under a
+    # tree is a LAWN, and the founder's target says the shade must keep a
+    # visible green hue.
+    "bounceLux": 2400.0, "bounceColor": (238, 244, 214), "bouncePitch": 90.0,
+    # ---- THE CANOPY FILL (PASS 24) -----------------------------------------
+    #
+    # MEASURED, and it is the reason the district frames collapse to black.
+    # `ShowFlag.DirectLighting 0` on MushroomGroveCam14 took the foreground
+    # from luma 0.0529 to 0.0031: with the direct lights off there is
+    # essentially NOTHING there. The ambient contribution under a canopy is
+    # zero, because the SkyLight is a sky-only real-time capture, the canopy
+    # occludes the sky above it, and there is no bounce to replace it --
+    # `r.Lumen.ScreenProbeGather.ShortRangeAO 0` and `r.Lumen.SkylightLeaking
+    # 0.35` moved that same frame from p50 7.7 to 8.0, i.e. not at all, so
+    # Lumen contributes nothing on this Vulkan SM5 runtime.
+    #
+    # PASS 05c identified the missing light exactly and never built it: "an
+    # upward light cannot reach a vertical face. What lights a shadow side is
+    # the SKY", and the leaf cloud occludes the sky on itself. So this is a
+    # shadowless directional from the ANTI-SUN direction, slightly down, which
+    # is the only thing that lights a shadow side without touching a sunlit
+    # one.
+    #
+    # 4,500 lux against a 60,000 lux key is 7.5%. The failure this project has
+    # hit three times is a fill that becomes MOST of the key and destroys the
+    # shade; this is a twelfth of it, and it lifts black to readable rather
+    # than flattening anything. The colour is a cool leaf-white so the shade
+    # keeps the green the boards show.
+    "canopyFillLux": 4500.0, "canopyFillColor": (214, 236, 220),
+    "canopyFillPitch": -18.0,
     # PASS 05c (gated WLV2_PASS05=1): the bounce light WORKS (V2_PASS_027: the
     # mushroom cap's underside p50 1 -> 26) but the canopy faces HeroCam0 sees
     # are SHADOW SIDES -- both trees are backlit, the sun sits ahead-right-

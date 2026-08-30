@@ -993,6 +993,47 @@ def _grove(sgn, cx, cy, seed, tag, count=5, H=None):
     return out
 
 
+#: WHERE A 20 m MUSHROOM BELONGS.
+#:
+#: They are the best Wonderland-scale identifier this world has and they had
+#: become background streetlights: 31 of them, and counted by district the
+#: distribution was backwards -- Royal Gardens 5, East Reach 5, and the
+#: MUSHROOM GROVE 2. A landmark that stands everywhere identifies nothing.
+#:
+#: So they belong to the wild half of the world. The formal districts -- the
+#: royal gardens, the clock quarter, the water gardens, the tea terraces, the
+#: tower rise, the lantern hamlets -- get none at all, and their landmark is
+#: their own architecture. And they come in three sizes rather than one:
+#:
+#:   HERO    2.6-3.2   a handful, one per wild district at most, sited
+#:   MEDIUM  1.3-1.7   the ordinary giant of a wood
+#:   (small) the garden-scale `mushroom_landmark` everywhere else
+_MUSH_DISTRICTS = ("Mushroom Grove", "The Long Woods", "West Wood", "North Reach",
+                   "Far Orchards", "South Meadows", "East Reach", "Gatekeeper Fields")
+#: The one district whose giants are its whole identity gets the heroes.
+_MUSH_HERO_DISTRICT = "Mushroom Grove"
+
+
+#: uu. The ONE hero, filled in once SITES exists: the grove of the Mushroom
+#: Grove standing nearest that district's own seed radius. A hierarchy needs a
+#: top and a hash cannot choose one.
+_MUSH_HERO_AT = None
+
+
+def _giant_tier(x, y):
+    """(allowed, scale multiplier) for a giant mushroom at this place."""
+    d = _district_of(x, y)[0]
+    if d not in _MUSH_DISTRICTS:
+        return (False, 0.0)
+    if _MUSH_HERO_AT is not None and \
+            math.hypot(x - _MUSH_HERO_AT[0], y - _MUSH_HERO_AT[1]) < 1500.0:
+        return (True, 2.55)                   # THE hero: ~26 m across
+    if d == _MUSH_HERO_DISTRICT:
+        return (True, 1.75)
+    # one in three of the wild quarters carries one, and it is a medium
+    return (_rnd(round(x / 400.0), round(y / 400.0), 181) < 0.42, 1.0)
+
+
 def _giant_mushroom(x, y, seed, tag, s=1.0, tint="MI_V2_MushRed"):
     """The landmark, all four of its pieces at one transform.
 
@@ -1812,9 +1853,10 @@ def _quarter_grove(cx, cy, sgn, seed, tag, H=None):
     # real 20 m cap; nearer ones keep the garden-scale family so the giants
     # stay rare enough to be landmarks.
     gx, gy = cx + sgn * 700.0 * sp, cy + 500.0 * sp
-    if H["landmark_scale"] > 1.22 or _district_of(cx, cy)[0] == "Mushroom Grove":
+    allowed, tier = _giant_tier(cx, cy)
+    if allowed:
         out += _giant_mushroom(gx, gy, seed + 30, "%s_Giant" % tag,
-                               s=(0.85 + 0.35 * _rnd(seed, 8, 1)) * H["landmark_scale"] * 0.9,
+                               s=(0.85 + 0.35 * _rnd(seed, 8, 1)) * tier * 0.95,
                                tint=("MI_V2_MushRed", "MI_V2_MushTerracotta",
                                      "MI_V2_MushPurple")[seed % 3])
     out += _mushroom_cluster(sgn, cx - sgn * 900.0 * sp, cy - 800.0 * sp, seed + 30,
@@ -1898,19 +1940,7 @@ def _quarter_wood(cx, cy, sgn, seed, tag, H=None):
         ux, uy = math.cos(a) * rad * ax, math.sin(a) * rad
         x = cx + ux * math.cos(lean) - uy * math.sin(lean)
         y = cy + ux * math.sin(lean) + uy * math.cos(lean)
-        t = 1.05 + 0.55 * _rnd(i, seed, 23)
-        if _rnd(i, seed, 24) > 0.42:
-            out.append(A("tree_mature_trunk", x, y, 0, yaw=_rnd(i, seed, 25) * 360.0,
-                         s=t * sc, mat="MI_V2_Bark", label="%s_Trunk%d" % (tag, i)))
-            out.append(A("canopy_large", x, y, 1320 * t * sc, yaw=_rnd(i, seed, 26) * 360.0,
-                         s=t * sc * 1.25, mat=_leaf(i, seed),
-                         label="%s_Canopy%d" % (tag, i)))
-        else:
-            out.append(A("tree_slender_trunk", x, y, 0, yaw=_rnd(i, seed, 27) * 360.0,
-                         s=t * sc, mat="MI_V2_Bark", label="%s_Slim%d" % (tag, i)))
-            out.append(A("canopy_medium", x, y, 800 * t * sc, yaw=_rnd(i, seed, 28) * 360.0,
-                         s=t * sc * 1.3, mat=_leaf(i, seed, 5),
-                         label="%s_SlimCanopy%d" % (tag, i)))
+        out += _tree(x, y, seed, i, "%s_Tree" % tag, sc=sc, mix="wood")
     # the ridge: a mass along the wood's long axis that gives it a top edge
     for i in range(_n(6, 0.6 + 0.7 * H["veg"], 3)):
         t = -0.5 + i / float(max(1, _n(6, 0.6 + 0.7 * H["veg"], 3) - 1))
@@ -1927,13 +1957,23 @@ def _quarter_wood(cx, cy, sgn, seed, tag, H=None):
     lx, ly = cx + sgn * 1500.0 * sp, cy - 1200.0 * sp
     ls = H["landmark_scale"]
     pick = _vnoise(cx, cy, 7000.0, 5501)
-    if pick < 0.40:
+    allowed, tier = _giant_tier(cx, cy)
+    if pick < 0.40 and allowed:
         out.append(A("stone_ring_base", lx, ly, -2, s=1.6 * ls, mat="MI_V2_Stone",
                      label="%s_Ring" % tag))
         out += _giant_mushroom(lx, ly, seed + 41, "%s_Giant" % tag,
-                               s=(0.9 + 0.4 * _rnd(seed, 8, 2)) * ls * 0.9,
+                               s=(0.9 + 0.4 * _rnd(seed, 8, 2)) * tier * 0.95,
                                tint=("MI_V2_MushRed", "MI_V2_MushPurple",
                                      "MI_V2_MushTerracotta")[seed % 3])
+    elif pick < 0.40:
+        # a wood outside the mushroom country still wants a marker, at the
+        # scale of a garden ornament rather than a landmark
+        out += [
+            A("stone_ring_base", lx, ly, -2, s=1.0 * ls, mat="MI_V2_Stone",
+              label="%s_Ring" % tag),
+            A("mushroom_landmark", lx, ly, 0, yaw=_rnd(seed, 1, 2) * 360.0, s=1.3 * ls,
+              mat="MI_V2_MushTerracotta", label="%s_Landmark" % tag),
+        ]
     elif pick < 0.74:
         h = 1.30 * ls * H["skyline"] / 1.28
         out += [
@@ -2578,13 +2618,7 @@ def _quarter_meadow(cx, cy, sgn, seed, tag, H=None):
         a = 6.283 * _rnd(i, seed, 13)
         r = (1200.0 + 2400.0 * _rnd(i, seed, 14)) * sp
         x, y = cx + math.cos(a) * r, cy + math.sin(a) * r
-        t = (1.15 + 0.5 * _rnd(i, seed, 15)) * sc
-        out += [
-            A("tree_mature_trunk", x, y, 0, yaw=_rnd(i, seed, 16) * 360.0, s=t,
-              mat="MI_V2_Bark", label="%s_Tree%d" % (tag, i)),
-            A("canopy_large", x, y, 1320.0 * t, yaw=_rnd(i, seed, 17) * 360.0, s=t * 1.2,
-              mat=_leaf(i, seed, 2), label="%s_TreeCanopy%d" % (tag, i)),
-        ]
+        out += _tree(x, y, seed, i, "%s_Tree" % tag, sc=sc * 1.1, mix="meadow")
     # drifts, not beds: long smears of one colour, which is what a meadow is
     for i in range(_n(7, 0.6 + 0.9 * H["veg"], 3)):
         a = lean + 0.5 * (i - 3)
@@ -2616,27 +2650,72 @@ def _quarter_meadow(cx, cy, sgn, seed, tag, H=None):
     return out
 
 
-def _road(x0, y0, x1, y1, width, tag, n=None):
+#: A ROAD HAS A CHARACTER, and the character says where it goes.
+#:
+#: 139 roads is enough infrastructure to expose the next problem: every one of
+#: them was the same two cream slabs alternating, at whatever width its caller
+#: passed. A player crossing this world could not tell a royal approach from a
+#: track through a wood, and a road that does not say where it leads is
+#: navigation furniture rather than a place.
+#:
+#: One FAMILY -- always terrace_platform, always the plaza tints -- with six
+#: contextual variations, because a different material every hundred metres is
+#: the other failure. What changes is the surface mix, the width, how long a
+#: slab runs, and whether the way has a kerb:
+#:
+#:   royal    pale formal stone, kerbed, long slabs      the castle approach
+#:   ring     the navigational backbone: warm, kerbed    recognisable anywhere
+#:   garden   smaller elegant paving, kerbed             between garden rooms
+#:   court    grey architectural paving, kerbed          tower districts
+#:   wood     narrow, warm-grey, unkerbed, short slabs   organic, through trees
+#:   trail    narrowest, shaded stone, unkerbed          meadow and open country
+_ROAD_STYLE = {
+    "royal":  (("MI_V2_PlazaCream", "MI_V2_PlazaCream", "MI_V2_PlazaWarm"), 1.00, 1500.0, True),
+    "ring":   (("MI_V2_PlazaWarm", "MI_V2_PlazaCream", "MI_V2_PlazaWarm"), 0.92, 1400.0, True),
+    "garden": (("MI_V2_PlazaCream", "MI_V2_PlazaWarm", "MI_V2_PlazaGrey"), 0.80, 1000.0, True),
+    "court":  (("MI_V2_PlazaGrey", "MI_V2_PlazaCream", "MI_V2_PlazaGrey"), 0.86, 1200.0, True),
+    "wood":   (("MI_V2_PlazaWarm", "MI_V2_PlazaShade", "MI_V2_PlazaWarm"), 0.62, 820.0, False),
+    "trail":  (("MI_V2_PlazaShade", "MI_V2_PlazaWarm", "MI_V2_PlazaShade"), 0.52, 900.0, False),
+}
+#: Which style a road serving this KIND of place wears.
+_ROAD_STYLE_FOR = {"garden": "garden", "court": "garden", "clockyard": "court",
+                   "towers": "court", "hamlet": "court", "water": "garden",
+                   "lake": "garden", "tea": "garden", "grove": "wood",
+                   "wood": "wood", "meadow": "trail"}
+
+
+def _road(x0, y0, x1, y1, width, tag, n=None, style="ring"):
     """A paved way between two points, laid as segments along its run.
 
     Roads are what make a ring of quarters a WORLD rather than a set of
     islands: the founder's test is that a player should feel 'I can keep
     going', and that is a question about connection, not about content.
     """
+    mats, wmul, seg_len, kerbed = _ROAD_STYLE.get(style, _ROAD_STYLE["ring"])
+    width = width * wmul
     out = []
     dx, dy = x1 - x0, y1 - y0
     length = math.hypot(dx, dy)
     if n is None:
-        n = max(1, int(length / 1400.0))
+        n = max(1, int(length / seg_len))
     yaw = math.degrees(math.atan2(dy, dx))
+    ux, uy = (dx / length, dy / length) if length else (1.0, 0.0)
     for i in range(n):
         t0, t1 = i / float(n), (i + 1) / float(n)
         cx, cy = x0 + dx * (t0 + t1) * 0.5, y0 + dy * (t0 + t1) * 0.5
         seg = length / n
         out.append(A("terrace_platform", cx, cy, -18.0, yaw=yaw,
                      sxyz=(seg / 1440.0, width / 740.0, 0.35),
-                     mat=("MI_V2_PlazaCream", "MI_V2_PlazaWarm")[i % 2],
-                     label="%s_Seg%d" % (tag, i)))
+                     mat=mats[i % 3], label="%s_Seg%d" % (tag, i)))
+        # THE KERB is what makes paving read as a made road rather than a
+        # slab dropped on grass, and it is the cheapest edge in the kit: two
+        # stretched kerb_stones per segment, instanced with everything else.
+        if kerbed:
+            for k, side in enumerate((-1.0, 1.0)):
+                out.append(A("kerb_stone", cx - uy * width * 0.55 * side,
+                             cy + ux * width * 0.55 * side, -2.0, yaw=yaw,
+                             sxyz=(seg / 120.0, 1.0, 0.5), mat="MI_V2_Kerb",
+                             label="%s_Kerb%d_%d" % (tag, i, k)))
     return out
 
 
@@ -3447,6 +3526,18 @@ def _all_sites():
 
 SITES = _all_sites()
 
+# THE HERO MUSHROOM. Chosen from the world rather than written down: the grove
+# of the Mushroom Grove nearest that district's own seed radius, so it stands
+# in the middle of its country rather than on its edge.
+_hero_seed_r = dict((n, r) for (n, _b, r, _k) in _DISTRICT_SEEDS)[_MUSH_HERO_DISTRICT]
+_hero_candidates = [s for s in SITES
+                    if s.get("district") == _MUSH_HERO_DISTRICT and s["kind"] in ("grove", "wood")]
+if _hero_candidates:
+    _h = min(_hero_candidates,
+             key=lambda s: abs(math.hypot(s["x"], s["y"]) - _hero_seed_r))
+    _MUSH_HERO_AT = (_h["x"], _h["y"])
+    SITE_NOTES.append("hero mushroom at %s (%.0f, %.0f)" % (_h["tag"], _h["x"], _h["y"]))
+
 _QUARTER_BUILDERS = {"garden": _quarter_garden, "towers": _quarter_towers,
                      "grove": _quarter_grove, "wood": _quarter_wood,
                      "clockyard": _quarter_clockyard, "water": _quarter_water,
@@ -3464,7 +3555,10 @@ _QUARTER_BUILDERS = {"garden": _quarter_garden, "towers": _quarter_towers,
 #: green, not an orchard.
 _BLOSSOM = ("MI_V2_PetalPink", "MI_V2_RosePink", "MI_V2_PetalWhite",
             "MI_V2_PetalViolet")
-_BLOSSOM_SHARE = 0.20
+# 0.08, not 0.20. `_tree`'s BLOSSOM form now carries the flowering trees on
+# purpose; leaving this at a fifth on top of it took the world's canopy to 31%
+# blossom, which is an orchard rather than the accent the boards show.
+_BLOSSOM_SHARE = 0.08
 
 
 def _leaf(i, seed, salt=0):
@@ -3472,6 +3566,92 @@ def _leaf(i, seed, salt=0):
     if _rnd(i, seed, 160 + salt) < _BLOSSOM_SHARE:
         return _BLOSSOM[int(_rnd(i, seed, 161 + salt) * 4) % 4]
     return ("MI_V2_LeafMid", "MI_V2_LeafDark", "MI_V2_LeafLight")[i % 3]
+
+
+#: FOUR FORMS FROM TWO MESHES.
+#:
+#: The forest mass works at macro scale and reads at close range as one tree
+#: asset stamped hundreds of times: every tree in this world was a trunk with
+#: ONE canopy centred on it, at a scale between 0.9 and 1.7. Two meshes cannot
+#: become four species, but they can become four SILHOUETTES -- which is what
+#: the eye actually reads at 20 m and beyond -- by varying the trunk's height
+#: against its canopy's width, how many canopies overlap, and how far off the
+#: axis they sit.
+#:
+#:   broad     mature trunk, three overlapping canopies, wide and low
+#:   tall      slender trunk stretched, one small high canopy
+#:   blossom   slender trunk, two canopies, always flowering
+#:   old       mature trunk at large scale, one huge asymmetric canopy
+#:
+#: The weights are the forest's composition and they are the whole of the
+#: variety knob: `_TREE_MIX` per context rather than a global.
+#: The BLOSSOM form carries two canopies, so its weight counts roughly double
+#: in the frame: at 0.16-0.26 the world's canopy came out 21% flowering, which
+#: is still an orchard. These land it near 14%.
+_TREE_MIX = {"wood":   (0.37, 0.28, 0.10, 0.25),
+             "grove":  (0.42, 0.24, 0.16, 0.18),
+             "country":(0.33, 0.32, 0.09, 0.26),
+             "edge":   (0.32, 0.37, 0.15, 0.16),
+             "meadow": (0.28, 0.20, 0.13, 0.39)}
+
+
+def _tree(x, y, seed, i, tag, sc=1.0, mix="wood"):
+    """One tree, of one of four forms. Returns its placements."""
+    w = _TREE_MIX.get(mix, _TREE_MIX["wood"])
+    u = _rnd(i, seed, 170)
+    form = 0
+    acc = 0.0
+    for k, wk in enumerate(w):
+        acc += wk
+        if u < acc:
+            form = k
+            break
+    yaw = _rnd(i, seed, 171) * 360.0
+    out = []
+    if form == 0:                              # BROAD
+        t = (1.05 + 0.35 * _rnd(i, seed, 172)) * sc
+        out.append(A("tree_mature_trunk", x, y, 0, yaw=yaw, s=t, mat="MI_V2_Bark",
+                     label="%s_T%d" % (tag, i)))
+        for c in range(3):
+            a = 6.283 * c / 3.0 + _rnd(i, seed, 173)
+            r = 260.0 * t * (0.4 + 0.6 * _rnd(i + c, seed, 174))
+            out.append(A("canopy_large", x + math.cos(a) * r, y + math.sin(a) * r,
+                         (1180.0 + 190.0 * c) * t, yaw=yaw + 47.0 * c,
+                         s=t * (1.05 + 0.18 * _rnd(i + c, seed, 175)),
+                         mat=_leaf(i + c, seed, 20 + c),
+                         label="%s_C%d_%d" % (tag, i, c)))
+    elif form == 1:                            # TALL
+        t = (0.95 + 0.4 * _rnd(i, seed, 176)) * sc
+        h = 1.45 + 0.35 * _rnd(i, seed, 177)
+        out += [
+            A("tree_slender_trunk", x, y, 0, yaw=yaw, sxyz=(t * 0.85, t * 0.85, t * h),
+              mat="MI_V2_Bark", label="%s_T%d" % (tag, i)),
+            A("canopy_medium", x, y, 800.0 * t * h, yaw=yaw + 30.0,
+              s=t * 0.92, mat=_leaf(i, seed, 24),
+              label="%s_C%d_0" % (tag, i)),
+        ]
+    elif form == 2:                            # BLOSSOM
+        t = (0.90 + 0.30 * _rnd(i, seed, 178)) * sc
+        petal = _BLOSSOM[int(_rnd(i, seed, 179) * 4) % 4]
+        out.append(A("tree_slender_trunk", x, y, 0, yaw=yaw, s=t, mat="MI_V2_Bark",
+                     label="%s_T%d" % (tag, i)))
+        for c in range(2):
+            a = 3.14 * c + _rnd(i, seed, 180)
+            r = 190.0 * t
+            out.append(A("canopy_medium", x + math.cos(a) * r, y + math.sin(a) * r,
+                         (760.0 + 150.0 * c) * t, yaw=yaw + 90.0 * c,
+                         s=t * (1.0 + 0.2 * c), mat=petal,
+                         label="%s_C%d_%d" % (tag, i, c)))
+    else:                                      # OLD
+        t = (1.45 + 0.55 * _rnd(i, seed, 182)) * sc
+        out += [
+            A("tree_mature_trunk", x, y, 0, yaw=yaw, sxyz=(t * 1.12, t * 1.12, t * 0.86),
+              mat="MI_V2_Bark", label="%s_T%d" % (tag, i)),
+            A("canopy_large", x + 150.0 * t, y - 110.0 * t, 1130.0 * t * 0.86,
+              yaw=yaw, s=t * 1.32, mat=_leaf(i, seed, 26),
+              label="%s_C%d_0" % (tag, i)),
+        ]
+    return out
 
 
 def _quarter_edge(s, H):
@@ -3506,14 +3686,7 @@ def _quarter_edge(s, H):
         x, y = cx + math.cos(a) * r, cy + math.sin(a) * r
         pick = _rnd(i, seed, 74)
         if pick < 0.34:
-            t = (1.0 + 0.45 * _rnd(i, seed, 75)) * sc
-            out += [
-                A("tree_slender_trunk", x, y, 0, yaw=_rnd(i, seed, 76) * 360.0, s=t,
-                  mat="MI_V2_Bark", label="%s_EdgeTrunk%d" % (tag, i)),
-                A("canopy_medium", x, y, 800.0 * t, yaw=_rnd(i, seed, 77) * 360.0,
-                  s=t * 1.25, mat=_leaf(i, seed, 7),
-                  label="%s_EdgeCanopy%d" % (tag, i)),
-            ]
+            out += _tree(x, y, seed, i, "%s_Edge" % tag, sc=sc * 0.95, mix="edge")
         elif pick < 0.72:
             out.append(A("hedge_mass", x, y, 0, yaw=math.degrees(a) + 90.0,
                          s=(1.0 + 0.5 * _rnd(i, seed, 78)) * sc,
@@ -3682,8 +3855,13 @@ def _road_tree(sites):
             continue
         # a far road is a line on the ground at 300 m: fewer, longer segments
         seg = 1400.0 if H["score"] > 0.45 else 2800.0
+        # the way wears the character of the place it serves, and the two
+        # roads out of the district's own edge wear the royal one
+        style = _ROAD_STYLE_FOR.get(s["kind"], "ring")
+        if best is None and math.hypot(s["x"], s["y"]) < 13000.0:
+            style = "royal"
         out += _road(x0, y0, x1, y1, width, "%s_Road" % s["tag"],
-                     n=max(1, int(math.hypot(x1 - x0, y1 - y0) / seg)))
+                     n=max(1, int(math.hypot(x1 - x0, y1 - y0) / seg)), style=style)
         out += _road_verge(x0, y0, x1, y1, s["tag"], s["seed"])
         # a threshold where the road meets the quarter, while it can be read
         if H["prop"] > 0.35:
@@ -3775,8 +3953,11 @@ def _district_lanes(sites):
                 continue
             n_lane += 1
             tag = "Lane%02d" % n_lane
+            soft = ("wood", "grove", "meadow")
+            lane_style = "wood" if (a["kind"] in soft and b["kind"] in soft) else "garden"
             out += _road(x0, y0, x1, y1, 180.0, tag,
-                         n=max(1, int(math.hypot(x1 - x0, y1 - y0) / 1800.0)))
+                         n=max(1, int(math.hypot(x1 - x0, y1 - y0) / 1800.0)),
+                         style=lane_style)
             out += _road_verge(x0, y0, x1, y1, tag, 6100 + 23 * n_lane)
             # a waymark at each end, the garden version: a plinth and a ball
             for k, (px, py) in enumerate(((x0, y0), (x1, y1))):
@@ -3837,7 +4018,7 @@ def _north_way():
     out = []
     for i in range(len(way) - 1):
         (x0, y0), (x1, y1) = way[i], way[i + 1]
-        out += _road(x0, y0, x1, y1, 280.0, "NorthWay%d" % i)
+        out += _road(x0, y0, x1, y1, 280.0, "NorthWay%d" % i, style="royal")
         out += _road_verge(x0, y0, x1, y1, "NorthWay%d" % i, 4400 + 17 * i)
         # a lantern pair at every turn, so the way reads at dusk and at range
         for k, side in enumerate((-1, 1)):
@@ -3936,7 +4117,8 @@ def _ring_roads(sites):
                     break
             if crosses:
                 continue
-            out += _road(x0, y0, x1, y1, width, "RingRoad%d_%02d" % (band, i))
+            out += _road(x0, y0, x1, y1, width, "RingRoad%d_%02d" % (band, i),
+                         style="ring")
             if band == 0:
                 out += [
                     A("pedestal_finial", x0, y0 - 900.0, 0, s=0.9, mat="MI_V2_IvoryStone",
@@ -4266,23 +4448,7 @@ def _country():
                     rad = (300.0 + 1500.0 * math.sqrt(_rnd(i, k, 97))) * (0.9 + 0.5 * sp)
                     x = cx + math.cos(a) * rad * (1.0 + 0.6 * math.cos(lean))
                     y = cy + math.sin(a) * rad
-                    t = (1.1 + 0.6 * _rnd(i, k, 98)) * sc
-                    if _rnd(i, k, 99) > 0.45:
-                        out += [
-                            A("tree_mature_trunk", x, y, 0, yaw=_rnd(i, k, 100) * 360.0,
-                              s=t, mat="MI_V2_Bark", label="%s_Trunk%d" % (tag, i)),
-                            A("canopy_large", x, y, 1320.0 * t, yaw=_rnd(i, k, 101) * 360.0,
-                              s=t * 1.22, mat=_leaf(i, k),
-                              label="%s_Canopy%d" % (tag, i)),
-                        ]
-                    else:
-                        out += [
-                            A("tree_slender_trunk", x, y, 0, yaw=_rnd(i, k, 102) * 360.0,
-                              s=t, mat="MI_V2_Bark", label="%s_Slim%d" % (tag, i)),
-                            A("canopy_medium", x, y, 800.0 * t, yaw=_rnd(i, k, 103) * 360.0,
-                              s=t * 1.3, mat=_leaf(i, k, 6),
-                              label="%s_SlimCanopy%d" % (tag, i)),
-                        ]
+                    out += _tree(x, y, k, i, "%s_Tree" % tag, sc=sc, mix="country")
             elif pick < 0.70:
                 # A HEDGEROW, which is what turns open ground into fields
                 lean = _rnd(gx, gy, 104) * 3.1416
@@ -4335,13 +4501,20 @@ def _country():
                                  s=1.3 * sc, mat="MI_V2_LeafDark",
                                  label="%s_TowerHedge%d" % (tag, i)))
             else:
-                # a lone giant, standing in open country the way the boards do it
-                out.append(A("stone_ring_base", cx, cy, -2, s=1.5 * sc,
+                # a lone giant, standing in open country the way the boards do
+                # it -- but only in the country that has giants
+                allowed, tier = _giant_tier(cx, cy)
+                out.append(A("stone_ring_base", cx, cy, -2, s=(1.5 if allowed else 0.9) * sc,
                              mat="MI_V2_Stone", label="%s_Ring" % tag))
-                out += _giant_mushroom(cx, cy, 12000 + k, "%s_Giant" % tag,
-                                       s=(0.9 + 0.4 * _rnd(gx, gy, 112)) * H["landmark_scale"] * 0.85,
-                                       tint=("MI_V2_MushRed", "MI_V2_MushPurple",
-                                             "MI_V2_MushTerracotta")[k % 3])
+                if allowed:
+                    out += _giant_mushroom(cx, cy, 12000 + k, "%s_Giant" % tag,
+                                           s=(0.9 + 0.4 * _rnd(gx, gy, 112)) * tier * 0.9,
+                                           tint=("MI_V2_MushRed", "MI_V2_MushPurple",
+                                                 "MI_V2_MushTerracotta")[k % 3])
+                else:
+                    out.append(A("mushroom_landmark", cx, cy, 0,
+                                 yaw=_rnd(gx, gy, 113) * 360.0, s=1.25 * sc,
+                                 mat="MI_V2_MushTerracotta", label="%s_Landmark" % tag))
     return out
 
 
