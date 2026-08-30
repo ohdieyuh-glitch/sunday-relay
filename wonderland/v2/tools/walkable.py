@@ -112,6 +112,9 @@ def main():
         ("RIGHT flank entry", -2650, 400), ("RIGHT parterre centre", -4350, 700),
         ("RIGHT grove", -5450, 3650), ("RIGHT landmark", -2750, 5950),
         ("rear gate", 0, -6000), ("rear world beyond", 0, -8200),
+        ("R lane y=1500", -3225, 1500), ("R lane y=2500", -3225, 2500),
+        ("R lane y=3500", -3225, 3500), ("R lane y=4500", -2975, 4500),
+        ("R lane y=5200", -2900, 5200),
     ]
     print("walkable flood from the spawn: %d cells of %d uu (%.0f%% of the sampled ground)"
           % (n, cell, 100.0 * n / float(nx * ny)))
@@ -133,7 +136,102 @@ def main():
             print("%-24s %s" % (name, "yes" if ok else "NO"))
             bad += 0 if ok else 1
     print("\n%d of %d destinations unreachable" % (bad, len(targets)))
+
+    # --- ROUTES ------------------------------------------------------------
+    # A straight paved spine does not fit the flanks -- measured, best
+    # clearance -33 uu against the 150 a 3 m walk needs, because the garden is
+    # planted along its whole length. That does not mean there is no way
+    # through; it means the way is not straight. The same fill that answers
+    # "can the Dog get there" can hand back the route it took, and a route is
+    # what paving should follow.
+    if "--routes" in sys.argv:
+        print("\nROUTES (grid cells of %d uu, simplified to turns):" % cell)
+        for name, ax, ay, bx, by in (
+                # the APPROACH to each landmark, not its own cell: the
+                # monument stands there, so routing to it asks for a way into
+                # a plinth
+                ("LEFT flank entry -> landmark", 2650, 400, 2750, 5650),
+                ("RIGHT flank entry -> landmark", -2650, 400, -2750, 5650),
+                ("LEFT entry -> parterre walk", 2650, 400, 3115, 520),
+                ("LEFT parterre -> grove", 3115, 520, 5450, 3650)):
+            path = _route(idx(float(ax), float(ay)), idx(float(bx), float(by)),
+                          blocked, nx, ny)
+            if path is None:
+                print("  %-30s NO ROUTE" % name)
+                continue
+            pts = [(X0 + (c % nx) * cell + cell // 2, Y0 + (c // nx) * cell + cell // 2)
+                   for c in path]
+            turns = _simplify(pts, tol=cell * 1.5)
+            print("  %-30s %d cells, %d waypoints" % (name, len(path), len(turns)))
+            for (x, y) in turns:
+                print("        (%6d, %6d)" % (x, y))
     return 1 if bad else 0
+
+
+def _nearest_free(c, blocked, nx, ny, rings=12):
+    """The nearest unblocked cell to c, or None.
+
+    A route endpoint is usually a THING -- a landmark, a plinth, an urn -- and
+    a thing occupies its own cell, so asking for a path INTO it returns "no
+    route" and means nothing. That is what the right flank reported: the
+    target sat inside the rose bush at the heart's foot, and a flank that the
+    flood fill showed reachable at every probe along its length came back as
+    unroutable. Route to the ground BESIDE the destination, which is where a
+    walker actually stands.
+    """
+    if not blocked[c]:
+        return c
+    i0, j0 = c % nx, c // nx
+    for r in range(1, rings + 1):
+        for di in range(-r, r + 1):
+            for dj in (-r, r) if abs(di) < r else range(-r, r + 1):
+                i, j = i0 + di, j0 + dj
+                if 0 <= i < nx and 0 <= j < ny and not blocked[j * nx + i]:
+                    return j * nx + i
+    return None
+
+
+def _route(a, b, blocked, nx, ny):
+    """Shortest cell path a -> b through unblocked cells, or None."""
+    a = _nearest_free(a, blocked, nx, ny)
+    b = _nearest_free(b, blocked, nx, ny)
+    if a is None or b is None:
+        return None
+    prev = {a: None}
+    q = deque([a])
+    while q:
+        c = q.popleft()
+        if c == b:
+            out = []
+            while c is not None:
+                out.append(c)
+                c = prev[c]
+            return out[::-1]
+        i, j = c % nx, c // nx
+        for di, dj in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            ii, jj = i + di, j + dj
+            if 0 <= ii < nx and 0 <= jj < ny:
+                k = jj * nx + ii
+                if k not in prev and not blocked[k]:
+                    prev[k] = c
+                    q.append(k)
+    return None
+
+
+def _simplify(pts, tol):
+    """Keep only the points where the route actually turns."""
+    if len(pts) < 3:
+        return pts
+    out = [pts[0]]
+    for i in range(1, len(pts) - 1):
+        ax, ay = out[-1]
+        bx, by = pts[i]
+        cx, cy = pts[i + 1]
+        # cross product of (b-a) and (c-b): zero while the run is straight
+        if abs((bx - ax) * (cy - by) - (by - ay) * (cx - bx)) > tol * tol:
+            out.append((bx, by))
+    out.append(pts[-1])
+    return out
 
 
 if __name__ == "__main__":

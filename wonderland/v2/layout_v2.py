@@ -835,9 +835,28 @@ def _rose_walk(sgn, x, y0, y1, seed, tag):
     alternating, which is what turns open ground into a WAY rather than a
     field, and what the eye follows from the plaza toward the castle."""
     out = []
+    # A DELIBERATE GAP, because the lane behind this border is pinched shut.
+    #
+    # walkable.py routed the left flank's entry to its landmark and the answer
+    # was 20 waypoints out to x = 1,500 -- back onto the main approach, up the
+    # middle, and in again at the far end. The right flank had NO route at all.
+    # The flanks were cul-de-sacs: you could enter them and not cross them.
+    #
+    # The pinch is between this border at x = 3,050 (+-75) and a PRE-EXISTING
+    # hedge mass, BeyondL_Wall0_0, r=416 at (3,683 / 4,617), which spans
+    # x 3,267..4,099 and y 4,201..5,033. That leaves a 142 uu lane, and once
+    # the Dog's 36 uu capsule is taken off both sides, 70 uu of walkable
+    # width -- 0.7 m, which is a squeeze rather than a garden walk, and which
+    # a coarser grid reports as no route at all.
+    #
+    # So the border opens opposite it. A gap in a planted border is ordinary
+    # garden language (it is where a path crosses) and it costs two pieces.
+    GAP_Y0, GAP_Y1 = 4050.0, 5150.0
     n = int((y1 - y0) / 620.0)
     for i in range(n):
         y = y0 + 620.0 * (i + 0.5)
+        if GAP_Y0 <= y <= GAP_Y1:
+            continue
         if i % 2 == 0:
             out.append(A("topiary_cone_roses", sgn * x, y, 0, yaw=25 * i, s=0.78,
                          mat="MI_V2_LeafMid", label="%s_Cone%d" % (tag, i)))
@@ -867,6 +886,50 @@ def _boundary(sgn, x, y0, y1, seed, tag):
         if i % 3 == 1:
             out.append(A("ivy_drape", sgn * (x - 40), y, 180, yaw=90, s=0.9,
                          mat="MI_V2_LeafDark", label="%s_Ivy%d" % (tag, i)))
+    return out
+
+
+#: THE FLANK WALK, ROUTED RATHER THAN RULED.
+#:
+#: A straight paved spine does not fit either flank -- measured, best
+#: clearance -33 uu against the 150 a 3 m walk needs, because the garden is
+#: planted along its whole length. That is a fact about STRAIGHT LINES. The
+#: walkability flood fill was then asked for the route a walker actually
+#: takes, and both flanks answered in seven waypoints that stay inside the
+#: flank (before the border gap was opened they answered in twenty, out to
+#: x = 1,500 and back down the main approach -- the flanks were cul-de-sacs).
+#:
+#: These are those waypoints, mirrored. They are DERIVED, not designed: run
+#:     python3 wonderland/v2/tools/walkable.py --routes
+#: after any change to the flank planting and bring them back into line. The
+#: paving is not an obstacle in that fill, so it cannot invent its own route.
+FLANK_ROUTE = [(2675, 425), (3225, 425), (3225, 3525), (2975, 3625),
+               (2975, 4725), (2775, 4775), (2775, 5675)]
+
+
+def _paved_route(sgn, pts, width, tag):
+    """Lay paving along a polyline, one slab per straight run.
+
+    terrace_platform is 1,440 along X and 740 along Y, so a run laid at yaw 90
+    takes its width from sy and its length from sx -- the axis swap that has
+    already cost two edits in this file. Sunk 18 uu so it reads as paving
+    rather than the 1.4 m terrace it is at scale 1.
+    """
+    out = []
+    for i in range(len(pts) - 1):
+        (x0, y0), (x1, y1) = pts[i], pts[i + 1]
+        cx, cy = sgn * (x0 + x1) * 0.5, (y0 + y1) * 0.5
+        dx, dy = abs(x1 - x0), abs(y1 - y0)
+        if dy >= dx:                       # a run along Y
+            length = max(dy, width)
+            out.append(A("terrace_platform", cx, cy, -18.0, yaw=90,
+                         sxyz=(length / 1440.0, width / 740.0, 0.35),
+                         mat="MI_V2_PlazaCream", label="%s_Paved%d" % (tag, i)))
+        else:                              # a run along X
+            length = max(dx, width)
+            out.append(A("terrace_platform", cx, cy, -18.0, yaw=0,
+                         sxyz=(length / 1440.0, width / 740.0, 0.35),
+                         mat="MI_V2_PlazaCream", label="%s_Paved%d" % (tag, i)))
     return out
 
 
@@ -998,6 +1061,7 @@ def _flank(sgn, tag):
     out += _grove(sgn, sgn * 5450, 3650, 4400 if sgn > 0 else 4500, "%s_Grove" % tag)
     out += _mushroom_cluster(sgn, sgn * 4900, 6900, 4600 if sgn > 0 else 4700, "%s_Mush" % tag)
     out += _boundary(sgn, 7700, -1200, 8300, 4800, "%s_Edge" % tag)
+    out += _paved_route(sgn, FLANK_ROUTE, 260.0, "%s_Walk" % tag)
     # WONDERLAND, NOT A FORMAL GARDEN. The flanks as built read as a competent
     # royal parterre and nothing in them says which world it is -- the boards
     # list clocks, hearts, keys and tea things as the signatures, and the brief
