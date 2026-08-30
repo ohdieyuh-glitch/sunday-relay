@@ -1449,17 +1449,49 @@ def _quarter_towers(cx, cy, sgn, seed, tag):
         out += _ground_patch(cx + 500 - 500 * i, cy - 700, 0, 60 * i, 1.0,
                              ("MI_V2_PetalPink", "MI_V2_Lavender", "MI_V2_PetalWhite")[i % 3],
                              "%s_CourtGround%d" % (tag, i))
+    # A NEIGHBOURHOOD, NOT FIVE TOWERS ON GRASS. The world render showed these
+    # as isolated architectural fragments standing on lawn -- the brief's
+    # "architectural fragments" was meant as a kind of place, not as debris.
+    # A neighbourhood has ground under it, a wall around it and a way in.
+    out.append(A("garden_lawn", cx, cy, -2, sxyz=(0.62, 0.52, 1.0),
+                 mat="MI_V2_Lawn", label="%s_Ground" % tag))
+    for i in range(14):
+        a = 6.283 * i / 14.0
+        # a broken perimeter wall: two gaps, where the roads arrive
+        if 0.42 < (i / 14.0) < 0.58 or (i / 14.0) > 0.92 or (i / 14.0) < 0.08:
+            continue
+        out.append(A("garden_wall", cx + math.cos(a) * 2150.0, cy + math.sin(a) * 2150.0, 0,
+                     yaw=math.degrees(a) + 90.0, sxyz=(1.0, 1.0, 0.85),
+                     mat="MI_V2_IvoryStone", label="%s_Wall%d" % (tag, i)))
+        if i % 4 == 0:
+            out.append(A("gate_pier", cx + math.cos(a) * 2150.0, cy + math.sin(a) * 2150.0, 0,
+                         s=0.6, mat="MI_V2_IvoryStone", label="%s_WallPier%d" % (tag, i)))
+    # a paved court at its heart, so the towers stand on something built
+    for k, yaw in enumerate((0.0, 90.0)):
+        out.append(A("terrace_platform", cx, cy, -18.0, yaw=yaw,
+                     sxyz=(1.45, 0.42, 0.35), mat="MI_V2_PlazaWarm",
+                     label="%s_Court%d" % (tag, k)))
     return out
 
 
 def _quarter_grove(cx, cy, sgn, seed, tag):
     """A mushroom wood: the organic, exploratory end of the language."""
-    out = _grove(sgn, cx, cy, seed, tag + "_G", count=7)
-    for i in range(4):
-        a = 6.283 * i / 4.0 + _rnd(i, seed, 5) * 0.7
-        r = 900.0 + 700.0 * _rnd(i, seed, 6)
-        out += _mushroom_cluster(sgn, cx + math.cos(a) * r, cy + math.sin(a) * r,
-                                 seed + 30 + i, "%s_M%d" % (tag, i))
+    # ONE landmark, not four clusters. The first world render showed eight of
+    # these quarters and the frame read as a mushroom farm: four clusters each
+    # (a landmark plus three caps) times eight quarters is ninety-six giant
+    # mushrooms, which is not a signature, it is wallpaper. The brief is
+    # explicit -- landmarks need hierarchy, and "do not turn every 5 meters
+    # into another gimmick". A mushroom wood is trees with ONE mushroom
+    # landmark standing in it and a few small ones at its feet.
+    out = _grove(sgn, cx, cy, seed, tag + "_G", count=9)
+    out += _mushroom_cluster(sgn, cx + sgn * 700.0, cy + 500.0, seed + 30, "%s_M" % tag)
+    for i in range(3):
+        a = 6.283 * i / 3.0 + _rnd(i, seed, 7) * 0.9
+        r = 1300.0 + 500.0 * _rnd(i, seed, 8)
+        out.append(A("mushroom_small", cx + math.cos(a) * r, cy + math.sin(a) * r, 0,
+                     yaw=_rnd(i, seed, 9) * 360.0, s=0.8 + 0.4 * _rnd(i, seed, 10),
+                     mat=("MI_V2_MushRed", "MI_V2_MushCream", "MI_V2_MushPurple")[i % 3],
+                     label="%s_SmallCap%d" % (tag, i)))
     return out
 
 
@@ -1586,6 +1618,40 @@ def _outer_world():
               label="RingMarkerCap%02d" % i),
         ]
     return out
+
+
+#: THE GROUND BETWEEN THE QUARTERS. The world render shows one flat green
+#: plane from the district out to the horizon -- the moss terrain slab, a
+#: single 3 km quad with a single material, which is why everything between
+#: the quarters reads as a golf course however good the quarters are.
+#: garden_lawn exists for exactly this: 60 x 72 m of 48 x 48 grid displaced by
+#: low-frequency noise, and its own docstring says a flat plane here is "the
+#: founder's flat colour in one actor".
+#:
+#: Twenty-eight of them across the ring on a jittered grid, alternating
+#: between the lawn and moss tints and turned so the seams do not line up.
+#: This is texture and tonal variation over ~10 hectares for twenty-eight
+#: actors -- the cheapest large-area improvement left in the world.
+def _ground_quilt():
+    out = []
+    k = 0
+    for gx in range(-3, 4):
+        for gy in range(-2, 3):
+            if abs(gx) <= 1 and abs(gy) <= 1:
+                continue                    # the district has its own ground
+            cx = gx * 5600.0 + (_rnd(gx, gy, 71) - 0.5) * 900.0
+            cy = gy * 6600.0 + (_rnd(gx, gy, 72) - 0.5) * 900.0 + 1000.0
+            out.append(A("garden_lawn", cx, cy, -3 - (k % 3),
+                         yaw=90.0 * (k % 4),
+                         sxyz=(0.98 + 0.10 * _rnd(gx, gy, 73),
+                               0.98 + 0.10 * _rnd(gx, gy, 74), 1.0),
+                         mat=("MI_V2_Lawn", "MI_V2_Moss", "MI_V2_Lawn")[k % 3],
+                         label="Quilt_%d_%d" % (gx, gy)))
+            k += 1
+    return out
+
+
+GROUND_QUILT = _band("V2_Skyline", _ground_quilt())
 
 
 OUTER_WORLD = _band("V2_Skyline", _outer_world())
@@ -1717,7 +1783,7 @@ PROCESSIONAL_BORDER = _band("V2_Garden", _processional_border())
 #: gate reading a different list from the builder reports the world it was
 #: shown, not the world that gets made.
 BUILD_BANDS = [FOREGROUND, COURTYARD, GARDEN, PALACE, FLANK_GROUND, FLANKS,
-               REARWORLD, CAM_FOREGROUNDS, OUTER_WORLD, PLAZA_ORNAMENT,
+               REARWORLD, CAM_FOREGROUNDS, GROUND_QUILT, OUTER_WORLD, PLAZA_ORNAMENT,
                PROCESSIONAL_BORDER]
 
 #: Everything the layout declares: what the builder walks, plus the two bands
