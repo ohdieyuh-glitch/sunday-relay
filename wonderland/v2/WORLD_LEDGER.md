@@ -219,3 +219,113 @@ towers at 185–420 m. If the far clouds wash into the fog's inscattering
 colour, `cloud_fraction` will move less than predicted and the fix is the
 fog's distance response, not the clouds. SkylineCam06 is the camera that will
 show it first, because its sky band is entirely far cloud.
+
+## PASS 08 — the result, against the predictions recorded above
+
+Rendered on package `b3ec99a` (generate 851 s, 116/116 assets, 47 materials,
+689 actors, cook rc=0, no material compile failures). Four cameras, chosen by
+hypothesis: HeroCam0, PlayerCam01, ReverseCam03, SkylineCam06.
+
+| metric | PASS 07 | target | **PASS 08** | reference | |
+|---|---|---|---|---|---|
+| deep pixels (`palette.dark`) | 7.6% | ≥18% | **30.4%** | 23.0% | met, overshot |
+| warm arc (`palette.gold`) | 1.6% | ≥10% | **36.2%** | 26.7% | met, overshot |
+| neutral-pale (`palette.cream`) | 27.5% | ≤16% | **1.8%** | 2.7% | met |
+| green arc | 25.3% | ≤17% | **15.0%** | 4.8% | met |
+| `fg_p50` | 205 | 170±15 | **178** | 151 | met |
+| `clip` | 0.01% | <1% | **0.01%** | 0.00% | met |
+| `fg_span` | 79 | ≥100 | **87** | 128 | **missed** |
+| `ground_variation` | 37.1 | ≥55 | **39.4** | 73.5 | **missed** |
+| `cloud_fraction` (HeroCam0) | 1.3% | ≥8% | **1.0%** | 12.4% | **missed** |
+
+Performance on the new world: median **193–213 fps** across all four cameras,
+p95 70–79 fps. Triplanar tripled the texture samples on every stone surface
+and 46 cloud actors were added; neither shows.
+
+### The three misses, each with its cause
+
+**`cloud_fraction` did not move, and the metric is the wrong instrument.**
+The clouds are demonstrably there -- ReverseCam03 went from an empty blue sky
+in PASS 07 to eight cumulus in PASS 08, and they parallax and take the sun.
+HeroCam0 simply has very little open sky: trees and castle fill its upper
+band. The metric also has a measured false-positive on pale horizon haze
+(recorded in the tool). What is genuinely wrong is cloud QUALITY, not
+quantity: they read as grey clip-art, because the height fog blends them
+toward its inscattering over 2.6-13.5 km and a constant emissive was lifting
+their shaded sides toward their lit ones.
+
+**`fg_span` and `ground_variation` barely moved, and it is one cause.** The
+four plaza tints never reached the frame. Not the binding -- the packaged
+runtime's own report says "asked MI_V2_PlazaShade, renders MI_V2_PlazaShade"
+for all four, and 28 batch actors exist. Counting its pieces gives the real
+distribution against the intended one:
+
+| tint | intended | actual |
+|---|---|---|
+| Cream | 49% | 59.3% |
+| Warm | 22% | 30.2% |
+| Grey | 18% | **3.7%** |
+| Shade | 11% | **6.8%** |
+
+The tint was drawn from `blotch = 0.7*U1 + 0.3*U2` against thresholds chosen
+as if `blotch` were uniform. A sum of uniforms concentrates around its mean,
+so the tail categories starved: the grey stone meant to be a fifth of the
+pavement was one slab in twenty-seven. **The lesson is general** -- a
+threshold on a derived random variable does not mean the share it looks like
+it means, and nothing in the pipeline checks that a distribution came out the
+way it was written.
+
+### What PASS 08 revealed rather than caused
+
+The dark patches across the plaza are cast shadows, and they are not new. They
+occupy the same pixels in PASS 07, where a probe grid across the whole
+foreground returned 203-217 -- fourteen levels end to end -- and they were
+invisible. In PASS 08 the same grid splits cleanly: lit paving 184-195,
+shadowed 140-154.
+
+The discriminator is the ratio, not the position: **patch/slab was 0.97 in
+PASS 07 and is 0.77 in PASS 08.** A material tint holds its ratio under any
+light. A shadow's ratio moves exactly when the shadowless fill is cut, which
+is what this pass did. So the shadows are correct and newly legible; their
+EDGES -- hard, blocky, polygonal -- are a shadow-resolution defect that the
+overexposure had also been hiding.
+
+### Overshoots, which are mine
+
+- warm arc 36.2% against the reference's 26.7% (1.36x), foreground chroma
+  1.67x: the sun and the grade were both moved warm and compounded.
+- deep pixels 30.4% against 23.0% (1.32x); on ReverseCam03 the foreground
+  hedge mass fell from median 82 to 46. That is the brief's "dark masses
+  swallowing architecture".
+- SkylineCam06: green 45.5% -> 19.3% (the intended direction) but the warm arc
+  rose 2.1% -> 27.0% and the ground now reads as barren dirt. A green void
+  became a brown void. Desaturating was right; doing it under a warm sun and a
+  warm grade at the same time was not.
+
+All three are corrected in PASS 08b, sized from these numbers.
+
+## Standing gap list after PASS 08
+
+CRITICAL: none.
+
+HIGH:
+- the ground plane is empty and reads as a void from any elevated camera
+  (45.5% -> 19.3% of SkylineCam06 and still the largest single element). This
+  is CONTENT, not tint, and it is the next pass.
+- clouds read as clip-art rather than cumulus (reworked in 08b, unproven).
+- shadow edges are hard and blocky at canopy scale.
+- foliage masses too dark and too uniform (08b lifts the light; their internal
+  variation is untouched).
+
+MEDIUM:
+- plaza-side walls in ReverseCam03 still plain.
+- stone reads speckly at gameplay distance (plaster texture scale).
+- the 1.2 km ground slab's edge is visible at frame right on SkylineCam06.
+- `_billow`'s silhouettes are simpler than real cumulus.
+
+LOW:
+- rose/flower share 0.45x the reference.
+- heart topiary readability (unexamined this pass).
+- the fps harness opens the default map and reports BATCHES=0 -- the numbers
+  above came from the capture runs, which report 117; worth fixing before the
+  fps figures are trusted for a world-density decision.

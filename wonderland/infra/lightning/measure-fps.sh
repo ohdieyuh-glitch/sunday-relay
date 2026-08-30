@@ -44,7 +44,17 @@ CSV_DIR="$(dirname "$APP")/Wonderland/Saved/Profiling/CSV"
 rm -rf "$CSV_DIR" 2>/dev/null || true
 
 wl_say "frame timing: HeroCam6=$CAM, $FRAMES frames, build $SHORT, no encoder in the path"
-setsid nohup env $(wl_vulkan_env_pairs) "$APP" \
+# THE MAP, WHICH THIS HARNESS NEVER PASSED (2026-08-30).
+#
+# Every other launcher here forwards ${WL_MAP_ARG}; this one did not, so the
+# packaged game booted its GameDefaultMap -- which for V2 is the EMPTY World
+# Partition container beside the authoritative classic map, exactly the trap
+# round.sh documents for captures. The runtime said so all along: the capture
+# runs log "BATCHES=117" and the fps runs interleaved with them log
+# "BATCHES=0". Every frame time this harness has ever reported for V2 was
+# measured on an empty world, and the numbers were good because there was
+# nothing in it. A frame rate with no world in it is not a frame rate.
+setsid nohup env $(wl_vulkan_env_pairs) "$APP" ${WL_MAP_ARG:-} \
   -RenderOffscreen -ForceRes "-ResX=$RES_X" "-ResY=$RES_Y" \
   -Unattended -stdout -FullStdOutLogOutput \
   -CinematicView "-HeroCam=$CAM" \
@@ -65,8 +75,8 @@ kill -KILL "-$APP_PID" 2>/dev/null || true
 
 [ -n "$CSV" ] || wl_die "no CSV under $CSV_DIR — the capture produced nothing; see $WL_LOG/fps-$CAM.log"
 wl_ok "csv: $CSV"
-python3 - "$CSV" "$SHORT" <<'PY'
-import csv, statistics, sys
+WL_FPS_RUN_LOG="$WL_LOG/fps-$CAM.log" python3 - "$CSV" "$SHORT" <<'PY'
+import csv, os, statistics, sys
 path, sha = sys.argv[1], sys.argv[2]
 # UE APPENDS A METADATA ROW WHOSE SINGLE FIELD IS ENORMOUS — the whole command
 # line, every cvar and the build config in one cell. Python's csv module
@@ -97,7 +107,25 @@ if not warm:
 mean = statistics.fmean(warm)
 med = statistics.median(warm)
 p95 = sorted(warm)[int(len(warm)*0.95) - 1]
+# THE NUMBER CARRIES THE WORLD IT MEASURED. This harness reported 193-213 fps
+# for a V2 world it had never loaded, and nothing in the output said so -- the
+# evidence was in the runtime log, in a line nobody was reading. A frame time
+# is meaningless without the scene, so the scene is now printed beside it and
+# an empty one is called out rather than quietly returning a good figure.
+batches = None
+try:
+    with open(os.environ.get("WL_FPS_RUN_LOG", ""), "rb") as fh:
+        for line in fh:
+            if b"BATCHES=" in line:
+                batches = int(line.rsplit(b"BATCHES=", 1)[1].split()[0])
+except Exception:
+    batches = None
 print("  FRAME TIME  build %s   %d frames after warm-up" % (sha, len(warm)))
+if batches is not None:
+    print("    world     %d instanced batches%s"
+          % (batches, "   *** EMPTY WORLD -- THIS FRAME RATE MEANS NOTHING ***" if batches == 0 else ""))
+else:
+    print("    world     unknown (no BATCHES= line in the run log)")
 print("    median  %7.2f ms   = %6.1f fps" % (med, 1000.0/med))
 print("    mean    %7.2f ms   = %6.1f fps" % (mean, 1000.0/mean))
 print("    p95     %7.2f ms   = %6.1f fps" % (p95, 1000.0/p95))

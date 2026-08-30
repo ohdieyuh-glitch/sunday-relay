@@ -43,7 +43,10 @@ shoot() {  # cam, extra-args, label -> registers a pass; prints its name
     mkdir -p $R/packaged/shots; D=$R/packaged/shots/\${P}_cam${cam}_${label}.png; cp \"\$F\" \"\$D\";
     echo \"\$P \$D\" >> $R/run/v2-render-history.txt; echo \"REGISTERED \$P \$V\"" 2>&1 | grep -v hostkeys
   if [ "${WL_V2_FPS:-1}" != "0" ] && [ "$label" = "kit" ]; then
-    ssh "$HOST" "cd $SRC && WL_REQUIRE_SHA=$SHA WL_HERO_CAM=$cam WL_FPS_FRAMES=${WL_FPS_FRAMES:-300} bash wonderland/infra/lightning/measure-fps.sh 2>&1 | tail -3 | tr '\\n' ' '; echo" 2>&1 | grep -v hostkeys | sed 's/^/  fps: /' \
+    # WL_MAP_ARG, same as the capture above. Without it measure-fps.sh boots
+    # the project's GameDefaultMap -- the EMPTY World Partition container --
+    # and reports the frame rate of nothing (2026-08-30).
+    ssh "$HOST" "cd $SRC && WL_REQUIRE_SHA=$SHA WL_HERO_CAM=$cam WL_MAP_ARG=$MAP WL_FPS_FRAMES=${WL_FPS_FRAMES:-300} bash wonderland/infra/lightning/measure-fps.sh 2>&1 | tail -3 | tr '\\n' ' '; echo" 2>&1 | grep -v hostkeys | sed 's/^/  fps: /' \
       | tee -a /dev/stderr | sed 's/^  fps: //' | xargs -I{} ssh "$HOST" "echo 'FPS cam${cam} {}' >> $R/run/v2-render-history.txt" 2>/dev/null || true
   fi
 }
