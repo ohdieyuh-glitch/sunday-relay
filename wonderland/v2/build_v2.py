@@ -514,17 +514,35 @@ def assign_layer(actor, band, layers, sub_cache=[None]):
 #: bCollides below) -- the batch carries it, which is the point: walkable.py's
 #: model of this world stays exactly true.
 #:
-#: tower_capped, roof_cone_steep, finial_spire and the castle pieces stay
-#: actors on purpose: they are the silhouette, there are only ~300 of them,
-#: and they are the pieces a later pass is most likely to want to touch one
-#: at a time.
+#: PASS 23: the roofs, the lawns, the piers and the ornament. Ten new district
+#: kinds took the world to 7,115 placements and the un-batched remainder was
+#: 1,679 -- garden_lawn 221, gate_pier 113, facade_panel 57, finial_spire 55,
+#: roof_cone_steep 47, garden_urn 45, stone_ring_base 43, topiary_spiral 41.
+#: None of them is a silhouette a later pass wants to touch one at a time any
+#: more; at forty-five quarters they are kit.
+#:
+#: tower_capped, tower_clock, the castle bodies and the giant mushrooms stay
+#: actors: those ARE the silhouette, and there are about 120 of them.
 BATCHABLE = {"ground_flowers", "ground_blooms", "flower_cluster", "rose_bloom", "hedge_block",
              "hedge_mass", "rose_bush", "shrub_flowering", "topiary_ball", "mushroom_small",
              "blossom_cluster", "vine_wall", "ivy_drape", "side_steps", "retaining_wall",
              "balustrade", "kerb_stone", "garden_wall", "lavender_heads",
              "canopy_large", "canopy_medium",
              "tree_mature_trunk", "tree_slender_trunk", "gate_finial_ball",
-             "pedestal_finial", "topiary_cone_plain", "mushroom_medium"}
+             "pedestal_finial", "topiary_cone_plain", "mushroom_medium",
+             "garden_lawn", "gate_pier", "garden_urn", "stone_ring_base",
+             "topiary_spiral", "facade_panel", "finial_spire", "balcony_ring",
+             "roof_cone_steep", "roof_bell", "roof_hip", "roof_ogee",
+             "roof_flat_crenellated", "planter_box", "column_ornate"}
+
+#: BATCHED ONLY IN THESE BANDS. terrace_platform is paving a participant walks
+#: on and batches are built at BeginPlay, which is how this project lost a Dog
+#: through flagstones that did not exist yet in the frame it spawned -- so it
+#: stays an actor everywhere the Dog spawns or the founder's cameras look.
+#: In the OUTER WORLD it is 250-odd road segments and quarter courts sitting
+#: 6 cm above a ground slab that collides from load, so a batch that appears a
+#: frame late costs a walker six centimetres.
+BATCHABLE_IN_BAND = {"terrace_platform": ("V2_Skyline",)}
 
 
 class Placer(object):
@@ -561,8 +579,15 @@ class Placer(object):
             self._mesh_cache[key] = self.eal.load_asset(path)
         return self._mesh_cache[key]
 
+    def batchable(self, item):
+        a = item["asset"]
+        bands = BATCHABLE_IN_BAND.get(a)
+        if bands is not None:
+            return item.get("band") in bands
+        return a in BATCHABLE
+
     def place(self, item, hover=False, batch=True):
-        if batch and self.batch_cls and item["asset"] in BATCHABLE and item["asset"] in self.assets:
+        if batch and self.batch_cls and self.batchable(item) and item["asset"] in self.assets:
             loc, r, sc = item["pos"], item["rot"], item["scale"]
             self.pending.setdefault((item["asset"], item.get("mat"), item["band"]), []).extend(
                 [float(loc[0]), float(loc[1]), float(loc[2]), float(r[0]), float(r[1]), float(r[2]),
@@ -654,7 +679,8 @@ class Placer(object):
             set_prop(a, "bCollides", key in ("side_steps", "path_steps", "stairs_broad",
                                              "terrace_platform", "retaining_wall",
                                              "balustrade", "hedge_block",
-                                             "tree_mature_trunk", "tree_slender_trunk"))
+                                             "tree_mature_trunk", "tree_slender_trunk",
+                                             "gate_pier", "garden_wall"))
             if mat in MAT.FOLIAGE and not int(C.LOOK.get("foliageDistanceFieldLighting", 1)):
                 # PASS 05d: the batched hedges, beds and blossoms -- same
                 # reason as the canopies (see Placer.place); the property is

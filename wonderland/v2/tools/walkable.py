@@ -40,17 +40,12 @@ import layout_v2 as LAYOUT     # noqa: E402
 #: to 618 x 135, and a circle of r=153 both over-blocks the walk beside it and
 #: under-blocks along its run. An elongated piece needs an ORIENTED RECTANGLE
 #: or the answer is about the model rather than the world.
-FOOT = {"hedge_block": (176, 75), "hedge_mass": (320, 320), "garden_wall": (255, 50),
-        "retaining_wall": (255, 50), "gate_pier": (95, 95), "gate_leaf": (210, 40),
-        "pedestal_finial": (35, 35), "garden_urn": (55, 55), "planter_box": (105, 105),
-        "topiary_cone_plain": (115, 120), "topiary_cone_roses": (115, 120),
-        "topiary_ball": (93, 92), "topiary_spiral": (95, 95), "heart_topiary": (589, 199),
-        "tree_mature_trunk": (105, 105), "tree_slender_trunk": (55, 55),
-        "tree_clock_trunk": (170, 170), "mushroom_landmark": (150, 150),
-        "mushroom_giant": (260, 260), "mushroom_medium": (90, 90),
-        "fountain_basin": (300, 300), "balustrade": (255, 40),
-        "castle_tower": (400, 400), "castle_hall": (600, 600), "tower_capped": (400, 400),
-        "rose_bush": (98, 105), "shrub_flowering": (90, 90), "tea_plinth": (200, 200)}
+#: The measured plan half-footprints now live in `layout_v2.FOOT` -- the
+#: layout needs the same numbers to keep its own pieces out of each other
+#: (see `_declutter`), and this file having its own copy is exactly the
+#: "two descriptions of one quantity" defect the ledger records.
+FOOT = LAYOUT.FOOT
+
 #: Walkable on purpose: paving and low platforms are surfaces, not obstacles.
 NOT_OBSTACLES = ("terrace_platform", "garden_lawn", "stone_ring_base", "path_steps",
                  "side_steps", "ground_flowers", "ground_blooms")

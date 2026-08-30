@@ -44,7 +44,7 @@ import layout_v2 as LAYOUT     # noqa: E402
 #: whether the QUARTERS have a hierarchy, which is the question. `--only=outer`
 #: keeps the quarters, their roads and the far tier; the default keeps
 #: everything, because the world a walker sees is the sum.
-OUTER_PREFIXES = ("Q", "S", "D", "C", "RingRoad")
+OUTER_PREFIXES = ("Q", "S", "D", "C", "RingRoad", "Country")
 
 #: Ground you walk ON rather than things standing on it. Counting these as
 #: density makes a paved road read as a populated place.
@@ -170,7 +170,7 @@ def _is_outer(label):
     parts = (label or "").split("_")
     if not parts:
         return False
-    if parts[0].startswith("RingRoad"):
+    if parts[0].startswith("RingRoad") or parts[0].startswith("Country"):
         return True
     return (parts[0][:1] in ("Q", "S", "D", "C")) and parts[0][1:].isdigit()
 

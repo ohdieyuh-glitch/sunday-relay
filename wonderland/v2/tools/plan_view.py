@@ -35,7 +35,13 @@ import layout_v2 as LAYOUT     # noqa: E402
 SURFACE = ("garden_lawn", "terrace_platform", "stone_ring_base", "path_steps",
            "side_steps", "kerb_stone", "ground_flowers", "ground_blooms")
 KIND_RGB = {"garden": (232, 148, 176), "towers": (150, 176, 236),
-            "grove": (140, 206, 146), "wood": (94, 154, 110)}
+            "grove": (140, 206, 146), "wood": (94, 154, 110),
+            "clockyard": (242, 206, 118), "water": (128, 202, 226),
+            "tea": (236, 168, 214), "court": (226, 214, 190),
+            "hamlet": (222, 156, 122), "meadow": (176, 206, 138)}
+#: One hue per named district, so the background says WHERE YOU ARE rather
+#: than only how dense it is. The score field is still under it as value.
+DISTRICT_RGB = {}
 
 
 def write_png(path, W, H, px):
@@ -85,7 +91,17 @@ def main():
                 g = (10, 10, 14)
             else:
                 s = LAYOUT.HIER(wx, wy)["score"]
-                g = (int(16 + 60 * s), int(18 + 54 * s), int(24 + 46 * s))
+                name = LAYOUT._district_of(wx, wy)[0]
+                if name not in DISTRICT_RGB:
+                    k = len(DISTRICT_RGB)
+                    a = 6.283 * (k * 0.61803) % 6.283
+                    DISTRICT_RGB[name] = (0.5 + 0.5 * math.cos(a),
+                                          0.5 + 0.5 * math.cos(a + 2.094),
+                                          0.5 + 0.5 * math.cos(a + 4.189))
+                hr, hg, hb = DISTRICT_RGB[name]
+                v = 14.0 + 62.0 * s
+                g = (int(v * (0.62 + 0.76 * hr)), int(v * (0.62 + 0.76 * hg)),
+                     int(v * (0.62 + 0.76 * hb)))
             for jj in range(j, min(H, j + step)):
                 for ii in range(i, min(W, i + step)):
                     put(ii, jj, g)
@@ -147,6 +163,15 @@ def main():
     n_solid = sum(counts.values())
     print("wrote %s (%dx%d, r <= %.0f m): %d solid placements, %d quarters"
           % (out, W, H, rmax / 100.0, n_solid, len(LAYOUT.SITES)))
+    by = {}
+    for s in LAYOUT.SITES:
+        by.setdefault(s.get("district", "?"), []).append(s["kind"])
+    for name in sorted(by):
+        kinds = {}
+        for k in by[name]:
+            kinds[k] = kinds.get(k, 0) + 1
+        print("  %-20s %2d  %s" % (name, len(by[name]),
+                                   ", ".join("%s x%d" % (k, v) for k, v in sorted(kinds.items()))))
 
 
 if __name__ == "__main__":
