@@ -23,7 +23,7 @@ import type {
  * TERMINAL MODE — drawn to the founder terminal photo: a framed SUNDAY
  * RELAY terminal window (traffic-light chrome, centered brand, RLY chip),
  * `● LIVE / MISSION IN PROGRESS` status row, one outlined panel per role —
- * PROMPT ARCHITECT (THINKING …), CODING AGENT (WORKING …), RELAY SYSTEM
+ * PROMPT ARCHITECT (THINKING …), CODING AGENT (WORKING …), JULIUS
  * (LIVE) — with timeline rows that read like live agent work: gold role
  * prefix, activity headline, dim sub-detail, right-aligned safe operation
  * summaries (CREATE / MODIFY / RUN …) and green ✓ COMPLETE steps, then the
@@ -50,19 +50,29 @@ const ACTIVE_STATES: ReadonlySet<WorkspaceOutputState> = new Set([
   'repairing',
 ]);
 
-/** Mixed-case role prefixes for terminal rows (founder photo language). */
+/** Mixed-case role prefixes for terminal rows (founder photo language).
+ *
+ * ORCHESTRATION IS JULIUS (founder canon, 2026-08-30). Every row that used to
+ * be attributed to "Relay" is the harness ABOVE the workers speaking -- mission
+ * locked, architect assigned, handoff accepted, evidence recorded, review
+ * requested, repair scheduled, mission verified -- and calling that "Relay"
+ * blurs the controller into the product. The three WORKER roles keep their own
+ * names, because the hierarchy has to be readable from the interface itself.
+ *
+ * These stay safe operational summaries: no chain-of-thought, no hidden
+ * prompts, no secrets, no internal reasoning. */
 const ROW_ROLE_LABEL: Record<TerminalEventCategory, string> = {
-  relay: 'Relay',
+  relay: 'Julius',
   prompt_architect: 'Prompt Architect',
   research: 'Prompt Architect',
   coding_agent: 'Coding Agent',
-  workspace_inspection: 'Relay Inspection',
-  verification: 'Relay Verification',
+  workspace_inspection: 'Julius Inspection',
+  verification: 'Julius Verification',
   reviewer: 'Reviewer',
   repair: 'Coding Agent',
-  manual_task: 'Relay',
-  completion_engine: 'Relay',
-  security: 'Relay Security',
+  manual_task: 'Julius',
+  completion_engine: 'Julius',
+  security: 'Julius Security',
   system: 'System',
 };
 
@@ -289,8 +299,15 @@ export function RelayLiveTerminalPanel({
   const architectEvents = events.filter((e) => ARCHITECT_CATS.has(e.category));
   const codingEvents = events.filter((e) => CODING_CATS.has(e.category));
   const reviewerEvents = events.filter((e) => REVIEWER_CATS.has(e.category));
-  // RELAY SYSTEM stays the catch-all, so a reviewer event appears in exactly
+  // JULIUS stays the catch-all, so a reviewer event appears in exactly
   // one lane rather than two.
+  //
+  // JULIUS IS NOT A WORKER SLOT (founder, 2026-08-30). The Prompt Architect,
+  // the Coding Agent and the Independent Reviewer are roles that DO work;
+  // Julius is the harness that assigns them, accepts their handoffs, records
+  // evidence and decides a mission is verified. It shares the panel column
+  // because that is the approved layout, and it carries the orchestration
+  // events rather than a worker's activity.
   const relayEvents = events.filter(
     (e) => !ARCHITECT_CATS.has(e.category) && !CODING_CATS.has(e.category)
       && !REVIEWER_CATS.has(e.category),
@@ -447,7 +464,7 @@ export function RelayLiveTerminalPanel({
             />
             <RolePanel
               {...roleProps('relay_system')}
-              title="RELAY SYSTEM"
+              title="JULIUS"
               chip={demo ? 'DEMO' : live ? 'LIVE' : 'STANDBY'}
               rightStatus={OUTPUT_STATE_LABEL[outputState]}
               busy={false}

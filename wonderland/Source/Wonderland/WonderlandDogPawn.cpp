@@ -264,7 +264,11 @@ void AWonderlandDogPawn::SetupPlayerInputComponent(UInputComponent* PlayerInputC
 	// Interact via BindKey — explicit FKeys, NO config mapping needed (the config
 	// +AxisMappings/+ActionMappings did not cook reliably). E / Space / F / Enter.
 	PlayerInputComponent->BindKey(EKeys::E, IE_Pressed, this, &AWonderlandDogPawn::OnInteract);
-	PlayerInputComponent->BindKey(EKeys::SpaceBar, IE_Pressed, this, &AWonderlandDogPawn::OnInteract);
+	// SPACE IS NOT AN INTERACT KEY ANY MORE. Founder canon, 2026-08-30: Space
+	// opens the Live Terminal everywhere in Wonderland, so it cannot also mean
+	// "interact" on the V1 pawn -- one key, one meaning, or the participant
+	// learns the wrong thing in whichever surface they meet first. E, F and
+	// Enter still interact.
 	PlayerInputComponent->BindKey(EKeys::F, IE_Pressed, this, &AWonderlandDogPawn::OnInteract);
 	PlayerInputComponent->BindKey(EKeys::Enter, IE_Pressed, this, &AWonderlandDogPawn::OnInteract);
 

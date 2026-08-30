@@ -10,7 +10,7 @@ import { RELAY_DEMO_SCRIPT } from './demo-simulation-script';
  * RENDERER-PRESERVATION GATE — starting Demo Simulation must NOT swap the
  * original Claude Code-built Live Terminal for the old Codex demo-terminal
  * interface. The same RelayLiveTerminalPanel (PROMPT ARCHITECT / CODING AGENT
- * / RELAY SYSTEM RolePanels) stays mounted and is fed projected simulated
+ * / JULIUS RolePanels) stays mounted and is fed projected simulated
  * events. The forbidden alternate surface must never render.
  */
 
@@ -54,7 +54,7 @@ describe('Demo Simulation keeps the original Live Terminal renderer', () => {
     // Same original component, same three RolePanels, before any demo click.
     expect(liveTerminal()).toBeTruthy();
     expect(screen.getByRole('region', { name: 'PROMPT ARCHITECT activity' })).toBeTruthy();
-    expect(screen.getByRole('region', { name: 'RELAY SYSTEM activity' })).toBeTruthy();
+    expect(screen.getByRole('region', { name: 'JULIUS activity' })).toBeTruthy();
   });
 
   it('keeps the SAME Live Terminal mounted and populates its original panels during autoplay', async () => {
@@ -76,7 +76,7 @@ describe('Demo Simulation keeps the original Live Terminal renderer', () => {
     // Original vertical role panels remain and are populated with simulated work.
     const architect = screen.getByRole('region', { name: 'PROMPT ARCHITECT activity' });
     const coding = screen.getByRole('region', { name: 'CODING AGENT activity' });
-    const relay = screen.getByRole('region', { name: 'RELAY SYSTEM activity' });
+    const relay = screen.getByRole('region', { name: 'JULIUS activity' });
     expect(architect.textContent).toContain('Prompt Architect');
     expect(coding.textContent).toContain('Coding Agent');
     expect(relay.textContent).toMatch(/Reviewer|Relay/);

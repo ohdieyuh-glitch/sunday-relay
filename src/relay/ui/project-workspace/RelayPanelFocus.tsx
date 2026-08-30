@@ -58,7 +58,7 @@ export const RELAY_PANEL_NAME: Readonly<Record<RelayFocusablePanel, string>> = O
   conversation: 'Project conversation',
   console: 'Relay Console',
   live_terminal: 'Live Terminal',
-  relay_system: 'Relay System',
+  relay_system: 'Julius',
 });
 
 export const EXPAND_TOOLTIP = 'Expand';

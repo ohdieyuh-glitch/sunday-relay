@@ -151,7 +151,7 @@ describe('truthfulness survives the live-coding look', () => {
     // "all tests passing" is done but NOT Relay-verified: ✓ COMPLETE without ✓ VERIFIED.
     expect(html).toContain('✓ COMPLETE');
     const codingPanel = html.slice(html.indexOf('CODING AGENT activity'));
-    expect(codingPanel.slice(0, codingPanel.indexOf('RELAY SYSTEM'))).not.toContain('✓ VERIFIED');
+    expect(codingPanel.slice(0, codingPanel.indexOf('JULIUS'))).not.toContain('✓ VERIFIED');
   });
 
   it('reduced motion disables the streaming presentation class-wise', () => {

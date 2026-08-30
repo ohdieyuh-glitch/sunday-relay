@@ -835,7 +835,7 @@ describe('the terminal is mounted in the real workspace surfaces', () => {
     expect(within(dialog).queryByLabelText('CODING AGENT activity')).toBeNull();
     // The architect and system role panels are untouched.
     expect(within(dialog).getByLabelText('PROMPT ARCHITECT activity')).toBeTruthy();
-    expect(within(dialog).getByLabelText('RELAY SYSTEM activity')).toBeTruthy();
+    expect(within(dialog).getByLabelText('JULIUS activity')).toBeTruthy();
   });
 
   it('renders truthful role rows beside the terminal', () => {

@@ -175,6 +175,11 @@ protected:
 	void OnRunReleased();
 	void OnWalkPressed();
 	void OnWalkReleased();
+	/** SPACE. Canon, 2026-08-30: Wonderland is an AI creation platform wrapped
+	 *  in an open world, so Space is a CREATION control and not a traversal
+	 *  one. It opens the participant's Live Terminal -- their direct interface
+	 *  to the Compound Agent -- and the Dog does not jump. */
+	void OnLiveTerminalPressed();
 
 
 	/** Find every Pivot_<joint> the generator built. Returns false and logs

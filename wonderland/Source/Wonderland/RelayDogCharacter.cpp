@@ -107,9 +107,19 @@ ARelayDogCharacter::ARelayDogCharacter()
 		// terrace wall the Dog has no business climbing.
 		Move->MaxStepHeight = 30.0f;
 		Move->SetWalkableFloorAngle(46.0f);
+		// LEGACY, NON-PLAYER. Jump is not part of Wonderland locomotion (see
+		// SetupPlayerInputComponent). These stay only so that a fall off a
+		// step still resolves with sane air physics; nothing in normal
+		// gameplay can start a jump.
 		Move->JumpZVelocity = 420.0f;
 		Move->AirControl = 0.35f;
 	}
+	// AND THE ABILITY IS REFUSED, not merely unbound. An unbound ability is
+	// still reachable from a Blueprint, a gamepad default or a later input
+	// mapping, and Wonderland's traversal is now audited on the promise that
+	// no route anywhere needs a jump. JumpMaxCount 0 is ACharacter's own
+	// answer to "this character does not jump".
+	JumpMaxCount = 0;
 	// THE FOUNDER'S DOG IS THE ONE IN THE WORLD. The playtest possesses the Dog
 	// that is already standing in Golden Arrival rather than spawning a second
 	// one at a PlayerStart: there is exactly one canonical Relay Dog, and the
@@ -435,8 +445,20 @@ void ARelayDogCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputC
 	PlayerInputComponent->BindKey(EKeys::RightShift, IE_Released, this, &ARelayDogCharacter::OnRunReleased);
 	PlayerInputComponent->BindKey(EKeys::LeftControl, IE_Pressed, this, &ARelayDogCharacter::OnWalkPressed);
 	PlayerInputComponent->BindKey(EKeys::LeftControl, IE_Released, this, &ARelayDogCharacter::OnWalkReleased);
-	PlayerInputComponent->BindKey(EKeys::SpaceBar, IE_Pressed, this, &ACharacter::Jump);
-	PlayerInputComponent->BindKey(EKeys::SpaceBar, IE_Released, this, &ACharacter::StopJumping);
+	// SPACE IS THE LIVE TERMINAL. THE RELAY DOG DOES NOT JUMP.
+	//
+	// Founder canon, 2026-08-30: "Wonderland is an AI creation platform wrapped
+	// in an open-world gaming interface, not a conventional game with AI bolted
+	// onto it." A traversal mechanic that produces nothing outside the world is
+	// the wrong thing to spend the most reachable key on; the participant's
+	// direct line to their Compound Agent is the right thing.
+	//
+	// Jump is not merely unbound -- an unbound ability is still reachable from
+	// a Blueprint, a gamepad default or a future input mapping, and the world
+	// is now audited on the promise that no route needs it. `bCanJump` refuses
+	// it at the character.
+	PlayerInputComponent->BindKey(EKeys::SpaceBar, IE_Pressed, this,
+	                              &ARelayDogCharacter::OnLiveTerminalPressed);
 
 	// A possessed Dog steers with the mouse, so the boom follows the controller
 	// rather than the body; the capture demo keeps the body-locked boom.
@@ -446,7 +468,22 @@ void ARelayDogCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputC
 		CameraBoom->bInheritPitch = true;
 		CameraBoom->bInheritYaw = true;
 	}
-	UE_LOG(LogTemp, Log, TEXT("WLDOG INPUT bound on %s (WASD, mouse, shift=run, ctrl=walk, space=jump)"), *GetName());
+	UE_LOG(LogTemp, Log, TEXT("WLDOG INPUT bound on %s (WASD, mouse, shift=run, ctrl=walk, SPACE=LIVE TERMINAL; the Dog does not jump)"), *GetName());
+}
+
+void ARelayDogCharacter::OnLiveTerminalPressed()
+{
+	// SPACE OPENS THE LIVE TERMINAL, and the participant's terminal lives in
+	// the BROWSER, over the Pixel Streaming view -- it is the founder-approved
+	// Relay panel, and re-drawing it in UMG would be redrawing an approved
+	// design in a second place where it could drift.
+	//
+	// So the front end intercepts Space before it is forwarded to the game
+	// (see wonderland/web/player), and this handler is the guard for the case
+	// where a key still arrives: it must do something that is NOT a jump, and
+	// it must say so in the log, because "space did nothing" and "space is
+	// wired to the terminal" look identical from a video otherwise.
+	UE_LOG(LogTemp, Log, TEXT("WLDOG INPUT: SPACE -> live terminal (the front end owns the panel; the Dog does not jump)"));
 }
 
 void ARelayDogCharacter::MoveForwardAxis(float Value)

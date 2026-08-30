@@ -126,7 +126,7 @@ describe('live terminal', () => {
     // Founder Terminal Mode structure: per-role panels + mission status row.
     expect(html).toContain('PROMPT ARCHITECT');
     expect(html).toContain('CODING AGENT');
-    expect(html).toContain('RELAY SYSTEM');
+    expect(html).toContain('JULIUS');
     expect(html).toContain('MISSION IN PROGRESS');
     expect(html).toContain('CONTEXT ID: rly_001_20260722_115712');
     expect(html).toContain('RUN typecheck'); // safe summarized op, never a raw command
