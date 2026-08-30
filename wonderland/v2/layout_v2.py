@@ -4784,7 +4784,7 @@ _FAR_HORIZON_SPACING = 26000.0
 
 def _far_horizon():
     r0, r1 = _FAR_HORIZON_BAND
-    kept, out = [], []
+    kept, out, towered = [], [], []
     for k in range(_FAR_HORIZON_TRIES):
         u = (k + 0.5) / _FAR_HORIZON_TRIES
         r = math.sqrt(r0 * r0 + (r1 * r1 - r0 * r0) * u)
@@ -4816,18 +4816,63 @@ def _far_horizon():
                          sxyz=(s, s * 0.72, s * (0.40 + 0.30 * _rnd(i, k, 155))),
                          mat=("MI_V2_LeafDark", "MI_V2_LeafMid")[i % 2],
                          label="%s_Ridge%d" % (tag, i)))
-        # and now and then something standing on one
-        if _rnd(k, 151, 6) < 0.34:
-            for i in range(2):
-                h = 5.0 + 3.0 * _rnd(i, k, 157)
-                tx = x + (i - 0.5) * 3400.0
-                out += [
-                    A("tower_capped", tx, y, 0, yaw=_rnd(i, k, 158) * 360.0, s=h,
-                      mat="MI_V2_IvoryStone", label="%s_Tower%d" % (tag, i)),
-                    A("roof_cone_steep", tx, y, 1100.0 * h, s=h,
-                      mat=("MI_V2_RoofPink", "MI_V2_RoofNavy")[i % 2],
-                      label="%s_TowerCap%d" % (tag, i)),
-                ]
+        # and now and then something standing on one -- decided below, once
+        # every ridge's bearing is known
+        towered.append([x, y, k, tag, _rnd(k, 151, 6) < 0.34])
+
+    # WHICH RIDGES GET A SILHOUETTE IS AN ANGULAR QUESTION, NOT A COIN FLIP.
+    #
+    # The ridges themselves are golden-angle spaced and land evenly. The towers
+    # were then chosen by an independent 34% draw per ridge, which is the same
+    # as choosing them at random around the circle -- and random points on a
+    # circle leave long gaps. Measured on the outer band: 70 tall pieces across
+    # 29 of 72 five-degree sectors, with an EMPTY ARC OF 95 DEGREES. A quarter
+    # of the horizon had nothing standing above the tree line, so from a
+    # good part of the world the place simply stopped at the canopy.
+    #
+    # Filling every sector would be worse: an even ring of towers is exactly
+    # the artificial tier the hierarchy exists to avoid, and 30-40 degrees of
+    # open sky between silhouettes is what makes the ones that are there read
+    # as distant. So the 34% draw stands, and only ARCS TOO WIDE TO BE SKY get
+    # a ridge promoted -- the one nearest the middle of the gap, which is where
+    # the eye is looking when it notices the world ended.
+    _GAP = 52.0                      # degrees of empty horizon that reads as a void
+    bearings = [(math.degrees(math.atan2(t[1], t[0])) % 360.0, i)
+                for i, t in enumerate(towered)]
+    for _ in range(len(towered)):
+        have = sorted(b for (b, i) in bearings if towered[i][4])
+        if not have:
+            towered[bearings[0][1]][4] = True
+            continue
+        # the widest gap on the circle, and the bearing at its middle
+        widest, mid = 0.0, None
+        for j, b in enumerate(have):
+            nxt = have[(j + 1) % len(have)]
+            gap = (nxt - b) % 360.0 or (360.0 if len(have) == 1 else 0.0)
+            if gap > widest:
+                widest, mid = gap, (b + gap / 2.0) % 360.0
+        if widest <= _GAP:
+            break
+        # promote the un-towered ridge closest to the middle of that gap
+        cand = [(abs(((b - mid + 180.0) % 360.0) - 180.0), i)
+                for (b, i) in bearings if not towered[i][4]]
+        if not cand:
+            break
+        towered[min(cand)[1]][4] = True
+
+    for (x, y, k, tag, has_tower) in towered:
+        if not has_tower:
+            continue
+        for i in range(2):
+            h = 5.0 + 3.0 * _rnd(i, k, 157)
+            tx = x + (i - 0.5) * 3400.0
+            out += [
+                A("tower_capped", tx, y, 0, yaw=_rnd(i, k, 158) * 360.0, s=h,
+                  mat="MI_V2_IvoryStone", label="%s_Tower%d" % (tag, i)),
+                A("roof_cone_steep", tx, y, 1100.0 * h, s=h,
+                  mat=("MI_V2_RoofPink", "MI_V2_RoofNavy")[i % 2],
+                  label="%s_TowerCap%d" % (tag, i)),
+            ]
     return out
 
 
