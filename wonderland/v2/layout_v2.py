@@ -696,8 +696,15 @@ def _parterre(sgn, cx, cy, seed, tag):
         # of as a planted bed -- in the boards a bed's ground is dark worked
         # soil, and it is a surprising amount of why their gardens look
         # gardened. garden_lawn is 6004 x 7197 x 30, so these fractions make a
-        # 620 x 620 floor; sunk 6 uu so the hedge edges stand proud of it.
-        out.append(A("garden_lawn", bx, by, -6.0, sxyz=(0.1033, 0.0862, 0.5),
+        # 620 x 620 floor, RAISED 3 uu rather than sunk. garden_lawn's box is
+        # `box(6000, 7200, 24, at=(0,0,-12))` -- centred 12 below its origin,
+        # so its top SURFACE is at local z = 0 and all its thickness hangs
+        # below. Placed at z = -6, as this first read, the bed floor's surface
+        # would have sat 6 uu UNDER the ground slab's top and the whole thing
+        # would have been invisible: a bed floor nobody would ever see, and no
+        # gate would have caught it because it placed and resolved perfectly.
+        # +3 puts it just proud of the slab (0) and of the garden lawn (-2).
+        out.append(A("garden_lawn", bx, by, 3.0, sxyz=(0.1033, 0.0862, 0.5),
                      mat="MI_V2_Soil", label="%s_Bed%d_Soil" % (tag, i)))
         # what fills it
         out.append(A("rose_bush", bx, by, 60, yaw=40 * i, s=0.85,
