@@ -919,6 +919,30 @@ def _flank(sgn, tag):
     out += _mushroom_cluster(sgn, sgn * 6400, -1750, 4900 if sgn > 0 else 5000, "%s_NearMush" % tag)
     out += _parterre(sgn, sgn * 4350, 700, 4100 if sgn > 0 else 4200, "%s_Parterre" % tag)
     out += _rose_walk(sgn, 3050, 1900, 5900, 4300, "%s_Walk" % tag)
+    # A PAVED SPINE DOES NOT FIT HERE, AND THAT IS THE FINDING.
+    #
+    # Every room in this flank is joined by lawn, which is unlike the
+    # reference (its gardens are threaded with stone) and against the brief's
+    # rule that art and navigation are developed together: a garden with no
+    # path is a garden nobody walks. So a paved run was authored along the
+    # flank's length -- and then MEASURED before it shipped, by scanning the
+    # clearance of a straight line at every x from 2,800 to 4,500 over
+    # y 2,000..5,800 against every solid actor:
+    #
+    #   best clearance, left flank:   -25 uu (at x = 3,300)
+    #   best clearance, right flank: +102 uu (at x = 3,400)
+    #
+    # A 3 m walk needs 150. Nothing fits, on either side, anywhere in the
+    # band. The obstruction is not this pass's work: a pre-existing hedge mass
+    # (BeyondL_Wall0_0, r=416 at 3,683/4,617) lies across the line, and the
+    # rose border at 3,050 closes the gap from the other side. Paving it
+    # anyway would have run stone through a hedge.
+    #
+    # So the walk is NOT placed. The flank's rooms are reached individually
+    # from the plaza for now, and its internal circulation is real design work
+    # -- a routed path that goes round what is already there, or that hedge
+    # moved -- rather than a strip laid down a constant x. Recorded here so
+    # the next pass starts from the measurement instead of rediscovering it.
     out += _grove(sgn, sgn * 5450, 3650, 4400 if sgn > 0 else 4500, "%s_Grove" % tag)
     out += _mushroom_cluster(sgn, sgn * 4900, 6900, 4600 if sgn > 0 else 4700, "%s_Mush" % tag)
     out += _boundary(sgn, 7700, -1200, 8300, 4800, "%s_Edge" % tag)
