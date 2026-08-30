@@ -769,7 +769,15 @@ def _grove(sgn, cx, cy, seed, tag, count=5):
         if tall:
             out.append(A("tree_mature_trunk", x, y, 0, yaw=_rnd(i, seed, 7) * 360.0, s=sc,
                          mat="MI_V2_Bark", label="%s_Trunk%d" % (tag, i)))
-            out.append(A("canopy_large", x, y, 1180 * sc, yaw=_rnd(i, seed, 8) * 360.0, s=sc * 1.05,
+            # 1320, not 1180. tree_mature_trunk MEASURES 1,066 x 929 x 1,752
+            # uu -- the 1,400 in its recipe is the bole, and its limbs carry it
+            # to 1,752. canopy_large is 837 tall, so centred at 1,180 x sc it
+            # topped out at 1,619 x sc and left 133 x sc of bare branch above
+            # the leaves: the brown spikes still visible on the grove trees in
+            # FlankRightCam09 after PASS 08 shortened the limbs. Shortening
+            # them was right and was not enough, because the canopy was hung
+            # too low to meet them. 1,320 x sc puts the leaf top at 1,759.
+            out.append(A("canopy_large", x, y, 1320 * sc, yaw=_rnd(i, seed, 8) * 360.0, s=sc * 1.05,
                          mat=("MI_V2_LeafMid", "MI_V2_LeafDark", "MI_V2_LeafLight")[i % 3],
                          label="%s_Canopy%d" % (tag, i)))
         else:
@@ -887,7 +895,7 @@ def _flank(sgn, tag):
     out += [
         A("tree_mature_trunk", sgn * 3150, -1450, 0, yaw=200, s=1.05, mat="MI_V2_Bark",
           label="%s_NearTreeA_Trunk" % tag),
-        A("canopy_large", sgn * 3150, -1450, 1240, yaw=40, s=1.1, mat="MI_V2_LeafMid",
+        A("canopy_large", sgn * 3150, -1450, 1385, yaw=40, s=1.1, mat="MI_V2_LeafMid",
           label="%s_NearTreeA_Canopy" % tag),
         A("tree_slender_trunk", sgn * 6000, -1350, 0, yaw=70, s=1.0, mat="MI_V2_Bark",
           label="%s_NearTreeB_Trunk" % tag),
