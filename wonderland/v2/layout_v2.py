@@ -2174,6 +2174,99 @@ def _quarter_water(cx, cy, sgn, seed, tag, H=None):
     return out
 
 
+def _quarter_lake(cx, cy, sgn, seed, tag, H=None):
+    """A LAKE -- the water feature at the scale the boards actually draw.
+
+    Twelve fountains across the world is a lot of water and none of it is
+    BIG, and the boards' water panel is not twelve fountains: it is a sheet of
+    water with a rim, planting at its edge and something to cross it by. There
+    was no room left to put a lake between the quarters -- the widest clear
+    spot in the whole southern half measures under 25 m -- so a lake is a KIND
+    of quarter instead, and the Water Gardens district makes some of its
+    quarters lakes.
+    
+    The sheet is `garden_lawn` wearing MI_V2_Water: 48 x 48 of displaced grid,
+    which under a water material is ripple rather than plate. Sunk 8 uu so the
+    shore has an edge, with an island at its middle carrying the fountain, a
+    balustrade rim broken where the path comes down, reeds at the water line
+    and seats facing it.
+    """
+    H = H or HIER(cx, cy)
+    sp, sc = H["spacing"], H["scale"]
+    out = []
+    w = 0.52 * sp
+    yaw0 = (seed * 29) % 90
+    out.append(A("garden_lawn", cx, cy, -8.0, yaw=yaw0, sxyz=(w, w * 0.88, 1.0),
+                 mat="MI_V2_Water", label="%s_Water" % tag))
+    rx, ry = 6004.0 * w * 0.5, 7197.0 * w * 0.88 * 0.5
+    # the rim, broken where the path comes down to the water
+    n_rim = _n(16, 0.6 + 0.6 * H["density"], 10)
+    for i in range(n_rim):
+        a = 6.283 * i / n_rim
+        px, py = cx + math.cos(a) * rx * 1.04, cy + math.sin(a) * ry * 1.04
+        if 0.20 < (i / float(n_rim)) < 0.30:
+            continue                          # the slipway
+        out.append(A(("balustrade", "kerb_stone")[i % 2], px, py, 0,
+                     yaw=math.degrees(a) + 90.0,
+                     sxyz=(1.0, 1.0, 1.0) if i % 2 == 0 else (3.0, 1.0, 0.6),
+                     mat=("MI_V2_IvoryStone", "MI_V2_Kerb")[i % 2],
+                     label="%s_Rim%d" % (tag, i)))
+        if i % 4 == 0:
+            out += [
+                A("pedestal_finial", px, py, 0, s=0.6 * sc, mat="MI_V2_IvoryStone",
+                  label="%s_Post%d" % (tag, i)),
+                A("gate_finial_ball", px, py, 84.0 * sc, s=0.36 * sc, mat="MI_V2_Gold",
+                  label="%s_Lamp%d" % (tag, i)),
+            ]
+    # THE ISLAND, and what stands on it
+    fs = (1.0 + 0.4 * (H["landmark_scale"] - 1.0)) * sc
+    out += [
+        A("stone_ring_base", cx, cy, -2, s=2.4 * fs, mat="MI_V2_Stone",
+          label="%s_Island" % tag),
+        A("fountain_basin", cx, cy, 0, s=1.15 * fs, mat="MI_V2_IvoryStone",
+          label="%s_Basin" % tag),
+        A("fountain_water", cx, cy, 0, s=1.15 * fs, mat="MI_V2_Water",
+          label="%s_BasinWater" % tag),
+        A("fountain_finial", cx, cy, 300.0 * fs, s=1.15 * fs, mat="MI_V2_Gold",
+          label="%s_Finial" % tag),
+    ]
+    # A WAY ACROSS. `castle_bridge` has been used exactly once in this world,
+    # inside the castle groups, and a lake is what a bridge is for.
+    out.append(A("castle_bridge", cx, cy - ry * 0.55, 60.0, yaw=yaw0, s=0.5 * sc,
+                 mat="MI_V2_IvoryStone", label="%s_Bridge" % tag))
+    # reeds at the water line, and the path that runs round it
+    for i in range(_n(10, 0.6 + 0.8 * H["veg"], 5)):
+        a = 6.283 * _rnd(i, seed, 61)
+        px = cx + math.cos(a) * rx * (0.96 + 0.10 * _rnd(i, seed, 62))
+        py = cy + math.sin(a) * ry * (0.96 + 0.10 * _rnd(i, seed, 62))
+        out.append(A(("lavender_stems", "shrub_flowering", "rose_bush")[i % 3], px, py, 0,
+                     yaw=_rnd(i, seed, 63) * 360.0,
+                     s=(0.9 + 0.4 * _rnd(i, seed, 64)) * sc,
+                     mat=("MI_V2_LeafMid", "MI_V2_LeafDark")[i % 2],
+                     label="%s_Reed%d" % (tag, i)))
+    n_path = _n(12, H["density"], 8)
+    for i in range(n_path):
+        a0 = 6.283 * i / n_path
+        a1 = 6.283 * (i + 1) / n_path
+        x0, y0 = cx + math.cos(a0) * rx * 1.22, cy + math.sin(a0) * ry * 1.22
+        x1, y1 = cx + math.cos(a1) * rx * 1.22, cy + math.sin(a1) * ry * 1.22
+        d = math.hypot(x1 - x0, y1 - y0) or 1.0
+        out.append(A("terrace_platform", (x0 + x1) * 0.5, (y0 + y1) * 0.5, -18.0,
+                     yaw=math.degrees(math.atan2(y1 - y0, x1 - x0)),
+                     sxyz=(d / 1440.0, 0.20, 0.35), mat="MI_V2_PlazaCream",
+                     label="%s_Walk%d" % (tag, i)))
+    for k, a in enumerate((0.6, 2.7, 4.4)):
+        bx = cx + math.cos(a) * rx * 1.30
+        by = cy + math.sin(a) * ry * 1.30
+        out.append(A("garden_bench", bx, by, 0,
+                     yaw=math.degrees(math.atan2(cy - by, cx - bx)),
+                     s=1.05 * sc, mat="MI_V2_IvoryStone",
+                     label="%s_Bench%d" % (tag, k)))
+    out.append(A("signpost", cx + rx * 1.34, cy, 0, yaw=180.0, s=1.15 * sc,
+                 mat="MI_V2_IvoryStone", label="%s_Sign" % tag))
+    return out
+
+
 def _quarter_tea(cx, cy, sgn, seed, tag, H=None):
     """THE TEA TERRACE -- Wonderland's own furniture, at garden scale.
 
@@ -2582,7 +2675,9 @@ _DISTRICT_SEEDS = (
     ("Tower Rise",       120.0, 13000.0, ("towers", "court", "clockyard")),
     ("Lantern Hamlets",  152.0, 15500.0, ("hamlet", "court", "garden")),
     ("Tea Terraces",     200.0, 11500.0, ("tea", "garden", "court")),
-    ("Water Gardens",    248.0, 12000.0, ("water", "water", "garden")),
+    # no garden in this palette: a district called the Water Gardens should
+    # arrive at a garden by FALLING BACK to one, not by choosing it
+    ("Water Gardens",    248.0, 12000.0, ("lake", "water", "water")),
     ("Mushroom Grove",   300.0, 14000.0, ("grove", "wood", "grove")),
     ("Gatekeeper Fields",340.0, 15000.0, ("meadow", "hamlet", "garden")),
     ("North Reach",      130.0, 25000.0, ("wood", "hamlet", "meadow")),
@@ -2797,7 +2892,13 @@ def _distance_sites():
 #: tower ended up inside an S04 wall with every keep-out satisfied.
 _REACH = {"garden": 2750.0, "towers": 2350.0, "grove": 1950.0, "wood": 2900.0,
           "clockyard": 2200.0, "water": 2100.0, "tea": 1900.0, "court": 2600.0,
-          "hamlet": 2000.0, "meadow": 3800.0}
+          "hamlet": 2000.0, "meadow": 3800.0,
+          # MEASURED off the builder, like the rest: the sheet is
+          # garden_lawn at 0.52 * spacing (half-width 1,560 uu at spacing 1)
+          # and the path ring sits at 1.22 of that. 2,600 was a guess and it
+          # made the lake so demanding that both candidates fell back to a
+          # fountain -- the kind existed and the world had none of it.
+          "lake": 1900.0}
 #: uu. How far a site may be nudged from where it was first put.
 #:
 #: Two budgets, because the two kinds of site mean different things. A `Q` or
@@ -2872,7 +2973,7 @@ def _reach(kind, H):
 #: meadows running into each other is a landscape rather than a collision.
 _BODY = {"garden": 0.45, "towers": 0.80, "grove": 0.55, "wood": 0.85,
          "clockyard": 0.78, "water": 0.80, "tea": 0.62, "court": 0.80,
-         "hamlet": 0.76, "meadow": 0.30}
+         "hamlet": 0.76, "meadow": 0.30, "lake": 0.90}
 
 
 def _body(kind, H):
@@ -2897,6 +2998,7 @@ _KIND_FALLBACK = {
     "court":     ("garden", "grove", "meadow"),
     "clockyard": ("court", "garden", "grove"),
     "towers":    ("hamlet", "grove", "meadow"),
+    "lake":      ("water", "garden", "grove"),
     "water":     ("garden", "grove", "meadow"),
     "garden":    ("grove", "meadow"),
     "tea":       ("garden", "grove"),
@@ -3321,7 +3423,8 @@ _QUARTER_BUILDERS = {"garden": _quarter_garden, "towers": _quarter_towers,
                      "grove": _quarter_grove, "wood": _quarter_wood,
                      "clockyard": _quarter_clockyard, "water": _quarter_water,
                      "tea": _quarter_tea, "court": _quarter_court,
-                     "hamlet": _quarter_hamlet, "meadow": _quarter_meadow}
+                     "hamlet": _quarter_hamlet, "meadow": _quarter_meadow,
+                     "lake": _quarter_lake}
 
 
 def _quarter_edge(s, H):
