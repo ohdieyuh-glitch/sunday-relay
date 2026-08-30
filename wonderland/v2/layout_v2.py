@@ -1591,6 +1591,74 @@ def _outer_world():
 OUTER_WORLD = _band("V2_Skyline", _outer_world())
 
 
+# ---------------------------------------------------------------------------
+# THE PLAZA STOPS BEING A GRID OF SLABS
+# ---------------------------------------------------------------------------
+#
+# The brief is specific about this surface: it must stop reading as repeated
+# prototype slabs and move toward crafted royal fantasy stonework, with
+# "selective ornamental inserts", "edge treatment" and "gold detail only where
+# tasteful" -- and explicitly NOT noise added to hide repetition. PASS 08 gave
+# the slabs four tints and a per-slab draw, which is the material half. This
+# is the other half: a plaza in the boards has a CENTRE and an EDGE, and ours
+# had neither. A grid with no centre is a floor; a grid with a medallion at
+# its heart and a border course at its rim is a plaza.
+#
+# Everything here sits at the plaza's own level and inside PLAZA_RECT
+# (x +-650, y -1500..800), and the medallion is a ring rather than a disc so
+# the arrival floor the brief wants kept open for gathering stays open.
+
+def _plaza_ornament():
+    out = []
+    cx, cy = 0.0, -350.0                       # the plaza's own centre
+    # THE MEDALLION: a ring of alternating gold and stone inlays, laid flat.
+    for i in range(16):
+        a = 6.283 * i / 16.0
+        r = 430.0
+        out.append(A("kerb_stone", cx + math.cos(a) * r, cy + math.sin(a) * r, 2,
+                     yaw=math.degrees(a) + 90.0, sxyz=(1.45, 0.62, 0.10),
+                     mat=("MI_V2_Gold", "MI_V2_PlazaWarm")[i % 2],
+                     label="Plaza_Medallion%d" % i))
+    # an inner ring, tighter and all stone, so the centre reads as worked
+    for i in range(10):
+        a = 6.283 * i / 10.0 + 0.31
+        out.append(A("kerb_stone", cx + math.cos(a) * 215.0, cy + math.sin(a) * 215.0, 2,
+                     yaw=math.degrees(a) + 90.0, sxyz=(1.05, 0.5, 0.09),
+                     mat="MI_V2_PlazaShade", label="Plaza_MedallionInner%d" % i))
+    # THE BORDER COURSE: a run of kerb along the plaza's four edges, just
+    # inside the side steps, which is what stops a paved field from simply
+    # ending.
+    x0, x1, y0, y1 = -650.0, 650.0, -1500.0, 800.0
+    for i in range(9):
+        t = i / 8.0
+        out += [
+            A("kerb_stone", x0 + 34.0, y0 + (y1 - y0) * t, 2, yaw=90,
+              sxyz=(2.4, 0.66, 0.13), mat="MI_V2_Kerb", label="Plaza_BorderL%d" % i),
+            A("kerb_stone", x1 - 34.0, y0 + (y1 - y0) * t, 2, yaw=90,
+              sxyz=(2.4, 0.66, 0.13), mat="MI_V2_Kerb", label="Plaza_BorderR%d" % i),
+        ]
+    for i in range(6):
+        t = i / 5.0
+        out.append(A("kerb_stone", x0 + (x1 - x0) * t, y0 + 34.0, 2, yaw=0,
+                     sxyz=(2.0, 0.66, 0.13), mat="MI_V2_Kerb",
+                     label="Plaza_BorderS%d" % i))
+    # GOLD, SPARINGLY: four small inlays on the medallion's axes, and nothing
+    # else on this floor. The brief's rule is that gold is an accent that
+    # communicates royal structure, not a coating.
+    # ON THE DIAGONALS, not the axes. The layout gate refused the first
+    # version: an inlay at (0, -990) stands on the GATE-VIEW AXIS, the line
+    # PlayerCam01 looks down and a participant walks in along. That check
+    # exists because the arrival sightline is composed, and a gold ball on it
+    # is an obstruction in the one view the district is built around.
+    for i, (dx, dy) in enumerate(((470, 450), (-470, 450), (470, -450), (-470, -450))):
+        out.append(A("gate_finial_ball", cx + dx, cy + dy, 6, s=0.30,
+                     mat="MI_V2_Gold", label="Plaza_Inlay%d" % i))
+    return out
+
+
+PLAZA_ORNAMENT = _band("V2_Arrival", _plaza_ornament())
+
+
 #: THE BANDS THE BUILDER WALKS. One list, so `ALL` and build_v2 cannot drift.
 #:
 #: They already had. build_v2 kept its own hand-written list and `ALL` kept
@@ -1601,7 +1669,7 @@ OUTER_WORLD = _band("V2_Skyline", _outer_world())
 #: gate reading a different list from the builder reports the world it was
 #: shown, not the world that gets made.
 BUILD_BANDS = [FOREGROUND, COURTYARD, GARDEN, PALACE, FLANK_GROUND, FLANKS,
-               REARWORLD, CAM_FOREGROUNDS, OUTER_WORLD]
+               REARWORLD, CAM_FOREGROUNDS, OUTER_WORLD, PLAZA_ORNAMENT]
 
 #: Everything the layout declares: what the builder walks, plus the two bands
 #: it places by their own rules (SKY is the dome/atmosphere, HOVER is lifted

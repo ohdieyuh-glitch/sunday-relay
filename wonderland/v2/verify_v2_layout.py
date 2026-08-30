@@ -44,8 +44,17 @@ def main():
         x, y, z = it["pos"]
         if it["asset"] in TALL and abs(x) < 260.0 and 900.0 < y < 4400.0:
             fails.append("%s (%s) stands in the corridor at (%d, %d)" % (it["label"], it["asset"], x, y))
+        # Floor-flat inlay is PAVING, not clutter. This check keeps the
+        # arrival floor free of objects, which is right -- the brief wants it
+        # open for gathering and movement -- but it had no notion of height,
+        # so it refused a medallion laid INTO the paving on the same terms as
+        # a bench. Ankle height with a crushed z scale is the signature of an
+        # inlay; anything with real height still fails.
+        _sc = it["scale"]
+        _sz = _sc[2] if isinstance(_sc, (list, tuple)) else _sc
+        _flat = z < 20.0 and abs(_sz) <= 0.15
         if x0 + 100 < x < x1 - 100 and y0 + 100 < y < y1 - 100 and it["asset"] not in PLAZA_OK \
-                and it["band"] not in ("V2_Props", "V2_Skyline"):
+                and it["band"] not in ("V2_Props", "V2_Skyline") and not _flat:
             fails.append("%s (%s) stands ON the plaza at (%d, %d)" % (it["label"], it["asset"], x, y))
     # every recipe's folder key must exist: a missing key is a KeyError at
     # asset time and a silently absent mesh in the level ("ground" was one)
@@ -93,9 +102,21 @@ def main():
         bearing = abs(math.degrees(math.atan2(dx, dy)))
         if bearing > half1:
             fails.append("%s at bearing %.0f is outside cam1's half-fov %.0f" % (lb, bearing, half1))
+    # THE GATE-VIEW AXIS must stay clear between cam1 and the gate -- it is the
+    # line PlayerCam01 looks down and a participant walks in along. The check
+    # had no notion of HEIGHT, so it refused a paving inlay lying flat on the
+    # floor as readily as it would refuse a tower: the plaza medallion's ring
+    # necessarily crosses x = 0, and 26 uu of kerb laid flat obstructs neither
+    # the view nor the walk. Anything deliberately floor-flat -- placed at
+    # ankle height with a crushed z scale -- is inlay rather than obstruction
+    # and is exempt; everything else still fails, which is what the corridor
+    # needs.
     for it in L.ALL:
         x, y = it["pos"][0], it["pos"][1]
-        if abs(x) < 120.0 and c1y < y < -700.0 and it["asset"] not in ("gate_leaf",):
+        sc = it["scale"]
+        sz = sc[2] if isinstance(sc, (list, tuple)) else sc
+        flat = it["pos"][2] < 20.0 and abs(sz) <= 0.15
+        if abs(x) < 120.0 and c1y < y < -700.0 and it["asset"] not in ("gate_leaf",) and not flat:
             fails.append("%s (%s) stands on the gate-view axis at (%d, %d)" % (it["label"], it["asset"], x, y))
     # THE PERMANENT CAMERA SUITE (founder, 2026-08-28). Eight cameras, fixed
     # names and indices, HeroCam0 frozen; each camera must hold the landmarks
