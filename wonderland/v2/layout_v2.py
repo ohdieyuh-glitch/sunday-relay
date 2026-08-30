@@ -861,6 +861,27 @@ REARWORLD = _band("V2_Garden", [
     A("garden_urn", -700, -2300, 112, s=0.55, mat="MI_V2_Ceramic", label="Rear_UrnR"),
     A("flower_cluster", 700, -2300, 190, s=0.45, mat="MI_V2_PetalWhite", label="Rear_UrnFlowersL"),
     A("flower_cluster", -700, -2300, 190, s=0.45, mat="MI_V2_PetalViolet", label="Rear_UrnFlowersR"),
+] + _grove(1, 2300, -8600, 5500, "Rear_FrameL", count=3)
+  + _grove(-1, -2500, -8500, 5600, "Rear_FrameR", count=3)
+  + _mushroom_cluster(1, 3600, -8900, 5700, "Rear_FrameMush")
+  + [
+    # THE REAR WORLD USED TO STOP 18 M SHORT OF ITS OWN CAMERA. RearWorldCam10
+    # stands at y = -9,400 and the furthest thing behind the spawn was a grove
+    # at -7,600: measured from the layout, ZERO placements within 15 m of the
+    # camera, so the view opened on 34 m of bare ground before it reached
+    # anything. The fix is not to move the camera in -- it is at the distance
+    # that reads the gate, the avenue, the arrival gate and the castle as one
+    # line of depth, which is the whole point of the view. The fix is that the
+    # world should not end before the place a participant stands in it.
+    A("hedge_block", side * (1500 + 120 * i), -8300 - 260 * i, 0, yaw=20 * i,
+      s=1.0, mat=("MI_V2_LeafDark", "MI_V2_LeafMid")[i % 2],
+      label="Rear_FarHedge%d_%d" % (side, i))
+    for side in (1, -1) for i in range(3)
+] + [
+    A("ground_flowers", side * 1900, -8750, 0, yaw=40 * side, s=1.1,
+      mat=("MI_V2_PetalViolet", "MI_V2_PetalWhite")[(side + 1) // 2],
+      label="Rear_FarFlowers%d" % side)
+    for side in (1, -1)
 ])
 
 
