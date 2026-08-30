@@ -1264,3 +1264,67 @@ plaza-side walls · performance, which now has a number.
    plan-view flood and the locomotion phase already proved that only walking
    finds a 60 uu riser. `playtest.sh` exists and has not been run against the
    district world.
+
+---
+
+## PASS 25 — THE WORLD, SOLVED FOR WALKING (2026-08-30)
+
+The founder's instruction was that the Relay Dog must walk this world, and
+that where a route does not work THE WORLD is repaired, not the route. Asking
+that question of the whole world at once turned out to be the fastest audit
+in the toolkit, and the most productive.
+
+**`tools/route.py`** — the fifth permanent tool. It builds the same obstacle
+field `walkable.py` audits with, floods it breadth-first from the spawn
+carrying parent pointers, and reads back a walkable path to every stop on the
+tour in one pass. ONE FLOOD, MANY DESTINATIONS: the first attempt searched per
+leg and did not finish in ten minutes; this solves the whole world in 5-16
+seconds. Paths are simplified by sight rather than by angle, so a grid
+staircase becomes a handful of legs.
+
+It reported four broken connections on its first run, and they were real:
+
+**The garden quarter and the hamlet were sealed inside their own flower
+beds.** Of 434,342 cells of open ground, exactly two were unreachable — the
+centres of two parterres, each with the ornament it is built around standing
+in the middle where no player could reach it. `_parterre` put the bed centres
+at `q/2 + w` from the axis, so `w` was the walk's half-width only if the beds'
+borders had no thickness; each border run is a stretched `hedge_block` of
+half-width 67.5 uu straddling the bed boundary, and two adjacent beds each
+took that out of the walk between them. Delivered: 112 uu. Not narrow —
+impassable. `off` now adds the border's own half-width, so `w` means what it
+says: a clear 2w, 3 m at full scale. The parterre grew 135 uu overall, under
+8 % of its width, and its proportions are unchanged.
+
+**A 13 m ivory tower was standing in a hedge.** `tools/hierarchy.py`'s
+embedded-landmark test was plan-only, so it had been reporting a clock
+ornament 5.6 m up a tree as "inside" the 2.6 m hedge below it — a standing
+false finding on approved composition, which is how a real one gets ignored.
+Made 3D (with tops measured from the recipes, failing CLOSED on any asset with
+no entry), the clock cleared and `Tower_R0` remained: an approach rung 1.4 m
+from its centre, wrapping a 5 m hedge blob around the foot of a landmark on
+the corridor every player walks. `_declutter` could not have caught it — it
+runs inside `_approach_sides` and the APPROACH band is assembled separately.
+`_approach_pair` now slides a colliding rung UP the climb until it clears,
+which keeps working when either end moves. Ledger item 7 is closed.
+
+**The exploration route is now generated, not typed.** 97 legs over 1,358 m,
+solved at an 80 uu capsule — more than twice the Dog's own 34 uu radius, so
+the tour has margin rather than merely fitting. Two hand-placed waypoints had
+already been found inside planting, each costing a capture. `route.py` also
+gates the trap that would have eaten this one: `StepRoute` abandons a leg after
+`max(12, hold + 25)` seconds and cannot tell "stuck" from "still walking", so
+a leg longer than its own budget is silently dropped and the tour quietly
+loses a stop. 0 of 97 overrun; the check now runs every time.
+
+**No leg needs a jump, and none ever will.** The Dog has none: Space is the
+Live Terminal, `JumpMaxCount = 0`, the ability refused rather than unbound.
+
+Audits after: walkable 0 of 60 quarters unreachable · emptiness 2,640 m2 with
+the largest region the deliberate castle sightline · hierarchy 0 embedded, 0
+roads crossing a quarter they do not serve · verify_v2_layout PASS ·
+verify_v2_dryrun PASS (625 actors) · verify_dog_canon PASS.
+
+Still open from the standing list: 1 (dark frames — PASS 24 lit them, unjudged
+in a fresh capture), 2, 3, 4, 5, 6. Item 7 closed. Item 8 half-closed: the
+route is solved and written, but it has not been RUN on hardware.

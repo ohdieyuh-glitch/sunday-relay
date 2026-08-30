@@ -333,6 +333,16 @@ def main():
             "castle_hall": (600, 600), "castle_arcade": (420, 200),
             "tree_mature_trunk": (105, 105), "hedge_block": (176, 75),
             "retaining_wall": (255, 50), "fountain_basin": (300, 300)}
+    #: BURIED IS A 3D QUESTION. This test was plan-only, so it reported a clock
+    #: ornament hanging 5.6 m up a tree as "inside" the 2.6 m hedge beneath it
+    #: -- a standing false finding on the founder-approved arrival composition,
+    #: which is exactly the kind of noise that gets a real one ignored. Tops
+    #: are measured from the recipes in assets_v2. An asset with no entry keeps
+    #: the old plan-only behaviour, so the test fails CLOSED on anything new.
+    TOP = {"hedge_mass": 154.0,        # spheres to z=120 r=78, z-scaled 0.78
+           "hedge_block": 127.0,       # 353 x 150 x 127
+           "garden_wall": 420.0, "retaining_wall": 300.0, "gate_pier": 700.0,
+           "fountain_basin": 190.0, "tree_mature_trunk": 900.0}
     bodies = []
     for p in LAYOUT.ALL:
         hw = FOOT.get(p["asset"])
@@ -340,20 +350,26 @@ def main():
             continue
         sc = p["scale"]
         sx, sy = (abs(sc[0]), abs(sc[1])) if isinstance(sc, (list, tuple)) else (abs(sc), abs(sc))
+        sz = abs(sc[2]) if isinstance(sc, (list, tuple)) and len(sc) > 2 else sx
+        top = TOP.get(p["asset"])
         bodies.append((p["pos"][0], p["pos"][1], hw[0] * sx, hw[1] * sy,
-                       math.radians(p["rot"][1]), p.get("label") or "", p["asset"]))
+                       math.radians(p["rot"][1]), p.get("label") or "", p["asset"],
+                       None if top is None else p["pos"][2] + top * sz))
     buried = []
     for p in LAYOUT.ALL:
         if not is_landmark(p["asset"]):
             continue
         lx, ly, lab = p["pos"][0], p["pos"][1], (p.get("label") or "")
         group = lab.split("_")[0]
-        for (ox, oy, hx, hy, yaw, olab, oasset) in bodies:
+        for (ox, oy, hx, hy, yaw, olab, oasset, otop) in bodies:
             # A finial stands on its own tower and a dome on its own hall.
             # Pieces of one composition sharing ground is the composition;
             # what this is looking for is a landmark inside SOMEONE ELSE'S
             # geometry, so anything with the same group prefix is skipped.
             if olab == lab or olab.split("_")[0] == group:
+                continue
+            # Standing ABOVE a piece is not standing inside it.
+            if otop is not None and p["pos"][2] >= otop:
                 continue
             dx, dy = lx - ox, ly - oy
             if dx * dx + dy * dy > (hx + hy) ** 2:

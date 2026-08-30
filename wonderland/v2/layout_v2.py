@@ -691,11 +691,39 @@ GARDEN = CORRIDOR + GARDEN_L + GARDEN_R
 #
 # Nothing here touches the castle, the skyline bands or the garden gates: the
 # PASS 06/07 hierarchy is preserved and this fills the hole inside it.
+#: Landmarks the approach rungs must not stand in, as (x, y, keep-out radius).
+#: The garden flanks were authored before the approach corridor was, so a rung
+#: can land on one: Approach_HedgeR2 sat 1.4 m from Tower_R0's centre, wrapping
+#: a 5 m hedge blob around the foot of a 13 m ivory tower on the corridor every
+#: player walks. `_declutter` could not catch it -- it runs inside
+#: `_approach_sides`, and the APPROACH band is assembled separately -- and the
+#: 3D embedded-landmark test in tools/hierarchy.py is what found it.
+_APPROACH_KEEPOUT = ((-2500.0, 4300.0, 620.0),   # Tower_R0, 3.6 m drum
+                     (2500.0, 4300.0, 620.0),    # Tower_L0, its mirror
+                     (0.0, 5400.0, 700.0))       # Court_FountainBasin
+
+
 def _approach_pair(y, half, seed, hedge_mat="MI_V2_LeafMid"):
-    """One rung of the approach: a hedge mass either side at +-half."""
+    """One rung of the approach: a hedge mass either side at +-half.
+
+    A RUNG SLIDES ALONG THE CORRIDOR RATHER THAN STANDING ON A LANDMARK. The
+    corridor's rhythm is what the rungs are for, so one that collides is moved
+    UP the climb -- the direction that keeps the sequence reading -- until it
+    clears, and dropped only if it cannot. Nudging the one hedge by hand would
+    have fixed the one hedge; this keeps working when either end moves.
+    """
     out = []
     for side, tag in ((1.0, "L"), (-1.0, "R")):
-        out.append(A("hedge_mass", side * half, y, 0, yaw=(seed * 37 + (0 if side > 0 else 90)) % 360,
+        x, ry = side * half, y
+        for _ in range(12):
+            hit = next(((kx, ky, kr) for (kx, ky, kr) in _APPROACH_KEEPOUT
+                        if (x - kx) ** 2 + (ry - ky) ** 2 < kr * kr), None)
+            if hit is None:
+                break
+            ry += 120.0
+        else:
+            continue        # twelve steps up the corridor and still on it: drop
+        out.append(A("hedge_mass", x, ry, 0, yaw=(seed * 37 + (0 if side > 0 else 90)) % 360,
                      s=1.25, mat=hedge_mat, label="Approach_Hedge%s%d" % (tag, seed)))
     return out
 
@@ -818,7 +846,28 @@ def _parterre(sgn, cx, cy, seed, tag, H=None):
     u = H["scale"] if H else 1.0   # the unit reads bigger with distance
     q = 620.0 * u                  # quadrant side
     w = 150.0 * u                  # half-width of the cross walk
-    off = q / 2.0 + w
+    # THE WALK IS AS WIDE AS THE GAP, NOT AS WIDE AS THE SPACING.
+    #
+    # `off = q/2 + w` puts the bed CENTRE at w from the axis, so the walk is w
+    # wide only if the beds' edges have no thickness. They do: each bed's
+    # border run is a stretched hedge_block, half-width 75 * 0.90 = 67.5 uu,
+    # straddling the bed boundary -- and the two perpendicular runs of adjacent
+    # beds each take 67.5 uu out of the walk between them, from BOTH sides.
+    #
+    # Delivered, the garden quarter's principal cross walk was 112 uu. Not
+    # narrow: IMPASSABLE. A route solve of the whole world found the centre of
+    # the garden quarter and the centre of the hamlet were the only two places
+    # in 434,342 cells of open ground that a walker could not reach -- sealed
+    # inside their own parterres by their own flower beds, with the ornament
+    # they are built around standing in the middle where nobody could get to
+    # it. The founder's rule is that the world is repaired, not the route.
+    #
+    # Adding the border's own half-width makes `w` mean what it says: a clear
+    # 2w between hedge faces, 3 m at full scale. The parterre grows 135 uu
+    # overall, under 8% of its width, and its proportions are unchanged --
+    # this is the composition being delivered, not redrawn.
+    _EDGE_HALF = 75.0 * 0.90       # hedge_block FOOT y * its sxyz y
+    off = q / 2.0 + w + _EDGE_HALF
     petals = ("MI_V2_PetalPink", "MI_V2_PetalViolet", "MI_V2_PetalWhite", "MI_V2_PetalRose")
     for i, (qx, qy) in enumerate(((-1, -1), (-1, 1), (1, -1), (1, 1))):
         bx, by = cx + sgn * qx * off, cy + qy * off
