@@ -840,8 +840,15 @@ def _flank(sgn, tag):
         # parterre, so the route into the room is stone the whole way
         A("terrace_platform", sgn * 2650, 400, -18.0, yaw=90,
           sxyz=(0.62, 0.44, 0.35), mat="MI_V2_PlazaCream", label="%s_EntryApron" % tag),
-        A("terrace_platform", sgn * 3480, 520, -18.0, yaw=90,
-          sxyz=(0.30, 1.15, 0.35), mat="MI_V2_PlazaWarm", label="%s_EntryWalk" % tag),
+        # YAW 90 SWAPS WHICH SCALE AXIS IS WHICH. terrace_platform is 1440
+        # along X and 740 along Y; turned 90 degrees its X extent comes from
+        # sy and its Y extent from sx. The first version of this line read as
+        # if it did not: it put an 851 x 432 slab centred at x=3480, which
+        # overlapped the parterre's outer edge at 3580 and stopped 400 uu
+        # short of the arch it was supposed to lead from. The gap to pave runs
+        # x 2650 (arch) to 3580 (bed edge), so 930 along X and 300 across.
+        A("terrace_platform", sgn * 3115, 520, -18.0, yaw=90,
+          sxyz=(0.208, 1.26, 0.35), mat="MI_V2_PlazaWarm", label="%s_EntryWalk" % tag),
         A("topiary_cone_plain", sgn * 2650, 40, 0, s=0.85, mat="MI_V2_LeafDark", label="%s_EntryConeA" % tag),
         A("topiary_cone_plain", sgn * 2650, 760, 0, s=0.85, mat="MI_V2_LeafDark", label="%s_EntryConeB" % tag),
     ]
