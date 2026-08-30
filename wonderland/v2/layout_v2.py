@@ -704,6 +704,21 @@ def _parterre(sgn, cx, cy, seed, tag):
         # tells the eye the four beds are one composition
         out.append(A("topiary_ball", bx - sgn * qx * q * 0.42, by - qy * q * 0.42, 0,
                      s=0.62, mat="MI_V2_LeafDark", label="%s_Bed%d_Ball" % (tag, i)))
+    # THE WALKS ARE PAVED, because in the reference they are. A royal garden's
+    # rooms have a stone floor between their beds; ours had lawn, which is the
+    # single clearest way our gardens still read as planting-on-grass rather
+    # than as the built rooms the boards show.
+    #
+    # terrace_platform is 1440 x 740 x 140 uu -- MEASURED, and that 140 is the
+    # trap: it is a raised terrace, so dropped in at z=0 it would put a 1.4 m
+    # wall across the middle of every garden room. At sz=0.35 it is 49 uu
+    # thick and sunk to z=-18 it stands about a kerb's height proud, which
+    # reads as paving and steps like paving. The two strips cross at the
+    # centrepiece, which is what the four beds are arranged around.
+    for k, yaw in enumerate((0.0, 90.0)):
+        out.append(A("terrace_platform", cx, cy, -18.0, yaw=yaw,
+                     sxyz=(1.07, 0.405, 0.35), mat="MI_V2_PlazaWarm",
+                     label="%s_Walk%d" % (tag, k)))
     # the centrepiece the walks run to
     out += [
         A("pedestal_finial", cx, cy, 0, s=1.0, mat="MI_V2_IvoryStone", label="%s_Centre_Plinth" % tag),
@@ -821,6 +836,12 @@ def _flank(sgn, tag):
     out += [
         A("garden_arch_stone", sgn * 2650, 400, 220, yaw=90, s=0.95,
           mat="MI_V2_IvoryStone", label="%s_EntryArch" % tag),
+        # a paved apron under the threshold and a paved way from it to the
+        # parterre, so the route into the room is stone the whole way
+        A("terrace_platform", sgn * 2650, 400, -18.0, yaw=90,
+          sxyz=(0.62, 0.44, 0.35), mat="MI_V2_PlazaCream", label="%s_EntryApron" % tag),
+        A("terrace_platform", sgn * 3480, 520, -18.0, yaw=90,
+          sxyz=(0.30, 1.15, 0.35), mat="MI_V2_PlazaWarm", label="%s_EntryWalk" % tag),
         A("topiary_cone_plain", sgn * 2650, 40, 0, s=0.85, mat="MI_V2_LeafDark", label="%s_EntryConeA" % tag),
         A("topiary_cone_plain", sgn * 2650, 760, 0, s=0.85, mat="MI_V2_LeafDark", label="%s_EntryConeB" % tag),
     ]
