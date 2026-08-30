@@ -1432,6 +1432,42 @@ def light_and_air(actors, layers):
             % (float(L["canopyFillLux"]), float(L["sunYaw"]) + 180.0,
                float(L["canopyFillPitch"])))
 
+    # THE SECOND CANOPY FILL, at a complementary yaw. See v2_config: one
+    # directional lights one hemisphere of leaf normals and the rest stay
+    # black however bright it is, which is why both garden cameras measured a
+    # foreground of 9.5 and 11.7 against 52-186 everywhere else.
+    if float(L.get("canopyFill2Lux", 0.0)) > 0.0:
+        cf2 = actors.spawn_actor_from_class(
+            unreal.DirectionalLight, vec((0, 0, 900)),
+            rot(float(L["canopyFill2Pitch"]),
+                float(L["sunYaw"]) + float(L["canopyFill2Yaw"]), 0))
+        cf2.set_actor_label("V2_CanopyFill2")
+        c2 = cf2.get_component_by_class(unreal.DirectionalLightComponent)
+        if c2 is not None:
+            try:
+                c2.set_mobility(unreal.ComponentMobility.MOVABLE)
+            except Exception:
+                pass
+            try:
+                c2.set_intensity(float(L["canopyFill2Lux"]))
+            except Exception:
+                set_prop(c2, "Intensity", float(L["canopyFill2Lux"]))
+            r, g, b = L["canopyFill2Color"]
+            set_prop(c2, "LightColor", unreal.Color(int(r), int(g), int(b), 255))
+            set_prop(c2, "bUseTemperature", False)
+            set_prop(c2, "CastShadows", False)
+            set_prop(c2, "bAtmosphereSunLight", False)
+            set_prop(c2, "VolumetricScatteringIntensity", 0.0)
+            set_prop(c2, "bCastVolumetricShadow", False)
+        try:
+            cf2.set_folder_path(unreal.Name("V2/Light"))
+        except Exception:
+            pass
+        assign_layer(cf2, "V2_Skyline", layers)
+        LOG("V2 LIGHT: canopy fill 2 %.0f lux from yaw %.0f pitch %.0f, shadowless"
+            % (float(L["canopyFill2Lux"]), float(L["sunYaw"]) + float(L["canopyFill2Yaw"]),
+               float(L["canopyFill2Pitch"])))
+
     sky = actors.spawn_actor_from_class(unreal.SkyAtmosphere, vec((0, 0, 0)), rot(0, 0, 0))
     sky.set_actor_label("V2_SkyAtmosphere")
     sac = sky.get_component_by_class(unreal.SkyAtmosphereComponent)

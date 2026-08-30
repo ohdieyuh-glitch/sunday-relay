@@ -75,22 +75,45 @@ setsid nohup env $(wl_vulkan_env_pairs) "$APP" \
   >"$WL_LOG/profile-run.log" 2>&1 </dev/null &
 APP_PID=$!
 
-CSV=""
-for _ in $(seq 1 120); do
-  CSV="$( ( set +o pipefail; find "$CSV_DIR" -name '*.csv' -size +2k 2>/dev/null | head -1 ) || true)"
-  [ -n "$CSV" ] && break
+# WAIT FOR THE RUN, NOT FOR THE FILE TO EXIST.
+#
+# UE writes the CSV INCREMENTALLY, so a loop that breaks the moment a >2k file
+# appears finds one after about ten seconds and then kills the game. That is
+# what happened: a 420-second profile returned in twelve seconds with 46 rows,
+# and every number computed from it would have described the first second of a
+# cold start rather than a traversal of the world.
+#
+# The run is over when the process exits or when the frames could not still be
+# coming: the route takes SECS seconds of game time and the world runs well
+# under 60 fps, so the deadline is generous and the ROW COUNT is checked
+# afterwards rather than assumed.
+DEADLINE=$(( SECS * 2 + 90 ))
+WAITED=0
+while [ "$WAITED" -lt "$DEADLINE" ]; do
   kill -0 "$APP_PID" 2>/dev/null || break
-  sleep 5
+  sleep 10
+  WAITED=$(( WAITED + 10 ))
 done
 kill "$APP_PID" 2>/dev/null || true
 pkill -f "Binaries/Linux/Wonderlan[d]" 2>/dev/null || true
+sleep 3
+# the LARGEST csv, not the first: a partial one from an earlier attempt can
+# still be sitting beside it
+CSV="$( ( set +o pipefail; find "$CSV_DIR" -name '*.csv' -size +2k -printf '%s %p\n' 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2- ) || true)"
+wl_say "run ended after ${WAITED}s"
 
 if [ -z "${CSV:-}" ]; then
   wl_warn "no CSV profile found; falling back to the app log's own frame timings"
   tail -40 "$WL_LOG/profile-run.log" > "$OUT/run-tail.txt" || true
 else
   cp "$CSV" "$OUT/frames.csv"
-  wl_ok "profile: $OUT/frames.csv"
+  ROWS="$(wc -l < "$OUT/frames.csv")"
+  wl_ok "profile: $OUT/frames.csv ($ROWS rows)"
+  # A PROFILE OF FORTY FRAMES IS NOT A PROFILE. Saying so is the difference
+  # between a measurement and a number that looks like one.
+  if [ "$ROWS" -lt 600 ]; then
+    wl_warn "only $ROWS frames captured for a ${SECS}s run -- this is a COLD START, not a traversal; do not report percentiles from it"
+  fi
 fi
 printf '%s\n' "$SHA" > "$OUT/packaged.sha"
 grep -a "WLDOG " "$WL_LOG/profile-run.log" 2>/dev/null | tail -40 | sed 's/.*LogTemp: //' > "$OUT/dog-state.txt" || true

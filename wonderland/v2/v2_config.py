@@ -329,7 +329,9 @@ LOOK = {
     # open shade went with it; this lifts the hemisphere again rather than
     # flattening the sun, which is the same call PASS 08c made for the same
     # reason. It cannot reach under a canopy -- that is the canopy fill's job.
-    "skyLightIntensity": 0.95, "exposureBias": 0.0,
+    # 0.95 -> 1.6: a floor under the shade everywhere, sized so it adds about
+    # +6 to sunlit paving rather than the +28 an x8 lift measured.
+    "skyLightIntensity": 1.6, "exposureBias": 0.0,
     # PASS 05 (2026-08-28, gated WLV2_PASS05=1 like the earlier passes): the
     # vegetation's black interiors. V2_PASS_024 measured the canopies at luma
     # p10 0 / p50 3-12 against the reference's 17-19 / 40-63 WITH the sky dome
@@ -391,8 +393,36 @@ LOOK = {
     # shade; this is a twelfth of it, and it lifts black to readable rather
     # than flattening anything. The colour is a cool leaf-white so the shade
     # keeps the green the boards show.
-    "canopyFillLux": 4500.0, "canopyFillColor": (214, 236, 220),
+    "canopyFillLux": 9000.0, "canopyFillColor": (214, 236, 220),
     "canopyFillPitch": -18.0,
+    # PASS 26: ONE FILL LIGHTS ONE HEMISPHERE OF LEAF NORMALS.
+    #
+    # The milestone suite measured both garden cameras with their foreground at
+    # luma 9.5 and 11.7, 89% and 71% of it under 20 -- black, while the six
+    # cameras in open and processional space read 52 to 186. The gardens are
+    # the densest canopy in the world, so their shade is lit ONLY by this fill,
+    # and a single directional can only reach leaves whose normals face it.
+    # The rest get nothing however bright it is.
+    #
+    # Two things were ruled out by measurement before this changed. Ambient
+    # occlusion is NOT the mechanism: r.DistanceFieldAO 0 and
+    # r.AmbientOcclusion.Enable 0 moved the garden foreground from 9.5 to 9.4.
+    # And the SKY LIGHT cannot be the answer on its own: at x8 it fixed the
+    # garden (9.5 -> 31.7) and took Golden Arrival's approved foreground from
+    # 177 to 205 with its shadowed hedges nearly doubling -- an omnidirectional
+    # ambient hits the up-facing plaza hardest, so it cannot separate the two.
+    #
+    # A near-horizontal fill can. At pitch -18 it delivers sin(18) = 0.31 of
+    # itself to up-facing paving and close to all of itself to a vertical leaf
+    # facing it, which is exactly the selectivity the gardens need and the
+    # plaza does not. A SECOND one at a complementary yaw covers the leaf
+    # normals the first cannot reach.
+    #
+    # 18,000 lux of fill against a 60,000 lux key is 30%. The failure recorded
+    # three times in this project is a fill at 122% of key, which destroys the
+    # shade; this lifts black to readable and leaves the sun the key.
+    "canopyFill2Lux": 9000.0, "canopyFill2Color": (220, 232, 236),
+    "canopyFill2Yaw": 60.0, "canopyFill2Pitch": -14.0,
     # PASS 05c (gated WLV2_PASS05=1): the bounce light WORKS (V2_PASS_027: the
     # mushroom cap's underside p50 1 -> 26) but the canopy faces HeroCam0 sees
     # are SHADOW SIDES -- both trees are backlit, the sun sits ahead-right-
