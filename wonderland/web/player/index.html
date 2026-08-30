@@ -6,63 +6,25 @@
 
 <!--
   WONDERLAND IS AN AI CREATION PLATFORM WRAPPED IN AN OPEN-WORLD INTERFACE.
-  The world is the streamed Unreal frame; the terminal over it is where work
-  is actually commissioned. Space opens it, Escape returns to the world, and
-  the Relay Dog does not jump.
+  The world is the streamed Unreal frame; the terminal over it is where work is
+  actually commissioned. Space opens it, Escape returns to the world, and the
+  Relay Dog does not jump.
 
-  The <video> is filled by whichever Pixel Streaming client is mounted -- the
-  epicgames frontend, or the harness in wonderland/infra. This page owns the
-  keyboard and the panel, and nothing else.
+  THE TERMINAL'S MARKUP IS NOT HERE. It lives in mount.js, once, because the
+  same panel also has to be built onto Epic's Pixel Streaming frontend at run
+  time -- that page is a stock player.html plus a 2.5 MB bundle and has no
+  markup to author into. Two copies of an approved design is two designs, and
+  the second one drifts.
+
+  This page is the standalone harness: a <video> the capture script fills, and
+  the same mount.
 -->
 
 <div id="wl-world" tabindex="0" aria-label="Wonderland world view">
   <video id="wl-video" playsinline autoplay muted></video>
 </div>
 
-<p id="wl-hint"><kbd>SPACE</kbd> LIVE TERMINAL</p>
-
-<div id="wl-terminal" role="dialog" aria-modal="false" aria-label="Wonderland Live Terminal">
-  <div class="wl-tm-window">
-
-    <div class="wl-tm-titlebar">
-      <span class="wl-tm-lights">
-        <span class="wl-tm-light wl-tm-light--r"></span>
-        <span class="wl-tm-light wl-tm-light--y"></span>
-        <span class="wl-tm-light wl-tm-light--g"></span>
-      </span>
-      <span class="wl-tm-brand">SUNDAY RELAY</span>
-      <span class="wl-tm-chip">RLY</span>
-    </div>
-
-    <div class="wl-tm-statusrow">
-      <span class="wl-tm-left">
-        <span id="wl-tm-live" class="wl-tm-live">○ NO AUTHORITATIVE FEED CONNECTED</span>
-        <span class="wl-tm-mission">WONDERLAND</span>
-      </span>
-      <span class="wl-tm-meta">
-        <span><span class="wl-tm-metakey">WORLD</span> DISTRICTS</span>
-        <span><span class="wl-tm-metakey">ESC</span> RETURN TO WORLD</span>
-      </span>
-    </div>
-
-    <!-- Stacked role sections, rendered by terminal.js: PROMPT ARCHITECT,
-         CODING AGENT, INDEPENDENT REVIEWER, then JULIUS as the orchestration
-         band beneath them. -->
-    <div id="wl-tm-panels" class="wl-tm-panels"></div>
-
-    <div class="wl-tm-input">
-      <span class="wl-tm-prompt">&gt;_</span>
-      <input id="wl-tm-input" type="text" autocomplete="off" spellcheck="false"
-             aria-label="Ask Relay" placeholder="Ask Relay">
-      <button id="wl-tm-send" class="wl-tm-send" type="button">↵ SEND</button>
-    </div>
-
-    <div class="wl-tm-footer">
-      <span id="wl-tm-note"></span>
-      <span>JULIUS ORCHESTRATES · WORKERS EXECUTE · RELAY VERIFIES</span>
-    </div>
-
-  </div>
-</div>
-
-<script type="module" src="./terminal.js"></script>
+<script type="module">
+  import { mount } from './mount.js';
+  mount({ cssHref: null, worldSelector: '#wl-world' });
+</script>

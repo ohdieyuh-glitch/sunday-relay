@@ -200,6 +200,10 @@ export function install(root = window) {
   return { open: openTerminal, close: closeTerminal, connect, isOpen: () => open };
 }
 
-if (typeof window !== 'undefined' && typeof document !== 'undefined') {
+// Auto-install ONLY when the markup is already on the page (index.html).
+// The Pixel Streaming frontend has no markup of its own, so mount.js builds it
+// first and calls install() itself; auto-installing on import would run
+// against an empty document and bind nothing.
+if (typeof document !== 'undefined' && document.getElementById('wl-terminal')) {
   window.wonderlandTerminal = install();
 }

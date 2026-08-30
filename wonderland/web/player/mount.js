@@ -1,0 +1,96 @@
+// MOUNT THE LIVE TERMINAL ON A PAGE THAT DOES NOT HAVE IT.
+//
+// index.html carries the markup inline. The Pixel Streaming frontend does not:
+// it is Epic's stock player.html plus a 2.5 MB bundle that fills the body with
+// its own video at runtime. So the same terminal has to be BUILT onto that
+// page rather than authored into it -- and it must be the same terminal, not a
+// second copy of the approved design that can drift away from the first.
+//
+// This file therefore owns the markup once, and index.html's copy is checked
+// against it by page.test.mjs.
+import { install } from './terminal.js';
+
+const SECTION_MARKUP = `
+  <div class="wl-tm-titlebar">
+    <span class="wl-tm-lights">
+      <span class="wl-tm-light wl-tm-light--r"></span>
+      <span class="wl-tm-light wl-tm-light--y"></span>
+      <span class="wl-tm-light wl-tm-light--g"></span>
+    </span>
+    <span class="wl-tm-brand">SUNDAY RELAY</span>
+    <span class="wl-tm-chip">RLY</span>
+  </div>
+  <div class="wl-tm-statusrow">
+    <span class="wl-tm-left">
+      <span id="wl-tm-live" class="wl-tm-live">○ NO AUTHORITATIVE FEED CONNECTED</span>
+      <span class="wl-tm-mission">WONDERLAND</span>
+    </span>
+    <span class="wl-tm-meta">
+      <span><span class="wl-tm-metakey">WORLD</span> DISTRICTS</span>
+      <span><span class="wl-tm-metakey">ESC</span> RETURN TO WORLD</span>
+    </span>
+  </div>
+  <div id="wl-tm-panels" class="wl-tm-panels"></div>
+  <div class="wl-tm-input">
+    <span class="wl-tm-prompt">&gt;_</span>
+    <input id="wl-tm-input" type="text" autocomplete="off" spellcheck="false"
+           aria-label="Ask Relay" placeholder="Ask Relay">
+    <button id="wl-tm-send" class="wl-tm-send" type="button">↵ SEND</button>
+  </div>
+  <div class="wl-tm-footer">
+    <span id="wl-tm-note"></span>
+    <span>JULIUS ORCHESTRATES · WORKERS EXECUTE · RELAY VERIFIES</span>
+  </div>`;
+
+/**
+ * Build the terminal onto a live Pixel Streaming page and take the keyboard.
+ *
+ * `worldSelector` names the element the stream renders into. It is made
+ * focusable, because "the world owns the keyboard" has to be something the
+ * browser agrees with and not something this page merely believes -- without
+ * a focusable world, Escape would have nowhere to give focus back to and the
+ * next Space would be swallowed by whatever the PS client focused last.
+ */
+export function mount({ cssHref = './player.css', worldSelector = '#videoElementParent' } = {}) {
+  if (document.getElementById('wl-terminal')) return window.wonderlandTerminal;
+
+  if (cssHref && !document.querySelector(`link[href="${cssHref}"]`)) {
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = cssHref;
+    document.head.append(link);
+  }
+
+  // The streamed video is the world. Whatever the client actually built, one
+  // element gets the id the terminal expects and a tabindex so it can hold
+  // focus; if the client has not built it yet, the body stands in and the
+  // hand-off still works because focus() on <body> is a real focus.
+  const streamed = document.querySelector(worldSelector) || document.body;
+  if (!streamed.id) streamed.id = 'wl-world';
+  if (streamed !== document.body && !streamed.hasAttribute('tabindex')) {
+    streamed.setAttribute('tabindex', '0');
+  }
+
+  const hint = document.createElement('p');
+  hint.id = 'wl-hint';
+  hint.innerHTML = '<kbd>SPACE</kbd> LIVE TERMINAL';
+
+  const overlay = document.createElement('div');
+  overlay.id = 'wl-terminal';
+  overlay.setAttribute('role', 'dialog');
+  overlay.setAttribute('aria-label', 'Wonderland Live Terminal');
+  // ABOVE THE STREAM CLIENT'S OWN UI. Epic's frontend layers its settings and
+  // stats panels over the video; the terminal is the front door and has to be
+  // over those too, or Space opens a panel behind a control bar.
+  overlay.style.zIndex = '2147483000';
+  const win = document.createElement('div');
+  win.className = 'wl-tm-window';
+  win.innerHTML = SECTION_MARKUP;
+  overlay.append(win);
+
+  document.body.append(hint, overlay);
+  window.wonderlandTerminal = install();
+  return window.wonderlandTerminal;
+}
+
+export { SECTION_MARKUP };
