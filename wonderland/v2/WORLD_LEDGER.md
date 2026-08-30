@@ -474,3 +474,53 @@ The heart topiary rebuilt with real volume (159 → 397 uu deep), and one
 Wonderland landmark per flank with the hierarchy the brief asks for — a clock
 monument at the end of one walk, the heart at the end of the other, a tea
 vignette beside each room, an arch over each way in. 919 actors.
+
+## PASS 10–11 — the new areas, and the error that hid two passes of work
+
+Golden Arrival's flanks and the ground behind the spawn are districts now
+rather than lawn. 787 placements at PASS 08; **1,479** at PASS 11. Density on
+the flanks went 1 actor per 178 m² → 1 per 41; behind the spawn 1 per 373 →
+1 per 105. Three cameras were added for the new ground (FlankLeftCam08,
+FlankRightCam09, RearWorldCam10); the original eight have not moved.
+
+Every defect below was found by a render or a measurement, and each one is
+recorded with what it cost:
+
+| found | defect | fix |
+|---|---|---|
+| render | the flank cameras stood on 12 m of bare lawn | near field authored |
+| render | a bed of three blooms reads as three dots on grass | seven, mixed |
+| render | ground-flower patches were **white domes** — one mesh carrying leaf mound *and* blooms, so the petal colour painted the mound | split into mat + blooms |
+| render | limbs still outside the leaves after two fixes | reach 0.60 → 0.42 |
+| render | the bole was 3.2 m across — a baobab, not a garden tree | 160/100 → 105/62 |
+| measurement | a paved spine down the flank does not fit (best clearance −25 uu against 150 needed) | **not placed**, numbers recorded |
+| measurement | the bed floor would have been buried under the ground slab | z −6 → +3 |
+| gate | the layout gate read a different band list from the builder | one list, `BUILD_BANDS` |
+
+### The one worth carrying forward
+
+**Foreground planting placed nearer than the frame's lower edge is invisible.**
+A camera's picture of the ground begins at `eye_z / tan(-(pitch - vfov/2))`,
+and everything nearer is under the lens. RearWorldCam10 sees from 5.1 m and
+its new planting was at 2.2 m; FlankLeftCam08 sees from 4.0 m and its bank was
+at 3.5 m. So two consecutive passes each authored a foreground that could not
+appear, and the second render looked exactly like the first — which is the
+worst kind of failure, because it reads as "the fix didn't work" rather than
+"the fix wasn't visible".
+
+It is now `v2/tools/camera_framing.py`, which prints for every camera where
+its ground begins, how many placements stand in the band from there to 3×,
+and how many sit **under** the lens. The three new cameras read 20 / 20 / 10
+in-band with 0 under. The weakest remaining are GardenLeft04 (8) and
+GardenRight05 (10) — the next foreground work, named by measurement rather
+than by which render happened to look wrong.
+
+### Also this stretch
+
+`ship_v2.sh` bundles incrementally (19.6 MB → 32 KB, after a full bundle timed
+out at 600 s), and its test suite — which had been failing three of four
+assertions in silence — is repaired and extended to 7/7. `measure-fps.sh` was
+measuring an **empty world** because it was the only launcher never forwarding
+`WL_MAP_ARG`; every frame rate it has reported for V2 is void, and it now
+prints the world it measured. `WLV2_REUSE_MATERIALS=1` skips a ~5-minute
+shader recompile on passes that only move actors.
