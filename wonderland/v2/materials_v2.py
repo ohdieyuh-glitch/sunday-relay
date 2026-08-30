@@ -237,6 +237,26 @@ TEX_SCALE = {"plaza": 0.0038, "pathstone": 0.0037, "cobble": 0.0034, "ashlar": 0
              "leaf": 0.0080, "cloud": 0.0004, "runes": 0.0010}
 
 
+def _load_if_exists(eal, path):
+    """load_asset, but only for a path the asset registry actually knows.
+
+    ASKING FOR A MISSING ASSET LOGS AN ERROR, and `-run=pythonscript` exits
+    non-zero if ANY error was logged during the run -- so a probe that tries
+    three candidates and takes the one that answers turns a completely
+    successful generate into a failed build step. That cost two thirteen-minute
+    runs: the first through the leaf-material probe, and the second through
+    this one, four masters asking for an engine normal map that is on disk but
+    not in this commandlet's registry.
+
+    Every load that MIGHT miss goes through here, so the next probe someone
+    adds cannot reintroduce it.
+    """
+    try:
+        return eal.load_asset(path) if eal.does_asset_exist(path) else None
+    except Exception:
+        return None
+
+
 def texture_means(log=None):
     """Achieved linear means per family from textures_v2.json, or {} if the
     set was not generated (then tints are used as-is and the log says so)."""
@@ -310,7 +330,7 @@ def import_textures(unreal, log):
             log("V2 TEXTURES: import_asset_tasks failed (%s)" % exc)
     for stem, _ in tasks:
         path = dest + "/" + stem
-        tex = eal.load_asset(path) if eal.does_asset_exist(path) else None
+        tex = _load_if_exists(eal, path)
         if tex is None:
             continue
         try:
@@ -397,10 +417,7 @@ def _master(unreal, log, name, kind, texs=None):
                 tex = texs[key]
                 break
         if tex is None:
-            try:
-                tex = eal.load_asset(fallback)
-            except Exception:
-                tex = None
+            tex = _load_if_exists(eal, fallback)
         got = None
         if tex is not None:
             for setter in (lambda: setattr(e, "texture", tex),
@@ -948,10 +965,7 @@ def build_materials(unreal, log, texs):
                         # does_asset_exist first is the idiom the rest of this
                         # file already uses; the try/except stays for the paths
                         # that exist in the registry but fail to load.
-                        try:
-                            plain = eal.load_asset(cand) if eal.does_asset_exist(cand) else None
-                        except Exception:
-                            plain = None
+                        plain = _load_if_exists(eal, cand)
                         if plain is not None:
                             used = cand
                             break

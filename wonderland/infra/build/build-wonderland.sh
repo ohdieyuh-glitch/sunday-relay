@@ -78,7 +78,30 @@ run_step() {
   rc="${PIPESTATUS[0]}"
   set -e
   if [ "$rc" -ne 0 ]; then
-    die "$name failed (exit $rc). See $logfile"
+    # THE ARTIFACT OUTRANKS THE EXIT CODE, FOR ONE STEP AND ONE SIGNATURE.
+    #
+    # `-run=pythonscript` exits non-zero if ANY error was logged during the
+    # run, which conflates "an error was written to the log" with "the step
+    # failed". The V2 generator writes a definitive success line at the end of
+    # a completed run -- assets built, actors placed, both maps saved -- and
+    # twice now a build has thrown away thirteen minutes of a perfectly good
+    # world because a probe asked for an engine asset that was not in this
+    # commandlet's registry.
+    #
+    # This is deliberately narrow: this step only, that line only, and it says
+    # so at the top of its voice. Anything else still dies. The probes are
+    # fixed at the source too (materials_v2._load_if_exists); this is here so
+    # the NEXT one costs a warning instead of a rebuild.
+    if [ "$name" = "generate-hub-level" ] \
+       && grep -qE 'V2 SUMMARY:.*saved=True' "$logfile" \
+       && ! grep -qE 'V2 SUMMARY:.*actors=0 ' "$logfile"; then
+      log "WARNING: $name exited $rc, but its own summary reports a completed world:"
+      grep -oE 'V2 SUMMARY:.*' "$logfile" | tail -1 | sed 's/^/  /'
+      log "WARNING: accepting the artifact over the exit code. Errors logged during the run:"
+      grep -oE ': Error: .{0,110}' "$logfile" | sort | uniq -c | sort -rn | head -5 | sed 's/^/  /'
+    else
+      die "$name failed (exit $rc). See $logfile"
+    fi
   fi
   # Secondary tripwire: strong failure signatures that can appear with rc=0.
   if grep -Eq 'AutomationTool exiting with ExitCode=[1-9]|ExitCode=[1-9][0-9]*|BUILD FAILED|Fatal error:|LogInit: *Error' "$logfile"; then
