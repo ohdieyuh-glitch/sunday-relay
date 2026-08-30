@@ -736,13 +736,23 @@ PALACE = CITY + BEYOND_L + BEYOND_R + AVENUE + APPROACH + APPROACH_STEPS
 # these rooms stays open for a social space.
 
 
-def _parterre(sgn, cx, cy, seed, tag):
+def _parterre(sgn, cx, cy, seed, tag, H=None):
     """A formal quadrant garden: four hedged beds around a centrepiece, with
     the walks between them left open. This is the unit the reference's royal
-    gardens are made of -- geometry first, then colour inside it."""
+    gardens are made of -- geometry first, then colour inside it.
+
+    HIERARCHY, WITHOUT REDRAWING THE UNIT. A parterre is a designed
+    composition and stretching its spacing would make a sprawl of it, so
+    distance changes what is IN it and how big the whole is, never its
+    proportions: the blooms thin, then the kerb course goes, then the corner
+    ornament, then the rim wall -- in that order, because that is the order in
+    which they stop being legible. `H` absent (the flanks, the rear world)
+    means every one of these is present, exactly as authored.
+    """
     out = []
-    q = 620.0                      # quadrant side
-    w = 150.0                      # half-width of the cross walk
+    u = H["scale"] if H else 1.0   # the unit reads bigger with distance
+    q = 620.0 * u                  # quadrant side
+    w = 150.0 * u                  # half-width of the cross walk
     off = q / 2.0 + w
     petals = ("MI_V2_PetalPink", "MI_V2_PetalViolet", "MI_V2_PetalWhite", "MI_V2_PetalRose")
     for i, (qx, qy) in enumerate(((-1, -1), (-1, 1), (1, -1), (1, 1))):
@@ -757,7 +767,7 @@ def _parterre(sgn, cx, cy, seed, tag):
         # continuous edge at knee height, which is what a parterre has.
         for k, (dx, dy, yaw) in enumerate(((0, -1, 0), (0, 1, 0), (-1, 0, 90), (1, 0, 90))):
             out.append(A("hedge_block", bx + dx * q * 0.5, by + dy * q * 0.5, 0,
-                         yaw=yaw, sxyz=(1.75, 0.90, 0.85),
+                         yaw=yaw, sxyz=(1.75 * u, 0.90, 0.85),
                          mat=("MI_V2_LeafDark", "MI_V2_LeafMid")[(i + k) % 2],
                          label="%s_Bed%d_Edge%d" % (tag, i, k)))
         # THE BED HAS A FLOOR. Without one the blooms sit on lawn showing
@@ -773,38 +783,39 @@ def _parterre(sgn, cx, cy, seed, tag):
         # would have been invisible: a bed floor nobody would ever see, and no
         # gate would have caught it because it placed and resolved perfectly.
         # +3 puts it just proud of the slab (0) and of the garden lawn (-2).
-        out.append(A("garden_lawn", bx, by, 3.0, sxyz=(0.1033, 0.0862, 0.5),
+        out.append(A("garden_lawn", bx, by, 3.0, sxyz=(0.1033 * u, 0.0862 * u, 0.5),
                      mat="MI_V2_Soil", label="%s_Bed%d_Soil" % (tag, i)))
         # STONE BORDERS. The brief asks for premium stone borders and formal
         # geometry, and the boards show every bed held by a kerb -- it is the
         # line that makes a bed a BED rather than a patch of planting. Four
         # kerb runs on the bed's own square, laid at its edge and low enough
         # to read as an edging course rather than a wall.
-        for k, (dx, dy, kyaw) in enumerate(((0, -1, 0), (0, 1, 0), (-1, 0, 90), (1, 0, 90))):
-            out.append(A("kerb_stone", bx + dx * (q * 0.5 + 34.0), by + dy * (q * 0.5 + 34.0), 0,
-                         yaw=kyaw, sxyz=(5.4, 1.0, 0.62), mat="MI_V2_Kerb",
-                         label="%s_Bed%d_Kerb%d" % (tag, i, k)))
+        if H is None or H["prop"] > 0.34:
+            for k, (dx, dy, kyaw) in enumerate(((0, -1, 0), (0, 1, 0), (-1, 0, 90), (1, 0, 90))):
+                out.append(A("kerb_stone", bx + dx * (q * 0.5 + 34.0 * u), by + dy * (q * 0.5 + 34.0 * u), 0,
+                             yaw=kyaw, sxyz=(5.4 * u, 1.0, 0.62), mat="MI_V2_Kerb",
+                             label="%s_Bed%d_Kerb%d" % (tag, i, k)))
         # what fills it
-        out.append(A("rose_bush", bx, by, 60, yaw=40 * i, s=0.85,
+        out.append(A("rose_bush", bx, by, 60, yaw=40 * i, s=0.85 * u,
                      mat="MI_V2_LeafMid", label="%s_Bed%d_Rose" % (tag, i)))
         # SEVEN, not three. FlankLeftCam08's first render showed a bed of
         # three blooms reading as three pink dots sitting on grass -- the
         # reference's beds are FULL, the planting is the bed. Filled to the
         # edges with a mix of clusters, blossom and lavender so the bed has
         # colour AND texture rather than four copies of one puff.
-        for k in range(7):
+        for k in range(7 if H is None else _n(7, H["veg"], 2)):
             a = _rnd(i, k, seed) * 6.283
-            r = 90.0 + 145.0 * _rnd(i, k, seed + 20)
+            r = (90.0 + 145.0 * _rnd(i, k, seed + 20)) * u
             kind = ("flower_cluster", "blossom_cluster", "lavender_heads")[k % 3]
             out.append(A(kind,
                          bx + math.cos(a) * r, by + math.sin(a) * r, 40,
-                         yaw=_rnd(i, k, seed + 1) * 360.0, s=0.5 + 0.24 * _rnd(i, k, seed + 2),
+                         yaw=_rnd(i, k, seed + 1) * 360.0, s=(0.5 + 0.24 * _rnd(i, k, seed + 2)) * u,
                          mat=petals[(i + k) % 4] if kind != "lavender_heads" else "MI_V2_Lavender",
                          label="%s_Bed%d_Flower%d" % (tag, i, k)))
         # a ball of clipped box at the bed's inner corner: the rhythm that
         # tells the eye the four beds are one composition
         out.append(A("topiary_ball", bx - sgn * qx * q * 0.42, by - qy * q * 0.42, 0,
-                     s=0.62, mat="MI_V2_LeafDark", label="%s_Bed%d_Ball" % (tag, i)))
+                     s=0.62 * u, mat="MI_V2_LeafDark", label="%s_Bed%d_Ball" % (tag, i)))
     # THE WALKS ARE PAVED, because in the reference they are. A royal garden's
     # rooms have a stone floor between their beds; ours had lawn, which is the
     # single clearest way our gardens still read as planting-on-grass rather
@@ -818,59 +829,69 @@ def _parterre(sgn, cx, cy, seed, tag):
     # centrepiece, which is what the four beds are arranged around.
     for k, yaw in enumerate((0.0, 90.0)):
         out.append(A("terrace_platform", cx, cy, -18.0, yaw=yaw,
-                     sxyz=(1.07, 0.405, 0.35), mat="MI_V2_PlazaWarm",
+                     sxyz=(1.07 * u, 0.405 * u, 0.35), mat="MI_V2_PlazaWarm",
                      label="%s_Walk%d" % (tag, k)))
     # the centrepiece the walks run to
     out += [
-        A("pedestal_finial", cx, cy, 0, s=1.0, mat="MI_V2_IvoryStone", label="%s_Centre_Plinth" % tag),
-        A("garden_urn", cx, cy, 124, s=0.6, mat="MI_V2_Ceramic", label="%s_Centre_Urn" % tag),
-        A("flower_cluster", cx, cy, 210, s=0.5, mat="MI_V2_PetalPink", label="%s_Centre_Flowers" % tag),
+        A("pedestal_finial", cx, cy, 0, s=1.0 * u, mat="MI_V2_IvoryStone", label="%s_Centre_Plinth" % tag),
+        A("garden_urn", cx, cy, 124 * u, s=0.6 * u, mat="MI_V2_Ceramic", label="%s_Centre_Urn" % tag),
+        A("flower_cluster", cx, cy, 210 * u, s=0.5 * u, mat="MI_V2_PetalPink", label="%s_Centre_Flowers" % tag),
     ]
     # cones at the room's outer corners, so it has a silhouette from the plaza,
     # and a PLINTHED URN beside each -- the boards put ornament at the corners
     # of a formal room, and a cone alone is a shape rather than a decision
     for i, (qx, qy) in enumerate(((-1, -1), (-1, 1), (1, -1), (1, 1))):
         ox, oy = cx + sgn * qx * (off + q * 0.62), cy + qy * (off + q * 0.62)
-        out.append(A("topiary_cone_plain", ox, oy, 0, s=0.9, mat="MI_V2_LeafDark",
+        out.append(A("topiary_cone_plain", ox, oy, 0, s=0.9 * u, mat="MI_V2_LeafDark",
                      label="%s_Cone%d" % (tag, i)))
-        out += [
-            A("pedestal_finial", ox + sgn * qx * 300.0, oy + qy * 300.0, 0, s=0.8,
-              mat="MI_V2_IvoryStone", label="%s_CornerPlinth%d" % (tag, i)),
-            A("garden_urn", ox + sgn * qx * 300.0, oy + qy * 300.0, 100, s=0.5,
-              mat="MI_V2_Ceramic", label="%s_CornerUrn%d" % (tag, i)),
-            A("flower_cluster", ox + sgn * qx * 300.0, oy + qy * 300.0, 172, s=0.42,
-              mat=("MI_V2_PetalPink", "MI_V2_PetalViolet", "MI_V2_PetalWhite",
-                   "MI_V2_RosePink")[i % 4],
-              label="%s_CornerFlowers%d" % (tag, i)),
-        ]
+        if H is None or H["prop"] > 0.46:
+            out += [
+                A("pedestal_finial", ox + sgn * qx * 300.0 * u, oy + qy * 300.0 * u, 0, s=0.8 * u,
+                  mat="MI_V2_IvoryStone", label="%s_CornerPlinth%d" % (tag, i)),
+                A("garden_urn", ox + sgn * qx * 300.0 * u, oy + qy * 300.0 * u, 100 * u, s=0.5 * u,
+                  mat="MI_V2_Ceramic", label="%s_CornerUrn%d" % (tag, i)),
+                A("flower_cluster", ox + sgn * qx * 300.0 * u, oy + qy * 300.0 * u, 172 * u, s=0.42 * u,
+                  mat=("MI_V2_PetalPink", "MI_V2_PetalViolet", "MI_V2_PetalWhite",
+                       "MI_V2_RosePink")[i % 4],
+                  label="%s_CornerFlowers%d" % (tag, i)),
+            ]
     # THE ROOM HAS A RIM. A low wall along the room's outer square, broken at
     # the four walk entrances, so the garden room is enclosed by architecture
     # the way the boards enclose theirs -- hedges alone read as planting, a
     # stone line reads as a built room.
-    rim = off + q * 0.5 + 190.0
-    for k in range(16):
-        side, t = k // 4, (k % 4) / 3.0
-        if 0.34 <= t <= 0.66:                 # the gap a walk passes through
-            continue
-        u = -rim + 2.0 * rim * t
-        px, py = ((u, -rim), (u, rim), (-rim, u), (rim, u))[side]
-        out.append(A("garden_wall", cx + sgn * px, cy + py, 0,
-                     yaw=(0.0, 0.0, 90.0, 90.0)[side], sxyz=(0.72, 1.0, 0.46),
-                     mat="MI_V2_IvoryStone", label="%s_Rim%d" % (tag, k)))
+    rim = off + q * 0.5 + 190.0 * u
+    if H is None or H["court_p"] > 0.40:
+        for k in range(16):
+            side, t = k // 4, (k % 4) / 3.0
+            if 0.34 <= t <= 0.66:                 # the gap a walk passes through
+                continue
+            v = -rim + 2.0 * rim * t
+            px, py = ((v, -rim), (v, rim), (-rim, v), (rim, v))[side]
+            out.append(A("garden_wall", cx + sgn * px, cy + py, 0,
+                         yaw=(0.0, 0.0, 90.0, 90.0)[side], sxyz=(0.72 * u, 1.0, 0.46),
+                         mat="MI_V2_IvoryStone", label="%s_Rim%d" % (tag, k)))
     return out
 
 
-def _grove(sgn, cx, cy, seed, tag, count=5):
+def _grove(sgn, cx, cy, seed, tag, count=5, H=None):
     """A loose group of trees with underplanting -- the canopy that stops a
     flank reading as open ground, placed as a GROUP with a centre and an edge
-    rather than as a row."""
+    rather than as a row.
+
+    `H` is optional and absent inside Golden Arrival on purpose: the flanks
+    and the rear world are authored ground the founder has already judged, and
+    a hierarchy that quietly rewrote them would be changing approved work to
+    fix a problem in the outer world.
+    """
     out = []
+    sp = H["spacing"] if H else 1.0
+    gs = H["scale"] if H else 1.0
     for i in range(count):
         a = 6.283 * i / count + _rnd(i, seed, 3) * 0.9
-        r = 320.0 + 520.0 * _rnd(i, seed, 4)
+        r = (320.0 + 520.0 * _rnd(i, seed, 4)) * sp
         x, y = cx + sgn * math.cos(a) * r, cy + math.sin(a) * r
         tall = _rnd(i, seed, 5) > 0.45
-        sc = 0.92 + 0.3 * _rnd(i, seed, 6)
+        sc = (0.92 + 0.3 * _rnd(i, seed, 6)) * gs
         if tall:
             out.append(A("tree_mature_trunk", x, y, 0, yaw=_rnd(i, seed, 7) * 360.0, s=sc,
                          mat="MI_V2_Bark", label="%s_Trunk%d" % (tag, i)))
@@ -891,33 +912,43 @@ def _grove(sgn, cx, cy, seed, tag, count=5):
             out.append(A("canopy_medium", x, y, 800 * sc, yaw=_rnd(i, seed, 10) * 360.0, s=sc * 1.1,
                          mat=("MI_V2_LeafLight", "MI_V2_LeafMid")[i % 2],
                          label="%s_SlimCanopy%d" % (tag, i)))
-        # what grows at its foot
-        out.append(A("shrub_flowering", x + 190 - 380 * _rnd(i, seed, 11), y + 190 - 380 * _rnd(i, seed, 12), 0,
-                     yaw=_rnd(i, seed, 13) * 360.0, s=0.8, mat="MI_V2_LeafMid",
-                     label="%s_Shrub%d" % (tag, i)))
-    for k in range(4):
+        # what grows at its foot -- underplanting is read at walking distance
+        # and is invisible mass beyond it, so it is on the vegetation budget
+        if H is None or _rnd(i, seed, 31) < H["veg"]:
+            out.append(A("shrub_flowering", x + 190 - 380 * _rnd(i, seed, 11), y + 190 - 380 * _rnd(i, seed, 12), 0,
+                         yaw=_rnd(i, seed, 13) * 360.0, s=0.8 * gs, mat="MI_V2_LeafMid",
+                         label="%s_Shrub%d" % (tag, i)))
+    for k in range(4 if H is None else _n(4, H["prop"], 0)):
         a = 6.283 * k / 4 + 0.4
-        out += _ground_patch(cx + sgn * math.cos(a) * 720.0, cy + math.sin(a) * 720.0, 0,
+        out += _ground_patch(cx + sgn * math.cos(a) * 720.0 * sp, cy + math.sin(a) * 720.0 * sp, 0,
                              _rnd(k, seed, 14) * 360.0, 1.0,
                              ("MI_V2_PetalViolet", "MI_V2_PetalWhite")[k % 2],
                              "%s_Ground%d" % (tag, k))
     return out
 
 
-def _mushroom_cluster(sgn, cx, cy, seed, tag):
+def _mushroom_cluster(sgn, cx, cy, seed, tag, H=None):
     """A landmark and its family. Wonderland's mushrooms are architecture, so
-    one is large and sited, and the rest read as its grounds."""
+    one is large and sited, and the rest read as its grounds.
+
+    FEWER BUT STRONGER with distance: the family thins to nothing and the
+    landmark itself grows, which is the whole of "landmark hierarchy" in two
+    numbers -- `landmark_p` decides how many companions, `landmark_scale`
+    decides how big the one that remains.
+    """
+    ls = H["landmark_scale"] if H else 1.0
     out = [
-        A("stone_ring_base", cx, cy, -2, s=0.85, mat="MI_V2_Stone", label="%s_Ring" % tag),
-        A("mushroom_landmark", cx, cy, 0, yaw=_rnd(seed, 1, 2) * 360.0, s=1.15,
+        A("stone_ring_base", cx, cy, -2, s=0.85 * ls, mat="MI_V2_Stone", label="%s_Ring" % tag),
+        A("mushroom_landmark", cx, cy, 0, yaw=_rnd(seed, 1, 2) * 360.0, s=1.15 * ls,
           mat="MI_V2_MushTerracotta", label="%s_Landmark" % tag),
     ]
-    for i in range(3):
+    for i in range(3 if H is None else _n(3, H["landmark_p"], 0)):
         a = 6.283 * i / 3 + _rnd(i, seed, 15) * 0.8
-        r = 420.0 + 260.0 * _rnd(i, seed, 16)
+        r = (420.0 + 260.0 * _rnd(i, seed, 16)) * (H["spacing"] if H else 1.0)
         out.append(A(("mushroom_medium", "mushroom_small", "mushroom_medium")[i],
                      cx + sgn * math.cos(a) * r, cy + math.sin(a) * r, 0,
-                     yaw=_rnd(i, seed, 17) * 360.0, s=0.8 + 0.35 * _rnd(i, seed, 18),
+                     yaw=_rnd(i, seed, 17) * 360.0,
+                     s=(0.8 + 0.35 * _rnd(i, seed, 18)) * (H["scale"] if H else 1.0),
                      mat=("MI_V2_MushRed", "MI_V2_MushPurple", "MI_V2_MushCream")[i % 3],
                      label="%s_Cap%d" % (tag, i)))
     return out
@@ -1413,39 +1444,230 @@ REARWORLD = _band("V2_Garden", [
 # flanks use.
 
 
-def _quarter_garden(cx, cy, sgn, seed, tag):
-    """A formal garden quarter: parterre, grove, landmark, hedged edge."""
-    return (_parterre(sgn, cx, cy, seed, tag + "_P")
-            + _grove(sgn, cx + sgn * 1800, cy + 1500, seed + 11, tag + "_G", count=5)
-            + _mushroom_cluster(sgn, cx - sgn * 1600, cy - 1400, seed + 21, tag + "_M"))
+# ---------------------------------------------------------------------------
+# THE HIERARCHY
+# ---------------------------------------------------------------------------
+#
+# The first outer world was 32 quarters built by three functions that took a
+# centre and nothing else, so every quarter of a kind was the same quarter:
+# garden 106 pieces, towers 36, grove 34, footprint 21.6 m, over and over, from
+# 50 m out to 164 m. tools/hierarchy.py put a number on it -- **core:far
+# density ratio 1.10x**, against boards that read past 2.5 -- and a polar map
+# showed the shape of the mistake: a complete RING of thin ground at 50-75 m
+# (147-334 per ha in all eight sectors) with a DENSER ring outside it at
+# 75-125 m. Density that rises with distance is not a hierarchy, it is a fence.
+#
+# So position no longer decides only WHERE a quarter is. It decides WHAT it is,
+# through one continuous score:
+#
+#   score = 0.70 * falloff + 0.16 * road activation + 0.14 * a noise field
+#
+# and every quantity a quarter has -- how many pieces, how far apart, how big,
+# how likely a landmark, how tall a silhouette, how much empty ground it may
+# hold -- is derived from that score rather than written down. The three terms
+# each do a job: the falloff makes the hierarchy, the road term keeps ground
+# beside a way denser than open land at the same radius (density follows
+# movement, not distance), and the noise breaks the tiers so they read as
+# country rather than as three concentric bands.
+#
+# `HIER` is exported, and `tools/emptiness.py` reads `empty_tol` from it: the
+# audit and the generator share one definition of how much emptiness is
+# correct at a place, which is the only way the audit can be right about the
+# far world without demanding the far world be dense.
+
+_H_R0 = 6500.0          #: uu -- inside this, Golden Arrival's own authored density
+_H_R1 = 34000.0         #: uu -- the far edge of the walkable world
+_H_E = 0.06720551273974977   #: math.exp(-2.7), the falloff's value at the far edge
 
 
-def _quarter_towers(cx, cy, sgn, seed, tag):
-    """A neighbourhood: a cluster of towers with courts and walls between."""
+def _clamp(v, lo=0.0, hi=1.0):
+    return lo if v < lo else (hi if v > hi else v)
+
+
+def _vnoise(x, y, cell, seed):
+    """Smooth deterministic 0..1 value noise, so a gradient is not a ring.
+
+    Bilinear between lattice values with a smoothstep weight -- without the
+    smoothstep the field creases along the lattice and the creases show up in
+    the world as straight edges of density.
+    """
+    gx, gy = x / cell, y / cell
+    i, j = math.floor(gx), math.floor(gy)
+    fx, fy = gx - i, gy - j
+    sx, sy = fx * fx * (3.0 - 2.0 * fx), fy * fy * (3.0 - 2.0 * fy)
+    a, b = _rnd(i, j, seed), _rnd(i + 1, j, seed)
+    c, d = _rnd(i, j + 1, seed), _rnd(i + 1, j + 1, seed)
+    return (a * (1.0 - sx) + b * sx) * (1.0 - sy) + (c * (1.0 - sx) + d * sx) * sy
+
+
+def _road_activation(x, y):
+    """1 on a way, falling to 0 in open country.
+
+    A world's density follows its movement, not its radius: the ground beside
+    a road is busier than the ground behind a hill at the same distance out.
+    This is what stops the falloff reading as concentric.
+    """
+    r = math.hypot(x, y)
+    if r < 900.0:
+        return 1.0
+    b = math.degrees(math.atan2(y, x)) % 360.0
+    best = 1e18
+    for rb in _ROAD_BEARINGS:
+        d = abs((b - rb + 180.0) % 360.0 - 180.0)
+        best = min(best, math.radians(d) * r)          # lateral offset, uu
+    # the ring circuit is a way too, and it runs at a radius rather than a bearing
+    best = min(best, abs(r - _RING_RADIUS))
+    return _clamp(1.0 - (best - 2600.0) / 6400.0)
+
+
+#: HIER is called about 1.3 million times while the world is placed -- once per
+#: candidate position per already-placed quarter, twice per `_want_gap` -- and
+#: each call walks 32 road bearings and two noise octaves. Memoising it on the
+#: exact coordinate took module import from 25 seconds to under three: the
+#: repeated queries are the same POINTS (a placed quarter, asked about again
+#: for the next candidate), so exact keys hit and nothing is approximated.
+_HIER_CACHE = {}
+
+
+def HIER(x, y):
+    """Everything a place derives from where it is. One dict, all continuous.
+
+    Nothing here is a threshold on a tier: `tier` is a label for the reports
+    and is never read by the generator, precisely so the world cannot acquire
+    a visible boundary at a number.
+    """
+    hit = _HIER_CACHE.get((x, y))
+    if hit is not None:
+        return hit
+    r = math.hypot(x, y)
+    # NOT LINEAR. A straight falloff over 65 -> 340 m barely moves across the
+    # 85-170 m band where most of the quarters actually stand: the first pass
+    # measured 385 per ha at 50-100 m against 407 at 100-150, still rising
+    # outward. Density in a landscape decays on a LENGTH, so this does too --
+    # normalised to reach exactly 0 at the far edge, which a bare exponential
+    # would not, leaving a step where the world stops.
+    t = _clamp((r - _H_R0) / (_H_R1 - _H_R0))
+    fall = (math.exp(-2.7 * t) - _H_E) / (1.0 - _H_E)
+    road = _road_activation(x, y)
+    field = 0.62 * _vnoise(x, y, 9000.0, 4211) + 0.38 * _vnoise(x, y, 3400.0, 9137)
+    s = _clamp(0.70 * fall + 0.16 * road + 0.14 * field)
+    out = {
+        "score": s,
+        "tier": "core" if s >= 0.68 else ("mid" if s >= 0.38 else "far"),
+        "fall": fall, "road": road, "field": field,
+        #: how many pieces a quarter is made of, against its authored count
+        "density": 0.26 + 1.20 * (s ** 1.90),
+        #: how far apart they stand -- the core is tight, the distance is loose.
+        #:
+        #: The core end was 1.00, meaning "as authored", and that was the
+        #: assumption worth questioning: a core tower quarter with its towers
+        #: at 1,500 uu from its centre is 34 m across, so packing those
+        #: densely puts a tower inside a tower and packing them safely empties
+        #: the core -- 103 placements per hectare at 100-150 m, against 188
+        #: before, chasing the same collision from the other side. "Shortest
+        #: spacing between meaningful structures" is the first line of the
+        #: brief for this tier, and it is a statement about what is INSIDE a
+        #: quarter as much as between them. 0.70 in the core.
+        "spacing": 2.25 - 1.55 * s,
+        #: a distant piece is bigger, or it is not there at all
+        "scale": 0.90 + 0.62 * ((1.0 - s) ** 1.35),
+        #: SECONDARY landmarks are a core luxury; the distance gets one, large
+        "landmark_p": 0.16 + 0.84 * s,
+        "landmark_scale": 1.00 + 1.15 * ((1.0 - s) ** 1.4),
+        "veg": 0.36 + 1.00 * (s ** 1.25),
+        #: props are the first thing distance takes and the last thing it returns
+        "prop": 0.04 + 1.36 * (s ** 2.1),
+        #: walls, courts and paved yards -- architecture ABOUT architecture
+        "court_p": s ** 1.15,
+        #: how much of the silhouette this place contributes at the horizon
+        "skyline": 0.55 + 1.10 * (1.0 - s),
+        #: uu. How far from a placement the ground may be before it reads as a
+        #: hole. 9 m in the core, 55 m at the horizon -- read by emptiness.py,
+        #: so "empty" means empty BY THE STANDARD OF ITS OWN TIER.
+        "empty_tol": 900.0 + 4600.0 * (1.0 - s),
+    }
+    if len(_HIER_CACHE) < 400000:
+        _HIER_CACHE[(x, y)] = out
+    return out
+
+
+def _n(base, mult, lo=1, hi=None):
+    """A count from a multiplier, floored so a tier can thin but not delete."""
+    v = int(round(base * mult))
+    v = max(lo, v)
+    return v if hi is None else min(hi, v)
+
+
+def _quarter_garden(cx, cy, sgn, seed, tag, H=None):
+    """A formal garden quarter: parterre, grove, landmark, hedged edge.
+
+    With a hierarchy the same three parts survive at every distance and stop
+    being the same SIZE: the parterre thins from the inside out (blooms first,
+    then ornament, then its rim), the grove grows and spreads, and the
+    mushroom family becomes one large landmark once secondary ones stop
+    earning their draw calls.
+    """
+    H = H or HIER(cx, cy)
+    sp = H["spacing"]
+    out = _parterre(sgn, cx, cy, seed, tag + "_P", H=H)
+    out += _grove(sgn, cx + sgn * 1800 * sp, cy + 1500 * sp, seed + 11, tag + "_G",
+                  count=_n(5, H["veg"], 3), H=H)
+    # INSIDE ITS OWN QUARTER. At 1600/1400 the landmark stood 2,120 uu from
+    # the centre against a garden's 2,200 uu reach -- on its own perimeter,
+    # which is exactly where the neighbour's wall is. Three of them were found
+    # inside other people's geometry. A landmark belongs in the room it names.
+    out += _mushroom_cluster(sgn, cx - sgn * 850 * sp, cy - 740 * sp, seed + 21,
+                             tag + "_M", H=H)
+    return out
+
+
+def _quarter_towers(cx, cy, sgn, seed, tag, H=None):
+    """A neighbourhood: a cluster of towers with courts and walls between.
+
+    HIERARCHY. Five towers, one wall ring and one paved court was this
+    quarter at 85 m and at 164 m alike. Now the count, the spread, the height
+    and whether it has a wall at all come from the score: a core neighbourhood
+    is seven towers close-packed inside a walled court with planting and
+    ground colour; a distant one is two or three tall silhouettes on open
+    ground, which is what a town reads as from three hundred metres.
+    """
+    H = H or HIER(cx, cy)
     out = []
-    for i, (dx, dy, h, roof) in enumerate((
-            (0, 0, 1.35, "MI_V2_RoofPink"), (1500, 900, 1.0, "MI_V2_RoofLilac"),
+    sp, sk = H["spacing"], H["skyline"]
+    plan = ((0, 0, 1.35, "MI_V2_RoofPink"), (1500, 900, 1.0, "MI_V2_RoofLilac"),
             (-1300, 1100, 1.15, "MI_V2_RoofBlue"), (700, -1500, 0.85, "MI_V2_RoofRose"),
-            (-1600, -900, 1.05, "MI_V2_RoofNavy"))):
-        x, y = cx + sgn * dx, cy + dy
+            (-1600, -900, 1.05, "MI_V2_RoofNavy"), (2100, -2000, 1.22, "MI_V2_RoofPink"),
+            (-2400, 2100, 0.95, "MI_V2_RoofRose"))
+    n_tower = _n(5, H["density"], 2, len(plan))
+    for i, (dx, dy, h0, roof) in enumerate(plan[:n_tower]):
+        x, y = cx + sgn * dx * sp, cy + dy * sp
+        # the DOMINANT tower keeps the full skyline multiplier; its attendants
+        # take less of it, so a distant cluster is one silhouette with company
+        # rather than three of the same height standing in a row
+        h = h0 * (sk if i == 0 else 0.55 + 0.45 * sk) * H["scale"] / 1.28
         out += [
             A("tower_capped", x, y, 0, yaw=_rnd(i, seed, 1) * 360.0, s=h,
               mat="MI_V2_IvoryStone", label="%s_Tower%d" % (tag, i)),
             A("roof_cone_steep", x, y, 1100.0 * h, s=h, mat=roof,
               label="%s_TowerCap%d" % (tag, i)),
-            A("balcony_ring", x, y, 585.0 * h, s=0.65 * h, mat="MI_V2_IvoryStone",
-              label="%s_TowerBalcony%d" % (tag, i)),
             A("finial_spire", x, y, 1560.0 * h, s=0.7 * h, mat="MI_V2_Gold",
               label="%s_TowerSpire%d" % (tag, i)),
         ]
+        # a balcony is a detail read at fifty metres and a wasted draw at three
+        # hundred: it is on the landmark budget, not the massing budget
+        if _rnd(i, seed, 41) < H["landmark_p"]:
+            out.append(A("balcony_ring", x, y, 585.0 * h, s=0.65 * h,
+                         mat="MI_V2_IvoryStone", label="%s_TowerBalcony%d" % (tag, i)))
     # a court between them, with its own planting
-    for i in range(6):
-        a = 6.283 * i / 6.0 + 0.4
+    n_court = _n(6, H["density"], 0)
+    for i in range(n_court):
+        a = 6.283 * i / max(1, n_court) + 0.4
         out.append(A(("topiary_cone_plain", "shrub_flowering", "topiary_ball")[i % 3],
-                     cx + math.cos(a) * 950.0, cy + math.sin(a) * 950.0, 0,
-                     yaw=40 * i, s=0.85, mat=("MI_V2_LeafDark", "MI_V2_LeafMid")[i % 2],
+                     cx + math.cos(a) * 950.0 * sp, cy + math.sin(a) * 950.0 * sp, 0,
+                     yaw=40 * i, s=0.85 * H["scale"],
+                     mat=("MI_V2_LeafDark", "MI_V2_LeafMid")[i % 2],
                      label="%s_Court%d" % (tag, i)))
-    for i in range(3):
+    for i in range(_n(3, H["prop"], 0)):
         out += _ground_patch(cx + 500 - 500 * i, cy - 700, 0, 60 * i, 1.0,
                              ("MI_V2_PetalPink", "MI_V2_Lavender", "MI_V2_PetalWhite")[i % 3],
                              "%s_CourtGround%d" % (tag, i))
@@ -1453,28 +1675,34 @@ def _quarter_towers(cx, cy, sgn, seed, tag):
     # as isolated architectural fragments standing on lawn -- the brief's
     # "architectural fragments" was meant as a kind of place, not as debris.
     # A neighbourhood has ground under it, a wall around it and a way in.
-    out.append(A("garden_lawn", cx, cy, -2, sxyz=(0.62, 0.52, 1.0),
+    out.append(A("garden_lawn", cx, cy, -2, sxyz=(0.62 * sp, 0.52 * sp, 1.0),
                  mat="MI_V2_Lawn", label="%s_Ground" % tag))
-    for i in range(14):
-        a = 6.283 * i / 14.0
-        # a broken perimeter wall: two gaps, where the roads arrive
-        if 0.42 < (i / 14.0) < 0.58 or (i / 14.0) > 0.92 or (i / 14.0) < 0.08:
-            continue
-        out.append(A("garden_wall", cx + math.cos(a) * 2150.0, cy + math.sin(a) * 2150.0, 0,
-                     yaw=math.degrees(a) + 90.0, sxyz=(1.0, 1.0, 0.85),
-                     mat="MI_V2_IvoryStone", label="%s_Wall%d" % (tag, i)))
-        if i % 4 == 0:
-            out.append(A("gate_pier", cx + math.cos(a) * 2150.0, cy + math.sin(a) * 2150.0, 0,
-                         s=0.6, mat="MI_V2_IvoryStone", label="%s_WallPier%d" % (tag, i)))
-    # a paved court at its heart, so the towers stand on something built
-    for k, yaw in enumerate((0.0, 90.0)):
-        out.append(A("terrace_platform", cx, cy, -18.0, yaw=yaw,
-                     sxyz=(1.45, 0.42, 0.35), mat="MI_V2_PlazaWarm",
-                     label="%s_Court%d" % (tag, k)))
+    # THE WALL IS THE FIRST THING DISTANCE TAKES. A perimeter wall is a line
+    # of 14 pieces that subtends about a pixel at 300 m; a tower is a
+    # silhouette. Walls, pilasters and the paved court belong to `court_p`.
+    if H["court_p"] > 0.34:
+        n_wall = _n(14, 0.5 + 0.5 * H["court_p"], 6)
+        for i in range(n_wall):
+            a = 6.283 * i / n_wall
+            # a broken perimeter wall: two gaps, where the roads arrive
+            if 0.42 < (i / float(n_wall)) < 0.58 or (i / float(n_wall)) > 0.92 or (i / float(n_wall)) < 0.08:
+                continue
+            rr = 2150.0 * sp
+            out.append(A("garden_wall", cx + math.cos(a) * rr, cy + math.sin(a) * rr, 0,
+                         yaw=math.degrees(a) + 90.0, sxyz=(1.0 * sp, 1.0, 0.85),
+                         mat="MI_V2_IvoryStone", label="%s_Wall%d" % (tag, i)))
+            if i % 4 == 0 and H["prop"] > 0.30:
+                out.append(A("gate_pier", cx + math.cos(a) * rr, cy + math.sin(a) * rr, 0,
+                             s=0.6, mat="MI_V2_IvoryStone", label="%s_WallPier%d" % (tag, i)))
+        # a paved court at its heart, so the towers stand on something built
+        for k, yaw in enumerate((0.0, 90.0)):
+            out.append(A("terrace_platform", cx, cy, -18.0, yaw=yaw,
+                         sxyz=(1.45 * sp, 0.42 * sp, 0.35), mat="MI_V2_PlazaWarm",
+                         label="%s_Court%d" % (tag, k)))
     return out
 
 
-def _quarter_grove(cx, cy, sgn, seed, tag):
+def _quarter_grove(cx, cy, sgn, seed, tag, H=None):
     """A mushroom wood: the organic, exploratory end of the language."""
     # ONE landmark, not four clusters. The first world render showed eight of
     # these quarters and the frame read as a mushroom farm: four clusters each
@@ -1483,15 +1711,129 @@ def _quarter_grove(cx, cy, sgn, seed, tag):
     # explicit -- landmarks need hierarchy, and "do not turn every 5 meters
     # into another gimmick". A mushroom wood is trees with ONE mushroom
     # landmark standing in it and a few small ones at its feet.
-    out = _grove(sgn, cx, cy, seed, tag + "_G", count=9)
-    out += _mushroom_cluster(sgn, cx + sgn * 700.0, cy + 500.0, seed + 30, "%s_M" % tag)
-    for i in range(3):
+    H = H or HIER(cx, cy)
+    sp = H["spacing"]
+    out = _grove(sgn, cx, cy, seed, tag + "_G", count=_n(9, H["veg"], 4), H=H)
+    out += _mushroom_cluster(sgn, cx + sgn * 700.0 * sp, cy + 500.0 * sp, seed + 30,
+                             "%s_M" % tag, H=H)
+    for i in range(_n(3, H["density"], 0)):
         a = 6.283 * i / 3.0 + _rnd(i, seed, 7) * 0.9
-        r = 1300.0 + 500.0 * _rnd(i, seed, 8)
+        r = (1300.0 + 500.0 * _rnd(i, seed, 8)) * sp
         out.append(A("mushroom_small", cx + math.cos(a) * r, cy + math.sin(a) * r, 0,
-                     yaw=_rnd(i, seed, 9) * 360.0, s=0.8 + 0.4 * _rnd(i, seed, 10),
+                     yaw=_rnd(i, seed, 9) * 360.0,
+                     s=(0.8 + 0.4 * _rnd(i, seed, 10)) * H["scale"],
                      mat=("MI_V2_MushRed", "MI_V2_MushCream", "MI_V2_MushPurple")[i % 3],
                      label="%s_SmallCap%d" % (tag, i)))
+    return out
+
+
+def _quarter_wood(cx, cy, sgn, seed, tag, H=None):
+    """LANDSCAPE, at the scale distance actually reads.
+
+    The atmospheric band is not a thinner town. Beyond ~190 m a wall is a
+    pixel, a parterre is a smudge and a court is nothing -- what carries is
+    MASS: a body of canopy with a shape, a ridge that gives it a top edge, and
+    one silhouette standing clear of it. So the far tier has its own kind
+    rather than a starved copy of a near one, which is also why the hierarchy
+    does not read as three rings of the same thing at three sizes.
+    """
+    H = H or HIER(cx, cy)
+    sc = H["scale"]
+    # A MASS IS TIGHT EVEN WHEN THE WORLD IS LOOSE. `spacing` is the distance
+    # BETWEEN quarters and applying it inside a wood scattered eleven trees
+    # over 116 m -- measured, and it read as trees on a lawn rather than as
+    # woodland. A far wood is bigger and there are fewer of them; the trees
+    # inside it stand as close together as they do anywhere. So the body takes
+    # a damped spread and the count follows its AREA, which holds the internal
+    # density roughly constant while the mass itself grows.
+    sp = 0.80 + 0.40 * H["spacing"]
+    out = []
+    # 20, NOT 11. The plan view is the check no camera can make, and at 11 the
+    # far woods drew as a dozen dots inside a 58 m ring -- one tree per 278 m2,
+    # which is an orchard with most of it missing, not woodland. A mass has to
+    # read as mass or the atmospheric tier is just sparse. The count follows
+    # sp^2 so the internal density holds as the body grows, and every piece of
+    # it is instanced (trunks and canopies are both in build_v2.BATCHABLE), so
+    # the far tier's silhouette costs draw calls in the single digits.
+    n_tree = _n(20 * sp * sp, 0.62 + 0.75 * H["veg"], 8)
+    ax = 1.0 + 0.9 * _rnd(seed, 3, 1)                   # the wood is not round
+    lean = _rnd(seed, 3, 2) * 6.283
+    for i in range(n_tree):
+        a = 6.283 * _rnd(i, seed, 21)
+        rad = (900.0 + 2100.0 * math.sqrt(_rnd(i, seed, 22))) * sp
+        ux, uy = math.cos(a) * rad * ax, math.sin(a) * rad
+        x = cx + ux * math.cos(lean) - uy * math.sin(lean)
+        y = cy + ux * math.sin(lean) + uy * math.cos(lean)
+        t = 1.05 + 0.55 * _rnd(i, seed, 23)
+        if _rnd(i, seed, 24) > 0.42:
+            out.append(A("tree_mature_trunk", x, y, 0, yaw=_rnd(i, seed, 25) * 360.0,
+                         s=t * sc, mat="MI_V2_Bark", label="%s_Trunk%d" % (tag, i)))
+            out.append(A("canopy_large", x, y, 1320 * t * sc, yaw=_rnd(i, seed, 26) * 360.0,
+                         s=t * sc * 1.25,
+                         mat=("MI_V2_LeafMid", "MI_V2_LeafDark", "MI_V2_LeafLight")[i % 3],
+                         label="%s_Canopy%d" % (tag, i)))
+        else:
+            out.append(A("tree_slender_trunk", x, y, 0, yaw=_rnd(i, seed, 27) * 360.0,
+                         s=t * sc, mat="MI_V2_Bark", label="%s_Slim%d" % (tag, i)))
+            out.append(A("canopy_medium", x, y, 800 * t * sc, yaw=_rnd(i, seed, 28) * 360.0,
+                         s=t * sc * 1.3,
+                         mat=("MI_V2_LeafLight", "MI_V2_LeafMid")[i % 2],
+                         label="%s_SlimCanopy%d" % (tag, i)))
+    # the ridge: a mass along the wood's long axis that gives it a top edge
+    for i in range(_n(6, 0.6 + 0.7 * H["veg"], 3)):
+        t = -0.5 + i / float(max(1, _n(6, 0.6 + 0.7 * H["veg"], 3) - 1))
+        rx, ry = t * 4200.0 * sp * ax, (_rnd(i, seed, 29) - 0.5) * 1400.0
+        x = cx + rx * math.cos(lean) - ry * math.sin(lean)
+        y = cy + rx * math.sin(lean) + ry * math.cos(lean)
+        out.append(A("hedge_mass", x, y, 0, yaw=math.degrees(lean),
+                     s=(1.7 + 0.9 * _rnd(i, seed, 30)) * sc,
+                     mat=("MI_V2_LeafDark", "MI_V2_LeafMid")[i % 2],
+                     label="%s_Ridge%d" % (tag, i)))
+    # ONE thing standing clear of the mass. Which one is the wood's identity,
+    # and it is chosen by the field rather than alternated, so neighbouring
+    # woods are not reliably different in the way a pattern is.
+    lx, ly = cx + sgn * 1500.0 * sp, cy - 1200.0 * sp
+    ls = H["landmark_scale"]
+    pick = _vnoise(cx, cy, 7000.0, 5501)
+    if pick < 0.40:
+        out += [
+            A("stone_ring_base", lx, ly, -2, s=1.15 * ls, mat="MI_V2_Stone",
+              label="%s_Ring" % tag),
+            A("mushroom_landmark", lx, ly, 0, yaw=_rnd(seed, 1, 2) * 360.0, s=1.35 * ls,
+              mat="MI_V2_MushTerracotta", label="%s_Landmark" % tag),
+        ]
+    elif pick < 0.74:
+        h = 1.30 * ls * H["skyline"] / 1.28
+        out += [
+            A("tower_capped", lx, ly, 0, yaw=_rnd(seed, 1, 3) * 360.0, s=h,
+              mat="MI_V2_IvoryStone", label="%s_Tower" % tag),
+            A("roof_cone_steep", lx, ly, 1100.0 * h, s=h,
+              mat=("MI_V2_RoofNavy", "MI_V2_RoofLilac", "MI_V2_RoofBlue")[seed % 3],
+              label="%s_TowerCap" % tag),
+            A("finial_spire", lx, ly, 1560.0 * h, s=0.7 * h, mat="MI_V2_Gold",
+              label="%s_TowerSpire" % tag),
+        ]
+    else:
+        for k in range(3):
+            a = 6.283 * k / 3.0 + _rnd(seed, k, 4)
+            t = 1.5 + 0.8 * _rnd(seed, k, 5)
+            out.append(A("tree_mature_trunk", lx + math.cos(a) * 620.0 * ls,
+                         ly + math.sin(a) * 620.0 * ls, 0, yaw=_rnd(seed, k, 6) * 360.0,
+                         s=t * ls * 0.8, mat="MI_V2_Bark", label="%s_Great%d" % (tag, k)))
+            out.append(A("canopy_large", lx + math.cos(a) * 620.0 * ls,
+                         ly + math.sin(a) * 620.0 * ls, 1320 * t * ls * 0.8,
+                         yaw=_rnd(seed, k, 7) * 360.0, s=t * ls * 1.1,
+                         mat=("MI_V2_LeafDark", "MI_V2_LeafMid", "MI_V2_LeafLight")[k % 3],
+                         label="%s_GreatCanopy%d" % (tag, k)))
+    # terrain composition: the ground under a far mass is its own tone, so the
+    # moss slab is not the only thing between here and the horizon
+    for k in range(2):
+        out.append(A("garden_lawn", cx + (k - 0.5) * 3600.0 * sp,
+                     cy + (0.5 - k) * 2600.0 * sp, -2,
+                     yaw=(seed * 13 + 40 * k) % 90,
+                     sxyz=(1.25 * sp, 1.05 * sp, 1.0),
+                     mat=("MI_V2_Lawn", "MI_V2_Moss")[k % 2],
+                     label="%s_Ground%d" % (tag, k)))
     return out
 
 
@@ -1550,73 +1892,809 @@ _QUARTER_SITES = [
     (11400, -10500, "grove", 9900), (-11000, -11200, "towers", 10000),
 ]
 
+#: uu. The ring circuit's working radius, used by the road-activation term.
+_RING_RADIUS = 12500.0
+#: The bearings that carry a radial way out of the district. Derived from the
+#: sites rather than restated, so a new quarter activates its own ground.
+_ROAD_BEARINGS = ([b for (b, _r, _k) in _QUARTERS]
+                  + [math.degrees(math.atan2(y, x)) % 360.0
+                     for (x, y, _k, _s) in _QUARTER_SITES])
+
+
+# ---------------------------------------------------------------------------
+# THE ATMOSPHERIC DISTANCE
+# ---------------------------------------------------------------------------
+#
+# The audit that found the 27,056 m2 void sampled +/- 120 m. The world reaches
+# 450 m. Re-run over the ground a walker can actually cover, it reports
+# **461,488 m2 in one region** -- 46 hectares, ninety-five times the number
+# this ledger had been carrying, and the same failure the tool exists to catch,
+# one level up: an audit's WINDOW is part of its measurement.
+#
+# A polar map says the shape of it. Density per hectare by 45 deg sector:
+#
+#   150-200 m    33   90  231   36   12   63   51   41
+#   200-300 m     0   10    9    0    0    0    0    0
+#   300-450 m     2   12   13    1    0    0    0    0
+#
+# Only the two sectors either side of the castle axis have anything out there,
+# and that is CITY -- the approved layer-4/5 silhouettes, all of them at y > 0.
+# Turn round at the plaza and the world ends at 165 m in every direction.
+#
+# This is the atmospheric band, and it is deliberately NOT a thinner ring of
+# the same quarters: `_quarter_wood` is landscape at the scale distance reads,
+# and the arcs skip the castle sightline and the ground the CITY already
+# occupies, so the far world is woods and lone towers behind and to the sides,
+# and architecture in front. That asymmetry is the reason it does not read as
+# a third concentric ring.
+
+#: uu. The atmospheric band: from beyond the quarter belt to the world edge.
+_DISTANCE_BAND = (17500.0, 33500.0)
+#: uu. How far apart the far tier stands, at the near edge of the band and at
+#: the far edge. IT GROWS, because a spiral at ONE spacing is area-uniform and
+#: an area-uniform tier does not thin: with the woods dense enough to read as
+#: mass, the profile went flat from 200 m to 325 m at ~50 per hectare -- the
+#: ring problem again, wearing the horizon's clothes. Masses stay masses and
+#: there are fewer of them the further out you go, which is the tier's own
+#: brief: lowest density, larger spacing, fewer but stronger landmarks.
+_DISTANCE_SPACING = (9600.0, 15400.0)
+#: How many to try before giving up -- the spiral is dense, the keep-outs and
+#: the spacing rule do the choosing.
+_DISTANCE_TRIES = 96
+#: deg. Half-width of the castle sightline, kept clear at every radius.
+_AXIS_KEEP_OUT = 15.0
+#: uu. How much air an approved CITY group keeps around it.
+_CITY_CLEARANCE = 5200.0
+
+
+def _city_points():
+    return [(it["pos"][0], it["pos"][1]) for it in CITY
+            if math.hypot(it["pos"][0], it["pos"][1]) > 15000.0]
+
+
+_CITY_POINTS = _city_points()
+
+
+def _spacing_at(x, y):
+    """The far tier's minimum spacing at a point -- it grows with radius."""
+    r0, r1 = _DISTANCE_BAND
+    d0, d1 = _DISTANCE_SPACING
+    t = _clamp((math.hypot(x, y) - r0) / (r1 - r0))
+    return d0 + (d1 - d0) * t
+
+
+def _distance_sites():
+    """The far tier: even coverage of a big ring, at a spacing that grows.
+
+    Authored: the band, the spacing, and the two keep-outs. Generated: every
+    position and kind.
+
+    IT WAS ARCS, AND ARCS ARE RINGS. Four concentric arcs of 12/12/10/8 put
+    forty-two quarters in a band that holds about twenty at the spacing the
+    hierarchy itself asks for, so the relaxation had nowhere to put them and
+    pressed them onto the world edge -- ten in the 325-350 m bin and a density
+    that RISED into the horizon, which is the exact artefact this pass exists
+    to remove. Cut to twenty-three the profile fell monotonically and the
+    coverage went ragged instead: two holes of 1.3 ha each at 320 m, big
+    enough to read as gaps in the horizon line.
+    
+    Both symptoms are the same cause -- a ring generator cannot distribute a
+    sparse tier evenly. So: candidates on a golden-angle spiral, which is
+    uniform BY AREA rather than by radius, kept only if they clear everything
+    already kept by `_DISTANCE_SPACING`. Even coverage, no band, and the count
+    is whatever the ring actually holds rather than a number written down.
+
+    THE CITY KEEP-OUT IS MEASURED, NOT ASSUMED. It began as "skip bearings
+    18-162 beyond 240 m, the CITY holds that ground" -- and the CITY does not
+    hold that ground: its layer 4 is two groups at 214 m and 229 m and its
+    layer 5 stands at 300-420 m, so the rule reserved a quadrant for
+    architecture that is not there. The audit found the consequence exactly:
+    30,416 m2 and 21,264 m2, the two largest holes in the world, both in the
+    front hemisphere between 200 and 350 m.
+
+    And what fills the front is WOOD, never towers. The founder's PASS 06 note
+    was that beyond the castle the world looked "too deep and messy", which is
+    why layers 4 and 5 were cut to three clean silhouettes; new tower tops
+    behind the castle would undo that judgement. Landscape at the same
+    distance does not -- it is the layered haze those frames read well.
+    """
+    r0, r1 = _DISTANCE_BAND
+    kept = []
+    for k in range(_DISTANCE_TRIES):
+        # uniform by AREA: r = sqrt(lerp(r0^2, r1^2, u)), bearing by the
+        # golden angle so successive candidates never share a spoke
+        u = (k + 0.5) / _DISTANCE_TRIES
+        r = math.sqrt(r0 * r0 + (r1 * r1 - r0 * r0) * u)
+        b = (k * 137.50776405 + 11.0 * _rnd(k, 64, 1)) % 360.0
+        if abs((b - 90.0 + 180.0) % 360.0 - 180.0) < _AXIS_KEEP_OUT:
+            continue                          # the castle reads against sky
+        a = math.radians(b)
+        x, y = math.cos(a) * r, math.sin(a) * r
+        if any((px - x) ** 2 + (py - y) ** 2 < _CITY_CLEARANCE ** 2
+               for (px, py) in _CITY_POINTS):
+            continue                          # an approved silhouette stands here
+        front = 10.0 < b < 170.0
+        kind = "wood" if (front or _rnd(k, 64, 2) < 0.72) else "towers"
+        # ONE SPACING RULE, NOT TWO. This had its own table -- 96 m at the
+        # near edge growing to 154 m at the far -- while `_separate` enforced
+        # `_want_gap`, which for two far woods asks 178 m. The spiral accepted
+        # candidates the placer then refused, and three woods were dropped
+        # into a 14,960 m2 hole in the west because of a disagreement between
+        # two descriptions of the same quantity. Asking `_want_gap` directly
+        # cannot disagree with itself.
+        me = {"x": x, "y": y, "kind": kind,
+              "reach": _reach(kind, HIER(x, y))}
+        if any(math.hypot(qx - x, qy - y)
+               < _want_gap(me, {"x": qx, "y": qy, "kind": qk,
+                                "reach": _reach(qk, HIER(qx, qy))})
+               for (qx, qy, qk, _s) in kept):
+            continue                          # too close to one already kept
+        kept.append((x, y, kind, 10500 + 211 * k))
+    return kept
+
+
+
+
+# ---------------------------------------------------------------------------
+# SITES, SEPARATED
+# ---------------------------------------------------------------------------
+#
+# Two quarters were 9.7 m apart with 21 m footprints -- S12_towers and
+# S00_garden, added in different rounds from the audit's own centres, because
+# the audit reports where the world is EMPTY and says nothing about what has
+# been put there since. Nothing checked, so a tower stood inside a parterre.
+#
+# Rather than move two coordinates, the sites are separated by construction:
+# each carries an estimated reach from its kind and its hierarchy, pairs that
+# interpenetrate push apart along their own separation, and a site that cannot
+# clear within a bounded displacement is DROPPED and named. The audit's intent
+# survives (nothing moves more than 25 m from where it reported), and the class
+# of defect cannot come back with the next round of sites.
+
+#: uu. How far a quarter of each kind reaches from its centre, at spacing 1.
+#:
+#: READ OFF THE BUILDERS, not guessed, and LINEAR IN SPACING because they are:
+#:
+#:   towers   the wall ring stands at 2,150 * spacing, plus a pier
+#:   garden   the grove sits at (1800 + 840) * spacing from the centre
+#:   grove    the outer small caps at (1300 + 500) * spacing
+#:   wood     the body at 3,000 * (0.80 + 0.40 * spacing), plus the ridge
+#:
+#: The first version was `_REACH * (0.55 + 0.45 * spacing)` -- SUBLINEAR, so
+#: at spacing 1.23 it called a tower quarter 2,429 uu wide when its own wall
+#: stood at 2,645. Everything measured against that number was measured
+#: against a quarter smaller than the one being built, which is how a City3
+#: tower ended up inside an S04 wall with every keep-out satisfied.
+_REACH = {"garden": 2750.0, "towers": 2350.0, "grove": 1950.0, "wood": 2900.0}
+#: uu. How far a site may be nudged from where it was first put.
+#:
+#: Two budgets, because the two kinds of site mean different things. A `Q` or
+#: `S` centre is a DECISION -- a bearing chosen to miss the castle sightline,
+#: or a coordinate the emptiness audit reported -- so it moves 25 m at most and
+#: keeps its intent. A `C` or `D` centre is generated from an arc and means
+#: nothing in particular, so it may travel until it fits. With one budget for
+#: both, a far wood and a tower neighbourhood stayed 43 m apart with 64 m and
+#: 36 m footprints: trees standing inside a court, because the only site that
+#: could have moved was pinned by a rule written for the other kind.
+_NUDGE = {"authored": 4500.0, "generated": 12000.0}
+#: uu. Two sites closer than this are the same site. 18 m against footprints
+#: of about 21 m is better than 80% overlap -- one place, described twice.
+#: Measured either way: at 13 m five such pairs survive into the world and
+#: five landmarks end up inside other geometry; at 25 m eight sites go,
+#: including pairs 24 m apart that are simply neighbours in a dense core.
+_DUPLICATE = 1800.0
+#: Jacobi damping: half of each step, so squeezed sites settle rather than
+#: oscillate between their neighbours.
+_RELAX_DAMP = 0.5
+#: uu. The biggest half-footprint in the approved district (a castle_hall at
+#: 600, a tower_capped at s=1.6 giving 640), so a point anchor stands for the
+#: body it actually has.
+_ANCHOR_BODY = 700.0
+#: uu. No quarter stands beyond this: the far arc plus a little, well inside
+#: the ground both audits sample and the distance this fog still carries.
+_WORLD_EDGE = 34500.0
+
+
+def _reach(kind, H):
+    """The quarter's true outer extent -- the furthest piece it lays down."""
+    return _REACH[kind] * (0.12 + 0.88 * H["spacing"]) + 250.0
+
+
+#: A quarter's BODY, as a fraction of its extent. TWO DIFFERENT QUESTIONS were
+#: being answered with one number, and the second answer was wrong both ways.
+#:
+#: Against APPROVED WORK the full extent is right: no piece of a quarter may
+#: stand inside the castle, so the keep-out has to be as wide as the quarter.
+#: Against ANOTHER QUARTER it is far too wide -- garden rooms sharing a hedge
+#: line is what a dense district looks like -- and spacing every pair by their
+#: full extents emptied the core: 147 placements per hectare at 100-150 m
+#: against 327 before, with five quarters dropped for not fitting.
+#:
+#: 0.53 restores the packing the core had before the extents were corrected:
+#: the old, understated reach gave two core tower quarters a 3,380 uu gap, and
+#: at 0.62 of the true extent they stood 3,930 apart -- the whole core drifted
+#: outward, its quarters' scores fell with it, and the density they derive
+#: from those scores fell too: 165 per hectare at 100-150 m against 327.
+#: Correcting a measurement must not quietly change the thing measured.
+#:
+#: PER KIND, because the kinds are not shaped alike. A garden's mass is its
+#: parterre, about 1,120 uu, with a grove and a landmark reaching well past
+#: it -- those may interleave with a neighbour's edge and it reads as one
+#: continuous district. A TOWER quarter's mass IS its spread: the towers stand
+#: at 1,500 * spacing from the centre, so at a single 0.53 two tower quarters
+#: 26 m apart put a tower inside a tower, which the embedded-landmark check
+#: found twice in one pair. Measured, not chosen: each fraction is the kind's
+#: own mass divided by its extent.
+#: MEASURED against each builder: garden -- the parterre rim at ~1,120 uu of
+#: a 2,750-ish extent; towers -- the wall ring at 2,150 * spacing, which is
+#: four fifths of the quarter; grove -- the small caps at 1,800 * spacing;
+#: wood -- the tree body at 3,000 * (0.80 + 0.40 * spacing), which is 0.81 of
+#: the extent at far spacing and was set to 0.62 until a wood's tree turned up
+#: standing inside an approved City8 tower.
+_BODY = {"garden": 0.45, "towers": 0.80, "grove": 0.55, "wood": 0.85}
+
+
+def _body(kind, H):
+    return _reach(kind, H) * _BODY[kind]
+
+
+#: The sizes a quarter will try, in order, before it gives up its place.
+_SQUEEZE = (1.0, 0.82, 0.66, 0.54)
+
+
+def _squeezed(H, f):
+    """The same hierarchy, for a quarter that had to fit into less room.
+
+    Only `spacing` and `scale` move: how far apart a quarter's own pieces
+    stand and how big they are. Its density, its landmark probability and
+    everything else stay what its POSITION says they should be, because being
+    squeezed by a neighbour is not the same as being far away.
+    """
+    if f >= 0.999:
+        return H
+    out = dict(H)
+    out["spacing"] = H["spacing"] * f
+    out["scale"] = H["scale"] * (0.55 + 0.45 * f)
+    return out
+
+
+def _want_gap(a, b):
+    """How far apart two quarters SHOULD stand -- itself a hierarchy quantity.
+
+    Quarters abutting is not the defect; a tower standing inside a parterre
+    is. And the core is MEANT to be tight -- "shortest spacing between
+    meaningful structures" is the first line of the brief for it -- so the
+    target gap is a fraction of the two reaches that grows with distance:
+    core rooms may almost touch, distant masses stand well clear of each
+    other with landscape between. Enforced here, so it is a property of the
+    construction rather than something a later audit has to notice.
+    """
+    ha, hb = HIER(a["x"], a["y"]), HIER(b["x"], b["y"])
+    s = 0.5 * (ha["score"] + hb["score"])
+    # BODIES, not extents. Two core quarters' bodies just touching is the
+    # dense core the brief asks for; two distant masses stand nearly two
+    # bodies clear of each other with landscape between. That is the whole
+    # spacing hierarchy, in one line and one number per tier.
+    body = _body(a["kind"], ha) + _body(b["kind"], hb)
+    # 0.90 at the core end, so two core quarters' bodies TOUCH rather than
+    # stand 13% clear: at 1.00 two tower quarters needed 43 m between centres
+    # and eleven of the thirty-two authored sites could not be placed at all.
+    # Touching is the dense core; the distance keeps nearly two bodies of air.
+    #
+    # EXCEPT BETWEEN TWO WOODS. The "larger spacing" the far tier asks for is
+    # about landmark clusters SEPARATED BY LANDSCAPE, and a wood is the
+    # landscape -- two woods whose canopies meet is a forest, not a collision.
+    # Applying the separation to them demanded 178 m between bodies 100 m
+    # across, so four of the fifteen far sites could not be placed and the
+    # west of the world opened a 15,000 m2 hole. They may nearly touch; what
+    # keeps the horizon sparse is that there are few of them and they are big.
+    sep = 0.35 if (a["kind"] == "wood" and b["kind"] == "wood") else 1.0
+    return body * (0.90 + 0.95 * (1.0 - s) * sep)
+
+
+def _anchor_grid(cell=1200.0):
+    """Approved mass, in a grid, so the relaxation can be pushed off it.
+
+    `_district_clear` refuses to PLACE a site on approved ground and says
+    nothing about where the relaxation then moves it. It moved two: the
+    hierarchy audit's embedded-landmark check found `City4_Tower3` standing
+    inside `Q07_towers_Tower2` and `City5_Tower2` inside a Q11 parterre bed --
+    an approved castle tower and a quarter's garden occupying the same square
+    metres. Golden Arrival and the city now repel, exactly as the quarters
+    repel each other, so a site cannot be pushed into approved work any more
+    than it can be placed there.
+    """
+    grid = {}
+    for (px, py) in _DISTRICT_MASS:
+        k = (int(px // cell), int(py // cell))
+        grid.setdefault(k, []).append((px, py))
+    return grid, cell
+
+
+def _nearest_anchor(x, y, grid, cell, reach):
+    """Any approved mass within `reach` of (x, y), or None.
+
+    It returns the FIRST hit, not the nearest: every caller asks "is there
+    one", and scanning the whole neighbourhood to find the closest of them
+    took placement from a second to half a minute of every module import.
+    """
+    rr = reach * reach
+    ci, cj = int(x // cell), int(y // cell)
+    span = int(reach // cell) + 1
+    for i in range(ci - span, ci + span + 1):
+        for j in range(cj - span, cj + span + 1):
+            for (px, py) in grid.get((i, j), ()):
+                if (px - x) ** 2 + (py - y) ** 2 < rr:
+                    return (px, py)
+    return None
+
+
+def _separate(sites):
+    """Place every quarter where it clears everything already placed.
+
+    GREEDY AND SEQUENTIAL, not relaxed. This was a damped Jacobi relaxation
+    and the trouble with relaxation here is that it does not have to succeed:
+    it pushes for a fixed number of passes and whatever is left over is left
+    over, so a site squeezed between two neighbours ends up embedded in one of
+    them and only a later audit finds out. Five successive tunings of the
+    damping, the iteration count and the budgets each fixed the pair in front
+    of me and produced a different one, and it cost 36 seconds of every
+    module import.
+
+    Sequential placement cannot do that. Inner sites first, because the core
+    is the authored intent; each site takes its own position if it clears, and
+    otherwise the nearest position on a deterministic ring search that does.
+    If nothing within its budget clears, it is DROPPED and named. Every kept
+    site is conflict-free by construction, which is the property the audits
+    kept having to check for.
+    """
+    # DUPLICATES FIRST, BECAUSE THEY ARE NOT A SPACING PROBLEM.
+    #
+    # S00_garden and S12_towers stood 9.7 m apart with 21 m footprints, and no
+    # amount of pushing fixes that: they are the SAME HOLE, reported by the
+    # emptiness audit in two different rounds and turned into two quarters
+    # because nothing compared the new centres against the old ones. Separating
+    # them just moves two quarters that should have been one. A later site
+    # within `_DUPLICATE` of an earlier one is dropped by name.
+    grid, cell = _anchor_grid()
+    cand = []
+    for s in sites:
+        twin = next((t for t in cand
+                     if math.hypot(s["x"] - t["x"], s["y"] - t["y"]) < _DUPLICATE), None)
+        if twin is not None:
+            SITE_NOTES.append("%s dropped: the same site as %s, %.0f m away"
+                              % (s["tag"], twin["tag"],
+                                 math.hypot(s["x"] - twin["x"], s["y"] - twin["y"]) / 100.0))
+            continue
+        d = dict(s)
+        d["squeeze"] = 1.0
+        cand.append(d)
+
+    def fits(a, placed):
+        H = _squeezed(HIER(a["x"], a["y"]), a["squeeze"])
+        a["reach"] = _reach(a["kind"], H)
+        if math.hypot(a["x"], a["y"]) > _WORLD_EDGE:
+            return False
+        # THE BODY, plus the anchor's own size. Using the full extent here
+        # demanded 35 m of clear ground around every quarter centre and
+        # refused twenty of the thirty-two authored sites -- the district's
+        # own mass reaches 66-117 m and the ring stands at 78-165, so almost
+        # every one of them has a hedge or a trunk within 35 m. What must not
+        # happen is a PIECE inside approved work, and every piece that can do
+        # that -- a tower at 1,500 * spacing, a landmark at 850 -- is inside
+        # the body. The outer, sparse end of a quarter meeting the flank's
+        # planting is a district, not a collision.
+        if _nearest_anchor(a["x"], a["y"], grid, cell,
+                           _body(a["kind"], H) + _ANCHOR_BODY) is not None:
+            return False
+        for b in placed:
+            if math.hypot(a["x"] - b["x"], a["y"] - b["y"]) < _want_gap(a, b):
+                return False
+        return True
+
+    # AUTHORED SITES PLACE FIRST. Ordering purely by radius let the generated
+    # core belt -- which means nothing in particular and carries a 120 m budget
+    # -- take the good ground before the twelve ring bearings and twenty audit
+    # centres that were chosen for reasons, and twenty-four of those thirty-two
+    # then had nowhere to go. A site that encodes a decision is placed while
+    # there is still room; the generated tiers fill what is left, which is
+    # what they are for.
+    def _priority(s):
+        return (0 if s["tag"][:1] in ("Q", "S") else 1, math.hypot(s["x"], s["y"]))
+
+    kept, dropped = [], []
+    for s in sorted(cand, key=_priority):
+        s["x0"], s["y0"] = s["x"], s["y"]
+        budget = _NUDGE["authored" if s["tag"][:1] in ("Q", "S") else "generated"]
+        placed = False
+        # MOVE, THEN SHRINK, THEN DROP. A quarter that will not fit at its own
+        # size can usually fit as a smaller one, and a place squeezed between
+        # two neighbours BEING smaller is what happens in a real district --
+        # it is local variation the hierarchy would otherwise have to invent.
+        # Dropping ten authored sites to keep every quarter full size threw
+        # away decisions (a bearing off the castle axis, an audited centre) to
+        # protect a number.
+        for squeeze in _SQUEEZE:
+            s["squeeze"] = squeeze
+            # ring search: the authored spot first, then the nearest ring that
+            # clears -- deterministic in both radius and bearing, so the world
+            # is identical every run
+            for step in range(0, int(budget // 500) + 1):
+                d = step * 500.0
+                for k in range(1 if step == 0 else 14):
+                    b = math.radians(360.0 * k / 14.0 + 11.0 * step)
+                    s["x"], s["y"] = s["x0"] + math.cos(b) * d, s["y0"] + math.sin(b) * d
+                    if fits(s, kept):
+                        kept.append(s)
+                        placed = True
+                        break
+                if placed:
+                    break
+            if placed:
+                break
+        if not placed:
+            s["x"], s["y"], s["squeeze"] = s["x0"], s["y0"], 1.0
+            dropped.append(s)
+    if dropped:
+        SITE_NOTES.append("dropped %d site(s) that could not clear: %s"
+                          % (len(dropped), ", ".join(s["tag"] for s in dropped)))
+    return kept
+
+
+#: Filled by _separate; printed by the layout gate so a dropped site is news
+#: rather than a silence.
+SITE_NOTES = []
+
+
+# ---------------------------------------------------------------------------
+# THE CORE BELT
+# ---------------------------------------------------------------------------
+#
+# With the falloff steepened the profile fell monotonically everywhere but one
+# band, and that band was the giveaway: measured then, 762 per ha at 25-50 m,
+# **338 at 50-75**, then back up to 549 at 75-100. Golden Arrival's authored
+# ground stops around 50 m and the first quarter centre stood at 85; the
+# twenty-five metres between them was a moat, and a moat is exactly how a
+# generated world announces itself -- the eye reads the ring, not the
+# gradient. (As built the dip is 282 against 723 and 305: see `_district_edge`
+# for why what remains of it is not this file's to close.)
+#
+# The brief's core tier is the answer and it was simply missing: "highest
+# architectural density, SHORTEST spacing between meaningful structures,
+# strong visual relationship to Golden Arrival". So a belt of small, tight
+# quarters just beyond the district's edge, close-packed because `_want_gap`
+# lets core bodies touch, and kept off the castle approach -- which is
+# approved composition and not ground to build on.
+
+#: deg. The castle approach and its sightline, kept clear of new quarters.
+_APPROACH_KEEP_OUT = 26.0
+#: (radius uu, count) for the belt that meets Golden Arrival's edge.
+#:
+#: 92 m, not the 71 the first attempt used. At 71 m every one of the twelve
+#: sites was refused by the district keep-out, each within 1.4 m to 12 m of a
+#: flank tree or a rear-world hedge -- which is the measurement that matters:
+#: **the 50-75 m band is not empty, it is Golden Arrival's own outskirt**, and
+#: that is approved ground rather than somewhere to put new towers. So the
+#: belt sits just beyond the district's reach and the band itself is thickened
+#: by the thing that already crosses it -- the roads (see `_road_verge`).
+#: TWO arcs, not one. Correcting the spacing rules pushed quarters that had
+#: been 10-17 m apart out to 30-60 m -- right, and it opened real ground: the
+#: district-window emptiness went 4,832 m2 to 9,200 AT THAT POINT, every new
+#: region between 58 m and 138 m, which is the core tier and the tier the
+#: brief wants DENSEST. The second arc is the answer the audit itself named;
+#: the keep-out, the duplicate rule and the placer decide which of its sites
+#: survive, and as built it is 5,840 m2.
+_CORE_ARCS = ((9200.0, 12), (12200.0, 14))
+
+
+def _core_sites():
+    sites = []
+    for ai, (rad, count) in enumerate(_CORE_ARCS):
+        for i in range(count):
+            b = (360.0 * i / count + 29.0 * ai + 13.0 * _rnd(ai, i, 73)) % 360.0
+            if abs((b - 90.0 + 180.0) % 360.0 - 180.0) < _APPROACH_KEEP_OUT:
+                continue
+            r = rad * (0.86 + 0.28 * _rnd(ai, i, 74))
+            a = math.radians(b)
+            # the core is where the architecture is: towers and gardens, and a
+            # grove only where the field says the ground wants to stay open
+            f = _vnoise(math.cos(a) * r, math.sin(a) * r, 5200.0, 7717)
+            kind = "towers" if f < 0.38 else ("garden" if f < 0.80 else "grove")
+            sites.append((math.cos(a) * r, math.sin(a) * r, kind,
+                          12800 + 173 * (ai * 20 + i)))
+    return sites
+
+
+CORE_SITES = _core_sites()
+#: Built here rather than beside its own function: `_distance_sites` asks
+#: `_want_gap` how far apart two far woods stand, and `_want_gap` is defined
+#: further down. One rule, so the definition order follows the dependency.
+DISTANCE_SITES = _distance_sites()
+
+
+#: What counts as district MASS for a keep-out: things with a body, not
+#: things with a colour. The first version of this refused every one of the
+#: twelve core sites, and the nearest thing to four of them was a patch of
+#: `ground_flowers` five metres away -- a keep-out that treats a bed of
+#: petals like a castle wall does not protect approved work, it just refuses
+#: to build. What must not be built over is stone, trunk and hedge.
+_MASS_ASSETS = ("garden_wall", "retaining_wall", "balustrade", "hedge_block",
+                "hedge_mass", "gate_pier", "gate_leaf", "garden_arch_stone",
+                "tower_capped", "tree_mature_trunk", "tree_slender_trunk",
+                "tree_clock_trunk", "mushroom_landmark", "mushroom_giant",
+                "fountain_basin", "heart_topiary", "tea_plinth", "facade_panel",
+                "topiary_cone_plain", "topiary_cone_roses", "topiary_spiral")
+
+
+def _district_mass():
+    """Golden Arrival's own authored mass, for a keep-out.
+
+    A generated site must not be laid on top of ground the founder has already
+    judged. `_separate` knows about quarters and nothing else, so without this
+    the core belt would happily stand a tower in the left flank's rose walk.
+    """
+    pts = []
+    for band in (FOREGROUND, GARDEN, PALACE, FLANK_GROUND, FLANKS, REARWORLD,
+                 CAM_FOREGROUNDS):
+        for it in band:
+            if it["asset"].startswith("castle_") or it["asset"] in _MASS_ASSETS:
+                pts.append((it["pos"][0], it["pos"][1]))
+    return pts
+
+
+_DISTRICT_MASS = _district_mass()
+
+
+def _district_clear(x, y, reach):
+    for (px, py) in _DISTRICT_MASS:
+        if (px - x) ** 2 + (py - y) ** 2 < reach * reach:
+            return False
+    return True
+
+
+#: How far Golden Arrival reaches on each bearing, in 24 sectors of 15 deg.
+#:
+#: Roads used to leave the district at a flat 8,000 uu on every bearing. The
+#: district is not round: measured, its walkable mass ends between 66 m and
+#: 117 m depending on where you stand, so that one number started a road
+#: fifteen metres short of the garden in some bearings and fifty metres inside
+#: it in others. Each road now leaves from its own bearing's edge.
+#:
+#: WHAT THIS DID NOT DO, because the first version of this comment claimed it
+#: would: it did not close the 50-75 m density trough. AS BUILT that band
+#: holds 282 placements per hectare against 723 inside it and 305 outside --
+#: a shallow dip now rather than the 391-against-720 step it was, but still a
+#: dip, and this measurement is why it stays one: the band is INSIDE the
+#: district on every bearing, so the thin ring is Golden Arrival's own
+#: outskirt and not a gap between the district and the quarters. Closing it
+#: means re-planting approved ground, and it is carried in WORLD_LEDGER.md as
+#: its own item rather than fixed here by stealth.
+def _district_edge():
+    # THE WALKABLE DISTRICT, not everything the district band holds. Measured
+    # against `_DISTRICT_MASS` this read 79-158 m, because that list carries
+    # PALACE -- the castle focal plane at 95-140 m and the far city beyond it.
+    # Roads then started past the quarters they were meant to reach. The edge
+    # a road leaves from is the edge of the ground somebody walks on.
+    ground = []
+    for band in (FOREGROUND, GARDEN, FLANK_GROUND, FLANKS, REARWORLD, CAM_FOREGROUNDS):
+        for it in band:
+            if it["asset"].startswith("castle_") or it["asset"] in _MASS_ASSETS:
+                ground.append((it["pos"][0], it["pos"][1]))
+    edge = [4800.0] * 24
+    for (px, py) in ground:
+        r = math.hypot(px, py)
+        if r < 1500.0 or r > 16000.0:
+            continue
+        k = int((math.degrees(math.atan2(py, px)) % 360.0) // 15.0)
+        for kk in (k - 1, k, k + 1):        # a road clears its neighbours too
+            edge[kk % 24] = max(edge[kk % 24], r)
+    return edge
+
+
+_DISTRICT_EDGE = _district_edge()
+
+
+def _edge_at(bearing_deg):
+    return _DISTRICT_EDGE[int(bearing_deg % 360.0 // 15.0)] + 400.0
+
+
+def _all_sites():
+    """Every quarter in the world, as one table, in one order."""
+    sites = []
+    for qi, (bearing, radius, kind) in enumerate(_QUARTERS):
+        a = math.radians(bearing)
+        sites.append({"x": math.cos(a) * radius, "y": math.sin(a) * radius,
+                      "kind": kind, "seed": 7000 + 137 * qi,
+                      "tag": "Q%02d_%s" % (qi, kind), "spoke": bearing})
+    for qi, (cx, cy, kind, seed) in enumerate(_QUARTER_SITES):
+        sites.append({"x": float(cx), "y": float(cy), "kind": kind, "seed": seed,
+                      "tag": "S%02d_%s" % (qi, kind), "spoke": None})
+    for qi, (cx, cy, kind, seed) in enumerate(CORE_SITES):
+        reach = _reach(kind, HIER(cx, cy))
+        if not _district_clear(cx, cy, reach * 0.62):
+            SITE_NOTES.append("core belt C%02d skipped: Golden Arrival stands there" % qi)
+            continue
+        sites.append({"x": cx, "y": cy, "kind": kind, "seed": seed,
+                      "tag": "C%02d_%s" % (qi, kind), "spoke": None})
+    for qi, (cx, cy, kind, seed) in enumerate(DISTANCE_SITES):
+        sites.append({"x": cx, "y": cy, "kind": kind, "seed": seed,
+                      "tag": "D%02d_%s" % (qi, kind), "spoke": None})
+    return _separate(sites)
+
+
+SITES = _all_sites()
+
+_QUARTER_BUILDERS = {"garden": _quarter_garden, "towers": _quarter_towers,
+                     "grove": _quarter_grove, "wood": _quarter_wood}
+
+
+def _road_verge(x0, y0, x1, y1, tag, seed):
+    """What grows beside a way.
+
+    ROAD-SIDE ACTIVATION, and the reason it is here rather than in a quarter:
+    the band from the district's edge out to the first quarters measured 338
+    placements per hectare against 762 inside it and 549 beyond, and the only
+    built thing that crosses that band is the roads. Planting their verges
+    thickens exactly the ground that is thin, ties the quarters back to Golden
+    Arrival along the routes a walker actually uses, and adds nothing to the
+    open country between the spokes -- which is meant to stay open.
+
+    Density comes from the hierarchy at each point, so a verge near the plaza
+    is a planted avenue and the same call at 300 m lays almost nothing.
+    """
+    out = []
+    d = math.hypot(x1 - x0, y1 - y0)
+    n = int(d / 900.0)
+    for i in range(n):
+        t = (i + 0.5) / n
+        px, py = x0 + (x1 - x0) * t, y0 + (y1 - y0) * t
+        H = HIER(px, py)
+        if _rnd(i, seed, 51) > 0.35 + 0.75 * H["score"]:
+            continue
+        nx, ny = -(y1 - y0) / d, (x1 - x0) / d
+        for side in (-1, 1):
+            off = (260.0 + 190.0 * _rnd(i, seed, 52)) * side
+            vx, vy = px + nx * off, py + ny * off
+            pick = _rnd(i, seed + side, 53)
+            if pick < 0.30 * H["veg"]:
+                s = (1.0 + 0.25 * _rnd(i, seed, 54)) * H["scale"]
+                out += [
+                    A("tree_slender_trunk", vx, vy, 0, yaw=_rnd(i, seed, 55) * 360.0,
+                      s=s, mat="MI_V2_Bark", label="%s_VergeTrunk%d_%d" % (tag, i, side)),
+                    A("canopy_medium", vx, vy, 800 * s, yaw=_rnd(i, seed, 56) * 360.0,
+                      s=s * 1.15, mat=("MI_V2_LeafMid", "MI_V2_LeafLight")[i % 2],
+                      label="%s_VergeCanopy%d_%d" % (tag, i, side)),
+                ]
+            elif pick < 0.55:
+                out.append(A(("shrub_flowering", "topiary_ball", "hedge_mass")[i % 3],
+                             vx, vy, 0, yaw=_rnd(i, seed, 57) * 360.0,
+                             s=(0.85 + 0.4 * _rnd(i, seed, 58)) * H["scale"],
+                             mat=("MI_V2_LeafDark", "MI_V2_LeafMid")[side > 0],
+                             label="%s_VergeShrub%d_%d" % (tag, i, side)))
+            elif pick < 0.72 and H["prop"] > 0.40:
+                out += [
+                    A("pedestal_finial", vx, vy, 0, s=0.7, mat="MI_V2_IvoryStone",
+                      label="%s_VergePost%d_%d" % (tag, i, side)),
+                    A("gate_finial_ball", vx, vy, 100, s=0.42, mat="MI_V2_Gold",
+                      label="%s_VergeLamp%d_%d" % (tag, i, side)),
+                ]
+            elif pick < 0.86 and H["veg"] > 0.55:
+                out += _ground_patch(vx, vy, 0, _rnd(i, seed, 59) * 360.0, 1.0,
+                                     ("MI_V2_PetalViolet", "MI_V2_PetalWhite",
+                                      "MI_V2_PetalPink")[i % 3],
+                                     "%s_VergeBed%d_%d" % (tag, i, side))
+    return out
+
+
+def _road_tree(sites):
+    """Roads that reach EVERYTHING, by construction rather than by hope.
+
+    The first outer world gave every quarter its own spoke from the district
+    edge, which is a wheel: twelve places you can reach from the plaza and
+    none you can reach from each other. A ring was added for the twelve, and
+    the twenty audit sites got spokes and no ring at all.
+
+    So instead: every quarter is joined to the nearest quarter CLOSER TO THE
+    DISTRICT than itself (the innermost joins the district edge). That is a
+    tree rooted at Golden Arrival, so connectivity is a property of the
+    construction and not something to be discovered by a walk -- and because
+    each link goes to a real neighbour rather than radially inward, the
+    network branches like a road network instead of radiating like a wheel.
+    The ring legs then close the loops, which is what makes it a circuit.
+    """
+    out = []
+    order = sorted(range(len(sites)), key=lambda i: math.hypot(sites[i]["x"], sites[i]["y"]))
+    for n, i in enumerate(order):
+        s = sites[i]
+        r = math.hypot(s["x"], s["y"]) or 1.0
+        H = HIER(s["x"], s["y"])
+        width = 200.0 + 180.0 * H["score"]
+        reach = _reach(s["kind"], H)
+        best, bd = None, 1e18
+        for j in order[:n]:
+            t = sites[j]
+            d = math.hypot(s["x"] - t["x"], s["y"] - t["y"])
+            if d < bd:
+                best, bd = t, d
+        if best is None or bd > r * 0.95:
+            # nothing nearer than the district itself: come straight in, from
+            # the district's own edge on this bearing rather than a flat radius
+            ux, uy = s["x"] / r, s["y"] / r
+            start = min(_edge_at(math.degrees(math.atan2(s["y"], s["x"]))), r - 900.0)
+            x0, y0 = ux * start, uy * start
+        else:
+            tr = _reach(best["kind"], HIER(best["x"], best["y"]))
+            d = bd or 1.0
+            ux, uy = (s["x"] - best["x"]) / d, (s["y"] - best["y"]) / d
+            x0, y0 = best["x"] + ux * tr, best["y"] + uy * tr
+        d = math.hypot(s["x"] - x0, s["y"] - y0) or 1.0
+        ux, uy = (s["x"] - x0) / d, (s["y"] - y0) / d
+        x1, y1 = s["x"] - ux * reach, s["y"] - uy * reach
+        if math.hypot(x1 - x0, y1 - y0) < 600.0:
+            continue
+        # a far road is a line on the ground at 300 m: fewer, longer segments
+        seg = 1400.0 if H["score"] > 0.45 else 2800.0
+        out += _road(x0, y0, x1, y1, width, "%s_Road" % s["tag"],
+                     n=max(1, int(math.hypot(x1 - x0, y1 - y0) / seg)))
+        out += _road_verge(x0, y0, x1, y1, s["tag"], s["seed"])
+        # a threshold where the road meets the quarter, while it can be read
+        if H["prop"] > 0.35:
+            tx, ty = s["x"] - ux * (reach + 250.0), s["y"] - uy * (reach + 250.0)
+            out += [
+                A("garden_arch_stone", tx, ty, 220,
+                  yaw=math.degrees(math.atan2(uy, ux)) + 90.0, s=0.9,
+                  mat="MI_V2_IvoryStone", label="%s_Threshold" % s["tag"]),
+                A("gate_finial_ball", tx, ty, 470, s=0.55, mat="MI_V2_Gold",
+                  label="%s_ThresholdFinial" % s["tag"]),
+            ]
+    return out
+
+
+def _ring_roads(sites):
+    """The legs that close the loops, at two radii.
+
+    A tree reaches everything and still means every journey is out and back.
+    Adjacent quarters at similar radius are joined so the outer world is a
+    circuit, at the inner ring and again in the far band -- and the leg that
+    would cross the castle approach is skipped at both, because that sightline
+    is approved work.
+    """
+    out = []
+    for band, (lo, hi, width) in enumerate(((9000.0, 17000.0, 240.0),
+                                            (17000.0, 34000.0, 200.0))):
+        ring = []
+        for s in sites:
+            r = math.hypot(s["x"], s["y"])
+            if lo <= r < hi:
+                ring.append((math.degrees(math.atan2(s["y"], s["x"])) % 360.0,
+                             s["x"], s["y"]))
+        ring.sort()
+        for i in range(len(ring)):
+            _b0, x0, y0 = ring[i]
+            _b1, x1, y1 = ring[(i + 1) % len(ring)]
+            if (x0 * x1 < 0) and (y0 > 6000 and y1 > 6000):
+                continue                      # never across the castle approach
+            if math.hypot(x1 - x0, y1 - y0) > 22000.0:
+                continue                      # not a leg, a shortcut across the world
+            out += _road(x0, y0, x1, y1, width, "RingRoad%d_%02d" % (band, i))
+            if band == 0:
+                out += [
+                    A("pedestal_finial", x0, y0 - 900.0, 0, s=0.9, mat="MI_V2_IvoryStone",
+                      label="RingMarker%02d" % i),
+                    A("gate_finial_ball", x0, y0 - 900.0, 124, s=0.55, mat="MI_V2_Gold",
+                      label="RingMarkerCap%02d" % i),
+                ]
+    return out
+
 
 def _outer_world():
     out = []
-    for qi, (bearing, radius, kind) in enumerate(_QUARTERS):
-        a = math.radians(bearing)
-        cx, cy = math.cos(a) * radius, math.sin(a) * radius
-        sgn = 1 if cx >= 0 else -1
-        seed = 7000 + 137 * qi
-        tag = "Q%02d_%s" % (qi, kind)
-        if kind == "garden":
-            out += _quarter_garden(cx, cy, sgn, seed, tag)
-        elif kind == "towers":
-            out += _quarter_towers(cx, cy, sgn, seed, tag)
-        else:
-            out += _quarter_grove(cx, cy, sgn, seed, tag)
-        # the road in, from the district edge toward the quarter
-        ix, iy = math.cos(a) * 8200.0, math.sin(a) * 8200.0
-        out += _road(ix, iy, cx - math.cos(a) * 1600.0, cy - math.sin(a) * 1600.0,
-                     300.0, "%s_Road" % tag)
-        # a threshold where the road meets the quarter
-        out += [
-            A("garden_arch_stone", cx - math.cos(a) * 1900.0, cy - math.sin(a) * 1900.0, 220,
-              yaw=bearing + 90.0, s=0.9, mat="MI_V2_IvoryStone", label="%s_Threshold" % tag),
-            A("gate_finial_ball", cx - math.cos(a) * 1900.0, cy - math.sin(a) * 1900.0, 470,
-              s=0.55, mat="MI_V2_Gold", label="%s_ThresholdFinial" % tag),
-        ]
-    # the sites the audit named, each with a road back toward the district
-    for qi, (cx, cy, kind, seed) in enumerate(_QUARTER_SITES):
-        sgn = 1 if cx >= 0 else -1
-        tag = "S%02d_%s" % (qi, kind)
-        if kind == "garden":
-            out += _quarter_garden(cx, cy, sgn, seed, tag)
-        elif kind == "towers":
-            out += _quarter_towers(cx, cy, sgn, seed, tag)
-        else:
-            out += _quarter_grove(cx, cy, sgn, seed, tag)
-        d = math.hypot(cx, cy) or 1.0
-        ux, uy = cx / d, cy / d
-        out += _road(ux * 8000.0, uy * 8000.0, cx - ux * 1700.0, cy - uy * 1700.0,
-                     280.0, "%s_Road" % tag)
-
-    # A RING, not just spokes. Radial roads make twelve places you can reach
-    # FROM the district and not one you can reach from another -- a wheel, not
-    # a world. The founder's test is that a player keeps going, and going
-    # means onward rather than back. Adjacent quarters on the outer ring are
-    # linked, so the outer world is a circuit a participant can walk without
-    # ever returning to the plaza.
-    ring = []
-    for (bearing, radius, _k) in _QUARTERS:
-        a = math.radians(bearing)
-        ring.append((bearing % 360.0, math.cos(a) * radius, math.sin(a) * radius))
-    ring.sort()
-    for i in range(len(ring)):
-        _b0, x0, y0 = ring[i]
-        _b1, x1, y1 = ring[(i + 1) % len(ring)]
-        # skip the leg that would cross the castle axis, so the approach and
-        # its sightline stay clear
-        if (x0 * x1 < 0) and (y0 > 6000 and y1 > 6000):
-            continue
-        out += _road(x0, y0, x1, y1, 240.0, "RingRoad%02d" % i)
-        # a marker where two legs meet, so the circuit has a rhythm
-        out += [
-            A("pedestal_finial", x0, y0 - 900.0, 0, s=0.9, mat="MI_V2_IvoryStone",
-              label="RingMarker%02d" % i),
-            A("gate_finial_ball", x0, y0 - 900.0, 124, s=0.55, mat="MI_V2_Gold",
-              label="RingMarkerCap%02d" % i),
-        ]
+    for s in SITES:
+        H = _squeezed(HIER(s["x"], s["y"]), s.get("squeeze", 1.0))
+        sgn = 1 if s["x"] >= 0 else -1
+        out += _QUARTER_BUILDERS[s["kind"]](s["x"], s["y"], sgn, s["seed"], s["tag"], H=H)
+    out += _road_tree(SITES)
+    out += _ring_roads(SITES)
     return out
 
 
@@ -1633,12 +2711,23 @@ def _outer_world():
 #: This is texture and tonal variation over ~10 hectares for twenty-eight
 #: actors -- the cheapest large-area improvement left in the world.
 def _ground_quilt():
+    # ACROSS THE WHOLE WORLD, not the district's shoulders. The quilt was a
+    # 7 x 5 grid reaching about 170 m, laid when that was the whole world; the
+    # hierarchy took the world to 350 m, and everything beyond the old grid is
+    # the flat moss slab again -- one quad, one tone, from the last quarter to
+    # the horizon, which is the founder's golf course over ten times the area
+    # it was first complained about. A `garden_lawn` is 60 x 72 m of displaced
+    # grid: terrain, not content. It is SURFACE to every audit here, so it
+    # moves no density number and games no measurement -- it is the tier's
+    # "terrain composition" and nothing else.
     out = []
     k = 0
-    for gx in range(-3, 4):
-        for gy in range(-2, 3):
+    for gx in range(-6, 7):
+        for gy in range(-5, 6):
             if abs(gx) <= 1 and abs(gy) <= 1:
                 continue                    # the district has its own ground
+            if math.hypot(gx * 5600.0, gy * 6600.0) > 35000.0:
+                continue                    # outside the world's own edge
             cx = gx * 5600.0 + (_rnd(gx, gy, 71) - 0.5) * 900.0
             cy = gy * 6600.0 + (_rnd(gx, gy, 72) - 0.5) * 900.0 + 1000.0
             out.append(A("garden_lawn", cx, cy, -3 - (k % 3),

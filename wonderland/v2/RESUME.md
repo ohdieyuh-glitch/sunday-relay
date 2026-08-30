@@ -143,3 +143,65 @@ FlankRightCam09, RearWorldCam10). 0 of 18 named destinations unreachable.
 Open, in order: the ground BETWEEN the garden rooms is still plain lawn; the
 distant world beyond the 1.2 km ground slab still ends at a visible edge;
 `palette.rose` remains ~0.45× the reference.
+
+---
+
+# Update — 2026-08-30, PASS 22: the quarter hierarchy
+
+## The five tools that decide things now
+
+| tool | question | what it caught this pass |
+|---|---|---|
+| `tools/gap_v2.py RENDER [REF]` | does the frame read as the reference? | (needs a GPU frame; not run this pass) |
+| `tools/camera_framing.py` | where does a camera's ground begin? | the two world cameras' near bands THINNED, correctly |
+| `tools/walkable.py [--window=world]` | can the Dog get there? | the outer world had never been tested at all |
+| `tools/emptiness.py [--scaled] [--window=]` | where is the world *not*? | its own window held 4,832 m2 of a 461,488 m2 problem |
+| **`tools/hierarchy.py`** | does the world have a hierarchy, or one density tiled? | **core:far 1.10x**; a nested pair; landmarks in other people's geometry; roads |
+| **`tools/plan_view.py OUT.png`** | what does the plan look like? | far woods drawing as scattered dots, not woodland |
+
+Two of these are new and two grew a window. **An audit's window is part of its
+measurement** -- `emptiness` sampled +/- 120 m and `walkable` +/- 90 m of a
+world that reaches 450 m, so both were answering a question about Golden
+Arrival while reporting on Wonderland.
+
+## The hierarchy, in one line
+
+`layout_v2.HIER(x, y)` returns a continuous score and twelve derived
+quantities. Everything the outer world has -- how many pieces a quarter is
+made of, how far apart they stand, how big, how likely a landmark, how much
+empty ground is correct there -- comes from that function and from nothing
+else. `emptiness.py --scaled` reads `empty_tol` from the same call, so the
+audit and the generator cannot disagree about how sparse the horizon should be.
+
+Placement is greedy and sequential (`_separate`): duplicates dropped, authored
+sites before generated, each taking its own position if it clears, then the
+nearest ring position that does, then a smaller size, then a drop with its
+name printed. Every kept site is conflict-free by construction.
+
+## Arithmetic worth not re-deriving
+
+- A quarter's REACH (its furthest piece) and its BODY (the mass that must not
+  overlap a neighbour) are different numbers and answer different questions.
+  Using one for both either fills the core with collisions or empties it.
+- Both are LINEAR in `H["spacing"]`, because the builders are.
+- `HIER` is called ~1.3 million times while the world is placed. It is
+  memoised on the exact coordinate; without that, importing `layout_v2` takes
+  25 seconds.
+- Roads *inside* the quarters they serve are 45% of all road segments and are
+  correct. The question worth asking is about the quarters a road does NOT
+  terminate in -- currently 0 of 263.
+
+## State
+
+`relay/wonderland-v2`. 44 quarters from 65 m to 345 m; the outer world's
+density falls monotonically from its peak at 100-150 m to the horizon, GROUND
+core:far 5.19x. 5,673 placements in **1,541 actors** -- fewer actors than the
+4,590-placement world had, because the woods are instanced. Golden Arrival:
+twelve of thirteen bands byte-identical, GROUND_QUILT extended on purpose.
+
+**Nothing rendered.** Next GPU session: cams 0 / 6 / 11 / 12.
+
+Open, in order: the far world is 8.5% empty by its own tier's tolerance; ten
+authored sites could not be placed and should be re-sited; the 50-75 m band is
+Golden Arrival's own outskirt and closing it is a founder decision. Full list
+in `WORLD_LEDGER.md`.

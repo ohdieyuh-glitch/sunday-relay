@@ -55,11 +55,30 @@ FOOT = {"hedge_block": (176, 75), "hedge_mass": (320, 320), "garden_wall": (255,
 NOT_OBSTACLES = ("terrace_platform", "garden_lawn", "stone_ring_base", "path_steps",
                  "side_steps", "ground_flowers", "ground_blooms")
 
-X0, X1, Y0, Y1 = -9000, 9000, -10000, 9500
+#: THE WINDOW WAS GOLDEN ARRIVAL AND THE WORLD IS NOT.
+#:
+#: This sampled x -90..90 m, y -100..95 m, and every one of its eighteen
+#: destinations stood inside that box. Meanwhile the outer world grew to
+#: fifty-three quarters out to 340 m, joined by radial roads and two ring
+#: circuits, and NOT ONE metre of it was ever tested -- "0 of 18 destinations
+#: unreachable" was true and was a statement about the district. The tool that
+#: found both flanks were cul-de-sacs could not have found a cul-de-sac in the
+#: outer world, because the outer world was outside its frame.
+#:
+#: `--window=world` samples the whole walkable ground and adds every quarter
+#: centre to the destination list, so road continuity is something the audit
+#: answers rather than something the road-building code promises.
+WINDOWS = {"district": (-9000, 9000, -10000, 9500),
+           "world": (-36000, 36000, -36000, 40000)}
+X0, X1, Y0, Y1 = WINDOWS["district"]
 
 
 def main():
-    cell = int(next((a.split("=")[1] for a in sys.argv[1:] if a.startswith("--cell=")), 50))
+    global X0, X1, Y0, Y1
+    win = next((a.split("=")[1] for a in sys.argv[1:] if a.startswith("--window=")), "district")
+    X0, X1, Y0, Y1 = WINDOWS[win]
+    cell = int(next((a.split("=")[1] for a in sys.argv[1:] if a.startswith("--cell=")),
+                    50 if win == "district" else 100))
     cap = float(next((a.split("=")[1] for a in sys.argv[1:] if a.startswith("--capsule=")), 36))
     obst = []
     for p in LAYOUT.ALL:
@@ -116,11 +135,13 @@ def main():
         ("R lane y=3500", -3225, 3500), ("R lane y=4500", -2975, 4500),
         ("R lane y=5200", -2900, 5200),
     ]
+
     print("walkable flood from the spawn: %d cells of %d uu (%.0f%% of the sampled ground)"
           % (n, cell, 100.0 * n / float(nx * ny)))
-    print("%-24s %s" % ("destination", "reached"))
-    print("-" * 40)
+    print("%-24s %8s %s" % ("destination", "r (m)", "reached"))
+    print("-" * 48)
     bad = 0
+    unreached = []
     for name, tx, ty in targets:
         k = idx(float(tx), float(ty))
         if blocked[k]:
@@ -129,13 +150,62 @@ def main():
             near = any(seen[idx(tx + dx, ty + dy)]
                        for dx in (-250, 0, 250) for dy in (-250, 0, 250)
                        if 0 <= idx(tx + dx, ty + dy) < nx * ny)
-            print("%-24s %s" % (name, "yes (approach)" if near else "NO"))
+            print("%-24s %8.0f %s" % (name, math.hypot(tx, ty) / 100.0,
+                                       "yes (approach)" if near else "NO"))
             bad += 0 if near else 1
+            if not near:
+                unreached.append(name)
         else:
             ok = bool(seen[k])
-            print("%-24s %s" % (name, "yes" if ok else "NO"))
+            print("%-24s %8.0f %s" % (name, math.hypot(tx, ty) / 100.0, "yes" if ok else "NO"))
             bad += 0 if ok else 1
-    print("\n%d of %d destinations unreachable" % (bad, len(targets)))
+            if not ok:
+                unreached.append(name)
+    print("\n%d of %d destinations unreachable%s"
+          % (bad, len(targets), (": " + ", ".join(unreached)) if unreached else ""))
+
+    # --- THE OUTER WORLD ---------------------------------------------------
+    #
+    # A quarter is not a point. Asked at its exact centre, seventeen of the
+    # fifty-three came back unreachable and every one of them was a `towers`
+    # quarter -- because `plan[0]` stands a tower ON the centre, so the audit
+    # was asking whether a walker can get INSIDE a building. That is the same
+    # mistake this tool's own docstring records finding in the world (a
+    # landmark placed inside a tower), made one level up in the instrument.
+    #
+    # So a quarter is probed as a place: twelve points on a ring inside it,
+    # plus its centre. The fraction that the flood reaches is the answer, and
+    # it is printed, because "reachable" at one probe of thirteen is a sliver
+    # a walker would have to find, and that is worth seeing before it is worth
+    # calling connected.
+    if win == "world":
+        print("\nOUTER WORLD -- can a walker get INTO each quarter?")
+        print("%-14s %8s %7s  %s" % ("quarter", "r (m)", "probes", "verdict"))
+        print("-" * 52)
+        cut = 0
+        for s in sorted(LAYOUT.SITES, key=lambda s: math.hypot(s["x"], s["y"])):
+            rr = s.get("reach", 2200.0) * 0.55
+            probes = [(s["x"], s["y"])] + [
+                (s["x"] + math.cos(6.283 * i / 12.0) * rr,
+                 s["y"] + math.sin(6.283 * i / 12.0) * rr) for i in range(12)]
+            hit = free = 0
+            for (px, py) in probes:
+                if not (X0 <= px < X1 and Y0 <= py < Y1):
+                    continue
+                k = idx(px, py)
+                if blocked[k]:
+                    continue
+                free += 1
+                if seen[k]:
+                    hit += 1
+            verdict = "unreachable" if hit == 0 else ("SLIVER" if hit * 3 < free else "open")
+            if hit == 0 or hit * 3 < free:
+                cut += 1
+            print("%-14s %8.0f %4d/%-3d  %s"
+                  % (s["tag"], math.hypot(s["x"], s["y"]) / 100.0, hit, free, verdict))
+        print("\n%d of %d quarters unreachable or reachable only through a sliver"
+              % (cut, len(LAYOUT.SITES)))
+        bad += cut
 
     # --- ROUTES ------------------------------------------------------------
     # A straight paved spine does not fit the flanks -- measured, best

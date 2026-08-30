@@ -500,10 +500,31 @@ def assign_layer(actor, band, layers, sub_cache=[None]):
 #: terrace_platform is deliberately NOT here. It is paving a participant walks
 #: on, batches are built at BeginPlay, and this project has already lost a Dog
 #: through flagstones that did not exist yet in the frame it spawned.
+#:
+#: PASS 22: the woods. The quarter hierarchy gave the world an atmospheric
+#: band of woodland, and a wood is canopies and trunks. MEASURED on the world
+#: as built: canopy_large 481, canopy_medium 342, tree_mature_trunk 457,
+#: tree_slender_trunk 340, gate_finial_ball 127, topiary_cone_plain 95,
+#: pedestal_finial 74, mushroom_medium 42 -- **1,958 StaticMeshActors becoming
+#: 40 batch actors** (they split by material and data layer). That is why the
+#: far tier costs almost nothing to draw: the world grew from 4,590 placements
+#: to 5,673 and its ACTOR count fell from 2,123 to 1,541.
+#:
+#: A trunk is an OBSTACLE, so unlike a canopy it keeps its collision (see
+#: bCollides below) -- the batch carries it, which is the point: walkable.py's
+#: model of this world stays exactly true.
+#:
+#: tower_capped, roof_cone_steep, finial_spire and the castle pieces stay
+#: actors on purpose: they are the silhouette, there are only ~300 of them,
+#: and they are the pieces a later pass is most likely to want to touch one
+#: at a time.
 BATCHABLE = {"ground_flowers", "ground_blooms", "flower_cluster", "rose_bloom", "hedge_block",
              "hedge_mass", "rose_bush", "shrub_flowering", "topiary_ball", "mushroom_small",
              "blossom_cluster", "vine_wall", "ivy_drape", "side_steps", "retaining_wall",
-             "balustrade", "kerb_stone", "garden_wall", "lavender_heads"}
+             "balustrade", "kerb_stone", "garden_wall", "lavender_heads",
+             "canopy_large", "canopy_medium",
+             "tree_mature_trunk", "tree_slender_trunk", "gate_finial_ball",
+             "pedestal_finial", "topiary_cone_plain", "mushroom_medium"}
 
 
 class Placer(object):
@@ -627,9 +648,13 @@ class Placer(object):
             # Everything else stays collision-free: this world has tens of
             # thousands of instanced pieces and collision on all of them is a
             # cost with no gameplay behind it.
+            # Trunks join the list because they joined BATCHABLE: they are
+            # obstacles in walkable.py's model of this world, and a batch that
+            # dropped their collision would make that model quietly false.
             set_prop(a, "bCollides", key in ("side_steps", "path_steps", "stairs_broad",
                                              "terrace_platform", "retaining_wall",
-                                             "balustrade", "hedge_block"))
+                                             "balustrade", "hedge_block",
+                                             "tree_mature_trunk", "tree_slender_trunk"))
             if mat in MAT.FOLIAGE and not int(C.LOOK.get("foliageDistanceFieldLighting", 1)):
                 # PASS 05d: the batched hedges, beds and blossoms -- same
                 # reason as the canopies (see Placer.place); the property is

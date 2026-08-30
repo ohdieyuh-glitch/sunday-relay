@@ -648,3 +648,198 @@ camera shows what it points at; only an audit shows where the world is not.**
 6. The plaza medallion reads as a scribed ring rather than inlay.
 7. Performance is unprofiled at this density — `measure-fps.sh` is fixed and
    has not been run against the 4,564-placement world.
+
+---
+
+# PASS 22 — QUARTER HIERARCHY (ledger item 1)
+
+The first item on the list above, closed against measurements rather than
+against a camera. `tools/hierarchy.py` and `tools/plan_view.py` are new; three
+of the four existing tools were extended, and two of those extensions found
+defects on their first run.
+
+## What the problem actually was, in numbers
+
+`hierarchy.py` on the world as it stood:
+
+| | |
+|---|---|
+| quarters | 32, all built by three functions taking a centre and nothing else |
+| garden quarters | **106 or 108** placements, every one |
+| towers quarters | **36 or 38** placements, every one |
+| grove quarters | **34 or 36** placements, every one |
+| footprint | 21.6 m for every garden AND every towers quarter, at 50 m out and at 164 m |
+| quarter-intrinsic core:far density | **1.10x** |
+| the outer world beyond 200 m | **nothing at all**, in 6 of 8 sectors |
+
+A polar map named the shape of it: a complete ring of thin ground at 50-75 m
+(147-334 per hectare in all eight sectors) with a DENSER ring outside it at
+75-125 m. Density that rises with distance is not a hierarchy, it is a fence.
+
+And the audits could not have seen the biggest part of it, because **their own
+windows were too small**. `emptiness.py` sampled +/- 120 m of a world that
+reaches 450 m and reported 4,832 m2 empty; over the ground a walker can
+actually cover it reports **461,488 m2** -- ninety-five times the number this
+ledger was carrying, and the identical failure the tool exists to catch, one
+level up. `walkable.py` sampled +/- 90 m, so all 24 quarters, both ring roads
+and every radial road had never been tested at all; "0 of 18 destinations
+unreachable" was true and was a statement about Golden Arrival.
+
+**An audit's window is part of its measurement.** Both are now parameterised
+and default to the world.
+
+## The mechanism
+
+One function, `layout_v2.HIER(x, y)`, returns a continuous score
+
+    score = 0.70 * falloff + 0.16 * road activation + 0.14 * a noise field
+
+and twelve derived quantities: density, spacing, scale, landmark probability,
+landmark scale, vegetation, props, courtyard frequency, skyline contribution,
+empty-area tolerance, plus the tier label -- which the generator never reads,
+precisely so the world cannot acquire a visible boundary at a threshold. The
+three terms each do a job: the falloff makes the hierarchy, the road term
+keeps ground beside a way denser than open land at the same radius (density
+follows movement, not distance), and the noise breaks the tiers so they read
+as country rather than as three concentric bands.
+
+`emptiness.py --scaled` reads `empty_tol` from the same function. The audit
+and the generator share one definition of how much emptiness is correct at a
+place, which is the only way the audit can be right about the far world
+without demanding the far world be dense.
+
+Placement is greedy and sequential, not relaxed: inner sites first, authored
+sites before generated ones, each taking its own position if it clears and
+otherwise the nearest ring position that does -- then a smaller size, then a
+drop with its name printed. Every kept site is conflict-free by construction.
+
+## Before / after
+
+| | before | after |
+|---|---|---|
+| quarters | 32 | **44** |
+| garden quarter size | 106 or 108, always | 67-151 |
+| footprint CV | 0.300 | **0.452** |
+| spacing CV | 0.379 | 0.381 |
+| quarter-density CV | 0.618 | **0.957** |
+| quarter-intrinsic core:far | **1.10x** | **4.82x** |
+| tier mean density (core/mid/far) | 787 / 596 / 717 | **502 / 215 / 104** |
+| outer world reaches | 200 m | **350 m** |
+| 50 m bands populated (0-350 m) | 4 of 7 | **7 of 7** |
+| monotone beyond the peak | n/a (world ended) | **0 violations** |
+| nested quarters | 1 (S00/S12, 10.6 m apart, 21 m footprints) | **0** |
+| landmarks in unrelated geometry | 1 new + 2 pre-existing | **0 new** |
+| roads through a quarter they do not serve | never measured | **0 of 263 segments** |
+| world emptiness, flat 9 m, 40.7 ha disc | 329,984 m2 | **207,392 m2** |
+| world emptiness, tier-scaled | not measurable | 34,656 m2 (8.5%) |
+| district emptiness, flat 9 m | 4,832 m2 | 5,840 m2 |
+| placements | 4,590 | 5,673 |
+| **actors after instancing** | **2,123** | **1,541** |
+| layout_v2 import | 0.05 s | 1.3 s |
+
+The actor count FELL while the world grew by a quarter, because the pass also
+put the trunks, canopies and repeated ornament into the instanced batches:
+1,958 pieces became 40 batch actors. Trunks keep their collision inside
+the batch, so `walkable.py`'s model of this world stays exactly true.
+
+## Golden Arrival is untouched, and that is checked rather than asserted
+
+Twelve of the thirteen bands hash **byte-identical** to the previous commit
+(FOREGROUND, GARDEN, PALACE, FLANKS, FLANK_GROUND, REARWORLD, CAM_FOREGROUNDS,
+COURTYARD, PLAZA_ORNAMENT, PROCESSIONAL_BORDER, SKY, HOVER). `_parterre`,
+`_grove` and `_mushroom_cluster` take an optional hierarchy and are unchanged
+without one, which is how the flanks kept their authored density.
+
+The thirteenth, GROUND_QUILT, went 26 -> 102 on purpose: it is terrain, it was
+a 7 x 5 grid reaching 170 m laid when that was the whole world, and everything
+beyond it was the flat moss slab again.
+
+## Defects this pass found, each by a measurement and not by looking
+
+| found by | defect |
+|---|---|
+| `emptiness --window=world` | the audit's own frame held 4,832 m2 of a 461,488 m2 problem |
+| `walkable --window=world` | 22 of 75 "unreachable" -- the destinations were quarter CENTRES, and a towers quarter has a tower on its centre. The instrument was asking to walk into a building |
+| `hierarchy` embedded-landmark check | quarters pushed onto approved castle groups; a tower inside a parterre; a wood's tree inside a City8 tower |
+| `hierarchy` nested check | S00_garden and S12_towers 9.7 m apart -- the SAME HOLE, reported by the emptiness audit in two rounds and turned into two quarters because nothing compared new centres against old |
+| `plan_view` | far woods drawing as a dozen dots inside a 58 m ring: an orchard with most of it missing, not woodland |
+| `hierarchy` monotonicity | four concentric far arcs pressed onto the world edge -- ten sites in one 25 m bin and a density that RISES into the horizon |
+
+## Traps worth not re-learning
+
+1. **A keep-out has to be as big as the thing it keeps out, and the anchors
+   have bodies.** Three successive versions cleared the quarter's CENTRE and
+   not its pieces, then cleared its pieces against anchor POINTS while the
+   anchor was a 640 uu tower.
+2. **Correcting a measurement must not quietly change the thing measured.**
+   Making `_reach` linear in spacing (which it should always have been) widened
+   every gap that used it and took the core from 327 placements per hectare to
+   147. The fix was to split the two questions -- a quarter's BODY for spacing
+   against another quarter, its full EXTENT against approved work.
+3. **Relaxation does not have to succeed.** A damped Jacobi pass runs a fixed
+   number of iterations and leaves whatever it could not fix embedded, so five
+   tunings each fixed the pair in front of me and produced a different one --
+   and cost 36 seconds of every module import. Greedy sequential placement
+   cannot leave a conflict.
+4. **Two descriptions of one quantity will disagree.** The far tier had its own
+   spacing table (154 m) while the placer enforced `_want_gap` (178 m); the
+   spiral accepted candidates the placer refused and four woods fell into a
+   15,000 m2 hole in the west.
+5. **Memoise before optimising anything else.** `HIER` is called ~1.3 million
+   times during placement; caching it on the exact coordinate took import from
+   25 s to 1.3 s with byte-identical output.
+6. **A hole on purpose is not a hole.** The largest empty region in the world
+   is the castle sightline, and it is meant to be. `emptiness.py` labels it, so
+   a later pass does not helpfully fill in the founder's sky.
+
+## Renders worth inspecting
+
+`v2/reference/renders/V2_WORLD_PLAN_PASS22.png` -- the world from above, with
+the score field as tone, every placement as a pixel, quarter footprints as
+rings by kind, and the road network. **No camera in this project can show a
+hierarchy**: every one of them stands inside the core at eye height. This is a
+diagram, not a render, and it is not evidence of visual quality.
+
+**Nothing here has been rendered on a GPU.** The Studio is stopped and
+founder-started. The next GPU session should capture cams 0 / 6 / 11 / 12 --
+0 and 6 to prove Golden Arrival is unchanged in frame, 11 and 12 because they
+are the only two cameras that can see the outer world at all.
+
+Their NEAR-band counts FELL -- WorldCam11 2,469 -> 2,044, WorldCam12
+1,504 -> 1,315 -- and that is the hierarchy working rather than a regression:
+those bands are 78-235 m and 59-178 m, which is exactly the ground the
+falloff thins. What grew is behind them, where neither tool counts and only a
+frame will say.
+
+## The list, re-ordered
+
+1. ~~Quarter hierarchy~~ **DONE, above.**
+2. **The far world is 8.5% empty by its own tier's tolerance** -- 34,656 m2,
+   the largest single region 14,960 m2. New, and the successor to item 1: the
+   far tier's coverage, now that it exists.
+3. **Ten authored sites could not be placed** and are named in the build log
+   (Q07, Q10, S02, S03, S16, S18, S19 towers/groves/gardens, and three far
+   woods). Their ground is mostly covered by neighbours -- district emptiness
+   went 4,832 -> 5,840 m2 -- but each is a decision that was discarded to
+   satisfy a spacing rule, and they should be re-sited rather than left dropped.
+4. **The 50-75 m band is Golden Arrival's own thin outskirt** (282 per hectare
+   against 723 inside it and 305 outside -- a dip now rather than the
+   391-against-720 step it was). Measured twice, from two directions:
+   the district's walkable mass ends between 66 m and 117 m depending on
+   bearing, so this band is INSIDE approved ground everywhere. Closing it means
+   re-planting the flanks and the rear world, which is a founder decision.
+5. The ground quilt does not read -- 102 displaced lawn meshes now, still
+   invisible at world distance because the Lawn and Moss tints are too close.
+   The mechanism works; the contrast does not.
+6. Mushrooms still out-shout the architecture, because terracotta is the
+   highest-contrast colour in the frame.
+7. The horizon still ends at a hard line against the sea band.
+8. `palette.rose` remains ~0.46x the reference on the flank cameras.
+9. The plaza medallion reads as a scribed ring rather than inlay.
+10. Performance is unprofiled at this density. `measure-fps.sh` is fixed and has
+    still never been run; the actor count is now LOWER than when that item was
+    written (1,541 against 2,123), so the answer may already be fine.
+11. Two landmarks stand inside hedges in Golden Arrival -- `ClockTree_Clock`
+    inside `Garden_R_Hedge0` and `Tower_R0` inside `Approach_HedgeR2`. Both
+    predate this pass (the twelve approved bands are byte-identical), both are
+    approved ground, and neither is mine to move without being asked.
