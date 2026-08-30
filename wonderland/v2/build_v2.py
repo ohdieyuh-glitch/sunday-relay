@@ -1852,7 +1852,28 @@ def main():
     except Exception:
         pass
     if not has_landscape:
-        g = actors.spawn_actor_from_class(unreal.StaticMeshActor, vec((0, 0, -30)), rot(0, 0, 0))
+        # -44, NOT -30. THE SLAB WAS ON TOP OF THE GARDENS.
+        #
+        # The Cube is 100 uu scaled 0.6 -- 60 uu thick, centred on the actor --
+        # so at z = -30 its TOP IS AT z = 0. `garden_lawn` is
+        # `box(6000, 7200, 24, at=(0,0,-12))`: its top surface is at its own
+        # local z = 0 with all the thickness below, then perlin displaces that
+        # top by +/-9. So a lawn placed at the authored z = -2 has its surface
+        # between -11 and +7, and only its noise PEAKS cleared the terrain.
+        #
+        # 191 of the world's 255 lawns sat at -2 to -8: the ground quilt, every
+        # quarter's ground, the flank lawns. All of them were INSIDE the
+        # terrain. That is why every wide frame shows one flat olive plane, why
+        # "the ground quilt does not read" survived a pass that doubled its
+        # colour contrast (the contrast was never the problem), and why the
+        # founder's "one flat green plane from the district to the horizon"
+        # outlived the twenty-eight meshes placed to answer it.
+        #
+        # `garden_lawn`'s own docstring says what was meant: "the moss ground
+        # slab stays BENEATH as terrain". At -44 its top is at -14, below the
+        # lawns' deepest displaced point, and every placement in the world
+        # keeps the z it was authored with.
+        g = actors.spawn_actor_from_class(unreal.StaticMeshActor, vec((0, 0, -44)), rot(0, 0, 0))
         if g is not None:
             g.set_actor_label("V2_GroundSlab")
             smc = g.get_component_by_class(unreal.StaticMeshComponent)

@@ -40,6 +40,36 @@ PASS02 = _os.environ.get("WLV2_PASS02", "0") == "1"
 PASS03 = _os.environ.get("WLV2_PASS03", "0") == "1"
 
 
+#: uu. WHERE A GROUND LAWN GOES, and why it is positive.
+#:
+#: THE QUILT WAS NEVER VISIBLE. `garden_lawn` is `box(6000, 7200, 24,
+#: at=(0,0,-12))` -- its top surface is at its own local z = 0 with all 24 uu
+#: of thickness below -- and then perlin displaces that top by +/-9. The
+#: terrain slab is an engine Cube at z = -30 scaled 0.6, so it is 60 uu thick
+#: and its TOP IS AT z = 0.
+#:
+#: A lawn placed at z = -2 therefore has its surface between -11 and +7, and
+#: only its noise peaks clear the slab. At -5 almost nothing does. 191 of the
+#: world's 255 lawns sat at -2 to -8: the quilt, every quarter's ground, the
+#: flank lawns and the lake's water sheet were all INSIDE the terrain, which
+#: is why every wide frame shows one flat olive plane and why "the ground
+#: quilt does not read" survived a pass that doubled its colour contrast. The
+#: contrast was never the problem.
+#:
+#: THE FIX IS THE SLAB, NOT THE LAWNS. Raising every lawn to +10 clears the
+#: terrain and then buries what stands ON the lawn: `ground_flowers` is a
+#: flattened sphere reaching only +11 from its origin, so every bed would have
+#: gone under the grass instead. `garden_lawn`'s own docstring says what was
+#: meant -- "sits 2 cm under the beds and walls; the moss ground slab stays
+#: BENEATH as terrain" -- and the slab is not beneath, it is exactly level
+#: with the lawn's origin. build_v2 drops it to a top of -14 (see
+#: V2_GroundSlab), which is below the lawns' deepest displaced point, and
+#: every placement keeps the z it was authored with.
+GROUND_Z = -2.0
+#: uu. A parterre's worked-soil floor, proud of the lawn under it.
+BED_Z = 3.0
+
+
 def _band(name, items):
     return [dict(it, band=name) for it in items]
 
@@ -296,7 +326,7 @@ CORRIDOR = _band("V2_Garden", [
 GARDEN_L = _band("V2_Garden", [
     # the garden floor first, so everything else stands on it (z -2 so slab
     # and wall bases at 0 stay proud of the lawn)
-    A("garden_lawn", 3800, 2600, -2, mat="MI_V2_Lawn", label="Lawn_L"),
+    A("garden_lawn", 3800, 2600, GROUND_Z, mat="MI_V2_Lawn", label="Lawn_L"),
     # the LEFT GARDEN GATE: gold leaves between cream piers at the entrance to
     # the left garden, beyond the front wall (reprojected view: az -25, ~18 m)
     A("gate_pier", 1080, 1700, 0, s=1.0, mat="MI_V2_IvoryStone", label="GardenGate_PierL"),
@@ -368,7 +398,7 @@ GARDEN_L = _band("V2_Garden", [
 # GARDEN RIGHT: the clock tree, flowering shrubs, the heart on its terrace
 # ---------------------------------------------------------------------------
 GARDEN_R = _band("V2_Garden", [
-    A("garden_lawn", -3800, 2600, -2, mat="MI_V2_Lawn", label="Lawn_R"),
+    A("garden_lawn", -3800, 2600, GROUND_Z, mat="MI_V2_Lawn", label="Lawn_R"),
     # MEASURED ON THE REPROJECTED cam0 VIEW, not the flat panorama: the clock
     # sits at +45 deg, the trunk spans +42..+52, and the foliage fills the
     # top-right corner -- so the tree is 16 m tall, 28 m out, at +47 deg.
@@ -818,7 +848,7 @@ def _parterre(sgn, cx, cy, seed, tag, H=None):
         # would have been invisible: a bed floor nobody would ever see, and no
         # gate would have caught it because it placed and resolved perfectly.
         # +3 puts it just proud of the slab (0) and of the garden lawn (-2).
-        out.append(A("garden_lawn", bx, by, 3.0, sxyz=(0.1033 * u, 0.0862 * u, 0.5),
+        out.append(A("garden_lawn", bx, by, BED_Z, sxyz=(0.1033 * u, 0.0862 * u, 0.5),
                      mat="MI_V2_Soil", label="%s_Bed%d_Soil" % (tag, i)))
         # STONE BORDERS. The brief asks for premium stone borders and formal
         # geometry, and the boards show every bed held by a kerb -- it is the
@@ -1366,7 +1396,7 @@ CAM_FOREGROUNDS = _band("V2_Garden",
 #: their ground is the moss terrain slab: one flat quad, one flat tone, under
 #: everything. Two meshes fix it.
 FLANK_GROUND = _band("V2_Garden", [
-    A("garden_lawn", sgn * 5250, 3500, -2, sxyz=(0.92, 1.53, 1.0),
+    A("garden_lawn", sgn * 5250, 3500, GROUND_Z, sxyz=(0.92, 1.53, 1.0),
       mat="MI_V2_Lawn", label="FlankGround_%s" % ("L" if sgn > 0 else "R"))
     for sgn in (1, -1)
 ])
@@ -1737,7 +1767,7 @@ def _quarter_towers(cx, cy, sgn, seed, tag, H=None):
     # as isolated architectural fragments standing on lawn -- the brief's
     # "architectural fragments" was meant as a kind of place, not as debris.
     # A neighbourhood has ground under it, a wall around it and a way in.
-    out.append(A("garden_lawn", cx, cy, -2, sxyz=(0.62 * sp, 0.52 * sp, 1.0),
+    out.append(A("garden_lawn", cx, cy, GROUND_Z, sxyz=(0.62 * sp, 0.52 * sp, 1.0),
                  mat="MI_V2_Lawn", label="%s_Ground" % tag))
     # THE WALL IS THE FIRST THING DISTANCE TAKES. A perimeter wall is a line
     # of 14 pieces that subtends about a pixel at 300 m; a tower is a
@@ -1932,7 +1962,7 @@ def _quarter_wood(cx, cy, sgn, seed, tag, H=None):
     # moss slab is not the only thing between here and the horizon
     for k in range(2):
         out.append(A("garden_lawn", cx + (k - 0.5) * 3600.0 * sp,
-                     cy + (0.5 - k) * 2600.0 * sp, -2,
+                     cy + (0.5 - k) * 2600.0 * sp, GROUND_Z,
                      yaw=(seed * 13 + 40 * k) % 90,
                      sxyz=(1.25 * sp, 1.05 * sp, 1.0),
                      mat=("MI_V2_Meadow", "MI_V2_Moss")[k % 2],
@@ -2013,7 +2043,7 @@ def _quarter_clockyard(cx, cy, sgn, seed, tag, H=None):
             A("key_ornate", px, py, 128.0 * sc, yaw=40 * i, s=0.9 * sc, mat="MI_V2_Gold",
               label="%s_Key%d" % (tag, i)),
         ]
-    out.append(A("garden_lawn", cx, cy, -2, sxyz=(0.55 * sp, 0.48 * sp, 1.0),
+    out.append(A("garden_lawn", cx, cy, GROUND_Z, sxyz=(0.55 * sp, 0.48 * sp, 1.0),
                  mat="MI_V2_Lawn", label="%s_Ground" % tag))
     for k, yaw in enumerate((0.0, 90.0)):
         out.append(A("terrace_platform", cx, cy, -18.0, yaw=yaw,
@@ -2169,7 +2199,7 @@ def _quarter_water(cx, cy, sgn, seed, tag, H=None):
             A("garden_urn", cx + math.cos(a) * d, cy + math.sin(a) * d, 100.0 * sc,
               s=0.5 * sc, mat="MI_V2_Ceramic", label="%s_PostUrn%d" % (tag, i)),
         ]
-    out.append(A("garden_lawn", cx, cy, -2, sxyz=(0.62 * sp, 0.55 * sp, 1.0),
+    out.append(A("garden_lawn", cx, cy, GROUND_Z, sxyz=(0.62 * sp, 0.55 * sp, 1.0),
                  mat="MI_V2_Lawn", label="%s_Ground" % tag))
     return out
 
@@ -2196,7 +2226,7 @@ def _quarter_lake(cx, cy, sgn, seed, tag, H=None):
     out = []
     w = 0.52 * sp
     yaw0 = (seed * 29) % 90
-    out.append(A("garden_lawn", cx, cy, -8.0, yaw=yaw0, sxyz=(w, w * 0.88, 1.0),
+    out.append(A("garden_lawn", cx, cy, GROUND_Z, yaw=yaw0, sxyz=(w, w * 0.88, 1.0),
                  mat="MI_V2_Water", label="%s_Water" % tag))
     rx, ry = 6004.0 * w * 0.5, 7197.0 * w * 0.88 * 0.5
     # the rim, broken where the path comes down to the water
@@ -2338,7 +2368,7 @@ def _quarter_tea(cx, cy, sgn, seed, tag, H=None):
                              40 * i, 1.0,
                              ("MI_V2_RosePink", "MI_V2_PetalWhite", "MI_V2_PetalViolet")[i % 3],
                              "%s_Bed%d" % (tag, i))
-    out.append(A("garden_lawn", cx, cy, -2, sxyz=(0.5 * sp, 0.45 * sp, 1.0),
+    out.append(A("garden_lawn", cx, cy, GROUND_Z, sxyz=(0.5 * sp, 0.45 * sp, 1.0),
                  mat="MI_V2_Lawn", label="%s_Ground" % tag))
     return out
 
@@ -2408,7 +2438,7 @@ def _quarter_court(cx, cy, sgn, seed, tag, H=None):
             A("clock_ornate", lx, ly, 150.0 * sc, yaw=yaw0 + 180, s=1.35 * sc,
               mat="MI_V2_Gold", label="%s_Clock" % tag),
         ]
-    out.append(A("garden_lawn", cx, cy, -2, yaw=yaw0,
+    out.append(A("garden_lawn", cx, cy, GROUND_Z, yaw=yaw0,
                  sxyz=(w / 2800.0, d / 2400.0, 1.0),
                  mat="MI_V2_Lawn", label="%s_Ground" % tag))
     return out
@@ -2509,7 +2539,7 @@ def _quarter_hamlet(cx, cy, sgn, seed, tag, H=None):
                              0, 45 * i, 1.0,
                              ("MI_V2_PetalPink", "MI_V2_PetalWhite", "MI_V2_Lavender")[i % 3],
                              "%s_Bed%d" % (tag, i))
-    out.append(A("garden_lawn", cx, cy, -2, sxyz=(0.58 * sp, 0.52 * sp, 1.0),
+    out.append(A("garden_lawn", cx, cy, GROUND_Z, sxyz=(0.58 * sp, 0.52 * sp, 1.0),
                  mat="MI_V2_Lawn", label="%s_Ground" % tag))
     return out
 
@@ -2529,7 +2559,7 @@ def _quarter_meadow(cx, cy, sgn, seed, tag, H=None):
     lean = _rnd(seed, 5, 1) * 6.283
     for k in range(3):
         out.append(A("garden_lawn", cx + math.cos(lean + 2.1 * k) * 2200.0 * sp,
-                     cy + math.sin(lean + 2.1 * k) * 2200.0 * sp, -2,
+                     cy + math.sin(lean + 2.1 * k) * 2200.0 * sp, GROUND_Z,
                      yaw=(seed * 11 + 37 * k) % 90,
                      sxyz=(1.15 * sp, 1.0 * sp, 1.0),
                      mat=("MI_V2_Meadow", "MI_V2_Moss", "MI_V2_Lawn")[k],
@@ -4254,7 +4284,7 @@ def _country():
                                          ("MI_V2_PetalPink", "MI_V2_Lavender",
                                           "MI_V2_PetalWhite", "MI_V2_PetalViolet")[i % 4],
                                          "%s_Drift%d" % (tag, i))
-                out.append(A("garden_lawn", cx, cy, -3, yaw=(k * 37) % 90,
+                out.append(A("garden_lawn", cx, cy, GROUND_Z, yaw=(k * 37) % 90,
                              sxyz=(1.1, 0.95, 1.0),
                              mat=("MI_V2_Meadow", "MI_V2_Lawn", "MI_V2_Moss")[k % 3],
                              label="%s_Ground" % tag))
@@ -4422,7 +4452,7 @@ def _ground_quilt():
                 continue                    # outside the world's own edge
             cx = gx * 5600.0 + (_rnd(gx, gy, 71) - 0.5) * 900.0
             cy = gy * 6600.0 + (_rnd(gx, gy, 72) - 0.5) * 900.0 + 1000.0
-            out.append(A("garden_lawn", cx, cy, -3 - (k % 3),
+            out.append(A("garden_lawn", cx, cy, GROUND_Z - (k % 3),
                          yaw=90.0 * (k % 4),
                          sxyz=(0.98 + 0.10 * _rnd(gx, gy, 73),
                                0.98 + 0.10 * _rnd(gx, gy, 74), 1.0),
@@ -4637,7 +4667,7 @@ def _approach_sides():
                 ]
         # a lawn under it, so the band has its own tone rather than the slab's
         for k in range(3):
-            out.append(A("garden_lawn", side * 4600.0, 3200.0 + 2700.0 * k, -2,
+            out.append(A("garden_lawn", side * 4600.0, 3200.0 + 2700.0 * k, GROUND_Z,
                          yaw=90.0 * (k % 2), sxyz=(0.62, 0.52, 1.0),
                          mat=("MI_V2_Lawn", "MI_V2_Meadow", "MI_V2_Lawn")[k],
                          label="%s_Ground%d" % (tag, k)))
