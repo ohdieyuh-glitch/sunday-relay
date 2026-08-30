@@ -126,10 +126,23 @@ frames — level load (4,290 ms) then first-draw shader work (550/71/67/62 ms). 
 stutter while the Dog moves; steady state is GPU-bound at 95% of a 12.4 ms frame, with the game
 thread nearly idle at 2.2 ms.
 
-The stutter was the STREAM: measured from a browser on the Studio, 71 fps at **11.8 Mbps of 1080p**,
-with WebRTC opening at a 10 Mbps target — a still scene compresses to nothing and the moment the
-camera moves that floods a trans-Pacific link. Fixed at 720p with start 2 / max 6 / min 0.4 Mbps at
-60 fps. The founder confirmed: *"the latency and lagging has been decreased significantly."*
+The stutter was the STREAM — and the first fix for it was half wrong, which the founder found by
+playing: after it they reported the picture freezing, then "extremely laggy again".
+
+Measured out of the stream rather than assumed, twice:
+
+- **The bitrate cap never applied.** `-ExecCmds` separates commands with COMMAS and the four CVars
+  were joined with `|`, so the engine got one malformed command and ignored all of them, silently.
+  Measured after that "fix": **17.3 Mbps at 720p** against a 6 Mbps ceiling that was not in force.
+  Every bit of the improvement the founder first felt came from 1080p → 720p.
+- **A ceiling alone makes the encoder drop frames**, holding resolution to obey the cap: 5 Mbps gave
+  21 fps, 8 Mbps gave 34, uncapped gave 80. `PixelStreaming2.Encoder.TargetBitrate` drives the
+  encoder at a rate so it trades image quality instead: **4.3 Mbps at 74 fps, zero freezes** — a
+  quarter of the bandwidth for nearly all the smoothness.
+
+The lesson is the same one the engine profile taught and this managed to ignore anyway: a setting
+that silently does nothing is indistinguishable from one that works, until something measures what
+arrived.
 
 ### Gap analysis
 
