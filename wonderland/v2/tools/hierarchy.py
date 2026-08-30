@@ -144,6 +144,11 @@ def quarters(pts):
         cy = sum(p["y"] for p in solid) / len(solid)
         d = sorted(math.hypot(p["x"] - cx, p["y"] - cy) for p in solid)
         r90 = d[int(0.90 * (len(d) - 1))]
+        # r50 is the MASS. r90 is the reach, and for a kind whose content is
+        # deliberately spread -- a meadow's drifts and hedgerows -- the two are
+        # very different numbers. "Is one quarter standing inside another" is a
+        # question about mass; "do their edges meet" is a question about reach.
+        r50 = d[int(0.50 * (len(d) - 1))]
         rows.append({
             "tag": tag, "kind": tag.split("_")[1], "cx": cx, "cy": cy,
             "r_from_origin_m": math.hypot(cx, cy) / 100.0,
@@ -152,7 +157,7 @@ def quarters(pts):
             "veg": sum(1 for p in solid if p["k"] == "veg"),
             "prop": sum(1 for p in solid if p["k"] == "prop"),
             "landmarks": sum(1 for p in solid if p["landmark"]),
-            "r90_m": r90 / 100.0,
+            "r90_m": r90 / 100.0, "r50_m": r50 / 100.0,
             "density_per_ha": len(solid) / (math.pi * (r90 / 100.0) ** 2 / 1e4) if r90 else 0.0,
         })
     # nearest-neighbour spacing between quarter centres
@@ -280,12 +285,27 @@ def main():
     # world back toward the uniform ring it started as. Quarters whose centres
     # are inside 0.3 of the two footprints are NESTED: one is standing in the
     # other, which is the defect that put a tower in a parterre.
+    # KIND-AWARE, the same way the layout's own `_want_gap` is. Landscape
+    # systems merge on purpose -- a meadow running into a wood is country, and
+    # `_BODY["meadow"]` is 0.30 precisely so they can. Reporting those as
+    # nested would push the world back toward the uniform ring this whole
+    # phase removed. Two meadows 30 m apart with 55 m footprints is the
+    # feature; a CLOCKYARD 30 m inside a court is the defect.
+    SOFT_KINDS = ("meadow", "wood", "grove")
     over, nested = [], []
     for i, a in enumerate(qs):
         for b in qs[i + 1:]:
             d = math.hypot(a["cx"] - b["cx"], a["cy"] - b["cy"]) / 100.0
             span = a["r90_m"] + b["r90_m"]
-            if d < span * 0.30:
+            # r50 was tried here and is the wrong instrument: a meadow's
+            # content is spread EVENLY, so its half-mass is 0.75 of its reach,
+            # not a fraction of it, and the test got worse. The rule that
+            # works is the layout's own: `_BODY["meadow"]` is 0.30 because
+            # open country is meant to lap against whatever is beside it, so
+            # any pair involving a meadow is adjacency and not nesting.
+            soft = ("meadow" in (a["kind"], b["kind"])
+                    or (a["kind"] in SOFT_KINDS and b["kind"] in SOFT_KINDS))
+            if d < span * 0.30 and not soft:
                 nested.append((d, a, b))
             elif d < span * 0.5:
                 over.append((d, a, b))

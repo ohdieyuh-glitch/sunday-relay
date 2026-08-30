@@ -2717,6 +2717,30 @@ def _body(kind, H):
 #: The sizes a quarter will try, in order, before it gives up its place.
 _SQUEEZE = (1.0, 0.82, 0.66, 0.54)
 
+#: AND THE KINDS IT WILL TRY. Seventeen sites could not be placed and every
+#: one of them was a big kind in a tight spot -- a walled court is 42 m across
+#: and there is not room for one everywhere the district field says "court".
+#: Dropping it throws away a decision (a bearing off the castle axis, a centre
+#: the emptiness audit reported) to protect a kind, which is backwards: the
+#: POSITION is what was decided and the kind is what the field suggested.
+#:
+#: So a site that will not fit becomes a smaller kind of place, in an order
+#: that keeps the district reading -- a court becomes a garden before it
+#: becomes a grove, a clock quarter keeps its architecture one step longer --
+#: and only a meadow that will not fit is finally dropped.
+_KIND_FALLBACK = {
+    "court":     ("garden", "grove", "meadow"),
+    "clockyard": ("court", "garden", "grove"),
+    "towers":    ("hamlet", "grove", "meadow"),
+    "water":     ("garden", "grove", "meadow"),
+    "garden":    ("grove", "meadow"),
+    "tea":       ("garden", "grove"),
+    "hamlet":    ("grove", "meadow"),
+    "wood":      ("grove", "meadow"),
+    "grove":     ("meadow",),
+    "meadow":    (),
+}
+
 
 def _squeezed(H, f):
     """The same hierarchy, for a quarter that had to fit into less room.
@@ -2898,26 +2922,36 @@ def _separate(sites):
         # Dropping ten authored sites to keep every quarter full size threw
         # away decisions (a bearing off the castle axis, an audited centre) to
         # protect a number.
-        for squeeze in _SQUEEZE:
-            s["squeeze"] = squeeze
-            # ring search: the authored spot first, then the nearest ring that
-            # clears -- deterministic in both radius and bearing, so the world
-            # is identical every run
-            for step in range(0, int(budget // 500) + 1):
-                d = step * 500.0
-                for k in range(1 if step == 0 else 14):
-                    b = math.radians(360.0 * k / 14.0 + 11.0 * step)
-                    s["x"], s["y"] = s["x0"] + math.cos(b) * d, s["y0"] + math.sin(b) * d
-                    if fits(s, kept):
-                        kept.append(s)
-                        placed = True
+        kind0 = s["kind"]
+        for kind in (kind0,) + _KIND_FALLBACK.get(kind0, ()):
+            s["kind"] = kind
+            for squeeze in _SQUEEZE:
+                s["squeeze"] = squeeze
+                # ring search: the authored spot first, then the nearest ring
+                # that clears -- deterministic in both radius and bearing, so
+                # the world is identical every run
+                for step in range(0, int(budget // 500) + 1):
+                    d = step * 500.0
+                    for k in range(1 if step == 0 else 14):
+                        b = math.radians(360.0 * k / 14.0 + 11.0 * step)
+                        s["x"], s["y"] = s["x0"] + math.cos(b) * d, s["y0"] + math.sin(b) * d
+                        if fits(s, kept):
+                            kept.append(s)
+                            placed = True
+                            break
+                    if placed:
                         break
                 if placed:
                     break
             if placed:
                 break
-        if not placed:
-            s["x"], s["y"], s["squeeze"] = s["x0"], s["y0"], 1.0
+        if placed:
+            if s["kind"] != kind0:
+                s["tag"] = s["tag"].split("_")[0] + "_" + s["kind"]
+                SITE_NOTES.append("%s: no room for a %s here, made a %s"
+                                  % (s["tag"], kind0, s["kind"]))
+        else:
+            s["x"], s["y"], s["squeeze"], s["kind"] = s["x0"], s["y0"], 1.0, kind0
             dropped.append(s)
     if dropped:
         SITE_NOTES.append("dropped %d site(s) that could not clear: %s"
@@ -3456,6 +3490,26 @@ def _ring_roads(sites):
                 continue                      # never across the castle approach
             if math.hypot(x1 - x0, y1 - y0) > 22000.0:
                 continue                      # not a leg, a shortcut across the world
+            # AND NOT THROUGH A THIRD QUARTER. A ring leg is a straight line
+            # between two centres and a straight line between two centres can
+            # cross somebody else's court -- the road audit found one going
+            # through C40_clockyard. The road tree is safe from this because
+            # it joins neighbours; the ring is not.
+            crosses = False
+            for s in sites:
+                if math.hypot(s["x"] - x0, s["y"] - y0) < 600.0 or \
+                   math.hypot(s["x"] - x1, s["y"] - y1) < 600.0:
+                    continue                  # an endpoint: the road serves it
+                bx, by = x1 - x0, y1 - y0
+                ll = bx * bx + by * by or 1.0
+                t = max(0.0, min(1.0, ((s["x"] - x0) * bx + (s["y"] - y0) * by) / ll))
+                if math.hypot(s["x"] - (x0 + t * bx), s["y"] - (y0 + t * by)) < \
+                        _body(s["kind"], _squeezed(HIER(s["x"], s["y"]),
+                                                   s.get("squeeze", 1.0))) * 0.85:
+                    crosses = True
+                    break
+            if crosses:
+                continue
             out += _road(x0, y0, x1, y1, width, "RingRoad%d_%02d" % (band, i))
             if band == 0:
                 out += [
@@ -3509,7 +3563,7 @@ def _outer_world():
 #: Cameras that get one. The eight world/district cameras; Golden Arrival's
 #: own eleven are authored ground and are not touched.
 _CAM_FOREGROUND_TAGS = ("HeroCam13", "HeroCam14", "HeroCam15", "HeroCam16",
-                        "HeroCam17", "HeroCam18")
+                        "HeroCam17", "HeroCam18", "HeroCam20")
 
 
 def _district_cam_foregrounds():
@@ -3729,7 +3783,8 @@ DECLUTTER_NOTES = []
 def _country():
     out = []
     bodies = [(s["x"], s["y"],
-               _body(s["kind"], _squeezed(HIER(s["x"], s["y"]), s.get("squeeze", 1.0))))
+               _body(s["kind"], _squeezed(HIER(s["x"], s["y"]), s.get("squeeze", 1.0))),
+               s.get("reach", 2500.0))
               for s in SITES]
     n = int(_WORLD_EDGE // _COUNTRY_CELL) + 1
     k = 0
@@ -3747,9 +3802,12 @@ def _country():
             # thin with distance, and thin again away from the ways
             if _rnd(gx, gy, 93) > 0.30 + 0.70 * (0.45 + 0.55 * H["score"]):
                 continue
-            if any(math.hypot(cx - s["x"], cy - s["y"]) < b * _COUNTRY_CLEAR
-                   for (sx, sy, b) in bodies
-                   for s in ({"x": sx, "y": sy},)):
+            # THE BODY OR THREE QUARTERS OF THE REACH, whichever is larger. A
+            # grove's body is 0.55 of its extent and its mushroom landmark
+            # sits outside that, so a country tower forty metres away stood
+            # through one. What country must clear is the quarter's CONTENT.
+            if any(math.hypot(cx - sx, cy - sy) < max(b, rr * 0.75) * _COUNTRY_CLEAR
+                   for (sx, sy, b, rr) in bodies):
                 continue
             k += 1
             tag = "Country%03d" % k
