@@ -204,7 +204,16 @@ def _trunk(ctx, name, h, r_base, r_top, lean, seed, roots=6, sides=22):
 #: the leaves; the branching depth is kept, because the fine limbs are what
 #: stops a canopy reading as a ball on a stick -- they simply live under the
 #: leaves now, as a tree's do.
-LIMB_REACH = 0.60
+#: 0.42, not 0.60. PASS 08 shortened the limbs and PASS 09 raised the canopies
+#: to meet them, and FlankLeftCam08 at PASS 10 STILL shows thick brown limbs
+#: punching out through the leaf mass with bare tips. Two fixes aimed at the
+#: same symptom from opposite ends and neither closed it, which means the
+#: margin was never big enough to survive the canopies being scattered around
+#: a trunk rather than centred on it (Garden_L hangs four of them at offsets
+#: up to 350 uu). The reach comes in far enough that no plausible offset
+#: exposes a tip. A tree that is slightly less branchy is a trade worth
+#: making against one that looks dead.
+LIMB_REACH = 0.42
 
 
 def _limb(m, start, direction, length, r0, depth, seed):
@@ -241,7 +250,12 @@ def tree_clock_trunk(ctx):
 def tree_mature_trunk(ctx):
     """The left framing tree and the garden trees: 14 m, heavier, three limbs
     spreading into the crown."""
-    m, path = _trunk(ctx, "tree_mature_trunk", 1400.0, 160.0, 100.0, -120.0, seed=57, roots=6)
+    # AND THE BOLE WAS 3.2 m ACROSS. 160 uu of radius at the base of a 14 m
+    # tree is a baobab, not the elegant garden tree the reference boards show;
+    # at gameplay distance it read as a smooth bloated column. 105/62 gives a
+    # 2.1 m base tapering to 1.2 m, which is a large mature tree and still
+    # reads as one.
+    m, path = _trunk(ctx, "tree_mature_trunk", 1400.0, 105.0, 62.0, -120.0, seed=57, roots=6)
     for k, (ang, z, ln) in enumerate(((0.6, 900.0, 560.0), (2.7, 1000.0, 600.0), (4.6, 1100.0, 540.0), (1.7, 760.0, 440.0))):
         p = path[int(len(path) * z / 1400.0)]
         _limb(m, (p[0], p[1], z), (math.cos(ang) * 0.8, math.sin(ang) * 0.8, 0.50),
