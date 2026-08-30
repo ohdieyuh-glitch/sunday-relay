@@ -431,3 +431,46 @@ radii chosen to over-report. The ledger already records that clearance at a
 point proves nothing about the ground between points, and that only walking it
 found the 60 uu riser that made the castle unreachable. **The real test is the
 Dog**, and it belongs in the same pass as these renders.
+
+## PASS 09 rendered, and what the first frame of a new area taught
+
+`5581796` built: 847 actors, garden band 230 → 535, v1_actors 0, 799 s.
+SkylineCam06 against PASS 08's: green arc 19.3% → 23.8% and the warm arc
+27.0% → 16.5%, so 08b's correction landed — the ground is meadow again rather
+than the brown void PASS 08 made of it. (Against the original SUITE03
+baseline: green 45.5% → 23.8%, because the flanks now carry garden instead of
+lawn.)
+
+**FlankLeftCam08's first frame is the useful one.** It showed three defects.
+Two of them I had already found and fixed in commits waiting for the next
+build — the hedges that edged 30% of their bed, and the missing paved walks.
+The third the render found and I had not:
+
+**The flank cameras stand on bare lawn.** Cam08 sits at y = −1,250 and the
+flank's first content was the parterre's near bed at y = −70: twelve metres of
+empty grass across the bottom 40% of the frame. This is the *same defect* the
+offline camera preview caught for RearWorldCam10 an hour earlier — which I
+fixed for that camera and did not think to check for these two. Fixing the
+instance instead of the class, in a session whose own ledger says that is the
+failure mode here.
+
+The other thing the frame said: **a bed of three blooms reads as three pink
+dots sitting on grass.** The reference's beds are full — the planting *is* the
+bed. Seven per quadrant now, mixed cluster/blossom/lavender so a bed has
+texture as well as colour.
+
+### Sequencing, learned the cheap way
+
+Cam10's capture in that round failed: `WL_REQUIRE_SHA=5581796 but the checkout
+is at c5d6338`. I shipped the next commit while a capture round was still
+running, and the source-pin guard refused rather than quietly capturing a
+frame whose provenance nobody could state. The guard is right and the mistake
+was mine. **Do not ship while a round is in flight**; there is no rush that a
+frame of unknown provenance would have saved.
+
+### Queued for the build after this one
+
+The heart topiary rebuilt with real volume (159 → 397 uu deep), and one
+Wonderland landmark per flank with the hierarchy the brief asks for — a clock
+monument at the end of one walk, the heart at the end of the other, a tea
+vignette beside each room, an arch over each way in. 919 actors.
