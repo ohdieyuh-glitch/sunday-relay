@@ -1127,3 +1127,80 @@ The object language, counted:
     mushroom_giant 31 · balloon 24 · signpost 54 · bench 50 · gate_arch_gold 8
 
 against 11 placements between the first eight of those at the phase start.
+
+---
+
+# THE RENDERS — PASS 23A and 23B, 2026-08-30
+
+The Studio was up with the L4. Two builds and two captures, and the second one
+carries a fix the first one found.
+
+## PASS 23A (`0051644`) — the world exists
+
+`V2_PASS_116-119`, HeroCam0 / SkylineCam06 / WorldCam11 / WorldCam12, 1280x720
+through Pixel Streaming, all four verdict STRUCTURED. The generate: 119/119
+assets, 584 actors, **8,533 instances in 314 batch actors** — the instancing is
+real in-engine, not only in the dry run.
+
+What the frames show that no previous render did: hot-air balloons across the
+sky in all four; giant mushrooms with their gold rims and cream spots reading
+as landmarks from 100 to 300 m; a clock tower on the skyline; garden quarters
+with their parterres and paths legible from above; tower neighbourhoods; and
+the horizon band as a treeline where the world used to stop at a hard edge.
+HeroCam0 is the founder's frozen composition, unchanged, with balloons over it.
+
+`V2_COMPARE_PASS21_vs_PASS23A_WorldCam12.png` is the pair worth looking at:
+PASS 21 is a sparse ring on bare ground under an empty sky; PASS 23A is wooded
+to the skyline.
+
+## What PASS 23A found — THE GROUND SLAB WAS ON TOP OF THE GARDENS
+
+Every frame showed one flat olive plane from the district to the horizon. The
+ledger has carried that since PASS 20 as "the ground quilt does not read — the
+mechanism works, the contrast does not", and PASS 23c had just doubled the
+quilt's colour contrast to 2.08x. **The contrast was never the problem.**
+
+    garden_lawn = box(6000, 7200, 24, at=(0,0,-12))   top surface at local z = 0
+                  perlin displaces that top by +/-9
+    terrain slab = Cube at z = -30 scaled 0.6          60 uu thick, TOP AT z = 0
+
+A lawn placed at the authored z = -2 therefore has its surface between -11 and
++7, and only its noise peaks cleared the terrain. **191 of the world's 255
+lawns sat between -2 and -8** — the ground quilt, every quarter's ground, the
+flank lawns, the lake's water sheet. All of them were inside the terrain.
+
+`garden_lawn`'s own docstring says what was meant: "the moss ground slab stays
+BENEATH as terrain." It was not beneath; it was exactly level with the lawn's
+origin, and had been since the slab was introduced.
+
+Raising the lawns was tried first and is wrong: it buries what stands ON the
+lawn instead (`ground_flowers` is a flattened sphere reaching only +11 from its
+origin). The slab drops to z = -44 — a top of -14, below the lawns' deepest
+displaced point of -13 — and every placement in the world keeps its authored z.
+
+## PASS 23B (`8568d7c`) — the fix, measured
+
+`V2_PASS_120-123`, same four cameras. Build time 14 minutes against the first
+build's 85, because the material set was unchanged and the shader cache warm.
+
+| SkylineCam06, gap_v2 | 23A | 23B |
+|---|---|---|
+| foreground.luma | 0.1547 | **0.1786** (+15%) |
+| midground.luma | 0.1084 | 0.1063 |
+| skyline.luma | 0.0712 | 0.0705 |
+
+The near ground brightened by an eighth and nothing else moved, which is
+exactly what a lawn appearing from under the terrain should do. On WorldCam11
+and 12 the quilt reads as lighter fields against the darker slab, and the new
+lake is visible as a pale sheet with its rim and walk.
+
+Filed: `V2_GOLDENARRIVAL_PASS23A_*` and `PASS23B_*` for the four cameras, with
+`V2_COMPARE_SLABFIX_*` sheets and `V2_COMPARE_PASS2x_vs_PASS23A_*`.
+
+## Performance, measured on the L4
+
+`FPS cam1 median 52.8 ms = 18.9 fps, mean 61.6 ms, p95 99.2 ms` at 1280x720
+through Pixel Streaming, with 9,830 placements in ~600 actors. The ledger's
+performance item has never had a number before; it has one now. Note the
+measured caveat already in this file: the encoder and the network are the
+known bottlenecks on this path, not the renderer, so this is a floor.
