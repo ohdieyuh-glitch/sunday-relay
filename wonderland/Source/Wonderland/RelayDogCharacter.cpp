@@ -59,8 +59,18 @@ ARelayDogCharacter::ARelayDogCharacter()
 	// The Dog is 174 uu tall with 48 uu legs; a 600 uu boom at chest height
 	// frames it with the world around it and keeps the feet in shot, which is
 	// what a locomotion review has to see.
-	CameraBoom->TargetArmLength = 420.0f;
-	CameraBoom->SocketOffset = FVector(0.0f, 60.0f, 95.0f);
+	// FRAMED FROM ABOVE, SO THE BOOM HAS LESS TO HIT.
+	//
+	// At 420 uu behind the Dog and 95 uu up, the boom swept through the world
+	// at roughly body height -- balustrades, hedges, tower bases, the fountain
+	// coping -- and every one of them yanked the camera to the hit point. The
+	// capture caught the result: several seconds of the inside of the Dog's
+	// own shoulder. Shorter, higher and looking further down keeps the arm in
+	// the air over most of the district, which prevents the collapse instead
+	// of hiding it, and it frames the Dog against the ground it is walking on
+	// rather than against whatever is behind it.
+	CameraBoom->TargetArmLength = 380.0f;
+	CameraBoom->SocketOffset = FVector(0.0f, 55.0f, 135.0f);
 	CameraBoom->bUsePawnControlRotation = false;
 	CameraBoom->bInheritPitch = false;
 	CameraBoom->bInheritRoll = false;
@@ -69,12 +79,15 @@ ARelayDogCharacter::ARelayDogCharacter()
 	CameraBoom->CameraLagSpeed = 8.0f;
 	CameraBoom->bEnableCameraRotationLag = true;
 	CameraBoom->CameraRotationLagSpeed = 7.0f;
+	// The collision test stays -- a camera that slides through a castle wall is
+	// worse than one that comes in close -- but a smaller probe means it only
+	// reacts to something the camera would really have entered.
 	CameraBoom->bDoCollisionTest = true;
-	CameraBoom->ProbeSize = 12.0f;
+	CameraBoom->ProbeSize = 7.0f;
 
 	FollowCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("FollowCamera"));
 	FollowCamera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName);
-	FollowCamera->SetRelativeRotation(FRotator(-6.0f, 0.0f, 0.0f));
+	FollowCamera->SetRelativeRotation(FRotator(-11.0f, 0.0f, 0.0f));
 	FollowCamera->FieldOfView = 75.0f;
 
 	if (UCharacterMovementComponent* Move = GetCharacterMovement())
