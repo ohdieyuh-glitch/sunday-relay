@@ -224,7 +224,16 @@ HERO_CAMS = [
     # ON A ROAD, at the Dog's own eye height, looking out along it to the
     # quarter it serves. The founder's test for the road network is that a
     # player believes they can keep going; this is the frame that answers it.
-    {"name": "GroveRoadCam18", "location": (5000.0, -5300.0, 170.0), "rotation": (-1.5, -39.1, 0.0),
+    # MEASURED ONTO THE ROAD, not placed beside it. Its first frame was a
+    # tree trunk two metres from the lens: `_road_verge` plants at 2.6-4.5 m
+    # from a road's centreline and this camera sits ON the road at 1.7 m of
+    # eye, so a verge tree fills the picture. Every road segment in the world
+    # was scored for clear air at the camera AND 6-18 m ahead along its own
+    # bearing, and this is the best of them -- 10.2 m here, 6.0 m ahead, on
+    # the outer ring in the Mushroom Grove at 182 m out, looking along the
+    # circuit. The founder's test for a road is that a player believes they
+    # can keep going; this is the frame that answers it.
+    {"name": "GroveRoadCam18", "location": (8259.0, -16236.0, 170.0), "rotation": (-1.5, 11.8, 0.0),
      "fov": 90.0, "tags": ("GroveRoadCam18", "HeroCam18")},
     # THE WORLD FROM BEYOND THE CASTLE, looking back: the castle plane, the
     # district behind it, and the far city over the shoulder. It is the only
