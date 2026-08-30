@@ -818,6 +818,22 @@ def _load_existing(unreal, log):
             log("V2 MATERIALS REUSE: %s would not load -- rebuilding all" % name)
             return None
         out[name] = mi
+    # MI_V2_SkyPano IS NOT IN `INSTANCES`. The full build creates it beside
+    # them, which is why that path reports 47 instances against this one's 46
+    # -- and it is the panorama dome's ONLY material. With skyDome=0 nothing
+    # references it and the difference is cosmetic; with skyDome=1 a reused
+    # set would have handed the dome no material at all, and the guard that
+    # exists for exactly that ("skyDome=1 but MI_V2_SkyPano was not built")
+    # lives further down the path this function short-circuits. So it is
+    # checked here, where the short circuit is.
+    sky = pkg + "/MI_V2_SkyPano"
+    if eal.does_asset_exist(sky):
+        mi = eal.load_asset(sky)
+        if mi is not None:
+            out["MI_V2_SkyPano"] = mi
+    if int(C.LOOK["skyDome"]) and "MI_V2_SkyPano" not in out:
+        log("V2 MATERIALS REUSE: skyDome=1 and MI_V2_SkyPano is not on disk -- rebuilding all")
+        return None
     return out
 
 
