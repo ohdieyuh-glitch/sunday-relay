@@ -1774,7 +1774,17 @@ def main():
                 smc.set_static_mesh(cube)
                 # PASS 06: +/- 600 m -- the far band stands at 300-420 m and
                 # the fog needs ground to fade into, not the atmosphere's floor
-                g.set_actor_scale3d(vec((1200.0, 1200.0, 0.6)))
+                # 3,000, not 1,200. At 1,200 the slab is 120,000 uu across --
+                # +-600 m -- and SkylineCam06 shows its EDGE at frame right,
+                # a hard line where the world stops and the atmosphere's
+                # floor begins. The far city stands at 185-420 m and is
+                # plainly visible through this fog, so 600 m is inside the
+                # distance this air still carries. +-1,500 m puts the edge
+                # far enough out that the haze closes over it before the eye
+                # reaches it. It is one flat quad either way: this buys
+                # nothing but the removal of a visible seam, which is exactly
+                # what it is for.
+                g.set_actor_scale3d(vec((3000.0, 3000.0, 0.6)))
                 if "MI_V2_Moss" in mats:
                     smc.set_material(0, mats["MI_V2_Moss"])
                 # AND IT COLLIDES (2026-08-29, the locomotion phase). The

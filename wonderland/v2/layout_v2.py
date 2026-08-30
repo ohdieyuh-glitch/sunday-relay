@@ -1170,6 +1170,19 @@ CAM_FOREGROUNDS = _band("V2_Garden",
                         + _cam_foreground(-2800.0, 1500.0, 50.0, 380.0, 900.0, 6200, "GR05_Fore"))
 
 
+#: THE FLANKS STAND ON THE TERRAIN SLAB, NOT ON LAWN. Every other garden in
+#: this world has a `garden_lawn` under it -- a 60 x 72 m slab whose top is a
+#: 48 x 48 grid displaced by low-frequency noise, which exists precisely
+#: because "a flat plane here is the founder's flat colour in one actor"
+#: (garden_lawn's own docstring). The flanks were authored without one, so
+#: their ground is the moss terrain slab: one flat quad, one flat tone, under
+#: everything. Two meshes fix it.
+FLANK_GROUND = _band("V2_Garden", [
+    A("garden_lawn", sgn * 5250, 3500, -2, sxyz=(0.92, 1.53, 1.0),
+      mat="MI_V2_Lawn", label="FlankGround_%s" % ("L" if sgn > 0 else "R"))
+    for sgn in (1, -1)
+])
+
 FLANKS = _band("V2_Garden", _flank(1, "FlankL") + _flank(-1, "FlankR"))
 
 
@@ -1289,7 +1302,8 @@ REARWORLD = _band("V2_Garden", [
 #: counted 305 new placements and passed while the generator placed four. A
 #: gate reading a different list from the builder reports the world it was
 #: shown, not the world that gets made.
-BUILD_BANDS = [FOREGROUND, COURTYARD, GARDEN, PALACE, FLANKS, REARWORLD, CAM_FOREGROUNDS]
+BUILD_BANDS = [FOREGROUND, COURTYARD, GARDEN, PALACE, FLANK_GROUND, FLANKS,
+               REARWORLD, CAM_FOREGROUNDS]
 
 #: Everything the layout declares: what the builder walks, plus the two bands
 #: it places by their own rules (SKY is the dome/atmosphere, HOVER is lifted
