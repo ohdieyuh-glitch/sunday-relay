@@ -405,3 +405,29 @@ depth and stone spread — and both push this number the wrong way. If it lands
 where predicted, the plaza albedo comes down ~10% in PASS 09; if it lands
 higher than 190, the light change is doing more than the arithmetic says and
 that is the thing to look at, not the albedo.
+
+## PASS 09 traversal check, before the render
+
+An offline clearance sweep over five routes into and along the new ground,
+with deliberately generous footprints for every solid asset and a 36 uu
+capsule:
+
+| route | min clearance | |
+|---|---|---|
+| spawn → rear gate → out | **227 uu** | clear |
+| left flank walk (border → grove) | −29 uu | pre-existing `BeyondL_Wall0_0` |
+| right flank walk | +103 uu | clear |
+| plaza → left flank room | −138 uu | pre-existing `SideBed_L_Hedge3`, `GiantMushroom_Foot0` |
+| plaza → right flank room | −50 uu | the parterre's own centrepiece |
+
+**Every flagged point is pre-existing planting or a route endpoint I chose
+badly** — the plaza's own side beds, the giant mushroom's foot, and in one
+case the plinth at the centre of a parterre, which a route should go round
+rather than through. Nothing PASS 09 placed blocks anything, and the rear
+route — the one genuinely new way through the world — is clear by 227 uu.
+
+This check is worth exactly what it is: a straight line through a garden, with
+radii chosen to over-report. The ledger already records that clearance at a
+point proves nothing about the ground between points, and that only walking it
+found the 60 uu riser that made the castle unreachable. **The real test is the
+Dog**, and it belongs in the same pass as these renders.

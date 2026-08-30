@@ -1,63 +1,88 @@
-# Wonderland V2 — resume point (GPU session ended 2026-08-26 ~19:20 UTC)
+# Wonderland V2 — resume point (2026-08-30, world-development phase)
 
 ## Where to pick up
 
 | | |
 |---|---|
-| DATE/TIME | 2026-08-26, GPU session ended ~19:20 UTC |
+| DATE | 2026-08-30, world-development phase (founder reopened it after locomotion closed) |
 | BRANCH | `relay/wonderland-v2` |
-| AUTHORITATIVE MAP | `/Game/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2` — **classic (non World Partition) container**, 445 actors, 437 production-tagged, 8 cameras, umap 877,890 bytes |
+| WORKTREE | `~/wonderland-ca-fixes` on the Chromebook — CPU work needs no Studio |
+| AUTHORITATIVE MAP | `/Game/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2` — **classic (non-WP) container** |
 | CONTENT ROOT | `/Game/WonderlandV2` |
-| CANONICAL REFERENCE | `v2/reference/marble-royal-garden-backdrop-panorama.png` (4608×2304, byte-identical Marble export; world id `ae83acaa-df79-4e92-b31f-53af690d5deb`) |
-| HERO CAMERA — **LOCKED** | `HeroCam_V2_MarbleReference`, (0, −150, 262), pitch −2 / yaw 90, FOV 100 |
-| VISUAL MODE | **SUPERVISED**: one major visual category → real Unreal render → founder review → next category. No autonomous multi-hour visual marathons. |
+| PRIMARY REFERENCE | `v2/reference/marble-royal-garden-cam0-founder-reference.png` (the founder's cam0 view) plus the three boards in `v2/reference/boards/` |
+| CAMERA SUITE | **eleven** now: the eight locked arrival cameras, plus FlankLeftCam08, FlankRightCam09, RearWorldCam10 added in PASS 09 for the new ground. None of the original eight moves. |
 
-## Visual status
+## The tool that decides things now
 
-- **First visible V2 world: ACHIEVED and APPROVED** — `v2/reference/renders/V2_FIRST_VISIBLE_APPROVED_FOUNDATION_cam0_720p.png`, commit `9158e48`, tag `v2-first-visible-foundation`. Structure approved by the founder; composition, path, castle massing and camera are locked.
-- **Vegetation pass 1: BUILT, NOT YET RENDERED.** Twelve recipes rebuilt as leaf foliage (leaf blades in clumps, twigs, petal flowers) and generated into the map; the cook that would have produced the render was interrupted when the Studio became unreachable. Founder review is **pending a render**, not pending a decision.
-- **The grey world is fixed** (not yet seen in a frame): the master materials failed to compile because their texture parameters held the engine's colour `DefaultTexture` under Normal/Grayscale samplers — *"(Node TextureSampleParameter2D) Sampler type is Normal, should be Color"*. Masters now get verified default textures; the last cook logged **0** "Failed to compile Material".
+`v2/tools/gap_v2.py RENDER.png [REFERENCE.png]` — measures the six things that
+decide whether a frame reads as the reference world: per-band luma/chroma/edges,
+the palette split by colour family, cloud share of the sky, ground variation,
+gridness, foreground tonal span and clipping. **Impressions drift; pixel
+populations do not.** It is what redirected PASS 08 away from the carried gap
+list, and every pass since states its predictions in these units BEFORE the
+render and scores them after. The predictions and scores live in
+`v2/WORLD_LEDGER.md`.
 
-## The black-screen incident — RESOLVED
+Two measured caveats are recorded in the tool: `cloud_fraction` is only
+meaningful on a camera with real sky above the horizon (pale horizon haze
+scores as cloud), and its whole-band figures differ from a hand-placed
+rectangle — quote the tool's.
 
-Root cause: the World Partition container created by `new_level(path, is_partitioned_world=True)` never registered its actors for cooking — 448 external actor packages existed on disk, but the cooked IoStore contained none, `GenerateStreaming` took 69 ms for both the empty and the populated world, and the packaged runtime held **0** production actors. Every capture was black under both shader models, all view modes, and both capture paths.
+## What has happened in this phase
 
-Fix: rebuild the identical world (same generator, same layout, same meshes) into a **classic** container. Runtime then reported `WL_TAG_VISIBILITY show=[UNREAL_PRODUCTION] shown=437`.
+- **PASS 08 (`b3ec99a`) — the look.** Triplanar projection replaced a world-XY
+  UV that smeared every vertical surface in Wonderland; the shadowless fill
+  was cut so shade exists; the grade and sun were warmed; stone albedo came
+  down; trees stopped ending outside their own leaves; clouds became lit
+  geometry because VolumetricCloud has now failed twice on this runtime.
+  Five of eight predictions met.
+- **PASS 08b (`427438e`) — the overshoots**, sized from PASS 08's frame:
+  warmth 1.36× the reference and shade 1.32×, both pulled back; the ground had
+  become a brown void instead of a green one; the plaza's four tints were
+  drawn from a sum of uniforms against thresholds calibrated as if uniform, so
+  the grey stone meant to be a fifth of the pavement was one slab in
+  twenty-seven.
+- **PASS 09 (`5581796`) — the flanks and the rear world.** 305 new placements
+  turning 23,300 m² of lawn into authored garden: threshold → parterre → rose
+  walk → grove → landmark → boundary on each flank, and a second gate with a
+  hedged avenue behind the spawn. Density 1 per 178 m² → 1 per 41.
 
-Open structural work: re-partitioning. `WorldPartitionConvertCommandlet` refused to start in this container (demands a Vulkan driver even with `-AllowCommandletRendering -RenderOffscreen` and the ICD mounted). The classic container renders; World Partition is deferred, not abandoned.
+## Three traps this phase found, worth not re-learning
 
-## Proven-good render configuration (regression baseline)
+1. **The gate read a different list from the builder.** `build_v2` walked a
+   hand-written band list and `layout_v2.ALL` was another; PASS 09 added 305
+   placements to ALL alone, the layout gate counted them and PASSED, and the
+   generator placed four. One list now (`LAYOUT.BUILD_BANDS`), ALL derived.
+2. **The fps harness was measuring an empty world.** `measure-fps.sh` was the
+   only launcher that never forwarded `${WL_MAP_ARG}`, so it booted the empty
+   World Partition container. Its numbers looked excellent because there was
+   nothing in them. It now forwards the map and prints the world it measured.
+3. **A threshold on a derived random variable does not mean its share.** See
+   the plaza tints above.
 
-Vulkan **SM5**, NVIDIA L4, `-RenderOffscreen`, Pixel-Streaming → **real Chrome** (`capture-hero-shots.sh` → `shot.cjs`), ≤1280×720, map chosen with `WL_MAP_ARG`. `HighResShot` is a **phantom here** — it writes all-zero PNGs; `frame-check.py`'s `verdict=` must be read, not its exit code.
-
-Diagnostic regression assets, all preserved: map `WL_V2_GoldenArrival_Diag/WL_V2_RenderDiagnosticClassic` (generator `v2/diag/build_classic_diag_map.py`), material `M_DiagUnlitMagenta`, and the packaged proof frame `v2/reference/renders/DIAG_CLASSIC_PACKAGED_MAGENTA_720p.png` (99% magenta, `verdict=STRUCTURED`).
-
-## Resume commands (CPU first; L4 only for the capture)
+## Build and capture (the Studio must already be on the L4)
 
 ```bash
-# 1. ship the branch to the Studio (bundle over ssh, md5 verified)
-bash wonderland/v2/tools/ship_v2.sh --ship-only
-# 2. regenerate the world (needs an RHI: the masters must compile)
-ssh wonderland-l4 'cd .../src && WLV2_REUSE_ASSETS=1 WP_STEP=build bash wonderland/v2/diag/wp_recover.sh'
-# 3. cook only that map, clean
-WL_EXTRA_ENV="WL_COOK_MAP=/Game/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2 WL_SKIP_GENERATE=1 \
-  SKIP_COMPILE_PREFLIGHT=1 WL_SKIP_BUILD_EDITOR=1 WL_BUILD_HLOD=0 SKIP_V2_TEXTURES=1 \
-  FORCE_REBUILD=1 WONDERLAND_MIN_PIECES=0 ALLOW_EMPTY_LEVEL=1" bash wonderland/v2/tools/ship_v2.sh
-# 4. one capture at the locked camera, then compare
-WL_RES_X=1280 WL_RES_Y=720 bash wonderland/v2/tools/round.sh
+bash wonderland/v2/tools/ship_v2.sh --ship-only          # incremental, ~30 KB
+ssh wonderland-l4 'cd .../src && WLV2_REBUILD="<recipes that changed>" \
+  setsid nohup bash wonderland/v2/tools/pass_chain.sh > ../run/pass.log 2>&1 &'
+WL_CAMS="0 8 9 10" WL_RES_X=1280 WL_RES_Y=720 bash wonderland/v2/tools/round.sh
 ```
 
-## NEXT VISUAL PASS — recorded only, not started
-
-**Render the vegetation pass** (already built) at HeroCam0 and hand the founder: the new render, before/after against `V2_FIRST_VISIBLE_APPROVED_FOUNDATION`, and new-vs-Marble. It is the first frame that will show the world in colour rather than the engine's grey checker. Nothing else may be changed until the founder judges it.
+`ship_v2.sh` now bundles incrementally by asking the Studio what commit it
+holds and proving locally that it is an ancestor — the full-branch bundle
+stopped fitting in a ten-minute upload once the reference art landed on the
+branch. `WL_STUDIO_FULL=1` forces the old behaviour.
 
 ## Permanent principles
 
-- Wonderland **V1 is archived / read-only** — never developed again; the write-guard (`tools/v1_guard.py`, pre-commit hook) stays.
-- Wonderland **V2 is the authoritative environment**; the canonical Marble panorama is its visual foundation.
-- **Marble designs, guides and may accelerate distant scenery; Unreal owns the playable world.** No raw Marble geometry in the player-facing foreground.
-- Never regress to V1's primitive/cartoonish asset language.
-- The founder-approved hero camera and composition are not casually redesigned.
-- Broad autonomy for bounded engineering; **supervised** autonomy for visuals.
-- Visual progress requires a **real Unreal render**. Offline traces, contact sheets and Python rasterisations are diagnostics, never acceptance.
-- One visual category at a time until the founder expands autonomy.
+- Wonderland **V1 is archived / read-only**; the write-guard stays.
+- **Marble designs and may accelerate distant scenery; Unreal owns the
+  playable world.** No raw Marble geometry in the player-facing foreground.
+- Visual progress requires a **real Unreal render**. Offline traces, contact
+  sheets and Python rasterisations are diagnostics, never acceptance.
+- The locked cameras are a **regression system**. Fix the world, not the
+  framing. A new area earns its own cameras once it has a real composition.
+- **Art and navigation together**: every environment pass keeps the routes
+  walkable, and clearance at a point proves nothing about the ground between
+  points — only a walk does.
