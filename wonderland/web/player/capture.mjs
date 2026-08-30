@@ -66,11 +66,27 @@ check('space opened the terminal',
       await page.evaluate(() => document.body.dataset.terminal === 'open'));
 check('and focus moved to the input',
       await page.evaluate(() => document.activeElement.id === 'wl-tm-input'));
-check('all four role sections are stacked',
-      (await page.$$eval('.wl-tmpanel-title', (n) => n.map((e) => e.textContent).join('|')))
-        === 'PROMPT ARCHITECT|CODING AGENT|INDEPENDENT REVIEWER|JULIUS');
+check('the three worker chips are there, in order',
+      (await page.$$eval('.wl-tm-role', (n) => n.map((e) => e.textContent.replace(/^\W+/, '')).join('|')))
+        === 'PROMPT ARCHITECT|CODING AGENT|INDEPENDENT REVIEWER');
+// THE SIZE THE FOUNDER ASKED FOR: 39.2% x 27.3% of the viewport, measured off
+// their reference frame. Checked as delivered pixels, not as the rule.
+const box = await page.$eval('.wl-tm-window', (e) => {
+  const r = e.getBoundingClientRect();
+  return { w: r.width / innerWidth, h: r.height / innerHeight,
+           bottom: (innerHeight - r.bottom) / innerHeight,
+           cx: (r.left + r.right) / 2 / innerWidth };
+});
+check(`the panel is ${(box.w * 100).toFixed(1)}% wide (target 39.2%)`,
+      Math.abs(box.w - 0.392) < 0.02 || box.w * 1280 <= 421, box);
+check(`and ${(box.h * 100).toFixed(1)}% tall (target 27.3%)`,
+      Math.abs(box.h - 0.273) < 0.02, box);
+check('bottom-centred', Math.abs(box.cx - 0.5) < 0.01 && Math.abs(box.bottom - 0.031) < 0.01, box);
+check('and the world is visible above it',
+      box.h < 0.45);
 check('the terminal is honest with no feed connected',
-      (await page.textContent('#wl-tm-live')).includes('NO AUTHORITATIVE FEED'));
+      (await page.textContent('#wl-tm-live')).includes('NO FEED')
+      && (await page.textContent('#wl-tm-stream')).includes('does not simulate'));
 
 // 3. TYPING -- the space character, three times, and the panel must not blink
 await page.keyboard.type('build a lantern walk along the north way');
@@ -108,8 +124,8 @@ await page.evaluate(() => window.wonderlandTerminal.connect('relay bridge', [
 await page.waitForTimeout(250);
 await shot('5_live');
 const body = await page.textContent('body');
-check('a connected feed reads LIVE', (await page.textContent('#wl-tm-live')).includes('LIVE'));
-check('orchestration is attributed to Julius', body.includes('Julius: Evidence recorded'));
+check('a connected feed reads LIVE', (await page.textContent('#wl-tm-live')).trim() === 'LIVE');
+check('orchestration is attributed to Julius', body.includes('JULIUS'));
 check('PRIVATE REASONING IS NOT ON SCREEN', !body.includes('PRIVATE REASONING'));
 
 // 6. THE STREAM PAGE. The one thing that can actually go wrong on Epic's
@@ -156,6 +172,23 @@ await sp.waitForTimeout(120);
 check('and W now reaches the game again',
       await sp.evaluate(() => window.wl_forwarded.includes('w')),
       await sp.evaluate(() => window.wl_forwarded));
+
+// 7. EXPANDED. The same panel and the same stream, larger -- not a second
+// design, and reachable without leaving the world.
+await page.click('#wl-tm-expand');
+await page.waitForTimeout(300);
+await shot('7_expanded');
+const big = await page.$eval('.wl-tm-window', (e) => {
+  const r = e.getBoundingClientRect();
+  return { w: r.width / innerWidth, h: r.height / innerHeight };
+});
+check('expand grows the panel', big.h > 0.5, big);
+check('and the same three chips are still there',
+      (await page.$$eval('.wl-tm-role', (n) => n.length)) === 3);
+await page.click('#wl-tm-expand');
+await page.waitForTimeout(300);
+const small = await page.$eval('.wl-tm-window', (e) => e.getBoundingClientRect().height / innerHeight);
+check('and it shrinks back to the HUD size', Math.abs(small - 0.273) < 0.02, small);
 
 await browser.close();
 server.close();

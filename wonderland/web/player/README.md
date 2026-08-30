@@ -2,7 +2,24 @@
 
 Wonderland is an AI creation platform wrapped in an open-world interface. This
 page is that wrapper: the streamed Unreal frame fills the viewport, and the
-**Live Terminal** — the founder-approved Sunday Relay panel — opens over it.
+**Live Terminal** opens over it as a HUD panel.
+
+## The size, and why it is a number
+
+Measured off the founder's reference frame (1672 × 941): **39.2% of the
+viewport wide, 27.3% tall, bottom-centred with a 3.1% margin**. Those fractions
+are in the stylesheet as written, with a 420 px floor — below that the log
+stops being readable, and a panel you cannot read is not a smaller panel.
+
+At that size a stacked section per role is four headers with no room for what
+they hold, so the reference's own arrangement applies: **three worker chips**
+(Prompt Architect, Coding Agent, Independent Reviewer) over **one flat stream**.
+Julius has no chip. It is the orchestration layer *above* those three and it
+speaks in the stream as a role, which states the hierarchy better than a fourth
+equal box beside them did.
+
+The expand control at the right of the input grows the same panel — same
+stream, same chips, more of it. Not a second design.
 
 ```
 SPACE   open the Live Terminal      (only when the world owns the keyboard)

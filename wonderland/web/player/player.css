@@ -64,8 +64,19 @@ html, body {
 body[data-terminal='open'] #wl-hint { opacity: 0; }
 
 /* -------------------------------------------------------------- terminal */
-/* A rectangle over the world, not a takeover: the world reads around all
-   four edges, and through the panel itself. */
+/* A HUD PANEL, NOT A TAKEOVER.
+   Measured off the founder's reference frame (1672 x 941): the panel is
+   39.2% of the viewport wide, 27.3% tall, bottom-centred with a 3.1% margin.
+   Those fractions are used directly so it holds its proportion at any size,
+   with a floor in pixels because below about 420 px the log stops being
+   readable and a panel you cannot read is not a smaller panel. */
+#wl-terminal {
+  position: fixed; inset: auto 0 3.1vh 0; display: none;
+  justify-content: center;
+  pointer-events: none;
+}
+body[data-terminal='open'] #wl-terminal { display: flex; }
+
 /* THE OVERLAY CARRIES ITS OWN TYPE.
    This stylesheet set the font on `html, body`, which is right on the
    standalone page and useless on Epic's: their <body> declares
@@ -78,132 +89,114 @@ body[data-terminal='open'] #wl-hint { opacity: 0; }
   font-family: var(--wl-mono);
   box-sizing: border-box;
 }
-#wl-terminal {
-  position: fixed; inset: 0; display: none;
-  align-items: center; justify-content: center;
-  padding: 2vh 3vw;
-  /* No full-screen scrim: dimming the whole frame would hide the world the
-     participant is standing in, and the world is the point. */
-  pointer-events: none;
-}
-body[data-terminal='open'] #wl-terminal { display: flex; }
 
 .wl-tm-window {
   pointer-events: auto;
-  width: min(1100px, 100%); max-height: 96vh;
+  width: max(420px, 39.2vw); max-width: calc(100vw - 24px);
+  height: max(190px, 27.3vh); max-height: calc(100vh - 48px);
   display: flex; flex-direction: column;
-  border: 1px solid var(--wl-line); border-radius: 14px;
-  background: rgba(11, 13, 18, 0.82);
-  backdrop-filter: blur(9px);
-  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.55);
-  padding: 0 22px 14px; overflow: hidden;
+  border: 1px solid var(--wl-gold-dim); border-radius: 10px;
+  background: rgba(11, 13, 18, 0.80);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 14px 44px rgba(0, 0, 0, 0.55);
+  padding: 0 14px 10px; overflow: hidden;
+  /* The type scales with the panel, which scales with the viewport. */
+  /* The reference sets its log at about 1.8% of the panel's width. Larger
+     than that and every line truncates; this is the density that fits. */
+  font-size: clamp(9px, 0.63vw, 12px);
+}
+/* Expanded: the same panel, more of the same stream. Not a second design. */
+body[data-terminal-size='max'] .wl-tm-window {
+  width: min(1100px, calc(100vw - 48px));
+  height: min(760px, calc(100vh - 64px));
+  font-size: clamp(11px, 0.85vw, 14px);
 }
 
 .wl-tm-titlebar {
   display: flex; align-items: center; justify-content: space-between;
-  gap: 12px; flex-wrap: wrap;
-  border-bottom: 1px solid var(--wl-line); padding: 12px 0 10px;
+  gap: 10px; border-bottom: 1px solid var(--wl-line); padding: 9px 0 8px;
+  flex: 0 0 auto;
 }
-.wl-tm-lights { display: inline-flex; align-items: center; gap: 8px; }
-.wl-tm-light { width: 12px; height: 12px; border-radius: 50%; display: inline-block; }
-.wl-tm-light--r { background: #d9564a; }
-.wl-tm-light--y { background: #e0b25c; }
-.wl-tm-light--g { background: #58b862; }
-.wl-tm-brand { font-size: 12px; letter-spacing: 0.28em; color: var(--wl-cream); }
-.wl-tm-chip {
-  font-size: 9px; letter-spacing: 0.16em; color: var(--wl-gold);
-  border: 1px solid var(--wl-gold-dim); padding: 3px 9px;
+.wl-tm-brand {
+  font-size: 1.08em; letter-spacing: 0.12em; color: var(--wl-gold); font-weight: 700;
 }
-
-.wl-tm-statusrow {
-  display: flex; align-items: center; justify-content: space-between;
-  gap: 12px; flex-wrap: wrap; padding: 9px 0 3px;
-}
-.wl-tm-left { display: inline-flex; align-items: center; gap: 14px; }
 .wl-tm-live {
-  font-size: 10px; letter-spacing: 0.16em; padding: 4px 10px;
-  border: 1px solid var(--wl-line); color: var(--wl-dim);
+  font-size: 0.85em; letter-spacing: 0.14em; color: var(--wl-dim);
+  display: inline-flex; align-items: center; gap: 7px;
 }
-.wl-tm-live--on { color: var(--wl-green); border-color: rgba(111, 191, 115, 0.5); }
-.wl-tm-mission { font-size: 11px; letter-spacing: 0.14em; color: var(--wl-cream); }
-.wl-tm-meta { display: inline-flex; gap: 18px; flex-wrap: wrap; font-size: 11px; }
-.wl-tm-metakey { color: var(--wl-gold); letter-spacing: 0.1em; }
+.wl-tm-live::after {
+  content: ''; width: 8px; height: 8px; border-radius: 50%;
+  background: var(--wl-faint);
+}
+.wl-tm-live--on { color: var(--wl-cream); }
+.wl-tm-live--on::after { background: var(--wl-green); box-shadow: 0 0 6px var(--wl-green); }
 
-/* Stacked role sections -- one per role, in order. Not tabs, not columns. */
-.wl-tm-panels {
-  display: flex; flex-direction: column; gap: 8px; padding: 5px 0;
-  overflow-y: auto; min-height: 0;
+/* THE THREE WORKERS, AND ONLY THE WORKERS.
+   Julius has no chip. It is the orchestration layer ABOVE these three and it
+   speaks in the stream as a role -- which says the hierarchy better than a
+   fourth equal box beside them ever did. */
+.wl-tm-roles {
+  display: flex; gap: 8px; padding: 8px 0 6px; flex: 0 0 auto; flex-wrap: wrap;
 }
-.wl-tmpanel {
-  border: 1px solid var(--wl-gold-dim); border-radius: 8px;
-  background: rgba(11, 13, 18, 0.45);
+.wl-tm-role {
+  display: inline-flex; align-items: center; gap: 7px;
+  border: 1px solid var(--wl-line); border-radius: 5px;
+  padding: 4px 9px 4px 5px;
+  font-size: 0.85em; letter-spacing: 0.1em; color: var(--wl-dim);
 }
-.wl-tmpanel-head {
-  display: flex; align-items: baseline; justify-content: space-between;
-  gap: 10px; flex-wrap: wrap;
-  padding: 8px 16px; border-bottom: 1px solid var(--wl-line);
+.wl-tm-role-glyph {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 1.5em; height: 1.5em; border: 1px solid var(--wl-line); border-radius: 3px;
+  font-size: 0.9em; color: var(--wl-faint);
 }
-.wl-tmpanel-title {
-  font-size: 12px; font-weight: 700; letter-spacing: 0.2em; color: var(--wl-gold);
-}
-.wl-tmpanel-status { font-size: 10px; letter-spacing: 0.18em; color: var(--wl-gold); }
-.wl-tmpanel-feed { list-style: none; margin: 0; padding: 4px 16px 8px; }
-.wl-tmpanel-empty {
-  margin: 0; padding: 8px 16px 10px; font-size: 11px; color: var(--wl-faint);
-}
+.wl-tm-role--active { color: var(--wl-gold); border-color: var(--wl-gold-dim); }
+.wl-tm-role--active .wl-tm-role-glyph { color: var(--wl-gold); border-color: var(--wl-gold-dim); }
 
+/* One flat stream. At this size a stacked section per role is four headers
+   and no room for what they would hold. */
+.wl-tm-stream {
+  list-style: none; margin: 0; padding: 2px 0 0;
+  flex: 1 1 auto; min-height: 0; overflow-y: auto;
+  line-height: 1.65;
+}
+.wl-tm-stream::-webkit-scrollbar { width: 6px; }
+.wl-tm-stream::-webkit-scrollbar-thumb { background: var(--wl-line); border-radius: 3px; }
 .wl-tmrow {
-  position: relative; display: flex; gap: 12px; align-items: baseline; padding: 5px 0;
+  display: flex; gap: 0.7em; align-items: baseline;
+  white-space: nowrap; overflow: hidden;
 }
-.wl-tmrow::before {
-  content: ''; position: absolute; left: 4px; top: 26px; bottom: -4px;
-  width: 1px; background: rgba(217, 164, 65, 0.16);
-}
-.wl-tmrow:last-child::before { display: none; }
-.wl-tmrow-square { color: var(--wl-gold); font-size: 9px; flex: 0 0 auto; }
-.wl-tmrow--done .wl-tmrow-square,
-.wl-tmrow--evidence .wl-tmrow-square { color: var(--wl-green); }
-.wl-tmrow-time { color: var(--wl-faint); font-size: 11px; min-width: 62px; }
-.wl-tmrow-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.wl-tmrow-headline { margin: 0; font-size: 13px; color: var(--wl-cream); overflow-wrap: anywhere; }
-.wl-tmrow--done .wl-tmrow-headline,
-.wl-tmrow--evidence .wl-tmrow-headline { color: var(--wl-green); }
-.wl-tmrow-role { color: var(--wl-gold); }
-.wl-tmrow-detail { margin: 0; font-size: 11px; color: var(--wl-dim); overflow-wrap: anywhere; }
-.wl-tmrow-op {
-  font-size: 10px; letter-spacing: 0.08em; color: var(--wl-gold);
-  flex: 0 0 auto; max-width: 40%; text-align: right;
-}
+.wl-tmrow-role { color: var(--wl-gold); letter-spacing: 0.08em; flex: 0 0 auto; }
+.wl-tmrow-tag { color: var(--wl-cyan); flex: 0 0 auto; }
+.wl-tmrow--done .wl-tmrow-tag, .wl-tmrow--evidence .wl-tmrow-tag { color: var(--wl-green); }
+.wl-tmrow-time { color: var(--wl-faint); flex: 0 0 auto; }
+.wl-tmrow-msg { color: var(--wl-cream); overflow: hidden; text-overflow: ellipsis; }
+.wl-tmrow--done .wl-tmrow-msg, .wl-tmrow--evidence .wl-tmrow-msg { color: var(--wl-green); }
+.wl-tm-empty { margin: 0; padding: 6px 0; color: var(--wl-faint); }
 
 .wl-tm-input {
-  display: flex; align-items: center; gap: 10px;
-  border: 1px solid var(--wl-gold-dim); border-radius: 8px;
-  padding: 5px 5px 5px 14px; margin: 7px 0 9px;
+  display: flex; align-items: center; gap: 8px;
+  border-top: 1px solid var(--wl-line); padding: 8px 0 0; margin-top: 6px;
+  flex: 0 0 auto;
 }
-.wl-tm-prompt { color: var(--wl-gold); letter-spacing: 0.06em; }
+.wl-tm-prompt { color: var(--wl-gold); letter-spacing: 0.06em; flex: 0 0 auto; }
 .wl-tm-input input {
   flex: 1; min-width: 0; background: transparent; color: var(--wl-cream);
-  border: 0; font-family: var(--wl-mono); font-size: 13px; padding: 8px 0;
+  border: 0; font-size: 1em; padding: 3px 0;
 }
-.wl-tm-input input:focus-visible { outline: 2px solid var(--wl-gold); outline-offset: 1px; }
-.wl-tm-send {
-  font-family: var(--wl-mono); font-size: 10px; letter-spacing: 0.14em;
-  color: var(--wl-gold); background: transparent;
-  border: 1px solid var(--wl-gold-dim); border-radius: 6px;
-  padding: 8px 12px; cursor: pointer;
+.wl-tm-input input:focus-visible { outline: 1px solid var(--wl-gold-dim); outline-offset: 3px; }
+.wl-tm-expand {
+  flex: 0 0 auto; font-size: 1em; line-height: 1;
+  color: var(--wl-faint); background: transparent;
+  border: 1px solid var(--wl-line); border-radius: 4px;
+  padding: 3px 6px; cursor: pointer;
 }
-.wl-tm-send:hover, .wl-tm-send:focus-visible { color: var(--wl-cream); border-color: var(--wl-gold); }
-
-.wl-tm-footer {
-  display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap;
-  border-top: 1px solid var(--wl-line); padding-top: 8px;
-  font-size: 10px; letter-spacing: 0.1em; color: var(--wl-faint);
+.wl-tm-expand:hover, .wl-tm-expand:focus-visible {
+  color: var(--wl-gold); border-color: var(--wl-gold-dim);
 }
 
 @media (max-width: 720px) {
-  .wl-tm-window { padding: 0 14px 12px; max-height: 96vh; }
-  .wl-tmrow { flex-wrap: wrap; }
-  .wl-tmrow-op { max-width: 100%; text-align: left; }
+  .wl-tm-window { width: calc(100vw - 16px); height: min(46vh, 320px); padding: 0 10px 8px; }
+  .wl-tm-roles { gap: 6px; }
 }
 @media (prefers-reduced-motion: reduce) {
   #wl-hint { transition: none; }

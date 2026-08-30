@@ -12,34 +12,17 @@ import { install, setWorld } from './terminal.js';
 
 const SECTION_MARKUP = `
   <div class="wl-tm-titlebar">
-    <span class="wl-tm-lights">
-      <span class="wl-tm-light wl-tm-light--r"></span>
-      <span class="wl-tm-light wl-tm-light--y"></span>
-      <span class="wl-tm-light wl-tm-light--g"></span>
-    </span>
-    <span class="wl-tm-brand">SUNDAY RELAY</span>
-    <span class="wl-tm-chip">RLY</span>
+    <span class="wl-tm-brand">RELAY AGENT LIVE TERMINAL</span>
+    <span id="wl-tm-live" class="wl-tm-live">NO FEED</span>
   </div>
-  <div class="wl-tm-statusrow">
-    <span class="wl-tm-left">
-      <span id="wl-tm-live" class="wl-tm-live">○ NO AUTHORITATIVE FEED CONNECTED</span>
-      <span class="wl-tm-mission">WONDERLAND</span>
-    </span>
-    <span class="wl-tm-meta">
-      <span><span class="wl-tm-metakey">WORLD</span> DISTRICTS</span>
-      <span><span class="wl-tm-metakey">ESC</span> RETURN TO WORLD</span>
-    </span>
-  </div>
-  <div id="wl-tm-panels" class="wl-tm-panels"></div>
+  <div id="wl-tm-roles" class="wl-tm-roles"></div>
+  <ul id="wl-tm-stream" class="wl-tm-stream"></ul>
   <div class="wl-tm-input">
     <span class="wl-tm-prompt">&gt;_</span>
     <input id="wl-tm-input" type="text" autocomplete="off" spellcheck="false"
-           aria-label="Ask Relay" placeholder="Ask Relay">
-    <button id="wl-tm-send" class="wl-tm-send" type="button">↵ SEND</button>
-  </div>
-  <div class="wl-tm-footer">
-    <span id="wl-tm-note"></span>
-    <span>JULIUS ORCHESTRATES · WORKERS EXECUTE · RELAY VERIFIES</span>
+           aria-label="Ask Relay" placeholder="">
+    <button id="wl-tm-expand" class="wl-tm-expand" type="button"
+            aria-label="Expand the terminal" title="Expand">&#9707;</button>
   </div>`;
 
 /**
