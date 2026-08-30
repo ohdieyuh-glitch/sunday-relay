@@ -8,6 +8,8 @@ import { configPermissions, configLimits, configEnum, patchConfig, EDITOR_LIMITS
 import type { listPsps, loadPsp, savePsp } from './psp-client';
 import type { LiveMissionUpdate } from './contracts';
 import { RELAY_EXECUTION_MODES, RELAY_REVIEW_REQUIREMENTS } from '../../mission/mission-config';
+import { AGENT_OPTIONS } from '../project-settings';
+import { parseCardRef } from '../relay-experience';
 
 /**
  * RUN A MISSION — the surface a signed-in beta user starts, watches, and ships a
@@ -30,7 +32,11 @@ const TERMINAL = new Set(['verified_complete', 'failed', 'cancelled']);
  * per-role actor/model is shown live from the bridge once the Mission runs).
  */
 function roleOccupantLabel(selector: unknown): string {
-  return typeof selector === 'string' && selector.trim() !== '' ? selector : 'deployment default';
+  if (typeof selector !== 'string' || selector.trim() === '') return 'deployment default';
+  // A C.A.R.D. records the product catalogue's ids; show the participant the
+  // name they chose, and any other selector exactly as it was requested.
+  const option = AGENT_OPTIONS.find((o) => o.id === selector);
+  return option !== undefined ? `${option.name} (${selector})` : selector;
 }
 
 export function RelayMissionRunner({
@@ -39,6 +45,9 @@ export function RelayMissionRunner({
   config,
   configLabel,
   onReconfigure,
+  onNewCard,
+  onNewAgent,
+  requestNotes,
   bridgeUrl,
   startImpl = startBetaMission,
   pollImpl = pollBetaMission,
@@ -54,15 +63,23 @@ export function RelayMissionRunner({
   readonly repositoryKey: string;
   readonly workingBranch?: string;
   readonly config?: unknown;
-  /** A truthful display name for `config` — "Your configured Agent" when the
-   *  participant configured it before Start Building, or the default's name.
-   *  Display only; the engine acts on `config`, never this. */
+  /** A truthful display name for `config` — the C.A.R.D.'s name and revision
+   *  ("C.A.R.D. Caesar · revision 3") from the caller that projected it. Display
+   *  only; the engine acts on `config`, never this. */
   readonly configLabel?: string;
-  /** Open the dedicated Configure surface (founder rules B/C). Reached from BOTH
-   *  the fail-closed state ("Configure Agent", when no valid Agent exists) and the
-   *  returning-user idle form ("Reconfigure Agent"). The runner never authors the
-   *  Agent inline — it hands off to the Configure surface and consumes the result. */
+  /** Open the dedicated edit surface (founder rules B/C). Reached from BOTH the
+   *  fail-closed state ("Configure C.A.R.D.") and the idle form ("Edit C.A.R.D.").
+   *  The runner never authors the C.A.R.D. inline — it hands off and consumes
+   *  the result. */
   readonly onReconfigure?: () => void;
+  /** EXPLICIT re-configuration paths (founder rules): a new C.A.R.D. for the same
+   *  Compound Agent, or a new Compound Agent. Offered only when the caller can
+   *  route them — the live journey routes both into the world. */
+  readonly onNewCard?: () => void;
+  readonly onNewAgent?: () => void;
+  /** Disclosures the caller wants shown beside the requested view — e.g. the
+   *  C.A.R.D. values this request cannot carry. Never invented here. */
+  readonly requestNotes?: readonly string[];
   readonly bridgeUrl?: string | null;
   readonly startImpl?: typeof startBetaMission;
   readonly pollImpl?: typeof pollBetaMission;
@@ -88,9 +105,21 @@ export function RelayMissionRunner({
   // live.
   const hasValidAgent = activeConfig !== null && typeof activeConfig === 'object'
     && !Array.isArray(activeConfig) && Object.keys(activeConfig as object).length > 0;
-  // Seeded truthfully from the caller: a rehydrated custom Agent must NOT read as
-  // "Default beta configuration". The PSP picker's onSelect overrides it on load.
+  // Seeded truthfully from the caller: a rehydrated C.A.R.D. must NOT read as
+  // "Default beta configuration". The profile picker's onSelect overrides it on load.
   const [activeLabel, setActiveLabel] = useState(configLabel ?? 'Default beta configuration');
+  // THE C.A.R.D. MOVED — FOLLOW IT. When the caller hands a different projection
+  // (the record was edited, reloaded, or replaced) the runner takes it, so a
+  // Mission can never start under a config the participant has since changed.
+  // A profile merged onto the previous projection is dropped with it: it was
+  // merged onto a C.A.R.D. that no longer exists in that form.
+  useEffect(() => {
+    setActiveConfig(config);
+    if (configLabel !== undefined) setActiveLabel(configLabel);
+    // A Mission Contract opened for the previous projection's permissions is
+    // not a contract for this one.
+    setContractShown(false);
+  }, [config, configLabel]);
   // Whether the high-consequence Mission Contract is being shown for confirmation.
   const [contractShown, setContractShown] = useState(false);
   // Reconnect: a refresh restores the mission last started on this repository,
@@ -216,33 +245,34 @@ export function RelayMissionRunner({
   }, [missionId, bridgeUrl, cancelImpl]);
 
   if (missionId === null) {
-    // FAIL-CLOSED (founder rule A): a signed-in participant whose session was
-    // restored but who has NO valid Agent may NOT start a Mission. We do not
-    // default one. Instead we withhold Start Mission entirely and offer the two
-    // ways to obtain a real Agent: configure one (the dedicated Configure surface,
-    // via onReconfigure) or load a saved PSP (which patchConfig turns into the
-    // Agent, lifting this gate). Start Mission is unreachable until then.
+    // FAIL-CLOSED (founder rule A): a caller that hands the runner NO valid
+    // C.A.R.D. projection gets no Start Mission. We do not default one. The two
+    // ways out are the caller's edit surface (onReconfigure) and loading a saved
+    // profile (which patchConfig turns into the request, lifting this gate).
+    // (The live entry itself never lands here with a signed-in participant: it
+    // routes anyone without an activated C.A.R.D. to the world first.)
     if (!hasValidAgent) {
       return (
         <>
         <div className="relay-mission-runner" data-state="no-agent">
           <h2>Start a Mission on <code>{repositoryKey}</code></h2>
           <p className="relay-mission-runner__no-agent" role="alert">
-            No Compound PSP Agent is configured. Configure your Agent or load a saved PSP to start a Mission.
+            No C.A.R.D. is active for this Compound Agent. Configure your C.A.R.D. or load a saved profile to
+            start a Mission.
           </p>
           {onReconfigure !== undefined && (
             <button type="button" className="relay-mission-runner__configure" onClick={onReconfigure}>
-              Configure Agent
+              Configure C.A.R.D.
             </button>
           )}
-          {/* Load Saved PSP: selecting a REAL saved profile patches it onto the
+          {/* Load a saved profile: selecting a REAL saved profile patches it onto the
               (null) base and yields a valid Agent, lifting the fail-closed gate.
               The empty/default option never fires on mount and patches to a bare
               {}, which is NOT a valid Agent — so no Agent is silently conjured. */}
           <RelayPspPicker
             bridgeUrl={bridgeUrl}
             defaultConfig={config}
-            defaultLabel="No Agent configured"
+            defaultLabel="No C.A.R.D. active"
             activeConfig={activeConfig}
             // Load-only in the fail-closed state: there is no configured Agent to
             // save, so the picker offers only LOAD (which supplies the Agent).
@@ -285,13 +315,19 @@ export function RelayMissionRunner({
       <form className="relay-mission-runner" data-state="idle" onSubmit={onStartSubmit}>
         <h2>Start a Mission on <code>{repositoryKey}</code></h2>
         <RelayPspPicker
+          // The blank option IS the C.A.R.D. — named as such, never as a default —
+          // and a new projection resets the selection along with it.
+          key={configLabel ?? 'default'}
           bridgeUrl={bridgeUrl}
           defaultConfig={config}
+          defaultLabel={configLabel ?? 'Default beta configuration'}
           activeConfig={activeConfig}
-          // MERGE the loaded profile onto the pre-configured Agent, never REPLACE
-          // it: loading a saved PSP overrides only the fields it names, so the
-          // Agent configured before this repository was connected (its roles,
-          // its ceilings, any pre-set field the profile is silent on) survives.
+          // MERGE the loaded profile onto the C.A.R.D. projection rather than
+          // replacing the object: a validated saved profile names EVERY request
+          // field, so loading one is an explicit per-Mission override of what
+          // the request carries (roles, policy, ceilings, permissions); the
+          // C.A.R.D. record itself is untouched, and the request's provenance
+          // becomes the profile's own id.
           onSelect={(c, label) => { setActiveConfig(patchConfig(config, c as Record<string, unknown>)); setActiveLabel(label); }}
           {...(pspListImpl !== undefined ? { listImpl: pspListImpl } : {})}
           {...(pspLoadImpl !== undefined ? { loadImpl: pspLoadImpl } : {})}
@@ -301,24 +337,36 @@ export function RelayMissionRunner({
         {/* RETURNING USER (founder rule B/C): reconfigure the Agent without being
             forced back through sign-in. It hands off to the dedicated Configure
             surface — the runner never authors the Agent inline — and returns here
-            with the updated Agent rehydrated. Sits alongside the Load-Saved-PSP
-            picker as the second way to change the active Agent. */}
+            with the updated C.A.R.D. rehydrated. Sits alongside the saved-profile
+            picker as the second way to change what the next Mission requests. */}
         {onReconfigure !== undefined && (
           <button type="button" className="relay-mission-runner__reconfigure" onClick={onReconfigure}>
-            Reconfigure Agent
+            Edit C.A.R.D.
+          </button>
+        )}
+        {/* The two OTHER explicit re-configuration paths, when the caller can
+            route them. Neither is ever taken on the participant's behalf. */}
+        {onNewCard !== undefined && (
+          <button type="button" className="relay-mission-runner__new-card" onClick={onNewCard}>
+            New C.A.R.D.
+          </button>
+        )}
+        {onNewAgent !== undefined && (
+          <button type="button" className="relay-mission-runner__new-agent" onClick={onNewAgent}>
+            New Compound Agent
           </button>
         )}
 
-        {/* THE CONFIGURED COMPOUND PSP AGENT (REQUESTED) — read only. This is the
-            Agent the participant configured BEFORE connecting this repository,
+        {/* THE ACTIVE C.A.R.D. (REQUESTED) — read only. This is the C.A.R.D. the
+            participant configured BEFORE connecting this repository,
             carried here unchanged (invariant 7): its roles, its policy, its
             ceilings. It is a REQUEST, kept deliberately DISTINCT from the
             authoritative "permissions held" / served-model view the running
             Mission shows from the bridge (criteria 10, 15) — the two are
-            different truth classes and must never read as equal. Editing lives in
-            the earlier Configure step; the runner only consumes. */}
-        <section className="relay-mission-runner__agent" aria-label="Configured Compound PSP Agent">
-          <h3>Configured Compound PSP Agent (requested)</h3>
+            different truth classes and must never read as equal. Editing lives on
+            the dedicated edit surface (Edit C.A.R.D.); the runner only consumes. */}
+        <section className="relay-mission-runner__agent" aria-label="Active C.A.R.D.">
+          <h3>Active C.A.R.D. (requested)</h3>
           <p className="relay-mission-runner__agent-note">
             What you configured before connecting this repository — a request, not a claim. The
             authority actually HELD and the model actually SERVED are shown from the bridge once
@@ -330,15 +378,21 @@ export function RelayMissionRunner({
             <li>Independent Reviewer: <strong>{roleOccupantLabel(agentRoles.reviewer)}</strong></li>
             <li>Relay: <strong>orchestrates the Mission</strong></li>
           </ul>
-          {/* PSP identity/version (founder rule D) — shown only when the config
-              actually carries a non-empty pspId. Never fabricated: a config with no
-              PSP identity omits this line rather than inventing "none" as a fact. */}
+          {/* Profile identity/version (founder rule D) — the C.A.R.D. revision the
+              projection stamped, or a loaded saved profile's id — shown only when the
+              config actually carries a non-empty pspId. Never fabricated: a config
+              with no identity omits this line rather than inventing "none" as a fact. */}
           {(() => {
             const pspId = (activeConfig as { pspId?: unknown } | null)?.pspId;
-            return typeof pspId === 'string' && pspId.trim() !== ''
-              ? <p className="relay-mission-runner__agent-psp">PSP: <strong>{pspId}</strong></p>
-              : null;
+            if (typeof pspId !== 'string' || pspId.trim() === '') return null;
+            const ref = parseCardRef(pspId);
+            return ref !== null
+              ? <p className="relay-mission-runner__agent-psp">Provenance: <strong>revision {ref.revision} of your C.A.R.D.</strong></p>
+              : <p className="relay-mission-runner__agent-psp">Profile: <strong>{pspId}</strong></p>;
           })()}
+          {requestNotes?.map((note) => (
+            <p key={note} className="relay-mission-runner__agent-not-carried">{note}</p>
+          ))}
           <p className="relay-mission-runner__agent-policy">
             Execution mode: <strong>{configEnum(activeConfig, 'mode', RELAY_EXECUTION_MODES, 'guided')}</strong>
             {' · '}Review requirement: <strong>{configEnum(activeConfig, 'review', RELAY_REVIEW_REQUIREMENTS, 'independent')}</strong>

@@ -4,15 +4,15 @@ import { RELAY_EXECUTION_MODES, RELAY_REVIEW_REQUIREMENTS } from '../../mission/
 import { REPOSITORY_PERMISSIONS, type RepositoryPermission } from '../../mission/repository-target';
 
 /**
- * CONFIGURE THE COMPOUND PSP AGENT — the PURE, session-free editor for what a
+ * THE C.A.R.D.'S EXECUTION BOUNDARIES — the PURE, session-free editor for what a
  * Mission will REQUEST: the repository permissions, the spend/compute ceilings,
  * and the execution/review policy.
  *
  * It is a CONTROLLED component: it renders from the {@link config} it is handed
  * and proposes every change back through {@link onChange} — it holds no config of
  * its own, opens no socket, reaches no bridge and touches no storage. That purity
- * is what lets it live BEFORE sign-in (the pre-Start-Building Configure step) and
- * ALSO compose inside a signed-in surface, from the same source.
+ * is what lets the C.A.R.D.'s edit surface (`RelayConfigureAgent`) compose it
+ * over the record's projection, and would let any other surface do the same.
  *
  * Every truthfulness rule the run request depends on is enforced here: a cleared
  * ceiling becomes `null` = "not set" (never coerced to `0` or "unlimited"), a
@@ -59,8 +59,8 @@ export function configEnum<T extends string>(config: unknown, key: string, allow
 
 /**
  * Produce the next config by patching the current one. Every unrelated field is
- * preserved (a loaded PSP's `pspId`, `roles`, `completionRule`…), so the
- * field-level editor and a PSP picker COMPOSE — pick a profile, then tweak —
+ * preserved (a loaded profile's `pspId`, `roles`, `completionRule`…), so the
+ * field-level editor and the profile picker COMPOSE — pick a profile, then tweak —
  * rather than one clobbering the other.
  */
 export function patchConfig(config: unknown, patch: Record<string, unknown>): Record<string, unknown> {
@@ -78,20 +78,26 @@ export const EDITOR_LIMITS = [
   { field: 'repairCycles', label: 'Repair cycles', step: '1' },
 ] as const;
 
-/** The base label an untouched config carries until the user diverges it. */
+/** The base label an untouched config carries until the user diverges it. The
+ *  caller's own label (e.g. the C.A.R.D.'s name and revision) is what the user
+ *  sees until then; this only names what an EDITED config diverged from. */
 const BASE_LABEL = 'Default beta configuration';
 
 export function RelayAgentConfigEditor({
   config,
   onChange,
+  baseLabel = BASE_LABEL,
 }: {
   readonly config: unknown;
   readonly onChange: (nextConfig: unknown, label: string) => void;
+  /** What the config was BEFORE any edit here — a C.A.R.D.'s name and revision,
+   *  or a loaded profile's name — so an edit reads "Custom (from <that>)". */
+  readonly baseLabel?: string;
 }) {
   // Editing here diverges the config from any named profile, so the label must
   // stop claiming that profile's name — the config is now customised. This is
   // display-only truthfulness; the config is what the engine acts on.
-  const [label, setLabel] = useState(BASE_LABEL);
+  const [label, setLabel] = useState(baseLabel);
   const nextLabel = () => (label.startsWith('Custom') ? label : `Custom (from ${label})`);
   const emit = (nextConfig: Record<string, unknown>) => {
     const relabelled = nextLabel();
@@ -127,7 +133,7 @@ export function RelayAgentConfigEditor({
 
   return (
     <fieldset className="relay-agent-config-editor">
-      <legend>Configure the Compound PSP Agent</legend>
+      <legend>C.A.R.D. — execution boundaries</legend>
 
       <div className="relay-agent-config-editor__perms" role="group" aria-label="Permissions to request">
         <p className="relay-agent-config-editor__heading">Permissions to request</p>

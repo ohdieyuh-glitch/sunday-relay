@@ -44,7 +44,7 @@ describe('RelayPspPicker', () => {
     );
     // The saved profiles appear as options.
     await waitFor(() => expect(screen.getByRole('option', { name: /Careful/i })).toBeTruthy());
-    fireEvent.change(screen.getByLabelText(/Configuration \(PSP\)/i), { target: { value: 'careful' } });
+    fireEvent.change(screen.getByLabelText(/Saved profile/i), { target: { value: 'careful' } });
     await waitFor(() => expect(load).toHaveBeenCalledTimes(1));
     // The loaded config — not an invented one — flows to the caller.
     expect(selected.at(-1)?.label).toBe('Careful');
@@ -65,7 +65,7 @@ describe('RelayPspPicker', () => {
         loadImpl={vi.fn<typeof loadPsp>(async ({ pspId }) => ({ ok: true, pspId, name: 'Fast lane', config: { from: pspId }, message: null }))}
       />,
     );
-    const select = await screen.findByLabelText(/Configuration \(PSP\)/i);
+    const select = await screen.findByLabelText(/Saved profile/i);
     fireEvent.change(select, { target: { value: 'fast' } });
     await waitFor(() => expect(selected.at(-1)?.label).toBe('Fast lane'));
     fireEvent.change(select, { target: { value: '' } });
@@ -87,11 +87,14 @@ describe('RelayPspPicker', () => {
       />,
     );
     fireEvent.change(await screen.findByLabelText(/New profile name/i), { target: { value: 'Careful & Slow!' } });
-    fireEvent.click(screen.getByRole('button', { name: /Save as PSP/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Save as profile/i }));
     await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
     // The active config is what's persisted, under a route-legal id.
     expect(save.mock.calls[0][0].pspId).toBe('careful-slow');
     expect((save.mock.calls[0][0].config as { tag?: string }).tag).toBe('active');
+    // A saved profile's provenance is ITSELF — never the C.A.R.D. reference the
+    // active projection carried when it was saved.
+    expect((save.mock.calls[0][0].config as { pspId?: string }).pspId).toBe('careful-slow');
     await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/Saved/i));
     // Re-listed after the save (mount + post-save).
     expect(list.mock.calls.length).toBeGreaterThanOrEqual(2);
@@ -99,7 +102,7 @@ describe('RelayPspPicker', () => {
 
   it('states a load refusal in the bridge’s words and does not invent a config', async () => {
     const selected: unknown[] = [];
-    const load = vi.fn<typeof loadPsp>(async () => ({ ok: false, pspId: null, name: null, config: null, message: 'No such PSP.' }));
+    const load = vi.fn<typeof loadPsp>(async () => ({ ok: false, pspId: null, name: null, config: null, message: 'No such profile.' }));
     render(
       <RelayPspPicker
         bridgeUrl={BRIDGE}
@@ -110,8 +113,8 @@ describe('RelayPspPicker', () => {
         loadImpl={load}
       />,
     );
-    fireEvent.change(await screen.findByLabelText(/Configuration \(PSP\)/i), { target: { value: 'fast' } });
-    await waitFor(() => expect(screen.getByRole('status').textContent).toBe('No such PSP.'));
+    fireEvent.change(await screen.findByLabelText(/Saved profile/i), { target: { value: 'fast' } });
+    await waitFor(() => expect(screen.getByRole('status').textContent).toBe('No such profile.'));
     // No config was handed out for a load that failed.
     expect(selected).toEqual([]);
   });
@@ -129,7 +132,7 @@ describe('RelayPspPicker', () => {
       />,
     );
     fireEvent.change(await screen.findByLabelText(/New profile name/i), { target: { value: '!!!' } });
-    fireEvent.click(screen.getByRole('button', { name: /Save as PSP/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Save as profile/i }));
     await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/letters or numbers/i));
     expect(save).not.toHaveBeenCalled();
   });
