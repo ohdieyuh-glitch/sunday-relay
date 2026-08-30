@@ -524,3 +524,67 @@ measuring an **empty world** because it was the only launcher never forwarding
 `WL_MAP_ARG`; every frame rate it has reported for V2 is void, and it now
 prints the world it measured. `WLV2_REUSE_MATERIALS=1` skips a ~5-minute
 shader recompile on passes that only move actors.
+
+## PASS 12–15 — the foreground, three ways wrong, and the colour nobody checked
+
+FlankLeftCam08 showed the same ground wrong three times running, one failure
+per build, and each fix caused the next:
+
+1. **Bare** — the planting was under the lens (nearer than
+   `eye_z / tan(-(pitch - vfov/2))`, so outside the picture entirely).
+2. **Polka dots** — moved into frame but laid on an even 9 × 3 grid, which
+   reads as isolated objects on a lawn. Massed into clumps.
+3. **A wall** — massed at s 0.82–0.96 five metres from a 2.65 m eye, so a bank
+   of foliage filled the bottom 45% and hid the garden. Dropped to knee height
+   at the front, mass kept for 9–12 m.
+
+And `camera_framing.py` caught a fourth inside fix 2 that no render would have
+attributed correctly: **at 90° horizontal fov the visible half-width equals
+the depth**, so clumps spread 30 m off-axis at 8 m out were not in the picture
+at all. The tool reported the near-band count going *down* after adding
+planting, which is not a thing an eye notices.
+
+Then `gap_v2` on the result, against the founder reference:
+
+| | ours | reference | |
+|---|---|---|---|
+| green arc | 25.6% | 4.8% | **5.3×** |
+| rose arc | 1.8% | 6.8% | **0.26×** |
+| foreground p50 | 61 | 151 | **0.40×** |
+
+**Three passes went to how MUCH planting there is and none to what colour it
+is.** Being right about the massing three times running does not make the mass
+the right colour. Every other piece in the near clumps and mid band now
+carries a petal colour; the greens include a lighter tone.
+
+### The flank walk, and why the straight line was the wrong question
+
+A straight paved spine does not fit either flank — best clearance −33 uu
+against the 150 a 3 m walk needs. That is a fact about **straight lines**.
+Asked instead for the route a walker takes, both flanks first answered in
+twenty waypoints out to x = 1,500 and back down the main approach: **they were
+cul-de-sacs**, and nothing had said so because every destination inside them
+was individually reachable — from the middle of the world, by walking round.
+
+The pinch was 142 uu between the rose border and a pre-existing hedge mass,
+70 uu once the Dog's capsule comes off both sides. A gap in the border
+opposite it — ordinary garden language, two pieces — and both flanks answer in
+seven waypoints that stay inside. Those waypoints are now paved, derived
+rather than designed, with the regenerating command in the comment.
+
+### Two flat quads
+
+The flanks were authored with no `garden_lawn` under them, so an entire
+district stood on the moss terrain slab: one flat quad, one flat tone. And
+that slab's edge showed at frame right on SkylineCam06 at ±600 m, inside the
+distance this fog still carries. Lawn meshes added; slab to ±1,500 m.
+
+### Standing after this stretch
+
+~1,500 placements against 787 at PASS 08. Flank density 1 per 178 m² → 1 per
+41. Eleven cameras, the original eight unmoved. **0 of 18 named destinations
+unreachable.** Generate down from ~15 min to ~6 with `WLV2_REUSE_MATERIALS=1`.
+
+Open, in order: the rose share is still the largest measured gap (the bloom
+pass is unrendered); the ground between garden rooms; and whether the flanks
+need their own camera-suite checkpoint once the founder has judged them.
