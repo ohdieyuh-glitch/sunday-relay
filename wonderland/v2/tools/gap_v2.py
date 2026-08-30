@@ -21,6 +21,15 @@ frame reads as the reference world:
               spread of 16x16 tile means inside the foreground band. A
               repeated prototype slab scores near zero however detailed one
               slab is.
+  span        p10..p90 luminance span of the foreground band, in sRGB
+              levels. This is the metric that redirected PASS 08: the walking
+              surface measured 44 against the reference's 119, i.e. 2.7x less
+              tonal range, which is what makes fitted masonry read as one
+              poured sheet. It is a larger defect than the brightness the
+              carried gap list named, and a band mean cannot see it.
+  clip        share of pixels above sRGB 240. Distinguishes "over-exposed"
+              from "unshaded" -- PASS 07 was 0.01% here, so it was never
+              blown out; it simply had no shadows.
   gridness    fraction of edge energy lying within 12 deg of the two
               dominant edge orientations. A modular grid concentrates;
               authored stonework spreads.
@@ -171,6 +180,18 @@ def analyse(raw, w=W, h=H):
             cloud += 1
     cloud_frac = cloud / float(len(sky_px)) if sky_px else 0.0
 
+    # ---- foreground tonal span, and clipping ----------------------------
+    fg = []
+    for y in range(3 * h // 4, h):
+        for x in range(w):
+            r, g, b = px(x, y)
+            fg.append((r + g + b) / 3.0)
+    fg.sort()
+    span = (fg[int(len(fg) * 0.90)] - fg[int(len(fg) * 0.10)]) if fg else 0.0
+    fg_p50 = fg[len(fg) // 2] if fg else 0.0
+    clip = sum(1 for y in range(h) for x in range(w)
+               if sum(px(x, y)) / 3.0 > 240) / float(w * h)
+
     # ---- ground variation: spread of 16x16 tile means in the bottom band --
     tiles = []
     for ty in range(3 * h // 4, h - 15, 16):
@@ -206,7 +227,8 @@ def analyse(raw, w=W, h=H):
 
     detail = sum(grad) / float(w * h)
     return {"bands": bands, "palette": palette, "cloud_fraction": cloud_frac,
-            "ground_variation": variation, "gridness": gridness, "detail": detail}
+            "ground_variation": variation, "gridness": gridness, "detail": detail,
+            "fg_span": span, "fg_p50": fg_p50, "clip": clip}
 
 
 def fmt(label, a, b=None):
@@ -238,7 +260,7 @@ def main():
     for k in ("rose", "gold", "green", "sky", "cream", "dark"):
         print(fmt("palette.%s" % k, render["palette"][k],
                   ref["palette"][k] if ref else None))
-    for k in ("cloud_fraction", "ground_variation", "gridness", "detail"):
+    for k in ("fg_p50", "fg_span", "clip", "cloud_fraction", "ground_variation", "gridness", "detail"):
         print(fmt(k, render[k], ref[k] if ref else None))
 
     if out:

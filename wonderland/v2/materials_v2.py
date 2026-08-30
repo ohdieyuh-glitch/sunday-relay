@@ -514,16 +514,25 @@ def _master(unreal, log, name, kind, texs=None):
         mel.connect_material_property(met, "", unreal.MaterialProperty.MP_METALLIC)
         spec = param(unreal.MaterialExpressionScalarParameter, "Specular", 800, 0.4, -420)
         mel.connect_material_property(spec, "", unreal.MaterialProperty.MP_SPECULAR)
-        if kind == "portal":
-            emi = param(unreal.MaterialExpressionVectorParameter, "Emissive", 900, unreal.LinearColor(0.66, 0.36, 1.0, 1), -420)
-            es = param(unreal.MaterialExpressionScalarParameter, "EmissiveStrength", 1000, 1.0, -420)
-            e1 = mel.create_material_expression(m, unreal.MaterialExpressionMultiply, -240, 920)
-            mel.connect_material_expressions(emi, "", e1, "A")
-            mel.connect_material_expressions(es, "", e1, "B")
-            e2 = mel.create_material_expression(m, unreal.MaterialExpressionMultiply, -60, 940)
-            mel.connect_material_expressions(e1, "", e2, "A")
-            mel.connect_material_expressions(alb, "", e2, "B")
-            mel.connect_material_property(e2, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+        # EMISSIVE IS NOT PORTAL-ONLY (PASS 08). These two parameters used to
+        # be built only on the portal master, so any instance under `surface`
+        # that carried an emissive value had it set on a parameter that did
+        # not exist -- a silent no-op, not an error. PASS 08's clouds are the
+        # first such instance: without this they would be lit spheres with a
+        # bright side and a dead side, which is a marshmallow, not a cumulus.
+        # The default is 0, and every existing surface instance carries
+        # emissive None and never writes the parameter, so nothing else in the
+        # world changes. The portal's two instances set theirs explicitly.
+        emi = param(unreal.MaterialExpressionVectorParameter, "Emissive", 900,
+                    unreal.LinearColor(0.66, 0.36, 1.0, 1), -420)
+        es = param(unreal.MaterialExpressionScalarParameter, "EmissiveStrength", 1000, 0.0, -420)
+        e1 = mel.create_material_expression(m, unreal.MaterialExpressionMultiply, -240, 920)
+        mel.connect_material_expressions(emi, "", e1, "A")
+        mel.connect_material_expressions(es, "", e1, "B")
+        e2 = mel.create_material_expression(m, unreal.MaterialExpressionMultiply, -60, 940)
+        mel.connect_material_expressions(e1, "", e2, "A")
+        mel.connect_material_expressions(alb, "", e2, "B")
+        mel.connect_material_property(e2, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
         if kind == "foliage":
             m.set_editor_property("two_sided", True)
             try:

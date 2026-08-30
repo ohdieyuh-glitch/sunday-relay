@@ -105,3 +105,117 @@ route. That was true and it was not enough. Three things only a walk could show:
 
 The lesson worth keeping: clearance at a point proves nothing about the ground BETWEEN points. The
 audit measured where things are; only the walk measured whether you can get there.
+
+---
+
+# PASS 08 — the look: light budget, warmth, stone, sky (2026-08-30)
+
+The founder reopened the phase with the environment as the objective and a
+carried gap list headed by "plaza ~1.3× brighter than reference", "empty lawn"
+and "clouds not resolved". The instruction was to baseline first and to solve
+the largest deficiencies rather than process the list. So the district was
+measured against the founder's cam0 reference before anything was touched,
+with a new permanent tool, `v2/tools/gap_v2.py`.
+
+## What the measurement said, and where it disagreed with the list
+
+| | ours (PASS 07) | reference | |
+|---|---|---|---|
+| pixels below sRGB 40 | 9.9% | **25.7%** | 0.39× |
+| pixels above sRGB 240 | 0.01% | 0.00% | nothing clips |
+| warm arc of the palette | 1.6% | **26.7%** | 0.06× |
+| neutral-pale arc | 27.5% | 2.7% | **10.2×** |
+| green arc | 25.3% | 4.8% | **5.2×** |
+| rose arc | 2.6% | 6.8% | 0.38× |
+| cloud, share of the sky band | 1.3% | 12.4% | 0.10× |
+| walking surface, p50 luma | 212 | 162 | 1.31× |
+| walking surface, p10–p90 span | 44 | **119** | 0.37× |
+| edge density (detail) | — | — | **1.18×** |
+
+Three of these changed the plan.
+
+**Nothing clips.** The world is not over-exposed, so pulling exposure — the
+lever the "1.3× brighter" note implies — would have darkened a frame that is
+already correctly exposed and produced the muddiness the founder warned
+against. The frame is *unshaded*, which is a different defect.
+
+**The district already carries more detail than the reference** (1.18×). Its
+richness gap is not a shortage of objects. Adding props would have made it
+busier and no closer. What it is short of is tonal range, warmth and shade.
+
+**The plaza's real defect is uniformity, not brightness.** 1.31× too bright is
+true; 2.7× too *flat* is larger, and it is what makes fitted masonry read as
+one poured sheet.
+
+## Cause, in one sentence per face
+
+- **No shade**: a 6,000-lux *shadowless* upward bounce plus a real-time sky
+  capture at 1.0 over a doubled atmosphere. The bounce was sized in PASS 05b
+  for leaf undersides at p50 1; PASS 05f then fixed the leaf albedo, which is
+  what actually lit them, and recorded "the bounce light stays for this render
+  (one change)". Nobody returned to it. Third time this class has cost
+  Wonderland its shadows.
+- **No warmth**: the grade was neutral to three decimal places while every
+  non-sky surface in the reference is warm.
+- **No stone variation**: three plaza tints inside 0.18 of each other, and the
+  entire path on a single material.
+- **No cloud**: VolumetricCloud spawns, takes its coverage, compiles its
+  shadermap, and puts nothing in the frame — twice, on this Vulkan SM5 runtime.
+- **Green dominance**: one actor, the 1.2 km moss cube standing in for terrain,
+  in a saturated blue-green.
+- **The vertical smear**: the surface master built UVs from WorldPosition
+  masked to X and Y, so on any vertical surface the UV does not change with
+  height and the texture is smeared upward. Every column, pier, wall, tower,
+  riser and plinth. This was not on the gap list at all; it was found by
+  zooming PlayerCam01 and then reading the master.
+- **Trees ending outside their leaves**: limb reach 700–800 uu against leaf
+  shells at 500–530.
+
+## Predictions for the PASS 08 capture — recorded BEFORE the render
+
+Each is measurable by `gap_v2.py` on HeroCam0 against the same reference. A
+prediction that misses is a finding, not a thing to re-explain afterwards.
+
+| metric | PASS 07 | PASS 08 target | reference |
+|---|---|---|---|
+| pixels below sRGB 40 | 9.9% | **≥ 18%** | 25.7% |
+| warm arc | 1.6% | **≥ 10%** | 26.7% |
+| neutral-pale arc | 27.5% | **≤ 16%** | 2.7% |
+| green arc | 25.3% | **≤ 17%** | 4.8% |
+| cloud share of sky | 1.3% | **≥ 8%** | 12.4% |
+| foreground p50 luma (`fg_p50`) | 205 | **170 ± 15** | 151 |
+| foreground tonal span (`fg_span`) | 79 | **≥ 100** | 128 |
+| ground_variation | 37.1 | **≥ 55** | 73.5 |
+| pixels above sRGB 240 (`clip`) | 0.01% | **< 1%** (no clipping) | 0.00% |
+
+The last four rows are `gap_v2.py`'s whole-band figures over the bottom
+quarter of the frame at 640×360. The 212/44 and 162/119 quoted earlier in this
+entry came from a hand-placed rectangle on the plaza at 1280×720, which
+excludes the kerbs and hedge feet the band includes. Both are true of the same
+frames; the tool's are the reproducible ones and are what the pass is judged
+on. Targets are stated in the tool's units.
+
+Visual, not metric: the gate columns and plaza-side walls must stop showing
+continuous vertical streaks (PlayerCam01, ReverseCam03), and the trees must
+stop showing bare brown branches outside their canopies (all cameras).
+
+Cameras to render, by hypothesis — not the whole suite:
+
+- **HeroCam0** — tonality, warmth, stone, sky, trees. The primary comparison.
+- **PlayerCam01** — the triplanar fix at gameplay height, where the streaked
+  columns fill the frame.
+- **ReverseCam03** — the plaza-side walls, the second place the smear shows.
+- **SkylineCam06** — the ground retint and whether cloud reaches a camera whose
+  sky band is only ~7° tall.
+
+GardenLeft04, GardenRight05, PathCam02 and ScaleCam07 are not rendered this
+pass: nothing in PASS 08 tests a hypothesis they answer, and the founder's
+render discipline is explicit about not spending compute on unchanged cameras.
+
+## Known risk, recorded before the fact
+
+The cumulus sit 2.6–13.5 km out under a fog tuned in PASS 06 for separating
+towers at 185–420 m. If the far clouds wash into the fog's inscattering
+colour, `cloud_fraction` will move less than predicted and the fix is the
+fog's distance response, not the clouds. SkylineCam06 is the camera that will
+show it first, because its sky band is entirely far cloud.
