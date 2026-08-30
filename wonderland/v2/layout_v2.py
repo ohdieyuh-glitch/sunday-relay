@@ -1998,6 +1998,33 @@ def _quarter_wood(cx, cy, sgn, seed, tag, H=None):
                      s=(1.7 + 0.9 * _rnd(i, seed, 30)) * sc,
                      mat=("MI_V2_LeafDark", "MI_V2_LeafMid")[i % 2],
                      label="%s_Ridge%d" % (tag, i)))
+    # THE CLEARING RIM, IN MUSHROOM COUNTRY.
+    #
+    # `rad` starts at 900 uu, so a wood has a nine-metre clearing at its heart
+    # and that is right: it is where the bench and the signpost go and where a
+    # player can stand. But measuring what is actually within fifteen metres of
+    # that spot found thirteen things, none of them a mushroom -- the NEAREST
+    # ONE WAS 22 M AWAY, in the mushroom wood. The quarter has twenty of them
+    # and the whole ring of trees, and a player standing at the heart of the
+    # place could see none of the thing it is named for.
+    #
+    # Three at the rim, where the trees begin, at the angles the trees leave
+    # open. They frame the clearing rather than filling it: the standing spot,
+    # the bench and the route through stay clear, which the world route solve
+    # re-checks at an 80 uu capsule. Woods outside mushroom country get
+    # nothing, because "some districts have none" is the hierarchy.
+    if _giant_tier(cx, cy)[0]:
+        for k in range(3):
+            a = lean + 2.094 * k + 0.9 * _rnd(seed, k, 61)
+            rad_m = (1000.0 + 320.0 * _rnd(seed, k, 62)) * sp
+            out.append(A("mushroom_medium", cx + math.cos(a) * rad_m,
+                         cy + math.sin(a) * rad_m, 0,
+                         yaw=_rnd(seed, k, 63) * 360.0,
+                         s=(1.15 + 0.45 * _rnd(seed, k, 64)) * sc,
+                         mat=("MI_V2_MushRed", "MI_V2_MushPurple",
+                              "MI_V2_MushTerracotta")[(seed + k) % 3],
+                         label="%s_Rim%d" % (tag, k)))
+
     # ONE thing standing clear of the mass. Which one is the wood's identity,
     # and it is chosen by the field rather than alternated, so neighbouring
     # woods are not reliably different in the way a pattern is.
