@@ -193,16 +193,34 @@ HERO_CAMS = [
     # A clock tower is 11.8 m to its cornice and its spire another 6, so its
     # camera stands 46 m back and pitches UP 1.5 degrees; a water garden is
     # ground furniture and its camera pitches down.
-    {"name": "ClockQuarterCam13", "location": (6719.0, 1560.0, 300.0), "rotation": (1.5, 13.1, 0.0),
-     "fov": 90.0, "tags": ("ClockQuarterCam13", "HeroCam13")},
-    {"name": "MushroomGroveCam14", "location": (8311.0, -7655.0, 300.0), "rotation": (1.0, -42.6, 0.0),
-     "fov": 92.0, "tags": ("MushroomGroveCam14", "HeroCam14")},
-    {"name": "WaterGardenCam15", "location": (-4256.0, -6404.0, 270.0), "rotation": (-2.0, -123.6, 0.0),
-     "fov": 90.0, "tags": ("WaterGardenCam15", "HeroCam15")},
-    {"name": "TeaTerraceCam16", "location": (-5860.0, -3807.0, 240.0), "rotation": (-2.0, -147.0, 0.0),
-     "fov": 90.0, "tags": ("TeaTerraceCam16", "HeroCam16")},
-    {"name": "HamletCam17", "location": (-14732.0, 2617.0, 280.0), "rotation": (-1.0, 169.9, 0.0),
-     "fov": 90.0, "tags": ("HamletCam17", "HeroCam17")},
+    # RE-AIMED ONCE, after their first render, and then locked.
+    #
+    # The first set was computed against the site list as it stood, at 26-46 m
+    # back and 2.4-3.0 m eye. Three things went wrong and the frames said all
+    # three: WaterGardenCam15 pointed at a tower because the district's kinds
+    # had changed under it since (the fallback chain turns a water garden into
+    # a garden where there is no room); ClockQuarterCam13's clock tower was
+    # behind its own quarter's edge planting at 46 m; and HamletCam17 was
+    # INSIDE A BUSH -- the exact failure this project spent PASS 09-12 on and
+    # recorded, reproduced by a foreground rule that put mass at 5.5 m from a
+    # 2.8 m eye.
+    #
+    # So: aimed at the quarter of the district's SIGNATURE kind whose radius
+    # is closest to the district's own seed radius (representative, not
+    # innermost), 40-79 m back at 3.4-5.2 m of eye, and each one nudged to the
+    # clearest spot on a 5x5 search -- the clearance is printed beside it.
+    # Never inside 40 m of the origin, because a district camera standing in
+    # the arrival plaza is not a district camera.
+    {"name": "ClockQuarterCam13", "location": (4668.7, -2703.3, 520.0), "rotation": (2.5, -4.9, 0.0),
+     "fov": 90.0, "tags": ("ClockQuarterCam13", "HeroCam13")},      # clockyard 130 m, 79 m back, 12.6 m clear
+    {"name": "MushroomGroveCam14", "location": (5449.8, -6922.9, 420.0), "rotation": (2.0, -31.0, 0.0),
+     "fov": 92.0, "tags": ("MushroomGroveCam14", "HeroCam14")},     # grove 155 m, 69 m back, 4.8 m clear
+    {"name": "WaterGardenCam15", "location": (-4731.9, -4764.1, 420.0), "rotation": (-1.5, -121.9, 0.0),
+     "fov": 90.0, "tags": ("WaterGardenCam15", "HeroCam15")},       # the LAKE at 125 m, 58 m back, 6.5 m clear
+    {"name": "TeaTerraceCam16", "location": (-5401.8, -1839.1, 340.0), "rotation": (-1.0, -126.8, 0.0),
+     "fov": 90.0, "tags": ("TeaTerraceCam16", "HeroCam16")},        # tea 93 m, 40 m back, 2.5 m clear
+    {"name": "HamletCam17", "location": (-13093.3, -1889.8, 460.0), "rotation": (0.0, 167.1, 0.0),
+     "fov": 90.0, "tags": ("HamletCam17", "HeroCam17")},            # hamlet 184 m, 54 m back, 5.0 m clear
     # ON A ROAD, at the Dog's own eye height, looking out along it to the
     # quarter it serves. The founder's test for the road network is that a
     # player believes they can keep going; this is the frame that answers it.

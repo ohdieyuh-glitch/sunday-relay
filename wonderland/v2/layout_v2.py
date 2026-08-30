@@ -4020,18 +4020,26 @@ def _district_cam_foregrounds():
         side = (-fwd[1], fwd[0])
         seed = int(abs(x) + abs(y)) % 9973
         tag = cam["name"]
-        n = 13
+        # KNEE HEIGHT AT THE FRONT, MASS AT THE SIDES -- the rule this project
+        # already paid for. HamletCam17's first frame was a wall of leaves
+        # because this put trees at 1.15x d_near, which is 5.5 m from a 2.8 m
+        # eye, and PASS 12's ledger entry says exactly what that looks like:
+        # "a bank of foliage filled the bottom 45% and hid the garden".
+        #
+        # Depth now starts at 1.6x, a tree needs 2.2x AND to be past 0.58 of
+        # the half-width, and anything nearer or more central than that is low
+        # planting. The subject keeps the middle of the frame.
+        n = 15
         for i in range(n):
-            # depth 1.15x to 2.6x d_near; the near end is the bottom of frame
-            t = 1.15 + 1.45 * _rnd(i, seed, 121)
+            t = 1.6 + 1.7 * _rnd(i, seed, 121)
             depth = d_near * t
-            # off-axis, but never across the middle third: the subject is there
             half = depth * math.tan(hfov / 2.0)
-            lat = (0.34 + 0.52 * _rnd(i, seed, 122)) * half * (1 if i % 2 else -1)
+            lat = (0.46 + 0.46 * _rnd(i, seed, 122)) * half * (1 if i % 2 else -1)
+            far_enough = t > 2.2 and abs(lat) > 0.58 * half
             px = x + fwd[0] * depth + side[0] * lat
             py = y + fwd[1] * depth + side[1] * lat
             pick = _rnd(i, seed, 123)
-            if pick < 0.30:
+            if pick < 0.30 and far_enough:
                 s = 1.0 + 0.35 * _rnd(i, seed, 124)
                 out += [
                     A("tree_slender_trunk", px, py, 0, yaw=_rnd(i, seed, 125) * 360.0,
@@ -4043,7 +4051,7 @@ def _district_cam_foregrounds():
             elif pick < 0.58:
                 out.append(A(("shrub_flowering", "rose_bush", "topiary_ball")[i % 3],
                              px, py, 0, yaw=_rnd(i, seed, 127) * 360.0,
-                             s=0.85 + 0.4 * _rnd(i, seed, 128),
+                             s=(0.85 + 0.4 * _rnd(i, seed, 128)) * (1.0 if far_enough else 0.62),
                              mat=("MI_V2_LeafMid", "MI_V2_LeafDark")[i % 2],
                              label="%s_FgShrub%d" % (tag, i)))
             elif pick < 0.82:
@@ -4051,11 +4059,15 @@ def _district_cam_foregrounds():
                                      ("MI_V2_PetalPink", "MI_V2_PetalViolet",
                                       "MI_V2_PetalWhite", "MI_V2_Lavender")[i % 4],
                                      "%s_FgBed%d" % (tag, i))
-            else:
+            elif far_enough:
                 out.append(A("hedge_mass", px, py, 0,
                              yaw=math.degrees(math.atan2(side[1], side[0])),
                              s=1.0 + 0.4 * _rnd(i, seed, 130),
                              mat="MI_V2_LeafDark", label="%s_FgHedge%d" % (tag, i)))
+            else:
+                out += _ground_patch(px, py, 0, _rnd(i, seed, 131) * 360.0, 1.0,
+                                     ("MI_V2_RosePink", "MI_V2_Lavender")[i % 2],
+                                     "%s_FgLow%d" % (tag, i))
     return out
 
 
