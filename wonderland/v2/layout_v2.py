@@ -922,12 +922,18 @@ def _flank(sgn, tag):
         # this bank stood 3.5 m out -- under the lens, invisible, and it is
         # why the first fix for "the camera stands on bare lawn" only half
         # worked: the mid band at 8.2 m showed and this did not.
-        A(("shrub_flowering", "hedge_block", "rose_bush")[i % 3],
-          sgn * (3400 + 420 * i), -700 + 90 * ((i % 2) * 2 - 1), 0,
-          yaw=90 + 12 * i, s=0.9,
-          mat=("MI_V2_LeafMid", "MI_V2_LeafDark", "MI_V2_LeafMid")[i % 3],
-          label="%s_NearBank%d" % (tag, i))
-        for i in range(7)
+        # massed for the same reason as the rear band: an even row of seven
+        # reads as a fence of separate objects, three groups read as planting
+        A(("shrub_flowering", "hedge_block", "rose_bush", "topiary_ball")[k % 4],
+          sgn * (bx + (-130 + 105 * (k % 3))), -700 + 85 * ((k % 2) * 2 - 1) + 45 * (k % 3), 0,
+          yaw=90 + 37 * k, s=0.82 + 0.14 * ((k % 3) / 2.0),
+          mat=("MI_V2_LeafMid", "MI_V2_LeafDark")[k % 2],
+          label="%s_NearClump%d_%d" % (tag, bi, k))
+        # same frustum rule: FlankLeftCam08 sits at x = 4,350, and at the
+        # 5.5 m depth of this bank the frame is 5.5 m wide, so a clump must
+        # stand within 550 uu of the camera's x to be in it at all.
+        for bi, bx in enumerate((3980, 4350, 4720))
+        for k in range(5)
     ] + [
         g for i in range(5)
         for g in _ground_patch(sgn * (3600 + 560 * i), -520, 0, 55 * i, 1.05,
@@ -1147,12 +1153,30 @@ REARWORLD = _band("V2_Garden", [
     #
     # Three rows at 6, 9 and 12 m, which is the band the frame actually shows
     # between its bottom edge and the groves at 17 m.
-    A(("topiary_ball", "shrub_flowering", "hedge_block", "rose_bush")[i % 4],
-      -3600 + 900 * (i % 9), (-8800, -8500, -8200)[i // 9] + 50 * ((i % 3) - 1), 0,
-      yaw=28 * i, s=0.78,
-      mat=("MI_V2_LeafDark", "MI_V2_LeafMid")[i % 2],
-      label="Rear_NearBand%d" % i)
-    for i in range(27)
+    # MASSED, NOT SPRINKLED. The first version of this band put 27 pieces on
+    # an even 9 x 3 grid, and the render came back reading as polka dots: a
+    # lawn with isolated shrub balls sitting on it at regular intervals. The
+    # planting was visible, which was the point of the previous fix, and it
+    # was not a garden. Reference planting comes in MASSES with ground
+    # between them -- five or six pieces touching, then a gap, then another
+    # group. Same count, five clumps, and the gaps are as deliberate as the
+    # groups.
+    A(("topiary_ball", "shrub_flowering", "hedge_block", "rose_bush", "shrub_flowering")[k % 5],
+      cx + (-140 + 115 * (k % 5)) + 40 * ((k % 3) - 1),
+      cy + (-90 + 75 * (k % 3)) + 35 * ((k % 2) * 2 - 1), 0,
+      yaw=41 * k + 90 * ci, s=0.70 + 0.16 * ((k % 4) / 3.0),
+      mat=("MI_V2_LeafDark", "MI_V2_LeafMid")[k % 2],
+      label="Rear_NearClump%d_%d" % (ci, k))
+    # POSITIONED INSIDE THE FRUSTUM. At 90 deg horizontal the visible
+    # half-width EQUALS the depth, so at 8 m out the frame is only 8 m wide --
+    # the first clump positions spread to 30 m off-axis and four of the five
+    # stood outside the picture entirely, which camera_framing.py caught as
+    # the near-band count going DOWN (10 -> 8) after adding planting. Each
+    # clump below satisfies |x - cam_x| < (y - cam_y), with the camera at
+    # (0, -9,400): depths 7-17 m, offsets inside the cone at that depth.
+    for ci, (cx, cy) in enumerate(((-300, -8700), (900, -8300), (-1600, -7800),
+                                   (1500, -7700), (-900, -8250)))
+    for k in range(6)
 ] + [
     g for i in range(8)
     for g in _ground_patch(-3100 + 900 * (i % 8), (-8650, -8350)[i // 8], 0, 50 * i, 0.95,
