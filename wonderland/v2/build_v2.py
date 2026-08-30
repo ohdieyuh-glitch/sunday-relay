@@ -551,7 +551,8 @@ BATCHABLE = {"ground_flowers", "ground_blooms", "flower_cluster", "rose_bloom", 
              "castle_dome", "castle_arcade", "castle_bridge",
              "mushroom_giant", "mushroom_giant_gills", "mushroom_giant_spots",
              "mushroom_giant_rim", "mushroom_landmark", "clock_ornate",
-             "garden_arch_stone", "gate_arch_gold", "key_ornate"}
+             "garden_arch_stone", "gate_arch_gold", "key_ornate",
+             "signpost", "garden_bench"}
 
 #: BATCHED ONLY IN THESE BANDS. terrace_platform is paving a participant walks
 #: on and batches are built at BeginPlay, which is how this project lost a Dog

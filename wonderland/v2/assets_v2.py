@@ -1185,7 +1185,58 @@ def balloon_basket(ctx):
     return m
 
 
+def signpost(ctx):
+    """A FINGERPOST, 2.6 m: a turned post, a collar, and three fingers.
+
+    "SIGNS" is a panel on the boards' object-language page and this kit had
+    no sign of any kind. It is also the one prop that does a JOB: the founder's
+    test for the road network is that a player believes they can keep going,
+    and a fingerpost at a junction is how a garden tells them where.
+
+    The fingers are separate boards at three bearings, pointed at the end the
+    way a fingerpost is; the writing is the material's business, not the
+    mesh's, at the distance these are read from.
+    """
+    m = ctx.mesh("signpost")
+    m.revolve([(0.0, 0.0), (46.0, 0.0), (40.0, 24.0), (26.0, 40.0), (22.0, 200.0),
+               (28.0, 214.0), (26.0, 236.0), (20.0, 250.0), (18.0, 258.0),
+               (0.0, 262.0)], steps=16)
+    m.torus(30.0, 7.0, at=(0, 0, 176.0), major=16, minor=6)
+    for k, (yaw, z, ln) in enumerate(((0.0, 214.0, 96.0), (118.0, 190.0, 84.0),
+                                      (242.0, 166.0, 90.0))):
+        a = math.radians(yaw)
+        cx, cy = math.cos(a) * (ln * 0.5 + 20.0), math.sin(a) * (ln * 0.5 + 20.0)
+        m.box(ln, 9.0, 26.0, at=(cx, cy, z), rot=(0.0, yaw, 0.0), chamfer=3.0)
+        # the point on the end
+        m.box(20.0, 9.0, 26.0, at=(math.cos(a) * (ln + 14.0), math.sin(a) * (ln + 14.0), z),
+              rot=(0.0, yaw + 45.0, 0.0), chamfer=3.0)
+    return m
+
+
+def garden_bench(ctx):
+    """A GARDEN SEAT, 1.7 m: two moulded ends, a slatted seat, a slatted back.
+
+    The founder's list of things a quarter should be able to have ends with
+    SOCIAL SPACES, and a social space with nowhere to sit is a lawn. Six slats
+    and two ends -- the cheapest object in this kit that says a place is meant
+    to be stayed in rather than walked through.
+    """
+    m = ctx.mesh("garden_bench")
+    for s in (-1.0, 1.0):
+        y = s * 78.0
+        m.box(52.0, 14.0, 46.0, at=(0.0, y, 23.0), chamfer=4.0)
+        m.box(14.0, 14.0, 92.0, at=(-20.0, y, 46.0), chamfer=3.0)
+        m.box(44.0, 16.0, 12.0, at=(0.0, y, 4.0), chamfer=3.0)
+    for i in range(3):
+        m.box(46.0, 168.0, 9.0, at=(-14.0 + i * 15.0, 0.0, 48.0 + i * 1.5), chamfer=2.0)
+    for i in range(3):
+        m.box(9.0, 168.0, 18.0, at=(-23.0, 0.0, 62.0 + i * 22.0), chamfer=2.0)
+    return m
+
+
 RECIPES = {
+    "signpost": (signpost, "garden_props", True, False),
+    "garden_bench": (garden_bench, "garden_props", True, False),
     "balloon_envelope": (balloon_envelope, "sky", False, False),
     "balloon_basket": (balloon_basket, "sky", False, False),
     "portal_disc": (portal_disc, "vfx_portal", True, False),

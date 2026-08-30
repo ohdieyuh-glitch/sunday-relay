@@ -3404,6 +3404,25 @@ def _quarter_edge(s, H):
                 A("gate_finial_ball", ox, oy, 300.0 * 0.62 * sc, s=0.4 * sc,
                   mat="MI_V2_Gold", label="%s_ApproachFinial%d" % (tag, k)),
             ]
+        # AND A FINGERPOST. The founder's test for a road network is that a
+        # player believes they can keep going, and the object that answers it
+        # is a sign -- which the boards give a panel to and this kit had none
+        # of. One at every quarter's approach, turned so a finger points back
+        # down the road it arrived by.
+        out.append(A("signpost", px - uy * 380.0 * sc, py + ux * 380.0 * sc, 0,
+                     yaw=yaw + 180.0, s=1.15 * sc, mat="MI_V2_IvoryStone",
+                     label="%s_Signpost" % tag))
+    # A SEAT. "Social spaces" is the last line of the founder's list for what
+    # a quarter should be able to have, and a social space with nowhere to sit
+    # is a lawn. Two, facing in, at a quarter that is dense enough to sit in.
+    if H["prop"] > 0.45:
+        for k, a in enumerate((0.9, 3.9)):
+            bx = cx + math.cos(a) * r0 * 0.56
+            by = cy + math.sin(a) * r0 * 0.56
+            out.append(A("garden_bench", bx, by, 0,
+                         yaw=math.degrees(math.atan2(cy - by, cx - bx)),
+                         s=1.05 * sc, mat="MI_V2_IvoryStone",
+                         label="%s_Bench%d" % (tag, k)))
     return out
 
 
@@ -3701,6 +3720,10 @@ def _north_way():
           label="NorthGate_UrnL"),
         A("garden_urn", gx - c * 620.0, gy - s0 * 620.0, 0, s=0.85, mat="MI_V2_Ceramic",
           label="NorthGate_UrnR"),
+        A("signpost", gx + c * 900.0, gy + s0 * 900.0, 0, yaw=yaw + 90.0, s=1.3,
+          mat="MI_V2_IvoryStone", label="NorthGate_Sign"),
+        A("garden_bench", gx - c * 900.0, gy - s0 * 900.0, 0, yaw=yaw, s=1.05,
+          mat="MI_V2_IvoryStone", label="NorthGate_Bench"),
     ]
     # and a MILESTONE at the far end, so the way arrives somewhere named
     ex, ey = way[-1]
@@ -3770,6 +3793,10 @@ def _ring_roads(sites):
                       label="RingMarker%02d" % i),
                     A("gate_finial_ball", x0, y0 - 900.0, 124, s=0.55, mat="MI_V2_Gold",
                       label="RingMarkerCap%02d" % i),
+                    A("signpost", x0 + 420.0, y0 - 900.0, 0, yaw=(i * 47) % 360, s=1.2,
+                      mat="MI_V2_IvoryStone", label="RingSign%02d" % i),
+                    A("garden_bench", x0 - 520.0, y0 - 900.0, 0, yaw=(i * 61) % 360,
+                      s=1.0, mat="MI_V2_IvoryStone", label="RingBench%02d" % i),
                 ]
     return out
 
@@ -3943,6 +3970,7 @@ FOOT = {"hedge_block": (176, 75), "hedge_mass": (320, 320), "garden_wall": (255,
         "castle_tower": (400, 400), "castle_hall": (600, 600), "tower_capped": (400, 400),
         "tower_clock": (176, 176), "column_ornate": (60, 60), "arch_stone": (330, 90),
         "tea_plinth": (200, 200), "stairs_broad": (350, 260),
+        "garden_bench": (85, 90), "signpost": (46, 46),
         "rose_bush": (98, 105), "shrub_flowering": (90, 90)}
 
 #: What must not have something growing through it. A landmark is the reason a
