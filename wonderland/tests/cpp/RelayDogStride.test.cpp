@@ -569,6 +569,93 @@ int main()
 		            F(ElbowLo).c_str(), F(ElbowHi).c_str(), F(KneeLo).c_str(), F(KneeHi).c_str());
 	}
 
+	std::printf("== the jump is a pose, and the walk has a body in it ==\n");
+	{
+		// THE FOUNDER ASKED FOR A HUMAN JUMP: legs bent, arms spread. Both are
+		// arithmetic, so both are checked rather than judged from a video.
+		FDogAnimator Dog;
+		Dog.Configure(LegUU, ThighUU, ShinUU, ScaleUU);
+		FDogInput In;
+		In.DeltaSeconds = 1.0f / 60.0f;
+		In.SpeedUU = 240.0f;
+		In.DistanceUU = 240.0f / 60.0f;
+		for (int i = 0; i < 60; ++i) Dog.Update(In);      // running along the ground
+		const FDogPose Ground = Dog.Pose();
+		In.bInAir = true;
+		In.VerticalSpeedUU = 300.0f;                      // on the way up
+		for (int i = 0; i < 30; ++i) Dog.Update(In);
+		const FDogPose Air = Dog.Pose();
+		Check("leaving the ground puts the Dog in the air pose", Air.AirborneWeight > 0.8f,
+		      F(Air.AirborneWeight));
+		// A RUNNING KNEE CYCLES from 12 to 118 degrees, so comparing the jump
+		// against ONE instant of it compares against a moving target and says
+		// nothing. What a tuck actually means is that the knee stays bent AND
+		// stops pedalling: held, not cycling.
+		{
+			float Lo = 1e9f, Hi = -1e9f;
+			FDogInput Hold = In;
+			for (int i = 0; i < 40; ++i)
+			{
+				const float K = Dog.Update(Hold).LegLeft.KneeDeg;
+				Lo = std::fmin(Lo, K); Hi = std::fmax(Hi, K);
+			}
+			Check("in the air the knee is bent", Lo > 55.0f, "min " + F(Lo));
+			Check("and it is held there rather than pedalling", (Hi - Lo) < 25.0f,
+			      F(Lo) + ".." + F(Hi) + " deg");
+		}
+		Check("both arms come up and out, not down at the sides",
+		      Air.ArmLeft.ShoulderDeg < -20.0f && Air.ArmRight.ShoulderDeg < -20.0f
+		      && Air.ArmLeft.ShoulderYawDeg > 15.0f,
+		      "L " + F(Air.ArmLeft.ShoulderDeg) + " R " + F(Air.ArmRight.ShoulderDeg)
+		      + " sweep " + F(Air.ArmLeft.ShoulderYawDeg));
+		// Falling differs from rising: the body reaches for the ground.
+		In.VerticalSpeedUU = -300.0f;
+		for (int i = 0; i < 20; ++i) Dog.Update(In);
+		Check("falling is a different pose from rising",
+		      std::fabs(Dog.Pose().LegLeft.KneeDeg - Air.LegLeft.KneeDeg) > 4.0f,
+		      F(Air.LegLeft.KneeDeg) + " rising vs " + F(Dog.Pose().LegLeft.KneeDeg) + " falling");
+		// And landing returns it, without a snap.
+		// LANDING. The joint angles on touchdown mix two things -- the air pose
+		// leaving and the run stride resuming -- and only the first is mine to
+		// control, so that is what is measured: the airborne blend itself must
+		// come out smoothly, with no step that would read as a pose swap.
+		In.bInAir = false;
+		In.VerticalSpeedUU = 0.0f;
+		float PrevAir = Dog.Pose().AirborneWeight;
+		float MaxAirStep = 0.0f;
+		for (int i = 0; i < 60; ++i)
+		{
+			const float W = Dog.Update(In).AirborneWeight;
+			MaxAirStep = std::fmax(MaxAirStep, std::fabs(W - PrevAir));
+			PrevAir = W;
+		}
+		Check("the air pose blends out smoothly rather than popping", MaxAirStep < 0.12f,
+		      F(MaxAirStep) + " of the blend in one frame");
+		Check("and the Dog is out of the air pose once down", Dog.Pose().AirborneWeight < 0.1f);
+	}
+	{
+		// THE COUNTER-ROTATION that separates a walk from a march: the body
+		// turns very slightly against the stride, and it is zero standing still.
+		FDogAnimator Dog;
+		Dog.Configure(LegUU, ThighUU, ShinUU, ScaleUU);
+		FDogInput In;
+		In.DeltaSeconds = 1.0f / 60.0f;
+		In.SpeedUU = 130.0f;
+		In.DistanceUU = 130.0f / 60.0f;
+		float Lo = 1e9f, Hi = -1e9f;
+		for (int i = 0; i < 400; ++i)
+		{
+			const float Y = Dog.Update(In).BodyYawDeg;
+			if (i > 120) { Lo = std::fmin(Lo, Y); Hi = std::fmax(Hi, Y); }
+		}
+		Check("the body counter-rotates while walking", (Hi - Lo) > 2.0f, F(Lo) + ".." + F(Hi) + " deg");
+		Check("and stays subtle -- this is a walk, not a swagger", (Hi - Lo) < 8.0f);
+		In.SpeedUU = 0.0f; In.DistanceUU = 0.0f;
+		for (int i = 0; i < 180; ++i) Dog.Update(In);
+		Check("standing still, the body does not rotate", std::fabs(Dog.Pose().BodyYawDeg) < 0.3f,
+		      F(Dog.Pose().BodyYawDeg));
+	}
+
 	std::printf("== the springs behave like the landing's ==\n");
 	{
 		FSpring S;

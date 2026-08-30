@@ -421,6 +421,14 @@ void ARelayDogCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputC
 	PlayerInputComponent->BindAxisKey(EKeys::MouseX, this, &ARelayDogCharacter::TurnAxis);
 	PlayerInputComponent->BindAxisKey(EKeys::MouseY, this, &ARelayDogCharacter::LookUpAxis);
 
+	// DOUBLE-TAP FORWARD AND HOLD TO RUN. Both forward keys are watched, and
+	// the run lasts exactly as long as the key stays down -- releasing it ends
+	// the run rather than leaving the Dog sprinting into a hedge.
+	PlayerInputComponent->BindKey(EKeys::W, IE_Pressed, this, &ARelayDogCharacter::OnForwardPressed);
+	PlayerInputComponent->BindKey(EKeys::W, IE_Released, this, &ARelayDogCharacter::OnForwardReleased);
+	PlayerInputComponent->BindKey(EKeys::Up, IE_Pressed, this, &ARelayDogCharacter::OnForwardPressed);
+	PlayerInputComponent->BindKey(EKeys::Up, IE_Released, this, &ARelayDogCharacter::OnForwardReleased);
+
 	PlayerInputComponent->BindKey(EKeys::LeftShift, IE_Pressed, this, &ARelayDogCharacter::OnRunPressed);
 	PlayerInputComponent->BindKey(EKeys::LeftShift, IE_Released, this, &ARelayDogCharacter::OnRunReleased);
 	PlayerInputComponent->BindKey(EKeys::RightShift, IE_Pressed, this, &ARelayDogCharacter::OnRunPressed);
@@ -468,6 +476,25 @@ void ARelayDogCharacter::LookUpAxis(float Value)
 {
 	// Inverted, as a camera pitch is: pushing the mouse forward looks down.
 	if (Value != 0.0f) AddControllerPitchInput(-Value);
+}
+
+void ARelayDogCharacter::OnForwardPressed()
+{
+	const float Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0f;
+	if (Now - LastForwardPressTime <= DoubleTapWindow)
+	{
+		bDoubleTapRun = true;
+	}
+	LastForwardPressTime = Now;
+	bForwardHeld = true;
+}
+
+void ARelayDogCharacter::OnForwardReleased()
+{
+	bForwardHeld = false;
+	// The run ends with the key. A double tap that latched a sprint the player
+	// could not stop by letting go would be a trap, not a control.
+	bDoubleTapRun = false;
 }
 
 void ARelayDogCharacter::OnRunPressed() { bRunHeld = true; }
@@ -527,7 +554,8 @@ void ARelayDogCharacter::Tick(float DeltaSeconds)
 		// component consumes this frame's input.
 		if (UCharacterMovementComponent* Move = GetCharacterMovement())
 		{
-			Move->MaxWalkSpeed = bWalkHeld ? WalkSpeedUU : (bRunHeld ? RunSpeedUU : JogSpeedUU);
+			const bool bRunning = bRunHeld || (bDoubleTapRun && bForwardHeld);
+			Move->MaxWalkSpeed = bWalkHeld ? WalkSpeedUU : (bRunning ? RunSpeedUU : JogSpeedUU);
 		}
 	}
 	if (bAutoDemo)
@@ -569,6 +597,11 @@ void ARelayDogCharacter::Tick(float DeltaSeconds)
 	// staircase can be walked in a test instead of judged from a stream.
 	// Measured from last frame's stride positions, which is what the feet were
 	// over when the world was last stepped.
+	if (const UCharacterMovementComponent* Move = GetCharacterMovement())
+	{
+		In.bInAir = Move->IsFalling();
+	}
+	In.VerticalSpeedUU = Velocity.Z;
 	In.GroundDeltaLeft = TraceFootGround(Animator.Pose().FootLeft.Forward, LegLeft.LateralUU);
 	In.GroundDeltaRight = TraceFootGround(Animator.Pose().FootRight.Forward, LegRight.LateralUU);
 
@@ -590,7 +623,7 @@ void ARelayDogCharacter::Tick(float DeltaSeconds)
 	if (BodyRoot != nullptr)
 	{
 		BodyRoot->SetRelativeLocation(BodyRestLocation + FVector(0.0f, Pose.SwayUU, Pose.BobUU - Pose.PelvisDropUU));
-		BodyRoot->SetRelativeRotation(FRotator(Pose.LeanDeg + Pose.Body.PitchDeg, 0.0f,
+		BodyRoot->SetRelativeRotation(FRotator(Pose.LeanDeg + Pose.Body.PitchDeg, Pose.BodyYawDeg,
 		                                       Pose.Body.RollDeg + Pose.TurnRollDeg));
 	}
 	if (HeadPivot != nullptr)

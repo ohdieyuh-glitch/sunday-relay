@@ -356,6 +356,11 @@ namespace RelayDogStride
 
 		float SwayUU = 0.0f;
 		float BobUU = 0.0f;
+		/** 0 on the ground, 1 fully in the jump pose. */
+		float AirborneWeight = 0.0f;
+		/** Degrees the whole body yaws against the stride -- the counter-rotation
+		 *  that separates a walking person from a marching one. */
+		float BodyYawDeg = 0.0f;
 
 		/** The eased vertical correction actually applied to each foot, uu. */
 		float FootOffsetLeft = 0.0f;
@@ -380,6 +385,15 @@ namespace RelayDogStride
 		/** Yaw the body is facing, degrees, and the yaw it wants. */
 		float HeadingDeg = 0.0f;
 		float DesiredHeadingDeg = 0.0f;
+		/** True while the character is off the ground. Drives the jump pose,
+		 *  which is a STATE OVERRIDE on top of whatever the gait was doing --
+		 *  the same layering the head uses. */
+		bool bInAir = false;
+		/** Upward velocity, uu/s: positive rising, negative falling. The pose
+		 *  differs between the two, because a body on the way up is still
+		 *  pushing and a body on the way down is reaching for the ground. */
+		float VerticalSpeedUU = 0.0f;
+
 		/** Traced ground height minus the height that foot would otherwise be
 		 *  planted at, uu. Positive means the ground is ABOVE the foot — a step
 		 *  up. The TRACE needs an engine; what to do with it does not, so the
@@ -417,7 +431,7 @@ namespace RelayDogStride
 
 		FDogPose Current;
 		FInterest Interest;
-		FSpring GaitBlend, HeadYaw, HeadPitch, Lean, TurnRoll, SpeedFilter;
+		FSpring GaitBlend, HeadYaw, HeadPitch, Lean, TurnRoll, SpeedFilter, Airborne;
 		float FootOffsetLeft = 0.0f;
 		float FootOffsetRight = 0.0f;
 		float Distance = 0.0f;

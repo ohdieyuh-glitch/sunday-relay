@@ -111,10 +111,15 @@ def main(argv):
         c_ue, d_ue = D.to_unreal(centre, size, scale)
         if abs(d_ue[0] - size[2] * scale) > 1e-9 or abs(d_ue[1] - size[0] * scale) > 1e-9 or abs(d_ue[2] - size[1] * scale) > 1e-9:
             rc |= fail("size not preserved for %s" % name)
+    # THE TAIL IS CENTRED (founder, 2026-08-30). It used to be required on the
+    # Dog's LEFT hip, matching relay-dog.ts; at gameplay scale in Wonderland the
+    # founder found that read as lopsided and asked for the middle. The rule is
+    # inverted rather than deleted, so a future transcription that quietly
+    # restores the web offset still fails this gate.
     tail = [b for b in D.BOXES if b[1] == "tail"]
     tail_y = [D.to_unreal(b[3], b[4], scale)[0][1] for b in tail]
-    if not all(y < 0 for y in tail_y):
-        rc |= fail("the tail must sit on the Dog's LEFT hip (-Y in Unreal); got %s" % tail_y)
+    if not all(abs(y) < 1e-6 for y in tail_y):
+        rc |= fail("the tail must leave the pelvis on the centre line (Y = 0 in Unreal); got %s" % tail_y)
     eyes = sorted(b for b in D.BOXES if b[2] == "eye")
     if len(eyes) != 2:
         rc |= fail("exactly two eyes")

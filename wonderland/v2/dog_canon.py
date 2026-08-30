@@ -85,7 +85,15 @@ PIVOTS = {
     "forearmRight": (ARM_PIVOT_X, ELBOW_Y, ARM_PIVOT_Z),
     "shinLeft": (-LEG_X, KNEE_Y, 0.0),
     "shinRight": (LEG_X, KNEE_Y, 0.0),
-    "tail": (0.2 * W, 1.0 * W, -0.2 * W),
+    # CENTRED, BY FOUNDER DECISION (2026-08-30). The web Dog carries its tail on
+    # the LEFT hip and this file has always matched it; seen at gameplay scale
+    # in Wonderland the founder called it "all the way on the left side" and
+    # asked for the middle. So the tail now leaves the back of the pelvis on
+    # the centre line and keeps its own rise and sweep. This is a deliberate
+    # divergence from relay-dog.ts, not a transcription slip -- the web model
+    # is untouched, and verify_dog_canon enforces the new rule instead of the
+    # old one so the two cannot drift silently.
+    "tail": (0.0, 1.0 * W, -0.2 * W),
 }
 
 #: joint -> the joint it hangs from. The hierarchy is what makes a shoulder
@@ -144,11 +152,11 @@ BOXES = [
     ("legRightShin", "shinRight", "ivory", (LEG_X, mid(FOOT_TOP, KNEE_Y), 0), (LEG_W, span(FOOT_TOP, KNEE_Y), 0.225 * W)),
     ("footLeft", "shinLeft", "ivory", (-(LEG_X + 0.0125 * W), FOOT_TOP / 2, 0.0625 * W), (FOOT_W, FOOT_TOP, 0.375 * W)),
     ("footRight", "shinRight", "ivory", (LEG_X + 0.0125 * W, FOOT_TOP / 2, 0.0625 * W), (FOOT_W, FOOT_TOP, 0.375 * W)),
-    ("tail01", "tail", "ivory", (0.2875 * W, 0.95 * W, -0.2375 * W), (0.1625 * W, 0.1625 * W, 0.175 * W)),
-    ("tail02", "tail", "ivory", (0.3875 * W, 0.9875 * W, -0.3375 * W), (0.1445 * W, 0.1445 * W, 0.157 * W)),
-    ("tail03", "tail", "ivory", (0.4625 * W, 1.075 * W, -0.4 * W), (0.125 * W, 0.125 * W, 0.1375 * W)),
-    ("tail04", "tail", "ivory", (0.5125 * W, 1.1875 * W, -0.4375 * W), (0.1125 * W, 0.1125 * W, 0.125 * W)),
-    ("tailTip", "tail", "ivory", (0.5375 * W, 1.2875 * W, -0.45 * W), (0.1 * W, 0.1 * W, 0.1125 * W)),
+    ("tail01", "tail", "ivory", (0.0, 0.95 * W, -0.2375 * W), (0.1625 * W, 0.1625 * W, 0.175 * W)),
+    ("tail02", "tail", "ivory", (0.0, 0.9875 * W, -0.3375 * W), (0.1445 * W, 0.1445 * W, 0.157 * W)),
+    ("tail03", "tail", "ivory", (0.0, 1.075 * W, -0.4 * W), (0.125 * W, 0.125 * W, 0.1375 * W)),
+    ("tail04", "tail", "ivory", (0.0, 1.1875 * W, -0.4375 * W), (0.1125 * W, 0.1125 * W, 0.125 * W)),
+    ("tailTip", "tail", "ivory", (0.0, 1.2875 * W, -0.45 * W), (0.1 * W, 0.1 * W, 0.1125 * W)),
 ]
 
 JOINTS = ("root", "head", "armLeft", "forearmLeft", "armRight", "forearmRight",

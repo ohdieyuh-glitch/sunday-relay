@@ -158,6 +158,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Relay Dog")
 	float RunSpeedUU = 520.0f;
 
+	/** How quickly the second tap has to follow the first, seconds. */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Relay Dog")
+	float DoubleTapWindow = 0.32f;
+
 protected:
 	void MoveForwardAxis(float Value);
 	void MoveBackwardAxis(float Value);
@@ -165,6 +169,8 @@ protected:
 	void MoveLeftAxis(float Value);
 	void TurnAxis(float Value);
 	void LookUpAxis(float Value);
+	void OnForwardPressed();
+	void OnForwardReleased();
 	void OnRunPressed();
 	void OnRunReleased();
 	void OnWalkPressed();
@@ -225,6 +231,12 @@ private:
 
 	bool bRunHeld = false;
 	bool bWalkHeld = false;
+	/** Double-tap-and-hold forward to run, the way a driving game does it.
+	 *  The first tap is remembered; a second within the window, held down,
+	 *  means run until the key comes up. */
+	bool bForwardHeld = false;
+	bool bDoubleTapRun = false;
+	float LastForwardPressTime = -10.0f;
 	int32 RouteIndex = 0;
 	float RouteHold = 0.0f;
 	/** How long the current leg has been attempted, seconds. */

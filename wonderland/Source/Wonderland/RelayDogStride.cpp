@@ -251,7 +251,10 @@ namespace RelayDogStride
 		// visibly past about 0.4 rad and there is no skinning to hide it.
 		const float Shaped = ShapePhase(StridePhase, 0.62f);
 		const float A = Shaped * 2.0f * Pi + (bLeft ? Pi : 0.0f);
-		const float Swing = std::sin(A) * 21.0f * Weight;
+		// ARMS SWING LIKE A PERSON WALKING, not like a doll being carried. The
+		// founder asked for a GTA-style walk; the largest single tell is how much
+		// the arms carry the stride, and 21 degrees was reading as restrained.
+		const float Swing = std::sin(A) * 27.0f * Weight;
 		// The elbow trails the shoulder by a quarter cycle and never straightens
 		// past zero: an arm swinging from a rigid shoulder with a dead-straight
 		// elbow is the pendulum this seam exists to avoid.
@@ -506,6 +509,53 @@ namespace RelayDogStride
 		// The landing's own smoothing times, so the ease matches the web Dog.
 		SpringStep(HeadYaw, WantYaw, 0.45f, Dt);
 		SpringStep(HeadPitch, WantPitch, 0.50f, Dt);
+
+		// THE SHOULDERS ARGUE WITH THE HIPS. A walking body counter-rotates: as
+		// the left leg comes through, the torso turns very slightly right. Two
+		// degrees is almost invisible held still and is most of what separates
+		// walking from marching -- and because the whole body carries it here,
+		// the legs turn with it, which is what stops the counter-rotation from
+		// sliding the feet.
+		Current.BodyYawDeg = -std::sin(ShapePhase(Current.StridePhase, Stride.DutyFactor) * 2.0f * Pi) * 2.4f * Weight;
+
+		// THE JUMP IS A POSE, NOT AN ABSENCE OF ONE. Off the ground the legs
+		// fold up under the body and the arms come out and up -- the founder's
+		// "legs bend, arms spread". Rising and falling differ: on the way up
+		// the body is still extending, on the way down it reaches for the
+		// ground it is about to meet.
+		// Leaving the ground is quick, landing is not: a pose that arrives in a
+		// tenth of a second reads as a jump, one that LEAVES that fast reads as
+		// a snap. The test measured 16.6 degrees in a single frame at 0.22 s.
+		SpringStep(Airborne, In.bInAir ? 1.0f : 0.0f, In.bInAir ? 0.12f : 0.34f, Dt);
+		Current.AirborneWeight = Clamp(Airborne.Value, 0.0f, 1.0f);
+		if (Current.AirborneWeight > 0.001f)
+		{
+			const float Air = Current.AirborneWeight;
+			// -1 falling, +1 rising, with a dead band so the apex is calm.
+			const float Rise = Clamp(In.VerticalSpeedUU / 320.0f, -1.0f, 1.0f);
+			// A REAL TUCK. At 42 degrees the jump was straighter-legged than a
+			// running stride, whose knee passes 100 -- so leaving the ground
+			// visibly UNBENT the legs, which is the opposite of a jump. Rising
+			// folds them up under the body; falling extends them toward the
+			// ground the Dog is about to meet.
+			const float Tuck = 78.0f + 26.0f * Rise;
+			const float HipUp = 30.0f + 12.0f * Rise;
+			Current.LegLeft.HipDeg = Current.LegLeft.HipDeg * (1.0f - Air) + HipUp * Air;
+			Current.LegRight.HipDeg = Current.LegRight.HipDeg * (1.0f - Air) + (HipUp * 0.65f) * Air;
+			Current.LegLeft.KneeDeg = Current.LegLeft.KneeDeg * (1.0f - Air) + Tuck * Air;
+			Current.LegRight.KneeDeg = Current.LegRight.KneeDeg * (1.0f - Air) + (Tuck * 0.8f) * Air;
+			// Arms out and up, and swept wide so the blocks clear the body.
+			const float ArmUp = -34.0f - 18.0f * Rise;
+			Current.ArmLeft.ShoulderDeg = Current.ArmLeft.ShoulderDeg * (1.0f - Air) + ArmUp * Air;
+			Current.ArmRight.ShoulderDeg = Current.ArmRight.ShoulderDeg * (1.0f - Air) + ArmUp * Air;
+			Current.ArmLeft.ElbowDeg = Current.ArmLeft.ElbowDeg * (1.0f - Air) + 22.0f * Air;
+			Current.ArmRight.ElbowDeg = Current.ArmRight.ElbowDeg * (1.0f - Air) + 22.0f * Air;
+			Current.ArmLeft.ShoulderYawDeg = Current.ArmLeft.ShoulderYawDeg * (1.0f - Air) + 30.0f * Air;
+			Current.ArmRight.ShoulderYawDeg = Current.ArmRight.ShoulderYawDeg * (1.0f - Air) + 30.0f * Air;
+			// The body pitches back a little rising, forward falling.
+			Current.LeanDeg = Current.LeanDeg * (1.0f - Air) + (-7.0f * Rise) * Air;
+			Current.BodyYawDeg *= (1.0f - Air);
+		}
 
 		const FIdlePose Idle = IdlePose(Elapsed, 1.0f - Weight, ScaleUU);
 		Current.HeadYawDeg = HeadYaw.Value + Idle.HeadYawDeg;
