@@ -995,22 +995,30 @@ def _flank(sgn, tag):
     # five metres. So: ONE major landmark per flank at the end of its walk,
     # where the eye already travels; one small vignette beside the room; and an
     # arch over the way in for vertical structure. Nothing else.
+    # (2,750, 5,950) AND NOT (3,050, 6,400), WHICH WAS INSIDE A TOWER.
+    # tools/walkable.py flood-filled the world from the spawn and reported the
+    # left flank's landmark unreachable; the cause was 180 uu away --
+    # Tower_L2, a tower_capped with a 520 uu footprint at (3,200, 6,500). The
+    # clock monument had been placed inside a building, and no gate caught it
+    # because a layout gate checks that assets and materials resolve, not that
+    # two pieces occupy different ground. Moved to the end of the rose walk
+    # with 711 uu to the tower and 652 to the court mushroom.
     if sgn > 0:
         # a clock monument, its face turned back down the walk
         out += [
-            A("gate_pier", sgn * 3050, 6400, 0, s=0.55, mat="MI_V2_IvoryStone",
+            A("gate_pier", sgn * 2750, 5950, 0, s=0.55, mat="MI_V2_IvoryStone",
               label="%s_ClockPier" % tag),
-            A("clock_ornate", sgn * 3050, 6285, 330, yaw=90, s=1.6, mat="MI_V2_Gold",
+            A("clock_ornate", sgn * 2750, 5835, 330, yaw=90, s=1.6, mat="MI_V2_Gold",
               label="%s_Clock" % tag),
-            A("gate_finial_ball", sgn * 3050, 6400, 372, s=0.5, mat="MI_V2_Gold",
+            A("gate_finial_ball", sgn * 2750, 5950, 372, s=0.5, mat="MI_V2_Gold",
               label="%s_ClockFinial" % tag),
         ]
     else:
         # the heart, on the same beat on the other side
         out += [
-            A("heart_topiary", sgn * 3050, 6400, 0, yaw=0, s=0.85, mat="MI_V2_LeafDark",
+            A("heart_topiary", sgn * 2750, 5950, 0, yaw=0, s=0.85, mat="MI_V2_LeafDark",
               label="%s_Heart" % tag),
-            A("rose_bush", sgn * 3050, 6180, 60, s=0.8, mat="MI_V2_LeafMid",
+            A("rose_bush", sgn * 2750, 5730, 60, s=0.8, mat="MI_V2_LeafMid",
               label="%s_HeartRoses" % tag),
         ]
     out += [
