@@ -21,48 +21,53 @@ const fail = [];
 const ok = (c, w) => { if (c) pass += 1; else fail.push(w); };
 
 // --- the approved layout ----------------------------------------------------
-ok(/RELAY AGENT LIVE TERMINAL/.test(markup), 'the title reads as the founder\'s reference');
+ok(!/RELAY AGENT LIVE TERMINAL/.test(markup), 'no title bar -- the reference has none');
 // The traffic-light chrome belonged to a full-screen window. At HUD size the
 // reference drops it for a title and a LIVE lamp, and three window-dressing
 // dots would cost a fifth of the title row.
-ok(!/wl-tm-light/.test(markup), 'no window chrome at HUD size');
-ok(/wl-tm-live/.test(markup), 'a LIVE lamp instead');
-ok(/&gt;_/.test(markup), 'the >_ prompt is present');
-ok(/rgba\(11, 13, 18, 0\.8/.test(css), 'the panel is dark AND translucent');
+ok(!/wl-tm-light/.test(markup), 'no window chrome');
+ok(!/wl-tm-expand/.test(markup), 'and no expand control -- that was mine, not the reference');
+ok(/&gt;_/.test(markup), 'the >_ prompt is present -- the one row a terminal cannot do without');
+
 ok(/backdrop-filter/.test(css), 'the world reads through the panel');
-ok(/flex-direction: column/.test(css.split('.wl-tm-window')[1] || ''),
-   'the panel stacks its rows');
+ok(/flex-direction: column/.test(css.split('.wl-tm-panels')[1] || ''),
+   'the sections are STACKED, not columns');
 // The redesign the founder forbade would show up as these words.
 for (const banned of ['tab', 'card', 'widget', 'accordion', 'carousel']) {
   const re = new RegExp(`class=["'][^"']*\\b${banned}`, 'i');
   ok(!re.test(markup), `no ${banned}s in the terminal markup`);
 }
 
-// --- the three workers, and Julius above them ------------------------------
-// The panel is a HUD element now, and at 27% of the viewport a stacked
-// section per role is four headers with no room for what they hold. The
-// founder's reference shows three WORKER chips with the orchestration layer
-// speaking in the stream, which states the hierarchy better than a fourth
-// equal box beside them.
-const order = ['PROMPT ARCHITECT', 'CODING AGENT', 'INDEPENDENT REVIEWER'];
-const idx = order.map((t) => js.indexOf(t));
-ok(idx.every((i) => i >= 0), 'all three worker chips exist');
-ok(idx.every((v, i) => i === 0 || v > idx[i - 1]), 'in the founder order');
-ok(!/WORKERS = \[[\s\S]{0,400}JULIUS/i.test(js), 'JULIUS IS NOT ONE OF THE CHIPS');
-ok(/Julius is deliberately absent/i.test(js), 'and the reason is stated where it can be read');
-ok(/ROLE_LABEL/.test(read('feed.js')) && /Julius/.test(read('feed.js')),
-   'Julius still speaks in the stream');
+// --- the four sections, in the founder's order -----------------------------
+// Read off their reference: PROMPT ARCHITECT, CODING AGENT, the orchestration
+// layer THIRD, then INDEPENDENT REVIEWER.
+const order = ['PROMPT ARCHITECT', 'CODING AGENT', 'JULIUS', 'INDEPENDENT REVIEWER'];
+const idx = order.map((t) => js.indexOf(`title: '${t}'`));
+ok(idx.every((i) => i >= 0), 'all four sections exist');
+ok(idx.every((v, i) => i === 0 || v > idx[i - 1]),
+   'Julius sits THIRD -- between the workers that produce and the reviewer that checks');
 ok(!/RELAY SYSTEM/.test(html + js), 'nothing is called RELAY SYSTEM any more');
+ok(/wl-tmpanel-state/.test(js) && /wl-tmpanel-status/.test(js),
+   'each header states its state twice, beside the name and again on the right');
+ok(/wl-tmrow-sub/.test(js), 'the detail is its own dim line under the headline');
 
-// --- the size the founder asked for ----------------------------------------
-// Measured off their reference frame (1672 x 941): 39.2% wide, 27.3% tall,
-// bottom-centred with a 3.1% margin. Fractions, so it holds at any viewport.
+// --- the size the founder asked for, kept ----------------------------------
 ok(/39\.2vw/.test(css), 'the panel is 39.2vw wide, as measured');
 ok(/27\.3vh/.test(css), 'and 27.3vh tall');
-ok(/3\.1vh/.test(css), 'and sits 3.1vh off the bottom');
 ok(/inset: auto 0 3\.1vh 0/.test(css), 'anchored to the bottom, not filling the screen');
 ok(/max\(420px/.test(css), 'with a pixel floor, because an unreadable panel is not a smaller one');
-ok(/terminalSize = 'min'/.test(js), 'and it opens MINIMISED');
+// The transparency is the one thing from my version the founder kept.
+ok(/rgba\(11, 13, 18, 0\.72\)/.test(css), 'the sections keep the dark translucent fill');
+ok(/backdrop-filter/.test(css), 'and the world still reads through them');
+// The sections are the frames; there is no box around the boxes.
+// THE RECTANGULAR OUTLINE. One panel with four sections inside it, not four
+// panels floating on the world -- it is what makes the terminal read as a
+// single instrument.
+const win = css.slice(css.indexOf('.wl-tm-window {'), css.indexOf('/* ------------------------------------------------ the four'));
+ok(/border: 1px solid var\(--wl-gold-dim\)/.test(win), 'the terminal has its outer outline');
+ok(/border-radius/.test(win), 'rounded, as the reference is');
+ok(/rgba\(9, 11, 15, 0\.58\)/.test(win), 'its fill is lighter than the sections, so they sit ON it');
+ok(/backdrop-filter/.test(win), 'and the world still reads through it');
 
 // --- space, escape, and the streamed game ----------------------------------
 ok(/SPACE/.test(markup) && /LIVE TERMINAL/.test(markup), 'the page says Space is the terminal');
@@ -86,6 +91,7 @@ ok(/#wl-hint \{[\s\S]{0,200}font-family/.test(css), 'and so does the hint');
 // --- honest state -----------------------------------------------------------
 ok(/'NO FEED'/.test(js) && /No authoritative Julius feed connected/.test(js),
    'the terminal starts in the honest state, not a live-looking one');
+ok(/'WAITING'/.test(js), 'and WAITING means connected-but-idle, which is a different thing');
 ok(/state = feedStatus\(\)/.test(js), 'the terminal boots cold');
 ok(/Not sent: no authoritative Julius feed/.test(js),
    'a command with nowhere to go says so rather than being answered');

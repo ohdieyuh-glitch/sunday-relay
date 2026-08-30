@@ -65,9 +65,9 @@ body[data-terminal='open'] #wl-hint { opacity: 0; }
 
 /* -------------------------------------------------------------- terminal */
 /* A HUD PANEL, NOT A TAKEOVER.
-   Measured off the founder's reference frame (1672 x 941): the panel is
-   39.2% of the viewport wide, 27.3% tall, bottom-centred with a 3.1% margin.
-   Those fractions are used directly so it holds its proportion at any size,
+   Measured off the founder's first reference frame (1672 x 941): 39.2% of the
+   viewport wide, 27.3% tall, bottom-centred with a 3.1% margin. Those
+   fractions are used directly so the panel holds its proportion at any size,
    with a floor in pixels because below about 420 px the log stops being
    readable and a panel you cannot read is not a smaller panel. */
 #wl-terminal {
@@ -95,108 +95,109 @@ body[data-terminal='open'] #wl-terminal { display: flex; }
   width: max(420px, 39.2vw); max-width: calc(100vw - 24px);
   height: max(190px, 27.3vh); max-height: calc(100vh - 48px);
   display: flex; flex-direction: column;
+  /* The reference sets its section titles at about 2% of the panel's width;
+     the panel is 39.2vw, so that is 0.78vw. Trimmed to 0.74vw, which is the
+     size at which four sections with a row each still fit inside 27.3vh --
+     the outline costs its own padding and they have to fit within it. */
+  font-size: clamp(9px, 0.74vw, 13px);
+  /* THE RECTANGULAR OUTLINE. The terminal is ONE panel with four sections
+     inside it, not four panels floating on the world -- that is what makes it
+     read as a single instrument rather than a stack of notifications. Its
+     fill is lighter than the sections' so they sit ON it instead of
+     dissolving into it, and both stay translucent so the world comes
+     through. */
   border: 1px solid var(--wl-gold-dim); border-radius: 10px;
-  background: rgba(11, 13, 18, 0.80);
-  backdrop-filter: blur(8px);
-  box-shadow: 0 14px 44px rgba(0, 0, 0, 0.55);
-  padding: 0 14px 10px; overflow: hidden;
-  /* The type scales with the panel, which scales with the viewport. */
-  /* The reference sets its log at about 1.8% of the panel's width. Larger
-     than that and every line truncates; this is the density that fits. */
-  font-size: clamp(9px, 0.63vw, 12px);
-}
-/* Expanded: the same panel, more of the same stream. Not a second design. */
-body[data-terminal-size='max'] .wl-tm-window {
-  width: min(1100px, calc(100vw - 48px));
-  height: min(760px, calc(100vh - 64px));
-  font-size: clamp(11px, 0.85vw, 14px);
+  background: rgba(9, 11, 15, 0.58);
+  backdrop-filter: blur(9px);
+  box-shadow: 0 14px 44px rgba(0, 0, 0, 0.5);
+  padding: 0.5em; overflow: hidden;
 }
 
-.wl-tm-titlebar {
-  display: flex; align-items: center; justify-content: space-between;
-  gap: 10px; border-bottom: 1px solid var(--wl-line); padding: 9px 0 8px;
-  flex: 0 0 auto;
-}
-.wl-tm-brand {
-  font-size: 1.08em; letter-spacing: 0.12em; color: var(--wl-gold); font-weight: 700;
-}
-.wl-tm-live {
-  font-size: 0.85em; letter-spacing: 0.14em; color: var(--wl-dim);
-  display: inline-flex; align-items: center; gap: 7px;
-}
-.wl-tm-live::after {
-  content: ''; width: 8px; height: 8px; border-radius: 50%;
-  background: var(--wl-faint);
-}
-.wl-tm-live--on { color: var(--wl-cream); }
-.wl-tm-live--on::after { background: var(--wl-green); box-shadow: 0 0 6px var(--wl-green); }
 
-/* THE THREE WORKERS, AND ONLY THE WORKERS.
-   Julius has no chip. It is the orchestration layer ABOVE these three and it
-   speaks in the stream as a role -- which says the hierarchy better than a
-   fourth equal box beside them ever did. */
-.wl-tm-roles {
-  display: flex; gap: 8px; padding: 8px 0 6px; flex: 0 0 auto; flex-wrap: wrap;
-}
-.wl-tm-role {
-  display: inline-flex; align-items: center; gap: 7px;
-  border: 1px solid var(--wl-line); border-radius: 5px;
-  padding: 4px 9px 4px 5px;
-  font-size: 0.85em; letter-spacing: 0.1em; color: var(--wl-dim);
-}
-.wl-tm-role-glyph {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 1.5em; height: 1.5em; border: 1px solid var(--wl-line); border-radius: 3px;
-  font-size: 0.9em; color: var(--wl-faint);
-}
-.wl-tm-role--active { color: var(--wl-gold); border-color: var(--wl-gold-dim); }
-.wl-tm-role--active .wl-tm-role-glyph { color: var(--wl-gold); border-color: var(--wl-gold-dim); }
-
-/* One flat stream. At this size a stacked section per role is four headers
-   and no room for what they would hold. */
-.wl-tm-stream {
-  list-style: none; margin: 0; padding: 2px 0 0;
+/* ------------------------------------------------ the four stacked sections */
+.wl-tm-panels {
+  display: flex; flex-direction: column;
+  gap: 1.15%;                      /* measured: 7 px on a 536 px panel */
   flex: 1 1 auto; min-height: 0; overflow-y: auto;
-  line-height: 1.65;
+  padding: 0;
 }
-.wl-tm-stream::-webkit-scrollbar { width: 6px; }
-.wl-tm-stream::-webkit-scrollbar-thumb { background: var(--wl-line); border-radius: 3px; }
-.wl-tmrow {
-  display: flex; gap: 0.7em; align-items: baseline;
-  white-space: nowrap; overflow: hidden;
-}
-.wl-tmrow-role { color: var(--wl-gold); letter-spacing: 0.08em; flex: 0 0 auto; }
-.wl-tmrow-tag { color: var(--wl-cyan); flex: 0 0 auto; }
-.wl-tmrow--done .wl-tmrow-tag, .wl-tmrow--evidence .wl-tmrow-tag { color: var(--wl-green); }
-.wl-tmrow-time { color: var(--wl-faint); flex: 0 0 auto; }
-.wl-tmrow-msg { color: var(--wl-cream); overflow: hidden; text-overflow: ellipsis; }
-.wl-tmrow--done .wl-tmrow-msg, .wl-tmrow--evidence .wl-tmrow-msg { color: var(--wl-green); }
-.wl-tm-empty { margin: 0; padding: 6px 0; color: var(--wl-faint); }
+.wl-tm-panels::-webkit-scrollbar { width: 5px; }
+.wl-tm-panels::-webkit-scrollbar-thumb { background: var(--wl-line); border-radius: 3px; }
 
-.wl-tm-input {
-  display: flex; align-items: center; gap: 8px;
-  border-top: 1px solid var(--wl-line); padding: 8px 0 0; margin-top: 6px;
+.wl-tmpanel {
+  border: 1px solid var(--wl-gold-dim); border-radius: 7px;
+  background: rgba(11, 13, 18, 0.72);   /* the transparency, kept */
+  backdrop-filter: blur(8px);
+  padding: 0.3em 0.8em 0.36em;
+  /* NATURAL HEIGHT, NEVER CLIPPED. Sharing the panel between four boxes cut
+     every sub-line in half -- a section that shows you the top of a sentence
+     is worse than one that scrolls. The type below is sized so all four fit
+     at 16:9 with a row each; beyond that the list scrolls. */
   flex: 0 0 auto;
 }
+.wl-tmpanel--live { border-color: rgba(217, 164, 65, 0.62); }
+
+.wl-tmpanel-head {
+  display: flex; align-items: baseline; gap: 0.55em;
+  white-space: nowrap;
+}
+.wl-tmpanel-sq { color: var(--wl-gold); font-size: 0.7em; }
+.wl-tmpanel-title {
+  margin: 0; font-size: 1em; font-weight: 700;
+  letter-spacing: 0.13em; color: var(--wl-gold);
+}
+/* The bracketed state beside the name, and the same word again on the right:
+   the reference says it twice and that is what makes a row of four boxes
+   scannable down either edge. */
+.wl-tmpanel-state { font-size: 0.92em; letter-spacing: 0.06em; color: var(--wl-cream); }
+.wl-tmpanel-status {
+  margin-left: auto; font-size: 0.85em; letter-spacing: 0.12em; color: var(--wl-gold);
+}
+.wl-tmpanel--live .wl-tmpanel-status::after {
+  content: ''; display: inline-block; margin-left: 0.5em; vertical-align: 0.05em;
+  width: 0.5em; height: 0.5em; border-radius: 50%; background: var(--wl-gold);
+}
+
+.wl-tmpanel-empty {
+  margin: 0.18em 0 0; font-size: 0.9em; color: var(--wl-dim); line-height: 1.3;
+}
+.wl-tmpanel-feed { list-style: none; margin: 0.16em 0 0; padding: 0; }
+
+.wl-tmrow { margin: 0 0 0.15em; }
+.wl-tmrow-head {
+  display: flex; align-items: baseline; gap: 0.5em;
+  font-size: 0.9em; line-height: 1.32;
+}
+.wl-tmrow-dot { color: var(--wl-gold); font-size: 0.62em; flex: 0 0 auto; }
+.wl-tmrow-time { color: var(--wl-gold); flex: 0 0 auto; }
+.wl-tmrow-role { color: var(--wl-gold); flex: 0 0 auto; }
+.wl-tmrow-msg { color: var(--wl-cream); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wl-tmrow--done .wl-tmrow-msg, .wl-tmrow--evidence .wl-tmrow-msg { color: var(--wl-green); }
+.wl-tmrow--done .wl-tmrow-dot, .wl-tmrow--evidence .wl-tmrow-dot { color: var(--wl-green); }
+/* The sub-line sits under the headline, indented past the bullet. */
+.wl-tmrow-sub {
+  font-size: 0.86em; color: var(--wl-dim); line-height: 1.3;
+  padding-left: 1.5em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* The one row the reference does not show, and the terminal cannot do
+   without: Space types a space in here, which is the whole input rule. */
+.wl-tm-input {
+  display: flex; align-items: center; gap: 0.6em;
+  border-top: 1px solid var(--wl-line);
+  padding: 0.34em 0.2em 0; margin-top: 0.35em;
+  flex: 0 0 auto;
+}
+
 .wl-tm-prompt { color: var(--wl-gold); letter-spacing: 0.06em; flex: 0 0 auto; }
 .wl-tm-input input {
   flex: 1; min-width: 0; background: transparent; color: var(--wl-cream);
-  border: 0; font-size: 1em; padding: 3px 0;
+  border: 0; font-size: 0.95em; padding: 0.15em 0;
 }
-.wl-tm-input input:focus-visible { outline: 1px solid var(--wl-gold-dim); outline-offset: 3px; }
-.wl-tm-expand {
-  flex: 0 0 auto; font-size: 1em; line-height: 1;
-  color: var(--wl-faint); background: transparent;
-  border: 1px solid var(--wl-line); border-radius: 4px;
-  padding: 3px 6px; cursor: pointer;
-}
-.wl-tm-expand:hover, .wl-tm-expand:focus-visible {
-  color: var(--wl-gold); border-color: var(--wl-gold-dim);
-}
+.wl-tm-input input:focus-visible { outline: none; }
 
 @media (max-width: 720px) {
-  .wl-tm-window { width: calc(100vw - 16px); height: min(46vh, 320px); padding: 0 10px 8px; }
-  .wl-tm-roles { gap: 6px; }
+  .wl-tm-window { width: calc(100vw - 16px); height: min(46vh, 320px); font-size: 11px; }
 }
 @media (prefers-reduced-motion: reduce) {
   #wl-hint { transition: none; }

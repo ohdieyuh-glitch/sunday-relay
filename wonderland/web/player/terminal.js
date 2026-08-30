@@ -6,18 +6,32 @@
 import { classifyKey, shouldPreventDefault, shouldStopGameInput } from './keys.js';
 import { feedStatus } from './feed.js';
 
-// THE THREE WORKERS. Julius is deliberately absent from this list: it is the
-// orchestration layer ABOVE them and it speaks in the stream as a role, which
-// says the hierarchy better than a fourth equal box beside them did.
-const WORKERS = [
-  { key: 'architect', title: 'PROMPT ARCHITECT', glyph: '\u25C8' },
-  { key: 'coding', title: 'CODING AGENT', glyph: '\u25C9' },
-  { key: 'reviewer', title: 'INDEPENDENT REVIEWER', glyph: '\u25A3' },
+// THE FOUR SECTIONS, IN THE FOUNDER'S ORDER.
+//
+// Read off their reference frame: PROMPT ARCHITECT, CODING AGENT, then the
+// orchestration layer, then INDEPENDENT REVIEWER. Julius sits THIRD -- between
+// the workers that produce and the reviewer that checks them -- which is
+// where a controller belongs in a run, and it is not the order I had.
+const SECTIONS = [
+  { key: 'architect', title: 'PROMPT ARCHITECT' },
+  { key: 'coding', title: 'CODING AGENT' },
+  { key: 'julius', title: 'JULIUS' },
+  { key: 'reviewer', title: 'INDEPENDENT REVIEWER' },
 ];
 
-// The stream keeps the most recent work. A mission is longer than a panel,
-// and at this size it is much longer.
-const STREAM_ROWS = 40;
+//: What a section says when it has nothing to report. The reference gives the
+//: reviewer its own line -- it is not idle, it is waiting on a verification
+//: that has not happened -- and that distinction is worth keeping.
+const RESTING = {
+  architect: 'No activity yet.',
+  coding: 'No activity yet.',
+  julius: 'No activity yet.',
+  reviewer: 'Reviewer: Independent review begins after Julius verification.',
+};
+
+// Each section keeps its most recent work; the list scrolls when the panel
+// cannot hold all four at once.
+const ROWS_PER_SECTION = 4;
 
 const el = (id) => document.getElementById(id);
 
@@ -55,73 +69,93 @@ function closeTerminal() {
   focusWorld();
 }
 
-function rowNode(row) {
+function rowNode(row, withDetail) {
   const li = document.createElement('li');
   li.className = 'wl-tmrow' + (row.state === 'open' ? '' : ` wl-tmrow--${row.state}`);
-  const role = document.createElement('span');
-  role.className = 'wl-tmrow-role';
-  role.textContent = row.role.toUpperCase();
-  li.append(role);
-  if (row.operation) {
-    const tag = document.createElement('span');
-    tag.className = 'wl-tmrow-tag';
-    tag.textContent = `[${row.operation.toUpperCase()}]`;
-    li.append(tag);
-  }
+  const head = document.createElement('div');
+  head.className = 'wl-tmrow-head';
+  const dot = document.createElement('span');
+  dot.className = 'wl-tmrow-dot';
+  dot.textContent = '\u25CF';
+  head.append(dot);
   if (row.at) {
     const time = document.createElement('span');
     time.className = 'wl-tmrow-time';
     time.textContent = row.at;
-    li.append(time);
+    head.append(time);
   }
+  const role = document.createElement('span');
+  role.className = 'wl-tmrow-role';
+  role.textContent = `${row.role}:`;
   const msg = document.createElement('span');
   msg.className = 'wl-tmrow-msg';
-  // One line. The detail joins the headline rather than taking a second row --
-  // at 27% of the viewport a two-line entry halves how much history is visible.
-  msg.textContent = row.detail ? `${row.headline}. ${row.detail}` : row.headline;
-  li.append(msg);
+  msg.textContent = row.headline;
+  head.append(role, msg);
+  li.append(head);
+  // The detail is its own dim line under the headline, indented past the
+  // bullet -- the reference's "Mission Contract accepted at revision 1."
+  //
+  // ONLY IN THE SECTION THAT IS WORKING, which is what the reference shows:
+  // three of its four boxes carry one body line and the live one carries two.
+  // Give every section a sub-line and the four of them no longer fit in the
+  // height the founder asked for -- the last one loses its body entirely.
+  if (row.detail && withDetail) {
+    const sub = document.createElement('div');
+    sub.className = 'wl-tmrow-sub';
+    sub.textContent = row.detail;
+    li.append(sub);
+  }
   return li;
 }
 
 function render() {
-  const live = el('wl-tm-live');
-  if (live) {
-    live.textContent = state.live ? 'LIVE' : 'NO FEED';
-    live.classList.toggle('wl-tm-live--on', state.live);
-    live.title = state.live ? (state.note || 'connected') : state.label;
-  }
-  const roles = el('wl-tm-roles');
-  if (roles) {
-    roles.textContent = '';
-    for (const w of WORKERS) {
-      const active = state.live && state.rows.some((r) => r.panel === w.key);
-      const chip = document.createElement('span');
-      chip.className = 'wl-tm-role' + (active ? ' wl-tm-role--active' : '');
-      chip.title = !state.live ? state.label : (active ? 'active in this mission' : 'idle');
-      const g = document.createElement('span');
-      g.className = 'wl-tm-role-glyph';
-      g.textContent = w.glyph;
-      chip.append(g, document.createTextNode(w.title));
-      roles.append(chip);
-    }
-  }
-  const host = el('wl-tm-stream');
+  const host = el('wl-tm-panels');
   if (!host) return;
   host.textContent = '';
-  const rows = state.rows.slice(-STREAM_ROWS);
-  if (!rows.length) {
-    const p = document.createElement('li');
-    p.className = 'wl-tm-empty';
-    // The honest state, in one line because one line is what there is room for.
-    p.textContent = state.live
-      ? 'Connected. No activity in the current mission.'
-      : 'No authoritative Julius feed connected. This terminal shows execution; it does not simulate it.';
-    host.append(p);
-    return;
+  // The section that owns the newest event is the one currently working.
+  const newest = state.rows.length ? state.rows[state.rows.length - 1].panel : null;
+  for (const section of SECTIONS) {
+    const all = state.rows.filter((r) => r.panel === section.key);
+    const rows = all.slice(-ROWS_PER_SECTION);
+    const live = state.live && all.length > 0;
+    // THE HEADER STATES THE SAME THING TWICE, AS THE REFERENCE DOES: a
+    // bracketed state beside the name and the word again on the right. With
+    // no feed at all it says so rather than reading as a connected mission
+    // that happens to be quiet.
+    const word = !state.live ? 'NO FEED' : (live ? 'LIVE' : 'WAITING');
+    const box = document.createElement('section');
+    box.className = 'wl-tmpanel' + (live ? ' wl-tmpanel--live' : '');
+    const head = document.createElement('div');
+    head.className = 'wl-tmpanel-head';
+    const sq = document.createElement('span');
+    sq.className = 'wl-tmpanel-sq';
+    sq.textContent = '\u25A0';
+    const title = document.createElement('h2');
+    title.className = 'wl-tmpanel-title';
+    title.textContent = section.title;
+    const st = document.createElement('span');
+    st.className = 'wl-tmpanel-state';
+    st.textContent = `[${word}]`;
+    const right = document.createElement('span');
+    right.className = 'wl-tmpanel-status';
+    right.textContent = word;
+    head.append(sq, title, st, right);
+    box.append(head);
+    if (rows.length) {
+      const ul = document.createElement('ul');
+      ul.className = 'wl-tmpanel-feed';
+      for (const r of rows) ul.append(rowNode(r, section.key === newest));
+      box.append(ul);
+    } else {
+      const p = document.createElement('p');
+      p.className = 'wl-tmpanel-empty';
+      p.textContent = state.live
+        ? RESTING[section.key]
+        : 'No authoritative Julius feed connected.';
+      box.append(p);
+    }
+    host.append(box);
   }
-  for (const r of rows) host.append(rowNode(r));
-  // A terminal shows its newest line.
-  host.scrollTop = host.scrollHeight;
 }
 
 /**
@@ -146,14 +180,9 @@ function submit() {
   // WITHOUT A CONNECTED JULIUS THERE IS NOWHERE FOR THIS TO GO, and inventing
   // a reply is precisely the failure the founder named. Say what happened.
   if (!state.live) {
-    const host = el('wl-tm-stream');
-    if (host) {
-      const p = document.createElement('li');
-      p.className = 'wl-tm-empty';
-      p.textContent = `Not sent: no authoritative Julius feed is connected. ("${text}")`;
-      host.append(p);
-      host.scrollTop = host.scrollHeight;
-    }
+    // NOWHERE TO SEND IT IS SOMETHING TO SAY, not something to answer.
+    const box = document.querySelector('.wl-tmpanel .wl-tmpanel-empty');
+    if (box) box.textContent = `Not sent: no authoritative Julius feed is connected. ("${text}")`;
     return;
   }
   window.dispatchEvent(new CustomEvent('wonderland:terminal-submit', { detail: { text } }));
@@ -205,16 +234,6 @@ export function install(root = window) {
   // The keyboard may already be claimed (overlay.js claims it at module
   // evaluation, before the panel exists); claimKeyboard is idempotent.
   claimKeyboard(root);
-  const expand = el('wl-tm-expand');
-  if (expand) {
-    expand.addEventListener('click', () => {
-      const max = document.body.dataset.terminalSize === 'max';
-      document.body.dataset.terminalSize = max ? 'min' : 'max';
-      expand.setAttribute('aria-label', max ? 'Expand the terminal' : 'Shrink the terminal');
-      const host = el('wl-tm-stream');
-      if (host) host.scrollTop = host.scrollHeight;
-    });
-  }
   const input = el('wl-tm-input');
   if (input) {
     input.addEventListener('keydown', (ev) => {
@@ -224,9 +243,6 @@ export function install(root = window) {
   const world = el('wl-world');
   if (world) world.addEventListener('click', focusWorld);
   document.body.dataset.terminal = 'closed';
-  // MINIMISED IS THE DEFAULT (founder, 2026-08-30). The panel is a HUD
-  // element over a world you are standing in, not a page you read.
-  document.body.dataset.terminalSize = 'min';
   render();
   focusWorld();
   return { open: openTerminal, close: closeTerminal, connect, isOpen: () => open };
