@@ -691,6 +691,14 @@ def _parterre(sgn, cx, cy, seed, tag):
                          yaw=yaw, sxyz=(1.75, 0.90, 0.85),
                          mat=("MI_V2_LeafDark", "MI_V2_LeafMid")[(i + k) % 2],
                          label="%s_Bed%d_Edge%d" % (tag, i, k)))
+        # THE BED HAS A FLOOR. Without one the blooms sit on lawn showing
+        # through between them, and the bed reads as flowers ON grass instead
+        # of as a planted bed -- in the boards a bed's ground is dark worked
+        # soil, and it is a surprising amount of why their gardens look
+        # gardened. garden_lawn is 6004 x 7197 x 30, so these fractions make a
+        # 620 x 620 floor; sunk 6 uu so the hedge edges stand proud of it.
+        out.append(A("garden_lawn", bx, by, -6.0, sxyz=(0.1033, 0.0862, 0.5),
+                     mat="MI_V2_Soil", label="%s_Bed%d_Soil" % (tag, i)))
         # what fills it
         out.append(A("rose_bush", bx, by, 60, yaw=40 * i, s=0.85,
                      mat="MI_V2_LeafMid", label="%s_Bed%d_Rose" % (tag, i)))
