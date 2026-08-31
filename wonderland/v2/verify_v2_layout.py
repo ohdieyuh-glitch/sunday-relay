@@ -31,6 +31,56 @@ PLAZA_OK = {"portal_disc", "portal_ring", "pedestal_finial", "gate_finial_ball",
             "flower_cluster", "gate_pier", "gate_leaf"}
 
 
+def _verify_step_heights():
+    """EVERY WALKING SURFACE MUST BE UNDER THE DOG'S STEP HEIGHT.
+
+    ARelayDogCharacter sets MaxStepHeight = 30 uu. terrace_platform's top sits
+    at local z = 140, so a slab at z = -18 with a 0.35 z-scale presents a 31 uu
+    lip -- ONE UNIT too tall, and every road in the world was unclimbable.
+
+    It cost six route fixes to find, because it does not look like a step. The
+    Dog crosses grass perfectly, stalls at road edges, grinds along them at a
+    sixth of its speed, and gives up seventy-four uu short of a target with
+    nothing collidable within three metres. Nothing in that picture says
+    "kerb".
+
+    Water features are exempt: a rill is meant to be a rill.
+    """
+    import layout_v2 as LAY
+    STEP = 30.0
+    # FLAT SLABS ONLY. A flight of steps is MEANT to be climbed and presents
+    # individual risers, not one lip; a terrace_platform stretched to z-scale
+    # 2.1 is a monument plinth, not a path. What this is looking for is the
+    # thing a walker crosses without thinking about it.
+    TOP = {"terrace_platform": 140.0}
+    FLAT = 0.5
+    bad = {}
+    for p in LAY.ALL:
+        h = TOP.get(p["asset"])
+        if h is None:
+            continue
+        lab = p.get("label") or ""
+        if "Water" in lab or "Rill" in lab:
+            continue
+        sc = p["scale"]
+        sz = sc[2] if isinstance(sc, (list, tuple)) and len(sc) > 2 else (
+            sc[0] if isinstance(sc, (list, tuple)) else sc)
+        if sz > FLAT:
+            continue
+        top = p["pos"][2] + h * sz
+        if top > STEP:
+            key = lab.rstrip("0123456789_") or p["asset"]
+            bad[key] = (bad.get(key, (0, top))[0] + 1, top)
+    if bad:
+        print("V2 STEP HEIGHT: %d walking surfaces are above the Dog's %.0f uu step:"
+              % (sum(v[0] for v in bad.values()), STEP))
+        for k, (n, top) in sorted(bad.items(), key=lambda kv: -kv[1][0])[:8]:
+            print("   %-30s x%-4d surface %.0f uu" % (k, n, top))
+        return False
+    print("V2 STEP HEIGHT: every walking surface is under the Dog's %.0f uu step" % STEP)
+    return True
+
+
 def main():
     fails = []
     mats = set(M.INSTANCES) | {"MI_V2_SkyPano"}
@@ -217,9 +267,15 @@ def main():
         for f in fails:
             print("  " + f)
         return 1
+    if not _verify_step_heights():
+        raise SystemExit("V2 LAYOUT FAIL: a walking surface is above the Dog's step height")
     print("PASS: recipes and materials resolve; corridor open; plaza clean; hover props high; landmarks in both cameras; gate view clear; city groups vary")
     return 0
 
 
 if __name__ == "__main__":
     sys.exit(main())
+
+
+
+

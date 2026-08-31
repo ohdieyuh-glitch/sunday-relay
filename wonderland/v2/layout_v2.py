@@ -66,6 +66,25 @@ PASS03 = _os.environ.get("WLV2_PASS03", "0") == "1"
 #: V2_GroundSlab), which is below the lawns' deepest displaced point, and
 #: every placement keeps the z it was authored with.
 GROUND_Z = -2.0
+#: THE ROAD'S TOP MUST BE UNDER THE DOG'S STEP HEIGHT, AND IT WAS OVER IT BY
+#: ONE UNIT.
+#:
+#: terrace_platform is a 120-thick slab with a 20-thick cap, so its top sits at
+#: local z = 140. At z = -18 with a 0.35 z-scale that puts the walking surface
+#: at 31 uu -- and ARelayDogCharacter sets MaxStepHeight = 30. Every road in
+#: this world was one unit too tall to step onto.
+#:
+#: It looked like anything but that. The Dog crossed grass perfectly, stalled
+#: at road edges, ground along them at a sixth of its speed, and once gave up
+#: SEVENTY-FOUR UU SHORT of a target with nothing collidable within three
+#: metres. Six route fixes went past it -- wider capsule, centred waypoints,
+#: pinned pinches, clearance-preferring search, shorter legs, a widened gate --
+#: because every one of them was looking for something in the way, and the
+#: obstacle was the road itself.
+#:
+#: -30 puts the surface at 19 uu, eleven under the step height, which is margin
+#: rather than luck.
+ROAD_Z = -30.0
 #: uu. A parterre's worked-soil floor, proud of the lawn under it.
 BED_Z = 3.0
 
@@ -942,7 +961,7 @@ def _parterre(sgn, cx, cy, seed, tag, H=None):
     # reads as paving and steps like paving. The two strips cross at the
     # centrepiece, which is what the four beds are arranged around.
     for k, yaw in enumerate((0.0, 90.0)):
-        out.append(A("terrace_platform", cx, cy, -18.0, yaw=yaw,
+        out.append(A("terrace_platform", cx, cy, ROAD_Z, yaw=yaw,
                      sxyz=(1.07 * u, 0.405 * u, 0.35), mat="MI_V2_PlazaWarm",
                      label="%s_Walk%d" % (tag, k)))
     # the centrepiece the walks run to
@@ -1231,12 +1250,12 @@ def _paved_route(sgn, pts, width, tag):
         dx, dy = abs(x1 - x0), abs(y1 - y0)
         if dy >= dx:                       # a run along Y
             length = max(dy, width)
-            out.append(A("terrace_platform", cx, cy, -18.0, yaw=90,
+            out.append(A("terrace_platform", cx, cy, ROAD_Z, yaw=90,
                          sxyz=(length / 1440.0, width / 740.0, 0.35),
                          mat="MI_V2_PlazaCream", label="%s_Paved%d" % (tag, i)))
         else:                              # a run along X
             length = max(dx, width)
-            out.append(A("terrace_platform", cx, cy, -18.0, yaw=0,
+            out.append(A("terrace_platform", cx, cy, ROAD_Z, yaw=0,
                          sxyz=(length / 1440.0, width / 740.0, 0.35),
                          mat="MI_V2_PlazaCream", label="%s_Paved%d" % (tag, i)))
     return out
@@ -1253,7 +1272,7 @@ def _flank(sgn, tag):
           mat="MI_V2_IvoryStone", label="%s_EntryArch" % tag),
         # a paved apron under the threshold and a paved way from it to the
         # parterre, so the route into the room is stone the whole way
-        A("terrace_platform", sgn * 2650, 400, -18.0, yaw=90,
+        A("terrace_platform", sgn * 2650, 400, ROAD_Z, yaw=90,
           sxyz=(0.62, 0.44, 0.35), mat="MI_V2_PlazaCream", label="%s_EntryApron" % tag),
         # YAW 90 SWAPS WHICH SCALE AXIS IS WHICH. terrace_platform is 1440
         # along X and 740 along Y; turned 90 degrees its X extent comes from
@@ -1262,7 +1281,7 @@ def _flank(sgn, tag):
         # overlapped the parterre's outer edge at 3580 and stopped 400 uu
         # short of the arch it was supposed to lead from. The gap to pave runs
         # x 2650 (arch) to 3580 (bed edge), so 930 along X and 300 across.
-        A("terrace_platform", sgn * 3115, 520, -18.0, yaw=90,
+        A("terrace_platform", sgn * 3115, 520, ROAD_Z, yaw=90,
           sxyz=(0.208, 1.26, 0.35), mat="MI_V2_PlazaWarm", label="%s_EntryWalk" % tag),
         A("topiary_cone_plain", sgn * 2650, 40, 0, s=0.85, mat="MI_V2_LeafDark", label="%s_EntryConeA" % tag),
         A("topiary_cone_plain", sgn * 2650, 760, 0, s=0.85, mat="MI_V2_LeafDark", label="%s_EntryConeB" % tag),
@@ -1877,7 +1896,7 @@ def _quarter_towers(cx, cy, sgn, seed, tag, H=None):
                              s=0.6, mat="MI_V2_IvoryStone", label="%s_WallPier%d" % (tag, i)))
         # a paved court at its heart, so the towers stand on something built
         for k, yaw in enumerate((0.0, 90.0)):
-            out.append(A("terrace_platform", cx, cy, -18.0, yaw=yaw,
+            out.append(A("terrace_platform", cx, cy, ROAD_Z, yaw=yaw,
                          sxyz=(1.45 * sp, 0.42 * sp, 0.35), mat="MI_V2_PlazaWarm",
                          label="%s_Court%d" % (tag, k)))
     return out
@@ -1930,7 +1949,7 @@ def _quarter_grove(cx, cy, sgn, seed, tag, H=None):
         if prev is not None:
             d = math.hypot(px - prev[0], py - prev[1]) or 1.0
             out.append(A("terrace_platform", (px + prev[0]) * 0.5, (py + prev[1]) * 0.5,
-                         -18.0, yaw=math.degrees(math.atan2(py - prev[1], px - prev[0])),
+                         ROAD_Z, yaw=math.degrees(math.atan2(py - prev[1], px - prev[0])),
                          sxyz=(d / 1440.0, 0.15, 0.35), mat="MI_V2_PlazaCream",
                          label="%s_Path%d" % (tag, i)))
         prev = (px, py)
@@ -2157,7 +2176,7 @@ def _quarter_clockyard(cx, cy, sgn, seed, tag, H=None):
               label="%s_Key%d" % (tag, i)),
         ]
     for k, yaw in enumerate((0.0, 90.0)):
-        out.append(A("terrace_platform", cx, cy, -18.0, yaw=yaw,
+        out.append(A("terrace_platform", cx, cy, ROAD_Z, yaw=yaw,
                      sxyz=(1.15 * sp, 0.34 * sp, 0.35), mat="MI_V2_PlazaCream",
                      label="%s_Yard%d" % (tag, k)))
     if H["court_p"] > 0.40:
@@ -2245,7 +2264,7 @@ def _quarter_water(cx, cy, sgn, seed, tag, H=None):
         yaw = 90.0 * k + 45.0 * (seed % 2)
         a = math.radians(yaw)
         out.append(A("terrace_platform", cx + math.cos(a) * 1250.0 * sp,
-                     cy + math.sin(a) * 1250.0 * sp, -18.0, yaw=yaw,
+                     cy + math.sin(a) * 1250.0 * sp, ROAD_Z, yaw=yaw,
                      sxyz=(1.15 * sp, 0.30 * sp, 0.35), mat="MI_V2_PlazaCream",
                      label="%s_Walk%d" % (tag, k)))
     n_bal = _n(8, H["density"], 4)
@@ -2284,7 +2303,7 @@ def _quarter_water(cx, cy, sgn, seed, tag, H=None):
     for i in range(5):
         d = 1900.0 + 520.0 * i
         out += [
-            A("terrace_platform", cx + math.cos(ra) * d, cy + math.sin(ra) * d, -18.0,
+            A("terrace_platform", cx + math.cos(ra) * d, cy + math.sin(ra) * d, ROAD_Z,
               yaw=math.degrees(ra), sxyz=(0.40 * sp, 0.14 * sp, 0.35),
               mat="MI_V2_PlazaCream", label="%s_Rill%d" % (tag, i)),
             A("terrace_platform", cx + math.cos(ra) * d, cy + math.sin(ra) * d, -6.0,
@@ -2390,7 +2409,7 @@ def _quarter_lake(cx, cy, sgn, seed, tag, H=None):
         x0, y0 = cx + math.cos(a0) * rx * 1.22, cy + math.sin(a0) * ry * 1.22
         x1, y1 = cx + math.cos(a1) * rx * 1.22, cy + math.sin(a1) * ry * 1.22
         d = math.hypot(x1 - x0, y1 - y0) or 1.0
-        out.append(A("terrace_platform", (x0 + x1) * 0.5, (y0 + y1) * 0.5, -18.0,
+        out.append(A("terrace_platform", (x0 + x1) * 0.5, (y0 + y1) * 0.5, ROAD_Z,
                      yaw=math.degrees(math.atan2(y1 - y0, x1 - x0)),
                      sxyz=(d / 1440.0, 0.20, 0.35), mat="MI_V2_PlazaCream",
                      label="%s_Walk%d" % (tag, i)))
@@ -2529,7 +2548,7 @@ def _quarter_court(cx, cy, sgn, seed, tag, H=None):
                 A("gate_finial_ball", px, py, 850.0 * 0.85 * sc, s=0.45 * sc,
                   mat="MI_V2_Gold", label="%s_ColumnCap%d" % (tag, i)),
             ]
-    out.append(A("terrace_platform", cx, cy, -18.0, yaw=yaw0,
+    out.append(A("terrace_platform", cx, cy, ROAD_Z, yaw=yaw0,
                  sxyz=(w / 900.0, d / 620.0, 0.35), mat="MI_V2_PlazaCream",
                  label="%s_Court" % tag))
     out += _parterre(sgn, cx, cy, seed + 5, tag + "_P", H=H)
@@ -2596,7 +2615,7 @@ def _quarter_hamlet(cx, cy, sgn, seed, tag, H=None):
                          fy - math.cos(a) * 190.0 * sc, 0, s=0.55 * sc,
                          mat="MI_V2_LeafDark", label="%s_Ball%d" % (tag, i)))
         # and the lane that runs to its door
-        out.append(A("terrace_platform", (x + cx) * 0.5, (y + cy) * 0.5, -18.0,
+        out.append(A("terrace_platform", (x + cx) * 0.5, (y + cy) * 0.5, ROAD_Z,
                      yaw=math.degrees(a),
                      sxyz=(math.hypot(x - cx, y - cy) / 1600.0, 0.16, 0.35),
                      mat="MI_V2_PlazaCream", label="%s_Lane%d" % (tag, i)))
@@ -2617,7 +2636,7 @@ def _quarter_hamlet(cx, cy, sgn, seed, tag, H=None):
           label="%s_WellWater" % tag),
     ]
     # the square, and a lane out of it
-    out.append(A("terrace_platform", cx, cy, -18.0, yaw=(seed * 17) % 90,
+    out.append(A("terrace_platform", cx, cy, ROAD_Z, yaw=(seed * 17) % 90,
                  sxyz=(0.62 * sp, 0.62 * sp, 0.35), mat="MI_V2_PlazaWarm",
                  label="%s_Square" % tag))
     # the market cross, and an arch on the way in: a village square wants a
@@ -2767,7 +2786,7 @@ def _road(x0, y0, x1, y1, width, tag, n=None, style="ring"):
         t0, t1 = i / float(n), (i + 1) / float(n)
         cx, cy = x0 + dx * (t0 + t1) * 0.5, y0 + dy * (t0 + t1) * 0.5
         seg = length / n
-        out.append(A("terrace_platform", cx, cy, -18.0, yaw=yaw,
+        out.append(A("terrace_platform", cx, cy, ROAD_Z, yaw=yaw,
                      sxyz=(seg / 1440.0, width / 740.0, 0.35),
                      mat=mats[i % 3], label="%s_Seg%d" % (tag, i)))
         # THE KERB is what makes paving read as a made road rather than a
@@ -3824,7 +3843,7 @@ def _quarter_edge(s, H):
         ux, uy = -cx / d, -cy / d               # toward the district
         px, py = cx + ux * r0 * 1.06, cy + uy * r0 * 1.06
         yaw = math.degrees(math.atan2(uy, ux))
-        out.append(A("terrace_platform", px, py, -18.0, yaw=yaw,
+        out.append(A("terrace_platform", px, py, ROAD_Z, yaw=yaw,
                      sxyz=(0.62 * sp, 0.24 * sp, 0.35), mat="MI_V2_PlazaCream",
                      label="%s_Approach" % tag))
         for k, side in enumerate((-1, 1)):
