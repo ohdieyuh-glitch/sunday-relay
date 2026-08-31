@@ -185,6 +185,29 @@ INSTANCES = {
     # shaded side.
     "MI_V2_Cloud":      ("cloud",   (0.96, 0.96, 0.97), 0.0, 1.00, 0.0, 0.02, (0.60, 0.64, 0.75), 1300.0),
     "MI_V2_CloudVeil":  ("cloud",   (0.90, 0.91, 0.95), 0.0, 1.00, 0.0, 0.02, (0.56, 0.60, 0.72), 950.0),
+    # ---- ENCHANTMENT batch C: coloured glass, and gold that has aged --------
+    #
+    # The brief asks for "colored glass/light" and "aged gold" by name. Glass
+    # is opaque geometry with a low roughness and a modest ABSOLUTE emissive:
+    # a real translucent master would be a shading change across the whole
+    # world for four pavilions and a hundred lanterns, and the thing the eye
+    # reads at 40 m is a coloured panel that is brighter than the stone around
+    # it, which this is.
+    #
+    # The emissive is ABSOLUTE (see EMISSIVE_ABSOLUTE below) because the
+    # relative path multiplies by LOOK["portalGlow"], which runs 6,000-9,000:
+    # a strength of 2 on that dial is 15,000 and a stained-glass window
+    # becomes a searchlight. And the total emissive AREA here is a few
+    # pavilions and lanterns, which is what keeps this clear of the trap where
+    # multiplying emissive geometry re-meters the whole frame.
+    "MI_V2_GlassRose":   ("glaze", (0.86, 0.34, 0.46), 0.0, 0.09, 0.05, 0.85, (0.86, 0.34, 0.46), 620.0),
+    "MI_V2_GlassAmber":  ("glaze", (0.93, 0.68, 0.26), 0.0, 0.09, 0.05, 0.85, (0.93, 0.68, 0.26), 620.0),
+    "MI_V2_GlassViolet": ("glaze", (0.50, 0.32, 0.82), 0.0, 0.09, 0.05, 0.85, (0.50, 0.32, 0.82), 560.0),
+    "MI_V2_GlassTeal":   ("glaze", (0.24, 0.62, 0.62), 0.0, 0.09, 0.05, 0.85, (0.24, 0.62, 0.62), 560.0),
+    #: Gold that has been outside. MI_V2_Gold is bright leaf; a 20 m gear
+    #: train in bright leaf reads as plastic, and the brief says AGED.
+    "MI_V2_GoldAged":    ("glaze", (0.60, 0.46, 0.19), 0.72, 0.44, 0.14, 0.70, None, 0.0),
+    "MI_V2_Bronze":      ("glaze", (0.42, 0.31, 0.20), 0.68, 0.52, 0.16, 0.62, None, 0.0),
     # ---- portal (M_V2_Portal): restrained -------------------------------------
     "MI_V2_PortalRunes": ("runes",  (0.62, 0.40, 0.92), 0.0, 0.40, 0.0, 0.2, (0.62, 0.40, 0.92), 1.0),
     "MI_V2_PortalGlow":  ("runes",  (0.68, 0.46, 0.94), 0.0, 0.40, 0.0, 0.2, (0.68, 0.46, 0.94), 1.2),
@@ -199,7 +222,8 @@ PORTAL = ("MI_V2_PortalRunes", "MI_V2_PortalGlow")
 #: anything else that ever needed emissive would have had its brightness
 #: silently tied to a rune disc. The portal keeps the scale it was tuned with;
 #: these carry their own value.
-EMISSIVE_ABSOLUTE = ("MI_V2_Cloud", "MI_V2_CloudVeil")
+EMISSIVE_ABSOLUTE = ("MI_V2_Cloud", "MI_V2_CloudVeil", "MI_V2_GlassRose",
+                     "MI_V2_GlassAmber", "MI_V2_GlassViolet", "MI_V2_GlassTeal")
 
 #: texture family -> (albedo, normal, roughness) file stems from textures_v2.py.
 #: These are NEUTRAL detail maps (linear mean ~0.92 per channel): the tint sets

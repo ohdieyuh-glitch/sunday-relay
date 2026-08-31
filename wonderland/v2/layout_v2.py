@@ -5333,7 +5333,7 @@ def _sig_free(x, y, need):
     return True
 
 
-def _sig_site(bearing_deg, radius, need, name):
+def _sig_site(bearing_deg, radius, need, name, district=None):
     """The nearest point to (bearing, radius) with `need` uu of clear ground.
 
     SEARCHED IN COST ORDER, and the cost is not symmetric. A bearing is a
@@ -5357,12 +5357,24 @@ def _sig_site(bearing_deg, radius, need, name):
             continue
         b = b0 + math.radians(db)
         x, y = math.cos(b) * r, math.sin(b) * r
+        # A DISTRICT LANDMARK THAT LEFT ITS DISTRICT IS NOT ONE. The Lantern
+        # Hamlets' lantern lane was pushed 90 m outward looking for clear
+        # ground and came to rest inside West Wood, which is a landmark
+        # correctly placed against an unstated requirement. The requirement is
+        # stated now, and the search enforces it rather than the radii being
+        # tuned until it happens to hold.
+        if district is not None and _district_of(x, y)[0].replace(" ", "") != district:
+            continue
         if _sig_free(x, y, need):
             if dr or db:
                 SIG_NOTES.append("%s moved %+.0f uu / %+.1f deg to clear ground"
                                  % (name, dr, db))
             _SIG_PLACED.append((x, y, need))
             return x, y
+    if need > 900.0:
+        SIG_NOTES.append("%s: no site at %.0f uu clearance inside its district "
+                         "-- retrying at %.0f" % (name, need, need * 0.68))
+        return _sig_site(bearing_deg, radius, need * 0.68, name, district)
     SIG_NOTES.append("%s COULD NOT BE PLACED -- no clear ground near "
                      "bearing %.0f radius %.0f" % (name, bearing_deg, radius))
     return None
@@ -5678,10 +5690,198 @@ def _reveal_city(bands):
 _reveal_city([OUTER_WORLD, HORIZON, FLANKS, REARWORLD, PALACE, GROUND_QUILT,
               CAM_FOREGROUNDS])
 
+# ===========================================================================
+# THE ENCHANTED LANDMARKS  (ENCHANTMENT + VERTICALITY, batch C + E)
+# ===========================================================================
+#
+# "Every major district should contain something that makes the player want to
+# walk toward it", and "important quarters should feel distinct through
+# landmark + architecture + vegetation + colour + ornament".
+#
+# The world already had fourteen NAMED districts and, apart from the Mushroom
+# Grove's fungus and the Clock Quarter's 11.9 m clock tower, nothing told you
+# which one you were in. The quarter builders differ by KIND, and kind is
+# assigned by a weighted hash inside a district -- so a district is mostly one
+# recipe, which is a texture, not an identity.
+#
+# So each district now gets ONE authored thing at landmark size, and no type
+# appears in more than two districts. The glass takes a different colour in
+# each place it is used, which is what stops two rose walks with a rotunda in
+# them from being the same place twice.
+#
+# Sized against what is already standing: the district towers are 75-91 m and
+# the neighbourhood towers 25-45, so these sit at 12-50 m -- big enough to
+# pull a walker across a quarter, small enough that they cannot compete with
+# the skyline hierarchy batch A just built. A landmark that outranks the
+# navigation anchor is not a landmark, it is a second anchor.
+
+#: Measured half-footprints, unscaled uu, read off the recipes. Conservative
+#: where a shape is not a cylinder: teapot_pavilion's spout reaches the ground
+#: 44 m from its axis and the solver's footprint is an axis-aligned rectangle
+#: that does not rotate with yaw, so the entry covers body AND spout at any
+#: yaw. Over-blocking sends a route around; under-blocking sends it THROUGH,
+#: and a missing entry fails open entirely.
+FOOT.update({"clock_grand": (950, 950), "gear_monument": (800, 800),
+             "key_colossal": (780, 700), "flower_colossal": (330, 330),
+             "glass_pavilion": (1180, 1180), "teapot_pavilion": (4600, 4600),
+             "floating_stair": (1650, 2600), "lantern_strange": (190, 190)})
+
+#: The glazing meshes ride on their frames and are never obstacles in their
+#: own right -- declared, not left missing, so the omission reads as a
+#: decision rather than an oversight.
+_GLASS_MESHES = ("glass_pavilion_lights", "lantern_strange_glass",
+                 "flower_colossal_bloom")
+
+#: (district, bearing, radius, builder key, scale, glass tint, note)
+#: No type in more than two districts; the two that repeat take a different
+#: glass colour, a different scale and a different setting.
+_DISTRICT_LANDMARKS = (
+    ("RoyalGardens",      65.0, 10200.0, "flower_bed",   1.00, "MI_V2_GlassRose",   "three giant blooms over a parterre"),
+    ("ClockQuarter",       5.0, 12600.0, "great_clock",  1.00, "MI_V2_GlassAmber",  "the great clock and its movement"),
+    ("TowerRise",        120.0, 12400.0, "stair",        0.42, "MI_V2_GlassViolet", "a stair that leaves the ground"),
+    ("LanternHamlets",   152.0, 14600.0, "lantern_run",  0.62, "MI_V2_GlassAmber",  "a lane of lanterns that lean"),
+    ("TeaTerraces",      200.0, 11000.0, "teapot",       0.42, "MI_V2_GlassRose",   "a teapot with a door in it"),
+    ("WaterGardens",     248.0, 11600.0, "pavilion",     0.60, "MI_V2_GlassTeal",   "a glass rotunda over the water"),
+    ("MushroomGrove",    300.0, 13600.0, "lantern_run",  0.50, "MI_V2_GlassTeal",   "lanterns among the caps"),
+    ("GatekeeperFields", 340.0, 14200.0, "key",          0.55, "MI_V2_GlassAmber",  "the key in the stone"),
+    ("NorthReach",       130.0, 24000.0, "gears",        1.30, "MI_V2_GlassAmber",  "an engine in the fields"),
+    ("EastReach",         25.0, 27000.0, "stair",        0.62, "MI_V2_GlassViolet", "a longer flight, further out"),
+    ("TheLongWoods",     210.0, 24000.0, "flower_bed",   1.45, "MI_V2_GlassRose",   "blooms above the woods"),
+    ("SouthMeadows",     278.0, 26000.0, "pavilion",     0.86, "MI_V2_GlassAmber",  "an amber rotunda in the meadow"),
+    ("WestWood",         170.0, 29000.0, "key",          0.90, "MI_V2_GlassAmber",  "a second key, larger, half sunk"),
+    ("FarOrchards",      315.0, 28000.0, "great_clock",  0.62, "MI_V2_GlassRose",   "a smaller clock, for the orchards"),
+)
+
+LANDMARK_NOTES = []
+
+
+def _lm_court(x, y, tag, r, n=8, pier=1.0, cone="topiary_cone_roses",
+              cone_mat="MI_V2_RosePink"):
+    """A landmark stands on something built, with a way in from the south."""
+    out = [A("terrace_platform", x, y, ROAD_Z, yaw=yaw,
+             sxyz=(r / 720.0, r / 1900.0, 0.35), mat="MI_V2_PlazaWarm",
+             label="%s_Court%d" % (tag, k)) for k, yaw in enumerate((0.0, 90.0))]
+    for k in range(n):
+        a = 2.0 * math.pi * k / n + 0.2
+        if 0.40 < (k / float(n)) < 0.60:
+            continue
+        out.append(A("gate_pier", x + math.cos(a) * r, y + math.sin(a) * r, 0.0,
+                     yaw=math.degrees(a), s=pier, mat="MI_V2_IvoryStone",
+                     label="%s_Pier%d" % (tag, k)))
+        if k % 2 == 0:
+            out.append(A(cone, x + math.cos(a) * r * 0.72, y + math.sin(a) * r * 0.72,
+                         0.0, yaw=37.0 * k, s=1.15 * pier, mat=cone_mat,
+                         label="%s_Cone%d" % (tag, k)))
+    return out
+
+
+def _lm_build(kind, x, y, tag, sc, glass):
+    """One district landmark and its setting."""
+    out = []
+    if kind == "great_clock":
+        out.append(A("clock_grand", x, y, 0.0, yaw=200.0, s=sc,
+                     mat="MI_V2_IvoryStone", label="%s_Clock" % tag))
+        out.append(A("gear_monument", x + 1900.0 * sc, y - 900.0 * sc, 0.0,
+                     yaw=-40.0, s=0.62 * sc, mat="MI_V2_GoldAged",
+                     label="%s_Gears" % tag))
+        out += _lm_court(x, y, tag, 2200.0 * sc, 10, 1.3 * sc,
+                         "topiary_cone_plain", "MI_V2_LeafDark")
+    elif kind == "gears":
+        out.append(A("gear_monument", x, y, 0.0, yaw=25.0, s=sc,
+                     mat="MI_V2_GoldAged", label="%s_Gears" % tag))
+        out += _lm_court(x, y, tag, 1700.0 * sc, 8, 1.1 * sc,
+                         "topiary_ball", "MI_V2_LeafMid")
+    elif kind == "key":
+        out.append(A("key_colossal", x, y, 0.0, yaw=118.0, s=sc,
+                     mat="MI_V2_GoldAged", label="%s_Key" % tag))
+        out += _lm_court(x, y, tag, 2000.0 * sc, 8, 1.2 * sc,
+                         "topiary_cone_plain", "MI_V2_LeafDark")
+    elif kind == "flower_bed":
+        # THREE, NOT ONE. A single giant flower is a specimen; three at
+        # different heights and headings are a bed, which is what a garden
+        # district's landmark should be.
+        for i, (dx, dy, s2, tint) in enumerate((
+                (0.0, 0.0, 1.00, "MI_V2_RosePink"),
+                (-1250.0, 900.0, 0.78, "MI_V2_PetalViolet"),
+                (1050.0, -1150.0, 0.88, "MI_V2_PetalPink"))):
+            out.append(A("flower_colossal", x + dx * sc, y + dy * sc, 0.0,
+                         yaw=61.0 * i + 20.0, s=s2 * sc, mat="MI_V2_LeafMid",
+                         label="%s_BloomStem%d" % (tag, i)))
+            out.append(A("flower_colossal_bloom", x + dx * sc, y + dy * sc, 0.0,
+                         yaw=61.0 * i + 20.0, s=s2 * sc, mat=tint,
+                         label="%s_Bloom%d" % (tag, i)))
+        out += _lm_court(x, y, tag, 2100.0 * sc, 8, 1.0 * sc,
+                         "shrub_flowering", "MI_V2_PetalWhite")
+    elif kind == "pavilion":
+        out.append(A("glass_pavilion", x, y, 0.0, yaw=15.0, s=sc,
+                     mat="MI_V2_IvoryStone", label="%s_Pavilion" % tag))
+        out.append(A("glass_pavilion_lights", x, y, 0.0, yaw=15.0, s=sc,
+                     mat=glass, label="%s_PavilionGlass" % tag))
+        out += _lm_court(x, y, tag, 1900.0 * sc, 10, 1.0 * sc,
+                         "topiary_ball", "MI_V2_LeafMid")
+    elif kind == "teapot":
+        out.append(A("teapot_pavilion", x, y, 0.0, yaw=-65.0, s=sc,
+                     mat="MI_V2_Ceramic", label="%s_Teapot" % tag))
+        out.append(A("tea_cup", x + 2600.0 * sc, y + 1500.0 * sc, 0.0, yaw=30.0,
+                     s=2.4 * sc, mat="MI_V2_Ceramic", label="%s_Cup" % tag))
+        out.append(A("tea_saucer", x + 2600.0 * sc, y + 1500.0 * sc, 0.0, yaw=30.0,
+                     s=2.4 * sc, mat="MI_V2_Ceramic", label="%s_Saucer" % tag))
+        out += _lm_court(x, y, tag, 2600.0 * sc, 10, 1.2 * sc,
+                         "topiary_cone_roses", "MI_V2_RosePink")
+    elif kind == "stair":
+        out.append(A("floating_stair", x, y, 0.0, yaw=-70.0, s=sc,
+                     mat="MI_V2_IvoryStone", label="%s_Stair" % tag))
+        out += _lm_court(x, y, tag, 2000.0 * sc, 8, 1.1 * sc,
+                         "topiary_cone_plain", "MI_V2_LeafDark")
+    elif kind == "lantern_run":
+        # A LANE OF THEM. One strange lantern is a prop; eleven leaning down a
+        # lane, each bent a different way, is a place with a name.
+        for i in range(11):
+            t = i / 10.0
+            a = math.atan2(y, x) + 1.15
+            lx = x + math.cos(a) * (t - 0.5) * 5200.0 + 260.0 * math.sin(4.1 * i)
+            ly = y + math.sin(a) * (t - 0.5) * 5200.0 + 260.0 * math.cos(3.3 * i)
+            s2 = sc * (0.86 + 0.34 * _rnd(i, 991, 3))
+            yw = 360.0 * _rnd(i, 991, 4)
+            out.append(A("lantern_strange", lx, ly, 0.0, yaw=yw, s=s2,
+                         mat="MI_V2_Bronze", label="%s_Lantern%d" % (tag, i)))
+            out.append(A("lantern_strange_glass", lx, ly, 0.0, yaw=yw, s=s2,
+                         mat=glass, label="%s_LanternGlass%d" % (tag, i)))
+        out.append(A("glass_pavilion", x, y, 0.0, yaw=40.0, s=0.42,
+                     mat="MI_V2_IvoryStone", label="%s_Pavilion" % tag))
+        out.append(A("glass_pavilion_lights", x, y, 0.0, yaw=40.0, s=0.42,
+                     mat=glass, label="%s_PavilionGlass" % tag))
+    return out
+
+
+def _district_landmarks():
+    out = []
+    for (who, bearing, radius, kind, sc, glass, note) in _DISTRICT_LANDMARKS:
+        need = 2400.0 if kind in ("great_clock", "teapot", "lantern_run") else 1900.0
+        pt = _sig_site(bearing, radius, need, "Landmark_%s" % who, district=who)
+        if pt is None:
+            continue
+        x, y = pt
+        out += _lm_build(kind, x, y, "LM%s" % who, sc, glass)
+        LANDMARK_NOTES.append("%-18s %-12s at (%7.0f,%7.0f) r=%5.0f m -- %s"
+                              % (who, kind, x, y, math.hypot(x, y) / 100.0, note))
+    return out
+
+
+LANDMARKS = _band("V2_Skyline", _district_landmarks())
+
+#: The enchanted landmarks are the reason a district is a place; scatter must
+#: not grow through them either.
+_PROTECT = _PROTECT + ("clock_grand", "gear_monument", "key_colossal",
+                       "flower_colossal", "glass_pavilion", "teapot_pavilion",
+                       "floating_stair")
+for _bandref in (OUTER_WORLD, HORIZON, GROUND_QUILT, FLANKS, REARWORLD):
+    _bandref[:] = _declutter(_bandref, also=LANDMARKS)
+
 BUILD_BANDS = [FOREGROUND, COURTYARD, GARDEN, PALACE, FLANK_GROUND, FLANKS,
                REARWORLD, CAM_FOREGROUNDS, GROUND_QUILT, OUTER_WORLD, PLAZA_ORNAMENT,
                PROCESSIONAL_BORDER, HORIZON, APPROACH_SIDES, PLAZA_WALL_DRESS,
-               SIGNATURE]
+               SIGNATURE, LANDMARKS]
 
 #: Everything the layout declares: what the builder walks, plus the two bands
 #: it places by their own rules (SKY is the dome/atmosphere, HOVER is lifted

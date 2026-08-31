@@ -2521,3 +2521,449 @@ RECIPES.update({
     "spire_halo_ring": (spire_halo_ring, "castle", True, False),
     "tower_district": (tower_district, "castle", True, True),
 })
+
+
+# ==========================================================================
+# THE ENCHANTED LANDMARKS (ENCHANTMENT + VERTICALITY, batch C)
+# ==========================================================================
+#
+# "Every major district should contain something that makes the player want to
+# walk toward it." The world already had Wonderland OBJECTS -- a teapot, a
+# cup, a clock, a key -- and they are 1.6 to 3.1 m tall. Measured beside the
+# things around them they are furniture: the giant mushroom is 16 m, a
+# neighbourhood tower 25-45 m, and a 1.6 m clock at 80 m subtends a fifth of a
+# degree. They cannot pull anybody anywhere.
+#
+# So these are the same vocabulary at LANDMARK size, 11 to 34 m, authored so
+# that the thing which reads at distance is the SILHOUETTE and the thing which
+# rewards arriving is the detail. Each is one idea carried all the way rather
+# than a pile of motifs -- the brief's "do not make it cheap theme-park
+# clutter" is a warning about quantity of ideas per object, not about whimsy.
+
+
+def clock_grand(ctx):
+    """THE GREAT CLOCK, 34 m: a 24 m gold-rimmed dial on a stone drum, with
+    the movement left open behind it.
+
+    The Clock Quarter's reason to exist. A clock reads as a clock only if the
+    dial is a disc with a rim, marks around it and two hands of DIFFERENT
+    length -- everything else is ornament -- so those four things are built at
+    the size that survives 200 m, and the exposed gear train behind is what
+    makes the last twenty metres of the walk worth it.
+    """
+    m = ctx.mesh("clock_grand")
+    # the drum it stands on
+    m.revolve([(0.0, 0.0), (900.0, 0.0), (920.0, 120.0), (880.0, 200.0),
+               (840.0, 1400.0), (900.0, 1460.0), (890.0, 1560.0), (0.0, 1600.0)], steps=32)
+    for k in range(16):
+        a = 2.0 * math.pi * k / 16
+        m.box(120.0, 120.0, 900.0, at=(math.cos(a) * 850.0, math.sin(a) * 850.0, 700.0),
+              rot=(0.0, math.degrees(a), 0.0), chamfer=10.0)
+    # THE DIAL, standing vertically: revolve about Y by rotating the piece
+    dz = 2900.0
+    m.revolve([(0.0, 0.0), (1180.0, 0.0), (1200.0, 60.0), (1160.0, 120.0), (0.0, 130.0)],
+              steps=48, at=(0, 0, dz), rot=(90.0, 0.0, 0.0))
+    m.torus(1190.0, 90.0, at=(0, 0, dz), rot=(90.0, 0.0, 0.0), major=56, minor=12)
+    m.torus(1050.0, 40.0, at=(0, -70.0, dz), rot=(90.0, 0.0, 0.0), major=48, minor=8)
+    for k in range(12):
+        a = 2.0 * math.pi * k / 12
+        cx, cz = math.sin(a) * 940.0, math.cos(a) * 940.0
+        m.box(150.0, 60.0, 230.0, at=(cx, -120.0, dz + cz),
+              rot=(0.0, 0.0, -math.degrees(a)), chamfer=8.0)
+        m.box(60.0, 50.0, 90.0, at=(math.sin(a + 0.26) * 1010.0, -110.0,
+                                    dz + math.cos(a + 0.26) * 1010.0), chamfer=5.0)
+    # the hands: different lengths, and not parallel
+    m.box(120.0, 70.0, 820.0, at=(-180.0, -190.0, dz + 330.0), rot=(0.0, 0.0, 24.0), chamfer=8.0)
+    m.box(96.0, 70.0, 1180.0, at=(330.0, -230.0, dz + 420.0), rot=(0.0, 0.0, -66.0), chamfer=8.0)
+    m.sphere(140.0, at=(0, -200.0, dz), steps=14)
+    # the movement, left open behind the dial
+    for (gx, gz, gr, gt) in ((-520.0, 2300.0, 620.0, 20), (430.0, 2900.0, 480.0, 16),
+                             (0.0, 3700.0, 380.0, 14), (620.0, 3560.0, 300.0, 12)):
+        m.torus(gr, 62.0, at=(gx, 420.0, dz + gz - 2900.0), rot=(90.0, 0.0, 0.0), major=36, minor=8)
+        for k in range(gt):
+            a = 2.0 * math.pi * k / gt
+            m.box(110.0, 130.0, 110.0, at=(gx + math.sin(a) * (gr + 60.0), 420.0,
+                                           dz + gz - 2900.0 + math.cos(a) * (gr + 60.0)),
+                  rot=(0.0, 0.0, -math.degrees(a)), chamfer=6.0)
+        m.cylinder(90.0, 300.0, at=(gx, 420.0, dz + gz - 2900.0), rot=(90.0, 0.0, 0.0), steps=12)
+    # a small cap and a weather-vane, so the top is a decision
+    m.revolve([(0.0, 0.0), (420.0, 0.0), (300.0, 300.0), (120.0, 620.0), (0.0, 760.0)],
+              steps=20, at=(0, 0, 3980.0))
+    m.cylinder(26.0, 700.0, at=(0, 0, 4740.0), steps=8)
+    m.box(520.0, 40.0, 200.0, at=(120.0, 0.0, 5230.0), chamfer=8.0)
+    return m
+
+
+def gear_monument(ctx):
+    """AGED-GOLD MECHANISM, 22 m: three gears on canted axles, still meshing.
+
+    An impossible machine that plainly WORKS -- the teeth line up, the axles
+    are braced, the plinth carries a governor -- because a mechanism that
+    obviously could not turn is a prop, and a mechanism that could is magic.
+    """
+    m = ctx.mesh("gear_monument")
+    m.extrude(_octo(760.0), 220.0)
+    m.extrude(_octo(660.0), 180.0, at=(0, 0, 220.0))
+    for k in range(8):
+        a = math.pi / 8 + 2.0 * math.pi * k / 8
+        m.box(90.0, 90.0, 260.0, at=(math.cos(a) * 690.0, math.sin(a) * 690.0, 300.0),
+              rot=(0.0, math.degrees(a), 0.0), chamfer=8.0)
+    for (gx, gy, gz, gr, teeth, tilt) in ((0.0, 0.0, 1300.0, 900.0, 26, 8.0),
+                                          (1180.0, 260.0, 1900.0, 640.0, 20, -14.0),
+                                          (-760.0, -320.0, 2150.0, 520.0, 16, 22.0)):
+        m.torus(gr, 86.0, at=(gx, gy, gz), rot=(90.0 + tilt, 0.0, 0.0), major=40, minor=10)
+        m.torus(gr * 0.34, 70.0, at=(gx, gy, gz), rot=(90.0 + tilt, 0.0, 0.0), major=24, minor=8)
+        for k in range(teeth):
+            a = 2.0 * math.pi * k / teeth
+            m.box(120.0, 150.0, 130.0,
+                  at=(gx + math.sin(a) * (gr + 84.0),
+                      gy - math.sin(math.radians(tilt)) * math.cos(a) * (gr + 84.0),
+                      gz + math.cos(math.radians(tilt)) * math.cos(a) * (gr + 84.0)),
+                  rot=(tilt, 0.0, -math.degrees(a)), chamfer=6.0)
+        for k in range(6):
+            a = 2.0 * math.pi * k / 6
+            m.tube([(gx, gy, gz),
+                    (gx + math.sin(a) * gr * 0.9,
+                     gy - math.sin(math.radians(tilt)) * math.cos(a) * gr * 0.9,
+                     gz + math.cos(math.radians(tilt)) * math.cos(a) * gr * 0.9)],
+                   [58.0, 40.0], sides=6)
+        m.tube([(gx, gy - 260.0, gz), (gx, gy + 260.0, gz)], [92.0, 92.0], sides=10)
+    # the braces that hold the axles, and a governor at the top
+    for (ax, ay, az) in ((0.0, 0.0, 1300.0), (1180.0, 260.0, 1900.0), (-760.0, -320.0, 2150.0)):
+        m.tube([(ax * 0.35, ay * 0.35 - 320.0, 400.0), (ax * 0.8, ay * 0.8 - 300.0, az * 0.7),
+                (ax, ay - 280.0, az)], [130.0, 100.0, 78.0], sides=6)
+    m.cylinder(50.0, 900.0, at=(0, 0, 2200.0), steps=10)
+    for k in range(3):
+        a = 2.0 * math.pi * k / 3
+        m.tube([(0.0, 0.0, 2900.0), (math.cos(a) * 420.0, math.sin(a) * 420.0, 2520.0)],
+               [40.0, 30.0], sides=6)
+        m.sphere(120.0, at=(math.cos(a) * 420.0, math.sin(a) * 420.0, 2520.0), steps=12)
+    return m
+
+
+def key_colossal(ctx):
+    """AN OVERSIZED KEY, 26 m, standing on its wards in a stone block.
+
+    Wonderland's most literal object at the size of a building. Read from the
+    silhouette outward: a great ring at the top with a heart cut through it,
+    a long shaft with two collars, and the bit at the bottom actually turned
+    into the stone -- the block is SPLIT along the line the key entered it,
+    which is the detail that makes an object look like it did something.
+    """
+    m = ctx.mesh("key_colossal")
+    # the split block
+    m.box(1500.0, 1200.0, 700.0, at=(-40.0, 0.0, 350.0), chamfer=40.0)
+    m.box(1360.0, 1080.0, 160.0, at=(-40.0, 0.0, 760.0), chamfer=26.0)
+    for s in (-1, 1):
+        m.box(560.0, 1060.0, 220.0, at=(-40.0 + s * 420.0, 0.0, 900.0),
+              rot=(0.0, 0.0, s * 6.0), chamfer=20.0)
+    # the bit: two wards, cut square, biting into the block
+    for (wz, ww) in ((1080.0, 520.0), (1420.0, 380.0)):
+        m.box(ww, 190.0, 230.0, at=(-40.0 - ww * 0.34, 0.0, wz), chamfer=14.0)
+    # the shaft
+    m.cylinder(190.0, 1900.0, at=(0, 0, 1000.0), steps=20)
+    m.cylinder(230.0, 2900.0, at=(0, 0, 2900.0), steps=20)
+    for cz in (1900.0, 4400.0):
+        m.revolve([(200.0, cz), (320.0, cz + 40.0), (320.0, cz + 150.0), (200.0, cz + 190.0)], steps=24)
+    m.torus(300.0, 70.0, at=(0, 0, 2340.0), major=24, minor=8)
+    # THE BOW: a great ring, with a heart standing inside it
+    bz = 6600.0
+    m.torus(1080.0, 210.0, at=(0, 0, bz), rot=(90.0, 0.0, 0.0), major=48, minor=14)
+    m.torus(1080.0, 90.0, at=(0, -190.0, bz), rot=(90.0, 0.0, 0.0), major=48, minor=10)
+    m.torus(1080.0, 90.0, at=(0, 190.0, bz), rot=(90.0, 0.0, 0.0), major=48, minor=10)
+    for k in range(24):
+        a = 2.0 * math.pi * k / 24
+        m.box(150.0, 130.0, 150.0, at=(math.sin(a) * 1240.0, 0.0, bz + math.cos(a) * 1240.0),
+              rot=(0.0, 0.0, -math.degrees(a)), chamfer=10.0)
+    # the heart inside the bow: two lobes and a point, as a tube
+    hp = []
+    for i in range(33):
+        t = math.pi * 2.0 * i / 32.0
+        hx = 16.0 * math.sin(t) ** 3
+        hy = 13.0 * math.cos(t) - 5.0 * math.cos(2 * t) - 2.0 * math.cos(3 * t) - math.cos(4 * t)
+        hp.append((hx * 42.0, 0.0, bz + hy * 42.0 - 60.0))
+    m.tube(hp, [78.0] * 33, sides=7)
+    m.revolve([(0.0, 0.0), (110.0, 40.0), (86.0, 160.0), (140.0, 220.0), (52.0, 400.0), (0.0, 560.0)],
+              steps=14, at=(0, 0, bz + 1240.0))
+    return m
+
+
+def _petal_outline(L, W):
+    """A petal in plan: narrow at the base, widest at two fifths, a point."""
+    pts, n = [], 8
+    for s in (1.0, -1.0):
+        rng = range(n + 1) if s > 0 else range(n, -1, -1)
+        for i in rng:
+            u = i / float(n)
+            w = W * (math.sin(math.pi * min(1.0, 0.10 + 0.90 * u)) ** 0.75)
+            pts.append((L * u, s * w))
+    return pts
+
+
+def flower_colossal(ctx):
+    """A GIANT BLOOM'S STEM, 21 m: the stalk, two leaves and the receptacle.
+
+    SPLIT FROM ITS PETALS ON PURPOSE. A mesh carries one material, so a bloom
+    authored as one piece is either a pink stem or green petals. The first
+    placement worked around that by putting the SAME mesh down twice in two
+    tints, which is co-planar geometry -- doubled triangles and z-fighting for
+    a colour. Two meshes at one transform is the pattern the glass pavilions
+    already use, and it is the right one.
+
+    AUTHORED TWICE for its proportions too: the first version put the head at
+    z = 13,400 uu on a stem 2.8 m thick -- a 161 m flower with a 1:57 stalk,
+    which is a wire, not a plant. A bloom is heavy and its stem bends under
+    it, so this is 1:8 and it leans.
+    """
+    m = ctx.mesh("flower_colossal")
+    stem = [(0.0, 0.0, 0.0), (40.0, 30.0, 520.0), (-30.0, 90.0, 1160.0),
+            (110.0, 50.0, 1760.0), (95.0, 0.0, 2060.0)]
+    m.tube(stem, [300.0, 250.0, 205.0, 175.0, 210.0], sides=12)
+    for s in (-1, 1):
+        lf = [(90.0 * s, 30.0, 660.0), (420.0 * s, 150.0 * s, 830.0),
+              (830.0 * s, 240.0 * s, 800.0), (1180.0 * s, 120.0 * s, 640.0)]
+        m.tube(lf, [130.0, 300.0, 250.0, 50.0], sides=7)
+    m.revolve([(0.0, 0.0), (250.0, 30.0), (350.0, 160.0), (390.0, 320.0), (320.0, 430.0), (0.0, 470.0)],
+              steps=24, at=(95.0, 0.0, 2020.0))
+    return m
+
+
+def flower_colossal_bloom(ctx):
+    """THE PETALS AND STAMENS of flower_colossal -- its own mesh, its own tint.
+
+    PETALS ARE FLAT, AND THE FIRST ONES WERE NOT. Built as swept tubes they
+    came out as sixteen sausages that closed into a ball, and the contact
+    sheet read the whole object as a pom-pom rather than a bloom. A petal is a
+    thin blade: an outline extruded 6 cm, pitched up by its rank's angle and
+    yawed into place, so the flower reads as OPEN from every side.
+    """
+    m = ctx.mesh("flower_colossal_bloom")
+    for rank, (n, tilt, ln, wd, ph) in enumerate(((7, 26.0, 1180.0, 430.0, 0.0),
+                                                  (6, -6.0, 940.0, 360.0, 0.44))):
+        for k in range(n):
+            deg = 360.0 * k / n + math.degrees(ph)
+            m.extrude(_petal_outline(ln, wd), 62.0,
+                      at=(95.0, 0.0, 2300.0 + 60.0 * rank), rot=(-tilt, deg, 0.0))
+    for k in range(11):
+        a_ = 2.0 * math.pi * k / 11
+        r = 80.0 + 170.0 * ((k * 7) % 5) / 4.0
+        m.tube([(95.0 + math.cos(a_) * r * 0.3, math.sin(a_) * r * 0.3, 2380.0),
+                (95.0 + math.cos(a_) * r, math.sin(a_) * r, 2760.0 - 60.0 * ((k * 3) % 4))],
+               [46.0, 34.0], sides=6)
+        m.sphere(90.0, at=(95.0 + math.cos(a_) * r, math.sin(a_) * r,
+                           2810.0 - 60.0 * ((k * 3) % 4)), steps=10)
+    return m
+
+
+def glass_pavilion(ctx):
+    """A ROTUNDA OF COLOURED GLASS, 16 m, on a stone stylobate.
+
+    Twelve ribs, glazed panels between them, an ogee dome and a gold finial.
+    The panels are separate pieces at a slightly larger radius than the ribs
+    so the layout can give each rotunda its own glass colour, and so the ribs
+    read as structure holding glass rather than as a pattern painted on a
+    cone.
+    """
+    m = ctx.mesh("glass_pavilion")
+    m.revolve([(0.0, 0.0), (1150.0, 0.0), (1170.0, 90.0), (1120.0, 170.0),
+               (1060.0, 210.0), (0.0, 250.0)], steps=36)
+    m.revolve([(0.0, 250.0), (980.0, 250.0), (990.0, 330.0), (940.0, 380.0), (0.0, 400.0)], steps=36)
+    for k in range(12):
+        a = 2.0 * math.pi * k / 12
+        cx, cy = math.cos(a) * 860.0, math.sin(a) * 860.0
+        m.box(200.0, 200.0, 260.0, at=(cx, cy, 530.0), rot=(0.0, math.degrees(a), 0.0), chamfer=16.0)
+        m.tube([(cx, cy, 660.0), (cx * 0.99, cy * 0.99, 2600.0),
+                (cx * 0.80, cy * 0.80, 3400.0), (cx * 0.44, cy * 0.44, 3980.0),
+                (0.0, 0.0, 4260.0)], [130.0, 110.0, 96.0, 78.0, 60.0], sides=6)
+    m.revolve([(880.0, 2560.0), (960.0, 2610.0), (960.0, 2700.0), (880.0, 2750.0)], steps=36)
+    m.revolve([(880.0, 640.0), (950.0, 690.0), (950.0, 780.0), (880.0, 830.0)], steps=36)
+    m.revolve([(0.0, 0.0), (70.0, 60.0), (54.0, 190.0), (110.0, 250.0), (40.0, 430.0),
+               (22.0, 700.0), (0.0, 1140.0)], steps=16, at=(0, 0, 4260.0))
+    return m
+
+
+def glass_pavilion_lights(ctx):
+    """The glazing for glass_pavilion: twelve panels and a domed cap.
+
+    A separate mesh so the LAYOUT chooses the glass colour per rotunda, which
+    is the difference between four coloured pavilions and one repeated four
+    times.
+    """
+    m = ctx.mesh("glass_pavilion_lights")
+    for k in range(12):
+        a0 = 2.0 * math.pi * k / 12 + 0.10
+        a1 = 2.0 * math.pi * (k + 1) / 12 - 0.10
+        for (z0, z1, r0, r1) in ((760.0, 2520.0, 850.0, 850.0),
+                                 (2800.0, 3380.0, 830.0, 660.0),
+                                 (3440.0, 3940.0, 640.0, 400.0)):
+            poly = []
+            steps = 4
+            for i in range(steps + 1):
+                a = a0 + (a1 - a0) * i / steps
+                poly.append((math.cos(a) * r0, math.sin(a) * r0))
+            for i in range(steps, -1, -1):
+                a = a0 + (a1 - a0) * i / steps
+                poly.append((math.cos(a) * (r0 - 34.0), math.sin(a) * (r0 - 34.0)))
+            m.extrude(poly, z1 - z0, at=(0, 0, z0))
+    m.revolve([(0.0, 4180.0), (330.0, 3980.0), (300.0, 3960.0), (0.0, 4150.0)], steps=24)
+    return m
+
+
+def teapot_pavilion(ctx):
+    """A TEAPOT THE SIZE OF A HOUSE, 18 m, with a door and windows.
+
+    The spout reaches the ground and is the building's buttress; the handle is
+    an arch you can walk under. That is what makes it architecture rather than
+    a big prop: both of its silly parts do a structural job.
+    """
+    m = ctx.mesh("teapot_pavilion")
+    m.revolve([(0.0, 0.0), (1500.0, 0.0), (1520.0, 90.0), (1440.0, 150.0), (0.0, 190.0)], steps=36)
+    body = [(0.0, 190.0), (1180.0, 220.0), (1560.0, 700.0), (1700.0, 1500.0),
+            (1620.0, 2400.0), (1300.0, 3050.0), (900.0, 3400.0), (760.0, 3480.0)]
+    m.revolve(body, steps=40)
+    m.revolve([(720.0, 3460.0), (900.0, 3520.0), (900.0, 3620.0), (720.0, 3680.0)], steps=32)
+    # the lid, with a knop
+    m.revolve([(0.0, 0.0), (840.0, 20.0), (760.0, 190.0), (520.0, 450.0), (240.0, 620.0), (0.0, 700.0)],
+              steps=32, at=(0, 0, 3660.0))
+    m.revolve([(0.0, 0.0), (150.0, 30.0), (110.0, 140.0), (190.0, 220.0), (70.0, 380.0), (0.0, 460.0)],
+              steps=16, at=(0, 0, 4360.0))
+    # THE SPOUT, reaching the ground: a buttress that happens to pour
+    sp = [(1560.0, 0.0, 1500.0), (2600.0, 0.0, 2100.0), (3400.0, 0.0, 2400.0),
+          (3900.0, 0.0, 1900.0), (4050.0, 0.0, 700.0), (4020.0, 0.0, 0.0)]
+    m.tube(sp, [520.0, 400.0, 330.0, 300.0, 380.0, 460.0], sides=14)
+    m.revolve([(0.0, 0.0), (520.0, 0.0), (500.0, 120.0), (0.0, 160.0)], steps=20, at=(4020.0, 0.0, 0.0))
+    # THE HANDLE, an arch you walk under
+    hp = [(-1600.0, 0.0, 1200.0), (-2700.0, 0.0, 1900.0), (-3100.0, 0.0, 2900.0),
+          (-2600.0, 0.0, 3500.0), (-1500.0, 0.0, 3300.0)]
+    m.tube(hp, [340.0, 300.0, 290.0, 300.0, 340.0], sides=12)
+    # a door under the handle, and two window ranks
+    m.box(300.0, 900.0, 1500.0, at=(-1660.0, 0.0, 950.0), chamfer=30.0)
+    m.torus(430.0, 90.0, at=(-1660.0, 0.0, 1660.0), rot=(0.0, 90.0, 90.0), major=18, minor=8, arc=180.0)
+    for row, (z, n, rr) in enumerate(((1500.0, 8, 1690.0), (2500.0, 8, 1600.0), (3150.0, 6, 1250.0))):
+        for k in range(n):
+            a = 2.0 * math.pi * (k + 0.4 * row) / n
+            if abs(((math.degrees(a) + 180.0) % 360.0) - 180.0) < 22.0:
+                continue
+            _window_arched(m, math.cos(a) * rr * 0.97, math.sin(a) * rr * 0.97, z,
+                           math.degrees(a) + 90.0, w=300.0, h=760.0, d=70.0)
+    for z in (1180.0, 2700.0):
+        m.revolve([(1560.0, z), (1700.0, z + 50.0), (1700.0, z + 150.0), (1560.0, z + 200.0)], steps=36)
+    return m
+
+
+def floating_stair(ctx):
+    """IMPOSSIBLE ARCHITECTURE, 26 m: a stair that leaves the ground.
+
+    Eleven treads of a real flight, then the flight comes apart -- the treads
+    keep the rise and lose the string, drifting off the line -- and it ends at
+    a small platform with a doorway that opens on nothing. The idea only works
+    if the BOTTOM is completely ordinary, so the bottom is a plain stone
+    flight with a plinth and a rail.
+    """
+    m = ctx.mesh("floating_stair")
+    m.box(1600.0, 1300.0, 200.0, at=(0.0, 0.0, 100.0), chamfer=24.0)
+    rise, go = 190.0, 300.0
+    for i in range(11):
+        m.box(1500.0 - 34.0 * i, 300.0, rise, at=(0.0, -600.0 + go * i, 200.0 + rise * (i + 0.5)),
+              chamfer=10.0)
+    for s in (-1, 1):
+        m.tube([(s * 720.0, -600.0, 500.0), (s * 700.0, -600.0 + go * 10, 500.0 + rise * 10)],
+               [70.0, 70.0], sides=6)
+        for i in range(0, 11, 2):
+            m.box(70.0, 70.0, 420.0, at=(s * 710.0, -600.0 + go * i, 400.0 + rise * i), chamfer=8.0)
+    # the flight comes apart: the treads keep the rise and lose the string
+    # THE FLOATING FLIGHT MUST CLIMB. The first version drifted sideways faster
+    # than it rose (60j + 14j squared across, against 190 uu of rise) and the
+    # contact sheet showed a stair falling over rather than leaving the
+    # ground. The rise per tread now GROWS as the flight comes apart -- gravity
+    # letting go is the idea -- and the drift is a quarter of what it was.
+    for i in range(11, 26):
+        j = i - 10
+        drift = 26.0 * j + 3.5 * j * j
+        lift = 200.0 + rise * 11 + (rise * 1.55) * j + 9.0 * j * j
+        m.box(1100.0 - 14.0 * j, 280.0, rise * 0.92,
+              at=(drift * (1.0 if j % 2 else 0.72), -600.0 + go * (11 + 0.62 * j), lift),
+              rot=(0.0, 0.0, 3.0 * j), chamfer=10.0)
+        if j % 3 == 0:
+            m.sphere(58.0, at=(drift - 620.0, -600.0 + go * (11 + 0.62 * j) - 240.0,
+                               lift - 220.0), steps=8)
+    # the platform, and a doorway onto nothing
+    px = 26.0 * 15 + 3.5 * 225
+    py = -600.0 + go * (11 + 0.62 * 15) + 420.0
+    pz = 200.0 + rise * 11 + (rise * 1.55) * 15 + 9.0 * 225 + 420.0
+    m.box(1900.0, 1500.0, 180.0, at=(px, py, pz), chamfer=20.0)
+    for s in (-1, 1):
+        m.box(240.0, 240.0, 2300.0, at=(px + s * 640.0, py, pz + 1240.0), chamfer=22.0)
+    m.box(1700.0, 260.0, 300.0, at=(px, py, pz + 2540.0), chamfer=20.0)
+    m.revolve([(0.0, 0.0), (760.0, 0.0), (700.0, 210.0), (420.0, 480.0), (0.0, 620.0)],
+              steps=4, at=(px, py, pz + 2690.0), rot=(0.0, 45.0, 0.0))
+    m.torus(640.0, 90.0, at=(px, py, pz + 2340.0), rot=(0.0, 0.0, 90.0), major=22, minor=8, arc=180.0)
+    return m
+
+
+def lantern_strange(ctx):
+    """A LANTERN 11 m TALL, on a post that has given up being straight.
+
+    AUTHORED TWICE, for the same reason as the flower: the first post reached
+    89 m at 1.3 m thick, a 1:68 needle carrying a lamp. At 11 m and 1:12 it is
+    a lamp post that has grown, which is the idea.
+
+    The Lantern Hamlets' signature, used many times, so it is cheap: a bent
+    post, a bracket, a six-sided housing whose glazing is a separate mesh, and
+    a curl at the top. Its whimsy is in the BEND -- a straight post with an
+    ornate lamp is a street light.
+    """
+    m = ctx.mesh("lantern_strange")
+    m.revolve([(0.0, 0.0), (170.0, 0.0), (176.0, 40.0), (140.0, 80.0), (120.0, 110.0), (0.0, 135.0)], steps=20)
+    m.tube([(0.0, 0.0, 110.0), (36.0, 18.0, 320.0), (-72.0, -24.0, 640.0),
+            (18.0, 36.0, 940.0), (150.0, 24.0, 1100.0)],
+           [88.0, 74.0, 62.0, 56.0, 50.0], sides=8)
+    m.tube([(150.0, 24.0, 1100.0), (320.0, 18.0, 1162.0), (470.0, 12.0, 1150.0)],
+           [46.0, 38.0, 34.0], sides=7)
+    for (bz, bx, by, br) in ((320.0, 36.0, 18.0, 138.0), (640.0, -72.0, -24.0, 118.0)):
+        m.torus(br, 22.0, at=(bx, by, bz), major=16, minor=6)
+    hx, hy, hz = 470.0, 12.0, 1058.0
+    m.revolve([(0.0, 0.0), (205.0, 38.0), (186.0, 88.0), (0.0, 112.0)], steps=6, at=(hx, hy, hz + 680.0))
+    for k in range(6):
+        a_ = math.pi / 6 + 2.0 * math.pi * k / 6
+        m.box(44.0, 44.0, 680.0, at=(hx + math.cos(a_) * 186.0, hy + math.sin(a_) * 186.0, hz + 340.0),
+              rot=(0.0, math.degrees(a_), 0.0), chamfer=5.0)
+    m.revolve([(0.0, 0.0), (224.0, 0.0), (205.0, 56.0), (0.0, 80.0)], steps=6, at=(hx, hy, hz - 38.0))
+    m.tube([(hx, hy, hz + 770.0), (hx + 38.0, hy, hz + 990.0), (hx + 162.0, hy, hz + 1102.0),
+            (hx + 205.0, hy, hz + 966.0), (hx + 112.0, hy, hz + 904.0)],
+           [36.0, 29.0, 24.0, 19.0, 14.0], sides=6)
+    return m
+
+
+def lantern_strange_glass(ctx):
+    """The glazing for lantern_strange -- its own mesh, its own colour."""
+    m = ctx.mesh("lantern_strange_glass")
+    hx, hy, hz = 470.0, 12.0, 1058.0
+    for k in range(6):
+        a0 = math.pi / 6 + 2.0 * math.pi * k / 6 + 0.16
+        a1 = math.pi / 6 + 2.0 * math.pi * (k + 1) / 6 - 0.16
+        poly = []
+        for i in range(4):
+            a_ = a0 + (a1 - a0) * i / 3.0
+            poly.append((hx + math.cos(a_) * 180.0, hy + math.sin(a_) * 180.0))
+        for i in range(3, -1, -1):
+            a_ = a0 + (a1 - a0) * i / 3.0
+            poly.append((hx + math.cos(a_) * 160.0, hy + math.sin(a_) * 160.0))
+        m.extrude(poly, 580.0, at=(0, 0, hz + 56.0))
+    m.sphere(112.0, at=(hx, hy, hz + 350.0), steps=10)
+    return m
+
+
+RECIPES.update({
+    "clock_grand": (clock_grand, "clocks", True, True),
+    "gear_monument": (gear_monument, "clocks", True, True),
+    "key_colossal": (key_colossal, "keys", True, True),
+    "flower_colossal": (flower_colossal, "flowers", True, True),
+    "flower_colossal_bloom": (flower_colossal_bloom, "flowers", True, False),
+    "glass_pavilion": (glass_pavilion, "garden_props", True, True),
+    "glass_pavilion_lights": (glass_pavilion_lights, "garden_props", True, False),
+    "teapot_pavilion": (teapot_pavilion, "tea", True, True),
+    "floating_stair": (floating_stair, "bridges", True, True),
+    "lantern_strange": (lantern_strange, "garden_props", True, True),
+    "lantern_strange_glass": (lantern_strange_glass, "garden_props", True, False),
+})
