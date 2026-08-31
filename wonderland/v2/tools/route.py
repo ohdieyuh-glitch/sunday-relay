@@ -377,7 +377,34 @@ def path_between(src, dst, blocked, nx, ny, cell, cache, dist=None):
             j -= 1
         out2.append(keep[j])
         i = j
-    return out2
+    # AND NO LEG LONGER THAN MAXLEG.
+    #
+    # StepRoute aims at the target and walks; it does not follow a path. Over a
+    # 40 m leg that is an invitation to drift, and the Dog took it: from
+    # (50, 8250) toward (-1950, 11750) it ended 1,783 uu off the straight line
+    # and 210 uu INSIDE City2_Hall -- ground the solver correctly marks
+    # blocked, and 1,681 uu from the nearest waypoint. It had left the route
+    # entirely.
+    #
+    # A leg is a promise that walking straight at the target is safe. That is
+    # only true over a short distance, so the long ones are cut back into
+    # pieces along the path that was actually solved. The clearance-preferring
+    # route is kept; the Dog simply re-aims often enough to stay on it.
+    MAXLEG = 12          # cells, so 1,200 uu at cell 100
+    out3 = [out2[0]]
+    for a, b in zip(out2, out2[1:]):
+        ax, ay = a % nx, a // nx
+        bx, by = b % nx, b // nx
+        steps = max(abs(bx - ax), abs(by - ay))
+        if steps > MAXLEG:
+            n_cut = (steps + MAXLEG - 1) // MAXLEG
+            for t in range(1, n_cut):
+                f = t / float(n_cut)
+                i2 = ax + round((bx - ax) * f)
+                j2 = ay + round((by - ay) * f)
+                out3.append(j2 * nx + i2)
+        out3.append(b)
+    return out3
 
 
 def main():
