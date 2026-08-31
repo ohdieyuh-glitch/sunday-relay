@@ -1375,3 +1375,67 @@ is the next piece of work, and until it exists the panel says so.
 Also corrected: `playtest.sh` printed "space  jump" beside the URL the founder
 opens -- the first thing they read, teaching the canon that had just been
 overturned.
+
+---
+
+## PASS 26 — THE MILESTONE RUN, AND THE THREE BLACK CAMERAS (2026-08-30)
+
+The founder asked for the full milestone validation: rebuild at the newest
+HEAD, capture the eight locked Golden Arrival cameras plus 15 and 16, split
+performance by region, and walk the Dog through all 1,359 m.
+
+**The camera suite found the world's largest remaining defect, and it was a
+lighting one.** Every locked camera's foreground was measured. Seven read 52
+to 186 luma. THREE read 8 to 12, with 71-89% of their foreground below luma
+20 -- GardenLeft04 (9.5), GardenRight05 (11.7) and TeaTerraceCam16 (8.1).
+All three stand under the densest canopy in the world. This is exactly the
+founder's first quality priority ("foliage collapsing to black") and it was
+invisible to every audit here, because plan-view coverage cannot see a
+shadow.
+
+Two candidates were ruled out by measurement BEFORE anything changed:
+
+* **Ambient occlusion is not the mechanism.** `r.DistanceFieldAO 0` plus
+  `r.AmbientOcclusion.Enable 0` moved the garden foreground from 9.5 to 9.4.
+* **The sky light cannot do it alone.** At x8 it fixed the garden (9.5 ->
+  31.7, green cast +6.5 -> +15) and took Golden Arrival's approved foreground
+  from 177 to 205 with its shadowed hedges nearly doubling. An omnidirectional
+  ambient hits the up-facing plaza hardest, so it cannot separate the two.
+
+What separates them is the ANGLE. At pitch -18 a shadowless fill delivers
+sin(18) = 0.31 of itself to up-facing paving and nearly all of itself to a
+vertical leaf facing it. And one directional lights ONE HEMISPHERE of leaf
+normals -- the rest stay black however bright it is, which is why 4,500 lux
+was not merely too little. The rig is now two fills of 9,000 lux at
+complementary yaws with the sky light at 1.6. 18,000 lux against a 60,000 lux
+key is 30%; the failure recorded three times in this project is a fill at
+122% of key, which destroys the shade.
+
+**Three builds were thrown away by exit codes, not by anything wrong with the
+world.** `-run=pythonscript` exits non-zero if ANY error was logged, and the
+material builder probed engine assets that are absent from this commandlet's
+registry. Fixed at the source, twice (two call sites, then one that cannot be
+guarded at all -- `does_asset_exist` reports DefaultNormal present and
+`load_asset` still fails, so the ask was removed). And the guard written to
+accept a completed world vetoed itself: `actors=0 ` matched `v1_actors=0 `.
+A regex written to catch one failure that instead catches every success is
+worse than no guard, because it looks like a safety net.
+
+**The profiler was measuring a cold start.** Its wait loop broke as soon as a
+>2k CSV existed, but UE writes the CSV incrementally: a 420-second profile
+returned in twelve seconds with 46 rows. Every percentile from it would have
+described the first second of a launch. It now waits for the run, takes the
+largest CSV rather than the first, and refuses to report percentiles from a
+capture too small to have them.
+
+Engine performance, measured per camera at 1080p on the L4 (NOT through the
+stream, whose 18.9 fps is an encoder and network number): HeroCam0 46.8 fps
+median, PlayerCam01 46.7, PathCam02 54.6, ReverseCam03 46.4.
+
+World as built: 631 actors, 11,290 instances in 335 batch actors, 121/121
+assets, both maps written.
+
+NOTE ON THE STAMP: the PASS 26 world on disk was generated at 43012bb and the
+package stamps 668c170. The two differ only in a build-script regex and an
+engine fallback that never loaded, so the generated content is identical --
+but the stamp is the newer commit and this is why.
