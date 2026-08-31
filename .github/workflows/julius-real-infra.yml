@@ -50,8 +50,10 @@ jobs:
           echo "::add-mask::$primary"
           echo "::add-mask::$secondary"
           echo "::add-mask::$operator"
-          scoped=$(EXECUTOR_CREDENTIAL_ROOT="$primary" node scripts/julius-derive-scoped-credentials.mjs --json)
-          other_scoped=$(EXECUTOR_CREDENTIAL_ROOT="$secondary" node scripts/julius-derive-scoped-credentials.mjs --json)
+          # A tenant caller holds only the tenant operations, so it is handed only those credentials.
+          tenant_ops='create prepare execute cancel destroy inspect artifacts'
+          scoped=$(EXECUTOR_CREDENTIAL_ROOT="$primary" node scripts/julius-derive-scoped-credentials.mjs --json $tenant_ops)
+          other_scoped=$(EXECUTOR_CREDENTIAL_ROOT="$secondary" node scripts/julius-derive-scoped-credentials.mjs --json $tenant_ops)
           operator_scoped=$(EXECUTOR_CREDENTIAL_ROOT="$operator" node scripts/julius-derive-scoped-credentials.mjs --json discover reconcile quarantine)
           for root in "$primary" "$secondary" "$operator"; do
             EXECUTOR_CREDENTIAL_ROOT="$root" node scripts/julius-derive-scoped-credentials.mjs --values | while read -r value; do echo "::add-mask::$value"; done

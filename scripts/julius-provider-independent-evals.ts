@@ -260,7 +260,8 @@ async function main():Promise<void>{
   });
   // Last: an oversized body is refused mid-upload, which retires the connection it arrived on.
   await evaluate('oversized-request-refused',async()=>{
-    try{const answer=await read(await post('discover',scoped.get('discover')!,`{"pad":"${'p'.repeat(1_200_000)}"}`));
+    // Posted on an operation this tenant actually holds: an unheld scope answers 401 before the body is read.
+    try{const answer=await read(await post('create',scoped.get('create')!,`{"pad":"${'p'.repeat(1_200_000)}"}`));
       if(answer.status!==413)throw new Error(`${answer.status} ${answer.error}`);return `${answer.status} ${answer.error}`;}
     catch(error){const message=error instanceof Error?error.message:String(error);if(/^\d{3} /.test(message))throw error;return `transport refused the oversized body: ${message}`;}
   });
