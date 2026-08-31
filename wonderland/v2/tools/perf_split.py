@@ -22,6 +22,11 @@ rendering one.
 """
 import csv, os, sys
 
+# UE's CSV carries a metadata row whose single field is far past Python's
+# default 128 KB limit -- the whole command line, every stat name, the build
+# configuration. Raising the limit is the only way to read the file at all.
+csv.field_size_limit(min(sys.maxsize, 2 ** 31 - 1))
+
 #: (label, start_s, end_s) -- from the exploration route's own leg timings.
 EXPLORE = [
     ("idle at spawn",        0,   9),
@@ -66,7 +71,7 @@ def main():
     budget = float(next((a.split("=")[1] for a in sys.argv[1:] if a.startswith("--budget=")), 33.3))
     windows = EXPLORE if route == "explore" else GAIT
     with open(path, newline="") as fh:
-        rows = list(csv.reader(fh))
+        rows = [r for r in csv.reader(fh) if r]
     header = rows[0]
     idx = {k: pick(header, v) for k, v in COLS.items()}
     if idx["frame"] is None:
