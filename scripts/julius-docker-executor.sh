@@ -1,11 +1,12 @@
 #!/bin/bash
 set -u
+set +e
 readonly command_text=${1:?missing command}
 readonly receipt_dir="/julius-receipts-root/${JULIUS_EXECUTION_TOKEN:?}"
 readonly stage_file="$receipt_dir/executor.stage"
 tree_digest() { (cd /workspace && find . -xdev \( -type f -o -type l \) -print0 | sort -z | while IFS= read -r -d '' path; do printf '%s\0' "$path"; stat -c '%f' -- "$path" 2>/dev/null; if test -L "$path"; then readlink -- "$path"; else sha256sum -- "$path" 2>/dev/null; fi; done) | sha256sum | cut -d' ' -f1; }
-durable_move() { local source=$1 target=$2; sync -f "$source"; mv -n -- "$source" "$target"; sync -f "$target"; sync -f "$receipt_dir"; }
-stage() { printf '%s\n' "$1" > "$stage_file.tmp"; sync -f "$stage_file.tmp"; mv -f -- "$stage_file.tmp" "$stage_file"; sync -f "$stage_file"; }
+durable_move() { local source=$1 target=$2; sync -f "$source"; mv -n -- "$source" "$target"; sync -f "$target"; sync; }
+stage() { printf '%s\n' "$1" > "$stage_file.tmp"; sync -f "$stage_file.tmp"; mv -f -- "$stage_file.tmp" "$stage_file"; sync -f "$stage_file"; sync; }
 readonly started_at=$(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)
 readonly pre_tree=$(tree_digest)
 printf 'receiptVersion=1\nphase=BEFORE\nmanifestDigest=%s\ninvocationId=%s\ndispatchGeneration=%s\nsandboxId=%s\ntenantDigest=%s\nprojectDigest=%s\nrunDigest=%s\ntaskDigest=%s\nworkerDigest=%s\ntoolId=%s\ntoolVersion=%s\nrequestDigest=%s\npolicyDigest=%s\nleaseGeneration=%s\nimageDigest=%s\nexecutorIdentity=%s\npreTreeDigest=%s\nstartedAt=%s\n' "$JULIUS_MANIFEST_DIGEST" "$JULIUS_INVOCATION_ID" "$JULIUS_DISPATCH_GENERATION" "$JULIUS_SANDBOX_ID" "$JULIUS_TENANT_DIGEST" "$JULIUS_PROJECT_DIGEST" "$JULIUS_RUN_DIGEST" "$JULIUS_TASK_DIGEST" "$JULIUS_WORKER_DIGEST" "$JULIUS_TOOL_ID" "$JULIUS_TOOL_VERSION" "$JULIUS_REQUEST_DIGEST" "$JULIUS_POLICY_DIGEST" "$JULIUS_LEASE_GENERATION" "$JULIUS_IMAGE_DIGEST" "$JULIUS_EXECUTOR_IDENTITY" "$pre_tree" "$started_at" > "$receipt_dir/before.receipt.tmp"
