@@ -65,12 +65,29 @@ APP="$(wl_find_first "$WL_OUT/Linux" -maxdepth 3 -name 'Wonderland.sh' -type f |
 CSV_DIR="$(dirname "$APP")/Wonderland/Saved/Profiling/CSV"
 rm -rf "$CSV_DIR" 2>/dev/null || true
 
-wl_say "offscreen run: $FRAMES frames while the Dog drives its route"
+# THE RENDER PROFILE HAS TO BE IN THE LAUNCH OR THE BEFORE AND THE AFTER ARE
+# THE SAME RUN WITH DIFFERENT LABELS.
+#
+# This script carried no -ExecCmds at all, so it measured the ENGINE DEFAULTS
+# every time -- not BALANCED, not LIVE, not whatever the stream is actually
+# serving. Setting WL_RENDER_PROFILE did nothing, silently, which is the
+# failure mode VERIFIED.md warns about in its opening paragraph: "an unverified
+# setting is not a risk, it is a silent no-op that later gets quoted as a
+# result". It was about to be quoted as a result here.
+RENDER_DIR="$HERE/../../rendering"
+EXEC_CMDS="${WL_EXEC_CMDS:-}"
+if [ -z "$EXEC_CMDS" ] && [ -r "$RENDER_DIR/render-profile.py" ]; then
+  EXEC_CMDS="$(python3 "$RENDER_DIR/render-profile.py" emit "${WL_RENDER_PROFILE:-LIVE}" 2>/dev/null || true)"
+fi
+EXEC_ARG=()
+[ -n "$EXEC_CMDS" ] && EXEC_ARG=(-ExecCmds="$EXEC_CMDS")
+wl_say "offscreen run: $FRAMES frames while the Dog drives its route, profile ${WL_RENDER_PROFILE:-LIVE}"
 setsid nohup env $(wl_vulkan_env_pairs) "$APP" \
   "${WL_MAP_ARG:-/Game/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2}" \
   -RenderOffscreen -ForceRes "-ResX=${WL_RES_X:-1280}" "-ResY=${WL_RES_Y:-720}" \
   -Unattended -stdout -FullStdOutLogOutput \
   $ROUTE_FLAG \
+  "${EXEC_ARG[@]+"${EXEC_ARG[@]}"}" \
   "-csvCaptureFrames=$FRAMES" -csvGpuStats \
   >"$WL_LOG/profile-run.log" 2>&1 </dev/null &
 APP_PID=$!

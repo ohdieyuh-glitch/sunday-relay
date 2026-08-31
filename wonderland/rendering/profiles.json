@@ -211,12 +211,12 @@
         "-PixelStreamingEncoderMinQuality=25",
         "-PixelStreamingEncoderMaxQuality=100",
         "-PixelStreamingH264Profile=HIGH",
-        "-PixelStreamingWebRTCStartBitrate=6000000",
-        "-PixelStreamingWebRTCMaxBitrate=14000000",
+        "-PixelStreamingWebRTCStartBitrate=4000000",
+        "-PixelStreamingWebRTCMaxBitrate=8000000",
         "-PixelStreamingWebRTCDegradationPreference=MAINTAIN_FRAMERATE",
         "-PixelStreamingWebRTCMaxFps=60"
       ],
-      "args_note": "MAINTAIN_FRAMERATE is the ENGINE DEFAULT this project overrode. VERIFIED.md records the override and its reason -- 'for a world the founder is judging on ornament and material detail, [dropping picture] is the wrong trade' -- and that reasoning is still correct FOR A CAPTURE. It is exactly backwards for someone driving the Dog, and it was in force on the live stream the founder was walking. MinQuality drops 60 -> 25 for the same reason: a quality floor plus MAINTAIN_RESOLUTION leaves the encoder nothing to give up but frames. BALANCED and CINEMATIC are untouched; captures keep the picture-first trade."
+      "args_note": "MAINTAIN_FRAMERATE is the ENGINE DEFAULT this project overrode. VERIFIED.md records the override and its reason -- 'for a world the founder is judging on ornament and material detail, [dropping picture] is the wrong trade' -- and that reasoning is still correct FOR A CAPTURE. It is exactly backwards for someone driving the Dog, and it was in force on the live stream the founder was walking. MinQuality drops 60 -> 25 for the same reason: a quality floor plus MAINTAIN_RESOLUTION leaves the encoder nothing to give up but frames. BALANCED and CINEMATIC are untouched; captures keep the picture-first trade. The bitrates match run-stream.sh's own WL_PS_* tune block (start 4 Mb/s, max 8, target 6), which is applied by -ExecCmds AFTER these switches and therefore wins. Two descriptions of one quantity WILL disagree -- this project has a ledger entry about exactly that -- so they say the same numbers. Those numbers were themselves chosen from a measurement: the founder is several thousand kilometres away, and a 10 Mb/s start bitrate floods that path the moment the camera moves."
     },
     "CINEMATIC": {
       "description": "Supersampled. Renders ABOVE 720p and lets TSR resolve down, which is where crisp edges and fine ornament actually come from at this output size. Costs GPU that the L4 may or may not have \u2014 that is what the bench is for.",
