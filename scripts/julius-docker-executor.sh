@@ -16,7 +16,7 @@ sync || true
 readonly start_ms=$(date +%s%3N)
 stage COMMAND_STARTING
 set +e
-(ulimit -f "$JULIUS_OUTPUT_BLOCKS"; /usr/bin/setpriv --reuid=65532 --regid=65532 --clear-groups /bin/bash --noprofile --norc -lc "$command_text") > "$receipt_dir/stdout.tmp" 2> "$receipt_dir/stderr.tmp"
+(ulimit -f "$JULIUS_OUTPUT_BLOCKS"; /usr/bin/setpriv --reuid=65532 --regid=65532 --clear-groups --bounding-set=-all --inh-caps=-all --ambient-caps=-all /bin/bash --noprofile --norc -lc "$command_text") > "$receipt_dir/stdout.tmp" 2> "$receipt_dir/stderr.tmp"
 readonly exit_code=$?
 set -e
 stage COMMAND_EXITED
