@@ -29,6 +29,8 @@ async function main():Promise<void>{
   const toolRepository=new JuliusToolPostgresRepository(pool),requestDigest='a'.repeat(64),requestedAt=new Date().toISOString();
   await toolRepository.request({invocationId:'sibling-inv',idempotencyKey:'sibling-effect',requestDigest,tenantId:'tenant',projectId:'project',runId:'run',taskId:'task',workerId:'worker',leaseGeneration:3,policyRevision:'card',toolId:'shell.bash',toolVersion:'1',mutationClass:'WORKSPACE',requestedAt});
   await toolRepository.authorize({invocationId:'sibling-inv',tenantId:'tenant',projectId:'project',requestDigest,policyRevision:'card',budgetReservationId:'budget',authorizedAt:new Date().toISOString()});
+  const dispatches=await toolRepository.claimDispatch({claimedBy:'julius-sibling',now:new Date().toISOString(),claimedUntil:new Date(Date.now()+120_000).toISOString(),limit:1});
+  if(dispatches.length!==1||dispatches[0].invocationId!=='sibling-inv'||dispatches[0].dispatchGeneration!==1)throw new Error('sibling_dispatch_not_claimed');
   const client=new RemoteExecutorControlPlane({endpoint:new URL('http://127.0.0.1:8787'),serviceCredential:required('JULIUS_EXECUTOR_CREDENTIAL'),callerId:'julius-prod',tenantId:'tenant',requestTimeoutMs:30_000,trustedReceiptKeys:new Map([['ci-key',publicKey]]),allowInsecureLoopbackForTests:true});
   const identity={sandboxId:'sibling-sandbox',invocationId:'sibling-inv',tenantId:'tenant',projectId:'project',runId:'run',taskId:'task',leaseGeneration:3,policyRevision:'card',createdAt:new Date().toISOString(),expiresAt:new Date(Date.now()+300_000).toISOString()};
   const limits={cpuCount:1,memoryBytes:134_217_728,pids:32,openFiles:128,workspaceBytes:10_485_760,outputBytes:32_768,wallClockMs:10_000,concurrentProcesses:4};
