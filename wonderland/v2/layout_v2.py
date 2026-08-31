@@ -4755,14 +4755,18 @@ def _country():
             elif pick < 0.93:
                 # ONE SILHOUETTE. Rare, and it is why the horizon has shape.
                 h = (1.1 + 0.5 * _rnd(gx, gy, 110)) * sc * H["skyline"] / 1.28
+                cap, caph = _far_cap(gx, gy, 2)
                 out += [
                     A("tower_capped", cx, cy, 0, yaw=_rnd(gx, gy, 111) * 360.0, s=h,
                       mat="MI_V2_IvoryStone", label="%s_Tower" % tag),
-                    A("roof_cone_steep", cx, cy, 1100.0 * h, s=h,
+                    A(cap, cx, cy, 1100.0 * h, s=h,
                       mat=("MI_V2_RoofPink", "MI_V2_RoofLilac", "MI_V2_RoofNavy",
                            "MI_V2_RoofBlue")[k % 4], label="%s_TowerCap" % tag),
-                    A("finial_spire", cx, cy, 1560.0 * h, s=0.7 * h, mat="MI_V2_Gold",
-                      label="%s_TowerSpire" % tag),
+                    # THE FINIAL RIDES THE CAP, not a constant. 1560 was the
+                    # cone's own 1100 + 460; on a crenellated roof it floated
+                    # 4.5 m over the parapet and on an ogee it sank into it.
+                    A("finial_spire", cx, cy, (1100.0 + caph * 0.82) * h, s=0.7 * h,
+                      mat="MI_V2_Gold", label="%s_TowerSpire" % tag),
                 ]
                 for i in range(3):
                     a = 6.283 * i / 3.0 + 0.4
@@ -4827,6 +4831,30 @@ _HORIZON_SPACING = 9000.0
 _HORIZON_AT = []
 
 
+#: THE BACKDROP HAD ONE SILHOUETTE AND FOUR COLOURS.
+#:
+#: `skyline.py`'s ladder is twenty rows of `roof_cone_steep` between 90 and
+#: 135 m -- every tower in the far city, the horizon band and the scenic
+#: groups caps with the same cone, and only its tint changes. At a kilometre,
+#: through fog, tint is the first thing to go and shape is the last, so the
+#: whole backdrop reads as one repeated tower. That is exactly the "endless
+#: towers" the founder's skyline note asks not to add, already added, and the
+#: fix is not fewer of them: it is that a tower group should have a PROFILE.
+#:
+#: Four caps the kit already has, chosen by hash so a group is mixed and two
+#: neighbouring groups are not reliably different in the way a pattern is.
+#: Heights are `cap_h`'s, so a finial that sits on top still sits on top.
+_FAR_CAPS = ("roof_cone_steep", "roof_bell", "roof_ogee", "roof_flat_crenellated")
+_FAR_CAP_H = {"roof_cone_steep": 560.0, "roof_bell": 640.0, "roof_ogee": 800.0,
+              "roof_flat_crenellated": 110.0}
+
+
+def _far_cap(a, b, salt=0):
+    """(cap asset, its own height in unscaled uu) for a backdrop tower."""
+    cap = _FAR_CAPS[int(_rnd(a, b, 170 + salt) * 4.0) % 4]
+    return cap, _FAR_CAP_H[cap]
+
+
 def _horizon():
     r0, r1 = _HORIZON_BAND
     kept, out = [], []
@@ -4882,10 +4910,11 @@ def _horizon():
                 rr = (700.0 + 1900.0 * _rnd(i, k, 150))
                 tx, ty = x + math.cos(a2) * rr, y + math.sin(a2) * rr
                 h = (2.6 if i == 0 else 1.5 + 1.0 * _rnd(i, k, 151))
+                cap, _caph = _far_cap(i, k, 1)
                 out += [
                     A("tower_capped", tx, ty, 0, yaw=_rnd(i, k, 152) * 360.0, s=h,
                       mat="MI_V2_IvoryStone", label="%s_Tower%d" % (tag, i)),
-                    A("roof_cone_steep", tx, ty, 1100.0 * h, s=h,
+                    A(cap, tx, ty, 1100.0 * h, s=h,
                       mat=("MI_V2_RoofPink", "MI_V2_RoofLilac", "MI_V2_RoofNavy",
                            "MI_V2_RoofBlue")[i % 4], label="%s_TowerCap%d" % (tag, i)),
                 ]
@@ -5014,10 +5043,11 @@ def _far_horizon():
         for i in range(2):
             h = 5.0 + 3.0 * _rnd(i, k, 157)
             tx = x + (i - 0.5) * 3400.0
+            cap, _caph = _far_cap(i, k, 3)
             out += [
                 A("tower_capped", tx, y, 0, yaw=_rnd(i, k, 158) * 360.0, s=h,
                   mat="MI_V2_IvoryStone", label="%s_Tower%d" % (tag, i)),
-                A("roof_cone_steep", tx, y, 1100.0 * h, s=h,
+                A(cap, tx, y, 1100.0 * h, s=h,
                   mat=("MI_V2_RoofPink", "MI_V2_RoofNavy")[i % 2],
                   label="%s_TowerCap%d" % (tag, i)),
             ]
