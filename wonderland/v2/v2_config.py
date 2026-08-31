@@ -278,6 +278,38 @@ HERO_CAMS = [
     {"name": "SkylineRiseCam21", "location": (0.0, -14000.0, 1800.0),
      "rotation": (-1.0, 90.0, 0.0), "fov": 100.0,
      "tags": ("SkylineRiseCam21", "HeroCam21")},
+    # ---- PASS 28: ONE CAMERA PER NEW ENCHANTED LANDMARK -------------------
+    #
+    # All at the gameplay eye height of 1.7 m, because the brief's test is
+    # whether the world is enchanted WHILE MOVING and not only from the air.
+    #
+    # SITED BY MEASUREMENT, not by eye, and the two things measured are the
+    # two that have gone wrong here before. DISTANCE comes from the landmark's
+    # own measured height against this camera's vertical half-field (33.8 deg
+    # at fov 100, 16:9) with 2.5 deg of margin -- so the thing the camera is
+    # named for actually fits in it. THE STANDING POINT is required to be
+    # clear of every placement in the world INCLUDING soft vegetation, at
+    # 6.5 m: three cameras in this suite have been placed inside a hedge and
+    # returned black frames, and each time it was found by a render rather
+    # than before one.
+    {"name": "GreatSpireCam22", "location": (-6580.1, 2043.3, 170.0), "rotation": (1.0, 78.0, 0.0),
+     "fov": 100.0, "tags": ("GreatSpireCam22", "HeroCam22")},        # 316 m out, top 31.3 deg
+    {"name": "ClockGrandCam23", "location": (15257.4, -9800.6, 170.0), "rotation": (1.0, 72.0, 0.0),
+     "fov": 100.0, "tags": ("ClockGrandCam23", "HeroCam23")},        # 87 m, top 31.3
+    {"name": "TeapotCam24", "location": (-11185.8, -7722.1, 170.0), "rotation": (1.0, -171.0, 0.0),
+     "fov": 100.0, "tags": ("TeapotCam24", "HeroCam24")},            # 30 m, top 31.3
+    {"name": "ColossalKeyCam25", "location": (15919.5, -11098.7, 170.0), "rotation": (1.0, 23.0, 0.0),
+     "fov": 100.0, "tags": ("ColossalKeyCam25", "HeroCam25")},       # 73 m, top 31.3
+    {"name": "FloatingStairCam26", "location": (-3650.8, 14237.2, 170.0), "rotation": (1.0, 96.0, 0.0),
+     "fov": 100.0, "tags": ("FloatingStairCam26", "HeroCam26")},     # 58 m, top 31.3
+    # 17 m out and the tallest lantern's tip is 0.9 deg outside the frame ON
+    # PURPOSE: the shot is a LANE of them, not a portrait of one.
+    {"name": "LanternLaneCam27", "location": (-16640.7, 10666.8, 170.0), "rotation": (4.3, -98.0, 0.0),
+     "fov": 100.0, "tags": ("LanternLaneCam27", "HeroCam27")},       # 17 m, top 34.7
+    {"name": "GlassPavilionCam28", "location": (-1712.0, -15895.3, 170.0), "rotation": (1.0, -172.0, 0.0),
+     "fov": 100.0, "tags": ("GlassPavilionCam28", "HeroCam28")},     # 50 m, top 31.3
+    {"name": "GiantBloomCam29", "location": (3280.2, 13780.7, 170.0), "rotation": (1.0, 63.0, 0.0),
+     "fov": 100.0, "tags": ("GiantBloomCam29", "HeroCam29")},        # 51 m, top 31.3
 ]
 #: The suite's names by index -- the filing tool and the checkpoint report use
 #: them; the capture tooling uses the "HeroCamN" tags.
@@ -287,7 +319,15 @@ CAM_SUITE = ("HeroCam0", "PlayerCam01", "PathCam02", "ReverseCam03",
              "WorldCam11", "WorldCam12",
              "ClockQuarterCam13", "MushroomGroveCam14", "WaterGardenCam15",
              "TeaTerraceCam16", "HamletCam17", "GroveRoadCam18",
-             "WorldNorthCam19", "EastReachCam20")
+             "WorldNorthCam19", "EastReachCam20",
+             # PASS 28. CAM_SUITE is the ORDERED roster the gate checks
+             # HERO_CAMS against, not just the locked eight -- adding a camera
+             # without adding it here fails the build with an IndexError, which
+             # is the gate doing exactly its job.
+             "SkylineRiseCam21",
+             "GreatSpireCam22", "ClockGrandCam23", "TeapotCam24",
+             "ColossalKeyCam25", "FloatingStairCam26", "LanternLaneCam27",
+             "GlassPavilionCam28", "GiantBloomCam29")
 #: HeroCam0's frozen transform (the founder benchmark) -- verify_v2_layout
 #: refuses a drift of the entry above from these values.
 HERO_CAM0_FROZEN = ((0.0, -150.0, 262.0), (-2.0, 90.0, 0.0), 100.0)
