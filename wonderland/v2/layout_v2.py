@@ -6686,6 +6686,14 @@ FOOT.update({"waymarker": (120, 120)})
 #: district -> (glass tint, wayside kind). Two districts share a kind at most,
 #: and where they do the tint differs, which is the same rule the district
 #: landmarks follow.
+# THREE NEW KINDS IN PASS 29, and one rule finally kept. The comment above
+# says "two districts share a kind at most" and `key` was in three -- South
+# Meadows, North Reach and Gatekeeper Fields -- so the roads of three separate
+# districts revealed the same gold key. The new district architecture supplies
+# the vocabulary to fix that rather than inventing more props: a lantern swag
+# SPANS the road (the only wayside piece the walker passes UNDER), a traceried
+# screen stands facing them at a set-back, and a small fountain marks a
+# junction. Each is used exactly once.
 _ROUTE_LANG = {
     "Clock Quarter":      ("MI_V2_GlassAmber",  "clock"),
     "Far Orchards":       ("MI_V2_GlassRose",   "clock"),
@@ -6693,11 +6701,11 @@ _ROUTE_LANG = {
     "The Long Woods":     ("MI_V2_GlassViolet", "bloom"),
     "Tower Rise":         ("MI_V2_GlassViolet", "gears"),
     "East Reach":         ("MI_V2_GlassAmber",  "gears"),
-    "Lantern Hamlets":    ("MI_V2_GlassAmber",  "lantern"),
+    "Lantern Hamlets":    ("MI_V2_GlassAmber",  "swag"),
     "West Wood":          ("MI_V2_GlassTeal",   "lantern"),
     "Tea Terraces":       ("MI_V2_GlassRose",   "tea"),
-    "Water Gardens":      ("MI_V2_GlassTeal",   "mush"),
-    "South Meadows":      ("MI_V2_GlassAmber",  "key"),
+    "Water Gardens":      ("MI_V2_GlassTeal",   "fountain"),
+    "South Meadows":      ("MI_V2_GlassAmber",  "screen"),
     "Mushroom Grove":     ("MI_V2_GlassTeal",   "mush"),
     "North Reach":        ("MI_V2_GlassViolet", "key"),
     "Gatekeeper Fields":  ("MI_V2_GlassAmber",  "key"),
@@ -6730,6 +6738,25 @@ def _wayside_piece(kind, x, y, yaw, tag, tint):
     if kind == "key":
         return [A("pedestal_finial", x, y, 0.0, s=1.4, mat="MI_V2_IvoryStone", label=tag + "_Plinth"),
                 A("key_ornate", x, y, 320.0, yaw=yaw, s=3.6, mat="MI_V2_GoldAged", label=tag + "_Key")]
+    # PASS 29. `yaw` arrives as the road bearing + 90, i.e. ACROSS the road, so
+    # a swag authored along its own local X spans the carriageway and the
+    # walker goes under it -- the only wayside piece in the world that is not
+    # something to look at from beside the road.
+    if kind == "swag":
+        return [A("lantern_swag", x, y, 0.0, yaw=yaw + 90.0, s=0.55,
+                  mat="MI_V2_Bronze", label=tag + "_Swag"),
+                A("lantern_swag_glass", x, y, 0.0, yaw=yaw + 90.0, s=0.55,
+                  mat=tint, label=tag + "_SwagGlass")]
+    if kind == "screen":
+        return [A("glass_screen", x, y, 0.0, yaw=yaw, s=0.42,
+                  mat="MI_V2_IvoryStone", label=tag + "_Screen"),
+                A("glass_screen_panes", x, y, 0.0, yaw=yaw, s=0.42,
+                  mat=tint, label=tag + "_ScreenGlass")]
+    if kind == "fountain":
+        return [A("fountain_grand", x, y, 0.0, yaw=yaw, s=0.46,
+                  mat="MI_V2_IvoryStone", label=tag + "_Fountain"),
+                A("fountain_grand_water", x, y, 0.0, yaw=yaw, s=0.46,
+                  mat="MI_V2_Water", label=tag + "_FountainWater")]
     return []
 
 
@@ -6783,8 +6810,19 @@ def _wayside(bands):
         ux, uy = -math.sin(yaw) * side, math.cos(yaw) * side
         district, _kind = _district_of(cx, cy)
         tint, wkind = _ROUTE_LANG.get(district, ("MI_V2_GlassAmber", "lantern"))
-        big = (i % 16 == 0)
-        need = 780.0 if big else 150.0
+        # ONE WONDER PER 29 SEGMENTS IS NOT WONDER PER METRE. At `i % 16` --
+        # over a loop that already skips odd indices, so every 32nd segment --
+        # 404 road segments carried 14 wonders, and four of the ten kinds never
+        # appeared anywhere in the world because their districts' roads never
+        # landed on one. The clearance search below is what decides whether a
+        # position is usable, and it reports its skips, so the cadence can be
+        # asked for honestly and the world answers.
+        big = (i % 6 == 0)
+        # A SWAG IS NOT A VERGE PIECE. Every other wayside wonder stands
+        # beside the carriageway; this one hangs across it, so it is placed on
+        # the road's own centre line and needs the room its 16.5 m span takes.
+        spans = big and wkind == "swag"
+        need = (940.0 if spans else 780.0) if big else 150.0
         # SEARCH BOTH VERGES AND SEVERAL SET-BACKS. The first version tried
         # one offset on each side and skipped HALF of its 202 positions,
         # leaving one marker per 69 m on a road system whose whole point was
@@ -6793,15 +6831,24 @@ def _wayside(bands):
         # a skip now means there genuinely is none.
         base = half + (900.0 if big else 380.0)
         spot = None
-        for grow in (0.0, 340.0, 700.0, 1150.0, 1700.0):
-            for sgn in (1.0, -1.0):
-                x = cx + ux * sgn * (base + grow)
-                y = cy + uy * sgn * (base + grow)
+        if spans:
+            # on the centre line, stepping ALONG the road for room
+            for step in (0.0, 900.0, -900.0, 1800.0, -1800.0):
+                x = cx + math.cos(yaw) * step
+                y = cy + math.sin(yaw) * step
                 if free(x, y, need):
                     spot = (x, y)
                     break
-            if spot:
-                break
+        else:
+            for grow in (0.0, 340.0, 700.0, 1150.0, 1700.0):
+                for sgn in (1.0, -1.0):
+                    x = cx + ux * sgn * (base + grow)
+                    y = cy + uy * sgn * (base + grow)
+                    if free(x, y, need):
+                        spot = (x, y)
+                        break
+                if spot:
+                    break
         if spot is None:
             n_skip += 1
             continue
@@ -6813,6 +6860,30 @@ def _wayside(bands):
                 out += piece
                 solid.append((x, y, need))
                 n_wonder += 1
+                # AND THE ROAD KEEPS ITS MARKER. A wonder used to REPLACE the
+                # waymarker at its position, so raising the wonder cadence from
+                # every 32nd segment to every 12th took the world from 172
+                # markers to 131 -- and the founder's preserve list names 171.
+                # A wayside wonder is something extra to walk toward, not a
+                # substitute for knowing where the road goes. The marker takes
+                # the ordinary verge offset on the far side, searched the same
+                # way, and is simply skipped if there is no room.
+                placed_mark = False
+                for grow in (0.0, 340.0, 700.0, 1150.0, 1700.0):
+                  for msgn in (-1.0, 1.0):
+                    mx = cx + ux * msgn * (half + 380.0 + grow)
+                    my = cy + uy * msgn * (half + 380.0 + grow)
+                    if free(mx, my, 150.0):
+                        out.append(A("waymarker", mx, my, 0.0, yaw=math.degrees(yaw), s=0.75,
+                                     mat="MI_V2_IvoryStone", label=tag + "_Marker"))
+                        out.append(A("waymarker_lamp", mx, my, 0.0, yaw=math.degrees(yaw), s=0.75,
+                                     mat=tint, label=tag + "_Lamp"))
+                        solid.append((mx, my, 150.0))
+                        n_mark += 1
+                        placed_mark = True
+                        break
+                  if placed_mark:
+                      break
                 continue
         out.append(A("waymarker", x, y, 0.0, yaw=math.degrees(yaw), s=0.75,
                      mat="MI_V2_IvoryStone", label=tag + "_Marker"))
