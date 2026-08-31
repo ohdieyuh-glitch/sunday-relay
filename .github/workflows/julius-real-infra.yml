@@ -22,7 +22,7 @@ jobs:
         run: |
           cat > /tmp/julius-sandbox.Dockerfile <<'EOF'
           FROM node:20-bookworm-slim
-          RUN apt-get update && apt-get install -y --no-install-recommends util-linux git ca-certificates \
+          RUN apt-get update && apt-get install -y --no-install-recommends util-linux git ca-certificates procps \
             && rm -rf /var/lib/apt/lists/*
           COPY scripts/julius-docker-executor.sh /usr/local/bin/julius-executor
           RUN chmod 0555 /usr/local/bin/julius-executor

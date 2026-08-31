@@ -18,6 +18,11 @@ stage COMMAND_STARTING
 set +e
 (ulimit -f "$JULIUS_OUTPUT_BLOCKS"; /usr/bin/setpriv --reuid=65532 --regid=65532 --clear-groups --bounding-set=-all --inh-caps=-all --ambient-caps=-all /bin/bash --noprofile --norc -lc "$command_text") > "$receipt_dir/stdout.tmp" 2> "$receipt_dir/stderr.tmp"
 readonly exit_code=$?
+# The container supervisor is uid 0. Every untrusted invocation process is uid 65532.
+# Reap any daemonized descendants before measuring or sealing the workspace.
+pkill -KILL -u 65532 2>/dev/null || true
+for _ in 1 2 3 4 5; do pgrep -u 65532 >/dev/null || break; sleep 0.05; done
+if pgrep -u 65532 >/dev/null; then exit 124; fi
 set -e
 stage COMMAND_EXITED
 durable_move "$receipt_dir/stdout.tmp" "$receipt_dir/stdout"
