@@ -125,7 +125,13 @@ def flood(src, blocked, nx, ny, dist=None):
     h = [(0.0, src)]
     # WANT is the clearance a route would like: 6 chamfer units is two cells of
     # room. Beyond it there is no bonus; below it the penalty climbs steeply.
-    WANT = 12
+    # 12 -> 24, and the penalty steeper. The Dog reached the city block and
+    # ground along it at 16 uu/s where the leg asked for 330: the route threaded
+    # a corridor with four to six chamfer units of room while everything either
+    # side of it had fourteen to twenty-three. Preferring open ground only
+    # helps if "open" is set wide enough to reject a gap the Dog can enter and
+    # then cannot move in.
+    WANT = 18
     while h:
         c0, c = heapq.heappop(h)
         if c0 > cost[c]:
@@ -139,7 +145,7 @@ def flood(src, blocked, nx, ny, dist=None):
             if blocked[k]:
                 continue
             room = min(dist[k], WANT)
-            step = 3.0 + 2.2 * (WANT - room)
+            step = 3.0 + 3.0 * (WANT - room)
             nc = c0 + step
             if nc < cost[k]:
                 cost[k] = nc
@@ -351,19 +357,19 @@ def path_between(src, dst, blocked, nx, ny, cell, cache, dist=None):
     # gateway -- and pinning every cell below a threshold produced 1,518 legs
     # for a 2 km walk.
 
-    keep = [out[0]]
+    keep = [(out[0], 0)]
     i = 0
     while i < len(out) - 1:
         j = len(out) - 1
         while j > i + 1 and not clear_line(out[i], out[j], blocked, nx, ny, cell):
             j -= 1
-        keep.append(out[j])
+        keep.append((out[j], j))
         i = j
     # CENTRE EVERY WAYPOINT BUT THE ENDS. The ends are the stops themselves and
     # moving them would move the tour; everything between is a corner the path
     # happened to turn at, and the middle of the gap is the better place for it.
     for k in range(1, len(keep) - 1):
-        keep[k] = centre(keep[k], blocked, nx, ny)
+        keep[k] = (centre(keep[k][0], blocked, nx, ny), keep[k][1])
     # A SECOND PASS OVER OPEN GROUND. Pinning every pinch is right and gives
     # 298 legs for a 2 km walk, most of them across ground where nothing is
     # near. This merges any run whose whole line keeps two free rings -- open
@@ -373,7 +379,7 @@ def path_between(src, dst, blocked, nx, ny, cell, cache, dist=None):
     i = 0
     while i < len(keep) - 1:
         j = len(keep) - 1
-        while j > i + 1 and not clear_wide(keep[i], keep[j], blocked, nx, ny, 2):
+        while j > i + 1 and not clear_wide(keep[i][0], keep[j][0], blocked, nx, ny, 2):
             j -= 1
         out2.append(keep[j])
         i = j
@@ -390,19 +396,25 @@ def path_between(src, dst, blocked, nx, ny, cell, cache, dist=None):
     # only true over a short distance, so the long ones are cut back into
     # pieces along the path that was actually solved. The clearance-preferring
     # route is kept; the Dog simply re-aims often enough to stay on it.
+    # SUBDIVIDE ALONG THE SOLVED PATH, NOT ALONG THE STRAIGHT LINE.
+    #
+    # Interpolating between two waypoints puts the new ones wherever the chord
+    # falls, and a chord across a bend leaves the free space entirely: the
+    # first version of this produced waypoints with ZERO room, standing inside
+    # geometry the solver had carefully routed around. `out` is the path that
+    # was actually solved and every cell of it is free, so the cuts come from
+    # there.
     MAXLEG = 12          # cells, so 1,200 uu at cell 100
-    out3 = [out2[0]]
-    for a, b in zip(out2, out2[1:]):
+    out3 = [out2[0][0]]
+    for (a, ka), (b, kb) in zip(out2, out2[1:]):
         ax, ay = a % nx, a // nx
         bx, by = b % nx, b // nx
         steps = max(abs(bx - ax), abs(by - ay))
-        if steps > MAXLEG:
+        if steps > MAXLEG and kb > ka:
             n_cut = (steps + MAXLEG - 1) // MAXLEG
             for t in range(1, n_cut):
-                f = t / float(n_cut)
-                i2 = ax + round((bx - ax) * f)
-                j2 = ay + round((by - ay) * f)
-                out3.append(j2 * nx + i2)
+                # the cut comes off the SOLVED path, then centres like the rest
+                out3.append(centre(out[ka + (kb - ka) * t // n_cut], blocked, nx, ny))
         out3.append(b)
     return out3
 
