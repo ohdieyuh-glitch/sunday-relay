@@ -1829,6 +1829,69 @@ def hero_camera(actors, layers):
                 MANIFEST["scale_dog"] = {"placed": True, "pos": list(L["scaleDogPos"]), "yaw": float(L["scaleDogYaw"])}
                 LOG("V2 SCALE DOG: one canonical Relay Dog at %s yaw %.0f, behind HeroCam0, for ScaleCam07"
                     % (L["scaleDogPos"], L["scaleDogYaw"]))
+
+                # ---- THE SCALE REFERENCE HAS TO BE A DOG NOBODY IS DRIVING --
+                #
+                # ScaleCam07's whole job is "the proportion test at gameplay
+                # height with the ONE canonical Relay Dog standing beside the
+                # right urn", and MEASURED on the PASS 28 capture there is no
+                # Dog anywhere in that frame -- not beside the urn, not at the
+                # PlayerStart, not in the gate opening. The PASS 26 capture of
+                # the same camera is equally empty, so this is not new: the
+                # camera has been documenting a scene that is not there for at
+                # least two passes, and a scale test with no figure in it
+                # proves nothing about scale.
+                #
+                # The Dog is NOT missing. The packaged log shows it spawned,
+                # possessed and bound: AWonderlandPlayerController::OnPossess
+                # -> ARelayDogCharacter::SetupPlayerInputComponent, then
+                # "WLDOG INPUT bound on BP_RelayDog_C_0". It is the PLAYER
+                # PAWN, and a player pawn's mesh is hidden from every view but
+                # its own -- so switching the view target to a HeroCam shows an
+                # empty plaza.
+                #
+                # So the scale reference is a SECOND Dog with auto-possess
+                # disabled: a figure for the camera, not a character anybody
+                # drives. The playable Dog is untouched, which matters because
+                # the founder's guardrail is that the canonical Dog is
+                # preserved -- and because changing which pawn the controller
+                # possesses is a gameplay change dressed as an art fix.
+                #
+                # Its position is the one the camera notes have always named,
+                # (-560, -1000): 33 deg off ScaleCam07's axis at 8.5 m, and
+                # 50.6 deg off PlayerCam01's against a 45 deg half-field, so it
+                # is in the frame that wants it and outside the one that does
+                # not. The playable Dog's own (-330, -650) is neither.
+                try:
+                    pos2 = L.get("scaleDogRefPos", (-560.0, -1000.0, 87.1))
+                    ref = actors.spawn_actor_from_class(
+                        dog_cls, vec(pos2), rot(0.0, float(L.get("scaleDogRefYaw", 128.0)), 0.0))
+                except Exception:
+                    ref = None
+                if ref is None:
+                    LOG("V2 SCALE DOG REF: second Dog did not spawn -- ScaleCam07 still has no figure")
+                else:
+                    for prop, val in (("auto_possess_player", "DISABLED"),
+                                      ("auto_possess_ai", "DISABLED")):
+                        try:
+                            enum = (unreal.AutoReceiveInput if prop == "auto_possess_player"
+                                    else unreal.AutoPossessAI)
+                            ref.set_editor_property(prop, getattr(enum, val))
+                        except Exception:
+                            pass
+                    try:
+                        ref.set_editor_property("tags", [unreal.Name("ScaleReference"),
+                                                         unreal.Name("ScaleDogUnpossessed")])
+                        ref.set_folder_path(unreal.Name("V2/Camera"))
+                    except Exception:
+                        pass
+                    set_prop(ref, "HeadWidthUU", float(os.environ.get("WLV2_DOG_HEAD_WIDTH_UU", "60")))
+                    set_prop(ref, "bAutoDemo", False)
+                    assign_layer(ref, "V2_Arrival", layers)
+                    MANIFEST["scale_dog"]["reference"] = {"pos": list(pos2), "possessed": False}
+                    LOG("V2 SCALE DOG REF: an UNPOSSESSED canonical Dog at %s for ScaleCam07 "
+                        "(the playable Dog is the possessed pawn and is hidden from every other view)"
+                        % (pos2,))
     return cams
 
 
