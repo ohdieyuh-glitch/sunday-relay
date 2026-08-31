@@ -1845,17 +1845,32 @@ def hero_camera(actors, layers):
                 # The Dog is NOT missing. The packaged log shows it spawned,
                 # possessed and bound: AWonderlandPlayerController::OnPossess
                 # -> ARelayDogCharacter::SetupPlayerInputComponent, then
-                # "WLDOG INPUT bound on BP_RelayDog_C_0". It is the PLAYER
-                # PAWN, and a player pawn's mesh is hidden from every view but
-                # its own -- so switching the view target to a HeroCam shows an
-                # empty plaza.
+                # "WLDOG INPUT bound on BP_RelayDog_C_0".
                 #
-                # So the scale reference is a SECOND Dog with auto-possess
-                # disabled: a figure for the camera, not a character anybody
-                # drives. The playable Dog is untouched, which matters because
-                # the founder's guardrail is that the canonical Dog is
-                # preserved -- and because changing which pawn the controller
-                # possesses is a gameplay change dressed as an art fix.
+                # MY FIRST EXPLANATION WAS WRONG AND THIS SECOND DOG DISPROVED
+                # IT. I reasoned that the Dog is the player pawn and a pawn's
+                # mesh is hidden from every view but its own, so a HeroCam
+                # view target would see an empty plaza. That predicted an
+                # UNPOSSESSED Dog would render. It does not: both actors are
+                # in the saved map --
+                #
+                #   Attempting to add actor of class 'BP_RelayDog_C' at -330,-650,174
+                #   Attempting to add actor of class 'BP_RelayDog_C' at -560,-1000,174
+                #
+                # -- and the PASS 28 ScaleCam07 capture, cropped and magnified
+                # at both coordinates, contains neither. Possession is not the
+                # cause. What remains is how BP_RelayDog's runtime-built joint
+                # meshes behave in a packaged capture, which is the character
+                # module rather than this world pass, and it is recorded as an
+                # open defect instead of guessed at again.
+                #
+                # THE SECOND DOG STAYS. Its position is right whatever the
+                # cause -- it is the coordinate the camera notes have always
+                # named -- so when the underlying defect is fixed ScaleCam07
+                # gets its figure with no further change. The playable Dog is
+                # untouched either way, which matters because changing which
+                # pawn the controller possesses would be a gameplay change
+                # dressed up as an art fix.
                 #
                 # Its position is the one the camera notes have always named,
                 # (-560, -1000): 33 deg off ScaleCam07's axis at 8.5 m, and
