@@ -94,7 +94,7 @@ run_step() {
     # the NEXT one costs a warning instead of a rebuild.
     if [ "$name" = "generate-hub-level" ] \
        && grep -qE 'V2 SUMMARY:.*saved=True' "$logfile" \
-       && ! grep -qE 'V2 SUMMARY:.*actors=0 ' "$logfile"; then
+       && ! grep -qE 'V2 SUMMARY:.*[^_]actors=0 ' "$logfile"; then
       log "WARNING: $name exited $rc, but its own summary reports a completed world:"
       grep -oE 'V2 SUMMARY:.*' "$logfile" | tail -1 | sed 's/^/  /'
       log "WARNING: accepting the artifact over the exit code. Errors logged during the run:"

@@ -358,7 +358,13 @@ def import_textures(unreal, log):
 #: the V2 set when it is imported, engine textures otherwise.
 _TEX_DEFAULTS = {
     "SAMPLERTYPE_COLOR": ("T_V2_plaster_a", "/Engine/EngineResources/WhiteSquareTexture"),
-    "SAMPLERTYPE_NORMAL": ("T_V2_plaster_n", "/Engine/EngineMaterials/DefaultNormal"),
+    # NO ENGINE FALLBACK FOR THE NORMAL SAMPLER. does_asset_exist says
+    # /Engine/EngineMaterials/DefaultNormal is there and load_asset still fails
+    # in this commandlet -- a registry entry without a loadable package, first
+    # recorded in PASS 05e -- so asking cannot be guarded against and every ask
+    # logs an error that fails the whole step. The V2 normal map is imported
+    # before any material is built and is the right default anyway.
+    "SAMPLERTYPE_NORMAL": ("T_V2_plaster_n", None),
     "SAMPLERTYPE_LINEAR_GRAYSCALE": ("T_V2_plaster_r", "/Engine/EngineResources/WhiteSquareTexture"),
     "SAMPLERTYPE_MASKS": ("T_V2_leafcard_m", "/Engine/EngineResources/WhiteSquareTexture"),
 }
@@ -416,7 +422,7 @@ def _master(unreal, log, name, kind, texs=None):
             if texs and key in texs:
                 tex = texs[key]
                 break
-        if tex is None:
+        if tex is None and fallback:
             tex = _load_if_exists(eal, fallback)
         got = None
         if tex is not None:
