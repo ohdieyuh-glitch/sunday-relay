@@ -100,8 +100,55 @@ def build(cell, capsule):
     return blocked, nx, ny, n
 
 
-def flood(src, blocked, nx, ny):
-    """BFS with parents from one cell. Solves every destination at once."""
+def flood(src, blocked, nx, ny, dist=None):
+    """Dijkstra with parents from one cell, PREFERRING OPEN GROUND.
+
+    A plain breadth-first flood finds *a* shortest path, and the shortest path
+    through a gateway runs along one jamb. That is fine for a point and fatal
+    for a body: the Dog caught the North Gate's jamb, slid 218 uu across the
+    opening and wedged into the far pier, and 31 legs were abandoned behind it.
+
+    So the step cost is distance PLUS a penalty for being near anything. A
+    cell with room around it costs 3; one hard against an obstacle costs much
+    more, and the route takes the long way round rather than threading a gap
+    it does not need. Where there is no alternative -- the hamlet's parterre
+    walk -- the penalty is paid and the gap is still used.
+    """
+    if dist is None:
+        return _flood_plain(src, blocked, nx, ny)
+    import heapq
+    INF = float("inf")
+    cost = [INF] * (nx * ny)
+    par = [-1] * (nx * ny)
+    cost[src] = 0.0
+    par[src] = src
+    h = [(0.0, src)]
+    # WANT is the clearance a route would like: 6 chamfer units is two cells of
+    # room. Beyond it there is no bonus; below it the penalty climbs steeply.
+    WANT = 12
+    while h:
+        c0, c = heapq.heappop(h)
+        if c0 > cost[c]:
+            continue
+        i, j = c % nx, c // nx
+        for di, dj in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            ii, jj = i + di, j + dj
+            if not (0 <= ii < nx and 0 <= jj < ny):
+                continue
+            k = jj * nx + ii
+            if blocked[k]:
+                continue
+            room = min(dist[k], WANT)
+            step = 3.0 + 2.2 * (WANT - room)
+            nc = c0 + step
+            if nc < cost[k]:
+                cost[k] = nc
+                par[k] = c
+                heapq.heappush(h, (nc, k))
+    return par
+
+
+def _flood_plain(src, blocked, nx, ny):
     par = [-1] * (nx * ny)
     par[src] = src
     q = deque([src])
@@ -130,6 +177,49 @@ def nearest_free(x, y, blocked, nx, ny, cell, rings=40):
                 if 0 <= i < nx and 0 <= j < ny and not blocked[j * nx + i]:
                     return j * nx + i
     return None
+
+
+def distance_field(blocked, nx, ny):
+    """Cells from the nearest obstacle, for every free cell, in one pass pair.
+
+    The ring-scan version of this was fine for a handful of waypoints and far
+    too slow for half a million cells, which is why the first attempts at a
+    clearance-aware route reached for cheaper proxies -- inflating the capsule,
+    then pinning pinch points -- and both made things worse. Inflating only
+    changes which gaps are legal; pinning aims the route AT the pinch. What is
+    actually wanted is to prefer open ground, and that needs the distance to
+    the nearest obstacle everywhere.
+
+    Two-pass chamfer, 3-4 weights, which is close enough to Euclidean for a
+    preference and is O(cells).
+    """
+    INF = 1 << 28
+    d = [0 if blocked[i] else INF for i in range(nx * ny)]
+    for j in range(ny):
+        base = j * nx
+        for i in range(nx):
+            k = base + i
+            if d[k] == 0:
+                continue
+            best = d[k]
+            if i: best = min(best, d[k - 1] + 3)
+            if j: best = min(best, d[k - nx] + 3)
+            if i and j: best = min(best, d[k - nx - 1] + 4)
+            if i < nx - 1 and j: best = min(best, d[k - nx + 1] + 4)
+            d[k] = best
+    for j in range(ny - 1, -1, -1):
+        base = j * nx
+        for i in range(nx - 1, -1, -1):
+            k = base + i
+            if d[k] == 0:
+                continue
+            best = d[k]
+            if i < nx - 1: best = min(best, d[k + 1] + 3)
+            if j < ny - 1: best = min(best, d[k + nx] + 3)
+            if i < nx - 1 and j < ny - 1: best = min(best, d[k + nx + 1] + 4)
+            if i and j < ny - 1: best = min(best, d[k + nx - 1] + 4)
+            d[k] = best
+    return d
 
 
 def clearance(c, blocked, nx, ny, limit=8):
@@ -209,9 +299,9 @@ def clear_line(a, b, blocked, nx, ny, cell):
     return True
 
 
-def path_between(src, dst, blocked, nx, ny, cell, cache):
+def path_between(src, dst, blocked, nx, ny, cell, cache, dist=None):
     if src not in cache:
-        cache[src] = flood(src, blocked, nx, ny)
+        cache[src] = flood(src, blocked, nx, ny, dist)
     par = cache[src]
     if par[dst] == -1:
         return None
@@ -241,22 +331,11 @@ def path_between(src, dst, blocked, nx, ny, cell, cache):
     # everywhere; what matters is the LOCAL MINIMUM -- the narrowest point of a
     # gateway -- and pinning every cell below a threshold produced 1,518 legs
     # for a 2 km walk.
-    prof = [clearance(c, blocked, nx, ny, limit=4) for c in out]
-    pins, span = set(), 6
-    for k in range(1, len(out) - 1):
-        if prof[k] > 1:
-            continue
-        lo, hi = max(0, k - span), min(len(out), k + span + 1)
-        if prof[k] == min(prof[lo:hi]) and not any(abs(k - q) < span for q in pins):
-            pins.add(k)
+
     keep = [out[0]]
     i = 0
     while i < len(out) - 1:
         j = len(out) - 1
-        # never simplify across a pinned cell
-        nxt = min((k for k in pins if k > i), default=None)
-        if nxt is not None:
-            j = min(j, nxt)
         while j > i + 1 and not clear_line(out[i], out[j], blocked, nx, ny, cell):
             j -= 1
         keep.append(out[j])
@@ -289,6 +368,8 @@ def main():
     blocked, nx, ny, n = build(cell, capsule)
     print("# obstacle field: %d x %d cells of %d uu from %d placements, %.1fs"
           % (nx, ny, cell, n, time.time() - t0))
+    dist = distance_field(blocked, nx, ny)
+    print("# distance field built, %.1fs" % (time.time() - t0))
 
     cells = []
     for (key, x, y, speed, hold, label) in TOUR:
@@ -303,7 +384,7 @@ def main():
     for k in range(len(cells) - 1):
         key, src, _, _, _ = cells[k]
         nkey, dst, speed, hold, label = cells[k + 1]
-        p = path_between(src, dst, blocked, nx, ny, cell, cache)
+        p = path_between(src, dst, blocked, nx, ny, cell, cache, dist)
         if p is None:
             broken.append((key, nkey))
             print("# NO WALKABLE ROUTE: %s -> %s. THIS IS A WORLD DEFECT." % (key, nkey))
