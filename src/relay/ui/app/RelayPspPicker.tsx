@@ -3,11 +3,13 @@ import { useEffect, useState } from 'react';
 import { listPsps, loadPsp, savePsp, pspIdFromName, type PspSummary } from './psp-client';
 
 /**
- * CHOOSE OR CREATE A PSP — the surface a signed-in beta user selects a saved
+ * CHOOSE OR SAVE A PROFILE — the surface a signed-in beta user selects a saved
  * configuration profile from, before starting a Mission, or saves the current
- * one under a name (criterion 4).
+ * one under a name (criterion 4). The bridge's wire name for a profile is still
+ * `psp` (`/relay-api/psp`, `pspId`); that is an internal legacy name and it
+ * never reaches the participant — the product's configuration is the C.A.R.D.
  *
- * A PSP is CONFIGURATION, not a Mission engine: selecting one only changes which
+ * A profile is CONFIGURATION, not a Mission engine: selecting one only changes which
  * validated {@link RelayMissionConfig} the next Mission will carry, and the
  * component announces facts — a profile reads as "Loaded" only after the bridge
  * returned its config, and "Saved" only after the durable write resolved. It
@@ -15,6 +17,18 @@ import { listPsps, loadPsp, savePsp, pspIdFromName, type PspSummary } from './ps
  * bridge's own words. The bridge remains the authority for what a config may
  * contain; this only picks among what a human already saved.
  */
+/**
+ * A SAVED PROFILE'S PROVENANCE IS ITSELF. The active projection carries the
+ * C.A.R.D.'s revision reference in the request's `pspId` slot; a profile saved
+ * from it must not carry that reference forward, or loading the profile later
+ * would present a Mission as running under a C.A.R.D. revision it no longer
+ * is. The profile's own id goes in that slot instead.
+ */
+export function profileConfig(config: unknown, pspId: string): Record<string, unknown> {
+  const base = (config !== null && typeof config === 'object' && !Array.isArray(config)) ? config as Record<string, unknown> : {};
+  return { ...base, pspId };
+}
+
 export function RelayPspPicker({
   bridgeUrl,
   defaultConfig,
@@ -83,7 +97,7 @@ export function RelayPspPicker({
     const pspId = pspIdFromName(name);
     if (pspId === null) { setNote('Use letters or numbers in the profile name.'); return; }
     setBusy(true);
-    const result = await saveImpl({ pspId, name, config: activeConfig, bridgeUrl });
+    const result = await saveImpl({ pspId, name, config: profileConfig(activeConfig, pspId), bridgeUrl });
     if (result.ok) {
       setSaveName('');
       const listed = await reload();
@@ -98,7 +112,7 @@ export function RelayPspPicker({
       <label>
         Run under
         <select
-          aria-label="Configuration (PSP)"
+          aria-label="Saved profile"
           value={selectedId}
           disabled={busy}
           onChange={(e) => void onChange(e.target.value)}
@@ -123,7 +137,7 @@ export function RelayPspPicker({
             />
           </label>
           <button type="button" onClick={() => void onSave()} disabled={busy || saveName.trim() === ''}>
-            {busy ? 'Working…' : 'Save as PSP'}
+            {busy ? 'Working…' : 'Save as profile'}
           </button>
         </div>
       )}

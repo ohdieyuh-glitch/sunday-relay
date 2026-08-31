@@ -1,0 +1,96 @@
+# Julius tooling and capability audit
+
+**Audit target:** the consolidation candidate based on main `96451fc0c8da59de792d973113c4e203ddab6f01`, including the effective #198 Julius tip, #185 Relay boundary tip, #201 C.A.R.D. seam, and the new provider-neutral tool substrate. A capability is marked **wired** only when a production composition calls it; tests alone are not wiring.
+
+## Architectural conclusion
+
+Julius remains the authoritative model-independent controller. The domain defines authorization, requests/results, budgets, evidence facts, idempotency, and tool lifecycle. The Node workspace adapter implements local filesystem/Unix behavior behind the port. Provider adapters translate their protocols into `ToolInvocationRequest`; they do not define policy. Relay terminal code may project audited facts but does not execute commands.
+
+```text
+worker/provider protocol
+  → ToolInvocationRequest
+  → JuliusToolController
+      → typed registry
+      → C.A.R.D. decisions (tool/read/mutate/process/network)
+      → budget reservation
+      → audit lifecycle
+      → JuliusToolAdapter port
+  → NodeJuliusToolAdapter
+      → bounded workspace filesystem or /bin/bash --noprofile --norc -lc
+  → normalized result + evidence + mutation hashes
+  → Julius authoritative continuation/verification
+```
+
+The Gauntlet feature is absent from Julius production identifiers and imports. Generic iterative-review bounds remain in C.A.R.D.; the activated feature consumes generic interfaces from `mission/gauntlet`.
+
+## Julius capability matrix
+
+Legend: **Y** proven in the candidate; **P** partial/model-only; **N** absent or unreachable. “API” means the generic Julius runtime API, not merely an exported function. “E2E” means a composed scenario, not a unit test.
+
+| Capability | Domain | Persisted | Wired | Reachable | Policy | Concurrent safe | Recoverable | Evidence | Observable | API | E2E | Finding |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|---|
+| Durable runs/task DAG | Y | Y | Y | Y | Y | Y | Y | Y | Y | Y | Y | Runtime loop composes claims and transitions. |
+| Leases/stale authority | Y | Y | Y | Y | Y | Y | Y | Y | Y | Y | Y | Generation fencing and stale-completion tests exist. |
+| Worker registry/provider routing | Y | P | Y | Y | Y | Y | Y | Y | Y | Y | Y | Registry itself is composition state, not a durable catalog. |
+| C.A.R.D. | Y | Y | Y | Y | Y | Y | Y | Y | Y | Y | Y | #201 supplies one UI authority; tool operations are generic. |
+| Budgets/retry/fallback | Y | Y | Y | Y | Y | Y | Y | Y | Y | Y | Y | Tool calls and actual runtime settle the budget. |
+| Sub-agents | Y | Y | Y | Y | Y | Y | Y | Y | Y | Y | Y | Child permissions must be a subset; same pipeline executes children. |
+| Context snapshots/Project Brain | Y | Y | Y | Y | P | Y | Y | Y | Y | Y | Y | Compilation is bounded; production Project Brain feed composition needs deployment verification. |
+| Independent review/verification/repair | Y | Y | Y | Y | Y | Y | Y | Y | Y | Y | Y | Reviewer results return to Julius; completion is not a worker decision. |
+| Pause/resume/cancel/approvals | Y | Y | Y | Y | Y | Y | Y | Y | Y | Y | Y | Durable lifecycle stack included. |
+| Recovery/idempotency | Y | Y | Y | Y | Y | Y | Y | Y | Y | Y | Y | Fault-injection and duplicate-result scenarios pass. |
+| Trajectories/evals/events/outbox | Y | Y | Y | Y | Y | Y | Y | Y | Y | Y | Y | Facts only; no hidden reasoning contract. |
+| Relay bootstrap/commands/terminal | Y | P | P | P | Y | P | P | Y | Y | P | P | Contracts/adapters exist, but current bridge startup does not yet instantiate a durable Julius runtime. |
+| Tool authorization/registry | Y | N | N | N | Y | Y | P | Y | Y | P | Y | In-memory idempotency needs a durable invocation repository before multi-process deployment. |
+| Filesystem/search/mutation | Y | N | N | N | Y | P | P | Y | Y | P | Y | Real disposable filesystem proven; mutation provenance contains before/after hashes. |
+| Bash/process/test/build | Y | N | N | N | Y | Y | P | Y | Y | P | Y | Real spawn/process-group lifecycle proven locally. |
+| Network isolation | Y | N | P | P | Y | P | N | Y | Y | N | P | General processes are classified network-capable and denied when network=false. Allowed execution requires a mediated-isolation attestation. This host forbids `unshare`, so a real allowlisted egress runtime is a deployment gap. |
+| Coding engineering cycle | Y | N | P | P | Y | P | P | Y | Y | N | Y | Fixture cycle proves read/search/write/Bash/test evidence, but no live provider is connected to this controller yet. |
+
+## Tool registry matrix
+
+| IDs | Structured | Reads | Mutates | Process | Network-classified | Evidence |
+|---|:---:|:---:|:---:|:---:|:---:|---|
+| `fs.read/list/stat` | Y | Y | N | N | N | Artifact/read facts |
+| `fs.write/mkdir/move/copy/remove` | Y | Y | Y | N | N | `FILE_MUTATION`, path + hashes |
+| `search.grep/find/glob` | Y | Y | N | N | N | Bounded search facts |
+| `process.exec`, `shell.bash` | Y | Y | Y | Y | Y | `COMMAND_EXECUTION` |
+| `git.status/diff/show/log` | Y | Y | N* | Y | Y | Command evidence; bounded log |
+| `git.apply` | Y | Y | Y | Y | Y | Command evidence; check before apply |
+| `test.run` | Y | Y | Y | Y | Y | `TEST_RESULT` |
+| `build.run` | Y | Y | Y | Y | Y | `BUILD_RESULT` |
+
+`*` The registry describes status/diff/show/log as nonmutating, but all general processes still require the workspace and network isolation attestations because executable behavior cannot be made safe by parsing command text.
+
+## Security properties proved
+
+- Absolute paths, `..` traversal, and symlink escapes are rejected after resolving the real workspace root and existing parent.
+- A no-mutation C.A.R.D. denies Bash/process execution before budget reservation or spawn; therefore denied operations have zero filesystem effects.
+- A no-network C.A.R.D. denies all general processes before spawn. Shell command inspection is intentionally not used as a security boundary.
+- Bash uses `/bin/bash --noprofile --norc -lc`, a deliberate minimal environment, workspace HOME/TMPDIR, a bounded cwd, a combined stdout/stderr cap, timeout/cancellation, and process-group SIGTERM/SIGKILL.
+- Secret-shaped output is redacted before normalized results/evidence facts leave the adapter.
+- Concurrent duplicate idempotency keys share one promise; completed duplicates return the original result and do not settle budget twice.
+- Sub-agent permission narrowing remains in the inherited Julius runtime; a child cannot widen parent permissions.
+
+## Explicit production gaps
+
+1. **Durable tool invocation/outbox:** migration 019 and the PostgreSQL repository now provide tenant/run/lease/digest identity, a serializable invocation+dispatch-intent transaction, `SKIP LOCKED` claims and generation-fenced completion. A disposable PostgreSQL 16 run now proves the migration, duplicate/digest/stale-lease, SKIP LOCKED dispatch, concurrent task claim, heartbeat and completion fences; atomic budget/evidence settlement and connection-loss recovery remain open.
+2. **Deployment sandbox:** a provider-neutral port and fail-closed Docker adapter now compile policy into read-only root/mount/network/capability and CPU/memory/PID/nofile/tmpfs limits. This host has no Docker, but GitHub Actions run `33327055137` passed the real Docker/PostgreSQL test. The broader hostile-code and crash-reconciliation matrix remains required before production enablement.
+3. **Artifacts:** a provider-neutral port, tenant-scoped local durable adapter, and PostgreSQL metadata now exist. Production object storage and streaming overflow integration remain open.
+4. **Patch artifacts:** `fs.patch` performs an exact, unique-context replacement with optional optimistic before-hash and records before/after hashes. Persisting the equivalent patch as an artifact remains required.
+5. **Provider loop:** a bounded provider-neutral model/tool turn loop now exists and proves two interchangeable fake adapters, but existing live providers have not yet been translated to it. No live-model pass is claimed.
+6. **Resource controls:** process count, CPU, memory, disk quota, and allowed executable sets require the deployment sandbox. Timeout/output/tool-call controls alone are not a complete hostile-code boundary.
+
+These gaps prevent describing the local adapter as a production hostile-code sandbox. The consolidation is founder-reviewable architecture and a tested local execution substrate; production enablement must remain off until gaps 1, 2, 3, 5, and 6 are closed.
+
+## Crash-after-effect follow-on
+
+Migration 020 classifies effects and persists scoped sandbox ownership, execution receipts, workspace-state digests, and a one-row-per-invocation settlement identity. Recovery policy is deliberately fail-closed: read-only work may retry only when never started or the sandbox is known gone; a durable terminal receipt or verified after-state may settle; an unknown non-idempotent/process effect requires an authorized reconciliation decision and is never blindly replayed. Docker containers now carry only opaque sandbox/run/task/image labels and can be enumerated or quarantined after adapter restart.
+
+This is not yet end-to-end crash proof. The executor receipt must still be emitted by a component that survives orchestrator death, and the durable reconciler must be composed into the production worker. Production object storage, atomic cross-record settlement, live provider routes, and the real repair mission remain blockers.
+
+## Phase II durable execution update (2026-08-31)
+
+Docker execution now has an executor-owned receipt volume and a privileged receipt writer surrounding an unprivileged tool process. Receipt envelopes bind dispatch, tenant/project/run/task/worker, tool/version, policy/lease/image, content-addressed workspace state, output hashes and resource facts. Recovery validates those receipts, refuses conflicting or incomplete terminal facts, and leaves arbitrary unknown effects blocked. The PostgreSQL settlement repository is now the single atomic authority for the invocation, consumed budget, verified artifact metadata, evidence, trajectory, event, optional verification-gated task outcome, outbox and settlement ledger. Docker lifecycle operations are fenced through the durable sandbox repository and startup reconciliation quarantines physical/DB disagreement.
+
+Focused tests prove the contracts and failure injection locally. Real Docker/PostgreSQL execution remains delegated to `.github/workflows/julius-real-infra.yml` because this host exposes neither executable. Live providers and the first repair mission remain absent; no beta claim is made.

@@ -11,9 +11,11 @@ import type { startBetaMission, pollBetaMission, shipBetaMission, listBetaMissio
 import type { listPsps } from './psp-client';
 import type { listConnectedRepositories, discoverInstallationRepositories, ConnectedRepository } from './repository-client';
 import { clearActiveMissions } from './active-mission';
-import { EMPTY_DRAFT, clearAgentDraft, saveAgentDraft } from '../relay-experience';
+import {
+  EMPTY_DRAFT, activate, cardRef, clearAgentDraft, loadAgentDraft, projectMissionConfig, saveAgentDraft,
+  startNewCompoundAgent, type CompoundAgentDraft,
+} from '../relay-experience';
 import { clearConnectedRepository, saveConnectedRepository } from './connected-repository';
-import { clearConfiguredPsp, loadConfiguredPsp, saveConfiguredPsp } from './configured-psp';
 import type { LiveMissionUpdate } from './contracts';
 
 // Keep the embedded picker + history hermetic — no network on mount in these tests.
@@ -61,24 +63,41 @@ const registerOk = (async () => ({ ok: true as const, key: 'github:github.com/be
 
 afterEach(() => {
   cleanup(); clearBridgeSession(); clearActiveMissions();
-  clearConnectedRepository(); clearConfiguredPsp(); clearAgentDraft();
+  clearConnectedRepository(); clearAgentDraft();
 });
+
+const T0 = '2026-08-27T10:00:00.000Z';
+const T1 = '2026-08-27T10:05:00.000Z';
 
 /**
  * A participant who has already built their Compound Agent but not activated
  * it. The live front door resumes them at the Relay stage of the same scene,
  * where ACTIVATE RELAY is the control that carries them into the rest of the
  * journey — so a test about sign-in can start where sign-in becomes reachable
- * instead of replaying eight onboarding steps.
+ * instead of replaying eight onboarding steps. The role ids are the product
+ * catalogue's — exactly what the world stores.
  */
-function agentBuilt() {
-  saveAgentDraft({
+function agentBuilt(overrides: Partial<CompoundAgentDraft> = {}): CompoundAgentDraft {
+  return saveAgentDraft({
     ...EMPTY_DRAFT,
     name: 'Test Agent',
-    promptArchitectId: 'openai_gpt_architect',
-    codingAgentId: 'claude_agent_sdk_hosted',
-    reviewerId: 'hermes_remote_service',
-  });
+    promptArchitectId: 'architect-sunday-alcatraz',
+    codingAgentId: 'coding-claude-code',
+    reviewerId: 'reviewer-hermes',
+    ...overrides,
+  }, T0);
+}
+
+/** A participant whose Compound Agent is complete AND online: the C.A.R.D. every later surface runs under. */
+function agentActivated(overrides: Partial<CompoundAgentDraft> = {}): CompoundAgentDraft {
+  return saveAgentDraft(activate({
+    ...EMPTY_DRAFT,
+    name: 'Test Agent',
+    promptArchitectId: 'architect-sunday-alcatraz',
+    codingAgentId: 'coding-claude-code',
+    reviewerId: 'reviewer-hermes',
+    ...overrides,
+  }, T0), T0);
 }
 
 function signedIn() {
@@ -128,38 +147,42 @@ describe('RelayBetaEntry', () => {
     }
   });
 
-  it('AC-2: bringing the Agent online reveals CONFIGURE first, then sign-in — GitHub is never the entrance', async () => {
+  it('AC-2: bringing the Agent online reveals sign-in DIRECTLY — no second configuration stage, and GitHub is never the entrance', async () => {
     agentBuilt();
     render(<RelayBetaEntry bridgeUrl={BRIDGE} completeImpl={noComplete}>{APP}</RelayBetaEntry>);
-    const startBuilding = await screen.findByRole('button', { name: /ACTIVATE RELAY/i });
+    const activateRelay = await screen.findByRole('button', { name: /ACTIVATE RELAY/i });
     // Still no GitHub wall while the participant is in the world.
     expect(screen.queryByRole('button', { name: /Sign in with GitHub/i })).toBeNull();
-    // Bringing the Agent online lands on the CONFIGURE step — the Compound PSP
-    // Agent is persisted BEFORE any GitHub. Sign-in is not shown yet.
-    fireEvent.click(startBuilding);
-    expect(await screen.findByText(/Configure your Compound PSP Agent/i)).toBeTruthy();
-    expect(screen.queryByRole('button', { name: /Sign in with GitHub/i })).toBeNull();
-    // Continuing from Configure (its own Start Building) reveals the sign-in.
-    fireEvent.click(screen.getByRole('button', { name: /Start Building/i }));
+    // Bringing the Agent online is the ONE configuration act. What follows is
+    // the contextual sign-in — never a screen asking for the same values again.
+    fireEvent.click(activateRelay);
     expect(await screen.findByRole('button', { name: /Sign in with GitHub/i })).toBeTruthy();
+    expect(screen.queryByText(/Edit your C.A.R.D./i)).toBeNull();
+    expect(screen.queryByLabelText('Execution mode')).toBeNull();
     expect(screen.queryByTestId('app')).toBeNull();
   });
 
-  it('AC-4/AC-5: a config set BEFORE sign-in survives the OAuth reload and reaches the runner unchanged', async () => {
-    // A fresh participant configures the Agent, diverging from the default.
-    agentBuilt();
+  it('THE SEAM, CLOSED: the C.A.R.D. built in the world is the ONE configuration — it survives the OAuth reload and reaches the Mission unchanged, with no second setup', async () => {
+    // The participant chose their C.A.R.D. in the world: autonomous, $3, 90 min, network blocked.
+    agentBuilt({ mode: 'autonomous', spendUsd: 3, runtimeMinutes: 90, network: 'blocked' });
     render(<RelayBetaEntry bridgeUrl={BRIDGE} completeImpl={noComplete}>{APP}</RelayBetaEntry>);
     fireEvent.click(await screen.findByRole('button', { name: /ACTIVATE RELAY/i }));
-    fireEvent.change(await screen.findByLabelText('Execution mode'), { target: { value: 'autonomous' } });
-    fireEvent.change(screen.getByLabelText('Spend ceiling (USD)'), { target: { value: '3' } });
-    // Start Building persists the configured Agent before the (redirecting) sign-in.
-    fireEvent.click(screen.getByRole('button', { name: /Start Building/i }));
-    expect((loadConfiguredPsp() as { mode?: string }).mode).toBe('autonomous');
+    // Straight to sign-in. Nothing asks for the same values again, and no
+    // default is shown in their place.
+    expect(await screen.findByRole('button', { name: /Sign in with GitHub/i })).toBeTruthy();
+    expect(screen.queryByText(/Edit your C.A.R.D./i)).toBeNull();
+    expect(screen.queryByLabelText('Execution mode')).toBeNull();
+    expect(screen.queryByText(/Default beta configuration/i)).toBeNull();
+    // The record is persisted, addressable, and not yet anyone's.
+    const stored = loadAgentDraft();
+    expect(stored.activatedAt).not.toBeNull();
+    expect(stored.revision).toBeGreaterThan(0);
+    expect(stored.cardId).toMatch(/^card-/);
+    expect(stored.participantId).toBeNull();
 
     // SIMULATE THE FULL OAUTH ROUND-TRIP: the redirect destroys React state, and
-    // the return is a fresh document load. Only sessionStorage survives — the
-    // session (now signed in), the connected repository, and the configured PSP.
-    // Nothing in the sign-in/install/discovery/select path cleared it (AC-5).
+    // the return is a fresh document load. The session (now signed in) and the
+    // connected repository are restored; the C.A.R.D. is in its durable store.
     cleanup();
     signedIn();
     saveConnectedRepository('github:github.com/beta-alice/their-app');
@@ -179,23 +202,44 @@ describe('RelayBetaEntry', () => {
       </RelayBetaEntry>,
     );
 
-    // TRUTHFUL LABEL (F1): the runner names the rehydrated custom Agent honestly —
-    // never "Default beta configuration" over a config that is autonomous + $3.
-    expect((await screen.findByText(/Running under/i)).textContent).toContain('Your configured Agent');
+    // Claimed for the signed-in participant and named truthfully — never
+    // "Default beta configuration" over the C.A.R.D. they configured.
+    expect((await screen.findByText(/Running under/i)).textContent).toContain('C.A.R.D. Test Agent · revision');
     expect(screen.getByText(/Running under/i).textContent).not.toContain('Default beta configuration');
+    expect(loadAgentDraft().participantId).toBe('ghu-4242');
+    // The requested view shows what they chose — the catalogue's own names.
+    const agent = screen.getByLabelText('Active C.A.R.D.').textContent ?? '';
+    expect(agent).toContain('Claude Code');
+    expect(agent).toContain('autonomous');
+    // What the request does NOT carry is said next to what it does.
+    expect(agent).toContain('Not carried by the Mission request');
+    expect(agent).toContain('network blocked');
+    expect(agent).toMatch(/Provenance: revision \d+ of your C\.A\.R\.D\./);
 
     // Straight to the runner for the connected repo, and its Start carries the
-    // CONFIGURED Agent — autonomous + the $3 ceiling — never DEFAULT_BETA_CONFIG.
+    // C.A.R.D. — autonomous, $3, 90 min, the roles they picked — never a default.
     fireEvent.change(await screen.findByLabelText(/Objective/i), { target: { value: 'Build it' } });
     fireEvent.click(screen.getByRole('button', { name: /Start Mission/i }));
     await waitFor(() => expect(start).toHaveBeenCalledTimes(1));
-    const config = start.mock.calls[0][0].config as { mode?: string; limits?: { spendUsd?: number | null } };
+    const config = start.mock.calls[0][0].config as {
+      mode?: string; pspId?: string | null;
+      limits?: { spendUsd?: number | null; runtimeMinutes?: number | null };
+      roles?: { architect?: string | null; coding?: string | null; reviewer?: string | null };
+    };
     expect(config.mode).toBe('autonomous');
     expect(config.limits?.spendUsd).toBe(3);
+    expect(config.limits?.runtimeMinutes).toBe(90);
+    expect(config.roles).toEqual({ architect: 'architect-sunday-alcatraz', coding: 'coding-claude-code', reviewer: 'reviewer-hermes' });
+    // ONE SOURCE: what was sent IS the projection of the stored record. Nothing
+    // was copied into a second store on the way — the old one no longer exists.
+    expect(config).toEqual(projectMissionConfig(loadAgentDraft()));
+    expect(config.pspId).toBe(cardRef(loadAgentDraft()));
+    expect(sessionStorage.getItem('sunday-relay.configured-psp')).toBeNull();
   });
 
   it('after sign-in, asks the user to connect a repository — the post-install picker, still not the app', async () => {
     signedIn();
+    agentActivated(); // a repository is connected TO an Agent that already exists
     render(
       <RelayBetaEntry
         bridgeUrl={BRIDGE}
@@ -219,7 +263,7 @@ describe('RelayBetaEntry', () => {
     // This participant configured their Agent before Start Building; without it the
     // runner would (correctly) fail closed. The persisted Agent is what lets them
     // reach Start Mission.
-    saveConfiguredPsp({ mode: 'guided' });
+    agentActivated({ mode: 'guided' });
     render(
       <RelayBetaEntry
         bridgeUrl={BRIDGE}
@@ -245,7 +289,7 @@ describe('RelayBetaEntry', () => {
 
   it('AC-1: a full reload mid-Mission returns the signed-in user to the live Mission view, not the connect screen', async () => {
     signedIn();
-    saveConfiguredPsp({ mode: 'guided' });
+    agentActivated({ mode: 'guided' });
     // First mount: sign in is already done; connect a repository and reach the
     // Mission surface.
     render(
@@ -291,7 +335,7 @@ describe('RelayBetaEntry', () => {
   it('THE WHOLE JOURNEY through the UI: connect → start → watch verified_complete → ship', async () => {
     signedIn();
     // The participant configured a guided Agent before connecting the repository.
-    saveConfiguredPsp({ mode: 'guided' });
+    agentActivated({ mode: 'guided' });
     const start = vi.fn<typeof startBetaMission>(async (input) => {
       // The mission targets the repo the user connected, under the beta config.
       expect(input.repositoryKey).toBe('github:github.com/beta-alice/their-app');
@@ -336,7 +380,7 @@ describe('RelayBetaEntry', () => {
 
   it('WP-3: a returning participant SELECTS an already-connected repo — no re-install/register', async () => {
     signedIn();
-    saveConfiguredPsp({ mode: 'guided' });
+    agentActivated({ mode: 'guided' });
     render(
       <RelayBetaEntry
         bridgeUrl={BRIDGE}
@@ -369,6 +413,7 @@ describe('RelayBetaEntry', () => {
 
   it('WP-3: "Connect a different repository" from the picker opens the connect flow', async () => {
     signedIn();
+    agentActivated(); // a repository is connected TO an Agent that already exists
     render(
       <RelayBetaEntry
         bridgeUrl={BRIDGE}
@@ -391,6 +436,7 @@ describe('RelayBetaEntry', () => {
 
   it('WP-3: a signed-in participant with NO connected repositories sees the connect flow directly', async () => {
     signedIn();
+    agentActivated(); // a repository is connected TO an Agent that already exists
     render(
       <RelayBetaEntry
         bridgeUrl={BRIDGE}
@@ -412,6 +458,7 @@ describe('RelayBetaEntry', () => {
 
   it('WP-3: a list-fetch FAILURE degrades to the connect flow, never a hard block, and states the reason', async () => {
     signedIn();
+    agentActivated(); // a repository is connected TO an Agent that already exists
     const failing = (async () => ({
       ok: false as const, repositories: [], message: 'Your connected repositories could not be read.',
     })) as unknown as typeof listConnectedRepositories;
@@ -436,6 +483,7 @@ describe('RelayBetaEntry', () => {
 
   it('WP-3: a REVOKED registration is never offered — an all-revoked list degrades to connect', async () => {
     signedIn();
+    agentActivated(); // a repository is connected TO an Agent that already exists
     const revoked: ConnectedRepository = { ...aliceRepo, key: 'github:github.com/beta-alice/old-app', name: 'old-app', revoked: true };
     render(
       <RelayBetaEntry
@@ -458,7 +506,7 @@ describe('RelayBetaEntry', () => {
     signedIn();
     // A returning participant: their Agent already exists and their repo is
     // connected. They must NOT be forced back through Configure.
-    saveConfiguredPsp({ mode: 'guided' });
+    agentActivated({ mode: 'guided' });
     saveConnectedRepository('github:github.com/beta-alice/their-app');
     render(
       <RelayBetaEntry
@@ -473,14 +521,16 @@ describe('RelayBetaEntry', () => {
     // Straight to the runner for their repo — Start Mission is available.
     await waitFor(() => expect(screen.getByRole('button', { name: /Start Mission/i })).toBeTruthy());
     expect(screen.getByText(/Start a Mission on/i).textContent).toContain('github:github.com/beta-alice/their-app');
-    // They were NOT dropped into the Configure surface.
-    expect(screen.queryByText(/Configure your Compound PSP Agent/i)).toBeNull();
+    // They were NOT dropped into an edit surface, and nothing asked them to configure again.
+    expect(screen.queryByText(/Edit your C.A.R.D./i)).toBeNull();
+    expect(screen.queryByLabelText('Execution mode')).toBeNull();
+    expect(screen.getByText(/Running under/i).textContent).toContain('C.A.R.D. Test Agent · revision 1');
   });
 
-  it('WP-2 FAIL-CLOSED: signed in with a connected repo but NO Agent cannot start a Mission', async () => {
+  it('WP-2 NO C.A.R.D.: a signed-in participant without one builds it in the world — nothing is defaulted, nothing dispatches', async () => {
     signedIn();
     saveConnectedRepository('github:github.com/beta-alice/their-app');
-    // Deliberately NO saveConfiguredPsp — session restored, but no valid Agent.
+    // Deliberately NO C.A.R.D. — session restored, but no Compound Agent.
     const start = vi.fn<typeof startBetaMission>(async () => ({ ok: true, missionId: 'm-fc', view: codingView, message: null }));
     render(
       <RelayBetaEntry
@@ -493,21 +543,38 @@ describe('RelayBetaEntry', () => {
         {APP}
       </RelayBetaEntry>,
     );
-    // The runner is reached (repo is connected) but FAILS CLOSED: the honest
-    // message, no Start Mission, and no silent default Agent.
-    expect((await screen.findByRole('alert')).textContent).toMatch(/No Compound PSP Agent is configured/i);
+    // The world at the Relay stage, step one — where every C.A.R.D. is created.
+    // Not the runner, not an edit surface, not a default Agent.
+    expect(await screen.findByText(/Create your Compound Agent/i)).toBeTruthy();
     expect(screen.queryByRole('button', { name: /Start Mission/i })).toBeNull();
     expect(screen.queryByLabelText(/Objective/i)).toBeNull();
-    // Both escape hatches are offered.
-    expect(screen.getByRole('button', { name: /Configure Agent/i })).toBeTruthy();
-    expect(screen.getByLabelText(/Configuration \(PSP\)/i)).toBeTruthy();
-    // Nothing was ever dispatched.
+    expect(screen.queryByText(/Default beta configuration/i)).toBeNull();
     expect(start).not.toHaveBeenCalled();
   });
 
-  it('WP-2 RECONFIGURE: from the runner, Reconfigure opens Configure, Save Agent persists + returns with the UPDATED Agent — repo kept, no sign-in', async () => {
+  it('WP-2 BUILT, NOT ONLINE: a signed-in participant resumes at ACTIVATE RELAY; activating claims the C.A.R.D. and continues to the repository', async () => {
     signedIn();
-    saveConfiguredPsp({ mode: 'guided' });
+    agentBuilt();
+    render(
+      <RelayBetaEntry
+        bridgeUrl={BRIDGE}
+        completeImpl={noComplete}
+        listRepositoriesImpl={emptyRepoList}
+        discoverRepositoriesImpl={discoverEmpty}
+      >
+        {APP}
+      </RelayBetaEntry>,
+    );
+    fireEvent.click(await screen.findByRole('button', { name: /ACTIVATE RELAY/i }));
+    expect(await screen.findByText(/Connect a repository/i)).toBeTruthy();
+    const record = loadAgentDraft();
+    expect(record.activatedAt).not.toBeNull();
+    expect(record.participantId).toBe('ghu-4242');
+  });
+
+  it('WP-2 EDIT C.A.R.D.: from the runner, Edit opens the SAME C.A.R.D. hydrated, Save writes a new revision and returns — repo kept, no sign-in', async () => {
+    signedIn();
+    agentActivated({ mode: 'guided' });
     saveConnectedRepository('github:github.com/beta-alice/their-app');
     render(
       <RelayBetaEntry
@@ -519,24 +586,179 @@ describe('RelayBetaEntry', () => {
         {APP}
       </RelayBetaEntry>,
     );
-    // On the runner with the current (guided) Agent.
+    // On the runner with the current (guided, revision 1) C.A.R.D.
     await waitFor(() => expect(screen.getByRole('button', { name: /Start Mission/i })).toBeTruthy());
-    expect(screen.getByLabelText('Configured Compound PSP Agent').textContent).toContain('guided');
+    expect(screen.getByLabelText('Active C.A.R.D.').textContent).toContain('guided');
+    expect(screen.getByText(/Running under/i).textContent).toContain('revision 1');
 
-    // Reconfigure → the dedicated Configure surface, NOT sign-in.
-    fireEvent.click(screen.getByRole('button', { name: /Reconfigure Agent/i }));
-    expect(await screen.findByText(/Configure your Compound PSP Agent/i)).toBeTruthy();
+    // Edit → the dedicated surface, NOT sign-in — hydrated from the record.
+    fireEvent.click(screen.getByRole('button', { name: /Edit C.A.R.D./i }));
+    expect(await screen.findByText(/Edit your C.A.R.D./i)).toBeTruthy();
     expect(screen.queryByRole('button', { name: /Sign in with GitHub/i })).toBeNull();
+    expect((screen.getByLabelText('Execution mode') as HTMLSelectElement).value).toBe('guided');
+    expect(screen.queryByText(/Default beta configuration/i)).toBeNull();
 
-    // Change a field and Save Agent — it persists first, then returns.
+    // Change a field and Save — it persists first, then returns.
     fireEvent.change(screen.getByLabelText('Execution mode'), { target: { value: 'autonomous' } });
-    fireEvent.click(screen.getByRole('button', { name: /Save Agent/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Save C.A.R.D./i }));
 
-    // Back on the runner for the SAME repo, showing the UPDATED Agent.
+    // Back on the runner for the SAME repo, showing the UPDATED C.A.R.D. — revision 2.
     await waitFor(() => expect(screen.getByRole('button', { name: /Start Mission/i })).toBeTruthy());
     expect(screen.getByText(/Start a Mission on/i).textContent).toContain('github:github.com/beta-alice/their-app');
-    expect(screen.getByLabelText('Configured Compound PSP Agent').textContent).toContain('autonomous');
-    // And the durable pointer carries the change.
-    expect((loadConfiguredPsp() as { mode?: string }).mode).toBe('autonomous');
+    expect(screen.getByLabelText('Active C.A.R.D.').textContent).toContain('autonomous');
+    expect(screen.getByText(/Running under/i).textContent).toContain('revision 2');
+    const record = loadAgentDraft();
+    expect(record.mode).toBe('autonomous');
+    expect(record.revision).toBe(2);
+  });
+
+  it('STALE REVISION: a Mission never starts under a C.A.R.D. revision the store has moved past', async () => {
+    signedIn();
+    agentActivated({ mode: 'guided' });
+    saveConnectedRepository('github:github.com/beta-alice/their-app');
+    const start = vi.fn<typeof startBetaMission>(async () => ({ ok: true, missionId: 'm-stale', view: codingView, message: null }));
+    render(
+      <RelayBetaEntry
+        bridgeUrl={BRIDGE}
+        completeImpl={noComplete}
+        missionStartImpl={start}
+        missionPspListImpl={emptyPspList}
+        missionHistoryImpl={emptyHistory}
+      >
+        {APP}
+      </RelayBetaEntry>,
+    );
+    await waitFor(() => expect(screen.getByRole('button', { name: /Start Mission/i })).toBeTruthy());
+    expect(screen.getByText(/Running under/i).textContent).toContain('revision 1');
+    // Another tab (or an edit) moved the record on: revision 2.
+    saveAgentDraft({ ...loadAgentDraft(), spendUsd: 1 }, T1);
+    fireEvent.change(screen.getByLabelText(/Objective/i), { target: { value: 'Build it' } });
+    fireEvent.click(screen.getByRole('button', { name: /Start Mission/i }));
+    // Refused — nothing dispatched under revision 1 — and the current record reloaded.
+    await waitFor(() => expect(screen.getByText(/changed \(revision 1 → 2\)/i)).toBeTruthy());
+    expect(start).not.toHaveBeenCalled();
+    expect(screen.getByText(/Running under/i).textContent).toContain('revision 2');
+  });
+
+  it('WRONG PARTICIPANT: a C.A.R.D. claimed by someone else never runs, is never edited, and is never inherited', async () => {
+    agentActivated({ participantId: 'ghu-1' });
+    signedIn(); // ghu-4242
+    saveConnectedRepository('github:github.com/beta-alice/their-app');
+    const start = vi.fn<typeof startBetaMission>(async () => ({ ok: true, missionId: 'm-wp', view: codingView, message: null }));
+    render(
+      <RelayBetaEntry
+        bridgeUrl={BRIDGE}
+        completeImpl={noComplete}
+        missionStartImpl={start}
+        missionPspListImpl={emptyPspList}
+        missionHistoryImpl={emptyHistory}
+      >
+        {APP}
+      </RelayBetaEntry>,
+    );
+    expect((await screen.findByRole('alert')).textContent).toMatch(/belongs to a different participant/i);
+    expect(screen.queryByRole('button', { name: /Start Mission/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Edit C.A.R.D./i })).toBeNull();
+    expect(loadAgentDraft().participantId).toBe('ghu-1'); // untouched
+    // The only way forward is explicit — and it inherits nothing.
+    fireEvent.click(screen.getByRole('button', { name: /Create a new Compound Agent/i }));
+    expect(await screen.findByText(/Create your Compound Agent/i)).toBeTruthy();
+    const fresh = loadAgentDraft();
+    expect(fresh.participantId).toBe('ghu-4242');
+    expect(fresh.name).toBe('');
+    expect(fresh.activatedAt).toBeNull();
+    expect(start).not.toHaveBeenCalled();
+  });
+
+  it('TERM HYGIENE: the live journey never shows the internal name "PSP" — the product configuration is the C.A.R.D.', async () => {
+    signedIn();
+    agentActivated({ mode: 'guided' });
+    saveConnectedRepository('github:github.com/beta-alice/their-app');
+    const { container } = render(
+      <RelayBetaEntry
+        bridgeUrl={BRIDGE}
+        completeImpl={noComplete}
+        missionPspListImpl={emptyPspList}
+        missionHistoryImpl={emptyHistory}
+      >
+        {APP}
+      </RelayBetaEntry>,
+    );
+    await waitFor(() => expect(screen.getByRole('button', { name: /Start Mission/i })).toBeTruthy());
+    const visible = () => {
+      const labels = Array.from(container.querySelectorAll('[aria-label]')).map((e) => e.getAttribute('aria-label') ?? '');
+      return `${container.textContent ?? ''}\n${labels.join('\n')}`;
+    };
+    expect(visible()).not.toMatch(/\bPSP\b/);
+    fireEvent.click(screen.getByRole('button', { name: /Edit C.A.R.D./i }));
+    await screen.findByText(/Edit your C.A.R.D./i);
+    expect(visible()).not.toMatch(/\bPSP\b/);
+  });
+
+  it('NEW C.A.R.D. from the runner: the same Compound Agent, a fresh operating profile, back in the world on the C.A.R.D. step', async () => {
+    signedIn();
+    const first = agentActivated({ mode: 'autonomous', spendUsd: 3 });
+    saveConnectedRepository('github:github.com/beta-alice/their-app');
+    render(
+      <RelayBetaEntry bridgeUrl={BRIDGE} completeImpl={noComplete} missionPspListImpl={emptyPspList} missionHistoryImpl={emptyHistory}>
+        {APP}
+      </RelayBetaEntry>,
+    );
+    await waitFor(() => expect(screen.getByRole('button', { name: /Start Mission/i })).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: /New C\.A\.R\.D\./i }));
+    // The world, on STEP 05 — the C.A.R.D. — for the same Agent.
+    expect(await screen.findByRole('heading', { level: 1 })).toBeTruthy();
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('C.A.R.D.');
+    expect(screen.queryByRole('button', { name: /Start Mission/i })).toBeNull();
+    const fresh = loadAgentDraft();
+    expect(fresh.agentId).toBe(first.agentId);
+    expect(fresh.cardId).not.toBe(first.cardId);
+    expect(fresh.name).toBe('Test Agent');
+    expect(fresh.mode).toBe(EMPTY_DRAFT.mode);
+    expect(fresh.spendUsd).toBe(EMPTY_DRAFT.spendUsd);
+    expect(fresh.activatedAt).toBeNull();
+    expect(fresh.participantId).toBe('ghu-4242');
+  });
+
+  it('NEW COMPOUND AGENT from the runner: inherits nothing, owned by the signed-in participant, back in the world on step one', async () => {
+    signedIn();
+    const first = agentActivated({ mode: 'autonomous' });
+    saveConnectedRepository('github:github.com/beta-alice/their-app');
+    render(
+      <RelayBetaEntry bridgeUrl={BRIDGE} completeImpl={noComplete} missionPspListImpl={emptyPspList} missionHistoryImpl={emptyHistory}>
+        {APP}
+      </RelayBetaEntry>,
+    );
+    await waitFor(() => expect(screen.getByRole('button', { name: /Start Mission/i })).toBeTruthy());
+    fireEvent.click(screen.getByRole('button', { name: /New Compound Agent/i }));
+    expect(await screen.findByText(/Create your Compound Agent/i)).toBeTruthy();
+    const fresh = loadAgentDraft();
+    expect(fresh.agentId).not.toBe(first.agentId);
+    expect(fresh.cardId).not.toBe(first.cardId);
+    expect(fresh.name).toBe('');
+    expect(fresh.promptArchitectId).toBeNull();
+    expect(fresh.mode).toBe(EMPTY_DRAFT.mode);
+    expect(fresh.participantId).toBe('ghu-4242');
+  });
+
+  it('WRONG AGENT: a Mission never starts under a C.A.R.D. of a Compound Agent that is no longer the active one', async () => {
+    signedIn();
+    agentActivated({ mode: 'guided' });
+    saveConnectedRepository('github:github.com/beta-alice/their-app');
+    const start = vi.fn<typeof startBetaMission>(async () => ({ ok: true, missionId: 'm-wa', view: codingView, message: null }));
+    render(
+      <RelayBetaEntry bridgeUrl={BRIDGE} completeImpl={noComplete} missionStartImpl={start} missionPspListImpl={emptyPspList} missionHistoryImpl={emptyHistory}>
+        {APP}
+      </RelayBetaEntry>,
+    );
+    await waitFor(() => expect(screen.getByRole('button', { name: /Start Mission/i })).toBeTruthy());
+    // Another tab created — and activated — a different Compound Agent.
+    const other = saveAgentDraft(activate({ ...startNewCompoundAgent(T1, 'ghu-4242'), name: 'Other', promptArchitectId: 'architect-sunday-alcatraz', codingAgentId: 'coding-claude-code', reviewerId: 'reviewer-hermes' }, T1), T1);
+    fireEvent.change(screen.getByLabelText(/Objective/i), { target: { value: 'Build it' } });
+    fireEvent.click(screen.getByRole('button', { name: /Start Mission/i }));
+    await waitFor(() => expect(screen.getByText(/A different C\.A\.R\.D\. is active now/i)).toBeTruthy());
+    expect(start).not.toHaveBeenCalled();
+    // The runner now follows the record that is actually active.
+    expect(screen.getByText(/Running under/i).textContent).toContain(`C.A.R.D. Other · revision ${other.revision}`);
   });
 });

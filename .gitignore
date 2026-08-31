@@ -11,3 +11,6 @@ dist-relay-hermes
 .relay/
 coverage
 *.log
+
+# card-seam browser harness live-mode bundle
+dist-live/

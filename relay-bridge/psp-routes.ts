@@ -48,26 +48,26 @@ export function handlePspRoute(
   // A PSP belongs to a participant. The operator holds no PSPs (no participant
   // identity), and an anonymous caller holds none either.
   if (request.caller.kind !== 'participant') {
-    return err(401, 'authentication_failed', 'Managing a PSP requires a signed-in participant.');
+    return err(401, 'authentication_failed', 'Managing a saved profile requires a signed-in participant.');
   }
   if (store === null) {
-    return err(503, 'psp_store_unavailable', 'No durable state root is mounted, so no PSP can be saved.');
+    return err(503, 'psp_store_unavailable', 'No durable state root is mounted, so no profile can be saved.');
   }
   const owner = request.caller.participantId;
 
   /* ----------------------------------------------------------- save a PSP */
   if (request.method === 'POST' && request.path === '/psp') {
     if (request.body === null || typeof request.body !== 'object') {
-      return err(422, 'validation_failed', 'A PSP object is required.');
+      return err(422, 'validation_failed', 'A profile object is required.');
     }
     const body = request.body as { pspId?: unknown; name?: unknown; config?: unknown };
     const pspId = typeof body.pspId === 'string' ? body.pspId.trim() : '';
     const name = typeof body.name === 'string' ? body.name.trim() : '';
     if (!PSP_ID.test(pspId)) {
-      return err(422, 'validation_failed', 'A PSP needs a pspId matching ^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$.');
+      return err(422, 'validation_failed', 'A profile needs an id matching ^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$.');
     }
     if (name === '') {
-      return err(422, 'validation_failed', 'A PSP needs a non-empty name.');
+      return err(422, 'validation_failed', 'A profile needs a non-empty name.');
     }
     const config = validateMissionConfig(body.config ?? {});
     if (!config.ok) {
@@ -86,15 +86,15 @@ export function handlePspRoute(
   if (request.method === 'GET' && request.path.startsWith('/psp/')) {
     const pspId = decodeURIComponent(request.path.slice('/psp/'.length));
     if (!PSP_ID.test(pspId)) {
-      return err(404, 'psp_not_found', 'No such PSP.');
+      return err(404, 'psp_not_found', 'No such profile.');
     }
     const psp = store.load(owner, pspId);
     if (psp === null) {
-      return err(404, 'psp_not_found', 'No such PSP.');
+      return err(404, 'psp_not_found', 'No such profile.');
     }
     // The full config, so the caller can start a mission under it.
     return ok({ pspId: psp.pspId, name: psp.name, config: psp.config, updatedAt: psp.updatedAt });
   }
 
-  return err(404, 'unknown_psp_route', 'No such PSP route.');
+  return err(404, 'unknown_psp_route', 'No such profile route.');
 }

@@ -114,7 +114,7 @@ describe('RelayMissionRunner', () => {
       />,
     );
     // Pick the saved profile; its config loads.
-    fireEvent.change(await screen.findByLabelText(/Configuration \(PSP\)/i), { target: { value: 'careful' } });
+    fireEvent.change(await screen.findByLabelText(/Saved profile/i), { target: { value: 'careful' } });
     await waitFor(() => expect(load).toHaveBeenCalledTimes(1));
     // The runner now says it will run under that profile.
     expect(screen.getByText(/Running under/i).textContent).toContain('Careful');
@@ -347,7 +347,7 @@ describe('RelayMissionRunner', () => {
         }}
       />,
     );
-    const agent = screen.getByLabelText('Configured Compound PSP Agent').textContent ?? '';
+    const agent = screen.getByLabelText('Active C.A.R.D.').textContent ?? '';
     // The three configured role identities, plus Relay orchestrating them.
     expect(agent).toContain('gpt-4o-architect');
     expect(agent).toContain('claude-code');
@@ -359,8 +359,8 @@ describe('RelayMissionRunner', () => {
     expect(agent).toContain('security');
     expect(agent).toContain('$5');
     // PSP identity/version — shown from config.pspId when present (founder rule D).
-    // Asserted with the colon so it cannot pass on the "Compound PSP Agent" heading.
-    expect(agent).toContain('PSP: careful-v2');
+    // Asserted with the colon so it cannot pass on a heading.
+    expect(agent).toContain('Profile: careful-v2');
     // The requested permissions are surfaced (distinct from the authoritative
     // "permissions held" the running Mission shows from the bridge).
     expect(screen.getByText(/Permissions requested/i).textContent).toContain('commit');
@@ -397,7 +397,7 @@ describe('RelayMissionRunner', () => {
         config={{ mode: 'autonomous', permissions: ['read', 'write_worktree', 'commit'], limits: { spendUsd: 9 } }}
       />,
     );
-    fireEvent.change(await screen.findByLabelText(/Configuration \(PSP\)/i), { target: { value: 'careful' } });
+    fireEvent.change(await screen.findByLabelText(/Saved profile/i), { target: { value: 'careful' } });
     await waitFor(() => expect(load).toHaveBeenCalledTimes(1));
     fireEvent.change(screen.getByLabelText(/Objective/i), { target: { value: 'go' } });
     fireEvent.click(screen.getByRole('button', { name: /Start Mission/i }));
@@ -428,14 +428,14 @@ describe('RelayMissionRunner', () => {
       />,
     );
     // The honest fail-closed message, and NO way to start a Mission.
-    expect(screen.getByRole('alert').textContent).toMatch(/No Compound PSP Agent is configured/i);
+    expect(screen.getByRole('alert').textContent).toMatch(/No C.A.R.D. is active/i);
     expect(screen.queryByRole('button', { name: /Start Mission/i })).toBeNull();
     expect(screen.queryByLabelText(/Objective/i)).toBeNull();
     // Both escape hatches are offered: Configure Agent (routes to the Configure
     // surface) and the Load-Saved-PSP picker.
-    fireEvent.click(screen.getByRole('button', { name: /Configure Agent/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Configure C.A.R.D./i }));
     expect(onReconfigure).toHaveBeenCalledTimes(1);
-    expect(screen.getByLabelText(/Configuration \(PSP\)/i)).toBeTruthy();
+    expect(screen.getByLabelText(/Saved profile/i)).toBeTruthy();
     // Nothing was ever dispatched — the fail-closed gate held.
     expect(start).not.toHaveBeenCalled();
   });
@@ -465,7 +465,7 @@ describe('RelayMissionRunner', () => {
     // Fail-closed at first: no Start Mission.
     expect(screen.queryByRole('button', { name: /Start Mission/i })).toBeNull();
     // Loading a REAL saved PSP becomes the Agent, lifting the gate.
-    fireEvent.change(await screen.findByLabelText(/Configuration \(PSP\)/i), { target: { value: 'careful' } });
+    fireEvent.change(await screen.findByLabelText(/Saved profile/i), { target: { value: 'careful' } });
     await waitFor(() => expect(load).toHaveBeenCalledTimes(1));
     // Now a Mission can start, carrying the loaded PSP's config (never a default).
     fireEvent.change(await screen.findByLabelText(/Objective/i), { target: { value: 'go' } });
@@ -492,7 +492,7 @@ describe('RelayMissionRunner', () => {
     // A returning user is NOT forced to reconfigure — Start Mission is right there.
     expect(screen.getByRole('button', { name: /Start Mission/i })).toBeTruthy();
     // …and Reconfigure routes to the Configure surface; the runner authors nothing.
-    fireEvent.click(screen.getByRole('button', { name: /Reconfigure Agent/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Edit C.A.R.D./i }));
     expect(onReconfigure).toHaveBeenCalledTimes(1);
     expect(screen.queryByLabelText('Spend ceiling (USD)')).toBeNull();
   });
@@ -510,8 +510,51 @@ describe('RelayMissionRunner', () => {
         config={{ mode: 'guided', limits: { spendUsd: 5 } }}
       />,
     );
-    const agent = screen.getByLabelText('Configured Compound PSP Agent').textContent ?? '';
-    // No pspId in the config → no PSP line (the "PSP Agent" heading has no colon).
-    expect(agent).not.toContain('PSP:');
+    const agent = screen.getByLabelText('Active C.A.R.D.').textContent ?? '';
+    // No pspId in the config → no Profile line (the heading has no colon).
+    expect(agent).not.toContain('Profile:');
+  });
+
+  it('names the C.A.R.D. as the blank profile option, and re-choosing it never relabels to a default', async () => {
+    render(
+      <RelayMissionRunner
+        repositoryKey={KEY}
+        bridgeUrl={BRIDGE}
+        pspListImpl={emptyList}
+        config={{ mode: 'autonomous', pspId: 'card-abc-r4' }}
+        configLabel="C.A.R.D. Caesar · revision 4"
+      />,
+    );
+    const select = await screen.findByLabelText(/Saved profile/i) as HTMLSelectElement;
+    expect(select.options[0].textContent).toBe('C.A.R.D. Caesar · revision 4');
+    expect(screen.getByLabelText('Active C.A.R.D.').textContent).toContain('Provenance: revision 4 of your C.A.R.D.');
+    fireEvent.change(select, { target: { value: '' } });
+    expect(screen.getByText(/Running under/i).textContent).toContain('C.A.R.D. Caesar · revision 4');
+    expect(document.body.textContent).not.toContain('Default beta configuration');
+  });
+
+  it('offers New C.A.R.D. / New Compound Agent only when the caller can route them, and shows what the request does not carry', () => {
+    const onNewCard = vi.fn();
+    const onNewAgent = vi.fn();
+    render(
+      <RelayMissionRunner
+        repositoryKey={KEY}
+        bridgeUrl={BRIDGE}
+        pspListImpl={emptyList}
+        config={{ mode: 'guided' }}
+        onNewCard={onNewCard}
+        onNewAgent={onNewAgent}
+        requestNotes={['Not carried by the Mission request — set in your C.A.R.D. only: network blocked.']}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /New C\.A\.R\.D\./i }));
+    fireEvent.click(screen.getByRole('button', { name: /New Compound Agent/i }));
+    expect(onNewCard).toHaveBeenCalledTimes(1);
+    expect(onNewAgent).toHaveBeenCalledTimes(1);
+    expect(screen.getByLabelText('Active C.A.R.D.').textContent).toContain('network blocked');
+    cleanup();
+    render(<RelayMissionRunner repositoryKey={KEY} bridgeUrl={BRIDGE} pspListImpl={emptyList} config={{ mode: 'guided' }} />);
+    expect(screen.queryByRole('button', { name: /New C\.A\.R\.D\./i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /New Compound Agent/i })).toBeNull();
   });
 });

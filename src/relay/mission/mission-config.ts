@@ -44,10 +44,13 @@ export interface RelayMissionLimits {
   readonly repairCycles: number | null;
 }
 
-/** Who fills each role. Occupant SELECTOR strings (e.g. an occupant id); null
- *  means "use the deployment's configured default for that role". The registry
- *  resolves these against the real occupants — an unknown selector is refused
- *  THERE, where the occupant set lives, not invented here. */
+/** Who the participant ASKED to fill each role — selector strings (today the
+ *  catalogue ids the C.A.R.D. records, e.g. `coding-claude-code`); null means
+ *  "use the deployment's configured default for that role". They are RECORDED
+ *  and DISPLAYED as the request: the bridge staffs its slots from the
+ *  deployment environment (`relay-bridge/mission.ts`) and does not resolve or
+ *  refuse these here. If a registry ever resolves them, it refuses unknown
+ *  selectors THERE, where the occupant set lives, never invents them here. */
 export interface RelayRoleSelection {
   readonly architect: string | null;
   readonly coding: string | null;
