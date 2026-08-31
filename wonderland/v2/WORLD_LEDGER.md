@@ -1505,3 +1505,67 @@ CORRECTION TO A PUBLISHED NUMBER: every "walkable: 0 of 60 quarters
 unreachable" reported before this commit was computed blind to castle
 architecture. It still reports 0 of 60 with the towers modelled, so the
 conclusion survives -- but it did not mean what it appeared to.
+
+---
+
+## PASS 27 — THE TRAVERSAL CONTRACT (2026-08-31)
+
+**ROOT CAUSE.** Flat walking slabs presented a surface 31 uu above the
+surrounding ground while the canonical Relay Dog's `MaxStepHeight` is 30 uu.
+`terrace_platform`'s top sits at local z = 140; at z = -18 with a 0.35 z-scale
+that is 31. Every road, lane, path and walk in Wonderland was unclimbable by
+ONE UNIT.
+
+**SYMPTOM.** Grass traversal succeeded perfectly. The Dog stalled and ground at
+road boundaries, moved at a sixth of its nominal speed along them, and could
+terminate short of completely unobstructed targets -- once SEVENTY-FOUR UU
+short, with nothing collidable within three metres. Every one of those reads as
+"something is in the way".
+
+**FAILED DIAGNOSTIC PATH.** Six route and collision fixes were made before the
+surface contract was questioned, and each addressed a real secondary defect:
+
+1. 38 castle towers absent from `FOOT` -- the route was solved through one.
+2. Missing footprints failing OPEN -- the tea district's crockery was invisible
+   to the solver too.
+3. A corner-hugging breadth-first path -- the Dog wedged in a gateway the
+   solver called clear.
+4. Pinned pinch points -- backwards; a pin aims the route THROUGH a gap.
+5. A flat 25 s leg budget -- punished the long legs the new solve produced.
+6. The North Gate at 336 uu -- genuinely too narrow for a body that can be
+   pushed into geometry and cannot depenetrate; widened to 736 uu.
+
+None of them was wrong. None of them was this. A one-unit lip does not look
+like a step, and the tell was there early: a Dog that cannot close 74 uu in
+open ground is not blocked, it is failing to climb.
+
+**FIX.** `ROAD_Z = -30`, putting the walking surface at 19 uu with 11 uu of
+margin, applied to every flat traversal slab -- processional roads, district
+lanes, grove paths, water-garden walks, garden and court walks. Intentionally
+elevated geometry is preserved: rills stay raised, stairs stay a flight,
+monument plinths stay plinths. The DOG WAS NOT CHANGED; `MaxStepHeight` is
+still 30 and the world moved to meet it.
+
+**PERMANENT PREVENTION.** `verify_v2_layout` now measures every flat walking
+surface against the Dog's step height and FAILS THE BUILD if one exceeds it,
+reporting the contract as numbers rather than a pass: MaxStepHeight 30 uu,
+highest flat lip 19 uu, margin 11 uu, 610 surfaces checked, 0 violations, with
+19 stairs, 20 rills and 5 plinths exempt and counted.
+
+**PROOF.** 262 of 262 legs, 3,232 m, 100% completion, in 920 s. ZERO stalls,
+zero route repairs, zero collision or step failures. All twelve stops reached
+in order -- arrival gate, plaza, fountain court, castle front, garden quarter,
+grove, water garden, mushroom wood, clock quarter, hamlet, home -- and the Dog
+then began a second lap. Speed median 283 uu/s against a nominal 330, with only
+3.1% of samples below 60 uu/s.
+
+The route is 3,232 m rather than the 1,359 m of the corner-hugging solve
+because it takes safe wide paths and now visits a grove and a water garden:
+`tools/surface_families.py` proved the old tour crossed only three of the seven
+surface families the contract governs, so it could not have proved the fix.
+
+**REGRESSION.** The 12 uu drop broke nothing and corrected something: kerbs now
+stand 9 uu PROUD of the road, where their tops previously sat at 28 against a
+31 uu road surface -- they had been buried in it. Roads remain 19 uu proud of
+the ground, stairs are 42-52 m from any road so no joins moved, and everything
+still at the old height is soft scatter on beds.
