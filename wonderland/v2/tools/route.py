@@ -43,6 +43,13 @@ TOUR = [
     ("court", 0.0, 5400.0, 300.0, 1.0, "the fountain court"),
     ("castle", 0.0, 8200.0, 300.0, 3.0, "the castle front, look up"),
     ("garden", 4969.0, 9516.0, 330.0, 2.5, "the garden quarter"),
+    # THE PROOF HAS TO TOUCH EVERY SURFACE FAMILY, not one road. The
+    # step-height defect was one number applied to every flat slab in the
+    # world, so a traversal that never crosses a grove path or a water-garden
+    # walk does not prove it fixed -- founder, 2026-08-31. S05_grove and
+    # Q02_water are the nearest quarters of their kind to the route.
+    ("grove", -4694.0, 9014.0, 330.0, 2.0, "the grove"),
+    ("water", -1936.0, -12000.0, 420.0, 2.0, "the water garden"),
     ("wood", 5423.0, -11475.0, 420.0, 2.5, "the mushroom wood"),
     ("clockyard", 12565.0, -3374.0, 420.0, 2.5, "the clock quarter"),
     ("hamlet", -12099.0, 8769.0, 420.0, 2.5, "the hamlet"),
