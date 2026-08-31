@@ -1659,3 +1659,56 @@ honest: the thinning may read as bare rather than open; 29% flowering canopy
 may read as an orchard again (it was cut from 20% to 8% for exactly that once);
 the sightline corridors radiate from the arrival plaza and may read as a
 starburst; and the coloured glass emissive is unmeasured on this runtime.
+
+### PASS 28 — SCORED AGAINST ITS PREDICTIONS (2026-08-31)
+
+Package `4fbba00` on the L4, 14 cameras at 1080p, frames V2_PASS_187..200.
+
+| prediction | result |
+|---|---|
+| 1. Great spire's tip inside HeroCam0 with sky above | **MET** — computed +32.0 deg against a 33.8 deg half-field, and that is where it landed |
+| 2. HeroCam0 reads as a hierarchy | **MET on the second attempt.** It landed as a HAIRLINE: 30.4 deg of height on 2.9 deg of shaft, 1:10.4 against the castle hall's 1:2.3. Repaired to 1:3.2 by widening 1.75x, height being already at the camera's ceiling |
+| 3. SkylineCam06 central third falls toward veg:arch 1.0 | **PARTIAL** — whole towers, walls and the gatehouse now visible where only tower tops showed; the frame-share number is the wrong instrument and the render is the evidence |
+| 4. palette.green falls, rose rises | **MET, measured on the founder's own frame**: green 0.342 -> 0.245 (-28%), rose 0.029 -> 0.061 (+110%), cream +25%, sky +26%, gold flat |
+| 5. The 40-130 m band reads as parkland | **MET** — cover 57.1% -> 22.1% at 80-130 m |
+| 6. No traversal or step-height regression | **MET** — 879 surfaces, highest lip 19 uu, 0 violations; 0 of 60 quarters unreachable |
+
+**And the guardrail I could not predict: performance IMPROVED.** Median fps at
+1080p on the L4 — HeroCam0 46.8 -> 49.6, PlayerCam01 46.7 -> 52.5, PathCam02
+54.6 -> 57.4 — on a world about 6,400 placements larger. Thinning removed 326
+generated trees (~900 large overlapping crowns, the expensive kind) and
+everything added is instanced.
+
+**RISKS I RECORDED BEFORE THE RENDER, scored honestly.** "The thinning may
+read as bare": it does not. "29% flowering may read as an orchard": it does
+not — it reads as a royal garden in blossom. "The corridors may read as a
+starburst": no sign of it in any frame. "The coloured glass emissive is
+unmeasured": it works, glowing without becoming a light source, which is what
+the ABSOLUTE emissive decision was for.
+
+### The rule this pass is actually about
+
+**Angular height is not enough to size a landmark by.** Everything else here
+followed from that: the spire needed mass, mass is width, and width was the
+one axis left once height hit the frozen camera's ceiling.
+
+### Three siting rules, each written because the last one passed something a render refused
+
+standpoint clear -> sightline clear -> **approach clear**. The third is the
+only one that is also a composition decision: a camera on the landmark's own
+cleared approach spur looks along ground already known to be open, at the face
+the approach arrives at. 100% of height clear at the teapot, stair and blooms,
+89% at the pavilion, 67% at the clock; the key's camera did not improve and
+kept its earlier point at 90%.
+
+### OPEN, and not caused by this pass
+
+**ScaleCam07 contains no Dog and has not since PASS 26.** Both a possessed and
+an UNPOSSESSED Dog are in the saved map at (-330,-650) and (-560,-1000); the
+capture, cropped and magnified at both, contains neither. My first explanation
+— hidden because possessed — is disproved by the second Dog. The cause is in
+how BP_RelayDog's runtime-built joint meshes behave in a packaged HeroCam
+capture: the character module, not the world.
+
+Founder checkpoint published:
+https://claude.ai/code/artifact/384b9438-f10d-42a1-b372-95e0a7225d3e
