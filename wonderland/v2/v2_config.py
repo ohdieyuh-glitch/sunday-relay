@@ -665,11 +665,12 @@ LOOK = {
     # right urn, 6 m from ScaleCam07 at bearing 33 deg; the same wall hides
     # it from PlayerCam01, and HeroCam0 looks the other way.
     "scaleDogPos": (-330.0, -650.0, 87.1), "scaleDogYaw": 56.0,
-    #: The UNPOSSESSED scale figure -- see build_v2's spawn for why there are
-    #: two Dogs. 33 deg off ScaleCam07's axis at 8.5 m; 50.6 deg off
-    #: PlayerCam01's against a 45 deg half-field, so it is in the frame that
-    #: wants a scale reference and outside the one that does not.
-    "scaleDogRefPos": (-560.0, -1000.0, 87.1), "scaleDogRefYaw": 128.0,
+    #: RETIRED IN PASS 29. There was a second, unpossessed Dog here on the
+    #: theory that the first one was invisible for an unknown reason. The
+    #: reason was known and logged -- the cinematic capture hides the
+    #: possessed pawn -- and (-560,-1000) was behind the gate's flanking wall
+    #: from ScaleCam07 as well, so the fallback could never have shown either.
+    #: One Dog, which is the founder's rule. See build_v2's spawn.
     # secondary dressing (the PCG-equivalent): garden zones only, after the authored layout
     "dressing": 1, "dressingDensity": 1.0,
     # ---- THE MARBLE WORLD -----------------------------------------------------

@@ -1830,83 +1830,41 @@ def hero_camera(actors, layers):
                 LOG("V2 SCALE DOG: one canonical Relay Dog at %s yaw %.0f, behind HeroCam0, for ScaleCam07"
                     % (L["scaleDogPos"], L["scaleDogYaw"]))
 
-                # ---- THE SCALE REFERENCE HAS TO BE A DOG NOBODY IS DRIVING --
+                # ---- THE SECOND DOG IS GONE, AND THE REAL CAUSE IS FIXED ----
                 #
-                # ScaleCam07's whole job is "the proportion test at gameplay
-                # height with the ONE canonical Relay Dog standing beside the
-                # right urn", and MEASURED on the PASS 28 capture there is no
-                # Dog anywhere in that frame -- not beside the urn, not at the
-                # PlayerStart, not in the gate opening. The PASS 26 capture of
-                # the same camera is equally empty, so this is not new: the
-                # camera has been documenting a scene that is not there for at
-                # least two passes, and a scale test with no figure in it
-                # proves nothing about scale.
+                # ScaleCam07 held no Dog from PASS 26 to PASS 28. PASS 28
+                # recorded the cause as unknown -- "how BP_RelayDog's
+                # runtime-built joint meshes behave in a packaged capture" --
+                # and added a SECOND, unpossessed Dog at (-560, -1000) so the
+                # camera would have a figure whatever the cause turned out to
+                # be. It never appeared either.
                 #
-                # The Dog is NOT missing. The packaged log shows it spawned,
-                # possessed and bound: AWonderlandPlayerController::OnPossess
-                # -> ARelayDogCharacter::SetupPlayerInputComponent, then
-                # "WLDOG INPUT bound on BP_RelayDog_C_0".
+                # THE PACKAGED LOG HAD SAID WHY SINCE THE FIRST EMPTY FRAME:
                 #
-                # MY FIRST EXPLANATION WAS WRONG AND THIS SECOND DOG DISPROVED
-                # IT. I reasoned that the Dog is the player pawn and a pawn's
-                # mesh is hidden from every view but its own, so a HeroCam
-                # view target would see an empty plaza. That predicted an
-                # UNPOSSESSED Dog would render. It does not: both actors are
-                # in the saved map --
+                #   CINEMATIC_PAWN_HIDDEN=1 pawn=BP_RelayDog_C_0 at=-330,-650
                 #
-                #   Attempting to add actor of class 'BP_RelayDog_C' at -330,-650,174
-                #   Attempting to add actor of class 'BP_RelayDog_C' at -560,-1000,174
+                # AWonderlandPlayerController hides the possessed pawn in every
+                # -CinematicView capture. That rule was written when the pawn
+                # was an accidental default one standing in front of the arrival
+                # camera; the locomotion phase then made the canonical Dog the
+                # player pawn, and from that commit the rule hid exactly the
+                # object ScaleCam07 exists to photograph. Fixed in the
+                # controller: a pawn tagged ScaleReference is the subject, not
+                # a stray. Nothing about the Dog or the camera changed.
                 #
-                # -- and the PASS 28 ScaleCam07 capture, cropped and magnified
-                # at both coordinates, contains neither. Possession is not the
-                # cause. What remains is how BP_RelayDog's runtime-built joint
-                # meshes behave in a packaged capture, which is the character
-                # module rather than this world pass, and it is recorded as an
-                # open defect instead of guessed at again.
+                # AND THE SECOND DOG COULD NEVER HAVE WORKED. (-560, -1000) is
+                # the position this file's own notes had already retired: it
+                # stands 0.9 m BEHIND the gate's flanking wall at y = -910,
+                # which is between it and ScaleCam07 at y = -150 -- the wall
+                # that hides it from PlayerCam01 hides it from ScaleCam07 too.
+                # It is also on the SAME bearing from that camera as the
+                # playable Dog (-33.4 deg for both), so it stood behind the
+                # other Dog as well. A fallback placed without checking the
+                # sightline is not a fallback.
                 #
-                # THE SECOND DOG STAYS. Its position is right whatever the
-                # cause -- it is the coordinate the camera notes have always
-                # named -- so when the underlying defect is fixed ScaleCam07
-                # gets its figure with no further change. The playable Dog is
-                # untouched either way, which matters because changing which
-                # pawn the controller possesses would be a gameplay change
-                # dressed up as an art fix.
-                #
-                # Its position is the one the camera notes have always named,
-                # (-560, -1000): 33 deg off ScaleCam07's axis at 8.5 m, and
-                # 50.6 deg off PlayerCam01's against a 45 deg half-field, so it
-                # is in the frame that wants it and outside the one that does
-                # not. The playable Dog's own (-330, -650) is neither.
-                try:
-                    pos2 = L.get("scaleDogRefPos", (-560.0, -1000.0, 87.1))
-                    ref = actors.spawn_actor_from_class(
-                        dog_cls, vec(pos2), rot(0.0, float(L.get("scaleDogRefYaw", 128.0)), 0.0))
-                except Exception:
-                    ref = None
-                if ref is None:
-                    LOG("V2 SCALE DOG REF: second Dog did not spawn -- ScaleCam07 still has no figure")
-                else:
-                    for prop, val in (("auto_possess_player", "DISABLED"),
-                                      ("auto_possess_ai", "DISABLED")):
-                        try:
-                            enum = (unreal.AutoReceiveInput if prop == "auto_possess_player"
-                                    else unreal.AutoPossessAI)
-                            ref.set_editor_property(prop, getattr(enum, val))
-                        except Exception:
-                            pass
-                    try:
-                        ref.set_editor_property("tags", [unreal.Name("ScaleReference"),
-                                                         unreal.Name("ScaleDogUnpossessed")])
-                        ref.set_folder_path(unreal.Name("V2/Camera"))
-                    except Exception:
-                        pass
-                    set_prop(ref, "HeadWidthUU", float(os.environ.get("WLV2_DOG_HEAD_WIDTH_UU", "60")))
-                    set_prop(ref, "bAutoDemo", False)
-                    assign_layer(ref, "V2_Arrival", layers)
-                    MANIFEST["scale_dog"]["reference"] = {"pos": list(pos2), "possessed": False}
-                    LOG("V2 SCALE DOG REF: an UNPOSSESSED canonical Dog at %s for ScaleCam07 "
-                        "(the playable Dog is the possessed pawn and is hidden from every other view)"
-                        % (pos2,))
+                # So there is ONE Dog again, which is the founder's rule
+                # ("one Dog only for scale; do not populate") and was never
+                # meant to stop being true.
     return cams
 
 

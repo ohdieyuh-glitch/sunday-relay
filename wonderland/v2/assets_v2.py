@@ -2282,63 +2282,192 @@ def _gallery(m, r, z, n=8, rail=True):
                    (r + 60.0, z + 280.0)], steps=n * 4)
 
 
+def _fins(m, r, out, z0, z1, n=8, w=200.0):
+    """Buttress fins running a shaft's full height.
+
+    A smooth octagonal shaft has eight silhouette edges and no vertical lines
+    between them; at 300 m it reads as a cylinder, which is to say as nothing.
+    Fins are the cheapest real width a tall thing can have -- they add to the
+    measured half-width, they catch the sun on one side and shade the other,
+    and they are what makes the eye read a HEIGHT rather than a length.
+    """
+    for k in range(n):
+        a = math.pi / n + 2.0 * math.pi * k / n
+        cx, cy = math.cos(a), math.sin(a)
+        m.tube([(cx * (r - 60.0), cy * (r - 60.0), z0),
+                (cx * out, cy * out, z0 + (z1 - z0) * 0.34),
+                (cx * (out - (out - r) * 0.35), cy * (out - (out - r) * 0.35), z1)],
+               [w, w * 0.82, w * 0.62], sides=4)
+        m.revolve([(0.0, 0.0), (w * 1.15, 0.0), (w * 0.9, 90.0), (w * 0.45, 320.0),
+                   (0.0, 420.0)], steps=8,
+                  at=(cx * (out - (out - r) * 0.35), cy * (out - (out - r) * 0.35), z1))
+
+
 def spire_great(ctx):
-    """THE GREAT SPIRE -- 180 m, the world's navigation anchor.
+    """THE GREAT SPIRE -- 180 m authored, the world's navigation anchor.
 
-    Four stages of an octagonal shaft, each set back from the one below and
-    parted by a corbelled gallery, on a buttressed plinth; a crown of eight
-    pinnacles; and a needle carrying a third of the total height. The
-    slenderness is 1:13 at the plinth and 1:26 at the crown, which is what
-    makes a tall thing read as a SPIRE rather than as a chimney.
+    RE-AUTHORED IN PASS 29, AND THE MEASUREMENT IS WHY. PASS 28 sized this by
+    angular HEIGHT, put its tip exactly where the arithmetic said, and it
+    rendered as a hairline; the repair widened the placement 1.75x, and it was
+    still not the biggest thing in its own hero frame. `skyline.py --cam` now
+    measures what a camera's picture is actually made of, and from HeroCam0 the
+    194 m navigation anchor was SEVENTH at 4.0% of the frame, behind two tree
+    trunks, three mushrooms and a canopy. The #1 object in Wonderland's hero
+    shot was a tree at 28 m.
 
-    Its one impossible gesture is structural, not decorative: the third stage
-    stands on eight flying arches with nothing but air between them and the
-    second, so the top half of Wonderland's tallest building is visibly
-    unsupported. Wonder that comes from the massing survives at 800 m; wonder
-    that is painted on does not.
+    A landmark's size on the retina is height TIMES WIDTH, and height here is
+    already at the ceiling the frozen camera allows. So the whole of this pass's
+    change is in the other axis, and it is architecture rather than a scale
+    factor:
+
+      * A CATHEDRAL BODY at the foot, 104 m across the transept arms, where
+        there used to be a 31 m plinth. The tower now rises OUT of a building,
+        which is what every real great spire does and is why one reads as
+        enormous and a mast does not.
+      * FOUR FLANKING SPIRES at 122 m on the shoulder. These are what fix the
+        upper half: a shaft alone is 5.6 deg wide at 330 m whatever you do to
+        its base, and the sky BETWEEN the four flanks and the central needle is
+        the negative space that makes the group read as one huge thing.
+      * BUTTRESS FINS the full height of both shaft stages, so the silhouette
+        has vertical lines instead of a smooth cylinder edge.
+
+    The 1.75x placement scale is GONE, folded into the authored radii. It was
+    stretching every window 1.75 across and 1.08 up -- a 2.6 m opening became
+    4.6 m wide and stayed 8 m tall -- which is the detail-destroying failure
+    the header of this section warns about, committed by the fix for it.
+
+    The impossible gesture is kept and is structural, not decorative: the
+    flying stage stands on eight arches with 40 m of open sky under it.
     """
     m = ctx.mesh("spire_great")
-    # --- plinth and buttresses, 0 .. 3,600
-    m.extrude(_octo(1560.0), 260.0)
-    m.extrude(_octo(1440.0), 180.0, at=(0, 0, 260.0))
+
+    # ---------------------------------------------------------------- MASSIF
+    # A stepped podium, then the body. Octagon radii are the INSCRIBED radius;
+    # the corners reach r/cos(pi/8) = 1.082 r, which is where the width comes
+    # from and why the arms are measured to their gables and not to this.
+    m.extrude(_octo(5200.0), 200.0)
+    m.extrude(_octo(4900.0), 260.0, at=(0, 0, 200.0))
+    m.extrude(_octo(3200.0), 2940.0, at=(0, 0, 460.0))
+    # the body's arcade: two rows of bays, so 30 m of wall is a building
+    for row, z in ((0, 1250.0), (1, 2500.0)):
+        for k in range(16):
+            a = 2.0 * math.pi * k / 16 + math.pi / 16
+            if (k + row) % 2:
+                continue
+            r = 3200.0 * 0.97
+            _window_arched(m, math.cos(a) * r, math.sin(a) * r, z,
+                           math.degrees(a) + 90.0, w=420.0, h=1000.0, d=90.0)
+    for z in (1900.0, 3100.0):
+        m.revolve([(3180.0, z), (3300.0, z + 40.0), (3306.0, z + 100.0),
+                   (3180.0, z + 140.0)], steps=48)
+
+    # FOUR TRANSEPT ARMS -- the width, and the reason the plan is a cross
+    # rather than a drum. Each is a gabled porch reaching 52 m from the axis.
+    for k in range(4):
+        a = math.pi / 4 + math.pi * k / 2
+        cx, cy = math.cos(a), math.sin(a)
+        yaw = math.degrees(a)
+        m.box(2600.0, 4200.0, 2600.0, at=(cx * 3900.0, cy * 3900.0, 1760.0),
+              rot=(0.0, yaw, 0.0), chamfer=60.0)
+        # the gable: a triangle standing on the arm's face
+        m.revolve([(0.0, 0.0), (1300.0, 0.0), (0.0, 1500.0)], steps=3,
+                  at=(cx * 5000.0, cy * 5000.0, 3060.0), rot=(0.0, yaw, 90.0))
+        m.box(2900.0, 300.0, 260.0, at=(cx * 5100.0, cy * 5100.0, 3040.0),
+              rot=(0.0, yaw, 0.0), chamfer=30.0)
+        # a great door under it, and a rose window over that
+        _window_arched(m, cx * 5140.0, cy * 5140.0, 1000.0, yaw + 90.0,
+                       w=900.0, h=1700.0, d=120.0)
+        _window_round(m, cx * 5150.0, cy * 5150.0, 2500.0, yaw + 90.0, r=420.0, d=110.0)
+        for s in (-1.0, 1.0):
+            px, py = cx * 4700.0 - cy * s * 1250.0, cy * 4700.0 + cx * s * 1250.0
+            m.extrude(_octo(230.0), 3400.0, at=(px, py, 460.0))
+            m.revolve([(0.0, 0.0), (290.0, 0.0), (250.0, 180.0), (140.0, 700.0),
+                       (48.0, 1150.0), (0.0, 1280.0)], steps=10, at=(px, py, 3860.0))
+
+    # EIGHT CORNER TURRETS, on the diagonals between the arms.
     for k in range(8):
         a = math.pi / 8 + 2.0 * math.pi * k / 8
-        cx, cy = math.cos(a), math.sin(a)
-        # a buttress is a wedge that LOSES depth with height -- a constant
-        # box reads as a pilaster and adds nothing to the base's weight
-        m.tube([(cx * 1320.0, cy * 1320.0, 440.0), (cx * 1120.0, cy * 1120.0, 1900.0),
-                (cx * 900.0, cy * 900.0, 3400.0), (cx * 820.0, cy * 820.0, 3860.0)],
-               [260.0, 200.0, 140.0, 110.0], sides=4)
-        m.box(300.0, 300.0, 420.0, at=(cx * 1300.0, cy * 1300.0, 640.0),
-              rot=(0.0, math.degrees(a), 0.0), chamfer=18.0)
-        m.revolve([(0.0, 0.0), (120.0, 0.0), (86.0, 150.0), (30.0, 330.0), (0.0, 400.0)],
-                  steps=10, at=(cx * 1300.0, cy * 1300.0, 850.0))
+        cx, cy = math.cos(a) * 3800.0, math.sin(a) * 3800.0
+        m.extrude(_octo(600.0), 4140.0, at=(cx, cy, 460.0))
+        m.revolve([(620.0, 4400.0), (760.0, 4460.0), (760.0, 4530.0), (620.0, 4600.0)],
+                  steps=16, at=(cx, cy, 0.0))
+        m.revolve([(0.0, 0.0), (700.0, 0.0), (610.0, 220.0), (350.0, 800.0),
+                   (120.0, 1180.0), (0.0, 1300.0)], steps=14, at=(cx, cy, 4600.0))
+        m.sphere(120.0, at=(cx, cy, 5960.0), steps=8)
+        # AND IT FLIES. A buttress from each turret to the shaft above the
+        # body -- the load path a tower this thin needs, drawn rather than
+        # implied, and eight of them are most of the silhouette's texture.
+        m.tube([(cx, cy, 3500.0), (cx * 0.80, cy * 0.80, 4300.0),
+                (cx * 0.52, cy * 0.52, 5200.0), (cx * 0.40, cy * 0.40, 5850.0)],
+               [190.0, 165.0, 140.0, 120.0], sides=4)
 
-    # --- STAGE 1, 440 .. 5,200: the tall arcaded body
-    m.extrude(_octo(780.0), 4760.0, at=(0, 0, 440.0))
-    for row, z in ((0, 1250.0), (1, 2450.0), (2, 3650.0)):
+    _gallery(m, 3300.0, 3400.0, n=16, rail=False)
+
+    # ------------------------------------------------------- STAGE 1 + FINS
+    # Radii here are the PASS 28 placement's 1.75x folded in (780 -> 1365), so
+    # the shaft is the width the approved render had and the windows are their
+    # authored size instead of stretched.
+    m.extrude(_octo(1365.0), 3100.0, at=(0, 0, 3900.0))
+    _fins(m, 1365.0, 2060.0, 3900.0, 6800.0, n=8)
+    for row, z in ((0, 4600.0), (1, 5700.0), (2, 6800.0)):
         for k in range(8):
             a = math.pi / 8 + 2.0 * math.pi * k / 8
             if (k + row) % 2:
                 continue
-            r = 780.0 * 0.93
+            r = 1365.0 * 0.95
             _window_arched(m, math.cos(a) * r, math.sin(a) * r, z,
-                           math.degrees(a) + 90.0, w=260.0, h=760.0, d=60.0)
-    for z in (2000.0, 3200.0):
-        m.revolve([(760.0, z), (836.0, z + 26.0), (840.0, z + 66.0), (760.0, z + 92.0)], steps=32)
-    _gallery(m, 800.0, 5200.0)
+                           math.degrees(a) + 90.0, w=300.0, h=820.0, d=70.0)
+    for z in (5150.0, 6250.0):
+        m.revolve([(1340.0, z), (1440.0, z + 30.0), (1446.0, z + 76.0), (1340.0, z + 106.0)], steps=32)
+    _gallery(m, 1400.0, 7000.0)
 
-    # --- STAGE 2, 5,480 .. 9,400
-    m.extrude(_octo(640.0), 3920.0, at=(0, 0, 5480.0))
-    for row, z in ((0, 6300.0), (1, 7500.0), (2, 8700.0)):
+    # ------------------------------------------------------------- STAGE 2
+    m.extrude(_octo(1120.0), 2100.0, at=(0, 0, 7300.0))
+    _fins(m, 1120.0, 1640.0, 7300.0, 9300.0, n=8)
+    for row, z in ((0, 7900.0), (1, 8800.0)):
         for k in range(8):
             a = math.pi / 8 + 2.0 * math.pi * k / 8
             if (k + row) % 2:
                 continue
-            r = 640.0 * 0.93
+            r = 1120.0 * 0.95
             _window_arched(m, math.cos(a) * r, math.sin(a) * r, z,
-                           math.degrees(a) + 90.0, w=210.0, h=640.0, d=50.0)
-    _gallery(m, 660.0, 9400.0)
+                           math.degrees(a) + 90.0, w=250.0, h=700.0, d=60.0)
+    _gallery(m, 1155.0, 9400.0)
+
+    # ------------------------------------------------- THE FOUR FLANKING SPIRES
+    #
+    # THE ONE THAT FIXES THE UPPER HALF. Everything above is base: a shaft on
+    # its own subtends 5.6 deg of width at 330 m however broad its plinth is,
+    # and 30 deg of height on 5.6 of width is a hairline by definition. These
+    # four stand on the shoulder at 27 m out and rise to 122 m, so the group
+    # is 10.5 deg wide where it used to be 5.6 -- and the SKY between them and
+    # the central needle is what stops the same width reading as a slab.
+    for k in range(4):
+        a = math.pi / 4 + math.pi * k / 2
+        cx, cy = math.cos(a) * 2700.0, math.sin(a) * 2700.0
+        m.extrude(_octo(440.0), 700.0, at=(cx, cy, 3400.0))
+        m.extrude(_octo(380.0), 5900.0, at=(cx, cy, 4100.0))
+        _fins(m, 380.0, 560.0, 4100.0, 9800.0, n=4, w=110.0)
+        for z in (5600.0, 7400.0, 9200.0):
+            m.revolve([(370.0, z), (470.0, z + 26.0), (474.0, z + 66.0), (370.0, z + 92.0)],
+                      steps=16, at=(cx, cy, 0.0))
+        for kk in range(4):
+            aa = math.pi / 4 + math.pi * kk / 2
+            _window_arched(m, cx + math.cos(aa) * 362.0, cy + math.sin(aa) * 362.0, 6400.0,
+                           math.degrees(aa) + 90.0, w=150.0, h=520.0, d=40.0)
+        # a gallery, four corner pinnacles, and a needle of its own
+        m.revolve([(360.0, 10000.0), (620.0, 10060.0), (620.0, 10180.0), (360.0, 10260.0)],
+                  steps=16, at=(cx, cy, 0.0))
+        for kk in range(4):
+            aa = math.pi / 4 + math.pi * kk / 2
+            px, py = cx + math.cos(aa) * 470.0, cy + math.sin(aa) * 470.0
+            m.extrude(_octo(105.0), 620.0, at=(px, py, 10260.0))
+            m.revolve([(0.0, 0.0), (130.0, 0.0), (108.0, 80.0), (58.0, 460.0),
+                       (18.0, 760.0), (0.0, 850.0)], steps=8, at=(px, py, 10880.0))
+        m.revolve([(0.0, 0.0), (330.0, 0.0), (318.0, 110.0), (238.0, 700.0),
+                   (150.0, 1300.0), (74.0, 1900.0), (22.0, 2280.0), (0.0, 2400.0)],
+                  steps=20, at=(cx, cy, 10100.0))
+        m.sphere(46.0, at=(cx, cy, 12560.0), steps=8)
 
     # --- THE FLYING STAGE, 9,680 .. 13,000. Eight arches spring from the
     # stage-2 gallery to a shaft that begins ABOVE them: the ring of open sky
@@ -2346,44 +2475,45 @@ def spire_great(ctx):
     for k in range(8):
         a = math.pi / 8 + 2.0 * math.pi * k / 8
         cx, cy = math.cos(a), math.sin(a)
-        m.tube([(cx * 740.0, cy * 740.0, 9680.0), (cx * 660.0, cy * 660.0, 10250.0),
-                (cx * 430.0, cy * 430.0, 10620.0), (cx * 180.0, cy * 180.0, 10760.0)],
-               [96.0, 82.0, 70.0, 62.0], sides=6)
-        m.box(150.0, 150.0, 230.0, at=(cx * 760.0, cy * 760.0, 9760.0),
-              rot=(0.0, math.degrees(a), 0.0), chamfer=12.0)
-    m.extrude(_octo(500.0), 2240.0, at=(0, 0, 10760.0))
+        m.tube([(cx * 1295.0, cy * 1295.0, 9680.0), (cx * 1155.0, cy * 1155.0, 10250.0),
+                (cx * 750.0, cy * 750.0, 10620.0), (cx * 315.0, cy * 315.0, 10760.0)],
+               [130.0, 112.0, 96.0, 84.0], sides=6)
+        m.box(220.0, 220.0, 300.0, at=(cx * 1330.0, cy * 1330.0, 9760.0),
+              rot=(0.0, math.degrees(a), 0.0), chamfer=16.0)
+    m.extrude(_octo(875.0), 2240.0, at=(0, 0, 10760.0))
+    _fins(m, 875.0, 1210.0, 10760.0, 12900.0, n=8, w=150.0)
     for k in range(8):
         a = math.pi / 8 + 2.0 * math.pi * k / 8
         if k % 2:
             continue
-        r = 500.0 * 0.93
+        r = 875.0 * 0.95
         _window_arched(m, math.cos(a) * r, math.sin(a) * r, 11700.0,
-                       math.degrees(a) + 90.0, w=170.0, h=560.0, d=42.0)
-    _gallery(m, 520.0, 13000.0, rail=False)
+                       math.degrees(a) + 90.0, w=200.0, h=620.0, d=48.0)
+    _gallery(m, 910.0, 13000.0, rail=False)
 
     # --- THE CROWN, 13,280: eight pinnacles around the needle's foot
-    m.extrude(_octo(400.0), 620.0, at=(0, 0, 13280.0))
+    m.extrude(_octo(700.0), 620.0, at=(0, 0, 13280.0))
     for k in range(8):
         a = math.pi / 8 + 2.0 * math.pi * k / 8
-        cx, cy = math.cos(a) * 560.0, math.sin(a) * 560.0
-        m.extrude(_octo(120.0), 900.0, at=(cx, cy, 13280.0))
-        m.revolve([(0.0, 0.0), (150.0, 0.0), (128.0, 90.0), (74.0, 520.0),
-                   (26.0, 900.0), (0.0, 1040.0)], steps=10, at=(cx, cy, 14180.0))
-        m.sphere(52.0, at=(cx, cy, 15180.0), steps=8)
+        cx, cy = math.cos(a) * 980.0, math.sin(a) * 980.0
+        m.extrude(_octo(210.0), 1100.0, at=(cx, cy, 13280.0))
+        m.revolve([(0.0, 0.0), (262.0, 0.0), (224.0, 110.0), (130.0, 620.0),
+                   (46.0, 1080.0), (0.0, 1240.0)], steps=10, at=(cx, cy, 14380.0))
+        m.sphere(76.0, at=(cx, cy, 15680.0), steps=8)
 
     # --- THE NEEDLE, 13,900 .. 18,000. A third of the height, and the reason
     # the silhouette resolves to a POINT from any distance.
-    m.revolve([(0.0, 0.0), (430.0, 0.0), (418.0, 130.0), (330.0, 900.0),
-               (238.0, 1900.0), (152.0, 2900.0), (78.0, 3700.0), (26.0, 4020.0),
+    m.revolve([(0.0, 0.0), (752.0, 0.0), (731.0, 130.0), (578.0, 900.0),
+               (416.0, 1900.0), (266.0, 2900.0), (136.0, 3700.0), (46.0, 4020.0),
                (0.0, 4100.0)], steps=32, at=(0, 0, 13900.0))
     for k in range(8):
         a = math.pi / 8 + 2.0 * math.pi * k / 8
         pts = [(math.cos(a) * r * 1.02, math.sin(a) * r * 1.02, 13900.0 + z)
-               for (r, z) in ((424.0, 130.0), (330.0, 900.0), (238.0, 1900.0),
-                              (152.0, 2900.0), (78.0, 3700.0))]
-        m.tube(pts, [26.0, 22.0, 18.0, 14.0, 10.0], sides=5)
-    m.revolve([(0.0, 0.0), (56.0, 30.0), (66.0, 90.0), (40.0, 150.0), (30.0, 210.0),
-               (52.0, 250.0), (18.0, 330.0), (0.0, 560.0)], steps=14, at=(0, 0, 17440.0))
+               for (r, z) in ((742.0, 130.0), (578.0, 900.0), (416.0, 1900.0),
+                              (266.0, 2900.0), (136.0, 3700.0))]
+        m.tube(pts, [42.0, 36.0, 30.0, 24.0, 17.0], sides=5)
+    m.revolve([(0.0, 0.0), (90.0, 30.0), (106.0, 90.0), (64.0, 150.0), (48.0, 210.0),
+               (84.0, 250.0), (28.0, 330.0), (0.0, 560.0)], steps=14, at=(0, 0, 17440.0))
     return m
 
 

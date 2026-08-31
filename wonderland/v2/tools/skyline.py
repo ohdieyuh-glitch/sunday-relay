@@ -178,10 +178,20 @@ def tops(origin=(0.0, 0.0), within_m=None, beyond_m=None):
             continue
         if beyond_m is not None and d <= beyond_m * 100.0:
             continue
+        sx, sy = p["scale"][0], p["scale"][1]
         rows.append({
             "asset": a, "label": p.get("label") or "", "band": p.get("band"),
-            "x": x, "y": y, "z": z, "sz": sz,
+            "x": x, "y": y, "z": z, "sz": sz, "sx": sx, "sy": sy,
             "top_uu": top, "top_m": top / 100.0,
+            "base_uu": z + b["zlo"] * sz,
+            # THE AXIS THAT WAS NEVER MEASURED. A landmark's size on the
+            # retina is height TIMES WIDTH; PASS 28 sized a 194 m spire by
+            # angular height alone and it landed as a hairline. `r_uu` is the
+            # piece's widest horizontal radius and `r_hi_uu` the widest in its
+            # UPPER HALF -- the shaft, which is what a distant eye actually
+            # reads, and which a broad plinth flatters if you take the max.
+            "r_uu": max(b["rx"] * sx, b["ry"] * sy),
+            "r_hi_uu": max(b["prof"][PROFILE_BINS // 2:]) * max(sx, sy),
             "d_uu": d,
         })
     return rows, unknown
@@ -382,6 +392,198 @@ def site_report(x, y, h_m):
     return rows
 
 
+# ---------------------------------------------------------------------------
+# MASS -- the axis PASS 28 proved was missing
+# ---------------------------------------------------------------------------
+#
+# THE RULE THIS EXISTS FOR: landmark scale = height + WIDTH + silhouette.
+# PASS 28 computed the great spire's top elevation against HeroCam0's half
+# field, placed it exactly where the arithmetic said, and it rendered as a
+# HAIRLINE -- 30.4 deg of height on 2.9 deg of shaft, 1:10.4, against the
+# castle hall beside it at 1:2.3. Angular height was never the size of a
+# thing; it is one of its two dimensions, and the tool that sized the spire
+# could only see that one.
+#
+# So: for each site, the angle it subtends VERTICALLY and HORIZONTALLY, the
+# aspect between them, and the product -- the solid angle, which is the share
+# of the picture the landmark occupies and the only number that answers "is
+# this the biggest thing in the frame".
+#
+# Two widths are reported because they answer different questions. `w_all` is
+# the widest the site gets anywhere, which a broad plinth flatters. `w_hi` is
+# the widest of its UPPER HALF -- the shaft against the sky, with no ground
+# clutter in front of it, which is what the eye reads at 300 m and what read
+# as a hairline. A landmark passes on w_hi or it does not pass.
+
+
+def mass(rows, sites, aspect_target=4.5):
+    """Angular height, width, aspect and solid angle per site."""
+    out = []
+    for s in sites:
+        near = [r for r in rows
+                if math.hypot(r["x"] - s["x"], r["y"] - s["y"]) < 900.0]
+        if not near:
+            near = [s]
+        d = max(1.0, s["d_uu"])
+        h_deg = angle_deg(s["top_uu"], d)
+        base_deg = math.degrees(math.atan2(min(r["base_uu"] for r in near) - EYE_Z, d))
+        h_deg = max(0.01, h_deg - base_deg)
+        # A radius r at distance d subtends 2*atan(r/d). Taking the widest
+        # piece rather than summing them is deliberate: two towers 40 m apart
+        # are two landmarks, not one wide one.
+        w_all = 2.0 * math.degrees(math.atan(max(r["r_uu"] for r in near) / d))
+        w_hi = 2.0 * math.degrees(math.atan(max(r["r_hi_uu"] for r in near) / d))
+        out.append({
+            "site": site_of(s["label"], s["asset"], s["x"], s["y"]),
+            "asset": s["asset"], "top_m": round(s["top_m"], 1),
+            "dist_m": round(d / 100.0, 1),
+            "h_deg": round(h_deg, 2),
+            "w_all_deg": round(w_all, 2), "w_hi_deg": round(w_hi, 2),
+            "aspect_all": round(h_deg / w_all, 2) if w_all else 99.0,
+            "aspect_hi": round(h_deg / w_hi, 2) if w_hi else 99.0,
+            "solid_deg2": round(h_deg * w_all, 1),
+            "pieces": len(near),
+            "slender": (h_deg / w_hi if w_hi else 99.0) > aspect_target,
+        })
+    return out
+
+
+def mass_report(top_n=18, origin=(0.0, 0.0), within_m=None, beyond_m=None,
+                aspect_target=4.5):
+    rows, _unknown = tops(origin, within_m, beyond_m)
+    for r in rows:
+        r["deg"] = angle_deg(r["top_uu"], r["d_uu"])
+    # rank by PRESENCE, not height: the question is what fills the picture
+    pres = []
+    for r in sorted(rows, key=lambda r: -r["deg"]):
+        for k in pres:
+            if math.hypot(r["x"] - k["x"], r["y"] - k["y"]) < 900.0:
+                break
+        else:
+            pres.append(r)
+            if len(pres) >= top_n * 2:
+                break
+    ms = mass(rows, pres)
+    ms.sort(key=lambda m: -m["solid_deg2"])
+    print("MASS -- height x width, from an eye at %.2f m at (%.0f,%.0f)"
+          % (EYE_Z / 100.0, origin[0], origin[1]))
+    print("  a landmark reads by SOLID ANGLE. aspect over %.1f:1 is a hairline."
+          % aspect_target)
+    print("  %-24s %7s %7s %7s %7s %7s %8s %9s"
+          % ("site", "top m", "dist m", "h deg", "w hi", "w all", "aspect", "solid"))
+    for m in ms[:top_n]:
+        flag = "  HAIRLINE" if m["slender"] else ""
+        print("  %-24s %7.1f %7.1f %7.2f %7.2f %7.2f %7.1f:1 %8.1f%s"
+              % (m["site"][:24], m["top_m"], m["dist_m"], m["h_deg"],
+                 m["w_hi_deg"], m["w_all_deg"], m["aspect_hi"],
+                 m["solid_deg2"], flag))
+    if len(ms) > 1:
+        print("\n  DOMINANCE BY SOLID ANGLE  1st:2nd  %.2fx   (%s over %s)"
+              % (ms[0]["solid_deg2"] / max(1e-6, ms[1]["solid_deg2"]),
+                 ms[0]["site"][:22], ms[1]["site"][:22]))
+    return ms
+
+
+def cam_mass_report(tag, top_n=14, aspect_target=4.5):
+    """What fills THIS camera's frame, ranked by the share of it each site takes.
+
+    "Unmistakably #1 from HeroCam0" is a claim about one picture, and the
+    world-from-the-spawn ranking cannot test it: a landmark dead on the
+    camera's axis and a tower 60 deg off it both appear in that list, and only
+    one of them is in the photograph. This clips every site to the frame
+    before measuring, so a site half out of shot scores half.
+    """
+    cams = {c["tag"]: c for c in cameras()}
+    cams.update({c["name"]: c for c in cameras()})
+    cam = cams.get(tag)
+    if cam is None:
+        print("no camera %s -- have %s" % (tag, ", ".join(sorted(set(c["tag"] for c in cameras())))))
+        return 1
+    cx, cy, cz = cam["loc"]
+    rows, _ = tops((cx, cy))
+    # cluster into sites first, so a spire and its finial are one entry
+    sites = []
+    for r in sorted(rows, key=lambda r: -r["top_uu"]):
+        for k in sites:
+            if math.hypot(r["x"] - k["x"], r["y"] - k["y"]) < 900.0:
+                k["members"].append(r)
+                break
+        else:
+            sites.append(dict(r, members=[r]))
+    hfov = cam["fov"]
+    vfov = math.degrees(2.0 * math.atan(math.tan(math.radians(hfov / 2.0)) / (16.0 / 9.0)))
+    hh, hv = hfov / 2.0, vfov / 2.0
+    out = []
+    for s in sites:
+        best = None
+        for r in s["members"]:
+            dx, dy = r["x"] - cx, r["y"] - cy
+            d = math.hypot(dx, dy)
+            if d < 1.0:
+                continue
+            off = (math.degrees(math.atan2(dy, dx)) - cam["yaw"] + 180.0) % 360.0 - 180.0
+            wr = math.degrees(math.atan(r["r_uu"] / d))
+            wr_hi = math.degrees(math.atan(r["r_hi_uu"] / d))
+            # clip the horizontal span to the frame
+            l, rgt = max(-hh, off - wr), min(hh, off + wr)
+            if rgt <= l:
+                continue
+            el_t = math.degrees(math.atan2(r["top_uu"] - cz, d)) - cam["pitch"]
+            el_b = math.degrees(math.atan2(r["base_uu"] - cz, d)) - cam["pitch"]
+            b, t = max(-hv, el_b), min(hv, el_t)
+            if t <= b:
+                continue
+            cand = {"w": rgt - l, "h": t - b, "w_hi": 2.0 * wr_hi, "off": off,
+                    "d": d, "el_t": el_t, "cut": el_t > hv,
+                    "top_m": r["top_m"], "asset": r["asset"], "label": r["label"],
+                    "x": r["x"], "y": r["y"]}
+            if best is None or cand["w"] * cand["h"] > best["w"] * best["h"]:
+                best = cand
+        if best is None:
+            continue
+        best["solid"] = best["w"] * best["h"]
+        best["aspect"] = best["h"] / best["w_hi"] if best["w_hi"] else 99.0
+        best["site"] = site_of(best["label"], best["asset"], best["x"], best["y"])
+        out.append(best)
+    out.sort(key=lambda m: -m["solid"])
+    frame = hfov * vfov
+    print("FRAME MASS -- %s  (fov %.0f x %.1f deg, frame %.0f deg2)"
+          % (cam["name"], hfov, vfov, frame))
+    print("  %-24s %7s %7s %7s %7s %8s %7s %6s"
+          % ("site", "top m", "dist m", "off", "h deg", "w deg", "aspect", "%frame"))
+    for m in out[:top_n]:
+        flag = ""
+        if m["aspect"] > aspect_target:
+            flag = "  HAIRLINE"
+        if m["cut"]:
+            flag += "  TOP CUT"
+        print("  %-24s %7.1f %7.1f %+7.1f %7.2f %8.2f %6.1f:1 %5.1f%%%s"
+              % (m["site"][:24], m["top_m"], m["d"] / 100.0, m["off"], m["h"],
+                 m["w"], m["aspect"], 100.0 * m["solid"] / frame, flag))
+    if len(out) > 1:
+        print("\n  #1 %s  %.1f%% of frame;  #2 %s  %.1f%%;  ratio %.2fx"
+              % (out[0]["site"][:20], 100.0 * out[0]["solid"] / frame,
+                 out[1]["site"][:20], 100.0 * out[1]["solid"] / frame,
+                 out[0]["solid"] / max(1e-9, out[1]["solid"])))
+    return out
+
+
+def profile_report(asset):
+    """The measured radius profile of one recipe, bottom slab to top."""
+    b = bboxes().get(asset)
+    if b is None:
+        print("no recipe bbox for %s" % asset)
+        return 1
+    span = (b["ztop"] - b["zlo"]) / 100.0
+    print("PROFILE  %s   height %.1f m   half-width max %.1f m"
+          % (asset, span, max(b["rx"], b["ry"]) / 100.0))
+    for k, r in enumerate(b["prof"]):
+        z0 = (b["zlo"] + (b["ztop"] - b["zlo"]) * k / float(PROFILE_BINS)) / 100.0
+        bar = "#" * int(round(r / 100.0 / max(1e-6, max(b["prof"]) / 100.0) * 44))
+        print("  %6.1f m  r %6.1f m  %s" % (z0, r / 100.0, bar))
+    return 0
+
+
 def main():
     args = sys.argv[1:]
     out_json = None
@@ -401,6 +603,21 @@ def main():
             within_m = float(a.split("=", 1)[1])
         elif a.startswith("--beyond="):
             beyond_m = float(a.split("=", 1)[1])
+        elif a == "--mass" or a.startswith("--mass="):
+            n = int(a.split("=", 1)[1]) if "=" in a else 18
+            for j, b in enumerate(args):
+                if b.startswith("--from="):
+                    xs, ys = b.split("=", 1)[1].split(",")
+                    origin = (float(xs), float(ys))
+                elif b.startswith("--within="):
+                    within_m = float(b.split("=", 1)[1])
+            mass_report(n, origin, within_m, beyond_m)
+            return 0
+        elif a.startswith("--cam="):
+            cam_mass_report(a.split("=", 1)[1])
+            return 0
+        elif a.startswith("--profile="):
+            return profile_report(a.split("=", 1)[1])
         elif a.startswith("--site="):
             xs, ys, hs = a.split("=", 1)[1].split(",")
             site_report(float(xs), float(ys), float(hs))

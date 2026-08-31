@@ -96,11 +96,41 @@ void AWonderlandPlayerController::BeginPlay()
 			// 1.5 m in front of the V2 arrival camera), and the founder's V2 rule
 			// is that no character stands in the environment. Hide it, drop its
 			// collision, and say so in the log next to the camera line.
+			//
+			// EXCEPT THE SCALE REFERENCE, AND THAT EXCEPTION IS A BUG FIX.
+			//
+			// This rule was written when the pawn was an ACCIDENT: a default
+			// pawn nobody placed, standing 1.5 m in front of the arrival camera
+			// because there was no PlayerStart. Then the locomotion phase made
+			// the canonical Relay Dog the player pawn, and the founder's scale
+			// reference and the founder's avatar became the same animal — so
+			// from PASS 26 this line hid the one object ScaleCam07 exists to
+			// photograph, in every capture, silently. The packaged log said so
+			// all along and nobody read it against the empty frame:
+			//
+			//   CINEMATIC_PAWN_HIDDEN=1 pawn=BP_RelayDog_C_0 at=X=-330 Y=-650
+			//
+			// A pawn the generator DELIBERATELY placed and tagged carries the
+			// tag `ScaleReference`; an accidental default pawn does not. That is
+			// the whole difference, and it is the one the rule always meant.
+			// The log says which branch was taken, because a capture that
+			// silently keeps a figure is as wrong as one that silently loses it.
 			if (APawn* CinematicPawn = GetPawn())
 			{
-				CinematicPawn->SetActorHiddenInGame(true);
-				CinematicPawn->SetActorEnableCollision(false);
-				UE_LOG(LogTemp, Display, TEXT("CINEMATIC_PAWN_HIDDEN=1 pawn=%s at=%s"), *CinematicPawn->GetName(), *CinematicPawn->GetActorLocation().ToString());
+				const bool bIsScaleReference = CinematicPawn->ActorHasTag(FName(TEXT("ScaleReference")));
+				if (bIsScaleReference)
+				{
+					UE_LOG(LogTemp, Display,
+						TEXT("CINEMATIC_PAWN_HIDDEN=0 pawn=%s at=%s — tagged ScaleReference, so it is ")
+						TEXT("the canonical Relay Dog the capture is FOR, not a stray default pawn."),
+						*CinematicPawn->GetName(), *CinematicPawn->GetActorLocation().ToString());
+				}
+				else
+				{
+					CinematicPawn->SetActorHiddenInGame(true);
+					CinematicPawn->SetActorEnableCollision(false);
+					UE_LOG(LogTemp, Display, TEXT("CINEMATIC_PAWN_HIDDEN=1 pawn=%s at=%s"), *CinematicPawn->GetName(), *CinematicPawn->GetActorLocation().ToString());
+				}
 			}
 
 			const FVector Where = HeroCameras[0]->GetActorLocation();

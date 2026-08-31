@@ -5359,14 +5359,15 @@ PLAZA_WALL_DRESS = _band("V2_Arrival",
 
 #: uu. How much open ground a signature landmark needs around its own
 #: footprint. A 194 m spire growing out of a hedge is not a landmark.
-_SIG_CLEAR = {"spire_great": 3000.0, "spire_signature": 2200.0,
+_SIG_CLEAR = {"spire_great": 7000.0, "spire_signature": 2200.0,
               "tower_district": 1500.0}
 
 #: Measured half-footprints, in unscaled uu, from the recipes above:
-#: spire_great's plinth octagon is radius 1560 and its buttress spurs reach
-#: 1580; spire_signature's base skirt is 880; tower_district's plinth box is
-#: 1240 across. The halo ring is 10 m in the air and is not an obstacle.
-FOOT.update({"spire_great": (1580, 1580), "spire_signature": (880, 880),
+#: spire_great's cathedral body reaches 5,120 (the transept gables, measured
+#: off the built mesh in PASS 29 -- it was 1,580 when the recipe was a bare
+#: plinth); spire_signature's base skirt is 880; tower_district's plinth box
+#: is 1240 across. The halo rings are in the air and are not obstacles.
+FOOT.update({"spire_great": (5250, 5250), "spire_signature": (880, 880),
              "tower_district": (620, 620)})
 
 _SIG_PLACED = []
@@ -5462,27 +5463,31 @@ def _signature_skyline():
     gx, gy = 0.0, 33000.0
     _SIG_PLACED.append((gx, gy, _SIG_CLEAR["spire_great"]))
     S = 1.08                                   # 180 m authored -> 194.4 m
-    # WIDENED AFTER THE FIRST RENDER, and the render is why. Measured off the
-    # PASS 28 HeroCam0 frame, the spire as first placed subtended 30.4 deg of
-    # height on 2.9 deg of shaft -- 1:10.4 -- against the castle hall beside
-    # it at 1:2.3. It landed exactly where it was computed to land and read as
-    # a HAIRLINE. Angular height was the wrong single number to size a
-    # landmark by; a navigation anchor needs MASS, and mass is width.
+    # THE NON-UNIFORM SCALE IS GONE, AND A MEASUREMENT RETIRED IT. PASS 28
+    # widened this placement 1.75x across because the spire had rendered as a
+    # hairline; `skyline.py --cam=HeroCam0` then showed the widened spire was
+    # STILL only 4.0% of the hero frame and seventh in it, behind two tree
+    # trunks and three mushrooms. A placement scale was never going to buy the
+    # width, and it cost detail on the way: 1.75 across against 1.08 up
+    # stretched every window in the tower.
     #
-    # The scale is non-uniform on purpose: 1.75 across, 1.08 up. Height is
-    # already at the ceiling HeroCam0's 33.8 deg half-field allows at 331 m,
-    # so the only axis left is the one that was wrong. Shaft goes 16.8 -> 27 m
-    # (1:6.5), plinth 34 -> 55 m (1:3.2), which is the castle's own league.
-    WIDE = 1.75
+    # The width is authored now -- a cathedral body 104 m across the transepts
+    # and four 122 m flanking spires on the shoulder -- so this is 1:1 and the
+    # geometry is the size it says it is. See assets_v2.spire_great.
+    WIDE = 1.0
     out.append(A("spire_great", gx, gy, 0.0, yaw=22.5, sxyz=(WIDE, WIDE, S),
                  mat="MI_V2_IvoryStone", label="GreatSpire_Body"))
     # AND IT STANDS ON SOMETHING. A spire rising straight out of a lawn is a
     # mast. Four subordinate towers at 43 m and two halls give the base a
     # silhouette of its own, so at 330 m the eye reads a great building with a
     # spire rather than a pole with a point.
+    # MOVED OUT IN PASS 29: at 22-33 m from the axis these four stood INSIDE
+    # the new cathedral body, whose transept arms reach 52 m. They are the
+    # precinct's outer guard now, at 78-84 m, where they read as a walled
+    # close around the great church rather than as lumps against its wall.
     for k, (ox, oy, ts, cap) in enumerate((
-            (3300.0, 900.0, 2.4, "roof_cone_steep"), (-3300.0, 900.0, 2.3, "roof_bell"),
-            (2200.0, -3000.0, 2.0, "roof_ogee"), (-2200.0, -3000.0, 2.1, "roof_cone_steep"))):
+            (7900.0, 2400.0, 2.4, "roof_cone_steep"), (-7900.0, 2400.0, 2.3, "roof_bell"),
+            (6200.0, -5600.0, 2.0, "roof_ogee"), (-6200.0, -5600.0, 2.1, "roof_cone_steep"))):
         out.append(A("castle_tower_octagon", gx + ox, gy + oy, 0.0, yaw=22.5 + 24.0 * k,
                      s=ts, mat="MI_V2_IvoryStone", label="GreatSpire_Tower%d" % k))
         out.append(A(cap, gx + ox, gy + oy, 1800.0 * ts, yaw=22.5 + 24.0 * k, s=ts,
@@ -5497,8 +5502,8 @@ def _signature_skyline():
     # thing in Wonderland from the one camera that stands under it. A
     # processional axis is a thing you keep CLEAR; that is the whole reason
     # PASS 06 left this bearing empty in the first place.
-    for k, (ox, oy, hs) in enumerate(((3900.0, 3400.0, 2.4), (-3900.0, 3400.0, 2.2),
-                                      (4600.0, -3200.0, 1.9), (-4600.0, -3200.0, 1.9))):
+    for k, (ox, oy, hs) in enumerate(((8800.0, 6200.0, 2.4), (-8800.0, 6200.0, 2.2),
+                                      (9400.0, -6400.0, 1.9), (-9400.0, -6400.0, 1.9))):
         out.append(A("castle_hall", gx + ox, gy + oy, 0.0, yaw=22.5 + 26.0 * k, s=hs,
                      mat="MI_V2_IvoryStone", label="GreatSpire_Hall%d" % k))
         out.append(A("roof_flat_crenellated", gx + ox, gy + oy, 900.0 * hs, yaw=22.5 + 26.0 * k,
@@ -5548,30 +5553,37 @@ def _signature_skyline():
     # THE IMPOSSIBLE GESTURE, used three times in the whole world. The rings
     # hang clear of the shaft at the two set-backs and at the crown, so from
     # the ground they read as unsupported: nothing rises through them.
-    for i, (z, hs, tilt) in enumerate(((6400.0, 1.05, 0.0), (10700.0, 0.86, 6.0),
-                                       (14900.0, 0.62, -9.0))):
-        # the rings ride the SHAFT's scale, not the body's height scale --
-        # sized against 1.08 they would now be inside a 1.75x wider spire,
-        # which is the whole point of them lost to one letter.
+    # SIZED OFF THE RECIPE, not off the placement scale. The ring asset is
+    # authored at r = 1000 uu, and a ring must CLEAR the shaft it hangs
+    # around or it is a collar: at 64 m the stage-1 fins reach 2,060 uu, at
+    # 107 m the flying stage reaches 1,330, at 149 m the needle is 420. A
+    # ring inside the geometry is the whole gesture lost, which is what
+    # happened when these rode a scale letter instead of a measurement.
+    for i, (z, ring_uu, tilt) in enumerate(((6400.0, 2700.0, 0.0),
+                                            (10700.0, 1850.0, 6.0),
+                                            (14900.0, 1150.0, -9.0))):
+        hs = ring_uu / 1000.0
         out.append(A("spire_halo_ring", gx, gy, z * S, yaw=17.0 * i,
-                     sxyz=(hs * WIDE, hs * WIDE, hs * WIDE),
+                     sxyz=(hs, hs, hs),
                      pitch=tilt, mat="MI_V2_Gold", label="GreatSpire_Halo%d" % i))
     # a precinct at its foot, so the tallest thing in Wonderland stands on
     # something built rather than on lawn
+    # THE CLOSE. The pier ring stood at 54 m, which the 52 m transept arms now
+    # reach into; both it and the paved court are sized off the building.
     for k, yaw in enumerate((0.0, 90.0)):
         out.append(A("terrace_platform", gx, gy, ROAD_Z, yaw=yaw,
-                     sxyz=(4.4, 1.6, 0.35), mat="MI_V2_PlazaCream",
+                     sxyz=(8.6, 3.1, 0.35), mat="MI_V2_PlazaCream",
                      label="GreatSpire_Court%d" % k))
-    for k in range(16):
-        a = 2.0 * math.pi * k / 16
-        if 0.40 < (k / 16.0) < 0.60:          # the way in, from the south
+    for k in range(20):
+        a = 2.0 * math.pi * k / 20
+        if 0.40 < (k / 20.0) < 0.60:          # the way in, from the south
             continue
-        out.append(A("gate_pier", gx + math.cos(a) * 5400.0, gy + math.sin(a) * 5400.0,
+        out.append(A("gate_pier", gx + math.cos(a) * 8600.0, gy + math.sin(a) * 8600.0,
                      0.0, yaw=math.degrees(a), s=1.8, mat="MI_V2_IvoryStone",
                      label="GreatSpire_Pier%d" % k))
         if k % 2 == 0:
-            out.append(A("topiary_cone_roses", gx + math.cos(a) * 4600.0,
-                         gy + math.sin(a) * 4600.0, 0.0, yaw=31.0 * k, s=1.9,
+            out.append(A("topiary_cone_roses", gx + math.cos(a) * 7500.0,
+                         gy + math.sin(a) * 7500.0, 0.0, yaw=31.0 * k, s=1.9,
                          mat=("MI_V2_RosePink", "MI_V2_PetalWhite")[(k // 2) % 2],
                          label="GreatSpire_Cone%d" % k))
 
