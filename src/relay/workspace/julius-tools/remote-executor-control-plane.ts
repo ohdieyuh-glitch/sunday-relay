@@ -16,6 +16,7 @@ export interface ExecutorControlPlaneConfig {
 
 const remoteInstances = new WeakSet<object>();
 async function boundedJson(response:Response):Promise<unknown>{const reader=response.body?.getReader();if(!reader)throw new Error('executor_response_missing');const chunks:Uint8Array[]=[];let bytes=0;while(true){const next=await reader.read();if(next.done)break;bytes+=next.value.byteLength;if(bytes>2*1024*1024){await reader.cancel();throw new Error('executor_response_too_large');}chunks.push(next.value);}try{return JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown;}catch{throw new Error('executor_response_malformed');}}
+async function refusal(response:Response):Promise<Error>{if(response.status===409)return new Error('executor_identity_conflict');if(response.status===401||response.status===403)return new Error('executor_authorization_refused');try{const decoded=await boundedJson(response) as {error?:unknown};if(typeof decoded.error==='string'&&/^[A-Za-z0-9_:.-]{1,256}$/.test(decoded.error))return new Error(`EXECUTOR_UNAVAILABLE:${decoded.error}`);}catch{}return new Error('EXECUTOR_UNAVAILABLE');}
 
 /** Production transport. It has no Docker binary, socket, signing key, or receipt-store path. */
 export class RemoteExecutorControlPlane implements SandboxExecutionPort {
@@ -33,7 +34,7 @@ export class RemoteExecutorControlPlane implements SandboxExecutionPort {
       headers: { authorization: `Bearer ${this.config.serviceCredential}`, 'content-type': 'application/json', 'x-julius-operation': operation },
       body: JSON.stringify(payload),
     }).catch(() => { throw new Error('EXECUTOR_UNAVAILABLE'); });
-    if (!response.ok) throw new Error(response.status === 409 ? 'executor_identity_conflict' : response.status === 401 || response.status === 403 ? 'executor_authorization_refused' : 'EXECUTOR_UNAVAILABLE');
+    if (!response.ok) throw await refusal(response);
     const decoded = await boundedJson(response) as {value:T;attestations?:readonly SignedExecutorAttestation[]};
     return decoded.value;
   }
@@ -47,7 +48,7 @@ export class RemoteExecutorControlPlane implements SandboxExecutionPort {
       method: 'POST', signal: AbortSignal.timeout(this.config.requestTimeoutMs),
       headers: { authorization: `Bearer ${this.config.serviceCredential}`, 'content-type': 'application/json', 'x-julius-operation': 'execute' }, body: JSON.stringify(envelope),
     }).catch(() => { throw new Error('EXECUTOR_UNAVAILABLE'); });
-    if (!response.ok) throw new Error(response.status === 401 || response.status === 403 ? 'executor_authorization_refused' : response.status === 409 ? 'executor_identity_conflict' : 'EXECUTOR_UNAVAILABLE');
+    if (!response.ok) throw await refusal(response);
     const decoded = await boundedJson(response) as {value:Awaited<ReturnType<SandboxExecutionPort['executeTool']>>;attestations:readonly SignedExecutorAttestation[];receiptBodies:Readonly<Record<'BEFORE'|'AFTER',string>>;terminalPayload:Readonly<Record<'stdout'|'stderr'|'changedPaths',string>>};
     if (!this.config.trustedReceiptKeys || decoded.attestations?.length !== 2) throw new Error('SECURITY_FAILURE:executor_attestation_missing');
     const executionIdentity = `${input.request.invocationId}:${input.dispatchGeneration}:${input.sandboxId}`;
