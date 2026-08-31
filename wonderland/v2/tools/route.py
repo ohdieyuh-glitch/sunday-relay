@@ -177,6 +177,23 @@ def centre(c, blocked, nx, ny, reach=3):
     return best
 
 
+def clear_wide(a, b, blocked, nx, ny, min_rings):
+    """Is the straight run between two cells free AND roomy the whole way?"""
+    ax, ay = a % nx, a // nx
+    bx, by = b % nx, b // nx
+    steps = max(abs(bx - ax), abs(by - ay))
+    if steps == 0:
+        return True
+    for s in range(steps + 1):
+        i = ax + round((bx - ax) * s / steps)
+        j = ay + round((by - ay) * s / steps)
+        if blocked[j * nx + i]:
+            return False
+        if clearance(j * nx + i, blocked, nx, ny, limit=min_rings) < min_rings:
+            return False
+    return True
+
+
 def clear_line(a, b, blocked, nx, ny, cell):
     """Is the straight segment between two cells free? (route simplification)"""
     ax, ay = a % nx, a // nx
@@ -207,10 +224,39 @@ def path_between(src, dst, blocked, nx, ny, cell, cache):
     # SIMPLIFY BY SIGHT, NOT BY ANGLE. A grid path is a staircase; keeping every
     # turn would emit hundreds of legs. Keep a waypoint only where the straight
     # run to the next one would clip something.
+    # PIN A WAYPOINT AT EVERY CONSTRICTION, BEFORE SIMPLIFYING PAST IT.
+    #
+    # Centring the waypoints was not enough, and the Dog said so by stopping
+    # at exactly the same coordinate twice: simplification collapses the run
+    # from the fountain court to the castle front into ONE straight leg, so
+    # there is no waypoint inside the North Gate to centre. The line goes
+    # where the line goes -- x = +50 through a span centred on x = -23 -- and
+    # the Dog catches the jamb.
+    #
+    # A gap is where the route must be deliberate. Any cell on the path with
+    # less than two free rings around it becomes a waypoint that survives
+    # simplification and then gets centred, so the route aims at the middle of
+    # the gate instead of merely passing through it.
+    # ONE PIN PER PINCH, not one per tight cell. A dense world is tight almost
+    # everywhere; what matters is the LOCAL MINIMUM -- the narrowest point of a
+    # gateway -- and pinning every cell below a threshold produced 1,518 legs
+    # for a 2 km walk.
+    prof = [clearance(c, blocked, nx, ny, limit=4) for c in out]
+    pins, span = set(), 6
+    for k in range(1, len(out) - 1):
+        if prof[k] > 1:
+            continue
+        lo, hi = max(0, k - span), min(len(out), k + span + 1)
+        if prof[k] == min(prof[lo:hi]) and not any(abs(k - q) < span for q in pins):
+            pins.add(k)
     keep = [out[0]]
     i = 0
     while i < len(out) - 1:
         j = len(out) - 1
+        # never simplify across a pinned cell
+        nxt = min((k for k in pins if k > i), default=None)
+        if nxt is not None:
+            j = min(j, nxt)
         while j > i + 1 and not clear_line(out[i], out[j], blocked, nx, ny, cell):
             j -= 1
         keep.append(out[j])
@@ -220,7 +266,20 @@ def path_between(src, dst, blocked, nx, ny, cell, cache):
     # happened to turn at, and the middle of the gap is the better place for it.
     for k in range(1, len(keep) - 1):
         keep[k] = centre(keep[k], blocked, nx, ny)
-    return keep
+    # A SECOND PASS OVER OPEN GROUND. Pinning every pinch is right and gives
+    # 298 legs for a 2 km walk, most of them across ground where nothing is
+    # near. This merges any run whose whole line keeps two free rings -- open
+    # country collapses back to long legs, and the waypoints inside gateways,
+    # which are the ones that had to be there, stay.
+    out2 = [keep[0]]
+    i = 0
+    while i < len(keep) - 1:
+        j = len(keep) - 1
+        while j > i + 1 and not clear_wide(keep[i], keep[j], blocked, nx, ny, 2):
+            j -= 1
+        out2.append(keep[j])
+        i = j
+    return out2
 
 
 def main():
