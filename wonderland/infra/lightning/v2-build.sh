@@ -38,6 +38,27 @@ export WL_GENERATOR="${WL_GENERATOR:-wonderland/v2/build_v2.py}"
 # exactly what happened on 2026-08-29 when a cook ran with the generate
 # skipped. The default is the world now; the empty one has to be asked for.
 export WL_COOK_MAP="${WL_COOK_MAP:-/Game/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2}"
+# GENERATE INTO THE MAP THAT IS COOKED. THIS WAS NOT TRUE.
+#
+# v2_config.MAP_NAME defaults to WL_V2_GoldenArrival, so every ordinary build
+# generated the World Partition map -- while the cook, round.sh, playtest.sh,
+# profile_movement.sh and capture_locomotion.sh all name
+# WL_V2_GoldenArrival_WP2. WLV2_MAP_NAME was set by exactly one script in the
+# repository, diag/wp_recover.sh, which is a recovery tool nobody runs in a
+# normal pass. So the world the generator built and the world the founder
+# played were two different maps, and WP2 was frozen at whatever the last
+# recovery run produced.
+#
+# Measured, not inferred: a build that added ONE actor (a second canopy fill)
+# reported 631 actors and saved=True, and WL_V2_GoldenArrival_WP2.umap came
+# out byte-identical in size with V2_CanopyFill present and V2_CanopyFill2
+# absent. The render was pixel-for-pixel unchanged. Everything generated this
+# way went somewhere nothing loads.
+#
+# WLV2_PARTITIONED=0 because WP2 is the CLASSIC map -- actors inside the .umap
+# -- which is what wp_recover.sh built it as and what the package boots.
+export WLV2_MAP_NAME="${WLV2_MAP_NAME:-$(basename "$WL_COOK_MAP")}"
+export WLV2_PARTITIONED="${WLV2_PARTITIONED:-0}"
 export WLV2_MANIFEST="${WLV2_MANIFEST:-$WL_RUN/wlv2-manifest.json}"
 export WL_BUILD_HLOD="${WL_BUILD_HLOD:-1}"      # World Partition HLODs (INSTANCING, CPU)
 # A V2 build regenerates the world from source every time; the shared build
