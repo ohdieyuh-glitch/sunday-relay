@@ -10,7 +10,8 @@ import { JuliusToolPostgresRepository } from '../src/relay/persistence/julius-to
 import { RemoteExecutorControlPlane } from '../src/relay/workspace/julius-tools/remote-executor-control-plane';
 
 const run=promisify(execFile),required=(name:string)=>{const value=process.env[name];if(!value)throw new Error(`sibling_config_missing:${name}`);return value;};
-const sha=(value:unknown)=>createHash('sha256').update(JSON.stringify(value)).digest('hex');
+const stable=(value:any):string=>value===null||typeof value!=='object'?JSON.stringify(value):Array.isArray(value)?`[${value.map(stable).join(',')}]`:`{${Object.keys(value).sort().map(key=>`${JSON.stringify(key)}:${stable(value[key])}`).join(',')}}`;
+const sha=(value:unknown)=>createHash('sha256').update(stable(value)).digest('hex');
 const denyRead=async(path:string)=>{try{await readFile(path);throw new Error(`isolation_read_succeeded:${path}`);}catch(error){if(error instanceof Error&&error.message.startsWith('isolation_'))throw error;}};
 const denyWrite=async(path:string)=>{try{await writeFile(path,'forbidden');throw new Error(`isolation_write_succeeded:${path}`);}catch(error){if(error instanceof Error&&error.message.startsWith('isolation_'))throw error;}};
 
