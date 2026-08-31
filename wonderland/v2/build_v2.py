@@ -552,7 +552,13 @@ BATCHABLE = {"ground_flowers", "ground_blooms", "flower_cluster", "rose_bloom", 
              "mushroom_giant", "mushroom_giant_gills", "mushroom_giant_spots",
              "mushroom_giant_rim", "mushroom_landmark", "clock_ornate",
              "garden_arch_stone", "gate_arch_gold", "key_ornate",
-             "signpost", "garden_bench"}
+             "signpost", "garden_bench",
+             # PASS 28: the wayside. 171 markers and their lamps along 6.7 km
+             # of road is 342 placements of two tiny meshes (568 and 112
+             # triangles) -- exactly the "repeated small asset" this list
+             # exists for. Instanced, they cost two draws instead of 342
+             # actors.
+             "waymarker", "waymarker_lamp"}
 
 #: BATCHED ONLY IN THESE BANDS. terrace_platform is paving a participant walks
 #: on and batches are built at BeginPlay, which is how this project lost a Dog

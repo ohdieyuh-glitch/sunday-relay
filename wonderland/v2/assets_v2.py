@@ -2967,3 +2967,53 @@ RECIPES.update({
     "lantern_strange": (lantern_strange, "garden_props", True, True),
     "lantern_strange_glass": (lantern_strange_glass, "garden_props", True, False),
 })
+
+
+def waymarker(ctx):
+    """A 7 m wayside pillar carrying a caged glass lamp.
+
+    The routes are 6.7 km of paving with kerbs and nothing else on them, and
+    "wonder per meter" is a claim about the metres BETWEEN the landmarks.
+    This is the cheapest thing that can be true of all of them: an octagonal
+    plinth, a tapering shaft with two collars, four gold ribs curving up into
+    a finial, and a glass lamp between them whose colour the layout picks per
+    district -- so a road tells you which quarter you are walking into before
+    its landmark is in sight.
+
+    Small on purpose. A wayside marker that competes with a district landmark
+    is theme-park clutter, which the brief names as the failure mode.
+    """
+    m = ctx.mesh("waymarker")
+    m.extrude(_octo(120.0), 70.0)
+    m.extrude(_octo(96.0), 46.0, at=(0, 0, 70.0))
+    prof = []
+    for i in range(7):
+        t = i / 6.0
+        prof.append((74.0 * (1.0 - 0.28 * t), 116.0 + 404.0 * t))
+    m.revolve([(0.0, 116.0)] + prof, steps=8)
+    for z in (250.0, 420.0):
+        m.revolve([(58.0, z), (86.0, z + 12.0), (86.0, z + 30.0), (58.0, z + 42.0)], steps=8)
+    m.revolve([(0.0, 520.0), (108.0, 528.0), (104.0, 552.0), (0.0, 566.0)], steps=8)
+    for k in range(4):
+        a = math.pi / 4 + 2.0 * math.pi * k / 4
+        cx, cy = math.cos(a), math.sin(a)
+        m.tube([(cx * 92.0, cy * 92.0, 552.0), (cx * 104.0, cy * 104.0, 640.0),
+                (cx * 70.0, cy * 70.0, 730.0), (cx * 18.0, cy * 18.0, 780.0)],
+               [17.0, 15.0, 13.0, 11.0], sides=5)
+    m.revolve([(0.0, 0.0), (34.0, 18.0), (26.0, 62.0), (44.0, 84.0), (16.0, 140.0), (0.0, 190.0)],
+              steps=10, at=(0, 0, 776.0))
+    return m
+
+
+def waymarker_lamp(ctx):
+    """The glass lamp inside a waymarker's cage -- its own mesh, its own tint."""
+    m = ctx.mesh("waymarker_lamp")
+    m.revolve([(0.0, 0.0), (52.0, 16.0), (76.0, 60.0), (74.0, 108.0), (46.0, 148.0), (0.0, 166.0)],
+              steps=14, at=(0, 0, 570.0))
+    return m
+
+
+RECIPES.update({
+    "waymarker": (waymarker, "garden_props", True, True),
+    "waymarker_lamp": (waymarker_lamp, "garden_props", True, False),
+})

@@ -6098,10 +6098,188 @@ def _dress_courts(bands):
 COURT_DRESS = _band("V2_Skyline", _dress_courts(
     [OUTER_WORLD, SIGNATURE, LANDMARKS, FLANKS, REARWORLD, PALACE]))
 
+# ===========================================================================
+# THE ROUTES  (batch C, second half -- wonder per METRE)
+# ===========================================================================
+#
+# "Add memorable authored moments along ROUTES and districts." The districts
+# have one each now. The routes are 404 paved segments across 139 runs --
+# about 6.7 km of paving with kerbs on it and NOTHING ELSE. Wonder per metre
+# is a claim about the metres between the landmarks, and those were empty.
+#
+# Two cadences, both derived from the road data rather than from new
+# geometry, so a road that moves takes its wayside with it:
+#
+#   every 2nd segment (~33 m)   a waymarker: a 7 m pillar with a caged glass
+#                               lamp whose COLOUR IS THE DISTRICT'S. A road
+#                               tells you which quarter you are walking into
+#                               before its landmark is in sight, which is the
+#                               brief's "route treatment" as a mechanism
+#                               rather than as an adjective.
+#   every 8th segment (~130 m)  a wayside wonder drawn from that district's
+#                               own vocabulary, at wayside scale -- 6 to 10 m,
+#                               never near its landmark's size. A wayside
+#                               piece that competes with a district landmark
+#                               is exactly the theme-park clutter the brief
+#                               names as the failure mode.
+#
+# EVERYTHING IS OFFSET TO THE SIDE OF THE CARRIAGEWAY, past the kerb line, and
+# every position is clearance-checked. The traversal contract is not something
+# to re-prove after decorating a road; it is a reason not to decorate the road
+# itself.
+
+FOOT.update({"waymarker": (120, 120)})
+
+#: district -> (glass tint, wayside kind). Two districts share a kind at most,
+#: and where they do the tint differs, which is the same rule the district
+#: landmarks follow.
+_ROUTE_LANG = {
+    "Clock Quarter":      ("MI_V2_GlassAmber",  "clock"),
+    "Far Orchards":       ("MI_V2_GlassRose",   "clock"),
+    "Royal Gardens":      ("MI_V2_GlassRose",   "bloom"),
+    "The Long Woods":     ("MI_V2_GlassViolet", "bloom"),
+    "Tower Rise":         ("MI_V2_GlassViolet", "gears"),
+    "East Reach":         ("MI_V2_GlassAmber",  "gears"),
+    "Lantern Hamlets":    ("MI_V2_GlassAmber",  "lantern"),
+    "West Wood":          ("MI_V2_GlassTeal",   "lantern"),
+    "Tea Terraces":       ("MI_V2_GlassRose",   "tea"),
+    "Water Gardens":      ("MI_V2_GlassTeal",   "mush"),
+    "South Meadows":      ("MI_V2_GlassAmber",  "key"),
+    "Mushroom Grove":     ("MI_V2_GlassTeal",   "mush"),
+    "North Reach":        ("MI_V2_GlassViolet", "key"),
+    "Gatekeeper Fields":  ("MI_V2_GlassAmber",  "key"),
+}
+
+WAYSIDE_NOTES = []
+
+
+def _wayside_piece(kind, x, y, yaw, tag, tint):
+    """One wayside wonder, from its district's own vocabulary."""
+    if kind == "clock":
+        return [A("pedestal_finial", x, y, 0.0, s=1.5, mat="MI_V2_IvoryStone", label=tag + "_Plinth"),
+                A("clock_ornate", x, y, 340.0, yaw=yaw, s=2.4, mat="MI_V2_GoldAged", label=tag + "_Clock")]
+    if kind == "bloom":
+        return [A("flower_colossal", x, y, 0.0, yaw=yaw, s=0.34, mat="MI_V2_LeafMid", label=tag + "_Stem"),
+                A("flower_colossal_bloom", x, y, 0.0, yaw=yaw, s=0.34,
+                  mat=("MI_V2_RosePink", "MI_V2_PetalViolet")[int(x + y) % 2], label=tag + "_Bloom")]
+    if kind == "gears":
+        return [A("gear_monument", x, y, 0.0, yaw=yaw, s=0.28, mat="MI_V2_GoldAged", label=tag + "_Gears")]
+    if kind == "lantern":
+        return [A("lantern_strange", x, y, 0.0, yaw=yaw, s=0.52, mat="MI_V2_Bronze", label=tag + "_Lantern"),
+                A("lantern_strange_glass", x, y, 0.0, yaw=yaw, s=0.52, mat=tint, label=tag + "_LanternGlass")]
+    if kind == "tea":
+        return [A("tea_saucer", x, y, 0.0, yaw=yaw, s=2.3, mat="MI_V2_Ceramic", label=tag + "_Saucer"),
+                A("tea_cup", x, y, 30.0, yaw=yaw + 40.0, s=2.3, mat="MI_V2_Ceramic", label=tag + "_Cup")]
+    if kind == "mush":
+        return [A("mushroom_giant", x, y, 0.0, yaw=yaw, s=0.5,
+                  mat=("MI_V2_MushRed", "MI_V2_MushPurple", "MI_V2_MushCream")[int(x) % 3],
+                  label=tag + "_Mush")]
+    if kind == "key":
+        return [A("pedestal_finial", x, y, 0.0, s=1.4, mat="MI_V2_IvoryStone", label=tag + "_Plinth"),
+                A("key_ornate", x, y, 320.0, yaw=yaw, s=3.6, mat="MI_V2_GoldAged", label=tag + "_Key")]
+    return []
+
+
+def _wayside(bands):
+    """Waymarkers and wayside wonders along every road in the world."""
+    import re as _re
+    segs = []
+    for band in bands:
+        for p in band:
+            if p["asset"] != "terrace_platform":
+                continue
+            lab = p.get("label") or ""
+            if not _re.search(r"_Seg\d+$", lab):
+                continue
+            segs.append(p)
+    segs.sort(key=lambda p: (p.get("label") or ""))
+
+    # what is already standing, so nothing is planted inside a wall
+    solid = []
+    surface = ("garden_lawn", "terrace_platform", "ground_flowers", "ground_blooms",
+               "flagstone", "kerb_stone", "sky_dome", "path_steps", "side_steps")
+    for band in bands:
+        for p in band:
+            a = p["asset"]
+            if a in surface or a.startswith("cloud_") or a.startswith("sea_"):
+                continue
+            hx, hy = FOOT.get(a, (170, 170))
+            solid.append((p["pos"][0], p["pos"][1],
+                          max(hx * abs(p["scale"][0]), hy * abs(p["scale"][1]))))
+
+    def free(x, y, need):
+        for (px, py, pr) in solid:
+            if abs(px - x) > need + pr or abs(py - y) > need + pr:
+                continue
+            if math.hypot(px - x, py - y) < need + pr:
+                return False
+        return True
+
+    out = []
+    n_mark = n_wonder = n_skip = 0
+    for i, p in enumerate(segs):
+        if i % 2:
+            continue
+        cx, cy = p["pos"][0], p["pos"][1]
+        yaw = math.radians(p["rot"][1])
+        # the carriageway's half-width comes from the segment's own y scale --
+        # 740 uu at scale 1 -- so a wide road pushes its wayside further out
+        # and a lane keeps it close, without either being written down twice
+        half = 740.0 * abs(p["scale"][1]) * 0.5
+        side = 1.0 if (i // 2) % 2 == 0 else -1.0
+        ux, uy = -math.sin(yaw) * side, math.cos(yaw) * side
+        district, _kind = _district_of(cx, cy)
+        tint, wkind = _ROUTE_LANG.get(district, ("MI_V2_GlassAmber", "lantern"))
+        big = (i % 16 == 0)
+        need = 780.0 if big else 150.0
+        # SEARCH BOTH VERGES AND SEVERAL SET-BACKS. The first version tried
+        # one offset on each side and skipped HALF of its 202 positions,
+        # leaving one marker per 69 m on a road system whose whole point was
+        # wonder per metre. The verges are busy, so the set-back is a search:
+        # the wayside steps back from the carriageway until it finds room, and
+        # a skip now means there genuinely is none.
+        base = half + (900.0 if big else 380.0)
+        spot = None
+        for grow in (0.0, 340.0, 700.0, 1150.0, 1700.0):
+            for sgn in (1.0, -1.0):
+                x = cx + ux * sgn * (base + grow)
+                y = cy + uy * sgn * (base + grow)
+                if free(x, y, need):
+                    spot = (x, y)
+                    break
+            if spot:
+                break
+        if spot is None:
+            n_skip += 1
+            continue
+        x, y = spot
+        tag = "Way%04d" % i
+        if big:
+            piece = _wayside_piece(wkind, x, y, math.degrees(yaw) + 90.0, tag, tint)
+            if piece:
+                out += piece
+                solid.append((x, y, need))
+                n_wonder += 1
+                continue
+        out.append(A("waymarker", x, y, 0.0, yaw=math.degrees(yaw), s=0.75,
+                     mat="MI_V2_IvoryStone", label=tag + "_Marker"))
+        out.append(A("waymarker_lamp", x, y, 0.0, yaw=math.degrees(yaw), s=0.75,
+                     mat=tint, label=tag + "_Lamp"))
+        solid.append((x, y, need))
+        n_mark += 1
+    WAYSIDE_NOTES.append(
+        "wayside: %d waymarkers, %d wonders, %d positions skipped for clearance, "
+        "over %d road segments" % (n_mark, n_wonder, n_skip, len(segs)))
+    return out
+
+
+WAYSIDE = _band("V2_Skyline", _wayside(
+    [OUTER_WORLD, SIGNATURE, LANDMARKS, PALACE, FLANKS, REARWORLD]))
+
 BUILD_BANDS = [FOREGROUND, COURTYARD, GARDEN, PALACE, FLANK_GROUND, FLANKS,
                REARWORLD, CAM_FOREGROUNDS, GROUND_QUILT, OUTER_WORLD, PLAZA_ORNAMENT,
                PROCESSIONAL_BORDER, HORIZON, APPROACH_SIDES, PLAZA_WALL_DRESS,
-               SIGNATURE, LANDMARKS, COURT_DRESS]
+               SIGNATURE, LANDMARKS, COURT_DRESS, WAYSIDE]
 
 #: Everything the layout declares: what the builder walks, plus the two bands
 #: it places by their own rules (SKY is the dome/atmosphere, HOVER is lifted
