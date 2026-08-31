@@ -6290,6 +6290,30 @@ _DEPTH = (
     ("GatekeeperFields", (("gate", 4400.0, 0.0, 1.00),
                           ("orrery", -2700.0, -2900.0, 0.86),
                           ("screen", 2200.0, 2600.0, 1.00))),
+    # THE OUTER SIX. Eight districts had architecture and six had a monument
+    # in a field, which is the same gap this whole layer was written to close
+    # -- just further out. The reaches are emptier and their landmarks stand
+    # further apart, so the offsets are larger and the pieces bigger; a 26 m
+    # gatehouse that reads at 150 m in the Clock Quarter has to be 30 m to do
+    # the same job on a 270 m reach.
+    ("NorthReach",      (("gate", 6200.0, 0.0, 1.15),
+                         ("screen", 2600.0, -3600.0, 1.20),
+                         ("swag", 2000.0, 0.0, 1.10))),
+    ("EastReach",       (("gate", 6800.0, 0.0, 1.10),
+                         ("cloister", -900.0, 5600.0, 1.05),
+                         ("swag", 2400.0, 0.0, 1.10))),
+    ("TheLongWoods",    (("cloister", -800.0, -5400.0, 1.05),
+                         ("fountain", -800.0, -5400.0, 1.00),
+                         ("screen", 2400.0, 3300.0, 1.15))),
+    ("SouthMeadows",    (("bridge", 3000.0, 0.0, 1.25),
+                         ("orrery", -3000.0, 3200.0, 1.00),
+                         ("swag", 6200.0, 0.0, 1.10))),
+    ("WestWood",        (("gate", 5600.0, 0.0, 1.10),
+                         ("screen", -2000.0, 3400.0, 1.15),
+                         ("swag", 2200.0, 0.0, 1.10))),
+    ("FarOrchards",     (("orrery", -2800.0, -3200.0, 1.05),
+                         ("fountain", 2600.0, 3000.0, 1.10),
+                         ("gate", 5800.0, 0.0, 1.05))),
 )
 
 DEPTH_NOTES = []
@@ -6299,8 +6323,16 @@ DEPTH_NOTES = []
 #: Golden Arrival is the founder's frozen composition and six of the locked
 #: cameras stand in it.
 _DEPTH_MIN_R = 9000.0
-#: uu. Nor further than this from the landmark it belongs to.
+#: uu. Nor further than this from the landmark it belongs to. Scaled with the
+#: landmark's own radius, because a 90 m leash is most of an inner district
+#: and a tenth of the ground between two outer ones -- the reaches are emptier
+#: and their pieces have to stand further apart to read at all.
 _DEPTH_MAX_FROM_LM = 9000.0
+
+
+def _depth_leash(lx, ly):
+    r = math.hypot(lx, ly)
+    return _DEPTH_MAX_FROM_LM * (1.0 if r < 18000.0 else 1.45)
 
 
 def _depth_site_ok(lx, ly, x, y):
@@ -6327,7 +6359,7 @@ def _depth_site_ok(lx, ly, x, y):
     """
     if math.hypot(x, y) < _DEPTH_MIN_R:
         return False
-    return math.hypot(x - lx, y - ly) <= _DEPTH_MAX_FROM_LM
+    return math.hypot(x - lx, y - ly) <= _depth_leash(lx, ly)
 
 
 #: district -> (roof / cap accent, the metal its mechanisms are made of).
