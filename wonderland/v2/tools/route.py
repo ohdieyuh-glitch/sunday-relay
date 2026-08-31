@@ -64,7 +64,14 @@ TOUR = [
 _SOFT_OK = ("flower_", "blossom_", "ground_", "petal", "lavender_", "rose_bloom",
             "ivy_", "vine_", "canopy_", "cloud_", "sky_", "balloon_", "leaf_",
             "roof_", "finial_", "balcony_", "dome", "bridge", "arch", "spire",
-            "kerb_", "sign", "banner", "lantern", "glow", "water", "lily")
+            "kerb_", "sign", "banner", "lantern", "glow", "water", "lily",
+            # PASS 29. Glazing rides its frame and is never an obstacle in its
+            # own right. gatehouse_district is a THRESHOLD: its solid parts are
+            # a ring around a 5.2 m opening the road runs through, and one
+            # axis-aligned rectangle can only express that by blocking the
+            # arch. Declared here rather than left missing, so the report above
+            # keeps meaning "nobody thought about this one".
+            "gatehouse_", "glass_screen_panes")
 
 
 def build(cell, capsule):

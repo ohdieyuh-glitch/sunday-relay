@@ -872,6 +872,9 @@ PALACE = CITY + BEYOND_L + BEYOND_R + AVENUE + APPROACH + APPROACH_STEPS
 # these rooms stays open for a social space.
 
 
+PARTERRE_NOTES = []
+
+
 def _parterre(sgn, cx, cy, seed, tag, H=None):
     """A formal quadrant garden: four hedged beds around a centrepiece, with
     the walks between them left open. This is the unit the reference's royal
@@ -1012,21 +1015,50 @@ def _parterre(sgn, cx, cy, seed, tag, H=None):
                        "MI_V2_RosePink")[i % 4],
                   label="%s_CornerFlowers%d" % (tag, i)),
             ]
-    # THE ROOM HAS A RIM. A low wall along the room's outer square, broken at
-    # the four walk entrances, so the garden room is enclosed by architecture
-    # the way the boards enclose theirs -- hedges alone read as planting, a
-    # stone line reads as a built room.
+    # THE ROOM HAS A RIM, AND FOR TWO PASSES IT HAD NO DOOR.
+    #
+    # A low wall along the room's outer square, broken at the four walk
+    # entrances, so the garden room is enclosed by architecture the way the
+    # boards enclose theirs -- hedges alone read as planting, a stone line
+    # reads as a built room.
+    #
+    # THE GAP COULD NEVER OPEN. Four pieces a side put t at 0, 0.333, 0.667
+    # and 1.0; the skip window was `0.34 <= t <= 0.66`, which excludes both
+    # middle values by three thousandths. So all sixteen segments were placed,
+    # every parterre in the world was a sealed box, and the comment above went
+    # on saying "broken at the four walk entrances" while the code closed it.
+    # A route solve found it: the garden quarter's centre was a 44 m2 pocket
+    # of open ground with no way in, and it had been that way since the rim
+    # was written. This is the same defect the parterre's own bed spacing had
+    # -- and the header two hundred lines up describes fixing THAT one.
+    #
+    # Rewritten so the opening is a MEASURED width rather than a threshold on
+    # a fraction: five pieces a side at 511 x 0.72u uu each, the middle one
+    # dropped, leaving a clear gap of `2*rim/2 - 511*0.72u` between the inner
+    # faces of its neighbours. The gate below asserts it, so this cannot
+    # silently close again.
     rim = off + q * 0.5 + 190.0 * u
+    _WALL_LEN = 511.0 * 0.72 * u
     if H is None or H["court_p"] > 0.40:
-        for k in range(16):
-            side, t = k // 4, (k % 4) / 3.0
-            if 0.34 <= t <= 0.66:                 # the gap a walk passes through
+        PER_SIDE = 5
+        for k in range(4 * PER_SIDE):
+            side, i = k // PER_SIDE, k % PER_SIDE
+            if i == PER_SIDE // 2:                # the walk entrance, centred
                 continue
+            t = i / float(PER_SIDE - 1)
             v = -rim + 2.0 * rim * t
             px, py = ((v, -rim), (v, rim), (-rim, v), (rim, v))[side]
             out.append(A("garden_wall", cx + sgn * px, cy + py, 0,
                          yaw=(0.0, 0.0, 90.0, 90.0)[side], sxyz=(0.72 * u, 1.0, 0.46),
                          mat="MI_V2_IvoryStone", label="%s_Rim%d" % (tag, k)))
+        # THE OPENING IS ASSERTED, not described. `_parterre` is called for
+        # every garden and court quarter in the world, so a silently closed
+        # rim seals dozens of rooms at once and only a full route solve finds
+        # it. 200 uu is comfortably over the Dog's 72 uu capsule width.
+        _gap = (2.0 * rim * (2.0 / (PER_SIDE - 1))) - _WALL_LEN
+        if _gap < 200.0:
+            PARTERRE_NOTES.append(
+                "%s: rim opening only %.0f uu -- the parterre is a sealed box" % (tag, _gap))
     return out
 
 
