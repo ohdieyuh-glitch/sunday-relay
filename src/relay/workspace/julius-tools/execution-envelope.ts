@@ -1,8 +1,9 @@
 import { createHash } from 'node:crypto';
+import { digest as sha256, exact, exactOptional, identifier, integer as wholeNumber, iso as isoTimestamp, json as jsonValue, str, type JsonValue } from './executor-schema';
 import type { JuliusToolEffectClassification } from '../../mission/julius/julius-tool-lifecycle';
 import type { JuliusToolId, ToolInvocationRequest } from '../../mission/julius/julius-tools';
 
-export type ExecutorCallerScope = 'sandbox:create'|'sandbox:execute'|'sandbox:inspect'|'sandbox:cancel'|'sandbox:destroy'|'sandbox:reconcile';
+
 export interface ExecutorExecutionEnvelope {
   readonly schemaVersion: 1;
   readonly callerId: string;
@@ -29,15 +30,13 @@ export interface ExecutorExecutionEnvelope {
 
 const TOOL_IDS = new Set<JuliusToolId>(['fs.read','fs.write','fs.patch','fs.list','fs.stat','fs.mkdir','fs.move','fs.copy','fs.remove','search.grep','search.find','search.glob','process.exec','shell.bash','git.status','git.diff','git.show','git.log','git.apply','test.run','build.run']);
 const EFFECTS = new Set<JuliusToolEffectClassification>(['READ_ONLY','IDEMPOTENT_MUTATION','NON_IDEMPOTENT_MUTATION','PROCESS_WITH_EXTERNAL_EFFECT']);
-const exact=(value:unknown,keys:readonly string[],code:string):Record<string,unknown>=>{if(!value||typeof value!=='object'||Array.isArray(value))throw new Error(`${code}:object_required`);const record=value as Record<string,unknown>;const actual=Object.keys(record).sort();const expected=[...keys].sort();if(actual.length!==expected.length||actual.some((key,index)=>key!==expected[index]))throw new Error(`${code}:fields_invalid`);return record;};
-const exactOptional=(value:unknown,required:readonly string[],optional:readonly string[],code:string):Record<string,unknown>=>{if(!value||typeof value!=='object'||Array.isArray(value))throw new Error(`${code}:object_required`);const record=value as Record<string,unknown>,allowed=new Set([...required,...optional]);if(required.some(key=>!(key in record))||Object.keys(record).some(key=>!allowed.has(key)))throw new Error(`${code}:fields_invalid`);return record;};
-const string=(value:unknown,name:string,max=256):string=>{if(typeof value!=='string'||value.length<1||value.length>max||/[\u0000-\u001f]/.test(value))throw new Error(`execution_envelope_invalid:${name}`);return value;};
-const id=(value:unknown,name:string):string=>{const result=string(value,name,128);if(!/^[A-Za-z0-9][A-Za-z0-9._:-]*$/.test(result))throw new Error(`execution_envelope_invalid:${name}`);return result;};
-const integer=(value:unknown,name:string,min=1,max=Number.MAX_SAFE_INTEGER):number=>{if(!Number.isSafeInteger(value)||Number(value)<min||Number(value)>max)throw new Error(`execution_envelope_invalid:${name}`);return Number(value);};
-const iso=(value:unknown,name:string):string=>{const result=string(value,name,40);if(!/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/.test(result)||!Number.isFinite(Date.parse(result)))throw new Error(`execution_envelope_invalid:${name}`);return result;};
-const digest=(value:unknown,name:string):string=>{const result=string(value,name,128);if(!/^[a-f0-9]{64}$/.test(result))throw new Error(`execution_envelope_invalid:${name}`);return result;};
-type JsonValue=null|boolean|number|string|readonly JsonValue[]|{readonly [key:string]:JsonValue};
-const json=(value:unknown,depth=0):JsonValue=>{if(depth>8)throw new Error('execution_envelope_invalid:arguments_depth');if(value===null||typeof value==='boolean')return value;if(typeof value==='number'){if(!Number.isFinite(value))throw new Error('execution_envelope_invalid:arguments_number');return value;}if(typeof value==='string'){if(value.length>16_384)throw new Error('execution_envelope_invalid:arguments_string');return value;}if(Array.isArray(value)){if(value.length>256)throw new Error('execution_envelope_invalid:arguments_array');return value.map(item=>json(item,depth+1));}if(value&&typeof value==='object'){const record=value as Record<string,unknown>,keys=Object.keys(record).sort();if(keys.length>64||keys.some(key=>!key||key.length>128||/[\u0000-\u001f]/.test(key)))throw new Error('execution_envelope_invalid:arguments_keys');return Object.fromEntries(keys.map(key=>[key,json(record[key],depth+1)]));}throw new Error('execution_envelope_invalid:arguments_value');};
+const E='execution_envelope_invalid';
+const string=(value:unknown,name:string,max=256)=>str(value,name,E,max);
+const id=(value:unknown,name:string)=>identifier(value,name,E);
+const integer=(value:unknown,name:string,min=1,max=Number.MAX_SAFE_INTEGER)=>wholeNumber(value,name,E,min,max);
+const iso=(value:unknown,name:string)=>isoTimestamp(value,name,E);
+const digest=(value:unknown,name:string)=>sha256(value,name,E);
+const json=(value:unknown)=>jsonValue(value,E);
 
 function parseRequest(value:unknown):ToolInvocationRequest {
   const request=exactOptional(value,['invocationId','runId','taskId','projectId','workerId','toolId','toolVersion','arguments','idempotencyKey','expectedMutation'],['cwd','timeoutMs'],'execution_request');

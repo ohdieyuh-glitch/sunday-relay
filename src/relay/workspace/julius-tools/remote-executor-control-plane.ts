@@ -2,10 +2,13 @@ import { randomUUID, type KeyObject } from 'node:crypto';
 import type { SandboxExecutionPort } from '../../mission/julius';
 import { receiptDigest, verifyExecutorAttestation, type SignedExecutorAttestation } from './executor-attestation';
 import { deriveToolInvocationResult, parseExecutorAfterReceipt, parseExecutorBeforeReceipt, validateToolInvocationResult } from './executor-terminal-receipt';
+import type { ExecutorOperation } from './executor-operation-request';
 
 export interface ExecutorControlPlaneConfig {
   readonly endpoint: URL;
   readonly serviceCredential: string;
+  /** One credential per operation. Present in production so a single stolen credential cannot reach a second operation. */
+  readonly scopedCredentials?: ReadonlyMap<ExecutorOperation, string>;
   readonly callerId: string;
   readonly tenantId: string;
   readonly requestTimeoutMs: number;
@@ -16,7 +19,16 @@ export interface ExecutorControlPlaneConfig {
 
 const remoteInstances = new WeakSet<object>();
 async function boundedJson(response:Response):Promise<unknown>{const reader=response.body?.getReader();if(!reader)throw new Error('executor_response_missing');const chunks:Uint8Array[]=[];let bytes=0;while(true){const next=await reader.read();if(next.done)break;bytes+=next.value.byteLength;if(bytes>2*1024*1024){await reader.cancel();throw new Error('executor_response_too_large');}chunks.push(next.value);}try{return JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown;}catch{throw new Error('executor_response_malformed');}}
-async function refusal(response:Response):Promise<Error>{if(response.status===409)return new Error('executor_identity_conflict');if(response.status===401||response.status===403)return new Error('executor_authorization_refused');try{const decoded=await boundedJson(response) as {error?:unknown};if(typeof decoded.error==='string'&&/^[A-Za-z0-9_:.-]{1,256}$/.test(decoded.error))return new Error(`EXECUTOR_UNAVAILABLE:${decoded.error}`);}catch{}return new Error('EXECUTOR_UNAVAILABLE');}
+async function refusal(response:Response):Promise<Error>{
+  const decoded=await boundedJson(response).then(value=>value as {error?:unknown},()=>null);
+  const code=typeof decoded?.error==='string'&&/^[A-Za-z0-9_:.-]{1,256}$/.test(decoded.error)?decoded.error:null;
+  // An execution that started but never reached a durable outcome is its own answer. It is never replayed blindly.
+  if(code==='STARTED_UNKNOWN_OUTCOME')return new Error('STARTED_UNKNOWN_OUTCOME');
+  if(code&&code.startsWith('SECURITY_FAILURE:'))return new Error(code);
+  if(response.status===409)return new Error('executor_identity_conflict');
+  if(response.status===401||response.status===403)return new Error('executor_authorization_refused');
+  return new Error(code?`EXECUTOR_UNAVAILABLE:${code}`:'EXECUTOR_UNAVAILABLE');
+}
 
 /** Production transport. It has no Docker binary, socket, signing key, or receipt-store path. */
 export class RemoteExecutorControlPlane implements SandboxExecutionPort {
@@ -28,10 +40,12 @@ export class RemoteExecutorControlPlane implements SandboxExecutionPort {
     remoteInstances.add(this);
   }
 
-  private async call<T>(operation: string, payload: unknown): Promise<T> {
+  private credentialFor(operation: ExecutorOperation): string { return this.config.scopedCredentials?.get(operation) ?? this.config.serviceCredential; }
+
+  private async call<T>(operation: ExecutorOperation, payload: unknown): Promise<T> {
     const response = await fetch(new URL('/v1/execute', this.config.endpoint), {
       method: 'POST', signal: AbortSignal.timeout(this.config.requestTimeoutMs),
-      headers: { authorization: `Bearer ${this.config.serviceCredential}`, 'content-type': 'application/json', 'x-julius-operation': operation },
+      headers: { authorization: `Bearer ${this.credentialFor(operation)}`, 'content-type': 'application/json', 'x-julius-operation': operation },
       body: JSON.stringify(payload),
     }).catch(() => { throw new Error('EXECUTOR_UNAVAILABLE'); });
     if (!response.ok) throw await refusal(response);
@@ -46,7 +60,7 @@ export class RemoteExecutorControlPlane implements SandboxExecutionPort {
     const envelope={schemaVersion:1,callerId:this.config.callerId,callerScope:'sandbox:execute',tenantId:this.config.tenantId,projectId:input.request.projectId,runId:input.request.runId,taskId:input.request.taskId,invocationId:input.request.invocationId,dispatchGeneration:input.dispatchGeneration,sandboxId:input.sandboxId,requestDigest:input.requestDigest,executionIdentity:`${input.request.invocationId}:${input.dispatchGeneration}:${input.sandboxId}`,nonce:randomUUID(),issuedAt:issuedAt.toISOString(),expiresAt:expiresAt.toISOString(),payload:{expectedLeaseGeneration:input.expectedLeaseGeneration,executionTokenHash:input.executionTokenHash,effectClassification:input.effectClassification,request:input.request}} as const;
     const response = await fetch(new URL('/v1/execute', this.config.endpoint), {
       method: 'POST', signal: AbortSignal.timeout(this.config.requestTimeoutMs),
-      headers: { authorization: `Bearer ${this.config.serviceCredential}`, 'content-type': 'application/json', 'x-julius-operation': 'execute' }, body: JSON.stringify(envelope),
+      headers: { authorization: `Bearer ${this.credentialFor('execute')}`, 'content-type': 'application/json', 'x-julius-operation': 'execute' }, body: JSON.stringify(envelope),
     }).catch(() => { throw new Error('EXECUTOR_UNAVAILABLE'); });
     if (!response.ok) throw await refusal(response);
     const decoded = await boundedJson(response) as {value:Awaited<ReturnType<SandboxExecutionPort['executeTool']>>;attestations:readonly SignedExecutorAttestation[];receiptBodies:Readonly<Record<'BEFORE'|'AFTER',string>>;terminalPayload:Readonly<Record<'stdout'|'stderr'|'changedPaths',string>>};

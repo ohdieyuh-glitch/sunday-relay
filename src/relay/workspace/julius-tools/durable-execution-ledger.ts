@@ -28,3 +28,19 @@ export class FilesystemExecutionLedger {
   }
   async removeForTests(identity:string):Promise<void>{await rm(this.path(identity),{force:true});}
 }
+
+/** Executor-owned sandbox->tenant binding. Written once at create, then enforced on every sandbox-scoped operation. */
+export class FilesystemSandboxTenancyLedger {
+  constructor(private readonly root:string){}
+  private path(sandboxId:string){return join(this.root,`${key(sandboxId)}.tenant`);}
+  async bind(input:{sandboxId:string;tenantId:string}):Promise<void>{
+    await mkdir(this.root,{recursive:true,mode:0o700});
+    try{const handle=await open(this.path(input.sandboxId),'wx',0o600);try{await handle.writeFile(input.tenantId);await handle.sync();}finally{await handle.close();}const directory=await open(dirname(this.path(input.sandboxId)),'r');try{await directory.sync();}finally{await directory.close();}}
+    catch(error){if((error as NodeJS.ErrnoException).code!=='EEXIST')throw error;await this.assert(input);}
+  }
+  async assert(input:{sandboxId:string;tenantId:string}):Promise<void>{
+    let bound:string;
+    try{bound=await readFile(this.path(input.sandboxId),'utf8');}catch(error){if((error as NodeJS.ErrnoException).code==='ENOENT')throw new Error('SECURITY_FAILURE:executor_sandbox_unbound');throw error;}
+    if(bound!==input.tenantId)throw new Error('SECURITY_FAILURE:executor_tenant_scope_refused');
+  }
+}
