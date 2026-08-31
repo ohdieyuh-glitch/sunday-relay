@@ -10,6 +10,8 @@ const safeName=(id:string)=>`julius-${createHash('sha256').update(id).digest('he
 const stable=(value:any):string=>value===null||typeof value!=='object'?JSON.stringify(value):Array.isArray(value)?`[${value.map(stable).join(',')}]`:`{${Object.keys(value).sort().map(key=>`${JSON.stringify(key)}:${stable(value[key])}`).join(',')}}`;
 const stableManifest=(record:JuliusSandboxRecord,input:any,executorIdentity:string,imageDigest:string)=>stable({invocationId:record.invocationId,dispatchGeneration:input.dispatchGeneration,sandboxId:record.sandboxId,tenantId:record.tenantId,projectId:record.projectId,runId:record.runId,taskId:record.taskId,workerId:input.request.workerId,toolId:input.request.toolId,toolVersion:input.request.toolVersion,requestDigest:input.requestDigest,argumentsDigest:opaque(stable(input.request.arguments)),policyRevision:record.policyRevision,leaseGeneration:record.leaseGeneration,imageDigest,effectClassification:input.effectClassification,executorIdentity});
 const opaque=(value:string)=>createHash('sha256').update(value).digest('hex');
+/** The root itself is a workspace; anything reached by climbing out of it is not. */
+export const workspaceContained=(root:string,candidate:string)=>{const rel=relative(root,candidate);return !rel.startsWith('..')&&!rel.startsWith('/');};
 const command=(binary:string,args:readonly string[],timeoutMs:number,cap:number):Promise<CommandResult>=>new Promise((done,reject)=>{let stdout:Buffer<ArrayBufferLike>=Buffer.alloc(0),stderr:Buffer<ArrayBufferLike>=Buffer.alloc(0),used=0,timedOut=false;const child=spawn(binary,[...args],{shell:false,env:{PATH:'/usr/local/bin:/usr/bin:/bin',LANG:'C.UTF-8'},stdio:['ignore','pipe','pipe'],detached:true});const add=(old:Buffer<ArrayBufferLike>,chunk:Buffer<ArrayBufferLike>)=>{const take=Math.min(chunk.length,Math.max(0,cap-used));used+=take;return take?Buffer.concat([old,chunk.subarray(0,take)]):old;};child.stdout.on('data',(x:Buffer<ArrayBufferLike>)=>stdout=add(stdout,x));child.stderr.on('data',(x:Buffer<ArrayBufferLike>)=>stderr=add(stderr,x));const timer=setTimeout(()=>{timedOut=true;try{process.kill(-child.pid!,'SIGKILL');}catch{}},timeoutMs);child.once('error',reject);child.once('close',code=>{clearTimeout(timer);done({code,stdout,stderr,timedOut});});});
 export interface DockerSandboxDurability {store:JuliusSandboxStore;receipts:DockerExecutorReceiptStore;runtimeInstanceId:string;executorVersion:string;attestReceipt?:(input:{phase:'BEFORE'|'AFTER';executionTokenHash:string;sandboxId:string})=>Promise<void>;settleRecovered?:(receipt:NonNullable<Awaited<ReturnType<DockerExecutorReceiptStore['consume']>>>)=>Promise<void>;}
 
@@ -62,11 +64,12 @@ export class DockerJuliusSandboxAdapter implements SandboxExecutionPort {
  /** Contained, existing, and free of the delimiters the mount specification is parsed on. One code for every failure. */
  private async resolveWorkspace(sourceRef:string):Promise<string>{
   const invalid=()=>new Error('sandbox_workspace_invalid');
-  const contained=(root:string,candidate:string)=>{const rel=relative(root,candidate);return rel!==''&&!rel.startsWith('..')&&!rel.startsWith('/');};
   const requested=resolve(sourceRef);
-  if(this.config.allowedWorkspaceRoot&&!contained(resolve(this.config.allowedWorkspaceRoot),requested))throw invalid();
+  // Checked lexically first, so a path outside the root is refused without the filesystem being consulted:
+  // otherwise the two outcomes are distinguishable and `prepare` becomes an existence oracle for the host.
+  if(this.config.allowedWorkspaceRoot&&!workspaceContained(resolve(this.config.allowedWorkspaceRoot),requested))throw invalid();
   const workspace=await realpath(requested).catch(()=>{throw invalid();});
-  if(this.config.allowedWorkspaceRoot){const root=await realpath(this.config.allowedWorkspaceRoot).catch(()=>{throw invalid();});if(!contained(root,workspace))throw invalid();}
+  if(this.config.allowedWorkspaceRoot){const root=await realpath(this.config.allowedWorkspaceRoot).catch(()=>{throw invalid();});if(!workspaceContained(root,workspace))throw invalid();}
   if(/[,=]/.test(workspace))throw invalid();
   return workspace;
  }
