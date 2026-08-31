@@ -1712,3 +1712,187 @@ capture: the character module, not the world.
 
 Founder checkpoint published:
 https://claude.ai/code/artifact/384b9438-f10d-42a1-b372-95e0a7225d3e
+
+## PASS 29 — ENCHANTMENT EXPANSION + LANDMARK CLOSURE (2026-08-31)
+
+The founder reopened the goal with two named gaps from PASS 28 — the great
+spire read as a hairline, and ScaleCam07 had no Dog — and a direction:
+"larger, more enchanted, more architectural, more vertical and more
+memorable", with the rule stated outright: **landmark scale = height + width
++ silhouette + negative-space readability.**
+
+### The instrument this pass needed and did not have
+
+Every tool here measured the world in PLAN, then PASS 28 added height. Nothing
+could measure WIDTH, which is why a 194 m spire could be sized correctly by
+every number available and still land as a thread.
+
+| tool | question | what it caught |
+|---|---|---|
+| `skyline.py --mass` | how much of the picture does this take? | the great spire was 18th from the spawn, behind fifteen trees |
+| `skyline.py --cam=X` | what is THIS camera's picture made of? | the spire was 7th in HeroCam0 at 4.0%; the biggest object in Wonderland's hero shot was a tree at 28 m |
+| `skyline.py --cam=X --near=40` | ranked among LANDMARKS, not framing | separates "what is the foreground" from "what is the picture of" |
+| `skyline.py --profile=<recipe>` | the silhouette, slab by slab | the shaft's upper half was 6.8 m of half-width on 194 m of height |
+
+`--cam` is the one that mattered. It clips every site to the frame before
+measuring, so a landmark half out of shot scores half, and it is the only
+number that can test "unmistakably #1 from HeroCam0".
+
+### 1. THE GREAT SPIRE — re-authored, not re-scaled
+
+PASS 28's repair widened the PLACEMENT 1.75x. Measured, that spire was still
+**4.0% of HeroCam0 and seventh in it**. A placement scale was never going to
+buy the width and it cost detail on the way: 1.75 across against 1.08 up
+stretched every window in the tower.
+
+Re-authored: a cathedral body 104 m across the transepts where there was a
+31 m plinth, **four 122 m flanking spires** on the shoulder, buttress fins the
+full height of both shaft stages, eight corner turrets with flying buttresses.
+The flanking spires are what fix the upper half — a shaft alone is 5.6 deg
+wide at 330 m whatever its base does, and the sky BETWEEN the flanks and the
+central needle is what stops the same width reading as a slab. The impossible
+flying stage, the crown and the needle are untouched.
+
+    HeroCam0 share    4.0%  ->  7.9%        rank 7th -> 1st among landmarks
+    shaft aspect      6.0:1 ->  2.7:1       (>4.5:1 is flagged a hairline)
+    vs next landmark  0.6x  ->  1.7x        (2.7x against the next tower)
+    GreatSpireCam22   36.4% of frame, 5x the next thing
+
+The 1.75x is gone, folded into authored radii. Precinct, pier ring, court and
+halo radii were all re-derived from the built mesh — the halos were riding the
+scale letter and would have sat inside the new fins.
+
+### 2. SCALECAM07 — the log had said why since the first empty frame
+
+    CINEMATIC_PAWN_HIDDEN=1 pawn=BP_RelayDog_C_0 at=X=-330 Y=-650
+
+`AWonderlandPlayerController` hides the possessed pawn in every
+`-CinematicView` capture. That rule was written when the pawn was an
+accidental default one standing in front of the arrival camera; the locomotion
+phase then made the canonical Dog the player pawn, and from that commit the
+rule hid the one object ScaleCam07 exists to photograph. A pawn tagged
+`ScaleReference` is the subject now, not a stray, and the log says which
+branch it took.
+
+PASS 28's second, unpossessed Dog is retired. It stood 0.9 m behind the gate's
+flanking wall — the position this file's own notes had already condemned —
+**and** on the same bearing from ScaleCam07 as the playable Dog, so it was
+behind the wall and behind the other Dog. A fallback placed without checking
+the sightline is not a fallback.
+
+Projected from where the Dog actually stands, it is in FOUR locked frames:
+ScaleCam07 (6.0 m, off -33.4), PlayerCam01 (8.7 m, +22.2), ReverseCam03
+(32.7 m, -5.8), GardenLeft04 (49.4 m, +2.6) — and out of HeroCam0, which is
+what the frozen arrival composition requires. v2_config had said the Dog was
+outside PlayerCam01 at bearing 50.6 deg; that bearing was measured for the
+RETIRED position and left standing when the Dog moved.
+
+### 3-4. DISTRICT DEPTH AND WONDER PER METRE
+
+Each district had one landmark, a 20 m court and an approach spur — a monument
+in a field. Seven new recipes, each one of four things: a THRESHOLD you pass
+through (`gatehouse_district`, `bridge_arc`), an OUTDOOR ROOM you stand in
+(`cloister_square`), a MECHANISM or light that does something (`orrery_gold`,
+`lantern_swag`, `fountain_grand`), or COLOUR at architectural size
+(`glass_screen`). No more trees and no more towers, which is what this world
+has always reached for and has enough of.
+
+95 pieces across eight districts, every one placed in its LANDMARK'S OWN
+APPROACH FRAME so the gate is always on the way in and the swags always span
+the walk, whatever bearing `_sig_site` finally chose.
+
+And the roads: `_ROUTE_LANG`'s own comment says "two districts share a kind at
+most" and `key` was in three. The new architecture supplied the vocabulary to
+keep the rule. The cadence was also wrong — `i % 16` over a loop that skips
+odd indices is every 32nd segment, so 404 segments carried 14 wonders and four
+of ten kinds never appeared in the world at all. Now 34 wonders, and the
+waymarker is no longer REPLACED by the wonder standing where it was.
+
+### 5. REVEAL — the filter could not see five of the founder's seven things
+
+`_reveal_city` runs before the district landmarks are sited, because the
+woodland must be thinned before they are placed into it. So its cones could
+only ever be drawn to the skyline and the castle: gates, cloisters, bridges,
+screens and courts were invisible to the only filter that opens a view. It
+runs a second time now, over the same bands, with the new marks and
+SIGHTLINES ONLY — the clearing field is a property of the woodland and
+applying it twice would quietly halve the forest. 120 more trees, all for a
+sightline.
+
+    canopy cover   0-40 m 41.0%   40-80 38.0%   80-130 28.9%   130-200 24.0%
+
+### 6. SKYLINE — one silhouette and four colours
+
+The ladder was twenty consecutive rows of `roof_cone_steep` between 90 and
+135 m. At a kilometre through fog, tint is the first thing to go and shape is
+the last, so the entire backdrop read as one repeated tower — the "endless
+towers" the brief asks not to add, already added. No tower was added, moved or
+removed; the cap is chosen by hash from the four the kit already has. The
+ladder now reads cone / ogee / bell / crenellated down its length.
+
+### The five defects this pass introduced and caught before the render
+
+Recorded because four of them are the same shape as something already in this
+ledger.
+
+1. **The depth search walked a bridge into the arrival plaza.** `_sig_site`
+   has carried a district guard since PASS 23; this search, written one
+   function away from it, had none. Tower Rise's bridge slid 63 m looking for
+   clear ground and came to rest 11 m from HeroCam0 at **81% of the founder's
+   hero frame**, with two lantern swags beside SkylineCam06. Caught by
+   `--cam`, the tool built this pass. *A rule applied to one collection and
+   not its sibling — the sixth.*
+2. **The guard's first version was the wrong test.** `_district_of` is the
+   obvious containment rule and it dropped eight pieces for being where they
+   should be: districts are wedges at a radius, an approach runs INWARD, and a
+   gate 150 m up the approach from a landmark at 250 m is correctly in another
+   district. The test is belonging to a LANDMARK, not membership of a wedge.
+3. **The bridge stood 1.55 m proud at both ends** — five times the Dog's step
+   — and the step-height gate passed it, because it knew exactly one asset.
+   *A gate that cannot see something reports success.*
+4. **A paired fountain skipped its clearance test when its cloister had just
+   been dropped for failing it**, because the pairing was tested against the
+   TABLE rather than against what was placed.
+5. **Four recipes were authored to sizes their docstrings did not have** —
+   radii read as diameters, a 20.4 m fountain described as 8 m, a torus-arc
+   window head that was neither pointed nor 13 m. All measured off the built
+   mesh and rewritten, the arch head rebuilt from voussoirs because
+   `torus(arc=)` gives no control over where an arc starts.
+
+### And two defects that were already there
+
+**Every parterre in Wonderland was a sealed box.** The route solve reported
+castle -> garden and garden -> grove broken; they are one defect reported
+twice, because the tour starts each leg from a stop it never reached. The
+garden quarter's centre is 44 m2 of open ground with nothing solid within 17 m
+of it, entirely enclosed by its own bed edges and rim. The rim's door could
+never open: four pieces a side put t at 0, 0.333, 0.667 and 1.0 and the skip
+window was `0.34 <= t <= 0.66`, excluding both middle values by three
+thousandths — while the comment above the loop said "broken at the four walk
+entrances". **Stale prose is load-bearing here and this is the clearest case
+yet: the sentence describing the opening was the only thing that had one.**
+The opening is a measured width now and `PARTERRE_NOTES` asserts it.
+
+**And the founder's lag was not the game.** Reported live, profiled before
+anything was changed: 3,540 frames of the exploration route, offscreen,
+FrameTime median 19.40 ms (51.5 fps), p99 25.82, worst frame 31.78, **zero
+frames over 33 ms**. GPUTime 19.26 of a 19.40 ms frame; GameThread 2.40. No
+hitch, stall, streaming or shader-compile line in the packaged log. The
+stutter was `MAINTAIN_RESOLUTION` — a setting VERIFIED.md records as a
+deliberate override *for judging stills*, which under load holds picture and
+drops FRAMES — over a renderer feeding 51.5 fps into a 60 Hz cadence with an
+encoder quality floor leaving nothing else to give. Fixed with a LIVE profile
+(MAINTAIN_FRAMERATE, MinQuality 25, ScreenPercentage 78) that the interactive
+stream now defaults to; BALANCED and CINEMATIC are untouched so captures keep
+the picture-first trade. **No art was changed for it.**
+
+The movement profiler itself passed no `-ExecCmds`, so it measured the engine
+defaults whatever profile it was asked for — the "after" would have been the
+"before" with a new label. Fixed before any number was taken.
+
+### Traversal, unchanged and re-proved at every step
+
+    step height   MaxStepHeight 30 uu | highest lip 19 | 888 surfaces | 0 violations
+    quarters      0 of 60 unreachable
+    tour          253 legs over 12 stops, 3,132 m, 0 broken connections
+    waymarkers    164 markers + 34 wayside wonders (was 171 + 13)
