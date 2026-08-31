@@ -78,3 +78,15 @@ A fresh full repository run with one worker completed 462 files: 460 passed, 1 i
 ### Independent security review
 
 A genuinely separate reviewing agent audited the effective follow-on diff and its revisions. Final review found **0 Critical** findings. The revision closed DB-clock lease fencing, pre-execution stale authority, scoped receipt/sandbox constraints, terminal-result integrity, hard provider deadlines, and exclusive generation-fenced recovery claims. Remaining High findings are explicitly blocking: executor-side before/after receipts plus a composed recovery worker; one atomic budget/evidence/artifact/event/trajectory/task settlement; and composition of the durable sandbox repository into Docker lifecycle/restart handling. No beta-readiness claim is made.
+
+## Phase II correctness checkpoint (2026-08-31)
+
+The stacked branch `codex/julius-beta-phase2` closes the three previously open High findings in code and focused tests without changing the #198 boundary:
+
+- **Executor witness:** the Docker adapter mounts a root-owned receipt directory outside the disposable container layer. A trusted wrapper writes immutable, identity-bound `BEFORE` and `AFTER` receipts around an unprivileged process. Receipt consumption validates scope, manifest and payload digests; `BEFORE` without a valid terminal receipt is `UNKNOWN_EFFECT` and is never replayed automatically.
+- **Exactly-once settlement:** one serializable PostgreSQL operation validates the terminal executor receipt and finalized artifact bytes, commits the scoped budget reservation, invocation result, artifact metadata, evidence, trajectory, operational event, task outcome, outbox, and settlement identity. Same identity/digest is idempotent; a changed digest conflicts. Task success additionally requires a persisted accepting verification decision whose passed evidence is included in the settlement.
+- **Durable Docker ownership:** create, physical binding, execution authorization, heartbeat, destroy and restart reconciliation use the PostgreSQL sandbox owner/generation. Reconciliation compares DB records with Docker IDs, images and opaque labels, consumes receipts before declaring loss, and quarantines mismatches and orphans.
+
+A genuinely separate final reviewer reported **Critical 0 / High 0 for these three targets**. That verdict is scoped to the Phase II diff and does not make Julius beta-ready. This machine still has no Docker/PostgreSQL executables for a local real-infrastructure rerun, and no `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, or configured remote Hermes credential. The GitHub PostgreSQL+Docker job and first live three-provider mission must pass before the states advance to `REAL_INFRA_PROVEN` or `BETA_READY`.
+
+Remaining beta blockers are the real CI run, a production object-store adapter, live Prompt Architect/Coding Agent/Independent Reviewer routes, the genuine reviewer-failure/repair mission, Project Brain/terminal/restart proof, the full resource/chaos/eval matrix, and a fresh whole-repository run.

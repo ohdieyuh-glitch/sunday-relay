@@ -118,3 +118,7 @@ A genuinely separate Codex sub-agent reviewed the final-direction diff. It found
 ## Beta closure follow-on
 
 A reviewable follow-on from PR #203 uses migration 020 to avoid altering published schema history. It adds fail-closed crash-after-effect semantics and durable sandbox/receipt/settlement records while retaining the #198 dependency boundary. This is a material safety improvement, not a beta declaration: no provider credentials were available, Docker/PostgreSQL are unavailable in this checkout, and the full real mission and chaos matrix remain unexecuted. Founder action remains review only; do not merge #202 or #203 until the remaining beta blockers in `JULIUS_BETA_READINESS.md` are closed.
+
+## Phase II stack status (2026-08-31)
+
+A new reviewable branch is stacked on PR #204 rather than rewriting it. Migration 021 adds settlement and sandbox-fencing fields after migration 020. The implementation closes the prior independent review's executor-receipt, atomic-settlement and durable-Docker-composition High findings; a separate re-review reports Critical 0 / High 0 for that scope. PRs #202, #203 and #204 remain unmerged and no historical PR was closed. Julius is still **not beta-ready** because live provider credentials/routes, the real reviewer-triggered repair mission, object storage, expanded real-infrastructure/resource/chaos proof and a final fresh full matrix remain outstanding.
