@@ -94,3 +94,15 @@ Remaining beta blockers are the real CI run, a production object-store adapter, 
 ### Real-infrastructure CI result
 
 GitHub Actions run `33349662781` proved migrations through 021, serializable invocation retry, stale lease fencing, `SKIP LOCKED`, concurrent task claims, and orphan-container quarantine. The crash-after-effect case failed because the container produced a `BEFORE` receipt but no terminal `AFTER` receipt or effect. Julius correctly kept the outcome unknown rather than replaying it. This is a **REAL REGRESSION / unresolved executor-image integration failure**, not a pass; consequently HIGH-1 is not infrastructure-proven and the live mission must not start.
+
+## Real executor closure checkpoint (2026-08-31)
+
+The BEFORE-only CI failure was traced, not waived. The host receipt directory is owned by the Actions runner. The container had `--cap-drop=ALL`; therefore its trusted uid-0 executor lacked `DAC_OVERRIDE` and could create neither the staged receipt nor command-output files on the bind mount. Its attempted identity drop also required `SETUID`/`SETGID`. The inline Docker argument made this failure unnecessarily opaque.
+
+PR #206 installs a fixed executor program into the digest-addressed sandbox image. The container grants only `DAC_OVERRIDE`, `SETUID`, `SETGID`, and `KILL` to that trusted program; `setpriv` changes the worker to uid/gid 65532 while clearing its bounding, inheritable, and ambient capability sets. The executor fsyncs and atomically publishes BEFORE, runs the requested effect unprivileged, reaps every uid-65532 descendant, proves none remain, measures the workspace, and then fsyncs and publishes AFTER. The orchestrator only consumes the resulting files.
+
+GitHub Actions run `33354964563` passed the real PostgreSQL 16 and Docker scenario. It proved migrations 001–021, serializable request retry, stale-lease fencing, `SKIP LOCKED`, unprivileged network-denied mutation, executor BEFORE/effect/AFTER integrity, crash-after-effect recovery without re-execution, exactly one settlement/budget/evidence record, stale sandbox-owner refusal, cleanup, and orphan quarantine. The fixture also starts a delayed background writer; the executor kills it before AFTER and the test proves no late mutation appears.
+
+Live-provider authorization remains absent: `OPENAI_API_KEY`, `OPENAI_PROMPT_ARCHITECT_MODEL`, `RELAY_PROMPT_ARCHITECT_MODE`, `ANTHROPIC_API_KEY`, `RELAY_HERMES_MODE`, `RELAY_HERMES_SERVICE_URL`, and `RELAY_HERMES_SERVICE_TOKEN` are unset. Consequently the real three-role mission remains `BLOCKED_EXTERNAL_CREDENTIAL`, not passed.
+
+The independent re-review still controls the security verdict. In particular, a direct-Docker orchestrator can access the host receipt store and Docker control plane; cryptographic independence from a malicious orchestrator requires a separately privileged executor/receipt service or attestation boundary. Julius remains **not beta-ready** until that deployment boundary, live provider mission, provider-triggered repair, broader real resource/authorization evals, and final zero-Critical/zero-High review are complete.
