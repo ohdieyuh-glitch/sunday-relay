@@ -58,21 +58,29 @@ export function parseExecutorAfterReceipt(body: string): ParsedExecutorAfterRece
   return value as ParsedExecutorAfterReceipt;
 }
 
+/** The three payloads travel base64-encoded: the receipt digests raw bytes, and a UTF-8 round trip through
+ *  the wire silently rewrites any byte that is not valid UTF-8, which made honest output look tampered with. */
 export interface ExecutorTerminalPayload { readonly stdout: string; readonly stderr: string; readonly changedPaths: string; readonly policyDecisionRef: string; }
 
 /** Derives Julius' normalized result solely from the authoritative AFTER receipt and its hash-bound payloads. */
 export function deriveToolInvocationResult(after: ParsedExecutorAfterReceipt, payload: ExecutorTerminalPayload): ToolInvocationResult {
-  const stdoutBytes = Buffer.byteLength(payload.stdout), stderrBytes = Buffer.byteLength(payload.stderr), changedBytes = Buffer.byteLength(payload.changedPaths);
+  const base64 = (value: string, name: string) => { if (typeof value !== 'string' || !/^[A-Za-z0-9+/]*={0,2}$/.test(value)) throw new Error(`executor_terminal_payload_encoding:${name}`); return Buffer.from(value, 'base64'); };
+  const stdout = base64(payload.stdout, 'stdout'), stderr = base64(payload.stderr, 'stderr'), changed = base64(payload.changedPaths, 'changedPaths');
+  const stdoutBytes = stdout.byteLength, stderrBytes = stderr.byteLength, changedBytes = changed.byteLength;
   if (stdoutBytes + stderrBytes > MAX_INLINE_OUTPUT_BYTES || changedBytes > MAX_CHANGED_PATHS_BYTES) throw new Error('executor_terminal_payload_too_large');
-  if (sha(payload.stdout) !== after.stdoutDigest || sha(payload.stderr) !== after.stderrDigest || sha(payload.changedPaths) !== after.changedPathsDigest) throw new Error('executor_terminal_payload_digest_mismatch');
+  if (sha(stdout) !== after.stdoutDigest || sha(stderr) !== after.stderrDigest || sha(changed) !== after.changedPathsDigest) throw new Error('executor_terminal_payload_digest_mismatch');
   const outputBytes = integer(after.outputBytes), durationMs = integer(after.durationMs), exitCode = integer(after.exitCode);
   if (outputBytes !== stdoutBytes + stderrBytes) throw new Error('executor_terminal_output_size_mismatch');
   const terminalDigest = sha([after.exitCode, after.durationMs, after.stdoutDigest, after.stderrDigest, after.postTreeDigest, after.changedPathsDigest].join('\n'));
   if (terminalDigest !== after.executorResultDigest) throw new Error('executor_terminal_result_digest_mismatch');
-  return { invocationId: after.invocationId, status: after.terminalState, exitCode, safeSummary: after.terminalState === 'SUCCEEDED' ? 'Sandbox command completed.' : 'Sandbox command failed.', stdout: payload.stdout, stderr: payload.stderr, stdoutRef: null, stderrRef: null, artifacts: [], evidence: [], durationMs, resourceUsage: { toolCalls: 1, runtimeMs: durationMs, outputBytes }, policyDecisionRef: payload.policyDecisionRef, mutations: [] };
+  return { invocationId: after.invocationId, status: after.terminalState, exitCode, safeSummary: after.terminalState === 'SUCCEEDED' ? 'Sandbox command completed.' : 'Sandbox command failed.', stdout: stdout.toString('utf8'), stderr: stderr.toString('utf8'), stdoutRef: null, stderrRef: null, artifacts: [], evidence: [], durationMs, resourceUsage: { toolCalls: 1, runtimeMs: durationMs, outputBytes }, policyDecisionRef: payload.policyDecisionRef, mutations: [] };
 }
 
 /** Rejects any independently supplied normalized result that differs from signed terminal truth. */
 export function validateToolInvocationResult(authoritative: ToolInvocationResult, supplied: ToolInvocationResult): void {
-  if (JSON.stringify(authoritative) !== JSON.stringify(supplied)) throw new Error('executor_normalized_result_mismatch');
+  // Compared by value, not by key order: JSON.stringify would reject an equal result built in another order.
+  const stable = (value: unknown): string => value === null || typeof value !== 'object' ? JSON.stringify(value) ?? 'null'
+    : Array.isArray(value) ? `[${value.map(stable).join(',')}]`
+    : `{${Object.keys(value as Record<string, unknown>).sort().map(key => `${JSON.stringify(key)}:${stable((value as Record<string, unknown>)[key])}`).join(',')}}`;
+  if (stable(authoritative) !== stable(supplied)) throw new Error('executor_normalized_result_mismatch');
 }

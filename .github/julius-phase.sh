@@ -12,7 +12,7 @@ exec docker run --rm --network container:julius-executor \
   -e JULIUS_CALLER_ID -e JULIUS_TENANT_ID -e JULIUS_OTHER_CALLER_ID -e EXECUTOR_KEY_ID \
   -e JULIUS_SCOPED_CREDENTIALS="$SCOPED" -e JULIUS_OTHER_SCOPED_CREDENTIALS="$OTHER_SCOPED" \
   -e JULIUS_OPERATOR_SCOPED_CREDENTIALS="${OPERATOR_SCOPED:-}" \
-  -e JULIUS_PUBLIC_KEY_PATH=/tmp/julius-public.pem -e JULIUS_WORKSPACE=/tmp/julius-workspace \
+  -e JULIUS_PUBLIC_KEY_PATH=/tmp/julius-public.pem -e JULIUS_WORKSPACE=/tmp/julius-workspace/tenant -e JULIUS_FOREIGN_WORKSPACE=/tmp/julius-workspace/other-tenant \
   -e JULIUS_ORPHAN_EXPECTED="${JULIUS_ORPHAN_EXPECTED:-}" \
   -e PROBE_EXECUTOR_PRIVATE_KEY=/tmp/julius-executor/private.pem \
   -e PROBE_EXECUTOR_RECEIPT_ROOT=/tmp/julius-executor/receipts \

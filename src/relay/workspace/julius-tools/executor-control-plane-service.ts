@@ -1,21 +1,26 @@
 import { createServer, type IncomingMessage, type Server } from 'node:http';
 import { createHash, createPublicKey, timingSafeEqual, type KeyObject } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import type { SandboxExecutionPort } from '../../mission/julius';
 import { receiptDigest, signExecutorAttestation, type SignedExecutorAttestation } from './executor-attestation';
 import type { DockerExecutorReceiptStore } from './executor-receipt-store';
 import { executionReplayDigest, parseExecutorExecutionEnvelope } from './execution-envelope';
-import { EXECUTOR_OPERATION_SET, SANDBOX_SCOPED, parseExecutorOperationRequest, type ExecutorOperation } from './executor-operation-request';
+import { EXECUTOR_OPERATION_SET, MAX_EXECUTOR_RESPONSE_BYTES, SANDBOX_SCOPED, parseExecutorOperationRequest, type ExecutorOperation } from './executor-operation-request';
+import { workspaceContained } from './docker-sandbox-adapter';
 import { verifyExecutorAttestation } from './executor-attestation';
 import { parseExecutorAfterReceipt, parseExecutorBeforeReceipt } from './executor-terminal-receipt';
 import { FilesystemExecutionLedger, FilesystemSandboxTenancyLedger, durablePublish } from './durable-execution-ledger';
 
 const MAX_BODY_BYTES = 1024 * 1024;
-const MAX_RESPONSE_BYTES = 4 * 1024 * 1024;
+const MAX_RESPONSE_BYTES = MAX_EXECUTOR_RESPONSE_BYTES;
 const equal = (left:string,right:string) => { const a=Buffer.from(left),b=Buffer.from(right); return a.length===b.length&&timingSafeEqual(a,b); };
 
-export interface ExecutorCallerAuthority {readonly callerId:string;readonly tenantId:string;readonly credential:string;readonly operations:ReadonlySet<ExecutorOperation>;}
+export interface ExecutorCallerAuthority {
+  readonly callerId:string;readonly tenantId:string;readonly credential:string;readonly operations:ReadonlySet<ExecutorOperation>;
+  /** Fleet authority acts beyond one tenant: it alone may sweep the host or touch a sandbox nobody owns. */
+  readonly fleet?:boolean;
+}
 export interface ExecutorControlPlaneServiceConfig {
   readonly callerAuthorities: readonly ExecutorCallerAuthority[];
   readonly keyId: string;
@@ -24,6 +29,10 @@ export interface ExecutorControlPlaneServiceConfig {
   readonly receipts: DockerExecutorReceiptStore;
   readonly executionLedger: FilesystemExecutionLedger;
   readonly tenancyLedger: FilesystemSandboxTenancyLedger;
+  /** When set, a tenant may only mount a workspace beneath its own subdirectory of this root. */
+  readonly tenantWorkspaceRoot?: string;
+  /** Recovers a completed execution's result from durable receipts, without executing anything. */
+  readonly recoverTerminal?: (input:{executionTokenHash:string;sandboxId:string}) => Promise<unknown|null>;
 }
 
 export function createDurableReceiptAttestor(config:Pick<ExecutorControlPlaneServiceConfig,'keyId'|'privateSigningKey'|'receipts'> & {executionLedger?:FilesystemExecutionLedger}) {
@@ -39,6 +48,15 @@ export function createDurableReceiptAttestor(config:Pick<ExecutorControlPlaneSer
     if(receipt.invocationId!==manifest.invocationId||Number(receipt.dispatchGeneration)!==manifest.dispatchGeneration||receipt.sandboxId!==manifest.sandboxId||receipt.requestDigest!==manifest.requestDigest)throw new Error('executor_attestation_scope_mismatch');
     const signed=signExecutorAttestation({version:1,keyId:config.keyId,phase:input.phase,executionIdentity:`${manifest.invocationId}:${manifest.dispatchGeneration}:${manifest.sandboxId}`,invocationId:manifest.invocationId,dispatchGeneration:manifest.dispatchGeneration,sandboxId:manifest.sandboxId,requestDigest:manifest.requestDigest,receiptDigest:receiptDigest(raw),issuedAt:new Date().toISOString()},config.privateSigningKey);
     const path=join(directory,`${input.phase.toLowerCase()}.attestation`),serialized=JSON.stringify(signed);
+    const executionIdentity=`${manifest.invocationId}:${manifest.dispatchGeneration}:${manifest.sandboxId}`;
+    /* The ledger must leave PREPARED BEFORE the gate is published, not after. The gate is what permits the
+       untrusted command to start, so if publication came first a failure in between left a running workload
+       behind a PREPARED reservation — and a reservation released on the strength of "still PREPARED" would
+       then be released after a real effect. Ordering it this way makes PREPARED mean the gate never opened. */
+    if(config.executionLedger&&input.phase==='BEFORE'){
+      const entry=await config.executionLedger.load(executionIdentity);
+      if(entry?.state==='PREPARED')await config.executionLedger.transition({executionIdentity,requestDigest:manifest.requestDigest,from:'PREPARED',to:'BEFORE_DURABLE',now:new Date().toISOString()});
+    }
     // The in-sandbox gate polls for this file's existence, so it must appear only once its bytes are durable.
     try{await durablePublish(path,serialized);}
     catch(error){
@@ -49,7 +67,11 @@ export function createDurableReceiptAttestor(config:Pick<ExecutorControlPlaneSer
       try{verifyExecutorAttestation(prior,new Map([[config.keyId,createPublicKey(config.privateSigningKey)]]),{phase:input.phase,executionIdentity:signed.attestation.executionIdentity,invocationId:signed.attestation.invocationId,dispatchGeneration:signed.attestation.dispatchGeneration,sandboxId:signed.attestation.sandboxId,requestDigest:signed.attestation.requestDigest,receiptDigest:signed.attestation.receiptDigest});}
       catch{throw new Error('executor_attestation_conflict');}
     }
-    if(config.executionLedger){const executionIdentity=`${manifest.invocationId}:${manifest.dispatchGeneration}:${manifest.sandboxId}`,now=new Date().toISOString();if(input.phase==='BEFORE'){await config.executionLedger.transition({executionIdentity,requestDigest:manifest.requestDigest,from:'PREPARED',to:'BEFORE_DURABLE',now});await config.executionLedger.transition({executionIdentity,requestDigest:manifest.requestDigest,from:'BEFORE_DURABLE',to:'RUNNING',now:new Date().toISOString()});}else await config.executionLedger.transition({executionIdentity,requestDigest:manifest.requestDigest,from:'RUNNING',to:'AFTER_DURABLE',now});}
+    if(config.executionLedger){
+      const now=new Date().toISOString();
+      if(input.phase==='BEFORE'){const entry=await config.executionLedger.load(executionIdentity);if(entry?.state==='BEFORE_DURABLE')await config.executionLedger.transition({executionIdentity,requestDigest:manifest.requestDigest,from:'BEFORE_DURABLE',to:'RUNNING',now});}
+      else await config.executionLedger.transition({executionIdentity,requestDigest:manifest.requestDigest,from:'RUNNING',to:'AFTER_DURABLE',now});
+    }
   };
 }
 
@@ -65,17 +87,38 @@ const statusFor=(message:string):number=>message.startsWith('SECURITY_FAILURE:')
 /** Every shape refusal answers as one family, so a caller can tell a malformed request from an executor fault. */
 const validated=async<T>(parse:()=>T|Promise<T>):Promise<T>=>{try{return await parse();}catch(error){const message=error instanceof Error?error.message:'invalid';throw new Error(message.startsWith('SECURITY_FAILURE:')||message==='request_too_large'?message:`INVALID_REQUEST:${message}`);}};
 
+/**
+ * Commits the one terminal answer for an execution whose effect has happened and whose receipts are signed.
+ * A response too large to return is still a terminal fact and is recorded as one: leaving the entry at
+ * AFTER_DURABLE would report a known outcome as unknown for ever, and no retry could clear it.
+ */
+async function sealTerminal(config:ExecutorControlPlaneServiceConfig,envelope:{executionIdentity:string;requestDigest:string;sandboxId:string;payload:{executionTokenHash:string}},value:unknown):Promise<{status:number;body:string}>{
+  const directory=config.receipts.directory(envelope.payload.executionTokenHash,envelope.sandboxId);
+  const receiptBodies={BEFORE:await readFile(join(directory,'before.receipt'),'utf8'),AFTER:await readFile(join(directory,'after.receipt'),'utf8')};
+  const attestations=await Promise.all((['before','after'] as const).map(async phase=>JSON.parse(await readFile(join(directory,`${phase}.attestation`),'utf8')) as SignedExecutorAttestation));
+  // Base64 so the bytes the receipt digested are the bytes Julius verifies; a UTF-8 round trip rewrites them.
+  const terminalPayload={stdout:(await readFile(join(directory,'stdout'))).toString('base64'),stderr:(await readFile(join(directory,'stderr'))).toString('base64'),changedPaths:(await readFile(join(directory,'changed-paths'))).toString('base64')};
+  const encoded=JSON.stringify({value,attestations,receiptBodies,terminalPayload});
+  const oversize=Buffer.byteLength(encoded)>MAX_RESPONSE_BYTES;
+  const body=oversize?JSON.stringify({error:'TERMINAL_FAILURE:executor_response_too_large'}):encoded,status=oversize?500:200;
+  await config.executionLedger.transition({executionIdentity:envelope.executionIdentity,requestDigest:envelope.requestDigest,from:'AFTER_DURABLE',to:'TERMINAL',resultDigest:createHash('sha256').update(body).digest('hex'),terminalResponse:body,terminalStatus:status,now:new Date().toISOString()});
+  return {status,body};
+}
+
 async function visibleSandboxes(config:ExecutorControlPlaneServiceConfig,tenantId:string){
   const discovered=await config.physical.discoverSandboxes();
   const owners=await Promise.all(discovered.map(sandbox=>config.tenancyLedger.boundTenant(sandbox.sandboxId)));
   return discovered.filter((_sandbox,index)=>owners[index]===null||owners[index]===tenantId);
 }
 
-async function assertQuarantineTarget(config:ExecutorControlPlaneServiceConfig,tenantId:string,runtimeId:string):Promise<void>{
+async function assertQuarantineTarget(config:ExecutorControlPlaneServiceConfig,authority:ExecutorCallerAuthority,runtimeId:string):Promise<void>{
   const target=(await config.physical.discoverSandboxes()).find(sandbox=>sandbox.runtimeId===runtimeId);
   if(!target)throw new Error('SECURITY_FAILURE:executor_quarantine_target_unknown');
   const owner=await config.tenancyLedger.boundTenant(target.sandboxId);
-  if(owner!==null&&owner!==tenantId)throw new Error('SECURITY_FAILURE:executor_tenant_scope_refused');
+  // Every other sandbox-scoped operation refuses an unowned sandbox. This one destroys a container, so it
+  // must refuse it at least as firmly: only fleet authority may act where there is no owner to consult.
+  if(owner===null){if(!authority.fleet)throw new Error('SECURITY_FAILURE:executor_sandbox_unbound');return;}
+  if(owner!==authority.tenantId)throw new Error('SECURITY_FAILURE:executor_tenant_scope_refused');
 }
 
 /** Minimal privileged boundary: transport/authentication/attestation only; C.A.R.D. and mission truth remain in Julius. */
@@ -93,14 +136,22 @@ export function createExecutorControlPlaneService(config:ExecutorControlPlaneSer
       if(!authority){response.statusCode=401;response.end('{"error":"unauthorized"}');return;}
       // One operation is one narrowly scoped authority: the execute credential cannot destroy, the inspect credential cannot execute.
       if(!authority.operations.has(operation)){response.statusCode=403;response.end('{"error":"operation_scope_refused"}');return;}
-      const input=await validated(()=>body(request));let value:unknown;let attestations:readonly SignedExecutorAttestation[]|undefined;let receiptBodies:Readonly<Record<'BEFORE'|'AFTER',string>>|undefined;let terminalPayload:Readonly<Record<'stdout'|'stderr'|'changedPaths',string>>|undefined;
+      const input=await validated(()=>body(request));let value:unknown;
       if(operation!=='execute'){
         const parsed=await validated(()=>parseExecutorOperationRequest(operation,input,{tenantId:authority.tenantId}));
         if(SANDBOX_SCOPED.has(operation))await config.tenancyLedger.assert({sandboxId:(parsed as {sandboxId:string}).sandboxId,tenantId:authority.tenantId});
+        // The sandbox is this tenant's; the directory it mounts must be too. One shared root would otherwise let
+        // any tenant mount another tenant's workspace read-write on a sandbox it legitimately owns.
+        if(operation==='prepare'&&config.tenantWorkspaceRoot){
+          const permitted=resolve(config.tenantWorkspaceRoot,authority.tenantId);
+          if(!workspaceContained(permitted,resolve((parsed as {sourceRef:string}).sourceRef)))throw new Error('SECURITY_FAILURE:executor_workspace_tenant_scope_refused');
+        }
         // `quarantine` destroys a container outright and names it by runtime id, so the id must first be
         // shown to belong to a Julius sandbox that is either this tenant's or unowned. Without this the
         // scope reaches an arbitrary `docker rm -f` on the executor host, including its own database.
-        if(operation==='quarantine')await assertQuarantineTarget(config,authority.tenantId,(parsed as {runtimeId:string}).runtimeId);
+        if(operation==='quarantine')await assertQuarantineTarget(config,authority,(parsed as {runtimeId:string}).runtimeId);
+        // Reconciliation sweeps every tenant's sandboxes at once, so it is fleet authority by definition.
+        if(operation==='reconcile'&&!authority.fleet)throw new Error('SECURITY_FAILURE:executor_fleet_authority_required');
         switch(operation){
           case 'create':{
             // Bound after the sandbox physically exists: binding first lets a tenant squat identifiers it never creates.
@@ -109,7 +160,12 @@ export function createExecutorControlPlaneService(config:ExecutorControlPlaneSer
             break;
           }
           case 'prepare':value=await config.physical.prepareWorkspace(parsed as Parameters<SandboxExecutionPort['prepareWorkspace']>[0]);break;
-          case 'cancel':value=await config.physical.cancelExecution(parsed as Parameters<SandboxExecutionPort['cancelExecution']>[0]);break;
+          case 'cancel':{
+            value=await config.physical.cancelExecution(parsed as Parameters<SandboxExecutionPort['cancelExecution']>[0]);
+            // cancelExecution destroys the sandbox, so it releases the identifier exactly as destroy does.
+            if(value===true)await config.tenancyLedger.unbind({sandboxId:(parsed as {sandboxId:string}).sandboxId,tenantId:authority.tenantId}).catch(()=>undefined);
+            break;
+          }
           case 'destroy':{
             value=await config.physical.destroySandbox(parsed as Parameters<SandboxExecutionPort['destroySandbox']>[0]);
             // A destroyed sandbox releases its identifier so the namespace is not a permanent first-come claim.
@@ -134,6 +190,12 @@ export function createExecutorControlPlaneService(config:ExecutorControlPlaneSer
       const reservation=await config.executionLedger.reserve({executionIdentity:envelope.executionIdentity,requestDigest:envelope.requestDigest,envelopeDigest:executionReplayDigest(envelope),now:new Date().toISOString()});
       if(reservation.kind==='EXISTING'){
         if(reservation.entry.state==='TERMINAL'&&reservation.entry.terminalResponse){response.statusCode=reservation.entry.terminalStatus??200;response.end(reservation.entry.terminalResponse);return;}
+        // An execution that reached a durable AFTER has an outcome, whatever interrupted the reply. It is
+        // recovered from the receipts rather than reported unknown, and nothing is executed a second time.
+        if(reservation.entry.state==='AFTER_DURABLE'&&config.recoverTerminal){
+          const recovered=await config.recoverTerminal({executionTokenHash:envelope.payload.executionTokenHash,sandboxId:envelope.sandboxId});
+          if(recovered){const sealed=await sealTerminal(config,envelope,recovered);response.statusCode=sealed.status;response.end(sealed.body);return;}
+        }
         throw new Error('STARTED_UNKNOWN_OUTCOME');
       }
       try{
@@ -145,18 +207,8 @@ export function createExecutorControlPlaneService(config:ExecutorControlPlaneSer
         await config.executionLedger.release({executionIdentity:envelope.executionIdentity,requestDigest:envelope.requestDigest,expected:'PREPARED'}).catch(()=>undefined);
         throw error;
       }
-      const directory=config.receipts.directory(envelope.payload.executionTokenHash,envelope.sandboxId);
-      receiptBodies={BEFORE:await readFile(join(directory,'before.receipt'),'utf8'),AFTER:await readFile(join(directory,'after.receipt'),'utf8')};
-      attestations=await Promise.all((['before','after'] as const).map(async phase=>JSON.parse(await readFile(join(directory,`${phase}.attestation`),'utf8')) as SignedExecutorAttestation));
-      terminalPayload={stdout:await readFile(join(directory,'stdout'),'utf8'),stderr:await readFile(join(directory,'stderr'),'utf8'),changedPaths:await readFile(join(directory,'changed-paths'),'utf8')};
-      // The effect has happened and both receipts are signed and durable, so this execution HAS an outcome.
-      // A response too large to return is still a terminal fact and is recorded as one: leaving the entry at
-      // AFTER_DURABLE would report a known outcome as unknown for ever, and no retry could ever clear it.
-      const encoded=JSON.stringify({value,attestations,receiptBodies,terminalPayload});
-      const oversize=Buffer.byteLength(encoded)>MAX_RESPONSE_BYTES;
-      const answer=oversize?JSON.stringify({error:'executor_response_too_large'}):encoded,status=oversize?500:200;
-      await config.executionLedger.transition({executionIdentity:envelope.executionIdentity,requestDigest:envelope.requestDigest,from:'AFTER_DURABLE',to:'TERMINAL',resultDigest:createHash('sha256').update(answer).digest('hex'),terminalResponse:answer,terminalStatus:status,now:new Date().toISOString()});
-      response.statusCode=status;response.end(answer);
+      const sealed=await sealTerminal(config,envelope,value);
+      response.statusCode=sealed.status;response.end(sealed.body);
     }catch(error){
       const message=error instanceof Error?error.message:'executor_failure';
       response.statusCode=statusFor(message);

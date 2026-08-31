@@ -190,7 +190,7 @@ async function main():Promise<void>{
   await refusesOverWire('malformed-envelope-refused','execute',scoped.get('execute')!,envelope({unexpected:1}),400,'INVALID_REQUEST:execution_envelope:fields_invalid');
   await refusesOverWire('malformed-operation-request-refused','create',scoped.get('create')!,{identity:{},policy:{},limits:{},extra:true},400);
   await refusesOverWire('unauthenticated-request-refused','discover','not-a-credential-at-all',{},401,'unauthorized');
-  await refusesOverWire('unknown-operation-refused','sandbox:root',scoped.get('discover')!,{},400,'operation_invalid');
+  await refusesOverWire('unknown-operation-refused','sandbox:root',scoped.get('execute')!,{},400,'operation_invalid');
   await refusesOverWire('scope-escalation-refused','destroy',scoped.get('execute')!,{sandboxId:containment.identity.sandboxId,expectedLeaseGeneration:LEASE,reason:'escalation'},403,'operation_scope_refused');
   await refusesOverWire('cross-scope-inspect-from-execute-credential-refused','inspect',scoped.get('execute')!,{sandboxId:containment.identity.sandboxId,tenantId:TENANT,projectId:PROJECT},403,'operation_scope_refused');
   await evaluate('request-replay-returns-original-terminal-material',async()=>{
@@ -240,6 +240,15 @@ async function main():Promise<void>{
     const winners=[...left,...right].filter(entry=>entry.invocation.invocationId===seed.invocationId);
     if(winners.length!==1)throw new Error(`${winners.length} schedulers claimed the same dispatch`);
     return 'exactly one scheduler claimed the dispatch';
+  });
+  await evaluate('cross-tenant-workspace-mount-refused',async()=>{
+    const foreign=process.env.JULIUS_FOREIGN_WORKSPACE;
+    if(!foreign)throw new Blocked('no second tenant workspace configured: set JULIUS_FOREIGN_WORKSPACE');
+    const seed=await seedFor('foreign-workspace','printf never');
+    await client.createSandbox({identity:seed.identity,limits:LIMITS,policy:FULL_POLICY});
+    const answer=await read(await post('prepare',scoped.get('prepare')!,{sandboxId:seed.identity.sandboxId,sourceRef:foreign,expectedLeaseGeneration:LEASE}));
+    if(answer.status!==409||answer.error!=='SECURITY_FAILURE:executor_workspace_tenant_scope_refused')throw new Error(`${answer.status} ${answer.error}`);
+    return `${answer.status} ${answer.error}`;
   });
   const operator=process.env.JULIUS_OPERATOR_SCOPED_CREDENTIALS?scopedCredentials('JULIUS_OPERATOR_SCOPED_CREDENTIALS'):null;
   for(const fleet of ['discover','reconcile','quarantine'] as const)

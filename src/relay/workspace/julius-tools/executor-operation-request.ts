@@ -17,10 +17,15 @@ export const TENANT_OPERATIONS:readonly ExecutorOperation[]=['create','prepare',
 export const OPERATOR_OPERATIONS:readonly ExecutorOperation[]=['discover','reconcile','quarantine'];
 
 const C='executor_operation_invalid';
-/** Bounded so a completed execution can always be returned: an answer the response envelope cannot carry
- *  would otherwise leave a real, signed outcome unreportable. Kept well under the service's response ceiling
- *  because the payload appears twice in the envelope and JSON escaping can multiply it further. */
-export const MAX_SANDBOX_OUTPUT_BYTES=262_144;
+/**
+ * Derived from what the response envelope can actually carry, not asserted to be under it. `ulimit -f` caps
+ * stdout and stderr separately, and each stream crosses the wire twice: once inside the result, where a
+ * control byte costs six characters of JSON escaping, and once as the base64 terminal payload it is verified
+ * against, which costs 4/3. A ceiling merely claimed to be safe is how a completed, signed execution became
+ * unreportable, so this one is computed and left with a margin.
+ */
+export const MAX_EXECUTOR_RESPONSE_BYTES=4*1024*1024;
+export const MAX_SANDBOX_OUTPUT_BYTES=Math.floor(MAX_EXECUTOR_RESPONSE_BYTES/(2*(6+4/3))*0.9);
 const NETWORKS=new Set(['DENY','MEDIATED']);
 const identity=(value:unknown,tenantId:string)=>{
   const record=exact(value,['sandboxId','invocationId','tenantId','projectId','runId','taskId','leaseGeneration','policyRevision','createdAt','expiresAt'],'executor_identity');

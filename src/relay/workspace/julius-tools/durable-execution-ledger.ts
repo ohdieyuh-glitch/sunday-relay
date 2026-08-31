@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { link, mkdir, open, readFile, rename, rm, unlink } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 
@@ -6,8 +6,13 @@ export type DurableExecutionState='PREPARED'|'BEFORE_DURABLE'|'RUNNING'|'AFTER_D
 export interface DurableExecutionEntry {readonly executionIdentity:string;readonly requestDigest:string;readonly envelopeDigest:string;readonly state:DurableExecutionState;readonly resultDigest:string|null;readonly terminalResponse:string|null;readonly terminalStatus:number|null;readonly updatedAt:string;}
 const STATES:readonly DurableExecutionState[]=['PREPARED','BEFORE_DURABLE','RUNNING','AFTER_DURABLE','TERMINAL'];
 const KEYS='envelopeDigest,executionIdentity,requestDigest,resultDigest,state,terminalResponse,terminalStatus,updatedAt';
+const LEGACY_KEYS='envelopeDigest,executionIdentity,requestDigest,resultDigest,state,terminalResponse,updatedAt';
 const key=(identity:string)=>createHash('sha256').update(identity).digest('hex');
-const validate=(value:unknown):DurableExecutionEntry=>{if(!value||typeof value!=='object'||Array.isArray(value))throw new Error('execution_ledger_corrupt');const x=value as Record<string,unknown>;if(Object.keys(x).sort().join(',')!==KEYS||typeof x.executionIdentity!=='string'||typeof x.requestDigest!=='string'||typeof x.envelopeDigest!=='string'||!STATES.includes(x.state as DurableExecutionState)||(x.resultDigest!==null&&typeof x.resultDigest!=='string')||(x.terminalResponse!==null&&typeof x.terminalResponse!=='string')||(x.terminalStatus!==null&&!Number.isSafeInteger(x.terminalStatus))||typeof x.updatedAt!=='string'||(x.state==='TERMINAL')!==(typeof x.terminalResponse==='string'))throw new Error('execution_ledger_corrupt');return x as unknown as DurableExecutionEntry;};
+const validate=(value:unknown):DurableExecutionEntry=>{if(!value||typeof value!=='object'||Array.isArray(value))throw new Error('execution_ledger_corrupt');const x=value as Record<string,unknown>;
+  // An entry written before terminalStatus existed is upgraded on read: refusing it would make an already
+  // settled execution's terminal answer unreachable for ever, which is the one thing the ledger exists to keep.
+  if(Object.keys(x).sort().join(',')===LEGACY_KEYS)x.terminalStatus=x.state==='TERMINAL'?200:null;
+  if(Object.keys(x).sort().join(',')!==KEYS||typeof x.executionIdentity!=='string'||typeof x.requestDigest!=='string'||typeof x.envelopeDigest!=='string'||!STATES.includes(x.state as DurableExecutionState)||(x.resultDigest!==null&&typeof x.resultDigest!=='string')||(x.terminalResponse!==null&&typeof x.terminalResponse!=='string')||(x.terminalStatus!==null&&!Number.isSafeInteger(x.terminalStatus))||typeof x.updatedAt!=='string'||(x.state==='TERMINAL')!==(typeof x.terminalResponse==='string'))throw new Error('execution_ledger_corrupt');return x as unknown as DurableExecutionEntry;};
 
 /**
  * Publishes a file that is either absent or complete, never both-visible-and-empty.
@@ -17,8 +22,14 @@ const validate=(value:unknown):DurableExecutionEntry=>{if(!value||typeof value!=
  * semantics (link fails EEXIST) while making the name appear only once the bytes are durable.
  */
 export async function durablePublish(path:string,body:string):Promise<void>{
-  const temporary=`${path}.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2,10)}.tmp`;
-  const handle=await open(temporary,'wx',0o600);
+  // Only the link's EEXIST may mean "the target already exists"; a temporary-name collision is retried, or
+  // callers would read a collision as a prior reservation and answer a corrupt-ledger error for a fresh one.
+  let handle;let temporary='';
+  for(let attempt=0;;attempt++){
+    temporary=`${path}.${process.pid}.${Date.now()}.${randomUUID()}.tmp`;
+    try{handle=await open(temporary,'wx',0o600);break;}
+    catch(error){if((error as NodeJS.ErrnoException).code!=='EEXIST'||attempt>=4)throw error;}
+  }
   try{await handle.writeFile(body);await handle.sync();}finally{await handle.close();}
   try{await link(temporary,path);}finally{await unlink(temporary).catch(()=>undefined);}
   const directory=await open(dirname(path),'r');try{await directory.sync();}finally{await directory.close();}

@@ -36,10 +36,12 @@ jobs:
       - name: Create executor-private state, signing identity and per-operation credentials
         id: identity
         run: |
-          mkdir -p /tmp/julius-executor/receipts /tmp/julius-executor/ledger /tmp/julius-workspace
+          # One workspace root, one subdirectory per tenant: a tenant may only mount its own.
+          mkdir -p /tmp/julius-executor/receipts /tmp/julius-executor/ledger /tmp/julius-workspace/tenant /tmp/julius-workspace/other-tenant
           chmod 0700 /tmp/julius-executor /tmp/julius-executor/receipts /tmp/julius-executor/ledger
-          chmod 0777 /tmp/julius-workspace
-          printf 'fixture\n' > /tmp/julius-workspace/fixture.txt
+          chmod 0777 /tmp/julius-workspace /tmp/julius-workspace/tenant /tmp/julius-workspace/other-tenant
+          printf 'fixture\n' > /tmp/julius-workspace/tenant/fixture.txt
+          printf 'other tenant private\n' > /tmp/julius-workspace/other-tenant/private.txt
           openssl genpkey -algorithm ED25519 -out /tmp/julius-executor/private.pem
           openssl pkey -in /tmp/julius-executor/private.pem -pubout -out /tmp/julius-public.pem
           chmod 0600 /tmp/julius-executor/private.pem
@@ -80,7 +82,7 @@ jobs:
             -e EXECUTOR_RECEIPT_ROOT=/tmp/julius-executor/receipts \
             -e EXECUTOR_LEDGER_ROOT=/tmp/julius-executor/ledger -e EXECUTOR_SIGNING_KEY_PATH=/tmp/julius-executor/private.pem \
             -e EXECUTOR_KEY_ID=ci-key -e EXECUTOR_RUNTIME_ID=executor-ci -e EXECUTOR_VERSION=docker-executor.v1 \
-            -e EXECUTOR_WORKSPACE_ROOT=/tmp/julius-workspace -e JULIUS_SANDBOX_IMAGE="$SANDBOX_IMAGE" \
+            -e EXECUTOR_WORKSPACE_ROOT=/tmp/julius-workspace -e EXECUTOR_TENANT_WORKSPACE_ROOT=/tmp/julius-workspace -e JULIUS_SANDBOX_IMAGE="$SANDBOX_IMAGE" \
             -e EXECUTOR_CALLERS="$EXECUTOR_CALLERS" -e EXECUTOR_SECRET_ENV=executor-only \
             "$EXECUTOR_IMAGE" node dist-relay-executor/main.cjs
           ./.github/wait-for-executor.sh

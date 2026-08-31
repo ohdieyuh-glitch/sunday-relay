@@ -71,7 +71,14 @@ export function parseExecutorExecutionEnvelope(value:unknown,options:{now?:Date;
   return {schemaVersion:1,callerId,callerScope:'sandbox:execute',tenantId:id(input.tenantId,'tenantId'),projectId,runId,taskId,invocationId,dispatchGeneration,sandboxId,requestDigest,executionIdentity,nonce:id(input.nonce,'nonce'),issuedAt,expiresAt,payload:{expectedLeaseGeneration:integer(payload.expectedLeaseGeneration,'expectedLeaseGeneration'),executionTokenHash:digest(payload.executionTokenHash,'executionTokenHash'),effectClassification:payload.effectClassification as JuliusToolEffectClassification,request}};
 }
 
-export function executionEnvelopeDigest(envelope:ExecutorExecutionEnvelope):string {return createHash('sha256').update(JSON.stringify(json(envelope))).digest('hex');}
+/** A field that is absent and a field present as undefined describe the same envelope, and the canonical
+ *  walk has no representation for undefined — so they are stripped before it, everywhere it is used. */
+const defined=(value:unknown):unknown=>{
+  if(Array.isArray(value))return value.map(defined);
+  if(value&&typeof value==='object')return Object.fromEntries(Object.entries(value as Record<string,unknown>).filter(([,item])=>item!==undefined).map(([key,item])=>[key,defined(item)]));
+  return value;
+};
+export function executionEnvelopeDigest(envelope:ExecutorExecutionEnvelope):string {return createHash('sha256').update(JSON.stringify(json(defined(envelope)))).digest('hex');}
 
 /**
  * The envelope minus the three fields a legitimate retry is expected to change. Two envelopes sharing an
@@ -80,12 +87,11 @@ export function executionEnvelopeDigest(envelope:ExecutorExecutionEnvelope):stri
  */
 export function executionReplayDigest(envelope:ExecutorExecutionEnvelope):string {
   const {nonce:_nonce,issuedAt:_issuedAt,expiresAt:_expiresAt,...stable}=envelope;
-  return createHash('sha256').update(JSON.stringify(json(stable))).digest('hex');
+  return createHash('sha256').update(JSON.stringify(json(defined(stable)))).digest('hex');
 }
 
 /** The digest the executor computes for itself, so a caller's claim about its own request is never taken on trust. */
 export function canonicalRequestDigest(request:ToolInvocationRequest):string {
   // Absent optional fields and fields present as undefined are the same request, so they must digest alike.
-  const defined=Object.fromEntries(Object.entries(request).filter(([,value])=>value!==undefined));
-  return createHash('sha256').update(JSON.stringify(jsonValue(defined,E,3))).digest('hex');
+  return createHash('sha256').update(JSON.stringify(jsonValue(defined(request),E,3))).digest('hex');
 }

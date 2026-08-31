@@ -2,7 +2,7 @@ import { createHash, randomUUID, type KeyObject } from 'node:crypto';
 import type { SandboxExecutionPort } from '../../mission/julius';
 import { receiptDigest, verifyExecutorAttestation, type SignedExecutorAttestation } from './executor-attestation';
 import { deriveToolInvocationResult, parseExecutorAfterReceipt, parseExecutorBeforeReceipt, validateToolInvocationResult } from './executor-terminal-receipt';
-import type { ExecutorOperation } from './executor-operation-request';
+import { MAX_EXECUTOR_RESPONSE_BYTES, type ExecutorOperation } from './executor-operation-request';
 
 export interface ExecutorControlPlaneConfig {
   readonly endpoint: URL;
@@ -18,13 +18,13 @@ export interface ExecutorControlPlaneConfig {
 }
 
 const remoteInstances = new WeakSet<object>();
-async function boundedJson(response:Response):Promise<unknown>{const reader=response.body?.getReader();if(!reader)throw new Error('executor_response_missing');const chunks:Uint8Array[]=[];let bytes=0;while(true){const next=await reader.read();if(next.done)break;bytes+=next.value.byteLength;if(bytes>4*1024*1024){await reader.cancel();throw new Error('executor_response_too_large');}chunks.push(next.value);}try{return JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown;}catch{throw new Error('executor_response_malformed');}}
+async function boundedJson(response:Response):Promise<unknown>{const reader=response.body?.getReader();if(!reader)throw new Error('executor_response_missing');const chunks:Uint8Array[]=[];let bytes=0;while(true){const next=await reader.read();if(next.done)break;bytes+=next.value.byteLength;if(bytes>MAX_EXECUTOR_RESPONSE_BYTES){await reader.cancel();throw new Error('executor_response_too_large');}chunks.push(next.value);}try{return JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown;}catch{throw new Error('executor_response_malformed');}}
 async function refusal(response:Response):Promise<Error>{
   const decoded=await boundedJson(response).then(value=>value as {error?:unknown},()=>null);
   const code=typeof decoded?.error==='string'&&/^[A-Za-z0-9_:.-]{1,256}$/.test(decoded.error)?decoded.error:null;
   // An execution that started but never reached a durable outcome is its own answer. It is never replayed blindly.
   if(code==='STARTED_UNKNOWN_OUTCOME')return new Error('STARTED_UNKNOWN_OUTCOME');
-  if(code&&code.startsWith('SECURITY_FAILURE:'))return new Error(code);
+  if(code&&(code.startsWith('SECURITY_FAILURE:')||code.startsWith('TERMINAL_FAILURE:')))return new Error(code);
   if(response.status===409)return new Error('executor_identity_conflict');
   if(response.status===401||response.status===403)return new Error('executor_authorization_refused');
   return new Error(code?`EXECUTOR_UNAVAILABLE:${code}`:'EXECUTOR_UNAVAILABLE');
@@ -40,7 +40,14 @@ export class RemoteExecutorControlPlane implements SandboxExecutionPort {
     remoteInstances.add(this);
   }
 
-  private credentialFor(operation: ExecutorOperation): string { return this.config.scopedCredentials?.get(operation) ?? this.config.serviceCredential; }
+  private credentialFor(operation: ExecutorOperation): string {
+    if (!this.config.scopedCredentials) return this.config.serviceCredential;
+    // Falling back to a credential minted for a different scope makes "I hold no such authority"
+    // indistinguishable from "the executor refused me". They are different facts.
+    const credential = this.config.scopedCredentials.get(operation);
+    if (!credential) throw new Error(`executor_scope_not_held:${operation}`);
+    return credential;
+  }
 
   private async call<T>(operation: ExecutorOperation, payload: unknown): Promise<T> {
     const response = await fetch(new URL('/v1/execute', this.config.endpoint), {

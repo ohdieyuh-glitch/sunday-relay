@@ -7,6 +7,7 @@ import { FilesystemExecutionLedger, FilesystemSandboxTenancyLedger } from './dur
 import { createDurableReceiptAttestor, createExecutorControlPlaneService } from './executor-control-plane-service';
 import { DockerExecutorReceiptStore } from './executor-receipt-store';
 import { deriveCallerAuthorities, parseExecutorCallers } from './executor-scoped-credential';
+import { OPERATOR_OPERATIONS, type ExecutorOperation } from './executor-operation-request';
 
 const required=(name:string):string=>{const value=process.env[name];if(!value)throw new Error(`executor_config_missing:${name}`);return value;};
 const port=Number(process.env.EXECUTOR_PORT??'8787');
@@ -19,15 +20,33 @@ async function main():Promise<void>{
   const executionLedger=new FilesystemExecutionLedger(ledgerRoot),tenancyLedger=new FilesystemSandboxTenancyLedger(`${ledgerRoot}/tenancy`);
   const privateSigningKey=createPrivateKey(await readFile(required('EXECUTOR_SIGNING_KEY_PATH'),'utf8'));
   const attestor=createDurableReceiptAttestor({keyId:required('EXECUTOR_KEY_ID'),privateSigningKey,receipts,executionLedger});
+  const workspaceRootEarly=required('EXECUTOR_WORKSPACE_ROOT');
+  const recoveryStore=new JuliusToolRecoveryPostgresRepository(pool);
   const physical=new DockerJuliusSandboxAdapter({
     image:required('JULIUS_SANDBOX_IMAGE'),enabled:true,dockerBinary:process.env.DOCKER_BINARY??'/usr/bin/docker',
-    allowedWorkspaceRoot:required('EXECUTOR_WORKSPACE_ROOT'),
-    durability:{store:new JuliusToolRecoveryPostgresRepository(pool),receipts,runtimeInstanceId:required('EXECUTOR_RUNTIME_ID'),executorVersion:required('EXECUTOR_VERSION'),attestReceipt:attestor},
+    allowedWorkspaceRoot:workspaceRootEarly,
+    durability:{store:recoveryStore,receipts,runtimeInstanceId:required('EXECUTOR_RUNTIME_ID'),executorVersion:required('EXECUTOR_VERSION'),attestReceipt:attestor},
   });
   // The root secret never leaves this process. Julius receives only the per-operation credentials derived from it.
   const declared=process.env.EXECUTOR_CALLERS?parseExecutorCallers(process.env.EXECUTOR_CALLERS):[{callerId:required('JULIUS_CALLER_ID'),tenantId:required('JULIUS_TENANT_ID'),credentialRoot:required('EXECUTOR_CREDENTIAL_ROOT')}];
-  const callerAuthorities=declared.flatMap(caller=>deriveCallerAuthorities({rootSecret:caller.credentialRoot,callerId:caller.callerId,tenantId:caller.tenantId,operations:caller.operations}));
-  const service=createExecutorControlPlaneService({callerAuthorities,keyId:required('EXECUTOR_KEY_ID'),privateSigningKey,physical,receipts,executionLedger,tenancyLedger});
+  // A caller that declares any fleet-wide operation is fleet authority: only it may sweep the host or act
+  // on a sandbox nobody owns. A tenant caller declares none and so is never granted it.
+  const fleetOperations=new Set<ExecutorOperation>(OPERATOR_OPERATIONS);
+  const callerAuthorities=declared.flatMap(caller=>{
+    const fleet=(caller.operations??[]).some(operation=>fleetOperations.has(operation));
+    return deriveCallerAuthorities({rootSecret:caller.credentialRoot,callerId:caller.callerId,tenantId:caller.tenantId,operations:caller.operations}).map(authority=>({...authority,fleet}));
+  });
+  const store=recoveryStore;
+  const service=createExecutorControlPlaneService({callerAuthorities,keyId:required('EXECUTOR_KEY_ID'),privateSigningKey,physical,receipts,executionLedger,tenancyLedger,
+    tenantWorkspaceRoot:process.env.EXECUTOR_TENANT_WORKSPACE_ROOT,
+    /* Completes an execution whose effect happened and whose receipts are signed but whose reply was lost.
+       It reads durable state and records the receipt Julius needs to settle; it never executes anything. */
+    recoverTerminal:async input=>{
+      const consumed=await receipts.consume(input.executionTokenHash,input.sandboxId);
+      if(!consumed?.receipt.result)return null;
+      await store.recordReceipt({...consumed.receipt,projectId:consumed.manifest.projectId});
+      return consumed.receipt.result;
+    }});
   // Loopback unless a deployment explicitly accepts a wider bind: this process holds Docker, the signing
   // key and the receipt store, and the transport is plaintext HTTP with a bearer credential on it.
   const address=process.env.EXECUTOR_BIND_ADDRESS??'127.0.0.1';
