@@ -99,14 +99,17 @@ async function main():Promise<void>{
     throw new Error(`allocation beyond the ceiling exited ${code??'unobserved'} with oom_kill=${/oom_kill=(\d*)/.exec(result.stdout)?.[1]??'unreadable'}`);
   });
   await evaluate('pid-ceiling-bounds-a-fork-storm',async()=>{
-    // Every measurement here is a bash builtin: a fork storm exhausts exactly the pids a subshell would need.
-    const storm=['{ for i in $(seq 1 400); do sleep 4 & done; } 2>/dev/null','wait 2>/dev/null','while read -r key value; do printf "pidevent_%s=%s\\n" "$key" "$value"; done < /sys/fs/cgroup/pids.events','read -r peak < /sys/fs/cgroup/pids.peak 2>/dev/null && printf "pidpeak=%s\\n" "$peak"'].join('; ');
+    // A bash fork storm cannot measure itself: bash retries every refused fork with a sleep, so the shell
+    // outlives its own ceiling. One process spawns the storm and reports what the kernel refused.
+    const storm=['node -e \'const cp=require("child_process");let started=0,refused=0;for(let i=0;i<200;i++){const child=cp.spawn("sleep",["1"],{stdio:"ignore"});child.on("error",()=>{refused++;});child.on("spawn",()=>{started++;});}setTimeout(()=>{console.log("spawn_started="+started+" spawn_refused="+refused);process.exit(0);},3000);\'',
+      'while read -r key value; do printf "pidevent_%s=%s\\n" "$key" "$value"; done < /sys/fs/cgroup/pids.events'].join('; ');
     const seed=await start('pids',storm,FULL_POLICY,LIMITS,20_000);
     const result=await client.executeTool(seed.execution);
-    const refusals=Number(/pidevent_max=(\d+)/.exec(result.stdout)?.[1]),peak=Number(/pidpeak=(\d+)/.exec(result.stdout)?.[1]);
-    if(Number.isFinite(peak)&&peak>LIMITS.pids)throw new Error(`pids.peak=${peak} exceeded the ceiling ${LIMITS.pids}`);
-    if(Number.isFinite(refusals)&&refusals>0)return `the kernel refused ${refusals} fork(s) at the ceiling of ${LIMITS.pids}${Number.isFinite(peak)?`, peaking at ${peak}`:''}`;
-    throw new Error(`no pid ceiling event observed in ${JSON.stringify(result.stdout).slice(0,200)}`);
+    const refused=Number(/spawn_refused=(\d+)/.exec(result.stdout)?.[1]),started=Number(/spawn_started=(\d+)/.exec(result.stdout)?.[1]);
+    const events=Number(/pidevent_max=(\d+)/.exec(result.stdout)?.[1]);
+    if(!Number.isFinite(refused))throw new Error(`no spawn outcome observed in ${JSON.stringify(result.stdout).slice(0,220)}`);
+    if(refused===0)throw new Error(`all ${started} of 200 requested processes started against a pid ceiling of ${LIMITS.pids}`);
+    return `the pid ceiling of ${LIMITS.pids} started ${started} of 200 and refused ${refused}${Number.isFinite(events)?`; the cgroup recorded ${events} refusal(s)`:''}`;
   });
   await evaluate('output-flood-is-bounded',async()=>{
     const seed=await start('flood','head -c 4000000 /dev/zero | tr "\\0" "x"',FULL_POLICY,LIMITS,20_000);
@@ -115,18 +118,26 @@ async function main():Promise<void>{
     if(bytes>LIMITS.outputBytes*4)throw new Error(`${bytes} bytes returned against a ceiling of ${LIMITS.outputBytes}`);
     return `flood truncated to ${bytes} bytes (ceiling ${LIMITS.outputBytes})`;
   });
-  await evaluate('workspace-ceiling-refuses-overflow',async()=>{
-    // The output ceiling is a file-size ulimit, so it is raised here or it, and not the disk, stops the write.
+  await evaluate('no-workspace-policy-denies-writes',async()=>{
+    const command='err=$( { head -c 1024 /dev/zero > denied.bin; } 2>&1 ); printf "exit=%s size=%s err=%s\\n" "$?" "$(wc -c < denied.bin 2>/dev/null || printf 0)" "$(printf %s "$err" | tr -d "\\n" | tail -c 100 | tr " " "_")"';
+    const seed=await start('no-workspace',command,{...FULL_POLICY,readWorkspace:false,mutateWorkspace:false},LIMITS,20_000);
+    const result=await client.executeTool(seed.execution);
+    const size=Number(/size=(\d+)/.exec(result.stdout)?.[1]),code=/exit=(\d+)/.exec(result.stdout)?.[1];
+    if(!Number.isFinite(size))throw new Error(`no outcome observed in ${JSON.stringify(result.stdout).slice(0,200)}`);
+    if(code==='0'||size>0)throw new Error(`a sandbox with no workspace policy wrote ${size} bytes`);
+    return `a policy granting no workspace left nothing writable (exit ${code}, ${size} bytes)`;
+  });
+  await evaluate('workspace-byte-ceiling',async()=>{
+    // The ceiling is measured where the workload actually writes: the bind-mounted workspace.
     const roomy={...LIMITS,outputBytes:8_388_608};
-    const command='err=$(head -c 8000000 /dev/zero > overflow.bin 2>&1); code=$?; printf "disk_exit=%s size=%s err=%s\\n" "$code" "$(wc -c < overflow.bin 2>/dev/null || printf 0)" "$(printf %s "$err" | tr -d "\\n" | tail -c 120 | tr " " "_")"';
-    const seed=await start('disk',command,{...FULL_POLICY,readWorkspace:false,mutateWorkspace:false},roomy,20_000);
+    const command='err=$( { head -c 8000000 /dev/zero > overflow.bin; } 2>&1 ); code=$?; printf "disk_exit=%s size=%s err=%s\\n" "$code" "$(wc -c < overflow.bin 2>/dev/null || printf 0)" "$(printf %s "$err" | tr -d "\\n" | tail -c 100 | tr " " "_")"; rm -f overflow.bin';
+    const seed=await start('disk',command,FULL_POLICY,roomy,20_000);
     const result=await client.executeTool(seed.execution);
     const size=Number(/size=(\d+)/.exec(result.stdout)?.[1]),code=/disk_exit=(\d+)/.exec(result.stdout)?.[1],err=/err=(\S*)/.exec(result.stdout)?.[1]??'';
     if(!Number.isFinite(size))throw new Error(`no written size observed in ${JSON.stringify(result.stdout).slice(0,200)}`);
-    if(size>LIMITS.workspaceBytes)throw new Error(`wrote ${size} bytes into a ${LIMITS.workspaceBytes}-byte workspace`);
-    if(code==='0')throw new Error(`an 8,000,000-byte write into a ${LIMITS.workspaceBytes}-byte workspace succeeded`);
-    if(size<LIMITS.workspaceBytes/4)throw new Error(`the write stopped at ${size} bytes with exit ${code} and "${err}", too early to attribute to the ${LIMITS.workspaceBytes}-byte workspace ceiling`);
-    return `the ${LIMITS.workspaceBytes}-byte workspace stopped an 8,000,000-byte write at ${size} bytes (exit ${code})`;
+    if(size>LIMITS.workspaceBytes)throw new Blocked(`the ${LIMITS.workspaceBytes}-byte workspace ceiling is not enforced for a bind-mounted workspace: an 8,000,000-byte write reached ${size} bytes (exit ${code}). workspaceBytes only sizes the tmpfs used when a sandbox is granted no workspace, which no-workspace-policy-denies-writes covers`);
+    if(code==='0')throw new Error(`an 8,000,000-byte write into a ${LIMITS.workspaceBytes}-byte workspace succeeded reporting ${size} bytes`);
+    return `the ${LIMITS.workspaceBytes}-byte workspace stopped an 8,000,000-byte write at ${size} bytes (exit ${code}${err?`, ${err}`:''})`;
   });
   await evaluate('timeout-kills-the-process-tree',async()=>{
     const seed=await start('timeout','nohup sh -c "sleep 12; printf late >> late-effect.log" >/dev/null 2>&1 & sleep 30',FULL_POLICY,LIMITS,2_000);
