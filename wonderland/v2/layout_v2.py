@@ -5209,9 +5209,271 @@ PLAZA_WALL_DRESS = _band("V2_Arrival",
     + _dress_wall(-1280.0, 900.0, 0.0, 1600.0, "FrontWallR", side=1.0))
 
 
+# ===========================================================================
+# THE SIGNATURE SKYLINE  (ENCHANTMENT + VERTICALITY, batch A)
+# ===========================================================================
+#
+# THE MEASUREMENT THAT FORCED THIS. `tools/skyline.py` builds every recipe on
+# the offline backend, reads its bounding box, and reports each placement's
+# real top. Over the walkable world before this band existed:
+#
+#   height p50 6.5 m   p90 32.1 m   max 127.7 m
+#   80-120 m ....  4 pieces      120 m+ .... 2 pieces
+#   tallest : second distinct site .... 1.46x
+#
+# The second-tallest thing in Wonderland was a hot-air balloon, and twelve of
+# the eighteen tallest sites were balloons. Ranked by the angle they subtend
+# from a player's eye -- which is what a skyline IS -- seven of the eighteen
+# largest presences in the world were TREE CANOPIES and the tallest piece of
+# architecture came eleventh.
+#
+# THE LADDER THIS BUILDS, and why each rung is where it is:
+#
+#   1  THE GREAT SPIRE, 194 m, on the arrival axis at 330 m.
+#      On-axis is not a compromise, it is the composition: gate -> plaza ->
+#      path -> arch -> castle -> and then, far beyond and twice the castle's
+#      angular height, the spire. The castle keeps the focal plane and the
+#      spire owns the distance, which is what "preserve castle importance"
+#      and "one dominant spire" mean together rather than in conflict.
+#      Its height is SET BY THE FROZEN CAMERA: HeroCam0's vertical half-field
+#      is 33.8 deg at 16:9, so at 331.5 m anything over about 200 m has its
+#      tip cut off in the founder's benchmark frame. 194 m subtends 30.5 deg
+#      against the 19.5 deg of the cluster it replaces as the anchor.
+#      The 12-deg-clear axis corridor PASS 06 established is why there is
+#      nothing to move: 0 pieces stand within 30 m of this point.
+#
+#   2  TWO SIGNATURE SPIRES, 150 m and 138 m, at bearings 30 and 128 deg.
+#      Both are OUTSIDE HeroCam0's 50 deg half-field, deliberately. Three
+#      near-equal towers in one frame is a row, not a hierarchy; and the
+#      brief asks for negative sky. They are what the player turns to see,
+#      and they give East Reach and Tower Rise a reason to be named.
+#      Different radii and different heights, because a symmetric pair reads
+#      as staging.
+#
+#   3  SEVEN DISTRICT TOWERS, 71-91 m, one per inner district that should
+#      have a built landmark. This is the rung the world was missing
+#      entirely: 4 pieces stood between 80 and 120 m and 65 between 50 and
+#      80, so the skyline went from neighbourhood tower straight to nothing.
+#
+# Nothing here is placed on a guessed coordinate. Every site is searched
+# outward from its district's own seed until it clears the world that is
+# already standing there, and the search reports what it moved and why.
+
+#: uu. How much open ground a signature landmark needs around its own
+#: footprint. A 194 m spire growing out of a hedge is not a landmark.
+_SIG_CLEAR = {"spire_great": 3000.0, "spire_signature": 2200.0,
+              "tower_district": 1500.0}
+
+#: Measured half-footprints, in unscaled uu, from the recipes above:
+#: spire_great's plinth octagon is radius 1560 and its buttress spurs reach
+#: 1580; spire_signature's base skirt is 880; tower_district's plinth box is
+#: 1240 across. The halo ring is 10 m in the air and is not an obstacle.
+FOOT.update({"spire_great": (1580, 1580), "spire_signature": (880, 880),
+             "tower_district": (620, 620)})
+
+_SIG_PLACED = []
+SIG_NOTES = []
+
+
+def _sig_free(x, y, need):
+    """Is there `need` uu of clear ground here, against the world as built?
+
+    SOFT SCATTER DOES NOT BLOCK. The first run of this required clear ground
+    against everything and six of seven district towers could not be placed:
+    the inner districts are full, and what they are full of is mostly hedges,
+    topiary and trees. Vegetation growing where a landmark should stand is
+    already a solved problem here -- `_declutter` removes scatter that has
+    grown through a protected asset -- so requiring virgin ground was asking
+    the wrong question and would have pushed every district landmark out into
+    the fields between the districts it was meant to name.
+
+    Surfaces do not block either: a tower standing on a road is standing on a
+    road, and that is correct.
+    """
+    surface = ("garden_lawn", "terrace_platform", "ground_flowers", "ground_blooms",
+               "flagstone", "kerb_stone", "sky_dome", "path_steps", "side_steps")
+    for band in (OUTER_WORLD, HORIZON, PALACE, GROUND_QUILT, FLANKS, REARWORLD):
+        for p in band:
+            a = p["asset"]
+            if a in surface or a in _SOFT or a.startswith("cloud_") or a.startswith("sea_"):
+                continue
+            px, py = p["pos"][0], p["pos"][1]
+            if abs(px - x) > need + 800.0 or abs(py - y) > need + 800.0:
+                continue
+            hx, hy = FOOT.get(a, (180, 180))
+            sx, sy = abs(p["scale"][0]), abs(p["scale"][1])
+            if math.hypot(px - x, py - y) < need + max(hx * sx, hy * sy):
+                return False
+    for (px, py, pr) in _SIG_PLACED:
+        if math.hypot(px - x, py - y) < need + pr:
+            return False
+    return True
+
+
+def _sig_site(bearing_deg, radius, need, name):
+    """The nearest point to (bearing, radius) with `need` uu of clear ground.
+
+    SEARCHED IN COST ORDER, and the cost is not symmetric. A bearing is a
+    COMPOSITION decision -- which way the player looks to see this thing, and
+    whether it stands in the frozen hero frame -- and a radius is only how far
+    away it is. Weighting them equally moved a signature spire 26 deg round
+    the world and put it 12 deg off the arrival axis, beside the great spire
+    it was meant to be the alternative to. A degree of bearing therefore costs
+    what 700 uu of radius costs, so this walks outward before it walks
+    sideways.
+    """
+    b0 = math.radians(bearing_deg)
+    cands = []
+    for dr in [900.0 * k for k in range(-8, 13)]:
+        for db in [2.0 * k for k in range(-14, 15)]:
+            cands.append((abs(dr) + 700.0 * abs(db), dr, db))
+    cands.sort()
+    for _cost, dr, db in cands:
+        r = radius + dr
+        if r < 3000.0:
+            continue
+        b = b0 + math.radians(db)
+        x, y = math.cos(b) * r, math.sin(b) * r
+        if _sig_free(x, y, need):
+            if dr or db:
+                SIG_NOTES.append("%s moved %+.0f uu / %+.1f deg to clear ground"
+                                 % (name, dr, db))
+            _SIG_PLACED.append((x, y, need))
+            return x, y
+    SIG_NOTES.append("%s COULD NOT BE PLACED -- no clear ground near "
+                     "bearing %.0f radius %.0f" % (name, bearing_deg, radius))
+    return None
+
+
+def _signature_skyline():
+    out = []
+
+    # --- 1. THE GREAT SPIRE, on the axis, at the far end of the world -----
+    gx, gy = 0.0, 33000.0
+    _SIG_PLACED.append((gx, gy, _SIG_CLEAR["spire_great"]))
+    S = 1.08                                   # 180 m authored -> 194.4 m
+    out.append(A("spire_great", gx, gy, 0.0, yaw=22.5, s=S,
+                 mat="MI_V2_IvoryStone", label="GreatSpire_Body"))
+    # THE IMPOSSIBLE GESTURE, used three times in the whole world. The rings
+    # hang clear of the shaft at the two set-backs and at the crown, so from
+    # the ground they read as unsupported: nothing rises through them.
+    for i, (z, s, tilt) in enumerate(((6400.0, 1.05, 0.0), (10700.0, 0.86, 6.0),
+                                      (14900.0, 0.62, -9.0))):
+        out.append(A("spire_halo_ring", gx, gy, z * S, yaw=17.0 * i, s=s * S,
+                     pitch=tilt, mat="MI_V2_Gold", label="GreatSpire_Halo%d" % i))
+    # a precinct at its foot, so the tallest thing in Wonderland stands on
+    # something built rather than on lawn
+    for k, yaw in enumerate((0.0, 90.0)):
+        out.append(A("terrace_platform", gx, gy, ROAD_Z, yaw=yaw,
+                     sxyz=(2.6, 0.9, 0.35), mat="MI_V2_PlazaCream",
+                     label="GreatSpire_Court%d" % k))
+    for k in range(16):
+        a = 2.0 * math.pi * k / 16
+        if 0.40 < (k / 16.0) < 0.60:          # the way in, from the south
+            continue
+        out.append(A("gate_pier", gx + math.cos(a) * 3050.0, gy + math.sin(a) * 3050.0,
+                     0.0, yaw=math.degrees(a), s=1.5, mat="MI_V2_IvoryStone",
+                     label="GreatSpire_Pier%d" % k))
+        if k % 2 == 0:
+            out.append(A("topiary_cone_plain", gx + math.cos(a) * 2350.0,
+                         gy + math.sin(a) * 2350.0, 0.0, yaw=31.0 * k, s=1.6,
+                         mat="MI_V2_LeafDark", label="GreatSpire_Cone%d" % k))
+
+    # --- 2. THE TWO SIGNATURE SPIRES --------------------------------------
+    # (bearing, radius, scale, yaw, halo, district it names)
+    for bearing, radius, sc, yaw, halo, who in (
+            # SIZED SO THE GREAT SPIRE ACTUALLY DOMINATES. At 150 m and 138 m
+            # these measured 29.8 and 26.1 deg of subtended angle against the
+            # great spire's 30.3 -- a tie, and a tie is three landmarks, not
+            # a hierarchy with an anchor. Trimmed to 1.47x and 1.59x below it.
+            (30.0, 25000.0, 1.130, 12.0, True, "EastReach"),       # 132 m
+            (128.0, 26000.0, 1.050, -24.0, True, "TowerRise")):    # 123 m
+        pt = _sig_site(bearing, radius, _SIG_CLEAR["spire_signature"],
+                       "Spire_%s" % who)
+        if pt is None:
+            continue
+        x, y = pt
+        out.append(A("spire_signature", x, y, 0.0, yaw=yaw, s=sc,
+                     mat="MI_V2_IvoryStone", label="Spire_%s_Body" % who))
+        if halo:
+            out.append(A("spire_halo_ring", x, y, 8100.0 * sc, yaw=yaw + 40.0,
+                         s=0.60 * sc, pitch=7.0, mat="MI_V2_Gold",
+                         label="Spire_%s_Halo" % who))
+        for k, cyaw in enumerate((0.0, 90.0)):
+            out.append(A("terrace_platform", x, y, ROAD_Z, yaw=cyaw,
+                         sxyz=(1.5, 0.55, 0.35), mat="MI_V2_PlazaWarm",
+                         label="Spire_%s_Court%d" % (who, k)))
+        for k in range(10):
+            a = 2.0 * math.pi * k / 10 + 0.3
+            out.append(A(("gate_pier", "topiary_cone_roses")[k % 2],
+                         x + math.cos(a) * 1700.0, y + math.sin(a) * 1700.0, 0.0,
+                         yaw=math.degrees(a), s=1.25,
+                         mat=("MI_V2_IvoryStone", "MI_V2_RosePink")[k % 2],
+                         label="Spire_%s_Ring%d" % (who, k)))
+
+    # --- 3. THE DISTRICT TOWERS, the rung that was missing ----------------
+    # One per inner district that should read as BUILT. Water Gardens and
+    # Mushroom Grove are deliberately absent: a district whose identity is
+    # water or fungus does not announce itself with a stone keep, and giving
+    # all eight the same landmark is the tiling this band exists to break.
+    # (district, bearing, radius, scale, roof material)
+    for who, bearing, radius, sc, roof in (
+            ("RoyalGardens",   65.0, 10600.0, 1.34, "MI_V2_RoofPink"),
+            ("ClockQuarter",    5.0, 13100.0, 1.28, "MI_V2_RoofNavy"),
+            ("TowerRise",     116.0, 12600.0, 1.20, "MI_V2_RoofLilac"),
+            ("LanternHamlets",152.0, 15100.0, 1.12, "MI_V2_RoofRose"),
+            ("TeaTerraces",   200.0, 11200.0, 1.06, "MI_V2_RoofBlue"),
+            ("GatekeeperFields",340.0, 14600.0, 1.24, "MI_V2_RoofPink"),
+            ("NorthReach",    130.0, 24500.0, 1.35, "MI_V2_RoofNavy")):
+        pt = _sig_site(bearing, radius, _SIG_CLEAR["tower_district"],
+                       "Tower_%s" % who)
+        if pt is None:
+            continue
+        x, y = pt
+        yaw = (bearing * 3.0) % 90.0
+        out.append(A("tower_district", x, y, 0.0, yaw=yaw, s=sc,
+                     mat="MI_V2_IvoryStone", label="DistrictTower_%s" % who))
+        out.append(A("roof_flat_crenellated", x, y, 4130.0 * sc, yaw=yaw, s=0.0001,
+                     mat=roof, label="DistrictTower_%s_RoofTint" % who))
+        for k, cyaw in enumerate((0.0, 90.0)):
+            out.append(A("terrace_platform", x, y, ROAD_Z, yaw=cyaw + yaw,
+                         sxyz=(1.05, 0.40, 0.35), mat="MI_V2_PlazaWarm",
+                         label="DistrictTower_%s_Court%d" % (who, k)))
+        for k in range(8):
+            a = 2.0 * math.pi * k / 8 + 0.6
+            out.append(A(("gate_pier", "topiary_ball")[k % 2],
+                         x + math.cos(a) * 1150.0, y + math.sin(a) * 1150.0, 0.0,
+                         yaw=math.degrees(a), s=1.0,
+                         mat=("MI_V2_IvoryStone", "MI_V2_LeafMid")[k % 2],
+                         label="DistrictTower_%s_Ring%d" % (who, k)))
+    return out
+
+
+SIGNATURE = _band("V2_Skyline", _signature_skyline())
+
+#: The landmarks the world is navigated by must survive the scatter that
+#: dresses a quarter's edge -- a missing name here is the same fail-open
+#: defect as a missing FOOT entry.
+_PROTECT = _PROTECT + ("spire_great", "spire_signature", "tower_district")
+
+#: AND THE SCATTER THAT IS ALREADY THERE HAS TO GO. `_sig_free` deliberately
+#: lets a landmark stand where hedges and trees stand, on the promise that
+#: this pass removes them -- an unkept promise here would put a 194 m spire
+#: inside a hedgerow. Reuses the existing filter rather than writing a second
+#: one, so there is one description of "scatter has grown through a landmark".
+_SIG_CLEARED = {}
+for _bandref in (OUTER_WORLD, HORIZON, GROUND_QUILT, FLANKS, REARWORLD, PALACE):
+    _before = len(_bandref)
+    _bandref[:] = _declutter(_bandref, also=SIGNATURE)
+    if len(_bandref) != _before:
+        _SIG_CLEARED[id(_bandref)] = _before - len(_bandref)
+SIG_NOTES.append("declutter around the signature landmarks removed %d scatter pieces"
+                 % sum(_SIG_CLEARED.values()))
+
 BUILD_BANDS = [FOREGROUND, COURTYARD, GARDEN, PALACE, FLANK_GROUND, FLANKS,
                REARWORLD, CAM_FOREGROUNDS, GROUND_QUILT, OUTER_WORLD, PLAZA_ORNAMENT,
-               PROCESSIONAL_BORDER, HORIZON, APPROACH_SIDES, PLAZA_WALL_DRESS]
+               PROCESSIONAL_BORDER, HORIZON, APPROACH_SIDES, PLAZA_WALL_DRESS,
+               SIGNATURE]
 
 #: Everything the layout declares: what the builder walks, plus the two bands
 #: it places by their own rules (SKY is the dome/atmosphere, HOVER is lifted

@@ -2220,3 +2220,304 @@ RECIPES.update({
     "stone_ring_base": (stone_ring_base, "mush_landmark", True, True),
     "tea_cup_small": (tea_cup_small, "tea", True, False),
 })
+
+
+# ==========================================================================
+# THE SIGNATURE SKYLINE (ENCHANTMENT + VERTICALITY, batch A)
+# ==========================================================================
+#
+# MEASURED BASELINE, from tools/skyline.py over the walkable world (r <= 400 m
+# of the arrival spawn), before any of this existed:
+#
+#   height p50 6.5 m, p90 32.1 m, max 127.7 m
+#   80-120 m ...... 4 pieces (0.06% of the skyline)
+#   120 m+ ........ 2 pieces (0.03%)
+#   tallest : 2nd distinct site .... 1.46x
+#
+# and the second-tallest thing in Wonderland was a HOT-AIR BALLOON. Ranked by
+# the angle they subtend from a player's eye -- which is what a skyline
+# actually is -- SEVEN of the eighteen largest presences in the world were
+# TREE CANOPIES, and the tallest piece of architecture came eleventh.
+#
+# That is the founder's brief stated as numbers: no verticality hierarchy, and
+# foliage outranking the city. The recipes below are the top three rungs of a
+# ladder the world did not have:
+#
+#   spire_great      180 m authored  -- ONE of these, the navigation anchor
+#   spire_signature  110 m authored  -- two, each a DIFFERENT silhouette
+#   tower_district    55 m authored  -- one per major district
+#
+# Each is authored at close to its final height rather than authored small and
+# scaled up, because scale multiplies detail with mass: a 3 m window scaled to
+# a 230 m tower is a 12 m window, and the tower stops reading as a building.
+#
+# The three silhouettes are deliberately unlike each other. A hierarchy of
+# heights in ONE silhouette still reads as tower spam -- it reads as the same
+# tower, near and far.
+
+
+def _octo(r, n=8, phase=None):
+    """An n-gon of radius r as an extrudable polygon."""
+    ph = (math.pi / n) if phase is None else phase
+    return [(math.cos(ph + 2.0 * math.pi * i / n) * r,
+             math.sin(ph + 2.0 * math.pi * i / n) * r) for i in range(n)]
+
+
+def _gallery(m, r, z, n=8, rail=True):
+    """A corbelled gallery ring: the set-back detail that makes a tall shaft
+    read as STAGES rather than as one long extrusion. It is the whole reason
+    a cathedral spire has scale and a scaled-up cylinder does not."""
+    m.revolve([(r - 20.0, z), (r + 90.0, z + 40.0), (r + 100.0, z + 90.0),
+               (r - 20.0, z + 110.0)], steps=n * 4)
+    for k in range(n * 3):
+        a = 2.0 * math.pi * k / (n * 3)
+        m.box(46.0, 46.0, 74.0, at=(math.cos(a) * (r + 62.0), math.sin(a) * (r + 62.0), z + 20.0),
+              rot=(0.0, math.degrees(a), 0.0), chamfer=4.0)
+    if rail:
+        for k in range(n * 6):
+            a = 2.0 * math.pi * k / (n * 6)
+            m.box(24.0, 24.0, 130.0, at=(math.cos(a) * (r + 84.0), math.sin(a) * (r + 84.0), z + 175.0),
+                  rot=(0.0, math.degrees(a), 0.0), chamfer=3.0)
+        m.revolve([(r + 60.0, z + 240.0), (r + 106.0, z + 246.0), (r + 106.0, z + 274.0),
+                   (r + 60.0, z + 280.0)], steps=n * 4)
+
+
+def spire_great(ctx):
+    """THE GREAT SPIRE -- 180 m, the world's navigation anchor.
+
+    Four stages of an octagonal shaft, each set back from the one below and
+    parted by a corbelled gallery, on a buttressed plinth; a crown of eight
+    pinnacles; and a needle carrying a third of the total height. The
+    slenderness is 1:13 at the plinth and 1:26 at the crown, which is what
+    makes a tall thing read as a SPIRE rather than as a chimney.
+
+    Its one impossible gesture is structural, not decorative: the third stage
+    stands on eight flying arches with nothing but air between them and the
+    second, so the top half of Wonderland's tallest building is visibly
+    unsupported. Wonder that comes from the massing survives at 800 m; wonder
+    that is painted on does not.
+    """
+    m = ctx.mesh("spire_great")
+    # --- plinth and buttresses, 0 .. 3,600
+    m.extrude(_octo(1560.0), 260.0)
+    m.extrude(_octo(1440.0), 180.0, at=(0, 0, 260.0))
+    for k in range(8):
+        a = math.pi / 8 + 2.0 * math.pi * k / 8
+        cx, cy = math.cos(a), math.sin(a)
+        # a buttress is a wedge that LOSES depth with height -- a constant
+        # box reads as a pilaster and adds nothing to the base's weight
+        m.tube([(cx * 1320.0, cy * 1320.0, 440.0), (cx * 1120.0, cy * 1120.0, 1900.0),
+                (cx * 900.0, cy * 900.0, 3400.0), (cx * 820.0, cy * 820.0, 3860.0)],
+               [260.0, 200.0, 140.0, 110.0], sides=4)
+        m.box(300.0, 300.0, 420.0, at=(cx * 1300.0, cy * 1300.0, 640.0),
+              rot=(0.0, math.degrees(a), 0.0), chamfer=18.0)
+        m.revolve([(0.0, 0.0), (120.0, 0.0), (86.0, 150.0), (30.0, 330.0), (0.0, 400.0)],
+                  steps=10, at=(cx * 1300.0, cy * 1300.0, 850.0))
+
+    # --- STAGE 1, 440 .. 5,200: the tall arcaded body
+    m.extrude(_octo(780.0), 4760.0, at=(0, 0, 440.0))
+    for row, z in ((0, 1250.0), (1, 2450.0), (2, 3650.0)):
+        for k in range(8):
+            a = math.pi / 8 + 2.0 * math.pi * k / 8
+            if (k + row) % 2:
+                continue
+            r = 780.0 * 0.93
+            _window_arched(m, math.cos(a) * r, math.sin(a) * r, z,
+                           math.degrees(a) + 90.0, w=260.0, h=760.0, d=60.0)
+    for z in (2000.0, 3200.0):
+        m.revolve([(760.0, z), (836.0, z + 26.0), (840.0, z + 66.0), (760.0, z + 92.0)], steps=32)
+    _gallery(m, 800.0, 5200.0)
+
+    # --- STAGE 2, 5,480 .. 9,400
+    m.extrude(_octo(640.0), 3920.0, at=(0, 0, 5480.0))
+    for row, z in ((0, 6300.0), (1, 7500.0), (2, 8700.0)):
+        for k in range(8):
+            a = math.pi / 8 + 2.0 * math.pi * k / 8
+            if (k + row) % 2:
+                continue
+            r = 640.0 * 0.93
+            _window_arched(m, math.cos(a) * r, math.sin(a) * r, z,
+                           math.degrees(a) + 90.0, w=210.0, h=640.0, d=50.0)
+    _gallery(m, 660.0, 9400.0)
+
+    # --- THE FLYING STAGE, 9,680 .. 13,000. Eight arches spring from the
+    # stage-2 gallery to a shaft that begins ABOVE them: the ring of open sky
+    # under the upper spire is the impossible part, and it is 40 m across.
+    for k in range(8):
+        a = math.pi / 8 + 2.0 * math.pi * k / 8
+        cx, cy = math.cos(a), math.sin(a)
+        m.tube([(cx * 740.0, cy * 740.0, 9680.0), (cx * 660.0, cy * 660.0, 10250.0),
+                (cx * 430.0, cy * 430.0, 10620.0), (cx * 180.0, cy * 180.0, 10760.0)],
+               [96.0, 82.0, 70.0, 62.0], sides=6)
+        m.box(150.0, 150.0, 230.0, at=(cx * 760.0, cy * 760.0, 9760.0),
+              rot=(0.0, math.degrees(a), 0.0), chamfer=12.0)
+    m.extrude(_octo(500.0), 2240.0, at=(0, 0, 10760.0))
+    for k in range(8):
+        a = math.pi / 8 + 2.0 * math.pi * k / 8
+        if k % 2:
+            continue
+        r = 500.0 * 0.93
+        _window_arched(m, math.cos(a) * r, math.sin(a) * r, 11700.0,
+                       math.degrees(a) + 90.0, w=170.0, h=560.0, d=42.0)
+    _gallery(m, 520.0, 13000.0, rail=False)
+
+    # --- THE CROWN, 13,280: eight pinnacles around the needle's foot
+    m.extrude(_octo(400.0), 620.0, at=(0, 0, 13280.0))
+    for k in range(8):
+        a = math.pi / 8 + 2.0 * math.pi * k / 8
+        cx, cy = math.cos(a) * 560.0, math.sin(a) * 560.0
+        m.extrude(_octo(120.0), 900.0, at=(cx, cy, 13280.0))
+        m.revolve([(0.0, 0.0), (150.0, 0.0), (128.0, 90.0), (74.0, 520.0),
+                   (26.0, 900.0), (0.0, 1040.0)], steps=10, at=(cx, cy, 14180.0))
+        m.sphere(52.0, at=(cx, cy, 15180.0), steps=8)
+
+    # --- THE NEEDLE, 13,900 .. 18,000. A third of the height, and the reason
+    # the silhouette resolves to a POINT from any distance.
+    m.revolve([(0.0, 0.0), (430.0, 0.0), (418.0, 130.0), (330.0, 900.0),
+               (238.0, 1900.0), (152.0, 2900.0), (78.0, 3700.0), (26.0, 4020.0),
+               (0.0, 4100.0)], steps=32, at=(0, 0, 13900.0))
+    for k in range(8):
+        a = math.pi / 8 + 2.0 * math.pi * k / 8
+        pts = [(math.cos(a) * r * 1.02, math.sin(a) * r * 1.02, 13900.0 + z)
+               for (r, z) in ((424.0, 130.0), (330.0, 900.0), (238.0, 1900.0),
+                              (152.0, 2900.0), (78.0, 3700.0))]
+        m.tube(pts, [26.0, 22.0, 18.0, 14.0, 10.0], sides=5)
+    m.revolve([(0.0, 0.0), (56.0, 30.0), (66.0, 90.0), (40.0, 150.0), (30.0, 210.0),
+               (52.0, 250.0), (18.0, 330.0), (0.0, 560.0)], steps=14, at=(0, 0, 17440.0))
+    return m
+
+
+def spire_halo_ring(ctx):
+    """A wide, thin ring that stands in the air with nothing holding it.
+
+    Placed around a spire, well clear of its shaft. It is one gesture, used
+    three times in the world and never as decoration on something small:
+    an impossible thing has to be rare or it is a motif.
+    """
+    m = ctx.mesh("spire_halo_ring")
+    m.torus(1000.0, 46.0, major=64, minor=10)
+    m.torus(1000.0, 16.0, at=(0, 0, 96.0), major=64, minor=8)
+    for k in range(24):
+        a = 2.0 * math.pi * k / 24
+        m.box(70.0, 26.0, 96.0, at=(math.cos(a) * 1000.0, math.sin(a) * 1000.0, 48.0),
+              rot=(0.0, math.degrees(a), 0.0), chamfer=6.0)
+    for k in range(8):
+        a = 2.0 * math.pi * k / 8 + 0.19
+        m.revolve([(0.0, 0.0), (66.0, 40.0), (48.0, 130.0), (20.0, 210.0), (0.0, 260.0)],
+                  steps=10, at=(math.cos(a) * 1000.0, math.sin(a) * 1000.0, 96.0))
+    return m
+
+
+def spire_signature(ctx):
+    """A SECOND signature silhouette, 110 m: round, ribbed and bulbous.
+
+    Deliberately nothing like spire_great. A tapering round shaft wrapped in
+    twelve ribs that converge as they rise, a ring of open lancets, an onion
+    crown, and a short needle. Where the great spire is gothic and pointed,
+    this is fairy-tale and swollen -- the two read as different BUILDINGS on
+    the horizon, which is the only way three tall things make a skyline
+    instead of a row.
+    """
+    m = ctx.mesh("spire_signature")
+    prof = []
+    for i in range(15):
+        t = i / 14.0
+        # entasis then a strong taper: a straight cone reads as a traffic cone
+        prof.append((620.0 * (1.0 + 0.06 * math.sin(math.pi * t) - 0.52 * t), 7600.0 * t))
+    m.revolve([(0.0, 0.0)] + prof, steps=32)
+    m.revolve([(0.0, 0.0), (860.0, 0.0), (880.0, 120.0), (840.0, 200.0), (0.0, 220.0)], steps=32)
+    for z, r in ((1900.0, 546.0), (4100.0, 440.0), (6100.0, 348.0)):
+        m.revolve([(r - 10.0, z), (r + 74.0, z + 30.0), (r + 78.0, z + 76.0), (r - 10.0, z + 106.0)], steps=32)
+    for k in range(12):
+        a = 2.0 * math.pi * k / 12
+        pts = [(math.cos(a) * 620.0 * (1.0 + 0.06 * math.sin(math.pi * t) - 0.52 * t) * 1.03,
+                math.sin(a) * 620.0 * (1.0 + 0.06 * math.sin(math.pi * t) - 0.52 * t) * 1.03,
+                7600.0 * t) for t in (0.02, 0.25, 0.5, 0.75, 0.99)]
+        m.tube(pts, [58.0, 50.0, 42.0, 34.0, 26.0], sides=5)
+    for row, z in ((0, 1400.0), (1, 3500.0), (2, 5500.0)):
+        n = (8, 6, 6)[row]
+        rr = 620.0 * (1.0 + 0.06 * math.sin(math.pi * (z / 7600.0)) - 0.52 * (z / 7600.0))
+        for k in range(n):
+            a = 2.0 * math.pi * (k + 0.4 * row) / n
+            _window_arched(m, math.cos(a) * rr * 0.94, math.sin(a) * rr * 0.94, z,
+                           math.degrees(a) + 90.0, w=150.0, h=520.0, d=44.0)
+    # the open lancet stage: light passes THROUGH the building at 76 m
+    m.revolve([(296.0, 7600.0), (400.0, 7660.0), (404.0, 7740.0), (296.0, 7800.0)], steps=32)
+    for k in range(8):
+        a = 2.0 * math.pi * k / 8
+        m.box(120.0, 120.0, 1120.0, at=(math.cos(a) * 300.0, math.sin(a) * 300.0, 8360.0),
+              rot=(0.0, math.degrees(a), 0.0), chamfer=10.0)
+    m.revolve([(296.0, 8920.0), (410.0, 8970.0), (414.0, 9050.0), (296.0, 9110.0)], steps=32)
+    # the onion crown
+    m.revolve([(0.0, 0.0), (300.0, 20.0), (430.0, 240.0), (486.0, 560.0), (452.0, 900.0),
+               (330.0, 1180.0), (176.0, 1360.0), (74.0, 1470.0), (0.0, 1520.0)],
+              steps=32, at=(0, 0, 9110.0))
+    m.revolve([(0.0, 0.0), (74.0, 40.0), (56.0, 150.0), (94.0, 210.0), (40.0, 330.0),
+               (22.0, 620.0), (0.0, 1100.0)], steps=16, at=(0, 0, 10570.0))
+    m.sphere(96.0, at=(0, 0, 10760.0), steps=12)
+    return m
+
+
+def tower_district(ctx):
+    """THE MIDDLE RUNG, 55 m: what a district's main building looks like.
+
+    The world had neighbourhood towers at 25-45 m and then nothing until 80 m.
+    A skyline with no middle is two skylines. This is a broad square body with
+    a battered base, quoined corners, three window registers, a machicolated
+    attic, four corner turrets and a steep pyramidal roof with dormers -- much
+    heavier than tower_capped and much lower than a spire, so it reads as the
+    important building of ONE place rather than as a landmark for the world.
+    """
+    m = ctx.mesh("tower_district")
+    m.box(1240.0, 1240.0, 240.0, at=(0, 0, 120.0), chamfer=16.0)
+    m.box(1140.0, 1140.0, 300.0, at=(0, 0, 390.0), chamfer=12.0)
+    m.box(1020.0, 1020.0, 3300.0, at=(0, 0, 2190.0), chamfer=14.0)
+    for c in range(22):
+        z = 560.0 + 150.0 * c
+        for (sx, sy) in ((-1, -1), (1, -1), (1, 1), (-1, 1)):
+            m.box(96.0, 96.0, 78.0, at=(sx * 490.0, sy * 490.0, z + (38.0 if c % 2 else 0.0)), chamfer=6.0)
+    for yaw, (nx, ny) in ((0.0, (0, -1)), (90.0, (1, 0)), (180.0, (0, 1)), (270.0, (-1, 0))):
+        for k in range(3):
+            off = -300.0 + 300.0 * k
+            x = nx * 516.0 + ny * off
+            y = ny * 516.0 + nx * off
+            _window_arched(m, x, y, 1150.0, yaw, w=150.0, h=430.0, d=34.0)
+            _window_rect(m, x, y, 2100.0, yaw, w=140.0, h=380.0, d=34.0)
+            _window_arched(m, x, y, 3020.0, yaw, w=130.0, h=340.0, d=30.0)
+        _window_round(m, nx * 516.0, ny * 516.0, 3600.0, yaw, r=118.0)
+    # the attic: corbels, then a parapet that OVERSAILS the shaft
+    for yaw, (nx, ny) in ((0.0, (0, -1)), (90.0, (1, 0)), (180.0, (0, 1)), (270.0, (-1, 0))):
+        for k in range(9):
+            off = -440.0 + 110.0 * k
+            m.box(90.0, 130.0, 96.0, at=(nx * 546.0 + ny * off, ny * 546.0 + nx * off, 3890.0),
+                  rot=(0.0, yaw, 0.0), chamfer=8.0)
+    m.box(1240.0, 1240.0, 130.0, at=(0, 0, 4000.0), chamfer=10.0)
+    for s in (-1, 1):
+        for k in range(9):
+            m.box(112.0, 76.0, 170.0, at=(-480.0 + 120.0 * k, s * 566.0, 4150.0), chamfer=8.0)
+            m.box(76.0, 112.0, 170.0, at=(s * 566.0, -480.0 + 120.0 * k, 4150.0), chamfer=8.0)
+    for (sx, sy) in ((-1, -1), (1, -1), (1, 1), (-1, 1)):
+        cx, cy = sx * 560.0, sy * 560.0
+        m.revolve([(0.0, 0.0), (190.0, 0.0), (186.0, 640.0), (216.0, 700.0), (210.0, 760.0), (0.0, 780.0)],
+                  steps=16, at=(cx, cy, 4080.0))
+        m.revolve([(0.0, 0.0), (216.0, 0.0), (150.0, 260.0), (66.0, 560.0), (0.0, 700.0)],
+                  steps=16, at=(cx, cy, 4860.0))
+        m.sphere(46.0, at=(cx, cy, 5600.0), steps=8)
+    # the roof: a steep pyramid with a dormer on each face
+    m.revolve([(0.0, 0.0), (700.0, 0.0), (690.0, 90.0), (430.0, 900.0), (180.0, 1500.0), (0.0, 1700.0)],
+              steps=4, at=(0, 0, 4130.0), rot=(0.0, 45.0, 0.0))
+    for yaw, (nx, ny) in ((0.0, (0, -1)), (90.0, (1, 0)), (180.0, (0, 1)), (270.0, (-1, 0))):
+        m.box(230.0, 200.0, 300.0, at=(nx * 430.0, ny * 430.0, 4620.0), rot=(0.0, yaw, 0.0), chamfer=14.0)
+        m.revolve([(0.0, 0.0), (170.0, 0.0), (120.0, 120.0), (0.0, 220.0)], steps=4,
+                  at=(nx * 430.0, ny * 430.0, 4770.0), rot=(0.0, yaw + 45.0, 0.0))
+    m.revolve([(0.0, 0.0), (86.0, 40.0), (64.0, 130.0), (110.0, 190.0), (46.0, 320.0),
+               (24.0, 560.0), (0.0, 900.0)], steps=14, at=(0, 0, 5830.0))
+    return m
+
+
+RECIPES.update({
+    "spire_great": (spire_great, "castle", True, True),
+    "spire_signature": (spire_signature, "castle", True, True),
+    "spire_halo_ring": (spire_halo_ring, "castle", True, False),
+    "tower_district": (tower_district, "castle", True, True),
+})

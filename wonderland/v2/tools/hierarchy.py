@@ -55,10 +55,16 @@ SKY = ("sky_dome", "cloud_", "sea_", "horizon_")
 #: Built mass: walls, towers, castles, arches, roofs -- the architecture.
 ARCH = ("tower_capped", "castle_", "garden_wall", "retaining_wall", "gate_pier",
         "gate_leaf", "garden_arch_stone", "facade_panel", "roof_", "balcony_ring",
-        "balustrade", "floral_arch", "gate_arch_gold", "fountain_")
+        "balustrade", "floral_arch", "gate_arch_gold", "fountain_",
+        # the signature skyline -- absent here, the pass that built the
+        # world's tallest architecture would have registered as zero
+        # architecture, which is the same fail-open shape as a missing FOOT
+        # entry and would have been just as quiet.
+        "spire_great", "spire_signature", "spire_halo_ring", "tower_district")
 #: The silhouette pieces -- what reads at distance and gives a place a name.
 LANDMARK = ("finial_spire", "mushroom_landmark", "mushroom_giant", "castle_tower",
-            "castle_dome", "tower_capped", "clock_ornate", "heart_topiary")
+            "castle_dome", "tower_capped", "clock_ornate", "heart_topiary",
+            "spire_great", "spire_signature", "tower_district")
 #: Everything green.
 VEG = ("tree_", "canopy_", "topiary_", "hedge_", "shrub_", "rose_", "blossom_",
        "flower_", "lavender_", "mushroom_", "ivy_", "vine_")
