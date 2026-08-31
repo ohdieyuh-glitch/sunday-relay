@@ -16,4 +16,8 @@ describe('remote executor production boundary', () => {
     const remote = new RemoteExecutorControlPlane({ endpoint: new URL('https://executor.internal'), serviceCredential: 'scoped', requestTimeoutMs: 50 });
     expect(() => assertProductionExecutorIsolation({ nodeEnv: 'production', adapter: remote })).not.toThrow();
   });
+
+  it('refuses plaintext credentials outside an explicit loopback test boundary', () => {
+    expect(() => new RemoteExecutorControlPlane({ endpoint: new URL('http://executor.internal'), serviceCredential: 'scoped', requestTimeoutMs: 50 })).toThrow('executor_endpoint_tls_required');
+  });
 });
