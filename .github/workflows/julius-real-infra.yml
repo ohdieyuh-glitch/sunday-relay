@@ -62,7 +62,21 @@ jobs:
             -e DATABASE_URL=postgres://julius:julius@julius-postgres:5432/julius -e JULIUS_EXECUTOR_CREDENTIAL=ci-scoped-credential \
             -e JULIUS_PUBLIC_KEY_PATH=/tmp/julius-public.pem -e JULIUS_WORKSPACE=/tmp/julius-workspace \
             -e PROBE_EXECUTOR_PRIVATE_KEY=/tmp/julius-executor/private.pem -e PROBE_EXECUTOR_RECEIPT_ROOT=/tmp/julius-executor/receipts \
-            node:22-bookworm-slim node dist-relay-executor/sibling-e2e.cjs
+            -e SIBLING_PHASE=initial node:22-bookworm-slim node dist-relay-executor/sibling-e2e.cjs
+      - name: Restart the independent executor after terminal persistence
+        run: |
+          docker restart julius-executor
+          for i in $(seq 1 40); do docker exec julius-executor node -e "fetch('http://127.0.0.1:8787/v1/execute').then(r=>process.exit(r.status===404?0:1)).catch(()=>process.exit(1))" && break; sleep 1; done
+          docker logs julius-executor
+      - name: Julius replays after executor restart with zero second physical effect
+        run: |
+          docker run --rm --network container:julius-executor \
+            -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE:ro" -v /tmp/julius-workspace:/tmp/julius-workspace \
+            -v /tmp/julius-public.pem:/tmp/julius-public.pem:ro -w "$GITHUB_WORKSPACE" \
+            -e DATABASE_URL=postgres://julius:julius@julius-postgres:5432/julius -e JULIUS_EXECUTOR_CREDENTIAL=ci-scoped-credential \
+            -e JULIUS_PUBLIC_KEY_PATH=/tmp/julius-public.pem -e JULIUS_WORKSPACE=/tmp/julius-workspace \
+            -e PROBE_EXECUTOR_PRIVATE_KEY=/tmp/julius-executor/private.pem -e PROBE_EXECUTOR_RECEIPT_ROOT=/tmp/julius-executor/receipts \
+            -e SIBLING_PHASE=replay node:22-bookworm-slim node dist-relay-executor/sibling-e2e.cjs
       - name: Executor topology evidence
         if: always()
         run: |
