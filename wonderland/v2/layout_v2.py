@@ -5972,12 +5972,15 @@ def _lm_setting(x, y, tag, sc, glass, reach):
     b = math.atan2(-y, -x)                       # back toward the origin
     ux, uy = math.cos(b), math.sin(b)
     px, py = -uy, ux
-    for i in range(6):
-        gx = x + ux * (2200.0 + 2600.0 * (i % 3)) + px * (2800.0 * ((i // 3) * 2 - 1))
-        gy = y + uy * (2200.0 + 2600.0 * (i % 3)) + py * (2800.0 * ((i // 3) * 2 - 1))
-        out.append(A("garden_lawn", gx, gy, GROUND_Z, yaw=41.0 * i,
-                     sxyz=(0.85, 0.72, 1.0),
-                     mat=("MI_V2_Lawn", "MI_V2_Meadow", "MI_V2_Moss")[i % 3],
+    # FOUR TILES, NOT SIX, AND THEY OVERLAP. Every tile boundary is a straight
+    # seam on a flat plane; fewer and larger means fewer seams, and 1.15 scale
+    # against a 2,400 uu step means they overlap rather than tile.
+    for i in range(4):
+        gx = x + ux * (2400.0 + 2400.0 * (i % 2)) + px * (3000.0 * ((i // 2) * 2 - 1))
+        gy = y + uy * (2400.0 + 2400.0 * (i % 2)) + py * (3000.0 * ((i // 2) * 2 - 1))
+        out.append(A("garden_lawn", gx, gy, GROUND_Z, yaw=37.0 * i + 13.0,
+                     sxyz=(1.15, 1.02, 1.0),
+                     mat=("MI_V2_Lawn", "MI_V2_Meadow")[i % 2],
                      label="%s_Ground%d" % (tag, i)))
     for i in range(7):
         d = reach + 900.0 + 1500.0 * i
