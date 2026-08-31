@@ -13,7 +13,7 @@ const port=Number(process.env.EXECUTOR_PORT??'8787');
 if(!Number.isSafeInteger(port)||port<1||port>65535)throw new Error('executor_config_invalid:EXECUTOR_PORT');
 
 async function main():Promise<void>{
-  const pool=new Pool({connectionString:required('DATABASE_URL')});
+  const pool=new Pool(process.env.DATABASE_URL?{connectionString:process.env.DATABASE_URL}:{});
   const receipts=new DockerExecutorReceiptStore(required('EXECUTOR_RECEIPT_ROOT'));
   const executionLedger=new FilesystemExecutionLedger(required('EXECUTOR_LEDGER_ROOT'));
   const privateSigningKey=createPrivateKey(await readFile(required('EXECUTOR_SIGNING_KEY_PATH'),'utf8'));

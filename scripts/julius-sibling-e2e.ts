@@ -25,7 +25,7 @@ async function main():Promise<void>{
   await run('docker',['ps']).then(()=>{throw new Error('isolation_direct_docker_succeeded');},()=>undefined);
   await access(required('JULIUS_PUBLIC_KEY_PATH'),constants.R_OK);
 
-  const pool=new Pool({connectionString:required('DATABASE_URL')});
+  const pool=new Pool(process.env.DATABASE_URL?{connectionString:process.env.DATABASE_URL}:{});
   const publicKey=createPublicKey(await readFile(required('JULIUS_PUBLIC_KEY_PATH'),'utf8'));
   const client=new RemoteExecutorControlPlane({endpoint:new URL('http://127.0.0.1:8787'),serviceCredential:required('JULIUS_EXECUTOR_CREDENTIAL'),callerId:'julius-prod',tenantId:'tenant',requestTimeoutMs:30_000,trustedReceiptKeys:new Map([['ci-key',publicKey]]),allowInsecureLoopbackForTests:true});
   const identity={sandboxId:'sibling-sandbox',invocationId:'sibling-inv',tenantId:'tenant',projectId:'project',runId:'run',taskId:'task',leaseGeneration:3,policyRevision:'card',createdAt:new Date().toISOString(),expiresAt:new Date(Date.now()+300_000).toISOString()};

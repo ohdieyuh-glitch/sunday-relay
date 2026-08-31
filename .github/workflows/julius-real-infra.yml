@@ -46,7 +46,8 @@ jobs:
           docker run -d --name julius-executor --network julius-sibling \
             -v /var/run/docker.sock:/var/run/docker.sock -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE:ro" \
             -v /tmp/julius-executor:/tmp/julius-executor -v /tmp/julius-workspace:/tmp/julius-workspace -w "$GITHUB_WORKSPACE" \
-            -e DATABASE_URL=postgres://julius:julius@julius-postgres:5432/julius -e EXECUTOR_RECEIPT_ROOT=/tmp/julius-executor/receipts \
+            -e PGHOST=julius-postgres -e PGPORT=5432 -e PGUSER=julius -e PGPASSWORD=julius -e PGDATABASE=julius \
+            -e EXECUTOR_RECEIPT_ROOT=/tmp/julius-executor/receipts \
             -e EXECUTOR_LEDGER_ROOT=/tmp/julius-executor/ledger -e EXECUTOR_SIGNING_KEY_PATH=/tmp/julius-executor/private.pem \
             -e EXECUTOR_KEY_ID=ci-key -e EXECUTOR_RUNTIME_ID=executor-ci -e EXECUTOR_VERSION=docker-executor.v1 \
             -e EXECUTOR_WORKSPACE_ROOT=/tmp/julius-workspace -e JULIUS_SANDBOX_IMAGE="$SANDBOX_IMAGE" \
@@ -59,7 +60,8 @@ jobs:
           docker run --rm --network container:julius-executor \
             -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE:ro" -v /tmp/julius-workspace:/tmp/julius-workspace \
             -v /tmp/julius-public.pem:/tmp/julius-public.pem:ro -w "$GITHUB_WORKSPACE" \
-            -e DATABASE_URL=postgres://julius:julius@julius-postgres:5432/julius -e JULIUS_EXECUTOR_CREDENTIAL=ci-scoped-credential \
+            -e PGHOST=julius-postgres -e PGPORT=5432 -e PGUSER=julius -e PGPASSWORD=julius -e PGDATABASE=julius \
+            -e JULIUS_EXECUTOR_CREDENTIAL=ci-scoped-credential \
             -e JULIUS_PUBLIC_KEY_PATH=/tmp/julius-public.pem -e JULIUS_WORKSPACE=/tmp/julius-workspace \
             -e PROBE_EXECUTOR_PRIVATE_KEY=/tmp/julius-executor/private.pem -e PROBE_EXECUTOR_RECEIPT_ROOT=/tmp/julius-executor/receipts \
             -e SIBLING_PHASE=initial node:22-bookworm-slim node dist-relay-executor/sibling-e2e.cjs
@@ -73,7 +75,8 @@ jobs:
           docker run --rm --network container:julius-executor \
             -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE:ro" -v /tmp/julius-workspace:/tmp/julius-workspace \
             -v /tmp/julius-public.pem:/tmp/julius-public.pem:ro -w "$GITHUB_WORKSPACE" \
-            -e DATABASE_URL=postgres://julius:julius@julius-postgres:5432/julius -e JULIUS_EXECUTOR_CREDENTIAL=ci-scoped-credential \
+            -e PGHOST=julius-postgres -e PGPORT=5432 -e PGUSER=julius -e PGPASSWORD=julius -e PGDATABASE=julius \
+            -e JULIUS_EXECUTOR_CREDENTIAL=ci-scoped-credential \
             -e JULIUS_PUBLIC_KEY_PATH=/tmp/julius-public.pem -e JULIUS_WORKSPACE=/tmp/julius-workspace \
             -e PROBE_EXECUTOR_PRIVATE_KEY=/tmp/julius-executor/private.pem -e PROBE_EXECUTOR_RECEIPT_ROOT=/tmp/julius-executor/receipts \
             -e SIBLING_PHASE=replay node:22-bookworm-slim node dist-relay-executor/sibling-e2e.cjs
