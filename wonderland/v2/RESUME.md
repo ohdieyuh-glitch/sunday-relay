@@ -205,3 +205,73 @@ Open, in order: the far world is 8.5% empty by its own tier's tolerance; ten
 authored sites could not be placed and should be re-sited; the 50-75 m band is
 Golden Arrival's own outskirt and closing it is a founder decision. Full list
 in `WORLD_LEDGER.md`.
+
+---
+
+# Update — 2026-08-31, PASS 28: ENCHANTMENT + VERTICALITY
+
+## Where to pick up
+
+| | |
+|---|---|
+| BRANCH | `relay/wonderland-v2`, HEAD `dfda8c9` |
+| WORKTREE | `~/wonderland-ca-fixes` |
+| MAP | `/Game/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2` (classic) |
+| CAMERAS | **30**: the eight locked (unmoved), 9-20 as before, plus SkylineRiseCam21 and eight landmark cameras 22-29 |
+| PLACEMENTS | 12,658 in ~803 actors |
+
+## Three new instruments, and they are the point
+
+Every audit in this project measured the world in PLAN. None could answer how
+tall it is, what a camera sees, or how much sky has a leaf in front of it.
+
+| tool | question | what it caught |
+|---|---|---|
+| `tools/skyline.py` | how tall, and is anything dominant? | the second-tallest thing in Wonderland was a HOT-AIR BALLOON |
+| `tools/skyline.py --site X,Y,H` | what would this do to all 30 cameras? | set the great spire's height from HeroCam0's frozen half-field, before it existed |
+| `tools/occlusion.py` | what does each camera actually SEE? | seven of the eighteen largest presences were TREE CANOPIES |
+| `tools/occlusion.py --cover` | how much ground has a crown over it? | 57-67% where the city is -- a closed woodland |
+
+Heights are MEASURED off the shipped geometry: every recipe is built on the
+offline meshkit backend and its bounding box plus a twelve-slab radius profile
+read. Never a table beside the code.
+
+## The rule this pass is really about
+
+**Angular height is not enough to size a landmark by.** The great spire
+landed exactly where it was computed to land -- +32.0 deg in HeroCam0 against
+a 33.8 deg half-field -- and read as a HAIRLINE, because it subtended 30.4 deg
+of height on 2.9 deg of shaft. 1:10.4, against the castle hall beside it at
+1:2.3. A navigation anchor needs MASS, and mass is width. Now 1:3.2, placed
+with a non-uniform scale because height was already at the camera's ceiling.
+
+## Four things that failed OPEN and said nothing
+
+Worth re-reading before writing any filter or gate here.
+
+1. **The reveal filter knew one tree naming scheme of two.** `_tree` writes
+   `<TAG>_T<i>`; `_tree_group` writes `<TAG>_Trunk`. The eight tree groups
+   between the plaza and the castle were invisible to the filter written to
+   open that sightline, and it reported success.
+2. **The occlusion camera basis was mirrored AND inverted.** `right` was
+   (sin, -cos) and `up` derived from it pointed down. Every share it reported
+   was measured from a scene projected below the frame.
+3. **One bounding cylinder per piece.** A giant mushroom's cap is 20 m across
+   and 13 m up; as a column from the ground it reported 556 buildings hidden
+   behind one fungus.
+4. **Camera siting checked the standpoint, not the sightline.** Three of six
+   landmark cameras could see 0-21% of the thing they are named for.
+
+## Frozen until the capture
+
+Content is frozen at `dfda8c9` while the L4 builds it. The next actions are:
+
+```bash
+WL_CAMS="0 1 2 6 7 21 22 23 24 25 26 27 28 29" WL_RES_X=1920 WL_RES_Y=1080 \
+  bash wonderland/v2/tools/round.sh
+python3 wonderland/v2/tools/perf_split.py        # the performance guardrail
+bash wonderland/v2/tools/capture_locomotion.sh   # the Dog walks it
+```
+
+Baselines for before/after are `~/wonderland-v2-renders/V2_PASS26_*.png` (all
+eight locked cameras) and `V2_PASS_170/171/172` (cam 0/6/2, mid-pass).
