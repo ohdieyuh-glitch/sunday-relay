@@ -6330,7 +6330,30 @@ def _depth_site_ok(lx, ly, x, y):
     return math.hypot(x - lx, y - ly) <= _DEPTH_MAX_FROM_LM
 
 
-def _depth_build(kind, x, y, bdeg, tag, sc, glass):
+#: district -> (roof / cap accent, the metal its mechanisms are made of).
+#: THE ARCHITECTURE WAS ALL ONE STONE. Every gatehouse, cloister, screen and
+#: bridge in PASS 29's first draft took MI_V2_IvoryStone and differed only in
+#: the colour of its GLASS -- which is a few per cent of the piece, and at
+#: player height in a district you meet the stone first. The founder's ask is
+#: "district-specific colour", so the roofs, caps and metalwork carry the
+#: district's own accent as well. The body stays ivory on purpose: a world
+#: where every quarter's walls are a different colour is a theme park, and the
+#: rule this project keeps is that identity comes from ONE thing changing, not
+#: from everything changing.
+_DEPTH_ACCENT = {
+    "RoyalGardens":     ("MI_V2_RoofRose",  "MI_V2_Gold"),
+    "ClockQuarter":     ("MI_V2_RoofNavy",  "MI_V2_GoldAged"),
+    "TowerRise":        ("MI_V2_RoofLilac", "MI_V2_Bronze"),
+    "TeaTerraces":      ("MI_V2_RoofPink",  "MI_V2_Ceramic"),
+    "WaterGardens":     ("MI_V2_RoofBlue",  "MI_V2_Bronze"),
+    "MushroomGrove":    ("MI_V2_RoofLilac", "MI_V2_Bronze"),
+    "LanternHamlets":   ("MI_V2_RoofNavy",  "MI_V2_GoldAged"),
+    "GatekeeperFields": ("MI_V2_RoofBlue",  "MI_V2_Gold"),
+}
+
+
+def _depth_build(kind, x, y, bdeg, tag, sc, glass, roof="MI_V2_RoofNavy",
+                 metal="MI_V2_Bronze"):
     """One depth piece, in the landmark's approach frame.
 
     `bdeg` is the bearing back toward the world centre, so a piece that faces
@@ -6343,6 +6366,14 @@ def _depth_build(kind, x, y, bdeg, tag, sc, glass):
                      mat="MI_V2_IvoryStone", label="%s_Gatehouse" % tag))
         out.append(A("gatehouse_glass", x, y, 0.0, yaw=bdeg, s=sc,
                      mat=glass, label="%s_GatehouseGlass" % tag))
+        # the district's roof colour on the gate's own caps, so the threshold
+        # announces which quarter you are entering before you read a sign
+        for s3 in (1.0, -1.0):
+            out.append(A("roof_cone_steep",
+                         x + math.cos(math.radians(bdeg + 90.0)) * 900.0 * sc * s3,
+                         y + math.sin(math.radians(bdeg + 90.0)) * 900.0 * sc * s3,
+                         1890.0 * sc, yaw=bdeg, s=0.62 * sc, mat=roof,
+                         label="%s_GateCap%d" % (tag, int(s3))))
         # the road runs THROUGH it, so it needs paving under the arch or the
         # threshold is a gate standing on grass
         out.append(A("terrace_platform", x, y, ROAD_Z, yaw=bdeg,
@@ -6362,12 +6393,20 @@ def _depth_build(kind, x, y, bdeg, tag, sc, glass):
     elif kind == "cloister":
         out.append(A("cloister_square", x, y, 0.0, yaw=bdeg, s=sc,
                      mat="MI_V2_IvoryStone", label="%s_Cloister" % tag))
+        for k4 in range(4):
+            a4 = math.radians(bdeg) + math.pi / 4.0 + math.pi * k4 / 2.0
+            out.append(A("roof_cone_steep", x + math.cos(a4) * 1768.0 * sc,
+                         y + math.sin(a4) * 1768.0 * sc, 1420.0 * sc,
+                         yaw=bdeg, s=0.5 * sc, mat=roof,
+                         label="%s_CloisterCap%d" % (tag, k4)))
         out.append(A("terrace_platform", x, y, ROAD_Z, yaw=bdeg,
                      sxyz=(2.0 * sc, 3.9 * sc, 0.35), mat="MI_V2_PlazaCream",
                      label="%s_CloisterFloor" % tag))
     elif kind == "fountain":
         out.append(A("fountain_grand", x, y, 0.0, yaw=bdeg + 22.0, s=sc,
                      mat="MI_V2_IvoryStone", label="%s_Fountain" % tag))
+        out.append(A("fountain_finial", x, y, 1560.0 * sc, yaw=bdeg, s=0.9 * sc,
+                     mat=metal, label="%s_FountainFinial" % tag))
         out.append(A("fountain_grand_water", x, y, 0.0, yaw=bdeg + 22.0, s=sc,
                      mat="MI_V2_Water", label="%s_FountainWater" % tag))
     elif kind == "screen":
@@ -6377,12 +6416,12 @@ def _depth_build(kind, x, y, bdeg, tag, sc, glass):
                      mat=glass, label="%s_ScreenGlass" % tag))
     elif kind == "swag":
         out.append(A("lantern_swag", x, y, 0.0, yaw=bdeg + 90.0, s=sc,
-                     mat="MI_V2_Bronze", label="%s_Swag" % tag))
+                     mat=metal, label="%s_Swag" % tag))
         out.append(A("lantern_swag_glass", x, y, 0.0, yaw=bdeg + 90.0, s=sc,
                      mat=glass, label="%s_SwagGlass" % tag))
     elif kind == "orrery":
         out.append(A("orrery_gold", x, y, 0.0, yaw=bdeg + 40.0, s=sc,
-                     mat="MI_V2_Gold", label="%s_Orrery" % tag))
+                     mat=metal, label="%s_Orrery" % tag))
         out.append(A("stone_ring_base", x, y, 0.0, yaw=0.0, s=1.5 * sc,
                      mat="MI_V2_PlazaGrey", label="%s_OrreryBase" % tag))
     elif kind == "bridge":
@@ -6391,6 +6430,15 @@ def _depth_build(kind, x, y, bdeg, tag, sc, glass):
         # spur's paving stopping short of both banks.
         out.append(A("bridge_arc", x, y, 0.0, yaw=bdeg, s=sc,
                      mat="MI_V2_IvoryStone", label="%s_Bridge" % tag))
+        for s4 in (1.0, -1.0):
+            for s5 in (1.0, -1.0):
+                out.append(A("waymarker_lamp",
+                             x + math.cos(math.radians(bdeg)) * 1240.0 * sc * s4
+                               + math.cos(math.radians(bdeg + 90.0)) * 330.0 * sc * s5,
+                             y + math.sin(math.radians(bdeg)) * 1240.0 * sc * s4
+                               + math.sin(math.radians(bdeg + 90.0)) * 330.0 * sc * s5,
+                             620.0 * sc, yaw=bdeg, s=0.9 * sc, mat=glass,
+                             label="%s_BridgeLamp%d_%d" % (tag, int(s4), int(s5))))
         # THE CHANNEL IS FLUSH, NOT SUNK. At 60 uu below the road it was a
         # 0.6 m ditch beside the path -- climbable down, not back up against a
         # 30 uu step -- and the gate would not have said so, because it exempts
@@ -6484,7 +6532,8 @@ def _district_depth():
                 _SIG_PLACED.append((x, y, need))
             placed_at.add((along, across))
             built.append(pk)
-            out += _depth_build(pk, x, y, bdeg, "DP%s" % who, psc, glass)
+            roof, metal = _DEPTH_ACCENT.get(who, ("MI_V2_RoofNavy", "MI_V2_Bronze"))
+            out += _depth_build(pk, x, y, bdeg, "DP%s" % who, psc, glass, roof, metal)
         DEPTH_NOTES.append("%-18s %s" % (who, ", ".join(built) or "nothing placed"))
     return out
 
