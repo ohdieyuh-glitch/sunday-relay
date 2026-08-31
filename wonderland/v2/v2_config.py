@@ -292,14 +292,23 @@ HERO_CAMS = [
     # 6.5 m: three cameras in this suite have been placed inside a hedge and
     # returned black frames, and each time it was found by a render rather
     # than before one.
-    {"name": "GreatSpireCam22", "location": (-6580.1, 2043.3, 170.0), "rotation": (1.0, 78.0, 0.0),
-     "fov": 100.0, "tags": ("GreatSpireCam22", "HeroCam22")},        # 316 m out, top 31.3 deg
-    {"name": "ClockGrandCam23", "location": (15257.4, -9800.6, 170.0), "rotation": (1.0, 72.0, 0.0),
-     "fov": 100.0, "tags": ("ClockGrandCam23", "HeroCam23")},        # 87 m, top 31.3
+    # THE GREAT SPIRE CANNOT BOTH FIT AND BE SEEN. At 194 m it needs 316 m of
+    # distance to fit a 33.8 deg half-field, and every point 316 m from it
+    # with a clear line of sight is OUTSIDE the populated world -- the
+    # line-of-sight search put this camera at (-30708, 40656), 500 m out,
+    # looking back across empty ground. So this one stands in its own
+    # precinct at 96 m and looks UP, and the top leaves the frame on purpose:
+    # that is what 194 m does to a 1.7 m walker, and it is the brief's
+    # "impossible verticality" as an experience rather than as a diagram.
+    # SkylineRiseCam21 is where the spire is seen WHOLE.
+    {"name": "GreatSpireCam22", "location": (0.0, 23400.0, 170.0), "rotation": (9.0, 90.0, 0.0),
+     "fov": 100.0, "tags": ("GreatSpireCam22", "HeroCam22")},        # 96 m, looking up
+    {"name": "ClockGrandCam23", "location": (19731.5, 6897.1, 170.0), "rotation": (1.0, -102.0, 0.0),
+     "fov": 100.0, "tags": ("ClockGrandCam23", "HeroCam23")},        # 87 m, sightline verified
     {"name": "TeapotCam24", "location": (-11185.8, -7722.1, 170.0), "rotation": (1.0, -171.0, 0.0),
      "fov": 100.0, "tags": ("TeapotCam24", "HeroCam24")},            # 30 m, top 31.3
-    {"name": "ColossalKeyCam25", "location": (15919.5, -11098.7, 170.0), "rotation": (1.0, 23.0, 0.0),
-     "fov": 100.0, "tags": ("ColossalKeyCam25", "HeroCam25")},       # 73 m, top 31.3
+    {"name": "ColossalKeyCam25", "location": (20342.2, -14247.3, 170.0), "rotation": (4.3, 69.0, 0.0),
+     "fov": 100.0, "tags": ("ColossalKeyCam25", "HeroCam25")},       # 64 m, sightline verified
     {"name": "FloatingStairCam26", "location": (-3650.8, 14237.2, 170.0), "rotation": (1.0, 96.0, 0.0),
      "fov": 100.0, "tags": ("FloatingStairCam26", "HeroCam26")},     # 58 m, top 31.3
     # 17 m out and the tallest lantern's tip is 0.9 deg outside the frame ON
