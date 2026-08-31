@@ -13,7 +13,8 @@ export const stable=(value:any):string=>value===null||typeof value!=='object'?JS
 export const digestOf=(value:unknown)=>sha(stable(value));
 
 export const TENANT=process.env.JULIUS_TENANT_ID??'tenant',PROJECT='project',RUN='run',TASK='task',WORKER='worker',LEASE=3,POLICY='card';
-export const LIMITS={cpuCount:1,memoryBytes:134_217_728,pids:32,openFiles:128,workspaceBytes:4_194_304,outputBytes:32_768,wallClockMs:15_000,concurrentProcesses:4} as const;
+export interface SandboxLimits {readonly cpuCount:number;readonly memoryBytes:number;readonly pids:number;readonly openFiles:number;readonly workspaceBytes:number;readonly outputBytes:number;readonly wallClockMs:number;readonly concurrentProcesses:number;}
+export const LIMITS:SandboxLimits={cpuCount:1,memoryBytes:134_217_728,pids:32,openFiles:128,workspaceBytes:4_194_304,outputBytes:32_768,wallClockMs:15_000,concurrentProcesses:4};
 export const FULL_POLICY={readWorkspace:true,mutateWorkspace:true,executeProcess:true,network:'DENY' as const,allowedTools:['shell.bash']};
 export const endpoint=()=>new URL(process.env.JULIUS_EXECUTOR_ENDPOINT??'http://127.0.0.1:8787');
 export const scopedCredentials=(name='JULIUS_SCOPED_CREDENTIALS')=>new Map(Object.entries(JSON.parse(required(name)) as Record<string,string>)) as ReadonlyMap<ExecutorOperation,string>;
@@ -26,8 +27,14 @@ export async function openJuliusClient():Promise<{pool:Pool;tools:JuliusToolPost
   return {pool,tools:new JuliusToolPostgresRepository(pool),client,scoped,trustedReceiptKeys,workspace:required('JULIUS_WORKSPACE')};
 }
 
+/** The migration set is a one-shot replay, so each phase migrates only when the last migration has not landed. */
+async function migrateOnce(pool:Pool):Promise<void>{
+  const applied=await pool.query(`SELECT 1 FROM information_schema.columns WHERE table_schema='relay_wonderland' AND table_name='julius_sandboxes' AND column_name='sandbox_policy'`);
+  if(applied.rowCount===0)await new TransactionalWonderlandDatabase(pool).migrate();
+}
+
 export async function seedBase(pool:Pool):Promise<void>{
-  await new TransactionalWonderlandDatabase(pool).migrate();
+  await migrateOnce(pool);
   await pool.query(`INSERT INTO relay_wonderland.players(player_id)VALUES($1) ON CONFLICT DO NOTHING`,[TENANT]);
   await pool.query(`INSERT INTO relay_wonderland.projects(project_id)VALUES($1) ON CONFLICT DO NOTHING`,[PROJECT]);
   await pool.query(`INSERT INTO relay_wonderland.project_members(project_id,player_id,role)VALUES($1,$2,'OWNER') ON CONFLICT DO NOTHING`,[PROJECT,TENANT]);

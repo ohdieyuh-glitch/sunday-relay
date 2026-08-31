@@ -7,7 +7,7 @@
 import { readFile, stat } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { verifyExecutorAttestation, type SignedExecutorAttestation } from '../src/relay/workspace/julius-tools/executor-attestation';
-import { FULL_POLICY, LEASE, LIMITS, PROJECT, TENANT, endpoint, envelopeFor, openJuliusClient, required, scopedCredentials, seedBase, seedInvocation, sha } from './julius-sibling-support';
+import { FULL_POLICY, LEASE, LIMITS, PROJECT, TENANT, endpoint, envelopeFor, openJuliusClient, required, scopedCredentials, seedBase, seedInvocation, sha, type SandboxLimits } from './julius-sibling-support';
 
 type Verdict='PASS'|'FAIL'|'BLOCKED';
 class Blocked extends Error {}
@@ -29,7 +29,7 @@ async function main():Promise<void>{
 
   let seeded=0;
   const seedFor=(label:string,command:string,timeoutMs=10_000,claim=true)=>seedInvocation(pool,tools,{invocationId:`eval-${label}-${++seeded}`,command,timeoutMs,claim});
-  const start=async(label:string,command:string,policy=FULL_POLICY,limits:typeof LIMITS=LIMITS,timeoutMs=10_000)=>{
+  const start=async(label:string,command:string,policy=FULL_POLICY,limits:SandboxLimits=LIMITS,timeoutMs=10_000)=>{
     const seed=await seedFor(label,command,timeoutMs);
     await client.createSandbox({identity:seed.identity,limits,policy});
     await client.prepareWorkspace({sandboxId:seed.identity.sandboxId,sourceRef:workspace,expectedLeaseGeneration:LEASE});
@@ -63,9 +63,17 @@ async function main():Promise<void>{
   await expectFact('receipt-store-unreadable-by-workload','receipt_read','DENIED');
   await expectFact('docker-socket-absent-in-sandbox','docker_socket','ABSENT');
   await expectFact('network-denial','network','DENIED');
-  await evaluate('cpu-limit-enforced',async()=>{const value=fact('cpu_max');if(!/^\d+_\d+$/.test(value))throw new Error(`cpu.max=${value}`);const [quota,period]=value.split('_').map(Number);if(quota/period>LIMITS.cpuCount)throw new Error(`cpu.max=${value} exceeds ${LIMITS.cpuCount}`);return `cpu.max=${value}`;});
-  await evaluate('memory-limit-enforced',async()=>{const value=Number(fact('memory_max'));if(!Number.isFinite(value)||value>LIMITS.memoryBytes)throw new Error(`memory.max=${fact('memory_max')}`);return `memory.max=${value}`;});
-  await evaluate('pid-limit-enforced',async()=>{const value=Number(fact('pids_max'));if(!Number.isFinite(value)||value>LIMITS.pids)throw new Error(`pids.max=${fact('pids_max')}`);return `pids.max=${value}`;});
+  const ceiling=(id:string,key:string,ceilingValue:number,read:(raw:string)=>number)=>evaluate(id,async()=>{
+    const raw=fact(key);
+    if(!raw)throw new Blocked(`${key} is not exposed by this kernel, so the ceiling cannot be observed from inside the sandbox`);
+    const value=read(raw);
+    if(!Number.isFinite(value))throw new Error(`${key}=${raw}`);
+    if(value>ceilingValue)throw new Error(`${key}=${raw} exceeds the requested ceiling ${ceilingValue}`);
+    return `${key}=${raw}`;
+  });
+  await ceiling('cpu-limit-enforced','cpu_max',LIMITS.cpuCount,raw=>{const [quota,period]=raw.split('_').map(Number);return quota/period;});
+  await ceiling('memory-limit-enforced','memory_max',LIMITS.memoryBytes,Number);
+  await ceiling('pid-limit-enforced','pids_max',LIMITS.pids,Number);
   await evaluate('open-file-limit-enforced',async()=>{const value=Number(fact('nofile'));if(!Number.isFinite(value)||value>LIMITS.openFiles)throw new Error(`nofile=${fact('nofile')}`);return `nofile=${value}`;});
   await evaluate('privilege-escalation-denied',async()=>{const nnp=fact('no_new_privs'),caps=fact('cap_eff');if(!nnp.endsWith('1'))throw new Error(nnp);if(!/CapEff:0*$/.test(caps))throw new Error(caps);return `${nnp} ${caps}`;});
 
@@ -83,18 +91,20 @@ async function main():Promise<void>{
 
   // ── Resource ceilings that are only observable by hitting them ───────────────────────────
   await evaluate('memory-ceiling-kills-the-workload',async()=>{
-    const seed=await start('oom','node -e "const held=[];for(;;)held.push(Buffer.alloc(8*1024*1024).fill(1))" >/dev/null 2>&1; printf "mem_exit=%s\\n" "$?"',FULL_POLICY,LIMITS,20_000);
+    const seed=await start('oom','timeout 8 node -e "const held=[];for(;;)held.push(Buffer.alloc(8*1024*1024).fill(1))" >/dev/null 2>&1; printf "mem_exit=%s oom_kill=%s\\n" "$?" "$(awk \'/^oom_kill /{print $2}\' /sys/fs/cgroup/memory.events 2>/dev/null)"',FULL_POLICY,LIMITS,20_000);
     const result=await client.executeTool(seed.execution);
-    const code=/mem_exit=(\d+)/.exec(result.stdout)?.[1];
-    if(!code||code==='0')throw new Error(`allocation beyond the ceiling exited ${code ?? 'unobserved'}`);
-    return `oom_exit=${code}`;
+    const code=/mem_exit=(\d+)/.exec(result.stdout)?.[1],kills=Number(/oom_kill=(\d+)/.exec(result.stdout)?.[1]);
+    if(Number.isFinite(kills)&&kills>0)return `the kernel recorded ${kills} oom kill(s); the allocation exited ${code}`;
+    if(code==='137')return 'the allocation was killed with SIGKILL at the memory ceiling';
+    throw new Error(`allocation beyond the ceiling exited ${code??'unobserved'} with oom_kill=${/oom_kill=(\d*)/.exec(result.stdout)?.[1]??'unreadable'}`);
   });
   await evaluate('pid-ceiling-bounds-a-fork-storm',async()=>{
-    const seed=await start('pids','spawned=0; for i in $(seq 1 200); do sleep 5 & spawned=$((spawned+1)) || break; done 2>/dev/null; printf "spawned=%s\\n" "$spawned"; wait 2>/dev/null || true',FULL_POLICY,LIMITS,20_000);
+    const seed=await start('pids','{ for i in $(seq 1 400); do sleep 4 & done; } 2>/dev/null; printf "alive=%s\\n" "$(ls /proc | grep -c \'^[0-9]\\+$\')"',FULL_POLICY,LIMITS,20_000);
     const result=await client.executeTool(seed.execution);
-    const spawned=Number(/spawned=(\d+)/.exec(result.stdout)?.[1]);
-    if(!Number.isFinite(spawned)||spawned>LIMITS.pids*4)throw new Error(`spawned=${spawned} against a pid ceiling of ${LIMITS.pids}`);
-    return `pid ceiling ${LIMITS.pids} held the storm to ${spawned} recorded spawns`;
+    const alive=Number(/alive=(\d+)/.exec(result.stdout)?.[1]);
+    if(!Number.isFinite(alive))throw new Error(`no live process count observed in ${JSON.stringify(result.stdout).slice(0,160)}`);
+    if(alive>LIMITS.pids)throw new Error(`${alive} live processes against a pid ceiling of ${LIMITS.pids}`);
+    return `400 requested forks left ${alive} live processes against a ceiling of ${LIMITS.pids}`;
   });
   await evaluate('output-flood-is-bounded',async()=>{
     const seed=await start('flood','head -c 4000000 /dev/zero | tr "\\0" "x"',FULL_POLICY,LIMITS,20_000);
@@ -104,11 +114,14 @@ async function main():Promise<void>{
     return `flood truncated to ${bytes} bytes (ceiling ${LIMITS.outputBytes})`;
   });
   await evaluate('workspace-ceiling-refuses-overflow',async()=>{
-    const seed=await start('disk','head -c 8000000 /dev/zero > overflow.bin 2>/dev/null; printf "disk_exit=%s size=%s\\n" "$?" "$(wc -c < overflow.bin 2>/dev/null || printf 0)"',{...FULL_POLICY,readWorkspace:false,mutateWorkspace:false},LIMITS,20_000);
+    const roomy={...LIMITS,outputBytes:8_388_608};
+    const seed=await start('disk','head -c 8000000 /dev/zero > overflow.bin 2>/dev/null; printf "disk_exit=%s size=%s\\n" "$?" "$(wc -c < overflow.bin 2>/dev/null || printf 0)"',{...FULL_POLICY,readWorkspace:false,mutateWorkspace:false},roomy,20_000);
     const result=await client.executeTool(seed.execution);
     const size=Number(/size=(\d+)/.exec(result.stdout)?.[1]);
-    if(!Number.isFinite(size)||size>=8_000_000)throw new Error(`wrote ${size} bytes into a ${LIMITS.workspaceBytes}-byte workspace`);
-    return `workspace ceiling stopped the write at ${size} bytes`;
+    if(!Number.isFinite(size))throw new Error(`no written size observed in ${JSON.stringify(result.stdout).slice(0,160)}`);
+    if(size>LIMITS.workspaceBytes)throw new Error(`wrote ${size} bytes into a ${LIMITS.workspaceBytes}-byte workspace`);
+    if(size<LIMITS.workspaceBytes/4)throw new Error(`the write stopped at ${size} bytes, too early to attribute to the ${LIMITS.workspaceBytes}-byte workspace ceiling`);
+    return `the ${LIMITS.workspaceBytes}-byte workspace stopped an 8,000,000-byte write at ${size} bytes`;
   });
   await evaluate('timeout-kills-the-process-tree',async()=>{
     const seed=await start('timeout','nohup sh -c "sleep 3; printf late >> late-effect.log" >/dev/null 2>&1 & sleep 30',FULL_POLICY,LIMITS,3_000);

@@ -9,32 +9,41 @@
  *   interrupt-verify the interrupted identity answers STARTED_UNKNOWN_OUTCOME and is never replayed blind.   (cases A and C)
  *   replay           after an executor restart the terminal material replays verbatim with no second effect. (case D)
  */
-import { access, readFile, writeFile } from 'node:fs/promises';
+import { access, readdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { constants } from 'node:fs';
+import { connect } from 'node:net';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { JuliusToolSettlementPostgresRepository } from '../src/relay/persistence/julius-tool-settlement-postgres';
-import { LIMITS, FULL_POLICY, LEASE, PROJECT, RUN, TASK, TENANT, WORKER, POLICY, digestOf, endpoint, envelopeFor, openJuliusClient, required, seedBase, seedInvocation, sha, type SeededInvocation } from './julius-sibling-support';
+import { LIMITS, FULL_POLICY, LEASE, PROJECT, RUN, TASK, TENANT, WORKER, POLICY, digestOf, endpoint, envelopeFor, openJuliusClient, required, seedBase, seedInvocation, sha, type SandboxLimits, type SeededInvocation } from './julius-sibling-support';
 
 const run=promisify(execFile);
-const denyRead=async(path:string)=>{try{await readFile(path);throw new Error(`isolation_read_succeeded:${path}`);}catch(error){if(error instanceof Error&&error.message.startsWith('isolation_'))throw error;}};
-const denyWrite=async(path:string)=>{try{await writeFile(path,'forbidden');throw new Error(`isolation_write_succeeded:${path}`);}catch(error){if(error instanceof Error&&error.message.startsWith('isolation_'))throw error;}};
-const EFFECT_LOG='physical-effects.log',INTERRUPT_STARTED='interrupt-started.log',INTERRUPT_UNSTARTED='interrupt-unstarted.log';
+const refused=async(what:string,attempt:()=>Promise<unknown>)=>{try{await attempt();}catch(error){if(error instanceof Error&&error.message.startsWith('isolation_'))throw error;return;}throw new Error(`isolation_${what}_succeeded`);};
+const denyRead=(path:string)=>refused(`read:${path}`,()=>readFile(path));
+const denyList=(path:string)=>refused(`list:${path}`,()=>readdir(path));
+const denyWrite=(path:string)=>refused(`write:${path}`,()=>writeFile(path,'forbidden'));
+/** readFile on a unix socket fails whether or not the socket is there, so the socket is probed by connecting to it. */
+const denySocket=(path:string)=>refused(`docker_socket:${path}`,async()=>{
+  const kind=await stat(path).then(entry=>entry.isSocket(),()=>false);
+  if(!kind)throw new Error('absent');
+  await new Promise<void>((resolve,reject)=>{const socket=connect(path);socket.once('connect',()=>{socket.destroy();resolve();});socket.once('error',error=>{socket.destroy();reject(error);});});
+});
+const EFFECT_LOG='physical-effects.log',INTERRUPT_STARTED='interrupt-started.log',INTERRUPT_ENTERED='interrupt-entered.log',INTERRUPT_UNSTARTED='interrupt-unstarted.log';
 const PHASES=['isolation','initial','settle','interrupt-start','interrupt-verify','replay'] as const;
-const LONG_RUNNING={...LIMITS,wallClockMs:150_000} as const;
+const LONG_RUNNING:SandboxLimits={...LIMITS,wallClockMs:150_000};
 type Phase=(typeof PHASES)[number];
 
 /** Julius must not be able to reach any executor-private authority, and asserting it from configuration is not proof. */
 async function proveIsolation():Promise<void>{
-  await denyRead('/var/run/docker.sock');
+  await denySocket('/var/run/docker.sock');
   await denyRead(required('PROBE_EXECUTOR_PRIVATE_KEY'));
-  await denyRead(`${required('PROBE_EXECUTOR_RECEIPT_ROOT')}/.`);
-  await denyWrite(`${required('PROBE_EXECUTOR_RECEIPT_ROOT')}/probe`);
-  await denyRead(`${required('PROBE_EXECUTOR_LEDGER_ROOT')}/.`);
-  await denyWrite(`${required('PROBE_EXECUTOR_LEDGER_ROOT')}/probe`);
+  for(const root of [required('PROBE_EXECUTOR_RECEIPT_ROOT'),required('PROBE_EXECUTOR_LEDGER_ROOT')]){
+    await denyList(root);await denyRead(`${root}/probe`);await denyWrite(`${root}/probe`);
+  }
   if(process.env.EXECUTOR_SIGNING_KEY_PATH||process.env.EXECUTOR_RECEIPT_ROOT||process.env.EXECUTOR_LEDGER_ROOT||process.env.EXECUTOR_SECRET_ENV||process.env.EXECUTOR_CREDENTIAL_ROOT||process.env.EXECUTOR_CALLERS)throw new Error('isolation_executor_environment_visible');
-  await run('docker',['ps']).then(()=>{throw new Error('isolation_direct_docker_succeeded');},()=>undefined);
-  await run('docker',['-H','unix:///var/run/docker.sock','info']).then(()=>{throw new Error('isolation_direct_docker_socket_succeeded');},()=>undefined);
+  await refused('direct_docker',()=>run('docker',['ps']));
+  await refused('direct_docker_over_socket',()=>run('docker',['-H','unix:///var/run/docker.sock','info']));
+  // The public verification key is the one executor artefact Julius is meant to hold.
   await access(required('JULIUS_PUBLIC_KEY_PATH'),constants.R_OK);
   process.stdout.write('SIBLING_ISOLATION_GREEN\n');
 }
@@ -63,8 +72,9 @@ async function main():Promise<void>{
   };
 
   const EFFECT_COMMAND=`test "$(id -u)" = 65532 && printf 'one-effect\\n' >> ${EFFECT_LOG} && test ! -S /var/run/docker.sock && node -e "fetch('http://example.com').then(()=>process.exit(2)).catch(()=>process.exit(0))"`;
-  const STARTED_COMMAND=`printf 'started\\n' >> ${INTERRUPT_STARTED}; sleep 90`;
-  const UNSTARTED_COMMAND=`sleep 90; printf 'never\\n' >> ${INTERRUPT_UNSTARTED}`;
+  const STARTED_COMMAND=`printf 'started\\n' >> ${INTERRUPT_STARTED}; sleep 120`;
+  // The entry marker proves the workload really started; the effect itself is what must never happen.
+  const UNSTARTED_COMMAND=`printf 'entered\\n' >> ${INTERRUPT_ENTERED}; sleep 120; printf 'never\\n' >> ${INTERRUPT_UNSTARTED}`;
 
   if(phase==='initial'){
     const seed=await reseed('sibling-inv',EFFECT_COMMAND);
@@ -88,9 +98,11 @@ async function main():Promise<void>{
       // Fire and forget: this process exits while the executor is mid-flight and the workflow destroys the sandbox under it.
       void post('execute',scoped.get('execute')!,envelopeFor(seed)).catch(()=>undefined);
     }
-    const deadline=Date.now()+45_000;
-    while(await lines(INTERRUPT_STARTED).catch(()=>0)<1&&Date.now()<deadline)await new Promise(resolve=>setTimeout(resolve,250));
-    if(await lines(INTERRUPT_STARTED).catch(()=>0)!==1)throw new Error('interrupt_dangerous_effect_never_started');
+    const deadline=Date.now()+60_000;
+    const seen=async(name:string)=>lines(name).catch(()=>0);
+    while((await seen(INTERRUPT_STARTED)<1||await seen(INTERRUPT_ENTERED)<1)&&Date.now()<deadline)await new Promise(resolve=>setTimeout(resolve,250));
+    if(await seen(INTERRUPT_STARTED)!==1)throw new Error('interrupt_dangerous_effect_never_started');
+    if(await seen(INTERRUPT_ENTERED)!==1)throw new Error('interrupt_unstarted_workload_never_entered');
     if(!await absent(INTERRUPT_UNSTARTED))throw new Error('interrupt_unstarted_effect_ran_early');
     await pool.end();process.stdout.write('SIBLING_INTERRUPT_STARTED\n');
     // Julius dies here, mid-request, exactly as a crashed orchestrator would.
