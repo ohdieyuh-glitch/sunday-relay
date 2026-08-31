@@ -7,7 +7,7 @@
 import { readFile, stat } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { verifyExecutorAttestation, type SignedExecutorAttestation } from '../src/relay/workspace/julius-tools/executor-attestation';
-import { FULL_POLICY, LEASE, LIMITS, PROJECT, TENANT, endpoint, envelopeFor, openJuliusClient, required, scopedCredentials, seedBase, seedInvocation, sha, type SandboxLimits } from './julius-sibling-support';
+import { EVAL_RUN, EVAL_TASK, FULL_POLICY, LEASE, LIMITS, PROJECT, TENANT, endpoint, envelopeFor, openJuliusClient, required, scopedCredentials, seedBase, seedInvocation, sha, type SandboxLimits } from './julius-sibling-support';
 
 type Verdict='PASS'|'FAIL'|'BLOCKED';
 class Blocked extends Error {}
@@ -25,10 +25,10 @@ const refuses=async(id:string,action:()=>Promise<unknown>,expected:string):Promi
 
 async function main():Promise<void>{
   const {pool,tools,client,scoped,trustedReceiptKeys,workspace}=await openJuliusClient();
-  await seedBase(pool);
+  await seedBase(pool,{runId:EVAL_RUN,taskId:EVAL_TASK});
 
   let seeded=0;
-  const seedFor=(label:string,command:string,timeoutMs=10_000,claim=true)=>seedInvocation(pool,tools,{invocationId:`eval-${label}-${++seeded}`,command,timeoutMs,claim});
+  const seedFor=(label:string,command:string,timeoutMs=10_000,claim=true)=>seedInvocation(pool,tools,{invocationId:`eval-${label}-${++seeded}`,command,timeoutMs,claim,runId:EVAL_RUN,taskId:EVAL_TASK});
   const start=async(label:string,command:string,policy=FULL_POLICY,limits:SandboxLimits=LIMITS,timeoutMs=10_000)=>{
     const seed=await seedFor(label,command,timeoutMs);
     await client.createSandbox({identity:seed.identity,limits,policy});

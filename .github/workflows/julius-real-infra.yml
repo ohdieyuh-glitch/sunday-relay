@@ -115,6 +115,10 @@ jobs:
         run: ./.github/julius-phase.sh replay
         env: { SCOPED: '${{ steps.identity.outputs.scoped }}', OTHER_SCOPED: '${{ steps.identity.outputs.other_scoped }}' }
 
+      - name: Completion authority settles a task outcome exactly once
+        run: ./.github/julius-phase.sh complete
+        env: { SCOPED: '${{ steps.identity.outputs.scoped }}', OTHER_SCOPED: '${{ steps.identity.outputs.other_scoped }}' }
+
       - name: Plant an unowned Julius-labelled container for reconciliation
         env: { SANDBOX_IMAGE: '${{ steps.images.outputs.sandbox }}' }
         run: docker create --label julius.sandbox=orphan-sandbox "$SANDBOX_IMAGE" sleep infinity

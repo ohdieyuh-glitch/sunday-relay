@@ -15,7 +15,7 @@ import { connect } from 'node:net';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { JuliusToolSettlementPostgresRepository } from '../src/relay/persistence/julius-tool-settlement-postgres';
-import { LIMITS, FULL_POLICY, LEASE, PROJECT, RUN, TASK, TENANT, WORKER, POLICY, digestOf, endpoint, envelopeFor, openJuliusClient, required, seedBase, seedInvocation, sha, type SandboxLimits, type SeededInvocation } from './julius-sibling-support';
+import { LIMITS, FULL_POLICY, LEASE, PROJECT, RUN, TASK, TENANT, WORKER, POLICY, COMPLETION_RUN, COMPLETION_TASK, digestOf, endpoint, envelopeFor, openJuliusClient, required, seedBase, seedInvocation, sha, type SandboxLimits, type SeededInvocation } from './julius-sibling-support';
 
 const run=promisify(execFile);
 const refused=async(what:string,attempt:()=>Promise<unknown>)=>{try{await attempt();}catch(error){if(error instanceof Error&&error.message.startsWith('isolation_'))throw error;return;}throw new Error(`isolation_${what}_succeeded`);};
@@ -29,7 +29,7 @@ const denySocket=(path:string)=>refused(`docker_socket:${path}`,async()=>{
   await new Promise<void>((resolve,reject)=>{const socket=connect(path);socket.once('connect',()=>{socket.destroy();resolve();});socket.once('error',error=>{socket.destroy();reject(error);});});
 });
 const EFFECT_LOG='physical-effects.log',INTERRUPT_STARTED='interrupt-started.log',INTERRUPT_ENTERED='interrupt-entered.log',INTERRUPT_UNSTARTED='interrupt-unstarted.log';
-const PHASES=['isolation','initial','settle','interrupt-start','interrupt-verify','replay'] as const;
+const PHASES=['isolation','initial','settle','interrupt-start','interrupt-verify','replay','complete'] as const;
 const LONG_RUNNING:SandboxLimits={...LIMITS,wallClockMs:150_000};
 type Phase=(typeof PHASES)[number];
 
@@ -49,10 +49,31 @@ async function proveIsolation():Promise<void>{
 }
 
 const proofPath=()=>`${required('JULIUS_WORKSPACE')}/julius-terminal-proof.json`;
+const settlementProofPath=()=>`${required('JULIUS_WORKSPACE')}/julius-settlement-proof.json`;
 const lines=async(name:string)=>(await readFile(`${required('JULIUS_WORKSPACE')}/${name}`,'utf8')).trim().split('\n').filter(Boolean).length;
 const absent=async(name:string)=>readFile(`${required('JULIUS_WORKSPACE')}/${name}`,'utf8').then(()=>false,()=>true);
 
-const settlementCommand=(seed:SeededInvocation,result:unknown)=>({settlementId:'sibling-settlement',invocationId:seed.invocationId,dispatchGeneration:seed.dispatchGeneration,resultDigest:digestOf(result),result:result as never,artifacts:[],evidence:[{evidenceId:'sibling-evidence',type:'COMMAND_EXECUTION' as const,integrityHash:'e'.repeat(64),facts:{safeSummary:'Sibling executor result verified.'}}],taskOutcome:null,occurredAt:new Date().toISOString()});
+type SettlementCommand=Parameters<JuliusToolSettlementPostgresRepository['settle']>[0];
+const settlementCommand=(input:{settlementId:string;seed:SeededInvocation;result:unknown;evidenceId:string;taskOutcome:{state:'SUCCEEDED';verificationDecisionId:string}|null}):SettlementCommand=>({settlementId:input.settlementId,invocationId:input.seed.invocationId,dispatchGeneration:input.seed.dispatchGeneration,resultDigest:digestOf(input.result),result:input.result as never,artifacts:[],evidence:[{evidenceId:input.evidenceId,type:'COMMAND_EXECUTION' as const,integrityHash:'e'.repeat(64),facts:{safeSummary:'Sibling executor result verified.'}}],taskOutcome:input.taskOutcome,occurredAt:new Date().toISOString()});
+
+/** Every row the settlement writes, counted by its own identity. Each must be exactly one, however often Julius retries. */
+const SETTLEMENT_COUNTS=`SELECT
+ (SELECT count(*) FROM relay_wonderland.julius_tool_settlements WHERE invocation_id=$1) settlements,
+ (SELECT count(*) FROM relay_wonderland.julius_evidence WHERE evidence_id=$2) evidence,
+ (SELECT count(*) FROM relay_wonderland.julius_tool_invocations WHERE invocation_id=$1 AND state='SUCCEEDED') succeeded,
+ (SELECT count(*) FROM relay_wonderland.budget_reservations WHERE reservation_id=$3 AND state='COMMITTED') committed,
+ (SELECT count(*) FROM relay_wonderland.julius_trajectory_events WHERE trajectory_event_id=$4) trajectory,
+ (SELECT count(*) FROM relay_wonderland.events WHERE event_id=$5) events,
+ (SELECT count(*) FROM relay_wonderland.outbox WHERE outbox_id=$6) outbox,
+ (SELECT count(*) FROM relay_wonderland.julius_tool_outbox WHERE invocation_id=$1 AND state='DELIVERED') delivered,
+ (SELECT count(*) FROM relay_wonderland.julius_tasks WHERE task_id=$7 AND state=$8) task`;
+const settlementTruth=async(pool:import('pg').Pool,input:{invocationId:string;evidenceId:string;settlementId:string;taskId:string;taskState:string})=>{
+  const counts=await pool.query(SETTLEMENT_COUNTS,[input.invocationId,input.evidenceId,`budget-${input.invocationId}`,`trajectory:tool-settlement:${input.settlementId}`,`julius:tool-settlement:${input.settlementId}`,`outbox:julius:tool-settlement:${input.settlementId}`,input.taskId,input.taskState]);
+  const truth=counts.rows[0] as Record<string,string>;
+  const wrong=Object.entries(truth).filter(([,value])=>value!=='1');
+  if(wrong.length)throw new Error(`settlement_not_exactly_once:${JSON.stringify(truth)}`);
+  return truth;
+};
 
 async function main():Promise<void>{
   const phase=(process.env.SIBLING_PHASE??'initial') as Phase;
@@ -121,6 +142,27 @@ async function main():Promise<void>{
     await pool.end();process.stdout.write('SIBLING_INTERRUPT_VERIFY_GREEN\n');return;
   }
 
+  if(phase==='complete'){
+    // Completion authority on its own task, so proving it cannot strand any other phase.
+    await seedBase(pool,{runId:COMPLETION_RUN,taskId:COMPLETION_TASK});
+    const seed=await seedInvocation(pool,tools,{invocationId:'sibling-completion',command:"printf 'completed\\n' >> completion-effect.log",runId:COMPLETION_RUN,taskId:COMPLETION_TASK});
+    await client.createSandbox({identity:seed.identity,limits:LIMITS,policy:FULL_POLICY});
+    await client.prepareWorkspace({sandboxId:seed.identity.sandboxId,sourceRef:workspace,expectedLeaseGeneration:LEASE});
+    const result=await client.executeTool(seed.execution);
+    if(result.status!=='SUCCEEDED')throw new Error(`completion_execution_not_successful:${result.status}`);
+    await pool.query(`INSERT INTO relay_wonderland.julius_verification_decisions(decision_id,run_id,task_id,action,reason_code,safe_summary,evidence_ids,policy_revision,occurred_at,idempotency_key)VALUES($1,$2,$3,'COMPLETE','evidence_verified','Sibling completion authority.',$4::jsonb,$5,now(),$1) ON CONFLICT DO NOTHING`,
+      ['sibling-decision',COMPLETION_RUN,COMPLETION_TASK,JSON.stringify(['completion-evidence']),POLICY]);
+    const command=settlementCommand({settlementId:'sibling-completion-settlement',seed,result,evidenceId:'completion-evidence',taskOutcome:{state:'SUCCEEDED',verificationDecisionId:'sibling-decision'}});
+    if(!(await settlement.settle(command)).created)throw new Error('completion_settlement_missing');
+    if((await settlement.settle(command)).created)throw new Error('completion_settlement_not_exactly_once');
+    const truth=await settlementTruth(pool,{invocationId:seed.invocationId,evidenceId:'completion-evidence',settlementId:'sibling-completion-settlement',taskId:COMPLETION_TASK,taskState:'SUCCEEDED'});
+    const released=await pool.query(`SELECT count(*) c FROM relay_wonderland.julius_tasks WHERE task_id=$1 AND state='SUCCEEDED' AND lease_owner IS NULL AND lease_expires_at IS NULL`,[COMPLETION_TASK]);
+    if(released.rows[0].c!=='1')throw new Error('completion_did_not_release_the_task_lease');
+    if(await lines('completion-effect.log')!==1)throw new Error('completion_effect_not_exactly_one');
+    await client.destroySandbox({sandboxId:seed.identity.sandboxId,expectedLeaseGeneration:LEASE,reason:'sibling-ci-cleanup'});
+    await pool.end();process.stdout.write(`SIBLING_COMPLETION_GREEN ${JSON.stringify(truth)}\n`);return;
+  }
+
   const proof=JSON.parse(await readFile(proofPath(),'utf8')) as {invocationId:string;dispatchGeneration:number;original:Awaited<ReturnType<typeof client.executeTool>>};
   const seed=rebuild(proof.invocationId,EFFECT_COMMAND);
   const replayed=await client.executeTool(seed.execution);
@@ -129,22 +171,27 @@ async function main():Promise<void>{
 
   if(phase==='settle'){
     // Julius restarted with no memory of the run, consumed the durable AFTER, and settles for the first time.
-    if(!(await settlement.settle(settlementCommand(seed,replayed))).created)throw new Error('restart_settlement_missing');
+    const command=settlementCommand({settlementId:'sibling-settlement',seed,result:replayed,evidenceId:'sibling-evidence',taskOutcome:null});
+    if(!(await settlement.settle(command)).created)throw new Error('restart_settlement_missing');
     if(await lines(EFFECT_LOG)!==1)throw new Error('settlement_caused_a_second_effect');
+    // A restarted Julius rebuilds the same command from its own durable record; this file stands in for that record.
+    await writeFile(settlementProofPath(),JSON.stringify(command),{flag:'wx'});
     await pool.end();process.stdout.write('SIBLING_SETTLE_GREEN\n');return;
   }
 
   // replay: the executor itself restarted between the settlement and now.
-  const command=settlementCommand(seed,replayed);
+  const command=JSON.parse(await readFile(settlementProofPath(),'utf8')) as SettlementCommand;
   if((await settlement.settle(command)).created)throw new Error('settlement_not_exactly_once');
+  // A second settlement of the same invocation carrying different material is refused, never merged.
+  await settlement.settle({...command,occurredAt:new Date().toISOString()}).then(
+    ()=>{throw new Error('divergent_settlement_accepted');},
+    error=>{if(!(error instanceof Error)||error.message!=='tool_settlement_identity_conflict')throw error;});
   await expectConflict(post,scoped.get('execute')!,seed);
   await client.destroySandbox({sandboxId:seed.identity.sandboxId,expectedLeaseGeneration:LEASE,reason:'sibling-ci-cleanup'});
-  const counts=await pool.query(`SELECT (SELECT count(*) FROM relay_wonderland.julius_tool_settlements WHERE invocation_id=$1) settlements,(SELECT count(*) FROM relay_wonderland.julius_evidence WHERE evidence_id='sibling-evidence') evidence,(SELECT count(*) FROM relay_wonderland.julius_tool_invocations WHERE invocation_id=$1 AND state='SUCCEEDED') succeeded,(SELECT count(*) FROM relay_wonderland.budget_reservations WHERE reservation_id=$2 AND state='COMMITTED') committed`,[seed.invocationId,`budget-${seed.invocationId}`]);
-  const truth=counts.rows[0] as Record<string,string>;
-  if(truth.settlements!=='1'||truth.evidence!=='1'||truth.succeeded!=='1'||truth.committed!=='1')throw new Error(`settlement_duplicate_material:${JSON.stringify(truth)}`);
+  const truth=await settlementTruth(pool,{invocationId:seed.invocationId,evidenceId:'sibling-evidence',settlementId:'sibling-settlement',taskId:TASK,taskState:'ACTIVE'});
   if(await lines(EFFECT_LOG)!==1)throw new Error('final_effect_count_not_one');
   await pool.end();
-  process.stdout.write(`SIBLING_E2E_GREEN settlements=${truth.settlements} evidence=${truth.evidence} invocation=${truth.succeeded} budget=${truth.committed} effects=1\n`);
+  process.stdout.write(`SIBLING_E2E_GREEN ${JSON.stringify(truth)} effects=1\n`);
 }
 
 /** The same execution identity carrying a different request is a hard conflict, never a second execution. */
