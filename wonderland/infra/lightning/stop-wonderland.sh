@@ -1,4 +1,16 @@
 #!/usr/bin/env bash
+# DO NOT RUN THIS AND THEN GO AND DO SOMETHING ELSE ON THE GPU.
+#
+# 2026-08-31: the PASS 29 package finished cooking, this script was run to free
+# port 8080 before a capture round, and the Lightning Studio put ITSELF to
+# sleep in the gap -- it idles out once nothing is holding the GPU. Starting it
+# again is a founder-only action (the agent has an SSH key and no API), so a
+# finished build sat uncapturable until the founder came back.
+#
+# The capture path (round.sh -> capture-hero-shots.sh) launches its own
+# streamer per camera and will take over the ports itself, so stopping first
+# is not required for it. If something must be stopped, start the next GPU
+# thing IMMEDIATELY, or accept that the Studio may sleep.
 # Stop everything GPU-intensive, cleanly, and say when it is safe to switch the
 # Studio back to CPU or let it sleep.
 #
