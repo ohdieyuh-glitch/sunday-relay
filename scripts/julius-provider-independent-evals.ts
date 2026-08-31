@@ -8,6 +8,7 @@ import { readFile, stat } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { verifyExecutorAttestation, type SignedExecutorAttestation } from '../src/relay/workspace/julius-tools/executor-attestation';
 import { RemoteExecutorControlPlane } from '../src/relay/workspace/julius-tools/remote-executor-control-plane';
+import { MAX_SANDBOX_OUTPUT_BYTES } from '../src/relay/workspace/julius-tools/executor-operation-request';
 import { EVAL_RUN, EVAL_TASK, FULL_POLICY, divergentEnvelope, LEASE, LIMITS, PROJECT, TENANT, endpoint, envelopeFor, openJuliusClient, required, scopedCredentials, seedBase, seedInvocation, sha, type SandboxLimits } from './julius-sibling-support';
 
 type Verdict='PASS'|'FAIL'|'BLOCKED';
@@ -130,7 +131,9 @@ async function main():Promise<void>{
   });
   await evaluate('workspace-byte-ceiling',async()=>{
     // The ceiling is measured where the workload actually writes: the bind-mounted workspace.
-    const roomy={...LIMITS,outputBytes:262_144,workspaceBytes:65_536};
+    // Derived from the service's own ceiling so this case cannot drift past it, and set well above the
+    // workspace ceiling so the file-size ulimit is not what stops the write.
+    const roomy={...LIMITS,outputBytes:Math.min(MAX_SANDBOX_OUTPUT_BYTES,262_144),workspaceBytes:65_536};
     const command='err=$( { head -c 200000 /dev/zero > overflow.bin; } 2>&1 ); code=$?; printf "disk_exit=%s size=%s err=%s\\n" "$code" "$(wc -c < overflow.bin 2>/dev/null || printf 0)" "$(printf %s "$err" | tr -d "\\n" | tail -c 100 | tr " " "_")"; rm -f overflow.bin';
     const seed=await start('disk',command,FULL_POLICY,roomy,20_000);
     const result=await client.executeTool(seed.execution);
