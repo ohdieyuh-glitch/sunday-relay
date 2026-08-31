@@ -5459,13 +5459,61 @@ def _signature_skyline():
                           "MI_V2_RoofRose")[k], label="GreatSpire_TowerCap%d" % k))
         out.append(A("finial_spire", gx + ox, gy + oy, 1800.0 * ts + 560.0 * ts,
                      s=0.9 * ts, mat="MI_V2_Gold", label="GreatSpire_TowerFinial%d" % k))
-    for k, (ox, oy, hs) in enumerate(((0.0, 3900.0, 2.8), (0.0, -4600.0, 2.2))):
-        out.append(A("castle_hall", gx + ox, gy + oy, 0.0, yaw=22.5, s=hs,
+    # THE HALLS COME OFF THE AXIS. GreatSpireCam22 -- the first player-height
+    # look at this precinct -- showed a 2.2-scale castle_hall standing at
+    # (0, -4600) squarely between the approach and the spire: a 40 m
+    # slab-sided box with a heavy cornice, hiding the base of the tallest
+    # thing in Wonderland from the one camera that stands under it. A
+    # processional axis is a thing you keep CLEAR; that is the whole reason
+    # PASS 06 left this bearing empty in the first place.
+    for k, (ox, oy, hs) in enumerate(((3900.0, 3400.0, 2.4), (-3900.0, 3400.0, 2.2),
+                                      (4600.0, -3200.0, 1.9), (-4600.0, -3200.0, 1.9))):
+        out.append(A("castle_hall", gx + ox, gy + oy, 0.0, yaw=22.5 + 26.0 * k, s=hs,
                      mat="MI_V2_IvoryStone", label="GreatSpire_Hall%d" % k))
-        out.append(A("roof_flat_crenellated", gx + ox, gy + oy, 900.0 * hs, yaw=22.5, s=hs,
-                     mat="MI_V2_RoofNavy", label="GreatSpire_HallRoof%d" % k))
-        out.append(A("castle_arcade", gx + ox, gy + oy - 430.0 * hs, 0.0, yaw=22.5,
+        out.append(A("roof_flat_crenellated", gx + ox, gy + oy, 900.0 * hs, yaw=22.5 + 26.0 * k,
+                     s=hs, mat=("MI_V2_RoofNavy", "MI_V2_RoofLilac")[k % 2],
+                     label="GreatSpire_HallRoof%d" % k))
+        out.append(A("castle_arcade", gx + ox, gy + oy - 430.0 * hs, 0.0, yaw=22.5 + 26.0 * k,
                      s=hs * 1.6, mat="MI_V2_IvoryStone", label="GreatSpire_Arcade%d" % k))
+        for f in range(3):
+            out.append(A("facade_panel", gx + ox - 400.0 * hs + 400.0 * hs * f,
+                         gy + oy - 402.0 * hs, 420.0 * hs, yaw=22.5 + 26.0 * k, s=hs,
+                         mat="MI_V2_IvoryStone", label="GreatSpire_Hall%dBay%d" % (k, f)))
+
+    # AND THE APPROACH IS BUILT, because the same frame showed the precinct
+    # standing on 100 m of empty lawn. A processional way 130 m long on the
+    # clear axis: paving at ROAD_Z like every other walking surface, piers and
+    # waymarkers down both sides, blossom trees behind them, and the ground
+    # under it laid rather than left as the outer world's bare quilt.
+    for i in range(9):
+        yy = gy - 13600.0 + 1600.0 * i
+        out.append(A("terrace_platform", gx, yy, ROAD_Z, yaw=0.0,
+                     sxyz=(1.15, 1.5, 0.35),
+                     mat=("MI_V2_PlazaCream", "MI_V2_PlazaWarm", "MI_V2_PlazaGrey")[i % 3],
+                     label="GreatSpire_Way%d" % i))
+        for sgn in (1.0, -1.0):
+            out.append(A("kerb_stone", gx + sgn * 1180.0, yy, -2.0, yaw=90.0,
+                         sxyz=(13.0, 1.0, 0.5), mat="MI_V2_Kerb",
+                         label="GreatSpire_WayKerb%d_%d" % (i, int(sgn))))
+            if i % 2 == 0:
+                out.append(A("waymarker", gx + sgn * 1620.0, yy, 0.0, yaw=90.0, s=0.95,
+                             mat="MI_V2_IvoryStone", label="GreatSpire_WayMark%d_%d" % (i, int(sgn))))
+                out.append(A("waymarker_lamp", gx + sgn * 1620.0, yy, 0.0, yaw=90.0, s=0.95,
+                             mat="MI_V2_GlassAmber", label="GreatSpire_WayLamp%d_%d" % (i, int(sgn))))
+            if i % 3 == 1:
+                out += _tree_group(gx + sgn * 3400.0, yy + 300.0, 4400 + i * 7 + int(sgn),
+                                   "GreatSpire_WayTree%d_%d" % (i, int(sgn)), 1.15)
+        if i % 4 == 2:
+            for sgn in (1.0, -1.0):
+                out.append(A("gate_pier", gx + sgn * 2300.0, yy, 0.0, yaw=0.0, s=1.7,
+                             mat="MI_V2_IvoryStone", label="GreatSpire_WayPier%d_%d" % (i, int(sgn))))
+    for i in range(12):
+        ax = -6000.0 + 1100.0 * (i % 6)
+        ay = -12800.0 + 4200.0 * (i // 6)
+        out.append(A("garden_lawn", gx + ax * 1.9, gy + ay, GROUND_Z, yaw=37.0 * i,
+                     sxyz=(0.95, 0.80, 1.0),
+                     mat=("MI_V2_Lawn", "MI_V2_Meadow")[i % 2],
+                     label="GreatSpire_Ground%d" % i))
     # THE IMPOSSIBLE GESTURE, used three times in the whole world. The rings
     # hang clear of the shaft at the two set-backs and at the crown, so from
     # the ground they read as unsupported: nothing rises through them.
