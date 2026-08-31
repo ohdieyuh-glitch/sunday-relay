@@ -53,7 +53,17 @@ NOT_OBSTACLES = ("terrace_platform", "garden_lawn", "stone_ring_base", "path_ste
                  # entry FAILS OPEN and looks exactly like a considered
                  # decision. tea_saucer is a 2.6 m flat disc you step onto;
                  # mushroom_small and key_ornate are ankle-height props.
-                 "tea_saucer", "mushroom_small", "key_ornate")
+                 "tea_saucer", "mushroom_small", "key_ornate",
+                 # PASS 28. The glazing meshes ride on frames that ARE in
+                 # FOOT -- glass_pavilion_lights on glass_pavilion,
+                 # lantern_strange_glass on lantern_strange,
+                 # flower_colossal_bloom on flower_colossal -- so giving them
+                 # footprints of their own would model each object twice.
+                 # Declared here for the same reason as the line above: route.py
+                 # lists what it cannot see, and an entry it never mentions is
+                 # indistinguishable from one somebody thought about.
+                 "glass_pavilion_lights", "lantern_strange_glass",
+                 "flower_colossal_bloom", "spire_halo_ring")
 
 #: THE WINDOW WAS GOLDEN ARRIVAL AND THE WORLD IS NOT.
 #:

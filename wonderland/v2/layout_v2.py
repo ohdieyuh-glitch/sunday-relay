@@ -232,10 +232,12 @@ SIDES = _band("V2_Arrival", [
     A("retaining_wall", -800, -640 + 400 * i, 60, yaw=90, s=1.0, mat="MI_V2_IvoryStone", label="SideWall_R%d" % i) for i in range(5)
 ] + [
     A(("hedge_block", "shrub_flowering", "hedge_mass")[i % 3], 1010 + 60 * (i % 2), -600 + 330 * i, 60, yaw=(90 if i % 3 == 0 else 41 * i), s=0.9,
-      mat=("MI_V2_LeafMid", "MI_V2_LeafDark")[i % 2], label="SideBed_L_Hedge%d" % i) for i in range(6)
+      mat=("MI_V2_LeafMid", "MI_V2_LeafDark", "MI_V2_RosePink", "MI_V2_LeafCream",
+           "MI_V2_LeafDark", "MI_V2_PetalViolet")[i % 6], label="SideBed_L_Hedge%d" % i) for i in range(6)
 ] + [
     A(("shrub_flowering", "hedge_block", "hedge_mass")[i % 3], -1010 - 60 * (i % 2), -540 + 330 * i, 60, yaw=(90 if i % 3 == 1 else 67 * i), s=0.9,
-      mat=("MI_V2_LeafDark", "MI_V2_LeafMid")[i % 2], label="SideBed_R_Hedge%d" % i) for i in range(6)
+      mat=("MI_V2_LeafDark", "MI_V2_PetalPink", "MI_V2_LeafMid", "MI_V2_Lavender",
+           "MI_V2_LeafCream", "MI_V2_LeafMid")[i % 6], label="SideBed_R_Hedge%d" % i) for i in range(6)
 ] + [
     A("rose_bush", 940, -300 + 600 * i, 85, yaw=30 * i, s=0.9, mat="MI_V2_LeafMid", label="SideBed_L_RoseBush%d" % i) for i in range(2)
 ] + [
@@ -311,7 +313,14 @@ CORRIDOR = _band("V2_Garden", [
 ]) + [
     # hedges flanking the path, then the garden opens
     A("hedge_mass", side * (390 + 30 * (i % 2)), 1950 + 320 * i, 0 + (60 if 1950 + 320 * i > 2980 else 0), yaw=41 * i + (0 if side > 0 else 180), s=(0.6 if PASS02 else 0.85),
-      mat=("MI_V2_LeafMid", "MI_V2_LeafDark")[i % 2], label="PathHedge%d_%d" % (side, i))
+      # THE WALL EITHER SIDE OF THE PROCESSIONAL WAY. Measured on the PASS 28
+      # PathCam02 frame, `hedge_mass` at 4-5 m is what fills the left and right
+      # thirds, in two greens that are one hue at two values. A third of the
+      # run now flowers, which changes the colour of the walk without changing
+      # a single position.
+      mat=("MI_V2_LeafMid", "MI_V2_LeafDark", "MI_V2_RosePink", "MI_V2_LeafDark",
+           "MI_V2_LeafCream", "MI_V2_PetalViolet")[i % 6],
+      label="PathHedge%d_%d" % (side, i))
     for side in (-1, 1) for i in range(8)
 ] + ([
     # PASS 02: colour along the corridor -- a massed bed between every other
@@ -327,7 +336,7 @@ CORRIDOR = _band("V2_Garden", [
       mat=("MI_V2_RoseRed", "MI_V2_RosePink")[(i + (0 if side > 0 else 1)) % 2], label="PathRose%d_%d" % (side, i))
     for side in (-1, 1) for i in range(6)
 ] + [
-    A(("floral_arch_trellis" if PASS03 else "floral_arch"), 0, 3600, 80, s=1.0, sxyz=(1.0, 1.0, 1.1), mat=("MI_V2_Gold" if PASS03 else "MI_V2_LeafMid"), label="Corridor_FloralArch"),
+    A(("floral_arch_trellis" if PASS03 else "floral_arch"), 0, 3600, 80, s=1.0, sxyz=(1.0, 1.0, 1.1), mat=("MI_V2_Gold" if PASS03 else "MI_V2_RosePink"), label="Corridor_FloralArch"),
     A("rose_bloom", -470, 3560, 660, yaw=0, s=0.7, mat="MI_V2_RosePink", label="FloralArch_Rose0"),
     A("rose_bloom", 460, 3560, 620, yaw=60, s=0.7, mat="MI_V2_RoseRed", label="FloralArch_Rose1"),
     A("rose_bloom", 0, 3550, 780, yaw=120, s=0.8, mat="MI_V2_RosePink", label="FloralArch_Rose2"),
@@ -393,10 +402,18 @@ GARDEN_L = _band("V2_Garden", [
     A("mushroom_small", 1300, 1200, 0, yaw=90, s=1.0, mat="MI_V2_MushPurple", label="Garden_L_Mush2"),
     A("mushroom_small", 1200, 2150, 0, yaw=300, s=0.9, mat="MI_V2_MushRed", label="Garden_L_Mush3"),
     A("tree_mature_trunk", 1350, 2300, 0, yaw=180, s=1.15, mat="MI_V2_Bark", label="Garden_L_Tree_Trunk"),
-    A("canopy_large", 1350, 2300, 1500, yaw=0, s=1.5, mat="MI_V2_LeafMid", label="Garden_L_Tree_Canopy0"),
-    A("canopy_large", 1000, 2550, 1380, yaw=130, s=1.1, mat="MI_V2_LeafDark", label="Garden_L_Tree_Canopy1"),
-    A("canopy_large", 1750, 2150, 1320, yaw=250, s=1.0, mat="MI_V2_LeafLight", label="Garden_L_Tree_Canopy2"),
-    A("canopy_medium", 1200, 2000, 1150, yaw=60, s=1.2, mat="MI_V2_LeafMid", label="Garden_L_Tree_Canopy3"),
+    # MEASURED ON THE PASS 28 RENDER: these four crowns and the clock tree's
+    # four are the EIGHT LARGEST presences in HeroCam0 -- 3.6%, 2.9%, 2.8%,
+    # 2.5%, 2.1%, 1.4% of the founder's benchmark frame each, all plain green,
+    # all within 25 m of the lens. The brief says reduce green dominance, and
+    # nothing else in this world is worth as many pixels. They are not removed:
+    # they are the frame's own trees and the reference has trees there. They
+    # FLOWER. A royal garden in blossom is the reference, and it costs the
+    # composition nothing.
+    A("canopy_large", 1350, 2300, 1500, yaw=0, s=1.5, mat="MI_V2_PetalWhite", label="Garden_L_Tree_Canopy0"),
+    A("canopy_large", 1000, 2550, 1380, yaw=130, s=1.1, mat="MI_V2_RosePink", label="Garden_L_Tree_Canopy1"),
+    A("canopy_large", 1750, 2150, 1320, yaw=250, s=1.0, mat="MI_V2_PetalPink", label="Garden_L_Tree_Canopy2"),
+    A("canopy_medium", 1200, 2000, 1150, yaw=60, s=1.2, mat="MI_V2_LeafCream", label="Garden_L_Tree_Canopy3"),
     A("blossom_cluster", 1250, 2450, 1600, s=1.0, mat="MI_V2_RosePink", label="Garden_L_Tree_Blossom"),
     A("topiary_ball", 1100, 1600, 0, s=1.0, mat="MI_V2_LeafMid", label="Garden_L_Ball0"),
     A("topiary_spiral", 2200, 2200, 0, s=1.1, mat="MI_V2_LeafDark", label="Garden_L_Spiral"),
@@ -426,10 +443,10 @@ GARDEN_R = _band("V2_Garden", [
     # ~17 m -- the measured ~16 m. (0.8 left bare limbs 5 m above the crown.)
     A("tree_clock_trunk", -2050, 1900, 0, yaw=200, s=0.6, mat="MI_V2_Bark", label="ClockTree_Trunk"),
     A("clock_ornate", -1900, 1720, 560, yaw=-25, s=1.0, mat="MI_V2_Gold", label="ClockTree_Clock"),
-    A("canopy_large", -2100, 1950, 1050, yaw=0, s=1.4, mat="MI_V2_LeafMid", label="ClockTree_Canopy0"),
-    A("canopy_large", -1600, 2100, 960, yaw=140, s=1.1, mat="MI_V2_LeafDark", label="ClockTree_Canopy1"),
-    A("canopy_large", -2550, 1650, 990, yaw=260, s=1.0, mat="MI_V2_LeafLight", label="ClockTree_Canopy2"),
-    A("canopy_medium", -1700, 1650, 800, yaw=30, s=1.2, mat="MI_V2_LeafMid", label="ClockTree_Canopy3"),
+    A("canopy_large", -2100, 1950, 1050, yaw=0, s=1.4, mat="MI_V2_PetalViolet", label="ClockTree_Canopy0"),
+    A("canopy_large", -1600, 2100, 960, yaw=140, s=1.1, mat="MI_V2_Lavender", label="ClockTree_Canopy1"),
+    A("canopy_large", -2550, 1650, 990, yaw=260, s=1.0, mat="MI_V2_PetalWhite", label="ClockTree_Canopy2"),
+    A("canopy_medium", -1700, 1650, 800, yaw=30, s=1.2, mat="MI_V2_LeafCream", label="ClockTree_Canopy3"),
     A("vine_hanging", -1880, 1700, 760, s=0.7, mat="MI_V2_LeafMid", label="ClockTree_Vine0"),
     A("vine_hanging", -2200, 1750, 800, s=0.6, mat="MI_V2_LeafDark", label="ClockTree_Vine1"),
     A("hedge_mass", -1400, 1500, 60, yaw=20, s=1.3, mat="MI_V2_LeafDark", label="Garden_R_Hedge0"),
@@ -1452,7 +1469,7 @@ def _flank(sgn, tag):
         A("tea_cup_small", sgn * 5090, 1690, 86, yaw=70 * sgn, s=0.5, mat="MI_V2_Ceramic", label="%s_TeaCupB" % tag),
         # floral arch over the way in: floral_arch is 1094 along X, so yaw 90
         # spans it ACROSS a walk that runs along X
-        A("floral_arch", sgn * 3115, 520, 0, yaw=90, s=0.6, mat="MI_V2_LeafMid",
+        A("floral_arch", sgn * 3115, 520, 0, yaw=90, s=0.6, mat="MI_V2_PetalWhite",
           label="%s_EntryFloralArch" % tag),
     ]
     return out
@@ -5407,32 +5424,70 @@ def _signature_skyline():
     gx, gy = 0.0, 33000.0
     _SIG_PLACED.append((gx, gy, _SIG_CLEAR["spire_great"]))
     S = 1.08                                   # 180 m authored -> 194.4 m
-    out.append(A("spire_great", gx, gy, 0.0, yaw=22.5, s=S,
+    # WIDENED AFTER THE FIRST RENDER, and the render is why. Measured off the
+    # PASS 28 HeroCam0 frame, the spire as first placed subtended 30.4 deg of
+    # height on 2.9 deg of shaft -- 1:10.4 -- against the castle hall beside
+    # it at 1:2.3. It landed exactly where it was computed to land and read as
+    # a HAIRLINE. Angular height was the wrong single number to size a
+    # landmark by; a navigation anchor needs MASS, and mass is width.
+    #
+    # The scale is non-uniform on purpose: 1.75 across, 1.08 up. Height is
+    # already at the ceiling HeroCam0's 33.8 deg half-field allows at 331 m,
+    # so the only axis left is the one that was wrong. Shaft goes 16.8 -> 27 m
+    # (1:6.5), plinth 34 -> 55 m (1:3.2), which is the castle's own league.
+    WIDE = 1.75
+    out.append(A("spire_great", gx, gy, 0.0, yaw=22.5, sxyz=(WIDE, WIDE, S),
                  mat="MI_V2_IvoryStone", label="GreatSpire_Body"))
+    # AND IT STANDS ON SOMETHING. A spire rising straight out of a lawn is a
+    # mast. Four subordinate towers at 43 m and two halls give the base a
+    # silhouette of its own, so at 330 m the eye reads a great building with a
+    # spire rather than a pole with a point.
+    for k, (ox, oy, ts, cap) in enumerate((
+            (3300.0, 900.0, 2.4, "roof_cone_steep"), (-3300.0, 900.0, 2.3, "roof_bell"),
+            (2200.0, -3000.0, 2.0, "roof_ogee"), (-2200.0, -3000.0, 2.1, "roof_cone_steep"))):
+        out.append(A("castle_tower_octagon", gx + ox, gy + oy, 0.0, yaw=22.5 + 24.0 * k,
+                     s=ts, mat="MI_V2_IvoryStone", label="GreatSpire_Tower%d" % k))
+        out.append(A(cap, gx + ox, gy + oy, 1800.0 * ts, yaw=22.5 + 24.0 * k, s=ts,
+                     mat=("MI_V2_RoofNavy", "MI_V2_RoofPink", "MI_V2_RoofLilac",
+                          "MI_V2_RoofRose")[k], label="GreatSpire_TowerCap%d" % k))
+        out.append(A("finial_spire", gx + ox, gy + oy, 1800.0 * ts + 560.0 * ts,
+                     s=0.9 * ts, mat="MI_V2_Gold", label="GreatSpire_TowerFinial%d" % k))
+    for k, (ox, oy, hs) in enumerate(((0.0, 3900.0, 2.8), (0.0, -4600.0, 2.2))):
+        out.append(A("castle_hall", gx + ox, gy + oy, 0.0, yaw=22.5, s=hs,
+                     mat="MI_V2_IvoryStone", label="GreatSpire_Hall%d" % k))
+        out.append(A("roof_flat_crenellated", gx + ox, gy + oy, 900.0 * hs, yaw=22.5, s=hs,
+                     mat="MI_V2_RoofNavy", label="GreatSpire_HallRoof%d" % k))
+        out.append(A("castle_arcade", gx + ox, gy + oy - 430.0 * hs, 0.0, yaw=22.5,
+                     s=hs * 1.6, mat="MI_V2_IvoryStone", label="GreatSpire_Arcade%d" % k))
     # THE IMPOSSIBLE GESTURE, used three times in the whole world. The rings
     # hang clear of the shaft at the two set-backs and at the crown, so from
     # the ground they read as unsupported: nothing rises through them.
-    for i, (z, s, tilt) in enumerate(((6400.0, 1.05, 0.0), (10700.0, 0.86, 6.0),
-                                      (14900.0, 0.62, -9.0))):
-        out.append(A("spire_halo_ring", gx, gy, z * S, yaw=17.0 * i, s=s * S,
+    for i, (z, hs, tilt) in enumerate(((6400.0, 1.05, 0.0), (10700.0, 0.86, 6.0),
+                                       (14900.0, 0.62, -9.0))):
+        # the rings ride the SHAFT's scale, not the body's height scale --
+        # sized against 1.08 they would now be inside a 1.75x wider spire,
+        # which is the whole point of them lost to one letter.
+        out.append(A("spire_halo_ring", gx, gy, z * S, yaw=17.0 * i,
+                     sxyz=(hs * WIDE, hs * WIDE, hs * WIDE),
                      pitch=tilt, mat="MI_V2_Gold", label="GreatSpire_Halo%d" % i))
     # a precinct at its foot, so the tallest thing in Wonderland stands on
     # something built rather than on lawn
     for k, yaw in enumerate((0.0, 90.0)):
         out.append(A("terrace_platform", gx, gy, ROAD_Z, yaw=yaw,
-                     sxyz=(2.6, 0.9, 0.35), mat="MI_V2_PlazaCream",
+                     sxyz=(4.4, 1.6, 0.35), mat="MI_V2_PlazaCream",
                      label="GreatSpire_Court%d" % k))
     for k in range(16):
         a = 2.0 * math.pi * k / 16
         if 0.40 < (k / 16.0) < 0.60:          # the way in, from the south
             continue
-        out.append(A("gate_pier", gx + math.cos(a) * 3050.0, gy + math.sin(a) * 3050.0,
-                     0.0, yaw=math.degrees(a), s=1.5, mat="MI_V2_IvoryStone",
+        out.append(A("gate_pier", gx + math.cos(a) * 5400.0, gy + math.sin(a) * 5400.0,
+                     0.0, yaw=math.degrees(a), s=1.8, mat="MI_V2_IvoryStone",
                      label="GreatSpire_Pier%d" % k))
         if k % 2 == 0:
-            out.append(A("topiary_cone_plain", gx + math.cos(a) * 2350.0,
-                         gy + math.sin(a) * 2350.0, 0.0, yaw=31.0 * k, s=1.6,
-                         mat="MI_V2_LeafDark", label="GreatSpire_Cone%d" % k))
+            out.append(A("topiary_cone_roses", gx + math.cos(a) * 4600.0,
+                         gy + math.sin(a) * 4600.0, 0.0, yaw=31.0 * k, s=1.9,
+                         mat=("MI_V2_RosePink", "MI_V2_PetalWhite")[(k // 2) % 2],
+                         label="GreatSpire_Cone%d" % k))
 
     # --- 2. THE TWO SIGNATURE SPIRES --------------------------------------
     # (bearing, radius, scale, yaw, halo, district it names)
@@ -5914,10 +5969,139 @@ _PROTECT = _PROTECT + ("clock_grand", "gear_monument", "key_colossal",
 for _bandref in (OUTER_WORLD, HORIZON, GROUND_QUILT, FLANKS, REARWORLD):
     _bandref[:] = _declutter(_bandref, also=LANDMARKS)
 
+# ===========================================================================
+# THE COURTS STOP BEING BLANK SLABS  (batch D, second half)
+# ===========================================================================
+#
+# "Improve large pale-stone areas with borders, inlays, medallions, subtle
+# wear, petals and scale variation. Avoid huge empty modern-plaza surfaces."
+#
+# The ARRIVAL plaza already has a centre and an edge -- a medallion of gold
+# and stone inlays and a border course -- and PASS 08 gave its slabs four
+# tints. Nothing else in Wonderland got either. Measured: 48 courts and 14
+# yards paved with `terrace_platform`, one flat `MI_V2_PlazaWarm` rectangle
+# each, and the largest is 41 x 25 m. Sixty-two blank plazas.
+#
+# So the plaza's own rule is applied to all of them, which is the point: one
+# description of what a paved court in this world IS, not a second one.
+#
+#   centre  a medallion of twelve alternating gold and shade inlays with an
+#           inner ring, so the middle is worked
+#   edge    a border course inset from the perimeter, so paving stops being
+#           a field that simply ends
+#   field   three to five overlapping slabs at other tints and angles, laid at
+#           EXACTLY the court's own surface height, which is the "scale
+#           variation" and "subtle wear" without a decal or a noise texture
+#   colour  petal patches at the corners
+#
+# THE STEP-HEIGHT CONTRACT IS WHY THE FIELD SLABS ARE AT ROAD_Z. A court's
+# walking surface is ROAD_Z + 140 * 0.35 = 19 uu. A tint slab laid at the same
+# z with the same z-scale has its top at 19 too -- lip zero. The inlays are
+# `kerb_stone` at 0.12 of its 28 uu, so 3.4 uu proud of the court and 22 above
+# ground, inside MaxStepHeight 30. This world lost a whole traversal audit to
+# a one-unit lip; nothing here is laid by eye.
+
+_COURT_TINTS = ("MI_V2_PlazaCream", "MI_V2_PlazaGrey", "MI_V2_PlazaShade",
+                "MI_V2_PlazaWarm")
+
+
+def _is_court(label):
+    """A paved COURT, not a road. Roads, lanes and walks are also
+    terrace_platform and dressing them would put a medallion in a street."""
+    tail = label.rsplit("_", 1)[-1] if "_" in label else label
+    base = tail.rstrip("0123456789")
+    return base in ("Court", "Yard")
+
+
+def _dress_courts(bands):
+    """One medallion, one border and some tonal variety per paved court."""
+    groups = {}
+    for band in bands:
+        for p in band:
+            if p["asset"] != "terrace_platform":
+                continue
+            lab = p.get("label") or ""
+            if not _is_court(lab):
+                continue
+            x, y = p["pos"][0], p["pos"][1]
+            key = (round(x / 300.0), round(y / 300.0))
+            g = groups.setdefault(key, {"x": x, "y": y, "hx": 0.0, "hy": 0.0,
+                                        "tag": lab.rsplit("_", 1)[0], "z": p["pos"][2]})
+            # the two crossed platforms of a court are at yaw 0 and 90, so the
+            # court's reach is the larger of each piece's ROTATED half-extent
+            yaw = abs(p["rot"][1]) % 180.0
+            ex, ey = 720.0 * abs(p["scale"][0]), 370.0 * abs(p["scale"][1])
+            if 45.0 < yaw < 135.0:
+                ex, ey = ey, ex
+            g["hx"], g["hy"] = max(g["hx"], ex), max(g["hy"], ey)
+
+    out = []
+    for i, (key, g) in enumerate(sorted(groups.items())):
+        cx, cy, hx, hy = g["x"], g["y"], g["hx"], g["hy"]
+        tag, z = g["tag"], g["z"]
+        h = min(hx, hy)
+        if h < 380.0:                       # too small to have a middle
+            continue
+        top = z + 140.0 * 0.35              # the court's own walking surface
+        # --- the medallion
+        for k in range(12):
+            a = 6.283 * k / 12.0
+            r = h * 0.30
+            out.append(A("kerb_stone", cx + math.cos(a) * r, cy + math.sin(a) * r, top,
+                         yaw=math.degrees(a) + 90.0, sxyz=(1.35, 0.55, 0.12),
+                         mat=("MI_V2_Gold", "MI_V2_PlazaShade")[k % 2],
+                         label="%s_Inlay%d" % (tag, k)))
+        for k in range(8):
+            a = 6.283 * k / 8.0 + 0.39
+            out.append(A("kerb_stone", cx + math.cos(a) * h * 0.15,
+                         cy + math.sin(a) * h * 0.15, top,
+                         yaw=math.degrees(a) + 90.0, sxyz=(0.95, 0.45, 0.11),
+                         mat="MI_V2_PlazaCream", label="%s_InlayIn%d" % (tag, k)))
+        # --- the border course, inset so the paving has a margin
+        bx, by = hx * 0.86, hy * 0.86
+        n = max(3, int(bx / 460.0))
+        for k in range(n + 1):
+            t = -1.0 + 2.0 * k / n
+            for sgn in (1.0, -1.0):
+                out.append(A("kerb_stone", cx + bx * t, cy + sgn * by, top,
+                             yaw=0.0, sxyz=(2.0, 0.6, 0.13), mat="MI_V2_Kerb",
+                             label="%s_Border%s%d" % (tag, "T" if sgn > 0 else "B", k)))
+        n2 = max(3, int(by / 460.0))
+        for k in range(n2 + 1):
+            t = -1.0 + 2.0 * k / n2
+            for sgn in (1.0, -1.0):
+                out.append(A("kerb_stone", cx + sgn * bx, cy + by * t, top,
+                             yaw=90.0, sxyz=(2.0, 0.6, 0.13), mat="MI_V2_Kerb",
+                             label="%s_Border%s%d" % (tag, "L" if sgn > 0 else "R", k)))
+        # --- tonal field: other stone, other angles, the SAME height
+        for k in range(3 + (i % 3)):
+            a = 6.283 * _rnd(i, k, 71)
+            rr = h * (0.36 + 0.42 * _rnd(i, k, 72))
+            out.append(A("terrace_platform", cx + math.cos(a) * rr, cy + math.sin(a) * rr,
+                         z, yaw=17.0 + 41.0 * k,
+                         sxyz=(0.30 + 0.36 * _rnd(i, k, 73),
+                               0.34 + 0.40 * _rnd(i, k, 74), 0.35),
+                         mat=_COURT_TINTS[(i + k) % 4],
+                         label="%s_Field%d" % (tag, k)))
+        # --- petals, at the corners rather than over the middle
+        corners = ((1, 1), (1, -1), (-1, 1), (-1, -1))
+        for k in range(4):
+            out.append(A("ground_flowers", cx + corners[k][0] * hx * 0.62,
+                         cy + corners[k][1] * hy * 0.62, top + 4.0,
+                         yaw=53.0 * k, s=0.9,
+                         mat=("MI_V2_PetalRose", "MI_V2_PetalWhite",
+                              "MI_V2_Lavender", "MI_V2_PetalPink")[k % 4],
+                         label="%s_Petals%d" % (tag, k)))
+    return out
+
+
+COURT_DRESS = _band("V2_Skyline", _dress_courts(
+    [OUTER_WORLD, SIGNATURE, LANDMARKS, FLANKS, REARWORLD, PALACE]))
+
 BUILD_BANDS = [FOREGROUND, COURTYARD, GARDEN, PALACE, FLANK_GROUND, FLANKS,
                REARWORLD, CAM_FOREGROUNDS, GROUND_QUILT, OUTER_WORLD, PLAZA_ORNAMENT,
                PROCESSIONAL_BORDER, HORIZON, APPROACH_SIDES, PLAZA_WALL_DRESS,
-               SIGNATURE, LANDMARKS]
+               SIGNATURE, LANDMARKS, COURT_DRESS]
 
 #: Everything the layout declares: what the builder walks, plus the two bands
 #: it places by their own rules (SKY is the dome/atmosphere, HOVER is lifted

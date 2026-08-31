@@ -257,6 +257,27 @@ HERO_CAMS = [
     # the first real destination BEYOND the castle rather than in front of it
     {"name": "EastReachCam20", "location": (4200.0, 19500.0, 900.0), "rotation": (-3.0, 66.0, 0.0),
      "fov": 92.0, "tags": ("EastReachCam20", "HeroCam20")},
+    # ---- PASS 28: A CAMERA THAT CAN SEE THE VERTICALITY -------------------
+    #
+    # None of the eight locked cameras can hold the world's tallest landmark,
+    # and that is arithmetic rather than opinion. SkylineCam06 is pitched -22
+    # with a 29 deg vertical half-field, so its frame ends at +7 deg of
+    # absolute elevation; the great spire subtends 30 deg from the arrival.
+    # It was already true before this pass -- the 128 m cluster the spire
+    # replaces as the anchor was cut off in that frame too -- so this is not a
+    # regression introduced by building something tall, it is a gap the
+    # suite has always had and nothing was ever tall enough to expose.
+    #
+    # SkylineCam06 DOES NOT MOVE. It is a regression camera and its job is
+    # plaza, gardens, castle and city at world scale, which it still does.
+    # This is a new one, sized by `skyline.py --site` so the whole hierarchy
+    # fits: 140 m back on the arrival axis and 18 m up, nearly level, 100 deg.
+    # The great spire lands at 21.6 deg against a 33.8 deg half-field, and
+    # both signature spires (37 and 26 deg off axis) are inside the 50 deg
+    # half-width, with the castle focal plane between them.
+    {"name": "SkylineRiseCam21", "location": (0.0, -14000.0, 1800.0),
+     "rotation": (-1.0, 90.0, 0.0), "fov": 100.0,
+     "tags": ("SkylineRiseCam21", "HeroCam21")},
 ]
 #: The suite's names by index -- the filing tool and the checkpoint report use
 #: them; the capture tooling uses the "HeroCamN" tags.
