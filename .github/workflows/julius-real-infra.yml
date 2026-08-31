@@ -19,7 +19,14 @@ jobs:
         with: { node-version: '20', cache: npm }
       - run: npm ci
       - id: image
-        run: docker pull node:20-bookworm-slim && echo "id=$(docker image inspect node:20-bookworm-slim --format '{{.Id}}')" >> "$GITHUB_OUTPUT"
+        run: |
+          cat > /tmp/julius-sandbox.Dockerfile <<'EOF'
+          FROM node:20-bookworm-slim
+          RUN apt-get update && apt-get install -y --no-install-recommends util-linux git ca-certificates \
+            && rm -rf /var/lib/apt/lists/*
+          EOF
+          image_id=$(docker build -q -f /tmp/julius-sandbox.Dockerfile /tmp)
+          echo "id=$image_id" >> "$GITHUB_OUTPUT"
       - run: npx vitest run src/relay/persistence/real-infra-julius.test.ts
         env:
           JULIUS_REAL_INFRA: '1'
