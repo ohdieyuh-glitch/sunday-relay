@@ -101,14 +101,19 @@ INSTANCES = {
     "MI_V2_Moss":       ("sward",   (0.11, 0.155, 0.09), 0.0, 0.82, 0.60, 0.20, None, 0.0),
     "MI_V2_Lawn":       ("sward",   (0.18, 0.25, 0.12), 0.0, 0.86, 0.60, 0.20, None, 0.0),
     "MI_V2_Meadow":     ("sward",   (0.27, 0.30, 0.15), 0.0, 0.88, 0.62, 0.20, None, 0.0),
-    "MI_V2_Soil":       ("sward",   (0.20, 0.15, 0.10), 0.0, 0.90, 0.50, 0.15, None, 0.0),
+    # PALER AND WARMER (PASS 28). Bare earth at 0.20/0.15/0.10 renders as a
+    # dark scar beside a 0.30-albedo lawn; a royal garden's worn ground is
+    # gravel and decomposed granite, not turned soil. The AREA was the main
+    # defect and _GROUND_LANG fixes that; this stops what remains reading as
+    # a hole in the lawn.
+    "MI_V2_Soil":       ("sward",   (0.31, 0.26, 0.20), 0.0, 0.90, 0.50, 0.15, None, 0.0),
     # PASS 24: two more grounds, so a place type can be recognised by what is
     # UNDER the player as well as what stands on it. MULCH is the dark organic
     # floor of a wood -- leaf litter, not grass; DIRT is the worn earth of a
     # village lane and a path's shoulder. Both are sward-family so they take
     # the same displaced mesh and normal map.
     "MI_V2_Mulch":      ("sward",   (0.13, 0.115, 0.075), 0.0, 0.92, 0.55, 0.14, None, 0.0),
-    "MI_V2_Dirt":       ("sward",   (0.29, 0.235, 0.165), 0.0, 0.90, 0.52, 0.16, None, 0.0),
+    "MI_V2_Dirt":       ("sward",   (0.37, 0.32, 0.25), 0.0, 0.90, 0.52, 0.16, None, 0.0),
     # ---- gold: metallic, restrained, aged in the recesses ---------------------
     "MI_V2_Gold":       ("metal",   (0.92, 0.70, 0.36), 0.90, 0.42, 0.45, 0.60, None, 0.0),
     # ---- roofs: muted pink, some dark navy caps, gold finials -----------------

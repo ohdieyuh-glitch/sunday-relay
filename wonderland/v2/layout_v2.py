@@ -3799,15 +3799,22 @@ def _tree(x, y, seed, i, tag, sc=1.0, mix="wood"):
 #: (material, scale multiplier, offset multiplier) per tile.
 _GROUND_LANG = {
     "garden":    (("MI_V2_Lawn", 1.00, 0.0), ("MI_V2_Meadow", 0.62, 0.55)),
+    # NO BARE EARTH IN A COURT. Measured on the PASS 28 SkylineRiseCam21
+    # frame: the worn-earth tiles read as a large bare wedge across the
+    # near-mid ground -- a scar, not a lane. A court is a PAVED yard and
+    # since PASS 28 it is dressed with a medallion and a border course, so
+    # the soil tile was describing something that is no longer there.
     "court":     (("MI_V2_Lawn", 1.00, 0.0), ("MI_V2_Lawn", 0.55, 0.62),
-                  ("MI_V2_Soil", 0.34, 0.70)),
+                  ("MI_V2_Meadow", 0.30, 0.70)),
     "clockyard": (("MI_V2_Lawn", 0.92, 0.0), ("MI_V2_Meadow", 0.50, 0.60)),
     "water":     (("MI_V2_Lawn", 1.00, 0.0), ("MI_V2_Moss", 0.58, 0.58)),
     "lake":      (("MI_V2_Moss", 1.05, 0.0), ("MI_V2_Meadow", 0.60, 0.72)),
     "tea":       (("MI_V2_Lawn", 0.92, 0.0), ("MI_V2_Meadow", 0.52, 0.58)),
-    "hamlet":    (("MI_V2_Meadow", 0.95, 0.0), ("MI_V2_Dirt", 0.52, 0.42),
+    # 0.30, not 0.52: at half a lawn tile these were fields of bare earth
+    # rather than the worn lanes they are meant to be.
+    "hamlet":    (("MI_V2_Meadow", 0.95, 0.0), ("MI_V2_Dirt", 0.30, 0.42),
                   ("MI_V2_Lawn", 0.46, 0.68)),
-    "towers":    (("MI_V2_Lawn", 0.95, 0.0), ("MI_V2_Dirt", 0.44, 0.60)),
+    "towers":    (("MI_V2_Lawn", 0.95, 0.0), ("MI_V2_Dirt", 0.26, 0.60)),
     "grove":     (("MI_V2_Mulch", 0.95, 0.0), ("MI_V2_Moss", 0.62, 0.55)),
     "wood":      (("MI_V2_Mulch", 1.10, 0.0), ("MI_V2_Mulch", 0.66, 0.62),
                   ("MI_V2_Moss", 0.52, 0.78)),
