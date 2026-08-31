@@ -19,7 +19,7 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "relay:card-seam:browser-verify": "node scripts/relay-card-seam-browser-verify.mjs",
-    "typecheck": "tsc -b --noEmit && tsc -p relay-bridge/tsconfig.json --noEmit && tsc -p relay-hermes-service/tsconfig.json --noEmit",
+    "typecheck": "tsc -b --noEmit && tsc -p relay-bridge/tsconfig.json --noEmit && tsc -p relay-hermes-service/tsconfig.json --noEmit && tsc -p scripts/tsconfig.json --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
     "relay:build": "esbuild src/relay/cli/main.ts --bundle --platform=node --format=cjs --outfile=dist-relay/cli.cjs --banner:js=\"#!/usr/bin/env node\" --log-level=warning",
@@ -55,7 +55,7 @@
     "relay:hermes:typecheck": "tsc -p relay-hermes-service/tsconfig.json --noEmit",
     "relay:hermes:test": "vitest run relay-hermes-service relay-bridge/reviewer-harness/hermes"
     ,"relay:executor:build": "esbuild src/relay/workspace/julius-tools/executor-control-plane-main.ts --bundle --platform=node --format=cjs --outfile=dist-relay-executor/main.cjs --external:pg --log-level=warning",
-    "relay:sibling-e2e:build": "esbuild scripts/julius-sibling-e2e.ts --bundle --platform=node --format=cjs --outfile=dist-relay-executor/sibling-e2e.cjs --external:pg --log-level=warning"
+    "relay:sibling-e2e:build": "esbuild scripts/julius-sibling-e2e.ts scripts/julius-provider-independent-evals.ts --bundle --platform=node --format=cjs --outdir=dist-relay-executor --out-extension:.js=.cjs --external:pg --log-level=warning"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.3.220",

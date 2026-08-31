@@ -6,7 +6,7 @@ import { DockerJuliusSandboxAdapter } from './docker-sandbox-adapter';
 import { FilesystemExecutionLedger, FilesystemSandboxTenancyLedger } from './durable-execution-ledger';
 import { createDurableReceiptAttestor, createExecutorControlPlaneService } from './executor-control-plane-service';
 import { DockerExecutorReceiptStore } from './executor-receipt-store';
-import { deriveCallerAuthorities } from './executor-scoped-credential';
+import { deriveCallerAuthorities, parseExecutorCallers } from './executor-scoped-credential';
 
 const required=(name:string):string=>{const value=process.env[name];if(!value)throw new Error(`executor_config_missing:${name}`);return value;};
 const port=Number(process.env.EXECUTOR_PORT??'8787');
@@ -25,7 +25,8 @@ async function main():Promise<void>{
     durability:{store:new JuliusToolRecoveryPostgresRepository(pool),receipts,runtimeInstanceId:required('EXECUTOR_RUNTIME_ID'),executorVersion:required('EXECUTOR_VERSION'),attestReceipt:attestor},
   });
   // The root secret never leaves this process. Julius receives only the per-operation credentials derived from it.
-  const callerAuthorities=deriveCallerAuthorities({rootSecret:required('EXECUTOR_CREDENTIAL_ROOT'),callerId:required('JULIUS_CALLER_ID'),tenantId:required('JULIUS_TENANT_ID')});
+  const declared=process.env.EXECUTOR_CALLERS?parseExecutorCallers(process.env.EXECUTOR_CALLERS):[{callerId:required('JULIUS_CALLER_ID'),tenantId:required('JULIUS_TENANT_ID'),credentialRoot:required('EXECUTOR_CREDENTIAL_ROOT')}];
+  const callerAuthorities=declared.flatMap(caller=>deriveCallerAuthorities({rootSecret:caller.credentialRoot,callerId:caller.callerId,tenantId:caller.tenantId}));
   const service=createExecutorControlPlaneService({callerAuthorities,keyId:required('EXECUTOR_KEY_ID'),privateSigningKey,physical,receipts,executionLedger,tenancyLedger});
   service.listen(port,'0.0.0.0',()=>process.stdout.write(`executor_ready:${port}\n`));
   const shutdown=async()=>{service.close();await pool.end();};

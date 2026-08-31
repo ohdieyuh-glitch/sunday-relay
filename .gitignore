@@ -3,6 +3,7 @@ dist
 dist-relay
 dist-relay-bridge
 dist-relay-hermes
+dist-relay-executor
 *.tsbuildinfo
 .DS_Store
 .env

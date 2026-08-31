@@ -19,3 +19,21 @@ export function deriveCallerAuthorities(input:{rootSecret:string;callerId:string
 export function deriveScopedCredentialMap(rootSecret:string,operations?:readonly ExecutorOperation[]):ReadonlyMap<ExecutorOperation,string> {
   return new Map((operations??EXECUTOR_OPERATIONS).map(operation=>[operation,deriveScopedCredential(rootSecret,operation)]));
 }
+
+export interface ExecutorCallerDeclaration {readonly callerId:string;readonly tenantId:string;readonly credentialRoot:string;}
+/** Parses the executor-only caller table. Each declared caller gets one narrowly scoped credential per operation. */
+export function parseExecutorCallers(value:string):readonly ExecutorCallerDeclaration[] {
+  const parsed=JSON.parse(value) as unknown;
+  if(!Array.isArray(parsed)||parsed.length<1||parsed.length>16)throw new Error('executor_callers_invalid');
+  const declarations=parsed.map(entry=>{
+    if(!entry||typeof entry!=='object'||Array.isArray(entry))throw new Error('executor_callers_invalid');
+    const record=entry as Record<string,unknown>;
+    if(Object.keys(record).sort().join(',')!=='callerId,credentialRoot,tenantId')throw new Error('executor_callers_invalid');
+    const callerId=String(record.callerId),tenantId=String(record.tenantId),credentialRoot=String(record.credentialRoot);
+    if(!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(callerId)||!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(tenantId)||credentialRoot.length<16)throw new Error('executor_callers_invalid');
+    return {callerId,tenantId,credentialRoot};
+  });
+  if(new Set(declarations.map(entry=>entry.callerId)).size!==declarations.length)throw new Error('executor_callers_invalid');
+  if(new Set(declarations.map(entry=>entry.credentialRoot)).size!==declarations.length)throw new Error('executor_callers_shared_root');
+  return declarations;
+}

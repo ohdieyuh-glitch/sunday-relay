@@ -92,9 +92,9 @@ describe('executor control-plane service',()=>{
 
       // An envelope that has already expired is refused against this service's clock, never against its own issuedAt.
       const stale=new Date(Date.now()-600_000);
-      expect(await read(await post('execute',scoped('execute'),envelope({issuedAt:stale.toISOString(),expiresAt:new Date(stale.getTime()+60_000).toISOString()})))).toMatchObject({status:400,error:'execution_envelope_expired'});
+      expect(await read(await post('execute',scoped('execute'),envelope({issuedAt:stale.toISOString(),expiresAt:new Date(stale.getTime()+60_000).toISOString()})))).toMatchObject({status:400,error:'INVALID_REQUEST:execution_envelope_expired'});
       const future=new Date(Date.now()+600_000);
-      expect(await read(await post('execute',scoped('execute'),envelope({issuedAt:future.toISOString(),expiresAt:new Date(future.getTime()+60_000).toISOString()})))).toMatchObject({status:400,error:'execution_envelope_not_yet_valid'});
+      expect(await read(await post('execute',scoped('execute'),envelope({issuedAt:future.toISOString(),expiresAt:new Date(future.getTime()+60_000).toISOString()})))).toMatchObject({status:400,error:'INVALID_REQUEST:execution_envelope_not_yet_valid'});
       expect(physicalEffects).toBe(0);
 
       // Two concurrent identical requests: the reservation, not the lookup, decides, so only one can reach a physical effect.

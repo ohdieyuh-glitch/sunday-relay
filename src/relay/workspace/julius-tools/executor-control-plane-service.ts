@@ -45,7 +45,9 @@ async function body(request: IncomingMessage):Promise<unknown>{
   return JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown;
 }
 
-const statusFor=(message:string):number=>message==='STARTED_UNKNOWN_OUTCOME'?409:message.startsWith('SECURITY_FAILURE:')?409:message.includes('conflict')?409:message==='request_too_large'?413:message.startsWith('execution_envelope_')||message.startsWith('executor_operation_invalid')||message.startsWith('execution_request:')||message.startsWith('executor_')&&message.includes(':fields_invalid')?400:500;
+const statusFor=(message:string):number=>message.startsWith('SECURITY_FAILURE:')||message==='STARTED_UNKNOWN_OUTCOME'||message.includes('conflict')?409:message==='request_too_large'?413:message.startsWith('INVALID_REQUEST:')?400:500;
+/** Every shape refusal answers as one family, so a caller can tell a malformed request from an executor fault. */
+const validated=<T>(parse:()=>T):T=>{try{return parse();}catch(error){const message=error instanceof Error?error.message:'invalid';throw new Error(message.startsWith('SECURITY_FAILURE:')?message:`INVALID_REQUEST:${message}`);}};
 
 /** Minimal privileged boundary: transport/authentication/attestation only; C.A.R.D. and mission truth remain in Julius. */
 export function createExecutorControlPlaneService(config:ExecutorControlPlaneServiceConfig):Server {
@@ -64,7 +66,7 @@ export function createExecutorControlPlaneService(config:ExecutorControlPlaneSer
       if(!authority.operations.has(operation)){response.statusCode=403;response.end('{"error":"operation_scope_refused"}');return;}
       const input=await body(request);let value:unknown;let attestations:readonly SignedExecutorAttestation[]|undefined;let receiptBodies:Readonly<Record<'BEFORE'|'AFTER',string>>|undefined;let terminalPayload:Readonly<Record<'stdout'|'stderr'|'changedPaths',string>>|undefined;
       if(operation!=='execute'){
-        const parsed=parseExecutorOperationRequest(operation,input,{tenantId:authority.tenantId});
+        const parsed=validated(()=>parseExecutorOperationRequest(operation,input,{tenantId:authority.tenantId}));
         if(operation==='create')await config.tenancyLedger.bind({sandboxId:(parsed as {identity:{sandboxId:string}}).identity.sandboxId,tenantId:authority.tenantId});
         else if(SANDBOX_SCOPED.has(operation))await config.tenancyLedger.assert({sandboxId:(parsed as {sandboxId:string}).sandboxId,tenantId:authority.tenantId});
         switch(operation){
@@ -82,7 +84,7 @@ export function createExecutorControlPlaneService(config:ExecutorControlPlaneSer
         response.statusCode=200;response.end(encoded);return;
       }
       // The envelope is parsed exactly once, against this service's clock. A caller-supplied timestamp never decides expiry.
-      const envelope=parseExecutorExecutionEnvelope(input,{allowedCallerIds:new Set([authority.callerId])});
+      const envelope=validated(()=>parseExecutorExecutionEnvelope(input,{allowedCallerIds:new Set([authority.callerId])}));
       if(envelope.tenantId!==authority.tenantId)throw new Error('SECURITY_FAILURE:executor_tenant_scope_refused');
       await config.tenancyLedger.assert({sandboxId:envelope.sandboxId,tenantId:authority.tenantId});
       // Reserve before any physical effect and branch on the reservation itself: two concurrent identical requests cannot both execute.
