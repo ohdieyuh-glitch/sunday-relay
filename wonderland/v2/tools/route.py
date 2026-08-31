@@ -165,18 +165,37 @@ def _flood_plain(src, blocked, nx, ny):
     return par
 
 
-def nearest_free(x, y, blocked, nx, ny, cell, rings=40):
-    """A destination centre is often the LANDMARK. Walk out to open ground."""
+def nearest_free(x, y, blocked, nx, ny, cell, rings=40, dist=None, want=6):
+    """A destination centre is often the LANDMARK. Walk out to STANDING ROOM.
+
+    "The nearest free cell" is not the same as "somewhere the Dog can stand".
+    Both remaining traversal failures were of that shape: the castle front and
+    the garden quarter resolved to cells hard against geometry, and the Dog
+    stopped 332 uu short of one having spent its whole budget trying to squeeze
+    the last few metres. It was not a tolerance problem -- the tolerance is 36
+    uu -- it simply could not get there.
+
+    So a destination now needs room around it as well as being free: `want` in
+    chamfer units, 6 being two cells. The search widens to the first cell that
+    has it, and falls back to merely-free only if the whole neighbourhood is
+    tight, which keeps a cramped quarter reachable rather than dropping it.
+    """
     i0, j0 = int((x - X0) // cell), int((y - Y0) // cell)
+    fallback = None
     for r in range(rings):
         for dj in range(-r, r + 1):
             for di in range(-r, r + 1):
                 if r and max(abs(di), abs(dj)) != r:
                     continue
                 i, j = i0 + di, j0 + dj
-                if 0 <= i < nx and 0 <= j < ny and not blocked[j * nx + i]:
-                    return j * nx + i
-    return None
+                if not (0 <= i < nx and 0 <= j < ny) or blocked[j * nx + i]:
+                    continue
+                k = j * nx + i
+                if dist is None or dist[k] >= want:
+                    return k
+                if fallback is None:
+                    fallback = k
+    return fallback
 
 
 def distance_field(blocked, nx, ny):
@@ -373,7 +392,7 @@ def main():
 
     cells = []
     for (key, x, y, speed, hold, label) in TOUR:
-        c = nearest_free(x, y, blocked, nx, ny, cell)
+        c = nearest_free(x, y, blocked, nx, ny, cell, dist=dist)
         if c is None:
             print("# UNREACHABLE STOP: %s at (%.0f, %.0f) has no free ground within %d m"
                   % (key, x, y, 40 * cell // 100))
