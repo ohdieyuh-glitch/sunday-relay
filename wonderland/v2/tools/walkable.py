@@ -48,7 +48,12 @@ FOOT = LAYOUT.FOOT
 
 #: Walkable on purpose: paving and low platforms are surfaces, not obstacles.
 NOT_OBSTACLES = ("terrace_platform", "garden_lawn", "stone_ring_base", "path_steps",
-                 "side_steps", "ground_flowers", "ground_blooms")
+                 "side_steps", "ground_flowers", "ground_blooms",
+                 # Declared rather than left missing, because a missing FOOT
+                 # entry FAILS OPEN and looks exactly like a considered
+                 # decision. tea_saucer is a 2.6 m flat disc you step onto;
+                 # mushroom_small and key_ornate are ankle-height props.
+                 "tea_saucer", "mushroom_small", "key_ornate")
 
 #: THE WINDOW WAS GOLDEN ARRIVAL AND THE WORLD IS NOT.
 #:

@@ -4423,6 +4423,29 @@ FOOT = {"hedge_block": (176, 75), "hedge_mass": (320, 320), "garden_wall": (255,
         "mushroom_giant": (260, 260), "mushroom_medium": (90, 90),
         "fountain_basin": (300, 300), "balustrade": (255, 40),
         "castle_tower": (400, 400), "castle_hall": (600, 600), "tower_capped": (400, 400),
+        # THE TOWER'S THREE SIBLINGS. `castle_tower` was here and the octagon,
+        # square and slender variants were not, so every route solve and every
+        # walkable audit ran straight through 38 castle towers as if they were
+        # air. The Dog proved it: the exploration route was solved through the
+        # tower at (2500, 10300), it walked into real collision on leg 19 of
+        # 95, and it never moved again -- 22 legs abandoned, the whole outer
+        # world unvisited. This is the richest defect class in this project,
+        # a rule applied to one collection and not its siblings, and it hid
+        # for as long as it did because a MISSING FOOT ENTRY FAILS OPEN.
+        #
+        # Measured from the recipes in assets_v2: the square tower's base box
+        # is 560 x 560, the slender's revolve profile starts at radius 120,
+        # the octagon's buttresses sit at radius 320 on a ~300 drum. The
+        # arcade is the walk-through colonnade at 420 x 200.
+        "castle_tower_octagon": (300, 300), "castle_tower_square": (280, 280),
+        "castle_tower_slender": (120, 120), "castle_arcade": (420, 200),
+        # THE TEA DISTRICT'S CROCKERY IS SOLID AND IS THE SIZE OF A BUILDING.
+        # Measured from the recipes: the pot reaches 138 uu, the cups 134 and
+        # 130, the clock 78. A walker meets all of them. The SAUCER is
+        # deliberately absent: at 260 uu it is a flat disc on the ground, a
+        # platform you step onto rather than something you go round.
+        "tea_pot": (138, 138), "tea_cup": (134, 134),
+        "tea_cup_small": (130, 130), "clock_ornate": (78, 78),
         "tower_clock": (176, 176), "column_ornate": (60, 60), "arch_stone": (330, 90),
         "tea_plinth": (200, 200), "stairs_broad": (350, 260),
         "garden_bench": (85, 90), "signpost": (46, 46),

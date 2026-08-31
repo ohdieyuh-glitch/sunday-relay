@@ -50,10 +50,33 @@ TOUR = [
 ]
 
 
+#: Assets with no FOOT entry that are DELIBERATELY not obstacles -- soft
+#: scatter, elevated pieces, things you walk through. Anything else missing is
+#: reported, because a missing footprint FAILS OPEN: the solver routes straight
+#: through it and only the Dog finds out.
+_SOFT_OK = ("flower_", "blossom_", "ground_", "petal", "lavender_", "rose_bloom",
+            "ivy_", "vine_", "canopy_", "cloud_", "sky_", "balloon_", "leaf_",
+            "roof_", "finial_", "balcony_", "dome", "bridge", "arch", "spire",
+            "kerb_", "sign", "banner", "lantern", "glow", "water", "lily")
+
+
 def build(cell, capsule):
     nx, ny = (X1 - X0) // cell, (Y1 - Y0) // cell
     blocked = bytearray(nx * ny)
     n = 0
+    # WHAT THE SOLVER CANNOT SEE. castle_tower was in FOOT and its octagon,
+    # square and slender siblings were not, so 38 towers were air to every
+    # route solve and every walkable audit until the Dog walked into one.
+    unseen = {}
+    for p in LAYOUT.ALL:
+        a = p["asset"]
+        if a not in FOOT and a not in NOT_OBSTACLES and p["pos"][2] < 200 \
+                and not any(k in a for k in _SOFT_OK):
+            unseen[a] = unseen.get(a, 0) + 1
+    if unseen:
+        print("# GROUND-LEVEL ASSETS WITH NO FOOT ENTRY -- invisible to this solve:")
+        for a, c in sorted(unseen.items(), key=lambda kv: -kv[1]):
+            print("#   %-28s x%d" % (a, c))
     for p in LAYOUT.ALL:
         a = p["asset"]
         if a in NOT_OBSTACLES or a not in FOOT:
