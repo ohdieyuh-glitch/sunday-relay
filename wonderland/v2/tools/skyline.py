@@ -575,19 +575,108 @@ def cam_mass_report(tag, top_n=14, aspect_target=4.5, min_m=0.0):
     return out
 
 
+def silhouette_fill(asset, cols=96, rows=128):
+    """The share of its bounding rectangle the SIDE VIEW actually covers.
+
+    THE RADIUS ENVELOPE IS THE WRONG MEASURE FOR A GROUPED SILHOUETTE. A
+    twelve-slab max-radius profile says the great spire fills 0.53 of its box
+    and calls it blocky -- but at 90-120 m that radius belongs to FOUR
+    SEPARATE FLANKING SPIRES with open sky between them and the needle, and a
+    single number per slab cannot tell four towers from a drum. The founder's
+    fourth term is negative-space READABILITY, which is a property of the
+    picture, so this rasterises the triangles into the picture: project every
+    triangle onto the x-z plane, fill it, and count.
+
+    Returns None if the mesh cannot be built, so the caller falls back rather
+    than reporting a fill of zero for a recipe that failed.
+    """
+    try:
+        class U:
+            pass
+        ctx = gs.Context(U(), lambda m: None, force_fallback=True)
+        mesh = A.RECIPES[asset][0](ctx).mesh
+    except Exception:
+        return None
+    lo, hi = mesh.bbox()
+    w = max(1e-6, hi[0] - lo[0])
+    h = max(1e-6, hi[2] - lo[2])
+    grid = bytearray(cols * rows)
+
+    def put(cx, cy):
+        if 0 <= cx < cols and 0 <= cy < rows:
+            grid[cy * cols + cx] = 1
+
+    for tri in mesh.tris:
+        pts = []
+        for vi in tri:
+            v = mesh.verts[vi]
+            pts.append(((v[0] - lo[0]) / w * (cols - 1), (v[2] - lo[2]) / h * (rows - 1)))
+        # scanline fill of one triangle, which is the whole point: a wireframe
+        # of edges would call a solid drum mostly sky
+        ys = [p[1] for p in pts]
+        y0, y1 = int(math.floor(min(ys))), int(math.ceil(max(ys)))
+        for yy in range(max(0, y0), min(rows, y1 + 1)):
+            xs = []
+            for i in range(3):
+                (ax, ay), (bx, by) = pts[i], pts[(i + 1) % 3]
+                if (ay <= yy < by) or (by <= yy < ay):
+                    t = (yy - ay) / (by - ay)
+                    xs.append(ax + t * (bx - ax))
+            if len(xs) >= 2:
+                for xx in range(int(math.floor(min(xs))), int(math.ceil(max(xs))) + 1):
+                    put(xx, yy)
+    return sum(grid) / float(cols * rows)
+
+
 def profile_report(asset):
-    """The measured radius profile of one recipe, bottom slab to top."""
+    """The measured radius profile of one recipe, bottom slab to top.
+
+    And its FILL: the share of its own bounding rectangle the silhouette
+    occupies. This is the founder's fourth term -- "clear negative-space
+    readability" -- made into a number, and it is the one that separates the
+    two ways of making a landmark bigger. A tower that gets its mass by
+    growing uniformly fills its box and reads as a BLOCK; one that gets it
+    from a broad body under a slender shaft leaves most of the box as sky.
+
+    THE BANDS ARE MEASURED, NOT INVENTED. The first version of this scored the
+    re-authored great spire at 0.50 and printed "blocky" against a threshold
+    somebody made up, which is the kind of number this ledger has an entry
+    about. Run over the shapes already in the world, and already approved:
+
+        castle_hall        0.93   a solid mass, and correctly so
+        tower_district     0.63   a capped tower
+        spire_signature    0.52   the signature spire the founder approved
+        spire_great        0.50   this pass -- MORE open than that one
+
+    So the bands below are those readings. The useful fact is the comparison:
+    a new landmark that scores near an approved one is not a block, whatever
+    an absolute threshold says.
+    """
     b = bboxes().get(asset)
     if b is None:
         print("no recipe bbox for %s" % asset)
         return 1
     span = (b["ztop"] - b["zlo"]) / 100.0
+    prof = b["prof"]
+    widest = max(prof) or 1.0
+    envelope = sum(prof) / (widest * len(prof))
+    fill = silhouette_fill(asset)
+    if fill is None:
+        fill = envelope
     print("PROFILE  %s   height %.1f m   half-width max %.1f m"
           % (asset, span, max(b["rx"], b["ry"]) / 100.0))
-    for k, r in enumerate(b["prof"]):
+    for k, r in enumerate(prof):
         z0 = (b["zlo"] + (b["ztop"] - b["zlo"]) * k / float(PROFILE_BINS)) / 100.0
-        bar = "#" * int(round(r / 100.0 / max(1e-6, max(b["prof"]) / 100.0) * 44))
+        bar = "#" * int(round(r / widest * 44))
         print("  %6.1f m  r %6.1f m  %s" % (z0, r / 100.0, bar))
+    verdict = ("a solid mass, like castle_hall at 0.93" if fill > 0.85 else
+               "a capped tower, like tower_district at 0.63" if fill > 0.60 else
+               "a spire with a body, like spire_signature at 0.52" if fill > 0.42 else
+               "a needle -- little mass below the point")
+    print("  fill %.2f of its own bounding box -- %s" % (fill, verdict))
+    print("  (radius envelope would say %.2f; it cannot see between separate masses)"
+          % envelope)
+    print("  (1.00 = a cylinder; the sky in the box is the silhouette)")
     return 0
 
 
