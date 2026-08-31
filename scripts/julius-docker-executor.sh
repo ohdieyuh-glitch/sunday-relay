@@ -5,7 +5,7 @@ readonly command_text=${1:?missing command}
 readonly receipt_dir="/julius-receipts-root/${JULIUS_EXECUTION_TOKEN:?}"
 readonly stage_file="$receipt_dir/executor.stage"
 tree_digest() { (cd /workspace && find . -xdev \( -type f -o -type l \) -print0 | sort -z | while IFS= read -r -d '' path; do printf '%s\0' "$path"; stat -c '%f' -- "$path" 2>/dev/null; if test -L "$path"; then readlink -- "$path"; else sha256sum -- "$path" 2>/dev/null; fi; done) | sha256sum | cut -d' ' -f1; }
-durable_move() { local source=$1 target=$2; sync -f "$source" || true; mv -n -- "$source" "$target" || return 1; sync -f "$target" || true; sync || true; }
+durable_move() { local source=$1 target=$2; test -e "$target" && return 1; sync -f "$source" || true; mv -n -- "$source" "$target" || return 1; test -e "$target" || return 1; sync -f "$target" || true; sync || true; }
 stage() { printf '%s\n' "$1" > "$stage_file.tmp" || return 1; sync -f "$stage_file.tmp" || true; mv -f -- "$stage_file.tmp" "$stage_file" || return 1; sync -f "$stage_file" || true; sync || true; }
 readonly started_at=$(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)
 readonly pre_tree=$(tree_digest)
@@ -36,9 +36,12 @@ durable_move "$receipt_dir/stdout.tmp" "$receipt_dir/stdout"
 durable_move "$receipt_dir/stderr.tmp" "$receipt_dir/stderr"
 readonly end_ms=$(date +%s%3N)
 readonly duration_ms=$((end_ms-start_ms))
-readonly post_tree=$(tree_digest)
-(cd /workspace && git status --porcelain=v1 2>/dev/null || true) | head -n 100 > "$receipt_dir/changed-paths.tmp"
+# git reads configuration out of the workspace the untrusted command just wrote, and core.fsmonitor names a
+# program git will run. It is therefore run as the unprivileged invocation user with a hermetic configuration,
+# and the post-state digest is taken afterwards so it describes the tree this step leaves behind.
+(cd /workspace && GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null /usr/bin/setpriv --reuid=65532 --regid=65532 --clear-groups --bounding-set=-all --inh-caps=-all --ambient-caps=-all git -c core.fsmonitor= -c core.hooksPath=/dev/null --no-optional-locks status --porcelain=v1 2>/dev/null || true) | head -n 100 > "$receipt_dir/changed-paths.tmp"
 durable_move "$receipt_dir/changed-paths.tmp" "$receipt_dir/changed-paths"
+readonly post_tree=$(tree_digest)
 readonly stdout_digest=$(sha256sum "$receipt_dir/stdout" | cut -d' ' -f1)
 readonly stderr_digest=$(sha256sum "$receipt_dir/stderr" | cut -d' ' -f1)
 readonly changed_digest=$(sha256sum "$receipt_dir/changed-paths" | cut -d' ' -f1)

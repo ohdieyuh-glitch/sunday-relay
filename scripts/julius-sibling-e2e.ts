@@ -15,6 +15,7 @@ import { connect } from 'node:net';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { JuliusToolSettlementPostgresRepository } from '../src/relay/persistence/julius-tool-settlement-postgres';
+import { canonicalRequestDigest } from '../src/relay/workspace/julius-tools/execution-envelope';
 import { LIMITS, FULL_POLICY, LEASE, PROJECT, RUN, TASK, TENANT, WORKER, POLICY, COMPLETION_RUN, COMPLETION_TASK, digestOf, endpoint, envelopeFor, openJuliusClient, required, seedBase, seedInvocation, sha, type SandboxLimits, type SeededInvocation } from './julius-sibling-support';
 
 const run=promisify(execFile);
@@ -87,7 +88,7 @@ async function main():Promise<void>{
   const reseed=async(invocationId:string,command:string,timeoutMs?:number)=>{await seedBase(pool);return seedInvocation(pool,tools,{invocationId,command,timeoutMs});};
   const rebuild=(invocationId:string,command:string,timeoutMs=10_000):SeededInvocation=>{
     const request={invocationId,runId:RUN,taskId:TASK,projectId:PROJECT,workerId:WORKER,toolId:'shell.bash' as const,toolVersion:'1',arguments:{command},cwd:'.',idempotencyKey:invocationId,timeoutMs,expectedMutation:'WORKSPACE' as const};
-    const requestDigest=sha(invocationId);
+    const requestDigest=canonicalRequestDigest(request);
     const identity={sandboxId:invocationId,invocationId,tenantId:TENANT,projectId:PROJECT,runId:RUN,taskId:TASK,leaseGeneration:LEASE,policyRevision:POLICY,createdAt:new Date().toISOString(),expiresAt:new Date(Date.now()+3_600_000).toISOString()};
     return {invocationId,requestDigest,dispatchGeneration:1,identity,request,execution:{sandboxId:invocationId,expectedLeaseGeneration:LEASE,dispatchGeneration:1,requestDigest,executionTokenHash:sha(`token:${invocationId}`),effectClassification:'NON_IDEMPOTENT_MUTATION' as const,request}};
   };

@@ -6,6 +6,7 @@ import { TransactionalWonderlandDatabase } from '../src/relay/persistence/wonder
 import { JuliusToolPostgresRepository } from '../src/relay/persistence/julius-tool-postgres';
 import { RemoteExecutorControlPlane } from '../src/relay/workspace/julius-tools/remote-executor-control-plane';
 import type { ExecutorOperation } from '../src/relay/workspace/julius-tools/executor-operation-request';
+import { canonicalRequestDigest } from '../src/relay/workspace/julius-tools/execution-envelope';
 
 export const required=(name:string):string=>{const value=process.env[name];if(!value)throw new Error(`sibling_config_missing:${name}`);return value;};
 export const sha=(value:string)=>createHash('sha256').update(value).digest('hex');
@@ -59,7 +60,10 @@ export interface SeededInvocation {
 
 /** Julius authorizes and dispatches. The executor is never asked to make either decision. */
 export async function seedInvocation(pool:Pool,tools:JuliusToolPostgresRepository,input:{invocationId:string;command:string;timeoutMs?:number;claim?:boolean;runId?:string;taskId?:string}):Promise<SeededInvocation>{
-  const {invocationId,command}=input,timeoutMs=input.timeoutMs??10_000,requestDigest=sha(invocationId),reservationId=`budget-${invocationId}`,runId=input.runId??RUN,taskId=input.taskId??TASK;
+  const {invocationId,command}=input,timeoutMs=input.timeoutMs??10_000,reservationId=`budget-${invocationId}`,runId=input.runId??RUN,taskId=input.taskId??TASK;
+  const request={invocationId,runId,taskId,projectId:PROJECT,workerId:WORKER,toolId:'shell.bash' as const,toolVersion:'1',arguments:{command},cwd:'.',idempotencyKey:invocationId,timeoutMs,expectedMutation:'WORKSPACE' as const};
+  // The executor recomputes this from the request it receives, so Julius must record the same canonical digest.
+  const requestDigest=canonicalRequestDigest(request);
   await pool.query(`INSERT INTO relay_wonderland.budget_reservations(reservation_id,execution_id,worker_id,operation_key,idempotency_key,state,tool_calls,runtime_ms,expires_at)VALUES($1,'execution',$2,'tool',$3,'RESERVED',1,600000,now()+interval '60 minutes') ON CONFLICT DO NOTHING`,[reservationId,WORKER,invocationId]);
   await tools.request({invocationId,idempotencyKey:invocationId,requestDigest,tenantId:TENANT,projectId:PROJECT,runId,taskId,workerId:WORKER,leaseGeneration:LEASE,policyRevision:POLICY,toolId:'shell.bash',toolVersion:'1',mutationClass:'WORKSPACE',requestedAt:new Date().toISOString()});
   await tools.authorize({invocationId,tenantId:TENANT,projectId:PROJECT,requestDigest,policyRevision:POLICY,budgetReservationId:reservationId,authorizedAt:new Date().toISOString()});
@@ -72,7 +76,6 @@ export async function seedInvocation(pool:Pool,tools:JuliusToolPostgresRepositor
     dispatchGeneration=dispatch.dispatchGeneration;
   }
   const identity={sandboxId:invocationId,invocationId,tenantId:TENANT,projectId:PROJECT,runId,taskId,leaseGeneration:LEASE,policyRevision:POLICY,createdAt:new Date().toISOString(),expiresAt:new Date(Date.now()+3_600_000).toISOString()};
-  const request={invocationId,runId,taskId,projectId:PROJECT,workerId:WORKER,toolId:'shell.bash' as const,toolVersion:'1',arguments:{command},cwd:'.',idempotencyKey:invocationId,timeoutMs,expectedMutation:'WORKSPACE' as const};
   return {invocationId,requestDigest,dispatchGeneration,identity,request,execution:{sandboxId:invocationId,expectedLeaseGeneration:LEASE,dispatchGeneration,requestDigest,executionTokenHash:sha(`token:${invocationId}`),effectClassification:'NON_IDEMPOTENT_MUTATION' as const,request}};
 }
 

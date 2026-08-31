@@ -1,4 +1,4 @@
-import { randomUUID, type KeyObject } from 'node:crypto';
+import { createHash, randomUUID, type KeyObject } from 'node:crypto';
 import type { SandboxExecutionPort } from '../../mission/julius';
 import { receiptDigest, verifyExecutorAttestation, type SignedExecutorAttestation } from './executor-attestation';
 import { deriveToolInvocationResult, parseExecutorAfterReceipt, parseExecutorBeforeReceipt, validateToolInvocationResult } from './executor-terminal-receipt';
@@ -18,7 +18,7 @@ export interface ExecutorControlPlaneConfig {
 }
 
 const remoteInstances = new WeakSet<object>();
-async function boundedJson(response:Response):Promise<unknown>{const reader=response.body?.getReader();if(!reader)throw new Error('executor_response_missing');const chunks:Uint8Array[]=[];let bytes=0;while(true){const next=await reader.read();if(next.done)break;bytes+=next.value.byteLength;if(bytes>2*1024*1024){await reader.cancel();throw new Error('executor_response_too_large');}chunks.push(next.value);}try{return JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown;}catch{throw new Error('executor_response_malformed');}}
+async function boundedJson(response:Response):Promise<unknown>{const reader=response.body?.getReader();if(!reader)throw new Error('executor_response_missing');const chunks:Uint8Array[]=[];let bytes=0;while(true){const next=await reader.read();if(next.done)break;bytes+=next.value.byteLength;if(bytes>4*1024*1024){await reader.cancel();throw new Error('executor_response_too_large');}chunks.push(next.value);}try{return JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown;}catch{throw new Error('executor_response_malformed');}}
 async function refusal(response:Response):Promise<Error>{
   const decoded=await boundedJson(response).then(value=>value as {error?:unknown},()=>null);
   const code=typeof decoded?.error==='string'&&/^[A-Za-z0-9_:.-]{1,256}$/.test(decoded.error)?decoded.error:null;
@@ -76,6 +76,9 @@ export class RemoteExecutorControlPlane implements SandboxExecutionPort {
     }
     const before=parseExecutorBeforeReceipt(decoded.receiptBodies.BEFORE),after=parseExecutorAfterReceipt(decoded.receiptBodies.AFTER);
     if(before.invocationId!==after.invocationId||before.sandboxId!==after.sandboxId||before.requestDigest!==after.requestDigest||before.preTreeDigest!==after.preTreeDigest)throw new Error('SECURITY_FAILURE:executor_receipt_chain_invalid');
+    // policyDecisionRef records which policy authorised the work and lands in Julius's durable settlement,
+    // so it is checked against the signed BEFORE receipt rather than taken from the unsigned response body.
+    if(createHash('sha256').update(String(decoded.value.policyDecisionRef)).digest('hex')!==before.policyDigest)throw new Error('SECURITY_FAILURE:executor_policy_reference_unattested');
     const authoritative=deriveToolInvocationResult(after,{...decoded.terminalPayload,policyDecisionRef:decoded.value.policyDecisionRef});
     try{validateToolInvocationResult(authoritative,decoded.value);}catch{throw new Error('SECURITY_FAILURE:executor_result_mismatch');}
     return authoritative;

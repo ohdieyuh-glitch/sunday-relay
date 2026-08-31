@@ -8,8 +8,19 @@ export const EXECUTOR_OPERATION_SET=new Set<ExecutorOperation>(EXECUTOR_OPERATIO
 export const operationScope=(operation:ExecutorOperation):ExecutorCallerScope=>`sandbox:${operation}`;
 /** Operations that act on an already-bound sandbox, so the executor must re-check the sandbox's tenant. */
 export const SANDBOX_SCOPED:ReadonlySet<ExecutorOperation>=new Set<ExecutorOperation>(['prepare','execute','cancel','destroy','inspect','artifacts']);
+/** What a tenant's orchestrator may do: everything it does names a sandbox it owns. */
+export const TENANT_OPERATIONS:readonly ExecutorOperation[]=['create','prepare','execute','cancel','destroy','inspect','artifacts'];
+/**
+ * Fleet-wide operations. `discover` and `reconcile` read and act across every tenant's sandboxes and
+ * `quarantine` destroys a container outright, so none of them is ever derived for a tenant caller.
+ */
+export const OPERATOR_OPERATIONS:readonly ExecutorOperation[]=['discover','reconcile','quarantine'];
 
 const C='executor_operation_invalid';
+/** Bounded so a completed execution can always be returned: an answer the response envelope cannot carry
+ *  would otherwise leave a real, signed outcome unreportable. Kept well under the service's response ceiling
+ *  because the payload appears twice in the envelope and JSON escaping can multiply it further. */
+export const MAX_SANDBOX_OUTPUT_BYTES=262_144;
 const NETWORKS=new Set(['DENY','MEDIATED']);
 const identity=(value:unknown,tenantId:string)=>{
   const record=exact(value,['sandboxId','invocationId','tenantId','projectId','runId','taskId','leaseGeneration','policyRevision','createdAt','expiresAt'],'executor_identity');
@@ -20,7 +31,11 @@ const identity=(value:unknown,tenantId:string)=>{
 };
 const limits=(value:unknown)=>{
   const record=exact(value,['cpuCount','memoryBytes','pids','openFiles','workspaceBytes','outputBytes','wallClockMs','concurrentProcesses'],'executor_limits');
-  return {cpuCount:integer(record.cpuCount,'limits.cpuCount',C,1,64),memoryBytes:integer(record.memoryBytes,'limits.memoryBytes',C,1,68_719_476_736),pids:integer(record.pids,'limits.pids',C,1,4096),openFiles:integer(record.openFiles,'limits.openFiles',C,1,1_048_576),workspaceBytes:integer(record.workspaceBytes,'limits.workspaceBytes',C,1,1_099_511_627_776),outputBytes:integer(record.outputBytes,'limits.outputBytes',C,1,16_777_216),wallClockMs:integer(record.wallClockMs,'limits.wallClockMs',C,1,3_600_000),concurrentProcesses:integer(record.concurrentProcesses,'limits.concurrentProcesses',C,1,256)};
+  const bounded={cpuCount:integer(record.cpuCount,'limits.cpuCount',C,1,64),memoryBytes:integer(record.memoryBytes,'limits.memoryBytes',C,1,68_719_476_736),pids:integer(record.pids,'limits.pids',C,1,4096),openFiles:integer(record.openFiles,'limits.openFiles',C,1,1_048_576),workspaceBytes:integer(record.workspaceBytes,'limits.workspaceBytes',C,1,1_099_511_627_776),outputBytes:integer(record.outputBytes,'limits.outputBytes',C,1,MAX_SANDBOX_OUTPUT_BYTES),wallClockMs:integer(record.wallClockMs,'limits.wallClockMs',C,1,3_600_000),concurrentProcesses:integer(record.concurrentProcesses,'limits.concurrentProcesses',C,1,256)};
+  // The kernel enforces concurrency through the pid ceiling, so a larger concurrency claim would be a number
+  // the sandbox cannot honour. It is refused rather than recorded and left unenforced.
+  if(bounded.concurrentProcesses>bounded.pids)throw new Error(`${C}:limits.concurrentProcesses`);
+  return bounded;
 };
 const policy=(value:unknown)=>{
   const record=exact(value,['readWorkspace','mutateWorkspace','executeProcess','network','allowedTools'],'executor_policy');
@@ -31,8 +46,6 @@ const policy=(value:unknown)=>{
 const lease=(record:Record<string,unknown>)=>integer(record.expectedLeaseGeneration,'expectedLeaseGeneration',C);
 
 export interface ExecutorOperationContext {readonly tenantId:string;}
-/** The sandbox this request acts on, when the operation is sandbox scoped. */
-export const requestSandboxId=(operation:ExecutorOperation,parsed:unknown):string|null=>SANDBOX_SCOPED.has(operation)?String((parsed as {sandboxId?:string;identity?:{sandboxId:string}}).sandboxId??''):null;
 
 /** Strict per-operation validation. The executor never forwards a caller-shaped object to the physical adapter. */
 export function parseExecutorOperationRequest(operation:Exclude<ExecutorOperation,'execute'>,value:unknown,context:ExecutorOperationContext):unknown {

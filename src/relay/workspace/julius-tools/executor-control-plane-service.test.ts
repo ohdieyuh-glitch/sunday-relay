@@ -10,19 +10,23 @@ import { createDurableReceiptAttestor, createExecutorControlPlaneService } from 
 import { RemoteExecutorControlPlane } from './remote-executor-control-plane';
 import { FilesystemExecutionLedger, FilesystemSandboxTenancyLedger } from './durable-execution-ledger';
 import { deriveScopedCredential, deriveCallerAuthorities } from './executor-scoped-credential';
+import { canonicalRequestDigest } from './execution-envelope';
+import { EXECUTOR_OPERATIONS } from './executor-operation-request';
 
 const roots:string[]=[];
 afterEach(async()=>{await Promise.all(roots.splice(0).map(root=>rm(root,{recursive:true,force:true})));});
 
-const sha=(value:string)=>createHash('sha256').update(value).digest('hex'),digest=sha('scope');
-const beforeBody=`receiptVersion=1\nphase=BEFORE\nmanifestDigest=${digest}\ninvocationId=inv\ndispatchGeneration=2\nsandboxId=sandbox\ntenantDigest=${digest}\nprojectDigest=${digest}\nrunDigest=${digest}\ntaskDigest=${digest}\nworkerDigest=${digest}\ntoolId=shell.bash\ntoolVersion=1\nrequestDigest=${'a'.repeat(64)}\npolicyDigest=${digest}\nleaseGeneration=1\nimageDigest=${digest}\nexecutorIdentity=executor\npreTreeDigest=${digest}\nstartedAt=2026-08-31T00:00:00.000Z\n`;
+const sha=(value:string)=>createHash('sha256').update(value).digest('hex'),digest=sha('scope'),policyDigest=sha('policy');
+const REQUEST={invocationId:'inv',runId:'run',taskId:'task',projectId:'project',workerId:'worker',toolId:'shell.bash' as const,toolVersion:'1',arguments:{command:'true'},cwd:'.',idempotencyKey:'key',timeoutMs:1000,expectedMutation:'WORKSPACE' as const};
+const REQUEST_DIGEST=canonicalRequestDigest(REQUEST);
+const beforeBody=`receiptVersion=1\nphase=BEFORE\nmanifestDigest=${digest}\ninvocationId=inv\ndispatchGeneration=2\nsandboxId=sandbox\ntenantDigest=${digest}\nprojectDigest=${digest}\nrunDigest=${digest}\ntaskDigest=${digest}\nworkerDigest=${digest}\ntoolId=shell.bash\ntoolVersion=1\nrequestDigest=${REQUEST_DIGEST}\npolicyDigest=${policyDigest}\nleaseGeneration=1\nimageDigest=${digest}\nexecutorIdentity=executor\npreTreeDigest=${digest}\nstartedAt=2026-08-31T00:00:00.000Z\n`;
 const afterDigest=sha(['0','1',sha(''),sha(''),digest,sha('')].join('\n'));
-const afterBody=`receiptVersion=1\nphase=AFTER\nmanifestDigest=${digest}\ninvocationId=inv\ndispatchGeneration=2\nsandboxId=sandbox\nrequestDigest=${'a'.repeat(64)}\nexecutorIdentity=executor\nterminalState=SUCCEEDED\nexitCode=0\ndurationMs=1\nfinishedAt=2026-08-31T00:00:01.000Z\nstdoutDigest=${sha('')}\nstderrDigest=${sha('')}\npreTreeDigest=${digest}\npostTreeDigest=${digest}\nchangedPathsDigest=${sha('')}\noutputBytes=0\nexecutorResultDigest=${afterDigest}\n`;
+const afterBody=`receiptVersion=1\nphase=AFTER\nmanifestDigest=${digest}\ninvocationId=inv\ndispatchGeneration=2\nsandboxId=sandbox\nrequestDigest=${REQUEST_DIGEST}\nexecutorIdentity=executor\nterminalState=SUCCEEDED\nexitCode=0\ndurationMs=1\nfinishedAt=2026-08-31T00:00:01.000Z\nstdoutDigest=${sha('')}\nstderrDigest=${sha('')}\npreTreeDigest=${digest}\npostTreeDigest=${digest}\nchangedPathsDigest=${sha('')}\noutputBytes=0\nexecutorResultDigest=${afterDigest}\n`;
 const result:ToolInvocationResult={invocationId:'inv',status:'SUCCEEDED',exitCode:0,safeSummary:'Sandbox command completed.',stdout:'',stderr:'',stdoutRef:null,stderrRef:null,artifacts:[],evidence:[],durationMs:1,resourceUsage:{toolCalls:1,runtimeMs:1,outputBytes:0},policyDecisionRef:'policy',mutations:[]};
 const physical = (execute:()=>Promise<ToolInvocationResult>):SandboxExecutionPort => ({
   createSandbox:async input=>({...input.identity,state:'CREATING',workspaceRef:null,runtimeKind:'test',limits:input.limits,policy:input.policy,safeFailure:null}),
   prepareWorkspace:async()=>{throw new Error("ENOENT: no such file or directory, open '/tmp/julius-executor/receipts/abc/before.receipt'");},executeTool:async()=>execute(),cancelExecution:async()=>true,destroySandbox:async()=>true,
-  inspectSandbox:async()=>null,collectArtifacts:async()=>[],discoverSandboxes:async()=>[],quarantineSandbox:async()=>true,reconcileSandboxes:async()=>({recovered:0,lost:0,quarantined:0,destroyed:0}),
+  inspectSandbox:async()=>null,collectArtifacts:async()=>[],discoverSandboxes:async()=>[{sandboxId:'sandbox',runtimeId:'container-sandbox',state:'running',labels:{'julius.sandbox':'sandbox'}}],quarantineSandbox:async()=>true,reconcileSandboxes:async()=>({recovered:0,lost:0,quarantined:0,destroyed:0}),
 });
 
 describe('executor control-plane service',()=>{
@@ -35,12 +39,12 @@ describe('executor control-plane service',()=>{
     const attest=createDurableReceiptAttestor({keyId:'current',privateSigningKey:keys.privateKey,receipts,executionLedger});
     const allOperations=new Set(['create','prepare','execute','cancel','destroy','inspect','artifacts','discover','quarantine','reconcile'] as const);
     let physicalEffects=0;
-    const server=createExecutorControlPlaneService({callerAuthorities:[{callerId:'julius-prod',tenantId:'tenant',credential:'caller',operations:allOperations},{callerId:'execute-only',tenantId:'tenant',credential:'execute-only-secret',operations:new Set(['execute'] as const)},{callerId:'other-tenant',tenantId:'other',credential:'other-tenant-secret',operations:allOperations}],keyId:'current',privateSigningKey:keys.privateKey,receipts,executionLedger,tenancyLedger,physical:physical(async()=>{physicalEffects++;await writeFile(join(directory,'request.json'),JSON.stringify({invocationId:'inv',dispatchGeneration:2,sandboxId,requestDigest:'a'.repeat(64)}),{flag:'wx'});await writeFile(join(directory,'before.receipt'),beforeBody,{flag:'wx'});await writeFile(join(directory,'stdout'),'',{flag:'wx'});await writeFile(join(directory,'stderr'),'',{flag:'wx'});await writeFile(join(directory,'changed-paths'),'',{flag:'wx'});await attest({phase:'BEFORE',executionTokenHash:token,sandboxId});await writeFile(join(directory,'after.receipt'),afterBody,{flag:'wx'});await attest({phase:'AFTER',executionTokenHash:token,sandboxId});return result;})});
+    const server=createExecutorControlPlaneService({callerAuthorities:[{callerId:'julius-prod',tenantId:'tenant',credential:'caller',operations:allOperations},{callerId:'execute-only',tenantId:'tenant',credential:'execute-only-secret',operations:new Set(['execute'] as const)},{callerId:'other-tenant',tenantId:'other',credential:'other-tenant-secret',operations:allOperations}],keyId:'current',privateSigningKey:keys.privateKey,receipts,executionLedger,tenancyLedger,physical:physical(async()=>{physicalEffects++;await writeFile(join(directory,'request.json'),JSON.stringify({invocationId:'inv',dispatchGeneration:2,sandboxId,requestDigest:REQUEST_DIGEST}),{flag:'wx'});await writeFile(join(directory,'before.receipt'),beforeBody,{flag:'wx'});await writeFile(join(directory,'stdout'),'',{flag:'wx'});await writeFile(join(directory,'stderr'),'',{flag:'wx'});await writeFile(join(directory,'changed-paths'),'',{flag:'wx'});await attest({phase:'BEFORE',executionTokenHash:token,sandboxId});await writeFile(join(directory,'after.receipt'),afterBody,{flag:'wx'});await attest({phase:'AFTER',executionTokenHash:token,sandboxId});return result;})});
     await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));
     try{
       const address=server.address() as AddressInfo;
       const client=new RemoteExecutorControlPlane({endpoint:new URL(`http://127.0.0.1:${address.port}`),serviceCredential:'caller',callerId:'julius-prod',tenantId:'tenant',requestTimeoutMs:1000,trustedReceiptKeys:new Map([['current',keys.publicKey]]),allowInsecureLoopbackForTests:true});
-      const execution={sandboxId,expectedLeaseGeneration:1,dispatchGeneration:2,requestDigest:'a'.repeat(64),executionTokenHash:token,effectClassification:'NON_IDEMPOTENT_MUTATION' as const,request:{invocationId:'inv',projectId:'project',runId:'run',taskId:'task',workerId:'worker',toolId:'shell.bash' as const,toolVersion:'1',arguments:{command:'true'},cwd:'.',timeoutMs:1000,idempotencyKey:'key',expectedMutation:'WORKSPACE' as const}};
+      const execution={sandboxId,expectedLeaseGeneration:1,dispatchGeneration:2,requestDigest:REQUEST_DIGEST,executionTokenHash:token,effectClassification:'NON_IDEMPOTENT_MUTATION' as const,request:REQUEST};
       const identity={sandboxId,invocationId:'inv',tenantId:'tenant',projectId:'project',runId:'run',taskId:'task',leaseGeneration:1,policyRevision:'policy',createdAt:new Date().toISOString(),expiresAt:new Date(Date.now()+600_000).toISOString()};
       const limits={cpuCount:1,memoryBytes:134_217_728,pids:32,openFiles:128,workspaceBytes:10_485_760,outputBytes:32_768,wallClockMs:10_000,concurrentProcesses:4};
       const policy={readWorkspace:true,mutateWorkspace:true,executeProcess:true,network:'DENY' as const,allowedTools:['shell.bash']};
@@ -60,9 +64,9 @@ describe('executor control-plane service',()=>{
     const keys=generateKeyPairSync('ed25519');
     const executionLedger=new FilesystemExecutionLedger(join(root,'ledger')),tenancyLedger=new FilesystemSandboxTenancyLedger(join(root,'tenancy'));
     const attest=createDurableReceiptAttestor({keyId:'current',privateSigningKey:keys.privateKey,receipts,executionLedger});
-    const rootSecret='executor-root-secret-value';
+    const rootSecret='executor-root-secret-value-with-enough-entropy';
     let physicalEffects=0,release=()=>{};const gate=new Promise<void>(resolve=>{release=resolve;});
-    const server=createExecutorControlPlaneService({callerAuthorities:[...deriveCallerAuthorities({rootSecret,callerId:'julius-prod',tenantId:'tenant'}),{callerId:'other-tenant',tenantId:'other',credential:'other-tenant-secret',operations:new Set(['create'] as const)}],keyId:'current',privateSigningKey:keys.privateKey,receipts,executionLedger,tenancyLedger,physical:physical(async()=>{physicalEffects++;await gate;await writeFile(join(directory,'request.json'),JSON.stringify({invocationId:'inv',dispatchGeneration:2,sandboxId,requestDigest:'a'.repeat(64)}),{flag:'wx'});await writeFile(join(directory,'before.receipt'),beforeBody,{flag:'wx'});await writeFile(join(directory,'stdout'),'',{flag:'wx'});await writeFile(join(directory,'stderr'),'',{flag:'wx'});await writeFile(join(directory,'changed-paths'),'',{flag:'wx'});await attest({phase:'BEFORE',executionTokenHash:token,sandboxId});await writeFile(join(directory,'after.receipt'),afterBody,{flag:'wx'});await attest({phase:'AFTER',executionTokenHash:token,sandboxId});return result;})});
+    const server=createExecutorControlPlaneService({callerAuthorities:[...deriveCallerAuthorities({rootSecret,callerId:'julius-prod',tenantId:'tenant',operations:EXECUTOR_OPERATIONS}),{callerId:'other-tenant',tenantId:'other',credential:'other-tenant-secret',operations:new Set(['create'] as const)}],keyId:'current',privateSigningKey:keys.privateKey,receipts,executionLedger,tenancyLedger,physical:physical(async()=>{physicalEffects++;await gate;await writeFile(join(directory,'request.json'),JSON.stringify({invocationId:'inv',dispatchGeneration:2,sandboxId,requestDigest:REQUEST_DIGEST}),{flag:'wx'});await writeFile(join(directory,'before.receipt'),beforeBody,{flag:'wx'});await writeFile(join(directory,'stdout'),'',{flag:'wx'});await writeFile(join(directory,'stderr'),'',{flag:'wx'});await writeFile(join(directory,'changed-paths'),'',{flag:'wx'});await attest({phase:'BEFORE',executionTokenHash:token,sandboxId});await writeFile(join(directory,'after.receipt'),afterBody,{flag:'wx'});await attest({phase:'AFTER',executionTokenHash:token,sandboxId});return result;})});
     await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));
     try{
       const address=server.address() as AddressInfo,base=`http://127.0.0.1:${address.port}/v1/execute`;
@@ -72,7 +76,7 @@ describe('executor control-plane service',()=>{
       const identity={sandboxId,invocationId:'inv',tenantId:'tenant',projectId:'project',runId:'run',taskId:'task',leaseGeneration:1,policyRevision:'policy',createdAt:new Date().toISOString(),expiresAt:new Date(Date.now()+600_000).toISOString()};
       const limits={cpuCount:1,memoryBytes:134_217_728,pids:32,openFiles:128,workspaceBytes:10_485_760,outputBytes:32_768,wallClockMs:10_000,concurrentProcesses:4};
       const policy={readWorkspace:true,mutateWorkspace:true,executeProcess:true,network:'DENY',allowedTools:['shell.bash']};
-      const envelope=(overrides:Record<string,unknown>={})=>({schemaVersion:1,callerId:'julius-prod',callerScope:'sandbox:execute',tenantId:'tenant',projectId:'project',runId:'run',taskId:'task',invocationId:'inv',dispatchGeneration:2,sandboxId,requestDigest:'a'.repeat(64),executionIdentity:`inv:2:${sandboxId}`,nonce:'nonce',issuedAt:new Date().toISOString(),expiresAt:new Date(Date.now()+60_000).toISOString(),payload:{expectedLeaseGeneration:1,executionTokenHash:token,effectClassification:'NON_IDEMPOTENT_MUTATION',request:{invocationId:'inv',projectId:'project',runId:'run',taskId:'task',workerId:'worker',toolId:'shell.bash',toolVersion:'1',arguments:{command:'true'},cwd:'.',timeoutMs:1000,idempotencyKey:'key',expectedMutation:'WORKSPACE'}},...overrides});
+      const envelope=(overrides:Record<string,unknown>={})=>({schemaVersion:1,callerId:'julius-prod',callerScope:'sandbox:execute',tenantId:'tenant',projectId:'project',runId:'run',taskId:'task',invocationId:'inv',dispatchGeneration:2,sandboxId,requestDigest:REQUEST_DIGEST,executionIdentity:`inv:2:${sandboxId}`,nonce:'nonce',issuedAt:new Date().toISOString(),expiresAt:new Date(Date.now()+60_000).toISOString(),payload:{expectedLeaseGeneration:1,executionTokenHash:token,effectClassification:'NON_IDEMPOTENT_MUTATION',request:REQUEST},...overrides});
 
       // One operation is one credential: the execute credential can never destroy, and the create credential can never execute.
       expect(scoped('execute')).not.toBe(scoped('destroy'));
@@ -106,11 +110,22 @@ describe('executor control-plane service',()=>{
       expect(outcomes[1]).toMatchObject({status:409,error:'STARTED_UNKNOWN_OUTCOME'});
 
       // The same execution identity carrying a different request is a hard conflict, never a second execution.
-      expect(await read(await post('execute',scoped('execute'),envelope({requestDigest:'b'.repeat(64)})))).toMatchObject({status:409,error:'SECURITY_FAILURE:execution_identity_conflict'});
+      expect(await read(await post('execute',scoped('execute'),envelope({requestDigest:'b'.repeat(64)})))).toMatchObject({status:400,error:'INVALID_REQUEST:execution_envelope_request_digest_mismatch'});
+      const other={...REQUEST,arguments:{command:'false'}};
+      const divergent=envelope();(divergent as {payload:{request:unknown}}).payload.request=other;(divergent as {requestDigest:string}).requestDigest=canonicalRequestDigest(other);
+      expect(await read(await post('execute',scoped('execute'),divergent))).toMatchObject({status:409,error:'SECURITY_FAILURE:execution_identity_conflict'});
       expect(physicalEffects).toBe(1);
       // A filesystem message never crosses the boundary: Julius is not allowed to learn the receipt-store path.
       const leaky=await read(await post('prepare',scoped('prepare'),{sandboxId,sourceRef:'/tmp/nowhere',expectedLeaseGeneration:1}));
       expect(leaky).toMatchObject({status:500,error:'executor_failure'});
+
+      // The quarantine scope reaches `docker rm -f`, so a runtime id that is not a Julius sandbox is refused
+      // outright; without this the credential deletes any container on the executor host, its database included.
+      expect(await read(await post('quarantine',scoped('quarantine'),{runtimeId:'julius-postgres',reason:'x'}))).toMatchObject({status:409,error:'SECURITY_FAILURE:executor_quarantine_target_unknown'});
+      expect((await post('quarantine',scoped('quarantine'),{runtimeId:'container-sandbox',reason:'x'})).status).toBe(200);
+      expect(await read(await post('quarantine','other-tenant-secret',{runtimeId:'container-sandbox',reason:'x'}))).toMatchObject({status:403,error:'operation_scope_refused'});
+      // Another tenant cannot enumerate this one's sandboxes.
+      expect(await (await post('discover',scoped('discover'),{})).json()).toMatchObject({value:[{sandboxId}]});
 
       // The settled execution replays its original terminal material verbatim.
       expect((await post('execute',scoped('execute'),envelope())).status).toBe(200);

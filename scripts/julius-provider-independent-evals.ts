@@ -7,6 +7,7 @@
 import { readFile, stat } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { verifyExecutorAttestation, type SignedExecutorAttestation } from '../src/relay/workspace/julius-tools/executor-attestation';
+import { RemoteExecutorControlPlane } from '../src/relay/workspace/julius-tools/remote-executor-control-plane';
 import { EVAL_RUN, EVAL_TASK, FULL_POLICY, LEASE, LIMITS, PROJECT, TENANT, endpoint, envelopeFor, openJuliusClient, required, scopedCredentials, seedBase, seedInvocation, sha, type SandboxLimits } from './julius-sibling-support';
 
 type Verdict='PASS'|'FAIL'|'BLOCKED';
@@ -83,9 +84,9 @@ async function main():Promise<void>{
     const decoded=await raw.json() as {attestations:readonly SignedExecutorAttestation[]};
     const at=(phase:'BEFORE'|'AFTER')=>{const signed=decoded.attestations.find(item=>item.attestation.phase===phase);if(!signed)throw new Error(`attestation_missing:${phase}`);verifyExecutorAttestation(signed,trustedReceiptKeys,{phase,executionIdentity:`${containment.invocationId}:${containment.dispatchGeneration}:${containment.identity.sandboxId}`,invocationId:containment.invocationId,dispatchGeneration:containment.dispatchGeneration,sandboxId:containment.identity.sandboxId,requestDigest:containment.requestDigest,receiptDigest:signed.attestation.receiptDigest});return Date.parse(signed.attestation.issuedAt);};
     const before=at('BEFORE'),after=at('AFTER'),effect=(await stat(`${workspace}/eval-effects.log`)).mtimeMs;
-    if(!(before<=effect))throw new Error(`BEFORE ${before} did not precede the effect ${effect}`);
-    if(!(effect<=after+1000))throw new Error(`effect ${effect} did not precede AFTER ${after}`);
-    return `BEFORE_DURABLE=${before} < effect=${Math.round(effect)} < AFTER_DURABLE=${after}`;
+    if(!(before<=effect))throw new Error(`BEFORE_DURABLE ${before} did not precede the effect at ${Math.round(effect)}`);
+    if(!(effect<=after))throw new Error(`the effect at ${Math.round(effect)} did not precede AFTER_DURABLE ${after}`);
+    return `BEFORE_DURABLE=${before} <= effect=${Math.round(effect)} <= AFTER_DURABLE=${after}`;
   });
   await evaluate('exactly-one-physical-effect',async()=>{const lines=(await readFile(`${workspace}/eval-effects.log`,'utf8')).trim().split('\n').length;if(lines!==1)throw new Error(`eval-effects.log has ${lines} lines`);return 'eval-effects.log=1';});
 
@@ -129,15 +130,15 @@ async function main():Promise<void>{
   });
   await evaluate('workspace-byte-ceiling',async()=>{
     // The ceiling is measured where the workload actually writes: the bind-mounted workspace.
-    const roomy={...LIMITS,outputBytes:8_388_608};
-    const command='err=$( { head -c 8000000 /dev/zero > overflow.bin; } 2>&1 ); code=$?; printf "disk_exit=%s size=%s err=%s\\n" "$code" "$(wc -c < overflow.bin 2>/dev/null || printf 0)" "$(printf %s "$err" | tr -d "\\n" | tail -c 100 | tr " " "_")"; rm -f overflow.bin';
+    const roomy={...LIMITS,outputBytes:262_144,workspaceBytes:65_536};
+    const command='err=$( { head -c 200000 /dev/zero > overflow.bin; } 2>&1 ); code=$?; printf "disk_exit=%s size=%s err=%s\\n" "$code" "$(wc -c < overflow.bin 2>/dev/null || printf 0)" "$(printf %s "$err" | tr -d "\\n" | tail -c 100 | tr " " "_")"; rm -f overflow.bin';
     const seed=await start('disk',command,FULL_POLICY,roomy,20_000);
     const result=await client.executeTool(seed.execution);
     const size=Number(/size=(\d+)/.exec(result.stdout)?.[1]),code=/disk_exit=(\d+)/.exec(result.stdout)?.[1],err=/err=(\S*)/.exec(result.stdout)?.[1]??'';
     if(!Number.isFinite(size))throw new Error(`no written size observed in ${JSON.stringify(result.stdout).slice(0,200)}`);
-    if(size>LIMITS.workspaceBytes)throw new Blocked(`the ${LIMITS.workspaceBytes}-byte workspace ceiling is not enforced for a bind-mounted workspace: an 8,000,000-byte write reached ${size} bytes (exit ${code}). workspaceBytes only sizes the tmpfs used when a sandbox is granted no workspace, which no-workspace-policy-denies-writes covers`);
-    if(code==='0')throw new Error(`an 8,000,000-byte write into a ${LIMITS.workspaceBytes}-byte workspace succeeded reporting ${size} bytes`);
-    return `the ${LIMITS.workspaceBytes}-byte workspace stopped an 8,000,000-byte write at ${size} bytes (exit ${code}${err?`, ${err}`:''})`;
+    if(size>roomy.workspaceBytes)throw new Blocked(`the ${roomy.workspaceBytes}-byte workspace ceiling is not enforced for a bind-mounted workspace: a 200,000-byte write reached ${size} bytes (exit ${code}). workspaceBytes only sizes the tmpfs used when a sandbox is granted no workspace, which no-workspace-policy-denies-writes covers`);
+    if(code==='0')throw new Error(`a 200,000-byte write into a ${roomy.workspaceBytes}-byte workspace succeeded reporting ${size} bytes`);
+    return `the ${roomy.workspaceBytes}-byte workspace stopped a 200,000-byte write at ${size} bytes (exit ${code}${err?`, ${err}`:''})`;
   });
   await evaluate('timeout-kills-the-process-tree',async()=>{
     const seed=await start('timeout','nohup sh -c "sleep 12; printf late >> late-effect.log" >/dev/null 2>&1 & sleep 30',FULL_POLICY,LIMITS,2_000);
@@ -239,9 +240,20 @@ async function main():Promise<void>{
     if(winners.length!==1)throw new Error(`${winners.length} schedulers claimed the same dispatch`);
     return 'exactly one scheduler claimed the dispatch';
   });
+  const operator=process.env.JULIUS_OPERATOR_SCOPED_CREDENTIALS?scopedCredentials('JULIUS_OPERATOR_SCOPED_CREDENTIALS'):null;
+  for(const fleet of ['discover','reconcile','quarantine'] as const)
+    await refusesOverWire(`tenant-credential-refused-${fleet}`,fleet,scoped.get('execute')!,fleet==='quarantine'?{runtimeId:'julius-postgres',reason:'x'}:{},403,'operation_scope_refused');
+  if(operator){
+    // The scope reaches `docker rm -f`, so a runtime id that is not a Julius sandbox must be refused outright.
+    await refusesOverWire('quarantine-of-a-non-sandbox-container-refused','quarantine',operator.get('quarantine')!,{runtimeId:'julius-postgres',reason:'audit'},409,'SECURITY_FAILURE:executor_quarantine_target_unknown');
+    await refusesOverWire('quarantine-of-an-unknown-runtime-id-refused','quarantine',operator.get('quarantine')!,{runtimeId:'definitely-not-a-container',reason:'audit'},409,'SECURITY_FAILURE:executor_quarantine_target_unknown');
+  } else for(const id of ['quarantine-of-a-non-sandbox-container-refused','quarantine-of-an-unknown-runtime-id-refused'])
+    results.push({id,verdict:'BLOCKED',detail:'no operator authority configured: set JULIUS_OPERATOR_SCOPED_CREDENTIALS'});
   await evaluate('orphan-sandbox-quarantined',async()=>{
     if(!process.env.JULIUS_ORPHAN_EXPECTED)throw new Blocked('no orphan container was planted: set JULIUS_ORPHAN_EXPECTED=1');
-    const reconciliation=await client.reconcileSandboxes();
+    if(!operator)throw new Blocked('reconciliation is an operator authority: set JULIUS_OPERATOR_SCOPED_CREDENTIALS');
+    const operatorClient=new RemoteExecutorControlPlane({endpoint:endpoint(),serviceCredential:operator.get('reconcile')!,scopedCredentials:operator,callerId:'julius-operator',tenantId:TENANT,requestTimeoutMs:60_000,trustedReceiptKeys,allowInsecureLoopbackForTests:true});
+    const reconciliation=await operatorClient.reconcileSandboxes();
     if(reconciliation.quarantined<1)throw new Error(`quarantined=${reconciliation.quarantined}`);
     return `quarantined=${reconciliation.quarantined} destroyed=${reconciliation.destroyed} recovered=${reconciliation.recovered}`;
   });

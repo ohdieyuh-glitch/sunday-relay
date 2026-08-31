@@ -46,17 +46,21 @@ jobs:
           # Two independent root secrets: one per tenant. Neither ever reaches a Julius container.
           primary=$(openssl rand -base64 33 | tr -d '\n')
           secondary=$(openssl rand -base64 33 | tr -d '\n')
+          operator=$(openssl rand -base64 33 | tr -d '\n')
           echo "::add-mask::$primary"
           echo "::add-mask::$secondary"
+          echo "::add-mask::$operator"
           scoped=$(EXECUTOR_CREDENTIAL_ROOT="$primary" node scripts/julius-derive-scoped-credentials.mjs --json)
           other_scoped=$(EXECUTOR_CREDENTIAL_ROOT="$secondary" node scripts/julius-derive-scoped-credentials.mjs --json)
-          for root in "$primary" "$secondary"; do
+          operator_scoped=$(EXECUTOR_CREDENTIAL_ROOT="$operator" node scripts/julius-derive-scoped-credentials.mjs --json discover reconcile quarantine)
+          for root in "$primary" "$secondary" "$operator"; do
             EXECUTOR_CREDENTIAL_ROOT="$root" node scripts/julius-derive-scoped-credentials.mjs --values | while read -r value; do echo "::add-mask::$value"; done
           done
-          callers=$(JULIUS_PRIMARY_ROOT="$primary" JULIUS_SECONDARY_ROOT="$secondary" node scripts/julius-ci-callers.mjs)
+          callers=$(JULIUS_PRIMARY_ROOT="$primary" JULIUS_SECONDARY_ROOT="$secondary" JULIUS_OPERATOR_ROOT="$operator" node scripts/julius-ci-callers.mjs)
           echo "callers=$callers" >> "$GITHUB_OUTPUT"
           echo "scoped=$scoped" >> "$GITHUB_OUTPUT"
           echo "other_scoped=$other_scoped" >> "$GITHUB_OUTPUT"
+          echo "operator_scoped=$operator_scoped" >> "$GITHUB_OUTPUT"
 
       - name: Start PostgreSQL 16 and the independent executor control plane
         env:
@@ -83,19 +87,19 @@ jobs:
       # no receipt store, no ledger and none of the executor's environment. Every one of those is probed.
       - name: Julius has no Docker, key, receipt or ledger authority
         run: ./.github/julius-phase.sh isolation
-        env: { SCOPED: '${{ steps.identity.outputs.scoped }}', OTHER_SCOPED: '${{ steps.identity.outputs.other_scoped }}' }
+        env: { SCOPED: '${{ steps.identity.outputs.scoped }}', OTHER_SCOPED: '${{ steps.identity.outputs.other_scoped }}', OPERATOR_SCOPED: '${{ steps.identity.outputs.operator_scoped }}' }
 
       - name: Scoped envelope, durable reservation, signed BEFORE, real effect, signed AFTER
         run: ./.github/julius-phase.sh initial
-        env: { SCOPED: '${{ steps.identity.outputs.scoped }}', OTHER_SCOPED: '${{ steps.identity.outputs.other_scoped }}' }
+        env: { SCOPED: '${{ steps.identity.outputs.scoped }}', OTHER_SCOPED: '${{ steps.identity.outputs.other_scoped }}', OPERATOR_SCOPED: '${{ steps.identity.outputs.operator_scoped }}' }
 
       - name: Julius died before settling; a restarted Julius settles exactly once without re-executing
         run: ./.github/julius-phase.sh settle
-        env: { SCOPED: '${{ steps.identity.outputs.scoped }}', OTHER_SCOPED: '${{ steps.identity.outputs.other_scoped }}' }
+        env: { SCOPED: '${{ steps.identity.outputs.scoped }}', OTHER_SCOPED: '${{ steps.identity.outputs.other_scoped }}', OPERATOR_SCOPED: '${{ steps.identity.outputs.operator_scoped }}' }
 
       - name: A dangerous effect starts and an effect that has not started is queued
         run: ./.github/julius-phase.sh interrupt-start
-        env: { SCOPED: '${{ steps.identity.outputs.scoped }}', OTHER_SCOPED: '${{ steps.identity.outputs.other_scoped }}' }
+        env: { SCOPED: '${{ steps.identity.outputs.scoped }}', OTHER_SCOPED: '${{ steps.identity.outputs.other_scoped }}', OPERATOR_SCOPED: '${{ steps.identity.outputs.operator_scoped }}' }
 
       - name: Destroy both in-flight sandboxes under the executor, then restart it
         run: |
@@ -109,15 +113,15 @@ jobs:
 
       - name: An interrupted execution answers STARTED_UNKNOWN_OUTCOME and is never replayed blind
         run: ./.github/julius-phase.sh interrupt-verify
-        env: { SCOPED: '${{ steps.identity.outputs.scoped }}', OTHER_SCOPED: '${{ steps.identity.outputs.other_scoped }}' }
+        env: { SCOPED: '${{ steps.identity.outputs.scoped }}', OTHER_SCOPED: '${{ steps.identity.outputs.other_scoped }}', OPERATOR_SCOPED: '${{ steps.identity.outputs.operator_scoped }}' }
 
       - name: After the executor restart the terminal material replays with zero second effect
         run: ./.github/julius-phase.sh replay
-        env: { SCOPED: '${{ steps.identity.outputs.scoped }}', OTHER_SCOPED: '${{ steps.identity.outputs.other_scoped }}' }
+        env: { SCOPED: '${{ steps.identity.outputs.scoped }}', OTHER_SCOPED: '${{ steps.identity.outputs.other_scoped }}', OPERATOR_SCOPED: '${{ steps.identity.outputs.operator_scoped }}' }
 
       - name: Completion authority settles a task outcome exactly once
         run: ./.github/julius-phase.sh complete
-        env: { SCOPED: '${{ steps.identity.outputs.scoped }}', OTHER_SCOPED: '${{ steps.identity.outputs.other_scoped }}' }
+        env: { SCOPED: '${{ steps.identity.outputs.scoped }}', OTHER_SCOPED: '${{ steps.identity.outputs.other_scoped }}', OPERATOR_SCOPED: '${{ steps.identity.outputs.operator_scoped }}' }
 
       - name: Plant an unowned Julius-labelled container for reconciliation
         env: { SANDBOX_IMAGE: '${{ steps.images.outputs.sandbox }}' }
@@ -128,6 +132,7 @@ jobs:
         env:
           SCOPED: ${{ steps.identity.outputs.scoped }}
           OTHER_SCOPED: ${{ steps.identity.outputs.other_scoped }}
+          OPERATOR_SCOPED: ${{ steps.identity.outputs.operator_scoped }}
           JULIUS_ORPHAN_EXPECTED: '1'
 
       - name: Executor topology evidence

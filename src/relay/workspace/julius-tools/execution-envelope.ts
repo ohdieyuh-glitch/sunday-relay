@@ -40,7 +40,10 @@ const json=(value:unknown)=>jsonValue(value,E);
 
 function parseRequest(value:unknown):ToolInvocationRequest {
   const request=exactOptional(value,['invocationId','runId','taskId','projectId','workerId','toolId','toolVersion','arguments','idempotencyKey','expectedMutation'],['cwd','timeoutMs'],'execution_request');
-  const args=json(exact(request.arguments,Object.keys(request.arguments as object),'execution_arguments')) as Readonly<Record<string,JsonValue>>;
+  if(!request.arguments||typeof request.arguments!=='object'||Array.isArray(request.arguments))throw new Error('execution_arguments:object_required');
+  // Budgeted so the whole envelope still fits the digest walk's depth limit; otherwise arguments could parse
+  // here and then fail as an executor fault when the envelope is digested.
+  const args=jsonValue(request.arguments,E,3) as Readonly<Record<string,JsonValue>>;
   if(Object.keys(args).length>64||JSON.stringify(args).length>64*1024)throw new Error('execution_envelope_invalid:arguments');
   const cwd=request.cwd===undefined?undefined:string(request.cwd,'cwd',1024);
   if(cwd!==undefined&&(cwd.startsWith('/')||cwd.split(/[\\/]/).includes('..')))throw new Error('execution_envelope_invalid:cwd');
@@ -63,7 +66,26 @@ export function parseExecutorExecutionEnvelope(value:unknown,options:{now?:Date;
   if(request.invocationId!==invocationId||request.projectId!==projectId||request.runId!==runId||request.taskId!==taskId)throw new Error('execution_envelope_scope_mismatch');
   const executionIdentity=id(input.executionIdentity,'executionIdentity');if(executionIdentity!==`${invocationId}:${dispatchGeneration}:${sandboxId}`)throw new Error('execution_envelope_identity_mismatch');
   if(!EFFECTS.has(payload.effectClassification as JuliusToolEffectClassification))throw new Error('execution_envelope_invalid:effectClassification');
+  // The executor digests the request itself. A digest the caller merely asserts binds nothing.
+  if(requestDigest!==canonicalRequestDigest(request))throw new Error('execution_envelope_request_digest_mismatch');
   return {schemaVersion:1,callerId,callerScope:'sandbox:execute',tenantId:id(input.tenantId,'tenantId'),projectId,runId,taskId,invocationId,dispatchGeneration,sandboxId,requestDigest,executionIdentity,nonce:id(input.nonce,'nonce'),issuedAt,expiresAt,payload:{expectedLeaseGeneration:integer(payload.expectedLeaseGeneration,'expectedLeaseGeneration'),executionTokenHash:digest(payload.executionTokenHash,'executionTokenHash'),effectClassification:payload.effectClassification as JuliusToolEffectClassification,request}};
 }
 
 export function executionEnvelopeDigest(envelope:ExecutorExecutionEnvelope):string {return createHash('sha256').update(JSON.stringify(json(envelope))).digest('hex');}
+
+/**
+ * The envelope minus the three fields a legitimate retry is expected to change. Two envelopes sharing an
+ * execution identity must agree on everything else, so a caller cannot present one identity with a
+ * different request and be answered with the first request's terminal material.
+ */
+export function executionReplayDigest(envelope:ExecutorExecutionEnvelope):string {
+  const {nonce:_nonce,issuedAt:_issuedAt,expiresAt:_expiresAt,...stable}=envelope;
+  return createHash('sha256').update(JSON.stringify(json(stable))).digest('hex');
+}
+
+/** The digest the executor computes for itself, so a caller's claim about its own request is never taken on trust. */
+export function canonicalRequestDigest(request:ToolInvocationRequest):string {
+  // Absent optional fields and fields present as undefined are the same request, so they must digest alike.
+  const defined=Object.fromEntries(Object.entries(request).filter(([,value])=>value!==undefined));
+  return createHash('sha256').update(JSON.stringify(jsonValue(defined,E,3))).digest('hex');
+}

@@ -26,9 +26,14 @@ async function main():Promise<void>{
   });
   // The root secret never leaves this process. Julius receives only the per-operation credentials derived from it.
   const declared=process.env.EXECUTOR_CALLERS?parseExecutorCallers(process.env.EXECUTOR_CALLERS):[{callerId:required('JULIUS_CALLER_ID'),tenantId:required('JULIUS_TENANT_ID'),credentialRoot:required('EXECUTOR_CREDENTIAL_ROOT')}];
-  const callerAuthorities=declared.flatMap(caller=>deriveCallerAuthorities({rootSecret:caller.credentialRoot,callerId:caller.callerId,tenantId:caller.tenantId}));
+  const callerAuthorities=declared.flatMap(caller=>deriveCallerAuthorities({rootSecret:caller.credentialRoot,callerId:caller.callerId,tenantId:caller.tenantId,operations:caller.operations}));
   const service=createExecutorControlPlaneService({callerAuthorities,keyId:required('EXECUTOR_KEY_ID'),privateSigningKey,physical,receipts,executionLedger,tenancyLedger});
-  service.listen(port,'0.0.0.0',()=>process.stdout.write(`executor_ready:${port}\n`));
+  // Loopback unless a deployment explicitly accepts a wider bind: this process holds Docker, the signing
+  // key and the receipt store, and the transport is plaintext HTTP with a bearer credential on it.
+  const address=process.env.EXECUTOR_BIND_ADDRESS??'127.0.0.1';
+  if(address!=='127.0.0.1'&&address!=='::1'&&process.env.EXECUTOR_ALLOW_NON_LOOPBACK_BIND!=='1')throw new Error('executor_config_invalid:EXECUTOR_BIND_ADDRESS');
+  service.headersTimeout=30_000;service.requestTimeout=120_000;service.maxConnections=256;
+  service.listen(port,address,()=>process.stdout.write(`executor_ready:${port}\n`));
   const shutdown=async()=>{service.close();await pool.end();};
   process.once('SIGTERM',()=>void shutdown());
   process.once('SIGINT',()=>void shutdown());
