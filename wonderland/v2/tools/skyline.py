@@ -484,7 +484,7 @@ def mass_report(top_n=18, origin=(0.0, 0.0), within_m=None, beyond_m=None,
     return ms
 
 
-def cam_mass_report(tag, top_n=14, aspect_target=4.5):
+def cam_mass_report(tag, top_n=14, aspect_target=4.5, min_m=0.0):
     """What fills THIS camera's frame, ranked by the share of it each site takes.
 
     "Unmistakably #1 from HeroCam0" is a claim about one picture, and the
@@ -519,7 +519,13 @@ def cam_mass_report(tag, top_n=14, aspect_target=4.5):
         for r in s["members"]:
             dx, dy = r["x"] - cx, r["y"] - cy
             d = math.hypot(dx, dy)
-            if d < 1.0:
+            # NEAR-FIELD FRAMING IS NOT A LANDMARK, and conflating the two
+            # makes this tool answer the wrong question. A tree 28 m from
+            # HeroCam0 takes 10.6% of that frame and a 194 m spire at 331 m
+            # takes 7.9%; the tree is the composition's foreground and the
+            # spire is what the composition is OF. `--near=<m>` asks only
+            # about landmarks. Both questions are real and they differ.
+            if d < 1.0 or d < min_m * 100.0:
                 continue
             off = (math.degrees(math.atan2(dy, dx)) - cam["yaw"] + 180.0) % 360.0 - 180.0
             wr = math.degrees(math.atan(r["r_uu"] / d))
@@ -547,8 +553,9 @@ def cam_mass_report(tag, top_n=14, aspect_target=4.5):
         out.append(best)
     out.sort(key=lambda m: -m["solid"])
     frame = hfov * vfov
-    print("FRAME MASS -- %s  (fov %.0f x %.1f deg, frame %.0f deg2)"
-          % (cam["name"], hfov, vfov, frame))
+    print("FRAME MASS -- %s  (fov %.0f x %.1f deg, frame %.0f deg2)%s"
+          % (cam["name"], hfov, vfov, frame,
+             ("   beyond %.0f m only" % min_m) if min_m else ""))
     print("  %-24s %7s %7s %7s %7s %8s %7s %6s"
           % ("site", "top m", "dist m", "off", "h deg", "w deg", "aspect", "%frame"))
     for m in out[:top_n]:
@@ -614,7 +621,11 @@ def main():
             mass_report(n, origin, within_m, beyond_m)
             return 0
         elif a.startswith("--cam="):
-            cam_mass_report(a.split("=", 1)[1])
+            near = 0.0
+            for b in args:
+                if b.startswith("--near="):
+                    near = float(b.split("=", 1)[1])
+            cam_mass_report(a.split("=", 1)[1], min_m=near)
             return 0
         elif a.startswith("--profile="):
             return profile_report(a.split("=", 1)[1])

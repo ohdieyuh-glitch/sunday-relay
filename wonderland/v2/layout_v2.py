@@ -5790,20 +5790,26 @@ def _keep_share(r):
     return _THIN_KEEP[-1][1]
 
 
-def _sight_cones():
+def _sight_cones(marks=None):
     """(camera xy, landmark xy, half-angle, landmark top) for every pair.
 
     Only the landmarks the world is NAVIGATED by: the signature skyline and
     the castle focal plane. Widening this to every wall would clear the world.
+
+    `marks` overrides that set, which is how the SECOND reveal pass -- the one
+    that runs after the district landmarks and their architecture exist -- asks
+    the same question about gates, cloisters, screens and bridges without this
+    function acquiring a second opinion about what a landmark is.
     """
     import v2_config as _cfg
-    marks = []
-    for p in SIGNATURE:
-        if p["asset"] in ("spire_great", "spire_signature", "tower_district"):
-            marks.append((p["pos"][0], p["pos"][1], 1600.0))
-    for p in CITY:
-        if p["asset"] == "castle_hall" and math.hypot(p["pos"][0], p["pos"][1]) < 16000.0:
-            marks.append((p["pos"][0], p["pos"][1], 1400.0))
+    if marks is None:
+        marks = []
+        for p in SIGNATURE:
+            if p["asset"] in ("spire_great", "spire_signature", "tower_district"):
+                marks.append((p["pos"][0], p["pos"][1], 1600.0))
+        for p in CITY:
+            if p["asset"] == "castle_hall" and math.hypot(p["pos"][0], p["pos"][1]) < 16000.0:
+                marks.append((p["pos"][0], p["pos"][1], 1400.0))
     cones = []
     for c in _cfg.HERO_CAMS:
         cx, cy, _cz = c["location"]
@@ -5818,9 +5824,14 @@ def _sight_cones():
 _REVEAL_NOTES = []
 
 
-def _reveal_city(bands):
-    """Thin the generated woodland, and clear the sightlines. In place."""
-    cones = _sight_cones()
+def _reveal_city(bands, marks=None, thin=True):
+    """Thin the generated woodland, and clear the sightlines. In place.
+
+    `thin=False` runs the sightline half only, for the second pass: the
+    clearing field is a property of the woodland and applying it twice would
+    thin the same trees against the same threshold a second time.
+    """
+    cones = _sight_cones(marks)
     trees = {}
     for band in bands:
         for p in band:
@@ -5845,7 +5856,7 @@ def _reveal_city(bands):
     for k, e in trees.items():
         x, y = e["x"], e["y"]
         r = math.hypot(x, y)
-        if _clearing(x, y) > _keep_share(r):
+        if thin and _clearing(x, y) > _keep_share(r):
             drop.add(k)
             continue
         for (cx, cy, mx, my, d, half) in cones:
@@ -6101,6 +6112,14 @@ def _lm_build(kind, x, y, tag, sc, glass):
     return out
 
 
+#: where each district landmark ACTUALLY landed. `_sig_site` moves a landmark
+#: to find clear ground inside its own district, so the table's bearing and
+#: radius are a request, not a position. Anything built around a landmark has
+#: to read this rather than recompute the request -- the same class of bug as
+#: the gate reading a different list from the builder.
+LANDMARK_SITES = {}
+
+
 def _district_landmarks():
     out = []
     for (who, bearing, radius, kind, sc, glass, note) in _DISTRICT_LANDMARKS:
@@ -6113,6 +6132,9 @@ def _district_landmarks():
         out += _lm_setting(x, y, "LM%s" % who, sc, glass,
                            {"great_clock": 2200.0, "teapot": 2600.0,
                             "lantern_run": 2600.0}.get(kind, 2000.0) * sc)
+        LANDMARK_SITES[who] = (x, y, kind, sc, glass,
+                               {"great_clock": 2200.0, "teapot": 2600.0,
+                                "lantern_run": 2600.0}.get(kind, 2000.0) * sc)
         LANDMARK_NOTES.append("%-18s %-12s at (%7.0f,%7.0f) r=%5.0f m -- %s"
                               % (who, kind, x, y, math.hypot(x, y) / 100.0, note))
     return out
@@ -6120,13 +6142,353 @@ def _district_landmarks():
 
 LANDMARKS = _band("V2_Skyline", _district_landmarks())
 
+
+# ---------------------------------------------------------------------------
+# DISTRICT DEPTH -- turning a monument in a field into somewhere to go
+# ---------------------------------------------------------------------------
+#
+# Each district had ONE landmark, a paved court about 20 m across and an
+# approach spur. Standing in one, that is a monument in a field: you read what
+# the district is FOR at 200 m and there is nothing to walk THROUGH when you
+# arrive. The founder's phrase for the gap is "wonder per meter".
+#
+# So eight districts get a second layer, and every piece of it is one of four
+# things -- a THRESHOLD, an OUTDOOR ROOM, a MECHANISM, or COLOUR at
+# architectural size. None of it is more trees or more towers, which is what
+# this world has always reached for and has enough of.
+#
+# EVERYTHING IS PLACED IN THE LANDMARK'S OWN APPROACH FRAME: `u` runs back
+# toward the world centre, which is where the district's road comes from and
+# therefore the direction a walker arrives from, and `p` is across it. So the
+# gate is always on the way in, the screens are always beside the walk, and
+# the swags always span it -- whatever bearing `_sig_site` finally chose. This
+# is the second lesson of the same kind as LANDMARK_SITES: build in the frame
+# the thing actually has, not the one the table asked for.
+
+#: uu, unscaled half-footprints for the new pieces, read off the built meshes.
+#: THREE OF THEM ARE DELIBERATELY ABSENT, and that is a decision rather than
+#: an omission -- the same declaration `_GLASS_MESHES` makes:
+#:   gatehouse_district  is a THRESHOLD. Its solid parts are a ring around a
+#:     5.2 m opening the road runs through; the solver's footprint is one
+#:     axis-aligned rectangle, so any entry blocks the arch and pushes every
+#:     route around the gate it exists to be walked through.
+#:   bridge_arc          is a walking surface. Blocking it removes a crossing.
+#:   lantern_swag        is two 2.6 m posts 30 m apart with a lane under it.
+#:     One rectangle can express the pair only by walling off the lane.
+FOOT.update({"cloister_square": (1520, 1520), "orrery_gold": (760, 760),
+             "glass_screen": (1040, 1040), "fountain_grand": (680, 680)})
+
+_DEPTH_MESHES = ("gatehouse_district", "bridge_arc", "lantern_swag")
+
+#: (district, pieces). Each piece: (kind, along, across, extra)
+#: `along` is uu out from the landmark toward the world centre (so positive is
+#: on the approach), `across` is uu to the walker's left. No district gets the
+#: same set as another; a place made of the same parts as its neighbour is a
+#: texture, which is the failure this whole layer is fixing.
+_DEPTH = (
+    ("RoyalGardens",    (("cloister", -400.0, 4300.0, 1.00),
+                         ("fountain", -400.0, 4300.0, 1.00),
+                         ("screen", 2600.0, 2200.0, 0.90),
+                         ("screen", 2600.0, -2200.0, 0.90),
+                         ("swag", 1400.0, 0.0, 1.00),
+                         ("swag", 4200.0, 0.0, 1.00))),
+    ("ClockQuarter",    (("gate", 4300.0, 0.0, 1.00),
+                         ("orrery", -3200.0, 2500.0, 1.00),
+                         ("screen", 1800.0, -2700.0, 1.00),
+                         ("swag", 900.0, 0.0, 1.00),
+                         ("swag", 6400.0, 0.0, 1.00))),
+    ("TowerRise",       (("gate", 4600.0, 0.0, 0.90),
+                         ("bridge", 1800.0, 0.0, 1.00),
+                         ("screen", -1800.0, 2900.0, 1.10),
+                         ("cloister", 2400.0, 5000.0, 0.92))),
+    # NO CLOISTER HERE, AND THE WORLD SAID SO. Tea Terraces is the densest
+    # quarter in the walkable world -- plinths, pots, saucers, cups and hearts
+    # at every scale -- and a 35 m cloister found no site at any of five
+    # offsets. It gets a threshold instead, which is the thing it was short of
+    # anyway: you now arrive at the tea district through a gate.
+    ("TeaTerraces",     (("gate", 3800.0, 1500.0, 0.92),
+                         ("fountain", 4200.0, 4400.0, 0.88),
+                         ("swag", 1200.0, 0.0, 1.00),
+                         ("swag", 3600.0, 0.0, 1.00),
+                         ("swag", 6000.0, 0.0, 1.00))),
+    ("WaterGardens",    (("bridge", 2600.0, 0.0, 1.10),
+                         ("fountain", -2800.0, 0.0, 1.20),
+                         ("screen", 800.0, 2900.0, 1.00),
+                         ("screen", 800.0, -2900.0, 1.00),
+                         ("gate", 5400.0, 0.0, 0.95))),
+    ("MushroomGrove",   (("cloister", -600.0, 4500.0, 0.88),
+                         ("screen", 2200.0, -2500.0, 0.95),
+                         ("swag", 1000.0, 0.0, 1.00),
+                         ("swag", 4000.0, 0.0, 1.00))),
+    ("LanternHamlets",  (("gate", 4800.0, 0.0, 0.86),
+                         ("fountain", -2500.0, 2300.0, 0.94),
+                         ("swag", 1200.0, 0.0, 1.00),
+                         ("swag", 2900.0, 0.0, 1.00),
+                         ("swag", 6600.0, 0.0, 1.00))),
+    ("GatekeeperFields", (("gate", 4400.0, 0.0, 1.00),
+                          ("orrery", -2700.0, -2900.0, 0.86),
+                          ("screen", 2200.0, 2600.0, 1.00))),
+)
+
+DEPTH_NOTES = []
+
+
+#: uu. Nothing in this layer may stand nearer the origin than this. The
+#: Golden Arrival is the founder's frozen composition and six of the locked
+#: cameras stand in it.
+_DEPTH_MIN_R = 9000.0
+#: uu. Nor further than this from the landmark it belongs to.
+_DEPTH_MAX_FROM_LM = 9000.0
+
+
+def _depth_site_ok(lx, ly, x, y):
+    """May a depth piece belonging to the landmark at (lx, ly) stand here?
+
+    THE SEARCH WALKED A BRIDGE INTO THE ARRIVAL PLAZA. `_sig_site` has carried
+    a guard for exactly this since PASS 23 -- "A DISTRICT LANDMARK THAT LEFT
+    ITS DISTRICT IS NOT ONE" -- and this search, written one function away
+    from it, had none. Tower Rise's bridge slid 63 m looking for clear ground,
+    crossed two districts and came to rest 11 m from HeroCam0, where
+    `skyline.py --cam` measured it at EIGHTY-ONE PER CENT of the founder's
+    hero frame. Two lantern swags landed beside SkylineCam06 the same way. A
+    rule applied to one collection and not its sibling is the richest defect
+    vein in this project, and this is the sixth.
+
+    THE TEST IS BELONGING TO A LANDMARK, NOT MEMBERSHIP OF A WEDGE.
+    `_district_of` was the obvious guard and it was the wrong one: the
+    districts are wedges at a radius, an approach runs INWARD, and a gate
+    150 m up the approach from a landmark at 250 m is at 100 m -- correctly
+    on the way in, and correctly reported as a different district. Requiring
+    the wedge dropped eight of thirty-eight pieces for being where they
+    should be. Ninety metres of its own landmark says the same thing about
+    what a piece belongs to without being wrong about geography.
+    """
+    if math.hypot(x, y) < _DEPTH_MIN_R:
+        return False
+    return math.hypot(x - lx, y - ly) <= _DEPTH_MAX_FROM_LM
+
+
+def _depth_build(kind, x, y, bdeg, tag, sc, glass):
+    """One depth piece, in the landmark's approach frame.
+
+    `bdeg` is the bearing back toward the world centre, so a piece that faces
+    the walker takes bdeg + 90 and a piece the walker passes through takes
+    bdeg.
+    """
+    out = []
+    if kind == "gate":
+        out.append(A("gatehouse_district", x, y, 0.0, yaw=bdeg, s=sc,
+                     mat="MI_V2_IvoryStone", label="%s_Gatehouse" % tag))
+        out.append(A("gatehouse_glass", x, y, 0.0, yaw=bdeg, s=sc,
+                     mat=glass, label="%s_GatehouseGlass" % tag))
+        # the road runs THROUGH it, so it needs paving under the arch or the
+        # threshold is a gate standing on grass
+        out.append(A("terrace_platform", x, y, ROAD_Z, yaw=bdeg,
+                     sxyz=(0.42 * sc, 1.05 * sc, 0.35), mat="MI_V2_PlazaGrey",
+                     label="%s_GatehouseFloor" % tag))
+        for s2 in (1.0, -1.0):
+            out.append(A("topiary_cone_plain",
+                         x + math.cos(math.radians(bdeg + 90.0)) * 1500.0 * sc,
+                         y + math.sin(math.radians(bdeg + 90.0)) * 1500.0 * sc,
+                         0.0, yaw=0.0, s=1.5, mat="MI_V2_LeafDark",
+                         label="%s_GateCone%d" % (tag, int(s2))) if s2 > 0 else
+                        A("topiary_cone_plain",
+                          x - math.cos(math.radians(bdeg + 90.0)) * 1500.0 * sc,
+                          y - math.sin(math.radians(bdeg + 90.0)) * 1500.0 * sc,
+                          0.0, yaw=0.0, s=1.5, mat="MI_V2_LeafDark",
+                          label="%s_GateCone%d" % (tag, int(s2))))
+    elif kind == "cloister":
+        out.append(A("cloister_square", x, y, 0.0, yaw=bdeg, s=sc,
+                     mat="MI_V2_IvoryStone", label="%s_Cloister" % tag))
+        out.append(A("terrace_platform", x, y, ROAD_Z, yaw=bdeg,
+                     sxyz=(2.0 * sc, 3.9 * sc, 0.35), mat="MI_V2_PlazaCream",
+                     label="%s_CloisterFloor" % tag))
+    elif kind == "fountain":
+        out.append(A("fountain_grand", x, y, 0.0, yaw=bdeg + 22.0, s=sc,
+                     mat="MI_V2_IvoryStone", label="%s_Fountain" % tag))
+        out.append(A("fountain_grand_water", x, y, 0.0, yaw=bdeg + 22.0, s=sc,
+                     mat="MI_V2_Water", label="%s_FountainWater" % tag))
+    elif kind == "screen":
+        out.append(A("glass_screen", x, y, 0.0, yaw=bdeg + 90.0, s=sc,
+                     mat="MI_V2_IvoryStone", label="%s_Screen" % tag))
+        out.append(A("glass_screen_panes", x, y, 0.0, yaw=bdeg + 90.0, s=sc,
+                     mat=glass, label="%s_ScreenGlass" % tag))
+    elif kind == "swag":
+        out.append(A("lantern_swag", x, y, 0.0, yaw=bdeg + 90.0, s=sc,
+                     mat="MI_V2_Bronze", label="%s_Swag" % tag))
+        out.append(A("lantern_swag_glass", x, y, 0.0, yaw=bdeg + 90.0, s=sc,
+                     mat=glass, label="%s_SwagGlass" % tag))
+    elif kind == "orrery":
+        out.append(A("orrery_gold", x, y, 0.0, yaw=bdeg + 40.0, s=sc,
+                     mat="MI_V2_Gold", label="%s_Orrery" % tag))
+        out.append(A("stone_ring_base", x, y, 0.0, yaw=0.0, s=1.5 * sc,
+                     mat="MI_V2_PlazaGrey", label="%s_OrreryBase" % tag))
+    elif kind == "bridge":
+        # A BRIDGE NEEDS SOMETHING TO CROSS, so the water comes with it. A
+        # channel 8 m wide under the span, its coping either side, and the
+        # spur's paving stopping short of both banks.
+        out.append(A("bridge_arc", x, y, 0.0, yaw=bdeg, s=sc,
+                     mat="MI_V2_IvoryStone", label="%s_Bridge" % tag))
+        # THE CHANNEL IS FLUSH, NOT SUNK. At 60 uu below the road it was a
+        # 0.6 m ditch beside the path -- climbable down, not back up against a
+        # 30 uu step -- and the gate would not have said so, because it exempts
+        # anything labelled Water on the grounds that a rill is meant to be a
+        # rill. An exemption is not a licence to build a trap.
+        out.append(A("terrace_platform", x, y, ROAD_Z, yaw=bdeg + 90.0,
+                     sxyz=(2.6 * sc, 0.62 * sc, 0.30), mat="MI_V2_Water",
+                     label="%s_BridgeWater" % tag))
+        # coping BESIDE the bridge, on both banks -- the first version ran it
+        # across the road at 6.2 m, which is on the deck
+        for s2 in (1.0, -1.0):
+            for s3 in (1.0, -1.0):
+                bx = (x + math.cos(math.radians(bdeg)) * 330.0 * sc * s2
+                      + math.cos(math.radians(bdeg + 90.0)) * 1500.0 * sc * s3)
+                by = (y + math.sin(math.radians(bdeg)) * 330.0 * sc * s2
+                      + math.sin(math.radians(bdeg + 90.0)) * 1500.0 * sc * s3)
+                out.append(A("kerb_stone", bx, by, -2.0, yaw=bdeg + 90.0,
+                             sxyz=(11.0 * sc, 1.0, 0.7), mat="MI_V2_Kerb",
+                             label="%s_BridgeBank%d_%d" % (tag, int(s2), int(s3))))
+    return out
+
+
+def _district_depth():
+    out = []
+    for who, pieces in _DEPTH:
+        site = LANDMARK_SITES.get(who)
+        if site is None:
+            DEPTH_NOTES.append("%-18s SKIPPED -- its landmark was never placed" % who)
+            continue
+        lx, ly, _kind, _sc, glass, reach = site
+        b = math.atan2(-ly, -lx)                 # back toward the world centre
+        bdeg = math.degrees(b)
+        ux, uy = math.cos(b), math.sin(b)
+        px, py = -uy, ux
+        built = []
+        placed_at = set()
+        for (pk, along, across, psc) in pieces:
+            x = lx + ux * (reach + along) + px * across
+            y = ly + uy * (reach + along) + py * across
+            # A piece that lands on top of an existing landmark is not a
+            # second thing to see, it is a bug with a name. Everything here is
+            # tested against the same register the landmarks were sited with.
+            # SIZED OFF THE MESH, PLUS A MARGIN -- not "how much room would be
+            # nice". The first draft asked a cloister for 24 m of clear ground
+            # beyond its own centre and TowerRise and Tea Terraces could not
+            # place theirs at any point on a 180 m approach: the inner
+            # districts are full of garden walls, benches and topiary cones,
+            # all of which `_declutter` will remove around a protected asset
+            # anyway. These are the built half-extents plus about 3 m.
+            need = {"cloister": 1760.0, "gate": 1000.0, "screen": 1150.0,
+                    "swag": 700.0, "orrery": 1120.0, "fountain": 960.0,
+                    "bridge": 1300.0}[pk] * psc
+            # A fountain inside its own cloister is the intended case, and it
+            # is only intended if the cloister IS THERE. Pairing against the
+            # TABLE rather than against what was placed let a fountain skip
+            # the clearance test at a site the cloister had just been dropped
+            # from for failing it -- a fountain planted inside whatever the
+            # cloister could not stand in. Pair against `placed`.
+            paired = pk == "fountain" and (along, across) in placed_at
+            if not paired and not (_depth_site_ok(lx, ly, x, y) and _sig_free(x, y, need)):
+                # SEARCH THE PLAN, NOT THE LINE. Sliding only along the
+                # approach dropped nine of thirty-eight pieces: the inner
+                # districts are full, and a spur that meets a quarter building
+                # is blocked at every distance along itself. Moving ACROSS as
+                # well costs a little of "the gate is on the way in" and buys
+                # the piece existing at all, so across is weighted heavier
+                # than along in the cost and the note says how far it went.
+                cands = []
+                for da in [900.0 * k for k in range(-7, 8)]:
+                    for dc in [900.0 * k for k in range(-5, 6)]:
+                        if da == 0.0 and dc == 0.0:
+                            continue
+                        cands.append((abs(da) + 2.1 * abs(dc), da, dc))
+                cands.sort()
+                moved = None
+                for _cost, da, dc in cands:
+                    x2 = x + ux * da + px * dc
+                    y2 = y + uy * da + py * dc
+                    if not _depth_site_ok(lx, ly, x2, y2):
+                        continue
+                    if _sig_free(x2, y2, need):
+                        x, y, moved = x2, y2, (da, dc)
+                        break
+                if moved is None:
+                    DEPTH_NOTES.append("%-18s %-9s DROPPED -- no clear ground within 63 m "
+                                       "of its site" % (who, pk))
+                    continue
+                DEPTH_NOTES.append("%-18s %-9s moved %+.0f along / %+.0f across"
+                                   % (who, pk, moved[0], moved[1]))
+            if not paired:
+                _SIG_PLACED.append((x, y, need))
+            placed_at.add((along, across))
+            built.append(pk)
+            out += _depth_build(pk, x, y, bdeg, "DP%s" % who, psc, glass)
+        DEPTH_NOTES.append("%-18s %s" % (who, ", ".join(built) or "nothing placed"))
+    return out
+
+
+DEPTH = _band("V2_Skyline", _district_depth())
+
+
+# ---------------------------------------------------------------------------
+# REVEAL, SECOND PASS -- the architecture that did not exist the first time
+# ---------------------------------------------------------------------------
+#
+# `_reveal_city` runs where it does because the woodland has to be thinned
+# before the landmarks are sited into it. That means its cones could only ever
+# be drawn to the skyline and the castle: the fourteen district landmarks and
+# every piece of PASS 29's district depth are placed AFTER it, so nothing has
+# ever cleared a sightline to a gatehouse, a cloister, a screen or a bridge.
+#
+# The founder's list is "gates, towers, courts, bridges, plazas, skyline
+# anchors and district entrances", and five of those seven were invisible to
+# the only filter that opens a view. So the same filter runs again over the
+# same bands with the new marks -- SIGHTLINES ONLY. The clearing field is a
+# property of the woodland; applying it twice would thin the same trees
+# against the same threshold a second time and quietly halve the forest.
+
+
+def _depth_marks():
+    """Every district destination worth clearing a view to, and how wide
+    it is. The widths are the half-extents the FOOT table already records or
+    the recipe's measured bbox, not a guess -- a cone drawn 16 m wide to a 7 m
+    pavilion clears woodland nobody was looking through."""
+    marks = []
+    for p in LANDMARKS:
+        w = {"clock_grand": 1200.0, "teapot_pavilion": 1600.0,
+             "key_colossal": 900.0, "glass_pavilion": 1000.0,
+             "floating_stair": 1300.0, "flower_colossal": 700.0,
+             "gear_monument": 800.0}.get(p["asset"])
+        if w:
+            marks.append((p["pos"][0], p["pos"][1], w * abs(p["scale"][0])))
+    for p in DEPTH:
+        w = {"gatehouse_district": 1300.0, "cloister_square": 1500.0,
+             "glass_screen": 1050.0, "bridge_arc": 1400.0,
+             "orrery_gold": 800.0, "fountain_grand": 700.0}.get(p["asset"])
+        if w:
+            marks.append((p["pos"][0], p["pos"][1], w * abs(p["scale"][0])))
+    return marks
+
+
+_reveal_city([OUTER_WORLD, HORIZON, FLANKS, REARWORLD, PALACE, GROUND_QUILT,
+              CAM_FOREGROUNDS], marks=_depth_marks(), thin=False)
+
 #: The enchanted landmarks are the reason a district is a place; scatter must
 #: not grow through them either.
 _PROTECT = _PROTECT + ("clock_grand", "gear_monument", "key_colossal",
                        "flower_colossal", "glass_pavilion", "teapot_pavilion",
-                       "floating_stair")
+                       "floating_stair",
+                       # PASS 29's district depth. `_sig_free` lets these stand
+                       # where hedges and cones stand on exactly the same
+                       # promise the signature landmarks were given, and the
+                       # promise is kept in the same place: a cloister with a
+                       # topiary growing through its arcade is the failure this
+                       # filter exists for.
+                       "gatehouse_district", "cloister_square", "bridge_arc",
+                       "orrery_gold", "glass_screen", "lantern_swag",
+                       "fountain_grand")
 for _bandref in (OUTER_WORLD, HORIZON, GROUND_QUILT, FLANKS, REARWORLD):
-    _bandref[:] = _declutter(_bandref, also=LANDMARKS)
+    _bandref[:] = _declutter(_bandref, also=LANDMARKS + DEPTH)
 
 # ===========================================================================
 # THE COURTS STOP BEING BLANK SLABS  (batch D, second half)
@@ -6438,7 +6800,7 @@ WAYSIDE = _band("V2_Skyline", _wayside(
 BUILD_BANDS = [FOREGROUND, COURTYARD, GARDEN, PALACE, FLANK_GROUND, FLANKS,
                REARWORLD, CAM_FOREGROUNDS, GROUND_QUILT, OUTER_WORLD, PLAZA_ORNAMENT,
                PROCESSIONAL_BORDER, HORIZON, APPROACH_SIDES, PLAZA_WALL_DRESS,
-               SIGNATURE, LANDMARKS, COURT_DRESS, WAYSIDE]
+               SIGNATURE, LANDMARKS, DEPTH, COURT_DRESS, WAYSIDE]
 
 #: Everything the layout declares: what the builder walks, plus the two bands
 #: it places by their own rules (SKY is the dome/atmosphere, HOVER is lifted

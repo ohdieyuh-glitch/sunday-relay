@@ -144,6 +144,80 @@
         "-PixelStreamingWebRTCMaxFps=60"
       ]
     },
+    "LIVE": {
+      "description": "THE FOUNDER'S PLAY PROFILE, and it exists because of a measurement. Walking the Dog felt laggy, so the movement profiler ran 3,540 frames of the exploration route offscreen: FrameTime median 19.40 ms (51.5 fps), p99 25.82, WORST FRAME 31.78 ms, and ZERO frames over 33 ms. The game does not hitch -- GPUTime median 19.26 of a 19.40 ms frame, so it is GPU-bound and perfectly steady, with the game thread at 2.40 ms. The stutter was the STREAM: BALANCED asks WebRTC for MAINTAIN_RESOLUTION, which holds picture and drops FRAMES, over a renderer feeding 51.5 fps into a 60 Hz cadence with an encoder quality FLOOR of 60 that leaves frame rate as the only variable left to give. That trade is right for judging a still and wrong for walking. This profile inverts it and buys the renderer enough headroom to hold 60: ScreenPercentage 78 costs 39% of the GPU's pixel work and, by this project's own measurement, no sharpness at all -- acutance is FLAT across 720p/1080p/1440p/2160p, because the softness is in the source geometry, not the output resolution. Tonemapper.Sharpen 2.0 is kept.",
+      "cvars": {
+        "r.AntiAliasingMethod": {
+          "value": 4,
+          "source": "anti-aliasing-and-upscaling-in-unreal-engine"
+        },
+        "r.ScreenPercentage": {
+          "value": 78,
+          "source": "temporal-super-resolution-in-unreal-engine",
+          "note": "TSR upscales below 100. 78% is 61% of the pixels, which takes the measured 19.26 ms GPU frame to roughly 12 and puts the renderer above the stream's 60 Hz instead of 8.5 fps under it. The cadence mismatch IS the judder: 51.5 fps into 60 Hz drops an irregular one frame in seven no matter how steady the renderer is."
+        },
+        "r.TSR.History.ScreenPercentage": {
+          "value": 100,
+          "source": "measured",
+          "note": "MEASURED ON THE STREAM 2026-08-23. BALANCED's TSR history was costing 31% of the DELIVERED detail: acutance 4.760 with it, 6.921 with TSR at engine defaults, same build, same camera, same sharpen, same exposure. The earlier note that TSR history was 'ruled out by measurement' was measured on the wrong axis - history accumulation smears a scene whose camera is static and whose Dogs move, which is exactly this scene."
+        },
+        "r.TSR.History.SampleCount": {
+          "value": 8,
+          "source": "measured",
+          "note": "Halved with the history screen percentage; see that note."
+        },
+        "r.TSR.ShadingRejection.SampleCount": {
+          "value": 2.0,
+          "source": "temporal-super-resolution-in-unreal-engine",
+          "note": "Left at its value; the history size was the lever, measured separately."
+        },
+        "r.TSR.Velocity.WeightClampingSampleCount": {
+          "value": 2.0,
+          "source": "temporal-super-resolution-in-unreal-engine",
+          "note": "Left at its value; the history size was the lever, measured separately."
+        },
+        "r.TSR.ShadingRejection.Flickering": {
+          "value": 1,
+          "source": "temporal-super-resolution-in-unreal-engine",
+          "note": "on at High/Epic/Cinematic; suppresses moire on the checkered flagstone"
+        },
+        "r.TSR.RejectionAntiAliasingQuality": {
+          "value": 2,
+          "source": "temporal-super-resolution-in-unreal-engine",
+          "note": "Left at its value; the history size was the lever, measured separately."
+        },
+        "r.TSR.Resurrection": {
+          "value": 1,
+          "source": "temporal-super-resolution-in-unreal-engine",
+          "note": "Left at its value; the history size was the lever, measured separately."
+        },
+        "r.MotionBlurQuality": {
+          "value": 0,
+          "source": "unprobed",
+          "note": "founder: disable unless testing proves it helps"
+        },
+        "r.AutoExposure.Bias": {
+          "value": -3.4,
+          "source": "generate-hub-level.py LOOK",
+          "note": "\nRE-MEASURED 2026-08-22 and it is INERT in this packaged render, which confirms an earlier finding independently. A sweep of -3.4 / -2.0 / -1.0 / 0.0 at 1080p moved frame luma only 47.0 -> 46.5 -> 48.7 -> 52.3 \u2014 3.4 stops of bias for an 11% change, when a working bias would be about 10x. Whatever holds this frame down, it is not the bias, so do not reach for it to fix darkness. The colour GRADE is the lever."
+        },
+        "r.Tonemapper.Sharpen": {
+          "value": 2.0,
+          "source": "measured on the L4, 2026-08-22 \u2014 not taken from documentation",
+          "note": "THE ONLY LEVER THAT MOVED SHARPNESS. The founder's note was that Wonderland is too blurry, too soft, too smeared, not crisp enough for 4K. Four candidates were captured at 1080p on build 03e7562 and scored by acutance (mean absolute luma gradient), which brightness does not move:\n    baseline                                3.091\n    r.TSR.History.ScreenPercentage 100      3.110   (+0.6%)\n    FullyLoadUsedTextures 1, MipLODBias -1  3.095   (+0.1%)\n    r.Tonemapper.Sharpen 1.0                3.667  (+18.6%)\n    r.Tonemapper.Sharpen 2.0                4.352  (+40.8%)\nTemporal smearing and texture mips are RULED OUT by measurement, not argument \u2014 the 8192 texture was already at full mip and TSR history was not the blur. 2.0 is visibly crisper on spire edges, cloud structure and foliage with no halo, at ~95 FPS.\nAlso measured and rejected: rendering at higher resolution. Compared at one display size, acutance is FLAT across 720p/1080p/1440p/2160p (4.237 / 4.188 / 4.105 / 4.347) while FPS falls 113 -> 12. 4K output buys ~2.6% detail for 10x the frame cost, because the softness is in the SOURCE \u2014 a photogrammetric shell and primitive authored geometry \u2014 not in the output resolution."
+        }
+      },
+      "args": [
+        "-PixelStreamingEncoderMinQuality=25",
+        "-PixelStreamingEncoderMaxQuality=100",
+        "-PixelStreamingH264Profile=HIGH",
+        "-PixelStreamingWebRTCStartBitrate=6000000",
+        "-PixelStreamingWebRTCMaxBitrate=14000000",
+        "-PixelStreamingWebRTCDegradationPreference=MAINTAIN_FRAMERATE",
+        "-PixelStreamingWebRTCMaxFps=60"
+      ],
+      "args_note": "MAINTAIN_FRAMERATE is the ENGINE DEFAULT this project overrode. VERIFIED.md records the override and its reason -- 'for a world the founder is judging on ornament and material detail, [dropping picture] is the wrong trade' -- and that reasoning is still correct FOR A CAPTURE. It is exactly backwards for someone driving the Dog, and it was in force on the live stream the founder was walking. MinQuality drops 60 -> 25 for the same reason: a quality floor plus MAINTAIN_RESOLUTION leaves the encoder nothing to give up but frames. BALANCED and CINEMATIC are untouched; captures keep the picture-first trade."
+    },
     "CINEMATIC": {
       "description": "Supersampled. Renders ABOVE 720p and lets TSR resolve down, which is where crisp edges and fine ornament actually come from at this output size. Costs GPU that the L4 may or may not have \u2014 that is what the bench is for.",
       "cvars": {

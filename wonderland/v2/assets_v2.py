@@ -3147,3 +3147,475 @@ RECIPES.update({
     "waymarker": (waymarker, "garden_props", True, True),
     "waymarker_lamp": (waymarker_lamp, "garden_props", True, False),
 })
+
+
+# ===========================================================================
+# PASS 29 -- ENCHANTED DISTRICT ARCHITECTURE
+# ===========================================================================
+#
+# The fourteen districts each had ONE authored landmark, a paved court and an
+# approach spur. Standing in one, that is a monument in a field: you can see
+# what the district is FOR at 200 m and there is nothing to walk through when
+# you arrive. The founder's word for the gap is "wonder per meter", and the
+# missing pieces are not more towers or more trees -- both of which this world
+# already solves richness with, and both of which it has enough of.
+#
+# What it has never had is ARCHITECTURE YOU STAND INSIDE, and thresholds.
+# Every recipe below is one of:
+#
+#   * a THRESHOLD you pass through, so arriving somewhere is an event
+#     (gatehouse_district, bridge_arc)
+#   * an OUTDOOR ROOM you stand in, with a floor, walls and a ceiling that are
+#     not a building's (cloister_square)
+#   * a MECHANISM or a light that does something (orrery_gold, lantern_swag,
+#     fountain_grand)
+#   * COLOUR at architectural scale, which is the one thing coloured glass
+#     does that a tinted material cannot (glass_screen)
+#
+# All seven take their glazing as a SEPARATE mesh, for the reason
+# glass_pavilion does: the layout picks the colour per district, and the
+# difference between four coloured places and one place built four times is
+# entirely in that choice.
+
+
+def gatehouse_district(ctx):
+    """A DISTRICT GATE, 29 m wide and 28 m tall: two towers, a 5.2 m arch,
+    a glazed tympanum.
+
+    You walk through it along local +X. A district's edge is currently a place
+    where the road stops having kerbs; a gatehouse makes arriving an event,
+    and it is the cheapest wonder per metre in the whole kit because the
+    player is INSIDE it for two seconds.
+    """
+    m = ctx.mesh("gatehouse_district")
+    # --- the two flanking towers
+    for sgn in (1.0, -1.0):
+        yy = sgn * 900.0
+        m.box(700.0, 700.0, 220.0, at=(0.0, yy, 110.0), chamfer=26.0)
+        m.box(620.0, 620.0, 1500.0, at=(0.0, yy, 970.0), chamfer=18.0)
+        for k in range(2):
+            _window_arched(m, 300.0, yy, 700.0 + 520.0 * k, 0.0, w=150.0, h=380.0, d=44.0)
+            _window_arched(m, -300.0, yy, 700.0 + 520.0 * k, 180.0, w=150.0, h=380.0, d=44.0)
+        m.revolve([(470.0, 1720.0), (560.0, 1770.0), (560.0, 1840.0), (470.0, 1890.0)],
+                  steps=16, at=(0.0, yy, 0.0))
+        # THE EAVES MUST NOT OUTGROW THE TOWER. Authored at r=520 over a
+        # 310 half-width tower this was a mushroom, and it took the gate to
+        # 29 m wide and 30 m tall -- a keep, not a garden gate.
+        m.revolve([(0.0, 0.0), (400.0, 0.0), (348.0, 150.0), (196.0, 520.0),
+                   (70.0, 760.0), (0.0, 840.0)], steps=16, at=(0.0, yy, 1890.0))
+        m.sphere(76.0, at=(0.0, yy, 2760.0), steps=10)
+    # --- the wall between them, with the opening left in it
+    for sgn in (1.0, -1.0):
+        m.box(340.0, 330.0, 1150.0, at=(0.0, sgn * 425.0, 575.0), chamfer=14.0)
+    # arch head over a 5.2 m opening: a half torus standing in the YZ plane
+    m.torus(260.0, 90.0, at=(0.0, 0.0, 1150.0), rot=(0.0, 90.0, 90.0),
+            major=20, minor=8, arc=180.0)
+    m.box(340.0, 1180.0, 420.0, at=(0.0, 0.0, 1620.0), chamfer=14.0)
+    # the parapet walk over the arch, and its crenellations
+    m.box(460.0, 1240.0, 120.0, at=(0.0, 0.0, 1890.0), chamfer=12.0)
+    for k in range(7):
+        yy = -900.0 + 300.0 * k
+        for sgn in (1.0, -1.0):
+            m.box(120.0, 190.0, 240.0, at=(sgn * 170.0, yy, 2070.0), chamfer=10.0)
+    # a heraldic panel on each face, under the tympanum glass
+    for sgn in (1.0, -1.0):
+        m.box(60.0, 620.0, 60.0, at=(sgn * 190.0, 0.0, 1420.0), chamfer=8.0)
+        m.box(60.0, 620.0, 60.0, at=(sgn * 190.0, 0.0, 1810.0), chamfer=8.0)
+    return m
+
+
+def gatehouse_glass(ctx):
+    """The gatehouse's glazing: a tympanum rose over the arch, lamps in the
+    tower windows. Its own mesh so each district's gate is its own colour."""
+    m = ctx.mesh("gatehouse_glass")
+    for sgn in (1.0, -1.0):
+        m.revolve([(0.0, 0.0), (250.0, 0.0), (250.0, 40.0), (0.0, 40.0)], steps=20,
+                  at=(sgn * 200.0, 0.0, 1620.0), rot=(0.0, 90.0, 0.0))
+        for k in range(8):
+            a = 2.0 * math.pi * k / 8
+            m.box(46.0, 46.0, 240.0,
+                  at=(sgn * 208.0, math.cos(a) * 155.0, 1620.0 + math.sin(a) * 155.0),
+                  rot=(math.degrees(a), 90.0, 0.0), chamfer=6.0)
+        for yy in (900.0, -900.0):
+            for k in range(2):
+                m.box(40.0, 120.0, 330.0, at=(sgn * 306.0, yy, 700.0 + 520.0 * k), chamfer=6.0)
+    return m
+
+
+def cloister_square(ctx):
+    """AN OUTDOOR ROOM, 29 m square and 20 m to the corner turrets: four
+    arcaded walks around an open court.
+
+    The one thing this world had no word for. A court here is a paved
+    rectangle with piers at its edge -- you are outside on it. A cloister has
+    a floor, columns, a ceiling over the walk and sky in the middle, so
+    standing in it is a different experience from standing anywhere else in
+    Wonderland, which is what a destination has to offer.
+    """
+    m = ctx.mesh("cloister_square")
+    R = 1300.0                    # outer half-width
+    W = 480.0                     # depth of the covered walk
+    # the plinth the whole thing stands on, and the walk's floor
+    m.box(2.0 * R + 220.0, 2.0 * R + 220.0, 120.0, at=(0, 0, 60.0), chamfer=24.0)
+    for side in range(4):
+        a = math.pi / 2 * side
+        ca, sa = math.cos(a), math.sin(a)
+        # the walk's floor slab and its roof, one per side
+        cx, cy = ca * (R - W / 2.0), sa * (R - W / 2.0)
+        m.box(2.0 * R if side % 2 else W, W if side % 2 else 2.0 * R, 60.0,
+              at=(cx, cy, 150.0), chamfer=8.0)
+        m.box((2.0 * R + 120.0) if side % 2 else (W + 120.0),
+              (W + 120.0) if side % 2 else (2.0 * R + 120.0), 130.0,
+              at=(cx, cy, 1180.0), chamfer=16.0)
+        # the outer wall, and the columns facing the court
+        ox, oy = ca * R, sa * R
+        m.box(2.0 * R if side % 2 else 150.0, 150.0 if side % 2 else 2.0 * R, 1060.0,
+              at=(ox, oy, 650.0), chamfer=10.0)
+        for k in range(7):
+            t = -R + 100.0 + (2.0 * R - 200.0) * k / 6.0
+            px = (t if side % 2 else ca * (R - W)) + (0.0 if side % 2 else 0.0)
+            py = (sa * (R - W) if side % 2 else t)
+            if side % 2 == 0:
+                px, py = ca * (R - W), t
+            else:
+                px, py = t, sa * (R - W)
+            m.box(150.0, 150.0, 130.0, at=(px, py, 245.0), chamfer=14.0)
+            m.revolve([(0.0, 0.0), (86.0, 0.0), (74.0, 40.0), (66.0, 620.0),
+                       (78.0, 660.0), (0.0, 700.0)], steps=12, at=(px, py, 310.0))
+            m.box(160.0, 160.0, 90.0, at=(px, py, 1055.0), chamfer=12.0)
+            # the arch between this column and the next
+            if k < 6:
+                t2 = t + (2.0 * R - 200.0) / 6.0
+                mx, my = ((ca * (R - W), (t + t2) / 2.0) if side % 2 == 0
+                          else ((t + t2) / 2.0, sa * (R - W)))
+                m.torus((t2 - t) / 2.0, 52.0, at=(mx, my, 1010.0),
+                        rot=(0.0, 0.0 if side % 2 else 90.0, 90.0),
+                        major=14, minor=6, arc=180.0)
+        # a parapet over the walk
+        m.box((2.0 * R + 160.0) if side % 2 else 170.0,
+              170.0 if side % 2 else (2.0 * R + 160.0), 210.0,
+              at=(ox, oy, 1350.0), chamfer=10.0)
+    # corner pinnacles, so the roofline is not four flat lines
+    for k in range(4):
+        a = math.pi / 4 + math.pi * k / 2
+        cx, cy = math.cos(a) * R * 1.36, math.sin(a) * R * 1.36
+        m.box(280.0, 280.0, 1420.0, at=(cx, cy, 710.0), chamfer=18.0)
+        m.revolve([(0.0, 0.0), (210.0, 0.0), (178.0, 80.0), (100.0, 340.0),
+                   (32.0, 530.0), (0.0, 600.0)], steps=12, at=(cx, cy, 1420.0))
+    return m
+
+
+def bridge_arc(ctx):
+    """A FOOTBRIDGE, 24 m span rising 1.8 m, 30 m end to end, standing on
+    nothing between.
+
+    Water and rills exist in this world and nothing crosses them; a route that
+    goes around a thing is a detour, and a route that goes OVER it is a view.
+    The arch springs from the abutments only -- no pier in the middle -- which
+    is both how a stone footbridge works and, at this span, quietly
+    impossible.
+
+    THE DECK'S ENDS ARE FLUSH WITH z = 0, and that is the whole difference
+    between a bridge and a monument. Authored with the deck sitting ON the
+    curve, its ends stood 1.55 m above the ground it lands on: a 155 uu step
+    against a 30 uu MaxStepHeight, so the Dog could look at it and never cross
+    it. The step-height gate did not catch it either, because it checks flat
+    walking surfaces and a bridge is neither flat nor a terrace -- a rule that
+    knows one collection and not its sibling, for the fifth time in this
+    project. The top surface is now the curve itself; everything else hangs
+    below it, and the abutments moved OFF the walking line to the banks.
+
+    Slope at the springing is 17 deg, well inside the engine's walkable floor
+    angle, and there is no lip anywhere on it -- a continuous ramp has none.
+    """
+    m = ctx.mesh("bridge_arc")
+    SPAN, RISE, DECK = 2400.0, 180.0, 70.0
+    def _z(t):                      # top surface of the deck, t in -1..1
+        return RISE * (1.0 - t * t)
+    N = 16
+    for i in range(N):
+        t0 = -1.0 + 2.0 * i / N
+        t1 = -1.0 + 2.0 * (i + 1) / N
+        x0, x1 = t0 * SPAN / 2.0, t1 * SPAN / 2.0
+        z0, z1 = _z(t0), _z(t1)
+        m.box((x1 - x0) * 1.08, 420.0, DECK,
+              at=((x0 + x1) / 2.0, 0.0, (z0 + z1) / 2.0 - DECK / 2.0),
+              rot=(0.0, -math.degrees(math.atan2(z1 - z0, x1 - x0)), 0.0), chamfer=6.0)
+    # the arch ring under the deck, springing from the banks
+    for sgn in (1.0, -1.0):
+        pts = [(t * SPAN / 2.0, sgn * 170.0, _z(t) - DECK - 100.0)
+               for t in [(-1.0 + 2.0 * i / N) for i in range(N + 1)]]
+        m.tube(pts, [86.0] * (N + 1), sides=6)
+    m.tube([(t * SPAN / 2.0, 0.0, _z(t) - DECK - 150.0)
+            for t in [(-1.0 + 2.0 * i / N) for i in range(N + 1)]],
+           [70.0] * (N + 1), sides=6)
+    # spandrel posts and the handrail, both standing ON the deck
+    for sgn in (1.0, -1.0):
+        for i in range(13):
+            t = -1.0 + 2.0 * i / 12.0
+            m.box(110.0, 100.0, 300.0, at=(t * SPAN / 2.0, sgn * 200.0, _z(t) + 150.0), chamfer=9.0)
+        m.tube([(t * SPAN / 2.0, sgn * 200.0, _z(t) + 330.0)
+                for t in [(-1.0 + 2.0 * i / N) for i in range(N + 1)]],
+               [44.0] * (N + 1), sides=6)
+    # THE ABUTMENTS ARE ON THE BANKS, NOT ACROSS THE ROAD. Centred, they were
+    # a 3 m wall at each end of a bridge nobody could get onto.
+    for sgn in (1.0, -1.0):
+        for s2 in (1.0, -1.0):
+            bx = sgn * (SPAN / 2.0 + 40.0)
+            by = s2 * 330.0
+            m.box(420.0, 260.0, 620.0, at=(bx, by, -140.0), chamfer=16.0)
+            m.box(200.0, 200.0, 520.0, at=(bx, by, 260.0), chamfer=14.0)
+            m.revolve([(0.0, 0.0), (128.0, 0.0), (106.0, 50.0), (54.0, 230.0), (0.0, 300.0)],
+                      steps=10, at=(bx, by, 520.0))
+    return m
+
+
+def orrery_gold(ctx):
+    """A GOLD MECHANISM, 15 m across and 26 m tall: three armillary rings on
+    a drum, and a sun.
+
+    The world's magic is mostly still -- a clock face, a key in the ground, a
+    stair that stops. This is the one shape that reads as a machine at rest
+    between movements: rings on three axes, planets on arms, all of it in
+    gold, and the sky visible straight through the middle of it.
+    """
+    m = ctx.mesh("orrery_gold")
+    m.revolve([(0.0, 0.0), (620.0, 0.0), (600.0, 90.0), (470.0, 150.0),
+               (440.0, 380.0), (500.0, 430.0), (480.0, 500.0), (0.0, 540.0)], steps=32)
+    for k in range(8):
+        a = 2.0 * math.pi * k / 8
+        m.box(90.0, 90.0, 300.0, at=(math.cos(a) * 500.0, math.sin(a) * 500.0, 250.0),
+              rot=(0.0, math.degrees(a), 0.0), chamfer=10.0)
+    # the drum the rings stand on
+    m.revolve([(0.0, 540.0), (330.0, 540.0), (340.0, 900.0), (300.0, 960.0), (0.0, 990.0)], steps=24)
+    # MEASURED AND CUT. Authored at CZ 2000 / R 950 this stood 38.8 m --
+    # taller than most of the district towers it is supposed to sit under,
+    # and a landmark that outranks the ladder above it is a second anchor.
+    CZ = 1300.0
+    R = 700.0
+    for tilt, band in ((0.0, 62.0), (66.0, 50.0), (-58.0, 44.0)):
+        m.torus(R, band, at=(0, 0, CZ), rot=(tilt, 24.0 * (band % 3), 0.0), major=48, minor=10)
+        m.torus(R * 0.995, band * 0.42, at=(0, 0, CZ + 4.0), rot=(tilt, 24.0 * (band % 3), 0.0),
+                major=48, minor=8)
+    # the meridian the rings hang in, and the pole it turns on
+    m.torus(R * 1.10, 52.0, at=(0, 0, CZ), rot=(90.0, 0.0, 0.0), major=52, minor=10)
+    m.tube([(0.0, 0.0, 960.0), (0.0, 0.0, CZ + R * 1.24)], [46.0, 46.0], sides=10)
+    m.sphere(210.0, at=(0, 0, CZ), steps=18)
+    for k in range(6):
+        a = 2.0 * math.pi * k / 6
+        m.tube([(0.0, 0.0, CZ), (math.cos(a) * R * 0.72, math.sin(a) * R * 0.72, CZ + 60.0 * math.sin(2.0 * a))],
+               [26.0, 20.0], sides=6)
+        m.sphere(66.0 + 22.0 * (k % 3),
+                 at=(math.cos(a) * R * 0.74, math.sin(a) * R * 0.74, CZ + 60.0 * math.sin(2.0 * a)),
+                 steps=12)
+    m.revolve([(0.0, 0.0), (96.0, 30.0), (74.0, 110.0), (128.0, 150.0), (46.0, 250.0),
+               (22.0, 340.0), (0.0, 470.0)], steps=16, at=(0, 0, CZ + R * 1.24))
+    return m
+
+
+def glass_screen(ctx):
+    """A TRACERIED SCREEN, 21 m wide and 24 m to the finial, standing free
+    with sky behind it.
+
+    Coloured glass in this world has always been inside something -- a lamp,
+    a rotunda, a lantern. A screen puts it at architectural size with nothing
+    behind it, so the colour is LIT rather than tinted, and walking round it
+    changes it completely. It is the district's own colour, stated once, big.
+    """
+    m = ctx.mesh("glass_screen")
+    W, H = 700.0, 1120.0                    # half-width, head height
+    m.box(2.0 * W + 480.0, 420.0, 180.0, at=(0, 0, 90.0), chamfer=24.0)
+    m.box(2.0 * W + 300.0, 320.0, 120.0, at=(0, 0, 240.0), chamfer=18.0)
+    for sgn in (1.0, -1.0):
+        # buttress jambs, stepped back twice
+        m.box(220.0, 300.0, H + 120.0, at=(sgn * (W + 110.0), 0.0, (H + 120.0) / 2.0 + 300.0), chamfer=14.0)
+        m.box(300.0, 420.0, 620.0, at=(sgn * (W + 190.0), 0.0, 610.0), chamfer=16.0)
+        m.revolve([(0.0, 0.0), (190.0, 0.0), (160.0, 80.0), (86.0, 420.0),
+                   (28.0, 660.0), (0.0, 740.0)], steps=12, at=(sgn * (W + 110.0), 0.0, H + 420.0))
+    # THE HEAD IS VOUSSOIRS, NOT A TORUS ARC. A two-centred arch is two arcs
+    # of radius W + c struck from (-+c, springing); `torus(arc=)` gives no
+    # control over WHERE an arc starts, so the first attempt drew two rings
+    # 9 m in the air and took the screen to 22.8 m. Stones along the curve are
+    # the shape itself, and they read as masonry into the bargain.
+    #   c = 300, R = W + c = 1000, apex = springing + sqrt(R^2 - c^2) = +954
+    ARC_C, ARC_R = 300.0, 1000.0
+    for sgn in (1.0, -1.0):
+        for k in range(11):
+            th = math.radians(90.0) * k / 10.0
+            px = sgn * (ARC_C - ARC_R * math.cos(th))
+            pz = H + ARC_R * math.sin(th)
+            if pz > H + math.sqrt(ARC_R * ARC_R - ARC_C * ARC_C) + 1.0:
+                continue
+            m.box(150.0, 210.0, 128.0, at=(px, 0.0, pz),
+                  rot=(0.0, -math.degrees(th) * sgn, 0.0), chamfer=8.0)
+    m.revolve([(0.0, 0.0), (120.0, 0.0), (100.0, 60.0), (52.0, 240.0), (0.0, 320.0)],
+              steps=12, at=(0.0, 0.0, H + 954.0))
+    # mullions and transoms
+    for k in range(5):
+        x = -W + 2.0 * W * k / 4.0
+        m.box(56.0, 190.0, H - 30.0, at=(x, 0.0, 300.0 + (H - 30.0) / 2.0), chamfer=6.0)
+    for z in (620.0, 1000.0):
+        m.box(2.0 * W, 170.0, 54.0, at=(0.0, 0.0, z), chamfer=6.0)
+    # tracery roundels in the head
+    for (dx, dz, r) in ((0.0, 470.0, 190.0), (-330.0, 210.0, 118.0), (330.0, 210.0, 118.0)):
+        m.torus(r, 40.0, at=(dx, 0.0, H + dz), rot=(90.0, 0.0, 0.0), major=20, minor=6)
+    return m
+
+
+def glass_screen_panes(ctx):
+    """The glazing for glass_screen -- the lights between the mullions."""
+    m = ctx.mesh("glass_screen_panes")
+    W, H = 700.0, 1120.0
+    for k in range(4):
+        x0 = -W + 2.0 * W * k / 4.0 + 34.0
+        x1 = -W + 2.0 * W * (k + 1) / 4.0 - 34.0
+        for (z0, z1) in ((330.0, 596.0), (648.0, 974.0), (1026.0, H - 30.0)):
+            m.box(x1 - x0, 66.0, z1 - z0, at=((x0 + x1) / 2.0, 0.0, (z0 + z1) / 2.0))
+    for (dx, dz, r) in ((0.0, 470.0, 152.0), (-330.0, 210.0, 86.0), (330.0, 210.0, 86.0)):
+        m.cylinder(r, 60.0, at=(dx, 0.0, H + dz), rot=(90.0, 0.0, 0.0), steps=18)
+    return m
+
+
+def lantern_swag(ctx):
+    """A CATENARY OF HUNG LANTERNS between two 12.5 m posts, 33 m across.
+
+    Suspended things are the founder's own example of wonder, and everything
+    hanging in Wonderland so far hangs from nothing (the balloons) or from
+    itself (the vines). This hangs from a cable between two posts, which is
+    the reading that makes it feel PUT there by somebody: it says the district
+    is inhabited, at a scale a walker meets at head height.
+    """
+    m = ctx.mesh("lantern_swag")
+    SPAN, TOP, SAG = 1500.0, 980.0, 380.0
+    def _z(t):
+        return TOP - SAG * (1.0 - t * t)
+    for sgn in (1.0, -1.0):
+        m.box(260.0, 260.0, 140.0, at=(sgn * SPAN, 0.0, 70.0), chamfer=18.0)
+        m.tube([(sgn * SPAN, 0.0, 140.0), (sgn * SPAN, 0.0, 640.0),
+                (sgn * SPAN, 0.0, TOP)], [78.0, 66.0, 54.0], sides=8)
+        m.revolve([(0.0, 0.0), (96.0, 0.0), (80.0, 50.0), (44.0, 210.0), (0.0, 270.0)],
+                  steps=10, at=(sgn * SPAN, 0.0, TOP))
+        m.tube([(sgn * SPAN, 0.0, 700.0), (sgn * (SPAN - 240.0), 0.0, 560.0)],
+               [26.0, 22.0], sides=5)
+    N = 18
+    pts = []
+    for i in range(N + 1):
+        t = -1.0 + 2.0 * i / N
+        pts.append((t * SPAN, 0.0, _z(t)))
+    m.tube(pts, [16.0] * (N + 1), sides=5)
+    for k in range(9):
+        t = -0.8 + 1.6 * k / 8.0
+        x, z = t * SPAN, _z(t)
+        m.tube([(x, 0.0, z), (x, 0.0, z - 90.0)], [9.0, 9.0], sides=4)
+        m.revolve([(0.0, 0.0), (78.0, 20.0), (86.0, 60.0), (74.0, 190.0),
+                   (86.0, 220.0), (30.0, 250.0), (0.0, 270.0)], steps=12,
+                  at=(x, 0.0, z - 350.0))
+        for j in range(4):
+            a = math.pi / 4 + math.pi * j / 2
+            m.box(20.0, 20.0, 150.0,
+                  at=(x + math.cos(a) * 74.0, math.sin(a) * 74.0, z - 210.0),
+                  rot=(0.0, math.degrees(a), 0.0), chamfer=4.0)
+    return m
+
+
+def lantern_swag_glass(ctx):
+    """The nine glass bodies in a lantern_swag -- the district's colour, hung."""
+    m = ctx.mesh("lantern_swag_glass")
+    SPAN, TOP, SAG = 1500.0, 980.0, 380.0
+    for k in range(9):
+        t = -0.8 + 1.6 * k / 8.0
+        x = t * SPAN
+        z = TOP - SAG * (1.0 - t * t)
+        m.revolve([(0.0, 0.0), (62.0, 24.0), (68.0, 80.0), (62.0, 170.0), (0.0, 200.0)],
+                  steps=12, at=(x, 0.0, z - 330.0))
+    return m
+
+
+def fountain_grand(ctx):
+    """A THREE-TIER FOUNTAIN, 13.3 m across and 15.9 m tall.
+
+    The size in this docstring is MEASURED off the built mesh, because the
+    first draft claimed 11 m and 8 m and delivered 23 m and 20 m -- radii read
+    as diameters, which is this project's oldest arithmetic slip and the
+    reason the tools read bounding boxes instead of tables.
+
+    `fountain_basin` is 4 m and reads as a garden feature. The founder asked
+    for enchanted fountains, and the difference between a feature and a
+    fountain you cross a district for is tiers: three bowls, water leaving
+    each one, and a figure on the top holding the last jet.
+    """
+    m = ctx.mesh("fountain_grand")
+    m.revolve([(0.0, 0.0), (620.0, 0.0), (632.0, 50.0), (610.0, 165.0),
+               (570.0, 190.0), (564.0, 74.0), (0.0, 70.0)], steps=48)
+    for k in range(12):
+        a = 2.0 * math.pi * k / 12
+        m.box(110.0, 110.0, 175.0, at=(math.cos(a) * 612.0, math.sin(a) * 612.0, 110.0),
+              rot=(0.0, math.degrees(a), 0.0), chamfer=14.0)
+    m.revolve([(0.0, 60.0), (215.0, 60.0), (196.0, 150.0), (140.0, 330.0),
+               (166.0, 400.0), (0.0, 430.0)], steps=32)
+    m.revolve([(0.0, 430.0), (420.0, 480.0), (440.0, 545.0), (408.0, 578.0),
+               (130.0, 510.0), (0.0, 478.0)], steps=40)
+    for k in range(8):
+        a = 2.0 * math.pi * k / 8 + 0.2
+        m.tube([(math.cos(a) * 356.0, math.sin(a) * 356.0, 545.0),
+                (math.cos(a) * 408.0, math.sin(a) * 408.0, 670.0),
+                (math.cos(a) * 330.0, math.sin(a) * 330.0, 748.0)],
+               [40.0, 32.0, 22.0], sides=6)
+    m.revolve([(0.0, 578.0), (128.0, 578.0), (108.0, 700.0), (84.0, 840.0),
+               (110.0, 886.0), (0.0, 916.0)], steps=24)
+    m.revolve([(0.0, 916.0), (255.0, 954.0), (268.0, 1008.0), (242.0, 1032.0),
+               (78.0, 978.0), (0.0, 954.0)], steps=32)
+    m.revolve([(0.0, 1032.0), (84.0, 1032.0), (70.0, 1164.0), (96.0, 1210.0),
+               (38.0, 1334.0), (0.0, 1396.0)], steps=20)
+    # the finial: a bud opening, so the top jet has something to leave
+    for k in range(6):
+        a = 2.0 * math.pi * k / 6
+        m.revolve([(0.0, 0.0), (62.0, 30.0), (48.0, 122.0), (0.0, 186.0)], steps=8,
+                  at=(math.cos(a) * 53.0, math.sin(a) * 53.0, 1366.0),
+                  rot=(26.0, math.degrees(a), 0.0))
+    m.sphere(46.0, at=(0, 0, 1540.0), steps=12)
+    return m
+
+
+def fountain_grand_water(ctx):
+    """The water in a fountain_grand: three still surfaces and the falls
+    between them, so the water takes MI_V2_Water and the stone does not."""
+    m = ctx.mesh("fountain_grand_water")
+    m.cylinder(562.0, 24.0, at=(0, 0, 140.0), steps=44)
+    m.cylinder(400.0, 20.0, at=(0, 0, 556.0), steps=36)
+    m.cylinder(240.0, 18.0, at=(0, 0, 1014.0), steps=28)
+    for k in range(12):
+        a = 2.0 * math.pi * k / 12 + 0.13
+        m.tube([(math.cos(a) * 394.0, math.sin(a) * 394.0, 545.0),
+                (math.cos(a) * 446.0, math.sin(a) * 446.0, 330.0),
+                (math.cos(a) * 484.0, math.sin(a) * 484.0, 152.0)],
+               [30.0, 24.0, 18.0], sides=5)
+    for k in range(8):
+        a = 2.0 * math.pi * k / 8 + 0.4
+        m.tube([(math.cos(a) * 234.0, math.sin(a) * 234.0, 1010.0),
+                (math.cos(a) * 276.0, math.sin(a) * 276.0, 790.0),
+                (math.cos(a) * 300.0, math.sin(a) * 300.0, 566.0)],
+               [22.0, 18.0, 13.0], sides=5)
+    m.tube([(0.0, 0.0, 1550.0), (0.0, 0.0, 1700.0)], [20.0, 11.0], sides=6)
+    for k in range(6):
+        a = 2.0 * math.pi * k / 6
+        m.tube([(0.0, 0.0, 1676.0),
+                (math.cos(a) * 150.0, math.sin(a) * 150.0, 1478.0),
+                (math.cos(a) * 214.0, math.sin(a) * 214.0, 1058.0)],
+               [13.0, 10.0, 8.0], sides=5)
+    return m
+
+
+RECIPES.update({
+    "gatehouse_district": (gatehouse_district, "gates", True, True),
+    "gatehouse_glass": (gatehouse_glass, "gates", True, False),
+    "cloister_square": (cloister_square, "castle", True, True),
+    "bridge_arc": (bridge_arc, "bridges", True, True),
+    "orrery_gold": (orrery_gold, "clocks", True, True),
+    "glass_screen": (glass_screen, "garden_arch", True, True),
+    "glass_screen_panes": (glass_screen_panes, "garden_arch", True, False),
+    "lantern_swag": (lantern_swag, "garden_props", True, True),
+    "lantern_swag_glass": (lantern_swag_glass, "garden_props", True, False),
+    "fountain_grand": (fountain_grand, "garden_props", True, True),
+    "fountain_grand_water": (fountain_grand_water, "garden_props", True, False),
+})

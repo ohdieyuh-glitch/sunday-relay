@@ -52,7 +52,14 @@ def _verify_step_heights():
     # individual risers, not one lip; a terrace_platform stretched to z-scale
     # 2.1 is a monument plinth, not a path. What this is looking for is the
     # thing a walker crosses without thinking about it.
-    TOP = {"terrace_platform": 140.0}
+    # A BRIDGE IS A WALKING SURFACE AND THIS COULD NOT SEE ONE. PASS 29 added
+    # bridge_arc, whose first draft stood 155 uu proud of the ground at both
+    # ends -- five times the Dog's step -- and this gate passed it, because it
+    # knew exactly one asset. The entry is the height of the deck AT ITS ENDS
+    # (0.0 by construction: the deck's top surface starts at the recipe's own
+    # z = 0 and rises from there), so a bridge placed at any z but ground level
+    # fails here instead of in a stream.
+    TOP = {"terrace_platform": 140.0, "bridge_arc": 0.0}
     FLAT = 0.5
     bad = {}
     highest, checked = 0.0, 0
@@ -70,7 +77,12 @@ def _verify_step_heights():
         sc = p["scale"]
         sz = sc[2] if isinstance(sc, (list, tuple)) and len(sc) > 2 else (
             sc[0] if isinstance(sc, (list, tuple)) else sc)
-        if sz > FLAT:
+        # THE PLINTH RULE IS ABOUT STRETCHED PLATFORMS, NOT ABOUT SCALE. A
+        # terrace_platform at z-scale 2.1 is a monument base; a bridge at its
+        # authored 1.0 is a bridge, and applying the same test to it exempted
+        # the one asset just added to this gate on the first run after adding
+        # it. Name the asset the rule is about.
+        if p["asset"] == "terrace_platform" and sz > FLAT:
             n_plinth += 1
             continue
         top = p["pos"][2] + h * sz

@@ -163,7 +163,15 @@ start_app() {
   # overrides the whole payload for a one-off experiment.
   local render_dir profile exec_cmds profile_args
   render_dir="$HERE/../../rendering"
-  profile="${WL_RENDER_PROFILE:-BALANCED}"
+  # LIVE, NOT BALANCED, AND A MEASUREMENT CHOSE IT. This script is the
+  # INTERACTIVE stream -- the founder driving the Dog -- and BALANCED is tuned
+  # for the opposite job. It asks WebRTC for MAINTAIN_RESOLUTION, which holds
+  # picture and drops FRAMES, and it renders at ScreenPercentage 100, which on
+  # this L4 delivers a measured 51.5 fps into a 60 Hz stream. The founder
+  # reported stutter while walking; the movement profiler then showed the GAME
+  # is not the problem at all (worst frame in 3,540 moving frames: 31.78 ms,
+  # zero over 33). The capture scripts pass their own profile and are unchanged.
+  profile="${WL_RENDER_PROFILE:-LIVE}"
   profile_args=()
   if [ -r "$render_dir/render-profile.py" ]; then
     if [ -n "${WL_EXEC_CMDS:-}" ]; then
