@@ -8,6 +8,7 @@ import type { SandboxExecutionPort, ToolInvocationResult } from '../../mission/j
 import { DockerExecutorReceiptStore } from './executor-receipt-store';
 import { createDurableReceiptAttestor, createExecutorControlPlaneService } from './executor-control-plane-service';
 import { RemoteExecutorControlPlane } from './remote-executor-control-plane';
+import { FilesystemExecutionLedger } from './durable-execution-ledger';
 
 const roots:string[]=[];
 afterEach(async()=>{await Promise.all(roots.splice(0).map(root=>rm(root,{recursive:true,force:true})));});
@@ -29,14 +30,21 @@ describe('executor control-plane service',()=>{
     const receipts=new DockerExecutorReceiptStore(root),token='e'.repeat(64),sandboxId='sandbox';
     const directory=receipts.directory(token,sandboxId);await mkdir(directory,{recursive:true});
     const keys=generateKeyPairSync('ed25519');
-    const attest=createDurableReceiptAttestor({keyId:'current',privateSigningKey:keys.privateKey,receipts});
-    const server=createExecutorControlPlaneService({callerCredential:'caller',keyId:'current',privateSigningKey:keys.privateKey,receipts,physical:physical(async()=>{await writeFile(join(directory,'request.json'),JSON.stringify({invocationId:'inv',dispatchGeneration:2,sandboxId,requestDigest:'a'.repeat(64)}),{flag:'wx'});await writeFile(join(directory,'before.receipt'),beforeBody,{flag:'wx'});await writeFile(join(directory,'stdout'),'',{flag:'wx'});await writeFile(join(directory,'stderr'),'',{flag:'wx'});await writeFile(join(directory,'changed-paths'),'',{flag:'wx'});await attest({phase:'BEFORE',executionTokenHash:token,sandboxId});await writeFile(join(directory,'after.receipt'),afterBody,{flag:'wx'});await attest({phase:'AFTER',executionTokenHash:token,sandboxId});return result;})});
+    const executionLedger=new FilesystemExecutionLedger(join(root,'ledger'));
+    const attest=createDurableReceiptAttestor({keyId:'current',privateSigningKey:keys.privateKey,receipts,executionLedger});
+    const allOperations=new Set(['create','prepare','execute','cancel','destroy','inspect','artifacts','discover','quarantine','reconcile'] as const);
+    let physicalEffects=0;
+    const server=createExecutorControlPlaneService({callerAuthorities:[{callerId:'julius-prod',credential:'caller',operations:allOperations},{callerId:'execute-only',credential:'execute-only-secret',operations:new Set(['execute'])}],keyId:'current',privateSigningKey:keys.privateKey,receipts,executionLedger,physical:physical(async()=>{physicalEffects++;await writeFile(join(directory,'request.json'),JSON.stringify({invocationId:'inv',dispatchGeneration:2,sandboxId,requestDigest:'a'.repeat(64)}),{flag:'wx'});await writeFile(join(directory,'before.receipt'),beforeBody,{flag:'wx'});await writeFile(join(directory,'stdout'),'',{flag:'wx'});await writeFile(join(directory,'stderr'),'',{flag:'wx'});await writeFile(join(directory,'changed-paths'),'',{flag:'wx'});await attest({phase:'BEFORE',executionTokenHash:token,sandboxId});await writeFile(join(directory,'after.receipt'),afterBody,{flag:'wx'});await attest({phase:'AFTER',executionTokenHash:token,sandboxId});return result;})});
     await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));
     try{
       const address=server.address() as AddressInfo;
-      const client=new RemoteExecutorControlPlane({endpoint:new URL(`http://127.0.0.1:${address.port}`),serviceCredential:'caller',requestTimeoutMs:1000,trustedReceiptKeys:new Map([['current',keys.publicKey]]),allowInsecureLoopbackForTests:true});
-      await expect(client.executeTool({sandboxId,expectedLeaseGeneration:1,dispatchGeneration:2,requestDigest:'a'.repeat(64),executionTokenHash:token,effectClassification:'NON_IDEMPOTENT_MUTATION',request:{invocationId:'inv',projectId:'project',runId:'run',taskId:'task',workerId:'worker',toolId:'shell.bash',toolVersion:'1',arguments:{command:'true'},cwd:'.',timeoutMs:1000,idempotencyKey:'key',expectedMutation:'WORKSPACE'}})).resolves.toEqual(result);
+      const client=new RemoteExecutorControlPlane({endpoint:new URL(`http://127.0.0.1:${address.port}`),serviceCredential:'caller',callerId:'julius-prod',tenantId:'tenant',requestTimeoutMs:1000,trustedReceiptKeys:new Map([['current',keys.publicKey]]),allowInsecureLoopbackForTests:true});
+      const execution={sandboxId,expectedLeaseGeneration:1,dispatchGeneration:2,requestDigest:'a'.repeat(64),executionTokenHash:token,effectClassification:'NON_IDEMPOTENT_MUTATION' as const,request:{invocationId:'inv',projectId:'project',runId:'run',taskId:'task',workerId:'worker',toolId:'shell.bash' as const,toolVersion:'1',arguments:{command:'true'},cwd:'.',timeoutMs:1000,idempotencyKey:'key',expectedMutation:'WORKSPACE' as const}};
+      await expect(client.executeTool(execution)).resolves.toEqual(result);
+      await expect(client.executeTool(execution)).resolves.toEqual(result);
+      expect(physicalEffects).toBe(1);
       await expect(fetch(`http://127.0.0.1:${address.port}/v1/execute`,{method:'POST',headers:{authorization:'Bearer wrong','x-julius-operation':'discover','content-type':'application/json'},body:'{}'}).then(x=>x.status)).resolves.toBe(401);
+      await expect(fetch(`http://127.0.0.1:${address.port}/v1/execute`,{method:'POST',headers:{authorization:'Bearer execute-only-secret','x-julius-operation':'discover','content-type':'application/json'},body:'{}'}).then(x=>x.status)).resolves.toBe(403);
     }finally{await new Promise<void>(resolve=>server.close(()=>resolve()));}
   });
 });

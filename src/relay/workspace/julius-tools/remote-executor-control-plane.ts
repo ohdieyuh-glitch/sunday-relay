@@ -1,4 +1,4 @@
-import type { KeyObject } from 'node:crypto';
+import { randomUUID, type KeyObject } from 'node:crypto';
 import type { SandboxExecutionPort } from '../../mission/julius';
 import { receiptDigest, verifyExecutorAttestation, type SignedExecutorAttestation } from './executor-attestation';
 import { deriveToolInvocationResult, parseExecutorAfterReceipt, parseExecutorBeforeReceipt, validateToolInvocationResult } from './executor-terminal-receipt';
@@ -6,6 +6,8 @@ import { deriveToolInvocationResult, parseExecutorAfterReceipt, parseExecutorBef
 export interface ExecutorControlPlaneConfig {
   readonly endpoint: URL;
   readonly serviceCredential: string;
+  readonly callerId: string;
+  readonly tenantId: string;
   readonly requestTimeoutMs: number;
   readonly trustedReceiptKeys?: ReadonlyMap<string, KeyObject>;
   /** Loopback HTTP is test-only; production service traffic must use authenticated TLS. */
@@ -21,7 +23,7 @@ export class RemoteExecutorControlPlane implements SandboxExecutionPort {
     const loopback = ['127.0.0.1','::1','localhost'].includes(config.endpoint.hostname);
     if (config.endpoint.protocol !== 'https:' && !(config.allowInsecureLoopbackForTests && config.endpoint.protocol === 'http:' && loopback)) throw new Error('executor_endpoint_tls_required');
     if (config.endpoint.username || config.endpoint.password || config.endpoint.search || config.endpoint.hash) throw new Error('executor_endpoint_secret_or_query_refused');
-    if (!config.serviceCredential || config.requestTimeoutMs < 1) throw new Error('executor_control_plane_config_invalid');
+    if (!config.serviceCredential || !config.callerId || !config.tenantId || config.requestTimeoutMs < 1) throw new Error('executor_control_plane_config_invalid');
     remoteInstances.add(this);
   }
 
@@ -39,9 +41,11 @@ export class RemoteExecutorControlPlane implements SandboxExecutionPort {
   createSandbox = (input: Parameters<SandboxExecutionPort['createSandbox']>[0]) => this.call<Awaited<ReturnType<SandboxExecutionPort['createSandbox']>>>('create', input);
   prepareWorkspace = (input: Parameters<SandboxExecutionPort['prepareWorkspace']>[0]) => this.call<Awaited<ReturnType<SandboxExecutionPort['prepareWorkspace']>>>('prepare', input);
   async executeTool(input: Parameters<SandboxExecutionPort['executeTool']>[0]) {
+    const issuedAt=new Date(),expiresAt=new Date(issuedAt.getTime()+Math.min(this.config.requestTimeoutMs,300_000));
+    const envelope={schemaVersion:1,callerId:this.config.callerId,callerScope:'sandbox:execute',tenantId:this.config.tenantId,projectId:input.request.projectId,runId:input.request.runId,taskId:input.request.taskId,invocationId:input.request.invocationId,dispatchGeneration:input.dispatchGeneration,sandboxId:input.sandboxId,requestDigest:input.requestDigest,executionIdentity:`${input.request.invocationId}:${input.dispatchGeneration}:${input.sandboxId}`,nonce:randomUUID(),issuedAt:issuedAt.toISOString(),expiresAt:expiresAt.toISOString(),payload:{expectedLeaseGeneration:input.expectedLeaseGeneration,executionTokenHash:input.executionTokenHash,effectClassification:input.effectClassification,request:input.request}} as const;
     const response = await fetch(new URL('/v1/execute', this.config.endpoint), {
       method: 'POST', signal: AbortSignal.timeout(this.config.requestTimeoutMs),
-      headers: { authorization: `Bearer ${this.config.serviceCredential}`, 'content-type': 'application/json', 'x-julius-operation': 'execute' }, body: JSON.stringify(input),
+      headers: { authorization: `Bearer ${this.config.serviceCredential}`, 'content-type': 'application/json', 'x-julius-operation': 'execute' }, body: JSON.stringify(envelope),
     }).catch(() => { throw new Error('EXECUTOR_UNAVAILABLE'); });
     if (!response.ok) throw new Error(response.status === 401 || response.status === 403 ? 'executor_authorization_refused' : response.status === 409 ? 'executor_identity_conflict' : 'EXECUTOR_UNAVAILABLE');
     const decoded = await boundedJson(response) as {value:Awaited<ReturnType<SandboxExecutionPort['executeTool']>>;attestations:readonly SignedExecutorAttestation[];receiptBodies:Readonly<Record<'BEFORE'|'AFTER',string>>;terminalPayload:Readonly<Record<'stdout'|'stderr'|'changedPaths',string>>};

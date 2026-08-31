@@ -1,40 +1,75 @@
-name: Julius real infrastructure
+name: Julius real sibling infrastructure
 on:
   pull_request:
-    paths: ['src/relay/mission/julius/**','src/relay/persistence/**','src/relay/workspace/julius-tools/**','.github/workflows/julius-real-infra.yml']
+    paths: ['src/relay/mission/julius/**','src/relay/persistence/**','src/relay/workspace/julius-tools/**','scripts/julius-*','.github/workflows/julius-real-infra.yml','package*.json']
   workflow_dispatch:
+permissions:
+  contents: read
 jobs:
-  postgres-and-sandbox:
+  sibling-control-plane:
     runs-on: ubuntu-24.04
-    services:
-      postgres:
-        image: postgres:16-bookworm
-        env: { POSTGRES_USER: julius, POSTGRES_PASSWORD: julius, POSTGRES_DB: julius }
-        ports: ['5432:5432']
-        options: >-
-          --health-cmd "pg_isready -U julius" --health-interval 5s --health-timeout 5s --health-retries 20
+    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: '20', cache: npm }
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with: { node-version: '22', cache: npm }
       - run: npm ci
-      - id: image
+      - run: npm run relay:executor:build && npm run relay:sibling-e2e:build
+      - name: Build pinned sandbox and executor-side images
+        id: images
         run: |
-          cat > /tmp/julius-sandbox.Dockerfile <<'EOF'
-          FROM node:20-bookworm-slim
-          RUN apt-get update && apt-get install -y --no-install-recommends util-linux git ca-certificates procps \
-            && rm -rf /var/lib/apt/lists/*
-          COPY scripts/julius-docker-executor.sh /usr/local/bin/julius-executor
-          RUN chmod 0555 /usr/local/bin/julius-executor
-          EOF
-          image_id=$(docker build -q -f /tmp/julius-sandbox.Dockerfile .)
-          echo "id=$image_id" >> "$GITHUB_OUTPUT"
-      - run: npx vitest run src/relay/persistence/real-infra-julius.test.ts
+          mkdir -p /tmp/julius-ci-build
+          cp scripts/julius-docker-executor.sh /tmp/julius-ci-build/julius-executor
+          printf '%s\n' 'FROM node:22-bookworm-slim' 'RUN apt-get update && apt-get install -y --no-install-recommends util-linux git ca-certificates procps && rm -rf /var/lib/apt/lists/*' 'COPY julius-executor /usr/local/bin/julius-executor' 'RUN chmod 0555 /usr/local/bin/julius-executor' > /tmp/julius-ci-build/Sandboxfile
+          sandbox_image=$(docker build -q -f /tmp/julius-ci-build/Sandboxfile /tmp/julius-ci-build)
+          printf '%s\n' 'FROM node:22-bookworm-slim' 'RUN apt-get update && apt-get install -y --no-install-recommends docker.io ca-certificates && rm -rf /var/lib/apt/lists/*' > /tmp/julius-ci-build/Executorfile
+          executor_image=$(docker build -q -f /tmp/julius-ci-build/Executorfile /tmp/julius-ci-build)
+          echo "sandbox=$sandbox_image" >> "$GITHUB_OUTPUT"
+          echo "executor=$executor_image" >> "$GITHUB_OUTPUT"
+      - name: Create executor-private state and signing identity
+        run: |
+          mkdir -p /tmp/julius-executor/receipts /tmp/julius-executor/ledger /tmp/julius-workspace
+          chmod 0700 /tmp/julius-executor /tmp/julius-executor/receipts /tmp/julius-executor/ledger
+          chmod 0777 /tmp/julius-workspace
+          printf 'fixture\n' > /tmp/julius-workspace/fixture.txt
+          openssl genpkey -algorithm ED25519 -out /tmp/julius-executor/private.pem
+          openssl pkey -in /tmp/julius-executor/private.pem -pubout -out /tmp/julius-public.pem
+          chmod 0600 /tmp/julius-executor/private.pem
+      - name: Start PostgreSQL 16 and independent executor control plane
         env:
-          JULIUS_REAL_INFRA: '1'
-          JULIUS_SANDBOX_IMAGE: ${{ steps.image.outputs.id }}
-          PGHOST: 127.0.0.1
-          PGPORT: '5432'
-          PGUSER: julius
-          PGPASSWORD: julius
-          PGDATABASE: julius
+          SANDBOX_IMAGE: ${{ steps.images.outputs.sandbox }}
+          EXECUTOR_IMAGE: ${{ steps.images.outputs.executor }}
+        run: |
+          docker network create julius-sibling
+          docker run -d --name julius-postgres --network julius-sibling -e POSTGRES_USER=julius -e POSTGRES_PASSWORD=julius -e POSTGRES_DB=julius postgres:16-bookworm
+          for i in $(seq 1 40); do docker exec julius-postgres pg_isready -U julius && break; sleep 1; done
+          docker run -d --name julius-executor --network julius-sibling \
+            -v /var/run/docker.sock:/var/run/docker.sock -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE:ro" \
+            -v /tmp/julius-executor:/tmp/julius-executor -v /tmp/julius-workspace:/tmp/julius-workspace -w "$GITHUB_WORKSPACE" \
+            -e DATABASE_URL=postgres://julius:julius@julius-postgres:5432/julius -e EXECUTOR_RECEIPT_ROOT=/tmp/julius-executor/receipts \
+            -e EXECUTOR_LEDGER_ROOT=/tmp/julius-executor/ledger -e EXECUTOR_SIGNING_KEY_PATH=/tmp/julius-executor/private.pem \
+            -e EXECUTOR_KEY_ID=ci-key -e EXECUTOR_RUNTIME_ID=executor-ci -e EXECUTOR_VERSION=docker-executor.v1 \
+            -e EXECUTOR_WORKSPACE_ROOT=/tmp/julius-workspace -e JULIUS_SANDBOX_IMAGE="$SANDBOX_IMAGE" \
+            -e JULIUS_CALLER_ID=julius-prod -e JULIUS_EXECUTOR_CREDENTIAL=ci-scoped-credential -e EXECUTOR_SECRET_ENV=executor-only \
+            "$EXECUTOR_IMAGE" node dist-relay-executor/main.cjs
+          for i in $(seq 1 40); do docker exec julius-executor node -e "fetch('http://127.0.0.1:8787/v1/execute').then(r=>process.exit(r.status===404?0:1)).catch(()=>process.exit(1))" && break; sleep 1; done
+          docker logs julius-executor
+      - name: Julius has no Docker or executor-private authority and completes the real effect
+        run: |
+          docker run --rm --network container:julius-executor \
+            -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE:ro" -v /tmp/julius-workspace:/tmp/julius-workspace \
+            -v /tmp/julius-public.pem:/tmp/julius-public.pem:ro -w "$GITHUB_WORKSPACE" \
+            -e DATABASE_URL=postgres://julius:julius@julius-postgres:5432/julius -e JULIUS_EXECUTOR_CREDENTIAL=ci-scoped-credential \
+            -e JULIUS_PUBLIC_KEY_PATH=/tmp/julius-public.pem -e JULIUS_WORKSPACE=/tmp/julius-workspace \
+            -e PROBE_EXECUTOR_PRIVATE_KEY=/tmp/julius-executor/private.pem -e PROBE_EXECUTOR_RECEIPT_ROOT=/tmp/julius-executor/receipts \
+            node:22-bookworm-slim node dist-relay-executor/sibling-e2e.cjs
+      - name: Executor topology evidence
+        if: always()
+        run: |
+          docker inspect julius-executor --format 'executor_mounts={{range .Mounts}}{{.Destination}}:{{.RW}} {{end}}' 2>/dev/null || true
+          docker logs julius-executor 2>&1 || true
+      - name: Cleanup
+        if: always()
+        run: |
+          docker rm -f julius-executor julius-postgres 2>/dev/null || true
+          docker network rm julius-sibling 2>/dev/null || true
