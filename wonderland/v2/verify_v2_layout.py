@@ -55,19 +55,27 @@ def _verify_step_heights():
     TOP = {"terrace_platform": 140.0}
     FLAT = 0.5
     bad = {}
+    highest, checked = 0.0, 0
+    n_steps = n_water = n_plinth = 0
     for p in LAY.ALL:
+        if p["asset"] in ("path_steps", "side_steps", "stairs_broad"):
+            n_steps += 1
         h = TOP.get(p["asset"])
         if h is None:
             continue
         lab = p.get("label") or ""
         if "Water" in lab or "Rill" in lab:
+            n_water += 1
             continue
         sc = p["scale"]
         sz = sc[2] if isinstance(sc, (list, tuple)) and len(sc) > 2 else (
             sc[0] if isinstance(sc, (list, tuple)) else sc)
         if sz > FLAT:
+            n_plinth += 1
             continue
         top = p["pos"][2] + h * sz
+        checked += 1
+        highest = max(highest, top)
         if top > STEP:
             key = lab.rstrip("0123456789_") or p["asset"]
             bad[key] = (bad.get(key, (0, top))[0] + 1, top)
@@ -77,7 +85,14 @@ def _verify_step_heights():
         for k, (n, top) in sorted(bad.items(), key=lambda kv: -kv[1][0])[:8]:
             print("   %-30s x%-4d surface %.0f uu" % (k, n, top))
         return False
-    print("V2 STEP HEIGHT: every walking surface is under the Dog's %.0f uu step" % STEP)
+    # THE CONTRACT, STATED AS NUMBERS. A pass that only says "pass" cannot show
+    # whether the margin is eleven units or one, and one is what this world
+    # shipped with.
+    print("V2 STEP HEIGHT: MaxStepHeight %.0f uu | highest flat walking lip %.0f uu | "
+          "margin %.0f uu | %d surfaces checked | 0 violations"
+          % (STEP, highest, STEP - highest, checked))
+    print("   exempt by design: %d stairs/risers, %d rills and water, %d raised plinths"
+          % (n_steps, n_water, n_plinth))
     return True
 
 
