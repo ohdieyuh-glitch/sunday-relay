@@ -24,8 +24,10 @@ jobs:
           FROM node:20-bookworm-slim
           RUN apt-get update && apt-get install -y --no-install-recommends util-linux git ca-certificates \
             && rm -rf /var/lib/apt/lists/*
+          COPY scripts/julius-docker-executor.sh /usr/local/bin/julius-executor
+          RUN chmod 0555 /usr/local/bin/julius-executor
           EOF
-          image_id=$(docker build -q -f /tmp/julius-sandbox.Dockerfile /tmp)
+          image_id=$(docker build -q -f /tmp/julius-sandbox.Dockerfile .)
           echo "id=$image_id" >> "$GITHUB_OUTPUT"
       - run: npx vitest run src/relay/persistence/real-infra-julius.test.ts
         env:
