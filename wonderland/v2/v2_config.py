@@ -303,22 +303,22 @@ HERO_CAMS = [
     # SkylineRiseCam21 is where the spire is seen WHOLE.
     {"name": "GreatSpireCam22", "location": (0.0, 23400.0, 170.0), "rotation": (9.0, 90.0, 0.0),
      "fov": 100.0, "tags": ("GreatSpireCam22", "HeroCam22")},        # 96 m, looking up
-    {"name": "ClockGrandCam23", "location": (19731.5, 6897.1, 170.0), "rotation": (1.0, -102.0, 0.0),
-     "fov": 100.0, "tags": ("ClockGrandCam23", "HeroCam23")},        # 87 m, sightline verified
-    {"name": "TeapotCam24", "location": (-11185.8, -7722.1, 170.0), "rotation": (1.0, -171.0, 0.0),
-     "fov": 100.0, "tags": ("TeapotCam24", "HeroCam24")},            # 30 m, top 31.3
+    {"name": "ClockGrandCam23", "location": (10603.0, -927.7, 170.0), "rotation": (5.3, -5.0, 0.0),
+     "fov": 100.0, "tags": ("ClockGrandCam23", "HeroCam23")},        # on its spur, 74 m, 67% clear
+    {"name": "TeapotCam24", "location": (-11830.9, -7143.9, 170.0), "rotation": (5.3, -156.0, 0.0),
+     "fov": 100.0, "tags": ("TeapotCam24", "HeroCam24")},            # on its spur, 26 m, 100% clear
     {"name": "ColossalKeyCam25", "location": (20342.2, -14247.3, 170.0), "rotation": (4.3, 69.0, 0.0),
      "fov": 100.0, "tags": ("ColossalKeyCam25", "HeroCam25")},       # 64 m, sightline verified
-    {"name": "FloatingStairCam26", "location": (-3650.8, 14237.2, 170.0), "rotation": (1.0, 96.0, 0.0),
-     "fov": 100.0, "tags": ("FloatingStairCam26", "HeroCam26")},     # 58 m, top 31.3
+    {"name": "FloatingStairCam26", "location": (-3347.4, 14277.2, 170.0), "rotation": (1.0, 99.0, 0.0),
+     "fov": 100.0, "tags": ("FloatingStairCam26", "HeroCam26")},     # on its spur, 58 m, 100% clear
     # 17 m out and the tallest lantern's tip is 0.9 deg outside the frame ON
     # PURPOSE: the shot is a LANE of them, not a portrait of one.
     {"name": "LanternLaneCam27", "location": (-16640.7, 10666.8, 170.0), "rotation": (4.3, -98.0, 0.0),
      "fov": 100.0, "tags": ("LanternLaneCam27", "HeroCam27")},       # 17 m, top 34.7
-    {"name": "GlassPavilionCam28", "location": (-1712.0, -15895.3, 170.0), "rotation": (1.0, -172.0, 0.0),
-     "fov": 100.0, "tags": ("GlassPavilionCam28", "HeroCam28")},     # 50 m, top 31.3
-    {"name": "GiantBloomCam29", "location": (3280.2, 13780.7, 170.0), "rotation": (1.0, 63.0, 0.0),
-     "fov": 100.0, "tags": ("GiantBloomCam29", "HeroCam29")},        # 51 m, top 31.3
+    {"name": "GlassPavilionCam28", "location": (-3834.3, -9491.0, 170.0), "rotation": (-6.0, -112.0, 0.0),
+     "fov": 100.0, "tags": ("GlassPavilionCam28", "HeroCam28")},     # on its spur, 77 m, 89% clear
+    {"name": "GiantBloomCam29", "location": (2882.2, 11925.6, 170.0), "rotation": (-6.0, 67.0, 0.0),
+     "fov": 100.0, "tags": ("GiantBloomCam29", "HeroCam29")},        # on its spur, 70 m, 100% clear
 ]
 #: The suite's names by index -- the filing tool and the checkpoint report use
 #: them; the capture tooling uses the "HeroCamN" tags.
