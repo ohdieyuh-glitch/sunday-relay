@@ -1,12 +1,13 @@
 /** @vitest-environment jsdom */
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
-  AGENT_STORAGE_KEY, EMPTY_DRAFT, ONBOARDING_STEPS, activate, canActivate,
-  clearAgentDraft, firstIncompleteStep, isConfigured, loadAgentDraft,
-  normaliseName, parseAgentDraft, saveAgentDraft, stepComplete,
-  type CompoundAgentDraft,
+  AGENT_STORAGE_KEY, EMPTY_DRAFT, ONBOARDING_STEPS, activate, canActivate, cardBelongsTo, cardCurrency,
+  cardReference, cardValues, claimCard, clearAgentDraft, firstIncompleteStep, isConfigured, isPersistedCard,
+  loadAgentDraft, newCardForAgent, normaliseName, parseAgentDraft, saveAgentDraft, startNewCompoundAgent,
+  stepComplete, type CompoundAgentDraft,
 } from './onboarding';
 import { AGENT_OPTIONS } from '../project-settings';
+import { REPOSITORY_PERMISSIONS } from '../../mission/repository-target';
 
 /**
  * The creation flow's gating, completion and durability — the parts that decide
@@ -162,5 +163,171 @@ describe('durability', () => {
     for (const junk of [null, 42, 'x', [], undefined]) {
       expect(parseAgentDraft(junk)).toEqual(EMPTY_DRAFT);
     }
+  });
+});
+
+describe('THE C.A.R.D. RECORD: identity, revisions, binding', () => {
+  const T0 = '2026-08-27T00:00:00.000Z';
+  const T1 = '2026-08-27T00:01:00.000Z';
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
+  it('mints identity on the first save and starts at revision 1', () => {
+    const saved = saveAgentDraft(complete(), T0);
+    expect(saved.cardId).toMatch(/^card-/);
+    expect(saved.agentId).toMatch(/^agent-/);
+    expect(saved.revision).toBe(1);
+    expect(saved.createdAt).toBe(T0);
+    expect(saved.updatedAt).toBe(T0);
+    expect(isPersistedCard(saved)).toBe(true);
+    expect(isPersistedCard(EMPTY_DRAFT)).toBe(false);
+    expect(loadAgentDraft()).toEqual(saved);
+  });
+
+  it('advances the revision only when a configured value changes', () => {
+    const first = saveAgentDraft(complete(), T0);
+    const same = saveAgentDraft({ ...first }, T1);
+    expect(same.revision).toBe(1);
+    expect(same.updatedAt).toBe(T0);
+    const changed = saveAgentDraft({ ...first, mode: 'guided' }, T1);
+    expect(changed.revision).toBe(2);
+    expect(changed.updatedAt).toBe(T1);
+    expect(changed.cardId).toBe(first.cardId);
+    expect(changed.createdAt).toBe(T0);
+  });
+
+  it('never lets a stale copy rewind identity or the revision counter', () => {
+    const first = saveAgentDraft(complete(), T0);
+    saveAgentDraft({ ...first, spendUsd: 1 }, T1); // revision 2
+    const fromStale = saveAgentDraft({ ...first, cardId: 'card-forged', agentId: 'agent-forged', revision: 0, runtimeMinutes: 9 }, T1);
+    expect(fromStale.cardId).toBe(first.cardId);
+    expect(fromStale.agentId).toBe(first.agentId);
+    expect(fromStale.revision).toBe(3);
+  });
+
+  it('migrates a record saved before identity existed: it becomes an addressable revision 1, stable across reads', () => {
+    localStorage.setItem(AGENT_STORAGE_KEY, JSON.stringify({
+      name: 'Old', promptArchitectId: 'architect-sunday-alcatraz', codingAgentId: 'coding-claude-code',
+      reviewerId: 'reviewer-hermes', mode: 'guided', spendUsd: 12, runtimeMinutes: 30,
+    }));
+    const migrated = loadAgentDraft(T0);
+    expect(migrated.name).toBe('Old');
+    expect(migrated.mode).toBe('guided');
+    expect(migrated.spendUsd).toBe(12);
+    expect(isPersistedCard(migrated)).toBe(true);
+    expect(migrated.revision).toBe(1);
+    expect(loadAgentDraft(T1)).toEqual(migrated);
+  });
+
+  it('keeps a cleared ceiling as NOT SET, never a silent zero', () => {
+    saveAgentDraft({ ...complete(), spendUsd: null, agentCalls: 4 }, T0);
+    expect(loadAgentDraft().spendUsd).toBeNull();
+    expect(loadAgentDraft().agentCalls).toBe(4);
+    expect(parseAgentDraft({ spendUsd: -1 }).spendUsd).toBe(EMPTY_DRAFT.spendUsd);
+  });
+
+  it('keeps only the permissions the product declares, in ladder order', () => {
+    const parsed = parseAgentDraft({ permissions: ['deploy_production', 'read', 'nope', 'read'] }).permissions;
+    expect(parsed).toEqual(REPOSITORY_PERMISSIONS.filter((p) => (['read', 'deploy_production'] as string[]).includes(p)));
+  });
+
+  describe('binding to the participant', () => {
+    it('claims an unbound C.A.R.D. for the participant who signs in — once, and again for the same one', () => {
+      saveAgentDraft(complete(), T0);
+      expect(claimCard('ghu-1', T1).ok).toBe(true);
+      expect(loadAgentDraft().participantId).toBe('ghu-1');
+      expect(claimCard('ghu-1', T1).ok).toBe(true);
+    });
+
+    it("REFUSES to hand one participant another participant's C.A.R.D., and leaves it untouched", () => {
+      saveAgentDraft(complete(), T0);
+      claimCard('ghu-1', T0);
+      const claim = claimCard('ghu-2', T1);
+      expect(claim.ok).toBe(false);
+      if (!claim.ok) expect(claim.reason).toBe('wrong_participant');
+      expect(loadAgentDraft().participantId).toBe('ghu-1');
+      expect(cardBelongsTo(loadAgentDraft(), 'ghu-2')).toBe(false);
+      expect(cardBelongsTo(loadAgentDraft(), 'ghu-1')).toBe(true);
+    });
+
+    it('has nothing to claim when no C.A.R.D. was ever persisted', () => {
+      const claim = claimCard('ghu-1', T0);
+      expect(claim.ok).toBe(false);
+      if (!claim.ok) expect(claim.reason).toBe('no_card');
+      expect(cardBelongsTo(EMPTY_DRAFT, 'ghu-1')).toBe(false);
+    });
+
+    it("a save never re-binds: the owner is the store's, not the caller's copy", () => {
+      saveAgentDraft(complete(), T0);
+      claimCard('ghu-1', T0);
+      const saved = saveAgentDraft({ ...loadAgentDraft(), participantId: 'ghu-2', mode: 'guided' }, T1);
+      expect(saved.participantId).toBe('ghu-1');
+    });
+  });
+
+  describe('currency — a consumer holding a reference notices the record moved', () => {
+    it('is current while nothing changed, stale once a value changed', () => {
+      const card = saveAgentDraft(complete(), T0);
+      expect(cardCurrency(cardReference(card)).ok).toBe(true);
+      saveAgentDraft({ ...card, mode: 'guided' }, T1);
+      const currency = cardCurrency(cardReference(card));
+      expect(currency.ok).toBe(false);
+      if (!currency.ok) {
+        expect(currency.reason).toBe('stale_revision');
+        expect(currency.current.revision).toBe(2);
+      }
+    });
+
+    it('reports a replaced C.A.R.D., a different Compound Agent, and no C.A.R.D. at all', () => {
+      const card = saveAgentDraft(complete(), T0);
+      newCardForAgent(T1);
+      let currency = cardCurrency(cardReference(card));
+      expect(!currency.ok && currency.reason).toBe('card_replaced');
+      startNewCompoundAgent(T1);
+      currency = cardCurrency(cardReference(card));
+      expect(!currency.ok && currency.reason).toBe('wrong_agent');
+      clearAgentDraft();
+      currency = cardCurrency(cardReference(card));
+      expect(!currency.ok && currency.reason).toBe('no_card');
+    });
+  });
+
+  describe('explicit re-configuration — the only ways a C.A.R.D. is configured again', () => {
+    it('a NEW C.A.R.D. keeps the Compound Agent, resets its operating profile, and is not yet activated', () => {
+      const card = saveAgentDraft(activate({ ...complete(), mode: 'autonomous', spendUsd: 3, network: 'blocked' }, T0), T0);
+      claimCard('ghu-1', T0);
+      const fresh = newCardForAgent(T1);
+      expect(fresh.agentId).toBe(card.agentId);
+      expect(fresh.cardId).not.toBe(card.cardId);
+      expect(fresh.revision).toBe(1);
+      expect(fresh.name).toBe('Caesar');
+      expect(fresh.promptArchitectId).toBe(card.promptArchitectId);
+      expect(fresh.mode).toBe(EMPTY_DRAFT.mode);
+      expect(fresh.spendUsd).toBe(EMPTY_DRAFT.spendUsd);
+      expect(fresh.network).toBe(EMPTY_DRAFT.network);
+      expect(fresh.activatedAt).toBeNull();
+      expect(fresh.participantId).toBe('ghu-1');
+      expect(loadAgentDraft()).toEqual(fresh);
+    });
+
+    it('a NEW COMPOUND AGENT inherits NOTHING from the first — not its name, roles, C.A.R.D. or identity', () => {
+      const card = saveAgentDraft(activate({ ...complete(), mode: 'autonomous', spendUsd: 3 }, T0), T0);
+      const fresh = startNewCompoundAgent(T1, 'ghu-9');
+      expect(fresh.agentId).not.toBe(card.agentId);
+      expect(fresh.cardId).not.toBe(card.cardId);
+      expect(cardValues(fresh)).toEqual(cardValues(EMPTY_DRAFT));
+      expect(fresh.participantId).toBe('ghu-9');
+      expect(fresh.revision).toBe(1);
+      expect(canActivate(fresh)).toBe(false);
+      expect(isConfigured(fresh)).toBe(false);
+      expect(loadAgentDraft()).toEqual(fresh);
+    });
+
+    it("a NEW COMPOUND AGENT started before sign-in stays unbound rather than inheriting a stranger's binding", () => {
+      saveAgentDraft(complete(), T0);
+      claimCard('ghu-1', T0);
+      expect(startNewCompoundAgent(T1, null).participantId).toBeNull();
+    });
   });
 });

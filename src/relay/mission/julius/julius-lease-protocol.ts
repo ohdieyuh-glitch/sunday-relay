@@ -1,0 +1,196 @@
+/**
+ * THE DURABLE LEASE PROTOCOL — the primitive Julius and the Wonderland swarm
+ * scheduler already share, named once so they cannot drift apart.
+ *
+ * THE SITUATION THIS EXISTS TO RESOLVE. Relay now has two schedulers.
+ * `julius_tasks` claims work out of a dependency DAG for a mission;
+ * `swarm_workers` claims work out of a bounded parallel fan-out for one battle
+ * or goal. They were built separately and they implement THE SAME PROTOCOL:
+ * the same five lease columns, the same `FOR UPDATE … SKIP LOCKED` claim, the
+ * same generation counter, the same compare-and-set on completion, the same
+ * expired-lease reclaim.
+ *
+ * TWO GENERAL-PURPOSE WORKER LEASE SYSTEMS IS ONE TOO MANY, and the answer is
+ * NOT to merge the two tables. They model different things and merging them
+ * would put a battle's role fan-out and a mission's dependency graph in one
+ * schema with a nullable half:
+ *
+ *   TASK GRAPH   a dependency structure — what must happen before what
+ *   SUB-AGENT    a dynamically authorized child worker inside a run
+ *   SWARM        a bounded parallel execution strategy for one goal
+ *
+ * Those three stay distinct. What they share is HOW A WORKER TAKES WORK AND
+ * PROVES IT STILL HAS IT, and that is the thing named here.
+ *
+ * WHAT THIS MODULE IS. The invariants, written once, plus a conformance
+ * harness any implementation can be driven through. It is not a base class and
+ * not a shared query builder: neither scheduler changes, and both are now
+ * HELD to the same contract instead of being similar by coincidence.
+ *
+ * THE CONVERGENCE PATH, recorded rather than taken. A single
+ * `relay_wonderland.leases` table keyed by `(scheduler, subject_id)` would
+ * carry both, with each scheduler keeping its own domain table and joining. It
+ * is not done here because it is a migration across two working systems for an
+ * architectural gain, and the founder's instruction was to preserve working
+ * battle and swarm behaviour. This contract is what makes that migration safe
+ * to attempt later: it is the test suite the merged table would have to pass.
+ */
+
+/* ------------------------------------------------------------ the contract */
+
+/**
+ * ONE LEASED SUBJECT, in whichever scheduler.
+ *
+ * `subjectId` is a task id in Julius and a worker id in the swarm; the
+ * protocol does not care which, which is the point.
+ */
+export interface LeasedSubject {
+  readonly subjectId: string;
+  readonly leaseOwner: string | null;
+  readonly leaseGeneration: number;
+  readonly leaseExpiresAt: string | null;
+  readonly attempt: number;
+  /** Whether the subject is currently held by a worker. */
+  readonly active: boolean;
+}
+
+/**
+ * What a scheduler must be able to do for the protocol to hold.
+ *
+ * Deliberately four methods. A protocol with more is a protocol two
+ * implementations will diverge on; these four are exactly the ones both
+ * schedulers already have.
+ */
+export interface LeaseScheduler {
+  /** Take up to `limit` subjects. Never returns one another owner holds. */
+  claim(input: { owner: string; now: string; leaseExpiresAt: string; limit: number }): Promise<readonly LeasedSubject[]>;
+  /** Renew a lease. False when the caller no longer holds it. */
+  heartbeat(input: { subjectId: string; owner: string; leaseGeneration: number; now: string; leaseExpiresAt: string }): Promise<boolean>;
+  /** Finish. False when the caller no longer holds the lease. */
+  complete(input: { subjectId: string; owner: string; leaseGeneration: number; now: string }): Promise<boolean>;
+  /** Read one subject's current lease state. */
+  read(subjectId: string): Promise<LeasedSubject | null>;
+}
+
+/* ---------------------------------------------------------- the invariants */
+
+export const LEASE_INVARIANTS = [
+  'a claimed subject is held by exactly one owner',
+  'a claim increments the generation',
+  'a claim increments the attempt count',
+  'a stale generation cannot heartbeat',
+  'a stale generation cannot complete',
+  'a different owner cannot heartbeat',
+  'a different owner cannot complete',
+  'an expired lease is reclaimable',
+  'reclaiming produces a new generation',
+  'the previous holder has no authority after a reclaim',
+  'a completed subject is not re-offered',
+] as const;
+export type LeaseInvariant = (typeof LEASE_INVARIANTS)[number];
+
+export interface LeaseConformanceResult {
+  readonly invariant: LeaseInvariant;
+  readonly held: boolean;
+  readonly detail: string;
+}
+
+/**
+ * Drive a scheduler through every invariant.
+ *
+ * Returns a RESULT PER INVARIANT rather than throwing on the first failure,
+ * because a scheduler that breaks three of them should report three — a
+ * conformance run that stops at the first is a bisect, not a report.
+ *
+ * `expiredAt` and `futureAt` are supplied so the harness needs no clock: the
+ * caller decides what "already expired" and "not yet expired" mean, which is
+ * the only way this can run against a deterministic model and a real database
+ * with the same code.
+ */
+export async function verifyLeaseProtocol(
+  scheduler: LeaseScheduler,
+  clock: { readonly now: string; readonly expiredAt: string; readonly futureAt: string },
+): Promise<readonly LeaseConformanceResult[]> {
+  const results: LeaseConformanceResult[] = [];
+  const record = (invariant: LeaseInvariant, held: boolean, detail: string) =>
+    results.push({ invariant, held, detail });
+
+  /* -- one owner, a new generation, a counted attempt -- */
+  const first = await scheduler.claim({ owner: 'owner-a', now: clock.now, leaseExpiresAt: clock.futureAt, limit: 1 });
+  if (first.length === 0) {
+    record('a claimed subject is held by exactly one owner', false, 'nothing was claimable');
+    return results;
+  }
+  const subject = first[0]!;
+  const before = subject.leaseGeneration;
+
+  const contested = await scheduler.claim({ owner: 'owner-b', now: clock.now, leaseExpiresAt: clock.futureAt, limit: 1 });
+  record(
+    'a claimed subject is held by exactly one owner',
+    !contested.some((other) => other.subjectId === subject.subjectId),
+    contested.length === 0 ? 'a second claim took nothing' : 'a second claim took a different subject',
+  );
+  record('a claim increments the generation', before > 0, `generation is ${before}`);
+  record('a claim increments the attempt count', subject.attempt > 0, `attempt is ${subject.attempt}`);
+
+  /* -- authority is (owner, generation), and nothing else -- */
+  record(
+    'a stale generation cannot heartbeat',
+    !(await scheduler.heartbeat({ subjectId: subject.subjectId, owner: 'owner-a', leaseGeneration: before - 1, now: clock.now, leaseExpiresAt: clock.futureAt })),
+    'heartbeat with generation - 1',
+  );
+  record(
+    'a different owner cannot heartbeat',
+    !(await scheduler.heartbeat({ subjectId: subject.subjectId, owner: 'owner-b', leaseGeneration: before, now: clock.now, leaseExpiresAt: clock.futureAt })),
+    'heartbeat as another owner',
+  );
+  record(
+    'a stale generation cannot complete',
+    !(await scheduler.complete({ subjectId: subject.subjectId, owner: 'owner-a', leaseGeneration: before - 1, now: clock.now })),
+    'complete with generation - 1',
+  );
+  record(
+    'a different owner cannot complete',
+    !(await scheduler.complete({ subjectId: subject.subjectId, owner: 'owner-b', leaseGeneration: before, now: clock.now })),
+    'complete as another owner',
+  );
+
+  /* -- an abandoned lease comes back, with new authority -- */
+  await scheduler.heartbeat({
+    subjectId: subject.subjectId, owner: 'owner-a', leaseGeneration: before,
+    now: clock.now, leaseExpiresAt: clock.expiredAt,
+  });
+  const reclaimed = await scheduler.claim({ owner: 'owner-c', now: clock.now, leaseExpiresAt: clock.futureAt, limit: 5 });
+  const retaken = reclaimed.find((other) => other.subjectId === subject.subjectId) ?? null;
+  record('an expired lease is reclaimable', retaken !== null, retaken === null ? 'not re-offered' : 're-offered');
+  record(
+    'reclaiming produces a new generation',
+    retaken !== null && retaken.leaseGeneration > before,
+    `was ${before}, now ${retaken?.leaseGeneration ?? 'n/a'}`,
+  );
+  record(
+    'the previous holder has no authority after a reclaim',
+    !(await scheduler.complete({ subjectId: subject.subjectId, owner: 'owner-a', leaseGeneration: before, now: clock.now })),
+    'the original holder tried to complete',
+  );
+
+  /* -- finished work is not offered again -- */
+  if (retaken !== null) {
+    await scheduler.complete({ subjectId: subject.subjectId, owner: 'owner-c', leaseGeneration: retaken.leaseGeneration, now: clock.now });
+  }
+  const after = await scheduler.claim({ owner: 'owner-d', now: clock.now, leaseExpiresAt: clock.futureAt, limit: 5 });
+  record(
+    'a completed subject is not re-offered',
+    !after.some((other) => other.subjectId === subject.subjectId),
+    'claimed again after completion',
+  );
+
+  return results;
+}
+
+/** Every invariant that did not hold. Empty means conformant. */
+export function leaseProtocolFailures(
+  results: readonly LeaseConformanceResult[],
+): readonly LeaseConformanceResult[] {
+  return results.filter((result) => !result.held);
+}

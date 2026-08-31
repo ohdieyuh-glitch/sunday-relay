@@ -18,6 +18,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
+    "relay:card-seam:browser-verify": "node scripts/relay-card-seam-browser-verify.mjs",
     "typecheck": "tsc -b --noEmit && tsc -p relay-bridge/tsconfig.json --noEmit && tsc -p relay-hermes-service/tsconfig.json --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
