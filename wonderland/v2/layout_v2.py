@@ -6366,14 +6366,21 @@ def _depth_build(kind, x, y, bdeg, tag, sc, glass, roof="MI_V2_RoofNavy",
                      mat="MI_V2_IvoryStone", label="%s_Gatehouse" % tag))
         out.append(A("gatehouse_glass", x, y, 0.0, yaw=bdeg, s=sc,
                      mat=glass, label="%s_GatehouseGlass" % tag))
-        # the district's roof colour on the gate's own caps, so the threshold
-        # announces which quarter you are entering before you read a sign
+        # THE COLOUR HAS TO BE WHERE IT CAN BE SEEN. This was a coloured
+        # roof_cone_steep at s=0.62 seated at the tower's own roof line --
+        # r 124 uu inside an ivory roof of r 400, so it was a coloured cone
+        # completely enclosed by a white one, invisible in every frame and
+        # costing two draws each. Measured off the recipes rather than
+        # assumed, which is the only reason it was caught before the render.
+        # The banner mast and its ball stand ABOVE the ivory finial (2,836 uu),
+        # where the district's colour is the highest thing on the gate.
         for s3 in (1.0, -1.0):
-            out.append(A("roof_cone_steep",
-                         x + math.cos(math.radians(bdeg + 90.0)) * 900.0 * sc * s3,
-                         y + math.sin(math.radians(bdeg + 90.0)) * 900.0 * sc * s3,
-                         1890.0 * sc, yaw=bdeg, s=0.62 * sc, mat=roof,
-                         label="%s_GateCap%d" % (tag, int(s3))))
+            gx3 = x + math.cos(math.radians(bdeg + 90.0)) * 900.0 * sc * s3
+            gy3 = y + math.sin(math.radians(bdeg + 90.0)) * 900.0 * sc * s3
+            out.append(A("gate_finial_ball", gx3, gy3, 2860.0 * sc, yaw=bdeg,
+                         s=2.4 * sc, mat=roof, label="%s_GateBall%d" % (tag, int(s3))))
+            out.append(A("finial_spire", gx3, gy3, 3170.0 * sc, yaw=bdeg,
+                         s=1.1 * sc, mat=metal, label="%s_GateSpire%d" % (tag, int(s3))))
         # the road runs THROUGH it, so it needs paving under the arch or the
         # threshold is a gate standing on grass
         out.append(A("terrace_platform", x, y, ROAD_Z, yaw=bdeg,
@@ -6393,12 +6400,15 @@ def _depth_build(kind, x, y, bdeg, tag, sc, glass, roof="MI_V2_RoofNavy",
     elif kind == "cloister":
         out.append(A("cloister_square", x, y, 0.0, yaw=bdeg, s=sc,
                      mat="MI_V2_IvoryStone", label="%s_Cloister" % tag))
+        # same measurement, same correction: the corner turret's own ivory
+        # pinnacle is r 210 and tops out at 2,020 uu, so a coloured cone at
+        # s=0.5 seated at 1,420 was inside it. Above it instead.
         for k4 in range(4):
             a4 = math.radians(bdeg) + math.pi / 4.0 + math.pi * k4 / 2.0
-            out.append(A("roof_cone_steep", x + math.cos(a4) * 1768.0 * sc,
-                         y + math.sin(a4) * 1768.0 * sc, 1420.0 * sc,
-                         yaw=bdeg, s=0.5 * sc, mat=roof,
-                         label="%s_CloisterCap%d" % (tag, k4)))
+            out.append(A("gate_finial_ball", x + math.cos(a4) * 1768.0 * sc,
+                         y + math.sin(a4) * 1768.0 * sc, 2020.0 * sc,
+                         yaw=bdeg, s=1.9 * sc, mat=roof,
+                         label="%s_CloisterBall%d" % (tag, k4)))
         out.append(A("terrace_platform", x, y, ROAD_Z, yaw=bdeg,
                      sxyz=(2.0 * sc, 3.9 * sc, 0.35), mat="MI_V2_PlazaCream",
                      label="%s_CloisterFloor" % tag))
