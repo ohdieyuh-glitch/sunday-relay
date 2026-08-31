@@ -254,8 +254,12 @@ void ARelayDogCharacter::BuildExplorationRoute()
 	// THE WORLD, WALKED -- AND SOLVED, NOT GUESSED.
 	//
 	// The founder's instruction is that the Relay Dog must walk this world:
-	// Golden Arrival, the castle corridor, the garden quarter, the mushroom
-	// wood, the clock quarter, the hamlet, and home. Sixty quarters over a
+	// Golden Arrival, the castle corridor, the garden quarter, a GROVE and a
+	// WATER GARDEN, the mushroom wood, the clock quarter, the hamlet, and
+	// home. The grove and the water garden are there because the proof has to
+	// cross every surface family the step-height contract governs -- without
+	// them the traversal never touches a grove path or a water walk, and
+	// would not prove the fix for either. Sixty quarters over a
 	// 720 m world is past the point where waypoints can be typed by hand.
 	// Two hand-placed ones have already been found inside planting -- one in
 	// a hedge, one at a fountain -- and each cost a capture, because a leg
@@ -337,65 +341,75 @@ void ARelayDogCharacter::BuildExplorationRoute()
 	Add(3550.0f, 10550.0f, 330.0f, 0.0f, TEXT(""));
 	Add(3750.0f, 9150.0f, 330.0f, 0.0f, TEXT(""));
 	Add(4450.0f, 9450.0f, 330.0f, 2.5f, TEXT("the garden quarter"));
-	Add(3750.0f, 9350.0f, 420.0f, 0.0f, TEXT(""));
-	Add(3450.0f, 10950.0f, 420.0f, 0.0f, TEXT(""));
-	Add(3150.0f, 11650.0f, 420.0f, 0.0f, TEXT(""));
-	Add(2750.0f, 12750.0f, 420.0f, 0.0f, TEXT(""));
-	Add(3050.0f, 13650.0f, 420.0f, 0.0f, TEXT(""));
-	Add(4150.0f, 14050.0f, 420.0f, 0.0f, TEXT(""));
-	Add(4450.0f, 15150.0f, 420.0f, 0.0f, TEXT(""));
-	Add(4650.0f, 15650.0f, 420.0f, 0.0f, TEXT(""));
-	Add(4050.0f, 16950.0f, 420.0f, 0.0f, TEXT(""));
-	Add(4050.0f, 18150.0f, 420.0f, 0.0f, TEXT(""));
-	Add(4350.0f, 18750.0f, 420.0f, 0.0f, TEXT(""));
-	Add(5150.0f, 20350.0f, 420.0f, 0.0f, TEXT(""));
-	Add(5850.0f, 21050.0f, 420.0f, 0.0f, TEXT(""));
-	Add(6450.0f, 21750.0f, 420.0f, 0.0f, TEXT(""));
-	Add(6850.0f, 23150.0f, 420.0f, 0.0f, TEXT(""));
-	Add(7850.0f, 24650.0f, 420.0f, 0.0f, TEXT(""));
-	Add(8950.0f, 25450.0f, 420.0f, 0.0f, TEXT(""));
-	Add(10050.0f, 25350.0f, 420.0f, 0.0f, TEXT(""));
-	Add(10950.0f, 25450.0f, 420.0f, 0.0f, TEXT(""));
-	Add(11750.0f, 25950.0f, 420.0f, 0.0f, TEXT(""));
-	Add(13050.0f, 24850.0f, 420.0f, 0.0f, TEXT(""));
-	Add(14550.0f, 24250.0f, 420.0f, 0.0f, TEXT(""));
-	Add(16350.0f, 24650.0f, 420.0f, 0.0f, TEXT(""));
-	Add(16850.0f, 22150.0f, 420.0f, 0.0f, TEXT(""));
-	Add(16650.0f, 20950.0f, 420.0f, 0.0f, TEXT(""));
-	Add(15550.0f, 19350.0f, 420.0f, 0.0f, TEXT(""));
-	Add(14850.0f, 17150.0f, 420.0f, 0.0f, TEXT(""));
-	Add(15850.0f, 15950.0f, 420.0f, 0.0f, TEXT(""));
-	Add(17950.0f, 16150.0f, 420.0f, 0.0f, TEXT(""));
-	Add(19650.0f, 14950.0f, 420.0f, 0.0f, TEXT(""));
-	Add(21050.0f, 13750.0f, 420.0f, 0.0f, TEXT(""));
-	Add(21150.0f, 12950.0f, 420.0f, 0.0f, TEXT(""));
-	Add(20750.0f, 11250.0f, 420.0f, 0.0f, TEXT(""));
-	Add(21650.0f, 10550.0f, 420.0f, 0.0f, TEXT(""));
-	Add(21350.0f, 9150.0f, 420.0f, 0.0f, TEXT(""));
-	Add(21550.0f, 7950.0f, 420.0f, 0.0f, TEXT(""));
-	Add(21550.0f, 6450.0f, 420.0f, 0.0f, TEXT(""));
-	Add(20650.0f, 5750.0f, 420.0f, 0.0f, TEXT(""));
-	Add(19450.0f, 5150.0f, 420.0f, 0.0f, TEXT(""));
-	Add(18650.0f, 4050.0f, 420.0f, 0.0f, TEXT(""));
-	Add(17150.0f, 4550.0f, 420.0f, 0.0f, TEXT(""));
-	Add(16550.0f, 3350.0f, 420.0f, 0.0f, TEXT(""));
-	Add(15650.0f, 2750.0f, 420.0f, 0.0f, TEXT(""));
-	Add(14350.0f, 2250.0f, 420.0f, 0.0f, TEXT(""));
-	Add(14050.0f, 150.0f, 420.0f, 0.0f, TEXT(""));
-	Add(13050.0f, -50.0f, 420.0f, 0.0f, TEXT(""));
-	Add(11750.0f, -350.0f, 420.0f, 0.0f, TEXT(""));
-	Add(10350.0f, -850.0f, 420.0f, 0.0f, TEXT(""));
-	Add(9750.0f, -1350.0f, 420.0f, 0.0f, TEXT(""));
-	Add(8450.0f, -2050.0f, 420.0f, 0.0f, TEXT(""));
-	Add(6950.0f, -2150.0f, 420.0f, 0.0f, TEXT(""));
-	Add(5350.0f, -2350.0f, 420.0f, 0.0f, TEXT(""));
-	Add(4550.0f, -3150.0f, 420.0f, 0.0f, TEXT(""));
+	Add(3750.0f, 9350.0f, 330.0f, 0.0f, TEXT(""));
+	Add(3450.0f, 10950.0f, 330.0f, 0.0f, TEXT(""));
+	Add(3150.0f, 11650.0f, 330.0f, 0.0f, TEXT(""));
+	Add(2750.0f, 12750.0f, 330.0f, 0.0f, TEXT(""));
+	Add(3050.0f, 13650.0f, 330.0f, 0.0f, TEXT(""));
+	Add(4150.0f, 14050.0f, 330.0f, 0.0f, TEXT(""));
+	Add(4450.0f, 15150.0f, 330.0f, 0.0f, TEXT(""));
+	Add(4650.0f, 15750.0f, 330.0f, 0.0f, TEXT(""));
+	Add(4050.0f, 16950.0f, 330.0f, 0.0f, TEXT(""));
+	Add(3550.0f, 18250.0f, 330.0f, 0.0f, TEXT(""));
+	Add(3150.0f, 18750.0f, 330.0f, 0.0f, TEXT(""));
+	Add(2250.0f, 20350.0f, 330.0f, 0.0f, TEXT(""));
+	Add(2450.0f, 21350.0f, 330.0f, 0.0f, TEXT(""));
+	Add(250.0f, 21950.0f, 330.0f, 0.0f, TEXT(""));
+	Add(-550.0f, 21150.0f, 330.0f, 0.0f, TEXT(""));
+	Add(-1550.0f, 20450.0f, 330.0f, 0.0f, TEXT(""));
+	Add(-2950.0f, 20150.0f, 330.0f, 0.0f, TEXT(""));
+	Add(-3550.0f, 18750.0f, 330.0f, 0.0f, TEXT(""));
+	Add(-4150.0f, 17650.0f, 330.0f, 0.0f, TEXT(""));
+	Add(-4250.0f, 16350.0f, 330.0f, 0.0f, TEXT(""));
+	Add(-3550.0f, 15250.0f, 330.0f, 0.0f, TEXT(""));
+	Add(-3450.0f, 14250.0f, 330.0f, 0.0f, TEXT(""));
+	Add(-3450.0f, 13050.0f, 330.0f, 0.0f, TEXT(""));
+	Add(-3950.0f, 11750.0f, 330.0f, 0.0f, TEXT(""));
+	Add(-4250.0f, 11250.0f, 330.0f, 0.0f, TEXT(""));
+	Add(-4250.0f, 10350.0f, 330.0f, 0.0f, TEXT(""));
+	Add(-3750.0f, 10150.0f, 330.0f, 0.0f, TEXT(""));
+	Add(-3850.0f, 9050.0f, 330.0f, 0.0f, TEXT(""));
+	Add(-4050.0f, 8850.0f, 330.0f, 0.0f, TEXT(""));
+	Add(-4650.0f, 8950.0f, 330.0f, 2.0f, TEXT("the grove"));
+	Add(-4050.0f, 8850.0f, 420.0f, 0.0f, TEXT(""));
+	Add(-2850.0f, 8750.0f, 420.0f, 0.0f, TEXT(""));
+	Add(-2350.0f, 8850.0f, 420.0f, 0.0f, TEXT(""));
+	Add(-750.0f, 8950.0f, 420.0f, 0.0f, TEXT(""));
+	Add(50.0f, 8250.0f, 420.0f, 0.0f, TEXT(""));
+	Add(1050.0f, 7150.0f, 420.0f, 0.0f, TEXT(""));
+	Add(1250.0f, 6650.0f, 420.0f, 0.0f, TEXT(""));
+	Add(1050.0f, 5550.0f, 420.0f, 0.0f, TEXT(""));
+	Add(1050.0f, 5050.0f, 420.0f, 0.0f, TEXT(""));
+	Add(1350.0f, 4050.0f, 420.0f, 0.0f, TEXT(""));
+	Add(1850.0f, 4050.0f, 420.0f, 0.0f, TEXT(""));
+	Add(2950.0f, 4050.0f, 420.0f, 0.0f, TEXT(""));
+	Add(3650.0f, 3150.0f, 420.0f, 0.0f, TEXT(""));
+	Add(4450.0f, 2250.0f, 420.0f, 0.0f, TEXT(""));
+	Add(5450.0f, 2250.0f, 420.0f, 0.0f, TEXT(""));
+	Add(6350.0f, 1650.0f, 420.0f, 0.0f, TEXT(""));
+	Add(6350.0f, 650.0f, 420.0f, 0.0f, TEXT(""));
+	Add(6150.0f, -250.0f, 420.0f, 0.0f, TEXT(""));
+	Add(5450.0f, -1250.0f, 420.0f, 0.0f, TEXT(""));
+	Add(5050.0f, -2550.0f, 420.0f, 0.0f, TEXT(""));
 	Add(4550.0f, -4750.0f, 420.0f, 0.0f, TEXT(""));
-	Add(4350.0f, -6050.0f, 420.0f, 0.0f, TEXT(""));
-	Add(4750.0f, -6450.0f, 420.0f, 0.0f, TEXT(""));
-	Add(5450.0f, -7550.0f, 420.0f, 0.0f, TEXT(""));
-	Add(5250.0f, -8950.0f, 420.0f, 0.0f, TEXT(""));
-	Add(5450.0f, -9850.0f, 420.0f, 0.0f, TEXT(""));
+	Add(4350.0f, -6450.0f, 420.0f, 0.0f, TEXT(""));
+	Add(2150.0f, -6350.0f, 420.0f, 0.0f, TEXT(""));
+	Add(250.0f, -7150.0f, 420.0f, 0.0f, TEXT(""));
+	Add(-650.0f, -7450.0f, 420.0f, 0.0f, TEXT(""));
+	Add(-1150.0f, -9050.0f, 420.0f, 0.0f, TEXT(""));
+	Add(-2650.0f, -9550.0f, 420.0f, 0.0f, TEXT(""));
+	Add(-2350.0f, -11250.0f, 420.0f, 0.0f, TEXT(""));
+	Add(-2350.0f, -11550.0f, 420.0f, 2.0f, TEXT("the water garden"));
+	Add(-1450.0f, -11450.0f, 420.0f, 0.0f, TEXT(""));
+	Add(-1050.0f, -12150.0f, 420.0f, 0.0f, TEXT(""));
+	Add(-350.0f, -12950.0f, 420.0f, 0.0f, TEXT(""));
+	Add(1150.0f, -12950.0f, 420.0f, 0.0f, TEXT(""));
+	Add(1850.0f, -12350.0f, 420.0f, 0.0f, TEXT(""));
+	Add(3450.0f, -13150.0f, 420.0f, 0.0f, TEXT(""));
+	Add(3950.0f, -13150.0f, 420.0f, 0.0f, TEXT(""));
+	Add(5150.0f, -13450.0f, 420.0f, 0.0f, TEXT(""));
+	Add(6250.0f, -12150.0f, 420.0f, 0.0f, TEXT(""));
+	Add(7050.0f, -11150.0f, 420.0f, 0.0f, TEXT(""));
 	Add(6050.0f, -10850.0f, 420.0f, 2.5f, TEXT("the mushroom wood"));
 	Add(5450.0f, -9850.0f, 420.0f, 0.0f, TEXT(""));
 	Add(5550.0f, -8550.0f, 420.0f, 0.0f, TEXT(""));
