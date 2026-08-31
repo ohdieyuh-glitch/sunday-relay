@@ -4145,8 +4145,26 @@ def _north_way():
     gx, gy = way[0]
     yaw = math.degrees(math.atan2(way[1][1] - gy, way[1][0] - gx)) + 90.0
     c, s0 = math.cos(math.radians(yaw)), math.sin(math.radians(yaw))
+    # 260 -> 460. THE NORTH GATE WAS A TRAP, and the Dog found it four times.
+    #
+    # Piers at +/-260 with a 92 uu octagonal plinth leave a 336 uu span. That is
+    # five times the Dog's width and it still could not get through: it caught a
+    # jamb, slid across the opening and ended SIXTEEN UU INSIDE the far pier's
+    # collision at (-168, 6914) -- the same coordinate every run, unable to
+    # depenetrate, pushing at it for 25 s a leg while every remaining leg of the
+    # tour was abandoned behind it.
+    #
+    # Four route solvers were tried against this before the world was
+    # questioned: a wider capsule, centred waypoints, pinned pinch points, and
+    # a clearance-preferring search. Each got the Dog closer and none of them
+    # made a 336 uu gate safe, because the failure is not the path -- it is a
+    # body that can be pushed into geometry and cannot get out.
+    #
+    # A gate a walker cannot walk through is a gate that is too narrow,
+    # whatever the arithmetic says. 460 gives a 736 uu span, and it still reads
+    # as a garden gate rather than a portal.
     for k, side in enumerate((-1, 1)):
-        px, py = gx + c * 260.0 * side, gy + s0 * 260.0 * side
+        px, py = gx + c * 460.0 * side, gy + s0 * 460.0 * side
         out += [
             A("gate_pier", px, py, 0, yaw=yaw, s=1.0, mat="MI_V2_IvoryStone",
               label="NorthGate_Pier%d" % k),
@@ -4154,7 +4172,9 @@ def _north_way():
               label="NorthGate_Finial%d" % k),
         ]
     out += [
-        A("gate_arch_gold", gx, gy, 0, yaw=yaw, s=0.95, mat="MI_V2_Gold",
+        # the arch spans the piers, so it grows with them (its own hoop is
+        # 190 uu at s=1, and it starts 5.6 m up -- it never was the obstacle)
+        A("gate_arch_gold", gx, gy, 0, yaw=yaw, s=1.7, mat="MI_V2_Gold",
           label="NorthGate_Arch"),
         A("garden_urn", gx + c * 620.0, gy + s0 * 620.0, 0, s=0.85, mat="MI_V2_Ceramic",
           label="NorthGate_UrnL"),

@@ -302,7 +302,6 @@ void ARelayDogCharacter::BuildExplorationRoute()
 	Add(-1550.0f, 4750.0f, 300.0f, 0.0f, TEXT(""));
 	Add(-250.0f, 6350.0f, 300.0f, 0.0f, TEXT(""));
 	Add(-250.0f, 5950.0f, 300.0f, 1.0f, TEXT("the fountain court"));
-	Add(-50.0f, 8150.0f, 300.0f, 0.0f, TEXT(""));
 	Add(50.0f, 8250.0f, 300.0f, 3.0f, TEXT("the castle front, look up"));
 	Add(-1950.0f, 11750.0f, 330.0f, 0.0f, TEXT(""));
 	Add(-3450.0f, 13050.0f, 330.0f, 0.0f, TEXT(""));
