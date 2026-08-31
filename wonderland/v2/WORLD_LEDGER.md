@@ -1439,3 +1439,33 @@ NOTE ON THE STAMP: the PASS 26 world on disk was generated at 43012bb and the
 package stamps 668c170. The two differ only in a build-script regex and an
 engine fallback that never loaded, so the generated content is identical --
 but the stamp is the newer commit and this is why.
+
+### PASS 26 CORRECTED — the lighting fix, on the map that actually plays
+
+The first attempt at the two-fill rig changed the render by nothing at all:
+foreground p50 9.5 before, 9.5 after, for a 4x increase in fill. That is what
+exposed the map defect above. Rebuilt with `WLV2_MAP_NAME` pinned to the cook
+map, the same change measures:
+
+| camera            | fg p50 before | after | under luma 20 | green in shadow |
+|-------------------|---------------|-------|---------------|-----------------|
+| GardenLeft04      |  9.5          | 41.7  | 89% -> 19%    | +6.5 -> +15     |
+| GardenRight05     | 11.7          | 38.8  | 71% -> 20%    | +6.5 -> +14.5   |
+| TeaTerraceCam16   |  8.1          | 29.4  | 84% -> 23%    | +3.5 ->  +8.5   |
+| HeroCam0          | 176.9         | 185.0 | 2.8% -> 1.8%  | midground +8.5 -> +20 |
+| ScaleCam07        | 186.3         | 195.5 | 1.2% -> 0.4%  | -               |
+
+The three dark cameras lift 3.6-4.4x. The two approved compositions move +8
+and +9 -- against the +28 the sky-light x8 experiment produced -- and neither
+clips (p95 209 and 210). Golden Arrival's midground is the clearest evidence
+the fix did what it was designed to do rather than simply brightening: its
+shadowed hedges went from 46.5 to 85.2 with the green cast rising +8.5 -> +20,
+which is "deep but readable shade with visible green hue" stated as numbers.
+
+Deep shade survives: 19-23% of each garden frame is still under luma 20.
+Nothing was flattened.
+
+NOTE ON THE BEFORE COLUMN: the "before" frames come from the frozen WP2, so
+part of each delta is the world differences that map never received. The
+direction and the magnitude are as designed, and the after column is the
+current world measured on the current package.
