@@ -432,7 +432,7 @@ def main():
     for (x, y, s, h, lb) in legs:
         d = math.hypot(x - px, y - py); px, py = x, y
         dist += d
-        if s > 0 and d / s > max(12.0, h + 25.0):
+        if s > 0 and d / s > max(12.0, h + 10.0 + 3.0 * (d / s)):
             overruns.append((d / 100.0, d / s, max(12.0, h + 25.0), lb))
     print("# tour length %.0f m" % (dist / 100.0))
     for (dm, t, b, lb) in overruns:

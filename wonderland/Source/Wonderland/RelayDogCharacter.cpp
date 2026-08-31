@@ -401,7 +401,22 @@ FVector ARelayDogCharacter::StepRoute(float DeltaSeconds)
 	// is worse. Each leg now gets a generous but finite budget, and giving up
 	// says so in the log rather than quietly.
 	LegSeconds += DeltaSeconds;
-	const float LegBudget = FMath::Max(12.0f, Leg.HoldSeconds + 25.0f);
+	// A BUDGET PROPORTIONAL TO THE LEG, NOT A FLAT 25 SECONDS.
+	//
+	// The flat budget was written when the route was 95 short legs. The
+	// clearance-preferring solve takes the long way round -- 82 legs over
+	// 2,240 m, some of them 40 m across open country -- and a Dog that
+	// achieves half its nominal speed over rough ground then runs out of
+	// budget on a leg that is not obstructed at all. Measured: 2,777 uu
+	// short of a target it had 25 s and 330 uu/s to reach, having covered
+	// about 68 uu/s across ground that climbs 93 uu.
+	//
+	// Three times the honest travel time, plus the hold and a floor. A leg
+	// that cannot be reached still gives up; it is no longer the LENGTH of a
+	// leg that decides.
+	const float LegTravel = (Leg.SpeedUU > 1.0f)
+	        ? FVector::Dist2D(Here, Leg.Target) / Leg.SpeedUU : 0.0f;
+	const float LegBudget = FMath::Max(12.0f, Leg.HoldSeconds + 10.0f + 3.0f * LegTravel);
 	if (LegSeconds > LegBudget)
 	{
 		// WHERE IT GAVE UP, NOT JUST HOW FAR SHORT.
