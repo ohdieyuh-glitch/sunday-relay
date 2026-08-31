@@ -3636,18 +3636,38 @@ _QUARTER_BUILDERS = {"garden": _quarter_garden, "towers": _quarter_towers,
 #: crowns flower. Kept to a fifth: the boards' blossom is an accent through
 #: green, not an orchard.
 _BLOSSOM = ("MI_V2_PetalPink", "MI_V2_RosePink", "MI_V2_PetalWhite",
-            "MI_V2_PetalViolet")
-# 0.08, not 0.20. `_tree`'s BLOSSOM form now carries the flowering trees on
-# purpose; leaving this at a fifth on top of it took the world's canopy to 31%
-# blossom, which is an orchard rather than the accent the boards show.
-_BLOSSOM_SHARE = 0.08
+            "MI_V2_PetalViolet", "MI_V2_Lavender", "MI_V2_PetalRose")
+#: A DELIBERATE REVERSAL, and worth stating as one. This was pulled to 0.08
+#: from 0.20 because 31% flowering canopy read as an orchard rather than an
+#: accent. The founder's brief now asks for the opposite in as many words --
+#: "reduce green dominance ... controlled rose, pink, lavender, cream, aged
+#: gold" -- so the earlier calibration is superseded, not forgotten. 0.20 with
+#: the BLOSSOM tree form on top lands the world's canopy near a quarter
+#: flowering, and the greens themselves now carry the rest of the colour.
+_BLOSSOM_SHARE = 0.20
+
+#: THE GREENS WERE ONE HUE AT THREE VALUES. Thinning a forest of one colour
+#: leaves a thinner forest of one colour, so the green half of the canopy is
+#: now a real palette: half of it the original mid-greens, the rest cream,
+#: aged gold, copper and blue-green -- foliage colours, carrying the brief's
+#: warmth at canopy scale where a blossom cluster is too small to reach.
+_LEAF_MIX = ("MI_V2_LeafMid", "MI_V2_LeafDark", "MI_V2_LeafLight",
+             "MI_V2_LeafMid", "MI_V2_LeafDark", "MI_V2_LeafLight",
+             "MI_V2_LeafCream", "MI_V2_LeafGold", "MI_V2_LeafCopper",
+             "MI_V2_LeafBlue", "MI_V2_LeafCream", "MI_V2_LeafGrey")
 
 
 def _leaf(i, seed, salt=0):
-    """The material for one crown: mostly leaf, sometimes flower."""
+    """The material for one crown: mostly leaf, sometimes flower.
+
+    The green is drawn on the HASH rather than on `i % 3`. The modulo made a
+    tree's three crowns one of each green every time, which averages to a
+    single colour at any distance -- the exact reason the canopy read as one
+    material however many tones were in the table.
+    """
     if _rnd(i, seed, 160 + salt) < _BLOSSOM_SHARE:
-        return _BLOSSOM[int(_rnd(i, seed, 161 + salt) * 4) % 4]
-    return ("MI_V2_LeafMid", "MI_V2_LeafDark", "MI_V2_LeafLight")[i % 3]
+        return _BLOSSOM[int(_rnd(i, seed, 161 + salt) * len(_BLOSSOM)) % len(_BLOSSOM)]
+    return _LEAF_MIX[int(_rnd(i, seed, 162 + salt) * len(_LEAF_MIX)) % len(_LEAF_MIX)]
 
 
 #: FOUR FORMS FROM TWO MESHES.
@@ -3670,11 +3690,14 @@ def _leaf(i, seed, salt=0):
 #: The BLOSSOM form carries two canopies, so its weight counts roughly double
 #: in the frame: at 0.16-0.26 the world's canopy came out 21% flowering, which
 #: is still an orchard. These land it near 14%.
-_TREE_MIX = {"wood":   (0.37, 0.28, 0.10, 0.25),
-             "grove":  (0.42, 0.24, 0.16, 0.18),
-             "country":(0.33, 0.32, 0.09, 0.26),
-             "edge":   (0.32, 0.37, 0.15, 0.16),
-             "meadow": (0.28, 0.20, 0.13, 0.39)}
+#: BLOSSOM WEIGHTS RAISED with _BLOSSOM_SHARE and for the same reason: the
+#: founder's brief asks for less green dominance, and the flowering FORM is
+#: the one that changes a crown's silhouette as well as its colour.
+_TREE_MIX = {"wood":   (0.34, 0.26, 0.18, 0.22),
+             "grove":  (0.36, 0.21, 0.27, 0.16),
+             "country":(0.30, 0.29, 0.17, 0.24),
+             "edge":   (0.28, 0.33, 0.25, 0.14),
+             "meadow": (0.25, 0.18, 0.22, 0.35)}
 
 
 def _tree(x, y, seed, i, tag, sc=1.0, mix="wood"):
@@ -5469,6 +5492,191 @@ for _bandref in (OUTER_WORLD, HORIZON, GROUND_QUILT, FLANKS, REARWORLD, PALACE):
         _SIG_CLEARED[id(_bandref)] = _before - len(_bandref)
 SIG_NOTES.append("declutter around the signature landmarks removed %d scatter pieces"
                  % sum(_SIG_CLEARED.values()))
+
+# ===========================================================================
+# REVEALING THE CITY  (ENCHANTMENT + VERTICALITY, batch B)
+# ===========================================================================
+#
+# MEASURED, from `tools/occlusion.py --cover`, before this filter existed:
+#
+#     0- 40 m   43.9% of the ground had a crown over it
+#    40- 80 m   45.5%
+#    80-130 m   57.1%      <- the castle approach
+#   130-200 m   67.2%      <- the quarters
+#   200-340 m   49.6%
+#
+# 62 canopies per hectare in the 80-130 m band, each about 14 m across. That
+# is a CLOSED woodland, and it is why the first SkylineCam06 render reads as a
+# forest with tower tops in it: at the shallow angle a standing player or a
+# low camera looks along, 57% plan cover is near-total occlusion. The castle
+# is 30 m tall and the canopy ceiling is 15-25 m, so the trees are not beside
+# the architecture, they are in front of it at its own height.
+#
+# THINNING EVENLY WOULD ONLY MAKE A THINNER FOREST. Cover is an average, and
+# an average says nothing about whether there is anywhere to see THROUGH. So
+# this does two things, both filters over the assembled bands rather than new
+# placement rules -- a filter cannot introduce a third thing to go wrong:
+#
+#   1. A CLEARING FIELD. Two octaves of the same value noise the density field
+#      uses, thresholded, so trees survive in groves and vanish in glades. The
+#      result is woodland with rooms in it, which is what a designed park is
+#      and what an even scatter can never become.
+#   2. SIGHTLINE CORRIDORS. From every camera in the suite to every signature
+#      landmark, trees inside the cone are removed -- but only beyond 30 m, so
+#      the near framing the compositions depend on is untouched, and only when
+#      they are tall enough to cross the line of sight.
+#
+# AUTHORED PLANTING IS NOT TOUCHED. Golden Arrival's own trees, the approach
+# avenue, the garden groups and the flank compositions carry authored labels;
+# only the generated `<TAG>_T<i>` / `<TAG>_C<i>_<c>` trees of the quarters,
+# the country layer and the road verges are in scope. "Do not globally remove
+# vegetation" is enforced by WHAT THIS CAN SEE, not by being careful.
+
+#: Label prefixes whose trees are generated and may be thinned. A tag like
+#: `S17_garden` or `Country042` is a procedural placement; `Garden_L_Tree` and
+#: `Approach_Trunk0` are decisions somebody made.
+def _generated_tag(tag):
+    if tag.startswith("Country") or tag.startswith("Road") or tag.startswith("Lane") \
+            or tag.startswith("Verge") or tag.startswith("Beyond"):
+        return True
+    return len(tag) > 1 and tag[0] in "QSDC" and tag[1:].isdigit()
+
+
+def _tree_key(label):
+    """(tag, index) for a generated tree piece, or None.
+
+    `<TAG>_T<i>` is the trunk and `<TAG>_C<i>_<c>` its crowns. Keying on the
+    pair is what makes this remove TREES rather than leave a field of bare
+    trunks holding nothing up -- the failure mode of thinning canopies alone.
+    """
+    parts = label.split("_")
+    if len(parts) < 2:
+        return None
+    if parts[-1].startswith("T") and parts[-1][1:].isdigit():
+        tag, idx = "_".join(parts[:-1]), parts[-1][1:]
+    elif len(parts) >= 3 and parts[-2].startswith("C") and parts[-2][1:].isdigit() \
+            and parts[-1].isdigit():
+        tag, idx = "_".join(parts[:-2]), parts[-2][1:]
+    else:
+        return None
+    head = tag.split("_")[0]
+    if not _generated_tag(head):
+        return None
+    return (tag, idx)
+
+
+def _clearing(x, y):
+    """0 = glade, 1 = closed grove. Two octaves, same family as the density
+    field, so clearings sit WITH the world's grain rather than across it."""
+    return 0.62 * _vnoise(x, y, 5200.0, 7717) + 0.38 * _vnoise(x, y, 2100.0, 7723)
+
+
+#: How much of the woodland survives, by radius. The far world's 49.6% cover
+#: is correct -- it is the backdrop and its job is mass. The approach and the
+#: quarters are where the city is, and they are where the canopy closed over
+#: it. Interpolated, never stepped, so no ring appears at a number.
+_THIN_KEEP = ((0.0, 1.00), (4000.0, 0.88), (9000.0, 0.70), (14000.0, 0.66),
+              (20000.0, 0.74), (28000.0, 0.90), (40000.0, 1.00))
+
+
+def _keep_share(r):
+    prev_r, prev_k = _THIN_KEEP[0]
+    for rr, kk in _THIN_KEEP[1:]:
+        if r <= rr:
+            t = (r - prev_r) / (rr - prev_r) if rr > prev_r else 0.0
+            return prev_k + t * (kk - prev_k)
+        prev_r, prev_k = rr, kk
+    return _THIN_KEEP[-1][1]
+
+
+def _sight_cones():
+    """(camera xy, landmark xy, half-angle, landmark top) for every pair.
+
+    Only the landmarks the world is NAVIGATED by: the signature skyline and
+    the castle focal plane. Widening this to every wall would clear the world.
+    """
+    import v2_config as _cfg
+    marks = []
+    for p in SIGNATURE:
+        if p["asset"] in ("spire_great", "spire_signature", "tower_district"):
+            marks.append((p["pos"][0], p["pos"][1], 1600.0))
+    for p in CITY:
+        if p["asset"] == "castle_hall" and math.hypot(p["pos"][0], p["pos"][1]) < 16000.0:
+            marks.append((p["pos"][0], p["pos"][1], 1400.0))
+    cones = []
+    for c in _cfg.HERO_CAMS:
+        cx, cy, _cz = c["location"]
+        for (mx, my, half_w) in marks:
+            d = math.hypot(mx - cx, my - cy)
+            if d < 3000.0:
+                continue
+            cones.append((cx, cy, mx, my, d, math.atan2(half_w, d)))
+    return cones
+
+
+_REVEAL_NOTES = []
+
+
+def _reveal_city(bands):
+    """Thin the generated woodland, and clear the sightlines. In place."""
+    cones = _sight_cones()
+    trees = {}
+    for band in bands:
+        for p in band:
+            k = _tree_key(p.get("label") or "")
+            if k is None:
+                continue
+            e = trees.setdefault(k, {"x": None, "y": None, "n": 0})
+            e["n"] += 1
+            if p["asset"].endswith("_trunk"):
+                e["x"], e["y"] = p["pos"][0], p["pos"][1]
+    # a crown whose trunk is in another band still belongs to that tree
+    for band in bands:
+        for p in band:
+            k = _tree_key(p.get("label") or "")
+            if k is None:
+                continue
+            e = trees[k]
+            if e["x"] is None:
+                e["x"], e["y"] = p["pos"][0], p["pos"][1]
+
+    drop, cone_drop = set(), 0
+    for k, e in trees.items():
+        x, y = e["x"], e["y"]
+        r = math.hypot(x, y)
+        if _clearing(x, y) > _keep_share(r):
+            drop.add(k)
+            continue
+        for (cx, cy, mx, my, d, half) in cones:
+            dxc, dyc = x - cx, y - cy
+            dc = math.hypot(dxc, dyc)
+            # BEYOND THE NEAR FRAMING AND NEARER THAN THE LANDMARK. A tree
+            # behind the landmark cannot hide it, and one at the camera's feet
+            # is the composition.
+            if not (3000.0 < dc < d):
+                continue
+            bearing = math.atan2(dyc, dxc)
+            to_mark = math.atan2(my - cy, mx - cx)
+            off = abs((bearing - to_mark + math.pi) % (2.0 * math.pi) - math.pi)
+            # the cone widens with the tree's own crown, so a wide crown just
+            # off the axis still counts as in the way
+            if off < half + math.atan2(900.0, dc):
+                drop.add(k)
+                cone_drop += 1
+                break
+
+    removed = 0
+    for band in bands:
+        before = len(band)
+        band[:] = [p for p in band if _tree_key(p.get("label") or "") not in drop]
+        removed += before - len(band)
+    _REVEAL_NOTES.append(
+        "reveal: %d of %d generated trees removed (%d for a sightline), "
+        "%d placements" % (len(drop), len(trees), cone_drop, removed))
+
+
+_reveal_city([OUTER_WORLD, HORIZON, FLANKS, REARWORLD, PALACE, GROUND_QUILT,
+              CAM_FOREGROUNDS])
 
 BUILD_BANDS = [FOREGROUND, COURTYARD, GARDEN, PALACE, FLANK_GROUND, FLANKS,
                REARWORLD, CAM_FOREGROUNDS, GROUND_QUILT, OUTER_WORLD, PLAZA_ORNAMENT,

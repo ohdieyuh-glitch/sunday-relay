@@ -63,6 +63,41 @@ NOT_SKYLINE = ("garden_lawn", "terrace_platform", "sky_dome", "ground_flowers",
 
 _BBOX_CACHE = None
 
+#: How many vertical slabs a recipe's silhouette is described in. A single
+#: bounding cylinder is a lie about anything mushroom-shaped or tree-shaped:
+#: a giant mushroom's cap is 20 m across and 13 m in the air, and treating it
+#: as a 20 m column from the ground up made the occlusion tool report 556
+#: hidden buildings behind ONE fungus. Twelve slabs is enough to separate a
+#: stem from a cap and a trunk from a canopy, and costs nothing -- it is read
+#: once per recipe and cached beside the bounding boxes.
+PROFILE_BINS = 12
+
+
+def _profile(mesh, zlo, ztop):
+    """Max horizontal radius per vertical slab, measured from the vertices."""
+    span = ztop - zlo
+    if span <= 1e-6:
+        return [max(abs(v[0]), abs(v[1])) for v in [(0.0, 0.0)]] * PROFILE_BINS
+    prof = [0.0] * PROFILE_BINS
+    for v in mesh.verts:
+        k = int((v[2] - zlo) / span * PROFILE_BINS)
+        if k < 0:
+            k = 0
+        elif k >= PROFILE_BINS:
+            k = PROFILE_BINS - 1
+        rr = math.hypot(v[0], v[1])
+        if rr > prof[k]:
+            prof[k] = rr
+    # a slab with no vertex of its own inherits its neighbour, so a gap in the
+    # sampling never reads as a hole in the silhouette
+    for k in range(1, PROFILE_BINS):
+        if prof[k] == 0.0:
+            prof[k] = prof[k - 1]
+    for k in range(PROFILE_BINS - 2, -1, -1):
+        if prof[k] == 0.0:
+            prof[k] = prof[k + 1]
+    return prof
+
 
 def bboxes():
     """Measured z-extent of every recipe, built once on the offline backend.
@@ -96,7 +131,8 @@ def bboxes():
             lo, hi = mesh.bbox()
             out[name] = {"zlo": lo[2], "ztop": hi[2],
                          "rx": max(abs(lo[0]), abs(hi[0])),
-                         "ry": max(abs(lo[1]), abs(hi[1]))}
+                         "ry": max(abs(lo[1]), abs(hi[1])),
+                         "prof": _profile(mesh, lo[2], hi[2])}
         except Exception as exc:
             sys.stderr.write("skyline: %s could not be built: %s\n" % (name, exc))
     try:
