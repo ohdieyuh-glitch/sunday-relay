@@ -1469,3 +1469,39 @@ NOTE ON THE BEFORE COLUMN: the "before" frames come from the frozen WP2, so
 part of each delta is the world differences that map never received. The
 direction and the magnitude are as designed, and the after column is the
 current world measured on the current package.
+
+### PASS 26 — CRITICAL: the Dog could not traverse the world
+
+The traversal capture found it, and nothing else could have. The Dog gave up
+on leg 19 of 95 and never moved again: 22 legs abandoned, the shortfall
+growing 1,154 uu -> 19,175 uu as the targets marched away while it stood
+still. The take is 266 seconds of a near-static frame, which the walk audit
+reported as a luma spread of HALF A UNIT across 941 frames.
+
+`FOOT` contained `castle_tower` and not `castle_tower_octagon`,
+`castle_tower_square` or `castle_tower_slender`. THIRTY-EIGHT TOWERS WERE AIR
+to every route solve and every walkable audit, and the route was solved
+straight through the one at (2500, 10300) -- nine uu off the leg-19 line.
+The richest defect class in this project, again: a rule applied to one
+collection and not its siblings.
+
+It hid because A MISSING FOOT ENTRY FAILS OPEN. The solver skips what it does
+not know and reports a clean route. `route.py` now lists every ground-level
+asset it cannot see, and the deliberate exclusions are DECLARED in
+NOT_OBSTACLES rather than left missing, where they looked like a considered
+decision. That list immediately produced a second finding: the tea district's
+crockery is solid and building-sized (pot 138 uu, cups 134 and 130, clock 78;
+the saucer excluded on purpose as a flat disc you step onto).
+
+THE CAPSULE CAME DOWN 80 -> 60. With the towers and crockery modelled, 80 uu
+no longer fits the hamlet's parterre cross walk, and the honest answer was not
+to widen the world to suit the solver. The world affords a 1.2 m walker
+everywhere; the Dog is 0.68 m wide, so 60 uu is 1.76x its radius.
+
+Route: 96 legs, 1,702 m -- up from 1,359 m, and the extra 343 m is the detour
+around the castle the Dog now actually walks.
+
+CORRECTION TO A PUBLISHED NUMBER: every "walkable: 0 of 60 quarters
+unreachable" reported before this commit was computed blind to castle
+architecture. It still reports 0 of 60 with the towers modelled, so the
+conclusion survives -- but it did not mean what it appeared to.
