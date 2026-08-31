@@ -84,3 +84,13 @@ export function envelopeFor(seed:SeededInvocation,overrides:Record<string,unknow
   const issuedAt=new Date();
   return {schemaVersion:1,callerId:required('JULIUS_CALLER_ID'),callerScope:'sandbox:execute',tenantId:TENANT,projectId:PROJECT,runId:seed.request.runId,taskId:seed.request.taskId,invocationId:seed.invocationId,dispatchGeneration:seed.dispatchGeneration,sandboxId:seed.identity.sandboxId,requestDigest:seed.requestDigest,executionIdentity:`${seed.invocationId}:${seed.dispatchGeneration}:${seed.identity.sandboxId}`,nonce:randomUUID(),issuedAt:issuedAt.toISOString(),expiresAt:new Date(issuedAt.getTime()+240_000).toISOString(),payload:{expectedLeaseGeneration:seed.execution.expectedLeaseGeneration,executionTokenHash:seed.execution.executionTokenHash,effectClassification:'NON_IDEMPOTENT_MUTATION',request:seed.request},...overrides};
 }
+
+/**
+ * The same execution identity carrying a genuinely different request, with the canonical digest that
+ * request actually has. A merely wrong digest is refused at the shape gate, so it can no longer reach
+ * the ledger; reaching the ledger's identity conflict now requires a real second request.
+ */
+export function divergentEnvelope(seed:SeededInvocation):Record<string,unknown>{
+  const request={...seed.request,arguments:{command:'printf divergent'}};
+  return envelopeFor(seed,{requestDigest:canonicalRequestDigest(request),payload:{expectedLeaseGeneration:seed.execution.expectedLeaseGeneration,executionTokenHash:seed.execution.executionTokenHash,effectClassification:'NON_IDEMPOTENT_MUTATION',request}});
+}

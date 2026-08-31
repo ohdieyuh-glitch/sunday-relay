@@ -8,7 +8,7 @@ import { readFile, stat } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { verifyExecutorAttestation, type SignedExecutorAttestation } from '../src/relay/workspace/julius-tools/executor-attestation';
 import { RemoteExecutorControlPlane } from '../src/relay/workspace/julius-tools/remote-executor-control-plane';
-import { EVAL_RUN, EVAL_TASK, FULL_POLICY, LEASE, LIMITS, PROJECT, TENANT, endpoint, envelopeFor, openJuliusClient, required, scopedCredentials, seedBase, seedInvocation, sha, type SandboxLimits } from './julius-sibling-support';
+import { EVAL_RUN, EVAL_TASK, FULL_POLICY, divergentEnvelope, LEASE, LIMITS, PROJECT, TENANT, endpoint, envelopeFor, openJuliusClient, required, scopedCredentials, seedBase, seedInvocation, sha, type SandboxLimits } from './julius-sibling-support';
 
 type Verdict='PASS'|'FAIL'|'BLOCKED';
 class Blocked extends Error {}
@@ -200,7 +200,8 @@ async function main():Promise<void>{
     if(lines!==1)throw new Error(`replay produced a second effect: ${lines} lines`);
     return 'identical terminal material, still exactly one effect';
   });
-  await refusesOverWire('request-conflict-is-a-hard-security-failure','execute',scoped.get('execute')!,envelope({requestDigest:'b'.repeat(64)}),409,'SECURITY_FAILURE:execution_identity_conflict');
+  await refusesOverWire('asserted-request-digest-refused','execute',scoped.get('execute')!,envelope({requestDigest:'b'.repeat(64)}),400,'INVALID_REQUEST:execution_envelope_request_digest_mismatch');
+  await refusesOverWire('request-conflict-is-a-hard-security-failure','execute',scoped.get('execute')!,divergentEnvelope(containment),409,'SECURITY_FAILURE:execution_identity_conflict');
 
   // ── Cross-tenant isolation ──────────────────────────────────────────────────────────────
   const other=process.env.JULIUS_OTHER_SCOPED_CREDENTIALS?scopedCredentials('JULIUS_OTHER_SCOPED_CREDENTIALS'):null;

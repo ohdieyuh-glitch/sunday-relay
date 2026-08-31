@@ -16,7 +16,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { JuliusToolSettlementPostgresRepository } from '../src/relay/persistence/julius-tool-settlement-postgres';
 import { canonicalRequestDigest } from '../src/relay/workspace/julius-tools/execution-envelope';
-import { LIMITS, FULL_POLICY, LEASE, PROJECT, RUN, TASK, TENANT, WORKER, POLICY, COMPLETION_RUN, COMPLETION_TASK, digestOf, endpoint, envelopeFor, openJuliusClient, required, seedBase, seedInvocation, sha, type SandboxLimits, type SeededInvocation } from './julius-sibling-support';
+import { LIMITS, FULL_POLICY, LEASE, PROJECT, RUN, TASK, TENANT, WORKER, POLICY, COMPLETION_RUN, COMPLETION_TASK, digestOf, endpoint, divergentEnvelope, envelopeFor, openJuliusClient, required, seedBase, seedInvocation, sha, type SandboxLimits, type SeededInvocation } from './julius-sibling-support';
 
 const run=promisify(execFile);
 const refused=async(what:string,attempt:()=>Promise<unknown>)=>{try{await attempt();}catch(error){if(error instanceof Error&&error.message.startsWith('isolation_'))throw error;return;}throw new Error(`isolation_${what}_succeeded`);};
@@ -197,7 +197,11 @@ async function main():Promise<void>{
 
 /** The same execution identity carrying a different request is a hard conflict, never a second execution. */
 async function expectConflict(post:(operation:string,credential:string,payload:unknown)=>Promise<Response>,credential:string,seed:SeededInvocation):Promise<void>{
-  const answer=await post('execute',credential,envelopeFor(seed,{requestDigest:'b'.repeat(64)}));
+  const asserted=await post('execute',credential,envelopeFor(seed,{requestDigest:'b'.repeat(64)}));
+  const assertedError=((await asserted.json()) as {error?:string}).error??'';
+  // A digest the caller merely asserts is refused before the ledger is consulted at all.
+  if(asserted.status!==400||assertedError!=='INVALID_REQUEST:execution_envelope_request_digest_mismatch')throw new Error(`asserted_digest_not_refused:${asserted.status}:${assertedError}`);
+  const answer=await post('execute',credential,divergentEnvelope(seed));
   const decoded=await answer.json() as {error?:string};
   if(answer.status!==409||decoded.error!=='SECURITY_FAILURE:execution_identity_conflict')throw new Error(`identity_conflict_not_refused:${answer.status}:${decoded.error??''}`);
 }
