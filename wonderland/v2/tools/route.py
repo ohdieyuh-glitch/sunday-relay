@@ -132,6 +132,51 @@ def nearest_free(x, y, blocked, nx, ny, cell, rings=40):
     return None
 
 
+def clearance(c, blocked, nx, ny, limit=8):
+    """Rings of free space around a cell, in cells, capped at `limit`."""
+    i0, j0 = c % nx, c // nx
+    for r in range(1, limit + 1):
+        for dj in range(-r, r + 1):
+            for di in range(-r, r + 1):
+                if max(abs(di), abs(dj)) != r:
+                    continue
+                i, j = i0 + di, j0 + dj
+                if i < 0 or j < 0 or i >= nx or j >= ny or blocked[j * nx + i]:
+                    return r - 1
+    return limit
+
+
+def centre(c, blocked, nx, ny, reach=3):
+    """Slide a waypoint toward the middle of its free space.
+
+    A BREADTH-FIRST PATH HUGS CORNERS. It finds *a* shortest route, and the
+    shortest route through a gateway runs along one jamb -- which is fine for
+    a point and fatal for a body that slides on contact. The Dog proved it at
+    the North Gate: the piers leave a 325 uu span centred on x = -23, the
+    solve ran it at x = +50, and the Dog ended wedged into the far pier at
+    (-168, 6914) having slid 218 uu across the opening. It never moved again;
+    31 legs were abandoned behind it.
+
+    Inflating the capsule does not fix this -- it only narrows which gaps are
+    considered passable, and the path still hugs whichever wall it finds. The
+    waypoint has to move to the middle, which is what this does.
+    """
+    best, bestc = c, clearance(c, blocked, nx, ny)
+    i0, j0 = c % nx, c // nx
+    for dj in range(-reach, reach + 1):
+        for di in range(-reach, reach + 1):
+            i, j = i0 + di, j0 + dj
+            if i < 0 or j < 0 or i >= nx or j >= ny:
+                continue
+            k = j * nx + i
+            if blocked[k]:
+                continue
+            cl = clearance(k, blocked, nx, ny)
+            if cl > bestc:
+                best, bestc = k, cl
+    return best
+
+
 def clear_line(a, b, blocked, nx, ny, cell):
     """Is the straight segment between two cells free? (route simplification)"""
     ax, ay = a % nx, a // nx
@@ -170,6 +215,11 @@ def path_between(src, dst, blocked, nx, ny, cell, cache):
             j -= 1
         keep.append(out[j])
         i = j
+    # CENTRE EVERY WAYPOINT BUT THE ENDS. The ends are the stops themselves and
+    # moving them would move the tour; everything between is a corner the path
+    # happened to turn at, and the middle of the gap is the better place for it.
+    for k in range(1, len(keep) - 1):
+        keep[k] = centre(keep[k], blocked, nx, ny)
     return keep
 
 
