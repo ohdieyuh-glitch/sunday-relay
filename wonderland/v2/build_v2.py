@@ -1817,10 +1817,20 @@ def hero_camera(actors, layers):
                 else:
                     LOG("V2 DOG FAILED: ARelayDogCharacter properties not found on the spawned Dog -- "
                         "BP_RelayDog fell back to plain Character and NOTHING WILL ANIMATE")
+                # THE TAG IS NOW LOAD-BEARING, so a silent failure here is a
+                # silent empty ScaleCam07. AWonderlandPlayerController keeps the
+                # possessed pawn visible in a cinematic capture ONLY if it
+                # carries `ScaleReference`; untagged, the Dog is hidden again
+                # and the frame looks exactly like the PASS 26-28 bug. This
+                # used to be `except: pass`, which is the shape this project
+                # has a ledger entry about -- a try/except that logs must say
+                # FAILED, because the dry run counts failures by that word.
                 try:
                     dog.set_editor_property("tags", [unreal.Name("ScaleReference"), unreal.Name("CanonicalDog")])
-                except Exception:
-                    pass
+                    LOG("V2 SCALE DOG: tagged ScaleReference -- the cinematic capture will keep it visible")
+                except Exception as exc:
+                    LOG("V2 SCALE DOG FAILED: could not tag the Dog ScaleReference (%s) -- every "
+                        "-CinematicView capture will HIDE it and ScaleCam07 will be empty" % exc)
                 try:
                     dog.set_folder_path(unreal.Name("V2/Camera"))
                 except Exception:

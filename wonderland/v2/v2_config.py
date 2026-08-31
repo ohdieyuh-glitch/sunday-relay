@@ -656,14 +656,26 @@ LOOK = {
     "castleKit": 1, "nanite": 1,
     # ONE canonical Relay Dog as ScaleCam07's scale reference (founder,
     # 2026-08-28: "one Dog only for scale; do not populate"). The approved,
-    # frozen BP_RelayDog (174 cm) stands beside the right urn on the plaza,
-    # BEHIND HeroCam0 (dy < 0) and just outside PlayerCam01's half-fov
-    # (bearing 50.6 deg). Capsule half-height 87.1 puts its feet on z = 0.
+    # frozen BP_RelayDog (174 cm) stands beside the right urn on the plaza.
+    # Capsule half-height 87.1 puts its feet on z = 0.
+    #
+    # WHICH CAMERAS SEE IT, PROJECTED RATHER THAN REMEMBERED. This block used
+    # to say the Dog was "just outside PlayerCam01's half-fov (bearing 50.6
+    # deg)" -- a bearing measured for the RETIRED position (-560,-1000) and
+    # left standing when the Dog moved to (-330,-650). From (-330,-650) it is
+    # in four of the locked frames:
+    #
+    #   ScaleCam07     6.0 m   off -33.4 deg   the scale test, by design
+    #   PlayerCam01    8.7 m   off +22.2 deg   the player's own viewpoint
+    #   ReverseCam03  32.7 m   off  -5.8 deg
+    #   GardenLeft04  49.4 m   off  +2.6 deg
+    #
+    # and NOT in HeroCam0, which is what the founder's frozen arrival
+    # composition requires and the only part of the old claim that was true.
     "scaleDog": 1, "scaleDogClass": "/Game/WonderlandV2/Characters/RelayDog/BP_RelayDog.BP_RelayDog_C",
     # (-560,-1000) stood 0.9 m BEHIND the gate's flanking wall (y = -910):
     # two ScaleCam07 renders without a Dog. Now inside the plaza, beside the
-    # right urn, 6 m from ScaleCam07 at bearing 33 deg; the same wall hides
-    # it from PlayerCam01, and HeroCam0 looks the other way.
+    # right urn, 6 m from ScaleCam07, and HeroCam0 looks the other way.
     "scaleDogPos": (-330.0, -650.0, 87.1), "scaleDogYaw": 56.0,
     #: RETIRED IN PASS 29. There was a second, unpossessed Dog here on the
     #: theory that the first one was invisible for an unknown reason. The
