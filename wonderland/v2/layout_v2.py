@@ -6381,6 +6381,16 @@ _DEPTH_ACCENT = {
     "MushroomGrove":    ("MI_V2_RoofLilac", "MI_V2_Bronze"),
     "LanternHamlets":   ("MI_V2_RoofNavy",  "MI_V2_GoldAged"),
     "GatekeeperFields": ("MI_V2_RoofBlue",  "MI_V2_Gold"),
+    # THE OUTER SIX, and they take the accents the inner eight do not. A reach
+    # is seen from further away and usually against the horizon haze, so the
+    # accent is doing more work there than anywhere: it is often the only
+    # thing separating one distant precinct from another.
+    "NorthReach":       ("MI_V2_RoofLilac", "MI_V2_GoldAged"),
+    "EastReach":        ("MI_V2_RoofRose",  "MI_V2_Bronze"),
+    "TheLongWoods":     ("MI_V2_RoofBlue",  "MI_V2_GoldAged"),
+    "SouthMeadows":     ("MI_V2_RoofPink",  "MI_V2_Gold"),
+    "WestWood":         ("MI_V2_RoofNavy",  "MI_V2_Bronze"),
+    "FarOrchards":      ("MI_V2_RoofRose",  "MI_V2_Gold"),
 }
 
 
