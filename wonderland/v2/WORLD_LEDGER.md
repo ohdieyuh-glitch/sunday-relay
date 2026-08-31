@@ -1569,3 +1569,93 @@ stand 9 uu PROUD of the road, where their tops previously sat at 28 against a
 31 uu road surface -- they had been buried in it. Roads remain 19 uu proud of
 the ground, stairs are 42-52 m from any road so no joins moved, and everything
 still at the old height is soft scatter on beds.
+
+---
+
+## PASS 28 — ENCHANTMENT + VERTICALITY (2026-08-31)
+
+The founder reopened the goal: Wonderland must stop reading as "a beautiful
+royal botanical city" and start reading as "an enchanted royal Wonderland
+civilization with impossible verticality, magical landmarks, strong
+silhouettes and discovery everywhere." Their diagnosis, in their words: the
+problem is not world size, it is WONDER PER METER.
+
+### Three instruments, because nothing here could measure any of it
+
+Every audit in this project measured the world in PLAN. None could answer
+"how tall is it", "what does a camera see", or "how much sky has a leaf in
+front of it" without a GPU and a capture round.
+
+| tool | question | what it caught |
+|---|---|---|
+| `tools/skyline.py` | how tall, and is anything dominant? | the second-tallest thing in Wonderland was a HOT-AIR BALLOON |
+| `tools/skyline.py --site` | what would this landmark do to all 21 cameras? | set the great spire's height from HeroCam0's frozen half-field |
+| `tools/occlusion.py` | what does each camera actually see? | seven of the eighteen largest presences in the world were TREE CANOPIES |
+| `tools/occlusion.py --cover` | how much ground has a crown over it? | 57-67% in the bands where the city is |
+
+Heights are MEASURED off the shipped geometry -- every recipe is built on the
+offline meshkit backend and its bounding box and a twelve-slab radius profile
+read -- never declared in a table beside the code. A table is a derived number
+in a comment, which is this project's richest defect vein.
+
+### The measured before, walkable world (r <= 400 m of the spawn)
+
+    height p50 6.5 m   p90 32.1 m   max 127.7 m
+    80-120 m ....  4 pieces (0.06%)      120 m+ .... 2 (0.03%)
+    tallest : second distinct site .... 1.46x
+    canopy cover  0-40 m 43.9%   40-80 45.5%   80-130 57.1%   130-200 67.2%
+    canopy palette  ~86% plain green / 0% varied leaf / ~14% flowering
+
+### What was built
+
+**A — the skyline.** `spire_great` (180 m authored), `spire_signature`
+(117 m), `tower_district` (67 m). One great spire ON the arrival axis at
+330 m, two signature spires deliberately OUTSIDE HeroCam0's 50 deg
+half-field, seven district towers filling a rung that did not exist.
+
+**B — revealing the city.** A clearing field and sightline corridors, both
+filters over the assembled bands. 326 of 738 generated trees removed.
+
+**C + E — the enchanted landmarks.** Ten recipes at 12-54 m and one authored
+thing per district, no type in more than two, verified in-district by
+`_district_of` itself.
+
+**D — colour.** Four new foliage tones, `_BLOSSOM_SHARE` 0.08 -> 0.20, and
+the green picked by hash instead of `i % 3` (which gave every tree one of
+each green, averaging to a single colour at any distance).
+
+### The measured after, same window
+
+    80-120 m .... 12 pieces      120 m+ .... 6
+    tallest : second distinct site .... 1.47x
+    tallest : p90 ......... 4.12x -> 6.25x
+    ladder 194.4 / 131.9 / 127.7 / 122.5 / 90.9 / 90.2 / 86.1 / 83.5 / 80.8 / 75.4
+    canopy cover  0-40 m 41.6%   40-80 37.1%   80-130 25.8%   130-200 31.0%
+    canopy palette  55.9% plain green / 15.1% varied leaf / 29.0% flowering
+
+### PREDICTIONS, stated before the render
+
+Scored after the capture, in the units the tools report.
+
+1. **The great spire's tip is inside HeroCam0**, with sky above it. Computed
+   +32.0 deg top elevation against a 33.8 deg vertical half-field.
+2. **HeroCam0's skyline reads as a hierarchy**: one spire clearly taller than
+   everything, castle below and in front of it, negative sky preserved.
+3. **SkylineCam06 shows city where it showed forest.** The whole-frame veg
+   share will move little -- that camera's 45 deg half-field still contains
+   the trees that moved outward -- but the CENTRAL THIRD should fall from
+   veg:arch 1.23 toward or below 1.0.
+4. **`gap_v2.palette` green share falls and rose/pink rises**, from a canopy
+   that went 86% one hue to 56% green / 29% flowering / 15% varied leaf.
+5. **The 40-130 m band reads as parkland**, not woodland: architecture
+   visible between crowns rather than above them.
+6. **No traversal or step-height regression.** Both already gated offline:
+   652 walking surfaces, highest lip 19 uu against MaxStepHeight 30, 0
+   violations; 0 of 60 quarters unreachable with the new landmarks modelled
+   in FOOT.
+
+RISKS I EXPECT THE RENDER TO ARBITRATE, recorded now so the scoring is
+honest: the thinning may read as bare rather than open; 29% flowering canopy
+may read as an orchard again (it was cut from 20% to 8% for exactly that once);
+the sightline corridors radiate from the arrival plaza and may read as a
+starburst; and the coloured glass emissive is unmeasured on this runtime.
