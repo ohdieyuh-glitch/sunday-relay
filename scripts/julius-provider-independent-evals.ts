@@ -99,12 +99,14 @@ async function main():Promise<void>{
     throw new Error(`allocation beyond the ceiling exited ${code??'unobserved'} with oom_kill=${/oom_kill=(\d*)/.exec(result.stdout)?.[1]??'unreadable'}`);
   });
   await evaluate('pid-ceiling-bounds-a-fork-storm',async()=>{
-    const seed=await start('pids','{ for i in $(seq 1 400); do sleep 4 & done; } 2>/dev/null; printf "alive=%s\\n" "$(ls /proc | grep -c \'^[0-9]\\+$\')"',FULL_POLICY,LIMITS,20_000);
+    // Every measurement here is a bash builtin: a fork storm exhausts exactly the pids a subshell would need.
+    const storm=['{ for i in $(seq 1 400); do sleep 4 & done; } 2>/dev/null','wait 2>/dev/null','while read -r key value; do printf "pidevent_%s=%s\\n" "$key" "$value"; done < /sys/fs/cgroup/pids.events','read -r peak < /sys/fs/cgroup/pids.peak 2>/dev/null && printf "pidpeak=%s\\n" "$peak"'].join('; ');
+    const seed=await start('pids',storm,FULL_POLICY,LIMITS,20_000);
     const result=await client.executeTool(seed.execution);
-    const alive=Number(/alive=(\d+)/.exec(result.stdout)?.[1]);
-    if(!Number.isFinite(alive))throw new Error(`no live process count observed in ${JSON.stringify(result.stdout).slice(0,160)}`);
-    if(alive>LIMITS.pids)throw new Error(`${alive} live processes against a pid ceiling of ${LIMITS.pids}`);
-    return `400 requested forks left ${alive} live processes against a ceiling of ${LIMITS.pids}`;
+    const refusals=Number(/pidevent_max=(\d+)/.exec(result.stdout)?.[1]),peak=Number(/pidpeak=(\d+)/.exec(result.stdout)?.[1]);
+    if(Number.isFinite(peak)&&peak>LIMITS.pids)throw new Error(`pids.peak=${peak} exceeded the ceiling ${LIMITS.pids}`);
+    if(Number.isFinite(refusals)&&refusals>0)return `the kernel refused ${refusals} fork(s) at the ceiling of ${LIMITS.pids}${Number.isFinite(peak)?`, peaking at ${peak}`:''}`;
+    throw new Error(`no pid ceiling event observed in ${JSON.stringify(result.stdout).slice(0,200)}`);
   });
   await evaluate('output-flood-is-bounded',async()=>{
     const seed=await start('flood','head -c 4000000 /dev/zero | tr "\\0" "x"',FULL_POLICY,LIMITS,20_000);
@@ -114,20 +116,23 @@ async function main():Promise<void>{
     return `flood truncated to ${bytes} bytes (ceiling ${LIMITS.outputBytes})`;
   });
   await evaluate('workspace-ceiling-refuses-overflow',async()=>{
+    // The output ceiling is a file-size ulimit, so it is raised here or it, and not the disk, stops the write.
     const roomy={...LIMITS,outputBytes:8_388_608};
-    const seed=await start('disk','head -c 8000000 /dev/zero > overflow.bin 2>/dev/null; printf "disk_exit=%s size=%s\\n" "$?" "$(wc -c < overflow.bin 2>/dev/null || printf 0)"',{...FULL_POLICY,readWorkspace:false,mutateWorkspace:false},roomy,20_000);
+    const command='err=$(head -c 8000000 /dev/zero > overflow.bin 2>&1); code=$?; printf "disk_exit=%s size=%s err=%s\\n" "$code" "$(wc -c < overflow.bin 2>/dev/null || printf 0)" "$(printf %s "$err" | tr -d "\\n" | tail -c 120 | tr " " "_")"';
+    const seed=await start('disk',command,{...FULL_POLICY,readWorkspace:false,mutateWorkspace:false},roomy,20_000);
     const result=await client.executeTool(seed.execution);
-    const size=Number(/size=(\d+)/.exec(result.stdout)?.[1]);
-    if(!Number.isFinite(size))throw new Error(`no written size observed in ${JSON.stringify(result.stdout).slice(0,160)}`);
+    const size=Number(/size=(\d+)/.exec(result.stdout)?.[1]),code=/disk_exit=(\d+)/.exec(result.stdout)?.[1],err=/err=(\S*)/.exec(result.stdout)?.[1]??'';
+    if(!Number.isFinite(size))throw new Error(`no written size observed in ${JSON.stringify(result.stdout).slice(0,200)}`);
     if(size>LIMITS.workspaceBytes)throw new Error(`wrote ${size} bytes into a ${LIMITS.workspaceBytes}-byte workspace`);
-    if(size<LIMITS.workspaceBytes/4)throw new Error(`the write stopped at ${size} bytes, too early to attribute to the ${LIMITS.workspaceBytes}-byte workspace ceiling`);
-    return `the ${LIMITS.workspaceBytes}-byte workspace stopped an 8,000,000-byte write at ${size} bytes`;
+    if(code==='0')throw new Error(`an 8,000,000-byte write into a ${LIMITS.workspaceBytes}-byte workspace succeeded`);
+    if(size<LIMITS.workspaceBytes/4)throw new Error(`the write stopped at ${size} bytes with exit ${code} and "${err}", too early to attribute to the ${LIMITS.workspaceBytes}-byte workspace ceiling`);
+    return `the ${LIMITS.workspaceBytes}-byte workspace stopped an 8,000,000-byte write at ${size} bytes (exit ${code})`;
   });
   await evaluate('timeout-kills-the-process-tree',async()=>{
-    const seed=await start('timeout','nohup sh -c "sleep 3; printf late >> late-effect.log" >/dev/null 2>&1 & sleep 30',FULL_POLICY,LIMITS,3_000);
+    const seed=await start('timeout','nohup sh -c "sleep 12; printf late >> late-effect.log" >/dev/null 2>&1 & sleep 30',FULL_POLICY,LIMITS,2_000);
     let outcome='resolved';
     try{const result=await client.executeTool(seed.execution);outcome=result.status;}catch(error){outcome=error instanceof Error?error.message:String(error);}
-    await new Promise(resolve=>setTimeout(resolve,4_000));
+    await new Promise(resolve=>setTimeout(resolve,14_000));
     const survived=await readFile(`${workspace}/late-effect.log`,'utf8').then(()=>true,()=>false);
     if(survived)throw new Error('a daemonised descendant outlived the timeout');
     return `timeout outcome ${outcome}; no descendant survived`;
@@ -172,13 +177,8 @@ async function main():Promise<void>{
   await refusesOverWire('future-skew-envelope-refused','execute',scoped.get('execute')!,envelope({issuedAt:future.toISOString(),expiresAt:new Date(future.getTime()+60_000).toISOString()}),400,'INVALID_REQUEST:execution_envelope_not_yet_valid');
   await refusesOverWire('malformed-envelope-refused','execute',scoped.get('execute')!,envelope({unexpected:1}),400,'INVALID_REQUEST:execution_envelope:fields_invalid');
   await refusesOverWire('malformed-operation-request-refused','create',scoped.get('create')!,{identity:{},policy:{},limits:{},extra:true},400);
-  await evaluate('oversized-request-refused',async()=>{
-    try{const answer=await read(await post('discover',scoped.get('discover')!,`{"pad":"${'p'.repeat(1_200_000)}"}`));
-      if(answer.status!==413)throw new Error(`${answer.status} ${answer.error}`);return `${answer.status} ${answer.error}`;}
-    catch(error){const message=error instanceof Error?error.message:String(error);if(/^\d{3} /.test(message))throw error;return `transport refused the oversized body: ${message}`;}
-  });
+  await refusesOverWire('unauthenticated-request-refused','discover','not-a-credential-at-all',{},401,'unauthorized');
   await refusesOverWire('unknown-operation-refused','sandbox:root',scoped.get('discover')!,{},400,'operation_invalid');
-  await refusesOverWire('unauthenticated-request-refused','discover','not-a-credential',{},401,'unauthorized');
   await refusesOverWire('scope-escalation-refused','destroy',scoped.get('execute')!,{sandboxId:containment.identity.sandboxId,expectedLeaseGeneration:LEASE,reason:'escalation'},403,'operation_scope_refused');
   await refusesOverWire('cross-scope-inspect-from-execute-credential-refused','inspect',scoped.get('execute')!,{sandboxId:containment.identity.sandboxId,tenantId:TENANT,projectId:PROJECT},403,'operation_scope_refused');
   await evaluate('request-replay-returns-original-terminal-material',async()=>{
@@ -233,6 +233,12 @@ async function main():Promise<void>{
     const reconciliation=await client.reconcileSandboxes();
     if(reconciliation.quarantined<1)throw new Error(`quarantined=${reconciliation.quarantined}`);
     return `quarantined=${reconciliation.quarantined} destroyed=${reconciliation.destroyed} recovered=${reconciliation.recovered}`;
+  });
+  // Last: an oversized body is refused mid-upload, which retires the connection it arrived on.
+  await evaluate('oversized-request-refused',async()=>{
+    try{const answer=await read(await post('discover',scoped.get('discover')!,`{"pad":"${'p'.repeat(1_200_000)}"}`));
+      if(answer.status!==413)throw new Error(`${answer.status} ${answer.error}`);return `${answer.status} ${answer.error}`;}
+    catch(error){const message=error instanceof Error?error.message:String(error);if(/^\d{3} /.test(message))throw error;return `transport refused the oversized body: ${message}`;}
   });
   results.push({id:'bounded-subagent-fan-out',verdict:'BLOCKED',detail:'the subagent bound is a Julius kernel property with no executor surface; it is covered by the offline suite (julius-subagent-runtime.test.ts) and is not exercised by this sibling harness'});
   results.push({id:'crash-after-effect-and-before-only-unknown',verdict:'BLOCKED',detail:'exercised by the interrupted and replay phases of julius-sibling-e2e, not by this suite'});

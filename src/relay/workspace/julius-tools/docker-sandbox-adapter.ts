@@ -24,7 +24,10 @@ export class DockerJuliusSandboxAdapter implements SandboxExecutionPort {
   /* BEFORE lands as the workload container starts. AFTER cannot land before the command itself finishes,
      so waiting a fixed constant for it capped every durable execution at that constant. It is bounded by the
      execution's own ceiling instead, and abandoned early once the command has exited without sealing. */
-  let exited=false;void rawPromise.then(()=>{exited=true;},()=>{exited=true;});
+  /* A timed-out command leaves its daemonised descendants alive inside the container: the in-sandbox
+     reaper only runs when the command exits on its own. The tree is killed the moment the timeout is
+     observed, not after the receipt grace, or a descendant can still land an effect in between. */
+  let exited=false;void rawPromise.then(result=>{exited=true;if(result.timedOut)void stopHostile().catch(()=>undefined);},()=>{exited=true;});
   const waitFor=async(receipt:string,hardDeadline:number,graceAfterExitMs:number)=>{
    let exitedAt=0;
    for(;;){

@@ -21,7 +21,7 @@ const afterBody=`receiptVersion=1\nphase=AFTER\nmanifestDigest=${digest}\ninvoca
 const result:ToolInvocationResult={invocationId:'inv',status:'SUCCEEDED',exitCode:0,safeSummary:'Sandbox command completed.',stdout:'',stderr:'',stdoutRef:null,stderrRef:null,artifacts:[],evidence:[],durationMs:1,resourceUsage:{toolCalls:1,runtimeMs:1,outputBytes:0},policyDecisionRef:'policy',mutations:[]};
 const physical = (execute:()=>Promise<ToolInvocationResult>):SandboxExecutionPort => ({
   createSandbox:async input=>({...input.identity,state:'CREATING',workspaceRef:null,runtimeKind:'test',limits:input.limits,policy:input.policy,safeFailure:null}),
-  prepareWorkspace:async()=>{throw new Error('unused');},executeTool:async()=>execute(),cancelExecution:async()=>true,destroySandbox:async()=>true,
+  prepareWorkspace:async()=>{throw new Error("ENOENT: no such file or directory, open '/tmp/julius-executor/receipts/abc/before.receipt'");},executeTool:async()=>execute(),cancelExecution:async()=>true,destroySandbox:async()=>true,
   inspectSandbox:async()=>null,collectArtifacts:async()=>[],discoverSandboxes:async()=>[],quarantineSandbox:async()=>true,reconcileSandboxes:async()=>({recovered:0,lost:0,quarantined:0,destroyed:0}),
 });
 
@@ -108,6 +108,10 @@ describe('executor control-plane service',()=>{
       // The same execution identity carrying a different request is a hard conflict, never a second execution.
       expect(await read(await post('execute',scoped('execute'),envelope({requestDigest:'b'.repeat(64)})))).toMatchObject({status:409,error:'SECURITY_FAILURE:execution_identity_conflict'});
       expect(physicalEffects).toBe(1);
+      // A filesystem message never crosses the boundary: Julius is not allowed to learn the receipt-store path.
+      const leaky=await read(await post('prepare',scoped('prepare'),{sandboxId,sourceRef:'/tmp/nowhere',expectedLeaseGeneration:1}));
+      expect(leaky).toMatchObject({status:500,error:'executor_failure'});
+
       // The settled execution replays its original terminal material verbatim.
       expect((await post('execute',scoped('execute'),envelope())).status).toBe(200);
       expect(physicalEffects).toBe(1);

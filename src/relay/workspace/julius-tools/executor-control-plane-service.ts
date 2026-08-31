@@ -45,6 +45,7 @@ async function body(request: IncomingMessage):Promise<unknown>{
   return JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown;
 }
 
+const SAFE_CODE=/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,119}$/;
 const statusFor=(message:string):number=>message.startsWith('SECURITY_FAILURE:')||message==='STARTED_UNKNOWN_OUTCOME'||message.includes('conflict')?409:message==='request_too_large'?413:message.startsWith('INVALID_REQUEST:')?400:500;
 /** Every shape refusal answers as one family, so a caller can tell a malformed request from an executor fault. */
 const validated=<T>(parse:()=>T):T=>{try{return parse();}catch(error){const message=error instanceof Error?error.message:'invalid';throw new Error(message.startsWith('SECURITY_FAILURE:')?message:`INVALID_REQUEST:${message}`);}};
@@ -101,6 +102,14 @@ export function createExecutorControlPlaneService(config:ExecutorControlPlaneSer
       const encoded=JSON.stringify({value,attestations,receiptBodies,terminalPayload});if(Buffer.byteLength(encoded)>MAX_RESPONSE_BYTES)throw new Error('executor_response_too_large');
       await config.executionLedger.transition({executionIdentity:envelope.executionIdentity,requestDigest:envelope.requestDigest,from:'AFTER_DURABLE',to:'TERMINAL',resultDigest:createHash('sha256').update(encoded).digest('hex'),terminalResponse:encoded,now:new Date().toISOString()});
       response.statusCode=200;response.end(encoded);
-    }catch(error){const message=error instanceof Error?error.message:'executor_failure';response.statusCode=statusFor(message);response.end(JSON.stringify({error:message.replace(/[^A-Za-z0-9_:.-]/g,'_')}));}
+    }catch(error){
+      const message=error instanceof Error?error.message:'executor_failure';
+      response.statusCode=statusFor(message);
+      // The client is still uploading a body this service refused to read, so the socket cannot be reused.
+      if(message==='request_too_large')response.setHeader('connection','close');
+      // Only this service's own refusal codes cross the boundary. A filesystem or driver message would
+      // hand Julius the receipt-store path it is not allowed to know, so anything else answers as a fault.
+      response.end(JSON.stringify({error:SAFE_CODE.test(message)?message:'executor_failure'}));
+    }
   });
 }
