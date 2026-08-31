@@ -319,6 +319,36 @@ HERO_CAMS = [
      "fov": 100.0, "tags": ("GlassPavilionCam28", "HeroCam28")},     # on its spur, 77 m, 89% clear
     {"name": "GiantBloomCam29", "location": (2882.2, 11925.6, 170.0), "rotation": (-6.0, 67.0, 0.0),
      "fov": 100.0, "tags": ("GiantBloomCam29", "HeroCam29")},        # on its spur, 70 m, 100% clear
+
+    # ---- PASS 29: THREE CAMERAS FOR THE ARCHITECTURE THAT DID NOT EXIST ----
+    #
+    # The rule this project keeps is that the locked cameras are a REGRESSION
+    # system -- fix the world, not the framing -- and its corollary is that a
+    # new area earns its own cameras once it has a real composition. PASS 29
+    # gave every district a threshold, an outdoor room or a crossing, and not
+    # one of the twenty-nine existing cameras was sited to stand in any of
+    # them: the district cameras look AT a landmark from its spur, which is
+    # the right shot for a monument and the wrong one for a thing you walk
+    # through.
+    #
+    # Sited by the three rules PASS 28 wrote, in order -- standpoint clear,
+    # sightline clear, approach clear -- which here means each one stands ON
+    # the piece's own approach, at eye height, looking along ground already
+    # known to be open at the face the approach arrives at. 24-29 m out, so
+    # the piece fills the frame the way it fills a walker's view rather than
+    # sitting in the middle of a field.
+    # AND THE FIRST OF THEM BROKE THE FIRST RULE. Sited by arithmetic straight
+    # down the approach at 26 m, this camera had a slender tree 5.1 m in front
+    # of its lens taking 58.7% of the frame -- the standpoint was never
+    # checked, only the sightline. Solved instead: every point on the approach
+    # ranked by its distance to the nearest obstacle, and this is the best one
+    # that still frames the gate. 8.1 m clear at the lens, gate at 39.8 m.
+    {"name": "GateArchCam30", "location": (10552.5, -790.7, 170.0), "rotation": (2.0, 19.8, 0.0),
+     "fov": 100.0, "tags": ("GateArchCam30", "HeroCam30")},      # the Clock Quarter gate, 39.8 m
+    {"name": "CloisterCam31", "location": (8815.3, 13730.6, 170.0), "rotation": (2.0, 57.3, 0.0),
+     "fov": 100.0, "tags": ("CloisterCam31", "HeroCam31")},      # the Royal Gardens cloister, 29 m
+    {"name": "BridgeCam32", "location": (-4045.9, -10013.8, 170.0), "rotation": (1.0, -112.0, 0.0),
+     "fov": 100.0, "tags": ("BridgeCam32", "HeroCam32")},        # across the Water Gardens bridge, 24 m
 ]
 #: The suite's names by index -- the filing tool and the checkpoint report use
 #: them; the capture tooling uses the "HeroCamN" tags.
@@ -336,7 +366,12 @@ CAM_SUITE = ("HeroCam0", "PlayerCam01", "PathCam02", "ReverseCam03",
              "SkylineRiseCam21",
              "GreatSpireCam22", "ClockGrandCam23", "TeapotCam24",
              "ColossalKeyCam25", "FloatingStairCam26", "LanternLaneCam27",
-             "GlassPavilionCam28", "GiantBloomCam29")
+             "GlassPavilionCam28", "GiantBloomCam29",
+             # PASS 29's three, and the gate caught their absence on the first
+             # run after adding them -- an IndexError from CAM_SUITE being
+             # shorter than HERO_CAMS, which is this gate doing its job for the
+             # second time in two passes.
+             "GateArchCam30", "CloisterCam31", "BridgeCam32")
 #: HeroCam0's frozen transform (the founder benchmark) -- verify_v2_layout
 #: refuses a drift of the entry above from these values.
 HERO_CAM0_FROZEN = ((0.0, -150.0, 262.0), (-2.0, 90.0, 0.0), 100.0)
