@@ -782,7 +782,14 @@ APPROACH = _band("V2_Garden",
     # trees between the masses: canopy overhead on the way up
     + [A("tree_mature_trunk", 2050 * (1 if i % 2 == 0 else -1), 2900 + 1500 * i, 0,
          yaw=31 * i, s=1.15, mat="MI_V2_Bark", label="Approach_Trunk%d" % i) for i in range(4)]
-    + [A("canopy_large", 2050 * (1 if i % 2 == 0 else -1), 2900 + 1500 * i, 940,
+    # 1500, NOT 940. `canopy_large` reaches 315 uu BELOW its own origin, so at
+    # 940 on a trunk whose top is 1,714 these crowns hung from 5.6 m to 15.7 m
+    # -- leaves at eye level over a processional avenue, and 55% of their own
+    # trunk's height where every other tree in Wonderland puts its crown at
+    # 88% (`_tree_group`: 1450 on a 1639 trunk). A number that contradicts the
+    # thing it sits on. Raised to the world's own ratio, which lifts the
+    # underside to 11 m and opens the walk up to the castle.
+    + [A("canopy_large", 2050 * (1 if i % 2 == 0 else -1), 2900 + 1500 * i, 1500,
          yaw=44 * i, s=1.2, mat=("MI_V2_LeafMid" if i % 2 else "MI_V2_LeafLight"),
          label="Approach_Canopy%d" % i) for i in range(4)]
     # THE FOUNTAIN COURT, at the midpoint of the climb
@@ -5159,7 +5166,20 @@ def _approach_sides():
             y = 2300.0 + 6500.0 * u + 400.0 * (_rnd(i, seed, 1) - 0.5)
             x = side * (2900.0 + 3500.0 * _rnd(i, seed, 2))
             pick = _rnd(i, seed, 3)
-            if pick < 0.26:
+            # RECOMPOSED, NOT THINNED (batch B). Measured on SkylineCam06, the
+            # single largest green mass in Wonderland is this band: canopy_large
+            # takes 26.3% of that frame and `ApproachSideL/R_Canopy*` are four of
+            # its six biggest individual pieces. They stand 29-64 m off the
+            # processional axis and they are what the castle is behind.
+            #
+            # The answer is not fewer plants -- the brief says do not globally
+            # remove vegetation, and a bare processional way is worse than a
+            # blocked one. It is WHERE the tall ones stand. Inside 42 m of the
+            # axis the band is now beds, ornament and low topiary; beyond it,
+            # trees and hedge masses. Same thirty pieces a side, the mass moved
+            # outward, and the near band gains the flower colour batch D wants.
+            near = abs(x) < 4200.0
+            if pick < (0.10 if near else 0.36):
                 t = 1.05 + 0.4 * _rnd(i, seed, 4)
                 out += [
                     A("tree_mature_trunk", x, y, 0, yaw=_rnd(i, seed, 5) * 360.0, s=t,
@@ -5168,17 +5188,17 @@ def _approach_sides():
                       s=t * 1.12, mat=_leaf(i, seed, 8),
                       label="%s_Canopy%d" % (tag, i)),
                 ]
-            elif pick < 0.50:
+            elif pick < (0.22 if near else 0.58):
                 out.append(A("hedge_mass", x, y, 0, yaw=_rnd(i, seed, 7) * 40.0,
                              s=1.1 + 0.5 * _rnd(i, seed, 8),
                              mat=("MI_V2_LeafDark", "MI_V2_LeafMid")[i % 2],
                              label="%s_Hedge%d" % (tag, i)))
-            elif pick < 0.70:
+            elif pick < (0.62 if near else 0.74):
                 out += _ground_patch(x, y, 0, _rnd(i, seed, 9) * 360.0, 1.1,
                                      ("MI_V2_PetalPink", "MI_V2_PetalViolet",
                                       "MI_V2_PetalWhite", "MI_V2_RosePink")[i % 4],
                                      "%s_Bed%d" % (tag, i))
-            elif pick < 0.86:
+            elif pick < (0.84 if near else 0.88):
                 out.append(A(("topiary_cone_plain", "topiary_ball", "shrub_flowering")[i % 3],
                              x, y, 0, yaw=30 * i,
                              s=0.85 + 0.35 * _rnd(i, seed, 10),
@@ -5557,18 +5577,34 @@ def _generated_tag(tag):
 def _tree_key(label):
     """(tag, index) for a generated tree piece, or None.
 
-    `<TAG>_T<i>` is the trunk and `<TAG>_C<i>_<c>` its crowns. Keying on the
-    pair is what makes this remove TREES rather than leave a field of bare
-    trunks holding nothing up -- the failure mode of thinning canopies alone.
+    TWO NAMING SCHEMES, because there are two. `_tree` writes `<TAG>_T<i>` and
+    `<TAG>_C<i>_<c>`; `_tree_group` writes `<TAG>_Trunk` and `<TAG>_Canopy<c>`.
+    The first version of this knew only the first scheme, so the eight tree
+    groups standing between the plaza and the castle -- twenty-four large
+    crowns on the exact sightline the founder says is blocked -- were INVISIBLE
+    to the filter that exists to open that sightline. It reported 311 trees
+    thinned and was silent about the ones that mattered most.
+
+    A FILTER THAT CANNOT SEE SOMETHING REPORTS SUCCESS. That is the same
+    fail-open shape as a missing FOOT entry, and it is the third time this
+    project has paid for a rule that knew one collection and not its sibling.
+
+    Keying on (tag, index) is what makes this remove TREES rather than leave a
+    field of bare trunks holding nothing up.
     """
     parts = label.split("_")
     if len(parts) < 2:
         return None
-    if parts[-1].startswith("T") and parts[-1][1:].isdigit():
-        tag, idx = "_".join(parts[:-1]), parts[-1][1:]
+    last = parts[-1]
+    if last.startswith("T") and last[1:].isdigit():
+        tag, idx = "_".join(parts[:-1]), last[1:]
     elif len(parts) >= 3 and parts[-2].startswith("C") and parts[-2][1:].isdigit() \
-            and parts[-1].isdigit():
+            and last.isdigit():
         tag, idx = "_".join(parts[:-2]), parts[-2][1:]
+    elif last == "Trunk":
+        tag, idx = "_".join(parts[:-1]), "g"
+    elif last.startswith("Canopy") and last[6:].isdigit():
+        tag, idx = "_".join(parts[:-1]), "g"
     else:
         return None
     head = tag.split("_")[0]
