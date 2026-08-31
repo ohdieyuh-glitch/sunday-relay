@@ -13,6 +13,13 @@ printf 'receiptVersion=1\nphase=BEFORE\nmanifestDigest=%s\ninvocationId=%s\ndisp
 durable_move "$receipt_dir/before.receipt.tmp" "$receipt_dir/before.receipt" || exit 125
 printf 'BEFORE_DURABLE\n' > "$stage_file" || exit 125
 sync || true
+# The trusted control plane must sign the durable BEFORE fact before the
+# untrusted command is permitted to start. A missing acknowledgement is a
+# fail-closed executor failure, never permission to continue unsigned.
+if test "${JULIUS_ATTESTATION_REQUIRED:-0}" = 1; then
+  for _ in $(seq 1 200); do test -f "$receipt_dir/before.attestation" && break; sleep 0.05; done
+  test -f "$receipt_dir/before.attestation" || exit 125
+fi
 readonly start_ms=$(date +%s%3N)
 stage COMMAND_STARTING
 set +e
@@ -41,5 +48,11 @@ readonly finished_at=$(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)
 if test "$exit_code" -eq 0; then terminal_state=SUCCEEDED; else terminal_state=FAILED; fi
 printf 'receiptVersion=1\nphase=AFTER\nmanifestDigest=%s\ninvocationId=%s\ndispatchGeneration=%s\nsandboxId=%s\nrequestDigest=%s\nexecutorIdentity=%s\nterminalState=%s\nexitCode=%s\ndurationMs=%s\nfinishedAt=%s\nstdoutDigest=%s\nstderrDigest=%s\npreTreeDigest=%s\npostTreeDigest=%s\nchangedPathsDigest=%s\noutputBytes=%s\nexecutorResultDigest=%s\n' "$JULIUS_MANIFEST_DIGEST" "$JULIUS_INVOCATION_ID" "$JULIUS_DISPATCH_GENERATION" "$JULIUS_SANDBOX_ID" "$JULIUS_REQUEST_DIGEST" "$JULIUS_EXECUTOR_IDENTITY" "$terminal_state" "$exit_code" "$duration_ms" "$finished_at" "$stdout_digest" "$stderr_digest" "$pre_tree" "$post_tree" "$changed_digest" "$output_bytes" "$result_digest" > "$receipt_dir/after.receipt.tmp"
 durable_move "$receipt_dir/after.receipt.tmp" "$receipt_dir/after.receipt"
+# Likewise, do not report terminal execution until the control plane has
+# durably signed the authoritative AFTER fact.
+if test "${JULIUS_ATTESTATION_REQUIRED:-0}" = 1; then
+  for _ in $(seq 1 200); do test -f "$receipt_dir/after.attestation" && break; sleep 0.05; done
+  test -f "$receipt_dir/after.attestation" || exit 125
+fi
 stage AFTER_DURABLE
 exit "$exit_code"

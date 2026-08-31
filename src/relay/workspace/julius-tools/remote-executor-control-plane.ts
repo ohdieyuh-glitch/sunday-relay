@@ -1,6 +1,7 @@
 import type { KeyObject } from 'node:crypto';
 import type { SandboxExecutionPort } from '../../mission/julius';
 import { receiptDigest, verifyExecutorAttestation, type SignedExecutorAttestation } from './executor-attestation';
+import { deriveToolInvocationResult, parseExecutorAfterReceipt, parseExecutorBeforeReceipt, validateToolInvocationResult } from './executor-terminal-receipt';
 
 export interface ExecutorControlPlaneConfig {
   readonly endpoint: URL;
@@ -12,6 +13,7 @@ export interface ExecutorControlPlaneConfig {
 }
 
 const remoteInstances = new WeakSet<object>();
+async function boundedJson(response:Response):Promise<unknown>{const reader=response.body?.getReader();if(!reader)throw new Error('executor_response_missing');const chunks:Uint8Array[]=[];let bytes=0;while(true){const next=await reader.read();if(next.done)break;bytes+=next.value.byteLength;if(bytes>2*1024*1024){await reader.cancel();throw new Error('executor_response_too_large');}chunks.push(next.value);}try{return JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown;}catch{throw new Error('executor_response_malformed');}}
 
 /** Production transport. It has no Docker binary, socket, signing key, or receipt-store path. */
 export class RemoteExecutorControlPlane implements SandboxExecutionPort {
@@ -30,7 +32,7 @@ export class RemoteExecutorControlPlane implements SandboxExecutionPort {
       body: JSON.stringify(payload),
     }).catch(() => { throw new Error('EXECUTOR_UNAVAILABLE'); });
     if (!response.ok) throw new Error(response.status === 409 ? 'executor_identity_conflict' : response.status === 401 || response.status === 403 ? 'executor_authorization_refused' : 'EXECUTOR_UNAVAILABLE');
-    const decoded = await response.json() as {value:T;attestations?:readonly SignedExecutorAttestation[]};
+    const decoded = await boundedJson(response) as {value:T;attestations?:readonly SignedExecutorAttestation[]};
     return decoded.value;
   }
 
@@ -42,7 +44,7 @@ export class RemoteExecutorControlPlane implements SandboxExecutionPort {
       headers: { authorization: `Bearer ${this.config.serviceCredential}`, 'content-type': 'application/json', 'x-julius-operation': 'execute' }, body: JSON.stringify(input),
     }).catch(() => { throw new Error('EXECUTOR_UNAVAILABLE'); });
     if (!response.ok) throw new Error(response.status === 401 || response.status === 403 ? 'executor_authorization_refused' : response.status === 409 ? 'executor_identity_conflict' : 'EXECUTOR_UNAVAILABLE');
-    const decoded = await response.json() as {value:Awaited<ReturnType<SandboxExecutionPort['executeTool']>>;attestations:readonly SignedExecutorAttestation[];receiptBodies:Readonly<Record<'BEFORE'|'AFTER',string>>};
+    const decoded = await boundedJson(response) as {value:Awaited<ReturnType<SandboxExecutionPort['executeTool']>>;attestations:readonly SignedExecutorAttestation[];receiptBodies:Readonly<Record<'BEFORE'|'AFTER',string>>;terminalPayload:Readonly<Record<'stdout'|'stderr'|'changedPaths',string>>};
     if (!this.config.trustedReceiptKeys || decoded.attestations?.length !== 2) throw new Error('SECURITY_FAILURE:executor_attestation_missing');
     const executionIdentity = `${input.request.invocationId}:${input.dispatchGeneration}:${input.sandboxId}`;
     for (const phase of ['BEFORE', 'AFTER'] as const) {
@@ -53,7 +55,11 @@ export class RemoteExecutorControlPlane implements SandboxExecutionPort {
         verifyExecutorAttestation(signed, this.config.trustedReceiptKeys, {phase,executionIdentity,invocationId:input.request.invocationId,dispatchGeneration:input.dispatchGeneration,sandboxId:input.sandboxId,requestDigest:input.requestDigest,receiptDigest:signed.attestation.receiptDigest});
       } catch { throw new Error('SECURITY_FAILURE:executor_attestation_invalid'); }
     }
-    return decoded.value;
+    const before=parseExecutorBeforeReceipt(decoded.receiptBodies.BEFORE),after=parseExecutorAfterReceipt(decoded.receiptBodies.AFTER);
+    if(before.invocationId!==after.invocationId||before.sandboxId!==after.sandboxId||before.requestDigest!==after.requestDigest||before.preTreeDigest!==after.preTreeDigest)throw new Error('SECURITY_FAILURE:executor_receipt_chain_invalid');
+    const authoritative=deriveToolInvocationResult(after,{...decoded.terminalPayload,policyDecisionRef:decoded.value.policyDecisionRef});
+    try{validateToolInvocationResult(authoritative,decoded.value);}catch{throw new Error('SECURITY_FAILURE:executor_result_mismatch');}
+    return authoritative;
   }
   cancelExecution = (input: Parameters<SandboxExecutionPort['cancelExecution']>[0]) => this.call<boolean>('cancel', input);
   destroySandbox = (input: Parameters<SandboxExecutionPort['destroySandbox']>[0]) => this.call<boolean>('destroy', input);

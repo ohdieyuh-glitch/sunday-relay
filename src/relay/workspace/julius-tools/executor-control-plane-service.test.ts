@@ -1,18 +1,22 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { generateKeyPairSync } from 'node:crypto';
+import { createHash, generateKeyPairSync } from 'node:crypto';
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { AddressInfo } from 'node:net';
 import type { SandboxExecutionPort, ToolInvocationResult } from '../../mission/julius';
 import { DockerExecutorReceiptStore } from './executor-receipt-store';
-import { createExecutorControlPlaneService } from './executor-control-plane-service';
+import { createDurableReceiptAttestor, createExecutorControlPlaneService } from './executor-control-plane-service';
 import { RemoteExecutorControlPlane } from './remote-executor-control-plane';
 
 const roots:string[]=[];
 afterEach(async()=>{await Promise.all(roots.splice(0).map(root=>rm(root,{recursive:true,force:true})));});
 
-const result:ToolInvocationResult={invocationId:'inv',status:'SUCCEEDED',exitCode:0,safeSummary:'done',stdout:'',stderr:'',stdoutRef:null,stderrRef:null,artifacts:[],evidence:[],durationMs:1,resourceUsage:{toolCalls:1,runtimeMs:1,outputBytes:0},policyDecisionRef:'policy',mutations:[]};
+const sha=(value:string)=>createHash('sha256').update(value).digest('hex'),digest=sha('scope');
+const beforeBody=`receiptVersion=1\nphase=BEFORE\nmanifestDigest=${digest}\ninvocationId=inv\ndispatchGeneration=2\nsandboxId=sandbox\ntenantDigest=${digest}\nprojectDigest=${digest}\nrunDigest=${digest}\ntaskDigest=${digest}\nworkerDigest=${digest}\ntoolId=shell.bash\ntoolVersion=1\nrequestDigest=${'a'.repeat(64)}\npolicyDigest=${digest}\nleaseGeneration=1\nimageDigest=${digest}\nexecutorIdentity=executor\npreTreeDigest=${digest}\nstartedAt=2026-08-31T00:00:00.000Z\n`;
+const afterDigest=sha(['0','1',sha(''),sha(''),digest,sha('')].join('\n'));
+const afterBody=`receiptVersion=1\nphase=AFTER\nmanifestDigest=${digest}\ninvocationId=inv\ndispatchGeneration=2\nsandboxId=sandbox\nrequestDigest=${'a'.repeat(64)}\nexecutorIdentity=executor\nterminalState=SUCCEEDED\nexitCode=0\ndurationMs=1\nfinishedAt=2026-08-31T00:00:01.000Z\nstdoutDigest=${sha('')}\nstderrDigest=${sha('')}\npreTreeDigest=${digest}\npostTreeDigest=${digest}\nchangedPathsDigest=${sha('')}\noutputBytes=0\nexecutorResultDigest=${afterDigest}\n`;
+const result:ToolInvocationResult={invocationId:'inv',status:'SUCCEEDED',exitCode:0,safeSummary:'Sandbox command completed.',stdout:'',stderr:'',stdoutRef:null,stderrRef:null,artifacts:[],evidence:[],durationMs:1,resourceUsage:{toolCalls:1,runtimeMs:1,outputBytes:0},policyDecisionRef:'policy',mutations:[]};
 const physical = (execute:()=>Promise<ToolInvocationResult>):SandboxExecutionPort => ({
   createSandbox:async input=>({...input.identity,state:'CREATING',workspaceRef:null,runtimeKind:'test',limits:input.limits,policy:input.policy,safeFailure:null}),
   prepareWorkspace:async()=>{throw new Error('unused');},executeTool:async()=>execute(),cancelExecution:async()=>true,destroySandbox:async()=>true,
@@ -25,7 +29,8 @@ describe('executor control-plane service',()=>{
     const receipts=new DockerExecutorReceiptStore(root),token='e'.repeat(64),sandboxId='sandbox';
     const directory=receipts.directory(token,sandboxId);await mkdir(directory,{recursive:true});
     const keys=generateKeyPairSync('ed25519');
-    const server=createExecutorControlPlaneService({callerCredential:'caller',keyId:'current',privateSigningKey:keys.privateKey,receipts,physical:physical(async()=>{await writeFile(join(directory,'before.receipt'),'before',{flag:'wx'});await writeFile(join(directory,'after.receipt'),'after',{flag:'wx'});return result;})});
+    const attest=createDurableReceiptAttestor({keyId:'current',privateSigningKey:keys.privateKey,receipts});
+    const server=createExecutorControlPlaneService({callerCredential:'caller',keyId:'current',privateSigningKey:keys.privateKey,receipts,physical:physical(async()=>{await writeFile(join(directory,'request.json'),JSON.stringify({invocationId:'inv',dispatchGeneration:2,sandboxId,requestDigest:'a'.repeat(64)}),{flag:'wx'});await writeFile(join(directory,'before.receipt'),beforeBody,{flag:'wx'});await writeFile(join(directory,'stdout'),'',{flag:'wx'});await writeFile(join(directory,'stderr'),'',{flag:'wx'});await writeFile(join(directory,'changed-paths'),'',{flag:'wx'});await attest({phase:'BEFORE',executionTokenHash:token,sandboxId});await writeFile(join(directory,'after.receipt'),afterBody,{flag:'wx'});await attest({phase:'AFTER',executionTokenHash:token,sandboxId});return result;})});
     await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));
     try{
       const address=server.address() as AddressInfo;
