@@ -5952,6 +5952,61 @@ def _lm_court(x, y, tag, r, n=8, pier=1.0, cone="topiary_cone_roses",
     return out
 
 
+def _lm_setting(x, y, tag, sc, glass, reach):
+    """The GROUND a landmark stands on, and the way you arrive at it.
+
+    Measured on the PASS 28 landmark captures: the teapot, the great spire and
+    the key all read well and all stand in the same empty frame -- the bottom
+    45% is flat outer-world quilt with nothing on it. `_lm_court` gives a
+    landmark a paved court about 20 m across, and a camera 30 m out sees
+    mostly the lawn in front of it.
+
+    So a landmark gets a SETTING: laid ground in three tones so the field is
+    not one flat green, an approach spur running back toward the world's
+    centre (which is where every district's road comes from), waymarkers in
+    the district's own glass along it, and planting either side. It is the
+    same language as the great spire's processional way, at a quarter the
+    length.
+    """
+    out = []
+    b = math.atan2(-y, -x)                       # back toward the origin
+    ux, uy = math.cos(b), math.sin(b)
+    px, py = -uy, ux
+    for i in range(6):
+        gx = x + ux * (2200.0 + 2600.0 * (i % 3)) + px * (2800.0 * ((i // 3) * 2 - 1))
+        gy = y + uy * (2200.0 + 2600.0 * (i % 3)) + py * (2800.0 * ((i // 3) * 2 - 1))
+        out.append(A("garden_lawn", gx, gy, GROUND_Z, yaw=41.0 * i,
+                     sxyz=(0.85, 0.72, 1.0),
+                     mat=("MI_V2_Lawn", "MI_V2_Meadow", "MI_V2_Moss")[i % 3],
+                     label="%s_Ground%d" % (tag, i)))
+    for i in range(7):
+        d = reach + 900.0 + 1500.0 * i
+        sx, sy = x + ux * d, y + uy * d
+        out.append(A("terrace_platform", sx, sy, ROAD_Z, yaw=math.degrees(b),
+                     sxyz=(1.15, 0.95, 0.35),
+                     mat=("MI_V2_PlazaWarm", "MI_V2_PlazaCream", "MI_V2_PlazaGrey")[i % 3],
+                     label="%s_Spur%d" % (tag, i)))
+        if i % 2 == 0:
+            for sgn in (1.0, -1.0):
+                out.append(A("waymarker", sx + px * sgn * 900.0, sy + py * sgn * 900.0, 0.0,
+                             yaw=math.degrees(b) + 90.0, s=0.8, mat="MI_V2_IvoryStone",
+                             label="%s_SpurMark%d_%d" % (tag, i, int(sgn))))
+                out.append(A("waymarker_lamp", sx + px * sgn * 900.0, sy + py * sgn * 900.0, 0.0,
+                             yaw=math.degrees(b) + 90.0, s=0.8, mat=glass,
+                             label="%s_SpurLamp%d_%d" % (tag, i, int(sgn))))
+        if i % 3 == 1:
+            for sgn in (1.0, -1.0):
+                out += _tree_group(sx + px * sgn * 2100.0, sy + py * sgn * 2100.0,
+                                   7700 + i * 11 + int(sgn), "%s_SpurTree%d_%d" % (tag, i, int(sgn)), 1.05)
+        if i % 3 == 2:
+            for sgn in (1.0, -1.0):
+                out += _ground_patch(sx + px * sgn * 1500.0, sy + py * sgn * 1500.0, 0,
+                                     53.0 * i, 1.3,
+                                     ("MI_V2_PetalRose", "MI_V2_Lavender", "MI_V2_PetalWhite")[i % 3],
+                                     "%s_SpurBed%d_%d" % (tag, i, int(sgn)))
+    return out
+
+
 def _lm_build(kind, x, y, tag, sc, glass):
     """One district landmark and its setting."""
     out = []
@@ -6040,6 +6095,9 @@ def _district_landmarks():
             continue
         x, y = pt
         out += _lm_build(kind, x, y, "LM%s" % who, sc, glass)
+        out += _lm_setting(x, y, "LM%s" % who, sc, glass,
+                           {"great_clock": 2200.0, "teapot": 2600.0,
+                            "lantern_run": 2600.0}.get(kind, 2000.0) * sc)
         LANDMARK_NOTES.append("%-18s %-12s at (%7.0f,%7.0f) r=%5.0f m -- %s"
                               % (who, kind, x, y, math.hypot(x, y) / 100.0, note))
     return out
