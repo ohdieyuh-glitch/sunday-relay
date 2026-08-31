@@ -5068,6 +5068,37 @@ def _plaza_ornament():
         out.append(A("kerb_stone", cx + math.cos(a) * 215.0, cy + math.sin(a) * 215.0, 2,
                      yaw=math.degrees(a) + 90.0, sxyz=(1.05, 0.5, 0.09),
                      mat="MI_V2_PlazaShade", label="Plaza_MedallionInner%d" % i))
+    # PASS 28: A BIGGER FIGURE, because the first one was too small to be
+    # seen. Measured on the PlayerCam01 frame, the arrival plaza's paving is
+    # the bottom 45% of the founder's own gameplay view and reads as a blank
+    # pale field -- the brief's "giant empty modern-plaza feeling" in the one
+    # place a player stands still and looks at the ground. The medallion above
+    # is 8.6 m across on a 13 m plaza and disappears at eye height.
+    #
+    # So the figure grows to fill the floor: an outer ring at 15 m, eight
+    # radiating spokes between the two rings, and petal drifts off the axis.
+    # Everything is `kerb_stone` at 0.11-0.13 of its 28 uu, so it stands 3 uu
+    # proud of paving whose own surface is 19 uu -- inside MaxStepHeight 30,
+    # and the layout gate checks it rather than this comment being trusted.
+    for i in range(24):
+        a = 6.283 * i / 24.0 + 0.13
+        out.append(A("kerb_stone", cx + math.cos(a) * 760.0, cy + math.sin(a) * 760.0, 2,
+                     yaw=math.degrees(a) + 90.0, sxyz=(1.30, 0.50, 0.11),
+                     mat=("MI_V2_PlazaShade", "MI_V2_Gold", "MI_V2_PlazaGrey")[i % 3],
+                     label="Plaza_Ring%d" % i))
+    for k in range(8):
+        a = 6.283 * k / 8.0 + 0.39
+        for j in range(3):
+            r = 500.0 + 105.0 * j
+            out.append(A("kerb_stone", cx + math.cos(a) * r, cy + math.sin(a) * r, 2,
+                         yaw=math.degrees(a), sxyz=(0.62, 0.34, 0.10),
+                         mat=("MI_V2_Gold", "MI_V2_PlazaShade")[j % 2],
+                         label="Plaza_Spoke%d_%d" % (k, j)))
+    # NO PETAL DRIFTS HERE. The layout gate refused them: "plaza clean" is one
+    # of its checks, and the arrival floor is deliberately kept as open paving
+    # a participant can stand and gather on. The colour has to come from the
+    # STONE, which is why the ring alternates gold, shade and grey rather than
+    # scattering flowers over the one surface the brief keeps clear.
     # THE BORDER COURSE: a run of kerb along the plaza's four edges, just
     # inside the side steps, which is what stops a paved field from simply
     # ending.
