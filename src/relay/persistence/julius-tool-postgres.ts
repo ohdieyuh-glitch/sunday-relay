@@ -3,9 +3,11 @@ import type { JuliusDurableToolInvocation,JuliusToolDispatchClaim,JuliusToolInvo
 const json=(value:unknown)=>JSON.stringify(value);
 const parsed=<T>(value:unknown,fallback:T):T=>value===null||value===undefined?fallback:typeof value==='string'?JSON.parse(value) as T:value as T;
 
+type JuliusToolRequestInput=Omit<JuliusDurableToolInvocation,'state'|'sandboxId'|'budgetReservationId'|'exitCode'|'safeSummary'|'stdoutPreview'|'stdoutArtifactId'|'stderrPreview'|'stderrArtifactId'|'evidenceIds'|'artifactIds'|'durationMs'|'authorizedAt'|'startedAt'|'completedAt'>;
 export class JuliusToolPostgresRepository implements JuliusToolInvocationStore {
  constructor(private readonly pool:Pool){}
- async request(input:Omit<JuliusDurableToolInvocation,'state'|'sandboxId'|'budgetReservationId'|'exitCode'|'safeSummary'|'stdoutPreview'|'stdoutArtifactId'|'stderrPreview'|'stderrArtifactId'|'evidenceIds'|'artifactIds'|'durationMs'|'authorizedAt'|'startedAt'|'completedAt'>):Promise<{created:boolean;invocation:JuliusDurableToolInvocation}>{
+ async request(input:JuliusToolRequestInput):Promise<{created:boolean;invocation:JuliusDurableToolInvocation}>{for(let attempt=0;;attempt++){try{return await this.requestOnce(input);}catch(error){if((error as {code?:string}).code!=='40001'||attempt>=4)throw error;await new Promise(resolve=>setTimeout(resolve,5*(attempt+1)));}}}
+ private async requestOnce(input:JuliusToolRequestInput):Promise<{created:boolean;invocation:JuliusDurableToolInvocation}>{
   const client=await this.pool.connect();try{await client.query('BEGIN ISOLATION LEVEL SERIALIZABLE');
    const task=await client.query(`SELECT t.lease_generation,t.state,t.worker_id,t.lease_owner,(t.lease_expires_at>clock_timestamp()) AS lease_valid,r.card_revision,EXISTS(SELECT 1 FROM relay_wonderland.project_members m WHERE m.project_id=r.project_id AND m.player_id=$4) AS tenant_member FROM relay_wonderland.julius_tasks t JOIN relay_wonderland.julius_runs r ON r.run_id=t.run_id WHERE t.task_id=$1 AND t.run_id=$2 AND r.project_id=$3 FOR UPDATE OF t,r`,[input.taskId,input.runId,input.projectId,input.tenantId]);
    if(!task.rows[0]||task.rows[0].tenant_member!==true)throw new Error('tool_task_not_found');if(Number(task.rows[0].lease_generation)!==input.leaseGeneration||task.rows[0].state!=='ACTIVE'||task.rows[0].worker_id!==input.workerId||!task.rows[0].lease_owner||task.rows[0].lease_valid!==true||task.rows[0].card_revision!==input.policyRevision)throw new Error('tool_stale_authority');
