@@ -1896,3 +1896,48 @@ defaults whatever profile it was asked for — the "after" would have been the
     quarters      0 of 60 unreachable
     tour          253 legs over 12 stops, 3,132 m, 0 broken connections
     waymarkers    164 markers + 34 wayside wonders (was 171 + 13)
+
+### PREDICTIONS, stated before the render
+
+Package `356fe89` — the spire, the Dog fix, the seven recipes, the 95-piece
+district depth, the second reveal pass and the parterre. The four commits
+after it (wayside vocabulary, backdrop silhouettes, district accents, the
+camera-list correction) are NOT in this package and are not being scored here.
+
+1. **The great spire is the largest landmark in HeroCam0.** Computed 7.9% of
+   frame against 4.7% for the next thing beyond 40 m, and 2.7x the next
+   district tower. It will still be behind two near-field framing pieces — a
+   tree at 28 m and the giant mushroom at 22.7 m — and that is the approved
+   arrival composition, not a defect.
+2. **Its shaft no longer reads as a thread.** Aspect 2.7:1 against 6.0:1, and
+   the four flanking spires give the group a silhouette with sky through it
+   rather than one line.
+3. **ScaleCam07 contains the canonical Relay Dog**, and the packaged log says
+   `CINEMATIC_PAWN_HIDDEN=0 pawn=BP_RelayDog_C_0`. PlayerCam01 contains it too,
+   at 8.7 m — the second camera the founder asked for proof in.
+4. **SkylineCam06 will NOT hold the spire's tip, and no world change can make
+   it.** That camera is 24 m up at pitch −22, so its frame top is +7.4 deg
+   above the horizon while the spire's tip is +26.1 deg. The spire will rise
+   out of the top of that frame. SkylineRiseCam21 and GreatSpireCam22 are
+   where it is seen whole; on the latter it is 36.4% of the frame, 5x the next
+   thing. Stated now because the founder's brief names SkylineCam06 and the
+   honest answer is arithmetic, not a fix.
+5. **Three district frames change character**: ClockGrandCam23 gains a
+   gatehouse at 21.5% (its new largest object), GlassPavilionCam28 gains a
+   bridge at 22.2% dead centre plus a gatehouse at 13.2%, FloatingStairCam26
+   gains a gatehouse and now holds the great spire at 15.7%.
+6. **No traversal regression**: 888 surfaces, highest lip 19 uu, 0 violations;
+   0 of 60 quarters unreachable; the twelve-stop tour walks 3,132 m with 0
+   broken connections, which is 2 fewer than PASS 28 had.
+7. **Performance no worse.** Everything added is a placed actor in an
+   HLOD-far band and the second reveal pass removed 120 more crowns, which are
+   the expensive kind. PASS 28's own measurement is the baseline: HeroCam0
+   49.6 fps at 1080p.
+
+RISKS RECORDED NOW, so the scoring is honest: 104 m of transept may read as a
+BLOCK rather than a cathedral from HeroCam0's 330 m, which is the one thing
+the founder explicitly warned against; the four flanking spires may read as a
+cluster of separate towers rather than one grouped landmark; the gatehouses at
+25-28 m are the tallest thing in several district frames and may outrank the
+landmark they announce; and the district glass tints are unmeasured on the
+depth pieces at these sizes.
