@@ -418,9 +418,19 @@ FVector ARelayDogCharacter::StepRoute(float DeltaSeconds)
 	const float LegBudget = FMath::Max(12.0f, Leg.HoldSeconds + 25.0f);
 	if (LegSeconds > LegBudget)
 	{
+		// WHERE IT GAVE UP, NOT JUST HOW FAR SHORT.
+		//
+		// The shortfall alone sent two rebuilds chasing the wrong obstacle:
+		// it says the distance to a target and nothing about which side of
+		// what the Dog is standing on. A stuck Dog is a WORLD defect at a
+		// COORDINATE, and without the coordinate the only way to find it is
+		// to guess from the route and check the guess with a 30-minute
+		// build.
 		UE_LOG(LogTemp, Warning,
-		       TEXT("WLDOG ROUTE: gave up on leg %d/%d '%s' after %.0f s (%.0f uu short) -- moving on"),
+		       TEXT("WLDOG ROUTE: gave up on leg %d/%d '%s' after %.0f s at (%.0f, %.0f, %.0f) "
+		            "-- target (%.0f, %.0f), %.0f uu short -- moving on"),
 		       RouteIndex + 1, Route.Num(), *Leg.Label, LegSeconds,
+		       Here.X, Here.Y, Here.Z, Leg.Target.X, Leg.Target.Y,
 		       FVector::Dist2D(Here, Leg.Target));
 		RouteIndex = (RouteIndex + 1) % Route.Num();
 		RouteHold = 0.0f;
