@@ -17,6 +17,7 @@ import {
   type JuliusTask,
 } from './julius-runtime';
 import { targetRunState } from './julius-run-loop';
+import { spawnJuliusSubagent } from './julius-subagent-runtime';
 import {
   cardPolicy,
   createJuliusHarness,
@@ -36,8 +37,13 @@ const tsk = (
   ordinal: 0, state: 'SUCCEEDED', ...over,
 } as JuliusTask);
 
-const repairOf = (parent: string, taskId: string, over: Partial<JuliusTask> = {}): JuliusTask =>
-  tsk(taskId, { parentTaskId: parent, taskType: 'repair:build', ...over });
+/**
+ * A repair child carrying the PLANNER'S full contract — the id shape, the
+ * derived type, the CODING_AGENT role — exactly as `planJuliusRepair` mints
+ * it. Supersession accepts nothing less.
+ */
+const repairOf = (parent: string, round = 1, over: Partial<JuliusTask> = {}): JuliusTask =>
+  tsk(`repair:${parent}:${round}:task`, { parentTaskId: parent, taskType: 'repair:build', ...over });
 
 const dec = (
   taskId: string,
@@ -58,28 +64,28 @@ describe('missionMayComplete reads effective verification state', () => {
     // No repair task at all.
     expect(may([tsk('x')], [dec('x', 'REPAIR')])).toBe(false);
     // A repair task that succeeded but was never verified vouches for nothing.
-    expect(may([tsk('x'), repairOf('x', 'x-r1')], [dec('x', 'REPAIR')])).toBe(false);
+    expect(may([tsk('x'), repairOf('x')], [dec('x', 'REPAIR')])).toBe(false);
     // A repair task that itself carries a REPAIR with no further lineage.
     expect(may(
-      [tsk('x'), repairOf('x', 'x-r1')],
-      [dec('x', 'REPAIR'), dec('x-r1', 'REPAIR')],
+      [tsk('x'), repairOf('x')],
+      [dec('x', 'REPAIR'), dec('repair:x:1:task', 'REPAIR')],
     )).toBe(false);
   });
 
   it('3. REPAIR → successful repair → effective ACCEPT for that lineage → completable', () => {
     expect(may(
-      [tsk('x'), repairOf('x', 'x-r1')],
-      [dec('x', 'REPAIR'), dec('x-r1', 'ACCEPT')],
+      [tsk('x'), repairOf('x')],
+      [dec('x', 'REPAIR'), dec('repair:x:1:task', 'ACCEPT')],
     )).toBe(true);
     // A repaired repair completes through the chain.
     expect(may(
-      [tsk('x'), repairOf('x', 'x-r1'), repairOf('x-r1', 'x-r2', { taskType: 'repair:repair:build' })],
-      [dec('x', 'REPAIR'), dec('x-r1', 'REPAIR'), dec('x-r2', 'ACCEPT')],
+      [tsk('x'), repairOf('x'), repairOf('repair:x:1:task', 1, { taskType: 'repair:repair:build' })],
+      [dec('x', 'REPAIR'), dec('repair:x:1:task', 'REPAIR'), dec('repair:repair:x:1:task:1:task', 'ACCEPT')],
     )).toBe(true);
     // A FAILED repair task supersedes nothing even if somehow decided.
     expect(may(
-      [tsk('x'), repairOf('x', 'x-r1', { state: 'FAILED' })],
-      [dec('x', 'REPAIR'), dec('x-r1', 'ACCEPT')],
+      [tsk('x'), repairOf('x', 1, { state: 'FAILED' })],
+      [dec('x', 'REPAIR'), dec('repair:x:1:task', 'ACCEPT')],
     )).toBe(false);
   });
 
@@ -90,8 +96,8 @@ describe('missionMayComplete reads effective verification state', () => {
     )).toBe(false);
     // Even a repair-typed, accepted task under a DIFFERENT parent is unrelated.
     expect(may(
-      [tsk('x'), tsk('y', { ordinal: 1 }), repairOf('y', 'y-r1')],
-      [dec('x', 'REPAIR'), dec('y', 'REPAIR'), dec('y-r1', 'ACCEPT')],
+      [tsk('x'), tsk('y', { ordinal: 1 }), repairOf('y')],
+      [dec('x', 'REPAIR'), dec('y', 'REPAIR'), dec('repair:y:1:task', 'ACCEPT')],
     )).toBe(false);
     // A same-parent child WITHOUT the repair task type is not repair lineage.
     expect(may(
@@ -100,21 +106,45 @@ describe('missionMayComplete reads effective verification state', () => {
     )).toBe(false);
   });
 
+  it('5b. a repair-TYPED impostor without the planner\'s full contract supersedes nothing', () => {
+    // The independent review's probe: a parent-linked, repair-typed sub-agent
+    // child (non-planner taskId) whose ACCEPT must never launder the REPAIR.
+    expect(may(
+      [tsk('x'), tsk('subagent:sub-1', { parentTaskId: 'x', taskType: 'repair:build' })],
+      [dec('x', 'REPAIR'), dec('subagent:sub-1', 'ACCEPT')],
+    )).toBe(false);
+    // Planner-shaped id, wrong role.
+    expect(may(
+      [tsk('x'), repairOf('x', 1, { role: 'INDEPENDENT_REVIEWER' })],
+      [dec('x', 'REPAIR'), dec('repair:x:1:task', 'ACCEPT')],
+    )).toBe(false);
+    // Planner-shaped id, non-derived task type.
+    expect(may(
+      [tsk('x'), repairOf('x', 1, { taskType: 'build' })],
+      [dec('x', 'REPAIR'), dec('repair:x:1:task', 'ACCEPT')],
+    )).toBe(false);
+    // Planner-shaped id under the WRONG parent.
+    expect(may(
+      [tsk('x'), tsk('y', { ordinal: 1 }), repairOf('x', 1, { parentTaskId: 'y' })],
+      [dec('x', 'REPAIR'), dec('y', 'ACCEPT'), dec('repair:x:1:task', 'ACCEPT')],
+    )).toBe(false);
+  });
+
   it('6. every currently effective scope must accept — one unrepaired REPAIR still blocks', () => {
-    const tasks = [tsk('x1'), tsk('x2', { ordinal: 1 }), repairOf('x1', 'x1-r1'), repairOf('x2', 'x2-r1')];
+    const tasks = [tsk('x1'), tsk('x2', { ordinal: 1 }), repairOf('x1'), repairOf('x2')];
     expect(may(tasks, [
-      dec('x1', 'REPAIR'), dec('x2', 'REPAIR'), dec('x1-r1', 'ACCEPT'),
+      dec('x1', 'REPAIR'), dec('x2', 'REPAIR'), dec('repair:x1:1:task', 'ACCEPT'),
     ])).toBe(false);
     expect(may(tasks, [
-      dec('x1', 'REPAIR'), dec('x2', 'REPAIR'), dec('x1-r1', 'ACCEPT'), dec('x2-r1', 'ACCEPT'),
+      dec('x1', 'REPAIR'), dec('x2', 'REPAIR'), dec('repair:x1:1:task', 'ACCEPT'), dec('repair:x2:1:task', 'ACCEPT'),
     ])).toBe(true);
   });
 
   it('7. HALT stays fail-closed: repair lineage never supersedes it', () => {
     // Even a successful, accepted repair child does not clear a HALT.
     expect(may(
-      [tsk('x'), repairOf('x', 'x-r1')],
-      [dec('x', 'HALT'), dec('x-r1', 'ACCEPT')],
+      [tsk('x'), repairOf('x')],
+      [dec('x', 'HALT'), dec('repair:x:1:task', 'ACCEPT')],
     )).toBe(false);
     // The one authorized path is the evaluator re-deciding the SAME task: a
     // later ACCEPT on that task is current; a later HALT is equally current.
@@ -125,9 +155,9 @@ describe('missionMayComplete reads effective verification state', () => {
   });
 
   it('9. duplicate or replayed decisions cannot change the effective answer', () => {
-    const tasks = [tsk('x'), repairOf('x', 'x-r1')];
-    const once = [dec('x', 'REPAIR'), dec('x-r1', 'ACCEPT')];
-    const replayed = [...once, dec('x', 'REPAIR'), dec('x-r1', 'ACCEPT'), dec('x-r1', 'ACCEPT')];
+    const tasks = [tsk('x'), repairOf('x')];
+    const once = [dec('x', 'REPAIR'), dec('repair:x:1:task', 'ACCEPT')];
+    const replayed = [...once, dec('x', 'REPAIR'), dec('repair:x:1:task', 'ACCEPT'), dec('repair:x:1:task', 'ACCEPT')];
     // A replayed REPAIR lands later in the log but is identical in verdict
     // and task, so the per-task current decision — and the lineage answer
     // that supersedes it — are unchanged.
@@ -138,6 +168,18 @@ describe('missionMayComplete reads effective verification state', () => {
       [tsk('x'), tsk('y', { ordinal: 1 })],
       [dec('x', 'REPAIR'), dec('y', 'ACCEPT'), dec('y', 'ACCEPT')],
     )).toBe(false);
+  });
+
+  it('a sub-agent spawn refuses the reserved repair:/review: namespaces before touching anything', async () => {
+    for (const taskType of ['repair:build', 'review:build']) {
+      const outcome = await spawnJuliusSubagent(
+        { taskType } as never,
+        // The refusal fires before any dependency is used; empty deps prove it.
+        {} as never,
+      );
+      expect(outcome.authorized).toBe(false);
+      if (!outcome.authorized) expect(outcome.reasonCode).toBe('SUBAGENT_TASK_TYPE_RESERVED');
+    }
   });
 
   it('still requires the outer conditions: VERIFYING, terminal tasks, at least one decision', () => {

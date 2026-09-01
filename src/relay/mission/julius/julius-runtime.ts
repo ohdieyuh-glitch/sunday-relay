@@ -168,13 +168,18 @@ export interface JuliusRecordedDecision extends JuliusVerificationDecision { rea
  *     log. Only a genuine re-verification of the same task appends a newer
  *     entry, so recency here is authority, not accident.
  *   - ACCEPT is effective acceptance.
- *   - REPAIR is superseded ONLY through its own repair lineage: a repair
- *     task is parent-linked to the task it repairs (`planJuliusRepair` sets
- *     `parentTaskId` and a `repair:`-prefixed type), so the REPAIR is
- *     effective-accepted exactly when some such child SUCCEEDED and is
- *     itself effectively accepted — recursively, so a repaired repair works
- *     and an abandoned one still blocks. An undecided repair child vouches
- *     for nothing, and an ACCEPT on any unrelated task supersedes nothing.
+ *   - REPAIR is superseded ONLY through its own repair lineage, and lineage
+ *     means the repair PLANNER'S full contract — not a naming convention. A
+ *     `repair:` type prefix alone is not proof: any producer of parent-linked
+ *     tasks (a sub-agent spawn, a future feature) could mint one, and an
+ *     ACCEPT on such an impostor must never launder a REPAIR. A child
+ *     supersedes only when it matches everything `planJuliusRepair` emits:
+ *     parent link to the governed task, taskType `repair:<parent's type>`,
+ *     taskId `repair:<parent's id>:<round>:task`, and the CODING_AGENT role —
+ *     and the child SUCCEEDED and is itself effectively accepted,
+ *     recursively, so a repaired repair works and an abandoned one still
+ *     blocks. An undecided repair child vouches for nothing, and an ACCEPT
+ *     on any unrelated task supersedes nothing.
  *   - HALT and every other action stay FAIL-CLOSED: no lineage supersedes
  *     them. (A later decision on the SAME task can — that is the evaluator
  *     re-verifying the same work, the one authorized reverification path.)
@@ -190,9 +195,20 @@ export function missionMayComplete(input: { state: JuliusMissionState; tasks: re
 
   const current = new Map<string, JuliusRecordedDecision>();
   for (const decision of input.decisions) current.set(decision.taskId, decision);
+  const byId = new Map(input.tasks.map(task => [task.taskId, task]));
+  const plannerRepairOf = (parent: JuliusTask, child: JuliusTask): boolean => {
+    if (child.parentTaskId !== parent.taskId || child.role !== 'CODING_AGENT') return false;
+    if (child.taskType !== `repair:${parent.taskType}`) return false;
+    const idPrefix = `repair:${parent.taskId}:`;
+    if (!child.taskId.startsWith(idPrefix) || !child.taskId.endsWith(':task')) return false;
+    const round = child.taskId.slice(idPrefix.length, -':task'.length);
+    return /^[1-9]\d*$/.test(round);
+  };
   const repairChildren = new Map<string, JuliusTask[]>();
   for (const task of input.tasks) {
-    if (task.parentTaskId === null || !task.taskType.startsWith('repair:')) continue;
+    if (task.parentTaskId === null) continue;
+    const parent = byId.get(task.parentTaskId);
+    if (parent === undefined || !plannerRepairOf(parent, task)) continue;
     const children = repairChildren.get(task.parentTaskId) ?? [];
     children.push(task);
     repairChildren.set(task.parentTaskId, children);
