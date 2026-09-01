@@ -18,6 +18,8 @@ const opaque=(value:string)=>createHash('sha256').update(value).digest('hex');
 export const outputBlocksFor=(outputBytes:number)=>Math.max(1,Math.floor(outputBytes/1024));
 /** The uid every untrusted invocation runs as; see scripts/julius-docker-executor.sh. */
 export const SANDBOX_UID=65532;
+/** What one tmpfs inode costs in host memory, near enough to bound an inode count against a byte ceiling. */
+export const MINIMUM_INODE_COST=1024;
 
 /**
  * The declared ceiling must be one the kernel will actually hold. A workspace whose backing filesystem is
@@ -25,11 +27,21 @@ export const SANDBOX_UID=65532;
  * the sandbox is refused rather than granted a limit that does not exist. Measured before this rule: a
  * 200,000-byte write into a declared 65,536-byte ceiling completed in full.
  */
-export async function assertEnforceableWorkspaceCeiling(workspace:string,workspaceBytes:number):Promise<void>{
-  const backing=await statfs(workspace).catch(()=>null);
+export interface WorkspaceBacking {readonly blocks:number;readonly bsize:number;readonly files:number;}
+export async function assertEnforceableWorkspaceCeiling(workspace:string,workspaceBytes:number,measure:(path:string)=>Promise<WorkspaceBacking>=statfs):Promise<void>{
+  const backing=await measure(workspace).catch(()=>null);
   if(!backing)throw new Error('sandbox_workspace_invalid');
   const total=Number(backing.blocks)*Number(backing.bsize);
-  if(!Number.isFinite(total)||total>workspaceBytes)throw new Error('sandbox_workspace_ceiling_unenforceable');
+  // A store reporting zero total blocks (several FUSE and 9p backends) bounds nothing. `0 > ceiling` is
+  // false, so accepting it would declare the ceiling enforced by a filesystem that enforces nothing.
+  if(!(total>0)||!Number.isFinite(total)||total>workspaceBytes)throw new Error('sandbox_workspace_ceiling_unenforceable');
+  /* Data blocks are not the only host resource a workspace spends. A memory-backed store derives its inode
+     count from host RAM rather than from its size, so an unbounded inode count pins hundreds of megabytes of
+     kernel memory that both `df` and `du` report as zero. Such a store reports its inode count, so where one
+     is reported it must be bounded by the same ceiling; a store reporting none keeps its inodes inside the
+     same bounded medium as its data, which the block ceiling already covers. */
+  const inodes=Number(backing.files);
+  if(inodes>0&&inodes*MINIMUM_INODE_COST>workspaceBytes)throw new Error('sandbox_workspace_inode_ceiling_unenforceable');
 }
 
 /**
@@ -39,8 +51,14 @@ export async function assertEnforceableWorkspaceCeiling(workspace:string,workspa
  * writable — that is the point of it — but its name cannot be moved out from under the mount.
  */
 export async function assertUnrenameableAncestry(workspace:string,root:string):Promise<void>{
-  const ceiling=resolve(root);
-  for(let directory=dirname(resolve(workspace));;directory=dirname(directory)){
+  // Resolved, because `workspace` arrives resolved: comparing it to a root's spelling makes a root reached
+  // through a symlink match nothing, and the walk then climbs past it to refuse on /tmp.
+  const ceiling=await realpath(resolve(root)).catch(()=>null);
+  if(!ceiling)throw new Error('sandbox_workspace_invalid');
+  const target=resolve(workspace);
+  // The root itself is a workspace, and it has no ancestry inside the root to check.
+  if(target===ceiling)return;
+  for(let directory=dirname(target);;directory=dirname(directory)){
     const entry=await stat(directory).catch(()=>null);
     if(!entry)throw new Error('sandbox_workspace_invalid');
     if((entry.mode&0o022)!==0||entry.uid===SANDBOX_UID)throw new Error('sandbox_workspace_parent_writable');
@@ -95,8 +113,11 @@ export class DockerJuliusSandboxAdapter implements SandboxExecutionPort {
   // Ancestry is walked to the FLEET root, not the tenant's: renaming the tenant directory itself would move
   // the whole path, so that directory's own writability has to be checked too.
   const governing=this.config.allowedWorkspaceRoot??input.permittedWorkspaceRoot;
-  if(record.policy.readWorkspace&&record.policy.mutateWorkspace){
-   await assertEnforceableWorkspaceCeiling(workspace,record.limits.workspaceBytes);
+  /* Two different questions. The ceiling is about writes, so it asks only of a workspace that can be
+     written. Ancestry is about which object gets mounted, which matters just as much for a read-only
+     mount — a swapped directory there is a cross-tenant READ — so it asks of every mounted workspace. */
+  if(record.policy.readWorkspace){
+   if(record.policy.mutateWorkspace)await assertEnforceableWorkspaceCeiling(workspace,record.limits.workspaceBytes);
    if(governing)await assertUnrenameableAncestry(workspace,governing);
   }
   const authorized=await stat(workspace).catch(()=>null);

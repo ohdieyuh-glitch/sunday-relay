@@ -7,6 +7,7 @@ import { JuliusToolPostgresRepository } from '../src/relay/persistence/julius-to
 import { RemoteExecutorControlPlane } from '../src/relay/workspace/julius-tools/remote-executor-control-plane';
 import type { ExecutorOperation } from '../src/relay/workspace/julius-tools/executor-operation-request';
 import { canonicalRequestDigest } from '../src/relay/workspace/julius-tools/execution-envelope';
+import {BETA_WORKSPACE_BYTES} from '../src/relay/workspace/julius-tools/workspace-provisioning';
 
 export const required=(name:string):string=>{const value=process.env[name];if(!value)throw new Error(`sibling_config_missing:${name}`);return value;};
 export const sha=(value:string)=>createHash('sha256').update(value).digest('hex');
@@ -17,7 +18,7 @@ export const TENANT=process.env.JULIUS_TENANT_ID??'tenant',PROJECT='project',RUN
 /** The evaluation suite gets its own run and task so completing the lifecycle task cannot strand it. */
 export const EVAL_RUN='run-evals',EVAL_TASK='task-evals',COMPLETION_RUN='run-completion',COMPLETION_TASK='task-completion';
 export interface SandboxLimits {readonly cpuCount:number;readonly memoryBytes:number;readonly pids:number;readonly openFiles:number;readonly workspaceBytes:number;readonly outputBytes:number;readonly wallClockMs:number;readonly concurrentProcesses:number;}
-export const LIMITS:SandboxLimits={cpuCount:1,memoryBytes:134_217_728,pids:32,openFiles:128,workspaceBytes:4_194_304,outputBytes:32_768,wallClockMs:15_000,concurrentProcesses:4};
+export const LIMITS:SandboxLimits={cpuCount:1,memoryBytes:134_217_728,pids:32,openFiles:128,workspaceBytes:BETA_WORKSPACE_BYTES,outputBytes:32_768,wallClockMs:15_000,concurrentProcesses:4};
 export const FULL_POLICY={readWorkspace:true,mutateWorkspace:true,executeProcess:true,network:'DENY' as const,allowedTools:['shell.bash']};
 export const endpoint=()=>new URL(process.env.JULIUS_EXECUTOR_ENDPOINT??'http://127.0.0.1:8787');
 export const scopedCredentials=(name='JULIUS_SCOPED_CREDENTIALS')=>new Map(Object.entries(JSON.parse(required(name)) as Record<string,string>)) as ReadonlyMap<ExecutorOperation,string>;

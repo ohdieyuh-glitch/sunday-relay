@@ -45,11 +45,14 @@ jobs:
           chmod 0700 /tmp/julius-executor /tmp/julius-executor/receipts /tmp/julius-executor/ledger
           chmod 0755 /tmp/julius-workspace /tmp/julius-workspace/tenant /tmp/julius-workspace/other-tenant
           for tenant in tenant other-tenant; do
-            sudo mount -t tmpfs -o size=4194304,mode=0777 tmpfs "/tmp/julius-workspace/$tenant/ws"
+            # nr_inodes matters as much as size: tmpfs takes its inode count from host RAM, so without it a
+            # 4 MiB workspace can still pin hundreds of MiB of kernel memory that df and du both report as zero.
+            sudo mount -t tmpfs -o size=4194304,nr_inodes=4096,mode=0777,nosuid,nodev tmpfs "/tmp/julius-workspace/$tenant/ws"
           done
           printf 'fixture\n' > /tmp/julius-workspace/tenant/ws/fixture.txt
           printf 'other tenant private\n' > /tmp/julius-workspace/other-tenant/ws/private.txt
           df -B1 --output=size,target /tmp/julius-workspace/tenant/ws /tmp/julius-workspace/other-tenant/ws
+          df -i --output=itotal,target /tmp/julius-workspace/tenant/ws /tmp/julius-workspace/other-tenant/ws
           openssl genpkey -algorithm ED25519 -out /tmp/julius-executor/private.pem
           openssl pkey -in /tmp/julius-executor/private.pem -pubout -out /tmp/julius-public.pem
           chmod 0600 /tmp/julius-executor/private.pem

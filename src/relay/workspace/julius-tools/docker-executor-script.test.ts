@@ -26,9 +26,9 @@ beforeAll(async () => {
   await chmod(join(shims, 'setpriv'), 0o755);
 });
 
-interface Run { code: number | null; receipts: string; workspace: string; }
-const invoke = async (command: string, options: { attestationRequired?: boolean; publishGate?: boolean; outputBlocks?: number; env?: Record<string, string> } = {}): Promise<Run> => {
-  const root = await mkdtemp(join(tmpdir(), 'julius-script-'));
+interface Run { code: number | null; stderr: string; receipts: string; workspace: string; }
+const invoke = async (command: string | null, options: { attestationRequired?: boolean; publishGate?: boolean | 'before-only'; outputBlocks?: number; env?: Record<string, string>; reuse?: Run } = {}): Promise<Run> => {
+  const root = options.reuse ? dirname(dirname(options.reuse.receipts)) : await mkdtemp(join(tmpdir(), 'julius-script-'));
   const receipts = join(root, 'receipts'), workspace = join(root, 'workspace');
   await mkdir(receipts, { recursive: true }); await mkdir(workspace, { recursive: true });
   const digest = sha('x');
@@ -54,7 +54,8 @@ const invoke = async (command: string, options: { attestationRequired?: boolean;
   await mkdir(join(receipts, 'token'), { recursive: true });
   if (options.publishGate) {
     // The control plane publishes the gate as soon as the BEFORE receipt is durable.
-    void (async () => { for (const phase of ['before', 'after'] as const) {
+    const phases = options.publishGate === 'before-only' ? (['before'] as const) : (['before', 'after'] as const);
+    void (async () => { for (const phase of phases) {
       for (let attempt = 0; attempt < 400; attempt++) {
         if (await readFile(join(receipts, 'token', `${phase}.receipt`), 'utf8').then(() => true, () => false)) {
           await writeFile(join(receipts, 'token', `${phase}.attestation`), '{"attestation":{}}'); break;
@@ -64,8 +65,10 @@ const invoke = async (command: string, options: { attestationRequired?: boolean;
     } })();
   }
   // Production runs the command with --workdir /workspace; the harness reproduces that.
-  const result = await run('bash', [script, command], { env, cwd: workspace, timeout: 30_000 }).then(() => ({ code: 0 }), (error: { code?: number }) => ({ code: error.code ?? null }));
-  return { code: result.code, receipts: join(receipts, 'token'), workspace };
+  // `null` passes NO command argument, which is what the missing-command guard is about.
+  const result = await run('bash', command === null ? [script] : [script, command], { env, cwd: workspace, timeout: 30_000 })
+    .then(({ stderr }) => ({ code: 0, stderr }), (error: { code?: number; stderr?: string }) => ({ code: error.code ?? null, stderr: error.stderr ?? '' }));
+  return { code: result.code, stderr: result.stderr, receipts: join(receipts, 'token'), workspace };
 };
 const field = async (path: string, key: string) => (await readFile(path, 'utf8')).split('\n').find(line => line.startsWith(`${key}=`))?.slice(key.length + 1);
 
@@ -96,6 +99,15 @@ describe('the in-sandbox executor script', () => {
     expect(await readFile(join(result.workspace, 'ran.txt'), 'utf8')).toBe('ran');
   }, 40_000);
 
+  it('refuses to report a terminal outcome the control plane has not signed', async () => {
+    /* The AFTER gate is the other half of the attestation contract: a command that ran is not a terminal
+       answer until the signed AFTER fact is durable. Only the BEFORE gate is published here. */
+    const result = await invoke('printf ran > ran.txt', { attestationRequired: true, publishGate: 'before-only' });
+    expect(result.code).toBe(125);
+    // The command did run — this is about refusing to declare the outcome, not about refusing to start.
+    expect(await readFile(join(result.workspace, 'ran.txt'), 'utf8')).toBe('ran');
+  }, 60_000);
+
   it('propagates a failing exit code and records it as a failed terminal state', async () => {
     const result = await invoke('exit 42');
     expect(result.code).toBe(42);
@@ -106,20 +118,24 @@ describe('the in-sandbox executor script', () => {
   it('bounds output at the block ceiling it was given', async () => {
     const result = await invoke('head -c 200000 /dev/zero | tr "\\0" "x"', { outputBlocks: 8 });
     const stdout = await readFile(join(result.receipts, 'stdout'));
-    // bash counts ulimit -f in 1024-byte blocks; the adapter derives the block count on that basis.
+    /* Two-sided, and that is the whole point. `<= 8*1024` alone is satisfied by a 512-byte block unit too,
+       which is exactly the defect that survived seven rounds: the flood eval read 65,674 bytes against a
+       declared 32,768 and the one-sided bound called it truncation working. 8 blocks must mean 8 KiB. */
     expect(stdout.byteLength).toBeLessThanOrEqual(8 * 1024);
+    expect(stdout.byteLength).toBeGreaterThan(4 * 1024);
     expect(await field(join(result.receipts, 'after.receipt'), 'outputBytes')).toBe(String(stdout.byteLength + (await readFile(join(result.receipts, 'stderr'))).byteLength));
   }, 40_000);
 
   it('refuses to seal over a receipt that already exists', async () => {
     const first = await invoke('printf one');
-    await writeFile(join(first.receipts, 'stdout.tmp'), 'second run');
-    // durable_move must not clobber a sealed name; ln refuses and the caller sees the refusal.
-    const source = join(first.receipts, 'stdout.tmp');
-    const clobbered = await run('bash', ['-c', `ln -- ${JSON.stringify(source)} ${JSON.stringify(join(first.receipts, 'stdout'))}`]).then(() => 'clobbered', () => 'refused');
-    expect(clobbered).toBe('refused');
     expect(await readFile(join(first.receipts, 'stdout'), 'utf8')).toBe('one');
-  }, 40_000);
+    /* Re-entered against the SAME receipt directory. The script itself must refuse, at exit 125, before the
+       command runs — asserting that coreutils' own `ln` refuses would pass with durable_move rewritten to
+       clobber, which is a property of coreutils and not of this program. */
+    const second = await invoke('printf two', { reuse: first });
+    expect(second.code).toBe(125);
+    expect(await readFile(join(first.receipts, 'stdout'), 'utf8')).toBe('one');
+  }, 60_000);
 
   /* The reap itself needs the real uid separation (`pkill -u 65532`), which a shim cannot provide and which
      the real-infrastructure evals already prove — timeout-kills-the-process-tree and
@@ -139,22 +155,39 @@ describe('the in-sandbox executor script', () => {
 
   it('fails closed when a required environment fact is missing', async () => {
     const result = await invoke('printf hello', { env: { JULIUS_MANIFEST_DIGEST: '' } });
-    expect(result.code).not.toBe(0);
+    // Named, not merely non-zero: `not.toBe(0)` is satisfied by any breakage at all, including one that has
+    // nothing to do with the missing fact, and would still pass with the guard deleted.
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain('JULIUS_MANIFEST_DIGEST');
+    expect(await readFile(join(result.receipts, 'before.receipt'), 'utf8').then(() => 'sealed', () => 'not sealed')).toBe('not sealed');
   }, 40_000);
 
   it('refuses to run with no command at all', async () => {
-    const root = await mkdtemp(join(tmpdir(), 'julius-script-'));
-    const script = join(root, 'executor.sh');
-    await writeFile(script, await readFile(SCRIPT, 'utf8')); await chmod(script, 0o755);
-    const code = await run('bash', [script], { env: { PATH: process.env.PATH ?? '' } }).then(() => 0, (error: { code?: number }) => error.code ?? null);
-    expect(code).not.toBe(0);
+    /* Run with a COMPLETE environment and no command argument. Previously this ran with no environment
+       either, so it died on the first missing fact and proved nothing about the missing command — it would
+       have passed with the command guard removed entirely. */
+    const result = await invoke(null);
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain('missing command');
   }, 40_000);
 
-  it('attests the changed-path list as unavailable when the tool that produces it cannot run', async () => {
-    // No git on PATH: the list is empty, and an empty list must not be attested as "nothing changed".
-    const result = await invoke('printf hello', { env: { PATH: `${shims}:/usr/bin:/bin` , GIT_MISSING: '1' } });
-    const available = await field(join(result.receipts, 'after.receipt'), 'changedPathsAvailable');
-    expect(available === '0' || available === '1').toBe(true);
-    if (available === '1') expect((await readFile(join(result.receipts, 'changed-paths'))).byteLength).toBeLessThan(65_536);
+  it('attests a complete changed-path list as available and a truncated one as not', async () => {
+    // A real repository with a handful of changes: the list is complete, so it is available.
+    const small = await invoke('git init -q . && git -c user.email=a@b -c user.name=a commit -q --allow-empty -m x && printf x > a.txt && printf y > b.txt');
+    expect(await field(join(small.receipts, 'after.receipt'), 'changedPathsAvailable')).toBe('1');
+    /* And one the script itself truncates. `head -n 100` closes the pipe, which destroys git's exit status,
+       so an incomplete list can never be distinguished from a complete one and must report unavailable. */
+    const large = await invoke('git init -q . && git -c user.email=a@b -c user.name=a commit -q --allow-empty -m x && for i in $(seq 1 300); do printf x > "f-$i.txt"; done');
+    expect(await field(join(large.receipts, 'after.receipt'), 'changedPathsAvailable')).toBe('0');
+  }, 60_000);
+
+  it('attests a post-state digest that differs when the command changed the tree', async () => {
+    /* Nothing downstream can catch a post-state digest copied from the pre-state one: consume() re-derives
+       the result digest from the same value, so afterStateDigest is verified by nothing but this. */
+    const result = await invoke('printf mutation > changed.txt');
+    const before = await field(join(result.receipts, 'before.receipt'), 'preTreeDigest');
+    const after = await field(join(result.receipts, 'after.receipt'), 'postTreeDigest');
+    expect(before).toMatch(/^[a-f0-9]{64}$/);
+    expect(after).not.toBe(before);
   }, 40_000);
 });

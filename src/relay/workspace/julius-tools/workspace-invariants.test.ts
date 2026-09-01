@@ -22,6 +22,30 @@ describe('workspace storage ceiling',()=>{
     await expect(assertEnforceableWorkspaceCeiling(root,Number.MAX_SAFE_INTEGER)).resolves.toBeUndefined();
   });
 
+  /* A memory-backed store takes its inode count from host RAM, not from its size: measured elsewhere, 300,000
+     directories on a 4 MiB tmpfs pinned 283 MiB of kernel memory while df and du both reported zero. The
+     shape is injected because no filesystem on an unprivileged host has it, and a test that can only skip
+     is not a test. */
+  const backing=(blocks:number,files:number)=>async()=>({blocks,bsize:1,files});
+  it('refuses a store whose inode count is not bounded by the same ceiling',async()=>{
+    // Block total well inside the ceiling, inode count far outside it: only the inode branch can decide.
+    await expect(assertEnforceableWorkspaceCeiling('/any',4_194_304,backing(4_194_304,351_726)))
+      .rejects.toThrow('sandbox_workspace_inode_ceiling_unenforceable');
+  });
+
+  it('accepts a store whose inodes are bounded alongside its bytes',async()=>{
+    await expect(assertEnforceableWorkspaceCeiling('/any',4_194_304,backing(4_194_304,4_096))).resolves.toBeUndefined();
+  });
+
+  it('refuses a store that reports no size at all, rather than reading zero as within the ceiling',async()=>{
+    await expect(assertEnforceableWorkspaceCeiling('/any',65_536,backing(0,0))).rejects.toThrow('sandbox_workspace_ceiling_unenforceable');
+  });
+
+  it('leaves a store that reports no inode count to its block ceiling alone',async()=>{
+    // Many disk filesystems report files=0; their inodes live in the same bounded medium as their data.
+    await expect(assertEnforceableWorkspaceCeiling('/any',4_194_304,backing(4_194_304,0))).resolves.toBeUndefined();
+  });
+
   it('refuses a workspace that does not exist',async()=>{
     await expect(assertEnforceableWorkspaceCeiling(join(tmpdir(),'julius-absent-workspace'),1)).rejects.toThrow('sandbox_workspace_invalid');
   });

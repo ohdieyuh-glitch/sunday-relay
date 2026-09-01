@@ -15,3 +15,7 @@ coverage
 
 # card-seam browser harness live-mode bundle
 dist-live/
+
+# Byproducts of running the in-sandbox executor script outside a container
+late.txt
+ran.txt

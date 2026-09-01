@@ -22,7 +22,7 @@ const C='executor_operation_invalid';
  * stdout and stderr separately, and each stream crosses the wire twice: once inside the result, where a
  * control byte costs six characters of JSON escaping, and once as the base64 terminal payload it is verified
  * against, which costs 4/3. The margin absorbs what that formula leaves out — the changed-path payload, the
- * two receipt bodies, the attestations, and `ulimit -f`'s rounding down to whole 1024-byte blocks. Measured
+ * two receipt bodies, the attestations, and the one-block floor `ulimit -f` is given below a kilobyte. Measured
  * worst case with the current constants is about 3.7 MB against 4 MB. A ceiling merely claimed to be safe is how a
  * completed, signed execution became unreportable, so this one is computed and the margin is load-bearing.
  */

@@ -4,13 +4,13 @@
  * Docker authority, and real containers. Nothing is asserted from configuration.
  * Each case reports PASS, FAIL or BLOCKED, and BLOCKED always carries the reason it is blocked.
  */
-import { lstat, readFile, rm, stat, symlink } from 'node:fs/promises';
+import { lstat, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { verifyExecutorAttestation, type SignedExecutorAttestation } from '../src/relay/workspace/julius-tools/executor-attestation';
 import { RemoteExecutorControlPlane } from '../src/relay/workspace/julius-tools/remote-executor-control-plane';
 import { EVAL_RUN, EVAL_TASK, FULL_POLICY, divergentEnvelope, LEASE, LIMITS, PROJECT, TENANT, endpoint, envelopeFor, openJuliusClient, required, scopedCredentials, seedBase, seedInvocation, sha, type SandboxLimits } from './julius-sibling-support';
 
-type Verdict='PASS'|'FAIL'|'BLOCKED';
+type Verdict='PASS'|'FAIL'|'BLOCKED'|'COVERED_ELSEWHERE';
 class Blocked extends Error {}
 const results:{id:string;verdict:Verdict;detail:string}[]=[];
 async function evaluate(id:string,run:()=>Promise<string>):Promise<void>{
@@ -136,19 +136,30 @@ async function main():Promise<void>{
       'repeated=0; for i in $(seq 1 40); do head -c 262144 /dev/zero >> repeated.bin 2>/dev/null || break; repeated=$i; done',
       'truncate -s 64000000 sparse.bin 2>/dev/null; sparse_apparent=$(wc -c < sparse.bin 2>/dev/null || printf 0)',
       'for i in 1 2 3 4; do (head -c 4000000 /dev/zero > "concurrent-$i.bin" 2>/dev/null) & done; wait',
-      'ln -s /etc link-out 2>/dev/null; linked=$(head -c 1000 /dev/zero > link-out/escape.bin 2>&1; echo $?)',
-      'printf "single_exit=%s repeated_rounds=%s sparse_apparent=%s link_exit=%s\\n" "$single" "$repeated" "$sparse_apparent" "$linked"',
-      'printf "used_kb=%s avail_kb=%s\\n" "$(du -sk . | cut -f1)" "$(df -k . | awk \'NR==2{print $4}\')"',
+      'ln -s /tmp link-out 2>/dev/null; linked=$(head -c 1000 /dev/zero > link-out/escape.bin 2>&1; echo $?)',
+      'inodes=0; for i in $(seq 1 20000); do mkdir "d-$i" 2>/dev/null || break; inodes=$i; done',
+      'printf "single_exit=%s repeated_rounds=%s sparse_apparent=%s link_exit=%s inodes=%s\\n" "$single" "$repeated" "$sparse_apparent" "$linked" "$inodes"',
+      // df, not du: a deleted-but-open file is charged to the filesystem while du reports nothing.
+      'printf "used_kb=%s\\n" "$(df -k . | awk \'NR==2{print $3}\')"',
+      // The workspace is shared with every other case, and a full one makes a proof that asserts a file is
+      // ABSENT pass for the wrong reason. Everything this case created is removed before it reports.
+      'rm -rf single.bin repeated.bin sparse.bin concurrent-*.bin link-out d-* 2>/dev/null',
+      'printf "recovered_kb=%s\\n" "$(df -k . | awk \'NR==2{print $4}\')"',
     ].join('; ');
     const seed=await start('quota',probe,FULL_POLICY,LIMITS,20_000);
     const result=await client.executeTool(seed.execution);
     const used=Number(/used_kb=(\d+)/.exec(result.stdout)?.[1]);
+    const recovered=Number(/recovered_kb=(\d+)/.exec(result.stdout)?.[1]);
+    const inodes=Number(/inodes=(\d+)/.exec(result.stdout)?.[1]);
     const ceilingKb=Math.ceil(LIMITS.workspaceBytes/1024);
-    if(!Number.isFinite(used))throw new Error(`no usage observed in ${JSON.stringify(result.stdout).slice(0,240)}`);
-    // Everything above tried to write far more than the ceiling, by five different routes at once.
+    if(!Number.isFinite(used)||!Number.isFinite(recovered))throw new Error(`no usage observed in ${JSON.stringify(result.stdout).slice(0,240)}`);
+    // Everything above tried to exceed the ceiling by six routes at once.
     if(used>ceilingKb)throw new Error(`the workspace holds ${used} KiB against a ${ceilingKb} KiB ceiling: ${result.stdout.replace(/\s+/g,' ').slice(0,200)}`);
-    if(/link_exit=0/.test(result.stdout))throw new Error('a symlink out of the workspace accepted a write');
-    return `${ceilingKb} KiB ceiling held at ${used} KiB against a single 8 MB write, 40 appends, a 64 MB sparse file, four concurrent writers and a symlink escape`;
+    if(Number.isFinite(inodes)&&inodes>=20000)throw new Error(`${inodes} directories were created against a bounded inode count`);
+    /* This case shares its workspace with every other one, and a full workspace makes any later proof that
+       asserts a file is ABSENT pass for the wrong reason. It must hand the space back. */
+    if(!(recovered>ceilingKb/2))throw new Error(`the workspace was left ${recovered} KiB free of ${ceilingKb} KiB, which would void the proofs that follow it`);
+    return `${ceilingKb} KiB ceiling held at ${used} KiB against an 8 MB write, 40 appends, a 64 MB sparse file, four concurrent writers, ${inodes} inode allocations and a symlink escape; ${recovered} KiB handed back`;
   });
   await evaluate('workspace-ceiling-is-refused-when-it-cannot-be-enforced',async()=>{
     // Declaring a ceiling smaller than the store that backs it is a claim nothing can hold, so it is refused
@@ -166,6 +177,11 @@ async function main():Promise<void>{
     let outcome='resolved';
     try{const result=await client.executeTool(seed.execution);outcome=result.status;}catch(error){outcome=error instanceof Error?error.message:String(error);}
     await new Promise(resolve=>setTimeout(resolve,14_000));
+    /* This proof reads a file's ABSENCE as evidence, so it is only evidence while the workspace can still
+       create one. A full workspace would make it pass for the wrong reason. */
+    const writable=await writeFile(`${workspace}/late-effect.log.probe`,'x').then(()=>true,()=>false);
+    await rm(`${workspace}/late-effect.log.probe`,{force:true});
+    if(!writable)throw new Error('the workspace could not accept a file, so an absent effect proves nothing');
     const survived=await readFile(`${workspace}/late-effect.log`,'utf8').then(()=>true,()=>false);
     if(survived)throw new Error('a daemonised descendant outlived the timeout');
     return `timeout outcome ${outcome}; no descendant survived`;
@@ -177,6 +193,11 @@ async function main():Promise<void>{
     const cancelled=await client.cancelExecution({sandboxId:seed.identity.sandboxId,invocationId:seed.invocationId,expectedLeaseGeneration:LEASE});
     const outcome=await running;
     await new Promise(resolve=>setTimeout(resolve,4_000));
+    /* This proof reads a file's ABSENCE as evidence, so it is only evidence while the workspace can still
+       create one. A full workspace would make it pass for the wrong reason. */
+    const writable=await writeFile(`${workspace}/cancel-effect.log.probe`,'x').then(()=>true,()=>false);
+    await rm(`${workspace}/cancel-effect.log.probe`,{force:true});
+    if(!writable)throw new Error('the workspace could not accept a file, so an absent effect proves nothing');
     const survived=await readFile(`${workspace}/cancel-effect.log`,'utf8').then(()=>true,()=>false);
     if(survived)throw new Error('a daemonised descendant outlived cancellation');
     return `cancel=${cancelled}; execution answered ${outcome}; no descendant survived`;
@@ -305,14 +326,25 @@ async function main():Promise<void>{
       if(answer.status!==413)throw new Error(`${answer.status} ${answer.error}`);return `${answer.status} ${answer.error}`;}
     catch(error){const message=error instanceof Error?error.message:String(error);if(/^\d{3} /.test(message))throw error;return `transport refused the oversized body: ${message}`;}
   });
-  results.push({id:'bounded-subagent-fan-out',verdict:'BLOCKED',detail:'the subagent bound is a Julius kernel property with no executor surface; it is covered by the offline suite (julius-subagent-runtime.test.ts) and is not exercised by this sibling harness'});
-  results.push({id:'crash-after-effect-and-before-only-unknown',verdict:'BLOCKED',detail:'exercised by the interrupted and replay phases of julius-sibling-e2e, not by this suite'});
+  /* `bounded-subagent-fan-out` is NOT listed here. It is a Julius kernel property with no executor
+     surface — the executor never sees a sub-agent — and it belongs to the kernel suite that owns it:
+     src/relay/mission/julius/julius-subagent-runtime.test.ts proves the depth cap against a real store,
+     the total cap across multiple parents, and the per-parent active cap. Carrying it in this matrix as
+     permanently BLOCKED stated a gap that does not exist. */
+
+  /* Proven, but by a sibling of this suite rather than inside it: an execution interrupted after its
+     effect must answer STARTED_UNKNOWN_OUTCOME and must never be replayed blind. Each phase below is a
+     separate process, so the boundary between them is a genuine Julius restart, which is the whole
+     property — it cannot be observed from within one process, and this suite is one process. */
+  results.push({id:'crash-after-effect-and-before-only-unknown',verdict:'COVERED_ELSEWHERE',detail:'julius-sibling-e2e phases interrupt-start -> interrupt-verify -> replay (.github/workflows/julius-real-infra.yml), each a separate process so the phase boundary is a real restart'});
 
   await pool.end();
   const width=Math.max(...results.map(entry=>entry.id.length));
-  for(const entry of results)process.stdout.write(`${entry.verdict.padEnd(7)} ${entry.id.padEnd(width)}  ${entry.detail}\n`);
-  const failed=results.filter(entry=>entry.verdict==='FAIL');
-  process.stdout.write(`\nEVALS pass=${results.filter(entry=>entry.verdict==='PASS').length} fail=${failed.length} blocked=${results.filter(entry=>entry.verdict==='BLOCKED').length}\n`);
+  for(const entry of results)process.stdout.write(`${entry.verdict.padEnd(17)} ${entry.id.padEnd(width)}  ${entry.detail}\n`);
+  const failed=results.filter(entry=>entry.verdict==='FAIL'),count=(verdict:Verdict)=>results.filter(entry=>entry.verdict===verdict).length;
+  // COVERED_ELSEWHERE is counted apart from BLOCKED: it names the run that proves the case, where BLOCKED
+  // names a case nothing proves. Collapsing them would hide a real gap behind a discharged one.
+  process.stdout.write(`\nEVALS pass=${count('PASS')} fail=${failed.length} blocked=${count('BLOCKED')} covered_elsewhere=${count('COVERED_ELSEWHERE')}\n`);
   if(failed.length)throw new Error(`provider_independent_evals_failed:${failed.map(entry=>entry.id).join(',')}`);
   process.stdout.write('PROVIDER_INDEPENDENT_EVALS_GREEN\n');
 }

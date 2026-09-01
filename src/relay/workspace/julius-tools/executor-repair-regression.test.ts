@@ -208,7 +208,9 @@ describe('the adapter gate that actually produces the mount',()=>{
     await symlink(join(root,'elsewhere'),join(fleet,'escape'));
     const adapter=new DockerJuliusSandboxAdapter({image:`sha256:${'a'.repeat(64)}`,enabled:true,unsafeDevelopmentMode:true,allowedWorkspaceRoot:fleet,dockerBinary:join(root,'no-such-docker')});
     const identity={sandboxId:'sandbox',invocationId:'inv',tenantId:'tenant',projectId:'project',runId:'run',taskId:'task',leaseGeneration:1,policyRevision:'policy',createdAt:new Date().toISOString(),expiresAt:new Date(Date.now()+600_000).toISOString()};
-    const limits={cpuCount:1,memoryBytes:134_217_728,pids:32,openFiles:128,workspaceBytes:1_048_576,outputBytes:32_768,wallClockMs:10_000,concurrentProcesses:4};
+    /* workspaceBytes is declared larger than any store this test runs on, so the storage ceiling is satisfied
+       and what these cases actually exercise — containment and ancestry — is what decides the outcome. */
+    const limits={cpuCount:1,memoryBytes:134_217_728,pids:32,openFiles:128,workspaceBytes:Number.MAX_SAFE_INTEGER,outputBytes:32_768,wallClockMs:10_000,concurrentProcesses:4};
     const policy={readWorkspace:true,mutateWorkspace:true,executeProcess:true,network:'DENY' as const,allowedTools:['shell.bash']};
     await adapter.createSandbox({identity,limits,policy});
     const prepare=(sourceRef:string,permittedWorkspaceRoot?:string)=>adapter.prepareWorkspace({sandboxId:'sandbox',sourceRef,expectedLeaseGeneration:1,permittedWorkspaceRoot}).then(()=>'accepted',(error:Error)=>error.message);
@@ -219,7 +221,11 @@ describe('the adapter gate that actually produces the mount',()=>{
     expect(await prepare(join(fleet,'a,b'))).toBe('sandbox_workspace_invalid');
     // A path inside the root must get PAST the gate and fail on something else, or a gate that refuses
     // everything would satisfy the refusals above and this test would prove nothing.
-    expect(await prepare(join(fleet,'work'))).not.toBe('sandbox_workspace_invalid');
+    /* Named, not negated: `not.toBe(...)` is satisfied by any other refusal, including ones this case has
+       nothing to do with, which is how the storage ceiling silently emptied it. Reaching the (absent)
+       docker binary is what proves the path got past every gate. */
+    const reachedTheRuntime=/^spawn .*no-such-docker/;
+    expect(await prepare(join(fleet,'work'))).toMatch(reachedTheRuntime);
 
     /* The caller-scoped root is what the Critical repair added, and it must NARROW the fleet root: a sibling
        tenant sits inside the fleet and must still be refused. Testing only the fleet path leaves the whole
@@ -228,7 +234,7 @@ describe('the adapter gate that actually produces the mount',()=>{
     const tenantA=join(fleet,'tenant-a');
     expect(await prepare(join(fleet,'tenant-b'),tenantA)).toBe('sandbox_workspace_invalid');
     expect(await prepare(join(fleet,'work'),tenantA)).toBe('sandbox_workspace_invalid');
-    expect(await prepare(join(tenantA,'work'),tenantA)).not.toBe('sandbox_workspace_invalid');
+    expect(await prepare(join(tenantA,'work'),tenantA)).toMatch(reachedTheRuntime);
     /* An empty root is "supplied" and falsy at once; it must not be the cheapest way past both checks. The
        path must sit INSIDE the fleet root, or the fleet check refuses it anyway and the assertion proves
        nothing about the empty root — which is how the previous version of this case passed while blind. */
@@ -238,7 +244,7 @@ describe('the adapter gate that actually produces the mount',()=>{
     expect(await prepare(join(root,'elsewhere','deep'),join(root,'elsewhere'))).toBe('sandbox_workspace_invalid');
     // A root spelled through a symlink must still work, or ordinary deployments lose prepare entirely.
     await symlink(fleet,join(root,'fleet-link'));
-    expect(await prepare(join(root,'fleet-link','tenant-a','work'),join(root,'fleet-link','tenant-a'))).not.toBe('sandbox_workspace_invalid');
+    expect(await prepare(join(root,'fleet-link','tenant-a','work'),join(root,'fleet-link','tenant-a'))).toMatch(reachedTheRuntime);
   },20_000);
 
   /* Two independent reviewers measured this one line: removing it let a relink between the tenant-root and
