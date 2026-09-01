@@ -547,19 +547,35 @@ describe('a resumed process cannot produce a vacuous review or a planless build'
 });
 
 describe('the durable completion rule after a repair', () => {
-  it('a repaired and re-approved run parks in VERIFYING with the cause named, never a silent stall', async () => {
-    // plan review approved; build review blocking; repair runs; re-review approved.
+  it('a repaired and re-approved run reaches COMPLETED, with the REPAIR still in durable history', async () => {
+    // Review finding F2 closed at its root by the effective-verification
+    // semantics on main: plan review approved; build review blocking; Julius
+    // plans and routes the repair; the coder repairs; the re-review approves;
+    // and the run now COMPLETES through the same composition that previously
+    // parked in VERIFYING forever.
     const { memory, fakes, outcome } = await driveLiveMission(['approved', 'changes_required', 'approved']);
-    // The repair genuinely ran and its re-review approved…
+
+    // The repair round genuinely ran through Julius: a second coder dispatch,
+    // a planner-shaped repair task, and a re-review.
     expect(fakes.log.order.filter((step) => step === 'coder').length).toBeGreaterThan(1);
     const tasks = await memory.tasksForRun('run-live', 'prj-live');
-    expect(tasks.filter((task) => task.taskType.startsWith('repair:')).every((task) => task.state === 'SUCCEEDED')).toBe(true);
-    // …and the core completion rule still refuses COMPLETED, because the
-    // durable decision history contains the REPAIR decision. The driver must
-    // say so rather than reporting an unexplained stall. (Review finding F2.)
-    expect(outcome.state).toBe('VERIFYING');
-    expect(outcome.stalled).toBe(true);
-    expect(outcome.haltCause ?? '').toContain('REPAIR');
+    const repairs = tasks.filter((task) => task.taskType.startsWith('repair:'));
+    expect(repairs.length).toBeGreaterThan(0);
+    expect(repairs.every((task) => task.state === 'SUCCEEDED')).toBe(true);
+
+    // Completion came from Julius core semantics — no entrypoint override,
+    // no direct run-state write: the driver only ticked the loop, and the
+    // loop's own advance emitted the completion event.
+    expect(outcome.state).toBe('COMPLETED');
+    expect(outcome.stalled).toBe(false);
+    expect(outcome.haltCause).toBeNull();
+    expect(memory.events().some((event) => event.type === 'run.completed')).toBe(true);
+
+    // History is audit material: the admitting REPAIR decision remains
+    // durable next to the ACCEPTs that superseded it through its lineage.
+    const decisions = await memory.decisionsForRun('run-live', 'prj-live');
+    expect(decisions.some((decision) => decision.action === 'REPAIR' && decision.taskId === 'build-1')).toBe(true);
+    expect(decisions.some((decision) => decision.action === 'ACCEPT')).toBe(true);
   });
 });
 

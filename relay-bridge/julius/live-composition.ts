@@ -350,12 +350,13 @@ export interface DriveOutcome {
   readonly ticks: number;
   readonly stalled: boolean;
   /**
-   * Why a non-terminal run stopped moving, when that is knowable. The core
-   * completion rule requires EVERY durable verification decision to be
-   * ACCEPT, so a run whose history contains a REPAIR or HALT decision parks
-   * in VERIFYING even after a successful repair and an approving re-review —
-   * "stalled" alone would misreport that as a mystery. (Independent review
-   * finding F2; the completion-rule question itself belongs to Julius core.)
+   * Why a non-terminal run stopped moving, when that is knowable. Under the
+   * effective-verification semantics a successfully repaired and re-accepted
+   * REPAIR no longer blocks completion, so a run parked in VERIFYING with
+   * every task terminal means some task's CURRENT decision is still not
+   * effectively accepted — a HALT, or a REPAIR whose repair lineage never
+   * reached an accepting re-verification. Naming those decisions beats
+   * reporting an unexplained stall.
    */
   readonly haltCause: string | null;
 }
@@ -379,7 +380,7 @@ export async function driveJuliusRunToTerminal(input: {
     const decisions = await input.store.decisionsForRun(input.runId, input.projectId);
     const nonAccept = decisions.filter((decision) => decision.action !== 'ACCEPT');
     return nonAccept.length === 0 ? null
-      : `the completion rule requires every durable verification decision to be ACCEPT, and this run's history holds: ${nonAccept.map((decision) => `${decision.action}(${decision.reasonCode})`).join(', ')}`;
+      : `completion requires every task's current verification decision to be effectively accepted, and this run's durable history holds unresolved: ${nonAccept.map((decision) => `${decision.action}(${decision.reasonCode})`).join(', ')}`;
   };
   let lastState = 'UNKNOWN';
   for (let tick = 1; tick <= maxTicks; tick += 1) {

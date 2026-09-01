@@ -192,15 +192,20 @@ the trivially-fixable items were repaired in one bounded iteration:
   refuses without the plan — a resumed run fails visibly instead of
   completing falsely. The durable artifact store remains the real fix and is
   open debt.
-- **F2 (High, core-rooted — recorded, reported honestly, not fixed here):**
-  the completion rule requires EVERY durable verification decision to be
-  ACCEPT, so any repair round leaves a REPAIR decision that parks the run in
-  VERIFYING even after a successful repair and an approving re-review —
-  proven by probe. The driver now names that cause instead of reporting an
-  unexplained stall, and a test pins the semantics. Whether completion should
-  consider only each task's latest decision is a Julius-core product decision
-  and must be settled before repair rounds are relied on as recovery in a
-  paid mission.
+- **F2 (High, core-rooted — RESOLVED at the root by PR #210 on main,
+  2026-09-01):** the completion rule required EVERY durable verification
+  decision to be ACCEPT, so any repair round parked the run in VERIFYING even
+  after a successful repair and an approving re-review — proven by probe.
+  Main now reads per-task CURRENT effective verification state with
+  planner-contract repair-lineage supersession (history immutable, HALT
+  fail-closed). After rebasing this branch onto that main, the composition's
+  own drive test proves the closure end-to-end: architect → coder → blocking
+  review → Julius-planned repair → accepting re-review → **COMPLETED**, with
+  the admitting REPAIR still in durable history and completion emitted by the
+  run loop's own advance (`julius-live-composition.test.ts`, "a repaired and
+  re-approved run reaches COMPLETED"). The driver's `haltCause` reporting
+  remains for the cases that still honestly park: a HALT, or a repair lineage
+  that never reached acceptance.
 - **F3 (Medium, fixed):** `repair:plan` is no longer registered on the coding
   agent — a routed `repair:plan` inherited the plan task's ARTIFACT evidence
   requirement the coder cannot produce, making it a paid dispatch guaranteed
