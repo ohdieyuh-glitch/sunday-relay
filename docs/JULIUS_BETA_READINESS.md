@@ -112,3 +112,132 @@ The independent re-review still controls the security verdict. In particular, a 
 The fresh single-worker repository run completed 463 passing files, one environment-gated skipped file, 8,740 passing tests, five todo, and one unrelated five-second timeout in `src/relay/persistence/persistence.test.ts`. The timed-out file immediately passed alone (22/22), classifying the full-run failure as resource contention rather than an executor regression. Typecheck, application/Relay/bridge builds, strict surface parity, repository boundary, parity gate, and diff check passed.
 
 A genuinely separate re-review closed the background-descendant High after the real delayed-daemon proof. Its final scoped verdict is **Critical 0 / High 1**. The remaining High is independent receipt authenticity against a malicious orchestrator that itself owns the Docker API and host receipt directory. No file-permission or local signing change can establish that trust separation while Julius retains direct Docker authority. Production hostile-orchestrator clearance requires a separate executor/control-plane service with an executor-only signing/attestation key or append-only receipt credential, and Julius settlement must verify that attestation. The direct Docker adapter is therefore limited to deployments that explicitly trust the Julius orchestrator.
+
+## Live composition checkpoint (2026-09-01, post-#208)
+
+The missing production composition between the durable Julius runtime and the
+three existing live provider implementations now exists, on the branch
+`relay/julius-live-validation`. States are claimed per this document's own
+definitions and no further.
+
+**Live three-role composition: IMPLEMENTED and WIRED, not REAL_INFRA_PROVEN.**
+`relay-bridge/julius/` adds three `JuliusProviderAdapter` factories that wrap
+the existing engines without duplicating a provider client — `runGptArchitect`
+(OpenAI Responses, plan validated by `validateArchitectPlan`),
+`runHostedCodingAgent` (Claude Agent SDK, edits inside its pinned envelope),
+`runHermesReview` (local Hermes, parsed findings) — plus the first production
+implementation of `JuliusBootstrapPort` (run + criteria + Project Brain +
+plan→build task graph + transitions to READY, idempotent per contract digest),
+a PostgreSQL runtime-store composition mirroring the conformance suite, and an
+executor-routed shell port that carries every workspace effect (base revision,
+diff, deterministic test) through the PR #208 control plane's durable
+request→authorize→claim→execute→settle path. One supported entrypoint exists
+and only one: `npm run relay:julius:mission -- run --contract <file>
+[--confirm-live]`, which fails closed naming every missing variable, prints
+SET/MISSING only, and starts nothing without the explicit flag. It lives in
+the bridge tree because the CLI is boundary-tested never to reference
+`relay-bridge`, where two of the three live engines live.
+
+Fourteen offline tests (`relay-bridge/julius/julius-live-composition.test.ts`)
+prove the wiring with zero network: C.A.R.D. role→adapter resolution including
+the requested models; fail-closed refusal per missing variable before any
+adapter is constructed; refusal of a reviewer sharing the coder's vendor;
+refusal of a coding agent without the executor port (no local fallback); the
+scripted fixtures unreachable from every live module; the full
+architect→coder→reviewer drive on the in-memory model with Julius sequencing,
+executor-routed effects, reviewer packets fed from Julius-owned artifacts, a
+real repair cycle on a blocking verdict, completion granted only by the
+verification gate and withheld while a decision is not ACCEPT; and no provider
+payload, plan body, or secret-shaped string reaching durable state. Typecheck
+(all four projects), the repository boundary, the parity gate and strict
+surface parity pass; the parity registry is untouched.
+
+**Findings recorded while wiring, not fixed silently.** (1) The verification
+evaluator checks each acceptance criterion's `requiredEvidenceTypes` against
+EVERY verified task, so a TEST-typed criterion can never accept the plan task
+and a three-role run parks in VERIFYING forever — the composition therefore
+stores criteria with empty type lists and carries the machine-testable TEST
+requirement on the build task's own `requiredEvidenceTypes`, which `verifyTask`
+HALTs without. (2) `runHermesReview` spawns Hermes with env `{PATH, HOME}`
+only: the xAI credential reaches the model through the operator's own Hermes
+profile, not the process environment; the entrypoint reports `XAI_API_KEY`
+presence for the record and says so. (3) The dispatch-path
+`JuliusBudgetPort` is an in-process ceiling seeded from the mission spend
+limit; durable per-invocation budget rows exist only on the executor
+settlement path. (4) Compiled context packets and task-claim lease
+generations reach adapters through same-process handoffs, because PostgreSQL
+deliberately stores context metadata without packet text; a restart resumes
+through the idempotent bootstrap and fresh claims recompile context.
+
+**First real Julius mission: still ABSENT.** Nothing here has executed against
+a real provider, a real PostgreSQL, or the real executor service. On the
+development machine the entrypoint was executed and correctly reported BLOCKED
+(missing `DATABASE_URL` and the five executor variables) with exit 1 and zero
+provider contact. Executing the first mission requires a host or CI
+environment with PostgreSQL 16, the Docker executor control plane from
+`.github/workflows/julius-real-infra.yml`, the three provider credentials, and
+an operator running the entrypoint above with `--confirm-live`.
+
+### Independent review of PR #209 (2026-09-01)
+
+A genuinely separate reviewer audited the full diff against source, proving two
+findings by executing probes against the composition's own exports. Verdict:
+**Critical 0 / High 2 / Medium 7 / Low 3 / Informational 3.** One High and
+the trivially-fixable items were repaired in one bounded iteration; the
+second High was resolved at its root by PR #210 on main:
+
+- **F1 (High, fixed):** on the resume path the same-process artifact exchange
+  is empty, and the probe proved an Independent Reviewer dispatched with an
+  empty diff could COMPLETE the mission. The reviewer now refuses a dispatch
+  when neither the plan nor the diff artifact is available, and the coder
+  refuses without the plan — a resumed run fails visibly instead of
+  completing falsely. The durable artifact store remains the real fix and is
+  open debt.
+- **F2 (High, core-rooted — RESOLVED at the root by PR #210 on main,
+  2026-09-01):** the completion rule required EVERY durable verification
+  decision to be ACCEPT, so any repair round parked the run in VERIFYING even
+  after a successful repair and an approving re-review — proven by probe.
+  Main now reads per-task CURRENT effective verification state with
+  planner-contract repair-lineage supersession (history immutable, HALT
+  fail-closed). After rebasing this branch onto that main, the composition's
+  own drive test proves the closure end-to-end: architect → coder → blocking
+  review → Julius-planned repair → accepting re-review → **COMPLETED**, with
+  the admitting REPAIR still in durable history and completion emitted by the
+  run loop's own advance (`julius-live-composition.test.ts`, "a repaired and
+  re-approved run reaches COMPLETED"). The driver's `haltCause` reporting
+  remains for the cases that still honestly park: a HALT, or a repair lineage
+  that never reached acceptance.
+- **F3 (Medium, fixed):** `repair:plan` is no longer registered on the coding
+  agent — a routed `repair:plan` inherited the plan task's ARTIFACT evidence
+  requirement the coder cannot produce, making it a paid dispatch guaranteed
+  to HALT. An immediate routing refusal is the honest failure.
+- **F8 (Medium, fixed):** a non-approved verdict without blocking-severity
+  findings now maps to FAILED review evidence (matching the engine's own
+  `hasBlockingFinding` semantics) and `unable_to_review` fails the dispatch,
+  instead of parking the run on inconclusive evidence.
+- **F4 (Medium, fixed):** a malformed `JULIUS_SCOPED_CREDENTIALS` no longer
+  reaches `JSON.parse`'s own error message (which quotes the input — a
+  credential map); the refusal is composed and echoes nothing.
+- **F10/F11/F12 (Low, fixed):** the bootstrap replay branch matches the
+  string the runtime actually throws and reports the run's ACTUAL durable
+  state instead of asserting READY; provider-authored model/response
+  identifiers are bounded by `safeClaim` before entering durable summaries;
+  the phantom `JULIUS_MISSION_WORKSPACE` variable name is gone.
+
+**Open findings carried as debt, in the reviewer's words, unfixed here:**
+F5 — the preflight verifies environment variables but probes neither the
+hermes binary nor the Agent SDK runtime, so a missing binary surfaces only
+after upstream roles were paid (`hermesPreflight` and `probeHostedReadiness`
+exist and are not yet called; note `hermesPreflight` performs a tiny real
+generation and so belongs behind `--confirm-live`). F6 — the drive loop
+claims ANY runnable task in the project, so a leftover non-terminal run in
+the same project would be driven by this process's adapters and budget;
+scope-to-run filtering is not yet built. F7 — a tolerated base/diff executor
+failure still settles durable FAILED command evidence on the task, which
+manufactures a repair round the adapter itself meant to absorb. F9 — on
+PostgreSQL `repairRoundsFor` reads `julius_repair_cycles`, which nothing on
+this path writes, so the contract's `repairCycles` ceiling is not durably
+enforced (bounded in practice by idempotent repair task ids and unroutable
+`repair:repair:*` types). F14 — the worst-case adapter chain can exceed the
+600s lease with no heartbeat during dispatch; safe single-process today,
+flagged for the first live run.

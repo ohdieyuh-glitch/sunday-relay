@@ -25,6 +25,8 @@
     "relay:build": "esbuild src/relay/cli/main.ts --bundle --platform=node --format=cjs --outfile=dist-relay/cli.cjs --banner:js=\"#!/usr/bin/env node\" --log-level=warning",
     "relay:bridge:build": "esbuild relay-bridge/server.ts --bundle --platform=node --format=cjs --outfile=dist-relay-bridge/server.cjs --external:@anthropic-ai/claude-agent-sdk --log-level=warning",
     "relay:bridge": "npm run relay:bridge:build --silent && node dist-relay-bridge/server.cjs",
+    "relay:julius:build": "esbuild relay-bridge/julius-live-mission.ts --bundle --platform=node --format=cjs --outfile=dist-relay-bridge/julius-live-mission.cjs --external:@anthropic-ai/claude-agent-sdk --external:pg --log-level=warning",
+    "relay:julius:mission": "npm run relay:julius:build --silent && node dist-relay-bridge/julius-live-mission.cjs",
     "relay": "npm run relay:build --silent && node dist-relay/cli.cjs",
     "relay:test": "vitest run src/relay",
     "relay:surface-parity:check": "node scripts/relay-surface-parity.mjs",
@@ -53,8 +55,8 @@
     "relay:hermes:start": "node dist-relay-hermes/main.cjs",
     "relay:hermes:dev": "npm run relay:hermes:build --silent && node dist-relay-hermes/main.cjs",
     "relay:hermes:typecheck": "tsc -p relay-hermes-service/tsconfig.json --noEmit",
-    "relay:hermes:test": "vitest run relay-hermes-service relay-bridge/reviewer-harness/hermes"
-    ,"relay:executor:build": "esbuild src/relay/workspace/julius-tools/executor-control-plane-main.ts --bundle --platform=node --format=cjs --outfile=dist-relay-executor/main.cjs --external:pg --log-level=warning",
+    "relay:hermes:test": "vitest run relay-hermes-service relay-bridge/reviewer-harness/hermes",
+    "relay:executor:build": "esbuild src/relay/workspace/julius-tools/executor-control-plane-main.ts --bundle --platform=node --format=cjs --outfile=dist-relay-executor/main.cjs --external:pg --log-level=warning",
     "relay:sibling-e2e:build": "esbuild scripts/julius-sibling-e2e.ts scripts/julius-provider-independent-evals.ts --bundle --platform=node --format=cjs --outdir=dist-relay-executor --out-extension:.js=.cjs --external:pg --log-level=warning"
   },
   "dependencies": {
