@@ -162,11 +162,13 @@ const REVIEWER = worker({
 });
 const scope = { projectId: 'prj-1' };
 
-async function drain(loop: { tick(scope: { projectId: string }): Promise<{ claimed: number }> }, maxTicks = 16): Promise<void> {
+/** Drain the loop, bounded; returns the tick count so no branch exits bare. */
+async function drain(loop: { tick(scope: { projectId: string }): Promise<{ claimed: number }> }, maxTicks = 16): Promise<number> {
   for (let tick = 0; tick < maxTicks; tick += 1) {
     const report = await loop.tick(scope);
-    if (report.claimed === 0) return;
+    if (report.claimed === 0) return tick;
   }
+  return maxTicks;
 }
 
 function buildRepairMission() {
