@@ -136,7 +136,7 @@ async function main():Promise<void>{
       'repeated=0; for i in $(seq 1 40); do head -c 262144 /dev/zero >> repeated.bin 2>/dev/null || break; repeated=$i; done',
       'truncate -s 64000000 sparse.bin 2>/dev/null; sparse_apparent=$(wc -c < sparse.bin 2>/dev/null || printf 0)',
       'for i in 1 2 3 4; do (head -c 4000000 /dev/zero > "concurrent-$i.bin" 2>/dev/null) & done; wait',
-      'ln -s /tmp link-out 2>/dev/null; linked=$(head -c 1000 /dev/zero > link-out/escape.bin 2>&1; echo $?)',
+      'ln -s /etc link-out 2>/dev/null; linked=$(head -c 1000 /dev/zero > link-out/escape.bin 2>&1; echo $?)',
       'inodes=0; for i in $(seq 1 20000); do mkdir "d-$i" 2>/dev/null || break; inodes=$i; done',
       'printf "single_exit=%s repeated_rounds=%s sparse_apparent=%s link_exit=%s inodes=%s\\n" "$single" "$repeated" "$sparse_apparent" "$linked" "$inodes"',
       // df, not du: a deleted-but-open file is charged to the filesystem while du reports nothing.
@@ -156,6 +156,9 @@ async function main():Promise<void>{
     // Everything above tried to exceed the ceiling by six routes at once.
     if(used>ceilingKb)throw new Error(`the workspace holds ${used} KiB against a ${ceilingKb} KiB ceiling: ${result.stdout.replace(/\s+/g,' ').slice(0,200)}`);
     if(Number.isFinite(inodes)&&inodes>=20000)throw new Error(`${inodes} directories were created against a bounded inode count`);
+    // Printed AND read. Dropping this while keeping the claim in the evidence line below is how a
+    // defence gets reported as proven by a case that stopped testing it.
+    if(/link_exit=0/.test(result.stdout))throw new Error('a symlink out of the workspace accepted a write');
     /* This case shares its workspace with every other one, and a full workspace makes any later proof that
        asserts a file is ABSENT pass for the wrong reason. It must hand the space back. */
     if(!(recovered>ceilingKb/2))throw new Error(`the workspace was left ${recovered} KiB free of ${ceilingKb} KiB, which would void the proofs that follow it`);
