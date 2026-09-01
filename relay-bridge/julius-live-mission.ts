@@ -227,7 +227,19 @@ async function main(argv: readonly string[]): Promise<number> {
     const applied = await pool.query(`SELECT 1 FROM information_schema.columns WHERE table_schema='relay_wonderland' AND table_name='julius_sandboxes' AND column_name='sandbox_policy'`);
     if (applied.rowCount === 0) await new TransactionalWonderlandDatabase(pool).migrate();
 
-    const scoped = new Map(Object.entries(JSON.parse(env.JULIUS_SCOPED_CREDENTIALS as string) as Record<string, string>)) as ReadonlyMap<ExecutorOperation, string>;
+    /* A malformed credential map must refuse with a COMPOSED message: the
+     * JSON parser's own error quotes a slice of the input, and the input is a
+     * credential map. (Independent review finding F4.) */
+    let scopedEntries: Record<string, string>;
+    try { scopedEntries = JSON.parse(env.JULIUS_SCOPED_CREDENTIALS as string) as Record<string, string>; } catch {
+      out('RESULT: BLOCKED — JULIUS_SCOPED_CREDENTIALS is not valid JSON. Its content is never echoed; fix the value and re-run.');
+      return 1;
+    }
+    const scoped = new Map(Object.entries(scopedEntries)) as ReadonlyMap<ExecutorOperation, string>;
+    if (!scoped.get('execute')) {
+      out('RESULT: BLOCKED — JULIUS_SCOPED_CREDENTIALS has no "execute" credential. Its content is never echoed; fix the value and re-run.');
+      return 1;
+    }
     const trustedReceiptKeys = new Map<string, KeyObject>([[
       env.EXECUTOR_KEY_ID as string,
       createPublicKey(readFileSync(env.JULIUS_PUBLIC_KEY_PATH as string, 'utf8')),
@@ -306,6 +318,7 @@ async function main(argv: readonly string[]): Promise<number> {
     const findings = await handoffs.store.findingsForRun(submitted.runId, contract.projectId);
     const decisions = await handoffs.store.decisionsForRun(submitted.runId, contract.projectId);
     out(`RESULT: ${outcome.state}${outcome.stalled ? ' (stalled before terminal state)' : ''} after ${outcome.ticks} ticks`);
+    if (outcome.haltCause !== null) out(`  cause: ${outcome.haltCause}`);
     out(`  run: ${submitted.runId}`);
     for (const task of tasks) out(`  task ${task.taskId} [${task.role}/${task.taskType}] → ${task.state}`);
     for (const item of evidence) out(`  evidence ${item.evidenceId} [${item.type}/${item.status}] ${item.safeSummary}`);

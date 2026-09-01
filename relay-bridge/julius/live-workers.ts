@@ -178,7 +178,7 @@ export function createLiveArchitectAdapter(input: {
         workerId: input.worker.workerId,
         providerId: input.worker.providerId,
         status: 'SUCCEEDED',
-        safeSummary: `Prompt Architect plan produced by observed model ${outcome.actualModel ?? 'unknown'} (response ${outcome.responseId ?? 'unknown'}).`,
+        safeSummary: `Prompt Architect plan produced by observed model ${safeClaim(outcome.actualModel ?? 'unknown', 80)} (response ${safeClaim(outcome.responseId ?? 'unknown', 80)}).`,
         evidence: [{
           type: 'ARTIFACT',
           status: 'PASSED',
@@ -230,6 +230,15 @@ export function createLiveHostedCodingAdapter(input: {
     async dispatch(dispatch): Promise<JuliusProviderResult> {
       const snapshot = requireSnapshot(input.contexts, dispatch.contextId);
       const plan = input.artifacts.get(planRef(snapshot.runId));
+      if (plan === null) {
+        // The artifact exchange is same-process: after a restart or in a
+        // second process the plan is gone even though the plan TASK succeeded
+        // durably. Implementing without the plan on a resumed run would be a
+        // silent downgrade of what the mission paid the architect for —
+        // refuse, so the resume fails visibly instead. (Independent review
+        // finding F1; the durable artifact store is the recorded fix.)
+        throw new JuliusDispatchError('WORKER_EXECUTION_FAILURE', false, 'The architect plan artifact is not available to this process; a resumed run cannot implement without it.');
+      }
 
       const shellScope = {
         runId: snapshot.runId,
@@ -258,7 +267,7 @@ export function createLiveHostedCodingAdapter(input: {
           '--- MISSION CONTEXT ---',
           packetText(snapshot),
           '--- ARCHITECT PLAN ---',
-          plan ?? 'No architect plan artifact is available; follow the mission context alone.',
+          plan,
         ].join('\n\n'),
         workspacePath: input.workspacePath,
         apiKey: input.apiKey,
@@ -292,7 +301,7 @@ export function createLiveHostedCodingAdapter(input: {
         workerId: input.worker.workerId,
         providerId: input.worker.providerId,
         status: 'SUCCEEDED',
-        safeSummary: `Hosted Coding Agent session completed (observed model ${observed.actualModel ?? 'unknown'}, ${observed.numTurns ?? 'unknown'} turns); tests ${test.status === 'SUCCEEDED' ? 'passed' : 'failed'} under the independent executor.`,
+        safeSummary: `Hosted Coding Agent session completed (observed model ${safeClaim(observed.actualModel ?? 'unknown', 80)}, ${observed.numTurns ?? 'unknown'} turns); tests ${test.status === 'SUCCEEDED' ? 'passed' : 'failed'} under the independent executor.`,
         evidence: [
           {
             type: 'DIFF',
@@ -340,11 +349,23 @@ export function createLiveHermesReviewerAdapter(input: {
     adapterId: input.worker.adapterId,
     async dispatch(dispatch): Promise<JuliusProviderResult> {
       const snapshot = requireSnapshot(input.contexts, dispatch.contextId);
-      const unifiedDiff = input.artifacts.get(diffRef(snapshot.runId)) ?? '';
+      const planArtifact = input.artifacts.get(planRef(snapshot.runId));
+      const diffArtifact = input.artifacts.get(diffRef(snapshot.runId));
+      if (planArtifact === null && diffArtifact === null) {
+        // The artifact exchange is same-process. After a restart both the plan
+        // and the diff are gone even though their tasks succeeded durably, and
+        // a review dispatched with neither would be a review of NOTHING whose
+        // approval could complete the mission. Refuse instead: a resumed run
+        // fails visibly rather than completing falsely. (Independent review
+        // finding F1, proven by probe; the durable artifact store is the
+        // recorded fix.) A legitimate first plan-review always has the plan.
+        throw new JuliusDispatchError('INVALID_REQUEST', false, 'Neither the architect plan nor the workspace diff artifact is available to this process; an independent review of nothing is refused.');
+      }
+      const unifiedDiff = diffArtifact ?? '';
       const packet: ReviewPacket = {
         missionId: snapshot.packet.missionId,
         originalRequest: safeClaim(packetText(snapshot), 8_000),
-        handoffJson: input.artifacts.get(planRef(snapshot.runId)) ?? '{}',
+        handoffJson: planArtifact ?? '{}',
         acceptanceCriteria: [...snapshot.acceptanceCriterionIds],
         baseRevision: input.artifacts.get(baseRevisionRef(snapshot.runId)) ?? 'unknown',
         artifactDigest: sha256(unifiedDiff),
@@ -362,25 +383,42 @@ export function createLiveHermesReviewerAdapter(input: {
       if (outcome.kind === 'review_incomplete') {
         throw new JuliusDispatchError('WORKER_EXECUTION_FAILURE', false, `Hermes review incomplete: ${safeClaim(outcome.safeMessage, 120)}.`);
       }
+      if (outcome.result.verdict === 'unable_to_review') {
+        // A reviewer that could not review has not reviewed. Recording that as
+        // evidence would park the run; failing the dispatch keeps the outcome
+        // visible and retryable by policy. (Independent review finding F8.)
+        throw new JuliusDispatchError('WORKER_EXECUTION_FAILURE', false, 'Hermes was unable to review the change.');
+      }
       const blocking = outcome.result.findings.filter((finding) => finding.severity === 'blocking' || finding.severity === 'major');
-      const evidence = blocking.length === 0
+      // The engine's own rule (`hasBlockingFinding`) treats ANY changes_required
+      // verdict as blocking; a non-approved verdict with only minor findings
+      // must therefore drive the repair path too, not park the run on
+      // inconclusive evidence. (Independent review finding F8.)
+      const evidence = blocking.length === 0 && outcome.result.verdict === 'approved'
         ? [{
           type: 'REVIEW_FINDING' as const,
-          status: outcome.result.verdict === 'approved' ? 'PASSED' as const : 'INCONCLUSIVE' as const,
-          safeSummary: `Independent review verdict ${outcome.result.verdict} with no blocking findings (served model ${outcome.servedModel ?? 'unknown'}).`,
+          status: 'PASSED' as const,
+          safeSummary: `Independent review verdict approved with no blocking findings (served model ${safeClaim(outcome.servedModel ?? 'unknown', 80)}).`,
           occurredAt: nowIso(),
         }]
-        : blocking.map((finding) => ({
-          type: 'REVIEW_FINDING' as const,
-          status: 'FAILED' as const,
-          safeSummary: safeClaim(`[${finding.severity}] ${finding.requirement}: ${finding.explanation}`),
-          occurredAt: nowIso(),
-        }));
+        : blocking.length === 0
+          ? [{
+            type: 'REVIEW_FINDING' as const,
+            status: 'FAILED' as const,
+            safeSummary: safeClaim(`Independent review verdict ${outcome.result.verdict} without blocking-severity findings: ${outcome.result.summary}`),
+            occurredAt: nowIso(),
+          }]
+          : blocking.map((finding) => ({
+            type: 'REVIEW_FINDING' as const,
+            status: 'FAILED' as const,
+            safeSummary: safeClaim(`[${finding.severity}] ${finding.requirement}: ${finding.explanation}`),
+            occurredAt: nowIso(),
+          }));
       return {
         workerId: input.worker.workerId,
         providerId: input.worker.providerId,
         status: 'SUCCEEDED',
-        safeSummary: `Independent Hermes review completed: verdict ${outcome.result.verdict}, ${outcome.result.findings.length} findings (${blocking.length} blocking), served model ${outcome.servedModel ?? 'unknown'}.`,
+        safeSummary: `Independent Hermes review completed: verdict ${outcome.result.verdict}, ${outcome.result.findings.length} findings (${blocking.length} blocking), served model ${safeClaim(outcome.servedModel ?? 'unknown', 80)}.`,
         evidence,
         usage: { toolCalls: 0 },
       };

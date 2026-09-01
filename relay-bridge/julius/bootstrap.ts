@@ -28,11 +28,12 @@ import {
   type JuliusBootstrapPort,
   type JuliusBootstrapRequest,
 } from '../../src/relay/integration/julius/julius-port';
-import type { JuliusTask } from '../../src/relay/mission/julius';
+import type { JuliusMissionState, JuliusTask } from '../../src/relay/mission/julius';
 import type { MissionSeedStore } from './mission-seed';
 
 /** The store methods bootstrap needs — `JuliusPostgresRepository` satisfies this directly. */
 export interface RunCreationStore {
+  loadRun(runId: string, projectId: string): Promise<{ readonly state: string } | null>;
   createRun(input: {
     commandId: string; runId: string; missionId: string; projectId: string;
     cardRevision: string; missionContractRevision: number; projectBrainRevision: number; occurredAt: string;
@@ -157,11 +158,15 @@ export function createLiveJuliusBootstrapPort(deps: {
       } catch (error) {
         // A replayed bootstrap lands here when the run already advanced past
         // CREATED: createRun idempotently returns the existing run, and the
-        // CREATED→PLANNING transition then conflicts. That is a duplicate
-        // submit, not a failure of the runtime.
+        // CREATED→PLANNING transition then conflicts (version race), or the
+        // runtime refuses the transition outright (`invalid_julius_transition`
+        // — the string the state machine actually throws). That is a
+        // duplicate submit, not a failure — and the ACTUAL durable state is
+        // reported, never an asserted READY. (Independent review finding F10.)
         const message = error instanceof Error ? error.message : '';
-        if (message.includes('optimistic_concurrency_conflict') || message.includes('invalid_mission_transition')) {
-          return { accepted: true, runId, acceptedAt: now(), state: 'READY' };
+        if (message.includes('optimistic_concurrency_conflict') || message.includes('invalid_julius_transition')) {
+          const existing = await deps.runs.loadRun(runId, request.projectId).catch(() => null);
+          return { accepted: true, runId, acceptedAt: now(), state: (existing?.state ?? 'READY') as JuliusMissionState };
         }
         if (message.includes('idempotency_payload_conflict')) {
           return refuse('mission_already_running', 'This idempotency key was already used for a different mission payload.');

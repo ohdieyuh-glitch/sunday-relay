@@ -14,14 +14,21 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
+  JULIUS_CONTEXT_COMPILER_VERSION,
   createJuliusMemoryStore,
+  type JuliusContextSnapshot,
   type JuliusRuntimeStore,
 } from '../../src/relay/mission/julius';
 import type { GptRunOutcome } from '../../src/relay/connectors/gpt-architect';
 import { compileHostedEnvelope } from '../hosted-coding-agent/hosted-envelope';
 import type { HostedQueryFn, HostedRunOutcome } from '../hosted-coding-agent/hosted-runner';
-import type { HermesOutcome, ReviewPacket } from '../hermes-reviewer';
-import { createLiveArtifactExchange } from './live-workers';
+import { loadHermesConfig, type HermesOutcome, type ReviewPacket } from '../hermes-reviewer';
+import {
+  createLiveArtifactExchange,
+  createLiveHermesReviewerAdapter,
+  createLiveHostedCodingAdapter,
+  planRef,
+} from './live-workers';
 import {
   ARCHITECT_WORKER,
   CODER_WORKER,
@@ -270,6 +277,7 @@ function fakeSeeds(calls: string[]): MissionSeedStore {
 function fakeRuns(calls: Array<Record<string, unknown>>) {
   let version = 0;
   return {
+    async loadRun() { return null; },
     async createRun(input: { runId: string }) { version = 1; calls.push({ createRun: input }); return { runId: input.runId, state: 'CREATED', version }; },
     async addTask(input: { task: { taskId: string } }) { calls.push({ addTask: input.task }); return true; },
     async transition(input: { to: string }) { version += 1; calls.push({ transition: input.to }); return { state: input.to, version }; },
@@ -444,6 +452,114 @@ describe('a full mission drive with Julius in control', () => {
     expect(first.state).toBe('RESERVED');
     expect(second.state).toBe('DENIED');
     expect(replay.state).toBe('RESERVED');
+  });
+});
+
+/* -------------------------------- resumed-process and verdict semantics */
+
+/** A hand-built snapshot, standing in for one the runtime compiled durably. */
+function reviewSnapshot(taskId: string): JuliusContextSnapshot {
+  const workerId = 'independent-reviewer-hermes';
+  return {
+    contextId: 'ctx-resume-1', runId: 'run-live', taskId, workerId,
+    workerRole: 'INDEPENDENT_REVIEWER', compilerVersion: JULIUS_CONTEXT_COMPILER_VERSION,
+    missionContractRevision: 1, cardRevision: 'card-test-1', projectBrainRevision: 0,
+    sourceEntryIds: [], dependencyTaskIds: [], evidenceIds: [], findingIds: [],
+    acceptanceCriterionIds: ['AC-1'], contentHash: 'sha256:resume-test',
+    characterCount: 24, redactionCount: 0, truncated: false,
+    packet: {
+      missionId: 'mission-live-1', taskId, workerId, sourceEntryIds: [],
+      blocks: [{ kind: 'CONSTRAINT', text: 'OBJECTIVE: resume test' }], truncated: false,
+    },
+  };
+}
+
+describe('a resumed process cannot produce a vacuous review or a planless build', () => {
+  const contexts = { snapshotFor: () => reviewSnapshot('build-1:review') };
+
+  it('the reviewer refuses a dispatch when neither the plan nor the diff artifact exists', async () => {
+    const log: FakeLog = { order: [] };
+    const adapter = createLiveHermesReviewerAdapter({
+      worker: {
+        workerId: 'independent-reviewer-hermes', role: 'INDEPENDENT_REVIEWER',
+        adapterId: 'hermes-local-live', providerId: 'xai', capabilities: ['review'],
+        taskTypes: ['review:build'], concurrencyLimit: 1, timeoutMs: 1_000, maxRetries: 1, status: 'AVAILABLE',
+      },
+      contexts, artifacts: createLiveArtifactExchange(),
+      config: loadHermesConfig(LIVE_ENV as never),
+      testCommand: 'npm run mission-test',
+      run: fakeReviewer(log, [], ['approved']) as never,
+    });
+    await expect(adapter.dispatch({ taskId: 'build-1:review', contextId: 'ctx-resume-1' }))
+      .rejects.toMatchObject({ code: 'INVALID_REQUEST', safeMessage: expect.stringContaining('review of nothing is refused') });
+    expect(log.order, 'Hermes must never have been invoked').toEqual([]);
+  });
+
+  it('the coder refuses a dispatch when the plan artifact is unavailable, before any effect or SDK load', async () => {
+    const log: FakeLog = { order: [] };
+    const invocations: ShellEffectInput[] = [];
+    const adapter = createLiveHostedCodingAdapter({
+      worker: {
+        workerId: 'coding-agent-claude-hosted', role: 'CODING_AGENT',
+        adapterId: 'claude-agent-sdk-hosted-live', providerId: 'anthropic', capabilities: ['implement'],
+        taskTypes: ['build'], concurrencyLimit: 1, timeoutMs: 1_000, maxRetries: 1, status: 'AVAILABLE',
+      },
+      contexts, artifacts: createLiveArtifactExchange(), projectId: 'prj-live',
+      apiKey: 'FAKETESTNOTREAL-anthropic', requestedModel: 'claude-fable-5',
+      workspacePath: '/workspace/mission', testCommand: 'npm run mission-test',
+      shell: fakeShell(log, invocations),
+      run: fakeCoder(log, []) as never, queryLoader: async () => fakeQuery,
+    });
+    await expect(adapter.dispatch({ taskId: 'build-1', contextId: 'ctx-resume-1' }))
+      .rejects.toMatchObject({ code: 'WORKER_EXECUTION_FAILURE', safeMessage: expect.stringContaining('architect plan artifact is not available') });
+    expect(log.order, 'no shell effect and no SDK session may have run').toEqual([]);
+    expect(invocations).toEqual([]);
+  });
+
+  it('a non-approved verdict without blocking-severity findings drives the repair path, and unable_to_review fails the dispatch', async () => {
+    const artifacts = createLiveArtifactExchange();
+    artifacts.put(planRef('run-live'), JSON.stringify(VALID_PLAN));
+    const worker = {
+      workerId: 'independent-reviewer-hermes', role: 'INDEPENDENT_REVIEWER' as const,
+      adapterId: 'hermes-local-live', providerId: 'xai', capabilities: ['review'],
+      taskTypes: ['review:build'], concurrencyLimit: 1, timeoutMs: 1_000, maxRetries: 1, status: 'AVAILABLE' as const,
+    };
+    const outcomeFor = (verdict: string): HermesOutcome => ({
+      kind: 'reviewed',
+      result: { verdict, summary: 'Minor issues only.', findings: [], requirementsChecked: [], parseRepaired: false },
+      startedAt: 't', completedAt: 't', requestedModel: 'grok-build-0.1', servedModel: 'grok-build-0.1', provider: 'xai',
+    } as never);
+    const minorOnly = createLiveHermesReviewerAdapter({
+      worker, contexts, artifacts, config: loadHermesConfig(LIVE_ENV as never),
+      testCommand: 'npm run mission-test', run: (async () => outcomeFor('changes_required')) as never,
+    });
+    const result = await minorOnly.dispatch({ taskId: 'build-1:review', contextId: 'ctx-resume-1' });
+    expect(result.evidence).toHaveLength(1);
+    expect((result.evidence[0] as { status: string }).status).toBe('FAILED');
+
+    const unable = createLiveHermesReviewerAdapter({
+      worker, contexts, artifacts, config: loadHermesConfig(LIVE_ENV as never),
+      testCommand: 'npm run mission-test', run: (async () => outcomeFor('unable_to_review')) as never,
+    });
+    await expect(unable.dispatch({ taskId: 'build-1:review', contextId: 'ctx-resume-1' }))
+      .rejects.toMatchObject({ code: 'WORKER_EXECUTION_FAILURE', safeMessage: expect.stringContaining('unable to review') });
+  });
+});
+
+describe('the durable completion rule after a repair', () => {
+  it('a repaired and re-approved run parks in VERIFYING with the cause named, never a silent stall', async () => {
+    // plan review approved; build review blocking; repair runs; re-review approved.
+    const { memory, fakes, outcome } = await driveLiveMission(['approved', 'changes_required', 'approved']);
+    // The repair genuinely ran and its re-review approved…
+    expect(fakes.log.order.filter((step) => step === 'coder').length).toBeGreaterThan(1);
+    const tasks = await memory.tasksForRun('run-live', 'prj-live');
+    expect(tasks.filter((task) => task.taskType.startsWith('repair:')).every((task) => task.state === 'SUCCEEDED')).toBe(true);
+    // …and the core completion rule still refuses COMPLETED, because the
+    // durable decision history contains the REPAIR decision. The driver must
+    // say so rather than reporting an unexplained stall. (Review finding F2.)
+    expect(outcome.state).toBe('VERIFYING');
+    expect(outcome.stalled).toBe(true);
+    expect(outcome.haltCause ?? '').toContain('REPAIR');
   });
 });
 

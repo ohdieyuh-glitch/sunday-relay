@@ -177,3 +177,61 @@ provider contact. Executing the first mission requires a host or CI
 environment with PostgreSQL 16, the Docker executor control plane from
 `.github/workflows/julius-real-infra.yml`, the three provider credentials, and
 an operator running the entrypoint above with `--confirm-live`.
+
+### Independent review of PR #209 (2026-09-01)
+
+A genuinely separate reviewer audited the full diff against source, proving two
+findings by executing probes against the composition's own exports. Verdict:
+**Critical 0 / High 2 / Medium 7 / Low 3 / Informational 3.** Both Highs and
+the trivially-fixable items were repaired in one bounded iteration:
+
+- **F1 (High, fixed):** on the resume path the same-process artifact exchange
+  is empty, and the probe proved an Independent Reviewer dispatched with an
+  empty diff could COMPLETE the mission. The reviewer now refuses a dispatch
+  when neither the plan nor the diff artifact is available, and the coder
+  refuses without the plan — a resumed run fails visibly instead of
+  completing falsely. The durable artifact store remains the real fix and is
+  open debt.
+- **F2 (High, core-rooted — recorded, reported honestly, not fixed here):**
+  the completion rule requires EVERY durable verification decision to be
+  ACCEPT, so any repair round leaves a REPAIR decision that parks the run in
+  VERIFYING even after a successful repair and an approving re-review —
+  proven by probe. The driver now names that cause instead of reporting an
+  unexplained stall, and a test pins the semantics. Whether completion should
+  consider only each task's latest decision is a Julius-core product decision
+  and must be settled before repair rounds are relied on as recovery in a
+  paid mission.
+- **F3 (Medium, fixed):** `repair:plan` is no longer registered on the coding
+  agent — a routed `repair:plan` inherited the plan task's ARTIFACT evidence
+  requirement the coder cannot produce, making it a paid dispatch guaranteed
+  to HALT. An immediate routing refusal is the honest failure.
+- **F8 (Medium, fixed):** a non-approved verdict without blocking-severity
+  findings now maps to FAILED review evidence (matching the engine's own
+  `hasBlockingFinding` semantics) and `unable_to_review` fails the dispatch,
+  instead of parking the run on inconclusive evidence.
+- **F4 (Medium, fixed):** a malformed `JULIUS_SCOPED_CREDENTIALS` no longer
+  reaches `JSON.parse`'s own error message (which quotes the input — a
+  credential map); the refusal is composed and echoes nothing.
+- **F10/F11/F12 (Low, fixed):** the bootstrap replay branch matches the
+  string the runtime actually throws and reports the run's ACTUAL durable
+  state instead of asserting READY; provider-authored model/response
+  identifiers are bounded by `safeClaim` before entering durable summaries;
+  the phantom `JULIUS_MISSION_WORKSPACE` variable name is gone.
+
+**Open findings carried as debt, in the reviewer's words, unfixed here:**
+F5 — the preflight verifies environment variables but probes neither the
+hermes binary nor the Agent SDK runtime, so a missing binary surfaces only
+after upstream roles were paid (`hermesPreflight` and `probeHostedReadiness`
+exist and are not yet called; note `hermesPreflight` performs a tiny real
+generation and so belongs behind `--confirm-live`). F6 — the drive loop
+claims ANY runnable task in the project, so a leftover non-terminal run in
+the same project would be driven by this process's adapters and budget;
+scope-to-run filtering is not yet built. F7 — a tolerated base/diff executor
+failure still settles durable FAILED command evidence on the task, which
+manufactures a repair round the adapter itself meant to absorb. F9 — on
+PostgreSQL `repairRoundsFor` reads `julius_repair_cycles`, which nothing on
+this path writes, so the contract's `repairCycles` ceiling is not durably
+enforced (bounded in practice by idempotent repair task ids and unroutable
+`repair:repair:*` types). F14 — the worst-case adapter chain can exceed the
+600s lease with no heartbeat during dispatch; safe single-process today,
+flagged for the first live run.

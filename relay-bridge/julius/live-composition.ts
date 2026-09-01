@@ -69,8 +69,12 @@ export const CODER_WORKER: JuliusWorker = {
   // A repair task is named `repair:<original taskType>` and always routes to
   // a CODING_AGENT, so the deployment registers those types explicitly — the
   // runtime documents that nothing detects the omission until a repair
-  // cannot be routed.
-  taskTypes: ['build', 'repair:build', 'repair:plan'],
+  // cannot be routed. `repair:plan` is deliberately NOT registered: the
+  // repair inherits the plan task's ARTIFACT evidence requirement, which the
+  // coding adapter does not produce, so a routed repair:plan is a paid
+  // dispatch guaranteed to HALT. An immediate routing refusal is the honest
+  // failure. (Independent review finding F3.)
+  taskTypes: ['build', 'repair:build'],
   concurrencyLimit: 1, timeoutMs: 600_000, maxRetries: 1, status: 'AVAILABLE',
 };
 
@@ -153,7 +157,7 @@ export function resolveLiveWorkers(options: {
   const codingMissing: string[] = [];
   if (!options.env[HOSTED_API_KEY_ENV]) codingMissing.push(HOSTED_API_KEY_ENV);
   if (!requested.codingModel) codingMissing.push(HOSTED_MODEL_ENV);
-  if (!options.workspacePath) codingMissing.push('JULIUS_MISSION_WORKSPACE');
+  if (!options.workspacePath) codingMissing.push('mission workspacePath (contract field)');
   if (!options.testCommand) codingMissing.push('mission testCommand');
   if (options.shell === null) codingMissing.push('executor shell port (JULIUS_EXECUTOR_ENDPOINT and its material)');
   if (codingMissing.length > 0) {
@@ -345,6 +349,15 @@ export interface DriveOutcome {
   readonly state: string;
   readonly ticks: number;
   readonly stalled: boolean;
+  /**
+   * Why a non-terminal run stopped moving, when that is knowable. The core
+   * completion rule requires EVERY durable verification decision to be
+   * ACCEPT, so a run whose history contains a REPAIR or HALT decision parks
+   * in VERIFYING even after a successful repair and an approving re-review —
+   * "stalled" alone would misreport that as a mystery. (Independent review
+   * finding F2; the completion-rule question itself belongs to Julius core.)
+   */
+  readonly haltCause: string | null;
 }
 
 /**
@@ -361,19 +374,28 @@ export async function driveJuliusRunToTerminal(input: {
 }): Promise<DriveOutcome> {
   const maxTicks = input.maxTicks ?? 32;
   const terminal = new Set(['COMPLETED', 'FAILED', 'CANCELLED']);
+  const stallCause = async (state: string): Promise<string | null> => {
+    if (state !== 'VERIFYING') return null;
+    const decisions = await input.store.decisionsForRun(input.runId, input.projectId);
+    const nonAccept = decisions.filter((decision) => decision.action !== 'ACCEPT');
+    return nonAccept.length === 0 ? null
+      : `the completion rule requires every durable verification decision to be ACCEPT, and this run's history holds: ${nonAccept.map((decision) => `${decision.action}(${decision.reasonCode})`).join(', ')}`;
+  };
   let lastState = 'UNKNOWN';
   for (let tick = 1; tick <= maxTicks; tick += 1) {
     const report = await input.loop.tick({ projectId: input.projectId });
     const run = await input.store.loadRun(input.runId, input.projectId);
     lastState = run?.state ?? 'UNKNOWN';
-    if (run !== null && terminal.has(run.state)) return { state: run.state, ticks: tick, stalled: false };
+    if (run !== null && terminal.has(run.state)) return { state: run.state, ticks: tick, stalled: false, haltCause: null };
     if (report.claimed === 0) {
       const advance = await input.loop.advanceRun(input.runId, input.projectId);
       const after = await input.store.loadRun(input.runId, input.projectId);
       lastState = after?.state ?? lastState;
-      if (after !== null && terminal.has(after.state)) return { state: after.state, ticks: tick, stalled: false };
-      if (advance === null || !advance.changed) return { state: lastState, ticks: tick, stalled: true };
+      if (after !== null && terminal.has(after.state)) return { state: after.state, ticks: tick, stalled: false, haltCause: null };
+      if (advance === null || !advance.changed) {
+        return { state: lastState, ticks: tick, stalled: true, haltCause: await stallCause(lastState) };
+      }
     }
   }
-  return { state: lastState, ticks: maxTicks, stalled: true };
+  return { state: lastState, ticks: maxTicks, stalled: true, haltCause: await stallCause(lastState) };
 }
