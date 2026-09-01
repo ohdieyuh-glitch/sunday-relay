@@ -41,7 +41,7 @@
  */
 
 import type { JuliusRecoveryAction } from './julius-recovery';
-import { transitionMission, type JuliusBrainEntry, type JuliusEvidence, type JuliusMissionState, type JuliusTask, type JuliusVerificationDecision } from './julius-runtime';
+import { transitionMission, type JuliusBrainEntry, type JuliusEvidence, type JuliusMissionState, type JuliusRecordedDecision, type JuliusTask } from './julius-runtime';
 import type { JuliusOperationalEvent } from './julius-events';
 import type { JuliusTrajectoryEvent } from './julius-trajectory';
 import type { JuliusContextSnapshot } from './julius-context-snapshot';
@@ -112,7 +112,7 @@ export function createJuliusMemoryStore(): JuliusMemoryStore {
   const tasks = new Map<string, TaskRow>();
   const evidence: JuliusEvidence[] = [];
   const evidenceKeys = new Set<string>();
-  const decisions: JuliusVerificationDecision[] = [];
+  const decisions: (JuliusRecordedDecision & { readonly runId: string })[] = [];
   const decisionKeys = new Set<string>();
   const decisionRunIds = new Map<string, string>();
   const findings: JuliusReviewerFinding[] = [];
@@ -405,7 +405,7 @@ export function createJuliusMemoryStore(): JuliusMemoryStore {
       const key = `${input.runId}::${input.idempotencyKey}`;
       if (decisionKeys.has(key)) return false;
       decisionKeys.add(key);
-      decisions.push({ ...input.decision });
+      decisions.push({ ...input.decision, taskId: input.taskId, runId: input.runId });
       decisionRunIds.set(input.decisionId, input.runId);
       return true;
     },
@@ -497,8 +497,10 @@ export function createJuliusMemoryStore(): JuliusMemoryStore {
     },
     async decisionsForRun(runId, projectId) {
       if (!inProject(runId, projectId)) return [];
-      const ids = new Set([...decisionRunIds.entries()].filter(([, value]) => value === runId).map(([key]) => key));
-      return ids.size === 0 ? [] : decisions.map((value) => ({ ...value }));
+      // Scoped to the run, like the PostgreSQL reader: the old model returned
+      // EVERY run's decisions once the run had any, which single-run tests
+      // could never notice and completion (now per-task) must never see.
+      return decisions.filter((value) => value.runId === runId).map(({ runId: _runId, ...value }) => ({ ...value }));
     },
     async brainEntriesForRun(runId, projectId) {
       return inProject(runId, projectId) ? (brain.get(runId) ?? []).map((entry) => ({ ...entry })) : [];

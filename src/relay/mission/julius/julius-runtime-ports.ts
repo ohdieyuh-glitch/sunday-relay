@@ -33,6 +33,7 @@
 import type {
   JuliusEvidence,
   JuliusMissionState,
+  JuliusRecordedDecision,
   JuliusTask,
   JuliusVerificationDecision,
   JuliusWorkerRole,
@@ -223,7 +224,14 @@ export interface JuliusRuntimeReader {
   evidenceForRun(runId: string, projectId: string): Promise<readonly JuliusEvidence[]>;
   findingsForRun(runId: string, projectId: string): Promise<readonly JuliusReviewerFinding[]>;
   criteriaForRun(runId: string, projectId: string): Promise<readonly JuliusAcceptanceCriterion[]>;
-  decisionsForRun(runId: string, projectId: string): Promise<readonly JuliusVerificationDecision[]>;
+  /**
+   * The run's verification decisions WITH the task each one governs, in the
+   * durable log's order (`occurred_at, decision_id` on PostgreSQL, append
+   * order in the model). The order is contractual: completion reads a task's
+   * CURRENT decision as its last entry here, so an implementation that
+   * reorders would silently change which decision is effective.
+   */
+  decisionsForRun(runId: string, projectId: string): Promise<readonly JuliusRecordedDecision[]>;
   brainEntriesForRun(runId: string, projectId: string): Promise<readonly JuliusBrainEntry[]>;
   /** How many repair rounds this task has already had. Zero, not null. */
   repairRoundsFor(taskId: string, projectId: string): Promise<number>;

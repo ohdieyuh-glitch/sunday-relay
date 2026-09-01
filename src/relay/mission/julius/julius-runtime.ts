@@ -141,6 +141,71 @@ export function compileJuliusContext(input: { missionId: string; task: JuliusTas
   return { missionId: input.missionId, taskId: input.task.taskId, workerId: input.worker.workerId, sourceEntryIds, blocks, truncated: sourceEntryIds.length < relevant.length };
 }
 
-export function missionMayComplete(input: { state: JuliusMissionState; tasks: readonly JuliusTask[]; decisions: readonly JuliusVerificationDecision[] }): boolean {
-  return !TERMINAL.has(input.state) && input.state === 'VERIFYING' && input.tasks.length > 0 && input.tasks.every(task => ['SUCCEEDED', 'SKIPPED'].includes(task.state)) && input.decisions.length > 0 && input.decisions.every(decision => decision.action === 'ACCEPT');
+/**
+ * A VERIFICATION DECISION AS RECORDED — the decision plus the task it
+ * governs. `JuliusVerificationDecision` deliberately stays a pure verdict;
+ * completion needs to know WHICH work each verdict is about, and the durable
+ * rows have always carried `task_id`. Ordering is the durable decision log's
+ * (`occurred_at, decision_id` on PostgreSQL, append order in the model): for
+ * one task, a later entry in the log is that task's CURRENT decision.
+ */
+export interface JuliusRecordedDecision extends JuliusVerificationDecision { readonly taskId: string; }
+
+/**
+ * COMPLETION READS EFFECTIVE VERIFICATION STATE, NOT RAW HISTORY.
+ *
+ * The previous rule required EVERY decision in the run's history to be
+ * ACCEPT, which made the product's own repair flow uncompletable: the durable
+ * REPAIR decision that ADMITTED a repair round poisoned completion forever,
+ * even after the repair succeeded and its re-review accepted. Founder
+ * decision, 2026-09-01: history is immutable audit material and is never
+ * deleted or rewritten — but a REPAIR that has been successfully addressed
+ * through its own repair lineage no longer blocks completion.
+ *
+ * THE EFFECTIVE RULE, per task, deterministic from durable state alone:
+ *
+ *   - A task's CURRENT decision is its LAST entry in the ordered decision
+ *     log. Only a genuine re-verification of the same task appends a newer
+ *     entry, so recency here is authority, not accident.
+ *   - ACCEPT is effective acceptance.
+ *   - REPAIR is superseded ONLY through its own repair lineage: a repair
+ *     task is parent-linked to the task it repairs (`planJuliusRepair` sets
+ *     `parentTaskId` and a `repair:`-prefixed type), so the REPAIR is
+ *     effective-accepted exactly when some such child SUCCEEDED and is
+ *     itself effectively accepted — recursively, so a repaired repair works
+ *     and an abandoned one still blocks. An undecided repair child vouches
+ *     for nothing, and an ACCEPT on any unrelated task supersedes nothing.
+ *   - HALT and every other action stay FAIL-CLOSED: no lineage supersedes
+ *     them. (A later decision on the SAME task can — that is the evaluator
+ *     re-verifying the same work, the one authorized reverification path.)
+ *
+ * Everything else is unchanged: the run must be VERIFYING, every task
+ * terminal, and at least one decision recorded. The full history remains in
+ * the log for evidence, trajectories, audit and recovery.
+ */
+export function missionMayComplete(input: { state: JuliusMissionState; tasks: readonly JuliusTask[]; decisions: readonly JuliusRecordedDecision[] }): boolean {
+  if (TERMINAL.has(input.state) || input.state !== 'VERIFYING') return false;
+  if (input.tasks.length === 0 || !input.tasks.every(task => ['SUCCEEDED', 'SKIPPED'].includes(task.state))) return false;
+  if (input.decisions.length === 0) return false;
+
+  const current = new Map<string, JuliusRecordedDecision>();
+  for (const decision of input.decisions) current.set(decision.taskId, decision);
+  const repairChildren = new Map<string, JuliusTask[]>();
+  for (const task of input.tasks) {
+    if (task.parentTaskId === null || !task.taskType.startsWith('repair:')) continue;
+    const children = repairChildren.get(task.parentTaskId) ?? [];
+    children.push(task);
+    repairChildren.set(task.parentTaskId, children);
+  }
+  const effectivelyAccepted = (taskId: string, walking: Set<string>): boolean => {
+    const decision = current.get(taskId);
+    if (decision === undefined) return false;
+    if (decision.action === 'ACCEPT') return true;
+    if (decision.action !== 'REPAIR') return false;
+    if (walking.has(taskId)) return false;
+    walking.add(taskId);
+    return (repairChildren.get(taskId) ?? [])
+      .some(child => child.state === 'SUCCEEDED' && effectivelyAccepted(child.taskId, walking));
+  };
+  return [...current.keys()].every(taskId => effectivelyAccepted(taskId, new Set()));
 }

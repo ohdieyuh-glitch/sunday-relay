@@ -25,7 +25,7 @@
 
 import type { JuliusCardPolicy } from './julius-policy';
 import type { JuliusVerificationPolicy } from './julius-verification-runtime';
-import { missionMayComplete, type JuliusMissionState, type JuliusTask, type JuliusVerificationDecision } from './julius-runtime';
+import { missionMayComplete, type JuliusMissionState, type JuliusRecordedDecision, type JuliusTask } from './julius-runtime';
 import { planRunStatePath, transitionIsLegal } from './julius-state-path';
 
 /**
@@ -136,7 +136,7 @@ export interface JuliusRunLoopConfig {
  */
 export function targetRunState(
   tasks: readonly JuliusTask[],
-  decisions: readonly JuliusVerificationDecision[] = [],
+  decisions: readonly JuliusRecordedDecision[] = [],
 ): { state: JuliusMissionState; reasonCode: string } {
   if (tasks.length === 0) return { state: 'PLANNING', reasonCode: 'NO_TASKS_PLANNED' };
   if (tasks.some((task) => task.state === 'ACTIVE')) return { state: 'EXECUTING', reasonCode: 'TASKS_ACTIVE' };
