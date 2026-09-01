@@ -8,12 +8,14 @@ const DIGEST = /^[a-f0-9]{64}$/;
 const ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$/;
 
 const BEFORE_FIELDS = ['receiptVersion', 'phase', 'manifestDigest', 'invocationId', 'dispatchGeneration', 'sandboxId', 'tenantDigest', 'projectDigest', 'runDigest', 'taskDigest', 'workerDigest', 'toolId', 'toolVersion', 'requestDigest', 'policyDigest', 'leaseGeneration', 'imageDigest', 'executorIdentity', 'preTreeDigest', 'startedAt'] as const;
-const AFTER_FIELDS = ['receiptVersion', 'phase', 'manifestDigest', 'invocationId', 'dispatchGeneration', 'sandboxId', 'requestDigest', 'executorIdentity', 'terminalState', 'exitCode', 'durationMs', 'finishedAt', 'stdoutDigest', 'stderrDigest', 'preTreeDigest', 'postTreeDigest', 'changedPathsDigest', 'changedPathsAvailable', 'outputBytes', 'executorResultDigest'] as const;
+const AFTER_FIELDS = ['receiptVersion', 'phase', 'manifestDigest', 'invocationId', 'dispatchGeneration', 'sandboxId', 'requestDigest', 'executorIdentity', 'terminalState', 'exitCode', 'durationMs', 'finishedAt', 'stdoutDigest', 'stderrDigest', 'preTreeDigest', 'postTreeDigest', 'changedPathsDigest', 'outputBytes', 'executorResultDigest'] as const;
+/** Added after receiptVersion 1 shipped. A receipt without it is not claiming availability, it predates the field. */
+const AFTER_OPTIONAL_FIELDS = ['changedPathsAvailable'] as const;
 
 export interface ParsedExecutorBeforeReceipt { readonly [key: string]: string; readonly receiptVersion: '1'; readonly phase: 'BEFORE'; }
 export interface ParsedExecutorAfterReceipt { readonly [key: string]: string; readonly receiptVersion: '1'; readonly phase: 'AFTER'; readonly terminalState: 'SUCCEEDED' | 'FAILED'; }
 
-function parseExact(body: string, expected: readonly string[], phase: 'BEFORE' | 'AFTER'): Record<string, string> {
+function parseExact(body: string, expected: readonly string[], phase: 'BEFORE' | 'AFTER', optional: readonly string[] = []): Record<string, string> {
   if (Buffer.byteLength(body, 'utf8') > MAX_RECEIPT_BYTES) throw new Error('executor_receipt_too_large');
   if (!body.endsWith('\n') || body.includes('\r') || body.includes('\0')) throw new Error('executor_receipt_malformed');
   const result: Record<string, string> = {};
@@ -24,7 +26,8 @@ function parseExact(body: string, expected: readonly string[], phase: 'BEFORE' |
     if (key in result || value.length === 0 || /[\u0000-\u001f\u007f]/.test(value)) throw new Error('executor_receipt_malformed');
     result[key] = value;
   }
-  if (Object.keys(result).sort().join('\0') !== [...expected].sort().join('\0')) throw new Error('executor_receipt_fields_invalid');
+  const seen = Object.keys(result).sort().join('\0');
+  if (seen !== [...expected].sort().join('\0') && seen !== [...expected, ...optional].sort().join('\0')) throw new Error('executor_receipt_fields_invalid');
   if (result.receiptVersion !== '1' || result.phase !== phase) throw new Error('executor_receipt_phase_invalid');
   return result;
 }
@@ -49,13 +52,13 @@ export function parseExecutorBeforeReceipt(body: string): ParsedExecutorBeforeRe
 }
 
 export function parseExecutorAfterReceipt(body: string): ParsedExecutorAfterReceipt {
-  const value = parseExact(body, AFTER_FIELDS, 'AFTER');
+  const value = parseExact(body, AFTER_FIELDS, 'AFTER', AFTER_OPTIONAL_FIELDS);
   for (const key of ['manifestDigest', 'requestDigest', 'stdoutDigest', 'stderrDigest', 'preTreeDigest', 'postTreeDigest', 'changedPathsDigest', 'executorResultDigest']) digest(value[key]);
   for (const key of ['invocationId', 'sandboxId', 'executorIdentity']) id(value[key]);
   integer(value.dispatchGeneration, 1); integer(value.exitCode); integer(value.durationMs); integer(value.outputBytes); timestamp(value.finishedAt);
-  // Whether the changed-path evidence could be gathered is signed, so an empty list cannot be read as
-  // "nothing changed" when the truth is that the tool that reports it could not run.
-  if (value.changedPathsAvailable !== '0' && value.changedPathsAvailable !== '1') throw new Error('executor_receipt_invalid:changedPathsAvailable');
+  // Whether the changed-path evidence could be gathered is part of the signed record. Like changedPaths
+  // itself it is attested rather than surfaced: no field of the derived result carries it yet.
+  if (value.changedPathsAvailable !== undefined && value.changedPathsAvailable !== '0' && value.changedPathsAvailable !== '1') throw new Error('executor_receipt_invalid:changedPathsAvailable');
   if (value.terminalState !== 'SUCCEEDED' && value.terminalState !== 'FAILED') throw new Error('executor_receipt_terminal_state_invalid');
   if ((value.terminalState === 'SUCCEEDED') !== (value.exitCode === '0')) throw new Error('executor_receipt_terminal_state_conflict');
   return value as ParsedExecutorAfterReceipt;
@@ -66,8 +69,8 @@ export function parseExecutorAfterReceipt(body: string): ParsedExecutorAfterRece
 export interface ExecutorTerminalPayload { readonly stdout: string; readonly stderr: string; readonly changedPaths: string; readonly policyDecisionRef: string; }
 
 /** Derives Julius' normalized result solely from the authoritative AFTER receipt and its hash-bound payloads. */
-export function deriveToolInvocationResult(after: ParsedExecutorAfterReceipt, payload: ExecutorTerminalPayload, encoding: 'base64' | 'utf8' = 'base64'): ToolInvocationResult {
-  const decode = (value: string, name: string) => { if (typeof value !== 'string') throw new Error(`executor_terminal_payload_encoding:${name}`); if (encoding === 'utf8') return Buffer.from(value, 'utf8'); if (!/^[A-Za-z0-9+/]*={0,2}$/.test(value)) throw new Error(`executor_terminal_payload_encoding:${name}`); return Buffer.from(value, 'base64'); };
+export function deriveToolInvocationResult(after: ParsedExecutorAfterReceipt, payload: ExecutorTerminalPayload): ToolInvocationResult {
+  const decode = (value: string, name: string) => { if (typeof value !== 'string' || !/^[A-Za-z0-9+/]*={0,2}$/.test(value)) throw new Error(`executor_terminal_payload_encoding:${name}`); return Buffer.from(value, 'base64'); };
   const stdout = decode(payload.stdout, 'stdout'), stderr = decode(payload.stderr, 'stderr'), changed = decode(payload.changedPaths, 'changedPaths');
   const stdoutBytes = stdout.byteLength, stderrBytes = stderr.byteLength, changedBytes = changed.byteLength;
   if (stdoutBytes + stderrBytes > MAX_INLINE_OUTPUT_BYTES || changedBytes > MAX_CHANGED_PATHS_BYTES) throw new Error('executor_terminal_payload_too_large');

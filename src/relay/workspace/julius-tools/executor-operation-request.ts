@@ -23,7 +23,7 @@ const C='executor_operation_invalid';
  * control byte costs six characters of JSON escaping, and once as the base64 terminal payload it is verified
  * against, which costs 4/3. The margin absorbs what that formula leaves out — the changed-path payload, the
  * two receipt bodies, the attestations, and `ulimit -f`'s rounding up to whole 512-byte blocks. Measured
- * worst case with the current constants is 3.9 MB against 4 MB. A ceiling merely claimed to be safe is how a
+ * worst case with the current constants is about 3.7 MB against 4 MB. A ceiling merely claimed to be safe is how a
  * completed, signed execution became unreportable, so this one is computed and the margin is load-bearing.
  */
 export const MAX_EXECUTOR_RESPONSE_BYTES=4*1024*1024;

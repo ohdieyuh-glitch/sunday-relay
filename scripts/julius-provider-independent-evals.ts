@@ -4,7 +4,7 @@
  * Docker authority, and real containers. Nothing is asserted from configuration.
  * Each case reports PASS, FAIL or BLOCKED, and BLOCKED always carries the reason it is blocked.
  */
-import { readFile, stat, symlink } from 'node:fs/promises';
+import { lstat, readFile, rm, stat, symlink } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { verifyExecutorAttestation, type SignedExecutorAttestation } from '../src/relay/workspace/julius-tools/executor-attestation';
 import { RemoteExecutorControlPlane } from '../src/relay/workspace/julius-tools/remote-executor-control-plane';
@@ -254,7 +254,11 @@ async function main():Promise<void>{
     // The direct form was never the interesting one: a symlink planted inside the tenant's own workspace
     // is lexically contained and resolves elsewhere, which is how the first version of this gate was beaten.
     const planted=`${workspace}/escape-to-other-tenant`;
-    await symlink(foreign,planted).catch(()=>undefined);
+    // Unguarded, and confirmed to be a symlink: swallowing the failure would let this case pass while
+    // refusing a path that simply does not exist, proving nothing about the boundary it names.
+    await rm(planted,{force:true});
+    await symlink(foreign,planted);
+    if(!(await lstat(planted)).isSymbolicLink())throw new Error('symlink_not_planted');
     const viaSymlink=await read(await post('prepare',scoped.get('prepare')!,{sandboxId:seed.identity.sandboxId,sourceRef:planted,expectedLeaseGeneration:LEASE}));
     if(viaSymlink.status!==409||viaSymlink.error!=='SECURITY_FAILURE:executor_workspace_tenant_scope_refused')throw new Error(`symlink: ${viaSymlink.status} ${viaSymlink.error}`);
     return `direct and symlinked both ${viaSymlink.status} ${viaSymlink.error}`;

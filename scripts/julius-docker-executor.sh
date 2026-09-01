@@ -5,7 +5,9 @@ readonly command_text=${1:?missing command}
 readonly receipt_dir="/julius-receipts-root/${JULIUS_EXECUTION_TOKEN:?}"
 readonly stage_file="$receipt_dir/executor.stage"
 tree_digest() { (cd /workspace && find . -xdev \( -type f -o -type l \) -print0 | sort -z | while IFS= read -r -d '' path; do printf '%s\0' "$path"; stat -c '%f' -- "$path" 2>/dev/null; if test -L "$path"; then readlink -- "$path"; else sha256sum -- "$path" 2>/dev/null; fi; done) | sha256sum | cut -d' ' -f1; }
-durable_move() { local source=$1 target=$2; sync -f "$source" || true; ln -- "$source" "$target" || return 1; rm -f -- "$source" || return 1; sync -f "$target" || true; sync || true; }
+# A failed rm leaves the temporary aliased to the sealed target, which is harmless: ln refuses a target
+# that already exists, so no later call can rewrite what was sealed through the surviving name.
+durable_move() { local source=$1 target=$2; sync -f "$source" || true; ln -- "$source" "$target" || return 1; rm -f -- "$source" || true; sync -f "$target" || true; sync || true; }
 stage() { printf '%s\n' "$1" > "$stage_file.tmp" || return 1; sync -f "$stage_file.tmp" || true; mv -f -- "$stage_file.tmp" "$stage_file" || return 1; sync -f "$stage_file" || true; sync || true; }
 readonly started_at=$(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)
 readonly pre_tree=$(tree_digest)
@@ -42,7 +44,10 @@ readonly duration_ms=$((end_ms-start_ms))
 # `safe.directory` is required because the command runs as 65532 in a workspace it may not own, and the two
 # hermetic settings above remove every other place that exception could come from. An empty result must not be
 # ambiguous, so a refusal is recorded as a line rather than discarded: silence would be attested as "nothing changed".
-if (cd /workspace && GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null /usr/bin/setpriv --reuid=65532 --regid=65532 --clear-groups --bounding-set=-all --inh-caps=-all --ambient-caps=-all git -c core.fsmonitor= -c core.hooksPath=/dev/null -c safe.directory=/workspace --no-optional-locks status --porcelain=v1 2>/dev/null) | head -n 100 | head -c 65536 > "$receipt_dir/changed-paths.tmp"; then changed_paths_available=1; else changed_paths_available=0; fi
+(cd /workspace && GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null /usr/bin/setpriv --reuid=65532 --regid=65532 --clear-groups --bounding-set=-all --inh-caps=-all --ambient-caps=-all git -c core.fsmonitor= -c core.hooksPath=/dev/null -c safe.directory=/workspace --no-optional-locks status --porcelain=v1 2>/dev/null) | head -n 100 | head -c 65536 > "$receipt_dir/changed-paths.tmp"
+# The pipeline's status is `head`'s, which succeeds however the git leg fared. Only PIPESTATUS carries the
+# fact the receipt is about to attest, and an empty list from a failed git must never read as "nothing changed".
+if test "${PIPESTATUS[0]}" -eq 0; then changed_paths_available=1; else changed_paths_available=0; fi
 readonly changed_paths_available
 durable_move "$receipt_dir/changed-paths.tmp" "$receipt_dir/changed-paths"
 readonly post_tree=$(tree_digest)

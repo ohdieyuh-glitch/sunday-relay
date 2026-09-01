@@ -1,6 +1,6 @@
 import { createServer, type IncomingMessage, type Server } from 'node:http';
 import { createHash, createPublicKey, timingSafeEqual, type KeyObject } from 'node:crypto';
-import { access, readFile } from 'node:fs/promises';
+import { readFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import type { SandboxExecutionPort } from '../../mission/julius';
 import { receiptDigest, signExecutorAttestation, type SignedExecutorAttestation } from './executor-attestation';
@@ -213,8 +213,11 @@ export function createExecutorControlPlaneService(config:ExecutorControlPlaneSer
            workload provably never started, whether the ledger stopped at PREPARED or at BEFORE_DURABLE —
            the transition now precedes the publish. Releasing then lets an honest retry through instead of
            burning the identity; if the gate exists, nothing is released and the answer stays unknown. */
+        /* The receipt directory is keyed on the execution token and sandbox, not on the dispatch generation,
+           so a prior generation's attestation can sit exactly where this one's would. Existence is therefore
+           not the question: the gate counts only if it was signed for THIS execution identity. */
         const gate=join(config.receipts.directory(envelope.payload.executionTokenHash,envelope.sandboxId),'before.attestation');
-        const opened=await access(gate).then(()=>true,()=>false);
+        const opened=await readFile(gate,'utf8').then(body=>(JSON.parse(body) as SignedExecutorAttestation).attestation.executionIdentity===envelope.executionIdentity,()=>false);
         if(!opened)for(const expected of ['PREPARED','BEFORE_DURABLE'] as const)
           await config.executionLedger.release({executionIdentity:envelope.executionIdentity,requestDigest:envelope.requestDigest,expected}).catch(()=>undefined);
         throw error;

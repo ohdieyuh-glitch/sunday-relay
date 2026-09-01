@@ -87,7 +87,11 @@ export class RemoteExecutorControlPlane implements SandboxExecutionPort {
     // so it is checked against the signed BEFORE receipt rather than taken from the unsigned response body.
     if(createHash('sha256').update(String(decoded.value.policyDecisionRef)).digest('hex')!==before.policyDigest)throw new Error('SECURITY_FAILURE:executor_policy_reference_unattested');
     // An answer with no stated encoding was written before the payload became base64 and is still UTF-8.
-    const authoritative=deriveToolInvocationResult(after,{...decoded.terminalPayload,policyDecisionRef:decoded.value.policyDecisionRef},decoded.terminalPayloadEncoding??'utf8');
+    // Absent means base64: the field was added after the payload became base64, so every stored answer that
+    // lacks it was written by a version that already encoded. An unrecognised value is refused, never guessed.
+    const encoding=decoded.terminalPayloadEncoding;
+    if(encoding!==undefined&&encoding!=='base64')throw new Error('SECURITY_FAILURE:executor_terminal_payload_encoding_unknown');
+    const authoritative=deriveToolInvocationResult(after,{...decoded.terminalPayload,policyDecisionRef:decoded.value.policyDecisionRef});
     try{validateToolInvocationResult(authoritative,decoded.value);}catch{throw new Error('SECURITY_FAILURE:executor_result_mismatch');}
     return authoritative;
   }
