@@ -107,6 +107,24 @@ async function sealTerminal(config:ExecutorControlPlaneServiceConfig,envelope:{e
   return {status,body};
 }
 
+/**
+ * Whether the in-sandbox gate was opened for THIS execution. Only a missing file proves it was not: the
+ * receipt directory omits the dispatch generation, so a prior generation's attestation sits where this
+ * one's would, and a torn or unreadable file might belong to this execution. Anything but ENOENT counts as
+ * opened, which is the direction that never releases a reservation whose workload may already have run.
+ * `.then(onFulfilled,onRejected)` does not route the parse failure to the second handler, so it is caught
+ * here rather than escaping and replacing a terminal refusal with a transient-looking fault.
+ */
+export async function executionGateOpened(gatePath:string,executionIdentity:string):Promise<boolean>{
+  return readFile(gatePath,'utf8').then(
+    body=>{try{
+      const identity=(JSON.parse(body) as SignedExecutorAttestation)?.attestation?.executionIdentity;
+      // Parseable but not an attestation is corruption, not proof the gate never opened.
+      return typeof identity!=='string'||identity===executionIdentity;
+    }catch{return true;}},
+    (failure:NodeJS.ErrnoException)=>failure?.code!=='ENOENT');
+}
+
 async function visibleSandboxes(config:ExecutorControlPlaneServiceConfig,tenantId:string){
   const discovered=await config.physical.discoverSandboxes();
   const owners=await Promise.all(discovered.map(sandbox=>config.tenancyLedger.boundTenant(sandbox.sandboxId)));
@@ -140,14 +158,18 @@ export function createExecutorControlPlaneService(config:ExecutorControlPlaneSer
       if(!authority.operations.has(operation)){response.statusCode=403;response.end('{"error":"operation_scope_refused"}');return;}
       const input=await validated(()=>body(request));let value:unknown;
       if(operation!=='execute'){
-        const parsed=await validated(()=>parseExecutorOperationRequest(operation,input,{tenantId:authority.tenantId}));
+        let parsed=await validated(()=>parseExecutorOperationRequest(operation,input,{tenantId:authority.tenantId}));
         if(SANDBOX_SCOPED.has(operation))await config.tenancyLedger.assert({sandboxId:(parsed as {sandboxId:string}).sandboxId,tenantId:authority.tenantId});
         // The sandbox is this tenant's; the directory it mounts must be too. One shared root would otherwise let
         // any tenant mount another tenant's workspace read-write on a sandbox it legitimately owns.
         if(operation==='prepare'&&config.tenantWorkspaceRoot){
           // The same routine the adapter uses to decide what it will mount, against this tenant's own root.
-          const permitted=await permittedWorkspace(resolve(config.tenantWorkspaceRoot,authority.tenantId),(parsed as {sourceRef:string}).sourceRef);
+          const tenantRoot=resolve(config.tenantWorkspaceRoot,authority.tenantId);
+          const permitted=await permittedWorkspace(tenantRoot,(parsed as {sourceRef:string}).sourceRef);
           if(!permitted)throw new Error('SECURITY_FAILURE:executor_workspace_tenant_scope_refused');
+          // The resolved path AND the root it must still be inside travel to the adapter, so the check that
+          // decides at mount time is this tenant's, not the fleet's. This check alone is only advisory.
+          parsed={...(parsed as object),sourceRef:permitted,permittedWorkspaceRoot:tenantRoot};
         }
         // `quarantine` destroys a container outright and names it by runtime id, so the id must first be
         // shown to belong to a Julius sandbox that is either this tenant's or unowned. Without this the
@@ -217,7 +239,7 @@ export function createExecutorControlPlaneService(config:ExecutorControlPlaneSer
            so a prior generation's attestation can sit exactly where this one's would. Existence is therefore
            not the question: the gate counts only if it was signed for THIS execution identity. */
         const gate=join(config.receipts.directory(envelope.payload.executionTokenHash,envelope.sandboxId),'before.attestation');
-        const opened=await readFile(gate,'utf8').then(body=>(JSON.parse(body) as SignedExecutorAttestation).attestation.executionIdentity===envelope.executionIdentity,()=>false);
+        const opened=await executionGateOpened(gate,envelope.executionIdentity);
         if(!opened)for(const expected of ['PREPARED','BEFORE_DURABLE'] as const)
           await config.executionLedger.release({executionIdentity:envelope.executionIdentity,requestDigest:envelope.requestDigest,expected}).catch(()=>undefined);
         throw error;

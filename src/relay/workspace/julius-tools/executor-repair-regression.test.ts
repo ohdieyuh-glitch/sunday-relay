@@ -2,16 +2,18 @@ import { mkdtemp, mkdir, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { generateKeyPairSync } from 'node:crypto';
+import { createHash, generateKeyPairSync } from 'node:crypto';
 import type { AddressInfo } from 'node:net';
 import type { SandboxExecutionPort } from '../../mission/julius';
-import { createExecutorControlPlaneService } from './executor-control-plane-service';
+import { createExecutorControlPlaneService, executionGateOpened } from './executor-control-plane-service';
 import { DockerExecutorReceiptStore } from './executor-receipt-store';
 import { FilesystemSandboxTenancyLedger } from './durable-execution-ledger';
-import { permittedWorkspace, workspaceContained } from './docker-sandbox-adapter';
+import { DockerJuliusSandboxAdapter, permittedWorkspace, workspaceContained } from './docker-sandbox-adapter';
+import { assertKnownPayloadEncoding } from './remote-executor-control-plane';
 import { FilesystemExecutionLedger, durablePublish } from './durable-execution-ledger';
 import { parseExecutorCallers } from './executor-scoped-credential';
 import { canonicalRequestDigest, executionReplayDigest, parseExecutorExecutionEnvelope } from './execution-envelope';
+import { deriveToolInvocationResult, parseExecutorAfterReceipt } from './executor-terminal-receipt';
 
 /*
  * Each case here is a branch that a previous review round repaired and left untested — which is exactly
@@ -135,4 +137,71 @@ describe('the gates themselves, not the helpers behind them',()=>{
       expect((await prepare(join(workspaces,'tenant'))).error).toBe('prepare_reached_the_adapter');
     }finally{await new Promise<void>(resolve=>server.close(()=>resolve()));}
   },20_000);
+});
+
+/*
+ * A mutation battery showed four of the last round's repairs could be silently undone: the release gate's
+ * identity comparison, the encoding stamp, the additive receipt field, and its value guard. Each is bound here.
+ */
+describe('repairs a mutation battery showed were undefended',()=>{
+  const gateFor=(executionIdentity:string)=>JSON.stringify({attestation:{version:1,keyId:'k',phase:'BEFORE',executionIdentity,invocationId:'inv',dispatchGeneration:1,sandboxId:'sandbox',requestDigest:'a'.repeat(64),receiptDigest:'b'.repeat(64),issuedAt:new Date().toISOString()},signature:'x'});
+  // The real predicate the service uses, not a copy of it: a test that reimplements the rule it checks
+  // passes whatever the production code does, which is how the last round's suite missed this repair.
+  const opened=async(body:string|null,identity:string)=>{
+    const root=await mkdtemp(join(tmpdir(),'julius-gate-file-'));const gate=join(root,'before.attestation');
+    if(body!==null)await writeFile(gate,body);
+    return executionGateOpened(gate,identity);
+  };
+  it('releases only when the gate provably never opened for this execution',async()=>{
+    expect(await opened(null,'inv:1:sandbox')).toBe(false);                    // absent: never opened, release
+    expect(await opened(gateFor('inv:1:sandbox'),'inv:1:sandbox')).toBe(true); // this execution: hold
+    expect(await opened(gateFor('inv:2:sandbox'),'inv:1:sandbox')).toBe(false);// a foreign generation: release
+    expect(await opened('{not json',  'inv:1:sandbox')).toBe(true);            // torn: may have opened, hold
+    expect(await opened('null',       'inv:1:sandbox')).toBe(true);            // shapeless: hold
+  });
+
+  it('reads a terminal payload whose encoding predates the stamp, and refuses one it does not know',()=>{
+    const payload=Buffer.from('ok','utf8');
+    const digest=(value:Buffer)=>createHash('sha256').update(value).digest('hex');
+    const empty=digest(Buffer.alloc(0));
+    const resultDigest=createHash('sha256').update(['0','1',digest(payload),empty,'d'.repeat(64),empty].join('\n')).digest('hex');
+    const after=`receiptVersion=1\nphase=AFTER\nmanifestDigest=${'d'.repeat(64)}\ninvocationId=inv\ndispatchGeneration=1\nsandboxId=sandbox\nrequestDigest=${'a'.repeat(64)}\nexecutorIdentity=executor\nterminalState=SUCCEEDED\nexitCode=0\ndurationMs=1\nfinishedAt=2026-08-31T00:00:01.000Z\nstdoutDigest=${digest(payload)}\nstderrDigest=${empty}\npreTreeDigest=${'d'.repeat(64)}\npostTreeDigest=${'d'.repeat(64)}\nchangedPathsDigest=${empty}\noutputBytes=${payload.byteLength}\nexecutorResultDigest=${resultDigest}\n`;
+    // A receipt written before the availability field existed must still parse, or a sandbox image not yet
+    // repinned makes every execution unanswerable.
+    const parsed=parseExecutorAfterReceipt(after);
+    expect(parsed.changedPathsAvailable).toBeUndefined();
+    // And the availability value is constrained, so the field cannot carry anything it likes.
+    expect(()=>parseExecutorAfterReceipt(after.replace('outputBytes=','changedPathsAvailable=2\noutputBytes='))).toThrow('changedPathsAvailable');
+    expect(parseExecutorAfterReceipt(after.replace('outputBytes=','changedPathsAvailable=0\noutputBytes=')).changedPathsAvailable).toBe('0');
+    // The payload is base64 whether or not the answer stamped its encoding: base64 landed first.
+    const derived=deriveToolInvocationResult(parsed,{stdout:payload.toString('base64'),stderr:'',changedPaths:'',policyDecisionRef:'policy'});
+    expect(derived.stdout).toBe('ok');
+  });
+});
+
+describe('the adapter gate that actually produces the mount',()=>{
+  /* The service-level gate can be absent — tenantWorkspaceRoot is optional for a single tenant — and then
+     this is the only containment between a caller's string and `docker --mount src=`. */
+  it('refuses a workspace outside its own allowed root, and admits one inside it',async()=>{
+    const root=await mkdtemp(join(tmpdir(),'julius-adapter-'));
+    const fleet=join(root,'fleet');await mkdir(join(fleet,'work'),{recursive:true});await mkdir(join(root,'elsewhere'));
+    await symlink(join(root,'elsewhere'),join(fleet,'escape'));
+    const adapter=new DockerJuliusSandboxAdapter({image:`sha256:${'a'.repeat(64)}`,enabled:true,unsafeDevelopmentMode:true,allowedWorkspaceRoot:fleet,dockerBinary:join(root,'no-such-docker')});
+    const identity={sandboxId:'sandbox',invocationId:'inv',tenantId:'tenant',projectId:'project',runId:'run',taskId:'task',leaseGeneration:1,policyRevision:'policy',createdAt:new Date().toISOString(),expiresAt:new Date(Date.now()+600_000).toISOString()};
+    const limits={cpuCount:1,memoryBytes:134_217_728,pids:32,openFiles:128,workspaceBytes:1_048_576,outputBytes:32_768,wallClockMs:10_000,concurrentProcesses:4};
+    const policy={readWorkspace:true,mutateWorkspace:true,executeProcess:true,network:'DENY' as const,allowedTools:['shell.bash']};
+    await adapter.createSandbox({identity,limits,policy});
+    const prepare=(sourceRef:string)=>adapter.prepareWorkspace({sandboxId:'sandbox',sourceRef,expectedLeaseGeneration:1}).then(()=>'accepted',(error:Error)=>error.message);
+    expect(await prepare(join(root,'elsewhere'))).toBe('sandbox_workspace_invalid');
+    expect(await prepare(join(fleet,'escape'))).toBe('sandbox_workspace_invalid');
+    // A path inside the root must get PAST the gate and fail on something else, or a gate that refuses
+    // everything would satisfy both refusals above and this test would prove nothing.
+    expect(await prepare(join(fleet,'work'))).not.toBe('sandbox_workspace_invalid');
+  },20_000);
+
+  it('refuses a terminal payload encoding it does not implement',()=>{
+    expect(()=>assertKnownPayloadEncoding(undefined)).not.toThrow();
+    expect(()=>assertKnownPayloadEncoding('base64')).not.toThrow();
+    for(const unknown of ['utf8','hex','',null,2]) expect(()=>assertKnownPayloadEncoding(unknown)).toThrow('SECURITY_FAILURE:executor_terminal_payload_encoding_unknown');
+  });
 });

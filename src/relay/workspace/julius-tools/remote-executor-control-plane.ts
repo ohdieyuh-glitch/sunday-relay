@@ -30,6 +30,14 @@ async function refusal(response:Response):Promise<Error>{
   return new Error(code?`EXECUTOR_UNAVAILABLE:${code}`:'EXECUTOR_UNAVAILABLE');
 }
 
+/**
+ * Absent means base64: the payload became base64 one commit before the stamp existed, so nothing stored
+ * lacks it by choice. An encoding this client does not implement is refused rather than guessed at.
+ */
+export function assertKnownPayloadEncoding(encoding:unknown):void {
+  if(encoding!==undefined&&encoding!=='base64')throw new Error('SECURITY_FAILURE:executor_terminal_payload_encoding_unknown');
+}
+
 /** Production transport. It has no Docker binary, socket, signing key, or receipt-store path. */
 export class RemoteExecutorControlPlane implements SandboxExecutionPort {
   constructor(private readonly config: ExecutorControlPlaneConfig) {
@@ -89,8 +97,7 @@ export class RemoteExecutorControlPlane implements SandboxExecutionPort {
     // An answer with no stated encoding was written before the payload became base64 and is still UTF-8.
     // Absent means base64: the field was added after the payload became base64, so every stored answer that
     // lacks it was written by a version that already encoded. An unrecognised value is refused, never guessed.
-    const encoding=decoded.terminalPayloadEncoding;
-    if(encoding!==undefined&&encoding!=='base64')throw new Error('SECURITY_FAILURE:executor_terminal_payload_encoding_unknown');
+    assertKnownPayloadEncoding(decoded.terminalPayloadEncoding);
     const authoritative=deriveToolInvocationResult(after,{...decoded.terminalPayload,policyDecisionRef:decoded.value.policyDecisionRef});
     try{validateToolInvocationResult(authoritative,decoded.value);}catch{throw new Error('SECURITY_FAILURE:executor_result_mismatch');}
     return authoritative;
