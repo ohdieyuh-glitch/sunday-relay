@@ -8,7 +8,7 @@ const DIGEST = /^[a-f0-9]{64}$/;
 const ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$/;
 
 const BEFORE_FIELDS = ['receiptVersion', 'phase', 'manifestDigest', 'invocationId', 'dispatchGeneration', 'sandboxId', 'tenantDigest', 'projectDigest', 'runDigest', 'taskDigest', 'workerDigest', 'toolId', 'toolVersion', 'requestDigest', 'policyDigest', 'leaseGeneration', 'imageDigest', 'executorIdentity', 'preTreeDigest', 'startedAt'] as const;
-const AFTER_FIELDS = ['receiptVersion', 'phase', 'manifestDigest', 'invocationId', 'dispatchGeneration', 'sandboxId', 'requestDigest', 'executorIdentity', 'terminalState', 'exitCode', 'durationMs', 'finishedAt', 'stdoutDigest', 'stderrDigest', 'preTreeDigest', 'postTreeDigest', 'changedPathsDigest', 'outputBytes', 'executorResultDigest'] as const;
+const AFTER_FIELDS = ['receiptVersion', 'phase', 'manifestDigest', 'invocationId', 'dispatchGeneration', 'sandboxId', 'requestDigest', 'executorIdentity', 'terminalState', 'exitCode', 'durationMs', 'finishedAt', 'stdoutDigest', 'stderrDigest', 'preTreeDigest', 'postTreeDigest', 'changedPathsDigest', 'changedPathsAvailable', 'outputBytes', 'executorResultDigest'] as const;
 
 export interface ParsedExecutorBeforeReceipt { readonly [key: string]: string; readonly receiptVersion: '1'; readonly phase: 'BEFORE'; }
 export interface ParsedExecutorAfterReceipt { readonly [key: string]: string; readonly receiptVersion: '1'; readonly phase: 'AFTER'; readonly terminalState: 'SUCCEEDED' | 'FAILED'; }
@@ -53,6 +53,9 @@ export function parseExecutorAfterReceipt(body: string): ParsedExecutorAfterRece
   for (const key of ['manifestDigest', 'requestDigest', 'stdoutDigest', 'stderrDigest', 'preTreeDigest', 'postTreeDigest', 'changedPathsDigest', 'executorResultDigest']) digest(value[key]);
   for (const key of ['invocationId', 'sandboxId', 'executorIdentity']) id(value[key]);
   integer(value.dispatchGeneration, 1); integer(value.exitCode); integer(value.durationMs); integer(value.outputBytes); timestamp(value.finishedAt);
+  // Whether the changed-path evidence could be gathered is signed, so an empty list cannot be read as
+  // "nothing changed" when the truth is that the tool that reports it could not run.
+  if (value.changedPathsAvailable !== '0' && value.changedPathsAvailable !== '1') throw new Error('executor_receipt_invalid:changedPathsAvailable');
   if (value.terminalState !== 'SUCCEEDED' && value.terminalState !== 'FAILED') throw new Error('executor_receipt_terminal_state_invalid');
   if ((value.terminalState === 'SUCCEEDED') !== (value.exitCode === '0')) throw new Error('executor_receipt_terminal_state_conflict');
   return value as ParsedExecutorAfterReceipt;
@@ -63,9 +66,9 @@ export function parseExecutorAfterReceipt(body: string): ParsedExecutorAfterRece
 export interface ExecutorTerminalPayload { readonly stdout: string; readonly stderr: string; readonly changedPaths: string; readonly policyDecisionRef: string; }
 
 /** Derives Julius' normalized result solely from the authoritative AFTER receipt and its hash-bound payloads. */
-export function deriveToolInvocationResult(after: ParsedExecutorAfterReceipt, payload: ExecutorTerminalPayload): ToolInvocationResult {
-  const base64 = (value: string, name: string) => { if (typeof value !== 'string' || !/^[A-Za-z0-9+/]*={0,2}$/.test(value)) throw new Error(`executor_terminal_payload_encoding:${name}`); return Buffer.from(value, 'base64'); };
-  const stdout = base64(payload.stdout, 'stdout'), stderr = base64(payload.stderr, 'stderr'), changed = base64(payload.changedPaths, 'changedPaths');
+export function deriveToolInvocationResult(after: ParsedExecutorAfterReceipt, payload: ExecutorTerminalPayload, encoding: 'base64' | 'utf8' = 'base64'): ToolInvocationResult {
+  const decode = (value: string, name: string) => { if (typeof value !== 'string') throw new Error(`executor_terminal_payload_encoding:${name}`); if (encoding === 'utf8') return Buffer.from(value, 'utf8'); if (!/^[A-Za-z0-9+/]*={0,2}$/.test(value)) throw new Error(`executor_terminal_payload_encoding:${name}`); return Buffer.from(value, 'base64'); };
+  const stdout = decode(payload.stdout, 'stdout'), stderr = decode(payload.stderr, 'stderr'), changed = decode(payload.changedPaths, 'changedPaths');
   const stdoutBytes = stdout.byteLength, stderrBytes = stderr.byteLength, changedBytes = changed.byteLength;
   if (stdoutBytes + stderrBytes > MAX_INLINE_OUTPUT_BYTES || changedBytes > MAX_CHANGED_PATHS_BYTES) throw new Error('executor_terminal_payload_too_large');
   if (sha(stdout) !== after.stdoutDigest || sha(stderr) !== after.stderrDigest || sha(changed) !== after.changedPathsDigest) throw new Error('executor_terminal_payload_digest_mismatch');

@@ -21,8 +21,10 @@ const C='executor_operation_invalid';
  * Derived from what the response envelope can actually carry, not asserted to be under it. `ulimit -f` caps
  * stdout and stderr separately, and each stream crosses the wire twice: once inside the result, where a
  * control byte costs six characters of JSON escaping, and once as the base64 terminal payload it is verified
- * against, which costs 4/3. A ceiling merely claimed to be safe is how a completed, signed execution became
- * unreportable, so this one is computed and left with a margin.
+ * against, which costs 4/3. The margin absorbs what that formula leaves out — the changed-path payload, the
+ * two receipt bodies, the attestations, and `ulimit -f`'s rounding up to whole 512-byte blocks. Measured
+ * worst case with the current constants is 3.9 MB against 4 MB. A ceiling merely claimed to be safe is how a
+ * completed, signed execution became unreportable, so this one is computed and the margin is load-bearing.
  */
 export const MAX_EXECUTOR_RESPONSE_BYTES=4*1024*1024;
 export const MAX_SANDBOX_OUTPUT_BYTES=Math.floor(MAX_EXECUTOR_RESPONSE_BYTES/(2*(6+4/3))*0.9);

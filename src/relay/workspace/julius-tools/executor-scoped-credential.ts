@@ -1,5 +1,5 @@
 import { createHmac } from 'node:crypto';
-import { EXECUTOR_OPERATIONS, TENANT_OPERATIONS, operationScope, type ExecutorOperation } from './executor-operation-request';
+import { EXECUTOR_OPERATIONS, OPERATOR_OPERATIONS, TENANT_OPERATIONS, operationScope, type ExecutorOperation } from './executor-operation-request';
 import type { ExecutorCallerAuthority } from './executor-control-plane-service';
 
 /**
@@ -21,7 +21,7 @@ export function deriveScopedCredentialMap(rootSecret:string,operations?:readonly
   return new Map((operations??EXECUTOR_OPERATIONS).map(operation=>[operation,deriveScopedCredential(rootSecret,operation)]));
 }
 
-export interface ExecutorCallerDeclaration {readonly callerId:string;readonly tenantId:string;readonly credentialRoot:string;readonly operations?:readonly ExecutorOperation[];}
+export interface ExecutorCallerDeclaration {readonly callerId:string;readonly tenantId:string;readonly credentialRoot:string;readonly operations?:readonly ExecutorOperation[];readonly fleet?:boolean;}
 /** Parses the executor-only caller table. Each declared caller gets one narrowly scoped credential per operation. */
 export function parseExecutorCallers(value:string):readonly ExecutorCallerDeclaration[] {
   const parsed=JSON.parse(value) as unknown;
@@ -30,12 +30,21 @@ export function parseExecutorCallers(value:string):readonly ExecutorCallerDeclar
     if(!entry||typeof entry!=='object'||Array.isArray(entry))throw new Error('executor_callers_invalid');
     const record=entry as Record<string,unknown>;
     const keys=Object.keys(record).sort().join(',');
-    if(keys!=='callerId,credentialRoot,tenantId'&&keys!=='callerId,credentialRoot,operations,tenantId')throw new Error('executor_callers_invalid');
+    if(!['callerId,credentialRoot,tenantId','callerId,credentialRoot,operations,tenantId','callerId,credentialRoot,fleet,operations,tenantId'].includes(keys))throw new Error('executor_callers_invalid');
     const callerId=String(record.callerId),tenantId=String(record.tenantId),credentialRoot=String(record.credentialRoot);
     if(!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(callerId)||!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(tenantId)||credentialRoot.length<32)throw new Error('executor_callers_invalid');
     if(record.operations===undefined)return {callerId,tenantId,credentialRoot};
     if(!Array.isArray(record.operations)||record.operations.length<1||record.operations.some(operation=>!EXECUTOR_OPERATIONS.includes(operation as ExecutorOperation)))throw new Error('executor_callers_invalid');
-    return {callerId,tenantId,credentialRoot,operations:record.operations as readonly ExecutorOperation[]};
+    const operations=record.operations as readonly ExecutorOperation[];
+    // A caller is a tenant or a fleet operator, never both: mixing the two is how a tenant-scoped
+    // declaration quietly acquired authority over sandboxes no tenant owns.
+    const operatorSet=new Set<ExecutorOperation>(OPERATOR_OPERATIONS);
+    if(operations.some(operation=>operatorSet.has(operation))&&operations.some(operation=>!operatorSet.has(operation)))throw new Error('executor_callers_mixed_authority');
+    if(record.fleet!==undefined&&typeof record.fleet!=='boolean')throw new Error('executor_callers_invalid');
+    // Fleet authority is granted, not inferred. Deriving it from the operation set made every gate that
+    // reads it tautologically satisfied, because reaching such a gate required declaring that operation.
+    if(record.fleet===true&&operations.some(operation=>!operatorSet.has(operation)))throw new Error('executor_callers_invalid');
+    return {callerId,tenantId,credentialRoot,operations,fleet:record.fleet===true};
   });
   if(new Set(declarations.map(entry=>entry.callerId)).size!==declarations.length)throw new Error('executor_callers_invalid');
   if(new Set(declarations.map(entry=>entry.credentialRoot)).size!==declarations.length)throw new Error('executor_callers_shared_root');

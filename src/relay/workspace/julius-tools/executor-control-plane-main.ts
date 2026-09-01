@@ -7,9 +7,11 @@ import { FilesystemExecutionLedger, FilesystemSandboxTenancyLedger } from './dur
 import { createDurableReceiptAttestor, createExecutorControlPlaneService } from './executor-control-plane-service';
 import { DockerExecutorReceiptStore } from './executor-receipt-store';
 import { deriveCallerAuthorities, parseExecutorCallers } from './executor-scoped-credential';
-import { OPERATOR_OPERATIONS, type ExecutorOperation } from './executor-operation-request';
+
 
 const required=(name:string):string=>{const value=process.env[name];if(!value)throw new Error(`executor_config_missing:${name}`);return value;};
+/** Identifiers reach filesystem paths, so the single-caller fallback validates them exactly as the caller table does. */
+const identifier=(name:string):string=>{const value=required(name);if(!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(value))throw new Error(`executor_config_invalid:${name}`);return value;};
 const port=Number(process.env.EXECUTOR_PORT??'8787');
 if(!Number.isSafeInteger(port)||port<1||port>65535)throw new Error('executor_config_invalid:EXECUTOR_PORT');
 
@@ -28,17 +30,17 @@ async function main():Promise<void>{
     durability:{store:recoveryStore,receipts,runtimeInstanceId:required('EXECUTOR_RUNTIME_ID'),executorVersion:required('EXECUTOR_VERSION'),attestReceipt:attestor},
   });
   // The root secret never leaves this process. Julius receives only the per-operation credentials derived from it.
-  const declared=process.env.EXECUTOR_CALLERS?parseExecutorCallers(process.env.EXECUTOR_CALLERS):[{callerId:required('JULIUS_CALLER_ID'),tenantId:required('JULIUS_TENANT_ID'),credentialRoot:required('EXECUTOR_CREDENTIAL_ROOT')}];
-  // A caller that declares any fleet-wide operation is fleet authority: only it may sweep the host or act
-  // on a sandbox nobody owns. A tenant caller declares none and so is never granted it.
-  const fleetOperations=new Set<ExecutorOperation>(OPERATOR_OPERATIONS);
-  const callerAuthorities=declared.flatMap(caller=>{
-    const fleet=(caller.operations??[]).some(operation=>fleetOperations.has(operation));
-    return deriveCallerAuthorities({rootSecret:caller.credentialRoot,callerId:caller.callerId,tenantId:caller.tenantId,operations:caller.operations}).map(authority=>({...authority,fleet}));
-  });
+  const declared=process.env.EXECUTOR_CALLERS?parseExecutorCallers(process.env.EXECUTOR_CALLERS):[{callerId:identifier('JULIUS_CALLER_ID'),tenantId:identifier('JULIUS_TENANT_ID'),credentialRoot:required('EXECUTOR_CREDENTIAL_ROOT')}];
+  // Fleet authority is whatever the caller table granted, never what its operation list implies: inferring it
+  // made every gate reading it satisfied by definition, since reaching one required holding that operation.
+  const callerAuthorities=declared.flatMap(caller=>
+    deriveCallerAuthorities({rootSecret:caller.credentialRoot,callerId:caller.callerId,tenantId:caller.tenantId,operations:caller.operations}).map(authority=>({...authority,fleet:caller.fleet===true})));
+  // With more than one tenant, a shared workspace root is no isolation at all, so it stops being optional.
+  const tenants=new Set(declared.map(caller=>caller.tenantId));
+  const tenantWorkspaceRoot=tenants.size>1?required('EXECUTOR_TENANT_WORKSPACE_ROOT'):process.env.EXECUTOR_TENANT_WORKSPACE_ROOT;
   const store=recoveryStore;
   const service=createExecutorControlPlaneService({callerAuthorities,keyId:required('EXECUTOR_KEY_ID'),privateSigningKey,physical,receipts,executionLedger,tenancyLedger,
-    tenantWorkspaceRoot:process.env.EXECUTOR_TENANT_WORKSPACE_ROOT,
+    tenantWorkspaceRoot:tenantWorkspaceRoot,
     /* Completes an execution whose effect happened and whose receipts are signed but whose reply was lost.
        It reads durable state and records the receipt Julius needs to settle; it never executes anything. */
     recoverTerminal:async input=>{

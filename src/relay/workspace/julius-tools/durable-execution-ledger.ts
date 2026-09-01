@@ -30,8 +30,10 @@ export async function durablePublish(path:string,body:string):Promise<void>{
     try{handle=await open(temporary,'wx',0o600);break;}
     catch(error){if((error as NodeJS.ErrnoException).code!=='EEXIST'||attempt>=4)throw error;}
   }
-  try{await handle.writeFile(body);await handle.sync();}finally{await handle.close();}
-  try{await link(temporary,path);}finally{await unlink(temporary).catch(()=>undefined);}
+  try{
+    try{await handle.writeFile(body);await handle.sync();}finally{await handle.close();}
+    await link(temporary,path);
+  }finally{await unlink(temporary).catch(()=>undefined);}
   const directory=await open(dirname(path),'r');try{await directory.sync();}finally{await directory.close();}
 }
 
@@ -56,12 +58,14 @@ export class FilesystemExecutionLedger {
   }
   async transition(input:{executionIdentity:string;requestDigest:string;from:DurableExecutionState;to:DurableExecutionState;resultDigest?:string|null;terminalResponse?:string|null;terminalStatus?:number|null;now:string}):Promise<DurableExecutionEntry>{
     const current=await this.load(input.executionIdentity);if(!current)throw new Error('execution_identity_not_reserved');if(current.requestDigest!==input.requestDigest)throw new Error('SECURITY_FAILURE:execution_identity_conflict');
-    if(current.state===input.to){if((input.resultDigest??null)!==current.resultDigest||(input.terminalResponse??null)!==current.terminalResponse)throw new Error('SECURITY_FAILURE:execution_terminal_conflict');return current;}
+    if(current.state===input.to){if((input.resultDigest??null)!==current.resultDigest||(input.terminalResponse??null)!==current.terminalResponse||(input.to==='TERMINAL'&&(input.terminalStatus??200)!==current.terminalStatus))throw new Error('SECURITY_FAILURE:execution_terminal_conflict');return current;}
     if(current.state!==input.from||STATES.indexOf(input.to)!==STATES.indexOf(input.from)+1)throw new Error('execution_state_conflict');
     if(input.to==='TERMINAL'&&(typeof input.terminalResponse!=='string'||!input.resultDigest))throw new Error('execution_terminal_material_required');
     if(input.to!=='TERMINAL'&&input.terminalResponse!==undefined&&input.terminalResponse!==null)throw new Error('execution_terminal_material_early');
     const next:DurableExecutionEntry={...current,state:input.to,resultDigest:input.resultDigest??null,terminalResponse:input.terminalResponse??null,terminalStatus:input.to==='TERMINAL'?(input.terminalStatus??200):null,updatedAt:input.now};
-    const path=this.path(input.executionIdentity),temporary=`${path}.${process.pid}.${Date.now()}.tmp`;const handle=await open(temporary,'wx',0o600);try{await handle.writeFile(JSON.stringify(next));await handle.sync();}finally{await handle.close();}await rename(temporary,path);const directory=await open(dirname(path),'r');try{await directory.sync();}finally{await directory.close();}return next;
+    // The same unique name durablePublish uses: recovery makes two transitions on one identity ordinary,
+    // and a shared pid and millisecond made the second one fail with EEXIST on a sealed outcome.
+    const path=this.path(input.executionIdentity),temporary=`${path}.${process.pid}.${Date.now()}.${randomUUID()}.tmp`;const handle=await open(temporary,'wx',0o600);try{await handle.writeFile(JSON.stringify(next));await handle.sync();}finally{await handle.close();}await rename(temporary,path);const directory=await open(dirname(path),'r');try{await directory.sync();}finally{await directory.close();}return next;
   }
   async removeForTests(identity:string):Promise<void>{await rm(this.path(identity),{force:true});}
 }

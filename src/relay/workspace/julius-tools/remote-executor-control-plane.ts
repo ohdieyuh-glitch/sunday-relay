@@ -70,7 +70,7 @@ export class RemoteExecutorControlPlane implements SandboxExecutionPort {
       headers: { authorization: `Bearer ${this.credentialFor('execute')}`, 'content-type': 'application/json', 'x-julius-operation': 'execute' }, body: JSON.stringify(envelope),
     }).catch(() => { throw new Error('EXECUTOR_UNAVAILABLE'); });
     if (!response.ok) throw await refusal(response);
-    const decoded = await boundedJson(response) as {value:Awaited<ReturnType<SandboxExecutionPort['executeTool']>>;attestations:readonly SignedExecutorAttestation[];receiptBodies:Readonly<Record<'BEFORE'|'AFTER',string>>;terminalPayload:Readonly<Record<'stdout'|'stderr'|'changedPaths',string>>};
+    const decoded = await boundedJson(response) as {value:Awaited<ReturnType<SandboxExecutionPort['executeTool']>>;attestations:readonly SignedExecutorAttestation[];receiptBodies:Readonly<Record<'BEFORE'|'AFTER',string>>;terminalPayload:Readonly<Record<'stdout'|'stderr'|'changedPaths',string>>;terminalPayloadEncoding?:'base64'};
     if (!this.config.trustedReceiptKeys || decoded.attestations?.length !== 2) throw new Error('SECURITY_FAILURE:executor_attestation_missing');
     const executionIdentity = `${input.request.invocationId}:${input.dispatchGeneration}:${input.sandboxId}`;
     for (const phase of ['BEFORE', 'AFTER'] as const) {
@@ -86,7 +86,8 @@ export class RemoteExecutorControlPlane implements SandboxExecutionPort {
     // policyDecisionRef records which policy authorised the work and lands in Julius's durable settlement,
     // so it is checked against the signed BEFORE receipt rather than taken from the unsigned response body.
     if(createHash('sha256').update(String(decoded.value.policyDecisionRef)).digest('hex')!==before.policyDigest)throw new Error('SECURITY_FAILURE:executor_policy_reference_unattested');
-    const authoritative=deriveToolInvocationResult(after,{...decoded.terminalPayload,policyDecisionRef:decoded.value.policyDecisionRef});
+    // An answer with no stated encoding was written before the payload became base64 and is still UTF-8.
+    const authoritative=deriveToolInvocationResult(after,{...decoded.terminalPayload,policyDecisionRef:decoded.value.policyDecisionRef},decoded.terminalPayloadEncoding??'utf8');
     try{validateToolInvocationResult(authoritative,decoded.value);}catch{throw new Error('SECURITY_FAILURE:executor_result_mismatch');}
     return authoritative;
   }

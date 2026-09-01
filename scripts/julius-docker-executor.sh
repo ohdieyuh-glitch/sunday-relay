@@ -5,7 +5,7 @@ readonly command_text=${1:?missing command}
 readonly receipt_dir="/julius-receipts-root/${JULIUS_EXECUTION_TOKEN:?}"
 readonly stage_file="$receipt_dir/executor.stage"
 tree_digest() { (cd /workspace && find . -xdev \( -type f -o -type l \) -print0 | sort -z | while IFS= read -r -d '' path; do printf '%s\0' "$path"; stat -c '%f' -- "$path" 2>/dev/null; if test -L "$path"; then readlink -- "$path"; else sha256sum -- "$path" 2>/dev/null; fi; done) | sha256sum | cut -d' ' -f1; }
-durable_move() { local source=$1 target=$2; sync -f "$source" || true; ln -- "$source" "$target" || return 1; rm -f -- "$source" || true; sync -f "$target" || true; sync || true; }
+durable_move() { local source=$1 target=$2; sync -f "$source" || true; ln -- "$source" "$target" || return 1; rm -f -- "$source" || return 1; sync -f "$target" || true; sync || true; }
 stage() { printf '%s\n' "$1" > "$stage_file.tmp" || return 1; sync -f "$stage_file.tmp" || true; mv -f -- "$stage_file.tmp" "$stage_file" || return 1; sync -f "$stage_file" || true; sync || true; }
 readonly started_at=$(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)
 readonly pre_tree=$(tree_digest)
@@ -42,7 +42,8 @@ readonly duration_ms=$((end_ms-start_ms))
 # `safe.directory` is required because the command runs as 65532 in a workspace it may not own, and the two
 # hermetic settings above remove every other place that exception could come from. An empty result must not be
 # ambiguous, so a refusal is recorded as a line rather than discarded: silence would be attested as "nothing changed".
-if (cd /workspace && GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null /usr/bin/setpriv --reuid=65532 --regid=65532 --clear-groups --bounding-set=-all --inh-caps=-all --ambient-caps=-all git -c core.fsmonitor= -c core.hooksPath=/dev/null -c safe.directory=/workspace --no-optional-locks status --porcelain=v1 2>/dev/null); then :; else printf '?? CHANGED_PATHS_UNAVAILABLE\n'; fi | head -n 100 | head -c 65536 > "$receipt_dir/changed-paths.tmp"
+if (cd /workspace && GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null /usr/bin/setpriv --reuid=65532 --regid=65532 --clear-groups --bounding-set=-all --inh-caps=-all --ambient-caps=-all git -c core.fsmonitor= -c core.hooksPath=/dev/null -c safe.directory=/workspace --no-optional-locks status --porcelain=v1 2>/dev/null) | head -n 100 | head -c 65536 > "$receipt_dir/changed-paths.tmp"; then changed_paths_available=1; else changed_paths_available=0; fi
+readonly changed_paths_available
 durable_move "$receipt_dir/changed-paths.tmp" "$receipt_dir/changed-paths"
 readonly post_tree=$(tree_digest)
 readonly stdout_digest=$(sha256sum "$receipt_dir/stdout" | cut -d' ' -f1)
@@ -52,7 +53,7 @@ readonly output_bytes=$(($(wc -c < "$receipt_dir/stdout")+$(wc -c < "$receipt_di
 readonly result_digest=$(printf '%s\n%s\n%s\n%s\n%s\n%s' "$exit_code" "$duration_ms" "$stdout_digest" "$stderr_digest" "$post_tree" "$changed_digest" | sha256sum | cut -d' ' -f1)
 readonly finished_at=$(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)
 if test "$exit_code" -eq 0; then terminal_state=SUCCEEDED; else terminal_state=FAILED; fi
-printf 'receiptVersion=1\nphase=AFTER\nmanifestDigest=%s\ninvocationId=%s\ndispatchGeneration=%s\nsandboxId=%s\nrequestDigest=%s\nexecutorIdentity=%s\nterminalState=%s\nexitCode=%s\ndurationMs=%s\nfinishedAt=%s\nstdoutDigest=%s\nstderrDigest=%s\npreTreeDigest=%s\npostTreeDigest=%s\nchangedPathsDigest=%s\noutputBytes=%s\nexecutorResultDigest=%s\n' "$JULIUS_MANIFEST_DIGEST" "$JULIUS_INVOCATION_ID" "$JULIUS_DISPATCH_GENERATION" "$JULIUS_SANDBOX_ID" "$JULIUS_REQUEST_DIGEST" "$JULIUS_EXECUTOR_IDENTITY" "$terminal_state" "$exit_code" "$duration_ms" "$finished_at" "$stdout_digest" "$stderr_digest" "$pre_tree" "$post_tree" "$changed_digest" "$output_bytes" "$result_digest" > "$receipt_dir/after.receipt.tmp"
+printf 'receiptVersion=1\nphase=AFTER\nmanifestDigest=%s\ninvocationId=%s\ndispatchGeneration=%s\nsandboxId=%s\nrequestDigest=%s\nexecutorIdentity=%s\nterminalState=%s\nexitCode=%s\ndurationMs=%s\nfinishedAt=%s\nstdoutDigest=%s\nstderrDigest=%s\npreTreeDigest=%s\npostTreeDigest=%s\nchangedPathsDigest=%s\nchangedPathsAvailable=%s\noutputBytes=%s\nexecutorResultDigest=%s\n' "$JULIUS_MANIFEST_DIGEST" "$JULIUS_INVOCATION_ID" "$JULIUS_DISPATCH_GENERATION" "$JULIUS_SANDBOX_ID" "$JULIUS_REQUEST_DIGEST" "$JULIUS_EXECUTOR_IDENTITY" "$terminal_state" "$exit_code" "$duration_ms" "$finished_at" "$stdout_digest" "$stderr_digest" "$pre_tree" "$post_tree" "$changed_digest" "$changed_paths_available" "$output_bytes" "$result_digest" > "$receipt_dir/after.receipt.tmp"
 durable_move "$receipt_dir/after.receipt.tmp" "$receipt_dir/after.receipt"
 # Likewise, do not report terminal execution until the control plane has
 # durably signed the authoritative AFTER fact.

@@ -9,7 +9,7 @@ const d = sha('x');
 const before = `receiptVersion=1\nphase=BEFORE\nmanifestDigest=${d}\ninvocationId=inv-1\ndispatchGeneration=1\nsandboxId=sb-1\ntenantDigest=${d}\nprojectDigest=${d}\nrunDigest=${d}\ntaskDigest=${d}\nworkerDigest=${d}\ntoolId=shell.bash\ntoolVersion=1\nrequestDigest=${d}\npolicyDigest=${d}\nleaseGeneration=1\nimageDigest=${d}\nexecutorIdentity=executor-1\npreTreeDigest=${d}\nstartedAt=2026-08-31T00:00:00.000Z\n`;
 const afterBody = (stdout: string | Buffer = 'ok', stderr: string | Buffer = '', changed: string | Buffer = '') => {
   const result = sha(['0', '12', sha(stdout), sha(stderr), d, sha(changed)].join('\n'));
-  return `receiptVersion=1\nphase=AFTER\nmanifestDigest=${d}\ninvocationId=inv-1\ndispatchGeneration=1\nsandboxId=sb-1\nrequestDigest=${d}\nexecutorIdentity=executor-1\nterminalState=SUCCEEDED\nexitCode=0\ndurationMs=12\nfinishedAt=2026-08-31T00:00:01.000Z\nstdoutDigest=${sha(stdout)}\nstderrDigest=${sha(stderr)}\npreTreeDigest=${d}\npostTreeDigest=${d}\nchangedPathsDigest=${sha(changed)}\noutputBytes=${Buffer.byteLength(stdout as string) + Buffer.byteLength(stderr as string)}\nexecutorResultDigest=${result}\n`;
+  return `receiptVersion=1\nphase=AFTER\nmanifestDigest=${d}\ninvocationId=inv-1\ndispatchGeneration=1\nsandboxId=sb-1\nrequestDigest=${d}\nexecutorIdentity=executor-1\nterminalState=SUCCEEDED\nexitCode=0\ndurationMs=12\nfinishedAt=2026-08-31T00:00:01.000Z\nstdoutDigest=${sha(stdout)}\nstderrDigest=${sha(stderr)}\npreTreeDigest=${d}\npostTreeDigest=${d}\nchangedPathsDigest=${sha(changed)}\nchangedPathsAvailable=1\noutputBytes=${Buffer.byteLength(stdout as string) + Buffer.byteLength(stderr as string)}\nexecutorResultDigest=${result}\n`;
 };
 
 describe('executor terminal receipts', () => {

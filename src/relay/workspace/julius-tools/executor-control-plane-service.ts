@@ -1,13 +1,13 @@
 import { createServer, type IncomingMessage, type Server } from 'node:http';
 import { createHash, createPublicKey, timingSafeEqual, type KeyObject } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
+import { access, readFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import type { SandboxExecutionPort } from '../../mission/julius';
 import { receiptDigest, signExecutorAttestation, type SignedExecutorAttestation } from './executor-attestation';
 import type { DockerExecutorReceiptStore } from './executor-receipt-store';
 import { executionReplayDigest, parseExecutorExecutionEnvelope } from './execution-envelope';
 import { EXECUTOR_OPERATION_SET, MAX_EXECUTOR_RESPONSE_BYTES, SANDBOX_SCOPED, parseExecutorOperationRequest, type ExecutorOperation } from './executor-operation-request';
-import { workspaceContained } from './docker-sandbox-adapter';
+import { permittedWorkspace } from './docker-sandbox-adapter';
 import { verifyExecutorAttestation } from './executor-attestation';
 import { parseExecutorAfterReceipt, parseExecutorBeforeReceipt } from './executor-terminal-receipt';
 import { FilesystemExecutionLedger, FilesystemSandboxTenancyLedger, durablePublish } from './durable-execution-ledger';
@@ -98,7 +98,9 @@ async function sealTerminal(config:ExecutorControlPlaneServiceConfig,envelope:{e
   const attestations=await Promise.all((['before','after'] as const).map(async phase=>JSON.parse(await readFile(join(directory,`${phase}.attestation`),'utf8')) as SignedExecutorAttestation));
   // Base64 so the bytes the receipt digested are the bytes Julius verifies; a UTF-8 round trip rewrites them.
   const terminalPayload={stdout:(await readFile(join(directory,'stdout'))).toString('base64'),stderr:(await readFile(join(directory,'stderr'))).toString('base64'),changedPaths:(await readFile(join(directory,'changed-paths'))).toString('base64')};
-  const encoded=JSON.stringify({value,attestations,receiptBodies,terminalPayload});
+  // The encoding is stamped in the body: a terminal answer stored by an earlier version carried UTF-8, and
+  // an unversioned switch would make every already-settled execution permanently unreplayable.
+  const encoded=JSON.stringify({value,attestations,receiptBodies,terminalPayload,terminalPayloadEncoding:'base64'});
   const oversize=Buffer.byteLength(encoded)>MAX_RESPONSE_BYTES;
   const body=oversize?JSON.stringify({error:'TERMINAL_FAILURE:executor_response_too_large'}):encoded,status=oversize?500:200;
   await config.executionLedger.transition({executionIdentity:envelope.executionIdentity,requestDigest:envelope.requestDigest,from:'AFTER_DURABLE',to:'TERMINAL',resultDigest:createHash('sha256').update(body).digest('hex'),terminalResponse:body,terminalStatus:status,now:new Date().toISOString()});
@@ -143,8 +145,9 @@ export function createExecutorControlPlaneService(config:ExecutorControlPlaneSer
         // The sandbox is this tenant's; the directory it mounts must be too. One shared root would otherwise let
         // any tenant mount another tenant's workspace read-write on a sandbox it legitimately owns.
         if(operation==='prepare'&&config.tenantWorkspaceRoot){
-          const permitted=resolve(config.tenantWorkspaceRoot,authority.tenantId);
-          if(!workspaceContained(permitted,resolve((parsed as {sourceRef:string}).sourceRef)))throw new Error('SECURITY_FAILURE:executor_workspace_tenant_scope_refused');
+          // The same routine the adapter uses to decide what it will mount, against this tenant's own root.
+          const permitted=await permittedWorkspace(resolve(config.tenantWorkspaceRoot,authority.tenantId),(parsed as {sourceRef:string}).sourceRef);
+          if(!permitted)throw new Error('SECURITY_FAILURE:executor_workspace_tenant_scope_refused');
         }
         // `quarantine` destroys a container outright and names it by runtime id, so the id must first be
         // shown to belong to a Julius sandbox that is either this tenant's or unowned. Without this the
@@ -193,18 +196,27 @@ export function createExecutorControlPlaneService(config:ExecutorControlPlaneSer
         // An execution that reached a durable AFTER has an outcome, whatever interrupted the reply. It is
         // recovered from the receipts rather than reported unknown, and nothing is executed a second time.
         if(reservation.entry.state==='AFTER_DURABLE'&&config.recoverTerminal){
-          const recovered=await config.recoverTerminal({executionTokenHash:envelope.payload.executionTokenHash,sandboxId:envelope.sandboxId});
-          if(recovered){const sealed=await sealTerminal(config,envelope,recovered);response.statusCode=sealed.status;response.end(sealed.body);return;}
+          // A failure to recover is not an answer. Anything thrown here falls through to the honest unknown
+          // rather than escaping as an opaque fault that a caller cannot distinguish from a transient one.
+          const sealed=await (async()=>{
+            const recovered=await config.recoverTerminal!({executionTokenHash:envelope.payload.executionTokenHash,sandboxId:envelope.sandboxId});
+            return recovered?await sealTerminal(config,envelope,recovered):null;
+          })().catch(()=>null);
+          if(sealed){response.statusCode=sealed.status;response.end(sealed.body);return;}
         }
         throw new Error('STARTED_UNKNOWN_OUTCOME');
       }
       try{
         value=await config.physical.executeTool({sandboxId:envelope.sandboxId,expectedLeaseGeneration:envelope.payload.expectedLeaseGeneration,dispatchGeneration:envelope.dispatchGeneration,requestDigest:envelope.requestDigest,executionTokenHash:envelope.payload.executionTokenHash,effectClassification:envelope.payload.effectClassification,request:envelope.payload.request});
       }catch(error){
-        // A refusal reached while the ledger is still PREPARED proves the workload never started: the
-        // in-sandbox gate blocks until the signed BEFORE exists, and that write is what leaves PREPARED.
-        // Releasing the reservation lets an honest retry through instead of burning the identity forever.
-        await config.executionLedger.release({executionIdentity:envelope.executionIdentity,requestDigest:envelope.requestDigest,expected:'PREPARED'}).catch(()=>undefined);
+        /* The gate the untrusted command waits on is the BEFORE attestation. If it is not on disk the
+           workload provably never started, whether the ledger stopped at PREPARED or at BEFORE_DURABLE —
+           the transition now precedes the publish. Releasing then lets an honest retry through instead of
+           burning the identity; if the gate exists, nothing is released and the answer stays unknown. */
+        const gate=join(config.receipts.directory(envelope.payload.executionTokenHash,envelope.sandboxId),'before.attestation');
+        const opened=await access(gate).then(()=>true,()=>false);
+        if(!opened)for(const expected of ['PREPARED','BEFORE_DURABLE'] as const)
+          await config.executionLedger.release({executionIdentity:envelope.executionIdentity,requestDigest:envelope.requestDigest,expected}).catch(()=>undefined);
         throw error;
       }
       const sealed=await sealTerminal(config,envelope,value);

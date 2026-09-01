@@ -4,7 +4,7 @@
  * Docker authority, and real containers. Nothing is asserted from configuration.
  * Each case reports PASS, FAIL or BLOCKED, and BLOCKED always carries the reason it is blocked.
  */
-import { readFile, stat } from 'node:fs/promises';
+import { readFile, stat, symlink } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { verifyExecutorAttestation, type SignedExecutorAttestation } from '../src/relay/workspace/julius-tools/executor-attestation';
 import { RemoteExecutorControlPlane } from '../src/relay/workspace/julius-tools/remote-executor-control-plane';
@@ -249,9 +249,15 @@ async function main():Promise<void>{
     if(!foreign)throw new Blocked('no second tenant workspace configured: set JULIUS_FOREIGN_WORKSPACE');
     const seed=await seedFor('foreign-workspace','printf never');
     await client.createSandbox({identity:seed.identity,limits:LIMITS,policy:FULL_POLICY});
-    const answer=await read(await post('prepare',scoped.get('prepare')!,{sandboxId:seed.identity.sandboxId,sourceRef:foreign,expectedLeaseGeneration:LEASE}));
-    if(answer.status!==409||answer.error!=='SECURITY_FAILURE:executor_workspace_tenant_scope_refused')throw new Error(`${answer.status} ${answer.error}`);
-    return `${answer.status} ${answer.error}`;
+    const direct=await read(await post('prepare',scoped.get('prepare')!,{sandboxId:seed.identity.sandboxId,sourceRef:foreign,expectedLeaseGeneration:LEASE}));
+    if(direct.status!==409||direct.error!=='SECURITY_FAILURE:executor_workspace_tenant_scope_refused')throw new Error(`direct: ${direct.status} ${direct.error}`);
+    // The direct form was never the interesting one: a symlink planted inside the tenant's own workspace
+    // is lexically contained and resolves elsewhere, which is how the first version of this gate was beaten.
+    const planted=`${workspace}/escape-to-other-tenant`;
+    await symlink(foreign,planted).catch(()=>undefined);
+    const viaSymlink=await read(await post('prepare',scoped.get('prepare')!,{sandboxId:seed.identity.sandboxId,sourceRef:planted,expectedLeaseGeneration:LEASE}));
+    if(viaSymlink.status!==409||viaSymlink.error!=='SECURITY_FAILURE:executor_workspace_tenant_scope_refused')throw new Error(`symlink: ${viaSymlink.status} ${viaSymlink.error}`);
+    return `direct and symlinked both ${viaSymlink.status} ${viaSymlink.error}`;
   });
   const operator=process.env.JULIUS_OPERATOR_SCOPED_CREDENTIALS?scopedCredentials('JULIUS_OPERATOR_SCOPED_CREDENTIALS'):null;
   for(const fleet of ['discover','reconcile','quarantine'] as const)
