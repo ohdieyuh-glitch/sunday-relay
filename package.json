@@ -27,6 +27,8 @@
     "relay:bridge": "npm run relay:bridge:build --silent && node dist-relay-bridge/server.cjs",
     "relay:julius:build": "esbuild relay-bridge/julius-live-mission.ts --bundle --platform=node --format=cjs --outfile=dist-relay-bridge/julius-live-mission.cjs --external:@anthropic-ai/claude-agent-sdk --external:pg --log-level=warning",
     "relay:julius:mission": "npm run relay:julius:build --silent && node dist-relay-bridge/julius-live-mission.cjs",
+    "julius:harness:export": "node scripts/export-julius-harness.mjs",
+    "julius:harness:check": "node scripts/export-julius-harness.mjs --check",
     "relay": "npm run relay:build --silent && node dist-relay/cli.cjs",
     "relay:test": "vitest run src/relay",
     "relay:surface-parity:check": "node scripts/relay-surface-parity.mjs",
