@@ -1,0 +1,66 @@
+BEGIN;
+-- THE GAUNTLET LOOP'S OWN STORAGE, and deliberately not Julius's.
+--
+-- `/gauntletloop` is a user-activated review command. An earlier version of
+-- this migration named these tables `julius_gauntlets` and
+-- `julius_gauntlet_rounds`, which put a user-facing feature inside Julius's
+-- namespace. They are the gauntlet's, they carry the ACTIVATION (who typed the
+-- command and when), and Julius does not read them.
+--
+-- The foreign keys point AT Julius, which is the allowed direction: the
+-- gauntlet depends on the work it reviews, and nothing in Julius references
+-- anything here.
+CREATE TABLE relay_wonderland.gauntlet_runs(
+ gauntlet_id text PRIMARY KEY,
+ run_id text NOT NULL REFERENCES relay_wonderland.julius_runs ON DELETE CASCADE,
+ project_id text NOT NULL REFERENCES relay_wonderland.projects,
+ -- The task the gauntlet is run FOR. One gauntlet per task, so a second
+ -- /gauntletloop on the same task resumes rather than forking.
+ -- The work under review. A foreign key into Julius is the ALLOWED direction:
+ -- the gauntlet depends on what it reviews, and Julius references nothing here.
+ subject_task_id text NOT NULL REFERENCES relay_wonderland.julius_tasks ON DELETE CASCADE,
+ -- WHO TYPED THE COMMAND, and when. A gauntlet that cannot say who activated
+ -- it is one nobody can be accountable for, and the architecture rests on this
+ -- being a thing a person chose rather than something a runtime turned on.
+ activated_by text NOT NULL,
+ activated_at timestamptz NOT NULL,
+ activation text NOT NULL CHECK(activation IN('INACTIVE','ACTIVE','CLEARED','HALTED','CANCELLED')),
+ state text NOT NULL CHECK(state IN('READY','RUNNING','VERIFYING','REPAIRING','CLEARED','HALTED','CANCELLED')),
+ round integer NOT NULL DEFAULT 0 CHECK(round>=0),
+ retries integer NOT NULL DEFAULT 0 CHECK(retries>=0),
+ max_rounds integer NOT NULL CHECK(max_rounds>0),
+ max_retries integer NOT NULL CHECK(max_retries>=0),
+ max_duration_ms bigint NOT NULL CHECK(max_duration_ms>0),
+ max_usd_micros bigint NOT NULL CHECK(max_usd_micros>=0),
+ used_duration_ms bigint NOT NULL DEFAULT 0 CHECK(used_duration_ms>=0),
+ used_usd_micros bigint NOT NULL DEFAULT 0 CHECK(used_usd_micros>=0),
+ halt_reason text,
+ -- Optimistic concurrency, matching `advanceGauntlet`'s own expectedVersion
+ -- check so the durable guard and the in-memory guard are the same guard.
+ version bigint NOT NULL DEFAULT 1 CHECK(version>0),
+ created_at timestamptz NOT NULL DEFAULT now(),
+ updated_at timestamptz NOT NULL DEFAULT now(),
+ UNIQUE(run_id,subject_task_id)
+);
+CREATE INDEX gauntlet_run_state ON relay_wonderland.gauntlet_runs(run_id,activation,state);
+
+CREATE TABLE relay_wonderland.gauntlet_rounds(
+ gauntlet_id text NOT NULL REFERENCES relay_wonderland.gauntlet_runs ON DELETE CASCADE,
+ round integer NOT NULL CHECK(round>0),
+ -- The work this round requested, through the generic work boundary. The
+ -- gauntlet holds the id and never the work's own record.
+ work_id text NOT NULL UNIQUE,
+ phase text NOT NULL CHECK(phase IN('REVIEW','REPAIR')),
+ outcome text CHECK(outcome IS NULL OR outcome IN('PASSED','FAILED','HALTED','CANCELLED')),
+ duration_ms bigint CHECK(duration_ms IS NULL OR duration_ms>=0),
+ usd_micros bigint CHECK(usd_micros IS NULL OR usd_micros>=0),
+ finding_ids jsonb NOT NULL DEFAULT '[]',
+ started_at timestamptz NOT NULL,
+ completed_at timestamptz,
+ -- DUPLICATE ROUND SCHEDULING IS A SCHEMA IMPOSSIBILITY, not a code
+ -- convention: two schedulers both deciding to start round 2 produce one row.
+ PRIMARY KEY(gauntlet_id,round,phase)
+);
+CREATE INDEX gauntlet_round_timeline ON relay_wonderland.gauntlet_rounds(gauntlet_id,round,started_at);
+INSERT INTO relay_wonderland.schema_migrations(version) VALUES('017_gauntlet_command');
+COMMIT;

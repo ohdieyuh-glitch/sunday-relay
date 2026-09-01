@@ -3,6 +3,7 @@ dist
 dist-relay
 dist-relay-bridge
 dist-relay-hermes
+dist-relay-executor
 *.tsbuildinfo
 .DS_Store
 .env
@@ -11,3 +12,10 @@ dist-relay-hermes
 .relay/
 coverage
 *.log
+
+# card-seam browser harness live-mode bundle
+dist-live/
+
+# Byproducts of running the in-sandbox executor script outside a container
+late.txt
+ran.txt

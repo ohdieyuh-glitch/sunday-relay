@@ -21,8 +21,11 @@ import type { WorldStage } from './world-stage';
  *
  * The old shell is not reachable from any of it.
  */
-export function RelayWorld({ initialStage, onActivated }: {
+export function RelayWorld({ initialStage, initialStep, onActivated }: {
   readonly initialStage: WorldStage;
+  /** Open the Relay panel on this step instead of resuming where the record
+   *  left off — the explicit NEW C.A.R.D. path opens on its C.A.R.D. step. */
+  readonly initialStep?: OnboardingStepId;
   /**
    * The participant brought their Compound Agent online during THIS visit.
    *
@@ -38,6 +41,7 @@ export function RelayWorld({ initialStage, onActivated }: {
   const reducedMotion = usePrefersReducedMotion();
   const [draft, setDraftState] = useState<CompoundAgentDraft>(() => loadAgentDraft());
   const [step, setStep] = useState<OnboardingStepId>(() => {
+    if (initialStep !== undefined) return initialStep;
     const stored = loadAgentDraft();
     return isConfigured(stored) ? 'activate' : firstIncompleteStep(stored);
   });
@@ -69,12 +73,17 @@ export function RelayWorld({ initialStage, onActivated }: {
   }, [draft.activatedAt, onActivated]);
 
   const setDraft = useCallback((patch: Partial<CompoundAgentDraft>, react = false) => {
-    setDraftState((prev) => {
-      const next = { ...prev, ...patch };
-      saveAgentDraft(next);
-      return next;
-    });
+    // The STORE's answer is the state: it mints the C.A.R.D.'s identity on the
+    // first save and advances the revision on every real change, so what the
+    // world shows is exactly what every other surface will read.
+    setDraftState((prev) => saveAgentDraft({ ...prev, ...patch }));
     if (react) world.pulse();
+  }, [world]);
+  // The explicit NEW C.A.R.D. / NEW COMPOUND AGENT paths persist through the
+  // store themselves and hand the world the record they created.
+  const replaceDraft = useCallback((next: CompoundAgentDraft) => {
+    setDraftState(next);
+    world.pulse();
   }, [world]);
 
   // Touch and mouse both enter through the artifact itself; the hit test runs
@@ -127,6 +136,7 @@ export function RelayWorld({ initialStage, onActivated }: {
           <RelayExperience
             draft={draft}
             setDraft={setDraft}
+            replaceDraft={replaceDraft}
             step={step}
             setStep={setStep}
             returning={returning}

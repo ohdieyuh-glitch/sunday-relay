@@ -1,0 +1,18 @@
+export {
+  LEGACY_CONVERSION_REFUSALS,
+  LEGACY_SOURCE_TO_ACTOR,
+  PSP_COMPLETION_RULE_TO_MISSION_RULE,
+  PSP_ROLE_KEYS,
+  PSP_ROLE_KEY_TO_ROLE_SLOT,
+  adaptLegacyTerminalEvent,
+  convertLegacyMissionConfig,
+  normalizeMissionContract,
+  normalizeMissionSpec,
+  roleMappingIsTotal,
+  translateCompletionRule,
+  type LegacyConfigConversion,
+  type LegacyConversionProblem,
+  type LegacyConversionRefusal,
+  type LegacyMissionNormalization,
+  type NormalizedLegacyMission,
+} from './legacy-adapters';

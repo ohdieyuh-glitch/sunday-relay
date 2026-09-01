@@ -57,10 +57,10 @@ describe('psp-client', () => {
     expect(loaded.ok).toBe(true);
     expect((loaded.config as { mode?: string }).mode).toBe('guided');
 
-    const missing = vi.fn<typeof fetch>(async () => jsonResponse(404, { error: { kind: 'psp_not_found', message: 'No such PSP.' } }));
+    const missing = vi.fn<typeof fetch>(async () => jsonResponse(404, { error: { kind: 'psp_not_found', message: 'No such profile.' } }));
     const gone = await loadPsp({ pspId: 'nope', bridgeUrl: BRIDGE, fetchImpl: missing });
     expect(gone.ok).toBe(false);
-    expect(gone.message).toBe('No such PSP.');
+    expect(gone.message).toBe('No such profile.');
   });
 
   it('savePsp posts the named config, and surfaces a validation refusal verbatim', async () => {

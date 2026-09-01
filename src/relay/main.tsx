@@ -22,16 +22,16 @@ import './ui/relay-manual-theme.css';
 import { RelayPreviewApp } from './ui/preview/RelayPreviewApp';
 import { RelayBetaEntry } from './ui/app/RelayBetaEntry';
 
-// Isolated preview wiring (feature/relay-entry-home-claude): the entry now
-// renders the preview shell, whose default route is the Relay Entry Home —
-// the in-product screen between Sunday Alcatraz and Project Settings. The
-// execution console (MissionControl, Prompt 8.2) stays reachable at
-// #/relay/console. This is the branch's single integration change beyond
-// src/relay/ui/**; see docs/relay/RELAY_ENTRY_HOME.md for reconciliation.
+// The front door is the Relay experience: Aquala → ENTER RELAY → create your
+// Compound Agent (its C.A.R.D.) in the world. The preview shell's default route
+// renders that same world; the superseded Entry Home survives only at the
+// explicit `#/relay/home-legacy` route nothing links to, and the execution
+// console stays reachable at #/relay/console.
 // The beta entry gate is TRANSPARENT unless a live Relay Bridge is configured
-// (VITE_RELAY_LIVE=1): the demo build renders the preview app exactly as before.
-// With a live bridge it is the front door — sign in, connect a repository, then
-// the app — the same journey the API enforces.
+// (VITE_RELAY_LIVE=1 + VITE_RELAY_BRIDGE_URL): the demo build renders the
+// preview app. With a live bridge it is the front door — the world, then
+// sign-in, then a repository, then Missions under the ONE C.A.R.D. built in
+// the world — the same journey the API enforces.
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <RelayBetaEntry>

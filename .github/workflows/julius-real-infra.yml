@@ -1,0 +1,165 @@
+name: Julius real sibling infrastructure
+on:
+  pull_request:
+    paths: ['src/relay/mission/julius/**','src/relay/persistence/**','src/relay/workspace/julius-tools/**','scripts/julius-*','.github/workflows/julius-real-infra.yml','package*.json']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  sibling-control-plane:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      JULIUS_CALLER_ID: julius-prod
+      JULIUS_TENANT_ID: tenant
+      JULIUS_OTHER_CALLER_ID: julius-other
+      EXECUTOR_KEY_ID: ci-key
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with: { node-version: '22', cache: npm }
+      - run: npm ci
+      - run: npm run relay:executor:build && npm run relay:sibling-e2e:build
+
+      - name: Build pinned sandbox and executor-side images
+        id: images
+        run: |
+          mkdir -p /tmp/julius-ci-build
+          cp scripts/julius-docker-executor.sh /tmp/julius-ci-build/julius-executor
+          printf '%s\n' 'FROM node:22-bookworm-slim' 'RUN apt-get update && apt-get install -y --no-install-recommends util-linux git ca-certificates procps && rm -rf /var/lib/apt/lists/*' 'COPY julius-executor /usr/local/bin/julius-executor' 'RUN chmod 0555 /usr/local/bin/julius-executor' > /tmp/julius-ci-build/Sandboxfile
+          sandbox_image=$(docker build -q -f /tmp/julius-ci-build/Sandboxfile /tmp/julius-ci-build)
+          printf '%s\n' 'FROM node:22-bookworm-slim' 'RUN apt-get update && apt-get install -y --no-install-recommends docker.io ca-certificates && rm -rf /var/lib/apt/lists/*' > /tmp/julius-ci-build/Executorfile
+          executor_image=$(docker build -q -f /tmp/julius-ci-build/Executorfile /tmp/julius-ci-build)
+          echo "sandbox=$sandbox_image" >> "$GITHUB_OUTPUT"
+          echo "executor=$executor_image" >> "$GITHUB_OUTPUT"
+
+      - name: Create executor-private state, signing identity and per-operation credentials
+        id: identity
+        run: |
+          # One workspace root, one directory per tenant, and inside each the workspace itself on its OWN
+          # kernel-sized filesystem. The tenant directory stays unwritable by the sandbox user so the
+          # workspace cannot be renamed out from under its mount; the tmpfs size is what makes the declared
+          # workspaceBytes an enforced ceiling rather than a recorded number.
+          mkdir -p /tmp/julius-executor/receipts /tmp/julius-executor/ledger \
+                   /tmp/julius-workspace/tenant/ws /tmp/julius-workspace/other-tenant/ws
+          chmod 0700 /tmp/julius-executor /tmp/julius-executor/receipts /tmp/julius-executor/ledger
+          chmod 0755 /tmp/julius-workspace /tmp/julius-workspace/tenant /tmp/julius-workspace/other-tenant
+          for tenant in tenant other-tenant; do
+            # nr_inodes matters as much as size: tmpfs takes its inode count from host RAM, so without it a
+            # 4 MiB workspace can still pin hundreds of MiB of kernel memory that df and du both report as zero.
+            sudo mount -t tmpfs -o size=4194304,nr_inodes=4096,mode=0777,nosuid,nodev tmpfs "/tmp/julius-workspace/$tenant/ws"
+          done
+          printf 'fixture\n' > /tmp/julius-workspace/tenant/ws/fixture.txt
+          printf 'other tenant private\n' > /tmp/julius-workspace/other-tenant/ws/private.txt
+          df -B1 --output=size,target /tmp/julius-workspace/tenant/ws /tmp/julius-workspace/other-tenant/ws
+          df --output=itotal,target /tmp/julius-workspace/tenant/ws /tmp/julius-workspace/other-tenant/ws
+          openssl genpkey -algorithm ED25519 -out /tmp/julius-executor/private.pem
+          openssl pkey -in /tmp/julius-executor/private.pem -pubout -out /tmp/julius-public.pem
+          chmod 0600 /tmp/julius-executor/private.pem
+          # Two independent root secrets: one per tenant. Neither ever reaches a Julius container.
+          primary=$(openssl rand -base64 33 | tr -d '\n')
+          secondary=$(openssl rand -base64 33 | tr -d '\n')
+          operator=$(openssl rand -base64 33 | tr -d '\n')
+          echo "::add-mask::$primary"
+          echo "::add-mask::$secondary"
+          echo "::add-mask::$operator"
+          # A tenant caller holds only the tenant operations, so it is handed only those credentials.
+          tenant_ops='create prepare execute cancel destroy inspect artifacts'
+          scoped=$(EXECUTOR_CREDENTIAL_ROOT="$primary" node scripts/julius-derive-scoped-credentials.mjs --json $tenant_ops)
+          other_scoped=$(EXECUTOR_CREDENTIAL_ROOT="$secondary" node scripts/julius-derive-scoped-credentials.mjs --json $tenant_ops)
+          operator_scoped=$(EXECUTOR_CREDENTIAL_ROOT="$operator" node scripts/julius-derive-scoped-credentials.mjs --json discover reconcile quarantine)
+          for root in "$primary" "$secondary" "$operator"; do
+            EXECUTOR_CREDENTIAL_ROOT="$root" node scripts/julius-derive-scoped-credentials.mjs --values | while read -r value; do echo "::add-mask::$value"; done
+          done
+          callers=$(JULIUS_PRIMARY_ROOT="$primary" JULIUS_SECONDARY_ROOT="$secondary" JULIUS_OPERATOR_ROOT="$operator" node scripts/julius-ci-callers.mjs)
+          echo "callers=$callers" >> "$GITHUB_OUTPUT"
+          echo "scoped=$scoped" >> "$GITHUB_OUTPUT"
+          echo "other_scoped=$other_scoped" >> "$GITHUB_OUTPUT"
+          echo "operator_scoped=$operator_scoped" >> "$GITHUB_OUTPUT"
+
+      - name: Start PostgreSQL 16 and the independent executor control plane
+        env:
+          SANDBOX_IMAGE: ${{ steps.images.outputs.sandbox }}
+          EXECUTOR_IMAGE: ${{ steps.images.outputs.executor }}
+          EXECUTOR_CALLERS: ${{ steps.identity.outputs.callers }}
+        run: |
+          docker network create julius-sibling
+          docker run -d --name julius-postgres --network julius-sibling -e POSTGRES_USER=julius -e POSTGRES_PASSWORD=julius -e POSTGRES_DB=julius postgres:16-bookworm
+          for i in $(seq 1 40); do docker exec julius-postgres pg_isready -U julius && break; sleep 1; done
+          docker run -d --name julius-executor --network julius-sibling \
+            -v /var/run/docker.sock:/var/run/docker.sock -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE:ro" \
+            -v /tmp/julius-executor:/tmp/julius-executor -v /tmp/julius-workspace:/tmp/julius-workspace -w "$GITHUB_WORKSPACE" \
+            -e PGHOST=julius-postgres -e PGPORT=5432 -e PGUSER=julius -e PGPASSWORD=julius -e PGDATABASE=julius \
+            -e EXECUTOR_RECEIPT_ROOT=/tmp/julius-executor/receipts \
+            -e EXECUTOR_LEDGER_ROOT=/tmp/julius-executor/ledger -e EXECUTOR_SIGNING_KEY_PATH=/tmp/julius-executor/private.pem \
+            -e EXECUTOR_KEY_ID=ci-key -e EXECUTOR_RUNTIME_ID=executor-ci -e EXECUTOR_VERSION=docker-executor.v1 \
+            -e EXECUTOR_WORKSPACE_ROOT=/tmp/julius-workspace -e EXECUTOR_TENANT_WORKSPACE_ROOT=/tmp/julius-workspace -e JULIUS_SANDBOX_IMAGE="$SANDBOX_IMAGE" \
+            -e EXECUTOR_CALLERS="$EXECUTOR_CALLERS" -e EXECUTOR_SECRET_ENV=executor-only \
+            "$EXECUTOR_IMAGE" node dist-relay-executor/main.cjs
+          ./.github/wait-for-executor.sh
+
+      # Julius shares only the executor's network namespace: it has no Docker socket, no signing key,
+      # no receipt store, no ledger and none of the executor's environment. Every one of those is probed.
+      - name: Julius has no Docker, key, receipt or ledger authority
+        run: ./.github/julius-phase.sh isolation
+        env: { SCOPED: '${{ steps.identity.outputs.scoped }}', OTHER_SCOPED: '${{ steps.identity.outputs.other_scoped }}', OPERATOR_SCOPED: '${{ steps.identity.outputs.operator_scoped }}' }
+
+      - name: Scoped envelope, durable reservation, signed BEFORE, real effect, signed AFTER
+        run: ./.github/julius-phase.sh initial
+        env: { SCOPED: '${{ steps.identity.outputs.scoped }}', OTHER_SCOPED: '${{ steps.identity.outputs.other_scoped }}', OPERATOR_SCOPED: '${{ steps.identity.outputs.operator_scoped }}' }
+
+      - name: Julius died before settling; a restarted Julius settles exactly once without re-executing
+        run: ./.github/julius-phase.sh settle
+        env: { SCOPED: '${{ steps.identity.outputs.scoped }}', OTHER_SCOPED: '${{ steps.identity.outputs.other_scoped }}', OPERATOR_SCOPED: '${{ steps.identity.outputs.operator_scoped }}' }
+
+      - name: A dangerous effect starts and an effect that has not started is queued
+        run: ./.github/julius-phase.sh interrupt-start
+        env: { SCOPED: '${{ steps.identity.outputs.scoped }}', OTHER_SCOPED: '${{ steps.identity.outputs.other_scoped }}', OPERATOR_SCOPED: '${{ steps.identity.outputs.operator_scoped }}' }
+
+      - name: Destroy both in-flight sandboxes under the executor, then restart it
+        run: |
+          for sandbox in sibling-interrupt-started sibling-interrupt-unstarted; do
+            id=$(docker ps -aq --filter "label=julius.sandbox=$sandbox")
+            test -n "$id" || { echo "no container for $sandbox"; docker ps -a; exit 1; }
+            docker rm -f $id
+          done
+          docker restart julius-executor
+          ./.github/wait-for-executor.sh
+
+      - name: An interrupted execution answers STARTED_UNKNOWN_OUTCOME and is never replayed blind
+        run: ./.github/julius-phase.sh interrupt-verify
+        env: { SCOPED: '${{ steps.identity.outputs.scoped }}', OTHER_SCOPED: '${{ steps.identity.outputs.other_scoped }}', OPERATOR_SCOPED: '${{ steps.identity.outputs.operator_scoped }}' }
+
+      - name: After the executor restart the terminal material replays with zero second effect
+        run: ./.github/julius-phase.sh replay
+        env: { SCOPED: '${{ steps.identity.outputs.scoped }}', OTHER_SCOPED: '${{ steps.identity.outputs.other_scoped }}', OPERATOR_SCOPED: '${{ steps.identity.outputs.operator_scoped }}' }
+
+      - name: Completion authority settles a task outcome exactly once
+        run: ./.github/julius-phase.sh complete
+        env: { SCOPED: '${{ steps.identity.outputs.scoped }}', OTHER_SCOPED: '${{ steps.identity.outputs.other_scoped }}', OPERATOR_SCOPED: '${{ steps.identity.outputs.operator_scoped }}' }
+
+      - name: Plant an unowned Julius-labelled container for reconciliation
+        env: { SANDBOX_IMAGE: '${{ steps.images.outputs.sandbox }}' }
+        run: docker create --label julius.sandbox=orphan-sandbox "$SANDBOX_IMAGE" sleep infinity
+
+      - name: Provider-independent evaluations against the real infrastructure
+        run: ./.github/julius-phase.sh evals
+        env:
+          SCOPED: ${{ steps.identity.outputs.scoped }}
+          OTHER_SCOPED: ${{ steps.identity.outputs.other_scoped }}
+          OPERATOR_SCOPED: ${{ steps.identity.outputs.operator_scoped }}
+          JULIUS_ORPHAN_EXPECTED: '1'
+
+      - name: Executor topology evidence
+        if: always()
+        run: |
+          docker inspect julius-executor --format 'executor_mounts={{range .Mounts}}{{.Destination}}:{{.RW}} {{end}}' 2>/dev/null || true
+          docker logs julius-executor 2>&1 | tail -n 200 || true
+
+      - name: Cleanup
+        if: always()
+        run: |
+          docker ps -aq --filter 'label=julius.sandbox' | xargs -r docker rm -f 2>/dev/null || true
+          docker rm -f julius-executor julius-postgres 2>/dev/null || true
+          docker network rm julius-sibling 2>/dev/null || true
+          for tenant in tenant other-tenant; do sudo umount "/tmp/julius-workspace/$tenant/ws" 2>/dev/null || true; done

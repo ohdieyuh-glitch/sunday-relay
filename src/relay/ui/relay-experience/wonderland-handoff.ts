@@ -1,4 +1,4 @@
-import { loadBridgeSession } from '../app/bridge-session';
+import { configuredBridgeUrl as liveBridgeUrl, loadBridgeSession } from '../app/bridge-session';
 
 /**
  * THE ENTER WONDERLAND BOUNDARY.
@@ -24,11 +24,16 @@ export type WonderlandReadiness =
   /** Activated, but this browser cannot reach the entrance. Says why. */
   | { readonly kind: 'unreachable'; readonly reason: string };
 
-/** The bridge URL this build was configured with, or null. */
+/**
+ * The bridge URL this build was configured with, or null. THE SAME GATE THE
+ * ENTRY USES: `bridge-session.configuredBridgeUrl` is live only when
+ * `VITE_RELAY_LIVE=1` names a bridge. Reading `VITE_RELAY_BRIDGE_URL` on its
+ * own here made the world claim the Wonderland entrance was reachable in a
+ * build whose entry gate was transparent — two gates disagreeing about one fact.
+ */
 export function configuredBridgeUrl(): string | null {
   try {
-    const raw = (import.meta as unknown as { env?: Record<string, unknown> }).env?.VITE_RELAY_BRIDGE_URL;
-    return typeof raw === 'string' && raw.length > 0 ? raw.replace(/\/+$/, '') : null;
+    return liveBridgeUrl();
   } catch {
     return null;
   }
