@@ -52,7 +52,7 @@ jobs:
           printf 'fixture\n' > /tmp/julius-workspace/tenant/ws/fixture.txt
           printf 'other tenant private\n' > /tmp/julius-workspace/other-tenant/ws/private.txt
           df -B1 --output=size,target /tmp/julius-workspace/tenant/ws /tmp/julius-workspace/other-tenant/ws
-          df -i --output=itotal,target /tmp/julius-workspace/tenant/ws /tmp/julius-workspace/other-tenant/ws
+          df --output=itotal,target /tmp/julius-workspace/tenant/ws /tmp/julius-workspace/other-tenant/ws
           openssl genpkey -algorithm ED25519 -out /tmp/julius-executor/private.pem
           openssl pkey -in /tmp/julius-executor/private.pem -pubout -out /tmp/julius-public.pem
           chmod 0600 /tmp/julius-executor/private.pem
