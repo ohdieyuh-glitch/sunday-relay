@@ -25,7 +25,7 @@
 
 import type { JuliusCardPolicy } from './julius-policy';
 import type { JuliusVerificationPolicy } from './julius-verification-runtime';
-import { missionMayComplete, type JuliusMissionState, type JuliusTask, type JuliusVerificationDecision } from './julius-runtime';
+import { missionMayComplete, type JuliusMissionState, type JuliusRecordedDecision, type JuliusTask } from './julius-runtime';
 import { planRunStatePath, transitionIsLegal } from './julius-state-path';
 
 /**
@@ -136,7 +136,7 @@ export interface JuliusRunLoopConfig {
  */
 export function targetRunState(
   tasks: readonly JuliusTask[],
-  decisions: readonly JuliusVerificationDecision[] = [],
+  decisions: readonly JuliusRecordedDecision[] = [],
 ): { state: JuliusMissionState; reasonCode: string } {
   if (tasks.length === 0) return { state: 'PLANNING', reasonCode: 'NO_TASKS_PLANNED' };
   if (tasks.some((task) => task.state === 'ACTIVE')) return { state: 'EXECUTING', reasonCode: 'TASKS_ACTIVE' };
@@ -150,11 +150,14 @@ export function targetRunState(
      * because nothing called `missionMayComplete`. Every run stopped at
      * VERIFYING and stayed there — the last state before the one that matters.
      *
-     * The rule is #169's and is not restated here. It requires the run to be
-     * VERIFYING, every task terminal, at least one decision, and EVERY
-     * decision an ACCEPT; a single REPAIR or HALT among them keeps the run in
-     * VERIFYING, which is the honest answer rather than a completion that
-     * ignores a decision.
+     * The rule lives on `missionMayComplete` and is not restated here. It
+     * requires the run to be VERIFYING, every task terminal, at least one
+     * decision, and every task's CURRENT decision effectively accepted: an
+     * ACCEPT outright, or a REPAIR superseded by its own planner-shaped
+     * repair lineage reaching an effective ACCEPT. A HALT — or a REPAIR
+     * nobody repaired — keeps the run in VERIFYING, which is the honest
+     * answer rather than a completion that ignores a decision; history
+     * itself is never rewritten to get past one.
      */
     if (missionMayComplete({ state: 'VERIFYING', tasks, decisions })) {
       return { state: 'COMPLETED', reasonCode: 'MISSION_VERIFIED' };

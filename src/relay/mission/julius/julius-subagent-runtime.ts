@@ -190,6 +190,20 @@ export async function spawnJuliusSubagent(
   input: JuliusSubagentSpawnInput,
   deps: JuliusSubagentDependencies,
 ): Promise<JuliusSubagentOutcome> {
+  /* ------------------------------------------ reserved task namespaces */
+  // `repair:` types are the repair planner's lineage signal — completion
+  // supersedes a REPAIR decision through children carrying them — and
+  // `review:` types are how the verification phase recognizes completed
+  // reviews. A sub-agent minting either would let ordinary child work
+  // impersonate verification machinery, so both namespaces are refused
+  // before anything is read, reserved, or recorded.
+  if (input.taskType.startsWith('repair:') || input.taskType.startsWith('review:')) {
+    return {
+      authorized: false, reasonCode: 'SUBAGENT_TASK_TYPE_RESERVED',
+      safeMessage: 'Sub-agent tasks may not use the reserved repair:/review: task-type namespaces.',
+    };
+  }
+
   /* -------------------------------------------------- already granted? */
   const existing = await deps.store.loadSubagent(input.run.runId, input.requestId);
   if (existing !== null) {

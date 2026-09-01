@@ -35,7 +35,8 @@ describe('Julius authoritative kernel', () => {
     const succeeded = { ...task('build'), state: 'SUCCEEDED' as const };
     expect(verifyTask(succeeded, [], 0).action).toBe('HALT');
     const accepted = verifyTask(succeeded, [{ evidenceId: 'e1', missionId: 'mission-1', taskId: 'build', workerId: 'testing-1', type: 'TEST', status: 'PASSED', safeSummary: '48 tests passed', artifactRef: null, integrityHash: 'sha256:x', occurredAt: '2026-08-27T00:00:00Z' }], 0);
-    expect(accepted.action).toBe('ACCEPT'); expect(missionMayComplete({ state: 'VERIFYING', tasks: [succeeded], decisions: [accepted] })).toBe(true);
-    expect(missionMayComplete({ state: 'EXECUTING', tasks: [succeeded], decisions: [accepted] })).toBe(false);
+    const recorded = { ...accepted, taskId: succeeded.taskId };
+    expect(accepted.action).toBe('ACCEPT'); expect(missionMayComplete({ state: 'VERIFYING', tasks: [succeeded], decisions: [recorded] })).toBe(true);
+    expect(missionMayComplete({ state: 'EXECUTING', tasks: [succeeded], decisions: [recorded] })).toBe(false);
   });
 });

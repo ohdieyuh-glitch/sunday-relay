@@ -2,7 +2,7 @@ import type { Pool } from 'pg';
 
 import type {
   JuliusAcceptanceCriterion, JuliusBrainEntry, JuliusEvidence, JuliusReviewerFinding,
-  JuliusRuntimeReader, JuliusTask, JuliusVerificationDecision, JuliusWorkerRole,
+  JuliusRecordedDecision, JuliusRuntimeReader, JuliusTask, JuliusVerificationDecision, JuliusWorkerRole,
 } from '../mission/julius';
 
 /**
@@ -123,14 +123,21 @@ export class JuliusReadPostgresRepository implements JuliusRuntimeReader {
     }));
   }
 
-  async decisionsForRun(runId: string, projectId: string): Promise<readonly JuliusVerificationDecision[]> {
+  async decisionsForRun(runId: string, projectId: string): Promise<readonly JuliusRecordedDecision[]> {
     const result = await this.pool.query<Record<string, unknown>>(
-      `SELECT d.action,d.reason_code,d.safe_summary,d.evidence_ids FROM relay_wonderland.julius_verification_decisions d
+      // Newest-first under the read limit, reversed back to log order below:
+      // completion reads each task's CURRENT decision as its last entry, so a
+      // truncated read must drop the OLDEST (superseded) entries, never the
+      // newest — oldest-first truncation would resurrect a stale ACCEPT as
+      // current, failing open. Below the limit the two orderings are
+      // identical.
+      `SELECT d.task_id,d.action,d.reason_code,d.safe_summary,d.evidence_ids FROM relay_wonderland.julius_verification_decisions d
          JOIN relay_wonderland.julius_runs r ON r.run_id=d.run_id
-        WHERE d.run_id=$1 AND r.project_id=$2 ORDER BY d.occurred_at,d.decision_id LIMIT $3`,
+        WHERE d.run_id=$1 AND r.project_id=$2 ORDER BY d.occurred_at DESC,d.decision_id DESC LIMIT $3`,
       [runId, projectId, JULIUS_READ_LIMIT],
     );
-    return result.rows.map((row) => ({
+    return result.rows.reverse().map((row) => ({
+      taskId: String(row.task_id),
       action: String(row.action) as JuliusVerificationDecision['action'],
       reasonCode: String(row.reason_code),
       evidenceIds: parsed<string[]>(row.evidence_ids, []),
