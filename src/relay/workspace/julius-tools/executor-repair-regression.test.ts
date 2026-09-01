@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, symlink, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, realpath, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -100,9 +100,9 @@ describe('repairs that previous rounds left untested',()=>{
  * path omits part of the identity. These stand the real service up and post at it.
  */
 describe('the gates themselves, not the helpers behind them',()=>{
-  const physical=():SandboxExecutionPort=>({
+  const physical=(received:{input?:{sourceRef:string;permittedWorkspaceRoot?:string}}):SandboxExecutionPort=>({
     createSandbox:async input=>({...input.identity,state:'CREATING',workspaceRef:null,runtimeKind:'test',limits:input.limits,policy:input.policy,safeFailure:null}),
-    prepareWorkspace:async()=>{throw new Error('prepare_reached_the_adapter');},
+    prepareWorkspace:async input=>{received.input=input as typeof received.input;throw new Error('prepare_reached_the_adapter');},
     executeTool:async()=>{throw new Error('unused');},cancelExecution:async()=>true,destroySandbox:async()=>true,
     inspectSandbox:async()=>null,collectArtifacts:async()=>[],discoverSandboxes:async()=>[],quarantineSandbox:async()=>true,reconcileSandboxes:async()=>({recovered:0,lost:0,quarantined:0,destroyed:0}),
   });
@@ -113,13 +113,14 @@ describe('the gates themselves, not the helpers behind them',()=>{
     await mkdir(join(workspaces,'tenant'),{recursive:true});await mkdir(join(workspaces,'other'),{recursive:true});
     await symlink(join(workspaces,'other'),join(workspaces,'tenant','escape'));
     const keys=generateKeyPairSync('ed25519');
+    const received:{input?:{sourceRef:string;permittedWorkspaceRoot?:string}}={};
     // prepare is sandbox scoped, so the sandbox must already belong to this tenant for the request to
     // reach the workspace gate at all — otherwise the test would pass on the wrong refusal.
     const tenancyLedger=new FilesystemSandboxTenancyLedger(join(root,'tenancy'));
     await tenancyLedger.bind({sandboxId:'sandbox',tenantId:'tenant'});
     const server=createExecutorControlPlaneService({
       callerAuthorities:[{callerId:'julius-prod',tenantId:'tenant',credential:'tenant-secret',operations:new Set(['prepare'] as const)}],
-      keyId:'current',privateSigningKey:keys.privateKey,physical:physical(),
+      keyId:'current',privateSigningKey:keys.privateKey,physical:physical(received),
       receipts:new DockerExecutorReceiptStore(join(root,'receipts')),
       executionLedger:new FilesystemExecutionLedger(join(root,'ledger')),
       tenancyLedger,
@@ -132,9 +133,16 @@ describe('the gates themselves, not the helpers behind them',()=>{
       const refusal={status:409,error:'SECURITY_FAILURE:executor_workspace_tenant_scope_refused'};
       expect(await prepare(join(workspaces,'other'))).toMatchObject(refusal);
       expect(await prepare(join(workspaces,'tenant','escape'))).toMatchObject(refusal);
-      // The tenant's own workspace must get PAST the gate and reach the adapter, or a gate that refuses
-      // everything would satisfy the two refusals above and this test would prove nothing.
-      expect((await prepare(join(workspaces,'tenant'))).error).toBe('prepare_reached_the_adapter');
+      /* The tenant's own workspace must get PAST the gate and reach the adapter, or a gate that refuses
+         everything would satisfy the two refusals above and this test would prove nothing. And what reaches
+         the adapter must be the RESOLVED path plus the tenant's root: forwarding the caller's raw string, or
+         dropping the root, silently returns the boundary to the form that let a relink cross tenants. */
+      /* Posted through a symlinked spelling so the raw and resolved forms DIFFER: with a path that is already
+         its own realpath, forwarding the caller's string is indistinguishable from forwarding the resolved
+         one, and the assertion proves nothing. */
+      await symlink(join(workspaces,'tenant'),join(workspaces,'tenant-alias'));
+      expect((await prepare(join(workspaces,'tenant-alias'))).error).toBe('prepare_reached_the_adapter');
+      expect(received.input).toEqual({sandboxId:'sandbox',expectedLeaseGeneration:1,sourceRef:await realpath(join(workspaces,'tenant')),permittedWorkspaceRoot:join(workspaces,'tenant')});
     }finally{await new Promise<void>(resolve=>server.close(()=>resolve()));}
   },20_000);
 });
@@ -158,6 +166,10 @@ describe('repairs a mutation battery showed were undefended',()=>{
     expect(await opened(gateFor('inv:2:sandbox'),'inv:1:sandbox')).toBe(false);// a foreign generation: release
     expect(await opened('{not json',  'inv:1:sandbox')).toBe(true);            // torn: may have opened, hold
     expect(await opened('null',       'inv:1:sandbox')).toBe(true);            // shapeless: hold
+    // Only ENOENT proves it never opened; every other read failure must hold the reservation.
+    const directoryRoot=await mkdtemp(join(tmpdir(),'julius-gate-dir-'));
+    await mkdir(join(directoryRoot,'before.attestation'));
+    expect(await executionGateOpened(join(directoryRoot,'before.attestation'),'inv:1:sandbox')).toBe(true);
   });
 
   it('reads a terminal payload whose encoding predates the stamp, and refuses one it does not know',()=>{
@@ -191,12 +203,29 @@ describe('the adapter gate that actually produces the mount',()=>{
     const limits={cpuCount:1,memoryBytes:134_217_728,pids:32,openFiles:128,workspaceBytes:1_048_576,outputBytes:32_768,wallClockMs:10_000,concurrentProcesses:4};
     const policy={readWorkspace:true,mutateWorkspace:true,executeProcess:true,network:'DENY' as const,allowedTools:['shell.bash']};
     await adapter.createSandbox({identity,limits,policy});
-    const prepare=(sourceRef:string)=>adapter.prepareWorkspace({sandboxId:'sandbox',sourceRef,expectedLeaseGeneration:1}).then(()=>'accepted',(error:Error)=>error.message);
+    const prepare=(sourceRef:string,permittedWorkspaceRoot?:string)=>adapter.prepareWorkspace({sandboxId:'sandbox',sourceRef,expectedLeaseGeneration:1,permittedWorkspaceRoot}).then(()=>'accepted',(error:Error)=>error.message);
     expect(await prepare(join(root,'elsewhere'))).toBe('sandbox_workspace_invalid');
     expect(await prepare(join(fleet,'escape'))).toBe('sandbox_workspace_invalid');
+    // A path carrying a mount delimiter would splice a field into the --mount specification.
+    await mkdir(join(fleet,'a,b'));
+    expect(await prepare(join(fleet,'a,b'))).toBe('sandbox_workspace_invalid');
     // A path inside the root must get PAST the gate and fail on something else, or a gate that refuses
-    // everything would satisfy both refusals above and this test would prove nothing.
+    // everything would satisfy the refusals above and this test would prove nothing.
     expect(await prepare(join(fleet,'work'))).not.toBe('sandbox_workspace_invalid');
+
+    /* The caller-scoped root is what the Critical repair added, and it must NARROW the fleet root: a sibling
+       tenant sits inside the fleet and must still be refused. Testing only the fleet path leaves the whole
+       repair — including a wholesale revert to the previous behaviour — invisible to this suite. */
+    await mkdir(join(fleet,'tenant-a','work'),{recursive:true});await mkdir(join(fleet,'tenant-b'),{recursive:true});
+    const tenantA=join(fleet,'tenant-a');
+    expect(await prepare(join(fleet,'tenant-b'),tenantA)).toBe('sandbox_workspace_invalid');
+    expect(await prepare(join(fleet,'work'),tenantA)).toBe('sandbox_workspace_invalid');
+    expect(await prepare(join(tenantA,'work'),tenantA)).not.toBe('sandbox_workspace_invalid');
+    // An empty root is "supplied" and falsy at once; it must not be the cheapest way past both checks.
+    expect(await prepare(join(root,'elsewhere'),'')).toBe('sandbox_workspace_invalid');
+    // A root spelled through a symlink must still work, or ordinary deployments lose prepare entirely.
+    await symlink(fleet,join(root,'fleet-link'));
+    expect(await prepare(join(root,'fleet-link','tenant-a','work'),join(root,'fleet-link','tenant-a'))).not.toBe('sandbox_workspace_invalid');
   },20_000);
 
   it('refuses a terminal payload encoding it does not implement',()=>{

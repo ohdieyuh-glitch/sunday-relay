@@ -69,7 +69,12 @@ export class RemoteExecutorControlPlane implements SandboxExecutionPort {
   }
 
   createSandbox = (input: Parameters<SandboxExecutionPort['createSandbox']>[0]) => this.call<Awaited<ReturnType<SandboxExecutionPort['createSandbox']>>>('create', input);
-  prepareWorkspace = (input: Parameters<SandboxExecutionPort['prepareWorkspace']>[0]) => this.call<Awaited<ReturnType<SandboxExecutionPort['prepareWorkspace']>>>('prepare', input);
+  prepareWorkspace = (input: Parameters<SandboxExecutionPort['prepareWorkspace']>[0]) => {
+    // `permittedWorkspaceRoot` is set by the trusted boundary and refused on the wire, so it is stripped
+    // here rather than sent and rejected: the interface's claim becomes structural instead of prose.
+    const { permittedWorkspaceRoot: _boundaryOnly, ...wire } = input;
+    return this.call<Awaited<ReturnType<SandboxExecutionPort['prepareWorkspace']>>>('prepare', wire);
+  };
   async executeTool(input: Parameters<SandboxExecutionPort['executeTool']>[0]) {
     const issuedAt=new Date(),expiresAt=new Date(issuedAt.getTime()+Math.min(this.config.requestTimeoutMs,300_000));
     const envelope={schemaVersion:1,callerId:this.config.callerId,callerScope:'sandbox:execute',tenantId:this.config.tenantId,projectId:input.request.projectId,runId:input.request.runId,taskId:input.request.taskId,invocationId:input.request.invocationId,dispatchGeneration:input.dispatchGeneration,sandboxId:input.sandboxId,requestDigest:input.requestDigest,executionIdentity:`${input.request.invocationId}:${input.dispatchGeneration}:${input.sandboxId}`,nonce:randomUUID(),issuedAt:issuedAt.toISOString(),expiresAt:expiresAt.toISOString(),payload:{expectedLeaseGeneration:input.expectedLeaseGeneration,executionTokenHash:input.executionTokenHash,effectClassification:input.effectClassification,request:input.request}} as const;
@@ -94,7 +99,6 @@ export class RemoteExecutorControlPlane implements SandboxExecutionPort {
     // policyDecisionRef records which policy authorised the work and lands in Julius's durable settlement,
     // so it is checked against the signed BEFORE receipt rather than taken from the unsigned response body.
     if(createHash('sha256').update(String(decoded.value.policyDecisionRef)).digest('hex')!==before.policyDigest)throw new Error('SECURITY_FAILURE:executor_policy_reference_unattested');
-    // An answer with no stated encoding was written before the payload became base64 and is still UTF-8.
     // Absent means base64: the field was added after the payload became base64, so every stored answer that
     // lacks it was written by a version that already encoded. An unrecognised value is refused, never guessed.
     assertKnownPayloadEncoding(decoded.terminalPayloadEncoding);

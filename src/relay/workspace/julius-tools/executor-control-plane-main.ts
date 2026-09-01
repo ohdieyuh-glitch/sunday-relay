@@ -2,7 +2,7 @@ import { createPrivateKey } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { Pool } from 'pg';
 import { JuliusToolRecoveryPostgresRepository } from '../../persistence/julius-tool-recovery-postgres';
-import { DockerJuliusSandboxAdapter } from './docker-sandbox-adapter';
+import { DockerJuliusSandboxAdapter, permittedWorkspace } from './docker-sandbox-adapter';
 import { FilesystemExecutionLedger, FilesystemSandboxTenancyLedger } from './durable-execution-ledger';
 import { createDurableReceiptAttestor, createExecutorControlPlaneService } from './executor-control-plane-service';
 import { DockerExecutorReceiptStore } from './executor-receipt-store';
@@ -38,6 +38,8 @@ async function main():Promise<void>{
   // With more than one tenant, a shared workspace root is no isolation at all, so it stops being optional.
   const tenants=new Set(declared.map(caller=>caller.tenantId));
   const tenantWorkspaceRoot=tenants.size>1?required('EXECUTOR_TENANT_WORKSPACE_ROOT'):process.env.EXECUTOR_TENANT_WORKSPACE_ROOT;
+  // A tenant root outside the fleet root refuses every prepare. Fail at boot rather than per request.
+  if(tenantWorkspaceRoot&&!await permittedWorkspace(workspaceRootEarly,tenantWorkspaceRoot))throw new Error('executor_config_invalid:EXECUTOR_TENANT_WORKSPACE_ROOT');
   const store=recoveryStore;
   const service=createExecutorControlPlaneService({callerAuthorities,keyId:required('EXECUTOR_KEY_ID'),privateSigningKey,physical,receipts,executionLedger,tenancyLedger,
     tenantWorkspaceRoot:tenantWorkspaceRoot,

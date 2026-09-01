@@ -12,9 +12,9 @@ export interface JuliusCollectedArtifact {readonly path:string;readonly kind:str
 /** Provider-neutral boundary. Julius never imports a container implementation. */
 export interface SandboxExecutionPort {
  createSandbox(input:{identity:JuliusSandboxIdentity;policy:JuliusSandboxPolicy;limits:JuliusSandboxLimits}):Promise<JuliusSandboxRecord>;
- /** `permittedWorkspaceRoot` is supplied by the trusted boundary, never by a caller: it is the root the
-  *  workspace must still resolve inside at the moment it is mounted, which is not the same instant an
-  *  upstream check ran. A caller-scoped root here is what keeps a relinked path from landing elsewhere. */
+ /** `permittedWorkspaceRoot` is supplied by the trusted boundary, never by a caller — the wire refuses it and
+  *  the transport strips it. It is the root the workspace must resolve inside when the adapter checks, which
+  *  narrows but does not close the window before the container runtime resolves the path again itself. */
  prepareWorkspace(input:{sandboxId:string;sourceRef:string;expectedLeaseGeneration:number;permittedWorkspaceRoot?:string}):Promise<JuliusSandboxRecord>;
  executeTool(input:{sandboxId:string;expectedLeaseGeneration:number;dispatchGeneration:number;requestDigest:string;executionTokenHash:string;effectClassification:import('./julius-tool-lifecycle').JuliusToolEffectClassification;request:ToolInvocationRequest}):Promise<ToolInvocationResult>;
  cancelExecution(input:{sandboxId:string;invocationId:string;expectedLeaseGeneration:number}):Promise<boolean>;

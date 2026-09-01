@@ -18,13 +18,14 @@ export const workspaceContained=(root:string,candidate:string)=>{const rel=relat
  * a tenant legitimately owns resolves elsewhere, and every lexical caller still sees the name it was given.
  */
 export async function permittedWorkspace(root:string,sourceRef:string):Promise<string|null>{
-  const requested=resolve(sourceRef);
-  if(!workspaceContained(resolve(root),requested))return null;
-  // Both sides are resolved and the RESOLVED paths compared. Demanding the requested path equal its own
-  // realpath would also refuse a root legitimately reached through one (an attached disk, /var on macOS),
-  // while comparing resolved-to-resolved still refuses a link that leaves the root.
-  const real=await realpath(requested).catch(()=>null),base=await realpath(resolve(root)).catch(()=>null);
-  return real&&base&&workspaceContained(base,real)?real:null;
+  if(!root)return null;
+  /* Both sides are resolved and only the RESOLVED paths compared. A lexical pre-check against the root's
+     spelling cannot work: when the root is itself reached through a symlink, nothing under it is lexically
+     related to it and every request is refused. Answering outside-the-root and does-not-exist with the same
+     null is what keeps `prepare` from becoming an existence oracle for the host. */
+  const base=await realpath(resolve(root)).catch(()=>null);
+  const real=await realpath(resolve(sourceRef)).catch(()=>null);
+  return base&&real&&workspaceContained(base,real)?real:null;
 }
 const command=(binary:string,args:readonly string[],timeoutMs:number,cap:number):Promise<CommandResult>=>new Promise((done,reject)=>{let stdout:Buffer<ArrayBufferLike>=Buffer.alloc(0),stderr:Buffer<ArrayBufferLike>=Buffer.alloc(0),used=0,timedOut=false;const child=spawn(binary,[...args],{shell:false,env:{PATH:'/usr/local/bin:/usr/bin:/bin',LANG:'C.UTF-8'},stdio:['ignore','pipe','pipe'],detached:true});const add=(old:Buffer<ArrayBufferLike>,chunk:Buffer<ArrayBufferLike>)=>{const take=Math.min(chunk.length,Math.max(0,cap-used));used+=take;return take?Buffer.concat([old,chunk.subarray(0,take)]):old;};child.stdout.on('data',(x:Buffer<ArrayBufferLike>)=>stdout=add(stdout,x));child.stderr.on('data',(x:Buffer<ArrayBufferLike>)=>stderr=add(stderr,x));const timer=setTimeout(()=>{timedOut=true;try{process.kill(-child.pid!,'SIGKILL');}catch{}},timeoutMs);child.once('error',reject);child.once('close',code=>{clearTimeout(timer);done({code,stdout,stderr,timedOut});});});
 export interface DockerSandboxDurability {store:JuliusSandboxStore;receipts:DockerExecutorReceiptStore;runtimeInstanceId:string;executorVersion:string;attestReceipt?:(input:{phase:'BEFORE'|'AFTER';executionTokenHash:string;sandboxId:string})=>Promise<void>;settleRecovered?:(receipt:NonNullable<Awaited<ReturnType<DockerExecutorReceiptStore['consume']>>>)=>Promise<void>;}
@@ -90,11 +91,18 @@ export class DockerJuliusSandboxAdapter implements SandboxExecutionPort {
      fleet root makes an upstream tenant check advisory: the path is resolved twice, at two moments, and a
      workspace relinked in between still lands inside the fleet — which is where the other tenants are.
      Both roots are required when both exist, so a tenant root cannot widen the fleet's. */
-  const root=permittedRoot??this.config.allowedWorkspaceRoot;
-  const workspace=root?await permittedWorkspace(root,requested):await realpath(requested).catch(()=>{throw invalid();});
-  if(!workspace)throw invalid();
-  if(permittedRoot&&this.config.allowedWorkspaceRoot&&!await permittedWorkspace(this.config.allowedWorkspaceRoot,workspace))throw invalid();
-  if(/[,=]/.test(workspace))throw invalid();
+  /* EVERY declared root must admit the path, and all must resolve it to the same place. Taking one root and
+     testing the other for truthiness let a tenant root widen the fleet's — and an empty string, being both
+     "supplied" and falsy, slipped past both. The cheapest way past a guard must never be a vaguer root. */
+  const roots=[permittedRoot,this.config.allowedWorkspaceRoot].filter((candidate):candidate is string=>candidate!==undefined);
+  let workspace=roots.length===0?await realpath(requested).catch(()=>{throw invalid();}):null;
+  for(const candidate of roots){
+    const admitted=await permittedWorkspace(candidate,requested);
+    if(!admitted||(workspace!==null&&admitted!==workspace))throw invalid();
+    workspace=admitted;
+  }
+  // The mount specification is comma and equals delimited, so a path carrying either could splice a field.
+  if(workspace===null||/[,=]/.test(workspace))throw invalid();
   return workspace;
  }
  private async owned(id:string,generation:number):Promise<JuliusSandboxRecord>{let record:JuliusSandboxRecord|undefined|null=this.cache.get(id);if(this.config.durability)record=await this.config.durability.store.loadOwned(id);if(!record)throw new Error('sandbox_not_found');if(record.leaseGeneration!==generation)throw new Error('sandbox_stale_lease');if(Date.parse(record.expiresAt)<=Date.now())throw new Error('sandbox_expired');return record;}
