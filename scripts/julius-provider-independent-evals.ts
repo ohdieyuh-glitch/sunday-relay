@@ -8,7 +8,6 @@ import { lstat, readFile, rm, stat, symlink } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { verifyExecutorAttestation, type SignedExecutorAttestation } from '../src/relay/workspace/julius-tools/executor-attestation';
 import { RemoteExecutorControlPlane } from '../src/relay/workspace/julius-tools/remote-executor-control-plane';
-import { MAX_SANDBOX_OUTPUT_BYTES } from '../src/relay/workspace/julius-tools/executor-operation-request';
 import { EVAL_RUN, EVAL_TASK, FULL_POLICY, divergentEnvelope, LEASE, LIMITS, PROJECT, TENANT, endpoint, envelopeFor, openJuliusClient, required, scopedCredentials, seedBase, seedInvocation, sha, type SandboxLimits } from './julius-sibling-support';
 
 type Verdict='PASS'|'FAIL'|'BLOCKED';
@@ -129,19 +128,38 @@ async function main():Promise<void>{
     if(code==='0'||size>0)throw new Error(`a sandbox with no workspace policy wrote ${size} bytes`);
     return `a policy granting no workspace left nothing writable (exit ${code}, ${size} bytes)`;
   });
-  await evaluate('workspace-byte-ceiling',async()=>{
-    // The ceiling is measured where the workload actually writes: the bind-mounted workspace.
-    // Derived from the service's own ceiling so this case cannot drift past it, and set well above the
-    // workspace ceiling so the file-size ulimit is not what stops the write.
-    const roomy={...LIMITS,outputBytes:Math.min(MAX_SANDBOX_OUTPUT_BYTES,262_144),workspaceBytes:65_536};
-    const command='err=$( { head -c 200000 /dev/zero > overflow.bin; } 2>&1 ); code=$?; printf "disk_exit=%s size=%s err=%s\\n" "$code" "$(wc -c < overflow.bin 2>/dev/null || printf 0)" "$(printf %s "$err" | tr -d "\\n" | tail -c 100 | tr " " "_")"; rm -f overflow.bin';
-    const seed=await start('disk',command,FULL_POLICY,roomy,20_000);
+  await evaluate('workspace-byte-ceiling-is-kernel-enforced',async()=>{
+    /* The ceiling is now a property of the workspace's own backing store, so it is proven the only way a
+       storage limit can be: by trying to exceed it several ways and measuring what the kernel allowed. */
+    const probe=[
+      'single=$(head -c 8000000 /dev/zero > single.bin 2>&1; echo $?)',
+      'repeated=0; for i in $(seq 1 40); do head -c 262144 /dev/zero >> repeated.bin 2>/dev/null || break; repeated=$i; done',
+      'truncate -s 64000000 sparse.bin 2>/dev/null; sparse_apparent=$(wc -c < sparse.bin 2>/dev/null || printf 0)',
+      'for i in 1 2 3 4; do (head -c 4000000 /dev/zero > "concurrent-$i.bin" 2>/dev/null) & done; wait',
+      'ln -s /etc link-out 2>/dev/null; linked=$(head -c 1000 /dev/zero > link-out/escape.bin 2>&1; echo $?)',
+      'printf "single_exit=%s repeated_rounds=%s sparse_apparent=%s link_exit=%s\\n" "$single" "$repeated" "$sparse_apparent" "$linked"',
+      'printf "used_kb=%s avail_kb=%s\\n" "$(du -sk . | cut -f1)" "$(df -k . | awk \'NR==2{print $4}\')"',
+    ].join('; ');
+    const seed=await start('quota',probe,FULL_POLICY,LIMITS,20_000);
     const result=await client.executeTool(seed.execution);
-    const size=Number(/size=(\d+)/.exec(result.stdout)?.[1]),code=/disk_exit=(\d+)/.exec(result.stdout)?.[1],err=/err=(\S*)/.exec(result.stdout)?.[1]??'';
-    if(!Number.isFinite(size))throw new Error(`no written size observed in ${JSON.stringify(result.stdout).slice(0,200)}`);
-    if(size>roomy.workspaceBytes)throw new Blocked(`the ${roomy.workspaceBytes}-byte workspace ceiling is not enforced for a bind-mounted workspace: a 200,000-byte write reached ${size} bytes (exit ${code}). workspaceBytes only sizes the tmpfs used when a sandbox is granted no workspace, which no-workspace-policy-denies-writes covers`);
-    if(code==='0')throw new Error(`a 200,000-byte write into a ${roomy.workspaceBytes}-byte workspace succeeded reporting ${size} bytes`);
-    return `the ${roomy.workspaceBytes}-byte workspace stopped a 200,000-byte write at ${size} bytes (exit ${code}${err?`, ${err}`:''})`;
+    const used=Number(/used_kb=(\d+)/.exec(result.stdout)?.[1]);
+    const ceilingKb=Math.ceil(LIMITS.workspaceBytes/1024);
+    if(!Number.isFinite(used))throw new Error(`no usage observed in ${JSON.stringify(result.stdout).slice(0,240)}`);
+    // Everything above tried to write far more than the ceiling, by five different routes at once.
+    if(used>ceilingKb)throw new Error(`the workspace holds ${used} KiB against a ${ceilingKb} KiB ceiling: ${result.stdout.replace(/\s+/g,' ').slice(0,200)}`);
+    if(/link_exit=0/.test(result.stdout))throw new Error('a symlink out of the workspace accepted a write');
+    return `${ceilingKb} KiB ceiling held at ${used} KiB against a single 8 MB write, 40 appends, a 64 MB sparse file, four concurrent writers and a symlink escape`;
+  });
+  await evaluate('workspace-ceiling-is-refused-when-it-cannot-be-enforced',async()=>{
+    // Declaring a ceiling smaller than the store that backs it is a claim nothing can hold, so it is refused
+    // rather than recorded — which is exactly the state this eval used to report BLOCKED.
+    const seed=await seedFor('unenforceable','printf never');
+    await client.createSandbox({identity:seed.identity,limits:{...LIMITS,workspaceBytes:65_536},policy:FULL_POLICY});
+    let outcome='accepted';
+    try{await client.prepareWorkspace({sandboxId:seed.identity.sandboxId,sourceRef:workspace,expectedLeaseGeneration:LEASE});}
+    catch(error){outcome=error instanceof Error?error.message:String(error);}
+    if(!outcome.includes('sandbox_workspace_ceiling_unenforceable'))throw new Error(`observed "${outcome}"`);
+    return outcome;
   });
   await evaluate('timeout-kills-the-process-tree',async()=>{
     const seed=await start('timeout','nohup sh -c "sleep 12; printf late >> late-effect.log" >/dev/null 2>&1 & sleep 30',FULL_POLICY,LIMITS,2_000);

@@ -3,6 +3,9 @@ set -u
 set +e
 readonly command_text=${1:?missing command}
 readonly receipt_dir="/julius-receipts-root/${JULIUS_EXECUTION_TOKEN:?}"
+# Every fact this script signs into a receipt must be present and non-empty. `set -u` catches an unset
+# variable but not an empty one, and an empty field would be sealed and only refused much later downstream.
+: "${JULIUS_OUTPUT_BLOCKS:?}" "${JULIUS_MANIFEST_DIGEST:?}" "${JULIUS_INVOCATION_ID:?}" "${JULIUS_DISPATCH_GENERATION:?}" "${JULIUS_SANDBOX_ID:?}" "${JULIUS_TENANT_DIGEST:?}" "${JULIUS_PROJECT_DIGEST:?}" "${JULIUS_RUN_DIGEST:?}" "${JULIUS_TASK_DIGEST:?}" "${JULIUS_WORKER_DIGEST:?}" "${JULIUS_TOOL_ID:?}" "${JULIUS_TOOL_VERSION:?}" "${JULIUS_REQUEST_DIGEST:?}" "${JULIUS_POLICY_DIGEST:?}" "${JULIUS_LEASE_GENERATION:?}" "${JULIUS_IMAGE_DIGEST:?}" "${JULIUS_EXECUTOR_IDENTITY:?}"
 readonly stage_file="$receipt_dir/executor.stage"
 tree_digest() { (cd /workspace && find . -xdev \( -type f -o -type l \) -print0 | sort -z | while IFS= read -r -d '' path; do printf '%s\0' "$path"; stat -c '%f' -- "$path" 2>/dev/null; if test -L "$path"; then readlink -- "$path"; else sha256sum -- "$path" 2>/dev/null; fi; done) | sha256sum | cut -d' ' -f1; }
 # A failed rm leaves the temporary aliased to the sealed target, and nothing prevents a later truncating

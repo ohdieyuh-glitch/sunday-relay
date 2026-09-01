@@ -36,12 +36,20 @@ jobs:
       - name: Create executor-private state, signing identity and per-operation credentials
         id: identity
         run: |
-          # One workspace root, one subdirectory per tenant: a tenant may only mount its own.
-          mkdir -p /tmp/julius-executor/receipts /tmp/julius-executor/ledger /tmp/julius-workspace/tenant /tmp/julius-workspace/other-tenant
+          # One workspace root, one directory per tenant, and inside each the workspace itself on its OWN
+          # kernel-sized filesystem. The tenant directory stays unwritable by the sandbox user so the
+          # workspace cannot be renamed out from under its mount; the tmpfs size is what makes the declared
+          # workspaceBytes an enforced ceiling rather than a recorded number.
+          mkdir -p /tmp/julius-executor/receipts /tmp/julius-executor/ledger \
+                   /tmp/julius-workspace/tenant/ws /tmp/julius-workspace/other-tenant/ws
           chmod 0700 /tmp/julius-executor /tmp/julius-executor/receipts /tmp/julius-executor/ledger
-          chmod 0777 /tmp/julius-workspace /tmp/julius-workspace/tenant /tmp/julius-workspace/other-tenant
-          printf 'fixture\n' > /tmp/julius-workspace/tenant/fixture.txt
-          printf 'other tenant private\n' > /tmp/julius-workspace/other-tenant/private.txt
+          chmod 0755 /tmp/julius-workspace /tmp/julius-workspace/tenant /tmp/julius-workspace/other-tenant
+          for tenant in tenant other-tenant; do
+            sudo mount -t tmpfs -o size=4194304,mode=0777 tmpfs "/tmp/julius-workspace/$tenant/ws"
+          done
+          printf 'fixture\n' > /tmp/julius-workspace/tenant/ws/fixture.txt
+          printf 'other tenant private\n' > /tmp/julius-workspace/other-tenant/ws/private.txt
+          df -B1 --output=size,target /tmp/julius-workspace/tenant/ws /tmp/julius-workspace/other-tenant/ws
           openssl genpkey -algorithm ED25519 -out /tmp/julius-executor/private.pem
           openssl pkey -in /tmp/julius-executor/private.pem -pubout -out /tmp/julius-public.pem
           chmod 0600 /tmp/julius-executor/private.pem
@@ -151,3 +159,4 @@ jobs:
           docker ps -aq --filter 'label=julius.sandbox' | xargs -r docker rm -f 2>/dev/null || true
           docker rm -f julius-executor julius-postgres 2>/dev/null || true
           docker network rm julius-sibling 2>/dev/null || true
+          for tenant in tenant other-tenant; do sudo umount "/tmp/julius-workspace/$tenant/ws" 2>/dev/null || true; done
