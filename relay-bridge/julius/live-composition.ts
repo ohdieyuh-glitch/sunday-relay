@@ -380,7 +380,7 @@ export async function driveJuliusRunToTerminal(input: {
     const decisions = await input.store.decisionsForRun(input.runId, input.projectId);
     const nonAccept = decisions.filter((decision) => decision.action !== 'ACCEPT');
     return nonAccept.length === 0 ? null
-      : `completion requires every task's current verification decision to be effectively accepted, and this run's durable history holds unresolved: ${nonAccept.map((decision) => `${decision.action}(${decision.reasonCode})`).join(', ')}`;
+      : `completion requires every task's current verification decision to be effectively accepted; this run's durable history holds these non-ACCEPT decisions (a REPAIR may already be superseded through its repair lineage): ${nonAccept.map((decision) => `${decision.action}(${decision.reasonCode})`).join(', ')}`;
   };
   let lastState = 'UNKNOWN';
   for (let tick = 1; tick <= maxTicks; tick += 1) {

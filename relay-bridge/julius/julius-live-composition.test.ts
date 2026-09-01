@@ -363,7 +363,10 @@ function seedMissionRun(store: ReturnType<typeof createJuliusMemoryStore>): void
   }]);
 }
 
-async function driveLiveMission(verdicts: Array<'approved' | 'changes_required'>) {
+async function driveLiveMission(
+  verdicts: Array<'approved' | 'changes_required'>,
+  budget?: Parameters<typeof assembleLiveJuliusRuntime>[0]['budget'],
+) {
   const memory = createJuliusMemoryStore();
   const handoffs = createContextAndClaimHandoffs(memory as unknown as JuliusRuntimeStore);
   const fakes = liveResolution({ verdicts, contexts: handoffs.contexts });
@@ -372,6 +375,7 @@ async function driveLiveMission(verdicts: Array<'approved' | 'changes_required'>
   const runtime = assembleLiveJuliusRuntime({
     store: handoffs.store, entries: fakes.resolution.entries,
     cardRevision: 'card-test-1', spendCeilingUsdMicros: 5_000_000, maxRepairRounds: 1,
+    budget,
   });
   const outcome = await driveJuliusRunToTerminal({
     loop: runtime.loop, store: handoffs.store, runId: 'run-live', projectId: 'prj-live', maxTicks: 24,
@@ -572,10 +576,34 @@ describe('the durable completion rule after a repair', () => {
     expect(memory.events().some((event) => event.type === 'run.completed')).toBe(true);
 
     // History is audit material: the admitting REPAIR decision remains
-    // durable next to the ACCEPTs that superseded it through its lineage.
+    // durable AND remains build-1's current decision — completion came from
+    // the planner-shaped repair lineage's own ACCEPT, never from a direct
+    // re-decision of the repaired task.
     const decisions = await memory.decisionsForRun('run-live', 'prj-live');
     expect(decisions.some((decision) => decision.action === 'REPAIR' && decision.taskId === 'build-1')).toBe(true);
-    expect(decisions.some((decision) => decision.action === 'ACCEPT')).toBe(true);
+    const buildDecisions = decisions.filter((decision) => decision.taskId === 'build-1');
+    expect(buildDecisions[buildDecisions.length - 1]?.action).toBe('REPAIR');
+    expect(decisions.some((decision) => decision.action === 'ACCEPT' && decision.taskId === 'repair:build-1:1:task')).toBe(true);
+  });
+
+  it('a run that still honestly parks names its cause: a REPAIR whose round the budget refused', async () => {
+    // The park routes that survive the effective-verification semantics are
+    // narrower, so the operator-facing cause line must stay pinned. Deny the
+    // repair-admission reservation specifically: the blocking review appends
+    // the REPAIR decision, the round cannot be admitted, every task ends
+    // terminal, and the run parks in VERIFYING with the cause named.
+    const ceiling = createRunSpendBudget(5_000_000);
+    const budget: typeof ceiling = {
+      reserve: async (input) => input.reservationId.startsWith('reservation:repair:')
+        ? { state: 'DENIED', denialReason: 'BUDGET_EXHAUSTED' }
+        : ceiling.reserve(input),
+      commit: (input) => ceiling.commit(input),
+      release: (input) => ceiling.release(input),
+    };
+    const { outcome } = await driveLiveMission(['approved', 'changes_required'], budget);
+    expect(outcome.state).toBe('VERIFYING');
+    expect(outcome.stalled).toBe(true);
+    expect(outcome.haltCause ?? '').toContain('REPAIR');
   });
 });
 

@@ -182,8 +182,9 @@ an operator running the entrypoint above with `--confirm-live`.
 
 A genuinely separate reviewer audited the full diff against source, proving two
 findings by executing probes against the composition's own exports. Verdict:
-**Critical 0 / High 2 / Medium 7 / Low 3 / Informational 3.** Both Highs and
-the trivially-fixable items were repaired in one bounded iteration:
+**Critical 0 / High 2 / Medium 7 / Low 3 / Informational 3.** One High and
+the trivially-fixable items were repaired in one bounded iteration; the
+second High was resolved at its root by PR #210 on main:
 
 - **F1 (High, fixed):** on the resume path the same-process artifact exchange
   is empty, and the probe proved an Independent Reviewer dispatched with an
