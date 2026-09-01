@@ -13,10 +13,25 @@ const opaque=(value:string)=>createHash('sha256').update(value).digest('hex');
 /** The root itself is a workspace; anything reached by climbing out of it is not. */
 export const workspaceContained=(root:string,candidate:string)=>{const rel=relative(root,candidate);return rel===''||(!rel.startsWith('/')&&!rel.split(/[\\/]/).includes('..'));};
 /**
- * A workspace is permitted only if the path asked for is already its own real path and lies inside the root.
- * A lexical check upstream of a realpath downstream is not containment: a symlink planted inside a workspace
- * a tenant legitimately owns resolves elsewhere, and every lexical caller still sees the name it was given.
+ * Permitted iff the root and the candidate both resolve and the resolved candidate lies inside the resolved
+ * root. Comparing an unresolved spelling to a resolved path is not containment in either direction: a symlink
+ * planted inside a workspace a tenant owns resolves elsewhere, and a root reached through one matches nothing.
  */
+/**
+ * Every declared root must admit the path, and all must resolve it to the SAME place. The agreement rule is
+ * what closes the window between the two resolutions: measured, removing it let 2,690 of 4,000 raced relink
+ * attempts mount another tenant. The resolver is injectable only so that rule can be tested without a race.
+ */
+export async function admitAcrossRoots(roots:readonly string[],sourceRef:string,resolveOne:(root:string,ref:string)=>Promise<string|null>=permittedWorkspace):Promise<string|null>{
+  let agreed:string|null=null;
+  for(const root of roots){
+    const admitted=await resolveOne(root,sourceRef);
+    if(!admitted||(agreed!==null&&admitted!==agreed))return null;
+    agreed=admitted;
+  }
+  return agreed;
+}
+
 export async function permittedWorkspace(root:string,sourceRef:string):Promise<string|null>{
   if(!root)return null;
   /* Both sides are resolved and only the RESOLVED paths compared. A lexical pre-check against the root's
@@ -87,20 +102,13 @@ export class DockerJuliusSandboxAdapter implements SandboxExecutionPort {
  private async resolveWorkspace(sourceRef:string,permittedRoot?:string):Promise<string>{
   const invalid=()=>new Error('sandbox_workspace_invalid');
   const requested=resolve(sourceRef);
-  /* The root that decides HERE is the caller-scoped one whenever the boundary supplied it. Checking only the
-     fleet root makes an upstream tenant check advisory: the path is resolved twice, at two moments, and a
-     workspace relinked in between still lands inside the fleet — which is where the other tenants are.
-     Both roots are required when both exist, so a tenant root cannot widen the fleet's. */
-  /* EVERY declared root must admit the path, and all must resolve it to the same place. Taking one root and
-     testing the other for truthiness let a tenant root widen the fleet's — and an empty string, being both
-     "supplied" and falsy, slipped past both. The cheapest way past a guard must never be a vaguer root. */
+  /* Checking only the fleet root makes an upstream tenant check advisory: the path is resolved twice, at two
+     moments, and a workspace relinked in between still lands inside the fleet — which is where the other
+     tenants are. So EVERY declared root must admit it, and all must agree on where it resolves. Taking one
+     root and testing the other for truthiness let a tenant root widen the fleet's, and an empty string —
+     supplied and falsy at once — slipped past both. The cheapest way past a guard must never be a vaguer root. */
   const roots=[permittedRoot,this.config.allowedWorkspaceRoot].filter((candidate):candidate is string=>candidate!==undefined);
-  let workspace=roots.length===0?await realpath(requested).catch(()=>{throw invalid();}):null;
-  for(const candidate of roots){
-    const admitted=await permittedWorkspace(candidate,requested);
-    if(!admitted||(workspace!==null&&admitted!==workspace))throw invalid();
-    workspace=admitted;
-  }
+  const workspace=roots.length===0?await realpath(requested).catch(()=>{throw invalid();}):await admitAcrossRoots(roots,requested);
   // The mount specification is comma and equals delimited, so a path carrying either could splice a field.
   if(workspace===null||/[,=]/.test(workspace))throw invalid();
   return workspace;

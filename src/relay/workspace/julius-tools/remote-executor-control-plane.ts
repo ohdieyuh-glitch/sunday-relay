@@ -70,9 +70,11 @@ export class RemoteExecutorControlPlane implements SandboxExecutionPort {
 
   createSandbox = (input: Parameters<SandboxExecutionPort['createSandbox']>[0]) => this.call<Awaited<ReturnType<SandboxExecutionPort['createSandbox']>>>('create', input);
   prepareWorkspace = (input: Parameters<SandboxExecutionPort['prepareWorkspace']>[0]) => {
-    // `permittedWorkspaceRoot` is set by the trusted boundary and refused on the wire, so it is stripped
-    // here rather than sent and rejected: the interface's claim becomes structural instead of prose.
-    const { permittedWorkspaceRoot: _boundaryOnly, ...wire } = input;
+    // `permittedWorkspaceRoot` is set by the trusted boundary, which is on the far side of this transport.
+    // Discarding one silently would lose a caller's narrower root without telling it; the wire refuses the
+    // field anyway, so saying so here turns a confusing 400 into an accurate local refusal.
+    const { permittedWorkspaceRoot, ...wire } = input;
+    if (permittedWorkspaceRoot !== undefined) throw new Error('executor_workspace_root_is_boundary_owned');
     return this.call<Awaited<ReturnType<SandboxExecutionPort['prepareWorkspace']>>>('prepare', wire);
   };
   async executeTool(input: Parameters<SandboxExecutionPort['executeTool']>[0]) {

@@ -5,9 +5,10 @@ readonly command_text=${1:?missing command}
 readonly receipt_dir="/julius-receipts-root/${JULIUS_EXECUTION_TOKEN:?}"
 readonly stage_file="$receipt_dir/executor.stage"
 tree_digest() { (cd /workspace && find . -xdev \( -type f -o -type l \) -print0 | sort -z | while IFS= read -r -d '' path; do printf '%s\0' "$path"; stat -c '%f' -- "$path" 2>/dev/null; if test -L "$path"; then readlink -- "$path"; else sha256sum -- "$path" 2>/dev/null; fi; done) | sha256sum | cut -d' ' -f1; }
-# A failed rm leaves the temporary aliased to the sealed target. What stops a later write through the
-# surviving name is not `ln` and not the ledger: it is that a re-entered container fails this same `ln` on
-# before.receipt, which already exists, and exits 125 before the command is ever reached.
+# A failed rm leaves the temporary aliased to the sealed target, and nothing prevents a later truncating
+# write through the surviving name — the `ln` that refuses a re-entry runs one line AFTER that write. What
+# bounds the damage is that the re-entered run then exits 125, and that consume() refuses the broken chain
+# rather than returning a wrong answer.
 durable_move() { local source=$1 target=$2; sync -f "$source" || true; ln -- "$source" "$target" || return 1; rm -f -- "$source" || true; sync -f "$target" || true; sync || true; }
 stage() { printf '%s\n' "$1" > "$stage_file.tmp" || return 1; sync -f "$stage_file.tmp" || true; mv -f -- "$stage_file.tmp" "$stage_file" || return 1; sync -f "$stage_file" || true; sync || true; }
 readonly started_at=$(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)
@@ -52,9 +53,16 @@ readonly duration_ms=$((end_ms-start_ms))
 # is what keeps a failing final stage from aborting before the AFTER receipt of an effect that has happened.
 set +e
 (cd /workspace && GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null /usr/bin/setpriv --reuid=65532 --regid=65532 --clear-groups --bounding-set=-all --inh-caps=-all --ambient-caps=-all git -c core.fsmonitor= -c core.hooksPath=/dev/null -c safe.directory=/workspace --no-optional-locks status --porcelain=v1 2>/dev/null) | head -n 100 | head -c 65536 > "$receipt_dir/changed-paths.tmp"
-git_status=${PIPESTATUS[0]}
+stages=("${PIPESTATUS[@]}")
+written=$(wc -c < "$receipt_dir/changed-paths.tmp" 2>/dev/null || printf 0)
+lines=$(wc -l < "$receipt_dir/changed-paths.tmp" 2>/dev/null || printf 0)
 set -e
-case "$git_status" in 0|141) changed_paths_available=1;; *) changed_paths_available=0;; esac
+# The flag means one thing only: git ran to completion and this list is all of it. When the script truncates,
+# `head` closes the pipe and git dies of SIGPIPE, which destroys its real exit status — a git that failed
+# after a hundred lines is indistinguishable from one that succeeded. Truncated, or written short, or failed:
+# all report 0. An incomplete list must never be attested as the complete one.
+if test "${stages[0]}" -eq 0 && test "${stages[2]}" -eq 0 && test "$lines" -lt 100 && test "$written" -lt 65536
+then changed_paths_available=1; else changed_paths_available=0; fi
 readonly changed_paths_available
 durable_move "$receipt_dir/changed-paths.tmp" "$receipt_dir/changed-paths"
 readonly post_tree=$(tree_digest)

@@ -38,7 +38,10 @@ async function main():Promise<void>{
   // With more than one tenant, a shared workspace root is no isolation at all, so it stops being optional.
   const tenants=new Set(declared.map(caller=>caller.tenantId));
   const tenantWorkspaceRoot=tenants.size>1?required('EXECUTOR_TENANT_WORKSPACE_ROOT'):process.env.EXECUTOR_TENANT_WORKSPACE_ROOT;
-  // A tenant root outside the fleet root refuses every prepare. Fail at boot rather than per request.
+  /* A tenant root outside the fleet root refuses every prepare, so it fails at boot rather than per request.
+     The fleet root is checked on its own first: `permittedWorkspace` returns null when EITHER side fails to
+     resolve, which would otherwise report a missing fleet root as an invalid tenant root. */
+  if(!await permittedWorkspace(workspaceRootEarly,workspaceRootEarly))throw new Error('executor_config_invalid:EXECUTOR_WORKSPACE_ROOT');
   if(tenantWorkspaceRoot&&!await permittedWorkspace(workspaceRootEarly,tenantWorkspaceRoot))throw new Error('executor_config_invalid:EXECUTOR_TENANT_WORKSPACE_ROOT');
   const store=recoveryStore;
   const service=createExecutorControlPlaneService({callerAuthorities,keyId:required('EXECUTOR_KEY_ID'),privateSigningKey,physical,receipts,executionLedger,tenancyLedger,

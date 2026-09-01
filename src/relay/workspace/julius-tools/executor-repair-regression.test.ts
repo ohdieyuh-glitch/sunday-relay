@@ -8,8 +8,8 @@ import type { SandboxExecutionPort } from '../../mission/julius';
 import { createExecutorControlPlaneService, executionGateOpened } from './executor-control-plane-service';
 import { DockerExecutorReceiptStore } from './executor-receipt-store';
 import { FilesystemSandboxTenancyLedger } from './durable-execution-ledger';
-import { DockerJuliusSandboxAdapter, permittedWorkspace, workspaceContained } from './docker-sandbox-adapter';
-import { assertKnownPayloadEncoding } from './remote-executor-control-plane';
+import { DockerJuliusSandboxAdapter, admitAcrossRoots, permittedWorkspace, workspaceContained } from './docker-sandbox-adapter';
+import { RemoteExecutorControlPlane, assertKnownPayloadEncoding } from './remote-executor-control-plane';
 import { FilesystemExecutionLedger, durablePublish } from './durable-execution-ledger';
 import { parseExecutorCallers } from './executor-scoped-credential';
 import { canonicalRequestDigest, executionReplayDigest, parseExecutorExecutionEnvelope } from './execution-envelope';
@@ -41,6 +41,14 @@ describe('repairs that previous rounds left untested',()=>{
     // And a root legitimately reached through a symlink must still work, or ordinary deployments break.
     await symlink(join(root,'mine'),join(root,'mine-link'));
     expect(await permittedWorkspace(join(root,'mine-link'),join(root,'mine-link','project'))).toBe(resolve(root,'mine','project'));
+  });
+
+  /* An empty root resolves to the process's own working directory, so a path under THAT directory is the
+     only place the missing guard shows: anywhere else, containment against cwd refuses it anyway and the
+     assertion passes while blind. */
+  it('refuses an empty root outright rather than resolving it to the working directory',async()=>{
+    expect(await permittedWorkspace('',process.cwd())).toBeNull();
+    expect(await permittedWorkspace(process.cwd(),process.cwd())).toBe(process.cwd());
   });
 
   it('accepts a child whose name merely begins with two dots',()=>{
@@ -221,12 +229,42 @@ describe('the adapter gate that actually produces the mount',()=>{
     expect(await prepare(join(fleet,'tenant-b'),tenantA)).toBe('sandbox_workspace_invalid');
     expect(await prepare(join(fleet,'work'),tenantA)).toBe('sandbox_workspace_invalid');
     expect(await prepare(join(tenantA,'work'),tenantA)).not.toBe('sandbox_workspace_invalid');
-    // An empty root is "supplied" and falsy at once; it must not be the cheapest way past both checks.
-    expect(await prepare(join(root,'elsewhere'),'')).toBe('sandbox_workspace_invalid');
+    /* An empty root is "supplied" and falsy at once; it must not be the cheapest way past both checks. The
+       path must sit INSIDE the fleet root, or the fleet check refuses it anyway and the assertion proves
+       nothing about the empty root — which is how the previous version of this case passed while blind. */
+    expect(await prepare(join(fleet,'tenant-b'),'')).toBe('sandbox_workspace_invalid');
+    // Likewise a caller root outside the fleet root: the tenant check alone would admit its own child.
+    await mkdir(join(root,'elsewhere','deep'),{recursive:true});
+    expect(await prepare(join(root,'elsewhere','deep'),join(root,'elsewhere'))).toBe('sandbox_workspace_invalid');
     // A root spelled through a symlink must still work, or ordinary deployments lose prepare entirely.
     await symlink(fleet,join(root,'fleet-link'));
     expect(await prepare(join(root,'fleet-link','tenant-a','work'),join(root,'fleet-link','tenant-a'))).not.toBe('sandbox_workspace_invalid');
   },20_000);
+
+  /* Two independent reviewers measured this one line: removing it let a relink between the tenant-root and
+     fleet-root resolutions mount another tenant in 2,690 of 4,000 raced attempts, and 135 of 827 in a second
+     harness — while the whole suite stayed green. The race cannot be written as a deterministic test, so the
+     resolver is injectable and the rule is exercised directly. */
+  it('refuses a path the declared roots resolve differently',async()=>{
+    const roots=['/fleet/tenant-a','/fleet'];
+    const agreeing=async()=>'/fleet/tenant-a/work';
+    expect(await admitAcrossRoots(roots,'/fleet/tenant-a/work',agreeing)).toBe('/fleet/tenant-a/work');
+    // The second root resolving somewhere else is exactly what a mid-flight relink produces.
+    let call=0;
+    const disagreeing=async()=>(call++===0?'/fleet/tenant-a/work':'/fleet/tenant-b/work');
+    expect(await admitAcrossRoots(roots,'/fleet/tenant-a/work',disagreeing)).toBeNull();
+    // A root that refuses outright still refuses, whichever one it is.
+    expect(await admitAcrossRoots(roots,'x',async(root:string)=>root==='/fleet'?null:'/fleet/tenant-a/work')).toBeNull();
+    expect(await admitAcrossRoots(roots,'x',async(root:string)=>root==='/fleet'?'/fleet/tenant-a/work':null)).toBeNull();
+  });
+
+  /* The containment root is chosen by the trusted boundary, which is on the far side of this transport.
+     A caller that supplies one is told, rather than having it silently replaced. */
+  it('refuses to carry a caller-supplied containment root over the wire',()=>{
+    const client=new RemoteExecutorControlPlane({endpoint:new URL('https://executor.internal'),serviceCredential:'scoped',callerId:'julius-prod',tenantId:'tenant',requestTimeoutMs:50});
+    expect(()=>client.prepareWorkspace({sandboxId:'sandbox',sourceRef:'/ws',expectedLeaseGeneration:1,permittedWorkspaceRoot:'/'})).toThrow('executor_workspace_root_is_boundary_owned');
+    expect(()=>client.prepareWorkspace({sandboxId:'sandbox',sourceRef:'/ws',expectedLeaseGeneration:1})).not.toThrow();
+  });
 
   it('refuses a terminal payload encoding it does not implement',()=>{
     expect(()=>assertKnownPayloadEncoding(undefined)).not.toThrow();
