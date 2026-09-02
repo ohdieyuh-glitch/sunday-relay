@@ -236,17 +236,16 @@ jobs:
           echo "exit=$status" >> "$GITHUB_OUTPUT"
           echo "--- executor diagnostics (safe lines only) ---"
           docker logs julius-executor 2>&1 | grep -E '^executor_(ready|diagnostic)[ :]' || echo 'no executor diagnostic line was written'
-          case '${{ matrix.receipts }}' in
-            host-visible)
-              # The transport under repair: the whole provider-free preflight must pass.
-              if [ "$status" -ne 0 ]; then echo "first_live_topology_failed:host-visible exit=$status" >&2; exit 1; fi ;;
-            executor-private)
-              # The transport free dry runs #1 and #2 ran. Its outcome is RECORDED here
-              # so that the failure names its stage and class; whether it must keep
-              # failing, and how, is asserted once that class is proven.
-              if [ "$status" -eq 0 ]; then echo 'first_live_topology_note:executor-private receipts passed the preflight'; fi
-              grep 'PREFLIGHT FAILED' preflight.log || true ;;
-          esac
+          # The invariant is the mission's: its provider-free preflight passes the real
+          # sandbox round trip, whichever receipt transport is under test. PROVEN STATE on
+          # 2026-09-02 (PR #214, run 33647859914): BOTH transports fail at the very first
+          # `create` with `class=23503`, PostgreSQL's foreign-key violation — the preflight
+          # probe names a project, run, task and invocation that no table holds, and the
+          # executor's julius_sandboxes insert is refused before any docker create. That is
+          # what free dry run #2 (33635375764) hit. The receipt transport is never reached
+          # until that is repaired, so this job stays red, by design, until it is.
+          if [ "$status" -ne 0 ]; then echo "first_live_topology_failed:${{ matrix.receipts }} exit=$status" >&2; exit 1; fi
+
       - name: Every evidence query holds against the migrated schema
         # The preflight above applied the migrations. The mission's own dump script runs here
         # against that schema, so a stale table or column name fails this PR instead of
