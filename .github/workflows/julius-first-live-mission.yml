@@ -78,6 +78,15 @@ jobs:
       EXECUTOR_KEY_ID: julius-live-key
       JULIUS_FLEET_ROOT: /tmp/julius-workspace
       JULIUS_WORKSPACE: /tmp/julius-workspace/tenant/ws
+      # THE RECEIPT TRANSPORT (PR #214, proven on real Docker). The executor asks the
+      # host Docker daemon to bind-mount each sandbox's scoped receipt directory,
+      # and the daemon resolves bind sources on the host; a receipt root inside the
+      # executor container's own layer stopped every sandbox at prepareWorkspace
+      # (sandbox_create_failed class=bind_source_missing). The root therefore lives
+      # on the host — created root:root 0700 by the launcher, mounted into the
+      # executor at this same path, unreadable by the runner user — while the
+      # signing key and the ledger stay under /executor-private, never mounted.
+      JULIUS_RECEIPT_HOST_ROOT: /tmp/julius-executor/receipts
       JULIUS_PUBLIC_KEY_PATH: /tmp/julius-public.pem
       JULIUS_EXECUTOR_ENDPOINT: http://127.0.0.1:8787/
       JULIUS_EXECUTOR_ALLOW_LOOPBACK: '1'
@@ -249,6 +258,12 @@ jobs:
         # `first-live-topology` regression runs. See its header for exactly what
         # it does and does not establish.
         run: ./.github/julius-live-key-boundary.sh
+
+      - name: 'Preflight: the receipt transport is private to root and the executor'
+        # root:root 0700 on the host, one same-path mount into the executor, no
+        # key or ledger on any host path or mount; proven by trying as the runner
+        # user, not by reading the launcher. Shared with the regression job.
+        run: ./.github/julius-live-receipt-boundary.sh
 
       - name: 'Preflight: durable store, executor, attestation, sandbox, in-sandbox git'
         env:
@@ -473,9 +488,12 @@ jobs:
           # the job.
           rm -rf /tmp/julius-hermes-home /tmp/julius-hermes-bin 2>/dev/null || true
           rm -rf /opt/hermes-venv 2>/dev/null || true
-          # The signing key, receipts and ledger lived inside the executor
-          # container's own layer, so removing the container removed them.
+          # The signing key and the ledger lived inside the executor container's
+          # own layer, so removing the container removed them. The receipt
+          # transport lived on the host, root-owned: it is removed here, after
+          # every container that could still write into it is gone.
           rm -f /tmp/julius-public.pem 2>/dev/null || true
+          sudo rm -rf /tmp/julius-executor 2>/dev/null || true
           sudo umount /tmp/julius-workspace/tenant/ws 2>/dev/null || true
           sudo rm -rf /tmp/julius-workspace 2>/dev/null || true
           echo 'cleanup complete'

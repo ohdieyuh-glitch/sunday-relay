@@ -194,9 +194,10 @@ jobs:
       JULIUS_EXECUTOR_ALLOW_LOOPBACK: '1'
       PGUSER: julius
       PGDATABASE: julius
-      # The one topology switch. Empty means the receipt root stays inside the
-      # executor container's own layer; a path means a root:root 0700 host
-      # directory bind-mounted into the executor at the same path.
+      # The one topology switch. `host-visible` is the mission's transport and must
+      # pass; `executor-private` is the shape dry runs #1 and #2 ran and is kept as
+      # a NEGATIVE regression: it must be refused by the host daemon at exactly
+      # the point and with exactly the code proven on 2026-09-02, and nothing else.
       JULIUS_RECEIPT_HOST_ROOT: ${{ matrix.receipts == 'host-visible' && '/tmp/julius-executor/receipts' || '' }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -223,6 +224,8 @@ jobs:
         run: ./.github/julius-live-executor.sh
       - name: The signing key is beyond every file-reading path, whichever receipt transport is in use
         run: ./.github/julius-live-key-boundary.sh
+      - name: The receipt transport's boundary holds (${{ matrix.receipts }})
+        run: ./.github/julius-live-receipt-boundary.sh
       - name: Preflight round trip (${{ matrix.receipts }} receipts)
         id: preflight
         env:
@@ -234,18 +237,38 @@ jobs:
           status=${PIPESTATUS[0]}
           set -e
           echo "exit=$status" >> "$GITHUB_OUTPUT"
+          umask 077
+          diagnostics=$(mktemp)
+          docker logs julius-executor 2>&1 | grep -E '^executor_diagnostic ' > "$diagnostics" || true
           echo "--- executor diagnostics (safe lines only) ---"
-          docker logs julius-executor 2>&1 | grep -E '^executor_(ready|diagnostic)[ :]' || echo 'no executor diagnostic line was written'
-          # The invariant is the mission's: its provider-free preflight passes the real
-          # sandbox round trip, whichever receipt transport is under test. PROVEN STATE on
-          # 2026-09-02 (PR #214, run 33648699207; first seen in 33647859914): BOTH
-          # transports fail at the very first
-          # `create` with `class=23503`, PostgreSQL's foreign-key violation — the preflight
-          # probe names a project, run, task and invocation that no table holds, and the
-          # executor's julius_sandboxes insert is refused before any docker create. That is
-          # what free dry run #2 (33635375764) hit. The receipt transport is never reached
-          # until that is repaired, so this job stays red, by design, until it is.
-          if [ "$status" -ne 0 ]; then echo "first_live_topology_failed:${{ matrix.receipts }} exit=$status" >&2; exit 1; fi
+          cat "$diagnostics"
+          case '${{ matrix.receipts }}' in
+            host-visible)
+              # THE MISSION'S TRANSPORT: the whole provider-free preflight passes, and the
+              # executor refused nothing along the way.
+              if [ "$status" -ne 0 ]; then echo "first_live_topology_failed:host-visible exit=$status" >&2; exit 1; fi
+              if [ -s "$diagnostics" ]; then echo 'first_live_topology_failed:host-visible executor refused a request' >&2; exit 1; fi
+              echo 'POSITIVE ROUND TRIP OK: host-visible receipts carried create, prepare, execute, receipts, diff and destroy.' ;;
+            executor-private)
+              # THE NEGATIVE REGRESSION. Proven 2026-09-02 (runs 33667743669, 33685880591): with a
+              # legitimate identity, a receipt root inside the executor's own layer is refused by
+              # the host daemon at prepareWorkspace, and only there. This entry is GREEN when that
+              # exact refusal is observed; a pass, a different stage, or a different class is a
+              # regression of the architecture this job protects.
+              expected='executor_diagnostic operation=prepare result=sandbox_create_failed class=bind_source_missing status=500'
+              if [ "$status" -eq 0 ]; then echo 'negative_regression_failed:executor-private receipts unexpectedly passed the preflight' >&2; exit 1; fi
+              if ! grep -q 'PREFLIGHT FAILED: EXECUTOR_UNAVAILABLE:sandbox_create_failed' preflight.log; then
+                echo 'negative_regression_failed:executor-private did not fail with sandbox_create_failed' >&2; exit 1
+              fi
+              if ! grep -qxF "$expected" "$diagnostics"; then
+                echo 'negative_regression_failed:executor-private refused for a different stage or class' >&2; exit 1
+              fi
+              if grep -vxF "$expected" "$diagnostics" | grep -q .; then
+                echo 'negative_regression_failed:executor-private produced an additional refusal' >&2; exit 1
+              fi
+              echo 'NEGATIVE REGRESSION OK: executor-private receipts were refused by the host daemon at prepareWorkspace with class=bind_source_missing, exactly as proven.' ;;
+          esac
+          rm -f "$diagnostics"
 
       - name: Preflight identity regression against real PostgreSQL (dry run 33635375764)
         # The executor's foreign keys, exercised through the executor's own repository: the

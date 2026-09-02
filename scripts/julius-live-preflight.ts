@@ -213,9 +213,14 @@ async function roundTrips(pool: Pool, identity: PreflightIdentity, out: (line: s
   let step = 0;
 
   /** One full create → prepare → execute → destroy round-trip, as the mission does it. */
+  /* Receipts live at the host path the executor was given (the mission's transport) or under the
+   * executor's private root; either way a sandbox must never see that path itself. */
+  const hostReceiptRoot = process.env.JULIUS_RECEIPT_HOST_ROOT?.trim() || '/executor-private/receipts';
+  let previousSandboxId = '';
   const runInSandbox = async (command: string): Promise<ToolInvocationResult> => {
     step += 1;
     const invocationId = `preflight:${identity.nonce}:${step}`;
+    if (step > 1) previousSandboxId = `preflight:${identity.nonce}:${step - 1}`;
     const request: ToolInvocationRequest = {
       invocationId,
       runId: identity.runId,
@@ -309,7 +314,32 @@ async function roundTrips(pool: Pool, identity: PreflightIdentity, out: (line: s
       return 1;
     }
     out(`  host-written change is visible in the sandbox diff (${diff.stdout.length} bytes) — the reviewer will see real work.`);
-    out('PREFLIGHT OK: executor, scoped credentials, attestation, workspace ceiling, in-sandbox git and the host→sandbox diff hand-off all proven. No provider was contacted.');
+
+    /* The receipt transport's isolation, proven from INSIDE a sandbox. The adapter mounts
+     * `<receipt root>/<sha256(sandboxId)>` — this sandbox's own scope — at /julius-receipts-root
+     * and nothing else of the root; so from within, the mount holds exactly one entry (this
+     * execution's token directory), the previous sandbox's scope is unreachable, the host root's
+     * own path does not exist, and neither does anything under /executor-private. */
+    const previousScope = sha(previousSandboxId);
+    const scope = await runInSandbox([
+      'set -e',
+      'test -d /julius-receipts-root',
+      '[ "$(ls -A /julius-receipts-root | wc -l)" -eq 1 ]',
+      `test ! -e /julius-receipts-root/${previousScope}`,
+      `test ! -e /julius-receipts-root/../${previousScope}`,
+      `test ! -e ${hostReceiptRoot}`,
+      'test ! -e /executor-private',
+      'test ! -e /executor-private/private.pem',
+      'test ! -e /executor-private/ledger',
+      'echo RECEIPT_SCOPE_OK',
+    ].join(' && '));
+    if (scope.status !== 'SUCCEEDED' || scope.exitCode !== 0 || !scope.stdout.includes('RECEIPT_SCOPE_OK')) {
+      out('PREFLIGHT FAILED: a sandbox could see more of the receipt transport than its own scoped subtree, or reached the key or ledger.');
+      out(`  stderr (first 400 chars): ${scope.stderr.slice(0, 400)}`);
+      return 1;
+    }
+    out('  sandbox receipt scope: only its own subtree is mounted; the parent root, the previous sandbox, the key and the ledger are unreachable.');
+    out('PREFLIGHT OK: executor, scoped credentials, attestation, workspace ceiling, in-sandbox git, the host→sandbox diff hand-off and the receipt scope all proven. No provider was contacted.');
     return 0;
   } catch (error) {
     const message = error instanceof Error ? error.message : 'unknown error';

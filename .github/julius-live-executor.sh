@@ -16,14 +16,20 @@
 #
 #   JULIUS_RECEIPT_HOST_ROOT unset   receipts under /executor-private/receipts, inside the executor
 #                                    container's own writable layer and on no host path. The #212
-#                                    F4 shape; what free dry runs #1 and #2 started.
+#                                    F4 shape; what free dry runs #1 and #2 started. PROVEN on real
+#                                    Docker (PR #214) to stop every sandbox at prepareWorkspace with
+#                                    `sandbox_create_failed class=bind_source_missing`: the daemon
+#                                    cannot see the source. Kept only as the negative regression
+#                                    the `first-live-topology` job runs.
 #   JULIUS_RECEIPT_HOST_ROOT=<dir>   receipts under a HOST directory created here root:root 0700
 #                                    and bind-mounted into the executor at the same path, so the
-#                                    daemon and the executor name one directory. The shape the
-#                                    proven #208 sibling job has always used.
+#                                    daemon and the executor name one directory. PROVEN to carry the
+#                                    whole provider-free preflight to a pass. THE MISSION'S TRANSPORT.
 #
 # Whichever is chosen, the signing key and the ledger stay under /executor-private and are never
-# bind-mounted anywhere: nothing on the host holds the key, and no sandbox sees the ledger.
+# bind-mounted anywhere: nothing on the host holds the key, and no sandbox sees the ledger. Each
+# sandbox is handed ONLY its own scoped subtree of the receipt root (docker-sandbox-adapter.ts
+# mounts `<root>/<sha256(sandboxId)>` at /julius-receipts-root), never the root itself.
 set -euo pipefail
 : "${SANDBOX_IMAGE:?missing SANDBOX_IMAGE}"; : "${EXECUTOR_IMAGE:?missing EXECUTOR_IMAGE}"
 : "${EXECUTOR_CREDENTIAL_ROOT:?missing EXECUTOR_CREDENTIAL_ROOT}"; : "${PGPASSWORD:?missing PGPASSWORD}"
@@ -43,10 +49,23 @@ DATABASE_URL=$(printf 'postgresql://%s:%s@127.0.0.1:5432/%s' "$PGUSER" "$PGPASSW
 receipt_root=/executor-private/receipts
 receipt_mount=()
 if [ -n "${JULIUS_RECEIPT_HOST_ROOT:-}" ]; then
+  # The transport must be an absolute host path of its own: never the private root the daemon
+  # cannot see, never the workspace fleet the sandboxes mount, never a path the runner can rename.
+  case "$JULIUS_RECEIPT_HOST_ROOT" in
+    /executor-private|/executor-private/*) echo "receipt_root_refused:executor_private:$JULIUS_RECEIPT_HOST_ROOT" >&2; exit 1 ;;
+    "$fleet_root"|"$fleet_root"/*) echo "receipt_root_refused:inside_workspace_fleet:$JULIUS_RECEIPT_HOST_ROOT" >&2; exit 1 ;;
+    /*) ;;
+    *) echo "receipt_root_refused:not_absolute:$JULIUS_RECEIPT_HOST_ROOT" >&2; exit 1 ;;
+  esac
   # root:root 0700: the ordinary runner user cannot list, read, write or traverse it. Stated
   # plainly: a holder of sudo or of the Docker socket still can. That party is not the boundary's
-  # adversary; the file-reading coding agent that runs as the runner user is.
+  # adversary; the file-reading coding agent that runs as the runner user is. Created with the
+  # parent first so no runner-owned ancestor is left writable, then proven, not assumed.
+  sudo install -d -m 0700 -o root -g root "$(dirname "$JULIUS_RECEIPT_HOST_ROOT")"
   sudo install -d -m 0700 -o root -g root "$JULIUS_RECEIPT_HOST_ROOT"
+  if [ -L "$JULIUS_RECEIPT_HOST_ROOT" ]; then echo 'receipt_root_refused:symlink' >&2; exit 1; fi
+  actual=$(sudo stat -c '%U:%G %a' "$JULIUS_RECEIPT_HOST_ROOT")
+  if [ "$actual" != 'root:root 700' ]; then echo "receipt_root_not_private:$actual" >&2; exit 1; fi
   receipt_root=$JULIUS_RECEIPT_HOST_ROOT
   receipt_mount=(-v "$JULIUS_RECEIPT_HOST_ROOT:$JULIUS_RECEIPT_HOST_ROOT")
 fi
