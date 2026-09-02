@@ -1,0 +1,243 @@
+/**
+ * THE PROVIDER-FREE HALF OF THE FIRST LIVE MISSION'S PREFLIGHT.
+ *
+ * The live entrypoint's own preflight proves that the three C.A.R.D. roles
+ * resolve and that every required variable is present, and it stops before
+ * contacting anything (exit 5). What it cannot prove without spending money is
+ * that the INFRASTRUCTURE underneath actually works. This script proves that
+ * half, by driving one real sandbox round-trip through the independent
+ * executor — create, prepare, execute, destroy — using the same control-plane
+ * client, the same scoped credentials, the same signed-receipt verification
+ * and the same sandbox limits the live mission will use.
+ *
+ * WHAT ONE ROUND-TRIP ACTUALLY ESTABLISHES:
+ *   - the executor is reachable and answers on its scoped surface;
+ *   - the derived `execute` credential authorizes a real operation;
+ *   - the receipts verify against JULIUS_PUBLIC_KEY_PATH, so attestation is
+ *     configured and the executor holds the matching private key;
+ *   - the workspace ceiling is ENFORCEABLE — the executor refuses a workspace
+ *     whose backing filesystem is larger than the declared bytes, so a
+ *     successful prepare is proof the tmpfs is real and correctly sized;
+ *   - the bind mount is live and `git` inside the sandbox accepts the
+ *     repository's ownership. That last one is the whole reason this exists:
+ *     the coding agent edits on the host and the DIFF is captured by a
+ *     sandbox command, so a repository git refuses inside the sandbox would
+ *     yield an empty diff and an independent review of nothing — after the
+ *     mission had already paid an architect and a coding agent.
+ *
+ * IT SPENDS NOTHING. No provider client is constructed and no credential is
+ * printed; the command it runs is `git rev-parse HEAD`, the same read the
+ * live coding adapter issues first.
+ */
+
+import { createHash, createPublicKey, type KeyObject } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { Pool } from 'pg';
+import { TransactionalWonderlandDatabase } from '../src/relay/persistence/wonderland-postgres';
+import { RemoteExecutorControlPlane } from '../src/relay/workspace/julius-tools/remote-executor-control-plane';
+import type { ExecutorOperation } from '../src/relay/workspace/julius-tools/executor-operation-request';
+import type {
+  JuliusSandboxLimits,
+  JuliusSandboxPolicy,
+  ToolInvocationRequest,
+} from '../src/relay/mission/julius';
+
+/**
+ * These MUST equal `EXECUTOR_SANDBOX_LIMITS` / `EXECUTOR_SANDBOX_POLICY` in
+ * `relay-bridge/julius/executor-effects.ts`, or the preflight would prove a
+ * sandbox shape the mission never uses. They are duplicated rather than
+ * imported because importing that module drags the three provider connectors
+ * into a script whose entire point is that it contacts no provider — and
+ * `julius-first-live-mission.test.ts` asserts the two stay identical.
+ */
+export const PREFLIGHT_LIMITS: JuliusSandboxLimits = {
+  cpuCount: 1, memoryBytes: 1_073_741_824, pids: 256, openFiles: 1_024,
+  workspaceBytes: 4_194_304, outputBytes: 262_144,
+  wallClockMs: 300_000, concurrentProcesses: 32,
+};
+
+export const PREFLIGHT_POLICY: JuliusSandboxPolicy = {
+  readWorkspace: true, mutateWorkspace: true, executeProcess: true,
+  network: 'DENY', allowedTools: ['shell.bash'],
+};
+
+const sha = (value: string): string => createHash('sha256').update(value).digest('hex');
+
+/** Canonical JSON, identical to the live shell port and the executor. */
+const stable = (value: unknown): string => value === null || typeof value !== 'object'
+  ? JSON.stringify(value)
+  : Array.isArray(value)
+    ? `[${value.map(stable).join(',')}]`
+    : `{${Object.keys(value as Record<string, unknown>).sort().map((key) => `${JSON.stringify(key)}:${stable((value as Record<string, unknown>)[key])}`).join(',')}}`;
+export const digestOf = (value: unknown): string => sha(stable(value));
+
+const required = (name: string): string => {
+  const value = process.env[name];
+  if (!value) throw new Error(`preflight_config_missing:${name}`);
+  return value;
+};
+
+/**
+ * The durable half: the live run refuses without PostgreSQL, and it applies
+ * the migration itself on first use. Applying it HERE means a schema problem
+ * surfaces before a provider is ever paid, and the tables the Julius runtime
+ * writes are proven to exist rather than assumed.
+ */
+async function proveDurableStore(out: (line: string) => void): Promise<boolean> {
+  const pool = new Pool({ connectionString: required('DATABASE_URL') });
+  try {
+    const version = await pool.query<{ server_version: string }>('SHOW server_version');
+    out(`  PostgreSQL reachable: server_version=${version.rows[0]?.server_version ?? 'unknown'}`);
+
+    await new TransactionalWonderlandDatabase(pool).migrate();
+    out('  migrations applied (idempotent)');
+
+    // Naming the tables the run actually writes turns "migrate() returned"
+    // into "the schema the runtime needs is present".
+    const required_tables = ['julius_runs', 'julius_tasks', 'julius_acceptance_criteria', 'julius_verification_decisions'];
+    const present = await pool.query<{ table_name: string }>(
+      `SELECT table_name FROM information_schema.tables WHERE table_schema='relay_wonderland' AND table_name = ANY($1::text[])`,
+      [required_tables],
+    );
+    const found = new Set(present.rows.map((row) => row.table_name));
+    const missing = required_tables.filter((table) => !found.has(table));
+    if (missing.length > 0) {
+      out(`PREFLIGHT FAILED: the migration left these tables absent: ${missing.join(', ')}`);
+      return false;
+    }
+    out(`  schema verified: ${required_tables.length} Julius tables present in relay_wonderland`);
+    return true;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'unknown error';
+    out(`PREFLIGHT FAILED: the durable store refused — ${message.slice(0, 200)}`);
+    return false;
+  } finally {
+    await pool.end().catch(() => undefined);
+  }
+}
+
+async function main(): Promise<number> {
+  const out = (line: string): void => { process.stdout.write(`${line}\n`); };
+
+  out('JULIUS LIVE PREFLIGHT — durable store');
+  if (!await proveDurableStore(out)) return 1;
+
+  const workspace = required('JULIUS_WORKSPACE');
+  const callerId = required('JULIUS_CALLER_ID');
+  const tenantId = process.env.JULIUS_TENANT_ID ?? 'tenant';
+
+  let scopedEntries: Record<string, string>;
+  try {
+    scopedEntries = JSON.parse(required('JULIUS_SCOPED_CREDENTIALS')) as Record<string, string>;
+  } catch {
+    // The parser's own error quotes a slice of its input, and the input is a
+    // credential map — so the message is composed here instead.
+    out('PREFLIGHT FAILED: JULIUS_SCOPED_CREDENTIALS is not valid JSON. Its content is never echoed.');
+    return 1;
+  }
+  const scoped = new Map(Object.entries(scopedEntries)) as ReadonlyMap<ExecutorOperation, string>;
+  for (const operation of ['create', 'prepare', 'execute', 'destroy'] as const) {
+    if (!scoped.get(operation)) {
+      out(`PREFLIGHT FAILED: JULIUS_SCOPED_CREDENTIALS has no "${operation}" credential. Its content is never echoed.`);
+      return 1;
+    }
+  }
+
+  const trustedReceiptKeys = new Map<string, KeyObject>([[
+    required('EXECUTOR_KEY_ID'),
+    createPublicKey(readFileSync(required('JULIUS_PUBLIC_KEY_PATH'), 'utf8')),
+  ]]);
+
+  const client = new RemoteExecutorControlPlane({
+    endpoint: new URL(required('JULIUS_EXECUTOR_ENDPOINT')),
+    serviceCredential: scoped.get('execute') as string,
+    scopedCredentials: scoped,
+    callerId,
+    tenantId,
+    requestTimeoutMs: Number(process.env.JULIUS_REQUEST_TIMEOUT_MS ?? '120000'),
+    trustedReceiptKeys,
+    allowInsecureLoopbackForTests: process.env.JULIUS_EXECUTOR_ALLOW_LOOPBACK === '1',
+  });
+
+  const invocationId = `preflight:${Date.now()}`;
+  const leaseGeneration = 1;
+  const request: ToolInvocationRequest = {
+    invocationId,
+    runId: 'run:julius-live-preflight',
+    taskId: 'task:julius-live-preflight',
+    projectId: process.env.JULIUS_PROJECT_ID ?? 'prj-julius-first-live',
+    workerId: 'julius-live-preflight',
+    toolId: 'shell.bash', toolVersion: '1',
+    arguments: { command: 'git rev-parse HEAD' },
+    cwd: '.',
+    idempotencyKey: invocationId,
+    timeoutMs: 30_000,
+    expectedMutation: 'WORKSPACE',
+  };
+
+  const identity = {
+    sandboxId: invocationId, invocationId, tenantId,
+    projectId: request.projectId, runId: request.runId, taskId: request.taskId,
+    leaseGeneration, policyRevision: process.env.RELAY_JULIUS_CARD_REVISION ?? 'card:julius-live:1',
+    createdAt: new Date().toISOString(),
+    expiresAt: new Date(Date.now() + 600_000).toISOString(),
+  };
+
+  out('JULIUS LIVE PREFLIGHT — independent executor round-trip');
+  out(`  workspace: ${workspace}`);
+  out(`  caller: ${callerId} tenant: ${tenantId}`);
+  out(`  sandbox: network=${PREFLIGHT_POLICY.network} workspaceBytes=${PREFLIGHT_LIMITS.workspaceBytes} outputBytes=${PREFLIGHT_LIMITS.outputBytes}`);
+
+  try {
+    await client.createSandbox({ identity, policy: PREFLIGHT_POLICY, limits: PREFLIGHT_LIMITS });
+    out('  createSandbox: OK');
+    await client.prepareWorkspace({
+      sandboxId: invocationId, sourceRef: workspace, expectedLeaseGeneration: leaseGeneration,
+    });
+    out('  prepareWorkspace: OK (ceiling enforceable, ancestry unrenameable, mount live)');
+
+    const result = await client.executeTool({
+      sandboxId: invocationId, expectedLeaseGeneration: leaseGeneration,
+      dispatchGeneration: 1, requestDigest: digestOf(request),
+      executionTokenHash: sha(`token:${invocationId}`),
+      effectClassification: 'NON_IDEMPOTENT_MUTATION', request,
+    });
+    const revision = result.stdout.trim();
+    out(`  executeTool: status=${result.status} exit=${result.exitCode ?? 'unknown'}`);
+
+    if (result.status !== 'SUCCEEDED' || result.exitCode !== 0) {
+      out('PREFLIGHT FAILED: `git rev-parse HEAD` did not succeed inside the sandbox.');
+      out('  Without it the coding agent produces no base revision and the captured diff is empty,');
+      out('  so the independent reviewer would review nothing.');
+      out(`  stderr (first 400 chars): ${result.stderr.slice(0, 400)}`);
+      return 1;
+    }
+    if (!/^[0-9a-f]{40}$/.test(revision)) {
+      out(`PREFLIGHT FAILED: the sandbox returned no usable base revision (${revision.length} chars).`);
+      return 1;
+    }
+    out(`  base revision resolved inside the sandbox: ${revision}`);
+    out('  receipts verified against EXECUTOR_KEY_ID — attestation is configured.');
+    out('PREFLIGHT OK: executor, scoped credentials, attestation, workspace ceiling and in-sandbox git all proven. No provider was contacted.');
+    return 0;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'unknown error';
+    out(`PREFLIGHT FAILED: ${message.slice(0, 300)}`);
+    return 1;
+  } finally {
+    await client.destroySandbox({
+      sandboxId: invocationId, expectedLeaseGeneration: leaseGeneration,
+      reason: 'preflight round-trip finished',
+    }).catch(() => undefined);
+  }
+}
+
+if (typeof require !== 'undefined' && require.main === module) {
+  main().then(
+    (code) => { process.exitCode = code; },
+    (error) => {
+      process.stdout.write(`JULIUS LIVE PREFLIGHT crashed: ${error instanceof Error ? error.message.slice(0, 300) : 'unknown error'}\n`);
+      process.exitCode = 1;
+    },
+  );
+}

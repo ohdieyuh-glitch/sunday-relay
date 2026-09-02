@@ -1,0 +1,47 @@
+{
+  "missionId": "mission:julius-first-live-1",
+  "projectId": "prj-julius-first-live",
+  "tenantId": "tenant",
+  "objective": "In this workspace, create a CommonJS module `julius-live-proof.js` that exports a function `juliusLiveProof(input)`, together with a focused test file `julius-live-proof.test.js` written for Node's built-in test runner. Edit only files inside this workspace.",
+  "requirements": [
+    "Create `julius-live-proof.js` in the workspace root. It must export exactly one named function via `module.exports = { juliusLiveProof }`.",
+    "`juliusLiveProof(input)` must return the string `julius:` followed by `input` with leading and trailing whitespace removed and all characters lowercased. For example `juliusLiveProof('  Relay  ')` returns `julius:relay`.",
+    "`juliusLiveProof(input)` must throw an Error whose message is exactly `julius_live_proof_empty_input` when `input` is not a string, or is a string that is empty or contains only whitespace.",
+    "Create `julius-live-proof.test.js` in the workspace root using `node:test` and `node:assert/strict`. It must assert the trimming-and-lowercasing behaviour, and it must assert that the empty-input case throws with that exact message.",
+    "The test file must pass under `node --test julius-live-proof.test.js` with no network access and no third-party dependency."
+  ],
+  "constraints": [
+    "Use CommonJS (`require` / `module.exports`). There is no bundler, no TypeScript toolchain and no `node_modules` in this workspace.",
+    "Add no dependency and create no `package-lock.json`; the sandbox that runs the test has no network access.",
+    "Do not modify `package.json` or `README.md`, and create no files outside this workspace.",
+    "Keep the whole change small: two new files and nothing else."
+  ],
+  "acceptanceCriteria": [
+    {
+      "id": "criterion-module-exists",
+      "text": "`julius-live-proof.js` exists in the workspace root and exports a `juliusLiveProof` function via `module.exports`.",
+      "blocking": true
+    },
+    {
+      "id": "criterion-normalises-input",
+      "text": "`juliusLiveProof` returns `julius:` concatenated with the input trimmed and lowercased, so `'  Relay  '` yields exactly `julius:relay`.",
+      "blocking": true
+    },
+    {
+      "id": "criterion-refuses-empty",
+      "text": "`juliusLiveProof` throws an Error with the exact message `julius_live_proof_empty_input` for a non-string, an empty string, or a whitespace-only string.",
+      "blocking": true
+    },
+    {
+      "id": "criterion-test-passes",
+      "text": "`julius-live-proof.test.js` exists, covers both the normalising case and the throwing case, and the declared test command exits zero.",
+      "blocking": true
+    }
+  ],
+  "testCommand": "node --test julius-live-proof.test.js",
+  "workspacePath": "/tmp/julius-workspace/tenant/ws",
+  "limits": {
+    "spendUsd": 5,
+    "repairCycles": 1
+  }
+}

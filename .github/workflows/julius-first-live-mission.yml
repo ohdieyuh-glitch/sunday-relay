@@ -1,0 +1,359 @@
+name: Julius first live mission
+
+# THE ONLY WORKFLOW IN THIS REPOSITORY THAT MAY SPEND PROVIDER MONEY.
+#
+# It runs one bounded, real Compound-AI mission end to end: GPT Prompt
+# Architect -> Julius plan -> Claude Coding Agent -> Julius -> Independent
+# Executor -> evidence -> Hermes/xAI Independent Reviewer -> Julius
+# verification -> COMPLETE. Nothing about it is automatic.
+#
+# THREE INDEPENDENT GATES stand between a push and a paid run:
+#   1. `workflow_dispatch` is the ONLY trigger. There is deliberately no
+#      `push`, no `pull_request` and no `schedule`, so no commit and no clock
+#      can start it.
+#   2. the `confirm_live` input must be typed exactly, by a human, at dispatch.
+#   3. the Julius entrypoint's own `--confirm-live` flag, which this workflow
+#      passes only when gate 2 was satisfied. Approval is never inferred.
+#
+# The job additionally runs in the `julius-live-validation` GitHub Environment,
+# so the provider credentials live beside neither ordinary CI nor the
+# repository, and an environment reviewer can be required before it starts.
+#
+# PREFLIGHT ALWAYS RUNS AND CONTACTS NO PROVIDER. Dispatching with an empty
+# `confirm_live` is the supported way to prove the whole rig — PostgreSQL,
+# migrations, the independent executor, receipt attestation, scoped
+# credentials, the sandbox ceiling, in-sandbox git, the Hermes profile, and
+# that all three roles resolve to the expected models — without spending
+# anything.
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_live:
+        description: 'Type "RUN LIVE MISSION" to dispatch the paid live mission. Leave empty for preflight only.'
+        required: false
+        default: ''
+      max_ticks:
+        description: 'Hard ceiling on Julius run-loop ticks.'
+        required: false
+        default: '24'
+      hermes_ref:
+        description: 'Hermes Agent git ref to install for the Independent Reviewer.'
+        required: false
+        default: 'v0.18.2'
+
+permissions:
+  contents: read
+
+# One mission at a time, and never cancelled mid-flight: a live run holds a
+# durable Julius run plus real sandboxes, and killing it halfway would leave
+# both to be reconciled by hand.
+concurrency:
+  group: julius-first-live-mission
+  cancel-in-progress: false
+
+jobs:
+  first-live-mission:
+    name: Preflight, then the live mission
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    environment: julius-live-validation
+    defaults:
+      run:
+        shell: bash
+    env:
+      JULIUS_CALLER_ID: julius-live
+      JULIUS_TENANT_ID: tenant
+      JULIUS_PROJECT_ID: prj-julius-first-live
+      EXECUTOR_KEY_ID: julius-live-key
+      JULIUS_FLEET_ROOT: /tmp/julius-workspace
+      JULIUS_WORKSPACE: /tmp/julius-workspace/tenant/ws
+      JULIUS_PUBLIC_KEY_PATH: /tmp/julius-public.pem
+      JULIUS_EXECUTOR_ENDPOINT: http://127.0.0.1:8787/
+      JULIUS_EXECUTOR_ALLOW_LOOPBACK: '1'
+      PGUSER: julius
+      PGDATABASE: julius
+      HERMES_PROFILE_HOME: /tmp/julius-hermes-home
+      CONTRACT: .github/julius-first-live-mission.json
+      # The three roles, pinned. The preflight refuses if the entrypoint
+      # resolves anything other than these.
+      RELAY_PROMPT_ARCHITECT_MODE: live
+      OPENAI_PROMPT_ARCHITECT_MODEL: gpt-5.6-sol
+      RELAY_HOSTED_CODING_MODEL: claude-fable-5
+      RELAY_HERMES_PROVIDER: xai
+      RELAY_HERMES_MODEL: grok-build-0.1
+
+    steps:
+      # Pinned to immutable commit SHAs. A mutable tag can be repointed by the
+      # action's owner at any time, which would change what runs here without
+      # changing anything in this repository.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Build the executor, the preflight probe and the live entrypoint
+        run: |
+          npm run relay:executor:build
+          npm run relay:julius:preflight:build
+          npm run relay:julius:build
+
+      - name: Build the pinned sandbox and executor images
+        id: images
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/julius-ci-build
+          cp scripts/julius-docker-executor.sh /tmp/julius-ci-build/julius-executor
+          printf '%s\n' 'FROM node:22-bookworm-slim' \
+            'RUN apt-get update && apt-get install -y --no-install-recommends util-linux git ca-certificates procps && rm -rf /var/lib/apt/lists/*' \
+            'COPY julius-executor /usr/local/bin/julius-executor' \
+            'RUN chmod 0555 /usr/local/bin/julius-executor' > /tmp/julius-ci-build/Sandboxfile
+          # `docker build -q` prints a bare sha256 digest, which is what the
+          # adapter requires — it refuses any image reference that is not
+          # digest-pinned.
+          sandbox_image=$(docker build -q -f /tmp/julius-ci-build/Sandboxfile /tmp/julius-ci-build)
+          printf '%s\n' 'FROM node:22-bookworm-slim' \
+            'RUN apt-get update && apt-get install -y --no-install-recommends docker.io ca-certificates && rm -rf /var/lib/apt/lists/*' > /tmp/julius-ci-build/Executorfile
+          executor_image=$(docker build -q -f /tmp/julius-ci-build/Executorfile /tmp/julius-ci-build)
+          echo "sandbox=$sandbox_image" >> "$GITHUB_OUTPUT"
+          echo "executor=$executor_image" >> "$GITHUB_OUTPUT"
+
+      - name: Create the ephemeral signing identity and scoped credentials
+        id: identity
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/julius-executor/receipts /tmp/julius-executor/ledger
+          chmod 0700 /tmp/julius-executor /tmp/julius-executor/receipts /tmp/julius-executor/ledger
+
+          # Both the signing key and the credential root are generated HERE and
+          # exist only for this job. Nothing durable is provisioned, so there
+          # is no executor secret to rotate, leak or revoke afterwards.
+          openssl genpkey -algorithm ED25519 -out /tmp/julius-executor/private.pem
+          openssl pkey -in /tmp/julius-executor/private.pem -pubout -out /tmp/julius-public.pem
+          chmod 0600 /tmp/julius-executor/private.pem
+
+          root=$(openssl rand -base64 33 | tr -d '\n')
+          echo "::add-mask::$root"
+          # The database password is ephemeral too. A literal one would be a
+          # credential committed to this file, and the boundary scanner is
+          # right to refuse that even for a throwaway container.
+          database_password=$(openssl rand -hex 24)
+          echo "::add-mask::$database_password"
+          # Mask every credential derivable from the root, not just the ones
+          # this job uses, so none can surface in a later log line.
+          EXECUTOR_CREDENTIAL_ROOT="$root" node scripts/julius-derive-scoped-credentials.mjs --values \
+            | while read -r value; do echo "::add-mask::$value"; done
+          scoped=$(EXECUTOR_CREDENTIAL_ROOT="$root" node scripts/julius-derive-scoped-credentials.mjs --json \
+            create prepare execute cancel destroy inspect artifacts)
+          echo "root=$root" >> "$GITHUB_OUTPUT"
+          echo "database_password=$database_password" >> "$GITHUB_OUTPUT"
+          echo "scoped=$scoped" >> "$GITHUB_OUTPUT"
+
+      - name: Provision the disposable mission workspace
+        run: ./.github/julius-live-workspace.sh
+
+      - name: Start PostgreSQL 16 and the independent executor
+        env:
+          SANDBOX_IMAGE: ${{ steps.images.outputs.sandbox }}
+          EXECUTOR_IMAGE: ${{ steps.images.outputs.executor }}
+          EXECUTOR_CREDENTIAL_ROOT: ${{ steps.identity.outputs.root }}
+          PGPASSWORD: ${{ steps.identity.outputs.database_password }}
+        run: |
+          set -euo pipefail
+          docker run -d --name julius-postgres -p 127.0.0.1:5432:5432 \
+            -e POSTGRES_USER="$PGUSER" -e POSTGRES_PASSWORD="$PGPASSWORD" -e POSTGRES_DB="$PGDATABASE" postgres:16-bookworm
+          for _ in $(seq 1 40); do docker exec julius-postgres pg_isready -U "$PGUSER" && break; sleep 1; done
+          # Assembled at runtime from parts, so this file carries a format
+          # string rather than a connection URL with inline credentials.
+          printf 'DATABASE_URL=postgresql://%s:%s@127.0.0.1:5432/%s\n' "$PGUSER" "$PGPASSWORD" "$PGDATABASE" >> "$GITHUB_ENV"
+          DATABASE_URL=$(printf 'postgresql://%s:%s@127.0.0.1:5432/%s' "$PGUSER" "$PGPASSWORD" "$PGDATABASE")
+
+          # The executor shares the HOST network namespace so that it can keep
+          # binding loopback only — its own guard refuses a wider bind, and
+          # publishing a port would have required weakening it. Julius runs on
+          # the host and reaches it at 127.0.0.1:8787. The sandboxes it creates
+          # are unaffected: they get `--network none`.
+          docker run -d --name julius-executor --network host \
+            -v /var/run/docker.sock:/var/run/docker.sock \
+            -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE:ro" \
+            -v /tmp/julius-executor:/tmp/julius-executor \
+            -v /tmp/julius-workspace:/tmp/julius-workspace \
+            -w "$GITHUB_WORKSPACE" \
+            -e DATABASE_URL="$DATABASE_URL" \
+            -e EXECUTOR_RECEIPT_ROOT=/tmp/julius-executor/receipts \
+            -e EXECUTOR_LEDGER_ROOT=/tmp/julius-executor/ledger \
+            -e EXECUTOR_SIGNING_KEY_PATH=/tmp/julius-executor/private.pem \
+            -e EXECUTOR_KEY_ID="$EXECUTOR_KEY_ID" \
+            -e EXECUTOR_RUNTIME_ID=executor-julius-live \
+            -e EXECUTOR_VERSION=docker-executor.v1 \
+            -e EXECUTOR_WORKSPACE_ROOT=/tmp/julius-workspace \
+            -e EXECUTOR_TENANT_WORKSPACE_ROOT=/tmp/julius-workspace \
+            -e JULIUS_SANDBOX_IMAGE="$SANDBOX_IMAGE" \
+            -e JULIUS_CALLER_ID="$JULIUS_CALLER_ID" \
+            -e JULIUS_TENANT_ID="$JULIUS_TENANT_ID" \
+            -e EXECUTOR_CREDENTIAL_ROOT="$EXECUTOR_CREDENTIAL_ROOT" \
+            "$EXECUTOR_IMAGE" node dist-relay-executor/main.cjs
+          ./.github/wait-for-executor.sh
+
+      # ------------------------------------------------------------ PREFLIGHT
+
+      - name: 'Preflight: durable store, executor, attestation, sandbox, in-sandbox git'
+        env:
+          JULIUS_SCOPED_CREDENTIALS: ${{ steps.identity.outputs.scoped }}
+        run: npm run relay:julius:preflight
+
+      - name: 'Preflight: install Hermes and bootstrap the ephemeral reviewer profile'
+        env:
+          XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
+          HERMES_REF: ${{ inputs.hermes_ref }}
+        run: ./.github/julius-live-hermes.sh
+
+      - name: 'Preflight: the Mission Contract is valid and bounded'
+        run: node scripts/julius-live-contract-check.mjs "$CONTRACT"
+
+      - name: 'Preflight: all three roles resolve to the expected models, nothing dispatched'
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          JULIUS_SCOPED_CREDENTIALS: ${{ steps.identity.outputs.scoped }}
+          RELAY_HERMES_EXECUTABLE: /opt/hermes-venv/bin/hermes
+        run: |
+          set -uo pipefail
+          # No `--confirm-live`. The entrypoint resolves every role, reports
+          # SET/MISSING for every credential, and STOPS with exit 5 before it
+          # constructs a provider client or opens a connection. Any other exit
+          # code means the rig is not ready, and 5 is the only one that proves
+          # it is.
+          set +e
+          npm run --silent relay:julius:mission -- run --contract "$CONTRACT" | tee preflight-roles.log
+          status=${PIPESTATUS[0]}
+          set -e
+          if [ "$status" -ne 5 ]; then
+            echo "preflight_not_ready: the entrypoint exited $status, expected 5 (ready, awaiting --confirm-live)" >&2
+            exit 1
+          fi
+          # Prove the RESOLVED identities, not merely that something resolved.
+          grep -q 'architect=gpt-5.6-sol' preflight-roles.log || { echo 'architect_model_unexpected' >&2; exit 1; }
+          grep -q 'coder=claude-fable-5' preflight-roles.log || { echo 'coding_model_unexpected' >&2; exit 1; }
+          grep -q 'reviewer=xai/grok-build-0.1' preflight-roles.log || { echo 'reviewer_model_unexpected' >&2; exit 1; }
+          for name in OPENAI_API_KEY ANTHROPIC_API_KEY DATABASE_URL JULIUS_EXECUTOR_ENDPOINT JULIUS_SCOPED_CREDENTIALS EXECUTOR_KEY_ID JULIUS_PUBLIC_KEY_PATH JULIUS_CALLER_ID; do
+            grep -q "^  $name: SET$" preflight-roles.log || { echo "preflight_variable_not_set:$name" >&2; exit 1; }
+          done
+          echo 'PREFLIGHT OK: three roles resolved, every variable present, no provider contacted.'
+
+      - name: 'Preflight complete — stopping here (no confirm_live given)'
+        if: inputs.confirm_live != 'RUN LIVE MISSION'
+        run: |
+          echo 'Preflight passed and NOTHING was dispatched.'
+          echo 'To run the paid mission, dispatch this workflow again with confirm_live = "RUN LIVE MISSION".'
+
+      # ----------------------------------------------------------------- LIVE
+
+      - name: 'LIVE: run the first real Julius mission'
+        if: inputs.confirm_live == 'RUN LIVE MISSION'
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          JULIUS_SCOPED_CREDENTIALS: ${{ steps.identity.outputs.scoped }}
+          RELAY_HERMES_EXECUTABLE: /opt/hermes-venv/bin/hermes
+          # `runHermesReview` forwards only PATH and HOME to the reviewer, so
+          # HOME is what hands it the ephemeral profile — and nothing else.
+          HOME: /tmp/julius-hermes-home
+          MAX_TICKS: ${{ inputs.max_ticks }}
+        run: |
+          set -uo pipefail
+          # The bundle was built in an earlier step and is invoked directly:
+          # HOME is redirected to the reviewer's ephemeral profile here, and
+          # running npm under that HOME would scatter its cache through the
+          # directory holding a live credential.
+          test -f dist-relay-bridge/julius-live-mission.cjs || { echo 'entrypoint_not_built' >&2; exit 1; }
+          set +e
+          node dist-relay-bridge/julius-live-mission.cjs \
+            run --contract "$CONTRACT" --confirm-live --max-ticks "$MAX_TICKS" | tee live-mission.log
+          status=${PIPESTATUS[0]}
+          set -e
+          echo "julius_exit=$status"
+          exit "$status"
+
+      # ------------------------------------------------------------- EVIDENCE
+
+      - name: Collect the redacted validation evidence
+        if: always()
+        env:
+          PGPASSWORD: ${{ steps.identity.outputs.database_password }}
+        run: |
+          set -uo pipefail
+          mkdir -p julius-live-evidence
+          cp preflight-roles.log julius-live-evidence/ 2>/dev/null || true
+          cp live-mission.log julius-live-evidence/ 2>/dev/null || true
+
+          # Only safe columns. No environment dump, no config, no packet text,
+          # no credential-bearing row.
+          dump() {
+            docker exec -e PGPASSWORD julius-postgres psql -U "$PGUSER" -d "$PGDATABASE" -A -F $'\t' -c "$1" \
+              > "julius-live-evidence/$2" 2>/dev/null || echo 'unavailable' > "julius-live-evidence/$2"
+          }
+          dump "SELECT run_id,mission_id,state,card_revision,created_at,updated_at FROM relay_wonderland.julius_runs ORDER BY created_at" runs.tsv
+          dump "SELECT task_id,task_type,role,state,ordinal,parent_task_id FROM relay_wonderland.julius_tasks ORDER BY ordinal,task_id" tasks.tsv
+          dump "SELECT evidence_id,type,status,safe_summary,occurred_at FROM relay_wonderland.julius_evidence ORDER BY occurred_at" evidence.tsv
+          dump "SELECT decision_id,task_id,action,reason_code,occurred_at FROM relay_wonderland.julius_verification_decisions ORDER BY occurred_at" decisions.tsv
+          dump "SELECT finding_id,blocking,status,claim FROM relay_wonderland.julius_findings" findings.tsv
+          dump "SELECT invocation_id,tool_id,state,requested_at FROM relay_wonderland.julius_tool_invocations ORDER BY requested_at" tool-invocations.tsv
+
+          # The mission's own diff is the point of the exercise; it contains
+          # only what a live coding agent wrote into a throwaway repository.
+          git -c safe.directory="$JULIUS_WORKSPACE" -C "$JULIUS_WORKSPACE" --no-pager diff \
+            > julius-live-evidence/workspace.diff 2>/dev/null || true
+          git -c safe.directory="$JULIUS_WORKSPACE" -C "$JULIUS_WORKSPACE" status --porcelain=v1 \
+            > julius-live-evidence/workspace-status.txt 2>/dev/null || true
+
+          # Receipt IDENTIFIERS and digests only — never a receipt body, which
+          # carries command text and signatures.
+          docker exec julius-executor sh -c 'ls -1 /tmp/julius-executor/receipts 2>/dev/null | head -n 200' \
+            > julius-live-evidence/receipt-ids.txt 2>/dev/null || true
+
+      - name: Refuse to publish evidence that contains credential-shaped material
+        if: always()
+        run: |
+          set -uo pipefail
+          if [ ! -d julius-live-evidence ]; then exit 0; fi
+          # A last structural check before anything leaves the runner. It looks
+          # for key SHAPES, never for the secret values themselves.
+          if grep -rEq '(sk-(ant-|proj-)?[A-Za-z0-9_-]{16,}|xai-[A-Za-z0-9_-]{16,}|BEGIN [A-Z ]*PRIVATE KEY|Authorization: Bearer [A-Za-z0-9._-]{16,})' julius-live-evidence; then
+            echo 'evidence_contains_credential_shaped_material: refusing to upload' >&2
+            rm -rf julius-live-evidence
+            exit 1
+          fi
+          echo 'evidence scan clean'
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: julius-live-evidence
+          path: julius-live-evidence
+          if-no-files-found: ignore
+          retention-days: 14
+
+      # -------------------------------------------------------------- CLEANUP
+
+      - name: Destroy everything this job created
+        if: always()
+        run: |
+          set -uo pipefail
+          docker ps -aq --filter 'label=julius.sandbox' | xargs -r docker rm -f 2>/dev/null || true
+          docker rm -f julius-executor julius-postgres 2>/dev/null || true
+          # The reviewer profile holds the xAI credential; it never outlives
+          # the job.
+          rm -rf /tmp/julius-hermes-home 2>/dev/null || true
+          rm -rf /opt/hermes-venv 2>/dev/null || true
+          # The signing key and every derived receipt.
+          sudo rm -rf /tmp/julius-executor 2>/dev/null || true
+          rm -f /tmp/julius-public.pem 2>/dev/null || true
+          sudo umount /tmp/julius-workspace/tenant/ws 2>/dev/null || true
+          sudo rm -rf /tmp/julius-workspace 2>/dev/null || true
+          echo 'cleanup complete'

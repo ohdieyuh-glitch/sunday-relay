@@ -241,3 +241,60 @@ enforced (bounded in practice by idempotent repair task ids and unroutable
 `repair:repair:*` types). F14 — the worst-case adapter chain can exceed the
 600s lease with no heartbeat during dispatch; safe single-process today,
 flagged for the first live run.
+
+## First live mission rig (2026-09-02)
+
+`.github/workflows/julius-first-live-mission.yml` is the only workflow in this
+repository that may spend provider money. It is `workflow_dispatch`-only —
+there is deliberately no `push`, `pull_request` or `schedule` trigger — runs in
+the `julius-live-validation` GitHub Environment, and reaches the paid stage
+only when a human types `RUN LIVE MISSION` at dispatch AND the entrypoint's own
+`--confirm-live` flag is passed. `scripts/julius-first-live-mission.test.ts`
+holds that arrangement in place offline.
+
+**Preflight spends nothing and is the supported dry run.** Dispatching with an
+empty `confirm_live` proves the whole rig: PostgreSQL reachable and migrated
+with the Julius tables verified present, the independent executor answering,
+receipts verifying against the ephemeral signing key, the scoped `execute`
+credential authorizing a real operation, the 4 MiB workspace ceiling actually
+enforceable, and — the reason `scripts/julius-live-preflight.ts` exists —
+`git rev-parse HEAD` succeeding *inside* the sandbox. Commands there run as uid
+65532, so a workspace git refuses would yield an empty diff and hand the
+Independent Reviewer nothing to review, after the mission had already paid an
+architect and a coding agent. The entrypoint is then run without
+`--confirm-live` and must exit **5**; any other code fails the job, and the
+resolved models are asserted to be `gpt-5.6-sol`, `claude-fable-5` and
+`xai/grok-build-0.1` rather than merely configured.
+
+**The mission is disposable by construction.** `workspacePath` is a 4 MiB tmpfs
+holding a two-file throwaway git repository, never this checkout —
+`scripts/julius-live-contract-check.mjs` refuses a contract whose workspace
+resolves inside the repository, and refuses `spendUsd > 5` or
+`repairCycles > 1`. The sandbox keeps `network: DENY`, so the declared test
+command must run with no network and no `node_modules`; `node --test` on plain
+CommonJS is what that leaves.
+
+**Ephemeral by default.** The Ed25519 signing key, the executor credential
+root, the database password and the Hermes profile are all generated inside the
+job and destroyed by an `if: always()` cleanup step. No durable executor secret
+is provisioned, so there is nothing to rotate or revoke afterwards. The three
+provider credentials are the only stored secrets, and they are referenced by
+name only.
+
+**The reviewer credential boundary is unchanged.** `runHermesReview` forwards
+`{PATH, HOME}` and nothing else to the Hermes child, so the workflow hands the
+reviewer its credential by pointing `HOME` at an ephemeral profile written by
+`hermes auth add` — the tool's own supported mechanism. `XAI_API_KEY` is
+deliberately *not* set on the live step: it would not reach the child, and
+setting it would suggest the credential flows through Julius. Julius was not
+modified to make any of this easier.
+
+**Open, and why this is not yet proven end to end.** No live mission has run.
+Two things are outside this repository: the three provider secrets must be
+added to the `julius-live-validation` environment, and Hermes must install on
+the runner from `NousResearch/hermes-agent` at the pinned `hermes_ref` — the
+proven local build reports a carried commit, so the upstream ref is not known
+to be byte-identical to it. The `edit on host → diff via executor` choreography
+is production code proven only against an offline fake shell; this preflight is
+its first real-infrastructure exercise, which is exactly why it runs before
+anything is paid for.
