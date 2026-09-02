@@ -371,8 +371,11 @@ jobs:
           umask 077
           raw_executor_log=$(mktemp)
           docker logs julius-executor > "$raw_executor_log" 2>&1 || true
-          grep -E '^executor_(ready|diagnostic)[ :]' "$raw_executor_log" \
-            | grep -E '^[A-Za-z0-9_=:. -]+$' > julius-live-evidence/executor-diagnostics.txt || true
+          # Kept lines must match the executor's exact grammar, not merely a
+          # character set: a credential-shaped tail on an otherwise valid line
+          # would survive a charset filter.
+          grep -E '^executor_(ready:[0-9]{1,5}|diagnostic operation=[a-z]+ result=[A-Za-z0-9_.:-]{1,120} class=[A-Za-z0-9_]{1,32} status=[0-9]{3})$' "$raw_executor_log" \
+            > julius-live-evidence/executor-diagnostics.txt || true
           rm -f "$raw_executor_log"
           umask 022
           # The raw logs are NEVER copied. They are rebuilt line by line from an

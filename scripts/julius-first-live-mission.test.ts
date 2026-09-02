@@ -559,6 +559,9 @@ describe('F4 — the executor owns its signing key, and Julius cannot reach it',
     expect(launch).toMatch(/receipt_root=\$JULIUS_RECEIPT_HOST_ROOT/u);
     expect(launch, 'the private root is never among the mounts, whichever transport is chosen')
       .not.toMatch(/-v [^\n]*executor-private/u);
+    // The mission's receipts stay under the private root until a proven decision moves them:
+    // setting the switch in the mission's env is exactly the change this must catch.
+    expect(workflow, 'the mission must not flip the receipt transport switch').not.toMatch(/^\s*JULIUS_RECEIPT_HOST_ROOT:/mu);
   });
 
   it('the mission and its Docker regression run the same launch scripts', () => {
@@ -592,8 +595,15 @@ describe('F5 — evidence is built by allowlist, and secrets cannot ride along',
   it('captures executor diagnostics by allowlist and deletes the raw container log before upload', () => {
     const collect = stepScript('Collect the redacted validation evidence');
     expect(collect, 'the raw executor log is written only to a private temp file').toMatch(/umask 077\s*\n\s*raw_executor_log=\$\(mktemp\)/u);
-    expect(collect, 'only the executor\u2019s own safe lines may be kept').toContain("grep -E '^executor_(ready|diagnostic)[ :]'");
-    expect(collect, 'and only characters a safe line can contain').toContain("grep -E '^[A-Za-z0-9_=:. -]+$'");
+    // The exact grammar of the two lines the executor writes — not a character set, which a
+    // credential-shaped tail on an otherwise valid line would pass.
+    const grammar = '^executor_(ready:[0-9]{1,5}|diagnostic operation=[a-z]+ result=[A-Za-z0-9_.:-]{1,120} class=[A-Za-z0-9_]{1,32} status=[0-9]{3})$';
+    expect(collect, 'only lines matching the executor\u2019s exact grammar may be kept').toContain(`grep -E '${grammar}'`);
+    const kept = new RegExp(grammar, 'u');
+    expect(kept.test('executor_diagnostic operation=create result=masked class=23503 status=500')).toBe(true);
+    expect(kept.test('executor_ready:8787')).toBe(true);
+    expect(kept.test('executor_diagnostic operation=prepare result=masked class=none status=500 Authorization: Bearer abc')).toBe(false);
+    expect(kept.test(['executor_ready:8787 ', 'sk-ant-', 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'].join(''))).toBe(false);
     expect(collect, 'the raw log must not survive to the upload step').toContain('rm -f "$raw_executor_log"');
     expect(collect.indexOf('rm -f "$raw_executor_log"'), 'delete before the evidence directory is complete')
       .toBeLessThan(collect.indexOf('./.github/julius-live-evidence-dump.sh'));

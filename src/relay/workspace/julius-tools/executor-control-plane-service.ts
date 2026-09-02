@@ -270,8 +270,10 @@ export function createExecutorControlPlaneService(config:ExecutorControlPlaneSer
          recorded, and it records a CLASS, never the text: the operation, the safe code or `masked`, the
          error's own short `code`, the status. It is what made dry run 33635375764 diagnosable. */
       const errorClass=(error as {code?:unknown}|null)?.code;
-      (config.diagnostics??defaultDiagnostics)(`executor_diagnostic operation=${diagnosticOperation} result=${safe?message:'masked'} class=${typeof errorClass==='string'&&DIAGNOSTIC_CLASS.test(errorClass)?errorClass:'none'} status=${response.statusCode}`);
       response.end(JSON.stringify({error:safe?message:'executor_failure'}));
+      // After the answer is on the wire, and guarded: a diagnostics sink may never take a refusal away or
+      // turn it into an unanswered request.
+      try{(config.diagnostics??defaultDiagnostics)(`executor_diagnostic operation=${diagnosticOperation} result=${safe?message:'masked'} class=${typeof errorClass==='string'&&DIAGNOSTIC_CLASS.test(errorClass)?errorClass:'none'} status=${response.statusCode}`);}catch{/* the refusal stands; the sink's failure is its own */}
     }
   });
 }

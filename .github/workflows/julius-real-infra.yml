@@ -238,7 +238,8 @@ jobs:
           docker logs julius-executor 2>&1 | grep -E '^executor_(ready|diagnostic)[ :]' || echo 'no executor diagnostic line was written'
           # The invariant is the mission's: its provider-free preflight passes the real
           # sandbox round trip, whichever receipt transport is under test. PROVEN STATE on
-          # 2026-09-02 (PR #214, run 33647859914): BOTH transports fail at the very first
+          # 2026-09-02 (PR #214, run 33648699207; first seen in 33647859914): BOTH
+          # transports fail at the very first
           # `create` with `class=23503`, PostgreSQL's foreign-key violation — the preflight
           # probe names a project, run, task and invocation that no table holds, and the
           # executor's julius_sandboxes insert is refused before any docker create. That is
@@ -247,6 +248,9 @@ jobs:
           if [ "$status" -ne 0 ]; then echo "first_live_topology_failed:${{ matrix.receipts }} exit=$status" >&2; exit 1; fi
 
       - name: Every evidence query holds against the migrated schema
+        # Runs whether or not the preflight passed: the preflight applies the migrations
+        # before its executor round trip, so the schema is present at today's failure too.
+        if: ${{ !cancelled() }}
         # The preflight above applied the migrations. The mission's own dump script runs here
         # against that schema, so a stale table or column name fails this PR instead of
         # silently becoming an `unavailable` artifact file after a paid run.
