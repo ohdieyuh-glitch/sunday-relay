@@ -33,23 +33,33 @@ on:
         description: 'Type "RUN LIVE MISSION" to dispatch the paid live mission. Leave empty for preflight only.'
         required: false
         default: ''
+      acknowledge_rerun:
+        description: 'Only to repeat a paid mission that already completed. Type "RERUN PAID MISSION".'
+        required: false
+        default: ''
       max_ticks:
         description: 'Hard ceiling on Julius run-loop ticks.'
         required: false
         default: '24'
       hermes_ref:
-        description: 'Hermes Agent git ref to install for the Independent Reviewer.'
+        description: 'Hermes Agent commit SHA (40 hex) to install for the Independent Reviewer. Immutable pins only.'
         required: false
-        default: 'v0.18.2'
+        default: '2ea39daeb1f675d72e5c21c9400f2d58d7e6d71a'
 
 permissions:
   contents: read
+  # Needed to ask whether a paid first-live mission has already completed. The
+  # answer lives in this workflow's own artifact list; nothing else is read.
+  actions: read
 
-# One mission at a time, and never cancelled mid-flight: a live run holds a
-# durable Julius run plus real sandboxes, and killing it halfway would leave
-# both to be reconciled by hand.
+# LIVE runs share one group, so two paid missions can never be in flight at
+# once — they would race for the same workspace, executor and database. DRY
+# runs get a group of their own per run, so proving the rig stays unlimited and
+# free. Nothing is ever cancelled mid-flight: a live run holds a durable Julius
+# run and real sandboxes, and killing it halfway leaves both to be reconciled
+# by hand.
 concurrency:
-  group: julius-first-live-mission
+  group: julius-first-live-mission-${{ inputs.confirm_live == 'RUN LIVE MISSION' && 'live' || github.run_id }}
   cancel-in-progress: false
 
 jobs:
@@ -95,6 +105,90 @@ jobs:
           node-version: '22'
           cache: npm
 
+      - name: 'Gate: the dispatch inputs are well formed'
+        env:
+          MAX_TICKS: ${{ inputs.max_ticks }}
+          CONFIRM_LIVE: ${{ inputs.confirm_live }}
+          HERMES_REF: ${{ inputs.hermes_ref }}
+        run: |
+          set -euo pipefail
+          # Runs FIRST, before any build, container or credential exists, so a
+          # malformed dispatch costs nothing and cannot reach a provider.
+          #
+          # The bounds: the seeded task graph is plan → review → build → review
+          # and, with the one permitted repair, → repair → review. Six tasks,
+          # each needing a claim tick plus an advance, so a run that completes
+          # cannot do so in fewer than about eight. Below MIN the mission would
+          # be paid for and then cut off before it could finish; above MAX the
+          # ceiling stops being a ceiling. MAX equals the entrypoint's own
+          # default, so this input can only ever tighten Julius's bound.
+          MIN_TICKS=8
+          MAX_ALLOWED=32
+          case "$MAX_TICKS" in
+            ''|*[!0-9]*)
+              echo "max_ticks_not_an_integer: '$MAX_TICKS'" >&2; exit 1;;
+          esac
+          if [ "$MAX_TICKS" -lt "$MIN_TICKS" ] || [ "$MAX_TICKS" -gt "$MAX_ALLOWED" ]; then
+            echo "max_ticks_out_of_range: $MAX_TICKS is outside [$MIN_TICKS, $MAX_ALLOWED]" >&2
+            exit 1
+          fi
+          # `confirm_live` is compared for exact equality by the live step's
+          # `if:`; anything else is a dry run. Saying so here makes a typo
+          # visible instead of silently producing a free run the operator
+          # believed was paid.
+          if [ -n "$CONFIRM_LIVE" ] && [ "$CONFIRM_LIVE" != 'RUN LIVE MISSION' ]; then
+            echo "confirm_live_not_recognised: refusing rather than silently running a dry run" >&2
+            exit 1
+          fi
+          # Hermes renders the Independent Reviewer's verdict, so it is pinned
+          # the same way every GitHub Action here is: to an immutable commit. A
+          # tag can be repointed by its owner, which would change what decides
+          # a paid mission without changing anything in this repository.
+          case "$HERMES_REF" in
+            *[!0-9a-f]*|'') echo "hermes_ref_not_a_commit_sha: '$HERMES_REF'" >&2; exit 1;;
+          esac
+          if [ "${#HERMES_REF}" -ne 40 ]; then
+            echo "hermes_ref_not_a_commit_sha: expected 40 hex characters, got ${#HERMES_REF}" >&2
+            exit 1
+          fi
+          echo "inputs OK: max_ticks=$MAX_TICKS hermes_ref=$HERMES_REF mode=$([ "$CONFIRM_LIVE" = 'RUN LIVE MISSION' ] && echo LIVE || echo DRY-RUN)"
+
+      - name: 'Gate: a paid first-live mission has not already completed'
+        if: inputs.confirm_live == 'RUN LIVE MISSION'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ACKNOWLEDGE_RERUN: ${{ inputs.acknowledge_rerun }}
+        run: |
+          set -euo pipefail
+          # Julius's own idempotency key is derived from the contract digest and
+          # deduplicates against the durable store — but this rig creates and
+          # destroys its PostgreSQL per job, so every dispatch meets an empty
+          # database and that key protects nothing across dispatches. The
+          # durable fact therefore has to live somewhere GitHub keeps: this
+          # workflow's own artifacts. A successful paid run publishes
+          # `julius-first-live-completed`, and finding one here means the
+          # historic first mission has already been paid for.
+          #
+          # KNOWN LIMIT, stated rather than papered over: artifacts expire (90
+          # days here) and can be deleted, so this guard weakens with age. It is
+          # a guard against ACCIDENT — a second dispatch of a run that already
+          # succeeded — not a security control, and it sits behind the typed
+          # phrase and the environment's own approval.
+          existing=$(gh api \
+            "repos/${GITHUB_REPOSITORY}/actions/artifacts?name=julius-first-live-completed&per_page=100" \
+            --jq '[.artifacts[] | select(.expired == false)] | length' 2>/dev/null || echo 0)
+          if [ "${existing:-0}" -gt 0 ]; then
+            if [ "$ACKNOWLEDGE_RERUN" != 'RERUN PAID MISSION' ]; then
+              echo "julius_first_live_already_completed: $existing completion marker(s) found." >&2
+              echo 'A paid first-live mission has already succeeded. Re-dispatch with' >&2
+              echo 'acknowledge_rerun = "RERUN PAID MISSION" only if you intend to pay again.' >&2
+              exit 1
+            fi
+            echo "operator acknowledged a deliberate rerun over $existing existing completion marker(s)"
+          else
+            echo 'no completion marker found; this would be the first paid mission'
+          fi
+
       - name: Install
         run: npm ci
 
@@ -124,20 +218,16 @@ jobs:
           echo "sandbox=$sandbox_image" >> "$GITHUB_OUTPUT"
           echo "executor=$executor_image" >> "$GITHUB_OUTPUT"
 
-      - name: Create the ephemeral signing identity and scoped credentials
+      - name: Create the ephemeral scoped credentials
         id: identity
         run: |
           set -euo pipefail
-          mkdir -p /tmp/julius-executor/receipts /tmp/julius-executor/ledger
-          chmod 0700 /tmp/julius-executor /tmp/julius-executor/receipts /tmp/julius-executor/ledger
-
-          # Both the signing key and the credential root are generated HERE and
-          # exist only for this job. Nothing durable is provisioned, so there
-          # is no executor secret to rotate, leak or revoke afterwards.
-          openssl genpkey -algorithm ED25519 -out /tmp/julius-executor/private.pem
-          openssl pkey -in /tmp/julius-executor/private.pem -pubout -out /tmp/julius-public.pem
-          chmod 0600 /tmp/julius-executor/private.pem
-
+          # NOTE: no signing key is created here. The executor mints its own
+          # inside its container (.github/julius-executor-entrypoint.sh) so that
+          # this user — the user that also runs Julius — never holds the private
+          # material it is supposed to be verifying against. Only the credential
+          # root, which Julius legitimately derives its scoped credentials from,
+          # is minted on this side.
           root=$(openssl rand -base64 33 | tr -d '\n')
           echo "::add-mask::$root"
           # The database password is ephemeral too. A literal one would be a
@@ -179,16 +269,20 @@ jobs:
           # publishing a port would have required weakening it. Julius runs on
           # the host and reaches it at 127.0.0.1:8787. The sandboxes it creates
           # are unaffected: they get `--network none`.
+          # NOTE the mounts: the Docker socket and the workspace, and NOTHING
+          # under which the executor keeps its signing key, receipts or ledger.
+          # `/executor-private` is the container's own writable layer, so the
+          # host cannot read it and Julius cannot sign what it later verifies.
           docker run -d --name julius-executor --network host \
             -v /var/run/docker.sock:/var/run/docker.sock \
             -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE:ro" \
-            -v /tmp/julius-executor:/tmp/julius-executor \
             -v /tmp/julius-workspace:/tmp/julius-workspace \
             -w "$GITHUB_WORKSPACE" \
             -e DATABASE_URL="$DATABASE_URL" \
-            -e EXECUTOR_RECEIPT_ROOT=/tmp/julius-executor/receipts \
-            -e EXECUTOR_LEDGER_ROOT=/tmp/julius-executor/ledger \
-            -e EXECUTOR_SIGNING_KEY_PATH=/tmp/julius-executor/private.pem \
+            -e EXECUTOR_PRIVATE_ROOT=/executor-private \
+            -e EXECUTOR_RECEIPT_ROOT=/executor-private/receipts \
+            -e EXECUTOR_LEDGER_ROOT=/executor-private/ledger \
+            -e EXECUTOR_SIGNING_KEY_PATH=/executor-private/private.pem \
             -e EXECUTOR_KEY_ID="$EXECUTOR_KEY_ID" \
             -e EXECUTOR_RUNTIME_ID=executor-julius-live \
             -e EXECUTOR_VERSION=docker-executor.v1 \
@@ -198,10 +292,46 @@ jobs:
             -e JULIUS_CALLER_ID="$JULIUS_CALLER_ID" \
             -e JULIUS_TENANT_ID="$JULIUS_TENANT_ID" \
             -e EXECUTOR_CREDENTIAL_ROOT="$EXECUTOR_CREDENTIAL_ROOT" \
-            "$EXECUTOR_IMAGE" node dist-relay-executor/main.cjs
+            "$EXECUTOR_IMAGE" sh "$GITHUB_WORKSPACE/.github/julius-executor-entrypoint.sh"
           ./.github/wait-for-executor.sh
 
+          # Take the PUBLIC key only. This is the whole of what Julius is given
+          # to verify attestations with, and the private half never leaves the
+          # container that produced it.
+          docker exec julius-executor cat /executor-private/public.pem > "$JULIUS_PUBLIC_KEY_PATH"
+          test -s "$JULIUS_PUBLIC_KEY_PATH" || { echo 'executor_public_key_not_exported' >&2; exit 1; }
+          grep -q 'BEGIN PUBLIC KEY' "$JULIUS_PUBLIC_KEY_PATH" || { echo 'executor_public_key_malformed' >&2; exit 1; }
+
       # ------------------------------------------------------------ PREFLIGHT
+
+      - name: 'Preflight: Julius cannot reach the executor signing key'
+        run: |
+          set -euo pipefail
+          # The trust boundary, asserted from the side that must NOT hold the
+          # secret. This step runs as the same user that runs Julius, so what
+          # it cannot read here, Julius cannot read during the mission.
+          for path in /executor-private/private.pem /tmp/julius-executor/private.pem; do
+            if [ -e "$path" ]; then
+              echo "executor_private_key_readable_by_julius:$path" >&2
+              exit 1
+            fi
+          done
+          if docker inspect julius-executor --format '{{range .Mounts}}{{.Source}}:{{.Destination}} {{end}}' | grep -q 'executor-private'; then
+            echo 'executor_private_root_is_bind_mounted_from_host' >&2
+            exit 1
+          fi
+          # And the executor really does hold it.
+          docker exec julius-executor test -f /executor-private/private.pem \
+            || { echo 'executor_missing_its_own_signing_key' >&2; exit 1; }
+          # Julius holds the public half, and only the public half.
+          grep -q 'BEGIN PUBLIC KEY' "$JULIUS_PUBLIC_KEY_PATH"
+          # `grep && { ... }` would return non-zero on the DESIRED no-match and
+          # abort the step under `set -e`; the branch has to be explicit.
+          if grep -q 'PRIVATE KEY' "$JULIUS_PUBLIC_KEY_PATH"; then
+            echo 'julius_holds_private_key_material' >&2
+            exit 1
+          fi
+          echo 'PREFLIGHT OK: the signing key is the executor'"'"'s alone; Julius has only the public verifier.'
 
       - name: 'Preflight: durable store, executor, attestation, sandbox, in-sandbox git'
         env:
@@ -286,6 +416,27 @@ jobs:
 
       # ------------------------------------------------------------- EVIDENCE
 
+      - name: Record that a paid mission completed
+        if: success() && inputs.confirm_live == 'RUN LIVE MISSION'
+        run: |
+          set -euo pipefail
+          # Safe identifiers only: this marker exists to be COUNTED by a later
+          # dispatch, so it carries nothing but provenance.
+          mkdir -p julius-first-live-completed
+          {
+            echo "completed_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo "run_id=${GITHUB_RUN_ID}"
+            echo "commit=${GITHUB_SHA}"
+            echo "workflow_ref=${GITHUB_WORKFLOW_REF:-unknown}"
+          } > julius-first-live-completed/marker.txt
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: success() && inputs.confirm_live == 'RUN LIVE MISSION'
+        with:
+          name: julius-first-live-completed
+          path: julius-first-live-completed
+          retention-days: 90
+
       - name: Collect the redacted validation evidence
         if: always()
         env:
@@ -293,8 +444,14 @@ jobs:
         run: |
           set -uo pipefail
           mkdir -p julius-live-evidence
-          cp preflight-roles.log julius-live-evidence/ 2>/dev/null || true
-          cp live-mission.log julius-live-evidence/ 2>/dev/null || true
+          # The raw logs are NEVER copied. They are rebuilt line by line from an
+          # allowlist of known shapes, so a future entrypoint change cannot put
+          # something unexamined into an artifact that outlives this job.
+          for log in preflight-roles.log live-mission.log; do
+            if [ -f "$log" ]; then
+              node scripts/julius-live-evidence.mjs "$log" > "julius-live-evidence/${log%.log}.evidence.txt" || true
+            fi
+          done
 
           # Only safe columns. No environment dump, no config, no packet text,
           # no credential-bearing row.
@@ -318,22 +475,53 @@ jobs:
 
           # Receipt IDENTIFIERS and digests only — never a receipt body, which
           # carries command text and signatures.
-          docker exec julius-executor sh -c 'ls -1 /tmp/julius-executor/receipts 2>/dev/null | head -n 200' \
+          docker exec julius-executor sh -c 'ls -1 /executor-private/receipts 2>/dev/null | head -n 200' \
             > julius-live-evidence/receipt-ids.txt 2>/dev/null || true
 
-      - name: Refuse to publish evidence that contains credential-shaped material
+      - name: Refuse to publish evidence that contains credential material
         if: always()
+        env:
+          EXECUTOR_ROOT: ${{ steps.identity.outputs.root }}
+          SCOPED: ${{ steps.identity.outputs.scoped }}
+          DB_PASSWORD: ${{ steps.identity.outputs.database_password }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
         run: |
           set -uo pipefail
           if [ ! -d julius-live-evidence ]; then exit 0; fi
-          # A last structural check before anything leaves the runner. It looks
-          # for key SHAPES, never for the secret values themselves.
-          if grep -rEq '(sk-(ant-|proj-)?[A-Za-z0-9_-]{16,}|xai-[A-Za-z0-9_-]{16,}|BEGIN [A-Z ]*PRIVATE KEY|Authorization: Bearer [A-Za-z0-9._-]{16,})' julius-live-evidence; then
+
+          # LAYER ONE — shapes. Catches a credential this job never minted.
+          if grep -rEq '(sk-(ant-|proj-)?[A-Za-z0-9_-]{16,}|xai-[A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9]{16,}|BEGIN [A-Z ]*PRIVATE KEY|Authorization:[[:space:]]*[A-Za-z0-9._-]{16,})' julius-live-evidence; then
             echo 'evidence_contains_credential_shaped_material: refusing to upload' >&2
             rm -rf julius-live-evidence
             exit 1
           fi
-          echo 'evidence scan clean'
+
+          # LAYER TWO — the exact values this job actually holds. A shape rule
+          # cannot know what a 43-character base64url scoped credential looks
+          # like, so the values themselves are matched literally. The needle
+          # file is written with a restrictive umask, never leaves the runner,
+          # and is removed before the upload step can see it.
+          umask 077
+          needles=$(mktemp)
+          for value in "$EXECUTOR_ROOT" "$DB_PASSWORD" "$OPENAI_API_KEY" "$ANTHROPIC_API_KEY" "$XAI_API_KEY"; do
+            [ -n "$value" ] && printf '%s\n' "$value" >> "$needles"
+          done
+          # Every derived scoped credential, pulled out of the JSON map.
+          printf '%s' "$SCOPED" | tr ',' '\n' | sed -n 's/.*:"\([A-Za-z0-9_-]\{20,\}\)".*/\1/p' >> "$needles" || true
+          leaked=0
+          if [ -s "$needles" ] && grep -rF -f "$needles" julius-live-evidence >/dev/null 2>&1; then
+            leaked=1
+          fi
+          rm -f "$needles"
+          if [ "$leaked" -eq 1 ]; then
+            # Deliberately does not say WHICH value matched.
+            echo 'evidence_contains_a_live_credential: refusing to upload' >&2
+            rm -rf julius-live-evidence
+            exit 1
+          fi
+          echo 'evidence scan clean (shapes and exact values)'
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
@@ -355,8 +543,8 @@ jobs:
           # the job.
           rm -rf /tmp/julius-hermes-home /tmp/julius-hermes-bin 2>/dev/null || true
           rm -rf /opt/hermes-venv 2>/dev/null || true
-          # The signing key and every derived receipt.
-          sudo rm -rf /tmp/julius-executor 2>/dev/null || true
+          # The signing key, receipts and ledger lived inside the executor
+          # container's own layer, so removing the container removed them.
           rm -f /tmp/julius-public.pem 2>/dev/null || true
           sudo umount /tmp/julius-workspace/tenant/ws 2>/dev/null || true
           sudo rm -rf /tmp/julius-workspace 2>/dev/null || true

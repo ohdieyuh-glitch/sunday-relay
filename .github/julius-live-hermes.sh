@@ -31,14 +31,24 @@ set -euo pipefail
 : "${HERMES_PROFILE_HOME:?missing HERMES_PROFILE_HOME}"
 : "${HERMES_WRAPPER_DIR:?missing HERMES_WRAPPER_DIR}"
 : "${XAI_API_KEY:?missing XAI_API_KEY}"
-HERMES_REF=${HERMES_REF:-v0.18.2}
+# The exact commit the founder's proven build runs. It is public upstream, so
+# there is nothing local to reproduce: `git status` in that checkout reports
+# "+1 carried commit" only because its shallow clone's origin ref is stale.
+# The commit itself changes `gateway/run.py` and one gateway test — the
+# messaging gateway, which the reviewer's one-shot CLI path never touches.
+HERMES_REF=${HERMES_REF:-2ea39daeb1f675d72e5c21c9400f2d58d7e6d71a}
 HERMES_PROVIDER=${RELAY_HERMES_PROVIDER:-xai}
 
 # Install into its own virtualenv so the runner's Python stays untouched and
 # the executable path is predictable.
 python3 -m venv /opt/hermes-venv
 /opt/hermes-venv/bin/pip install --quiet --upgrade pip
+case "$HERMES_REF" in
+  *[!0-9a-f]*|'') echo "hermes_ref_not_a_commit_sha:$HERMES_REF" >&2; exit 1;;
+esac
+[ "${#HERMES_REF}" -eq 40 ] || { echo 'hermes_ref_not_a_commit_sha' >&2; exit 1; }
 /opt/hermes-venv/bin/pip install --quiet "git+https://github.com/NousResearch/hermes-agent.git@${HERMES_REF}"
+
 
 HERMES_BIN=/opt/hermes-venv/bin/hermes
 test -x "$HERMES_BIN" || { echo 'hermes_not_installed' >&2; exit 1; }

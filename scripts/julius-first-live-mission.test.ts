@@ -60,9 +60,10 @@ describe('only a human dispatch can start the live mission', () => {
     }
   });
 
-  it('runs one mission at a time and never cancels one in flight', () => {
+  it('runs one LIVE mission at a time and never cancels one in flight', () => {
+    // Dry runs get a per-run group (see the F6 cases); paid runs share one.
     expect(workflow, 'two concurrent live missions would race for one workspace and one executor')
-      .toMatch(/concurrency:\s*\n\s*group:\s*julius-first-live-mission\s*\n\s*cancel-in-progress:\s*false/u);
+      .toMatch(/concurrency:\s*\n\s*group:\s*julius-first-live-mission-\$\{\{ inputs\.confirm_live == 'RUN LIVE MISSION' && 'live' \|\| github\.run_id \}\}\s*\n\s*cancel-in-progress:\s*false/u);
   });
 
   it('isolates the provider credentials in a dedicated GitHub Environment', () => {
@@ -177,8 +178,11 @@ describe('no credential is committed, and none can leave the runner', () => {
     const step = rest.slice(0, rest.indexOf('\n      - ', 1));
     expect(step).toContain('rm -rf julius-live-evidence');
     expect(step).toMatch(/exit 1/u);
-    // The scan must run before the upload, or it protects nothing.
-    expect(start, 'the scan must precede the upload step').toBeLessThan(workflow.indexOf('upload-artifact'));
+    // The scan must run before the EVIDENCE upload, or it protects nothing.
+    // (The completion-marker upload legitimately comes earlier and carries
+    // only provenance fields — its own test proves that.)
+    expect(start, 'the scan must precede the evidence upload step')
+      .toBeLessThan(workflow.indexOf('name: julius-live-evidence'));
   });
 
   it('uploads only the curated evidence directory, never the environment or a config file', () => {
@@ -224,13 +228,20 @@ describe('what the job creates, the job destroys', () => {
     const step = workflow.slice(start);
     expect(step, 'cleanup must run even when the mission fails').toMatch(/if:\s*always\(\)/u);
     expect(step, 'the profile holds the xAI credential and must not outlive the job').toContain('rm -rf /tmp/julius-hermes-home');
-    expect(step, 'the ephemeral signing key must not outlive the job').toContain('/tmp/julius-executor');
+    // The signing key, receipts and ledger live inside the executor
+    // container's own layer, so removing the container removes them — and the
+    // F4 cases prove the host never held the key to begin with.
+    expect(step, 'removing the executor container is what destroys its private material')
+      .toContain('docker rm -f julius-executor');
     expect(step, 'the workspace tmpfs must be unmounted').toContain('umount');
     expect(step, 'sandboxes must be destroyed').toContain("--filter 'label=julius.sandbox'");
   });
 
   it('generates the executor identity per-job rather than provisioning a durable secret', () => {
-    expect(workflow, 'the signing key is ephemeral').toContain('openssl genpkey -algorithm ED25519');
+    // The signing key is minted INSIDE the executor container (the F4 cases
+    // prove where); this one proves nothing durable exists on either side.
+    expect(read('.github/julius-executor-entrypoint.sh'), 'the signing key is ephemeral and executor-born')
+      .toContain('generateKeyPairSync');
     expect(workflow, 'the credential root is ephemeral').toContain('openssl rand -base64 33');
     expect(workflow, 'a durable executor secret would need rotating and could leak between runs')
       .not.toContain('secrets.EXECUTOR_CREDENTIAL_ROOT');
@@ -388,5 +399,239 @@ describe('the mission itself is bounded and aimed away from this repository', ()
     const unbounded = check({ ...base, limits: undefined });
     expect(unbounded.code).toBe(1);
     expect(unbounded.output).toContain('limits must be present');
+  });
+});
+
+/* ------------------------------------------------- final pre-live hardening */
+
+/** The `run:` body of a named step, with YAML block indentation stripped. */
+const stepScript = (name: string): string => {
+  const start = workflow.indexOf(`- name: ${name}`);
+  expect(start, `step "${name}" must exist`).toBeGreaterThan(-1);
+  const rest = workflow.slice(start);
+  const end = rest.indexOf('\n      - ', 1);
+  const step = end < 0 ? rest : rest.slice(0, end);
+  const body = step.slice(step.indexOf('run: |') + 'run: |'.length);
+  return body.split('\n').map((line) => line.replace(/^ {10}/u, '')).join('\n');
+};
+
+describe('F4 — the executor owns its signing key, and Julius cannot reach it', () => {
+  it('the host never generates or holds private signing material', () => {
+    expect(workflow, 'a key minted on the runner is readable by the user that runs Julius')
+      .not.toMatch(/openssl genpkey/u);
+    const entrypoint = read('.github/julius-executor-entrypoint.sh');
+    expect(entrypoint, 'the key must be born inside the executor').toMatch(/generateKeyPairSync\("ed25519"\)/u);
+    expect(entrypoint).toMatch(/private\.pem/u);
+  });
+
+  it('the private root is not bind-mounted, so the host filesystem cannot see it', () => {
+    const start = workflow.indexOf('docker run -d --name julius-executor');
+    const run = workflow.slice(start, workflow.indexOf('./.github/wait-for-executor.sh', start));
+    const mounts = run.split('\n').filter((line) => line.includes('-v '));
+    for (const mount of mounts) {
+      expect(mount, 'mounting the private root would hand the key back to the host')
+        .not.toContain('executor-private');
+    }
+    expect(run, 'the executor mints its identity through its own entrypoint')
+      .toContain('.github/julius-executor-entrypoint.sh');
+  });
+
+  it('only the public half is exported to Julius, and it is checked', () => {
+    expect(workflow).toContain('cat /executor-private/public.pem');
+    expect(workflow, 'exporting the private half would defeat the whole arrangement')
+      .not.toContain('cat /executor-private/private.pem');
+    const proof = stepScript("'Preflight: Julius cannot reach the executor signing key'");
+    expect(proof, 'the boundary must be asserted from the side that must not hold the key')
+      .toContain('executor_private_key_readable_by_julius');
+    expect(proof).toContain('julius_holds_private_key_material');
+    expect(proof, 'and the executor must actually have it').toContain('docker exec julius-executor test -f /executor-private/private.pem');
+  });
+
+  it('the receipt store and ledger stay executor-private too', () => {
+    for (const variable of ['EXECUTOR_RECEIPT_ROOT', 'EXECUTOR_LEDGER_ROOT', 'EXECUTOR_SIGNING_KEY_PATH']) {
+      const line = workflow.split('\n').find((entry) => entry.includes(`-e ${variable}=`));
+      expect(line, `${variable} must be set on the executor`).toBeDefined();
+      expect(line, `${variable} must live under the container-private root`).toContain('/executor-private');
+    }
+  });
+});
+
+describe('F5 — evidence is built by allowlist, and secrets cannot ride along', () => {
+  const buildEvidence = (log: string): string => execFileSync(
+    process.execPath,
+    [resolve(ROOT, 'scripts/julius-live-evidence.mjs'), '-'],
+    { input: log, encoding: 'utf8', cwd: ROOT },
+  );
+
+  it('never copies a raw log into the uploaded evidence', () => {
+    expect(workflow, 'tee writes raw bytes to disk; ::add-mask:: only redacts the console')
+      .not.toMatch(/cp\s+\S*\.log\s+julius-live-evidence/u);
+    expect(workflow, 'evidence is rebuilt from an allowlist instead')
+      .toContain('node scripts/julius-live-evidence.mjs');
+  });
+
+  it('keeps the lines a mission actually needs', () => {
+    const output = buildEvidence([
+      'RESULT: COMPLETED after 11 ticks',
+      '  run: run:abc123',
+      '  task run:abc123:plan [PROMPT_ARCHITECT/plan] → SUCCEEDED',
+      '  evidence ev:1 [TEST/PASSED] Deterministic test command exited 0.',
+      '  verification decisions: ACCEPT, ACCEPT',
+      'julius_exit=0',
+    ].join('\n'));
+    expect(output).toContain('RESULT: COMPLETED after 11 ticks');
+    expect(output).toContain('  task run:abc123:plan [PROMPT_ARCHITECT/plan] → SUCCEEDED');
+    expect(output).toContain('julius_exit=0');
+  });
+
+  it('MUTATION: a secret smuggled into a recognised line cannot reach the artifact', () => {
+    // Each of these is a real leak shape: a key pasted into an evidence
+    // summary, a PEM in a stack trace, an auth header echoed by a client, a
+    // connection URL, and an opaque base64url credential of the exact length
+    // this job's scoped credentials have. The needle strings are assembled by
+    // CONCATENATION so that no credential-shaped literal ever exists in this
+    // file — the repository boundary scanner is right to refuse those, and a
+    // test about leak prevention should not itself look like a leak.
+    const anthropicShaped = ['sk-ant-', 'api03-AAAABBBBCCCCDDDDEEEEFFFF0000'].join('');
+    const xaiShaped = ['xai-', '9f2ba7c1d4e6f0aa8b3c5d7e9f1a2b4c'].join('');
+    const pemHeader = ['-----BEGIN ', 'PRIVATE KEY-----'].join('');
+    const inlineUrl = ['postgresql://julius:', 's3cretp4ssw0rd', '@127.0.0.1:5432/julius'].join('');
+    const openaiShaped = ['sk-proj-', 'ZZZZYYYYXXXXWWWWVVVV1111'].join('');
+    const opaqueScoped = 'Xk7Qm2Rv9TzLbN4pAeWs6YcHgJdF1uOi3ZrKxVtB0nM';
+    const smuggled = [
+      `  evidence ev:2 [ARTIFACT/PASSED] leaked ${anthropicShaped}`,
+      `  finding f:1 blocking=true status=OPEN — token ${xaiShaped}`,
+      pemHeader,
+      'Authorization: Bearer abcdefghijklmnopqrstuvwxyz012345',
+      `  cause: ${inlineUrl}`,
+      `  evidence ev:3 [ARTIFACT/PASSED] ${opaqueScoped}`,
+      `RANDOM UNRECOGNISED LINE WITH ${openaiShaped}`,
+    ];
+    const output = buildEvidence(smuggled.join('\n'));
+    for (const forbidden of [anthropicShaped, xaiShaped, pemHeader, 'Bearer abcdefghij', 's3cretp4ssw0rd', opaqueScoped, openaiShaped]) {
+      expect(output, `${forbidden.slice(0, 12)}… must never reach the uploaded evidence`).not.toContain(forbidden);
+    }
+    expect(output, 'and the artifact must say how much it withheld').toMatch(/withheld/u);
+  });
+
+  it('the workflow also matches this job\u2019s exact ephemeral values, not only shapes', () => {
+    const scan = stepScript('Refuse to publish evidence that contains credential material');
+    expect(scan, 'a shape rule cannot know what a derived scoped credential looks like')
+      .toContain('grep -rF -f');
+    expect(scan, 'the needle file must not survive the step').toContain('rm -f "$needles"');
+    expect(scan, 'a leak must delete the evidence, not merely warn').toContain('rm -rf julius-live-evidence');
+    expect(workflow.indexOf('Refuse to publish evidence'), 'the scan must precede the upload')
+      .toBeLessThan(workflow.indexOf('name: julius-live-evidence'));
+  });
+});
+
+describe('F8 — Hermes is pinned to an immutable commit', () => {
+  const SHA = /^[0-9a-f]{40}$/u;
+
+  it('the workflow default and the script default are the same 40-hex commit', () => {
+    const fromWorkflow = /hermes_ref:[\s\S]*?default:\s*'([^']+)'/u.exec(workflow)?.[1] ?? '';
+    const fromScript = /HERMES_REF=\$\{HERMES_REF:-([0-9a-zA-Z.]+)\}/u.exec(read('.github/julius-live-hermes.sh'))?.[1] ?? '';
+    expect(fromWorkflow, 'a tag can be repointed by its owner').toMatch(SHA);
+    expect(fromScript).toMatch(SHA);
+    expect(fromScript, 'the two defaults must not drift apart').toBe(fromWorkflow);
+  });
+
+  it('a non-SHA ref is refused before anything is installed', () => {
+    const script = read('.github/julius-live-hermes.sh');
+    expect(script).toContain('hermes_ref_not_a_commit_sha');
+    const guardAt = script.indexOf('hermes_ref_not_a_commit_sha');
+    expect(guardAt, 'the guard must precede the install').toBeLessThan(script.indexOf('pip install --quiet "git+'));
+  });
+});
+
+describe('F9 — dispatch inputs are validated before anything is built', () => {
+  const gate = (): string => stepScript("'Gate: the dispatch inputs are well formed'");
+  const runGate = (env: Record<string, string>): number => {
+    try {
+      execFileSync('bash', ['-c', gate()], {
+        env: { ...process.env, ...env }, stdio: 'ignore', cwd: ROOT,
+      });
+      return 0;
+    } catch (error) {
+      return (error as { status?: number }).status ?? 1;
+    }
+  };
+  const base = { MAX_TICKS: '24', CONFIRM_LIVE: '', HERMES_REF: '2ea39daeb1f675d72e5c21c9400f2d58d7e6d71a' };
+
+  it('runs before the install, so a bad dispatch costs nothing', () => {
+    expect(workflow.indexOf("- name: 'Gate: the dispatch inputs are well formed'"))
+      .toBeLessThan(workflow.indexOf('- name: Install'));
+  });
+
+  it('accepts the committed defaults', () => {
+    expect(runGate(base)).toBe(0);
+  });
+
+  it('refuses a malformed tick count', () => {
+    for (const value of ['', 'abc', '12x', '-4', '3.5', ' 12']) {
+      expect(runGate({ ...base, MAX_TICKS: value }), `max_ticks='${value}' must be refused`).not.toBe(0);
+    }
+  });
+
+  it('refuses a tick count outside the bounds, in both directions', () => {
+    expect(runGate({ ...base, MAX_TICKS: '7' }), 'below the floor the run is cut off after being paid for').not.toBe(0);
+    expect(runGate({ ...base, MAX_TICKS: '33' }), 'above the ceiling the bound stops bounding').not.toBe(0);
+    expect(runGate({ ...base, MAX_TICKS: '10000' })).not.toBe(0);
+    expect(runGate({ ...base, MAX_TICKS: '8' }), 'the floor itself is allowed').toBe(0);
+    expect(runGate({ ...base, MAX_TICKS: '32' }), 'the ceiling itself is allowed').toBe(0);
+  });
+
+  it('cannot exceed the entrypoint\u2019s own default bound', () => {
+    // `driveJuliusRunToTerminal` defaults to 32 ticks, so the input may only
+    // ever tighten Julius's bound, never loosen it.
+    expect(gate()).toContain('MAX_ALLOWED=32');
+  });
+
+  it('refuses a mistyped confirmation instead of silently running a dry run', () => {
+    expect(runGate({ ...base, CONFIRM_LIVE: 'run live mission' })).not.toBe(0);
+    expect(runGate({ ...base, CONFIRM_LIVE: 'RUN LIVE MISSION ' })).not.toBe(0);
+    expect(runGate({ ...base, CONFIRM_LIVE: 'RUN LIVE MISSION' })).toBe(0);
+  });
+
+  it('refuses a mutable Hermes ref', () => {
+    expect(runGate({ ...base, HERMES_REF: 'v0.18.2' })).not.toBe(0);
+    expect(runGate({ ...base, HERMES_REF: 'main' })).not.toBe(0);
+    expect(runGate({ ...base, HERMES_REF: '2ea39da' }), 'a short SHA is still ambiguous').not.toBe(0);
+  });
+});
+
+describe('F6 — a paid mission cannot be run twice by accident', () => {
+  it('live dispatches share one concurrency group; dry runs do not', () => {
+    const group = /concurrency:\s*\n\s*group:\s*(.+)/u.exec(workflow)?.[1] ?? '';
+    expect(group, 'live runs must serialise').toContain("'live'");
+    expect(group, 'dry runs must stay unlimited and parallel').toContain('github.run_id');
+    expect(workflow, 'a live run must never be cancelled mid-flight').toMatch(/cancel-in-progress:\s*false/u);
+  });
+
+  it('a completed paid run publishes a marker carrying no secret', () => {
+    const marker = stepScript('Record that a paid mission completed');
+    expect(marker).toContain('run_id=');
+    expect(marker).toContain('commit=');
+    for (const forbidden of ['API_KEY', 'SCOPED', 'PASSWORD', 'printenv', 'private.pem']) {
+      expect(marker, `${forbidden} must never enter the durable marker`).not.toContain(forbidden);
+    }
+    expect(workflow, 'the marker is published only when a PAID run succeeded')
+      .toMatch(/if: success\(\) && inputs\.confirm_live == 'RUN LIVE MISSION'/u);
+  });
+
+  it('a second paid dispatch is refused unless the operator acknowledges it', () => {
+    const guard = stepScript("'Gate: a paid first-live mission has not already completed'");
+    expect(guard).toContain('julius_first_live_already_completed');
+    expect(guard, 'the guard reads the completion marker artifact').toContain('julius-first-live-completed');
+    expect(guard, 'and can only be overridden by an explicit typed phrase').toContain('RERUN PAID MISSION');
+    expect(workflow, 'the guard applies to live dispatches only, so dry runs stay repeatable')
+      .toMatch(/- name: 'Gate: a paid first-live mission has not already completed'\n\s*if: inputs\.confirm_live == 'RUN LIVE MISSION'/u);
+    expect(workflow, 'listing artifacts needs actions:read and nothing more')
+      .toMatch(/permissions:[\s\S]*?actions: read/u);
+  });
+
+  it('the guard runs before any credential or container exists', () => {
+    expect(workflow.indexOf("- name: 'Gate: a paid first-live mission has not already completed'"))
+      .toBeLessThan(workflow.indexOf('- name: Create the ephemeral scoped credentials'));
   });
 });
