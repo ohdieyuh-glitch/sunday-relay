@@ -391,3 +391,27 @@ mission that already succeeded — and sits behind the typed phrase and the
 environment's own approval, not in place of them. Julius's contract-digest
 idempotency remains inert across dispatches because PostgreSQL is per-job;
 that is now a documented property rather than an implied protection.
+
+## Dry run #1 (2026-09-02) — the executor refused the live output ceiling
+
+The first free dispatch of the first-live workflow (run 33625851653 on main
+2335c08) passed the input gate, the disposable workspace, PostgreSQL, the
+migrations, the executor start and the key-boundary check, then failed on the
+very first `createSandbox`: `executor_operation_invalid:limits.outputBytes`.
+The live composition asked for 262,144 bytes of output, a literal chosen in
+#209; the executor's validator caps that field at `MAX_SANDBOX_OUTPUT_BYTES`,
+derived in #208 from the 4 MiB response envelope (257,377 at the current
+constants). The preflight carried the same literal on purpose, which is why it
+failed exactly as the paid mission would have, after paying an architect and a
+coding agent. No sandbox, receipt or diff existed; Hermes, the contract check
+and role resolution were skipped; no provider was contacted.
+
+Repair: `relay-bridge/julius/sandbox-limits.ts` is now the single place Julius
+states its request. `outputBytes` IS the executor's ceiling, imported from the
+validator's own module, and both the live composition and the preflight import
+those same frozen objects, so parity is identity rather than a maintained copy.
+`sandbox-limits.test.ts` runs the live limits through the real validator,
+accepts the ceiling and refuses one byte more, and reads the three files that
+could hold a second number. No executor limit, guard or validator changed, and
+the envelope was not raised. The free dry run must be repeated and pass before
+the paid mission is attempted.
