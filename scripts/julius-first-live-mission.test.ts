@@ -491,6 +491,53 @@ describe('the evidence dump names only tables and columns the migrations create'
   });
 });
 
+describe('the preflight is a legitimate participant in the durable schema (dry run 33635375764)', () => {
+  // The executor's sandbox record references projects, julius_runs, julius_tasks and,
+  // as a composite key, julius_tool_invocations. Dry run #2 died on the first create
+  // because the probe seeded none of them. These cases hold the ORDER the source
+  // enforces; the real-PostgreSQL cases in julius-live-preflight-identity.test.ts
+  // hold the foreign keys themselves.
+  const preflight = read('scripts/julius-live-preflight.ts');
+  const fixture = read('scripts/julius-live-preflight-identity.ts');
+
+  it('seeds its ancestry before the first executor request, and each invocation before its sandbox', () => {
+    expect(preflight.indexOf('await seedPreflightIdentity(pool, identity)'), 'the ancestry must exist before any executor call')
+      .toBeLessThan(preflight.indexOf('client.createSandbox('));
+    const roundTrip = preflight.slice(preflight.indexOf('const runInSandbox'));
+    expect(roundTrip.indexOf('await seedPreflightInvocation('), 'the invocation must be recorded before the sandbox that references it')
+      .toBeLessThan(roundTrip.indexOf('client.createSandbox('));
+  });
+
+  it('names no invented identity: every id derives from the nonce, and the invocation goes through the production repository', () => {
+    for (const literal of ["run:julius-live-preflight'", "task:julius-live-preflight'", 'JULIUS_PROJECT_ID']) {
+      expect(preflight, `${literal} was the unseeded identity that dry run #2 sent`).not.toContain(literal);
+    }
+    expect(fixture).toContain("import { JuliusToolPostgresRepository } from '../src/relay/persistence/julius-tool-postgres'");
+    expect(fixture, 'the executor persistence is never special-cased or bypassed').not.toMatch(/INSERT INTO relay_wonderland\.julius_(sandboxes|tool_invocations)/u);
+    expect(fixture).toMatch(/projectId: `\$\{PREFLIGHT_PROJECT_PREFIX\}\$\{input\.nonce\}`/u);
+  });
+
+  it('cleans up in a finally, in reverse foreign-key order, and reports rather than hides a failure', () => {
+    const tail = preflight.slice(preflight.indexOf('} finally {', preflight.indexOf('async function main')));
+    expect(tail).toContain('await cleanupPreflightIdentity(pool, identity)');
+    expect(tail).toContain('PREFLIGHT CLEANUP FAILED');
+    expect(preflight, 'a clean proof cannot leave rows behind and still exit 0').toContain('return code === 0 && cleanupFailed ? 1 : code;');
+    const order = ['julius_tool_execution_receipts', 'julius_sandboxes', 'julius_tool_invocations', 'julius_tasks', 'julius_runs', 'mission_contracts', 'project_members', 'projects']
+      .map((table) => fixture.indexOf(`['${table}',`));
+    for (let index = 1; index < order.length; index += 1) {
+      expect(order[index - 1], 'children before parents; receipts before the sandboxes they RESTRICT').toBeLessThan(order[index]);
+    }
+    expect(fixture, 'the shared tenant player row is never deleted').not.toMatch(/DELETE FROM relay_wonderland\.players/u);
+    expect(fixture).toContain("throw new Error('preflight_identity_not_owned')");
+  });
+
+  it('is proven against real PostgreSQL in the Docker regression job', () => {
+    const regression = read('.github/workflows/julius-real-infra.yml');
+    expect(regression).toContain('npx vitest run scripts/julius-live-preflight-identity.test.ts');
+    expect(regression).toMatch(/JULIUS_REAL_POSTGRES:\s*'1'/u);
+  });
+});
+
 /* ------------------------------------------------- final pre-live hardening */
 
 /** The `run:` body of a named step, with YAML block indentation stripped. */

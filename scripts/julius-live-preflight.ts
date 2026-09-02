@@ -33,6 +33,16 @@
  * printed; the only commands it runs are `git rev-parse HEAD` and
  * `git --no-pager diff` — the same two reads the live coding adapter issues —
  * and it restores the file it touched.
+ *
+ * IT IS A LEGITIMATE PARTICIPANT IN THE DURABLE SCHEMA. Free dry run #2
+ * (run 33635375764) failed at its first `createSandbox` with SQLSTATE 23503:
+ * this probe had invented a project, a run, a task and an invocation and
+ * seeded none of them, while the executor's sandbox record references all
+ * four. It now seeds a disposable, nonce-scoped identity in foreign-key order
+ * before the first request (`julius-live-preflight-identity.ts`), records
+ * each invocation through the production tool repository as the live mission
+ * does, and removes exactly what it created afterwards, reporting anything
+ * that remains rather than hiding it.
  */
 
 import { createHash, createPublicKey, type KeyObject } from 'node:crypto';
@@ -43,6 +53,7 @@ import { TransactionalWonderlandDatabase } from '../src/relay/persistence/wonder
 import { RemoteExecutorControlPlane } from '../src/relay/workspace/julius-tools/remote-executor-control-plane';
 import type { ExecutorOperation } from '../src/relay/workspace/julius-tools/executor-operation-request';
 import { EXECUTOR_SANDBOX_LIMITS, EXECUTOR_SANDBOX_POLICY } from '../relay-bridge/julius/sandbox-limits';
+import { cleanupPreflightIdentity, preflightIdentityFor, preflightNonce, seedPreflightIdentity, seedPreflightInvocation, type PreflightIdentity } from './julius-live-preflight-identity';
 import type {
   JuliusSandboxLimits,
   JuliusSandboxPolicy,
@@ -86,8 +97,7 @@ const required = (name: string): string => {
  * surfaces before a provider is ever paid, and the tables the Julius runtime
  * writes are proven to exist rather than assumed.
  */
-async function proveDurableStore(out: (line: string) => void): Promise<boolean> {
-  const pool = new Pool({ connectionString: required('DATABASE_URL') });
+async function proveDurableStore(pool: Pool, out: (line: string) => void): Promise<boolean> {
   try {
     const version = await pool.query<{ server_version: string }>('SHOW server_version');
     out(`  PostgreSQL reachable: server_version=${version.rows[0]?.server_version ?? 'unknown'}`);
@@ -114,20 +124,53 @@ async function proveDurableStore(out: (line: string) => void): Promise<boolean> 
     const message = error instanceof Error ? error.message : 'unknown error';
     out(`PREFLIGHT FAILED: the durable store refused — ${message.slice(0, 200)}`);
     return false;
-  } finally {
-    await pool.end().catch(() => undefined);
   }
 }
 
 async function main(): Promise<number> {
   const out = (line: string): void => { process.stdout.write(`${line}\n`); };
+  const pool = new Pool({ connectionString: required('DATABASE_URL') });
+  let identity: PreflightIdentity | null = null;
+  let code = 1;
+  let cleanupFailed = false;
+  try {
+    out('JULIUS LIVE PREFLIGHT — durable store');
+    if (!await proveDurableStore(pool, out)) return 1;
 
-  out('JULIUS LIVE PREFLIGHT — durable store');
-  if (!await proveDurableStore(out)) return 1;
+    const tenantId = process.env.JULIUS_TENANT_ID ?? 'tenant';
+    const policyRevision = process.env.RELAY_JULIUS_CARD_REVISION ?? 'card:julius-live:1';
+    identity = preflightIdentityFor({ tenantId, nonce: preflightNonce(), policyRevision });
+    await seedPreflightIdentity(pool, identity);
+    out(`  preflight identity seeded in foreign-key order: project=${identity.projectId} run=${identity.runId} task=${identity.taskId}`);
 
+    code = await roundTrips(pool, identity, out);
+  } finally {
+    // What the preflight created, the preflight removes — and says so either way.
+    if (identity !== null) {
+      try {
+        const report = await cleanupPreflightIdentity(pool, identity);
+        const summary = Object.entries(report.deleted).filter(([, count]) => count > 0).map(([table, count]) => `${table}=${count}`).join(' ');
+        if (report.remaining > 0) {
+          out(`PREFLIGHT CLEANUP FAILED: ${report.remaining} row(s) still carry ${identity.projectId} after cleanup (deleted: ${summary || 'nothing'}).`);
+          cleanupFailed = true;
+        } else {
+          out(`  preflight identity removed (${summary || 'nothing to delete'}); nothing of ${identity.projectId} remains.`);
+        }
+      } catch (error) {
+        out(`PREFLIGHT CLEANUP FAILED: ${error instanceof Error ? error.message.slice(0, 200) : 'unknown error'} — rows of ${identity.projectId} may remain.`);
+        cleanupFailed = true;
+      }
+    }
+    await pool.end().catch(() => undefined);
+  }
+  // A proof that left junk behind is not a clean proof: cleanup failure is its own exit 1, never hidden behind a passing round trip.
+  return code === 0 && cleanupFailed ? 1 : code;
+}
+
+async function roundTrips(pool: Pool, identity: PreflightIdentity, out: (line: string) => void): Promise<number> {
   const workspace = required('JULIUS_WORKSPACE');
   const callerId = required('JULIUS_CALLER_ID');
-  const tenantId = process.env.JULIUS_TENANT_ID ?? 'tenant';
+  const { tenantId } = identity;
 
   let scopedEntries: Record<string, string>;
   try {
@@ -162,20 +205,19 @@ async function main(): Promise<number> {
     allowInsecureLoopbackForTests: process.env.JULIUS_EXECUTOR_ALLOW_LOOPBACK === '1',
   });
 
-  const leaseGeneration = 1;
-  const projectId = process.env.JULIUS_PROJECT_ID ?? 'prj-julius-first-live';
+  const { leaseGeneration, projectId } = identity;
   let step = 0;
 
   /** One full create → prepare → execute → destroy round-trip, as the mission does it. */
   const runInSandbox = async (command: string): Promise<ToolInvocationResult> => {
     step += 1;
-    const invocationId = `preflight:${Date.now()}:${step}`;
+    const invocationId = `preflight:${identity.nonce}:${step}`;
     const request: ToolInvocationRequest = {
       invocationId,
-      runId: 'run:julius-live-preflight',
-      taskId: 'task:julius-live-preflight',
+      runId: identity.runId,
+      taskId: identity.taskId,
       projectId,
-      workerId: 'julius-live-preflight',
+      workerId: identity.workerId,
       toolId: 'shell.bash', toolVersion: '1',
       arguments: { command },
       cwd: '.',
@@ -183,15 +225,19 @@ async function main(): Promise<number> {
       timeoutMs: 30_000,
       expectedMutation: 'WORKSPACE',
     };
-    const identity = {
+    const sandboxIdentity = {
       sandboxId: invocationId, invocationId, tenantId,
       projectId, runId: request.runId, taskId: request.taskId,
-      leaseGeneration, policyRevision: process.env.RELAY_JULIUS_CARD_REVISION ?? 'card:julius-live:1',
+      leaseGeneration, policyRevision: identity.policyRevision,
       createdAt: new Date().toISOString(),
       expiresAt: new Date(Date.now() + 600_000).toISOString(),
     };
+    // The invocation exists, REQUESTED then AUTHORIZED, before the executor is
+    // asked to record a sandbox that references it — the order the live
+    // mission follows and the order the foreign keys enforce.
+    await seedPreflightInvocation(pool, identity, { invocationId, requestDigest: digestOf(request), requestedAt: sandboxIdentity.createdAt });
     try {
-      await client.createSandbox({ identity, policy: PREFLIGHT_POLICY, limits: PREFLIGHT_LIMITS });
+      await client.createSandbox({ identity: sandboxIdentity, policy: PREFLIGHT_POLICY, limits: PREFLIGHT_LIMITS });
       await client.prepareWorkspace({
         sandboxId: invocationId, sourceRef: workspace, expectedLeaseGeneration: leaseGeneration,
       });
