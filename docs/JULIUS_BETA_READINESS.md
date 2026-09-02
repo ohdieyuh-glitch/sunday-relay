@@ -334,7 +334,8 @@ any file read could take it — including a `Read` from the live coding agent.
 It is now generated inside the executor container by
 `.github/julius-executor-entrypoint.sh`, under `/executor-private` — the
 container's own writable layer, deliberately not bind-mounted — beside the
-receipt store and ledger. What leaves the container is the public key, read
+ledger. (The receipt store moved to a root-owned host transport after dry run #2;
+see below.) What leaves the container is the public key, read
 out once over `docker exec`. A preflight step asserts exactly what that
 arrangement establishes: the host paths do not exist, the private root is not
 among the container's mounts, the executor does hold its key, and what Julius
@@ -405,6 +406,44 @@ constants). The preflight carried the same literal on purpose, which is why it
 failed exactly as the paid mission would have, after paying an architect and a
 coding agent. No sandbox, receipt or diff existed; Hermes, the contract check
 and role resolution were skipped; no provider was contacted.
+
+
+## Dry run #2 (2026-09-02) — the preflight's identity, and the receipt transport
+
+The second free dispatch (run 33635375764, main 168105b) got past the output
+ceiling and failed at its first `createSandbox` with a masked
+`executor_failure`. PR #214 made the executor record one safe diagnostic line
+per refusal — operation, safe code or `masked`, the error's own class, status —
+and reproduced the mission's exact executor on real Docker in a
+`first-live-topology` job. The class was 23503, PostgreSQL's foreign-key
+violation: the preflight probe had invented a project, run, task and invocation
+and seeded none of the rows `julius_sandboxes` references. The probe now seeds a
+nonce-scoped, disposable identity in foreign-key order, records each invocation
+through the production tool repository with its dispatch claimed for that
+invocation alone, and removes exactly what it created; a PostgreSQL-backed
+regression holds all of it through the executor's own repository.
+
+With a legitimate identity the matrix then decided the receipt question. The
+#212 hardening had placed the receipt root at `/executor-private/receipts`,
+inside the executor container's own layer, but the executor asks the HOST
+Docker daemon to bind-mount each sandbox's scoped receipt directory and the
+daemon resolves bind sources on the host: every sandbox stopped at
+`prepareWorkspace` with `sandbox_create_failed class=bind_source_missing`. A
+root:root 0700 host directory, `/tmp/julius-executor/receipts`, mounted into
+the executor at the same path, carried the whole provider-free preflight to a
+pass — create, prepare, execute, signed receipts verified, the host-written
+change visible in the sandbox diff, destroy, fixture cleanup. That is now the
+mission's transport (`JULIUS_RECEIPT_HOST_ROOT` in the workflow, applied by the
+shared launcher). Stated precisely: the receipt root is unreadable by the
+runner user, which is the file-reading coding agent's user; a sudo or
+Docker-socket holder can still read it. The signing key and the ledger stay
+under `/executor-private` and are never bind-mounted anywhere; each sandbox is
+handed only `<root>/<sha256(sandboxId)>` at `/julius-receipts-root`: the preflight
+reads that from the daemon's own mount table while its third sandbox exists, and
+proves from inside that the workload, uid 65532, cannot even list the root-owned
+receipt mount. The executor-private shape is kept
+in the topology job as an expected-failure regression: green only when the
+host daemon refuses it at exactly that point with exactly that class.
 
 Repair: `relay-bridge/julius/sandbox-limits.ts` is now the single place Julius
 states its request. `outputBytes` IS the executor's ceiling, imported from the

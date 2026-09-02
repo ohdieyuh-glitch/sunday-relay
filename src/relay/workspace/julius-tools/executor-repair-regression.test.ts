@@ -126,7 +126,7 @@ describe('the gates themselves, not the helpers behind them',()=>{
     // reach the workspace gate at all — otherwise the test would pass on the wrong refusal.
     const tenancyLedger=new FilesystemSandboxTenancyLedger(join(root,'tenancy'));
     await tenancyLedger.bind({sandboxId:'sandbox',tenantId:'tenant'});
-    const server=createExecutorControlPlaneService({
+    const server=createExecutorControlPlaneService({diagnostics:()=>{},
       callerAuthorities:[{callerId:'julius-prod',tenantId:'tenant',credential:'tenant-secret',operations:new Set(['prepare'] as const)}],
       keyId:'current',privateSigningKey:keys.privateKey,physical:physical(received),
       receipts:new DockerExecutorReceiptStore(join(root,'receipts')),

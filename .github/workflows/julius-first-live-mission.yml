@@ -78,6 +78,15 @@ jobs:
       EXECUTOR_KEY_ID: julius-live-key
       JULIUS_FLEET_ROOT: /tmp/julius-workspace
       JULIUS_WORKSPACE: /tmp/julius-workspace/tenant/ws
+      # THE RECEIPT TRANSPORT (PR #214, proven on real Docker). The executor asks the
+      # host Docker daemon to bind-mount each sandbox's scoped receipt directory,
+      # and the daemon resolves bind sources on the host; a receipt root inside the
+      # executor container's own layer stopped every sandbox at prepareWorkspace
+      # (sandbox_create_failed class=bind_source_missing). The root therefore lives
+      # on the host — created root:root 0700 by the launcher, mounted into the
+      # executor at this same path, unreadable by the runner user — while the
+      # signing key and the ledger stay under /executor-private, never mounted.
+      JULIUS_RECEIPT_HOST_ROOT: /tmp/julius-executor/receipts
       JULIUS_PUBLIC_KEY_PATH: /tmp/julius-public.pem
       JULIUS_EXECUTOR_ENDPOINT: http://127.0.0.1:8787/
       JULIUS_EXECUTOR_ALLOW_LOOPBACK: '1'
@@ -215,50 +224,15 @@ jobs:
 
       - name: Build the pinned sandbox and executor images
         id: images
-        run: |
-          set -euo pipefail
-          mkdir -p /tmp/julius-ci-build
-          cp scripts/julius-docker-executor.sh /tmp/julius-ci-build/julius-executor
-          printf '%s\n' 'FROM node:22-bookworm-slim' \
-            'RUN apt-get update && apt-get install -y --no-install-recommends util-linux git ca-certificates procps && rm -rf /var/lib/apt/lists/*' \
-            'COPY julius-executor /usr/local/bin/julius-executor' \
-            'RUN chmod 0555 /usr/local/bin/julius-executor' > /tmp/julius-ci-build/Sandboxfile
-          # `docker build -q` prints a bare sha256 digest, which is what the
-          # adapter requires — it refuses any image reference that is not
-          # digest-pinned.
-          sandbox_image=$(docker build -q -f /tmp/julius-ci-build/Sandboxfile /tmp/julius-ci-build)
-          printf '%s\n' 'FROM node:22-bookworm-slim' \
-            'RUN apt-get update && apt-get install -y --no-install-recommends docker.io ca-certificates && rm -rf /var/lib/apt/lists/*' > /tmp/julius-ci-build/Executorfile
-          executor_image=$(docker build -q -f /tmp/julius-ci-build/Executorfile /tmp/julius-ci-build)
-          echo "sandbox=$sandbox_image" >> "$GITHUB_OUTPUT"
-          echo "executor=$executor_image" >> "$GITHUB_OUTPUT"
+        # Shared with the `first-live-topology` job in julius-real-infra.yml, so
+        # the Docker regression builds exactly what the mission builds.
+        run: ./.github/julius-live-images.sh
 
       - name: Create the ephemeral scoped credentials
         id: identity
-        run: |
-          set -euo pipefail
-          # NOTE: no signing key is created here. The executor mints its own
-          # inside its container (.github/julius-executor-entrypoint.sh) so that
-          # this user — the user that also runs Julius — never holds the private
-          # material it is supposed to be verifying against. Only the credential
-          # root, which Julius legitimately derives its scoped credentials from,
-          # is minted on this side.
-          root=$(openssl rand -base64 33 | tr -d '\n')
-          echo "::add-mask::$root"
-          # The database password is ephemeral too. A literal one would be a
-          # credential committed to this file, and the boundary scanner is
-          # right to refuse that even for a throwaway container.
-          database_password=$(openssl rand -hex 24)
-          echo "::add-mask::$database_password"
-          # Mask every credential derivable from the root, not just the ones
-          # this job uses, so none can surface in a later log line.
-          EXECUTOR_CREDENTIAL_ROOT="$root" node scripts/julius-derive-scoped-credentials.mjs --values \
-            | while read -r value; do echo "::add-mask::$value"; done
-          scoped=$(EXECUTOR_CREDENTIAL_ROOT="$root" node scripts/julius-derive-scoped-credentials.mjs --json \
-            create prepare execute cancel destroy inspect artifacts)
-          echo "root=$root" >> "$GITHUB_OUTPUT"
-          echo "database_password=$database_password" >> "$GITHUB_OUTPUT"
-          echo "scoped=$scoped" >> "$GITHUB_OUTPUT"
+        # No signing key is created here: the executor mints its own inside its
+        # container. Shared with the `first-live-topology` regression job.
+        run: ./.github/julius-live-identity.sh
 
       - name: Provision the disposable mission workspace
         run: ./.github/julius-live-workspace.sh
@@ -269,89 +243,27 @@ jobs:
           EXECUTOR_IMAGE: ${{ steps.images.outputs.executor }}
           EXECUTOR_CREDENTIAL_ROOT: ${{ steps.identity.outputs.root }}
           PGPASSWORD: ${{ steps.identity.outputs.database_password }}
-        run: |
-          set -euo pipefail
-          docker run -d --name julius-postgres -p 127.0.0.1:5432:5432 \
-            -e POSTGRES_USER="$PGUSER" -e POSTGRES_PASSWORD="$PGPASSWORD" -e POSTGRES_DB="$PGDATABASE" postgres:16-bookworm
-          for _ in $(seq 1 40); do docker exec julius-postgres pg_isready -U "$PGUSER" && break; sleep 1; done
-          # Assembled at runtime from parts, so this file carries a format
-          # string rather than a connection URL with inline credentials.
-          printf 'DATABASE_URL=postgresql://%s:%s@127.0.0.1:5432/%s\n' "$PGUSER" "$PGPASSWORD" "$PGDATABASE" >> "$GITHUB_ENV"
-          DATABASE_URL=$(printf 'postgresql://%s:%s@127.0.0.1:5432/%s' "$PGUSER" "$PGPASSWORD" "$PGDATABASE")
-
-          # The executor shares the HOST network namespace so that it can keep
-          # binding loopback only — its own guard refuses a wider bind, and
-          # publishing a port would have required weakening it. Julius runs on
-          # the host and reaches it at 127.0.0.1:8787. The sandboxes it creates
-          # are unaffected: they get `--network none`.
-          # NOTE the mounts: the Docker socket and the workspace, and NOTHING
-          # under which the executor keeps its signing key, receipts or ledger.
-          # `/executor-private` is the container's own writable layer, so the
-          # host cannot read it and Julius cannot sign what it later verifies.
-          docker run -d --name julius-executor --network host \
-            -v /var/run/docker.sock:/var/run/docker.sock \
-            -v "$GITHUB_WORKSPACE:$GITHUB_WORKSPACE:ro" \
-            -v /tmp/julius-workspace:/tmp/julius-workspace \
-            -w "$GITHUB_WORKSPACE" \
-            -e DATABASE_URL="$DATABASE_URL" \
-            -e EXECUTOR_PRIVATE_ROOT=/executor-private \
-            -e EXECUTOR_RECEIPT_ROOT=/executor-private/receipts \
-            -e EXECUTOR_LEDGER_ROOT=/executor-private/ledger \
-            -e EXECUTOR_SIGNING_KEY_PATH=/executor-private/private.pem \
-            -e EXECUTOR_KEY_ID="$EXECUTOR_KEY_ID" \
-            -e EXECUTOR_RUNTIME_ID=executor-julius-live \
-            -e EXECUTOR_VERSION=docker-executor.v1 \
-            -e EXECUTOR_WORKSPACE_ROOT=/tmp/julius-workspace \
-            -e EXECUTOR_TENANT_WORKSPACE_ROOT=/tmp/julius-workspace \
-            -e JULIUS_SANDBOX_IMAGE="$SANDBOX_IMAGE" \
-            -e JULIUS_CALLER_ID="$JULIUS_CALLER_ID" \
-            -e JULIUS_TENANT_ID="$JULIUS_TENANT_ID" \
-            -e EXECUTOR_CREDENTIAL_ROOT="$EXECUTOR_CREDENTIAL_ROOT" \
-            "$EXECUTOR_IMAGE" sh "$GITHUB_WORKSPACE/.github/julius-executor-entrypoint.sh"
-          ./.github/wait-for-executor.sh
-
-          # Take the PUBLIC key only. This is the whole of what Julius is given
-          # to verify attestations with, and the private half never leaves the
-          # container that produced it.
-          docker exec julius-executor cat /executor-private/public.pem > "$JULIUS_PUBLIC_KEY_PATH"
-          test -s "$JULIUS_PUBLIC_KEY_PATH" || { echo 'executor_public_key_not_exported' >&2; exit 1; }
-          grep -q 'BEGIN PUBLIC KEY' "$JULIUS_PUBLIC_KEY_PATH" || { echo 'executor_public_key_malformed' >&2; exit 1; }
+        # The whole launch — PostgreSQL, the executor with its mounts and
+        # environment, the public-key hand-off — lives in one script shared
+        # with the `first-live-topology` job in julius-real-infra.yml, which
+        # drives this exact executor on real Docker on every relevant PR.
+        # The receipt-transport choice is the script's one topology switch
+        # (JULIUS_RECEIPT_HOST_ROOT); see the script header.
+        run: ./.github/julius-live-executor.sh
 
       # ------------------------------------------------------------ PREFLIGHT
 
       - name: 'Preflight: Julius cannot reach the executor signing key'
-        run: |
-          set -euo pipefail
-          # What these assertions establish — precisely: the key is on no host
-          # path and no bind mount, so no FILE-READING tool can reach it; the
-          # live coding agent (Read/Glob/Grep, no shell) is the party that
-          # boundary is for. They do NOT establish protection from a holder of
-          # the Docker socket or sudo: this very job reads the PUBLIC half via
-          # `docker exec`, and the same command with the other filename would
-          # read the private half. Claiming more here would be untrue.
-          for path in /executor-private/private.pem /tmp/julius-executor/private.pem; do
-            if [ -e "$path" ]; then
-              echo "executor_private_key_readable_by_julius:$path" >&2
-              exit 1
-            fi
-          done
-          if docker inspect julius-executor --format '{{range .Mounts}}{{.Source}}:{{.Destination}} {{end}}' | grep -q 'executor-private'; then
-            echo 'executor_private_root_is_bind_mounted_from_host' >&2
-            exit 1
-          fi
-          # And the executor really does hold it.
-          docker exec julius-executor test -f /executor-private/private.pem \
-            || { echo 'executor_missing_its_own_signing_key' >&2; exit 1; }
-          # Julius holds the public half, and only the public half.
-          grep -q 'BEGIN PUBLIC KEY' "$JULIUS_PUBLIC_KEY_PATH"
-          # `grep && { ... }` would return non-zero on the DESIRED no-match and
-          # abort the step under `set -e`; the branch has to be explicit.
-          if grep -q 'PRIVATE KEY' "$JULIUS_PUBLIC_KEY_PATH"; then
-            echo 'julius_holds_private_key_material' >&2
-            exit 1
-          fi
-          echo 'PREFLIGHT OK: the signing key is on no host path and no bind mount — no file-reading tool can reach it.'
-          echo '  (A Docker-socket or sudo holder could still extract it; the boundary is against the file-reading coding agent.)'
+        # Asserted from the side that must not hold the key; the same script the
+        # `first-live-topology` regression runs. See its header for exactly what
+        # it does and does not establish.
+        run: ./.github/julius-live-key-boundary.sh
+
+      - name: 'Preflight: the receipt transport is private to root and the executor'
+        # root:root 0700 on the host, one same-path mount into the executor, no
+        # key or ledger on any host path or mount; proven by trying as the runner
+        # user, not by reading the launcher. Shared with the regression job.
+        run: ./.github/julius-live-receipt-boundary.sh
 
       - name: 'Preflight: durable store, executor, attestation, sandbox, in-sandbox git'
         env:
@@ -464,6 +376,23 @@ jobs:
         run: |
           set -uo pipefail
           mkdir -p julius-live-evidence
+          # The executor answers every refused request with a safe code and,
+          # because dry run #2 left nothing to read, now writes one
+          # executor-local diagnostic line per refusal to its own stderr:
+          # operation, safe result, error class, status — never a message. Its
+          # raw container log is captured to a 0600 file, reduced to that
+          # allowlist, and the raw file is deleted before the upload step
+          # exists. A raw executor log is never uploaded.
+          umask 077
+          raw_executor_log=$(mktemp)
+          docker logs julius-executor > "$raw_executor_log" 2>&1 || true
+          # Kept lines must match the executor's exact grammar, not merely a
+          # character set: a credential-shaped tail on an otherwise valid line
+          # would survive a charset filter.
+          grep -E '^executor_(ready:[0-9]{1,5}|diagnostic operation=[a-z]+ result=[A-Za-z0-9_.:-]{1,120} class=[A-Za-z0-9_]{1,32} status=[0-9]{3})$' "$raw_executor_log" \
+            > julius-live-evidence/executor-diagnostics.txt || true
+          rm -f "$raw_executor_log"
+          umask 022
           # The raw logs are NEVER copied. They are rebuilt line by line from an
           # allowlist of known shapes, so a future entrypoint change cannot put
           # something unexamined into an artifact that outlives this job.
@@ -473,18 +402,11 @@ jobs:
             fi
           done
 
-          # Only safe columns. No environment dump, no config, no packet text,
-          # no credential-bearing row.
-          dump() {
-            docker exec -e PGPASSWORD julius-postgres psql -U "$PGUSER" -d "$PGDATABASE" -A -F $'\t' -c "$1" \
-              > "julius-live-evidence/$2" 2>/dev/null || echo 'unavailable' > "julius-live-evidence/$2"
-          }
-          dump "SELECT run_id,mission_id,state,card_revision,created_at,updated_at FROM relay_wonderland.julius_runs ORDER BY created_at" runs.tsv
-          dump "SELECT task_id,task_type,role,state,ordinal,parent_task_id FROM relay_wonderland.julius_tasks ORDER BY ordinal,task_id" tasks.tsv
-          dump "SELECT evidence_id,type,status,safe_summary,occurred_at FROM relay_wonderland.julius_evidence ORDER BY occurred_at" evidence.tsv
-          dump "SELECT decision_id,task_id,action,reason_code,occurred_at FROM relay_wonderland.julius_verification_decisions ORDER BY occurred_at" decisions.tsv
-          dump "SELECT finding_id,blocking,status,claim FROM relay_wonderland.julius_findings" findings.tsv
-          dump "SELECT invocation_id,tool_id,state,requested_at FROM relay_wonderland.julius_tool_invocations ORDER BY requested_at" tool-invocations.tsv
+          # Only safe columns, from one script the `first-live-topology` job also
+          # runs against a freshly migrated database — dry runs #1 and #2 uploaded
+          # `unavailable` for two tables because the inline queries named a
+          # column and a table the migrations never created.
+          ./.github/julius-live-evidence-dump.sh julius-live-evidence
 
           # The mission's own diff is the point of the exercise; it contains
           # only what a live coding agent wrote into a throwaway repository.
@@ -495,7 +417,9 @@ jobs:
 
           # Receipt IDENTIFIERS and digests only — never a receipt body, which
           # carries command text and signatures.
-          docker exec julius-executor sh -c 'ls -1 /executor-private/receipts 2>/dev/null | head -n 200' \
+          # The receipt root the executor was actually given (the host transport since PR #214);
+          # the entries are sha256 scope names, safe to publish.
+          docker exec julius-executor sh -c 'ls -1 "$EXECUTOR_RECEIPT_ROOT" 2>/dev/null | head -n 200' \
             > julius-live-evidence/receipt-ids.txt 2>/dev/null || true
 
       - name: Refuse to publish evidence that contains credential material
@@ -566,9 +490,12 @@ jobs:
           # the job.
           rm -rf /tmp/julius-hermes-home /tmp/julius-hermes-bin 2>/dev/null || true
           rm -rf /opt/hermes-venv 2>/dev/null || true
-          # The signing key, receipts and ledger lived inside the executor
-          # container's own layer, so removing the container removed them.
+          # The signing key and the ledger lived inside the executor container's
+          # own layer, so removing the container removed them. The receipt
+          # transport lived on the host, root-owned: it is removed here, after
+          # every container that could still write into it is gone.
           rm -f /tmp/julius-public.pem 2>/dev/null || true
+          sudo rm -rf /tmp/julius-executor 2>/dev/null || true
           sudo umount /tmp/julius-workspace/tenant/ws 2>/dev/null || true
           sudo rm -rf /tmp/julius-workspace 2>/dev/null || true
           echo 'cleanup complete'

@@ -33,16 +33,28 @@
  * printed; the only commands it runs are `git rev-parse HEAD` and
  * `git --no-pager diff` — the same two reads the live coding adapter issues —
  * and it restores the file it touched.
+ *
+ * IT IS A LEGITIMATE PARTICIPANT IN THE DURABLE SCHEMA. Free dry run #2
+ * (run 33635375764) failed at its first `createSandbox` with SQLSTATE 23503:
+ * this probe had invented a project, a run, a task and an invocation and
+ * seeded none of them, while the executor's sandbox record references all
+ * four. It now seeds a disposable, nonce-scoped identity in foreign-key order
+ * before the first request (`julius-live-preflight-identity.ts`), records
+ * each invocation through the production tool repository as the live mission
+ * does, and removes exactly what it created afterwards, reporting anything
+ * that remains rather than hiding it.
  */
 
+import { execFile } from 'node:child_process';
 import { createHash, createPublicKey, type KeyObject } from 'node:crypto';
+import { promisify } from 'node:util';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Pool } from 'pg';
-import { TransactionalWonderlandDatabase } from '../src/relay/persistence/wonderland-postgres';
 import { RemoteExecutorControlPlane } from '../src/relay/workspace/julius-tools/remote-executor-control-plane';
 import type { ExecutorOperation } from '../src/relay/workspace/julius-tools/executor-operation-request';
 import { EXECUTOR_SANDBOX_LIMITS, EXECUTOR_SANDBOX_POLICY } from '../relay-bridge/julius/sandbox-limits';
+import { cleanupPreflightIdentity, migrateIfNeeded, preflightIdentityFor, preflightNonce, seedPreflightIdentity, seedPreflightInvocation, type PreflightIdentity } from './julius-live-preflight-identity';
 import type {
   JuliusSandboxLimits,
   JuliusSandboxPolicy,
@@ -86,14 +98,16 @@ const required = (name: string): string => {
  * surfaces before a provider is ever paid, and the tables the Julius runtime
  * writes are proven to exist rather than assumed.
  */
-async function proveDurableStore(out: (line: string) => void): Promise<boolean> {
-  const pool = new Pool({ connectionString: required('DATABASE_URL') });
+async function proveDurableStore(pool: Pool, out: (line: string) => void): Promise<boolean> {
   try {
     const version = await pool.query<{ server_version: string }>('SHOW server_version');
     out(`  PostgreSQL reachable: server_version=${version.rows[0]?.server_version ?? 'unknown'}`);
 
-    await new TransactionalWonderlandDatabase(pool).migrate();
-    out('  migrations applied (idempotent)');
+    // The migration set is a one-shot replay, so it is applied only where its last
+    // migration has not landed — the same guard the live entrypoint uses. A probe
+    // pointed at an already-migrated validation database must not fail on 42P07.
+    const migration = await migrateIfNeeded(pool);
+    out(migration === 'applied' ? '  migrations applied (empty database)' : '  migrations already present (one-shot replay skipped)');
 
     // Naming the tables the run actually writes turns "migrate() returned"
     // into "the schema the runtime needs is present".
@@ -114,20 +128,55 @@ async function proveDurableStore(out: (line: string) => void): Promise<boolean> 
     const message = error instanceof Error ? error.message : 'unknown error';
     out(`PREFLIGHT FAILED: the durable store refused — ${message.slice(0, 200)}`);
     return false;
-  } finally {
-    await pool.end().catch(() => undefined);
   }
 }
 
 async function main(): Promise<number> {
   const out = (line: string): void => { process.stdout.write(`${line}\n`); };
+  const pool = new Pool({ connectionString: required('DATABASE_URL') });
+  let identity: PreflightIdentity | null = null;
+  let code = 1;
+  let cleanupFailed = false;
+  try {
+    out('JULIUS LIVE PREFLIGHT — durable store');
+    if (!await proveDurableStore(pool, out)) return 1;
 
-  out('JULIUS LIVE PREFLIGHT — durable store');
-  if (!await proveDurableStore(out)) return 1;
+    const tenantId = process.env.JULIUS_TENANT_ID ?? 'tenant';
+    const policyRevision = process.env.RELAY_JULIUS_CARD_REVISION ?? 'card:julius-live:1';
+    identity = preflightIdentityFor({ tenantId, nonce: preflightNonce(), policyRevision });
+    // Eight executor requests at most, each bounded by the request timeout, plus a margin.
+    const requestTimeoutMs = Number(process.env.JULIUS_REQUEST_TIMEOUT_MS ?? '120000');
+    await seedPreflightIdentity(pool, identity, { leaseMinutes: Math.ceil((8 * requestTimeoutMs + 120_000) / 60_000) });
+    out(`  preflight identity seeded in foreign-key order: project=${identity.projectId} run=${identity.runId} task=${identity.taskId}`);
 
+    code = await roundTrips(pool, identity, out);
+  } finally {
+    // What the preflight created, the preflight removes — and says so either way.
+    if (identity !== null) {
+      try {
+        const report = await cleanupPreflightIdentity(pool, identity);
+        const summary = Object.entries(report.deleted).filter(([, count]) => count > 0).map(([table, count]) => `${table}=${count}`).join(' ');
+        if (report.remaining > 0) {
+          out(`PREFLIGHT CLEANUP FAILED: ${report.remaining} row(s) still carry ${identity.projectId} after cleanup (deleted: ${summary || 'nothing'}).`);
+          cleanupFailed = true;
+        } else {
+          out(`  preflight identity removed (${summary || 'nothing to delete'}); nothing of ${identity.projectId} remains.`);
+        }
+      } catch (error) {
+        out(`PREFLIGHT CLEANUP FAILED: ${error instanceof Error ? error.message.slice(0, 200) : 'unknown error'} — rows of ${identity.projectId} may remain.`);
+        cleanupFailed = true;
+      }
+    }
+    await pool.end().catch(() => undefined);
+  }
+  // A proof that left junk behind is not a clean proof: cleanup failure is its own exit 1, never hidden behind a passing round trip.
+  return code === 0 && cleanupFailed ? 1 : code;
+}
+
+async function roundTrips(pool: Pool, identity: PreflightIdentity, out: (line: string) => void): Promise<number> {
   const workspace = required('JULIUS_WORKSPACE');
   const callerId = required('JULIUS_CALLER_ID');
-  const tenantId = process.env.JULIUS_TENANT_ID ?? 'tenant';
+  const { tenantId } = identity;
 
   let scopedEntries: Record<string, string>;
   try {
@@ -162,20 +211,24 @@ async function main(): Promise<number> {
     allowInsecureLoopbackForTests: process.env.JULIUS_EXECUTOR_ALLOW_LOOPBACK === '1',
   });
 
-  const leaseGeneration = 1;
-  const projectId = process.env.JULIUS_PROJECT_ID ?? 'prj-julius-first-live';
+  const { leaseGeneration, projectId } = identity;
   let step = 0;
 
   /** One full create → prepare → execute → destroy round-trip, as the mission does it. */
-  const runInSandbox = async (command: string): Promise<ToolInvocationResult> => {
+  /* Receipts live at the host path the executor was given (the mission's transport) or under the
+   * executor's private root; either way a sandbox must never see that path itself. */
+  const hostReceiptRoot = process.env.JULIUS_RECEIPT_HOST_ROOT?.trim() || '/executor-private/receipts';
+  /** The sandbox that ran before the current one, for the sibling-scope check. */
+  let previousSandboxId = '';
+  const runInSandbox = async (command: string, afterPrepare?: (sandboxId: string) => Promise<void>): Promise<ToolInvocationResult> => {
     step += 1;
-    const invocationId = `preflight:${Date.now()}:${step}`;
+    const invocationId = `preflight:${identity.nonce}:${step}`;
     const request: ToolInvocationRequest = {
       invocationId,
-      runId: 'run:julius-live-preflight',
-      taskId: 'task:julius-live-preflight',
+      runId: identity.runId,
+      taskId: identity.taskId,
       projectId,
-      workerId: 'julius-live-preflight',
+      workerId: identity.workerId,
       toolId: 'shell.bash', toolVersion: '1',
       arguments: { command },
       cwd: '.',
@@ -183,21 +236,26 @@ async function main(): Promise<number> {
       timeoutMs: 30_000,
       expectedMutation: 'WORKSPACE',
     };
-    const identity = {
+    const sandboxIdentity = {
       sandboxId: invocationId, invocationId, tenantId,
       projectId, runId: request.runId, taskId: request.taskId,
-      leaseGeneration, policyRevision: process.env.RELAY_JULIUS_CARD_REVISION ?? 'card:julius-live:1',
+      leaseGeneration, policyRevision: identity.policyRevision,
       createdAt: new Date().toISOString(),
       expiresAt: new Date(Date.now() + 600_000).toISOString(),
     };
+    // The invocation exists, REQUESTED then AUTHORIZED, before the executor is
+    // asked to record a sandbox that references it — the order the live
+    // mission follows and the order the foreign keys enforce.
+    const { dispatchGeneration } = await seedPreflightInvocation(pool, identity, { invocationId, requestDigest: digestOf(request), requestedAt: sandboxIdentity.createdAt });
     try {
-      await client.createSandbox({ identity, policy: PREFLIGHT_POLICY, limits: PREFLIGHT_LIMITS });
+      await client.createSandbox({ identity: sandboxIdentity, policy: PREFLIGHT_POLICY, limits: PREFLIGHT_LIMITS });
       await client.prepareWorkspace({
         sandboxId: invocationId, sourceRef: workspace, expectedLeaseGeneration: leaseGeneration,
       });
+      if (afterPrepare) await afterPrepare(invocationId);
       return await client.executeTool({
         sandboxId: invocationId, expectedLeaseGeneration: leaseGeneration,
-        dispatchGeneration: 1, requestDigest: digestOf(request),
+        dispatchGeneration, requestDigest: digestOf(request),
         executionTokenHash: sha(`token:${invocationId}`),
         effectClassification: 'NON_IDEMPOTENT_MUTATION', request,
       });
@@ -206,7 +264,43 @@ async function main(): Promise<number> {
         sandboxId: invocationId, expectedLeaseGeneration: leaseGeneration,
         reason: 'preflight round-trip finished',
       }).catch(() => undefined);
+      previousSandboxId = invocationId;
     }
+  };
+
+  /* THE RECEIPT SCOPE, FROM THE DAEMON'S OWN MOUNT TABLE. The workload inside a sandbox runs as
+   * uid 65532 and the scoped receipt directory is root:root 0700, so nothing run inside can even
+   * list /julius-receipts-root — which is itself a property worth proving, and which makes an
+   * in-sandbox listing useless as a scope proof. So the proof is taken by this operator-side probe
+   * from the host, between prepare and execute, while the sandbox exists: `docker inspect` of the
+   * container the executor labelled with this sandbox id must show exactly one receipt mount, its
+   * source the sandbox's own sha256 scope under the receipt root, and no mount of the root itself,
+   * of an earlier sandbox's scope, or of anything under /executor-private. Julius never holds the
+   * Docker socket; this probe runs as the operator that started the executor and already does. */
+  const dockerBinary = process.env.JULIUS_PREFLIGHT_DOCKER_BINARY ?? '/usr/bin/docker';
+  const docker = promisify(execFile);
+  const proveReceiptScope = async (sandboxId: string): Promise<void> => {
+    const listed = await docker(dockerBinary, ['ps', '-aq', '--filter', `label=julius.sandbox=${sandboxId}`]).catch((error: Error) => {
+      throw new Error(`preflight_docker_unavailable:${error.message.slice(0, 80)}`);
+    });
+    const containers = listed.stdout.trim().split('\n').filter(Boolean);
+    if (containers.length !== 1) throw new Error(`preflight_sandbox_container_count:${containers.length}`);
+    const inspected = await docker(dockerBinary, ['inspect', '--format', '{{json .Mounts}}', containers[0] as string]);
+    const mounts = JSON.parse(inspected.stdout) as Array<{ Type: string; Source: string; Destination: string; RW: boolean }>;
+    const expectedSource = join(hostReceiptRoot, sha(sandboxId));
+    const receiptMounts = mounts.filter((mount) => mount.Destination === '/julius-receipts-root');
+    const problems: string[] = [];
+    if (receiptMounts.length !== 1) problems.push(`receipt_mounts=${receiptMounts.length}`);
+    if (receiptMounts[0] && (receiptMounts[0].Type !== 'bind' || receiptMounts[0].Source !== expectedSource)) problems.push('receipt_mount_is_not_the_sandbox_scope');
+    for (const mount of mounts) {
+      if (mount.Source === hostReceiptRoot) problems.push('whole_receipt_root_mounted');
+      if (previousSandboxId && mount.Source === join(hostReceiptRoot, sha(previousSandboxId))) problems.push('earlier_sandbox_scope_mounted');
+      if (mount.Source.startsWith('/executor-private') || mount.Destination.startsWith('/executor-private')) problems.push('executor_private_mounted');
+      if (mount.Destination.startsWith('/julius-receipts-root/')) problems.push('receipt_subpath_mounted');
+      if (mount.Type === 'bind' && !['/workspace', '/julius-receipts-root'].includes(mount.Destination)) problems.push(`unexpected_bind:${mount.Destination}`);
+    }
+    if (problems.length > 0) throw new Error(`preflight_receipt_scope_violation:${problems.join(',')}`);
+    out(`  receipt scope (daemon mount table): one bind, ${hostReceiptRoot}/<sha256(sandboxId)> → /julius-receipts-root; no root, no earlier scope, nothing under /executor-private.`);
   };
 
   out('JULIUS LIVE PREFLIGHT — independent executor round-trip');
@@ -259,7 +353,27 @@ async function main(): Promise<number> {
       return 1;
     }
     out(`  host-written change is visible in the sandbox diff (${diff.stdout.length} bytes) — the reviewer will see real work.`);
-    out('PREFLIGHT OK: executor, scoped credentials, attestation, workspace ceiling, in-sandbox git and the host→sandbox diff hand-off all proven. No provider was contacted.');
+
+    /* The receipt transport's isolation. The scope itself is proven from the daemon's mount
+     * table while the third sandbox exists (`proveReceiptScope`, between prepare and execute).
+     * What is proven from INSIDE is the workload's view: it runs as uid 65532, cannot list the
+     * root-owned receipt mount at all, and finds nothing under /executor-private. */
+    const scope = await runInSandbox([
+      '[ "$(id -u)" = "65532" ]',
+      'test -d /julius-receipts-root',
+      '! ls -A /julius-receipts-root >/dev/null 2>&1',
+      'test ! -e /executor-private',
+      'test ! -e /executor-private/private.pem',
+      'test ! -e /executor-private/ledger',
+      'echo RECEIPT_WORKLOAD_REFUSED',
+    ].join(' && '), proveReceiptScope);
+    if (scope.status !== 'SUCCEEDED' || scope.exitCode !== 0 || !scope.stdout.includes('RECEIPT_WORKLOAD_REFUSED')) {
+      out('PREFLIGHT FAILED: the sandbox workload could read the receipt mount, or reached /executor-private.');
+      out(`  stderr (first 400 chars): ${scope.stderr.slice(0, 400)}`);
+      return 1;
+    }
+    out('  sandbox workload (uid 65532): the receipt mount exists but cannot be listed; nothing under /executor-private is reachable.');
+    out('PREFLIGHT OK: executor, scoped credentials, attestation, workspace ceiling, in-sandbox git, the host→sandbox diff hand-off and the receipt scope all proven. No provider was contacted.');
     return 0;
   } catch (error) {
     const message = error instanceof Error ? error.message : 'unknown error';

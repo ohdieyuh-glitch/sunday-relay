@@ -1,7 +1,7 @@
 name: Julius real sibling infrastructure
 on:
   pull_request:
-    paths: ['src/relay/mission/julius/**','src/relay/persistence/**','src/relay/workspace/julius-tools/**','scripts/julius-*','.github/workflows/julius-real-infra.yml','package*.json']
+    paths: ['src/relay/mission/julius/**','src/relay/persistence/**','src/relay/workspace/julius-tools/**','scripts/julius-*','.github/julius-*','.github/wait-for-executor.sh','.github/workflows/julius-real-infra.yml','.github/workflows/julius-first-live-mission.yml','package*.json']
   workflow_dispatch:
 permissions:
   contents: read
@@ -163,3 +163,151 @@ jobs:
           docker rm -f julius-executor julius-postgres 2>/dev/null || true
           docker network rm julius-sibling 2>/dev/null || true
           for tenant in tenant other-tenant; do sudo umount "/tmp/julius-workspace/$tenant/ws" 2>/dev/null || true; done
+
+  first-live-topology:
+    # THE PROVIDER-FREE HALF OF THE FIRST-LIVE MISSION, ON REAL DOCKER, ON EVERY
+    # RELEVANT PR. Free dry run #2 (GitHub Actions run 33635375764) failed inside
+    # the executor with a masked `executor_failure` that nothing offline could
+    # reproduce: the sandbox round trip is production code that had only ever
+    # met a fake shell. This job runs the SAME scripts the mission runs
+    # (images, identity, workspace, executor launch, key boundary) and the SAME
+    # preflight bundle, with no provider credential anywhere — and it runs once
+    # per receipt transport: the executor-private receipt root the mission
+    # started with, and the host-visible one the sibling job above has always
+    # used. The executor's own diagnostics (safe lines only) are printed for
+    # both, so a refusal names its stage and class instead of vanishing.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        receipts: [executor-private, host-visible]
+    env:
+      JULIUS_CALLER_ID: julius-live
+      JULIUS_TENANT_ID: tenant
+      JULIUS_PROJECT_ID: prj-julius-first-live
+      EXECUTOR_KEY_ID: julius-live-key
+      JULIUS_FLEET_ROOT: /tmp/julius-workspace
+      JULIUS_WORKSPACE: /tmp/julius-workspace/tenant/ws
+      JULIUS_PUBLIC_KEY_PATH: /tmp/julius-public.pem
+      JULIUS_EXECUTOR_ENDPOINT: http://127.0.0.1:8787/
+      JULIUS_EXECUTOR_ALLOW_LOOPBACK: '1'
+      PGUSER: julius
+      PGDATABASE: julius
+      # The one topology switch. `host-visible` is the mission's transport and must
+      # pass; `executor-private` is the shape dry runs #1 and #2 ran and is kept as
+      # a NEGATIVE regression: it must be refused by the host daemon at exactly
+      # the point and with exactly the code proven on 2026-09-02, and nothing else.
+      JULIUS_RECEIPT_HOST_ROOT: ${{ matrix.receipts == 'host-visible' && '/tmp/julius-executor/receipts' || '' }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with: { node-version: '22', cache: npm }
+      - run: npm ci
+      - run: npm run relay:executor:build && npm run relay:julius:preflight:build
+      - name: Build the pinned sandbox and executor images
+        id: images
+        run: ./.github/julius-live-images.sh
+      - name: Create the ephemeral scoped credentials
+        id: identity
+        run: ./.github/julius-live-identity.sh
+      - name: Provision the disposable mission workspace
+        run: ./.github/julius-live-workspace.sh
+      - name: Start PostgreSQL 16 and the independent executor (${{ matrix.receipts }} receipts)
+        env:
+          SANDBOX_IMAGE: ${{ steps.images.outputs.sandbox }}
+          EXECUTOR_IMAGE: ${{ steps.images.outputs.executor }}
+          EXECUTOR_CREDENTIAL_ROOT: ${{ steps.identity.outputs.root }}
+          PGPASSWORD: ${{ steps.identity.outputs.database_password }}
+        run: ./.github/julius-live-executor.sh
+      - name: The signing key is beyond every file-reading path, whichever receipt transport is in use
+        run: ./.github/julius-live-key-boundary.sh
+      - name: The receipt transport's boundary holds (${{ matrix.receipts }})
+        run: ./.github/julius-live-receipt-boundary.sh
+      - name: Preflight round trip (${{ matrix.receipts }} receipts)
+        id: preflight
+        env:
+          JULIUS_SCOPED_CREDENTIALS: ${{ steps.identity.outputs.scoped }}
+        run: |
+          set -uo pipefail
+          set +e
+          npm run relay:julius:preflight | tee preflight.log
+          status=${PIPESTATUS[0]}
+          set -e
+          echo "exit=$status" >> "$GITHUB_OUTPUT"
+          umask 077
+          diagnostics=$(mktemp)
+          docker logs julius-executor 2>&1 | grep -E '^executor_diagnostic ' > "$diagnostics" || true
+          echo "--- executor diagnostics (safe lines only) ---"
+          cat "$diagnostics"
+          case '${{ matrix.receipts }}' in
+            host-visible)
+              # THE MISSION'S TRANSPORT: the whole provider-free preflight passes, and the
+              # executor refused nothing along the way.
+              if [ "$status" -ne 0 ]; then echo "first_live_topology_failed:host-visible exit=$status" >&2; exit 1; fi
+              if [ -s "$diagnostics" ]; then echo 'first_live_topology_failed:host-visible executor refused a request' >&2; exit 1; fi
+              echo 'POSITIVE ROUND TRIP OK: host-visible receipts carried create, prepare, execute, receipts, diff and destroy.' ;;
+            executor-private)
+              # THE NEGATIVE REGRESSION. Proven 2026-09-02 (runs 33667743669, 33685880591): with a
+              # legitimate identity, a receipt root inside the executor's own layer is refused by
+              # the host daemon at prepareWorkspace, and only there. This entry is GREEN when that
+              # exact refusal is observed; a pass, a different stage, or a different class is a
+              # regression of the architecture this job protects.
+              expected='executor_diagnostic operation=prepare result=sandbox_create_failed class=bind_source_missing status=500'
+              if [ "$status" -eq 0 ]; then echo 'negative_regression_failed:executor-private receipts unexpectedly passed the preflight' >&2; exit 1; fi
+              if ! grep -q 'PREFLIGHT FAILED: EXECUTOR_UNAVAILABLE:sandbox_create_failed' preflight.log; then
+                echo 'negative_regression_failed:executor-private did not fail with sandbox_create_failed' >&2; exit 1
+              fi
+              if ! grep -qxF "$expected" "$diagnostics"; then
+                echo 'negative_regression_failed:executor-private refused for a different stage or class' >&2; exit 1
+              fi
+              if grep -vxF "$expected" "$diagnostics" | grep -q .; then
+                echo 'negative_regression_failed:executor-private produced an additional refusal' >&2; exit 1
+              fi
+              echo 'NEGATIVE REGRESSION OK: executor-private receipts were refused by the host daemon at prepareWorkspace with class=bind_source_missing, exactly as proven.' ;;
+          esac
+          rm -f "$diagnostics"
+
+      - name: Preflight identity regression against real PostgreSQL (dry run 33635375764)
+        # The executor's foreign keys, exercised through the executor's own repository: the
+        # preflight's fixture is accepted, removing the invocation seed brings 23503 back,
+        # another preflight's rows cannot satisfy this one, cleanup leaves nothing behind.
+        if: ${{ !cancelled() }}
+        env:
+          JULIUS_REAL_POSTGRES: '1'
+        run: npx vitest run scripts/julius-live-preflight-identity.test.ts
+      - name: Every evidence query holds against the migrated schema
+        # Runs whether or not the preflight passed: the preflight applies the migrations
+        # before its executor round trip, so the schema is present at today's failure too.
+        if: ${{ !cancelled() }}
+        # The preflight above applied the migrations. The mission's own dump script runs here
+        # against that schema, so a stale table or column name fails this PR instead of
+        # silently becoming an `unavailable` artifact file after a paid run.
+        env:
+          PGPASSWORD: ${{ steps.identity.outputs.database_password }}
+        run: |
+          set -euo pipefail
+          ./.github/julius-live-evidence-dump.sh /tmp/julius-evidence-check
+          failed=0
+          for file in /tmp/julius-evidence-check/*.tsv; do
+            if grep -qx 'unavailable' "$file"; then echo "evidence_query_invalid:$(basename "$file")" >&2; failed=1; else echo "$(basename "$file"): $(head -n 1 "$file")"; fi
+          done
+          rm -rf /tmp/julius-evidence-check
+          [ "$failed" -eq 0 ]
+      - name: Executor topology evidence
+        if: always()
+        run: |
+          docker inspect julius-executor --format 'executor_mounts={{range .Mounts}}{{.Destination}}:{{.RW}} {{end}}' 2>/dev/null || true
+          echo "receipt_root_host=${JULIUS_RECEIPT_HOST_ROOT:-none}"
+          if [ -n "${JULIUS_RECEIPT_HOST_ROOT:-}" ]; then sudo stat -c 'host_receipt_root=%n owner=%U:%G mode=%a' "$JULIUS_RECEIPT_HOST_ROOT" || true; fi
+          docker logs julius-executor 2>&1 | grep -E '^executor_(ready|diagnostic)[ :]' || true
+      - name: Cleanup
+        if: always()
+        run: |
+          docker ps -aq --filter 'label=julius.sandbox' | xargs -r docker rm -f 2>/dev/null || true
+          docker rm -f julius-executor julius-postgres 2>/dev/null || true
+          rm -f /tmp/julius-public.pem 2>/dev/null || true
+          sudo umount /tmp/julius-workspace/tenant/ws 2>/dev/null || true
+          sudo rm -rf /tmp/julius-workspace /tmp/julius-executor 2>/dev/null || true

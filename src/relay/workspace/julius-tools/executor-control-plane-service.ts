@@ -33,6 +33,14 @@ export interface ExecutorControlPlaneServiceConfig {
   readonly tenantWorkspaceRoot?: string;
   /** Recovers a completed execution's result from durable receipts, without executing anything. */
   readonly recoverTerminal?: (input:{executionTokenHash:string;sandboxId:string}) => Promise<unknown|null>;
+  /**
+   * Executor-local diagnostics. One line per refused request, safe fields only: the operation, the code
+   * Julius was answered with (`masked` when the boundary withheld it), the error's own short code class
+   * — an errno such as ENOENT, a SQLSTATE, a docker failure class — and the HTTP status. Never the
+   * message: dry run 33635375764 answered `executor_failure` and left nothing, anywhere, saying which
+   * stage refused or why. The masking stays; the executor may still tell ITSELF. Defaults to stderr.
+   */
+  readonly diagnostics?: (line:string) => void;
 }
 
 export function createDurableReceiptAttestor(config:Pick<ExecutorControlPlaneServiceConfig,'keyId'|'privateSigningKey'|'receipts'> & {executionLedger?:FilesystemExecutionLedger}) {
@@ -82,6 +90,9 @@ async function body(request: IncomingMessage):Promise<unknown>{
 }
 
 const SAFE_CODE=/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,119}$/;
+/** An error's own `code` may name a class (ENOENT, 42P01, bind_source_missing); anything wider is not a class and is not logged. */
+const DIAGNOSTIC_CLASS=/^[A-Za-z0-9_]{1,32}$/;
+const defaultDiagnostics=(line:string):void=>{process.stderr.write(`${line}\n`);};
 const LEDGER_CONFLICTS=new Set(['execution_state_conflict','execution_identity_not_reserved','executor_attestation_conflict']);
 const statusFor=(message:string):number=>message.startsWith('SECURITY_FAILURE:')||message==='STARTED_UNKNOWN_OUTCOME'||LEDGER_CONFLICTS.has(message)?409:message==='request_too_large'?413:message.startsWith('INVALID_REQUEST:')?400:500;
 /** Every shape refusal answers as one family, so a caller can tell a malformed request from an executor fault. */
@@ -146,12 +157,13 @@ export function createExecutorControlPlaneService(config:ExecutorControlPlaneSer
   if(!config.keyId||config.callerAuthorities.length<1||config.callerAuthorities.some(authority=>!authority.callerId||!authority.tenantId||!authority.credential||authority.operations.size<1))throw new Error('executor_service_config_invalid');
   return createServer(async(request,response)=>{
     response.setHeader('content-type','application/json');
+    let diagnosticOperation='unknown';
     try{
       if(request.method!=='POST'||request.url!=='/v1/execute'){response.statusCode=404;response.end('{"error":"not_found"}');return;}
       const supplied=request.headers.authorization?.startsWith('Bearer ')?request.headers.authorization.slice(7):'';
       const header=request.headers['x-julius-operation'];
       if(typeof header!=='string'||!EXECUTOR_OPERATION_SET.has(header as ExecutorOperation)){response.statusCode=400;response.end('{"error":"operation_invalid"}');return;}
-      const operation=header as ExecutorOperation;
+      const operation=header as ExecutorOperation;diagnosticOperation=operation;
       const authority=config.callerAuthorities.find(candidate=>equal(supplied,candidate.credential));
       if(!authority){response.statusCode=401;response.end('{"error":"unauthorized"}');return;}
       // One operation is one narrowly scoped authority: the execute credential cannot destroy, the inspect credential cannot execute.
@@ -253,7 +265,15 @@ export function createExecutorControlPlaneService(config:ExecutorControlPlaneSer
       if(message==='request_too_large')response.setHeader('connection','close');
       // Only this service's own refusal codes cross the boundary. A filesystem or driver message would
       // hand Julius the receipt-store path it is not allowed to know, so anything else answers as a fault.
-      response.end(JSON.stringify({error:SAFE_CODE.test(message)?message:'executor_failure'}));
+      const safe=SAFE_CODE.test(message);
+      /* The executor keeps what Julius may not learn. This is the only place a refusal's cause is ever
+         recorded, and it records a CLASS, never the text: the operation, the safe code or `masked`, the
+         error's own short `code`, the status. It is what made dry run 33635375764 diagnosable. */
+      const errorClass=(error as {code?:unknown}|null)?.code;
+      response.end(JSON.stringify({error:safe?message:'executor_failure'}));
+      // After the answer is on the wire, and guarded: a diagnostics sink may never take a refusal away or
+      // turn it into an unanswered request.
+      try{(config.diagnostics??defaultDiagnostics)(`executor_diagnostic operation=${diagnosticOperation} result=${safe?message:'masked'} class=${typeof errorClass==='string'&&DIAGNOSTIC_CLASS.test(errorClass)?errorClass:'none'} status=${response.statusCode}`);}catch{/* the refusal stands; the sink's failure is its own */}
     }
   });
 }
