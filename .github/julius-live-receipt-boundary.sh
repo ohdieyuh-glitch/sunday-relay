@@ -20,8 +20,10 @@ for forbidden in executor-private private.pem ledger; do
 done
 docker exec julius-executor test -f /executor-private/private.pem || { echo 'receipt_boundary_violation:executor_missing_key' >&2; exit 1; }
 docker exec julius-executor test -d /executor-private/ledger || { echo 'receipt_boundary_violation:executor_missing_ledger' >&2; exit 1; }
+# Existence on the host is asked with sudo: under a root:root 0700 parent an unprivileged
+# `[ -e ]` cannot see and would answer "absent" for a file that is there.
 for host_path in /executor-private/private.pem /executor-private/ledger /tmp/julius-executor/private.pem /tmp/julius-executor/ledger; do
-  if [ -e "$host_path" ]; then echo "receipt_boundary_violation:host_holds_$host_path" >&2; exit 1; fi
+  if sudo test -e "$host_path"; then echo "receipt_boundary_violation:host_holds_$host_path" >&2; exit 1; fi
 done
 
 if [ -z "${JULIUS_RECEIPT_HOST_ROOT:-}" ]; then
@@ -31,9 +33,15 @@ if [ -z "${JULIUS_RECEIPT_HOST_ROOT:-}" ]; then
 fi
 
 root=$JULIUS_RECEIPT_HOST_ROOT
-if [ -L "$root" ]; then echo 'receipt_boundary_violation:root_is_symlink' >&2; exit 1; fi
-actual=$(sudo stat -c '%U:%G %a' "$root")
-[ "$actual" = 'root:root 700' ] || { echo "receipt_boundary_violation:root_is_$actual" >&2; exit 1; }
+parent=$(dirname "$root")
+for candidate in "$parent" "$root"; do
+  if sudo test -L "$candidate"; then echo "receipt_boundary_violation:symlink:$candidate" >&2; exit 1; fi
+done
+[ "$(sudo realpath "$root")" = "$root" ] || { echo 'receipt_boundary_violation:root_resolves_elsewhere' >&2; exit 1; }
+for measured in "$parent" "$root"; do
+  actual=$(sudo stat -c '%U:%G %a' "$measured")
+  [ "$actual" = 'root:root 700' ] || { echo "receipt_boundary_violation:${measured}_is_$actual" >&2; exit 1; }
+done
 # The ordinary runner user, without sudo: every access must be refused.
 if ls "$root" >/dev/null 2>&1; then echo 'receipt_boundary_violation:runner_can_list' >&2; exit 1; fi
 if cat "$root/probe" >/dev/null 2>&1; then echo 'receipt_boundary_violation:runner_can_read' >&2; exit 1; fi

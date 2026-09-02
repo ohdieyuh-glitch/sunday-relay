@@ -9,8 +9,10 @@
 # other filename would read the private half. Claiming more here would be untrue.
 set -euo pipefail
 : "${JULIUS_PUBLIC_KEY_PATH:?missing JULIUS_PUBLIC_KEY_PATH}"
-for path in /executor-private/private.pem /tmp/julius-executor/private.pem; do
-  if [ -e "$path" ]; then
+# Asked with sudo: /tmp/julius-executor is root:root 0700 under the mission's receipt transport,
+# and an unprivileged `[ -e ]` beneath it answers "absent" without looking.
+for path in /executor-private/private.pem /tmp/julius-executor/private.pem /tmp/julius-executor/ledger; do
+  if sudo test -e "$path"; then
     echo "executor_private_key_readable_by_julius:$path" >&2
     exit 1
   fi

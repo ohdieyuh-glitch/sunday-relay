@@ -23,8 +23,11 @@
 #                                    the `first-live-topology` job runs.
 #   JULIUS_RECEIPT_HOST_ROOT=<dir>   receipts under a HOST directory created here root:root 0700
 #                                    and bind-mounted into the executor at the same path, so the
-#                                    daemon and the executor name one directory. PROVEN to carry the
-#                                    whole provider-free preflight to a pass. THE MISSION'S TRANSPORT.
+#                                    daemon and the executor name one directory. PROVEN (runs
+#                                    33667743669, 33685880591) to carry create, prepare, execute,
+#                                    signed receipts, the host→sandbox diff and destroy; the scope
+#                                    proof was added afterwards and is held by the same job. THE
+#                                    MISSION'S TRANSPORT.
 #
 # Whichever is chosen, the signing key and the ledger stay under /executor-private and are never
 # bind-mounted anywhere: nothing on the host holds the key, and no sandbox sees the ledger. Each
@@ -59,13 +62,22 @@ if [ -n "${JULIUS_RECEIPT_HOST_ROOT:-}" ]; then
   esac
   # root:root 0700: the ordinary runner user cannot list, read, write or traverse it. Stated
   # plainly: a holder of sudo or of the Docker socket still can. That party is not the boundary's
-  # adversary; the file-reading coding agent that runs as the runner user is. Created with the
-  # parent first so no runner-owned ancestor is left writable, then proven, not assumed.
-  sudo install -d -m 0700 -o root -g root "$(dirname "$JULIUS_RECEIPT_HOST_ROOT")"
+  # adversary; the file-reading coding agent that runs as the runner user is. `install -d` follows
+  # a symlink that already sits where it is told to create, so a planted link at the root or its
+  # parent is refused BEFORE anything is created; afterwards the path must resolve to itself and
+  # both the parent and the root must measure root:root 0700 — proven, not assumed.
+  parent=$(dirname "$JULIUS_RECEIPT_HOST_ROOT")
+  for candidate in "$parent" "$JULIUS_RECEIPT_HOST_ROOT"; do
+    if sudo test -L "$candidate"; then echo "receipt_root_refused:symlink:$candidate" >&2; exit 1; fi
+  done
+  sudo install -d -m 0700 -o root -g root "$parent"
   sudo install -d -m 0700 -o root -g root "$JULIUS_RECEIPT_HOST_ROOT"
-  if [ -L "$JULIUS_RECEIPT_HOST_ROOT" ]; then echo 'receipt_root_refused:symlink' >&2; exit 1; fi
-  actual=$(sudo stat -c '%U:%G %a' "$JULIUS_RECEIPT_HOST_ROOT")
-  if [ "$actual" != 'root:root 700' ]; then echo "receipt_root_not_private:$actual" >&2; exit 1; fi
+  resolved=$(sudo realpath "$JULIUS_RECEIPT_HOST_ROOT")
+  if [ "$resolved" != "$JULIUS_RECEIPT_HOST_ROOT" ]; then echo "receipt_root_refused:resolves_elsewhere" >&2; exit 1; fi
+  for measured in "$parent" "$JULIUS_RECEIPT_HOST_ROOT"; do
+    actual=$(sudo stat -c '%U:%G %a' "$measured")
+    if [ "$actual" != 'root:root 700' ]; then echo "receipt_root_not_private:$measured:$actual" >&2; exit 1; fi
+  done
   receipt_root=$JULIUS_RECEIPT_HOST_ROOT
   receipt_mount=(-v "$JULIUS_RECEIPT_HOST_ROOT:$JULIUS_RECEIPT_HOST_ROOT")
 fi

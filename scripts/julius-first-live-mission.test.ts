@@ -582,12 +582,20 @@ describe('the receipt transport — proven on real Docker, PR #214 (runs 3366774
     expect(boundary).toContain('receipt_boundary_violation:receipt_mount_path_differs');
   });
 
-  it('3 + 4. the host root is created root:root with mode exactly 0700, and proven so at runtime', () => {
+  it('3 + 4. the host root and its parent are created root:root with mode exactly 0700, and proven so at runtime', () => {
+    expect(launch).toContain('sudo install -d -m 0700 -o root -g root "$parent"');
     expect(launch).toContain('sudo install -d -m 0700 -o root -g root "$JULIUS_RECEIPT_HOST_ROOT"');
-    expect(launch, 'created, then measured').toMatch(/actual=\$\(sudo stat -c '%U:%G %a' "\$JULIUS_RECEIPT_HOST_ROOT"\)\s*\n\s*if \[ "\$actual" != 'root:root 700' \]/u);
-    expect(launch, 'a symlink in place of the root is refused').toContain("receipt_root_refused:symlink");
+    // Symlinks are refused BEFORE anything is created (install -d follows one), the created path
+    // must resolve to itself, and both the parent and the root are measured afterwards.
+    expect(launch.indexOf('sudo test -L "$candidate"'), 'the symlink refusal precedes creation').toBeLessThan(launch.indexOf('sudo install -d -m 0700 -o root -g root "$parent"'));
+    expect(launch).toContain('receipt_root_refused:symlink:$candidate');
+    expect(launch).toContain('resolved=$(sudo realpath "$JULIUS_RECEIPT_HOST_ROOT")');
+    expect(launch).toContain('receipt_root_refused:resolves_elsewhere');
+    expect(launch, 'parent and root measured').toMatch(/for measured in "\$parent" "\$JULIUS_RECEIPT_HOST_ROOT"; do\s*\n\s*actual=\$\(sudo stat -c '%U:%G %a' "\$measured"\)\s*\n\s*if \[ "\$actual" != 'root:root 700' \]/u);
     expect(boundary).toContain("[ \"$actual\" = 'root:root 700' ]");
-    for (const refusal of ['runner_can_list', 'runner_can_read', 'runner_can_write', 'runner_has_mode_bits', 'root_is_symlink']) {
+    expect(boundary, 'the probe measures the parent as well').toContain('for measured in "$parent" "$root"; do');
+    expect(boundary).toContain('[ "$(sudo realpath "$root")" = "$root" ]');
+    for (const refusal of ['runner_can_list', 'runner_can_read', 'runner_can_write', 'runner_has_mode_bits', 'symlink:$candidate', 'root_resolves_elsewhere']) {
       expect(boundary, `the boundary probe must try as the runner user: ${refusal}`).toContain(`receipt_boundary_violation:${refusal}`);
     }
     expect(workflow, 'the mission runs the boundary probe').toContain('./.github/julius-live-receipt-boundary.sh');
@@ -616,6 +624,9 @@ describe('the receipt transport — proven on real Docker, PR #214 (runs 3366774
     expect(launch).toContain('-e EXECUTOR_SIGNING_KEY_PATH=/executor-private/private.pem');
     expect(launch).toContain('-e EXECUTOR_LEDGER_ROOT=/executor-private/ledger');
     expect(boundary, 'and neither exists on any host path').toContain('/tmp/julius-executor/private.pem /tmp/julius-executor/ledger');
+    // Under a root:root 0700 parent an unprivileged `[ -e ]` cannot see; existence is asked with sudo.
+    expect(boundary).toContain('if sudo test -e "$host_path"; then');
+    expect(read('.github/julius-live-key-boundary.sh')).toContain('if sudo test -e "$path"; then');
   });
 
   it('9 + 10 + 11. network DENY, the 4 MiB workspace and the shared output ceiling are unchanged', () => {
@@ -631,22 +642,29 @@ describe('the receipt transport — proven on real Docker, PR #214 (runs 3366774
     expect(cleanup.indexOf("--filter 'label=julius.sandbox'")).toBeLessThan(cleanup.indexOf('sudo rm -rf /tmp/julius-executor'));
   });
 
-  it('each sandbox is handed only its own scoped subtree, and the preflight proves it from inside', () => {
+  it('each sandbox is handed only its own scoped subtree: the adapter mounts it, the preflight reads the daemon, the workload is refused', () => {
     const adapter = read('src/relay/workspace/julius-tools/docker-sandbox-adapter.ts');
     // The adapter mounts <root>/<sha256(sandboxId)>, never the root.
     expect(adapter).toContain('const sandboxReceipts=join(this.config.durability.receipts.root,opaque(record.sandboxId))');
     expect(adapter).toContain("createHash('sha256').update(value).digest('hex')");
     expect(adapter).toContain('`type=bind,src=${sandboxReceipts},dst=/julius-receipts-root`');
     expect(adapter).not.toMatch(/src=\$\{this\.config\.durability\.receipts\.root\},dst=/u);
-    // The preflight derives the same scope and checks, from inside a real sandbox, that only its
-    // own subtree, none of the previous sandbox's, none of the host root and nothing under
-    // /executor-private is reachable.
+    // The scope is proven from the daemon's mount table while the sandbox exists — the workload
+    // runs as uid 65532 and cannot list the root-owned mount, so an in-sandbox listing proves nothing.
     const preflight = read('scripts/julius-live-preflight.ts');
-    expect(preflight).toContain('const previousScope = sha(previousSandboxId);');
-    for (const check of ['test -d /julius-receipts-root', "[ \"$(ls -A /julius-receipts-root | wc -l)\" -eq 1 ]", 'test ! -e /julius-receipts-root/${previousScope}', 'test ! -e ${hostReceiptRoot}', 'test ! -e /executor-private/private.pem', 'test ! -e /executor-private/ledger', 'echo RECEIPT_SCOPE_OK']) {
+    expect(preflight).toContain("['ps', '-aq', '--filter', `label=julius.sandbox=${sandboxId}`]");
+    expect(preflight).toContain("['inspect', '--format', '{{json .Mounts}}', containers[0] as string]");
+    expect(preflight).toContain('const expectedSource = join(hostReceiptRoot, sha(sandboxId));');
+    for (const violation of ['receipt_mounts=', 'receipt_mount_is_not_the_sandbox_scope', 'whole_receipt_root_mounted', 'earlier_sandbox_scope_mounted', 'executor_private_mounted', 'receipt_subpath_mounted', 'unexpected_bind:']) {
+      expect(preflight, `the daemon-side proof must refuse: ${violation}`).toContain(violation);
+    }
+    expect(preflight, 'the proof is taken between prepare and execute').toMatch(/if \(afterPrepare\) await afterPrepare\(invocationId\);\s*\n\s*return await client\.executeTool/u);
+    expect(preflight).toContain("].join(' && '), proveReceiptScope);");
+    // And from inside: uid 65532, the mount exists but cannot be listed, nothing under /executor-private.
+    for (const check of ['[ "$(id -u)" = "65532" ]', 'test -d /julius-receipts-root', '! ls -A /julius-receipts-root >/dev/null 2>&1', 'test ! -e /executor-private', 'echo RECEIPT_WORKLOAD_REFUSED']) {
       expect(preflight, `the in-sandbox probe must check: ${check}`).toContain(check);
     }
-    expect(preflight).toContain("scope.stdout.includes('RECEIPT_SCOPE_OK')");
+    expect(preflight).toContain("scope.stdout.includes('RECEIPT_WORKLOAD_REFUSED')");
   });
 
   it('the executor-private entry is an exact expected-failure regression, and host-visible a full pass', () => {

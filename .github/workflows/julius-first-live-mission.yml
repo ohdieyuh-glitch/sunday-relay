@@ -417,7 +417,9 @@ jobs:
 
           # Receipt IDENTIFIERS and digests only — never a receipt body, which
           # carries command text and signatures.
-          docker exec julius-executor sh -c 'ls -1 /executor-private/receipts 2>/dev/null | head -n 200' \
+          # The receipt root the executor was actually given (the host transport since PR #214);
+          # the entries are sha256 scope names, safe to publish.
+          docker exec julius-executor sh -c 'ls -1 "$EXECUTOR_RECEIPT_ROOT" 2>/dev/null | head -n 200' \
             > julius-live-evidence/receipt-ids.txt 2>/dev/null || true
 
       - name: Refuse to publish evidence that contains credential material

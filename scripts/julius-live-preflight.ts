@@ -45,7 +45,9 @@
  * that remains rather than hiding it.
  */
 
+import { execFile } from 'node:child_process';
 import { createHash, createPublicKey, type KeyObject } from 'node:crypto';
+import { promisify } from 'node:util';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Pool } from 'pg';
@@ -216,11 +218,11 @@ async function roundTrips(pool: Pool, identity: PreflightIdentity, out: (line: s
   /* Receipts live at the host path the executor was given (the mission's transport) or under the
    * executor's private root; either way a sandbox must never see that path itself. */
   const hostReceiptRoot = process.env.JULIUS_RECEIPT_HOST_ROOT?.trim() || '/executor-private/receipts';
+  /** The sandbox that ran before the current one, for the sibling-scope check. */
   let previousSandboxId = '';
-  const runInSandbox = async (command: string): Promise<ToolInvocationResult> => {
+  const runInSandbox = async (command: string, afterPrepare?: (sandboxId: string) => Promise<void>): Promise<ToolInvocationResult> => {
     step += 1;
     const invocationId = `preflight:${identity.nonce}:${step}`;
-    if (step > 1) previousSandboxId = `preflight:${identity.nonce}:${step - 1}`;
     const request: ToolInvocationRequest = {
       invocationId,
       runId: identity.runId,
@@ -250,6 +252,7 @@ async function roundTrips(pool: Pool, identity: PreflightIdentity, out: (line: s
       await client.prepareWorkspace({
         sandboxId: invocationId, sourceRef: workspace, expectedLeaseGeneration: leaseGeneration,
       });
+      if (afterPrepare) await afterPrepare(invocationId);
       return await client.executeTool({
         sandboxId: invocationId, expectedLeaseGeneration: leaseGeneration,
         dispatchGeneration, requestDigest: digestOf(request),
@@ -261,7 +264,43 @@ async function roundTrips(pool: Pool, identity: PreflightIdentity, out: (line: s
         sandboxId: invocationId, expectedLeaseGeneration: leaseGeneration,
         reason: 'preflight round-trip finished',
       }).catch(() => undefined);
+      previousSandboxId = invocationId;
     }
+  };
+
+  /* THE RECEIPT SCOPE, FROM THE DAEMON'S OWN MOUNT TABLE. The workload inside a sandbox runs as
+   * uid 65532 and the scoped receipt directory is root:root 0700, so nothing run inside can even
+   * list /julius-receipts-root — which is itself a property worth proving, and which makes an
+   * in-sandbox listing useless as a scope proof. So the proof is taken by this operator-side probe
+   * from the host, between prepare and execute, while the sandbox exists: `docker inspect` of the
+   * container the executor labelled with this sandbox id must show exactly one receipt mount, its
+   * source the sandbox's own sha256 scope under the receipt root, and no mount of the root itself,
+   * of an earlier sandbox's scope, or of anything under /executor-private. Julius never holds the
+   * Docker socket; this probe runs as the operator that started the executor and already does. */
+  const dockerBinary = process.env.JULIUS_PREFLIGHT_DOCKER_BINARY ?? '/usr/bin/docker';
+  const docker = promisify(execFile);
+  const proveReceiptScope = async (sandboxId: string): Promise<void> => {
+    const listed = await docker(dockerBinary, ['ps', '-aq', '--filter', `label=julius.sandbox=${sandboxId}`]).catch((error: Error) => {
+      throw new Error(`preflight_docker_unavailable:${error.message.slice(0, 80)}`);
+    });
+    const containers = listed.stdout.trim().split('\n').filter(Boolean);
+    if (containers.length !== 1) throw new Error(`preflight_sandbox_container_count:${containers.length}`);
+    const inspected = await docker(dockerBinary, ['inspect', '--format', '{{json .Mounts}}', containers[0] as string]);
+    const mounts = JSON.parse(inspected.stdout) as Array<{ Type: string; Source: string; Destination: string; RW: boolean }>;
+    const expectedSource = join(hostReceiptRoot, sha(sandboxId));
+    const receiptMounts = mounts.filter((mount) => mount.Destination === '/julius-receipts-root');
+    const problems: string[] = [];
+    if (receiptMounts.length !== 1) problems.push(`receipt_mounts=${receiptMounts.length}`);
+    if (receiptMounts[0] && (receiptMounts[0].Type !== 'bind' || receiptMounts[0].Source !== expectedSource)) problems.push('receipt_mount_is_not_the_sandbox_scope');
+    for (const mount of mounts) {
+      if (mount.Source === hostReceiptRoot) problems.push('whole_receipt_root_mounted');
+      if (previousSandboxId && mount.Source === join(hostReceiptRoot, sha(previousSandboxId))) problems.push('earlier_sandbox_scope_mounted');
+      if (mount.Source.startsWith('/executor-private') || mount.Destination.startsWith('/executor-private')) problems.push('executor_private_mounted');
+      if (mount.Destination.startsWith('/julius-receipts-root/')) problems.push('receipt_subpath_mounted');
+      if (mount.Type === 'bind' && !['/workspace', '/julius-receipts-root'].includes(mount.Destination)) problems.push(`unexpected_bind:${mount.Destination}`);
+    }
+    if (problems.length > 0) throw new Error(`preflight_receipt_scope_violation:${problems.join(',')}`);
+    out(`  receipt scope (daemon mount table): one bind, ${hostReceiptRoot}/<sha256(sandboxId)> → /julius-receipts-root; no root, no earlier scope, nothing under /executor-private.`);
   };
 
   out('JULIUS LIVE PREFLIGHT — independent executor round-trip');
@@ -315,30 +354,25 @@ async function roundTrips(pool: Pool, identity: PreflightIdentity, out: (line: s
     }
     out(`  host-written change is visible in the sandbox diff (${diff.stdout.length} bytes) — the reviewer will see real work.`);
 
-    /* The receipt transport's isolation, proven from INSIDE a sandbox. The adapter mounts
-     * `<receipt root>/<sha256(sandboxId)>` — this sandbox's own scope — at /julius-receipts-root
-     * and nothing else of the root; so from within, the mount holds exactly one entry (this
-     * execution's token directory), the previous sandbox's scope is unreachable, the host root's
-     * own path does not exist, and neither does anything under /executor-private. */
-    const previousScope = sha(previousSandboxId);
+    /* The receipt transport's isolation. The scope itself is proven from the daemon's mount
+     * table while the third sandbox exists (`proveReceiptScope`, between prepare and execute).
+     * What is proven from INSIDE is the workload's view: it runs as uid 65532, cannot list the
+     * root-owned receipt mount at all, and finds nothing under /executor-private. */
     const scope = await runInSandbox([
-      'set -e',
+      '[ "$(id -u)" = "65532" ]',
       'test -d /julius-receipts-root',
-      '[ "$(ls -A /julius-receipts-root | wc -l)" -eq 1 ]',
-      `test ! -e /julius-receipts-root/${previousScope}`,
-      `test ! -e /julius-receipts-root/../${previousScope}`,
-      `test ! -e ${hostReceiptRoot}`,
+      '! ls -A /julius-receipts-root >/dev/null 2>&1',
       'test ! -e /executor-private',
       'test ! -e /executor-private/private.pem',
       'test ! -e /executor-private/ledger',
-      'echo RECEIPT_SCOPE_OK',
-    ].join(' && '));
-    if (scope.status !== 'SUCCEEDED' || scope.exitCode !== 0 || !scope.stdout.includes('RECEIPT_SCOPE_OK')) {
-      out('PREFLIGHT FAILED: a sandbox could see more of the receipt transport than its own scoped subtree, or reached the key or ledger.');
+      'echo RECEIPT_WORKLOAD_REFUSED',
+    ].join(' && '), proveReceiptScope);
+    if (scope.status !== 'SUCCEEDED' || scope.exitCode !== 0 || !scope.stdout.includes('RECEIPT_WORKLOAD_REFUSED')) {
+      out('PREFLIGHT FAILED: the sandbox workload could read the receipt mount, or reached /executor-private.');
       out(`  stderr (first 400 chars): ${scope.stderr.slice(0, 400)}`);
       return 1;
     }
-    out('  sandbox receipt scope: only its own subtree is mounted; the parent root, the previous sandbox, the key and the ledger are unreachable.');
+    out('  sandbox workload (uid 65532): the receipt mount exists but cannot be listed; nothing under /executor-private is reachable.');
     out('PREFLIGHT OK: executor, scoped credentials, attestation, workspace ceiling, in-sandbox git, the host→sandbox diff hand-off and the receipt scope all proven. No provider was contacted.');
     return 0;
   } catch (error) {
