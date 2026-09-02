@@ -166,9 +166,11 @@ describe('no credential is committed, and none can leave the runner', () => {
   });
 
   it('masks the ephemeral executor credentials before they can reach a log', () => {
-    expect(workflow, 'a derived credential printed once is a credential in the log forever')
+    const identity = read('.github/julius-live-identity.sh');
+    expect(identity, 'a derived credential printed once is a credential in the log forever')
       .toContain('::add-mask::');
-    expect(workflow).toMatch(/julius-derive-scoped-credentials\.mjs --values/u);
+    expect(identity).toMatch(/julius-derive-scoped-credentials\.mjs --values/u);
+    expect(workflow, 'the mission mints its identity through the shared script').toContain('./.github/julius-live-identity.sh');
   });
 
   it('scans the evidence for credential shapes and refuses to upload when it finds any', () => {
@@ -242,9 +244,11 @@ describe('what the job creates, the job destroys', () => {
     // prove where); this one proves nothing durable exists on either side.
     expect(read('.github/julius-executor-entrypoint.sh'), 'the signing key is ephemeral and executor-born')
       .toContain('generateKeyPairSync');
-    expect(workflow, 'the credential root is ephemeral').toContain('openssl rand -base64 33');
-    expect(workflow, 'a durable executor secret would need rotating and could leak between runs')
-      .not.toContain('secrets.EXECUTOR_CREDENTIAL_ROOT');
+    expect(read('.github/julius-live-identity.sh'), 'the credential root is ephemeral').toContain('openssl rand -base64 33');
+    for (const file of [WORKFLOW_PATH, '.github/julius-live-identity.sh', '.github/julius-live-executor.sh']) {
+      expect(read(file), 'a durable executor secret would need rotating and could leak between runs')
+        .not.toContain('secrets.EXECUTOR_CREDENTIAL_ROOT');
+    }
   });
 });
 
@@ -440,34 +444,64 @@ describe('F4 — the executor owns its signing key, and Julius cannot reach it',
   });
 
   it('the private root is not bind-mounted, so the host filesystem cannot see it', () => {
-    const start = workflow.indexOf('docker run -d --name julius-executor');
-    const run = workflow.slice(start, workflow.indexOf('./.github/wait-for-executor.sh', start));
+    // The launch moved into a script shared with the Docker regression job, so the
+    // mounts are asserted where they are written, and the mission must call it.
+    const launch = read('.github/julius-live-executor.sh');
+    const start = launch.indexOf('docker run -d --name julius-executor');
+    expect(start, 'the shared launch script must start the executor').toBeGreaterThan(-1);
+    const run = launch.slice(start, launch.indexOf('./.github/wait-for-executor.sh', start));
     const mounts = run.split('\n').filter((line) => line.includes('-v '));
+    expect(mounts.length).toBeGreaterThan(0);
     for (const mount of mounts) {
       expect(mount, 'mounting the private root would hand the key back to the host')
         .not.toContain('executor-private');
     }
     expect(run, 'the executor mints its identity through its own entrypoint')
       .toContain('.github/julius-executor-entrypoint.sh');
+    expect(workflow, 'the mission starts its executor through the shared launch script')
+      .toContain('./.github/julius-live-executor.sh');
   });
 
   it('only the public half is exported to Julius, and it is checked', () => {
-    expect(workflow).toContain('cat /executor-private/public.pem');
-    expect(workflow, 'exporting the private half would defeat the whole arrangement')
+    const launch = read('.github/julius-live-executor.sh');
+    expect(launch).toContain('cat /executor-private/public.pem');
+    expect(launch, 'exporting the private half would defeat the whole arrangement')
       .not.toContain('cat /executor-private/private.pem');
-    const proof = stepScript("'Preflight: Julius cannot reach the executor signing key'");
+    const proof = read('.github/julius-live-key-boundary.sh');
     expect(proof, 'the boundary must be asserted from the side that must not hold the key')
       .toContain('executor_private_key_readable_by_julius');
     expect(proof).toContain('julius_holds_private_key_material');
     expect(proof, 'and the executor must actually have it').toContain('docker exec julius-executor test -f /executor-private/private.pem');
+    expect(workflow, 'the mission runs the same boundary proof as the regression').toContain('./.github/julius-live-key-boundary.sh');
   });
 
-  it('the receipt store and ledger stay executor-private too', () => {
-    for (const variable of ['EXECUTOR_RECEIPT_ROOT', 'EXECUTOR_LEDGER_ROOT', 'EXECUTOR_SIGNING_KEY_PATH']) {
-      const line = workflow.split('\n').find((entry) => entry.includes(`-e ${variable}=`));
+  it('the signing key and the ledger stay executor-private; the receipt root is the launch script\u2019s one topology switch', () => {
+    const launch = read('.github/julius-live-executor.sh');
+    for (const variable of ['EXECUTOR_LEDGER_ROOT', 'EXECUTOR_SIGNING_KEY_PATH']) {
+      const line = launch.split('\n').find((entry) => entry.includes(`-e ${variable}=`));
       expect(line, `${variable} must be set on the executor`).toBeDefined();
       expect(line, `${variable} must live under the container-private root`).toContain('/executor-private');
     }
+    // The receipt root is what the host daemon must be able to see (the sandbox's receipt
+    // directory is bind-mounted from it), so it is a variable, not a literal under the private root.
+    expect(launch).toContain('-e EXECUTOR_RECEIPT_ROOT="$receipt_root"');
+    expect(launch).toContain('receipt_root=/executor-private/receipts');
+    expect(launch).toMatch(/receipt_root=\$JULIUS_RECEIPT_HOST_ROOT/u);
+    expect(launch, 'the private root is never among the mounts, whichever transport is chosen')
+      .not.toMatch(/-v [^\n]*executor-private/u);
+  });
+
+  it('the mission and its Docker regression run the same launch scripts', () => {
+    const regression = read('.github/workflows/julius-real-infra.yml');
+    expect(regression, 'the provider-free half of the mission must run on real Docker on every relevant PR')
+      .toContain('first-live-topology:');
+    expect(regression).toMatch(/receipts:\s*\[executor-private, host-visible\]/u);
+    for (const script of ['julius-live-images.sh', 'julius-live-identity.sh', 'julius-live-workspace.sh', 'julius-live-executor.sh', 'julius-live-key-boundary.sh']) {
+      expect(workflow, `the mission must run ${script}`).toContain(`./.github/${script}`);
+      expect(regression, `the regression must run ${script}`).toContain(`./.github/${script}`);
+    }
+    expect(regression, 'the regression drives the same provider-free preflight').toContain('npm run relay:julius:preflight');
+    expect(regression, 'no provider secret may reach the regression').not.toMatch(/secrets\.(OPENAI|ANTHROPIC|XAI)_API_KEY/u);
   });
 });
 
@@ -483,6 +517,18 @@ describe('F5 — evidence is built by allowlist, and secrets cannot ride along',
       .not.toMatch(/cp\s+\S*\.log\s+julius-live-evidence/u);
     expect(workflow, 'evidence is rebuilt from an allowlist instead')
       .toContain('node scripts/julius-live-evidence.mjs');
+  });
+
+  it('captures executor diagnostics by allowlist and deletes the raw container log before upload', () => {
+    const collect = stepScript('Collect the redacted validation evidence');
+    expect(collect, 'the raw executor log is written only to a private temp file').toMatch(/umask 077\s*\n\s*raw_executor_log=\$\(mktemp\)/u);
+    expect(collect, 'only the executor\u2019s own safe lines may be kept').toContain("grep -E '^executor_(ready|diagnostic)[ :]'");
+    expect(collect, 'and only characters a safe line can contain').toContain("grep -E '^[A-Za-z0-9_=:. -]+$'");
+    expect(collect, 'the raw log must not survive to the upload step').toContain('rm -f "$raw_executor_log"');
+    expect(collect.indexOf('rm -f "$raw_executor_log"'), 'delete before the evidence directory is complete')
+      .toBeLessThan(collect.indexOf('dump "SELECT'));
+    expect(workflow, 'a raw docker log must never be written into the evidence directory')
+      .not.toMatch(/docker logs [^\n]*> *julius-live-evidence/u);
   });
 
   it('keeps the lines a mission actually needs', () => {

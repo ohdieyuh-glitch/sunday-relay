@@ -1,7 +1,7 @@
 name: Julius real sibling infrastructure
 on:
   pull_request:
-    paths: ['src/relay/mission/julius/**','src/relay/persistence/**','src/relay/workspace/julius-tools/**','scripts/julius-*','.github/workflows/julius-real-infra.yml','package*.json']
+    paths: ['src/relay/mission/julius/**','src/relay/persistence/**','src/relay/workspace/julius-tools/**','scripts/julius-*','.github/julius-*','.github/wait-for-executor.sh','.github/workflows/julius-real-infra.yml','.github/workflows/julius-first-live-mission.yml','package*.json']
   workflow_dispatch:
 permissions:
   contents: read
@@ -163,3 +163,102 @@ jobs:
           docker rm -f julius-executor julius-postgres 2>/dev/null || true
           docker network rm julius-sibling 2>/dev/null || true
           for tenant in tenant other-tenant; do sudo umount "/tmp/julius-workspace/$tenant/ws" 2>/dev/null || true; done
+
+  first-live-topology:
+    # THE PROVIDER-FREE HALF OF THE FIRST-LIVE MISSION, ON REAL DOCKER, ON EVERY
+    # RELEVANT PR. Free dry run #2 (GitHub Actions run 33635375764) failed inside
+    # the executor with a masked `executor_failure` that nothing offline could
+    # reproduce: the sandbox round trip is production code that had only ever
+    # met a fake shell. This job runs the SAME scripts the mission runs
+    # (images, identity, workspace, executor launch, key boundary) and the SAME
+    # preflight bundle, with no provider credential anywhere — and it runs once
+    # per receipt transport: the executor-private receipt root the mission
+    # started with, and the host-visible one the sibling job above has always
+    # used. The executor's own diagnostics (safe lines only) are printed for
+    # both, so a refusal names its stage and class instead of vanishing.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        receipts: [executor-private, host-visible]
+    env:
+      JULIUS_CALLER_ID: julius-live
+      JULIUS_TENANT_ID: tenant
+      JULIUS_PROJECT_ID: prj-julius-first-live
+      EXECUTOR_KEY_ID: julius-live-key
+      JULIUS_FLEET_ROOT: /tmp/julius-workspace
+      JULIUS_WORKSPACE: /tmp/julius-workspace/tenant/ws
+      JULIUS_PUBLIC_KEY_PATH: /tmp/julius-public.pem
+      JULIUS_EXECUTOR_ENDPOINT: http://127.0.0.1:8787/
+      JULIUS_EXECUTOR_ALLOW_LOOPBACK: '1'
+      PGUSER: julius
+      PGDATABASE: julius
+      # The one topology switch. Empty means the receipt root stays inside the
+      # executor container's own layer; a path means a root:root 0700 host
+      # directory bind-mounted into the executor at the same path.
+      JULIUS_RECEIPT_HOST_ROOT: ${{ matrix.receipts == 'host-visible' && '/tmp/julius-executor/receipts' || '' }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with: { node-version: '22', cache: npm }
+      - run: npm ci
+      - run: npm run relay:executor:build && npm run relay:julius:preflight:build
+      - name: Build the pinned sandbox and executor images
+        id: images
+        run: ./.github/julius-live-images.sh
+      - name: Create the ephemeral scoped credentials
+        id: identity
+        run: ./.github/julius-live-identity.sh
+      - name: Provision the disposable mission workspace
+        run: ./.github/julius-live-workspace.sh
+      - name: Start PostgreSQL 16 and the independent executor (${{ matrix.receipts }} receipts)
+        env:
+          SANDBOX_IMAGE: ${{ steps.images.outputs.sandbox }}
+          EXECUTOR_IMAGE: ${{ steps.images.outputs.executor }}
+          EXECUTOR_CREDENTIAL_ROOT: ${{ steps.identity.outputs.root }}
+          PGPASSWORD: ${{ steps.identity.outputs.database_password }}
+        run: ./.github/julius-live-executor.sh
+      - name: The signing key is beyond every file-reading path, whichever receipt transport is in use
+        run: ./.github/julius-live-key-boundary.sh
+      - name: Preflight round trip (${{ matrix.receipts }} receipts)
+        id: preflight
+        env:
+          JULIUS_SCOPED_CREDENTIALS: ${{ steps.identity.outputs.scoped }}
+        run: |
+          set -uo pipefail
+          set +e
+          npm run relay:julius:preflight | tee preflight.log
+          status=${PIPESTATUS[0]}
+          set -e
+          echo "exit=$status" >> "$GITHUB_OUTPUT"
+          echo "--- executor diagnostics (safe lines only) ---"
+          docker logs julius-executor 2>&1 | grep -E '^executor_(ready|diagnostic)[ :]' || echo 'no executor diagnostic line was written'
+          case '${{ matrix.receipts }}' in
+            host-visible)
+              # The transport under repair: the whole provider-free preflight must pass.
+              if [ "$status" -ne 0 ]; then echo "first_live_topology_failed:host-visible exit=$status" >&2; exit 1; fi ;;
+            executor-private)
+              # The transport free dry runs #1 and #2 ran. Its outcome is RECORDED here
+              # so that the failure names its stage and class; whether it must keep
+              # failing, and how, is asserted once that class is proven.
+              if [ "$status" -eq 0 ]; then echo 'first_live_topology_note:executor-private receipts passed the preflight'; fi
+              grep 'PREFLIGHT FAILED' preflight.log || true ;;
+          esac
+      - name: Executor topology evidence
+        if: always()
+        run: |
+          docker inspect julius-executor --format 'executor_mounts={{range .Mounts}}{{.Destination}}:{{.RW}} {{end}}' 2>/dev/null || true
+          echo "receipt_root_host=${JULIUS_RECEIPT_HOST_ROOT:-none}"
+          if [ -n "${JULIUS_RECEIPT_HOST_ROOT:-}" ]; then sudo stat -c 'host_receipt_root=%n owner=%U:%G mode=%a' "$JULIUS_RECEIPT_HOST_ROOT" || true; fi
+          docker logs julius-executor 2>&1 | grep -E '^executor_(ready|diagnostic)[ :]' || true
+      - name: Cleanup
+        if: always()
+        run: |
+          docker ps -aq --filter 'label=julius.sandbox' | xargs -r docker rm -f 2>/dev/null || true
+          docker rm -f julius-executor julius-postgres 2>/dev/null || true
+          rm -f /tmp/julius-public.pem 2>/dev/null || true
+          sudo umount /tmp/julius-workspace/tenant/ws 2>/dev/null || true
+          sudo rm -rf /tmp/julius-workspace /tmp/julius-executor 2>/dev/null || true

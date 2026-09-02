@@ -25,7 +25,7 @@ const afterBody=`receiptVersion=1\nphase=AFTER\nmanifestDigest=${digest}\ninvoca
 const result:ToolInvocationResult={invocationId:'inv',status:'SUCCEEDED',exitCode:0,safeSummary:'Sandbox command completed.',stdout:'',stderr:'',stdoutRef:null,stderrRef:null,artifacts:[],evidence:[],durationMs:1,resourceUsage:{toolCalls:1,runtimeMs:1,outputBytes:0},policyDecisionRef:'policy',mutations:[]};
 const physical = (execute:()=>Promise<ToolInvocationResult>):SandboxExecutionPort => ({
   createSandbox:async input=>({...input.identity,state:'CREATING',workspaceRef:null,runtimeKind:'test',limits:input.limits,policy:input.policy,safeFailure:null}),
-  prepareWorkspace:async()=>{throw new Error("ENOENT: no such file or directory, open '/tmp/julius-executor/receipts/abc/before.receipt'");},executeTool:async()=>execute(),cancelExecution:async()=>true,destroySandbox:async()=>true,
+  prepareWorkspace:async()=>{throw Object.assign(new Error("ENOENT: no such file or directory, open '/tmp/julius-executor/receipts/abc/before.receipt'"),{code:'ENOENT'});},executeTool:async()=>execute(),cancelExecution:async()=>true,destroySandbox:async()=>true,
   inspectSandbox:async()=>null,collectArtifacts:async()=>[],discoverSandboxes:async()=>[{sandboxId:'sandbox',runtimeId:'container-sandbox',state:'running',labels:{'julius.sandbox':'sandbox'}}],quarantineSandbox:async()=>true,reconcileSandboxes:async()=>({recovered:0,lost:0,quarantined:0,destroyed:0}),
 });
 
@@ -66,7 +66,8 @@ describe('executor control-plane service',()=>{
     const attest=createDurableReceiptAttestor({keyId:'current',privateSigningKey:keys.privateKey,receipts,executionLedger});
     const rootSecret='executor-root-secret-value-with-enough-entropy';
     let physicalEffects=0,release=()=>{};const gate=new Promise<void>(resolve=>{release=resolve;});
-    const server=createExecutorControlPlaneService({callerAuthorities:[...deriveCallerAuthorities({rootSecret,callerId:'julius-prod',tenantId:'tenant',operations:EXECUTOR_OPERATIONS}),{callerId:'other-tenant',tenantId:'other',credential:'other-tenant-secret',operations:new Set(['create'] as const)}],keyId:'current',privateSigningKey:keys.privateKey,receipts,executionLedger,tenancyLedger,physical:physical(async()=>{physicalEffects++;await gate;await writeFile(join(directory,'request.json'),JSON.stringify({invocationId:'inv',dispatchGeneration:2,sandboxId,requestDigest:REQUEST_DIGEST}),{flag:'wx'});await writeFile(join(directory,'before.receipt'),beforeBody,{flag:'wx'});await writeFile(join(directory,'stdout'),'',{flag:'wx'});await writeFile(join(directory,'stderr'),'',{flag:'wx'});await writeFile(join(directory,'changed-paths'),'',{flag:'wx'});await attest({phase:'BEFORE',executionTokenHash:token,sandboxId});await writeFile(join(directory,'after.receipt'),afterBody,{flag:'wx'});await attest({phase:'AFTER',executionTokenHash:token,sandboxId});return result;})});
+    const diagnosticLines:string[]=[];
+    const server=createExecutorControlPlaneService({diagnostics:(line:string)=>{diagnosticLines.push(line);},callerAuthorities:[...deriveCallerAuthorities({rootSecret,callerId:'julius-prod',tenantId:'tenant',operations:EXECUTOR_OPERATIONS}),{callerId:'other-tenant',tenantId:'other',credential:'other-tenant-secret',operations:new Set(['create'] as const)}],keyId:'current',privateSigningKey:keys.privateKey,receipts,executionLedger,tenancyLedger,physical:physical(async()=>{physicalEffects++;await gate;await writeFile(join(directory,'request.json'),JSON.stringify({invocationId:'inv',dispatchGeneration:2,sandboxId,requestDigest:REQUEST_DIGEST}),{flag:'wx'});await writeFile(join(directory,'before.receipt'),beforeBody,{flag:'wx'});await writeFile(join(directory,'stdout'),'',{flag:'wx'});await writeFile(join(directory,'stderr'),'',{flag:'wx'});await writeFile(join(directory,'changed-paths'),'',{flag:'wx'});await attest({phase:'BEFORE',executionTokenHash:token,sandboxId});await writeFile(join(directory,'after.receipt'),afterBody,{flag:'wx'});await attest({phase:'AFTER',executionTokenHash:token,sandboxId});return result;})});
     await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve));
     try{
       const address=server.address() as AddressInfo,base=`http://127.0.0.1:${address.port}/v1/execute`;
@@ -118,6 +119,12 @@ describe('executor control-plane service',()=>{
       // A filesystem message never crosses the boundary: Julius is not allowed to learn the receipt-store path.
       const leaky=await read(await post('prepare',scoped('prepare'),{sandboxId,sourceRef:'/tmp/nowhere',expectedLeaseGeneration:1}));
       expect(leaky).toMatchObject({status:500,error:'executor_failure'});
+      // What the boundary withheld from Julius, the executor recorded for itself — the stage and the error's
+      // CLASS, never its text. Dry run 33635375764 answered `executor_failure` and left nothing else anywhere.
+      expect(diagnosticLines.filter(line=>line.includes('operation=prepare')).at(-1)).toBe('executor_diagnostic operation=prepare result=masked class=ENOENT status=500');
+      for(const line of diagnosticLines){expect(line,'a diagnostic line must carry no path and no message text').not.toMatch(/receipts|\/tmp|no such file|before\.receipt/i);}
+      // A safe refusal is recorded as itself.
+      expect(diagnosticLines.some(line=>/^executor_diagnostic operation=execute result=INVALID_REQUEST:[a-z_]+ class=none status=400$/.test(line))).toBe(true);
 
       // The quarantine scope reaches `docker rm -f`, so a runtime id that is not a Julius sandbox is refused
       // outright; without this the credential deletes any container on the executor host, its database included.
