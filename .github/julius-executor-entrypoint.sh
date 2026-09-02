@@ -8,7 +8,11 @@
 # signed its own receipts and the guarantee was decorative. It is generated
 # here instead, inside the executor container, under a directory that is part
 # of the container's own writable layer and is deliberately NOT bind-mounted
-# from the host. The host — and therefore Julius — never sees it.
+# from the host. That puts it beyond every FILE-READING path: nothing on the
+# host filesystem holds it, so the live coding agent's Read/Glob/Grep — the
+# realistic adversary — cannot reach it. It is not beyond the Docker socket:
+# the runner user that starts this container could still `docker exec` its way
+# in, so against THAT party the boundary is honest labelling, not a wall.
 #
 # What leaves this container is the PUBLIC key, read out once over `docker
 # exec` after boot. That is all Julius needs to verify an attestation, and it

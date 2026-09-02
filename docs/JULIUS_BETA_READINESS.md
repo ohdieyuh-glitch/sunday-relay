@@ -328,25 +328,32 @@ anything is paid for.
 The independent review's Medium findings, accepted under the one-iteration rule
 at the time, are now closed — each with a mutation-proven test.
 
-**F4 — the executor owns its signing key.** The key used to be minted on the
-runner by the same user that runs Julius, so the party verifying receipts could
-have signed them: attestation was decorative. It is now generated inside the
-executor container by `.github/julius-executor-entrypoint.sh`, under
-`/executor-private` — the container's own writable layer, deliberately not
-bind-mounted — beside the receipt store and ledger. What leaves the container
-is the public key, read out once over `docker exec`. A preflight step asserts
-the boundary from the side that must not hold the secret: the host paths do
-not exist, the private root is not among the container's mounts, the executor
-does hold its key, and what Julius holds contains a public key and no private
-material. This reproduces the #208 sibling separation by moving the secret
-rather than by moving Julius; no loopback, network or containment guard
-changed.
+**F4 — the executor owns its signing key, against every file-reading path.**
+The key used to be minted on the runner by the same user that runs Julius, so
+any file read could take it — including a `Read` from the live coding agent.
+It is now generated inside the executor container by
+`.github/julius-executor-entrypoint.sh`, under `/executor-private` — the
+container's own writable layer, deliberately not bind-mounted — beside the
+receipt store and ledger. What leaves the container is the public key, read
+out once over `docker exec`. A preflight step asserts exactly what that
+arrangement establishes: the host paths do not exist, the private root is not
+among the container's mounts, the executor does hold its key, and what Julius
+holds contains a public key and no private material. Stated plainly rather
+than implied away: this is a FILESYSTEM boundary, and its adversary is the
+file-reading coding agent. The runner user itself holds the Docker socket and
+sudo, so a process acting as that user could still `docker exec` the key out —
+the same channel this job uses for the public half. Full #208-grade separation
+(Julius in its own container, no socket) remains the reference architecture;
+here the secret moved instead of Julius, because the coding agent and Hermes
+both live host-side. No loopback, network or containment guard changed.
 
 **F5 — evidence is built by allowlist, never by redaction.** Raw `tee`'d logs
 are no longer copied into the artifact. `scripts/julius-live-evidence.mjs`
-re-emits only lines matching the entrypoint's known shapes, then drops any
-survivor carrying key-shaped or opaque mixed-case material, and reports how
-many lines it withheld. Behind it, the workflow greps the evidence for the
+re-emits only lines matching the entrypoint's known shapes — the failure
+outcomes (`RESULT: BLOCKED …`, `crashed: …`) included, because the runs that
+most need evidence are the ones that went wrong — then drops any survivor
+carrying key-shaped or opaque mixed-case material, and reports how many lines
+it withheld. Behind it, the workflow greps the evidence for the
 JOB'S OWN exact values — provider keys, credential root, database password and
 every derived scoped credential — via a needle file deleted before the upload
 step exists; a hit deletes the evidence and fails the job without naming which

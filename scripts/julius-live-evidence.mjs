@@ -34,6 +34,11 @@ const ALLOWED = [
   /^  [A-Z][A-Z0-9_]*: (SET|MISSING)$/u,
   /^  BLOCKED [a-z_ ]+: .+$/iu,
   /^RESULT: [A-Z_]+( \(stalled before terminal state\))?( after \d+ ticks)?$/u,
+  // The outcomes that matter most are the failures: a BLOCKED or crashed paid
+  // run must state WHAT happened in its own artifact. The free-text tails stay
+  // subject to the secret rejectors below, like every other kept line.
+  /^RESULT: [A-Z_]+( at bootstrap)? — .+$/u,
+  /^JULIUS LIVE MISSION crashed: .+$/u,
   /^  cause: .+$/u,
   /^Run [\w:.-]+ accepted in state [A-Z_]+; driving the Julius run loop\.$/u,
   /^  run: [\w:.-]+$/u,

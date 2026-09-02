@@ -484,6 +484,18 @@ describe('F5 — evidence is built by allowlist, and secrets cannot ride along',
     expect(output).toContain('julius_exit=0');
   });
 
+  it('keeps the failure outcomes — the runs that most need evidence', () => {
+    // A paid mission that is BLOCKED or crashes must state its outcome in its
+    // own artifact; the first cut of the allowlist kept only success shapes.
+    const failures = [
+      'RESULT: BLOCKED — nothing was submitted and no provider was contacted.',
+      'RESULT: BLOCKED at bootstrap — contract_rejected: the durable store refused.',
+      'JULIUS LIVE MISSION crashed: connect ECONNREFUSED 127.0.0.1:5432',
+    ];
+    const output = buildEvidence(failures.join('\n'));
+    for (const line of failures) expect(output, 'failure outcomes are evidence too').toContain(line);
+  });
+
   it('MUTATION: a secret smuggled into a recognised line cannot reach the artifact', () => {
     // Each of these is a real leak shape: a key pasted into an evidence
     // summary, a PEM in a stack trace, an auth header echoed by a client, a
@@ -498,20 +510,45 @@ describe('F5 — evidence is built by allowlist, and secrets cannot ride along',
     const inlineUrl = ['postgresql://julius:', 's3cretp4ssw0rd', '@127.0.0.1:5432/julius'].join('');
     const openaiShaped = ['sk-proj-', 'ZZZZYYYYXXXXWWWWVVVV1111'].join('');
     const opaqueScoped = 'Xk7Qm2Rv9TzLbN4pAeWs6YcHgJdF1uOi3ZrKxVtB0nM';
+    // Every needle rides inside a line the allowlist RECOGNISES — otherwise
+    // the allowlist drops it first and the secret rejector is never exercised,
+    // which is a test that keeps passing after the rule it guards is deleted.
     const smuggled = [
       `  evidence ev:2 [ARTIFACT/PASSED] leaked ${anthropicShaped}`,
       `  finding f:1 blocking=true status=OPEN — token ${xaiShaped}`,
-      pemHeader,
-      'Authorization: Bearer abcdefghijklmnopqrstuvwxyz012345',
+      `  cause: ${pemHeader}`,
+      '  cause: Authorization: Bearer abcdefghijklmnopqrstuvwxyz012345',
       `  cause: ${inlineUrl}`,
       `  evidence ev:3 [ARTIFACT/PASSED] ${opaqueScoped}`,
-      `RANDOM UNRECOGNISED LINE WITH ${openaiShaped}`,
+      `  cause: retry with ${openaiShaped}`,
     ];
     const output = buildEvidence(smuggled.join('\n'));
     for (const forbidden of [anthropicShaped, xaiShaped, pemHeader, 'Bearer abcdefghij', 's3cretp4ssw0rd', opaqueScoped, openaiShaped]) {
       expect(output, `${forbidden.slice(0, 12)}… must never reach the uploaded evidence`).not.toContain(forbidden);
     }
     expect(output, 'and the artifact must say how much it withheld').toMatch(/withheld/u);
+  });
+
+  it('the layer-one shape scan itself catches a bearer token and a vendor key', () => {
+    // This regex guards the files the allowlist never sees — the workspace
+    // diff and the reviewer's free-text findings — and this commit history
+    // includes one edit that silently broke its Bearer clause. So the REAL
+    // pattern is extracted from the workflow and executed, not admired.
+    const scanStep = stepScript('Refuse to publish evidence that contains credential material');
+    const pattern = /grep -rEq '(.+)' julius-live-evidence/u.exec(scanStep)?.[1];
+    expect(pattern, 'the shape scan must exist in the scan step').toBeDefined();
+
+    const matches = (line: string): boolean => {
+      try {
+        execFileSync('grep', ['-Eq', pattern as string], { input: line, stdio: ['pipe', 'ignore', 'ignore'] });
+        return true;
+      } catch { return false; }
+    };
+    const bearer = ['Authorization: Bearer ', 'abcdefghijklmnopqrstuvwxyz012345'].join('');
+    expect(matches(bearer), 'a bearer token in a diff or finding must trip the scan').toBe(true);
+    expect(matches(['leaked ', 'sk-ant-', 'api03-AAAAAAAAAAAAAAAAAAAAAAAA'].join('')), 'an Anthropic-shaped key must trip the scan').toBe(true);
+    expect(matches(['-----BEGIN ', 'PRIVATE KEY-----'].join('')), 'a PEM header must trip the scan').toBe(true);
+    expect(matches('  task run:abc [CODING_AGENT/build] → SUCCEEDED'), 'ordinary evidence must not trip it').toBe(false);
   });
 
   it('the workflow also matches this job\u2019s exact ephemeral values, not only shapes', () => {
@@ -622,6 +659,12 @@ describe('F6 — a paid mission cannot be run twice by accident', () => {
   it('a second paid dispatch is refused unless the operator acknowledges it', () => {
     const guard = stepScript("'Gate: a paid first-live mission has not already completed'");
     expect(guard).toContain('julius_first_live_already_completed');
+    // Unknown is not zero: a failed marker QUERY must refuse like a found
+    // marker does, behind the same acknowledgement — not read as "no marker".
+    expect(guard, 'an unreadable marker list must not pass as a first run')
+      .toContain('julius_first_live_marker_unknown');
+    expect(guard, 'the query result must be branched on, never defaulted to zero')
+      .not.toContain('|| echo 0');
     expect(guard, 'the guard reads the completion marker artifact').toContain('julius-first-live-completed');
     expect(guard, 'and can only be overridden by an explicit typed phrase').toContain('RERUN PAID MISSION');
     expect(workflow, 'the guard applies to live dispatches only, so dry runs stay repeatable')

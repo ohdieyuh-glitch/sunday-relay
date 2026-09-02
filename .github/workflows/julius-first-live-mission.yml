@@ -99,6 +99,11 @@ jobs:
       # action's owner at any time, which would change what runs here without
       # changing anything in this repository.
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          # Nothing after checkout authenticates to git, and $GITHUB_WORKSPACE
+          # is bind-mounted into the executor container — a persisted token in
+          # .git/config would ride along with it.
+          persist-credentials: false
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
@@ -174,10 +179,20 @@ jobs:
           # a guard against ACCIDENT — a second dispatch of a run that already
           # succeeded — not a security control, and it sits behind the typed
           # phrase and the environment's own approval.
-          existing=$(gh api \
+          # Unknown is not zero. "The marker list could not be read" and "no
+          # marker exists" must never share an answer: the first is exactly the
+          # state in which an accidental second paid run slips through.
+          if ! existing=$(gh api \
             "repos/${GITHUB_REPOSITORY}/actions/artifacts?name=julius-first-live-completed&per_page=100" \
-            --jq '[.artifacts[] | select(.expired == false)] | length' 2>/dev/null || echo 0)
-          if [ "${existing:-0}" -gt 0 ]; then
+            --jq '[.artifacts[] | select(.expired == false)] | length'); then
+            echo 'julius_first_live_marker_unknown: the completion-marker list could not be read.' >&2
+            if [ "$ACKNOWLEDGE_RERUN" != 'RERUN PAID MISSION' ]; then
+              echo 'Refusing to pay while the previous-run state is unknown. Re-dispatch with' >&2
+              echo 'acknowledge_rerun = "RERUN PAID MISSION" to proceed anyway.' >&2
+              exit 1
+            fi
+            echo 'operator acknowledged proceeding despite the UNKNOWN marker state'
+          elif [ "${existing:-0}" -gt 0 ]; then
             if [ "$ACKNOWLEDGE_RERUN" != 'RERUN PAID MISSION' ]; then
               echo "julius_first_live_already_completed: $existing completion marker(s) found." >&2
               echo 'A paid first-live mission has already succeeded. Re-dispatch with' >&2
@@ -307,9 +322,13 @@ jobs:
       - name: 'Preflight: Julius cannot reach the executor signing key'
         run: |
           set -euo pipefail
-          # The trust boundary, asserted from the side that must NOT hold the
-          # secret. This step runs as the same user that runs Julius, so what
-          # it cannot read here, Julius cannot read during the mission.
+          # What these assertions establish — precisely: the key is on no host
+          # path and no bind mount, so no FILE-READING tool can reach it; the
+          # live coding agent (Read/Glob/Grep, no shell) is the party that
+          # boundary is for. They do NOT establish protection from a holder of
+          # the Docker socket or sudo: this very job reads the PUBLIC half via
+          # `docker exec`, and the same command with the other filename would
+          # read the private half. Claiming more here would be untrue.
           for path in /executor-private/private.pem /tmp/julius-executor/private.pem; do
             if [ -e "$path" ]; then
               echo "executor_private_key_readable_by_julius:$path" >&2
@@ -331,7 +350,8 @@ jobs:
             echo 'julius_holds_private_key_material' >&2
             exit 1
           fi
-          echo 'PREFLIGHT OK: the signing key is the executor'"'"'s alone; Julius has only the public verifier.'
+          echo 'PREFLIGHT OK: the signing key is on no host path and no bind mount — no file-reading tool can reach it.'
+          echo '  (A Docker-socket or sudo holder could still extract it; the boundary is against the file-reading coding agent.)'
 
       - name: 'Preflight: durable store, executor, attestation, sandbox, in-sandbox git'
         env:
@@ -492,7 +512,7 @@ jobs:
           if [ ! -d julius-live-evidence ]; then exit 0; fi
 
           # LAYER ONE — shapes. Catches a credential this job never minted.
-          if grep -rEq '(sk-(ant-|proj-)?[A-Za-z0-9_-]{16,}|xai-[A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9]{16,}|BEGIN [A-Z ]*PRIVATE KEY|Authorization:[[:space:]]*[A-Za-z0-9._-]{16,})' julius-live-evidence; then
+          if grep -rEq '(sk-(ant-|proj-)?[A-Za-z0-9_-]{16,}|xai-[A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9]{16,}|BEGIN [A-Z ]*PRIVATE KEY|Authorization:[[:space:]]*([A-Za-z]+[[:space:]]+)?[A-Za-z0-9._-]{16,})' julius-live-evidence; then
             echo 'evidence_contains_credential_shaped_material: refusing to upload' >&2
             rm -rf julius-live-evidence
             exit 1
@@ -509,7 +529,10 @@ jobs:
             [ -n "$value" ] && printf '%s\n' "$value" >> "$needles"
           done
           # Every derived scoped credential, pulled out of the JSON map.
-          printf '%s' "$SCOPED" | tr ',' '\n' | sed -n 's/.*:"\([A-Za-z0-9_-]\{20,\}\)".*/\1/p' >> "$needles" || true
+          # awk re-terminates every record: without it the map's final value
+          # arrives without a trailing newline, and anything appended later
+          # would fuse with it into one useless needle.
+          printf '%s' "$SCOPED" | tr ',' '\n' | sed -n 's/.*:"\([A-Za-z0-9_-]\{20,\}\)".*/\1/p' | awk '{ print }' >> "$needles" || true
           leaked=0
           if [ -s "$needles" ] && grep -rF -f "$needles" julius-live-evidence >/dev/null 2>&1; then
             leaked=1
