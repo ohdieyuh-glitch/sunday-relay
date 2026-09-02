@@ -142,7 +142,9 @@ async function main(): Promise<number> {
     const tenantId = process.env.JULIUS_TENANT_ID ?? 'tenant';
     const policyRevision = process.env.RELAY_JULIUS_CARD_REVISION ?? 'card:julius-live:1';
     identity = preflightIdentityFor({ tenantId, nonce: preflightNonce(), policyRevision });
-    await seedPreflightIdentity(pool, identity);
+    // Eight executor requests at most, each bounded by the request timeout, plus a margin.
+    const requestTimeoutMs = Number(process.env.JULIUS_REQUEST_TIMEOUT_MS ?? '120000');
+    await seedPreflightIdentity(pool, identity, { leaseMinutes: Math.ceil((8 * requestTimeoutMs + 120_000) / 60_000) });
     out(`  preflight identity seeded in foreign-key order: project=${identity.projectId} run=${identity.runId} task=${identity.taskId}`);
 
     code = await roundTrips(pool, identity, out);

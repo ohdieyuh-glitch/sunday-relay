@@ -270,9 +270,17 @@ suite('dry run 33635375764 — the preflight identity satisfies the executor’s
     expect((await pool.query('SELECT count(*) AS n FROM relay_wonderland.players WHERE player_id=$1', [TENANT])).rows[0]).toEqual(players.rows[0]);
   });
 
-  it('refuses to clean up an identity it does not own', async () => {
-    const foreign = { ...fixture(), projectId: 'prj-julius-first-live' };
-    await expect(cleanupPreflightIdentity(pool, foreign)).rejects.toThrow('preflight_identity_not_owned');
+  it('refuses to seed or clean up an identity it does not own, on any of its identifiers', async () => {
+    const owned = fixture();
+    for (const foreign of [
+      { ...owned, projectId: 'prj-julius-first-live' },
+      { ...owned, runId: 'run:some-real-mission' },
+      { ...owned, taskId: 'task:some-real-task' },
+      { ...owned, missionId: 'mission:some-real-mission' },
+    ]) {
+      await expect(cleanupPreflightIdentity(pool, foreign)).rejects.toThrow('preflight_identity_not_owned');
+      await expect(seedPreflightIdentity(pool, foreign)).rejects.toThrow('preflight_identity_not_owned');
+    }
   });
 });
 

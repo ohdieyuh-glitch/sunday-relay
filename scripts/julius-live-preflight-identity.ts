@@ -95,10 +95,18 @@ export const preflightIdentityFor = (input: { tenantId: string; nonce: string; p
   policyRevision: input.policyRevision,
 });
 
+/**
+ * Ownership is the nonce, on EVERY identifier. A hand-built identity carrying an owned
+ * project but a real run would otherwise attach a preflight task to that run at seed time
+ * and reach its tasks at cleanup, so all four keys must be the nonce's.
+ */
 const assertOwned = (identity: PreflightIdentity): void => {
-  if (!identity.projectId.startsWith(PREFLIGHT_PROJECT_PREFIX) || !identity.projectId.endsWith(identity.nonce)) {
-    throw new Error('preflight_identity_not_owned');
-  }
+  const owned = identity.projectId === `${PREFLIGHT_PROJECT_PREFIX}${identity.nonce}`
+    && identity.missionId === `mission:julius-preflight-${identity.nonce}`
+    && identity.runId === `run:julius-preflight-${identity.nonce}`
+    && identity.taskId === `task:julius-preflight-${identity.nonce}`
+    && /^[A-Za-z0-9-]{4,64}$/u.test(identity.nonce);
+  if (!owned) throw new Error('preflight_identity_not_owned');
 };
 
 /**
@@ -108,27 +116,40 @@ const assertOwned = (identity: PreflightIdentity): void => {
  */
 export async function seedPreflightIdentity(pool: Pool, identity: PreflightIdentity, options: { leaseMinutes?: number } = {}): Promise<void> {
   assertOwned(identity);
-  const leaseMinutes = options.leaseMinutes ?? 15;
-  await pool.query('INSERT INTO relay_wonderland.players(player_id) VALUES($1) ON CONFLICT DO NOTHING', [identity.tenantId]);
-  await pool.query('INSERT INTO relay_wonderland.projects(project_id) VALUES($1) ON CONFLICT DO NOTHING', [identity.projectId]);
-  await pool.query(
-    "INSERT INTO relay_wonderland.project_members(project_id,player_id,role) VALUES($1,$2,'OWNER') ON CONFLICT DO NOTHING",
-    [identity.projectId, identity.tenantId],
-  );
-  await pool.query(
-    "INSERT INTO relay_wonderland.mission_contracts(mission_id,project_id,stage,canonical_hash,snapshot) VALUES($1,$2,'READY',$3,'{}'::jsonb) ON CONFLICT DO NOTHING",
-    [identity.missionId, identity.projectId, `preflight:${identity.nonce}`],
-  );
-  await pool.query(
-    "INSERT INTO relay_wonderland.julius_runs(run_id,mission_id,project_id,state,runtime_version,card_revision,mission_contract_revision,project_brain_revision) VALUES($1,$2,$3,'EXECUTING','preflight',$4,1,0) ON CONFLICT DO NOTHING",
-    [identity.runId, identity.missionId, identity.projectId, identity.policyRevision],
-  );
-  // ACTIVE with a live lease held by a named owner: `request()` refuses anything less.
-  await pool.query(
-    `INSERT INTO relay_wonderland.julius_tasks(task_id,run_id,role,task_type,state,ordinal,worker_id,lease_owner,lease_generation,lease_expires_at)
-     VALUES($1,$2,'CODING_AGENT','preflight','ACTIVE',0,$3,'julius-live-preflight',$4,clock_timestamp()+($5::text||' minutes')::interval) ON CONFLICT DO NOTHING`,
-    [identity.taskId, identity.runId, identity.workerId, identity.leaseGeneration, String(leaseMinutes)],
-  );
+  // The task lease must outlive every executor request the preflight will make; the caller
+  // sizes it from its request timeout, and 15 minutes is the floor.
+  const leaseMinutes = Math.max(15, Math.ceil(options.leaseMinutes ?? 15));
+  // One transaction: a preflight that dies mid-seed leaves either the whole ancestry or none of it.
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('INSERT INTO relay_wonderland.players(player_id) VALUES($1) ON CONFLICT DO NOTHING', [identity.tenantId]);
+    await client.query('INSERT INTO relay_wonderland.projects(project_id) VALUES($1) ON CONFLICT DO NOTHING', [identity.projectId]);
+    await client.query(
+      "INSERT INTO relay_wonderland.project_members(project_id,player_id,role) VALUES($1,$2,'OWNER') ON CONFLICT DO NOTHING",
+      [identity.projectId, identity.tenantId],
+    );
+    await client.query(
+      "INSERT INTO relay_wonderland.mission_contracts(mission_id,project_id,stage,canonical_hash,snapshot) VALUES($1,$2,'READY',$3,'{}'::jsonb) ON CONFLICT DO NOTHING",
+      [identity.missionId, identity.projectId, `preflight:${identity.nonce}`],
+    );
+    await client.query(
+      "INSERT INTO relay_wonderland.julius_runs(run_id,mission_id,project_id,state,runtime_version,card_revision,mission_contract_revision,project_brain_revision) VALUES($1,$2,$3,'EXECUTING','preflight',$4,1,0) ON CONFLICT DO NOTHING",
+      [identity.runId, identity.missionId, identity.projectId, identity.policyRevision],
+    );
+    // ACTIVE with a live lease held by a named owner: `request()` refuses anything less.
+    await client.query(
+      `INSERT INTO relay_wonderland.julius_tasks(task_id,run_id,role,task_type,state,ordinal,worker_id,lease_owner,lease_generation,lease_expires_at)
+       VALUES($1,$2,'CODING_AGENT','preflight','ACTIVE',0,$3,'julius-live-preflight',$4,clock_timestamp()+($5::text||' minutes')::interval) ON CONFLICT DO NOTHING`,
+      [identity.taskId, identity.runId, identity.workerId, identity.leaseGeneration, String(leaseMinutes)],
+    );
+    await client.query('COMMIT');
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => undefined);
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 /**
@@ -198,7 +219,7 @@ export async function cleanupPreflightIdentity(pool: Pool, identity: PreflightId
       ['julius_sandboxes', 'DELETE FROM relay_wonderland.julius_sandboxes WHERE project_id=$1', [identity.projectId]],
       ['julius_tool_outbox', 'DELETE FROM relay_wonderland.julius_tool_outbox WHERE project_id=$1', [identity.projectId]],
       ['julius_tool_invocations', 'DELETE FROM relay_wonderland.julius_tool_invocations WHERE project_id=$1', [identity.projectId]],
-      ['julius_tasks', 'DELETE FROM relay_wonderland.julius_tasks WHERE run_id=$1', [identity.runId]],
+      ['julius_tasks', 'DELETE FROM relay_wonderland.julius_tasks t USING relay_wonderland.julius_runs r WHERE t.run_id=r.run_id AND r.run_id=$1 AND r.project_id=$2', [identity.runId, identity.projectId]],
       ['julius_runs', 'DELETE FROM relay_wonderland.julius_runs WHERE run_id=$1 AND project_id=$2', [identity.runId, identity.projectId]],
       ['mission_contracts', 'DELETE FROM relay_wonderland.mission_contracts WHERE mission_id=$1 AND project_id=$2', [identity.missionId, identity.projectId]],
       ['project_members', 'DELETE FROM relay_wonderland.project_members WHERE project_id=$1', [identity.projectId]],
@@ -222,9 +243,9 @@ export async function cleanupPreflightIdentity(pool: Pool, identity: PreflightId
           + (SELECT count(*) FROM relay_wonderland.julius_sandboxes WHERE project_id=$1)
           + (SELECT count(*) FROM relay_wonderland.julius_tool_outbox WHERE project_id=$1)
           + (SELECT count(*) FROM relay_wonderland.julius_tool_invocations WHERE project_id=$1)
-          + (SELECT count(*) FROM relay_wonderland.julius_tasks WHERE run_id=$2)
-          + (SELECT count(*) FROM relay_wonderland.julius_runs WHERE run_id=$2)
-          + (SELECT count(*) FROM relay_wonderland.mission_contracts WHERE mission_id=$3)
+          + (SELECT count(*) FROM relay_wonderland.julius_tasks t JOIN relay_wonderland.julius_runs r ON r.run_id=t.run_id WHERE r.run_id=$2 AND r.project_id=$1)
+          + (SELECT count(*) FROM relay_wonderland.julius_runs WHERE run_id=$2 AND project_id=$1)
+          + (SELECT count(*) FROM relay_wonderland.mission_contracts WHERE mission_id=$3 AND project_id=$1)
           + (SELECT count(*) FROM relay_wonderland.project_members WHERE project_id=$1)
           + (SELECT count(*) FROM relay_wonderland.projects WHERE project_id=$1) AS total`,
     [identity.projectId, identity.runId, identity.missionId],
