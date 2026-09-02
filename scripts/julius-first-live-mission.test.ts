@@ -508,6 +508,19 @@ describe('the preflight is a legitimate participant in the durable schema (dry r
       .toBeLessThan(roundTrip.indexOf('client.createSandbox('));
   });
 
+  it('hands the executor the dispatch generation the claim returned, and migrates only where the replay has not landed', () => {
+    // PR #214's host-visible entry: an invocation left AUTHORIZED loses execution authority.
+    expect(preflight).toContain('const { dispatchGeneration } = await seedPreflightInvocation(');
+    expect(preflight, 'a hard-coded generation cannot match a claimed one').not.toMatch(/dispatchGeneration:\s*\d/u);
+    expect(fixture).toMatch(/SET state='DISPATCHING',dispatch_generation=i\.dispatch_generation\+1/u);
+    expect(fixture, 'the claim is scoped to this invocation and this project, never the fleet').toMatch(/WHERE o\.invocation_id=\$1 AND o\.project_id=\$4 AND o\.state='PENDING'/u);
+    expect(fixture, 'the production claimDispatch sweeps every pending invocation and must not be used by a probe').not.toContain('claimDispatch(');
+    // The migration set is a one-shot replay: guard it the way the live entrypoint does.
+    expect(preflight).toContain('await migrateIfNeeded(pool)');
+    expect(preflight).not.toContain('new TransactionalWonderlandDatabase(pool).migrate()');
+    expect(fixture).toContain("column_name='sandbox_policy'");
+  });
+
   it('names no invented identity: every id derives from the nonce, and the invocation goes through the production repository', () => {
     for (const literal of ["run:julius-live-preflight'", "task:julius-live-preflight'", 'JULIUS_PROJECT_ID']) {
       expect(preflight, `${literal} was the unseeded identity that dry run #2 sent`).not.toContain(literal);

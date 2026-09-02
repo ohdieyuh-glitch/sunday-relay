@@ -32,12 +32,23 @@
  * Cleanup deletes in the reverse of that order, receipts before sandboxes because
  * of the RESTRICT, and reports what it deleted and what, if anything, remains.
  *
+ * THE DISPATCH CLAIM. Recording the invocation is not enough: the executor's
+ * `authorizeExecution` joins the invocation and admits it only DISPATCHING (or
+ * RUNNING) with the dispatch generation the request names — the claim the live
+ * dispatcher makes through `claimDispatch`. PR #214's host-visible entry proved
+ * it: with the invocation left AUTHORIZED the executor answered
+ * `sandbox_execution_authority_lost`. The production `claimDispatch` claims up to
+ * N pending invocations of ANY run, which a probe on a shared database must
+ * never do, so the claim here is the same state change scoped to this one
+ * invocation and this nonce's project, and nothing else can be touched by it.
+ *
  * Pure with respect to providers: this module reaches PostgreSQL and nothing else.
  */
 
 import { randomBytes } from 'node:crypto';
 import type { Pool } from 'pg';
 import { JuliusToolPostgresRepository } from '../src/relay/persistence/julius-tool-postgres';
+import { TransactionalWonderlandDatabase } from '../src/relay/persistence/wonderland-postgres';
 
 export interface PreflightIdentity {
   readonly nonce: string;
@@ -49,6 +60,21 @@ export interface PreflightIdentity {
   readonly workerId: string;
   readonly leaseGeneration: number;
   readonly policyRevision: string;
+}
+
+/**
+ * Applies the migration set only when its last migration has not landed. The set is a
+ * one-shot replay (`CREATE TABLE` without `IF NOT EXISTS`), so a second application
+ * fails with 42P07 — the live entrypoint and the sibling harness guard it with this
+ * same column check, and so must anything that may meet an already-migrated database.
+ */
+export async function migrateIfNeeded(pool: Pool): Promise<'applied' | 'present'> {
+  const applied = await pool.query(
+    "SELECT 1 FROM information_schema.columns WHERE table_schema='relay_wonderland' AND table_name='julius_sandboxes' AND column_name='sandbox_policy'",
+  );
+  if ((applied.rowCount ?? 0) > 0) return 'present';
+  await new TransactionalWonderlandDatabase(pool).migrate();
+  return 'applied';
 }
 
 /** The prefix every preflight-owned identifier carries. Cleanup refuses to touch anything without it. */
@@ -108,13 +134,15 @@ export async function seedPreflightIdentity(pool: Pool, identity: PreflightIdent
 /**
  * Records ONE invocation through the production tool repository — REQUESTED, then
  * AUTHORIZED — exactly as the live composition does before it asks the executor for a
- * sandbox. The digest recorded is the digest the executor will be handed.
+ * sandbox, then claims its dispatch (see the header) and returns the dispatch
+ * generation the executor must be handed. The digest recorded is the digest the
+ * executor will be handed.
  */
 export async function seedPreflightInvocation(
   pool: Pool,
   identity: PreflightIdentity,
   input: { invocationId: string; requestDigest: string; requestedAt: string },
-): Promise<void> {
+): Promise<{ dispatchGeneration: number }> {
   assertOwned(identity);
   const tools = new JuliusToolPostgresRepository(pool);
   await tools.request({
@@ -129,6 +157,22 @@ export async function seedPreflightInvocation(
     budgetReservationId: `budget:${input.invocationId}`, authorizedAt: input.requestedAt,
   });
   if (!authorized) throw new Error('preflight_invocation_not_authorized');
+  // The dispatch claim, for THIS invocation only: the outbox entry becomes CLAIMED and the
+  // invocation DISPATCHING with its generation advanced — the state `claimDispatch` leaves
+  // behind, reached without the fleet-wide sweep `claimDispatch` performs.
+  const claimedUntil = new Date(Date.parse(input.requestedAt) + 600_000).toISOString();
+  const claimed = await pool.query<{ dispatch_generation: string }>(
+    `WITH claimed AS (
+       UPDATE relay_wonderland.julius_tool_outbox o SET state='CLAIMED',claimed_by=$2,claimed_until=$3,attempts=o.attempts+1
+       WHERE o.invocation_id=$1 AND o.project_id=$4 AND o.state='PENDING' RETURNING o.invocation_id)
+     UPDATE relay_wonderland.julius_tool_invocations i
+     SET state='DISPATCHING',dispatch_generation=i.dispatch_generation+1,dispatch_claimed_by=$2,dispatch_claimed_until=$3
+     FROM claimed c WHERE i.invocation_id=c.invocation_id AND i.project_id=$4 AND i.state='AUTHORIZED'
+     RETURNING i.dispatch_generation`,
+    [input.invocationId, identity.workerId, claimedUntil, identity.projectId],
+  );
+  if (claimed.rowCount !== 1) throw new Error('preflight_invocation_not_dispatched');
+  return { dispatchGeneration: Number(claimed.rows[0]?.dispatch_generation) };
 }
 
 export interface PreflightCleanupReport {
@@ -171,12 +215,17 @@ export async function cleanupPreflightIdentity(pool: Pool, identity: PreflightId
   } finally {
     client.release();
   }
+  // Every table a preflight can leave a row in, by its ownership key.
   const remaining = await pool.query<{ total: string }>(
-    `SELECT (SELECT count(*) FROM relay_wonderland.julius_sandboxes WHERE project_id=$1)
+    `SELECT (SELECT count(*) FROM relay_wonderland.julius_tool_execution_receipts WHERE project_id=$1)
+          + (SELECT count(*) FROM relay_wonderland.julius_tool_settlements WHERE project_id=$1)
+          + (SELECT count(*) FROM relay_wonderland.julius_sandboxes WHERE project_id=$1)
+          + (SELECT count(*) FROM relay_wonderland.julius_tool_outbox WHERE project_id=$1)
           + (SELECT count(*) FROM relay_wonderland.julius_tool_invocations WHERE project_id=$1)
           + (SELECT count(*) FROM relay_wonderland.julius_tasks WHERE run_id=$2)
           + (SELECT count(*) FROM relay_wonderland.julius_runs WHERE run_id=$2)
           + (SELECT count(*) FROM relay_wonderland.mission_contracts WHERE mission_id=$3)
+          + (SELECT count(*) FROM relay_wonderland.project_members WHERE project_id=$1)
           + (SELECT count(*) FROM relay_wonderland.projects WHERE project_id=$1) AS total`,
     [identity.projectId, identity.runId, identity.missionId],
   );

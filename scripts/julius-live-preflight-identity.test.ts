@@ -2,12 +2,13 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { Pool } from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { TransactionalWonderlandDatabase } from '../src/relay/persistence/wonderland-postgres';
+import { JuliusToolPostgresRepository } from '../src/relay/persistence/julius-tool-postgres';
 import { JuliusToolRecoveryPostgresRepository } from '../src/relay/persistence/julius-tool-recovery-postgres';
 import { EXECUTOR_SANDBOX_LIMITS, EXECUTOR_SANDBOX_POLICY } from '../relay-bridge/julius/sandbox-limits';
 import {
   PREFLIGHT_PROJECT_PREFIX,
   cleanupPreflightIdentity,
+  migrateIfNeeded,
   preflightIdentityFor,
   preflightNonce,
   seedPreflightIdentity,
@@ -67,8 +68,18 @@ suite('dry run 33635375764 — the preflight identity satisfies the executor’s
     return identity;
   };
   const invocationId = (identity: PreflightIdentity, step: number): string => `preflight:${identity.nonce}:${step}`;
-  const seedInvocation = (identity: PreflightIdentity, step: number): Promise<void> =>
-    seedPreflightInvocation(pool, identity, { invocationId: invocationId(identity, step), requestDigest: 'a'.repeat(64), requestedAt: new Date().toISOString() });
+  const DIGEST = 'a'.repeat(64);
+  const seedInvocation = (identity: PreflightIdentity, step: number): Promise<{ dispatchGeneration: number }> =>
+    seedPreflightInvocation(pool, identity, { invocationId: invocationId(identity, step), requestDigest: DIGEST, requestedAt: new Date().toISOString() });
+  /** The executor's execute-time authorization, exactly as `DockerJuliusSandboxAdapter.executeTool` performs it. */
+  const authorize = (identity: PreflightIdentity, step: number, dispatchGeneration: number) => store.authorizeExecution({
+    sandboxId: invocationId(identity, step), runtimeInstanceId: 'executor-preflight-regression', invocationId: invocationId(identity, step),
+    leaseGeneration: identity.leaseGeneration, dispatchGeneration, requestDigest: DIGEST, executionTokenHash: 'b'.repeat(64),
+  });
+  const bind = (identity: PreflightIdentity, step: number) => store.bindPhysical({
+    sandboxId: invocationId(identity, step), runtimeInstanceId: 'executor-preflight-regression', leaseGeneration: identity.leaseGeneration,
+    containerId: `container-${identity.nonce}-${step}`, workspaceRef: '/tmp/julius-workspace/tenant/ws',
+  });
   const rowsFor = async (identity: PreflightIdentity): Promise<number> => {
     const result = await pool.query<{ total: string }>(
       `SELECT (SELECT count(*) FROM relay_wonderland.julius_sandboxes WHERE project_id=$1)
@@ -85,7 +96,8 @@ suite('dry run 33635375764 — the preflight identity satisfies the executor’s
 
   beforeAll(async () => {
     pool = new Pool({ connectionString: process.env.DATABASE_URL });
-    await new TransactionalWonderlandDatabase(pool).migrate();
+    // The replay is one-shot: the preflight that ran before this test already migrated.
+    await migrateIfNeeded(pool);
     store = new JuliusToolRecoveryPostgresRepository(pool);
   });
   afterAll(async () => {
@@ -112,9 +124,15 @@ suite('dry run 33635375764 — the preflight identity satisfies the executor’s
     await seedPreflightIdentity(pool, identity);
     // Fixture rows exist BEFORE any create is attempted.
     expect(await rowsFor(identity)).toBe(5);
-    await seedInvocation(identity, 1);
-    const invocation = await pool.query<{ state: string }>('SELECT state FROM relay_wonderland.julius_tool_invocations WHERE invocation_id=$1', [invocationId(identity, 1)]);
-    expect(invocation.rows[0]?.state).toBe('AUTHORIZED');
+    const { dispatchGeneration } = await seedInvocation(identity, 1);
+    // REQUESTED → AUTHORIZED through the production repository, then the dispatch claimed for this
+    // invocation alone: the state the live dispatcher leaves behind before it asks for a sandbox.
+    const invocation = await pool.query<{ state: string; dispatch_generation: string; dispatch_claimed_by: string }>(
+      'SELECT state, dispatch_generation, dispatch_claimed_by FROM relay_wonderland.julius_tool_invocations WHERE invocation_id=$1', [invocationId(identity, 1)]);
+    expect(invocation.rows[0]).toEqual({ state: 'DISPATCHING', dispatch_generation: '1', dispatch_claimed_by: identity.workerId });
+    expect(dispatchGeneration).toBe(1);
+    const outbox = await pool.query<{ state: string; claimed_by: string }>('SELECT state, claimed_by FROM relay_wonderland.julius_tool_outbox WHERE invocation_id=$1', [invocationId(identity, 1)]);
+    expect(outbox.rows[0]).toEqual({ state: 'CLAIMED', claimed_by: identity.workerId });
 
     // The exact insert that dry run #2 died on, through the executor's own repository.
     expect(await store.save(sandboxRecord(identity, invocationId(identity, 1)))).toBe(true);
@@ -127,6 +145,62 @@ suite('dry run 33635375764 — the preflight identity satisfies the executor’s
       tenant_id: identity.tenantId, project_id: identity.projectId, run_id: identity.runId, task_id: identity.taskId,
       invocation_id: invocationId(identity, 1), policy_revision: identity.policyRevision, state: 'CREATING',
     });
+  });
+
+  it('the executor then authorizes execution against the claimed dispatch, as the mission’s execute step requires', async () => {
+    const identity = fixture();
+    await seedPreflightIdentity(pool, identity);
+    const { dispatchGeneration } = await seedInvocation(identity, 1);
+    expect(await store.save(sandboxRecord(identity, invocationId(identity, 1)))).toBe(true);
+    expect(await bind(identity, 1)).toBe(true);
+    // `authorizeExecution` joins the invocation, the task and the run: DISPATCHING with this generation,
+    // this digest, an ACTIVE task with a live lease, and a run whose card revision is the policy.
+    const authorized = await authorize(identity, 1, dispatchGeneration);
+    expect(authorized).toMatchObject({ sandboxId: invocationId(identity, 1), state: 'RUNNING' });
+  });
+
+  it('MUTATION: an invocation left AUTHORIZED, without the dispatch claim, loses execution authority exactly as PR #214’s host-visible entry did', async () => {
+    const identity = fixture();
+    await seedPreflightIdentity(pool, identity);
+    // The state the fixture used to leave behind: REQUESTED → AUTHORIZED, no claim.
+    const tools = new JuliusToolPostgresRepository(pool);
+    const invocation = invocationId(identity, 1);
+    await tools.request({
+      invocationId: invocation, idempotencyKey: invocation, requestDigest: DIGEST,
+      tenantId: identity.tenantId, projectId: identity.projectId, runId: identity.runId, taskId: identity.taskId,
+      workerId: identity.workerId, leaseGeneration: identity.leaseGeneration, policyRevision: identity.policyRevision,
+      toolId: 'shell.bash', toolVersion: '1', mutationClass: 'WORKSPACE', requestedAt: new Date().toISOString(),
+    });
+    expect(await tools.authorize({
+      invocationId: invocation, tenantId: identity.tenantId, projectId: identity.projectId, requestDigest: DIGEST,
+      policyRevision: identity.policyRevision, budgetReservationId: `budget:${invocation}`, authorizedAt: new Date().toISOString(),
+    })).toBe(true);
+    expect(await store.save(sandboxRecord(identity, invocation))).toBe(true);
+    expect(await bind(identity, 1)).toBe(true);
+    await expect(authorize(identity, 1, 1)).rejects.toThrow('sandbox_execution_authority_lost');
+  });
+
+  it('the dispatch claim touches this invocation only', async () => {
+    const mine = fixture();
+    const theirs = fixture();
+    await seedPreflightIdentity(pool, mine);
+    await seedPreflightIdentity(pool, theirs);
+    // Theirs: AUTHORIZED and pending, the way a real dispatcher's candidate would sit.
+    const tools = new JuliusToolPostgresRepository(pool);
+    const pending = invocationId(theirs, 1);
+    await tools.request({
+      invocationId: pending, idempotencyKey: pending, requestDigest: DIGEST,
+      tenantId: theirs.tenantId, projectId: theirs.projectId, runId: theirs.runId, taskId: theirs.taskId,
+      workerId: theirs.workerId, leaseGeneration: theirs.leaseGeneration, policyRevision: theirs.policyRevision,
+      toolId: 'shell.bash', toolVersion: '1', mutationClass: 'WORKSPACE', requestedAt: new Date().toISOString(),
+    });
+    await tools.authorize({
+      invocationId: pending, tenantId: theirs.tenantId, projectId: theirs.projectId, requestDigest: DIGEST,
+      policyRevision: theirs.policyRevision, budgetReservationId: `budget:${pending}`, authorizedAt: new Date().toISOString(),
+    });
+    await seedInvocation(mine, 1);
+    const untouched = await pool.query<{ state: string; dispatch_generation: string }>('SELECT state, dispatch_generation FROM relay_wonderland.julius_tool_invocations WHERE invocation_id=$1', [pending]);
+    expect(untouched.rows[0], 'another run’s pending dispatch must never be claimed by a preflight').toEqual({ state: 'AUTHORIZED', dispatch_generation: '0' });
   });
 
   it('MUTATION: without the invocation seed, the executor’s insert fails with 23503 exactly as dry run #2 did', async () => {

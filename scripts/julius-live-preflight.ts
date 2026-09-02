@@ -49,11 +49,10 @@ import { createHash, createPublicKey, type KeyObject } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Pool } from 'pg';
-import { TransactionalWonderlandDatabase } from '../src/relay/persistence/wonderland-postgres';
 import { RemoteExecutorControlPlane } from '../src/relay/workspace/julius-tools/remote-executor-control-plane';
 import type { ExecutorOperation } from '../src/relay/workspace/julius-tools/executor-operation-request';
 import { EXECUTOR_SANDBOX_LIMITS, EXECUTOR_SANDBOX_POLICY } from '../relay-bridge/julius/sandbox-limits';
-import { cleanupPreflightIdentity, preflightIdentityFor, preflightNonce, seedPreflightIdentity, seedPreflightInvocation, type PreflightIdentity } from './julius-live-preflight-identity';
+import { cleanupPreflightIdentity, migrateIfNeeded, preflightIdentityFor, preflightNonce, seedPreflightIdentity, seedPreflightInvocation, type PreflightIdentity } from './julius-live-preflight-identity';
 import type {
   JuliusSandboxLimits,
   JuliusSandboxPolicy,
@@ -102,8 +101,11 @@ async function proveDurableStore(pool: Pool, out: (line: string) => void): Promi
     const version = await pool.query<{ server_version: string }>('SHOW server_version');
     out(`  PostgreSQL reachable: server_version=${version.rows[0]?.server_version ?? 'unknown'}`);
 
-    await new TransactionalWonderlandDatabase(pool).migrate();
-    out('  migrations applied (idempotent)');
+    // The migration set is a one-shot replay, so it is applied only where its last
+    // migration has not landed — the same guard the live entrypoint uses. A probe
+    // pointed at an already-migrated validation database must not fail on 42P07.
+    const migration = await migrateIfNeeded(pool);
+    out(migration === 'applied' ? '  migrations applied (empty database)' : '  migrations already present (one-shot replay skipped)');
 
     // Naming the tables the run actually writes turns "migrate() returned"
     // into "the schema the runtime needs is present".
@@ -235,7 +237,7 @@ async function roundTrips(pool: Pool, identity: PreflightIdentity, out: (line: s
     // The invocation exists, REQUESTED then AUTHORIZED, before the executor is
     // asked to record a sandbox that references it — the order the live
     // mission follows and the order the foreign keys enforce.
-    await seedPreflightInvocation(pool, identity, { invocationId, requestDigest: digestOf(request), requestedAt: sandboxIdentity.createdAt });
+    const { dispatchGeneration } = await seedPreflightInvocation(pool, identity, { invocationId, requestDigest: digestOf(request), requestedAt: sandboxIdentity.createdAt });
     try {
       await client.createSandbox({ identity: sandboxIdentity, policy: PREFLIGHT_POLICY, limits: PREFLIGHT_LIMITS });
       await client.prepareWorkspace({
@@ -243,7 +245,7 @@ async function roundTrips(pool: Pool, identity: PreflightIdentity, out: (line: s
       });
       return await client.executeTool({
         sandboxId: invocationId, expectedLeaseGeneration: leaseGeneration,
-        dispatchGeneration: 1, requestDigest: digestOf(request),
+        dispatchGeneration, requestDigest: digestOf(request),
         executionTokenHash: sha(`token:${invocationId}`),
         effectClassification: 'NON_IDEMPOTENT_MUTATION', request,
       });
