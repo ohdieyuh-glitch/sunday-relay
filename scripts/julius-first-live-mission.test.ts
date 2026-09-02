@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve, sep } from 'node:path';
 import { parseLiveMissionContract } from '../relay-bridge/julius-live-mission';
 import { EXECUTOR_SANDBOX_LIMITS, EXECUTOR_SANDBOX_POLICY } from '../relay-bridge/julius/executor-effects';
+import { HOSTED_ALLOWED_TOOLS, HOSTED_DISALLOWED_TOOLS } from '../relay-bridge/hosted-coding-agent/hosted-envelope';
 import { PREFLIGHT_LIMITS, PREFLIGHT_POLICY } from './julius-live-preflight';
 
 /**
@@ -129,7 +130,8 @@ describe('the paid stage is gated, and the unpaid stage cannot pay', () => {
     expect(workflow).toMatch(/RELAY_HOSTED_CODING_MODEL:\s*claude-fable-5/u);
     expect(workflow).toMatch(/RELAY_HERMES_PROVIDER:\s*xai/u);
     expect(workflow).toMatch(/RELAY_HERMES_MODEL:\s*grok-build-0\.1/u);
-    // And proves what actually resolved, rather than trusting what was set.
+    // Exit 5 (asserted above) is what proves the roles resolved; these pin
+    // WHICH models were configured. The served model is observed during the run.
     expect(workflow).toContain('architect=gpt-5.6-sol');
     expect(workflow).toContain('coder=claude-fable-5');
     expect(workflow).toContain('reviewer=xai/grok-build-0.1');
@@ -186,17 +188,32 @@ describe('no credential is committed, and none can leave the runner', () => {
     }
   });
 
-  it('keeps the reviewer credential out of the child environment by construction', () => {
-    // `runHermesReview` forwards only PATH and HOME. The workflow must
-    // therefore hand the reviewer its profile through HOME — passing
-    // XAI_API_KEY into the live step would be a boundary change that does
-    // nothing, and reads as if the credential flows through Julius.
+  it('gives the reviewer profile to the reviewer alone, not to the coding agent', () => {
+    // `runHermesReview` forwards only PATH and HOME, so HOME is how the
+    // reviewer receives its credential. But the live Claude coding agent is a
+    // child of the SAME process and holds Read/Glob/Grep, so a job-wide HOME
+    // pointed at the profile would hand it the xAI key too. The credential is
+    // therefore redirected by a wrapper at exec time, for that child only.
     const start = workflow.indexOf("- name: 'LIVE: run the first real Julius mission'");
     const rest = workflow.slice(start);
     const step = rest.slice(0, rest.indexOf('\n      - ', 1));
-    expect(step, 'the reviewer profile reaches Hermes through HOME').toMatch(/HOME:\s*\/tmp\/julius-hermes-home/u);
+    const assignments = step.split('\n').filter((line) => !/^\s*#/.test(line));
+    expect(
+      assignments.some((line) => /^\s*HOME:/.test(line)),
+      'a job-wide HOME would give the live coding agent the directory holding the xAI credential',
+    ).toBe(false);
+    expect(step, 'the reviewer is spawned through the redirecting wrapper')
+      .toMatch(/RELAY_HERMES_EXECUTABLE:\s*\/tmp\/julius-hermes-bin\/hermes/u);
     expect(step, 'XAI_API_KEY in the live step would never reach the reviewer child anyway')
       .not.toContain('XAI_API_KEY');
+  });
+
+  it('the wrapper, not the workflow, is what redirects HOME for Hermes', () => {
+    const wrapper = read('.github/julius-live-hermes.sh');
+    expect(wrapper, 'the wrapper must set HOME for the Hermes child at exec time')
+      .toMatch(/exec env HOME="\$HERMES_PROFILE_HOME"/u);
+    expect(wrapper, 'the credential must be proven resolvable with HERMES_HOME unset, as Julius spawns it')
+      .toContain('env -u HERMES_HOME');
   });
 });
 
@@ -273,6 +290,53 @@ describe('the mission itself is bounded and aimed away from this repository', ()
       workspace === repository || workspace.startsWith(repository + sep),
       'a live coding agent pointed at the Relay checkout would be editing the code that governs it',
     ).toBe(false);
+  });
+
+  it('asks only for edits, because the hosted agent is denied file creation', () => {
+    // `HOSTED_DISALLOWED_TOOLS` includes `Write`: the coding agent can Edit an
+    // existing file but cannot bring a new one into existence. A mission that
+    // asks for a new file is a paid run that cannot complete.
+    expect(HOSTED_DISALLOWED_TOOLS, 'this test exists because Write is denied').toContain('Write');
+    expect(HOSTED_ALLOWED_TOOLS).toContain('Edit');
+
+    const provisioning = read('.github/julius-live-workspace.sh');
+    const contract = JSON.parse(contractSource) as { objective: string; requirements: string[] };
+    const deliverables = ['julius-live-proof.js', 'julius-live-proof.test.js'];
+    for (const file of deliverables) {
+      expect(provisioning, `${file} must be seeded in the workspace, not created by the agent`)
+        .toContain(`cat > ${file} <<'JAVASCRIPT'`);
+      // Tracked, or `git diff` cannot see the agent's work at all.
+      expect(provisioning, `${file} must be committed so the captured diff is non-empty`)
+        .toMatch(new RegExp(`add[^\\n]*${file.replace('.', '\\.')}`, 'u'));
+    }
+    const asks = [contract.objective, ...contract.requirements].join(' ');
+    expect(asks, 'the contract must ask for edits, never for a new file').not.toMatch(/\bCreate\b/u);
+  });
+
+  it('seeds deliverables whose test command FAILS until the work is really done', () => {
+    // A stub test that passes would let the mission satisfy its TEST evidence
+    // having implemented nothing — the machine-checkable half of completion,
+    // satisfied by doing no work. So the seeded pair is actually executed here.
+    const provisioning = read('.github/julius-live-workspace.sh');
+    const directory = mkdtempSync(join(tmpdir(), 'julius-live-stubs-'));
+    for (const file of ['julius-live-proof.js', 'julius-live-proof.test.js']) {
+      const block = new RegExp(`cat > ${file.replace(/\./gu, '\\.')} <<'JAVASCRIPT'\\n([\\s\\S]*?)\\nJAVASCRIPT\\n`, 'u');
+      const seeded = block.exec(provisioning);
+      expect(seeded, `${file} must be seeded by the provisioning script`).not.toBeNull();
+      writeFileSync(join(directory, file), `${(seeded as RegExpExecArray)[1]}\n`);
+    }
+    const parsed = parseLiveMissionContract(contractSource);
+    if (!parsed.ok) throw new Error(parsed.problem);
+    const [command, ...args] = parsed.contract.testCommand.split(' ');
+    expect(command).toBe('node');
+
+    let code = 0;
+    try {
+      execFileSync(process.execPath, args, { cwd: directory, stdio: 'ignore' });
+    } catch (error) {
+      code = (error as { status?: number }).status ?? 1;
+    }
+    expect(code, 'the seeded stubs must FAIL the declared test command, or completion is free').not.toBe(0);
   });
 
   it('declares a test command that can run with no network and no dependency', () => {

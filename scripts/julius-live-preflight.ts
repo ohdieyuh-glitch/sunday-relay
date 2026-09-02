@@ -19,19 +19,25 @@
  *     whose backing filesystem is larger than the declared bytes, so a
  *     successful prepare is proof the tmpfs is real and correctly sized;
  *   - the bind mount is live and `git` inside the sandbox accepts the
- *     repository's ownership. That last one is the whole reason this exists:
- *     the coding agent edits on the host and the DIFF is captured by a
- *     sandbox command, so a repository git refuses inside the sandbox would
- *     yield an empty diff and an independent review of nothing — after the
- *     mission had already paid an architect and a coding agent.
+ *     repository's ownership;
+ *   - and, decisively, that a change written on the HOST actually appears in
+ *     the diff the sandbox captures. That last one is the whole reason this
+ *     exists: the coding agent edits on the host and the DIFF is captured by
+ *     a sandbox command, so anything that breaks that hand-off — git refusing
+ *     the repository's ownership, an untracked file `git diff` cannot see, a
+ *     mount that is not live — yields an empty diff and an independent review
+ *     of NOTHING, after the mission has already paid an architect and a
+ *     coding agent. Proving `git rev-parse` alone would not catch it.
  *
  * IT SPENDS NOTHING. No provider client is constructed and no credential is
- * printed; the command it runs is `git rev-parse HEAD`, the same read the
- * live coding adapter issues first.
+ * printed; the only commands it runs are `git rev-parse HEAD` and
+ * `git --no-pager diff` — the same two reads the live coding adapter issues —
+ * and it restores the file it touched.
  */
 
 import { createHash, createPublicKey, type KeyObject } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { Pool } from 'pg';
 import { TransactionalWonderlandDatabase } from '../src/relay/persistence/wonderland-postgres';
 import { RemoteExecutorControlPlane } from '../src/relay/workspace/julius-tools/remote-executor-control-plane';
@@ -40,6 +46,7 @@ import type {
   JuliusSandboxLimits,
   JuliusSandboxPolicy,
   ToolInvocationRequest,
+  ToolInvocationResult,
 } from '../src/relay/mission/julius';
 
 /**
@@ -159,28 +166,51 @@ async function main(): Promise<number> {
     allowInsecureLoopbackForTests: process.env.JULIUS_EXECUTOR_ALLOW_LOOPBACK === '1',
   });
 
-  const invocationId = `preflight:${Date.now()}`;
   const leaseGeneration = 1;
-  const request: ToolInvocationRequest = {
-    invocationId,
-    runId: 'run:julius-live-preflight',
-    taskId: 'task:julius-live-preflight',
-    projectId: process.env.JULIUS_PROJECT_ID ?? 'prj-julius-first-live',
-    workerId: 'julius-live-preflight',
-    toolId: 'shell.bash', toolVersion: '1',
-    arguments: { command: 'git rev-parse HEAD' },
-    cwd: '.',
-    idempotencyKey: invocationId,
-    timeoutMs: 30_000,
-    expectedMutation: 'WORKSPACE',
-  };
+  const projectId = process.env.JULIUS_PROJECT_ID ?? 'prj-julius-first-live';
+  let step = 0;
 
-  const identity = {
-    sandboxId: invocationId, invocationId, tenantId,
-    projectId: request.projectId, runId: request.runId, taskId: request.taskId,
-    leaseGeneration, policyRevision: process.env.RELAY_JULIUS_CARD_REVISION ?? 'card:julius-live:1',
-    createdAt: new Date().toISOString(),
-    expiresAt: new Date(Date.now() + 600_000).toISOString(),
+  /** One full create → prepare → execute → destroy round-trip, as the mission does it. */
+  const runInSandbox = async (command: string): Promise<ToolInvocationResult> => {
+    step += 1;
+    const invocationId = `preflight:${Date.now()}:${step}`;
+    const request: ToolInvocationRequest = {
+      invocationId,
+      runId: 'run:julius-live-preflight',
+      taskId: 'task:julius-live-preflight',
+      projectId,
+      workerId: 'julius-live-preflight',
+      toolId: 'shell.bash', toolVersion: '1',
+      arguments: { command },
+      cwd: '.',
+      idempotencyKey: invocationId,
+      timeoutMs: 30_000,
+      expectedMutation: 'WORKSPACE',
+    };
+    const identity = {
+      sandboxId: invocationId, invocationId, tenantId,
+      projectId, runId: request.runId, taskId: request.taskId,
+      leaseGeneration, policyRevision: process.env.RELAY_JULIUS_CARD_REVISION ?? 'card:julius-live:1',
+      createdAt: new Date().toISOString(),
+      expiresAt: new Date(Date.now() + 600_000).toISOString(),
+    };
+    try {
+      await client.createSandbox({ identity, policy: PREFLIGHT_POLICY, limits: PREFLIGHT_LIMITS });
+      await client.prepareWorkspace({
+        sandboxId: invocationId, sourceRef: workspace, expectedLeaseGeneration: leaseGeneration,
+      });
+      return await client.executeTool({
+        sandboxId: invocationId, expectedLeaseGeneration: leaseGeneration,
+        dispatchGeneration: 1, requestDigest: digestOf(request),
+        executionTokenHash: sha(`token:${invocationId}`),
+        effectClassification: 'NON_IDEMPOTENT_MUTATION', request,
+      });
+    } finally {
+      await client.destroySandbox({
+        sandboxId: invocationId, expectedLeaseGeneration: leaseGeneration,
+        reason: 'preflight round-trip finished',
+      }).catch(() => undefined);
+    }
   };
 
   out('JULIUS LIVE PREFLIGHT — independent executor round-trip');
@@ -188,20 +218,12 @@ async function main(): Promise<number> {
   out(`  caller: ${callerId} tenant: ${tenantId}`);
   out(`  sandbox: network=${PREFLIGHT_POLICY.network} workspaceBytes=${PREFLIGHT_LIMITS.workspaceBytes} outputBytes=${PREFLIGHT_LIMITS.outputBytes}`);
 
+  const marker = `julius-live-preflight-${Date.now()}`;
+  const probeFile = join(workspace, 'README.md');
+  let restore: string | null = null;
   try {
-    await client.createSandbox({ identity, policy: PREFLIGHT_POLICY, limits: PREFLIGHT_LIMITS });
-    out('  createSandbox: OK');
-    await client.prepareWorkspace({
-      sandboxId: invocationId, sourceRef: workspace, expectedLeaseGeneration: leaseGeneration,
-    });
-    out('  prepareWorkspace: OK (ceiling enforceable, ancestry unrenameable, mount live)');
-
-    const result = await client.executeTool({
-      sandboxId: invocationId, expectedLeaseGeneration: leaseGeneration,
-      dispatchGeneration: 1, requestDigest: digestOf(request),
-      executionTokenHash: sha(`token:${invocationId}`),
-      effectClassification: 'NON_IDEMPOTENT_MUTATION', request,
-    });
+    const result = await runInSandbox('git rev-parse HEAD');
+    out('  createSandbox / prepareWorkspace: OK (ceiling enforceable, ancestry unrenameable, mount live)');
     const revision = result.stdout.trim();
     out(`  executeTool: status=${result.status} exit=${result.exitCode ?? 'unknown'}`);
 
@@ -218,17 +240,41 @@ async function main(): Promise<number> {
     }
     out(`  base revision resolved inside the sandbox: ${revision}`);
     out('  receipts verified against EXECUTOR_KEY_ID — attestation is configured.');
-    out('PREFLIGHT OK: executor, scoped credentials, attestation, workspace ceiling and in-sandbox git all proven. No provider was contacted.');
+
+    /* The hand-off itself: write on the HOST exactly as the coding agent
+     * does, then capture the diff from a sandbox exactly as the mission does,
+     * and require the change to be visible. An empty diff here means the
+     * Independent Reviewer would be handed nothing to review. */
+    restore = readFileSync(probeFile, 'utf8');
+    writeFileSync(probeFile, `${restore}\n${marker}\n`);
+    const diff = await runInSandbox('git --no-pager diff');
+    if (diff.status !== 'SUCCEEDED' || diff.exitCode !== 0) {
+      out('PREFLIGHT FAILED: the sandbox could not capture a workspace diff.');
+      out(`  stderr (first 400 chars): ${diff.stderr.slice(0, 400)}`);
+      return 1;
+    }
+    if (!diff.stdout.includes(marker)) {
+      out('PREFLIGHT FAILED: a change written on the host did NOT appear in the diff captured inside the sandbox.');
+      out(`  the diff was ${diff.stdout.length} bytes and did not contain the probe marker.`);
+      out('  The Independent Reviewer would be handed an empty diff — a review of nothing — after the');
+      out('  mission had already paid an architect and a coding agent. Common causes: the deliverables are');
+      out('  untracked (git diff never reports those), the workspace is not the live bind mount, or git');
+      out('  refused the repository inside the sandbox.');
+      return 1;
+    }
+    out(`  host-written change is visible in the sandbox diff (${diff.stdout.length} bytes) — the reviewer will see real work.`);
+    out('PREFLIGHT OK: executor, scoped credentials, attestation, workspace ceiling, in-sandbox git and the host→sandbox diff hand-off all proven. No provider was contacted.');
     return 0;
   } catch (error) {
     const message = error instanceof Error ? error.message : 'unknown error';
     out(`PREFLIGHT FAILED: ${message.slice(0, 300)}`);
     return 1;
   } finally {
-    await client.destroySandbox({
-      sandboxId: invocationId, expectedLeaseGeneration: leaseGeneration,
-      reason: 'preflight round-trip finished',
-    }).catch(() => undefined);
+    // The probe must leave the mission's workspace exactly as it found it, or
+    // the run would open with a diff nobody asked for.
+    if (restore !== null) {
+      try { writeFileSync(probeFile, restore); } catch { out('  WARNING: the preflight probe could not restore README.md.'); }
+    }
   }
 }
 

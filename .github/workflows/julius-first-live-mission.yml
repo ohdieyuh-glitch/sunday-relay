@@ -74,6 +74,7 @@ jobs:
       PGUSER: julius
       PGDATABASE: julius
       HERMES_PROFILE_HOME: /tmp/julius-hermes-home
+      HERMES_WRAPPER_DIR: /tmp/julius-hermes-bin
       CONTRACT: .github/julius-first-live-mission.json
       # The three roles, pinned. The preflight refuses if the entrypoint
       # resolves anything other than these.
@@ -221,7 +222,7 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           JULIUS_SCOPED_CREDENTIALS: ${{ steps.identity.outputs.scoped }}
-          RELAY_HERMES_EXECUTABLE: /opt/hermes-venv/bin/hermes
+          RELAY_HERMES_EXECUTABLE: /tmp/julius-hermes-bin/hermes
         run: |
           set -uo pipefail
           # No `--confirm-live`. The entrypoint resolves every role, reports
@@ -237,7 +238,10 @@ jobs:
             echo "preflight_not_ready: the entrypoint exited $status, expected 5 (ready, awaiting --confirm-live)" >&2
             exit 1
           fi
-          # Prove the RESOLVED identities, not merely that something resolved.
+          # Exit 5 above already proves all three roles RESOLVED — adapters were
+          # constructed. These greps pin WHICH models were configured. The model a
+          # provider actually serves is a different fact, observed during the run
+          # and recorded as `actualModel` / `servedModel`; nothing here can know it.
           grep -q 'architect=gpt-5.6-sol' preflight-roles.log || { echo 'architect_model_unexpected' >&2; exit 1; }
           grep -q 'coder=claude-fable-5' preflight-roles.log || { echo 'coding_model_unexpected' >&2; exit 1; }
           grep -q 'reviewer=xai/grok-build-0.1' preflight-roles.log || { echo 'reviewer_model_unexpected' >&2; exit 1; }
@@ -260,17 +264,17 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           JULIUS_SCOPED_CREDENTIALS: ${{ steps.identity.outputs.scoped }}
-          RELAY_HERMES_EXECUTABLE: /opt/hermes-venv/bin/hermes
-          # `runHermesReview` forwards only PATH and HOME to the reviewer, so
-          # HOME is what hands it the ephemeral profile — and nothing else.
-          HOME: /tmp/julius-hermes-home
+          # The reviewer is spawned through a wrapper that sets HOME to the
+          # ephemeral profile for ITSELF ALONE. Setting HOME on this step
+          # instead would hand the same credential-bearing directory to the
+          # live Claude coding agent, which is a child of this same process
+          # and holds Read/Glob/Grep.
+          RELAY_HERMES_EXECUTABLE: /tmp/julius-hermes-bin/hermes
           MAX_TICKS: ${{ inputs.max_ticks }}
         run: |
           set -uo pipefail
-          # The bundle was built in an earlier step and is invoked directly:
-          # HOME is redirected to the reviewer's ephemeral profile here, and
-          # running npm under that HOME would scatter its cache through the
-          # directory holding a live credential.
+          # The bundle was built in an earlier step and is invoked directly,
+          # so this step starts no build and depends on no package manager.
           test -f dist-relay-bridge/julius-live-mission.cjs || { echo 'entrypoint_not_built' >&2; exit 1; }
           set +e
           node dist-relay-bridge/julius-live-mission.cjs \
@@ -349,7 +353,7 @@ jobs:
           docker rm -f julius-executor julius-postgres 2>/dev/null || true
           # The reviewer profile holds the xAI credential; it never outlives
           # the job.
-          rm -rf /tmp/julius-hermes-home 2>/dev/null || true
+          rm -rf /tmp/julius-hermes-home /tmp/julius-hermes-bin 2>/dev/null || true
           rm -rf /opt/hermes-venv 2>/dev/null || true
           # The signing key and every derived receipt.
           sudo rm -rf /tmp/julius-executor 2>/dev/null || true

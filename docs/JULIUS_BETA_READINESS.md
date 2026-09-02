@@ -262,17 +262,41 @@ enforceable, and — the reason `scripts/julius-live-preflight.ts` exists —
 65532, so a workspace git refuses would yield an empty diff and hand the
 Independent Reviewer nothing to review, after the mission had already paid an
 architect and a coding agent. The entrypoint is then run without
-`--confirm-live` and must exit **5**; any other code fails the job, and the
-resolved models are asserted to be `gpt-5.6-sol`, `claude-fable-5` and
-`xai/grok-build-0.1` rather than merely configured.
+`--confirm-live` and must exit **5** — which is what proves all three roles
+resolved into real adapters — and the configured models are pinned to
+`gpt-5.6-sol`, `claude-fable-5` and `xai/grok-build-0.1`. The model a provider
+actually serves is a separate fact, observed during the run as
+`actualModel` / `servedModel`; no preflight can know it.
 
 **The mission is disposable by construction.** `workspacePath` is a 4 MiB tmpfs
-holding a two-file throwaway git repository, never this checkout —
+holding a four-file throwaway git repository, never this checkout —
 `scripts/julius-live-contract-check.mjs` refuses a contract whose workspace
 resolves inside the repository, and refuses `spendUsd > 5` or
 `repairCycles > 1`. The sandbox keeps `network: DENY`, so the declared test
 command must run with no network and no `node_modules`; `node --test` on plain
 CommonJS is what that leaves.
+
+**The deliverables are seeded, tracked, and edited — not created.** An
+independent review of the first draft caught two defects that would have made
+the paid run fail with certainty. The hosted coding agent is allowed
+`Read/Glob/Grep/Edit` and expressly denied `Write`
+(`relay-bridge/hosted-coding-agent/hosted-envelope.ts`), so it cannot bring a
+new file into existence; and `git diff` — how the mission captures the change
+for the reviewer — never reports an untracked file, so even a created file
+would have reached the Independent Reviewer as zero bytes. Both vanish when the
+deliverables are committed stubs the agent edits. The preflight now also writes
+a marker on the host and requires it to appear in the diff captured inside the
+sandbox, so that hand-off is proven rather than assumed.
+
+**The reviewer's credential is redirected for the reviewer alone.** Pointing the
+job's `HOME` at the profile would also hand it to the live Claude coding agent,
+a child of the same process holding `Read/Glob/Grep`. Instead
+`RELAY_HERMES_EXECUTABLE` points at a wrapper that sets `HOME` at exec time for
+the Hermes child only, and the credential is written to
+`$HOME/.hermes/.env` — Hermes's own first lookup for an api-key provider
+(`get_env_value_prefer_dotenv`), which needs no TTY and makes no network call.
+Its resolvability is then proven through Hermes's own resolver with
+`HERMES_HOME` unset, exactly as Julius spawns it.
 
 **Ephemeral by default.** The Ed25519 signing key, the executor credential
 root, the database password and the Hermes profile are all generated inside the
