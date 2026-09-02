@@ -241,3 +241,153 @@ enforced (bounded in practice by idempotent repair task ids and unroutable
 `repair:repair:*` types). F14 — the worst-case adapter chain can exceed the
 600s lease with no heartbeat during dispatch; safe single-process today,
 flagged for the first live run.
+
+## First live mission rig (2026-09-02)
+
+`.github/workflows/julius-first-live-mission.yml` is the only workflow in this
+repository that may spend provider money. It is `workflow_dispatch`-only —
+there is deliberately no `push`, `pull_request` or `schedule` trigger — runs in
+the `julius-live-validation` GitHub Environment, and reaches the paid stage
+only when a human types `RUN LIVE MISSION` at dispatch AND the entrypoint's own
+`--confirm-live` flag is passed. `scripts/julius-first-live-mission.test.ts`
+holds that arrangement in place offline.
+
+**Preflight spends nothing and is the supported dry run.** Dispatching with an
+empty `confirm_live` proves the whole rig: PostgreSQL reachable and migrated
+with the Julius tables verified present, the independent executor answering,
+receipts verifying against the ephemeral signing key, the scoped `execute`
+credential authorizing a real operation, the 4 MiB workspace ceiling actually
+enforceable, and — the reason `scripts/julius-live-preflight.ts` exists —
+`git rev-parse HEAD` succeeding *inside* the sandbox. Commands there run as uid
+65532, so a workspace git refuses would yield an empty diff and hand the
+Independent Reviewer nothing to review, after the mission had already paid an
+architect and a coding agent. The entrypoint is then run without
+`--confirm-live` and must exit **5** — which is what proves all three roles
+resolved into real adapters — and the configured models are pinned to
+`gpt-5.6-sol`, `claude-fable-5` and `xai/grok-build-0.1`. The model a provider
+actually serves is a separate fact, observed during the run as
+`actualModel` / `servedModel`; no preflight can know it.
+
+**The mission is disposable by construction.** `workspacePath` is a 4 MiB tmpfs
+holding a four-file throwaway git repository, never this checkout —
+`scripts/julius-live-contract-check.mjs` refuses a contract whose workspace
+resolves inside the repository, and refuses `spendUsd > 5` or
+`repairCycles > 1`. The sandbox keeps `network: DENY`, so the declared test
+command must run with no network and no `node_modules`; `node --test` on plain
+CommonJS is what that leaves.
+
+**The deliverables are seeded, tracked, and edited — not created.** An
+independent review of the first draft caught two defects that would have made
+the paid run fail with certainty. The hosted coding agent is allowed
+`Read/Glob/Grep/Edit` and expressly denied `Write`
+(`relay-bridge/hosted-coding-agent/hosted-envelope.ts`), so it cannot bring a
+new file into existence; and `git diff` — how the mission captures the change
+for the reviewer — never reports an untracked file, so even a created file
+would have reached the Independent Reviewer as zero bytes. Both vanish when the
+deliverables are committed stubs the agent edits. The preflight now also writes
+a marker on the host and requires it to appear in the diff captured inside the
+sandbox, so that hand-off is proven rather than assumed.
+
+**The reviewer's credential is redirected for the reviewer alone.** Pointing the
+job's `HOME` at the profile would also hand it to the live Claude coding agent,
+a child of the same process holding `Read/Glob/Grep`. Instead
+`RELAY_HERMES_EXECUTABLE` points at a wrapper that sets `HOME` at exec time for
+the Hermes child only, and the credential is written to
+`$HOME/.hermes/.env` — Hermes's own first lookup for an api-key provider
+(`get_env_value_prefer_dotenv`), which needs no TTY and makes no network call.
+Its resolvability is then proven through Hermes's own resolver with
+`HERMES_HOME` unset, exactly as Julius spawns it.
+
+**Ephemeral by default.** The executor credential root, the database password
+and the Hermes profile are generated inside the job and destroyed by an
+`if: always()` cleanup step; the Ed25519 signing key is minted by the executor
+itself, inside its container. No durable executor secret is provisioned, so
+there is nothing to rotate or revoke afterwards. The three provider credentials
+are the only stored secrets, and they are referenced by name only.
+
+**The reviewer credential boundary is unchanged.** `runHermesReview` forwards
+`{PATH, HOME}` and nothing else to the Hermes child, so the workflow hands the
+reviewer its credential by pointing `HOME` at an ephemeral profile written by
+`hermes auth add` — the tool's own supported mechanism. `XAI_API_KEY` is
+deliberately *not* set on the live step: it would not reach the child, and
+setting it would suggest the credential flows through Julius. Julius was not
+modified to make any of this easier.
+
+**Open, and why this is not yet proven end to end.** No live mission has run.
+Two things are outside this repository: the three provider secrets must be
+added to the `julius-live-validation` environment, and Hermes must install on
+the runner from `NousResearch/hermes-agent` at the pinned `hermes_ref` — the
+proven local build reports a carried commit, so the upstream ref is not known
+to be byte-identical to it. The `edit on host → diff via executor` choreography
+is production code proven only against an offline fake shell; this preflight is
+its first real-infrastructure exercise, which is exactly why it runs before
+anything is paid for.
+
+## Final pre-live hardening (2026-09-02)
+
+The independent review's Medium findings, accepted under the one-iteration rule
+at the time, are now closed — each with a mutation-proven test.
+
+**F4 — the executor owns its signing key, against every file-reading path.**
+The key used to be minted on the runner by the same user that runs Julius, so
+any file read could take it — including a `Read` from the live coding agent.
+It is now generated inside the executor container by
+`.github/julius-executor-entrypoint.sh`, under `/executor-private` — the
+container's own writable layer, deliberately not bind-mounted — beside the
+receipt store and ledger. What leaves the container is the public key, read
+out once over `docker exec`. A preflight step asserts exactly what that
+arrangement establishes: the host paths do not exist, the private root is not
+among the container's mounts, the executor does hold its key, and what Julius
+holds contains a public key and no private material. Stated plainly rather
+than implied away: this is a FILESYSTEM boundary, and its adversary is the
+file-reading coding agent. The runner user itself holds the Docker socket and
+sudo, so a process acting as that user could still `docker exec` the key out —
+the same channel this job uses for the public half. Full #208-grade separation
+(Julius in its own container, no socket) remains the reference architecture;
+here the secret moved instead of Julius, because the coding agent and Hermes
+both live host-side. No loopback, network or containment guard changed.
+
+**F5 — evidence is built by allowlist, never by redaction.** Raw `tee`'d logs
+are no longer copied into the artifact. `scripts/julius-live-evidence.mjs`
+re-emits only lines matching the entrypoint's known shapes — the failure
+outcomes (`RESULT: BLOCKED …`, `crashed: …`) included, because the runs that
+most need evidence are the ones that went wrong — then drops any survivor
+carrying key-shaped or opaque mixed-case material, and reports how many lines
+it withheld. Behind it, the workflow greps the evidence for the
+JOB'S OWN exact values — provider keys, credential root, database password and
+every derived scoped credential — via a needle file deleted before the upload
+step exists; a hit deletes the evidence and fails the job without naming which
+value matched. Masking is still applied but nothing relies on it.
+
+**F8 — Hermes is pinned to `2ea39daeb1f675d72e5c21c9400f2d58d7e6d71a`.** That
+is the exact commit the proven local build runs, and it is public upstream:
+the install banner's "+1 carried commit" was bookkeeping against a stale
+origin ref in a shallow clone, not a local-only patch. The commit's whole
+delta is `gateway/run.py` plus one gateway test — the messaging gateway, which
+the reviewer's one-shot CLI path never touches. `pyproject.toml` at that
+commit declares `requires-python >=3.11,<3.14` (the runner's 3.12 is in
+range) and the `hermes` console script. A mutable ref is refused twice, in
+the dispatch gate and again in the install script, before pip runs.
+
+**F9 — dispatch inputs are validated first.** A gate step runs before any
+build, container or credential exists: `max_ticks` must be an integer in
+[8, 32] — the floor because the six-task graph cannot complete much under
+eight ticks, so less would buy a paid run guaranteed to be cut off; the
+ceiling because 32 is the entrypoint's own default, so the input can tighten
+Julius's bound but never loosen it. A near-miss `confirm_live` phrase is
+refused outright rather than silently downgraded to a dry run, and a
+non-40-hex `hermes_ref` is refused here too. The gate's bash is executed by
+the offline tests with well-formed, malformed, out-of-range and boundary
+values.
+
+**F6 — a paid mission cannot repeat by accident.** Live dispatches share one
+concurrency group (never cancelled in flight); dry runs get a per-run group,
+so proving the rig stays unlimited and free. A successful paid run uploads a
+`julius-first-live-completed` marker (provenance fields only, 90-day
+retention), and a live dispatch that finds one refuses unless the operator
+typed `RERUN PAID MISSION`. Stated limit, not papered over: artifacts expire
+and can be deleted, so this guards against accident — a second dispatch of a
+mission that already succeeded — and sits behind the typed phrase and the
+environment's own approval, not in place of them. Julius's contract-digest
+idempotency remains inert across dispatches because PostgreSQL is per-job;
+that is now a documented property rather than an implied protection.
