@@ -90,8 +90,13 @@ describe('dry run 33625851653 — the live sandbox output limit and the executor
     expect(EXECUTOR_SANDBOX_LIMITS.workspaceBytes).toBe(4_194_304);
   });
 
-  it('the shared objects are frozen, so no caller can drift them at runtime', () => {
+  it('the shared objects are frozen to the leaf, so no caller can drift them at runtime', () => {
     expect(Object.isFrozen(EXECUTOR_SANDBOX_LIMITS)).toBe(true);
     expect(Object.isFrozen(EXECUTOR_SANDBOX_POLICY)).toBe(true);
+    // Object.freeze is shallow; the tool list is the one nested value, and an
+    // appended tool would be sent by the preflight AND the live mission alike.
+    expect(Object.isFrozen(EXECUTOR_SANDBOX_POLICY.allowedTools)).toBe(true);
+    expect(() => (EXECUTOR_SANDBOX_POLICY.allowedTools as string[]).push('shell.evil')).toThrow();
+    expect(EXECUTOR_SANDBOX_POLICY.allowedTools).toEqual(['shell.bash']);
   });
 });

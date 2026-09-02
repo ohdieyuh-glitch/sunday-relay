@@ -23,9 +23,13 @@
  * (`scripts/julius-live-preflight.ts`) import THESE objects rather than keeping
  * copies: parity is identity, not a test that two copies still agree.
  *
- * Deliberately pure — constants and types only — so the preflight can import it
- * without dragging a provider connector into a script whose whole point is that
- * it contacts no provider. Frozen, so no caller can drift them at runtime.
+ * Pure in its own content — constants and types only — so the preflight can
+ * import it without dragging a provider connector into a script whose whole
+ * point is that it contacts no provider. Its import closure is not empty: the
+ * workspace ceiling comes from the executor's provisioning helper, which reaches
+ * the Docker adapter for one constant; nothing there runs at import time, and
+ * the preflight bundle drops it. Frozen to the leaf, so no caller can drift
+ * them at runtime.
  */
 
 import type { JuliusSandboxLimits, JuliusSandboxPolicy } from '../../src/relay/mission/julius';
@@ -42,5 +46,5 @@ export const EXECUTOR_SANDBOX_LIMITS: JuliusSandboxLimits = Object.freeze<Julius
 /** The sandbox policy every live tool effect runs under. Network stays DENY: no worker reaches a provider through a tool. */
 export const EXECUTOR_SANDBOX_POLICY: JuliusSandboxPolicy = Object.freeze<JuliusSandboxPolicy>({
   readWorkspace: true, mutateWorkspace: true, executeProcess: true,
-  network: 'DENY', allowedTools: ['shell.bash'],
+  network: 'DENY', allowedTools: Object.freeze(['shell.bash']),
 });
