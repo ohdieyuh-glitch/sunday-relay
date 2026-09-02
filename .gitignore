@@ -19,3 +19,7 @@ dist-live/
 # Byproducts of running the in-sandbox executor script outside a container
 late.txt
 ran.txt
+
+# Julius single-file inspection export (regenerate: node scripts/export-julius-harness.mjs).
+# Derived, not source of truth; the generator and JULIUS_HARNESS_MANIFEST.md are committed instead.
+generated/
