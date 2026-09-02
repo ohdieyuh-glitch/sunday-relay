@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve, sep } from 'node:path';
 import { parseLiveMissionContract } from '../relay-bridge/julius-live-mission';
@@ -421,6 +421,76 @@ describe('the mission itself is bounded and aimed away from this repository', ()
   });
 });
 
+describe('the evidence dump names only tables and columns the migrations create', () => {
+  // Free dry runs #1 and #2 uploaded `unavailable` for evidence.tsv and findings.tsv: the inline
+  // queries named `type` where the table has `evidence_type`, and `julius_findings` where the
+  // table is `julius_reviewer_findings`, and psql's refusal became a silent placeholder. The
+  // queries now live in one script the mission runs and the Docker regression validates against
+  // a migrated database; this case holds them to the migration SQL offline as well.
+  const migrationsDirectory = resolve(ROOT, 'src/relay/persistence/wonderland-migrations');
+  const schema = (): Map<string, Set<string>> => {
+    const tables = new Map<string, Set<string>>();
+    const files = readdirSync(migrationsDirectory).filter((file) => file.endsWith('.sql')).sort();
+    for (const file of files) {
+      const sql = readFileSync(join(migrationsDirectory, file), 'utf8');
+      for (const match of sql.matchAll(/CREATE TABLE(?: IF NOT EXISTS)? relay_wonderland\.([a-z_]+)\s*\(([\s\S]*?)\n\);/gu)) {
+        const columns = new Set<string>();
+        for (const line of match[2].split(/[,\n]/u)) {
+          const column = /^\s*([a-z_]+)\s+(?:text|jsonb|bigint|integer|boolean|timestamptz|numeric|double precision|bytea)\b/u.exec(line);
+          if (column) columns.add(column[1]);
+        }
+        tables.set(match[1], columns);
+      }
+      for (const match of sql.matchAll(/ALTER TABLE relay_wonderland\.([a-z_]+)([\s\S]*?);/gu)) {
+        const columns = tables.get(match[1]) ?? new Set<string>();
+        for (const added of match[2].matchAll(/ADD COLUMN(?: IF NOT EXISTS)? ([a-z_]+)/gu)) columns.add(added[1]);
+        tables.set(match[1], columns);
+      }
+    }
+    return tables;
+  };
+
+  const queries = (): Array<{ file: string; table: string; columns: string[]; orderBy: string[] }> => {
+    const script = read('.github/julius-live-evidence-dump.sh');
+    const found: Array<{ file: string; table: string; columns: string[]; orderBy: string[] }> = [];
+    for (const match of script.matchAll(/dump "SELECT ([a-z_,]+) FROM relay_wonderland\.([a-z_]+)(?: ORDER BY ([a-z_,]+))?" ([a-z-]+\.tsv)/gu)) {
+      found.push({ file: match[4], table: match[2], columns: match[1].split(','), orderBy: match[3] ? match[3].split(',') : [] });
+    }
+    return found;
+  };
+
+  it('the mission runs the dump script, and only the dump script, for its table evidence', () => {
+    const collect = stepScript('Collect the redacted validation evidence');
+    expect(collect).toContain('./.github/julius-live-evidence-dump.sh julius-live-evidence');
+    expect(workflow, 'an inline query would drift away from the validated script again').not.toContain('dump "SELECT');
+  });
+
+  it('every dumped table exists and every selected or ordered column is a real column', () => {
+    const tables = schema();
+    const dumps = queries();
+    expect(dumps.map((dump) => dump.file).sort()).toEqual(['decisions.tsv', 'evidence.tsv', 'findings.tsv', 'runs.tsv', 'tasks.tsv', 'tool-invocations.tsv']);
+    for (const dump of dumps) {
+      const columns = tables.get(dump.table);
+      expect(columns, `${dump.file} reads relay_wonderland.${dump.table}, which no migration creates`).toBeDefined();
+      for (const column of [...dump.columns, ...dump.orderBy]) {
+        expect(columns!.has(column), `${dump.file}: ${dump.table}.${column} is not a column the migrations create`).toBe(true);
+      }
+    }
+  });
+
+  it('is held by the Docker regression against a migrated database as well', () => {
+    const regression = read('.github/workflows/julius-real-infra.yml');
+    expect(regression).toContain('./.github/julius-live-evidence-dump.sh /tmp/julius-evidence-check');
+    expect(regression, 'a stale name must fail the PR, not become a placeholder').toContain('evidence_query_invalid');
+  });
+
+  it('keeps the two names dry run #2 proved wrong corrected', () => {
+    const dumps = queries();
+    expect(dumps.find((dump) => dump.file === 'evidence.tsv')?.columns).toContain('evidence_type');
+    expect(dumps.find((dump) => dump.file === 'findings.tsv')?.table).toBe('julius_reviewer_findings');
+  });
+});
+
 /* ------------------------------------------------- final pre-live hardening */
 
 /** The `run:` body of a named step, with YAML block indentation stripped. */
@@ -526,7 +596,7 @@ describe('F5 — evidence is built by allowlist, and secrets cannot ride along',
     expect(collect, 'and only characters a safe line can contain').toContain("grep -E '^[A-Za-z0-9_=:. -]+$'");
     expect(collect, 'the raw log must not survive to the upload step').toContain('rm -f "$raw_executor_log"');
     expect(collect.indexOf('rm -f "$raw_executor_log"'), 'delete before the evidence directory is complete')
-      .toBeLessThan(collect.indexOf('dump "SELECT'));
+      .toBeLessThan(collect.indexOf('./.github/julius-live-evidence-dump.sh'));
     expect(workflow, 'a raw docker log must never be written into the evidence directory')
       .not.toMatch(/docker logs [^\n]*> *julius-live-evidence/u);
   });

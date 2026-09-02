@@ -384,18 +384,11 @@ jobs:
             fi
           done
 
-          # Only safe columns. No environment dump, no config, no packet text,
-          # no credential-bearing row.
-          dump() {
-            docker exec -e PGPASSWORD julius-postgres psql -U "$PGUSER" -d "$PGDATABASE" -A -F $'\t' -c "$1" \
-              > "julius-live-evidence/$2" 2>/dev/null || echo 'unavailable' > "julius-live-evidence/$2"
-          }
-          dump "SELECT run_id,mission_id,state,card_revision,created_at,updated_at FROM relay_wonderland.julius_runs ORDER BY created_at" runs.tsv
-          dump "SELECT task_id,task_type,role,state,ordinal,parent_task_id FROM relay_wonderland.julius_tasks ORDER BY ordinal,task_id" tasks.tsv
-          dump "SELECT evidence_id,type,status,safe_summary,occurred_at FROM relay_wonderland.julius_evidence ORDER BY occurred_at" evidence.tsv
-          dump "SELECT decision_id,task_id,action,reason_code,occurred_at FROM relay_wonderland.julius_verification_decisions ORDER BY occurred_at" decisions.tsv
-          dump "SELECT finding_id,blocking,status,claim FROM relay_wonderland.julius_findings" findings.tsv
-          dump "SELECT invocation_id,tool_id,state,requested_at FROM relay_wonderland.julius_tool_invocations ORDER BY requested_at" tool-invocations.tsv
+          # Only safe columns, from one script the `first-live-topology` job also
+          # runs against a freshly migrated database — dry runs #1 and #2 uploaded
+          # `unavailable` for two tables because the inline queries named a
+          # column and a table the migrations never created.
+          ./.github/julius-live-evidence-dump.sh julius-live-evidence
 
           # The mission's own diff is the point of the exercise; it contains
           # only what a live coding agent wrote into a throwaway repository.
