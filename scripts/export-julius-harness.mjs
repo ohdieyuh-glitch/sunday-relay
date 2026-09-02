@@ -229,6 +229,7 @@ const FILE_RULES = [
   ['relay-bridge/julius/mission-seed.ts', 'MISSION CONTRACT / BOOTSTRAP'],
   ['relay-bridge/julius/postgres-store.ts', 'PERSISTENCE'],
   ['relay-bridge/julius/executor-effects.ts', 'TOOLS'],
+  ['relay-bridge/julius/sandbox-limits.ts', 'TOOLS'],
   ['relay-bridge/julius/live-composition.ts', 'LIVE PROVIDER COMPOSITION'],
   ['relay-bridge/julius/live-workers.ts', 'LIVE PROVIDER COMPOSITION'],
   ['relay-bridge/hosted-coding-agent/', 'CODING AGENT'],

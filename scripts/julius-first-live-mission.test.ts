@@ -251,10 +251,25 @@ describe('what the job creates, the job destroys', () => {
 describe('the sandbox proven by preflight is the sandbox the mission uses', () => {
   it('the preflight probe declares the live composition limits exactly', () => {
     expect(PREFLIGHT_LIMITS).toEqual(EXECUTOR_SANDBOX_LIMITS);
+    // Dry run 33625851653: two copies that this equality once blessed had
+    // drifted together, 4,767 bytes above the executor's ceiling. Equality of
+    // copies proves nothing about the executor; the preflight must send the
+    // live composition's object itself, so there is only one thing to be wrong.
+    expect(PREFLIGHT_LIMITS, 'the preflight must import the live limits, never keep a copy').toBe(EXECUTOR_SANDBOX_LIMITS);
   });
 
   it('the preflight probe declares the live composition policy exactly', () => {
     expect(PREFLIGHT_POLICY).toEqual(EXECUTOR_SANDBOX_POLICY);
+    expect(PREFLIGHT_POLICY, 'the preflight must import the live policy, never keep a copy').toBe(EXECUTOR_SANDBOX_POLICY);
+  });
+
+  it('both sides read the one shared limits module, and neither keeps an output number of its own', () => {
+    const shared = 'relay-bridge/julius/sandbox-limits';
+    expect(read('scripts/julius-live-preflight.ts')).toContain(`from '../${shared}'`);
+    expect(read('relay-bridge/julius/executor-effects.ts')).toContain("from './sandbox-limits'");
+    for (const file of ['scripts/julius-live-preflight.ts', 'relay-bridge/julius/executor-effects.ts']) {
+      expect(read(file), `${file} must not carry its own outputBytes literal`).not.toMatch(/outputBytes:\s*\d/u);
+    }
   });
 
   it('the sandbox denies network, so no worker can reach a provider through a tool', () => {

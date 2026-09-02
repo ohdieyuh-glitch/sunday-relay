@@ -36,8 +36,8 @@ import {
 } from '../../src/relay/mission/julius';
 import type { JuliusToolPostgresRepository } from '../../src/relay/persistence/julius-tool-postgres';
 import type { JuliusToolSettlementPostgresRepository } from '../../src/relay/persistence/julius-tool-settlement-postgres';
-import { BETA_WORKSPACE_BYTES } from '../../src/relay/workspace/julius-tools/workspace-provisioning';
 import { safeClaim } from './live-workers';
+import { EXECUTOR_SANDBOX_LIMITS, EXECUTOR_SANDBOX_POLICY } from './sandbox-limits';
 
 /* ---------------------------------------------------------------- shapes */
 
@@ -82,16 +82,15 @@ export const digestOf = (value: unknown): string => sha(stable(value));
 
 /* ------------------------------------------------------------ live port */
 
-export const EXECUTOR_SANDBOX_LIMITS: JuliusSandboxLimits = {
-  cpuCount: 1, memoryBytes: 1_073_741_824, pids: 256, openFiles: 1_024,
-  workspaceBytes: BETA_WORKSPACE_BYTES, outputBytes: 262_144,
-  wallClockMs: 300_000, concurrentProcesses: 32,
-};
-
-export const EXECUTOR_SANDBOX_POLICY: JuliusSandboxPolicy = {
-  readWorkspace: true, mutateWorkspace: true, executeProcess: true,
-  network: 'DENY', allowedTools: ['shell.bash'],
-};
+/*
+ * The limits and policy are declared in `./sandbox-limits` — a pure module the
+ * provider-free preflight can import without reaching `./live-workers` and the
+ * provider connectors behind it — and re-exported here, where the live port
+ * consumes them. `outputBytes` there is the executor's own ceiling, imported
+ * from its validator; dry run 33625851653 failed because a literal kept here
+ * had drifted above it.
+ */
+export { EXECUTOR_SANDBOX_LIMITS, EXECUTOR_SANDBOX_POLICY } from './sandbox-limits';
 
 export function createExecutorShellPort(config: {
   readonly pool: Pool;

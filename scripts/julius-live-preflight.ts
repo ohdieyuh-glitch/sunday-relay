@@ -42,6 +42,7 @@ import { Pool } from 'pg';
 import { TransactionalWonderlandDatabase } from '../src/relay/persistence/wonderland-postgres';
 import { RemoteExecutorControlPlane } from '../src/relay/workspace/julius-tools/remote-executor-control-plane';
 import type { ExecutorOperation } from '../src/relay/workspace/julius-tools/executor-operation-request';
+import { EXECUTOR_SANDBOX_LIMITS, EXECUTOR_SANDBOX_POLICY } from '../relay-bridge/julius/sandbox-limits';
 import type {
   JuliusSandboxLimits,
   JuliusSandboxPolicy,
@@ -50,23 +51,18 @@ import type {
 } from '../src/relay/mission/julius';
 
 /**
- * These MUST equal `EXECUTOR_SANDBOX_LIMITS` / `EXECUTOR_SANDBOX_POLICY` in
- * `relay-bridge/julius/executor-effects.ts`, or the preflight would prove a
- * sandbox shape the mission never uses. They are duplicated rather than
- * imported because importing that module drags the three provider connectors
- * into a script whose entire point is that it contacts no provider — and
- * `julius-first-live-mission.test.ts` asserts the two stay identical.
+ * THE SAME OBJECTS THE LIVE COMPOSITION SENDS — not equal copies, the objects
+ * themselves. They come from `relay-bridge/julius/sandbox-limits`, a pure
+ * constants module, rather than from `executor-effects.ts`, which reaches the
+ * provider connectors; so this script still contacts no provider and there is
+ * no copy here to drift. Dry run 33625851653 failed because the copy that used
+ * to live here, and its twin in the composition, both asked for 4,767 bytes
+ * more output than the executor's ceiling allows. `outputBytes` is now that
+ * ceiling, imported from the validator's own module, and
+ * `julius-first-live-mission.test.ts` asserts identity, not mere equality.
  */
-export const PREFLIGHT_LIMITS: JuliusSandboxLimits = {
-  cpuCount: 1, memoryBytes: 1_073_741_824, pids: 256, openFiles: 1_024,
-  workspaceBytes: 4_194_304, outputBytes: 262_144,
-  wallClockMs: 300_000, concurrentProcesses: 32,
-};
-
-export const PREFLIGHT_POLICY: JuliusSandboxPolicy = {
-  readWorkspace: true, mutateWorkspace: true, executeProcess: true,
-  network: 'DENY', allowedTools: ['shell.bash'],
-};
+export const PREFLIGHT_LIMITS: JuliusSandboxLimits = EXECUTOR_SANDBOX_LIMITS;
+export const PREFLIGHT_POLICY: JuliusSandboxPolicy = EXECUTOR_SANDBOX_POLICY;
 
 const sha = (value: string): string => createHash('sha256').update(value).digest('hex');
 

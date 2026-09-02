@@ -17,7 +17,7 @@ Julius is the provider-neutral, deterministic orchestration kernel that turns an
 
 Static import closure from the two roots over the TypeScript AST (value and type edges), stopping at the declared boundaries below; plus declared production modules not reached from the live root (flagged); plus path-loaded assets. Tests, fixtures, fakes and UI are refused by category. A drift gate fails the generator when a production file imports the Julius kernel or port without being reached, declared or explicitly excluded, or when a declaration no longer matches the wiring.
 
-Represented: **102 production files** across 20/20 subsystems (2 roots, 81 traced, 8 not composed by the live root, 11 path-loaded assets). Line and byte totals, the coverage estimate and the commit SHA are printed by the generator and recorded in the export header; they are kept out of this file so it changes only when the file set or its classification changes.
+Represented: **103 production files** across 20/20 subsystems (2 roots, 82 traced, 8 not composed by the live root, 11 path-loaded assets). Line and byte totals, the coverage estimate and the commit SHA are printed by the generator and recorded in the export header; they are kept out of this file so it changes only when the file set or its classification changes.
 
 ## Dependency direction (observed, between coarse groups)
 
@@ -35,8 +35,8 @@ Edges counted by the trace between included files; "type" = type-only imports, e
 | executor + tool substrate (src/relay/workspace/julius-tools/) | persistence (src/relay/persistence/) | 1 | 0 |
 | live composition (relay-bridge/julius/) | bridge provider stacks (hosted Claude, Hermes, redaction) | 6 | 2 |
 | live composition (relay-bridge/julius/) | connectors (gpt-architect, prompt-architect contracts) | 4 | 1 |
-| live composition (relay-bridge/julius/) | executor + tool substrate (src/relay/workspace/julius-tools/) | 1 | 0 |
-| live composition (relay-bridge/julius/) | kernel (src/relay/mission/julius/) | 5 | 2 |
+| live composition (relay-bridge/julius/) | executor + tool substrate (src/relay/workspace/julius-tools/) | 2 | 0 |
+| live composition (relay-bridge/julius/) | kernel (src/relay/mission/julius/) | 6 | 3 |
 | live composition (relay-bridge/julius/) | persistence (src/relay/persistence/) | 9 | 2 |
 | live composition (relay-bridge/julius/) | Relay↔Julius port (src/relay/integration/julius/) | 1 | 0 |
 | persistence (src/relay/persistence/) | kernel (src/relay/mission/julius/) | 15 | 11 |
@@ -168,12 +168,13 @@ Tool ids and kinds, invocation requests and results, the tool controller’s C.A
 | production source | role | reached from |
 | --- | --- | --- |
 | `relay-bridge/julius/executor-effects.ts` | traced | `relay-bridge/julius-live-mission.ts` |
+| `relay-bridge/julius/sandbox-limits.ts` | traced | `relay-bridge/julius/executor-effects.ts` |
 | `src/relay/mission/julius/julius-sandbox.ts` | traced | `src/relay/mission/julius/index.ts` |
 | `src/relay/mission/julius/julius-tool-lifecycle.ts` | traced | `src/relay/mission/julius/index.ts` |
 | `src/relay/mission/julius/julius-tool-settlement.ts` | traced | `src/relay/mission/julius/index.ts` |
 | `src/relay/mission/julius/julius-tools.ts` | traced | `src/relay/mission/julius/index.ts` |
 | `src/relay/workspace/julius-tools/registry.ts` | not composed by the live root | — |
-| `src/relay/workspace/julius-tools/workspace-provisioning.ts` | traced | `relay-bridge/julius/executor-effects.ts` |
+| `src/relay/workspace/julius-tools/workspace-provisioning.ts` | traced | `relay-bridge/julius/sandbox-limits.ts` |
 
 ### 11 INDEPENDENT EXECUTOR
 
