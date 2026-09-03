@@ -88,6 +88,27 @@ start_signalling() {
   # missing www serves 404 on the page the founder was handed.
   wl_require_ps_infra
 
+  # THE OVERLAY IS INSTALLED EVERY LAUNCH, because a page that is one version
+  # behind the repo fails SILENTLY and looks exactly like a broken feature.
+  #
+  # 2026-09-03: the founder reported that jump and Ctrl+T "have not been
+  # implemented". Both were implemented, compiled and packaged -- what was
+  # stale was `www/wonderland/keys.js`, which decides which keystrokes reach
+  # the game at all. The old copy swallowed Space (so the jump never arrived)
+  # and did not know Ctrl+T (so the browser opened a tab). The engine was
+  # innocent and completely unable to say so.
+  #
+  # `install-overlay.sh` was written to be idempotent and re-runnable after any
+  # infra restore, and then was never called by anything -- a manual step in a
+  # pipeline that restores `pixel-streaming-infra` from scratch on every
+  # machine change. It runs here now, before the server starts, so the served
+  # page and the repository cannot disagree.
+  if [ -x "$WL_SRC/wonderland/web/player/install-overlay.sh" ]; then
+    bash "$WL_SRC/wonderland/web/player/install-overlay.sh" >/dev/null 2>&1 \
+      && wl_ok "live-terminal overlay installed from the checkout" \
+      || wl_warn "overlay install failed -- the page will serve whatever it already had"
+  fi
+
   # THE NODE IS VERIFIED, NOT ASSUMED. A wrong node fails deep inside a
   # dependency and reads as a networking problem — an expensive way to learn a
   # version number on a GPU. wl_require_node compares against the checkout's

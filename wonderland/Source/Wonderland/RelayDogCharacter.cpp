@@ -715,6 +715,26 @@ void ARelayDogCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputC
 		CameraBoom->bUsePawnControlRotation = true;
 		CameraBoom->bInheritPitch = true;
 		CameraBoom->bInheritYaw = true;
+		// AND THE CAMERA STOPS TRAILING THE PLAYER (2026-09-03).
+		//
+		// The founder reports that walking and running still feel laggy after
+		// the renderer was measured at 11.40 ms median and 87.7 fps -- and
+		// that report is right, because none of this is a frame-rate problem.
+		// The boom is built with `bEnableCameraLag` at speed 8 and
+		// `bEnableCameraRotationLag` at speed 7. Those are exponential
+		// interpolations: at speed 7 a look input reaches 63% of its travel in
+		// about 140 ms and settles around 430 ms. That is FELT AS INPUT
+		// LATENCY, it is added on top of the network round trip, and no GPU
+		// measurement can see it -- which is exactly why "the GPU is under
+		// budget so it is smooth" was the wrong conclusion to reach.
+		//
+		// The smoothing is right for the CINEMATIC DEMO, where the Dog drives
+		// its own route and the lag hides the steering corrections of an
+		// auto-pilot. It is wrong for a hand on a mouse. So it is switched off
+		// here, inside the branch that already distinguishes the two, and the
+		// demo path is untouched.
+		CameraBoom->bEnableCameraLag = false;
+		CameraBoom->bEnableCameraRotationLag = false;
 	}
 	UE_LOG(LogTemp, Log, TEXT("WLDOG INPUT bound on %s (WASD, mouse, shift=run, ctrl=walk, SPACE=JUMP, CTRL+T=LIVE TERMINAL)"), *GetName());
 }
