@@ -105,12 +105,14 @@ cat <<EOF
     shift (hold)       run         ctrl (hold)   walk
 
     SPACE              JUMP
-    CTRL+T             the LIVE TERMINAL (toggles)
+    `  (backquote)     the LIVE TERMINAL (toggles)
+    CTRL+T             the same, but ONLY in fullscreen
     ESC                back to the world
 
-  Ctrl+T is the front door: it opens the terminal over the live world and
-  closes it again, from either side, because unlike Space it is never a
-  character inside the terminal's own input. Space is the Dog's jump.
+  Backquote is the front door. Ctrl+T is the founder's canonical chord and the
+  browser keeps it for itself in a normal tab -- Chrome reserves it for "new
+  tab" and never delivers the keypress to the page, so it works only under
+  Keyboard Lock, which needs fullscreen. Space is the Dog's jump.
 
 EOF
 printf '%s\n' "$URL"

@@ -1,9 +1,19 @@
 // WHO OWNS THE KEYBOARD.
 //
-// Founder canon, 2026-08-30: SPACE opens the Wonderland Live Terminal, and the
-// Relay Dog does not jump. That is one line of product and three traps of
-// implementation, so the decision lives here on its own, as a pure function
-// over a keyboard event, and is tested rather than tried.
+// Founder canon, 2026-09-03: CTRL+T opens the Wonderland Live Terminal and
+// SPACE is the Relay Dog's jump. (It was the other way round on 2026-08-30 --
+// Space opened the terminal and the Dog could not jump at all.) That is one
+// line of product and four traps of implementation, so the decision lives here
+// on its own, as a pure function over a keyboard event, and is tested rather
+// than tried.
+//
+//   0. A TEST CANNOT TELL YOU THE BROWSER NEVER SENDS THE KEY. Ctrl+T is on
+//      Chrome's reserved list; in a normal tab the browser opens a tab and the
+//      keydown never reaches the page. Every assertion below passed while the
+//      feature was completely dead in the founder's hands, because a synthetic
+//      Ctrl+T is indistinguishable from a real one to this function. Ctrl+T
+//      now works only under Keyboard Lock in fullscreen, and BACKQUOTE is the
+//      key that always arrives.
 //
 //   1. WONDERLAND RUNS THROUGH PIXEL STREAMING. The page holds a <video> and
 //      forwards keystrokes to the game. If Space reaches the game it is a
@@ -76,6 +86,29 @@ export function classifyKey(ev, terminalOpen) {
     // otherwise the only way back to the world is the mouse.
     if (key === 'Escape' && terminalOpen) return 'close-terminal';
     return 'type';
+  }
+  // AND A KEY THE BROWSER WILL ACTUALLY GIVE US.
+  //
+  // Ctrl+T above is the founder's canon and, in a NORMAL TAB, can never fire:
+  // it is on Chrome's reserved list with Ctrl+N and Ctrl+W, so the browser
+  // opens a tab and the keydown is never dispatched to the page. preventDefault
+  // cannot help with an event that does not arrive. The only way to receive it
+  // is the Keyboard Lock API, which takes effect only in FULLSCREEN --
+  // terminal.js requests it on fullscreen change, so Ctrl+T works there.
+  //
+  // THE UNIT TESTS COULD NOT HAVE CAUGHT THAT. They hand this function a
+  // synthetic event, and a synthetic Ctrl+T is indistinguishable from a real
+  // one; the difference is whether the browser dispatches it at all, which
+  // nothing in here can observe. Worth remembering before trusting a keyboard
+  // test again.
+  //
+  // BACKQUOTE is the always-available alternative -- the console key in every
+  // game that has one, reserved by nothing. It sits BELOW the text-entry check
+  // on purpose: inside the terminal's own input a backquote is a CHARACTER,
+  // because people type them, and a toggle there would eat every code fence.
+  if ((key === '`' || key === '~' || ev.code === 'Backquote') && !ev.ctrlKey
+      && !ev.metaKey && !ev.altKey) {
+    return terminalOpen ? 'close-terminal' : 'open-terminal';
   }
   // SPACE IS NO LONGER OURS. It goes to the game so the Dog can jump. The one
   // exception is while the terminal is open: then every key belongs to the

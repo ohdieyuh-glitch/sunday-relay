@@ -219,9 +219,39 @@ let claimed = false;
  * forwarded the opening Space and every character of "walk south" to the game
  * until this ran first.
  */
+/**
+ * Ask the browser for the keys it normally keeps.
+ *
+ * Ctrl+T is the founder's canonical Live Terminal chord and Chrome reserves it
+ * for "new tab": in a normal tab the keydown is never dispatched to the page,
+ * so no listener and no preventDefault can reach it. The Keyboard Lock API is
+ * the documented way to receive reserved chords, and it only takes effect
+ * while the document is FULLSCREEN -- which is how the world is played anyway.
+ *
+ * Best-effort by design: unsupported browser, no fullscreen, or a rejected
+ * promise all just mean Ctrl+T stays with the browser and backquote carries
+ * the terminal instead. It must never throw into the caller, because failing
+ * to get a nice-to-have key is not a reason for the page not to load.
+ */
+function lockReservedKeys() {
+  try {
+    const kb = navigator.keyboard;
+    if (!kb || typeof kb.lock !== 'function') return;
+    if (document.fullscreenElement) {
+      kb.lock(['KeyT']).catch(() => {});
+    } else if (typeof kb.unlock === 'function') {
+      kb.unlock();
+    }
+  } catch (_) { /* the terminal still has backquote */ }
+}
+
 export function claimKeyboard(root = window) {
   if (claimed) return;
   claimed = true;
+  if (typeof document !== 'undefined' && document.addEventListener) {
+    document.addEventListener('fullscreenchange', lockReservedKeys);
+    lockReservedKeys();
+  }
   root.addEventListener('keydown', onKeyDown, true);
   for (const type of ['keyup', 'keypress']) {
     root.addEventListener(type, (ev) => {

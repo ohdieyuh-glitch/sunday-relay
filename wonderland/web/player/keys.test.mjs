@@ -34,6 +34,16 @@ eq(classifyKey(K('t', world, { ctrlKey: true }), true), 'close-terminal',
    'ctrl+T again closes it -- a toggle, which Space could never safely be');
 eq(classifyKey(K('t', input, { ctrlKey: true }), true), 'close-terminal',
    'ctrl+T closes from INSIDE the terminal input: it is not a character there');
+// BACKQUOTE, because Chrome never delivers Ctrl+T to a normal tab -- it is
+// reserved for "new tab" and the keydown does not reach the page at all.
+// These assertions cannot prove the browser DOES deliver backquote; they only
+// pin the classification. The delivery question is why Ctrl+T shipped broken.
+eq(classifyKey(K('`', world), false), 'open-terminal', 'backquote opens the terminal');
+eq(classifyKey(K('`', video), true), 'close-terminal', 'backquote closes it again');
+eq(classifyKey(K('~', world, { code: 'Backquote' }), false), 'open-terminal',
+   'backquote by code and by tilde, for clients that report either');
+eq(classifyKey(K('`', input), true), 'type',
+   'backquote INSIDE the terminal input is a character, not a toggle');
 // Space must now reach the game, or the jump silently does nothing and this
 // layer hides an engine-side regression.
 eq(classifyKey(K(' ', world), false), 'pass', 'space goes to the game: it is the jump');
