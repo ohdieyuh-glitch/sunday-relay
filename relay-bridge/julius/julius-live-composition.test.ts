@@ -739,10 +739,10 @@ describe('the first paid attempt, reproduced: a failing Prompt Architect', () =>
    * A FAILURE ROW THAT NAMES NO TASK NAMES NO ROLE EITHER.
    *
    * `failures.tsv` reads the role by joining the event's task id to the task
-   * row. The coordinator writes the only event on a non-retryable worker
-   * failure — the shape the first paid mission failed in — and it used to
-   * write no task id at all, so the two columns that say WHO stopped were
-   * blank for exactly that run.
+   * row. On a non-retryable worker failure — the shape the first paid mission
+   * failed in — the coordinator writes the only row that ENDS the task, and it
+   * used to write no task id at all, so the two columns that say WHO stopped
+   * were blank for exactly that run.
    */
   it('names the task on the failure row, so the evidence can name the role', async () => {
     const { failures } = await failedRun('provider_error');

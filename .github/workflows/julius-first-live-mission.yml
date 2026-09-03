@@ -211,6 +211,19 @@ jobs:
               --jq '[.artifacts[] | select(.expired == false)] | length'
           }
           is_count() { case "$1" in ''|*[!0-9]*) return 1;; *) return 0;; esac; }
+          # THE GUARD MUST COVER THE ATTEMPT THAT MOTIVATED IT.
+          #
+          # Run 33697109210 crossed the live boundary on 2026-09-02, failed at
+          # its `plan` task, and left no marker because the attempt marker did
+          # not exist yet. A guard that counted only artifacts would therefore
+          # let the very next paid dispatch through with no acknowledgement —
+          # the exact accident this repair was written to stop, on the exact run
+          # that revealed it. So the attempt is recorded here, in the workflow,
+          # where it also outlives the 90-day artifact expiry.
+          #
+          # Set this to 0 once a later paid mission has recorded its own
+          # markers and this history no longer needs carrying by hand.
+          RECORDED_PAID_ATTEMPTS=1  # run 33697109210
           # Either list failing means the previous-run state is UNKNOWN, and
           # unknown is never treated as zero.
           if ! completed=$(count_markers julius-first-live-completed) || ! attempted=$(count_markers julius-first-live-attempted); then
@@ -237,15 +250,15 @@ jobs:
               exit 1
             fi
             echo 'operator acknowledged proceeding despite an UNPARSEABLE marker count'
-          elif [ "$completed" -gt 0 ] || [ "$attempted" -gt 0 ]; then
+          elif [ "$completed" -gt 0 ] || [ "$attempted" -gt 0 ] || [ "$RECORDED_PAID_ATTEMPTS" -gt 0 ]; then
             if [ "$ACKNOWLEDGE_RERUN" != 'RERUN PAID MISSION' ]; then
-              echo "julius_first_live_already_entered: ${completed:-0} completion marker(s) and ${attempted:-0} attempt marker(s) found." >&2
+              echo "julius_first_live_already_entered: $completed completion marker(s), $attempted attempt marker(s) and $RECORDED_PAID_ATTEMPTS recorded prior attempt(s)." >&2
               echo 'A paid first-live mission has already been entered — a previous attempt may have' >&2
               echo 'spent provider money whether or not it completed. Re-dispatch with' >&2
               echo 'acknowledge_rerun = "RERUN PAID MISSION" only if you intend to pay again.' >&2
               exit 1
             fi
-            echo "operator acknowledged a deliberate rerun over ${completed:-0} completion and ${attempted:-0} attempt marker(s)"
+            echo "operator acknowledged a deliberate rerun over $completed completion marker(s), $attempted attempt marker(s) and $RECORDED_PAID_ATTEMPTS recorded prior attempt(s)"
           else
             echo 'no completion or attempt marker found; this would be the first paid mission'
           fi

@@ -1154,8 +1154,23 @@ describe('F6 — a paid mission cannot be run twice by accident', () => {
       }
     };
 
-    it('a first paid run, with no markers at all, proceeds', () => {
-      expect(runGuard({})).toBe(0);
+    /**
+     * NO MARKERS IS NOT THE SAME AS NO ATTEMPT. Run 33697109210 entered the
+     * paid path and failed before the attempt marker existed, so it left none.
+     * A guard that counted only artifacts would wave the very next dispatch
+     * through — on the exact run that revealed the gap. The workflow records
+     * that attempt, so an empty marker list still refuses.
+     */
+    it('refuses even with no markers, because a paid attempt is recorded in the workflow', () => {
+      expect(runGuard({})).not.toBe(0);
+      expect(runGuard({ acknowledge: 'RERUN PAID MISSION' }), 'and only the typed phrase gets past it').toBe(0);
+    });
+
+    it('the recorded attempt names the run it stands for, so it can be checked and retired', () => {
+      const guard = stepScript(GATE);
+      expect(guard).toMatch(/RECORDED_PAID_ATTEMPTS=1\s+# run 33697109210/u);
+      expect(guard, 'and it is counted, not merely written down')
+        .toContain('[ "$RECORDED_PAID_ATTEMPTS" -gt 0 ]');
     });
 
     it('MUTATION: a FAILED first attempt still blocks the next ordinary paid dispatch', () => {
@@ -1169,6 +1184,7 @@ describe('F6 — a paid mission cannot be run twice by accident', () => {
     it('the exact acknowledgement lets a deliberate rerun through, over either marker', () => {
       expect(runGuard({ attempted: 1, acknowledge: 'RERUN PAID MISSION' })).toBe(0);
       expect(runGuard({ completed: 1, acknowledge: 'RERUN PAID MISSION' })).toBe(0);
+      expect(runGuard({ completed: 3, attempted: 5, acknowledge: 'RERUN PAID MISSION' }), 'however many there are').toBe(0);
     });
 
     it('MUTATION: a mistyped acknowledgement is refused', () => {

@@ -34,7 +34,7 @@
 import { evaluateJuliusPolicy, type JuliusCardPolicy } from './julius-policy';
 import { decideJuliusContinuation } from './julius-continuation';
 import { JuliusExecutionCoordinator, type JuliusExecutionPorts, type JuliusExecutionClaim, type JuliusResourceRequest } from './julius-execution-coordinator';
-import type { JuliusProviderRouter } from './julius-router';
+import { safeFailureClass, type JuliusProviderRouter } from './julius-router';
 import { createJuliusContextSnapshot } from './julius-context-snapshot';
 import { evaluateJuliusVerification, type JuliusVerificationPolicy } from './julius-verification-runtime';
 import { planJuliusRepair } from './julius-repair-runtime';
@@ -243,8 +243,12 @@ export async function runClaimedTask(
   const capabilityVerdict = evaluateJuliusPolicy(request.policy, { operation: 'USE_CAPABILITY', capability: request.capability });
   for (const verdict of [dispatchVerdict, capabilityVerdict]) {
     if (verdict.effect === 'REQUIRE_APPROVAL') {
-      // The task keeps its lease released and returns to RUNNABLE so the
-      // approval can be answered without the claim expiring underneath it.
+      // The lease is released at once, so the approval can be answered without
+      // the claim expiring underneath it. The task itself ends FAILED: this
+      // call passes no next attempt time, and under the hand-back rule both
+      // stores now share, only a call that does returns a task to RUNNABLE.
+      // (An earlier comment here said it returned to RUNNABLE; it did not, in
+      // either store.)
       await deps.store.finishTask({ taskId: claim.taskId, owner: deps.owner, leaseGeneration: claim.leaseGeneration, state: 'FAILED', now: deps.clock.now() });
       await ledger.event('run.paused', { taskId: claim.taskId, facts: { reasonCode: verdict.reasonCode, policyRevision: verdict.policyRevision } });
       return { kind: 'APPROVAL_REQUIRED', taskId: claim.taskId, operation: 'DISPATCH_WORKER', reasonCode: verdict.reasonCode };
@@ -544,9 +548,11 @@ function executionPorts(
         facts[key] = value === null || ['string', 'number', 'boolean'].includes(typeof value) ? value as string | number | boolean | null : String(value);
       }
       // NAME THE TASK. A `task.failed` with no task cannot say which of the
-      // three C.A.R.D. roles stopped, and on a non-retryable worker failure
-      // this is the only row written — which is exactly the shape the first
-      // paid mission failed in.
+      // three C.A.R.D. roles stopped, and on a non-retryable worker failure the
+      // coordinator's is the only row that ENDS the task — which is exactly the
+      // shape the first paid mission failed in. (This port also carries
+      // `worker.selected`, `budget.reserved` and `worker.dispatched`; they name
+      // the same claimed task.)
       await ledger.event(type, { taskId, facts: { ...facts, runId: run.runId } });
     },
   };
@@ -806,7 +812,13 @@ async function scheduleRepair(input: {
     // missing evidence. Each is a HALT with a reason rather than a crash: the
     // run stops for a stated cause and the reservation is handed back.
     await deps.budget.release({ reservationId, reason: 'REPAIR_NOT_PLANNABLE', now: deps.clock.now() });
-    const reasonCode = error instanceof Error ? error.message : 'repair_not_plannable';
+    // NARROWED, NOT TRUSTED. This value leaves the process in the evidence
+    // bundle's `reason_code` column, whose contract is "a machine token by
+    // construction". Every throw in the repair planner is a token today, but a
+    // TypeError from anywhere in it would otherwise put free text into an
+    // uploaded artifact, so the same narrowing the failure classes get is
+    // applied here rather than assumed.
+    const reasonCode = safeFailureClass(error instanceof Error ? error.message : null) ?? 'repair_not_plannable';
     await ledger.event('run.failed', { taskId: task.taskId, facts: { reasonCode } });
     return { kind: 'HALTED', taskId: task.taskId, reasonCode, safeSummary: 'A repair round was required and could not be planned.' };
   }

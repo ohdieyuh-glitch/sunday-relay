@@ -397,7 +397,12 @@ distinction is what the first paid attempt taught:
 A live dispatch that finds EITHER marker refuses unless the operator typed
 `RERUN PAID MISSION`. Run 33697109210 is why: it crossed the live boundary,
 failed at its `plan` task and left no marker at all, so an ordinary
-re-dispatch would have been treated as the first paid run. A marker list that
+re-dispatch would have been treated as the first paid run. THAT RUN IS ALSO
+COVERED, not merely explained: markers only exist from now on, so the attempt
+itself is recorded in the gate as `RECORDED_PAID_ATTEMPTS=1`, naming the run.
+The next paid dispatch therefore needs the acknowledgement even though the
+artifact list is empty, which is the whole point. Set it to 0 once a later paid
+mission has recorded markers of its own. A marker list that
 answers with something other than a count is now routed to the same refusal an
 unreadable list gets, because a default-to-zero is the one answer that lets a
 second paid run through.
@@ -434,7 +439,7 @@ database. Two repairs, both provider-free:
   read from named fact keys and never from a whole payload. Every worker-failure
   row names its task, and the role is joined from the task, so the artifact says
   which of the three C.A.R.D. roles stopped — including on the non-retryable
-  path, where the execution coordinator writes the only row. That path is the
+  path, where the execution coordinator writes the only task-ending row. That path is the
   shape the first paid attempt failed in, and its events used to carry no task
   id at all. The one row that names no task is the run loop's own `run.failed`, written
   when the run itself reaches FAILED; its task and role columns are blank
