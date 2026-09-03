@@ -25,4 +25,16 @@ it('normalizes a non-dispatch throw from selection rather than writing "undefine
   expect(row.code,'a real code, never the string "undefined"').toBe('WORKER_EXECUTION_FAILURE');
   expect(row.errorRetryable,'a real boolean, never the string "undefined"').toBe(false);
   expect(row.failureClass,'unknown is null, not "undefined"').toBeNull();
-  expect(JSON.stringify(rows),'and no part of the exception text reaches the durable row').not.toContain('FAKESECRET123456789');});});
+  expect(JSON.stringify(rows),'and no part of the exception text reaches the durable row').not.toContain('FAKESECRET123456789');
+  /* A SELECTION FAILURE IS NEVER RETRYABLE, which is the property the choice of
+   * narrowing is FOR. Routing this through `normalizeProviderError` — which
+   * reads a provider's `.code` — classifies the same throw as a retryable
+   * TIMEOUT and writes `errorRetryable: true` beside a status that ENDS the
+   * task. `select` contacts nobody, so there is no transient condition to
+   * report. This is the only input on which the two narrowings differ. */
+  const coded:Record<string,unknown>[]=[];
+  const codedRouter=new JuliusProviderRouter(registry,new Map([['adapter',success]]),new JuliusProviderHealthRegistry());
+  (codedRouter as unknown as{select:()=>never}).select=()=>{throw{code:'TIMEOUT'}};
+  const outcome=await new JuliusExecutionCoordinator(codedRouter,{...ports,async recordEvent(input){coded.push({type:input.type,...input.payload})}}).execute(request);
+  expect(outcome,'a throw from selection is a programming error, not a transient provider condition').toEqual({status:'FAILED',code:'WORKER_EXECUTION_FAILURE',failureClass:null});
+  expect(coded.at(-1)!.errorRetryable,'never retryable-true on the row that ends the task').toBe(false);});});

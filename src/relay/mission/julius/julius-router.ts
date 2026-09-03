@@ -20,12 +20,15 @@ export const JULIUS_ERROR_CODES=['RATE_LIMIT','TIMEOUT','AUTH_CONFIGURATION','PR
  * comment claimed it. The rule is exactly `[a-z]` followed by up to 63 of
  * `[a-z0-9_]`, so it refuses a space, a colon, a slash, a dot, a dash, every
  * upper-case letter, a leading digit and anything past 64 characters — every
- * key shape this runtime has actually seen. What it still admits is a token
- * already in that alphabet: a hex digest beginning a–f would pass. That is not
- * a live exposure — every value the three live adapters pass is a literal or a
- * member of the connector's closed failure-class union — and the workflow's
- * credential scan reads the artifact before it is published. This function is
- * the first layer, not the only one.
+ * PROVIDER key shape this runtime has seen. It is not a shape rule for
+ * credentials in general, and the rig mints a counter-example itself: the
+ * live workflow's database password is `openssl rand -hex 24`, and about three
+ * in eight of those are all-lower-case hex beginning a–f, which is shaped like
+ * a class and passes. That is not a live exposure — every value the three live
+ * adapters pass is a literal or a member of the connector's closed
+ * failure-class union — and it is why the workflow matches its own secret
+ * VALUES literally before publishing the artifact. This function is the first
+ * layer, not the only one.
  */
 export const safeFailureClass=(value:unknown):string|null=>typeof value==='string'&&/^[a-z][a-z0-9_]{0,63}$/.test(value)?value:null;
 /**

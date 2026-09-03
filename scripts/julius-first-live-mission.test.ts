@@ -1099,10 +1099,15 @@ describe('F6 — a paid mission cannot be run twice by accident', () => {
     expect(attemptUpload, 'the attempt upload is itself on the paid, fail-closed path')
       .toMatch(/if: success\(\) && inputs\.confirm_live == 'RUN LIVE MISSION'/u);
     // A MARKER THAT UPLOADED NOTHING MUST NOT BE A GREEN STEP. upload-artifact
-    // v4 defaults to `warn`, so an empty directory uploads no artifact and
-    // still succeeds — and the very next paid step is the one that spends.
-    // With `error`, "a marker exists before any provider can be reached" is a
-    // property of the upload rather than of the previous step's `set -e`.
+    // v4 defaults to `warn`, so an empty directory uploads no artifact and the
+    // step still succeeds. THE TWO MARKERS NEED IT FOR DIFFERENT REASONS, and
+    // conflating them is how one of these assertions would get relaxed: the
+    // attempt marker is followed immediately by the step that spends, so
+    // `error` makes "a marker exists before any provider can be reached" a
+    // property of the upload rather than of the previous step's `set -e`;
+    // nothing spends after the completion marker, and its reason is the NEXT
+    // dispatch, whose `count_markers julius-first-live-completed` would read
+    // zero and be told no paid mission has ever completed.
     for (const marker of ['julius-first-live-attempted', 'julius-first-live-completed']) {
       const upload = uploads.find((block) => block.includes(`name: ${marker}`)) ?? '';
       expect(upload, `${marker} must not report success having uploaded nothing`)

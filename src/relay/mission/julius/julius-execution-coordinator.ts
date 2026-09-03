@@ -55,9 +55,10 @@ export class JuliusExecutionCoordinator {
    * `WORKER_EXECUTION_FAILURE`. Deliberately not `normalizeProviderError` —
    * that reads a provider's `.code` for a rate limit or a timeout, and
    * `select` contacts nobody. It reads the worker registry, the health
-   * registry and the C.A.R.D., so a throw from it is a programming error, not
-   * a transient provider condition; classifying one as TIMEOUT would put
-   * `errorRetryable: true` on a row that ends the task.
+   * registry, the adapter map and the C.A.R.D. — all in memory — so a throw
+   * from it is a programming error, not a transient provider condition;
+   * classifying one as TIMEOUT would put `errorRetryable: true` on a row that
+   * ends the task.
    */
   async execute(request:JuliusExecutionRequest):Promise<JuliusExecutionOutcome>{
     let worker:JuliusWorker;try{worker=this.router.select({role:request.role,taskType:request.taskType,capability:request.capability,policy:request.policy,excludedWorkerIds:request.excludedWorkerIds});}catch(error){const failure=error instanceof JuliusDispatchError?error:new JuliusDispatchError('WORKER_EXECUTION_FAILURE',false,'Worker selection failed.');await this.event(request,'task.failed',{code:failure.code,errorRetryable:failure.retryable,failureClass:failure.failureClass});return{status:failure.code==='POLICY_DENIED'?'DENIED':'FAILED',code:failure.code,failureClass:failure.failureClass};}

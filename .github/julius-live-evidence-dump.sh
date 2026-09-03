@@ -36,11 +36,12 @@ dump "SELECT invocation_id,tool_id,state,requested_at FROM relay_wonderland.juli
 #
 # NAMED FACT KEYS ONLY, never `payload` whole. Every value below is a machine token by
 # construction — `code` is one of nine JuliusErrorCodes, `failureClass` is narrowed by
-# `safeFailureClass` to /^[a-z][a-z0-9_]{0,63}$/, `reasonCode` is a continuation reason — so a
+# `safeFailureClass` to /^[a-z][a-z0-9_]{0,63}$/, `reasonCode` is a continuation reason or a cause
+# narrowed by the wider `safeReasonCode`, which also admits upper case — so a
 # provider message, a prompt, a URL or an `Authorization:` header cannot reach this file even if
 # an adapter passes one. The rule is `[a-z]` then up to 63 of `[a-z0-9_]`, so it refuses an
-# upper-case letter, a leading digit, punctuation and anything longer — but a token already in
-# that alphabet, such as a hex digest beginning a-f, would pass. That is the first layer; the
+# upper-case letter, a leading digit, every punctuation mark but `_`, and anything longer — but a
+# token already in that alphabet, such as a hex digest beginning a-f, would pass. That is the first layer; the
 # workflow's credential scan before publication is the second. Neither is claimed to be the only one.
 # The role comes from the task row, so a reader sees which of the three C.A.R.D. roles stopped.
 # One row names no task: the run loop's own `julius.run.failed`, the run's ending rather than a
