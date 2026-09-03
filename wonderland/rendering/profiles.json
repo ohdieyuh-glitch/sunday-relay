@@ -1,327 +1,337 @@
 {
-  "schema": "wonderland.rendering.profiles/1",
-  "engine": "5.8",
-  "default": "BALANCED",
-  "output": {
-    "width": 1280,
-    "height": 720,
-    "target_fps_min": 30,
-    "target_fps_preferred": 60
-  },
-  "_how_to_read_this": [
-    "cvars  are applied through -ExecCmds when the packaged build launches.",
-    "args   are command-line switches. Pixel Streaming settings live here rather",
-    "       than in cvars because the 5.8 reference documents the SWITCH names",
-    "       (-PixelStreamingEncoderMinQuality=...) while the plugin loaded by this",
-    "       project is PixelStreaming2, whose cvar prefix has not been confirmed.",
-    "       A documented switch beats an assumed cvar name.",
-    "source on every entry is the page the value came from. An entry with",
-    "       source 'unprobed' has NOT been confirmed to exist in this engine and",
-    "       render-profile.py refuses to emit it once a probe file exists that",
-    "       says the engine does not have it."
-  ],
-  "profiles": {
-    "PERFORMANCE": {
-      "description": "Headroom first. TSR upscales from 67% so the GPU has room for a denser world; edges stay clean because TSR is still doing the anti-aliasing.",
-      "cvars": {
-        "r.AntiAliasingMethod": {
-          "value": 4,
-          "source": "dev.epicgames.com/documentation/unreal-engine/anti-aliasing-and-upscaling-in-unreal-engine",
-          "note": "4 = TSR, the UE5 default"
-        },
-        "r.ScreenPercentage": {
-          "value": 67,
-          "source": "temporal-super-resolution-in-unreal-engine",
-          "note": "TSR reconstructs to 720p"
-        },
-        "r.TSR.History.ScreenPercentage": {
-          "value": 100,
-          "source": "temporal-super-resolution-in-unreal-engine",
-          "note": "100-200 supported; 100 is the cheap end"
-        },
-        "r.TSR.History.SampleCount": {
-          "value": 8,
-          "source": "temporal-super-resolution-in-unreal-engine",
-          "note": "range 8-32"
-        },
-        "r.TSR.ShadingRejection.SampleCount": {
-          "value": 2.0,
-          "source": "temporal-super-resolution-in-unreal-engine"
-        },
-        "r.TSR.Velocity.WeightClampingSampleCount": {
-          "value": 2.0,
-          "source": "temporal-super-resolution-in-unreal-engine",
-          "note": "lower = less blur in motion"
-        },
-        "r.MotionBlurQuality": {
-          "value": 0,
-          "source": "unprobed",
-          "note": "long-standing UE cvar; the probe decides"
-        },
-        "r.AutoExposure.Bias": {
-          "value": -3.4,
-          "source": "wonderland/infra/build/generate-hub-level.py LOOK",
-          "note": "the ONE exposure lever proven to reach this packaged render"
-        }
-      },
-      "args": [
-        "-PixelStreamingEncoderMinQuality=40",
-        "-PixelStreamingEncoderMaxQuality=100",
-        "-PixelStreamingH264Profile=HIGH",
-        "-PixelStreamingWebRTCMaxFps=60"
-      ]
+ "schema": "wonderland.rendering.profiles/1",
+ "engine": "5.8",
+ "default": "BALANCED",
+ "output": {
+  "width": 1280,
+  "height": 720,
+  "target_fps_min": 30,
+  "target_fps_preferred": 60
+ },
+ "_how_to_read_this": [
+  "cvars  are applied through -ExecCmds when the packaged build launches.",
+  "args   are command-line switches. Pixel Streaming settings live here rather",
+  "       than in cvars because the 5.8 reference documents the SWITCH names",
+  "       (-PixelStreamingEncoderMinQuality=...) while the plugin loaded by this",
+  "       project is PixelStreaming2, whose cvar prefix has not been confirmed.",
+  "       A documented switch beats an assumed cvar name.",
+  "source on every entry is the page the value came from. An entry with",
+  "       source 'unprobed' has NOT been confirmed to exist in this engine and",
+  "       render-profile.py refuses to emit it once a probe file exists that",
+  "       says the engine does not have it."
+ ],
+ "profiles": {
+  "PERFORMANCE": {
+   "description": "Headroom first. TSR upscales from 67% so the GPU has room for a denser world; edges stay clean because TSR is still doing the anti-aliasing.",
+   "cvars": {
+    "r.AntiAliasingMethod": {
+     "value": 4,
+     "source": "dev.epicgames.com/documentation/unreal-engine/anti-aliasing-and-upscaling-in-unreal-engine",
+     "note": "4 = TSR, the UE5 default"
     },
-    "BALANCED": {
-      "description": "The L4 default. Native 720p with TSR as the anti-aliaser, motion clamping tightened for readable movement, and a QUALITY FLOOR on the encoder so the stream cannot quietly go soft when the network dips.",
-      "cvars": {
-        "r.AntiAliasingMethod": {
-          "value": 4,
-          "source": "anti-aliasing-and-upscaling-in-unreal-engine"
-        },
-        "r.ScreenPercentage": {
-          "value": 100,
-          "source": "temporal-super-resolution-in-unreal-engine",
-          "note": "native; TSR is AA here, not an upscaler"
-        },
-        "r.TSR.History.ScreenPercentage": {
-          "value": 100,
-          "source": "measured",
-          "note": "MEASURED ON THE STREAM 2026-08-23. BALANCED's TSR history was costing 31% of the DELIVERED detail: acutance 4.760 with it, 6.921 with TSR at engine defaults, same build, same camera, same sharpen, same exposure. The earlier note that TSR history was 'ruled out by measurement' was measured on the wrong axis - history accumulation smears a scene whose camera is static and whose Dogs move, which is exactly this scene."
-        },
-        "r.TSR.History.SampleCount": {
-          "value": 8,
-          "source": "measured",
-          "note": "Halved with the history screen percentage; see that note."
-        },
-        "r.TSR.ShadingRejection.SampleCount": {
-          "value": 2.0,
-          "source": "temporal-super-resolution-in-unreal-engine",
-          "note": "Left at its value; the history size was the lever, measured separately."
-        },
-        "r.TSR.Velocity.WeightClampingSampleCount": {
-          "value": 2.0,
-          "source": "temporal-super-resolution-in-unreal-engine",
-          "note": "Left at its value; the history size was the lever, measured separately."
-        },
-        "r.TSR.ShadingRejection.Flickering": {
-          "value": 1,
-          "source": "temporal-super-resolution-in-unreal-engine",
-          "note": "on at High/Epic/Cinematic; suppresses moire on the checkered flagstone"
-        },
-        "r.TSR.RejectionAntiAliasingQuality": {
-          "value": 2,
-          "source": "temporal-super-resolution-in-unreal-engine",
-          "note": "Left at its value; the history size was the lever, measured separately."
-        },
-        "r.TSR.Resurrection": {
-          "value": 1,
-          "source": "temporal-super-resolution-in-unreal-engine",
-          "note": "Left at its value; the history size was the lever, measured separately."
-        },
-        "r.MotionBlurQuality": {
-          "value": 0,
-          "source": "unprobed",
-          "note": "founder: disable unless testing proves it helps"
-        },
-        "r.AutoExposure.Bias": {
-          "value": -3.4,
-          "source": "generate-hub-level.py LOOK",
-          "note": "\nRE-MEASURED 2026-08-22 and it is INERT in this packaged render, which confirms an earlier finding independently. A sweep of -3.4 / -2.0 / -1.0 / 0.0 at 1080p moved frame luma only 47.0 -> 46.5 -> 48.7 -> 52.3 \u2014 3.4 stops of bias for an 11% change, when a working bias would be about 10x. Whatever holds this frame down, it is not the bias, so do not reach for it to fix darkness. The colour GRADE is the lever."
-        },
-        "r.Tonemapper.Sharpen": {
-          "value": 2.0,
-          "source": "measured on the L4, 2026-08-22 \u2014 not taken from documentation",
-          "note": "THE ONLY LEVER THAT MOVED SHARPNESS. The founder's note was that Wonderland is too blurry, too soft, too smeared, not crisp enough for 4K. Four candidates were captured at 1080p on build 03e7562 and scored by acutance (mean absolute luma gradient), which brightness does not move:\n    baseline                                3.091\n    r.TSR.History.ScreenPercentage 100      3.110   (+0.6%)\n    FullyLoadUsedTextures 1, MipLODBias -1  3.095   (+0.1%)\n    r.Tonemapper.Sharpen 1.0                3.667  (+18.6%)\n    r.Tonemapper.Sharpen 2.0                4.352  (+40.8%)\nTemporal smearing and texture mips are RULED OUT by measurement, not argument \u2014 the 8192 texture was already at full mip and TSR history was not the blur. 2.0 is visibly crisper on spire edges, cloud structure and foliage with no halo, at ~95 FPS.\nAlso measured and rejected: rendering at higher resolution. Compared at one display size, acutance is FLAT across 720p/1080p/1440p/2160p (4.237 / 4.188 / 4.105 / 4.347) while FPS falls 113 -> 12. 4K output buys ~2.6% detail for 10x the frame cost, because the softness is in the SOURCE \u2014 a photogrammetric shell and primitive authored geometry \u2014 not in the output resolution."
-        }
-      },
-      "args": [
-        "-PixelStreamingEncoderMinQuality=60",
-        "-PixelStreamingEncoderMaxQuality=100",
-        "-PixelStreamingH264Profile=HIGH",
-        "-PixelStreamingWebRTCStartBitrate=10000000",
-        "-PixelStreamingWebRTCMaxBitrate=20000000",
-        "-PixelStreamingWebRTCDegradationPreference=MAINTAIN_RESOLUTION",
-        "-PixelStreamingWebRTCMaxFps=60"
-      ]
+    "r.ScreenPercentage": {
+     "value": 67,
+     "source": "temporal-super-resolution-in-unreal-engine",
+     "note": "TSR reconstructs to 720p"
     },
-    "LIVE": {
-      "description": "THE FOUNDER'S PLAY PROFILE, and it exists because of a measurement. Walking the Dog felt laggy, so the movement profiler ran 3,540 frames of the exploration route offscreen: FrameTime median 19.40 ms (51.5 fps), p99 25.82, WORST FRAME 31.78 ms, and ZERO frames over 33 ms. The game does not hitch -- GPUTime median 19.26 of a 19.40 ms frame, so it is GPU-bound and perfectly steady, with the game thread at 2.40 ms. The stutter was the STREAM: BALANCED asks WebRTC for MAINTAIN_RESOLUTION, which holds picture and drops FRAMES, over a renderer feeding 51.5 fps into a 60 Hz cadence with an encoder quality FLOOR of 60 that leaves frame rate as the only variable left to give. That trade is right for judging a still and wrong for walking. This profile inverts it and buys the renderer enough headroom to hold 60: ScreenPercentage 78 costs 39% of the GPU's pixel work and, by this project's own measurement, no sharpness at all -- acutance is FLAT across 720p/1080p/1440p/2160p, because the softness is in the source geometry, not the output resolution. Tonemapper.Sharpen 2.0 is kept.",
-      "cvars": {
-        "r.AntiAliasingMethod": {
-          "value": 4,
-          "source": "anti-aliasing-and-upscaling-in-unreal-engine"
-        },
-        "r.ScreenPercentage": {
-          "value": 78,
-          "source": "temporal-super-resolution-in-unreal-engine",
-          "note": "TSR upscales below 100. 78% is 61% of the pixels, which takes the measured 19.26 ms GPU frame to roughly 12 and puts the renderer above the stream's 60 Hz instead of 8.5 fps under it. The cadence mismatch IS the judder: 51.5 fps into 60 Hz drops an irregular one frame in seven no matter how steady the renderer is."
-        },
-        "r.TSR.History.ScreenPercentage": {
-          "value": 100,
-          "source": "measured",
-          "note": "MEASURED ON THE STREAM 2026-08-23. BALANCED's TSR history was costing 31% of the DELIVERED detail: acutance 4.760 with it, 6.921 with TSR at engine defaults, same build, same camera, same sharpen, same exposure. The earlier note that TSR history was 'ruled out by measurement' was measured on the wrong axis - history accumulation smears a scene whose camera is static and whose Dogs move, which is exactly this scene."
-        },
-        "r.TSR.History.SampleCount": {
-          "value": 8,
-          "source": "measured",
-          "note": "Halved with the history screen percentage; see that note."
-        },
-        "r.TSR.ShadingRejection.SampleCount": {
-          "value": 2.0,
-          "source": "temporal-super-resolution-in-unreal-engine",
-          "note": "Left at its value; the history size was the lever, measured separately."
-        },
-        "r.TSR.Velocity.WeightClampingSampleCount": {
-          "value": 2.0,
-          "source": "temporal-super-resolution-in-unreal-engine",
-          "note": "Left at its value; the history size was the lever, measured separately."
-        },
-        "r.TSR.ShadingRejection.Flickering": {
-          "value": 1,
-          "source": "temporal-super-resolution-in-unreal-engine",
-          "note": "on at High/Epic/Cinematic; suppresses moire on the checkered flagstone"
-        },
-        "r.TSR.RejectionAntiAliasingQuality": {
-          "value": 2,
-          "source": "temporal-super-resolution-in-unreal-engine",
-          "note": "Left at its value; the history size was the lever, measured separately."
-        },
-        "r.TSR.Resurrection": {
-          "value": 1,
-          "source": "temporal-super-resolution-in-unreal-engine",
-          "note": "Left at its value; the history size was the lever, measured separately."
-        },
-        "r.MotionBlurQuality": {
-          "value": 0,
-          "source": "unprobed",
-          "note": "founder: disable unless testing proves it helps"
-        },
-        "r.AutoExposure.Bias": {
-          "value": -3.4,
-          "source": "generate-hub-level.py LOOK",
-          "note": "\nRE-MEASURED 2026-08-22 and it is INERT in this packaged render, which confirms an earlier finding independently. A sweep of -3.4 / -2.0 / -1.0 / 0.0 at 1080p moved frame luma only 47.0 -> 46.5 -> 48.7 -> 52.3 \u2014 3.4 stops of bias for an 11% change, when a working bias would be about 10x. Whatever holds this frame down, it is not the bias, so do not reach for it to fix darkness. The colour GRADE is the lever."
-        },
-        "r.Tonemapper.Sharpen": {
-          "value": 2.0,
-          "source": "measured on the L4, 2026-08-22 \u2014 not taken from documentation",
-          "note": "THE ONLY LEVER THAT MOVED SHARPNESS. The founder's note was that Wonderland is too blurry, too soft, too smeared, not crisp enough for 4K. Four candidates were captured at 1080p on build 03e7562 and scored by acutance (mean absolute luma gradient), which brightness does not move:\n    baseline                                3.091\n    r.TSR.History.ScreenPercentage 100      3.110   (+0.6%)\n    FullyLoadUsedTextures 1, MipLODBias -1  3.095   (+0.1%)\n    r.Tonemapper.Sharpen 1.0                3.667  (+18.6%)\n    r.Tonemapper.Sharpen 2.0                4.352  (+40.8%)\nTemporal smearing and texture mips are RULED OUT by measurement, not argument \u2014 the 8192 texture was already at full mip and TSR history was not the blur. 2.0 is visibly crisper on spire edges, cloud structure and foliage with no halo, at ~95 FPS.\nAlso measured and rejected: rendering at higher resolution. Compared at one display size, acutance is FLAT across 720p/1080p/1440p/2160p (4.237 / 4.188 / 4.105 / 4.347) while FPS falls 113 -> 12. 4K output buys ~2.6% detail for 10x the frame cost, because the softness is in the SOURCE \u2014 a photogrammetric shell and primitive authored geometry \u2014 not in the output resolution."
-        }
-      },
-      "args": [
-        "-PixelStreamingEncoderMinQuality=25",
-        "-PixelStreamingEncoderMaxQuality=100",
-        "-PixelStreamingH264Profile=HIGH",
-        "-PixelStreamingWebRTCStartBitrate=4000000",
-        "-PixelStreamingWebRTCMaxBitrate=8000000",
-        "-PixelStreamingWebRTCDegradationPreference=MAINTAIN_FRAMERATE",
-        "-PixelStreamingWebRTCMaxFps=60"
-      ],
-      "args_note": "MAINTAIN_FRAMERATE is the ENGINE DEFAULT this project overrode. VERIFIED.md records the override and its reason -- 'for a world the founder is judging on ornament and material detail, [dropping picture] is the wrong trade' -- and that reasoning is still correct FOR A CAPTURE. It is exactly backwards for someone driving the Dog, and it was in force on the live stream the founder was walking. MinQuality drops 60 -> 25 for the same reason: a quality floor plus MAINTAIN_RESOLUTION leaves the encoder nothing to give up but frames. BALANCED and CINEMATIC are untouched; captures keep the picture-first trade. The bitrates match run-stream.sh's own WL_PS_* tune block (start 4 Mb/s, max 8, target 6), which is applied by -ExecCmds AFTER these switches and therefore wins. Two descriptions of one quantity WILL disagree -- this project has a ledger entry about exactly that -- so they say the same numbers. Those numbers were themselves chosen from a measurement: the founder is several thousand kilometres away, and a 10 Mb/s start bitrate floods that path the moment the camera moves."
+    "r.TSR.History.ScreenPercentage": {
+     "value": 100,
+     "source": "temporal-super-resolution-in-unreal-engine",
+     "note": "100-200 supported; 100 is the cheap end"
     },
-    "CINEMATIC": {
-      "description": "Supersampled. Renders ABOVE 720p and lets TSR resolve down, which is where crisp edges and fine ornament actually come from at this output size. Costs GPU that the L4 may or may not have \u2014 that is what the bench is for.",
-      "cvars": {
-        "r.AntiAliasingMethod": {
-          "value": 4,
-          "source": "anti-aliasing-and-upscaling-in-unreal-engine"
-        },
-        "r.ScreenPercentage": {
-          "value": 150,
-          "source": "temporal-super-resolution-in-unreal-engine",
-          "note": "supersample; MEASURE it \u2014 more is not automatically better"
-        },
-        "r.TSR.History.ScreenPercentage": {
-          "value": 200,
-          "source": "temporal-super-resolution-in-unreal-engine"
-        },
-        "r.TSR.History.SampleCount": {
-          "value": 32,
-          "source": "temporal-super-resolution-in-unreal-engine",
-          "note": "top of the documented range"
-        },
-        "r.TSR.ShadingRejection.SampleCount": {
-          "value": 2.0,
-          "source": "temporal-super-resolution-in-unreal-engine"
-        },
-        "r.TSR.Velocity.WeightClampingSampleCount": {
-          "value": 2.0,
-          "source": "temporal-super-resolution-in-unreal-engine"
-        },
-        "r.TSR.ShadingRejection.Flickering": {
-          "value": 1,
-          "source": "temporal-super-resolution-in-unreal-engine"
-        },
-        "r.TSR.RejectionAntiAliasingQuality": {
-          "value": 2,
-          "source": "temporal-super-resolution-in-unreal-engine"
-        },
-        "r.TSR.Resurrection": {
-          "value": 1,
-          "source": "temporal-super-resolution-in-unreal-engine"
-        },
-        "r.TSR.History.R11G11B10": {
-          "value": 0,
-          "source": "temporal-super-resolution-in-unreal-engine",
-          "note": "full-precision history; costs bandwidth, keeps gradients clean"
-        },
-        "r.MotionBlurQuality": {
-          "value": 0,
-          "source": "unprobed"
-        },
-        "r.AutoExposure.Bias": {
-          "value": -3.4,
-          "source": "generate-hub-level.py LOOK"
-        }
-      },
-      "args": [
-        "-PixelStreamingEncoderMinQuality=80",
-        "-PixelStreamingEncoderMaxQuality=100",
-        "-PixelStreamingH264Profile=HIGH",
-        "-PixelStreamingWebRTCStartBitrate=20000000",
-        "-PixelStreamingWebRTCMaxBitrate=40000000",
-        "-PixelStreamingWebRTCDegradationPreference=MAINTAIN_RESOLUTION",
-        "-PixelStreamingWebRTCMaxFps=60"
-      ]
+    "r.TSR.History.SampleCount": {
+     "value": 8,
+     "source": "temporal-super-resolution-in-unreal-engine",
+     "note": "range 8-32"
+    },
+    "r.TSR.ShadingRejection.SampleCount": {
+     "value": 2.0,
+     "source": "temporal-super-resolution-in-unreal-engine"
+    },
+    "r.TSR.Velocity.WeightClampingSampleCount": {
+     "value": 2.0,
+     "source": "temporal-super-resolution-in-unreal-engine",
+     "note": "lower = less blur in motion"
+    },
+    "r.MotionBlurQuality": {
+     "value": 0,
+     "source": "unprobed",
+     "note": "long-standing UE cvar; the probe decides"
+    },
+    "r.AutoExposure.Bias": {
+     "value": -3.4,
+     "source": "wonderland/infra/build/generate-hub-level.py LOOK",
+     "note": "the ONE exposure lever proven to reach this packaged render"
     }
+   },
+   "args": [
+    "-PixelStreamingEncoderMinQuality=40",
+    "-PixelStreamingEncoderMaxQuality=100",
+    "-PixelStreamingH264Profile=HIGH",
+    "-PixelStreamingWebRTCMaxFps=60"
+   ]
   },
-  "candidates": [
-    "r.Tonemapper.Sharpen",
-    "r.TSR.Visualize",
-    "r.TSR.AsyncCompute",
-    "r.TSR.ShadingRejection.Flickering.Period",
-    "r.TSR.Resurrection.PersistentFrameCount",
-    "r.DefaultFeature.MotionBlur",
-    "r.MotionBlur.Max",
-    "r.Streaming.PoolSize",
-    "r.Streaming.LimitPoolSizeToVRAM",
-    "r.ViewDistanceScale",
-    "r.Shadow.DistanceScale",
-    "r.Shadow.Virtual.Enable",
-    "r.Shadow.Virtual.ResolutionLodBiasDirectional",
-    "r.DynamicGlobalIlluminationMethod",
-    "r.ReflectionMethod",
-    "r.Lumen.ScreenProbeGather.DownsampleFactor",
-    "r.MegaLights.Enable",
-    "r.Nanite",
-    "r.Nanite.MaxPixelsPerEdge",
-    "r.DynamicRes.OperationMode",
-    "sg.AntiAliasingQuality",
-    "sg.ShadowQuality",
-    "sg.TextureQuality",
-    "sg.ViewDistanceQuality",
-    "sg.EffectsQuality",
-    "sg.GlobalIlluminationQuality",
-    "sg.ReflectionQuality",
-    "PixelStreaming.Encoder.MinQuality",
-    "PixelStreaming2.Encoder.MinQuality",
-    "CsvProfile",
-    "r.MeshDrawCommands.DynamicInstancing",
-    "r.MeshDrawCommands.LogDynamicInstancingStats"
-  ],
-  "rejected": {
-    "r.TemporalAACurrentFrameWeight": "Legacy TAA/TAAU only. UE 5.8's anti-aliasing documentation states the r.TemporalAA* variables 'apply only to legacy TAAU, not to TSR', and this project renders with TSR (r.AntiAliasingMethod=4, the UE5 default). Setting it would change nothing and would read as a knob that had been tried.",
-    "r.TemporalAASamples": "Same reason. It is a TAA sample-count control with no effect on the TSR path. Under TSR the equivalent levers are r.TSR.History.SampleCount and r.TSR.ShadingRejection.SampleCount, which are in the profiles above.",
-    "r.PostProcessAAQuality": "Governs the legacy AA quality tiers. Under TSR the scalability group is sg.AntiAliasingQuality, which drives the r.TSR.* permutations instead.",
-    "PostProcessVolume sharpening/grade": "PROVEN not to reach this render. Both the PostProcessVolume grade and the camera-component PostProcessSettings are silently ignored in the packaged -RenderOffscreen Pixel Streaming build \u2014 a 40% ColorGain change was invisible with zero override errors. Only launch cvars reach it. See the wonderland live-render notes."
+  "BALANCED": {
+   "description": "The L4 default. Native 720p with TSR as the anti-aliaser, motion clamping tightened for readable movement, and a QUALITY FLOOR on the encoder so the stream cannot quietly go soft when the network dips.",
+   "cvars": {
+    "r.AntiAliasingMethod": {
+     "value": 4,
+     "source": "anti-aliasing-and-upscaling-in-unreal-engine"
+    },
+    "r.ScreenPercentage": {
+     "value": 100,
+     "source": "temporal-super-resolution-in-unreal-engine",
+     "note": "native; TSR is AA here, not an upscaler"
+    },
+    "r.TSR.History.ScreenPercentage": {
+     "value": 100,
+     "source": "measured",
+     "note": "MEASURED ON THE STREAM 2026-08-23. BALANCED's TSR history was costing 31% of the DELIVERED detail: acutance 4.760 with it, 6.921 with TSR at engine defaults, same build, same camera, same sharpen, same exposure. The earlier note that TSR history was 'ruled out by measurement' was measured on the wrong axis - history accumulation smears a scene whose camera is static and whose Dogs move, which is exactly this scene."
+    },
+    "r.TSR.History.SampleCount": {
+     "value": 8,
+     "source": "measured",
+     "note": "Halved with the history screen percentage; see that note."
+    },
+    "r.TSR.ShadingRejection.SampleCount": {
+     "value": 2.0,
+     "source": "temporal-super-resolution-in-unreal-engine",
+     "note": "Left at its value; the history size was the lever, measured separately."
+    },
+    "r.TSR.Velocity.WeightClampingSampleCount": {
+     "value": 2.0,
+     "source": "temporal-super-resolution-in-unreal-engine",
+     "note": "Left at its value; the history size was the lever, measured separately."
+    },
+    "r.TSR.ShadingRejection.Flickering": {
+     "value": 1,
+     "source": "temporal-super-resolution-in-unreal-engine",
+     "note": "on at High/Epic/Cinematic; suppresses moire on the checkered flagstone"
+    },
+    "r.TSR.RejectionAntiAliasingQuality": {
+     "value": 2,
+     "source": "temporal-super-resolution-in-unreal-engine",
+     "note": "Left at its value; the history size was the lever, measured separately."
+    },
+    "r.TSR.Resurrection": {
+     "value": 1,
+     "source": "temporal-super-resolution-in-unreal-engine",
+     "note": "Left at its value; the history size was the lever, measured separately."
+    },
+    "r.MotionBlurQuality": {
+     "value": 0,
+     "source": "unprobed",
+     "note": "founder: disable unless testing proves it helps"
+    },
+    "r.AutoExposure.Bias": {
+     "value": -3.4,
+     "source": "generate-hub-level.py LOOK",
+     "note": "\nRE-MEASURED 2026-08-22 and it is INERT in this packaged render, which confirms an earlier finding independently. A sweep of -3.4 / -2.0 / -1.0 / 0.0 at 1080p moved frame luma only 47.0 -> 46.5 -> 48.7 -> 52.3 \u2014 3.4 stops of bias for an 11% change, when a working bias would be about 10x. Whatever holds this frame down, it is not the bias, so do not reach for it to fix darkness. The colour GRADE is the lever."
+    },
+    "r.Tonemapper.Sharpen": {
+     "value": 2.0,
+     "source": "measured on the L4, 2026-08-22 \u2014 not taken from documentation",
+     "note": "THE ONLY LEVER THAT MOVED SHARPNESS. The founder's note was that Wonderland is too blurry, too soft, too smeared, not crisp enough for 4K. Four candidates were captured at 1080p on build 03e7562 and scored by acutance (mean absolute luma gradient), which brightness does not move:\n    baseline                                3.091\n    r.TSR.History.ScreenPercentage 100      3.110   (+0.6%)\n    FullyLoadUsedTextures 1, MipLODBias -1  3.095   (+0.1%)\n    r.Tonemapper.Sharpen 1.0                3.667  (+18.6%)\n    r.Tonemapper.Sharpen 2.0                4.352  (+40.8%)\nTemporal smearing and texture mips are RULED OUT by measurement, not argument \u2014 the 8192 texture was already at full mip and TSR history was not the blur. 2.0 is visibly crisper on spire edges, cloud structure and foliage with no halo, at ~95 FPS.\nAlso measured and rejected: rendering at higher resolution. Compared at one display size, acutance is FLAT across 720p/1080p/1440p/2160p (4.237 / 4.188 / 4.105 / 4.347) while FPS falls 113 -> 12. 4K output buys ~2.6% detail for 10x the frame cost, because the softness is in the SOURCE \u2014 a photogrammetric shell and primitive authored geometry \u2014 not in the output resolution."
+    }
+   },
+   "args": [
+    "-PixelStreamingEncoderMinQuality=60",
+    "-PixelStreamingEncoderMaxQuality=100",
+    "-PixelStreamingH264Profile=HIGH",
+    "-PixelStreamingWebRTCStartBitrate=10000000",
+    "-PixelStreamingWebRTCMaxBitrate=20000000",
+    "-PixelStreamingWebRTCDegradationPreference=MAINTAIN_RESOLUTION",
+    "-PixelStreamingWebRTCMaxFps=60"
+   ]
+  },
+  "LIVE": {
+   "description": "THE FOUNDER'S PLAY PROFILE, and it exists because of a measurement. Walking the Dog felt laggy, so the movement profiler ran 3,540 frames of the exploration route offscreen: FrameTime median 19.40 ms (51.5 fps), p99 25.82, WORST FRAME 31.78 ms, and ZERO frames over 33 ms. The game does not hitch -- GPUTime median 19.26 of a 19.40 ms frame, so it is GPU-bound and perfectly steady, with the game thread at 2.40 ms. The stutter was the STREAM: BALANCED asks WebRTC for MAINTAIN_RESOLUTION, which holds picture and drops FRAMES, over a renderer feeding 51.5 fps into a 60 Hz cadence with an encoder quality FLOOR of 60 that leaves frame rate as the only variable left to give. That trade is right for judging a still and wrong for walking. This profile inverts it and buys the renderer enough headroom to hold 60: ScreenPercentage 78 costs 39% of the GPU's pixel work and, by this project's own measurement, no sharpness at all -- acutance is FLAT across 720p/1080p/1440p/2160p, because the softness is in the source geometry, not the output resolution. Tonemapper.Sharpen 2.0 is kept.",
+   "cvars": {
+    "r.AntiAliasingMethod": {
+     "value": 4,
+     "source": "anti-aliasing-and-upscaling-in-unreal-engine"
+    },
+    "r.ScreenPercentage": {
+     "value": 78,
+     "source": "temporal-super-resolution-in-unreal-engine",
+     "note": "TSR upscales below 100. 78% is 61% of the pixels, which takes the measured 19.26 ms GPU frame to roughly 12 and puts the renderer above the stream's 60 Hz instead of 8.5 fps under it. The cadence mismatch IS the judder: 51.5 fps into 60 Hz drops an irregular one frame in seven no matter how steady the renderer is."
+    },
+    "r.TSR.History.ScreenPercentage": {
+     "value": 100,
+     "source": "measured",
+     "note": "MEASURED ON THE STREAM 2026-08-23. BALANCED's TSR history was costing 31% of the DELIVERED detail: acutance 4.760 with it, 6.921 with TSR at engine defaults, same build, same camera, same sharpen, same exposure. The earlier note that TSR history was 'ruled out by measurement' was measured on the wrong axis - history accumulation smears a scene whose camera is static and whose Dogs move, which is exactly this scene."
+    },
+    "r.TSR.History.SampleCount": {
+     "value": 8,
+     "source": "measured",
+     "note": "Halved with the history screen percentage; see that note."
+    },
+    "r.TSR.ShadingRejection.SampleCount": {
+     "value": 2.0,
+     "source": "temporal-super-resolution-in-unreal-engine",
+     "note": "Left at its value; the history size was the lever, measured separately."
+    },
+    "r.TSR.Velocity.WeightClampingSampleCount": {
+     "value": 2.0,
+     "source": "temporal-super-resolution-in-unreal-engine",
+     "note": "Left at its value; the history size was the lever, measured separately."
+    },
+    "r.TSR.ShadingRejection.Flickering": {
+     "value": 1,
+     "source": "temporal-super-resolution-in-unreal-engine",
+     "note": "on at High/Epic/Cinematic; suppresses moire on the checkered flagstone"
+    },
+    "r.TSR.RejectionAntiAliasingQuality": {
+     "value": 2,
+     "source": "temporal-super-resolution-in-unreal-engine",
+     "note": "Left at its value; the history size was the lever, measured separately."
+    },
+    "r.TSR.Resurrection": {
+     "value": 1,
+     "source": "temporal-super-resolution-in-unreal-engine",
+     "note": "Left at its value; the history size was the lever, measured separately."
+    },
+    "r.MotionBlurQuality": {
+     "value": 0,
+     "source": "unprobed",
+     "note": "founder: disable unless testing proves it helps"
+    },
+    "r.AutoExposure.Bias": {
+     "value": -3.4,
+     "source": "generate-hub-level.py LOOK",
+     "note": "\nRE-MEASURED 2026-08-22 and it is INERT in this packaged render, which confirms an earlier finding independently. A sweep of -3.4 / -2.0 / -1.0 / 0.0 at 1080p moved frame luma only 47.0 -> 46.5 -> 48.7 -> 52.3 \u2014 3.4 stops of bias for an 11% change, when a working bias would be about 10x. Whatever holds this frame down, it is not the bias, so do not reach for it to fix darkness. The colour GRADE is the lever."
+    },
+    "r.Tonemapper.Sharpen": {
+     "value": 2.0,
+     "source": "measured on the L4, 2026-08-22 \u2014 not taken from documentation",
+     "note": "THE ONLY LEVER THAT MOVED SHARPNESS. The founder's note was that Wonderland is too blurry, too soft, too smeared, not crisp enough for 4K. Four candidates were captured at 1080p on build 03e7562 and scored by acutance (mean absolute luma gradient), which brightness does not move:\n    baseline                                3.091\n    r.TSR.History.ScreenPercentage 100      3.110   (+0.6%)\n    FullyLoadUsedTextures 1, MipLODBias -1  3.095   (+0.1%)\n    r.Tonemapper.Sharpen 1.0                3.667  (+18.6%)\n    r.Tonemapper.Sharpen 2.0                4.352  (+40.8%)\nTemporal smearing and texture mips are RULED OUT by measurement, not argument \u2014 the 8192 texture was already at full mip and TSR history was not the blur. 2.0 is visibly crisper on spire edges, cloud structure and foliage with no halo, at ~95 FPS.\nAlso measured and rejected: rendering at higher resolution. Compared at one display size, acutance is FLAT across 720p/1080p/1440p/2160p (4.237 / 4.188 / 4.105 / 4.347) while FPS falls 113 -> 12. 4K output buys ~2.6% detail for 10x the frame cost, because the softness is in the SOURCE \u2014 a photogrammetric shell and primitive authored geometry \u2014 not in the output resolution."
+    },
+    "sg.GlobalIlluminationQuality": {
+     "value": 1,
+     "source": "measured on the L4, 2026-09-03 -- ablation, not documentation",
+     "note": "MEASURED ON THE L4, 2026-09-03, and this is the first time the LIVE profile itself was ever measured -- f84b0c9 proved the movement profiler passed no -ExecCmds, so every number previously quoted for this profile was the engine DEFAULTS with a LIVE label on it.\nThe founder reported that walking Wonderland stutters. 54,001 frames of the exploration route at this profile: FRAME median 15.92 ms, GPU median 15.74 -- the GPU is 98.9% of the frame, the game thread is 2.28 ms and the draw thread 3.95, so this is GPU-bound with the CPU idle. It does not HITCH (worst steady-state frame 35.23 ms, p99 23.68); it is sustained: 36.9% of frames miss the 16.67 ms budget, and they cluster where the founder spends time -- plaza crossing 94% over, arrival gate 96% over, hamlet 79% over, while the garden and clock quarters are 2-4%. A renderer at 48-63 fps into a 60 Hz stream drops an irregular frame, which is what judder is.\nThe hardware says the same thing from the other side: 97% utilisation and 71.8 W of a 72 W CAP, with memory bandwidth at 14% and VRAM at 2.55 of 23 GB. Shading-bound, not bandwidth- or memory-bound, so a larger-VRAM card buys nothing.\nABLATED one variable at a time on the gait route, 3,600 frames each, GPU median against a 17.86 ms baseline:\n    Lumen diffuse GI OFF            13.55   -4.26\n    shadows OFF                     14.49   -3.32\n    ScreenPercentage 50             13.94   -3.87\n    Lumen reflections OFF           17.85    none\n    volumetric fog OFF              17.72    none\nLumen GI and shadows own ~43% of the frame between them; reflections and volumetric fog own nothing measurable, so neither is a lever. Turning either big system off is not a candidate -- the direction needs the GI, and the frame's structure IS its shade -- so the tiers were measured instead:\n    sg.GlobalIlluminationQuality 2  15.44   -2.42\n    sg.GlobalIlluminationQuality 1  13.72   -4.14\n    sg.ShadowQuality 2              14.10   -3.76\n    both of the two below           12.36   -5.50\nGI at LOW recovers almost the whole saving of switching Lumen GI OFF (-4.14 of -4.26) while Lumen GI is still ON and still doing the bounce light. Paired with shadows at medium: GPU 12.36 median / 13.35 p95 / 13.69 p99, frame 14.12 median, 70.8 fps median and 55.3 at p95, 12.5% of frames over budget against the baseline's majority. The bottleneck MOVED rather than shifting its label -- GPU p95 13.35 is now under the draw thread's 11.07 plus its own, which is what a real fix looks like.\nBoth are on LIVE only. BALANCED and CINEMATIC are untouched, because a capture is judged on the still and can pay for the quality; a walk is judged on the motion and cannot."
+    },
+    "sg.ShadowQuality": {
+     "value": 2,
+     "source": "measured on the L4, 2026-09-03 -- ablation, not documentation",
+     "note": "Worth 3.76 ms of a 17.86 ms GPU frame on its own, and 1.36 more on top of GI at low. Shadows are NOT disabled: the reference frame's ground variation is dappled shade and this project has a ledger entry about a shadowless fill destroying the frame. This is the quality tier, not the switch. See the sg.GlobalIlluminationQuality note for the full ablation."
+    }
+   },
+   "args": [
+    "-PixelStreamingEncoderMinQuality=25",
+    "-PixelStreamingEncoderMaxQuality=100",
+    "-PixelStreamingH264Profile=HIGH",
+    "-PixelStreamingWebRTCStartBitrate=4000000",
+    "-PixelStreamingWebRTCMaxBitrate=8000000",
+    "-PixelStreamingWebRTCDegradationPreference=MAINTAIN_FRAMERATE",
+    "-PixelStreamingWebRTCMaxFps=60"
+   ],
+   "args_note": "MAINTAIN_FRAMERATE is the ENGINE DEFAULT this project overrode. VERIFIED.md records the override and its reason -- 'for a world the founder is judging on ornament and material detail, [dropping picture] is the wrong trade' -- and that reasoning is still correct FOR A CAPTURE. It is exactly backwards for someone driving the Dog, and it was in force on the live stream the founder was walking. MinQuality drops 60 -> 25 for the same reason: a quality floor plus MAINTAIN_RESOLUTION leaves the encoder nothing to give up but frames. BALANCED and CINEMATIC are untouched; captures keep the picture-first trade. The bitrates match run-stream.sh's own WL_PS_* tune block (start 4 Mb/s, max 8, target 6), which is applied by -ExecCmds AFTER these switches and therefore wins. Two descriptions of one quantity WILL disagree -- this project has a ledger entry about exactly that -- so they say the same numbers. Those numbers were themselves chosen from a measurement: the founder is several thousand kilometres away, and a 10 Mb/s start bitrate floods that path the moment the camera moves."
+  },
+  "CINEMATIC": {
+   "description": "Supersampled. Renders ABOVE 720p and lets TSR resolve down, which is where crisp edges and fine ornament actually come from at this output size. Costs GPU that the L4 may or may not have \u2014 that is what the bench is for.",
+   "cvars": {
+    "r.AntiAliasingMethod": {
+     "value": 4,
+     "source": "anti-aliasing-and-upscaling-in-unreal-engine"
+    },
+    "r.ScreenPercentage": {
+     "value": 150,
+     "source": "temporal-super-resolution-in-unreal-engine",
+     "note": "supersample; MEASURE it \u2014 more is not automatically better"
+    },
+    "r.TSR.History.ScreenPercentage": {
+     "value": 200,
+     "source": "temporal-super-resolution-in-unreal-engine"
+    },
+    "r.TSR.History.SampleCount": {
+     "value": 32,
+     "source": "temporal-super-resolution-in-unreal-engine",
+     "note": "top of the documented range"
+    },
+    "r.TSR.ShadingRejection.SampleCount": {
+     "value": 2.0,
+     "source": "temporal-super-resolution-in-unreal-engine"
+    },
+    "r.TSR.Velocity.WeightClampingSampleCount": {
+     "value": 2.0,
+     "source": "temporal-super-resolution-in-unreal-engine"
+    },
+    "r.TSR.ShadingRejection.Flickering": {
+     "value": 1,
+     "source": "temporal-super-resolution-in-unreal-engine"
+    },
+    "r.TSR.RejectionAntiAliasingQuality": {
+     "value": 2,
+     "source": "temporal-super-resolution-in-unreal-engine"
+    },
+    "r.TSR.Resurrection": {
+     "value": 1,
+     "source": "temporal-super-resolution-in-unreal-engine"
+    },
+    "r.TSR.History.R11G11B10": {
+     "value": 0,
+     "source": "temporal-super-resolution-in-unreal-engine",
+     "note": "full-precision history; costs bandwidth, keeps gradients clean"
+    },
+    "r.MotionBlurQuality": {
+     "value": 0,
+     "source": "unprobed"
+    },
+    "r.AutoExposure.Bias": {
+     "value": -3.4,
+     "source": "generate-hub-level.py LOOK"
+    }
+   },
+   "args": [
+    "-PixelStreamingEncoderMinQuality=80",
+    "-PixelStreamingEncoderMaxQuality=100",
+    "-PixelStreamingH264Profile=HIGH",
+    "-PixelStreamingWebRTCStartBitrate=20000000",
+    "-PixelStreamingWebRTCMaxBitrate=40000000",
+    "-PixelStreamingWebRTCDegradationPreference=MAINTAIN_RESOLUTION",
+    "-PixelStreamingWebRTCMaxFps=60"
+   ]
   }
+ },
+ "candidates": [
+  "r.Tonemapper.Sharpen",
+  "r.TSR.Visualize",
+  "r.TSR.AsyncCompute",
+  "r.TSR.ShadingRejection.Flickering.Period",
+  "r.TSR.Resurrection.PersistentFrameCount",
+  "r.DefaultFeature.MotionBlur",
+  "r.MotionBlur.Max",
+  "r.Streaming.PoolSize",
+  "r.Streaming.LimitPoolSizeToVRAM",
+  "r.ViewDistanceScale",
+  "r.Shadow.DistanceScale",
+  "r.Shadow.Virtual.Enable",
+  "r.Shadow.Virtual.ResolutionLodBiasDirectional",
+  "r.DynamicGlobalIlluminationMethod",
+  "r.ReflectionMethod",
+  "r.Lumen.ScreenProbeGather.DownsampleFactor",
+  "r.MegaLights.Enable",
+  "r.Nanite",
+  "r.Nanite.MaxPixelsPerEdge",
+  "r.DynamicRes.OperationMode",
+  "sg.AntiAliasingQuality",
+  "sg.ShadowQuality",
+  "sg.TextureQuality",
+  "sg.ViewDistanceQuality",
+  "sg.EffectsQuality",
+  "sg.GlobalIlluminationQuality",
+  "sg.ReflectionQuality",
+  "PixelStreaming.Encoder.MinQuality",
+  "PixelStreaming2.Encoder.MinQuality",
+  "CsvProfile",
+  "r.MeshDrawCommands.DynamicInstancing",
+  "r.MeshDrawCommands.LogDynamicInstancingStats"
+ ],
+ "rejected": {
+  "r.TemporalAACurrentFrameWeight": "Legacy TAA/TAAU only. UE 5.8's anti-aliasing documentation states the r.TemporalAA* variables 'apply only to legacy TAAU, not to TSR', and this project renders with TSR (r.AntiAliasingMethod=4, the UE5 default). Setting it would change nothing and would read as a knob that had been tried.",
+  "r.TemporalAASamples": "Same reason. It is a TAA sample-count control with no effect on the TSR path. Under TSR the equivalent levers are r.TSR.History.SampleCount and r.TSR.ShadingRejection.SampleCount, which are in the profiles above.",
+  "r.PostProcessAAQuality": "Governs the legacy AA quality tiers. Under TSR the scalability group is sg.AntiAliasingQuality, which drives the r.TSR.* permutations instead.",
+  "PostProcessVolume sharpening/grade": "PROVEN not to reach this render. Both the PostProcessVolume grade and the camera-component PostProcessSettings are silently ignored in the packaged -RenderOffscreen Pixel Streaming build \u2014 a 40% ColorGain change was invisible with zero override errors. Only launch cvars reach it. See the wonderland live-render notes."
+ }
 }
