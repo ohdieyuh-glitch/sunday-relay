@@ -397,10 +397,18 @@ distinction is what the first paid attempt taught:
 A live dispatch that finds EITHER marker refuses unless the operator typed
 `RERUN PAID MISSION`. Run 33697109210 is why: it crossed the live boundary,
 failed at its `plan` task and left no marker at all, so an ordinary
-re-dispatch would have been treated as the first paid run. Every step on the
-paid path now also carries `success()` in its condition — a step whose `if:`
-names no status function runs even after an earlier step failed — so a failed
-preflight or a failed marker upload cannot reach the entrypoint that spends.
+re-dispatch would have been treated as the first paid run. A marker list that
+answers with something other than a count is now routed to the same refusal an
+unreadable list gets, because a default-to-zero is the one answer that lets a
+second paid run through.
+
+Both marker steps and the live entrypoint now write `success()` into their
+conditions. That guard was already there implicitly — GitHub applies a default
+`success()` to a step whose `if:` names no status function, and runs
+33625851653 and 33635375764 show it, where a failed preflight skipped every
+custom-`if:` step below it. Writing it out is defence in depth, not a repair: a
+paid step later given `always()` or `!cancelled()` WOULD reach the entrypoint
+that spends, and the contract test now refuses that.
 
 Stated limit, not papered over: artifacts expire and can be deleted, so this
 guards against accident — a second dispatch of a mission already entered — and

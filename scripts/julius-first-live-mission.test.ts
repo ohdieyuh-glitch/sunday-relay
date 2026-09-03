@@ -517,11 +517,14 @@ describe('the evidence dump names only tables and columns the migrations create'
     // NAMED KEYS ONLY. Every value below is a machine token by construction —
     // nine JuliusErrorCodes, a class narrowed to /^[a-z][a-z0-9_]{0,63}$/, a
     // continuation reason — so provider text cannot ride out in this file.
-    for (const key of ["'code'", "'failureClass'", "'retryable'", "'reasonCode'"]) {
+    for (const key of ["'code'", "'failureClass'", "'errorRetryable'", "'reasonCode'"]) {
       expect(query, `the failure dump must select ${key}`).toContain(key);
     }
-    expect(query, 'the whole payload is never dumped: it is the one column with room for anything')
-      .not.toMatch(/SELECT[^"]*\bе?\.?payload\b\s*(?:AS|,)/u);
+    // Anchored on the column, not on what follows it: `SELECT e.payload FROM …`
+    // is the most natural way to dump the one column with room for anything,
+    // and an earlier form of this assertion did not catch it.
+    expect(query, 'the whole payload is never dumped')
+      .not.toMatch(/\bpayload\b(?!\s*(?:->|#>))/u);
     expect(query, 'and it is scoped to the failure events, not the whole stream')
       .toContain("'julius.task.failed'");
   });
@@ -1041,6 +1044,9 @@ describe('F6 — a paid mission cannot be run twice by accident', () => {
     const upload = workflow.indexOf('name: julius-first-live-attempted');
     const live = workflow.indexOf("- name: 'LIVE: run the first real Julius mission'");
     expect(attempt, 'the attempt marker step must exist').toBeGreaterThan(-1);
+    // Without this, deleting the upload makes the ordering assertion below pass
+    // vacuously: indexOf answers -1, and -1 is less than every position.
+    expect(upload, 'the attempt marker upload must exist').toBeGreaterThan(-1);
     expect(attempt, 'it is written before the entrypoint, not after').toBeLessThan(live);
     expect(upload, 'and uploaded before the entrypoint, or a dead runner loses it').toBeLessThan(live);
     expect(workflow.indexOf('name: julius-first-live-completed'), 'completion is still recorded after the run')
@@ -1070,11 +1076,15 @@ describe('F6 — a paid mission cannot be run twice by accident', () => {
   });
 
   /**
-   * A STEP WHOSE `if:` NAMES NO STATUS FUNCTION RUNS AFTER AN EARLIER FAILURE.
-   * That is GitHub's documented behaviour — a custom condition replaces the
-   * implicit `success()` — so on the paid path the guard has to be written
-   * out. Without it a failed preflight, or a failed attempt-marker upload,
-   * would still reach the entrypoint that can spend money.
+   * THE PAID PATH MUST NEVER RUN AFTER A FAILURE, AND MUST SAY SO.
+   *
+   * GitHub applies a default `success()` to a step whose `if:` names no status
+   * function, and this workflow's own history shows it: in runs 33625851653
+   * and 33635375764 a failed preflight skipped every custom-`if:` step below
+   * it while the `always()` steps ran. The guard was therefore already there,
+   * implicitly. Writing it out is defence in depth, not a repair — it puts the
+   * property where a reader can see it, and this case fails if a paid step is
+   * ever given `always()` or `!cancelled()`, which WOULD reach the entrypoint.
    */
   it('every paid step fails closed: no status guard, no spend', () => {
     for (const step of ["- name: 'LIVE: run the first real Julius mission'", `- name: ${ATTEMPT_STEP}`]) {
@@ -1115,15 +1125,15 @@ describe('F6 — a paid mission cannot be run twice by accident', () => {
    * is a guard nobody has proven refuses.
    */
   describe('the guard, run against a stubbed artifact list', () => {
-    const runGuard = (input: { completed?: number; attempted?: number; readable?: boolean; acknowledge?: string }): number => {
+    const runGuard = (input: { completed?: number | string; attempted?: number | string; readable?: boolean; acknowledge?: string }): number => {
       const bin = mkdtempSync(join(realpathSync(tmpdir()), 'julius-gh-'));
       const readable = input.readable ?? true;
       writeFileSync(join(bin, 'gh'), [
         '#!/usr/bin/env bash',
         readable ? '' : 'exit 1',
         'case "$*" in',
-        `  *julius-first-live-completed*) echo ${input.completed ?? 0};;`,
-        `  *julius-first-live-attempted*) echo ${input.attempted ?? 0};;`,
+        `  *julius-first-live-completed*) echo '${input.completed ?? 0}';;`,
+        `  *julius-first-live-attempted*) echo '${input.attempted ?? 0}';;`,
         '  *) echo 0;;',
         'esac',
       ].join('\n'), { mode: 0o755 });
@@ -1165,6 +1175,24 @@ describe('F6 — a paid mission cannot be run twice by accident', () => {
       for (const typo of ['rerun paid mission', 'RERUN PAID MISSION ', 'RERUN-PAID-MISSION', 'yes', 'RERUN PAID MISSIO']) {
         expect(runGuard({ attempted: 1, acknowledge: typo }), `"${typo}" must not pass`).not.toBe(0);
       }
+    });
+
+    /**
+     * UNKNOWN IS NOT ZERO, AND A NON-COUNT IS UNKNOWN. A `gh` that exits 0 with
+     * something that is not a number — or with nothing — must refuse exactly as
+     * an unreadable list does. An earlier form of this guard defaulted the
+     * value to zero, and zero is the one answer that lets a second paid run
+     * through. A first form of the digit test concatenated the two counts,
+     * which let a BLANK answer hide behind the other's digits; each value is
+     * now tested on its own, and these cases hold that.
+     */
+    it('MUTATION: a marker list that answers with something other than a count fails closed', () => {
+      for (const value of ['null', '', 'many', '1.5', '-1', 'null\nnull']) {
+        expect(runGuard({ completed: value }), `completed="${value}" must not pass as zero`).not.toBe(0);
+        expect(runGuard({ attempted: value }), `attempted="${value}" must not pass as zero`).not.toBe(0);
+      }
+      expect(runGuard({ completed: '', attempted: '' })).not.toBe(0);
+      expect(runGuard({ completed: '', acknowledge: 'RERUN PAID MISSION' }), 'and only the typed phrase overrides it').toBe(0);
     });
 
     it('MUTATION: an unreadable marker list fails closed, and only the phrase overrides it', () => {

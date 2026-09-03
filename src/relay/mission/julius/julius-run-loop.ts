@@ -157,25 +157,32 @@ export interface JuliusRunLoopConfig {
  * Cycles are structurally impossible — `JuliusTaskGraph.add` refuses a
  * self-reference and requires every dependency to already exist — but a cycle
  * would be unsatisfiable anyway, so re-entry answers false and the walk
- * terminates on any input.
+ * terminates on any input. `visiting` is a path stack and `settled` a memo:
+ * without the memo a diamond-shaped graph is walked once per path to each
+ * node, and this runs on every advance.
  */
 function stillReachable(
   task: JuliusTask,
   byId: ReadonlyMap<string, JuliusTask>,
   visiting: Set<string> = new Set(),
+  settled: Map<string, boolean> = new Map(),
 ): boolean {
   if (task.state === 'SUCCEEDED' || task.state === 'SKIPPED') return true;
   if (task.state === 'FAILED' || task.state === 'CANCELLED') return false;
   if (task.state !== 'BLOCKED') return true;
+  const memo = settled.get(task.taskId);
+  if (memo !== undefined) return memo;
   if (visiting.has(task.taskId)) return false;
   visiting.add(task.taskId);
   try {
-    return task.dependencyIds.every((id) => {
+    const reachable = task.dependencyIds.every((id) => {
       const dependency = byId.get(id);
       // A dependency the run does not hold can never become SUCCEEDED here,
       // so the task waiting on it is not waiting for anything either.
-      return dependency !== undefined && stillReachable(dependency, byId, visiting);
+      return dependency !== undefined && stillReachable(dependency, byId, visiting, settled);
     });
+    settled.set(task.taskId, reachable);
+    return reachable;
   } finally {
     visiting.delete(task.taskId);
   }
@@ -189,7 +196,8 @@ export function targetRunState(
   if (tasks.some((task) => task.state === 'ACTIVE')) return { state: 'EXECUTING', reasonCode: 'TASKS_ACTIVE' };
   if (tasks.some((task) => task.state === 'RUNNABLE')) return { state: 'READY', reasonCode: 'TASKS_RUNNABLE' };
   const byId = new Map(tasks.map((task) => [task.taskId, task]));
-  if (tasks.some((task) => task.state === 'BLOCKED' && stillReachable(task, byId))) {
+  const settled = new Map<string, boolean>();
+  if (tasks.some((task) => task.state === 'BLOCKED' && stillReachable(task, byId, new Set(), settled))) {
     return { state: 'WAITING', reasonCode: 'TASKS_BLOCKED' };
   }
   if (tasks.some((task) => task.state === 'FAILED')) return { state: 'FAILED', reasonCode: 'TASK_FAILED' };

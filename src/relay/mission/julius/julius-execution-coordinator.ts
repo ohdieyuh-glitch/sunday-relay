@@ -32,7 +32,7 @@ const normalizedEvidence=(claim:JuliusExecutionClaim,worker:JuliusWorker,result:
 export class JuliusExecutionCoordinator {
   constructor(private readonly router:JuliusProviderRouter,private readonly ports:JuliusExecutionPorts){}
   async execute(request:JuliusExecutionRequest):Promise<JuliusExecutionOutcome>{
-    let worker:JuliusWorker;try{worker=this.router.select({role:request.role,taskType:request.taskType,capability:request.capability,policy:request.policy,excludedWorkerIds:request.excludedWorkerIds});}catch(error){const failure=error as JuliusDispatchError;await this.event(request,'task.failed',{code:failure.code,retryable:failure.retryable,failureClass:failure.failureClass});return{status:failure.code==='POLICY_DENIED'?'DENIED':'FAILED',code:failure.code,failureClass:failure.failureClass};}
+    let worker:JuliusWorker;try{worker=this.router.select({role:request.role,taskType:request.taskType,capability:request.capability,policy:request.policy,excludedWorkerIds:request.excludedWorkerIds});}catch(error){const failure=error as JuliusDispatchError;await this.event(request,'task.failed',{code:failure.code,errorRetryable:failure.retryable,failureClass:failure.failureClass});return{status:failure.code==='POLICY_DENIED'?'DENIED':'FAILED',code:failure.code,failureClass:failure.failureClass};}
     await this.event(request,'worker.selected',{workerId:worker.workerId,providerId:worker.providerId});
     const reservation=await this.ports.reserve({claim:request.claim,worker,request:request.resources,idempotencyKey:`${request.operationId}:budget`});
     if(reservation.state==='DENIED'){await this.event(request,'budget.denied',{reason:reservation.denialReason});return{status:'DENIED',code:'BUDGET_DENIED'};}
@@ -52,7 +52,7 @@ export class JuliusExecutionCoordinator {
       * abandoned and a failure taken at once must leave the same diagnosis
       * behind, or the durable record would explain only the failures that
       * happened to be non-retryable. */
-     if(failure.retryable&&request.policy.automaticRetry){await this.event(request,'retry.scheduled',{code:failure.code,retryable:true,failureClass:failure.failureClass});return{status:'RETRY',code:failure.code,failureClass:failure.failureClass};}await this.event(request,'task.failed',{code:failure.code,retryable:failure.retryable,failureClass:failure.failureClass});return{status:'FAILED',code:failure.code,failureClass:failure.failureClass};}
+     if(failure.retryable&&request.policy.automaticRetry){await this.event(request,'retry.scheduled',{code:failure.code,errorRetryable:true,failureClass:failure.failureClass});return{status:'RETRY',code:failure.code,failureClass:failure.failureClass};}await this.event(request,'task.failed',{code:failure.code,errorRetryable:failure.retryable,failureClass:failure.failureClass});return{status:'FAILED',code:failure.code,failureClass:failure.failureClass};}
   }
   private event(request:JuliusExecutionRequest,type:JuliusExecutionEventType,payload:Record<string,unknown>){return this.ports.recordEvent({runId:request.claim.runId,projectId:request.claim.projectId,type,idempotencyKey:`${request.operationId}:${type}`,payload});}
 }

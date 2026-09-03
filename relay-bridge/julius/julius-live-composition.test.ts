@@ -732,7 +732,7 @@ describe('the first paid attempt, reproduced: a failing Prompt Architect', () =>
     const facts = failures.at(-1)!.facts;
     expect(facts.code, 'the normalized Julius code').toBe(code);
     expect(facts.failureClass, 'and the connector class that the code alone cannot express').toBe(failureClass);
-    expect(typeof facts.retryable, 'retryable is recorded, so a reader need not re-derive it').toBe('boolean');
+    expect(typeof facts.errorRetryable, 'whether the ERROR was retryable is recorded, so a reader need not re-derive it').toBe('boolean');
   });
 
   it('separates the two Julius-side failures a provider class cannot describe', async () => {

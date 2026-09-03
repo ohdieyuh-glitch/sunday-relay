@@ -440,11 +440,12 @@ export async function runClaimedTask(
             // fail" must be able to tell "the connector did not classify it"
             // from "nobody wrote the field down".
             failureClass: outcome.failureClass ?? null,
-            // Reached only from the RETRY branch, so the ERROR was retryable and
-            // the run's own autonomy is what declined — `reasonCode` says which.
-            // Recording it here keeps every failure row shaped alike, whichever
-            // of the two endings wrote it.
-            retryable: true,
+            // THE ERROR WAS RETRYABLE; THE TASK WAS NOT RETRIED. Reached only
+            // from the RETRY branch, where the run's own autonomy declined —
+            // `reasonCode` says which rule. The name says which of the two it
+            // describes, because `retryable` on a row that ends a task reads as
+            // a promise the run did not make.
+            errorRetryable: true,
           },
         });
       }
