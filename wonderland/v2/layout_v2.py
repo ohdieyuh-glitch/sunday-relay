@@ -4382,6 +4382,11 @@ def _outer_world():
     out += _north_way()
     out += _country()
     out += _district_cam_foregrounds()
+    # BUILT framing for the six district cameras that opened onto bare apron.
+    # Applied here, beside its vegetation sibling, because both are defined far
+    # below the band literals that would otherwise want to call them -- and a
+    # module reads top to bottom.
+    out += _district_cam_architecture()
     protected = [it for band in (FOREGROUND, GARDEN, PALACE, FLANK_GROUND, FLANKS,
                                  REARWORLD, CAM_FOREGROUNDS)
                  for it in band if it["asset"] in _PROTECT]
@@ -4413,6 +4418,106 @@ def _outer_world():
 #: own eleven are authored ground and are not touched.
 _CAM_FOREGROUND_TAGS = ("HeroCam13", "HeroCam14", "HeroCam15", "HeroCam16",
                         "HeroCam17", "HeroCam18", "HeroCam20")
+
+# ---------------------------------------------------------------------------
+# SIX DISTRICT CAMERAS OPENED ONTO NOTHING, AND THE ANSWER IS NOT MORE TREES
+#
+# `camera_framing.py` reports, for every camera, where its picture of the
+# ground begins and how many placements stand in the band between there and
+# 3x it. Six came back with ZERO:
+#
+#     ClockGrandCam23  ColossalKeyCam25  FloatingStairCam26
+#     LanternLaneCam27 GlassPavilionCam28 CloisterCam31
+#
+# Each was added in PASS 28/29 for a landmark that now exists, and each is a
+# monument across an empty apron: the eye has nothing to measure the distance
+# against, so a 25 m gatehouse at 24 m reads the same size as a 12 m one.
+#
+# THE EXISTING GENERATOR CANNOT DO THIS JOB. `_district_cam_foregrounds` places
+# trees, shrubs, flower beds and hedges, and the founder's instruction for this
+# pass is explicit: "Add ARCHITECTURE and vertical layering, not foliage spam",
+# "no tree pass as architecture substitute". A near field of shrubs would tick
+# the audit and miss the point.
+#
+# So this places BUILT things, and it keeps the two rules the vegetation
+# generator paid for:
+#
+#   * THE MIDDLE STAYS OPEN. Everything sits off-axis; the subject the camera
+#     exists to photograph is never behind foreground.
+#   * NOTHING GOES UNDER THE LENS. Depth starts at 1.15x the camera's own
+#     d_near, computed from its transform, so a piece cannot land in the strip
+#     below the frame -- two passes were spent planting there before
+#     `camera_framing.py` existed.
+#
+# The vocabulary is a terrace edge read from the side: a balustrade run along
+# the view, a plinth with an urn on it, and a column standing further out. Low
+# things near, tall things at the sides and further back, which is how a real
+# forecourt frames a building and why it gives scale where a bush does not.
+_CAM_ARCH_TAGS = ("HeroCam23", "HeroCam25", "HeroCam26",
+                  "HeroCam27", "HeroCam28", "CloisterCam31")
+
+
+def _district_cam_architecture():
+    try:
+        import v2_config as _C
+    except Exception:                          # the layout must import alone
+        return []
+    out = []
+    aspect = 16.0 / 9.0
+    for cam in getattr(_C, "HERO_CAMS", ()):
+        tags = tuple(cam.get("tags", ()))
+        if not any(t in _CAM_ARCH_TAGS for t in tags):
+            continue
+        x, y, z = cam["location"]
+        pitch, yaw = cam["rotation"][0], cam["rotation"][1]
+        hfov = math.radians(float(cam["fov"]))
+        vfov = 2.0 * math.atan(math.tan(hfov / 2.0) / aspect)
+        lower = math.radians(pitch) - vfov / 2.0
+        if lower >= -1e-6:
+            # the camera looks at or above the horizon: its ground never
+            # begins, so there is no near field to fill and nothing to do.
+            continue
+        d_near = z / math.tan(-lower)
+        fwd = (math.cos(math.radians(yaw)), math.sin(math.radians(yaw)))
+        side = (-fwd[1], fwd[0])
+        seed = int(abs(x) + abs(y)) % 9973
+        tag = cam["name"]
+        across = math.degrees(math.atan2(side[1], side[0]))
+        # (depth multiple, lateral fraction of the half-width, what stands there)
+        plan = ((1.25, 0.62, "rail"), (1.25, -0.62, "rail"),
+                (1.70, 0.50, "plinth"), (1.70, -0.50, "plinth"),
+                (2.40, 0.72, "column"), (2.40, -0.72, "column"))
+        for i, (t, latf, kind) in enumerate(plan):
+            depth = d_near * t
+            half = depth * math.tan(hfov / 2.0)
+            lat = latf * half
+            px = x + fwd[0] * depth + side[0] * lat
+            py = y + fwd[1] * depth + side[1] * lat
+            j = _rnd(i, seed, 141)
+            if kind == "rail":
+                # the run lies ALONG the view, like the edge of a terrace the
+                # camera stands on, not a fence across it
+                out.append(A("balustrade", px, py, 0,
+                             yaw=math.degrees(math.atan2(fwd[1], fwd[0])),
+                             s=0.9 + 0.25 * j, mat="MI_V2_IvoryStone",
+                             label="%s_ArchRail%d" % (tag, i)))
+            elif kind == "plinth":
+                s = 0.85 + 0.25 * j
+                out += [
+                    A("pedestal_finial", px, py, 0, yaw=across, s=s,
+                      mat="MI_V2_IvoryStone", label="%s_ArchPlinth%d" % (tag, i)),
+                    A("garden_urn", px, py, 150.0 * s, yaw=_rnd(i, seed, 142) * 360.0,
+                      # MI_V2_Ceramic is what all twelve other garden_urns in
+                      # the world wear. MI_V2_Porcelain was invented here and
+                      # the layout gate refused it, which is the gate working.
+                      s=s * 0.9, mat="MI_V2_Ceramic",
+                      label="%s_ArchUrn%d" % (tag, i)),
+                ]
+            else:
+                out.append(A("column_ornate", px, py, 0, yaw=across,
+                             s=1.0 + 0.3 * j, mat="MI_V2_IvoryStone",
+                             label="%s_ArchColumn%d" % (tag, i)))
+    return out
 
 
 def _district_cam_foregrounds():
