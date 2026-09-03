@@ -817,9 +817,12 @@ async function scheduleRepair(input: {
     // construction". Every throw in the repair planner is a token today, but a
     // TypeError from anywhere in it would otherwise put free text into an
     // uploaded artifact, so the narrowing is applied rather than assumed.
-    // `safeReasonCode`, not `safeFailureClass`: this column carries
-    // `UNRESOLVED_WORKER_ROLE` beside `repair_round_limit`, and the lower-case
-    // rule would replace every upper-case cause with the generic fallback.
+    // `safeReasonCode`, not `safeFailureClass`: no upper-case cause reaches
+    // this narrowing today — every throw in the repair planner is lower-case
+    // and passes either rule — but the column itself carries
+    // `UNRESOLVED_WORKER_ROLE` beside `repair_round_limit`, so the alphabet is
+    // matched to the column's vocabulary. A future producer that routes an
+    // upper-case cause here is then recorded rather than silently generalised.
     const reasonCode = safeReasonCode(error instanceof Error ? error.message : null) ?? 'repair_not_plannable';
     await ledger.event('run.failed', { taskId: task.taskId, facts: { reasonCode } });
     return { kind: 'HALTED', taskId: task.taskId, reasonCode, safeSummary: 'A repair round was required and could not be planned.' };

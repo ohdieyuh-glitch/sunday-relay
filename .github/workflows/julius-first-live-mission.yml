@@ -226,11 +226,11 @@ jobs:
           # An earlier version of this comment said to set it to 0 once markers
           # existed — which would have handed the gap back on a 90-day fuse,
           # because markers carry `retention-days: 90` and `count_markers`
-          # ignores expired ones. Two cases in
-          # scripts/julius-first-live-mission.test.ts pin both the value and
+          # ignores expired ones. One case in
+          # scripts/julius-first-live-mission.test.ts pins both the value and
           # the run it names, so a change here is a change there too.
           RECORDED_PAID_ATTEMPTS=1  # run 33697109210
-          # G2: the one hand-maintained value in this gate was also the only one
+          # The one hand-maintained value in this gate was also the only one
           # that failed OPEN when malformed — an empty or non-numeric value made
           # the comparison error, fall through to the else, and announce a first
           # paid mission. It is held to the same digit test as the counts.

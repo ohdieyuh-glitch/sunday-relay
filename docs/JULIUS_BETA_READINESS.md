@@ -401,8 +401,10 @@ re-dispatch would have been treated as the first paid run. THAT RUN IS ALSO
 COVERED, not merely explained: markers only exist from now on, so the attempt
 itself is recorded in the gate as `RECORDED_PAID_ATTEMPTS=1`, naming the run.
 The next paid dispatch therefore needs the acknowledgement even though the
-artifact list is empty, which is the whole point. Set it to 0 once a later paid
-mission has recorded markers of its own. A marker list that
+artifact list is empty, which is the whole point. THAT NUMBER ONLY EVER GOES UP:
+increment it when another paid run is entered that the file does not already
+count, and never reduce it. Markers carry ninety-day retention and the guard
+ignores expired ones, so zeroing it would hand the gap back on a fuse. A marker list that
 answers with something other than a count is now routed to the same refusal an
 unreadable list gets, because a default-to-zero is the one answer that lets a
 second paid run through.

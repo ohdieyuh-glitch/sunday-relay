@@ -1166,7 +1166,7 @@ describe('F6 — a paid mission cannot be run twice by accident', () => {
       expect(runGuard({ acknowledge: 'RERUN PAID MISSION' }), 'and only the typed phrase gets past it').toBe(0);
     });
 
-    it('the recorded attempt names the run it stands for, so it can be checked and retired', () => {
+    it('the recorded attempt names the run it stands for, so it can be checked and incremented', () => {
       const guard = stepScript(GATE);
       expect(guard).toMatch(/RECORDED_PAID_ATTEMPTS=1\s+# run 33697109210/u);
       expect(guard, 'and it is counted, not merely written down')
@@ -1202,6 +1202,37 @@ describe('F6 — a paid mission cannot be run twice by accident', () => {
      * which let a BLANK answer hide behind the other's digits; each value is
      * now tested on its own, and these cases hold that.
      */
+    /**
+     * THE ONE VALUE A HUMAN EDITS IS THE ONE THAT MUST NOT FAIL OPEN. Before it
+     * was digit-tested, an empty or non-numeric `RECORDED_PAID_ATTEMPTS` made
+     * the comparison error, fall through to the else, and announce a first paid
+     * mission. Deliberately NOT overridable by the typed phrase: a malformed
+     * constant in the repository is a mistake to fix, not an operator decision.
+     */
+    it('MUTATION: a malformed recorded-attempt constant refuses, and the phrase cannot override it', () => {
+      const withConstant = (value: string): number => {
+        const bin = mkdtempSync(join(realpathSync(tmpdir()), 'julius-gh-'));
+        writeFileSync(join(bin, 'gh'), '#!/usr/bin/env bash\necho 0\n', { mode: 0o755 });
+        const script = stepScript(GATE).replace(/^RECORDED_PAID_ATTEMPTS=.*$/mu, `RECORDED_PAID_ATTEMPTS=${value}`);
+        expect(script, `the constant must still be present for value "${value}"`).toContain(`RECORDED_PAID_ATTEMPTS=${value}`);
+        try {
+          execFileSync('bash', ['-c', script], {
+            cwd: ROOT, stdio: 'ignore',
+            env: { ...process.env, PATH: `${bin}:${process.env.PATH ?? ''}`, GITHUB_REPOSITORY: 'owner/repo', GH_TOKEN: 'stub', ACKNOWLEDGE_RERUN: 'RERUN PAID MISSION' },
+          });
+          return 0;
+        } catch (error) {
+          return (error as { status?: number }).status ?? 1;
+        }
+      };
+      for (const value of ['', 'many', '1.5', '-1', '" 1 "']) {
+        expect(withConstant(value), `RECORDED_PAID_ATTEMPTS=${value} must refuse even with the phrase`).not.toBe(0);
+      }
+      // The control: a well-formed constant PROCEEDS under the same phrase, so
+      // the refusals above are caused by the malformation and not by the harness.
+      expect(withConstant('2'), 'a well-formed count is still overridable by the phrase').toBe(0);
+    });
+
     it('MUTATION: a marker list that answers with something other than a count fails closed', () => {
       for (const value of ['null', '', 'many', '1.5', '-1', 'null\nnull']) {
         expect(runGuard({ completed: value }), `completed="${value}" must not pass as zero`).not.toBe(0);

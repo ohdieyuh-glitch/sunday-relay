@@ -43,6 +43,12 @@ describe('the repair planner speaks in tokens the evidence column can carry', ()
   it('every throw in the planner survives the reason-code narrowing unchanged', () => {
     const source = readFileSync(resolve(import.meta.dirname, 'julius-repair-runtime.ts'), 'utf8');
     const thrown = [...source.matchAll(/throw new Error\('([^']+)'\)/gu)].map((match) => match[1]);
+    // COVERAGE CANNOT SHRINK SILENTLY. The pattern reads single-quoted literals
+    // only, so a message rewritten as a template literal or in double quotes
+    // would drop out of the set and leave this case green while free text
+    // reached the evidence column. Counting the throws holds the two together.
+    const throwCount = [...source.matchAll(/\bthrow\b/gu)].length;
+    expect(thrown.length, 'every throw in the planner must be readable by this case').toBe(throwCount);
     expect(thrown.length, 'the planner must still throw, or this case proves nothing').toBeGreaterThan(0);
     for (const message of thrown) {
       expect(safeReasonCode(message), `${message} would be replaced by the generic fallback`).toBe(message);
