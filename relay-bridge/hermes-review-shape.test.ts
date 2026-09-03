@@ -16,7 +16,7 @@ import {
  * separated a dead credential from a model writing prose was composed and then
  * dropped — the coordinator persists the code, the retryable flag and the
  * failure CLASS, not the message — so the one artifact built to explain a paid
- * failure could not say which of eleven things had happened.
+ * failure could not say which of a dozen things had happened.
  *
  * Every case here drives the REAL local runner through a fake process. No
  * Hermes, no provider, no network: `spawnImpl` hands back a child this test
@@ -28,6 +28,8 @@ import {
 /** A child process this test drives: stdout text, exit code, and timing. */
 function fakeChild(input: {
   readonly stdout?: string;
+  /** Several writes, so a retained prefix can overflow on a later chunk. */
+  readonly stdoutChunks?: readonly string[];
   readonly code?: number;
   readonly closeAfterMs?: number;
   readonly neverCloses?: boolean;
@@ -40,7 +42,9 @@ function fakeChild(input: {
     child.stderr = new Readable({ read() { /* never surfaced */ } });
     child.kill = () => true;
     setTimeout(() => {
-      if (input.stdout !== undefined && input.stdout !== '') child.stdout.push(Buffer.from(input.stdout, 'utf8'));
+      for (const chunk of input.stdoutChunks ?? (input.stdout !== undefined && input.stdout !== '' ? [input.stdout] : [])) {
+        child.stdout.push(Buffer.from(chunk, 'utf8'));
+      }
       child.stdout.push(null);
       child.stderr.push(null);
       if (input.neverCloses !== true) child.emit('close', input.code ?? 0);
@@ -164,8 +168,33 @@ describe('the local reviewer names which failure it was', () => {
       .toBe('review_authentication_failed');
   });
 
+  it('13b. a reviewer QUOTING an HTTP 401 keeps its own verdict, and is not called an auth failure', async () => {
+    // The upstream classifier matches an HTTP line anywhere in the text. A code
+    // reviewer quoting one — this repository's fixtures contain such a line —
+    // must not have its review recorded as a dead credential.
+    const quoting = 'The diff logs "HTTP 401: invalid api-key" on failure, which is fine.\n'
+      + '{"verdict":"changes_required","summary":"Handle the 401 branch."}';
+    const outcome = await review({ stdout: quoting });
+    expect(outcome.kind, 'the reviewer stated a verdict, so it reviewed').toBe('reviewed');
+    if (outcome.kind !== 'reviewed') throw new Error('unreachable');
+    expect(outcome.result.verdict).toBe('changes_required');
+    // And the provider's own rejection — which is itself JSON — is still auth.
+    expect(await shapeOf({ stdout: 'HTTP 400: {"code":"invalid-argument","error":"Incorrect API key provided."}' }))
+      .toBe('review_authentication_failed');
+  });
+
   it('14. any other upstream HTTP failure is named as one', async () => {
     expect(await shapeOf({ stdout: 'HTTP 503: upstream unavailable' })).toBe('review_provider_http_error');
+  });
+
+  it('15b. a later chunk overflowing is still named, with a prefix already retained', async () => {
+    // The single-chunk case drops everything; this one keeps a prefix and then
+    // overflows, which is the shape a real stream takes.
+    const shape = await shapeOf(
+      { stdoutChunks: ['{"verdict":"approved","summary":"', 'x'.repeat(400), '"}'] },
+      { maxOutputBytes: 40 },
+    );
+    expect(shape).toBe('review_output_too_large');
   });
 
   it('15. output beyond the ceiling is named, not parsed as partial text', async () => {
@@ -250,7 +279,7 @@ describe('a hostile review leaks nothing structural inspection does not need', (
     // and its findings are the reviewer's product and travel by design. What
     // must never happen is the SHAPE machinery copying them.
     expect(outcome.kind).toBe('reviewed');
-    expect(classifyUnreadableReview(valid), 'a readable review has no shape complaint').toBe('review_unreadable');
+    expect(classifyUnreadableReview(valid), 'a readable review has no shape complaint').toBe('review_classifier_disagreement');
     expect(JSON.stringify(classifyUnreadableReview(valid))).not.toContain('FAKESECRET');
   });
 });
@@ -266,6 +295,48 @@ describe('the extractor finds one object without becoming permissive', () => {
   it('does not end an object on a brace inside a quoted string', () => {
     const text = '{"verdict":"approved","summary":"the diff added } and { here","findings":[]}';
     expect(validateHermesReview(text)?.summary).toBe('the diff added } and { here');
+  });
+
+  /**
+   * THE CASE THAT WAS MISSING, AND THE DEFECT IT WOULD HAVE CAUGHT.
+   *
+   * The first extractor took the first parseable object ANYWHERE, at any depth.
+   * A reviewer that quotes a JSON object out of the diff and then states its own
+   * verdict below had the QUOTED object read as its verdict — so a review that
+   * said `changes_required` was recorded as an approval, and the run completed.
+   * Reviewer text of exactly this shape is invited by this repository's own
+   * diffs, which carry review fixtures as literals.
+   */
+  it('refuses a text whose verdict cannot be known, rather than picking one', () => {
+    const quotedThenReal = `The diff contained ${APPROVED} which I disagree with.\n`
+      + '{"verdict":"changes_required","summary":"AC-1 is unmet."}';
+    expect(validateHermesReview(quotedThenReal), 'two verdicts is not a tie to break').toBeNull();
+    expect(classifyUnreadableReview(quotedThenReal)).toBe('review_json_ambiguous');
+    expect(extractReviewJson(quotedThenReal)).toBeNull();
+  });
+
+  it('never descends into an array or into a failed parent to find a verdict', () => {
+    // An approval inside a findings list, and an approval nested under a parent
+    // that does not parse. Both were selected before; neither is the review.
+    const inArray = `[${APPROVED},{"verdict":"changes_required","summary":"no"}]`;
+    expect(validateHermesReview(inArray), 'an array of reviews is not a review').toBeNull();
+    const nested = `{"outer": broken, "inner": ${APPROVED}}`;
+    expect(validateHermesReview(nested), 'a child of an unparseable parent is not the review').toBeNull();
+  });
+
+  it('a single object missing its verdict is still found, so the field can be named', () => {
+    // Refusing to extract would report "no JSON" for a review that was JSON.
+    expect(classifyUnreadableReview('{"summary":"looks fine","findings":[]}'))
+      .toBe('review_verdict_missing');
+  });
+
+  it('prose that quotes code with braces is absent, not unparseable', () => {
+    // A CODE reviewer writing prose quotes code, and code has braces. Calling
+    // that "unparseable" points the operator at a ceiling; the fix is the prompt.
+    expect(classifyUnreadableReview('The function foo() { return 1; } is fine, so I approve.'))
+      .toBe('review_json_absent');
+    expect(classifyUnreadableReview('```\n- if (a) { b(); }\n+ if (a) { c(); }\n```\nLooks right.'))
+      .toBe('review_json_absent');
   });
 
   it('finds nothing in text that contains no object at all', () => {
@@ -285,7 +356,7 @@ describe('the extractor finds one object without becoming permissive', () => {
       const accepted = validateHermesReview(text) !== null;
       const shape = classifyUnreadableReview(text);
       expect(accepted, `"${text.slice(0, 20)}" — accepted iff the shape says readable`)
-        .toBe(shape === 'review_unreadable');
+        .toBe(shape === 'review_classifier_disagreement');
     }
   });
 });

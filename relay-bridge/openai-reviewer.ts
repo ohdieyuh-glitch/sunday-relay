@@ -187,8 +187,10 @@ export async function runOpenAiReview(input: {
     return {
       kind: 'review_incomplete',
       safeMessage: 'The reviewer response could not be read.',
-      // The HTTP body itself was unreadable — not a review shape at all.
-      shape: 'review_json_unparseable',
+      // The HTTP BODY was unreadable, which is the provider's answer failing —
+      // not the model's review JSON being malformed. Labelling it with the
+      // review-shape token would tell an operator to change the prompt.
+      shape: 'review_provider_http_error',
       startedAt,
       completedAt: now(),
     };

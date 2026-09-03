@@ -91,7 +91,15 @@ export type HermesReviewShape =
   | 'review_verdict_invalid'
   | 'review_summary_missing'
   | 'review_summary_invalid'
-  | 'review_unreadable';
+  | 'review_json_ambiguous'
+  /**
+   * UNREACHABLE UNLESS THE TWO READERS DRIFT APART. The classifier applies the
+   * validator's own rules to the validator's own slice, so a review it calls
+   * readable is one the validator accepted — and the classifier only runs after
+   * the validator refused. It is kept as the canary for that invariant
+   * breaking, and named for what it would mean.
+   */
+  | 'review_classifier_disagreement';
 
 export interface HermesConfig {
   executable: string;
@@ -458,54 +466,93 @@ export function escapeInvalidJsonEscapes(text: string): string {
 
 /** Strict validation — malformed output NEVER approves. */
 /**
- * THE ONE JSON OBJECT THE REVIEWER MEANT, found deterministically.
+ * WHAT THE REVIEWER'S OUTPUT ACTUALLY CONTAINS, structurally.
  *
- * The old extraction took the first `{` and the last `}` in the text. That is
- * correct for a model that answers with nothing else, and wrong the moment it
- * does not: a sentence containing a brace before the JSON, a trailing note
- * after it, or a fenced diff snippet quoted above the verdict all produce a
- * slice that spans two things and parses as neither. The reviewer is then told
- * its JSON was unparseable when the JSON was fine.
+ * The first version of this scan took the first parseable object ANYWHERE, at
+ * any depth. An independent review proved that manufactures approvals: a
+ * reviewer that quotes a JSON object out of the diff and then states its own
+ * `changes_required` verdict below had the QUOTED object selected, and Julius
+ * recorded an approval for a review that said no. Reviewer output of exactly
+ * that shape is invited by this repository's own diffs, which contain review
+ * fixtures as literals.
  *
- * So candidates are scanned in order — each fenced block first, then the bare
- * text — and within each, every balanced `{…}` region is offered to the parser
- * until one is a JSON OBJECT. String literals are tracked so a brace inside a
- * quoted diff cannot end the region.
- *
- * THIS IS NOT PERMISSIVENESS. It changes only WHICH substring is parsed, never
- * what an accepted review must contain: the verdict vocabulary, the required
- * summary and every other rule are applied afterwards, unchanged. A text with
- * no parseable object still yields null.
+ * So the scan is TOP LEVEL ONLY — an array is skipped whole rather than
+ * descended into, and a region that fails to parse is skipped past rather than
+ * re-entered — and the caller must find exactly one candidate for the verdict.
+ * Two is not a tie to be broken; it is a text whose verdict cannot be known.
  */
-export function extractReviewJson(text: string): string | null {
-  const candidates: string[] = [];
-  for (const match of text.matchAll(/```(?:json)?\s*([\s\S]*?)```/gi)) {
-    if (match[1] !== undefined) candidates.push(match[1]);
-  }
-  candidates.push(text);
-
-  for (const candidate of candidates) {
-    for (let i = 0; i < candidate.length; i += 1) {
-      if (candidate[i] !== '{') continue;
-      const region = balancedObject(candidate, i);
-      if (region === null) continue;
-      // The REGION is returned, never the repaired form: the caller performs
-      // the repair itself and records that it had to, and handing back
-      // already-repaired text would silently clear `parseRepaired` — evidence
-      // that the reviewer's output was malformed.
-      for (const attempt of [region, escapeInvalidJsonEscapes(region)]) {
-        try {
-          const parsed: unknown = JSON.parse(attempt);
-          if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)) return region;
-        } catch { /* try the repaired form, then the next region */ }
-      }
-    }
-  }
-  return null;
+interface ReviewJsonScan {
+  /** Top-level objects that parsed, in the order they appear. */
+  readonly objects: readonly string[];
+  /** Those carrying a `verdict` key — the candidates for the review itself. */
+  readonly withVerdict: readonly string[];
+  /** A `{` that never closes: the signature of a truncated review. */
+  readonly unclosed: boolean;
+  /** A balanced region that looked like JSON — quoted keys — and failed to parse. */
+  readonly malformed: boolean;
 }
 
-/** The `{…}` starting at `from`, or null when it never closes. */
-function balancedObject(text: string, from: number): string | null {
+export function scanReviewJson(text: string): ReviewJsonScan {
+  const objects: string[] = [];
+  const withVerdict: string[] = [];
+  let unclosed = false;
+  let malformed = false;
+
+  for (let i = 0; i < text.length; i += 1) {
+    const ch = text[i];
+    // An array is skipped ENTIRE. Descending into one is how an object inside a
+    // findings list became the review.
+    if (ch === '[') {
+      const span = balancedRegion(text, i, '[', ']');
+      if (span === null) { unclosed = true; break; }
+      i += span.length - 1;
+      continue;
+    }
+    if (ch !== '{') continue;
+    const region = balancedRegion(text, i, '{', '}');
+    if (region === null) { unclosed = true; break; }
+    i += region.length - 1;
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(region);
+    } catch {
+      try {
+        parsed = JSON.parse(escapeInvalidJsonEscapes(region));
+      } catch {
+        // A brace in prose is not malformed JSON — `if (a) { b(); }` has no
+        // quoted key. Requiring one keeps "the model wrote prose" (absent)
+        // separate from "the model wrote broken JSON" (unparseable), which the
+        // operator answers with a prompt change and a schema fix respectively.
+        if (/"[^"]*"\s*:/.test(region)) malformed = true;
+        continue;
+      }
+    }
+    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) continue;
+    objects.push(region);
+    if (Object.prototype.hasOwnProperty.call(parsed, 'verdict')) withVerdict.push(region);
+  }
+
+  return { objects, withVerdict, unclosed, malformed };
+}
+
+/**
+ * THE ONE OBJECT THAT IS THE REVIEW, or null when that cannot be known.
+ *
+ * Exactly one verdict-bearing object is the review. None, with exactly one
+ * object present, is a review whose verdict is missing — returned so the caller
+ * can say which field was wrong rather than "no JSON". Anything else is refused:
+ * two verdicts is ambiguity, and ambiguity on this path spends money.
+ */
+export function extractReviewJson(text: string): string | null {
+  const scan = scanReviewJson(text);
+  if (scan.withVerdict.length === 1) return scan.withVerdict[0]!;
+  if (scan.withVerdict.length > 1) return null;
+  return scan.objects.length === 1 ? scan.objects[0]! : null;
+}
+
+/** The `open`…`close` region starting at `from`, or null when it never closes. */
+function balancedRegion(text: string, from: number, open: string, close: string): string | null {
   let depth = 0;
   let inString = false;
   let escaped = false;
@@ -518,8 +565,8 @@ function balancedObject(text: string, from: number): string | null {
       continue;
     }
     if (ch === '"') { inString = true; continue; }
-    if (ch === '{') depth += 1;
-    else if (ch === '}') {
+    if (ch === open) depth += 1;
+    else if (ch === close) {
       depth -= 1;
       if (depth === 0) return text.slice(from, i + 1);
     }
@@ -697,7 +744,24 @@ export async function runHermesReview(input: {
          * credential — which sends an operator to read the reviewer's prompt
          * and rubric when the fix is an expired key.
          */
-        const upstream = classifyHermesUpstreamFailure(out);
+        /**
+         * ONLY WHEN THE REVIEWER RETURNED NO VERDICT AT ALL.
+         *
+         * `classifyHermesUpstreamFailure` matches an `HTTP 401:` line anywhere
+         * in the text, and a code reviewer quoting one — this repository's own
+         * fixtures contain such a line — would have had its review recorded as
+         * a dead credential, durably, sending an operator to rotate a working
+         * key. Requiring the absence of a verdict-bearing object separates the
+         * two: a provider's error dump carries a body but never a verdict, and
+         * a reviewer quoting an error still states its own.
+         *
+         * The test is NOT "nothing parsed": xAI's rejection is itself JSON
+         * (`HTTP 400: {"code":"invalid-argument",…}`), which parses and would
+         * have suppressed the classification that case exists to prove.
+         */
+        const upstream = scanReviewJson(out).withVerdict.length === 0
+          ? classifyHermesUpstreamFailure(out)
+          : null;
         /**
          * THE SHAPE IS THE PART THAT SURVIVES. The message below is composed
          * and then dropped — the coordinator persists the code, the retryable
@@ -755,7 +819,7 @@ export async function runHermesReview(input: {
 /**
  * WHY A REVIEW COULD NOT BE READ, in facts that cannot leak.
  *
- * `validateHermesReview` returns `null` for six different reasons and the
+ * `validateHermesReview` returns `null` for several different reasons and the
  * mission reported one sentence for all of them: "The Reviewer service
  * returned a review Relay could not read." A real Hermes/xAI/Grok review ran
  * for 45 seconds against a real diff and produced something Relay rejected,
@@ -782,12 +846,20 @@ export async function runHermesReview(input: {
  * own class. Only a word outside the whole vocabulary is `verdict_invalid`.
  */
 export function classifyUnreadableReview(text: string): HermesReviewShape {
+  const scan = scanReviewJson(text);
+  // TWO VERDICTS IS NOT A TIE TO BREAK. A reviewer that quoted one object and
+  // meant another leaves a text whose verdict cannot be known, and guessing is
+  // how an approval gets manufactured.
+  if (scan.withVerdict.length > 1) return 'review_json_ambiguous';
   const slice = extractReviewJson(text);
   if (slice === null) {
-    // No balanced object parsed anywhere. Whether the model wrote prose or
-    // stopped mid-object is the difference between "absent" and "unparseable",
-    // and a brace with no partner is the signature of the second.
-    return /\{/.test(text) ? 'review_json_unparseable' : 'review_json_absent';
+    // An object that never closed is a review cut off mid-sentence; a balanced
+    // region with quoted keys that will not parse is malformed JSON; anything
+    // else — prose, code with braces, an empty answer — is no JSON at all.
+    if (scan.unclosed || scan.malformed) return 'review_json_unparseable';
+    // Several objects and no verdict among them: the verdict is what is
+    // missing, and saying "no JSON" would send the operator the wrong way.
+    return scan.objects.length > 0 ? 'review_verdict_missing' : 'review_json_absent';
   }
   let raw: unknown;
   try {
@@ -806,7 +878,7 @@ export function classifyUnreadableReview(text: string): HermesReviewShape {
   if (typeof o.summary !== 'string' || !o.summary.trim()) return 'review_summary_invalid';
   // Every field the validator requires is present and well formed, so the
   // rejection came from somewhere this function cannot see.
-  return 'review_unreadable';
+  return 'review_classifier_disagreement';
 }
 
 export function describeUnreadableReview(text: string): string {
@@ -819,9 +891,15 @@ export function describeUnreadableReview(text: string): string {
   // block held a quoted diff and whose JSON followed it was reported here as
   // "json=absent" while the classifier had already parsed the object and found
   // the verdict word wrong.
+  const scan = scanReviewJson(text);
+  if (scan.withVerdict.length > 1) {
+    parts.push(`json=ambiguous objectsWithVerdict=${String(scan.withVerdict.length)}`);
+    return `Review shape: ${parts.join(' ')}.`;
+  }
   const slice = extractReviewJson(text);
   if (slice === null) {
-    parts.push(/\{/.test(text) ? 'json=unparseable' : 'json=absent');
+    parts.push(scan.unclosed || scan.malformed ? 'json=unparseable'
+      : scan.objects.length > 0 ? 'json=noVerdictObject' : 'json=absent');
     return `Review shape: ${parts.join(' ')}.`;
   }
 
