@@ -313,10 +313,14 @@ export class JuliusRunLoop {
       const policy = await this.resolvePolicy(claim, scope, policyCache);
       if (policy === null) {
         unresolvedPolicyRunIds.add(claim.runId);
-        // THE LEASE IS HANDED BACK, NOT HELD. A task nobody can supply policy
-        // for must become claimable again once the deployment is fixed, and
-        // holding the lease until it expires would delay that by the lease
-        // duration for no reason.
+        // THE LEASE IS RELEASED, AND THE TASK IS FAILED — not handed back.
+        // This call passes no next attempt time, so under the rule both stores
+        // now share it ends the task rather than requeueing it, and a FAILED
+        // task is claimable by nobody. That is deliberate: a task nobody can
+        // supply policy for would otherwise be claimed, refused and released on
+        // every tick forever. Releasing the lease immediately still beats
+        // holding it until it expires. (An earlier comment here claimed the
+        // task became claimable again; it never did.)
         await this.deps.store.finishTask({
           taskId: claim.taskId, owner: this.deps.owner, leaseGeneration: claim.leaseGeneration,
           state: 'FAILED', now: this.deps.clock.now(),

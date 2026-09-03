@@ -280,8 +280,13 @@ suite('dry run 33635375764 — the preflight identity satisfies the executor’s
    * retry with it. The memory store answers by setting the task RUNNABLE. This
    * store set it FAILED, where no claim query can reach it again, so in
    * production a yielded or retried task was destroyed for a benign reason.
-   * The live C.A.R.D. runs `concurrency: 1` against a claim limit of 4, so the
-   * yield path is reachable on the tick after the architect succeeds.
+   * WHICH OF THE TWO REACHES THE PAID PATH: the pipeline's requeue, because the
+   * live C.A.R.D. sets `automaticRetry` and a rate-limited or timed-out worker
+   * is exactly what it requeues. The concurrency yield needs two tasks of one
+   * run claimable in the same tick, and the live graph never has that — plan
+   * and build are ordered by a dependency, and a review task is created BLOCKED
+   * on the task it reviews. It is reachable only for a run with two independent
+   * tasks.
    *
    * These two cases are the behavioural proof, against the real schema: handed
    * back means claimable again, and a genuine failure still ends terminal.

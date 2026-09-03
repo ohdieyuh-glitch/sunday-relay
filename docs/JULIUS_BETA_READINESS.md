@@ -430,7 +430,7 @@ database. Two repairs, both provider-free:
   passes one. Nine coarse codes cannot separate a refusal from a malformed
   response from a 500; the class can.
 - The evidence bundle gains `failures.tsv`: task, role, event type, Julius
-  code, failure class, retryable and timestamp, read from named fact keys and
+  code, failure class, `errorRetryable` and timestamp, read from named fact keys and
   never from a whole payload.
 
 A run whose only remaining tasks are blocked behind a terminally failed
