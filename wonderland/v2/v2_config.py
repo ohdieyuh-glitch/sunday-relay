@@ -301,8 +301,22 @@ HERO_CAMS = [
     # that is what 194 m does to a 1.7 m walker, and it is the brief's
     # "impossible verticality" as an experience rather than as a diagram.
     # SkylineRiseCam21 is where the spire is seen WHOLE.
-    {"name": "GreatSpireCam22", "location": (0.0, 23400.0, 170.0), "rotation": (9.0, 90.0, 0.0),
-     "fov": 100.0, "tags": ("GreatSpireCam22", "HeroCam22")},        # 96 m, looking up
+    #
+    # AND IT WAS NOT LOOKING UP ENOUGH TO DO ANY OF THAT (2026-09-03). Rendered,
+    # this camera is a featureless wall of pale stone: at pitch 9 the frame top
+    # sits 42.8 deg above the horizon (9 + a 33.8 deg vertical half-field) while
+    # the spire's tip is at 63.5 deg, so the picture holds the BASE and nothing
+    # else -- no shaft, no tip, no sky, nothing to say the thing is tall. The
+    # standpoint above is a considered decision and it stands; what failed is
+    # that "looks UP" was written as 9 degrees, which is very nearly level.
+    #
+    # Pitch 30 puts the frame top at 63.8 deg and the tip at 63.5 just inside
+    # it, so the shaft rises the full height of the picture -- the experience
+    # the note above asks for. The ground edge moves out to 26 m, which is
+    # correct for a look-up shot and is why this camera gets no near-field
+    # framing: there is no near field in it.
+    {"name": "GreatSpireCam22", "location": (0.0, 23400.0, 170.0), "rotation": (30.0, 90.0, 0.0),
+     "fov": 100.0, "tags": ("GreatSpireCam22", "HeroCam22")},        # 96 m, looking properly up
     {"name": "ClockGrandCam23", "location": (10603.0, -927.7, 170.0), "rotation": (5.3, -5.0, 0.0),
      "fov": 100.0, "tags": ("ClockGrandCam23", "HeroCam23")},        # on its spur, 74 m, 67% clear
     {"name": "TeapotCam24", "location": (-11830.9, -7143.9, 170.0), "rotation": (5.3, -156.0, 0.0),
