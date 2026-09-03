@@ -161,8 +161,11 @@ describe('the Julius runtime ports and the PostgreSQL repositories agree', () =>
     const sql = readFileSync(resolve(import.meta.dirname, 'julius-postgres.ts'), 'utf8');
     const update = /UPDATE relay_wonderland\.julius_tasks SET state=([^,]+),/u.exec(sql)?.[1] ?? '';
     expect(update, 'the SQL must branch, not write the state through').not.toBe('$4');
+    // The casts are part of the contract, not formatting: without them the
+    // statement does not plan at all (42P08), which the sibling workflow's
+    // real-PostgreSQL cases caught on the first version of this repair.
     expect(update.replace(/\s+/gu, ' '))
-      .toBe("CASE WHEN $4='FAILED' AND $6 IS NOT NULL THEN 'RUNNABLE' ELSE $4 END");
+      .toBe("CASE WHEN $4::text='FAILED' AND $6::timestamptz IS NOT NULL THEN 'RUNNABLE'::text ELSE $4::text END");
 
     const memory = readFileSync(resolve(import.meta.dirname, '../mission/julius/julius-memory-store.ts'), 'utf8');
     expect(memory, 'the memory store states the same rule in its own terms')
