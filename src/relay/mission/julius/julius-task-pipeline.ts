@@ -118,8 +118,8 @@ export type JuliusTaskOutcome =
   | { readonly kind: 'COMPLETED'; readonly taskId: string; readonly workerId: string; readonly duplicate: boolean; readonly decision: JuliusVerificationDecision }
   | { readonly kind: 'REVIEW_SCHEDULED'; readonly taskId: string; readonly reviewTaskId: string }
   | { readonly kind: 'REPAIR_SCHEDULED'; readonly taskId: string; readonly repairTaskId: string; readonly round: number }
-  | { readonly kind: 'RETRY'; readonly taskId: string; readonly code: string }
-  | { readonly kind: 'FAILED'; readonly taskId: string; readonly code: string }
+  | { readonly kind: 'RETRY'; readonly taskId: string; readonly code: string; readonly failureClass?: string | null }
+  | { readonly kind: 'FAILED'; readonly taskId: string; readonly code: string; readonly failureClass?: string | null }
   | { readonly kind: 'DENIED'; readonly taskId: string; readonly reasonCode: string }
   | { readonly kind: 'APPROVAL_REQUIRED'; readonly taskId: string; readonly operation: string; readonly reasonCode: string }
   | { readonly kind: 'HALTED'; readonly taskId: string; readonly reasonCode: string; readonly safeSummary: string };
@@ -377,7 +377,8 @@ export async function runClaimedTask(
     if (remaining.length === 0) break;
 
     await ledger.event('provider.failure', {
-      taskId: claim.taskId, facts: { code: outcome.code, triedWorkers: tried.length },
+      taskId: claim.taskId,
+      facts: { code: outcome.code, triedWorkers: tried.length, failureClass: outcome.failureClass ?? null },
     });
 
     const carryOn = decideJuliusContinuation(request.policy, {
@@ -433,7 +434,18 @@ export async function runClaimedTask(
       if (!carryOn.proceed) {
         await ledger.event('task.failed', {
           taskId: claim.taskId,
-          facts: { code: outcome.code, reasonCode: carryOn.reasonCode, awaitingHuman: carryOn.awaitingHuman },
+          facts: {
+            code: outcome.code, reasonCode: carryOn.reasonCode, awaitingHuman: carryOn.awaitingHuman,
+            // UNKNOWN IS NULL, NOT ABSENT. A reader asking "why did this task
+            // fail" must be able to tell "the connector did not classify it"
+            // from "nobody wrote the field down".
+            failureClass: outcome.failureClass ?? null,
+            // Reached only from the RETRY branch, so the ERROR was retryable and
+            // the run's own autonomy is what declined — `reasonCode` says which.
+            // Recording it here keeps every failure row shaped alike, whichever
+            // of the two endings wrote it.
+            retryable: true,
+          },
         });
       }
     }
@@ -444,10 +456,11 @@ export async function runClaimedTask(
     });
     await ledger.trajectory(requeue ? 'RETRY' : 'DISPATCH', {
       taskId: claim.taskId, contextId, policyRevision: request.policy.revision, outcome: outcome.code,
+      facts: { failureClass: outcome.failureClass ?? null },
     });
-    if (requeue) return { kind: 'RETRY', taskId: claim.taskId, code: outcome.code };
+    if (requeue) return { kind: 'RETRY', taskId: claim.taskId, code: outcome.code, failureClass: outcome.failureClass ?? null };
     if (outcome.status === 'DENIED') return { kind: 'DENIED', taskId: claim.taskId, reasonCode: outcome.code };
-    return { kind: 'FAILED', taskId: claim.taskId, code: outcome.code };
+    return { kind: 'FAILED', taskId: claim.taskId, code: outcome.code, failureClass: outcome.failureClass ?? null };
   }
 
   await ledger.trajectory('DISPATCH', {

@@ -1,6 +1,26 @@
 import type{JuliusWorker,JuliusWorkerRegistry,JuliusWorkerRole}from'./julius-runtime';import{workerAllowedByCard,type JuliusCardPolicy}from'./julius-policy';
 export const JULIUS_ERROR_CODES=['RATE_LIMIT','TIMEOUT','AUTH_CONFIGURATION','PROVIDER_UNAVAILABLE','INVALID_REQUEST','WORKER_EXECUTION_FAILURE','POLICY_DENIED','BUDGET_DENIED','CANCELLED']as const;export type JuliusErrorCode=typeof JULIUS_ERROR_CODES[number];
-export class JuliusDispatchError extends Error{constructor(readonly code:JuliusErrorCode,readonly retryable:boolean,readonly safeMessage:string){super(code);}}
+/**
+ * THE CONNECTOR'S OWN CLASSIFICATION, NARROWED TO A MACHINE TOKEN.
+ *
+ * A `JuliusErrorCode` is deliberately coarse: nine codes have to cover every
+ * provider, so `WORKER_EXECUTION_FAILURE` answers "a malformed plan", "a
+ * refusal" and "a 500" identically. The first paid mission failed on exactly
+ * that ambiguity — the durable record held `code` and nothing else, and the
+ * run could not be diagnosed after its database was destroyed.
+ *
+ * The connector already knows the finer answer, so it is carried alongside the
+ * code. NARROWING IS THE SAFETY PROPERTY, not a convention: anything that is
+ * not a short lower-case token becomes `null`, so a provider exception
+ * message, a URL, a header or a key SHAPE cannot survive this function even if
+ * a future adapter passes one by mistake. Redaction that depends on the caller
+ * remembering to redact is not redaction.
+ */
+export const safeFailureClass=(value:unknown):string|null=>typeof value==='string'&&/^[a-z][a-z0-9_]{0,63}$/.test(value)?value:null;
+export class JuliusDispatchError extends Error{
+ readonly failureClass:string|null;
+ constructor(readonly code:JuliusErrorCode,readonly retryable:boolean,readonly safeMessage:string,failureClass?:unknown){super(code);this.failureClass=safeFailureClass(failureClass);}
+}
 export interface JuliusProviderResult{readonly workerId:string;readonly providerId:string;readonly status:'SUCCEEDED'|'FAILED';readonly safeSummary:string;readonly evidence:readonly unknown[];readonly usage:unknown;}
 export interface JuliusProviderAdapter{readonly adapterId:string;dispatch(input:{taskId:string;contextId:string;signal?:AbortSignal}):Promise<JuliusProviderResult>;}
 export interface JuliusProviderHealth{readonly providerId:string;readonly state:'CLOSED'|'OPEN'|'HALF_OPEN';readonly consecutiveFailures:number;readonly openedAt:string|null;readonly active:number;readonly concurrencyLimit:number;}

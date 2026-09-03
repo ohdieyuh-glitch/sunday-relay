@@ -93,9 +93,9 @@ describe('the paid stage is gated, and the unpaid stage cannot pay', () => {
     return end < 0 ? rest : rest.slice(0, end);
   };
 
-  it('the live step requires the exact typed confirmation', () => {
+  it('the live step requires the exact typed confirmation, and a clean run behind it', () => {
     expect(liveStep(), 'the live step must be gated on the exact dispatch phrase')
-      .toMatch(/if:\s*inputs\.confirm_live == 'RUN LIVE MISSION'/u);
+      .toMatch(/if:\s*success\(\) && inputs\.confirm_live == 'RUN LIVE MISSION'/u);
   });
 
   it('the live step passes --confirm-live, so Julius gates it a third time', () => {
@@ -468,6 +468,9 @@ describe('the evidence dump names only tables and columns the migrations create'
   it('every dumped table exists and every selected or ordered column is a real column', () => {
     const tables = schema();
     const dumps = queries();
+    const everyDumpedFile = [...read('.github/julius-live-evidence-dump.sh').matchAll(/" ([a-z-]+\.tsv)$/gmu)].map((match) => match[1]).sort();
+    expect(everyDumpedFile, 'every file the script writes, including the ones this regex cannot parse')
+      .toEqual(['decisions.tsv', 'evidence.tsv', 'failures.tsv', 'findings.tsv', 'runs.tsv', 'tasks.tsv', 'tool-invocations.tsv']);
     expect(dumps.map((dump) => dump.file).sort()).toEqual(['decisions.tsv', 'evidence.tsv', 'findings.tsv', 'runs.tsv', 'tasks.tsv', 'tool-invocations.tsv']);
     for (const dump of dumps) {
       const columns = tables.get(dump.table);
@@ -482,6 +485,45 @@ describe('the evidence dump names only tables and columns the migrations create'
     const regression = read('.github/workflows/julius-real-infra.yml');
     expect(regression).toContain('./.github/julius-live-evidence-dump.sh /tmp/julius-evidence-check');
     expect(regression, 'a stale name must fail the PR, not become a placeholder').toContain('evidence_query_invalid');
+  });
+
+  /**
+   * WHY A TASK FAILED, and why this query is checked by hand rather than by the
+   * parser above: it joins, so the simple SELECT/FROM regex cannot read it.
+   * The first paid attempt is the reason it exists at all — its artifact could
+   * say the plan task FAILED and never why.
+   */
+  it('the failure query reads real columns and exports named fact keys, never a whole payload', () => {
+    const tables = schema();
+    const script = read('.github/julius-live-evidence-dump.sh');
+    const query = script.split('\n').find((line) => line.includes('failures.tsv')) ?? '';
+    expect(query, 'the failure dump must exist').not.toBe('');
+
+    // `events` is declared on a single line in 001, which the shared parser
+    // above cannot read, so its columns are taken from the migration directly
+    // rather than assumed. A column this query names and no migration creates
+    // is exactly the defect that made two dry-run artifacts read "unavailable".
+    const eventsDdl = /CREATE TABLE relay_wonderland\.events\(([\s\S]*?)\);/u
+      .exec(readFileSync(join(migrationsDirectory, '001_wonderland_runtime.sql'), 'utf8'))?.[1] ?? '';
+    expect(eventsDdl, 'the events table must exist in the migrations').not.toBe('');
+    for (const column of ['event_type', 'payload', 'occurred_at']) {
+      expect(new RegExp(`\\b${column}\\s+(?:text|jsonb|timestamptz)\\b`, 'u').test(eventsDdl),
+        `events.${column} is not a column the migrations create`).toBe(true);
+    }
+    for (const column of ['task_id', 'role']) {
+      expect(tables.get('julius_tasks')?.has(column), `julius_tasks.${column} is not a column the migrations create`).toBe(true);
+    }
+
+    // NAMED KEYS ONLY. Every value below is a machine token by construction —
+    // nine JuliusErrorCodes, a class narrowed to /^[a-z][a-z0-9_]{0,63}$/, a
+    // continuation reason — so provider text cannot ride out in this file.
+    for (const key of ["'code'", "'failureClass'", "'retryable'", "'reasonCode'"]) {
+      expect(query, `the failure dump must select ${key}`).toContain(key);
+    }
+    expect(query, 'the whole payload is never dumped: it is the one column with room for anything')
+      .not.toMatch(/SELECT[^"]*\bе?\.?payload\b\s*(?:AS|,)/u);
+    expect(query, 'and it is scoped to the failure events, not the whole stream')
+      .toContain("'julius.task.failed'");
   });
 
   it('keeps the two names dry run #2 proved wrong corrected', () => {
@@ -963,6 +1005,9 @@ describe('F9 — dispatch inputs are validated before anything is built', () => 
 });
 
 describe('F6 — a paid mission cannot be run twice by accident', () => {
+  const GATE = "'Gate: no paid first-live mission has been attempted or completed'";
+  const ATTEMPT_STEP = "'Record that a paid mission was attempted (before any provider can be reached)'";
+
   it('live dispatches share one concurrency group; dry runs do not', () => {
     const group = /concurrency:\s*\n\s*group:\s*(.+)/u.exec(workflow)?.[1] ?? '';
     expect(group, 'live runs must serialise').toContain("'live'");
@@ -981,25 +1026,155 @@ describe('F6 — a paid mission cannot be run twice by accident', () => {
       .toMatch(/if: success\(\) && inputs\.confirm_live == 'RUN LIVE MISSION'/u);
   });
 
-  it('a second paid dispatch is refused unless the operator acknowledges it', () => {
-    const guard = stepScript("'Gate: a paid first-live mission has not already completed'");
-    expect(guard).toContain('julius_first_live_already_completed');
+  /**
+   * THE FIRST PAID ATTEMPT IS WHY THIS SECTION EXISTS.
+   *
+   * Run 33697109210 crossed the live boundary, failed at its `plan` task and
+   * published no marker at all, because only COMPLETION was recorded. A second
+   * ordinary dispatch would then have been treated as the first paid run. The
+   * attempt marker closes that: it records that a paid run was AUTHORIZED AND
+   * ENTERED, which is the strongest claim this job can honestly make — whether
+   * a provider was billed is not observable from here.
+   */
+  it('a paid attempt is recorded BEFORE the provider-capable entrypoint can run', () => {
+    const attempt = workflow.indexOf(`- name: ${ATTEMPT_STEP}`);
+    const upload = workflow.indexOf('name: julius-first-live-attempted');
+    const live = workflow.indexOf("- name: 'LIVE: run the first real Julius mission'");
+    expect(attempt, 'the attempt marker step must exist').toBeGreaterThan(-1);
+    expect(attempt, 'it is written before the entrypoint, not after').toBeLessThan(live);
+    expect(upload, 'and uploaded before the entrypoint, or a dead runner loses it').toBeLessThan(live);
+    expect(workflow.indexOf('name: julius-first-live-completed'), 'completion is still recorded after the run')
+      .toBeGreaterThan(live);
+  });
+
+  it('the attempt marker carries safe provenance and a contract digest, never contract text', () => {
+    const marker = stepScript(ATTEMPT_STEP);
+    expect(marker).toContain('attempted_at=');
+    expect(marker).toContain('run_id=');
+    expect(marker).toContain('commit=');
+    expect(marker, 'the digest identifies WHAT was authorized without reproducing it')
+      .toContain('contract_sha256=');
+    expect(marker, 'the contract is hashed, never copied').toMatch(/sha256sum "\$CONTRACT"/u);
+    for (const forbidden of ['API_KEY', 'SCOPED', 'PASSWORD', 'printenv', 'private.pem', 'cat "$CONTRACT"']) {
+      expect(marker, `${forbidden} must never enter the durable marker`).not.toContain(forbidden);
+    }
+  });
+
+  it('a dry run creates neither marker', () => {
+    for (const step of [ATTEMPT_STEP, "Record that a paid mission completed"]) {
+      const start = workflow.indexOf(`- name: ${step}`);
+      const guard = workflow.slice(start, start + 260);
+      expect(guard, `${step} must be gated on the typed live phrase`)
+        .toMatch(/if: success\(\) && inputs\.confirm_live == 'RUN LIVE MISSION'/u);
+    }
+  });
+
+  /**
+   * A STEP WHOSE `if:` NAMES NO STATUS FUNCTION RUNS AFTER AN EARLIER FAILURE.
+   * That is GitHub's documented behaviour — a custom condition replaces the
+   * implicit `success()` — so on the paid path the guard has to be written
+   * out. Without it a failed preflight, or a failed attempt-marker upload,
+   * would still reach the entrypoint that can spend money.
+   */
+  it('every paid step fails closed: no status guard, no spend', () => {
+    for (const step of ["- name: 'LIVE: run the first real Julius mission'", `- name: ${ATTEMPT_STEP}`]) {
+      const start = workflow.indexOf(step);
+      expect(start, `${step} must exist`).toBeGreaterThan(-1);
+      const condition = /\n\s*if: (.+)/u.exec(workflow.slice(start, start + 300))?.[1] ?? '';
+      expect(condition, `${step} must not run after an earlier step failed`).toContain('success()');
+      expect(condition).toContain("inputs.confirm_live == 'RUN LIVE MISSION'");
+    }
+    const uploads = workflow.split('- uses: actions/upload-artifact');
+    const attemptUpload = uploads.find((block) => block.includes('name: julius-first-live-attempted')) ?? '';
+    expect(attemptUpload, 'the attempt upload is itself on the paid, fail-closed path')
+      .toMatch(/if: success\(\) && inputs\.confirm_live == 'RUN LIVE MISSION'/u);
+  });
+
+  it('the guard reads BOTH markers and can only be overridden by the exact phrase', () => {
+    const guard = stepScript(GATE);
+    expect(guard, 'a failed attempt must block the next ordinary dispatch')
+      .toContain('julius-first-live-attempted');
+    expect(guard, 'a completed run must block it too').toContain('julius-first-live-completed');
+    expect(guard).toContain('julius_first_live_already_entered');
     // Unknown is not zero: a failed marker QUERY must refuse like a found
     // marker does, behind the same acknowledgement — not read as "no marker".
     expect(guard, 'an unreadable marker list must not pass as a first run')
       .toContain('julius_first_live_marker_unknown');
     expect(guard, 'the query result must be branched on, never defaulted to zero')
       .not.toContain('|| echo 0');
-    expect(guard, 'the guard reads the completion marker artifact').toContain('julius-first-live-completed');
     expect(guard, 'and can only be overridden by an explicit typed phrase').toContain('RERUN PAID MISSION');
     expect(workflow, 'the guard applies to live dispatches only, so dry runs stay repeatable')
-      .toMatch(/- name: 'Gate: a paid first-live mission has not already completed'\n\s*if: inputs\.confirm_live == 'RUN LIVE MISSION'/u);
+      .toMatch(/- name: 'Gate: no paid first-live mission has been attempted or completed'\n\s*if: inputs\.confirm_live == 'RUN LIVE MISSION'/u);
     expect(workflow, 'listing artifacts needs actions:read and nothing more')
       .toMatch(/permissions:[\s\S]*?actions: read/u);
   });
 
+  /**
+   * THE GUARD, EXECUTED. The cases above read the file; these run the real
+   * script against a stubbed `gh`, because a guard that only reads correctly
+   * is a guard nobody has proven refuses.
+   */
+  describe('the guard, run against a stubbed artifact list', () => {
+    const runGuard = (input: { completed?: number; attempted?: number; readable?: boolean; acknowledge?: string }): number => {
+      const bin = mkdtempSync(join(realpathSync(tmpdir()), 'julius-gh-'));
+      const readable = input.readable ?? true;
+      writeFileSync(join(bin, 'gh'), [
+        '#!/usr/bin/env bash',
+        readable ? '' : 'exit 1',
+        'case "$*" in',
+        `  *julius-first-live-completed*) echo ${input.completed ?? 0};;`,
+        `  *julius-first-live-attempted*) echo ${input.attempted ?? 0};;`,
+        '  *) echo 0;;',
+        'esac',
+      ].join('\n'), { mode: 0o755 });
+      try {
+        execFileSync('bash', ['-c', stepScript(GATE)], {
+          cwd: ROOT, stdio: 'ignore',
+          env: {
+            ...process.env,
+            PATH: `${bin}:${process.env.PATH ?? ''}`,
+            GITHUB_REPOSITORY: 'owner/repo',
+            GH_TOKEN: 'stub',
+            ACKNOWLEDGE_RERUN: input.acknowledge ?? '',
+          },
+        });
+        return 0;
+      } catch (error) {
+        return (error as { status?: number }).status ?? 1;
+      }
+    };
+
+    it('a first paid run, with no markers at all, proceeds', () => {
+      expect(runGuard({})).toBe(0);
+    });
+
+    it('MUTATION: a FAILED first attempt still blocks the next ordinary paid dispatch', () => {
+      expect(runGuard({ attempted: 1, completed: 0 }), 'this is exactly attempt #1 followed by an ordinary re-dispatch').not.toBe(0);
+    });
+
+    it('a completed run blocks it too, as it always did', () => {
+      expect(runGuard({ completed: 1 })).not.toBe(0);
+    });
+
+    it('the exact acknowledgement lets a deliberate rerun through, over either marker', () => {
+      expect(runGuard({ attempted: 1, acknowledge: 'RERUN PAID MISSION' })).toBe(0);
+      expect(runGuard({ completed: 1, acknowledge: 'RERUN PAID MISSION' })).toBe(0);
+    });
+
+    it('MUTATION: a mistyped acknowledgement is refused', () => {
+      for (const typo of ['rerun paid mission', 'RERUN PAID MISSION ', 'RERUN-PAID-MISSION', 'yes', 'RERUN PAID MISSIO']) {
+        expect(runGuard({ attempted: 1, acknowledge: typo }), `"${typo}" must not pass`).not.toBe(0);
+      }
+    });
+
+    it('MUTATION: an unreadable marker list fails closed, and only the phrase overrides it', () => {
+      expect(runGuard({ readable: false })).not.toBe(0);
+      expect(runGuard({ readable: false, acknowledge: 'RERUN PAID MISSION' })).toBe(0);
+    });
+  });
+
   it('the guard runs before any credential or container exists', () => {
-    expect(workflow.indexOf("- name: 'Gate: a paid first-live mission has not already completed'"))
+    expect(workflow.indexOf(`- name: ${GATE}`))
       .toBeLessThan(workflow.indexOf('- name: Create the ephemeral scoped credentials'));
   });
 });

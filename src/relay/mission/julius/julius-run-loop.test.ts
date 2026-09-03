@@ -50,6 +50,60 @@ describe('the run state a task set implies', () => {
     expect(targetRunState([t('FAILED'), t('SUCCEEDED')]).state).toBe('FAILED');
   });
 
+  /**
+   * THE FIRST PAID MISSION STALLED HERE. Its `plan` task failed and its
+   * `build` task stayed BLOCKED behind it, so `any BLOCKED → WAITING` kept
+   * answering WAITING while nothing could ever move: a claim is offered only
+   * when every dependency is SUCCEEDED or SKIPPED, and a FAILED task is
+   * terminal. The run reported "stalled before terminal state" instead of the
+   * failure it was.
+   */
+  const dep = (state: JuliusTask['state'], id: string, dependencyIds: string[] = []): JuliusTask =>
+    ({ ...task({ taskId: id }), state, dependencyIds } as JuliusTask);
+
+  it('is FAILED when the only tasks left are blocked behind a failure', () => {
+    const target = targetRunState([dep('FAILED', 'plan'), dep('BLOCKED', 'build', ['plan'])]);
+    expect(target.state, 'a task waiting on a failure is not waiting for anything').toBe('FAILED');
+    expect(target.reasonCode).toBe('TASK_FAILED');
+  });
+
+  it('follows the chain: a task blocked behind a blocked task behind a failure is dead too', () => {
+    expect(targetRunState([
+      dep('FAILED', 'plan'), dep('BLOCKED', 'build', ['plan']), dep('BLOCKED', 'review', ['build']),
+    ]).state).toBe('FAILED');
+  });
+
+  it('still WAITS while any one blocked task could still be unblocked', () => {
+    // The rule is per task, not per run: a dead branch beside a live one must
+    // not fail a run that still has somewhere to go.
+    expect(targetRunState([
+      dep('FAILED', 'plan'), dep('BLOCKED', 'build', ['plan']),
+      dep('SUCCEEDED', 'other'), dep('BLOCKED', 'after-other', ['other']),
+    ]).state, 'one live blocked task is enough to keep the run waiting').toBe('WAITING');
+    expect(targetRunState([
+      dep('SUCCEEDED', 'plan'), dep('BLOCKED', 'build', ['plan']),
+    ]).state, 'a dependency that succeeded leaves an ordinary blocked task').toBe('WAITING');
+    expect(targetRunState([
+      dep('FAILED', 'plan'), dep('BLOCKED', 'build', ['plan']),
+      dep('ACTIVE', 'other'),
+    ]).state, 'and work in flight still outranks every other signal').toBe('EXECUTING');
+  });
+
+  it('a blocked task with no dependencies is still treated as waiting, as it always was', () => {
+    expect(targetRunState([t('BLOCKED'), t('SUCCEEDED')]).state).toBe('WAITING');
+  });
+
+  it('cannot progress, without claiming a failure, when a dependency was never planned', () => {
+    const target = targetRunState([dep('SUCCEEDED', 'plan'), dep('BLOCKED', 'build', ['never-planned'])]);
+    expect(target.state, 'nothing failed, and nothing can move either').toBe('BLOCKED');
+    expect(target.reasonCode).toBe('RUN_CANNOT_PROGRESS');
+  });
+
+  it('terminates on a dependency cycle rather than recursing forever', () => {
+    const target = targetRunState([dep('BLOCKED', 'a', ['b']), dep('BLOCKED', 'b', ['a'])]);
+    expect(target.state, 'a cycle can never be satisfied').toBe('BLOCKED');
+  });
+
   it('is VERIFYING only when every task is SUCCEEDED or SKIPPED', () => {
     expect(targetRunState([t('SUCCEEDED'), t('SKIPPED')]).state).toBe('VERIFYING');
   });

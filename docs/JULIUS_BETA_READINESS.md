@@ -383,15 +383,52 @@ values.
 
 **F6 — a paid mission cannot repeat by accident.** Live dispatches share one
 concurrency group (never cancelled in flight); dry runs get a per-run group,
-so proving the rig stays unlimited and free. A successful paid run uploads a
-`julius-first-live-completed` marker (provenance fields only, 90-day
-retention), and a live dispatch that finds one refuses unless the operator
-typed `RERUN PAID MISSION`. Stated limit, not papered over: artifacts expire
-and can be deleted, so this guards against accident — a second dispatch of a
-mission that already succeeded — and sits behind the typed phrase and the
-environment's own approval, not in place of them. Julius's contract-digest
-idempotency remains inert across dispatches because PostgreSQL is per-job;
-that is now a documented property rather than an implied protection.
+so proving the rig stays unlimited and free. TWO durable markers, and the
+distinction is what the first paid attempt taught:
+
+- `julius-first-live-attempted` is uploaded after every free gate has passed
+  and BEFORE the provider-capable entrypoint is invoked. It means a paid run
+  was AUTHORIZED AND ENTERED — the strongest claim this job can honestly make,
+  since whether a provider was billed is not observable from the runner. It
+  carries provenance fields and the Mission Contract's sha256, never its text.
+- `julius-first-live-completed` is uploaded only when Julius itself reached
+  legitimate completion, exactly as before.
+
+A live dispatch that finds EITHER marker refuses unless the operator typed
+`RERUN PAID MISSION`. Run 33697109210 is why: it crossed the live boundary,
+failed at its `plan` task and left no marker at all, so an ordinary
+re-dispatch would have been treated as the first paid run. Every step on the
+paid path now also carries `success()` in its condition — a step whose `if:`
+names no status function runs even after an earlier step failed — so a failed
+preflight or a failed marker upload cannot reach the entrypoint that spends.
+
+Stated limit, not papered over: artifacts expire and can be deleted, so this
+guards against accident — a second dispatch of a mission already entered — and
+sits behind the typed phrase and the environment's own approval, not in place
+of them. Julius's contract-digest idempotency remains inert across dispatches
+because PostgreSQL is per-job; that is a documented property rather than an
+implied protection.
+
+**F10 — a failed paid run says why, safely.** The first paid attempt failed at
+its Prompt Architect task and the uploaded evidence could not say why: the
+normalized `JuliusErrorCode` lived only in the operational event stream and
+the trajectory row, neither of which was dumped, and the job destroys its
+database. Two repairs, both provider-free:
+
+- The connector's own classification now travels with the code.
+  `JuliusDispatchError` carries a `failureClass`, narrowed by
+  `safeFailureClass` to `/^[a-z][a-z0-9_]{0,63}$/`, so a provider exception,
+  a header or a key shape cannot survive into a durable row even if an adapter
+  passes one. Nine coarse codes cannot separate a refusal from a malformed
+  response from a 500; the class can.
+- The evidence bundle gains `failures.tsv`: task, role, event type, Julius
+  code, failure class, retryable and timestamp, read from named fact keys and
+  never from a whole payload.
+
+A run whose only remaining tasks are blocked behind a terminally failed
+dependency now reports FAILED rather than WAITING. A claim is offered only when
+every dependency is SUCCEEDED or SKIPPED and nothing revives a FAILED task, so
+"waiting" was describing a run that could never move.
 
 ## Dry run #1 (2026-09-02) — the executor refused the live output ceiling
 
@@ -452,5 +489,7 @@ those same frozen objects, so parity is identity rather than a maintained copy.
 `sandbox-limits.test.ts` runs the live limits through the real validator,
 accepts the ceiling and refuses one byte more, and reads the three files that
 could hold a second number. No executor limit, guard or validator changed, and
-the envelope was not raised. The free dry run must be repeated and pass before
-the paid mission is attempted.
+the envelope was not raised. Free dry run #3 (run 33695712645, main
+`fb4f21f`) then passed every stage, and the first paid attempt (run
+33697109210) followed — it failed at its `plan` task, which is what F10 above
+is the repair for.

@@ -15,7 +15,13 @@ export interface JuliusExecutionPorts {
 }
 export type JuliusExecutionEventType='worker.selected'|'budget.reserved'|'budget.denied'|'worker.dispatched'|'worker.completed'|'retry.scheduled'|'task.failed';
 export interface JuliusExecutionRequest { readonly claim:JuliusExecutionClaim;readonly policy:JuliusCardPolicy;readonly role:JuliusWorkerRole;readonly taskType:string;readonly capability:string;readonly resources:JuliusResourceRequest;readonly operationId:string;readonly signal?:AbortSignal;/** Workers already tried for this task. Additive: omitted behaves exactly as before. */readonly excludedWorkerIds?:readonly string[]; }
-export type JuliusExecutionOutcome={readonly status:'COMPLETED';readonly workerId:string;readonly duplicate:boolean}|{readonly status:'RETRY'|'FAILED'|'DENIED';readonly code:string};
+/**
+ * `failureClass` is the connector's safe subclass when one is known, already
+ * narrowed to a machine token by {@link safeFailureClass}. It is additive:
+ * every existing reader keeps working, and `null` means "not classified",
+ * never "fine".
+ */
+export type JuliusExecutionOutcome={readonly status:'COMPLETED';readonly workerId:string;readonly duplicate:boolean}|{readonly status:'RETRY'|'FAILED'|'DENIED';readonly code:string;readonly failureClass?:string|null};
 
 const normalizedEvidence=(claim:JuliusExecutionClaim,worker:JuliusWorker,result:JuliusProviderResult):JuliusEvidence[]=>{
   if(result.workerId!==worker.workerId||result.providerId!==worker.providerId||!result.safeSummary.trim()||!Array.isArray(result.evidence))throw new JuliusDispatchError('INVALID_REQUEST',false,'Provider returned a malformed or mismatched result.');
@@ -26,7 +32,7 @@ const normalizedEvidence=(claim:JuliusExecutionClaim,worker:JuliusWorker,result:
 export class JuliusExecutionCoordinator {
   constructor(private readonly router:JuliusProviderRouter,private readonly ports:JuliusExecutionPorts){}
   async execute(request:JuliusExecutionRequest):Promise<JuliusExecutionOutcome>{
-    let worker:JuliusWorker;try{worker=this.router.select({role:request.role,taskType:request.taskType,capability:request.capability,policy:request.policy,excludedWorkerIds:request.excludedWorkerIds});}catch(error){const failure=error as JuliusDispatchError;await this.event(request,'task.failed',{code:failure.code});return{status:failure.code==='POLICY_DENIED'?'DENIED':'FAILED',code:failure.code};}
+    let worker:JuliusWorker;try{worker=this.router.select({role:request.role,taskType:request.taskType,capability:request.capability,policy:request.policy,excludedWorkerIds:request.excludedWorkerIds});}catch(error){const failure=error as JuliusDispatchError;await this.event(request,'task.failed',{code:failure.code,retryable:failure.retryable,failureClass:failure.failureClass});return{status:failure.code==='POLICY_DENIED'?'DENIED':'FAILED',code:failure.code,failureClass:failure.failureClass};}
     await this.event(request,'worker.selected',{workerId:worker.workerId,providerId:worker.providerId});
     const reservation=await this.ports.reserve({claim:request.claim,worker,request:request.resources,idempotencyKey:`${request.operationId}:budget`});
     if(reservation.state==='DENIED'){await this.event(request,'budget.denied',{reason:reservation.denialReason});return{status:'DENIED',code:'BUDGET_DENIED'};}
@@ -41,7 +47,12 @@ export class JuliusExecutionCoordinator {
       await this.ports.commit({reservationId:reservation.reservationId,result});
       await this.event(request,'worker.completed',{workerId:worker.workerId,duplicate:receipt.duplicate,evidenceCount:evidence.length});
       return{status:'COMPLETED',workerId:worker.workerId,duplicate:receipt.duplicate};
-    }catch(error){const failure=error instanceof JuliusDispatchError?error:new JuliusDispatchError('WORKER_EXECUTION_FAILURE',false,'Execution boundary failed.');await this.ports.release({reservationId:reservation.reservationId,reason:failure.code});if(failure.retryable&&request.policy.automaticRetry){await this.event(request,'retry.scheduled',{code:failure.code});return{status:'RETRY',code:failure.code};}await this.event(request,'task.failed',{code:failure.code});return{status:'FAILED',code:failure.code};}
+    }catch(error){const failure=error instanceof JuliusDispatchError?error:new JuliusDispatchError('WORKER_EXECUTION_FAILURE',false,'Execution boundary failed.');await this.ports.release({reservationId:reservation.reservationId,reason:failure.code});
+     /* The class travels with the code on BOTH endings. A retry that is later
+      * abandoned and a failure taken at once must leave the same diagnosis
+      * behind, or the durable record would explain only the failures that
+      * happened to be non-retryable. */
+     if(failure.retryable&&request.policy.automaticRetry){await this.event(request,'retry.scheduled',{code:failure.code,retryable:true,failureClass:failure.failureClass});return{status:'RETRY',code:failure.code,failureClass:failure.failureClass};}await this.event(request,'task.failed',{code:failure.code,retryable:failure.retryable,failureClass:failure.failureClass});return{status:'FAILED',code:failure.code,failureClass:failure.failureClass};}
   }
   private event(request:JuliusExecutionRequest,type:JuliusExecutionEventType,payload:Record<string,unknown>){return this.ports.recordEvent({runId:request.claim.runId,projectId:request.claim.projectId,type,idempotencyKey:`${request.operationId}:${type}`,payload});}
 }

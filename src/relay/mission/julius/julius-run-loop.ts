@@ -126,14 +126,61 @@ export interface JuliusRunLoopConfig {
  *   nothing yet          → PLANNING. A run with no tasks has not been planned.
  *   any ACTIVE           → EXECUTING. Work is in flight.
  *   any RUNNABLE         → READY. Work is available and nothing holds it.
- *   any BLOCKED          → WAITING. Everything left is waiting on something.
- *   all terminal, any    → FAILED. A failed task the graph never routed
- *     FAILED               around is a failed run; a repaired one leaves the
+ *   any LIVE BLOCKED     → WAITING. Something left is waiting on work that
+ *                          can still arrive. A task blocked on a dependency
+ *                          that has already FAILED or been CANCELLED is not
+ *                          waiting for anything — see `stillReachable` — and
+ *                          does not hold the run here.
+ *   any FAILED           → FAILED. A failed task the graph never routed
+ *                          around is a failed run; a repaired one leaves the
  *                          original SUCCEEDED behind it.
  *   all SUCCEEDED/SKIPPED→ VERIFYING. The run is ready to be judged; the
  *                          decision to COMPLETE is `missionMayComplete`'s and
  *                          is taken by the caller with the decisions in hand.
  */
+/**
+ * COULD THIS TASK STILL REACH SUCCEEDED?
+ *
+ * A claim is only offered to a task whose every dependency is SUCCEEDED or
+ * SKIPPED, and a FAILED task is terminal: `finishTask` moves it back to
+ * RUNNABLE only when the caller supplies a next attempt time in the same call,
+ * and recovery requeues only ACTIVE tasks whose lease expired. So a task
+ * blocked behind a FAILED or CANCELLED dependency can never be claimed again,
+ * however many ticks it is given.
+ *
+ * THE FIRST PAID MISSION IS WHY THIS EXISTS. Its `plan` task failed and its
+ * dependent `build` task stayed BLOCKED, so `any BLOCKED → WAITING` kept
+ * answering WAITING while nothing could ever move. The run reported "stalled
+ * before terminal state" instead of FAILED, which reads as a runtime that lost
+ * track rather than a mission that failed.
+ *
+ * Cycles are structurally impossible — `JuliusTaskGraph.add` refuses a
+ * self-reference and requires every dependency to already exist — but a cycle
+ * would be unsatisfiable anyway, so re-entry answers false and the walk
+ * terminates on any input.
+ */
+function stillReachable(
+  task: JuliusTask,
+  byId: ReadonlyMap<string, JuliusTask>,
+  visiting: Set<string> = new Set(),
+): boolean {
+  if (task.state === 'SUCCEEDED' || task.state === 'SKIPPED') return true;
+  if (task.state === 'FAILED' || task.state === 'CANCELLED') return false;
+  if (task.state !== 'BLOCKED') return true;
+  if (visiting.has(task.taskId)) return false;
+  visiting.add(task.taskId);
+  try {
+    return task.dependencyIds.every((id) => {
+      const dependency = byId.get(id);
+      // A dependency the run does not hold can never become SUCCEEDED here,
+      // so the task waiting on it is not waiting for anything either.
+      return dependency !== undefined && stillReachable(dependency, byId, visiting);
+    });
+  } finally {
+    visiting.delete(task.taskId);
+  }
+}
+
 export function targetRunState(
   tasks: readonly JuliusTask[],
   decisions: readonly JuliusRecordedDecision[] = [],
@@ -141,7 +188,10 @@ export function targetRunState(
   if (tasks.length === 0) return { state: 'PLANNING', reasonCode: 'NO_TASKS_PLANNED' };
   if (tasks.some((task) => task.state === 'ACTIVE')) return { state: 'EXECUTING', reasonCode: 'TASKS_ACTIVE' };
   if (tasks.some((task) => task.state === 'RUNNABLE')) return { state: 'READY', reasonCode: 'TASKS_RUNNABLE' };
-  if (tasks.some((task) => task.state === 'BLOCKED')) return { state: 'WAITING', reasonCode: 'TASKS_BLOCKED' };
+  const byId = new Map(tasks.map((task) => [task.taskId, task]));
+  if (tasks.some((task) => task.state === 'BLOCKED' && stillReachable(task, byId))) {
+    return { state: 'WAITING', reasonCode: 'TASKS_BLOCKED' };
+  }
   if (tasks.some((task) => task.state === 'FAILED')) return { state: 'FAILED', reasonCode: 'TASK_FAILED' };
   if (tasks.every((task) => task.state === 'SUCCEEDED' || task.state === 'SKIPPED')) {
     /**

@@ -167,7 +167,7 @@ jobs:
           fi
           echo "inputs OK: max_ticks=$MAX_TICKS hermes_ref=$HERMES_REF mode=$([ "$CONFIRM_LIVE" = 'RUN LIVE MISSION' ] && echo LIVE || echo DRY-RUN)"
 
-      - name: 'Gate: a paid first-live mission has not already completed'
+      - name: 'Gate: no paid first-live mission has been attempted or completed'
         if: inputs.confirm_live == 'RUN LIVE MISSION'
         env:
           GH_TOKEN: ${{ github.token }}
@@ -179,9 +179,23 @@ jobs:
           # destroys its PostgreSQL per job, so every dispatch meets an empty
           # database and that key protects nothing across dispatches. The
           # durable fact therefore has to live somewhere GitHub keeps: this
-          # workflow's own artifacts. A successful paid run publishes
-          # `julius-first-live-completed`, and finding one here means the
-          # historic first mission has already been paid for.
+          # workflow's own artifacts. TWO markers, and the distinction is the
+          # whole point:
+          #
+          #   julius-first-live-attempted — written after every free gate has
+          #     passed and BEFORE the provider-capable entrypoint is invoked.
+          #     It means A PAID RUN WAS AUTHORIZED AND ENTERED, which is the
+          #     honest claim: whether a provider was actually billed is not
+          #     knowable from here, and treating "no bill proven" as "no
+          #     attempt" is what let attempt #1 be followed by an ordinary
+          #     dispatch.
+          #   julius-first-live-completed — written only when Julius itself
+          #     reached legitimate completion.
+          #
+          # A FAILED PAID RUN LEAVES THE ATTEMPT MARKER BEHIND, so the next
+          # paid dispatch needs the typed acknowledgement even though nothing
+          # ever completed. That is the repair the first paid attempt asked
+          # for.
           #
           # KNOWN LIMIT, stated rather than papered over: artifacts expire (90
           # days here) and can be deleted, so this guard weakens with age. It is
@@ -191,26 +205,31 @@ jobs:
           # Unknown is not zero. "The marker list could not be read" and "no
           # marker exists" must never share an answer: the first is exactly the
           # state in which an accidental second paid run slips through.
-          if ! existing=$(gh api \
-            "repos/${GITHUB_REPOSITORY}/actions/artifacts?name=julius-first-live-completed&per_page=100" \
-            --jq '[.artifacts[] | select(.expired == false)] | length'); then
-            echo 'julius_first_live_marker_unknown: the completion-marker list could not be read.' >&2
+          count_markers() {
+            gh api "repos/${GITHUB_REPOSITORY}/actions/artifacts?name=$1&per_page=100" \
+              --jq '[.artifacts[] | select(.expired == false)] | length'
+          }
+          # Either list failing means the previous-run state is UNKNOWN, and
+          # unknown is never treated as zero.
+          if ! completed=$(count_markers julius-first-live-completed) || ! attempted=$(count_markers julius-first-live-attempted); then
+            echo 'julius_first_live_marker_unknown: the marker list could not be read.' >&2
             if [ "$ACKNOWLEDGE_RERUN" != 'RERUN PAID MISSION' ]; then
               echo 'Refusing to pay while the previous-run state is unknown. Re-dispatch with' >&2
               echo 'acknowledge_rerun = "RERUN PAID MISSION" to proceed anyway.' >&2
               exit 1
             fi
             echo 'operator acknowledged proceeding despite the UNKNOWN marker state'
-          elif [ "${existing:-0}" -gt 0 ]; then
+          elif [ "${completed:-0}" -gt 0 ] || [ "${attempted:-0}" -gt 0 ]; then
             if [ "$ACKNOWLEDGE_RERUN" != 'RERUN PAID MISSION' ]; then
-              echo "julius_first_live_already_completed: $existing completion marker(s) found." >&2
-              echo 'A paid first-live mission has already succeeded. Re-dispatch with' >&2
+              echo "julius_first_live_already_entered: ${completed:-0} completion marker(s) and ${attempted:-0} attempt marker(s) found." >&2
+              echo 'A paid first-live mission has already been entered — a previous attempt may have' >&2
+              echo 'spent provider money whether or not it completed. Re-dispatch with' >&2
               echo 'acknowledge_rerun = "RERUN PAID MISSION" only if you intend to pay again.' >&2
               exit 1
             fi
-            echo "operator acknowledged a deliberate rerun over $existing existing completion marker(s)"
+            echo "operator acknowledged a deliberate rerun over ${completed:-0} completion and ${attempted:-0} attempt marker(s)"
           else
-            echo 'no completion marker found; this would be the first paid mission'
+            echo 'no completion or attempt marker found; this would be the first paid mission'
           fi
 
       - name: Install
@@ -320,8 +339,45 @@ jobs:
 
       # ----------------------------------------------------------------- LIVE
 
+      # THE LAST FREE STEP. Everything above proved the rig without spending
+      # anything; the entrypoint below can contact a provider on its first
+      # tick. The attempt is recorded HERE, in between, so a run that dies
+      # mid-mission still leaves the durable fact that a paid run was entered.
+      #
+      # ORDERING IS THE SEMANTIC. The marker means "authorized and about to
+      # start", not "a provider was billed" — a claim this job could never
+      # prove. Writing it after the mission would lose exactly the case that
+      # matters: attempt #1, which entered LIVE, failed, and left nothing
+      # behind for the next dispatch to find.
+      - name: 'Record that a paid mission was attempted (before any provider can be reached)'
+        id: attempt_marker
+        if: success() && inputs.confirm_live == 'RUN LIVE MISSION'
+        run: |
+          set -euo pipefail
+          # Safe provenance only. The contract digest identifies WHAT was
+          # authorized without reproducing any of its text.
+          mkdir -p julius-first-live-attempted
+          {
+            echo "attempted_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo "run_id=${GITHUB_RUN_ID}"
+            echo "commit=${GITHUB_SHA}"
+            echo "workflow_ref=${GITHUB_WORKFLOW_REF:-unknown}"
+            echo "contract_sha256=$(sha256sum "$CONTRACT" | cut -d' ' -f1)"
+          } > julius-first-live-attempted/marker.txt
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: success() && inputs.confirm_live == 'RUN LIVE MISSION'
+        with:
+          name: julius-first-live-attempted
+          path: julius-first-live-attempted
+          retention-days: 90
+
+      # `success()` IS LOAD-BEARING, NOT DECORATION. A step whose `if:` names no
+      # status function runs even after an earlier step failed, so without it a
+      # failed preflight — or a failed attempt-marker upload — would still
+      # reach the provider-capable entrypoint. Fail closed: no marker, no spend.
       - name: 'LIVE: run the first real Julius mission'
-        if: inputs.confirm_live == 'RUN LIVE MISSION'
+        if: success() && inputs.confirm_live == 'RUN LIVE MISSION'
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
