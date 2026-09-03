@@ -47,6 +47,9 @@ function juliusScheduler(): { scheduler: LeaseScheduler; harness: ReturnType<typ
     // Julius claims first and decides second, so its claim is ownership only;
     // `admitTask` is where an execution attempt is spent.
     claimIsAdmission: false,
+    // Julius's claim query does not offer an expired lease: the bounded
+    // recovery sweep is the one way back, so the harness runs it here.
+    reclaimExpired: async (now) => { await harness.store.recoverExpired(now); },
     heartbeat: (input) => harness.store.heartbeat({ ...input, taskId: input.subjectId }),
     complete: (input) => harness.store.finishTask({ ...input, taskId: input.subjectId, state: 'SUCCEEDED' }),
     async read(subjectId) {

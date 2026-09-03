@@ -173,6 +173,30 @@ describe('the Julius runtime ports and the PostgreSQL repositories agree', () =>
       .toContain("if (input.state === 'FAILED' && input.nextAttemptAt !== undefined) task.state = 'RUNNABLE';");
   });
 
+  /**
+   * AN EXPIRED LEASE IS RECOVERY'S IN BOTH STORES.
+   *
+   * The claim query used to offer an ACTIVE task whose lease had expired, which
+   * reclaimed it while raising only `lease_generation` — bypassing `recoveries`
+   * and its ceiling entirely, so a task that crashed before admission could be
+   * retaken forever. This is the cheap offline guard on the SQL; the
+   * behavioural proof against a real database is in
+   * `scripts/julius-live-preflight-identity.test.ts`.
+   */
+  it('neither store lets a bare claim reclaim an expired lease', () => {
+    const sql = readFileSync(resolve(import.meta.dirname, 'julius-postgres.ts'), 'utf8');
+    expect(sql, 'the claim offers only RUNNABLE and BLOCKED work')
+      .toContain("AND t.next_attempt_at<=$2 AND t.state IN('RUNNABLE','BLOCKED')");
+    expect(sql, 'and never an expired ACTIVE lease, which is recovery\'s to hand back')
+      .not.toMatch(/state='ACTIVE' AND t\.lease_expires_at<=\$2/u);
+
+    const memory = readFileSync(resolve(import.meta.dirname, '../mission/julius/julius-memory-store.ts'), 'utf8');
+    expect(memory, 'the memory store states the same rule in its own terms')
+      .toContain("if (task.state !== 'RUNNABLE' && task.state !== 'BLOCKED') return false;");
+    expect(memory, 'with no expiry escape hatch beside it')
+      .not.toMatch(/&& !expired\) return false;/u);
+  });
+
   it('composes a complete runtime store from the real repositories', () => {
     // The assignment above is the assertion; this proves the composition is a
     // real object with every method the runtime will call, so a missing one is

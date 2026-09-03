@@ -84,6 +84,23 @@ export interface LeaseScheduler {
    * is the model every scheduler that predates this field implements.
    */
   readonly claimIsAdmission?: boolean;
+  /**
+   * HOW THIS SCHEDULER BRINGS AN EXPIRED LEASE BACK.
+   *
+   * The swarm's claim query offers an expired subject directly, so a claim
+   * reclaims it. Julius's does not, deliberately: that path raised only the
+   * generation and bypassed the recovery ceiling, so a subject claimed and
+   * abandoned could be retaken forever without ever being counted. Julius
+   * brings it back through a bounded recovery sweep that counts the reclaim
+   * and can end the subject instead of re-offering it.
+   *
+   * Supplied, the harness runs it before the reclaim step; omitted, the claim
+   * is expected to do the reclaiming itself, which is what every scheduler
+   * predating this hook does. Either way the invariants below are the same:
+   * the subject comes back, with a new generation, and the previous holder
+   * has no authority.
+   */
+  reclaimExpired?: (now: string) => Promise<void>;
 }
 
 /* ---------------------------------------------------------- the invariants */
@@ -134,6 +151,11 @@ export async function verifyLeaseProtocol(
   // The probe claim is released by letting its lease expire immediately, so the
   // real claim below sees the same subject with a known prior attempt count.
   const beforeClaim = offered[0] === undefined ? null : await scheduler.read(offered[0].subjectId);
+  // The probe's lease is already expired; bring the subject back the way this
+  // scheduler brings any expired lease back, so the measured claim below sees
+  // it. Without this a scheduler whose claim does not reclaim — Julius — would
+  // have its only subject stranded by the probe.
+  await scheduler.reclaimExpired?.(clock.now);
   const first = await scheduler.claim({ owner: 'owner-a', now: clock.now, leaseExpiresAt: clock.futureAt, limit: 1 });
   if (first.length === 0) {
     record('a claimed subject is held by exactly one owner', false, 'nothing was claimable');
@@ -207,6 +229,7 @@ export async function verifyLeaseProtocol(
     subjectId: subject.subjectId, owner: 'owner-a', leaseGeneration: before,
     now: clock.now, leaseExpiresAt: clock.expiredAt,
   });
+  await scheduler.reclaimExpired?.(clock.now);
   const reclaimed = await scheduler.claim({ owner: 'owner-c', now: clock.now, leaseExpiresAt: clock.futureAt, limit: 5 });
   const retaken = reclaimed.find((other) => other.subjectId === subject.subjectId) ?? null;
   record('an expired lease is reclaimable', retaken !== null, retaken === null ? 'not re-offered' : 're-offered');

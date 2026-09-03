@@ -287,7 +287,18 @@ export function createJuliusMemoryStore(): JuliusMemoryStore {
           if (input.projectId !== undefined && run.projectId !== input.projectId) return false;
           if (!CLAIMABLE_RUN_STATES.includes(run.state)) return false;
           if (task.nextAttemptAt > input.now) return false;
-          const expired = task.state === 'ACTIVE' && task.leaseExpiresAt !== null && task.leaseExpiresAt <= input.now;
+          // AN EXPIRED LEASE IS RECOVERY'S, NOT THE CLAIM'S.
+          //
+          // This query used to also offer an ACTIVE task whose lease had
+          // expired, which reclaimed it while raising only `lease_generation` —
+          // so a task that was claimed and died before admission could be
+          // picked up again forever, bypassing `recoveries` and its ceiling
+          // entirely. There is one path back from an expired lease now:
+          // `recoverExpired` counts the reclaim, bounds it, and writes the
+          // `recovery.action` row that explains it, leaving the task RUNNABLE
+          // for an ordinary claim. A runtime whose recovery never runs stalls
+          // such a task, which is the safe direction — the unbounded reclaim
+          // was the unsafe one. The PostgreSQL claim carries the same rule.
           // BLOCKED IS CLAIMABLE ONCE ITS DEPENDENCIES ARE SATISFIED, and the
           // inherited claim query did not say so. `JuliusTaskGraph` promotes
           // BLOCKED to RUNNABLE when its dependencies succeed, but nothing
@@ -297,7 +308,7 @@ export function createJuliusMemoryStore(): JuliusMemoryStore {
           // never be claimed at all. The dependency predicate below is already
           // the gate; the state check was a second, stricter one that made the
           // first unreachable.
-          if (task.state !== 'RUNNABLE' && task.state !== 'BLOCKED' && !expired) return false;
+          if (task.state !== 'RUNNABLE' && task.state !== 'BLOCKED') return false;
           return dependenciesSatisfied(task);
         })
         // The claim query orders by run creation, then ordinal, then task id.

@@ -502,11 +502,28 @@ never counted by anything. That churn is deliberate and free — no provider is
 called and no money is spent — and a run whose allowance is narrower than its
 claim limit simply takes more ticks.
 
-THE SWEEP HAS TO RUN FOR ANY OF THIS TO BIND. `recoverExpired` was written and
-never called: the claim query also offers an ACTIVE task whose lease has
-expired, so the runtime worked while reclaiming without counting. The live
-driver now runs the sweep before every tick, which is what turns a reclaim into
-a counted, bounded, recorded event.
+AN EXPIRED LEASE HAS EXACTLY ONE WAY BACK. `recoverExpired` was written and
+never called, and the runtime worked anyway because the claim query ALSO
+offered an ACTIVE task whose lease had expired — a reclaim that raised only
+`lease_generation`, so a task claimed by a worker that died before admission
+could be retaken forever, past the ceiling, with no `recovery.action` row and
+no terminal behaviour. That branch is gone from both claim queries. The sweep
+counts the reclaim, bounds it, records it, and hands the task back RUNNABLE for
+an ordinary claim.
+
+AND THE SWEEP BELONGS TO THE KERNEL. `JuliusRunLoop.tick` runs it before it
+claims, so a future driver cannot bypass the invariant by ticking differently —
+the store contract now includes the recovery driver for exactly that reason. A
+runtime whose recovery somehow never runs stalls such a task instead of
+reclaiming it uncounted, which is the safe direction.
+
+A PRE-EXECUTION REFUSAL IS NOT AN EXECUTION EITHER. Admission ran before the
+task-level gates, so a C.A.R.D. that denied the capability, an approval nobody
+had given, an unresolvable role, a task that had vanished, or a run outside the
+caller's scope each spent one of the task's three attempts on work Julius had
+just decided not to do. Those gates live in `prepareClaimedTask`, evaluated
+once, and the run loop admits only an `ELIGIBLE` result — it reads the verdict
+off the type rather than re-deciding policy.
 
 ## Dry run #1 (2026-09-02) — the executor refused the live output ceiling
 

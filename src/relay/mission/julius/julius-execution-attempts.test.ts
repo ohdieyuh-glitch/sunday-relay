@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  createJuliusHarness, seedRun, task, worker, cardPolicy, type ScriptedOutcome,
+  createJuliusHarness, seedRun, task, worker, cardPolicy, verificationPolicy, type ScriptedOutcome,
 } from './julius-runtime-fixtures';
 import { JuliusRunLoop } from './julius-run-loop';
+import { prepareClaimedTask } from './julius-task-pipeline';
 import { MAX_TASK_RECOVERIES, planJuliusRecovery } from './julius-recovery';
 import { MAX_TASK_ATTEMPTS } from './julius-task-pipeline';
 
@@ -315,6 +316,206 @@ describe('an execution attempt is spent at admission, never at the claim', () =>
     expect(row.state, 'and the churn is terminated rather than endless').toBe('FAILED');
     expect(row.recoveries, 'by the counter written for exactly this loop')
       .toBeGreaterThanOrEqual(MAX_TASK_RECOVERIES);
+  });
+
+  /* ------------------------------------------------ the policy gate matrix -- */
+  /**
+   * A REFUSAL IS NOT AN EXECUTION.
+   *
+   * Admission used to happen in the run loop BEFORE the pipeline evaluated the
+   * task-level gates, so a C.A.R.D. that denied the capability, an approval
+   * nobody had given, or a role Julius could not resolve each spent one of the
+   * task's three attempts on work Julius had just decided not to do. The gates
+   * answer first now, and the attempt is spent only once nothing can refuse it.
+   */
+  describe('a pre-execution refusal spends no execution attempt', () => {
+    const refusals = [
+      ['a C.A.R.D. that denies the capability', { card: cardPolicy({ allowedProviders: [CODER.providerId], capabilities: [] }) }, 'DENIED'],
+      ['an approval nobody has given', { card: cardPolicy({ allowedProviders: [CODER.providerId], approvals: ['DISPATCH_WORKER'] }) }, 'APPROVAL_REQUIRED'],
+    ] as const;
+
+    it.each(refusals)('%s refuses without admitting', async (_name, overrides, kind) => {
+      const harness = createJuliusHarness({ workers: [{ worker: CODER, script: [SUCCESS] }], ...overrides });
+      const { projectId } = seedRun(harness, { tasks: [task({ taskId: 'only' })] });
+
+      const report = await harness.loop.tick({ projectId });
+      expect(report.outcomes[0]?.kind, 'the gate refused it').toBe(kind);
+      expect(report.refusedBeforeAdmission, 'and the tick says so').toBe(1);
+      expect(harness.store.taskRow('only')!.attempt, 'NO ATTEMPT WAS SPENT ON WORK JULIUS REFUSED').toBe(0);
+      expect(harness.store.taskRow('only')!.leaseGeneration, 'though it really was claimed').toBe(1);
+      expect(harness.adapters.get(CODER.adapterId)!.dispatches, 'and no worker ran').toHaveLength(0);
+    });
+
+    it('an unresolvable role refuses without admitting', async () => {
+      const harness = createJuliusHarness({ workers: [{ worker: CODER, script: [SUCCESS] }] });
+      const { projectId } = seedRun(harness, { tasks: [task({ taskId: 'only', role: 'SPECIALIST:' as never })] });
+
+      const report = await harness.loop.tick({ projectId });
+      expect(report.outcomes[0]).toMatchObject({ kind: 'HALTED', reasonCode: 'UNRESOLVED_WORKER_ROLE' });
+      expect(report.refusedBeforeAdmission).toBe(1);
+      expect(harness.store.taskRow('only')!.attempt, 'a role Julius cannot resolve is not an execution').toBe(0);
+      expect(harness.adapters.get(CODER.adapterId)!.dispatches).toHaveLength(0);
+    });
+
+    it('a run outside this scope refuses without admitting or writing', async () => {
+      const harness = createJuliusHarness({ workers: [{ worker: CODER, script: [SUCCESS] }] });
+      seedRun(harness, { tasks: [task({ taskId: 'only' })] });
+      // Claim under the real project, then run the tick under another one: the
+      // claim query is scoped, so this is reached by driving the pipeline with
+      // a scope the run does not belong to.
+      const [claim] = await harness.deps.store.claimRunnable({
+        owner: 'worker-a', now: harness.clock.now(), leaseExpiresAt: '2099-01-01T00:00:00.000Z',
+        limit: 1, projectId: 'prj-1',
+      });
+      const preflight = await prepareClaimedTask(
+        { claim: claim!, policy: cardPolicy(), verification: verificationPolicy(), capability: 'implement' },
+        harness.deps, { projectId: 'prj-somebody-else' },
+      );
+      expect(preflight).toMatchObject({ kind: 'REFUSED', outcome: { reasonCode: 'RUN_NOT_IN_SCOPE' } });
+      expect(harness.store.taskRow('only')!.attempt, 'another tenant cannot spend this task\'s attempts').toBe(0);
+    });
+
+    it('a task that passes every gate is admitted, and runs as attempt 1', async () => {
+      const harness = createJuliusHarness({ workers: [{ worker: CODER, script: [SUCCESS] }] });
+      const { projectId } = seedRun(harness, { tasks: [task({ taskId: 'only' })] });
+
+      const report = await harness.loop.tick({ projectId });
+      expect(report.refusedBeforeAdmission, 'nothing refused it').toBe(0);
+      expect(harness.store.taskRow('only')!.attempt).toBe(1);
+      expect(harness.adapters.get(CODER.adapterId)!.dispatches, 'and the worker really ran').toHaveLength(1);
+    });
+
+    /**
+     * THE LEASE MOVES BETWEEN THE GATES AND THE ADMISSION.
+     *
+     * The gates take real time — they read the run, the task row and the
+     * C.A.R.D. — so a lease can expire and be reclaimed in between. The old
+     * owner must execute nothing and spend nothing; the attempt belongs to
+     * whoever holds the lease now.
+     */
+    it('a lease that moves between the gates and the admission admits nobody stale', async () => {
+      const harness = createJuliusHarness({ workers: [{ worker: CODER, script: [SUCCESS] }] });
+      const { projectId } = seedRun(harness, { tasks: [task({ taskId: 'only' })] });
+
+      const [stale] = await harness.deps.store.claimRunnable({
+        owner: 'worker-a', now: harness.clock.now(), leaseExpiresAt: harness.clock.now(),
+        limit: 1, projectId,
+      });
+      // The lease expires and recovery hands it back — the one path from an
+      // expired lease — then another worker takes it while the first is still
+      // deciding.
+      await harness.loop.recover({ projectId }, harness.store);
+      await harness.deps.store.claimRunnable({
+        owner: 'worker-b', now: harness.clock.now(), leaseExpiresAt: '2099-01-01T00:00:00.000Z',
+        limit: 1, projectId,
+      });
+
+      const admitted = await harness.deps.store.admitTask({
+        taskId: 'only', owner: 'worker-a', leaseGeneration: stale!.leaseGeneration, now: harness.clock.now(),
+      });
+      expect(admitted, 'the stale owner is refused at the admission boundary').toBeNull();
+      expect(harness.store.taskRow('only')!.attempt, 'and spends nothing').toBe(0);
+    });
+  });
+
+  /* ------------------------------------------- the one path from an expiry -- */
+  /**
+   * AN EXPIRED LEASE HAS EXACTLY ONE WAY BACK.
+   *
+   * The claim query used to also offer an ACTIVE task whose lease had expired,
+   * which reclaimed it while raising only `lease_generation` — so a task that
+   * was claimed and died before admission could be picked up forever, past
+   * `MAX_TASK_RECOVERIES`, with no `recovery.action` row and no terminal
+   * behaviour. Recovery is the only path now, and it runs inside `tick` rather
+   * than in whichever driver remembers to call it.
+   */
+  describe('an expired lease is reclaimable only through bounded recovery', () => {
+    const expiredClaim = async (harness: ReturnType<typeof createJuliusHarness>, projectId: string, limit = 1) =>
+      harness.deps.store.claimRunnable({
+        owner: 'dying-worker', now: harness.clock.now(), leaseExpiresAt: harness.clock.now(), limit, projectId,
+      });
+
+    it('the claim query refuses an expired ACTIVE task outright', async () => {
+      const harness = createJuliusHarness({ workers: [{ worker: CODER, script: [SUCCESS] }] });
+      const { projectId } = seedRun(harness, { tasks: [task({ taskId: 'only' })] });
+
+      await expiredClaim(harness, projectId);
+      expect(harness.store.taskRow('only')!.state).toBe('ACTIVE');
+
+      const second = await harness.deps.store.claimRunnable({
+        owner: 'another-worker', now: harness.clock.now(), leaseExpiresAt: '2099-01-01T00:00:00.000Z',
+        limit: 5, projectId,
+      });
+      expect(second, 'a bare claim cannot take it — that path bypassed the ceiling').toHaveLength(0);
+      expect(harness.store.taskRow('only')!.recoveries, 'and nothing was counted').toBe(0);
+    });
+
+    it('recovery hands it back, counted, and then it is claimable', async () => {
+      const harness = createJuliusHarness({ workers: [{ worker: CODER, script: [SUCCESS] }] });
+      const { projectId } = seedRun(harness, { tasks: [task({ taskId: 'only' })] });
+
+      await expiredClaim(harness, projectId);
+      await harness.loop.recover({ projectId }, harness.store);
+
+      const row = harness.store.taskRow('only')!;
+      expect(row.state, 'handed back').toBe('RUNNABLE');
+      expect(row.recoveries, 'and counted on the way').toBe(1);
+      expect(row.attempt, 'while the abandoned claim still spent no attempt').toBe(0);
+
+      const claimed = await harness.deps.store.claimRunnable({
+        owner: 'another-worker', now: harness.clock.now(), leaseExpiresAt: '2099-01-01T00:00:00.000Z',
+        limit: 5, projectId,
+      });
+      expect(claimed.map((entry) => entry.taskId)).toContain('only');
+    });
+
+    it('tick itself sweeps, so no driver can bypass the invariant by ticking differently', async () => {
+      const harness = createJuliusHarness({ workers: [{ worker: CODER, script: [SUCCESS] }] });
+      const { projectId } = seedRun(harness, { tasks: [task({ taskId: 'only' })] });
+
+      await expiredClaim(harness, projectId);
+      // No explicit recover() call here — only the loop's own tick.
+      const report = await harness.loop.tick({ projectId });
+
+      expect(harness.store.taskRow('only')!.recoveries, 'the kernel swept').toBe(1);
+      expect(report.outcomes[0]?.kind, 'and the recovered task ran in the same tick').toBe('COMPLETED');
+      expect(harness.store.taskRow('only')!.attempt, 'as its first execution').toBe(1);
+    });
+
+    /**
+     * MORE EXPIRED TASKS THAN ONE SWEEP TAKES.
+     *
+     * The sweep is bounded by the claim limit, so a burst of expiries is
+     * carried across ticks. What must NOT happen is the claim query picking up
+     * the remainder outside the bound — the leftovers stay ACTIVE and wait for
+     * the next sweep rather than being reclaimed uncounted.
+     */
+    it('leftovers beyond one sweep are not reclaimable outside recovery', async () => {
+      const harness = createJuliusHarness({
+        workers: [{ worker: CODER, script: [SUCCESS, SUCCESS, SUCCESS] }],
+        config: { claimLimit: 1 },
+      });
+      const { projectId } = seedRun(harness, {
+        tasks: ['a', 'b', 'c'].map((id, index) => task({ taskId: id, ordinal: index })),
+      });
+      await expiredClaim(harness, projectId, 3);
+      for (const id of ['a', 'b', 'c']) expect(harness.store.taskRow(id)!.state).toBe('ACTIVE');
+
+      await harness.loop.recover({ projectId }, harness.store, 1);
+      const recovered = ['a', 'b', 'c'].filter((id) => harness.store.taskRow(id)!.state === 'RUNNABLE');
+      expect(recovered, 'the sweep took only its limit').toHaveLength(1);
+
+      const claimed = await harness.deps.store.claimRunnable({
+        owner: 'another-worker', now: harness.clock.now(), leaseExpiresAt: '2099-01-01T00:00:00.000Z',
+        limit: 5, projectId,
+      });
+      expect(claimed.map((entry) => entry.taskId), 'only the recovered one is claimable').toEqual(recovered);
+      for (const id of ['a', 'b', 'c']) {
+        if (recovered.includes(id)) continue;
+        expect(harness.store.taskRow(id)!.state, `${id} waits for the next sweep`).toBe('ACTIVE');
+        expect(harness.store.taskRow(id)!.recoveries, `${id} was not counted by a bypass`).toBe(0);
+      }
+    });
   });
 
   /* ---------------------------------------- one trajectory row per recovery */

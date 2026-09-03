@@ -293,7 +293,9 @@ export function createContextAndClaimHandoffs<S extends JuliusRuntimeStore>(stor
 }
 
 export function assembleLiveJuliusRuntime(options: {
-  readonly store: JuliusRuntimeStore;
+  // Also the recovery driver: the run loop sweeps expired leases itself, so
+  // the bound on crash churn belongs to the kernel and not to a driver.
+  readonly store: JuliusRuntimeStore & JuliusRecoveryDriver;
   readonly entries: readonly LiveWorkerEntry[];
   readonly cardRevision: string;
   readonly spendCeilingUsdMicros: number;

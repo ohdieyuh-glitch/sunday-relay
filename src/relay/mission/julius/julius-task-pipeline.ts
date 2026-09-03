@@ -38,7 +38,7 @@ import { safeReasonCode, type JuliusProviderRouter } from './julius-router';
 import { createJuliusContextSnapshot } from './julius-context-snapshot';
 import { evaluateJuliusVerification, type JuliusVerificationPolicy } from './julius-verification-runtime';
 import { planJuliusRepair } from './julius-repair-runtime';
-import { JULIUS_RUNTIME_VERSION, type JuliusTask, type JuliusVerificationDecision, type JuliusWorker } from './julius-runtime';
+import { JULIUS_RUNTIME_VERSION, type JuliusTask, type JuliusVerificationDecision, type JuliusWorker, type JuliusWorkerRole } from './julius-runtime';
 import { validateJuliusEvent, type JuliusOperationalEvent, type JuliusOperationalEventType } from './julius-events';
 import { validateTrajectoryEvent, type JuliusTrajectoryEvent, type JuliusTrajectoryKind } from './julius-trajectory';
 import {
@@ -48,6 +48,7 @@ import {
   type JuliusClock,
   type JuliusIdFactory,
   type JuliusRunRow,
+  type JuliusRecoveryDriver,
   type JuliusRuntimeStore,
 } from './julius-runtime-ports';
 
@@ -92,7 +93,15 @@ export function fixedResourceEstimate(request: JuliusResourceRequest): JuliusRes
 
 /** What a task needs in order to be dispatched at all. */
 export interface JuliusPipelineDependencies {
-  readonly store: JuliusRuntimeStore;
+  /**
+   * ALSO THE RECOVERY DRIVER, so the run loop can sweep before it claims.
+   *
+   * An expired lease is no longer reclaimable by the claim query — that path
+   * raised only `lease_generation` and bypassed the recovery ceiling — so the
+   * sweep is the one way back, and it must belong to the kernel rather than to
+   * whichever driver happens to call `tick`.
+   */
+  readonly store: JuliusRuntimeStore & JuliusRecoveryDriver;
   readonly router: JuliusProviderRouter;
   readonly budget: JuliusBudgetPort;
   readonly clock: JuliusClock;
@@ -218,43 +227,51 @@ class RuntimeLedger {
  * whose run belongs to a different project must never be executed under this
  * caller's identity.
  */
-export async function runClaimedTask(
+/**
+ * WHAT MUST BE DECIDED BEFORE AN EXECUTION ATTEMPT IS SPENT.
+ *
+ * Every gate here can REFUSE to execute the task — a run outside this scope, a
+ * role Julius cannot resolve, a C.A.R.D. that denies the dispatch or the
+ * capability, an approval the operator has not given, a task that no longer
+ * exists. None of them is a worker execution, and while admission happened in
+ * the run loop before this function ran, each of them spent one of the task's
+ * three attempts on work Julius had just decided not to do.
+ *
+ * So the gates live here, exactly once, and the caller admits only an ELIGIBLE
+ * result. The policy implementation is not duplicated into the run loop: the
+ * run loop learns the verdict from the type, not by re-evaluating it.
+ */
+export type JuliusTaskPreflight =
+  | { readonly kind: 'REFUSED'; readonly outcome: JuliusTaskOutcome }
+  | {
+    readonly kind: 'ELIGIBLE';
+    readonly run: JuliusRunRow;
+    readonly role: JuliusWorkerRole;
+    readonly task: JuliusTask;
+  };
+
+export async function prepareClaimedTask(
   request: JuliusPipelineRequest,
   deps: JuliusPipelineDependencies,
   scope: { readonly projectId: string },
-): Promise<JuliusTaskOutcome> {
+): Promise<JuliusTaskPreflight> {
   const { claim } = request;
   const run = await deps.store.loadRun(claim.runId, scope.projectId);
   if (run === null) {
     // Not this caller's run. Nothing is written and nothing is dispatched: a
     // silent skip is the only safe answer, because even a failure event would
     // be a write into another tenant's stream.
-    return { kind: 'HALTED', taskId: claim.taskId, reasonCode: 'RUN_NOT_IN_SCOPE', safeSummary: 'The claimed task belongs to a run outside this scope.' };
+    return { kind: 'REFUSED', outcome: { kind: 'HALTED', taskId: claim.taskId, reasonCode: 'RUN_NOT_IN_SCOPE', safeSummary: 'The claimed task belongs to a run outside this scope.' } };
   }
 
   const correlationId = `${claim.taskId}:${claim.leaseGeneration}`;
   const ledger = new RuntimeLedger(deps, run, correlationId);
-  /**
-   * TWO NUMBERS THAT USED TO BE ONE.
-   *
-   * `leaseGeneration` counts CLAIMS — every one, including the ones the
-   * scheduler hands straight back — and is the token authority is checked
-   * against. `attempt` counts EXECUTIONS: it is raised by `admitTask`, which
-   * runs after every hand-back decision and immediately before this dispatch,
-   * so this event fires once per execution and the number it carries is the
-   * attempt actually being run. A generation above the attempt is not a
-   * discrepancy; it is a task that was offered more often than it was run.
-   */
-  await ledger.event('task.claimed', {
-    taskId: claim.taskId,
-    facts: { leaseGeneration: claim.leaseGeneration, attempt: claim.attempt, role: claim.role },
-  });
 
   const role = resolveWorkerRole(claim.role);
   if (role === null) {
     await deps.store.finishTask({ taskId: claim.taskId, owner: deps.owner, leaseGeneration: claim.leaseGeneration, state: 'FAILED', now: deps.clock.now() });
     await ledger.event('run.failed', { taskId: claim.taskId, facts: { reasonCode: 'UNRESOLVED_WORKER_ROLE', role: claim.role } });
-    return { kind: 'HALTED', taskId: claim.taskId, reasonCode: 'UNRESOLVED_WORKER_ROLE', safeSummary: 'The task names a role Julius cannot resolve, so it was not dispatched.' };
+    return { kind: 'REFUSED', outcome: { kind: 'HALTED', taskId: claim.taskId, reasonCode: 'UNRESOLVED_WORKER_ROLE', safeSummary: 'The task names a role Julius cannot resolve, so it was not dispatched.' } };
   }
 
   /* -------------------------------------------------- 1. policy, first */
@@ -270,13 +287,13 @@ export async function runClaimedTask(
       // either store.)
       await deps.store.finishTask({ taskId: claim.taskId, owner: deps.owner, leaseGeneration: claim.leaseGeneration, state: 'FAILED', now: deps.clock.now() });
       await ledger.event('run.paused', { taskId: claim.taskId, facts: { reasonCode: verdict.reasonCode, policyRevision: verdict.policyRevision } });
-      return { kind: 'APPROVAL_REQUIRED', taskId: claim.taskId, operation: 'DISPATCH_WORKER', reasonCode: verdict.reasonCode };
+      return { kind: 'REFUSED', outcome: { kind: 'APPROVAL_REQUIRED', taskId: claim.taskId, operation: 'DISPATCH_WORKER', reasonCode: verdict.reasonCode } };
     }
     if (verdict.effect === 'DENY') {
       await deps.store.finishTask({ taskId: claim.taskId, owner: deps.owner, leaseGeneration: claim.leaseGeneration, state: 'FAILED', now: deps.clock.now() });
       await ledger.event('run.failed', { taskId: claim.taskId, facts: { reasonCode: verdict.reasonCode, policyRevision: verdict.policyRevision } });
       await ledger.trajectory('DISPATCH', { taskId: claim.taskId, policyRevision: verdict.policyRevision, outcome: 'POLICY_DENIED' });
-      return { kind: 'DENIED', taskId: claim.taskId, reasonCode: verdict.reasonCode };
+      return { kind: 'REFUSED', outcome: { kind: 'DENIED', taskId: claim.taskId, reasonCode: verdict.reasonCode } };
     }
   }
 
@@ -284,8 +301,45 @@ export async function runClaimedTask(
   const tasks = await deps.store.tasksForRun(run.runId, run.projectId);
   const task = tasks.find((value) => value.taskId === claim.taskId);
   if (task === undefined) {
-    return { kind: 'HALTED', taskId: claim.taskId, reasonCode: 'TASK_NOT_FOUND', safeSummary: 'The claimed task no longer exists in the run.' };
+    return { kind: 'REFUSED', outcome: { kind: 'HALTED', taskId: claim.taskId, reasonCode: 'TASK_NOT_FOUND', safeSummary: 'The claimed task no longer exists in the run.' } };
   }
+
+  return { kind: 'ELIGIBLE', run, role, task };
+}
+
+/**
+ * EXECUTE A TASK THE CALLER HAS ALREADY ADMITTED.
+ *
+ * `claim.attempt` here is the value `admitTask` returned — the attempt actually
+ * being run — because every gate that could refuse execution was answered by
+ * {@link prepareClaimedTask} BEFORE the attempt was spent. The preflight's
+ * findings are passed in rather than recomputed, so the run, the role and the
+ * task row are each read once and the policy is evaluated in exactly one place.
+ */
+export async function runClaimedTask(
+  request: JuliusPipelineRequest,
+  deps: JuliusPipelineDependencies,
+  preflight: Extract<JuliusTaskPreflight, { kind: 'ELIGIBLE' }>,
+): Promise<JuliusTaskOutcome> {
+  const { claim } = request;
+  const { run, role, task } = preflight;
+  const correlationId = `${claim.taskId}:${claim.leaseGeneration}`;
+  const ledger = new RuntimeLedger(deps, run, correlationId);
+  /**
+   * TWO NUMBERS THAT USED TO BE ONE, and this event carries both.
+   *
+   * `leaseGeneration` counts CLAIMS — every one, including the ones the
+   * scheduler hands straight back. `attempt` counts EXECUTIONS: it is raised by
+   * `admitTask`, which the caller runs after every hand-back decision AND after
+   * every pre-execution gate, immediately before this dispatch. So this event
+   * fires once per execution and the number it carries is the attempt actually
+   * being run. A generation above the attempt is not a discrepancy; it is a
+   * task that was offered, or refused, more often than it was run.
+   */
+  await ledger.event('task.claimed', {
+    taskId: claim.taskId,
+    facts: { leaseGeneration: claim.leaseGeneration, attempt: claim.attempt, role: claim.role },
+  });
 
   let worker: JuliusWorker;
   try {
