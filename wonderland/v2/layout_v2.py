@@ -7115,6 +7115,96 @@ def _drop_pieces_standing_on_cameras(bands):
 
 _drop_pieces_standing_on_cameras(BUILD_BANDS)
 
+# ---------------------------------------------------------------------------
+# TWO TREES IN ONE PLACE TRAPPED THE DOG (2026-09-03)
+#
+# The first real-GPU traversal of this world since the Studio came back wedged
+# the canonical Relay Dog at leg 123 of 262 and it NEVER GOT OUT: seventeen
+# consecutive legs failed from the identical coordinates, each after up to 114
+# seconds, so the route could not finish. The ledger's "262 of 262 legs, 3,232
+# m, 100%, ZERO stalls" was measured on an older world and carried forward
+# unverified -- and both offending trees were already present at 356fe89, so
+# this is NOT a regression from the offline work. It has been a trap for some
+# time and only a real traversal could find it.
+#
+# WHAT IT WAS. `ClockQuarterCam13_FgTrunk12`, a camera-foreground tree placed
+# for ClockQuarterCam13's framing, stands 68 uu from `LMClockQuarter_SpurTree4_1_Trunk`,
+# a landmark spur tree. Their trunk radii are 65 and 121 uu, so the two trees
+# INTERPENETRATE by 1.19 m; the Dog's 72 uu capsule rode up the fused flare to
+# z = 107 and could not step off in any direction.
+#
+# THE EXISTING FILTER COULD NOT SEE IT. `_declutter` removes scatter that has
+# grown through a LANDMARK -- its guard list is `_PROTECT`, which is towers,
+# domes, mushrooms and spires. A tree is not protected, so two trees growing
+# through each other is invisible to it. A rule applied to one collection and
+# not its sibling, which is the richest defect vein in this project.
+#
+# WHY THIS AND NOT THE 679. Measured across the whole world there are 679 pairs
+# of solid pieces whose gap is narrower than the Dog can pass. Nearly all are
+# harmless -- a rose bush against a hedge, a teacup beside its teapot, pilasters
+# in a wall run -- things a walker goes AROUND and reads as one mass. Dropping
+# them would gut the world for no gain and is exactly the broad speculative
+# change this pass was told not to make. The dangerous class is much smaller and
+# has a different signature: two THIN TRUNKS in open ground, which read as
+# passable and are not, and which are also simply wrong to look at. There are 32
+# such pairs and this drops the junior of each.
+#
+# Junior = the smaller trunk, because the larger one is the more considered
+# piece of the two (a landmark's spur tree over a camera's foreground dressing),
+# with the label as a deterministic tie-break. The trunk's CANOPY goes with it:
+# anything sharing its exact position, or a floating crown is left behind, which
+# is a defect shape this project has already paid for.
+_TRUNKS = ("tree_mature_trunk", "tree_slender_trunk", "tree_clock_trunk")
+FUSED_TREES_DROPPED = []
+
+
+def _drop_trees_growing_through_each_other(bands):
+    idx = []
+    for band in bands:
+        for it in band:
+            if it["asset"] not in _TRUNKS or it["asset"] not in FOOT:
+                continue
+            sc = it["scale"]
+            sx = abs(sc[0]) if isinstance(sc, (list, tuple)) else abs(sc)
+            hx, hy = FOOT[it["asset"]]
+            idx.append((it["pos"][0], it["pos"][1], min(hx, hy) * sx, it))
+    cell = 600.0
+    grid = {}
+    for n, (x, y, r, it) in enumerate(idx):
+        grid.setdefault((int(x // cell), int(y // cell)), []).append(n)
+    doomed = set()
+    for n, (x, y, r, it) in enumerate(idx):
+        ci, cj = int(x // cell), int(y // cell)
+        for di in (-1, 0, 1):
+            for dj in (-1, 0, 1):
+                for m in grid.get((ci + di, cj + dj), ()):
+                    if m <= n:
+                        continue
+                    x2, y2, r2, it2 = idx[m]
+                    if math.hypot(x2 - x, y2 - y) > r + r2:
+                        continue
+                    # the smaller trunk yields; equal radii break on the label
+                    if (r, str(it["label"])) <= (r2, str(it2["label"])):
+                        doomed.add(id(it))
+                    else:
+                        doomed.add(id(it2))
+    if not doomed:
+        return bands
+    #: the doomed trunks' own positions, so their crowns leave with them
+    spots = set()
+    for (x, y, r, it) in idx:
+        if id(it) in doomed:
+            spots.add((round(x, 1), round(y, 1)))
+            FUSED_TREES_DROPPED.append("%s (%s)" % (it["label"], it["asset"]))
+    for band in bands:
+        band[:] = [it for it in band
+                   if id(it) not in doomed
+                   and (round(it["pos"][0], 1), round(it["pos"][1], 1)) not in spots]
+    return bands
+
+
+_drop_trees_growing_through_each_other(BUILD_BANDS)
+
 #: Everything the layout declares: what the builder walks, plus the two bands
 #: it places by their own rules (SKY is the dome/atmosphere, HOVER is lifted
 #: props). Derived from BUILD_BANDS rather than restated.
