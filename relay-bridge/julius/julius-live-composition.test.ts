@@ -17,6 +17,7 @@ import {
   JULIUS_CONTEXT_COMPILER_VERSION,
   createJuliusMemoryStore,
   type JuliusContextSnapshot,
+  type JuliusRecoveryDriver,
   type JuliusRuntimeStore,
 } from '../../src/relay/mission/julius';
 import type { GptRunOutcome } from '../../src/relay/connectors/gpt-architect';
@@ -372,7 +373,9 @@ async function driveLiveMission(
   architect?: () => Promise<GptRunOutcome>,
 ) {
   const memory = createJuliusMemoryStore();
-  const handoffs = createContextAndClaimHandoffs(memory as unknown as JuliusRuntimeStore);
+  // Not narrowed to JuliusRuntimeStore: the drive loop runs the recovery sweep,
+  // and the memory store is the recovery driver as well as the store.
+  const handoffs = createContextAndClaimHandoffs(memory as unknown as JuliusRuntimeStore & JuliusRecoveryDriver);
   const fakes = liveResolution({ verdicts, contexts: handoffs.contexts, architect });
   expect(fakes.resolution.ok).toBe(true);
   seedMissionRun(memory);
@@ -420,6 +423,92 @@ describe('a full mission drive with Julius in control', () => {
     const decisions = await memory.decisionsForRun('run-live', 'prj-live');
     expect(decisions.length).toBeGreaterThan(0);
     expect(decisions.some((decision) => decision.action === 'ACCEPT' || decision.action === 'COMPLETE')).toBe(true);
+  });
+
+  /**
+   * CASE K — NO TASK REACHES ITS FIRST PROVIDER DISPATCH WITH AN INFLATED
+   * ATTEMPT NUMBER.
+   *
+   * This is the whole mission graph, on the real live configuration: a claim
+   * limit of 4 against a C.A.R.D. concurrency of 1. On the tick after `plan`
+   * succeeds, `build` and the plan's review task both become claimable — a
+   * review task is created BLOCKED on the task it reviews, and the claim query
+   * offers a BLOCKED task whose dependencies are all SUCCEEDED — so one of the
+   * two is claimed and handed straight back.
+   *
+   * While the claim spent an execution attempt, that hand-back charged a task
+   * for a provider that was never called, and a task yielded twice reached its
+   * FIRST genuine dispatch at attempt 3 of 3 — one rate limit away from being
+   * refused as exhausted, after the plan had already been paid for.
+   */
+  it('CASE K: every task in the live graph reaches its first dispatch as attempt 1', async () => {
+    const { memory, outcome, handoffs } = await driveLiveMission(['approved']);
+    expect(outcome.state, 'the mission still completes').toBe('COMPLETED');
+
+    const tasks = await handoffs.store.tasksForRun('run-live', 'prj-live');
+    expect(tasks.length, 'the graph really did fan out').toBeGreaterThan(1);
+
+    // Every task that ran, ran once: nothing failed here, so no task should
+    // have needed a second execution, and none may have been charged for a
+    // scheduling decision either.
+    for (const task of tasks) {
+      const row = memory.taskRow(task.taskId)!;
+      expect(row.attempt, `${task.taskId} executed exactly once`).toBe(1);
+    }
+
+    // And the hand-back really happened — otherwise this case proves nothing.
+    // A lease generation above the execution count is a claim that took
+    // ownership without spending an attempt, which is the repair itself.
+    const yielded = tasks.filter((task) => memory.taskRow(task.taskId)!.leaseGeneration > 1);
+    expect(yielded.length, 'at least one task was claimed more times than it executed').toBeGreaterThan(0);
+  });
+
+  /**
+   * THE DRIVE LOOP MUST ACTUALLY SWEEP, or the crash bound is decoration.
+   *
+   * `recoverExpired` was written and never called. The runtime worked anyway,
+   * because the claim query USED to also offer an ACTIVE task whose lease had
+   * expired — but that path reclaimed WITHOUT counting, so a task claimed and
+   * dead before admission could be picked up forever. That branch is gone, and
+   * the sweep now belongs to `JuliusRunLoop.tick` rather than to this driver,
+   * so no future driver can bypass the bound by ticking differently. This
+   * asserts the SWEEP ITSELF, through the real drive, rather than trusting a
+   * line to stay where it was put.
+   */
+  it('the live driver runs the recovery sweep, so an abandoned lease is counted', async () => {
+    const memory = createJuliusMemoryStore();
+    const handoffs = createContextAndClaimHandoffs(memory as unknown as JuliusRuntimeStore & JuliusRecoveryDriver);
+    const fakes = liveResolution({ verdicts: ['approved'], contexts: handoffs.contexts });
+    expect(fakes.resolution.ok).toBe(true);
+    seedMissionRun(memory);
+    const runtime = assembleLiveJuliusRuntime({
+      store: handoffs.store, entries: fakes.resolution.entries,
+      cardRevision: 'card-test-1', spendCeilingUsdMicros: 5_000_000, maxRepairRounds: 1,
+    });
+
+    // A worker claimed the plan task and died before admitting it: ACTIVE, with
+    // a lease that has already expired. Only a sweep can count this.
+    const [abandoned] = await handoffs.store.claimRunnable({
+      owner: 'worker-that-died', now: new Date().toISOString(),
+      leaseExpiresAt: new Date(Date.now() - 60_000).toISOString(),
+      limit: 1, projectId: 'prj-live',
+    });
+    expect(abandoned?.taskId, 'the plan task was claimed and abandoned').toBe('plan-1');
+    expect(memory.taskRow('plan-1')!.recoveries, 'nothing has counted it yet').toBe(0);
+
+    const outcome = await driveJuliusRunToTerminal({
+      loop: runtime.loop, store: handoffs.store, runId: 'run-live', projectId: 'prj-live', maxTicks: 24,
+    });
+
+    expect(memory.taskRow('plan-1')!.recoveries, 'the driver swept, and the reclaim was counted')
+      .toBeGreaterThan(0);
+    expect(memory.events().some((event) => event.type === 'recovery.action'),
+      'and it left the durable row that says a lease was reclaimed').toBe(true);
+    // EXACTLY ONE, not merely some. `> 0` would pass in the regression this
+    // guards — a claim that resumed spending an attempt would leave 2.
+    expect(memory.taskRow('plan-1')!.attempt, 'the abandoned claim spent no attempt; only the real admission did')
+      .toBe(1);
+    expect(outcome.state, 'and a swept run still completes').toBe('COMPLETED');
   });
 
   it('a blocking review verdict forces exactly one Julius repair cycle, and completion is withheld when it stays blocking', async () => {

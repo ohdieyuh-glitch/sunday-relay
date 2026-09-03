@@ -40,7 +40,7 @@
  * system that is not durable.
  */
 
-import type { JuliusRecoveryAction } from './julius-recovery';
+import { MAX_TASK_RECOVERIES, planJuliusRecovery, type JuliusRecoveryAction } from './julius-recovery';
 import { transitionMission, type JuliusBrainEntry, type JuliusEvidence, type JuliusMissionState, type JuliusRecordedDecision, type JuliusTask } from './julius-runtime';
 import type { JuliusOperationalEvent } from './julius-events';
 import type { JuliusTrajectoryEvent } from './julius-trajectory';
@@ -60,22 +60,31 @@ import type { JuliusTimelineEntry, JuliusTimelineReader } from './julius-runtime
 interface TaskRow extends JuliusTask {
   runId: string;
   leaseOwner: string | null;
+  /** Scheduling ownership. Every claim takes a new generation. */
   leaseGeneration: number;
   leaseExpiresAt: string | null;
+  /** EXECUTION admissions. Only `admitTask` raises it. */
   attempt: number;
+  /** Expired leases reclaimed by recovery. Only `recoverExpired` raises it. */
+  recoveries: number;
   nextAttemptAt: string;
   version: number;
 }
 
 /**
- * The attempt ceiling recovery requeues against.
+ * The EXECUTION ceiling recovery requeues against.
  *
  * The inherited `recoverExpired` reads a `maxRetries` written as the SQL
- * literal `2` inside its own query. That number is the same idea as the
- * dispatch path's attempt ceiling and lives in two places; this model uses the
- * dispatch path's, so a task cannot be requeued past the point at which the
- * pipeline would refuse to retry it. Reconciling the two is recorded as a gap
- * rather than fixed by editing the inherited SQL.
+ * literal `2` inside its own query, and `planJuliusRecovery` fails at
+ * `attempt >= maxRetries + 1` — the same 3 this names, reached from the other
+ * side. This model uses the dispatch path's number, so a task cannot be
+ * requeued past the point at which the pipeline would refuse to retry it.
+ *
+ * IT IS NOT THE ONLY BOUND ANY MORE, and it could not be. Now that `attempt`
+ * counts execution admissions, a task that is claimed, crashes before it is
+ * admitted, and is recovered leaves this number untouched — so bounded only by
+ * it, that loop would run forever. {@link MAX_TASK_RECOVERIES} bounds the
+ * recovery itself; both are checked, in `planJuliusRecovery`'s order.
  */
 const RECOVERY_MAX_ATTEMPTS = 3;
 
@@ -163,7 +172,7 @@ export function createJuliusMemoryStore(): JuliusMemoryStore {
     seedTask(runId, task) {
       tasks.set(task.taskId, {
         ...task, runId, leaseOwner: null, leaseGeneration: 0, leaseExpiresAt: null,
-        attempt: 0, nextAttemptAt: '1970-01-01T00:00:00.000Z', version: 1,
+        attempt: 0, recoveries: 0, nextAttemptAt: '1970-01-01T00:00:00.000Z', version: 1,
       });
     },
     seedCriteria(runId, values) { criteria.set(runId, values.map((value) => ({ ...value }))); },
@@ -192,18 +201,26 @@ export function createJuliusMemoryStore(): JuliusMemoryStore {
         const run = runs.get(task.runId);
         if (run === undefined) continue;
         if (projectId !== undefined && run.projectId !== projectId) continue;
-        const requeue = task.attempt < RECOVERY_MAX_ATTEMPTS;
-        task.state = requeue ? 'RUNNABLE' : 'FAILED';
+        // The SAME decision the PostgreSQL sweep takes, taken by the same
+        // function, so the two stores cannot drift on which bound stopped a
+        // task or on what it is called.
+        const action = planJuliusRecovery({
+          runId: task.runId, projectId: run.projectId, runState: run.state, taskId: task.taskId,
+          attempt: task.attempt, maxRetries: RECOVERY_MAX_ATTEMPTS - 1,
+          leaseGeneration: task.leaseGeneration,
+          recoveries: task.recoveries, maxRecoveries: MAX_TASK_RECOVERIES,
+        });
+        const requeue = action.action === 'REQUEUE';
+        task.state = requeue ? 'RUNNABLE' : action.action === 'CANCEL_TASK' ? 'CANCELLED' : 'FAILED';
         task.leaseOwner = null;
         task.leaseExpiresAt = null;
         task.nextAttemptAt = now;
+        // COUNTED ON THE WAY OUT, and only when this task is being handed
+        // another turn. Raising it on a terminal decision would bound nothing
+        // and would make the number mean two things.
+        if (requeue) task.recoveries += 1;
         task.version += 1;
-        actions.push({
-          action: requeue ? 'REQUEUE' : 'FAIL_TASK',
-          runId: task.runId, taskId: task.taskId,
-          reasonCode: requeue ? 'LEASE_EXPIRED' : 'RETRIES_EXHAUSTED',
-          expectedLeaseGeneration: task.leaseGeneration,
-        });
+        actions.push(action);
       }
       return actions;
     },
@@ -250,7 +267,7 @@ export function createJuliusMemoryStore(): JuliusMemoryStore {
       }
       tasks.set(input.task.taskId, {
         ...input.task, runId: input.runId, leaseOwner: null, leaseGeneration: 0,
-        leaseExpiresAt: null, attempt: 0, nextAttemptAt: '1970-01-01T00:00:00.000Z', version: 1,
+        leaseExpiresAt: null, attempt: 0, recoveries: 0, nextAttemptAt: '1970-01-01T00:00:00.000Z', version: 1,
       });
       if (input.task.taskType.startsWith('repair:') && input.task.parentTaskId !== null) {
         repairRounds.set(input.task.parentTaskId, (repairRounds.get(input.task.parentTaskId) ?? 0) + 1);
@@ -270,7 +287,18 @@ export function createJuliusMemoryStore(): JuliusMemoryStore {
           if (input.projectId !== undefined && run.projectId !== input.projectId) return false;
           if (!CLAIMABLE_RUN_STATES.includes(run.state)) return false;
           if (task.nextAttemptAt > input.now) return false;
-          const expired = task.state === 'ACTIVE' && task.leaseExpiresAt !== null && task.leaseExpiresAt <= input.now;
+          // AN EXPIRED LEASE IS RECOVERY'S, NOT THE CLAIM'S.
+          //
+          // This query used to also offer an ACTIVE task whose lease had
+          // expired, which reclaimed it while raising only `lease_generation` —
+          // so a task that was claimed and died before admission could be
+          // picked up again forever, bypassing `recoveries` and its ceiling
+          // entirely. There is one path back from an expired lease now:
+          // `recoverExpired` counts the reclaim, bounds it, and writes the
+          // `recovery.action` row that explains it, leaving the task RUNNABLE
+          // for an ordinary claim. A runtime whose recovery never runs stalls
+          // such a task, which is the safe direction — the unbounded reclaim
+          // was the unsafe one. The PostgreSQL claim carries the same rule.
           // BLOCKED IS CLAIMABLE ONCE ITS DEPENDENCIES ARE SATISFIED, and the
           // inherited claim query did not say so. `JuliusTaskGraph` promotes
           // BLOCKED to RUNNABLE when its dependencies succeed, but nothing
@@ -280,7 +308,7 @@ export function createJuliusMemoryStore(): JuliusMemoryStore {
           // never be claimed at all. The dependency predicate below is already
           // the gate; the state check was a second, stricter one that made the
           // first unreachable.
-          if (task.state !== 'RUNNABLE' && task.state !== 'BLOCKED' && !expired) return false;
+          if (task.state !== 'RUNNABLE' && task.state !== 'BLOCKED') return false;
           return dependenciesSatisfied(task);
         })
         // The claim query orders by run creation, then ordinal, then task id.
@@ -294,7 +322,10 @@ export function createJuliusMemoryStore(): JuliusMemoryStore {
         task.leaseOwner = input.owner;
         task.leaseGeneration += 1;
         task.leaseExpiresAt = input.leaseExpiresAt;
-        task.attempt += 1;
+        // THE CLAIM TAKES OWNERSHIP, NOT AN ATTEMPT. `admitTask` spends the
+        // execution attempt once the scheduler has decided to run this task,
+        // so a concurrency or fairness hand-back costs a lease generation and
+        // nothing else.
         task.version += 1;
         claimed.push({
           taskId: task.taskId, runId: task.runId, role: task.role, taskType: task.taskType,
@@ -302,6 +333,15 @@ export function createJuliusMemoryStore(): JuliusMemoryStore {
         });
       }
       return claimed;
+    },
+
+    async admitTask(input) {
+      const task = tasks.get(input.taskId);
+      if (task === undefined || task.state !== 'ACTIVE') return null;
+      if (task.leaseOwner !== input.owner || task.leaseGeneration !== input.leaseGeneration) return null;
+      task.attempt += 1;
+      task.version += 1;
+      return task.attempt;
     },
 
     async heartbeat(input) {

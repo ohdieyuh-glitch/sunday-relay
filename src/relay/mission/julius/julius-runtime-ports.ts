@@ -83,7 +83,13 @@ export interface JuliusClaimedTask {
   readonly runId: string;
   readonly role: string;
   readonly taskType: string;
+  /** Scheduling ownership: incremented by EVERY claim, hand-backs included. */
   readonly leaseGeneration: number;
+  /**
+   * EXECUTION attempts this task has consumed, which a claim does not change.
+   * As handed back by `claimRunnable` this is the count BEFORE this claim;
+   * `admitTask` returns the value to run under.
+   */
   readonly attempt: number;
 }
 
@@ -109,6 +115,30 @@ export interface JuliusRunWriter {
   claimRunnable(input: {
     owner: string; now: string; leaseExpiresAt: string; limit: number; projectId?: string;
   }): Promise<JuliusClaimedTask[]>;
+  /**
+   * ADMIT A CLAIMED TASK INTO EXECUTION, consuming one execution attempt.
+   *
+   * THE CLAIM IS NOT THE ATTEMPT. `claimRunnable` takes scheduling ownership,
+   * and the scheduler may then decide NOT to run the task — the run's C.A.R.D.
+   * concurrency allowance is already spent, or the per-run fairness share is —
+   * and hand it straight back. While the claim incremented `attempt`, those
+   * hand-backs spent provider retries that no provider ever saw: a task yielded
+   * twice arrived at its FIRST real dispatch on attempt 3 of 3, and a rate
+   * limit there was refused as exhausted.
+   *
+   * So the attempt is consumed HERE, once the scheduler has decided to run the
+   * task and before any provider-capable work begins. It is one atomic write
+   * conditioned on the same lease the caller holds, which is what makes the
+   * crash semantics honest in both directions: a crash after this point has
+   * spent an attempt, because a worker may genuinely have been dispatched; a
+   * crash before it has spent none, because nothing could have been.
+   *
+   * Returns the NEW execution attempt, or null when the lease has moved on —
+   * the caller no longer owns the task and must not run it or finish it.
+   */
+  admitTask(input: {
+    taskId: string; owner: string; leaseGeneration: number; now: string;
+  }): Promise<number | null>;
   heartbeat(input: {
     taskId: string; owner: string; leaseGeneration: number; now: string; leaseExpiresAt: string;
   }): Promise<boolean>;
@@ -129,7 +159,7 @@ export interface JuliusRunWriter {
  * RECLAIMING EXPIRED LEASES.
  *
  * `recoverExpired` exists on the recovery repository and nothing called it —
- * the claim query happens to also pick up an expired ACTIVE task, so the
+ * the claim query USED to also pick up an expired ACTIVE task, so the
  * runtime worked without recovery and lost every RECOVERY FACT: what was
  * requeued, what was abandoned, how many attempts it had taken. Declaring the
  * port is what lets the run loop run the sweep and record what it did.

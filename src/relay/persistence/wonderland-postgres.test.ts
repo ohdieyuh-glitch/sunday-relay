@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Pool } from 'pg';
-import { TransactionalWonderlandDatabase, WONDERLAND_MIGRATION_001, WONDERLAND_MIGRATION_002, WONDERLAND_MIGRATION_003, WONDERLAND_MIGRATION_004, WONDERLAND_MIGRATION_005, WONDERLAND_MIGRATION_006, WONDERLAND_MIGRATION_007, WONDERLAND_MIGRATION_008, WONDERLAND_MIGRATION_009, WONDERLAND_MIGRATION_010, WONDERLAND_MIGRATION_011, WONDERLAND_MIGRATION_012, WONDERLAND_MIGRATION_013, WONDERLAND_MIGRATION_014, WONDERLAND_MIGRATION_015, WONDERLAND_MIGRATION_016, WONDERLAND_MIGRATION_017, WONDERLAND_MIGRATION_018, WONDERLAND_MIGRATION_019, WONDERLAND_MIGRATION_020, WONDERLAND_MIGRATION_021 } from './wonderland-postgres';
+import { TransactionalWonderlandDatabase, migrationVersion, WONDERLAND_MIGRATIONS, WONDERLAND_MIGRATION_001, WONDERLAND_MIGRATION_003, WONDERLAND_MIGRATION_004, WONDERLAND_MIGRATION_005, WONDERLAND_MIGRATION_006, WONDERLAND_MIGRATION_007, WONDERLAND_MIGRATION_008, WONDERLAND_MIGRATION_009, WONDERLAND_MIGRATION_010, WONDERLAND_MIGRATION_011, WONDERLAND_MIGRATION_012, WONDERLAND_MIGRATION_013, WONDERLAND_MIGRATION_014, WONDERLAND_MIGRATION_015, WONDERLAND_MIGRATION_016, WONDERLAND_MIGRATION_017, WONDERLAND_MIGRATION_018 } from './wonderland-postgres';
 import type { WonderlandExecutionSession } from '../mission/wonderland/wonderland-execution';
 
 class FakePool {
@@ -41,7 +41,33 @@ describe('Wonderland PostgreSQL migration', () => {
   it('defines durable sub-agent grants with depth, narrowed permissions and per-parent counting',()=>{expect(WONDERLAND_MIGRATION_016).toContain('julius_subagents');expect(WONDERLAND_MIGRATION_016).toContain('CHECK(depth>0)');expect(WONDERLAND_MIGRATION_016).toContain('child_task_id text NOT NULL UNIQUE');expect(WONDERLAND_MIGRATION_016).toContain('julius_subagent_parent');});
   it('persists the GAUNTLET COMMAND outside the Julius namespace, with its activator',()=>{expect(WONDERLAND_MIGRATION_017).toContain('relay_wonderland.gauntlet_runs');expect(WONDERLAND_MIGRATION_017).not.toContain('relay_wonderland.julius_gauntlet');expect(WONDERLAND_MIGRATION_017).toContain('activated_by');expect(WONDERLAND_MIGRATION_017).toContain('UNIQUE(run_id,subject_task_id)');expect(WONDERLAND_MIGRATION_017).toContain('PRIMARY KEY(gauntlet_id,round,phase)');});
   it('persists approvals with one pending request per gated operation',()=>{expect(WONDERLAND_MIGRATION_018).toContain('julius_approvals');expect(WONDERLAND_MIGRATION_018).toContain('julius_approval_one_pending');expect(WONDERLAND_MIGRATION_018).toContain("WHERE state='PENDING'");expect(WONDERLAND_MIGRATION_018).toContain('lifecycle_actor');});
-  it('runs every checked-in migration through the configured PostgreSQL pool', async () => { const pool = new FakePool(); const db = database(pool); await db.migrate(); expect(pool.commands).toEqual([WONDERLAND_MIGRATION_001, WONDERLAND_MIGRATION_002, WONDERLAND_MIGRATION_003, WONDERLAND_MIGRATION_004, WONDERLAND_MIGRATION_005, WONDERLAND_MIGRATION_006, WONDERLAND_MIGRATION_007, WONDERLAND_MIGRATION_008, WONDERLAND_MIGRATION_009, WONDERLAND_MIGRATION_010, WONDERLAND_MIGRATION_011, WONDERLAND_MIGRATION_012, WONDERLAND_MIGRATION_013, WONDERLAND_MIGRATION_014, WONDERLAND_MIGRATION_015, WONDERLAND_MIGRATION_016, WONDERLAND_MIGRATION_017, WONDERLAND_MIGRATION_018, WONDERLAND_MIGRATION_019, WONDERLAND_MIGRATION_020, WONDERLAND_MIGRATION_021]); });
+  it('applies every checked-in migration to an empty database, in order', async () => { const pool = new FakePool(); const db = database(pool); await db.migrate(); expect(pool.commands.filter((command) => !command.includes('information_schema.tables'))).toEqual([...WONDERLAND_MIGRATIONS]); });
+
+  /**
+   * A MIGRATED DATABASE MUST NOT BE REPLAYED, AND A PARTLY MIGRATED ONE MUST BE
+   * FINISHED.
+   *
+   * The migrations use bare `CREATE TABLE`, so a blind replay dies with 42P07 —
+   * which is why three entrypoints guarded `migrate()` with a sentinel column
+   * from whichever migration was last when the guard was written. Adding 022
+   * made that sentinel answer "already migrated" for a database at 021, so the
+   * new column was never created. `schema_migrations` is the authority now.
+   */
+  it('applies only what schema_migrations does not already hold', async () => {
+    const versions = WONDERLAND_MIGRATIONS.map((sql) => migrationVersion(sql));
+    expect(versions.every((version) => version !== null), 'every migration stamps its own version').toBe(true);
+
+    const current = new FakePool();
+    current.topRows = versions.map((version) => ({ version }));
+    await database(current).migrate();
+    expect(current.commands.filter((command) => command.startsWith('BEGIN;')), 'nothing is replayed').toEqual([]);
+
+    const atPrevious = new FakePool();
+    atPrevious.topRows = versions.slice(0, -1).map((version) => ({ version }));
+    await database(atPrevious).migrate();
+    expect(atPrevious.commands.filter((command) => command.startsWith('BEGIN;')), 'only the missing one runs')
+      .toEqual([WONDERLAND_MIGRATIONS.at(-1)]);
+  });
 });
 
 describe('the outbox never stores a secret in its error', () => {

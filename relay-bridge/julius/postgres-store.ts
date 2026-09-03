@@ -35,6 +35,9 @@ export function createJuliusPostgresRuntimeStore(pool: Pool): JuliusRuntimeStore
     transition: runs.transition.bind(runs),
     addTask: runs.addTask.bind(runs),
     claimRunnable: runs.claimRunnable.bind(runs),
+    // The claim takes ownership; THIS spends the execution attempt, immediately
+    // before the run loop dispatches a provider-capable worker.
+    admitTask: runs.admitTask.bind(runs),
     heartbeat: runs.heartbeat.bind(runs),
     finishTask: runs.finishTask.bind(runs),
     appendEvidence: runs.appendEvidence.bind(runs),

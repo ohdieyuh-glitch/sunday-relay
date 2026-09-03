@@ -30,6 +30,7 @@ import {
   type JuliusContextSnapshot,
   type JuliusPipelineDependencies,
   type JuliusPolicySource,
+  type JuliusRecoveryDriver,
   type JuliusProviderAdapter,
   type JuliusRuntimeStore,
   type JuliusVerificationPolicy,
@@ -255,14 +256,21 @@ export interface LiveJuliusRuntime {
 }
 
 /** Wraps the store so compiled contexts and task claims reach the adapters. */
-export function createContextAndClaimHandoffs(store: JuliusRuntimeStore): {
-  readonly store: JuliusRuntimeStore;
+/**
+ * Generic in the store so a store that is ALSO a recovery driver stays one.
+ * Declared as `JuliusRuntimeStore`, the spread below erased `recoverExpired`
+ * from the type while keeping it at runtime — and the run loop, which sweeps
+ * expired leases before it claims, cannot be built from a store that has lost
+ * it.
+ */
+export function createContextAndClaimHandoffs<S extends JuliusRuntimeStore>(store: S): {
+  readonly store: S;
   readonly contexts: CompiledContextSource;
   readonly claims: TaskClaimSource;
 } {
   const snapshots = new Map<string, JuliusContextSnapshot>();
   const claims = new Map<string, { leaseGeneration: number }>();
-  const wrapped: JuliusRuntimeStore = {
+  const wrapped: S = {
     ...store,
     persist: async (input) => {
       snapshots.set(input.snapshot.contextId, input.snapshot);
@@ -286,7 +294,9 @@ export function createContextAndClaimHandoffs(store: JuliusRuntimeStore): {
 }
 
 export function assembleLiveJuliusRuntime(options: {
-  readonly store: JuliusRuntimeStore;
+  // Also the recovery driver: the run loop sweeps expired leases itself, so
+  // the bound on crash churn belongs to the kernel and not to a driver.
+  readonly store: JuliusRuntimeStore & JuliusRecoveryDriver;
   readonly entries: readonly LiveWorkerEntry[];
   readonly cardRevision: string;
   readonly spendCeilingUsdMicros: number;
@@ -368,7 +378,11 @@ export interface DriveOutcome {
  */
 export async function driveJuliusRunToTerminal(input: {
   readonly loop: JuliusRunLoop;
-  readonly store: JuliusRuntimeStore;
+  // The same store object goes to `assembleLiveJuliusRuntime`, whose run loop
+  // sweeps expired leases itself, so it must be the recovery driver too. This
+  // driver no longer sweeps — an earlier comment here said the sweep "below"
+  // needed it, and there is no sweep below any more.
+  readonly store: JuliusRuntimeStore & JuliusRecoveryDriver;
   readonly runId: string;
   readonly projectId: string;
   readonly maxTicks?: number;
@@ -384,6 +398,11 @@ export async function driveJuliusRunToTerminal(input: {
   };
   let lastState = 'UNKNOWN';
   for (let tick = 1; tick <= maxTicks; tick += 1) {
+    // THE SWEEP IS THE KERNEL'S. This driver used to call `recover` before
+    // every tick, which made a store-level guarantee depend on one composition
+    // root remembering to make it — and it passed the default limit of 100
+    // where `tick` passes the claim limit, so the bound the comments advertised
+    // was not the bound the live path applied. `tick` sweeps first now.
     const report = await input.loop.tick({ projectId: input.projectId });
     const run = await input.store.loadRun(input.runId, input.projectId);
     lastState = run?.state ?? 'UNKNOWN';

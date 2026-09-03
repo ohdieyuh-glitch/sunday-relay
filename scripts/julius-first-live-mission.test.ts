@@ -527,6 +527,15 @@ describe('the evidence dump names only tables and columns the migrations create'
       .not.toMatch(/\bpayload\b(?!\s*(?:->|#>))/u);
     expect(query, 'and it is scoped to the failure events, not the whole stream')
       .toContain("'julius.task.failed'");
+    // A TASK CAN END FOR A REASON ONLY THIS TYPE CARRIES. RECOVERY_LIMIT_REACHED
+    // travels on `recovery.action`, and a task that never reached a worker
+    // leaves no `task.failed` behind — so without this type the artifact cannot
+    // say why such a task stopped. `recovery_action` distinguishes those rows
+    // from the ordinary requeues the same type also records.
+    expect(query, 'the recovery sweep can end a task, so its rows belong here')
+      .toContain("'julius.recovery.action'");
+    expect(query, 'and a requeue must be distinguishable from a terminal recovery')
+      .toContain("'action'");
   });
 
   it('keeps the two names dry run #2 proved wrong corrected', () => {
@@ -544,6 +553,8 @@ describe('the preflight is a legitimate participant in the durable schema (dry r
   // hold the foreign keys themselves.
   const preflight = read('scripts/julius-live-preflight.ts');
   const fixture = read('scripts/julius-live-preflight-identity.ts');
+  const sibling = read('scripts/julius-sibling-support.ts');
+  const liveEntry = read('relay-bridge/julius-live-mission.ts');
 
   it('seeds its ancestry before the first executor request, and each invocation before its sandbox', () => {
     expect(preflight.indexOf('await seedPreflightIdentity(pool, identity)'), 'the ancestry must exist before any executor call')
@@ -553,17 +564,28 @@ describe('the preflight is a legitimate participant in the durable schema (dry r
       .toBeLessThan(roundTrip.indexOf('client.createSandbox('));
   });
 
-  it('hands the executor the dispatch generation the claim returned, and migrates only where the replay has not landed', () => {
+  it('hands the executor the dispatch generation the claim returned, and migrates by version rather than by sentinel', () => {
     // PR #214's host-visible entry: an invocation left AUTHORIZED loses execution authority.
     expect(preflight).toContain('const { dispatchGeneration } = await seedPreflightInvocation(');
     expect(preflight, 'a hard-coded generation cannot match a claimed one').not.toMatch(/dispatchGeneration:\s*\d/u);
     expect(fixture).toMatch(/SET state='DISPATCHING',dispatch_generation=i\.dispatch_generation\+1/u);
     expect(fixture, 'the claim is scoped to this invocation and this project, never the fleet').toMatch(/WHERE o\.invocation_id=\$1 AND o\.project_id=\$4 AND o\.state='PENDING'/u);
     expect(fixture, 'the production claimDispatch sweeps every pending invocation and must not be used by a probe').not.toContain('claimDispatch(');
-    // The migration set is a one-shot replay: guard it the way the live entrypoint does.
+    // MIGRATION IS PER-VERSION, AND NO SENTINEL MAY COME BACK.
+    //
+    // This used to require the probe `column_name='sandbox_policy'` — the
+    // artefact of whichever migration was last when it was written. Adding 022
+    // made that answer "already migrated" for a database at 021, so the new
+    // column would never have been created. `migrate()` now consults
+    // `schema_migrations`, so the rule is that no caller reintroduces a
+    // one-column stand-in for the whole set.
     expect(preflight).toContain('await migrateIfNeeded(pool)');
-    expect(preflight).not.toContain('new TransactionalWonderlandDatabase(pool).migrate()');
-    expect(fixture).toContain("column_name='sandbox_policy'");
+    expect(preflight, 'the probe must not name one migration\'s artefact')
+      .not.toContain("column_name='sandbox_policy'");
+    for (const source of [fixture, sibling, liveEntry]) {
+      expect(source, 'a column sentinel cannot decide whether a migration set has landed')
+        .not.toMatch(/information_schema\.columns[\s\S]{0,200}sandbox_policy/u);
+    }
   });
 
   it('names no invented identity: every id derives from the nonce, and the invocation goes through the production repository', () => {

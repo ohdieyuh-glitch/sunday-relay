@@ -34,7 +34,7 @@ import { planRunStatePath, transitionIsLegal } from './julius-state-path';
  * runtime shares — two runtimes, one walk of one table.
  */
 export { planRunStatePath, transitionIsLegal };
-import { runClaimedTask, type JuliusPipelineDependencies, type JuliusTaskOutcome } from './julius-task-pipeline';
+import { prepareClaimedTask, runClaimedTask, type JuliusPipelineDependencies, type JuliusTaskOutcome } from './julius-task-pipeline';
 import { continuationConcurrency } from './julius-continuation';
 import type { JuliusClaimedTask, JuliusRecoveryDriver, JuliusRunRow } from './julius-runtime-ports';
 import { validateJuliusEvent } from './julius-events';
@@ -81,6 +81,20 @@ export interface JuliusTickReport {
    * high means the claim limit is wider than the runs it serves.
    */
   readonly yieldedForConcurrency: number;
+  /**
+   * Tasks whose lease was gone by the time this worker tried to admit them —
+   * reclaimed by recovery, or taken by another worker after a restart. They
+   * were neither run nor finished here, and they spent no execution attempt.
+   * Distinct from a hand-back, which this worker chose.
+   */
+  readonly lostLeases: number;
+  /**
+   * Tasks a pre-execution gate refused — outside this scope, an unresolvable
+   * role, a C.A.R.D. denial, an approval nobody has given, a task that no
+   * longer exists. None executed anything, so none spent an execution attempt
+   * or took a slot in the run's concurrency allowance for this tick.
+   */
+  readonly refusedBeforeAdmission: number;
 }
 
 export interface JuliusRunAdvance {
@@ -254,6 +268,29 @@ export class JuliusRunLoop {
    * across tenants is a tenancy hole disguised as a convenience.
    */
   async tick(scope: { readonly projectId: string }, signal?: AbortSignal): Promise<JuliusTickReport> {
+    /**
+     * RECOVERY IS THE KERNEL'S, NOT THE DRIVER'S.
+     *
+     * An expired lease is no longer reclaimable by the claim query: that path
+     * raised only `lease_generation`, so a task claimed and dead before
+     * admission could be picked up forever, bypassing `recoveries` and its
+     * ceiling. The sweep is the one way back — it counts the reclaim, bounds
+     * it, writes the `recovery.action` row that explains it, and leaves the
+     * task RUNNABLE for an ordinary claim below.
+     *
+     * It runs HERE rather than in a driver so no future caller can bypass the
+     * invariant by ticking differently. `driveJuliusRunToTerminal` owned this
+     * call and no longer does — a store-level guarantee should not depend on
+     * one composition root remembering to make it, and that driver also passed
+     * the sweep's default limit where this passes the claim limit, so the bound
+     * the comments advertised was not the one the live path applied.
+     */
+    await this.recover(scope, this.deps.store, this.config.claimLimit);
+
+    // AFTER THE SWEEP, deliberately. A recovered task is given a next attempt
+    // time from the clock the sweep read, so a `now` captured before it would
+    // be older and the claim below would refuse the very task just recovered —
+    // making a reclaim take one extra tick for no reason.
     const now = this.deps.clock.now();
     const leaseExpiresAt = new Date(Date.parse(now) + this.config.leaseMs).toISOString();
     const claimed = await this.deps.store.claimRunnable({
@@ -312,6 +349,8 @@ export class JuliusRunLoop {
     // width C.A.R.D. granted.
     const inFlight = new Map<string, number>();
     let yieldedForConcurrency = 0;
+    let lostLeases = 0;
+    let refusedBeforeAdmission = 0;
 
     for (const claim of claims) {
       touchedRunIds.add(claim.runId);
@@ -352,15 +391,81 @@ export class JuliusRunLoop {
         yieldedForConcurrency += 1;
         continue;
       }
+      /* ------------------------------------------ pre-execution gates first */
+      /**
+       * EVERY REFUSAL IS ANSWERED BEFORE AN ATTEMPT IS SPENT.
+       *
+       * The two questions above — can policy be resolved for this run, does
+       * the run have room — are answered by handing the task BACK. The gates
+       * below can refuse it outright: a run outside this scope, a role Julius
+       * cannot resolve, a C.A.R.D. that denies the dispatch or the capability,
+       * an approval nobody has given, a task that no longer exists. None of
+       * those is a worker execution, and while admission ran before them each
+       * one spent an attempt on work Julius had just decided not to do.
+       *
+       * The policy is evaluated in ONE place — `prepareClaimedTask` — and this
+       * loop reads the verdict off the type rather than re-deciding it.
+       */
+      const request = {
+        claim, policy: policy.card, verification: policy.verification,
+        capability: this.policies.capabilityFor(claim), signal,
+      };
+      const preflight = await prepareClaimedTask(request, this.deps, scope);
+      if (preflight.kind === 'REFUSED') {
+        // No execution happened, so no attempt is spent. Three of the five
+        // gates also END the task; the two that do not — a run outside this
+        // scope, which must write nothing at all, and a task that has vanished
+        // from its run — leave the lease to expire and the sweep to reclaim it.
+        // Neither is reachable from a real claim: the claim query is scoped by
+        // project, and a claimed task is in `tasksForRun` by construction.
+        refusedBeforeAdmission += 1;
+        outcomes.push(preflight.outcome);
+        continue;
+      }
+
+      /* ------------------------------------------------- execution admission */
+      /**
+       * EVERY GATE THAT CAN REFUSE CHEAPLY HAS ANSWERED; THIS TASK IS GOING
+       * TO RUN.
+       *
+       * Two refusals still follow, and both are deliberate: the router refuses
+       * when C.A.R.D. denies every eligible PROVIDER, and the coordinator
+       * refuses when the budget is spent. Each ends the task after one attempt
+       * rather than looping, and each needs the worker set or the reservation
+       * that only exist past this point.
+       *
+       * The attempt is spent here rather than by the claim because the live
+       * topology hands tasks back routinely — a claim limit of 4 against a
+       * C.A.R.D. concurrency of 1, with `build` and the plan's review task
+       * both claimable on the tick after the plan succeeds — so a task could
+       * be yielded twice and reach its FIRST real dispatch on attempt 3 of 3,
+       * where a rate limit is refused as exhausted without one provider call.
+       *
+       * `null` means the lease moved while we decided. The task is somebody
+       * else's now: do not run it, and do not finish it either, because
+       * finishing needs the generation we no longer hold.
+       */
+      const attempt = await this.deps.store.admitTask({
+        taskId: claim.taskId, owner: this.deps.owner,
+        leaseGeneration: claim.leaseGeneration, now: this.deps.clock.now(),
+      });
+      if (attempt === null) {
+        lostLeases += 1;
+        continue;
+      }
+      // COUNTED ONLY ONCE THE TASK IS REALLY RUNNING. Counted before the
+      // admission, a lease lost between the two would hold a slot in this
+      // run's allowance for work nobody is doing, and the next claim in the
+      // same tick would be handed back to make room for it.
       inFlight.set(claim.runId, running + 1);
 
       outcomes.push(await runClaimedTask({
-        claim,
-        policy: policy.card,
-        verification: policy.verification,
-        capability: this.policies.capabilityFor(claim),
-        signal,
-      }, this.deps, scope));
+        // The claim carried the count BEFORE this admission. Everything
+        // downstream — the retry ceiling, the operation id that makes a
+        // repeated dispatch idempotent, the resource estimate — must read the
+        // attempt actually being run.
+        ...request, claim: { ...claim, attempt },
+      }, this.deps, preflight));
     }
 
     const runs: JuliusRunAdvance[] = [];
@@ -375,7 +480,7 @@ export class JuliusRunLoop {
       // the claim limit is wider than the runs it serves.
       claimed: claimed.length, outcomes, runs,
       unresolvedPolicyRunIds: [...unresolvedPolicyRunIds], yieldedForConcurrency,
-      yieldedForFairness: yielded.length,
+      yieldedForFairness: yielded.length, lostLeases, refusedBeforeAdmission,
     };
   }
 
@@ -403,6 +508,12 @@ export class JuliusRunLoop {
     input: {
       taskId?: string | null; outcome?: string | null; durationMs?: number | null;
       usdMicros?: number | null; facts?: Record<string, string | number | boolean | null>;
+      /**
+       * Distinguishes rows a run VERSION cannot. A recovery does not change the
+       * run's version, so without this every action in a sweep shares one key
+       * and the writers — which dedupe on it — keep the first and drop the rest.
+       */
+      idempotencySuffix?: string;
     },
   ): Promise<void> {
     const event: JuliusTrajectoryEvent = {
@@ -422,7 +533,7 @@ export class JuliusRunLoop {
       durationMs: input.durationMs ?? null, usdMicros: input.usdMicros ?? null,
       inputTokens: null, outputTokens: null,
       outcome: input.outcome ?? null, safeFacts: input.facts ?? {},
-      idempotencyKey: `${run.runId}:${kind}:${run.version}`,
+      idempotencyKey: `${run.runId}:${kind}:${run.version}${input.idempotencySuffix === undefined ? '' : `:${input.idempotencySuffix}`}`,
       occurredAt: this.deps.clock.now(),
     };
     validateTrajectoryEvent(event);
@@ -432,15 +543,17 @@ export class JuliusRunLoop {
   /**
    * ONE BOUNDED RECOVERY SWEEP.
    *
-   * `recoverExpired` was written in #173 and never called. The runtime works
-   * without it — the claim query also picks up an expired ACTIVE task — so its
-   * absence cost no correctness and lost every RECOVERY FACT: what was
-   * requeued, what was abandoned after too many attempts, and how a run came
-   * to be in the state an operator is looking at.
+   * `recoverExpired` was written in #173 and never called. The runtime worked
+   * without it because the claim query ALSO offered an expired ACTIVE task —
+   * a reclaim that counted nothing, so its absence lost every RECOVERY FACT
+   * (what was requeued, what was abandoned, how a run reached the state an
+   * operator is looking at) AND left the churn unbounded. That branch is gone,
+   * so this is the only way back from an expired lease.
    *
-   * Bounded, scoped to a project, and separate from `tick()` on purpose: a
-   * deployment decides how often to sweep, and a sweep that ran inside every
-   * tick would scan on a cadence set by how much work there happens to be.
+   * `tick()` calls it before it claims. An earlier version of this comment
+   * said the two were separate on purpose, so a deployment could choose its
+   * own cadence; that made a store-level guarantee depend on whichever driver
+   * remembered to sweep, which is not a choice worth offering.
    */
   async recover(
     scope: { readonly projectId: string },
@@ -472,9 +585,23 @@ export class JuliusRunLoop {
       };
       validateJuliusEvent(event);
       await this.deps.store.appendEvent(event);
+      // KEYED BY THE ACTION, NOT THE RUN VERSION. A recovery does not change
+      // the run's version, and the trajectory writers dedupe on that key — so a
+      // sweep that recovered ten tasks recorded one row, and consecutive sweeps
+      // between transitions recorded none after the first. Newly reachable,
+      // because nothing called this before the live driver began sweeping.
       await this.#trajectory(run, 'RECOVERY', {
         taskId: action.taskId, outcome: action.action,
         facts: { reasonCode: action.reasonCode },
+        // THE LEASE GENERATION IS THE DISCRIMINATOR, because it is the one
+        // value that differs between two reclaims of the SAME task for the
+        // SAME reason. Task and reason alone still collapsed that case — every
+        // REQUEUE carries LEASE_EXPIRED, and a recovery does not bump the run's
+        // version — so a task crash-looping before admission recorded one row
+        // for three recoveries, and the eval metric that counts them
+        // under-reported in exactly the scenario recovery exists for. Each
+        // reclaim follows its own claim, so each carries its own generation.
+        idempotencySuffix: `${action.taskId ?? run.runId}:${action.reasonCode}:${action.expectedLeaseGeneration ?? 'none'}`,
       });
     }
     return { actions: actions.length, requeued, abandoned };

@@ -3,6 +3,9 @@ import { resolve } from 'node:path';
 import { Pool } from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { JuliusPostgresRepository } from '../src/relay/persistence/julius-postgres';
+import { JuliusRecoveryPostgresRepository } from '../src/relay/persistence/julius-recovery-postgres';
+import { MAX_TASK_RECOVERIES } from '../src/relay/mission/julius';
+import { WONDERLAND_MIGRATIONS } from '../src/relay/persistence/wonderland-postgres';
 import { JuliusToolPostgresRepository } from '../src/relay/persistence/julius-tool-postgres';
 import { JuliusToolRecoveryPostgresRepository } from '../src/relay/persistence/julius-tool-recovery-postgres';
 import { EXECUTOR_SANDBOX_LIMITS, EXECUTOR_SANDBOX_POLICY } from '../relay-bridge/julius/sandbox-limits';
@@ -97,7 +100,8 @@ suite('dry run 33635375764 — the preflight identity satisfies the executor’s
 
   beforeAll(async () => {
     pool = new Pool({ connectionString: process.env.DATABASE_URL });
-    // The replay is one-shot: the preflight that ran before this test already migrated.
+    // `migrate()` applies only versions `schema_migrations` does not hold, so calling it
+    // after the preflight already migrated is a no-op rather than a 42P07.
     await migrateIfNeeded(pool);
     store = new JuliusToolRecoveryPostgresRepository(pool);
   });
@@ -347,6 +351,202 @@ suite('dry run 33635375764 — the preflight identity satisfies the executor’s
       limit: 5, projectId: identity.projectId,
     });
     expect(claimed.map((task) => task.taskId), 'and nothing revives it').not.toContain(identity.taskId);
+  });
+
+  /**
+   * A CLAIM IS NOT AN EXECUTION, against the real schema.
+   *
+   * `claimRunnable` used to carry `attempt=t.attempt+1`, so the concurrency
+   * hand-back proven above — the one the live graph performs on the tick after
+   * the architect succeeds — also spent one of the task's three execution
+   * attempts, on a provider that was never called. A task yielded twice
+   * reached its FIRST real dispatch at attempt 3 of 3, where a rate limit is
+   * refused as exhausted. The attempt is spent by `admitTask` now, in one
+   * atomic statement immediately before provider-capable work begins.
+   *
+   * The offline model is held to the same rule in
+   * `src/relay/mission/julius/julius-execution-attempts.test.ts`; this is the
+   * proof that the SQL agrees, which is the half no laptop can run.
+   */
+  it('a claim takes a generation and spends no execution attempt; admission spends exactly one', async () => {
+    const identity = fixture();
+    await seedPreflightIdentity(pool, identity);
+    const repo = new JuliusPostgresRepository(pool);
+    const now = new Date().toISOString();
+
+    const before = await pool.query<{ attempt: number; recoveries: number }>(
+      'SELECT attempt, recoveries FROM relay_wonderland.julius_tasks WHERE task_id=$1', [identity.taskId],
+    );
+    expect(Number(before.rows[0]?.attempt), 'the seeded task has executed nothing').toBe(0);
+    expect(Number(before.rows[0]?.recoveries), 'and has never been recovered').toBe(0);
+
+    // Hand it back so it is claimable, then claim it for real.
+    await repo.finishTask({
+      taskId: identity.taskId, owner: 'julius-live-preflight',
+      leaseGeneration: identity.leaseGeneration, state: 'FAILED', now, nextAttemptAt: now,
+    });
+    const [claim] = await repo.claimRunnable({
+      owner: 'admitting-worker', now,
+      leaseExpiresAt: new Date(Date.now() + 60_000).toISOString(),
+      limit: 5, projectId: identity.projectId,
+    });
+    expect(claim?.taskId, 'the claim is the subject of this case').toBe(identity.taskId);
+
+    const claimed = await pool.query<{ attempt: number; lease_generation: string }>(
+      'SELECT attempt, lease_generation FROM relay_wonderland.julius_tasks WHERE task_id=$1', [identity.taskId],
+    );
+    expect(Number(claimed.rows[0]?.attempt), 'THE CLAIM SPENT NO ATTEMPT').toBe(0);
+    expect(Number(claimed.rows[0]?.lease_generation), 'but it did take ownership')
+      .toBeGreaterThan(identity.leaseGeneration);
+
+    // A stale generation cannot admit, and must not move the counter.
+    const stale = await repo.admitTask({
+      taskId: identity.taskId, owner: 'admitting-worker', leaseGeneration: claim!.leaseGeneration - 1, now,
+    });
+    expect(stale, 'a lease that has moved on carries no authority').toBeNull();
+    const wrongOwner = await repo.admitTask({
+      taskId: identity.taskId, owner: 'someone-else', leaseGeneration: claim!.leaseGeneration, now,
+    });
+    expect(wrongOwner, 'nor does another owner holding the right generation').toBeNull();
+    const untouched = await pool.query<{ attempt: number }>(
+      'SELECT attempt FROM relay_wonderland.julius_tasks WHERE task_id=$1', [identity.taskId],
+    );
+    expect(Number(untouched.rows[0]?.attempt), 'a refused admission spends nothing').toBe(0);
+
+    const admitted = await repo.admitTask({
+      taskId: identity.taskId, owner: 'admitting-worker', leaseGeneration: claim!.leaseGeneration, now,
+    });
+    expect(admitted, 'the holder admits, and is told which attempt it runs as').toBe(1);
+    const second = await repo.admitTask({
+      taskId: identity.taskId, owner: 'admitting-worker', leaseGeneration: claim!.leaseGeneration, now,
+    });
+    expect(second, 'a second admission on the same lease is the second execution').toBe(2);
+  });
+
+  /**
+   * AN EXPIRED LEASE CANNOT BE RECLAIMED BY A BARE CLAIM, against the real schema.
+   *
+   * The claim query used to offer an ACTIVE task whose lease had expired. That
+   * reclaim raised only `lease_generation`, so a task claimed by a worker that
+   * died before admission could be retaken forever — past `MAX_TASK_RECOVERIES`,
+   * with no `recovery.action` row and no terminal behaviour. Recovery is the
+   * only way back now, and this is the half no laptop can run.
+   */
+  it('a bare claim cannot reclaim an expired lease; the recovery sweep can, and counts it', async () => {
+    const identity = fixture();
+    await seedPreflightIdentity(pool, identity);
+    const repo = new JuliusPostgresRepository(pool);
+    const recovery = new JuliusRecoveryPostgresRepository(pool);
+    const now = new Date().toISOString();
+
+    // The seeded task is ACTIVE with a live lease; expire it, which is what a
+    // worker that died between the claim and the admission leaves behind.
+    await pool.query(
+      "UPDATE relay_wonderland.julius_tasks SET lease_expires_at=now()-interval '1 minute' WHERE task_id=$1",
+      [identity.taskId],
+    );
+
+    const bare = await repo.claimRunnable({
+      owner: 'opportunist', now, leaseExpiresAt: new Date(Date.now() + 60_000).toISOString(),
+      limit: 5, projectId: identity.projectId,
+    });
+    expect(bare.map((entry) => entry.taskId), 'the bypass is closed in the SQL').not.toContain(identity.taskId);
+    const untouched = await pool.query<{ recoveries: number; state: string }>(
+      'SELECT recoveries, state FROM relay_wonderland.julius_tasks WHERE task_id=$1', [identity.taskId],
+    );
+    expect(Number(untouched.rows[0]?.recoveries), 'and nothing was counted by a bypass').toBe(0);
+    expect(untouched.rows[0]?.state, 'the task is still held, waiting for the sweep').toBe('ACTIVE');
+
+    const actions = await recovery.recoverExpired(now, 10, identity.projectId);
+    expect(actions.map((action) => action.taskId), 'the sweep is the one path back').toContain(identity.taskId);
+    const recovered = await pool.query<{ recoveries: number; state: string; attempt: number }>(
+      'SELECT recoveries, state, attempt FROM relay_wonderland.julius_tasks WHERE task_id=$1', [identity.taskId],
+    );
+    expect(Number(recovered.rows[0]?.recoveries), 'the reclaim is counted durably').toBe(1);
+    expect(recovered.rows[0]?.state, 'and handed back for an ordinary claim').toBe('RUNNABLE');
+    expect(Number(recovered.rows[0]?.attempt), 'the abandoned claim still spent no execution attempt').toBe(0);
+
+    const afterRecovery = await repo.claimRunnable({
+      owner: 'opportunist', now, leaseExpiresAt: new Date(Date.now() + 60_000).toISOString(),
+      limit: 5, projectId: identity.projectId,
+    });
+    expect(afterRecovery.map((entry) => entry.taskId), 'now it is claimable').toContain(identity.taskId);
+  });
+
+  /**
+   * THE RECOVERY CEILING PERSISTS, and ends the task when it is reached.
+   */
+  it('the recovery ceiling is durable and terminal', async () => {
+    const identity = fixture();
+    await seedPreflightIdentity(pool, identity);
+    const repo = new JuliusPostgresRepository(pool);
+    const recovery = new JuliusRecoveryPostgresRepository(pool);
+
+    for (let round = 0; round < MAX_TASK_RECOVERIES + 1; round += 1) {
+      await pool.query(
+        "UPDATE relay_wonderland.julius_tasks SET state='ACTIVE',lease_owner='dying-worker',lease_expires_at=now()-interval '1 minute' WHERE task_id=$1",
+        [identity.taskId],
+      );
+      const actions = await recovery.recoverExpired(new Date().toISOString(), 10, identity.projectId);
+      const action = actions.find((entry) => entry.taskId === identity.taskId);
+      if (round < MAX_TASK_RECOVERIES) {
+        expect(action?.action, `round ${round + 1} still has turns left`).toBe('REQUEUE');
+      } else {
+        expect(action?.action, 'the ceiling ends it').toBe('FAIL_TASK');
+        expect(action?.reasonCode, 'and names the bound that stopped it').toBe('RECOVERY_LIMIT_REACHED');
+      }
+    }
+
+    const final = await pool.query<{ recoveries: number; state: string; attempt: number }>(
+      'SELECT recoveries, state, attempt FROM relay_wonderland.julius_tasks WHERE task_id=$1', [identity.taskId],
+    );
+    expect(Number(final.rows[0]?.recoveries), 'every requeue counted').toBe(MAX_TASK_RECOVERIES);
+    expect(final.rows[0]?.state, 'and the churn is terminated').toBe('FAILED');
+    expect(Number(final.rows[0]?.attempt), 'with no execution ever charged').toBe(0);
+
+    const claimed = await repo.claimRunnable({
+      owner: 'anyone', now: new Date().toISOString(),
+      leaseExpiresAt: new Date(Date.now() + 60_000).toISOString(), limit: 5, projectId: identity.projectId,
+    });
+    expect(claimed.map((entry) => entry.taskId), 'nothing revives it').not.toContain(identity.taskId);
+  });
+
+  /**
+   * MIGRATION 022 UPGRADES AN EXISTING 021 DATABASE, against a real one.
+   *
+   * This is the case CI can otherwise never see: every workflow migrates a
+   * container that starts EMPTY, so the sentinel that used to guard `migrate()`
+   * — a probe for one column of the then-last migration — could report
+   * "already migrated" for a database at 021 and skip 022 entirely, and no job
+   * would notice. The guard is the version ledger now; this proves it against
+   * a database that genuinely holds 21 versions and not 22.
+   */
+  it('brings a database at 021 up to 022, without replaying what it already has', async () => {
+    // Wind the real schema back to 021: drop the column 022 adds and its stamp.
+    await pool.query('ALTER TABLE relay_wonderland.julius_tasks DROP COLUMN IF EXISTS recoveries');
+    await pool.query("DELETE FROM relay_wonderland.schema_migrations WHERE version='022_julius_execution_attempts'");
+    const at021 = await pool.query<{ count: string }>(
+      "SELECT count(*) FROM relay_wonderland.schema_migrations WHERE version='022_julius_execution_attempts'",
+    );
+    expect(Number(at021.rows[0]?.count), 'the database is genuinely at 021').toBe(0);
+
+    const result = await migrateIfNeeded(pool);
+    expect(result.applied, 'exactly the missing version, and nothing replayed')
+      .toEqual(['022_julius_execution_attempts']);
+    // Derived, not pinned: a literal count would fail on migration 023 for a
+    // reason that has nothing to do with what this case measures.
+    expect(result.alreadyPresent, 'every other version was left alone')
+      .toBe(WONDERLAND_MIGRATIONS.length - 1);
+
+    const column = await pool.query<{ count: string }>(
+      "SELECT count(*) FROM information_schema.columns WHERE table_schema='relay_wonderland' AND table_name='julius_tasks' AND column_name='recoveries'",
+    );
+    expect(Number(column.rows[0]?.count), 'the column the recovery bound depends on exists').toBe(1);
+
+    // And a second call is a no-op rather than a 42P07.
+    const again = await migrateIfNeeded(pool);
+    expect(again.applied, 'nothing left to do').toEqual([]);
+    expect(again.alreadyPresent).toBe(WONDERLAND_MIGRATIONS.length);
   });
 
   it('refuses to seed or clean up an identity it does not own, on any of its identifiers', async () => {

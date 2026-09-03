@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { WONDERLAND_MIGRATIONS } from './wonderland-postgres';
+import { migrationVersion, WONDERLAND_MIGRATIONS } from './wonderland-postgres';
 
 /**
  * THE MIGRATION CHAIN, HELD TO ITS OWN RULES.
@@ -58,6 +58,12 @@ describe('every migration is a single transaction that records itself', () => {
       // A migration that stamps a version other than its own filename makes
       // the applied-set a lie, and re-running it would then be silent.
       expect(sql).toContain(`INSERT INTO relay_wonderland.schema_migrations(version) VALUES('${version}')`);
+      // EXACTLY ONE, so `migrationVersion` cannot read a version out of a
+      // comment. A second stamp — a header quoting an earlier migration —
+      // would make `migrate()` believe this file had already been applied and
+      // skip it on every migrated database, silently.
+      expect(sql.match(/schema_migrations\(version\) VALUES/gu)?.length, `${name} must stamp exactly once`).toBe(1);
+      expect(migrationVersion(sql), `${name} must resolve to its own version`).toBe(version);
     });
   }
 });
