@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { Pool } from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { JuliusPostgresRepository } from '../src/relay/persistence/julius-postgres';
 import { JuliusToolPostgresRepository } from '../src/relay/persistence/julius-tool-postgres';
 import { JuliusToolRecoveryPostgresRepository } from '../src/relay/persistence/julius-tool-recovery-postgres';
 import { EXECUTOR_SANDBOX_LIMITS, EXECUTOR_SANDBOX_POLICY } from '../relay-bridge/julius/sandbox-limits';
@@ -268,6 +269,84 @@ suite('dry run 33635375764 — the preflight identity satisfies the executor’s
     expect(await rowsFor(theirs), 'the other preflight must be untouched').toBe(theirsBefore);
     // The tenant's player row is shared with the mission and is never deleted.
     expect((await pool.query('SELECT count(*) AS n FROM relay_wonderland.players WHERE player_id=$1', [TENANT])).rows[0]).toEqual(players.rows[0]);
+  });
+
+  /**
+   * FOUND BY THE INDEPENDENT REVIEW OF PR #215, AND NOT INTRODUCED BY IT.
+   *
+   * `finishTask(state:'FAILED', nextAttemptAt)` is the runtime's "hand this
+   * task back" call — the run loop yields a claim with it when the C.A.R.D.
+   * concurrency allowance is spent, and the pipeline requeues an authorized
+   * retry with it. The memory store answers by setting the task RUNNABLE. This
+   * store set it FAILED, where no claim query can reach it again, so in
+   * production a yielded or retried task was destroyed for a benign reason.
+   * BOTH PATHS REACH A PAID MISSION, and the second one reaches it first.
+   * The pipeline requeues an authorized retry, and the live C.A.R.D. sets
+   * `automaticRetry`, so a rate-limited or timed-out worker takes that path.
+   * The concurrency yield needs two tasks of one run claimable in the same
+   * tick, and the live graph produces exactly that on the tick after the
+   * architect succeeds: `build` depends on `plan`, and the review task is
+   * created BLOCKED on `plan` too — by which time `plan` is already SUCCEEDED,
+   * so both unblock together. The repository's own end-to-end case says so
+   * ("`plan-1:review` becomes claimable in the same tick the plan succeeded").
+   * With `concurrency: 1` against a claim limit of 4, one of the two is handed
+   * back on that tick. Before this repair, PostgreSQL destroyed it.
+   *
+   * Two reviewers disagreed about this, in both directions. It is settled here
+   * from the task graph and that end-to-end case, not from either verdict.
+   *
+   * These two cases are the behavioural proof, against the real schema: handed
+   * back means claimable again, and a genuine failure still ends terminal.
+   */
+  it('a task handed back with a next attempt returns to RUNNABLE and can be claimed again', async () => {
+    const identity = fixture();
+    await seedPreflightIdentity(pool, identity);
+    const repo = new JuliusPostgresRepository(pool);
+    const now = new Date().toISOString();
+
+    const handedBack = await repo.finishTask({
+      taskId: identity.taskId, owner: 'julius-live-preflight',
+      leaseGeneration: identity.leaseGeneration, state: 'FAILED', now, nextAttemptAt: now,
+    });
+    expect(handedBack, 'the lease was live and owned, so the call applies').toBe(true);
+
+    const row = await pool.query<{ state: string; lease_owner: string | null }>(
+      'SELECT state, lease_owner FROM relay_wonderland.julius_tasks WHERE task_id=$1', [identity.taskId],
+    );
+    expect(row.rows[0]?.state, 'handed back is not failed').toBe('RUNNABLE');
+    expect(row.rows[0]?.lease_owner, 'and the lease is released').toBeNull();
+
+    const claimed = await repo.claimRunnable({
+      owner: 'another-worker', now,
+      leaseExpiresAt: new Date(Date.now() + 60_000).toISOString(),
+      limit: 5, projectId: identity.projectId,
+    });
+    expect(claimed.map((task) => task.taskId), 'the whole point of handing it back').toContain(identity.taskId);
+  });
+
+  it('MUTATION: a real failure, with no next attempt, still ends the task terminally', async () => {
+    const identity = fixture();
+    await seedPreflightIdentity(pool, identity);
+    const repo = new JuliusPostgresRepository(pool);
+    const now = new Date().toISOString();
+
+    const finished = await repo.finishTask({
+      taskId: identity.taskId, owner: 'julius-live-preflight',
+      leaseGeneration: identity.leaseGeneration, state: 'FAILED', now,
+    });
+    expect(finished).toBe(true);
+
+    const row = await pool.query<{ state: string }>(
+      'SELECT state FROM relay_wonderland.julius_tasks WHERE task_id=$1', [identity.taskId],
+    );
+    expect(row.rows[0]?.state, 'a failure the runtime did not ask to requeue stays FAILED').toBe('FAILED');
+
+    const claimed = await repo.claimRunnable({
+      owner: 'another-worker', now,
+      leaseExpiresAt: new Date(Date.now() + 60_000).toISOString(),
+      limit: 5, projectId: identity.projectId,
+    });
+    expect(claimed.map((task) => task.taskId), 'and nothing revives it').not.toContain(identity.taskId);
   });
 
   it('refuses to seed or clean up an identity it does not own, on any of its identifiers', async () => {

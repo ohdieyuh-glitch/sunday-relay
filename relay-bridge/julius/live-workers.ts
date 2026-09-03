@@ -107,7 +107,7 @@ function requireSnapshot(contexts: CompiledContextSource, contextId: string): Ju
     // The pipeline persists the snapshot immediately before dispatch in this
     // same process, so a miss means the handoff itself is broken — refuse
     // rather than dispatch a provider against a context nobody compiled.
-    throw new JuliusDispatchError('INVALID_REQUEST', false, 'Compiled context is not available to the adapter.');
+    throw new JuliusDispatchError('INVALID_REQUEST', false, 'Compiled context is not available to the adapter.', 'context_unavailable');
   }
   return snapshot;
 }
@@ -150,28 +150,40 @@ export function createLiveArchitectAdapter(input: {
         signal: dispatch.signal,
       });
       if (!outcome.ok) {
+        /**
+         * THE CLASS TRAVELS WITH THE CODE.
+         *
+         * Nine `JuliusErrorCode`s cannot separate a refusal from a malformed
+         * response from a 500 — all three are WORKER_EXECUTION_FAILURE — and
+         * the first paid mission failed on exactly that ambiguity: its durable
+         * record held the code alone. The connector's own class is a fixed
+         * machine token, so it is passed through and narrowed again by
+         * `safeFailureClass` on the way into the error.
+         */
         switch (outcome.failureClass) {
           case 'authentication_failed':
           case 'permission_denied':
-            throw new JuliusDispatchError('AUTH_CONFIGURATION', false, 'Prompt Architect authentication or configuration failed.');
+            throw new JuliusDispatchError('AUTH_CONFIGURATION', false, 'Prompt Architect authentication or configuration failed.', outcome.failureClass);
           case 'rate_limited':
-            throw new JuliusDispatchError('RATE_LIMIT', true, 'Prompt Architect provider rate limit reached.');
+            throw new JuliusDispatchError('RATE_LIMIT', true, 'Prompt Architect provider rate limit reached.', outcome.failureClass);
           case 'timeout':
           case 'network_disconnected':
-            throw new JuliusDispatchError('TIMEOUT', true, 'Prompt Architect provider timed out.');
+            throw new JuliusDispatchError('TIMEOUT', true, 'Prompt Architect provider timed out.', outcome.failureClass);
           case 'model_unavailable':
-            throw new JuliusDispatchError('PROVIDER_UNAVAILABLE', false, 'Prompt Architect model is unavailable.');
+            throw new JuliusDispatchError('PROVIDER_UNAVAILABLE', false, 'Prompt Architect model is unavailable.', outcome.failureClass);
           default:
-            throw new JuliusDispatchError('WORKER_EXECUTION_FAILURE', false, `Prompt Architect failed: ${outcome.failureClass}.`);
+            throw new JuliusDispatchError('WORKER_EXECUTION_FAILURE', false, `Prompt Architect failed: ${outcome.failureClass}.`, outcome.failureClass);
         }
       }
       let parsed: unknown;
       try { parsed = JSON.parse(outcome.outputText); } catch {
-        throw new JuliusDispatchError('WORKER_EXECUTION_FAILURE', false, 'Prompt Architect output was not parseable JSON.');
+        // Julius's own classes, not the provider's: the call succeeded and what
+        // came back was unusable, which is a different repair from a 500.
+        throw new JuliusDispatchError('WORKER_EXECUTION_FAILURE', false, 'Prompt Architect output was not parseable JSON.', 'unparseable_plan_json');
       }
       const validation = validateArchitectPlan(parsed);
       if (!validation.ok) {
-        throw new JuliusDispatchError('WORKER_EXECUTION_FAILURE', false, `Prompt Architect plan failed validation: ${safeClaim(validation.reason, 120)}.`);
+        throw new JuliusDispatchError('WORKER_EXECUTION_FAILURE', false, `Prompt Architect plan failed validation: ${safeClaim(validation.reason, 120)}.`, 'plan_validation_failed');
       }
       input.artifacts.put(planRef(snapshot.runId), outcome.outputText);
       return {
@@ -275,10 +287,10 @@ export function createLiveHostedCodingAdapter(input: {
         now: nowIso,
       });
       if (outcome.kind !== 'completed') {
-        if (outcome.kind === 'timed_out') throw new JuliusDispatchError('TIMEOUT', true, 'Hosted Coding Agent timed out.');
-        if (outcome.kind === 'cancelled') throw new JuliusDispatchError('CANCELLED', false, 'Hosted Coding Agent run was cancelled.');
-        if (outcome.kind === 'launch_failed') throw new JuliusDispatchError('AUTH_CONFIGURATION', false, `Hosted Coding Agent could not launch: ${safeClaim(outcome.safeMessage, 120)}.`);
-        throw new JuliusDispatchError('WORKER_EXECUTION_FAILURE', false, `Hosted Coding Agent refused: ${safeClaim(outcome.safeMessage, 120)}.`);
+        if (outcome.kind === 'timed_out') throw new JuliusDispatchError('TIMEOUT', true, 'Hosted Coding Agent timed out.', 'coder_timed_out');
+        if (outcome.kind === 'cancelled') throw new JuliusDispatchError('CANCELLED', false, 'Hosted Coding Agent run was cancelled.', 'coder_cancelled');
+        if (outcome.kind === 'launch_failed') throw new JuliusDispatchError('AUTH_CONFIGURATION', false, `Hosted Coding Agent could not launch: ${safeClaim(outcome.safeMessage, 120)}.`, 'coder_launch_failed');
+        throw new JuliusDispatchError('WORKER_EXECUTION_FAILURE', false, `Hosted Coding Agent refused: ${safeClaim(outcome.safeMessage, 120)}.`, 'coder_refused');
       }
 
       const diff = await input.shell.run({
@@ -378,16 +390,16 @@ export function createLiveHermesReviewerAdapter(input: {
       };
       const outcome: HermesOutcome = await run({ packet, config: input.config });
       if (outcome.kind === 'launch_failed') {
-        throw new JuliusDispatchError('PROVIDER_UNAVAILABLE', false, `Hermes reviewer could not launch: ${safeClaim(outcome.safeMessage, 120)}.`);
+        throw new JuliusDispatchError('PROVIDER_UNAVAILABLE', false, `Hermes reviewer could not launch: ${safeClaim(outcome.safeMessage, 120)}.`, 'reviewer_launch_failed');
       }
       if (outcome.kind === 'review_incomplete') {
-        throw new JuliusDispatchError('WORKER_EXECUTION_FAILURE', false, `Hermes review incomplete: ${safeClaim(outcome.safeMessage, 120)}.`);
+        throw new JuliusDispatchError('WORKER_EXECUTION_FAILURE', false, `Hermes review incomplete: ${safeClaim(outcome.safeMessage, 120)}.`, 'reviewer_review_incomplete');
       }
       if (outcome.result.verdict === 'unable_to_review') {
         // A reviewer that could not review has not reviewed. Recording that as
         // evidence would park the run; failing the dispatch keeps the outcome
         // visible and retryable by policy. (Independent review finding F8.)
-        throw new JuliusDispatchError('WORKER_EXECUTION_FAILURE', false, 'Hermes was unable to review the change.');
+        throw new JuliusDispatchError('WORKER_EXECUTION_FAILURE', false, 'Hermes was unable to review the change.', 'reviewer_unable_to_review');
       }
       const blocking = outcome.result.findings.filter((finding) => finding.severity === 'blocking' || finding.severity === 'major');
       // The engine's own rule (`hasBlockingFinding`) treats ANY changes_required

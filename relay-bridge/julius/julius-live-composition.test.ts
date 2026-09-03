@@ -20,6 +20,7 @@ import {
   type JuliusRuntimeStore,
 } from '../../src/relay/mission/julius';
 import type { GptRunOutcome } from '../../src/relay/connectors/gpt-architect';
+import { JuliusDispatchError, safeFailureClass } from '../../src/relay/mission/julius';
 import { compileHostedEnvelope } from '../hosted-coding-agent/hosted-envelope';
 import type { HostedQueryFn, HostedRunOutcome } from '../hosted-coding-agent/hosted-runner';
 import { loadHermesConfig, type HermesOutcome, type ReviewPacket } from '../hermes-reviewer';
@@ -163,6 +164,8 @@ function liveResolution(overrides: {
   verdicts?: Array<'approved' | 'changes_required'>;
   shell?: ShellEffectPort | null;
   contexts?: Parameters<typeof resolveLiveWorkers>[0]['contexts'];
+  /** A failing or otherwise unusual architect, for the failure-diagnosis cases. */
+  architect?: () => Promise<GptRunOutcome>;
 }) {
   const log: FakeLog = { order: [] };
   const prompts: string[] = [];
@@ -176,7 +179,7 @@ function liveResolution(overrides: {
     contexts: overrides.contexts ?? { snapshotFor: () => null },
     artifacts, shell,
     runners: {
-      architect: fakeArchitect(log) as never,
+      architect: (overrides.architect ?? fakeArchitect(log)) as never,
       coder: fakeCoder(log, prompts) as never,
       reviewer: fakeReviewer(log, packets, overrides.verdicts ?? ['approved']) as never,
       queryLoader: async () => fakeQuery,
@@ -366,10 +369,11 @@ function seedMissionRun(store: ReturnType<typeof createJuliusMemoryStore>): void
 async function driveLiveMission(
   verdicts: Array<'approved' | 'changes_required'>,
   budget?: Parameters<typeof assembleLiveJuliusRuntime>[0]['budget'],
+  architect?: () => Promise<GptRunOutcome>,
 ) {
   const memory = createJuliusMemoryStore();
   const handoffs = createContextAndClaimHandoffs(memory as unknown as JuliusRuntimeStore);
-  const fakes = liveResolution({ verdicts, contexts: handoffs.contexts });
+  const fakes = liveResolution({ verdicts, contexts: handoffs.contexts, architect });
   expect(fakes.resolution.ok).toBe(true);
   seedMissionRun(memory);
   const runtime = assembleLiveJuliusRuntime({
@@ -652,5 +656,145 @@ describe('the live mission contract file', () => {
     expect(request.workers.map((worker) => worker.adapterId)).toEqual([
       ARCHITECT_WORKER.adapterId, CODER_WORKER.adapterId, 'hermes-local-live',
     ]);
+  });
+});
+
+/* ------------------------------------------------------------------------ *
+ * THE FIRST PAID MISSION, REPRODUCED OFFLINE
+ * ------------------------------------------------------------------------ */
+
+/**
+ * RUN 33697109210 — the first paid Julius mission — failed here, and this is
+ * the shape it failed in: the `plan` task went FAILED, the `build` task
+ * stayed BLOCKED behind it, and the run reported "WAITING (stalled before
+ * terminal state) after 2 ticks". The uploaded evidence could say WHAT
+ * happened and not WHY: the normalized code lived only in the operational
+ * event stream, which nothing exported, and the database is destroyed with the
+ * job.
+ *
+ * The fixture is the real one — `seedMissionRun` seeds exactly that two-task
+ * graph — and only the architect's outcome is injected. No provider is
+ * contacted by any case in this file.
+ */
+describe('the first paid attempt, reproduced: a failing Prompt Architect', () => {
+  const architectFailure = (failureClass: GptRunOutcome extends { ok: false } ? never : string, message: string) =>
+    async (): Promise<GptRunOutcome> => ({ ok: false, failureClass: failureClass as never, message });
+
+  const failedRun = async (failureClass: string, message = 'safe provider message') => {
+    const driven = await driveLiveMission(['approved'], undefined, architectFailure(failureClass as never, message));
+    const tasks = await driven.memory.tasksForRun('run-live', 'prj-live');
+    const failures = driven.memory.events().filter((event) => event.type === 'task.failed' || event.type === 'retry.scheduled');
+    return { ...driven, tasks, failures };
+  };
+
+  it('reproduces the observed task states exactly: plan FAILED, build BLOCKED', async () => {
+    const { tasks } = await failedRun('provider_error');
+    const byId = new Map(tasks.map((task) => [task.taskId, task.state]));
+    expect(byId.get('plan-1')).toBe('FAILED');
+    expect(byId.get('build-1')).toBe('BLOCKED');
+  });
+
+  /**
+   * THE STATE-MACHINE REPAIR. `build-1` is blocked on a dependency that has
+   * terminally FAILED, so it can never be claimed: the claim predicate needs
+   * every dependency SUCCEEDED or SKIPPED, and nothing revives a FAILED task.
+   * Before the repair, `any BLOCKED → WAITING` answered WAITING forever and
+   * the driver reported a stall; a mission that failed must say so.
+   */
+  it('ends the run FAILED instead of stalling in WAITING', async () => {
+    const { outcome } = await failedRun('provider_error');
+    expect(outcome.state, 'a dead-blocked run is a failed run, not a waiting one').toBe('FAILED');
+    expect(outcome.stalled, 'and it is terminal, so nothing is reported as stalled').toBe(false);
+  });
+
+  /**
+   * EVERY CLASS SURVIVES DURABLY. The coarse JuliusErrorCode cannot separate a
+   * refusal from a malformed response from a 500 — all three are
+   * WORKER_EXECUTION_FAILURE — so the connector's own class is carried
+   * alongside it. Each row is a class the OpenAI connector actually emits.
+   */
+  const CLASSES: ReadonlyArray<readonly [string, string, boolean]> = [
+    ['authentication_failed', 'AUTH_CONFIGURATION', false],
+    ['permission_denied', 'AUTH_CONFIGURATION', false],
+    ['rate_limited', 'RATE_LIMIT', true],
+    ['timeout', 'TIMEOUT', true],
+    ['network_disconnected', 'TIMEOUT', true],
+    ['model_unavailable', 'PROVIDER_UNAVAILABLE', false],
+    ['refused', 'WORKER_EXECUTION_FAILURE', false],
+    ['incomplete_response', 'WORKER_EXECUTION_FAILURE', false],
+    ['malformed_output', 'WORKER_EXECUTION_FAILURE', false],
+    ['provider_error', 'WORKER_EXECUTION_FAILURE', false],
+  ];
+
+  it.each(CLASSES)('records %s durably as %s with its own class', async (failureClass, code) => {
+    const { failures } = await failedRun(failureClass);
+    expect(failures.length, 'a failed dispatch must leave a durable event').toBeGreaterThan(0);
+    const facts = failures.at(-1)!.facts;
+    expect(facts.code, 'the normalized Julius code').toBe(code);
+    expect(facts.failureClass, 'and the connector class that the code alone cannot express').toBe(failureClass);
+    expect(typeof facts.errorRetryable, 'whether the ERROR was retryable is recorded, so a reader need not re-derive it').toBe('boolean');
+  });
+
+  /**
+   * A FAILURE ROW THAT NAMES NO TASK NAMES NO ROLE EITHER.
+   *
+   * `failures.tsv` reads the role by joining the event's task id to the task
+   * row. On a non-retryable worker failure — the shape the first paid mission
+   * failed in — the coordinator writes the only row that ENDS the task, and it
+   * used to write no task id at all, so the two columns that say WHO stopped
+   * were blank for exactly that run.
+   */
+  it('names the task on the failure row, so the evidence can name the role', async () => {
+    const { failures } = await failedRun('provider_error');
+    const last = failures.at(-1)!;
+    expect(last.type, 'the coordinator writes the only task-ending row on this path').toBe('task.failed');
+    expect(last.taskId, 'and the row must say which task stopped').toBe('plan-1');
+  });
+
+  it('separates the two Julius-side failures a provider class cannot describe', async () => {
+    const unparseable = await driveLiveMission(['approved'], undefined,
+      async () => ({ ok: true, status: 'completed', outputText: 'not json at all', actualModel: 'gpt-5.6-sol', responseId: 'resp_1',
+        usage: { inputTokens: 1, cachedInputTokens: 0, outputTokens: 1, reasoningTokens: 0, totalTokens: 2 } } as GptRunOutcome));
+    const unparseableFacts = unparseable.memory.events().filter((event) => event.type === 'task.failed').at(-1)?.facts;
+    expect(unparseableFacts?.failureClass).toBe('unparseable_plan_json');
+
+    const invalid = await driveLiveMission(['approved'], undefined,
+      async () => ({ ok: true, status: 'completed', outputText: JSON.stringify({ objectiveSummary: 'missing everything else' }),
+        actualModel: 'gpt-5.6-sol', responseId: 'resp_2',
+        usage: { inputTokens: 1, cachedInputTokens: 0, outputTokens: 1, reasoningTokens: 0, totalTokens: 2 } } as GptRunOutcome));
+    const invalidFacts = invalid.memory.events().filter((event) => event.type === 'task.failed').at(-1)?.facts;
+    expect(invalidFacts?.failureClass, 'a plan that parsed but did not validate is a different repair')
+      .toBe('plan_validation_failed');
+  });
+
+  /**
+   * THE LEAK MUTATION. A provider exception is not a machine token, and an
+   * adapter that passed one through would put arbitrary text — including a
+   * header — into a durable row and then into an uploaded artifact.
+   * `safeFailureClass` narrows to /^[a-z][a-z0-9_]{0,63}$/, so none of the
+   * three values below can survive it, whatever an adapter does. The rule is
+   * not a proof that no secret ever could: a token already in that alphabet —
+   * a hex digest beginning a–f — is shaped like a class and passes, which is
+   * why the workflow scans the artifact before publishing it.
+   */
+  it('MUTATION: a secret-bearing provider exception cannot become a failure class', async () => {
+    const bearer = 'Authorization: Bearer FAKESECRET123456789';
+    expect(safeFailureClass(bearer), 'a header is not a token').toBeNull();
+    expect(safeFailureClass('sk-live-FAKESECRET123456789')).toBeNull();
+    expect(safeFailureClass('Provider said: 500 Internal Server Error')).toBeNull();
+    expect(safeFailureClass('provider_error'), 'a real class still passes').toBe('provider_error');
+
+    const { failures, memory } = await failedRun('provider_error', bearer);
+    const serialised = JSON.stringify({ events: memory.events(), failures });
+    expect(serialised, 'no part of the exception text reaches the durable record').not.toContain('FAKESECRET123456789');
+    expect(serialised).not.toContain('Bearer');
+    expect(failures.at(-1)!.facts.failureClass, 'only the class the connector named').toBe('provider_error');
+  });
+
+  it('a dispatch error constructed with junk carries no class at all, rather than a dirty one', () => {
+    const dirty = new JuliusDispatchError('WORKER_EXECUTION_FAILURE', false, 'safe', 'Bearer FAKESECRET123456789');
+    expect(dirty.failureClass, 'unknown is null, never a partially cleaned string').toBeNull();
+    expect(new JuliusDispatchError('TIMEOUT', true, 'safe', 'timeout').failureClass).toBe('timeout');
+    expect(new JuliusDispatchError('TIMEOUT', true, 'safe').failureClass, 'omitted stays null').toBeNull();
   });
 });

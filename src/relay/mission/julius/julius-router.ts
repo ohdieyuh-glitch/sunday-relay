@@ -1,6 +1,52 @@
 import type{JuliusWorker,JuliusWorkerRegistry,JuliusWorkerRole}from'./julius-runtime';import{workerAllowedByCard,type JuliusCardPolicy}from'./julius-policy';
 export const JULIUS_ERROR_CODES=['RATE_LIMIT','TIMEOUT','AUTH_CONFIGURATION','PROVIDER_UNAVAILABLE','INVALID_REQUEST','WORKER_EXECUTION_FAILURE','POLICY_DENIED','BUDGET_DENIED','CANCELLED']as const;export type JuliusErrorCode=typeof JULIUS_ERROR_CODES[number];
-export class JuliusDispatchError extends Error{constructor(readonly code:JuliusErrorCode,readonly retryable:boolean,readonly safeMessage:string){super(code);}}
+/**
+ * THE CONNECTOR'S OWN CLASSIFICATION, NARROWED TO A MACHINE TOKEN.
+ *
+ * A `JuliusErrorCode` is deliberately coarse: nine codes have to cover every
+ * provider, so `WORKER_EXECUTION_FAILURE` answers "a malformed plan", "a
+ * refusal" and "a 500" identically. The first paid mission failed on exactly
+ * that ambiguity — the durable record held `code` and nothing else, and the
+ * run could not be diagnosed after its database was destroyed.
+ *
+ * The connector already knows the finer answer, so it is carried alongside the
+ * code. NARROWING IS THE SAFETY PROPERTY, not a convention: anything that is
+ * not a short lower-case token becomes `null`, so a provider exception
+ * message, a URL or an `Authorization:` header cannot survive this function
+ * even if a future adapter passes one by mistake. Redaction that depends on
+ * the caller remembering to redact is not redaction.
+ *
+ * WHAT IT DOES NOT PROVE, written down because an earlier version of this
+ * comment claimed it. The rule is exactly `[a-z]` followed by up to 63 of
+ * `[a-z0-9_]`, so it refuses a space, a colon, a slash, a dot, a dash, every
+ * upper-case letter, a leading digit and anything past 64 characters — every
+ * PROVIDER key shape this runtime has seen. It is not a shape rule for
+ * credentials in general, and the rig mints a counter-example itself: the
+ * live workflow's database password is `openssl rand -hex 24`, and about three
+ * in eight of those are all-lower-case hex beginning a–f, which is shaped like
+ * a class and passes. That is not a live exposure — every value the three live
+ * adapters pass is a literal or a member of the connector's closed
+ * failure-class union — and it is one of the cases the workflow's
+ * literal-VALUE scan already exists to catch, `$DB_PASSWORD` being in its
+ * needle list. This function is the first layer, not the only one.
+ */
+export const safeFailureClass=(value:unknown):string|null=>typeof value==='string'&&/^[a-z][a-z0-9_]{0,63}$/.test(value)?value:null;
+/**
+ * THE SAME NARROWING FOR REASON CODES, WHICH USE BOTH CONVENTIONS.
+ *
+ * A connector's failure class is lower-case by its own vocabulary, so
+ * {@link safeFailureClass} keeps that alphabet strict. A reason code is not:
+ * this runtime writes `UNRESOLVED_WORKER_ROLE` and `TASK_FAILED` beside
+ * `repair_round_limit` in the same durable column. Narrowing reason codes with
+ * the lower-case rule would silently replace every upper-case one with a
+ * generic fallback — losing the specific cause from the one artifact built to
+ * explain a paid failure — so the alphabet is widened here and nowhere else.
+ */
+export const safeReasonCode=(value:unknown):string|null=>typeof value==='string'&&/^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(value)?value:null;
+export class JuliusDispatchError extends Error{
+ readonly failureClass:string|null;
+ constructor(readonly code:JuliusErrorCode,readonly retryable:boolean,readonly safeMessage:string,failureClass?:unknown){super(code);this.failureClass=safeFailureClass(failureClass);}
+}
 export interface JuliusProviderResult{readonly workerId:string;readonly providerId:string;readonly status:'SUCCEEDED'|'FAILED';readonly safeSummary:string;readonly evidence:readonly unknown[];readonly usage:unknown;}
 export interface JuliusProviderAdapter{readonly adapterId:string;dispatch(input:{taskId:string;contextId:string;signal?:AbortSignal}):Promise<JuliusProviderResult>;}
 export interface JuliusProviderHealth{readonly providerId:string;readonly state:'CLOSED'|'OPEN'|'HALF_OPEN';readonly consecutiveFailures:number;readonly openedAt:string|null;readonly active:number;readonly concurrencyLimit:number;}

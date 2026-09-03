@@ -7,6 +7,9 @@ import {
   createJuliusHarness, seedRun, task, worker, cardPolicy, verificationPolicy,
 } from './julius-runtime-fixtures';
 import type { JuliusTask } from './julius-runtime';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { safeReasonCode } from './julius-router';
 
 /**
  * DOES JULIUS ACTUALLY RUN?
@@ -25,6 +28,42 @@ const REVIEWER = worker({ workerId: 'reviewer', role: 'INDEPENDENT_REVIEWER', ca
 const scope = { projectId: 'prj-1' };
 
 /* ------------------------------------------------------- the state target */
+
+/**
+ * THE REASON CODES THAT REACH THE EVIDENCE BUNDLE MUST SURVIVE ITS NARROWING.
+ *
+ * `failures.tsv` publishes `reason_code`, and the repair planner's throw
+ * messages are the only ones that reach it through an `Error`. They are
+ * narrowed on the way out, so a message that stops being a machine token
+ * silently becomes a generic fallback and the specific cause is lost from the
+ * one artifact built to explain a paid failure. This case reads the planner's
+ * real throws and fails the day one of them stops surviving.
+ */
+describe('the repair planner speaks in tokens the evidence column can carry', () => {
+  it('every throw in the planner survives the reason-code narrowing unchanged', () => {
+    const source = readFileSync(resolve(import.meta.dirname, 'julius-repair-runtime.ts'), 'utf8');
+    const thrown = [...source.matchAll(/throw new Error\('([^']+)'\)/gu)].map((match) => match[1]);
+    // COVERAGE CANNOT SHRINK SILENTLY. The pattern reads single-quoted literals
+    // only, so a message rewritten as a template literal or in double quotes
+    // would drop out of the set and leave this case green while free text
+    // reached the evidence column. Counting the throws holds the two together.
+    // `throw new`, not the bare word: the word appears in prose too, and a
+    // comment mentioning it is not a throw this case has failed to read.
+    const throwCount = [...source.matchAll(/\bthrow\s+new\b/gu)].length;
+    expect(thrown.length, 'every throw in the planner must be readable by this case').toBe(throwCount);
+    expect(thrown.length, 'the planner must still throw, or this case proves nothing').toBeGreaterThan(0);
+    for (const message of thrown) {
+      expect(safeReasonCode(message), `${message} would be replaced by the generic fallback`).toBe(message);
+    }
+  });
+
+  it('and the narrowing still refuses anything that is not a token', () => {
+    expect(safeReasonCode('Authorization: Bearer FAKESECRET123456789')).toBeNull();
+    expect(safeReasonCode('Cannot read properties of undefined (reading \'x\')')).toBeNull();
+    expect(safeReasonCode('UNRESOLVED_WORKER_ROLE'), 'the column carries upper case too').toBe('UNRESOLVED_WORKER_ROLE');
+    expect(safeReasonCode('repair_round_limit')).toBe('repair_round_limit');
+  });
+});
 
 describe('the run state a task set implies', () => {
   const t = (state: JuliusTask['state'], id = state): JuliusTask =>
@@ -48,6 +87,60 @@ describe('the run state a task set implies', () => {
 
   it('is FAILED when a terminal task set contains a failure', () => {
     expect(targetRunState([t('FAILED'), t('SUCCEEDED')]).state).toBe('FAILED');
+  });
+
+  /**
+   * THE FIRST PAID MISSION STALLED HERE. Its `plan` task failed and its
+   * `build` task stayed BLOCKED behind it, so `any BLOCKED → WAITING` kept
+   * answering WAITING while nothing could ever move: a claim is offered only
+   * when every dependency is SUCCEEDED or SKIPPED, and a FAILED task is
+   * terminal. The run reported "stalled before terminal state" instead of the
+   * failure it was.
+   */
+  const dep = (state: JuliusTask['state'], id: string, dependencyIds: string[] = []): JuliusTask =>
+    ({ ...task({ taskId: id }), state, dependencyIds } as JuliusTask);
+
+  it('is FAILED when the only tasks left are blocked behind a failure', () => {
+    const target = targetRunState([dep('FAILED', 'plan'), dep('BLOCKED', 'build', ['plan'])]);
+    expect(target.state, 'a task waiting on a failure is not waiting for anything').toBe('FAILED');
+    expect(target.reasonCode).toBe('TASK_FAILED');
+  });
+
+  it('follows the chain: a task blocked behind a blocked task behind a failure is dead too', () => {
+    expect(targetRunState([
+      dep('FAILED', 'plan'), dep('BLOCKED', 'build', ['plan']), dep('BLOCKED', 'review', ['build']),
+    ]).state).toBe('FAILED');
+  });
+
+  it('still WAITS while any one blocked task could still be unblocked', () => {
+    // The rule is per task, not per run: a dead branch beside a live one must
+    // not fail a run that still has somewhere to go.
+    expect(targetRunState([
+      dep('FAILED', 'plan'), dep('BLOCKED', 'build', ['plan']),
+      dep('SUCCEEDED', 'other'), dep('BLOCKED', 'after-other', ['other']),
+    ]).state, 'one live blocked task is enough to keep the run waiting').toBe('WAITING');
+    expect(targetRunState([
+      dep('SUCCEEDED', 'plan'), dep('BLOCKED', 'build', ['plan']),
+    ]).state, 'a dependency that succeeded leaves an ordinary blocked task').toBe('WAITING');
+    expect(targetRunState([
+      dep('FAILED', 'plan'), dep('BLOCKED', 'build', ['plan']),
+      dep('ACTIVE', 'other'),
+    ]).state, 'and work in flight still outranks every other signal').toBe('EXECUTING');
+  });
+
+  it('a blocked task with no dependencies is still treated as waiting, as it always was', () => {
+    expect(targetRunState([t('BLOCKED'), t('SUCCEEDED')]).state).toBe('WAITING');
+  });
+
+  it('cannot progress, without claiming a failure, when a dependency was never planned', () => {
+    const target = targetRunState([dep('SUCCEEDED', 'plan'), dep('BLOCKED', 'build', ['never-planned'])]);
+    expect(target.state, 'nothing failed, and nothing can move either').toBe('BLOCKED');
+    expect(target.reasonCode).toBe('RUN_CANNOT_PROGRESS');
+  });
+
+  it('terminates on a dependency cycle rather than recursing forever', () => {
+    const target = targetRunState([dep('BLOCKED', 'a', ['b']), dep('BLOCKED', 'b', ['a'])]);
+    expect(target.state, 'a cycle can never be satisfied').toBe('BLOCKED');
   });
 
   it('is VERIFYING only when every task is SUCCEEDED or SKIPPED', () => {

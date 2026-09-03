@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { Pool } from 'pg';
 
@@ -143,6 +145,33 @@ const composed: JuliusRuntimeStore & JuliusSubagentStore
 };
 
 describe('the Julius runtime ports and the PostgreSQL repositories agree', () => {
+  /**
+   * THE TWO STORES MUST AGREE ABOUT A TASK HANDED BACK.
+   *
+   * `finishTask(state:'FAILED', nextAttemptAt)` means "give this task back",
+   * not "fail it": the run loop yields a claim with it, and the pipeline
+   * requeues an authorized retry with it. The memory store answers RUNNABLE.
+   * The PostgreSQL store answered FAILED — beyond the reach of every claim
+   * query — so the same call destroyed a task in production and requeued it in
+   * every test. This case is the cheap offline guard on the SQL; the
+   * behavioural proof runs against a real database in
+   * `scripts/julius-live-preflight-identity.test.ts`.
+   */
+  it('a FAILED finish carrying a next attempt requeues in BOTH stores', () => {
+    const sql = readFileSync(resolve(import.meta.dirname, 'julius-postgres.ts'), 'utf8');
+    const update = /UPDATE relay_wonderland\.julius_tasks SET state=([^,]+),/u.exec(sql)?.[1] ?? '';
+    expect(update, 'the SQL must branch, not write the state through').not.toBe('$4');
+    // The casts are part of the contract, not formatting: without them the
+    // statement does not plan at all (42P08), which the sibling workflow's
+    // real-PostgreSQL cases caught on the first version of this repair.
+    expect(update.replace(/\s+/gu, ' '))
+      .toBe("CASE WHEN $4::text='FAILED' AND $6::timestamptz IS NOT NULL THEN 'RUNNABLE'::text ELSE $4::text END");
+
+    const memory = readFileSync(resolve(import.meta.dirname, '../mission/julius/julius-memory-store.ts'), 'utf8');
+    expect(memory, 'the memory store states the same rule in its own terms')
+      .toContain("if (input.state === 'FAILED' && input.nextAttemptAt !== undefined) task.state = 'RUNNABLE';");
+  });
+
   it('composes a complete runtime store from the real repositories', () => {
     // The assignment above is the assertion; this proves the composition is a
     // real object with every method the runtime will call, so a missing one is

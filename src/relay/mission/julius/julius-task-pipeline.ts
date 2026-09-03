@@ -34,7 +34,7 @@
 import { evaluateJuliusPolicy, type JuliusCardPolicy } from './julius-policy';
 import { decideJuliusContinuation } from './julius-continuation';
 import { JuliusExecutionCoordinator, type JuliusExecutionPorts, type JuliusExecutionClaim, type JuliusResourceRequest } from './julius-execution-coordinator';
-import type { JuliusProviderRouter } from './julius-router';
+import { safeReasonCode, type JuliusProviderRouter } from './julius-router';
 import { createJuliusContextSnapshot } from './julius-context-snapshot';
 import { evaluateJuliusVerification, type JuliusVerificationPolicy } from './julius-verification-runtime';
 import { planJuliusRepair } from './julius-repair-runtime';
@@ -118,8 +118,8 @@ export type JuliusTaskOutcome =
   | { readonly kind: 'COMPLETED'; readonly taskId: string; readonly workerId: string; readonly duplicate: boolean; readonly decision: JuliusVerificationDecision }
   | { readonly kind: 'REVIEW_SCHEDULED'; readonly taskId: string; readonly reviewTaskId: string }
   | { readonly kind: 'REPAIR_SCHEDULED'; readonly taskId: string; readonly repairTaskId: string; readonly round: number }
-  | { readonly kind: 'RETRY'; readonly taskId: string; readonly code: string }
-  | { readonly kind: 'FAILED'; readonly taskId: string; readonly code: string }
+  | { readonly kind: 'RETRY'; readonly taskId: string; readonly code: string; readonly failureClass?: string | null }
+  | { readonly kind: 'FAILED'; readonly taskId: string; readonly code: string; readonly failureClass?: string | null }
   | { readonly kind: 'DENIED'; readonly taskId: string; readonly reasonCode: string }
   | { readonly kind: 'APPROVAL_REQUIRED'; readonly taskId: string; readonly operation: string; readonly reasonCode: string }
   | { readonly kind: 'HALTED'; readonly taskId: string; readonly reasonCode: string; readonly safeSummary: string };
@@ -243,8 +243,12 @@ export async function runClaimedTask(
   const capabilityVerdict = evaluateJuliusPolicy(request.policy, { operation: 'USE_CAPABILITY', capability: request.capability });
   for (const verdict of [dispatchVerdict, capabilityVerdict]) {
     if (verdict.effect === 'REQUIRE_APPROVAL') {
-      // The task keeps its lease released and returns to RUNNABLE so the
-      // approval can be answered without the claim expiring underneath it.
+      // The lease is released at once, so the approval can be answered without
+      // the claim expiring underneath it. The task itself ends FAILED: this
+      // call passes no next attempt time, and under the hand-back rule both
+      // stores now share, only a call that does returns a task to RUNNABLE.
+      // (An earlier comment here said it returned to RUNNABLE; it did not, in
+      // either store.)
       await deps.store.finishTask({ taskId: claim.taskId, owner: deps.owner, leaseGeneration: claim.leaseGeneration, state: 'FAILED', now: deps.clock.now() });
       await ledger.event('run.paused', { taskId: claim.taskId, facts: { reasonCode: verdict.reasonCode, policyRevision: verdict.policyRevision } });
       return { kind: 'APPROVAL_REQUIRED', taskId: claim.taskId, operation: 'DISPATCH_WORKER', reasonCode: verdict.reasonCode };
@@ -377,7 +381,8 @@ export async function runClaimedTask(
     if (remaining.length === 0) break;
 
     await ledger.event('provider.failure', {
-      taskId: claim.taskId, facts: { code: outcome.code, triedWorkers: tried.length },
+      taskId: claim.taskId,
+      facts: { code: outcome.code, triedWorkers: tried.length, failureClass: outcome.failureClass ?? null },
     });
 
     const carryOn = decideJuliusContinuation(request.policy, {
@@ -433,7 +438,19 @@ export async function runClaimedTask(
       if (!carryOn.proceed) {
         await ledger.event('task.failed', {
           taskId: claim.taskId,
-          facts: { code: outcome.code, reasonCode: carryOn.reasonCode, awaitingHuman: carryOn.awaitingHuman },
+          facts: {
+            code: outcome.code, reasonCode: carryOn.reasonCode, awaitingHuman: carryOn.awaitingHuman,
+            // UNKNOWN IS NULL, NOT ABSENT. A reader asking "why did this task
+            // fail" must be able to tell "the connector did not classify it"
+            // from "nobody wrote the field down".
+            failureClass: outcome.failureClass ?? null,
+            // THE ERROR WAS RETRYABLE; THE TASK WAS NOT RETRIED. Reached only
+            // from the RETRY branch, where the run's own autonomy declined —
+            // `reasonCode` says which rule. The name says which of the two it
+            // describes, because `retryable` on a row that ends a task reads as
+            // a promise the run did not make.
+            errorRetryable: true,
+          },
         });
       }
     }
@@ -444,10 +461,11 @@ export async function runClaimedTask(
     });
     await ledger.trajectory(requeue ? 'RETRY' : 'DISPATCH', {
       taskId: claim.taskId, contextId, policyRevision: request.policy.revision, outcome: outcome.code,
+      facts: { failureClass: outcome.failureClass ?? null },
     });
-    if (requeue) return { kind: 'RETRY', taskId: claim.taskId, code: outcome.code };
+    if (requeue) return { kind: 'RETRY', taskId: claim.taskId, code: outcome.code, failureClass: outcome.failureClass ?? null };
     if (outcome.status === 'DENIED') return { kind: 'DENIED', taskId: claim.taskId, reasonCode: outcome.code };
-    return { kind: 'FAILED', taskId: claim.taskId, code: outcome.code };
+    return { kind: 'FAILED', taskId: claim.taskId, code: outcome.code, failureClass: outcome.failureClass ?? null };
   }
 
   await ledger.trajectory('DISPATCH', {
@@ -524,12 +542,18 @@ function executionPorts(
       });
       return { duplicate: receipt.duplicate };
     },
-    recordEvent: async ({ type, payload }) => {
+    recordEvent: async ({ type, taskId, payload }) => {
       const facts: Record<string, string | number | boolean | null> = {};
       for (const [key, value] of Object.entries(payload)) {
         facts[key] = value === null || ['string', 'number', 'boolean'].includes(typeof value) ? value as string | number | boolean | null : String(value);
       }
-      await ledger.event(type, { taskId: null, facts: { ...facts, runId: run.runId } });
+      // NAME THE TASK. A `task.failed` with no task cannot say which of the
+      // three C.A.R.D. roles stopped, and on a non-retryable worker failure the
+      // coordinator's is the only row that ENDS the task — which is exactly the
+      // shape the first paid mission failed in. (This port also carries
+      // `worker.selected`, `budget.reserved` and `worker.dispatched`, which name
+      // the same claimed task, as do the coordinator's other events.)
+      await ledger.event(type, { taskId, facts: { ...facts, runId: run.runId } });
     },
   };
 }
@@ -788,7 +812,18 @@ async function scheduleRepair(input: {
     // missing evidence. Each is a HALT with a reason rather than a crash: the
     // run stops for a stated cause and the reservation is handed back.
     await deps.budget.release({ reservationId, reason: 'REPAIR_NOT_PLANNABLE', now: deps.clock.now() });
-    const reasonCode = error instanceof Error ? error.message : 'repair_not_plannable';
+    // NARROWED, NOT TRUSTED. This value leaves the process in the evidence
+    // bundle's `reason_code` column, whose contract is "a machine token by
+    // construction". Every throw in the repair planner is a token today, but a
+    // TypeError from anywhere in it would otherwise put free text into an
+    // uploaded artifact, so the narrowing is applied rather than assumed.
+    // `safeReasonCode`, not `safeFailureClass`: no upper-case cause reaches
+    // this narrowing today — every throw in the repair planner is lower-case
+    // and passes either rule — but the column itself carries
+    // `UNRESOLVED_WORKER_ROLE` beside `repair_round_limit`, so the alphabet is
+    // matched to the column's vocabulary. A future producer that routes an
+    // upper-case cause here is then recorded rather than silently generalised.
+    const reasonCode = safeReasonCode(error instanceof Error ? error.message : null) ?? 'repair_not_plannable';
     await ledger.event('run.failed', { taskId: task.taskId, facts: { reasonCode } });
     return { kind: 'HALTED', taskId: task.taskId, reasonCode, safeSummary: 'A repair round was required and could not be planned.' };
   }
