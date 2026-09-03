@@ -289,7 +289,7 @@ describe('an execution attempt is spent at admission, never at the claim', () =>
   });
 
   /* ------------------------------------------------------------- CASE G2 -- */
-  it('CASE G2: the live drive loop sweeps, so the direct reclaim path is bounded too', async () => {
+  it('CASE G2: a reclaimed expired lease is counted, and the reclaim loop is bounded', async () => {
     // THE BOUND ONLY EXISTS IF THE SWEEP RUNS. The claim query also offers an
     // ACTIVE task whose lease has expired, and that path reclaims WITHOUT
     // counting — so a task that is claimed, dies before admission and has its

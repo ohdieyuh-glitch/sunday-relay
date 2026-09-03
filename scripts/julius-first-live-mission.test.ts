@@ -527,6 +527,15 @@ describe('the evidence dump names only tables and columns the migrations create'
       .not.toMatch(/\bpayload\b(?!\s*(?:->|#>))/u);
     expect(query, 'and it is scoped to the failure events, not the whole stream')
       .toContain("'julius.task.failed'");
+    // A TASK CAN END FOR A REASON ONLY THIS TYPE CARRIES. RECOVERY_LIMIT_REACHED
+    // travels on `recovery.action`, and a task that never reached a worker
+    // leaves no `task.failed` behind — so without this type the artifact cannot
+    // say why such a task stopped. `recovery_action` distinguishes those rows
+    // from the ordinary requeues the same type also records.
+    expect(query, 'the recovery sweep can end a task, so its rows belong here')
+      .toContain("'julius.recovery.action'");
+    expect(query, 'and a requeue must be distinguishable from a terminal recovery')
+      .toContain("'action'");
   });
 
   it('keeps the two names dry run #2 proved wrong corrected', () => {
@@ -555,7 +564,7 @@ describe('the preflight is a legitimate participant in the durable schema (dry r
       .toBeLessThan(roundTrip.indexOf('client.createSandbox('));
   });
 
-  it('hands the executor the dispatch generation the claim returned, and migrates only where the replay has not landed', () => {
+  it('hands the executor the dispatch generation the claim returned, and migrates by version rather than by sentinel', () => {
     // PR #214's host-visible entry: an invocation left AUTHORIZED loses execution authority.
     expect(preflight).toContain('const { dispatchGeneration } = await seedPreflightInvocation(');
     expect(preflight, 'a hard-coded generation cannot match a claimed one').not.toMatch(/dispatchGeneration:\s*\d/u);

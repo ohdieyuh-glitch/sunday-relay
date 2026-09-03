@@ -51,7 +51,10 @@ dump "SELECT invocation_id,tool_id,state,requested_at FROM relay_wonderland.juli
 # `julius.recovery.action` is here because a task can now END for a reason no other row carries:
 # the recovery sweep fails one whose expired lease it has already reclaimed too many times
 # (RECOVERY_LIMIT_REACHED), and a task that never reached a worker leaves no `task.failed` behind.
+# The sweep also records ordinary REQUEUEs, which are not failures, so `recovery_action` is
+# exported as the discriminator — a source literal from a four-value union. `owner` is NOT
+# exported: which worker held a lease is not part of explaining why a mission failed.
 # One row names no task: the run loop's own `julius.run.failed`, the run's ending rather than a
 # worker's. The pipeline emits that type too — an unresolvable role, a policy denial, a repair it
 # cannot plan — and those DO name their task. Blank means the run's ending; the type alone does not.
-dump "SELECT e.payload->>'taskId' AS task_id,t.role,e.event_type,e.payload->'facts'->>'code' AS julius_code,e.payload->'facts'->>'failureClass' AS failure_class,e.payload->'facts'->>'errorRetryable' AS error_retryable,e.payload->'facts'->>'reasonCode' AS reason_code,e.occurred_at FROM relay_wonderland.events e LEFT JOIN relay_wonderland.julius_tasks t ON t.task_id=e.payload->>'taskId' WHERE e.event_type IN ('julius.task.failed','julius.provider.failure','julius.run.failed','julius.retry.scheduled','julius.recovery.action') ORDER BY e.occurred_at" failures.tsv
+dump "SELECT e.payload->>'taskId' AS task_id,t.role,e.event_type,e.payload->'facts'->>'code' AS julius_code,e.payload->'facts'->>'failureClass' AS failure_class,e.payload->'facts'->>'errorRetryable' AS error_retryable,e.payload->'facts'->>'reasonCode' AS reason_code,e.payload->'facts'->>'action' AS recovery_action,e.occurred_at FROM relay_wonderland.events e LEFT JOIN relay_wonderland.julius_tasks t ON t.task_id=e.payload->>'taskId' WHERE e.event_type IN ('julius.task.failed','julius.provider.failure','julius.run.failed','julius.retry.scheduled','julius.recovery.action') ORDER BY e.occurred_at" failures.tsv

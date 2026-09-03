@@ -97,7 +97,8 @@ suite('dry run 33635375764 — the preflight identity satisfies the executor’s
 
   beforeAll(async () => {
     pool = new Pool({ connectionString: process.env.DATABASE_URL });
-    // The replay is one-shot: the preflight that ran before this test already migrated.
+    // `migrate()` applies only versions `schema_migrations` does not hold, so calling it
+    // after the preflight already migrated is a no-op rather than a 42P07.
     await migrateIfNeeded(pool);
     store = new JuliusToolRecoveryPostgresRepository(pool);
   });

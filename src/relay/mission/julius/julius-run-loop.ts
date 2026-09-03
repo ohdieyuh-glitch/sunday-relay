@@ -445,6 +445,12 @@ export class JuliusRunLoop {
     input: {
       taskId?: string | null; outcome?: string | null; durationMs?: number | null;
       usdMicros?: number | null; facts?: Record<string, string | number | boolean | null>;
+      /**
+       * Distinguishes rows a run VERSION cannot. A recovery does not change the
+       * run's version, so without this every action in a sweep shares one key
+       * and the writers — which dedupe on it — keep the first and drop the rest.
+       */
+      idempotencySuffix?: string;
     },
   ): Promise<void> {
     const event: JuliusTrajectoryEvent = {
@@ -464,7 +470,7 @@ export class JuliusRunLoop {
       durationMs: input.durationMs ?? null, usdMicros: input.usdMicros ?? null,
       inputTokens: null, outputTokens: null,
       outcome: input.outcome ?? null, safeFacts: input.facts ?? {},
-      idempotencyKey: `${run.runId}:${kind}:${run.version}`,
+      idempotencyKey: `${run.runId}:${kind}:${run.version}${input.idempotencySuffix === undefined ? '' : `:${input.idempotencySuffix}`}`,
       occurredAt: this.deps.clock.now(),
     };
     validateTrajectoryEvent(event);
@@ -514,9 +520,15 @@ export class JuliusRunLoop {
       };
       validateJuliusEvent(event);
       await this.deps.store.appendEvent(event);
+      // KEYED BY THE ACTION, NOT THE RUN VERSION. A recovery does not change
+      // the run's version, and the trajectory writers dedupe on that key — so a
+      // sweep that recovered ten tasks recorded one row, and consecutive sweeps
+      // between transitions recorded none after the first. Newly reachable,
+      // because nothing called this before the live driver began sweeping.
       await this.#trajectory(run, 'RECOVERY', {
         taskId: action.taskId, outcome: action.action,
         facts: { reasonCode: action.reasonCode },
+        idempotencySuffix: `${action.taskId ?? run.runId}:${action.reasonCode}`,
       });
     }
     return { actions: actions.length, requeued, abandoned };

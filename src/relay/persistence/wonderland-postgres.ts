@@ -194,7 +194,15 @@ class PostgresWonderlandTransaction implements WonderlandTransaction {
  * filename version.
  */
 export function migrationVersion(sql: string): string | null {
-  return /INSERT INTO relay_wonderland\.schema_migrations\(version\) VALUES\('([^']+)'\)/u.exec(sql)?.[1] ?? null;
+  // THE LAST MATCH, ANCHORED TO A STATEMENT. `exec` takes the first occurrence
+  // anywhere, including inside a comment — and these files carry long
+  // explanatory headers. A header quoting another migration's stamp would
+  // return that version, `migrate()` would find it already applied, and the new
+  // migration would be skipped SILENTLY on every migrated database: precisely
+  // the failure the version ledger replaced, with no test going red. A missing
+  // or malformed stamp yields null, which always applies and fails loudly.
+  const matches = [...sql.matchAll(/^INSERT INTO relay_wonderland\.schema_migrations\(version\) VALUES\('([^']+)'\)/gmu)];
+  return matches.at(-1)?.[1] ?? null;
 }
 
 export class TransactionalWonderlandDatabase {

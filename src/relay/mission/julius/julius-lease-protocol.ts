@@ -148,7 +148,11 @@ export async function verifyLeaseProtocol(
     !contested.some((other) => other.subjectId === subject.subjectId),
     contested.length === 0 ? 'a second claim took nothing' : 'a second claim took a different subject',
   );
-  record('a claim increments the generation', before > 0, `generation is ${before}`);
+  record(
+    'a claim increments the generation',
+    before > (beforeClaim?.leaseGeneration ?? 0),
+    `generation went ${beforeClaim?.leaseGeneration ?? 0} -> ${before}`,
+  );
   /**
    * AN ATTEMPT IS SPENT AT ADMISSION, NOT AT OWNERSHIP.
    *

@@ -63,7 +63,8 @@ export interface PreflightIdentity {
 }
 
 /**
- * Brings the database up to the checked-in migration set.
+ * Brings the database up to the checked-in migration set, and reports exactly
+ * what it did.
  *
  * THE SENTINEL THIS REPLACES WAS A TWO-ANSWER GUARD ON A QUESTION WITH MANY.
  * It asked whether `julius_sandboxes.sandbox_policy` existed — the artefact of
@@ -76,12 +77,21 @@ export interface PreflightIdentity {
  * empty database, a partially migrated one, or a current one — and there is no
  * sentinel left to go stale.
  */
-export async function migrateIfNeeded(pool: Pool): Promise<'applied' | 'present'> {
+export async function migrateIfNeeded(
+  pool: Pool,
+): Promise<{ readonly alreadyPresent: number; readonly applied: readonly string[] }> {
   const database = new TransactionalWonderlandDatabase(pool);
   const before = await database.appliedMigrationVersions();
   await database.migrate();
   const after = await database.appliedMigrationVersions();
-  return after.size > before.size ? 'applied' : 'present';
+  // WHAT HAPPENED, NOT A VERDICT ABOUT IT. A boolean here made the caller
+  // report "empty database" for a database that held 21 migrations and
+  // received one — which is exactly the state the version ledger was
+  // introduced to serve, described to the operator as its opposite.
+  return {
+    alreadyPresent: before.size,
+    applied: [...after].filter((version) => !before.has(version)).sort(),
+  };
 }
 
 /** The prefix every preflight-owned identifier carries. Cleanup refuses to touch anything without it. */

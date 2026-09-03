@@ -103,11 +103,15 @@ async function proveDurableStore(pool: Pool, out: (line: string) => void): Promi
     const version = await pool.query<{ server_version: string }>('SHOW server_version');
     out(`  PostgreSQL reachable: server_version=${version.rows[0]?.server_version ?? 'unknown'}`);
 
-    // The migration set is a one-shot replay, so it is applied only where its last
-    // migration has not landed — the same guard the live entrypoint uses. A probe
-    // pointed at an already-migrated validation database must not fail on 42P07.
+    // `migrate()` applies only the versions `schema_migrations` does not already
+    // hold, so this is safe against an empty database, a partly migrated one and
+    // a current one alike. The line below reports what was MEASURED: saying
+    // "empty database" because something was applied was wrong for the one case
+    // the version ledger exists to serve — a database at 021 receiving 022.
     const migration = await migrateIfNeeded(pool);
-    out(migration === 'applied' ? '  migrations applied (empty database)' : '  migrations already present (one-shot replay skipped)');
+    out(migration.applied.length === 0
+      ? `  migrations already current (${migration.alreadyPresent} present)`
+      : `  migrations applied: ${migration.applied.join(', ')} (${migration.alreadyPresent} already present)`);
 
     // Naming the tables the run actually writes turns "migrate() returned"
     // into "the schema the runtime needs is present".

@@ -441,6 +441,51 @@ describe('a full mission drive with Julius in control', () => {
    * FIRST genuine dispatch at attempt 3 of 3 — one rate limit away from being
    * refused as exhausted, after the plan had already been paid for.
    */
+  /**
+   * THE DRIVE LOOP MUST ACTUALLY SWEEP, or the crash bound is decoration.
+   *
+   * `recoverExpired` was written and never called. The runtime worked anyway,
+   * because the claim query also offers an ACTIVE task whose lease has
+   * expired — but that path reclaims WITHOUT counting, so a task claimed and
+   * dead before admission could be picked up forever: `attempt` stays 0
+   * because nothing ran, and the counter that bounds exactly that loop is
+   * never reached. The one-line wiring that fixes it is the kind a future edit
+   * removes without noticing, so this asserts the SWEEP ITSELF, on the real
+   * driver, rather than trusting the line to stay.
+   */
+  it('the live driver runs the recovery sweep, so an abandoned lease is counted', async () => {
+    const memory = createJuliusMemoryStore();
+    const handoffs = createContextAndClaimHandoffs(memory as unknown as JuliusRuntimeStore & JuliusRecoveryDriver);
+    const fakes = liveResolution({ verdicts: ['approved'], contexts: handoffs.contexts });
+    expect(fakes.resolution.ok).toBe(true);
+    seedMissionRun(memory);
+    const runtime = assembleLiveJuliusRuntime({
+      store: handoffs.store, entries: fakes.resolution.entries,
+      cardRevision: 'card-test-1', spendCeilingUsdMicros: 5_000_000, maxRepairRounds: 1,
+    });
+
+    // A worker claimed the plan task and died before admitting it: ACTIVE, with
+    // a lease that has already expired. Only a sweep can count this.
+    const [abandoned] = await handoffs.store.claimRunnable({
+      owner: 'worker-that-died', now: new Date().toISOString(),
+      leaseExpiresAt: new Date(Date.now() - 60_000).toISOString(),
+      limit: 1, projectId: 'prj-live',
+    });
+    expect(abandoned?.taskId, 'the plan task was claimed and abandoned').toBe('plan-1');
+    expect(memory.taskRow('plan-1')!.recoveries, 'nothing has counted it yet').toBe(0);
+
+    await driveJuliusRunToTerminal({
+      loop: runtime.loop, store: handoffs.store, runId: 'run-live', projectId: 'prj-live', maxTicks: 24,
+    });
+
+    expect(memory.taskRow('plan-1')!.recoveries, 'the driver swept, and the reclaim was counted')
+      .toBeGreaterThan(0);
+    expect(memory.events().some((event) => event.type === 'recovery.action'),
+      'and it left the durable row that says a lease was reclaimed').toBe(true);
+    expect(memory.taskRow('plan-1')!.attempt, 'the abandoned claim still spent no execution attempt')
+      .toBeGreaterThan(0);
+  });
+
   it('CASE K: every task in the live graph reaches its first dispatch as attempt 1', async () => {
     const { memory, outcome, handoffs } = await driveLiveMission(['approved']);
     expect(outcome.state, 'the mission still completes').toBe('COMPLETED');
