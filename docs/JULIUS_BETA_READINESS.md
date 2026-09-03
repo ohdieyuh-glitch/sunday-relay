@@ -430,8 +430,11 @@ database. Two repairs, both provider-free:
   passes one. Nine coarse codes cannot separate a refusal from a malformed
   response from a 500; the class can.
 - The evidence bundle gains `failures.tsv`: task, role, event type, Julius
-  code, failure class, `errorRetryable` and timestamp, read from named fact keys and
-  never from a whole payload.
+  code, failure class, `errorRetryable`, the continuation reason and timestamp,
+  read from named fact keys and never from a whole payload. Rows the execution
+  coordinator emits carry no task id, so their task and role columns are blank;
+  the rows that diagnose a worker failure — the pipeline's own `task.failed` and
+  `provider.failure` — carry both.
 
 A run whose only remaining tasks are blocked behind a terminally failed
 dependency now reports FAILED rather than WAITING. A claim is offered only when

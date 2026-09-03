@@ -280,13 +280,20 @@ suite('dry run 33635375764 — the preflight identity satisfies the executor’s
    * retry with it. The memory store answers by setting the task RUNNABLE. This
    * store set it FAILED, where no claim query can reach it again, so in
    * production a yielded or retried task was destroyed for a benign reason.
-   * WHICH OF THE TWO REACHES THE PAID PATH: the pipeline's requeue, because the
-   * live C.A.R.D. sets `automaticRetry` and a rate-limited or timed-out worker
-   * is exactly what it requeues. The concurrency yield needs two tasks of one
-   * run claimable in the same tick, and the live graph never has that — plan
-   * and build are ordered by a dependency, and a review task is created BLOCKED
-   * on the task it reviews. It is reachable only for a run with two independent
-   * tasks.
+   * BOTH PATHS REACH A PAID MISSION, and the second one reaches it first.
+   * The pipeline requeues an authorized retry, and the live C.A.R.D. sets
+   * `automaticRetry`, so a rate-limited or timed-out worker takes that path.
+   * The concurrency yield needs two tasks of one run claimable in the same
+   * tick, and the live graph produces exactly that on the tick after the
+   * architect succeeds: `build` depends on `plan`, and the review task is
+   * created BLOCKED on `plan` too — by which time `plan` is already SUCCEEDED,
+   * so both unblock together. The repository's own end-to-end case says so
+   * ("`plan-1:review` becomes claimable in the same tick the plan succeeded").
+   * With `concurrency: 1` against a claim limit of 4, one of the two is handed
+   * back on that tick. Before this repair, PostgreSQL destroyed it.
+   *
+   * Two reviewers disagreed about this, in both directions. It is settled here
+   * from the task graph and that end-to-end case, not from either verdict.
    *
    * These two cases are the behavioural proof, against the real schema: handed
    * back means claimable again, and a genuine failure still ends terminal.

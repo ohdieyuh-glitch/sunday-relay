@@ -34,7 +34,7 @@ on:
         required: false
         default: ''
       acknowledge_rerun:
-        description: 'Only to repeat a paid mission that already completed. Type "RERUN PAID MISSION".'
+        description: 'Only to repeat a paid mission that was already attempted or completed. Type "RERUN PAID MISSION".'
         required: false
         default: ''
       max_ticks:
@@ -48,8 +48,9 @@ on:
 
 permissions:
   contents: read
-  # Needed to ask whether a paid first-live mission has already completed. The
-  # answer lives in this workflow's own artifact list; nothing else is read.
+  # Needed to ask whether a paid first-live mission was already attempted or
+  # completed. The answer lives in this workflow's own artifact list; nothing
+  # else is read.
   actions: read
 
 # LIVE runs share one group, so two paid missions can never be in flight at
