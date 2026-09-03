@@ -5,6 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { JuliusPostgresRepository } from '../src/relay/persistence/julius-postgres';
 import { JuliusRecoveryPostgresRepository } from '../src/relay/persistence/julius-recovery-postgres';
 import { MAX_TASK_RECOVERIES } from '../src/relay/mission/julius';
+import { WONDERLAND_MIGRATIONS } from '../src/relay/persistence/wonderland-postgres';
 import { JuliusToolPostgresRepository } from '../src/relay/persistence/julius-tool-postgres';
 import { JuliusToolRecoveryPostgresRepository } from '../src/relay/persistence/julius-tool-recovery-postgres';
 import { EXECUTOR_SANDBOX_LIMITS, EXECUTOR_SANDBOX_POLICY } from '../relay-bridge/julius/sandbox-limits';
@@ -532,7 +533,10 @@ suite('dry run 33635375764 — the preflight identity satisfies the executor’s
     const result = await migrateIfNeeded(pool);
     expect(result.applied, 'exactly the missing version, and nothing replayed')
       .toEqual(['022_julius_execution_attempts']);
-    expect(result.alreadyPresent, 'the other 21 were left alone').toBe(21);
+    // Derived, not pinned: a literal count would fail on migration 023 for a
+    // reason that has nothing to do with what this case measures.
+    expect(result.alreadyPresent, 'every other version was left alone')
+      .toBe(WONDERLAND_MIGRATIONS.length - 1);
 
     const column = await pool.query<{ count: string }>(
       "SELECT count(*) FROM information_schema.columns WHERE table_schema='relay_wonderland' AND table_name='julius_tasks' AND column_name='recoveries'",
@@ -542,7 +546,7 @@ suite('dry run 33635375764 — the preflight identity satisfies the executor’s
     // And a second call is a no-op rather than a 42P07.
     const again = await migrateIfNeeded(pool);
     expect(again.applied, 'nothing left to do').toEqual([]);
-    expect(again.alreadyPresent).toBe(22);
+    expect(again.alreadyPresent).toBe(WONDERLAND_MIGRATIONS.length);
   });
 
   it('refuses to seed or clean up an identity it does not own, on any of its identifiers', async () => {

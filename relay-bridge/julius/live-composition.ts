@@ -259,8 +259,9 @@ export interface LiveJuliusRuntime {
 /**
  * Generic in the store so a store that is ALSO a recovery driver stays one.
  * Declared as `JuliusRuntimeStore`, the spread below erased `recoverExpired`
- * from the type while keeping it at runtime, and the drive loop could not ask
- * for the sweep it needs.
+ * from the type while keeping it at runtime — and the run loop, which sweeps
+ * expired leases before it claims, cannot be built from a store that has lost
+ * it.
  */
 export function createContextAndClaimHandoffs<S extends JuliusRuntimeStore>(store: S): {
   readonly store: S;
@@ -377,7 +378,10 @@ export interface DriveOutcome {
  */
 export async function driveJuliusRunToTerminal(input: {
   readonly loop: JuliusRunLoop;
-  // The sweep below needs the recovery driver, not only the runtime store.
+  // The same store object goes to `assembleLiveJuliusRuntime`, whose run loop
+  // sweeps expired leases itself, so it must be the recovery driver too. This
+  // driver no longer sweeps — an earlier comment here said the sweep "below"
+  // needed it, and there is no sweep below any more.
   readonly store: JuliusRuntimeStore & JuliusRecoveryDriver;
   readonly runId: string;
   readonly projectId: string;
