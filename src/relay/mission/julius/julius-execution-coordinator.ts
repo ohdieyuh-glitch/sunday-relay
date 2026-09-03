@@ -1,5 +1,5 @@
 import type { JuliusCardPolicy } from './julius-policy';
-import { JuliusDispatchError, JuliusProviderRouter, normalizeProviderError, type JuliusProviderResult } from './julius-router';
+import { JuliusDispatchError, JuliusProviderRouter, type JuliusProviderResult } from './julius-router';
 import type { JuliusEvidence, JuliusTask, JuliusWorker, JuliusWorkerRole } from './julius-runtime';
 
 export interface JuliusExecutionClaim { readonly runId:string;readonly projectId:string;readonly taskId:string;readonly leaseOwner:string;readonly leaseGeneration:number;readonly task:JuliusTask;readonly capability:string;readonly contextId:string; }
@@ -48,11 +48,19 @@ export class JuliusExecutionCoordinator {
    * port coerces a non-primitive through `String(value)`, and `typeof
    * undefined` is not in its allowlist, so all three columns of the row that
    * ENDS the task would have read the literal `undefined` in the one artifact
-   * built to explain a paid failure. `normalizeProviderError` is what the
-   * dispatch catch below already uses; both endings now agree.
+   * built to explain a paid failure.
+   *
+   * It is narrowed the same way the dispatch catch below narrows: anything
+   * that is not already a `JuliusDispatchError` becomes a NON-RETRYABLE
+   * `WORKER_EXECUTION_FAILURE`. Deliberately not `normalizeProviderError` —
+   * that reads a provider's `.code` for a rate limit or a timeout, and
+   * `select` contacts nobody. It reads the worker registry, the health
+   * registry and the C.A.R.D., so a throw from it is a programming error, not
+   * a transient provider condition; classifying one as TIMEOUT would put
+   * `errorRetryable: true` on a row that ends the task.
    */
   async execute(request:JuliusExecutionRequest):Promise<JuliusExecutionOutcome>{
-    let worker:JuliusWorker;try{worker=this.router.select({role:request.role,taskType:request.taskType,capability:request.capability,policy:request.policy,excludedWorkerIds:request.excludedWorkerIds});}catch(error){const failure=normalizeProviderError(error);await this.event(request,'task.failed',{code:failure.code,errorRetryable:failure.retryable,failureClass:failure.failureClass});return{status:failure.code==='POLICY_DENIED'?'DENIED':'FAILED',code:failure.code,failureClass:failure.failureClass};}
+    let worker:JuliusWorker;try{worker=this.router.select({role:request.role,taskType:request.taskType,capability:request.capability,policy:request.policy,excludedWorkerIds:request.excludedWorkerIds});}catch(error){const failure=error instanceof JuliusDispatchError?error:new JuliusDispatchError('WORKER_EXECUTION_FAILURE',false,'Worker selection failed.');await this.event(request,'task.failed',{code:failure.code,errorRetryable:failure.retryable,failureClass:failure.failureClass});return{status:failure.code==='POLICY_DENIED'?'DENIED':'FAILED',code:failure.code,failureClass:failure.failureClass};}
     await this.event(request,'worker.selected',{workerId:worker.workerId,providerId:worker.providerId});
     const reservation=await this.ports.reserve({claim:request.claim,worker,request:request.resources,idempotencyKey:`${request.operationId}:budget`});
     if(reservation.state==='DENIED'){await this.event(request,'budget.denied',{reason:reservation.denialReason});return{status:'DENIED',code:'BUDGET_DENIED'};}

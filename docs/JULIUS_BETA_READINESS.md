@@ -434,9 +434,11 @@ database. Two repairs, both provider-free:
   `JuliusDispatchError` carries a `failureClass`, narrowed by
   `safeFailureClass` to `/^[a-z][a-z0-9_]{0,63}$/`, so a provider exception,
   a URL or an `Authorization:` header cannot survive into a durable row even if
-  an adapter passes one. It refuses every shape but an all-lower-case
-  alphanumeric token, so it is the first layer and the pre-publication
-  credential scan is the second; neither is claimed to be the only one. Nine
+  an adapter passes one. The rule is `[a-z]` then up to 63 of `[a-z0-9_]`, so
+  it refuses an upper-case letter, a leading digit, punctuation and anything
+  longer — but a token already in that alphabet, such as a hex digest beginning
+  `a`–`f`, would pass. It is the first layer and the pre-publication credential
+  scan is the second; neither is claimed to be the only one. Nine
   coarse codes cannot separate a refusal from a malformed response from a 500;
   the class can.
 - The evidence bundle gains `failures.tsv`: task, role, event type, Julius

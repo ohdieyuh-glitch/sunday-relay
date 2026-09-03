@@ -17,14 +17,15 @@ export const JULIUS_ERROR_CODES=['RATE_LIMIT','TIMEOUT','AUTH_CONFIGURATION','PR
  * the caller remembering to redact is not redaction.
  *
  * WHAT IT DOES NOT PROVE, written down because an earlier version of this
- * comment claimed it. The rule refuses a space, a colon, a slash, a dot, a
- * dash and every upper-case letter — every key shape this runtime has actually
- * seen — but a value that is ALREADY an all-lower-case alphanumeric token is
- * shaped like a class and passes, a 64-character hex digest being the
- * realistic example. That is not a live exposure: every value the three live
- * adapters pass is a literal or a member of the connector's closed
- * failure-class union, and the workflow's credential scan reads the artifact
- * before it is published. This function is the first layer, not the only one.
+ * comment claimed it. The rule is exactly `[a-z]` followed by up to 63 of
+ * `[a-z0-9_]`, so it refuses a space, a colon, a slash, a dot, a dash, every
+ * upper-case letter, a leading digit and anything past 64 characters — every
+ * key shape this runtime has actually seen. What it still admits is a token
+ * already in that alphabet: a hex digest beginning a–f would pass. That is not
+ * a live exposure — every value the three live adapters pass is a literal or a
+ * member of the connector's closed failure-class union — and the workflow's
+ * credential scan reads the artifact before it is published. This function is
+ * the first layer, not the only one.
  */
 export const safeFailureClass=(value:unknown):string|null=>typeof value==='string'&&/^[a-z][a-z0-9_]{0,63}$/.test(value)?value:null;
 /**

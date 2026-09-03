@@ -38,9 +38,10 @@ dump "SELECT invocation_id,tool_id,state,requested_at FROM relay_wonderland.juli
 # construction — `code` is one of nine JuliusErrorCodes, `failureClass` is narrowed by
 # `safeFailureClass` to /^[a-z][a-z0-9_]{0,63}$/, `reasonCode` is a continuation reason — so a
 # provider message, a prompt, a URL or an `Authorization:` header cannot reach this file even if
-# an adapter passes one. The narrowing refuses every shape but an all-lower-case alphanumeric
-# token, which is the first layer; the workflow's credential scan before publication is the
-# second. Neither is claimed to be the only one.
+# an adapter passes one. The rule is `[a-z]` then up to 63 of `[a-z0-9_]`, so it refuses an
+# upper-case letter, a leading digit, punctuation and anything longer — but a token already in
+# that alphabet, such as a hex digest beginning a-f, would pass. That is the first layer; the
+# workflow's credential scan before publication is the second. Neither is claimed to be the only one.
 # The role comes from the task row, so a reader sees which of the three C.A.R.D. roles stopped.
 # One row names no task: the run loop's own `julius.run.failed`, the run's ending rather than a
 # worker's. The pipeline emits that type too — an unresolvable role, a policy denial, a repair it

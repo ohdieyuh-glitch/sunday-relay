@@ -771,8 +771,11 @@ describe('the first paid attempt, reproduced: a failing Prompt Architect', () =>
    * THE LEAK MUTATION. A provider exception is not a machine token, and an
    * adapter that passed one through would put arbitrary text — including a
    * header — into a durable row and then into an uploaded artifact.
-   * `safeFailureClass` narrows to /^[a-z][a-z0-9_]{0,63}$/, so the leak is
-   * structurally impossible rather than conventionally avoided.
+   * `safeFailureClass` narrows to /^[a-z][a-z0-9_]{0,63}$/, so none of the
+   * three values below can survive it, whatever an adapter does. The rule is
+   * not a proof that no secret ever could: a token already in that alphabet —
+   * a hex digest beginning a–f — is shaped like a class and passes, which is
+   * why the workflow scans the artifact before publishing it.
    */
   it('MUTATION: a secret-bearing provider exception cannot become a failure class', async () => {
     const bearer = 'Authorization: Bearer FAKESECRET123456789';
