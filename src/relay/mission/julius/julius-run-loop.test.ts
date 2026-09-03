@@ -47,7 +47,9 @@ describe('the repair planner speaks in tokens the evidence column can carry', ()
     // only, so a message rewritten as a template literal or in double quotes
     // would drop out of the set and leave this case green while free text
     // reached the evidence column. Counting the throws holds the two together.
-    const throwCount = [...source.matchAll(/\bthrow\b/gu)].length;
+    // `throw new`, not the bare word: the word appears in prose too, and a
+    // comment mentioning it is not a throw this case has failed to read.
+    const throwCount = [...source.matchAll(/\bthrow\s+new\b/gu)].length;
     expect(thrown.length, 'every throw in the planner must be readable by this case').toBe(throwCount);
     expect(thrown.length, 'the planner must still throw, or this case proves nothing').toBeGreaterThan(0);
     for (const message of thrown) {

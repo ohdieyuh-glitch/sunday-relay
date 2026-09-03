@@ -1171,6 +1171,11 @@ describe('F6 — a paid mission cannot be run twice by accident', () => {
       expect(guard).toMatch(/RECORDED_PAID_ATTEMPTS=1\s+# run 33697109210/u);
       expect(guard, 'and it is counted, not merely written down')
         .toContain('[ "$RECORDED_PAID_ATTEMPTS" -gt 0 ]');
+      // ORDER, NOT ONLY PRESENCE. A digit test that runs after the branch it
+      // protects still refuses, but only after announcing a first paid mission,
+      // and one moved into a later step would not refuse at all.
+      expect(guard.indexOf('is_count "$RECORDED_PAID_ATTEMPTS"'), 'the value is validated before it is used')
+        .toBeLessThan(guard.indexOf('[ "$RECORDED_PAID_ATTEMPTS" -gt 0 ]'));
     });
 
     it('MUTATION: a FAILED first attempt still blocks the next ordinary paid dispatch', () => {
@@ -1214,7 +1219,8 @@ describe('F6 — a paid mission cannot be run twice by accident', () => {
         const bin = mkdtempSync(join(realpathSync(tmpdir()), 'julius-gh-'));
         writeFileSync(join(bin, 'gh'), '#!/usr/bin/env bash\necho 0\n', { mode: 0o755 });
         const script = stepScript(GATE).replace(/^RECORDED_PAID_ATTEMPTS=.*$/mu, `RECORDED_PAID_ATTEMPTS=${value}`);
-        expect(script, `the constant must still be present for value "${value}"`).toContain(`RECORDED_PAID_ATTEMPTS=${value}`);
+        expect(script, `the substitution must have replaced the whole line for value "${value}"`)
+          .toContain(`\nRECORDED_PAID_ATTEMPTS=${value}\n`);
         try {
           execFileSync('bash', ['-c', script], {
             cwd: ROOT, stdio: 'ignore',
