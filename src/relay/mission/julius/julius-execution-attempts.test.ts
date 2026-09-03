@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   createJuliusHarness, seedRun, task, worker, cardPolicy, type ScriptedOutcome,
 } from './julius-runtime-fixtures';
+import { JuliusRunLoop } from './julius-run-loop';
 import { MAX_TASK_RECOVERIES, planJuliusRecovery } from './julius-recovery';
 import { MAX_TASK_ATTEMPTS } from './julius-task-pipeline';
 
@@ -259,6 +260,32 @@ describe('an execution attempt is spent at admission, never at the claim', () =>
       taskId: 'only', owner: 'worker-b', leaseGeneration: second!.leaseGeneration, now: harness.clock.now(),
     });
     expect(rightful, 'the current holder can').toBe(1);
+  });
+
+  /* ------------------------------------------------------------- CASE L --- */
+  it('CASE L: a lease lost between claim and admission runs nothing and holds no slot', async () => {
+    const { harness, projectId } = twoClaimableTasks();
+    // The first admission loses its race; the second must still be admitted,
+    // because the task that lost is not running and is not occupying the run's
+    // allowance of one.
+    let refusals = 0;
+    const store = {
+      ...harness.deps.store,
+      admitTask: async (input: Parameters<typeof harness.deps.store.admitTask>[0]) => {
+        if (refusals === 0) { refusals += 1; return null; }
+        return harness.deps.store.admitTask(input);
+      },
+    } as typeof harness.deps.store;
+    const loop = new JuliusRunLoop({ ...harness.deps, store }, harness.policies, { claimLimit: 4, leaseMs: 60_000 });
+
+    const report = await loop.tick({ projectId });
+    expect(refusals, 'the first admission was refused').toBe(1);
+    expect(report.lostLeases, 'and the tick says so, distinctly from a hand-back').toBe(1);
+    expect(report.outcomes, 'the other task still ran — the lost lease held no slot').toHaveLength(1);
+
+    const rows = ['a', 'b'].map((id) => harness.store.taskRow(id)!);
+    expect(rows.filter((row) => row.attempt === 1), 'exactly one execution was charged').toHaveLength(1);
+    expect(rows.filter((row) => row.attempt === 0), 'and the refused one was charged nothing').toHaveLength(1);
   });
 
   /* ---------------------------------------------- the planner, in isolation */

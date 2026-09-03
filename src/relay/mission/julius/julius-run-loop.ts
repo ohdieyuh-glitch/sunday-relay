@@ -360,8 +360,6 @@ export class JuliusRunLoop {
         yieldedForConcurrency += 1;
         continue;
       }
-      inFlight.set(claim.runId, running + 1);
-
       /* ------------------------------------------------- execution admission */
       /**
        * EVERY HAND-BACK IS BEHIND US; THIS TASK IS GOING TO RUN.
@@ -388,6 +386,11 @@ export class JuliusRunLoop {
         lostLeases += 1;
         continue;
       }
+      // COUNTED ONLY ONCE THE TASK IS REALLY RUNNING. Counted before the
+      // admission, a lease lost between the two would hold a slot in this
+      // run's allowance for work nobody is doing, and the next claim in the
+      // same tick would be handed back to make room for it.
+      inFlight.set(claim.runId, running + 1);
 
       outcomes.push(await runClaimedTask({
         // The claim carried the count BEFORE this admission. Everything
