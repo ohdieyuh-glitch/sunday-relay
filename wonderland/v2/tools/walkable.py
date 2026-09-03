@@ -168,10 +168,35 @@ def main():
         k = idx(float(tx), float(ty))
         if blocked[k]:
             # a target standing ON an object (a plinth, a landmark) is not a
-            # failure; ask whether its immediate surroundings are reachable
-            near = any(seen[idx(tx + dx, ty + dy)]
-                       for dx in (-250, 0, 250) for dy in (-250, 0, 250)
-                       if 0 <= idx(tx + dx, ty + dy) < nx * ny)
+            # failure; ask whether its immediate surroundings are reachable.
+            #
+            # THIS USED TO SAMPLE NINE POINTS and it reported the LEFT flank
+            # landmark unreachable while a walker can stand 2.5 m from it. The
+            # nine were (0, +/-250) on each axis; the open ground beside that
+            # landmark is at (-175, -175) from it, between them. The RIGHT
+            # landmark passed the identical geometry only because its open
+            # ground happened to land on a sampled offset. A probe that misses
+            # by falling between its own samples is the instrument talking, so
+            # the ring is SWEPT rather than sampled -- every cell out to the
+            # 354 uu diagonal the nine already accepted, no threshold moved.
+            near = False
+            rad = int(math.ceil(354.0 / cell))
+            ci, cj = k % nx, k // nx
+            for dj in range(-rad, rad + 1):
+                jj = cj + dj
+                if not (0 <= jj < ny):
+                    continue
+                for di in range(-rad, rad + 1):
+                    ii = ci + di
+                    if not (0 <= ii < nx):
+                        continue
+                    if math.hypot(di, dj) * cell > 354.0:
+                        continue
+                    if seen[jj * nx + ii]:
+                        near = True
+                        break
+                if near:
+                    break
             print("%-24s %8.0f %s" % (name, math.hypot(tx, ty) / 100.0,
                                        "yes (approach)" if near else "NO"))
             bad += 0 if near else 1

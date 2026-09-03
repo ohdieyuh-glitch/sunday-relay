@@ -1377,17 +1377,44 @@ def plaza_slab_class(variant):
 
 
 def _worn_slab(m, poly, thick=10.0, lip=3.0, inset=0.965, seed=0, grain=1.0):
-    """A flagstone: a full-size lower body, an inset top layer that reads as a
-    worn chamfer once smoothed, and a hair of grain. The Geometry Script box has
-    no chamfer, so the bevel is BUILT, not asked for."""
+    """A flagstone: a full-size lower body and an inset top layer that reads as
+    a worn chamfer. The Geometry Script box has no chamfer, so the bevel is
+    BUILT, not asked for.
+
+    IT USED TO BE TESSELLATED, DISPLACED AND SMOOTHED, AND THAT SHATTERED THE
+    PAVING (2026-09-03, found in the first render after the Studio came back).
+
+    The tail was `subdivide(1); perlin(grain, 0.05); smooth(1, 0.35)` -- a hair
+    of grain, sub-centimetre, added for a realism nobody can see at any distance
+    a walker stands. What it actually produced, on the GPU, was thin flat shards
+    and spikes lying across the plaza and the path, with dark slivers under
+    them: the inset top layer is 3 uu thick on a 128 uu slab, a razor plate, and
+    `subdivide` is `apply_pn_tessellation` -- CURVED Point-Normal patches. Run
+    over a box whose corner normals are averaged across its own hard edges, PN
+    bulges every flat face and tears that plate off its body; `smooth` then
+    drags it further. Every foreground frame in the founder's arrival
+    composition carried it, and PathCam02 -- the castle approach -- read as
+    loose stepping stones, which is precisely the failure PASS 01b's own
+    comment says running-bond flags were written to replace.
+
+    THE OFFLINE PREVIEW CANNOT SEE THIS, which is why twenty-nine passes of
+    gates missed it: the meshkit fallback implements `subdivide` as midpoint
+    subdivision, which is planar, so the artefact exists only under the real
+    Geometry Script backend. A defect no offline harness can reach is a defect
+    only a render can find -- and this one was in every render since PASS 01,
+    unremarked.
+
+    So the deformation is gone rather than retuned. The variation that survives
+    is the variation that was always doing the work and is visible: three slab
+    LENGTHS in running bond, +/-2 uu of vertex jitter on each corner, the
+    four tints, and the built chamfer. `grain` is kept in the signature because
+    both callers pass it and it names the intent; it no longer deforms.
+    """
     cx = sum(p[0] for p in poly) / len(poly)
     cy = sum(p[1] for p in poly) / len(poly)
     top = [(cx + (x - cx) * inset, cy + (y - cy) * inset) for (x, y) in poly]
     m.extrude(poly, thick)
     m.extrude(top, lip, at=(0.0, 0.0, thick))
-    m.subdivide(1)
-    m.perlin(grain, 0.05, seed=seed)
-    m.smooth(1, 0.35)
     m.split_normals(38.0)
     return m
 

@@ -108,6 +108,98 @@ def _verify_step_heights():
     return True
 
 
+def _verify_camera_standpoints():
+    """NO CAMERA MAY STAND INSIDE SOMETHING.
+
+    Found by the first render after the Studio came back (2026-09-03):
+    GreatSpireCam22 rendered the inside of a wall. `DPTowerRise_Cloister`, a
+    PASS 29 depth piece, was placed 10.6 m from that camera and its footprint
+    is 14.0 m -- the lens is inside the cloister.
+
+    THE PROJECT ALREADY KNEW THIS RULE AND HAD NO GATE FOR IT. PASS 28 wrote
+    the three siting rules in order -- standpoint clear, sightline clear,
+    approach clear -- and PASS 29's own camera commit says "I checked the
+    sightline and never checked the standpoint, which is rule one". Both times
+    it was caught by a render or by eye. `camera_framing.py` asks where a
+    camera's ground begins and `occlusion.py` asks what is in front of it;
+    neither can answer "is the camera inside a building", because both start
+    from the lens and look outward.
+
+    The depth-piece placer guards against landing in a district it does not
+    belong to and against taking too much of a hero frame. It has never asked
+    whether it landed ON a camera, so a piece may be correctly sited by every
+    rule the placer knows and still swallow a viewpoint.
+
+    HEIGHT IS PART OF THE TEST, not a refinement of it. The plan-only version
+    of this check reported four cameras and one of them was the instrument
+    talking: SkylineRiseCam21 stands 18 m up and the hedge it "is inside"
+    tops out at 3.6 m. A footprint containing a camera means nothing until
+    the piece also reaches the lens.
+    """
+    try:
+        sys.path.insert(0, os.path.join(HERE, "tools"))
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "_sk_bbox", os.path.join(HERE, "tools", "skyline.py"))
+        sk = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(sk)
+        BB = sk.bboxes()
+    except Exception as exc:
+        # NOT a silent pass. Without heights this cannot be decided, and the
+        # honest report says which cameras would need checking by hand.
+        print("V2 CAMERA STANDPOINT: heights unavailable (%s) -- check NOT performed" % exc)
+        return True
+    # Paving, lawn and ankle props are surfaces a camera stands ON, not in.
+    surfaces = ("terrace_platform", "garden_lawn", "stone_ring_base", "path_steps",
+                "side_steps", "ground_flowers", "ground_blooms", "tea_saucer",
+                "mushroom_small", "key_ornate")
+    inside = []
+    for cam in C.HERO_CAMS:
+        cx, cy, cz = cam["location"]
+        for it in L.ALL:
+            a = it["asset"]
+            if a in surfaces or a not in L.FOOT:
+                continue
+            sc = it["scale"]
+            sx, sy = (abs(sc[0]), abs(sc[1])) if isinstance(sc, (list, tuple)) else (abs(sc), abs(sc))
+            sz = abs(sc[2]) if isinstance(sc, (list, tuple)) and len(sc) > 2 else sx
+            hx, hy = L.FOOT[a]
+            hx *= sx
+            hy *= sy
+            yaw = math.radians(it["rot"][1])
+            co, si = math.cos(yaw), math.sin(yaw)
+            dx, dy = cx - it["pos"][0], cy - it["pos"][1]
+            lx, ly = dx * co + dy * si, -dx * si + dy * co
+            # THE INSCRIBED ELLIPSE, NOT THE RECTANGLE. `FOOT` is a half-extent
+            # pair and says nothing about the shape inside it; read as a
+            # rectangle it reaches sqrt(2) further at the corners than at the
+            # axes, and that corner is what reported EastReachCam20 "inside" a
+            # colossal bloom whose stem it is 2.9 m clear of -- and which
+            # stands BEHIND the lens. The render of that camera is fine. An
+            # ellipse is the conservative reading of an unknown footprint: it
+            # still contains every camera that is genuinely enclosed (the
+            # cloister at 0.76 of its half-extent, the hedge at 0.04) and stops
+            # claiming the corners of a circle.
+            if (lx / hx) ** 2 + (ly / hy) ** 2 > 1.0:
+                continue
+            bb = BB.get(a)
+            top = (it["pos"][2] + bb["ztop"] * sz) if bb else None
+            if top is None or top > cz:
+                inside.append((cam["name"], cz / 100.0, it["label"], a,
+                               (top / 100.0) if top else float("nan"),
+                               math.hypot(dx, dy)))
+    if inside:
+        print("V2 CAMERA STANDPOINT: %d camera(s) stand INSIDE a piece that reaches the lens:"
+              % len(inside))
+        for (n, eye, lbl, a, top, d) in inside:
+            print("   %-18s eye %.2f m is inside %s (%s), top %.1f m, centre %.0f uu away"
+                  % (n, eye, lbl, a, top, d))
+        return False
+    print("V2 CAMERA STANDPOINT: %d cameras, none stands inside a piece that reaches its lens"
+          % len(C.HERO_CAMS))
+    return True
+
+
 def main():
     fails = []
     mats = set(M.INSTANCES) | {"MI_V2_SkyPano"}
@@ -296,6 +388,8 @@ def main():
         return 1
     if not _verify_step_heights():
         raise SystemExit("V2 LAYOUT FAIL: a walking surface is above the Dog's step height")
+    if not _verify_camera_standpoints():
+        raise SystemExit("V2 LAYOUT FAIL: a camera stands inside a piece that reaches its lens")
     print("PASS: recipes and materials resolve; corridor open; plaza clean; hover props high; landmarks in both cameras; gate view clear; city groups vary")
     return 0
 

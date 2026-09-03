@@ -701,12 +701,27 @@ LOOK = {
     # in four of the locked frames:
     #
     #   ScaleCam07     6.0 m   off -33.4 deg   the scale test, by design
-    #   PlayerCam01    8.7 m   off +22.2 deg   the player's own viewpoint
+    #   PlayerCam01    8.7 m   off +22.2 deg   IN THE FOV, BEHIND THE GATE PIER
     #   ReverseCam03  32.7 m   off  -5.8 deg
     #   GardenLeft04  49.4 m   off  +2.6 deg
     #
     # and NOT in HeroCam0, which is what the founder's frozen arrival
     # composition requires and the only part of the old claim that was true.
+    #
+    # ONE OF THOSE FOUR IS A BEARING, NOT A SIGHTING (2026-09-03, first render
+    # of this commit). ScaleCam07 holds the Dog and the frame proves it. The
+    # PlayerCam01 line above was written as "the second camera the founder
+    # asked for proof in" and the render shows NO DOG THERE: the gate pier and
+    # its gold leaf stand exactly where +22.2 deg lands, 4.4 m from that lens.
+    #
+    # The comment this replaced had said "the same wall hides it from
+    # PlayerCam01". That sentence was RIGHT about the occlusion and WRONG about
+    # the position -- it was measured for the retired (-560,-1000). Recomputing
+    # the bearing for (-330,-650) fixed the position and dropped the occlusion
+    # with it, so a true claim was replaced by a false one. Being in frame is
+    # two questions, and this file has now got each of them wrong once.
+    # ReverseCam03 and GardenLeft04 are bearings too, and neither has been
+    # rendered: they are candidates for a second proof, not evidence of one.
     "scaleDog": 1, "scaleDogClass": "/Game/WonderlandV2/Characters/RelayDog/BP_RelayDog.BP_RelayDog_C",
     # (-560,-1000) stood 0.9 m BEHIND the gate's flanking wall (y = -910):
     # two ScaleCam07 renders without a Dog. Now inside the plaza, beside the

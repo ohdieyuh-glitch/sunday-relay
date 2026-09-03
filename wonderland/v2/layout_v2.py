@@ -7036,6 +7036,85 @@ BUILD_BANDS = [FOREGROUND, COURTYARD, GARDEN, PALACE, FLANK_GROUND, FLANKS,
                PROCESSIONAL_BORDER, HORIZON, APPROACH_SIDES, PLAZA_WALL_DRESS,
                SIGNATURE, LANDMARKS, DEPTH, COURT_DRESS, WAYSIDE]
 
+# ---------------------------------------------------------------------------
+# NOTHING IS BUILT ON A VIEWPOINT (2026-09-03)
+#
+# The first render after the Studio came back showed GreatSpireCam22 looking at
+# the inside of a wall: `DPTowerRise_Cloister`, a PASS 29 depth piece, stands
+# 10.6 m from that camera and its footprint is 14.0 m, so the lens is inside
+# the cloister. Two more cameras were in the same state -- FlankRightCam09
+# 0.19 m from the centre of an edge hedge, EastReachCam20 inside a colossal
+# bloom's stem.
+#
+# EVERY PLACER INVOLVED WAS OBEYING ITS OWN RULES. The depth search guards the
+# district it belongs to and the share it takes of a hero frame; the quarter
+# ring places a broken hedge circle with deliberate gaps; the landmark dressing
+# stands stems around a bloom. None of them had any reason to know a camera was
+# there, and PASS 28's first siting rule -- STANDPOINT CLEAR, before sightline,
+# before approach -- was written for the camera author, not for the placers.
+#
+# So the rule is applied ONCE, here, over the single list the builder walks,
+# rather than in each generator: that is the same correction PASS 09 made when
+# `build_v2` walked a hand-written band list and `layout_v2.ALL` was another,
+# and 305 placements passed the gate while four reached the world.
+#
+# It DROPS rather than nudges, which is what these placers already do when a
+# clearance test fails, and it is deliberately height-blind: a footprint that
+# contains a viewpoint is a piece that should not be there whether or not it
+# happens to clear the lens today, and cameras move. `verify_v2_layout`'s gate
+# is the height-aware one, because a FAILURE has to be true -- the plan-only
+# version of it reported SkylineRiseCam21 inside a 3.6 m hedge from 18 m up.
+_CAM_KEEPOUT_SURFACES = ("terrace_platform", "garden_lawn", "stone_ring_base",
+                         "path_steps", "side_steps", "ground_flowers",
+                         "ground_blooms", "tea_saucer", "mushroom_small",
+                         "key_ornate")
+CAM_KEEPOUT_DROPPED = []
+
+
+def _drop_pieces_standing_on_cameras(bands):
+    try:
+        import v2_config as _C
+        pts = [c["location"] for c in getattr(_C, "HERO_CAMS", ())]
+    except Exception:                          # the layout must import alone
+        return bands
+    if not pts:
+        return bands
+    for band in bands:
+        keep = []
+        for it in band:
+            a = it["asset"]
+            if a in _CAM_KEEPOUT_SURFACES or a not in FOOT:
+                keep.append(it)
+                continue
+            sc = it["scale"]
+            sx, sy = ((abs(sc[0]), abs(sc[1])) if isinstance(sc, (list, tuple))
+                      else (abs(sc), abs(sc)))
+            hx, hy = FOOT[a]
+            hx *= sx
+            hy *= sy
+            yaw = math.radians(it["rot"][1])
+            co, si = math.cos(yaw), math.sin(yaw)
+            hit = None
+            for (cx, cy, _cz) in pts:
+                dx, dy = cx - it["pos"][0], cy - it["pos"][1]
+                lx, ly = dx * co + dy * si, -dx * si + dy * co
+                # the inscribed ELLIPSE, for the reason verify_v2_layout's
+                # matching check records: FOOT is a half-extent pair, not a
+                # shape, and its corners reach 1.41x its axes -- which claimed
+                # a camera 2.9 m clear of a round stem, standing behind it.
+                if (lx / hx) ** 2 + (ly / hy) ** 2 <= 1.0:
+                    hit = (cx, cy)
+                    break
+            if hit is None:
+                keep.append(it)
+            else:
+                CAM_KEEPOUT_DROPPED.append("%s (%s)" % (it["label"], a))
+        band[:] = keep
+    return bands
+
+
+_drop_pieces_standing_on_cameras(BUILD_BANDS)
+
 #: Everything the layout declares: what the builder walks, plus the two bands
 #: it places by their own rules (SKY is the dome/atmosphere, HOVER is lifted
 #: props). Derived from BUILD_BANDS rather than restated.
