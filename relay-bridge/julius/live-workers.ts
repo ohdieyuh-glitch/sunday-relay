@@ -393,7 +393,28 @@ export function createLiveHermesReviewerAdapter(input: {
         throw new JuliusDispatchError('PROVIDER_UNAVAILABLE', false, `Hermes reviewer could not launch: ${safeClaim(outcome.safeMessage, 120)}.`, 'reviewer_launch_failed');
       }
       if (outcome.kind === 'review_incomplete') {
-        throw new JuliusDispatchError('WORKER_EXECUTION_FAILURE', false, `Hermes review incomplete: ${safeClaim(outcome.safeMessage, 120)}.`, 'reviewer_review_incomplete');
+        /**
+         * THE SHAPE IS THE CLASS, because the class is what survives.
+         *
+         * Paid attempt #2 (run 33802017460) failed with both reviewer tasks
+         * recording the single word `reviewer_review_incomplete`. The message
+         * beside it already separated a dead credential from a model writing
+         * prose — and the message is not persisted; the coordinator writes the
+         * code, the retryable flag and the failure class. So the artifact that
+         * exists to explain a paid failure said only that the review was
+         * unreadable, and a second paid run was the only way to learn more.
+         *
+         * A timeout, a refused credential and an upstream HTTP error are the
+         * three the operator can act on without reading anything else, so they
+         * keep their own Julius codes; the rest are worker execution failures
+         * distinguished by their shape. None is retryable: every one of them
+         * describes an answer that will be identical if asked again.
+         */
+        const code = outcome.shape === 'review_timeout' ? 'TIMEOUT'
+          : outcome.shape === 'review_authentication_failed' ? 'AUTH_CONFIGURATION'
+            : outcome.shape === 'review_provider_http_error' ? 'PROVIDER_UNAVAILABLE'
+              : 'WORKER_EXECUTION_FAILURE';
+        throw new JuliusDispatchError(code, false, `Hermes review incomplete: ${safeClaim(outcome.safeMessage, 120)}.`, outcome.shape);
       }
       if (outcome.result.verdict === 'unable_to_review') {
         // A reviewer that could not review has not reviewed. Recording that as

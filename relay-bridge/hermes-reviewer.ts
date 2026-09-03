@@ -61,7 +61,37 @@ export type HermesOutcome =
    */
   | { kind: 'reviewed'; result: HermesReviewResult; startedAt: string; completedAt: string; requestedModel: string | null; servedModel: string | null; provider: string | null }
   | { kind: 'launch_failed'; safeMessage: string }
-  | { kind: 'review_incomplete'; safeMessage: string; startedAt: string; completedAt: string };
+  | { kind: 'review_incomplete'; safeMessage: string; shape: HermesReviewShape; startedAt: string; completedAt: string };
+
+/**
+ * WHY A REVIEW WAS UNREADABLE, as a machine token.
+ *
+ * Paid attempt #2 (run 33802017460) failed with BOTH reviewer tasks recording
+ * `reviewer_review_incomplete` and nothing else. The safe message that would
+ * have separated a dead credential from a model writing prose was composed and
+ * then dropped: the coordinator persists `code`, `retryable` and `failureClass`
+ * — not the message. So `failures.tsv` said the review was unreadable and could
+ * not say in what way, which is the one thing an operator needs to know before
+ * paying again.
+ *
+ * These are the shapes the local path can actually distinguish. They are
+ * STRUCTURAL only: no reviewer text, no diff, no provider message. The token
+ * travels as the Julius failure class, so it survives the database being
+ * destroyed with the job.
+ */
+export type HermesReviewShape =
+  | 'review_timeout'
+  | 'review_authentication_failed'
+  | 'review_provider_http_error'
+  | 'review_process_exit'
+  | 'review_output_too_large'
+  | 'review_json_absent'
+  | 'review_json_unparseable'
+  | 'review_verdict_missing'
+  | 'review_verdict_invalid'
+  | 'review_summary_missing'
+  | 'review_summary_invalid'
+  | 'review_unreadable';
 
 export interface HermesConfig {
   executable: string;
@@ -427,13 +457,82 @@ export function escapeInvalidJsonEscapes(text: string): string {
 }
 
 /** Strict validation — malformed output NEVER approves. */
+/**
+ * THE ONE JSON OBJECT THE REVIEWER MEANT, found deterministically.
+ *
+ * The old extraction took the first `{` and the last `}` in the text. That is
+ * correct for a model that answers with nothing else, and wrong the moment it
+ * does not: a sentence containing a brace before the JSON, a trailing note
+ * after it, or a fenced diff snippet quoted above the verdict all produce a
+ * slice that spans two things and parses as neither. The reviewer is then told
+ * its JSON was unparseable when the JSON was fine.
+ *
+ * So candidates are scanned in order — each fenced block first, then the bare
+ * text — and within each, every balanced `{…}` region is offered to the parser
+ * until one is a JSON OBJECT. String literals are tracked so a brace inside a
+ * quoted diff cannot end the region.
+ *
+ * THIS IS NOT PERMISSIVENESS. It changes only WHICH substring is parsed, never
+ * what an accepted review must contain: the verdict vocabulary, the required
+ * summary and every other rule are applied afterwards, unchanged. A text with
+ * no parseable object still yields null.
+ */
+export function extractReviewJson(text: string): string | null {
+  const candidates: string[] = [];
+  for (const match of text.matchAll(/```(?:json)?\s*([\s\S]*?)```/gi)) {
+    if (match[1] !== undefined) candidates.push(match[1]);
+  }
+  candidates.push(text);
+
+  for (const candidate of candidates) {
+    for (let i = 0; i < candidate.length; i += 1) {
+      if (candidate[i] !== '{') continue;
+      const region = balancedObject(candidate, i);
+      if (region === null) continue;
+      // The REGION is returned, never the repaired form: the caller performs
+      // the repair itself and records that it had to, and handing back
+      // already-repaired text would silently clear `parseRepaired` — evidence
+      // that the reviewer's output was malformed.
+      for (const attempt of [region, escapeInvalidJsonEscapes(region)]) {
+        try {
+          const parsed: unknown = JSON.parse(attempt);
+          if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)) return region;
+        } catch { /* try the repaired form, then the next region */ }
+      }
+    }
+  }
+  return null;
+}
+
+/** The `{…}` starting at `from`, or null when it never closes. */
+function balancedObject(text: string, from: number): string | null {
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let i = from; i < text.length; i += 1) {
+    const ch = text[i]!;
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (ch === '\\') escaped = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') { inString = true; continue; }
+    if (ch === '{') depth += 1;
+    else if (ch === '}') {
+      depth -= 1;
+      if (depth === 0) return text.slice(from, i + 1);
+    }
+  }
+  return null;
+}
+
 export function validateHermesReview(text: string): HermesReviewResult | null {
-  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  const candidate = fenced ? fenced[1] : text;
-  const start = candidate.indexOf('{');
-  const end = candidate.lastIndexOf('}');
-  if (start === -1 || end === -1 || end <= start) return null;
-  const slice = candidate.slice(start, end + 1);
+  // ONE EXTRACTOR FOR EVERY READER, so the validator, the shape classifier and
+  // the human-readable description can never disagree about which object the
+  // reviewer meant, or about whether there was one at all.
+  const slice = extractReviewJson(text);
+  if (slice === null) return null;
   let raw: unknown;
   let parseRepaired = false;
   try {
@@ -550,6 +649,7 @@ export async function runHermesReview(input: {
 
     let out = '';
     let bytes = 0;
+    let truncated = false;
     let settled = false;
     const finish = (o: HermesOutcome) => {
       if (settled) return;
@@ -574,12 +674,16 @@ export async function runHermesReview(input: {
     };
     const timer = setTimeout(() => {
       try { child.kill('SIGTERM'); } catch { /* already gone */ }
-      finish({ kind: 'review_incomplete', safeMessage: 'The Hermes reviewer timed out.', startedAt, completedAt: now() });
+      finish({ kind: 'review_incomplete', safeMessage: 'The Hermes reviewer timed out.', shape: 'review_timeout', startedAt, completedAt: now() });
     }, cfg.timeoutMs);
 
     child.stdout?.on('data', (c: Buffer) => {
       bytes += c.length;
-      if (bytes <= cfg.maxOutputBytes) out += c.toString('utf8');
+      // PAST THE CEILING THE TEXT IS NO LONGER THE REVIEW. Dropping the
+      // overflowing chunk and parsing what arrived would report a truncated
+      // review as unparseable JSON — a shape complaint about the model when the
+      // cause is our own ceiling. The overflow is remembered instead.
+      if (bytes <= cfg.maxOutputBytes) out += c.toString('utf8'); else truncated = true;
     });
     child.stderr?.on('data', () => { /* never surfaced verbatim */ });
     child.on('error', () => finish({ kind: 'launch_failed', safeMessage: 'The Hermes reviewer could not be started.' }));
@@ -594,16 +698,40 @@ export async function runHermesReview(input: {
          * and rubric when the fix is an expired key.
          */
         const upstream = classifyHermesUpstreamFailure(out);
+        /**
+         * THE SHAPE IS THE PART THAT SURVIVES. The message below is composed
+         * and then dropped — the coordinator persists the code, the retryable
+         * flag and the failure CLASS, not the text — which is why paid attempt
+         * #2 recorded `reviewer_review_incomplete` twice and could not say
+         * whether the credential was dead or the model had written prose.
+         *
+         * The order is the order of causes: an answer that never came, then
+         * one the provider refused, then a process that died, then our own
+         * ceiling, and only then the shape of what the model actually wrote.
+         */
+        const shape: HermesReviewShape =
+          upstream?.kind === 'authentication' ? 'review_authentication_failed'
+            : upstream !== null ? 'review_provider_http_error'
+              : code !== 0 ? 'review_process_exit'
+                : truncated ? 'review_output_too_large'
+                  : classifyUnreadableReview(out);
         finish({
           kind: 'review_incomplete',
+          shape,
           safeMessage:
             upstream?.kind === 'authentication'
               ? 'The Hermes reviewer could not authenticate with its configured provider.'
               : upstream !== null
                 ? `The Hermes reviewer's provider returned HTTP ${String(upstream.status ?? 0)}.`
-                : code === 0
-                  ? 'The Hermes reviewer returned no valid structured review.'
-                  : `The Hermes reviewer exited without a valid review (code ${code ?? 'unknown'}).`,
+                : code !== 0
+                  ? `The Hermes reviewer exited without a valid review (code ${code ?? 'unknown'}).`
+                  : truncated
+                    ? `The Hermes reviewer produced more than the ${String(cfg.maxOutputBytes)}-byte ceiling allows.`
+                    // SHAPE, NOT TEXT. `describeUnreadableReview` reports whether
+                    // a fence was present, whether JSON parsed, and which
+                    // required field was wrong — never the review itself, which
+                    // quotes the diff.
+                    : `The Hermes reviewer returned no valid structured review. ${describeUnreadableReview(out)}`,
           startedAt,
           completedAt,
         });
@@ -641,26 +769,70 @@ export async function runHermesReview(input: {
  * answering "approve" or "PASS") and a word of that shape cannot carry a
  * sentence. Review TEXT is never included: it quotes the diff.
  */
+/**
+ * THE SAME INSPECTION `describeUnreadableReview` MAKES, AS ONE TOKEN.
+ *
+ * The prose description is for a human reading a log; this is for the durable
+ * record, which is the copy that survives. Both walk the text in the same order
+ * — fenced block, braces, parse, verdict, summary — so a shape and its
+ * description can never disagree about what was wrong.
+ *
+ * `unable_to_review` is deliberately NOT invalid here: it is a verdict the
+ * reviewer is allowed to return and the adapter refuses separately, with its
+ * own class. Only a word outside the whole vocabulary is `verdict_invalid`.
+ */
+export function classifyUnreadableReview(text: string): HermesReviewShape {
+  const slice = extractReviewJson(text);
+  if (slice === null) {
+    // No balanced object parsed anywhere. Whether the model wrote prose or
+    // stopped mid-object is the difference between "absent" and "unparseable",
+    // and a brace with no partner is the signature of the second.
+    return /\{/.test(text) ? 'review_json_unparseable' : 'review_json_absent';
+  }
+  let raw: unknown;
+  try {
+    raw = JSON.parse(slice);
+  } catch {
+    try { raw = JSON.parse(escapeInvalidJsonEscapes(slice)); } catch { return 'review_json_unparseable'; }
+  }
+  if (raw === null || typeof raw !== 'object') return 'review_json_unparseable';
+
+  const o = raw as Record<string, unknown>;
+  if (o.verdict === undefined) return 'review_verdict_missing';
+  if (o.verdict !== 'approved' && o.verdict !== 'changes_required' && o.verdict !== 'unable_to_review') {
+    return 'review_verdict_invalid';
+  }
+  if (o.summary === undefined) return 'review_summary_missing';
+  if (typeof o.summary !== 'string' || !o.summary.trim()) return 'review_summary_invalid';
+  // Every field the validator requires is present and well formed, so the
+  // rejection came from somewhere this function cannot see.
+  return 'review_unreadable';
+}
+
 export function describeUnreadableReview(text: string): string {
   const parts: string[] = [];
   parts.push(`chars=${String(text.length)}`);
   parts.push(`fenced=${String(/```/.test(text))}`);
 
-  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  const candidate = fenced ? fenced[1] : text;
-  const start = candidate.indexOf('{');
-  const end = candidate.lastIndexOf('}');
-  if (start === -1 || end === -1 || end <= start) {
-    parts.push('json=absent');
+  // THE SAME EXTRACTOR THE VALIDATOR USES. Reading the text a second way let
+  // this description and the durable shape disagree: a review whose fenced
+  // block held a quoted diff and whose JSON followed it was reported here as
+  // "json=absent" while the classifier had already parsed the object and found
+  // the verdict word wrong.
+  const slice = extractReviewJson(text);
+  if (slice === null) {
+    parts.push(/\{/.test(text) ? 'json=unparseable' : 'json=absent');
     return `Review shape: ${parts.join(' ')}.`;
   }
 
   let raw: unknown;
   try {
-    raw = JSON.parse(candidate.slice(start, end + 1));
+    raw = JSON.parse(slice);
   } catch {
-    parts.push('json=unparseable');
-    return `Review shape: ${parts.join(' ')}.`;
+    try { raw = JSON.parse(escapeInvalidJsonEscapes(slice)); } catch {
+      parts.push('json=unparseable');
+      return `Review shape: ${parts.join(' ')}.`;
+    }
   }
   if (raw === null || typeof raw !== 'object') {
     parts.push('json=notAnObject');

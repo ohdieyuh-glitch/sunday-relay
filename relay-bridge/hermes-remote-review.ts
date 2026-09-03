@@ -1,4 +1,4 @@
-import { buildReviewPrompt, describeUnreadableReview, validateHermesReview, type HermesOutcome, type ReviewPacket } from './hermes-reviewer';
+import { buildReviewPrompt, classifyUnreadableReview, describeUnreadableReview, validateHermesReview, type HermesOutcome, type ReviewPacket } from './hermes-reviewer';
 import { SERVICE_MAX_TURNS } from '../relay-hermes-service/service';
 
 /**
@@ -222,6 +222,9 @@ export async function runRemoteHermesReview(input: {
     return {
       kind: 'review_incomplete',
       safeMessage: `The Reviewer service refused the review (${String(start.status)}).`,
+      // The service answered and said no. 401/403 is its credential; anything
+      // else is an upstream refusal.
+      shape: start.status === 401 || start.status === 403 ? 'review_authentication_failed' : 'review_provider_http_error',
       startedAt,
       completedAt: now(),
     };
@@ -235,6 +238,7 @@ export async function runRemoteHermesReview(input: {
       return {
         kind: 'review_incomplete',
         safeMessage: 'The Reviewer service did not return a verdict within the time allowed. Whether it finished is unknown.',
+        shape: 'review_timeout',
         startedAt,
         completedAt: now(),
       };
@@ -259,6 +263,8 @@ export async function runRemoteHermesReview(input: {
       return {
         kind: 'review_incomplete',
         safeMessage: state.safeMessage ?? `The Reviewer service ended in "${state.status ?? 'unknown'}".`,
+        // The service ended without a review text. Its own process, not ours.
+        shape: 'review_process_exit',
         startedAt,
         completedAt: now(),
       };
@@ -271,6 +277,9 @@ export async function runRemoteHermesReview(input: {
       return {
         kind: 'review_incomplete',
         safeMessage: `The Reviewer service returned a review Relay could not read. ${describeUnreadableReview(state.reviewText)}`,
+        // THE SAME CLASSIFIER AS THE LOCAL PATH, on the same text, so the two
+        // reviewers cannot disagree about what an unreadable review was.
+        shape: classifyUnreadableReview(state.reviewText),
         startedAt,
         completedAt: now(),
       };

@@ -24,7 +24,7 @@ import type { GptRunOutcome } from '../../src/relay/connectors/gpt-architect';
 import { JuliusDispatchError, safeFailureClass } from '../../src/relay/mission/julius';
 import { compileHostedEnvelope } from '../hosted-coding-agent/hosted-envelope';
 import type { HostedQueryFn, HostedRunOutcome } from '../hosted-coding-agent/hosted-runner';
-import { loadHermesConfig, type HermesOutcome, type ReviewPacket } from '../hermes-reviewer';
+import { classifyUnreadableReview, loadHermesConfig, validateHermesReview, type HermesOutcome, type ReviewPacket } from '../hermes-reviewer';
 import {
   createLiveArtifactExchange,
   createLiveHermesReviewerAdapter,
@@ -117,6 +117,40 @@ function fakeCoder(log: FakeLog, prompts: string[]) {
   };
 }
 
+/**
+ * A REVIEWER THAT ANSWERS IN TEXT, read by the REAL validator.
+ *
+ * `fakeReviewer` below hands Julius an already-built `reviewed` outcome, which
+ * is right for testing the scheduler but skips the part paid attempt #2 failed
+ * in: the parse. This one emits the JSON a reviewer would actually print and
+ * builds the outcome the way `runHermesReview`'s close handler does — through
+ * `validateHermesReview`, and through `classifyUnreadableReview` when that
+ * returns null. Nothing is hard-coded to succeed: a text this rig cannot parse
+ * fails the dispatch exactly as a real one would.
+ */
+function textReviewer(log: FakeLog, packets: ReviewPacket[], texts: readonly string[]) {
+  let call = 0;
+  return async (input: { packet: ReviewPacket }): Promise<HermesOutcome> => {
+    log.order.push('reviewer');
+    packets.push(input.packet);
+    const text = texts[Math.min(call, texts.length - 1)]!;
+    call += 1;
+    const startedAt = new Date().toISOString();
+    const result = validateHermesReview(text);
+    if (result === null) {
+      return {
+        kind: 'review_incomplete', shape: classifyUnreadableReview(text),
+        safeMessage: 'The Hermes reviewer returned no valid structured review.',
+        startedAt, completedAt: new Date().toISOString(),
+      };
+    }
+    return {
+      kind: 'reviewed', result, startedAt, completedAt: new Date().toISOString(),
+      requestedModel: 'grok-build-0.1', servedModel: 'grok-build-0.1', provider: 'xai',
+    };
+  };
+}
+
 function fakeReviewer(log: FakeLog, packets: ReviewPacket[], verdicts: Array<'approved' | 'changes_required'>) {
   let call = 0;
   return async (input: { packet: ReviewPacket }): Promise<HermesOutcome> => {
@@ -167,6 +201,8 @@ function liveResolution(overrides: {
   contexts?: Parameters<typeof resolveLiveWorkers>[0]['contexts'];
   /** A failing or otherwise unusual architect, for the failure-diagnosis cases. */
   architect?: () => Promise<GptRunOutcome>;
+  /** Raw reviewer output, read by the real validator instead of a built outcome. */
+  reviewerTexts?: readonly string[];
 }) {
   const log: FakeLog = { order: [] };
   const prompts: string[] = [];
@@ -182,7 +218,9 @@ function liveResolution(overrides: {
     runners: {
       architect: (overrides.architect ?? fakeArchitect(log)) as never,
       coder: fakeCoder(log, prompts) as never,
-      reviewer: fakeReviewer(log, packets, overrides.verdicts ?? ['approved']) as never,
+      reviewer: (overrides.reviewerTexts !== undefined
+        ? textReviewer(log, packets, overrides.reviewerTexts)
+        : fakeReviewer(log, packets, overrides.verdicts ?? ['approved'])) as never,
       queryLoader: async () => fakeQuery,
     },
   });
@@ -371,12 +409,13 @@ async function driveLiveMission(
   verdicts: Array<'approved' | 'changes_required'>,
   budget?: Parameters<typeof assembleLiveJuliusRuntime>[0]['budget'],
   architect?: () => Promise<GptRunOutcome>,
+  reviewerTexts?: readonly string[],
 ) {
   const memory = createJuliusMemoryStore();
   // Not narrowed to JuliusRuntimeStore: the drive loop runs the recovery sweep,
   // and the memory store is the recovery driver as well as the store.
   const handoffs = createContextAndClaimHandoffs(memory as unknown as JuliusRuntimeStore & JuliusRecoveryDriver);
-  const fakes = liveResolution({ verdicts, contexts: handoffs.contexts, architect });
+  const fakes = liveResolution({ verdicts, contexts: handoffs.contexts, architect, reviewerTexts });
   expect(fakes.resolution.ok).toBe(true);
   seedMissionRun(memory);
   const runtime = assembleLiveJuliusRuntime({
@@ -441,6 +480,66 @@ describe('a full mission drive with Julius in control', () => {
    * FIRST genuine dispatch at attempt 3 of 3 — one rate limit away from being
    * refused as exhausted, after the plan had already been paid for.
    */
+  /**
+   * PAID ATTEMPT #2, WITH A REVIEWER THAT ANSWERS IN THE CONTRACT'S OWN SHAPE.
+   *
+   * Run 33802017460 got a real plan, a real diff and passing tests, and then
+   * both reviews failed to parse — so Julius never received a verdict and the
+   * run ended FAILED with zero decisions. This drives the same two packets with
+   * reviewer TEXT rather than a pre-built outcome, so the JSON goes through the
+   * real `validateHermesReview` on its way to the adapter, the verification
+   * evaluator and completion.
+   *
+   * It is not permission to approve this fixture: the text is ordinary reviewer
+   * output, and a text the validator rejects fails the dispatch exactly as the
+   * paid run did — which the case below this one proves with the same rig.
+   */
+  it('the attempt #2 packets complete when the reviewer answers in the contract shape', async () => {
+    const approved = (summary: string) => JSON.stringify({
+      verdict: 'approved', summary,
+      findings: [],
+      requirementsChecked: [{ requirement: 'AC-1', status: 'passed', evidence: 'reviewed the artifact' }],
+    });
+    const { memory, outcome, fakes } = await driveLiveMission(['approved'], undefined, undefined, [
+      approved('The plan satisfies every acceptance criterion.'),
+      approved('The diff implements the plan and the tests pass.'),
+    ]);
+
+    // The two packets attempt #2 actually built. Both carry the validated
+    // architect handoff; the build review additionally carries the coder's
+    // diff, its test command and the acceptance criteria Julius holds.
+    expect(fakes.packets, 'one packet per review task').toHaveLength(2);
+    for (const packet of fakes.packets) {
+      expect(packet.handoffJson.length, 'every review sees the architect plan').toBeGreaterThan(0);
+      expect(packet.testCommand).toBe('npm run mission-test');
+    }
+    const buildPacket = fakes.packets.find((packet) => packet.unifiedDiff.length > 0);
+    expect(buildPacket, 'the build review saw the coder diff').toBeDefined();
+    expect(buildPacket!.unifiedDiff).toBe(DIFF_TEXT);
+    expect(buildPacket!.relayEvidence.length, 'and the evidence Relay itself recorded').toBeGreaterThan(0);
+
+    // Through the real parser, to a real verdict, to completion.
+    expect(outcome.state, 'the run completes through verification').toBe('COMPLETED');
+    const decisions = await memory.decisionsForRun('run-live', 'prj-live');
+    expect(decisions.length, 'and completion came from decisions, not from nothing').toBeGreaterThan(0);
+    expect(decisions.every((decision) => decision.action === 'ACCEPT'),
+      'each one an acceptance the reviewer actually issued').toBe(true);
+    const reviewTasks = ['plan-1:review', 'build-1:review'].map((id) => memory.taskRow(id));
+    for (const row of reviewTasks) expect(row?.state, 'both reviews succeeded').toBe('SUCCEEDED');
+  });
+
+  it('and the same rig still fails when the reviewer answers unreadably', async () => {
+    // The control. Without it the case above proves only that a fixture can be
+    // made to pass, not that the parser is on the path.
+    const { memory, outcome } = await driveLiveMission(['approved'], undefined, undefined, [
+      'The plan looks fine to me overall.',
+    ]);
+    expect(outcome.state, 'no verdict, no completion').toBe('FAILED');
+    expect(memory.taskRow('plan-1:review')?.state).toBe('FAILED');
+    const failures = memory.events().filter((event) => event.type === 'task.failed');
+    expect(failures.at(-1)?.facts.failureClass, 'and the shape names why').toBe('review_json_absent');
+  });
+
   it('CASE K: every task in the live graph reaches its first dispatch as attempt 1', async () => {
     const { memory, outcome, handoffs } = await driveLiveMission(['approved']);
     expect(outcome.state, 'the mission still completes').toBe('COMPLETED');

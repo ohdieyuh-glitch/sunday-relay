@@ -604,6 +604,7 @@ describe('14-20. only a genuine, current, approving review can complete the miss
     const h = harness({
       reviewer: async () => ({
         kind: 'review_incomplete',
+        shape: 'review_json_absent' as const,
         safeMessage: 'The Hermes reviewer returned no valid structured review.',
         startedAt: AT,
         completedAt: AT,

@@ -28,12 +28,16 @@ describe('the review shape names which failure it was', () => {
   });
 
   it('separates malformed JSON from absent JSON', () => {
-    // Braces present but the content is not valid JSON. My first fixture here
-    // omitted the closing brace, which the validator's brace scan correctly
-    // calls ABSENT rather than unparseable — the fixture was wrong, not the
-    // describer.
+    // Braces present but the content is not valid JSON.
     expect(describeUnreadableReview('{ "verdict": "approved",, }')).toContain('json=unparseable');
-    expect(describeUnreadableReview('{ "verdict": "approved", ')).toContain('json=absent');
+    // AN OBJECT THAT NEVER CLOSES IS TRUNCATED, NOT ABSENT. The old extraction
+    // scanned to the last `}` in the text, found none, and reported the same
+    // word it uses for prose — so a model cut off mid-review and a model that
+    // wrote an essay were indistinguishable. They need different responses: a
+    // ceiling or a generation limit, versus a prompt. `absent` now means what
+    // it says, and this input is the truncation case.
+    expect(describeUnreadableReview('{ "verdict": "approved", ')).toContain('json=unparseable');
+    expect(describeUnreadableReview('no braces at all here')).toContain('json=absent');
   });
 
   it('names a verdict word outside the vocabulary — the likeliest cause', () => {

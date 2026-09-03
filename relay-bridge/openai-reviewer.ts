@@ -1,4 +1,4 @@
-import { buildReviewPrompt, describeUnreadableReview, validateHermesReview, type HermesOutcome, type ReviewPacket } from './hermes-reviewer';
+import { classifyUnreadableReview, buildReviewPrompt, describeUnreadableReview, validateHermesReview, type HermesOutcome, type ReviewPacket } from './hermes-reviewer';
 
 /**
  * A REVIEWER THAT NEEDS NO INSTALLED BINARY AND NO NEW SERVICE.
@@ -146,6 +146,8 @@ export async function runOpenAiReview(input: {
         : response.status === 429
           ? 'The reviewer provider refused the request (rate limit or insufficient balance).'
           : `The reviewer provider returned status ${String(response.status)}.`,
+      shape: response.status === 401 || response.status === 403
+        ? 'review_authentication_failed' : 'review_provider_http_error',
       startedAt,
       completedAt: now(),
     };
@@ -165,6 +167,9 @@ export async function runOpenAiReview(input: {
       return {
         kind: 'review_incomplete',
         safeMessage: `The reviewer returned a review Relay could not read. ${describeUnreadableReview(text)}`,
+        // THE SAME CLASSIFIER EVERY REVIEWER USES, so three providers cannot
+        // describe one unreadable review three different ways.
+        shape: classifyUnreadableReview(text),
         startedAt,
         completedAt: now(),
       };
@@ -182,6 +187,8 @@ export async function runOpenAiReview(input: {
     return {
       kind: 'review_incomplete',
       safeMessage: 'The reviewer response could not be read.',
+      // The HTTP body itself was unreadable — not a review shape at all.
+      shape: 'review_json_unparseable',
       startedAt,
       completedAt: now(),
     };
