@@ -159,7 +159,7 @@ export interface JuliusRunWriter {
  * RECLAIMING EXPIRED LEASES.
  *
  * `recoverExpired` exists on the recovery repository and nothing called it —
- * the claim query happens to also pick up an expired ACTIVE task, so the
+ * the claim query USED to also pick up an expired ACTIVE task, so the
  * runtime worked without recovery and lost every RECOVERY FACT: what was
  * requeued, what was abandoned, how many attempts it had taken. Declaring the
  * port is what lets the run loop run the sweep and record what it did.

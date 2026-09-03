@@ -291,13 +291,12 @@ describe('an execution attempt is spent at admission, never at the claim', () =>
 
   /* ------------------------------------------------------------- CASE G2 -- */
   it('CASE G2: a reclaimed expired lease is counted, and the reclaim loop is bounded', async () => {
-    // THE BOUND ONLY EXISTS IF THE SWEEP RUNS. The claim query also offers an
-    // ACTIVE task whose lease has expired, and that path reclaims WITHOUT
-    // counting — so a task that is claimed, dies before admission and has its
-    // lease expire could be picked up forever: `attempt` stays 0 because
-    // nothing ran, and the counter that bounds this loop is never reached.
-    // The live driver runs the sweep before every tick, which is what turns a
-    // reclaim into a counted, bounded event.
+    // THE BOUND ONLY EXISTS IF THE SWEEP RUNS. The claim query USED to also
+    // offer an ACTIVE task whose lease had expired, and that path reclaimed
+    // WITHOUT counting — so a task claimed by a worker that died before
+    // admission could be picked up forever: `attempt` stays 0 because nothing
+    // ran, and the counter that bounds this loop was never reached. That
+    // branch is gone, and `tick` sweeps before it claims.
     const harness = createJuliusHarness({ workers: [{ worker: CODER, script: [SUCCESS] }] });
     const { projectId } = seedRun(harness, { tasks: [task({ taskId: 'only' })] });
 
@@ -357,22 +356,32 @@ describe('an execution attempt is spent at admission, never at the claim', () =>
       expect(harness.adapters.get(CODER.adapterId)!.dispatches).toHaveLength(0);
     });
 
-    it('a run outside this scope refuses without admitting or writing', async () => {
+    /**
+     * TENANCY REFUSES, AND WRITES NOTHING.
+     *
+     * Stated plainly: this gate is NOT reachable through the run loop, because
+     * `resolvePolicy` loads the run first and a run it cannot load is skipped
+     * before the gates run at all. So this drives the gate directly and claims
+     * only what that proves — the refusal happens, and it writes nothing into
+     * another tenant's stream. The ORDER of admission against the gates is
+     * proven by the three cases above, which do go through `tick`.
+     */
+    it('a run outside this scope refuses, and writes nothing', async () => {
       const harness = createJuliusHarness({ workers: [{ worker: CODER, script: [SUCCESS] }] });
       seedRun(harness, { tasks: [task({ taskId: 'only' })] });
-      // Claim under the real project, then run the tick under another one: the
-      // claim query is scoped, so this is reached by driving the pipeline with
-      // a scope the run does not belong to.
       const [claim] = await harness.deps.store.claimRunnable({
         owner: 'worker-a', now: harness.clock.now(), leaseExpiresAt: '2099-01-01T00:00:00.000Z',
         limit: 1, projectId: 'prj-1',
       });
+      const before = harness.store.events().length;
+
       const preflight = await prepareClaimedTask(
         { claim: claim!, policy: cardPolicy(), verification: verificationPolicy(), capability: 'implement' },
         harness.deps, { projectId: 'prj-somebody-else' },
       );
       expect(preflight).toMatchObject({ kind: 'REFUSED', outcome: { reasonCode: 'RUN_NOT_IN_SCOPE' } });
-      expect(harness.store.taskRow('only')!.attempt, 'another tenant cannot spend this task\'s attempts').toBe(0);
+      expect(harness.store.events().length, 'not even a failure event reaches another tenant').toBe(before);
+      expect(harness.store.taskRow('only')!.attempt, 'and no attempt is spent').toBe(0);
     });
 
     it('a task that passes every gate is admitted, and runs as attempt 1', async () => {
@@ -393,7 +402,7 @@ describe('an execution attempt is spent at admission, never at the claim', () =>
      * owner must execute nothing and spend nothing; the attempt belongs to
      * whoever holds the lease now.
      */
-    it('a lease that moves between the gates and the admission admits nobody stale', async () => {
+    it('a lease reclaimed while a worker decides admits nobody stale', async () => {
       const harness = createJuliusHarness({ workers: [{ worker: CODER, script: [SUCCESS] }] });
       const { projectId } = seedRun(harness, { tasks: [task({ taskId: 'only' })] });
 

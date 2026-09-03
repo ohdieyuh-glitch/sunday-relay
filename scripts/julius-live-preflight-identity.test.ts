@@ -510,6 +510,41 @@ suite('dry run 33635375764 — the preflight identity satisfies the executor’s
     expect(claimed.map((entry) => entry.taskId), 'nothing revives it').not.toContain(identity.taskId);
   });
 
+  /**
+   * MIGRATION 022 UPGRADES AN EXISTING 021 DATABASE, against a real one.
+   *
+   * This is the case CI can otherwise never see: every workflow migrates a
+   * container that starts EMPTY, so the sentinel that used to guard `migrate()`
+   * — a probe for one column of the then-last migration — could report
+   * "already migrated" for a database at 021 and skip 022 entirely, and no job
+   * would notice. The guard is the version ledger now; this proves it against
+   * a database that genuinely holds 21 versions and not 22.
+   */
+  it('brings a database at 021 up to 022, without replaying what it already has', async () => {
+    // Wind the real schema back to 021: drop the column 022 adds and its stamp.
+    await pool.query('ALTER TABLE relay_wonderland.julius_tasks DROP COLUMN IF EXISTS recoveries');
+    await pool.query("DELETE FROM relay_wonderland.schema_migrations WHERE version='022_julius_execution_attempts'");
+    const at021 = await pool.query<{ count: string }>(
+      "SELECT count(*) FROM relay_wonderland.schema_migrations WHERE version='022_julius_execution_attempts'",
+    );
+    expect(Number(at021.rows[0]?.count), 'the database is genuinely at 021').toBe(0);
+
+    const result = await migrateIfNeeded(pool);
+    expect(result.applied, 'exactly the missing version, and nothing replayed')
+      .toEqual(['022_julius_execution_attempts']);
+    expect(result.alreadyPresent, 'the other 21 were left alone').toBe(21);
+
+    const column = await pool.query<{ count: string }>(
+      "SELECT count(*) FROM information_schema.columns WHERE table_schema='relay_wonderland' AND table_name='julius_tasks' AND column_name='recoveries'",
+    );
+    expect(Number(column.rows[0]?.count), 'the column the recovery bound depends on exists').toBe(1);
+
+    // And a second call is a no-op rather than a 42P07.
+    const again = await migrateIfNeeded(pool);
+    expect(again.applied, 'nothing left to do').toEqual([]);
+    expect(again.alreadyPresent).toBe(22);
+  });
+
   it('refuses to seed or clean up an identity it does not own, on any of its identifiers', async () => {
     const owned = fixture();
     for (const foreign of [

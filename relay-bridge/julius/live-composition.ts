@@ -394,19 +394,11 @@ export async function driveJuliusRunToTerminal(input: {
   };
   let lastState = 'UNKNOWN';
   for (let tick = 1; tick <= maxTicks; tick += 1) {
-    /**
-     * SWEEP BEFORE CLAIMING, so the bound on crash churn is real.
-     *
-     * `recoverExpired` existed and nothing called it. The runtime still worked,
-     * because the claim query also offers an ACTIVE task whose lease has
-     * expired — but that path reclaims WITHOUT counting, so a task that is
-     * claimed, dies before it is admitted, and has its lease expire could be
-     * picked up again forever: `attempt` stays 0 because nothing ran, and the
-     * recovery counter that bounds exactly this loop was never reached. The
-     * sweep is what turns a reclaim into a counted, bounded event, and what
-     * writes the `recovery.action` row that says which bound stopped a task.
-     */
-    await input.loop.recover({ projectId: input.projectId }, input.store);
+    // THE SWEEP IS THE KERNEL'S. This driver used to call `recover` before
+    // every tick, which made a store-level guarantee depend on one composition
+    // root remembering to make it — and it passed the default limit of 100
+    // where `tick` passes the claim limit, so the bound the comments advertised
+    // was not the bound the live path applied. `tick` sweeps first now.
     const report = await input.loop.tick({ projectId: input.projectId });
     const run = await input.store.loadRun(input.runId, input.projectId);
     lastState = run?.state ?? 'UNKNOWN';

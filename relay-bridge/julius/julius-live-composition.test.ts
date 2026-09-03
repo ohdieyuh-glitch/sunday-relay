@@ -467,13 +467,13 @@ describe('a full mission drive with Julius in control', () => {
    * THE DRIVE LOOP MUST ACTUALLY SWEEP, or the crash bound is decoration.
    *
    * `recoverExpired` was written and never called. The runtime worked anyway,
-   * because the claim query also offers an ACTIVE task whose lease has
-   * expired — but that path reclaims WITHOUT counting, so a task claimed and
-   * dead before admission could be picked up forever: `attempt` stays 0
-   * because nothing ran, and the counter that bounds exactly that loop is
-   * never reached. The one-line wiring that fixes it is the kind a future edit
-   * removes without noticing, so this asserts the SWEEP ITSELF, on the real
-   * driver, rather than trusting the line to stay.
+   * because the claim query USED to also offer an ACTIVE task whose lease had
+   * expired — but that path reclaimed WITHOUT counting, so a task claimed and
+   * dead before admission could be picked up forever. That branch is gone, and
+   * the sweep now belongs to `JuliusRunLoop.tick` rather than to this driver,
+   * so no future driver can bypass the bound by ticking differently. This
+   * asserts the SWEEP ITSELF, through the real drive, rather than trusting a
+   * line to stay where it was put.
    */
   it('the live driver runs the recovery sweep, so an abandoned lease is counted', async () => {
     const memory = createJuliusMemoryStore();

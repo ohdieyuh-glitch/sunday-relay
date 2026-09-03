@@ -91,8 +91,8 @@ export interface JuliusTickReport {
   /**
    * Tasks a pre-execution gate refused — outside this scope, an unresolvable
    * role, a C.A.R.D. denial, an approval nobody has given, a task that no
-   * longer exists. They spent no execution attempt and held no slot in the
-   * run's concurrency allowance, because none of them executed anything.
+   * longer exists. None executed anything, so none spent an execution attempt
+   * or took a slot in the run's concurrency allowance for this tick.
    */
   readonly refusedBeforeAdmission: number;
 }
@@ -279,9 +279,11 @@ export class JuliusRunLoop {
      * task RUNNABLE for an ordinary claim below.
      *
      * It runs HERE rather than in a driver so no future caller can bypass the
-     * invariant by ticking differently. `driveJuliusRunToTerminal` used to own
-     * this call, which made a store-level guarantee depend on one composition
-     * root remembering to make it.
+     * invariant by ticking differently. `driveJuliusRunToTerminal` owned this
+     * call and no longer does — a store-level guarantee should not depend on
+     * one composition root remembering to make it, and that driver also passed
+     * the sweep's default limit where this passes the claim limit, so the bound
+     * the comments advertised was not the one the live path applied.
      */
     await this.recover(scope, this.deps.store, this.config.claimLimit);
 
@@ -410,8 +412,12 @@ export class JuliusRunLoop {
       };
       const preflight = await prepareClaimedTask(request, this.deps, scope);
       if (preflight.kind === 'REFUSED') {
-        // The gate already released or ended the task. No execution happened,
-        // so no attempt is spent and no slot in the run's allowance is held.
+        // No execution happened, so no attempt is spent. Three of the five
+        // gates also END the task; the two that do not — a run outside this
+        // scope, which must write nothing at all, and a task that has vanished
+        // from its run — leave the lease to expire and the sweep to reclaim it.
+        // Neither is reachable from a real claim: the claim query is scoped by
+        // project, and a claimed task is in `tasksForRun` by construction.
         refusedBeforeAdmission += 1;
         outcomes.push(preflight.outcome);
         continue;
@@ -419,7 +425,14 @@ export class JuliusRunLoop {
 
       /* ------------------------------------------------- execution admission */
       /**
-       * NOTHING CAN REFUSE THIS TASK NOW; IT IS GOING TO RUN.
+       * EVERY GATE THAT CAN REFUSE CHEAPLY HAS ANSWERED; THIS TASK IS GOING
+       * TO RUN.
+       *
+       * Two refusals still follow, and both are deliberate: the router refuses
+       * when C.A.R.D. denies every eligible PROVIDER, and the coordinator
+       * refuses when the budget is spent. Each ends the task after one attempt
+       * rather than looping, and each needs the worker set or the reservation
+       * that only exist past this point.
        *
        * The attempt is spent here rather than by the claim because the live
        * topology hands tasks back routinely — a claim limit of 4 against a
@@ -530,15 +543,17 @@ export class JuliusRunLoop {
   /**
    * ONE BOUNDED RECOVERY SWEEP.
    *
-   * `recoverExpired` was written in #173 and never called. The runtime works
-   * without it — the claim query also picks up an expired ACTIVE task — so its
-   * absence cost no correctness and lost every RECOVERY FACT: what was
-   * requeued, what was abandoned after too many attempts, and how a run came
-   * to be in the state an operator is looking at.
+   * `recoverExpired` was written in #173 and never called. The runtime worked
+   * without it because the claim query ALSO offered an expired ACTIVE task —
+   * a reclaim that counted nothing, so its absence lost every RECOVERY FACT
+   * (what was requeued, what was abandoned, how a run reached the state an
+   * operator is looking at) AND left the churn unbounded. That branch is gone,
+   * so this is the only way back from an expired lease.
    *
-   * Bounded, scoped to a project, and separate from `tick()` on purpose: a
-   * deployment decides how often to sweep, and a sweep that ran inside every
-   * tick would scan on a cadence set by how much work there happens to be.
+   * `tick()` calls it before it claims. An earlier version of this comment
+   * said the two were separate on purpose, so a deployment could choose its
+   * own cadence; that made a store-level guarantee depend on whichever driver
+   * remembered to sweep, which is not a choice worth offering.
    */
   async recover(
     scope: { readonly projectId: string },

@@ -220,26 +220,7 @@ class RuntimeLedger {
 /* -------------------------------------------------------------- pipeline */
 
 /**
- * Run one claimed task through policy, context, execution and verification.
- *
- * TENANCY IS CHECKED HERE, not assumed from the claim. The claim came from a
- * scheduler query that may have been scoped to a project or not, and a task
- * whose run belongs to a different project must never be executed under this
- * caller's identity.
- */
-/**
- * WHAT MUST BE DECIDED BEFORE AN EXECUTION ATTEMPT IS SPENT.
- *
- * Every gate here can REFUSE to execute the task — a run outside this scope, a
- * role Julius cannot resolve, a C.A.R.D. that denies the dispatch or the
- * capability, an approval the operator has not given, a task that no longer
- * exists. None of them is a worker execution, and while admission happened in
- * the run loop before this function ran, each of them spent one of the task's
- * three attempts on work Julius had just decided not to do.
- *
- * So the gates live here, exactly once, and the caller admits only an ELIGIBLE
- * result. The policy implementation is not duplicated into the run loop: the
- * run loop learns the verdict from the type, not by re-evaluating it.
+ * The verdict of every gate that can refuse a claimed task before it executes.
  */
 export type JuliusTaskPreflight =
   | { readonly kind: 'REFUSED'; readonly outcome: JuliusTaskOutcome }
@@ -250,6 +231,26 @@ export type JuliusTaskPreflight =
     readonly task: JuliusTask;
   };
 
+/**
+ * WHAT MUST BE DECIDED BEFORE AN EXECUTION ATTEMPT IS SPENT.
+ *
+ * Every gate here can REFUSE to execute the task — a run outside this scope, a
+ * role Julius cannot resolve, a C.A.R.D. that denies the dispatch or the
+ * capability, an approval the operator has not given, a task that no longer
+ * exists. None of them is a worker execution, and while admission ran in the
+ * run loop before these gates, each of them spent one of the task's three
+ * attempts on work Julius had just decided not to do.
+ *
+ * So the gates live here, exactly once, and the caller admits only an ELIGIBLE
+ * result. The policy implementation is not duplicated into the run loop: the
+ * run loop learns the verdict from the type, not by re-evaluating it.
+ *
+ * TENANCY IS CHECKED HERE, not assumed from the claim. The claim came from a
+ * scheduler query that may have been scoped to a project or not, and a task
+ * whose run belongs to a different project must never be executed under this
+ * caller's identity — which is why `runClaimedTask` takes this result rather
+ * than a raw claim.
+ */
 export async function prepareClaimedTask(
   request: JuliusPipelineRequest,
   deps: JuliusPipelineDependencies,
