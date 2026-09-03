@@ -31,7 +31,10 @@ it('normalizes a non-dispatch throw from selection rather than writing "undefine
    * reads a provider's `.code` — classifies the same throw as a retryable
    * TIMEOUT and writes `errorRetryable: true` beside a status that ENDS the
    * task. `select` contacts nobody, so there is no transient condition to
-   * report. This is the only input on which the two narrowings differ. */
+   * report. `{code:'TIMEOUT'}` is one of NINE `.code` values on which the two
+   * narrowings differ — 429, RATE_LIMIT, ETIMEDOUT, TIMEOUT, 401, 403, AUTH,
+   * CONFIGURATION, ABORT_ERR — and one of the four that also flip
+   * `errorRetryable` to true, which is the half that does the damage. */
   const coded:Record<string,unknown>[]=[];
   const codedRouter=new JuliusProviderRouter(registry,new Map([['adapter',success]]),new JuliusProviderHealthRegistry());
   (codedRouter as unknown as{select:()=>never}).select=()=>{throw{code:'TIMEOUT'}};

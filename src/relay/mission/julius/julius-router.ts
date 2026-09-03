@@ -26,9 +26,9 @@ export const JULIUS_ERROR_CODES=['RATE_LIMIT','TIMEOUT','AUTH_CONFIGURATION','PR
  * in eight of those are all-lower-case hex beginning a–f, which is shaped like
  * a class and passes. That is not a live exposure — every value the three live
  * adapters pass is a literal or a member of the connector's closed
- * failure-class union — and it is why the workflow matches its own secret
- * VALUES literally before publishing the artifact. This function is the first
- * layer, not the only one.
+ * failure-class union — and it is one of the cases the workflow's
+ * literal-VALUE scan already exists to catch, `$DB_PASSWORD` being in its
+ * needle list. This function is the first layer, not the only one.
  */
 export const safeFailureClass=(value:unknown):string|null=>typeof value==='string'&&/^[a-z][a-z0-9_]{0,63}$/.test(value)?value:null;
 /**
