@@ -4484,9 +4484,16 @@ def _district_cam_architecture():
         tag = cam["name"]
         across = math.degrees(math.atan2(side[1], side[0]))
         # (depth multiple, lateral fraction of the half-width, what stands there)
-        plan = ((1.25, 0.62, "rail"), (1.25, -0.62, "rail"),
-                (1.70, 0.50, "plinth"), (1.70, -0.50, "plinth"),
-                (2.40, 0.72, "column"), (2.40, -0.72, "column"))
+        # SIZED FROM THE RENDER, not from the plan (2026-09-03). The first
+        # version put the plinths at 1.70x d_near and half the visible
+        # half-width, and ClockGrandCam23 and FloatingStairCam26 both came back
+        # with an urn eating a quarter of the frame: at 4.4 m and 61% of the
+        # way to the edge, a 1 m urn is enormous. Framing is meant to give the
+        # eye something to measure the subject against, not to become the
+        # subject. Deeper and wider, and the urn itself smaller.
+        plan = ((1.25, 0.66, "rail"), (1.25, -0.66, "rail"),
+                (2.30, 0.70, "plinth"), (2.30, -0.70, "plinth"),
+                (3.10, 0.80, "column"), (3.10, -0.80, "column"))
         for i, (t, latf, kind) in enumerate(plan):
             depth = d_near * t
             half = depth * math.tan(hfov / 2.0)
@@ -4510,7 +4517,7 @@ def _district_cam_architecture():
                       # MI_V2_Ceramic is what all twelve other garden_urns in
                       # the world wear. MI_V2_Porcelain was invented here and
                       # the layout gate refused it, which is the gate working.
-                      s=s * 0.9, mat="MI_V2_Ceramic",
+                      s=s * 0.55, mat="MI_V2_Ceramic",
                       label="%s_ArchUrn%d" % (tag, i)),
                 ]
             else:
