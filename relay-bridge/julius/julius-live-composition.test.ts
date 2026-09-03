@@ -747,7 +747,7 @@ describe('the first paid attempt, reproduced: a failing Prompt Architect', () =>
   it('names the task on the failure row, so the evidence can name the role', async () => {
     const { failures } = await failedRun('provider_error');
     const last = failures.at(-1)!;
-    expect(last.type, 'the coordinator is the only emitter on this path').toBe('task.failed');
+    expect(last.type, 'the coordinator writes the only task-ending row on this path').toBe('task.failed');
     expect(last.taskId, 'and the row must say which task stopped').toBe('plan-1');
   });
 

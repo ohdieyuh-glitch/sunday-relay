@@ -436,8 +436,12 @@ database. Two repairs, both provider-free:
   which of the three C.A.R.D. roles stopped — including on the non-retryable
   path, where the execution coordinator writes the only row. That path is the
   shape the first paid attempt failed in, and its events used to carry no task
-  id at all. Run-level rows (`run.failed`) name no task, because a run ending is
-  not a worker's failure; their task and role columns are blank by design.
+  id at all. The one row that names no task is the run loop's own `run.failed`, written
+  when the run itself reaches FAILED; its task and role columns are blank
+  because a run ending is not a worker's failure. The pipeline also writes
+  `run.failed` — for a role it cannot resolve, a policy denial, or a repair it
+  cannot plan — and those name the task they are about. So a blank task always
+  means the run's ending, but a `run.failed` is not always blank.
 
 A run whose only remaining tasks are blocked behind a terminally failed
 dependency now reports FAILED rather than WAITING. A claim is offered only when
