@@ -221,9 +221,23 @@ jobs:
           # that revealed it. So the attempt is recorded here, in the workflow,
           # where it also outlives the 90-day artifact expiry.
           #
-          # Set this to 0 once a later paid mission has recorded its own
-          # markers and this history no longer needs carrying by hand.
+          # THIS NUMBER ONLY EVER GOES UP. Increment it when another paid run
+          # is entered that this file does not already count; never reduce it.
+          # An earlier version of this comment said to set it to 0 once markers
+          # existed — which would have handed the gap back on a 90-day fuse,
+          # because markers carry `retention-days: 90` and `count_markers`
+          # ignores expired ones. Two cases in
+          # scripts/julius-first-live-mission.test.ts pin both the value and
+          # the run it names, so a change here is a change there too.
           RECORDED_PAID_ATTEMPTS=1  # run 33697109210
+          # G2: the one hand-maintained value in this gate was also the only one
+          # that failed OPEN when malformed — an empty or non-numeric value made
+          # the comparison error, fall through to the else, and announce a first
+          # paid mission. It is held to the same digit test as the counts.
+          is_count "$RECORDED_PAID_ATTEMPTS" || {
+            echo "recorded_paid_attempts_not_a_count: '$RECORDED_PAID_ATTEMPTS'" >&2
+            exit 1
+          }
           # Either list failing means the previous-run state is UNKNOWN, and
           # unknown is never treated as zero.
           if ! completed=$(count_markers julius-first-live-completed) || ! attempted=$(count_markers julius-first-live-attempted); then

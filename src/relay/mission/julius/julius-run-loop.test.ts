@@ -7,6 +7,9 @@ import {
   createJuliusHarness, seedRun, task, worker, cardPolicy, verificationPolicy,
 } from './julius-runtime-fixtures';
 import type { JuliusTask } from './julius-runtime';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { safeReasonCode } from './julius-router';
 
 /**
  * DOES JULIUS ACTUALLY RUN?
@@ -25,6 +28,34 @@ const REVIEWER = worker({ workerId: 'reviewer', role: 'INDEPENDENT_REVIEWER', ca
 const scope = { projectId: 'prj-1' };
 
 /* ------------------------------------------------------- the state target */
+
+/**
+ * THE REASON CODES THAT REACH THE EVIDENCE BUNDLE MUST SURVIVE ITS NARROWING.
+ *
+ * `failures.tsv` publishes `reason_code`, and the repair planner's throw
+ * messages are the only ones that reach it through an `Error`. They are
+ * narrowed on the way out, so a message that stops being a machine token
+ * silently becomes a generic fallback and the specific cause is lost from the
+ * one artifact built to explain a paid failure. This case reads the planner's
+ * real throws and fails the day one of them stops surviving.
+ */
+describe('the repair planner speaks in tokens the evidence column can carry', () => {
+  it('every throw in the planner survives the reason-code narrowing unchanged', () => {
+    const source = readFileSync(resolve(import.meta.dirname, 'julius-repair-runtime.ts'), 'utf8');
+    const thrown = [...source.matchAll(/throw new Error\('([^']+)'\)/gu)].map((match) => match[1]);
+    expect(thrown.length, 'the planner must still throw, or this case proves nothing').toBeGreaterThan(0);
+    for (const message of thrown) {
+      expect(safeReasonCode(message), `${message} would be replaced by the generic fallback`).toBe(message);
+    }
+  });
+
+  it('and the narrowing still refuses anything that is not a token', () => {
+    expect(safeReasonCode('Authorization: Bearer FAKESECRET123456789')).toBeNull();
+    expect(safeReasonCode('Cannot read properties of undefined (reading \'x\')')).toBeNull();
+    expect(safeReasonCode('UNRESOLVED_WORKER_ROLE'), 'the column carries upper case too').toBe('UNRESOLVED_WORKER_ROLE');
+    expect(safeReasonCode('repair_round_limit')).toBe('repair_round_limit');
+  });
+});
 
 describe('the run state a task set implies', () => {
   const t = (state: JuliusTask['state'], id = state): JuliusTask =>

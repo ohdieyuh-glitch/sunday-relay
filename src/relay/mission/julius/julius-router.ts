@@ -17,6 +17,18 @@ export const JULIUS_ERROR_CODES=['RATE_LIMIT','TIMEOUT','AUTH_CONFIGURATION','PR
  * remembering to redact is not redaction.
  */
 export const safeFailureClass=(value:unknown):string|null=>typeof value==='string'&&/^[a-z][a-z0-9_]{0,63}$/.test(value)?value:null;
+/**
+ * THE SAME NARROWING FOR REASON CODES, WHICH USE BOTH CONVENTIONS.
+ *
+ * A connector's failure class is lower-case by its own vocabulary, so
+ * {@link safeFailureClass} keeps that alphabet strict. A reason code is not:
+ * this runtime writes `UNRESOLVED_WORKER_ROLE` and `TASK_FAILED` beside
+ * `repair_round_limit` in the same durable column. Narrowing reason codes with
+ * the lower-case rule would silently replace every upper-case one with a
+ * generic fallback — losing the specific cause from the one artifact built to
+ * explain a paid failure — so the alphabet is widened here and nowhere else.
+ */
+export const safeReasonCode=(value:unknown):string|null=>typeof value==='string'&&/^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(value)?value:null;
 export class JuliusDispatchError extends Error{
  readonly failureClass:string|null;
  constructor(readonly code:JuliusErrorCode,readonly retryable:boolean,readonly safeMessage:string,failureClass?:unknown){super(code);this.failureClass=safeFailureClass(failureClass);}

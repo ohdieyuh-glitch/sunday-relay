@@ -34,7 +34,7 @@
 import { evaluateJuliusPolicy, type JuliusCardPolicy } from './julius-policy';
 import { decideJuliusContinuation } from './julius-continuation';
 import { JuliusExecutionCoordinator, type JuliusExecutionPorts, type JuliusExecutionClaim, type JuliusResourceRequest } from './julius-execution-coordinator';
-import { safeFailureClass, type JuliusProviderRouter } from './julius-router';
+import { safeReasonCode, type JuliusProviderRouter } from './julius-router';
 import { createJuliusContextSnapshot } from './julius-context-snapshot';
 import { evaluateJuliusVerification, type JuliusVerificationPolicy } from './julius-verification-runtime';
 import { planJuliusRepair } from './julius-repair-runtime';
@@ -551,8 +551,8 @@ function executionPorts(
       // three C.A.R.D. roles stopped, and on a non-retryable worker failure the
       // coordinator's is the only row that ENDS the task — which is exactly the
       // shape the first paid mission failed in. (This port also carries
-      // `worker.selected`, `budget.reserved` and `worker.dispatched`; they name
-      // the same claimed task.)
+      // `worker.selected`, `budget.reserved` and `worker.dispatched`, which name
+      // the same claimed task, as do the coordinator's other events.)
       await ledger.event(type, { taskId, facts: { ...facts, runId: run.runId } });
     },
   };
@@ -816,9 +816,11 @@ async function scheduleRepair(input: {
     // bundle's `reason_code` column, whose contract is "a machine token by
     // construction". Every throw in the repair planner is a token today, but a
     // TypeError from anywhere in it would otherwise put free text into an
-    // uploaded artifact, so the same narrowing the failure classes get is
-    // applied here rather than assumed.
-    const reasonCode = safeFailureClass(error instanceof Error ? error.message : null) ?? 'repair_not_plannable';
+    // uploaded artifact, so the narrowing is applied rather than assumed.
+    // `safeReasonCode`, not `safeFailureClass`: this column carries
+    // `UNRESOLVED_WORKER_ROLE` beside `repair_round_limit`, and the lower-case
+    // rule would replace every upper-case cause with the generic fallback.
+    const reasonCode = safeReasonCode(error instanceof Error ? error.message : null) ?? 'repair_not_plannable';
     await ledger.event('run.failed', { taskId: task.taskId, facts: { reasonCode } });
     return { kind: 'HALTED', taskId: task.taskId, reasonCode, safeSummary: 'A repair round was required and could not be planned.' };
   }
