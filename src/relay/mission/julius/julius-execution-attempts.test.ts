@@ -317,6 +317,28 @@ describe('an execution attempt is spent at admission, never at the claim', () =>
       .toBeGreaterThanOrEqual(MAX_TASK_RECOVERIES);
   });
 
+  /* ---------------------------------------- one trajectory row per recovery */
+  it('records one RECOVERY trajectory row per reclaim, not one per run version', async () => {
+    // A recovery does not change the run's version, and every REQUEUE carries
+    // the same reason — so keyed by run version alone, a task crash-looping
+    // before admission recorded ONE row for three reclaims, and the eval metric
+    // that counts recoveries under-reported in the one scenario it is for.
+    const harness = createJuliusHarness({ workers: [{ worker: CODER, script: [SUCCESS] }] });
+    const { projectId } = seedRun(harness, { tasks: [task({ taskId: 'only' })] });
+
+    for (let round = 0; round < 3; round += 1) {
+      await harness.deps.store.claimRunnable({
+        owner: 'dying-worker', now: harness.clock.now(), leaseExpiresAt: harness.clock.now(),
+        limit: 1, projectId,
+      });
+      await harness.loop.recover({ projectId }, harness.store);
+    }
+
+    const rows = harness.store.trajectory().filter((event) => event.kind === 'RECOVERY');
+    expect(rows.length, 'each reclaim is its own row, because each follows its own claim').toBe(3);
+    expect(new Set(rows.map((row) => row.idempotencyKey)).size, 'and each carries a distinct key').toBe(3);
+  });
+
   /* ---------------------------------------------- the planner, in isolation */
   it('the recovery planner reports the execution ceiling before the recovery one', () => {
     const base = {

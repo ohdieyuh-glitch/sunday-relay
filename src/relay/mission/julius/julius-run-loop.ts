@@ -528,7 +528,15 @@ export class JuliusRunLoop {
       await this.#trajectory(run, 'RECOVERY', {
         taskId: action.taskId, outcome: action.action,
         facts: { reasonCode: action.reasonCode },
-        idempotencySuffix: `${action.taskId ?? run.runId}:${action.reasonCode}`,
+        // THE LEASE GENERATION IS THE DISCRIMINATOR, because it is the one
+        // value that differs between two reclaims of the SAME task for the
+        // SAME reason. Task and reason alone still collapsed that case — every
+        // REQUEUE carries LEASE_EXPIRED, and a recovery does not bump the run's
+        // version — so a task crash-looping before admission recorded one row
+        // for three recoveries, and the eval metric that counts them
+        // under-reported in exactly the scenario recovery exists for. Each
+        // reclaim follows its own claim, so each carries its own generation.
+        idempotencySuffix: `${action.taskId ?? run.runId}:${action.reasonCode}:${action.expectedLeaseGeneration ?? 'none'}`,
       });
     }
     return { actions: actions.length, requeued, abandoned };
