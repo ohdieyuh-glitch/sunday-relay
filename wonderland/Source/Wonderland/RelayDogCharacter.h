@@ -265,6 +265,10 @@ private:
 	float StuckSeconds = 0.0f;
 	float UnstickSeconds = 0.0f;
 	float UnstickSign = 1.0f;
+	/** Attempts on the CURRENT leg. A corner that defeats the recovery should
+	 *  cost a few seconds and one leg, not a hundred attempts and the whole
+	 *  time budget -- measured at 111 fires on one leg before this existed. */
+	int32 UnstickTries = 0;
 	float LastLoggedSpeed = -1.0f;
 	FVector SpawnLocation = FVector::ZeroVector;
 	float SpawnYaw = 0.0f;

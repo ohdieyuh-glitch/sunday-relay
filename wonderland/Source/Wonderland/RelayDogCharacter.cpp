@@ -561,7 +561,13 @@ FVector ARelayDogCharacter::StepRoute(float DeltaSeconds)
 	const float LegTravel = (Leg.SpeedUU > 1.0f)
 	        ? FVector::Dist2D(Here, Leg.Target) / Leg.SpeedUU : 0.0f;
 	const float LegBudget = FMath::Max(12.0f, Leg.HoldSeconds + 10.0f + 3.0f * LegTravel);
-	if (LegSeconds > LegBudget)
+	// SIX ATTEMPTS IS THE RECOVERY SAYING IT CANNOT. Where one side is open the
+	// sweep finds it on the first or second try; a corner that has defeated six
+	// swept attempts is not going to yield to a seventh, and grinding there
+	// spends the whole leg budget and then the NEXT leg's -- measured at 111
+	// fires on one leg. Abandoning early costs the same single leg and gives
+	// the rest of the route its time back.
+	if (LegSeconds > LegBudget || UnstickTries >= 6)
 	{
 		// WHERE IT GAVE UP, NOT JUST HOW FAR SHORT.
 		//
@@ -585,6 +591,7 @@ FVector ARelayDogCharacter::StepRoute(float DeltaSeconds)
 		StuckAnchor = Here;
 		StuckSeconds = 0.0f;
 		UnstickSeconds = 0.0f;
+		UnstickTries = 0;
 		return FVector::ZeroVector;
 	}
 	FVector ToTarget = Leg.Target - Here;
@@ -640,14 +647,57 @@ FVector ARelayDogCharacter::StepRoute(float DeltaSeconds)
 			StuckSeconds += DeltaSeconds;
 			if (StuckSeconds > 1.5f)
 			{
+				// WHICH WAY IS OPEN, ASKED RATHER THAN ALTERNATED.
+				//
+				// The first version simply flipped sides each time. It works
+				// where one side is free -- measured at leg 20, where a step
+				// right failed, a step left freed the Dog and the leg
+				// completed -- and it THRASHES in a concave corner, where both
+				// perpendiculars lead back into the same surface: 111 fires at
+				// leg 189 against `Q05_clockyard_Wall8`, oscillating between
+				// two points 116 uu apart and never leaving.
+				//
+				// So the two directions are SWEPT with the Dog's own capsule
+				// and the roomier one is taken. A blind flip has no way to
+				// tell an open side from a wall; a sweep does, and it costs
+				// two traces on a frame that is already stuck.
+				const FVector Fwd = ToTarget.GetSafeNormal();
+				const FVector Side = FVector::CrossProduct(FVector::UpVector, Fwd);
+				const float Probe = 220.0f;
+				float Room[2] = { 0.0f, 0.0f };
+				const UCapsuleComponent* Cap = GetCapsuleComponent();
+				const UWorld* W = GetWorld();
+				if (W != nullptr && Cap != nullptr)
+				{
+					FCollisionQueryParams P(FName(TEXT("RelayDogUnstick")), false, this);
+					const FCollisionShape Shape = FCollisionShape::MakeCapsule(
+						Cap->GetScaledCapsuleRadius() * 0.9f,
+						Cap->GetScaledCapsuleHalfHeight() * 0.9f);
+					for (int32 s = 0; s < 2; ++s)
+					{
+						const FVector Dir = (s == 0) ? Side : -Side;
+						FHitResult Hit;
+						const bool bBlocked = W->SweepSingleByChannel(
+							Hit, Here, Here + Dir * Probe, FQuat::Identity,
+							ECC_Pawn, Shape, P);
+						Room[s] = bBlocked ? (Hit.Distance) : Probe;
+					}
+				}
+				// Ties and a world we cannot trace both fall back to
+				// alternating, which is still better than always picking the
+				// same wall.
+				if (Room[0] > Room[1] + 10.0f)       UnstickSign = 1.0f;
+				else if (Room[1] > Room[0] + 10.0f)  UnstickSign = -1.0f;
+				else                                 UnstickSign = -UnstickSign;
 				UnstickSeconds = 0.6f;
-				UnstickSign = -UnstickSign;
 				StuckSeconds = 0.0f;
 				StuckAnchor = Here;
+				++UnstickTries;
 				UE_LOG(LogTemp, Log,
 				       TEXT("WLDOG UNSTICK: leg %d/%d, no progress for 1.5 s at "
-				            "(%.0f, %.0f) -- stepping %s for 0.6 s"),
+				            "(%.0f, %.0f) -- room L %.0f R %.0f, stepping %s for 0.6 s"),
 				       RouteIndex + 1, Route.Num(), Here.X, Here.Y,
+				       Room[0], Room[1],
 				       UnstickSign > 0.0f ? TEXT("left") : TEXT("right"));
 			}
 		}
@@ -683,6 +733,9 @@ FVector ARelayDogCharacter::StepRoute(float DeltaSeconds)
 			RouteIndex = (RouteIndex + 1) % Route.Num();
 			RouteHold = 0.0f;
 			LegSeconds = 0.0f;
+			UnstickTries = 0;
+			StuckAnchor = Here;
+			StuckSeconds = 0.0f;
 			const FRelayDogRouteLeg& Next = Route[RouteIndex];
 			UE_LOG(LogTemp, Log, TEXT("WLDOG ROUTE %d/%d: %s (%.0f uu/s)"),
 			       RouteIndex + 1, Route.Num(), *Next.Label, Next.SpeedUU);
