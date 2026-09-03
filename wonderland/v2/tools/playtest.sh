@@ -104,11 +104,13 @@ cat <<EOF
     W A S D / arrows   move        mouse   look
     shift (hold)       run         ctrl (hold)   walk
 
-    SPACE              the LIVE TERMINAL
+    SPACE              JUMP
+    CTRL+T             the LIVE TERMINAL (toggles)
     ESC                back to the world
 
-  The Relay Dog does not jump. Space is the front door: it opens the terminal
-  over the live world, and inside it Space types a space like anywhere else.
+  Ctrl+T is the front door: it opens the terminal over the live world and
+  closes it again, from either side, because unlike Space it is never a
+  character inside the terminal's own input. Space is the Dog's jump.
 
 EOF
 printf '%s\n' "$URL"

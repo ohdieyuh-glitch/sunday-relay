@@ -72,7 +72,8 @@ ok(/backdrop-filter/.test(win), 'and the world still reads through it');
 // --- space, escape, and the streamed game ----------------------------------
 ok(/SPACE/.test(markup) && /LIVE TERMINAL/.test(markup), 'the page says Space is the terminal');
 ok(/ESC/.test(html) || /Escape/.test(read('README.md')), 'Escape is documented');
-ok(/does not jump/i.test(html), 'the page records that the Dog does not jump');
+ok(/ctrl\+t/i.test(html), 'the page records that Ctrl+T opens the terminal');
+ok(/jump/i.test(html), "the page records that Space is the Dog's jump");
 ok(/addEventListener\('keydown', onKeyDown, true\)/.test(js),
    'the keydown listener is CAPTURE PHASE -- it must beat the streaming client');
 ok(/'keyup', 'keypress'/.test(js), 'key releases are withheld from the game too');

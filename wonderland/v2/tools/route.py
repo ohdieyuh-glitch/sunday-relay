@@ -65,13 +65,20 @@ _SOFT_OK = ("flower_", "blossom_", "ground_", "petal", "lavender_", "rose_bloom"
             "ivy_", "vine_", "canopy_", "cloud_", "sky_", "balloon_", "leaf_",
             "roof_", "finial_", "balcony_", "dome", "bridge", "arch", "spire",
             "kerb_", "sign", "banner", "lantern", "glow", "water", "lily",
-            # PASS 29. Glazing rides its frame and is never an obstacle in its
-            # own right. gatehouse_district is a THRESHOLD: its solid parts are
-            # a ring around a 5.2 m opening the road runs through, and one
+            # Glazing rides its frame and is never an obstacle in its own
+            # right. `vine_wall` is ivy on a wall that is itself solid.
+            #
+            # `gatehouse_` USED TO BE HERE, and the note that put it here was
+            # right about the problem and wrong to stop there: "its solid parts
+            # are a ring around a 5.2 m opening the road runs through, and one
             # axis-aligned rectangle can only express that by blocking the
-            # arch. Declared here rather than left missing, so the report above
-            # keeps meaning "nobody thought about this one".
-            "gatehouse_", "glass_screen_panes")
+            # arch." True -- and declaring it soft is FAIL-OPEN, which is the
+            # very thing the report above exists to prevent. The solver ran a
+            # leg through the gatehouse's PIERS and the Dog wedged inside one
+            # at (14143, 1086) on the first real-GPU traversal of this world.
+            # `layout_v2.FOOT_PARTS` can now say "piers block, span does not",
+            # so the gate is solved as a gate.
+            "glass_screen_panes", "gatehouse_glass")
 
 
 def build(cell, capsule):
@@ -84,8 +91,11 @@ def build(cell, capsule):
     unseen = {}
     for p in LAYOUT.ALL:
         a = p["asset"]
-        if a not in FOOT and a not in NOT_OBSTACLES and p["pos"][2] < 200 \
-                and not any(k in a for k in _SOFT_OK):
+        # a piece is SEEN if it has a plain footprint or a parts list; the
+        # report has to know about both or it starts crying wolf about the
+        # gatehouses it can now solve properly.
+        if a not in FOOT and a not in LAYOUT.FOOT_PARTS and a not in NOT_OBSTACLES \
+                and p["pos"][2] < 200 and not any(k in a for k in _SOFT_OK):
             unseen[a] = unseen.get(a, 0) + 1
     if unseen:
         print("# GROUND-LEVEL ASSETS WITH NO FOOT ENTRY -- invisible to this solve:")
@@ -93,23 +103,25 @@ def build(cell, capsule):
             print("#   %-28s x%d" % (a, c))
     for p in LAYOUT.ALL:
         a = p["asset"]
-        if a in NOT_OBSTACLES or a not in FOOT:
+        if a in NOT_OBSTACLES:
             continue
-        sc = p["scale"]
-        sx, sy = (abs(sc[0]), abs(sc[1])) if isinstance(sc, (list, tuple)) else (abs(sc), abs(sc))
-        hx, hy = FOOT[a][0] * sx + capsule, FOOT[a][1] * sy + capsule
-        ox, oy, yaw = p["pos"][0], p["pos"][1], math.radians(p["rot"][1])
-        c, sn = math.cos(yaw), math.sin(yaw)
-        reach = math.hypot(hx, hy)
-        i0, i1 = max(0, int((ox - reach - X0) // cell)), min(nx - 1, int((ox + reach - X0) // cell))
-        j0, j1 = max(0, int((oy - reach - Y0) // cell)), min(ny - 1, int((oy + reach - Y0) // cell))
-        for j in range(j0, j1 + 1):
-            cy = Y0 + j * cell + cell * 0.5
-            for i in range(i0, i1 + 1):
-                cx = X0 + i * cell + cell * 0.5
-                dx, dy = cx - ox, cy - oy
-                if abs(dx * c + dy * sn) <= hx and abs(-dx * sn + dy * c) <= hy:
-                    blocked[j * nx + i] = 1
+        # ONE OBSTACLE MODEL, shared with walkable.py: `solid_boxes` yields the
+        # single box an ordinary piece contributes and the SEVERAL a threshold
+        # does, so a gatehouse blocks its piers and passes its arch instead of
+        # being all-or-nothing. See layout_v2.FOOT_PARTS.
+        for (ox, oy, phx, phy, yaw) in LAYOUT.solid_boxes(p):
+            hx, hy = phx + capsule, phy + capsule
+            c, sn = math.cos(yaw), math.sin(yaw)
+            reach = math.hypot(hx, hy)
+            i0, i1 = max(0, int((ox - reach - X0) // cell)), min(nx - 1, int((ox + reach - X0) // cell))
+            j0, j1 = max(0, int((oy - reach - Y0) // cell)), min(ny - 1, int((oy + reach - Y0) // cell))
+            for j in range(j0, j1 + 1):
+                cy = Y0 + j * cell + cell * 0.5
+                for i in range(i0, i1 + 1):
+                    cx = X0 + i * cell + cell * 0.5
+                    dx, dy = cx - ox, cy - oy
+                    if abs(dx * c + dy * sn) <= hx and abs(-dx * sn + dy * c) <= hy:
+                        blocked[j * nx + i] = 1
         n += 1
     return blocked, nx, ny, n
 

@@ -20,10 +20,26 @@ const textbox = { tagName: 'DIV', getAttribute: (a) => (a === 'role' ? 'textbox'
 const K = (key, target, extra = {}) => ({ key, target, ...extra });
 
 // --- what a space MEANS -----------------------------------------------------
-eq(classifyKey(K(' ', world), false), 'open-terminal', 'space from the world opens the terminal');
-eq(classifyKey(K(' ', video), false), 'open-terminal', 'space over the streamed video opens it');
-eq(classifyKey(K(' ', world, { code: 'Space', key: 'Unidentified' }), false), 'open-terminal',
-   'space by code, for clients that do not report key');
+// CTRL+T OPENS AND CLOSES; SPACE BELONGS TO THE DOG (founder, 2026-09-03).
+// These three used to assert the opposite, and they are the reason the change
+// is safe to make: the contract was written down, so replacing it is a visible
+// edit rather than a silent drift.
+eq(classifyKey(K('t', world, { ctrlKey: true }), false), 'open-terminal',
+   'ctrl+T from the world opens the terminal');
+eq(classifyKey(K('t', video, { ctrlKey: true }), false), 'open-terminal',
+   'ctrl+T over the streamed video opens it');
+eq(classifyKey(K('T', world, { ctrlKey: true, code: 'KeyT' }), false), 'open-terminal',
+   'ctrl+T by code and by capital, for clients that report either');
+eq(classifyKey(K('t', world, { ctrlKey: true }), true), 'close-terminal',
+   'ctrl+T again closes it -- a toggle, which Space could never safely be');
+eq(classifyKey(K('t', input, { ctrlKey: true }), true), 'close-terminal',
+   'ctrl+T closes from INSIDE the terminal input: it is not a character there');
+// Space must now reach the game, or the jump silently does nothing and this
+// layer hides an engine-side regression.
+eq(classifyKey(K(' ', world), false), 'pass', 'space goes to the game: it is the jump');
+eq(classifyKey(K(' ', video), false), 'pass', 'space over the video goes to the game too');
+eq(classifyKey(K(' ', world, { code: 'Space', key: 'Unidentified' }), false), 'pass',
+   'space by code goes to the game as well');
 
 // --- and what it must NEVER mean -------------------------------------------
 for (const [name, t] of [['input', input], ['textarea', area],

@@ -93,13 +93,17 @@ def main():
     obst = []
     for p in LAYOUT.ALL:
         a = p["asset"]
-        if a in NOT_OBSTACLES or a not in FOOT:
+        if a in NOT_OBSTACLES:
             continue
-        sc = p["scale"]
-        sx, sy = (abs(sc[0]), abs(sc[1])) if isinstance(sc, (list, tuple)) else (abs(sc), abs(sc))
-        hx, hy = FOOT[a]
-        obst.append((p["pos"][0], p["pos"][1], hx * sx + cap, hy * sy + cap,
-                     math.radians(p["rot"][1])))
+        # A THRESHOLD IS NOT A BLOCK. `layout_v2.solid_boxes` yields one box for
+        # an ordinary piece and SEVERAL for the few that a single rectangle
+        # cannot describe -- a gatehouse is two towers, two wall stubs and a
+        # 5.2 m opening the road runs through. Before this the choice was
+        # between walling off the arch and declaring the whole gate soft, and
+        # the second was chosen: the solver drew a route through the piers and
+        # the Dog wedged in one on the first real traversal.
+        for (bx, by, hx, hy, yaw) in LAYOUT.solid_boxes(p):
+            obst.append((bx, by, hx + cap, hy + cap, yaw))
     nx, ny = (X1 - X0) // cell, (Y1 - Y0) // cell
     blocked = bytearray(nx * ny)
     for (ox, oy, hx, hy, yaw) in obst:

@@ -5432,6 +5432,90 @@ _SIG_CLEAR = {"spire_great": 7000.0, "spire_signature": 2200.0,
 FOOT.update({"spire_great": (5250, 5250), "spire_signature": (880, 880),
              "tower_district": (620, 620)})
 
+# ---------------------------------------------------------------------------
+# WHAT A GATE IS: PIERS THAT BLOCK AND AN OPENING THAT DOES NOT (2026-09-03)
+#
+# `FOOT` gives one axis-aligned half-extent pair per asset, and a THRESHOLD
+# cannot be said in that language. `route.py` knew it and wrote the reason down
+# next to its own workaround:
+#
+#     "gatehouse_district is a THRESHOLD: its solid parts are a ring around a
+#      5.2 m opening the road runs through, and one axis-aligned rectangle can
+#      only express that by blocking the arch."
+#
+# So it was declared soft -- excluded from the solve entirely -- and that is
+# FAIL-OPEN. The route solver drew a line straight through the gatehouse's
+# PIERS, and on 2026-09-03 the first real-GPU traversal of this world wedged
+# the canonical Relay Dog inside `DPClockQuarter_Gatehouse`'s wall at
+# (14143, 1086), where it failed leg after leg from identical coordinates and
+# the 262-leg route could not finish. The reasoning was right and the fallback
+# was the only thing available; this is the missing third option.
+#
+# A part is (local_x, local_y, half_x, half_y) in uu at scale 1, in the piece's
+# own frame, and every number below is READ OFF THE RECIPE that builds the
+# mesh rather than estimated from its bounding box:
+#
+#   gatehouse_district  towers  box(700,700,...) at y = +/-900  -> half 350
+#                       walls   box(340,330,...) at y = +/-425  -> half 170x165
+#                       leaving |y| < 260, which is the 5.2 m arch its own
+#                       docstring names.
+#   garden_arch_stone   pilasters box(120, D+30=120, ...) at x = +/-R = +/-350
+#   lantern_swag        posts   box(260,260,140) at x = +/-SPAN = +/-1500;
+#                       33 m of catenary between them is air, and treating the
+#                       swag as one block would have walled off 35.9 m of
+#                       ground for two 2.6 m posts.
+#   floral_arch         posts   box(40,40,130) at x = +/-R = +/-500
+#
+# NOT LISTED, ON PURPOSE. `bridge_arc` says in its own comment that the arch
+# springs from abutments "moved OFF the walking line to the banks" and has no
+# central pier -- it is a surface you cross, not a thing you go around.
+# `castle_bridge` is the same. `glass_screen_panes` and `vine_wall` are glazing
+# and ivy riding a frame that is itself solid. `fountain_grand_water` is the
+# water inside `fountain_grand`, which is already in FOOT at (680, 680).
+# Each of those is a considered non-obstacle, which is what `_SOFT_OK` is for;
+# what was wrong was putting load-bearing masonry in the same bucket.
+FOOT_PARTS = {
+    "gatehouse_district": ((0.0, -900.0, 350.0, 350.0), (0.0, 900.0, 350.0, 350.0),
+                           (0.0, -425.0, 170.0, 165.0), (0.0, 425.0, 170.0, 165.0)),
+    "garden_arch_stone":  ((-350.0, 0.0, 60.0, 60.0), (350.0, 0.0, 60.0, 60.0)),
+    "lantern_swag":       ((-1500.0, 0.0, 130.0, 130.0), (1500.0, 0.0, 130.0, 130.0)),
+    "floral_arch":        ((-500.0, 0.0, 20.0, 20.0), (500.0, 0.0, 20.0, 20.0)),
+}
+
+
+def solid_boxes(it):
+    """Every solid box a placement contributes, in WORLD space.
+
+    Yields (cx, cy, half_x, half_y, yaw_radians). One implementation, so the
+    walkability flood, the route solver and any gate that comes later cannot
+    hold different opinions about what is solid -- the failure PASS 09 fixed
+    when the builder walked one band list and `ALL` was another.
+
+    A piece with parts contributes those parts; a piece with a plain `FOOT`
+    entry contributes one box; anything else contributes nothing and its
+    caller decides whether that silence was considered.
+    """
+    a = it["asset"]
+    sc = it["scale"]
+    sx, sy = ((abs(sc[0]), abs(sc[1])) if isinstance(sc, (list, tuple))
+              else (abs(sc), abs(sc)))
+    yaw = math.radians(it["rot"][1])
+    co, si = math.cos(yaw), math.sin(yaw)
+    ox, oy = it["pos"][0], it["pos"][1]
+    parts = FOOT_PARTS.get(a)
+    if parts:
+        for (lx, ly, hx, hy) in parts:
+            # the part's own offset turns with the piece; its half-extents are
+            # already in the piece's frame and stay there, which is what the
+            # oriented-rectangle test downstream expects.
+            px, py = lx * sx, ly * sy
+            yield (ox + px * co - py * si, oy + px * si + py * co,
+                   hx * sx, hy * sy, yaw)
+        return
+    f = FOOT.get(a)
+    if f:
+        yield (ox, oy, f[0] * sx, f[1] * sy, yaw)
+
 _SIG_PLACED = []
 SIG_NOTES = []
 

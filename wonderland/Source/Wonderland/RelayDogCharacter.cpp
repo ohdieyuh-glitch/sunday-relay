@@ -107,19 +107,27 @@ ARelayDogCharacter::ARelayDogCharacter()
 		// terrace wall the Dog has no business climbing.
 		Move->MaxStepHeight = 30.0f;
 		Move->SetWalkableFloorAngle(46.0f);
-		// LEGACY, NON-PLAYER. Jump is not part of Wonderland locomotion (see
-		// SetupPlayerInputComponent). These stay only so that a fall off a
-		// step still resolves with sane air physics; nothing in normal
-		// gameplay can start a jump.
+		// THE JUMP IS THE PLAYER'S AGAIN (founder, 2026-09-03). These were
+		// kept for falls off a step and are now what a real jump uses.
 		Move->JumpZVelocity = 420.0f;
 		Move->AirControl = 0.35f;
 	}
-	// AND THE ABILITY IS REFUSED, not merely unbound. An unbound ability is
-	// still reachable from a Blueprint, a gamepad default or a later input
-	// mapping, and Wonderland's traversal is now audited on the promise that
-	// no route anywhere needs a jump. JumpMaxCount 0 is ACharacter's own
-	// answer to "this character does not jump".
-	JumpMaxCount = 0;
+	// AND THE ABILITY IS ALLOWED AGAIN -- ONCE.
+	//
+	// This reverses the 2026-08-30 canon, on the founder's instruction, and the
+	// old reasoning is worth keeping because it says what to re-check. Jump was
+	// refused rather than merely unbound (`JumpMaxCount = 0`) so that no
+	// Blueprint, gamepad default or later input mapping could reach it, on the
+	// promise that "no route anywhere needs a jump". THAT PROMISE STILL HOLDS
+	// and is still audited: the 242 solved route legs are walked, and
+	// `route.py` has no notion of jumping, so a leg that needs one is still a
+	// world defect rather than something the participant is expected to hop
+	// over. What changed is that the participant may now jump because jumping
+	// is a thing a body does, not because the world requires it.
+	//
+	// ONE, not two: JumpMaxCount 1 refuses a double jump, which nothing in
+	// Wonderland's movement vocabulary has ever had.
+	JumpMaxCount = 1;
 	// THE FOUNDER'S DOG IS THE ONE IN THE WORLD. The playtest possesses the Dog
 	// that is already standing in Golden Arrival rather than spawning a second
 	// one at a PlayerStart: there is exactly one canonical Relay Dog, and the
@@ -275,6 +283,19 @@ void ARelayDogCharacter::BuildExplorationRoute()
 	//
 	//     python3 wonderland/v2/tools/route.py --capsule=60 --cpp
 	//
+	// REGENERATED 2026-09-03, and the reason is the whole point of generating
+	// them. The solver's obstacle model could not describe a THRESHOLD -- one
+	// axis-aligned rectangle per asset can either block a gatehouse's 5.2 m
+	// arch or miss its piers entirely -- so `route.py` declared gatehouses
+	// SOFT and drew legs straight through them. That is fail-open, and the
+	// first real-GPU traversal of this world found it: the Dog wedged inside
+	// `DPClockQuarter_Gatehouse`'s wall at (14143, 1086) and failed leg after
+	// leg from identical coordinates, so the route never finished. The world
+	// was not at fault and neither was the Dog; the MAP THE SOLVER READ was.
+	// `layout_v2.FOOT_PARTS` now says piers block and spans do not, and these
+	// 242 legs are the solve against that. 262 -> 242 because a route that
+	// goes around a gate it used to walk through is a different route.
+	//
 	// The named stops carry the holds; the connectors between them carry
 	// only speed, so the Dog pauses at the PLACE and not on the road.
 	//
@@ -306,260 +327,240 @@ void ARelayDogCharacter::BuildExplorationRoute()
 	Add(50.0f, 550.0f, 150.0f, 1.5f, TEXT("back in, across the plaza"));
 	Add(-50.0f, 1450.0f, 300.0f, 0.0f, TEXT(""));
 	Add(-50.0f, 2550.0f, 300.0f, 0.0f, TEXT(""));
-	Add(-50.0f, 3550.0f, 300.0f, 0.0f, TEXT(""));
-	Add(150.0f, 4750.0f, 300.0f, 0.0f, TEXT(""));
-	Add(-550.0f, 4650.0f, 300.0f, 0.0f, TEXT(""));
+	Add(-50.0f, 3650.0f, 300.0f, 0.0f, TEXT(""));
+	Add(-50.0f, 4750.0f, 300.0f, 0.0f, TEXT(""));
 	Add(-1150.0f, 5150.0f, 300.0f, 0.0f, TEXT(""));
 	Add(-1150.0f, 5550.0f, 300.0f, 0.0f, TEXT(""));
 	Add(-350.0f, 6250.0f, 300.0f, 0.0f, TEXT(""));
 	Add(-250.0f, 5950.0f, 300.0f, 1.0f, TEXT("the fountain court"));
 	Add(50.0f, 6950.0f, 300.0f, 0.0f, TEXT(""));
 	Add(50.0f, 8250.0f, 300.0f, 3.0f, TEXT("the castle front, look up"));
-	Add(-750.0f, 8950.0f, 330.0f, 0.0f, TEXT(""));
-	Add(-1150.0f, 10450.0f, 330.0f, 0.0f, TEXT(""));
-	Add(-1950.0f, 11750.0f, 330.0f, 0.0f, TEXT(""));
-	Add(-2850.0f, 12550.0f, 330.0f, 0.0f, TEXT(""));
-	Add(-3350.0f, 13150.0f, 330.0f, 0.0f, TEXT(""));
-	Add(-3550.0f, 14650.0f, 330.0f, 0.0f, TEXT(""));
-	Add(-4150.0f, 16150.0f, 330.0f, 0.0f, TEXT(""));
-	Add(-4250.0f, 17050.0f, 330.0f, 0.0f, TEXT(""));
-	Add(-3650.0f, 18550.0f, 330.0f, 0.0f, TEXT(""));
-	Add(-3250.0f, 19850.0f, 330.0f, 0.0f, TEXT(""));
-	Add(-2150.0f, 20450.0f, 330.0f, 0.0f, TEXT(""));
-	Add(-950.0f, 21050.0f, 330.0f, 0.0f, TEXT(""));
-	Add(150.0f, 21850.0f, 330.0f, 0.0f, TEXT(""));
-	Add(2450.0f, 21350.0f, 330.0f, 0.0f, TEXT(""));
-	Add(2350.0f, 19850.0f, 330.0f, 0.0f, TEXT(""));
-	Add(3250.0f, 18550.0f, 330.0f, 0.0f, TEXT(""));
-	Add(4050.0f, 18150.0f, 330.0f, 0.0f, TEXT(""));
-	Add(4650.0f, 16450.0f, 330.0f, 0.0f, TEXT(""));
-	Add(4750.0f, 15550.0f, 330.0f, 0.0f, TEXT(""));
-	Add(4150.0f, 14050.0f, 330.0f, 0.0f, TEXT(""));
-	Add(2850.0f, 13150.0f, 330.0f, 0.0f, TEXT(""));
-	Add(2950.0f, 11950.0f, 330.0f, 0.0f, TEXT(""));
-	Add(3350.0f, 11350.0f, 330.0f, 0.0f, TEXT(""));
-	Add(3550.0f, 10550.0f, 330.0f, 0.0f, TEXT(""));
-	Add(3750.0f, 9150.0f, 330.0f, 0.0f, TEXT(""));
+	Add(1250.0f, 8250.0f, 330.0f, 0.0f, TEXT(""));
+	Add(2650.0f, 8050.0f, 330.0f, 0.0f, TEXT(""));
+	Add(3450.0f, 8450.0f, 330.0f, 0.0f, TEXT(""));
+	Add(3750.0f, 9050.0f, 330.0f, 0.0f, TEXT(""));
 	Add(4450.0f, 9450.0f, 330.0f, 2.5f, TEXT("the garden quarter"));
-	Add(3750.0f, 9350.0f, 330.0f, 0.0f, TEXT(""));
-	Add(3450.0f, 10950.0f, 330.0f, 0.0f, TEXT(""));
-	Add(3150.0f, 11650.0f, 330.0f, 0.0f, TEXT(""));
-	Add(2750.0f, 12750.0f, 330.0f, 0.0f, TEXT(""));
-	Add(3050.0f, 13650.0f, 330.0f, 0.0f, TEXT(""));
-	Add(4150.0f, 14050.0f, 330.0f, 0.0f, TEXT(""));
-	Add(4450.0f, 15150.0f, 330.0f, 0.0f, TEXT(""));
-	Add(4650.0f, 15750.0f, 330.0f, 0.0f, TEXT(""));
-	Add(4050.0f, 16950.0f, 330.0f, 0.0f, TEXT(""));
-	Add(3550.0f, 18250.0f, 330.0f, 0.0f, TEXT(""));
-	Add(3150.0f, 18750.0f, 330.0f, 0.0f, TEXT(""));
-	Add(2250.0f, 20350.0f, 330.0f, 0.0f, TEXT(""));
-	Add(2450.0f, 21350.0f, 330.0f, 0.0f, TEXT(""));
-	Add(250.0f, 21950.0f, 330.0f, 0.0f, TEXT(""));
-	Add(-550.0f, 21150.0f, 330.0f, 0.0f, TEXT(""));
-	Add(-1550.0f, 20450.0f, 330.0f, 0.0f, TEXT(""));
-	Add(-2950.0f, 20150.0f, 330.0f, 0.0f, TEXT(""));
-	Add(-3550.0f, 18750.0f, 330.0f, 0.0f, TEXT(""));
-	Add(-4150.0f, 17650.0f, 330.0f, 0.0f, TEXT(""));
-	Add(-4250.0f, 16350.0f, 330.0f, 0.0f, TEXT(""));
-	Add(-3550.0f, 15250.0f, 330.0f, 0.0f, TEXT(""));
-	Add(-3450.0f, 14250.0f, 330.0f, 0.0f, TEXT(""));
-	Add(-3450.0f, 13050.0f, 330.0f, 0.0f, TEXT(""));
-	Add(-3950.0f, 11750.0f, 330.0f, 0.0f, TEXT(""));
-	Add(-4250.0f, 11250.0f, 330.0f, 0.0f, TEXT(""));
-	Add(-4250.0f, 10350.0f, 330.0f, 0.0f, TEXT(""));
-	Add(-3750.0f, 10150.0f, 330.0f, 0.0f, TEXT(""));
+	Add(3550.0f, 8950.0f, 330.0f, 0.0f, TEXT(""));
+	Add(2550.0f, 8150.0f, 330.0f, 0.0f, TEXT(""));
+	Add(1250.0f, 8250.0f, 330.0f, 0.0f, TEXT(""));
+	Add(-50.0f, 8150.0f, 330.0f, 0.0f, TEXT(""));
+	Add(-750.0f, 8950.0f, 330.0f, 0.0f, TEXT(""));
+	Add(-850.0f, 8850.0f, 330.0f, 0.0f, TEXT(""));
+	Add(-2550.0f, 8850.0f, 330.0f, 0.0f, TEXT(""));
+	Add(-2850.0f, 8650.0f, 330.0f, 0.0f, TEXT(""));
 	Add(-3850.0f, 9050.0f, 330.0f, 0.0f, TEXT(""));
-	Add(-4050.0f, 8850.0f, 330.0f, 0.0f, TEXT(""));
+	Add(-4650.0f, 8950.0f, 330.0f, 0.0f, TEXT(""));
 	Add(-4650.0f, 8950.0f, 330.0f, 2.0f, TEXT("the grove"));
 	Add(-4050.0f, 8850.0f, 420.0f, 0.0f, TEXT(""));
-	Add(-2850.0f, 8750.0f, 420.0f, 0.0f, TEXT(""));
+	Add(-2850.0f, 8650.0f, 420.0f, 0.0f, TEXT(""));
 	Add(-2350.0f, 8850.0f, 420.0f, 0.0f, TEXT(""));
 	Add(-750.0f, 8950.0f, 420.0f, 0.0f, TEXT(""));
-	Add(50.0f, 8250.0f, 420.0f, 0.0f, TEXT(""));
-	Add(1050.0f, 7150.0f, 420.0f, 0.0f, TEXT(""));
-	Add(1250.0f, 6650.0f, 420.0f, 0.0f, TEXT(""));
-	Add(1050.0f, 5550.0f, 420.0f, 0.0f, TEXT(""));
-	Add(1050.0f, 5050.0f, 420.0f, 0.0f, TEXT(""));
-	Add(1350.0f, 4050.0f, 420.0f, 0.0f, TEXT(""));
-	Add(1850.0f, 4050.0f, 420.0f, 0.0f, TEXT(""));
+	Add(-250.0f, 8450.0f, 420.0f, 0.0f, TEXT(""));
+	Add(250.0f, 7350.0f, 420.0f, 0.0f, TEXT(""));
+	Add(50.0f, 6450.0f, 420.0f, 0.0f, TEXT(""));
+	Add(1150.0f, 5550.0f, 420.0f, 0.0f, TEXT(""));
+	Add(1250.0f, 4350.0f, 420.0f, 0.0f, TEXT(""));
+	Add(1550.0f, 4050.0f, 420.0f, 0.0f, TEXT(""));
+	Add(1950.0f, 4150.0f, 420.0f, 0.0f, TEXT(""));
 	Add(2950.0f, 4050.0f, 420.0f, 0.0f, TEXT(""));
 	Add(3650.0f, 3150.0f, 420.0f, 0.0f, TEXT(""));
 	Add(4450.0f, 2250.0f, 420.0f, 0.0f, TEXT(""));
 	Add(5450.0f, 2250.0f, 420.0f, 0.0f, TEXT(""));
-	Add(6350.0f, 1650.0f, 420.0f, 0.0f, TEXT(""));
-	Add(6350.0f, 650.0f, 420.0f, 0.0f, TEXT(""));
-	Add(6150.0f, -250.0f, 420.0f, 0.0f, TEXT(""));
-	Add(5450.0f, -1250.0f, 420.0f, 0.0f, TEXT(""));
-	Add(5050.0f, -2550.0f, 420.0f, 0.0f, TEXT(""));
-	Add(4550.0f, -4750.0f, 420.0f, 0.0f, TEXT(""));
-	Add(4350.0f, -6450.0f, 420.0f, 0.0f, TEXT(""));
+	Add(6450.0f, 1650.0f, 420.0f, 0.0f, TEXT(""));
+	Add(6350.0f, 1250.0f, 420.0f, 0.0f, TEXT(""));
+	Add(6750.0f, 450.0f, 420.0f, 0.0f, TEXT(""));
+	Add(6150.0f, -850.0f, 420.0f, 0.0f, TEXT(""));
+	Add(5250.0f, -950.0f, 420.0f, 0.0f, TEXT(""));
+	Add(4750.0f, -2050.0f, 420.0f, 0.0f, TEXT(""));
+	Add(4150.0f, -2850.0f, 420.0f, 0.0f, TEXT(""));
+	Add(4550.0f, -5150.0f, 420.0f, 0.0f, TEXT(""));
+	Add(4450.0f, -6950.0f, 420.0f, 0.0f, TEXT(""));
 	Add(2150.0f, -6350.0f, 420.0f, 0.0f, TEXT(""));
-	Add(250.0f, -7150.0f, 420.0f, 0.0f, TEXT(""));
-	Add(-650.0f, -7450.0f, 420.0f, 0.0f, TEXT(""));
-	Add(-1150.0f, -9050.0f, 420.0f, 0.0f, TEXT(""));
-	Add(-2650.0f, -9550.0f, 420.0f, 0.0f, TEXT(""));
-	Add(-2350.0f, -11250.0f, 420.0f, 0.0f, TEXT(""));
+	Add(450.0f, -7250.0f, 420.0f, 0.0f, TEXT(""));
+	Add(50.0f, -8150.0f, 420.0f, 0.0f, TEXT(""));
+	Add(750.0f, -9450.0f, 420.0f, 0.0f, TEXT(""));
+	Add(1450.0f, -10150.0f, 420.0f, 0.0f, TEXT(""));
+	Add(1750.0f, -11250.0f, 420.0f, 0.0f, TEXT(""));
+	Add(950.0f, -12150.0f, 420.0f, 0.0f, TEXT(""));
+	Add(50.0f, -12950.0f, 420.0f, 0.0f, TEXT(""));
+	Add(-1150.0f, -11950.0f, 420.0f, 0.0f, TEXT(""));
+	Add(-2150.0f, -11250.0f, 420.0f, 0.0f, TEXT(""));
 	Add(-2350.0f, -11550.0f, 420.0f, 2.0f, TEXT("the water garden"));
 	Add(-1450.0f, -11450.0f, 420.0f, 0.0f, TEXT(""));
-	Add(-1050.0f, -12150.0f, 420.0f, 0.0f, TEXT(""));
-	Add(-350.0f, -12950.0f, 420.0f, 0.0f, TEXT(""));
-	Add(1150.0f, -12950.0f, 420.0f, 0.0f, TEXT(""));
-	Add(1850.0f, -12350.0f, 420.0f, 0.0f, TEXT(""));
-	Add(3450.0f, -13150.0f, 420.0f, 0.0f, TEXT(""));
-	Add(3950.0f, -13150.0f, 420.0f, 0.0f, TEXT(""));
-	Add(5150.0f, -13450.0f, 420.0f, 0.0f, TEXT(""));
-	Add(6250.0f, -12150.0f, 420.0f, 0.0f, TEXT(""));
-	Add(7050.0f, -11150.0f, 420.0f, 0.0f, TEXT(""));
+	Add(-450.0f, -12450.0f, 420.0f, 0.0f, TEXT(""));
+	Add(250.0f, -12950.0f, 420.0f, 0.0f, TEXT(""));
+	Add(1750.0f, -11250.0f, 420.0f, 0.0f, TEXT(""));
+	Add(2050.0f, -10650.0f, 420.0f, 0.0f, TEXT(""));
+	Add(3550.0f, -9950.0f, 420.0f, 0.0f, TEXT(""));
+	Add(4750.0f, -9650.0f, 420.0f, 0.0f, TEXT(""));
+	Add(5650.0f, -9750.0f, 420.0f, 0.0f, TEXT(""));
 	Add(6050.0f, -10850.0f, 420.0f, 2.5f, TEXT("the mushroom wood"));
-	Add(5450.0f, -9850.0f, 420.0f, 0.0f, TEXT(""));
-	Add(5550.0f, -8550.0f, 420.0f, 0.0f, TEXT(""));
-	Add(5250.0f, -7050.0f, 420.0f, 0.0f, TEXT(""));
-	Add(4350.0f, -6450.0f, 420.0f, 0.0f, TEXT(""));
-	Add(4350.0f, -5650.0f, 420.0f, 0.0f, TEXT(""));
-	Add(4550.0f, -4350.0f, 420.0f, 0.0f, TEXT(""));
-	Add(4750.0f, -2850.0f, 420.0f, 0.0f, TEXT(""));
-	Add(5350.0f, -2350.0f, 420.0f, 0.0f, TEXT(""));
-	Add(6950.0f, -2150.0f, 420.0f, 0.0f, TEXT(""));
-	Add(8350.0f, -2050.0f, 420.0f, 0.0f, TEXT(""));
-	Add(8950.0f, -3450.0f, 420.0f, 0.0f, TEXT(""));
-	Add(10650.0f, -4050.0f, 420.0f, 0.0f, TEXT(""));
-	Add(10750.0f, -3950.0f, 420.0f, 0.0f, TEXT(""));
-	Add(12050.0f, -3850.0f, 420.0f, 0.0f, TEXT(""));
+	Add(5650.0f, -9750.0f, 420.0f, 0.0f, TEXT(""));
+	Add(5950.0f, -8150.0f, 420.0f, 0.0f, TEXT(""));
+	Add(5750.0f, -7850.0f, 420.0f, 0.0f, TEXT(""));
+	Add(4450.0f, -6950.0f, 420.0f, 0.0f, TEXT(""));
+	Add(4150.0f, -5850.0f, 420.0f, 0.0f, TEXT(""));
+	Add(4450.0f, -4550.0f, 420.0f, 0.0f, TEXT(""));
+	Add(4150.0f, -2850.0f, 420.0f, 0.0f, TEXT(""));
+	Add(4850.0f, -2250.0f, 420.0f, 0.0f, TEXT(""));
+	Add(5650.0f, -2450.0f, 420.0f, 0.0f, TEXT(""));
+	Add(7050.0f, -2050.0f, 420.0f, 0.0f, TEXT(""));
+	Add(8450.0f, -2250.0f, 420.0f, 0.0f, TEXT(""));
+	Add(9350.0f, -2850.0f, 420.0f, 0.0f, TEXT(""));
+	Add(9350.0f, -3450.0f, 420.0f, 0.0f, TEXT(""));
+	Add(10350.0f, -4150.0f, 420.0f, 0.0f, TEXT(""));
+	Add(10850.0f, -4350.0f, 420.0f, 0.0f, TEXT(""));
+	Add(12150.0f, -3850.0f, 420.0f, 0.0f, TEXT(""));
 	Add(12150.0f, -3750.0f, 420.0f, 2.5f, TEXT("the clock quarter"));
-	Add(11950.0f, -3450.0f, 420.0f, 0.0f, TEXT(""));
-	Add(12550.0f, -2750.0f, 420.0f, 0.0f, TEXT(""));
-	Add(12050.0f, -1650.0f, 420.0f, 0.0f, TEXT(""));
-	Add(12250.0f, -1450.0f, 420.0f, 0.0f, TEXT(""));
+	Add(12450.0f, -2750.0f, 420.0f, 0.0f, TEXT(""));
+	Add(12650.0f, -1650.0f, 420.0f, 0.0f, TEXT(""));
 	Add(13050.0f, -50.0f, 420.0f, 0.0f, TEXT(""));
-	Add(13950.0f, 50.0f, 420.0f, 0.0f, TEXT(""));
-	Add(14350.0f, 1550.0f, 420.0f, 0.0f, TEXT(""));
-	Add(14650.0f, 2950.0f, 420.0f, 0.0f, TEXT(""));
-	Add(16250.0f, 3350.0f, 420.0f, 0.0f, TEXT(""));
-	Add(17250.0f, 4450.0f, 420.0f, 0.0f, TEXT(""));
-	Add(18950.0f, 4750.0f, 420.0f, 0.0f, TEXT(""));
-	Add(20450.0f, 5750.0f, 420.0f, 0.0f, TEXT(""));
-	Add(21550.0f, 6750.0f, 420.0f, 0.0f, TEXT(""));
-	Add(21250.0f, 8650.0f, 420.0f, 0.0f, TEXT(""));
-	Add(21650.0f, 10750.0f, 420.0f, 0.0f, TEXT(""));
-	Add(20550.0f, 11350.0f, 420.0f, 0.0f, TEXT(""));
-	Add(21250.0f, 13050.0f, 420.0f, 0.0f, TEXT(""));
-	Add(20450.0f, 14650.0f, 420.0f, 0.0f, TEXT(""));
-	Add(19550.0f, 15350.0f, 420.0f, 0.0f, TEXT(""));
-	Add(17650.0f, 15950.0f, 420.0f, 0.0f, TEXT(""));
-	Add(15950.0f, 15950.0f, 420.0f, 0.0f, TEXT(""));
-	Add(14850.0f, 17150.0f, 420.0f, 0.0f, TEXT(""));
-	Add(14850.0f, 18350.0f, 420.0f, 0.0f, TEXT(""));
-	Add(15950.0f, 19350.0f, 420.0f, 0.0f, TEXT(""));
-	Add(16650.0f, 20350.0f, 420.0f, 0.0f, TEXT(""));
-	Add(16850.0f, 21250.0f, 420.0f, 0.0f, TEXT(""));
-	Add(17450.0f, 23050.0f, 420.0f, 0.0f, TEXT(""));
-	Add(16450.0f, 24650.0f, 420.0f, 0.0f, TEXT(""));
-	Add(14750.0f, 24650.0f, 420.0f, 0.0f, TEXT(""));
-	Add(13250.0f, 24450.0f, 420.0f, 0.0f, TEXT(""));
-	Add(13050.0f, 24750.0f, 420.0f, 0.0f, TEXT(""));
-	Add(11550.0f, 25950.0f, 420.0f, 0.0f, TEXT(""));
-	Add(10350.0f, 25650.0f, 420.0f, 0.0f, TEXT(""));
-	Add(8850.0f, 25650.0f, 420.0f, 0.0f, TEXT(""));
-	Add(7650.0f, 25350.0f, 420.0f, 0.0f, TEXT(""));
-	Add(6850.0f, 26650.0f, 420.0f, 0.0f, TEXT(""));
-	Add(5050.0f, 26950.0f, 420.0f, 0.0f, TEXT(""));
-	Add(3850.0f, 26650.0f, 420.0f, 0.0f, TEXT(""));
-	Add(2350.0f, 26650.0f, 420.0f, 0.0f, TEXT(""));
-	Add(850.0f, 26650.0f, 420.0f, 0.0f, TEXT(""));
-	Add(-650.0f, 26650.0f, 420.0f, 0.0f, TEXT(""));
-	Add(-2150.0f, 26650.0f, 420.0f, 0.0f, TEXT(""));
-	Add(-3650.0f, 26650.0f, 420.0f, 0.0f, TEXT(""));
-	Add(-5150.0f, 26650.0f, 420.0f, 0.0f, TEXT(""));
-	Add(-6550.0f, 26350.0f, 420.0f, 0.0f, TEXT(""));
-	Add(-7250.0f, 27550.0f, 420.0f, 0.0f, TEXT(""));
-	Add(-8650.0f, 28250.0f, 420.0f, 0.0f, TEXT(""));
-	Add(-9850.0f, 27950.0f, 420.0f, 0.0f, TEXT(""));
-	Add(-10450.0f, 28850.0f, 420.0f, 0.0f, TEXT(""));
-	Add(-9950.0f, 30250.0f, 420.0f, 0.0f, TEXT(""));
-	Add(-11750.0f, 31150.0f, 420.0f, 0.0f, TEXT(""));
-	Add(-12650.0f, 30850.0f, 420.0f, 0.0f, TEXT(""));
-	Add(-12950.0f, 32550.0f, 420.0f, 0.0f, TEXT(""));
-	Add(-13950.0f, 32750.0f, 420.0f, 0.0f, TEXT(""));
-	Add(-15650.0f, 32550.0f, 420.0f, 0.0f, TEXT(""));
-	Add(-16050.0f, 31450.0f, 420.0f, 0.0f, TEXT(""));
-	Add(-16650.0f, 30550.0f, 420.0f, 0.0f, TEXT(""));
-	Add(-18150.0f, 30550.0f, 420.0f, 0.0f, TEXT(""));
-	Add(-20050.0f, 30850.0f, 420.0f, 0.0f, TEXT(""));
-	Add(-20750.0f, 30050.0f, 420.0f, 0.0f, TEXT(""));
-	Add(-22150.0f, 29850.0f, 420.0f, 0.0f, TEXT(""));
-	Add(-22950.0f, 28450.0f, 420.0f, 0.0f, TEXT(""));
-	Add(-22650.0f, 27450.0f, 420.0f, 0.0f, TEXT(""));
-	Add(-23550.0f, 26850.0f, 420.0f, 0.0f, TEXT(""));
-	Add(-23750.0f, 25250.0f, 420.0f, 0.0f, TEXT(""));
-	Add(-23450.0f, 24250.0f, 420.0f, 0.0f, TEXT(""));
-	Add(-23450.0f, 22850.0f, 420.0f, 0.0f, TEXT(""));
-	Add(-23450.0f, 21550.0f, 420.0f, 0.0f, TEXT(""));
-	Add(-23750.0f, 20350.0f, 420.0f, 0.0f, TEXT(""));
-	Add(-22250.0f, 20250.0f, 420.0f, 0.0f, TEXT(""));
-	Add(-21050.0f, 20050.0f, 420.0f, 0.0f, TEXT(""));
-	Add(-20750.0f, 18650.0f, 420.0f, 0.0f, TEXT(""));
-	Add(-20350.0f, 17650.0f, 420.0f, 0.0f, TEXT(""));
-	Add(-19150.0f, 17750.0f, 420.0f, 0.0f, TEXT(""));
-	Add(-17950.0f, 16450.0f, 420.0f, 0.0f, TEXT(""));
-	Add(-17950.0f, 14750.0f, 420.0f, 0.0f, TEXT(""));
-	Add(-18050.0f, 13850.0f, 420.0f, 0.0f, TEXT(""));
-	Add(-18950.0f, 13050.0f, 420.0f, 0.0f, TEXT(""));
-	Add(-19750.0f, 12150.0f, 420.0f, 0.0f, TEXT(""));
-	Add(-20050.0f, 11450.0f, 420.0f, 0.0f, TEXT(""));
-	Add(-20650.0f, 10950.0f, 420.0f, 0.0f, TEXT(""));
-	Add(-20250.0f, 9350.0f, 420.0f, 0.0f, TEXT(""));
-	Add(-19250.0f, 9150.0f, 420.0f, 0.0f, TEXT(""));
-	Add(-18050.0f, 9050.0f, 420.0f, 0.0f, TEXT(""));
-	Add(-16850.0f, 9150.0f, 420.0f, 0.0f, TEXT(""));
-	Add(-15450.0f, 8450.0f, 420.0f, 0.0f, TEXT(""));
-	Add(-14950.0f, 7650.0f, 420.0f, 0.0f, TEXT(""));
-	Add(-14450.0f, 5950.0f, 420.0f, 0.0f, TEXT(""));
-	Add(-13550.0f, 5450.0f, 420.0f, 0.0f, TEXT(""));
-	Add(-12350.0f, 5650.0f, 420.0f, 0.0f, TEXT(""));
-	Add(-11650.0f, 7050.0f, 420.0f, 0.0f, TEXT(""));
-	Add(-12250.0f, 7150.0f, 420.0f, 0.0f, TEXT(""));
-	Add(-12850.0f, 7550.0f, 420.0f, 2.5f, TEXT("the hamlet"));
-	Add(-11650.0f, 7050.0f, 300.0f, 0.0f, TEXT(""));
-	Add(-11950.0f, 6150.0f, 300.0f, 0.0f, TEXT(""));
-	Add(-12550.0f, 5450.0f, 300.0f, 0.0f, TEXT(""));
-	Add(-14050.0f, 5450.0f, 300.0f, 0.0f, TEXT(""));
-	Add(-14750.0f, 6750.0f, 300.0f, 0.0f, TEXT(""));
-	Add(-15350.0f, 8450.0f, 300.0f, 0.0f, TEXT(""));
-	Add(-16150.0f, 9050.0f, 300.0f, 0.0f, TEXT(""));
-	Add(-17450.0f, 8750.0f, 300.0f, 0.0f, TEXT(""));
-	Add(-18250.0f, 9050.0f, 300.0f, 0.0f, TEXT(""));
-	Add(-19050.0f, 9150.0f, 300.0f, 0.0f, TEXT(""));
-	Add(-20250.0f, 9350.0f, 300.0f, 0.0f, TEXT(""));
-	Add(-21150.0f, 8450.0f, 300.0f, 0.0f, TEXT(""));
-	Add(-21650.0f, 7450.0f, 300.0f, 0.0f, TEXT(""));
-	Add(-21650.0f, 6150.0f, 300.0f, 0.0f, TEXT(""));
-	Add(-21650.0f, 4850.0f, 300.0f, 0.0f, TEXT(""));
-	Add(-21650.0f, 4450.0f, 300.0f, 0.0f, TEXT(""));
-	Add(-22750.0f, 3350.0f, 300.0f, 0.0f, TEXT(""));
-	Add(-22750.0f, 2050.0f, 300.0f, 0.0f, TEXT(""));
-	Add(-22750.0f, 850.0f, 300.0f, 0.0f, TEXT(""));
-	Add(-22150.0f, -1050.0f, 300.0f, 0.0f, TEXT(""));
-	Add(-21150.0f, -2050.0f, 300.0f, 0.0f, TEXT(""));
-	Add(-19350.0f, -950.0f, 300.0f, 0.0f, TEXT(""));
-	Add(-18150.0f, -1650.0f, 300.0f, 0.0f, TEXT(""));
-	Add(-17750.0f, -1950.0f, 300.0f, 0.0f, TEXT(""));
-	Add(-16350.0f, -1550.0f, 300.0f, 0.0f, TEXT(""));
-	Add(-15650.0f, -2450.0f, 300.0f, 0.0f, TEXT(""));
-	Add(-14950.0f, -1950.0f, 300.0f, 0.0f, TEXT(""));
-	Add(-14250.0f, -1450.0f, 300.0f, 0.0f, TEXT(""));
-	Add(-12950.0f, -2150.0f, 300.0f, 0.0f, TEXT(""));
-	Add(-12050.0f, -2650.0f, 300.0f, 0.0f, TEXT(""));
-	Add(-10350.0f, -2950.0f, 300.0f, 0.0f, TEXT(""));
-	Add(-9850.0f, -2850.0f, 300.0f, 0.0f, TEXT(""));
-	Add(-8550.0f, -1950.0f, 300.0f, 0.0f, TEXT(""));
-	Add(-7250.0f, -1950.0f, 300.0f, 0.0f, TEXT(""));
-	Add(-6350.0f, -850.0f, 300.0f, 0.0f, TEXT(""));
-	Add(-5350.0f, -850.0f, 300.0f, 0.0f, TEXT(""));
-	Add(-4650.0f, -550.0f, 300.0f, 0.0f, TEXT(""));
-	Add(-3550.0f, -850.0f, 300.0f, 0.0f, TEXT(""));
-	Add(-2250.0f, -1250.0f, 300.0f, 0.0f, TEXT(""));
-	Add(-1850.0f, -1950.0f, 300.0f, 0.0f, TEXT(""));
-	Add(50.0f, -1550.0f, 300.0f, 0.0f, TEXT(""));
+	Add(12250.0f, 1050.0f, 420.0f, 0.0f, TEXT(""));
+	Add(12450.0f, 1750.0f, 420.0f, 0.0f, TEXT(""));
+	Add(13550.0f, 1950.0f, 420.0f, 0.0f, TEXT(""));
+	Add(14550.0f, 3150.0f, 420.0f, 0.0f, TEXT(""));
+	Add(16350.0f, 3450.0f, 420.0f, 0.0f, TEXT(""));
+	Add(16850.0f, 3750.0f, 420.0f, 0.0f, TEXT(""));
+	Add(18650.0f, 4050.0f, 420.0f, 0.0f, TEXT(""));
+	Add(19250.0f, 5050.0f, 420.0f, 0.0f, TEXT(""));
+	Add(21050.0f, 5650.0f, 420.0f, 0.0f, TEXT(""));
+	Add(22450.0f, 5450.0f, 420.0f, 0.0f, TEXT(""));
+	Add(22950.0f, 5950.0f, 420.0f, 0.0f, TEXT(""));
+	Add(24150.0f, 7050.0f, 420.0f, 0.0f, TEXT(""));
+	Add(25350.0f, 7550.0f, 420.0f, 0.0f, TEXT(""));
+	Add(26750.0f, 7950.0f, 420.0f, 0.0f, TEXT(""));
+	Add(27350.0f, 8950.0f, 420.0f, 0.0f, TEXT(""));
+	Add(27650.0f, 10150.0f, 420.0f, 0.0f, TEXT(""));
+	Add(27450.0f, 11450.0f, 420.0f, 0.0f, TEXT(""));
+	Add(27250.0f, 12750.0f, 420.0f, 0.0f, TEXT(""));
+	Add(25550.0f, 12950.0f, 420.0f, 0.0f, TEXT(""));
+	Add(25050.0f, 14350.0f, 420.0f, 0.0f, TEXT(""));
+	Add(23850.0f, 15250.0f, 420.0f, 0.0f, TEXT(""));
+	Add(22650.0f, 16950.0f, 420.0f, 0.0f, TEXT(""));
+	Add(21750.0f, 18850.0f, 420.0f, 0.0f, TEXT(""));
+	Add(20850.0f, 19550.0f, 420.0f, 0.0f, TEXT(""));
+	Add(19450.0f, 20150.0f, 420.0f, 0.0f, TEXT(""));
+	Add(17450.0f, 21150.0f, 420.0f, 0.0f, TEXT(""));
+	Add(16850.0f, 22150.0f, 420.0f, 0.0f, TEXT(""));
+	Add(17450.0f, 23350.0f, 420.0f, 0.0f, TEXT(""));
+	Add(16750.0f, 24650.0f, 420.0f, 0.0f, TEXT(""));
+	Add(16950.0f, 25650.0f, 420.0f, 0.0f, TEXT(""));
+	Add(17250.0f, 26750.0f, 420.0f, 0.0f, TEXT(""));
+	Add(16850.0f, 28150.0f, 420.0f, 0.0f, TEXT(""));
+	Add(16550.0f, 28650.0f, 420.0f, 0.0f, TEXT(""));
+	Add(14250.0f, 28950.0f, 420.0f, 0.0f, TEXT(""));
+	Add(12650.0f, 28850.0f, 420.0f, 0.0f, TEXT(""));
+	Add(12550.0f, 29950.0f, 420.0f, 0.0f, TEXT(""));
+	Add(11350.0f, 31650.0f, 420.0f, 0.0f, TEXT(""));
+	Add(10150.0f, 32450.0f, 420.0f, 0.0f, TEXT(""));
+	Add(9150.0f, 31350.0f, 420.0f, 0.0f, TEXT(""));
+	Add(7550.0f, 31450.0f, 420.0f, 0.0f, TEXT(""));
+	Add(6950.0f, 29450.0f, 420.0f, 0.0f, TEXT(""));
+	Add(6050.0f, 29250.0f, 420.0f, 0.0f, TEXT(""));
+	Add(4850.0f, 28250.0f, 420.0f, 0.0f, TEXT(""));
+	Add(4550.0f, 27150.0f, 420.0f, 0.0f, TEXT(""));
+	Add(2950.0f, 27150.0f, 420.0f, 0.0f, TEXT(""));
+	Add(1450.0f, 26850.0f, 420.0f, 0.0f, TEXT(""));
+	Add(550.0f, 25450.0f, 420.0f, 0.0f, TEXT(""));
+	Add(1050.0f, 23950.0f, 420.0f, 0.0f, TEXT(""));
+	Add(550.0f, 22850.0f, 420.0f, 0.0f, TEXT(""));
+	Add(550.0f, 21850.0f, 420.0f, 0.0f, TEXT(""));
+	Add(-50.0f, 20850.0f, 420.0f, 0.0f, TEXT(""));
+	Add(-1650.0f, 20250.0f, 420.0f, 0.0f, TEXT(""));
+	Add(-2550.0f, 19750.0f, 420.0f, 0.0f, TEXT(""));
+	Add(-3850.0f, 18650.0f, 420.0f, 0.0f, TEXT(""));
+	Add(-4050.0f, 17350.0f, 420.0f, 0.0f, TEXT(""));
+	Add(-4950.0f, 17450.0f, 420.0f, 0.0f, TEXT(""));
+	Add(-6350.0f, 17750.0f, 420.0f, 0.0f, TEXT(""));
+	Add(-7750.0f, 17350.0f, 420.0f, 0.0f, TEXT(""));
+	Add(-8750.0f, 17350.0f, 420.0f, 0.0f, TEXT(""));
+	Add(-9650.0f, 17350.0f, 420.0f, 0.0f, TEXT(""));
+	Add(-10250.0f, 16850.0f, 420.0f, 0.0f, TEXT(""));
+	Add(-10550.0f, 15650.0f, 420.0f, 0.0f, TEXT(""));
+	Add(-9850.0f, 13750.0f, 420.0f, 0.0f, TEXT(""));
+	Add(-10550.0f, 13450.0f, 420.0f, 0.0f, TEXT(""));
+	Add(-11850.0f, 13350.0f, 420.0f, 0.0f, TEXT(""));
+	Add(-12250.0f, 11950.0f, 420.0f, 0.0f, TEXT(""));
+	Add(-12150.0f, 11250.0f, 420.0f, 0.0f, TEXT(""));
+	Add(-12050.0f, 10250.0f, 420.0f, 0.0f, TEXT(""));
+	Add(-11550.0f, 10250.0f, 420.0f, 0.0f, TEXT(""));
+	Add(-10750.0f, 9950.0f, 420.0f, 0.0f, TEXT(""));
+	Add(-11050.0f, 8850.0f, 420.0f, 2.5f, TEXT("the hamlet"));
+	Add(-10750.0f, 9950.0f, 300.0f, 0.0f, TEXT(""));
+	Add(-11750.0f, 10250.0f, 300.0f, 0.0f, TEXT(""));
+	Add(-12250.0f, 10350.0f, 300.0f, 0.0f, TEXT(""));
+	Add(-12050.0f, 11750.0f, 300.0f, 0.0f, TEXT(""));
+	Add(-12350.0f, 12350.0f, 300.0f, 0.0f, TEXT(""));
+	Add(-11550.0f, 13550.0f, 300.0f, 0.0f, TEXT(""));
+	Add(-10050.0f, 13350.0f, 300.0f, 0.0f, TEXT(""));
+	Add(-10150.0f, 15250.0f, 300.0f, 0.0f, TEXT(""));
+	Add(-10350.0f, 15950.0f, 300.0f, 0.0f, TEXT(""));
+	Add(-9650.0f, 17350.0f, 300.0f, 0.0f, TEXT(""));
+	Add(-8050.0f, 17350.0f, 300.0f, 0.0f, TEXT(""));
+	Add(-7250.0f, 17350.0f, 300.0f, 0.0f, TEXT(""));
+	Add(-5950.0f, 18150.0f, 300.0f, 0.0f, TEXT(""));
+	Add(-4750.0f, 17450.0f, 300.0f, 0.0f, TEXT(""));
+	Add(-3950.0f, 18250.0f, 300.0f, 0.0f, TEXT(""));
+	Add(-3250.0f, 19050.0f, 300.0f, 0.0f, TEXT(""));
+	Add(-2150.0f, 20250.0f, 300.0f, 0.0f, TEXT(""));
+	Add(-1050.0f, 20450.0f, 300.0f, 0.0f, TEXT(""));
+	Add(-50.0f, 20950.0f, 300.0f, 0.0f, TEXT(""));
+	Add(550.0f, 22050.0f, 300.0f, 0.0f, TEXT(""));
+	Add(1050.0f, 23650.0f, 300.0f, 0.0f, TEXT(""));
+	Add(550.0f, 25450.0f, 300.0f, 0.0f, TEXT(""));
+	Add(650.0f, 26150.0f, 300.0f, 0.0f, TEXT(""));
+	Add(2250.0f, 27050.0f, 300.0f, 0.0f, TEXT(""));
+	Add(3150.0f, 27150.0f, 300.0f, 0.0f, TEXT(""));
+	Add(4550.0f, 27150.0f, 300.0f, 0.0f, TEXT(""));
+	Add(4850.0f, 28550.0f, 300.0f, 0.0f, TEXT(""));
+	Add(6450.0f, 29350.0f, 300.0f, 0.0f, TEXT(""));
+	Add(7350.0f, 30350.0f, 300.0f, 0.0f, TEXT(""));
+	Add(8150.0f, 31450.0f, 300.0f, 0.0f, TEXT(""));
+	Add(9550.0f, 32350.0f, 300.0f, 0.0f, TEXT(""));
+	Add(11350.0f, 31650.0f, 300.0f, 0.0f, TEXT(""));
+	Add(12550.0f, 29750.0f, 300.0f, 0.0f, TEXT(""));
+	Add(13350.0f, 28850.0f, 300.0f, 0.0f, TEXT(""));
+	Add(15350.0f, 29150.0f, 300.0f, 0.0f, TEXT(""));
+	Add(16950.0f, 27750.0f, 300.0f, 0.0f, TEXT(""));
+	Add(16950.0f, 25350.0f, 300.0f, 0.0f, TEXT(""));
+	Add(17450.0f, 23050.0f, 300.0f, 0.0f, TEXT(""));
+	Add(17050.0f, 21250.0f, 300.0f, 0.0f, TEXT(""));
+	Add(18350.0f, 20850.0f, 300.0f, 0.0f, TEXT(""));
+	Add(19850.0f, 19850.0f, 300.0f, 0.0f, TEXT(""));
+	Add(21350.0f, 18950.0f, 300.0f, 0.0f, TEXT(""));
+	Add(22650.0f, 17450.0f, 300.0f, 0.0f, TEXT(""));
+	Add(22850.0f, 16650.0f, 300.0f, 0.0f, TEXT(""));
+	Add(23950.0f, 14950.0f, 300.0f, 0.0f, TEXT(""));
+	Add(25150.0f, 14250.0f, 300.0f, 0.0f, TEXT(""));
+	Add(25750.0f, 13350.0f, 300.0f, 0.0f, TEXT(""));
+	Add(27450.0f, 12150.0f, 300.0f, 0.0f, TEXT(""));
+	Add(27550.0f, 10350.0f, 300.0f, 0.0f, TEXT(""));
+	Add(27350.0f, 8750.0f, 300.0f, 0.0f, TEXT(""));
+	Add(26750.0f, 7950.0f, 300.0f, 0.0f, TEXT(""));
+	Add(24750.0f, 7250.0f, 300.0f, 0.0f, TEXT(""));
+	Add(23350.0f, 6650.0f, 300.0f, 0.0f, TEXT(""));
+	Add(22650.0f, 5450.0f, 300.0f, 0.0f, TEXT(""));
+	Add(21650.0f, 5250.0f, 300.0f, 0.0f, TEXT(""));
+	Add(19850.0f, 5150.0f, 300.0f, 0.0f, TEXT(""));
+	Add(19050.0f, 4650.0f, 300.0f, 0.0f, TEXT(""));
+	Add(17950.0f, 4450.0f, 300.0f, 0.0f, TEXT(""));
+	Add(16850.0f, 3750.0f, 300.0f, 0.0f, TEXT(""));
+	Add(16350.0f, 3450.0f, 300.0f, 0.0f, TEXT(""));
+	Add(14350.0f, 3150.0f, 300.0f, 0.0f, TEXT(""));
+	Add(13550.0f, 1850.0f, 300.0f, 0.0f, TEXT(""));
+	Add(12450.0f, 1750.0f, 300.0f, 0.0f, TEXT(""));
+	Add(11150.0f, 950.0f, 300.0f, 0.0f, TEXT(""));
+	Add(9950.0f, 1050.0f, 300.0f, 0.0f, TEXT(""));
+	Add(9050.0f, 650.0f, 300.0f, 0.0f, TEXT(""));
+	Add(8350.0f, 150.0f, 300.0f, 0.0f, TEXT(""));
+	Add(8150.0f, -1050.0f, 300.0f, 0.0f, TEXT(""));
+	Add(7750.0f, -2050.0f, 300.0f, 0.0f, TEXT(""));
+	Add(6850.0f, -2450.0f, 300.0f, 0.0f, TEXT(""));
+	Add(5450.0f, -2350.0f, 300.0f, 0.0f, TEXT(""));
+	Add(4550.0f, -2150.0f, 300.0f, 0.0f, TEXT(""));
+	Add(3450.0f, -2550.0f, 300.0f, 0.0f, TEXT(""));
+	Add(2450.0f, -2550.0f, 300.0f, 0.0f, TEXT(""));
+	Add(1850.0f, -1950.0f, 300.0f, 0.0f, TEXT(""));
 	Add(50.0f, -1450.0f, 300.0f, 5.0f, TEXT("home, and idle"));
 }
 
@@ -728,20 +729,25 @@ void ARelayDogCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputC
 	PlayerInputComponent->BindKey(EKeys::RightShift, IE_Released, this, &ARelayDogCharacter::OnRunReleased);
 	PlayerInputComponent->BindKey(EKeys::LeftControl, IE_Pressed, this, &ARelayDogCharacter::OnWalkPressed);
 	PlayerInputComponent->BindKey(EKeys::LeftControl, IE_Released, this, &ARelayDogCharacter::OnWalkReleased);
-	// SPACE IS THE LIVE TERMINAL. THE RELAY DOG DOES NOT JUMP.
+	// SPACE IS THE JUMP. CTRL+T IS THE LIVE TERMINAL. (founder, 2026-09-03)
 	//
-	// Founder canon, 2026-08-30: "Wonderland is an AI creation platform wrapped
-	// in an open-world gaming interface, not a conventional game with AI bolted
-	// onto it." A traversal mechanic that produces nothing outside the world is
-	// the wrong thing to spend the most reachable key on; the participant's
-	// direct line to their Compound Agent is the right thing.
+	// This replaces the 2026-08-30 arrangement, where Space opened the terminal
+	// and the Dog could not jump at all. That reasoning -- "a traversal mechanic
+	// that produces nothing outside the world is the wrong thing to spend the
+	// most reachable key on" -- was about WHICH key, not about whether the Dog
+	// should be able to jump, and the founder has now assigned both: Ctrl+T
+	// carries the terminal, Space carries the jump.
 	//
-	// Jump is not merely unbound -- an unbound ability is still reachable from
-	// a Blueprint, a gamepad default or a future input mapping, and the world
-	// is now audited on the promise that no route needs it. `bCanJump` refuses
-	// it at the character.
-	PlayerInputComponent->BindKey(EKeys::SpaceBar, IE_Pressed, this,
-	                              &ARelayDogCharacter::OnLiveTerminalPressed);
+	// Bound to ACharacter's own Jump/StopJumping so the hold-to-rise behaviour,
+	// the landing and the air control are the engine's, not a reimplementation.
+	PlayerInputComponent->BindKey(EKeys::SpaceBar, IE_Pressed, this, &ACharacter::Jump);
+	PlayerInputComponent->BindKey(EKeys::SpaceBar, IE_Released, this, &ACharacter::StopJumping);
+	// CTRL+T, both orders of the chord. `BindKey` with an FInputChord matches
+	// the modifier, and binding T alone would fire while the participant walks
+	// with their hand near it.
+	PlayerInputComponent->BindKey(FInputChord(EKeys::T, /*bShift*/ false, /*bCtrl*/ true,
+	                                          /*bAlt*/ false, /*bCmd*/ false),
+	                              IE_Pressed, this, &ARelayDogCharacter::OnLiveTerminalPressed);
 
 	// A possessed Dog steers with the mouse, so the boom follows the controller
 	// rather than the body; the capture demo keeps the body-locked boom.
@@ -751,22 +757,26 @@ void ARelayDogCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputC
 		CameraBoom->bInheritPitch = true;
 		CameraBoom->bInheritYaw = true;
 	}
-	UE_LOG(LogTemp, Log, TEXT("WLDOG INPUT bound on %s (WASD, mouse, shift=run, ctrl=walk, SPACE=LIVE TERMINAL; the Dog does not jump)"), *GetName());
+	UE_LOG(LogTemp, Log, TEXT("WLDOG INPUT bound on %s (WASD, mouse, shift=run, ctrl=walk, SPACE=JUMP, CTRL+T=LIVE TERMINAL)"), *GetName());
 }
 
 void ARelayDogCharacter::OnLiveTerminalPressed()
 {
-	// SPACE OPENS THE LIVE TERMINAL, and the participant's terminal lives in
+	// CTRL+T OPENS THE LIVE TERMINAL, and the participant's terminal lives in
 	// the BROWSER, over the Pixel Streaming view -- it is the founder-approved
 	// Relay panel, and re-drawing it in UMG would be redrawing an approved
 	// design in a second place where it could drift.
 	//
-	// So the front end intercepts Space before it is forwarded to the game
-	// (see wonderland/web/player), and this handler is the guard for the case
-	// where a key still arrives: it must do something that is NOT a jump, and
-	// it must say so in the log, because "space did nothing" and "space is
-	// wired to the terminal" look identical from a video otherwise.
-	UE_LOG(LogTemp, Log, TEXT("WLDOG INPUT: SPACE -> live terminal (the front end owns the panel; the Dog does not jump)"));
+	// So the front end intercepts Ctrl+T before it is forwarded to the game
+	// (see wonderland/web/player/keys.js), and this handler is the guard for
+	// the case where the chord still arrives -- a gamepad, a resumed session, a
+	// client that binds its own listener. It must say so in the log, because
+	// "the chord did nothing" and "the chord is wired to the terminal" look
+	// identical from a video otherwise.
+	//
+	// It must also NOT be a jump. Space is the jump now, and if these two ever
+	// end up on the same key again this log line is how it will be noticed.
+	UE_LOG(LogTemp, Log, TEXT("WLDOG INPUT: CTRL+T -> live terminal (the front end owns the panel)"));
 }
 
 void ARelayDogCharacter::MoveForwardAxis(float Value)

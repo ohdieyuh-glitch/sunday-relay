@@ -175,10 +175,12 @@ protected:
 	void OnRunReleased();
 	void OnWalkPressed();
 	void OnWalkReleased();
-	/** SPACE. Canon, 2026-08-30: Wonderland is an AI creation platform wrapped
-	 *  in an open world, so Space is a CREATION control and not a traversal
-	 *  one. It opens the participant's Live Terminal -- their direct interface
-	 *  to the Compound Agent -- and the Dog does not jump. */
+	/** CTRL+T. Canon, 2026-09-03, replacing Space: Wonderland is an AI creation
+	 *  platform wrapped in an open world, so the terminal keeps a dedicated
+	 *  chord -- the participant's direct interface to their Compound Agent --
+	 *  while Space returns to the body as the Dog's jump. Ctrl+T also toggles,
+	 *  which Space never safely could: it is not a character inside the
+	 *  terminal's own input. */
 	void OnLiveTerminalPressed();
 
 
