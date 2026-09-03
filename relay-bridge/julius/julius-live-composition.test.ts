@@ -17,6 +17,7 @@ import {
   JULIUS_CONTEXT_COMPILER_VERSION,
   createJuliusMemoryStore,
   type JuliusContextSnapshot,
+  type JuliusRecoveryDriver,
   type JuliusRuntimeStore,
 } from '../../src/relay/mission/julius';
 import type { GptRunOutcome } from '../../src/relay/connectors/gpt-architect';
@@ -372,7 +373,9 @@ async function driveLiveMission(
   architect?: () => Promise<GptRunOutcome>,
 ) {
   const memory = createJuliusMemoryStore();
-  const handoffs = createContextAndClaimHandoffs(memory as unknown as JuliusRuntimeStore);
+  // Not narrowed to JuliusRuntimeStore: the drive loop runs the recovery sweep,
+  // and the memory store is the recovery driver as well as the store.
+  const handoffs = createContextAndClaimHandoffs(memory as unknown as JuliusRuntimeStore & JuliusRecoveryDriver);
   const fakes = liveResolution({ verdicts, contexts: handoffs.contexts, architect });
   expect(fakes.resolution.ok).toBe(true);
   seedMissionRun(memory);

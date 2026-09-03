@@ -478,7 +478,7 @@ Three counters now, each meaning one thing:
 |---|---|---|
 | `lease_generation` | every claim, hand-backs included | nothing; it is the ownership token authority is checked against |
 | `attempt` | `admitTask` only, once the scheduler has decided to run the task | `MAX_TASK_ATTEMPTS` — the provider/execution retry budget |
-| `recoveries` | the recovery sweep, when it requeues an expired lease | `MAX_TASK_RECOVERIES` — scheduler and crash churn |
+| `recoveries` | the recovery sweep, when it requeues an expired lease | `MAX_TASK_RECOVERIES` — crash churn reclaimed by the sweep |
 
 `admitTask` is one atomic statement conditioned on the caller's own lease, and
 it runs immediately before provider-capable work begins. That is what makes the
@@ -490,8 +490,23 @@ while it decided is told so and runs nothing.
 The recovery counter exists because the execution counter stopped being able to
 bound recovery: a task claimed, crashed before admission and recovered leaves
 `attempt` untouched — correctly — so bounded only by it, that loop would never
-terminate. Both ceilings are checked, execution first, so an operator reading
-`failures.tsv` sees the cause they act on.
+terminate. Both ceilings are checked, execution first, and `failures.tsv` now
+selects `julius.recovery.action` as well, so the reason that ended such a task
+(`RECOVERY_LIMIT_REACHED`) reaches the artifact instead of dying with the
+database.
+
+WHAT IS NOT BOUNDED, stated rather than implied: a scheduling hand-back. The
+fairness and concurrency yields return the task to RUNNABLE with no lease, and
+the sweep only ever selects an ACTIVE task whose lease expired, so a yield is
+never counted by anything. That churn is deliberate and free — no provider is
+called and no money is spent — and a run whose allowance is narrower than its
+claim limit simply takes more ticks.
+
+THE SWEEP HAS TO RUN FOR ANY OF THIS TO BIND. `recoverExpired` was written and
+never called: the claim query also offers an ACTIVE task whose lease has
+expired, so the runtime worked while reclaiming without counting. The live
+driver now runs the sweep before every tick, which is what turns a reclaim into
+a counted, bounded, recorded event.
 
 ## Dry run #1 (2026-09-02) — the executor refused the live output ceiling
 

@@ -187,12 +187,60 @@ class PostgresWonderlandTransaction implements WonderlandTransaction {
   }
 }
 
+/**
+ * The version a migration stamps into `schema_migrations`, read from the file
+ * itself so the two can never disagree. `julius-migration-chain.test.ts`
+ * requires every migration to carry exactly this statement with its own
+ * filename version.
+ */
+export function migrationVersion(sql: string): string | null {
+  return /INSERT INTO relay_wonderland\.schema_migrations\(version\) VALUES\('([^']+)'\)/u.exec(sql)?.[1] ?? null;
+}
+
 export class TransactionalWonderlandDatabase {
   readonly pool: Pool;
   constructor(config: PoolConfig | Pool) { this.pool = typeof (config as Pool).connect === 'function' ? config as Pool : new Pool(config as PoolConfig); }
+  /**
+   * APPLY WHAT IS MISSING, NOT EVERYTHING.
+   *
+   * This replayed the whole array unconditionally, and the migrations use bare
+   * `CREATE TABLE`, so a second call against a migrated database died with
+   * 42P07. Three entrypoints therefore guarded it with a sentinel — "does
+   * `julius_sandboxes.sandbox_policy` exist" — which named the artefact of
+   * whichever migration happened to be last when the guard was written.
+   *
+   * That guard answers a question with only two answers, and the real question
+   * has as many answers as there are migrations. Adding one made the sentinel
+   * lie in the worst direction: a database at 021 reported "already migrated",
+   * so 022 was never applied, `julius_tasks.recoveries` never existed, and the
+   * recovery sweep — the only bound on a task that crashes before admission —
+   * would have failed with 42703 on every pass. CI could not catch it, because
+   * every workflow migrates a container that starts empty.
+   *
+   * So the version each migration stamps into `schema_migrations` is the
+   * authority, which is what that table is for. An unmigrated database has no
+   * such table and gets everything; a database at 021 gets 022 alone. The
+   * chain test guarantees every migration stamps its own filename version, so
+   * the version read here is the one the file writes.
+   */
   async migrate(): Promise<void> {
     if (WONDERLAND_MIGRATIONS.some(sql => sql === '')) throw new Error('wonderland_migration_not_packaged');
-    for (const sql of WONDERLAND_MIGRATIONS) await this.pool.query(sql);
+    const applied = await this.appliedMigrationVersions();
+    for (const sql of WONDERLAND_MIGRATIONS) {
+      const version = migrationVersion(sql);
+      if (version !== null && applied.has(version)) continue;
+      await this.pool.query(sql);
+    }
+  }
+
+  /** Empty when the schema — or the ledger table itself — does not exist yet. */
+  async appliedMigrationVersions(): Promise<ReadonlySet<string>> {
+    const present = await this.pool.query(
+      "SELECT 1 FROM information_schema.tables WHERE table_schema='relay_wonderland' AND table_name='schema_migrations'",
+    );
+    if (present.rowCount === 0) return new Set();
+    const rows = await this.pool.query<{ version: string }>('SELECT version FROM relay_wonderland.schema_migrations');
+    return new Set(rows.rows.map((row) => String(row.version)));
   }
   async commitCommand<T>(input: { scope: string; commandId: string; requestHash: string; streamId: string; event: Omit<WonderlandEvent, 'sequence'> }, effect: (transaction: WonderlandTransaction) => Promise<T>): Promise<{ response: T; event: WonderlandEvent }> {
     return this.transaction(transaction => transaction.idempotent(input.scope, input.commandId, input.requestHash, async () => {

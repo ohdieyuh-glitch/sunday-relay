@@ -224,8 +224,14 @@ async function main(argv: readonly string[]): Promise<number> {
   /* ------------------------------------------------- confirmed live path */
   const pool = new Pool({ connectionString: env.DATABASE_URL });
   try {
-    const applied = await pool.query(`SELECT 1 FROM information_schema.columns WHERE table_schema='relay_wonderland' AND table_name='julius_sandboxes' AND column_name='sandbox_policy'`);
-    if (applied.rowCount === 0) await new TransactionalWonderlandDatabase(pool).migrate();
+    /* `migrate()` applies only the versions `schema_migrations` does not
+     * already hold, so this is safe against an empty database, a partially
+     * migrated one and a current one alike. It replaced a sentinel that asked
+     * whether one column of the then-last migration existed: adding migration
+     * 022 made that sentinel report "already migrated" for a database at 021,
+     * which would have skipped the new column entirely on the one path that
+     * spends money. */
+    await new TransactionalWonderlandDatabase(pool).migrate();
 
     /* A malformed credential map must refuse with a COMPOSED message: the
      * JSON parser's own error quotes a slice of the input, and the input is a

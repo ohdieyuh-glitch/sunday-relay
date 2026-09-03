@@ -129,7 +129,11 @@ export async function verifyLeaseProtocol(
   const record = (invariant: LeaseInvariant, held: boolean, detail: string) =>
     results.push({ invariant, held, detail });
 
-  /* -- one owner, a new generation, a counted attempt -- */
+  /* -- one owner, a new generation, an attempt counted where it should be -- */
+  const offered = await scheduler.claim({ owner: 'owner-probe', now: clock.now, leaseExpiresAt: clock.now, limit: 1 });
+  // The probe claim is released by letting its lease expire immediately, so the
+  // real claim below sees the same subject with a known prior attempt count.
+  const beforeClaim = offered[0] === undefined ? null : await scheduler.read(offered[0].subjectId);
   const first = await scheduler.claim({ owner: 'owner-a', now: clock.now, leaseExpiresAt: clock.futureAt, limit: 1 });
   if (first.length === 0) {
     record('a claimed subject is held by exactly one owner', false, 'nothing was claimable');
@@ -158,15 +162,18 @@ export async function verifyLeaseProtocol(
    * claim is its admission must count at the claim, and a scheduler that
    * decides afterwards must NOT, or it charges for work it may refuse to do.
    *
-   * Read against a subject that has never been admitted, which is what the
-   * harness claims — the same freshness the generation invariant above already
-   * relies on when it requires a generation above zero.
+   * Measured as a DELTA, not against zero. Asserting `attempt === 0` would
+   * hold only for a subject that has never executed, and this harness is meant
+   * to be pointed at any scheduler, including one whose claimable subject has
+   * a history. The claim either raised the count or it did not, and that is
+   * the whole question.
    */
   const claimIsAdmission = scheduler.claimIsAdmission ?? true;
+  const attemptBefore = beforeClaim?.attempt ?? 0;
   record(
     "the attempt count follows the scheduler's admission model",
-    claimIsAdmission ? subject.attempt > 0 : subject.attempt === 0,
-    `attempt is ${subject.attempt}; a claim ${claimIsAdmission ? 'is' : 'is not'} an admission here`,
+    claimIsAdmission ? subject.attempt > attemptBefore : subject.attempt === attemptBefore,
+    `attempt went ${attemptBefore} -> ${subject.attempt}; a claim ${claimIsAdmission ? 'is' : 'is not'} an admission here`,
   );
 
   /* -- authority is (owner, generation), and nothing else -- */

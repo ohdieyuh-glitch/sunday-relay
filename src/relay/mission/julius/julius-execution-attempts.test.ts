@@ -288,6 +288,35 @@ describe('an execution attempt is spent at admission, never at the claim', () =>
     expect(rows.filter((row) => row.attempt === 0), 'and the refused one was charged nothing').toHaveLength(1);
   });
 
+  /* ------------------------------------------------------------- CASE G2 -- */
+  it('CASE G2: the live drive loop sweeps, so the direct reclaim path is bounded too', async () => {
+    // THE BOUND ONLY EXISTS IF THE SWEEP RUNS. The claim query also offers an
+    // ACTIVE task whose lease has expired, and that path reclaims WITHOUT
+    // counting — so a task that is claimed, dies before admission and has its
+    // lease expire could be picked up forever: `attempt` stays 0 because
+    // nothing ran, and the counter that bounds this loop is never reached.
+    // The live driver runs the sweep before every tick, which is what turns a
+    // reclaim into a counted, bounded event.
+    const harness = createJuliusHarness({ workers: [{ worker: CODER, script: [SUCCESS] }] });
+    const { projectId } = seedRun(harness, { tasks: [task({ taskId: 'only' })] });
+
+    for (let round = 0; round < MAX_TASK_RECOVERIES + 1; round += 1) {
+      await harness.loop.recover({ projectId }, harness.store);
+      // A worker claims and dies before admitting; the lease is already expired.
+      await harness.deps.store.claimRunnable({
+        owner: 'dying-worker', now: harness.clock.now(), leaseExpiresAt: harness.clock.now(),
+        limit: 1, projectId,
+      });
+    }
+    await harness.loop.recover({ projectId }, harness.store);
+
+    const row = harness.store.taskRow('only')!;
+    expect(row.attempt, 'nothing ever executed, so nothing was charged').toBe(0);
+    expect(row.state, 'and the churn is terminated rather than endless').toBe('FAILED');
+    expect(row.recoveries, 'by the counter written for exactly this loop')
+      .toBeGreaterThanOrEqual(MAX_TASK_RECOVERIES);
+  });
+
   /* ---------------------------------------------- the planner, in isolation */
   it('the recovery planner reports the execution ceiling before the recovery one', () => {
     const base = {

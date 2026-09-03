@@ -63,18 +63,25 @@ export interface PreflightIdentity {
 }
 
 /**
- * Applies the migration set only when its last migration has not landed. The set is a
- * one-shot replay (`CREATE TABLE` without `IF NOT EXISTS`), so a second application
- * fails with 42P07 — the live entrypoint and the sibling harness guard it with this
- * same column check, and so must anything that may meet an already-migrated database.
+ * Brings the database up to the checked-in migration set.
+ *
+ * THE SENTINEL THIS REPLACES WAS A TWO-ANSWER GUARD ON A QUESTION WITH MANY.
+ * It asked whether `julius_sandboxes.sandbox_policy` existed — the artefact of
+ * whichever migration was last when the guard was written — and skipped the
+ * whole set when it did. Adding migration 022 made that lie in the dangerous
+ * direction: a database already at 021 answered "present", so the new column
+ * was never created and the recovery sweep that depends on it would have
+ * failed on every pass. `migrate()` now applies only the versions
+ * `schema_migrations` does not already hold, so it is safe to call against an
+ * empty database, a partially migrated one, or a current one — and there is no
+ * sentinel left to go stale.
  */
 export async function migrateIfNeeded(pool: Pool): Promise<'applied' | 'present'> {
-  const applied = await pool.query(
-    "SELECT 1 FROM information_schema.columns WHERE table_schema='relay_wonderland' AND table_name='julius_sandboxes' AND column_name='sandbox_policy'",
-  );
-  if ((applied.rowCount ?? 0) > 0) return 'present';
-  await new TransactionalWonderlandDatabase(pool).migrate();
-  return 'applied';
+  const database = new TransactionalWonderlandDatabase(pool);
+  const before = await database.appliedMigrationVersions();
+  await database.migrate();
+  const after = await database.appliedMigrationVersions();
+  return after.size > before.size ? 'applied' : 'present';
 }
 
 /** The prefix every preflight-owned identifier carries. Cleanup refuses to touch anything without it. */

@@ -31,10 +31,9 @@ export async function openJuliusClient():Promise<{pool:Pool;tools:JuliusToolPost
   return {pool,tools:new JuliusToolPostgresRepository(pool),client,scoped,trustedReceiptKeys,workspace:required('JULIUS_WORKSPACE')};
 }
 
-/** The migration set is a one-shot replay, so each phase migrates only when the last migration has not landed. */
+/** `migrate()` applies only the versions `schema_migrations` does not hold, so every phase may call it. */
 async function migrateOnce(pool:Pool):Promise<void>{
-  const applied=await pool.query(`SELECT 1 FROM information_schema.columns WHERE table_schema='relay_wonderland' AND table_name='julius_sandboxes' AND column_name='sandbox_policy'`);
-  if(applied.rowCount===0)await new TransactionalWonderlandDatabase(pool).migrate();
+  await new TransactionalWonderlandDatabase(pool).migrate();
 }
 
 export async function seedBase(pool:Pool,scope:{runId:string;taskId:string}={runId:RUN,taskId:TASK}):Promise<void>{

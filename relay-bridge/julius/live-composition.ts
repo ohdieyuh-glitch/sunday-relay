@@ -30,6 +30,7 @@ import {
   type JuliusContextSnapshot,
   type JuliusPipelineDependencies,
   type JuliusPolicySource,
+  type JuliusRecoveryDriver,
   type JuliusProviderAdapter,
   type JuliusRuntimeStore,
   type JuliusVerificationPolicy,
@@ -255,14 +256,20 @@ export interface LiveJuliusRuntime {
 }
 
 /** Wraps the store so compiled contexts and task claims reach the adapters. */
-export function createContextAndClaimHandoffs(store: JuliusRuntimeStore): {
-  readonly store: JuliusRuntimeStore;
+/**
+ * Generic in the store so a store that is ALSO a recovery driver stays one.
+ * Declared as `JuliusRuntimeStore`, the spread below erased `recoverExpired`
+ * from the type while keeping it at runtime, and the drive loop could not ask
+ * for the sweep it needs.
+ */
+export function createContextAndClaimHandoffs<S extends JuliusRuntimeStore>(store: S): {
+  readonly store: S;
   readonly contexts: CompiledContextSource;
   readonly claims: TaskClaimSource;
 } {
   const snapshots = new Map<string, JuliusContextSnapshot>();
   const claims = new Map<string, { leaseGeneration: number }>();
-  const wrapped: JuliusRuntimeStore = {
+  const wrapped: S = {
     ...store,
     persist: async (input) => {
       snapshots.set(input.snapshot.contextId, input.snapshot);
@@ -368,7 +375,8 @@ export interface DriveOutcome {
  */
 export async function driveJuliusRunToTerminal(input: {
   readonly loop: JuliusRunLoop;
-  readonly store: JuliusRuntimeStore;
+  // The sweep below needs the recovery driver, not only the runtime store.
+  readonly store: JuliusRuntimeStore & JuliusRecoveryDriver;
   readonly runId: string;
   readonly projectId: string;
   readonly maxTicks?: number;
@@ -384,6 +392,19 @@ export async function driveJuliusRunToTerminal(input: {
   };
   let lastState = 'UNKNOWN';
   for (let tick = 1; tick <= maxTicks; tick += 1) {
+    /**
+     * SWEEP BEFORE CLAIMING, so the bound on crash churn is real.
+     *
+     * `recoverExpired` existed and nothing called it. The runtime still worked,
+     * because the claim query also offers an ACTIVE task whose lease has
+     * expired — but that path reclaims WITHOUT counting, so a task that is
+     * claimed, dies before it is admitted, and has its lease expire could be
+     * picked up again forever: `attempt` stays 0 because nothing ran, and the
+     * recovery counter that bounds exactly this loop was never reached. The
+     * sweep is what turns a reclaim into a counted, bounded event, and what
+     * writes the `recovery.action` row that says which bound stopped a task.
+     */
+    await input.loop.recover({ projectId: input.projectId }, input.store);
     const report = await input.loop.tick({ projectId: input.projectId });
     const run = await input.store.loadRun(input.runId, input.projectId);
     lastState = run?.state ?? 'UNKNOWN';
