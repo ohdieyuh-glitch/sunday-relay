@@ -580,11 +580,83 @@ FVector ARelayDogCharacter::StepRoute(float DeltaSeconds)
 		RouteIndex = (RouteIndex + 1) % Route.Num();
 		RouteHold = 0.0f;
 		LegSeconds = 0.0f;
+		// a new leg starts with a clean stuck record, or the anchor from the
+		// abandoned one makes the next leg look stuck the instant it begins
+		StuckAnchor = Here;
+		StuckSeconds = 0.0f;
+		UnstickSeconds = 0.0f;
 		return FVector::ZeroVector;
 	}
 	FVector ToTarget = Leg.Target - Here;
 	ToTarget.Z = 0.0f;
 	const float Distance = ToTarget.Size();
+
+	// ---- STUCK ON THE WORLD, AND GETTING OFF IT ---------------------------
+	//
+	// A leg drives straight at its target. Where the body grazes geometry the
+	// capsule slides along it and stops dead, and because nothing ever moves
+	// the Dog off what it is caught on, EVERY following leg fails from the
+	// identical coordinate. That is what the log looked like on 2026-09-03:
+	// seventeen legs abandoned from one spot between two fused trees, then --
+	// after the map was corrected -- twelve more from inside a garden wall's
+	// footprint at (-7781, -940).
+	//
+	// FIXING THE MAP WAS NECESSARY AND IS NOT SUFFICIENT. `FOOT_PARTS` taught
+	// the solver what a gate is and the route stopped being drawn through
+	// masonry; the Dog still has momentum, still slides along a wall it
+	// clipped, and a plan-view solve will always call some corner passable
+	// that a body with width cannot round cleanly. So the recovery belongs
+	// here, in the body, not in the map.
+	//
+	// It is deliberately the smallest thing that works: notice that the Dog
+	// has barely moved while being ASKED to move, then push PERPENDICULAR to
+	// the target for a moment. Sideways rather than backwards, because what
+	// traps a capsule is a surface it is pressed flat against -- reversing
+	// re-approaches the same face at the same angle, while a step along the
+	// face slides out of the corner. The side alternates each time so a
+	// symmetric trap cannot hold it by pushing it back and forth forever.
+	if (UnstickSeconds > 0.0f)
+	{
+		UnstickSeconds -= DeltaSeconds;
+		const FVector Side = FVector::CrossProduct(FVector::UpVector,
+		                                           ToTarget.GetSafeNormal());
+		// A LITTLE FORWARD TOO. Pure sideways can walk along a wall forever
+		// without ever leaving it; the bias keeps the intent of the leg.
+		return (Side * UnstickSign + ToTarget.GetSafeNormal() * 0.35f)
+		       .GetSafeNormal() * FMath::Max(180.0f, Leg.SpeedUU * 0.6f);
+	}
+	if (Leg.SpeedUU > 1.0f && Distance > FMath::Max(20.0f, Leg.SpeedUU * 0.12f))
+	{
+		// Progress is measured against an ANCHOR rather than the last frame:
+		// a Dog pressed into a wall still jitters a few uu per frame, and a
+		// per-frame test reads that as movement forever.
+		if (FVector::Dist2D(Here, StuckAnchor) > 60.0f)
+		{
+			StuckAnchor = Here;
+			StuckSeconds = 0.0f;
+		}
+		else
+		{
+			StuckSeconds += DeltaSeconds;
+			if (StuckSeconds > 1.5f)
+			{
+				UnstickSeconds = 0.6f;
+				UnstickSign = -UnstickSign;
+				StuckSeconds = 0.0f;
+				StuckAnchor = Here;
+				UE_LOG(LogTemp, Log,
+				       TEXT("WLDOG UNSTICK: leg %d/%d, no progress for 1.5 s at "
+				            "(%.0f, %.0f) -- stepping %s for 0.6 s"),
+				       RouteIndex + 1, Route.Num(), Here.X, Here.Y,
+				       UnstickSign > 0.0f ? TEXT("left") : TEXT("right"));
+			}
+		}
+	}
+	else
+	{
+		StuckAnchor = Here;
+		StuckSeconds = 0.0f;
+	}
 
 	// ARRIVAL TOLERANCE SCALES WITH SPEED. A fixed radius at 560 uu/s is
 	// overshot inside a single frame, and the Dog then circles the point

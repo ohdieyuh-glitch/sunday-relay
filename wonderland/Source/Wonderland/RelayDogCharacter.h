@@ -248,6 +248,23 @@ private:
 	float RouteHold = 0.0f;
 	/** How long the current leg has been attempted, seconds. */
 	float LegSeconds = 0.0f;
+	/** THE DOG CAN GET STUCK ON THE WORLD, AND MUST BE ABLE TO GET OFF IT.
+	 *
+	 *  A route leg drives straight at its target. Where the body grazes
+	 *  geometry the capsule slides along it and stops, and every following leg
+	 *  then fails from the identical coordinate because nothing ever moves the
+	 *  Dog off the thing it is caught on. Measured on 2026-09-03: seventeen
+	 *  consecutive legs abandoned from one spot between two fused trees, and
+	 *  later twelve more from inside a garden wall's footprint.
+	 *
+	 *  Solving the map is necessary and is not sufficient -- a body with
+	 *  momentum will always find a corner a plan-view solve says is passable.
+	 *  So the Dog notices it has stopped while being asked to move, and steps
+	 *  aside. These carry that. */
+	FVector StuckAnchor = FVector::ZeroVector;
+	float StuckSeconds = 0.0f;
+	float UnstickSeconds = 0.0f;
+	float UnstickSign = 1.0f;
 	float LastLoggedSpeed = -1.0f;
 	FVector SpawnLocation = FVector::ZeroVector;
 	float SpawnYaw = 0.0f;
