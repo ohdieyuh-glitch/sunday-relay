@@ -70,6 +70,20 @@ export interface LeaseScheduler {
   complete(input: { subjectId: string; owner: string; leaseGeneration: number; now: string }): Promise<boolean>;
   /** Read one subject's current lease state. */
   read(subjectId: string): Promise<LeasedSubject | null>;
+  /**
+   * WHERE THIS SCHEDULER ADMITS WORK, which decides where an attempt is spent.
+   *
+   * The swarm's claim query enforces the concurrency ceiling itself — it takes
+   * `ceiling - active` subjects and no more — so a claimed worker is always a
+   * worker that runs, and its claim IS its admission. Julius claims first and
+   * decides second: it resolves policy, compares the run's C.A.R.D.
+   * concurrency, and hands back what it cannot run, so a claim there is
+   * ownership only and admission comes later, in `admitTask`.
+   *
+   * Declaring it is what lets one invariant hold both. Default `true`, which
+   * is the model every scheduler that predates this field implements.
+   */
+  readonly claimIsAdmission?: boolean;
 }
 
 /* ---------------------------------------------------------- the invariants */
@@ -77,7 +91,7 @@ export interface LeaseScheduler {
 export const LEASE_INVARIANTS = [
   'a claimed subject is held by exactly one owner',
   'a claim increments the generation',
-  'a claim increments the attempt count',
+  'the attempt count follows the scheduler\'s admission model',
   'a stale generation cannot heartbeat',
   'a stale generation cannot complete',
   'a different owner cannot heartbeat',
@@ -131,7 +145,29 @@ export async function verifyLeaseProtocol(
     contested.length === 0 ? 'a second claim took nothing' : 'a second claim took a different subject',
   );
   record('a claim increments the generation', before > 0, `generation is ${before}`);
-  record('a claim increments the attempt count', subject.attempt > 0, `attempt is ${subject.attempt}`);
+  /**
+   * AN ATTEMPT IS SPENT AT ADMISSION, NOT AT OWNERSHIP.
+   *
+   * This invariant used to read "a claim increments the attempt count", which
+   * was the swarm's truth stated as everyone's. Julius hands claimed tasks
+   * back — for policy it cannot resolve, for a C.A.R.D. concurrency allowance
+   * already spent — and while its claim counted, every one of those hand-backs
+   * spent a provider retry on a provider that was never called.
+   *
+   * So the rule is the same for both and the place is not: a scheduler whose
+   * claim is its admission must count at the claim, and a scheduler that
+   * decides afterwards must NOT, or it charges for work it may refuse to do.
+   *
+   * Read against a subject that has never been admitted, which is what the
+   * harness claims — the same freshness the generation invariant above already
+   * relies on when it requires a generation above zero.
+   */
+  const claimIsAdmission = scheduler.claimIsAdmission ?? true;
+  record(
+    "the attempt count follows the scheduler's admission model",
+    claimIsAdmission ? subject.attempt > 0 : subject.attempt === 0,
+    `attempt is ${subject.attempt}; a claim ${claimIsAdmission ? 'is' : 'is not'} an admission here`,
+  );
 
   /* -- authority is (owner, generation), and nothing else -- */
   record(

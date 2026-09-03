@@ -460,28 +460,38 @@ dependency now reports FAILED rather than WAITING. A claim is offered only when
 every dependency is SUCCEEDED or SKIPPED and nothing revives a FAILED task, so
 "waiting" was describing a run that could never move.
 
-**KNOWN AND NOT REPAIRED HERE — a scheduling yield spends a retry attempt.**
-Both stores increment `attempt` on every claim, including a claim that is
-immediately handed back for C.A.R.D. concurrency or per-run fairness without
-ever reaching a provider, and `decideJuliusContinuation` reads that same counter
-against `MAX_TASK_ATTEMPTS = 3`. The live configuration reaches it: the claim
-limit is 4 against a C.A.R.D. concurrency of 1, and on the tick after `plan`
-succeeds both `build` and the `plan` review task become claimable — a review
-task is created BLOCKED on the task it reviews, and the claim query offers a
-BLOCKED task whose dependencies are all SUCCEEDED. So the yielded task pays an
-attempt for scheduling, and a task yielded twice reaches its first real dispatch
-at attempt 3 of 3, where a rate limit or a timeout is refused as
-`RETRY_ATTEMPTS_EXHAUSTED` instead of being retried.
+**F11 — a scheduling yield no longer spends a provider retry.** Both stores
+incremented `attempt` on every CLAIM, and the run loop claims before it decides:
+it resolves policy, compares the run's C.A.R.D. concurrency allowance against
+what is in flight, and hands back what it cannot run. The live configuration
+reaches that on every mission — a claim limit of 4 against a concurrency of 1,
+with `build` and the plan's review task both claimable on the tick after `plan`
+succeeds, because a review task is created BLOCKED on the task it reviews and
+the claim query offers a BLOCKED task whose dependencies are all SUCCEEDED. A
+task yielded twice arrived at its FIRST genuine dispatch carrying attempt 3 of
+3, where a rate limit is refused as `RETRY_ATTEMPTS_EXHAUSTED` — with no
+provider call having been made, after the plan had already been paid for.
 
-This is NOT a regression from the hand-back repair above and it is not new
-behaviour in this PR: before it, the PostgreSQL store wrote FAILED for the same
-yield and the task was destroyed outright, which is strictly worse. The repair
-is what makes the accounting visible. It is left alone deliberately — correcting
-it means changing what `attempt` counts in both stores and in the continuation
-policy, which is the retry budget's only runaway bound, and this PR does not
-touch retry semantics. **Settle it before a paid mission is expected to get past
-the plan stage**: either do not count a claim that never dispatched, or bound
-retries by dispatch attempts rather than claim attempts.
+Three counters now, each meaning one thing:
+
+| Counter | Raised by | Bounds |
+|---|---|---|
+| `lease_generation` | every claim, hand-backs included | nothing; it is the ownership token authority is checked against |
+| `attempt` | `admitTask` only, once the scheduler has decided to run the task | `MAX_TASK_ATTEMPTS` — the provider/execution retry budget |
+| `recoveries` | the recovery sweep, when it requeues an expired lease | `MAX_TASK_RECOVERIES` — scheduler and crash churn |
+
+`admitTask` is one atomic statement conditioned on the caller's own lease, and
+it runs immediately before provider-capable work begins. That is what makes the
+crash semantics honest in both directions: a crash after it has spent an
+attempt, because a worker may genuinely have been dispatched; a crash before it
+has spent none, because nothing could have been. A caller whose lease moved
+while it decided is told so and runs nothing.
+
+The recovery counter exists because the execution counter stopped being able to
+bound recovery: a task claimed, crashed before admission and recovered leaves
+`attempt` untouched — correctly — so bounded only by it, that loop would never
+terminate. Both ceilings are checked, execution first, so an operator reading
+`failures.tsv` sees the cause they act on.
 
 ## Dry run #1 (2026-09-02) — the executor refused the live output ceiling
 

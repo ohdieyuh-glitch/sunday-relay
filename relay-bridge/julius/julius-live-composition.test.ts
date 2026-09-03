@@ -422,6 +422,44 @@ describe('a full mission drive with Julius in control', () => {
     expect(decisions.some((decision) => decision.action === 'ACCEPT' || decision.action === 'COMPLETE')).toBe(true);
   });
 
+  /**
+   * CASE K — NO TASK REACHES ITS FIRST PROVIDER DISPATCH WITH AN INFLATED
+   * ATTEMPT NUMBER.
+   *
+   * This is the whole mission graph, on the real live configuration: a claim
+   * limit of 4 against a C.A.R.D. concurrency of 1. On the tick after `plan`
+   * succeeds, `build` and the plan's review task both become claimable — a
+   * review task is created BLOCKED on the task it reviews, and the claim query
+   * offers a BLOCKED task whose dependencies are all SUCCEEDED — so one of the
+   * two is claimed and handed straight back.
+   *
+   * While the claim spent an execution attempt, that hand-back charged a task
+   * for a provider that was never called, and a task yielded twice reached its
+   * FIRST genuine dispatch at attempt 3 of 3 — one rate limit away from being
+   * refused as exhausted, after the plan had already been paid for.
+   */
+  it('CASE K: every task in the live graph reaches its first dispatch as attempt 1', async () => {
+    const { memory, outcome, handoffs } = await driveLiveMission(['approved']);
+    expect(outcome.state, 'the mission still completes').toBe('COMPLETED');
+
+    const tasks = await handoffs.store.tasksForRun('run-live', 'prj-live');
+    expect(tasks.length, 'the graph really did fan out').toBeGreaterThan(1);
+
+    // Every task that ran, ran once: nothing failed here, so no task should
+    // have needed a second execution, and none may have been charged for a
+    // scheduling decision either.
+    for (const task of tasks) {
+      const row = memory.taskRow(task.taskId)!;
+      expect(row.attempt, `${task.taskId} executed exactly once`).toBe(1);
+    }
+
+    // And the hand-back really happened — otherwise this case proves nothing.
+    // A lease generation above the execution count is a claim that took
+    // ownership without spending an attempt, which is the repair itself.
+    const yielded = tasks.filter((task) => memory.taskRow(task.taskId)!.leaseGeneration > 1);
+    expect(yielded.length, 'at least one task was claimed more times than it executed').toBeGreaterThan(0);
+  });
+
   it('a blocking review verdict forces exactly one Julius repair cycle, and completion is withheld when it stays blocking', async () => {
     const { memory, fakes, outcome } = await driveLiveMission(['changes_required']);
     expect(outcome.state).not.toBe('COMPLETED');

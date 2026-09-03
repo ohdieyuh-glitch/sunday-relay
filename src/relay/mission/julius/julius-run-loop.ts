@@ -81,6 +81,13 @@ export interface JuliusTickReport {
    * high means the claim limit is wider than the runs it serves.
    */
   readonly yieldedForConcurrency: number;
+  /**
+   * Tasks whose lease was gone by the time this worker tried to admit them —
+   * reclaimed by recovery, or taken by another worker after a restart. They
+   * were neither run nor finished here, and they spent no execution attempt.
+   * Distinct from a hand-back, which this worker chose.
+   */
+  readonly lostLeases: number;
 }
 
 export interface JuliusRunAdvance {
@@ -312,6 +319,7 @@ export class JuliusRunLoop {
     // width C.A.R.D. granted.
     const inFlight = new Map<string, number>();
     let yieldedForConcurrency = 0;
+    let lostLeases = 0;
 
     for (const claim of claims) {
       touchedRunIds.add(claim.runId);
@@ -354,8 +362,39 @@ export class JuliusRunLoop {
       }
       inFlight.set(claim.runId, running + 1);
 
+      /* ------------------------------------------------- execution admission */
+      /**
+       * EVERY HAND-BACK IS BEHIND US; THIS TASK IS GOING TO RUN.
+       *
+       * The attempt is spent here and not by the claim, because the two
+       * questions above — can policy be resolved, does the run have room —
+       * are answered by handing the task BACK, and a task handed back has not
+       * attempted anything. While the claim spent it, the live topology made
+       * that expensive: a claim limit of 4 against a C.A.R.D. concurrency of
+       * 1, with `build` and the plan's review task both claimable on the tick
+       * after the plan succeeds, so a task could be yielded twice and reach
+       * its FIRST real dispatch on attempt 3 of 3 — where a rate limit is
+       * refused as exhausted without one provider call having been made.
+       *
+       * `null` means the lease moved while we decided. The task is somebody
+       * else's now: do not run it, and do not finish it either, because
+       * finishing needs the generation we no longer hold.
+       */
+      const attempt = await this.deps.store.admitTask({
+        taskId: claim.taskId, owner: this.deps.owner,
+        leaseGeneration: claim.leaseGeneration, now: this.deps.clock.now(),
+      });
+      if (attempt === null) {
+        lostLeases += 1;
+        continue;
+      }
+
       outcomes.push(await runClaimedTask({
-        claim,
+        // The claim carried the count BEFORE this admission. Everything
+        // downstream — the retry ceiling, the operation id that makes a
+        // repeated dispatch idempotent, the resource estimate — must read the
+        // attempt actually being run.
+        claim: { ...claim, attempt },
         policy: policy.card,
         verification: policy.verification,
         capability: this.policies.capabilityFor(claim),
@@ -375,7 +414,7 @@ export class JuliusRunLoop {
       // the claim limit is wider than the runs it serves.
       claimed: claimed.length, outcomes, runs,
       unresolvedPolicyRunIds: [...unresolvedPolicyRunIds], yieldedForConcurrency,
-      yieldedForFairness: yielded.length,
+      yieldedForFairness: yielded.length, lostLeases,
     };
   }
 

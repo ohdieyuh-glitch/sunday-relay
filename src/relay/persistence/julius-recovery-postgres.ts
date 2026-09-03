@@ -1,5 +1,5 @@
 import type { Pool } from 'pg';
-import { planJuliusRecovery, type JuliusMissionState, type JuliusRecoveryAction, type JuliusRecoveryCandidate } from '../mission/julius';
+import { MAX_TASK_RECOVERIES, planJuliusRecovery, type JuliusMissionState, type JuliusRecoveryAction, type JuliusRecoveryCandidate } from '../mission/julius';
 
 export interface JuliusWorkerResultInput {
   readonly resultId: string; readonly idempotencyKey: string; readonly runId: string; readonly projectId: string;
@@ -46,13 +46,18 @@ export class JuliusRecoveryPostgresRepository {
     const client = await this.pool.connect();
     try {
       await client.query('BEGIN ISOLATION LEVEL SERIALIZABLE');
-      const rows = await client.query<Record<string, unknown>>(`SELECT t.task_id,t.run_id,t.attempt,t.lease_generation,2 AS max_retries,r.project_id,r.state AS run_state FROM relay_wonderland.julius_tasks t JOIN relay_wonderland.julius_runs r ON r.run_id=t.run_id WHERE t.state='ACTIVE' AND t.lease_expires_at<=$1 AND ($3::text IS NULL OR r.project_id=$3) ORDER BY t.lease_expires_at,t.created_at FOR UPDATE OF t SKIP LOCKED LIMIT $2`, [now,limit,projectId??null]);
+      const rows = await client.query<Record<string, unknown>>(`SELECT t.task_id,t.run_id,t.attempt,t.recoveries,t.lease_generation,2 AS max_retries,r.project_id,r.state AS run_state FROM relay_wonderland.julius_tasks t JOIN relay_wonderland.julius_runs r ON r.run_id=t.run_id WHERE t.state='ACTIVE' AND t.lease_expires_at<=$1 AND ($3::text IS NULL OR r.project_id=$3) ORDER BY t.lease_expires_at,t.created_at FOR UPDATE OF t SKIP LOCKED LIMIT $2`, [now,limit,projectId??null]);
       const actions: JuliusRecoveryAction[] = [];
       for (const row of rows.rows) {
-        const candidate: JuliusRecoveryCandidate = { runId:String(row.run_id),projectId:String(row.project_id),runState:String(row.run_state) as JuliusMissionState,taskId:String(row.task_id),attempt:Number(row.attempt),maxRetries:Number(row.max_retries),leaseGeneration:Number(row.lease_generation) };
+        const candidate: JuliusRecoveryCandidate = { runId:String(row.run_id),projectId:String(row.project_id),runState:String(row.run_state) as JuliusMissionState,taskId:String(row.task_id),attempt:Number(row.attempt),maxRetries:Number(row.max_retries),leaseGeneration:Number(row.lease_generation),recoveries:Number(row.recoveries),maxRecoveries:MAX_TASK_RECOVERIES };
         const action = planJuliusRecovery(candidate); actions.push(action);
         const state = action.action === 'REQUEUE' ? 'RUNNABLE' : action.action === 'CANCEL_TASK' ? 'CANCELLED' : 'FAILED';
-        await client.query(`UPDATE relay_wonderland.julius_tasks SET state=$3,lease_owner=NULL,lease_expires_at=NULL,next_attempt_at=$2,version=version+1,updated_at=$2 WHERE task_id=$1 AND state='ACTIVE' AND lease_generation=$4`, [candidate.taskId,now,state,candidate.leaseGeneration]);
+        // COUNTED ON THE WAY OUT, in the same statement that hands the task
+        // back, so a crash between the two cannot leave a requeue uncounted
+        // and the loop unbounded. A terminal decision does not raise it: the
+        // number bounds how many more turns recovery may give, and a task with
+        // no turns left is not being given one.
+        await client.query(`UPDATE relay_wonderland.julius_tasks SET state=$3,lease_owner=NULL,lease_expires_at=NULL,next_attempt_at=$2,recoveries=recoveries+$5,version=version+1,updated_at=$2 WHERE task_id=$1 AND state='ACTIVE' AND lease_generation=$4`, [candidate.taskId,now,state,candidate.leaseGeneration,action.action==='REQUEUE'?1:0]);
       }
       await client.query('COMMIT'); return actions;
     } catch (error) { await client.query('ROLLBACK').catch(() => undefined); throw error; } finally { client.release(); }

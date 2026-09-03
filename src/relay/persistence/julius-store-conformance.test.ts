@@ -112,6 +112,7 @@ const composed: JuliusRuntimeStore & JuliusSubagentStore
   transition: runWriter.transition.bind(runWriter),
   addTask: runWriter.addTask.bind(runWriter),
   claimRunnable: runWriter.claimRunnable.bind(runWriter),
+  admitTask: runWriter.admitTask.bind(runWriter),
   heartbeat: runWriter.heartbeat.bind(runWriter),
   finishTask: runWriter.finishTask.bind(runWriter),
   appendEvidence: runWriter.appendEvidence.bind(runWriter),

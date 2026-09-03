@@ -56,12 +56,20 @@ import {
 /**
  * THE STRUCTURAL ATTEMPT CEILING.
  *
- * A task's own `attempt` counter is incremented by the claim, and nothing in
+ * A task's own `attempt` counter was incremented by the CLAIM, and nothing in
  * the inherited stack bounded it — `planJuliusRecovery` uses a `maxRetries` of
  * 2 written inline in a SQL literal, and the dispatch path had no ceiling at
  * all. This is the dispatch path's ceiling, stated once. It is deliberately
  * NOT a C.A.R.D. value: C.A.R.D. decides whether retrying is permitted, and
  * this decides when a task has simply had enough turns.
+ *
+ * WHAT A TURN IS, since it used to be the wrong thing. The counter is spent by
+ * `admitTask`, once the scheduler has decided to run the task and immediately
+ * before provider-capable work begins — so this ceiling bounds EXECUTIONS.
+ * While the claim spent it, a task the scheduler claimed and handed straight
+ * back for concurrency lost a turn to a provider that was never called, and
+ * the first-live topology hands tasks back routinely. Scheduling churn is
+ * bounded by {@link MAX_TASK_RECOVERIES} instead, on its own counter.
  */
 export const MAX_TASK_ATTEMPTS = 3;
 
@@ -226,6 +234,17 @@ export async function runClaimedTask(
 
   const correlationId = `${claim.taskId}:${claim.leaseGeneration}`;
   const ledger = new RuntimeLedger(deps, run, correlationId);
+  /**
+   * TWO NUMBERS THAT USED TO BE ONE.
+   *
+   * `leaseGeneration` counts CLAIMS — every one, including the ones the
+   * scheduler hands straight back — and is the token authority is checked
+   * against. `attempt` counts EXECUTIONS: it is raised by `admitTask`, which
+   * runs after every hand-back decision and immediately before this dispatch,
+   * so this event fires once per execution and the number it carries is the
+   * attempt actually being run. A generation above the attempt is not a
+   * discrepancy; it is a task that was offered more often than it was run.
+   */
   await ledger.event('task.claimed', {
     taskId: claim.taskId,
     facts: { leaseGeneration: claim.leaseGeneration, attempt: claim.attempt, role: claim.role },

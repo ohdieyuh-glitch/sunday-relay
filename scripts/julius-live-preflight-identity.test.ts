@@ -349,6 +349,76 @@ suite('dry run 33635375764 — the preflight identity satisfies the executor’s
     expect(claimed.map((task) => task.taskId), 'and nothing revives it').not.toContain(identity.taskId);
   });
 
+  /**
+   * A CLAIM IS NOT AN EXECUTION, against the real schema.
+   *
+   * `claimRunnable` used to carry `attempt=t.attempt+1`, so the concurrency
+   * hand-back proven above — the one the live graph performs on the tick after
+   * the architect succeeds — also spent one of the task's three execution
+   * attempts, on a provider that was never called. A task yielded twice
+   * reached its FIRST real dispatch at attempt 3 of 3, where a rate limit is
+   * refused as exhausted. The attempt is spent by `admitTask` now, in one
+   * atomic statement immediately before provider-capable work begins.
+   *
+   * The offline model is held to the same rule in
+   * `src/relay/mission/julius/julius-execution-attempts.test.ts`; this is the
+   * proof that the SQL agrees, which is the half no laptop can run.
+   */
+  it('a claim takes a generation and spends no execution attempt; admission spends exactly one', async () => {
+    const identity = fixture();
+    await seedPreflightIdentity(pool, identity);
+    const repo = new JuliusPostgresRepository(pool);
+    const now = new Date().toISOString();
+
+    const before = await pool.query<{ attempt: number; recoveries: number }>(
+      'SELECT attempt, recoveries FROM relay_wonderland.julius_tasks WHERE task_id=$1', [identity.taskId],
+    );
+    expect(Number(before.rows[0]?.attempt), 'the seeded task has executed nothing').toBe(0);
+    expect(Number(before.rows[0]?.recoveries), 'and has never been recovered').toBe(0);
+
+    // Hand it back so it is claimable, then claim it for real.
+    await repo.finishTask({
+      taskId: identity.taskId, owner: 'julius-live-preflight',
+      leaseGeneration: identity.leaseGeneration, state: 'FAILED', now, nextAttemptAt: now,
+    });
+    const [claim] = await repo.claimRunnable({
+      owner: 'admitting-worker', now,
+      leaseExpiresAt: new Date(Date.now() + 60_000).toISOString(),
+      limit: 5, projectId: identity.projectId,
+    });
+    expect(claim?.taskId, 'the claim is the subject of this case').toBe(identity.taskId);
+
+    const claimed = await pool.query<{ attempt: number; lease_generation: string }>(
+      'SELECT attempt, lease_generation FROM relay_wonderland.julius_tasks WHERE task_id=$1', [identity.taskId],
+    );
+    expect(Number(claimed.rows[0]?.attempt), 'THE CLAIM SPENT NO ATTEMPT').toBe(0);
+    expect(Number(claimed.rows[0]?.lease_generation), 'but it did take ownership')
+      .toBeGreaterThan(identity.leaseGeneration);
+
+    // A stale generation cannot admit, and must not move the counter.
+    const stale = await repo.admitTask({
+      taskId: identity.taskId, owner: 'admitting-worker', leaseGeneration: claim!.leaseGeneration - 1, now,
+    });
+    expect(stale, 'a lease that has moved on carries no authority').toBeNull();
+    const wrongOwner = await repo.admitTask({
+      taskId: identity.taskId, owner: 'someone-else', leaseGeneration: claim!.leaseGeneration, now,
+    });
+    expect(wrongOwner, 'nor does another owner holding the right generation').toBeNull();
+    const untouched = await pool.query<{ attempt: number }>(
+      'SELECT attempt FROM relay_wonderland.julius_tasks WHERE task_id=$1', [identity.taskId],
+    );
+    expect(Number(untouched.rows[0]?.attempt), 'a refused admission spends nothing').toBe(0);
+
+    const admitted = await repo.admitTask({
+      taskId: identity.taskId, owner: 'admitting-worker', leaseGeneration: claim!.leaseGeneration, now,
+    });
+    expect(admitted, 'the holder admits, and is told which attempt it runs as').toBe(1);
+    const second = await repo.admitTask({
+      taskId: identity.taskId, owner: 'admitting-worker', leaseGeneration: claim!.leaseGeneration, now,
+    });
+    expect(second, 'a second admission on the same lease is the second execution').toBe(2);
+  });
+
   it('refuses to seed or clean up an identity it does not own, on any of its identifiers', async () => {
     const owned = fixture();
     for (const foreign of [
