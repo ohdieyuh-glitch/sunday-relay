@@ -431,10 +431,13 @@ database. Two repairs, both provider-free:
   response from a 500; the class can.
 - The evidence bundle gains `failures.tsv`: task, role, event type, Julius
   code, failure class, `errorRetryable`, the continuation reason and timestamp,
-  read from named fact keys and never from a whole payload. Rows the execution
-  coordinator emits carry no task id, so their task and role columns are blank;
-  the rows that diagnose a worker failure — the pipeline's own `task.failed` and
-  `provider.failure` — carry both.
+  read from named fact keys and never from a whole payload. Every worker-failure
+  row names its task, and the role is joined from the task, so the artifact says
+  which of the three C.A.R.D. roles stopped — including on the non-retryable
+  path, where the execution coordinator writes the only row. That path is the
+  shape the first paid attempt failed in, and its events used to carry no task
+  id at all. Run-level rows (`run.failed`) name no task, because a run ending is
+  not a worker's failure; their task and role columns are blank by design.
 
 A run whose only remaining tasks are blocked behind a terminally failed
 dependency now reports FAILED rather than WAITING. A claim is offered only when

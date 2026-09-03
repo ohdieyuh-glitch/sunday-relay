@@ -735,6 +735,22 @@ describe('the first paid attempt, reproduced: a failing Prompt Architect', () =>
     expect(typeof facts.errorRetryable, 'whether the ERROR was retryable is recorded, so a reader need not re-derive it').toBe('boolean');
   });
 
+  /**
+   * A FAILURE ROW THAT NAMES NO TASK NAMES NO ROLE EITHER.
+   *
+   * `failures.tsv` reads the role by joining the event's task id to the task
+   * row. The coordinator writes the only event on a non-retryable worker
+   * failure — the shape the first paid mission failed in — and it used to
+   * write no task id at all, so the two columns that say WHO stopped were
+   * blank for exactly that run.
+   */
+  it('names the task on the failure row, so the evidence can name the role', async () => {
+    const { failures } = await failedRun('provider_error');
+    const last = failures.at(-1)!;
+    expect(last.type, 'the coordinator is the only emitter on this path').toBe('task.failed');
+    expect(last.taskId, 'and the row must say which task stopped').toBe('plan-1');
+  });
+
   it('separates the two Julius-side failures a provider class cannot describe', async () => {
     const unparseable = await driveLiveMission(['approved'], undefined,
       async () => ({ ok: true, status: 'completed', outputText: 'not json at all', actualModel: 'gpt-5.6-sol', responseId: 'resp_1',

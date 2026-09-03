@@ -34,7 +34,7 @@ on:
         required: false
         default: ''
       acknowledge_rerun:
-        description: 'Only to repeat a paid mission that was already attempted or completed. Type "RERUN PAID MISSION".'
+        description: 'Only to repeat a paid mission already attempted or completed, or to proceed when the marker state cannot be read. Type "RERUN PAID MISSION".'
         required: false
         default: ''
       max_ticks:

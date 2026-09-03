@@ -11,7 +11,14 @@ export interface JuliusExecutionPorts {
   release(input:{reservationId:string;reason:string}):Promise<void>;
   persistEvidence(input:{claim:JuliusExecutionClaim;worker:JuliusWorker;evidence:readonly JuliusEvidence[]}):Promise<void>;
   acceptResult(input:{claim:JuliusExecutionClaim;worker:JuliusWorker;result:JuliusProviderResult;idempotencyKey:string}):Promise<{duplicate:boolean}>;
-  recordEvent(input:{runId:string;projectId:string;type:JuliusExecutionEventType;idempotencyKey:string;payload:Record<string,unknown>}):Promise<void>;
+  /**
+   * `taskId` is the task the event is ABOUT. It was absent, and the events
+   * this coordinator writes carried none — so on the failure path that matters
+   * most, a non-retryable worker failure, the durable row could not say which
+   * task or which C.A.R.D. role had stopped. Every call already holds the
+   * claim; only the port refused to carry it.
+   */
+  recordEvent(input:{runId:string;projectId:string;taskId:string|null;type:JuliusExecutionEventType;idempotencyKey:string;payload:Record<string,unknown>}):Promise<void>;
 }
 export type JuliusExecutionEventType='worker.selected'|'budget.reserved'|'budget.denied'|'worker.dispatched'|'worker.completed'|'retry.scheduled'|'task.failed';
 export interface JuliusExecutionRequest { readonly claim:JuliusExecutionClaim;readonly policy:JuliusCardPolicy;readonly role:JuliusWorkerRole;readonly taskType:string;readonly capability:string;readonly resources:JuliusResourceRequest;readonly operationId:string;readonly signal?:AbortSignal;/** Workers already tried for this task. Additive: omitted behaves exactly as before. */readonly excludedWorkerIds?:readonly string[]; }
@@ -54,5 +61,5 @@ export class JuliusExecutionCoordinator {
       * happened to be non-retryable. */
      if(failure.retryable&&request.policy.automaticRetry){await this.event(request,'retry.scheduled',{code:failure.code,errorRetryable:true,failureClass:failure.failureClass});return{status:'RETRY',code:failure.code,failureClass:failure.failureClass};}await this.event(request,'task.failed',{code:failure.code,errorRetryable:failure.retryable,failureClass:failure.failureClass});return{status:'FAILED',code:failure.code,failureClass:failure.failureClass};}
   }
-  private event(request:JuliusExecutionRequest,type:JuliusExecutionEventType,payload:Record<string,unknown>){return this.ports.recordEvent({runId:request.claim.runId,projectId:request.claim.projectId,type,idempotencyKey:`${request.operationId}:${type}`,payload});}
+  private event(request:JuliusExecutionRequest,type:JuliusExecutionEventType,payload:Record<string,unknown>){return this.ports.recordEvent({runId:request.claim.runId,projectId:request.claim.projectId,taskId:request.claim.taskId,type,idempotencyKey:`${request.operationId}:${type}`,payload});}
 }

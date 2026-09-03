@@ -538,12 +538,16 @@ function executionPorts(
       });
       return { duplicate: receipt.duplicate };
     },
-    recordEvent: async ({ type, payload }) => {
+    recordEvent: async ({ type, taskId, payload }) => {
       const facts: Record<string, string | number | boolean | null> = {};
       for (const [key, value] of Object.entries(payload)) {
         facts[key] = value === null || ['string', 'number', 'boolean'].includes(typeof value) ? value as string | number | boolean | null : String(value);
       }
-      await ledger.event(type, { taskId: null, facts: { ...facts, runId: run.runId } });
+      // NAME THE TASK. A `task.failed` with no task cannot say which of the
+      // three C.A.R.D. roles stopped, and on a non-retryable worker failure
+      // this is the only row written — which is exactly the shape the first
+      // paid mission failed in.
+      await ledger.event(type, { taskId, facts: { ...facts, runId: run.runId } });
     },
   };
 }
