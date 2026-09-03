@@ -433,9 +433,12 @@ database. Two repairs, both provider-free:
 - The connector's own classification now travels with the code.
   `JuliusDispatchError` carries a `failureClass`, narrowed by
   `safeFailureClass` to `/^[a-z][a-z0-9_]{0,63}$/`, so a provider exception,
-  a header or a key shape cannot survive into a durable row even if an adapter
-  passes one. Nine coarse codes cannot separate a refusal from a malformed
-  response from a 500; the class can.
+  a URL or an `Authorization:` header cannot survive into a durable row even if
+  an adapter passes one. It refuses every shape but an all-lower-case
+  alphanumeric token, so it is the first layer and the pre-publication
+  credential scan is the second; neither is claimed to be the only one. Nine
+  coarse codes cannot separate a refusal from a malformed response from a 500;
+  the class can.
 - The evidence bundle gains `failures.tsv`: task, role, event type, Julius
   code, failure class, `errorRetryable`, the continuation reason and timestamp,
   read from named fact keys and never from a whole payload. Every worker-failure
@@ -454,6 +457,29 @@ A run whose only remaining tasks are blocked behind a terminally failed
 dependency now reports FAILED rather than WAITING. A claim is offered only when
 every dependency is SUCCEEDED or SKIPPED and nothing revives a FAILED task, so
 "waiting" was describing a run that could never move.
+
+**KNOWN AND NOT REPAIRED HERE — a scheduling yield spends a retry attempt.**
+Both stores increment `attempt` on every claim, including a claim that is
+immediately handed back for C.A.R.D. concurrency or per-run fairness without
+ever reaching a provider, and `decideJuliusContinuation` reads that same counter
+against `MAX_TASK_ATTEMPTS = 3`. The live configuration reaches it: the claim
+limit is 4 against a C.A.R.D. concurrency of 1, and on the tick after `plan`
+succeeds both `build` and the `plan` review task become claimable — a review
+task is created BLOCKED on the task it reviews, and the claim query offers a
+BLOCKED task whose dependencies are all SUCCEEDED. So the yielded task pays an
+attempt for scheduling, and a task yielded twice reaches its first real dispatch
+at attempt 3 of 3, where a rate limit or a timeout is refused as
+`RETRY_ATTEMPTS_EXHAUSTED` instead of being retried.
+
+This is NOT a regression from the hand-back repair above and it is not new
+behaviour in this PR: before it, the PostgreSQL store wrote FAILED for the same
+yield and the task was destroyed outright, which is strictly worse. The repair
+is what makes the accounting visible. It is left alone deliberately — correcting
+it means changing what `attempt` counts in both stores and in the continuation
+policy, which is the retry budget's only runaway bound, and this PR does not
+touch retry semantics. **Settle it before a paid mission is expected to get past
+the plan stage**: either do not count a claim that never dispatched, or bound
+retries by dispatch attempts rather than claim attempts.
 
 ## Dry run #1 (2026-09-02) — the executor refused the live output ceiling
 

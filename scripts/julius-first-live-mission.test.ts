@@ -1098,6 +1098,16 @@ describe('F6 — a paid mission cannot be run twice by accident', () => {
     const attemptUpload = uploads.find((block) => block.includes('name: julius-first-live-attempted')) ?? '';
     expect(attemptUpload, 'the attempt upload is itself on the paid, fail-closed path')
       .toMatch(/if: success\(\) && inputs\.confirm_live == 'RUN LIVE MISSION'/u);
+    // A MARKER THAT UPLOADED NOTHING MUST NOT BE A GREEN STEP. upload-artifact
+    // v4 defaults to `warn`, so an empty directory uploads no artifact and
+    // still succeeds — and the very next paid step is the one that spends.
+    // With `error`, "a marker exists before any provider can be reached" is a
+    // property of the upload rather than of the previous step's `set -e`.
+    for (const marker of ['julius-first-live-attempted', 'julius-first-live-completed']) {
+      const upload = uploads.find((block) => block.includes(`name: ${marker}`)) ?? '';
+      expect(upload, `${marker} must not report success having uploaded nothing`)
+        .toContain('if-no-files-found: error');
+    }
   });
 
   it('the guard reads BOTH markers and can only be overridden by the exact phrase', () => {
@@ -1125,7 +1135,7 @@ describe('F6 — a paid mission cannot be run twice by accident', () => {
    * is a guard nobody has proven refuses.
    */
   describe('the guard, run against a stubbed artifact list', () => {
-    const runGuard = (input: { completed?: number | string; attempted?: number | string; readable?: boolean; acknowledge?: string }): number => {
+    const runGuard = (input: { completed?: number | string; attempted?: number | string; readable?: boolean; acknowledge?: string; constant?: string }): number => {
       const bin = mkdtempSync(join(realpathSync(tmpdir()), 'julius-gh-'));
       const readable = input.readable ?? true;
       writeFileSync(join(bin, 'gh'), [
@@ -1137,8 +1147,14 @@ describe('F6 — a paid mission cannot be run twice by accident', () => {
         '  *) echo 0;;',
         'esac',
       ].join('\n'), { mode: 0o755 });
+      let script = stepScript(GATE);
+      if (input.constant !== undefined) {
+        script = script.replace(/^RECORDED_PAID_ATTEMPTS=.*$/mu, `RECORDED_PAID_ATTEMPTS=${input.constant}`);
+        expect(script, `the substitution must have replaced the whole line for "${input.constant}"`)
+          .toContain(`\nRECORDED_PAID_ATTEMPTS=${input.constant}\n`);
+      }
       try {
-        execFileSync('bash', ['-c', stepScript(GATE)], {
+        execFileSync('bash', ['-c', script], {
           cwd: ROOT, stdio: 'ignore',
           env: {
             ...process.env,
@@ -1237,6 +1253,28 @@ describe('F6 — a paid mission cannot be run twice by accident', () => {
       // The control: a well-formed constant PROCEEDS under the same phrase, so
       // the refusals above are caused by the malformation and not by the harness.
       expect(withConstant('2'), 'a well-formed count is still overridable by the phrase').toBe(0);
+    });
+
+    /**
+     * THE MARKER READ NEEDS A CASE THAT CAN FAIL.
+     *
+     * `RECORDED_PAID_ATTEMPTS=1` satisfies the refusal's third disjunct on
+     * every dispatch, so while it stands, every case above still passes with
+     * the two marker disjuncts DELETED — a review proved exactly that by
+     * mutation. The artifact-based half of the guard is the half that keeps
+     * working once this constant is understood as history, and it had no
+     * assertion that could go red. Retiring the constant to 0 is the only way
+     * to see it, so one case does that and holds the marker read on its own.
+     */
+    it('MUTATION: with the recorded attempt retired to 0, the marker read alone still refuses', () => {
+      expect(runGuard({ constant: '0', attempted: 1 }), 'an attempt marker alone must refuse').not.toBe(0);
+      expect(runGuard({ constant: '0', completed: 1 }), 'a completion marker alone must refuse').not.toBe(0);
+      // The control. With no markers AND no recorded attempt this really would
+      // be the first paid mission, and the gate proceeds — so the two refusals
+      // above are caused by the marker counts and not by the harness.
+      expect(runGuard({ constant: '0' }), 'and with neither, a genuine first paid mission proceeds').toBe(0);
+      expect(runGuard({ constant: '0', attempted: 1, acknowledge: 'RERUN PAID MISSION' }),
+        'the typed phrase still overrides a marker, exactly as it overrides the constant').toBe(0);
     });
 
     it('MUTATION: a marker list that answers with something other than a count fails closed', () => {

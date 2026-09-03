@@ -1,5 +1,5 @@
 import type { JuliusCardPolicy } from './julius-policy';
-import { JuliusDispatchError, JuliusProviderRouter, type JuliusProviderResult } from './julius-router';
+import { JuliusDispatchError, JuliusProviderRouter, normalizeProviderError, type JuliusProviderResult } from './julius-router';
 import type { JuliusEvidence, JuliusTask, JuliusWorker, JuliusWorkerRole } from './julius-runtime';
 
 export interface JuliusExecutionClaim { readonly runId:string;readonly projectId:string;readonly taskId:string;readonly leaseOwner:string;readonly leaseGeneration:number;readonly task:JuliusTask;readonly capability:string;readonly contextId:string; }
@@ -38,8 +38,21 @@ const normalizedEvidence=(claim:JuliusExecutionClaim,worker:JuliusWorker,result:
 /** One claimed task execution. Julius—not the adapter—owns policy, budget, evidence, result acceptance, and retry semantics. */
 export class JuliusExecutionCoordinator {
   constructor(private readonly router:JuliusProviderRouter,private readonly ports:JuliusExecutionPorts){}
+  /**
+   * UNKNOWN IS NULL, NOT THE STRING "undefined".
+   *
+   * `select` throws `JuliusDispatchError` for every routing outcome it models,
+   * but this catch used to CAST rather than check, so any other throw — a
+   * programming error inside the registry or the C.A.R.D. evaluation — read
+   * `.code`, `.retryable` and `.failureClass` off an object that has none. The
+   * port coerces a non-primitive through `String(value)`, and `typeof
+   * undefined` is not in its allowlist, so all three columns of the row that
+   * ENDS the task would have read the literal `undefined` in the one artifact
+   * built to explain a paid failure. `normalizeProviderError` is what the
+   * dispatch catch below already uses; both endings now agree.
+   */
   async execute(request:JuliusExecutionRequest):Promise<JuliusExecutionOutcome>{
-    let worker:JuliusWorker;try{worker=this.router.select({role:request.role,taskType:request.taskType,capability:request.capability,policy:request.policy,excludedWorkerIds:request.excludedWorkerIds});}catch(error){const failure=error as JuliusDispatchError;await this.event(request,'task.failed',{code:failure.code,errorRetryable:failure.retryable,failureClass:failure.failureClass});return{status:failure.code==='POLICY_DENIED'?'DENIED':'FAILED',code:failure.code,failureClass:failure.failureClass};}
+    let worker:JuliusWorker;try{worker=this.router.select({role:request.role,taskType:request.taskType,capability:request.capability,policy:request.policy,excludedWorkerIds:request.excludedWorkerIds});}catch(error){const failure=normalizeProviderError(error);await this.event(request,'task.failed',{code:failure.code,errorRetryable:failure.retryable,failureClass:failure.failureClass});return{status:failure.code==='POLICY_DENIED'?'DENIED':'FAILED',code:failure.code,failureClass:failure.failureClass};}
     await this.event(request,'worker.selected',{workerId:worker.workerId,providerId:worker.providerId});
     const reservation=await this.ports.reserve({claim:request.claim,worker,request:request.resources,idempotencyKey:`${request.operationId}:budget`});
     if(reservation.state==='DENIED'){await this.event(request,'budget.denied',{reason:reservation.denialReason});return{status:'DENIED',code:'BUDGET_DENIED'};}

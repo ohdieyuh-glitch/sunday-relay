@@ -422,6 +422,12 @@ jobs:
           name: julius-first-live-attempted
           path: julius-first-live-attempted
           retention-days: 90
+          # v4 defaults to `warn`: an empty directory would UPLOAD NOTHING and
+          # still report success, and for the attempt marker the next step is
+          # the one that spends. `error` makes "a marker exists before any
+          # provider can be reached" a property of this step rather than a
+          # consequence of the previous step's `set -e`.
+          if-no-files-found: error
 
       # `success()` IS EXPLICIT, NOT NEW. GitHub already applies a default
       # `success()` to a step whose `if:` names no status function, and this
@@ -479,6 +485,12 @@ jobs:
           name: julius-first-live-completed
           path: julius-first-live-completed
           retention-days: 90
+          # v4 defaults to `warn`: an empty directory would UPLOAD NOTHING and
+          # still report success, and for the attempt marker the next step is
+          # the one that spends. `error` makes "a marker exists before any
+          # provider can be reached" a property of this step rather than a
+          # consequence of the previous step's `set -e`.
+          if-no-files-found: error
 
       - name: Collect the redacted validation evidence
         if: always()

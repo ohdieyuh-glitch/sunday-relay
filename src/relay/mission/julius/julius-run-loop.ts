@@ -154,10 +154,15 @@ export interface JuliusRunLoopConfig {
  * before terminal state" instead of FAILED, which reads as a runtime that lost
  * track rather than a mission that failed.
  *
- * Cycles are structurally impossible — `JuliusTaskGraph.add` refuses a
- * self-reference and requires every dependency to already exist — but a cycle
- * would be unsatisfiable anyway, so re-entry answers false and the walk
- * terminates on any input. `visiting` is a path stack and `settled` a memo:
+ * Cycles are structurally impossible in the DURABLE stores these tasks are
+ * read from: both `addTask` implementations refuse a dependency that does not
+ * already exist — PostgreSQL by foreign key plus
+ * `CHECK(task_id<>dependency_task_id)`, the memory store by an explicit
+ * `task_reference_not_found` throw — and a task's dependencies are written
+ * only when that task is created, so no back-edge can ever appear. (An earlier
+ * comment here cited `JuliusTaskGraph.add`, which nothing on this path
+ * instantiates.) A cycle would be unsatisfiable anyway, so re-entry answers
+ * false and the walk terminates on any input. `visiting` is a path stack and `settled` a memo:
  * without the memo a diamond-shaped graph is walked once per path to each
  * node, and this runs on every advance.
  */
