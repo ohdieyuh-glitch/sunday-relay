@@ -1636,8 +1636,62 @@ PATH_FLAG_VARIANTS = 6       # three lengths x two variants (PASS 01b)
 
 _old_build_assets = build_assets
 
+#: The variant families, named ONCE so the rebuild knob and the builder read the
+#: same list instead of two copies of it.
+VARIANT_FAMILIES = (("plaza_slab", "PLAZA_VARIANTS"),
+                    ("path_flag", "PATH_FLAG_VARIANTS"),
+                    ("flower_bed_base", "FLOWER_BED_VARIANTS"),
+                    ("flower_bed_blooms", "FLOWER_BED_VARIANTS"))
+
+
+def _expand_rebuild_keys(log=print):
+    """WLV2_REBUILD NAMES A FAMILY OR A KEY, AND AN UNKNOWN NAME IS FATAL.
+
+    `REBUILD_KEYS` is matched against the EXACT asset key, and the variant
+    families are keyed `plaza_slab_0 ... plaza_slab_8`. So
+    `WLV2_REBUILD="plaza_slab,path_flag"` matched nothing: on 2026-09-03 a
+    generate asked to rebuild the paving after `_worn_slab` changed reported
+    "122 recipe(s) REUSED from disk", reused the shattered meshes, and the cook
+    went on to package them. Nothing failed and nothing warned, so the frame
+    would have carried the repaired commit's sha over the unrepaired world --
+    the same shape as the stale-package trap already recorded in this project.
+
+    Two changes, because either alone leaves the hole open. A FAMILY name now
+    expands to its variant keys, which is what a reader of `pass_chain.sh`'s own
+    usage line expects it to mean. And a name matching neither a recipe nor a
+    family is FATAL rather than ignored: a rebuild request that silently does
+    nothing is worse than a build that stops and says the name is wrong.
+    """
+    if not REBUILD_KEYS:
+        return
+    known = set(RECIPES)
+    families = {}
+    for prefix, countname in VARIANT_FAMILIES:
+        count = int(globals()[countname])
+        families[prefix] = count
+        for v in range(count):
+            known.add("%s_%d" % (prefix, v))
+    unknown = []
+    for k in sorted(REBUILD_KEYS):
+        if k in known:
+            continue
+        if k in families:
+            expanded = ["%s_%d" % (k, v) for v in range(families[k])]
+            REBUILD_KEYS.update(expanded)
+            log("V2 ASSET REBUILD: family %r -> %d keys (%s ... %s)"
+                % (k, len(expanded), expanded[0], expanded[-1]))
+            continue
+        unknown.append(k)
+    if unknown:
+        log("V2 ASSET REBUILD FAILED: WLV2_REBUILD names %s, which is neither a recipe "
+            "nor a variant family; nothing would have been rebuilt and the cook would "
+            "have packaged the previous meshes"
+            % ", ".join(repr(u) for u in unknown))
+        raise ValueError("WLV2_REBUILD names unknown asset(s): %s" % ", ".join(unknown))
+
 
 def build_assets(ctx, keys=None, log=print):
+    _expand_rebuild_keys(log)
     out = _old_build_assets(ctx, keys, log)
     for prefix, count, recipe, folder in (("plaza_slab", PLAZA_VARIANTS, plaza_slab, "cobble"),
                                           ("path_flag", PATH_FLAG_VARIANTS, path_flag, "cobble"),
