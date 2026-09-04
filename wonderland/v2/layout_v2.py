@@ -7519,6 +7519,29 @@ def _south_quarter():
 SOUTH_QUARTER = _band("V2_South", _south_quarter())
 
 
+def _south_way():
+    """The quarter's own waypoints, for the tools that ask whether a walker can
+    get here. Derived from the same axis the street is laid on, so they cannot
+    go stale the way a hand-written list does -- walkable.py has a comment about
+    exactly that failure, where it reported a turn unreachable that the world no
+    longer had."""
+    (ux, uy), _ = _south_axis()
+    px, py = -uy, ux
+    cx, cy = SOUTH_CENTRE
+    def at(a, c):
+        return (cx + ux * a + px * c, cy + uy * a + py * c)
+    return [at(8900.0, 0.0),      # the quarter's gate, from the city side
+            at(4000.0, 0.0),      # upper street
+            at(0.0, 0.0),         # the crossing
+            at(-4000.0, 0.0),     # lower street
+            at(-10300.0, 0.0),    # the market
+            at(-2000.0, 8600.0),  # west lane
+            at(-2000.0, -8600.0)] # east lane
+
+
+SOUTH_WAY = _south_way()
+
+
 BUILD_BANDS = [FOREGROUND, COURTYARD, GARDEN, PALACE, FLANK_GROUND, FLANKS,
                REARWORLD, CAM_FOREGROUNDS, GROUND_QUILT, OUTER_WORLD, PLAZA_ORNAMENT,
                PROCESSIONAL_BORDER, HORIZON, APPROACH_SIDES, PLAZA_WALL_DRESS,

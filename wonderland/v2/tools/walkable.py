@@ -158,6 +158,13 @@ def main():
         # that the world no longer had.
         ("north gate", int(LAYOUT.NORTH_WAY[0][0]), int(LAYOUT.NORTH_WAY[0][1])),
     ]
+    # PASS 30: THE SOUTHERN QUARTER. It was built, measured, and then could not
+    # be reached -- an attempt to drive there ended against a retaining wall.
+    # "Is it reachable" is a question this tool already answers for every other
+    # quarter, and the new one was simply not on the list. Read from the layout
+    # for the reason the comment above gives.
+    for si, (sx, sy) in enumerate(getattr(LAYOUT, "SOUTH_WAY", ())):
+        targets.append(("south way %d" % si, int(sx), int(sy)))
     if win == "world":
         for wi, (wx, wy) in enumerate(LAYOUT.NORTH_WAY[1:]):
             targets.append(("north way %d" % (wi + 1), int(wx), int(wy)))
