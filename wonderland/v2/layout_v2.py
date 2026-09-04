@@ -7291,8 +7291,14 @@ KIT_ROOFS = ("MI_V2_RoofRose", "MI_V2_RoofPink", "MI_V2_RoofRose",
 #: seed costs nothing (the instancing key already includes the material, so
 #: this trades one huge batch for six large ones) and it is most of what stops
 #: a generated street reading as a single extruded object.
+#: PULLED BACK TOWARD IVORY. The street render at 09517895 read SANDY, not
+#: pale stone, and the cause was in this tuple: MI_V2_PlazaWarm and MI_V2_Stone
+#: are warm greys that go tan under a bright sky, and between them they held a
+#: quarter of every wall in the city. Variation within a palette was the right
+#: idea; the palette had drifted off the board, which calls for cream and ivory
+#: marble with blush and shade as the accents.
 KIT_WALLS = ("MI_V2_IvoryStone", "MI_V2_PlazaCream", "MI_V2_IvoryStone",
-             "MI_V2_PlazaWarm", "MI_V2_Stone", "MI_V2_IvoryStone",
+             "MI_V2_PathPale", "MI_V2_PlazaCream", "MI_V2_IvoryStone",
              "MI_V2_PlazaShade", "MI_V2_Ceramic")
 
 
@@ -7321,6 +7327,19 @@ def kit_crown(x, y, z, yaw, width_m, seed, tag, mat=None):
         zc += h_m * s * 100.0 * 0.78      # overlap so tiers read as one crown
     out.append(A("finial_spire", x, y, zc, yaw=yaw, s=max(0.8, width_m / 4.0),
                  mat="MI_V2_Gold", label="%s_Spire" % tag))
+    # GOLD THAT READS AT A DISTANCE. gap_v2 measured palette.gold at 0.15x the
+    # reference and adding trim did not move it -- at 140 m a cornice is
+    # sub-pixel. A dome is not. castle_dome is 6.4 m across, so one in gold on
+    # every third crown is a highlight visible from the street, the midground
+    # AND the wide camera, which is what the founder asked for and what trim
+    # cannot do.
+    if k % 3 == 0:
+        out.append(A("castle_dome", x, y, z - 60.0, yaw=yaw,
+                     s=max(0.55, width_m / 7.0), mat="MI_V2_Gold",
+                     label="%s_GoldDome" % tag))
+    elif k % 7 == 1:
+        out.append(A("tower_clock", x, y, z, yaw=yaw, s=max(0.5, width_m / 5.0),
+                     mat="MI_V2_GoldAged", label="%s_ClockTower" % tag))
     return out
 
 
@@ -7343,9 +7362,32 @@ def kit_facade(x, y, yaw, width_m, seed, tag, bays=None, lamp=False):
         off = (-width_m * 0.5 + step * (i + 0.5)) * 100.0
         bx = x + math.cos(along) * off + math.cos(fwd) * 402.0
         by = y + math.sin(along) * off + math.sin(fwd) * 402.0
+        # RELIEF, NOT A FLAT SHEET. Every bay sat at the same 402 uu offset,
+        # so a facade was one plane with incised lines on it -- the founder's
+        # "blank wall panels". Alternating bays now PROJECT and RECESS by 55 uu
+        # either side of the wall line, which is half a metre of real shadow at
+        # head height and is most of what "carved" means.
+        depth = 402.0 + (55.0 if (k + i) % 2 else -55.0)
+        bx = x + math.cos(along) * off + math.cos(fwd) * depth
+        by = y + math.sin(along) * off + math.sin(fwd) * depth
         out.append(A("facade_panel", bx, by, 300.0, yaw=yaw, s=step / 4.4,
                      mat=KIT_WALLS[(k + i) % len(KIT_WALLS)],
                      label="%s_Bay%d" % (tag, i)))
+        # A WINDOW IN THE BAY. glass_screen_panes is 13.3 m wide at s=1, so
+        # 0.22 is a 2.9 m casement -- a window rather than a curtain wall.
+        # Set BEHIND the bay face so the reveal has depth.
+        wx = x + math.cos(along) * off + math.cos(fwd) * (depth - 70.0)
+        wy = y + math.sin(along) * off + math.sin(fwd) * (depth - 70.0)
+        out.append(A("glass_screen_panes", wx, wy, 330.0, yaw=yaw,
+                     s=0.22 * (step / 5.2),
+                     mat=("MI_V2_GlassTeal", "MI_V2_GlassAmber",
+                          "MI_V2_GlassRose", "MI_V2_GlassViolet")[(k + i) % 4],
+                     label="%s_Win%d" % (tag, i)))
+        # an arched head over it -- garden_arch_stone is 8.2 m, so 0.34 is a
+        # 2.8 m arch, which is the width of the casement below it
+        out.append(A("garden_arch_stone", wx, wy, 640.0, yaw=yaw,
+                     s=0.34 * (step / 5.2), mat="MI_V2_IvoryStone",
+                     label="%s_WinArch%d" % (tag, i)))
         # the pilaster between this bay and the next: 9.5 m tall at s=1, so a
         # 10 m storey takes about 0.75
         px_ = x + math.cos(along) * (off + step * 50.0) + math.cos(fwd) * 430.0
@@ -7353,8 +7395,15 @@ def kit_facade(x, y, yaw, width_m, seed, tag, bays=None, lamp=False):
         out.append(A("column_ornate", px_, py_, 0.0, yaw=yaw, s=0.72,
                      mat="MI_V2_IvoryStone", label="%s_Pilaster%d" % (tag, i)))
         if i == n // 2:
-            out.append(A("arch_stone", bx, by, 0.0, yaw=yaw, s=0.42,
-                         mat="MI_V2_PlazaCream", label="%s_Entrance" % tag))
+            # THE ENTRANCE IS GOLD AND IT IS DOOR-SIZED. gate_arch_gold is
+            # 4.0 x 8.3 m, so 0.45 gives a 1.8 x 3.7 m portal -- gold where a
+            # person meets the building, which is where the reference puts it.
+            out.append(A("garden_arch_stone", bx, by, 0.0, yaw=yaw, s=0.38,
+                         mat="MI_V2_PlazaCream", label="%s_Portal" % tag))
+            out.append(A("gate_arch_gold", bx, by, 0.0, yaw=yaw, s=0.45,
+                         mat="MI_V2_Gold", label="%s_PortalGold" % tag))
+            out.append(A("gate_leaf", bx, by, 0.0, yaw=yaw, s=0.30,
+                         mat="MI_V2_GoldAged", label="%s_Door" % tag))
     # THE CORNICE. A flat parapet band over the bays, which is most of what
     # separates a building from a box: the reference never has a wall meeting
     # sky without a line on it.
