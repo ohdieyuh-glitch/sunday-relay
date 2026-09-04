@@ -7358,10 +7358,24 @@ def kit_facade(x, y, yaw, width_m, seed, tag, bays=None, lamp=False):
     # THE CORNICE. A flat parapet band over the bays, which is most of what
     # separates a building from a box: the reference never has a wall meeting
     # sky without a line on it.
+    # THE CORNICE IS GOLD, and that is a measurement rather than a taste.
+    # gap_v2 against the reference: palette.gold 0.058 vs 0.365 -- SIX TIMES
+    # under. The reference's aged gold is not a few finials, it is trim on
+    # everything, and removing the oversized garlands (correctly) left the city
+    # with almost none. A cornice line runs the full width of every facade,
+    # which is the largest gold surface available for the fewest pieces.
     out.append(A("balustrade", x + math.cos(fwd) * 410.0,
                  y + math.sin(fwd) * 410.0, 700.0, yaw=yaw,
-                 s=width_m / 3.5, mat="MI_V2_IvoryStone",
+                 s=width_m / 3.5, mat="MI_V2_GoldAged",
                  label="%s_Cornice" % tag))
+    # a gold ball on each pilaster head: small, cheap, and it puts a highlight
+    # at the top of every bay rather than one per building
+    for gi in range(n):
+        goff = (-width_m * 0.5 + step * (gi + 1.0)) * 100.0
+        gx = x + math.cos(along) * goff + math.cos(fwd) * 430.0
+        gy = y + math.sin(along) * goff + math.sin(fwd) * 430.0
+        out.append(A("gate_finial_ball", gx, gy, 960.0, yaw=yaw, s=0.9,
+                     mat="MI_V2_Gold", label="%s_PilasterCap%d" % (tag, gi)))
     if lamp:
         out.append(A("waymarker_lamp", x + math.cos(fwd) * 620.0,
                      y + math.sin(fwd) * 620.0, 0.0, yaw=yaw, s=1.0,
@@ -7387,10 +7401,10 @@ def kit_building(x, y, yaw, seed, tag, storeys=1, tower=True, scale=1.0):
                           lamp=(st == 0 and k % 3 == 0))
         if st:
             out.append(A("balcony_ring", x, y, z, yaw=yaw, s=scale * 0.68,
-                         mat="MI_V2_IvoryStone", label="%s_Bal%d" % (tag, st)))
+                         mat="MI_V2_GoldAged", label="%s_Bal%d" % (tag, st)))
     ztop = storeys * 1000.0 * scale
     out.append(A("roof_flat_crenellated", x, y, ztop, yaw=yaw, s=scale * 1.1,
-                 mat="MI_V2_PlazaGrey", label="%s_Parapet" % tag))
+                 mat="MI_V2_GoldAged", label="%s_Parapet" % tag))
     if tower:
         body = ("castle_tower_slender", "castle_tower_octagon",
                 "castle_tower", "castle_tower_square")[k % 4]
@@ -7403,7 +7417,7 @@ def kit_building(x, y, yaw, seed, tag, storeys=1, tower=True, scale=1.0):
         zt = ztop + _S_BODY_H[body] * ts
         out += kit_crown(x, y, zt, yaw, bw * ts, k, "%s_Crown" % tag)
         out.append(A("balcony_ring", x, y, zt * 0.94, yaw=yaw, s=ts * 0.85,
-                     mat="MI_V2_IvoryStone", label="%s_TowerBal" % tag))
+                     mat="MI_V2_GoldAged", label="%s_TowerBal" % tag))
     return out
 
 
@@ -7602,8 +7616,14 @@ def urban_fill(cx, cy, half_x, half_y, seed, tag, bearing=0.0,
                 n += 1
             # the courtyard floor and something in it
             qx, qy = at(a0, c0)
+            # PAVED WIDER THAN THE COURTYARD. gap_v2: palette.green 0.192 vs
+            # the reference's 0.040 -- 4.8 TIMES over, which is the founder's
+            # "gardens richer than buildings" as a number. The block interiors
+            # were lawn showing between four buildings; the courtyard floor now
+            # covers the whole block footprint so what shows between buildings
+            # is stone.
             out.append(A("terrace_platform", qx, qy, ROAD_Z, yaw=bearing,
-                         sxyz=(block_m / 28.8, block_m / 14.8, 0.32),
+                         sxyz=(block_m / 14.4, block_m / 7.4, 0.32),
                          mat="MI_V2_PlazaShade", label="%s_Q%d_%dFloor" % (tag, gj, gi)))
             pick = k % 4
             if pick == 0:
