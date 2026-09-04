@@ -289,8 +289,14 @@ export async function runRemoteHermesReview(input: {
       diagnostics: reviewDiagnostics({
         transport: 'remote', shape: admissionShape,
         timedOut: admissionShape === 'review_timeout',
-        // The status the SERVICE returned at admission. A real HTTP response.
-        providerHttpStatus: start.status,
+        /**
+         * THE SERVICE'S STATUS, NOT THE PROVIDER'S. Hermes has not run and no
+         * provider has been called: a 422 is this service refusing to read the
+         * request and a 503 is it having no capacity. Recording either as a
+         * provider status would point an operator at a model vendor that was
+         * never contacted.
+         */
+        serviceHttpStatus: start.status,
       }),
       startedAt,
       completedAt: now(),

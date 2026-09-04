@@ -135,6 +135,7 @@ export const safeReviewDiagnostics=(value:unknown):JuliusSafeDiagnostics|null=>{
   summaryPresent:safeNullableBool(v.summaryPresent),
   failureShape:safeToken(v.failureShape),
   providerHttpStatus:safeHttpStatus(v.providerHttpStatus),
+  serviceHttpStatus:safeHttpStatus(v.serviceHttpStatus),
   /* --- Prompt Architect (plan stage). Null for the reviewer, and vice versa. */
   requestedModel:safeModel(v.requestedModel),
   responseId:safeResponseId(v.responseId),

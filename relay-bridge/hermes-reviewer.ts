@@ -185,6 +185,20 @@ export interface HermesReviewDiagnostics {
    * is not kept.
    */
   readonly providerHttpStatus: number | null;
+  /**
+   * THE REVIEW SERVICE'S OWN STATUS, which is not the provider's.
+   *
+   * A remote admission refusal is the hosted harness answering about ITSELF —
+   * 422 for a request it would not read, 503 for capacity — before Hermes or
+   * any provider has run. Recording that as `providerHttpStatus` would send an
+   * operator to a model vendor that was never called, which is the same
+   * misattribution `review_service_unavailable` and `review_request_rejected`
+   * exist to prevent. The shape says which KIND; this says which number.
+   *
+   * REMOTE PATH ONLY. Null everywhere else, including the local path, where the
+   * status Hermes prints IS the provider's.
+   */
+  readonly serviceHttpStatus: number | null;
 }
 
 /** What the reviewer's text structurally was — no part of it is retained. */
@@ -251,6 +265,8 @@ export function reviewDiagnostics(input: {
   readonly outputTruncated?: boolean;
   /** Only a status a provider really returned. Never parsed out of prose. */
   readonly providerHttpStatus?: number | null;
+  /** The review service's own status. Never the provider's. */
+  readonly serviceHttpStatus?: number | null;
   /** Read for its SHAPE only; no part of it is retained. */
   readonly text?: string | null;
 }): HermesReviewDiagnostics {
@@ -265,6 +281,7 @@ export function reviewDiagnostics(input: {
     outputByteLimit: input.outputByteLimit ?? null,
     outputTruncated: input.outputTruncated ?? false,
     providerHttpStatus: input.providerHttpStatus ?? null,
+    serviceHttpStatus: input.serviceHttpStatus ?? null,
     ...reviewStructureFacts(input.text ?? null),
     failureShape: input.shape,
   };
@@ -934,6 +951,8 @@ export async function runHermesReview(input: {
       outputByteLimit: cfg.maxOutputBytes,
       outputTruncated: truncated,
       providerHttpStatus: input.providerHttpStatus ?? null,
+      // The local path talks to a provider, never to a review service.
+      serviceHttpStatus: null,
       ...reviewStructureFacts(out),
       failureShape: input.shape,
     });

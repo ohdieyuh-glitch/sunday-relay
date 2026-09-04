@@ -511,7 +511,7 @@ describe('the evidence dump names only tables and columns the migrations create'
       'outputBytesObserved', 'outputByteLimit', 'outputTruncated', 'jsonDetected', 'jsonParseable',
       'reviewObjectCount', 'verdictPresent', 'verdictValid', 'summaryPresent', 'failureShape',
       // Paid attempt #4 named the auth failure and not the status behind it.
-      'providerHttpStatus',
+      'providerHttpStatus', 'serviceHttpStatus',
       // The Prompt Architect half. Paid attempt #3 failed here and the artifact
       // could not say which rule refused the plan.
       'requestedModel', 'responseId', 'validationPassed', 'validationReasonCode', 'validationField',
