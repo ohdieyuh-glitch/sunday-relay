@@ -7407,6 +7407,62 @@ def kit_building(x, y, yaw, seed, tag, storeys=1, tower=True, scale=1.0):
     return out
 
 
+def connect_districts(ax, ay, bx, by, seed, tag, width_m=13.0,
+                      block_every_m=52.0, skip_m=9000.0):
+    """A built ROAD between two districts, not a gap between them.
+
+    Eleven districts with open ground between them is eleven villages. The
+    reference is one continuous metropolis, so the ground BETWEEN quarters has
+    to be built too -- a paved road with frontage along it, which is how a real
+    city's districts stop being separate.
+
+    `skip_m` leaves the ends alone: both districts already have their own edges
+    and gates, and running frontage into them would double up on geometry that
+    is there.
+    """
+    out = []
+    dx, dy = bx - ax, by - ay
+    L = math.hypot(dx, dy)
+    if L < skip_m * 2.2:
+        return out
+    ux, uy = dx / L, dy / L
+    px, py = -uy, ux
+    bearing = math.degrees(math.atan2(uy, ux))
+    step = 1300.0
+    n = int((L - skip_m * 2.0) / step)
+    for i in range(n + 1):
+        d = skip_m + step * i
+        sx, sy = ax + ux * d, ay + uy * d
+        out.append(A("terrace_platform", sx, sy, ROAD_Z, yaw=bearing,
+                     sxyz=(1.0, width_m / 7.4, 0.30), mat="MI_V2_PathWarm",
+                     label="%s_Rd%03d" % (tag, i)))
+        for sgn in (1.0, -1.0):
+            out.append(A("kerb_stone", sx + px * width_m * 50.0 * sgn,
+                         sy + py * width_m * 50.0 * sgn, ROAD_Z + 26.0,
+                         yaw=bearing, s=1.0, mat="MI_V2_Kerb",
+                         label="%s_Kb%03d_%d" % (tag, i, int(sgn))))
+        # frontage at intervals: enough to enclose the road, not so much that
+        # a connector becomes a district in its own right
+        if (step * i) % block_every_m * 0 == 0 and i % max(1, int(block_every_m / 13.0)) == 0:
+            k = seed * 17 + i
+            for sgn in (1.0, -1.0):
+                hx = sx + px * (width_m * 50.0 + 900.0) * sgn
+                hy = sy + py * (width_m * 50.0 + 900.0) * sgn
+                out += kit_building(hx, hy, bearing + (90.0 if sgn > 0 else -90.0),
+                                    k + int(sgn), "%s_B%03d_%d" % (tag, i, int(sgn)),
+                                    storeys=1 + ((k + int(sgn)) % 2),
+                                    tower=((k + i) % 4 == 0), scale=0.84)
+        if i % 9 == 4:
+            out.append(A("waymarker_lamp", sx + px * (width_m * 50.0 + 300.0),
+                         sy + py * (width_m * 50.0 + 300.0), 0.0, yaw=bearing,
+                         s=1.05, mat="MI_V2_GoldAged",
+                         label="%s_Lamp%03d" % (tag, i)))
+        if i % 17 == 8:
+            out.append(A("gate_arch_gold", sx, sy, 0.0, yaw=bearing, s=1.2,
+                         mat="MI_V2_GoldAged", label="%s_Arch%03d" % (tag, i)))
+    return out
+
+
 def urban_fill(cx, cy, half_x, half_y, seed, tag, bearing=0.0,
                street_m=14.0, block_m=34.0, roofs=None, storey_bias=0):
     """Convert a MEASURED empty rectangle into connected city.
@@ -8080,6 +8136,21 @@ FILL_EASTLOW = _band("V2_FillEL", urban_fill(
     31762.0, -1335.0, 4000.0, 3400.0, 29, "FillEL", bearing=8.0))
 
 
+# ---------------------------------------------------------------------------
+# THE ROADS BETWEEN. Eleven districts with open ground between them is eleven
+# villages; the reference is one continuous metropolis. Each of these is a
+# paved road with frontage along it, joining quarters that already exist.
+CONNECTORS = _band("V2_Connect",
+    connect_districts(0.0, 0.0, 6736.0, -29819.0, 2, "CxCityS")
+    + connect_districts(6736.0, -29819.0, -20606.0, -24316.0, 3, "CxSSW")
+    + connect_districts(0.0, 0.0, -20606.0, -24316.0, 5, "CxCitySW")
+    + connect_districts(0.0, 0.0, 14730.0, 29419.0, 7, "CxCityNE")
+    + connect_districts(6736.0, -29819.0, 15707.0, -27323.0, 11, "CxSSFE")
+    + connect_districts(-20606.0, -24316.0, -32067.0, -9835.0, 13, "CxSWW")
+    + connect_districts(0.0, 0.0, 32488.0, -4129.0, 17, "CxCityE")
+    + connect_districts(0.0, 0.0, -32484.0, 8667.0, 19, "CxCityWE"))
+
+
 BUILD_BANDS = [FOREGROUND, COURTYARD, GARDEN, PALACE, FLANK_GROUND, FLANKS,
                REARWORLD, CAM_FOREGROUNDS, GROUND_QUILT, OUTER_WORLD, PLAZA_ORNAMENT,
                PROCESSIONAL_BORDER, HORIZON, APPROACH_SIDES, PLAZA_WALL_DRESS,
@@ -8087,7 +8158,7 @@ BUILD_BANDS = [FOREGROUND, COURTYARD, GARDEN, PALACE, FLANK_GROUND, FLANKS,
                SOUTH_QUARTER, SOUTHWEST_QUARTER,
                FILL_NORTHEAST, FILL_SOUTHFLANK_W, FILL_SOUTHFLANK_E,
                FILL_EAST, FILL_WEST, FILL_WESTEDGE, FILL_EASTEDGE,
-               FILL_SOUTHEAST2, FILL_EASTLOW]
+               FILL_SOUTHEAST2, FILL_EASTLOW, CONNECTORS]
 
 # ---------------------------------------------------------------------------
 # NOTHING IS BUILT ON A VIEWPOINT (2026-09-03)
