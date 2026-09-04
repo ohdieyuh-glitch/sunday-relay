@@ -80,6 +80,33 @@ export function classifyKey(ev, terminalOpen) {
   if ((key === 't' || key === 'T' || ev.code === 'KeyT') && ev.ctrlKey && !ev.metaKey && !ev.altKey) {
     return terminalOpen ? 'close-terminal' : 'open-terminal';
   }
+  // BACKQUOTE TOGGLES, FROM EITHER SIDE (founder, 2026-09-04). It is now the
+  // PRIMARY way in and out of the Live Terminal; Ctrl+T stays as the secondary
+  // alias above.
+  //
+  // This is checked ABOVE the text-entry check, which is a REVERSAL and costs
+  // something real, so it is written down rather than quietly changed. The old
+  // note said backquote sat below that check "on purpose: inside the terminal's
+  // own input a backquote is a CHARACTER, because people type them, and a
+  // toggle there would eat every code fence." That is still true -- a backquote
+  // can no longer be TYPED into the terminal, so code fences have to be pasted.
+  // The founder weighed that against being able to leave the terminal with the
+  // same key that opened it, while fullscreen, without reaching for Escape, and
+  // chose the toggle. Same precedent as Ctrl+T, which is checked up here for the
+  // same reason.
+  //
+  // MEASURED BEFORE IT WAS CHANGED, from a real browser on the live stream:
+  // backquote opened the terminal (display none -> flex, focus to
+  // INPUT#wl-tm-input) and a second backquote did NOTHING, because this check
+  // never ran -- isTextEntry() had already returned 'type' for the terminal's
+  // own input. Escape closed it. So the founder's report was exactly right.
+  //
+  // Escape still closes, and is still the only way out that leaves a backquote
+  // typable anywhere else on the page.
+  if ((key === '`' || key === '~' || ev.code === 'Backquote') && !ev.ctrlKey
+      && !ev.metaKey && !ev.altKey) {
+    return terminalOpen ? 'close-terminal' : 'open-terminal';
+  }
   if (ev.ctrlKey || ev.metaKey || ev.altKey) return 'pass';
   if (isTextEntry(ev.target)) {
     // Escape still gets you out of the terminal from inside its own input --
@@ -102,14 +129,6 @@ export function classifyKey(ev, terminalOpen) {
   // nothing in here can observe. Worth remembering before trusting a keyboard
   // test again.
   //
-  // BACKQUOTE is the always-available alternative -- the console key in every
-  // game that has one, reserved by nothing. It sits BELOW the text-entry check
-  // on purpose: inside the terminal's own input a backquote is a CHARACTER,
-  // because people type them, and a toggle there would eat every code fence.
-  if ((key === '`' || key === '~' || ev.code === 'Backquote') && !ev.ctrlKey
-      && !ev.metaKey && !ev.altKey) {
-    return terminalOpen ? 'close-terminal' : 'open-terminal';
-  }
   // SPACE IS NO LONGER OURS. It goes to the game so the Dog can jump. The one
   // exception is while the terminal is open: then every key belongs to the
   // terminal, which `shouldStopGameInput` enforces, and a Space that reaches

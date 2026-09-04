@@ -42,8 +42,20 @@ eq(classifyKey(K('`', world), false), 'open-terminal', 'backquote opens the term
 eq(classifyKey(K('`', video), true), 'close-terminal', 'backquote closes it again');
 eq(classifyKey(K('~', world, { code: 'Backquote' }), false), 'open-terminal',
    'backquote by code and by tilde, for clients that report either');
-eq(classifyKey(K('`', input), true), 'type',
-   'backquote INSIDE the terminal input is a character, not a toggle');
+// SUPERSEDED 2026-09-04 (founder). This asserted the opposite -- that a
+// backquote inside the terminal's own input is a CHARACTER, so code fences stay
+// typable. That was a deliberate trade and it lost to a measurement: on the live
+// stream, backquote opened the terminal and a second backquote did nothing,
+// because isTextEntry() classified it as 'type' before the backquote check ever
+// ran. The founder wants the same key to get them back out while fullscreen, so
+// backquote now toggles from either side, exactly as Ctrl+T does. The cost is
+// real and stays written down: a backquote can no longer be typed here.
+eq(classifyKey(K('`', input), true), 'close-terminal',
+   'backquote INSIDE the terminal input closes it -- it toggles from either side');
+eq(classifyKey(K('a', input), true), 'type',
+   '...and every other key in that input is still a character');
+eq(classifyKey(K('Escape', input), true), 'close-terminal',
+   'Escape still closes from inside the input');
 // Space must now reach the game, or the jump silently does nothing and this
 // layer hides an engine-side regression.
 eq(classifyKey(K(' ', world), false), 'pass', 'space goes to the game: it is the jump');
