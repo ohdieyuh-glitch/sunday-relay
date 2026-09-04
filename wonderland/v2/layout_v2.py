@@ -7247,6 +7247,153 @@ WAYSIDE = _band("V2_Skyline", _wayside(
 # spire_great at (0, 8200) and the quarter is 386 m south of it, so a street
 # laid along the bearing from here to there gives a walker a view corridor
 # with the landmark closing it. The axis is computed, not guessed.
+# ---------------------------------------------------------------------------
+# THE ARCHITECTURE KIT.
+#
+# Written after measuring, because every visual defect in the first two
+# districts turned out to be a scale mistake rather than a design one. From
+# skyline.py's own meshkit bboxes:
+#
+#     lantern_swag        32.6 m wide, 12.5 m tall     <- a street-spanning
+#                                                         GARLAND, and one was
+#                                                         hung on every facade
+#                                                         bay: 24 of them
+#     lantern_strange     13.9 x 21.8 m                <- 48 used as street lamps
+#     orrery_gold         15.2 x 26.4 m                <- a landmark, placed as
+#                                                         a plaza ornament at 1.5
+#     castle_hall         12.6 x 8.8 x 10.0 m
+#     column_ornate        1.8 x  1.9 x  9.5 m
+#     facade_panel         4.4 x  1.7 x  6.3 m
+#
+# The founder's list -- "too much gold ornament", "obvious repeated procedural
+# rhythms", "facades lack depth" -- is that table. Ornament the size of a
+# building repeated every eight metres IS the rhythm you can see.
+#
+# So the kit works in MEASURED units and builds in the order the reference
+# does: base -> body -> crown, with the facade rhythm made of things that are
+# actually facade-sized.
+_KIT_ROOF_TIERS = {
+    # cap -> (height at s=1, the width it wants to sit on)
+    "roof_ogee": (8.2, 6.2), "roof_bell": (7.0, 6.9),
+    "roof_cone_steep": (6.0, 4.0), "roof_hip": (4.2, 13.0),
+    "roof_flat_crenellated": (1.0, 5.2),
+}
+#: The reference board's roof palette is CORAL / ROSE / TERRACOTTA over ivory,
+#: with lilac and blue as accents -- not the navy-led mix the first two
+#: districts used. Ordered so a hash pick lands on warm far more often.
+KIT_ROOFS = ("MI_V2_RoofRose", "MI_V2_RoofPink", "MI_V2_RoofRose",
+             "MI_V2_MushTerracotta", "MI_V2_RoofLilac", "MI_V2_RoofPink",
+             "MI_V2_RoofRose", "MI_V2_RoofBlue")
+
+
+def kit_crown(x, y, z, yaw, width_m, seed, tag, mat=None):
+    """A STACKED crown, which is what the reference towers actually have.
+
+    Every tower in the first two districts was a cylinder with one cap on it --
+    the founder's "too many simple cylinder + tower-cap forms". The reference
+    stacks two or three roofs of falling diameter with a spire above, so the
+    silhouette steps instead of stopping.
+    """
+    out = []
+    k = seed
+    roof = mat or KIT_ROOFS[k % len(KIT_ROOFS)]
+    tiers = (("roof_bell", "roof_cone_steep"),
+             ("roof_ogee", "roof_cone_steep"),
+             ("roof_hip", "roof_bell", "roof_cone_steep"))[k % 3]
+    zc = z
+    for ti, cap in enumerate(tiers):
+        h_m, want_w = _KIT_ROOF_TIERS[cap]
+        # each tier sits on what the one below left, narrowing as it rises
+        s = (width_m * (0.92 ** ti)) / want_w
+        out.append(A(cap, x, y, zc, yaw=yaw + 9.0 * ti, s=s,
+                     mat=roof if ti == 0 else KIT_ROOFS[(k + ti) % len(KIT_ROOFS)],
+                     label="%s_Tier%d" % (tag, ti)))
+        zc += h_m * s * 100.0 * 0.78      # overlap so tiers read as one crown
+    out.append(A("finial_spire", x, y, zc, yaw=yaw, s=max(0.8, width_m / 4.0),
+                 mat="MI_V2_Gold", label="%s_Spire" % tag))
+    return out
+
+
+def kit_facade(x, y, yaw, width_m, seed, tag, bays=None, lamp=False):
+    """A facade with DEPTH: pilasters between the bays, an arch at the middle
+    one, a cornice line over the top. facade_panel is 4.4 m wide and
+    column_ornate is 1.8 -- so a 12.6 m hall takes two bays and three
+    pilasters, which is a rhythm rather than a repeat.
+
+    `lamp` is off by default and deliberately so. lantern_swag is 32.6 m wide;
+    it belongs ACROSS a street, once, not on a building.
+    """
+    out = []
+    k = seed
+    n = bays if bays is not None else max(2, int(width_m / 5.2))
+    step = width_m / float(n)
+    fwd = math.radians(yaw - 90.0)
+    along = math.radians(yaw)
+    for i in range(n):
+        off = (-width_m * 0.5 + step * (i + 0.5)) * 100.0
+        bx = x + math.cos(along) * off + math.cos(fwd) * 402.0
+        by = y + math.sin(along) * off + math.sin(fwd) * 402.0
+        out.append(A("facade_panel", bx, by, 300.0, yaw=yaw, s=step / 4.4,
+                     mat="MI_V2_IvoryStone", label="%s_Bay%d" % (tag, i)))
+        # the pilaster between this bay and the next: 9.5 m tall at s=1, so a
+        # 10 m storey takes about 0.75
+        px_ = x + math.cos(along) * (off + step * 50.0) + math.cos(fwd) * 430.0
+        py_ = y + math.sin(along) * (off + step * 50.0) + math.sin(fwd) * 430.0
+        out.append(A("column_ornate", px_, py_, 0.0, yaw=yaw, s=0.72,
+                     mat="MI_V2_IvoryStone", label="%s_Pilaster%d" % (tag, i)))
+        if i == n // 2:
+            out.append(A("arch_stone", bx, by, 0.0, yaw=yaw, s=0.42,
+                         mat="MI_V2_PlazaCream", label="%s_Entrance" % tag))
+    # THE CORNICE. A flat parapet band over the bays, which is most of what
+    # separates a building from a box: the reference never has a wall meeting
+    # sky without a line on it.
+    out.append(A("balustrade", x + math.cos(fwd) * 410.0,
+                 y + math.sin(fwd) * 410.0, 700.0, yaw=yaw,
+                 s=width_m / 3.5, mat="MI_V2_IvoryStone",
+                 label="%s_Cornice" % tag))
+    if lamp:
+        out.append(A("waymarker_lamp", x + math.cos(fwd) * 620.0,
+                     y + math.sin(fwd) * 620.0, 0.0, yaw=yaw, s=1.0,
+                     mat="MI_V2_GoldAged", label="%s_Lamp" % tag))
+    return out
+
+
+def kit_building(x, y, yaw, seed, tag, storeys=1, tower=True, scale=1.0):
+    """base -> body -> crown, the order the reference reads in.
+
+    Storeys stack castle_hall (10 m each) so a block can be two or three high
+    without a new mesh, which is what makes a street wall rather than a row of
+    bungalows.
+    """
+    out = []
+    k = seed
+    for st in range(storeys):
+        z = st * 1000.0 * scale
+        out.append(A("castle_hall", x, y, z, yaw=yaw, s=scale,
+                     mat="MI_V2_IvoryStone", label="%s_Body%d" % (tag, st)))
+        out += kit_facade(x, y, yaw, 12.6 * scale, k + st, "%s_F%d" % (tag, st),
+                          lamp=(st == 0 and k % 3 == 0))
+        if st:
+            out.append(A("balcony_ring", x, y, z, yaw=yaw, s=scale * 0.68,
+                         mat="MI_V2_IvoryStone", label="%s_Bal%d" % (tag, st)))
+    ztop = storeys * 1000.0 * scale
+    out.append(A("roof_flat_crenellated", x, y, ztop, yaw=yaw, s=scale * 1.1,
+                 mat="MI_V2_PlazaGrey", label="%s_Parapet" % tag))
+    if tower:
+        body = ("castle_tower_slender", "castle_tower_octagon",
+                "castle_tower", "castle_tower_square")[k % 4]
+        ts = scale * (1.5 + 0.5 * (k % 3))
+        bw = {"castle_tower_slender": 2.7, "castle_tower_octagon": 6.9,
+              "castle_tower": 5.8, "castle_tower_square": 5.6}[body]
+        out.append(A(body, x, y, ztop, yaw=yaw + 11.0, s=ts,
+                     mat="MI_V2_IvoryStone", label="%s_Tower" % tag))
+        zt = ztop + _S_BODY_H[body] * ts
+        out += kit_crown(x, y, zt, yaw, bw * ts, k, "%s_Crown" % tag)
+        out.append(A("balcony_ring", x, y, zt * 0.94, yaw=yaw, s=ts * 0.85,
+                     mat="MI_V2_IvoryStone", label="%s_TowerBal" % tag))
+    return out
+
+
 SOUTH_CENTRE = (6736.0, -29819.0)
 _SPIRE_AT = (0.0, 8200.0)
 
@@ -7269,69 +7416,29 @@ _S_ROOFS = ("MI_V2_RoofPink", "MI_V2_RoofLilac", "MI_V2_RoofBlue",
 
 
 def _south_house(x, y, yaw, seed, tag, scale=1.0, tall=False):
-    """One street-fronting house: mass, roof, facade bays, arcade, balcony.
+    """A street house, now built from the kit rather than by hand.
 
-    The z offsets are the ones _castle_group proved (hall roof at 900*scale,
-    bays at 420, arcade set back 430); they are NOT re-derived here, because a
-    roof seated at a guessed height is the failure this file already has a
-    ledger entry about.
+    The hand-built version hung a lantern_swag on every bay. That mesh is
+    32.6 m wide and 12.5 m tall -- a garland meant to span a street -- so
+    twenty-four of them became the gold clutter and the mechanical rhythm the
+    founder saw. The kit's facade uses facade_panel (4.4 m) with column_ornate
+    pilasters (1.8 m) between, an arch at the middle bay and a cornice over the
+    top, which is ornament at ornament scale.
     """
-    k = seed
-    out = []
-    out.append(A("castle_hall", x, y, 0.0, yaw=yaw, s=scale,
-                 mat="MI_V2_IvoryStone", label="%s_Hall" % tag))
-    out.append(A(("roof_hip", "roof_flat_crenellated", "roof_ogee")[k % 3],
-                 x, y, 900.0 * scale, yaw=yaw, s=scale,
-                 mat=_S_ROOFS[k % 5], label="%s_Roof" % tag))
-    # THE ARCADE IS THE FACADE DEPTH. A flat wall at three metres is the thing
-    # the founder called a blank wall; an arcade in front of it gives the
-    # street a colonnade to walk under and the wall a shadow to sit behind.
-    ax = x + math.cos(math.radians(yaw - 90.0)) * 430.0 * scale
-    ay = y + math.sin(math.radians(yaw - 90.0)) * 430.0 * scale
-    out.append(A("castle_arcade", ax, ay, 0.0, yaw=yaw, s=scale * 1.5,
-                 mat="MI_V2_IvoryStone", label="%s_Arcade" % tag))
-    for f in range(3):
-        bx = x + math.cos(math.radians(yaw)) * (-400.0 + 400.0 * f) * scale \
-             + math.cos(math.radians(yaw - 90.0)) * 402.0 * scale
-        by = y + math.sin(math.radians(yaw)) * (-400.0 + 400.0 * f) * scale \
-             + math.sin(math.radians(yaw - 90.0)) * 402.0 * scale
-        out.append(A("facade_panel", bx, by, 420.0 * scale, yaw=yaw, s=scale,
-                     mat="MI_V2_IvoryStone", label="%s_Bay%d" % (tag, f)))
-        # A DOOR AND A LAMP AT EVERY BAY. This is the 3-9 m band the founder
-        # walks through: an arch the height of the Dog, and a light beside it.
-        if f == 1:
-            out.append(A("arch_stone", bx, by, 0.0, yaw=yaw, s=scale * 0.62,
-                         mat="MI_V2_PlazaCream", label="%s_Door" % tag))
-        out.append(A("lantern_swag", bx, by, 640.0 * scale, yaw=yaw,
-                     s=scale * 0.8, mat="MI_V2_GoldAged",
-                     label="%s_Lamp%d" % (tag, f)))
-        out.append(A("lantern_swag_glass", bx, by, 640.0 * scale, yaw=yaw,
-                     s=scale * 0.8, mat="MI_V2_GlassAmber",
-                     label="%s_LampGlass%d" % (tag, f)))
-    # A balcony over the street, because a facade with nothing standing out of
-    # it reads as a painted flat however many bays it has.
-    out.append(A("balcony_ring", x, y, 760.0 * scale, yaw=yaw, s=scale * 0.7,
-                 mat="MI_V2_IvoryStone", label="%s_Balcony" % tag))
+    out = kit_building(x, y, yaw, seed, tag,
+                       storeys=2 if (seed % 3 == 0 or tall) else 1,
+                       tower=True, scale=scale)
+    # The arcade stays: it is the thing that gives the pavement a colonnade to
+    # walk under, and it is 6.6 m wide, which is the right size for one.
+    ax = x + math.cos(math.radians(yaw - 90.0)) * 640.0 * scale
+    ay = y + math.sin(math.radians(yaw - 90.0)) * 640.0 * scale
+    for k2 in (-1, 0, 1):
+        ox = math.cos(math.radians(yaw)) * 620.0 * k2 * scale
+        oy = math.sin(math.radians(yaw)) * 620.0 * k2 * scale
+        out.append(A("castle_arcade", ax + ox, ay + oy, 0.0, yaw=yaw, s=scale,
+                     mat="MI_V2_IvoryStone", label="%s_Arcade%d" % (tag, k2 + 1)))
     out.append(A("ivy_drape", x, y, 700.0 * scale, yaw=yaw + 40.0, s=scale * 0.9,
                  mat="MI_V2_LeafMid", label="%s_Ivy" % tag))
-    # The house tower: the roof hierarchy the reference has, and the rung the
-    # skyline audit asked for when `tall` is set.
-    body = ("castle_tower_square", "castle_tower", "castle_tower_octagon",
-            "castle_tower_slender")[k % 4]
-    ts = scale * (2.9 if tall else 1.15)
-    tx = x + math.cos(math.radians(yaw + 90.0)) * 640.0 * scale
-    ty = y + math.sin(math.radians(yaw + 90.0)) * 640.0 * scale
-    out.append(A(body, tx, ty, 0.0, yaw=yaw + 12.0, s=ts,
-                 mat="MI_V2_IvoryStone", label="%s_Tower" % tag))
-    zt = _S_BODY_H[body] * ts
-    cap = ("roof_cone_steep", "roof_bell", "roof_ogee")[k % 3]
-    out.append(A(cap, tx, ty, zt, yaw=yaw + 12.0, s=ts,
-                 mat=_S_ROOFS[(k + 2) % 5], label="%s_TowerRoof" % tag))
-    out.append(A("finial_spire", tx, ty, zt + _S_CAP_H[cap] * ts, s=ts * 0.85,
-                 mat="MI_V2_Gold", label="%s_TowerFinial" % tag))
-    if tall:
-        out.append(A("balcony_ring", tx, ty, zt * 0.58, s=ts * 0.9,
-                     mat="MI_V2_IvoryStone", label="%s_TowerBalcony" % tag))
     return out
 
 
@@ -7449,10 +7556,10 @@ def _south_quarter():
         by = my + math.sin(ang) * 2100.0
         out.append(A("column_ornate", bx, by, 0.0, yaw=yaw, s=1.2,
                      mat="MI_V2_IvoryStone", label="South_MarketCol%d" % k))
-        out.append(A("lantern_strange", bx, by, 1180.0, yaw=yaw, s=0.9,
+        # lantern_strange is 21.8 m tall. Six of them at 0.9 ringed the market
+        # with twenty-metre lamps. A waymarker_lamp is a lamp.
+        out.append(A("waymarker_lamp", bx, by, 0.0, yaw=yaw, s=1.15,
                      mat="MI_V2_GoldAged", label="South_MarketLamp%d" % k))
-        out.append(A("lantern_strange_glass", bx, by, 1180.0, yaw=yaw, s=0.9,
-                     mat="MI_V2_GlassRose", label="South_MarketLampGlass%d" % k))
         out.append(A("garden_urn", bx + 260.0, by, 0.0, yaw=yaw, s=1.0,
                      mat="MI_V2_PlazaCream", label="South_MarketUrn%d" % k))
     out.append(A("balustrade", *at(-HALF - 3600.0, 0.0), 0.0, yaw=yaw + 90.0,
@@ -7576,51 +7683,14 @@ _SW_ROOFS = ("MI_V2_RoofBlue", "MI_V2_RoofLilac", "MI_V2_RoofNavy",
 
 
 def _sw_block(x, y, yaw, seed, tag, scale=1.0):
-    """A tall narrow civic block. Not _south_house: no front garden, no set-back
-    arcade, a crenellated parapet instead of a pitched roof on the mass, and the
-    tower is part of the block rather than standing beside it -- which is what
-    makes a street feel walled rather than lined."""
-    k = seed
-    out = []
-    out.append(A("castle_hall", x, y, 0.0, yaw=yaw, s=scale,
-                 mat="MI_V2_IvoryStone", label="%s_Mass" % tag))
-    out.append(A("roof_flat_crenellated", x, y, 900.0 * scale, yaw=yaw, s=scale,
-                 mat="MI_V2_PlazaGrey", label="%s_Parapet" % tag))
-    # THE STREET WALL. Bays on BOTH long sides, because a narrow street is
-    # walled by the backs of things as much as the fronts, and an unfinished
-    # backside is the founder's "blank wall" seen from the next street over.
-    for side in (1.0, -1.0):
-        for f in range(3):
-            bx = x + math.cos(math.radians(yaw)) * (-380.0 + 380.0 * f) * scale \
-                 + math.cos(math.radians(yaw - 90.0)) * 402.0 * scale * side
-            by = y + math.sin(math.radians(yaw)) * (-380.0 + 380.0 * f) * scale \
-                 + math.sin(math.radians(yaw - 90.0)) * 402.0 * scale * side
-            out.append(A("facade_panel", bx, by, 430.0 * scale, yaw=yaw, s=scale,
-                         mat="MI_V2_IvoryStone",
-                         label="%s_Bay%d_%d" % (tag, f, int(side))))
-            if f == 1:
-                out.append(A("arch_stone", bx, by, 0.0, yaw=yaw, s=scale * 0.58,
-                             mat="MI_V2_PlazaShade",
-                             label="%s_Door%d" % (tag, int(side))))
-                out.append(A("lantern_strange", bx, by, 700.0 * scale, yaw=yaw,
-                             s=scale * 0.7, mat="MI_V2_GoldAged",
-                             label="%s_Lamp%d" % (tag, int(side))))
-                out.append(A("lantern_strange_glass", bx, by, 700.0 * scale,
-                             yaw=yaw, s=scale * 0.7, mat="MI_V2_GlassTeal",
-                             label="%s_LampGlass%d" % (tag, int(side))))
-    out.append(A("balcony_ring", x, y, 820.0 * scale, yaw=yaw, s=scale * 0.62,
-                 mat="MI_V2_IvoryStone", label="%s_Balcony" % tag))
-    # The block's own tower, rising out of the mass rather than beside it.
-    body = ("castle_tower_square", "castle_tower_octagon")[k % 2]
-    ts = scale * (1.35 + 0.25 * (k % 3))
-    out.append(A(body, x, y, 900.0 * scale, yaw=yaw + 8.0, s=ts,
-                 mat="MI_V2_IvoryStone", label="%s_Tower" % tag))
-    zt = 900.0 * scale + _S_BODY_H[body] * ts
-    cap = ("roof_ogee", "roof_bell", "roof_cone_steep")[k % 3]
-    out.append(A(cap, x, y, zt, yaw=yaw + 8.0, s=ts,
-                 mat=_SW_ROOFS[k % 5], label="%s_TowerRoof" % tag))
-    out.append(A("finial_spire", x, y, zt + _S_CAP_H[cap] * ts, s=ts * 0.8,
-                 mat="MI_V2_Gold", label="%s_Finial" % tag))
+    """A civic block: taller than the south, no front garden, three storeys
+    where the seed allows. Same kit, different massing -- which is what makes
+    two districts read as one city rather than two generators."""
+    out = kit_building(x, y, yaw, seed, tag,
+                       storeys=2 + (seed % 2), tower=True, scale=scale)
+    # bays on the BACK too: a narrow street is walled by the backs of things.
+    out += kit_facade(x, y, yaw + 180.0, 12.6 * scale, seed + 3,
+                      "%s_Rear" % tag)
     return out
 
 
@@ -7641,11 +7711,11 @@ def _southwest_quarter():
         px_, py_ = cx + math.cos(a) * R, cy + math.sin(a) * R
         out.append(A("column_ornate", px_, py_, 0.0, yaw=math.degrees(a),
                      s=1.35, mat="MI_V2_IvoryStone", label="SW_Col%02d" % k))
-        out.append(A("lantern_swag", px_, py_, 1320.0, yaw=math.degrees(a),
-                     s=0.95, mat="MI_V2_GoldAged", label="SW_ColLamp%02d" % k))
-        out.append(A("lantern_swag_glass", px_, py_, 1320.0, yaw=math.degrees(a),
-                     s=0.95, mat="MI_V2_GlassViolet",
-                     label="SW_ColLampGlass%02d" % k))
+        # was lantern_swag at 0.95 -- a 31 m garland on every column of a
+        # 34 m plaza, sixteen of them. The swag spans the plaza ONCE now,
+        # below; the columns carry a finial instead.
+        out.append(A("gate_finial_ball", px_, py_, 950.0, yaw=math.degrees(a),
+                     s=1.1, mat="MI_V2_GoldAged", label="SW_ColFinial%02d" % k))
         if k % 4 == 0:
             out.append(A("castle_arcade", cx + math.cos(a) * (R + 900.0),
                          cy + math.sin(a) * (R + 900.0), 0.0,
@@ -7659,10 +7729,21 @@ def _southwest_quarter():
     # the civic monument at the centre, and it is not a fountain again
     out.append(A("stone_ring_base", cx, cy, 0.0, yaw=0.0, s=1.6,
                  mat="MI_V2_PlazaCream", label="SW_MonumentBase"))
-    out.append(A("orrery_gold", cx, cy, 380.0, yaw=0.0, s=1.5,
+    # orrery_gold is 15.2 x 16.4 x 26.4 m -- a LANDMARK. At s=1.5 it stood
+    # forty metres over a civic plaza and camera 42 ended up inside it. Kept,
+    # because a mechanism at the heart of the quarter is on the reference
+    # board, but at a size a plaza can hold.
+    out.append(A("orrery_gold", cx, cy, 380.0, yaw=0.0, s=0.42,
                  mat="MI_V2_Gold", label="SW_Orrery"))
     out.append(A("pedestal_finial", cx, cy, 1500.0, yaw=0.0, s=1.2,
                  mat="MI_V2_Bronze", label="SW_MonumentFinial"))
+    # THE SWAG, USED AS A SWAG. 32.6 m wide, so it spans the 34 m plaza once,
+    # overhead, which is what the mesh was modelled for.
+    for sw in range(2):
+        out.append(A("lantern_swag", cx, cy, 1450.0, yaw=90.0 * sw, s=1.0,
+                     mat="MI_V2_GoldAged", label="SW_PlazaSwag%d" % sw))
+        out.append(A("lantern_swag_glass", cx, cy, 1450.0, yaw=90.0 * sw, s=1.0,
+                     mat="MI_V2_GlassAmber", label="SW_PlazaSwagGlass%d" % sw))
 
     # ---- THE TOWER CLUSTER, tight and tall ----------------------------
     # Five towers inside a 45 m circle. The south's rungs reached 86 m; these
