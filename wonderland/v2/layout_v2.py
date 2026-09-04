@@ -7542,11 +7542,232 @@ def _south_way():
 SOUTH_WAY = _south_way()
 
 
+# ---------------------------------------------------------------------------
+# THE SOUTHWEST QUARTER -- the civic tower district, and deliberately NOT the
+# southern one again.
+#
+# emptiness.py after the southern quarter: the largest remaining region is
+# 8,128 m2 centred at (-20606, -24316), x -290..-150 m, y -310..-178 m. The
+# founder asked for a distinct identity rather than a second copy, so where the
+# south is a low residential street with a market at one end, this is VERTICAL
+# and CIVIC: a hard-edged plaza with a colonnade all the way round it, a tight
+# cluster of towers taller than anything in the south, bridges between them at
+# height, and streets narrow enough that the towers close over the walker.
+#
+# The skyline argument is the same one the towers answer in the south and this
+# is where it is pressed: 479 pieces stand 30-50 m and 28 stand 80-120 m. The
+# south added rungs at 86 m. These go to about 120, which is the band directly
+# under the great spire's 194.
+SW_CENTRE = (-20606.0, -24316.0)
+#: Cooler than the south on purpose -- blue and lilac lead, rose is the accent.
+_SW_ROOFS = ("MI_V2_RoofBlue", "MI_V2_RoofLilac", "MI_V2_RoofNavy",
+             "MI_V2_RoofBlue", "MI_V2_RoofRose")
+
+
+def _sw_block(x, y, yaw, seed, tag, scale=1.0):
+    """A tall narrow civic block. Not _south_house: no front garden, no set-back
+    arcade, a crenellated parapet instead of a pitched roof on the mass, and the
+    tower is part of the block rather than standing beside it -- which is what
+    makes a street feel walled rather than lined."""
+    k = seed
+    out = []
+    out.append(A("castle_hall", x, y, 0.0, yaw=yaw, s=scale,
+                 mat="MI_V2_IvoryStone", label="%s_Mass" % tag))
+    out.append(A("roof_flat_crenellated", x, y, 900.0 * scale, yaw=yaw, s=scale,
+                 mat="MI_V2_PlazaGrey", label="%s_Parapet" % tag))
+    # THE STREET WALL. Bays on BOTH long sides, because a narrow street is
+    # walled by the backs of things as much as the fronts, and an unfinished
+    # backside is the founder's "blank wall" seen from the next street over.
+    for side in (1.0, -1.0):
+        for f in range(3):
+            bx = x + math.cos(math.radians(yaw)) * (-380.0 + 380.0 * f) * scale \
+                 + math.cos(math.radians(yaw - 90.0)) * 402.0 * scale * side
+            by = y + math.sin(math.radians(yaw)) * (-380.0 + 380.0 * f) * scale \
+                 + math.sin(math.radians(yaw - 90.0)) * 402.0 * scale * side
+            out.append(A("facade_panel", bx, by, 430.0 * scale, yaw=yaw, s=scale,
+                         mat="MI_V2_IvoryStone",
+                         label="%s_Bay%d_%d" % (tag, f, int(side))))
+            if f == 1:
+                out.append(A("arch_stone", bx, by, 0.0, yaw=yaw, s=scale * 0.58,
+                             mat="MI_V2_PlazaShade",
+                             label="%s_Door%d" % (tag, int(side))))
+                out.append(A("lantern_strange", bx, by, 700.0 * scale, yaw=yaw,
+                             s=scale * 0.7, mat="MI_V2_GoldAged",
+                             label="%s_Lamp%d" % (tag, int(side))))
+                out.append(A("lantern_strange_glass", bx, by, 700.0 * scale,
+                             yaw=yaw, s=scale * 0.7, mat="MI_V2_GlassTeal",
+                             label="%s_LampGlass%d" % (tag, int(side))))
+    out.append(A("balcony_ring", x, y, 820.0 * scale, yaw=yaw, s=scale * 0.62,
+                 mat="MI_V2_IvoryStone", label="%s_Balcony" % tag))
+    # The block's own tower, rising out of the mass rather than beside it.
+    body = ("castle_tower_square", "castle_tower_octagon")[k % 2]
+    ts = scale * (1.35 + 0.25 * (k % 3))
+    out.append(A(body, x, y, 900.0 * scale, yaw=yaw + 8.0, s=ts,
+                 mat="MI_V2_IvoryStone", label="%s_Tower" % tag))
+    zt = 900.0 * scale + _S_BODY_H[body] * ts
+    cap = ("roof_ogee", "roof_bell", "roof_cone_steep")[k % 3]
+    out.append(A(cap, x, y, zt, yaw=yaw + 8.0, s=ts,
+                 mat=_SW_ROOFS[k % 5], label="%s_TowerRoof" % tag))
+    out.append(A("finial_spire", x, y, zt + _S_CAP_H[cap] * ts, s=ts * 0.8,
+                 mat="MI_V2_Gold", label="%s_Finial" % tag))
+    return out
+
+
+def _southwest_quarter():
+    cx, cy = SW_CENTRE
+    out = []
+    R = 3400.0                       # the civic plaza's radius, 34 m
+
+    # ---- THE PLAZA, AND IT HAS AN EDGE --------------------------------
+    # The founder's note was "no giant dead plazas". A plaza is dead when it is
+    # a floor with nothing standing at its rim, so this one is a colonnade the
+    # whole way round with an arcade on two sides behind it.
+    out.append(A("terrace_platform", cx, cy, ROAD_Z, yaw=0.0,
+                 sxyz=(2.3, 2.3, 0.34), mat="MI_V2_PlazaShade",
+                 label="SW_PlazaFloor"))
+    for k in range(16):
+        a = math.radians(22.5 * k)
+        px_, py_ = cx + math.cos(a) * R, cy + math.sin(a) * R
+        out.append(A("column_ornate", px_, py_, 0.0, yaw=math.degrees(a),
+                     s=1.35, mat="MI_V2_IvoryStone", label="SW_Col%02d" % k))
+        out.append(A("lantern_swag", px_, py_, 1320.0, yaw=math.degrees(a),
+                     s=0.95, mat="MI_V2_GoldAged", label="SW_ColLamp%02d" % k))
+        out.append(A("lantern_swag_glass", px_, py_, 1320.0, yaw=math.degrees(a),
+                     s=0.95, mat="MI_V2_GlassViolet",
+                     label="SW_ColLampGlass%02d" % k))
+        if k % 4 == 0:
+            out.append(A("castle_arcade", cx + math.cos(a) * (R + 900.0),
+                         cy + math.sin(a) * (R + 900.0), 0.0,
+                         yaw=math.degrees(a) + 90.0, s=1.4,
+                         mat="MI_V2_IvoryStone", label="SW_Arcade%02d" % k))
+        if k % 2 == 1:
+            out.append(A("balustrade", cx + math.cos(a) * (R - 250.0),
+                         cy + math.sin(a) * (R - 250.0), 0.0,
+                         yaw=math.degrees(a) + 90.0, s=1.25,
+                         mat="MI_V2_IvoryStone", label="SW_Rail%02d" % k))
+    # the civic monument at the centre, and it is not a fountain again
+    out.append(A("stone_ring_base", cx, cy, 0.0, yaw=0.0, s=1.6,
+                 mat="MI_V2_PlazaCream", label="SW_MonumentBase"))
+    out.append(A("orrery_gold", cx, cy, 380.0, yaw=0.0, s=1.5,
+                 mat="MI_V2_Gold", label="SW_Orrery"))
+    out.append(A("pedestal_finial", cx, cy, 1500.0, yaw=0.0, s=1.2,
+                 mat="MI_V2_Bronze", label="SW_MonumentFinial"))
+
+    # ---- THE TOWER CLUSTER, tight and tall ----------------------------
+    # Five towers inside a 45 m circle. The south's rungs reached 86 m; these
+    # reach about 120, which is the band under the great spire.
+    # SCALED DOWN AFTER MEASURING, not before. At 4.2-5.4 the tallest topped out
+    # near 153 m and skyline.py's dominance -- the great spire against the next
+    # distinct site -- fell from 1.45x to 1.27x. The spire is the city's
+    # orientation landmark and a rival two thirds of the way to it is not a
+    # rung, it is competition. These reach roughly 118 m: the top of the 80-120
+    # band, under the 134 m second site that already existed, so the ladder
+    # fills and the spire keeps its lead.
+    towers = ((-2600.0, 4200.0, 3.6), (1400.0, 4900.0, 4.2),
+              (4300.0, 3100.0, 3.3), (-4600.0, 1800.0, 3.0),
+              (300.0, 6600.0, 3.8))
+    tops = []
+    for i, (ox, oy, ts) in enumerate(towers):
+        tx, ty = cx + ox, cy + oy
+        body = ("castle_tower_slender", "castle_tower_octagon",
+                "castle_tower")[i % 3]
+        out.append(A(body, tx, ty, 0.0, yaw=17.0 * i, s=ts,
+                     mat="MI_V2_IvoryStone", label="SW_Tower%d" % i))
+        zt = _S_BODY_H[body] * ts
+        cap = ("roof_cone_steep", "roof_ogee")[i % 2]
+        out.append(A(cap, tx, ty, zt, yaw=17.0 * i, s=ts,
+                     mat=_SW_ROOFS[i % 5], label="SW_Tower%dRoof" % i))
+        out.append(A("finial_spire", tx, ty, zt + _S_CAP_H[cap] * ts,
+                     s=ts * 0.8, mat="MI_V2_Gold", label="SW_Tower%dFinial" % i))
+        out.append(A("balcony_ring", tx, ty, zt * 0.55, s=ts * 0.85,
+                     mat="MI_V2_IvoryStone", label="SW_Tower%dBalcony" % i))
+        out.append(A("ivy_drape", tx, ty, zt * 0.30, yaw=40.0 * i, s=ts * 0.5,
+                     mat="MI_V2_LeafMid", label="SW_Tower%dIvy" % i))
+        tops.append((tx, ty, zt))
+    # BRIDGES BETWEEN THEM, at height. This is the thing the south does not
+    # have and the reference does: a city you read as connected in the air.
+    for i in range(len(tops) - 1):
+        ax, ay, az = tops[i]; bx, by, bz = tops[i + 1]
+        mx, my = (ax + bx) * 0.5, (ay + by) * 0.5
+        br = math.degrees(math.atan2(by - ay, bx - ax))
+        out.append(A("castle_bridge", mx, my, min(az, bz) * 0.62, yaw=br,
+                     s=1.5, mat="MI_V2_IvoryStone", label="SW_Bridge%d" % i))
+
+    # ---- THREE NARROW STREETS off the plaza ---------------------------
+    for si, bearing in enumerate((205.0, 285.0, 145.0)):
+        b = math.radians(bearing)
+        for j in range(7):
+            d = R + 1200.0 + 1500.0 * j
+            sx, sy = cx + math.cos(b) * d, cy + math.sin(b) * d
+            out.append(A("terrace_platform", sx, sy, ROAD_Z, yaw=bearing,
+                         sxyz=(0.26, 0.46, 0.30), mat="MI_V2_Cobble",
+                         label="SW_St%d_%02d" % (si, j)))
+            for s in (1.0, -1.0):
+                # blocks TIGHT to the street: 9 m apart, so the towers close over it
+                if j % 2 == 0:
+                    bx = sx + math.cos(b + math.pi / 2) * 900.0 * s
+                    by = sy + math.sin(b + math.pi / 2) * 900.0 * s
+                    out += _sw_block(bx, by, bearing + (90.0 if s > 0 else -90.0),
+                                     si * 5 + j + int(s) + 2,
+                                     "SW_S%d_%02d_%d" % (si, j, int(s)),
+                                     scale=0.86 + 0.10 * ((j + si) % 3))
+                if j % 2 == 1 and s > 0:
+                    out.append(A("waymarker_lamp", sx + math.cos(b + math.pi / 2) * 620.0,
+                                 sy + math.sin(b + math.pi / 2) * 620.0, 0.0,
+                                 yaw=bearing, s=1.05, mat="MI_V2_GoldAged",
+                                 label="SW_St%dLamp%02d" % (si, j)))
+            if j == 3:
+                # a terrace step partway along, so the street is not a flat run
+                out.append(A("retaining_wall", sx, sy, ROAD_Z, yaw=bearing + 90.0,
+                             s=1.3, mat="MI_V2_PlazaGrey",
+                             label="SW_St%dTerrace" % si))
+                out.append(A("stairs_broad", sx + math.cos(b) * 700.0,
+                             sy + math.sin(b) * 700.0, ROAD_Z, yaw=bearing + 180.0,
+                             s=1.2, mat="MI_V2_PlazaGrey",
+                             label="SW_St%dSteps" % si))
+        # a gate closing each street where it leaves the quarter
+        gd = R + 1200.0 + 1500.0 * 7
+        gx, gy = cx + math.cos(b) * gd, cy + math.sin(b) * gd
+        for s in (1.0, -1.0):
+            out.append(A("gate_pier", gx + math.cos(b + math.pi / 2) * 780.0 * s,
+                         gy + math.sin(b + math.pi / 2) * 780.0 * s, 0.0,
+                         yaw=bearing, s=1.3, mat="MI_V2_IvoryStone",
+                         label="SW_St%dPier%d" % (si, int(s))))
+        out.append(A("gate_arch_gold", gx, gy, 0.0, yaw=bearing, s=1.3,
+                     mat="MI_V2_GoldAged", label="SW_St%dGate" % si))
+
+    # ---- THE ENCHANTED ACCENT, integrated into stone ------------------
+    # Not a mushroom field beside the city: mushrooms standing in the city's own
+    # courtyards, which is what "integrated" has to mean if it is not foliage
+    # spam with extra steps.
+    for i, (ox, oy, s) in enumerate(((-5200.0, -3800.0, 1.5),
+                                     (5600.0, -2600.0, 1.2),
+                                     (-1200.0, -6200.0, 1.35))):
+        mx, my = cx + ox, cy + oy
+        out.append(A("terrace_platform", mx, my, ROAD_Z, yaw=0.0,
+                     sxyz=(0.7, 0.7, 0.32), mat="MI_V2_PlazaCream",
+                     label="SW_Court%dFloor" % i))
+        out.append(A("mushroom_medium", mx, my, 0.0, yaw=30.0 * i, s=s,
+                     mat=("MI_V2_MushPurple", "MI_V2_MushCream",
+                          "MI_V2_MushTerracotta")[i % 3],
+                     label="SW_Court%dMush" % i))
+        out.append(A("garden_bench", mx + 700.0, my, 0.0, yaw=90.0, s=1.0,
+                     mat="MI_V2_IvoryStone", label="SW_Court%dBench" % i))
+        out.append(A("planter_box", mx - 700.0, my, 0.0, yaw=0.0, s=1.0,
+                     mat="MI_V2_PlazaCream", label="SW_Court%dPlanter" % i))
+        out.append(A("rose_bush", mx - 700.0, my, 160.0, yaw=0.0, s=0.9,
+                     mat="MI_V2_RosePink", label="SW_Court%dRose" % i))
+    return out
+
+
+SOUTHWEST_QUARTER = _band("V2_Southwest", _southwest_quarter())
+
+
 BUILD_BANDS = [FOREGROUND, COURTYARD, GARDEN, PALACE, FLANK_GROUND, FLANKS,
                REARWORLD, CAM_FOREGROUNDS, GROUND_QUILT, OUTER_WORLD, PLAZA_ORNAMENT,
                PROCESSIONAL_BORDER, HORIZON, APPROACH_SIDES, PLAZA_WALL_DRESS,
                SIGNATURE, LANDMARKS, DEPTH, COURT_DRESS, WAYSIDE,
-               SOUTH_QUARTER]
+               SOUTH_QUARTER, SOUTHWEST_QUARTER]
 
 # ---------------------------------------------------------------------------
 # NOTHING IS BUILT ON A VIEWPOINT (2026-09-03)

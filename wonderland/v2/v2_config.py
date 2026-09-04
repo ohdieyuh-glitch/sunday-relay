@@ -377,6 +377,18 @@ HERO_CAMS = [
     {'name': 'South_Skyline38', 'location': (14498.3, -38091.7, 900.0), 'rotation': (8.0, 152.0, 0.0), 'fov': 90.0, 'tags': ('South_Skyline38', 'HeroCam38')},
     {'name': 'South_Overview39', 'location': (22153.5, -42321.0, 6200.0), 'rotation': (-14.0, 138.0, 0.0), 'fov': 95.0, 'tags': ('South_Overview39', 'HeroCam39')},
     {'name': 'South_PlayerClose40', 'location': (7654.7, -26406.4, 170.0), 'rotation': (1.0, 170.0, 0.0), 'fov': 85.0, 'tags': ('South_PlayerClose40', 'HeroCam40')},
+    # ---------------------------------------------------------------------
+    # THE SOUTHWEST QUARTER, PASS 31. Seven, and they are not the southern
+    # eight repeated: this district is vertical and civic, so the cameras look
+    # UP the tower cluster and ALONG streets narrow enough to be walled, rather
+    # than down a residential street at a market.
+    {'name': 'SW_PlazaHero41', 'location': (-24503.1, -26133.3, 170.0), 'rotation': (3.0, 51.0, 0.0), 'fov': 100.0, 'tags': ('SW_PlazaHero41', 'HeroCam41')},
+    {'name': 'SW_TowerCluster42', 'location': (-21106.0, -26116.0, 170.0), 'rotation': (16.0, 79.7, 0.0), 'fov': 95.0, 'tags': ('SW_TowerCluster42', 'HeroCam42')},
+    {'name': 'SW_NarrowStreet43', 'location': (-18639.0, -31657.0, 170.0), 'rotation': (2.0, 105.0, 0.0), 'fov': 90.0, 'tags': ('SW_NarrowStreet43', 'HeroCam43')},
+    {'name': 'SW_Bridges44', 'location': (-15406.0, -23116.0, 320.0), 'rotation': (13.0, 147.6, 0.0), 'fov': 90.0, 'tags': ('SW_Bridges44', 'HeroCam44')},
+    {'name': 'SW_Colonnade45', 'location': (-22162.4, -23226.2, 170.0), 'rotation': (1.0, 145.0, 0.0), 'fov': 85.0, 'tags': ('SW_Colonnade45', 'HeroCam45')},
+    {'name': 'SW_StreetGate46', 'location': (-35105.0, -14163.7, 170.0), 'rotation': (2.0, 325.0, 0.0), 'fov': 95.0, 'tags': ('SW_StreetGate46', 'HeroCam46')},
+    {'name': 'SW_Overview47', 'location': (-4606.0, -39316.0, 7000.0), 'rotation': (-15.0, 136.8, 0.0), 'fov': 95.0, 'tags': ('SW_Overview47', 'HeroCam47')},
 ]
 #: The suite's names by index -- the filing tool and the checkpoint report use
 #: them; the capture tooling uses the "HeroCamN" tags.
@@ -405,7 +417,11 @@ CAM_SUITE = ("HeroCam0", "PlayerCam01", "PathCam02", "ReverseCam03",
              # because they were added together.
              "South_SpireCorridor33", "South_StreetHero34", "South_Market35",
              "South_FacadeRow36", "South_Arcade37", "South_Skyline38",
-             "South_Overview39", "South_PlayerClose40")
+             "South_Overview39", "South_PlayerClose40",
+             # PASS 31: the southwest civic quarter's seven.
+             "SW_PlazaHero41", "SW_TowerCluster42", "SW_NarrowStreet43",
+             "SW_Bridges44", "SW_Colonnade45", "SW_StreetGate46",
+             "SW_Overview47")
 #: HeroCam0's frozen transform (the founder benchmark) -- verify_v2_layout
 #: refuses a drift of the entry above from these values.
 HERO_CAM0_FROZEN = ((0.0, -150.0, 262.0), (-2.0, 90.0, 0.0), 100.0)
