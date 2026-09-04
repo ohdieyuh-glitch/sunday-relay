@@ -389,6 +389,21 @@ HERO_CAMS = [
     {'name': 'SW_Colonnade45', 'location': (-22162.4, -23226.2, 170.0), 'rotation': (1.0, 145.0, 0.0), 'fov': 85.0, 'tags': ('SW_Colonnade45', 'HeroCam45')},
     {'name': 'SW_StreetGate46', 'location': (-35105.0, -14163.7, 170.0), 'rotation': (2.0, 325.0, 0.0), 'fov': 95.0, 'tags': ('SW_StreetGate46', 'HeroCam46')},
     {'name': 'SW_Overview47', 'location': (-4606.0, -39316.0, 7000.0), 'rotation': (-15.0, 136.8, 0.0), 'fov': 95.0, 'tags': ('SW_Overview47', 'HeroCam47')},
+    # ---------------------------------------------------------------------
+    # PASS 32. The nine generated districts, one camera standing in each and
+    # looking along its own grid, plus one high wide shot to judge the rule
+    # this phase is really about: a city that has almost consumed the
+    # landscape. A district with no camera is a number -- that was the
+    # lesson of the southern quarter and it is not repeated here.
+    {'name': 'City_FillNE48', 'location': (12257.3, 28615.6, 170.0), 'rotation': (2.0, 18.0, 0.0), 'fov': 95.0, 'tags': ('City_FillNE48', 'HeroCam48')},
+    {'name': 'City_FillSFW49', 'location': (-7528.0, -31798.3, 170.0), 'rotation': (2.0, 351.0, 0.0), 'fov': 95.0, 'tags': ('City_FillSFW49', 'HeroCam49')},
+    {'name': 'City_FillSFE50', 'location': (13121.2, -27594.8, 170.0), 'rotation': (2.0, 6.0, 0.0), 'fov': 95.0, 'tags': ('City_FillSFE50', 'HeroCam50')},
+    {'name': 'City_FillE51', 'location': (30112.8, -3071.5, 170.0), 'rotation': (2.0, 336.0, 0.0), 'fov': 95.0, 'tags': ('City_FillE51', 'HeroCam51')},
+    {'name': 'City_FillW52', 'location': (-34295.6, -11174.1, 170.0), 'rotation': (2.0, 31.0, 0.0), 'fov': 95.0, 'tags': ('City_FillW52', 'HeroCam52')},
+    {'name': 'City_FillWE53', 'location': (-35006.8, 9296.0, 170.0), 'rotation': (2.0, 346.0, 0.0), 'fov': 95.0, 'tags': ('City_FillWE53', 'HeroCam53')},
+    {'name': 'City_FillEE54', 'location': (28149.3, 9030.0, 170.0), 'rotation': (2.0, 22.0, 0.0), 'fov': 95.0, 'tags': ('City_FillEE54', 'HeroCam54')},
+    {'name': 'City_FillEL55', 'location': (29187.3, -1696.9, 170.0), 'rotation': (2.0, 8.0, 0.0), 'fov': 95.0, 'tags': ('City_FillEL55', 'HeroCam55')},
+    {'name': 'City_WorldWide56', 'location': (26000.0, -34000.0, 14000.0), 'rotation': (-17.0, 128.0, 0.0), 'fov': 100.0, 'tags': ('City_WorldWide56', 'HeroCam56')},
 ]
 #: The suite's names by index -- the filing tool and the checkpoint report use
 #: them; the capture tooling uses the "HeroCamN" tags.
@@ -421,7 +436,10 @@ CAM_SUITE = ("HeroCam0", "PlayerCam01", "PathCam02", "ReverseCam03",
              # PASS 31: the southwest civic quarter's seven.
              "SW_PlazaHero41", "SW_TowerCluster42", "SW_NarrowStreet43",
              "SW_Bridges44", "SW_Colonnade45", "SW_StreetGate46",
-             "SW_Overview47")
+             "SW_Overview47",
+             # PASS 32: the nine generated districts and the world wide shot.
+             "City_FillNE48", "City_FillSFW49", "City_FillSFE50", "City_FillE51",
+             "City_FillW52", "City_FillWE53", "City_FillEE54", "City_FillEL55", "City_WorldWide56")
 #: HeroCam0's frozen transform (the founder benchmark) -- verify_v2_layout
 #: refuses a drift of the entry above from these values.
 HERO_CAM0_FROZEN = ((0.0, -150.0, 262.0), (-2.0, 90.0, 0.0), 100.0)
