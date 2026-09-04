@@ -3,7 +3,7 @@ import { EventEmitter } from 'node:events';
 import { Readable } from 'node:stream';
 
 import {
-  classifyUnreadableReview, extractReviewJson, runHermesReview, validateHermesReview,
+  classifyUnreadableReview, extractReviewJson, reviewStructureFacts, runHermesReview, validateHermesReview,
   type HermesConfig, type HermesOutcome, type HermesReviewShape, type ReviewPacket,
 } from './hermes-reviewer';
 
@@ -350,6 +350,25 @@ describe('an incomplete review carries the safe facts that explain its shape', (
     // Evidence, and a failed review produced none. Never the requested model
     // wearing the served model's clothes.
     expect(d.servedModel).toBeNull();
+  });
+
+  it('a VALID review counts as exactly one candidate, which is what makes two ambiguous', () => {
+    // The parser semantics the ambiguity rule rests on, pinned directly:
+    // one verdict-bearing object is a review, two is a text whose verdict
+    // cannot be known. Read through the exported facts, not inferred.
+    const one = reviewStructureFacts(APPROVED);
+    expect(one.reviewObjectCount).toBe(1);
+    expect(one.jsonParseable).toBe(true);
+    expect(one.verdictPresent).toBe(true);
+    expect(one.verdictValid).toBe(true);
+    expect(one.summaryPresent).toBe(true);
+    // `findings` and `requirementsChecked` are inside the review object, so
+    // they are never counted as candidates of their own.
+    expect(reviewStructureFacts(CHANGES).reviewObjectCount).toBe(1);
+    expect(reviewStructureFacts(`${APPROVED}\n${CHANGES}`).reviewObjectCount).toBe(2);
+    // And nothing at all is a measured zero, not an absent count.
+    expect(reviewStructureFacts('prose').reviewObjectCount).toBe(0);
+    expect(reviewStructureFacts(null).reviewObjectCount, 'no text is not a count').toBeNull();
   });
 
   it('no reviewer text of any kind reaches the record', async () => {
