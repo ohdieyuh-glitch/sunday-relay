@@ -34,6 +34,7 @@ import {
   createLiveHostedCodingAdapter,
   diffRef,
   planRef,
+  reviewStageOf,
 } from './live-workers';
 import {
   ARCHITECT_WORKER,
@@ -1401,5 +1402,38 @@ describe('a refused plan names the rule it broke', () => {
       expect(durable, `"${secret}" must not reach the durable record`).not.toContain(secret);
     }
     expect(facts.diag_validationReasonCode).toBe('objective_summary_empty');
+  });
+});
+
+/**
+ * WHICH REVIEW A FAILURE WAS, INCLUDING THE ONES A REPAIR CREATES.
+ *
+ * The first derivation read the stage from whether a diff artifact existed, and
+ * the build runs BEFORE the plan review — so every plan review was recorded as
+ * a build review. The second anchored on the end of the reviewed task id, which
+ * reads `run:…:plan` and `build-1` and then returns null for a REPAIR
+ * re-review, whose reviewed id is `repair:build-1:1:task`. A durable field that
+ * is wrong is worse than one that is absent, and a repaired run's re-review is
+ * exactly where a paid mission ends.
+ */
+describe('the review stage is read from the task id', () => {
+  it('names the ordinary plan and build reviews, in both id shapes', () => {
+    expect(reviewStageOf('plan-1:review')).toBe('plan');
+    expect(reviewStageOf('build-1:review')).toBe('build');
+    expect(reviewStageOf('run:526ca97da0e94b6223a5320a:plan:review')).toBe('plan');
+    expect(reviewStageOf('run:526ca97da0e94b6223a5320a:build:review')).toBe('build');
+  });
+
+  it('keeps the stage on a repair re-review, which is routed review:repair:build', () => {
+    expect(reviewStageOf('repair:build-1:1:task:review')).toBe('build');
+    expect(reviewStageOf('repair:plan-1:1:task:review')).toBe('plan');
+  });
+
+  it('returns null rather than guessing when it cannot be read', () => {
+    // A durable field that is wrong is worse than one that is absent.
+    expect(reviewStageOf('something:else:review')).toBeNull();
+    expect(reviewStageOf('')).toBeNull();
+    // Two kinds is not a tie to break.
+    expect(reviewStageOf('repair:plan-1:build-2:task:review')).toBeNull();
   });
 });

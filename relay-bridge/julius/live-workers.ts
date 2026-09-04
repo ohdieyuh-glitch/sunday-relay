@@ -164,11 +164,21 @@ const ARCHITECT_CHARTER = [
  */
 export function reviewStageOf(taskId: string): 'plan' | 'build' | null {
   const reviewed = taskId.endsWith(':review') ? taskId.slice(0, -':review'.length) : taskId;
-  // Production ids are `${runId}:plan` / `${runId}:build`; fixtures use
-  // `plan-1` / `build-1`. Both end in the reviewed task's own type.
-  if (/(^|[:\-])build(-\d+)?$/u.test(reviewed)) return 'build';
-  if (/(^|[:\-])plan(-\d+)?$/u.test(reviewed)) return 'plan';
-  return null;
+  /**
+   * A SEGMENT, NOT A SUFFIX. An end-anchored match reads `run:…:plan` and
+   * `build-1`, and then returns null for a REPAIR re-review — whose reviewed id
+   * is `repair:build-1:1:task`, routed as `review:repair:build`. The repair path
+   * is exercised by the live composition, so anchoring on the end silently drops
+   * the stage on exactly the reviews a repaired run depends on.
+   */
+  const kinds = new Set(
+    reviewed.split(':')
+      .map((segment) => /^(plan|build)(-\d+)?$/u.exec(segment)?.[1])
+      .filter((kind): kind is 'plan' | 'build' => kind !== undefined),
+  );
+  // One kind is the stage. None cannot be read, and both is a shape this
+  // runtime does not build — neither is a guess worth publishing.
+  return kinds.size === 1 ? [...kinds][0]! : null;
 }
 
 /**

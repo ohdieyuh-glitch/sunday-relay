@@ -90,13 +90,16 @@ describe('safe review diagnostics', () => {
     expect(JSON.stringify(safe)).not.toContain('FAKESECRET');
   });
 
-  it('a flag is true only when it is really the boolean true', () => {
-    // `'false'`, `1` and `'yes'` are all truthy-ish shapes that must not
-    // become a durable assertion that a review timed out.
+  it('a flag is a flag only when it is really a boolean', () => {
+    // `'false'`, `1` and `'yes'` are truthy-ish shapes that must not become a
+    // durable assertion about a review at all. This case originally required
+    // them to become `false`, which was the same conflation in miniature: a
+    // string is not a measurement, and `false` is a measurement.
     for (const value of ['false', 'true', 1, 0, 'yes', null, undefined]) {
-      expect(safeReviewDiagnostics({ timedOut: value })!.timedOut, String(value)).toBe(false);
+      expect(safeReviewDiagnostics({ timedOut: value })!.timedOut, String(value)).toBeNull();
     }
     expect(safeReviewDiagnostics({ timedOut: true })!.timedOut).toBe(true);
+    expect(safeReviewDiagnostics({ timedOut: false })!.timedOut).toBe(false);
   });
 
   it('null is a real answer, and zero is never invented for it', () => {
@@ -107,6 +110,38 @@ describe('safe review diagnostics', () => {
     expect(empty.outputBytesObserved).toBeNull();
     expect(empty.reviewObjectCount).toBeNull();
     expect(empty.servedModel).toBeNull();
+  });
+
+  it('a flag the other role does not have is null, not false', () => {
+    /**
+     * One allowlist serves two roles. Coercing an absent flag to `false`
+     * publishes a measurement nobody took: every reviewer failure would report
+     * `validation_passed=false`, which reads as "a plan was validated and
+     * rejected" when no plan was validated at all.
+     */
+    const reviewerShaped = safeReviewDiagnostics({
+      transport: 'local', failureShape: 'review_json_absent',
+      timedOut: false, jsonParseable: false,
+    })!;
+    expect(reviewerShaped.validationPassed, 'no architect validation happened here').toBeNull();
+    expect(reviewerShaped.timedOut, 'and a flag it DID report is still its real value').toBe(false);
+    expect(reviewerShaped.jsonParseable).toBe(false);
+
+    const planShaped = safeReviewDiagnostics({
+      transport: 'openai', stage: 'plan', validationPassed: false, jsonParseable: true,
+    })!;
+    expect(planShaped.validationPassed).toBe(false);
+    expect(planShaped.timedOut, 'a plan has no timeout flag to report').toBeNull();
+    expect(planShaped.outputTruncated).toBeNull();
+    expect(planShaped.verdictValid, 'and no verdict of any kind').toBeNull();
+  });
+
+  it('still refuses a non-boolean dressed as a flag', () => {
+    for (const value of ['false', 'true', 1, 0, 'yes']) {
+      expect(safeReviewDiagnostics({ timedOut: value })!.timedOut, String(value)).toBeNull();
+    }
+    expect(safeReviewDiagnostics({ timedOut: true })!.timedOut).toBe(true);
+    expect(safeReviewDiagnostics({ timedOut: false })!.timedOut).toBe(false);
   });
 
   it('refuses anything that is not an object at all', () => {

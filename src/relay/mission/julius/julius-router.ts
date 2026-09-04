@@ -79,7 +79,17 @@ export const safeReasonCode=(value:unknown):string|null=>typeof value==='string'
 const MODEL_TOKEN=/^[A-Za-z0-9][A-Za-z0-9._-]{0,47}$/;
 const CREDENTIAL_SHAPED=/(^(sk|xai|ghp|gho|ghu|ghs|ghr|pk|api)[-_])|bearer|authorization|private[-_ ]?key|begin [a-z ]*private/i;
 const safeToken=(value:unknown):string|null=>typeof value==='string'&&/^[a-z][a-z0-9_]{0,63}$/.test(value)?value:null;
-const safeBool=(value:unknown):boolean=>value===true;
+/**
+ * A FLAG A ROLE DOES NOT HAVE IS NULL, NOT FALSE.
+ *
+ * One allowlist serves the reviewer and the Prompt Architect, and most flags
+ * belong to one of them. Coercing an absent flag to `false` publishes a
+ * measurement nobody took: every reviewer failure would have reported
+ * `validation_passed=false`, which reads as "a plan was validated and
+ * rejected" when no plan was validated at all. `true` and `false` still mean
+ * exactly themselves, and only a genuinely boolean value produces either.
+ */
+const safeNullableBool=(value:unknown):boolean|null=>typeof value==='boolean'?value:null;
 const safeCount=(value:unknown):number|null=>typeof value==='number'&&Number.isInteger(value)&&value>=0&&value<=Number.MAX_SAFE_INTEGER?value:null;
 const safeExitCode=(value:unknown):number|null=>typeof value==='number'&&Number.isInteger(value)&&value>=-256&&value<=65535?value:null;
 const safeModel=(value:unknown):string|null=>typeof value==='string'&&MODEL_TOKEN.test(value)&&!CREDENTIAL_SHAPED.test(value)?value:null;
@@ -102,21 +112,21 @@ export const safeReviewDiagnostics=(value:unknown):JuliusSafeDiagnostics|null=>{
   provider:safeToken(v.provider),
   servedModel:safeModel(v.servedModel),
   processExitCode:safeExitCode(v.processExitCode),
-  timedOut:safeBool(v.timedOut),
+  timedOut:safeNullableBool(v.timedOut),
   outputBytesObserved:safeCount(v.outputBytesObserved),
   outputByteLimit:safeCount(v.outputByteLimit),
-  outputTruncated:safeBool(v.outputTruncated),
-  jsonDetected:safeBool(v.jsonDetected),
-  jsonParseable:safeBool(v.jsonParseable),
+  outputTruncated:safeNullableBool(v.outputTruncated),
+  jsonDetected:safeNullableBool(v.jsonDetected),
+  jsonParseable:safeNullableBool(v.jsonParseable),
   reviewObjectCount:safeCount(v.reviewObjectCount),
-  verdictPresent:safeBool(v.verdictPresent),
-  verdictValid:safeBool(v.verdictValid),
-  summaryPresent:safeBool(v.summaryPresent),
+  verdictPresent:safeNullableBool(v.verdictPresent),
+  verdictValid:safeNullableBool(v.verdictValid),
+  summaryPresent:safeNullableBool(v.summaryPresent),
   failureShape:safeToken(v.failureShape),
   /* --- Prompt Architect (plan stage). Null for the reviewer, and vice versa. */
   requestedModel:safeModel(v.requestedModel),
   responseId:safeResponseId(v.responseId),
-  validationPassed:safeBool(v.validationPassed),
+  validationPassed:safeNullableBool(v.validationPassed),
   /** A member of the closed `ArchitectPlanReasonCode` union, never validator prose. */
   validationReasonCode:safeToken(v.validationReasonCode),
   validationField:safeFieldName(v.validationField),
