@@ -7407,6 +7407,72 @@ def kit_building(x, y, yaw, seed, tag, storeys=1, tower=True, scale=1.0):
     return out
 
 
+def kit_massing(x, y, yaw, seed, tag, scale=1.0, storeys=2):
+    """A DISTANT building: mass and crown, no bays, no pilasters, no arch.
+
+    The detail bands the founder set are 0-50 m authored, 50-200 m modular,
+    200 m+ cheap. kit_building is the 0-200 m article -- twelve to sixty
+    placements each, because a facade you can walk up to needs them. At 400 m
+    none of that is resolvable and all of it is paid for, so the far band gets
+    the silhouette only: the stack, a parapet, and a crown, which is the entire
+    contribution a building makes to a skyline.
+    """
+    out = []
+    k = seed
+    for st in range(storeys):
+        out.append(A("castle_hall", x, y, st * 1000.0 * scale, yaw=yaw, s=scale,
+                     mat=KIT_WALLS[(k + st) % len(KIT_WALLS)],
+                     label="%s_M%d" % (tag, st)))
+    ztop = storeys * 1000.0 * scale
+    body = ("castle_tower_slender", "castle_tower_octagon", "castle_tower")[k % 3]
+    ts = scale * (1.2 + 0.4 * (k % 3))
+    bw = {"castle_tower_slender": 2.7, "castle_tower_octagon": 6.9,
+          "castle_tower": 5.8}[body]
+    out.append(A(body, x, y, ztop, yaw=yaw, s=ts,
+                 mat=KIT_WALLS[(k + 2) % len(KIT_WALLS)],
+                 label="%s_T" % tag))
+    out += kit_crown(x, y, ztop + _S_BODY_H[body] * ts, yaw, bw * ts, k,
+                     "%s_C" % tag)
+    return out
+
+
+def skyline_ring(r_inner_m, r_outer_m, rings, per_ring, seed, tag):
+    """The city goes on past the edge of the sampled world.
+
+    Every emptiness audit runs on a 720 x 760 m window, so "no empty ground"
+    has only ever meant no empty ground INSIDE that box. The reference board's
+    world-scale panel shows the city running to the horizon in every direction,
+    and a wide shot from inside a 360 m disc shows its edge. This fills the
+    band beyond with massing on the same kit, so the horizon is city rather
+    than the place the city stops.
+    """
+    out = []
+    for ri in range(rings):
+        r = r_inner_m + (r_outer_m - r_inner_m) * (ri / max(1.0, rings - 1.0))
+        n = int(per_ring * (r / r_inner_m))
+        for i in range(n):
+            a = (2.0 * math.pi * i / n) + 0.37 * ri + 0.11 * seed
+            # jitter, so a ring does not read as a ring
+            h = _rnd(seed, ri, i)
+            rr = (r + (h - 0.5) * (r_outer_m - r_inner_m) * 0.42) * 100.0
+            x = math.cos(a) * rr
+            y = math.sin(a) * rr
+            # keep the castle sightline clear: nothing within 12 deg of +y
+            if abs(math.degrees(math.atan2(x, y))) < 12.0 and y > 0:
+                continue
+            k = seed * 101 + ri * 13 + i
+            # SCALED AFTER MEASURING. At scale 1.5-2.9 the ring topped out at
+            # 332 m and skyline.py's dominance -- the great spire against the
+            # next distinct site -- went to 1.00x. A horizon that is TALLER
+            # than the landmark it surrounds does not read as distance, it
+            # reads as the spire having been demoted. These reach about 100 m:
+            # a city on the skyline, comfortably under the 194 m spire.
+            out += kit_massing(x, y, math.degrees(a) + 90.0 + 40.0 * h, k,
+                               "%s_R%d_%03d" % (tag, ri, i),
+                               scale=0.85 + 0.55 * h, storeys=1 + (k % 2))
+    return out
+
+
 def connect_districts(ax, ay, bx, by, seed, tag, width_m=13.0,
                       block_every_m=52.0, skip_m=9000.0):
     """A built ROAD between two districts, not a gap between them.
@@ -8150,6 +8216,12 @@ CONNECTORS = _band("V2_Connect",
     + connect_districts(0.0, 0.0, 32488.0, -4129.0, 17, "CxCityE")
     + connect_districts(0.0, 0.0, -32484.0, 8667.0, 19, "CxCityWE"))
 
+#: THE HORIZON. Four rings from 420 m to 900 m, massing only -- the 200 m+
+#: band of the founder's detail policy. The castle sightline is carved out of
+#: every ring, because the one deliberate piece of negative space in Wonderland
+#: does not get filled from behind either.
+SKYLINE_RING = _band("V2_SkyRing", skyline_ring(420.0, 900.0, 4, 26, 3, "Sky"))
+
 
 BUILD_BANDS = [FOREGROUND, COURTYARD, GARDEN, PALACE, FLANK_GROUND, FLANKS,
                REARWORLD, CAM_FOREGROUNDS, GROUND_QUILT, OUTER_WORLD, PLAZA_ORNAMENT,
@@ -8158,7 +8230,7 @@ BUILD_BANDS = [FOREGROUND, COURTYARD, GARDEN, PALACE, FLANK_GROUND, FLANKS,
                SOUTH_QUARTER, SOUTHWEST_QUARTER,
                FILL_NORTHEAST, FILL_SOUTHFLANK_W, FILL_SOUTHFLANK_E,
                FILL_EAST, FILL_WEST, FILL_WESTEDGE, FILL_EASTEDGE,
-               FILL_SOUTHEAST2, FILL_EASTLOW, CONNECTORS]
+               FILL_SOUTHEAST2, FILL_EASTLOW, CONNECTORS, SKYLINE_RING]
 
 # ---------------------------------------------------------------------------
 # NOTHING IS BUILT ON A VIEWPOINT (2026-09-03)
