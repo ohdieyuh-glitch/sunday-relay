@@ -7441,6 +7441,41 @@ def kit_facade(x, y, yaw, width_m, seed, tag, bays=None, lamp=False):
     return out
 
 
+def kit_lite_face(x, y, yaw, width_m, seed, tag, storeys=1, scale=1.0):
+    """Openings and a cornice on ONE face, cheaply.
+
+    kit_facade dresses a single face -- the one at yaw-90 -- so a building
+    turned any other way presented a bare wall to the street. In a grid every
+    building is seen from more than one side, which is why HeroCam48 still had
+    a large blank elevation after the facade and glazing passes: the camera was
+    looking at a side nobody had dressed.
+
+    This is three pieces per storey against kit_facade's dozen, so all three
+    remaining faces can be covered for less than one more full facade.
+    """
+    out = []
+    k = seed
+    fwd = math.radians(yaw - 90.0)
+    along = math.radians(yaw)
+    n = max(2, int(width_m / 5.6))
+    for st in range(storeys):
+        z = st * 1000.0 * scale
+        for i in range(n):
+            off = (-width_m * 0.5 + (width_m / n) * (i + 0.5)) * 100.0
+            wx = x + math.cos(along) * off + math.cos(fwd) * 396.0 * scale
+            wy = y + math.sin(along) * off + math.sin(fwd) * 396.0 * scale
+            out.append(A("glass_screen_panes", wx, wy, 330.0 + z, yaw=yaw,
+                         s=0.20 * scale,
+                         mat=KIT_GLASS[(k + st + i) % len(KIT_GLASS)],
+                         label="%s_LW%d_%d" % (tag, st, i)))
+    out.append(A("balustrade", x + math.cos(fwd) * 406.0 * scale,
+                 y + math.sin(fwd) * 406.0 * scale,
+                 700.0 + (storeys - 1) * 1000.0 * scale, yaw=yaw,
+                 s=width_m / 3.5, mat="MI_V2_GoldAged",
+                 label="%s_LC" % tag))
+    return out
+
+
 def kit_building(x, y, yaw, seed, tag, storeys=1, tower=True, scale=1.0):
     """base -> body -> crown, the order the reference reads in.
 
@@ -7457,6 +7492,13 @@ def kit_building(x, y, yaw, seed, tag, storeys=1, tower=True, scale=1.0):
                      label="%s_Body%d" % (tag, st)))
         out += kit_facade(x, y, yaw, 12.6 * scale, k + st, "%s_F%d" % (tag, st),
                           lamp=(st == 0 and k % 3 == 0))
+        # THE OTHER THREE SIDES. Every building is seen from more than one
+        # angle in a grid; dressing one face left the rest as the blank walls
+        # the founder keeps seeing.
+        for face in (90.0, 180.0, 270.0):
+            out += kit_lite_face(x, y, yaw + face, 12.6 * scale, k + st + int(face),
+                                 "%s_S%d_%d" % (tag, st, int(face)),
+                                 storeys=1, scale=scale)
         if st:
             out.append(A("balcony_ring", x, y, z, yaw=yaw, s=scale * 0.68,
                          mat="MI_V2_GoldAged", label="%s_Bal%d" % (tag, st)))
@@ -7501,20 +7543,10 @@ def kit_massing(x, y, yaw, seed, tag, scale=1.0, storeys=2):
     # that judged the district was looking at the massed pair. Windows and a
     # cornice cost three pieces per storey against kit_facade's dozen, and a
     # wall with openings in it is not a blank wall.
-    fwd_m = math.radians(yaw - 90.0)
-    along_m = math.radians(yaw)
-    for st in range(storeys):
-        for wi in (-1, 1):
-            wx = x + math.cos(along_m) * 300.0 * wi + math.cos(fwd_m) * 400.0
-            wy = y + math.sin(along_m) * 300.0 * wi + math.sin(fwd_m) * 400.0
-            out.append(A("glass_screen_panes", wx, wy, 330.0 + st * 1000.0 * scale,
-                         yaw=yaw, s=0.20 * scale,
-                         mat=KIT_GLASS[(k + st + wi) % len(KIT_GLASS)],
-                         label="%s_LiteWin%d_%d" % (tag, st, wi)))
-    out.append(A("balustrade", x + math.cos(fwd_m) * 410.0,
-                 y + math.sin(fwd_m) * 410.0, 700.0 + (storeys - 1) * 1000.0 * scale,
-                 yaw=yaw, s=3.4 * scale, mat="MI_V2_GoldAged",
-                 label="%s_LiteCornice" % tag))
+    for face in (0.0, 90.0, 180.0, 270.0):
+        out += kit_lite_face(x, y, yaw + face, 12.0 * scale, k + int(face),
+                             "%s_F%d" % (tag, int(face)),
+                             storeys=storeys, scale=scale)
 
     ztop = storeys * 1000.0 * scale
     body = ("castle_tower_slender", "castle_tower_octagon", "castle_tower")[k % 3]
