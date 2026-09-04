@@ -7297,6 +7297,16 @@ KIT_ROOFS = ("MI_V2_RoofRose", "MI_V2_RoofPink", "MI_V2_RoofRose",
 #: quarter of every wall in the city. Variation within a palette was the right
 #: idea; the palette had drifted off the board, which calls for cream and ivory
 #: marble with blush and shade as the accents.
+#: WINDOWS ARE MOSTLY DARK. The first glazed pass gave every pane a saturated
+#: GlassTeal / Amber / Rose / Violet, and at street distance a grid of bright
+#: colour reads as tiles pasted on a wall rather than as glazing. Real windows
+#: are dark holes with a tint in them, so two thirds are a dark neutral and the
+#: colour is an accent -- which is also how the reference board's facades read:
+#: pale stone, dark openings, colour on the ROOFS.
+KIT_GLASS = ("MI_V2_MarbleShade", "MI_V2_MarbleShade", "MI_V2_GlassTeal",
+             "MI_V2_MarbleShade", "MI_V2_MarbleShade", "MI_V2_GlassAmber",
+             "MI_V2_MarbleShade", "MI_V2_GlassRose")
+
 KIT_WALLS = ("MI_V2_MarblePale", "MI_V2_MarbleBlush", "MI_V2_MarblePale",
              "MI_V2_MarbleCool", "MI_V2_Ceramic", "MI_V2_MarblePale",
              "MI_V2_MarbleShade", "MI_V2_MarbleBlush")
@@ -7380,8 +7390,7 @@ def kit_facade(x, y, yaw, width_m, seed, tag, bays=None, lamp=False):
         wy = y + math.sin(along) * off + math.sin(fwd) * (depth - 70.0)
         out.append(A("glass_screen_panes", wx, wy, 330.0, yaw=yaw,
                      s=0.22 * (step / 5.2),
-                     mat=("MI_V2_GlassTeal", "MI_V2_GlassAmber",
-                          "MI_V2_GlassRose", "MI_V2_GlassViolet")[(k + i) % 4],
+                     mat=KIT_GLASS[(k + i) % len(KIT_GLASS)],
                      label="%s_Win%d" % (tag, i)))
         # an arched head over it -- garden_arch_stone is 8.2 m, so 0.34 is a
         # 2.8 m arch, which is the width of the casement below it
@@ -7500,8 +7509,7 @@ def kit_massing(x, y, yaw, seed, tag, scale=1.0, storeys=2):
             wy = y + math.sin(along_m) * 300.0 * wi + math.sin(fwd_m) * 400.0
             out.append(A("glass_screen_panes", wx, wy, 330.0 + st * 1000.0 * scale,
                          yaw=yaw, s=0.20 * scale,
-                         mat=("MI_V2_GlassTeal", "MI_V2_GlassAmber",
-                              "MI_V2_GlassRose")[(k + st + wi) % 3],
+                         mat=KIT_GLASS[(k + st + wi) % len(KIT_GLASS)],
                          label="%s_LiteWin%d_%d" % (tag, st, wi)))
     out.append(A("balustrade", x + math.cos(fwd_m) * 410.0,
                  y + math.sin(fwd_m) * 410.0, 700.0 + (storeys - 1) * 1000.0 * scale,
