@@ -7297,9 +7297,9 @@ KIT_ROOFS = ("MI_V2_RoofRose", "MI_V2_RoofPink", "MI_V2_RoofRose",
 #: quarter of every wall in the city. Variation within a palette was the right
 #: idea; the palette had drifted off the board, which calls for cream and ivory
 #: marble with blush and shade as the accents.
-KIT_WALLS = ("MI_V2_IvoryStone", "MI_V2_PlazaCream", "MI_V2_IvoryStone",
-             "MI_V2_PathPale", "MI_V2_PlazaCream", "MI_V2_IvoryStone",
-             "MI_V2_PlazaShade", "MI_V2_Ceramic")
+KIT_WALLS = ("MI_V2_MarblePale", "MI_V2_MarbleBlush", "MI_V2_MarblePale",
+             "MI_V2_MarbleCool", "MI_V2_Ceramic", "MI_V2_MarblePale",
+             "MI_V2_MarbleShade", "MI_V2_MarbleBlush")
 
 
 def kit_crown(x, y, z, yaw, width_m, seed, tag, mat=None):
@@ -7486,6 +7486,28 @@ def kit_massing(x, y, yaw, seed, tag, scale=1.0, storeys=2):
         out.append(A("castle_hall", x, y, st * 1000.0 * scale, yaw=yaw, s=scale,
                      mat=KIT_WALLS[(k + st) % len(KIT_WALLS)],
                      label="%s_M%d" % (tag, st)))
+    # A LITE FACADE, BECAUSE HALF THE STREET FRONTAGES WERE BLANK. The
+    # performance repair made two of every four buildings kit_massing, chosen
+    # by index -- and in a grid all four faces front a street, so the camera
+    # that judged the district was looking at the massed pair. Windows and a
+    # cornice cost three pieces per storey against kit_facade's dozen, and a
+    # wall with openings in it is not a blank wall.
+    fwd_m = math.radians(yaw - 90.0)
+    along_m = math.radians(yaw)
+    for st in range(storeys):
+        for wi in (-1, 1):
+            wx = x + math.cos(along_m) * 300.0 * wi + math.cos(fwd_m) * 400.0
+            wy = y + math.sin(along_m) * 300.0 * wi + math.sin(fwd_m) * 400.0
+            out.append(A("glass_screen_panes", wx, wy, 330.0 + st * 1000.0 * scale,
+                         yaw=yaw, s=0.20 * scale,
+                         mat=("MI_V2_GlassTeal", "MI_V2_GlassAmber",
+                              "MI_V2_GlassRose")[(k + st + wi) % 3],
+                         label="%s_LiteWin%d_%d" % (tag, st, wi)))
+    out.append(A("balustrade", x + math.cos(fwd_m) * 410.0,
+                 y + math.sin(fwd_m) * 410.0, 700.0 + (storeys - 1) * 1000.0 * scale,
+                 yaw=yaw, s=3.4 * scale, mat="MI_V2_GoldAged",
+                 label="%s_LiteCornice" % tag))
+
     ztop = storeys * 1000.0 * scale
     body = ("castle_tower_slender", "castle_tower_octagon", "castle_tower")[k % 3]
     ts = scale * (1.2 + 0.4 * (k % 3))

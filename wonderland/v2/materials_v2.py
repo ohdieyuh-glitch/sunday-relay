@@ -39,7 +39,32 @@ INSTANCES = {
     # The four tints below span 0.24..0.56 where the old three spanned
     # 0.54..0.72, and the light budget (v2_config PASS 08) supplies the
     # shading that the albedo cannot.
-    "MI_V2_IvoryStone": ("plaster", (0.56, 0.51, 0.43), 0.0, 0.58, 0.50, 0.32, None, 0.0),
+    # THE MATERIAL NAMED IVORY WAS NOT IVORY. (0.56, 0.51, 0.43) is R-B = 0.13,
+    # a mid beige, and it is the base stone of Golden Arrival and every
+    # hand-authored district -- 3,422 walls. That single value is why the whole
+    # city rendered sandy rather than pale marble, and it was trusted by its
+    # name for the length of the project.
+    #
+    # LUMINANCE IS PRESERVED, which is the part that matters. The comment above
+    # records that these tints were deliberately dropped so the light budget
+    # could supply the shading; 0.5164 -> 0.5223 is inside the noise of that
+    # decision. Only the cast changes: R-B 0.13 -> 0.02.
+    "MI_V2_IvoryStone": ("plaster", (0.53, 0.52, 0.51), 0.0, 0.58, 0.50, 0.32, None, 0.0),
+    # NEUTRAL MARBLES, ADDED 2026-09-04 AT THE SAME LUMINANCE ON PURPOSE.
+    #
+    # The street render read SANDY and the cause is right here: the material
+    # NAMED ivory is (0.56, 0.51, 0.43), R-B = 0.13, which is a mid beige. Every
+    # stone in the table shares that warm cast, so a whole city of pale marble
+    # rendered tan. The name was trusted and the value never read.
+    #
+    # The fix is NOT to brighten. The comment above records that these tints
+    # were deliberately dropped to 0.24..0.56 because the light budget supplies
+    # the shading the albedo cannot, and raising them would undo that pass. The
+    # defect is HUE, so these sit at the same luminance with R-B near zero.
+    "MI_V2_MarblePale":  ("plaster", (0.55, 0.54, 0.52), 0.0, 0.58, 0.50, 0.32, None, 0.0),
+    "MI_V2_MarbleBlush": ("plaster", (0.56, 0.52, 0.52), 0.0, 0.60, 0.50, 0.32, None, 0.0),
+    "MI_V2_MarbleCool":  ("plaster", (0.50, 0.50, 0.52), 0.0, 0.56, 0.50, 0.32, None, 0.0),
+    "MI_V2_MarbleShade": ("plaster", (0.40, 0.40, 0.42), 0.0, 0.62, 0.50, 0.32, None, 0.0),
     "MI_V2_Stone":      ("ashlar",  (0.44, 0.40, 0.34), 0.0, 0.82, 0.80, 0.30, None, 0.0),
     "MI_V2_PlazaCream": ("plaza",   (0.50, 0.47, 0.40), 0.0, 0.74, 0.85, 0.30, None, 0.0),
     "MI_V2_PlazaGrey":  ("plaza",   (0.40, 0.39, 0.35), 0.0, 0.76, 0.85, 0.30, None, 0.0),
