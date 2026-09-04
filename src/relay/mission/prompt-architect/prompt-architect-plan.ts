@@ -16,9 +16,49 @@ import type {
  *     Generated text cannot widen file scope or grant a tool.
  */
 
+/**
+ * WHY A PLAN WAS REFUSED, as a machine token.
+ *
+ * Paid attempt #3 (run 33897565981) bought a real GPT-5.6 Sol answer that
+ * parsed as JSON and then failed this validator — and the durable record held
+ * `plan_validation_failed` and nothing else, because the coordinator persists
+ * the code, the retryable flag and the failure CLASS, never the message. So
+ * the artifact built to explain a paid failure could not say WHICH rule was
+ * broken, and a fourth paid run was the only way to learn more. That is the
+ * same opacity the reviewer shapes were added to close, on the other role.
+ *
+ * CLOSED VOCABULARY. These are tokens this repository chose, not validator
+ * prose, so nothing a model wrote can travel inside one.
+ */
+export type ArchitectPlanReasonCode =
+  | 'plan_object_invalid'
+  | 'objective_summary_empty'
+  | 'required_array_invalid'
+  | 'required_string_array_invalid'
+  | 'decision_object_invalid'
+  | 'decision_statement_empty'
+  | 'decision_rationale_empty'
+  | 'decision_pre_accepted'
+  | 'assumption_statement_empty'
+  | 'handoff_missing'
+  | 'handoff_objective_empty'
+  | 'handoff_bounded_task_empty'
+  | 'handoff_array_invalid'
+  | 'handoff_allowed_scope_empty'
+  | 'plan_false_work_claim';
+
 export type PlanValidation =
   | { readonly ok: true; readonly plan: ArchitectPlan }
-  | { readonly ok: false; readonly reason: string };
+  | {
+    readonly ok: false;
+    readonly reason: string;
+    readonly reasonCode: ArchitectPlanReasonCode;
+    /**
+     * The field the rule was about, when one rule covers many fields. Always a
+     * literal from the lists below — never text a model produced.
+     */
+    readonly reasonField?: string;
+  };
 
 const isStringArray = (v: unknown): v is string[] =>
   Array.isArray(v) && v.every((x) => typeof x === 'string');
@@ -32,68 +72,76 @@ const nonEmptyString = (v: unknown): v is string => typeof v === 'string' && v.t
  */
 export function validateArchitectPlan(raw: unknown): PlanValidation {
   if (raw === null || typeof raw !== 'object') {
-    return { ok: false, reason: 'structured output is not an object' };
+    return { ok: false, reason: 'structured output is not an object', reasonCode: 'plan_object_invalid' };
   }
   const v = raw as Record<string, unknown>;
 
   if (!nonEmptyString(v.objectiveSummary)) {
-    return { ok: false, reason: 'objectiveSummary is missing or empty' };
+    return { ok: false, reason: 'objectiveSummary is missing or empty', reasonCode: 'objective_summary_empty' };
   }
   for (const key of ['assumptions', 'unresolvedQuestions', 'requirements',
     'architectureDecisions', 'implementationSteps', 'risks']) {
-    if (!Array.isArray(v[key])) return { ok: false, reason: `${key} must be an array` };
+    if (!Array.isArray(v[key])) return { ok: false, reason: `${key} must be an array`, reasonCode: 'required_array_invalid', reasonField: key };
   }
   for (const key of ['acceptanceCriteria', 'testPlan', 'prohibitedActions',
     'proposedContractAmendments', 'contextRefs']) {
-    if (!isStringArray(v[key])) return { ok: false, reason: `${key} must be an array of strings` };
+    if (!isStringArray(v[key])) return { ok: false, reason: `${key} must be an array of strings`, reasonCode: 'required_string_array_invalid', reasonField: key };
   }
 
   // Every proposed decision must arrive UNACCEPTED. A model claiming its own
   // decision is accepted is exactly the untruth this gate exists to stop.
   for (const decision of v.architectureDecisions as unknown[]) {
     if (decision === null || typeof decision !== 'object') {
-      return { ok: false, reason: 'architectureDecisions contains a non-object' };
+      return { ok: false, reason: 'architectureDecisions contains a non-object', reasonCode: 'decision_object_invalid' };
     }
     const d = decision as Record<string, unknown>;
-    if (!nonEmptyString(d.decision) || !nonEmptyString(d.rationale)) {
-      return { ok: false, reason: 'an architecture decision is missing its statement or rationale' };
+    // Split for the CODE only: the message is unchanged, and each half now
+    // names which of the two was missing.
+    if (!nonEmptyString(d.decision)) {
+      return { ok: false, reason: 'an architecture decision is missing its statement or rationale', reasonCode: 'decision_statement_empty' };
+    }
+    if (!nonEmptyString(d.rationale)) {
+      return { ok: false, reason: 'an architecture decision is missing its statement or rationale', reasonCode: 'decision_rationale_empty' };
     }
     if (d.accepted === true) {
-      return { ok: false, reason: 'a proposed decision may not arrive pre-accepted' };
+      return { ok: false, reason: 'a proposed decision may not arrive pre-accepted', reasonCode: 'decision_pre_accepted' };
     }
   }
 
   for (const assumption of v.assumptions as unknown[]) {
     const a = assumption as Record<string, unknown>;
     if (a === null || typeof a !== 'object' || !nonEmptyString(a.statement)) {
-      return { ok: false, reason: 'an assumption is missing its statement' };
+      return { ok: false, reason: 'an assumption is missing its statement', reasonCode: 'assumption_statement_empty' };
     }
   }
 
   const handoff = v.handoff;
   if (handoff === null || typeof handoff !== 'object') {
-    return { ok: false, reason: 'handoff is missing' };
+    return { ok: false, reason: 'handoff is missing', reasonCode: 'handoff_missing' };
   }
   const h = handoff as Record<string, unknown>;
-  if (!nonEmptyString(h.objective) || !nonEmptyString(h.boundedTask)) {
-    return { ok: false, reason: 'handoff is missing its objective or bounded task' };
+  if (!nonEmptyString(h.objective)) {
+    return { ok: false, reason: 'handoff is missing its objective or bounded task', reasonCode: 'handoff_objective_empty' };
+  }
+  if (!nonEmptyString(h.boundedTask)) {
+    return { ok: false, reason: 'handoff is missing its objective or bounded task', reasonCode: 'handoff_bounded_task_empty' };
   }
   for (const key of ['acceptanceCriteria', 'requiredTests', 'allowedFileScope',
     'prohibitedActions', 'grantedTools', 'expectedEvidence']) {
     if (!isStringArray(h[key])) {
-      return { ok: false, reason: `handoff.${key} must be an array of strings` };
+      return { ok: false, reason: `handoff.${key} must be an array of strings`, reasonCode: 'handoff_array_invalid', reasonField: `handoff.${key}` };
     }
   }
   if ((h.allowedFileScope as string[]).length === 0) {
     // An unbounded handoff is not a bounded handoff.
-    return { ok: false, reason: 'handoff.allowedFileScope must name at least one path' };
+    return { ok: false, reason: 'handoff.allowedFileScope must name at least one path', reasonCode: 'handoff_allowed_scope_empty' };
   }
 
   // No field may claim work already happened.
   const serialized = JSON.stringify(v).toLowerCase();
   for (const claim of ['files were edited', 'tests were run', 'i ran the tests', 'i edited']) {
     if (serialized.includes(claim)) {
-      return { ok: false, reason: `plan claims work that did not happen: "${claim}"` };
+      return { ok: false, reason: `plan claims work that did not happen: "${claim}"`, reasonCode: 'plan_false_work_claim' };
     }
   }
 

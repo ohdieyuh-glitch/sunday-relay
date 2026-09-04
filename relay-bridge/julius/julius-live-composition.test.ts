@@ -548,7 +548,31 @@ describe('a full mission drive with Julius in control', () => {
     expect(outcome.state, 'no verdict, no completion').toBe('FAILED');
     expect(memory.taskRow('plan-1:review')?.state).toBe('FAILED');
     const failures = memory.events().filter((event) => event.type === 'task.failed');
-    expect(failures.at(-1)?.facts.failureClass, 'and the shape names why').toBe('review_json_absent');
+    const factsFor = (taskId: string) =>
+      failures.find((event) => event.taskId === taskId)!.facts as Record<string, unknown>;
+    const planFacts = factsFor('plan-1:review');
+    expect(planFacts.failureClass, 'and the shape names why').toBe('review_json_absent');
+    /**
+     * AND THE FACTS SURVIVE THE LEDGER, which is the half a unit test on the
+     * adapter cannot see. Facts are flat scalars by contract and the runtime
+     * coerces anything else with `String(value)`, so the first version of this
+     * telemetry reached the durable row as `[object Object]` and every column
+     * the artifact reads out of it was null — present in tests, destroyed on
+     * the only path that spends money.
+     */
+    expect(planFacts.diag_transport).toBe('local');
+    expect(planFacts.diag_failureShape).toBe('review_json_absent');
+    expect(planFacts.diag_jsonParseable).toBe(false);
+    expect(JSON.stringify(planFacts), 'no fact may be a stringified object').not.toContain('[object Object]');
+    /**
+     * AND EACH REVIEW NAMES ITS OWN STAGE. Both reviews get the same unreadable
+     * answer here, so both fail — which is exactly the case that caught the
+     * first derivation: it read the stage from whether a diff artifact existed,
+     * and the build runs BEFORE the plan review, so every plan review was
+     * recorded as a build review.
+     */
+    expect(planFacts.diag_stage, 'the plan review is a plan review').toBe('plan');
+    expect(factsFor('build-1:review').diag_stage, 'and the build review is not').toBe('build');
   });
 
   it('CASE K: every task in the live graph reaches its first dispatch as attempt 1', async () => {
@@ -1189,7 +1213,7 @@ describe('a paid reviewer failure can be diagnosed from the record alone', () =>
     expect(failure.code).toBe('WORKER_EXECUTION_FAILURE');
     expect(failure.retryable).toBe(false);
     // WHERE — the reviewer, on the build review, over the local transport.
-    expect(failure.diagnostics?.reviewStage, 'this review carried a diff').toBe('build');
+    expect(failure.diagnostics?.stage, 'this review carried a diff').toBe('build');
     expect(failure.diagnostics?.transport).toBe('local');
     expect(failure.diagnostics?.provider).toBe('xai');
     // THE NUMBER THAT WAS MISSING. Without it `review_process_exit` is a class
@@ -1265,5 +1289,117 @@ describe('a paid reviewer failure can be diagnosed from the record alone', () =>
     const decisions = await memory.decisionsForRun('run-live', 'prj-live');
     expect(decisions.length).toBeGreaterThan(0);
     expect(decisions.every((decision) => decision.action === 'ACCEPT')).toBe(true);
+  });
+});
+
+
+/**
+ * PAID ATTEMPT #3, REPLAYED PROVIDER-FREE.
+ *
+ * Run 33897565981 bought a real GPT-5.6 Sol plan that parsed and then failed
+ * `validateArchitectPlan`. The durable record said `plan_validation_failed` and
+ * could not say WHICH of fifteen rules refused it, so a fourth paid run was the
+ * only way to find out. These drive the REAL architect adapter, the REAL JSON
+ * parse and the REAL validator over a fake provider outcome, and read the
+ * diagnostics the coordinator now persists.
+ */
+describe('a refused plan names the rule it broke', () => {
+  const BASE = {
+    objectiveSummary: 'Implement the mission fixture change.',
+    assumptions: [{ id: 'A1', statement: 'The fixture exists.', confidence: 'medium' }],
+    unresolvedQuestions: [],
+    requirements: [{ id: 'R1', statement: 'It must pass.', rationale: 'The contract says so.' }],
+    architectureDecisions: [{ id: 'D1', decision: 'Edit in place.', rationale: 'Smallest change.', alternativesConsidered: [], accepted: false }],
+    implementationSteps: [{ order: 1, description: 'Edit the fixture.', filesTouched: ['fixtures/a.ts'] }],
+    acceptanceCriteria: ['AC-1'], testPlan: ['npm run mission-test'],
+    risks: [], prohibitedActions: [], proposedContractAmendments: [], contextRefs: [],
+    handoff: {
+      objective: 'Implement the fixture change.',
+      boundedTask: 'Edit exactly the fixture files and make the test pass.',
+      acceptanceCriteria: ['AC-1'], requiredTests: ['npm run mission-test'],
+      allowedFileScope: ['fixtures/live-validation/'], prohibitedActions: [],
+      grantedTools: [], expectedEvidence: ['TEST'],
+      missionContractRef: 'contract-1', environmentRef: null,
+    },
+  };
+  const withPlan = (change: (p: typeof BASE) => void) => {
+    const plan = JSON.parse(JSON.stringify(BASE)) as typeof BASE;
+    change(plan);
+    return async (): Promise<GptRunOutcome> => ({
+      ok: true, status: 'completed', outputText: JSON.stringify(plan),
+      actualModel: 'gpt-5.6-sol-2026-08-01', responseId: 'resp_paid3',
+      usage: { inputTokens: 1, cachedInputTokens: 0, outputTokens: 1, reasoningTokens: 0, totalTokens: 2 },
+    } as GptRunOutcome);
+  };
+  const planFailure = async (change: (p: typeof BASE) => void) => {
+    const driven = await driveLiveMission(['approved'], undefined, withPlan(change));
+    const failed = driven.memory.events().filter((event) => event.type === 'task.failed').at(-1)!;
+    return { driven, facts: failed.facts as Record<string, unknown> };
+  };
+
+  it('a VALID plan still succeeds and stores its artifact, and the mission completes', async () => {
+    const { memory, outcome } = await driveLiveMission(['approved'], undefined, withPlan(() => { /* unchanged */ }));
+    expect(memory.taskRow('plan-1')?.state, 'the plan task succeeded').toBe('SUCCEEDED');
+    expect(outcome.state, 'and the whole rig still reaches COMPLETED').toBe('COMPLETED');
+    const decisions = await memory.decisionsForRun('run-live', 'prj-live');
+    expect(decisions.every((decision) => decision.action === 'ACCEPT')).toBe(true);
+  });
+
+  it('every refusal names its rule, leaves the build blocked, and fabricates no evidence', async () => {
+    const cases: readonly [string, (p: typeof BASE) => void][] = [
+      ['objective_summary_empty', (p) => { p.objectiveSummary = ''; }],
+      ['assumption_statement_empty', (p) => { p.assumptions[0]!.statement = ''; }],
+      ['decision_statement_empty', (p) => { p.architectureDecisions[0]!.decision = ''; }],
+      ['decision_rationale_empty', (p) => { p.architectureDecisions[0]!.rationale = ''; }],
+      ['decision_pre_accepted', (p) => { (p.architectureDecisions[0] as { accepted: boolean }).accepted = true; }],
+      ['handoff_objective_empty', (p) => { p.handoff.objective = ''; }],
+      ['handoff_bounded_task_empty', (p) => { p.handoff.boundedTask = ''; }],
+      ['handoff_allowed_scope_empty', (p) => { p.handoff.allowedFileScope = []; }],
+      ['plan_false_work_claim', (p) => { p.objectiveSummary = 'Done — files were edited already.'; }],
+      ['required_string_array_invalid', (p) => { (p as { testPlan: unknown }).testPlan = [1]; }],
+    ];
+    for (const [expected, change] of cases) {
+      const { driven, facts } = await planFailure(change);
+      expect(facts.failureClass, expected).toBe('plan_validation_failed');
+      // THE FACT PAID ATTEMPT #3 DID NOT HAVE — read through the REAL pipeline
+      // ledger, which flattens facts to scalars. Asserting a nested object here
+      // is what proved the first version of this telemetry never survived.
+      expect(facts.diag_validationReasonCode, `${expected}: the rule must be named`).toBe(expected);
+      expect(facts.diag_stage).toBe('plan');
+      expect(facts.diag_jsonParseable, 'it parsed; it did not validate').toBe(true);
+      expect(facts.diag_validationPassed).toBe(false);
+      expect(facts.diag_servedModel, 'the model the provider said answered').toBe('gpt-5.6-sol-2026-08-01');
+      expect(facts.diag_outputBytesObserved as number).toBeGreaterThan(0);
+      expect(JSON.stringify(facts), 'no fact may be a stringified object').not.toContain('[object Object]');
+      // The mission stops, and nothing downstream is invented.
+      expect(driven.memory.taskRow('plan-1')?.state, expected).toBe('FAILED');
+      expect(driven.memory.taskRow('build-1')?.state, 'the build never runs on a refused plan').not.toBe('SUCCEEDED');
+      expect(await driven.memory.decisionsForRun('run-live', 'prj-live'), 'no verification decision').toHaveLength(0);
+    }
+  });
+
+  it('a plan that did not even parse is a different repair, and says so', async () => {
+    const driven = await driveLiveMission(['approved'], undefined,
+      async () => ({ ok: true, status: 'completed', outputText: 'not json at all',
+        actualModel: 'gpt-5.6-sol', responseId: 'resp_x',
+        usage: { inputTokens: 1, cachedInputTokens: 0, outputTokens: 1, reasoningTokens: 0, totalTokens: 2 } } as GptRunOutcome));
+    const facts = driven.memory.events().filter((event) => event.type === 'task.failed').at(-1)!.facts as Record<string, unknown>;
+    expect(facts.failureClass).toBe('unparseable_plan_json');
+    expect(facts.diag_jsonParseable).toBe(false);
+    // No validation happened, so no rule is named — null, not a guess.
+    expect(facts.diag_validationReasonCode).toBeNull();
+  });
+
+  it('the plan itself never reaches the durable record', async () => {
+    const SECRET = 'sk-live-FAKESECRET123456789';
+    const { facts } = await planFailure((p) => {
+      p.objectiveSummary = '';
+      p.handoff.boundedTask = `Rotate ${SECRET} and Authorization: Bearer FAKESECRET123456789`;
+    });
+    const durable = JSON.stringify(facts);
+    for (const secret of [SECRET, 'FAKESECRET123456789', 'Authorization', 'Rotate']) {
+      expect(durable, `"${secret}" must not reach the durable record`).not.toContain(secret);
+    }
+    expect(facts.diag_validationReasonCode).toBe('objective_summary_empty');
   });
 });

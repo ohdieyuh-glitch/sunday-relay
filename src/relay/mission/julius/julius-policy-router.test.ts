@@ -28,7 +28,7 @@ describe('safe review diagnostics', () => {
     prompt: 'the whole review prompt',
     authorization: 'Bearer FAKESECRET123456789',
     // And the legitimate ones, so the record is still useful.
-    transport: 'local', reviewStage: 'build', provider: 'xai',
+    transport: 'local', stage: 'build', provider: 'xai',
     processExitCode: 137, timedOut: false, outputBytesObserved: 1234,
     outputByteLimit: 524288, outputTruncated: true, jsonDetected: true,
     jsonParseable: false, reviewObjectCount: 2, verdictPresent: true,
@@ -38,7 +38,7 @@ describe('safe review diagnostics', () => {
   it('keeps every allowlisted structural fact', () => {
     const safe = safeReviewDiagnostics(HOSTILE)!;
     expect(safe.transport).toBe('local');
-    expect(safe.reviewStage).toBe('build');
+    expect(safe.stage).toBe('build');
     expect(safe.provider).toBe('xai');
     expect(safe.processExitCode).toBe(137);
     expect(safe.outputBytesObserved).toBe(1234);
@@ -78,7 +78,7 @@ describe('safe review diagnostics', () => {
       provider: 'Authorization: Bearer x',
       failureShape: 'REVIEW_JSON_ABSENT',
       transport: 'smtp',
-      reviewStage: 'deploy',
+      stage: 'deploy',
     })!;
     expect(safe.processExitCode).toBeNull();
     expect(safe.outputBytesObserved, 'a negative byte count is not a measurement').toBeNull();
@@ -86,7 +86,7 @@ describe('safe review diagnostics', () => {
     expect(safe.provider).toBeNull();
     expect(safe.failureShape, 'the narrow alphabet refuses upper case').toBeNull();
     expect(safe.transport, 'a closed vocabulary').toBeNull();
-    expect(safe.reviewStage).toBeNull();
+    expect(safe.stage).toBeNull();
     expect(JSON.stringify(safe)).not.toContain('FAKESECRET');
   });
 
