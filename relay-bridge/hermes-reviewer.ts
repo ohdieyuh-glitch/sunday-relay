@@ -61,7 +61,7 @@ export type HermesOutcome =
    */
   | { kind: 'reviewed'; result: HermesReviewResult; startedAt: string; completedAt: string; requestedModel: string | null; servedModel: string | null; provider: string | null }
   | { kind: 'launch_failed'; safeMessage: string }
-  | { kind: 'review_incomplete'; safeMessage: string; shape: HermesReviewShape; startedAt: string; completedAt: string };
+  | { kind: 'review_incomplete'; safeMessage: string; shape: HermesReviewShape; diagnostics: HermesReviewDiagnostics; startedAt: string; completedAt: string };
 
 /**
  * WHY A REVIEW WAS UNREADABLE, as a machine token.
@@ -120,6 +120,137 @@ export type HermesReviewShape =
    * breaking, and named for what it would mean.
    */
   | 'review_classifier_disagreement';
+
+/**
+ * THE SAFE CORROBORATING FACTS BESIDE THE SHAPE.
+ *
+ * The shape says WHICH boundary failed. It cannot say the exit code Hermes
+ * returned, how many bytes arrived against the ceiling, or how many
+ * verdict-bearing objects made a text ambiguous — and those are the facts an
+ * operator needs to debug the class without buying a second paid run.
+ *
+ * EVERY FIELD IS STRUCTURAL. Numbers, booleans, and tokens this runtime chose
+ * itself. No reviewer text, no summary, no diff, no prompt, no provider body,
+ * no header. `null` is a real answer everywhere it appears and always means
+ * "not known here", never zero — a reviewer that never started has no exit
+ * code, and reporting `0` would say it exited cleanly.
+ *
+ * The domain narrows this again on the way to the durable record
+ * (`safeReviewDiagnostics`), because redaction that depends on the caller
+ * remembering to redact is not redaction.
+ */
+export interface HermesReviewDiagnostics {
+  /** Which review this was. `null` when the caller did not say. */
+  readonly reviewStage: 'plan' | 'build' | null;
+  readonly transport: 'local' | 'remote' | 'openai';
+  /** Configuration, known before the call — never parsed out of an error. */
+  readonly provider: string | null;
+  /**
+   * Evidence, never configuration. On a failed review this is almost always
+   * `null`: the served model is read from the engine's usage report, which
+   * only exists once a review actually finished.
+   */
+  readonly servedModel: string | null;
+  /** `null` when no process ran, or when the transport has no process. */
+  readonly processExitCode: number | null;
+  readonly timedOut: boolean;
+  /**
+   * TOTAL BYTES SEEN, not bytes retained. The local runner counts every chunk
+   * including the ones past the ceiling it refuses to keep, so this stays
+   * exact through truncation rather than reporting the ceiling as the size.
+   */
+  readonly outputBytesObserved: number | null;
+  readonly outputByteLimit: number | null;
+  readonly outputTruncated: boolean;
+  readonly jsonDetected: boolean;
+  readonly jsonParseable: boolean;
+  /** Verdict-bearing candidates. 1 for a normal review, 2+ is the ambiguity. */
+  readonly reviewObjectCount: number | null;
+  readonly verdictPresent: boolean;
+  readonly verdictValid: boolean;
+  readonly summaryPresent: boolean;
+  readonly failureShape: HermesReviewShape | null;
+}
+
+/** What the reviewer's text structurally was — no part of it is retained. */
+export function reviewStructureFacts(text: string | null): Pick<
+  HermesReviewDiagnostics,
+  'jsonDetected' | 'jsonParseable' | 'reviewObjectCount' | 'verdictPresent' | 'verdictValid' | 'summaryPresent'
+> {
+  if (text === null) {
+    return {
+      jsonDetected: false, jsonParseable: false, reviewObjectCount: null,
+      verdictPresent: false, verdictValid: false, summaryPresent: false,
+    };
+  }
+  const scan = scanReviewJson(text);
+  // A candidate is a verdict-bearing object; the ambiguity IS this count > 1.
+  const reviewObjectCount = scan.withVerdict.length + scan.verdictsInArrays;
+  const jsonDetected = scan.objects.length > 0 || reviewObjectCount > 0 || scan.malformed || scan.unclosed;
+  const slice = extractReviewJson(text);
+  if (slice === null) {
+    return {
+      jsonDetected, jsonParseable: scan.objects.length > 0,
+      reviewObjectCount, verdictPresent: false, verdictValid: false, summaryPresent: false,
+    };
+  }
+  let raw: unknown;
+  try {
+    raw = JSON.parse(slice);
+  } catch {
+    try { raw = JSON.parse(escapeInvalidJsonEscapes(slice)); } catch {
+      return { jsonDetected, jsonParseable: false, reviewObjectCount, verdictPresent: false, verdictValid: false, summaryPresent: false };
+    }
+  }
+  if (raw === null || typeof raw !== 'object') {
+    return { jsonDetected, jsonParseable: false, reviewObjectCount, verdictPresent: false, verdictValid: false, summaryPresent: false };
+  }
+  const o = raw as Record<string, unknown>;
+  const summary = o.summary;
+  return {
+    jsonDetected: true,
+    jsonParseable: true,
+    reviewObjectCount,
+    verdictPresent: o.verdict !== undefined,
+    verdictValid: o.verdict === 'approved' || o.verdict === 'changes_required' || o.verdict === 'unable_to_review',
+    summaryPresent: typeof summary === 'string' && summary.trim() !== '',
+  };
+}
+
+/**
+ * ONE BUILDER FOR EVERY TRANSPORT, so three reviewers cannot describe the same
+ * failure with three different field sets. Everything not supplied is `null`
+ * or `false` — the honest default for "this transport cannot know that", never
+ * a zero that would read as a measurement.
+ */
+export function reviewDiagnostics(input: {
+  readonly transport: HermesReviewDiagnostics['transport'];
+  readonly shape: HermesReviewShape | null;
+  readonly reviewStage?: 'plan' | 'build' | null;
+  readonly provider?: string | null;
+  readonly servedModel?: string | null;
+  readonly processExitCode?: number | null;
+  readonly timedOut?: boolean;
+  readonly outputBytesObserved?: number | null;
+  readonly outputByteLimit?: number | null;
+  readonly outputTruncated?: boolean;
+  /** Read for its SHAPE only; no part of it is retained. */
+  readonly text?: string | null;
+}): HermesReviewDiagnostics {
+  return {
+    reviewStage: input.reviewStage ?? null,
+    transport: input.transport,
+    provider: input.provider ?? null,
+    servedModel: input.servedModel ?? null,
+    processExitCode: input.processExitCode ?? null,
+    timedOut: input.timedOut ?? false,
+    outputBytesObserved: input.outputBytesObserved ?? null,
+    outputByteLimit: input.outputByteLimit ?? null,
+    outputTruncated: input.outputTruncated ?? false,
+    ...reviewStructureFacts(input.text ?? null),
+    failureShape: input.shape,
+  };
+}
 
 export interface HermesConfig {
   executable: string;
@@ -756,6 +887,35 @@ export async function runHermesReview(input: {
     let bytes = 0;
     let truncated = false;
     let settled = false;
+
+    /**
+     * The corroborating facts this process actually observed.
+     *
+     * `bytes` counts EVERY chunk, including the ones past the ceiling that
+     * `out` refuses to keep, so the observed size stays exact through
+     * truncation instead of reporting our own limit back as the model's size.
+     * The structural facts are read from the retained text, which is all this
+     * process has — and none of that text travels, only what shape it was.
+     */
+    const localDiagnostics = (input: {
+      shape: HermesReviewShape;
+      exitCode: number | null;
+      timedOut: boolean;
+    }): HermesReviewDiagnostics => ({
+      reviewStage: null,
+      transport: 'local',
+      provider: cfg.provider ?? null,
+      // Read from the usage file only once a review really finished, so a
+      // failed review attests no model rather than the configured one.
+      servedModel: null,
+      processExitCode: input.exitCode,
+      timedOut: input.timedOut,
+      outputBytesObserved: bytes,
+      outputByteLimit: cfg.maxOutputBytes,
+      outputTruncated: truncated,
+      ...reviewStructureFacts(out),
+      failureShape: input.shape,
+    });
     const finish = (o: HermesOutcome) => {
       if (settled) return;
       settled = true;
@@ -779,7 +939,13 @@ export async function runHermesReview(input: {
     };
     const timer = setTimeout(() => {
       try { child.kill('SIGTERM'); } catch { /* already gone */ }
-      finish({ kind: 'review_incomplete', safeMessage: 'The Hermes reviewer timed out.', shape: 'review_timeout', startedAt, completedAt: now() });
+      finish({
+        kind: 'review_incomplete', safeMessage: 'The Hermes reviewer timed out.', shape: 'review_timeout',
+        // The process was killed, so it has no exit code to report. `null`
+        // here is the difference between "it did not exit" and "it exited 0".
+        diagnostics: localDiagnostics({ shape: 'review_timeout', exitCode: null, timedOut: true }),
+        startedAt, completedAt: now(),
+      });
     }, cfg.timeoutMs);
 
     child.stdout?.on('data', (c: Buffer) => {
@@ -852,6 +1018,7 @@ export async function runHermesReview(input: {
         finish({
           kind: 'review_incomplete',
           shape,
+          diagnostics: localDiagnostics({ shape, exitCode: code ?? null, timedOut: false }),
           safeMessage:
             upstream?.kind === 'authentication'
               ? 'The Hermes reviewer could not authenticate with its configured provider.'

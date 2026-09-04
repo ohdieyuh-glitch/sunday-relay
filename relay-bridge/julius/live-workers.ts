@@ -444,7 +444,22 @@ export function createLiveHermesReviewerAdapter(input: {
                   // only spends the attempt. Never the provider's fault.
                   ? ['INVALID_REQUEST', false] as const
                   : ['WORKER_EXECUTION_FAILURE', false] as const;
-        throw new JuliusDispatchError(code, retryable, `Hermes review incomplete: ${safeClaim(outcome.safeMessage, 120)}.`, outcome.shape);
+        /**
+         * THE SHAPE, AND THE FACTS THAT LET SOMEONE DEBUG THE SHAPE.
+         *
+         * `review_process_exit` without the exit code, and
+         * `review_output_too_large` without the byte count, each name a class
+         * an operator then has to buy a second paid run to investigate. The
+         * domain rebuilds this from an allowlist before it is written, so
+         * nothing here can widen what reaches the durable event.
+         */
+        throw new JuliusDispatchError(
+          code, retryable, `Hermes review incomplete: ${safeClaim(outcome.safeMessage, 120)}.`, outcome.shape,
+          // THE STAGE IS WHAT THE REVIEW ACTUALLY CARRIED, not a substring of
+          // an id: a build review reviews a diff and a plan review does not,
+          // which is the same fact the packet above was built from.
+          { ...outcome.diagnostics, reviewStage: diffArtifact === null ? 'plan' : 'build' },
+        );
       }
       if (outcome.result.verdict === 'unable_to_review') {
         // A reviewer that could not review has not reviewed. Recording that as

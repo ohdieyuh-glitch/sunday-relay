@@ -253,6 +253,117 @@ describe('the local reviewer names which failure it was', () => {
   });
 });
 
+/**
+ * THE FACTS BESIDE THE SHAPE.
+ *
+ * The shape says which boundary broke; these say enough to debug that boundary
+ * without buying a second paid run. `review_process_exit` without the exit
+ * code and `review_output_too_large` without the byte count were each a class
+ * an operator could only investigate by paying again.
+ */
+describe('an incomplete review carries the safe facts that explain its shape', () => {
+  const diagnosticsOf = async (over: Parameters<typeof fakeChild>[0], cfg: Partial<HermesConfig> = {}) => {
+    const outcome = await review(over, cfg);
+    if (outcome.kind !== 'review_incomplete') throw new Error(`expected review_incomplete, got ${outcome.kind}`);
+    return outcome.diagnostics;
+  };
+
+  it('a nonzero exit reports the code the process actually returned', async () => {
+    expect((await diagnosticsOf({ stdout: 'crashed', code: 1 })).processExitCode).toBe(1);
+    // 137 is SIGKILL through a container — the OOM signature, and the single
+    // most useful number this record can carry for a reviewer that vanished.
+    const killed = await diagnosticsOf({ stdout: '', code: 137 });
+    expect(killed.processExitCode).toBe(137);
+    expect(killed.failureShape).toBe('review_process_exit');
+    expect(killed.timedOut).toBe(false);
+  });
+
+  it('a timeout has no exit code, because the process did not exit', async () => {
+    const timedOut = await diagnosticsOf({ neverCloses: true }, { timeoutMs: 40 });
+    expect(timedOut.failureShape).toBe('review_timeout');
+    expect(timedOut.timedOut).toBe(true);
+    // null, never 0 — `0` would say it exited cleanly.
+    expect(timedOut.processExitCode).toBeNull();
+  });
+
+  it('overflow reports the bytes seen and the ceiling they passed', async () => {
+    const huge = `{"verdict":"approved","summary":"${'x'.repeat(400)}","findings":[]}`;
+    const over = await diagnosticsOf({ stdout: huge }, { maxOutputBytes: 64 });
+    expect(over.failureShape).toBe('review_output_too_large');
+    expect(over.outputTruncated).toBe(true);
+    expect(over.outputByteLimit).toBe(64);
+    // THE TOTAL SEEN, not the ceiling read back as the size. Every chunk is
+    // counted even though the overflowing ones are not kept.
+    expect(over.outputBytesObserved).toBe(huge.length);
+    expect(over.outputBytesObserved!).toBeGreaterThan(over.outputByteLimit!);
+  });
+
+  it('ambiguity reports how many verdicts made it ambiguous', async () => {
+    const two = `${APPROVED}\n${CHANGES}`;
+    const d = await diagnosticsOf({ stdout: two });
+    expect(d.failureShape).toBe('review_json_ambiguous');
+    expect(d.reviewObjectCount, 'two candidates is the whole reason it refused').toBe(2);
+    expect(d.verdictPresent, 'no single verdict was selected').toBe(false);
+    // And the array form of the same defect is counted too.
+    const hidden = `[${CHANGES}]\n${APPROVED}`;
+    expect((await diagnosticsOf({ stdout: hidden })).reviewObjectCount).toBe(2);
+  });
+
+  it('prose reports that no JSON was there at all', async () => {
+    const prose = 'The plan looks fine to me overall.';
+    const d = await diagnosticsOf({ stdout: prose });
+    expect(d.failureShape).toBe('review_json_absent');
+    expect(d.jsonDetected).toBe(false);
+    expect(d.jsonParseable).toBe(false);
+    expect(d.reviewObjectCount).toBe(0);
+    // Derived, not hard-coded: a literal here only records what the assertion
+    // happened to be written against.
+    expect(d.outputBytesObserved).toBe(Buffer.byteLength(prose, 'utf8'));
+    expect(d.outputTruncated).toBe(false);
+  });
+
+  it('a bad verdict word reports that JSON parsed and the verdict did not', async () => {
+    const d = await diagnosticsOf({ stdout: JSON.stringify({ verdict: 'approve', summary: 'ok' }) });
+    expect(d.failureShape).toBe('review_verdict_invalid');
+    expect(d.jsonParseable).toBe(true);
+    expect(d.verdictPresent).toBe(true);
+    expect(d.verdictValid, 'present and outside the vocabulary').toBe(false);
+    expect(d.summaryPresent).toBe(true);
+  });
+
+  it('a missing summary is distinguished from a missing verdict, in the facts too', async () => {
+    const noSummary = await diagnosticsOf({ stdout: JSON.stringify({ verdict: 'approved' }) });
+    expect(noSummary.failureShape).toBe('review_summary_missing');
+    expect(noSummary.verdictValid).toBe(true);
+    expect(noSummary.summaryPresent).toBe(false);
+
+    const noVerdict = await diagnosticsOf({ stdout: JSON.stringify({ summary: 'ok' }) });
+    expect(noVerdict.failureShape).toBe('review_verdict_missing');
+    expect(noVerdict.verdictPresent).toBe(false);
+    expect(noVerdict.summaryPresent).toBe(true);
+  });
+
+  it('the transport and the configured provider are named; the served model is not guessed', async () => {
+    const d = await diagnosticsOf({ stdout: 'prose' });
+    expect(d.transport).toBe('local');
+    expect(d.provider, 'configuration, known before the call').toBe('xai');
+    // Evidence, and a failed review produced none. Never the requested model
+    // wearing the served model's clothes.
+    expect(d.servedModel).toBeNull();
+  });
+
+  it('no reviewer text of any kind reaches the record', async () => {
+    const SECRET = 'Authorization: Bearer FAKESECRET123456789';
+    const d = await diagnosticsOf({ stdout: `${SECRET}\nsk-live-FAKESECRET123456789\n{"verdict":"approve","summary":"${SECRET}"}` });
+    const serialized = JSON.stringify(d);
+    for (const secret of ['FAKESECRET123456789', 'sk-live', 'Authorization', 'approve']) {
+      expect(serialized, `"${secret}" must not reach the diagnostics`).not.toContain(secret);
+    }
+    // Only counts, flags and tokens this runtime chose.
+    expect(d.failureShape).toBe('review_verdict_invalid');
+  });
+});
+
 describe('a hostile review leaks nothing structural inspection does not need', () => {
   const SECRET = 'Authorization: Bearer FAKESECRET123456789';
   const HOSTILE = [

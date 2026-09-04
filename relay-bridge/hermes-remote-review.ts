@@ -1,4 +1,4 @@
-import { buildReviewPrompt, classifyUnreadableReview, describeUnreadableReview, validateHermesReview, type HermesOutcome, type HermesReviewShape, type ReviewPacket } from './hermes-reviewer';
+import { buildReviewPrompt, classifyUnreadableReview, describeUnreadableReview, reviewDiagnostics, validateHermesReview, type HermesOutcome, type HermesReviewShape, type ReviewPacket } from './hermes-reviewer';
 import { SERVICE_MAX_TURNS } from '../relay-hermes-service/service';
 
 /**
@@ -263,6 +263,11 @@ export async function runRemoteHermesReview(input: {
     return { kind: 'launch_failed', safeMessage: 'The Reviewer service could not be reached.' };
   }
   if (!start.ok) {
+    const admissionShape = classifyRemoteReviewFailure({ failureKind: declaredFailureKind(start.body) })
+      ?? (start.status === 401 || start.status === 403 ? 'review_authentication_failed'
+        : start.status === 400 || start.status === 422 ? 'review_request_rejected'
+          : start.status === 429 || start.status === 503 ? 'review_service_unavailable'
+            : 'review_provider_http_error');
     // A refusal the service made is not a launch failure: it answered.
     return {
       kind: 'review_incomplete',
@@ -275,11 +280,16 @@ export async function runRemoteHermesReview(input: {
        * codes are the fallback for a body that named no kind, and only a
        * refusal that is none of those remains an upstream error.
        */
-      shape: classifyRemoteReviewFailure({ failureKind: declaredFailureKind(start.body) })
-        ?? (start.status === 401 || start.status === 403 ? 'review_authentication_failed'
-          : start.status === 400 || start.status === 422 ? 'review_request_rejected'
-            : start.status === 429 || start.status === 503 ? 'review_service_unavailable'
-              : 'review_provider_http_error'),
+      shape: admissionShape,
+      /**
+       * NOTHING RAN, so there is no exit code, no byte count and no review to
+       * read the shape of. The service refused at admission; every measurement
+       * below is honestly absent rather than zero.
+       */
+      diagnostics: reviewDiagnostics({
+        transport: 'remote', shape: admissionShape,
+        timedOut: admissionShape === 'review_timeout',
+      }),
       startedAt,
       completedAt: now(),
     };
@@ -294,6 +304,9 @@ export async function runRemoteHermesReview(input: {
         kind: 'review_incomplete',
         safeMessage: 'The Reviewer service did not return a verdict within the time allowed. Whether it finished is unknown.',
         shape: 'review_timeout',
+        // Our deadline, not the service's process. Whether it finished is
+        // unknown, so nothing about its output is claimed.
+        diagnostics: reviewDiagnostics({ transport: 'remote', shape: 'review_timeout', timedOut: true }),
         startedAt,
         completedAt: now(),
       };
@@ -315,6 +328,8 @@ export async function runRemoteHermesReview(input: {
     if (state.status === 'running' || state.status === 'queued' || state.status === undefined) continue;
 
     if (state.status !== 'completed' || typeof state.reviewText !== 'string') {
+      const terminalShape = classifyRemoteReviewFailure({ status: state.status, failureKind: state.failureKind })
+        ?? 'review_process_exit';
       return {
         kind: 'review_incomplete',
         safeMessage: state.safeMessage ?? `The Reviewer service ended in "${state.status ?? 'unknown'}".`,
@@ -326,8 +341,13 @@ export async function runRemoteHermesReview(input: {
          * one cause with two words. Process exit remains the fallback for a
          * terminal state carrying no kind at all.
          */
-        shape: classifyRemoteReviewFailure({ status: state.status, failureKind: state.failureKind })
-          ?? 'review_process_exit',
+        shape: terminalShape,
+        // The service ran a process we cannot see; its exit code is its own
+        // and is not reported over this wire, so it stays null.
+        diagnostics: reviewDiagnostics({
+          transport: 'remote', shape: terminalShape,
+          timedOut: terminalShape === 'review_timeout',
+        }),
         startedAt,
         completedAt: now(),
       };
@@ -343,6 +363,17 @@ export async function runRemoteHermesReview(input: {
         // THE SAME CLASSIFIER AS THE LOCAL PATH, on the same text, so the two
         // reviewers cannot disagree about what an unreadable review was.
         shape: classifyUnreadableReview(state.reviewText),
+        // The one remote branch that HAS the text, so its structure is
+        // measurable — and only its structure is kept.
+        diagnostics: reviewDiagnostics({
+          transport: 'remote',
+          shape: classifyUnreadableReview(state.reviewText),
+          provider: null,
+          servedModel: typeof state.usage?.model === 'string' ? state.usage.model : null,
+          outputBytesObserved: Buffer.byteLength(state.reviewText, 'utf8'),
+          outputByteLimit: REMOTE_REVIEW_LIMITS.maxOutputBytes,
+          text: state.reviewText,
+        }),
         startedAt,
         completedAt: now(),
       };
