@@ -8054,6 +8054,18 @@ FILL_EAST = _band("V2_FillE", urban_fill(
 FILL_WEST = _band("V2_FillW", urban_fill(
     -32067.0, -9835.0, 3600.0, 5800.0, 13, "FillW", bearing=31.0))
 
+# The next tier of holes, all under 4,000 m2 and all off the same audit. The
+# goal is the largest accidental hole under 2,000 m2, then under 1,000; these
+# are the ones standing between here and that.
+FILL_WESTEDGE = _band("V2_FillWE", urban_fill(
+    -32484.0, 8667.0, 4200.0, 6000.0, 17, "FillWE", bearing=-14.0))
+FILL_EASTEDGE = _band("V2_FillEE", urban_fill(
+    30560.0, 10004.0, 3800.0, 3400.0, 19, "FillEE", bearing=22.0))
+FILL_SOUTHEAST2 = _band("V2_FillSE2", urban_fill(
+    22804.0, -15764.0, 3000.0, 3200.0, 23, "FillSE2", bearing=-33.0))
+FILL_EASTLOW = _band("V2_FillEL", urban_fill(
+    31762.0, -1335.0, 4000.0, 3400.0, 29, "FillEL", bearing=8.0))
+
 
 BUILD_BANDS = [FOREGROUND, COURTYARD, GARDEN, PALACE, FLANK_GROUND, FLANKS,
                REARWORLD, CAM_FOREGROUNDS, GROUND_QUILT, OUTER_WORLD, PLAZA_ORNAMENT,
@@ -8061,7 +8073,8 @@ BUILD_BANDS = [FOREGROUND, COURTYARD, GARDEN, PALACE, FLANK_GROUND, FLANKS,
                SIGNATURE, LANDMARKS, DEPTH, COURT_DRESS, WAYSIDE,
                SOUTH_QUARTER, SOUTHWEST_QUARTER,
                FILL_NORTHEAST, FILL_SOUTHFLANK_W, FILL_SOUTHFLANK_E,
-               FILL_EAST, FILL_WEST]
+               FILL_EAST, FILL_WEST, FILL_WESTEDGE, FILL_EASTEDGE,
+               FILL_SOUTHEAST2, FILL_EASTLOW]
 
 # ---------------------------------------------------------------------------
 # NOTHING IS BUILT ON A VIEWPOINT (2026-09-03)
