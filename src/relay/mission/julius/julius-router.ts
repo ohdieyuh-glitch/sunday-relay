@@ -60,7 +60,13 @@ export const safeReasonCode=(value:unknown):string|null=>typeof value==='string'
  * dropped. `null` always means "not known", never zero: a reviewer that never
  * started has no exit code, and `0` would say it exited cleanly.
  *
- * WHAT THE STRING FIELDS DO AND DO NOT PROVE. `transport` and `reviewStage`
+ * TWO ROLES, ONE ALLOWLIST. The reviewer names why a review was unreadable;
+ * the Prompt Architect names why a plan was refused. Paid attempt #3 proved the
+ * second gap the same way attempt #2 proved the first: `plan_validation_failed`
+ * alone could not say WHICH rule the plan broke. A field a role does not have
+ * is `null` for that role, which is the honest answer and costs nothing.
+ *
+ * WHAT THE STRING FIELDS DO AND DO NOT PROVE. `transport` and `stage`
  * are closed vocabularies. `provider` and `failureShape` take the
  * {@link safeFailureClass} alphabet, which no provider key shape this runtime
  * has seen can pass. `servedModel` is the loose one by necessity — real model
@@ -73,33 +79,79 @@ export const safeReasonCode=(value:unknown):string|null=>typeof value==='string'
 const MODEL_TOKEN=/^[A-Za-z0-9][A-Za-z0-9._-]{0,47}$/;
 const CREDENTIAL_SHAPED=/(^(sk|xai|ghp|gho|ghu|ghs|ghr|pk|api)[-_])|bearer|authorization|private[-_ ]?key|begin [a-z ]*private/i;
 const safeToken=(value:unknown):string|null=>typeof value==='string'&&/^[a-z][a-z0-9_]{0,63}$/.test(value)?value:null;
-const safeBool=(value:unknown):boolean=>value===true;
+/**
+ * A FLAG A ROLE DOES NOT HAVE IS NULL, NOT FALSE.
+ *
+ * One allowlist serves the reviewer and the Prompt Architect, and most flags
+ * belong to one of them. Coercing an absent flag to `false` publishes a
+ * measurement nobody took: every reviewer failure would have reported
+ * `validation_passed=false`, which reads as "a plan was validated and
+ * rejected" when no plan was validated at all. `true` and `false` still mean
+ * exactly themselves, and only a genuinely boolean value produces either.
+ */
+const safeNullableBool=(value:unknown):boolean|null=>typeof value==='boolean'?value:null;
 const safeCount=(value:unknown):number|null=>typeof value==='number'&&Number.isInteger(value)&&value>=0&&value<=Number.MAX_SAFE_INTEGER?value:null;
 const safeExitCode=(value:unknown):number|null=>typeof value==='number'&&Number.isInteger(value)&&value>=-256&&value<=65535?value:null;
 const safeModel=(value:unknown):string|null=>typeof value==='string'&&MODEL_TOKEN.test(value)&&!CREDENTIAL_SHAPED.test(value)?value:null;
 const safeEnum=<T extends string>(value:unknown,allowed:readonly T[]):T|null=>typeof value==='string'&&(allowed as readonly string[]).includes(value)?value as T:null;
+/**
+ * A FIELD NAME THIS REPOSITORY WROTE, not a value a model produced. Admits the
+ * camelCase and dotted forms the validator's own key lists use
+ * (`objectiveSummary`, `handoff.allowedFileScope`) and nothing longer than one.
+ */
+const safeFieldName=(value:unknown):string|null=>typeof value==='string'&&/^[A-Za-z][A-Za-z0-9_]{0,31}(\.[A-Za-z][A-Za-z0-9_]{0,31})?$/.test(value)?value:null;
+/** A provider response identifier: bounded, and refused when credential-shaped. */
+const safeResponseId=(value:unknown):string|null=>typeof value==='string'&&/^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(value)&&!CREDENTIAL_SHAPED.test(value)?value:null;
 export type JuliusSafeDiagnostics=Readonly<Record<string,string|number|boolean|null>>;
 export const safeReviewDiagnostics=(value:unknown):JuliusSafeDiagnostics|null=>{
  if(value===null||typeof value!=='object'||Array.isArray(value))return null;
  const v=value as Record<string,unknown>;
  return Object.freeze({
-  reviewStage:safeEnum(v.reviewStage,['plan','build'] as const),
+  stage:safeEnum(v.stage,['plan','build'] as const),
   transport:safeEnum(v.transport,['local','remote','openai'] as const),
   provider:safeToken(v.provider),
   servedModel:safeModel(v.servedModel),
   processExitCode:safeExitCode(v.processExitCode),
-  timedOut:safeBool(v.timedOut),
+  timedOut:safeNullableBool(v.timedOut),
   outputBytesObserved:safeCount(v.outputBytesObserved),
   outputByteLimit:safeCount(v.outputByteLimit),
-  outputTruncated:safeBool(v.outputTruncated),
-  jsonDetected:safeBool(v.jsonDetected),
-  jsonParseable:safeBool(v.jsonParseable),
+  outputTruncated:safeNullableBool(v.outputTruncated),
+  jsonDetected:safeNullableBool(v.jsonDetected),
+  jsonParseable:safeNullableBool(v.jsonParseable),
   reviewObjectCount:safeCount(v.reviewObjectCount),
-  verdictPresent:safeBool(v.verdictPresent),
-  verdictValid:safeBool(v.verdictValid),
-  summaryPresent:safeBool(v.summaryPresent),
+  verdictPresent:safeNullableBool(v.verdictPresent),
+  verdictValid:safeNullableBool(v.verdictValid),
+  summaryPresent:safeNullableBool(v.summaryPresent),
   failureShape:safeToken(v.failureShape),
+  /* --- Prompt Architect (plan stage). Null for the reviewer, and vice versa. */
+  requestedModel:safeModel(v.requestedModel),
+  responseId:safeResponseId(v.responseId),
+  validationPassed:safeNullableBool(v.validationPassed),
+  /** A member of the closed `ArchitectPlanReasonCode` union, never validator prose. */
+  validationReasonCode:safeToken(v.validationReasonCode),
+  validationField:safeFieldName(v.validationField),
  });
+};
+/**
+ * THE DIAGNOSTICS AS FLAT FACTS, because an operational event's facts are flat
+ * by contract — `Record<string,string|number|boolean|null>`.
+ *
+ * A nested object here does not survive: the runtime's `recordEvent` adapter
+ * coerces any non-scalar with `String(value)`, so a diagnostics object reached
+ * the durable row as the literal text `[object Object]` and every column the
+ * artifact reads out of it was null. The telemetry looked present in unit tests
+ * that inspected the payload directly and was destroyed on the only path that
+ * matters. Flattening at the source is what makes the two agree.
+ *
+ * Keys are prefixed so they cannot collide with `code`, `failureClass`,
+ * `errorRetryable` or `reasonCode`, and null-valued facts are kept: "not known
+ * here" is an answer the artifact must be able to show.
+ */
+export const flattenDiagnostics=(value:JuliusSafeDiagnostics|null):Record<string,string|number|boolean|null>=>{
+ if(value===null)return{};
+ const out:Record<string,string|number|boolean|null>={};
+ for(const[key,entry]of Object.entries(value))out[`diag_${key}`]=entry;
+ return out;
 };
 export class JuliusDispatchError extends Error{
  readonly failureClass:string|null;

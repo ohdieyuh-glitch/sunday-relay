@@ -54,7 +54,7 @@ it('normalizes a non-dispatch throw from selection rather than writing "undefine
  */
 describe('safe reviewer diagnostics reach the durable event', () => {
   const HOSTILE_DIAGNOSTICS = {
-    transport: 'local', reviewStage: 'build', provider: 'xai',
+    transport: 'local', stage: 'build', provider: 'xai',
     processExitCode: 137, timedOut: false, outputBytesObserved: 1234,
     outputByteLimit: 524288, outputTruncated: true, failureShape: 'review_process_exit',
     // What must not survive, passed the way a careless adapter would pass it.
@@ -80,20 +80,27 @@ describe('safe reviewer diagnostics reach the durable event', () => {
   it('writes them on the failing ending, narrowed, beside the class', async () => {
     const failed = (await factsFrom(false)).find((row) => row.type === 'task.failed')!;
     expect(failed.failureClass).toBe('review_process_exit');
-    const diagnostics = failed.diagnostics as Record<string, unknown>;
-    expect(diagnostics.processExitCode, 'the number that made the class debuggable').toBe(137);
-    expect(diagnostics.outputByteLimit).toBe(524288);
-    expect(diagnostics.reviewStage).toBe('build');
+    // FLAT SCALARS. Facts are `string|number|boolean|null` by contract and the
+    // runtime coerces anything else with `String(value)` — a nested object
+    // reached the durable row as `[object Object]` and read back as null.
+    expect(failed.diag_processExitCode, 'the number that made the class debuggable').toBe(137);
+    expect(failed.diag_outputByteLimit).toBe(524288);
+    expect(failed.diag_stage).toBe('build');
+    expect(failed.diagnostics, 'never a nested object').toBeUndefined();
     // The domain rebuilt it, so the adapter's extra keys are simply not there.
-    expect(Object.prototype.hasOwnProperty.call(diagnostics, 'reviewText')).toBe(false);
-    expect(Object.prototype.hasOwnProperty.call(diagnostics, 'stdout')).toBe(false);
+    expect(Object.prototype.hasOwnProperty.call(failed, 'diag_reviewText')).toBe(false);
+    expect(Object.prototype.hasOwnProperty.call(failed, 'diag_stdout')).toBe(false);
+    for (const value of Object.values(failed)) {
+      expect(['string', 'number', 'boolean', 'undefined'].includes(typeof value) || value === null,
+        'every fact must be a scalar the ledger can store').toBe(true);
+    }
     expect(JSON.stringify(failed)).not.toContain('FAKESECRET123456789');
   });
 
   it('and on the retry ending too, so an abandoned retry leaves the same diagnosis', async () => {
     const scheduled = (await factsFrom(true)).find((row) => row.type === 'retry.scheduled')!;
     expect(scheduled, 'a retryable failure schedules rather than fails').toBeDefined();
-    expect((scheduled.diagnostics as Record<string, unknown>).processExitCode).toBe(137);
+    expect(scheduled.diag_processExitCode).toBe(137);
     expect(JSON.stringify(scheduled)).not.toContain('FAKESECRET123456789');
   });
 
@@ -107,6 +114,8 @@ describe('safe reviewer diagnostics reach the durable event', () => {
     await h.coordinator.execute(request);
     const failed = rows.find((row) => row.type === 'task.failed')!;
     expect(failed.failureClass).toBe('coder_refused');
-    expect(failed.diagnostics, 'no facts is null, never a row of zeroes').toBeNull();
+    // No diagnostics means no diag_ keys at all, rather than a row of nulls
+    // pretending a measurement was taken.
+    expect(Object.keys(failed).some((key) => key.startsWith('diag_')), 'no facts, no columns').toBe(false);
   });
 });

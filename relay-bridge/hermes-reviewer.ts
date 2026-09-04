@@ -141,7 +141,7 @@ export type HermesReviewShape =
  */
 export interface HermesReviewDiagnostics {
   /** Which review this was. `null` when the caller did not say. */
-  readonly reviewStage: 'plan' | 'build' | null;
+  readonly stage: 'plan' | 'build' | null;
   readonly transport: 'local' | 'remote' | 'openai';
   /** Configuration, known before the call — never parsed out of an error. */
   readonly provider: string | null;
@@ -226,7 +226,7 @@ export function reviewStructureFacts(text: string | null): Pick<
 export function reviewDiagnostics(input: {
   readonly transport: HermesReviewDiagnostics['transport'];
   readonly shape: HermesReviewShape | null;
-  readonly reviewStage?: 'plan' | 'build' | null;
+  readonly stage?: 'plan' | 'build' | null;
   readonly provider?: string | null;
   readonly servedModel?: string | null;
   readonly processExitCode?: number | null;
@@ -238,7 +238,7 @@ export function reviewDiagnostics(input: {
   readonly text?: string | null;
 }): HermesReviewDiagnostics {
   return {
-    reviewStage: input.reviewStage ?? null,
+    stage: input.stage ?? null,
     transport: input.transport,
     provider: input.provider ?? null,
     servedModel: input.servedModel ?? null,
@@ -902,7 +902,7 @@ export async function runHermesReview(input: {
       exitCode: number | null;
       timedOut: boolean;
     }): HermesReviewDiagnostics => ({
-      reviewStage: null,
+      stage: null,
       transport: 'local',
       provider: cfg.provider ?? null,
       // Read from the usage file only once a review really finished, so a

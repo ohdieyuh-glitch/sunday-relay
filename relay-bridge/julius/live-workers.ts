@@ -119,11 +119,100 @@ const nowIso = (): string => new Date().toISOString();
 
 /* ----------------------------------------------------- prompt architect */
 
+/**
+ * WHAT THE SCHEMA CANNOT SAY, SAID HERE.
+ *
+ * Paid attempt #3 bought a real plan that satisfied the strict JSON schema and
+ * was then refused by `validateArchitectPlan`. The schema constrains SHAPE: it
+ * cannot require that a string be non-empty in a way this runtime has verified
+ * the Responses API accepts, and it cannot express "do not claim work that has
+ * not happened" at all. Those rules lived only in a validator the model was
+ * never told about — so the charter is where they have to be stated, in the
+ * model's own terms, before it writes.
+ *
+ * Each line below corresponds to a rule `validateArchitectPlan` enforces, and
+ * `plan-schema-parity.test.ts` holds them together: a validator rule with no
+ * charter sentence is a rule the model is refused for without being told.
+ *
+ * This states the RULES, never the answers. No fixture, no expected plan, and
+ * no hidden reasoning is requested or exposed.
+ */
 const ARCHITECT_CHARTER = [
   'You are the Prompt Architect for a Relay mission run by Julius, the mission controller.',
   'Read the mission context below and produce the structured plan the output schema requires.',
   'You plan; you do not implement, review, or approve your own work.',
+  'This is a PLAN ONLY. No work has been done yet and no file has been touched.',
+  'Never state or imply that files were edited, that tests were run, that you edited anything,',
+  'or that you ran the tests — a plan that claims completed work is refused outright.',
+  'Every required string must be substantive: objectiveSummary, each assumption statement,',
+  'each architecture decision and its rationale, and the handoff objective and bounded task',
+  'must each be non-empty and meaningful. An empty string is refused.',
+  'handoff.allowedFileScope must name at least one concrete path drawn from the mission context;',
+  'an empty scope is an unbounded handoff and is refused.',
+  'Architecture decisions are PROPOSALS: leave accepted false. Approval is not yours to give.',
 ].join(' ');
+
+/**
+ * WHICH REVIEW THIS IS, from the only carrier that reaches the adapter.
+ *
+ * The runtime names a review task `${reviewedTaskId}:review`, so the stage is
+ * encoded in the id by construction. The first version of this read it from
+ * whether a diff artifact existed — and the build runs BEFORE the plan review,
+ * so by then a diff always exists and every plan review was recorded as a
+ * build review. A durable field that is wrong is worse than one that is
+ * absent, so anything this cannot read returns null rather than a guess.
+ */
+export function reviewStageOf(taskId: string): 'plan' | 'build' | null {
+  const reviewed = taskId.endsWith(':review') ? taskId.slice(0, -':review'.length) : taskId;
+  /**
+   * A SEGMENT, NOT A SUFFIX. An end-anchored match reads `run:…:plan` and
+   * `build-1`, and then returns null for a REPAIR re-review — whose reviewed id
+   * is `repair:build-1:1:task`, routed as `review:repair:build`. The repair path
+   * is exercised by the live composition, so anchoring on the end silently drops
+   * the stage on exactly the reviews a repaired run depends on.
+   */
+  const kinds = new Set(
+    reviewed.split(':')
+      .map((segment) => /^(plan|build)(-\d+)?$/u.exec(segment)?.[1])
+      .filter((kind): kind is 'plan' | 'build' => kind !== undefined),
+  );
+  // One kind is the stage. None cannot be read, and both is a shape this
+  // runtime does not build — neither is a guess worth publishing.
+  return kinds.size === 1 ? [...kinds][0]! : null;
+}
+
+/**
+ * THE SAFE FACTS BESIDE A PLAN FAILURE.
+ *
+ * `plan_validation_failed` named the boundary and nothing else, so paid attempt
+ * #3 could not say WHICH of fifteen rules the plan broke. These are structural
+ * only — a closed reason code, booleans, a byte count, and identifiers the
+ * provider itself returned. No plan text, no prompt, no provider body.
+ */
+const planDiagnostics = (input: {
+  readonly requestedModel: string | null;
+  readonly servedModel?: string | null;
+  readonly responseId?: string | null;
+  readonly jsonParseable: boolean;
+  readonly validationPassed: boolean;
+  readonly validationReasonCode?: string | null;
+  readonly validationField?: string | null;
+  readonly outputBytes?: number | null;
+}): Record<string, unknown> => ({
+  stage: 'plan',
+  transport: 'openai',
+  provider: 'openai',
+  requestedModel: input.requestedModel,
+  // Evidence: the model the provider said answered, never the one requested.
+  servedModel: input.servedModel ?? null,
+  responseId: input.responseId ?? null,
+  jsonDetected: input.jsonParseable,
+  jsonParseable: input.jsonParseable,
+  validationPassed: input.validationPassed,
+  validationReasonCode: input.validationReasonCode ?? null,
+  validationField: input.validationField ?? null,
+  outputBytesObserved: input.outputBytes ?? null,
+});
 
 export function createLiveArchitectAdapter(input: {
   readonly worker: JuliusWorker;
@@ -160,30 +249,54 @@ export function createLiveArchitectAdapter(input: {
          * machine token, so it is passed through and narrowed again by
          * `safeFailureClass` on the way into the error.
          */
+        // Nothing was generated, so nothing about a plan is claimed: no JSON,
+        // no validation, no byte count.
+        const failed = planDiagnostics({
+          requestedModel: input.config.model, servedModel: outcome.actualModel ?? null,
+          responseId: outcome.responseId ?? null, jsonParseable: false, validationPassed: false,
+        });
         switch (outcome.failureClass) {
           case 'authentication_failed':
           case 'permission_denied':
-            throw new JuliusDispatchError('AUTH_CONFIGURATION', false, 'Prompt Architect authentication or configuration failed.', outcome.failureClass);
+            throw new JuliusDispatchError('AUTH_CONFIGURATION', false, 'Prompt Architect authentication or configuration failed.', outcome.failureClass, failed);
           case 'rate_limited':
-            throw new JuliusDispatchError('RATE_LIMIT', true, 'Prompt Architect provider rate limit reached.', outcome.failureClass);
+            throw new JuliusDispatchError('RATE_LIMIT', true, 'Prompt Architect provider rate limit reached.', outcome.failureClass, failed);
           case 'timeout':
           case 'network_disconnected':
-            throw new JuliusDispatchError('TIMEOUT', true, 'Prompt Architect provider timed out.', outcome.failureClass);
+            throw new JuliusDispatchError('TIMEOUT', true, 'Prompt Architect provider timed out.', outcome.failureClass, failed);
           case 'model_unavailable':
-            throw new JuliusDispatchError('PROVIDER_UNAVAILABLE', false, 'Prompt Architect model is unavailable.', outcome.failureClass);
+            throw new JuliusDispatchError('PROVIDER_UNAVAILABLE', false, 'Prompt Architect model is unavailable.', outcome.failureClass, failed);
           default:
-            throw new JuliusDispatchError('WORKER_EXECUTION_FAILURE', false, `Prompt Architect failed: ${outcome.failureClass}.`, outcome.failureClass);
+            throw new JuliusDispatchError('WORKER_EXECUTION_FAILURE', false, `Prompt Architect failed: ${outcome.failureClass}.`, outcome.failureClass, failed);
         }
       }
       let parsed: unknown;
       try { parsed = JSON.parse(outcome.outputText); } catch {
         // Julius's own classes, not the provider's: the call succeeded and what
         // came back was unusable, which is a different repair from a 500.
-        throw new JuliusDispatchError('WORKER_EXECUTION_FAILURE', false, 'Prompt Architect output was not parseable JSON.', 'unparseable_plan_json');
+        throw new JuliusDispatchError('WORKER_EXECUTION_FAILURE', false, 'Prompt Architect output was not parseable JSON.', 'unparseable_plan_json',
+          planDiagnostics({
+            requestedModel: input.config.model, servedModel: outcome.actualModel,
+            responseId: outcome.responseId, jsonParseable: false, validationPassed: false,
+            outputBytes: Buffer.byteLength(outcome.outputText, 'utf8'),
+          }));
       }
       const validation = validateArchitectPlan(parsed);
       if (!validation.ok) {
-        throw new JuliusDispatchError('WORKER_EXECUTION_FAILURE', false, `Prompt Architect plan failed validation: ${safeClaim(validation.reason, 120)}.`, 'plan_validation_failed');
+        /**
+         * THE RULE IT BROKE, as a closed token. Paid attempt #3 recorded
+         * `plan_validation_failed` and stopped there: the reason was composed
+         * into the message below and the coordinator persists the class, not
+         * the message. The code travels beside it now, so the next paid failure
+         * names which of the fifteen rules refused the plan.
+         */
+        throw new JuliusDispatchError('WORKER_EXECUTION_FAILURE', false, `Prompt Architect plan failed validation: ${safeClaim(validation.reason, 120)}.`, 'plan_validation_failed',
+          planDiagnostics({
+            requestedModel: input.config.model, servedModel: outcome.actualModel,
+            responseId: outcome.responseId, jsonParseable: true, validationPassed: false,
+            validationReasonCode: validation.reasonCode, validationField: validation.reasonField ?? null,
+            outputBytes: Buffer.byteLength(outcome.outputText, 'utf8'),
+          }));
       }
       input.artifacts.put(planRef(snapshot.runId), outcome.outputText);
       return {
@@ -455,10 +568,7 @@ export function createLiveHermesReviewerAdapter(input: {
          */
         throw new JuliusDispatchError(
           code, retryable, `Hermes review incomplete: ${safeClaim(outcome.safeMessage, 120)}.`, outcome.shape,
-          // THE STAGE IS WHAT THE REVIEW ACTUALLY CARRIED, not a substring of
-          // an id: a build review reviews a diff and a plan review does not,
-          // which is the same fact the packet above was built from.
-          { ...outcome.diagnostics, reviewStage: diffArtifact === null ? 'plan' : 'build' },
+          { ...outcome.diagnostics, stage: reviewStageOf(dispatch.taskId) },
         );
       }
       if (outcome.result.verdict === 'unable_to_review') {

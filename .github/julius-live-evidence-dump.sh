@@ -66,15 +66,22 @@ dump "SELECT e.payload->>'taskId' AS task_id,t.role,e.event_type,e.payload->'fac
 # ambiguous — so `review_process_exit` and `review_output_too_large` each named a class an
 # operator could only investigate by paying again. Paid attempt #2 had none of these.
 #
+# FLAT SCALARS, NOT A NESTED OBJECT. An operational event's facts are
+# `Record<string,string|number|boolean|null>` by contract, and the runtime's
+# `recordEvent` coerces any non-scalar with `String(value)` — so a nested
+# diagnostics object reached the row as the literal text `[object Object]` and
+# every column below read null. The domain flattens to `diag_*` at the source,
+# which is why these read a scalar key rather than descending into one.
+#
 # EVERY COLUMN IS REBUILT BY AN ALLOWLIST BEFORE IT IS WRITTEN. `safeReviewDiagnostics` in the
 # domain constructs this object from a fixed set of keys with a fixed type each, so a key nobody
 # listed cannot reach the event however an adapter passed it, and a wrong-typed value becomes
 # null rather than travelling. Counts are non-negative integers, flags are booleans, `transport`
-# and `reviewStage` are closed vocabularies, `provider` and `failureShape` take the narrow
+# and `stage` are closed vocabularies, `provider` and `failureShape` take the narrow
 # failure-class alphabet, and `servedModel` is bounded to 48 characters and refused outright
 # when it looks like a credential. NO reviewer text, summary, diff, prompt or provider body has
 # a column here, because none of them has a key in that allowlist.
 #
 # `NULL` is a real answer everywhere and always means "not known here", never zero: a reviewer
 # that never started has no exit code, and 0 would say it exited cleanly.
-dump "SELECT e.payload->>'taskId' AS task_id,t.role,e.payload->'facts'->'diagnostics'->>'reviewStage' AS review_stage,e.payload->'facts'->'diagnostics'->>'transport' AS transport,e.payload->'facts'->'diagnostics'->>'provider' AS provider,e.payload->'facts'->'diagnostics'->>'servedModel' AS served_model,e.payload->'facts'->'diagnostics'->>'processExitCode' AS process_exit_code,e.payload->'facts'->'diagnostics'->>'timedOut' AS timed_out,e.payload->'facts'->'diagnostics'->>'outputBytesObserved' AS output_bytes_observed,e.payload->'facts'->'diagnostics'->>'outputByteLimit' AS output_byte_limit,e.payload->'facts'->'diagnostics'->>'outputTruncated' AS output_truncated,e.payload->'facts'->'diagnostics'->>'jsonDetected' AS json_detected,e.payload->'facts'->'diagnostics'->>'jsonParseable' AS json_parseable,e.payload->'facts'->'diagnostics'->>'reviewObjectCount' AS review_object_count,e.payload->'facts'->'diagnostics'->>'verdictPresent' AS verdict_present,e.payload->'facts'->'diagnostics'->>'verdictValid' AS verdict_valid,e.payload->'facts'->'diagnostics'->>'summaryPresent' AS summary_present,e.payload->'facts'->'diagnostics'->>'failureShape' AS failure_shape,e.payload->'facts'->>'code' AS julius_code,e.payload->'facts'->>'errorRetryable' AS retryable,e.occurred_at FROM relay_wonderland.events e LEFT JOIN relay_wonderland.julius_tasks t ON t.task_id=e.payload->>'taskId' WHERE jsonb_typeof(e.payload->'facts'->'diagnostics')='object' ORDER BY e.occurred_at" reviewer-diagnostics.tsv
+dump "SELECT e.payload->>'taskId' AS task_id,t.role,e.payload->'facts'->>'diag_stage' AS stage,e.payload->'facts'->>'diag_transport' AS transport,e.payload->'facts'->>'diag_provider' AS provider,e.payload->'facts'->>'diag_servedModel' AS served_model,e.payload->'facts'->>'diag_processExitCode' AS process_exit_code,e.payload->'facts'->>'diag_timedOut' AS timed_out,e.payload->'facts'->>'diag_outputBytesObserved' AS output_bytes_observed,e.payload->'facts'->>'diag_outputByteLimit' AS output_byte_limit,e.payload->'facts'->>'diag_outputTruncated' AS output_truncated,e.payload->'facts'->>'diag_jsonDetected' AS json_detected,e.payload->'facts'->>'diag_jsonParseable' AS json_parseable,e.payload->'facts'->>'diag_reviewObjectCount' AS review_object_count,e.payload->'facts'->>'diag_verdictPresent' AS verdict_present,e.payload->'facts'->>'diag_verdictValid' AS verdict_valid,e.payload->'facts'->>'diag_summaryPresent' AS summary_present,e.payload->'facts'->>'diag_failureShape' AS failure_shape,e.payload->'facts'->>'diag_requestedModel' AS requested_model,e.payload->'facts'->>'diag_responseId' AS response_id,e.payload->'facts'->>'diag_validationPassed' AS validation_passed,e.payload->'facts'->>'diag_validationReasonCode' AS validation_reason_code,e.payload->'facts'->>'diag_validationField' AS validation_field,e.payload->'facts'->>'code' AS julius_code,e.payload->'facts'->>'errorRetryable' AS retryable,e.occurred_at FROM relay_wonderland.events e LEFT JOIN relay_wonderland.julius_tasks t ON t.task_id=e.payload->>'taskId' WHERE e.payload->'facts'->>'diag_transport' IS NOT NULL ORDER BY e.occurred_at" worker-diagnostics.tsv

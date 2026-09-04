@@ -470,7 +470,7 @@ describe('the evidence dump names only tables and columns the migrations create'
     const dumps = queries();
     const everyDumpedFile = [...read('.github/julius-live-evidence-dump.sh').matchAll(/" ([a-z-]+\.tsv)$/gmu)].map((match) => match[1]).sort();
     expect(everyDumpedFile, 'every file the script writes, including the ones this regex cannot parse')
-      .toEqual(['decisions.tsv', 'evidence.tsv', 'failures.tsv', 'findings.tsv', 'reviewer-diagnostics.tsv', 'runs.tsv', 'tasks.tsv', 'tool-invocations.tsv']);
+      .toEqual(['decisions.tsv', 'evidence.tsv', 'failures.tsv', 'findings.tsv', 'runs.tsv', 'tasks.tsv', 'tool-invocations.tsv', 'worker-diagnostics.tsv']);
     expect(dumps.map((dump) => dump.file).sort()).toEqual(['decisions.tsv', 'evidence.tsv', 'findings.tsv', 'runs.tsv', 'tasks.tsv', 'tool-invocations.tsv']);
     for (const dump of dumps) {
       const columns = tables.get(dump.table);
@@ -497,7 +497,7 @@ describe('the evidence dump names only tables and columns the migrations create'
   it('the reviewer diagnostics query exports allowlisted structural keys and no payload', () => {
     const tables = schema();
     const script = read('.github/julius-live-evidence-dump.sh');
-    const query = script.split('\n').find((line) => line.includes('reviewer-diagnostics.tsv')) ?? '';
+    const query = script.split('\n').find((line) => line.includes('worker-diagnostics.tsv')) ?? '';
     expect(query, 'the reviewer diagnostics dump must exist').not.toBe('');
 
     for (const column of ['task_id', 'role']) {
@@ -507,11 +507,14 @@ describe('the evidence dump names only tables and columns the migrations create'
     // EVERY KEY THE SAFE RECORD DEFINES, so a field added to the allowlist
     // without a column here would be collected and then silently not exported.
     for (const key of [
-      'reviewStage', 'transport', 'provider', 'servedModel', 'processExitCode', 'timedOut',
+      'stage', 'transport', 'provider', 'servedModel', 'processExitCode', 'timedOut',
       'outputBytesObserved', 'outputByteLimit', 'outputTruncated', 'jsonDetected', 'jsonParseable',
       'reviewObjectCount', 'verdictPresent', 'verdictValid', 'summaryPresent', 'failureShape',
+      // The Prompt Architect half. Paid attempt #3 failed here and the artifact
+      // could not say which rule refused the plan.
+      'requestedModel', 'responseId', 'validationPassed', 'validationReasonCode', 'validationField',
     ]) {
-      expect(query, `the diagnostics dump must select ${key}`).toContain(`'${key}'`);
+      expect(query, `the diagnostics dump must select ${key}`).toContain(`'diag_${key}'`);
     }
     // No key exists in the allowlist for reviewer text, a summary, a diff or a
     // prompt — so there is nothing to select, and nothing selects one.
@@ -521,8 +524,12 @@ describe('the evidence dump names only tables and columns the migrations create'
     expect(query, 'the whole payload is never dumped').not.toMatch(/\bpayload\b(?!\s*(?:->|#>))/u);
     // Scoped to rows that actually carry the record, so ordinary events do not
     // become a wall of empty columns.
-    expect(query, 'scoped to events carrying a diagnostics object')
-      .toContain("jsonb_typeof(e.payload->'facts'->'diagnostics')='object'");
+    // Flat scalars: a nested object does not survive the runtime's fact
+    // coercion, which is the defect this shape exists to avoid.
+    expect(query, 'scoped to events carrying diagnostics')
+      .toContain("e.payload->'facts'->>'diag_transport' IS NOT NULL");
+    expect(query, 'and it never descends into a nested diagnostics object')
+      .not.toContain("->'diagnostics'");
   });
 
   /**
