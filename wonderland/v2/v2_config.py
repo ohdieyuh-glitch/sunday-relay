@@ -363,6 +363,20 @@ HERO_CAMS = [
      "fov": 100.0, "tags": ("CloisterCam31", "HeroCam31")},      # the Royal Gardens cloister, 29 m
     {"name": "BridgeCam32", "location": (-4045.9, -10013.8, 170.0), "rotation": (1.0, -112.0, 0.0),
      "fov": 100.0, "tags": ("BridgeCam32", "HeroCam32")},        # across the Water Gardens bridge, 24 m
+    # ---------------------------------------------------------------------
+    # THE SOUTHERN QUARTER, PASS 30. The district was built from emptiness.py's
+    # measurement and then could not be SEEN: driving 300 m south by mouse-turn
+    # put the Dog against a retaining wall and never reached it. A district
+    # with no camera is a number, so these are its eight, computed from the
+    # quarter's own axis rather than placed by eye.
+    {'name': 'South_SpireCorridor33', 'location': (7852.5, -36120.9, 170.0), 'rotation': (2.0, 100.0, 0.0), 'fov': 100.0, 'tags': ('South_SpireCorridor33', 'HeroCam33')},
+    {'name': 'South_StreetHero34', 'location': (5828.8, -24698.7, 170.0), 'rotation': (-1.0, 280.0, 0.0), 'fov': 100.0, 'tags': ('South_StreetHero34', 'HeroCam34')},
+    {'name': 'South_Market35', 'location': (7922.3, -36514.7, 170.0), 'rotation': (-2.0, 280.0, 0.0), 'fov': 95.0, 'tags': ('South_Market35', 'HeroCam35')},
+    {'name': 'South_FacadeRow36', 'location': (7595.4, -28651.2, 170.0), 'rotation': (4.0, 190.0, 0.0), 'fov': 95.0, 'tags': ('South_FacadeRow36', 'HeroCam36')},
+    {'name': 'South_Arcade37', 'location': (6001.8, -31980.2, 170.0), 'rotation': (2.0, 10.0, 0.0), 'fov': 90.0, 'tags': ('South_Arcade37', 'HeroCam37')},
+    {'name': 'South_Skyline38', 'location': (14498.3, -38091.7, 900.0), 'rotation': (8.0, 152.0, 0.0), 'fov': 90.0, 'tags': ('South_Skyline38', 'HeroCam38')},
+    {'name': 'South_Overview39', 'location': (22153.5, -42321.0, 6200.0), 'rotation': (-14.0, 138.0, 0.0), 'fov': 95.0, 'tags': ('South_Overview39', 'HeroCam39')},
+    {'name': 'South_PlayerClose40', 'location': (7654.7, -26406.4, 170.0), 'rotation': (1.0, 170.0, 0.0), 'fov': 85.0, 'tags': ('South_PlayerClose40', 'HeroCam40')},
 ]
 #: The suite's names by index -- the filing tool and the checkpoint report use
 #: them; the capture tooling uses the "HeroCamN" tags.
@@ -385,7 +399,13 @@ CAM_SUITE = ("HeroCam0", "PlayerCam01", "PathCam02", "ReverseCam03",
              # run after adding them -- an IndexError from CAM_SUITE being
              # shorter than HERO_CAMS, which is this gate doing its job for the
              # second time in two passes.
-             "GateArchCam30", "CloisterCam31", "BridgeCam32")
+             "GateArchCam30", "CloisterCam31", "BridgeCam32",
+             # PASS 30: the southern quarter's eight. The gate has caught a
+             # missing roster entry twice in two passes; it is not caught here
+             # because they were added together.
+             "South_SpireCorridor33", "South_StreetHero34", "South_Market35",
+             "South_FacadeRow36", "South_Arcade37", "South_Skyline38",
+             "South_Overview39", "South_PlayerClose40")
 #: HeroCam0's frozen transform (the founder benchmark) -- verify_v2_layout
 #: refuses a drift of the entry above from these values.
 HERO_CAM0_FROZEN = ((0.0, -150.0, 262.0), (-2.0, 90.0, 0.0), 100.0)
