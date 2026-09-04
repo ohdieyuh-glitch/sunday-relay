@@ -394,6 +394,15 @@ namespace RelayDogStride
 		 *  pushing and a body on the way down is reaching for the ground. */
 		float VerticalSpeedUU = 0.0f;
 
+		/** True on the frames between the jump key going down and the feet
+		 *  actually leaving the ground. A person does not launch from a
+		 *  standing skeleton: they DIP first and swing the arms back, and that
+		 *  load is most of what makes the launch read as a jump rather than a
+		 *  teleport upward. Without this the pose can only ever begin once the
+		 *  Dog is already airborne, which is one frame too late to anticipate
+		 *  anything. */
+		bool bJumpPressed = false;
+
 		/** Traced ground height minus the height that foot would otherwise be
 		 *  planted at, uu. Positive means the ground is ABOVE the foot — a step
 		 *  up. The TRACE needs an engine; what to do with it does not, so the
@@ -432,6 +441,12 @@ namespace RelayDogStride
 		FDogPose Current;
 		FInterest Interest;
 		FSpring GaitBlend, HeadYaw, HeadPitch, Lean, TurnRoll, SpeedFilter, Airborne;
+		/** Pre-jump load and post-landing absorb. Separate from Airborne because
+		 *  both happen while the Dog is ON the ground, where AirborneWeight is 0. */
+		FSpring Crouch, Land;
+		/** Last frame's airborne weight, so a touchdown can be detected without
+		 *  the actor having to report one. */
+		float PrevAirborne = 0.0f;
 		float FootOffsetLeft = 0.0f;
 		float FootOffsetRight = 0.0f;
 		float Distance = 0.0f;

@@ -544,17 +544,88 @@ namespace RelayDogStride
 			Current.LegRight.HipDeg = Current.LegRight.HipDeg * (1.0f - Air) + (HipUp * 0.65f) * Air;
 			Current.LegLeft.KneeDeg = Current.LegLeft.KneeDeg * (1.0f - Air) + Tuck * Air;
 			Current.LegRight.KneeDeg = Current.LegRight.KneeDeg * (1.0f - Air) + (Tuck * 0.8f) * Air;
-			// Arms out and up, and swept wide so the blocks clear the body.
-			const float ArmUp = -34.0f - 18.0f * Rise;
-			Current.ArmLeft.ShoulderDeg = Current.ArmLeft.ShoulderDeg * (1.0f - Air) + ArmUp * Air;
-			Current.ArmRight.ShoulderDeg = Current.ArmRight.ShoulderDeg * (1.0f - Air) + ArmUp * Air;
-			Current.ArmLeft.ElbowDeg = Current.ArmLeft.ElbowDeg * (1.0f - Air) + 22.0f * Air;
-			Current.ArmRight.ElbowDeg = Current.ArmRight.ElbowDeg * (1.0f - Air) + 22.0f * Air;
-			Current.ArmLeft.ShoulderYawDeg = Current.ArmLeft.ShoulderYawDeg * (1.0f - Air) + 30.0f * Air;
-			Current.ArmRight.ShoulderYawDeg = Current.ArmRight.ShoulderYawDeg * (1.0f - Air) + 30.0f * Air;
-			// The body pitches back a little rising, forward falling.
-			Current.LeanDeg = Current.LeanDeg * (1.0f - Air) + (-7.0f * Rise) * Air;
+			// THE ARMS WERE BEHIND THE BODY, AND THE COMMENT SAID OTHERWISE.
+			//
+			// The founder rejected this jump: "arms/front limbs pulled behind
+			// him". The old line was `ArmUp = -34 - 18 * Rise` under a comment
+			// reading "Arms out and up". In this rig NEGATIVE IS BACK -- the
+			// anime run's "both arms trail straight back" is BackShoulder =
+			// -62.0 in ArmPose() twenty lines up. So the jump asked for 52
+			// degrees BACK on takeoff and 34 at the apex: the arms-back
+			// silhouette, a few degrees short of the sprint pose, described in
+			// the comment as its opposite. Nothing measured it because the
+			// gait goldens cover locomotion, not the airborne override.
+			//
+			// A person's arms LEAD a jump. They swing back during the dip
+			// (below), then drive forward and up through takeoff, stay high
+			// while the body is rising, and come down and forward again on the
+			// way to the ground so the landing has something to balance
+			// against. That is the arc these numbers make, with Rise as the
+			// clock: +1 leaving the ground, 0 at the apex, -1 descending.
+			const float ArmFwd = 58.0f + 22.0f * Rise;      // 80 up, 58 apex, 36 down
+			const float ArmElbow = 30.0f - 8.0f * Rise;     // folds in slightly to land
+			// Only enough outward sweep to clear the hips. The old 30 existed
+			// because arms held BEHIND the body foul the torso; arms in front
+			// do not need it, and a wide sweep reads as a T-pose.
+			const float ArmOut = 16.0f;
+			Current.ArmLeft.ShoulderDeg = Current.ArmLeft.ShoulderDeg * (1.0f - Air) + ArmFwd * Air;
+			Current.ArmRight.ShoulderDeg = Current.ArmRight.ShoulderDeg * (1.0f - Air) + ArmFwd * Air;
+			Current.ArmLeft.ElbowDeg = Current.ArmLeft.ElbowDeg * (1.0f - Air) + ArmElbow * Air;
+			Current.ArmRight.ElbowDeg = Current.ArmRight.ElbowDeg * (1.0f - Air) + ArmElbow * Air;
+			Current.ArmLeft.ShoulderYawDeg = Current.ArmLeft.ShoulderYawDeg * (1.0f - Air) + ArmOut * Air;
+			Current.ArmRight.ShoulderYawDeg = Current.ArmRight.ShoulderYawDeg * (1.0f - Air) + ArmOut * Air;
+			// Chest opens slightly on the way up, torso folds forward on the way
+			// down to meet the ground. Was -7 * Rise, which leaned BACK while
+			// falling -- the pose of someone being lifted, not someone landing.
+			Current.LeanDeg = Current.LeanDeg * (1.0f - Air) + (2.0f - 6.0f * Rise) * Air;
 			Current.BodyYawDeg *= (1.0f - Air);
+		}
+
+		// THE DIP BEFORE, AND THE ABSORB AFTER. Both happen while the Dog is on
+		// the ground, where AirborneWeight is zero, so neither can live in the
+		// block above. A jump with no anticipation and no landing is two poses
+		// with a gap; these are the frames that make it one movement.
+		//
+		// LOAD: knees bend, hips drop, arms swing BACK and down -- which is the
+		// one moment arms-behind is correct, and is what the takeoff swings out
+		// of. Fast in (0.08 s) because a dip you can watch arrive is a squat.
+		SpringStep(Crouch, (In.bJumpPressed && !In.bInAir) ? 1.0f : 0.0f,
+		           (In.bJumpPressed && !In.bInAir) ? 0.08f : 0.16f, Dt);
+		// ABSORB: fires on TOUCHDOWN, detected here rather than reported by the
+		// actor -- last frame airborne, this frame not. Decays slowly so the
+		// knees give and recover instead of snapping straight.
+		const bool bTouchedDown = (PrevAirborne > 0.35f) && !In.bInAir;
+		if (bTouchedDown) { Land.Value = 1.0f; }
+		SpringStep(Land, 0.0f, 0.30f, Dt);
+		PrevAirborne = Current.AirborneWeight;
+
+		const float Dip = Clamp(Crouch.Value, 0.0f, 1.0f) + Clamp(Land.Value, 0.0f, 1.0f);
+		// Carried past the body block below, which ASSIGNS BobUU from the stride
+		// and would discard a dip applied here. Found by the acceptance test:
+		// knees bent, arms loaded, and the body height never moved.
+		float DipBobUU = 0.0f;
+		if (Dip > 0.001f)
+		{
+			const float D = Clamp(Dip, 0.0f, 1.0f);
+			// Knees take the load on both the dip and the landing.
+			Current.LegLeft.KneeDeg += 34.0f * D;
+			Current.LegRight.KneeDeg += 34.0f * D;
+			Current.LegLeft.HipDeg += 10.0f * D;
+			Current.LegRight.HipDeg += 10.0f * D;
+			// The body actually lowers; a crouch that does not change height is
+			// a leg animation nobody reads as weight. Applied below, after the
+			// stride's own bob is assigned.
+			DipBobUU = 5.5f * D * (ScaleUU / 100.0f);
+			Current.LeanDeg += 6.0f * D;
+			// Arms back and down to LOAD the swing, forward-low to STABILISE on
+			// landing. Crouch drives them back, Land settles them in front.
+			const float C = Clamp(Crouch.Value, 0.0f, 1.0f);
+			const float L = Clamp(Land.Value, 0.0f, 1.0f);
+			const float ArmLoad = -38.0f * C + 20.0f * L;
+			Current.ArmLeft.ShoulderDeg = Current.ArmLeft.ShoulderDeg * (1.0f - D) + ArmLoad * D;
+			Current.ArmRight.ShoulderDeg = Current.ArmRight.ShoulderDeg * (1.0f - D) + ArmLoad * D;
+			Current.ArmLeft.ElbowDeg += 14.0f * D;
+			Current.ArmRight.ElbowDeg += 14.0f * D;
 		}
 
 		const FIdlePose Idle = IdlePose(Elapsed, 1.0f - Weight, ScaleUU);
@@ -563,7 +634,7 @@ namespace RelayDogStride
 		// the Dog looks where it is going instead of at the floor.
 		Current.HeadPitchDeg = HeadPitch.Value + Idle.HeadPitchDeg + Current.LeanDeg * 0.55f;
 		Current.SwayUU = Current.Body.SwayUU + Idle.SwayUU;
-		Current.BobUU = Current.Body.BobUU;
+		Current.BobUU = Current.Body.BobUU - DipBobUU;
 		Current.Body.RollDeg += Idle.RollDeg;
 		Current.ArmLeft.ShoulderDeg += Idle.ArmLeftDeg;
 		Current.ArmRight.ShoulderDeg += Idle.ArmRightDeg;

@@ -603,9 +603,25 @@ int main()
 			Check("and it is held there rather than pedalling", (Hi - Lo) < 25.0f,
 			      F(Lo) + ".." + F(Hi) + " deg");
 		}
-		Check("both arms come up and out, not down at the sides",
-		      Air.ArmLeft.ShoulderDeg < -20.0f && Air.ArmRight.ShoulderDeg < -20.0f
-		      && Air.ArmLeft.ShoulderYawDeg > 15.0f,
+		// SUPERSEDED 2026-09-04 (founder rejected the pose this asserted).
+		//
+		// This required ShoulderDeg < -20 on both arms and called it "up and
+		// out". Negative is BACK in this rig -- ArmPose()'s anime sprint, the
+		// one posture whose comment says "both arms trail straight back", is
+		// BackShoulder = -62. So the assertion demanded the arms be at least a
+		// third of the way into the sprint's arms-back silhouette, and the code
+		// obliged with -52 on takeoff. Test and code were written together and
+		// shared the same sign, so they agreed with each other and neither
+		// agreed with the Dog: the founder saw "arms/front limbs pulled behind
+		// him" the first time they jumped.
+		//
+		// The assertion now says what a person watching would say. Arms in
+		// FRONT and up, positively, with only enough outward sweep to clear the
+		// hips -- and an explicit floor at zero, because the failure being
+		// guarded against is specifically "behind the body".
+		Check("both arms come up and FORWARD, never behind the body",
+		      Air.ArmLeft.ShoulderDeg > 20.0f && Air.ArmRight.ShoulderDeg > 20.0f
+		      && Air.ArmLeft.ShoulderYawDeg > 8.0f,
 		      "L " + F(Air.ArmLeft.ShoulderDeg) + " R " + F(Air.ArmRight.ShoulderDeg)
 		      + " sweep " + F(Air.ArmLeft.ShoulderYawDeg));
 		// Falling differs from rising: the body reaches for the ground.
@@ -632,6 +648,80 @@ int main()
 		Check("the air pose blends out smoothly rather than popping", MaxAirStep < 0.12f,
 		      F(MaxAirStep) + " of the blend in one frame");
 		Check("and the Dog is out of the air pose once down", Dog.Pose().AirborneWeight < 0.1f);
+	}
+
+	std::printf("== the jump has an anticipation and a landing ==\n");
+	{
+		// A JUMP IS FOUR THINGS, AND THE POSE USED TO BE ONE. Off the ground
+		// there was an air pose; on either side of it, nothing. So the Dog went
+		// from standing skeleton to airborne in a frame and back the same way.
+		// The founder asked for the human sequence: dip, drive, fly, absorb.
+		//
+		// The dip and the absorb both happen ON THE GROUND, where
+		// AirborneWeight is zero, which is why neither could live in the air
+		// block and why nothing here was caught by the tests above.
+		FDogAnimator Dog;
+		Dog.Configure(LegUU, ThighUU, ShinUU, ScaleUU);
+		FDogInput In;
+		In.DeltaSeconds = 1.0f / 60.0f;
+		In.SpeedUU = 0.0f;
+		In.DistanceUU = 0.0f;
+		for (int i = 0; i < 60; ++i) Dog.Update(In);       // standing still
+		const FDogPose Rest = Dog.Pose();
+
+		// PRE-JUMP. The key is down and the feet are still on the floor.
+		In.bJumpPressed = true;
+		for (int i = 0; i < 10; ++i) Dog.Update(In);
+		const FDogPose Load = Dog.Pose();
+		Check("the standing jump dips before it leaves",
+		      Load.LegLeft.KneeDeg > Rest.LegLeft.KneeDeg + 8.0f,
+		      F(Rest.LegLeft.KneeDeg) + " -> " + F(Load.LegLeft.KneeDeg) + " deg");
+		Check("...and the body actually lowers, rather than only bending a leg",
+		      Load.BobUU < Rest.BobUU - 1.0f,
+		      F(Rest.BobUU) + " -> " + F(Load.BobUU) + " uu");
+		Check("...and the arms swing BACK to load the swing",
+		      Load.ArmLeft.ShoulderDeg < Rest.ArmLeft.ShoulderDeg - 8.0f,
+		      F(Rest.ArmLeft.ShoulderDeg) + " -> " + F(Load.ArmLeft.ShoulderDeg) + " deg");
+
+		// TAKEOFF out of that load: the arms reverse through the swing.
+		In.bJumpPressed = false;
+		In.bInAir = true;
+		In.VerticalSpeedUU = 320.0f;
+		for (int i = 0; i < 25; ++i) Dog.Update(In);
+		const FDogPose Up = Dog.Pose();
+		Check("the standing jump throws the arms FORWARD, not behind",
+		      Up.ArmLeft.ShoulderDeg > 20.0f && Up.ArmRight.ShoulderDeg > 20.0f,
+		      "L " + F(Up.ArmLeft.ShoulderDeg) + " R " + F(Up.ArmRight.ShoulderDeg));
+		Check("...which is a real reversal out of the loaded pose",
+		      (Up.ArmLeft.ShoulderDeg - Load.ArmLeft.ShoulderDeg) > 40.0f,
+		      F(Load.ArmLeft.ShoulderDeg) + " -> " + F(Up.ArmLeft.ShoulderDeg) + " deg");
+
+		// LANDING. Touchdown is detected inside the solver from the airborne
+		// weight falling away, so the actor does not have to report it.
+		In.bInAir = false;
+		In.VerticalSpeedUU = 0.0f;
+		float KneePeak = -1e9f;
+		float BobLow = 1e9f;
+		for (int i = 0; i < 12; ++i)
+		{
+			const FDogPose P = Dog.Update(In);
+			KneePeak = std::fmax(KneePeak, P.LegLeft.KneeDeg);
+			BobLow = std::fmin(BobLow, P.BobUU);
+		}
+		Check("landing absorbs: the knees give on touchdown",
+		      KneePeak > Rest.LegLeft.KneeDeg + 8.0f,
+		      "peak " + F(KneePeak) + " vs rest " + F(Rest.LegLeft.KneeDeg) + " deg");
+		Check("...and the body dips with them",
+		      BobLow < Rest.BobUU - 1.0f, F(BobLow) + " vs rest " + F(Rest.BobUU) + " uu");
+		// ...and recovers, rather than leaving the Dog in a permanent crouch.
+		for (int i = 0; i < 90; ++i) Dog.Update(In);
+		const FDogPose Settled = Dog.Pose();
+		Check("...and it recovers to standing rather than staying crouched",
+		      std::fabs(Settled.LegLeft.KneeDeg - Rest.LegLeft.KneeDeg) < 3.0f,
+		      F(Settled.LegLeft.KneeDeg) + " vs rest " + F(Rest.LegLeft.KneeDeg) + " deg");
+		Check("...and the arms come back to where they started",
+		      std::fabs(Settled.ArmLeft.ShoulderDeg - Rest.ArmLeft.ShoulderDeg) < 4.0f,
+		      F(Settled.ArmLeft.ShoulderDeg) + " vs rest " + F(Rest.ArmLeft.ShoulderDeg) + " deg");
 	}
 	{
 		// THE COUNTER-ROTATION that separates a walk from a march: the body

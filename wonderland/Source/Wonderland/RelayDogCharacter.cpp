@@ -1036,6 +1036,11 @@ void ARelayDogCharacter::Tick(float DeltaSeconds)
 		In.bInAir = Move->IsFalling();
 	}
 	In.VerticalSpeedUU = Velocity.Z;
+	// ACharacter sets bPressedJump on the frame Jump() is called and clears it
+	// when the jump is consumed or released, so between the key going down and
+	// the feet leaving the ground this is true AND IsFalling() is false. That
+	// window is the anticipation dip; see the jump block in RelayDogStride.cpp.
+	In.bJumpPressed = bPressedJump;
 	In.GroundDeltaLeft = TraceFootGround(Animator.Pose().FootLeft.Forward, LegLeft.LateralUU);
 	In.GroundDeltaRight = TraceFootGround(Animator.Pose().FootRight.Forward, LegRight.LateralUU);
 
