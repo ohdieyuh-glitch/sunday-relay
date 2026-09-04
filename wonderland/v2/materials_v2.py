@@ -61,6 +61,12 @@ INSTANCES = {
     # were deliberately dropped to 0.24..0.56 because the light budget supplies
     # the shading the albedo cannot, and raising them would undo that pass. The
     # defect is HUE, so these sit at the same luminance with R-B near zero.
+    # THE GROUND WAS WARMER THAN THE WALLS once the stone went neutral. Same
+    # treatment, same reasoning: hue only, luminance held, because the light
+    # budget owns brightness. Kerb is the most-placed material in the city
+    # (1,757) and Cobble is every street surface.
+    #     Kerb    luma 0.4243 -> 0.4247   R-B 0.11 -> 0.02
+    #     Cobble  luma 0.3148 -> 0.3215   R-B 0.10 -> 0.02
     "MI_V2_MarblePale":  ("plaster", (0.55, 0.54, 0.52), 0.0, 0.58, 0.50, 0.32, None, 0.0),
     "MI_V2_MarbleBlush": ("plaster", (0.56, 0.52, 0.52), 0.0, 0.60, 0.50, 0.32, None, 0.0),
     "MI_V2_MarbleCool":  ("plaster", (0.50, 0.50, 0.52), 0.0, 0.56, 0.50, 0.32, None, 0.0),
@@ -75,7 +81,7 @@ INSTANCES = {
     # cannot make a course read as separate stones however good the bond is;
     # the reference's paving has stones two stops apart sitting side by side.
     "MI_V2_PlazaShade": ("plaza",   (0.30, 0.28, 0.24), 0.0, 0.78, 0.85, 0.30, None, 0.0),
-    "MI_V2_Kerb":       ("plaza",   (0.46, 0.42, 0.35), 0.0, 0.70, 0.75, 0.30, None, 0.0),
+    "MI_V2_Kerb":       ("plaza",   (0.43, 0.42, 0.41), 0.0, 0.70, 0.75, 0.30, None, 0.0),
     # the central path in the founder's view is PALE grey-blue stone, a step
     # cooler and a touch darker than the cream plaza -- not a dark road
     # PASS 01b: the reference path is a warm dark grey-brown. The `pathstone`
@@ -88,7 +94,7 @@ INSTANCES = {
     # varied stones, not as three pavements.
     "MI_V2_PathWarm":   ("plaza",   (0.38, 0.33, 0.26), 0.0, 0.79, 0.85, 0.30, None, 0.0),
     "MI_V2_PathPale":   ("plaza",   (0.45, 0.41, 0.34), 0.0, 0.81, 0.85, 0.30, None, 0.0),
-    "MI_V2_Cobble":     ("cobble",  (0.36, 0.30, 0.26), 0.0, 0.78, 0.90, 0.28, None, 0.0),
+    "MI_V2_Cobble":     ("cobble",  (0.33, 0.32, 0.31), 0.0, 0.78, 0.90, 0.28, None, 0.0),
     "MI_V2_CobbleHero": ("cobble",  (0.33, 0.31, 0.28), 0.0, 0.74, 0.90, 0.30, None, 0.0),
     # PASS 08: THE GROUND STOPS BEING A GREEN SCREEN. Whole-frame palette
     # against the founder reference: the green arc holds 25.3% of our frame
