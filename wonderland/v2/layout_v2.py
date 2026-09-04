@@ -7284,6 +7284,16 @@ _KIT_ROOF_TIERS = {
 KIT_ROOFS = ("MI_V2_RoofRose", "MI_V2_RoofPink", "MI_V2_RoofRose",
              "MI_V2_MushTerracotta", "MI_V2_RoofLilac", "MI_V2_RoofPink",
              "MI_V2_RoofRose", "MI_V2_RoofBlue")
+#: THE WALLS ARE NOT ALL ONE IVORY. The founder's list ends with "materials too
+#: uniform", and every wall in the first two districts was MI_V2_IvoryStone --
+#: one instance batch, one tone, across a whole city. The reference board's
+#: stone swatches are a family: warm cream, cool grey-white, shaded. Varying by
+#: seed costs nothing (the instancing key already includes the material, so
+#: this trades one huge batch for six large ones) and it is most of what stops
+#: a generated street reading as a single extruded object.
+KIT_WALLS = ("MI_V2_IvoryStone", "MI_V2_PlazaCream", "MI_V2_IvoryStone",
+             "MI_V2_PlazaWarm", "MI_V2_Stone", "MI_V2_IvoryStone",
+             "MI_V2_PlazaShade", "MI_V2_Ceramic")
 
 
 def kit_crown(x, y, z, yaw, width_m, seed, tag, mat=None):
@@ -7334,7 +7344,8 @@ def kit_facade(x, y, yaw, width_m, seed, tag, bays=None, lamp=False):
         bx = x + math.cos(along) * off + math.cos(fwd) * 402.0
         by = y + math.sin(along) * off + math.sin(fwd) * 402.0
         out.append(A("facade_panel", bx, by, 300.0, yaw=yaw, s=step / 4.4,
-                     mat="MI_V2_IvoryStone", label="%s_Bay%d" % (tag, i)))
+                     mat=KIT_WALLS[(k + i) % len(KIT_WALLS)],
+                     label="%s_Bay%d" % (tag, i)))
         # the pilaster between this bay and the next: 9.5 m tall at s=1, so a
         # 10 m storey takes about 0.75
         px_ = x + math.cos(along) * (off + step * 50.0) + math.cos(fwd) * 430.0
@@ -7370,7 +7381,8 @@ def kit_building(x, y, yaw, seed, tag, storeys=1, tower=True, scale=1.0):
     for st in range(storeys):
         z = st * 1000.0 * scale
         out.append(A("castle_hall", x, y, z, yaw=yaw, s=scale,
-                     mat="MI_V2_IvoryStone", label="%s_Body%d" % (tag, st)))
+                     mat=KIT_WALLS[(k + st) % len(KIT_WALLS)],
+                     label="%s_Body%d" % (tag, st)))
         out += kit_facade(x, y, yaw, 12.6 * scale, k + st, "%s_F%d" % (tag, st),
                           lamp=(st == 0 and k % 3 == 0))
         if st:
@@ -7386,7 +7398,8 @@ def kit_building(x, y, yaw, seed, tag, storeys=1, tower=True, scale=1.0):
         bw = {"castle_tower_slender": 2.7, "castle_tower_octagon": 6.9,
               "castle_tower": 5.8, "castle_tower_square": 5.6}[body]
         out.append(A(body, x, y, ztop, yaw=yaw + 11.0, s=ts,
-                     mat="MI_V2_IvoryStone", label="%s_Tower" % tag))
+                     mat=KIT_WALLS[(k + 3) % len(KIT_WALLS)],
+                     label="%s_Tower" % tag))
         zt = ztop + _S_BODY_H[body] * ts
         out += kit_crown(x, y, zt, yaw, bw * ts, k, "%s_Crown" % tag)
         out.append(A("balcony_ring", x, y, zt * 0.94, yaw=yaw, s=ts * 0.85,
