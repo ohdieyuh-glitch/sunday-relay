@@ -322,3 +322,53 @@ describe('the remote reviewer names the service state it was actually given', ()
     expect(JSON.stringify(outcome)).not.toContain('service-token');
   });
 });
+
+/**
+ * A SERVICE STATUS IS NOT A PROVIDER STATUS.
+ *
+ * At admission Hermes has not run and no provider has been called, so the
+ * number the hosted harness returns is its own. Recording it as the provider's
+ * would point an operator at a model vendor that was never contacted — the same
+ * misattribution `review_service_unavailable` and `review_request_rejected`
+ * exist to prevent, reintroduced through a number instead of a word.
+ */
+describe('the remote reviewer separates the service status from the provider status', () => {
+  const diagnosticsOf = async (fetchImpl: unknown) => {
+    const outcome = await runRemoteHermesReview({
+      packet: PACKET, config, runId: 'run-1',
+      deps: { ...deps, fetchImpl: fetchImpl as typeof fetch },
+    });
+    if (outcome.kind !== 'review_incomplete') throw new Error(`expected review_incomplete, got ${outcome.kind}`);
+    return outcome.diagnostics;
+  };
+
+  it('an admission refusal records the SERVICE status and no provider status', async () => {
+    for (const [status, kind] of [[503, 'capacity_exhausted'], [422, 'validation_failed'], [401, null]] as const) {
+      const d = await diagnosticsOf(() => Promise.resolve(
+        json(kind === null ? {} : { failureKind: kind }, status)));
+      expect(d.serviceHttpStatus, `service answered ${status}`).toBe(status);
+      expect(d.providerHttpStatus, 'no provider was called at admission').toBeNull();
+    }
+  });
+
+  it('and the shape still names the kind, so the number is corroboration not diagnosis', async () => {
+    const capacity = await diagnosticsOf(() => Promise.resolve(json({ failureKind: 'capacity_exhausted' }, 503)));
+    expect(capacity.failureShape).toBe('review_service_unavailable');
+    expect(capacity.serviceHttpStatus).toBe(503);
+
+    const rejected = await diagnosticsOf(() => Promise.resolve(json({ failureKind: 'validation_failed' }, 422)));
+    expect(rejected.failureShape).toBe('review_request_rejected');
+    expect(rejected.serviceHttpStatus).toBe(422);
+  });
+
+  it('a review the service returned but Relay could not read has neither status', async () => {
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(json({ accepted: true, runId: 'run-1' }))
+      .mockResolvedValueOnce(json({ runId: 'run-1', status: 'completed', reviewText: 'not json at all' }));
+    const d = await diagnosticsOf(fetchImpl);
+    expect(d.failureShape).toBe('review_json_absent');
+    // The service answered 200 and the provider status is not on this wire.
+    expect(d.serviceHttpStatus).toBeNull();
+    expect(d.providerHttpStatus).toBeNull();
+  });
+});

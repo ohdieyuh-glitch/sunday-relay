@@ -26,7 +26,7 @@ import type { GptRunOutcome } from '../../src/relay/connectors/gpt-architect';
 import { JuliusDispatchError, safeFailureClass } from '../../src/relay/mission/julius';
 import { compileHostedEnvelope } from '../hosted-coding-agent/hosted-envelope';
 import type { HostedQueryFn, HostedRunOutcome } from '../hosted-coding-agent/hosted-runner';
-import { classifyUnreadableReview, loadHermesConfig, reviewDiagnostics, runHermesReview, validateHermesReview, type HermesOutcome, type ReviewPacket } from '../hermes-reviewer';
+import { loadHermesConfig, runHermesReview, type HermesOutcome, type ReviewPacket } from '../hermes-reviewer';
 import { runRemoteHermesReview, type RemoteHermesConfig } from '../hermes-remote-review';
 import {
   createLiveArtifactExchange,
@@ -122,6 +122,23 @@ function fakeCoder(log: FakeLog, prompts: string[]) {
   };
 }
 
+/** A child process that prints one answer and exits, for the REAL runner. */
+function spawnEmitting(stdout: string, code = 0) {
+  return () => {
+    const child = new EventEmitter() as EventEmitter & { stdout: Readable; stderr: Readable; kill: () => boolean };
+    child.stdout = new Readable({ read() { /* pushed below */ } });
+    child.stderr = new Readable({ read() { /* never surfaced */ } });
+    child.kill = () => true;
+    setTimeout(() => {
+      if (stdout !== '') child.stdout.push(Buffer.from(stdout, 'utf8'));
+      child.stdout.push(null);
+      child.stderr.push(null);
+      child.emit('close', code);
+    }, 0);
+    return child as never;
+  };
+}
+
 /**
  * A REVIEWER THAT ANSWERS IN TEXT, read by the REAL validator.
  *
@@ -140,26 +157,20 @@ function textReviewer(log: FakeLog, packets: ReviewPacket[], texts: readonly str
     packets.push(input.packet);
     const text = texts[Math.min(call, texts.length - 1)]!;
     call += 1;
-    const startedAt = new Date().toISOString();
-    const result = validateHermesReview(text);
-    if (result === null) {
-      return {
-        kind: 'review_incomplete', shape: classifyUnreadableReview(text),
-        safeMessage: 'The Hermes reviewer returned no valid structured review.',
-        // The real builder on the real text, so the replay below carries the
-        // same structural facts a paid failure would.
-        diagnostics: reviewDiagnostics({
-          transport: 'local', shape: classifyUnreadableReview(text),
-          provider: 'xai', outputBytesObserved: Buffer.byteLength(text, 'utf8'),
-          outputByteLimit: 512 * 1024, processExitCode: 0, text,
-        }),
-        startedAt, completedAt: new Date().toISOString(),
-      };
-    }
-    return {
-      kind: 'reviewed', result, startedAt, completedAt: new Date().toISOString(),
-      requestedModel: 'grok-build-0.1', servedModel: 'grok-build-0.1', provider: 'xai',
-    };
+    /**
+     * THE REAL RUNNER, over a fake process.
+     *
+     * This used to rebuild the close handler's outcome by hand, which drifted:
+     * it never ran `classifyHermesUpstreamFailure`, so an `HTTP 401:` answer
+     * was classified by JSON shape and carried no status — and the harness that
+     * exists to prove the paid path could not reproduce the way paid attempt #4
+     * actually failed. Driving the real runner removes the duplicate entirely.
+     */
+    return runHermesReview({
+      packet: input.packet,
+      config: loadHermesConfig(LIVE_ENV as never),
+      spawnImpl: spawnEmitting(text),
+    });
   };
 }
 
@@ -1435,5 +1446,66 @@ describe('the review stage is read from the task id', () => {
     expect(reviewStageOf('')).toBeNull();
     // Two kinds is not a tie to break.
     expect(reviewStageOf('repair:plan-1:build-2:task:review')).toBeNull();
+  });
+});
+
+
+/**
+ * PAID ATTEMPT #4, REPLAYED THROUGH THE REAL LEDGER.
+ *
+ * Run 33907599197 reached the reviewer and recorded
+ * `review_authentication_failed` with no number — one shape covering a dead key
+ * (401), a key without model access (403) and a malformed request whose body
+ * merely says `api-key` (400). These drive the REAL local runner over a fake
+ * process into the REAL adapter and read the facts the REAL pipeline ledger
+ * persisted, because a status that only exists on an adapter-local object is
+ * not a status the artifact can show.
+ */
+describe('the reviewer HTTP status reaches the durable record', () => {
+  const upstreamRun = async (stdout: string) => {
+    const driven = await driveLiveMission(['approved'], undefined, undefined, [stdout]);
+    const failed = driven.memory.events().filter((event) => event.type === 'task.failed');
+    return failed.find((event) => event.taskId === 'plan-1:review')!.facts as Record<string, unknown>;
+  };
+
+  it('a dead credential is durably a 401', async () => {
+    const facts = await upstreamRun('HTTP 401: {"error":"invalid api-key"}');
+    expect(facts.failureClass).toBe('review_authentication_failed');
+    expect(facts.julius_code ?? facts.code).toBe('AUTH_CONFIGURATION');
+    // THE NUMBER PAID ATTEMPT #4 DID NOT HAVE.
+    expect(facts.diag_providerHttpStatus).toBe(401);
+    expect(facts.diag_stage).toBe('plan');
+    expect(facts.diag_transport).toBe('local');
+  });
+
+  it('a key without model access is durably a 403, and not confused with a dead one', async () => {
+    const facts = await upstreamRun('HTTP 403: {"error":"model not permitted"}');
+    expect(facts.failureClass, 'same shape').toBe('review_authentication_failed');
+    expect(facts.diag_providerHttpStatus, 'different repair').toBe(403);
+  });
+
+  it('an upstream error keeps its own shape and its own number', async () => {
+    const facts = await upstreamRun('HTTP 500: {"error":"boom"}');
+    expect(facts.failureClass).toBe('review_provider_http_error');
+    expect(facts.diag_providerHttpStatus).toBe(500);
+  });
+
+  it('a review that simply could not be read carries no status at all', async () => {
+    const facts = await upstreamRun('The plan looks fine to me overall.');
+    expect(facts.failureClass).toBe('review_json_absent');
+    // null, never 0 — nobody read a status here.
+    expect(facts.diag_providerHttpStatus).toBeNull();
+  });
+
+  it('and the provider body never reaches the ledger, only the integer', async () => {
+    const facts = await upstreamRun(
+      'HTTP 401: {"error":"invalid api-key sk-live-FAKESECRET123456789","header":"Authorization: Bearer FAKESECRET123456789"}',
+    );
+    expect(facts.diag_providerHttpStatus).toBe(401);
+    const durable = JSON.stringify(facts);
+    for (const secret of ['FAKESECRET123456789', 'sk-live', 'Authorization', 'Bearer', 'invalid api-key']) {
+      expect(durable, `"${secret}" must not reach the durable record`).not.toContain(secret);
+    }
+    expect(durable, 'and nothing is a stringified object').not.toContain('[object Object]');
   });
 });

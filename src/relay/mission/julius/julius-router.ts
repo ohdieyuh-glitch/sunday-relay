@@ -91,6 +91,17 @@ const safeToken=(value:unknown):string|null=>typeof value==='string'&&/^[a-z][a-
  */
 const safeNullableBool=(value:unknown):boolean|null=>typeof value==='boolean'?value:null;
 const safeCount=(value:unknown):number|null=>typeof value==='number'&&Number.isInteger(value)&&value>=0&&value<=Number.MAX_SAFE_INTEGER?value:null;
+/**
+ * AN HTTP STATUS, AND ONLY THAT.
+ *
+ * Bounded to the real status range so no counter, byte size or timestamp can
+ * arrive dressed as one, and `null` whenever a status was not read. Paid
+ * attempt #4 recorded `review_authentication_failed` with no number, and that
+ * one shape covers a dead key (401), a key without model access (403) and a
+ * malformed request whose body merely says `api-key` (400) — three different
+ * repairs an operator otherwise has to guess between.
+ */
+const safeHttpStatus=(value:unknown):number|null=>typeof value==='number'&&Number.isInteger(value)&&value>=100&&value<=599?value:null;
 const safeExitCode=(value:unknown):number|null=>typeof value==='number'&&Number.isInteger(value)&&value>=-256&&value<=65535?value:null;
 const safeModel=(value:unknown):string|null=>typeof value==='string'&&MODEL_TOKEN.test(value)&&!CREDENTIAL_SHAPED.test(value)?value:null;
 const safeEnum=<T extends string>(value:unknown,allowed:readonly T[]):T|null=>typeof value==='string'&&(allowed as readonly string[]).includes(value)?value as T:null;
@@ -123,6 +134,8 @@ export const safeReviewDiagnostics=(value:unknown):JuliusSafeDiagnostics|null=>{
   verdictValid:safeNullableBool(v.verdictValid),
   summaryPresent:safeNullableBool(v.summaryPresent),
   failureShape:safeToken(v.failureShape),
+  providerHttpStatus:safeHttpStatus(v.providerHttpStatus),
+  serviceHttpStatus:safeHttpStatus(v.serviceHttpStatus),
   /* --- Prompt Architect (plan stage). Null for the reviewer, and vice versa. */
   requestedModel:safeModel(v.requestedModel),
   responseId:safeResponseId(v.responseId),

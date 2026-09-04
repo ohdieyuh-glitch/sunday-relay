@@ -151,7 +151,12 @@ export async function runOpenAiReview(input: {
       shape: httpShape,
       // The provider answered with a status and a body we never read. No
       // review existed to measure.
-      diagnostics: reviewDiagnostics({ transport: 'openai', shape: httpShape, provider: 'openai' }),
+      diagnostics: reviewDiagnostics({
+        transport: 'openai', shape: httpShape, provider: 'openai',
+        // 401 is a dead key, 403 a key without access, 429 a limit — one shape,
+        // three repairs, and only the number separates them.
+        providerHttpStatus: response.status,
+      }),
       startedAt,
       completedAt: now(),
     };
@@ -182,6 +187,8 @@ export async function runOpenAiReview(input: {
           // is the only reason this branch can attest one at all.
           servedModel: actualModel,
           outputBytesObserved: Buffer.byteLength(text, 'utf8'),
+          // The call itself succeeded; the REVIEW is what could not be read.
+          providerHttpStatus: response.status,
           text,
         }),
         startedAt,
@@ -205,8 +212,16 @@ export async function runOpenAiReview(input: {
       // not the model's review JSON being malformed. Labelling it with the
       // review-shape token would tell an operator to change the prompt.
       shape: 'review_provider_http_error',
-      // The body itself would not read, so nothing about a review is known.
-      diagnostics: reviewDiagnostics({ transport: 'openai', shape: 'review_provider_http_error', provider: 'openai' }),
+      /**
+       * The body itself would not read, so nothing about a review is known —
+       * but the status IS known, and recording it is what separates "the
+       * provider refused" from "the provider answered 200 with a body we could
+       * not parse". Both reach this branch and they are not the same repair.
+       */
+      diagnostics: reviewDiagnostics({
+        transport: 'openai', shape: 'review_provider_http_error', provider: 'openai',
+        providerHttpStatus: response.status,
+      }),
       startedAt,
       completedAt: now(),
     };
