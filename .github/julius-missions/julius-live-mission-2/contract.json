@@ -1,0 +1,61 @@
+{
+  "missionId": "mission:julius-live-2",
+  "markerNamespace": "julius-live-mission-2",
+  "projectId": "prj-julius-live-2",
+  "tenantId": "tenant",
+  "objective": "In this workspace, replace the failing stub in `run-summary.js` with a working `summarizeRuns(entries)` implementation, and replace the placeholder test in `run-summary.test.js` with focused coverage of the behaviour below. Both files already exist and are tracked by git — edit them in place. Edit only files inside this workspace.",
+  "requirements": [
+    "Edit `run-summary.js` so `summarizeRuns(entries)` is implemented. Keep the existing `module.exports = { summarizeRuns }` export.",
+    "`summarizeRuns(entries)` takes an array of run records and returns an object `{ count, totalMs, slowestId }`. `count` is the number of entries, `totalMs` is the sum of every entry's `ms`, and `slowestId` is the `id` of the entry with the largest `ms`.",
+    "When two or more entries share the largest `ms`, `slowestId` must be the `id` of the EARLIEST such entry in the array.",
+    "`summarizeRuns(entries)` must throw an Error whose message is exactly `run_summary_invalid_entries` when `entries` is not an array, or is an empty array.",
+    "`summarizeRuns(entries)` must throw an Error whose message is exactly `run_summary_invalid_entry` when any entry is not a plain object, or its `id` is not a non-empty string, or its `ms` is not a finite number greater than or equal to zero.",
+    "Edit `run-summary.test.js`, replacing the placeholder case, so it uses `node:test` and `node:assert/strict` to assert the summary, the tie-break, and BOTH refusal messages.",
+    "After your edits `node --test run-summary.test.js` must exit zero, with no network access and no third-party dependency."
+  ],
+  "constraints": [
+    "Edit the two existing files in place. You have `Read`, `Glob`, `Grep` and `Edit`; you cannot create files or run commands, and you do not need to.",
+    "Use CommonJS (`require` / `module.exports`). There is no bundler, no TypeScript toolchain and no `node_modules` in this workspace.",
+    "Add no dependency; the sandbox that runs the test has no network access.",
+    "Do not modify `package.json` or `README.md`, and edit nothing outside this workspace.",
+    "Keep the change small: the two files named above and nothing else."
+  ],
+  "acceptanceCriteria": [
+    {
+      "id": "criterion-module-exists",
+      "text": "`run-summary.js` no longer throws `run_summary_not_implemented`; it exports a working `summarizeRuns` function via `module.exports`.",
+      "blocking": true
+    },
+    {
+      "id": "criterion-summarises",
+      "text": "`summarizeRuns` returns `{ count, totalMs, slowestId }`, so `[{id:'a',ms:5},{id:'b',ms:9}]` yields count 2, totalMs 14 and slowestId 'b'.",
+      "blocking": true
+    },
+    {
+      "id": "criterion-tie-break",
+      "text": "When the largest `ms` is shared, `slowestId` is the earliest such entry, so `[{id:'a',ms:9},{id:'b',ms:9}]` yields slowestId 'a'.",
+      "blocking": true
+    },
+    {
+      "id": "criterion-refuses-entries",
+      "text": "`summarizeRuns` throws an Error with the exact message `run_summary_invalid_entries` for a non-array and for an empty array.",
+      "blocking": true
+    },
+    {
+      "id": "criterion-refuses-entry",
+      "text": "`summarizeRuns` throws an Error with the exact message `run_summary_invalid_entry` for an entry that is not a plain object, whose `id` is not a non-empty string, or whose `ms` is not a finite number greater than or equal to zero.",
+      "blocking": true
+    },
+    {
+      "id": "criterion-test-passes",
+      "text": "`run-summary.test.js` no longer contains the placeholder case, covers the summary, the tie-break and both refusals, and the declared test command exits zero.",
+      "blocking": true
+    }
+  ],
+  "testCommand": "node --test run-summary.test.js",
+  "workspacePath": "/tmp/julius-workspace/tenant/ws",
+  "limits": {
+    "spendUsd": 5,
+    "repairCycles": 1
+  }
+}

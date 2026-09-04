@@ -17,6 +17,22 @@ import { fileURLToPath } from 'node:url';
  */
 export default defineConfig({
   plugins: [react()],
+  test: {
+    /**
+     * THE MISSION SEEDS ARE NOT THIS REPOSITORY'S TESTS.
+     *
+     * Each bounded live mission seeds a throwaway workspace containing a
+     * DELIBERATELY FAILING stub test — that is the point: a stub that passed
+     * would let a paid mission satisfy its TEST evidence having implemented
+     * nothing. Those files became real files on disk when missions moved out of
+     * the provisioning script's heredocs, and vitest's default discovery
+     * promptly adopted them and failed the suite.
+     *
+     * They are executed deliberately, by `julius-first-live-mission.test.ts`,
+     * which asserts they FAIL. Nothing else should run them.
+     */
+    exclude: ['**/node_modules/**', '**/dist/**', '.github/julius-missions/**'],
+  },
   envPrefix: ['VITE_', 'RELAY_PUBLIC_'],
   build: {
     rollupOptions: {

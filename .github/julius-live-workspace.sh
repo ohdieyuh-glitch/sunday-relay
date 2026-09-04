@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
-# Provisions the ONE disposable mission workspace for the first live Julius
-# mission, and nothing else.
+# Provisions the disposable mission workspace for ONE bounded live Julius
+# mission, whichever mission that is.
+#
+# GENERIC MECHANISM, MISSION-SUPPLIED CONTENTS. The tmpfs, the enforceable
+# ceiling, the git repository, the ownership dance and the outputs below are
+# infrastructure and are identical for every mission. What differs is only the
+# seed tree, which is copied from `$JULIUS_MISSION_DIR/workspace`. This used to
+# embed the first mission's four files as heredocs, which meant a second
+# mission could not exist without a second copy of all of the reasoning below.
 #
 # WHY A THROWAWAY REPOSITORY AND NOT THIS CHECKOUT. The executor bind-mounts
 # the workspace into a sandbox and refuses any workspace whose BACKING
@@ -35,6 +42,21 @@
 # be renamed out from under its own mount.
 set -euo pipefail
 
+# WHICH MISSION. Declared by the caller; never guessed. An unset or unreadable
+# mission directory is a refusal, not a fallback to the first mission — seeding
+# the wrong workspace would hand a live coding agent the wrong task and the
+# diff would look perfectly legitimate.
+MISSION_DIR=${JULIUS_MISSION_DIR:?missing JULIUS_MISSION_DIR}
+[ -d "$MISSION_DIR" ] || { echo "mission_dir_missing: $MISSION_DIR" >&2; exit 1; }
+# ABSOLUTE, AND RESOLVED HERE. Callers pass a repository-relative path, and this
+# script later `cd`s into the workspace — so a relative seed path would be
+# resolved against the empty tmpfs and every mission would fail provisioning
+# with `mission_workspace_seed_missing`. Resolving before the `cd` is what makes
+# the order of the rest of this file irrelevant.
+MISSION_DIR=$(cd "$MISSION_DIR" && pwd)
+MISSION_NAME=$(basename "$MISSION_DIR")
+SEED_DIR="$MISSION_DIR/workspace"
+
 FLEET_ROOT=${JULIUS_FLEET_ROOT:-/tmp/julius-workspace}
 TENANT=${JULIUS_TENANT_ID:-tenant}
 WORKSPACE="$FLEET_ROOT/$TENANT/ws"
@@ -64,63 +86,31 @@ fi
 
 cd "$WORKSPACE"
 
-cat > package.json <<'JSON'
-{
-  "name": "julius-live-proof",
-  "version": "0.0.0",
-  "private": true,
-  "description": "Disposable workspace for the first live Julius mission."
-}
-JSON
-
-cat > README.md <<'MARKDOWN'
-# Julius first live mission workspace
-
-A throwaway repository. It exists only so one live Julius mission can make a
-small, real, reviewable change inside a bounded sandbox: 4 MiB, no network, no
-dependencies, and no path back to the Sunday Relay repository.
-
-The mission's own contract states what must be built here.
-MARKDOWN
-
-cat > julius-live-proof.js <<'JAVASCRIPT'
-'use strict';
-
-/**
- * Replace this stub with the behaviour the mission's acceptance criteria
- * describe. It throws today so the declared test command cannot pass until the
- * work is real.
- */
-function juliusLiveProof(input) {
-  throw new Error('julius_live_proof_not_implemented');
-}
-
-module.exports = { juliusLiveProof };
-JAVASCRIPT
-
-cat > julius-live-proof.test.js <<'JAVASCRIPT'
-'use strict';
-
-const test = require('node:test');
-const assert = require('node:assert/strict');
-const { juliusLiveProof } = require('./julius-live-proof');
-
-// Replace this placeholder with focused coverage of both behaviours the
-// acceptance criteria name: the normalising case and the refusing case.
-//
-// It FAILS on purpose. If it merely asserted that the stub throws, it would
-// pass while nothing had been implemented, and the mission's TEST evidence
-// would be satisfied by doing no work at all.
-test('placeholder: replace with real coverage of juliusLiveProof', () => {
-  assert.fail('julius_live_proof_test_placeholder');
-});
-JAVASCRIPT
+# THE SEED TREE IS THE MISSION'S, AND MUST NOT BE EMPTY.
+#
+# WHY THE DELIVERABLES ARE SEEDED AND TRACKED, NOT CREATED. Two constraints
+# that are easy to miss until a paid run fails on them:
+#   - the hosted coding agent is allowed `Read/Glob/Grep/Edit` and is expressly
+#     DENIED `Write` (`relay-bridge/hosted-coding-agent/hosted-envelope.ts`), so
+#     it cannot bring a new file into existence at all;
+#   - `git diff` — which is how the mission captures the change for the
+#     Independent Reviewer — never reports an untracked file, so even a created
+#     file would reach the reviewer as zero bytes.
+# Both disappear if the deliverables already exist and are committed: the agent
+# EDITS them, and the diff is real. Every mission's stubs are therefore
+# deliberately failing, so the declared test command cannot pass until the work
+# is actually done.
+[ -d "$SEED_DIR" ] || { echo "mission_workspace_seed_missing: $SEED_DIR" >&2; exit 1; }
+# An empty seed would produce an empty repository, an empty diff, and a mission
+# that looks like it ran. Refuse instead.
+seeded=$(find "$SEED_DIR" -type f | wc -l)
+[ "$seeded" -gt 0 ] || { echo "mission_workspace_seed_empty: $SEED_DIR" >&2; exit 1; }
+cp -R "$SEED_DIR/." "$WORKSPACE/"
 
 git init --quiet --initial-branch=main .
+git -c user.name='Julius Live Mission' -c user.email='julius-live@invalid' add -A
 git -c user.name='Julius Live Mission' -c user.email='julius-live@invalid' \
-    add package.json README.md julius-live-proof.js julius-live-proof.test.js
-git -c user.name='Julius Live Mission' -c user.email='julius-live@invalid' \
-    commit --quiet -m 'Disposable workspace for the first live Julius mission'
+    commit --quiet -m "Disposable workspace for Julius mission $MISSION_NAME"
 
 # The sandbox runs as 65532; git refuses a repository it does not own. The
 # coding agent then edits from the host as a DIFFERENT uid, so the tree is also
@@ -129,6 +119,7 @@ git -c user.name='Julius Live Mission' -c user.email='julius-live@invalid' \
 sudo chown -R "$SANDBOX_UID:$SANDBOX_UID" "$WORKSPACE"
 sudo chmod -R a+rwX "$WORKSPACE"
 
+echo "mission=$MISSION_NAME"
 echo "workspace=$WORKSPACE"
 echo "workspace_bytes=$WORKSPACE_BYTES"
 echo "base_revision=$(git -c safe.directory="$WORKSPACE" rev-parse HEAD)"

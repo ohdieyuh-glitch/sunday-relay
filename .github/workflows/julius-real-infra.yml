@@ -214,6 +214,10 @@ jobs:
         id: identity
         run: ./.github/julius-live-identity.sh
       - name: Provision the disposable mission workspace
+        env:
+          # The regression provisions the FIRST mission's fixture; the script
+          # itself is generic and refuses to guess which mission it is seeding.
+          JULIUS_MISSION_DIR: .github/julius-missions/julius-first-live
         run: ./.github/julius-live-workspace.sh
       - name: Start PostgreSQL 16 and the independent executor (${{ matrix.receipts }} receipts)
         env:
