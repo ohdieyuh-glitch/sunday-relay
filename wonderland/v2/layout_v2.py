@@ -7353,8 +7353,14 @@ def _south_quarter():
     for i in range(n + 1):
         a = -HALF + seg * i
         sx, sy = at(a, 0.0)
+        # MEASURED, AFTER LOOKING AT IT. terrace_platform is rx 720, ry 370 --
+        # 14.4 m along its local x by 7.4 m across -- so (0.34, 0.62) made a
+        # 4.9 x 4.6 m slab, dropped every 10 m, in a street meant to be 14 m
+        # wide. The overview render showed exactly that: pale squares scattered
+        # on open grass, no street. The scale was chosen without ever asking
+        # the recipe how big the piece is.
         out.append(A("terrace_platform", sx, sy, ROAD_Z, yaw=yaw,
-                     sxyz=(0.34, 0.62, 0.30), mat="MI_V2_Cobble",
+                     sxyz=(0.76, 1.95, 0.30), mat="MI_V2_Cobble",
                      label="South_Road%02d" % i))
         for s in (1.0, -1.0):
             kx, ky = at(a, 700.0 * s)
@@ -7400,10 +7406,15 @@ def _south_quarter():
     # ---- THE BLOCKS ------------------------------------------------------
     # Four plots a side, fronting the street, set back far enough for the
     # arcade to stand in front of the facade.
-    plots = 4
+    # A STREET WALL NEEDS TO BE A WALL. castle_hall is rx 630 -- 12.6 m wide --
+    # and four plots a side over 170 m put 27 m of grass between neighbours, so
+    # the render read as scattered buildings on a lawn rather than a street.
+    # Ten a side at 16 m centres leaves about 3 m between masses, which the
+    # garden walls below then close.
+    plots = 10
     for side_i, s in enumerate((1.0, -1.0)):
         for i in range(plots):
-            a = -HALF + 2200.0 + (16000.0 / plots) * i
+            a = -HALF + 1400.0 + (16000.0 / plots) * i
             hx, hy = at(a, 2300.0 * s)
             # facing the street: the facade normal points across, toward a=0
             hyaw = yaw + (90.0 if s > 0 else -90.0)
@@ -7413,7 +7424,7 @@ def _south_quarter():
                                 tall=(i == 1 and side_i == 0) or (i == 3 and side_i == 1))
             # A garden wall closing the gap between plots, so the street has a
             # continuous edge instead of grass running between buildings.
-            wx, wy = at(a + 2000.0, 1500.0 * s)
+            wx, wy = at(a + 800.0, 1500.0 * s)
             out.append(A("garden_wall", wx, wy, 0.0, yaw=yaw, s=1.25,
                          mat="MI_V2_IvoryStone",
                          label="South_Wall%s%d" % ("L" if s > 0 else "R", i)))
@@ -7485,7 +7496,7 @@ def _south_quarter():
             a = -6200.0 + 1600.0 * i
             sx, sy = at(a, wacross)
             out.append(A("terrace_platform", sx, sy, ROAD_Z, yaw=yaw,
-                         sxyz=(0.26, 0.50, 0.30), mat="MI_V2_PathStone",
+                         sxyz=(1.20, 1.05, 0.30), mat="MI_V2_PathStone",
                          label="South_%sLane%02d" % (wtag, i)))
             if i % 3 == 1:
                 out.append(A("waymarker_lamp", *at(a, wacross + 620.0 * wsign),
@@ -7508,7 +7519,7 @@ def _south_quarter():
         for j in range(6):
             cxs, cys = at(-6600.0, wacross * (j / 5.0))
             out.append(A("terrace_platform", cxs, cys, ROAD_Z, yaw=yaw + 90.0,
-                         sxyz=(0.24, 0.46, 0.30), mat="MI_V2_PathStone",
+                         sxyz=(1.25, 1.00, 0.30), mat="MI_V2_PathStone",
                          label="South_%sCross%d" % (wtag, j)))
         out.append(A("arch_stone", *at(-6600.0, wacross * 0.5), 0.0,
                      yaw=yaw + 90.0, s=1.5, mat="MI_V2_PlazaCream",
@@ -7699,12 +7710,14 @@ def _southwest_quarter():
         for j in range(7):
             d = R + 1200.0 + 1500.0 * j
             sx, sy = cx + math.cos(b) * d, cy + math.sin(b) * d
+            # 3.7 x 3.4 m every 15 m was the south's mistake twice over. A
+            # narrow street is still a PAVED street: 9 m across, continuous.
             out.append(A("terrace_platform", sx, sy, ROAD_Z, yaw=bearing,
-                         sxyz=(0.26, 0.46, 0.30), mat="MI_V2_Cobble",
+                         sxyz=(1.10, 1.25, 0.30), mat="MI_V2_Cobble",
                          label="SW_St%d_%02d" % (si, j)))
             for s in (1.0, -1.0):
                 # blocks TIGHT to the street: 9 m apart, so the towers close over it
-                if j % 2 == 0:
+                if True:
                     bx = sx + math.cos(b + math.pi / 2) * 900.0 * s
                     by = sy + math.sin(b + math.pi / 2) * 900.0 * s
                     out += _sw_block(bx, by, bearing + (90.0 if s > 0 else -90.0),
