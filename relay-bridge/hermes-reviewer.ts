@@ -83,6 +83,26 @@ export type HermesReviewShape =
   | 'review_timeout'
   | 'review_authentication_failed'
   | 'review_provider_http_error'
+  /**
+   * THE REVIEW SERVICE ANSWERED AND HAD NO CAPACITY FOR THE REVIEW.
+   *
+   * `capacity_exhausted` and `shutting_down` are states the hosted harness
+   * reports about ITSELF: it was reached, it authenticated, it understood the
+   * request, and it is full or draining. Recording those as
+   * `review_provider_http_error` sent an operator to the model provider — which
+   * had not been asked anything yet — when what clears it is a run finishing or
+   * a deploy landing. REMOTE PATH ONLY: a local reviewer has no admission step.
+   */
+  | 'review_service_unavailable'
+  /**
+   * THE REVIEW SERVICE UNDERSTOOD THE REQUEST AND DECLINED IT.
+   *
+   * A 422 whose limits it cannot read, or a `review_refused`. No provider call
+   * necessarily happened, so naming it a provider error is a claim about
+   * somebody else's system; it is the request that has to change. REMOTE PATH
+   * ONLY, for the same reason.
+   */
+  | 'review_request_rejected'
   | 'review_process_exit'
   | 'review_output_too_large'
   | 'review_json_absent'
@@ -490,13 +510,30 @@ interface ReviewJsonScan {
   readonly unclosed: boolean;
   /** A balanced region that looked like JSON — quoted keys — and failed to parse. */
   readonly malformed: boolean;
+  /**
+   * Verdict-bearing objects found INSIDE a top-level array — never candidates,
+   * always evidence that the text states more than one verdict.
+   */
+  readonly verdictsInArrays: number;
 }
 
+/**
+ * How far into nested top-level arrays the ambiguity count looks. Selection
+ * never descends at all; this bound exists so a pathological `[[[[…` cannot
+ * make the scan superlinear, and it is stated rather than left implicit.
+ */
+const ARRAY_AMBIGUITY_DEPTH = 4;
+
 export function scanReviewJson(text: string): ReviewJsonScan {
+  return scanReviewJsonAt(text, 0);
+}
+
+function scanReviewJsonAt(text: string, depth: number): ReviewJsonScan {
   const objects: string[] = [];
   const withVerdict: string[] = [];
   let unclosed = false;
   let malformed = false;
+  let verdictsInArrays = 0;
 
   for (let i = 0; i < text.length; i += 1) {
     const ch = text[i];
@@ -505,6 +542,22 @@ export function scanReviewJson(text: string): ReviewJsonScan {
     if (ch === '[') {
       const span = balancedRegion(text, i, '[', ']');
       if (span === null) { unclosed = true; break; }
+      /**
+       * SKIPPED FOR SELECTION, COUNTED FOR AMBIGUITY.
+       *
+       * Not descending is what stopped a findings entry from being read as the
+       * review. But silently DISCARDING an array is its own way to manufacture
+       * an approval: a reviewer that states `changes_required` in an array and
+       * quotes an `approved` object beside it leaves exactly one top-level
+       * verdict, and answering with it picks the one the reviewer did not
+       * give. The interior never becomes a candidate; it only makes a text that
+       * states two verdicts refuse, which is the rule the top level already
+       * follows.
+       */
+      if (depth < ARRAY_AMBIGUITY_DEPTH) {
+        const inner = scanReviewJsonAt(span.slice(1, -1), depth + 1);
+        verdictsInArrays += inner.withVerdict.length + inner.verdictsInArrays;
+      }
       i += span.length - 1;
       continue;
     }
@@ -533,7 +586,7 @@ export function scanReviewJson(text: string): ReviewJsonScan {
     if (Object.prototype.hasOwnProperty.call(parsed, 'verdict')) withVerdict.push(region);
   }
 
-  return { objects, withVerdict, unclosed, malformed };
+  return { objects, withVerdict, unclosed, malformed, verdictsInArrays };
 }
 
 /**
@@ -546,8 +599,13 @@ export function scanReviewJson(text: string): ReviewJsonScan {
  */
 export function extractReviewJson(text: string): string | null {
   const scan = scanReviewJson(text);
-  if (scan.withVerdict.length === 1) return scan.withVerdict[0]!;
   if (scan.withVerdict.length > 1) return null;
+  // One verdict at the top level and another inside an array is still a text
+  // stating two verdicts. It is refused for the same reason two at the top
+  // level are: choosing between them is choosing one the reviewer may not have
+  // given, on the path where being wrong ships code and spends money.
+  if (scan.withVerdict.length === 1 && scan.verdictsInArrays > 0) return null;
+  if (scan.withVerdict.length === 1) return scan.withVerdict[0]!;
   return scan.objects.length === 1 ? scan.objects[0]! : null;
 }
 
@@ -736,7 +794,19 @@ export async function runHermesReview(input: {
     child.on('error', () => finish({ kind: 'launch_failed', safeMessage: 'The Hermes reviewer could not be started.' }));
     child.on('close', (code) => {
       const completedAt = now();
-      const parsed = validateHermesReview(out);
+      /**
+       * A TRUNCATED ANSWER IS NEVER A VERDICT, even when the part that arrived
+       * parses.
+       *
+       * The retained prefix can hold a complete, valid review object followed
+       * by text this process never saw — and a reviewer's later word is the one
+       * that counts. `extractReviewJson` refuses a text stating two verdicts
+       * precisely so a quoted approval cannot outrank a real rejection; reading
+       * only a prefix hides the second verdict and defeats that guard silently,
+       * which is the one failure mode where the guard's absence looks like
+       * success. What was cut off is unknown, and unknown is not approval.
+       */
+      const parsed = truncated ? null : validateHermesReview(out);
       if (!parsed) {
         /**
          * NAME THE ACTUAL FAILURE. Hermes exits 0 when its provider rejects
@@ -851,6 +921,7 @@ export function classifyUnreadableReview(text: string): HermesReviewShape {
   // meant another leaves a text whose verdict cannot be known, and guessing is
   // how an approval gets manufactured.
   if (scan.withVerdict.length > 1) return 'review_json_ambiguous';
+  if (scan.withVerdict.length === 1 && scan.verdictsInArrays > 0) return 'review_json_ambiguous';
   const slice = extractReviewJson(text);
   if (slice === null) {
     // An object that never closed is a review cut off mid-sentence; a balanced
@@ -892,8 +963,8 @@ export function describeUnreadableReview(text: string): string {
   // "json=absent" while the classifier had already parsed the object and found
   // the verdict word wrong.
   const scan = scanReviewJson(text);
-  if (scan.withVerdict.length > 1) {
-    parts.push(`json=ambiguous objectsWithVerdict=${String(scan.withVerdict.length)}`);
+  if (scan.withVerdict.length > 1 || (scan.withVerdict.length === 1 && scan.verdictsInArrays > 0)) {
+    parts.push(`json=ambiguous objectsWithVerdict=${String(scan.withVerdict.length)} inArrays=${String(scan.verdictsInArrays)}`);
     return `Review shape: ${parts.join(' ')}.`;
   }
   const slice = extractReviewJson(text);

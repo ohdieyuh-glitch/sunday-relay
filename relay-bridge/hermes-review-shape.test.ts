@@ -204,6 +204,23 @@ describe('the local reviewer names which failure it was', () => {
     expect(await shapeOf({ stdout: huge }, { maxOutputBytes: 64 })).toBe('review_output_too_large');
   });
 
+  it('15c. a COMPLETE review followed by overflow is refused, not approved', async () => {
+    /**
+     * The prefix parses perfectly — and a reviewer's later word is the one that
+     * counts. Accepting this reads an approval out of a stream whose remainder
+     * this process never saw, and a second verdict past the ceiling is exactly
+     * what `extractReviewJson` refuses when it CAN see it. Truncation must not
+     * be the way that guard is bypassed.
+     */
+    const complete = JSON.stringify({ verdict: 'approved', summary: 'Looks good.', findings: [] });
+    const outcome = await review(
+      { stdoutChunks: [complete, ' ...and on reflection: ', JSON.stringify({ verdict: 'changes_required', summary: 'AC-1 unmet' })] },
+      { maxOutputBytes: complete.length + 4 },
+    );
+    expect(outcome.kind, 'a partial stream is not a verdict').toBe('review_incomplete');
+    if (outcome.kind === 'review_incomplete') expect(outcome.shape).toBe('review_output_too_large');
+  });
+
   /* -------------------------------------------------------------- the rule */
   it('NO invalid review ever becomes a verdict', async () => {
     const invalid = [
@@ -322,6 +339,42 @@ describe('the extractor finds one object without becoming permissive', () => {
     expect(validateHermesReview(inArray), 'an array of reviews is not a review').toBeNull();
     const nested = `{"outer": broken, "inner": ${APPROVED}}`;
     expect(validateHermesReview(nested), 'a child of an unparseable parent is not the review').toBeNull();
+  });
+
+  it('a verdict hidden in an array still makes the text ambiguous, not approved', () => {
+    /**
+     * THE INVERSE OF THE CRITICAL. Not descending into arrays stopped a
+     * findings entry from being read as the review — and then DISCARDING the
+     * array became its own way to pick a verdict the reviewer did not give: a
+     * real `changes_required` in a list, an `approved` quoted beside it, and
+     * exactly one candidate left standing at the top level.
+     */
+    const hidden = [
+      'My findings, as a list:',
+      '[{"verdict":"changes_required","summary":"AC-1 is unmet"}]',
+      `The diff claimed ${APPROVED} which I dispute.`,
+    ].join('\n');
+    expect(validateHermesReview(hidden), 'two verdicts is never an approval').toBeNull();
+    expect(classifyUnreadableReview(hidden)).toBe('review_json_ambiguous');
+    expect(extractReviewJson(hidden)).toBeNull();
+  });
+
+  it('the arrays a REAL review carries are untouched, because they are not top level', () => {
+    // The guard above must not refuse ordinary reviews: `findings` and
+    // `requirementsChecked` live inside the review object, which the scan takes
+    // whole and never looks inside. Without this the fix would fail closed on
+    // every valid review, which is a worse defect than the one it closes.
+    expect(validateHermesReview(APPROVED)?.verdict).toBe('approved');
+    expect(validateHermesReview(CHANGES)?.verdict).toBe('changes_required');
+    expect(validateHermesReview(`\`\`\`json\n${APPROVED}\n\`\`\``)?.verdict).toBe('approved');
+  });
+
+  it('a verdict that exists ONLY inside an array names the missing field, not an approval', () => {
+    // Nothing competes with it, so there is no ambiguity to report — but an
+    // array is still not the review, and no verdict is manufactured from it.
+    expect(validateHermesReview(`{"summary":"see list"}\n[${APPROVED}]`)).toBeNull();
+    expect(classifyUnreadableReview(`{"summary":"see list"}\n[${APPROVED}]`))
+      .toBe('review_verdict_missing');
   });
 
   it('a single object missing its verdict is still found, so the field can be named', () => {

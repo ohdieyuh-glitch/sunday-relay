@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import {
   REMOTE_HERMES_ENV,
+  classifyRemoteReviewFailure,
   resolveRemoteHermes,
   runRemoteHermesReview,
   type RemoteHermesConfig,
@@ -228,6 +229,95 @@ describe('running a review', () => {
     const outcome = await runRemoteHermesReview({
       packet: PACKET, config, runId: 'run-1',
       deps: { ...deps, fetchImpl: (() => Promise.resolve(json({}, 500))) as unknown as typeof fetch },
+    });
+    expect(JSON.stringify(outcome)).not.toContain('service-token');
+  });
+});
+
+
+/**
+ * THE SERVICE'S OWN STATE, NOT THE PROVIDER'S.
+ *
+ * Both branches below used to answer with a word about somebody else: an
+ * admission refusal became `review_provider_http_error` and every terminal
+ * state without a review became `review_process_exit`. An independent review
+ * found the timeout first — the service says `timed_out` and Julius recorded
+ * WORKER_EXECUTION_FAILURE — which is precisely the durable diagnosis this
+ * taxonomy exists to give, defeated on the clearest shape there is.
+ */
+describe('the remote reviewer names the service state it was actually given', () => {
+  const shapeOf = async (fetchImpl: unknown, cfg: Partial<RemoteHermesConfig> = {}) => {
+    const outcome = await runRemoteHermesReview({
+      packet: PACKET, config: { ...config, ...cfg }, runId: 'run-1',
+      deps: { ...deps, fetchImpl: fetchImpl as typeof fetch },
+    });
+    expect(outcome.kind).toBe('review_incomplete');
+    return outcome.kind === 'review_incomplete' ? outcome.shape : null;
+  };
+  const polled = (state: unknown) => vi.fn()
+    .mockResolvedValueOnce(json({ accepted: true, runId: 'run-1' }))
+    .mockResolvedValueOnce(json(state));
+
+  it('a review the service timed out is a TIMEOUT, not a process exit', async () => {
+    // The local path has named this `review_timeout` since the taxonomy
+    // existed. Two readers must not describe one cause with two words.
+    expect(await shapeOf(polled({ runId: 'run-1', status: 'timed_out', failureKind: 'timed_out' })))
+      .toBe('review_timeout');
+  });
+
+  it('reads the status even when the service sent no failure kind', async () => {
+    expect(await shapeOf(polled({ runId: 'run-1', status: 'timed_out' }))).toBe('review_timeout');
+  });
+
+  it('a terminal state that names no cause is still a process exit', async () => {
+    // The fallback is retained deliberately: "it stopped and did not say why"
+    // is what a process exit means, and inventing a cause for it would be the
+    // failure this whole change is about.
+    expect(await shapeOf(polled({ runId: 'run-1', status: 'failed' }))).toBe('review_process_exit');
+  });
+
+  it('the service being full or draining is not a provider error', async () => {
+    // No provider request necessarily happened. Sending an operator to the
+    // model vendor for the harness being at capacity is the misdirection.
+    expect(await shapeOf(() => Promise.resolve(json({ failureKind: 'capacity_exhausted' }, 503))))
+      .toBe('review_service_unavailable');
+    expect(await shapeOf(() => Promise.resolve(json({ failureKind: 'shutting_down' }, 503))))
+      .toBe('review_service_unavailable');
+  });
+
+  it('a request the service refused to admit names the request', async () => {
+    expect(await shapeOf(() => Promise.resolve(json({ failureKind: 'validation_failed' }, 422))))
+      .toBe('review_request_rejected');
+    expect(await shapeOf(() => Promise.resolve(json({ failureKind: 'review_refused' }, 400))))
+      .toBe('review_request_rejected');
+  });
+
+  it('falls back to the HTTP status when the body named no kind', async () => {
+    expect(await shapeOf(() => Promise.resolve(json({}, 503)))).toBe('review_service_unavailable');
+    expect(await shapeOf(() => Promise.resolve(json({}, 422)))).toBe('review_request_rejected');
+    expect(await shapeOf(() => Promise.resolve(json({}, 401)))).toBe('review_authentication_failed');
+    // Still an upstream error when it is none of the states above.
+    expect(await shapeOf(() => Promise.resolve(json({}, 500)))).toBe('review_provider_http_error');
+  });
+
+  it('a dead credential is an auth failure however the service phrased it', async () => {
+    expect(await shapeOf(() => Promise.resolve(json({ failureKind: 'authentication_failed' }, 500))))
+      .toBe('review_authentication_failed');
+    expect(await shapeOf(polled({ runId: 'run-1', status: 'failed', failureKind: 'credentials_missing' })))
+      .toBe('review_authentication_failed');
+  });
+
+  it('classifies nothing it was not told, so no cause is ever manufactured', () => {
+    expect(classifyRemoteReviewFailure({})).toBeNull();
+    expect(classifyRemoteReviewFailure({ status: 'failed' })).toBeNull();
+    expect(classifyRemoteReviewFailure({ status: 'completed' })).toBeNull();
+    expect(classifyRemoteReviewFailure({ failureKind: 'something_new' })).toBeNull();
+  });
+
+  it('names a service state without ever quoting the credential', async () => {
+    const outcome = await runRemoteHermesReview({
+      packet: PACKET, config, runId: 'run-1',
+      deps: { ...deps, fetchImpl: (() => Promise.resolve(json({ failureKind: 'capacity_exhausted' }, 503))) as typeof fetch },
     });
     expect(JSON.stringify(outcome)).not.toContain('service-token');
   });

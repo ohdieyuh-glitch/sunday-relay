@@ -1,4 +1,4 @@
-import { buildReviewPrompt, classifyUnreadableReview, describeUnreadableReview, validateHermesReview, type HermesOutcome, type ReviewPacket } from './hermes-reviewer';
+import { buildReviewPrompt, classifyUnreadableReview, describeUnreadableReview, validateHermesReview, type HermesOutcome, type HermesReviewShape, type ReviewPacket } from './hermes-reviewer';
 import { SERVICE_MAX_TURNS } from '../relay-hermes-service/service';
 
 /**
@@ -155,6 +155,51 @@ export interface RemoteReviewDeps {
 }
 
 /**
+ * WHAT THE REVIEW SERVICE SAID ABOUT ITSELF, as a review shape.
+ *
+ * This path answered two different questions with one word each: a start
+ * refusal was `review_provider_http_error` unless it was a 401, and every
+ * terminal state carrying no review text was `review_process_exit`. Both are
+ * claims about the model provider and about a reviewer process — neither of
+ * which is what `capacity_exhausted`, `shutting_down`, `validation_failed` or
+ * `timed_out` describe. An independent review found the timeout case first:
+ * the service says `timed_out`, and Julius recorded WORKER_EXECUTION_FAILURE
+ * rather than TIMEOUT — defeating the durable diagnosis this taxonomy exists
+ * to provide, on the one shape it names most plainly.
+ *
+ * The service's own `failureKind` is authoritative when it sent one; its
+ * status is read second. `null` means it said nothing this function can read,
+ * and the caller keeps its own fallback rather than inventing a cause — the
+ * same rule the local path follows for an unreadable review.
+ */
+export function classifyRemoteReviewFailure(input: {
+  readonly status?: string | null;
+  readonly failureKind?: string | null;
+}): HermesReviewShape | null {
+  switch (input.failureKind) {
+    case 'timed_out': return 'review_timeout';
+    case 'authentication_failed':
+    case 'credentials_missing': return 'review_authentication_failed';
+    case 'capacity_exhausted':
+    case 'shutting_down': return 'review_service_unavailable';
+    case 'validation_failed':
+    case 'review_refused': return 'review_request_rejected';
+    default: break;
+  }
+  // A terminal status the service reports without a failure kind. `cancelled`
+  // and `failed` stay unclassified: the caller's process-exit fallback is the
+  // honest reading of "it stopped and did not say why".
+  return input.status === 'timed_out' ? 'review_timeout' : null;
+}
+
+/** The service's `failureKind`, when the body is an object that carries one. */
+function declaredFailureKind(body: unknown): string | null {
+  if (body === null || typeof body !== 'object') return null;
+  const kind = (body as { failureKind?: unknown }).failureKind;
+  return typeof kind === 'string' ? kind : null;
+}
+
+/**
  * Run one review against the dedicated service.
  *
  * `runId` and `idempotencyKey` are the SAME value on purpose: a redelivered
@@ -222,9 +267,19 @@ export async function runRemoteHermesReview(input: {
     return {
       kind: 'review_incomplete',
       safeMessage: `The Reviewer service refused the review (${String(start.status)}).`,
-      // The service answered and said no. 401/403 is its credential; anything
-      // else is an upstream refusal.
-      shape: start.status === 401 || start.status === 403 ? 'review_authentication_failed' : 'review_provider_http_error',
+      /**
+       * WHAT IT SAID, THEN WHAT IT RETURNED. A refusal at ADMISSION is the
+       * service's own answer about its own state, and calling all of them
+       * `review_provider_http_error` sent an operator to a provider that had
+       * not been called: a 503 is capacity, a 422 is these limits. The status
+       * codes are the fallback for a body that named no kind, and only a
+       * refusal that is none of those remains an upstream error.
+       */
+      shape: classifyRemoteReviewFailure({ failureKind: declaredFailureKind(start.body) })
+        ?? (start.status === 401 || start.status === 403 ? 'review_authentication_failed'
+          : start.status === 400 || start.status === 422 ? 'review_request_rejected'
+            : start.status === 429 || start.status === 503 ? 'review_service_unavailable'
+              : 'review_provider_http_error'),
       startedAt,
       completedAt: now(),
     };
@@ -263,8 +318,16 @@ export async function runRemoteHermesReview(input: {
       return {
         kind: 'review_incomplete',
         safeMessage: state.safeMessage ?? `The Reviewer service ended in "${state.status ?? 'unknown'}".`,
-        // The service ended without a review text. Its own process, not ours.
-        shape: 'review_process_exit',
+        /**
+         * The service ended without a review text, and it usually says why.
+         * `timed_out` recorded as a process exit is the review's own deadline
+         * reported as a crash — the local path has named that `review_timeout`
+         * since this taxonomy existed, and the two readers must not describe
+         * one cause with two words. Process exit remains the fallback for a
+         * terminal state carrying no kind at all.
+         */
+        shape: classifyRemoteReviewFailure({ status: state.status, failureKind: state.failureKind })
+          ?? 'review_process_exit',
         startedAt,
         completedAt: now(),
       };

@@ -404,17 +404,47 @@ export function createLiveHermesReviewerAdapter(input: {
          * exists to explain a paid failure said only that the review was
          * unreadable, and a second paid run was the only way to learn more.
          *
-         * A timeout, a refused credential and an upstream HTTP error are the
-         * three the operator can act on without reading anything else, so they
-         * keep their own Julius codes; the rest are worker execution failures
-         * distinguished by their shape. None is retryable: every one of them
-         * describes an answer that will be identical if asked again.
+         * A timeout, a refused credential, an upstream HTTP error, a review
+         * service with no capacity and a request that service would not admit
+         * are the five an operator can act on without reading anything else,
+         * so they keep their own Julius codes; the rest are worker execution
+         * failures distinguished by their shape.
+         *
+         * AND TWO OF THEM ARE RETRYABLE, because two of them describe an answer
+         * that did not arrive rather than one that arrived wrong.
+         *
+         * Every shape used to be `retryable: false` under one sentence — "every
+         * one of them describes an answer that will be identical if asked
+         * again" — which is true of a malformed verdict and false of a review
+         * that timed out or a service that was full. The rest of Julius already
+         * knows this: the Prompt Architect and the Coding Agent both raise
+         * TIMEOUT retryable, and only the reviewer treated its own timeout as
+         * final. Nothing paid for is discarded by retrying one: a timeout and a
+         * 503 produced no verdict to throw away.
+         *
+         * The refusals stay final, and are held there twice — `retryable: false`
+         * here, and `decideJuliusContinuation` refusing AUTH_CONFIGURATION and
+         * INVALID_REQUEST whatever this flag says. Retries remain bounded by the
+         * task's attempt ceiling, the C.A.R.D.'s `automaticRetry`, and the run
+         * spend budget, so "retryable" is a permission to re-ask, never a
+         * licence to spend without one.
          */
-        const code = outcome.shape === 'review_timeout' ? 'TIMEOUT'
-          : outcome.shape === 'review_authentication_failed' ? 'AUTH_CONFIGURATION'
-            : outcome.shape === 'review_provider_http_error' ? 'PROVIDER_UNAVAILABLE'
-              : 'WORKER_EXECUTION_FAILURE';
-        throw new JuliusDispatchError(code, false, `Hermes review incomplete: ${safeClaim(outcome.safeMessage, 120)}.`, outcome.shape);
+        const [code, retryable] = outcome.shape === 'review_timeout'
+          ? ['TIMEOUT', true] as const
+          : outcome.shape === 'review_service_unavailable'
+            // Capacity clears as runs finish and a drain ends when the deploy
+            // lands. Neither is a verdict, and neither needs a human first.
+            ? ['PROVIDER_UNAVAILABLE', true] as const
+            : outcome.shape === 'review_authentication_failed'
+              ? ['AUTH_CONFIGURATION', false] as const
+              : outcome.shape === 'review_provider_http_error'
+                ? ['PROVIDER_UNAVAILABLE', false] as const
+                : outcome.shape === 'review_request_rejected'
+                  // The request is what has to change, so repeating it verbatim
+                  // only spends the attempt. Never the provider's fault.
+                  ? ['INVALID_REQUEST', false] as const
+                  : ['WORKER_EXECUTION_FAILURE', false] as const;
+        throw new JuliusDispatchError(code, retryable, `Hermes review incomplete: ${safeClaim(outcome.safeMessage, 120)}.`, outcome.shape);
       }
       if (outcome.result.verdict === 'unable_to_review') {
         // A reviewer that could not review has not reviewed. Recording that as

@@ -12,7 +12,7 @@
 
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   JULIUS_CONTEXT_COMPILER_VERSION,
   createJuliusMemoryStore,
@@ -25,6 +25,7 @@ import { JuliusDispatchError, safeFailureClass } from '../../src/relay/mission/j
 import { compileHostedEnvelope } from '../hosted-coding-agent/hosted-envelope';
 import type { HostedQueryFn, HostedRunOutcome } from '../hosted-coding-agent/hosted-runner';
 import { classifyUnreadableReview, loadHermesConfig, validateHermesReview, type HermesOutcome, type ReviewPacket } from '../hermes-reviewer';
+import { runRemoteHermesReview, type RemoteHermesConfig } from '../hermes-remote-review';
 import {
   createLiveArtifactExchange,
   createLiveHermesReviewerAdapter,
@@ -984,5 +985,138 @@ describe('the first paid attempt, reproduced: a failing Prompt Architect', () =>
     expect(dirty.failureClass, 'unknown is null, never a partially cleaned string').toBeNull();
     expect(new JuliusDispatchError('TIMEOUT', true, 'safe', 'timeout').failureClass).toBe('timeout');
     expect(new JuliusDispatchError('TIMEOUT', true, 'safe').failureClass, 'omitted stays null').toBeNull();
+  });
+});
+
+
+/**
+ * WHAT AN INCOMPLETE REVIEW BECOMES, END TO END AND PROVIDER-FREE.
+ *
+ * Paid attempt #2 recorded `reviewer_review_incomplete` twice and could say
+ * nothing else, so these drive the REAL remote runner over a fake fetch into
+ * the REAL adapter: the service's own words, through the classifier, through
+ * the shape, to the Julius code and the retryable flag the coordinator
+ * persists. No provider, no network, no Hermes.
+ */
+describe('an incomplete review reaches Julius as the failure it actually was', () => {
+  const REMOTE_CFG: RemoteHermesConfig = {
+    serviceUrl: 'https://hermes.example.com',
+    token: 'FAKETESTNOTREAL-service',
+    trustedOrigins: ['https://hermes.example.com'],
+    timeoutMs: 1_000, reviewTimeoutMs: 10_000, pollIntervalMs: 1,
+  };
+  const worker = {
+    workerId: 'independent-reviewer-hermes', role: 'INDEPENDENT_REVIEWER' as const,
+    adapterId: 'hermes-remote-live', providerId: 'xai', capabilities: ['review'],
+    taskTypes: ['review:build'], concurrencyLimit: 1, timeoutMs: 1_000, maxRetries: 1,
+    status: 'AVAILABLE' as const,
+  };
+  const jsonRes = (body: unknown, status = 200): Response =>
+    new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+  const started = (state: unknown) => vi.fn()
+    .mockResolvedValueOnce(jsonRes({ accepted: true, runId: 'run-live' }))
+    .mockResolvedValueOnce(jsonRes(state));
+
+  /** Dispatches through the real adapter and returns the thrown Julius error. */
+  const failureFrom = async (fetchImpl: unknown) => {
+    const artifacts = createLiveArtifactExchange();
+    artifacts.put(planRef('run-live'), JSON.stringify(VALID_PLAN));
+    const adapter = createLiveHermesReviewerAdapter({
+      worker,
+      contexts: { snapshotFor: () => reviewSnapshot('build-1:review') },
+      artifacts,
+      config: loadHermesConfig(LIVE_ENV as never),
+      testCommand: 'npm run mission-test',
+      run: (async (input: { packet: ReviewPacket }) => runRemoteHermesReview({
+        packet: input.packet, config: REMOTE_CFG, runId: 'run-live',
+        deps: {
+          now: () => '2026-09-04T00:00:00.000Z',
+          sleep: () => Promise.resolve(),
+          fetchImpl: fetchImpl as typeof fetch,
+        },
+      })) as never,
+    });
+    return adapter.dispatch({ taskId: 'build-1:review', contextId: 'ctx-resume-1' })
+      .then(() => { throw new Error('the dispatch was expected to fail'); })
+      .catch((error: unknown) => error as { code: string; retryable: boolean; failureClass: string | null });
+  };
+
+  it('a review the service timed out is a TIMEOUT that may be re-asked, never a process exit', async () => {
+    // The finding this closes: `status: "timed_out"` fell through to
+    // `review_process_exit` and reached Julius as WORKER_EXECUTION_FAILURE,
+    // defeating the durable diagnosis on the shape it names most plainly.
+    const failure = await failureFrom(started({ runId: 'run-live', status: 'timed_out', failureKind: 'timed_out' }));
+    expect(failure.failureClass, 'the shape is the durable record').toBe('review_timeout');
+    expect(failure.failureClass).not.toBe('review_process_exit');
+    expect(failure.code).toBe('TIMEOUT');
+    // The architect and the coder both raise TIMEOUT retryable; a reviewer that
+    // never answered has produced no paid verdict to throw away by re-asking.
+    expect(failure.retryable, 'an answer that did not arrive may be asked for again').toBe(true);
+  });
+
+  it('a service with no capacity is service-side and clears itself, so it is retryable', async () => {
+    for (const kind of ['capacity_exhausted', 'shutting_down']) {
+      const failure = await failureFrom(() => Promise.resolve(jsonRes({ failureKind: kind }, 503)));
+      expect(failure.failureClass, kind).toBe('review_service_unavailable');
+      expect(failure.code).toBe('PROVIDER_UNAVAILABLE');
+      expect(failure.retryable, 'capacity clears as runs finish; a drain ends when the deploy lands').toBe(true);
+    }
+  });
+
+  it('a request the service would not admit names the request, not the model vendor', async () => {
+    for (const [kind, status] of [['validation_failed', 422], ['review_refused', 400]] as const) {
+      const failure = await failureFrom(() => Promise.resolve(jsonRes({ failureKind: kind }, status)));
+      expect(failure.failureClass, kind).toBe('review_request_rejected');
+      // Never PROVIDER_UNAVAILABLE: no model-provider request necessarily
+      // happened, and sending an operator to xAI for our own bad request is
+      // the false diagnosis this closes.
+      expect(failure.code).toBe('INVALID_REQUEST');
+      expect(failure.retryable, 'repeating a refused request only spends the attempt').toBe(false);
+    }
+  });
+
+  it('a dead credential stays authentication-specific and final', async () => {
+    const failure = await failureFrom(() => Promise.resolve(jsonRes({ failureKind: 'authentication_failed' }, 401)));
+    expect(failure.failureClass).toBe('review_authentication_failed');
+    expect(failure.code).toBe('AUTH_CONFIGURATION');
+    expect(failure.retryable).toBe(false);
+  });
+
+  it('an actual upstream HTTP failure is still a provider failure', async () => {
+    // The branch that must NOT be swallowed by the two service shapes above.
+    const failure = await failureFrom(() => Promise.resolve(jsonRes({}, 500)));
+    expect(failure.failureClass).toBe('review_provider_http_error');
+    expect(failure.code).toBe('PROVIDER_UNAVAILABLE');
+    expect(failure.retryable).toBe(false);
+  });
+
+  it('a terminal state that names no cause is still a process exit', async () => {
+    // The fallback is retained deliberately: inventing a cause for "it stopped
+    // and did not say why" is the defect, not the fix.
+    const failure = await failureFrom(started({ runId: 'run-live', status: 'failed' }));
+    expect(failure.failureClass).toBe('review_process_exit');
+    expect(failure.code).toBe('WORKER_EXECUTION_FAILURE');
+    expect(failure.retryable).toBe(false);
+  });
+
+  it('a review Relay cannot read is a worker failure carrying the shape that says why', async () => {
+    const failure = await failureFrom(started({ runId: 'run-live', status: 'completed', reviewText: 'The plan looks fine to me.' }));
+    expect(failure.failureClass, 'prose is absent JSON, not a dead credential').toBe('review_json_absent');
+    expect(failure.code).toBe('WORKER_EXECUTION_FAILURE');
+    expect(failure.retryable, 'a model that wrote prose will write prose again').toBe(false);
+  });
+
+  it('no incomplete review produces a verdict, a decision or a finding', async () => {
+    // The whole point: every branch above threw, so none of them reached the
+    // evidence that completion is computed from.
+    for (const fetchImpl of [
+      started({ runId: 'run-live', status: 'timed_out', failureKind: 'timed_out' }),
+      () => Promise.resolve(jsonRes({ failureKind: 'capacity_exhausted' }, 503)),
+      started({ runId: 'run-live', status: 'completed', reviewText: '{"verdict":"approve","summary":"ok"}' }),
+    ]) {
+      const failure = await failureFrom(fetchImpl);
+      expect(failure.code, 'a dispatch that failed produced no evidence').toBeDefined();
+      expect(JSON.stringify(failure)).not.toContain('FAKETESTNOTREAL');
+    }
   });
 });
