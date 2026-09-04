@@ -7394,6 +7394,116 @@ def kit_building(x, y, yaw, seed, tag, storeys=1, tower=True, scale=1.0):
     return out
 
 
+def urban_fill(cx, cy, half_x, half_y, seed, tag, bearing=0.0,
+               street_m=14.0, block_m=34.0, roofs=None, storey_bias=0):
+    """Convert a MEASURED empty rectangle into connected city.
+
+    The first two districts were hand-authored, which is why the third, fourth
+    and fifth holes were still holes: hand-authoring does not scale and the
+    emptiness audit finds new ones faster than a person can lay streets. This
+    takes a region straight off emptiness.py -- centre and extent -- and returns
+    a block grid with streets between, so closing a hole is one call.
+
+    A grid, not a scatter. The founder's complaint is that buildings "feel
+    placed apart rather than continuous city": a scatter with a minimum
+    distance always reads as objects on a lawn, because the gaps are the same
+    size everywhere. Streets and blocks give the gaps a STRUCTURE -- wide where
+    a street runs, nearly nothing where two blocks meet.
+    """
+    out = []
+    b = math.radians(bearing)
+    ux, uy = math.cos(b), math.sin(b)
+    px, py = -uy, ux
+    pitch = block_m + street_m                 # centre-to-centre, metres
+    nx = max(1, int((half_x * 2.0 / 100.0) / pitch))
+    ny = max(1, int((half_y * 2.0 / 100.0) / pitch))
+
+    def at(a_m, c_m):
+        return (cx + ux * a_m * 100.0 + px * c_m * 100.0,
+                cy + uy * a_m * 100.0 + py * c_m * 100.0)
+
+    # ---- the street grid, paved continuously -------------------------------
+    # terrace_platform is 14.4 m along its local x by 7.4 m across. Spacing is
+    # chosen so the pieces OVERLAP; this is the defect that made the southern
+    # quarter read as slabs on grass and it is arithmetic, not judgement.
+    span_a = nx * pitch
+    span_c = ny * pitch
+    step = 13.0
+    for gi in range(ny + 1):
+        c = -span_c * 0.5 + pitch * gi
+        for t in range(int(span_a / step) + 1):
+            a = -span_a * 0.5 + step * t
+            sx, sy = at(a, c)
+            out.append(A("terrace_platform", sx, sy, ROAD_Z, yaw=bearing,
+                         sxyz=(1.0, street_m / 7.4, 0.30), mat="MI_V2_Cobble",
+                         label="%s_StA%d_%03d" % (tag, gi, t)))
+    for gj in range(nx + 1):
+        a = -span_a * 0.5 + pitch * gj
+        for t in range(int(span_c / step) + 1):
+            c = -span_c * 0.5 + step * t
+            sx, sy = at(a, c)
+            out.append(A("terrace_platform", sx, sy, ROAD_Z, yaw=bearing + 90.0,
+                         sxyz=(1.0, street_m / 7.4, 0.30), mat="MI_V2_PathStone",
+                         label="%s_StC%d_%03d" % (tag, gj, t)))
+
+    # ---- the blocks --------------------------------------------------------
+    n = 0
+    for gj in range(nx):
+        for gi in range(ny):
+            a0 = -span_a * 0.5 + pitch * (gj + 0.5)
+            c0 = -span_c * 0.5 + pitch * (gi + 0.5)
+            k = seed * 31 + gj * 7 + gi * 13
+            # FOUR BUILDINGS PER BLOCK, one to each street frontage, with a
+            # courtyard in the middle. A block that is one building is a
+            # pavilion; a block that is four with a hole in it is a city.
+            for e in range(4):
+                eang = bearing + 90.0 * e
+                ex, ey = at(a0 + math.cos(math.radians(90.0 * e)) * block_m * 0.32,
+                            c0 + math.sin(math.radians(90.0 * e)) * block_m * 0.32)
+                st = 1 + ((k + e) % 3) + storey_bias
+                out += kit_building(ex, ey, eang, k + e, "%s_B%d_%d_%d" % (tag, gj, gi, e),
+                                    storeys=max(1, st), tower=((k + e) % 3 == 0),
+                                    scale=0.86 + 0.06 * ((k + e) % 4))
+                n += 1
+            # the courtyard floor and something in it
+            qx, qy = at(a0, c0)
+            out.append(A("terrace_platform", qx, qy, ROAD_Z, yaw=bearing,
+                         sxyz=(block_m / 28.8, block_m / 14.8, 0.32),
+                         mat="MI_V2_PlazaShade", label="%s_Q%d_%dFloor" % (tag, gj, gi)))
+            pick = k % 4
+            if pick == 0:
+                out.append(A("fountain_basin", qx, qy, 0.0, yaw=bearing, s=0.85,
+                             mat="MI_V2_IvoryStone", label="%s_Q%d_%dBasin" % (tag, gj, gi)))
+            elif pick == 1:
+                # MUSHROOM ARCHITECTURE, which the reference board has as a
+                # landmark class: a giant cap with a building under it, in a
+                # courtyard, rather than a mushroom field beside the city.
+                out.append(A("mushroom_giant", qx, qy, 0.0, yaw=bearing, s=0.55,
+                             mat="MI_V2_MushCream", label="%s_Q%d_%dMush" % (tag, gj, gi)))
+                out.append(A("mushroom_giant_spots", qx, qy, 0.0, yaw=bearing, s=0.55,
+                             mat="MI_V2_MushRed", label="%s_Q%d_%dMushSpot" % (tag, gj, gi)))
+                out.append(A("arch_stone", qx, qy, 0.0, yaw=bearing + 40.0, s=0.36,
+                             mat="MI_V2_IvoryStone", label="%s_Q%d_%dMushDoor" % (tag, gj, gi)))
+            elif pick == 2:
+                out.append(A("topiary_spiral", qx, qy, 0.0, yaw=0.0, s=1.1,
+                             mat="MI_V2_LeafDark", label="%s_Q%d_%dTopiary" % (tag, gj, gi)))
+                out.append(A("garden_bench", qx + 600.0, qy, 0.0, yaw=bearing + 90.0,
+                             s=1.0, mat="MI_V2_IvoryStone",
+                             label="%s_Q%d_%dBench" % (tag, gj, gi)))
+            else:
+                out.append(A("clock_ornate", qx, qy, 250.0, yaw=bearing, s=0.7,
+                             mat="MI_V2_GoldAged", label="%s_Q%d_%dClock" % (tag, gj, gi)))
+            # a bridge over the street between this block and the next, at
+            # height -- "landmarks behind landmarks" needs things in front of
+            # things, and an arch across a street is the cheapest of those
+            if (k % 3) == 0 and gj < nx - 1:
+                bxm, bym = at(a0 + (block_m + street_m) * 0.5, c0)
+                out.append(A("castle_bridge", bxm, bym, 1150.0, yaw=bearing + 90.0,
+                             s=street_m / 9.2, mat="MI_V2_IvoryStone",
+                             label="%s_Br%d_%d" % (tag, gj, gi)))
+    return out
+
+
 SOUTH_CENTRE = (6736.0, -29819.0)
 _SPIRE_AT = (0.0, 8200.0)
 
@@ -7923,11 +8033,35 @@ def _southwest_quarter():
 SOUTHWEST_QUARTER = _band("V2_Southwest", _southwest_quarter())
 
 
+# ---------------------------------------------------------------------------
+# THE MEASURED HOLES, closed by the generator rather than by hand.
+#
+# Every region below came off emptiness.py with its centre and extent; none was
+# chosen because a camera pointed at it. The castle sightline at (-10923,
+# 30061) is NOT here and never will be -- it is deliberate negative space, and
+# the audit has flagged it as such since before these districts existed.
+#
+# bearings differ per region so the grids do not all run true north, which is
+# what would turn five districts into one visible tiling.
+FILL_NORTHEAST = _band("V2_FillNE", urban_fill(
+    14730.0, 29419.0, 7800.0, 6000.0, 3, "FillNE", bearing=18.0))
+FILL_SOUTHFLANK_W = _band("V2_FillSW2", urban_fill(
+    -4960.0, -32205.0, 8400.0, 4400.0, 5, "FillSFW", bearing=-9.0))
+FILL_SOUTHFLANK_E = _band("V2_FillSE", urban_fill(
+    15707.0, -27323.0, 7200.0, 6600.0, 7, "FillSFE", bearing=6.0))
+FILL_EAST = _band("V2_FillE", urban_fill(
+    32488.0, -4129.0, 4000.0, 6800.0, 11, "FillE", bearing=-24.0))
+FILL_WEST = _band("V2_FillW", urban_fill(
+    -32067.0, -9835.0, 3600.0, 5800.0, 13, "FillW", bearing=31.0))
+
+
 BUILD_BANDS = [FOREGROUND, COURTYARD, GARDEN, PALACE, FLANK_GROUND, FLANKS,
                REARWORLD, CAM_FOREGROUNDS, GROUND_QUILT, OUTER_WORLD, PLAZA_ORNAMENT,
                PROCESSIONAL_BORDER, HORIZON, APPROACH_SIDES, PLAZA_WALL_DRESS,
                SIGNATURE, LANDMARKS, DEPTH, COURT_DRESS, WAYSIDE,
-               SOUTH_QUARTER, SOUTHWEST_QUARTER]
+               SOUTH_QUARTER, SOUTHWEST_QUARTER,
+               FILL_NORTHEAST, FILL_SOUTHFLANK_W, FILL_SOUTHFLANK_E,
+               FILL_EAST, FILL_WEST]
 
 # ---------------------------------------------------------------------------
 # NOTHING IS BUILT ON A VIEWPOINT (2026-09-03)
