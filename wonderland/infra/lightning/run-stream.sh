@@ -134,9 +134,41 @@ start_signalling() {
   local host peer
   host="$( ( set +o pipefail; hostname -I 2>/dev/null | awk '{print $1}' ) || true)"
   [ -n "$host" ] || host="127.0.0.1"
-  peer='{"iceServers":[{"urls":["stun:stun.l.google.com:19302"]},'
-  peer+='{"urls":["turn:'"$host"':'"$WL_TURN_PORT"'"],'
-  peer+='"username":"'"$WL_TURN_USER"'","credential":"'"$WL_TURN_PASS"'"}]}'
+  # A TURN ON A PRIVATE ADDRESS IS NOT A MEDIA PATH (measured 2026-09-04).
+  #
+  # `hostname -I` on this Studio is 10.128.0.44, so the browser was handed
+  # turn:10.128.0.44:3478 -- an address no remote viewer can route to. The
+  # founder's page loaded, signalling pinged and ponged happily over the
+  # cloudflare tunnel, and the video stayed BLACK, which is the exact failure
+  # the comment above warns about, one layer up: the ICE list was not stun-only,
+  # it was stun plus a TURN that does not exist as far as the internet is
+  # concerned.
+  #
+  # Advertising the public IP instead does NOT fix it. Measured from the
+  # Chromebook: a STUN binding request to 35.239.198.108:3478 times out, so
+  # inbound UDP to this Studio is blocked and a self-hosted TURN can never be
+  # reached from outside. cloudflare quick tunnels forward HTTP only.
+  #
+  # What DOES work is the direct path. Measured from the Studio: a STUN binding
+  # request to stun.l.google.com returns mapped=35.239.198.108:65222, so UDP
+  # egress works and the NAT creates a mapping -- srflx candidates and hole
+  # punching are available. In the black-screen session the streamer offered
+  # only `typ relay` (private) and `typ host` (private) candidates and no srflx
+  # at all, while the browser correctly offered its own public srflx.
+  #
+  # So the ICE list is overridable. WL_ICE_SERVERS takes raw JSON (the value of
+  # "iceServers") for the remote case -- stun-only to force hole punching, or a
+  # real reachable TURN service when a NAT turns out to be symmetric. Unset, the
+  # behaviour is unchanged: stun + the local TURN, which is correct for a viewer
+  # on this same host and is what the capture scripts use.
+  if [ -n "${WL_ICE_SERVERS:-}" ]; then
+    peer='{"iceServers":'"$WL_ICE_SERVERS"'}'
+    wl_say "ICE servers from WL_ICE_SERVERS (local TURN not advertised)"
+  else
+    peer='{"iceServers":[{"urls":["stun:stun.l.google.com:19302"]},'
+    peer+='{"urls":["turn:'"$host"':'"$WL_TURN_PORT"'"],'
+    peer+='"username":"'"$WL_TURN_USER"'","credential":"'"$WL_TURN_PASS"'"}]}'
+  fi
   printf '%s\n' "$peer" > "$WL_RUN/peer_options.json"
 
   : > "$WL_LOG/sig.log"
