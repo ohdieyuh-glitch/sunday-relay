@@ -1,4 +1,5 @@
 import{describe,expect,it}from'vitest';import{JuliusExecutionCoordinator,JuliusProviderHealthRegistry,JuliusProviderRouter,JuliusWorkerRegistry,type JuliusCardPolicy,type JuliusExecutionPorts,type JuliusProviderAdapter}from'.';
+import{JuliusDispatchError}from'./julius-router';
 const policy:JuliusCardPolicy={revision:'card',autonomy:'AUTONOMOUS',allowedProviders:['provider'],capabilities:['code'],network:false,filesystemMutation:true,fallback:false,automaticRetry:true,subagents:{allowed:false,maxDepth:0,maxActive:0,maxTotal:0},iterativeReview:{allowed:false,maxRounds:0},concurrency:1,approvals:[]};
 const claim={runId:'run',projectId:'project',taskId:'task',leaseOwner:'scheduler',leaseGeneration:1,capability:'code',contextId:'context',task:{taskId:'task',missionId:'mission',parentTaskId:null,dependencyIds:[],requiredEvidenceTypes:['TEST' as const],taskType:'implementation',role:'CODING_AGENT' as const,ordinal:0,state:'ACTIVE' as const}};
 const resources={usdMicros:10,inputTokens:10,outputTokens:10,toolCalls:1,runtimeMs:100};
@@ -41,3 +42,71 @@ it('normalizes a non-dispatch throw from selection rather than writing "undefine
   const outcome=await new JuliusExecutionCoordinator(codedRouter,{...ports,async recordEvent(input){coded.push({type:input.type,...input.payload})}}).execute(request);
   expect(outcome,'a throw from selection is a programming error, not a transient provider condition').toEqual({status:'FAILED',code:'WORKER_EXECUTION_FAILURE',failureClass:null});
   expect(coded.at(-1)!.errorRetryable,'never retryable-true on the row that ends the task').toBe(false);});});
+
+
+/**
+ * THE FACTS HAVE TO SURVIVE THE THROW.
+ *
+ * A failing adapter returns no evidence — it throws — so the structural facts
+ * that explain a paid failure can only reach the durable record by travelling
+ * on the error into the event this coordinator writes. Paid attempt #2 proved
+ * what the alternative looks like: a class, and nothing to debug it with.
+ */
+describe('safe reviewer diagnostics reach the durable event', () => {
+  const HOSTILE_DIAGNOSTICS = {
+    transport: 'local', reviewStage: 'build', provider: 'xai',
+    processExitCode: 137, timedOut: false, outputBytesObserved: 1234,
+    outputByteLimit: 524288, outputTruncated: true, failureShape: 'review_process_exit',
+    // What must not survive, passed the way a careless adapter would pass it.
+    reviewText: 'Authorization: Bearer FAKESECRET123456789',
+    stdout: 'sk-live-FAKESECRET123456789',
+  };
+  const throwing = (retryable: boolean): JuliusProviderAdapter => ({
+    adapterId: 'adapter',
+    async dispatch(): Promise<never> {
+      throw new JuliusDispatchError(
+        retryable ? 'TIMEOUT' : 'WORKER_EXECUTION_FAILURE', retryable, 'safe',
+        'review_process_exit', HOSTILE_DIAGNOSTICS,
+      );
+    },
+  });
+  const factsFrom = async (retryable: boolean) => {
+    const rows: Record<string, unknown>[] = [];
+    const h = harness(throwing(retryable), { async recordEvent(input) { rows.push({ type: input.type, ...input.payload }); } });
+    await h.coordinator.execute(request);
+    return rows;
+  };
+
+  it('writes them on the failing ending, narrowed, beside the class', async () => {
+    const failed = (await factsFrom(false)).find((row) => row.type === 'task.failed')!;
+    expect(failed.failureClass).toBe('review_process_exit');
+    const diagnostics = failed.diagnostics as Record<string, unknown>;
+    expect(diagnostics.processExitCode, 'the number that made the class debuggable').toBe(137);
+    expect(diagnostics.outputByteLimit).toBe(524288);
+    expect(diagnostics.reviewStage).toBe('build');
+    // The domain rebuilt it, so the adapter's extra keys are simply not there.
+    expect(Object.prototype.hasOwnProperty.call(diagnostics, 'reviewText')).toBe(false);
+    expect(Object.prototype.hasOwnProperty.call(diagnostics, 'stdout')).toBe(false);
+    expect(JSON.stringify(failed)).not.toContain('FAKESECRET123456789');
+  });
+
+  it('and on the retry ending too, so an abandoned retry leaves the same diagnosis', async () => {
+    const scheduled = (await factsFrom(true)).find((row) => row.type === 'retry.scheduled')!;
+    expect(scheduled, 'a retryable failure schedules rather than fails').toBeDefined();
+    expect((scheduled.diagnostics as Record<string, unknown>).processExitCode).toBe(137);
+    expect(JSON.stringify(scheduled)).not.toContain('FAKESECRET123456789');
+  });
+
+  it('a failure that carries none writes null, not an empty shell', async () => {
+    const bare: JuliusProviderAdapter = {
+      adapterId: 'adapter',
+      async dispatch(): Promise<never> { throw new JuliusDispatchError('WORKER_EXECUTION_FAILURE', false, 'safe', 'coder_refused'); },
+    };
+    const rows: Record<string, unknown>[] = [];
+    const h = harness(bare, { async recordEvent(input) { rows.push({ type: input.type, ...input.payload }); } });
+    await h.coordinator.execute(request);
+    const failed = rows.find((row) => row.type === 'task.failed')!;
+    expect(failed.failureClass).toBe('coder_refused');
+    expect(failed.diagnostics, 'no facts is null, never a row of zeroes').toBeNull();
+  });
+});
