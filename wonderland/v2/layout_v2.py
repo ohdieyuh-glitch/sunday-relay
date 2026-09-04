@@ -7605,14 +7605,38 @@ def urban_fill(cx, cy, half_x, half_y, seed, tag, bearing=0.0,
             # FOUR BUILDINGS PER BLOCK, one to each street frontage, with a
             # courtyard in the middle. A block that is one building is a
             # pavilion; a block that is four with a hole in it is a city.
+            # TWO AUTHORED, TWO MASSED -- and this is a measured repair, not a
+            # taste. The first profile of the expanded world:
+            #
+            #     p95        18.09 ms -> 39.16      draw p95  11.81 -> 36.38
+            #     >33.3 ms    0.00%  -> 24.13%      GPU  p95  13.20 -> 35.69
+            #
+            # A quarter of frames missing 33 ms where none did. The draw thread
+            # tripled, which is primitive COUNT, not shading -- kit_building
+            # emits twenty-five to forty pieces (bays, pilasters, gold caps,
+            # arch, cornice, parapet, tower, three crown tiers, spire) and
+            # urban_fill was placing four of them per block everywhere.
+            #
+            # The founder's own detail policy is the fix, applied per block
+            # rather than per district: the two frontages ON the street get the
+            # authored article, the two behind get kit_massing -- stack,
+            # parapet, crown, nothing else. From the street you see the
+            # authored pair and the massed pair's silhouette behind them, which
+            # is what "architecture behind architecture" actually needs, at a
+            # third of the pieces.
             for e in range(4):
                 eang = bearing + 90.0 * e
                 ex, ey = at(a0 + math.cos(math.radians(90.0 * e)) * block_m * 0.32,
                             c0 + math.sin(math.radians(90.0 * e)) * block_m * 0.32)
                 st = 1 + ((k + e) % 3) + storey_bias
-                out += kit_building(ex, ey, eang, k + e, "%s_B%d_%d_%d" % (tag, gj, gi, e),
-                                    storeys=max(1, st), tower=((k + e) % 3 == 0),
-                                    scale=0.86 + 0.06 * ((k + e) % 4))
+                if e % 2 == 0:
+                    out += kit_building(ex, ey, eang, k + e, "%s_B%d_%d_%d" % (tag, gj, gi, e),
+                                        storeys=max(1, st), tower=((k + e) % 3 == 0),
+                                        scale=0.86 + 0.06 * ((k + e) % 4))
+                else:
+                    out += kit_massing(ex, ey, eang, k + e, "%s_M%d_%d_%d" % (tag, gj, gi, e),
+                                       scale=0.86 + 0.06 * ((k + e) % 4),
+                                       storeys=max(1, st))
                 n += 1
             # the courtyard floor and something in it
             qx, qy = at(a0, c0)
@@ -8240,7 +8264,7 @@ CONNECTORS = _band("V2_Connect",
 #: band of the founder's detail policy. The castle sightline is carved out of
 #: every ring, because the one deliberate piece of negative space in Wonderland
 #: does not get filled from behind either.
-SKYLINE_RING = _band("V2_SkyRing", skyline_ring(420.0, 900.0, 4, 26, 3, "Sky"))
+SKYLINE_RING = _band("V2_SkyRing", skyline_ring(420.0, 900.0, 3, 20, 3, "Sky"))
 
 
 BUILD_BANDS = [FOREGROUND, COURTYARD, GARDEN, PALACE, FLANK_GROUND, FLANKS,
