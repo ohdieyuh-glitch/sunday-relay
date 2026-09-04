@@ -393,7 +393,73 @@ export function createLiveHermesReviewerAdapter(input: {
         throw new JuliusDispatchError('PROVIDER_UNAVAILABLE', false, `Hermes reviewer could not launch: ${safeClaim(outcome.safeMessage, 120)}.`, 'reviewer_launch_failed');
       }
       if (outcome.kind === 'review_incomplete') {
-        throw new JuliusDispatchError('WORKER_EXECUTION_FAILURE', false, `Hermes review incomplete: ${safeClaim(outcome.safeMessage, 120)}.`, 'reviewer_review_incomplete');
+        /**
+         * THE SHAPE IS THE CLASS, because the class is what survives.
+         *
+         * Paid attempt #2 (run 33802017460) failed with both reviewer tasks
+         * recording the single word `reviewer_review_incomplete`. The message
+         * beside it already separated a dead credential from a model writing
+         * prose — and the message is not persisted; the coordinator writes the
+         * code, the retryable flag and the failure class. So the artifact that
+         * exists to explain a paid failure said only that the review was
+         * unreadable, and a second paid run was the only way to learn more.
+         *
+         * A timeout, a refused credential, an upstream HTTP error, a review
+         * service with no capacity and a request that service would not admit
+         * are the five an operator can act on without reading anything else,
+         * so they keep their own Julius codes; the rest are worker execution
+         * failures distinguished by their shape.
+         *
+         * AND TWO OF THEM ARE RETRYABLE, because two of them describe an answer
+         * that did not arrive rather than one that arrived wrong.
+         *
+         * Every shape used to be `retryable: false` under one sentence — "every
+         * one of them describes an answer that will be identical if asked
+         * again" — which is true of a malformed verdict and false of a review
+         * that timed out or a service that was full. The rest of Julius already
+         * knows this: the Prompt Architect and the Coding Agent both raise
+         * TIMEOUT retryable, and only the reviewer treated its own timeout as
+         * final. Nothing paid for is discarded by retrying one: a timeout and a
+         * 503 produced no verdict to throw away.
+         *
+         * The refusals stay final, and are held there twice — `retryable: false`
+         * here, and `decideJuliusContinuation` refusing AUTH_CONFIGURATION and
+         * INVALID_REQUEST whatever this flag says. Retries remain bounded by the
+         * task's attempt ceiling, the C.A.R.D.'s `automaticRetry`, and the run
+         * spend budget, so "retryable" is a permission to re-ask, never a
+         * licence to spend without one.
+         */
+        const [code, retryable] = outcome.shape === 'review_timeout'
+          ? ['TIMEOUT', true] as const
+          : outcome.shape === 'review_service_unavailable'
+            // Capacity clears as runs finish and a drain ends when the deploy
+            // lands. Neither is a verdict, and neither needs a human first.
+            ? ['PROVIDER_UNAVAILABLE', true] as const
+            : outcome.shape === 'review_authentication_failed'
+              ? ['AUTH_CONFIGURATION', false] as const
+              : outcome.shape === 'review_provider_http_error'
+                ? ['PROVIDER_UNAVAILABLE', false] as const
+                : outcome.shape === 'review_request_rejected'
+                  // The request is what has to change, so repeating it verbatim
+                  // only spends the attempt. Never the provider's fault.
+                  ? ['INVALID_REQUEST', false] as const
+                  : ['WORKER_EXECUTION_FAILURE', false] as const;
+        /**
+         * THE SHAPE, AND THE FACTS THAT LET SOMEONE DEBUG THE SHAPE.
+         *
+         * `review_process_exit` without the exit code, and
+         * `review_output_too_large` without the byte count, each name a class
+         * an operator then has to buy a second paid run to investigate. The
+         * domain rebuilds this from an allowlist before it is written, so
+         * nothing here can widen what reaches the durable event.
+         */
+        throw new JuliusDispatchError(
+          code, retryable, `Hermes review incomplete: ${safeClaim(outcome.safeMessage, 120)}.`, outcome.shape,
+          // THE STAGE IS WHAT THE REVIEW ACTUALLY CARRIED, not a substring of
+          // an id: a build review reviews a diff and a plan review does not,
+          // which is the same fact the packet above was built from.
+          { ...outcome.diagnostics, reviewStage: diffArtifact === null ? 'plan' : 'build' },
+        );
       }
       if (outcome.result.verdict === 'unable_to_review') {
         // A reviewer that could not review has not reviewed. Recording that as

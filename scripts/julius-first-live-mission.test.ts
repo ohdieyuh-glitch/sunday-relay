@@ -470,7 +470,7 @@ describe('the evidence dump names only tables and columns the migrations create'
     const dumps = queries();
     const everyDumpedFile = [...read('.github/julius-live-evidence-dump.sh').matchAll(/" ([a-z-]+\.tsv)$/gmu)].map((match) => match[1]).sort();
     expect(everyDumpedFile, 'every file the script writes, including the ones this regex cannot parse')
-      .toEqual(['decisions.tsv', 'evidence.tsv', 'failures.tsv', 'findings.tsv', 'runs.tsv', 'tasks.tsv', 'tool-invocations.tsv']);
+      .toEqual(['decisions.tsv', 'evidence.tsv', 'failures.tsv', 'findings.tsv', 'reviewer-diagnostics.tsv', 'runs.tsv', 'tasks.tsv', 'tool-invocations.tsv']);
     expect(dumps.map((dump) => dump.file).sort()).toEqual(['decisions.tsv', 'evidence.tsv', 'findings.tsv', 'runs.tsv', 'tasks.tsv', 'tool-invocations.tsv']);
     for (const dump of dumps) {
       const columns = tables.get(dump.table);
@@ -485,6 +485,44 @@ describe('the evidence dump names only tables and columns the migrations create'
     const regression = read('.github/workflows/julius-real-infra.yml');
     expect(regression).toContain('./.github/julius-live-evidence-dump.sh /tmp/julius-evidence-check');
     expect(regression, 'a stale name must fail the PR, not become a placeholder').toContain('evidence_query_invalid');
+  });
+
+  /**
+   * THE FACTS BESIDE THE CLASS. Hand-checked for the same reason as the failure
+   * query: it joins. It exists because `failures.tsv` can say
+   * `review_process_exit` and never which exit code, or
+   * `review_output_too_large` and never how many bytes — each a class an
+   * operator could otherwise only investigate by paying for another run.
+   */
+  it('the reviewer diagnostics query exports allowlisted structural keys and no payload', () => {
+    const tables = schema();
+    const script = read('.github/julius-live-evidence-dump.sh');
+    const query = script.split('\n').find((line) => line.includes('reviewer-diagnostics.tsv')) ?? '';
+    expect(query, 'the reviewer diagnostics dump must exist').not.toBe('');
+
+    for (const column of ['task_id', 'role']) {
+      expect(tables.get('julius_tasks')?.has(column), `julius_tasks.${column} is not a column the migrations create`).toBe(true);
+    }
+
+    // EVERY KEY THE SAFE RECORD DEFINES, so a field added to the allowlist
+    // without a column here would be collected and then silently not exported.
+    for (const key of [
+      'reviewStage', 'transport', 'provider', 'servedModel', 'processExitCode', 'timedOut',
+      'outputBytesObserved', 'outputByteLimit', 'outputTruncated', 'jsonDetected', 'jsonParseable',
+      'reviewObjectCount', 'verdictPresent', 'verdictValid', 'summaryPresent', 'failureShape',
+    ]) {
+      expect(query, `the diagnostics dump must select ${key}`).toContain(`'${key}'`);
+    }
+    // No key exists in the allowlist for reviewer text, a summary, a diff or a
+    // prompt — so there is nothing to select, and nothing selects one.
+    for (const forbidden of ['reviewText', 'summary\'', 'stdout', 'stderr', 'prompt', 'diff']) {
+      expect(query.includes(forbidden), `the diagnostics dump must not export ${forbidden}`).toBe(false);
+    }
+    expect(query, 'the whole payload is never dumped').not.toMatch(/\bpayload\b(?!\s*(?:->|#>))/u);
+    // Scoped to rows that actually carry the record, so ordinary events do not
+    // become a wall of empty columns.
+    expect(query, 'scoped to events carrying a diagnostics object')
+      .toContain("jsonb_typeof(e.payload->'facts'->'diagnostics')='object'");
   });
 
   /**

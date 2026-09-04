@@ -1,4 +1,4 @@
-import { buildReviewPrompt, describeUnreadableReview, validateHermesReview, type HermesOutcome, type ReviewPacket } from './hermes-reviewer';
+import { classifyUnreadableReview, buildReviewPrompt, describeUnreadableReview, reviewDiagnostics, validateHermesReview, type HermesOutcome, type ReviewPacket } from './hermes-reviewer';
 
 /**
  * A REVIEWER THAT NEEDS NO INSTALLED BINARY AND NO NEW SERVICE.
@@ -137,6 +137,8 @@ export async function runOpenAiReview(input: {
   }
 
   if (!response.ok) {
+    const httpShape = response.status === 401 || response.status === 403
+      ? 'review_authentication_failed' as const : 'review_provider_http_error' as const;
     // ANSWERED AND REFUSED is not the same as never reached, and the status is
     // the actionable part. The body is never surfaced: it is provider text.
     return {
@@ -146,6 +148,10 @@ export async function runOpenAiReview(input: {
         : response.status === 429
           ? 'The reviewer provider refused the request (rate limit or insufficient balance).'
           : `The reviewer provider returned status ${String(response.status)}.`,
+      shape: httpShape,
+      // The provider answered with a status and a body we never read. No
+      // review existed to measure.
+      diagnostics: reviewDiagnostics({ transport: 'openai', shape: httpShape, provider: 'openai' }),
       startedAt,
       completedAt: now(),
     };
@@ -165,6 +171,19 @@ export async function runOpenAiReview(input: {
       return {
         kind: 'review_incomplete',
         safeMessage: `The reviewer returned a review Relay could not read. ${describeUnreadableReview(text)}`,
+        // THE SAME CLASSIFIER EVERY REVIEWER USES, so three providers cannot
+        // describe one unreadable review three different ways.
+        shape: classifyUnreadableReview(text),
+        diagnostics: reviewDiagnostics({
+          transport: 'openai',
+          shape: classifyUnreadableReview(text),
+          provider: 'openai',
+          // The provider named the model that answered; it is evidence, and it
+          // is the only reason this branch can attest one at all.
+          servedModel: actualModel,
+          outputBytesObserved: Buffer.byteLength(text, 'utf8'),
+          text,
+        }),
         startedAt,
         completedAt: now(),
       };
@@ -182,6 +201,12 @@ export async function runOpenAiReview(input: {
     return {
       kind: 'review_incomplete',
       safeMessage: 'The reviewer response could not be read.',
+      // The HTTP BODY was unreadable, which is the provider's answer failing —
+      // not the model's review JSON being malformed. Labelling it with the
+      // review-shape token would tell an operator to change the prompt.
+      shape: 'review_provider_http_error',
+      // The body itself would not read, so nothing about a review is known.
+      diagnostics: reviewDiagnostics({ transport: 'openai', shape: 'review_provider_http_error', provider: 'openai' }),
       startedAt,
       completedAt: now(),
     };

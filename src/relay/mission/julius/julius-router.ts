@@ -43,9 +43,69 @@ export const safeFailureClass=(value:unknown):string|null=>typeof value==='strin
  * explain a paid failure — so the alphabet is widened here and nowhere else.
  */
 export const safeReasonCode=(value:unknown):string|null=>typeof value==='string'&&/^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(value)?value:null;
+/**
+ * THE CORROBORATING FACTS, NARROWED THE SAME WAY THE CLASS IS.
+ *
+ * A failure class says WHICH boundary broke. It cannot say the exit code, the
+ * bytes seen against the ceiling, or how many verdict-bearing objects made a
+ * text ambiguous — and an operator needs those to debug the class without
+ * buying a second paid run. Attempt #2 had none of them.
+ *
+ * THE ALLOWLIST IS THE SAFETY PROPERTY. This does not sanitise what the caller
+ * sent; it rebuilds the record from a fixed set of keys with a fixed type
+ * each, so a key nobody listed here cannot reach the durable event however it
+ * was passed, and a value of the wrong type becomes `null` rather than
+ * travelling. Booleans must be booleans, counts must be finite non-negative
+ * integers, and the three string fields must match a shape. Everything else is
+ * dropped. `null` always means "not known", never zero: a reviewer that never
+ * started has no exit code, and `0` would say it exited cleanly.
+ *
+ * WHAT THE STRING FIELDS DO AND DO NOT PROVE. `transport` and `reviewStage`
+ * are closed vocabularies. `provider` and `failureShape` take the
+ * {@link safeFailureClass} alphabet, which no provider key shape this runtime
+ * has seen can pass. `servedModel` is the loose one by necessity — real model
+ * ids carry dots and dashes (`grok-build-0.1`, `gpt-4o-2024-08-06`) — so it is
+ * bounded to 48 characters AND refused outright when it looks like a
+ * credential. That is two layers, not a proof: it is stated here rather than
+ * assumed, and the value only ever originates from a provider's own `model`
+ * field or an engine usage report, never from parsing an error string.
+ */
+const MODEL_TOKEN=/^[A-Za-z0-9][A-Za-z0-9._-]{0,47}$/;
+const CREDENTIAL_SHAPED=/(^(sk|xai|ghp|gho|ghu|ghs|ghr|pk|api)[-_])|bearer|authorization|private[-_ ]?key|begin [a-z ]*private/i;
+const safeToken=(value:unknown):string|null=>typeof value==='string'&&/^[a-z][a-z0-9_]{0,63}$/.test(value)?value:null;
+const safeBool=(value:unknown):boolean=>value===true;
+const safeCount=(value:unknown):number|null=>typeof value==='number'&&Number.isInteger(value)&&value>=0&&value<=Number.MAX_SAFE_INTEGER?value:null;
+const safeExitCode=(value:unknown):number|null=>typeof value==='number'&&Number.isInteger(value)&&value>=-256&&value<=65535?value:null;
+const safeModel=(value:unknown):string|null=>typeof value==='string'&&MODEL_TOKEN.test(value)&&!CREDENTIAL_SHAPED.test(value)?value:null;
+const safeEnum=<T extends string>(value:unknown,allowed:readonly T[]):T|null=>typeof value==='string'&&(allowed as readonly string[]).includes(value)?value as T:null;
+export type JuliusSafeDiagnostics=Readonly<Record<string,string|number|boolean|null>>;
+export const safeReviewDiagnostics=(value:unknown):JuliusSafeDiagnostics|null=>{
+ if(value===null||typeof value!=='object'||Array.isArray(value))return null;
+ const v=value as Record<string,unknown>;
+ return Object.freeze({
+  reviewStage:safeEnum(v.reviewStage,['plan','build'] as const),
+  transport:safeEnum(v.transport,['local','remote','openai'] as const),
+  provider:safeToken(v.provider),
+  servedModel:safeModel(v.servedModel),
+  processExitCode:safeExitCode(v.processExitCode),
+  timedOut:safeBool(v.timedOut),
+  outputBytesObserved:safeCount(v.outputBytesObserved),
+  outputByteLimit:safeCount(v.outputByteLimit),
+  outputTruncated:safeBool(v.outputTruncated),
+  jsonDetected:safeBool(v.jsonDetected),
+  jsonParseable:safeBool(v.jsonParseable),
+  reviewObjectCount:safeCount(v.reviewObjectCount),
+  verdictPresent:safeBool(v.verdictPresent),
+  verdictValid:safeBool(v.verdictValid),
+  summaryPresent:safeBool(v.summaryPresent),
+  failureShape:safeToken(v.failureShape),
+ });
+};
 export class JuliusDispatchError extends Error{
  readonly failureClass:string|null;
- constructor(readonly code:JuliusErrorCode,readonly retryable:boolean,readonly safeMessage:string,failureClass?:unknown){super(code);this.failureClass=safeFailureClass(failureClass);}
+ /** Allowlisted structural facts, or null when the boundary reported none. */
+ readonly diagnostics:JuliusSafeDiagnostics|null;
+ constructor(readonly code:JuliusErrorCode,readonly retryable:boolean,readonly safeMessage:string,failureClass?:unknown,diagnostics?:unknown){super(code);this.failureClass=safeFailureClass(failureClass);this.diagnostics=diagnostics===undefined?null:safeReviewDiagnostics(diagnostics);}
 }
 export interface JuliusProviderResult{readonly workerId:string;readonly providerId:string;readonly status:'SUCCEEDED'|'FAILED';readonly safeSummary:string;readonly evidence:readonly unknown[];readonly usage:unknown;}
 export interface JuliusProviderAdapter{readonly adapterId:string;dispatch(input:{taskId:string;contextId:string;signal?:AbortSignal}):Promise<JuliusProviderResult>;}

@@ -21,6 +21,7 @@ import {
   classifyHermesUpstreamFailure,
   validateHermesReview,
   escapeInvalidJsonEscapes,
+  reviewDiagnostics,
 } from './hermes-reviewer';
 import type { HermesOutcome, ReviewPacket } from './hermes-reviewer';
 import { normalizeObservation } from '../src/relay/mission/evidence';
@@ -604,6 +605,8 @@ describe('14-20. only a genuine, current, approving review can complete the miss
     const h = harness({
       reviewer: async () => ({
         kind: 'review_incomplete',
+        shape: 'review_json_absent' as const,
+        diagnostics: reviewDiagnostics({ transport: 'local', shape: 'review_json_absent', text: 'prose' }),
         safeMessage: 'The Hermes reviewer returned no valid structured review.',
         startedAt: AT,
         completedAt: AT,
