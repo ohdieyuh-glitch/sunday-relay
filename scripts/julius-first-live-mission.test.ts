@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { mkdtempSync, readdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readdirSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve, sep } from 'node:path';
 import { parseLiveMissionContract } from '../relay-bridge/julius-live-mission';
@@ -34,11 +34,30 @@ import { PREFLIGHT_LIMITS, PREFLIGHT_POLICY } from './julius-live-preflight';
 
 const ROOT = resolve(import.meta.dirname, '..');
 const WORKFLOW_PATH = '.github/workflows/julius-first-live-mission.yml';
-const CONTRACT_PATH = '.github/julius-first-live-mission.json';
+const CONTRACT_PATH = '.github/julius-missions/julius-first-live/contract.json';
 const read = (relative: string): string => readFileSync(resolve(ROOT, relative), 'utf8');
 
 const workflow = read(WORKFLOW_PATH);
 const contractSource = read(CONTRACT_PATH);
+
+/**
+ * EVERY BOUNDED MISSION, not just the first one.
+ *
+ * The seed files used to live as heredocs inside the provisioning script, so
+ * these cases could only ever describe one mission and a second one would have
+ * needed a second copy of the script. Missions are directories now — a contract
+ * and a workspace seed — and the cases below run against all of them, which is
+ * what makes "the rig generalises" a tested claim rather than an aspiration.
+ */
+const MISSIONS_DIR = '.github/julius-missions';
+const MISSIONS = readdirSync(resolve(ROOT, MISSIONS_DIR))
+  .filter((name) => statSync(resolve(ROOT, MISSIONS_DIR, name)).isDirectory())
+  .sort();
+/** Files a mission seeds that are not scaffolding — the ones the agent edits. */
+const deliverablesOf = (mission: string): string[] =>
+  readdirSync(resolve(ROOT, MISSIONS_DIR, mission, 'workspace'))
+    .filter((name) => !['package.json', 'README.md'].includes(name))
+    .sort();
 
 /** The workflow's `on:` block, up to the next top-level key. */
 const triggerBlock = (): string => {
@@ -291,6 +310,47 @@ describe('the sandbox proven by preflight is the sandbox the mission uses', () =
   });
 });
 
+describe('every mission declares its own durable accounting namespace', () => {
+  it('each contract parses and names a namespace', () => {
+    for (const mission of MISSIONS) {
+      const parsedMission = parseLiveMissionContract(read(`${MISSIONS_DIR}/${mission}/contract.json`));
+      expect(parsedMission.ok ? 'accepted' : parsedMission.problem, mission).toBe('accepted');
+      if (!parsedMission.ok) continue;
+      expect(parsedMission.contract.markerNamespace, `${mission} must declare a namespace`).toMatch(/^[a-z][a-z0-9-]{2,48}$/u);
+    }
+  });
+
+  it('no two missions share a namespace, a mission id or a project id', () => {
+    // A collision here is one contract's paid history answering for another's.
+    for (const field of ['markerNamespace', 'missionId', 'projectId'] as const) {
+      const values = MISSIONS.map((mission) => {
+        const parsedMission = parseLiveMissionContract(read(`${MISSIONS_DIR}/${mission}/contract.json`));
+        return parsedMission.ok ? parsedMission.contract[field] : mission;
+      });
+      expect(new Set(values).size, `${field} must be unique across missions`).toBe(values.length);
+    }
+  });
+
+  it('the first mission keeps the namespace its completed history is filed under', () => {
+    // Its markers are `julius-first-live-attempted` / `-completed` and they are
+    // immutable artifacts. Renaming this would orphan a real paid completion.
+    const first = parseLiveMissionContract(read(`${MISSIONS_DIR}/julius-first-live/contract.json`));
+    expect(first.ok).toBe(true);
+    if (!first.ok) return;
+    expect(first.contract.markerNamespace).toBe('julius-first-live');
+  });
+
+  it('a contract without a namespace is refused, rather than defaulted', () => {
+    const base = JSON.parse(read(`${MISSIONS_DIR}/julius-first-live/contract.json`)) as Record<string, unknown>;
+    for (const bad of [undefined, '', 'Julius-First-Live', 'ns', '../escape', 'a'.repeat(50)]) {
+      const candidate = { ...base };
+      if (bad === undefined) delete candidate.markerNamespace; else candidate.markerNamespace = bad;
+      const result = parseLiveMissionContract(JSON.stringify(candidate));
+      expect(result.ok, `markerNamespace=${String(bad)} must be refused`).toBe(false);
+    }
+  });
+});
+
 describe('the mission itself is bounded and aimed away from this repository', () => {
   const parsed = parseLiveMissionContract(contractSource);
 
@@ -322,7 +382,7 @@ describe('the mission itself is bounded and aimed away from this repository', ()
     ).toBe(false);
   });
 
-  it('asks only for edits, because the hosted agent is denied file creation', () => {
+  it('every mission asks only for edits, because the hosted agent is denied file creation', () => {
     // `HOSTED_DISALLOWED_TOOLS` includes `Write`: the coding agent can Edit an
     // existing file but cannot bring a new one into existence. A mission that
     // asks for a new file is a paid run that cannot complete.
@@ -330,43 +390,48 @@ describe('the mission itself is bounded and aimed away from this repository', ()
     expect(HOSTED_ALLOWED_TOOLS).toContain('Edit');
 
     const provisioning = read('.github/julius-live-workspace.sh');
-    const contract = JSON.parse(contractSource) as { objective: string; requirements: string[] };
-    const deliverables = ['julius-live-proof.js', 'julius-live-proof.test.js'];
-    for (const file of deliverables) {
-      expect(provisioning, `${file} must be seeded in the workspace, not created by the agent`)
-        .toContain(`cat > ${file} <<'JAVASCRIPT'`);
-      // Tracked, or `git diff` cannot see the agent's work at all.
-      expect(provisioning, `${file} must be committed so the captured diff is non-empty`)
-        .toMatch(new RegExp(`add[^\\n]*${file.replace('.', '\\.')}`, 'u'));
+    // Tracked wholesale, so a mission cannot add a deliverable the commit misses
+    // and hand the reviewer a diff that does not contain it.
+    expect(provisioning, 'the seed tree must be committed in full').toContain('add -A');
+
+    expect(MISSIONS.length, 'there must be at least one mission').toBeGreaterThan(0);
+    for (const mission of MISSIONS) {
+      const deliverables = deliverablesOf(mission);
+      expect(deliverables.length, `${mission} must seed something to edit`).toBeGreaterThan(0);
+      const contract = JSON.parse(read(`${MISSIONS_DIR}/${mission}/contract.json`)) as
+        { objective: string; requirements: string[] };
+      const asks = [contract.objective, ...contract.requirements].join(' ');
+      expect(asks, `${mission}: the contract must ask for edits, never for a new file`).not.toMatch(/\bCreate\b/u);
+      for (const file of deliverables) {
+        expect(asks, `${mission}: ${file} must be named by the contract it is seeded for`).toContain(file);
+      }
     }
-    const asks = [contract.objective, ...contract.requirements].join(' ');
-    expect(asks, 'the contract must ask for edits, never for a new file').not.toMatch(/\bCreate\b/u);
   });
 
-  it('seeds deliverables whose test command FAILS until the work is really done', () => {
-    // A stub test that passes would let the mission satisfy its TEST evidence
+  it('every mission seeds deliverables whose test command FAILS until the work is really done', () => {
+    // A stub test that passes would let a mission satisfy its TEST evidence
     // having implemented nothing — the machine-checkable half of completion,
-    // satisfied by doing no work. So the seeded pair is actually executed here.
-    const provisioning = read('.github/julius-live-workspace.sh');
-    const directory = mkdtempSync(join(tmpdir(), 'julius-live-stubs-'));
-    for (const file of ['julius-live-proof.js', 'julius-live-proof.test.js']) {
-      const block = new RegExp(`cat > ${file.replace(/\./gu, '\\.')} <<'JAVASCRIPT'\\n([\\s\\S]*?)\\nJAVASCRIPT\\n`, 'u');
-      const seeded = block.exec(provisioning);
-      expect(seeded, `${file} must be seeded by the provisioning script`).not.toBeNull();
-      writeFileSync(join(directory, file), `${(seeded as RegExpExecArray)[1]}\n`);
-    }
-    const parsed = parseLiveMissionContract(contractSource);
-    if (!parsed.ok) throw new Error(parsed.problem);
-    const [command, ...args] = parsed.contract.testCommand.split(' ');
-    expect(command).toBe('node');
+    // satisfied by doing no work. So every seeded pair is actually executed.
+    for (const mission of MISSIONS) {
+      const contract = parseLiveMissionContract(read(`${MISSIONS_DIR}/${mission}/contract.json`));
+      expect(contract.ok ? 'accepted' : contract.problem, mission).toBe('accepted');
+      if (!contract.ok) continue;
 
-    let code = 0;
-    try {
-      execFileSync(process.execPath, args, { cwd: directory, stdio: 'ignore' });
-    } catch (error) {
-      code = (error as { status?: number }).status ?? 1;
+      const directory = mkdtempSync(join(tmpdir(), `julius-stubs-${mission}-`));
+      for (const file of readdirSync(resolve(ROOT, MISSIONS_DIR, mission, 'workspace'))) {
+        writeFileSync(join(directory, file), read(`${MISSIONS_DIR}/${mission}/workspace/${file}`));
+      }
+      const [command, ...args] = contract.contract.testCommand.split(' ');
+      expect(command, mission).toBe('node');
+
+      let code = 0;
+      try {
+        execFileSync(process.execPath, args, { cwd: directory, stdio: 'ignore' });
+      } catch (error) {
+        code = (error as { status?: number }).status ?? 1;
+      }
+      expect(code, `${mission}: the seeded stubs must FAIL the declared test command, or completion is free`).not.toBe(0);
     }
-    expect(code, 'the seeded stubs must FAIL the declared test command, or completion is free').not.toBe(0);
   });
 
   it('declares a test command that can run with no network and no dependency', () => {
@@ -1025,14 +1090,24 @@ describe('F9 — dispatch inputs are validated before anything is built', () => 
   const runGate = (env: Record<string, string>): number => {
     try {
       execFileSync('bash', ['-c', gate()], {
-        env: { ...process.env, ...env }, stdio: 'ignore', cwd: ROOT,
+        // The gate publishes the contract's accounting namespace as a step
+        // output, so it needs somewhere to publish it.
+        env: {
+          ...process.env,
+          GITHUB_OUTPUT: join(mkdtempSync(join(tmpdir(), 'julius-gate-out-')), 'out.txt'),
+          ...env,
+        },
+        stdio: 'ignore', cwd: ROOT,
       });
       return 0;
     } catch (error) {
       return (error as { status?: number }).status ?? 1;
     }
   };
-  const base = { MAX_TICKS: '24', CONFIRM_LIVE: '', HERMES_REF: '2ea39daeb1f675d72e5c21c9400f2d58d7e6d71a' };
+  const base = {
+    MAX_TICKS: '24', CONFIRM_LIVE: '', HERMES_REF: '2ea39daeb1f675d72e5c21c9400f2d58d7e6d71a',
+    MISSION: 'julius-first-live', CONTRACT: CONTRACT_PATH,
+  };
 
   it('runs before the install, so a bad dispatch costs nothing', () => {
     expect(workflow.indexOf("- name: 'Gate: the dispatch inputs are well formed'"))
@@ -1077,7 +1152,7 @@ describe('F9 — dispatch inputs are validated before anything is built', () => 
 });
 
 describe('F6 — a paid mission cannot be run twice by accident', () => {
-  const GATE = "'Gate: no paid first-live mission has been attempted or completed'";
+  const GATE = "'Gate: no paid mission has been attempted or completed for THIS contract'";
   const ATTEMPT_STEP = "'Record that a paid mission was attempted (before any provider can be reached)'";
 
   it('live dispatches share one concurrency group; dry runs do not', () => {
@@ -1110,7 +1185,7 @@ describe('F6 — a paid mission cannot be run twice by accident', () => {
    */
   it('a paid attempt is recorded BEFORE the provider-capable entrypoint can run', () => {
     const attempt = workflow.indexOf(`- name: ${ATTEMPT_STEP}`);
-    const upload = workflow.indexOf('name: julius-first-live-attempted');
+    const upload = workflow.indexOf('name: ${{ steps.inputs_gate.outputs.marker_namespace }}-attempted');
     const live = workflow.indexOf("- name: 'LIVE: run the first real Julius mission'");
     expect(attempt, 'the attempt marker step must exist').toBeGreaterThan(-1);
     // Without this, deleting the upload makes the ordering assertion below pass
@@ -1118,7 +1193,7 @@ describe('F6 — a paid mission cannot be run twice by accident', () => {
     expect(upload, 'the attempt marker upload must exist').toBeGreaterThan(-1);
     expect(attempt, 'it is written before the entrypoint, not after').toBeLessThan(live);
     expect(upload, 'and uploaded before the entrypoint, or a dead runner loses it').toBeLessThan(live);
-    expect(workflow.indexOf('name: julius-first-live-completed'), 'completion is still recorded after the run')
+    expect(workflow.indexOf('name: ${{ steps.inputs_gate.outputs.marker_namespace }}-completed'), 'completion is still recorded after the run')
       .toBeGreaterThan(live);
   });
 
@@ -1164,7 +1239,7 @@ describe('F6 — a paid mission cannot be run twice by accident', () => {
       expect(condition).toContain("inputs.confirm_live == 'RUN LIVE MISSION'");
     }
     const uploads = workflow.split('- uses: actions/upload-artifact');
-    const attemptUpload = uploads.find((block) => block.includes('name: julius-first-live-attempted')) ?? '';
+    const attemptUpload = uploads.find((block) => block.includes('name: ${{ steps.inputs_gate.outputs.marker_namespace }}-attempted')) ?? '';
     expect(attemptUpload, 'the attempt upload is itself on the paid, fail-closed path')
       .toMatch(/if: success\(\) && inputs\.confirm_live == 'RUN LIVE MISSION'/u);
     // A MARKER THAT UPLOADED NOTHING MUST NOT BE A GREEN STEP. upload-artifact
@@ -1177,7 +1252,7 @@ describe('F6 — a paid mission cannot be run twice by accident', () => {
     // nothing spends after the completion marker, and its reason is the NEXT
     // dispatch, whose `count_markers julius-first-live-completed` would read
     // zero and be told no paid mission has ever completed.
-    for (const marker of ['julius-first-live-attempted', 'julius-first-live-completed']) {
+    for (const marker of ['${{ steps.inputs_gate.outputs.marker_namespace }}-attempted', '${{ steps.inputs_gate.outputs.marker_namespace }}-completed']) {
       const upload = uploads.find((block) => block.includes(`name: ${marker}`)) ?? '';
       expect(upload, `${marker} must not report success having uploaded nothing`)
         .toContain('if-no-files-found: error');
@@ -1187,9 +1262,9 @@ describe('F6 — a paid mission cannot be run twice by accident', () => {
   it('the guard reads BOTH markers and can only be overridden by the exact phrase', () => {
     const guard = stepScript(GATE);
     expect(guard, 'a failed attempt must block the next ordinary dispatch')
-      .toContain('julius-first-live-attempted');
-    expect(guard, 'a completed run must block it too').toContain('julius-first-live-completed');
-    expect(guard).toContain('julius_first_live_already_entered');
+      .toContain('${MARKER_NAMESPACE}-attempted');
+    expect(guard, 'a completed run must block it too').toContain('${MARKER_NAMESPACE}-completed');
+    expect(guard).toContain('julius_paid_mission_already_entered_for_');
     // Unknown is not zero: a failed marker QUERY must refuse like a found
     // marker does, behind the same acknowledgement — not read as "no marker".
     expect(guard, 'an unreadable marker list must not pass as a first run')
@@ -1198,7 +1273,7 @@ describe('F6 — a paid mission cannot be run twice by accident', () => {
       .not.toContain('|| echo 0');
     expect(guard, 'and can only be overridden by an explicit typed phrase').toContain('RERUN PAID MISSION');
     expect(workflow, 'the guard applies to live dispatches only, so dry runs stay repeatable')
-      .toMatch(/- name: 'Gate: no paid first-live mission has been attempted or completed'\n\s*if: inputs\.confirm_live == 'RUN LIVE MISSION'/u);
+      .toMatch(/- name: 'Gate: no paid mission has been attempted or completed for THIS contract'\n\s*if: inputs\.confirm_live == 'RUN LIVE MISSION'/u);
     expect(workflow, 'listing artifacts needs actions:read and nothing more')
       .toMatch(/permissions:[\s\S]*?actions: read/u);
   });
@@ -1209,23 +1284,30 @@ describe('F6 — a paid mission cannot be run twice by accident', () => {
    * is a guard nobody has proven refuses.
    */
   describe('the guard, run against a stubbed artifact list', () => {
-    const runGuard = (input: { completed?: number | string; attempted?: number | string; readable?: boolean; acknowledge?: string; constant?: string }): number => {
+    const runGuard = (input: { completed?: number | string; attempted?: number | string; readable?: boolean; acknowledge?: string; constant?: string; namespace?: string }): number => {
       const bin = mkdtempSync(join(realpathSync(tmpdir()), 'julius-gh-'));
       const readable = input.readable ?? true;
+      // The namespace under test, defaulting to the one whose paid history is
+      // real. A second contract counts ITS OWN markers, which is the property
+      // the namespace exists to give.
+      const namespace = input.namespace ?? 'julius-first-live';
       writeFileSync(join(bin, 'gh'), [
         '#!/usr/bin/env bash',
         readable ? '' : 'exit 1',
         'case "$*" in',
-        `  *julius-first-live-completed*) echo '${input.completed ?? 0}';;`,
-        `  *julius-first-live-attempted*) echo '${input.attempted ?? 0}';;`,
+        `  *${namespace}-completed*) echo '${input.completed ?? 0}';;`,
+        `  *${namespace}-attempted*) echo '${input.attempted ?? 0}';;`,
         '  *) echo 0;;',
         'esac',
       ].join('\n'), { mode: 0o755 });
       let script = stepScript(GATE);
       if (input.constant !== undefined) {
-        script = script.replace(/^RECORDED_PAID_ATTEMPTS=.*$/mu, `RECORDED_PAID_ATTEMPTS=${input.constant}`);
-        expect(script, `the substitution must have replaced the whole line for "${input.constant}"`)
-          .toContain(`\nRECORDED_PAID_ATTEMPTS=${input.constant}\n`);
+        // The recorded attempt is per namespace now, so the substitution targets
+        // the first-live arm of the table rather than a bare assignment.
+        script = script.replace(/julius-first-live\) RECORDED_PAID_ATTEMPTS=[^ ]*/u,
+          `julius-first-live) RECORDED_PAID_ATTEMPTS=${input.constant}`);
+        expect(script, `the substitution must have replaced the arm for "${input.constant}"`)
+          .toContain(`julius-first-live) RECORDED_PAID_ATTEMPTS=${input.constant}`);
       }
       try {
         execFileSync('bash', ['-c', script], {
@@ -1236,6 +1318,7 @@ describe('F6 — a paid mission cannot be run twice by accident', () => {
             GITHUB_REPOSITORY: 'owner/repo',
             GH_TOKEN: 'stub',
             ACKNOWLEDGE_RERUN: input.acknowledge ?? '',
+            MARKER_NAMESPACE: namespace,
           },
         });
         return 0;
@@ -1243,6 +1326,45 @@ describe('F6 — a paid mission cannot be run twice by accident', () => {
         return (error as { status?: number }).status ?? 1;
       }
     };
+
+    /**
+     * ONE CONTRACT'S PAID HISTORY MUST NOT ANSWER FOR ANOTHER'S.
+     *
+     * Markers are artifacts counted by name, and the first mission owned those
+     * names outright. A second contract would have counted the first one's
+     * completed run as its own and demanded the rerun phrase for a mission that
+     * had never run — and, far worse, the first mission's guard would have been
+     * satisfied by the second mission's completion.
+     */
+    it('a second contract counts its own markers, not the first mission\'s', () => {
+      // The first mission is entered: 1 recorded attempt plus real markers.
+      expect(runGuard({ namespace: 'julius-first-live', completed: 1, attempted: 1 }),
+        'the first mission stays guarded by its own history').not.toBe(0);
+
+      // A DIFFERENT namespace, with the first mission's markers still present
+      // in the stub for their own name, is untouched by them.
+      expect(runGuard({ namespace: 'julius-live-mission-2' }),
+        'a contract that has never run is not blocked by another that has').toBe(0);
+    });
+
+    it('and a second contract becomes guarded once IT has been entered', () => {
+      expect(runGuard({ namespace: 'julius-live-mission-2', attempted: 1 }),
+        'its own attempt marker guards it').not.toBe(0);
+      expect(runGuard({ namespace: 'julius-live-mission-2', completed: 1 }),
+        'and so does its own completion').not.toBe(0);
+      expect(runGuard({ namespace: 'julius-live-mission-2', attempted: 1, acknowledge: 'RERUN PAID MISSION' }),
+        'overridable only by the typed phrase, exactly as the first mission is').toBe(0);
+    });
+
+    it('an unreadable marker list fails closed for a new contract too', () => {
+      // Unknown is not zero, whichever namespace is asking.
+      expect(runGuard({ namespace: 'julius-live-mission-2', readable: false }),
+        'a namespace with no history still refuses when the list cannot be read').not.toBe(0);
+      expect(runGuard({ namespace: 'julius-live-mission-2', readable: false, acknowledge: 'RERUN PAID MISSION' }),
+        'and only the typed phrase gets past it').toBe(0);
+      expect(runGuard({ namespace: 'julius-live-mission-2', attempted: 'many' }),
+        'a non-count answer fails closed as well').not.toBe(0);
+    });
 
     /**
      * NO MARKERS IS NOT THE SAME AS NO ATTEMPT. Run 33697109210 entered the
@@ -1258,7 +1380,7 @@ describe('F6 — a paid mission cannot be run twice by accident', () => {
 
     it('the recorded attempt names the run it stands for, so it can be checked and incremented', () => {
       const guard = stepScript(GATE);
-      expect(guard).toMatch(/RECORDED_PAID_ATTEMPTS=1\s+# run 33697109210/u);
+      expect(guard).toMatch(/julius-first-live\) RECORDED_PAID_ATTEMPTS=1 ;;\s+# run 33697109210/u);
       expect(guard, 'and it is counted, not merely written down')
         .toContain('[ "$RECORDED_PAID_ATTEMPTS" -gt 0 ]');
       // ORDER, NOT ONLY PRESENCE. A digit test that runs after the branch it
@@ -1308,13 +1430,14 @@ describe('F6 — a paid mission cannot be run twice by accident', () => {
       const withConstant = (value: string): number => {
         const bin = mkdtempSync(join(realpathSync(tmpdir()), 'julius-gh-'));
         writeFileSync(join(bin, 'gh'), '#!/usr/bin/env bash\necho 0\n', { mode: 0o755 });
-        const script = stepScript(GATE).replace(/^RECORDED_PAID_ATTEMPTS=.*$/mu, `RECORDED_PAID_ATTEMPTS=${value}`);
-        expect(script, `the substitution must have replaced the whole line for value "${value}"`)
-          .toContain(`\nRECORDED_PAID_ATTEMPTS=${value}\n`);
+        const script = stepScript(GATE).replace(/julius-first-live\) RECORDED_PAID_ATTEMPTS=[^ ]*/u,
+          `julius-first-live) RECORDED_PAID_ATTEMPTS=${value}`);
+        expect(script, `the substitution must have replaced the arm for value "${value}"`)
+          .toContain(`julius-first-live) RECORDED_PAID_ATTEMPTS=${value}`);
         try {
           execFileSync('bash', ['-c', script], {
             cwd: ROOT, stdio: 'ignore',
-            env: { ...process.env, PATH: `${bin}:${process.env.PATH ?? ''}`, GITHUB_REPOSITORY: 'owner/repo', GH_TOKEN: 'stub', ACKNOWLEDGE_RERUN: 'RERUN PAID MISSION' },
+            env: { ...process.env, PATH: `${bin}:${process.env.PATH ?? ''}`, GITHUB_REPOSITORY: 'owner/repo', GH_TOKEN: 'stub', ACKNOWLEDGE_RERUN: 'RERUN PAID MISSION', MARKER_NAMESPACE: 'julius-first-live' },
           });
           return 0;
         } catch (error) {

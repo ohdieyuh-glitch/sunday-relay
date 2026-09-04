@@ -350,7 +350,7 @@ function fakeRuns(calls: Array<Record<string, unknown>>) {
 }
 
 const BOOTSTRAP_REQUEST = () => compileBootstrapRequest({
-  missionId: 'mission-live-1', projectId: 'prj-live', tenantId: 'tenant-live',
+  missionId: 'mission-live-1', markerNamespace: 'test-namespace', projectId: 'prj-live', tenantId: 'tenant-live',
   objective: 'Prove the live chain with a tiny fixture.',
   requirements: ['Normalize a mission label.'], constraints: ['Touch only the fixture.'],
   acceptanceCriteria: [{ id: 'AC-1', text: 'The fixture test passes.', blocking: true }],
@@ -851,11 +851,17 @@ describe('the durable completion rule after a repair', () => {
 describe('the live mission contract file', () => {
   it('refuses malformed contracts with a named problem', () => {
     expect(parseLiveMissionContract('not json').ok).toBe(false);
-    const missing = parseLiveMissionContract(JSON.stringify({ missionId: 'm' }));
+    // Each missing required field is NAMED, in the order they are checked —
+    // a contract that says only which of thirteen fields is wrong is a contract
+    // an operator can fix without reading the parser.
+    const noNamespace = parseLiveMissionContract(JSON.stringify({ missionId: 'm' }));
+    expect(noNamespace.ok).toBe(false);
+    if (!noNamespace.ok) expect(noNamespace.problem).toContain('markerNamespace');
+    const missing = parseLiveMissionContract(JSON.stringify({ missionId: 'm', markerNamespace: 'test-namespace' }));
     expect(missing.ok).toBe(false);
     if (!missing.ok) expect(missing.problem).toContain('projectId');
     const noCriteria = parseLiveMissionContract(JSON.stringify({
-      missionId: 'm', projectId: 'p', tenantId: 't', objective: 'o',
+      missionId: 'm', markerNamespace: 'test-namespace', projectId: 'p', tenantId: 't', objective: 'o',
       testCommand: 'npm test', workspacePath: '/w', acceptanceCriteria: [],
     }));
     expect(noCriteria.ok).toBe(false);
@@ -864,7 +870,7 @@ describe('the live mission contract file', () => {
 
   it('compiles a deterministic bootstrap request so re-running the same contract resumes the same run', () => {
     const contract = {
-      missionId: 'm', projectId: 'p', tenantId: 't', objective: 'o',
+      missionId: 'm', markerNamespace: 'test-namespace', projectId: 'p', tenantId: 't', objective: 'o',
       requirements: [], constraints: [],
       acceptanceCriteria: [{ id: 'AC-1', text: 'passes', blocking: true }],
       testCommand: 'npm test', workspacePath: '/w',
@@ -879,7 +885,7 @@ describe('the live mission contract file', () => {
   it('worker roles resolved by the composition are what the bootstrap request carries', () => {
     const { resolution } = liveResolution({});
     const request = compileBootstrapRequest({
-      missionId: 'm', projectId: 'p', tenantId: 't', objective: 'o',
+      missionId: 'm', markerNamespace: 'test-namespace', projectId: 'p', tenantId: 't', objective: 'o',
       requirements: [], constraints: [],
       acceptanceCriteria: [{ id: 'AC-1', text: 'passes', blocking: true }],
       testCommand: 'npm test', workspacePath: '/w',

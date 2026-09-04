@@ -59,6 +59,24 @@ import {
 
 export interface LiveMissionContractFile {
   readonly missionId: string;
+  /**
+   * THE DURABLE ACCOUNTING NAMESPACE FOR THIS CONTRACT.
+   *
+   * Paid attempt markers are GitHub artifacts counted by name, and the first
+   * live mission owned those names outright — so a second contract would have
+   * counted the first one's history as its own, been told a paid mission had
+   * already completed, and demanded the rerun acknowledgement for a mission
+   * that had never run. The reverse is worse: a second mission's completion
+   * would have satisfied the first mission's guard.
+   *
+   * DECLARED, NOT DERIVED. A slug computed from `missionId` would silently
+   * collide the moment two ids normalise the same way, and the failure mode is
+   * one contract's paid history answering for another's. The contract states
+   * it, the parser refuses a contract without one, and the first live mission
+   * keeps `julius-first-live` so its completed history stays exactly where it
+   * is.
+   */
+  readonly markerNamespace: string;
   readonly projectId: string;
   readonly tenantId: string;
   readonly objective: string;
@@ -75,10 +93,20 @@ export function parseLiveMissionContract(raw: string): { ok: true; contract: Liv
   try { parsed = JSON.parse(raw); } catch { return { ok: false, problem: 'The contract file is not valid JSON.' }; }
   if (parsed === null || typeof parsed !== 'object') return { ok: false, problem: 'The contract must be a JSON object.' };
   const value = parsed as Record<string, unknown>;
-  for (const field of ['missionId', 'projectId', 'tenantId', 'objective', 'testCommand', 'workspacePath'] as const) {
+  for (const field of ['missionId', 'markerNamespace', 'projectId', 'tenantId', 'objective', 'testCommand', 'workspacePath'] as const) {
     if (typeof value[field] !== 'string' || (value[field] as string).trim() === '') {
       return { ok: false, problem: `The contract field "${field}" must be a non-empty string.` };
     }
+  }
+  /**
+   * An artifact name, and one this repository can count. Lower-case, starts
+   * with a letter, no path separators and no upper case — the alphabet GitHub
+   * artifact names and `count_markers` both handle without quoting surprises.
+   * Anything else is refused rather than sanitised: a namespace quietly
+   * rewritten is a namespace that can collide.
+   */
+  if (!/^[a-z][a-z0-9-]{2,48}$/u.test(value.markerNamespace as string)) {
+    return { ok: false, problem: 'The contract field "markerNamespace" must be 3-49 lower-case letters, digits or hyphens, starting with a letter.' };
   }
   const criteria = value.acceptanceCriteria;
   if (!Array.isArray(criteria) || criteria.length === 0) return { ok: false, problem: 'The contract needs a non-empty acceptanceCriteria array.' };
@@ -92,7 +120,8 @@ export function parseLiveMissionContract(raw: string): { ok: true; contract: Liv
   return {
     ok: true,
     contract: {
-      missionId: value.missionId as string, projectId: value.projectId as string,
+      missionId: value.missionId as string, markerNamespace: value.markerNamespace as string,
+      projectId: value.projectId as string,
       tenantId: value.tenantId as string, objective: value.objective as string,
       requirements: list('requirements'), constraints: list('constraints'),
       acceptanceCriteria: criteria as LiveMissionContractFile['acceptanceCriteria'],

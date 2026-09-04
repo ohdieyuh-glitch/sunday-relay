@@ -1,5 +1,6 @@
 {
   "missionId": "mission:julius-first-live-1",
+  "markerNamespace": "julius-first-live",
   "projectId": "prj-julius-first-live",
   "tenantId": "tenant",
   "objective": "In this workspace, replace the failing stub in `julius-live-proof.js` with a working `juliusLiveProof(input)` implementation, and replace the placeholder test in `julius-live-proof.test.js` with focused coverage of the behaviour below. Both files already exist and are tracked by git — edit them in place. Edit only files inside this workspace.",
