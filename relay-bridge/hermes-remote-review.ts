@@ -289,6 +289,8 @@ export async function runRemoteHermesReview(input: {
       diagnostics: reviewDiagnostics({
         transport: 'remote', shape: admissionShape,
         timedOut: admissionShape === 'review_timeout',
+        // The status the SERVICE returned at admission. A real HTTP response.
+        providerHttpStatus: start.status,
       }),
       startedAt,
       completedAt: now(),

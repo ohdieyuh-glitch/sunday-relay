@@ -6,6 +6,7 @@ import {
   classifyUnreadableReview, extractReviewJson, reviewStructureFacts, runHermesReview, validateHermesReview,
   type HermesConfig, type HermesOutcome, type HermesReviewShape, type ReviewPacket,
 } from './hermes-reviewer';
+import { safeReviewDiagnostics } from '../src/relay/mission/julius';
 
 /**
  * PAID ATTEMPT #2 SAID "UNREADABLE" TWICE AND NOTHING ELSE.
@@ -380,6 +381,92 @@ describe('an incomplete review carries the safe facts that explain its shape', (
     }
     // Only counts, flags and tokens this runtime chose.
     expect(d.failureShape).toBe('review_verdict_invalid');
+  });
+});
+
+/**
+ * THE NUMBER BEHIND THE SHAPE.
+ *
+ * Paid attempt #4 (run 33907599197) reached the reviewer for the first time and
+ * recorded `review_authentication_failed` — one shape covering a dead key
+ * (401), a key without access to the model (403) and a malformed request whose
+ * body merely mentions `api-key` (400). Three different repairs, and the
+ * classifier already knew which; it dropped the number.
+ */
+describe('an upstream failure carries the status the provider returned', () => {
+  const statusOf = async (stdout: string) => {
+    const outcome = await review({ stdout });
+    if (outcome.kind !== 'review_incomplete') throw new Error(`expected review_incomplete, got ${outcome.kind}`);
+    return { shape: outcome.shape, status: outcome.diagnostics.providerHttpStatus };
+  };
+
+  it('401 is a dead credential, and says 401', async () => {
+    expect(await statusOf('HTTP 401: {"error":"invalid api-key"}'))
+      .toEqual({ shape: 'review_authentication_failed', status: 401 });
+  });
+
+  it('403 is a credential without access, and says 403', async () => {
+    // Same shape as 401, different repair: the key works, the model does not.
+    expect(await statusOf('HTTP 403: {"error":"model not permitted"}'))
+      .toEqual({ shape: 'review_authentication_failed', status: 403 });
+  });
+
+  it('a 400 whose body names the credential keeps BOTH its classification and its number', async () => {
+    // The existing rule treats an api-key-shaped body as authentication even at
+    // 400 — xAI answers this way. The classification is unchanged; the status
+    // is what now separates it from a real 401.
+    expect(await statusOf('HTTP 400: {"code":"invalid-argument","message":"bad api-key"}'))
+      .toEqual({ shape: 'review_authentication_failed', status: 400 });
+  });
+
+  it('a rate limit and a server error are upstream errors, with their numbers', async () => {
+    expect(await statusOf('HTTP 429: {"error":"slow down"}'))
+      .toEqual({ shape: 'review_provider_http_error', status: 429 });
+    expect(await statusOf('HTTP 500: {"error":"boom"}'))
+      .toEqual({ shape: 'review_provider_http_error', status: 500 });
+    expect(await statusOf('HTTP 503: {"error":"unavailable"}'))
+      .toEqual({ shape: 'review_provider_http_error', status: 503 });
+  });
+
+  it('no status line means null, never a guess and never a zero', async () => {
+    // Prose, a malformed review and an unrecognised failure all reach here
+    // without an HTTP status. `0` would assert a status nobody read.
+    for (const stdout of ['The plan looks fine to me.', '{"verdict":"approve","summary":"x"}', '{"broken']) {
+      expect((await statusOf(stdout)).status, stdout.slice(0, 20)).toBeNull();
+    }
+  });
+
+  it('a number that is not a status cannot arrive dressed as one', async () => {
+    // The classifier requires a literal `HTTP <3 digits>:` line, so a byte
+    // count or a year in prose is not a status.
+    expect((await statusOf('We processed 200 lines in 2026 and it looks fine.')).status).toBeNull();
+    /**
+     * TWO LAYERS, AND THE DURABLE ONE IS THE DOMAIN'S. The adapter reports what
+     * the engine actually printed, so a nonsense `HTTP 999:` line is carried
+     * truthfully here rather than quietly rewritten — and `safeHttpStatus`
+     * refuses it on the way into the record, which is where it would otherwise
+     * become a durable claim about a provider.
+     */
+    expect((await statusOf('HTTP 999: nonsense')).status, 'reported as read').toBe(999);
+    expect(safeReviewDiagnostics({ providerHttpStatus: 999 })!.providerHttpStatus,
+      'and refused before it is persisted').toBeNull();
+    for (const value of [99, 600, 0, -401, 401.5, '401', null, undefined]) {
+      expect(safeReviewDiagnostics({ providerHttpStatus: value })!.providerHttpStatus, String(value)).toBeNull();
+    }
+    expect(safeReviewDiagnostics({ providerHttpStatus: 401 })!.providerHttpStatus).toBe(401);
+  });
+
+  it('and the status never arrives with the body it came from', async () => {
+    const SECRET = 'Authorization: Bearer FAKESECRET123456789';
+    const outcome = await review({
+      stdout: `HTTP 401: {"error":"invalid api-key sk-live-FAKESECRET123456789","header":"${SECRET}","prompt":"the whole review prompt"}`,
+    });
+    if (outcome.kind !== 'review_incomplete') throw new Error('unreachable');
+    expect(outcome.diagnostics.providerHttpStatus).toBe(401);
+    const serialized = JSON.stringify(outcome.diagnostics);
+    for (const secret of ['FAKESECRET123456789', 'sk-live', 'Authorization', 'Bearer', 'prompt', 'invalid api-key']) {
+      expect(serialized, `"${secret}" must not reach the diagnostics`).not.toContain(secret);
+    }
   });
 });
 

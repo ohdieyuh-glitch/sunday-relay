@@ -170,6 +170,21 @@ export interface HermesReviewDiagnostics {
   readonly verdictValid: boolean;
   readonly summaryPresent: boolean;
   readonly failureShape: HermesReviewShape | null;
+  /**
+   * THE STATUS THE PROVIDER ACTUALLY RETURNED, when one was read.
+   *
+   * Paid attempt #4 recorded `review_authentication_failed` and stopped there.
+   * That one shape covers three different repairs — a 401 is a dead key, a 403
+   * is a key without access to the model, and a 400 whose body merely mentions
+   * `api-key` is a malformed request — and an operator cannot tell which
+   * without asking the provider again. The classifier already knew the number
+   * and dropped it.
+   *
+   * Read from an HTTP response or from a status line the engine printed; never
+   * inferred from prose, and `null` when none was read. The body it came with
+   * is not kept.
+   */
+  readonly providerHttpStatus: number | null;
 }
 
 /** What the reviewer's text structurally was — no part of it is retained. */
@@ -234,6 +249,8 @@ export function reviewDiagnostics(input: {
   readonly outputBytesObserved?: number | null;
   readonly outputByteLimit?: number | null;
   readonly outputTruncated?: boolean;
+  /** Only a status a provider really returned. Never parsed out of prose. */
+  readonly providerHttpStatus?: number | null;
   /** Read for its SHAPE only; no part of it is retained. */
   readonly text?: string | null;
 }): HermesReviewDiagnostics {
@@ -247,6 +264,7 @@ export function reviewDiagnostics(input: {
     outputBytesObserved: input.outputBytesObserved ?? null,
     outputByteLimit: input.outputByteLimit ?? null,
     outputTruncated: input.outputTruncated ?? false,
+    providerHttpStatus: input.providerHttpStatus ?? null,
     ...reviewStructureFacts(input.text ?? null),
     failureShape: input.shape,
   };
@@ -901,6 +919,8 @@ export async function runHermesReview(input: {
       shape: HermesReviewShape;
       exitCode: number | null;
       timedOut: boolean;
+      /** Only ever `classifyHermesUpstreamFailure`'s own reading. */
+      providerHttpStatus?: number | null;
     }): HermesReviewDiagnostics => ({
       stage: null,
       transport: 'local',
@@ -913,6 +933,7 @@ export async function runHermesReview(input: {
       outputBytesObserved: bytes,
       outputByteLimit: cfg.maxOutputBytes,
       outputTruncated: truncated,
+      providerHttpStatus: input.providerHttpStatus ?? null,
       ...reviewStructureFacts(out),
       failureShape: input.shape,
     });
@@ -1018,7 +1039,7 @@ export async function runHermesReview(input: {
         finish({
           kind: 'review_incomplete',
           shape,
-          diagnostics: localDiagnostics({ shape, exitCode: code ?? null, timedOut: false }),
+          diagnostics: localDiagnostics({ shape, exitCode: code ?? null, timedOut: false, providerHttpStatus: upstream?.status ?? null }),
           safeMessage:
             upstream?.kind === 'authentication'
               ? 'The Hermes reviewer could not authenticate with its configured provider.'
