@@ -7631,6 +7631,72 @@ def _south_quarter():
         out.append(A("arch_stone", *at(-6600.0, wacross * 0.5), 0.0,
                      yaw=yaw + 90.0, s=1.5, mat="MI_V2_PlazaCream",
                      label="South_%sCrossArch" % wtag))
+
+    # ---- DEPTH, NOT A RIBBON ---------------------------------------------
+    # The founder's rule: a player must be able to turn left, then left again,
+    # and still be inside authored Wonderland. One street with houses along it
+    # fails that on the first turn -- behind the frontage there was grass.
+    #
+    # So: three cross streets cutting the block, courtyards BEHIND the houses
+    # with their own rear elevations, alleys between them, and a secondary
+    # destination that is not the market, so the quarter has two reasons to
+    # walk it.
+    for ci, along_c in enumerate((-5000.0, 900.0, 6200.0)):
+        for j in range(-6, 7):
+            ccx, ccy = at(along_c, j * 1100.0)
+            out.append(A("terrace_platform", ccx, ccy, ROAD_Z, yaw=yaw + 90.0,
+                         sxyz=(0.82, 1.35, 0.30), mat="MI_V2_PathStone",
+                         label="South_X%d_%02d" % (ci, j + 6)))
+        # blocks facing the cross street, on both sides, beyond the main row
+        for j in (-5, -3, 3, 5):
+            hx, hy = at(along_c + 1500.0 * (1 if j > 0 else -1), j * 1100.0)
+            k = ci * 11 + abs(j) * 3 + 5
+            out += kit_building(hx, hy, yaw + (0.0 if j > 0 else 180.0), k,
+                                "South_X%d_B%d" % (ci, j + 6),
+                                storeys=1 + (k % 2), tower=(k % 2 == 0),
+                                scale=0.92)
+        out.append(A("arch_stone", *at(along_c, 0.0), 0.0, yaw=yaw + 90.0,
+                     s=0.75, mat="MI_V2_PlazaCream",
+                     label="South_X%dArch" % ci))
+
+    # COURTYARDS behind the frontage: paved, edged, with a rear elevation on
+    # three sides. This is the "turn left twice" test made physical.
+    for qi, (qa, qc) in enumerate(((-3600.0, 4600.0), (2600.0, -4600.0),
+                                   (-7400.0, -4400.0))):
+        qx, qy = at(qa, qc)
+        out.append(A("terrace_platform", qx, qy, ROAD_Z, yaw=yaw,
+                     sxyz=(1.5, 1.5, 0.32), mat="MI_V2_PlazaShade",
+                     label="South_Court%dFloor" % qi))
+        for e in range(3):
+            eang = yaw + 90.0 * e
+            ex = qx + math.cos(math.radians(eang)) * 1500.0
+            ey = qy + math.sin(math.radians(eang)) * 1500.0
+            out += kit_building(ex, ey, eang + 180.0, qi * 7 + e + 2,
+                                "South_Court%d_E%d" % (qi, e),
+                                storeys=1, tower=(e == 1), scale=0.8)
+        out.append(A("fountain_basin", qx, qy, 0.0, yaw=yaw, s=0.9,
+                     mat="MI_V2_IvoryStone", label="South_Court%dBasin" % qi))
+        out.append(A("topiary_cone_roses", qx + 900.0, qy + 900.0, 0.0,
+                     yaw=0.0, s=1.2, mat="MI_V2_LeafDark",
+                     label="South_Court%dTopiary" % qi))
+        out.append(A("garden_bench", qx - 900.0, qy, 0.0, yaw=yaw + 90.0,
+                     s=1.0, mat="MI_V2_IvoryStone",
+                     label="South_Court%dBench" % qi))
+
+    # THE SECOND DESTINATION. A clock hall off the main street, so the quarter
+    # is not just "walk to the market": the reference board has clocks and
+    # mechanisms as a whole object language, and this is where the south gets
+    # one.
+    hx, hy = at(3000.0, 5400.0)
+    out += kit_building(hx, hy, yaw + 90.0, 4, "South_ClockHall",
+                        storeys=2, tower=True, scale=1.5)
+    out.append(A("clock_ornate", hx, hy, 2050.0, yaw=yaw + 90.0, s=1.3,
+                 mat="MI_V2_GoldAged", label="South_ClockFace"))
+    out.append(A("stairs_broad", *at(2600.0, 3900.0), ROAD_Z, yaw=yaw + 90.0,
+                 s=1.4, mat="MI_V2_PlazaGrey", label="South_ClockSteps"))
+    out.append(A("terrace_platform", *at(3000.0, 3900.0), ROAD_Z, yaw=yaw,
+                 sxyz=(1.1, 0.9, 0.32), mat="MI_V2_PlazaCream",
+                 label="South_ClockForecourt"))
     return out
 
 
