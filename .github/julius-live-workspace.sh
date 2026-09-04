@@ -48,7 +48,14 @@ set -euo pipefail
 # diff would look perfectly legitimate.
 MISSION_DIR=${JULIUS_MISSION_DIR:?missing JULIUS_MISSION_DIR}
 [ -d "$MISSION_DIR" ] || { echo "mission_dir_missing: $MISSION_DIR" >&2; exit 1; }
+# ABSOLUTE, AND RESOLVED HERE. Callers pass a repository-relative path, and this
+# script later `cd`s into the workspace — so a relative seed path would be
+# resolved against the empty tmpfs and every mission would fail provisioning
+# with `mission_workspace_seed_missing`. Resolving before the `cd` is what makes
+# the order of the rest of this file irrelevant.
+MISSION_DIR=$(cd "$MISSION_DIR" && pwd)
 MISSION_NAME=$(basename "$MISSION_DIR")
+SEED_DIR="$MISSION_DIR/workspace"
 
 FLEET_ROOT=${JULIUS_FLEET_ROOT:-/tmp/julius-workspace}
 TENANT=${JULIUS_TENANT_ID:-tenant}
@@ -93,7 +100,6 @@ cd "$WORKSPACE"
 # EDITS them, and the diff is real. Every mission's stubs are therefore
 # deliberately failing, so the declared test command cannot pass until the work
 # is actually done.
-SEED_DIR="$MISSION_DIR/workspace"
 [ -d "$SEED_DIR" ] || { echo "mission_workspace_seed_missing: $SEED_DIR" >&2; exit 1; }
 # An empty seed would produce an empty repository, an empty diff, and a mission
 # that looks like it ran. Refuse instead.

@@ -382,6 +382,45 @@ describe('the mission itself is bounded and aimed away from this repository', ()
     ).toBe(false);
   });
 
+  it('resolves the seed directory to an absolute path BEFORE changing directory', () => {
+    /**
+     * Callers pass a repository-relative mission directory and this script
+     * `cd`s into the workspace, so a seed path resolved after the `cd` is
+     * resolved against the empty tmpfs — every mission would then fail
+     * provisioning with `mission_workspace_seed_missing`, on both dry and paid
+     * dispatches. Caught by the real Docker regression; held here.
+     */
+    const provisioning = read('.github/julius-live-workspace.sh');
+    const absolute = provisioning.indexOf('MISSION_DIR=$(cd "$MISSION_DIR" && pwd)');
+    const seed = provisioning.indexOf('SEED_DIR="$MISSION_DIR/workspace"');
+    const changeDirectory = provisioning.indexOf('cd "$WORKSPACE"');
+    expect(absolute, 'the mission directory must be made absolute').toBeGreaterThan(-1);
+    expect(seed, 'the seed directory must be derived from it').toBeGreaterThan(-1);
+    expect(changeDirectory, 'the script must change into the workspace').toBeGreaterThan(-1);
+    expect(absolute, 'absolute BEFORE the cd').toBeLessThan(changeDirectory);
+    expect(seed, 'and the seed path BEFORE the cd too').toBeLessThan(changeDirectory);
+  });
+
+  it('every workflow that provisions a workspace names the mission it is seeding', () => {
+    // The script refuses to guess, which is right — and that makes an unset
+    // caller a hard failure rather than a silent seeding of the wrong task.
+    for (const file of readdirSync(resolve(ROOT, '.github/workflows'))) {
+      const source = read(`.github/workflows/${file}`);
+      if (!source.includes('julius-live-workspace.sh')) continue;
+      expect(source, `${file} invokes the provisioner and must set JULIUS_MISSION_DIR`)
+        .toContain('JULIUS_MISSION_DIR');
+    }
+  });
+
+  it('the mission seed stubs are not collected as this repository\'s own tests', () => {
+    // They are deliberately failing files; vitest's default discovery adopted
+    // them the moment missions stopped being heredocs, and the suite failed.
+    // They are executed on purpose above, and nowhere else.
+    const config = read('vite.config.mts');
+    expect(config, 'the mission trees must be excluded from test discovery')
+      .toContain('.github/julius-missions/**');
+  });
+
   it('every mission asks only for edits, because the hosted agent is denied file creation', () => {
     // `HOSTED_DISALLOWED_TOOLS` includes `Write`: the coding agent can Edit an
     // existing file but cannot bring a new one into existence. A mission that
