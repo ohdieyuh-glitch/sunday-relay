@@ -34,6 +34,7 @@
     "relay": "npm run relay:build --silent && node dist-relay/cli.cjs",
     "relay:test": "vitest run src/relay",
     "relay:surface-parity:check": "node scripts/relay-surface-parity.mjs",
+    "julius:review-currency": "node scripts/julius-review-currency.mjs",
     "relay:surface-parity:check:strict": "node scripts/relay-surface-parity.mjs --strict",
     "relay:yc": "npm run relay:build --silent && node dist-relay/cli.cjs demo yc --presentation",
     "relay:yc:verify": "npm run relay:build --silent && node scripts/relay-yc-verify.mjs",
