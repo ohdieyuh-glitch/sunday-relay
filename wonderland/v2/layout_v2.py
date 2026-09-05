@@ -7709,6 +7709,36 @@ def urban_fill(cx, cy, half_x, half_y, seed, tag, bearing=0.0,
             out.append(A("terrace_platform", sx, sy, ROAD_Z, yaw=bearing,
                          sxyz=(1.0, street_m / 7.4, 0.30), mat="MI_V2_Cobble",
                          label="%s_StA%d_%03d" % (tag, gi, t)))
+            # THE STREET SURFACE ITSELF. gap_v2 at street level scored
+            # foreground.edges 0.058 against the reference's 0.317 -- 0.18x,
+            # and by far the weakest number in the frame. The buildings had
+            # been fixed and the ground under them was a flat cobble plane with
+            # nothing standing on it. Kerbs both sides every cell, and a lamp,
+            # bollard or bench at intervals, is edge density where the player
+            # actually looks.
+            for kb in (1.0, -1.0):
+                kx = sx + px * street_m * 50.0 * kb
+                ky = sy + py * street_m * 50.0 * kb
+                out.append(A("kerb_stone", kx, ky, ROAD_Z + 26.0, yaw=bearing,
+                             s=1.0, mat="MI_V2_Kerb",
+                             label="%s_KA%d_%03d_%d" % (tag, gi, t, int(kb))))
+            if t % 3 == 1:
+                sgn = 1.0 if (t // 3) % 2 == 0 else -1.0
+                fx = sx + px * (street_m * 50.0 - 160.0) * sgn
+                fy = sy + py * (street_m * 50.0 - 160.0) * sgn
+                pick = (seed + t) % 3
+                if pick == 0:
+                    out.append(A("waymarker_lamp", fx, fy, 0.0, yaw=bearing,
+                                 s=1.05, mat="MI_V2_GoldAged",
+                                 label="%s_Lamp%d_%03d" % (tag, gi, t)))
+                elif pick == 1:
+                    out.append(A("garden_bench", fx, fy, 0.0, yaw=bearing + 90.0,
+                                 s=1.0, mat="MI_V2_MarblePale",
+                                 label="%s_Bench%d_%03d" % (tag, gi, t)))
+                else:
+                    out.append(A("pedestal_finial", fx, fy, 0.0, yaw=bearing,
+                                 s=1.6, mat="MI_V2_GoldAged",
+                                 label="%s_Bollard%d_%03d" % (tag, gi, t)))
     for gj in range(nx + 1):
         a = -span_a * 0.5 + pitch * gj
         for t in range(int(span_c / step) + 1):
