@@ -7304,9 +7304,9 @@ KIT_ROOFS = ("MI_V2_RoofRose", "MI_V2_RoofPink", "MI_V2_RoofRose",
 #: colour is an accent -- which is also how the reference board's facades read:
 #: pale stone, dark openings, colour on the ROOFS.
 KIT_GLASS = ("MI_V2_WindowDark", "MI_V2_WindowDark", "MI_V2_WindowDark",
-             "MI_V2_WindowDark", "MI_V2_GlassTeal", "MI_V2_WindowDark",
+             "MI_V2_WindowDark", "MI_V2_PaneTeal", "MI_V2_WindowDark",
              "MI_V2_WindowDark", "MI_V2_WindowDark", "MI_V2_WindowDark",
-             "MI_V2_GlassAmber", "MI_V2_WindowDark", "MI_V2_WindowDark")
+             "MI_V2_PaneAmber", "MI_V2_WindowDark", "MI_V2_WindowDark")
 
 KIT_WALLS = ("MI_V2_MarblePale", "MI_V2_MarbleBlush", "MI_V2_MarblePale",
              "MI_V2_MarbleCool", "MI_V2_Ceramic", "MI_V2_MarblePale",

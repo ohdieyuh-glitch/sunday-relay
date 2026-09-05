@@ -71,6 +71,15 @@ INSTANCES = {
     # used as glazing against a 0.53 wall -- barely a shade, so the dark panes
     # vanished and only the coloured minority read, which is why a regular grid
     # rendered as scattered confetti. An opening is a hole: this is one.
+    # NON-EMISSIVE WINDOW ACCENTS. MI_V2_GlassTeal and friends carry an
+    # emissive term at 560-620 -- they were authored as LANTERN glass, a few of
+    # them, glowing. Used as window panes they put 2,206 emissive surfaces in
+    # the city, and every one is a light source for Lumen's dynamic GI. That is
+    # the GPU p95 going 12.07 -> 35.84 ms and a quarter of frames missing 33 ms.
+    # Same hues, no emissive, opaque plaster.
+    "MI_V2_PaneTeal":    ("plaster", (0.18, 0.34, 0.36), 0.0, 0.45, 0.50, 0.32, None, 0.0),
+    "MI_V2_PaneAmber":   ("plaster", (0.40, 0.31, 0.16), 0.0, 0.45, 0.50, 0.32, None, 0.0),
+    "MI_V2_PaneRose":    ("plaster", (0.38, 0.20, 0.25), 0.0, 0.45, 0.50, 0.32, None, 0.0),
     "MI_V2_WindowDark":  ("plaster", (0.11, 0.11, 0.13), 0.0, 0.42, 0.50, 0.32, None, 0.0),
     "MI_V2_MarblePale":  ("plaster", (0.55, 0.54, 0.52), 0.0, 0.58, 0.50, 0.32, None, 0.0),
     "MI_V2_MarbleBlush": ("plaster", (0.56, 0.52, 0.52), 0.0, 0.60, 0.50, 0.32, None, 0.0),
