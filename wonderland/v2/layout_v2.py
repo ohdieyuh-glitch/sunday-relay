@@ -7480,16 +7480,34 @@ def kit_lite_face(x, y, yaw, width_m, seed, tag, storeys=1, scale=1.0):
             # it per opening, and a continuous string course is what a real
             # elevation has anyway. Both project 62 uu past the wall face so
             # the shadow is cast by GEOMETRY, not painted on.
+            # THE MESH WAS WRONG, AND IT WAS CHOSEN FOR THE WRONG REASON.
+            #
+            # These courses were balustrade, picked because balustrade +
+            # MarbleCool was already the largest instanced pair in this band
+            # and so cost no draw call. balustrade is a rail carried on FIVE
+            # TURNED BALUSTERS. Stretched along a row it is a comb; there were
+            # two of them per row and two rows per storey, on four faces of
+            # every building, and HeroCam48 came back looking like scaffolding
+            # rather than a street. Instancing economy is not a reason to
+            # place a mesh whose SHAPE is wrong -- the same error as the 32.6 m
+            # lantern_swag used as per-bay trim.
+            #
+            # kerb_stone is a plain section: a 120 x 36 x 22 box with a 116 x
+            # 32 x 6 cap, x-centred and z-based. Stretched it is a string
+            # course with a drip edge, which is what a sill is.
+            #
+            # ONE course per row, not two. The head has gone with the comb:
+            # four horizontal bands per storey was most of the clutter, and a
+            # sill plus a pier already gives an opening three of its four
+            # sides. A head can come back once the elevation is legible again.
             band = width_m * 0.70
-            for bz, bs, bmat, bnm in ((rz - 120.0, 0.30, "MI_V2_MarblePale", "Sill"),
-                                      (rz + 330.0, 0.22, "MI_V2_MarbleCool", "Head")):
-                out.append(A("balustrade",
-                             x + math.cos(fwd) * 458.0 * scale,
-                             y + math.sin(fwd) * 458.0 * scale,
-                             bz + z, yaw=yaw,
-                             sxyz=(band / 3.5, 1.15, bs),
-                             mat=bmat,
-                             label="%s_%s%d_%d" % (tag, bnm, st, row)))
+            out.append(A("kerb_stone",
+                         x + math.cos(fwd) * 458.0 * scale,
+                         y + math.sin(fwd) * 458.0 * scale,
+                         rz - 120.0 + z, yaw=yaw,
+                         sxyz=(band * 100.0 / 120.0, 1.4, 1.1),
+                         mat="MI_V2_MarblePale",
+                         label="%s_Sill%d_%d" % (tag, st, row)))
             for i in range(n):
                 # INSET FROM THE CORNERS. Columns spanned the full face width,
                 # so the outermost pane on one face reached past the corner and
@@ -7527,11 +7545,15 @@ def kit_lite_face(x, y, yaw, width_m, seed, tag, storeys=1, scale=1.0):
         span = width_m * 0.70
         for i in range(n - 1):
             off = (-span * 0.5 + (span / n) * (i + 1.0)) * 100.0
-            out.append(A("balustrade",
+            # kerb_stone, not balustrade, for the reason given at the sill:
+            # stood on end a balustrade is a stack of five turned lumps. This
+            # is a plain 120 x 36 x 22 section, x-centred, so pitch=90 gives a
+            # clean vertical pier centred on the glazed band.
+            out.append(A("kerb_stone",
                          x + math.cos(along) * off + math.cos(fwd) * 440.0 * scale,
                          y + math.sin(along) * off + math.sin(fwd) * 440.0 * scale,
                          490.0 * scale + z, yaw=yaw, pitch=90.0,
-                         sxyz=(7.2 / 3.5 * scale, 1.4, 0.45),
+                         sxyz=(720.0 / 120.0 * scale, 1.4, 2.1),
                          mat="MI_V2_MarbleCool",
                          label="%s_Pier%d_%d" % (tag, st, i)))
     out.append(A("balustrade", x + math.cos(fwd) * 406.0 * scale,
