@@ -55,7 +55,18 @@ export interface HostedObservation {
   readonly reportedTools: readonly string[];
   /** Tool targets the run reported touching, for the scope audit. */
   readonly toolTargets: readonly string[];
+  /** DISTINCT tool NAMES, deduplicated. Not how often they were called. */
   readonly toolsUsed: readonly string[];
+  /**
+   * HOW MANY TIMES A TOOL WAS ACTUALLY INVOKED.
+   *
+   * `toolsUsed` deduplicates by name, so ten `Edit` calls and one `Read` are
+   * two entries. A refusal record that reported that as the tool-use count
+   * materially understated how much the run did — ten edits and one read is
+   * not "2 tool uses". This counts invocations as they are observed, so a
+   * partial run reports what it genuinely saw before the stream ended.
+   */
+  readonly toolInvocations: number;
   /** Permission denials the runtime itself recorded — evidence of the envelope working. */
   readonly permissionDenials: number;
   readonly numTurns: number | null;
@@ -71,7 +82,7 @@ export interface HostedObservation {
 
 const EMPTY: HostedObservation = {
   initSeen: false, sessionId: null, actualModel: null, runtimeVersion: null, apiKeySource: null,
-  reportedCwd: null, reportedTools: [], toolTargets: [], toolsUsed: [],
+  reportedCwd: null, reportedTools: [], toolTargets: [], toolsUsed: [], toolInvocations: 0,
   permissionDenials: 0, numTurns: null, durationMs: null, usage: UNKNOWN_HOSTED_USAGE,
   resultSubtype: null, isError: null, finalText: null,
   thinkingBlocksOmitted: 0, unknownMessageCount: 0,
@@ -137,6 +148,7 @@ export function foldHostedMessage(
         next = {
           ...next,
           toolsUsed: next.toolsUsed.includes(tool) ? next.toolsUsed : [...next.toolsUsed, tool],
+          toolInvocations: next.toolInvocations + 1,
           toolTargets: [...next.toolTargets, ...targets],
         };
       }

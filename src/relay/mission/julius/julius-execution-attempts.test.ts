@@ -568,3 +568,115 @@ describe('an execution attempt is spent at admission, never at the claim', () =>
     expect(planJuliusRecovery({ ...base, attempt: 0 }).action).toBe('REQUEUE');
   });
 });
+
+/**
+ * A RETRY MUST NOT REFERENCE A CONTEXT THAT WAS NEVER STORED.
+ *
+ * Paid Mission #2 (run 33924009789, Julius run `run:d5becd51…`) CRASHED with
+ * `julius_trajectory_events_context_id_fkey`. Context ids are minted per
+ * compile while the store deduplicates on (task_id, worker_id, content_hash),
+ * so a retry of a task whose context has not changed minted a fresh id, matched
+ * the existing row, stored nothing — and the caller discarded the boolean that
+ * said so and wrote the unstored id onto a trajectory event whose `context_id`
+ * is a foreign key.
+ *
+ * It was latent until a review timeout became retryable and made the path
+ * reachable. The memory store has no foreign key, so the same defect there was
+ * SILENT: a dangling reference rather than a crash. These cases hold the
+ * invariant directly, which is why they catch both.
+ */
+describe('context identity survives a retry', () => {
+  /** THE INVARIANT: every context a trajectory event names must be stored. */
+  const everyContextReferenceResolves = (harness: ReturnType<typeof createJuliusHarness>): void => {
+    const stored = new Set(harness.store.contexts().map((snapshot) => snapshot.contextId));
+    for (const event of harness.store.trajectory()) {
+      if (event.contextId === null) continue;
+      expect(stored.has(event.contextId),
+        `trajectory ${event.kind} names context ${event.contextId}, which is not stored`).toBe(true);
+    }
+  };
+
+  it('reuses the stored id when a retry recompiles identical content', async () => {
+    // The Mission #2 shape: one retryable failure, then a retry whose context
+    // is byte-identical because nothing about the task changed.
+    const harness = createJuliusHarness({
+      workers: [{ worker: CODER, script: [{ kind: 'fail', code: 'RATE_LIMIT' }, SUCCESS] }],
+      card: cardPolicy({ allowedProviders: [CODER.providerId], automaticRetry: true }),
+    });
+    const { projectId } = seedRun(harness, { tasks: [task({ taskId: 'only' })] });
+
+    await harness.loop.tick({ projectId });
+    await harness.loop.tick({ projectId });
+
+    expect(harness.store.taskRow('only')!.state).toBe('SUCCEEDED');
+    // Identical content deduplicates to ONE row, which is the whole point of
+    // the unique key — the defect was never the dedupe, it was the id.
+    expect(harness.store.contexts(), 'unchanged content stores one context').toHaveLength(1);
+    everyContextReferenceResolves(harness);
+
+    // And both compiles named the SAME id, which is what makes the reference
+    // resolvable at all.
+    const named = new Set(harness.store.trajectory()
+      .filter((event) => event.contextId !== null)
+      .map((event) => event.contextId));
+    expect(named.size, 'one stored context, one id named by every event').toBe(1);
+    expect(named.has(harness.store.contexts()[0]!.contextId)).toBe(true);
+  });
+
+  it('stores a second context when the retry genuinely recompiles different content', async () => {
+    // Evidence from the first attempt changes the packet, so the content hash
+    // differs and a second row is correct. Dedupe must not swallow that.
+    const harness = createJuliusHarness({
+      workers: [{ worker: CODER, script: [{ kind: 'fail', code: 'RATE_LIMIT' }, SUCCESS] }],
+      card: cardPolicy({ allowedProviders: [CODER.providerId], automaticRetry: true }),
+    });
+    const { projectId, runId } = seedRun(harness, { tasks: [task({ taskId: 'only' })] });
+
+    await harness.loop.tick({ projectId });
+    // Change what the context is compiled FROM between the two attempts.
+    harness.store.seedBrain(runId, [{
+      entryId: 'brain-late', kind: 'CONSTRAINT', text: 'OBJECTIVE: a different constraint',
+      taskIds: [], allowedRoles: ['CODING_AGENT'], sensitivity: 'INTERNAL',
+    }]);
+    await harness.loop.tick({ projectId });
+
+    expect(harness.store.contexts().length, 'different content is a different row').toBeGreaterThan(1);
+    everyContextReferenceResolves(harness);
+  });
+
+  it('a task that fails without a retry still leaves every reference resolvable', async () => {
+    const harness = createJuliusHarness({
+      workers: [{ worker: CODER, script: [{ kind: 'fail', code: 'AUTH_CONFIGURATION' }] }],
+      card: cardPolicy({ allowedProviders: [CODER.providerId], automaticRetry: true }),
+    });
+    const { projectId } = seedRun(harness, { tasks: [task({ taskId: 'only' })] });
+    await harness.loop.tick({ projectId });
+    expect(harness.store.taskRow('only')!.state).toBe('FAILED');
+    everyContextReferenceResolves(harness);
+  });
+
+  it('the store returns the id it kept, not the one the caller minted', async () => {
+    // The unit of the fix, stated directly: a replay with a different minted id
+    // and identical content answers with the id already stored.
+    const harness = createJuliusHarness({ workers: [{ worker: CODER, script: [SUCCESS] }] });
+    const { projectId } = seedRun(harness, { tasks: [task({ taskId: 'only' })] });
+    await harness.loop.tick({ projectId });
+
+    const stored = harness.store.contexts()[0]!;
+    const replayed = await harness.store.persist({
+      projectId, snapshot: { ...stored, contextId: 'context#freshly-minted' },
+    });
+    expect(replayed, 'the stored id wins').toBe(stored.contextId);
+    expect(harness.store.contexts(), 'and nothing new was written').toHaveLength(1);
+  });
+
+  it('refuses to name a context for a run the project does not own', async () => {
+    // Unknown is not a reference. Returning null is what lets the pipeline fail
+    // closed instead of writing an edge to nothing.
+    const harness = createJuliusHarness({ workers: [{ worker: CODER, script: [SUCCESS] }] });
+    const { projectId } = seedRun(harness, { tasks: [task({ taskId: 'only' })] });
+    await harness.loop.tick({ projectId });
+    const stored = harness.store.contexts()[0]!;
+    expect(await harness.store.persist({ projectId: 'prj-someone-else', snapshot: stored })).toBeNull();
+  });
+});

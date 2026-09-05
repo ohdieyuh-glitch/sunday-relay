@@ -273,12 +273,24 @@ export function createContextAndClaimHandoffs<S extends JuliusRuntimeStore>(stor
   const wrapped: S = {
     ...store,
     persist: async (input) => {
-      snapshots.set(input.snapshot.contextId, input.snapshot);
-      if (snapshots.size > 64) {
-        const oldest = snapshots.keys().next().value;
-        if (oldest !== undefined) snapshots.delete(oldest);
+      /**
+       * KEYED BY THE ID THE STORE KEPT.
+       *
+       * Adapters resolve a context by the id the pipeline hands them, and the
+       * pipeline now uses the STORED id — which, on a retry of unchanged
+       * content, is the id of the row that already existed rather than the one
+       * minted for this compile. Caching under the minted id would leave the
+       * adapter unable to find a context that is durably present.
+       */
+      const persisted = await store.persist(input);
+      if (persisted !== null) {
+        snapshots.set(persisted, { ...input.snapshot, contextId: persisted });
+        if (snapshots.size > 64) {
+          const oldest = snapshots.keys().next().value;
+          if (oldest !== undefined) snapshots.delete(oldest);
+        }
       }
-      return store.persist(input);
+      return persisted;
     },
     claimRunnable: async (input) => {
       const claimed: JuliusClaimedTask[] = await store.claimRunnable(input);

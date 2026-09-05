@@ -110,7 +110,7 @@ function fakeCoder(log: FakeLog, prompts: string[]) {
       observation: {
         initSeen: true, sessionId: 'sess-test', actualModel: 'claude-fable-5',
         runtimeVersion: 'test', apiKeySource: 'env', reportedCwd: input.workspacePath,
-        reportedTools: ['Read', 'Glob', 'Grep', 'Edit'], toolTargets: [], toolsUsed: ['Edit'],
+        reportedTools: ['Read', 'Glob', 'Grep', 'Edit'], toolTargets: [], toolsUsed: ['Edit'], toolInvocations: 3,
         permissionDenials: 0, numTurns: 3, durationMs: 10,
         usage: { inputTokens: 500, outputTokens: 200, totalCostUsd: 0.02, source: 'runtime_reported' },
         resultSubtype: 'success', isError: false, finalText: `done (${SECRET_CANARY})`,
