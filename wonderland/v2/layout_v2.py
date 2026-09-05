@@ -7466,6 +7466,30 @@ def kit_lite_face(x, y, yaw, width_m, seed, tag, storeys=1, scale=1.0):
     for st in range(storeys):
         z = st * 1000.0 * scale
         for row, rz in ((0, 250.0), (1, 520.0)):
+            # A STRING COURSE AND A HOOD, ONE PIECE EACH PER ROW.
+            #
+            # The openings are correctly placed, sized, valued and lit, and they
+            # still read as dark rectangles because they have no EDGE. A window
+            # is an assembly: a sill you could rest a hand on, a head that casts
+            # a line of shadow down the glass.
+            #
+            # Per-row rather than per-window, and that is a performance
+            # decision as much as an architectural one. balustrade is 3.5 m at
+            # s=1, so one stretched piece spans the whole row of three and
+            # gives every window in it a sill -- a third of the pieces of doing
+            # it per opening, and a continuous string course is what a real
+            # elevation has anyway. Both project 62 uu past the wall face so
+            # the shadow is cast by GEOMETRY, not painted on.
+            band = width_m * 0.70
+            for bz, bs, bmat, bnm in ((rz - 120.0, 0.30, "MI_V2_MarblePale", "Sill"),
+                                      (rz + 330.0, 0.22, "MI_V2_MarbleCool", "Head")):
+                out.append(A("balustrade",
+                             x + math.cos(fwd) * 458.0 * scale,
+                             y + math.sin(fwd) * 458.0 * scale,
+                             bz + z, yaw=yaw,
+                             sxyz=(band / 3.5, 1.15, bs),
+                             mat=bmat,
+                             label="%s_%s%d_%d" % (tag, bnm, st, row)))
             for i in range(n):
                 # INSET FROM THE CORNERS. Columns spanned the full face width,
                 # so the outermost pane on one face reached past the corner and
@@ -7514,6 +7538,59 @@ def kit_building(x, y, yaw, seed, tag, storeys=1, tower=True, scale=1.0):
         if st:
             out.append(A("balcony_ring", x, y, z, yaw=yaw, s=scale * 0.68,
                          mat="MI_V2_GoldAged", label="%s_Bal%d" % (tag, st)))
+    # SECONDARY MASSING, so the silhouette is not a decorated box.
+    #
+    # Ornament on a cube is still a cube. These change the OUTLINE and the way
+    # the building meets the street: a shallow wing that steps the frontage
+    # forward, an upper storey set back so the roofline breaks, a corner turret
+    # that turns the corner rather than stopping at it. Three variants keyed
+    # off the seed so a street gets a mix rather than one hero cloned down it,
+    # and only about two thirds of buildings get anything at all -- the plain
+    # ones are what make the others read as special.
+    fwd_m = math.radians(yaw - 90.0)
+    along_m = math.radians(yaw)
+    variant = k % 5
+    if variant == 0:
+        # a shallow wing, stepped forward at one end of the frontage
+        wx = x + math.cos(along_m) * 480.0 * scale + math.cos(fwd_m) * 210.0 * scale
+        wy = y + math.sin(along_m) * 480.0 * scale + math.sin(fwd_m) * 210.0 * scale
+        out.append(A("castle_hall", wx, wy, 0.0, yaw=yaw, s=scale * 0.52,
+                     mat=KIT_WALLS[(k + 5) % len(KIT_WALLS)],
+                     label="%s_Wing" % tag))
+        out.append(A("roof_hip", wx, wy, 520.0 * scale, yaw=yaw, s=scale * 0.52,
+                     mat=KIT_ROOFS[(k + 1) % len(KIT_ROOFS)],
+                     label="%s_WingRoof" % tag))
+    elif variant == 1 and storeys > 1:
+        # the top storey set BACK, which breaks the roofline and gives the
+        # street a terrace edge to read against the sky
+        out.append(A("balustrade", x + math.cos(fwd_m) * 300.0 * scale,
+                     y + math.sin(fwd_m) * 300.0 * scale,
+                     (storeys - 1) * 1000.0 * scale, yaw=yaw,
+                     sxyz=(3.2 * scale, 1.2, 0.5), mat="MI_V2_MarblePale",
+                     label="%s_Setback" % tag))
+    elif variant == 2:
+        # a corner turret that turns the corner instead of stopping at it
+        cx_ = x + math.cos(along_m) * 520.0 * scale + math.cos(fwd_m) * 380.0 * scale
+        cy_ = y + math.sin(along_m) * 520.0 * scale + math.sin(fwd_m) * 380.0 * scale
+        out.append(A("castle_tower_slender", cx_, cy_, 0.0, yaw=yaw,
+                     s=scale * 0.62, mat=KIT_WALLS[(k + 2) % len(KIT_WALLS)],
+                     label="%s_Turret" % tag))
+        out.append(A("roof_cone_steep", cx_, cy_, 2000.0 * scale * 0.62,
+                     yaw=yaw, s=scale * 0.62,
+                     mat=KIT_ROOFS[(k + 3) % len(KIT_ROOFS)],
+                     label="%s_TurretRoof" % tag))
+    elif variant == 3:
+        # an entry projection: a porch that pushes into the pavement, which is
+        # the piece that most changes how a building meets a walker
+        px_ = x + math.cos(fwd_m) * 560.0 * scale
+        py_ = y + math.sin(fwd_m) * 560.0 * scale
+        out.append(A("castle_arcade", px_, py_, 0.0, yaw=yaw, s=scale * 0.85,
+                     mat=KIT_WALLS[(k + 4) % len(KIT_WALLS)],
+                     label="%s_Porch" % tag))
+        out.append(A("balustrade", px_, py_, 420.0 * scale, yaw=yaw,
+                     sxyz=(1.7 * scale, 1.2, 0.4), mat="MI_V2_GoldAged",
+                     label="%s_PorchRail" % tag))
+
     ztop = storeys * 1000.0 * scale
     out.append(A("roof_flat_crenellated", x, y, ztop, yaw=yaw, s=scale * 1.1,
                  mat="MI_V2_GoldAged", label="%s_Parapet" % tag))
@@ -7722,6 +7799,27 @@ def urban_fill(cx, cy, half_x, half_y, seed, tag, bearing=0.0,
                 out.append(A("kerb_stone", kx, ky, ROAD_Z + 26.0, yaw=bearing,
                              s=1.0, mat="MI_V2_Kerb",
                              label="%s_KA%d_%03d_%d" % (tag, gi, t, int(kb))))
+                # A GUTTER MARGIN INSIDE THE KERB. foreground.edges measured
+                # 0.25x the reference and the ground is where the player looks
+                # first: a contrasting band along each kerb line puts two more
+                # edges across the near field per cell, for one flat piece, and
+                # is what a paved street actually has between carriageway and
+                # footway.
+                gx = sx + px * (street_m * 50.0 - 130.0) * kb
+                gy = sy + py * (street_m * 50.0 - 130.0) * kb
+                out.append(A("terrace_platform", gx, gy, ROAD_Z + 4.0,
+                             yaw=bearing, sxyz=(0.95, 0.30, 0.28),
+                             mat="MI_V2_MarbleShade",
+                             label="%s_GA%d_%03d_%d" % (tag, gi, t, int(kb))))
+                # a shallow threshold step every few cells, where a doorway
+                # would meet the pavement
+                if t % 4 == 2:
+                    tx_ = sx + px * (street_m * 50.0 + 240.0) * kb
+                    ty_ = sy + py * (street_m * 50.0 + 240.0) * kb
+                    out.append(A("side_steps", tx_, ty_, ROAD_Z + 8.0,
+                                 yaw=bearing + 90.0 * kb, s=0.8,
+                                 mat="MI_V2_MarblePale",
+                                 label="%s_TH%d_%03d_%d" % (tag, gi, t, int(kb))))
             if t % 3 == 1:
                 sgn = 1.0 if (t // 3) % 2 == 0 else -1.0
                 fx = sx + px * (street_m * 50.0 - 160.0) * sgn
