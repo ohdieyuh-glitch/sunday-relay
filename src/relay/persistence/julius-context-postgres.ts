@@ -29,5 +29,33 @@ async persist(input:{projectId:string;snapshot:JuliusContextSnapshot}):Promise<s
  * `null` after that means there genuinely is none, and failing closed is then
  * the honest answer rather than a race.
  */
-const settled=await this.pool.query<{context_id:string}>(`SELECT c.context_id FROM relay_wonderland.julius_context_snapshots c WHERE c.task_id=$1 AND c.worker_id=$2 AND c.content_hash=$3 AND EXISTS(SELECT 1 FROM relay_wonderland.julius_runs WHERE run_id=$4 AND project_id=$5) LIMIT 1`,[s.taskId,s.workerId,s.contentHash,s.runId,input.projectId]);
-return settled.rows[0]?.context_id??null;}}
+/**
+ * ON ITS OWN CONNECTION, so the snapshot cannot be inherited.
+ *
+ * The recovery read is only correct if it sees the row the winning transaction
+ * committed. Issuing it as a second statement on the SAME session gives that
+ * only under READ COMMITTED and only while nothing wraps this call in an
+ * explicit transaction — an implicit requirement that no code states and no
+ * test can see. This repository already writes the pattern that would break it:
+ * `julius-event-postgres` and `julius-recovery-postgres` both take a client and
+ * `BEGIN ISOLATION LEVEL SERIALIZABLE`. Under a fixed snapshot the recovery
+ * would find nothing, `persist` would answer null, and the pipeline would fail
+ * a perfectly valid task as `context_not_persisted`.
+ *
+ * A DEDICATED CONNECTION IS A SEPARATE SESSION. Its first statement takes a new
+ * snapshot whatever the caller is doing, so the guarantee stops depending on
+ * the caller's isolation level and starts being structural. The read is a
+ * single row of immutable dedupe metadata, so running it outside a caller's
+ * transaction changes nothing else.
+ *
+ * If no independent connection can be had, this answers null. Reusing the
+ * possibly-transactional handle would be the silent wrong answer this exists to
+ * prevent, and unknown is not an id.
+ */
+if(typeof this.pool.connect!=='function')return null;
+let client;
+try{client=await this.pool.connect();}catch{return null;}
+try{
+ const settled=await client.query<{context_id:string}>(`SELECT c.context_id FROM relay_wonderland.julius_context_snapshots c WHERE c.task_id=$1 AND c.worker_id=$2 AND c.content_hash=$3 AND EXISTS(SELECT 1 FROM relay_wonderland.julius_runs WHERE run_id=$4 AND project_id=$5) LIMIT 1`,[s.taskId,s.workerId,s.contentHash,s.runId,input.projectId]);
+ return settled.rows[0]?.context_id??null;
+}finally{client.release();}}}
