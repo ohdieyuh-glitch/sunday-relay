@@ -144,6 +144,61 @@ describe('safe review diagnostics', () => {
     expect(safeReviewDiagnostics({ timedOut: false })!.timedOut).toBe(false);
   });
 
+  it('carries the Coding Agent\'s structural facts, and none of its output', () => {
+    /**
+     * Paid Mission #2 recorded `coder_refused` and nothing else — the third
+     * worker with the same opacity the reviewer had. A transcript, a prompt or
+     * a final message is not a fact this record may carry; a turn count, a
+     * denial count and a result subtype are.
+     */
+    const SECRET = 'Authorization: Bearer FAKESECRET123456789';
+    const safe = safeReviewDiagnostics({
+      stage: 'build', transport: 'hosted', provider: 'anthropic',
+      requestedModel: 'claude-fable-5', servedModel: 'claude-fable-5-20260114',
+      responseId: 'session-abc123', numTurns: 7, toolUseCount: 12, permissionDenials: 2,
+      resultSubtype: 'error_max_turns', isError: true, implementationPresent: false,
+      outputBytesObserved: 4096,
+      // What a careless adapter might attach, and what must not survive.
+      finalText: `I edited the file. ${SECRET}`,
+      prompt: 'the whole mission prompt',
+      transcript: 'sk-live-FAKESECRET123456789',
+      workspaceSource: 'const key = "xai-FAKESECRET123456789";',
+    })!;
+
+    expect(safe.stage).toBe('build');
+    expect(safe.transport).toBe('hosted');
+    expect(safe.resultSubtype).toBe('error_max_turns');
+    expect(safe.isError).toBe(true);
+    expect(safe.numTurns).toBe(7);
+    expect(safe.toolUseCount).toBe(12);
+    expect(safe.permissionDenials, 'evidence the envelope held').toBe(2);
+    expect(safe.implementationPresent).toBe(false);
+    expect(safe.servedModel).toBe('claude-fable-5-20260114');
+
+    for (const key of ['finalText', 'prompt', 'transcript', 'workspaceSource']) {
+      expect(Object.prototype.hasOwnProperty.call(safe, key), `${key} must not survive`).toBe(false);
+    }
+    const serialized = JSON.stringify(safe);
+    for (const secret of ['FAKESECRET123456789', 'sk-live', 'xai-', 'Authorization', 'I edited']) {
+      expect(serialized, `"${secret}" must not reach the durable record`).not.toContain(secret);
+    }
+  });
+
+  it('a reviewer failure carries no coder facts, and vice versa', () => {
+    // One allowlist, three roles. A field a role does not have is null, never a
+    // zero that reads as a measurement nobody took.
+    const reviewer = safeReviewDiagnostics({ transport: 'local', failureShape: 'review_json_absent' })!;
+    expect(reviewer.numTurns).toBeNull();
+    expect(reviewer.permissionDenials).toBeNull();
+    expect(reviewer.resultSubtype).toBeNull();
+    expect(reviewer.implementationPresent).toBeNull();
+
+    const coder = safeReviewDiagnostics({ transport: 'hosted', stage: 'build', numTurns: 3 })!;
+    expect(coder.failureShape).toBeNull();
+    expect(coder.reviewObjectCount).toBeNull();
+    expect(coder.validationReasonCode).toBeNull();
+  });
+
   it('refuses anything that is not an object at all', () => {
     for (const value of [null, undefined, 'diagnostics', 42, [1, 2]]) {
       expect(safeReviewDiagnostics(value)).toBeNull();

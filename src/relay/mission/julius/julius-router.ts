@@ -119,7 +119,7 @@ export const safeReviewDiagnostics=(value:unknown):JuliusSafeDiagnostics|null=>{
  const v=value as Record<string,unknown>;
  return Object.freeze({
   stage:safeEnum(v.stage,['plan','build'] as const),
-  transport:safeEnum(v.transport,['local','remote','openai'] as const),
+  transport:safeEnum(v.transport,['local','remote','openai','hosted'] as const),
   provider:safeToken(v.provider),
   servedModel:safeModel(v.servedModel),
   processExitCode:safeExitCode(v.processExitCode),
@@ -143,6 +143,16 @@ export const safeReviewDiagnostics=(value:unknown):JuliusSafeDiagnostics|null=>{
   /** A member of the closed `ArchitectPlanReasonCode` union, never validator prose. */
   validationReasonCode:safeToken(v.validationReasonCode),
   validationField:safeFieldName(v.validationField),
+  /* --- Coding Agent (build stage). Null for the other two roles. --- */
+  /** The runtime's own result subtype, e.g. `success` / `error_max_turns`. */
+  resultSubtype:safeToken(v.resultSubtype),
+  isError:safeNullableBool(v.isError),
+  numTurns:safeCount(v.numTurns),
+  toolUseCount:safeCount(v.toolUseCount),
+  /** Denials the runtime itself recorded — evidence the envelope held. */
+  permissionDenials:safeCount(v.permissionDenials),
+  /** Whether an actionable implementation result existed at all. */
+  implementationPresent:safeNullableBool(v.implementationPresent),
  });
 };
 /**
