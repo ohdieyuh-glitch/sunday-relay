@@ -175,6 +175,18 @@ def main():
     print("-" * 48)
     bad = 0
     unreached = []
+    # A TARGET OUTSIDE THE SAMPLED WINDOW IS NOT A FAILURE, IT IS NOT A
+    # QUESTION. The southern waypoints were added to this list unguarded, and
+    # they sit at y = -30,000 -- fine under --window=world, an IndexError under
+    # the default district window, because idx() has nothing to index. The
+    # north way avoided it by being wrapped in `if win == "world"`, which fixes
+    # one list rather than the tool. Skipping anything off-window fixes the
+    # tool, and says so instead of crashing.
+    skipped = [t for t in targets if not (X0 <= t[1] <= X1 and Y0 <= t[2] <= Y1)]
+    targets = [t for t in targets if (X0 <= t[1] <= X1 and Y0 <= t[2] <= Y1)]
+    if skipped:
+        print("  (%d target(s) outside the %s window, not sampled: %s)"
+              % (len(skipped), win, ", ".join(t[0] for t in skipped[:6])))
     for name, tx, ty in targets:
         k = idx(float(tx), float(ty))
         if blocked[k]:
