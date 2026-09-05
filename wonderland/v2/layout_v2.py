@@ -7902,7 +7902,61 @@ def urban_fill(cx, cy, half_x, half_y, seed, tag, bearing=0.0,
                                  yaw=bearing + 90.0 * kb, s=0.8,
                                  mat="MI_V2_MarblePale",
                                  label="%s_TH%d_%03d_%d" % (tag, gi, t, int(kb))))
-            if t % 3 == 1:
+            # THE NEAR FIELD NEEDS EDGES, NOT AREA.
+            #
+            # The gutter margin above was the last pass's answer to
+            # foreground.edges at 0.25x and it made the number WORSE, not
+            # better: 0.0789 -> 0.0629 at HeroCam48, 0.19x. A margin is a flat
+            # slab, and adding smooth area to the bottom of the frame lowers
+            # edge density however much detail it represents conceptually.
+            # ground_variation rose (19.7 -> 25.5) while edges fell, which is
+            # exactly the signature of more colour and less relief.
+            #
+            # These are LINES. A paving band runs the full width of the
+            # carriageway twice per cell, so it crosses the whole lower frame
+            # rather than sitting beside it; a gutter channel runs ALONG the
+            # street on both sides, and a line that converges on the vanishing
+            # point crosses every horizontal band of the image the player is
+            # looking down. Both are kerb_stone on MI_V2_Kerb, a pair already
+            # instanced in this band by the kerb lines, so the whole thing
+            # costs no draw call.
+            #
+            # 5.5 uu proud at most against MaxStepHeight 30, so nothing here
+            # narrows a route or trips the step-height gate.
+            for band_t in (0.0, 0.25, 0.5, 0.75):
+                bxx = sx + ux * step * band_t * 100.0
+                byy = sy + uy * step * band_t * 100.0
+                out.append(A("kerb_stone", bxx, byy, ROAD_Z + 2.0,
+                             yaw=bearing + 90.0,
+                             sxyz=(street_m * 100.0 / 120.0, 1.0, 0.25),
+                             mat="MI_V2_Kerb",
+                             label="%s_PB%d_%03d_%d" % (tag, gi, t, int(band_t * 2))))
+            for kb in (1.0, -1.0):
+                cxx = sx + px * (street_m * 50.0 - 60.0) * kb
+                cyy = sy + py * (street_m * 50.0 - 60.0) * kb
+                out.append(A("kerb_stone", cxx, cyy, ROAD_Z + 2.0, yaw=bearing,
+                             sxyz=(step * 100.0 / 120.0, 0.55, 0.18),
+                             mat="MI_V2_Kerb",
+                             label="%s_DR%d_%03d_%d" % (tag, gi, t, int(kb))))
+            # Two longitudinal joints dividing the carriageway. The whole fill
+            # grid is only 144 street cells across ELEVEN districts, which is
+            # why the ground reads as an empty plane in the first place: there
+            # was almost nothing on it to read. Lines along the street are the
+            # cheapest possible relief and they run toward the vanishing
+            # point, so they cross the entire lower frame.
+            for lane in (1.0, -1.0):
+                lxx = sx + px * street_m * 100.0 / 3.0 * lane * 0.5
+                lyy = sy + py * street_m * 100.0 / 3.0 * lane * 0.5
+                out.append(A("kerb_stone", lxx, lyy, ROAD_Z + 2.0, yaw=bearing,
+                             sxyz=(step * 100.0 / 120.0, 0.40, 0.14),
+                             mat="MI_V2_Kerb",
+                             label="%s_LN%d_%03d_%d" % (tag, gi, t, int(lane))))
+            # Every second cell rather than every third. The furniture is a
+            # lamp, a bench or a gold bollard; two of the three are GoldAged,
+            # and palette.gold fell 21% across this pass when the emissive
+            # amber panes went. Gold belongs at eye level on the street, not
+            # painted back onto the glazing.
+            if t % 2 == 1:
                 sgn = 1.0 if (t // 3) % 2 == 0 else -1.0
                 fx = sx + px * (street_m * 50.0 - 160.0) * sgn
                 fy = sy + py * (street_m * 50.0 - 160.0) * sgn
