@@ -421,14 +421,30 @@ export function createLiveHostedCodingAdapter(input: {
           responseId: observed?.sessionId ?? null,
           numTurns: observed?.numTurns ?? null,
           toolUseCount: observed?.toolsUsed.length ?? null,
-          permissionDenials: observed?.permissionDenials ?? null,
+          /**
+           * ONLY WHEN A RESULT ARRIVED. `permissionDenials` starts at 0 and is
+           * populated by the result message alone, so reporting it after a
+           * timeout or a cancellation would assert that no denial occurred —
+           * evidence the envelope held — on precisely the runs where the
+           * terminal data never came. `resultSubtype` is null until that
+           * message, which is how this knows.
+           */
+          permissionDenials: observed?.resultSubtype === null || observed === null
+            ? null : observed.permissionDenials,
           resultSubtype: observed?.resultSubtype ?? null,
           isError: observed?.isError ?? null,
           // A COUNT of the runtime's final text, never the text.
           outputBytesObserved: observed?.finalText === null || observed?.finalText === undefined
             ? null : Buffer.byteLength(observed.finalText, 'utf8'),
-          // Did an actionable implementation result exist at all?
-          implementationPresent: observed === null ? null : observed.initSeen && observed.isError !== true,
+          /**
+           * AN OBSERVED SUCCESSFUL RESULT, not merely a runtime that started.
+           * `initSeen && isError !== true` is true after a timeout or a
+           * provider exception — `isError` is still null then — so it claimed
+           * an implementation existed on exactly the partial runs these
+           * diagnostics exist to tell apart.
+           */
+          implementationPresent: observed === null || observed.isError === null
+            ? null : observed.isError === false,
         };
         if (outcome.kind === 'timed_out') throw new JuliusDispatchError('TIMEOUT', true, 'Hosted Coding Agent timed out.', 'coder_timed_out', { ...coderDiagnostics, timedOut: true });
         if (outcome.kind === 'cancelled') throw new JuliusDispatchError('CANCELLED', false, 'Hosted Coding Agent run was cancelled.', 'coder_cancelled', coderDiagnostics);

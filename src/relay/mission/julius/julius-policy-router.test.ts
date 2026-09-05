@@ -184,6 +184,43 @@ describe('safe review diagnostics', () => {
     }
   });
 
+  it('a partial coder run reports no denials and claims no implementation', () => {
+    /**
+     * `permissionDenials` starts at 0 and only the RESULT message populates it,
+     * and `isError` stays null until that message. So a timeout, a
+     * cancellation or a provider exception after init would have published
+     * "no permission denials occurred" — evidence the envelope held — and
+     * "an implementation existed", on exactly the partial runs these
+     * diagnostics exist to tell apart. Both must be unknown.
+     */
+    const partial = safeReviewDiagnostics({
+      stage: 'build', transport: 'hosted', provider: 'anthropic',
+      // No result arrived: no subtype, no isError, and the denial counter is
+      // still its initial zero.
+      resultSubtype: null, isError: null, permissionDenials: null, implementationPresent: null,
+      numTurns: 4,
+    })!;
+    expect(partial.permissionDenials, 'a zero nobody measured is not evidence').toBeNull();
+    expect(partial.implementationPresent, 'a runtime that started is not a result').toBeNull();
+    expect(partial.numTurns, 'what WAS observed still travels').toBe(4);
+
+    // And a completed run reports both, including a genuine zero.
+    const completed = safeReviewDiagnostics({
+      stage: 'build', transport: 'hosted', resultSubtype: 'success',
+      isError: false, permissionDenials: 0, implementationPresent: true,
+    })!;
+    expect(completed.permissionDenials, 'a measured zero is a real answer').toBe(0);
+    expect(completed.implementationPresent).toBe(true);
+
+    // A result that errored is a result, and it did not implement anything.
+    const errored = safeReviewDiagnostics({
+      stage: 'build', transport: 'hosted', resultSubtype: 'error_max_turns',
+      isError: true, permissionDenials: 3, implementationPresent: false,
+    })!;
+    expect(errored.implementationPresent).toBe(false);
+    expect(errored.permissionDenials).toBe(3);
+  });
+
   it('a reviewer failure carries no coder facts, and vice versa', () => {
     // One allowlist, three roles. A field a role does not have is null, never a
     // zero that reads as a measurement nobody took.
