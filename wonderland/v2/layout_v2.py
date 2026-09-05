@@ -7887,12 +7887,19 @@ def urban_fill(cx, cy, half_x, half_y, seed, tag, bearing=0.0,
                 # edges across the near field per cell, for one flat piece, and
                 # is what a paved street actually has between carriageway and
                 # footway.
-                gx = sx + px * (street_m * 50.0 - 130.0) * kb
-                gy = sy + py * (street_m * 50.0 - 130.0) * kb
-                out.append(A("terrace_platform", gx, gy, ROAD_Z + 4.0,
-                             yaw=bearing, sxyz=(0.95, 0.30, 0.28),
-                             mat="MI_V2_MarbleShade",
-                             label="%s_GA%d_%03d_%d" % (tag, gi, t, int(kb))))
+                # THE GUTTER MARGIN IS GONE, AND IT WAS THE REGRESSION.
+                #
+                # It was a flat MarbleShade slab laid at ROAD_Z + 4 INSIDE the
+                # kerb line -- which is to say on top of the cobbled street.
+                # Cobble is the highest-edge surface in the frame, and this
+                # covered a 2.1 m band of it on both sides of every street
+                # with smooth stone. HeroCam48 before: cobbles broad across
+                # the foreground, foreground.edges 0.0789. After: cobbles
+                # narrowed by two dark flat bands, 0.0629. The piece that
+                # was added "for edge density" removed the edges it was
+                # standing on. Listing the ground pieces within 25 m of the
+                # camera is what found it; the render alone could not say
+                # which slab was which.
                 # a shallow threshold step every few cells, where a doorway
                 # would meet the pavement
                 if t % 4 == 2:
