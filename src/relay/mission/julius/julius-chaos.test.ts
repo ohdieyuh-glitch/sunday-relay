@@ -256,7 +256,14 @@ describe('every replayable operation absorbs its replay', () => {
     })).toBe(false);
 
     const snapshot = harness.store.contexts()[0]!;
-    expect(await harness.store.persist({ projectId: 'prj-1', snapshot })).toBe(false);
+    // A REPLAY RETURNS THE STORED ID, which is a stronger statement of the same
+    // idempotency: the second write stores nothing AND tells the caller which
+    // row every downstream reference must name. Returning `false` here is what
+    // let a retry reference a context that was never stored.
+    const first = await harness.store.persist({ projectId: 'prj-1', snapshot });
+    expect(first).toBe(snapshot.contextId);
+    const replay = await harness.store.persist({ projectId: 'prj-1', snapshot: { ...snapshot, contextId: 'context#replayed' } });
+    expect(replay, 'the id already stored, not the one just minted').toBe(snapshot.contextId);
   });
 
   it('refuses a stale run version rather than applying it twice', async () => {

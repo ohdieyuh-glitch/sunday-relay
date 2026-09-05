@@ -352,3 +352,42 @@ describe('reading a hosted run', () => {
     expect(hostedStreamIsUsable(observeHostedMessages([init, result])).ok).toBe(true);
   });
 });
+
+/**
+ * HOW MUCH THE RUN DID, NOT HOW MANY KINDS OF THING IT DID.
+ *
+ * `toolsUsed` deduplicates by tool NAME, so a run that edited ten times and
+ * read once holds two entries. The Coding Agent refusal diagnostics reported
+ * that as the tool-use count, which materially understates the activity on
+ * exactly the records added to explain a refusal — ten edits and one read is
+ * not "2 tool uses". Found by independent review of the exact head.
+ */
+describe('hosted tool activity is counted per invocation', () => {
+  const toolUse = (name: string) => ({
+    type: 'assistant',
+    message: { content: [{ type: 'tool_use', name, input: { file_path: `/ws/${name}.js` } }] },
+  });
+
+  it('counts repeated calls to the same tool, and still lists it once', () => {
+    const observation = observeHostedMessages([
+      ...Array.from({ length: 10 }, () => toolUse('Edit')),
+      toolUse('Read'),
+    ]);
+    expect(observation.toolInvocations, 'ten edits and one read is eleven invocations').toBe(11);
+    expect([...observation.toolsUsed].sort(), 'and two distinct tools').toEqual(['Edit', 'Read']);
+  });
+
+  it('a run that used no tool has observed zero, which is a real measurement', () => {
+    // Distinct from `null`: the stream was read and no tool was invoked.
+    expect(observeHostedMessages([]).toolInvocations).toBe(0);
+  });
+
+  it('a partial stream reports what it saw before it ended', () => {
+    // No result message arrives, so the terminal facts stay unknown — but the
+    // invocations observed on the way are genuinely observed.
+    const observation = observeHostedMessages([toolUse('Edit'), toolUse('Edit')]);
+    expect(observation.toolInvocations).toBe(2);
+    expect(observation.resultSubtype, 'no result was seen').toBeNull();
+    expect(observation.isError, 'so this stays unknown').toBeNull();
+  });
+});

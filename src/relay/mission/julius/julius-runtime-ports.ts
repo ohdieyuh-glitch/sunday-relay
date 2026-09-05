@@ -194,7 +194,23 @@ export interface JuliusFindingWriter {
 }
 
 export interface JuliusContextWriter {
-  persist(input: { projectId: string; snapshot: JuliusContextSnapshot }): Promise<boolean>;
+  /**
+   * PERSISTS A CONTEXT AND RETURNS THE ID THAT IS ACTUALLY STORED.
+   *
+   * This returned a boolean, and every caller discarded it. Context ids are
+   * MINTED BY THE CALLER while the store deduplicates on
+   * `(task_id, worker_id, content_hash)` — so a retry of a task whose context
+   * has not changed mints a new id, matches the existing row, stores nothing,
+   * and leaves the caller holding an id that exists nowhere. Paid Mission #2
+   * crashed on exactly that: `julius_trajectory_events.context_id` is a foreign
+   * key, and a review timeout made the retry path reachable for the first time.
+   *
+   * The invariant is now in the signature: a downstream record may reference
+   * only an id this repository has PROVEN exists. `null` means it could not
+   * prove one — the run does not have a context to point at, and the caller
+   * must refuse rather than invent a reference.
+   */
+  persist(input: { projectId: string; snapshot: JuliusContextSnapshot }): Promise<string | null>;
 }
 
 /**

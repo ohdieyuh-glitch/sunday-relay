@@ -400,10 +400,65 @@ export function createLiveHostedCodingAdapter(input: {
         now: nowIso,
       });
       if (outcome.kind !== 'completed') {
-        if (outcome.kind === 'timed_out') throw new JuliusDispatchError('TIMEOUT', true, 'Hosted Coding Agent timed out.', 'coder_timed_out');
-        if (outcome.kind === 'cancelled') throw new JuliusDispatchError('CANCELLED', false, 'Hosted Coding Agent run was cancelled.', 'coder_cancelled');
-        if (outcome.kind === 'launch_failed') throw new JuliusDispatchError('AUTH_CONFIGURATION', false, `Hosted Coding Agent could not launch: ${safeClaim(outcome.safeMessage, 120)}.`, 'coder_launch_failed');
-        throw new JuliusDispatchError('WORKER_EXECUTION_FAILURE', false, `Hosted Coding Agent refused: ${safeClaim(outcome.safeMessage, 120)}.`, 'coder_refused');
+        /**
+         * THE FACTS BESIDE THE CODER'S REFUSAL.
+         *
+         * Paid Mission #2 recorded `coder_refused` and stopped there — the same
+         * single word `reviewer_review_incomplete` was, on the third worker. An
+         * untrusted result, a runtime that did not honour its envelope and a
+         * cost ceiling are three different repairs, and the runner already knew
+         * which. These are the structural facts its observation actually
+         * carries; nothing is invented to fill a column, and no transcript,
+         * prompt, final text or provider body is among them.
+         */
+        const observed = 'observation' in outcome ? outcome.observation : null;
+        const coderDiagnostics: Record<string, unknown> = {
+          stage: 'build',
+          transport: 'hosted',
+          provider: 'anthropic',
+          requestedModel: input.requestedModel,
+          servedModel: observed?.actualModel ?? null,
+          responseId: observed?.sessionId ?? null,
+          numTurns: observed?.numTurns ?? null,
+          // INVOCATIONS, not distinct names: `toolsUsed` deduplicates, so ten
+          // edits and one read would have been reported as 2.
+          toolUseCount: observed?.toolInvocations ?? null,
+          /**
+           * ONLY WHEN A RESULT ARRIVED. `permissionDenials` starts at 0 and is
+           * populated by the result message alone, so reporting it after a
+           * timeout or a cancellation would assert that no denial occurred —
+           * evidence the envelope held — on precisely the runs where the
+           * terminal data never came. `resultSubtype` is null until that
+           * message, which is how this knows.
+           */
+          permissionDenials: observed?.resultSubtype === null || observed === null
+            ? null : observed.permissionDenials,
+          resultSubtype: observed?.resultSubtype ?? null,
+          isError: observed?.isError ?? null,
+          // A COUNT of the runtime's final text, never the text.
+          outputBytesObserved: observed?.finalText === null || observed?.finalText === undefined
+            ? null : Buffer.byteLength(observed.finalText, 'utf8'),
+          /**
+           * AN OBSERVED SUCCESSFUL RESULT, not merely a runtime that started.
+           * `initSeen && isError !== true` is true after a timeout or a
+           * provider exception — `isError` is still null then — so it claimed
+           * an implementation existed on exactly the partial runs these
+           * diagnostics exist to tell apart.
+           */
+          implementationPresent: observed === null || observed.isError === null
+            ? null : observed.isError === false,
+        };
+        if (outcome.kind === 'timed_out') throw new JuliusDispatchError('TIMEOUT', true, 'Hosted Coding Agent timed out.', 'coder_timed_out', { ...coderDiagnostics, timedOut: true });
+        if (outcome.kind === 'cancelled') throw new JuliusDispatchError('CANCELLED', false, 'Hosted Coding Agent run was cancelled.', 'coder_cancelled', coderDiagnostics);
+        if (outcome.kind === 'launch_failed') throw new JuliusDispatchError('AUTH_CONFIGURATION', false, `Hosted Coding Agent could not launch: ${safeClaim(outcome.safeMessage, 120)}.`, 'coder_launch_failed', coderDiagnostics);
+        // THE REFUSAL CODE IS THE CLASS. Four causes, four words, instead of one.
+        if (outcome.kind === 'refused') {
+          throw new JuliusDispatchError('WORKER_EXECUTION_FAILURE', false, `Hosted Coding Agent refused: ${safeClaim(outcome.safeMessage, 120)}.`, outcome.refusalCode, coderDiagnostics);
+        }
+        // Unreachable today: the four kinds above are the whole union. Kept so
+        // a fifth outcome added later fails as a named worker failure rather
+        // than falling through to a success it never earned.
+        throw new JuliusDispatchError('WORKER_EXECUTION_FAILURE', false, 'The hosted Coding Agent returned an unrecognised outcome.', 'coder_outcome_unrecognised', coderDiagnostics);
       }
 
       const diff = await input.shell.run({

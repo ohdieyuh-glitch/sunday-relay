@@ -388,8 +388,32 @@ export async function runClaimedTask(
       findingIds: findings.filter((value) => value.taskId === task.taskId).map((value) => value.findingId),
       acceptanceCriterionIds: criteria.map((value) => value.criterionId),
     });
-    await deps.store.persist({ projectId: run.projectId, snapshot });
-    contextId = snapshot.contextId;
+    /**
+     * THE STORE'S ID, NOT THE ONE WE MINTED.
+     *
+     * `persist` deduplicates on (task_id, worker_id, content_hash), so a RETRY
+     * of a task whose context has not changed stores nothing and the id minted
+     * above exists nowhere. Assigning it here is what put a dangling
+     * `context_id` on a trajectory event and crashed paid Mission #2 on the
+     * foreign key. The stored id is the only one anything downstream may name.
+     */
+    const persistedContextId = await deps.store.persist({ projectId: run.projectId, snapshot });
+    if (persistedContextId === null) {
+      // The store could not prove a context exists. Dispatching would hand a
+      // worker a context nothing can resolve and write references to a row
+      // that is not there, so the task fails here instead — visibly, before a
+      // provider is paid.
+      await ledger.event('task.failed', {
+        taskId: task.taskId,
+        facts: { code: 'INVALID_REQUEST', errorRetryable: false, failureClass: 'context_not_persisted' },
+      });
+      await deps.store.finishTask({
+        taskId: claim.taskId, owner: deps.owner, leaseGeneration: claim.leaseGeneration,
+        state: 'FAILED', now: deps.clock.now(),
+      });
+      return { kind: 'FAILED', taskId: claim.taskId, code: 'INVALID_REQUEST', failureClass: 'context_not_persisted' };
+    }
+    contextId = persistedContextId;
     await ledger.event('context.compiled', {
       taskId: task.taskId, workerId: worker.workerId,
       facts: {

@@ -453,12 +453,24 @@ export function createJuliusMemoryStore(): JuliusMemoryStore {
     /* ------------------------------------------------------------ context */
     async persist(input) {
       const run = runs.get(input.snapshot.runId);
-      if (run === undefined || run.projectId !== input.projectId) return false;
+      // No run, no context: there is nothing for a downstream record to point
+      // at, and `null` says so rather than a caller-minted id that exists
+      // nowhere.
+      if (run === undefined || run.projectId !== input.projectId) return null;
       const key = `${input.snapshot.taskId}::${input.snapshot.workerId}::${input.snapshot.contentHash}`;
-      if (contextKeys.has(key)) return false;
+      // THE STORED ID WINS. A retry mints a new id for identical content; the
+      // row that already exists is the one every reference must name, or the
+      // durable graph gains an edge to nothing. The Postgres store has a
+      // foreign key that catches this; here there is none, so the same defect
+      // was silent and produced a dangling reference instead of a crash.
+      const existing = contexts.find((value) =>
+        value.taskId === input.snapshot.taskId
+        && value.workerId === input.snapshot.workerId
+        && value.contentHash === input.snapshot.contentHash);
+      if (existing !== undefined) return existing.contextId;
       contextKeys.add(key);
       contexts.push({ ...input.snapshot });
-      return true;
+      return input.snapshot.contextId;
     },
 
     /* ------------------------------------------------------------- events */

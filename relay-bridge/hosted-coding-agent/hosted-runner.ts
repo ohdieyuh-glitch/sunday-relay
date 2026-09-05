@@ -63,6 +63,21 @@ export type HostedRunOutcome =
     readonly kind: 'refused';
     /** Relay refused the RESULT — the process may have finished perfectly. */
     readonly safeMessage: string;
+    /**
+     * WHY, AS A MACHINE TOKEN.
+     *
+     * Paid Mission #2 recorded `coder_refused` and nothing else, which is the
+     * same opacity `reviewer_review_incomplete` was — on the third worker. The
+     * message that distinguishes an untrusted result from a broken envelope
+     * from a cost ceiling is composed and then dropped, because the coordinator
+     * persists the class and not the text. These four are the refusals this
+     * runner can actually reach.
+     */
+    readonly refusalCode:
+      | 'coder_result_untrusted'
+      | 'coder_envelope_not_honoured'
+      | 'coder_cost_exceeded'
+      | 'coder_provider_error_after_init';
     readonly observation: HostedObservation;
     readonly envelope: HostedEnvelope;
     readonly startedAt: string;
@@ -171,6 +186,8 @@ export async function runHostedCodingAgent(input: HostedRunInput): Promise<Hoste
     if (observation.initSeen) {
       return {
         kind: 'refused',
+        // The runtime started and then failed: its own error, after init.
+        refusalCode: 'coder_provider_error_after_init',
         safeMessage: 'The hosted Coding Agent stopped part-way through its run',
         observation, envelope, startedAt, completedAt,
       };
@@ -192,11 +209,14 @@ export async function runHostedCodingAgent(input: HostedRunInput): Promise<Hoste
     return { kind: 'timed_out', safeMessage: 'The hosted Coding Agent exceeded its runtime bound.', observation, startedAt, completedAt };
   }
 
-  const refuse = (safeMessage: string): HostedRunOutcome =>
-    ({ kind: 'refused', safeMessage, observation, envelope, startedAt, completedAt });
+  const refuse = (
+    refusalCode: Extract<HostedRunOutcome, { kind: 'refused' }>['refusalCode'],
+    safeMessage: string,
+  ): HostedRunOutcome =>
+    ({ kind: 'refused', refusalCode, safeMessage, observation, envelope, startedAt, completedAt });
 
   const usable = hostedStreamIsUsable(observation);
-  if (!usable.ok) return refuse(`The hosted run could not be trusted: ${usable.reason}.`);
+  if (!usable.ok) return refuse('coder_result_untrusted', `The hosted run could not be trusted: ${usable.reason}.`);
 
   // CONTAINMENT GATE. The envelope Relay requested is compared with the one
   // the runtime reported granting. A clean result message does not certify
@@ -206,10 +226,10 @@ export async function runHostedCodingAgent(input: HostedRunInput): Promise<Hoste
     reportedTools: observation.reportedTools,
     reportedCwd: observation.reportedCwd,
   });
-  if (!granted.matches) return refuse(`The hosted runtime did not honour the requested envelope: ${granted.reason}.`);
+  if (!granted.matches) return refuse('coder_envelope_not_honoured', `The hosted runtime did not honour the requested envelope: ${granted.reason}.`);
 
   const cost = withinCostCeiling(observation.usage.totalCostUsd, limits);
-  if (!cost.within) return refuse(cost.reason as string);
+  if (!cost.within) return refuse('coder_cost_exceeded', cost.reason as string);
 
   return { kind: 'completed', observation, envelope, startedAt, completedAt };
 }
