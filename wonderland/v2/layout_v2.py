@@ -8587,6 +8587,63 @@ CONNECTORS = _band("V2_Connect",
 SKYLINE_RING = _band("V2_SkyRing", skyline_ring(420.0, 900.0, 3, 20, 3, "Sky"))
 
 
+def hole_spur(x0, y0, x1, y1, n, seed, tag, scale=1.0, storeys=2):
+    """A LINE of buildings laid ACROSS a hole, to divide it rather than fill it.
+
+    emptiness.py measures REGIONS -- connected runs of cells with no placement
+    within 9 m -- so a hole is beaten by cutting it as surely as by filling it,
+    at a fraction of the pieces. The three remaining accidental holes are 44 x
+    76 m, 48 x 40 m and 56 x 32 m, and every one of them is a gap BETWEEN
+    existing fills rather than open country.
+
+    urban_fill cannot do this. Its grid span is nx * (block + street) with nx
+    at least one, so the smallest thing it can lay down is 48 m square, and 48
+    m square does not fit in a 44 m gap between two districts that are already
+    built. Trying anyway is how FILL_SOUTHFLANK_E came to be writing on the
+    southern quarter's east lane. This takes the two endpoints instead, so the
+    extent is stated rather than derived and can be checked against the
+    measured bounding box of every neighbour before it is placed.
+
+    Each placement clears cells within 9 m of itself, so a single line cuts a
+    swathe about 18 m wide plus the building's own footprint.
+    """
+    out = []
+    for i in range(n):
+        t = (i + 0.5) / float(n)
+        out += kit_massing(x0 + (x1 - x0) * t, y0 + (y1 - y0) * t,
+                           (seed * 37 + i * 61) % 360, seed + i,
+                           "%s%d" % (tag, i), scale=scale, storeys=storeys)
+    return out
+
+
+# THE LAST THREE ACCIDENTAL HOLES, cut rather than filled.
+#
+# Every line below was placed against the MEASURED bounding box of the bands
+# around it, not against the declared centre and half-extent of those bands --
+# the two differ, and the difference is what sealed a lane last time.
+#
+#   hole      measured extent            neighbours it must clear
+#   2000 m2   x 24600..29000  y -11400..-3800   FillSE2 x<=25750, FillE x>=28058
+#   1520 m2   x -23000..-18200 y -26600..-22600 inside V2_Southwest's bbox
+#   1408 m2   x 11000..16600  y -33400..-30200  SOUTH WAY 6 runs at y = -30288
+#
+# The third is the ground vacated to reopen south way 6, so its line is held
+# at y = -32400 -- two thousand uu clear of the lane's waypoint. Reopening a
+# route and then building on it again would be a straight circle.
+# Each spur carries the band name of the district it abuts, NOT a band of its
+# own. A band is part of the instancing key (asset, material, band), so one
+# "V2_Spurs" band made every pair inside it a new draw call and cost THIRTY
+# NINE for sixteen buildings. Filed with the neighbour, the same sixteen
+# buildings reuse batches that already exist.
+HOLE_SPURS = (_band("V2_FillE",
+                    hole_spur(24900.0, -6200.0, 28600.0, -6200.0, 4, 41, "SpurEMa")
+                    + hole_spur(24900.0, -9000.0, 28600.0, -9000.0, 4, 43, "SpurEMb"))
+              + _band("V2_Southwest",
+                      hole_spur(-22500.0, -24600.0, -18700.0, -24600.0, 3, 47, "SpurSW"))
+              + _band("V2_FillSE",
+                      hole_spur(11600.0, -32400.0, 16000.0, -32400.0, 4, 53, "SpurSE")))
+
+
 BUILD_BANDS = [FOREGROUND, COURTYARD, GARDEN, PALACE, FLANK_GROUND, FLANKS,
                REARWORLD, CAM_FOREGROUNDS, GROUND_QUILT, OUTER_WORLD, PLAZA_ORNAMENT,
                PROCESSIONAL_BORDER, HORIZON, APPROACH_SIDES, PLAZA_WALL_DRESS,
@@ -8594,7 +8651,8 @@ BUILD_BANDS = [FOREGROUND, COURTYARD, GARDEN, PALACE, FLANK_GROUND, FLANKS,
                SOUTH_QUARTER, SOUTHWEST_QUARTER,
                FILL_NORTHEAST, FILL_SOUTHFLANK_W, FILL_SOUTHFLANK_E,
                FILL_EAST, FILL_WEST, FILL_WESTEDGE, FILL_EASTEDGE,
-               FILL_SOUTHEAST2, FILL_EASTLOW, CONNECTORS, SKYLINE_RING]
+               FILL_SOUTHEAST2, FILL_EASTLOW, CONNECTORS, SKYLINE_RING,
+               HOLE_SPURS]
 
 # ---------------------------------------------------------------------------
 # NOTHING IS BUILT ON A VIEWPOINT (2026-09-03)
