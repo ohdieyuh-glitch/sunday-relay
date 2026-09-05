@@ -46,36 +46,36 @@ export const NON_ATTESTING_IDENTITIES = Object.freeze(['julius-worker[bot]']);
  * environment being reviewed. GitHub binds an `APPROVED` review to a
  * `commit_id`, which makes it exactly the SHA-bound signal this gate needs.
  *
+ * The same account is also the only identity that may BLOCK a head, through
+ * `CHANGES_REQUESTED`, a review body, or a line comment.
+ *
  * This is only sound while the environment genuinely does not hold the
  * founder's credential. If it is ever put back, this entry stops meaning
- * anything and belongs in `NON_ATTESTING_IDENTITIES` instead.
+ * anything and belongs in `NON_ATTESTING_IDENTITIES` instead. It is equally
+ * unsound in the other direction: the founder may never approve a pull request
+ * the founder authored, which the author rule below enforces without caring
+ * which login it is.
  */
 export const EXTERNAL_APPROVER_LOGINS = Object.freeze(['ohdieyuh-glitch']);
 
 /**
- * THE INDEPENDENT REVIEWER.
+ * EVERY IDENTITY WHOSE SIGNAL IS READ AT ALL.
  *
- * Codex reports findings as review comments bound to the commit it read. Its
- * findings BLOCK here. What it does not do in practice is approve: it signals
- * "no findings" with a `+1` reaction on the issue, and a reaction's payload is
- * `content, created_at, id, node_id, user` — there is no commit field on it at
- * all, so it cannot say WHICH code was clean. Treating that as approval would
- * make "clean at some point" indistinguishable from "clean at this head", which
- * is the whole hazard, so reactions are not an input to this function in any
- * shape.
+ * One list, because the GitHub merge gate has exactly one authority: the
+ * founder, who may approve a head and may block one. No provider bot is a
+ * development worker, reviewer, blocker or required authority here. A login
+ * absent from this list has no standing at all — its reviews, comments and
+ * reactions are read past, not weighed — so adding a reviewer is a deliberate
+ * edit to this list and never an accident of who happened to comment.
  *
- * The line is drawn at SHA BINDING, not at the identity. Were this reviewer
- * ever to publish an `APPROVED` review or a commit status, both carry the
- * commit they are about and both would count. What is refused is the unbound
- * signal, from anyone.
+ * That is not the same question as who reviews a Julius RUN. The canonical
+ * development model — Prompt Architect, then Coding Agent, then Independent
+ * Reviewer — is provider-independent, and Hermes may implement the Independent
+ * Reviewer slot at runtime. This file is about who may approve a MERGE on
+ * GitHub. Conflating the two would let a runtime verdict stand in for a merge
+ * approval, which is a different claim about a different artifact.
  */
-export const INDEPENDENT_REVIEWER_LOGINS = Object.freeze(['chatgpt-codex-connector[bot]']);
-
-/** Every identity whose signal is read at all: one may approve, both may block. */
-export const REVIEW_AUTHORITY_LOGINS = Object.freeze([
-  ...EXTERNAL_APPROVER_LOGINS,
-  ...INDEPENDENT_REVIEWER_LOGINS,
-]);
+export const REVIEW_AUTHORITY_LOGINS = Object.freeze([...EXTERNAL_APPROVER_LOGINS]);
 
 /** The only verdicts. Anything not `current` blocks. */
 export const REVIEW_CURRENCY_VERDICTS = Object.freeze(['current', 'stale', 'blocked', 'indeterminate']);
@@ -84,15 +84,18 @@ export const REVIEW_CURRENCY_VERDICTS = Object.freeze(['current', 'stale', 'bloc
 export const BASE_INTEGRATION_VERDICTS = Object.freeze(['integrated', 'behind', 'indeterminate']);
 
 /**
- * THE SHA-BOUND CLEAN ATTESTATION, for a reviewer whose clean signal is not one.
+ * THE SHA-BOUND CLEAN ATTESTATION.
  *
- * A commit status is the GitHub-native artifact that IS bound to a sha and
- * carries an authenticated creator, so an authorized reviewer publishing
- * `success` on this context for an exact commit makes the machine-verifiable
- * statement a reaction cannot. Nothing publishes it today, which is why the
- * founder's `APPROVED` review is the path that actually runs; this stays
- * because it is the seam an automated reviewer would use, and because the
- * coding worker holding only `statuses: read` cannot forge one.
+ * A commit status is the GitHub-native artifact that is bound to a sha and
+ * carries an authenticated creator, so an authorized identity publishing
+ * `success` on this context for an exact commit makes a machine-verifiable
+ * statement about that commit and no other.
+ *
+ * Nothing publishes it today — the founder's `APPROVED` review is the path that
+ * actually runs — and it stays for two reasons. It is the seam any future
+ * automated authority would use, whoever that turns out to be, and it is a
+ * standing demonstration that the coding worker holding only `statuses: read`
+ * cannot forge one.
  */
 export const REVIEW_ATTESTATION_CONTEXT = 'julius/independent-review';
 
@@ -119,10 +122,10 @@ const FULL_SHA = /^[0-9a-f]{40}$/u;
 /**
  * A FINDING THAT BLOCKS.
  *
- * This reviewer reports severity as a badge in the comment body — `P1`, and
- * the words Critical and High. Nothing here infers severity from tone or
- * length: an unrecognised comment on the head is treated as blocking, because
- * a finding this function cannot classify is not a finding it may dismiss.
+ * Severity is read from the body — a `P1` badge, or the words Critical and
+ * High. Nothing here infers it from tone or length, and an unrecognised comment
+ * on the head is treated as blocking, because a finding this function cannot
+ * classify is not a finding it may dismiss.
  */
 const BLOCKING_MARKERS = [/\bP1\b/u, /\bcritical\b/iu, /\bhigh\b/iu];
 

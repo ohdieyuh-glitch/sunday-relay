@@ -8,7 +8,6 @@ import { join, resolve } from 'node:path';
 import {
   BASE_INTEGRATION_VERDICTS,
   EXTERNAL_APPROVER_LOGINS,
-  INDEPENDENT_REVIEWER_LOGINS,
   NON_ATTESTING_IDENTITIES,
   REVIEW_ATTESTATION_CONTEXT,
   REVIEW_AUTHORITY_LOGINS,
@@ -30,20 +29,20 @@ import {
 const A = 'a'.repeat(40);
 const B = 'b'.repeat(40);
 
-/** The account outside this coding environment. It approves. */
+/** The account outside this coding environment. It approves, and it blocks. */
 const APPROVER = EXTERNAL_APPROVER_LOGINS[0]!;
-/** The independent reviewer. It finds, and it never approves. */
-const REVIEWER = INDEPENDENT_REVIEWER_LOGINS[0]!;
 /** The coding worker: author of everything under review, authority over nothing. */
 const WORKER = NON_ATTESTING_IDENTITIES[0]!;
+/** Anyone else at all, including a provider bot. No standing whatsoever. */
+const OUTSIDER = 'a-passing-collaborator';
 
 const approved = (commit: string, login = APPROVER) =>
   ({ commit_id: commit, state: 'APPROVED', user: { login } });
-const commented = (commit: string, login = REVIEWER) =>
+const commented = (commit: string, login = APPROVER) =>
   ({ commit_id: commit, state: 'COMMENTED', user: { login } });
-const review = (commit: string, state: string, login = REVIEWER) =>
+const review = (commit: string, state: string, login = APPROVER) =>
   ({ commit_id: commit, state, user: { login } });
-const finding = (commit: string, body: string, login = REVIEWER) =>
+const finding = (commit: string, body: string, login = APPROVER) =>
   ({ original_commit_id: commit, commit_id: commit, body, user: { login } });
 
 /** The happy shape, with the head held still and the worker as author. */
@@ -97,7 +96,7 @@ describe('review currency', () => {
     // `original_commit_id` is the commit the comment was written against.
     // GitHub advances `commit_id` on comments that still apply, which is why
     // the original is the one that decides.
-    const carried = { original_commit_id: A, commit_id: B, body: '**P1 Badge** old', user: { login: REVIEWER } };
+    const carried = { original_commit_id: A, commit_id: B, body: '**P1 Badge** old', user: { login: APPROVER } };
     expect(at(B, [approved(B)], [carried]).verdict).toBe('current');
   });
 
@@ -137,7 +136,7 @@ describe('review currency', () => {
 
   it('7. nothing but a real approval by a configured authority counts', () => {
     // A different account, however friendly.
-    expect(at(A, [approved(A, 'a-passing-collaborator')]).verdict).toBe('stale');
+    expect(at(A, [approved(A, OUTSIDER)]).verdict).toBe('stale');
     // A DISMISSED review says nothing about the code.
     expect(at(A, [review(A, 'DISMISSED', APPROVER)]).verdict).toBe('stale');
     // Issue comments and reactions are not reviews: they never reach this
@@ -206,7 +205,7 @@ describe('review authority', () => {
       expect(REVIEW_AUTHORITY_LOGINS, `${forbidden} may never be an authority`).not.toContain(forbidden);
     }
     expect(REVIEW_AUTHORITY_LOGINS)
-      .toEqual([...EXTERNAL_APPROVER_LOGINS, ...INDEPENDENT_REVIEWER_LOGINS]);
+      .toEqual([...EXTERNAL_APPROVER_LOGINS]);
   });
 
   it('the identities are the ones this deployment actually has', () => {
@@ -214,7 +213,10 @@ describe('review authority', () => {
     // logins the trust model names, spelled out once.
     expect(NON_ATTESTING_IDENTITIES).toEqual(['julius-worker[bot]']);
     expect(EXTERNAL_APPROVER_LOGINS).toEqual(['ohdieyuh-glitch']);
-    expect(INDEPENDENT_REVIEWER_LOGINS).toEqual(['chatgpt-codex-connector[bot]']);
+    // ONE authority, and it is a person outside the coding environment. No
+    // provider bot has standing in this gate; a second entry here would be a
+    // deliberate decision, and this fails until someone makes it.
+    expect(REVIEW_AUTHORITY_LOGINS).toEqual(['ohdieyuh-glitch']);
   });
 
   it('the founder approves an exact head, and that is the path that runs today', () => {
@@ -224,23 +226,31 @@ describe('review authority', () => {
     expect(result.attested, 'no commit status was involved').toBe(false);
   });
 
-  it('the independent reviewer blocks but does not approve', () => {
-    // Its findings decide the head.
-    expect(at(A, [commented(A, REVIEWER)], [finding(A, '**P1** broken', REVIEWER)]).verdict).toBe('blocked');
-    expect(at(A, [review(A, 'CHANGES_REQUESTED', REVIEWER)]).verdict).toBe('blocked');
-    // Its silence does not.
-    const looked = at(A, [commented(A, REVIEWER)]);
+  it('the same authority that approves may also block', () => {
+    // Approval is not the only thing a reviewer can say about a head.
+    expect(at(A, [commented(A), finding(A, '')] , [finding(A, '**P1** broken')]).verdict).toBe('blocked');
+    expect(at(A, [review(A, 'CHANGES_REQUESTED')]).verdict).toBe('blocked');
+    // And looking without approving is not approval.
+    const looked = at(A, [commented(A)]);
     expect(looked.verdict).toBe('stale');
     expect(looked.reason).toContain('no approval');
   });
 
+  it('a login outside the authority list has no standing at all', () => {
+    // Not an approver, and not a blocker either: an identity this gate does not
+    // configure is read past rather than weighed. That is what keeps a provider
+    // bot commenting on a pull request from becoming a merge authority.
+    expect(at(A, [approved(A, OUTSIDER)]).verdict).toBe('stale');
+    expect(at(A, [approved(A), review(A, 'CHANGES_REQUESTED', OUTSIDER)]).verdict).toBe('current');
+    expect(at(A, [approved(A)], [finding(A, '**P1** from a stranger', OUTSIDER)]).verdict).toBe('current');
+    expect(at(A, [approved(A)], [{ content: '+1', user: { login: OUTSIDER } }]).verdict).toBe('current');
+  });
+
   it('the line is drawn at sha binding, not at the identity', () => {
-    // The reviewer signals clean with a reaction, which carries no commit and
-    // is therefore never read. Were it to publish either artifact that DOES
-    // carry a commit, that artifact would count — the refusal is of the unbound
-    // signal, from anyone, and this pins that the code means what it says.
-    expect(at(A, [approved(A, REVIEWER)]).verdict).toBe('current');
-    expect(at(A, [approved(A, REVIEWER)]).approvedBy).toEqual([REVIEWER]);
+    // A reaction carries no commit and is never read, from anyone. The two
+    // artifacts that DO name their commit are the two this gate accepts.
+    expect(at(A, [approved(A, APPROVER)]).verdict).toBe('current');
+    expect(at(A, [{ content: '+1', user: { login: APPROVER } }]).verdict).toBe('stale');
   });
 
   it('narrowing the reviewer list cannot hide the reviewer\'s findings', () => {
@@ -250,7 +260,7 @@ describe('review authority', () => {
     const narrowed = evaluateReviewCurrency({
       headSha: A, headShaAfter: A, pullAuthorLogin: WORKER,
       reviews: [approved(A, APPROVER)],
-      reviewComments: [finding(A, '**P1 Badge** still broken', REVIEWER)],
+      reviewComments: [finding(A, '**P1 Badge** still broken', APPROVER)],
       reviewerLogins: [APPROVER],
     });
     expect(narrowed.verdict).toBe('blocked');
@@ -258,7 +268,7 @@ describe('review authority', () => {
   });
 
   it('a finding written in the review body, not a line comment, still blocks', () => {
-    const summarised = { commit_id: A, state: 'COMMENTED', body: '**P1** the whole approach is wrong', user: { login: REVIEWER } };
+    const summarised = { commit_id: A, state: 'COMMENTED', body: '**P1** the whole approach is wrong', user: { login: APPROVER } };
     expect(at(A, [approved(A), summarised]).verdict).toBe('blocked');
     // An empty summary is a reviewer who wrote no summary, not an
     // unclassifiable finding, so it does not block on its own.
@@ -293,10 +303,10 @@ describe('review authority', () => {
     expect(at(A, [commented(A)]).reason).toContain('carries no approval');
   });
 
-  it('both authorities on one head: the finding wins over the approval', () => {
-    // A human approves while the independent reviewer is still objecting.
+  it('an approval and a finding on one head: the finding wins', () => {
+    // An approval submitted while an objection stands on the same commit.
     // Reading the approval first would make the objection disappear.
-    const contested = at(A, [approved(A, APPROVER), commented(A, REVIEWER)], [finding(A, '**P1** still broken', REVIEWER)]);
+    const contested = at(A, [approved(A), commented(A)], [finding(A, '**P1** still broken')]);
     expect(contested.verdict).toBe('blocked');
     expect(contested.blockingCount).toBe(1);
   });
@@ -403,17 +413,17 @@ describe('merge eligibility', () => {
 });
 
 /**
- * THE REVIEWER'S CLEAN SIGNAL IS NOT SHA-BOUND, SO IT CANNOT BE APPROVAL.
+ * AN UNBOUND SIGNAL CANNOT BE APPROVAL, WHOEVER SENDS IT.
  *
- * Measured on this repository: PRs #213 and #214 carry a `+1` reaction from the
- * reviewer and nothing else. A reaction's payload is
- * `content, created_at, id, node_id, user` — there is no commit field on it, so
- * it cannot say which code was clean. A commit status can.
+ * A reaction's payload is `content, created_at, id, node_id, user` — there is
+ * no commit field on it, so it cannot say which code was clean, and accepting
+ * one would make "clean at some point" indistinguishable from "clean at this
+ * head". A commit status names its commit, so it can.
  */
 describe('clean-review attestation', () => {
   const status = (over: Record<string, unknown> = {}) => ({
     context: REVIEW_ATTESTATION_CONTEXT, state: 'success', sha: A,
-    creator: { login: REVIEWER }, ...over,
+    creator: { login: APPROVER }, ...over,
   });
   const withStatuses = (statuses: unknown, reviews: unknown[] = [], reviewComments: unknown[] = []) =>
     evaluateReviewCurrency({
@@ -426,7 +436,7 @@ describe('clean-review attestation', () => {
     expect(result.verdict).toBe('current');
     expect(result.attested).toBe(true);
     expect(result.reviewedSha).toBe(A);
-    expect(result.approvedBy).toEqual([REVIEWER]);
+    expect(result.approvedBy).toEqual([APPROVER]);
   });
 
   it('a real status row, which carries no sha of its own, is honoured', () => {
@@ -435,7 +445,7 @@ describe('clean-review attestation', () => {
     // there is no sha field. The rows are fetched FOR a sha, and the optional
     // `sha` this code also accepts is only a defence against a caller handing
     // over another commit's statuses.
-    const bare = { context: REVIEW_ATTESTATION_CONTEXT, state: 'success', creator: { login: REVIEWER } };
+    const bare = { context: REVIEW_ATTESTATION_CONTEXT, state: 'success', creator: { login: APPROVER } };
     const result = withStatuses([bare]);
     expect(result.verdict).toBe('current');
     expect(result.attested).toBe(true);
@@ -448,7 +458,7 @@ describe('clean-review attestation', () => {
     expect(withStatuses([status({ state: 'pending' })]).verdict).toBe('stale');
     expect(withStatuses([status({ state: 'failure' })]).verdict).toBe('stale');
     expect(withStatuses([status({ sha: B })]).verdict).toBe('stale');
-    expect(withStatuses([status({ creator: { login: 'a-passing-collaborator' } })]).verdict).toBe('stale');
+    expect(withStatuses([status({ creator: { login: OUTSIDER } })]).verdict).toBe('stale');
   });
 
   it('the author cannot attest their own head', () => {
@@ -483,12 +493,12 @@ describe('clean-review attestation', () => {
     ]).verdict).toBe('current');
   });
 
-  it('the latest state decides even when it comes from another creator', () => {
-    // One authority withdrawing what another published is a disagreement, and
-    // a disagreement is not an approval.
+  it('the latest state decides, whoever wrote it', () => {
+    // A withdrawal is the newest word on the context, and a withdrawn
+    // attestation is not an approval.
     expect(withStatuses([
       status({ state: 'failure', creator: { login: APPROVER }, created_at: '2026-09-05T12:00:00Z' }),
-      status({ state: 'success', creator: { login: REVIEWER }, created_at: '2026-09-05T11:00:00Z' }),
+      status({ state: 'success', creator: { login: APPROVER }, created_at: '2026-09-05T11:00:00Z' }),
     ]).verdict).toBe('stale');
   });
 
@@ -524,7 +534,7 @@ describe('clean-review attestation', () => {
 describe('a coding worker cannot certify itself', () => {
   const status = (over: Record<string, unknown> = {}) => ({
     context: REVIEW_ATTESTATION_CONTEXT, state: 'success', sha: A,
-    creator: { login: REVIEWER }, ...over,
+    creator: { login: APPROVER }, ...over,
   });
   const check = (over: Record<string, unknown>) => evaluateReviewCurrency({
     headSha: A, headShaAfter: A, reviews: [], reviewComments: [], pullAuthorLogin: WORKER, ...over,
@@ -546,7 +556,7 @@ describe('a coding worker cannot certify itself', () => {
   it('5. a reaction can never certify anything, because it is not an input', () => {
     // Reactions carry no commit field, so they are not consulted at all. There
     // is no shape of reaction data that reaches a verdict.
-    const asIfReaction = { content: '+1', user: { login: REVIEWER }, created_at: '2026-09-05T03:08:00Z' };
+    const asIfReaction = { content: '+1', user: { login: APPROVER }, created_at: '2026-09-05T03:08:00Z' };
     expect(check({ reviews: [asIfReaction], statuses: [asIfReaction] }).verdict).toBe('stale');
   });
 
@@ -565,7 +575,7 @@ describe('a coding worker cannot certify itself', () => {
     // allowlist is consulted, so the widened list buys nothing.
     expect(check({
       statuses: [status({ creator: { login: WORKER } })],
-      reviewerLogins: [WORKER, REVIEWER],
+      reviewerLogins: [WORKER, APPROVER],
     }).verdict).toBe('stale');
     expect(check({
       reviews: [approved(A, WORKER)],
@@ -589,7 +599,7 @@ describe('a coding worker cannot certify itself', () => {
     // rather than quietly becoming self-approval.
     for (const forbidden of NON_ATTESTING_IDENTITIES) {
       expect(EXTERNAL_APPROVER_LOGINS, `${forbidden} may never approve`).not.toContain(forbidden);
-      expect(INDEPENDENT_REVIEWER_LOGINS, `${forbidden} may never review`).not.toContain(forbidden);
+      expect(REVIEW_AUTHORITY_LOGINS, `${forbidden} may never be an authority`).not.toContain(forbidden);
     }
     expect(NON_ATTESTING_IDENTITIES.length, 'the coding worker identity is named').toBeGreaterThan(0);
     expect(EXTERNAL_APPROVER_LOGINS.length, 'an approver outside this environment is named').toBeGreaterThan(0);

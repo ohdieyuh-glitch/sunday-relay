@@ -8,11 +8,9 @@
 
 /** Identities that may never attest, checked before any allowlist. The coding worker. */
 export declare const NON_ATTESTING_IDENTITIES: readonly string[];
-/** The account outside this coding environment whose `APPROVED` review approves a head. */
+/** The account outside this coding environment. Its `APPROVED` review approves a head; it may also block one. */
 export declare const EXTERNAL_APPROVER_LOGINS: readonly string[];
-/** The independent reviewer whose findings block. It does not approve. */
-export declare const INDEPENDENT_REVIEWER_LOGINS: readonly string[];
-/** Every identity whose signal is read at all: one may approve, both may block. */
+/** Every identity whose signal is read at all. One authority: it approves and it blocks. */
 export declare const REVIEW_AUTHORITY_LOGINS: readonly string[];
 export declare const BASE_INTEGRATION_VERDICTS: readonly ['integrated', 'behind', 'indeterminate'];
 /** The commit-status context an authorized reviewer publishes a clean head under. */
