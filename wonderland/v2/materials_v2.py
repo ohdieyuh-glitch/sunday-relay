@@ -67,6 +67,11 @@ INSTANCES = {
     # (1,757) and Cobble is every street surface.
     #     Kerb    luma 0.4243 -> 0.4247   R-B 0.11 -> 0.02
     #     Cobble  luma 0.3148 -> 0.3215   R-B 0.10 -> 0.02
+    # A WINDOW HAS TO BE DARKER THAN THE WALL. MarbleShade (0.40,0.40,0.42) was
+    # used as glazing against a 0.53 wall -- barely a shade, so the dark panes
+    # vanished and only the coloured minority read, which is why a regular grid
+    # rendered as scattered confetti. An opening is a hole: this is one.
+    "MI_V2_WindowDark":  ("plaster", (0.11, 0.11, 0.13), 0.0, 0.42, 0.50, 0.32, None, 0.0),
     "MI_V2_MarblePale":  ("plaster", (0.55, 0.54, 0.52), 0.0, 0.58, 0.50, 0.32, None, 0.0),
     "MI_V2_MarbleBlush": ("plaster", (0.56, 0.52, 0.52), 0.0, 0.60, 0.50, 0.32, None, 0.0),
     "MI_V2_MarbleCool":  ("plaster", (0.50, 0.50, 0.52), 0.0, 0.56, 0.50, 0.32, None, 0.0),

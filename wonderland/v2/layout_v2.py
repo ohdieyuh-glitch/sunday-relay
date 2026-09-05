@@ -7303,9 +7303,10 @@ KIT_ROOFS = ("MI_V2_RoofRose", "MI_V2_RoofPink", "MI_V2_RoofRose",
 #: are dark holes with a tint in them, so two thirds are a dark neutral and the
 #: colour is an accent -- which is also how the reference board's facades read:
 #: pale stone, dark openings, colour on the ROOFS.
-KIT_GLASS = ("MI_V2_MarbleShade", "MI_V2_MarbleShade", "MI_V2_GlassTeal",
-             "MI_V2_MarbleShade", "MI_V2_MarbleShade", "MI_V2_GlassAmber",
-             "MI_V2_MarbleShade", "MI_V2_GlassRose")
+KIT_GLASS = ("MI_V2_WindowDark", "MI_V2_WindowDark", "MI_V2_WindowDark",
+             "MI_V2_WindowDark", "MI_V2_GlassTeal", "MI_V2_WindowDark",
+             "MI_V2_WindowDark", "MI_V2_WindowDark", "MI_V2_WindowDark",
+             "MI_V2_GlassAmber", "MI_V2_WindowDark", "MI_V2_WindowDark")
 
 KIT_WALLS = ("MI_V2_MarblePale", "MI_V2_MarbleBlush", "MI_V2_MarblePale",
              "MI_V2_MarbleCool", "MI_V2_Ceramic", "MI_V2_MarblePale",
@@ -7464,7 +7465,7 @@ def kit_lite_face(x, y, yaw, width_m, seed, tag, storeys=1, scale=1.0):
     n = max(3, int(width_m / 3.2))
     for st in range(storeys):
         z = st * 1000.0 * scale
-        for row, rz in ((0, 300.0), (1, 660.0)):
+        for row, rz in ((0, 250.0), (1, 520.0)):
             for i in range(n):
                 off = (-width_m * 0.5 + (width_m / n) * (i + 0.5)) * 100.0
                 wx = x + math.cos(along) * off + math.cos(fwd) * 396.0 * scale
