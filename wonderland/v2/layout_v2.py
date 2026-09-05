@@ -8477,8 +8477,17 @@ FILL_NORTHEAST = _band("V2_FillNE", urban_fill(
     14730.0, 29419.0, 7800.0, 6000.0, 3, "FillNE", bearing=18.0))
 FILL_SOUTHFLANK_W = _band("V2_FillSW2", urban_fill(
     -4960.0, -32205.0, 8400.0, 4400.0, 5, "FillSFW", bearing=-9.0))
+# PULLED NORTH OFF THE SOUTHERN QUARTER'S EAST LANE. walkable.py: "south way 6
+# ... NO" -- the lane's waypoint at (15553, -30288) sat INSIDE a building of
+# this fill. Two generators had been writing to the same acre: emptiness.py
+# picked this region because it was empty, and the quarter's east wing runs
+# through it. The overlap was invisible until the facade wrap put openings on
+# all four faces and sealed the waypoint in.
+#
+# Half-extent in y drops 6,600 -> 3,300 and the centre moves north, so the
+# fill stops at y = -29,500 and the lane at -30,288 is clear ground again.
 FILL_SOUTHFLANK_E = _band("V2_FillSE", urban_fill(
-    15707.0, -27323.0, 7200.0, 6600.0, 7, "FillSFE", bearing=6.0))
+    15707.0, -26200.0, 7200.0, 3300.0, 7, "FillSFE", bearing=6.0))
 FILL_EAST = _band("V2_FillE", urban_fill(
     32488.0, -4129.0, 4000.0, 6800.0, 11, "FillE", bearing=-24.0))
 FILL_WEST = _band("V2_FillW", urban_fill(
