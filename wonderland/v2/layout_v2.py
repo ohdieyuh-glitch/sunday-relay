@@ -7457,17 +7457,22 @@ def kit_lite_face(x, y, yaw, width_m, seed, tag, storeys=1, scale=1.0):
     k = seed
     fwd = math.radians(yaw - 90.0)
     along = math.radians(yaw)
-    n = max(2, int(width_m / 5.6))
+    # A GRID, TWO ROWS PER STOREY. Two windows on one row of a 12.6 x 10 m face
+    # is about 11% glazing and reads as decals stuck on a big wall -- which is
+    # what the render showed after the wrap. A storey is ten metres; there is
+    # room for two rows, and four columns instead of two.
+    n = max(3, int(width_m / 3.2))
     for st in range(storeys):
         z = st * 1000.0 * scale
-        for i in range(n):
-            off = (-width_m * 0.5 + (width_m / n) * (i + 0.5)) * 100.0
-            wx = x + math.cos(along) * off + math.cos(fwd) * 396.0 * scale
-            wy = y + math.sin(along) * off + math.sin(fwd) * 396.0 * scale
-            out.append(A("glass_screen_panes", wx, wy, 330.0 + z, yaw=yaw,
-                         s=0.20 * scale,
-                         mat=KIT_GLASS[(k + st + i) % len(KIT_GLASS)],
-                         label="%s_LW%d_%d" % (tag, st, i)))
+        for row, rz in ((0, 300.0), (1, 660.0)):
+            for i in range(n):
+                off = (-width_m * 0.5 + (width_m / n) * (i + 0.5)) * 100.0
+                wx = x + math.cos(along) * off + math.cos(fwd) * 396.0 * scale
+                wy = y + math.sin(along) * off + math.sin(fwd) * 396.0 * scale
+                out.append(A("glass_screen_panes", wx, wy, rz + z, yaw=yaw,
+                             s=0.235 * scale,
+                             mat=KIT_GLASS[(k + st + i + row) % len(KIT_GLASS)],
+                             label="%s_LW%d_%d_%d" % (tag, st, row, i)))
     out.append(A("balustrade", x + math.cos(fwd) * 406.0 * scale,
                  y + math.sin(fwd) * 406.0 * scale,
                  700.0 + (storeys - 1) * 1000.0 * scale, yaw=yaw,
