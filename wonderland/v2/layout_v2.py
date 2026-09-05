@@ -7985,8 +7985,20 @@ def urban_fill(cx, cy, half_x, half_y, seed, tag, bearing=0.0,
         for t in range(int(span_c / step) + 1):
             c = -span_c * 0.5 + step * t
             sx, sy = at(a, c)
+            # COBBLE, LIKE THE STREETS IT CROSSES. The cross-streets were
+            # PathStone: a smooth slab material on a 14 x 13 m piece, and a
+            # camera standing at an intersection stands on one of these with
+            # the cobbled main street beside it. HeroCam48's whole lower frame
+            # is a PathStone slab. Three near-field passes added lines,
+            # removed slabs and moved furniture, and foreground.edges stayed
+            # at 0.066 against 0.079 before them, because the SURFACE under
+            # the camera was smooth and nothing laid on top of a smooth
+            # surface at 5 uu changes that. Cobble is the highest-edge
+            # material in the world and the reference cobbles every street.
+            # This also retires the terrace_platform + PathStone pair from
+            # every fill band, so it costs fewer draws, not more.
             out.append(A("terrace_platform", sx, sy, ROAD_Z, yaw=bearing + 90.0,
-                         sxyz=(1.0, street_m / 7.4, 0.30), mat="MI_V2_PathStone",
+                         sxyz=(1.0, street_m / 7.4, 0.30), mat="MI_V2_Cobble",
                          label="%s_StC%d_%03d" % (tag, gj, t)))
 
     # ---- the blocks --------------------------------------------------------
