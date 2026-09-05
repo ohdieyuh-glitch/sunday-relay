@@ -7370,7 +7370,7 @@ def kit_facade(x, y, yaw, width_m, seed, tag, bays=None, lamp=False):
     fwd = math.radians(yaw - 90.0)
     along = math.radians(yaw)
     for i in range(n):
-        off = (-width_m * 0.5 + step * (i + 0.5)) * 100.0
+        off = (-width_m * 0.36 + step * 0.72 * (i + 0.5)) * 100.0
         bx = x + math.cos(along) * off + math.cos(fwd) * 402.0
         by = y + math.sin(along) * off + math.sin(fwd) * 402.0
         # RELIEF, NOT A FLAT SHEET. Every bay sat at the same 402 uu offset,
@@ -7467,7 +7467,13 @@ def kit_lite_face(x, y, yaw, width_m, seed, tag, storeys=1, scale=1.0):
         z = st * 1000.0 * scale
         for row, rz in ((0, 250.0), (1, 520.0)):
             for i in range(n):
-                off = (-width_m * 0.5 + (width_m / n) * (i + 0.5)) * 100.0
+                # INSET FROM THE CORNERS. Columns spanned the full face width,
+                # so the outermost pane on one face reached past the corner and
+                # poked out of the face beside it -- the dark shapes sticking
+                # out of the building edges in the last render. 0.70 of the
+                # width keeps every pane clear of both corners.
+                span = width_m * 0.70
+                off = (-span * 0.5 + (span / n) * (i + 0.5)) * 100.0
                 wx = x + math.cos(along) * off + math.cos(fwd) * 396.0 * scale
                 wy = y + math.sin(along) * off + math.sin(fwd) * 396.0 * scale
                 out.append(A("glass_screen_panes", wx, wy, rz + z, yaw=yaw,
