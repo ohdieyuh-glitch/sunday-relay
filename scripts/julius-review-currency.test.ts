@@ -5,7 +5,9 @@ import { resolve } from 'node:path';
 
 import {
   INDEPENDENT_REVIEWER_LOGINS,
+  REVIEW_ATTESTATION_CONTEXT,
   REVIEW_CURRENCY_VERDICTS,
+  evaluateMergeEligibility,
   evaluateReviewCurrency,
 } from './julius-review-currency.mjs';
 
@@ -157,5 +159,139 @@ describe('review currency', () => {
     ]) {
       expect(result.verdict).not.toBe('current');
     }
+  });
+});
+
+/**
+ * EXACT-HEAD IDENTITY ALONE IS NOT ENOUGH.
+ *
+ * A review binds to a commit; a merge integrates that commit with whatever the
+ * base has become. Head A can be reviewed cleanly while base is X, main can
+ * advance to Y, the head never moves, and the exact-head check keeps saying
+ * `current` — for a combination A+Y nobody reviewed.
+ */
+describe('merge eligibility', () => {
+  const X = 'c'.repeat(40);
+  const Y = 'd'.repeat(40);
+  const eligibility = (over: Record<string, unknown>) => evaluateMergeEligibility({
+    headSha: A, headShaAfter: A, reviews: [review(A)], reviewComments: [],
+    pullAuthorLogin: 'ohdieyuh-glitch', baseSha: X, baseContainedInHead: true, ...over,
+  });
+
+  it('a clean review of the head, with the base already contained, is eligible', () => {
+    const result = eligibility({});
+    expect(result.reviewCurrency.verdict).toBe('current');
+    expect(result.baseIntegration).toBe('integrated');
+    expect(result.mergeEligible).toBe(true);
+  });
+
+  it('the base advancing past the reviewed candidate makes it ineligible', () => {
+    // The head never moved and its review is still exactly current — which is
+    // why review currency alone would have waved this through.
+    const result = eligibility({ baseSha: Y, baseContainedInHead: false });
+    expect(result.reviewCurrency.verdict, 'the review of the head is still current').toBe('current');
+    expect(result.baseIntegration).toBe('behind');
+    expect(result.mergeEligible, 'but the pair was never reviewed').toBe(false);
+    expect(result.baseReason).toContain('incorporate it');
+  });
+
+  it('incorporating the base makes a NEW head, which the old review does not cover', () => {
+    // The remedy is the same rule applying again, not an exception to it.
+    const result = evaluateMergeEligibility({
+      headSha: B, headShaAfter: B, reviews: [review(A)], reviewComments: [],
+      pullAuthorLogin: 'ohdieyuh-glitch', baseSha: Y, baseContainedInHead: true,
+    });
+    expect(result.reviewCurrency.verdict).toBe('stale');
+    expect(result.baseIntegration, 'the base is now contained').toBe('integrated');
+    expect(result.mergeEligible).toBe(false);
+  });
+
+  it('and a clean review of that new head is eligible', () => {
+    const result = evaluateMergeEligibility({
+      headSha: B, headShaAfter: B, reviews: [review(A), review(B)], reviewComments: [],
+      pullAuthorLogin: 'ohdieyuh-glitch', baseSha: Y, baseContainedInHead: true,
+    });
+    expect(result.mergeEligible).toBe(true);
+  });
+
+  it('ancestry that cannot be proven is not permission', () => {
+    for (const unproven of [undefined, null, 'yes', 1, {}]) {
+      const result = eligibility({ baseContainedInHead: unproven });
+      expect(result.baseIntegration, String(unproven)).toBe('indeterminate');
+      expect(result.mergeEligible).toBe(false);
+    }
+    expect(eligibility({ baseSha: 'not-a-sha' }).baseIntegration).toBe('indeterminate');
+  });
+
+  it('the two facts are reported separately, never collapsed', () => {
+    // "Nobody reviewed this" and "the base moved underneath it" need different
+    // actions, so they may not share a verdict.
+    const result = evaluateMergeEligibility({
+      headSha: B, headShaAfter: B, reviews: [review(A)], reviewComments: [],
+      baseSha: Y, baseContainedInHead: false,
+    });
+    expect(result.reviewCurrency.verdict).toBe('stale');
+    expect(result.baseIntegration).toBe('behind');
+    expect(result.reason).toContain('review=stale');
+    expect(result.reason).toContain('base=behind');
+  });
+});
+
+/**
+ * THE REVIEWER'S CLEAN SIGNAL IS NOT SHA-BOUND, SO IT CANNOT BE APPROVAL.
+ *
+ * Measured on this repository: PRs #213 and #214 carry a `+1` reaction from the
+ * reviewer and nothing else. A reaction's payload is
+ * `content, created_at, id, node_id, user` — there is no commit field on it, so
+ * it cannot say which code was clean. A commit status can.
+ */
+describe('clean-review attestation', () => {
+  const status = (over: Record<string, unknown> = {}) => ({
+    context: REVIEW_ATTESTATION_CONTEXT, state: 'success', sha: A,
+    creator: { login: REVIEWER }, ...over,
+  });
+  const withStatuses = (statuses: unknown, reviews: unknown[] = [], reviewComments: unknown[] = []) =>
+    evaluateReviewCurrency({
+      headSha: A, headShaAfter: A, reviews, reviewComments, statuses,
+      pullAuthorLogin: 'ohdieyuh-glitch',
+    });
+
+  it('an authorized attestation on the exact head is a clean review of it', () => {
+    const result = withStatuses([status()]);
+    expect(result.verdict).toBe('current');
+    expect(result.attested).toBe(true);
+    expect(result.reviewedSha).toBe(A);
+  });
+
+  it('nothing weaker counts', () => {
+    // Wrong context, not success, another commit's status, or an unauthorized
+    // creator — each is refused, and none is "probably fine".
+    expect(withStatuses([status({ context: 'ci/other' })]).verdict).toBe('stale');
+    expect(withStatuses([status({ state: 'pending' })]).verdict).toBe('stale');
+    expect(withStatuses([status({ state: 'failure' })]).verdict).toBe('stale');
+    expect(withStatuses([status({ sha: B })]).verdict).toBe('stale');
+    expect(withStatuses([status({ creator: { login: 'a-passing-collaborator' } })]).verdict).toBe('stale');
+  });
+
+  it('the author cannot attest their own head', () => {
+    // The coding worker self-certifying is the failure this whole control
+    // exists to prevent; an attestation does not become an exception to it.
+    expect(evaluateReviewCurrency({
+      headSha: A, headShaAfter: A, reviews: [], reviewComments: [],
+      statuses: [status()], pullAuthorLogin: REVIEWER,
+    }).verdict).toBe('stale');
+  });
+
+  it('an attestation cannot outrank a blocking finding on the same head', () => {
+    expect(withStatuses([status()], [], [finding(A, '**P1 Badge** still broken')]).verdict).toBe('blocked');
+  });
+
+  it('statuses that could not be read fail closed', () => {
+    // "The caller could not read them" is not "there were none".
+    expect(withStatuses('unavailable').verdict).toBe('indeterminate');
+    // Absent is fine: it simply means no attestation was offered.
+    expect(evaluateReviewCurrency({
+      headSha: A, headShaAfter: A, reviews: [review(A)], reviewComments: [],
+    }).verdict).toBe('current');
   });
 });
