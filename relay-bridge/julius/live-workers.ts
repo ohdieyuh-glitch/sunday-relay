@@ -420,7 +420,9 @@ export function createLiveHostedCodingAdapter(input: {
           servedModel: observed?.actualModel ?? null,
           responseId: observed?.sessionId ?? null,
           numTurns: observed?.numTurns ?? null,
-          toolUseCount: observed?.toolsUsed.length ?? null,
+          // INVOCATIONS, not distinct names: `toolsUsed` deduplicates, so ten
+          // edits and one read would have been reported as 2.
+          toolUseCount: observed?.toolInvocations ?? null,
           /**
            * ONLY WHEN A RESULT ARRIVED. `permissionDenials` starts at 0 and is
            * populated by the result message alone, so reporting it after a
