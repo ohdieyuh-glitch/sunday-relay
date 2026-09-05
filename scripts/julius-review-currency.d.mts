@@ -6,6 +6,8 @@
  * exactly one implementation of the exact-head rule.
  */
 export declare const INDEPENDENT_REVIEWER_LOGINS: readonly string[];
+/** Identities that may never attest, checked before the reviewer allowlist. */
+export declare const NON_ATTESTING_IDENTITIES: readonly string[];
 export declare const BASE_INTEGRATION_VERDICTS: readonly ['integrated', 'behind', 'indeterminate'];
 /** The commit-status context an authorized reviewer publishes a clean head under. */
 export declare const REVIEW_ATTESTATION_CONTEXT: string;

@@ -27,6 +27,26 @@
  */
 export const INDEPENDENT_REVIEWER_LOGINS = Object.freeze(['chatgpt-codex-connector[bot]']);
 
+/**
+ * IDENTITIES THAT MAY NEVER ATTEST, WHATEVER THE ALLOWLIST SAYS.
+ *
+ * The coding worker runs with this repository's own credential —
+ * `ohdieyuh-glitch`, admin, `repo` and `workflow` scopes. Anything that
+ * identity can do, the worker can do: publish a commit status, rewrite a
+ * workflow, push to `main`. Branch protection is unavailable on this plan
+ * (`Upgrade to GitHub Pro or make this repository public`), so no workflow
+ * anchor, App key or signed provenance held INSIDE this repository can be made
+ * safe from it — the anchor itself is rewritable.
+ *
+ * That is a fact about the deployment, and the honest response is to refuse
+ * rather than to look protected. This set is checked BEFORE the allowlist, so
+ * a change that adds the author to `INDEPENDENT_REVIEWER_LOGINS` still cannot
+ * make the author their own reviewer. Closing the gap for real needs an
+ * authority this environment does not hold: a protected `main`, or a
+ * credential kept outside it.
+ */
+export const NON_ATTESTING_IDENTITIES = Object.freeze(['ohdieyuh-glitch']);
+
 /** The only verdicts. Anything not `current` blocks. */
 export const REVIEW_CURRENCY_VERDICTS = Object.freeze(['current', 'stale', 'blocked', 'indeterminate']);
 
@@ -112,8 +132,10 @@ export function evaluateReviewCurrency(input) {
   const authored = typeof input?.pullAuthorLogin === 'string' ? input.pullAuthorLogin : null;
   const isIndependent = (login) =>
     typeof login === 'string'
+    // Refused first, so widening the allowlist cannot smuggle the author in.
+    && !NON_ATTESTING_IDENTITIES.includes(login)
     && reviewerLogins.includes(login)
-    // A worker may not certify its own head, whatever the allowlist says.
+    // And never the author of the pull request under review.
     && (authored === null || login !== authored);
 
   // EXACT SHA. Never ancestry: a review of a parent commit says nothing about

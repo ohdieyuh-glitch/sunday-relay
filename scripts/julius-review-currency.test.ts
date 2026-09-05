@@ -5,6 +5,7 @@ import { resolve } from 'node:path';
 
 import {
   INDEPENDENT_REVIEWER_LOGINS,
+  NON_ATTESTING_IDENTITIES,
   REVIEW_ATTESTATION_CONTEXT,
   REVIEW_CURRENCY_VERDICTS,
   evaluateMergeEligibility,
@@ -293,5 +294,82 @@ describe('clean-review attestation', () => {
     expect(evaluateReviewCurrency({
       headSha: A, headShaAfter: A, reviews: [review(A)], reviewComments: [],
     }).verdict).toBe('current');
+  });
+});
+
+/**
+ * THE THREAT MODEL, EXECUTED.
+ *
+ * The coding worker runs with this repository's own admin credential and
+ * `main` cannot be protected on this plan, so it can publish a status, rewrite
+ * a workflow, or push to `main`. These cases fix what the VERIFIER refuses
+ * regardless — the part that does not depend on an authority this environment
+ * does not yet have.
+ */
+describe('a coding worker cannot certify itself', () => {
+  const AUTHOR = NON_ATTESTING_IDENTITIES[0]!;
+  const status = (over: Record<string, unknown> = {}) => ({
+    context: REVIEW_ATTESTATION_CONTEXT, state: 'success', sha: A,
+    creator: { login: REVIEWER }, ...over,
+  });
+  const check = (over: Record<string, unknown>) => evaluateReviewCurrency({
+    headSha: A, headShaAfter: A, reviews: [], reviewComments: [], ...over,
+  });
+
+  it('1+3. a status it publishes under its own identity is not a review', () => {
+    expect(check({ statuses: [status({ creator: { login: AUTHOR } })] }).verdict).toBe('stale');
+  });
+
+  it('2+4. a status naming a different commit cannot be replayed onto this head', () => {
+    // Attesting SHA A and presenting it for head B is the replay this refuses.
+    expect(check({ headSha: B, headShaAfter: B, statuses: [status({ sha: A })] }).verdict).toBe('stale');
+    // And an arbitrary chosen sha is equally not this head.
+    expect(check({ statuses: [status({ sha: 'e'.repeat(40) })] }).verdict).toBe('stale');
+  });
+
+  it('5. a reaction can never certify anything, because it is not an input', () => {
+    // Reactions carry no commit field, so they are not consulted at all. There
+    // is no shape of reaction data that reaches a verdict.
+    const asIfReaction = { content: '+1', user: { login: REVIEWER }, created_at: '2026-09-05T03:08:00Z' };
+    expect(check({ reviews: [asIfReaction], statuses: [asIfReaction] }).verdict).toBe('stale');
+  });
+
+  it('6. a valid attestation does not survive the base moving underneath it', () => {
+    const moved = evaluateMergeEligibility({
+      headSha: A, headShaAfter: A, reviews: [], reviewComments: [], statuses: [status()],
+      baseSha: 'f'.repeat(40), baseContainedInHead: false,
+    });
+    expect(moved.reviewCurrency.verdict, 'the head really was attested').toBe('current');
+    expect(moved.mergeEligible, 'but the pair was never reviewed').toBe(false);
+  });
+
+  it('7. widening the allowlist cannot make the author their own reviewer', () => {
+    // The policy-modification attack: change the trust list in the same change
+    // that the list is asked to approve. The author is refused BEFORE the
+    // allowlist is consulted, so the widened list buys nothing.
+    expect(check({
+      statuses: [status({ creator: { login: AUTHOR } })],
+      reviewerLogins: [AUTHOR, REVIEWER],
+    }).verdict).toBe('stale');
+    expect(check({
+      reviews: [{ commit_id: A, state: 'APPROVED', user: { login: AUTHOR } }],
+      reviewerLogins: [AUTHOR],
+    }).verdict).toBe('stale');
+  });
+
+  it('and the shipped policy never lists an identity that may not attest', () => {
+    // A change adding the author to the reviewer allowlist fails here, in CI,
+    // rather than quietly becoming self-approval.
+    for (const forbidden of NON_ATTESTING_IDENTITIES) {
+      expect(INDEPENDENT_REVIEWER_LOGINS, `${forbidden} may never be a reviewer`).not.toContain(forbidden);
+    }
+    expect(NON_ATTESTING_IDENTITIES.length, 'the coding worker identity is named').toBeGreaterThan(0);
+  });
+
+  it('no attestation exists today, so the gate is closed and stays closed', () => {
+    // The configured reviewer publishes no commit status, so nothing currently
+    // satisfies the attestation path. That is the correct state until an
+    // authority the coding worker does not control is provisioned.
+    expect(check({ statuses: [] }).verdict).toBe('stale');
   });
 });
