@@ -7504,6 +7504,36 @@ def kit_lite_face(x, y, yaw, width_m, seed, tag, storeys=1, scale=1.0):
                              s=0.235 * scale,
                              mat=KIT_GLASS[(k + st + i + row) % len(KIT_GLASS)],
                              label="%s_LW%d_%d_%d" % (tag, st, row, i)))
+        # PIERS BETWEEN THE OPENINGS.
+        #
+        # The sill and the head gave every window a top edge and a bottom
+        # edge, and the elevation still read flat, because a window has two
+        # more sides. Between two panes there was nothing at all: the row ran
+        # as one unbroken dark band with a line above it and a line below it,
+        # which is a stripe, not windows.
+        #
+        # balustrade is 350 uu centred on its local x and 0-based on its local
+        # z, so pitch=90 stands it up CENTRED on the placement height -- the
+        # piece spans 130..850 about z=490, which is exactly the glazed band
+        # of the storey. After the pitch the local axes read (height, depth
+        # out of the wall, width along it), hence the scale triple.
+        #
+        # Per BOUNDARY, not per window: n-1 pieces for n openings, spanning
+        # both rows at once. It sits at 440 -- proud of the glass at 396,
+        # behind the courses at 458 -- so it casts across the pane beside it
+        # instead of floating in front of the wall. balustrade+MarbleCool is
+        # already the largest instanced pair in this band, so this adds no
+        # draw call at all; only the instance count moves.
+        span = width_m * 0.70
+        for i in range(n - 1):
+            off = (-span * 0.5 + (span / n) * (i + 1.0)) * 100.0
+            out.append(A("balustrade",
+                         x + math.cos(along) * off + math.cos(fwd) * 440.0 * scale,
+                         y + math.sin(along) * off + math.sin(fwd) * 440.0 * scale,
+                         490.0 * scale + z, yaw=yaw, pitch=90.0,
+                         sxyz=(7.2 / 3.5 * scale, 1.4, 0.45),
+                         mat="MI_V2_MarbleCool",
+                         label="%s_Pier%d_%d" % (tag, st, i)))
     out.append(A("balustrade", x + math.cos(fwd) * 406.0 * scale,
                  y + math.sin(fwd) * 406.0 * scale,
                  700.0 + (storeys - 1) * 1000.0 * scale, yaw=yaw,
@@ -7550,6 +7580,7 @@ def kit_building(x, y, yaw, seed, tag, storeys=1, tower=True, scale=1.0):
     fwd_m = math.radians(yaw - 90.0)
     along_m = math.radians(yaw)
     variant = k % 5
+    massed = variant in (0, 2, 3) or (variant == 1 and storeys > 1)
     if variant == 0:
         # a shallow wing, stepped forward at one end of the frontage
         wx = x + math.cos(along_m) * 480.0 * scale + math.cos(fwd_m) * 210.0 * scale
@@ -7594,6 +7625,35 @@ def kit_building(x, y, yaw, seed, tag, storeys=1, tower=True, scale=1.0):
     ztop = storeys * 1000.0 * scale
     out.append(A("roof_flat_crenellated", x, y, ztop, yaw=yaw, s=scale * 1.1,
                  mat="MI_V2_GoldAged", label="%s_Parapet" % tag))
+    if not massed and not tower:
+        # THE ONES THAT WERE STILL BOXES.
+        #
+        # Four of the five variants change the outline and the fifth is
+        # deliberately plain, because plain neighbours are what make a massed
+        # building read as special. That reasoning holds for a building that
+        # also carries a tower and a crown -- its silhouette is already
+        # broken at the top. It does NOT hold for variant 4 with tower=False,
+        # which gets no massing and no crown: a cube with a parapet, and in
+        # the fill districts that is a large share of what the skyline is
+        # made of.
+        #
+        # A stair turret standing ON the parapet, five metres of it, off
+        # centre so it breaks the roofline asymmetrically. Two pieces, and
+        # only for the buildings that genuinely had nothing.
+        tx = x + math.cos(along_m) * 300.0 * scale + math.cos(fwd_m) * 170.0 * scale
+        ty = y + math.sin(along_m) * 300.0 * scale + math.sin(fwd_m) * 170.0 * scale
+        # castle_tower_slender + roof_cone_steep rather than a square tower
+        # and an ogee cap: those two were a new (asset, material, band) triple
+        # in every fill district and cost SIXTEEN draw calls for twenty-five
+        # buildings. These two are already instanced in these bands by the
+        # corner-turret variant, so the pair is free.
+        out.append(A("castle_tower_slender", tx, ty, ztop, yaw=yaw + 7.0,
+                     s=scale * 0.26, mat=KIT_WALLS[(k + 1) % len(KIT_WALLS)],
+                     label="%s_Stair" % tag))
+        out.append(A("roof_cone_steep", tx, ty, ztop + 2000.0 * scale * 0.26,
+                     yaw=yaw, s=scale * 0.26,
+                     mat=KIT_ROOFS[(k + 2) % len(KIT_ROOFS)],
+                     label="%s_StairRoof" % tag))
     if tower:
         body = ("castle_tower_slender", "castle_tower_octagon",
                 "castle_tower", "castle_tower_square")[k % 4]
