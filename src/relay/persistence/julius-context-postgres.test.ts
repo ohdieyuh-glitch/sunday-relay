@@ -1,4 +1,33 @@
-import{describe,expect,it}from'vitest';import type{Pool}from'pg';import{JuliusContextPostgresRepository}from'./julius-context-postgres';class PoolStub{rows:{context_id:string}[]=[{context_id:'context'}];sql='';statements:string[]=[];replies:{context_id:string}[][]|null=null;async query(text:string){this.sql=text;this.statements.push(text);const scripted=this.replies?.[this.statements.length-1];return{rows:scripted??this.rows,rowCount:(scripted??this.rows).length}}async connect(){throw new Error('unused')}async end(){}}const snapshot={contextId:'context',runId:'run',taskId:'task',workerId:'worker',workerRole:'CODING_AGENT',compilerVersion:'julius-context.v1' as const,missionContractRevision:1,cardRevision:'card',projectBrainRevision:2,sourceEntryIds:['entry'],dependencyTaskIds:['dependency'],evidenceIds:['evidence'],findingIds:['finding'],acceptanceCriterionIds:['criterion'],contentHash:'sha256:x',characterCount:10,redactionCount:1,truncated:false,packet:{missionId:'mission',taskId:'task',workerId:'worker',sourceEntryIds:['entry'],blocks:[],truncated:false}};describe('Julius context persistence',()=>{
+import{describe,expect,it}from'vitest';import type{Pool}from'pg';import{JuliusContextPostgresRepository}from'./julius-context-postgres';/**
+ * TWO SESSIONS, MODELLED SEPARATELY.
+ *
+ * `query` is the AMBIENT session — the one a caller could have wrapped in a
+ * transaction with a fixed snapshot. `connect()` hands out an INDEPENDENT
+ * session whose reads are not bound by it. Modelling them as one object was
+ * what made the old test unable to tell a correct recovery from a lucky one.
+ */
+class PoolStub{
+ rows:{context_id:string}[]=[{context_id:'context'}];
+ sql='';
+ statements:string[]=[];
+ replies:{context_id:string}[][]|null=null;
+ /** What an INDEPENDENT session sees. Null means it sees nothing. */
+ freshSessionRows:{context_id:string}[]=[];
+ connects=0;
+ connectFails=false;
+ released=0;
+ async query(text:string){this.sql=text;this.statements.push(text);const scripted=this.replies?.[this.statements.length-1];return{rows:scripted??this.rows,rowCount:(scripted??this.rows).length}}
+ async connect(){
+  this.connects+=1;
+  if(this.connectFails)throw new Error('no connection available');
+  const self=this;
+  return{
+   async query(){return{rows:self.freshSessionRows,rowCount:self.freshSessionRows.length}},
+   release(){self.released+=1},
+  };
+ }
+ async end(){}
+}const snapshot={contextId:'context',runId:'run',taskId:'task',workerId:'worker',workerRole:'CODING_AGENT',compilerVersion:'julius-context.v1' as const,missionContractRevision:1,cardRevision:'card',projectBrainRevision:2,sourceEntryIds:['entry'],dependencyTaskIds:['dependency'],evidenceIds:['evidence'],findingIds:['finding'],acceptanceCriterionIds:['criterion'],contentHash:'sha256:x',characterCount:10,redactionCount:1,truncated:false,packet:{missionId:'mission',taskId:'task',workerId:'worker',sourceEntryIds:['entry'],blocks:[],truncated:false}};describe('Julius context persistence',()=>{
  it('tenant-scopes and idempotently stores snapshot metadata rather than arbitrary transcripts',async()=>{
   const pool=new PoolStub();
   expect(await new JuliusContextPostgresRepository(pool as unknown as Pool).persist({projectId:'project',snapshot})).toBe('context');
@@ -42,13 +71,46 @@ import{describe,expect,it}from'vitest';import type{Pool}from'pg';import{JuliusCo
   * there would fail a perfectly valid task as `context_not_persisted` — a fix
   * for a crash turned into an availability bug.
   */
- it('looks again in a fresh statement when the conflicting row was invisible',async()=>{
+ it('recovers the winning row on an INDEPENDENT session',async()=>{
   const pool=new PoolStub();
-  pool.replies=[[],[{context_id:'context#committed-by-the-other-writer'}]];
+  pool.replies=[[]];                                             // the insert deduplicated away
+  pool.freshSessionRows=[{context_id:'context#committed-by-the-other-writer'}];
   const effective=await new JuliusContextPostgresRepository(pool as unknown as Pool).persist({projectId:'project',snapshot});
   expect(effective,'the row the other transaction committed').toBe('context#committed-by-the-other-writer');
-  expect(pool.statements.length,'a SECOND statement, so it takes a new snapshot').toBe(2);
-  expect(pool.statements[1]).not.toContain('INSERT');
+  expect(pool.connects,'the recovery took its own connection').toBe(1);
+  expect(pool.released,'and gave it back').toBe(1);
+  expect(pool.statements.length,'the recovery did NOT reuse the ambient session').toBe(1);
+ });
+
+ /**
+  * THE FAILURE CLASS ITSELF.
+  *
+  * If the caller wrapped this in `BEGIN ISOLATION LEVEL SERIALIZABLE` — the
+  * pattern `julius-event-postgres` and `julius-recovery-postgres` already use —
+  * the ambient session holds a snapshot taken before the winner committed and
+  * will never see it, however many statements are issued on it. The recovery
+  * must therefore not be issued there at all.
+  */
+ it('sees the winner even when the AMBIENT session is pinned to a stale snapshot',async()=>{
+  const pool=new PoolStub();
+  // Every read on the ambient session answers nothing, forever: a fixed
+  // snapshot taken before the winning transaction committed.
+  pool.rows=[];
+  pool.replies=null;
+  pool.freshSessionRows=[{context_id:'context#winner'}];
+  const effective=await new JuliusContextPostgresRepository(pool as unknown as Pool).persist({projectId:'project',snapshot});
+  expect(effective,'a stale ambient snapshot must not decide the answer').toBe('context#winner');
+  expect(pool.connects).toBe(1);
+ });
+
+ it('answers null rather than reusing a possibly-transactional handle',async()=>{
+  // No independent session can be had. Reusing the ambient one is the silent
+  // wrong answer this design exists to prevent, and unknown is not an id.
+  const pool=new PoolStub();
+  pool.rows=[];
+  pool.connectFails=true;
+  expect(await new JuliusContextPostgresRepository(pool as unknown as Pool).persist({projectId:'project',snapshot})).toBeNull();
+  expect(pool.statements.length,'it did not fall back to the ambient session').toBe(1);
  });
 
  it('answers null rather than naming a context it did not store',async()=>{
@@ -56,9 +118,11 @@ import{describe,expect,it}from'vitest';import type{Pool}from'pg';import{JuliusCo
   // not a reference, and the caller must fail closed rather than invent one.
   const pool=new PoolStub();
   pool.rows=[];
-  // Null only after the fresh look as well: still nothing means there is
-  // genuinely nothing, and failing closed is then honest rather than a race.
+  pool.freshSessionRows=[];
+  // Null only after an INDEPENDENT session has looked too: still nothing means
+  // there is genuinely nothing, and failing closed is then honest, not a race.
   expect(await new JuliusContextPostgresRepository(pool as unknown as Pool).persist({projectId:'wrong-project',snapshot})).toBeNull();
-  expect(pool.statements.length).toBe(2);
+  expect(pool.connects,'a fresh session was consulted before answering null').toBe(1);
+  expect(pool.released).toBe(1);
  });
 });
