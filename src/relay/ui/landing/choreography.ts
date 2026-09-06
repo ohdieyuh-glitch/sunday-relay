@@ -42,14 +42,14 @@ export const LANDING_SCENES: readonly LandingScene[] = Object.freeze([
   {
     id: 'signal',
     index: 0,
-    eyebrow: 'AQUALA TECHNOLOGIES',
-    headline: 'Signal, before software.',
-    body: 'Something is moving through the system.',
+    eyebrow: 'i.WONDER',
+    headline: 'Enter the World Where Ideas Become Real.',
+    body: 'A living, multiplayer world for building software with AI.',
   },
   {
     id: 'relay',
     index: 1,
-    eyebrow: 'SUNDAY RELAY',
+    eyebrow: 'RELAY’S WONDERLAND',
     headline: 'The runtime for Compound AI Agents.',
     body: 'Not a coding assistant. The control plane that decides when work is actually done.',
   },

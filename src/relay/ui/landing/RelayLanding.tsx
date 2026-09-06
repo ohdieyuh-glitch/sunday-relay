@@ -69,8 +69,8 @@ export function RelayLanding({
 
       <header className="rl3-brand">
         <span className="rl3-mark" aria-hidden="true" />
-        <span className="rl3-wordmark">SUNDAY RELAY</span>
-        <span className="rl3-label rl3-brand-sub">AQUALA TECHNOLOGIES</span>
+        <span className="rl3-wordmark">RELAY’S WONDERLAND</span>
+        <span className="rl3-label rl3-brand-sub">i.WONDER</span>
       </header>
 
       {/* Floating system chips, positioned by projecting world anchors. Depth

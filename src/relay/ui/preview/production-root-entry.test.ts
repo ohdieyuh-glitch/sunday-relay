@@ -31,7 +31,7 @@ const VITE = read('vite.config.mts');
 describe('the canonical application document', () => {
   it('is index.html, at the repository root', () => {
     expect(existsSync(join(ROOT, 'index.html'))).toBe(true);
-    expect(INDEX).toContain('<title>Sunday Relay</title>');
+    expect(INDEX).toContain('<title>Relay\u2019s Wonderland \u2014 i.Wonder</title>');
   });
 
   it('loads the Relay application entry module', () => {
