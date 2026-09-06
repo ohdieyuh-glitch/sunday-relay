@@ -239,16 +239,17 @@ is the code somebody approved, and they answer different questions:
 The first two read GitHub records alone. The third needs a record of what was
 accepted before, and where that record lives is the whole of this section.
 
-### Why the writer workflow is founder-controlled
+### 13.0 Why workflow files are founder-controlled at all
 
-`.github/workflows/julius-accept-main.yml` is the only thing that records an
-accepted-main checkpoint. It must be beyond the reach of the identity it
-polices, and it is, for a reason that is a fact about GitHub rather than a
-convention: **the coding worker cannot write workflow files at all.** A push
-touching `.github/workflows/**` from a GitHub App without the `workflows`
-permission is refused by the server, and `julius-worker[bot]` does not have that
-permission. It also cannot dispatch a workflow (`actions: read`), cannot upload
-an artifact by any REST route, and cannot delete one.
+Workflows are where this repository's security controls run: the writer that
+records an accepted-main checkpoint, and the paid-mission workflow that spends
+money. They must be beyond the reach of the identity they police, and they are,
+for a reason that is a fact about GitHub rather than a convention: **the coding
+worker cannot write workflow files at all.** A push touching
+`.github/workflows/**` from a GitHub App without the `workflows` permission is
+refused by the server, and `julius-worker[bot]` does not have that permission.
+It also cannot dispatch a workflow (`actions: read`), cannot upload an artifact
+by any REST route, and cannot delete one.
 
 `julius-worker[bot]` must never be granted `Workflows: Write`. It would hand the
 worker the ability to rewrite both this writer and the paid-mission workflow,
@@ -262,7 +263,7 @@ ordinary worker-authored pull request was rejected by the server:
   workflow `.github/workflows/julius-accept-main.yml` without `workflows` permission
 ```
 
-### Why the installation is a one-time trust-root bootstrap
+### 13.1 The one-time accepted-main trust-root bootstrap
 
 The writer cannot be introduced by the ordinary route, because the ordinary
 route requires a worker-authored pull request and the worker cannot author
@@ -273,12 +274,77 @@ This is a bootstrap in the strict sense: it is the step that establishes the
 trust root, and it cannot be performed by the mechanism it establishes.
 
 It happened once, in commit `1c8a63add32c685a4d1983691d4f98281199ac2a`, which
-touches that one file and nothing else. The content was published with its
-digest before installation and verified byte-for-byte afterwards
-(`sha256:8de58423dca8487f3ea9e1f093a7e1f976375797daf89d1dfbb4d12eded615b5`), so
-what landed is what was reviewed even though no pull request carried it.
+touches `.github/workflows/julius-accept-main.yml` and nothing else. That commit
+is the bootstrap; it is not a precedent for anything but itself, and later
+workflow changes are governed by 13.2 rather than by it.
 
-### Why `main` temporarily becomes unprovenanced
+The content was published with its digest before installation and verified
+byte-for-byte afterwards
+(`sha256:8de58423dca8487f3ea9e1f093a7e1f976375797daf89d1dfbb4d12eded615b5`), so
+what landed is what was reviewed even though no pull request carried it. That is
+the ceremony in 13.2 applied to its own first instance.
+
+### 13.2 Founder-controlled workflow administration
+
+The bootstrap above happened once. The *reason* it had to happen does not go
+away with it: the worker still cannot write `.github/workflows/**`, so every
+future change there — amending the accepted-main writer, wiring the live
+preflight into `julius-first-live-mission.yml`, anything else under that
+directory — must also be installed by the founder.
+
+This is a standing arrangement, not a repeated exception, and it exists for
+exactly one reason: **no other identity is structurally able to make the
+change.** It is permitted because it is unavoidable, and it is bounded by the
+ceremony below rather than by anyone's restraint.
+
+An earlier draft of this section said the exception was "exactly one file". That
+was wrong, and the way it was wrong is worth recording: it read as though only
+`julius-accept-main.yml` could ever be founder-installed, which is false, and it
+invited the opposite reading later — that a founder-authored commit is a normal
+tool once precedent exists. Neither is the rule. The bootstrap was one specific
+installation; workflow administration is a permanent, narrow, ceremonied power
+over one directory.
+
+#### The ceremony, required for every founder-installed workflow change
+
+Each step exists because skipping it turns "the founder had to install this"
+into "the founder installed something".
+
+1. **Identify the exact file or files** under `.github/workflows/**` beforehand.
+   A change of unstated scope is not reviewable.
+2. **Publish the final content** before installation, in full.
+3. **Publish its SHA-256 digest** before installation.
+4. **The founder installs exactly those bytes.** Nothing edited in passing, and
+   nothing else in the same commit.
+5. **Verify the digest after installation.** What landed must be what was
+   published, and the verification is recorded.
+6. **Expect `main` to become `unprovenanced`.** A founder-authored tip is not
+   the merge result of an approved worker candidate, and the gate will say so.
+7. **No paid or live execution while unprovenanced.** The block is the point;
+   it is never suspended to get a run through.
+8. **Open a fresh worker-authored restoration pull request** from that exact new
+   `main`. Not a rebase of something older — from the commit that landed.
+9. **Founder approves it at the exact head sha**, under the ordinary rules.
+10. **Merging restores provenance**, because the gate asks about the commit
+    `main` carries rather than about history.
+11. **This never applies to ordinary source code.** See below.
+12. **The worker is never granted `Workflows: Write`.** Granting it would make
+    every step above pointless, because the constraint the ceremony compensates
+    for would no longer exist.
+
+#### It never extends to ordinary source
+
+A founder-authored change to anything outside `.github/workflows/**` inherits
+none of this. The justification is structural impossibility, and it does not
+apply: the worker *can* write source, so a founder writing it instead is a
+choice, and the choice bypasses the reviewer model by making the author and the
+approver the same person. It would also leave `main` unprovenanced with no
+bootstrap and no ceremony to account for it.
+
+Source changes go through the worker and are approved by the founder at an exact
+sha. There is no version of this section that permits otherwise.
+
+### 13.3 Why `main` temporarily becomes unprovenanced
 
 `julius:main-provenance` requires the commit on `main` to be the merge result of
 a **worker-authored** pull request approved at an exact sha. A founder-authored
@@ -289,7 +355,7 @@ That is the gate working. It is not suppressed, not exempted, and not worked
 around. Live execution is correctly unavailable for as long as the condition
 holds.
 
-### Why a subsequent worker-authored PR restores it
+### 13.4 Why a subsequent worker-authored PR restores it
 
 The gate asks about the commit `main` currently carries, not about history. Once
 an ordinary worker-authored, exact-sha-approved pull request merges, the tip is
@@ -302,18 +368,7 @@ checkpoint for a commit that is not `provenant`. Recording one for an unreviewed
 commit would launder it into the trusted history and make it the floor every
 later run compares against.
 
-### This exception is exactly one file
-
-It permits a founder to install and amend `.github/workflows/**`, because no
-other identity can. It permits nothing else.
-
-A founder-authored change to ordinary source does **not** inherit this
-exception. It bypasses the reviewer model — the author and the approver become
-the same person — and it leaves `main` unprovenanced until a worker-authored
-approved pull request lands. Source changes go through the worker and are
-approved by the founder at an exact sha, without exception.
-
-### Checkpoint retention and renewal
+### 13.5 Checkpoint retention and renewal
 
 Checkpoints are Actions artifacts, and artifacts expire. Ninety days is the
 ceiling this plan allows, so retention cannot be raised to avoid the problem.
@@ -330,7 +385,7 @@ Any dispatch renews, because each records a fresh checkpoint, and older ones
 ageing out costs nothing while a live one remains. A lapse needs no exception to
 recover from: dispatch once at the current `main`.
 
-### Recovering from an intentional rollback
+### 13.6 Recovering from an intentional rollback
 
 1. Move `main` to the intended commit.
 2. Delete the `julius-accepted-main-<sha>` artifacts no longer contained in it.
