@@ -45,6 +45,15 @@
  * branch. `indeterminate` is everything unreadable, contradictory or moving.
  * Both block. Unknown is never converted into success.
  *
+ * WHERE THIS MUST SIT IN THE EVENTUAL WORKFLOW (recorded, not implemented here).
+ *
+ * Immediately after the trusted-verifier checkout and its Node setup, and BEFORE
+ * any step that interprets candidate-controlled repository content — the mission
+ * contract, the input gate, the build. Trust in the branch, the commit, its
+ * provenance and its monotonicity has to be established before the candidate
+ * gets to say anything, or the checks are running downstream of the thing they
+ * are checking.
+ *
  * NO PROVIDER, EVER. This module reads GitHub and nothing else: no provider SDK,
  * no model, no network client beyond `gh`. It also writes nothing anywhere — no
  * dispatch, no marker, no status, no artifact. It is a question, not an action.
@@ -119,26 +128,48 @@ function readGate(report, name, expectedVerdict, frozenMainSha) {
  * @param {unknown} input.finalMainSha   `main`, re-read after both gates.
  */
 export function evaluateLivePreflight(input) {
-  const branch = typeof input?.branch === 'string' && input.branch !== '' ? input.branch : LIVE_BRANCH;
-  const expectedRef = `refs/heads/${branch}`;
-
-  const frozenMainSha = input?.frozenMainSha;
-  if (!isSha(frozenMainSha)) {
-    return verdict('indeterminate', `${branch} could not be read as a full commit sha`);
+  /**
+   * ONLY `main`, AND THE CALLER DOES NOT GET TO SAY WHICH BRANCH THAT IS.
+   *
+   * An earlier revision took the branch from the input and built the expected
+   * ref out of it, which made the pair self-consistent for ANY branch: pass
+   * `relay/anything` with `refs/heads/relay/anything` and the relationship
+   * holds. The constants existed and enforced nothing.
+   *
+   * Both halves are now checked against the constants independently. The branch
+   * is still an explicit argument, because a workflow naming what it is asking
+   * about is auditable and a silent default is not — but naming it wrong is
+   * refused rather than honoured. A caller cannot make another branch legitimate
+   * by being consistent about it.
+   */
+  const branch = input?.branch;
+  if (typeof branch !== 'string' || branch === '') {
+    return verdict('indeterminate', 'the branch this preflight was asked about could not be read');
+  }
+  if (branch !== LIVE_BRANCH) {
+    return verdict('blocked',
+      `a live mission may only run from ${LIVE_BRANCH}, and this preflight was asked about ${branch}`,
+      { ref: typeof input?.ref === 'string' ? input.ref : null });
   }
 
   /**
-   * THE REF IS CHECKED AS A WHOLE STRING, not as a suffix or a name.
+   * THE REF IS CHECKED AS A WHOLE STRING against the constant, not as a suffix,
+   * not as a name, and not against anything derived from the input.
    *
    * `refs/heads/main` is the branch; `refs/tags/main`, `refs/heads/mainline`
    * and a dispatch from any other branch are not, and one of them being a
    * plausible-looking near-miss is exactly why this compares the whole thing.
    */
   const ref = input?.ref;
-  if (typeof ref !== 'string' || ref !== expectedRef) {
+  if (typeof ref !== 'string' || ref !== LIVE_REF) {
     return verdict('blocked',
-      `this job runs for ${typeof ref === 'string' && ref !== '' ? ref : 'an unreadable ref'}, not ${expectedRef}`,
-      { frozenMainSha, ref: typeof ref === 'string' ? ref : null });
+      `this job runs for ${typeof ref === 'string' && ref !== '' ? ref : 'an unreadable ref'}, not ${LIVE_REF}`,
+      { ref: typeof ref === 'string' ? ref : null });
+  }
+
+  const frozenMainSha = input?.frozenMainSha;
+  if (!isSha(frozenMainSha)) {
+    return verdict('indeterminate', `${LIVE_BRANCH} could not be read as a full commit sha`, { ref });
   }
 
   /**
@@ -155,7 +186,7 @@ export function evaluateLivePreflight(input) {
   }
   if (workflowSha !== frozenMainSha) {
     return verdict('blocked',
-      `this job is running ${workflowSha}, which is not the ${branch} tip ${frozenMainSha} the gates describe`,
+      `this job is running ${workflowSha}, which is not the ${LIVE_BRANCH} tip ${frozenMainSha} the gates describe`,
       { frozenMainSha, workflowSha, ref });
   }
 
@@ -175,18 +206,18 @@ export function evaluateLivePreflight(input) {
    */
   const finalMainSha = input?.finalMainSha;
   if (!isSha(finalMainSha)) {
-    return verdict('indeterminate', `${branch} could not be re-read to prove it held still`,
+    return verdict('indeterminate', `${LIVE_BRANCH} could not be re-read to prove it held still`,
       { frozenMainSha, workflowSha, ref });
   }
   if (finalMainSha !== frozenMainSha) {
     return verdict('indeterminate',
-      `${branch} moved during the preflight: ${frozenMainSha} then ${finalMainSha}`,
+      `${LIVE_BRANCH} moved during the preflight: ${frozenMainSha} then ${finalMainSha}`,
       { frozenMainSha, workflowSha, ref, finalMainSha });
   }
 
   const accepted = input?.monotonicity?.accepted;
   return verdict('pass',
-    `${branch} ${frozenMainSha} is provenant and monotonic, and is the commit this job is running`,
+    `${LIVE_BRANCH} ${frozenMainSha} is provenant and monotonic, and is the commit this job is running`,
     {
       frozenMainSha,
       workflowSha,

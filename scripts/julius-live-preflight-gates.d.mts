@@ -42,7 +42,8 @@ export interface GateReport {
 
 export declare function evaluateLivePreflight(input: {
   readonly repository?: unknown;
-  readonly branch?: unknown;
+  /** Must be exactly `main`. Explicit so the caller's intent is auditable, and refused when wrong. */
+  readonly branch: unknown;
   readonly ref: unknown;
   readonly workflowSha: unknown;
   readonly frozenMainSha: unknown;

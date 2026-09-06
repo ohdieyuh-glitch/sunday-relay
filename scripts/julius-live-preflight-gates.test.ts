@@ -80,11 +80,40 @@ describe('live preflight', () => {
  * is not about to run.
  */
 describe('binding the job to what was verified', () => {
-  it('exactly refs/heads/main succeeds', () => {
-    expect(preflight({ ref: 'refs/heads/main' }).verdict).toBe('pass');
+  it('branch main with refs/heads/main is the only pair that passes', () => {
+    expect(preflight({ branch: 'main', ref: 'refs/heads/main' }).verdict).toBe('pass');
   });
 
-  it('another branch fails even when its commit is a perfectly valid one', () => {
+  it('a caller cannot legitimise another branch by being consistent about it', () => {
+    // THE BUG THIS REPLACED. An earlier revision built the expected ref out of
+    // the supplied branch, so any self-consistent pair satisfied it. Everything
+    // else here is perfect: the commit is the frozen tip, both gates pass on it,
+    // and main never moves. Only the branch is wrong, and that is enough.
+    const consistent = preflight({ branch: 'relay/anything', ref: 'refs/heads/relay/anything' });
+    expect(consistent.verdict).toBe('blocked');
+    expect(consistent.reason).toContain('may only run from main');
+  });
+
+  it('and cannot get there by naming main while running elsewhere, or the reverse', () => {
+    expect(preflight({ branch: 'relay/anything', ref: 'refs/heads/main' }).verdict).toBe('blocked');
+    expect(preflight({ branch: 'main', ref: 'refs/heads/relay/anything' }).verdict).toBe('blocked');
+  });
+
+  it('a branch that cannot be read fails closed', () => {
+    for (const branch of [undefined, null, '', 42, ['main'], { branch: 'main' }, true]) {
+      const result = preflight({ branch });
+      expect(result.verdict, String(branch)).toBe('indeterminate');
+      expect(result.reason).toContain('could not be read');
+    }
+  });
+
+  it('a branch that merely resembles main is not main', () => {
+    for (const branch of ['Main', 'MAIN', 'main ', ' main', 'mainline', 'refs/heads/main', 'origin/main']) {
+      expect(preflight({ branch }).verdict, branch).toBe('blocked');
+    }
+  });
+
+  it('another ref fails even when its commit is a perfectly valid one', () => {
     // The commit is the real `main` tip and both gates passed on it. The job
     // still runs for a ref a live mission may not run from.
     const elsewhere = preflight({ ref: 'refs/heads/relay/anything' });
@@ -230,6 +259,8 @@ describe('the frozen epoch', () => {
 
   it('every verdict other than pass blocks', () => {
     for (const result of [
+      preflight({ branch: 'relay/anything', ref: 'refs/heads/relay/anything' }),
+      preflight({ branch: undefined }),
       preflight({ ref: 'refs/heads/other' }),
       preflight({ workflowSha: OTHER }),
       preflight({ provenance: failing('unprovenanced') }),
@@ -321,6 +352,18 @@ describe('the helper is a question, not an action', () => {
     expect(source).not.toContain('dispatches');
     expect(source).not.toContain('upload-artifact');
     expect(source).not.toMatch(/\bstatuses\/\$\{/u);
+  });
+
+  it('compares the ref against the constant, never against caller input', () => {
+    // Behaviourally this is belt and braces: with the branch locked to `main`,
+    // `refs/heads/${branch}` and LIVE_REF are the same string, so a mutation
+    // that derives the ref changes nothing and no behavioural test can catch
+    // it. What it WOULD do is survive a later change that relaxes the branch
+    // lock, and quietly restore the bug this revision fixed — a self-consistent
+    // pair legitimising any branch. So the form is pinned here directly.
+    expect(source).toContain('ref !== LIVE_REF');
+    expect(source).not.toMatch(/refs\/heads\/\$\{branch\}/u);
+    expect(source).toContain('branch !== LIVE_BRANCH');
   });
 
   it('resolves the sibling gates beside itself, not from the working tree', () => {
