@@ -332,6 +332,25 @@ into "the founder installed something".
     every step above pointless, because the constraint the ceremony compensates
     for would no longer exist.
 
+#### Instances
+
+Every founder-installed workflow change is recorded here, so the ceremony leaves
+a trail that does not depend on anyone remembering it happened.
+
+| Commit | File | SHA-256 of the installed bytes |
+| --- | --- | --- |
+| `1c8a63add32c685a4d1983691d4f98281199ac2a` | `.github/workflows/julius-accept-main.yml` | `8de58423dca8487f3ea9e1f093a7e1f976375797daf89d1dfbb4d12eded615b5` |
+| `b7f5085012271c0f42ab8cb6fa8f85b4363792e8` | `.github/workflows/julius-first-live-mission.yml` | `2a5ad95fc4205f131817c3044610681ab8a7b3f500684c091b3fbe078912e045` |
+
+Each touches one file and nothing else, each digest was published before
+installation and verified after, and each was followed by a worker-authored
+restoration pull request that returned `main` to `provenant`.
+
+The second one added the repository trust gate: the live mission workflow now
+executes its trust checks from a separate checkout pinned to an already-accepted
+checkpoint, because code being judged must not grade itself. The pinned commit is
+a trust root, and it can only move through this ceremony.
+
 #### It never extends to ordinary source
 
 A founder-authored change to anything outside `.github/workflows/**` inherits
