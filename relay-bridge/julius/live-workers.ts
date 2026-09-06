@@ -119,6 +119,10 @@ function requireSnapshot(contexts: CompiledContextSource, contextId: string): Ju
 const packetText = (snapshot: JuliusContextSnapshot): string =>
   snapshot.packet.blocks.map((block) => block.text).join('');
 
+/** The mission context WITHOUT the findings Julius compiled for a repair. */
+const missionText = (snapshot: JuliusContextSnapshot): string =>
+  snapshot.packet.blocks.filter((block) => block.kind !== 'FINDING').map((block) => block.text).join('');
+
 const nowIso = (): string => new Date().toISOString();
 
 /* ----------------------------------------------------- prompt architect */
@@ -404,6 +408,18 @@ export function createLiveHostedCodingAdapter(input: {
       const limits: HostedLimits = dispatch.allocation === undefined
         ? DEFAULT_HOSTED_LIMITS
         : hostedLimitsForAllocation(dispatch.allocation.usdMicros);
+      /**
+       * AN ALLOCATION BELOW ONE CENT BUYS NOTHING AND STILL BILLS.
+       *
+       * The envelope speaks whole cents, so anything under 10,000 micro-dollars
+       * floors to a 0¢ ceiling — and a runtime told to stop at $0 still bills
+       * the turn it takes to notice. Refusing before the dispatch spends
+       * nothing and says exactly why the mission cannot continue.
+       */
+      if (dispatch.allocation !== undefined && limits.maxCostCents < 1) {
+        throw new JuliusDispatchError('WORKER_EXECUTION_FAILURE', false,
+          'The remaining mission budget is below one cent; the hosted Coding Agent was not dispatched.', 'coder_allocation_below_one_cent');
+      }
       const outcome: HostedRunOutcome = await run({
         queryFn,
         prompt: [
@@ -433,7 +449,10 @@ export function createLiveHostedCodingAdapter(input: {
          */
         const observed = 'observation' in outcome ? outcome.observation : null;
         const coderDiagnostics: Record<string, unknown> = {
-          stage: 'build',
+          // THE ROUND THAT SPENT THE MONEY. Fixing this to 'build' made a
+          // repair round's cost refusal indistinguishable from the first
+          // build's in the very artifact that exists to tell them apart.
+          stage: dispatch.taskType === 'repair:build' ? 'repair:build' : 'build',
           transport: 'hosted',
           provider: 'anthropic',
           requestedModel: input.requestedModel,
@@ -583,22 +602,36 @@ export function createLiveHermesReviewerAdapter(input: {
         // rather than completing falsely. (Independent review finding F1.)
         throw new JuliusDispatchError('INVALID_REQUEST', false, 'The architect plan artifact is not available to this process; an independent review of nothing is refused.', 'reviewer_plan_absent');
       }
-      if (charge.subject === 'IMPLEMENTATION' && diffArtifact === null) {
-        // A build review with no implementation to judge is not a review that
-        // can pass; it is the plan review's mistake in the other direction.
+      // AN EMPTY DIFF IS NO DIFF. The exchange stores whatever `git diff`
+      // printed, so a coder that edited nothing leaves an empty string — which
+      // is not an implementation, and a review of it is the plan review's
+      // mistake in the other direction.
+      if (charge.subject === 'IMPLEMENTATION' && (diffArtifact === null || diffArtifact.trim() === '')) {
         throw new JuliusDispatchError('INVALID_REQUEST', false, 'No workspace diff artifact is available to this process; an implementation review of nothing is refused.', 'reviewer_implementation_absent');
       }
-      // The findings Julius compiled into this context, for a repair re-review.
+      /**
+       * The findings Julius compiled into this context, for a repair review.
+       *
+       * NOT REQUIRED, AND THE FIRST VERSION REFUSED WITHOUT THEM. Julius admits
+       * a repair round on the subject's own FAILED evidence as well as on a
+       * reviewer finding (`verifyTask` → EVIDENCE_FAILED), and such a round has
+       * no findings by construction. Refusing there would have failed a run
+       * that was repairing exactly as designed — a defect this change would
+       * have introduced. When findings exist the reviewer must judge their
+       * resolution; when none do, it judges the repaired work and its evidence.
+       */
       const priorFindings = snapshot.packet.blocks.filter((block) => block.kind === 'FINDING').map((block) => block.text);
-      if (charge.repair && priorFindings.length === 0) {
-        throw new JuliusDispatchError('INVALID_REQUEST', false, 'A repair review was dispatched with no prior findings in its context; resolution of nothing cannot be judged.', 'reviewer_prior_findings_absent');
-      }
       const unifiedDiff = diffArtifact ?? '';
       const packet: ReviewPacket = {
         stage,
         charge,
         missionId: snapshot.packet.missionId,
-        originalRequest: safeClaim(packetText(snapshot), 8_000),
+        // THE FINDINGS ARE NOT THE FOUNDER'S REQUEST. `packetText` joins every
+        // block, so the FINDING entries Julius compiled for a repair review
+        // would appear under "FOUNDER'S ORIGINAL REQUEST" as well as under the
+        // prior-findings heading, and a reviewer asked whether the plan is
+        // faithful to the request would be reading findings as the request.
+        originalRequest: safeClaim(missionText(snapshot), 8_000),
         handoffJson: planArtifact,
         acceptanceCriteria: [...snapshot.acceptanceCriterionIds],
         priorFindings,

@@ -87,6 +87,18 @@ describe('a REPAIR review', () => {
     expect(prompt, 'a plan repair is still a plan review').not.toContain('UNIFIED DIFF:');
   });
 
+  it('says so plainly when the round was admitted by failed evidence and has no findings', () => {
+    // Julius admits a repair on the subject's own FAILED evidence too, and
+    // such a round carries none. The reviewer is told that, not left to read
+    // an empty list as "nothing was wrong".
+    const prompt = buildReviewPrompt({
+      ...base, stage: 'repair:build', charge: reviewChargeFor('repair:build'),
+      unifiedDiff: '--- a\n+++ b/x.js', testOutput: 'ok',
+    });
+    expect(prompt).toContain('none recorded: this repair was admitted by failed evidence');
+    expect(prompt).toMatch(/judge the repaired work and its evidence/);
+  });
+
   it('a repair build review keeps the diff and adds the findings', () => {
     const prompt = buildReviewPrompt({
       ...base, stage: 'repair:build', charge: reviewChargeFor('repair:build'),

@@ -237,12 +237,22 @@ export function createRunSpendBudget(ceilingUsdMicros: number): JuliusBudgetPort
     async commit(input) {
       const row = held.get(input.reservationId);
       if (row === undefined || row.state !== 'RESERVED') return;
-      held.set(input.reservationId, { usdMicros: input.usdMicros, state: 'COMMITTED' });
+      // UNKNOWN SETTLES AT WHAT IT RESERVED. `null` is "the boundary reported
+      // no cost", and freeing the hold on that would hand the rest of the
+      // mission money this dispatch may already have spent.
+      held.set(input.reservationId, { usdMicros: input.usdMicros ?? row.usdMicros, state: 'COMMITTED' });
     },
     async release(input) {
       const row = held.get(input.reservationId);
       if (row === undefined || row.state !== 'RESERVED') return;
-      held.set(input.reservationId, { usdMicros: 0, state: 'RELEASED' });
+      // SPENT MONEY IS CHARGED, NOT RELEASED. A failed attempt that billed
+      // before it failed settles at what it billed; only an attempt that spent
+      // nothing hands its whole hold back.
+      const spent = typeof input.usdMicros === 'number' && Number.isFinite(input.usdMicros) && input.usdMicros > 0
+        ? Math.min(input.usdMicros, row.usdMicros) : 0;
+      held.set(input.reservationId, spent > 0
+        ? { usdMicros: spent, state: 'COMMITTED' }
+        : { usdMicros: 0, state: 'RELEASED' });
     },
     // What an allocation may be derived from: the ceiling minus everything
     // held or spent. This ledger can always answer, so it never says null.

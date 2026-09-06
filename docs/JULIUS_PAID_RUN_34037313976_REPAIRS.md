@@ -139,3 +139,66 @@ Properties held by construction and by test:
 
 This policy becomes canonical only when the founder approves the exact head of
 the PR that carries it. No paid run is authorized by this document.
+
+## What the adversarial review changed
+
+Six provider-free review agents read this change before it merged. Four
+completed and raised nineteen findings; these are the ones that were real, and
+what was done about them. Three would have failed a live run.
+
+- **A repair admitted by FAILED evidence has no findings**, because
+  `verifyTask` returns REPAIR whenever the subject's evidence failed, whether
+  or not a reviewer wrote anything. The first version of the reviewer adapter
+  refused such a review (`reviewer_prior_findings_absent`), which would have
+  failed a run that was repairing exactly as designed. The refusal is gone; the
+  prompt says the round was admitted by failed evidence, and the reviewer
+  judges the repaired work and its evidence. `requires` no longer lists prior
+  findings, because they are not required.
+- **Unknown cost settled a reservation at zero.** A runtime that reports no
+  cost is Unknown, not free, and freeing the whole hold handed the rest of the
+  mission money the dispatch may already have spent. `commit` now takes
+  `usdMicros: number | null`, and `null` settles at what was reserved.
+- **A failed attempt's spend was released, not charged.** A hosted run that
+  timed out after billing $4.90 returned its whole $5 hold, and the retry was
+  granted the same $5 again. `release` now carries what the boundary reported
+  billing, and money already spent is committed rather than freed.
+- **A replayed decision would have minted a second repair round**, since
+  `repairRoundsBefore` counts the existing child and the replay computes the
+  next round under a fresh id. The write that records a decision is now the one
+  that schedules its repair.
+- **A truncated context dropped the findings first**, because they are compiled
+  after the Project Brain and the compiler stops at the first entry that
+  overflows. The brain stays first (a revision that loses the objective is the
+  worse failure) and a repair whose findings did not fit is refused with
+  `repair_context_findings_dropped` rather than dispatched blind.
+- **Acceptance liveness counted any child.** A succeeded sub-agent could mask a
+  review that failed for good, leaving a dependent waiting forever. Only a
+  reviewer child decides an undecided task, and only a repair of the planner's
+  own shape keeps a REPAIR live.
+- Smaller: an allocation under one cent is refused before the runtime is
+  reached (a $0 ceiling still bills the turn that notices); an empty diff is no
+  implementation; the compiled findings no longer appear inside the reviewer's
+  "founder's original request"; a repair round's cost refusal is recorded as
+  `repair:build` rather than as the first build; the packet type makes a stage
+  without its charge unrepresentable; every halt names its cause in the ledger;
+  and the evidence bundle gains `budget.tsv` (what each dispatch was allowed to
+  spend, and what it settled).
+
+## Known limits, stated rather than hidden
+
+- **A crash between accepting a worker result and writing its decision leaves
+  the run stalled.** The task is SUCCEEDED with no decision, nothing
+  re-verifies it, and its dependents are never released; the drive loop ends
+  and reports the stall. Before this change the dependent would have run
+  anyway, which is the defect being fixed, so failing closed is the correct
+  direction. Recovery re-verification of a decided-nothing task is recorded
+  debt, not built here.
+- **The allocation policy and the spend ledger are process-scoped**, as the run
+  budget already was: one contract, one process, one mission. A second run
+  claimed by the same process would be allocated from this mission's contract.
+  Pre-existing shape, unchanged by this work, recorded in
+  `docs/JULIUS_BETA_READINESS.md` alongside the durable-ledger debt.
+- **Repair rows written before this change are not lineage members** (they
+  carry `CODING_AGENT` on a plan repair, or a doubled `repair:repair:` type).
+  No such rows exist: a live mission's database is created and destroyed with
+  its CI job.

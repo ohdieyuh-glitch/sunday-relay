@@ -2107,14 +2107,35 @@ describe('DEFECT 2 — the live reviewer adapter reviews the stage it was dispat
     expect(Object.keys(result).sort()).toEqual(['evidence', 'providerId', 'safeSummary', 'status', 'usage', 'workerId']);
   });
 
-  it('a BUILD review is refused when no implementation exists to judge', async () => {
+  it('a BUILD review is refused when no implementation exists to judge, and an EMPTY diff is no implementation', async () => {
     const artifacts = createLiveArtifactExchange();
     artifacts.put(planRef('run-live'), JSON.stringify(VALID_PLAN));
     const log: FakeLog = { order: [] };
     const adapter = reviewerAdapterFor({ taskId: 'build-1:review', artifacts, packets: [], log });
     await expect(adapter.dispatch({ taskId: 'build-1:review', contextId: 'ctx-resume-1', taskType: 'review:build' }))
       .rejects.toMatchObject({ code: 'INVALID_REQUEST', failureClass: 'reviewer_implementation_absent' });
+    // The exchange stores whatever `git diff` printed, so a coder that edited
+    // nothing leaves an empty string — which is not an implementation either.
+    artifacts.put(diffRef('run-live'), '');
+    await expect(adapter.dispatch({ taskId: 'build-1:review', contextId: 'ctx-resume-1', taskType: 'review:build' }))
+      .rejects.toMatchObject({ code: 'INVALID_REQUEST', failureClass: 'reviewer_implementation_absent' });
     expect(log.order).toEqual([]);
+  });
+
+  it('the findings are the findings, not the founder\'s request: they are not repeated into the request block', async () => {
+    const artifacts = createLiveArtifactExchange();
+    artifacts.put(planRef('run-live'), JSON.stringify(VALID_PLAN));
+    artifacts.put(diffRef('run-live'), DIFF_TEXT);
+    const packets: ReviewPacket[] = [];
+    const adapter = reviewerAdapterFor({
+      taskId: 'repair:build-1:1:task:review', artifacts, packets, log: { order: [] },
+      snapshot: repairReviewSnapshot('repair:build-1:1:task:review'),
+    });
+    await adapter.dispatch({ taskId: 'repair:build-1:1:task:review', contextId: 'ctx-resume-1', taskType: 'review:repair:build' });
+    expect(packets[0]!.priorFindings).toEqual(['REVIEW FINDING f-1 [HIGH]: no verification strategy']);
+    expect(packets[0]!.originalRequest, 'the request is the mission, not the verdict on it')
+      .not.toContain('REVIEW FINDING');
+    expect(packets[0]!.originalRequest).toContain('OBJECTIVE: resume test');
   });
 
   it('a BUILD review carries the diff and the implementation charge', async () => {
@@ -2129,15 +2150,24 @@ describe('DEFECT 2 — the live reviewer adapter reviews the stage it was dispat
     expect(packets[0]!.unifiedDiff).toBe(DIFF_TEXT);
   });
 
-  it('a REPAIR review requires the prior findings in its context, and carries them', async () => {
+  it('a REPAIR review carries the prior findings, and proceeds without them when the round was admitted by failed evidence', async () => {
     const artifacts = createLiveArtifactExchange();
     artifacts.put(planRef('run-live'), JSON.stringify(VALID_PLAN));
     artifacts.put(diffRef('run-live'), DIFF_TEXT);
     const log: FakeLog = { order: [] };
-    const bare = reviewerAdapterFor({ taskId: 'repair:build-1:1:task:review', artifacts, packets: [], log });
-    await expect(bare.dispatch({ taskId: 'repair:build-1:1:task:review', contextId: 'ctx-resume-1', taskType: 'review:repair:build' }))
-      .rejects.toMatchObject({ code: 'INVALID_REQUEST', failureClass: 'reviewer_prior_findings_absent' });
-    expect(log.order).toEqual([]);
+    /**
+     * NOT A REFUSAL. Julius admits a repair round on the subject's own FAILED
+     * evidence as well as on a reviewer finding, and such a round has no
+     * findings by construction — an earlier version of this adapter refused
+     * there, which would have failed a run that was repairing exactly as
+     * designed.
+     */
+    const bare: ReviewPacket[] = [];
+    const evidenceAdmitted = reviewerAdapterFor({ taskId: 'repair:build-1:1:task:review', artifacts, packets: bare, log });
+    const outcome = await evidenceAdmitted.dispatch({ taskId: 'repair:build-1:1:task:review', contextId: 'ctx-resume-1', taskType: 'review:repair:build' });
+    expect(outcome.status).toBe('SUCCEEDED');
+    expect(bare[0]!.stage).toBe('repair:build');
+    expect(bare[0]!.priorFindings).toEqual([]);
     const packets: ReviewPacket[] = [];
     const informed = reviewerAdapterFor({
       taskId: 'repair:build-1:1:task:review', artifacts, packets, log, snapshot: repairReviewSnapshot('repair:build-1:1:task:review'),
@@ -2204,6 +2234,21 @@ describe('DEFECT 1 — the live coder adapter is limited to what Julius allocate
     expect((granted.usage as { usdMicros: number }).usdMicros).toBe(900_000);
     await adapter.dispatch({ taskId: 'build-1', contextId: 'ctx-resume-1', taskType: 'build' });
     expect(runs[1]!.limits).toBe(DEFAULT_HOSTED_LIMITS);
+  });
+
+  it('an allocation below one cent is refused BEFORE the runtime is reached, because a $0 ceiling still bills a turn', async () => {
+    const runs: HostedRunInput[] = [];
+    const adapter = coderAdapter({ runs });
+    await expect(adapter.dispatch({ taskId: 'build-1', contextId: 'ctx-resume-1', taskType: 'build', allocation: { usdMicros: 6_000, policyVersion: 'julius-allocation.v1', basis: 'CODER_REMAINDER' } }))
+      .rejects.toMatchObject({ code: 'WORKER_EXECUTION_FAILURE', failureClass: 'coder_allocation_below_one_cent' });
+    expect(runs, 'no hosted run was started').toEqual([]);
+  });
+
+  it('names the round that spent the money: a repair refusal is not recorded as the first build', async () => {
+    const runs: HostedRunInput[] = [];
+    const adapter = coderAdapter({ runs, cost: 5.25, refuse: true });
+    await expect(adapter.dispatch({ taskId: 'repair:build-1:1:task', contextId: 'ctx-resume-1', taskType: 'repair:build', allocation: { usdMicros: 5_000_000, policyVersion: 'julius-allocation.v1', basis: 'CODER_SHARE' } }))
+      .rejects.toMatchObject({ diagnostics: expect.objectContaining({ stage: 'repair:build' }) });
   });
 
   it('a cost refusal carries the money beside it: observed, ceiling and source', async () => {

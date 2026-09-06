@@ -88,12 +88,22 @@ export function createMemoryBudget(ceilingUsdMicros: number): MemoryBudget {
     async commit(input) {
       const row = held.get(input.reservationId);
       if (row === undefined || row.state !== 'RESERVED') return;
-      held.set(input.reservationId, { usdMicros: input.usdMicros, state: 'COMMITTED' });
+      // UNKNOWN SETTLES AT WHAT IT RESERVED. `null` is "the boundary reported
+      // no cost", and freeing the hold on that would hand the rest of the
+      // mission money this dispatch may already have spent.
+      held.set(input.reservationId, { usdMicros: input.usdMicros ?? row.usdMicros, state: 'COMMITTED' });
     },
     async release(input) {
       const row = held.get(input.reservationId);
       if (row === undefined || row.state !== 'RESERVED') return;
-      held.set(input.reservationId, { usdMicros: 0, state: 'RELEASED' });
+      // SPENT MONEY IS CHARGED, NOT RELEASED. A failed attempt that billed
+      // before it failed settles at what it billed; only an attempt that spent
+      // nothing hands its whole hold back.
+      const spent = typeof input.usdMicros === 'number' && Number.isFinite(input.usdMicros) && input.usdMicros > 0
+        ? Math.min(input.usdMicros, row.usdMicros) : 0;
+      held.set(input.reservationId, spent > 0
+        ? { usdMicros: spent, state: 'COMMITTED' }
+        : { usdMicros: 0, state: 'RELEASED' });
     },
     async available() { return ceilingUsdMicros - outstanding(); },
     remainingUsdMicros() { return ceilingUsdMicros - outstanding(); },
@@ -120,8 +130,10 @@ export function worker(over: Partial<JuliusWorker> & Pick<JuliusWorker, 'workerI
 /* ------------------------------------------------------- scripted adapter */
 
 export type ScriptedOutcome =
-  | { readonly kind: 'succeed'; readonly evidence?: readonly Record<string, unknown>[]; readonly usdMicros?: number }
-  | { readonly kind: 'fail'; readonly code: 'RATE_LIMIT' | 'TIMEOUT' | 'AUTH_CONFIGURATION' | 'PROVIDER_UNAVAILABLE' | 'WORKER_EXECUTION_FAILURE' }
+  /** `usdMicros: null` reports NO cost — Unknown, which is not zero. */
+  | { readonly kind: 'succeed'; readonly evidence?: readonly Record<string, unknown>[]; readonly usdMicros?: number | null }
+  /** `costUsdMicros` is what the boundary billed before it failed, as its diagnostics would carry. */
+  | { readonly kind: 'fail'; readonly code: 'RATE_LIMIT' | 'TIMEOUT' | 'AUTH_CONFIGURATION' | 'PROVIDER_UNAVAILABLE' | 'WORKER_EXECUTION_FAILURE'; readonly costUsdMicros?: number }
   | { readonly kind: 'malformed' };
 
 export interface ScriptedAdapter extends JuliusProviderAdapter {
@@ -152,7 +164,10 @@ export function scriptedAdapter(
       const step = script[Math.min(index, script.length - 1)] ?? { kind: 'succeed' as const };
       index += 1;
       if (step.kind === 'fail') {
-        throw new JuliusDispatchError(step.code, step.code === 'RATE_LIMIT' || step.code === 'TIMEOUT', 'Scripted provider failure.');
+        throw new JuliusDispatchError(
+          step.code, step.code === 'RATE_LIMIT' || step.code === 'TIMEOUT', 'Scripted provider failure.', undefined,
+          step.costUsdMicros === undefined ? undefined : { costUsdMicros: step.costUsdMicros },
+        );
       }
       if (step.kind === 'malformed') {
         return { workerId: 'someone-else', providerId: target.providerId, status: 'SUCCEEDED', safeSummary: 'x', evidence: [], usage: {} };
@@ -161,7 +176,12 @@ export function scriptedAdapter(
         workerId: target.workerId, providerId: target.providerId, status: 'SUCCEEDED',
         safeSummary: `${target.role} completed ${input.taskId}.`,
         evidence: step.evidence ?? [{ type: 'TEST', status: 'PASSED', safeSummary: 'Suite passed.' }],
-        usage: { usdMicros: step.usdMicros ?? 1_000, inputTokens: 10, outputTokens: 10, toolCalls: 1, runtimeMs: 5 },
+        usage: {
+          // `null` omits the field entirely, which is how a worker reports a
+          // cost it does not know — never as a zero.
+          ...(step.usdMicros === null ? {} : { usdMicros: step.usdMicros ?? 1_000 }),
+          inputTokens: 10, outputTokens: 10, toolCalls: 1, runtimeMs: 5,
+        },
       };
       return result;
     },

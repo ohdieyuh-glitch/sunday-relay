@@ -415,6 +415,33 @@ export async function runClaimedTask(
       acceptanceCriterionIds: criteria.map((value) => value.criterionId),
     });
     /**
+     * A REPAIR THAT CANNOT SEE ITS FINDINGS IS NOT A REPAIR.
+     *
+     * `compileJuliusContext` stops at the first entry that would overflow the
+     * character budget, and the findings are appended after the Project Brain
+     * — so a large brain silently drops exactly the entries the repair exists
+     * to address, and `findingIds` would then record findings the worker was
+     * never shown. Refusing here keeps the durable claim true and costs a
+     * dispatch nobody could have acted on. The brain stays first because a
+     * revision that loses the mission objective is the worse failure.
+     */
+    const droppedFindings = priorFindings.filter((finding) =>
+      !snapshot.sourceEntryIds.includes(findingEntryFor(task, finding).entryId));
+    if (droppedFindings.length > 0) {
+      await ledger.event('task.failed', {
+        taskId: task.taskId,
+        facts: {
+          code: 'INVALID_REQUEST', errorRetryable: false, failureClass: 'repair_context_findings_dropped',
+          droppedFindings: droppedFindings.length, characterCount: snapshot.characterCount,
+        },
+      });
+      await deps.store.finishTask({
+        taskId: claim.taskId, owner: deps.owner, leaseGeneration: claim.leaseGeneration,
+        state: 'FAILED', now: deps.clock.now(),
+      });
+      return { kind: 'FAILED', taskId: claim.taskId, code: 'INVALID_REQUEST', failureClass: 'repair_context_findings_dropped' };
+    }
+    /**
      * THE STORE'S ID, NOT THE ONE WE MINTED.
      *
      * `persist` deduplicates on (task_id, worker_id, content_hash), so a RETRY
@@ -654,22 +681,37 @@ function executionPorts(
     commit: async ({ reservationId, result }) => {
       const usage = (result.usage ?? {}) as Record<string, unknown>;
       const number = (key: string): number => (typeof usage[key] === 'number' && Number.isFinite(usage[key] as number) ? usage[key] as number : 0);
+      /**
+       * UNKNOWN COST IS NOT ZERO COST, and it used to be. A worker that
+       * reports no `usdMicros` — the hosted runtime is allowed to, and Relay
+       * records that as Unknown rather than inventing a number — settled its
+       * reservation at $0 and handed the whole allocation back to the ledger,
+       * so the rest of the mission could be granted money this dispatch may
+       * already have spent. `null` tells the ledger to keep what it reserved.
+       */
+      const usdMicros = typeof usage.usdMicros === 'number' && Number.isFinite(usage.usdMicros) ? usage.usdMicros : null;
       await deps.budget.commit({
-        reservationId, usdMicros: number('usdMicros'), inputTokens: number('inputTokens'),
+        reservationId, usdMicros, inputTokens: number('inputTokens'),
         outputTokens: number('outputTokens'), toolCalls: number('toolCalls'), runtimeMs: number('runtimeMs'),
         receiptId: typeof usage.receiptId === 'string' ? usage.receiptId : null, now: deps.clock.now(),
       });
       // The coordinator emits `budget.reserved` and `budget.denied` and has no
       // event for the settlement, so the amount actually spent had no
       // authoritative record. It does now, and it is the OBSERVED usage rather
-      // than the estimate that was reserved.
+      // than the estimate that was reserved — or `null`, which says the
+      // boundary reported none rather than claiming it cost nothing.
       await ledger.event('budget.settled', {
         taskId: null,
-        facts: { reservationId, usdMicros: number('usdMicros'), inputTokens: number('inputTokens'), outputTokens: number('outputTokens') },
+        facts: { reservationId, usdMicros, inputTokens: number('inputTokens'), outputTokens: number('outputTokens') },
       });
     },
-    release: async ({ reservationId, reason }) => {
-      await deps.budget.release({ reservationId, reason, now: deps.clock.now() });
+    release: async ({ reservationId, reason, usdMicros }) => {
+      await deps.budget.release({ reservationId, reason, now: deps.clock.now(), usdMicros: usdMicros ?? null });
+      // A failed attempt that billed before it failed is a settlement, not a
+      // hand-back, and the record has to be able to say so.
+      if (typeof usdMicros === 'number' && usdMicros > 0) {
+        await ledger.event('budget.settled', { taskId: null, facts: { reservationId, usdMicros, reason } });
+      }
     },
     persistEvidence: async ({ claim, evidence }) => {
       for (const item of evidence) {
@@ -898,6 +940,18 @@ async function verifyExecutedTask(input: {
   });
 
   if (decision.action === 'REPAIR') {
+    /**
+     * ONE DECISION, ONE ROUND. `appendDecision` is idempotent by key, and a
+     * replayed verification that skipped this guard would mint a SECOND repair
+     * task beside the first — `repairRoundsBefore` counts the existing child,
+     * so the replay computes the next round and creates it under a fresh id —
+     * spending a round of the bound and a paid dispatch on work already
+     * scheduled. The write that recorded the decision is the one that schedules
+     * its repair.
+     */
+    if (!decisionRecorded) {
+      return { kind: 'COMPLETED', taskId: task.taskId, workerId: input.workerId, duplicate: true, decision };
+    }
     // The repair is planned for the SUBJECT — the work — never for the review.
     return scheduleRepair({
       ...input, task: subject, decision, tasks,
@@ -983,6 +1037,7 @@ async function scheduleRepair(input: {
   const admission = await allocateFor({ deps, run, role: task.role, estimateUsdMicros: estimate.usdMicros });
   if (admission?.basis === 'EXHAUSTED') {
     await ledger.event('budget.denied', { taskId: task.taskId, facts: { reason: 'BUDGET_EXHAUSTED', forRepairRound: priorRounds + 1, ...allocationFacts(admission) } });
+    await ledger.event('run.failed', { taskId: task.taskId, facts: { reasonCode: 'REPAIR_BUDGET_DENIED', forRepairRound: priorRounds + 1 } });
     return { kind: 'HALTED', taskId: task.taskId, reasonCode: 'REPAIR_BUDGET_DENIED', safeSummary: 'A repair round was required and the mission budget is exhausted.' };
   }
   const reservation = await deps.budget.reserve({
@@ -992,6 +1047,7 @@ async function scheduleRepair(input: {
   });
   if (reservation.state === 'DENIED') {
     await ledger.event('budget.denied', { taskId: task.taskId, facts: { reason: reservation.denialReason, forRepairRound: priorRounds + 1 } });
+    await ledger.event('run.failed', { taskId: task.taskId, facts: { reasonCode: 'REPAIR_BUDGET_DENIED', forRepairRound: priorRounds + 1 } });
     return { kind: 'HALTED', taskId: task.taskId, reasonCode: 'REPAIR_BUDGET_DENIED', safeSummary: 'A repair round was required and the budget did not permit it.' };
   }
 

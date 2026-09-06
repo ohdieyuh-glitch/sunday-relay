@@ -132,3 +132,51 @@ describe('allocations against a real reservation ledger', () => {
     expect(reservation.state).toBe('DENIED');
   });
 });
+
+describe('the ledger charges what was spent and never frees what it cannot account for', () => {
+  const now = '2026-09-06T00:00:00.000Z';
+  const reserve = (budget: ReturnType<typeof createMemoryBudget>, id: string, usdMicros: number) =>
+    budget.reserve({ reservationId: id, runId: 'run', projectId: 'prj', taskId: id, usdMicros, inputTokens: 0, outputTokens: 0, toolCalls: 0, runtimeMs: 0, now });
+
+  it('UNKNOWN cost settles at what was reserved, so the rest of the mission is not handed money already spent', async () => {
+    const budget = createMemoryBudget(20 * USD);
+    await reserve(budget, 'build', 5 * USD);
+    // The runtime answered without a cost. Unknown is not zero.
+    await budget.commit({ reservationId: 'build', usdMicros: null, inputTokens: 0, outputTokens: 0, toolCalls: 0, runtimeMs: 0, receiptId: null, now });
+    expect(budget.remainingUsdMicros(), 'the hold stands').toBe(15 * USD);
+    expect(budget.reservations()).toContainEqual({ reservationId: 'build', state: 'COMMITTED', usdMicros: 5 * USD });
+  });
+
+  it('a KNOWN cost settles at what it actually cost, freeing the difference', async () => {
+    const budget = createMemoryBudget(20 * USD);
+    await reserve(budget, 'build', 5 * USD);
+    await budget.commit({ reservationId: 'build', usdMicros: 250_000, inputTokens: 0, outputTokens: 0, toolCalls: 0, runtimeMs: 0, receiptId: null, now });
+    expect(budget.remainingUsdMicros()).toBe(20 * USD - 250_000);
+  });
+
+  it('a failed attempt that BILLED before it failed is charged, not released, so a retry cannot be granted that money twice', async () => {
+    const budget = createMemoryBudget(20 * USD);
+    await reserve(budget, 'build:1', 5 * USD);
+    await budget.release({ reservationId: 'build:1', reason: 'TIMEOUT', now, usdMicros: 4_900_000 });
+    expect(budget.reservations()).toContainEqual({ reservationId: 'build:1', state: 'COMMITTED', usdMicros: 4_900_000 });
+    expect(budget.remainingUsdMicros()).toBe(20 * USD - 4_900_000);
+    // And the retry is allocated against what is actually left.
+    expect(evaluateJuliusAllocation({ policy: MISSION_2, role: 'CODING_AGENT', remainingUsdMicros: budget.remainingUsdMicros(), estimateUsdMicros: ESTIMATE }))
+      .toMatchObject({ usdMicros: 5 * USD, basis: 'CODER_SHARE' });
+  });
+
+  it('a failed attempt that billed NOTHING hands its whole hold back', async () => {
+    const budget = createMemoryBudget(20 * USD);
+    await reserve(budget, 'build:1', 5 * USD);
+    await budget.release({ reservationId: 'build:1', reason: 'AUTH_CONFIGURATION', now, usdMicros: null });
+    expect(budget.remainingUsdMicros()).toBe(20 * USD);
+    expect(budget.reservations()).toContainEqual({ reservationId: 'build:1', state: 'RELEASED', usdMicros: 0 });
+  });
+
+  it('a reported cost above the hold is charged at the hold: the ledger never invents money it did not authorize', async () => {
+    const budget = createMemoryBudget(20 * USD);
+    await reserve(budget, 'build:1', 5 * USD);
+    await budget.release({ reservationId: 'build:1', reason: 'TIMEOUT', now, usdMicros: 9 * USD });
+    expect(budget.reservations()).toContainEqual({ reservationId: 'build:1', state: 'COMMITTED', usdMicros: 5 * USD });
+  });
+});

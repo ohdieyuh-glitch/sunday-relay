@@ -21,7 +21,15 @@ export function reviewStageOf(taskType: string): JuliusReviewStage | null {
   return (JULIUS_REVIEW_STAGES as readonly string[]).includes(reviewed) ? reviewed as JuliusReviewStage : null;
 }
 
-export type JuliusReviewRequirement = 'plan' | 'diff' | 'testOutput' | 'priorFindings';
+/**
+ * An input a review of this stage cannot proceed without. Only what is
+ * genuinely REQUIRED is listed: a repair review does not require prior
+ * findings, because Julius admits a repair round on failed evidence as well as
+ * on a reviewer finding, and such a round has none by construction. Test
+ * output is shown when it exists and its sufficiency is the reviewer's own
+ * question, not a precondition of asking it.
+ */
+export type JuliusReviewRequirement = 'plan' | 'diff';
 
 export interface JuliusReviewCharge {
   readonly stage: JuliusReviewStage;
@@ -72,16 +80,16 @@ const CHARGES: Readonly<Record<JuliusReviewStage, JuliusReviewCharge>> = Object.
   'repair:plan': Object.freeze({
     stage: 'repair:plan', subject: 'PLAN', repair: true,
     judges: Object.freeze([...PLAN_JUDGES, RESOLUTION_JUDGE]), mustNotDemand: PLAN_MUST_NOT_DEMAND,
-    requires: Object.freeze<JuliusReviewRequirement[]>(['plan', 'priorFindings']),
+    requires: Object.freeze<JuliusReviewRequirement[]>(['plan']),
   }),
   'build': Object.freeze({
     stage: 'build', subject: 'IMPLEMENTATION', repair: false,
-    judges: BUILD_JUDGES, mustNotDemand: Object.freeze<string[]>([]), requires: Object.freeze<JuliusReviewRequirement[]>(['plan', 'diff', 'testOutput']),
+    judges: BUILD_JUDGES, mustNotDemand: Object.freeze<string[]>([]), requires: Object.freeze<JuliusReviewRequirement[]>(['plan', 'diff']),
   }),
   'repair:build': Object.freeze({
     stage: 'repair:build', subject: 'IMPLEMENTATION', repair: true,
     judges: Object.freeze([...BUILD_JUDGES, RESOLUTION_JUDGE]), mustNotDemand: Object.freeze<string[]>([]),
-    requires: Object.freeze<JuliusReviewRequirement[]>(['plan', 'diff', 'testOutput', 'priorFindings']),
+    requires: Object.freeze<JuliusReviewRequirement[]>(['plan', 'diff']),
   }),
 });
 

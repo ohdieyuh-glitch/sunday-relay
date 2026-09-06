@@ -550,16 +550,26 @@ export function hermesPreflight(
   };
 }
 
-export interface ReviewPacket {
+/** A review Julius dispatched: the stage and its charge, always together. */
+export type ReviewPacket = ReviewPacketFields | (Omit<ReviewPacketFields, 'stage' | 'charge'> & {
+  readonly stage: JuliusReviewStage;
+  readonly charge: JuliusReviewCharge;
+});
+
+interface ReviewPacketFields {
   /**
-   * WHICH STAGE THIS REVIEW IS, as Julius dispatched it. Absent means an
-   * implementation review — the only kind the older harness callers build —
-   * so nothing they send changes meaning. `charge` is the domain's statement
-   * of what the stage judges and what it must not demand; a caller that sets
-   * a stage and no charge gets the domain's charge for that stage.
+   * WHICH STAGE THIS REVIEW IS, as Julius dispatched it, and what that stage
+   * charges the reviewer with. THE TWO TRAVEL TOGETHER OR NOT AT ALL: this
+   * module may not import the domain (an adapter cannot own mission verdicts),
+   * so it cannot look a charge up from a stage, and a packet carrying a stage
+   * without its charge would announce "PLAN REVIEW" over an implementation
+   * rubric — the paid run's own defect, reintroduced. The union below makes
+   * that unrepresentable. Neither field means an implementation review, which
+   * is the only kind the older reviewer harness builds, so nothing it sends
+   * changes meaning.
    */
-  stage?: JuliusReviewStage;
-  charge?: JuliusReviewCharge;
+  stage?: undefined;
+  charge?: undefined;
   /** Prior blocking findings, for a repair review that must judge their resolution. */
   priorFindings?: string[];
   missionId: string;
@@ -589,7 +599,7 @@ const LEGACY_IMPLEMENTATION_CHARGE: JuliusReviewCharge = Object.freeze({
     'Is the evidence sufficient?',
   ]),
   mustNotDemand: Object.freeze<string[]>([]),
-  requires: Object.freeze<JuliusReviewCharge['requires'][number][]>(['plan', 'diff', 'testOutput']),
+  requires: Object.freeze<JuliusReviewCharge['requires'][number][]>(['plan', 'diff']),
 });
 
 export function buildReviewPrompt(p: ReviewPacket): string {
@@ -602,12 +612,16 @@ export function buildReviewPrompt(p: ReviewPacket): string {
    * it sends changes meaning. This module never reaches into the domain for
    * it: the reviewer consumes a contract, it does not own one.
    */
+  // The charge always arrives with the stage (the packet type makes one
+  // without the other unrepresentable); a packet with neither is the older
+  // harness's implementation review.
   const charge: JuliusReviewCharge = p.charge ?? LEGACY_IMPLEMENTATION_CHARGE;
   const rubric = charge.judges.map((question, index) => `(${index + 1}) ${question}`).join(' ');
   const findings = p.priorFindings ?? [];
   const priorFindingsBlock = charge.repair || findings.length > 0
     ? [`PRIOR BLOCKING FINDINGS (${charge.repair ? 'this review must judge whether each is resolved' : 'for context'}):`,
-      ...(findings.length > 0 ? findings.map((finding) => `- ${finding}`) : ['- (none supplied)']), '']
+      ...(findings.length > 0 ? findings.map((finding) => `- ${finding}`)
+        : ['- (none recorded: this repair was admitted by failed evidence rather than by a reviewer finding, so judge the repaired work and its evidence)']), '']
     : [];
   const head = charge.subject === 'PLAN'
     ? [

@@ -288,3 +288,69 @@ describe('DEFECT 1 — the mission budget governs the Coding Agent dispatch', ()
     expect((await harness.store.loadRun('run-1', 'prj-1'))?.state).toBe('COMPLETED');
   });
 });
+
+/* ================== the defects this change nearly introduced ============= */
+
+describe('the repairs hold their own edges', () => {
+  const USD = 1_000_000;
+  const MISSION_2 = juliusAllocationPolicy({ ceilingUsdMicros: 20 * USD, authorizedRepairRounds: 3 });
+
+  it('an attempt that BILLED before it failed is charged, so the retry cannot be granted that money twice', async () => {
+    const harness = build({
+      reviewer: [REVIEW_ACCEPT, REVIEW_ACCEPT],
+      coder: [{ kind: 'fail', code: 'TIMEOUT', costUsdMicros: 4_900_000 }, BUILD_OK],
+      allocation: MISSION_2, budgetUsdMicros: 20 * USD,
+    });
+    await drain(harness.loop, 20);
+    // The timed-out attempt billed $4.90 of its $5 allocation. Releasing that
+    // to zero would have handed the retry the same $5 a second time.
+    const charged = harness.budget.reservations().filter((row) => row.state === 'COMMITTED' && row.usdMicros === 4_900_000);
+    expect(charged, 'the billed attempt is a settlement, not a hand-back').toHaveLength(1);
+    const settled = harness.store.events().filter((event) => event.type === 'budget.settled');
+    expect(settled.some((event) => event.facts.usdMicros === 4_900_000 && event.facts.reason === 'TIMEOUT')).toBe(true);
+    expect(harness.budget.remainingUsdMicros()).toBeLessThanOrEqual(20 * USD - 4_900_000);
+    expect(harness.adapters.get(CODER.adapterId)!.dispatches, 'the retry did run').toHaveLength(2);
+  });
+
+  it('a completed dispatch whose runtime reported NO cost keeps its reservation: Unknown is not zero', async () => {
+    const harness = build({
+      reviewer: [REVIEW_ACCEPT, REVIEW_ACCEPT],
+      coder: [{ ...BUILD_OK, usdMicros: null }],
+      allocation: MISSION_2, budgetUsdMicros: 20 * USD,
+    });
+    await drain(harness.loop);
+    const build1 = harness.budget.reservations().find((row) => row.reservationId.includes('build-1') && row.state === 'COMMITTED');
+    expect(build1?.usdMicros, 'settled at what was reserved, never at zero').toBe(5 * USD);
+    const settled = harness.store.events().filter((event) => event.type === 'budget.settled');
+    expect(settled.some((event) => event.facts.usdMicros === null), 'and the record says Unknown, not 0').toBe(true);
+  });
+
+  it('a decision that was already recorded schedules no second repair round', async () => {
+    // `appendDecision` is idempotent by key. A replayed verification that
+    // ignored that would mint a SECOND repair beside the first — a fresh id, a
+    // fresh reservation, a paid dispatch for work already scheduled.
+    const harness = build({ reviewer: [REVIEW_REJECT, REVIEW_ACCEPT, REVIEW_ACCEPT] });
+    const replaying = { ...harness.store, appendDecision: async () => false } as typeof harness.store;
+    const loop = new JuliusRunLoop({ ...harness.deps, store: replaying }, harness.policies, { claimLimit: 10, leaseMs: 60_000 });
+    for (let tick = 0; tick < 8; tick += 1) if ((await loop.tick(scope)).claimed === 0) break;
+    const tasks = await harness.store.tasksForRun('run-1', 'prj-1');
+    expect(tasks.filter((task) => task.taskId.startsWith('repair:')), 'no repair was scheduled by a decision that did not land').toEqual([]);
+    expect(harness.store.events().filter((event) => event.type === 'repair.scheduled')).toEqual([]);
+  });
+
+  it('a repair whose findings do not fit its context is refused, never dispatched blind', async () => {
+    const harness = build({ reviewer: [REVIEW_REJECT, REVIEW_ACCEPT, REVIEW_ACCEPT] });
+    // A context budget that fits the Project Brain and not the findings: the
+    // compiler stops at the first entry that would overflow, so the entries
+    // the repair exists to address are exactly what it drops.
+    const loop = new JuliusRunLoop({ ...harness.deps, contextCharacterBudget: 40 }, harness.policies, { claimLimit: 10, leaseMs: 60_000 });
+    for (let tick = 0; tick < 8; tick += 1) if ((await loop.tick(scope)).claimed === 0) break;
+    const revision = harness.store.taskRow('repair:plan-1:1:task');
+    expect(revision?.state, 'the revision failed rather than revising blind').toBe('FAILED');
+    const failure = harness.store.events().find((event) => event.type === 'task.failed' && event.facts.failureClass === 'repair_context_findings_dropped');
+    expect(failure, 'and the record names why').toBeDefined();
+    expect(failure!.facts.droppedFindings).toBe(1);
+    // The architect was dispatched for the plan only, never for the blind revision.
+    expect(harness.adapters.get(ARCHITECT.adapterId)!.dispatches.map((d) => d.taskId)).toEqual(['plan-1']);
+  });
+});

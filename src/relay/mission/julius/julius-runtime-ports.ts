@@ -260,11 +260,24 @@ export interface JuliusBudgetPort {
     usdMicros: number; inputTokens: number; outputTokens: number;
     toolCalls: number; runtimeMs: number; now: string;
   }): Promise<{ readonly state: 'RESERVED' | 'DENIED'; readonly denialReason: string | null }>;
+  /**
+   * UNKNOWN SPEND IS NOT ZERO SPEND. `usdMicros: null` means the boundary
+   * reported no cost, and the ledger must then keep holding what it reserved
+   * rather than freeing it: a runtime that answers without a cost has still
+   * been paid, and treating that as $0 hands the rest of the mission money it
+   * may already have spent.
+   */
   commit(input: {
-    reservationId: string; usdMicros: number; inputTokens: number; outputTokens: number;
+    reservationId: string; usdMicros: number | null; inputTokens: number; outputTokens: number;
     toolCalls: number; runtimeMs: number; receiptId: string | null; now: string;
   }): Promise<void>;
-  release(input: { reservationId: string; reason: string; now: string }): Promise<void>;
+  /**
+   * Hand a reservation back. `usdMicros` is what the failed attempt actually
+   * billed, when the boundary reported it — money already spent is CHARGED,
+   * never released, or a timed-out attempt would return its whole allocation
+   * to the ledger and the retry would be granted it a second time.
+   */
+  release(input: { reservationId: string; reason: string; now: string; usdMicros?: number | null }): Promise<void>;
   /**
    * WHAT REMAINS, so an allocation can be derived from it: the ceiling minus
    * every outstanding reservation and commitment, in micro-dollars. `null`

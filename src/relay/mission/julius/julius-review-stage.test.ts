@@ -35,21 +35,27 @@ describe('the charge for each stage', () => {
     }
   });
 
-  it('a BUILD review judges the implementation and requires the diff and test output', () => {
+  it('a BUILD review judges the implementation and requires the plan and the diff', () => {
     const charge = reviewChargeFor('build');
     expect(charge.subject).toBe('IMPLEMENTATION');
-    expect(charge.requires).toEqual(['plan', 'diff', 'testOutput']);
+    expect(charge.requires).toEqual(['plan', 'diff']);
     expect(charge.mustNotDemand).toEqual([]);
     expect(charge.judges.join(' ').toLowerCase()).toContain('diff');
   });
 
-  it('a REPAIR review adds resolution of every prior finding, and requires them', () => {
+  it('a REPAIR review adds resolution of every prior finding, but never REQUIRES one', () => {
+    // Julius admits a repair round on the subject's own FAILED evidence as
+    // well as on a reviewer finding, and such a round has no findings by
+    // construction — so requiring them would refuse a review of a repair that
+    // was scheduled exactly as designed.
     for (const stage of ['repair:plan', 'repair:build'] as const) {
       const charge = reviewChargeFor(stage);
       expect(charge.repair).toBe(true);
-      expect(charge.requires).toContain('priorFindings');
+      expect(charge.requires).not.toContain('priorFindings');
       expect(charge.judges.at(-1)?.toLowerCase()).toContain('prior blocking finding');
     }
+    expect(reviewChargeFor('repair:plan').requires).toEqual(['plan']);
+    expect(reviewChargeFor('repair:build').requires).toEqual(['plan', 'diff']);
     expect(reviewChargeFor('repair:plan').subject).toBe('PLAN');
     expect(reviewChargeFor('repair:build').subject).toBe('IMPLEMENTATION');
   });

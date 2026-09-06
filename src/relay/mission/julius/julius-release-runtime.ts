@@ -1,5 +1,5 @@
 import type { JuliusRecordedDecision, JuliusTask } from './julius-runtime';
-import { effectivelyAcceptedTaskIds } from './julius-repair-lineage';
+import { effectivelyAcceptedTaskIds, isJuliusRepairOf } from './julius-repair-lineage';
 
 /**
  * RELEASE — the moment work becomes claimable, decided by Julius.
@@ -89,6 +89,7 @@ export function canStillBeAccepted(
   const accepted = effectivelyAcceptedTaskIds(tasks, decisions, JULIUS_RELEASING_ACTIONS);
   const current = new Map<string, JuliusRecordedDecision>();
   for (const decision of decisions) current.set(decision.taskId, decision);
+  const byId = new Map(tasks.map((task) => [task.taskId, task]));
   const children = new Map<string, JuliusTask[]>();
   for (const task of tasks) {
     if (task.parentTaskId === null) continue;
@@ -108,9 +109,23 @@ export function canStillBeAccepted(
     const kids = children.get(taskId) ?? [];
     let answer: boolean;
     if (decision === undefined) {
-      answer = kids.length === 0 || kids.some((kid) => live(kid) || kid.state === 'SUCCEEDED');
+      /**
+       * ONLY A REVIEW DECIDES AN UNDECIDED TASK. Counting any child kept a task
+       * live on the strength of, say, a SUCCEEDED sub-agent while the review
+       * that would actually have decided it had failed for good — so a
+       * dependent waited on an acceptance that could never come.
+       */
+      const reviews = kids.filter((kid) => kid.role === 'INDEPENDENT_REVIEWER');
+      answer = reviews.length === 0
+        // No review scheduled yet: verification has not run, and it will.
+        ? true
+        : reviews.some((kid) => live(kid) || kid.state === 'SUCCEEDED');
     } else if (decision.action === 'REPAIR') {
-      answer = kids.some((kid) => kid.taskType.startsWith('repair:') && (live(kid) || (kid.state === 'SUCCEEDED' && walk(kid.taskId, walking))));
+      // The SAME lineage rule acceptance itself uses: a child that is merely
+      // repair-SHAPED supersedes nothing, so it cannot keep its parent live.
+      const subject = byId.get(taskId);
+      answer = subject !== undefined && kids.some((kid) => isJuliusRepairOf(subject, kid)
+        && (live(kid) || (kid.state === 'SUCCEEDED' && walk(kid.taskId, walking))));
     } else {
       answer = false;
     }

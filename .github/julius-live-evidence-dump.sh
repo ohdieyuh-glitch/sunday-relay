@@ -57,7 +57,15 @@ dump "SELECT invocation_id,tool_id,state,requested_at FROM relay_wonderland.juli
 # One row names no task: the run loop's own `julius.run.failed`, the run's ending rather than a
 # worker's. The pipeline emits that type too — an unresolvable role, a policy denial, a repair it
 # cannot plan — and those DO name their task. Blank means the run's ending; the type alone does not.
-dump "SELECT e.payload->>'taskId' AS task_id,t.role,e.event_type,e.payload->'facts'->>'code' AS julius_code,e.payload->'facts'->>'failureClass' AS failure_class,e.payload->'facts'->>'errorRetryable' AS error_retryable,e.payload->'facts'->>'reasonCode' AS reason_code,e.payload->'facts'->>'action' AS recovery_action,e.occurred_at FROM relay_wonderland.events e LEFT JOIN relay_wonderland.julius_tasks t ON t.task_id=e.payload->>'taskId' WHERE e.event_type IN ('julius.task.failed','julius.provider.failure','julius.run.failed','julius.retry.scheduled','julius.recovery.action') ORDER BY e.occurred_at" failures.tsv
+dump "SELECT e.payload->>'taskId' AS task_id,t.role,e.event_type,e.payload->'facts'->>'code' AS julius_code,e.payload->'facts'->>'failureClass' AS failure_class,e.payload->'facts'->>'errorRetryable' AS error_retryable,e.payload->'facts'->>'reasonCode' AS reason_code,e.payload->'facts'->>'action' AS recovery_action,e.occurred_at FROM relay_wonderland.events e LEFT JOIN relay_wonderland.julius_tasks t ON t.task_id=e.payload->>'taskId' WHERE e.event_type IN ('julius.task.failed','julius.provider.failure','julius.run.failed','julius.retry.scheduled','julius.recovery.action','julius.budget.denied') ORDER BY e.occurred_at" failures.tsv
+
+# WHAT EACH DISPATCH WAS ALLOWED TO SPEND, AND WHAT IT SPENT.
+# Paid run 34037313976 was refused for cost and the bundle could not say what the
+# ceiling was, who set it, or how much of the mission remained — the amount lived
+# only in a message nothing persisted. The mission contract now derives a bounded
+# allocation per Coding Agent dispatch (`julius-allocation.v1`); these are the
+# rows that prove which round was granted what, and what the ledger settled.
+dump "SELECT e.payload->>'taskId' AS task_id,e.event_type,e.payload->'facts'->>'role' AS role,e.payload->'facts'->>'allocatedUsdMicros' AS allocated_usd_micros,e.payload->'facts'->>'allocationBasis' AS allocation_basis,e.payload->'facts'->>'shareUsdMicros' AS share_usd_micros,e.payload->'facts'->>'remainingUsdMicros' AS remaining_usd_micros,e.payload->'facts'->>'allocationPolicy' AS allocation_policy,e.payload->'facts'->>'usdMicros' AS settled_usd_micros,e.payload->'facts'->>'reason' AS reason,e.payload->'facts'->>'reservationId' AS reservation_id,e.occurred_at FROM relay_wonderland.events e WHERE e.event_type IN ('julius.budget.allocated','julius.budget.reserved','julius.budget.settled','julius.budget.denied') ORDER BY e.occurred_at" budget.tsv
 
 # THE FACTS THAT LET SOMEONE DEBUG THE CLASS, WITHOUT BUYING A SECOND PAID RUN.
 #

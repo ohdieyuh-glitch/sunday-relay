@@ -141,7 +141,9 @@ describe('the run state a task set implies', () => {
     const child = (state: JuliusTask['state'], id: string, parentTaskId: string, taskType: string, role: JuliusTask['role']): JuliusTask =>
       ({ ...task({ taskId: id }), state, parentTaskId, taskType, role } as JuliusTask);
     const decision = (taskId: string, action: 'ACCEPT' | 'REPAIR' | 'HALT') => ({ taskId, action, reasonCode: 'x', evidenceIds: [], safeSummary: 'x' });
-    const plan = dep('SUCCEEDED', 'plan');
+    // A real plan task: the repair lineage rule requires a repair child to
+    // carry its parent's role and stage, so the parent must be the plan it is.
+    const plan: JuliusTask = { ...dep('SUCCEEDED', 'plan'), taskType: 'plan', role: 'PROMPT_ARCHITECT' };
     const build = dep('BLOCKED', 'build', ['plan']);
     // Review pending: waiting.
     expect(targetRunState([plan, build, child('RUNNABLE', 'plan:review', 'plan', 'review:plan', 'INDEPENDENT_REVIEWER')]).state).toBe('READY');

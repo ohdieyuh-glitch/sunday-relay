@@ -8,7 +8,8 @@ export interface JuliusResourceReservation { readonly reservationId:string;reado
 export interface JuliusExecutionPorts {
   reserve(input:{claim:JuliusExecutionClaim;worker:JuliusWorker;request:JuliusResourceRequest;idempotencyKey:string}):Promise<JuliusResourceReservation>;
   commit(input:{reservationId:string;result:JuliusProviderResult}):Promise<void>;
-  release(input:{reservationId:string;reason:string}):Promise<void>;
+  /** `usdMicros` is what the failed attempt billed, when the boundary reported it. Spent money is charged, not released. */
+  release(input:{reservationId:string;reason:string;usdMicros?:number|null}):Promise<void>;
   persistEvidence(input:{claim:JuliusExecutionClaim;worker:JuliusWorker;evidence:readonly JuliusEvidence[]}):Promise<void>;
   acceptResult(input:{claim:JuliusExecutionClaim;worker:JuliusWorker;result:JuliusProviderResult;idempotencyKey:string}):Promise<{duplicate:boolean}>;
   /**
@@ -76,7 +77,7 @@ export class JuliusExecutionCoordinator {
       await this.ports.commit({reservationId:reservation.reservationId,result});
       await this.event(request,'worker.completed',{workerId:worker.workerId,duplicate:receipt.duplicate,evidenceCount:evidence.length});
       return{status:'COMPLETED',workerId:worker.workerId,duplicate:receipt.duplicate};
-    }catch(error){const failure=error instanceof JuliusDispatchError?error:new JuliusDispatchError('WORKER_EXECUTION_FAILURE',false,'Execution boundary failed.');await this.ports.release({reservationId:reservation.reservationId,reason:failure.code});
+    }catch(error){const failure=error instanceof JuliusDispatchError?error:new JuliusDispatchError('WORKER_EXECUTION_FAILURE',false,'Execution boundary failed.');await this.ports.release({reservationId:reservation.reservationId,reason:failure.code,usdMicros:typeof failure.diagnostics?.costUsdMicros==='number'?failure.diagnostics.costUsdMicros:null});
      /* The class travels with the code on BOTH endings. A retry that is later
       * abandoned and a failure taken at once must leave the same diagnosis
       * behind, or the durable record would explain only the failures that

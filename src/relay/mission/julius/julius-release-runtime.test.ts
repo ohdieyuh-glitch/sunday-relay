@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { evaluateJuliusRelease } from './julius-release-runtime';
+import { canStillBeAccepted, evaluateJuliusRelease } from './julius-release-runtime';
 import { repairTaskTypeFor } from './julius-repair-lineage';
 import type { JuliusRecordedDecision, JuliusTask } from './julius-runtime';
 
@@ -111,5 +111,54 @@ describe('the dependency rule in general', () => {
     const first = evaluateJuliusRelease({ tasks, decisions });
     const second = evaluateJuliusRelease({ tasks: structuredClone(tasks), decisions: structuredClone(decisions) });
     expect(second).toEqual(first);
+  });
+});
+
+describe('whether a SUCCEEDED task can still be accepted', () => {
+  const kid = (id: string, over: Partial<JuliusTask>): JuliusTask => tsk(id, { parentTaskId: 'plan-1', ...over });
+  const reviewKid = (state: JuliusTask['state']) =>
+    kid('plan-1:review', { state, taskType: 'review:plan', role: 'INDEPENDENT_REVIEWER' });
+
+  it('a task with no review scheduled yet is live: verification has not run', () => {
+    expect(canStillBeAccepted([plan], [])('plan-1')).toBe(true);
+  });
+
+  it('a review still running or awaiting its verdict keeps it live; a review that failed for good does not', () => {
+    for (const state of ['RUNNABLE', 'ACTIVE', 'BLOCKED', 'SUCCEEDED'] as const) {
+      expect(canStillBeAccepted([plan, reviewKid(state)], [])('plan-1'), state).toBe(true);
+    }
+    for (const state of ['FAILED', 'CANCELLED'] as const) {
+      expect(canStillBeAccepted([plan, reviewKid(state)], [])('plan-1'), state).toBe(false);
+    }
+  });
+
+  it('ONLY a review decides it: a succeeded sub-agent child cannot mask a review that failed', () => {
+    // The children map is keyed by parentTaskId alone, so any child used to
+    // keep its parent live — and a sub-agent (created with the requesting task
+    // as its parent) would hold a dependent waiting on an acceptance that can
+    // never come.
+    const subagent = kid('subagent:sub-1', { state: 'SUCCEEDED', taskType: 'implement', role: 'CODING_AGENT' });
+    expect(canStillBeAccepted([plan, reviewKid('FAILED'), subagent], [])('plan-1')).toBe(false);
+  });
+
+  it('an accepted task is live; a halted one never is', () => {
+    expect(canStillBeAccepted([plan], [decision('plan-1', 'ACCEPT')])('plan-1')).toBe(true);
+    expect(canStillBeAccepted([plan], [decision('plan-1', 'HALT')])('plan-1')).toBe(false);
+  });
+
+  it('a REPAIR is live only while a repair of the planner\'s own shape can still accept it', () => {
+    const revision = (over: Partial<JuliusTask> = {}): JuliusTask => tsk('repair:plan-1:1:task', {
+      parentTaskId: 'plan-1', taskType: repairTaskTypeFor('plan'), role: 'PROMPT_ARCHITECT', state: 'RUNNABLE', ...over,
+    });
+    const repaired = [decision('plan-1', 'REPAIR')];
+    expect(canStillBeAccepted([plan, revision()], repaired)('plan-1')).toBe(true);
+    expect(canStillBeAccepted([plan, revision({ state: 'FAILED' })], repaired)('plan-1')).toBe(false);
+    expect(canStillBeAccepted([plan, revision({ state: 'SUCCEEDED' })], [...repaired, decision('repair:plan-1:1:task', 'ACCEPT')])('plan-1')).toBe(true);
+    expect(canStillBeAccepted([plan, revision({ state: 'SUCCEEDED' })], [...repaired, decision('repair:plan-1:1:task', 'HALT')])('plan-1')).toBe(false);
+    expect(canStillBeAccepted([plan], repaired)('plan-1'), 'a REPAIR nobody repaired').toBe(false);
+    // A merely repair-SHAPED child — the wrong role, as the pre-change planner
+    // minted for every subject — supersedes nothing, so it cannot keep its
+    // parent live either.
+    expect(canStillBeAccepted([plan, revision({ role: 'CODING_AGENT' })], repaired)('plan-1')).toBe(false);
   });
 });
