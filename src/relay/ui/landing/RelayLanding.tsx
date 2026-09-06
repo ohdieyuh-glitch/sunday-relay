@@ -1,4 +1,4 @@
-import { LANDING_SCENES, smoothstep, type ScenePosition } from './choreography';
+import { LANDING_SCENES, smoothstep, type ScenePosition, BRAND_EYEBROW } from './choreography';
 
 /** Screen-space anchor for a floating chip, projected by the world's engine. */
 export type LandingAnchor = { x: number; y: number; depth: number; visible: boolean };
@@ -69,8 +69,8 @@ export function RelayLanding({
 
       <header className="rl3-brand">
         <span className="rl3-mark" aria-hidden="true" />
-        <span className="rl3-wordmark">SUNDAY RELAY</span>
-        <span className="rl3-label rl3-brand-sub">AQUALA TECHNOLOGIES</span>
+        <span className="rl3-wordmark">RELAY’S WONDERLAND</span>
+        <span className="rl3-label rl3-brand-sub rl3-brandmark">i.Wonder</span>
       </header>
 
       {/* Floating system chips, positioned by projecting world anchors. Depth
@@ -99,7 +99,7 @@ export function RelayLanding({
       </div>
 
       <div className="rl3-copy" style={{ opacity: copyOpacity }}>
-        <p className="rl3-label rl3-eyebrow">{scene.eyebrow}</p>
+        <p className={`rl3-label rl3-eyebrow${scene.eyebrow === BRAND_EYEBROW ? ' rl3-brandmark' : ''}`}>{scene.eyebrow}</p>
         <h1 className="rl3-headline">{scene.headline}</h1>
         <p className="rl3-body">{scene.body}</p>
         {scene.cta && telemetry.webgl && (
@@ -141,7 +141,7 @@ export function RelayLanding({
       <div className="rl3-sr">
         {LANDING_SCENES.map((s) => (
           <section key={s.id} aria-label={s.eyebrow}>
-            <p className="rl3-label">{s.eyebrow}</p>
+            <p className={`rl3-label${s.eyebrow === BRAND_EYEBROW ? ' rl3-brandmark' : ''}`}>{s.eyebrow}</p>
             <h2>{s.headline}</h2>
             <p>{s.body}</p>
             {s.nodes && <ul>{s.nodes.map((n) => <li key={n}>{n}</li>)}</ul>}

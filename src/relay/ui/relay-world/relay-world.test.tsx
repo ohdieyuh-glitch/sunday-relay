@@ -106,6 +106,6 @@ describe('direct entry', () => {
 
   it('shows the Aquala beats when the URL does not', () => {
     render(createElement(RelayWorld, { initialStage: 'aquala' as const }));
-    expect(screen.getAllByText('Signal, before software.').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Enter the World Where Ideas Become Real.').length).toBeGreaterThan(0);
   });
 });

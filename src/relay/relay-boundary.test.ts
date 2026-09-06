@@ -74,7 +74,7 @@ describe('relay isolation boundary', () => {
     // The CANONICAL document is `index.html` — Vite's normal root entry — so
     // the deployed application loads from `/` with no host-specific rewrite.
     const html = readFileSync(join(root, 'index.html'), 'utf8');
-    expect(html).toContain('<title>Sunday Relay</title>');
+    expect(html).toContain('<title>Relay\u2019s Wonderland \u2014 i.Wonder</title>');
     expect(html).toContain('/src/relay/main.tsx');
   });
 

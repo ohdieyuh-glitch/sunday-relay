@@ -71,7 +71,7 @@ describe('production bundle', () => {
       return;
     }
     const html = readFileSync(index, 'utf8');
-    expect(html).toContain('<title>Sunday Relay</title>');
+    expect(html).toContain('<title>Relay\u2019s Wonderland \u2014 i.Wonder</title>');
     expect(html).toContain('<div id="root"></div>');
     // Vite rewrote the entry module into a hashed asset — not the raw source.
     expect(html).toMatch(/<script type="module"[^>]+src="\/assets\/[^"]+\.js"/);
