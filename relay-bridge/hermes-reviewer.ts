@@ -559,14 +559,16 @@ export type ReviewPacket = ReviewPacketFields | (Omit<ReviewPacketFields, 'stage
 interface ReviewPacketFields {
   /**
    * WHICH STAGE THIS REVIEW IS, as Julius dispatched it, and what that stage
-   * charges the reviewer with. THE TWO TRAVEL TOGETHER OR NOT AT ALL: this
-   * module may not import the domain (an adapter cannot own mission verdicts),
-   * so it cannot look a charge up from a stage, and a packet carrying a stage
-   * without its charge would announce "PLAN REVIEW" over an implementation
-   * rubric — the paid run's own defect, reintroduced. The union below makes
-   * that unrepresentable. Neither field means an implementation review, which
-   * is the only kind the older reviewer harness builds, so nothing it sends
-   * changes meaning.
+   * charges the reviewer with.
+   *
+   * THE TWO TRAVEL TOGETHER OR NOT AT ALL. This module takes the stage and the
+   * charge as TYPES and never as values — the charge is Julius's statement of
+   * what a stage judges, and a reviewer that could look one up would be
+   * choosing its own charge. So a packet carrying a stage without its charge
+   * would announce "PLAN REVIEW" over an implementation rubric: the paid run's
+   * own defect, reintroduced. The union below makes that unrepresentable.
+   * Neither field means an implementation review, which is the only kind the
+   * older reviewer harness builds, so nothing it sends changes meaning.
    */
   stage?: undefined;
   charge?: undefined;

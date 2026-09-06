@@ -175,9 +175,13 @@ export interface JuliusRecordedDecision extends JuliusVerificationDecision { rea
  *     `repair:` type prefix alone is not proof: any producer of parent-linked
  *     tasks (a sub-agent spawn, a future feature) could mint one, and an
  *     ACCEPT on such an impostor must never launder a REPAIR. A child
- *     supersedes only when it matches everything `planJuliusRepair` emits:
- *     parent link to the governed task, taskType `repair:<parent's type>`,
- *     taskId `repair:<parent's id>:<round>:task`, and the CODING_AGENT role —
+ *     supersedes only when it matches everything `planJuliusRepair` emits —
+ *     `isJuliusRepairOf` is that contract, and the one both this rule and the
+ *     release rule read, so the two can never disagree: a parent link to the
+ *     governed task, the PARENT'S OWN ROLE (a plan is revised by the Prompt
+ *     Architect, code repaired by the Coding Agent), the taskType
+ *     `repair:<parent's STAGE>` with every `repair:` prefix stripped, and the
+ *     taskId `repair:<parent's id>:<round>:task` —
  *     and the child SUCCEEDED and is itself effectively accepted,
  *     recursively, so a repaired repair works and an abandoned one still
  *     blocks. An undecided repair child vouches for nothing, and an ACCEPT
