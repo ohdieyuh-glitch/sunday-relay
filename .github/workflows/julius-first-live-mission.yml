@@ -50,12 +50,21 @@ on:
         required: false
         default: 'julius-first-live'
 
+# READ-ONLY, and every entry is here because a gate needs it. No write scope of
+# any kind, no PAT, and never the coding worker's credential: the trust gates
+# only ever ASK questions, and a token that could answer them differently is a
+# token that could answer them wrongly.
+#   contents       the branch tip, commit trees and parents, and `compare`
+#   actions        the paid-attempt markers and the accepted-main checkpoints
+#   pull-requests  the merged pull request behind the commit, and its reviews
+#   issues         the pull request timeline, where a base retarget shows
+#   statuses       the sha-bound attestation path
 permissions:
   contents: read
-  # Needed to ask whether a paid first-live mission was already attempted or
-  # completed. The answer lives in this workflow's own artifact list; nothing
-  # else is read.
   actions: read
+  pull-requests: read
+  issues: read
+  statuses: read
 
 # LIVE runs share one group, so two paid missions can never be in flight at
 # once — they would race for the same workspace, executor and database. DRY
@@ -122,6 +131,80 @@ jobs:
           # .git/config would ride along with it.
           persist-credentials: false
 
+      # THE VERIFIER MUST NOT COME FROM THE COMMIT IT IS JUDGING.
+      #
+      # A candidate running its own trust gate to decide whether it is
+      # trustworthy is a formality: alter the gate in the same push and it
+      # returns success. So the gate is executed from a SECOND checkout pinned
+      # to an immutable commit that was already accepted as a checkpoint, while
+      # it evaluates whatever `main` currently is.
+      #
+      # This sha is a TRUST ROOT and is deliberately hard to change: it may only
+      # move through the founder-controlled workflow-administration ceremony,
+      # because the coding worker cannot write this file at all.
+      # THE CANDIDATE DOES NOT GET TO OWN THE PATH THE VERIFIER LANDS ON.
+      #
+      # The candidate tree is already on disk by now, so it could ship a file, a
+      # directory or a symlink at this path. `actions/checkout` would clean the
+      # destination anyway, but a symlink makes "the destination" a question
+      # about candidate content, and this gate exists precisely so that nothing
+      # about it is. One line removes the whole class.
+      - name: 'Make room for the trusted verifier, whatever the candidate shipped'
+        run: rm -rf .julius-trusted-verifier
+
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: f131098cc4e8f35d7231cf2e9693b83c05dab75c
+          path: .julius-trusted-verifier
+          persist-credentials: false
+
+      # NO CACHE, ON PURPOSE. `cache: npm` reads the candidate's lockfile, and
+      # nothing candidate-controlled may be interpreted before trust exists.
+      # The cached setup that the build needs happens after the gate passes.
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+
+      # ------------------------------------------------- REPOSITORY TRUST GATE
+      #
+      # THIS RUNS ON EVERY DISPATCH, dry or paid. A dry run spends no provider
+      # money, but it executes the credentialed rig inside the
+      # `julius-live-validation` environment, so an unprovenanced or rolled-back
+      # checkout must not reach it merely because `confirm_live` was left empty.
+      #
+      # Everything the gate needs is passed explicitly. It reads `main`
+      # remotely, freezes it, and requires: the branch is exactly `main`, the
+      # ref is exactly `refs/heads/main`, THIS JOB'S OWN COMMIT is that frozen
+      # tip, reviewed-main provenance says `provenant` for it, main
+      # monotonicity says `monotonic` for that same frozen commit, and `main`
+      # has not moved by the time both have answered. Anything unreadable,
+      # contradictory or moving fails closed.
+      #
+      # PRECONDITION, and the one that will surprise someone: monotonicity needs
+      # a non-expired `julius-accepted-main-<sha>` checkpoint to exist at all.
+      # Checkpoints are artifacts and expire after 90 days, so `Julius accept
+      # main` must be dispatched at the current `main` at least every 60 days or
+      # every dispatch here — dry runs included — blocks with `uninitialized`.
+      # That is the correct failure, and the cadence is docs/REPOSITORY_GOVERNANCE.md §13.5.
+      - name: 'Gate: the code this job will run is reviewed, current and not rolled back'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # THE TRUST ROOT IS PROVEN, NOT ASSUMED. The step above proves where
+          # the verifier landed; this proves WHAT landed there. Without it, "the
+          # verifier is the pinned commit" is a property of `actions/checkout`'s
+          # internals rather than a checked fact of this run, and the whole
+          # arrangement rests on that one sentence being true.
+          actual="$(git -C .julius-trusted-verifier rev-parse HEAD)"
+          if [ "$actual" != 'f131098cc4e8f35d7231cf2e9693b83c05dab75c' ]; then
+            echo "trusted_verifier_not_at_the_pinned_commit: $actual" >&2
+            exit 1
+          fi
+          node .julius-trusted-verifier/scripts/julius-live-preflight-gates.mjs \
+            "${GITHUB_REPOSITORY}" main "${GITHUB_REF}" "${GITHUB_SHA}"
+
+      # Only now, with the candidate proven, is its own content read.
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: '22'
