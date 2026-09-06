@@ -1536,3 +1536,153 @@ describe('F6 — a paid mission cannot be run twice by accident', () => {
       .toBeLessThan(workflow.indexOf('- name: Create the ephemeral scoped credentials'));
   });
 });
+
+/* ------------------------------------------------ the repository trust gate */
+
+/**
+ * CODE BEING JUDGED MUST NOT GRADE ITSELF.
+ *
+ * This job executes a credentialed rig and, on a paid dispatch, reaches
+ * providers. Both are reachable only after a trust gate proves that the commit
+ * about to run is the reviewed, current, un-rolled-back tip of `main`.
+ *
+ * The gate cannot be executed from the candidate, because a candidate that
+ * altered it would simply be graded by its own alteration. It runs from a
+ * SECOND checkout pinned to an immutable commit that was already accepted as a
+ * checkpoint. These cases hold the workflow to that arrangement, because every
+ * part of it is a line someone could quietly move.
+ *
+ * The worker cannot edit this workflow at all — GitHub refuses a push touching
+ * `.github/workflows/**` from an App without the `workflows` permission — so
+ * these tests are the only thing standing between a founder-installed edit and
+ * a silently weakened gate.
+ */
+describe('the trust gate runs before anything the candidate controls', () => {
+  /** Character offset of a step, by its exact name. */
+  const stepAt = (name: string): number => {
+    const at = workflow.indexOf(`- name: ${name}`);
+    expect(at, `step "${name}" must exist`).toBeGreaterThan(-1);
+    return at;
+  };
+  const TRUST_GATE = "'Gate: the code this job will run is reviewed, current and not rolled back'";
+  const verifierCheckout = (): string => {
+    const at = workflow.indexOf('path: .julius-trusted-verifier');
+    expect(at, 'the trusted verifier must be checked out separately').toBeGreaterThan(-1);
+    const start = workflow.lastIndexOf('- uses: actions/checkout', at);
+    return workflow.slice(start, workflow.indexOf('\n      - ', at));
+  };
+
+  it('pins the verifier to a full, immutable commit sha', () => {
+    // A branch, a tag or an expression would let the thing being judged choose
+    // its own judge. Only 40 hex characters name one commit forever.
+    const checkout = verifierCheckout();
+    const ref = /\n\s+ref:\s*([^\s#]+)/u.exec(checkout)?.[1];
+    expect(ref, 'the verifier checkout must name a ref').toBeDefined();
+    expect(ref, 'a 40-hex commit, not a branch, tag or expression').toMatch(/^[0-9a-f]{40}$/u);
+    expect(checkout, 'no interpolation may reach the verifier ref').not.toMatch(/ref:\s*\$\{\{/u);
+  });
+
+  it('the verifier is a SEPARATE checkout from the candidate', () => {
+    // Two checkouts, and only the verifier carries a pinned ref and a path.
+    const checkouts = workflow.split('- uses: actions/checkout').length - 1;
+    expect(checkouts, 'the candidate and the verifier are two different checkouts').toBe(2);
+    expect(verifierCheckout()).toContain('path: .julius-trusted-verifier');
+    expect(verifierCheckout(), 'a token in the verifier checkout would ride into the container')
+      .toContain('persist-credentials: false');
+  });
+
+  it('runs the gate from the verifier checkout, never from the candidate', () => {
+    const gate = stepScript(TRUST_GATE);
+    expect(gate, 'the helper must be the one in the pinned checkout')
+      .toContain('node .julius-trusted-verifier/scripts/julius-live-preflight-gates.mjs');
+    expect(gate, 'invoking the candidate copy would defeat the whole arrangement')
+      .not.toMatch(/node scripts\/julius-live-preflight-gates/u);
+  });
+
+  it('passes the branch, ref and this job\'s own commit explicitly', () => {
+    // The helper refuses to assume any of them. An ambient branch is exactly
+    // the assumption that lets a job verify one commit and execute another.
+    const gate = stepScript(TRUST_GATE);
+    expect(gate).toContain('"${GITHUB_REPOSITORY}" main "${GITHUB_REF}" "${GITHUB_SHA}"');
+  });
+
+  it('runs on EVERY dispatch, so a dry run cannot skip it', () => {
+    // A dry run spends no provider money but still executes the credentialed
+    // rig inside the live environment. An unprovenanced checkout must not reach
+    // it merely because confirm_live was left empty.
+    const step = workflow.slice(stepAt(TRUST_GATE), workflow.indexOf('\n      - ', stepAt(TRUST_GATE) + 1));
+    expect(step, 'a condition here would let an untrusted dry run through').not.toMatch(/\n\s+if:/u);
+    expect(step, 'a failure that does not fail the step is not a gate')
+      .not.toMatch(/continue-on-error/u);
+  });
+
+  it('precedes every step that interprets candidate-controlled content', () => {
+    const gate = stepAt(TRUST_GATE);
+    for (const later of [
+      "'Gate: the dispatch inputs are well formed'",
+      "'Gate: no paid mission has been attempted or completed for THIS contract'",
+      'Install',
+      "'Preflight: the Mission Contract is valid and bounded'",
+      "'Record that a paid mission was attempted (before any provider can be reached)'",
+      "'LIVE: run the first real Julius mission'",
+    ]) {
+      expect(gate, `the trust gate must precede ${later}`).toBeLessThan(stepAt(later));
+    }
+  });
+
+  it('and no npm cache reads the candidate lockfile before it', () => {
+    // `cache: npm` parses the candidate's package-lock.json. That is
+    // candidate-controlled content being interpreted, and it may not happen
+    // until the candidate has been proven.
+    //
+    // Matched as a YAML KEY, not as text: the comment above the gate step
+    // discusses `cache: npm` by name, and a text search finds the prose as
+    // readily as the setting — which is how this assertion first passed for
+    // the wrong reason.
+    const gateLine = workflow.split('\n').findIndex((line) => line.includes(`- name: ${TRUST_GATE}`));
+    expect(gateLine, 'the trust gate must exist').toBeGreaterThan(-1);
+    const cacheLines = workflow.split('\n')
+      .map((line, index) => ({ line, index }))
+      .filter(({ line }) => /^\s+cache: npm\s*$/u.test(line))
+      .map(({ index }) => index);
+    expect(cacheLines.length, 'the build needs exactly one npm cache').toBe(1);
+    expect(cacheLines[0], 'the pre-trust setup-node must not read the lockfile').toBeGreaterThan(gateLine);
+  });
+
+  it('leaves the paid path unreachable when the gate fails', () => {
+    // A failed step makes success() false, so neither the attempt marker nor
+    // the live run is reachable. This is the mechanism, asserted rather than
+    // assumed.
+    for (const paid of [
+      "'Record that a paid mission was attempted (before any provider can be reached)'",
+      "'LIVE: run the first real Julius mission'",
+    ]) {
+      const step = workflow.slice(stepAt(paid), workflow.indexOf('\n      - ', stepAt(paid) + 1));
+      expect(step, `${paid} must be guarded by success()`)
+        .toMatch(/if: success\(\) && inputs\.confirm_live == 'RUN LIVE MISSION'/u);
+    }
+  });
+
+  it('asks for exactly the read scopes the gates need, and no write scope', () => {
+    const block = /\npermissions:\n((?:\s{2}\S[^\n]*\n)+)/u.exec(workflow)?.[1];
+    expect(block, 'the workflow must declare its permissions').toBeDefined();
+    const scopes = Object.fromEntries((block ?? '').trim().split('\n')
+      .map((line) => line.trim().split(/:\s*/u)));
+    expect(scopes).toEqual({
+      contents: 'read',
+      actions: 'read',
+      'pull-requests': 'read',
+      issues: 'read',
+      statuses: 'read',
+    });
+    expect(block, 'a write scope here would make the gates able to change what they read')
+      .not.toMatch(/write/u);
+  });
+
+  it('uses the workflow\'s own token, never a PAT or the coding worker', () => {
+    const gate = workflow.slice(stepAt(TRUST_GATE), workflow.indexOf('\n      - ', stepAt(TRUST_GATE) + 1));
+    expect(gate).toContain('GH_TOKEN: ${{ github.token }}');
+    expect(gate, 'a stored credential would be a second authority nobody reviewed')
+      .not.toMatch(/secrets\./u);
+  });
+});
