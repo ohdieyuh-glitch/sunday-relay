@@ -38,11 +38,18 @@ export type LandingScene = {
  * Naming is governed: the configuration surface is C.A.R.D., never PSP, and the
  * role stack is described as SYSTEM COMPONENTS, never as a software team.
  */
+/**
+ * The brand exactly as it is written: lowercase i, a period, capital W. It
+ * lives here so the landing chrome can recognise it and opt that one label
+ * out of the uppercase technical register.
+ */
+export const BRAND_EYEBROW = 'i.Wonder';
+
 export const LANDING_SCENES: readonly LandingScene[] = Object.freeze([
   {
     id: 'signal',
     index: 0,
-    eyebrow: 'i.WONDER',
+    eyebrow: BRAND_EYEBROW,
     headline: 'Enter the World Where Ideas Become Real.',
     body: 'A living, multiplayer world for building software with AI.',
   },

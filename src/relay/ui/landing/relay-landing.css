@@ -105,6 +105,14 @@
   font-size: 10px;
 }
 
+/* THE BRAND IS "i.Wonder", AND THE LEADING i IS LOWERCASE.
+   .rl3-label uppercases the whole technical register, which is right for
+   COMPOUND AGENT and MISSION RUNTIME and wrong for a brand whose first
+   letter carries meaning: uppercased it reads "I.WONDER", which is a
+   different company. This exempts only the brand, so the register keeps
+   its caps everywhere else. */
+.rl3-brandmark { text-transform: none; }
+
 /* ---- the beat's copy ----------------------------------------------------- */
 .rl3-copy {
   left: var(--rl3-pad);
