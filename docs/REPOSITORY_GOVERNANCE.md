@@ -222,3 +222,120 @@ written statement of what rule is being suspended and why, a rollback plan, and
 a follow-up issue to restore the rule. Emergencies never justify force-pushing
 `main`, rewriting history, copying secrets across products, or deploying
 without separate authorization.
+
+---
+
+## 13. Julius provenance, and the accepted-main trust root
+
+Julius executes the code on `main`. Three gates establish that the code it runs
+is the code somebody approved, and they answer different questions:
+
+| Gate | Question |
+| --- | --- |
+| `npm run julius:review-currency -- <owner/repo> <pr>` | is this pull request approved at its exact head? |
+| `npm run julius:main-provenance -- <owner/repo>` | is the tree on `main` the tree of an approved worker candidate? |
+| `npm run julius:main-monotonicity -- <owner/repo>` | has `main` only ever moved forward from an accepted checkpoint? |
+
+The first two read GitHub records alone. The third needs a record of what was
+accepted before, and where that record lives is the whole of this section.
+
+### Why the writer workflow is founder-controlled
+
+`.github/workflows/julius-accept-main.yml` is the only thing that records an
+accepted-main checkpoint. It must be beyond the reach of the identity it
+polices, and it is, for a reason that is a fact about GitHub rather than a
+convention: **the coding worker cannot write workflow files at all.** A push
+touching `.github/workflows/**` from a GitHub App without the `workflows`
+permission is refused by the server, and `julius-worker[bot]` does not have that
+permission. It also cannot dispatch a workflow (`actions: read`), cannot upload
+an artifact by any REST route, and cannot delete one.
+
+`julius-worker[bot]` must never be granted `Workflows: Write`. It would hand the
+worker the ability to rewrite both this writer and the paid-mission workflow,
+and every guarantee in this section rests on it not having that.
+
+The refusal is not theoretical. Attempting to land the writer as part of an
+ordinary worker-authored pull request was rejected by the server:
+
+```
+! [remote rejected] refusing to allow a GitHub App to create or update
+  workflow `.github/workflows/julius-accept-main.yml` without `workflows` permission
+```
+
+### Why the installation is a one-time trust-root bootstrap
+
+The writer cannot be introduced by the ordinary route, because the ordinary
+route requires a worker-authored pull request and the worker cannot author
+changes to workflow files. Someone with `workflows` authority has to place the
+first copy. That is the founder, once, as a deliberate administrative act.
+
+This is a bootstrap in the strict sense: it is the step that establishes the
+trust root, and it cannot be performed by the mechanism it establishes.
+
+It happened once, in commit `1c8a63add32c685a4d1983691d4f98281199ac2a`, which
+touches that one file and nothing else. The content was published with its
+digest before installation and verified byte-for-byte afterwards
+(`sha256:8de58423dca8487f3ea9e1f093a7e1f976375797daf89d1dfbb4d12eded615b5`), so
+what landed is what was reviewed even though no pull request carried it.
+
+### Why `main` temporarily becomes unprovenanced
+
+`julius:main-provenance` requires the commit on `main` to be the merge result of
+a **worker-authored** pull request approved at an exact sha. A founder-authored
+installation commit satisfies none of that, so immediately after the install the
+gate reports `unprovenanced` and blocks.
+
+That is the gate working. It is not suppressed, not exempted, and not worked
+around. Live execution is correctly unavailable for as long as the condition
+holds.
+
+### Why a subsequent worker-authored PR restores it
+
+The gate asks about the commit `main` currently carries, not about history. Once
+an ordinary worker-authored, exact-sha-approved pull request merges, the tip is
+again the merge result of an approved candidate and `julius:main-provenance`
+returns `provenant`. Nothing needs to be repaired; the next normal change is the
+repair.
+
+Only after that may the writer be dispatched, because it refuses to record a
+checkpoint for a commit that is not `provenant`. Recording one for an unreviewed
+commit would launder it into the trusted history and make it the floor every
+later run compares against.
+
+### This exception is exactly one file
+
+It permits a founder to install and amend `.github/workflows/**`, because no
+other identity can. It permits nothing else.
+
+A founder-authored change to ordinary source does **not** inherit this
+exception. It bypasses the reviewer model — the author and the approver become
+the same person — and it leaves `main` unprovenanced until a worker-authored
+approved pull request lands. Source changes go through the worker and are
+approved by the founder at an exact sha, without exception.
+
+### Checkpoint retention and renewal
+
+Checkpoints are Actions artifacts, and artifacts expire. Ninety days is the
+ceiling this plan allows, so retention cannot be raised to avoid the problem.
+
+The guard is not weakened to tolerate expiry. An expired checkpoint is not
+authority, and if every checkpoint expires `julius:main-monotonicity` answers
+`uninitialized` and blocks. That is a lockout of live execution, and it is the
+correct failure: a rollback guard with no record of what was accepted is not a
+guard.
+
+Renewal is therefore an operational obligation. **Dispatch `Julius accept main`
+at the current `main` at least every 60 days**, which leaves 30 days of margin.
+Any dispatch renews, because each records a fresh checkpoint, and older ones
+ageing out costs nothing while a live one remains. A lapse needs no exception to
+recover from: dispatch once at the current `main`.
+
+### Recovering from an intentional rollback
+
+1. Move `main` to the intended commit.
+2. Delete the `julius-accepted-main-<sha>` artifacts no longer contained in it.
+3. Dispatch `Julius accept main` at the intended commit.
+
+Step 2 needs `actions: write`, which neither the worker nor the writer workflow
+holds. Lowering the floor is an act by a person and leaves a trail in the
+Actions UI.
