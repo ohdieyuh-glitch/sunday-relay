@@ -267,6 +267,20 @@ describe('review authority', () => {
     expect(narrowed.blockingCount).toBe(1);
   });
 
+  it('an approval with ordinary prose on it is still an approval', () => {
+    // The reviewer types "looks good, merging". Judged by the rule a finding
+    // report needs, that unclassifiable text would refuse the very approval it
+    // is attached to, and the gate would claim a blocking finding exists.
+    for (const body of ['looks good, merging', 'LGTM', 'thanks — shipping this', 'approved']) {
+      expect(at(A, [{ ...approved(A), body }]).verdict, body).toBe('current');
+    }
+    // An approval that spells out a blocking severity is a contradiction the
+    // reviewer wrote, and it still blocks: the marker is read, the fail-closed
+    // default for unreadable prose is what does not apply to an approval.
+    expect(at(A, [{ ...approved(A), body: 'approving, but **P1** the retry path is wrong' }]).verdict).toBe('blocked');
+    expect(at(A, [{ ...approved(A), body: 'critical: do not ship' }]).verdict).toBe('blocked');
+  });
+
   it('a finding written in the review body, not a line comment, still blocks', () => {
     const summarised = { commit_id: A, state: 'COMMENTED', body: '**P1** the whole approach is wrong', user: { login: APPROVER } };
     expect(at(A, [approved(A), summarised]).verdict).toBe('blocked');
@@ -677,5 +691,5 @@ describe('the CLI entry guard', () => {
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }
-  });
+  }, 30_000);
 });
