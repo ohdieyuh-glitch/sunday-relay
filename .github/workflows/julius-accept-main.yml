@@ -1,0 +1,213 @@
+# RECORD AN ACCEPTED MAIN CHECKPOINT.
+#
+# This is the ONLY writer of the store the monotonicity guard reads. It exists
+# so that "the branch has only moved forward" is a claim about something the
+# coding worker cannot author.
+#
+# WHY A WORKFLOW, AND WHY DISPATCH-ONLY.
+#
+# The checkpoint may not live in this repository: every file here is writable by
+# `julius-worker[bot]` (`contents: write`), and so are tags — creating one was
+# tried with the worker's own credential and it succeeded. An Actions artifact
+# is different in three ways, each verified against the live API with that same
+# credential:
+#
+#   * there is no REST route that uploads an artifact, so a token alone cannot
+#     produce one — something has to RUN;
+#   * the worker cannot make anything run (`actions: read` refuses
+#     workflow_dispatch with HTTP 403);
+#   * the worker cannot delete one either (HTTP 403).
+#
+# `workflow_dispatch` is therefore the whole point. There is deliberately no
+# `push` trigger: the worker can push to `main`, so a push-triggered writer
+# would let it advance the checkpoint at will and the guard would certify its
+# own rollbacks.
+#
+# WHAT IT REFUSES TO RECORD. A checkpoint is only written for a commit the
+# provenance gate already calls `provenant`. Accepting an unreviewed commit
+# would launder it into the trusted history, and every later run would treat it
+# as the floor.
+#
+# INTENTIONAL ROLLBACK — the recovery procedure.
+#
+# If the founder decides `main` must go backward on purpose, the guard is
+# supposed to refuse until the record says so. Recovery is deliberately manual
+# and founder-only:
+#
+#   1. Move `main` to the intended older commit.
+#   2. DELETE the `julius-accepted-main-<sha>` artifacts for every commit that
+#      is no longer contained in it (Actions > Artifacts, or
+#      `DELETE /repos/{owner}/{repo}/actions/artifacts/{id}`). This needs
+#      `actions: write`, which the worker does not have and this workflow is not
+#      granted — it is an act by a person, and it is what makes an intentional
+#      rollback distinguishable from a covert one.
+#   3. Dispatch this workflow again at the intended commit.
+#
+# Deleting a checkpoint is the only way to lower the floor, it leaves an audit
+# trail in the Actions UI, and nothing automatable can do it.
+#
+# RETENTION, AND THE RENEWAL THAT PREVENTS A LOCKOUT.
+#
+# Artifacts expire. 90 days is the ceiling this plan allows, so `retention-days`
+# cannot be raised to sidestep the problem, and the guard is deliberately not
+# weakened to tolerate it: an EXPIRED checkpoint is not authority, and if every
+# checkpoint expires the guard answers `uninitialized` and blocks. That is a
+# lockout, and it is the correct failure — a rollback guard with no record of
+# what was accepted is not a guard.
+#
+# The renewal policy is therefore an operational obligation, not a code change:
+# dispatch this workflow again at the current `main` at least every 60 days,
+# leaving 30 days of margin before the newest checkpoint expires. Any dispatch
+# renews, because each one records a fresh checkpoint; older ones aging out
+# costs nothing while a live one remains, since the rule only ever requires the
+# current commit to contain the checkpoints that still exist.
+#
+# A lapse is recoverable and needs no exception: dispatch once at the current
+# main. The only thing it costs is that live execution is blocked until then.
+
+name: Julius accept main
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_accept:
+        description: 'Type "ACCEPT MAIN" to record the current main as an accepted checkpoint.'
+        required: true
+        default: ''
+      expected_main:
+        description: 'The exact 40-hex commit expected on main. Recording a different commit is refused.'
+        required: true
+        default: ''
+
+# READ-ONLY, and every entry is here because a gate needs it:
+#   contents       the branch tip, commit trees and parents, and `compare`
+#   pull-requests  the merged pull request behind the commit, and its reviews
+#   issues         the pull request timeline, which is where a base retarget shows
+#   statuses       the sha-bound attestation path
+#   actions        the existing accepted-main checkpoints
+# Uploading an artifact needs none of them: `actions/upload-artifact` uses the
+# runtime token, which is why `actions: write` is absent. That absence is load
+# bearing — it is what keeps this workflow unable to delete a checkpoint.
+permissions:
+  contents: read
+  pull-requests: read
+  issues: read
+  statuses: read
+  actions: read
+
+concurrency:
+  group: julius-accept-main
+  cancel-in-progress: false
+
+jobs:
+  accept:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: 'Gate: the operator typed the exact phrase'
+        env:
+          CONFIRM: ${{ inputs.confirm_accept }}
+          EXPECTED: ${{ inputs.expected_main }}
+        run: |
+          set -euo pipefail
+          # Exact match, no trimming: a phrase that has to be typed is a phrase
+          # that has to be typed. A trailing space once cost a dispatch, and the
+          # fix was to keep the comparison strict and say so.
+          if [ "$CONFIRM" != "ACCEPT MAIN" ]; then
+            echo 'refused: confirm_accept must be exactly "ACCEPT MAIN"' >&2
+            exit 1
+          fi
+          case "$EXPECTED" in
+            [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]) ;;
+            *) echo 'refused: expected_main must be a full 40-hex commit sha' >&2; exit 1 ;;
+          esac
+
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ inputs.expected_main }}
+          persist-credentials: false
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+
+      - name: 'Gate: main is exactly the commit the operator named'
+        id: read_main
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED: ${{ inputs.expected_main }}
+        run: |
+          set -euo pipefail
+          actual="$(gh api "repos/${GITHUB_REPOSITORY}/branches/main" --jq '.commit.sha')"
+          if [ "$actual" != "$EXPECTED" ]; then
+            echo "refused: main is $actual, not the $EXPECTED this dispatch named" >&2
+            exit 1
+          fi
+          echo "main_sha=$actual" >> "$GITHUB_OUTPUT"
+
+      - name: 'Gate: that commit is reviewed-main provenant'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # A checkpoint for an unreviewed commit would launder it into the
+          # trusted history and become the floor every later run compares to.
+          node scripts/julius-main-provenance.mjs "${GITHUB_REPOSITORY}" main
+
+      - name: 'Gate: main has not moved since the provenance check'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED: ${{ inputs.expected_main }}
+        run: |
+          set -euo pipefail
+          actual="$(gh api "repos/${GITHUB_REPOSITORY}/branches/main" --jq '.commit.sha')"
+          [ "$actual" = "$EXPECTED" ] || { echo "refused: main moved to $actual during the check" >&2; exit 1; }
+
+      - name: Build the checkpoint payload
+        env:
+          MAIN_SHA: ${{ steps.read_main.outputs.main_sha }}
+        run: |
+          set -euo pipefail
+          # An EMPTY directory uploads no artifact and still reports success, so
+          # the file is written before the upload and its presence is checked.
+          mkdir -p checkpoint
+          {
+            echo "accepted_main=${MAIN_SHA}"
+            echo "accepted_by_run=${GITHUB_RUN_ID}"
+            echo "accepted_by_actor=${GITHUB_ACTOR}"
+          } > checkpoint/accepted-main.txt
+          test -s checkpoint/accepted-main.txt
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          # THE COMMIT IS IN THE NAME. The guard lists artifacts and reads the
+          # sha straight off, so verifying a checkpoint needs no download, no
+          # unzip, and no trust in anything fetched separately.
+          name: julius-accepted-main-${{ steps.read_main.outputs.main_sha }}
+          path: checkpoint
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: 'Prove the checkpoint is readable, and that the guard now passes'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # Announce facts, not intentions: the run says "recorded" only after
+          # the guard it exists to satisfy actually reads the checkpoint back.
+          #
+          # An artifact is not always listed by the API the instant its upload
+          # returns, so this retries rather than calling a recorded checkpoint a
+          # failure. The retry is bounded and the last attempt is fatal: a run
+          # that cannot demonstrate the guard passing must go red, because the
+          # alternative is an operator believing a checkpoint exists when the
+          # thing that reads it cannot see one.
+          for attempt in 1 2 3 4 5 6; do
+            if node scripts/julius-main-monotonicity.mjs "${GITHUB_REPOSITORY}" main; then
+              exit 0
+            fi
+            echo "checkpoint not yet visible to the guard (attempt $attempt); retrying in 10s" >&2
+            sleep 10
+          done
+          echo 'the checkpoint was uploaded but the guard never saw it' >&2
+          exit 1
