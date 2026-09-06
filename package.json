@@ -32,6 +32,7 @@
     "julius:review-currency": "node scripts/julius-review-currency.mjs",
     "julius:main-provenance": "node scripts/julius-main-provenance.mjs",
     "julius:main-monotonicity": "node scripts/julius-main-monotonicity.mjs",
+    "julius:live-preflight": "node scripts/julius-live-preflight-gates.mjs",
     "julius:harness:export": "node scripts/export-julius-harness.mjs",
     "julius:harness:check": "node scripts/export-julius-harness.mjs --check",
     "relay": "npm run relay:build --silent && node dist-relay/cli.cjs",
