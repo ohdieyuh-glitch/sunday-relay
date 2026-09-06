@@ -354,3 +354,37 @@ describe('the repairs hold their own edges', () => {
     expect(harness.adapters.get(ARCHITECT.adapterId)!.dispatches.map((d) => d.taskId)).toEqual(['plan-1']);
   });
 });
+
+describe('a Coding Agent timeout that reported no cost', () => {
+  const USD = 1_000_000;
+  const MISSION_2 = juliusAllocationPolicy({ ceilingUsdMicros: 20 * USD, authorizedRepairRounds: 3 });
+
+  it('keeps its hold, so the retry is not granted money the first attempt may already have spent', async () => {
+    const harness = build({
+      reviewer: [REVIEW_ACCEPT, REVIEW_ACCEPT],
+      // A hosted timeout: the runtime started and the final message that would
+      // have carried the cost never arrived.
+      coder: [{ kind: 'fail', code: 'TIMEOUT', runtimeStarted: true }, BUILD_OK],
+      allocation: MISSION_2, budgetUsdMicros: 20 * USD,
+    });
+    await drain(harness.loop, 20);
+    // The timed-out attempt's own reservation, settled at the whole allocation
+    // it was holding rather than freed.
+    const held = harness.budget.reservations()
+      .filter((row) => row.reservationId.includes('build-1') && row.state === 'COMMITTED' && row.usdMicros === 5 * USD);
+    expect(held, 'the hold stands: Unknown spend is not zero spend').toHaveLength(1);
+    const settled = harness.store.events().filter((event) => event.type === 'budget.settled' && event.facts.reason === 'TIMEOUT');
+    expect(settled, 'and the record says the amount is Unknown').toHaveLength(1);
+    expect(settled[0]!.facts.usdMicros).toBeNull();
+  });
+
+  it('but a dispatch that never reached a runtime hands its whole hold back', async () => {
+    const harness = build({
+      reviewer: [REVIEW_ACCEPT, REVIEW_ACCEPT],
+      coder: [{ kind: 'fail', code: 'RATE_LIMIT', runtimeStarted: false }, BUILD_OK],
+      allocation: MISSION_2, budgetUsdMicros: 20 * USD,
+    });
+    await drain(harness.loop, 20);
+    expect(harness.budget.reservations().some((row) => row.state === 'RELEASED' && row.usdMicros === 0)).toBe(true);
+  });
+});

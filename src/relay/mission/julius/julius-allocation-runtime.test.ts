@@ -173,10 +173,46 @@ describe('the ledger charges what was spent and never frees what it cannot accou
     expect(budget.reservations()).toContainEqual({ reservationId: 'build:1', state: 'RELEASED', usdMicros: 0 });
   });
 
-  it('a reported cost above the hold is charged at the hold: the ledger never invents money it did not authorize', async () => {
-    const budget = createMemoryBudget(20 * USD);
+  it('a cost above what was authorized is recorded in full, and the overspend denies the next dispatch', async () => {
+    // Clamping to the hold would hide real overspend and let the mission be
+    // granted money it has already spent.
+    const budget = createMemoryBudget(6 * USD);
     await reserve(budget, 'build:1', 5 * USD);
     await budget.release({ reservationId: 'build:1', reason: 'TIMEOUT', now, usdMicros: 9 * USD });
+    expect(budget.reservations()).toContainEqual({ reservationId: 'build:1', state: 'COMMITTED', usdMicros: 9 * USD });
+    expect(budget.remainingUsdMicros(), 'the ceiling has been exceeded and the ledger says so').toBe(-3 * USD);
+    expect(evaluateJuliusAllocation({ policy: MISSION_2, role: 'CODING_AGENT', remainingUsdMicros: budget.remainingUsdMicros(), estimateUsdMicros: ESTIMATE }))
+      .toMatchObject({ usdMicros: 0, basis: 'EXHAUSTED' });
+  });
+});
+
+describe('a failure that reports no cost: spending nothing is not the same as spending an unknown amount', () => {
+  const now = '2026-09-06T00:00:00.000Z';
+  const reserve = (budget: ReturnType<typeof createMemoryBudget>, id: string, usdMicros: number) =>
+    budget.reserve({ reservationId: id, runId: 'run', projectId: 'prj', taskId: id, usdMicros, inputTokens: 0, outputTokens: 0, toolCalls: 0, runtimeMs: 0, now });
+
+  it('a runtime that STARTED and reported nothing keeps its hold — the timeout case a cost is never reported for', async () => {
+    // The SDK reports cost only in its final result message, which a timeout
+    // never delivers: the attempt most likely to have billed is the one least
+    // likely to say so. Freeing the hold would hand the retry the same money.
+    const budget = createMemoryBudget(20 * USD);
+    await reserve(budget, 'build:1', 5 * USD);
+    await budget.release({ reservationId: 'build:1', reason: 'TIMEOUT', now, usdMicros: null, spendUnknown: true });
     expect(budget.reservations()).toContainEqual({ reservationId: 'build:1', state: 'COMMITTED', usdMicros: 5 * USD });
+    expect(budget.remainingUsdMicros()).toBe(15 * USD);
+  });
+
+  it('a runtime that never STARTED hands its whole hold back', async () => {
+    const budget = createMemoryBudget(20 * USD);
+    await reserve(budget, 'build:1', 5 * USD);
+    await budget.release({ reservationId: 'build:1', reason: 'AUTH_CONFIGURATION', now, usdMicros: null, spendUnknown: false });
+    expect(budget.remainingUsdMicros()).toBe(20 * USD);
+  });
+
+  it('a reported cost always wins over the hold, whether or not the runtime started', async () => {
+    const budget = createMemoryBudget(20 * USD);
+    await reserve(budget, 'build:1', 5 * USD);
+    await budget.release({ reservationId: 'build:1', reason: 'WORKER_EXECUTION_FAILURE', now, usdMicros: 1_500_000, spendUnknown: true });
+    expect(budget.reservations()).toContainEqual({ reservationId: 'build:1', state: 'COMMITTED', usdMicros: 1_500_000 });
   });
 });

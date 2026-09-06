@@ -121,6 +121,11 @@ keep their fixed estimates (they report no cost), and the share is derived from
 the two contract fields alone. If every authorized round spends its full share
 the mission spends exactly its ceiling and never more.
 
+`floor` divides evenly only when the ceiling divides by the round count, so
+the guarantee is AT MOST the ceiling, never exactly it: a $10 contract with two
+repair rounds shares $3.333333 three times and leaves a micro-dollar unspent.
+Under-spending the authorization is the safe direction.
+
 Properties held by construction and by test:
 
 - The allocation is reserved against the run ledger before dispatch, so the sum
@@ -161,7 +166,10 @@ what was done about them. Three would have failed a live run.
 - **A failed attempt's spend was released, not charged.** A hosted run that
   timed out after billing $4.90 returned its whole $5 hold, and the retry was
   granted the same $5 again. `release` now carries what the boundary reported
-  billing, and money already spent is committed rather than freed.
+  billing, and money already spent is committed rather than freed — at what it
+  cost, not at what it was allowed to cost, so a runtime that overran its
+  ceiling drives the remaining budget down and, past zero, denies the next
+  dispatch instead of hiding the overspend.
 - **A replayed decision would have minted a second repair round**, since
   `repairRoundsBefore` counts the existing child and the replay computes the
   next round under a fresh id. The write that records a decision is now the one
@@ -198,6 +206,17 @@ what was done about them. Three would have failed a live run.
   claimed by the same process would be allocated from this mission's contract.
   Pre-existing shape, unchanged by this work, recorded in
   `docs/JULIUS_BETA_READINESS.md` alongside the durable-ledger debt.
+- **Two dependencies accepted concurrently can each miss the other's release.**
+  A release is computed from the decisions the accepting write can see, so if a
+  fan-in's last two dependencies were accepted by two processes at the same
+  instant, neither would see the other and the dependent would stay BLOCKED.
+  Nothing in the live graph fans in — `build` depends on the plan alone, a
+  review on the task it reviews, a repair on nothing — and a live mission is one
+  process with a C.A.R.D. concurrency of 1, so the race has no reachable
+  instance today. It would surface as a stall the drive loop reports, not as
+  work running unverified. Computing the release inside the store's own
+  transaction, or sweeping for it when a run would otherwise stall, is the fix
+  if a fan-in ever enters the graph.
 - **Repair rows written before this change are not lineage members** (they
   carry `CODING_AGENT` on a plan repair, or a doubled `repair:repair:` type).
   No such rows exist: a live mission's database is created and destroyed with

@@ -646,7 +646,7 @@ describe('the evidence dump names only tables and columns the migrations create'
     const dumps = queries();
     const everyDumpedFile = [...read('.github/julius-live-evidence-dump.sh').matchAll(/" ([a-z-]+\.tsv)$/gmu)].map((match) => match[1]).sort();
     expect(everyDumpedFile, 'every file the script writes, including the ones this regex cannot parse')
-      .toEqual(['decisions.tsv', 'evidence.tsv', 'failures.tsv', 'findings.tsv', 'runs.tsv', 'tasks.tsv', 'tool-invocations.tsv', 'worker-diagnostics.tsv']);
+      .toEqual(['budget.tsv', 'decisions.tsv', 'evidence.tsv', 'failures.tsv', 'findings.tsv', 'runs.tsv', 'tasks.tsv', 'tool-invocations.tsv', 'worker-diagnostics.tsv']);
     expect(dumps.map((dump) => dump.file).sort()).toEqual(['decisions.tsv', 'evidence.tsv', 'findings.tsv', 'runs.tsv', 'tasks.tsv', 'tool-invocations.tsv']);
     for (const dump of dumps) {
       const columns = tables.get(dump.table);
@@ -1756,5 +1756,54 @@ describe('the trust gate runs before anything the candidate controls', () => {
     expect(gate).toContain('GH_TOKEN: ${{ github.token }}');
     expect(gate, 'a stored credential would be a second authority nobody reviewed')
       .not.toMatch(/secrets\./u);
+  });
+});
+
+/**
+ * WHAT EACH DISPATCH WAS ALLOWED TO SPEND.
+ *
+ * Paid run 34037313976 was refused for cost and the bundle could not say what
+ * the ceiling was, who set it, or how much of the mission remained — the
+ * amount lived only in a message nothing persisted. `budget.tsv` is the row
+ * that answers it, and these hold it to real columns and named fact keys
+ * rather than a whole payload, exactly as the failure query is held.
+ */
+describe('the budget dump explains what a mission was allowed to spend', () => {
+  const budgetQuery = () => {
+    const query = read('.github/julius-live-evidence-dump.sh').split('\n').find((line) => line.includes('budget.tsv')) ?? '';
+    expect(query, 'the budget dump must exist').not.toBe('');
+    return query;
+  };
+
+  it('reads the events table by real columns, and never exports a whole payload', () => {
+    const query = budgetQuery();
+    const eventsDdl = /CREATE TABLE relay_wonderland\.events\(([\s\S]*?)\);/u
+      .exec(read('src/relay/persistence/wonderland-migrations/001_wonderland_runtime.sql'))?.[1] ?? '';
+    expect(eventsDdl, 'the events table must exist in the migrations').not.toBe('');
+    for (const column of ['event_type', 'payload', 'occurred_at']) {
+      expect(eventsDdl.includes(column), `events.${column} is not a column the migrations create`).toBe(true);
+    }
+    expect(query, 'a whole payload would carry whatever a worker put in it').not.toMatch(/->'facts'(?!->>)/u);
+    expect(query).not.toMatch(/SELECT[^"]*\be\.payload\b\s*(?:,|AS|FROM)/u);
+  });
+
+  it('names the four budget event types the runtime actually emits', () => {
+    const query = budgetQuery();
+    const catalogue = read('src/relay/mission/julius/julius-events.ts');
+    for (const type of ['budget.allocated', 'budget.reserved', 'budget.settled', 'budget.denied']) {
+      expect(query, `${type} must be exported`).toContain(`julius.${type}`);
+      expect(catalogue, `${type} must be a declared event type`).toContain(`'${type}'`);
+    }
+  });
+
+  it('exports the facts that answer WHO SET THE CEILING and WHAT REMAINED', () => {
+    const query = budgetQuery();
+    for (const fact of ['allocatedUsdMicros', 'allocationBasis', 'shareUsdMicros', 'remainingUsdMicros', 'allocationPolicy', 'usdMicros']) {
+      expect(query, `${fact} is what the paid run's bundle could not say`).toContain(`'facts'->>'${fact}'`);
+    }
+    // The facts the pipeline actually writes beside an allocation.
+    const pipeline = read('src/relay/mission/julius/julius-task-pipeline.ts');
+    expect(pipeline).toContain('allocatedUsdMicros: allocation.usdMicros');
+    expect(pipeline).toContain('allocationPolicy: allocation.policyVersion');
   });
 });

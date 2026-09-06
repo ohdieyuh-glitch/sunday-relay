@@ -496,6 +496,15 @@ export function createLiveHostedCodingAdapter(input: {
             ? null : Math.round(observed.usage.totalCostUsd * 1_000_000),
           costCeilingUsdMicros: limits.maxCostCents * 10_000,
           costSource: observed?.usage.source ?? null,
+          /**
+           * DID THE RUNTIME EVER START? A run that never launched billed
+           * nothing; one that launched and was aborted — the timeout, which is
+           * the case a cost is LEAST likely to be reported for, because the
+           * SDK reports cost only in its final result message — billed an
+           * unknown amount. The ledger needs that difference to decide whether
+           * a hand-back may free the hold.
+           */
+          runtimeStarted: observed?.initSeen ?? false,
         };
         if (outcome.kind === 'timed_out') throw new JuliusDispatchError('TIMEOUT', true, 'Hosted Coding Agent timed out.', 'coder_timed_out', { ...coderDiagnostics, timedOut: true });
         if (outcome.kind === 'cancelled') throw new JuliusDispatchError('CANCELLED', false, 'Hosted Coding Agent run was cancelled.', 'coder_cancelled', coderDiagnostics);

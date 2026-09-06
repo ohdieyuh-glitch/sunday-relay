@@ -161,6 +161,8 @@ export const safeReviewDiagnostics=(value:unknown):JuliusSafeDiagnostics|null=>{
   costCeilingUsdMicros:safeCount(v.costCeilingUsdMicros),
   /** `runtime_reported` or `unavailable` — Unknown stays Unknown. */
   costSource:safeToken(v.costSource),
+  /** Whether the provider runtime launched at all: the difference between spending nothing and spending an unknown amount. */
+  runtimeStarted:safeNullableBool(v.runtimeStarted),
  });
 };
 /**

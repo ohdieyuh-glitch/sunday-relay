@@ -277,7 +277,18 @@ export interface JuliusBudgetPort {
    * never released, or a timed-out attempt would return its whole allocation
    * to the ledger and the retry would be granted it a second time.
    */
-  release(input: { reservationId: string; reason: string; now: string; usdMicros?: number | null }): Promise<void>;
+  release(input: {
+    reservationId: string; reason: string; now: string;
+    usdMicros?: number | null;
+    /**
+     * The attempt reached a provider that started work and reported no cost.
+     * Unknown spend is not zero spend either: the hold is KEPT rather than
+     * freed, because a hosted runtime reports its cost only in a final message
+     * a timeout never delivers — the case where a hand-back would most often
+     * hand the retry money the first attempt had already spent.
+     */
+    spendUnknown?: boolean;
+  }): Promise<void>;
   /**
    * WHAT REMAINS, so an allocation can be derived from it: the ceiling minus
    * every outstanding reservation and commitment, in micro-dollars. `null`

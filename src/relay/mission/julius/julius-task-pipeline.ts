@@ -705,12 +705,15 @@ function executionPorts(
         facts: { reservationId, usdMicros, inputTokens: number('inputTokens'), outputTokens: number('outputTokens') },
       });
     },
-    release: async ({ reservationId, reason, usdMicros }) => {
-      await deps.budget.release({ reservationId, reason, now: deps.clock.now(), usdMicros: usdMicros ?? null });
+    release: async ({ reservationId, reason, usdMicros, spendUnknown }) => {
+      await deps.budget.release({ reservationId, reason, now: deps.clock.now(), usdMicros: usdMicros ?? null, spendUnknown });
       // A failed attempt that billed before it failed is a settlement, not a
       // hand-back, and the record has to be able to say so.
-      if (typeof usdMicros === 'number' && usdMicros > 0) {
-        await ledger.event('budget.settled', { taskId: null, facts: { reservationId, usdMicros, reason } });
+      if ((typeof usdMicros === 'number' && usdMicros > 0) || spendUnknown === true) {
+        await ledger.event('budget.settled', {
+          taskId: null,
+          facts: { reservationId, usdMicros: typeof usdMicros === 'number' ? usdMicros : null, reason },
+        });
       }
     },
     persistEvidence: async ({ claim, evidence }) => {

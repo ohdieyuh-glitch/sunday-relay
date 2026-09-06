@@ -96,11 +96,24 @@ export function createMemoryBudget(ceilingUsdMicros: number): MemoryBudget {
     async release(input) {
       const row = held.get(input.reservationId);
       if (row === undefined || row.state !== 'RESERVED') return;
-      // SPENT MONEY IS CHARGED, NOT RELEASED. A failed attempt that billed
-      // before it failed settles at what it billed; only an attempt that spent
-      // nothing hands its whole hold back.
+      // SPENT MONEY IS CHARGED, NOT RELEASED, AND CHARGED AT WHAT IT COST.
+      //
+      // A failed attempt that billed before it failed settles at what it
+      // billed — not at what it was allowed to bill. Clamping to the hold
+      // would hide real overspend from the ledger and let the mission be
+      // granted money it has already spent; recording the excess drives
+      // `available()` down, and past zero it denies the next dispatch, which
+      // is the honest direction for a ceiling that has been exceeded. Only an
+      // attempt that spent nothing hands its whole hold back.
       const spent = typeof input.usdMicros === 'number' && Number.isFinite(input.usdMicros) && input.usdMicros > 0
-        ? Math.min(input.usdMicros, row.usdMicros) : 0;
+        ? input.usdMicros : 0;
+      // AND UNKNOWN SPEND KEEPS ITS HOLD. A hosted runtime reports cost only
+      // in the final message a timeout never delivers, so the attempt most
+      // likely to have billed is the one least likely to say so.
+      if (spent === 0 && input.spendUnknown === true) {
+        held.set(input.reservationId, { usdMicros: row.usdMicros, state: 'COMMITTED' });
+        return;
+      }
       held.set(input.reservationId, spent > 0
         ? { usdMicros: spent, state: 'COMMITTED' }
         : { usdMicros: 0, state: 'RELEASED' });
@@ -133,7 +146,13 @@ export type ScriptedOutcome =
   /** `usdMicros: null` reports NO cost — Unknown, which is not zero. */
   | { readonly kind: 'succeed'; readonly evidence?: readonly Record<string, unknown>[]; readonly usdMicros?: number | null }
   /** `costUsdMicros` is what the boundary billed before it failed, as its diagnostics would carry. */
-  | { readonly kind: 'fail'; readonly code: 'RATE_LIMIT' | 'TIMEOUT' | 'AUTH_CONFIGURATION' | 'PROVIDER_UNAVAILABLE' | 'WORKER_EXECUTION_FAILURE'; readonly costUsdMicros?: number }
+  | {
+    readonly kind: 'fail';
+    readonly code: 'RATE_LIMIT' | 'TIMEOUT' | 'AUTH_CONFIGURATION' | 'PROVIDER_UNAVAILABLE' | 'WORKER_EXECUTION_FAILURE';
+    readonly costUsdMicros?: number;
+    /** Whether the provider runtime launched — the difference between spending nothing and spending an unknown amount. */
+    readonly runtimeStarted?: boolean;
+  }
   | { readonly kind: 'malformed' };
 
 export interface ScriptedAdapter extends JuliusProviderAdapter {
@@ -166,7 +185,12 @@ export function scriptedAdapter(
       if (step.kind === 'fail') {
         throw new JuliusDispatchError(
           step.code, step.code === 'RATE_LIMIT' || step.code === 'TIMEOUT', 'Scripted provider failure.', undefined,
-          step.costUsdMicros === undefined ? undefined : { costUsdMicros: step.costUsdMicros },
+          step.costUsdMicros === undefined && step.runtimeStarted === undefined
+            ? undefined
+            : {
+              ...(step.costUsdMicros === undefined ? {} : { costUsdMicros: step.costUsdMicros }),
+              ...(step.runtimeStarted === undefined ? {} : { runtimeStarted: step.runtimeStarted }),
+            },
         );
       }
       if (step.kind === 'malformed') {
