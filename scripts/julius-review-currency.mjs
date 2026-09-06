@@ -289,13 +289,24 @@ export function evaluateReviewCurrency(input) {
    * A FINDING CAN BE WRITTEN IN THE REVIEW ITSELF, not only in a line comment.
    * An EMPTY body carries no finding — that is a reviewer who left no summary,
    * not an unclassifiable one — so only a body with text is judged.
+   *
+   * AN APPROVAL IS NOT A FINDING REPORT, and is not read as one. Prose attached
+   * to an APPROVED review is a remark: "looks good", "merging this now". Judged
+   * by the unclassifiable-blocks rule that a finding report needs, ordinary
+   * courtesy would refuse the approval it is attached to, and the gate would
+   * report the head as carrying a blocking finding — which is both wrong and
+   * dishonest about why. An approval that nonetheless spells out an explicit
+   * blocking severity is a contradiction the reviewer wrote, and that still
+   * blocks: the marker is read, the fail-closed default is not.
    */
-  const blockingSummaries = input.reviews.filter((review) =>
-    review?.commit_id === headSha
-    && canBlock(review?.user?.login)
-    && READ_STATES.includes(review?.state)
-    && typeof review?.body === 'string' && review.body.trim() !== ''
-    && isBlockingBody(review.body));
+  const blockingSummaries = input.reviews.filter((review) => {
+    if (review?.commit_id !== headSha || !canBlock(review?.user?.login)) return false;
+    if (!READ_STATES.includes(review?.state)) return false;
+    if (typeof review?.body !== 'string' || review.body.trim() === '') return false;
+    return APPROVING_STATES.includes(review.state)
+      ? BLOCKING_MARKERS.some((marker) => marker.test(review.body))
+      : isBlockingBody(review.body);
+  });
   const blockingComments = input.reviewComments.filter((comment) =>
     comment?.original_commit_id === headSha
     && canBlock(comment?.user?.login)

@@ -30,6 +30,7 @@
     "relay:julius:preflight:build": "esbuild scripts/julius-live-preflight.ts --bundle --platform=node --format=cjs --outfile=dist-relay-bridge/julius-live-preflight.cjs --external:pg --log-level=warning",
     "relay:julius:preflight": "npm run relay:julius:preflight:build --silent && node dist-relay-bridge/julius-live-preflight.cjs",
     "julius:review-currency": "node scripts/julius-review-currency.mjs",
+    "julius:main-provenance": "node scripts/julius-main-provenance.mjs",
     "julius:harness:export": "node scripts/export-julius-harness.mjs",
     "julius:harness:check": "node scripts/export-julius-harness.mjs --check",
     "relay": "npm run relay:build --silent && node dist-relay/cli.cjs",
