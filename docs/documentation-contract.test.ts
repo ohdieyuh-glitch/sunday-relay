@@ -646,3 +646,72 @@ describe('documents written for the founder are discoverable', () => {
     expect(readme).toMatch(/§0/);
   });
 });
+
+/**
+ * THE WORKFLOW-ADMINISTRATION CEREMONY.
+ *
+ * §13 records the one arrangement in this repository where a founder-authored
+ * commit lands on `main` without a pull request: changes under
+ * `.github/workflows/**`, which the coding worker is structurally unable to
+ * write. The justification is narrow and the ceremony around it is what keeps
+ * it narrow.
+ *
+ * An earlier draft of that section called the exception "exactly one file",
+ * which read two ways — that only the bootstrap file could ever be
+ * founder-installed, and, later, that a founder-authored commit is an ordinary
+ * tool once precedent exists. Neither is the rule, and the ambiguity was the
+ * kind that becomes a justification.
+ *
+ * These cases hold the section to the distinction. They check load-bearing
+ * claims, not wording: a step that quietly disappears from the ceremony is a
+ * step nobody performs.
+ */
+describe('governance §13 keeps the workflow exception narrow', () => {
+  const governance = read('docs/REPOSITORY_GOVERNANCE.md');
+
+  it('separates the one-time bootstrap from standing workflow administration', () => {
+    // Two concepts, two headings. Collapsing them is what made the earlier
+    // draft ambiguous.
+    expect(governance).toMatch(/^### 13\.1 The one-time accepted-main trust-root bootstrap$/mu);
+    expect(governance).toMatch(/^### 13\.2 Founder-controlled workflow administration$/mu);
+  });
+
+  it('names the bootstrap by its exact commit, so it cannot grow', () => {
+    expect(governance).toContain('1c8a63add32c685a4d1983691d4f98281199ac2a');
+    expect(governance).toContain('sha256:8de58423dca8487f3ea9e1f093a7e1f976375797daf89d1dfbb4d12eded615b5');
+  });
+
+  it('states every step of the ceremony a founder-installed workflow needs', () => {
+    // Each of these is a step that, skipped, turns "the founder had to install
+    // this" into "the founder installed something".
+    const required: [string, RegExp][] = [
+      ['the files are identified beforehand', /Identify the exact file or files/u],
+      ['the content is published first', /Publish the final content/u],
+      ['the digest is published first', /Publish its SHA-256 digest/u],
+      ['exactly those bytes are installed', /installs exactly those bytes/u],
+      ['the digest is verified afterwards', /Verify the digest after installation/u],
+      ['unprovenanced is expected', /Expect `main` to become `unprovenanced`/u],
+      ['no live execution while blocked', /No paid or live execution while unprovenanced/u],
+      ['a fresh restoration PR from that commit', /fresh worker-authored restoration pull request/u],
+      ['approved at the exact head sha', /approves it at the exact head sha/u],
+      ['merging restores provenance', /Merging restores provenance/u],
+      ['never for ordinary source', /never applies to ordinary source code/u],
+      ['never Workflows: Write', /never granted `Workflows: Write`/u],
+    ];
+    for (const [what, pattern] of required) {
+      expect(governance, `the ceremony no longer states that ${what}`).toMatch(pattern);
+    }
+  });
+
+  it('refuses the exception to ordinary source in its own words', () => {
+    expect(governance).toMatch(/^#### It never extends to ordinary source$/mu);
+    expect(governance).toContain('There is no version of this section that permits otherwise.');
+  });
+
+  it('keeps the retracted phrasing marked as retracted, not merely deleted', () => {
+    // Deleting the mistake would lose the reason it was a mistake, which is the
+    // part a later reader needs.
+    const retraction = /An earlier draft of this section said the exception was "exactly one file"\. That\nwas wrong/u;
+    expect(governance).toMatch(retraction);
+  });
+});
