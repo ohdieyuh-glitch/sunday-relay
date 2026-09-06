@@ -44,7 +44,7 @@ export function suggestProjectNames(brief: ProjectBriefDraft | null): string[] {
     base.push(`${cap(words[1])} Control`);
     base.push(`${cap(words[0])} HQ`);
   }
-  base.push('Relay Project One', 'Sunday Build', 'Mission Zero');
+  base.push('Relay Project One', 'Wonderland Build', 'Mission Zero');
   // Dedupe, keep order, cap at 6.
   return [...new Set(base)].slice(0, 6);
 }

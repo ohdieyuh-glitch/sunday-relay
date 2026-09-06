@@ -177,7 +177,7 @@ export function projectDemoSimulationIntoWorkspace(
     researchState: {
       status: index >= 2 && index <= 4 ? 'researching' : 'monitoring',
       approvedTopics: ['normalizeProjectName acceptance criteria'],
-      note: index >= 3 ? 'Sunday Alcatraz preserved the approved mission constraints.' : null,
+      note: index >= 3 ? 'Alcatraz preserved the approved mission constraints.' : null,
     },
     projectBrainState: {
       entries: base.projectBrainState.entries,

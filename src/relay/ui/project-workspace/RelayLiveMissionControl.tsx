@@ -44,7 +44,7 @@ export function RelayLiveMissionControl({
       <div className="rpw-playback-head">
         <span className="rpw-playback-tag">LIVE MISSION</span>
         <span className="rpw-playback-note">
-          Real Sunday Alcatraz architect → real Claude Code, verified by Relay
+          Real Alcatraz architect → real Claude Code, verified by Relay
           {architectLabel ? ` · ${architectLabel}` : ''}.
         </span>
       </div>

@@ -48,8 +48,8 @@ const render = (key: WorkspaceFixtureKey, overrides: Partial<RelayProjectWorkspa
 describe('product flow + application surface', () => {
   it('renders the active workspace with project identity — a browser app, not a CLI', () => {
     const html = render('implementing');
-    expect(html).toContain('SUNDAY RELAY');
-    expect(html).toContain('Sunday Relay Frontend');
+    expect(html).toContain('RELAY\u2019S WONDERLAND');
+    expect(html).toContain('Relay’s Wonderland Frontend');
     expect(html).toContain('RLY / 001');
     expect(html).toContain('RELAY HOME'); // return control
     expect(html).toContain('PROJECT SETTINGS');

@@ -136,7 +136,7 @@ export function RelayApp() {
     <div className="relay-app">
       <header className="relay-header">
         <div className="relay-brand">
-          <span className="relay-wordmark">SUNDAY RELAY</span>
+          <span className="relay-wordmark">RELAY’S WONDERLAND</span>
           <span className="relay-tagline">One mission. Two agents. A verified result.</span>
         </div>
         <nav className="relay-nav">

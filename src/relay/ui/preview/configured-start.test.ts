@@ -22,7 +22,7 @@ describe('configuredStartFromSettingsDraft', () => {
     expect(start.reference).toBe('RLY / 002');
     expect(start.name).toBe('Usage Dashboard');
     // Default draft recommends the real workforce.
-    expect(start.promptArchitectName).toBe('Sunday Alcatraz');
+    expect(start.promptArchitectName).toBe('Alcatraz');
     expect(start.codingAgentName).toBe('Claude Code');
     expect(start.reviewerName).toBe('Codex');
     // Labels, never policy identifiers.

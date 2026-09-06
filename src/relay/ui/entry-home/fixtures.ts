@@ -90,7 +90,7 @@ export const FIXTURE_RECENT_PROJECTS: RecentProjectSummary[] = [
     mode: 'semi',
     state: 'review_required',
     workforce: {
-      promptArchitect: 'Sunday Alcatraz',
+      promptArchitect: 'Alcatraz',
       codingAgent: 'Claude Code',
       reviewer: 'Codex',
     },
@@ -104,7 +104,7 @@ export const FIXTURE_RECENT_PROJECTS: RecentProjectSummary[] = [
     mode: 'guided',
     state: 'verified_complete',
     workforce: {
-      promptArchitect: 'Sunday Alcatraz',
+      promptArchitect: 'Alcatraz',
       codingAgent: 'Claude Code',
       reviewer: 'Codex',
     },
@@ -118,7 +118,7 @@ export const FIXTURE_RECENT_PROJECTS: RecentProjectSummary[] = [
     mode: 'semi',
     state: 'draft',
     workforce: {
-      promptArchitect: 'Sunday Alcatraz',
+      promptArchitect: 'Alcatraz',
       codingAgent: 'Claude Code',
       reviewer: null,
     },

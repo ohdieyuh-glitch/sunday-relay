@@ -105,7 +105,7 @@ export const OCCUPANT_FACTS: readonly OccupantFacts[] = Object.freeze([
   Object.freeze({
     occupantId: 'fusion_architect',
     role: 'prompt_architect',
-    displayName: 'Sunday Alcatraz (Fusion) development architect',
+    displayName: 'Alcatraz (Fusion) development architect',
     environments: Object.freeze(['founder_machine', 'hosted']),
     adapterAvailable: true,
     needsServerConfig: NO_CONFIG,

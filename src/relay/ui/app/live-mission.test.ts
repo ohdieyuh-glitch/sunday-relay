@@ -44,13 +44,13 @@ const HANDOFF = {
   instructions: ['Trim surrounding whitespace', 'Lowercase the name'],
   constraints: ['Edit only src/normalize.js'],
   acceptanceCriteria: ['The test suite passes', 'Only the claimed file changed'],
-  architectLabel: 'Sunday Alcatraz · live (claude)',
+  architectLabel: 'Alcatraz · live (claude)',
   architectProvenance: 'live' as const,
 };
 const CLAIM = { summary: 'Implemented the normalizer.', filesChanged: ['src/normalize.js'], checksRun: ['Reported completing the task'] };
 
 const E0 = ev(0, 'relay', 'relay', 'system_notice', 'Mission Contract locked.');
-const E1 = ev(1, 'prompt_architect', 'prompt_architect', 'system_notice', 'Sunday Alcatraz preparing the implementation brief.');
+const E1 = ev(1, 'prompt_architect', 'prompt_architect', 'system_notice', 'Alcatraz preparing the implementation brief.');
 const E2 = ev(2, 'prompt_architect', 'prompt_architect', 'system_notice', 'Handoff brief ready.', { done: true });
 const E3 = ev(3, 'coding_agent', 'coding_agent', 'system_notice', 'Claude Code session started.');
 const E4 = ev(4, 'coding_agent', 'coding_agent', 'agent_claim', 'Work submitted — pending Relay verification.', { done: true });

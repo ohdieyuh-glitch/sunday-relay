@@ -67,7 +67,7 @@ function renderMission(id: string): string {
 describe('relay UI renders every golden-path state', () => {
   it('empty app state shows the mission form', () => {
     const html = renderToStaticMarkup(createElement(RelayApp));
-    expect(html).toContain('SUNDAY RELAY');
+    expect(html).toContain('RELAY\u2019S WONDERLAND');
     expect(html).toContain('New mission');
     expect(html).toContain('Acceptance criteria');
   });

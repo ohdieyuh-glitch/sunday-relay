@@ -26,7 +26,7 @@ const SELECTION: RelayWorkforceSelection = {
 };
 
 const WORKFORCE: WorkforceAssignment = {
-  promptArchitect: { name: 'Sunday Alcatraz', status: 'waiting' },
+  promptArchitect: { name: 'Alcatraz', status: 'waiting' },
   codingAgent: { name: 'Claude Code', status: 'ready' },
   reviewer: { name: 'Hermes', state: 'waiting' },
 };

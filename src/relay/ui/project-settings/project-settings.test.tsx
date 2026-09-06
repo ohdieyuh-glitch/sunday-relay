@@ -157,7 +157,7 @@ describe('workforce options — truthful, clickable, no Gemini/Google', () => {
     expect(html).toContain('CHOOSE PROMPT ARCHITECT');
     expect(html).toContain('CHOOSE CODING AGENT');
     expect(html).toContain('CHOOSE REVIEWER');
-    expect(html).toContain('Sunday Alcatraz');
+    expect(html).toContain('Alcatraz');
     expect(html).toContain('Manual Architect');
     expect(html).toContain('No Reviewer');
     expect(html).toContain('COMING LATER');

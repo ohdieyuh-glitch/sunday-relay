@@ -63,7 +63,7 @@ describe('entry home interactions', () => {
   it('typing the objective updates the idea without starting execution', () => {
     const props = makeProps();
     render(createElement(RelayEntryHome, props));
-    const input = screen.getByLabelText('PROJECT OBJECTIVE');
+    const input = screen.getByLabelText('WHAT ARE WE BUILDING?');
     fireEvent.change(input, { target: { value: 'Build a usage dashboard' } });
     expect(props.onUpdateProjectIdea).toHaveBeenCalledWith('Build a usage dashboard');
     expect(props.onBuildProjectBrief).not.toHaveBeenCalled();

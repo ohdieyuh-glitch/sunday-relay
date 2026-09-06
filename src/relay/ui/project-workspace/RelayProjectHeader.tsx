@@ -36,9 +36,9 @@ export function RelayProjectHeader({
     <header className="rpw-header">
       <div className="rpw-header-left">
         <RelayDogMark unit={3} />
-        <span className="rpw-wordmark" aria-label="SUNDAY RELAY">
-          <span className="rpw-wordmark-sunday" aria-hidden="true">SUNDAY</span>{' '}
-          <span className="rpw-wordmark-relay" aria-hidden="true">RELAY</span>
+        <span className="rpw-wordmark" aria-label="RELAY’S WONDERLAND">
+          <span className="rpw-wordmark-sunday" aria-hidden="true">RELAY’S</span>{' '}
+          <span className="rpw-wordmark-relay" aria-hidden="true">WONDERLAND</span>
         </span>
         <button type="button" className="rpw-switch-btn" onClick={onReturnHome}>
           ← RELAY HOME

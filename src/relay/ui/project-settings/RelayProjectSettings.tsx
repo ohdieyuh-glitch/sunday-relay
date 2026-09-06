@@ -224,9 +224,9 @@ export function RelayProjectSettings({
       <header className="rps-header">
         <div className="rps-header-left">
           <RelayDogMark unit={2} />
-          <span className="rps-wordmark" aria-label="SUNDAY RELAY">
-            <span className="rps-wordmark-sunday" aria-hidden="true">SUNDAY</span>{' '}
-            <span className="rps-wordmark-relay" aria-hidden="true">RELAY</span>
+          <span className="rps-wordmark" aria-label="RELAY’S WONDERLAND">
+            <span className="rps-wordmark-sunday" aria-hidden="true">RELAY’S</span>{' '}
+            <span className="rps-wordmark-relay" aria-hidden="true">WONDERLAND</span>
           </span>
           <span className="rps-ref-chip">RLY / CONFIG</span>
         </div>

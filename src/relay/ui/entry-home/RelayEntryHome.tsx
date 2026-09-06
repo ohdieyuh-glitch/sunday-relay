@@ -9,10 +9,10 @@ import type { RelayEntryHomeProps } from './contracts';
 
 /**
  * RELAY ENTRY HOME — the authenticated in-product screen shown immediately
- * after switching from Sunday Alcatraz into Sunday Relay, BEFORE Project
+ * after switching from Alcatraz into Relay’s Wonderland, BEFORE Project
  * Settings and BEFORE the Active Project Workspace.
  *
- * Flow: Sunday Alcatraz → Relay Home → Project Settings → workspace.
+ * Flow: Alcatraz → Relay Home → Project Settings → workspace.
  *
  * Deliberately calm and spacious: three immediate choices (start from an
  * idea, choose a route, connect an existing project), the Ask Relay guide

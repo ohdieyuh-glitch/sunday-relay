@@ -38,7 +38,7 @@ export function LiveTerminal({ data, mode, fullScreen = false, onClose }: {
     <section className={`relay-terminal${fullScreen ? ' relay-terminal--full' : ''}`} aria-label="Live Terminal">
       <header className="relay-terminal-head">
         <div>
-          <span className="relay-wordmark-sm">SUNDAY RELAY</span> <span className="relay-dim">— LIVE TERMINAL</span>
+          <span className="relay-wordmark-sm">RELAY’S WONDERLAND</span> <span className="relay-dim">— LIVE TERMINAL</span>
         </div>
         {onClose && <button type="button" className="relay-btn ghost relay-terminal-close" onClick={onClose} aria-label="Close Live Terminal">✕</button>}
       </header>

@@ -51,7 +51,7 @@ export type WorkspaceFixture = Omit<
 
 const PROJECT: WorkspaceProject = {
   projectId: 'rly-001',
-  name: 'Sunday Relay Frontend',
+  name: 'Relay’s Wonderland Frontend',
   reference: 'RLY / 001',
   projectType: 'Web interface',
 };
@@ -117,7 +117,7 @@ const BASE: Omit<WorkspaceFixture, 'fixtureLabel'> = {
   // them, because an agent with no mission has no operating profile to show.
   operatingProfiles: projectAgentOperatingProfiles(operatingProfileFixtures()),
   workforce: {
-    promptArchitect: { name: 'Sunday Alcatraz', status: 'waiting' },
+    promptArchitect: { name: 'Alcatraz', status: 'waiting' },
     codingAgent: { name: 'Claude Code', status: 'ready' },
     reviewer: { name: 'Codex', state: 'waiting' },
   },
@@ -154,7 +154,7 @@ const implementing: WorkspaceFixture = {
   ...BASE,
   fixtureLabel: 'FIXTURE — IMPLEMENTING',
   workforce: {
-    promptArchitect: { name: 'Sunday Alcatraz', status: 'preparing_handoff' },
+    promptArchitect: { name: 'Alcatraz', status: 'preparing_handoff' },
     codingAgent: { name: 'Claude Code', status: 'implementing' },
     reviewer: { name: 'Codex', state: 'waiting' },
   },
@@ -371,7 +371,7 @@ const verifying: WorkspaceFixture = {
   ...BASE,
   fixtureLabel: 'FIXTURE — VERIFYING',
   workforce: {
-    promptArchitect: { name: 'Sunday Alcatraz', status: 'waiting' },
+    promptArchitect: { name: 'Alcatraz', status: 'waiting' },
     codingAgent: { name: 'Claude Code', status: 'verifying' },
     reviewer: { name: 'Codex', state: 'waiting' },
   },
@@ -422,7 +422,7 @@ const reviewing: WorkspaceFixture = {
   ...BASE,
   fixtureLabel: 'FIXTURE — REVIEWING',
   workforce: {
-    promptArchitect: { name: 'Sunday Alcatraz', status: 'waiting' },
+    promptArchitect: { name: 'Alcatraz', status: 'waiting' },
     codingAgent: { name: 'Claude Code', status: 'waiting' },
     reviewer: { name: 'Codex', state: 'reviewing' },
   },
@@ -467,7 +467,7 @@ const revisionRequired: WorkspaceFixture = {
   ...BASE,
   fixtureLabel: 'FIXTURE — REVISION REQUIRED',
   workforce: {
-    promptArchitect: { name: 'Sunday Alcatraz', status: 'waiting' },
+    promptArchitect: { name: 'Alcatraz', status: 'waiting' },
     codingAgent: { name: 'Claude Code', status: 'repairing' },
     reviewer: { name: 'Codex', state: 'changes_required' },
   },
@@ -531,7 +531,7 @@ const waitingForUser: WorkspaceFixture = {
   ...BASE,
   fixtureLabel: 'FIXTURE — WAITING FOR USER',
   workforce: {
-    promptArchitect: { name: 'Sunday Alcatraz', status: 'waiting' },
+    promptArchitect: { name: 'Alcatraz', status: 'waiting' },
     codingAgent: { name: 'Claude Code', status: 'waiting' },
     reviewer: { name: 'Codex', state: 'waiting' },
   },
@@ -581,7 +581,7 @@ const researching: WorkspaceFixture = {
   ...BASE,
   fixtureLabel: 'FIXTURE — RESEARCHING',
   workforce: {
-    promptArchitect: { name: 'Sunday Alcatraz', status: 'researching' },
+    promptArchitect: { name: 'Alcatraz', status: 'researching' },
     codingAgent: { name: 'Claude Code', status: 'ready' },
     reviewer: { name: 'Codex', state: 'waiting' },
   },
@@ -621,7 +621,7 @@ const verifiedComplete: WorkspaceFixture = {
   ...BASE,
   fixtureLabel: 'FIXTURE — VERIFIED COMPLETE',
   workforce: {
-    promptArchitect: { name: 'Sunday Alcatraz', status: 'waiting' },
+    promptArchitect: { name: 'Alcatraz', status: 'waiting' },
     codingAgent: { name: 'Claude Code', status: 'waiting' },
     reviewer: { name: 'Codex', state: 'approved' },
   },

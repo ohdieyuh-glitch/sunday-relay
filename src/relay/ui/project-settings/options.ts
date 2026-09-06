@@ -46,8 +46,8 @@ export const AGENT_OPTIONS: AgentOption[] = [
   /* -------- Prompt Architects -------- */
   {
     id: 'architect-sunday-alcatraz',
-    name: 'Sunday Alcatraz',
-    provider: 'Sunday',
+    name: 'Alcatraz',
+    provider: 'i.Wonder',
     role: 'prompt_architect',
     availability: 'recommended',
     description:
@@ -528,7 +528,7 @@ export const MEMORY_SOURCE_CHOICES: Array<Choice<MemorySourceId> & { status: str
   { value: 'project_settings', label: 'Project Settings', status: 'AVAILABLE' },
   { value: 'uploaded_files', label: 'Uploaded files', status: 'AVAILABLE' },
   { value: 'project_brain', label: 'Relay Project Brain', status: 'AVAILABLE' },
-  { value: 'sunday_alcatraz', label: 'Sunday Alcatraz context', status: 'AVAILABLE' },
+  { value: 'sunday_alcatraz', label: 'Alcatraz context', status: 'AVAILABLE' },
   { value: 'project_notes', label: 'Project notes', status: 'AVAILABLE' },
   { value: 'obsidian', label: 'Obsidian', status: 'NOT CONFIGURED', unavailable: true },
   { value: 'openknowledge', label: 'OpenKnowledge', status: 'COMING LATER', unavailable: true },

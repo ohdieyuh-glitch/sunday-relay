@@ -33,9 +33,9 @@ export function RelayEntryHeader({
         <span className="reh-mark" aria-hidden="true">
           <RelayDogMark unit={2} />
         </span>
-        <span className="reh-wordmark">SUNDAY RELAY</span>
+        <span className="reh-wordmark">RELAY’S WONDERLAND</span>
         <nav className="reh-switcher" aria-label="Product switcher">
-          {/* Alcatraz stays visible as an Aquala sibling product — the
+          {/* Alcatraz stays visible as an i.Wonder sibling product — the
               relationship is real. It is only CLICKABLE when a URL is
               configured; otherwise it is disabled and says why, instead of
               navigating to a route this repository does not build. */}
@@ -66,7 +66,7 @@ export function RelayEntryHeader({
         items={[
           {
             id: 'alcatraz',
-            label: '← SUNDAY ALCATRAZ',
+            label: '← ALCATRAZ',
             onSelect: onReturnToSunday ?? (() => undefined),
             hint: onReturnToSunday ? undefined : 'NOT CONFIGURED',
           },

@@ -63,7 +63,7 @@ export const RELAY_DEMO_SCRIPT: readonly RelayDemoStep[] = [
     label: 'PREPARING HANDOFF',
     activeRole: 'alcatraz',
     durationMs: 3400,
-    headline: 'Sunday Alcatraz · Intelligence coordination',
+    headline: 'Alcatraz · Intelligence coordination',
     summary: 'Checking mission alignment and preserving constraints before delegation.',
     details: ['Implementation route selected', 'Project Brain updated', 'Structured handoff validated'],
     event: event(4, 'alcatraz', 'coordination', 'Project Brain updated', 'Mission alignment checked and approved context prepared.', 'PREPARING HANDOFF'),

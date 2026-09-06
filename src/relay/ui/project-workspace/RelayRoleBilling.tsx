@@ -7,7 +7,7 @@ import type { RoleBillingRow } from './coding-terminal';
  * renders them. It exists so the workspace can never imply a role ran, was
  * billed, or approved something when it did not:
  *
- *   ChatGPT — Prompt Architect — coordinated by Sunday Alcatraz, which selects
+ *   ChatGPT — Prompt Architect — coordinated by Alcatraz, which selects
  *     and records the route; the request itself leaves the Relay bridge
  *     directly for OpenAI, and the row never claims a hop that did not occur.
  *     Labeled API PAID only after a proven, attested, api-billed request.

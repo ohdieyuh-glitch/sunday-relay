@@ -38,7 +38,7 @@ describe('mission control data projection (Relay Core, no provider call)', () =>
 describe('MissionControl renders every safe state', () => {
   it('renders the primary screen, terminal button, dog, and progressive sections', () => {
     const html = renderToStaticMarkup(createElement(MissionControl, { initialMode: 'semi' }));
-    expect(html).toContain('SUNDAY RELAY');
+    expect(html).toContain('RELAY\u2019S WONDERLAND');
     expect(html).toContain('Mission Control');
     expect(html).toContain('Protect anonymous live access');
     expect(html).toContain('verified complete');

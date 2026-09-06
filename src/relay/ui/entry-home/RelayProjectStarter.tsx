@@ -25,25 +25,28 @@ export function RelayProjectStarter({
   const readiness = computeHomeReadiness(projectIdeaDraft, projectBriefDraft);
 
   return (
-    <section className="reh-starter" aria-labelledby="reh-starter-heading">
-      <p className="reh-syslabel">RELAY HOME / ROUTE 000</p>
-      <h1 id="reh-starter-heading" className="reh-h1">
-        What are we building?
+    <section className="reh-starter reh-hero" aria-labelledby="reh-starter-heading">
+      <p className="reh-syslabel">i.Wonder / Relay’s Wonderland</p>
+      <p className="reh-hero-product">RELAY’S WONDERLAND</p>
+      <h1 id="reh-starter-heading" className="reh-h1 reh-hero-title">
+        Enter the World Where Ideas Become Real.
       </h1>
-      <p className="reh-support">
-        Start with an idea, connect an existing project, or choose a starting route.
+      <p className="reh-support reh-hero-support">
+        A living, multiplayer world for building software with AI — where projects, agents,
+        tools and verification become places you can enter, watch and change. Explore it like a
+        world; real software is built underneath.
       </p>
 
       <div className="reh-objective">
         <label className="reh-field-label" htmlFor="reh-objective-input">
-          PROJECT OBJECTIVE
+          WHAT ARE WE BUILDING?
         </label>
         <textarea
           id="reh-objective-input"
           className="reh-objective-input"
           rows={4}
           value={projectIdeaDraft}
-          placeholder="Describe the product, feature, system, or result you want Relay to help you build."
+          placeholder="Describe the product, feature, system or world you want to bring into being."
           onChange={(e) => onUpdateProjectIdea(e.target.value)}
         />
         <p className="reh-objective-example">

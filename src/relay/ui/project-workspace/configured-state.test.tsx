@@ -23,7 +23,7 @@ const START: ConfiguredProjectStart = {
   reference: 'RLY / 002',
   projectType: 'Web application',
   mode: 'guided',
-  promptArchitectName: 'Sunday Alcatraz',
+  promptArchitectName: 'Alcatraz',
   codingAgentName: 'Claude Code',
   reviewerName: 'Codex',
   reviewerRequired: true,

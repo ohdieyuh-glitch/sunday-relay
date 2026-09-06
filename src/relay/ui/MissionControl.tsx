@@ -58,7 +58,7 @@ export function MissionControl({ initialMode = 'semi' }: { initialMode?: RelayMo
 
       <header className="relay-mc-head">
         <div className="relay-mc-brand">
-          <span className="relay-wordmark">SUNDAY RELAY</span>
+          <span className="relay-wordmark">RELAY’S WONDERLAND</span>
           <span className="relay-tagline">Mission Control</span>
         </div>
         <div className="relay-mc-head-right">

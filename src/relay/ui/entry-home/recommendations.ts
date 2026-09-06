@@ -159,7 +159,7 @@ export function buildWorkforceRecommendation(
     roles: [
       {
         role: 'prompt_architect',
-        agentName: 'Sunday Alcatraz',
+        agentName: 'Alcatraz',
         description: ARCHITECT_DESCRIPTION,
         responsibilities: [
           'Mission planning',

@@ -71,7 +71,7 @@ describe('production bundle', () => {
       return;
     }
     const html = readFileSync(index, 'utf8');
-    expect(html).toContain('<title>Sunday Relay</title>');
+    expect(html).toContain('<title>Relay’s Wonderland — i.Wonder</title>');
     expect(html).toContain('<div id="root"></div>');
     // Vite rewrote the entry module into a hashed asset — not the raw source.
     expect(html).toMatch(/<script type="module"[^>]+src="\/assets\/[^"]+\.js"/);
@@ -104,13 +104,13 @@ describe('production bundle', () => {
     ).toBe(true);
   });
 
-  it('still identifies itself as Sunday Relay', () => {
+  it('still identifies itself as Relay’s Wonderland', () => {
     if (bundles.length === 0) {
       requireCiRerun();
       return;
     }
     const all = bundles.map((b) => readFileSync(b, 'utf8')).join('');
-    expect(all).toContain('SUNDAY RELAY');
+    expect(all).toContain('RELAY\u2019S WONDERLAND');
   });
 });
 
@@ -163,7 +163,7 @@ describe('Alcatraz sibling-product navigation', () => {
       'utf8',
     );
     expect(header).toContain('ALCATRAZ');
-    expect(header).toContain('SUNDAY RELAY');
+    expect(header).toContain('RELAY\u2019S WONDERLAND');
     // Visible, but only actionable when configured.
     expect(header).toContain('disabled={!onReturnToSunday}');
   });

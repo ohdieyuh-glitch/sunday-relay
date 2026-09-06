@@ -28,6 +28,7 @@ export function RelayEntryFooter({
         </span>
       </div>
       <p className="reh-footer-statement">Pass the work. Keep the context.</p>
+      <p className="reh-footer-brand">Relay’s Wonderland — a product of i.Wonder</p>
     </footer>
   );
 }

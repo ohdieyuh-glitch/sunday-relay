@@ -547,7 +547,7 @@ describe('11. hidden reasoning is never rendered', () => {
 describe('12 + 13. Hermes billing is truthful and never a blocker', () => {
   const rows = (over: Parameters<typeof buildRoleBilling>[0] = {}) =>
     buildRoleBilling({
-      architectLabel: 'Sunday Alcatraz (live)',
+      architectLabel: 'Alcatraz (live)',
       architectProvenance: 'live',
       architectApiBilled: false,
       codingAttestation: terminalState().attestation,
@@ -601,9 +601,9 @@ describe('12 + 13. Hermes billing is truthful and never a blocker', () => {
       (r) => r.roleKey === 'prompt_architect',
     );
     expect(unproven?.billingLabel).toBe('NOT BILLED');
-    // The route wording states what actually happens: Sunday Alcatraz
+    // The route wording states what actually happens: Alcatraz
     // coordinates the request, which leaves the bridge directly for OpenAI.
-    expect(unproven?.runtime).toContain('Coordinated by Sunday Alcatraz');
+    expect(unproven?.runtime).toContain('Coordinated by Alcatraz');
     expect(unproven?.runtime).not.toContain('Routed through');
 
     const proven = buildRoleBilling({ architectApiBilled: true }).find((r) => r.roleKey === 'prompt_architect');

@@ -1,7 +1,7 @@
 /**
  * OFFICIAL RELAY DOG — shared identity surface.
  *
- * Sunday Relay has ONE official Relay Dog: the compact front-facing voxel
+ * Relay’s Wonderland has ONE official Relay Dog: the compact front-facing voxel
  * companion with upright ears, a dark charcoal visor band, two square amber
  * eyes, a cream/bone-white body and short block legs. This barrel is the
  * WEBSITE'S VIEW of that identity — the modules themselves live in

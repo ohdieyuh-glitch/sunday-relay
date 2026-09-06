@@ -89,7 +89,7 @@ describe('headers expose the founder mobile menu', () => {
       createElement(RelayProjectHeader, {
         project: {
           projectId: 'rly-001',
-          name: 'Sunday Relay Frontend',
+          name: 'Relay’s Wonderland Frontend',
           reference: 'RLY / 001',
           projectType: 'Web interface',
         },

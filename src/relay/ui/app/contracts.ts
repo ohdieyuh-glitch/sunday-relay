@@ -255,7 +255,7 @@ export function emptyRelayAppData(): RelayAppData {
 /** The replaceable application boundary. The demo adapter is deterministic
     and offline; the live adapter (`kind: 'live'`) implements the same
     interface against the real Relay bridge (a server that runs the real
-    Sunday Alcatraz architect and Claude Code coding agent) without rewriting
+    Alcatraz architect and Claude Code coding agent) without rewriting
     the UI. Provider credentials NEVER live in an adapter — the live adapter
     knows only a non-secret bridge URL. */
 export interface RelayApplicationAdapter {

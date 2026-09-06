@@ -2,7 +2,7 @@
  * Relay Entry Home — public data contracts (frontend phase).
  *
  * The Entry Home is the FIRST in-product screen after switching from Sunday
- * Alcatraz into Sunday Relay, BEFORE Project Settings and BEFORE the Relay
+ * Alcatraz into Relay’s Wonderland, BEFORE Project Settings and BEFORE the Relay
  * execution console. Everything here is browser-safe typed state + callbacks:
  * no provider calls, no persistence, no credentials, no execution authority.
  * The UI is never the policy authority — it projects state it is given and
@@ -236,8 +236,8 @@ export interface RelayEntryHomeProps {
   connectionStatuses: ConnectionStatuses;
   reducedMotion?: boolean;
 
-  /** Navigate to the Sunday Alcatraz SIBLING PRODUCT. Optional on purpose:
-   * Alcatraz is a separate Aquala product with its own deployment, and this
+  /** Navigate to the Alcatraz SIBLING PRODUCT. Optional on purpose:
+   * Alcatraz is a separate i.Wonder product with its own deployment, and this
    * repository serves Relay itself at `/`. When no Alcatraz URL is configured
    * the control must present itself as unavailable rather than link to a
    * route that does not exist here. */

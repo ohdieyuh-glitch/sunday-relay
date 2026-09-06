@@ -72,9 +72,9 @@ const render = (overrides: Partial<RelayEntryHomeProps> = {}) =>
 /* ------------------------------------------------------ product identity */
 
 describe('product identity', () => {
-  it('shows Relay as the active product with a Sunday Alcatraz return control', () => {
+  it('shows Relay as the active product with an Alcatraz return control', () => {
     const html = render();
-    expect(html).toContain('SUNDAY RELAY');
+    expect(html).toContain('RELAY\u2019S WONDERLAND');
     expect(html).toContain('RELAY');
     expect(html).toContain('ALCATRAZ');
     expect(html).toContain('aria-current="page"');
@@ -102,13 +102,13 @@ describe('product identity', () => {
 describe('project start', () => {
   it('renders the objective input, brief action, connect action, and settings action', () => {
     const html = render();
-    expect(html).toContain('PROJECT OBJECTIVE');
-    expect(html).toContain('Describe the product, feature, system, or result');
+    expect(html).toContain('WHAT ARE WE BUILDING?');
+    expect(html).toContain('Describe the product, feature, system or world');
     expect(html).toContain('BUILD PROJECT BRIEF');
     expect(html).toContain('CONNECT EXISTING PROJECT');
     expect(html).toContain('OPEN PROJECT SETTINGS');
-    expect(html).toContain('What are we building?');
-    expect(html).toContain('RELAY HOME / ROUTE 000');
+    expect(html).toContain('Enter the World Where Ideas Become Real.');
+    expect(html).toContain('RELAY\u2019S WONDERLAND');
   });
 
   it('never claims ready-to-execute; readiness stops at Project Settings', () => {

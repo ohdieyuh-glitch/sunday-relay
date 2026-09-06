@@ -52,7 +52,7 @@ describe('terminal window chrome (founder photo)', () => {
     expect(html).toContain('rpw-tm-light--r');
     expect(html).toContain('rpw-tm-light--y');
     expect(html).toContain('rpw-tm-light--g');
-    expect(html).toContain('SUNDAY RELAY');
+    expect(html).toContain('RELAY\u2019S WONDERLAND');
     expect(html).toContain('RLY / 001');
     expect(html).toContain('Close Live Terminal');
   });
@@ -62,7 +62,7 @@ describe('terminal window chrome (founder photo)', () => {
     expect(html).toContain('● LIVE');
     expect(html).toContain('MISSION IN PROGRESS');
     expect(html).toContain('ARCHITECT:');
-    expect(html).toContain('Sunday Alcatraz');
+    expect(html).toContain('Alcatraz');
     expect(html).toContain('CODING AGENT:');
     expect(html).toContain('Claude Code');
     expect(html).toContain('SEMI');

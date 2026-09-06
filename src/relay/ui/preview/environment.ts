@@ -5,7 +5,7 @@
  * testable without a bundler:
  *
  * `siblingProductTarget()` — where the Alcatraz control goes. Sunday
- * Alcatraz is an Aquala SIBLING PRODUCT, not a route of this application:
+ * Alcatraz is an i.Wonder SIBLING PRODUCT, not a route of this application:
  * `/` is Relay's own canonical entry, so sending the browser there never
  * reached Alcatraz. Alcatraz stays visible as a sibling — the relationship
  * is real and governance §11 permits documenting it — but the control is
@@ -37,7 +37,7 @@ export function siblingProductTarget(
   if (!raw) {
     return {
       configured: false,
-      reason: 'Sunday Alcatraz is a separate Aquala product. Set VITE_ALCATRAZ_URL to link to it.',
+      reason: 'Alcatraz is a separate i.Wonder product. Set VITE_ALCATRAZ_URL to link to it.',
     };
   }
   // Only absolute http(s) URLs. A relative value would recreate the original

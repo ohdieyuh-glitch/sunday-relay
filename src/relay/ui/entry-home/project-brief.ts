@@ -35,7 +35,7 @@ export function createEmptyProjectBriefDraft(): ProjectBriefDraft {
     researchTopics: [],
     unknowns: [],
     knowledgeGaps: [],
-    suggestedPromptArchitect: 'Sunday Alcatraz',
+    suggestedPromptArchitect: 'Alcatraz',
     suggestedCodingAgent: 'Claude Code',
     suggestedReviewer: 'Codex',
     suggestedMode: 'semi',
@@ -81,7 +81,7 @@ export function buildProjectBriefDraft(
     preferredStack: 'To be confirmed in Project Settings.',
     visualDirection:
       category === 'interface'
-        ? 'Match the Sunday Relay system aesthetic unless the developer specifies otherwise.'
+        ? 'Match the Relay’s Wonderland system aesthetic unless the developer specifies otherwise.'
         : '',
     constraints: ['No provider credentials in the browser', 'Stay inside the approved project scope'],
     researchTopics: research.topics,
@@ -123,7 +123,7 @@ export const READINESS_LABEL: Record<HomeReadiness, string> = {
 export function formatProjectBriefDraft(draft: ProjectBriefDraft): string {
   const list = (items: string[]) => (items.length ? items.map((i) => `  - ${i}`).join('\n') : '  - (none yet)');
   return [
-    'PROJECT BRIEF DRAFT — Sunday Relay',
+    'PROJECT BRIEF DRAFT — Relay’s Wonderland',
     '(Not a Mission Contract. Created before Project Settings.)',
     '',
     `Working title: ${draft.workingTitle || '(untitled)'}`,

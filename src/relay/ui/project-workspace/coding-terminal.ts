@@ -269,13 +269,13 @@ export function buildCodingTerminalView(input: {
 /**
  * The truthful default description of the Prompt Architect route.
  *
- * Sunday Alcatraz SELECTS and RECORDS the architect route (mode, provider,
+ * Alcatraz SELECTS and RECORDS the architect route (mode, provider,
  * model, limits); the request itself leaves the Relay bridge directly for the
  * OpenAI API. Saying "routed through" would claim a network hop that did not
  * occur, so the coordination wording is used instead — and the backend's own
  * receipt label overrides this whenever a request has actually happened.
  */
-export const ARCHITECT_ROUTE_LABEL = 'Coordinated by Sunday Alcatraz';
+export const ARCHITECT_ROUTE_LABEL = 'Coordinated by Alcatraz';
 
 /**
  * ONE LABEL PER BILLING PATH, and no default that asserts.
@@ -315,7 +315,7 @@ export interface RoleBillingRow {
   /** Actor name, e.g. "ChatGPT". Never a claim about a model that did not run. */
   actor: string;
   role: string;
-  /** Runtime/provider facts, e.g. "Coordinated by Sunday Alcatraz". */
+  /** Runtime/provider facts, e.g. "Coordinated by Alcatraz". */
   runtime: string;
   /** Honest billing label — API PAID only after a proven successful request. */
   billingLabel: string;

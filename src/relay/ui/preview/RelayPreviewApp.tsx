@@ -725,7 +725,7 @@ export function RelayPreviewApp() {
       handoffNetworkState="standby"
       entitlement="pro"
       connectionStatuses={DEFAULT_CONNECTION_STATUSES}
-      // Sunday Alcatraz is an Aquala SIBLING PRODUCT, not a route of this
+      // Alcatraz is an i.Wonder SIBLING PRODUCT, not a route of this
       // application: `/` is Relay's own canonical entry, so the old
       // `window.location.href = '/'` never reached Alcatraz. The control now
       // navigates to a CONFIGURED external Alcatraz URL, and reports itself
