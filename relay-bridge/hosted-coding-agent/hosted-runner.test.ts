@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { runHostedCodingAgent, type HostedQueryFn } from './hosted-runner';
-import { DEFAULT_HOSTED_LIMITS } from './hosted-envelope';
+import { DEFAULT_HOSTED_LIMITS, hostedLimitsForAllocation } from './hosted-envelope';
 
 /**
  * The full hosted pipeline, driven by a fake `query` that yields the real SDK
@@ -151,5 +151,60 @@ describe('stopping a hosted run', () => {
     expect(outcome.kind).toBe('launch_failed');
     expect(JSON.stringify(outcome)).not.toContain('sk-ant');
     expect(JSON.stringify(outcome)).not.toContain('api.anthropic.com');
+  });
+});
+
+/**
+ * DEFECT 1 (paid run 34037313976): the mission authorised $20 and the hosted
+ * run was refused at 50 cents AFTER the work was done. The limit is now what
+ * Julius reserved; these cases hold both ends of that seam.
+ */
+describe('the execution limit is the allocation Julius reserved', () => {
+  it('a run over 50¢ SUCCEEDS when Julius allocated more, and is refused when it did not', async () => {
+    const messages = [init(), result({ total_cost_usd: 0.9 })];
+    const granted = await run(messages, { limits: hostedLimitsForAllocation(5_000_000) });
+    expect(granted.outcome.kind).toBe('completed');
+    const ungoverned = await run(messages);
+    expect(ungoverned.outcome.kind).toBe('refused');
+    if (ungoverned.outcome.kind === 'refused') expect(ungoverned.outcome.refusalCode).toBe('coder_cost_exceeded');
+  });
+
+  it('a run over its ALLOCATION is still refused, however large the mission budget was', async () => {
+    const { outcome } = await run([init(), result({ total_cost_usd: 5.01 })], { limits: hostedLimitsForAllocation(5_000_000) });
+    expect(outcome.kind).toBe('refused');
+    if (outcome.kind === 'refused') expect(outcome.refusalCode).toBe('coder_cost_exceeded');
+  });
+
+  it('tells the runtime to stop at the allocation, in dollars, alongside the turn bound', async () => {
+    const { options } = await run([init(), result()], { limits: hostedLimitsForAllocation(5_000_000) });
+    expect(options.maxBudgetUsd).toBe(5);
+    expect(options.maxTurns).toBe(DEFAULT_HOSTED_LIMITS.maxTurns);
+    const ungoverned = await run([init(), result()]);
+    expect(ungoverned.options.maxBudgetUsd, 'the conservative default still binds the runtime').toBe(0.5);
+  });
+
+  it('rounds the allocation DOWN to whole cents, never admitting more than the reservation', () => {
+    expect(hostedLimitsForAllocation(1_234_567).maxCostCents).toBe(123);
+    expect(hostedLimitsForAllocation(0).maxCostCents).toBe(0);
+    expect(() => hostedLimitsForAllocation(-1)).toThrow('hosted_allocation_invalid');
+    expect(() => hostedLimitsForAllocation(Number.NaN)).toThrow('hosted_allocation_invalid');
+    expect(hostedLimitsForAllocation(5_000_000).maxRuntimeMs).toBe(DEFAULT_HOSTED_LIMITS.maxRuntimeMs);
+  });
+
+  it('a runtime budget stop is a COST refusal, not an untrusted result', async () => {
+    const { outcome } = await run(
+      [init(), result({ subtype: 'error_max_budget_usd', is_error: true, total_cost_usd: 5.0 })],
+      { limits: hostedLimitsForAllocation(5_000_000) },
+    );
+    expect(outcome.kind).toBe('refused');
+    if (outcome.kind !== 'refused') return;
+    expect(outcome.refusalCode).toBe('coder_cost_exceeded');
+    expect(outcome.safeMessage).toContain('500¢');
+  });
+
+  it('Unknown cost stays Unknown and is not refused as if it were over', async () => {
+    const { outcome } = await run([init(), result({ total_cost_usd: undefined, usage: undefined })], { limits: hostedLimitsForAllocation(10_000) });
+    expect(outcome.kind).toBe('completed');
+    if (outcome.kind === 'completed') expect(outcome.observation.usage.source).toBe('unavailable');
   });
 });

@@ -1,0 +1,134 @@
+import { describe, expect, it } from 'vitest';
+
+import {
+  JULIUS_ALLOCATION_POLICY_VERSION, JULIUS_ALLOCATION_RULE,
+  coderShareUsdMicros, evaluateJuliusAllocation, juliusAllocationPolicy,
+} from './julius-allocation-runtime';
+import { createMemoryBudget } from './julius-runtime-fixtures';
+
+const USD = 1_000_000;
+/** julius-live-mission-2: $20, three repair rounds. */
+const MISSION_2 = juliusAllocationPolicy({ ceilingUsdMicros: 20 * USD, authorizedRepairRounds: 3 });
+/** The default contract: $5, one repair round. */
+const MISSION_1 = juliusAllocationPolicy({ ceilingUsdMicros: 5 * USD, authorizedRepairRounds: 1 });
+const ESTIMATE = 300_000;
+
+describe('DEFECT 1 — the allocation policy is derived from the contract alone', () => {
+  it('is versioned, named and frozen', () => {
+    expect(MISSION_2.version).toBe(JULIUS_ALLOCATION_POLICY_VERSION);
+    expect(MISSION_2.rule).toBe(JULIUS_ALLOCATION_RULE);
+    expect(Object.isFrozen(MISSION_2)).toBe(true);
+  });
+
+  it('refuses a ceiling or round count that is not a non-negative integer', () => {
+    expect(() => juliusAllocationPolicy({ ceilingUsdMicros: -1, authorizedRepairRounds: 1 })).toThrow('allocation_ceiling_invalid');
+    expect(() => juliusAllocationPolicy({ ceilingUsdMicros: 1.5, authorizedRepairRounds: 1 })).toThrow('allocation_ceiling_invalid');
+    expect(() => juliusAllocationPolicy({ ceilingUsdMicros: 1, authorizedRepairRounds: Number.NaN })).toThrow('allocation_repair_rounds_invalid');
+  });
+
+  it('shares the ceiling equally over the build and every authorised repair round', () => {
+    expect(coderShareUsdMicros(MISSION_2)).toBe(5 * USD);
+    expect(coderShareUsdMicros(MISSION_1)).toBe(2_500_000);
+    expect(coderShareUsdMicros(juliusAllocationPolicy({ ceilingUsdMicros: 10, authorizedRepairRounds: 2 }))).toBe(3);
+  });
+
+  it('Mission 2\'s grant does not leak to Mission 1 or to an invented namespace', () => {
+    const two = evaluateJuliusAllocation({ policy: MISSION_2, role: 'CODING_AGENT', remainingUsdMicros: 20 * USD, estimateUsdMicros: ESTIMATE });
+    const one = evaluateJuliusAllocation({ policy: MISSION_1, role: 'CODING_AGENT', remainingUsdMicros: 5 * USD, estimateUsdMicros: ESTIMATE });
+    expect(two.usdMicros).toBe(5 * USD);
+    expect(one.usdMicros).toBe(2_500_000);
+    const invented = juliusAllocationPolicy({ ceilingUsdMicros: 0, authorizedRepairRounds: 0 });
+    expect(evaluateJuliusAllocation({ policy: invented, role: 'CODING_AGENT', remainingUsdMicros: 0, estimateUsdMicros: ESTIMATE }))
+      .toMatchObject({ usdMicros: 0, basis: 'EXHAUSTED' });
+  });
+});
+
+describe('the allocation for one dispatch', () => {
+  it('the Coding Agent gets its share while the remaining budget covers it', () => {
+    expect(evaluateJuliusAllocation({ policy: MISSION_2, role: 'CODING_AGENT', remainingUsdMicros: 19_700_000, estimateUsdMicros: ESTIMATE }))
+      .toEqual({ usdMicros: 5 * USD, basis: 'CODER_SHARE', shareUsdMicros: 5 * USD, remainingUsdMicros: 19_700_000, policyVersion: JULIUS_ALLOCATION_POLICY_VERSION });
+  });
+
+  it('never exceeds the remaining mission budget', () => {
+    expect(evaluateJuliusAllocation({ policy: MISSION_2, role: 'CODING_AGENT', remainingUsdMicros: 1_234_567, estimateUsdMicros: ESTIMATE }))
+      .toMatchObject({ usdMicros: 1_234_567, basis: 'CODER_REMAINDER' });
+    expect(evaluateJuliusAllocation({ policy: MISSION_2, role: 'CODING_AGENT', remainingUsdMicros: 0, estimateUsdMicros: ESTIMATE }))
+      .toMatchObject({ usdMicros: 0, basis: 'EXHAUSTED' });
+    expect(evaluateJuliusAllocation({ policy: MISSION_2, role: 'CODING_AGENT', remainingUsdMicros: -5, estimateUsdMicros: ESTIMATE }))
+      .toMatchObject({ usdMicros: 0, basis: 'EXHAUSTED' });
+  });
+
+  it('Unknown remaining budget is not zero and not the share: the smaller of share and estimate', () => {
+    expect(evaluateJuliusAllocation({ policy: MISSION_2, role: 'CODING_AGENT', remainingUsdMicros: null, estimateUsdMicros: ESTIMATE }))
+      .toMatchObject({ usdMicros: ESTIMATE, basis: 'BUDGET_UNKNOWN', remainingUsdMicros: null });
+    const tiny = juliusAllocationPolicy({ ceilingUsdMicros: 100_000, authorizedRepairRounds: 0 });
+    expect(evaluateJuliusAllocation({ policy: tiny, role: 'CODING_AGENT', remainingUsdMicros: null, estimateUsdMicros: ESTIMATE }))
+      .toMatchObject({ usdMicros: 100_000, basis: 'BUDGET_UNKNOWN' });
+  });
+
+  it('the Prompt Architect and the reviewer keep their fixed estimate', () => {
+    for (const role of ['PROMPT_ARCHITECT', 'INDEPENDENT_REVIEWER'] as const) {
+      expect(evaluateJuliusAllocation({ policy: MISSION_2, role, remainingUsdMicros: 20 * USD, estimateUsdMicros: ESTIMATE }))
+        .toMatchObject({ usdMicros: ESTIMATE, basis: 'ESTIMATE', shareUsdMicros: null });
+    }
+  });
+});
+
+describe('allocations against a real reservation ledger', () => {
+  const now = '2026-09-06T00:00:00.000Z';
+  const reserveCoder = async (budget: ReturnType<typeof createMemoryBudget>, id: string) => {
+    const allocation = evaluateJuliusAllocation({
+      policy: MISSION_2, role: 'CODING_AGENT', remainingUsdMicros: budget.remainingUsdMicros(), estimateUsdMicros: ESTIMATE,
+    });
+    const reservation = await budget.reserve({
+      reservationId: id, runId: 'run', projectId: 'prj', taskId: id, usdMicros: allocation.usdMicros,
+      inputTokens: 0, outputTokens: 0, toolCalls: 0, runtimeMs: 0, now,
+    });
+    return { allocation, reservation };
+  };
+
+  it('the build and three repair rounds can each spend a full share and sum to exactly the ceiling', async () => {
+    const budget = createMemoryBudget(20 * USD);
+    let total = 0;
+    for (const round of ['build', 'r1', 'r2', 'r3']) {
+      const { allocation, reservation } = await reserveCoder(budget, round);
+      expect(reservation.state).toBe('RESERVED');
+      expect(allocation.basis).toBe('CODER_SHARE');
+      await budget.commit({ reservationId: round, usdMicros: allocation.usdMicros, inputTokens: 0, outputTokens: 0, toolCalls: 0, runtimeMs: 0, receiptId: null, now });
+      total += allocation.usdMicros;
+    }
+    expect(total).toBe(20 * USD);
+    expect(budget.remainingUsdMicros()).toBe(0);
+    // A fifth round is denied before any provider is reached.
+    const fifth = await reserveCoder(budget, 'r4');
+    expect(fifth.allocation.basis).toBe('EXHAUSTED');
+  });
+
+  it('when a round over-spends its share, later rounds shrink to the remainder and never past the ceiling', async () => {
+    const budget = createMemoryBudget(20 * USD);
+    // The build reserved $5 and the runtime reported $5 (the SDK stops there);
+    // then repair one is committed at its full share, repair two at $8 of
+    // unbounded spend that a legacy adapter might report.
+    const build = await reserveCoder(budget, 'build');
+    await budget.commit({ reservationId: 'build', usdMicros: build.allocation.usdMicros, inputTokens: 0, outputTokens: 0, toolCalls: 0, runtimeMs: 0, receiptId: null, now });
+    const r1 = await reserveCoder(budget, 'r1');
+    await budget.commit({ reservationId: 'r1', usdMicros: 8 * USD, inputTokens: 0, outputTokens: 0, toolCalls: 0, runtimeMs: 0, receiptId: null, now });
+    expect(r1.allocation.usdMicros).toBe(5 * USD);
+    const r2 = await reserveCoder(budget, 'r2');
+    expect(r2.allocation).toMatchObject({ usdMicros: 5 * USD, basis: 'CODER_SHARE' });
+    await budget.commit({ reservationId: 'r2', usdMicros: 5 * USD, inputTokens: 0, outputTokens: 0, toolCalls: 0, runtimeMs: 0, receiptId: null, now });
+    const r3 = await reserveCoder(budget, 'r3');
+    expect(r3.allocation).toMatchObject({ usdMicros: 2 * USD, basis: 'CODER_REMAINDER' });
+    expect(r3.reservation.state).toBe('RESERVED');
+    expect(budget.remainingUsdMicros()).toBe(0);
+  });
+
+  it('the ledger, not the allocator, is the last word: an allocation past the ceiling is DENIED', async () => {
+    const budget = createMemoryBudget(1 * USD);
+    const reservation = await budget.reserve({
+      reservationId: 'x', runId: 'run', projectId: 'prj', taskId: 'x', usdMicros: 5 * USD,
+      inputTokens: 0, outputTokens: 0, toolCalls: 0, runtimeMs: 0, now,
+    });
+    expect(reservation.state).toBe('DENIED');
+  });
+});

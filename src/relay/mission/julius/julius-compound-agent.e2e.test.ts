@@ -27,22 +27,21 @@ import type { JuliusRunRow } from './julius-runtime-ports';
 
 const ARCHITECT = worker({
   workerId: 'architect', role: 'PROMPT_ARCHITECT',
-  capabilities: ['plan'], taskTypes: ['plan'], providerId: 'openai', adapterId: 'architect-adapter',
+  // `repair:plan` is a plan REVISION: a repair inherits its subject's role, so
+  // a rejected plan comes back to the architect with the findings in context.
+  capabilities: ['plan'], taskTypes: ['plan', 'repair:plan'], providerId: 'openai', adapterId: 'architect-adapter',
 });
 const CODER = worker({
   workerId: 'coder', role: 'CODING_AGENT',
-  // `repair:plan` as well as `repair:build`: `planJuliusRepair` names a repair
-  // task `repair:<original taskType>` and assigns it to a CODING_AGENT
-  // whatever the original role was, so a deployment must register a coding
-  // agent that accepts a repair of every task type it plans. That is a real
-  // deployment requirement and it is stated here rather than discovered when a
-  // repair cannot be routed.
-  capabilities: ['implement'], taskTypes: ['build', 'repair:build', 'repair:plan', 'audit'],
+  // `repair:build` covers every Coding Agent repair round: a repair of a
+  // repair is still `repair:build`. The coder does NOT accept `repair:plan` —
+  // that was the shape paid run 34037313976 minted and nobody could route.
+  capabilities: ['implement'], taskTypes: ['build', 'repair:build', 'audit'],
   providerId: 'anthropic', adapterId: 'coder-adapter',
 });
 const REVIEWER = worker({
   workerId: 'reviewer', role: 'INDEPENDENT_REVIEWER',
-  capabilities: ['review'], taskTypes: ['review:build', 'review:plan'],
+  capabilities: ['review'], taskTypes: ['review:build', 'review:plan', 'review:repair:build', 'review:repair:plan'],
   providerId: 'hermes', adapterId: 'reviewer-adapter',
 });
 const BACKUP_CODER = worker({
@@ -87,7 +86,10 @@ describe('scenario 1 — a mission through three roles, a failed review and a re
         {
           worker: REVIEWER,
           script: [
-            // The review SUCCEEDS as a task and its verdict is a BLOCKING
+            // The PLAN review comes first now — the build waits for it — and
+            // accepts the plan.
+            { kind: 'succeed', evidence: [{ type: 'REVIEW_FINDING', status: 'PASSED', safeSummary: 'The plan is sound.' }] },
+            // The BUILD review SUCCEEDS as a task and its verdict is a BLOCKING
             // finding — which is the case the product exists for, and the one
             // that produced nothing at all before the finding path was wired.
             { kind: 'succeed', evidence: [{ type: 'REVIEW_FINDING', status: 'FAILED', safeSummary: 'The branch is untested.' }] },
@@ -118,16 +120,26 @@ describe('scenario 1 — a mission through three roles, a failed review and a re
     return harness;
   };
 
-  it('runs the architect first, and the coder only after it', async () => {
+  it('runs the architect first, then the plan review, and the coder only after Julius accepts the plan', async () => {
     const harness = build();
     const first = await harness.loop.tick(scope);
     expect(first.outcomes.map((outcome) => outcome.taskId)).toEqual(['plan-1']);
     expect(harness.adapters.get(CODER.adapterId)!.dispatches).toEqual([]);
+    // The plan SUCCEEDED and its review is scheduled; `build-1` stays BLOCKED.
+    expect(harness.store.taskRow('build-1')!.state).toBe('BLOCKED');
 
     const second = await harness.loop.tick(scope);
-    // `plan-1:review` becomes claimable in the same tick the plan succeeded,
-    // because the claim query is the only wakeup and it runs once per tick.
-    expect(second.outcomes.map((outcome) => outcome.taskId)).toContain('build-1');
+    // Only the plan's review is claimable: the plan succeeding released nothing.
+    expect(second.outcomes.map((outcome) => outcome.taskId)).toEqual(['plan-1:review']);
+    expect(harness.adapters.get(CODER.adapterId)!.dispatches, 'no build before the plan review').toEqual([]);
+    // The review ACCEPTED the plan (scripted PASSED finding) → Julius released the build.
+    expect(harness.store.taskRow('build-1')!.state).toBe('RUNNABLE');
+
+    const third = await harness.loop.tick(scope);
+    expect(third.outcomes.map((outcome) => outcome.taskId)).toEqual(['build-1']);
+    const runnable = harness.store.events().filter((event) => event.type === 'task.runnable' && event.taskId === 'build-1');
+    expect(runnable, 'released exactly once').toHaveLength(1);
+    expect(runnable[0]!.facts.unblockedBy).toBe('plan-1');
   });
 
   it('never schedules a review OF a review — the chain would not end', async () => {

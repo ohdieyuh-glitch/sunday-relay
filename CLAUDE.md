@@ -184,6 +184,21 @@ or mutates a run is operator-only. CORS is exact-match with no wildcard branch.
   passes and the bridge one is easy to skip locally.
 - Adding a `relay mission <x>` or `relay reviewer <x>` action breaks the test
   asserting the exact action list in the error message. Update it in the same change.
+- **A Julius task is claimable only when Julius released it.** The claim
+  query offers RUNNABLE tasks only; BLOCKED becomes RUNNABLE solely inside
+  `appendDecision({ releaseTaskIds })`, computed by `evaluateJuliusRelease`
+  (accepted dependency, or SKIPPED). Seed dependents BLOCKED; create reviews,
+  repairs and sub-agents RUNNABLE. A test that seeds a BLOCKED task expecting
+  the claim query to pick it up once its dependency SUCCEEDED is wrong now.
+- **A repair inherits its subject's role and stage** (`repair:plan` on the
+  Prompt Architect, `repair:build` on the coder, never `repair:repair:*`), is
+  proven routable before it is created (`REPAIR_UNROUTABLE` otherwise), and
+  every deployment fixture must register the repair type on the right role.
+- **Coding Agent spend is governed by `julius-allocation.v1`**: share =
+  floor(spendUsd / (1 + repairCycles)), bounded by what remains, reserved
+  exactly, and passed to the hosted adapter as its limit. No policy → the
+  adapter's 50¢ default. Do not raise `DEFAULT_HOSTED_LIMITS.maxCostCents`.
+  Design: `docs/JULIUS_PAID_RUN_34037313976_REPAIRS.md`.
 - Hermes Agent v0.18.2 at `~/.local/bin/hermes`. `-z` one-shot + `--usage-file`
   is the chosen transport. Read-only is STRUCTURAL: an isolated `HERMES_HOME`
   disables all 23 toolsets (verified against the real binary), so the model gets

@@ -299,16 +299,18 @@ export function createJuliusMemoryStore(): JuliusMemoryStore {
           // for an ordinary claim. A runtime whose recovery never runs stalls
           // such a task, which is the safe direction — the unbounded reclaim
           // was the unsafe one. The PostgreSQL claim carries the same rule.
-          // BLOCKED IS CLAIMABLE ONCE ITS DEPENDENCIES ARE SATISFIED, and the
-          // inherited claim query did not say so. `JuliusTaskGraph` promotes
-          // BLOCKED to RUNNABLE when its dependencies succeed, but nothing
-          // performs that promotion against the database — so a task inserted
-          // BLOCKED (which is exactly how a scheduled review or repair task is
-          // inserted, since it must not run before what it depends on) could
-          // never be claimed at all. The dependency predicate below is already
-          // the gate; the state check was a second, stricter one that made the
-          // first unreachable.
-          if (task.state !== 'RUNNABLE' && task.state !== 'BLOCKED') return false;
+          // RUNNABLE ONLY. BLOCKED used to be claimable once its dependencies
+          // had SUCCEEDED, and that is how paid run 34037313976 ran `build`
+          // before anyone had reviewed the plan: SUCCEEDED is not ACCEPTED.
+          // Julius alone moves a task from BLOCKED to RUNNABLE, in the same
+          // durable write as the decision that satisfied it (`appendDecision`
+          // with `releaseTaskIds`). Tasks whose dependencies are already
+          // satisfied when Julius creates them — a review of a task that has
+          // succeeded, a repair, a sub-agent — are created RUNNABLE. The
+          // dependency predicate below stays as a second gate: a RUNNABLE task
+          // with a dependency that has not succeeded is still never offered.
+          // The PostgreSQL claim carries the same rule.
+          if (task.state !== 'RUNNABLE') return false;
           return dependenciesSatisfied(task);
         })
         // The claim query orders by run creation, then ordinal, then task id.
@@ -447,6 +449,14 @@ export function createJuliusMemoryStore(): JuliusMemoryStore {
       decisionKeys.add(key);
       decisions.push({ ...input.decision, taskId: input.taskId, runId: input.runId });
       decisionRunIds.set(input.decisionId, input.runId);
+      // THE RELEASE IS PART OF THE SAME WRITE. Only a BLOCKED task of this run
+      // moves; anything else named here is left exactly as it was.
+      for (const taskId of input.releaseTaskIds ?? []) {
+        const task = tasks.get(taskId);
+        if (task === undefined || task.runId !== input.runId || task.state !== 'BLOCKED') continue;
+        task.state = 'RUNNABLE';
+        task.version += 1;
+      }
       return true;
     },
 

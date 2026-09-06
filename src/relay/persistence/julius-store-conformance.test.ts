@@ -185,14 +185,19 @@ describe('the Julius runtime ports and the PostgreSQL repositories agree', () =>
    */
   it('neither store lets a bare claim reclaim an expired lease', () => {
     const sql = readFileSync(resolve(import.meta.dirname, 'julius-postgres.ts'), 'utf8');
-    expect(sql, 'the claim offers only RUNNABLE and BLOCKED work')
-      .toContain("AND t.next_attempt_at<=$2 AND t.state IN('RUNNABLE','BLOCKED')");
+    // RUNNABLE only: BLOCKED is never claimable, it is RELEASED by Julius's
+    // accepting decision (paid run 34037313976 built against an unreviewed
+    // plan while BLOCKED was still offered once its dependencies succeeded).
+    expect(sql, 'the claim offers only RUNNABLE work')
+      .toContain("AND t.next_attempt_at<=$2 AND t.state='RUNNABLE'");
+    expect(sql, 'and never BLOCKED work, whatever its dependencies have done')
+      .not.toMatch(/t\.state IN\('RUNNABLE','BLOCKED'\)/u);
     expect(sql, 'and never an expired ACTIVE lease, which is recovery\'s to hand back')
       .not.toMatch(/state='ACTIVE' AND t\.lease_expires_at<=\$2/u);
 
     const memory = readFileSync(resolve(import.meta.dirname, '../mission/julius/julius-memory-store.ts'), 'utf8');
     expect(memory, 'the memory store states the same rule in its own terms')
-      .toContain("if (task.state !== 'RUNNABLE' && task.state !== 'BLOCKED') return false;");
+      .toContain("if (task.state !== 'RUNNABLE') return false;");
     expect(memory, 'with no expiry escape hatch beside it')
       .not.toMatch(/&& !expired\) return false;/u);
   });

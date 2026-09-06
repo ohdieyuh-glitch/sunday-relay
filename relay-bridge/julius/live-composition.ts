@@ -24,6 +24,7 @@ import {
   JuliusRunLoop,
   JuliusWorkerRegistry,
   fixedResourceEstimate,
+  juliusAllocationPolicy,
   type JuliusBudgetPort,
   type JuliusCardPolicy,
   type JuliusClaimedTask,
@@ -59,7 +60,11 @@ import type { ShellEffectPort, TaskClaimSource } from './executor-effects';
 export const ARCHITECT_WORKER: JuliusWorker = {
   workerId: 'prompt-architect-openai', role: 'PROMPT_ARCHITECT',
   adapterId: 'openai-architect-live', providerId: 'openai',
-  capabilities: ['plan'], taskTypes: ['plan'],
+  // `repair:plan` is a PLAN REVISION: a repair inherits its subject's role and
+  // stage, so a rejected plan comes back here with the reviewer's findings in
+  // its context, not to the Coding Agent. Paid run 34037313976 minted the
+  // latter, and nobody could route it.
+  capabilities: ['plan'], taskTypes: ['plan', 'repair:plan'],
   concurrencyLimit: 1, timeoutMs: 300_000, maxRetries: 1, status: 'AVAILABLE',
 };
 
@@ -67,14 +72,12 @@ export const CODER_WORKER: JuliusWorker = {
   workerId: 'coding-agent-claude-hosted', role: 'CODING_AGENT',
   adapterId: 'claude-agent-sdk-hosted-live', providerId: 'anthropic',
   capabilities: ['implement'],
-  // A repair task is named `repair:<original taskType>` and always routes to
-  // a CODING_AGENT, so the deployment registers those types explicitly — the
-  // runtime documents that nothing detects the omission until a repair
-  // cannot be routed. `repair:plan` is deliberately NOT registered: the
-  // repair inherits the plan task's ARTIFACT evidence requirement, which the
-  // coding adapter does not produce, so a routed repair:plan is a paid
-  // dispatch guaranteed to HALT. An immediate routing refusal is the honest
-  // failure. (Independent review finding F3.)
+  // A repair is `repair:<stage>` on the subject's own role, and a second
+  // round is still `repair:build`, so this one registration covers every
+  // Coding Agent repair round. `repair:plan` belongs to the Prompt Architect.
+  // The pipeline proves a repair routable BEFORE creating it, so an omission
+  // here halts the run with `REPAIR_UNROUTABLE` rather than spending an
+  // attempt on `PROVIDER_UNAVAILABLE` (paid run 34037313976, tick 5).
   taskTypes: ['build', 'repair:build'],
   concurrencyLimit: 1, timeoutMs: 600_000, maxRetries: 1, status: 'AVAILABLE',
 };
@@ -241,6 +244,9 @@ export function createRunSpendBudget(ceilingUsdMicros: number): JuliusBudgetPort
       if (row === undefined || row.state !== 'RESERVED') return;
       held.set(input.reservationId, { usdMicros: 0, state: 'RELEASED' });
     },
+    // What an allocation may be derived from: the ceiling minus everything
+    // held or spent. This ledger can always answer, so it never says null.
+    async available() { return ceilingUsdMicros - outstanding(); },
   };
 }
 
@@ -353,6 +359,16 @@ export function assembleLiveJuliusRuntime(options: {
     ids: { next: (kind) => `${kind}:${randomUUID()}` },
     resources: fixedResourceEstimate({
       usdMicros: 300_000, inputTokens: 50_000, outputTokens: 20_000, toolCalls: 10, runtimeMs: 300_000,
+    }),
+    /**
+     * THE MISSION CONTRACT GOVERNS THE CODING AGENT'S SPEND. The same two
+     * contract fields that seed the run budget and the repair bound derive
+     * the per-dispatch allocation: each Coding Agent round may spend an equal
+     * share of `spendUsd` over the build and every authorised repair round,
+     * never more than remains. See docs/JULIUS_PAID_RUN_34037313976_REPAIRS.md.
+     */
+    allocation: juliusAllocationPolicy({
+      ceilingUsdMicros: options.spendCeilingUsdMicros, authorizedRepairRounds: options.maxRepairRounds,
     }),
     owner: options.owner ?? 'julius-live-mission',
     contextCharacterBudget: 24_000,

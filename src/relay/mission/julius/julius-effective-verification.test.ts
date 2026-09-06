@@ -79,7 +79,7 @@ describe('missionMayComplete reads effective verification state', () => {
     )).toBe(true);
     // A repaired repair completes through the chain.
     expect(may(
-      [tsk('x'), repairOf('x'), repairOf('repair:x:1:task', 1, { taskType: 'repair:repair:build' })],
+      [tsk('x'), repairOf('x'), repairOf('repair:x:1:task', 1)],
       [dec('x', 'REPAIR'), dec('repair:x:1:task', 'REPAIR'), dec('repair:repair:x:1:task:1:task', 'ACCEPT')],
     )).toBe(true);
     // A FAILED repair task supersedes nothing even if somehow decided.

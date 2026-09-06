@@ -20,7 +20,7 @@
 
 import {
   JuliusProviderHealthRegistry, JuliusProviderRouter, JuliusDispatchError,
-  type JuliusProviderAdapter, type JuliusProviderResult,
+  type JuliusDispatchAllocation, type JuliusProviderAdapter, type JuliusProviderResult,
 } from './julius-router';
 import { JuliusWorkerRegistry, type JuliusWorker } from './julius-runtime';
 import type { JuliusCardPolicy } from './julius-policy';
@@ -29,6 +29,7 @@ import { createJuliusMemoryStore, type JuliusMemoryStore } from './julius-memory
 import { fixedResourceEstimate, type JuliusPipelineDependencies } from './julius-task-pipeline';
 import { JuliusRunLoop, type JuliusPolicySource, type JuliusRunLoopConfig } from './julius-run-loop';
 import type { JuliusBudgetPort, JuliusClock, JuliusIdFactory } from './julius-runtime-ports';
+import type { JuliusAllocationPolicy } from './julius-allocation-runtime';
 
 /* ---------------------------------------------------------------- clock */
 
@@ -94,6 +95,7 @@ export function createMemoryBudget(ceilingUsdMicros: number): MemoryBudget {
       if (row === undefined || row.state !== 'RESERVED') return;
       held.set(input.reservationId, { usdMicros: 0, state: 'RELEASED' });
     },
+    async available() { return ceilingUsdMicros - outstanding(); },
     remainingUsdMicros() { return ceilingUsdMicros - outstanding(); },
     reservations() {
       return [...held.entries()].map(([reservationId, row]) => ({ reservationId, state: row.state, usdMicros: row.usdMicros }));
@@ -123,7 +125,8 @@ export type ScriptedOutcome =
   | { readonly kind: 'malformed' };
 
 export interface ScriptedAdapter extends JuliusProviderAdapter {
-  readonly dispatches: { taskId: string; contextId: string }[];
+  /** Everything Julius handed the adapter, so a test can assert what a dispatch carried. */
+  readonly dispatches: { taskId: string; contextId: string; taskType?: string; allocation?: JuliusDispatchAllocation }[];
 }
 
 /**
@@ -135,13 +138,17 @@ export function scriptedAdapter(
   target: JuliusWorker,
   script: readonly ScriptedOutcome[],
 ): ScriptedAdapter {
-  const dispatches: { taskId: string; contextId: string }[] = [];
+  const dispatches: ScriptedAdapter['dispatches'] = [];
   let index = 0;
   return {
     adapterId: target.adapterId,
     dispatches,
     async dispatch(input) {
-      dispatches.push({ taskId: input.taskId, contextId: input.contextId });
+      dispatches.push({
+        taskId: input.taskId, contextId: input.contextId,
+        ...(input.taskType === undefined ? {} : { taskType: input.taskType }),
+        ...(input.allocation === undefined ? {} : { allocation: input.allocation }),
+      });
       const step = script[Math.min(index, script.length - 1)] ?? { kind: 'succeed' as const };
       index += 1;
       if (step.kind === 'fail') {
@@ -199,6 +206,8 @@ export function createJuliusHarness(input: {
   readonly card?: JuliusCardPolicy;
   readonly verification?: JuliusVerificationPolicy;
   readonly budgetUsdMicros?: number;
+  /** An allocation policy for the pipeline; absent, dispatches reserve the fixed estimate. */
+  readonly allocation?: JuliusAllocationPolicy;
   readonly config?: Partial<JuliusRunLoopConfig>;
   readonly owner?: string;
   readonly capabilityFor?: (task: { taskId: string; taskType: string; role: string }) => string;
@@ -224,6 +233,7 @@ export function createJuliusHarness(input: {
   const deps: JuliusPipelineDependencies = {
     store, router, budget, clock, ids,
     resources: fixedResourceEstimate({ usdMicros: 2_000, inputTokens: 100, outputTokens: 100, toolCalls: 1, runtimeMs: 1_000 }),
+    ...(input.allocation === undefined ? {} : { allocation: input.allocation }),
     owner: input.owner ?? 'worker-a',
     contextCharacterBudget: 4_000,
   };

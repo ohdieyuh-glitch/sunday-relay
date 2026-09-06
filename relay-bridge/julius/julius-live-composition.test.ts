@@ -25,16 +25,17 @@ import {
 import type { GptRunOutcome } from '../../src/relay/connectors/gpt-architect';
 import { JuliusDispatchError, safeFailureClass } from '../../src/relay/mission/julius';
 import { compileHostedEnvelope } from '../hosted-coding-agent/hosted-envelope';
-import type { HostedQueryFn, HostedRunOutcome } from '../hosted-coding-agent/hosted-runner';
+import type { HostedQueryFn, HostedRunInput, HostedRunOutcome } from '../hosted-coding-agent/hosted-runner';
 import { loadHermesConfig, runHermesReview, type HermesOutcome, type ReviewPacket } from '../hermes-reviewer';
 import { runRemoteHermesReview, type RemoteHermesConfig } from '../hermes-remote-review';
+import { reviewStageOf } from '../../src/relay/mission/julius';
+import { DEFAULT_HOSTED_LIMITS, type HostedLimits } from '../hosted-coding-agent/hosted-envelope';
 import {
   createLiveArtifactExchange,
   createLiveHermesReviewerAdapter,
   createLiveHostedCodingAdapter,
   diffRef,
   planRef,
-  reviewStageOf,
 } from './live-workers';
 import {
   ARCHITECT_WORKER,
@@ -492,11 +493,11 @@ describe('a full mission drive with Julius in control', () => {
    * ATTEMPT NUMBER.
    *
    * This is the whole mission graph, on the real live configuration: a claim
-   * limit of 4 against a C.A.R.D. concurrency of 1. On the tick after `plan`
-   * succeeds, `build` and the plan's review task both become claimable — a
-   * review task is created BLOCKED on the task it reviews, and the claim query
-   * offers a BLOCKED task whose dependencies are all SUCCEEDED — so one of the
-   * two is claimed and handed straight back.
+   * limit of 4 against a C.A.R.D. concurrency of 1. Before the release rule,
+   * on the tick after `plan` succeeded `build` and the plan's review were BOTH
+   * claimable, so one was claimed and handed straight back; now only what
+   * Julius released is offered, and the hand-back is exercised by the build
+   * and the build's review instead.
    *
    * While the claim spent an execution attempt, that hand-back charged a task
    * for a provider that was never called, and a task yielded twice reached its
@@ -577,14 +578,17 @@ describe('a full mission drive with Julius in control', () => {
     expect(planFacts.diag_jsonParseable).toBe(false);
     expect(JSON.stringify(planFacts), 'no fact may be a stringified object').not.toContain('[object Object]');
     /**
-     * AND EACH REVIEW NAMES ITS OWN STAGE. Both reviews get the same unreadable
-     * answer here, so both fail — which is exactly the case that caught the
-     * first derivation: it read the stage from whether a diff artifact existed,
-     * and the build runs BEFORE the plan review, so every plan review was
-     * recorded as a build review.
+     * AND THE REVIEW NAMES ITS OWN STAGE — from the dispatched task type, not
+     * from whether a diff existed (the first derivation) or from the task id
+     * (the second). Under the declared graph an unreadable PLAN review ends
+     * the run before any build: the plan can never be accepted, so nothing is
+     * released, the coder never runs and no build review exists to misname.
+     * Paid run 34037313976 built first and reviewed the plan afterwards.
      */
     expect(planFacts.diag_stage, 'the plan review is a plan review').toBe('plan');
-    expect(factsFor('build-1:review').diag_stage, 'and the build review is not').toBe('build');
+    expect(memory.taskRow('build-1')?.state, 'the build was never released').toBe('BLOCKED');
+    expect(memory.taskRow('build-1:review'), 'and so there is no build review').toBeNull();
+    expect(failures.map((event) => event.taskId)).toEqual(['plan-1:review']);
   });
 
   it('CASE K: every task in the live graph reaches its first dispatch as attempt 1', async () => {
@@ -602,11 +606,13 @@ describe('a full mission drive with Julius in control', () => {
       expect(row.attempt, `${task.taskId} executed exactly once`).toBe(1);
     }
 
-    // And the hand-back really happened — otherwise this case proves nothing.
-    // A lease generation above the execution count is a claim that took
-    // ownership without spending an attempt, which is the repair itself.
+    // The race that produced hand-backs is gone: with the release rule only
+    // what Julius accepted is claimable, so the declared graph offers one
+    // task per tick and nothing is claimed and handed straight back. The
+    // attempt rule above is still the property under test; this records
+    // that the topology no longer exercises the hand-back at all.
     const yielded = tasks.filter((task) => memory.taskRow(task.taskId)!.leaseGeneration > 1);
-    expect(yielded.length, 'at least one task was claimed more times than it executed').toBeGreaterThan(0);
+    expect(yielded, 'no task was claimed more times than it executed').toEqual([]);
   });
 
   /**
@@ -658,7 +664,8 @@ describe('a full mission drive with Julius in control', () => {
   });
 
   it('a blocking review verdict forces exactly one Julius repair cycle, and completion is withheld when it stays blocking', async () => {
-    const { memory, fakes, outcome } = await driveLiveMission(['changes_required']);
+    // The plan review accepts; every implementation review rejects.
+    const { memory, fakes, outcome } = await driveLiveMission(['approved', 'changes_required']);
     expect(outcome.state).not.toBe('COMPLETED');
 
     const tasks = await memory.tasksForRun('run-live', 'prj-live');
@@ -733,9 +740,29 @@ describe('a resumed process cannot produce a vacuous review or a planless build'
       testCommand: 'npm run mission-test',
       run: fakeReviewer(log, [], ['approved']) as never,
     });
-    await expect(adapter.dispatch({ taskId: 'build-1:review', contextId: 'ctx-resume-1' }))
+    await expect(adapter.dispatch({ taskId: 'build-1:review', contextId: 'ctx-resume-1', taskType: 'review:build' }))
       .rejects.toMatchObject({ code: 'INVALID_REQUEST', safeMessage: expect.stringContaining('review of nothing is refused') });
     expect(log.order, 'Hermes must never have been invoked').toEqual([]);
+  });
+
+  it('the reviewer refuses a dispatch that names no stage, rather than guessing one', async () => {
+    const log: FakeLog = { order: [] };
+    const artifacts = createLiveArtifactExchange();
+    artifacts.put(planRef('run-live'), JSON.stringify(VALID_PLAN));
+    const adapter = createLiveHermesReviewerAdapter({
+      worker: {
+        workerId: 'independent-reviewer-hermes', role: 'INDEPENDENT_REVIEWER',
+        adapterId: 'hermes-local-live', providerId: 'xai', capabilities: ['review'],
+        taskTypes: ['review:build'], concurrencyLimit: 1, timeoutMs: 1_000, maxRetries: 1, status: 'AVAILABLE',
+      },
+      contexts, artifacts,
+      config: loadHermesConfig(LIVE_ENV as never),
+      testCommand: 'npm run mission-test',
+      run: fakeReviewer(log, [], ['approved']) as never,
+    });
+    await expect(adapter.dispatch({ taskId: 'build-1:review', contextId: 'ctx-resume-1' }))
+      .rejects.toMatchObject({ code: 'INVALID_REQUEST', failureClass: 'reviewer_stage_unknown' });
+    expect(log.order).toEqual([]);
   });
 
   it('the coder refuses a dispatch when the plan artifact is unavailable, before any effect or SDK load', async () => {
@@ -776,7 +803,7 @@ describe('a resumed process cannot produce a vacuous review or a planless build'
       worker, contexts, artifacts, config: loadHermesConfig(LIVE_ENV as never),
       testCommand: 'npm run mission-test', run: (async () => outcomeFor('changes_required')) as never,
     });
-    const result = await minorOnly.dispatch({ taskId: 'build-1:review', contextId: 'ctx-resume-1' });
+    const result = await minorOnly.dispatch({ taskId: 'build-1:review', contextId: 'ctx-resume-1', taskType: 'review:plan' });
     expect(result.evidence).toHaveLength(1);
     expect((result.evidence[0] as { status: string }).status).toBe('FAILED');
 
@@ -784,7 +811,7 @@ describe('a resumed process cannot produce a vacuous review or a planless build'
       worker, contexts, artifacts, config: loadHermesConfig(LIVE_ENV as never),
       testCommand: 'npm run mission-test', run: (async () => outcomeFor('unable_to_review')) as never,
     });
-    await expect(unable.dispatch({ taskId: 'build-1:review', contextId: 'ctx-resume-1' }))
+    await expect(unable.dispatch({ taskId: 'build-1:review', contextId: 'ctx-resume-1', taskType: 'review:plan' }))
       .rejects.toMatchObject({ code: 'WORKER_EXECUTION_FAILURE', safeMessage: expect.stringContaining('unable to review') });
   });
 });
@@ -1088,7 +1115,7 @@ describe('an incomplete review reaches Julius as the failure it actually was', (
         },
       })) as never,
     });
-    return adapter.dispatch({ taskId: 'build-1:review', contextId: 'ctx-resume-1' })
+    return adapter.dispatch({ taskId: 'build-1:review', contextId: 'ctx-resume-1', taskType: 'review:plan' })
       .then(() => { throw new Error('the dispatch was expected to fail'); })
       .catch((error: unknown) => error as { code: string; retryable: boolean; failureClass: string | null });
   };
@@ -1219,7 +1246,7 @@ describe('a paid reviewer failure can be diagnosed from the record alone', () =>
         packet: packetInput.packet, config: packetInput.config, spawnImpl: fakeChild(child),
       })) as never,
     });
-    return adapter.dispatch({ taskId: 'build-1:review', contextId: 'ctx-resume-1' })
+    return adapter.dispatch({ taskId: 'build-1:review', contextId: 'ctx-resume-1', taskType: 'review:build' })
       .then(() => { throw new Error('the dispatch was expected to fail'); })
       .catch((error: unknown) => error as JuliusDispatchError);
   };
@@ -1426,35 +1453,544 @@ describe('a refused plan names the rule it broke', () => {
  * WHICH REVIEW A FAILURE WAS, INCLUDING THE ONES A REPAIR CREATES.
  *
  * The first derivation read the stage from whether a diff artifact existed, and
- * the build runs BEFORE the plan review — so every plan review was recorded as
- * a build review. The second anchored on the end of the reviewed task id, which
- * reads `run:…:plan` and `build-1` and then returns null for a REPAIR
- * re-review, whose reviewed id is `repair:build-1:1:task`. A durable field that
- * is wrong is worse than one that is absent, and a repaired run's re-review is
- * exactly where a paid mission ends.
+ * the build ran BEFORE the plan review — so every plan review was recorded as a
+ * build review. The second parsed the task id. The stage is now the task TYPE
+ * Julius dispatches with, read by the domain's own `reviewStageOf`, and a
+ * dispatch that carries none is refused rather than guessed (see the adapter
+ * cases below).
  */
-describe('the review stage is read from the task id', () => {
-  it('names the ordinary plan and build reviews, in both id shapes', () => {
-    expect(reviewStageOf('plan-1:review')).toBe('plan');
-    expect(reviewStageOf('build-1:review')).toBe('build');
-    expect(reviewStageOf('run:526ca97da0e94b6223a5320a:plan:review')).toBe('plan');
-    expect(reviewStageOf('run:526ca97da0e94b6223a5320a:build:review')).toBe('build');
-  });
-
-  it('keeps the stage on a repair re-review, which is routed review:repair:build', () => {
-    expect(reviewStageOf('repair:build-1:1:task:review')).toBe('build');
-    expect(reviewStageOf('repair:plan-1:1:task:review')).toBe('plan');
-  });
-
-  it('returns null rather than guessing when it cannot be read', () => {
-    // A durable field that is wrong is worse than one that is absent.
-    expect(reviewStageOf('something:else:review')).toBeNull();
-    expect(reviewStageOf('')).toBeNull();
-    // Two kinds is not a tie to break.
-    expect(reviewStageOf('repair:plan-1:build-2:task:review')).toBeNull();
+describe('the review stage is read from the dispatched task type', () => {
+  it('names every stage, and only from a review type', () => {
+    expect(reviewStageOf('review:plan')).toBe('plan');
+    expect(reviewStageOf('review:build')).toBe('build');
+    expect(reviewStageOf('review:repair:plan')).toBe('repair:plan');
+    expect(reviewStageOf('review:repair:build')).toBe('repair:build');
+    expect(reviewStageOf('plan-1:review'), 'a task id is not a type').toBeNull();
+    expect(reviewStageOf('run:526ca97da0e94b6223a5320a:plan:review')).toBeNull();
   });
 });
 
+/* ------------------------------------------------------------------------ *
+ * THE FIRST PAID MISSION, REPRODUCED OFFLINE
+ * ------------------------------------------------------------------------ */
+
+/**
+ * RUN 33697109210 — the first paid Julius mission — failed here, and this is
+ * the shape it failed in: the `plan` task went FAILED, the `build` task
+ * stayed BLOCKED behind it, and the run reported "WAITING (stalled before
+ * terminal state) after 2 ticks". The uploaded evidence could say WHAT
+ * happened and not WHY: the normalized code lived only in the operational
+ * event stream, which nothing exported, and the database is destroyed with the
+ * job.
+ *
+ * The fixture is the real one — `seedMissionRun` seeds exactly that two-task
+ * graph — and only the architect's outcome is injected. No provider is
+ * contacted by any case in this file.
+ */
+describe('the first paid attempt, reproduced: a failing Prompt Architect', () => {
+  const architectFailure = (failureClass: GptRunOutcome extends { ok: false } ? never : string, message: string) =>
+    async (): Promise<GptRunOutcome> => ({ ok: false, failureClass: failureClass as never, message });
+
+  const failedRun = async (failureClass: string, message = 'safe provider message') => {
+    const driven = await driveLiveMission(['approved'], undefined, architectFailure(failureClass as never, message));
+    const tasks = await driven.memory.tasksForRun('run-live', 'prj-live');
+    const failures = driven.memory.events().filter((event) => event.type === 'task.failed' || event.type === 'retry.scheduled');
+    return { ...driven, tasks, failures };
+  };
+
+  it('reproduces the observed task states exactly: plan FAILED, build BLOCKED', async () => {
+    const { tasks } = await failedRun('provider_error');
+    const byId = new Map(tasks.map((task) => [task.taskId, task.state]));
+    expect(byId.get('plan-1')).toBe('FAILED');
+    expect(byId.get('build-1')).toBe('BLOCKED');
+  });
+
+  /**
+   * THE STATE-MACHINE REPAIR. `build-1` is blocked on a dependency that has
+   * terminally FAILED, so it can never be claimed: the claim predicate needs
+   * every dependency SUCCEEDED or SKIPPED, and nothing revives a FAILED task.
+   * Before the repair, `any BLOCKED → WAITING` answered WAITING forever and
+   * the driver reported a stall; a mission that failed must say so.
+   */
+  it('ends the run FAILED instead of stalling in WAITING', async () => {
+    const { outcome } = await failedRun('provider_error');
+    expect(outcome.state, 'a dead-blocked run is a failed run, not a waiting one').toBe('FAILED');
+    expect(outcome.stalled, 'and it is terminal, so nothing is reported as stalled').toBe(false);
+  });
+
+  /**
+   * EVERY CLASS SURVIVES DURABLY. The coarse JuliusErrorCode cannot separate a
+   * refusal from a malformed response from a 500 — all three are
+   * WORKER_EXECUTION_FAILURE — so the connector's own class is carried
+   * alongside it. Each row is a class the OpenAI connector actually emits.
+   */
+  const CLASSES: ReadonlyArray<readonly [string, string, boolean]> = [
+    ['authentication_failed', 'AUTH_CONFIGURATION', false],
+    ['permission_denied', 'AUTH_CONFIGURATION', false],
+    ['rate_limited', 'RATE_LIMIT', true],
+    ['timeout', 'TIMEOUT', true],
+    ['network_disconnected', 'TIMEOUT', true],
+    ['model_unavailable', 'PROVIDER_UNAVAILABLE', false],
+    ['refused', 'WORKER_EXECUTION_FAILURE', false],
+    ['incomplete_response', 'WORKER_EXECUTION_FAILURE', false],
+    ['malformed_output', 'WORKER_EXECUTION_FAILURE', false],
+    ['provider_error', 'WORKER_EXECUTION_FAILURE', false],
+  ];
+
+  it.each(CLASSES)('records %s durably as %s with its own class', async (failureClass, code) => {
+    const { failures } = await failedRun(failureClass);
+    expect(failures.length, 'a failed dispatch must leave a durable event').toBeGreaterThan(0);
+    const facts = failures.at(-1)!.facts;
+    expect(facts.code, 'the normalized Julius code').toBe(code);
+    expect(facts.failureClass, 'and the connector class that the code alone cannot express').toBe(failureClass);
+    expect(typeof facts.errorRetryable, 'whether the ERROR was retryable is recorded, so a reader need not re-derive it').toBe('boolean');
+  });
+
+  /**
+   * A FAILURE ROW THAT NAMES NO TASK NAMES NO ROLE EITHER.
+   *
+   * `failures.tsv` reads the role by joining the event's task id to the task
+   * row. On a non-retryable worker failure — the shape the first paid mission
+   * failed in — the coordinator writes the only row that ENDS the task, and it
+   * used to write no task id at all, so the two columns that say WHO stopped
+   * were blank for exactly that run.
+   */
+  it('names the task on the failure row, so the evidence can name the role', async () => {
+    const { failures } = await failedRun('provider_error');
+    const last = failures.at(-1)!;
+    expect(last.type, 'the coordinator writes the only task-ending row on this path').toBe('task.failed');
+    expect(last.taskId, 'and the row must say which task stopped').toBe('plan-1');
+  });
+
+  it('separates the two Julius-side failures a provider class cannot describe', async () => {
+    const unparseable = await driveLiveMission(['approved'], undefined,
+      async () => ({ ok: true, status: 'completed', outputText: 'not json at all', actualModel: 'gpt-5.6-sol', responseId: 'resp_1',
+        usage: { inputTokens: 1, cachedInputTokens: 0, outputTokens: 1, reasoningTokens: 0, totalTokens: 2 } } as GptRunOutcome));
+    const unparseableFacts = unparseable.memory.events().filter((event) => event.type === 'task.failed').at(-1)?.facts;
+    expect(unparseableFacts?.failureClass).toBe('unparseable_plan_json');
+
+    const invalid = await driveLiveMission(['approved'], undefined,
+      async () => ({ ok: true, status: 'completed', outputText: JSON.stringify({ objectiveSummary: 'missing everything else' }),
+        actualModel: 'gpt-5.6-sol', responseId: 'resp_2',
+        usage: { inputTokens: 1, cachedInputTokens: 0, outputTokens: 1, reasoningTokens: 0, totalTokens: 2 } } as GptRunOutcome));
+    const invalidFacts = invalid.memory.events().filter((event) => event.type === 'task.failed').at(-1)?.facts;
+    expect(invalidFacts?.failureClass, 'a plan that parsed but did not validate is a different repair')
+      .toBe('plan_validation_failed');
+  });
+
+  /**
+   * THE LEAK MUTATION. A provider exception is not a machine token, and an
+   * adapter that passed one through would put arbitrary text — including a
+   * header — into a durable row and then into an uploaded artifact.
+   * `safeFailureClass` narrows to /^[a-z][a-z0-9_]{0,63}$/, so none of the
+   * three values below can survive it, whatever an adapter does. The rule is
+   * not a proof that no secret ever could: a token already in that alphabet —
+   * a hex digest beginning a–f — is shaped like a class and passes, which is
+   * why the workflow scans the artifact before publishing it.
+   */
+  it('MUTATION: a secret-bearing provider exception cannot become a failure class', async () => {
+    const bearer = 'Authorization: Bearer FAKESECRET123456789';
+    expect(safeFailureClass(bearer), 'a header is not a token').toBeNull();
+    expect(safeFailureClass('sk-live-FAKESECRET123456789')).toBeNull();
+    expect(safeFailureClass('Provider said: 500 Internal Server Error')).toBeNull();
+    expect(safeFailureClass('provider_error'), 'a real class still passes').toBe('provider_error');
+
+    const { failures, memory } = await failedRun('provider_error', bearer);
+    const serialised = JSON.stringify({ events: memory.events(), failures });
+    expect(serialised, 'no part of the exception text reaches the durable record').not.toContain('FAKESECRET123456789');
+    expect(serialised).not.toContain('Bearer');
+    expect(failures.at(-1)!.facts.failureClass, 'only the class the connector named').toBe('provider_error');
+  });
+
+  it('a dispatch error constructed with junk carries no class at all, rather than a dirty one', () => {
+    const dirty = new JuliusDispatchError('WORKER_EXECUTION_FAILURE', false, 'safe', 'Bearer FAKESECRET123456789');
+    expect(dirty.failureClass, 'unknown is null, never a partially cleaned string').toBeNull();
+    expect(new JuliusDispatchError('TIMEOUT', true, 'safe', 'timeout').failureClass).toBe('timeout');
+    expect(new JuliusDispatchError('TIMEOUT', true, 'safe').failureClass, 'omitted stays null').toBeNull();
+  });
+});
+
+
+/**
+ * WHAT AN INCOMPLETE REVIEW BECOMES, END TO END AND PROVIDER-FREE.
+ *
+ * Paid attempt #2 recorded `reviewer_review_incomplete` twice and could say
+ * nothing else, so these drive the REAL remote runner over a fake fetch into
+ * the REAL adapter: the service's own words, through the classifier, through
+ * the shape, to the Julius code and the retryable flag the coordinator
+ * persists. No provider, no network, no Hermes.
+ */
+describe('an incomplete review reaches Julius as the failure it actually was', () => {
+  const REMOTE_CFG: RemoteHermesConfig = {
+    serviceUrl: 'https://hermes.example.com',
+    token: 'FAKETESTNOTREAL-service',
+    trustedOrigins: ['https://hermes.example.com'],
+    timeoutMs: 1_000, reviewTimeoutMs: 10_000, pollIntervalMs: 1,
+  };
+  const worker = {
+    workerId: 'independent-reviewer-hermes', role: 'INDEPENDENT_REVIEWER' as const,
+    adapterId: 'hermes-remote-live', providerId: 'xai', capabilities: ['review'],
+    taskTypes: ['review:build'], concurrencyLimit: 1, timeoutMs: 1_000, maxRetries: 1,
+    status: 'AVAILABLE' as const,
+  };
+  const jsonRes = (body: unknown, status = 200): Response =>
+    new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+  const started = (state: unknown) => vi.fn()
+    .mockResolvedValueOnce(jsonRes({ accepted: true, runId: 'run-live' }))
+    .mockResolvedValueOnce(jsonRes(state));
+
+  /** Dispatches through the real adapter and returns the thrown Julius error. */
+  const failureFrom = async (fetchImpl: unknown) => {
+    const artifacts = createLiveArtifactExchange();
+    artifacts.put(planRef('run-live'), JSON.stringify(VALID_PLAN));
+    const adapter = createLiveHermesReviewerAdapter({
+      worker,
+      contexts: { snapshotFor: () => reviewSnapshot('build-1:review') },
+      artifacts,
+      config: loadHermesConfig(LIVE_ENV as never),
+      testCommand: 'npm run mission-test',
+      run: (async (input: { packet: ReviewPacket }) => runRemoteHermesReview({
+        packet: input.packet, config: REMOTE_CFG, runId: 'run-live',
+        deps: {
+          now: () => '2026-09-04T00:00:00.000Z',
+          sleep: () => Promise.resolve(),
+          fetchImpl: fetchImpl as typeof fetch,
+        },
+      })) as never,
+    });
+    return adapter.dispatch({ taskId: 'build-1:review', contextId: 'ctx-resume-1', taskType: 'review:plan' })
+      .then(() => { throw new Error('the dispatch was expected to fail'); })
+      .catch((error: unknown) => error as { code: string; retryable: boolean; failureClass: string | null });
+  };
+
+  it('a review the service timed out is a TIMEOUT that may be re-asked, never a process exit', async () => {
+    // The finding this closes: `status: "timed_out"` fell through to
+    // `review_process_exit` and reached Julius as WORKER_EXECUTION_FAILURE,
+    // defeating the durable diagnosis on the shape it names most plainly.
+    const failure = await failureFrom(started({ runId: 'run-live', status: 'timed_out', failureKind: 'timed_out' }));
+    expect(failure.failureClass, 'the shape is the durable record').toBe('review_timeout');
+    expect(failure.failureClass).not.toBe('review_process_exit');
+    expect(failure.code).toBe('TIMEOUT');
+    // The architect and the coder both raise TIMEOUT retryable; a reviewer that
+    // never answered has produced no paid verdict to throw away by re-asking.
+    expect(failure.retryable, 'an answer that did not arrive may be asked for again').toBe(true);
+  });
+
+  it('a service with no capacity is service-side and clears itself, so it is retryable', async () => {
+    for (const kind of ['capacity_exhausted', 'shutting_down']) {
+      const failure = await failureFrom(() => Promise.resolve(jsonRes({ failureKind: kind }, 503)));
+      expect(failure.failureClass, kind).toBe('review_service_unavailable');
+      expect(failure.code).toBe('PROVIDER_UNAVAILABLE');
+      expect(failure.retryable, 'capacity clears as runs finish; a drain ends when the deploy lands').toBe(true);
+    }
+  });
+
+  it('a request the service would not admit names the request, not the model vendor', async () => {
+    for (const [kind, status] of [['validation_failed', 422], ['review_refused', 400]] as const) {
+      const failure = await failureFrom(() => Promise.resolve(jsonRes({ failureKind: kind }, status)));
+      expect(failure.failureClass, kind).toBe('review_request_rejected');
+      // Never PROVIDER_UNAVAILABLE: no model-provider request necessarily
+      // happened, and sending an operator to xAI for our own bad request is
+      // the false diagnosis this closes.
+      expect(failure.code).toBe('INVALID_REQUEST');
+      expect(failure.retryable, 'repeating a refused request only spends the attempt').toBe(false);
+    }
+  });
+
+  it('a dead credential stays authentication-specific and final', async () => {
+    const failure = await failureFrom(() => Promise.resolve(jsonRes({ failureKind: 'authentication_failed' }, 401)));
+    expect(failure.failureClass).toBe('review_authentication_failed');
+    expect(failure.code).toBe('AUTH_CONFIGURATION');
+    expect(failure.retryable).toBe(false);
+  });
+
+  it('an actual upstream HTTP failure is still a provider failure', async () => {
+    // The branch that must NOT be swallowed by the two service shapes above.
+    const failure = await failureFrom(() => Promise.resolve(jsonRes({}, 500)));
+    expect(failure.failureClass).toBe('review_provider_http_error');
+    expect(failure.code).toBe('PROVIDER_UNAVAILABLE');
+    expect(failure.retryable).toBe(false);
+  });
+
+  it('a terminal state that names no cause is still a process exit', async () => {
+    // The fallback is retained deliberately: inventing a cause for "it stopped
+    // and did not say why" is the defect, not the fix.
+    const failure = await failureFrom(started({ runId: 'run-live', status: 'failed' }));
+    expect(failure.failureClass).toBe('review_process_exit');
+    expect(failure.code).toBe('WORKER_EXECUTION_FAILURE');
+    expect(failure.retryable).toBe(false);
+  });
+
+  it('a review Relay cannot read is a worker failure carrying the shape that says why', async () => {
+    const failure = await failureFrom(started({ runId: 'run-live', status: 'completed', reviewText: 'The plan looks fine to me.' }));
+    expect(failure.failureClass, 'prose is absent JSON, not a dead credential').toBe('review_json_absent');
+    expect(failure.code).toBe('WORKER_EXECUTION_FAILURE');
+    expect(failure.retryable, 'a model that wrote prose will write prose again').toBe(false);
+  });
+
+  it('no incomplete review produces a verdict, a decision or a finding', async () => {
+    // The whole point: every branch above threw, so none of them reached the
+    // evidence that completion is computed from.
+    for (const fetchImpl of [
+      started({ runId: 'run-live', status: 'timed_out', failureKind: 'timed_out' }),
+      () => Promise.resolve(jsonRes({ failureKind: 'capacity_exhausted' }, 503)),
+      started({ runId: 'run-live', status: 'completed', reviewText: '{"verdict":"approve","summary":"ok"}' }),
+    ]) {
+      const failure = await failureFrom(fetchImpl);
+      expect(failure.code, 'a dispatch that failed produced no evidence').toBeDefined();
+      expect(JSON.stringify(failure)).not.toContain('FAKETESTNOTREAL');
+    }
+  });
+});
+
+
+/**
+ * THE PAID FAILURE, REPLAYED PROVIDER-FREE, WITH THE FACTS ATTACHED.
+ *
+ * Attempt #2 failed on the LOCAL path and left one word. This drives the REAL
+ * `runHermesReview` over a fake child process into the REAL adapter, and asks
+ * the durable failure the questions an operator has to answer before deciding
+ * whether to pay again: what failed, where, why, is it retryable, what did the
+ * process return, did it time out, did it overflow, was the text ambiguous.
+ */
+describe('a paid reviewer failure can be diagnosed from the record alone', () => {
+  const fakeChild = (input: { stdout?: string; code?: number; neverCloses?: boolean }) => () => {
+    const child = new EventEmitter() as EventEmitter & { stdout: Readable; stderr: Readable; kill: () => boolean };
+    child.stdout = new Readable({ read() { /* pushed below */ } });
+    child.stderr = new Readable({ read() { /* never surfaced */ } });
+    child.kill = () => true;
+    setTimeout(() => {
+      if (input.stdout !== undefined && input.stdout !== '') child.stdout.push(Buffer.from(input.stdout, 'utf8'));
+      child.stdout.push(null);
+      child.stderr.push(null);
+      if (input.neverCloses !== true) child.emit('close', input.code ?? 0);
+    }, 0);
+    return child as never;
+  };
+
+  const failureFrom = async (child: Parameters<typeof fakeChild>[0], overrides: Record<string, unknown> = {}) => {
+    const artifacts = createLiveArtifactExchange();
+    artifacts.put(planRef('run-live'), JSON.stringify(VALID_PLAN));
+    // A BUILD review reviews a diff. Supplying it is what makes the stage
+    // 'build', because the stage is read from what the review actually carried
+    // rather than from the shape of a task id.
+    artifacts.put(diffRef('run-live'), DIFF_TEXT);
+    const adapter = createLiveHermesReviewerAdapter({
+      worker: {
+        workerId: 'independent-reviewer-hermes', role: 'INDEPENDENT_REVIEWER',
+        adapterId: 'hermes-local-live', providerId: 'xai', capabilities: ['review'],
+        taskTypes: ['review:build'], concurrencyLimit: 1, timeoutMs: 1_000, maxRetries: 1, status: 'AVAILABLE',
+      },
+      contexts: { snapshotFor: () => reviewSnapshot('build-1:review') },
+      artifacts,
+      config: { ...loadHermesConfig(LIVE_ENV as never), ...overrides } as never,
+      testCommand: 'npm run mission-test',
+      run: ((packetInput: { packet: ReviewPacket; config: never }) => runHermesReview({
+        packet: packetInput.packet, config: packetInput.config, spawnImpl: fakeChild(child),
+      })) as never,
+    });
+    return adapter.dispatch({ taskId: 'build-1:review', contextId: 'ctx-resume-1', taskType: 'review:build' })
+      .then(() => { throw new Error('the dispatch was expected to fail'); })
+      .catch((error: unknown) => error as JuliusDispatchError);
+  };
+
+  it('answers WHAT, WHERE, WHY, retryable and the exit code, from one durable row', async () => {
+    const failure = await failureFrom({ stdout: 'segfault', code: 139 });
+    // WHAT / WHY
+    expect(failure.failureClass).toBe('review_process_exit');
+    expect(failure.code).toBe('WORKER_EXECUTION_FAILURE');
+    expect(failure.retryable).toBe(false);
+    // WHERE — the reviewer, on the build review, over the local transport.
+    expect(failure.diagnostics?.stage, 'this review carried a diff').toBe('build');
+    expect(failure.diagnostics?.transport).toBe('local');
+    expect(failure.diagnostics?.provider).toBe('xai');
+    // THE NUMBER THAT WAS MISSING. Without it `review_process_exit` is a class
+    // an operator can only investigate by paying for another run.
+    expect(failure.diagnostics?.processExitCode).toBe(139);
+    expect(failure.diagnostics?.timedOut).toBe(false);
+  });
+
+  it('a timeout is answerable too, and reports no exit code it did not observe', async () => {
+    const failure = await failureFrom({ neverCloses: true }, { timeoutMs: 40 });
+    expect(failure.failureClass).toBe('review_timeout');
+    expect(failure.code).toBe('TIMEOUT');
+    expect(failure.retryable, 'an answer that never came may be asked for again').toBe(true);
+    expect(failure.diagnostics?.timedOut).toBe(true);
+    expect(failure.diagnostics?.processExitCode).toBeNull();
+  });
+
+  it('an overflow reports the bytes against the ceiling that refused them', async () => {
+    const huge = `{"verdict":"approved","summary":"${'x'.repeat(400)}"}`;
+    const failure = await failureFrom({ stdout: huge }, { maxOutputBytes: 64 });
+    expect(failure.failureClass).toBe('review_output_too_large');
+    expect(failure.diagnostics?.outputTruncated).toBe(true);
+    expect(failure.diagnostics?.outputByteLimit).toBe(64);
+    expect(failure.diagnostics?.outputBytesObserved).toBe(huge.length);
+  });
+
+  it('an ambiguous review reports how many verdicts it found', async () => {
+    const failure = await failureFrom({
+      stdout: '{"verdict":"changes_required","summary":"AC-1 unmet"}\n{"verdict":"approved","summary":"fine"}',
+    });
+    expect(failure.failureClass).toBe('review_json_ambiguous');
+    expect(failure.diagnostics?.reviewObjectCount).toBe(2);
+    expect(failure.diagnostics?.verdictPresent, 'neither was selected').toBe(false);
+  });
+
+  it('and the record stays safe when the reviewer is hostile', async () => {
+    // Assembled, not written: the repository boundary scanner refuses a
+    // private-key marker in source and is right to. The test needs the
+    // SHAPE of one, never the string itself.
+    const failure = await failureFrom({
+      stdout: [
+        'Authorization: Bearer FAKESECRET123456789',
+        'sk-live-FAKESECRET123456789  xai-FAKESECRET123456789',
+        ['-----BEGIN', 'RSA', 'PRIVATE', 'KEY-----'].join(' '),
+        '{"verdict":"approve","summary":"the diff sets Authorization: Bearer FAKESECRET123456789"}',
+      ].join('\n'),
+    });
+    const durable = JSON.stringify({
+      code: failure.code, failureClass: failure.failureClass,
+      retryable: failure.retryable, diagnostics: failure.diagnostics,
+    });
+    for (const secret of ['FAKESECRET123456789', 'sk-live', 'xai-FAKE', 'PRIVATE', 'Authorization', 'approve']) {
+      expect(durable, `"${secret}" must not reach the durable record`).not.toContain(secret);
+    }
+    // Still fully diagnosable: the shape and the structural facts survive.
+    expect(failure.failureClass).toBe('review_verdict_invalid');
+    expect(failure.diagnostics?.jsonParseable).toBe(true);
+    expect(failure.diagnostics?.verdictValid).toBe(false);
+  });
+
+  it('a VALID approved review still traverses the whole rig to COMPLETED', async () => {
+    // The control. Diagnostics must not have made a failing path out of the
+    // succeeding one, and approval is still parsed, never assumed.
+    const approved = (summary: string) => JSON.stringify({
+      verdict: 'approved', summary, findings: [],
+      requirementsChecked: [{ requirement: 'AC-1', status: 'passed', evidence: 'reviewed' }],
+    });
+    const { memory, outcome } = await driveLiveMission(['approved'], undefined, undefined, [
+      approved('The plan satisfies every acceptance criterion.'),
+      approved('The diff implements the plan and the tests pass.'),
+    ]);
+    expect(outcome.state).toBe('COMPLETED');
+    const decisions = await memory.decisionsForRun('run-live', 'prj-live');
+    expect(decisions.length).toBeGreaterThan(0);
+    expect(decisions.every((decision) => decision.action === 'ACCEPT')).toBe(true);
+  });
+});
+
+
+/**
+ * PAID ATTEMPT #3, REPLAYED PROVIDER-FREE.
+ *
+ * Run 33897565981 bought a real GPT-5.6 Sol plan that parsed and then failed
+ * `validateArchitectPlan`. The durable record said `plan_validation_failed` and
+ * could not say WHICH of fifteen rules refused it, so a fourth paid run was the
+ * only way to find out. These drive the REAL architect adapter, the REAL JSON
+ * parse and the REAL validator over a fake provider outcome, and read the
+ * diagnostics the coordinator now persists.
+ */
+describe('a refused plan names the rule it broke', () => {
+  const BASE = {
+    objectiveSummary: 'Implement the mission fixture change.',
+    assumptions: [{ id: 'A1', statement: 'The fixture exists.', confidence: 'medium' }],
+    unresolvedQuestions: [],
+    requirements: [{ id: 'R1', statement: 'It must pass.', rationale: 'The contract says so.' }],
+    architectureDecisions: [{ id: 'D1', decision: 'Edit in place.', rationale: 'Smallest change.', alternativesConsidered: [], accepted: false }],
+    implementationSteps: [{ order: 1, description: 'Edit the fixture.', filesTouched: ['fixtures/a.ts'] }],
+    acceptanceCriteria: ['AC-1'], testPlan: ['npm run mission-test'],
+    risks: [], prohibitedActions: [], proposedContractAmendments: [], contextRefs: [],
+    handoff: {
+      objective: 'Implement the fixture change.',
+      boundedTask: 'Edit exactly the fixture files and make the test pass.',
+      acceptanceCriteria: ['AC-1'], requiredTests: ['npm run mission-test'],
+      allowedFileScope: ['fixtures/live-validation/'], prohibitedActions: [],
+      grantedTools: [], expectedEvidence: ['TEST'],
+      missionContractRef: 'contract-1', environmentRef: null,
+    },
+  };
+  const withPlan = (change: (p: typeof BASE) => void) => {
+    const plan = JSON.parse(JSON.stringify(BASE)) as typeof BASE;
+    change(plan);
+    return async (): Promise<GptRunOutcome> => ({
+      ok: true, status: 'completed', outputText: JSON.stringify(plan),
+      actualModel: 'gpt-5.6-sol-2026-08-01', responseId: 'resp_paid3',
+      usage: { inputTokens: 1, cachedInputTokens: 0, outputTokens: 1, reasoningTokens: 0, totalTokens: 2 },
+    } as GptRunOutcome);
+  };
+  const planFailure = async (change: (p: typeof BASE) => void) => {
+    const driven = await driveLiveMission(['approved'], undefined, withPlan(change));
+    const failed = driven.memory.events().filter((event) => event.type === 'task.failed').at(-1)!;
+    return { driven, facts: failed.facts as Record<string, unknown> };
+  };
+
+  it('a VALID plan still succeeds and stores its artifact, and the mission completes', async () => {
+    const { memory, outcome } = await driveLiveMission(['approved'], undefined, withPlan(() => { /* unchanged */ }));
+    expect(memory.taskRow('plan-1')?.state, 'the plan task succeeded').toBe('SUCCEEDED');
+    expect(outcome.state, 'and the whole rig still reaches COMPLETED').toBe('COMPLETED');
+    const decisions = await memory.decisionsForRun('run-live', 'prj-live');
+    expect(decisions.every((decision) => decision.action === 'ACCEPT')).toBe(true);
+  });
+
+  it('every refusal names its rule, leaves the build blocked, and fabricates no evidence', async () => {
+    const cases: readonly [string, (p: typeof BASE) => void][] = [
+      ['objective_summary_empty', (p) => { p.objectiveSummary = ''; }],
+      ['assumption_statement_empty', (p) => { p.assumptions[0]!.statement = ''; }],
+      ['decision_statement_empty', (p) => { p.architectureDecisions[0]!.decision = ''; }],
+      ['decision_rationale_empty', (p) => { p.architectureDecisions[0]!.rationale = ''; }],
+      ['decision_pre_accepted', (p) => { (p.architectureDecisions[0] as { accepted: boolean }).accepted = true; }],
+      ['handoff_objective_empty', (p) => { p.handoff.objective = ''; }],
+      ['handoff_bounded_task_empty', (p) => { p.handoff.boundedTask = ''; }],
+      ['handoff_allowed_scope_empty', (p) => { p.handoff.allowedFileScope = []; }],
+      ['plan_false_work_claim', (p) => { p.objectiveSummary = 'Done — files were edited already.'; }],
+      ['required_string_array_invalid', (p) => { (p as { testPlan: unknown }).testPlan = [1]; }],
+    ];
+    for (const [expected, change] of cases) {
+      const { driven, facts } = await planFailure(change);
+      expect(facts.failureClass, expected).toBe('plan_validation_failed');
+      // THE FACT PAID ATTEMPT #3 DID NOT HAVE — read through the REAL pipeline
+      // ledger, which flattens facts to scalars. Asserting a nested object here
+      // is what proved the first version of this telemetry never survived.
+      expect(facts.diag_validationReasonCode, `${expected}: the rule must be named`).toBe(expected);
+      expect(facts.diag_stage).toBe('plan');
+      expect(facts.diag_jsonParseable, 'it parsed; it did not validate').toBe(true);
+      expect(facts.diag_validationPassed).toBe(false);
+      expect(facts.diag_servedModel, 'the model the provider said answered').toBe('gpt-5.6-sol-2026-08-01');
+      expect(facts.diag_outputBytesObserved as number).toBeGreaterThan(0);
+      expect(JSON.stringify(facts), 'no fact may be a stringified object').not.toContain('[object Object]');
+      // The mission stops, and nothing downstream is invented.
+      expect(driven.memory.taskRow('plan-1')?.state, expected).toBe('FAILED');
+      expect(driven.memory.taskRow('build-1')?.state, 'the build never runs on a refused plan').not.toBe('SUCCEEDED');
+      expect(await driven.memory.decisionsForRun('run-live', 'prj-live'), 'no verification decision').toHaveLength(0);
+    }
+  });
+
+  it('a plan that did not even parse is a different repair, and says so', async () => {
+    const driven = await driveLiveMission(['approved'], undefined,
+      async () => ({ ok: true, status: 'completed', outputText: 'not json at all',
+        actualModel: 'gpt-5.6-sol', responseId: 'resp_x',
+        usage: { inputTokens: 1, cachedInputTokens: 0, outputTokens: 1, reasoningTokens: 0, totalTokens: 2 } } as GptRunOutcome));
+    const facts = driven.memory.events().filter((event) => event.type === 'task.failed').at(-1)!.facts as Record<string, unknown>;
+    expect(facts.failureClass).toBe('unparseable_plan_json');
+    expect(facts.diag_jsonParseable).toBe(false);
+    // No validation happened, so no rule is named — null, not a guess.
+    expect(facts.diag_validationReasonCode).toBeNull();
+  });
+
+  it('the plan itself never reaches the durable record', async () => {
+    const SECRET = 'sk-live-FAKESECRET123456789';
+    const { facts } = await planFailure((p) => {
+      p.objectiveSummary = '';
+      p.handoff.boundedTask = `Rotate ${SECRET} and Authorization: Bearer FAKESECRET123456789`;
+    });
+    const durable = JSON.stringify(facts);
+    for (const secret of [SECRET, 'FAKESECRET123456789', 'Authorization', 'Rotate']) {
+      expect(durable, `"${secret}" must not reach the durable record`).not.toContain(secret);
+    }
+    expect(facts.diag_validationReasonCode).toBe('objective_summary_empty');
+  });
+});
 
 /**
  * PAID ATTEMPT #4, REPLAYED THROUGH THE REAL LEDGER.
@@ -1513,5 +2049,170 @@ describe('the reviewer HTTP status reaches the durable record', () => {
       expect(durable, `"${secret}" must not reach the durable record`).not.toContain(secret);
     }
     expect(durable, 'and nothing is a stringified object').not.toContain('[object Object]');
+  });
+});
+
+/* ------------------------------------------------------------------------ *
+ * PAID RUN 34037313976 — THE ADAPTERS' SHARE OF THE FOUR DEFECTS
+ * ------------------------------------------------------------------------ */
+
+const LIVE_REVIEWER_WORKER = {
+  workerId: 'independent-reviewer-hermes', role: 'INDEPENDENT_REVIEWER' as const,
+  adapterId: 'hermes-local-live', providerId: 'xai', capabilities: ['review'],
+  taskTypes: ['review:plan', 'review:build', 'review:repair:plan', 'review:repair:build'],
+  concurrencyLimit: 1, timeoutMs: 1_000, maxRetries: 1, status: 'AVAILABLE' as const,
+};
+
+/** A snapshot with the FINDING entries Julius compiles for a repair re-review. */
+function repairReviewSnapshot(taskId: string): JuliusContextSnapshot {
+  const snapshot = reviewSnapshot(taskId);
+  return {
+    ...snapshot, findingIds: ['f-1'],
+    packet: { ...snapshot.packet, blocks: [...snapshot.packet.blocks, { kind: 'FINDING', text: 'REVIEW FINDING f-1 [HIGH]: no verification strategy' }] },
+  };
+}
+
+function reviewerAdapterFor(input: { taskId: string; artifacts: ReturnType<typeof createLiveArtifactExchange>; packets: ReviewPacket[]; log: FakeLog; snapshot?: JuliusContextSnapshot }) {
+  return createLiveHermesReviewerAdapter({
+    worker: LIVE_REVIEWER_WORKER,
+    contexts: { snapshotFor: () => input.snapshot ?? reviewSnapshot(input.taskId) },
+    artifacts: input.artifacts,
+    config: loadHermesConfig(LIVE_ENV as never),
+    testCommand: 'npm run mission-test',
+    run: fakeReviewer(input.log, input.packets, ['changes_required']) as never,
+  });
+}
+
+describe('DEFECT 2 — the live reviewer adapter reviews the stage it was dispatched for', () => {
+  it('a PLAN review sees the plan and no diff or test output, even when a diff artifact exists', async () => {
+    const artifacts = createLiveArtifactExchange();
+    artifacts.put(planRef('run-live'), JSON.stringify(VALID_PLAN));
+    artifacts.put(diffRef('run-live'), DIFF_TEXT);
+    const packets: ReviewPacket[] = [];
+    const adapter = reviewerAdapterFor({ taskId: 'plan-1:review', artifacts, packets, log: { order: [] } });
+    const result = await adapter.dispatch({ taskId: 'plan-1:review', contextId: 'ctx-resume-1', taskType: 'review:plan' });
+    expect(packets).toHaveLength(1);
+    const packet = packets[0]!;
+    expect(packet.stage).toBe('plan');
+    expect(packet.charge?.subject).toBe('PLAN');
+    expect(packet.charge?.mustNotDemand).toContain('a unified diff');
+    expect(packet.handoffJson).toBe(JSON.stringify(VALID_PLAN));
+    expect(packet.unifiedDiff, 'no implementation is shown to a plan review').toBe('');
+    expect(packet.changedFiles).toEqual([]);
+    expect(packet.testOutput).toBe('');
+    // A rejecting verdict is EVIDENCE, nothing else: the adapter holds no store
+    // and returns findings for Julius to record and decide on.
+    expect(result.status).toBe('SUCCEEDED');
+    expect(result.evidence.every((item) => (item as { type: string }).type === 'REVIEW_FINDING')).toBe(true);
+    expect(Object.keys(result).sort()).toEqual(['evidence', 'providerId', 'safeSummary', 'status', 'usage', 'workerId']);
+  });
+
+  it('a BUILD review is refused when no implementation exists to judge', async () => {
+    const artifacts = createLiveArtifactExchange();
+    artifacts.put(planRef('run-live'), JSON.stringify(VALID_PLAN));
+    const log: FakeLog = { order: [] };
+    const adapter = reviewerAdapterFor({ taskId: 'build-1:review', artifacts, packets: [], log });
+    await expect(adapter.dispatch({ taskId: 'build-1:review', contextId: 'ctx-resume-1', taskType: 'review:build' }))
+      .rejects.toMatchObject({ code: 'INVALID_REQUEST', failureClass: 'reviewer_implementation_absent' });
+    expect(log.order).toEqual([]);
+  });
+
+  it('a BUILD review carries the diff and the implementation charge', async () => {
+    const artifacts = createLiveArtifactExchange();
+    artifacts.put(planRef('run-live'), JSON.stringify(VALID_PLAN));
+    artifacts.put(diffRef('run-live'), DIFF_TEXT);
+    const packets: ReviewPacket[] = [];
+    const adapter = reviewerAdapterFor({ taskId: 'build-1:review', artifacts, packets, log: { order: [] } });
+    await adapter.dispatch({ taskId: 'build-1:review', contextId: 'ctx-resume-1', taskType: 'review:build' });
+    expect(packets[0]!.stage).toBe('build');
+    expect(packets[0]!.charge?.subject).toBe('IMPLEMENTATION');
+    expect(packets[0]!.unifiedDiff).toBe(DIFF_TEXT);
+  });
+
+  it('a REPAIR review requires the prior findings in its context, and carries them', async () => {
+    const artifacts = createLiveArtifactExchange();
+    artifacts.put(planRef('run-live'), JSON.stringify(VALID_PLAN));
+    artifacts.put(diffRef('run-live'), DIFF_TEXT);
+    const log: FakeLog = { order: [] };
+    const bare = reviewerAdapterFor({ taskId: 'repair:build-1:1:task:review', artifacts, packets: [], log });
+    await expect(bare.dispatch({ taskId: 'repair:build-1:1:task:review', contextId: 'ctx-resume-1', taskType: 'review:repair:build' }))
+      .rejects.toMatchObject({ code: 'INVALID_REQUEST', failureClass: 'reviewer_prior_findings_absent' });
+    expect(log.order).toEqual([]);
+    const packets: ReviewPacket[] = [];
+    const informed = reviewerAdapterFor({
+      taskId: 'repair:build-1:1:task:review', artifacts, packets, log, snapshot: repairReviewSnapshot('repair:build-1:1:task:review'),
+    });
+    await informed.dispatch({ taskId: 'repair:build-1:1:task:review', contextId: 'ctx-resume-1', taskType: 'review:repair:build' });
+    expect(packets[0]!.stage).toBe('repair:build');
+    expect(packets[0]!.priorFindings).toEqual(['REVIEW FINDING f-1 [HIGH]: no verification strategy']);
+    expect(packets[0]!.charge?.repair).toBe(true);
+  });
+
+  it('swapping the reviewer runner does not change what the stage means', async () => {
+    // Two different reviewer implementations receive the identical packet for
+    // the identical dispatch: the stage and charge are Julius's, not theirs.
+    const artifacts = createLiveArtifactExchange();
+    artifacts.put(planRef('run-live'), JSON.stringify(VALID_PLAN));
+    const seen: ReviewPacket[] = [];
+    for (const runner of [fakeReviewer({ order: [] }, seen, ['approved']), textReviewer({ order: [] }, seen, [JSON.stringify({ verdict: 'approved', summary: 'ok', findings: [], requirementsChecked: [] })])]) {
+      const adapter = createLiveHermesReviewerAdapter({
+        worker: LIVE_REVIEWER_WORKER, contexts: { snapshotFor: () => reviewSnapshot('plan-1:review') },
+        artifacts, config: loadHermesConfig(LIVE_ENV as never), testCommand: 'npm run mission-test', run: runner as never,
+      });
+      await adapter.dispatch({ taskId: 'plan-1:review', contextId: 'ctx-resume-1', taskType: 'review:plan' });
+    }
+    expect(seen).toHaveLength(2);
+    expect(seen[0]!.stage).toBe(seen[1]!.stage);
+    expect(seen[0]!.charge).toEqual(seen[1]!.charge);
+    expect(seen[0]!.unifiedDiff).toBe(seen[1]!.unifiedDiff);
+  });
+});
+
+describe('DEFECT 1 — the live coder adapter is limited to what Julius allocated', () => {
+  const coderAdapter = (input: { runs: HostedRunInput[]; cost?: number; refuse?: boolean }) => {
+    const log: FakeLog = { order: [] };
+    const artifacts = createLiveArtifactExchange();
+    artifacts.put(planRef('run-live'), JSON.stringify(VALID_PLAN));
+    const run = async (runInput: HostedRunInput): Promise<HostedRunOutcome> => {
+      input.runs.push(runInput);
+      const completed = await fakeCoder(log, [])(runInput) as Extract<HostedRunOutcome, { kind: 'completed' }>;
+      const observation = { ...completed.observation, usage: { ...completed.observation.usage, totalCostUsd: input.cost ?? 0.02 } };
+      if (input.refuse) {
+        return { kind: 'refused', refusalCode: 'coder_cost_exceeded', safeMessage: 'over', observation, envelope: completed.envelope, startedAt: completed.startedAt, completedAt: completed.completedAt } as HostedRunOutcome;
+      }
+      return { ...completed, observation };
+    };
+    return createLiveHostedCodingAdapter({
+      worker: {
+        workerId: 'coding-agent-claude-hosted', role: 'CODING_AGENT', adapterId: 'claude-agent-sdk-hosted-live', providerId: 'anthropic',
+        capabilities: ['implement'], taskTypes: ['build'], concurrencyLimit: 1, timeoutMs: 1_000, maxRetries: 1, status: 'AVAILABLE',
+      },
+      contexts: { snapshotFor: () => reviewSnapshot('build-1') }, artifacts, projectId: 'prj-live',
+      apiKey: 'FAKETESTNOTREAL-anthropic', requestedModel: 'claude-fable-5',
+      workspacePath: '/workspace/mission', testCommand: 'npm run mission-test',
+      shell: fakeShell(log, []), run: run as never, queryLoader: async () => fakeQuery,
+    });
+  };
+
+  it('with an allocation, the hosted limits ARE the allocation; without one, the conservative default', async () => {
+    const runs: HostedRunInput[] = [];
+    const adapter = coderAdapter({ runs, cost: 0.9 });
+    const granted = await adapter.dispatch({ taskId: 'build-1', contextId: 'ctx-resume-1', taskType: 'build', allocation: { usdMicros: 5_000_000, policyVersion: 'julius-allocation.v1', basis: 'CODER_SHARE' } });
+    expect((runs[0]!.limits as HostedLimits).maxCostCents).toBe(500);
+    expect((runs[0]!.limits as HostedLimits).maxTurns).toBe(DEFAULT_HOSTED_LIMITS.maxTurns);
+    expect(granted.status).toBe('SUCCEEDED');
+    expect((granted.usage as { usdMicros: number }).usdMicros).toBe(900_000);
+    await adapter.dispatch({ taskId: 'build-1', contextId: 'ctx-resume-1', taskType: 'build' });
+    expect(runs[1]!.limits).toBe(DEFAULT_HOSTED_LIMITS);
+  });
+
+  it('a cost refusal carries the money beside it: observed, ceiling and source', async () => {
+    const runs: HostedRunInput[] = [];
+    const adapter = coderAdapter({ runs, cost: 5.25, refuse: true });
+    await expect(adapter.dispatch({ taskId: 'build-1', contextId: 'ctx-resume-1', taskType: 'build', allocation: { usdMicros: 5_000_000, policyVersion: 'julius-allocation.v1', basis: 'CODER_SHARE' } }))
+      .rejects.toMatchObject({
+        code: 'WORKER_EXECUTION_FAILURE', failureClass: 'coder_cost_exceeded',
+        diagnostics: expect.objectContaining({ costUsdMicros: 5_250_000, costCeilingUsdMicros: 5_000_000, costSource: 'runtime_reported', stage: 'build' }),
+      });
   });
 });

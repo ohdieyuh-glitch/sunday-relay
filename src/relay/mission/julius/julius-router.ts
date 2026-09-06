@@ -118,7 +118,7 @@ export const safeReviewDiagnostics=(value:unknown):JuliusSafeDiagnostics|null=>{
  if(value===null||typeof value!=='object'||Array.isArray(value))return null;
  const v=value as Record<string,unknown>;
  return Object.freeze({
-  stage:safeEnum(v.stage,['plan','build'] as const),
+  stage:safeEnum(v.stage,['plan','build','repair:plan','repair:build'] as const),
   transport:safeEnum(v.transport,['local','remote','openai','hosted'] as const),
   provider:safeToken(v.provider),
   servedModel:safeModel(v.servedModel),
@@ -153,6 +153,14 @@ export const safeReviewDiagnostics=(value:unknown):JuliusSafeDiagnostics|null=>{
   permissionDenials:safeCount(v.permissionDenials),
   /** Whether an actionable implementation result existed at all. */
   implementationPresent:safeNullableBool(v.implementationPresent),
+  /* --- Coding Agent cost, beside a refusal. Paid run 34037313976 was refused
+   * for cost and the amount lived only in a message nothing persisted. --- */
+  /** The runtime-reported cost in micro-dollars; null when the runtime reported none. */
+  costUsdMicros:safeCount(v.costUsdMicros),
+  /** The ceiling this dispatch was limited to, in micro-dollars. */
+  costCeilingUsdMicros:safeCount(v.costCeilingUsdMicros),
+  /** `runtime_reported` or `unavailable` — Unknown stays Unknown. */
+  costSource:safeToken(v.costSource),
  });
 };
 /**
@@ -183,7 +191,19 @@ export class JuliusDispatchError extends Error{
  constructor(readonly code:JuliusErrorCode,readonly retryable:boolean,readonly safeMessage:string,failureClass?:unknown,diagnostics?:unknown){super(code);this.failureClass=safeFailureClass(failureClass);this.diagnostics=diagnostics===undefined?null:safeReviewDiagnostics(diagnostics);}
 }
 export interface JuliusProviderResult{readonly workerId:string;readonly providerId:string;readonly status:'SUCCEEDED'|'FAILED';readonly safeSummary:string;readonly evidence:readonly unknown[];readonly usage:unknown;}
-export interface JuliusProviderAdapter{readonly adapterId:string;dispatch(input:{taskId:string;contextId:string;signal?:AbortSignal}):Promise<JuliusProviderResult>;}
+/**
+ * WHAT JULIUS TELLS AN ADAPTER, and nothing more.
+ *
+ * `taskType` is the canonical stage carrier: a reviewer reads `review:plan` or
+ * `review:build` from it rather than parsing a task id. `allocation` is the
+ * execution ceiling Julius has RESERVED for this dispatch — the adapter may
+ * spend up to it and not past it, and an adapter given none keeps its own
+ * conservative default. Both are additive: an adapter that ignores them
+ * behaves exactly as before.
+ */
+export interface JuliusDispatchAllocation{readonly usdMicros:number;readonly policyVersion:string;readonly basis:string;}
+export interface JuliusDispatchInput{readonly taskId:string;readonly contextId:string;readonly taskType?:string;readonly allocation?:JuliusDispatchAllocation;readonly signal?:AbortSignal;}
+export interface JuliusProviderAdapter{readonly adapterId:string;dispatch(input:JuliusDispatchInput):Promise<JuliusProviderResult>;}
 export interface JuliusProviderHealth{readonly providerId:string;readonly state:'CLOSED'|'OPEN'|'HALF_OPEN';readonly consecutiveFailures:number;readonly openedAt:string|null;readonly active:number;readonly concurrencyLimit:number;}
 export class JuliusProviderHealthRegistry{private readonly values=new Map<string,JuliusProviderHealth>();set(value:JuliusProviderHealth){this.values.set(value.providerId,structuredClone(value));}available(providerId:string){const value=this.values.get(providerId);return value===undefined||(value.state!=='OPEN'&&value.active<value.concurrencyLimit);}get(providerId:string){const value=this.values.get(providerId);return value?structuredClone(value):null;}}
 export class JuliusProviderRouter{constructor(private readonly workers:JuliusWorkerRegistry,private readonly adapters:ReadonlyMap<string,JuliusProviderAdapter>,private readonly health:JuliusProviderHealthRegistry){}
@@ -211,6 +231,6 @@ export class JuliusProviderRouter{constructor(private readonly workers:JuliusWor
   const worker=this.workers.get(workerId);
   return worker?worker.providerId:null;
  }
- async dispatch(worker:JuliusWorker,input:{taskId:string;contextId:string;signal?:AbortSignal}){const adapter=this.adapters.get(worker.adapterId);if(!adapter)throw new JuliusDispatchError('PROVIDER_UNAVAILABLE',false,'Worker adapter is unavailable.');try{return await adapter.dispatch(input);}catch(error){throw normalizeProviderError(error);}}
+ async dispatch(worker:JuliusWorker,input:JuliusDispatchInput){const adapter=this.adapters.get(worker.adapterId);if(!adapter)throw new JuliusDispatchError('PROVIDER_UNAVAILABLE',false,'Worker adapter is unavailable.');try{return await adapter.dispatch(input);}catch(error){throw normalizeProviderError(error);}}
 }
 export function normalizeProviderError(error:unknown):JuliusDispatchError{if(error instanceof JuliusDispatchError)return error;const code=error!==null&&typeof error==='object'&&'code'in error?String((error as{code:unknown}).code).toUpperCase():'';if(code==='429'||code==='RATE_LIMIT')return new JuliusDispatchError('RATE_LIMIT',true,'Provider rate limit reached.');if(code==='ETIMEDOUT'||code==='TIMEOUT'||error instanceof DOMException&&error.name==='TimeoutError')return new JuliusDispatchError('TIMEOUT',true,'Provider timed out.');if(['401','403','AUTH','CONFIGURATION'].includes(code))return new JuliusDispatchError('AUTH_CONFIGURATION',false,'Provider authentication or configuration failed.');if(code==='ABORT_ERR')return new JuliusDispatchError('CANCELLED',false,'Dispatch was cancelled.');return new JuliusDispatchError('WORKER_EXECUTION_FAILURE',false,'Worker execution failed.');}

@@ -149,9 +149,22 @@ export interface JuliusRunWriter {
   appendEvidence(input: {
     runId: string; projectId: string; idempotencyKey: string; evidence: JuliusEvidence;
   }): Promise<boolean>;
+  /**
+   * THE DECISION AND ITS RELEASE ARE ONE WRITE.
+   *
+   * `releaseTaskIds` names BLOCKED tasks this decision satisfies (computed by
+   * `evaluateJuliusRelease`); they become RUNNABLE in the same durable write
+   * as the decision, so no crash can leave an accepted plan with a build that
+   * nothing will ever release, or a released build with no decision behind it.
+   * A duplicate decision (idempotency conflict) moves nothing: the write that
+   * recorded it first already did. Only Julius calls this, and the claim query
+   * offers RUNNABLE tasks alone, so this is the only path from BLOCKED to
+   * claimable.
+   */
   appendDecision(input: {
     decisionId: string; runId: string; taskId: string; policyRevision: string;
     idempotencyKey: string; occurredAt: string; decision: JuliusVerificationDecision;
+    releaseTaskIds?: readonly string[];
   }): Promise<boolean>;
 }
 
@@ -252,6 +265,14 @@ export interface JuliusBudgetPort {
     toolCalls: number; runtimeMs: number; receiptId: string | null; now: string;
   }): Promise<void>;
   release(input: { reservationId: string; reason: string; now: string }): Promise<void>;
+  /**
+   * WHAT REMAINS, so an allocation can be derived from it: the ceiling minus
+   * every outstanding reservation and commitment, in micro-dollars. `null`
+   * means the ledger cannot say — Unknown, not zero — and the allocator then
+   * takes its conservative branch. Optional so a ledger that cannot answer is
+   * honest by omission rather than by inventing a number.
+   */
+  available?(input: { runId: string; projectId: string; now: string }): Promise<number | null>;
 }
 
 /* ------------------------------------------------------------- read ports */

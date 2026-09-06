@@ -33,12 +33,15 @@
 
 import { evaluateJuliusPolicy, type JuliusCardPolicy } from './julius-policy';
 import { decideJuliusContinuation } from './julius-continuation';
-import { JuliusExecutionCoordinator, type JuliusExecutionPorts, type JuliusExecutionClaim, type JuliusResourceRequest } from './julius-execution-coordinator';
+import { JuliusExecutionCoordinator, type JuliusExecutionOutcome, type JuliusExecutionPorts, type JuliusExecutionClaim, type JuliusResourceRequest } from './julius-execution-coordinator';
 import { safeReasonCode, type JuliusProviderRouter } from './julius-router';
 import { createJuliusContextSnapshot } from './julius-context-snapshot';
-import { evaluateJuliusVerification, type JuliusVerificationPolicy } from './julius-verification-runtime';
+import { evaluateJuliusVerification, type JuliusReviewerFinding, type JuliusVerificationPolicy } from './julius-verification-runtime';
 import { planJuliusRepair } from './julius-repair-runtime';
-import { JULIUS_RUNTIME_VERSION, type JuliusTask, type JuliusVerificationDecision, type JuliusWorker, type JuliusWorkerRole } from './julius-runtime';
+import { repairRoundsBefore, repairTaskTypeFor } from './julius-repair-lineage';
+import { evaluateJuliusRelease } from './julius-release-runtime';
+import { evaluateJuliusAllocation, type JuliusAllocationPolicy, type JuliusExecutionAllocation } from './julius-allocation-runtime';
+import { JULIUS_RUNTIME_VERSION, type JuliusBrainEntry, type JuliusTask, type JuliusVerificationDecision, type JuliusWorker, type JuliusWorkerRole } from './julius-runtime';
 import { validateJuliusEvent, type JuliusOperationalEvent, type JuliusOperationalEventType } from './julius-events';
 import { validateTrajectoryEvent, type JuliusTrajectoryEvent, type JuliusTrajectoryKind } from './julius-trajectory';
 import {
@@ -107,6 +110,14 @@ export interface JuliusPipelineDependencies {
   readonly clock: JuliusClock;
   readonly ids: JuliusIdFactory;
   readonly resources: JuliusResourceEstimator;
+  /**
+   * THE MISSION'S ALLOCATION POLICY, when the composition has one. A Coding
+   * Agent dispatch is then allocated a bounded share of the run budget, that
+   * share is what gets reserved, and the adapter is limited to exactly it.
+   * Absent, every dispatch reserves its fixed estimate and the adapter keeps
+   * its own conservative default — Mission 2's grant reaches nobody else.
+   */
+  readonly allocation?: JuliusAllocationPolicy;
   /** Whoever holds the lease. Recorded on every event for attribution. */
   readonly owner: string;
   /** Context budget in characters. Compiling is bounded, never open-ended. */
@@ -120,6 +131,8 @@ export interface JuliusPipelineRequest {
   /** The capability this task requires. Refused if C.A.R.D. does not allow it. */
   readonly capability: string;
   readonly signal?: AbortSignal;
+  /** Resolves the capability a task not yet created would need, so a repair can be proven routable before it exists. */
+  readonly capabilityFor?: (task: { taskId: string; taskType: string; role: string }) => string;
 }
 
 /* -------------------------------------------------------------- outcomes */
@@ -367,25 +380,38 @@ export async function runClaimedTask(
       taskId: task.taskId, workerId: worker.workerId, providerId: worker.providerId,
       policyRevision: request.policy.revision, outcome: 'SELECTED',
     });
-    const [evidence, findings, criteria, brain] = await Promise.all([
+    const [evidence, findings, criteria, brain, runTasks] = await Promise.all([
       deps.store.evidenceForRun(run.runId, run.projectId),
       deps.store.findingsForRun(run.runId, run.projectId),
       deps.store.criteriaForRun(run.runId, run.projectId),
       deps.store.brainEntriesForRun(run.runId, run.projectId),
+      // Only a repair RE-REVIEW needs to walk to its parent's parent; every
+      // other task's subject is its own parent, and a 300-task run must not
+      // pay for a graph copy per dispatch it will not read.
+      task.taskType.startsWith('review:repair:') ? deps.store.tasksForRun(run.runId, run.projectId) : Promise.resolve([] as readonly JuliusTask[]),
     ]);
+    /**
+     * A REPAIR SEES WHAT IT IS REPAIRING. The findings that admitted a repair
+     * round were recorded on the SUBJECT, and the context carried only the
+     * Project Brain — so the worker asked to revise a plan, or repair a build,
+     * was never told why. Julius compiles the subject's OPEN blocking findings
+     * into the repair's context (and into its re-review's, so the reviewer can
+     * judge resolution) as FINDING entries scoped to this task and role.
+     */
+    const priorFindings = repairContextFindings(task, runTasks, findings);
     const snapshot = createJuliusContextSnapshot({
       contextId: deps.ids.next('context'),
       runId: run.runId,
       task,
       worker,
-      entries: brain,
+      entries: [...brain, ...priorFindings.map((finding) => findingEntryFor(task, finding))],
       maxCharacters: deps.contextCharacterBudget,
       missionContractRevision: run.missionContractRevision,
       cardRevision: run.cardRevision,
       projectBrainRevision: run.projectBrainRevision,
       dependencyTaskIds: task.dependencyIds,
       evidenceIds: evidence.filter((value) => task.dependencyIds.includes(value.taskId)).map((value) => value.evidenceId),
-      findingIds: findings.filter((value) => value.taskId === task.taskId).map((value) => value.findingId),
+      findingIds: (priorFindings.length > 0 ? priorFindings : findings.filter((value) => value.taskId === task.taskId)).map((value) => value.findingId),
       acceptanceCriterionIds: criteria.map((value) => value.criterionId),
     });
     /**
@@ -438,7 +464,25 @@ export async function runClaimedTask(
     contextId: contextId ?? '',
   };
   const operationId = `${correlationId}:${claim.attempt}`;
-  const resources = deps.resources.estimate({ taskId: claim.taskId, taskType: claim.taskType, role: claim.role, attempt: claim.attempt });
+  const estimate = deps.resources.estimate({ taskId: claim.taskId, taskType: claim.taskType, role: claim.role, attempt: claim.attempt });
+  /**
+   * THE ALLOCATION IS THE RESERVATION IS THE LIMIT.
+   *
+   * With an allocation policy, a Coding Agent dispatch is allocated its share
+   * of the mission budget bounded by what remains; that amount is what the
+   * coordinator reserves, and it travels to the adapter as the execution
+   * ceiling. So the adapter can never be allowed more than Julius reserved,
+   * the sum of allocations can never pass the ceiling (the ledger refuses),
+   * and a mission with nothing left is denied HERE, before a provider is
+   * reached, rather than by an adapter refusing work it already did.
+   */
+  const allocation = await allocateFor({ deps, run, role, estimateUsdMicros: estimate.usdMicros });
+  const resources: JuliusResourceRequest = allocation === null ? estimate : { ...estimate, usdMicros: allocation.usdMicros };
+  const dispatchAllocation = allocation === null ? undefined
+    : { usdMicros: allocation.usdMicros, policyVersion: allocation.policyVersion, basis: allocation.basis };
+  if (allocation !== null) {
+    await ledger.event('budget.allocated', { taskId: claim.taskId, facts: { role, ...allocationFacts(allocation) } });
+  }
 
   const coordinator = new JuliusExecutionCoordinator(deps.router, executionPorts(deps, run, ledger));
 
@@ -459,10 +503,16 @@ export async function runClaimedTask(
    * quietly try three providers before telling anyone.
    */
   const tried: string[] = [];
-  let outcome = await coordinator.execute({
-    claim: executionClaim, policy: request.policy, role, taskType: claim.taskType,
-    capability: request.capability, resources, operationId, signal: request.signal,
-  });
+  let outcome: JuliusExecutionOutcome = allocation?.basis === 'EXHAUSTED'
+    ? await (async (): Promise<JuliusExecutionOutcome> => {
+      await ledger.event('budget.denied', { taskId: claim.taskId, facts: { reason: 'BUDGET_EXHAUSTED', ...allocationFacts(allocation) } });
+      return { status: 'DENIED', code: 'BUDGET_DENIED' };
+    })()
+    : await coordinator.execute({
+      claim: executionClaim, policy: request.policy, role, taskType: claim.taskType,
+      capability: request.capability, resources, operationId, signal: request.signal,
+      ...(dispatchAllocation === undefined ? {} : { allocation: dispatchAllocation }),
+    });
   let lastProviderId = deps.router.providerOf(outcome.status === 'COMPLETED' ? outcome.workerId : null);
 
   while (outcome.status !== 'COMPLETED' && outcome.status !== 'DENIED') {
@@ -513,6 +563,7 @@ export async function runClaimedTask(
       capability: request.capability, resources,
       operationId: `${operationId}:reroute:${tried.length}`,
       signal: request.signal, excludedWorkerIds: tried,
+      ...(dispatchAllocation === undefined ? {} : { allocation: dispatchAllocation }),
     });
   }
 
@@ -790,14 +841,16 @@ async function verifyExecutedTask(input: {
         taskId: reviewTaskId,
         missionId: task.missionId,
         parentTaskId: task.taskId,
-        // The reviewer depends on the task it reviews, so the scheduler will
-        // not hand it out until that task has actually succeeded.
+        // The reviewer depends on the task it reviews, and that task has just
+        // SUCCEEDED — this review is scheduled from its verification — so the
+        // dependency is satisfied at creation and the review is RUNNABLE now.
+        // (BLOCKED is no longer claimable; only Julius releases BLOCKED work.)
         dependencyIds: [task.taskId],
         requiredEvidenceTypes: ['REVIEW_FINDING'],
         taskType: `review:${task.taskType}`,
         role: 'INDEPENDENT_REVIEWER',
         ordinal: task.ordinal + 1,
-        state: 'BLOCKED',
+        state: 'RUNNABLE',
       },
     });
     await ledger.event('review.started', { taskId: reviewTaskId, facts: { reviewsTaskId: task.taskId, created } });
@@ -806,7 +859,20 @@ async function verifyExecutedTask(input: {
 
   /* ------------------------------------------------------- a decision */
   const { decision } = action;
-  await deps.store.appendDecision({
+  /**
+   * WHAT THIS DECISION RELEASES, decided before it is written and written
+   * with it. `evaluateJuliusRelease` names the BLOCKED tasks whose every
+   * dependency is now accepted (an ACCEPT, or a REPAIR superseded by an
+   * accepted repair lineage) or SKIPPED. The store moves them to RUNNABLE in
+   * the same durable write as the decision, so a restart between the two is
+   * not a state that exists. Paid run 34037313976 ran `build` before the plan
+   * review because SUCCEEDED alone used to be enough; it is not.
+   */
+  const recorded = { ...decision, taskId: subject.taskId };
+  const release = (decision.action === 'ACCEPT' || decision.action === 'COMPLETE') && tasks.some((value) => value.state === 'BLOCKED')
+    ? evaluateJuliusRelease({ tasks, decisions: [...decisions, recorded] })
+    : { releasable: [] as readonly string[], withheld: [] };
+  const decisionRecorded = await deps.store.appendDecision({
     decisionId: deps.ids.next('decision'),
     runId: run.runId,
     taskId: subject.taskId,
@@ -814,6 +880,7 @@ async function verifyExecutedTask(input: {
     idempotencyKey: `${subject.taskId}:${decision.action}:${decision.reasonCode}`,
     occurredAt: deps.clock.now(),
     decision,
+    releaseTaskIds: release.releasable,
   });
   await ledger.event('verification.decided', {
     taskId: subject.taskId, workerId: input.workerId,
@@ -821,6 +888,7 @@ async function verifyExecutedTask(input: {
       action: decision.action, reasonCode: decision.reasonCode,
       criteriaSatisfied: action.criteriaSatisfied.length, criteriaMissing: action.criteriaMissing.length,
       missionCompletable: action.missionCompletable,
+      released: release.releasable.length,
     },
   });
   await ledger.trajectory('VERIFICATION', {
@@ -832,34 +900,25 @@ async function verifyExecutedTask(input: {
   if (decision.action === 'REPAIR') {
     // The repair is planned for the SUBJECT — the work — never for the review.
     return scheduleRepair({
-      ...input, task: subject, decision,
+      ...input, task: subject, decision, tasks,
       findings: await deps.store.findingsForRun(run.runId, run.projectId),
     });
   }
   if (decision.action === 'ACCEPT' || decision.action === 'COMPLETE') {
     /**
-     * DEPENDENCY WAKEUP, AS AN EVENT RATHER THAN AS A MECHANISM.
-     *
-     * The claim query is what actually makes a task claimable, and nothing
-     * here changes that — a second wakeup mechanism would race the first. What
-     * was missing is the OBSERVABILITY of it: `task.runnable` was in the
-     * catalogue and nothing emitted it, so a consumer could see a task claimed
-     * and never see the moment work became available. This announces the fact
-     * the claim query will act on, and moves nothing.
+     * `task.runnable` announces exactly what the decision's write released —
+     * a fact the claim query will act on, recorded once, by the writer. A
+     * duplicate decision released nothing, so it announces nothing.
      */
-    for (const dependent of tasks) {
-      if (!dependent.dependencyIds.includes(task.taskId)) continue;
-      if (dependent.state !== 'BLOCKED' && dependent.state !== 'RUNNABLE') continue;
-      const satisfied = dependent.dependencyIds.every((id) => {
-        if (id === task.taskId) return true;
-        const other = tasks.find((value) => value.taskId === id);
-        return other !== undefined && (other.state === 'SUCCEEDED' || other.state === 'SKIPPED');
-      });
-      if (!satisfied) continue;
-      await ledger.event('task.runnable', {
-        taskId: dependent.taskId,
-        facts: { unblockedBy: task.taskId, role: dependent.role, taskType: dependent.taskType },
-      });
+    if (decisionRecorded) {
+      const byId = new Map(tasks.map((value) => [value.taskId, value]));
+      for (const taskId of release.releasable) {
+        const dependent = byId.get(taskId);
+        await ledger.event('task.runnable', {
+          taskId,
+          facts: { unblockedBy: subject.taskId, role: dependent?.role ?? null, taskType: dependent?.taskType ?? null },
+        });
+      }
     }
     return { kind: 'COMPLETED', taskId: task.taskId, workerId: input.workerId, duplicate: input.duplicate, decision };
   }
@@ -878,19 +937,57 @@ async function scheduleRepair(input: {
   ledger: RuntimeLedger;
   task: JuliusTask;
   decision: JuliusVerificationDecision;
+  tasks: readonly JuliusTask[];
   findings: Awaited<ReturnType<JuliusRuntimeStore['findingsForRun']>>;
 }): Promise<JuliusTaskOutcome> {
   const { deps, run, ledger, task } = input;
-  const priorRounds = await deps.store.repairRoundsFor(task.taskId, run.projectId);
+  /**
+   * ROUNDS ARE COUNTED FROM THE LINEAGE, from durable task rows. The store's
+   * repair-cycle table is never written on the live path, so it answered zero
+   * for every round and the repair bound was never reached; and a second
+   * round chains on the first, so counting the subject's own children alone
+   * would restart at one. `repairRoundsBefore` counts both directions.
+   */
+  const priorRounds = repairRoundsBefore(task, input.tasks);
+  const repairTaskType = repairTaskTypeFor(task.taskType);
+
+  /**
+   * ROUTABLE BEFORE IT EXISTS. Paid run 34037313976 minted a repair task no
+   * registered worker accepted, then spent an attempt discovering that as
+   * `PROVIDER_UNAVAILABLE` — indistinguishable in the record from an outage.
+   * The same eligibility, health and C.A.R.D. filters the dispatcher applies
+   * are asked here, and an unroutable repair halts the run with its own
+   * reason and spends nothing: no reservation, no task, no attempt.
+   */
+  const capability = input.request.capabilityFor?.({ taskId: task.taskId, taskType: repairTaskType, role: task.role });
+  if (capability !== undefined) {
+    const routes = deps.router.eligibleWorkerIds({ role: task.role, taskType: repairTaskType, capability, policy: input.request.policy });
+    if (routes.length === 0) {
+      await ledger.event('run.failed', {
+        taskId: task.taskId,
+        facts: { reasonCode: 'REPAIR_UNROUTABLE', repairRole: task.role, repairTaskType, forRepairRound: priorRounds + 1 },
+      });
+      return {
+        kind: 'HALTED', taskId: task.taskId, reasonCode: 'REPAIR_UNROUTABLE',
+        safeSummary: `A repair round was required and no registered worker accepts ${task.role} ${repairTaskType}.`,
+      };
+    }
+  }
 
   // A REPAIR IS BUDGETED WORK. Reserving before planning is what stops a run
   // from scheduling a repair it cannot pay for and discovering that when the
-  // repair task is claimed.
+  // repair task is claimed. The amount is the same allocation the round's own
+  // dispatch will be given, so admission and execution cannot disagree.
   const reservationId = `reservation:repair:${task.taskId}:${priorRounds + 1}`;
-  const estimate = deps.resources.estimate({ taskId: task.taskId, taskType: `repair:${task.taskType}`, role: 'CODING_AGENT', attempt: priorRounds + 1 });
+  const estimate = deps.resources.estimate({ taskId: task.taskId, taskType: repairTaskType, role: task.role, attempt: priorRounds + 1 });
+  const admission = await allocateFor({ deps, run, role: task.role, estimateUsdMicros: estimate.usdMicros });
+  if (admission?.basis === 'EXHAUSTED') {
+    await ledger.event('budget.denied', { taskId: task.taskId, facts: { reason: 'BUDGET_EXHAUSTED', forRepairRound: priorRounds + 1, ...allocationFacts(admission) } });
+    return { kind: 'HALTED', taskId: task.taskId, reasonCode: 'REPAIR_BUDGET_DENIED', safeSummary: 'A repair round was required and the mission budget is exhausted.' };
+  }
   const reservation = await deps.budget.reserve({
     reservationId, runId: run.runId, projectId: run.projectId, taskId: task.taskId,
-    usdMicros: estimate.usdMicros, inputTokens: estimate.inputTokens, outputTokens: estimate.outputTokens,
+    usdMicros: admission?.usdMicros ?? estimate.usdMicros, inputTokens: estimate.inputTokens, outputTokens: estimate.outputTokens,
     toolCalls: estimate.toolCalls, runtimeMs: estimate.runtimeMs, now: deps.clock.now(),
   });
   if (reservation.state === 'DENIED') {
@@ -960,3 +1057,63 @@ async function scheduleRepair(input: {
 
   return { kind: 'REPAIR_SCHEDULED', taskId: task.taskId, repairTaskId: plan.task.taskId, round: plan.round };
 }
+
+/* ------------------------------------------------------- allocation */
+
+/**
+ * The allocation for one dispatch, or null when the composition has no policy
+ * — in which case the estimate is reserved and the adapter keeps its default.
+ * `remaining` is read from the ledger when it can answer; Unknown stays null.
+ */
+async function allocateFor(input: {
+  deps: JuliusPipelineDependencies;
+  run: JuliusRunRow;
+  role: JuliusWorkerRole;
+  estimateUsdMicros: number;
+}): Promise<JuliusExecutionAllocation | null> {
+  const policy = input.deps.allocation;
+  if (policy === undefined) return null;
+  const remaining = input.deps.budget.available === undefined ? null
+    : await input.deps.budget.available({ runId: input.run.runId, projectId: input.run.projectId, now: input.deps.clock.now() });
+  return evaluateJuliusAllocation({ policy, role: input.role, remainingUsdMicros: remaining, estimateUsdMicros: input.estimateUsdMicros });
+}
+
+const allocationFacts = (allocation: JuliusExecutionAllocation): Record<string, string | number | null> => ({
+  allocatedUsdMicros: allocation.usdMicros, allocationBasis: allocation.basis,
+  shareUsdMicros: allocation.shareUsdMicros, remainingUsdMicros: allocation.remainingUsdMicros,
+  allocationPolicy: allocation.policyVersion,
+});
+
+/* ---------------------------------------------------- repair context */
+
+/**
+ * The OPEN blocking findings a repair-shaped task exists to address: for a
+ * `repair:*` task, those recorded on its subject (its parent); for a
+ * `review:repair:*` task, those recorded on the repaired subject (its
+ * parent's parent). Anything else has none.
+ */
+function repairContextFindings(
+  task: JuliusTask,
+  tasks: readonly JuliusTask[],
+  findings: readonly JuliusReviewerFinding[],
+): JuliusReviewerFinding[] {
+  const byId = new Map(tasks.map((value) => [value.taskId, value]));
+  let subjectId: string | null = null;
+  if (task.taskType.startsWith('repair:')) subjectId = task.parentTaskId;
+  else if (task.taskType.startsWith('review:repair:')) {
+    const repair = task.parentTaskId === null ? undefined : byId.get(task.parentTaskId);
+    subjectId = repair?.parentTaskId ?? null;
+  }
+  if (subjectId === null) return [];
+  return findings.filter((finding) => finding.taskId === subjectId && finding.blocking && finding.status === 'OPEN');
+}
+
+/** A finding as a context entry: scoped to this task and this role, never SECRET, never the reviewer's raw body. */
+const findingEntryFor = (task: JuliusTask, finding: JuliusReviewerFinding): JuliusBrainEntry => ({
+  entryId: `finding:${task.taskId}:${finding.findingId}`,
+  kind: 'FINDING',
+  text: `REVIEW FINDING ${finding.findingId} [${finding.severity}${finding.criterionId === null ? '' : `, criterion ${finding.criterionId}`}]: ${finding.claim}`,
+  taskIds: [task.taskId],
+  allowedRoles: [task.role],
+  sensitivity: 'INTERNAL',
+});

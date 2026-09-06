@@ -1,5 +1,7 @@
 /** Provider-neutral, deterministic Julius orchestration kernel. */
 
+import { effectivelyAcceptedTaskIds } from './julius-repair-lineage';
+
 export const JULIUS_RUNTIME_VERSION = 'julius-runtime.v1' as const;
 
 export const JULIUS_MISSION_STATES = [
@@ -193,35 +195,13 @@ export function missionMayComplete(input: { state: JuliusMissionState; tasks: re
   if (input.tasks.length === 0 || !input.tasks.every(task => ['SUCCEEDED', 'SKIPPED'].includes(task.state))) return false;
   if (input.decisions.length === 0) return false;
 
-  const current = new Map<string, JuliusRecordedDecision>();
-  for (const decision of input.decisions) current.set(decision.taskId, decision);
-  const byId = new Map(input.tasks.map(task => [task.taskId, task]));
-  const plannerRepairOf = (parent: JuliusTask, child: JuliusTask): boolean => {
-    if (child.parentTaskId !== parent.taskId || child.role !== 'CODING_AGENT') return false;
-    if (child.taskType !== `repair:${parent.taskType}`) return false;
-    const idPrefix = `repair:${parent.taskId}:`;
-    if (!child.taskId.startsWith(idPrefix) || !child.taskId.endsWith(':task')) return false;
-    const round = child.taskId.slice(idPrefix.length, -':task'.length);
-    return /^[1-9]\d*$/.test(round);
-  };
-  const repairChildren = new Map<string, JuliusTask[]>();
-  for (const task of input.tasks) {
-    if (task.parentTaskId === null) continue;
-    const parent = byId.get(task.parentTaskId);
-    if (parent === undefined || !plannerRepairOf(parent, task)) continue;
-    const children = repairChildren.get(task.parentTaskId) ?? [];
-    children.push(task);
-    repairChildren.set(task.parentTaskId, children);
-  }
-  const effectivelyAccepted = (taskId: string, walking: Set<string>): boolean => {
-    const decision = current.get(taskId);
-    if (decision === undefined) return false;
-    if (decision.action === 'ACCEPT') return true;
-    if (decision.action !== 'REPAIR') return false;
-    if (walking.has(taskId)) return false;
-    walking.add(taskId);
-    return (repairChildren.get(taskId) ?? [])
-      .some(child => child.state === 'SUCCEEDED' && effectivelyAccepted(child.taskId, walking));
-  };
-  return [...current.keys()].every(taskId => effectivelyAccepted(taskId, new Set()));
+  /**
+   * THE LINEAGE RULE LIVES IN ONE PLACE. `effectivelyAcceptedTaskIds` is the
+   * shape of a planner repair and the walk through its rounds, shared with the
+   * release evaluator so that "accepted enough to complete" and "accepted
+   * enough to unblock what depends on it" can never disagree.
+   */
+  const decided = new Set(input.decisions.map(decision => decision.taskId));
+  const accepted = effectivelyAcceptedTaskIds(input.tasks, input.decisions);
+  return [...decided].every(taskId => accepted.has(taskId));
 }

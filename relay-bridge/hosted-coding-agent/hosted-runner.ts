@@ -136,6 +136,11 @@ export async function runHostedCodingAgent(input: HostedRunInput): Promise<Hoste
         disallowedTools: [...envelope.disallowedTools],
         permissionMode: envelope.permissionMode,
         maxTurns: envelope.maxTurns,
+        // THE RUNTIME STOPS ITSELF at the ceiling Julius reserved, returning
+        // `error_max_budget_usd`, instead of Relay discovering the overspend
+        // after the fact. The post-hoc ceiling check below still stands, so a
+        // runtime that ignores this option is refused rather than trusted.
+        maxBudgetUsd: limits.maxCostCents / 100,
         // Empty: no settings file, hook or plugin on the host may widen the
         // envelope this module just compiled.
         settingSources: [...envelope.settingSources],
@@ -215,6 +220,12 @@ export async function runHostedCodingAgent(input: HostedRunInput): Promise<Hoste
   ): HostedRunOutcome =>
     ({ kind: 'refused', refusalCode, safeMessage, observation, envelope, startedAt, completedAt });
 
+  // A BUDGET STOP IS A COST REFUSAL, NOT AN UNTRUSTED RESULT. The runtime
+  // reports it as an error subtype, which the usability gate would otherwise
+  // file under "could not be trusted" and hide the one fact that matters.
+  if (observation.resultSubtype === 'error_max_budget_usd') {
+    return refuse('coder_cost_exceeded', `The hosted runtime stopped at its ${limits.maxCostCents}¢ budget ceiling.`);
+  }
   const usable = hostedStreamIsUsable(observation);
   if (!usable.ok) return refuse('coder_result_untrusted', `The hosted run could not be trusted: ${usable.reason}.`);
 

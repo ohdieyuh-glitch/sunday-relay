@@ -64,6 +64,23 @@ export const DEFAULT_HOSTED_LIMITS: HostedLimits = Object.freeze({
 });
 
 /**
+ * THE LIMIT JULIUS RESERVED, as hosted limits.
+ *
+ * The 50 cent default above is the ceiling for a run NOBODY has budgeted — a
+ * conservative floor, not a mission policy. Paid run 34037313976 authorised
+ * $20 and was refused at 50 cents after the work was done, because nothing
+ * carried the mission's allocation down to this envelope. This is the one
+ * seam that does: the amount is what Julius reserved for the dispatch, in
+ * micro-dollars, and it becomes both the post-hoc ceiling and the runtime's
+ * own `maxBudgetUsd` stop. Rounded DOWN to whole cents so the envelope never
+ * admits more than the reservation. Turns and runtime keep their bounds.
+ */
+export function hostedLimitsForAllocation(usdMicros: number, base: HostedLimits = DEFAULT_HOSTED_LIMITS): HostedLimits {
+  if (!Number.isFinite(usdMicros) || usdMicros < 0) throw new Error('hosted_allocation_invalid');
+  return Object.freeze({ ...base, maxCostCents: Math.floor(usdMicros / 10_000) });
+}
+
+/**
  * The environment the hosted agent's child process receives.
  *
  * This is built from `{}` — it is not a filtered copy of `process.env`. On a
