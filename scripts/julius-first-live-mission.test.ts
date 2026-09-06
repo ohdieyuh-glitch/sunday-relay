@@ -340,6 +340,78 @@ describe('every mission declares its own durable accounting namespace', () => {
     expect(first.contract.markerNamespace).toBe('julius-first-live');
   });
 
+  /**
+   * A BUDGET DECISION IS ABOUT ONE MISSION.
+   *
+   * The contract checker's ceilings are keyed by accounting namespace. Raising
+   * the default instead would have been a smaller diff and a much larger
+   * change: every existing mission, and every mission written afterwards,
+   * would silently inherit an authorisation nobody made for it.
+   *
+   * These cases are that boundary, executed. The grant to mission 2 must not
+   * be reachable by any other contract, including one that copies mission 2's
+   * limits verbatim.
+   */
+  describe('a raised ceiling applies to the mission it was raised for, and no other', () => {
+    const checker = resolve(ROOT, 'scripts/julius-live-contract-check.mjs');
+    const checkContract = (contract: unknown): { code: number; output: string } => {
+      const file = join(mkdtempSync(join(realpathSync(tmpdir()), 'julius-contract-')), 'contract.json');
+      writeFileSync(file, JSON.stringify(contract));
+      try {
+        return { code: 0, output: execFileSync(process.execPath, [checker, file], { encoding: 'utf8' }) };
+      } catch (error) {
+        const failure = error as { status?: number; stdout?: string; stderr?: string };
+        return { code: failure.status ?? 1, output: `${failure.stdout ?? ''}${failure.stderr ?? ''}` };
+      }
+    };
+    const missionTwo = () => JSON.parse(read(`${MISSIONS_DIR}/julius-live-mission-2/contract.json`)) as Record<string, unknown>;
+    const missionOne = () => JSON.parse(read(`${MISSIONS_DIR}/julius-first-live/contract.json`)) as Record<string, unknown>;
+
+    it('mission 2 carries its granted budget and passes its own checker', () => {
+      const contract = missionTwo();
+      expect(contract.limits).toEqual({ spendUsd: 20, repairCycles: 3 });
+      expect(checkContract(contract).code, 'the committed contract must pass').toBe(0);
+    }, 30_000);
+
+    it('and is still refused above that grant', () => {
+      // A ceiling that cannot be exceeded is not a ceiling anyone tested.
+      const overSpend = checkContract({ ...missionTwo(), limits: { spendUsd: 21, repairCycles: 3 } });
+      expect(overSpend.code).toBe(1);
+      expect(overSpend.output).toContain('above the 20 ceiling for julius-live-mission-2');
+
+      const overRepair = checkContract({ ...missionTwo(), limits: { spendUsd: 20, repairCycles: 4 } });
+      expect(overRepair.code).toBe(1);
+      expect(overRepair.output).toContain('above the 3 allowed for julius-live-mission-2');
+    }, 30_000);
+
+    it('the default did NOT move: mission 1 is still bounded at five dollars', () => {
+      // The whole point. If this passes with mission 2's numbers, the grant
+      // leaked into every other mission.
+      const leaked = checkContract({ ...missionOne(), limits: { spendUsd: 20, repairCycles: 3 } });
+      expect(leaked.code, 'mission 1 must not inherit mission 2\'s grant').toBe(1);
+      expect(leaked.output).toContain('above the 5 ceiling for julius-first-live');
+      expect(leaked.output).toContain('above the 1 allowed for julius-first-live');
+    }, 30_000);
+
+    it('and a namespace nobody granted anything to gets the default', () => {
+      // A new mission is bounded until someone says otherwise, rather than
+      // unbounded until someone notices.
+      const invented = checkContract({
+        ...missionTwo(), markerNamespace: 'julius-some-future-mission', limits: { spendUsd: 20, repairCycles: 3 },
+      });
+      expect(invented.code).toBe(1);
+      expect(invented.output).toContain('above the 5 ceiling for julius-some-future-mission');
+    }, 30_000);
+
+    it('an unreadable namespace falls to the default, not to the most permissive grant', () => {
+      const nameless: Record<string, unknown> = { ...missionTwo(), limits: { spendUsd: 20, repairCycles: 3 } };
+      delete nameless.markerNamespace;
+      const result = checkContract(nameless);
+      expect(result.code).toBe(1);
+      expect(result.output).toContain('above the 5 ceiling for a mission with no declared namespace');
+    }, 30_000);
+  });
+
   it('a contract without a namespace is refused, rather than defaulted', () => {
     const base = JSON.parse(read(`${MISSIONS_DIR}/julius-first-live/contract.json`)) as Record<string, unknown>;
     for (const bad of [undefined, '', 'Julius-First-Live', 'ns', '../escape', 'a'.repeat(50)]) {

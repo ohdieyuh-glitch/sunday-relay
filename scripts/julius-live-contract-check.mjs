@@ -17,9 +17,38 @@
 import { readFileSync, realpathSync } from 'node:fs';
 import { resolve, sep } from 'node:path';
 
-/** Ceilings this repository is willing to dispatch without a further decision. */
-const MAX_SPEND_USD = 5;
-const MAX_REPAIR_CYCLES = 1;
+/**
+ * CEILINGS, PER MISSION, because a decision about one mission is not a decision
+ * about the next one.
+ *
+ * The default is what this repository is willing to dispatch without anyone
+ * deciding anything: five dollars and a single repair cycle. A mission may be
+ * granted more, and the grant is written here against that mission's own
+ * accounting namespace — so raising a ceiling is a visible, reviewable edit
+ * naming exactly which mission it applies to.
+ *
+ * Raising the DEFAULT instead would have been a smaller diff and a much larger
+ * change: every existing mission, and every mission written afterwards, would
+ * silently inherit an authorisation nobody made for it.
+ *
+ * A namespace absent from this table gets the default. That is deliberate: a
+ * new mission is bounded until someone says otherwise, rather than unbounded
+ * until someone notices.
+ */
+const DEFAULT_LIMITS = Object.freeze({ spendUsd: 5, repairCycles: 1 });
+const MISSION_LIMITS = Object.freeze({
+  // Founder decision, 2026-09-06: mission 2 gets a larger bounded budget for
+  // its paid rerun. Its first paid attempt entered LIVE and did not complete,
+  // and the repairs it needs cost more than one cycle allows.
+  'julius-live-mission-2': Object.freeze({ spendUsd: 20, repairCycles: 3 }),
+});
+
+/** The ceilings that apply to THIS contract, by its own declared namespace. */
+const ceilingsFor = (namespace) =>
+  (typeof namespace === 'string' && Object.hasOwn(MISSION_LIMITS, namespace))
+    ? MISSION_LIMITS[namespace]
+    : DEFAULT_LIMITS;
+
 const MAX_ACCEPTANCE_CRITERIA = 12;
 
 const problems = [];
@@ -66,6 +95,14 @@ if (!Array.isArray(criteria) || criteria.length === 0) {
 
 /* ------------------------------------------------------------ the ceilings */
 
+/**
+ * The namespace decides which ceilings apply, so it is read as strictly as the
+ * live workflow reads it. An unreadable namespace falls to the default rather
+ * than to the most permissive entry.
+ */
+const namespace = typeof contract.markerNamespace === 'string' ? contract.markerNamespace : null;
+const { spendUsd: MAX_SPEND_USD, repairCycles: MAX_REPAIR_CYCLES } = ceilingsFor(namespace);
+
 const limits = contract.limits;
 if (limits === undefined || limits === null || typeof limits !== 'object') {
   // Absent limits are NOT a default here: the entrypoint would fall back to
@@ -75,12 +112,12 @@ if (limits === undefined || limits === null || typeof limits !== 'object') {
   if (typeof limits.spendUsd !== 'number' || !Number.isFinite(limits.spendUsd) || limits.spendUsd <= 0) {
     refuse('limits.spendUsd must be a positive, finite number');
   } else if (limits.spendUsd > MAX_SPEND_USD) {
-    refuse(`limits.spendUsd is ${limits.spendUsd}, above the ${MAX_SPEND_USD} ceiling for a first live mission`);
+    refuse(`limits.spendUsd is ${limits.spendUsd}, above the ${MAX_SPEND_USD} ceiling for ${namespace ?? 'a mission with no declared namespace'}`);
   }
   if (!Number.isInteger(limits.repairCycles) || limits.repairCycles < 0) {
     refuse('limits.repairCycles must be a non-negative integer');
   } else if (limits.repairCycles > MAX_REPAIR_CYCLES) {
-    refuse(`limits.repairCycles is ${limits.repairCycles}, above the ${MAX_REPAIR_CYCLES} allowed for a first live mission`);
+    refuse(`limits.repairCycles is ${limits.repairCycles}, above the ${MAX_REPAIR_CYCLES} allowed for ${namespace ?? 'a mission with no declared namespace'}`);
   }
 }
 
