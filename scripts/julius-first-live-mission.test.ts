@@ -1796,6 +1796,21 @@ describe('the budget dump explains what a mission was allowed to spend', () => {
     }
   });
 
+  it('the worker diagnostics export the cost facts, including whether the runtime started at all', () => {
+    // `runtimeStarted` is what decides whether a failed attempt's hold is kept
+    // or handed back, so a budget that behaves unexpectedly is explained by
+    // this column or by a second paid run.
+    const query = read('.github/julius-live-evidence-dump.sh').split('\n').find((line) => line.includes('worker-diagnostics.tsv')) ?? '';
+    for (const fact of ['diag_costUsdMicros', 'diag_costCeilingUsdMicros', 'diag_costSource', 'diag_runtimeStarted']) {
+      expect(query, `${fact} must be exported`).toContain(`'facts'->>'${fact}'`);
+    }
+    // And every one of them is a key the diagnostics allowlist actually admits.
+    const allowlist = read('src/relay/mission/julius/julius-router.ts');
+    for (const key of ['costUsdMicros', 'costCeilingUsdMicros', 'costSource', 'runtimeStarted']) {
+      expect(allowlist, `${key} must survive safeReviewDiagnostics`).toContain(`${key}:safe`);
+    }
+  });
+
   it('exports the facts that answer WHO SET THE CEILING and WHAT REMAINED', () => {
     const query = budgetQuery();
     for (const fact of ['allocatedUsdMicros', 'allocationBasis', 'shareUsdMicros', 'remainingUsdMicros', 'allocationPolicy', 'usdMicros']) {

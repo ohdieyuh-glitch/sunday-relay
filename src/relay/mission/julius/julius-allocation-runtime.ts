@@ -23,6 +23,15 @@ import type { JuliusWorkerRole } from './julius-runtime';
  * the reservation still gates the dispatch. When the remaining budget is gone
  * the allocation is zero and the dispatch is denied before a provider is paid.
  *
+ * ONE LEDGER, EVERY ROLE. The share is computed from the whole ceiling, and
+ * the Prompt Architect and the Independent Reviewer draw from that same
+ * ceiling — they report no cost at all, so their reservations settle at what
+ * they held rather than at a zero nobody measured. A later Coding Agent round
+ * therefore receives what REMAINS, which may be less than a share. That is the
+ * share behaving as an upper bound per round rather than a reservation of one,
+ * and under-spending an authorization is the safe direction; the alternative
+ * is a ratio between roles, which would be a number nobody can justify.
+ *
  * Pure: no I/O, no clock. The policy is versioned so a durable record can say
  * which rule produced a number.
  */

@@ -126,6 +126,14 @@ the guarantee is AT MOST the ceiling, never exactly it: a $10 contract with two
 repair rounds shares $3.333333 three times and leaves a micro-dollar unspent.
 Under-spending the authorization is the safe direction.
 
+Every role draws from that one ledger. The Prompt Architect and the Independent
+Reviewer report no cost, so their reservations settle at what they held rather
+than at a zero nobody measured, and a later Coding Agent round is allocated
+what REMAINS — a share is an upper bound on a round, not a reservation of one.
+On the default $5 contract that means the repair round runs on the remainder
+rather than on a second $2.50. Splitting the ceiling by role instead would mean
+inventing a ratio, which is the thing this policy exists to avoid.
+
 Properties held by construction and by test:
 
 - The allocation is reserved against the run ledger before dispatch, so the sum

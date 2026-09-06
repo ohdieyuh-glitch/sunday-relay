@@ -216,3 +216,53 @@ describe('a failure that reports no cost: spending nothing is not the same as sp
     expect(budget.reservations()).toContainEqual({ reservationId: 'build:1', state: 'COMMITTED', usdMicros: 1_500_000 });
   });
 });
+
+describe('one ledger, every role: a share is an upper bound on a round, not a reservation of one', () => {
+  const now = '2026-09-06T00:00:00.000Z';
+  const DEFAULT_CONTRACT = juliusAllocationPolicy({ ceilingUsdMicros: 5 * USD, authorizedRepairRounds: 1 });
+
+  it('the architect and reviewer hold what they reserved, so the repair round runs on the remainder', async () => {
+    // Neither non-coder role reports a cost, and Unknown is not zero: each
+    // settles at the estimate the mission already agreed to risk for it.
+    const budget = createMemoryBudget(5 * USD);
+    const allocateAndSettle = async (id: string, role: 'PROMPT_ARCHITECT' | 'CODING_AGENT' | 'INDEPENDENT_REVIEWER', reported: number | null) => {
+      const allocation = evaluateJuliusAllocation({
+        policy: DEFAULT_CONTRACT, role, remainingUsdMicros: budget.remainingUsdMicros(), estimateUsdMicros: ESTIMATE,
+      });
+      await budget.reserve({ reservationId: id, runId: 'run', projectId: 'prj', taskId: id, usdMicros: allocation.usdMicros, inputTokens: 0, outputTokens: 0, toolCalls: 0, runtimeMs: 0, now });
+      await budget.commit({ reservationId: id, usdMicros: reported, inputTokens: 0, outputTokens: 0, toolCalls: 0, runtimeMs: 0, receiptId: null, now });
+      return allocation;
+    };
+
+    expect((await allocateAndSettle('plan', 'PROMPT_ARCHITECT', null)).basis).toBe('ESTIMATE');
+    expect((await allocateAndSettle('plan:review', 'INDEPENDENT_REVIEWER', null)).basis).toBe('ESTIMATE');
+    const build = await allocateAndSettle('build', 'CODING_AGENT', 2_500_000);
+    expect(build, 'the first round gets its whole share').toMatchObject({ usdMicros: 2_500_000, basis: 'CODER_SHARE' });
+    expect((await allocateAndSettle('build:review', 'INDEPENDENT_REVIEWER', null)).basis).toBe('ESTIMATE');
+
+    // 5.00 - 0.30 (plan) - 0.30 (plan review) - 2.50 (build) - 0.30 (build review).
+    expect(budget.remainingUsdMicros()).toBe(1_600_000);
+    const repair = evaluateJuliusAllocation({
+      policy: DEFAULT_CONTRACT, role: 'CODING_AGENT', remainingUsdMicros: budget.remainingUsdMicros(), estimateUsdMicros: ESTIMATE,
+    });
+    expect(repair, 'the repair round runs on what is left, not on a second full share')
+      .toMatchObject({ usdMicros: 1_600_000, basis: 'CODER_REMAINDER', shareUsdMicros: 2_500_000 });
+    expect(repair.usdMicros).toBeLessThan(coderShareUsdMicros(DEFAULT_CONTRACT));
+  });
+
+  it('and the mission never spends past its ceiling doing it', async () => {
+    const budget = createMemoryBudget(5 * USD);
+    let spent = 0;
+    for (const [id, role] of [['plan', 'PROMPT_ARCHITECT'], ['build', 'CODING_AGENT'], ['repair', 'CODING_AGENT']] as const) {
+      const allocation = evaluateJuliusAllocation({
+        policy: DEFAULT_CONTRACT, role, remainingUsdMicros: budget.remainingUsdMicros(), estimateUsdMicros: ESTIMATE,
+      });
+      const reservation = await budget.reserve({ reservationId: id, runId: 'run', projectId: 'prj', taskId: id, usdMicros: allocation.usdMicros, inputTokens: 0, outputTokens: 0, toolCalls: 0, runtimeMs: 0, now });
+      expect(reservation.state).toBe('RESERVED');
+      await budget.commit({ reservationId: id, usdMicros: allocation.usdMicros, inputTokens: 0, outputTokens: 0, toolCalls: 0, runtimeMs: 0, receiptId: null, now });
+      spent += allocation.usdMicros;
+    }
+    expect(spent).toBeLessThanOrEqual(5 * USD);
+    expect(budget.remainingUsdMicros()).toBeGreaterThanOrEqual(0);
+  });
+});
