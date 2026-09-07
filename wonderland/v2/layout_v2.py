@@ -93,6 +93,15 @@ def _band(name, items):
     return [dict(it, band=name) for it in items]
 
 
+#: uu. THE LEFT ARRIVAL TREE'S OFFSET (PASS 32). Applied to the trunk, its
+#: four crowns and its blossom as one rigid group, so the tree stays a tree.
+#: Chosen against a per-degree HeroCam0 profile rather than by eye -- see the
+#: note at `Garden_L_Tree_Canopy0`. Named here because a bare pair of numbers
+#: added to six placements is the kind of edit that gets half-reverted.
+_GLT_DX = 900.0
+_GLT_DY = 200.0
+
+
 def A(asset, x, y, z=0.0, yaw=0.0, s=1.0, mat=None, label=None, sxyz=None, pitch=0.0, roll=0.0):
     return {"asset": asset, "pos": (x, y, z), "rot": (pitch, yaw, roll),
             "scale": sxyz if sxyz is not None else (s, s, s), "mat": mat, "label": label}
@@ -401,7 +410,8 @@ GARDEN_L = _band("V2_Garden", [
     A("mushroom_medium", 2600, 1500, 0, yaw=200, s=0.8, mat="MI_V2_MushCream", label="Garden_L_Mush1"),
     A("mushroom_small", 1300, 1200, 0, yaw=90, s=1.0, mat="MI_V2_MushPurple", label="Garden_L_Mush2"),
     A("mushroom_small", 1200, 2150, 0, yaw=300, s=0.9, mat="MI_V2_MushRed", label="Garden_L_Mush3"),
-    A("tree_mature_trunk", 1350, 2300, 0, yaw=180, s=1.15, mat="MI_V2_Bark", label="Garden_L_Tree_Trunk"),
+    A("tree_mature_trunk", 1350 + _GLT_DX, 2300 + _GLT_DY, 0, yaw=180, s=1.15,
+      mat="MI_V2_Bark", label="Garden_L_Tree_Trunk"),
     # MEASURED ON THE PASS 28 RENDER: these four crowns and the clock tree's
     # four are the EIGHT LARGEST presences in HeroCam0 -- 3.6%, 2.9%, 2.8%,
     # 2.5%, 2.1%, 1.4% of the founder's benchmark frame each, all plain green,
@@ -410,11 +420,30 @@ GARDEN_L = _band("V2_Garden", [
     # they are the frame's own trees and the reference has trees there. They
     # FLOWER. A royal garden in blossom is the reference, and it costs the
     # composition nothing.
-    A("canopy_large", 1350, 2300, 1500, yaw=0, s=1.5, mat="MI_V2_PetalWhite", label="Garden_L_Tree_Canopy0"),
-    A("canopy_large", 1000, 2550, 1380, yaw=130, s=1.1, mat="MI_V2_RosePink", label="Garden_L_Tree_Canopy1"),
-    A("canopy_large", 1750, 2150, 1320, yaw=250, s=1.0, mat="MI_V2_PetalPink", label="Garden_L_Tree_Canopy2"),
-    A("canopy_medium", 1200, 2000, 1150, yaw=60, s=1.2, mat="MI_V2_LeafCream", label="Garden_L_Tree_Canopy3"),
-    A("blossom_cluster", 1250, 2450, 1600, s=1.0, mat="MI_V2_RosePink", label="Garden_L_Tree_Blossom"),
+    #
+    # PASS 32 MOVED THEM OUTWARD, and the colour change is why it had to. Made
+    # to blossom, they stopped being green and went on being a ROOF: a
+    # per-degree profile of HeroCam0 found `Garden_L_Tree_Canopy0` alone owning
+    # the frame's ceiling from +11.8 to +46 deg -- 34 of the frame's 100
+    # degrees, from one crown at 28 m -- with the city standing at +19 to +28
+    # deg in those same columns, present and hidden.
+    #
+    # The founder's reference is the authority on where a tree goes, and it is
+    # ASYMMETRIC: its left margin carries foliage only from about +50 to +36
+    # deg (a giant mushroom cap and some hanging leaves in the corner), while
+    # its right is a single huge dark tree from -16 all the way to -50. Ours
+    # was the MIRROR of that -- heavy left, light right. `ClockTree` already
+    # runs -29 to -50 and is left alone; this is the side that was wrong.
+    A("canopy_large", 1350 + _GLT_DX, 2300 + _GLT_DY, 1500, yaw=0, s=1.5,
+      mat="MI_V2_PetalWhite", label="Garden_L_Tree_Canopy0"),
+    A("canopy_large", 1000 + _GLT_DX, 2550 + _GLT_DY, 1380, yaw=130, s=1.1,
+      mat="MI_V2_RosePink", label="Garden_L_Tree_Canopy1"),
+    A("canopy_large", 1750 + _GLT_DX, 2150 + _GLT_DY, 1320, yaw=250, s=1.0,
+      mat="MI_V2_PetalPink", label="Garden_L_Tree_Canopy2"),
+    A("canopy_medium", 1200 + _GLT_DX, 2000 + _GLT_DY, 1150, yaw=60, s=1.2,
+      mat="MI_V2_LeafCream", label="Garden_L_Tree_Canopy3"),
+    A("blossom_cluster", 1250 + _GLT_DX, 2450 + _GLT_DY, 1600, s=1.0,
+      mat="MI_V2_RosePink", label="Garden_L_Tree_Blossom"),
     A("topiary_ball", 1100, 1600, 0, s=1.0, mat="MI_V2_LeafMid", label="Garden_L_Ball0"),
     A("topiary_spiral", 2200, 2200, 0, s=1.1, mat="MI_V2_LeafDark", label="Garden_L_Spiral"),
     A("topiary_cone_plain", 1250, 3100, 0, s=1.0, mat="MI_V2_LeafMid", label="Garden_L_Cone"),
@@ -488,13 +517,26 @@ GARDEN_R = _band("V2_Garden", [
 # ---------------------------------------------------------------------------
 
 
-def _castle_group(x, y, seed, scale=1.0, layer="V2_Castle", n_towers=4, dominant=1.0):
+def _castle_group(x, y, seed, scale=1.0, layer="V2_Castle", n_towers=4, dominant=1.0, spire=1.0):
     """One palace mass with REAL variation: the tower bodies rotate through
     round / square / octagon / slender, the roofs through ogee / bell / steep
     cone / flat-crenellated / dome, halls carry facade bays and an arcade,
     finials alternate ball / spire, heights and widths differ per tower, and
     the cluster's footprint and yaw change with the seed. Ten groups do not
-    read as ten copies."""
+    read as ten copies.
+
+    `spire` STRETCHES THE TOWER BODIES VERTICALLY AND NOTHING ELSE, and it
+    exists because the obvious lever was the wrong one. Raising a cluster's
+    silhouette by raising `scale` also grows its hall, arcade, facade bays,
+    dome, bridge and every tower offset -- and when City1 and City2 were
+    lifted that way to close the two sky notches in HeroCam0, `route.py` went
+    from 190 legs and 2,306 m to 377 and 4,878: the tour DOUBLED because two
+    palaces at 100 m had grown across the ground the world walks through. The
+    measured gap was elevation, so this moves elevation: the body scales
+    (s, s, s * spire), its cap and finial ride up to the new top at their own
+    scale (a roof that stretches is a different roof), and no footprint in the
+    cluster changes by a centimetre. Slender is also what the reference shows
+    -- its skyline is needles, not wider drums."""
     k = seed
     h = _rnd
     roofs = ("MI_V2_RoofPink", "MI_V2_RoofRose", "MI_V2_RoofNavy", "MI_V2_RoofPink", "MI_V2_RoofLilac")
@@ -524,8 +566,10 @@ def _castle_group(x, y, seed, scale=1.0, layer="V2_Castle", n_towers=4, dominant
         cap = caps[body][int(h(k, t, 8) * 2) % 2]
         ts2 = ts * (0.85 + 0.3 * h(k, t, 1)) * scale
         tx, ty = x + ox * scale, y + oy * scale
-        items.append(A(body, tx, ty, 0, yaw=yaw + 20 * t, s=ts2, mat="MI_V2_IvoryStone", label="City%d_Tower%d" % (k, t)))
-        zt = body_h[body] * ts2
+        items.append(A(body, tx, ty, 0, yaw=yaw + 20 * t, s=ts2,
+                       sxyz=None if spire == 1.0 else (ts2, ts2, ts2 * spire),
+                       mat="MI_V2_IvoryStone", label="City%d_Tower%d" % (k, t)))
+        zt = body_h[body] * ts2 * spire
         items.append(A(cap, tx, ty, zt, yaw=yaw + 20 * t, s=ts2 * (1.15 if body == "castle_tower_slender" else 1.0),
                        mat=roofs[(k + t + 1) % 5], label="City%d_Tower%d_Roof" % (k, t)))
         if body in ("castle_tower", "castle_tower_octagon") and t % 2 == 0:
@@ -544,8 +588,33 @@ def _castle_group(x, y, seed, scale=1.0, layer="V2_Castle", n_towers=4, dominant
 
 CITY = (
     # LAYER 3: the castle focal plane, 95-130 m -- the massing the founder
-    # approved (SUITE01); unchanged
-    _castle_group(2400, 9500, 1, 1.0) + _castle_group(-2600, 10200, 2, 1.1) + _castle_group(300, 11500, 3, 1.7)
+    # approved (SUITE01). The GROUPS and their positions are unchanged; two
+    # of the five grew, and the reason is a measurement of the founder's own
+    # reference rather than a preference.
+    #
+    # A per-degree ceiling profile of HeroCam0 found two NOTCHES, the lowest
+    # points in the whole hundred-degree frame: +16.8 deg at -15..-11 and
+    # +19.1 at +11..+15, with every neighbouring column at +26 to +32. They
+    # are City1 (s 1.0, +14 deg, 107 m) and City2 (s 1.1, -14 deg, 115 m) --
+    # the two SMALLEST clusters of the focal plane, standing exactly where
+    # the reference's city is densest. The reference has no notch: its spire
+    # field is continuous from its left margin to its right tree, which is
+    # most of why it reads as a CITY and ours reads as a castle with sky
+    # beside it.
+    #
+    # This is not PASS 06's mistake repeated. What the founder rejected there
+    # was thirty-two giant towers at scale 2.0-4.6 stacked BEHIND the castle
+    # ON its own silhouette; nothing here moves behind the castle or onto its
+    # outline. City3 keeps the axis at s 1.7 and stays the dominant mass, and
+    # the two that grew are on its flanks at 100-115 m, in front of it.
+    # Solved, not guessed: City1's top reads 35.7 m, and the lift needed to
+    # put it at +24 deg against its neighbours' +26 is 1.35x of height. It is
+    # taken as `spire` -- tower bodies stretched vertically, footprints
+    # untouched -- because taking it as `scale` cost the world its walk: see
+    # the note on `_castle_group`.
+    _castle_group(2400, 9500, 1, 1.0, spire=1.50)
+    + _castle_group(-2600, 10200, 2, 1.1, spire=1.70)
+    + _castle_group(300, 11500, 3, 1.7)
     + _castle_group(5200, 12200, 4, 1.3) + _castle_group(-5600, 13000, 5, 1.4)
     # PASS 06 (founder, 2026-08-28: "beyond the castle the world starts to
     # look too deep and messy"). Layers 4 and 5 were eight groups of four
