@@ -2352,3 +2352,95 @@ decision for a considered pass.
 `SkyGold0` (+37..+39, loses by 1.5 deg) and `GiantMushroom_Vine1` (+43..+49,
 1.9 deg) would both flip by nudging a floating prop upward. Left alone: that
 is benchmark-gaming, not world-building.
+
+---
+
+# PASS 34-37 — the world measured from all thirty-three cameras
+
+Everything before PASS 34 was measured at HeroCam0. `tools/framescape.py` asks
+the suite instead: a CENSUS (who holds the top of each column of each frame --
+built, vegetation, or open sky) and a `--crowd` mode (intersect a nearby
+piece's angular box with the frame's, report the fraction of frame AREA it
+takes). The founder's reference, classified from its own pixels, is built
+71.5% / veg 28.5% / sky 0%.
+
+                                          PASS 33     PASS 37
+    mean built share, 33 cameras            56.6%       67.2%
+    frames over half roofed by veg            11           9
+    route                            190/2,306 m   182/2,118 m
+
+## PASS 34 (`0250fa2`) -- the instrument, and a regression of mine
+
+`verify_v2_layout`'s standpoint check asks whether a piece reaches INTO a lens
+and all 33 pass; it is the wrong question by a few metres. PASS 31 sited the
+gold screens against HeroCam0 and nothing else, and `GoldScreen0` passed 2.0 m
+from `GardenLeft04`'s lens with one leaf taking 55% of that frame. `_GS_LENS =
+900` uu; the screen moved 12 m along its own perpendicular, which is also
+further frame-left where the reference's gold lives.
+
+The crowd measure was WRONG TWICE before it was right, and both errors are in
+the tool's docstring. First it clamped a piece's angular width to the fov and
+called a tree 73 deg off axis "90 degrees wide". Then it filtered on elevation
+above +40 deg -- a 90 deg fov at 16:9 has a VERTICAL field of 58, so the
+frame's top edge is +29 and everything that filter kept was above the picture.
+A camera is a rectangle and half of it is vertical. The census had the same
+hole and it is closed. I acted on neither wrong number.
+
+## PASS 35 (`6738435`) -- fourteen landmarks hidden by their own avenues
+
+`_lm_setting` dressed every district approach with `_tree_group` copses 21 m
+either side, and the district cameras stand back along that approach. The
+avenue out-topped its own landmark: WaterGardenCam15 -19.9 deg,
+ClockQuarterCam13 -10.2, GroveRoadCam18 -7.3 (CloisterCam31 +30.9, control).
+
+The cause is a shape: `canopy_large` is 8.4 m across, aspect 0.46;
+`column_ornate` is 5.13 and `topiary_cone_plain` 1.29. All fourteen approaches
+are columnar now. Two wrong turns recorded: the copses were first kept and
+moved to "the far station", which is the end nearest the ORIGIN, so fourteen
+copses moved toward the cameras; and the offset was solved against BOTH audits
+(16 m best composition but +430 m of tour, 27 m same frames and a tour shorter
+than baseline).
+
+## PASS 36 (`b43de04`) -- the flank cameras found a walk nobody had built
+
+The founder's camera siting scored 91 stations by clearance and put BOTH flank
+cameras at |x| = 4350, in the middle of a 35 m planted band; `framescape` found
+those the most vegetation-roofed frames in the world. Two instruments on the
+same fourteen metres of ground. `_flank_walks` lays 62 m of paving down each
+flank with urns, cypresses and a column every fourth station. Kerbs are 380 uu
+and not 620 -- at 620 the inner kerb closed a 67-cell pocket and `walkable`
+lost "R lane y=4500".
+
+Note that "batch B" had already recomposed this band once, pushing the tall
+mass past |x| 4200, measured on SkylineCam06 alone -- which is where the flank
+cameras live. That is the THIRD time this session a fix measured at one camera
+moved the problem to another.
+
+## PASS 37 (`f67a9f0`) -- the rear avenue
+
+`TeaTerraceCam16` is locked at (-1579, -4603) and `Avenue_TreeR1` stood at
+(-1500, -4400): 2.2 m apart. The camera was not beside the avenue, it was in
+the tree row. Tree lines out to 23 m; the line they vacate becomes seven
+stations a side of `column_ornate` with gold finials and lanterns, running from
+the gate to the two towers at (+/-2600, -8200) that had been terminating an
+avenue with nothing in it.
+
+    TeaTerraceCam16    12.5% -> 50.0%      RearWorldCam10   45.8% -> 61.7%
+    MushroomGroveCam14 30.8% -> 40.8%      ReverseCam03     39.2% -> 45.0%
+
+## Next
+
+The largest remaining mismatch is LIGHT and it is blocked without a render:
+ground-row dark 0.5/3.3/8.9% against the reference's 12/20/42, median luminance
+120 against 81. The tuned `LOOK` values were NOT touched -- five passes of
+render-measured tuning and a founder judgement are in them.
+
+Then: nine frames still over half veg-roofed (worst `GardenRight05` 15.0%,
+whose ceiling is `Garden_R_Tree_Canopy0` -- the mirror of the tree PASS 32
+moved for HeroCam0 and never moved for its own camera); the 180-360 m band
+still the thinnest part of the silhouette; and nine frames with ONE piece
+holding a third of the ceiling.
+
+**Run `framescape.py` before and after every composition change.** Three
+separate fixes this session were measured at one camera and moved the problem
+to another.

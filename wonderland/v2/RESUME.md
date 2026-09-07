@@ -337,3 +337,43 @@ lighting pass: our ground carries essentially no cast shadow (ground-row dark
 
 Full detail: `WORLD_LEDGER.md`, PASS 31 and 32, and
 `docs/handoffs/WONDERLAND_WORLD_CURRENT.md`.
+
+## PASS 34-37 (2026-09-07) — the world measured from all thirty-three cameras
+
+Every composition number this project had quoted came from HeroCam0.
+`tools/framescape.py` asks the whole suite: who holds the top of each frame,
+column by column. The founder's reference, classified from its own pixels, is
+built 71.5% / vegetation 28.5%.
+
+    mean built share, 33 cameras   56.6%  ->  67.2%
+    frames over half veg-roofed       11  ->      9
+    route                    190/2,306 m  ->  182/2,118 m
+
+It found a regression of mine (PASS 31's gold screen stood 2.0 m from
+GardenLeft04's lens taking 55% of the frame, and no gate could see it), and
+then the general case: **things planted to dress a way were hiding the way.**
+Fourteen district approaches were dressed with copses that out-topped their own
+landmark by up to 20 degrees; the arrival flanks had a lane down the middle
+that only the camera-siting search knew about; and TeaTerraceCam16 stood 2.2 m
+from an avenue tree. All three are now colonnades -- `column_ornate` has an
+aspect of 5.13 against `canopy_large`'s 0.46, so it holds a frame's height
+without taking its width.
+
+The transferable rule: **run `framescape.py` before and after every
+composition change.** Three separate fixes this session were measured at one
+camera and moved the problem to another, including one made by a previous
+session ("batch B") that pushed the arrival's tall planting to exactly where
+the flank cameras stand.
+
+Also locked by the founder on 2026-09-07: the Wonderland usage meter (health
+bar) design -- four states, twin arcs, WONDER units. It lives in the PLATFORM
+stream (`src/relay/mission/wonderland/wonderland-usage-meter.ts`), not this
+tree, and a world session should not restyle it or build a second one.
+
+**Still nothing rendered since PASS 26.** Passes 28-37 are offline-only, and
+the largest remaining gap is light: our ground carries no cast shadow
+(ground-row dark 0.5/3.3/8.9% against the reference's 12/20/42). The tuned
+`LOOK` values were deliberately not touched.
+
+Full detail: `WORLD_LEDGER.md` PASS 34-37, and
+`docs/handoffs/WONDERLAND_WORLD_CURRENT.md`.

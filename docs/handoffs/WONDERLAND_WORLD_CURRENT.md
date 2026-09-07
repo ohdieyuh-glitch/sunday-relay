@@ -10,7 +10,7 @@ session.
 | CHECKOUT | `/home/thomasajvt13/dev/sunday-relay` (git worktree; the primary checkout is `sunday-relay-main`, detached at `b2dc9f2`, and is the Julius/platform stream) |
 | BRANCH | `relay/wonderland-v2` |
 | SHA AT START | `d9245bf` |
-| SHA AT END | `09b5349` (pushed). A fresh session should `git log --oneline -6` — 993385e, e3952ae, 9655bad, 200aeff, 9086b78, 09b5349 are PASS 30–33. |
+| SHA AT END | `f67a9f0` (pushed). `git log --oneline -11` walks PASS 30-37: 993385e, e3952ae, 9655bad, 200aeff, 9086b78, 09b5349, 28c4d30, 0250fa2, 6738435, b43de04, f67a9f0. |
 | LOCK | `wonderland/.gauntlet-lock` = `writer=claude step=0 since=2026-08-25`. Unchanged. `gauntlet-check.py` clean on every commit. |
 | MAP | `/Game/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2` (classic container) |
 | RENDERED THIS SESSION | **Nothing.** No engine, no Studio, no GPU frame. Every number below is offline, measured off `layout_v2.ALL` and the built meshkit geometry. |
@@ -331,6 +331,100 @@ nudging a floating prop upward, and that is benchmark-gaming, not world-building
 
 ---
 
+## PASS 34-37 — the world measured from all thirty-three cameras
+
+**Everything before PASS 34 was measured at HeroCam0.** The suite exists so
+the world is judged as a world; `tools/framescape.py` is the instrument that
+finally asks it. Two modes:
+
+- **census** — walk each camera's arc in columns, report who holds the top of
+  each: built, vegetation, or open sky. The founder's reference, classified
+  from its own pixels, is **built 71.5% / veg 28.5% / sky 0%**.
+- **`--crowd`** — intersect each nearby piece's angular box with the frame's
+  and report the fraction of frame AREA one piece takes.
+
+### The headline
+
+| | PASS 33 | PASS 37 |
+|---|---|---|
+| mean built share of the ceiling, 33 cameras | **56.6%** | **67.2%** |
+| frames more than half roofed by vegetation | 11 | **9** |
+| pieces taking >14% of a frame from inside 40 m | 44 | see below |
+| route | 190 legs / 2,306 m | **179 legs / 2,123 m** |
+
+The reference is 71.5%. The world went from 56.6 to 67.2 and the walking tour
+got *shorter*.
+
+### PASS 34 (`0250fa2`) — the instrument, and a regression of mine
+
+`verify_v2_layout`'s camera-standpoint check asks whether a piece reaches INTO
+a lens; all 33 pass. It is the wrong question by a few metres. PASS 31 sited
+the gold screens against HeroCam0 and nothing else, and `GoldScreen0`'s run
+passed **2.0 m from GardenLeft04's lens**, `GoldScreen0_Leaf1` taking 55% of
+that frame. No gate could see it. `_GS_LENS = 900` uu; the screen moved 12 m
+along its own perpendicular — which is also further frame-left, where the
+reference's gold lives.
+
+**The crowd measure was wrong twice before it was right** and both errors are
+in the tool's docstring, because both turned a real defect into a fake one:
+first clamping a piece's angular width to the fov (calling a tree 73° off-axis
+"90 degrees wide"), then filtering on elevation above +40° when a 90° fov at
+16:9 has a **vertical** field of 58°, so the frame's top edge is +29 and
+everything that filter kept was above the picture. The census had the same
+hole; it is closed. I acted on neither wrong number.
+
+### PASS 35 (`6738435`) — fourteen landmarks hidden by their own avenues
+
+`_lm_setting` gave every district landmark an approach dressed with
+`_tree_group` copses 21 m either side — and the district cameras stand back
+along that same approach. Measured per district, the avenue **out-topped its
+own landmark**: WaterGardenCam15 −19.9°, ClockQuarterCam13 −10.2°,
+GroveRoadCam18 −7.3° (CloisterCam31 +30.9° was the control).
+
+The cause is a shape. `canopy_large` is 8.4 m across with an aspect of 0.46;
+`column_ornate` is 5.13 and `topiary_cone_plain` 1.29. All fourteen approaches
+are now columnar processional ways.
+
+Two wrong turns, both caught: the copses were first *kept* and moved "to the
+far station" — station 6 is the end nearest the **origin**, so I moved
+fourteen copses toward the cameras. And the offset was solved against both
+audits rather than picked: at 16 m the composition is best by 0.2 points and
+the tour is **430 m longer**; at 27 m the frames are the same and the tour is
+shorter than baseline.
+
+### PASS 36 (`b43de04`) — the flank cameras found a walk nobody had built
+
+The founder's camera siting scored 91 stations by clearance and put **both**
+flank cameras at |x| = 4350, in the middle of a 35 m planted band. `framescape`
+found those the most vegetation-roofed frames in the world. Two instruments
+pointing at the same 14 m of ground: there is a lane there, and nothing was
+built on it.
+
+`_flank_walks` lays 62 m of paving down each flank with plinthed urns,
+cypresses and a column every fourth station. Kerbs are 380 uu, not 620 — at
+620 the inner kerb closed a 67-cell pocket and `walkable` lost "R lane
+y=4500".
+
+Note also that "batch B" had already recomposed this band once, pushing the
+tall mass past |x| 4200 — measured on SkylineCam06 alone, which is exactly
+where the flank cameras live. **That is the third time this session a fix
+measured at one camera moved the problem to another.**
+
+### PASS 37 (`f67a9f0`) — the rear avenue
+
+`TeaTerraceCam16` is locked at (−1579, −4603) and `Avenue_TreeR1` stood at
+(−1500, −4400): **2.2 m apart**. The camera was not beside the avenue, it was
+in the tree row — 12.5% built, the worst frame in the world. The tree lines
+moved out to ±23 m, and the line they vacate became a colonnade: seven
+stations a side of `column_ornate` with gold finials and lanterns, running
+from the gate down to the two towers at (±2600, −8200) that had been
+terminating an avenue with nothing in it.
+
+    TeaTerraceCam16   12.5% -> 50.0%      RearWorldCam10   45.8% -> 61.7%
+    MushroomGrove14   30.8% -> 40.8%      ReverseCam03     39.2% -> 45.0%
+
+---
+
 ## OFFLINE VERIFIED vs VISUALLY PROVEN
 
 **Visually proven: nothing since PASS 26.** There is no engine, no Studio and
@@ -358,74 +452,49 @@ environment gap, not a world defect.
 
 ## The five largest remaining mismatches, measured
 
-Real pixels, founder reference against `V2_MILESTONE26_HeroCam0_1080p.png`.
-Note that render **predates PASS 28's blossom change**, so the colour half of
-mismatch 2 is already partly closed and unrendered.
+**1. LIGHT — the ground carries no cast shadow. Still the biggest, still
+blocked.** Reference vs our PASS 26 render: dark share 42.9% vs 27.1%, median
+luminance 81 vs **120**, p10 23 vs **43**, ground row dark 11.7/19.5/42.4% vs
+**0.5/3.3/8.9%**. The cause is the shadowless fill budget in `v2_config.LOOK`
+(`canopyFillLux` 9,000 + a second PASS 26 fill + `bounceLux` 2,400 +
+`skyLightIntensity` 1.6 against a 60,000-lux key). **Not touched, deliberately**
+— tuned across PASS 08/08b/08c/24/26 against real renders, with a founder
+judgement in that history (the right side reading "excessively dark" is what
+caused the hemisphere lift). It needs a render in the loop.
 
-**1. LIGHT — the ground carries no cast shadow. This is the biggest one.**
+**2. Nine frames are still more than half roofed by vegetation**, worst
+`GardenRight05` 15.0%, `ClockQuarterCam13` 18.3%, `GroveRoadCam18` 21.7%.
+`GardenRight05`'s ceiling is `Garden_R_Tree_Canopy0` — the mirror of the tree
+PASS 32 moved for HeroCam0, never moved for its own camera.
+`ClockQuarterCam13`'s is `FlankL_NearMush_Landmark`, a giant mushroom at 33 m.
+Grove and mushroom cameras being green is correct; these three are not those.
 
-| | reference | ours |
-|---|---|---|
-| dark (<70/255) | 42.9% | 27.1% |
-| median luminance | 81 | **120** |
-| p10 (shadow depth) | 23 | **43** |
-| ground row, dark (L/C/R) | 11.7 / 19.5 / 42.4% | **0.5 / 3.3 / 8.9%** |
-| near-black share | 20.1% | 5.1% |
+**3. The 180–360 m band is the thinnest part of the world's silhouette** —
+tops at +7.9° and +5.6°, against +14.0° nearer and +13.2° in the backdrop.
 
-The cause is the shadowless fill budget in `v2_config.LOOK`:
-`canopyFillLux` 9,000 + a second PASS 26 fill + `bounceLux` 2,400 +
-`skyLightIntensity` 1.6, all against a 60,000-lux key. **It was NOT touched
-this session, deliberately.** Those values were tuned across PASS 08, 08b,
-08c, 24 and 26 *against real renders*, and a founder judgement is in that
-history — the right side reading "excessively dark" is what caused the
-hemisphere lift. Moving them blind risks re-breaking a call the founder
-already made. **PASS 33 should be the lighting pass and it must have a render
-in the loop.**
+**4. Nine frames have ONE piece holding a third of the ceiling** —
+`ClockGrandCam23` 71%, `TeapotCam24` 68%, `WorldNorthCam19` 58%. Procedural
+monotony: the same great spire or the same swag roofing frame after frame.
 
-**2. Vegetation owns 44.2% of the ceiling against the reference's 28.5%,**
-and the honest remainder is small. PASS 33 sorted every losing column: the
-frame margins are faithful and should stay, and the one real hole is
-frame-left +31..+41, which needs a **district palette decision** (see PASS 33
-above) rather than more tree-moving. Do not move `ClockTree`, `Tower_R0/R1`
-or the margin canopies — they match the reference.
-
-**3. The low row is pale where the reference is grey — and that is
-mismatch 1 again, not a material.** Ours pale/stone 42.3% + gold 48.0% +
-grey 4.1%; reference gold 57.9% + grey **21.2%** + pale **4.1%**. The two
-buckets differ only in luminance — "pale" is bright-and-desaturated, "grey"
-is dark-and-desaturated, and the gold shares are already close (48.0 against
-57.9). So this is the same paving under different light, not different
-paving. **Do not darken the paving albedo to close it** — that bakes an
-exposure error into a material and will read wrong the moment the lighting is
-fixed. Re-measure this row after PASS 33 and only then ask whether any
-material work is left.
-
-**4. A dip in the middle distance.** Silhouette tops by depth band:
-0–40 m +12.3°, 40–90 m +21.2°, 90–180 m +14.0°, **180–260 m +7.9°,
-260–360 m +5.6°**, 360–600 m +13.2°. The 180–360 m band is the thinnest part
-of the world's profile.
-
-**5. Six embedded landmarks remain** — the audit's `FOOT` margin (400 uu, a
-walker-clearance number) rather than mesh overlap (178 uu). Two are
-pre-existing `Country039`/`GreatSpire`; one is far-city against `_horizon`,
-which does not share the far city's occupancy list.
-
----
+**5. HeroCam0 itself is 56.7% built against the reference's 71.5%** — now
+*below* the suite mean, which it was above three passes ago. Its remaining
+ceiling holders are `ClockTree_Canopy0` and the `ApproachSide` canopies.
 
 ## The exact next pass
 
-1. **Get a render.** Nothing below can be judged without one, and five passes
-   of geometry now sit unrendered.
-2. **PASS 33 = light.** Reduce the shadowless fill budget so the ground takes
-   cast shadow, re-measure the same table above, and stop when the ground row
-   reaches roughly the reference's 12 / 20 / 42%. Change one light at a time
-   and render between changes — this project has broken shade three times by
-   moving two knobs at once.
-3. Then mismatch 4 (the 180–360 m band is the thinnest part of the world's
-   profile, +7.9° and +5.6° against +14.0° nearer and +13.2° beyond).
-4. Only then the frame-left +31..+41 hole, and only as a considered decision
-   about what `Royal Gardens` / `S17_garden` / `S16_meadow` should be. It is
-   a district-identity question, not a hole to plug.
+1. **Get a render.** Ten passes now sit unrendered (28–37). Nothing in
+   mismatch 1 can be judged without one, and the palette comparison that drove
+   PASS 31–33 is only trustworthy with real pixels on both sides.
+2. **PASS 38 = light**, with a render between every change. Reduce the
+   shadowless fill budget until the ground row reaches roughly the reference's
+   12/20/42%. One light at a time — this project has broken shade three times
+   by moving two knobs at once.
+3. Then mismatch 2 (`Garden_R_Tree` for its own camera, the same move PASS 32
+   made at HeroCam0), then mismatch 4.
+4. **Run `framescape.py` before and after every composition change from now
+   on.** Three separate fixes this session were measured at one camera and
+   moved the problem to another; the census is the cheapest way to not do that
+   a fourth time.
 
 ## Other open world problems
 
@@ -442,10 +511,20 @@ which does not share the far city's occupancy list.
    label. Fourteen district landmarks are therefore approached by something
    no audit calls a road. Not wrong on the ground; wrong in the measurement.
 4. Six embedded landmarks (above) — instrument margin, not mesh overlap.
-5. `wonderland/infra/build/hero_shots.py` is **dirty in the worktree** — a
+5. **The Wonderland usage meter (health bar) is founder-locked** (2026-09-07):
+   "This is the permanent health bar usage until I say otherwise." Four states
+   — TYPICAL / NEARLY SPENT / UNTOUCHED / NOTHING REPORTED, twin arcs, green
+   compound-agent outer and blue single-agent inner, counted in WONDER. Its
+   geometry and palette live in
+   `src/relay/mission/wonderland/wonderland-usage-meter.ts`, regenerated with
+   `npm run wonderland:hud:preview`. **That file is on no branch this checkout
+   can see** — it is the platform stream's working tree in `sunday-relay-main`,
+   not the world tree. A world session should not restyle it, add states, or
+   build a second usage display anywhere.
+6. `wonderland/infra/build/hero_shots.py` is **dirty in the worktree** — a
    one-line change from a previous session sending a NOTE to stderr. Not
    mine, not committed, left alone.
-6. `verify_v2_textures.py` fails here for want of `/opt/wonderland/textures`
+7. `verify_v2_textures.py` fails here for want of `/opt/wonderland/textures`
    — an environment gap on this machine, not a world defect.
 
 ## Render-ready: the exact commands and the camera list
