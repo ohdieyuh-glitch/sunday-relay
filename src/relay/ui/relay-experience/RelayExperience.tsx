@@ -1,7 +1,8 @@
 import { useCallback } from 'react';
 import { AGENT_OPTIONS } from '../project-settings';
 import type { AgentOption, WorkforceRole } from '../project-settings';
-import { readinessLabel, wonderlandReadiness } from './wonderland-handoff';
+import { wonderlandReadiness } from './wonderland-handoff';
+import { useWonderlandEntry } from '../wonderland-entry/useWonderlandEntry';
 import {
   JULIUS, ONBOARDING_STEPS, activate, canActivate, newCardForAgent, normaliseName, startNewCompoundAgent,
   type CompoundAgentDraft, type OnboardingStepId,
@@ -94,6 +95,16 @@ export function RelayExperience({
   }, [replaceDraft, setStep]);
 
   const readiness = wonderlandReadiness(draft.activatedAt !== null);
+  // The entrance, as a state machine rather than a disabled button. Admission
+  // and presentation are separate facts and the label says which one is which:
+  // a successful join reads ADMITTED · NOTHING CAN SHOW IT, because this build
+  // ships no world renderer and pretending otherwise is the failure the whole
+  // entry contract exists to prevent.
+  const wonderland = useWonderlandEntry({
+    readiness,
+    projectId: draft.cardId,
+    playerId: draft.participantId ?? draft.agentId,
+  });
   const agentLabel = normaliseName(draft.name) || 'UNNAMED';
   const ceiling = (value: number | null, unit: string) => (value === null ? 'NOT SET' : `${unit}${value}`);
   const ceilingInput = (raw: string): number | null => {
@@ -251,10 +262,10 @@ export function RelayExperience({
             ) : (
               <>
                 <p className="rx-hint">
-                  {agentLabel} is online. {readiness.kind === 'unreachable' ? readiness.reason : ''}
+                  {agentLabel} is online. {wonderland.detail ?? ''}
                 </p>
                 <button type="button" className="rx-cta" data-primary="true"
-                  disabled={readiness.kind !== 'ready'}>
+                  onClick={wonderland.enter} disabled={!wonderland.canEnter}>
                   ENTER WONDERLAND
                 </button>
                 <button type="button" className="rx-ghost" onClick={() => goto('name')}>EDIT C.A.R.D.</button>
@@ -280,7 +291,7 @@ export function RelayExperience({
         <span>HARNESS</span><strong>{JULIUS.name}</strong>
         <span>STATUS</span>
         <strong>{draft.activatedAt !== null ? 'ACTIVE' : canActivate(draft) ? 'READY' : 'FORMING'}</strong>
-        <span>WONDERLAND</span><strong>{readinessLabel(readiness)}</strong>
+        <span>WONDERLAND</span><strong>{wonderland.label}</strong>
         {returning && <><span>SESSION</span><strong>RETURNING</strong></>}
       </aside>
 
