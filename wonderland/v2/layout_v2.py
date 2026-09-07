@@ -100,6 +100,9 @@ def _band(name, items):
 #: added to six placements is the kind of edit that gets half-reverted.
 _GLT_DX = 900.0
 _GLT_DY = 200.0
+#: uu. The right garden tree's offset -- see the note at `Garden_R_Tree_Trunk`.
+_GRT_DX = -900.0
+_GRT_DY = 1100.0
 
 
 def A(asset, x, y, z=0.0, yaw=0.0, s=1.0, mat=None, label=None, sxyz=None, pitch=0.0, roll=0.0):
@@ -507,9 +510,16 @@ GARDEN_R = _band("V2_Garden", [
     A("gate_finial_ball", -2500, 4300, 1320 + 640 * 1.2, s=0.9, mat="MI_V2_Gold", label="Tower_R0_Finial"),
     A("tower_capped", -5200, 5400, 0, s=1.4, mat="MI_V2_IvoryStone", label="Tower_R1"),
     A("roof_cone_steep", -5200, 5400, 1540, s=1.4, mat="MI_V2_RoofBlue", label="Tower_R1_Cap"),
-    A("tree_mature_trunk", -3600, 3600, 0, yaw=60, s=0.8, mat="MI_V2_Bark", label="Garden_R_Tree_Trunk"),
-    A("canopy_large", -3600, 3600, 1050, yaw=0, s=1.0, mat="MI_V2_LeafMid", label="Garden_R_Tree_Canopy0"),
-    A("canopy_large", -3200, 3800, 950, yaw=150, s=0.8, mat="MI_V2_LeafLight", label="Garden_R_Tree_Canopy1"),
+    # PASS 38: pushed out along its own radial from GardenRight05, the mirror
+    # of what PASS 32 did to `Garden_L_Tree` for HeroCam0 -- and this one has a
+    # cost the left one did not, so it is measured rather than assumed. From
+    # HeroCam0 this tree sits at -43.8 deg, on the frame's right edge, which is
+    # exactly where the founder's reference carries its heavy foliage. Moving
+    # it helps GardenRight05 and can only take mass off HeroCam0's good edge.
+    # Both are measured below; if HeroCam0 loses, this comes back.
+    A("tree_mature_trunk", -3600 + _GRT_DX, 3600 + _GRT_DY, 0, yaw=60, s=0.8, mat="MI_V2_Bark", label="Garden_R_Tree_Trunk"),
+    A("canopy_large", -3600 + _GRT_DX, 3600 + _GRT_DY, 1050, yaw=0, s=1.0, mat="MI_V2_LeafMid", label="Garden_R_Tree_Canopy0"),
+    A("canopy_large", -3200 + _GRT_DX, 3800 + _GRT_DY, 950, yaw=150, s=0.8, mat="MI_V2_LeafLight", label="Garden_R_Tree_Canopy1"),
 ])
 
 # ---------------------------------------------------------------------------
@@ -1618,6 +1628,15 @@ def _flank(sgn, tag):
     return out
 
 
+#: uu / scale. The garden cameras' frame edge. `canopy_medium` is ztop 250 and
+#: `tree_slender_trunk` 904, both at scale 1; the crown sits on z so the crown
+#: top is `_CF_EDGE_Z + 250 * _CF_EDGE_CANOPY` = 620 uu, just over the 608 the
+#: picture's top edge cuts at this distance, and the trunk tops under it.
+_CF_EDGE_Z = 420.0
+_CF_EDGE_CANOPY = 0.80
+_CF_EDGE_TRUNK = 0.55
+
+
 def _cam_foreground(cx, cy, yaw_deg, d0, d1, seed, tag):
     """Planting in the band a camera's frame actually opens on.
 
@@ -1639,10 +1658,26 @@ def _cam_foreground(cx, cy, yaw_deg, d0, d1, seed, tag):
         y = cy + f[1] * along + r[1] * across
         edge = abs(i - 5) / 5.0                       # 0 at centre, 1 at the edges
         if edge > 0.62:
+            # A FRAME EDGE IS NOT A LID. This stood a `canopy_medium` at s 1.15
+            # on z 780 -- topping 10.7 m -- eight metres from a 2.0 m eye, and
+            # `framescape.py` found GardenRight05 the second-worst frame in the
+            # world at 15% built, held by `GR05_Fore_EdgeCanopy9` at +49.4 deg.
+            #
+            # A 90 deg fov at 16:9 has a vertical field of 58, so with the
+            # camera's -3 pitch the TOP OF THE PICTURE is +26.2 deg above the
+            # horizon. At 8.3 m that is 6.1 m of height. Everything above it
+            # was outside the frame and everything below was the frame, so the
+            # piece meant to frame the corner was roofing the whole shot.
+            # `_CF_EDGE_TOP` is that 6.1 m, and the tree is sized to it: the
+            # crown just clips the top corner, which is what framing looks
+            # like. The docstring's intent -- "taller at the edges" -- is kept;
+            # only the arithmetic that never checked the frame's top is gone.
             out += [
-                A("tree_slender_trunk", x, y, 0, yaw=_rnd(i, seed, 1) * 360.0, s=0.95,
-                  mat="MI_V2_Bark", label="%s_EdgeTrunk%d" % (tag, i)),
-                A("canopy_medium", x, y, 780, yaw=_rnd(i, seed, 2) * 360.0, s=1.15,
+                A("tree_slender_trunk", x, y, 0, yaw=_rnd(i, seed, 1) * 360.0,
+                  s=_CF_EDGE_TRUNK, mat="MI_V2_Bark",
+                  label="%s_EdgeTrunk%d" % (tag, i)),
+                A("canopy_medium", x, y, _CF_EDGE_Z, yaw=_rnd(i, seed, 2) * 360.0,
+                  s=_CF_EDGE_CANOPY,
                   mat=("MI_V2_LeafMid", "MI_V2_LeafDark")[i % 2],
                   label="%s_EdgeCanopy%d" % (tag, i)),
             ]
