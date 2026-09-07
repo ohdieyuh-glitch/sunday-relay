@@ -697,13 +697,55 @@ BEYOND_R = _band("V2_Castle",
 # world ending at the gate with the panorama painted behind it. An avenue:
 # hedge rows and a tree line either side of the axis, a pair of towers where
 # the avenue meets the city behind, and a cluster beyond them.
+#: uu. THE AVENUE'S TREE LINE MOVED OUT, and a camera is why.
+#:
+#: `TeaTerraceCam16` is locked at (-1579, -4603) and `Avenue_TreeR1` stood at
+#: (-1500, -4400): 2.2 m apart. The camera was not beside the avenue, it was
+#: IN the tree row -- `framescape.py` put that frame at 12.5% built, the worst
+#: in the world, with a canopy 2.2 m from the lens. The hedges are the way's
+#: edge at 9 m; the trees belong outside them with room for a person between,
+#: which is what 23 m gives.
+_AV_TREE_X = 2300.0
+#: An avenue of six trees and two towers eighty metres away is a hint, not a
+#: way. PASS 35 and 36 both found that a processional line wants COLUMNS --
+#: `column_ornate` has an aspect of 5.13 against `canopy_medium`'s 0.37 -- so
+#: the line the trees vacate is where the architecture goes: seven stations a
+#: side from the gate down to the towers, which is what the two towers at
+#: (+/-2600, -8200) have been terminating all along with nothing in between.
+_AV_COL_X = 1500.0
+_AV_COL_N = 7
+_AV_COL_Y0, _AV_COL_DY = -2800.0, -800.0
+
+
+def _avenue_colonnade():
+    out = []
+    for sgn in (1.0, -1.0):
+        tag = "AvenueCol%s" % ("L" if sgn > 0 else "R")
+        for i in range(_AV_COL_N):
+            x, y = sgn * _AV_COL_X, _AV_COL_Y0 + _AV_COL_DY * i
+            out.append(A("column_ornate", x, y, 0.0, yaw=90.0, s=1.55,
+                         mat="MI_V2_IvoryStone", label="%s_Col%d" % (tag, i)))
+            out.append(A("gate_finial_ball", x, y, 950.0 * 1.55, s=1.25,
+                         mat="MI_V2_Gold", label="%s_Ball%d" % (tag, i)))
+            if i % 2 == 1:
+                # a lantern between the columns, the way the lantern lanes do
+                out.append(A("waymarker", x, y + _AV_COL_DY * 0.5, 0.0,
+                             yaw=90.0, s=0.85, mat="MI_V2_IvoryStone",
+                             label="%s_Mark%d" % (tag, i)))
+                out.append(A("waymarker_lamp", x, y + _AV_COL_DY * 0.5, 0.0,
+                             yaw=90.0, s=0.85, mat="MI_V2_GlassAmber",
+                             label="%s_Lamp%d" % (tag, i)))
+    return out
+
+
 AVENUE = _band("V2_Arrival",
     _hedge_wall(900, -2200, 900, -6200, 6, "Avenue_HedgeL", s=1.2, mat="MI_V2_LeafMid")
     + _hedge_wall(-900, -2200, -900, -6200, 6, "Avenue_HedgeR", s=1.2, mat="MI_V2_LeafMid")
-    + [A("tree_slender_trunk", 1500, -2800 - 1100 * i, 0, yaw=40 * i, s=1.1, mat="MI_V2_Bark", label="Avenue_TreeL%d" % i) for i in range(3)]
-    + [A("canopy_medium", 1500, -2800 - 1100 * i, 880, yaw=30 * i, s=1.2, mat="MI_V2_LeafMid", label="Avenue_CanopyL%d" % i) for i in range(3)]
-    + [A("tree_slender_trunk", -1500, -3300 - 1100 * i, 0, yaw=50 * i, s=1.1, mat="MI_V2_Bark", label="Avenue_TreeR%d" % i) for i in range(3)]
-    + [A("canopy_medium", -1500, -3300 - 1100 * i, 880, yaw=70 * i, s=1.2, mat="MI_V2_LeafLight", label="Avenue_CanopyR%d" % i) for i in range(3)]
+    + _avenue_colonnade()
+    + [A("tree_slender_trunk", _AV_TREE_X, -2800 - 1100 * i, 0, yaw=40 * i, s=1.1, mat="MI_V2_Bark", label="Avenue_TreeL%d" % i) for i in range(3)]
+    + [A("canopy_medium", _AV_TREE_X, -2800 - 1100 * i, 880, yaw=30 * i, s=1.2, mat="MI_V2_LeafMid", label="Avenue_CanopyL%d" % i) for i in range(3)]
+    + [A("tree_slender_trunk", -_AV_TREE_X, -3300 - 1100 * i, 0, yaw=50 * i, s=1.1, mat="MI_V2_Bark", label="Avenue_TreeR%d" % i) for i in range(3)]
+    + [A("canopy_medium", -_AV_TREE_X, -3300 - 1100 * i, 880, yaw=70 * i, s=1.2, mat="MI_V2_LeafLight", label="Avenue_CanopyR%d" % i) for i in range(3)]
     + [A("tower_capped", 2600, -8200, 0, s=1.3, mat="MI_V2_IvoryStone", label="Avenue_TowerL"),
        A("roof_cone_steep", 2600, -8200, 1430, s=1.3, mat="MI_V2_RoofPink", label="Avenue_TowerL_Cap"),
        A("gate_finial_ball", 2600, -8200, 1430 + 640 * 1.3, s=1.0, mat="MI_V2_Gold", label="Avenue_TowerL_Finial"),
