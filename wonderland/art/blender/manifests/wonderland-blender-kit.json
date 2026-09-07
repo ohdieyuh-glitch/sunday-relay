@@ -1,7 +1,7 @@
 {
   "schema": "wonderland-blender-kit/1",
   "kit_version": "1.0.0",
-  "generated_utc": "2026-09-07T21:40:29+00:00",
+  "generated_utc": "2026-09-07T22:52:14+00:00",
   "generator": "wonderland/art/blender/scripts/build_assets.py",
   "blender": "4.5.13 LTS",
   "conventions": {
@@ -64,9 +64,9 @@
     }
   },
   "counts": {
-    "assets": 55,
-    "meshes": 156,
-    "triangles": 248813,
+    "assets": 63,
+    "meshes": 171,
+    "triangles": 263937,
     "by_role": {
       "foot": 4,
       "body": 11,
@@ -76,6 +76,7 @@
       "screen": 7,
       "span": 3,
       "detail": 9,
+      "route": 8,
       "hero": 2
     },
     "legal_tower_stacks_up_to_3_bodies": 692,
@@ -11815,6 +11816,1690 @@
         }
       },
       "part_count": 4
+    },
+    {
+      "asset_id": "WL_Stair_Straight_T2",
+      "kit_version": "1.0.0",
+      "family": "stair",
+      "family_group": "stairs",
+      "category": "structure",
+      "silhouette_role": "route",
+      "note": "10 risers of 0.310 m to the T2 terrace at 3.10 m; 3.4 m clear width, cheeks and balusters both sides",
+      "districts": [
+        "royal_garden",
+        "plaza",
+        "city",
+        "tea_terrace",
+        "water_garden"
+      ],
+      "params": {
+        "risers": 10,
+        "riser_m": 0.31,
+        "going_m": 0.36,
+        "rise_m": 3.1,
+        "run_m": 3.5999999999999996,
+        "width_m": 3.4,
+        "rung": "T2",
+        "pitch_deg": 40.7
+      },
+      "origin_rule": "footing at z = 0; +X is the module front",
+      "units": {
+        "authored": "metres",
+        "manifest": "unreal units (cm)",
+        "uu_per_metre": 100.0
+      },
+      "height_uu": 479.0,
+      "bbox_min_uu": [
+        -12.5,
+        -212.0,
+        0.0
+      ],
+      "bbox_max_uu": [
+        380.0,
+        212.0,
+        479.0
+      ],
+      "size_uu": [
+        392.5,
+        424.0,
+        479.0
+      ],
+      "base_z_uu": 0.0,
+      "tris_total": 1288,
+      "tri_budget": 14000,
+      "over_budget": false,
+      "nanite_recommended": true,
+      "collision_recommended": true,
+      "uv": "planar-world-2m (not a lightmap unwrap)",
+      "sockets": [
+        {
+          "name": "bottom_route",
+          "kind": "route",
+          "z_uu": 0.0,
+          "radius_uu": 170.0,
+          "rung": null,
+          "note": "walkable ground at z = 0, entering along +X"
+        },
+        {
+          "name": "top_route",
+          "kind": "route",
+          "z_uu": 310.0,
+          "radius_uu": 170.0,
+          "rung": null,
+          "note": "arrives at 3.10 m (10 risers, rung T2) at x = 3.60 m"
+        },
+        {
+          "name": "edge_l",
+          "kind": "edge",
+          "z_uu": 0.0,
+          "radius_uu": 191.0,
+          "rung": null,
+          "note": "balustrade line, -Y side"
+        },
+        {
+          "name": "edge_r",
+          "kind": "edge",
+          "z_uu": 0.0,
+          "radius_uu": 191.0,
+          "rung": null,
+          "note": "balustrade line, +Y side"
+        }
+      ],
+      "parts": {
+        "stone": {
+          "verts": 678,
+          "faces": 740,
+          "tris": 1288,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_IvoryStone"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -12.5,
+            -212.0,
+            0.0
+          ],
+          "bbox_max_uu": [
+            380.0,
+            212.0,
+            479.0
+          ],
+          "size_uu": [
+            392.5,
+            424.0,
+            479.0
+          ],
+          "height_m": 4.79,
+          "base_z_uu": 0.0,
+          "normals": {
+            "faces": 740,
+            "shells": 17,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 1,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_IvoryStone",
+          "mesh_name": "WL_Stair_Straight_T2",
+          "glb": "exports/glb/WL_Stair_Straight_T2.glb",
+          "fbx": "exports/fbx/WL_Stair_Straight_T2.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_IvoryStone"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -0.125,
+              0,
+              -2.119999885559082
+            ],
+            "max_yup": [
+              3.799999952316284,
+              4.789999961853027,
+              2.119999885559082
+            ],
+            "bytes": 57232
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 0.0,
+            "stored_z_max": 479.0
+          }
+        }
+      },
+      "part_count": 1
+    },
+    {
+      "asset_id": "WL_Stair_Straight_T3",
+      "kit_version": "1.0.0",
+      "family": "stair",
+      "family_group": "stairs",
+      "category": "structure",
+      "silhouette_role": "route",
+      "note": "20 risers to the T3 wall-walk elevation, 6.20 m; finished both sides with newels, so it needs no wall to lean on",
+      "districts": [
+        "plaza",
+        "city",
+        "castle",
+        "royal_garden"
+      ],
+      "params": {
+        "risers": 20,
+        "rise_m": 6.2,
+        "run_m": 7.199999999999999,
+        "width_m": 3.8,
+        "rung": "T3",
+        "interchangeable_with": "WL_Wall_Stair_Flight"
+      },
+      "origin_rule": "footing at z = 0; +X is the module front",
+      "units": {
+        "authored": "metres",
+        "manifest": "unreal units (cm)",
+        "uu_per_metre": 100.0
+      },
+      "height_uu": 895.0,
+      "bbox_min_uu": [
+        -41.0,
+        -250.0,
+        0.0
+      ],
+      "bbox_max_uu": [
+        766.0,
+        250.0,
+        895.0
+      ],
+      "size_uu": [
+        807.0,
+        500.0,
+        895.0
+      ],
+      "base_z_uu": 0.0,
+      "tris_total": 4256,
+      "tri_budget": 26000,
+      "over_budget": false,
+      "nanite_recommended": true,
+      "collision_recommended": true,
+      "uv": "planar-world-2m (not a lightmap unwrap)",
+      "sockets": [
+        {
+          "name": "bottom_route",
+          "kind": "route",
+          "z_uu": 0.0,
+          "radius_uu": 190.0,
+          "rung": null,
+          "note": "walkable ground at z = 0, entering along +X"
+        },
+        {
+          "name": "top_route",
+          "kind": "route",
+          "z_uu": 620.0,
+          "radius_uu": 190.0,
+          "rung": null,
+          "note": "arrives at 6.20 m (20 risers, rung T3) at x = 7.20 m"
+        },
+        {
+          "name": "edge_l",
+          "kind": "edge",
+          "z_uu": 0.0,
+          "radius_uu": 214.0,
+          "rung": null,
+          "note": "balustrade line, -Y"
+        },
+        {
+          "name": "edge_r",
+          "kind": "edge",
+          "z_uu": 0.0,
+          "radius_uu": 214.0,
+          "rung": null,
+          "note": "balustrade line, +Y"
+        }
+      ],
+      "parts": {
+        "gold": {
+          "verts": 908,
+          "faces": 952,
+          "tris": 1776,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_Gold"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -26.0,
+            -235.0,
+            195.0
+          ],
+          "bbox_max_uu": [
+            751.0,
+            235.0,
+            895.0
+          ],
+          "size_uu": [
+            777.0,
+            470.0,
+            700.0
+          ],
+          "height_m": 7.0,
+          "base_z_uu": 195.0,
+          "normals": {
+            "faces": 952,
+            "shells": 12,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 0,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_Gold",
+          "mesh_name": "WL_Stair_Straight_T3_gold",
+          "glb": "exports/glb/WL_Stair_Straight_T3_gold.glb",
+          "fbx": "exports/fbx/WL_Stair_Straight_T3_gold.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_Gold"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -0.25999999046325684,
+              1.9500000476837158,
+              -2.3500001430511475
+            ],
+            "max_yup": [
+              7.510000228881836,
+              8.949999809265137,
+              2.3500001430511475
+            ],
+            "bytes": 63416
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 195.0,
+            "stored_z_max": 895.0
+          }
+        },
+        "stone": {
+          "verts": 1302,
+          "faces": 1416,
+          "tris": 2480,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_IvoryStone"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -41.0,
+            -250.0,
+            0.0
+          ],
+          "bbox_max_uu": [
+            766.0,
+            250.0,
+            815.0
+          ],
+          "size_uu": [
+            807.0,
+            500.0,
+            815.0
+          ],
+          "height_m": 8.15,
+          "base_z_uu": 0.0,
+          "normals": {
+            "faces": 1416,
+            "shells": 31,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 3,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_IvoryStone",
+          "mesh_name": "WL_Stair_Straight_T3",
+          "glb": "exports/glb/WL_Stair_Straight_T3.glb",
+          "fbx": "exports/fbx/WL_Stair_Straight_T3.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_IvoryStone"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -0.4100000262260437,
+              0,
+              -2.5
+            ],
+            "max_yup": [
+              7.660000324249268,
+              8.149999618530273,
+              2.5
+            ],
+            "bytes": 112176
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 0.0,
+            "stored_z_max": 814.9999389648438
+          }
+        }
+      },
+      "part_count": 2
+    },
+    {
+      "asset_id": "WL_Stair_Quarter_Landing",
+      "kit_version": "1.0.0",
+      "family": "stair",
+      "family_group": "stairs",
+      "category": "structure",
+      "silhouette_role": "route",
+      "note": "5 + landing + 5 with a 90-degree turn; T2 in a footprint a straight flight would overshoot",
+      "districts": [
+        "royal_garden",
+        "tea_terrace",
+        "grove",
+        "water_garden"
+      ],
+      "params": {
+        "risers": 10,
+        "rise_m": 3.1,
+        "turn_deg": 90.0,
+        "landing_z_m": 1.55,
+        "rung": "T2"
+      },
+      "origin_rule": "footing at z = 0; +X is the module front",
+      "units": {
+        "authored": "metres",
+        "manifest": "unreal units (cm)",
+        "uu_per_metre": 100.0
+      },
+      "height_uu": 479.0,
+      "bbox_min_uu": [
+        -12.5,
+        -190.0,
+        0.0
+      ],
+      "bbox_max_uu": [
+        545.0,
+        375.0,
+        479.0
+      ],
+      "size_uu": [
+        557.5,
+        565.0,
+        479.0
+      ],
+      "base_z_uu": 0.0,
+      "tris_total": 1404,
+      "tri_budget": 20000,
+      "over_budget": false,
+      "nanite_recommended": true,
+      "collision_recommended": true,
+      "uv": "planar-world-2m (not a lightmap unwrap)",
+      "sockets": [
+        {
+          "name": "bottom_route",
+          "kind": "route",
+          "z_uu": 0.0,
+          "radius_uu": 145.0,
+          "rung": null,
+          "note": "enters along +X at z = 0"
+        },
+        {
+          "name": "landing",
+          "kind": "route",
+          "z_uu": 155.0,
+          "radius_uu": 175.0,
+          "rung": null,
+          "note": "level platform at 1.55 m, x = 3.55 m"
+        },
+        {
+          "name": "top_route",
+          "kind": "route",
+          "z_uu": 310.0,
+          "radius_uu": 145.0,
+          "rung": null,
+          "note": "leaves along +Y at 3.10 m (T2), 90 degrees off the entry"
+        }
+      ],
+      "parts": {
+        "stone": {
+          "verts": 744,
+          "faces": 792,
+          "tris": 1392,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_IvoryStone"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -12.5,
+            -190.0,
+            0.0
+          ],
+          "bbox_max_uu": [
+            545.0,
+            375.0,
+            479.0
+          ],
+          "size_uu": [
+            557.5,
+            565.0,
+            479.0
+          ],
+          "height_m": 4.79,
+          "base_z_uu": 0.0,
+          "normals": {
+            "faces": 792,
+            "shells": 24,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 3,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_IvoryStone",
+          "mesh_name": "WL_Stair_Quarter_Landing",
+          "glb": "exports/glb/WL_Stair_Quarter_Landing.glb",
+          "fbx": "exports/fbx/WL_Stair_Quarter_Landing.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_IvoryStone"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -0.125,
+              0,
+              -3.750000238418579
+            ],
+            "max_yup": [
+              5.449999809265137,
+              4.789999961853027,
+              1.899999976158142
+            ],
+            "bytes": 64520
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 0.0,
+            "stored_z_max": 479.0
+          }
+        },
+        "stone_dark": {
+          "verts": 8,
+          "faces": 6,
+          "tris": 12,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_Stone"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            192.0,
+            -163.0,
+            149.0
+          ],
+          "bbox_max_uu": [
+            518.0,
+            163.0,
+            155.0
+          ],
+          "size_uu": [
+            326.0,
+            326.0,
+            6.0
+          ],
+          "height_m": 0.06,
+          "base_z_uu": 149.0,
+          "normals": {
+            "faces": 6,
+            "shells": 1,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 1,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_Stone",
+          "mesh_name": "WL_Stair_Quarter_Landing_stone_dark",
+          "glb": "exports/glb/WL_Stair_Quarter_Landing_stone_dark.glb",
+          "fbx": "exports/fbx/WL_Stair_Quarter_Landing_stone_dark.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_Stone"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              1.9199999570846558,
+              1.4900000095367432,
+              -1.6299999952316284
+            ],
+            "max_yup": [
+              5.179999828338623,
+              1.5499999523162842,
+              1.6299999952316284
+            ],
+            "bytes": 2120
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 149.0,
+            "stored_z_max": 155.0
+          }
+        }
+      },
+      "part_count": 2
+    },
+    {
+      "asset_id": "WL_Stair_HalfTurn",
+      "kit_version": "1.0.0",
+      "family": "stair",
+      "family_group": "stairs",
+      "category": "structure",
+      "silhouette_role": "route",
+      "note": "10 + half-landing + 10 folded 180 degrees: T3 in 3.9 m of plan instead of 7.2 m",
+      "districts": [
+        "castle",
+        "city",
+        "royal_garden",
+        "plaza"
+      ],
+      "params": {
+        "risers": 20,
+        "rise_m": 6.2,
+        "turn_deg": 180.0,
+        "landing_z_m": 3.1,
+        "rung": "T3",
+        "plan_run_m": 5.699999999999999
+      },
+      "origin_rule": "footing at z = 0; +X is the module front",
+      "units": {
+        "authored": "metres",
+        "manifest": "unreal units (cm)",
+        "uu_per_metre": 100.0
+      },
+      "height_uu": 789.0,
+      "bbox_min_uu": [
+        -38.0,
+        -183.0,
+        0.0
+      ],
+      "bbox_max_uu": [
+        585.0,
+        486.0,
+        789.0
+      ],
+      "size_uu": [
+        623.0,
+        669.0,
+        789.0
+      ],
+      "base_z_uu": 0.0,
+      "tris_total": 2136,
+      "tri_budget": 30000,
+      "over_budget": false,
+      "nanite_recommended": true,
+      "collision_recommended": true,
+      "uv": "planar-world-2m (not a lightmap unwrap)",
+      "sockets": [
+        {
+          "name": "bottom_route",
+          "kind": "route",
+          "z_uu": 0.0,
+          "radius_uu": 130.0,
+          "rung": null,
+          "note": "enters along +X at z = 0"
+        },
+        {
+          "name": "landing",
+          "kind": "route",
+          "z_uu": 310.0,
+          "radius_uu": 105.0,
+          "rung": null,
+          "note": "half-landing at 3.10 m (T2), x = 4.65 m"
+        },
+        {
+          "name": "top_route",
+          "kind": "route",
+          "z_uu": 620.0,
+          "radius_uu": 130.0,
+          "rung": null,
+          "note": "arrives at 6.20 m (T3) heading BACK along -X, offset +Y"
+        },
+        {
+          "name": "wall_join",
+          "kind": "pier",
+          "z_uu": 0.0,
+          "radius_uu": 22.0,
+          "rung": null,
+          "note": "the spine wall at y = +1.58 m takes a retaining wall"
+        }
+      ],
+      "parts": {
+        "gold": {
+          "verts": 227,
+          "faces": 238,
+          "tris": 444,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_Gold"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -24.5,
+            -169.5,
+            185.0
+          ],
+          "bbox_max_uu": [
+            14.5,
+            -130.5,
+            257.0
+          ],
+          "size_uu": [
+            39.0,
+            39.0,
+            72.0
+          ],
+          "height_m": 0.72,
+          "base_z_uu": 185.0,
+          "normals": {
+            "faces": 238,
+            "shells": 3,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 0,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_Gold",
+          "mesh_name": "WL_Stair_HalfTurn_gold",
+          "glb": "exports/glb/WL_Stair_HalfTurn_gold.glb",
+          "fbx": "exports/fbx/WL_Stair_HalfTurn_gold.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_Gold"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -0.2449999898672104,
+              1.850000023841858,
+              1.3050000667572021
+            ],
+            "max_yup": [
+              0.14499999582767487,
+              2.569999933242798,
+              1.6949999332427979
+            ],
+            "bytes": 16752
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 185.0,
+            "stored_z_max": 257.0
+          }
+        },
+        "stone": {
+          "verts": 884,
+          "faces": 936,
+          "tris": 1680,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_IvoryStone"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -38.0,
+            -183.0,
+            0.0
+          ],
+          "bbox_max_uu": [
+            585.0,
+            486.0,
+            789.0
+          ],
+          "size_uu": [
+            623.0,
+            669.0,
+            789.0
+          ],
+          "height_m": 7.89,
+          "base_z_uu": 0.0,
+          "normals": {
+            "faces": 936,
+            "shells": 22,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 3,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_IvoryStone",
+          "mesh_name": "WL_Stair_HalfTurn",
+          "glb": "exports/glb/WL_Stair_HalfTurn.glb",
+          "fbx": "exports/fbx/WL_Stair_HalfTurn.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_IvoryStone"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -0.3800000250339508,
+              0,
+              -4.8600006103515625
+            ],
+            "max_yup": [
+              5.850000381469727,
+              7.889999866485596,
+              1.8300000429153442
+            ],
+            "bytes": 84680
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 0.0,
+            "stored_z_max": 789.0
+          }
+        },
+        "stone_dark": {
+          "verts": 8,
+          "faces": 6,
+          "tris": 12,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_Stone"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            372.0,
+            -118.0,
+            304.0
+          ],
+          "bbox_max_uu": [
+            558.0,
+            433.0,
+            310.0
+          ],
+          "size_uu": [
+            186.0,
+            551.0,
+            6.0
+          ],
+          "height_m": 0.06,
+          "base_z_uu": 304.0,
+          "normals": {
+            "faces": 6,
+            "shells": 1,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 1,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_Stone",
+          "mesh_name": "WL_Stair_HalfTurn_stone_dark",
+          "glb": "exports/glb/WL_Stair_HalfTurn_stone_dark.glb",
+          "fbx": "exports/fbx/WL_Stair_HalfTurn_stone_dark.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_Stone"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              3.7200000286102295,
+              3.0399999618530273,
+              -4.329999923706055
+            ],
+            "max_yup": [
+              5.579999923706055,
+              3.0999999046325684,
+              1.1800000667572021
+            ],
+            "bytes": 2104
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 304.0,
+            "stored_z_max": 310.0
+          }
+        }
+      },
+      "part_count": 3
+    },
+    {
+      "asset_id": "WL_Stair_Curved",
+      "kit_version": "1.0.0",
+      "family": "stair",
+      "family_group": "stairs",
+      "category": "structure",
+      "silhouette_role": "route",
+      "note": "10 wedge risers on a 55-degree arc, mean radius 6.90 m; the module's origin is the ARC CENTRE, not the geometry",
+      "districts": [
+        "royal_garden",
+        "plaza",
+        "water_garden",
+        "tea_terrace"
+      ],
+      "params": {
+        "risers": 10,
+        "rise_m": 3.1,
+        "sweep_deg": 55.0,
+        "r_inner_m": 5.2,
+        "r_outer_m": 8.6,
+        "rung": "T2",
+        "origin": "arc centre"
+      },
+      "origin_rule": "footing at z = 0; +X is the module front",
+      "units": {
+        "authored": "metres",
+        "manifest": "unreal units (cm)",
+        "uu_per_metre": 100.0
+      },
+      "height_uu": 478.0,
+      "bbox_min_uu": [
+        273.14,
+        -12.5,
+        0.0
+      ],
+      "bbox_max_uu": [
+        894.5,
+        734.99,
+        478.0
+      ],
+      "size_uu": [
+        621.36,
+        747.49,
+        478.0
+      ],
+      "base_z_uu": 0.0,
+      "tris_total": 4012,
+      "tri_budget": 26000,
+      "over_budget": false,
+      "nanite_recommended": true,
+      "collision_recommended": true,
+      "uv": "planar-world-2m (not a lightmap unwrap)",
+      "sockets": [
+        {
+          "name": "bottom_route",
+          "kind": "route",
+          "z_uu": 0.0,
+          "radius_uu": 170.0,
+          "rung": null,
+          "note": "enters at bearing 0 deg on a 6.90 m mean radius"
+        },
+        {
+          "name": "top_route",
+          "kind": "route",
+          "z_uu": 310.0,
+          "radius_uu": 170.0,
+          "rung": null,
+          "note": "arrives at 3.10 m (T2) at bearing 55 deg"
+        },
+        {
+          "name": "edge_l",
+          "kind": "edge",
+          "z_uu": 0.0,
+          "radius_uu": 498.0,
+          "rung": null,
+          "note": "inner balustrade arc"
+        },
+        {
+          "name": "edge_r",
+          "kind": "edge",
+          "z_uu": 0.0,
+          "radius_uu": 882.0,
+          "rung": null,
+          "note": "outer balustrade arc"
+        }
+      ],
+      "parts": {
+        "stone": {
+          "verts": 1798,
+          "faces": 1918,
+          "tris": 4012,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_IvoryStone"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            273.14,
+            -12.5,
+            0.0
+          ],
+          "bbox_max_uu": [
+            894.5,
+            734.99,
+            478.0
+          ],
+          "size_uu": [
+            621.36,
+            747.49,
+            478.0
+          ],
+          "height_m": 4.78,
+          "base_z_uu": 0.0,
+          "normals": {
+            "faces": 1918,
+            "shells": 31,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 2,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_IvoryStone",
+          "mesh_name": "WL_Stair_Curved",
+          "glb": "exports/glb/WL_Stair_Curved.glb",
+          "fbx": "exports/fbx/WL_Stair_Curved.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_IvoryStone"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              2.7314107418060303,
+              0,
+              -7.349921226501465
+            ],
+            "max_yup": [
+              8.944999694824219,
+              4.779999732971191,
+              0.125
+            ],
+            "bytes": 151968
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 0.0,
+            "stored_z_max": 477.9999694824219
+          }
+        }
+      },
+      "part_count": 1
+    },
+    {
+      "asset_id": "WL_Stair_Ceremonial",
+      "kit_version": "1.0.0",
+      "family": "stair",
+      "family_group": "stairs",
+      "category": "structure",
+      "silhouette_role": "route",
+      "note": "13 m wide, 10 risers of 0.155 m on a 0.900 m going -- 9.8 degrees, deliberately off the kit's riser; flanking dies with gold urns",
+      "districts": [
+        "plaza",
+        "royal_garden",
+        "city"
+      ],
+      "params": {
+        "risers": 10,
+        "riser_m": 0.155,
+        "going_m": 0.9,
+        "rise_m": 1.55,
+        "width_m": 13.0,
+        "rung": "T1",
+        "pitch_deg": 9.8,
+        "riser_exception": "ceremonial shallow, not the 0.310 m kit riser"
+      },
+      "origin_rule": "footing at z = 0; +X is the module front",
+      "units": {
+        "authored": "metres",
+        "manifest": "unreal units (cm)",
+        "uu_per_metre": 100.0
+      },
+      "height_uu": 505.0,
+      "bbox_min_uu": [
+        -55.0,
+        -770.0,
+        0.0
+      ],
+      "bbox_max_uu": [
+        975.0,
+        770.0,
+        505.0
+      ],
+      "size_uu": [
+        1030.0,
+        1540.0,
+        505.0
+      ],
+      "base_z_uu": 0.0,
+      "tris_total": 1792,
+      "tri_budget": 30000,
+      "over_budget": false,
+      "nanite_recommended": true,
+      "collision_recommended": true,
+      "uv": "planar-world-2m (not a lightmap unwrap)",
+      "sockets": [
+        {
+          "name": "bottom_route",
+          "kind": "route",
+          "z_uu": 0.0,
+          "radius_uu": 650.0,
+          "rung": null,
+          "note": "13 m of open front at z = 0"
+        },
+        {
+          "name": "top_route",
+          "kind": "route",
+          "z_uu": 155.0,
+          "radius_uu": 650.0,
+          "rung": null,
+          "note": "arrives at 1.55 m (T1) across the full 13 m width"
+        },
+        {
+          "name": "edge_l",
+          "kind": "edge",
+          "z_uu": 0.0,
+          "radius_uu": 705.0,
+          "rung": null,
+          "note": "die line, -Y"
+        },
+        {
+          "name": "edge_r",
+          "kind": "edge",
+          "z_uu": 0.0,
+          "radius_uu": 705.0,
+          "rung": null,
+          "note": "die line, +Y"
+        }
+      ],
+      "parts": {
+        "gold": {
+          "verts": 584,
+          "faces": 648,
+          "tris": 1152,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_Gold"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -42.0,
+            -756.21,
+            254.0
+          ],
+          "bbox_max_uu": [
+            962.0,
+            756.21,
+            505.0
+          ],
+          "size_uu": [
+            1004.0,
+            1512.42,
+            251.0
+          ],
+          "height_m": 2.51,
+          "base_z_uu": 254.0,
+          "normals": {
+            "faces": 648,
+            "shells": 4,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 0,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_Gold",
+          "mesh_name": "WL_Stair_Ceremonial_gold",
+          "glb": "exports/glb/WL_Stair_Ceremonial_gold.glb",
+          "fbx": "exports/fbx/WL_Stair_Ceremonial_gold.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_Gold"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -0.41999998688697815,
+              2.5399999618530273,
+              -7.562100410461426
+            ],
+            "max_yup": [
+              9.620000839233398,
+              5.050000190734863,
+              7.562100410461426
+            ],
+            "bytes": 44304
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 254.0,
+            "stored_z_max": 505.0000305175781
+          }
+        },
+        "stone": {
+          "verts": 350,
+          "faces": 320,
+          "tris": 640,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_IvoryStone"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -55.0,
+            -770.0,
+            0.0
+          ],
+          "bbox_max_uu": [
+            975.0,
+            770.0,
+            409.0
+          ],
+          "size_uu": [
+            1030.0,
+            1540.0,
+            409.0
+          ],
+          "height_m": 4.09,
+          "base_z_uu": 0.0,
+          "normals": {
+            "faces": 320,
+            "shells": 15,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 1,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_IvoryStone",
+          "mesh_name": "WL_Stair_Ceremonial",
+          "glb": "exports/glb/WL_Stair_Ceremonial.glb",
+          "fbx": "exports/fbx/WL_Stair_Ceremonial.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_IvoryStone"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -0.5499999523162842,
+              0,
+              -7.700000286102295
+            ],
+            "max_yup": [
+              9.75,
+              4.090000152587891,
+              7.700000286102295
+            ],
+            "bytes": 46044
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 0.0,
+            "stored_z_max": 409.0
+          }
+        }
+      },
+      "part_count": 2
+    },
+    {
+      "asset_id": "WL_Stair_Garden",
+      "kit_version": "1.0.0",
+      "family": "stair",
+      "family_group": "stairs",
+      "category": "structure",
+      "silhouette_role": "route",
+      "note": "5 risers to T1 at 1.55 m on a shallow 0.400 m going; cheeks are veg_anchor strips, not balustrades",
+      "districts": [
+        "royal_garden",
+        "grove",
+        "water_garden",
+        "tea_terrace",
+        "meadow"
+      ],
+      "params": {
+        "risers": 5,
+        "rise_m": 1.55,
+        "going_m": 0.4,
+        "width_m": 2.2,
+        "rung": "T1",
+        "cheeks": "veg_anchor"
+      },
+      "origin_rule": "footing at z = 0; +X is the module front",
+      "units": {
+        "authored": "metres",
+        "manifest": "unreal units (cm)",
+        "uu_per_metre": 100.0
+      },
+      "height_uu": 189.0,
+      "bbox_min_uu": [
+        -10.0,
+        -166.0,
+        0.0
+      ],
+      "bbox_max_uu": [
+        220.0,
+        166.0,
+        189.0
+      ],
+      "size_uu": [
+        230.0,
+        332.0,
+        189.0
+      ],
+      "base_z_uu": 0.0,
+      "tris_total": 188,
+      "tri_budget": 8000,
+      "over_budget": false,
+      "nanite_recommended": true,
+      "collision_recommended": true,
+      "uv": "planar-world-2m (not a lightmap unwrap)",
+      "sockets": [
+        {
+          "name": "bottom_route",
+          "kind": "route",
+          "z_uu": 0.0,
+          "radius_uu": 110.0,
+          "rung": null,
+          "note": "walkable ground at z = 0, entering along +X"
+        },
+        {
+          "name": "top_route",
+          "kind": "route",
+          "z_uu": 155.0,
+          "radius_uu": 110.0,
+          "rung": null,
+          "note": "arrives at 1.55 m (5 risers, rung T1) at x = 2.00 m"
+        },
+        {
+          "name": "edge_l",
+          "kind": "edge",
+          "z_uu": 0.0,
+          "radius_uu": 138.0,
+          "rung": null,
+          "note": "planted cheek, -Y"
+        },
+        {
+          "name": "edge_r",
+          "kind": "edge",
+          "z_uu": 0.0,
+          "radius_uu": 138.0,
+          "rung": null,
+          "note": "planted cheek, +Y"
+        }
+      ],
+      "parts": {
+        "stone": {
+          "verts": 88,
+          "faces": 82,
+          "tris": 164,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_IvoryStone"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -10.0,
+            -166.0,
+            0.0
+          ],
+          "bbox_max_uu": [
+            220.0,
+            166.0,
+            189.0
+          ],
+          "size_uu": [
+            230.0,
+            332.0,
+            189.0
+          ],
+          "height_m": 1.89,
+          "base_z_uu": 0.0,
+          "normals": {
+            "faces": 82,
+            "shells": 3,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 1,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_IvoryStone",
+          "mesh_name": "WL_Stair_Garden",
+          "glb": "exports/glb/WL_Stair_Garden.glb",
+          "fbx": "exports/fbx/WL_Stair_Garden.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_IvoryStone"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -0.10000000149011612,
+              0,
+              -1.659999966621399
+            ],
+            "max_yup": [
+              2.200000047683716,
+              1.8899999856948853,
+              1.659999966621399
+            ],
+            "bytes": 12720
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 0.0,
+            "stored_z_max": 189.0
+          }
+        },
+        "veg_anchor": {
+          "verts": 16,
+          "faces": 12,
+          "tris": 24,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_LeafMid"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            10.88,
+            -155.0,
+            33.18
+          ],
+          "bbox_max_uu": [
+            182.99,
+            155.0,
+            169.72
+          ],
+          "size_uu": [
+            172.11,
+            310.0,
+            136.54
+          ],
+          "height_m": 1.3654,
+          "base_z_uu": 33.18,
+          "normals": {
+            "faces": 12,
+            "shells": 2,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 0,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_LeafMid",
+          "mesh_name": "WL_Stair_Garden_veg_anchor",
+          "glb": "exports/glb/WL_Stair_Garden_veg_anchor.glb",
+          "fbx": "exports/fbx/WL_Stair_Garden_veg_anchor.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_LeafMid"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              0.1088070422410965,
+              0.3317997455596924,
+              -1.5499999523162842
+            ],
+            "max_yup": [
+              1.8299357891082764,
+              1.6972417831420898,
+              1.5499999523162842
+            ],
+            "bytes": 2952
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 33.17997360229492,
+            "stored_z_max": 169.72418212890625
+          }
+        }
+      },
+      "part_count": 2
+    },
+    {
+      "asset_id": "WL_Ramp_Terrace",
+      "kit_version": "1.0.0",
+      "family": "stair",
+      "family_group": "stairs",
+      "category": "structure",
+      "silhouette_role": "route",
+      "note": "1-in-12 ramp to T1 at 1.55 m over 18.6 m; kerbs both sides and a darker running surface. The step-free route.",
+      "districts": [
+        "royal_garden",
+        "plaza",
+        "water_garden",
+        "hamlet"
+      ],
+      "params": {
+        "gradient": "1:12",
+        "rise_m": 1.55,
+        "run_m": 18.6,
+        "width_m": 3.0,
+        "rung": "T1",
+        "steps": 0
+      },
+      "origin_rule": "footing at z = 0; +X is the module front",
+      "units": {
+        "authored": "metres",
+        "manifest": "unreal units (cm)",
+        "uu_per_metre": 100.0
+      },
+      "height_uu": 207.0,
+      "bbox_min_uu": [
+        -10.0,
+        -176.0,
+        0.0
+      ],
+      "bbox_max_uu": [
+        1880.0,
+        176.0,
+        207.0
+      ],
+      "size_uu": [
+        1890.0,
+        352.0,
+        207.0
+      ],
+      "base_z_uu": 0.0,
+      "tris_total": 48,
+      "tri_budget": 6000,
+      "over_budget": false,
+      "nanite_recommended": true,
+      "collision_recommended": true,
+      "uv": "planar-world-2m (not a lightmap unwrap)",
+      "sockets": [
+        {
+          "name": "bottom_route",
+          "kind": "route",
+          "z_uu": 0.0,
+          "radius_uu": 150.0,
+          "rung": null,
+          "note": "walkable ground at z = 0, entering along +X"
+        },
+        {
+          "name": "top_route",
+          "kind": "route",
+          "z_uu": 155.0,
+          "radius_uu": 150.0,
+          "rung": null,
+          "note": "arrives at 1.55 m (5 risers, rung T1) at x = 18.60 m"
+        },
+        {
+          "name": "edge_l",
+          "kind": "edge",
+          "z_uu": 0.0,
+          "radius_uu": 163.0,
+          "rung": null,
+          "note": "kerb line, -Y"
+        },
+        {
+          "name": "edge_r",
+          "kind": "edge",
+          "z_uu": 0.0,
+          "radius_uu": 163.0,
+          "rung": null,
+          "note": "kerb line, +Y"
+        }
+      ],
+      "parts": {
+        "stone": {
+          "verts": 24,
+          "faces": 18,
+          "tris": 36,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_IvoryStone"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -10.0,
+            -176.0,
+            0.0
+          ],
+          "bbox_max_uu": [
+            1880.0,
+            176.0,
+            207.0
+          ],
+          "size_uu": [
+            1890.0,
+            352.0,
+            207.0
+          ],
+          "height_m": 2.07,
+          "base_z_uu": 0.0,
+          "normals": {
+            "faces": 18,
+            "shells": 3,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 2,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_IvoryStone",
+          "mesh_name": "WL_Ramp_Terrace",
+          "glb": "exports/glb/WL_Ramp_Terrace.glb",
+          "fbx": "exports/fbx/WL_Ramp_Terrace.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_IvoryStone"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -0.10000000149011612,
+              0,
+              -1.7599999904632568
+            ],
+            "max_yup": [
+              18.799999237060547,
+              2.069999933242798,
+              1.7599999904632568
+            ],
+            "bytes": 3756
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 0.0,
+            "stored_z_max": 207.0
+          }
+        },
+        "stone_dark": {
+          "verts": 8,
+          "faces": 6,
+          "tris": 12,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_Stone"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            20.0,
+            -124.0,
+            26.0
+          ],
+          "bbox_max_uu": [
+            1840.0,
+            124.0,
+            186.0
+          ],
+          "size_uu": [
+            1820.0,
+            248.0,
+            160.0
+          ],
+          "height_m": 1.6,
+          "base_z_uu": 26.0,
+          "normals": {
+            "faces": 6,
+            "shells": 1,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 1,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_Stone",
+          "mesh_name": "WL_Ramp_Terrace_stone_dark",
+          "glb": "exports/glb/WL_Ramp_Terrace_stone_dark.glb",
+          "fbx": "exports/fbx/WL_Ramp_Terrace_stone_dark.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_Stone"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              0.20000000298023224,
+              0.25999999046325684,
+              -1.2400000095367432
+            ],
+            "max_yup": [
+              18.399999618530273,
+              1.8600000143051147,
+              1.2400000095367432
+            ],
+            "bytes": 2104
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 26.0,
+            "stored_z_max": 186.0
+          }
+        }
+      },
+      "part_count": 2
     },
     {
       "asset_id": "WL_Detail_Balustrade_Run",

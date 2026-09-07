@@ -24,7 +24,8 @@ below, and add one line to `FAMILIES`. That is the whole ceremony, and it is
 now impossible to do it for the builder and not for the validator.
 """
 
-from .families import civic, details, hero, roofscape, thresholds, towers, walls
+from .families import (civic, details, hero, roofscape, stairs,
+                       thresholds, towers, walls)
 
 #: (group name, module). Group name reaches the manifest as `family_group` and
 #: names the contact sheet, the Unreal destination folder and the proof pack.
@@ -34,6 +35,7 @@ FAMILIES = (
     ("civic", civic),
     ("walls", walls),
     ("roofscape", roofscape),
+    ("stairs", stairs),
     ("details", details),
     ("hero", hero),
 )

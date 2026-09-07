@@ -96,7 +96,61 @@ SOCKET_KINDS = (
     "pier",         # the ground foot of an arch or a gate, joins sideways
     "bridge_end",   # a span's landing, attaches to the SIDE of a shaft
     "ground",       # sits on terrain; nothing goes below it
+    "route",        # a WALKABLE surface begins or ends here, at a stated level
+    "edge",         # a terrace lip: a balustrade or a coping mounts along it
 )
+
+
+# --------------------------------------------------------------------------
+# the route ladder -- the radius ladder's horizontal twin
+# --------------------------------------------------------------------------
+#
+# A stair is only a module if the generator knows where it ARRIVES. Sockets
+# whose heights are whatever a flight happened to be leave the world session
+# solving a packing problem per placement, which is how a stair family becomes
+# a set of stair props.
+#
+# So route elevations are quantised the way join radii are, and the quantum is
+# the riser this kit already proved: 0.310 m, which `WL_Wall_Stair_Flight`
+# reaches the 6.20 m wall-walk in exactly twenty of. Every rung is a whole
+# number of those, in fives:
+#
+#     T1  1.55 m    5 risers   a garden step-up, a plinth you sit on
+#     T2  3.10 m   10 risers   a terrace
+#     T3  6.20 m   20 risers   THE WALL-WALK -- already built, now in the system
+#     T4  9.30 m   30 risers   an upper court
+#
+# T3 is not a new number. It is the wall family's `WALK_Z`, which means a
+# free-standing stair, a retaining terrace and a curtain wall all arrive at one
+# elevation and a generator can join them without knowing they came from
+# different families.
+
+#: The riser. Every route elevation in the kit is a whole multiple of it.
+RISER_M = 0.310
+
+#: rung -> elevation in METRES.
+ROUTE_LADDER = {
+    "T1": RISER_M * 5,            # 1.55
+    "T2": RISER_M * 10,           # 3.10
+    "T3": RISER_M * 20,           # 6.20  == walls.WALK_Z
+    "T4": RISER_M * 30,           # 9.30
+}
+
+ROUTE_TOLERANCE_M = 0.005
+
+
+def route_rung(z_m):
+    """Which route rung an elevation is on, or None. Used by the validator."""
+    for name, z in ROUTE_LADDER.items():
+        if abs(float(z_m) - z) <= ROUTE_TOLERANCE_M:
+            return name
+    return None
+
+
+def risers_for(z_m):
+    """How many 0.310 m risers reach `z_m`, or None if it is not a whole number."""
+    n = float(z_m) / RISER_M
+    return int(round(n)) if abs(n - round(n)) < 0.02 else None
 
 
 class Socket(object):
@@ -227,6 +281,8 @@ ROLES = (
     "screen",     # a vertical plane of ornament you look through
     "detail",     # attaches to something else and changes its outline
     "hero",       # a one-off with its own identity
+    "route",      # you WALK ON it, and it changes your elevation
+    "terrace",    # a level platform with a retained edge
 )
 
 

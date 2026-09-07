@@ -1,5 +1,5 @@
 {
-  "checked_assets": 55,
+  "checked_assets": 63,
   "failures": 0,
   "material_check": "59 MI_V2_* names parsed from materials_v2.py",
   "per_asset": {
@@ -50,6 +50,14 @@
     "WL_Roof_Dormer": [],
     "WL_Roof_Chimney": [],
     "WL_House_Shopfront": [],
+    "WL_Stair_Straight_T2": [],
+    "WL_Stair_Straight_T3": [],
+    "WL_Stair_Quarter_Landing": [],
+    "WL_Stair_HalfTurn": [],
+    "WL_Stair_Curved": [],
+    "WL_Stair_Ceremonial": [],
+    "WL_Stair_Garden": [],
+    "WL_Ramp_Terrace": [],
     "WL_Detail_Balustrade_Run": [],
     "WL_Detail_Newel_Urn": [],
     "WL_Detail_Screen_Filigree": [],
@@ -68,6 +76,7 @@
     "civic",
     "walls",
     "roofscape",
+    "stairs",
     "details",
     "hero"
   ],
@@ -293,6 +302,37 @@
       "gold": "f4f349f7fa49e31fb4ac23737a8aa4c9396284a3a74a92e15409d461870e59e7",
       "stone": "372d14750b6c64e8778cbdb07f147908b9cc61eb1a37485a547456424fb78a88",
       "stone_dark": "480761d6017924b640a206fbbb48ecfbb0745538dfe91729ef9997890d6f7c92"
+    },
+    "WL_Stair_Straight_T2": {
+      "stone": "30d1b9cbd098c01976cca0cdf8464d09d66b43a92f6ee0be0b3ea70e753bd7bf"
+    },
+    "WL_Stair_Straight_T3": {
+      "gold": "632d80e7611229e54a96bae3840f3698138197cde0568dd1939c9c07421712af",
+      "stone": "bbc82cc686283a4de190076cb4c9d443875405e1fdba73796979b3c4c903588b"
+    },
+    "WL_Stair_Quarter_Landing": {
+      "stone": "96eb3913fc0253eff0b4311e7638315d04628814c6efc7cde69b03821db04a80",
+      "stone_dark": "e3afd7b5cb13b20fa17ef184125e21b4112cb8eb943436234a8b8528c2a5df4d"
+    },
+    "WL_Stair_HalfTurn": {
+      "gold": "2cec881a153989d24dbb67c1859967a799cf7bbecf1d62c4cd378e7756807fd3",
+      "stone": "678cf472c4f83ec6739ac7ded9fd135e1adac48ae737397d27bd6d82cec8aee4",
+      "stone_dark": "f6ccd413aa717fdc50c57b49e83277a1ee05aee5fccc4c87ac10980df31765bf"
+    },
+    "WL_Stair_Curved": {
+      "stone": "a0c92ece2ff7322ae37c90da64f00a115488d10d71a3e6ab6947282adda4d771"
+    },
+    "WL_Stair_Ceremonial": {
+      "gold": "a8a54acc8db8b6f3c84e973b08351a22f0ade62e1a5342e25ccd7e35a24be791",
+      "stone": "45e0f3d9b329c536db7e144bc1d5ff7af4e518b4452bf00a1c036994e8a7d105"
+    },
+    "WL_Stair_Garden": {
+      "stone": "9bb3005e0bf831e959123e0f789675ef561351e4bbfc4f66dc2ab1dffcc541d8",
+      "veg_anchor": "9d1e4484e961c3116f28846a1f68d7e4047d866b732d86f6dcd3f6438eb6764c"
+    },
+    "WL_Ramp_Terrace": {
+      "stone": "500a4ac2063df0cbf435338a31e5c69addddf3ba30808f46b860617d51c81eea",
+      "stone_dark": "7e6b20257dd5af0ec1358fb4edf9141345c4d9c955533441106b603e97276fd3"
     },
     "WL_Detail_Balustrade_Run": {
       "stone": "489bafa5aa4aa4a08c830e95b2fe68627baf72e0502e6167ef851a42d06dc7c1"

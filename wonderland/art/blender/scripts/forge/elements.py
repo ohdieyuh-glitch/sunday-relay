@@ -598,6 +598,114 @@ def roof_ridged(part, length, width, height, at=(0.0, 0.0, 0.0), rot=(0.0, 0.0, 
     return made
 
 
+# --------------------------------------------------------------------------
+# stairs: the horizontal half of the kit's grammar
+# --------------------------------------------------------------------------
+#
+# Wonderland's own audits decide the shape of these. `verify_v2_layout.py`
+# reports step height over every surface in the world ("0 violations over 914
+# surfaces"), and `walkable.py --window=world` reports ground the Dog cannot
+# reach. A stair that fails either is not a stair, it is an obstacle with a
+# handrail -- so the riser is fixed at `kit.RISER_M` (0.310 m) everywhere, and
+# every flight in the kit arrives on a rung of `kit.ROUTE_LADDER`.
+
+
+def stair_flight(part, risers, width, going=0.360, riser=0.310, at=(0.0, 0.0, 0.0),
+                 rot=(0.0, 0.0, 0.0), matrix=None, nosing=0.035, solid=True):
+    """`risers` steps climbing along +X, `width` across Y. Returns (run, rise).
+
+    Built as a stack of boxes each running from its own step to the FOOT of the
+    flight, so the assembly is a solid wedge with a stepped top rather than a
+    ribbon of floating treads. Solid matters twice: an Unreal collision hull
+    fitted to a ribbon leaves gaps you fall through, and a hollow stair seen
+    from the side shows its own underside.
+    """
+    mat = M.xform(at, rot)
+    if matrix is not None:
+        mat = matrix @ mat
+    made = []
+    n = int(risers)
+    for i in range(n):
+        depth = going * (n - i) + nosing
+        made += part.box(depth, width, riser,
+                         at=(going * i + depth * 0.5 - nosing, 0.0, riser * i),
+                         matrix=mat, chamfer=min(0.03, riser * 0.28),
+                         centre_z=False)
+    # NO SEPARATE NOSING BOX. One was tried: `width + 0.02` wide so it would
+    # show, which made it protrude a centimetre past each side of the tread and
+    # read as a black sliver line across every step of the ceremonial flight.
+    # A tread's own 2 cm chamfer already gives it an arris, and an arris is
+    # what makes a flight read as steps rather than as a ramp.
+    return made, (going * n, riser * n)
+
+
+def stair_cheek(part, run, rise, y, thickness=0.42, top=0.46, matrix=None,
+                at=(0.0, 0.0, 0.0), rot=(0.0, 0.0, 0.0)):
+    """The raking kerb beside a flight, its top parallel to the pitch.
+
+    LOW on purpose. `WL_Wall_Stair_Flight`'s first version carried a
+    full-height stringer to the landing, which hid every tread behind it and
+    made the flight render as a plain wedge. A cheek is a kerb; a rail is what
+    stops you falling, and it goes above.
+    """
+    mat = M.xform(at, rot)
+    if matrix is not None:
+        mat = matrix @ mat
+    return part.loft([
+        [(-0.10, y - thickness * 0.5, 0.0), (run + 0.20, y - thickness * 0.5, 0.0),
+         (run + 0.20, y + thickness * 0.5, 0.0), (-0.10, y + thickness * 0.5, 0.0)],
+        [(-0.10, y - thickness * 0.5, top), (run + 0.20, y - thickness * 0.5, rise + top),
+         (run + 0.20, y + thickness * 0.5, rise + top), (-0.10, y + thickness * 0.5, top)]],
+        matrix=mat, smooth=False)
+
+
+def rake_balustrade(part, run, rise, y, height=1.05, spacing=0.72, rail=0.20,
+                    matrix=None, at=(0.0, 0.0, 0.0), rot=(0.0, 0.0, 0.0),
+                    z0=0.46):
+    """Turned balusters and a raking rail following a flight's pitch.
+
+    The same baluster profile as `balcony_ring` and `WL_Detail_Balustrade_Run`,
+    so a stair rail meets a terrace rail without a change of language.
+    """
+    mat = M.xform(at, rot)
+    if matrix is not None:
+        mat = matrix @ mat
+    made = []
+    n = max(2, int(run / spacing))
+    for i in range(n + 1):
+        t = i / float(n)
+        made += part.lathe(
+            [(0.0, 0.0), (0.085, 0.0), (0.070, 0.24), (0.125, 0.50),
+             (0.075, 0.86), (0.090, 1.10), (0.0, 1.22)],
+            segments=8, smooth=True,
+            matrix=mat @ M.xform((run * t, y, z0 + rise * t)))
+    made += part.loft([
+        [(-0.10, y - rail * 0.9, z0 + height), (run + 0.20, y - rail * 0.9, z0 + rise + height),
+         (run + 0.20, y + rail * 0.9, z0 + rise + height), (-0.10, y + rail * 0.9, z0 + height)],
+        [(-0.10, y - rail * 0.9, z0 + height + 0.18), (run + 0.20, y - rail * 0.9, z0 + rise + height + 0.18),
+         (run + 0.20, y + rail * 0.9, z0 + rise + height + 0.18), (-0.10, y + rail * 0.9, z0 + height + 0.18)]],
+        matrix=mat, smooth=False)
+    return made
+
+
+def landing(part, w, d, thickness=0.42, at=(0.0, 0.0, 0.0), rot=(0.0, 0.0, 0.0),
+            matrix=None, dark=None):
+    """A level platform between two flights, with a darker walking surface."""
+    mat = M.xform(at, rot)
+    if matrix is not None:
+        mat = matrix @ mat
+    # THE SLAB STOPS 6 cm DOWN and the dark wearing surface fills that. Both
+    # topping out at z = 0 put two up-facing faces in one plane, which is the
+    # z-fight this kit keeps rediscovering -- here it turned every landing
+    # solid black in the first stairs render.
+    made = part.box(w, d, thickness, at=(0.0, 0.0, -thickness - 0.06),
+                    matrix=mat, chamfer=0.06, centre_z=False)
+    if dark is not None:
+        dark.box(w - 0.24, d - 0.24, 0.06, at=(0.0, 0.0, -0.06), matrix=mat,
+                 centre_z=False)
+    return made
+
+
 def rib_set(part, z0, z1, radius, count=8, width=0.30, out=0.22, taper=0.86,
             matrix=None):
     """Vertical ribs up a shaft or a dome. Verticals are what make a needle
