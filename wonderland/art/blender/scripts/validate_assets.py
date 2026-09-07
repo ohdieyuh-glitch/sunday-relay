@@ -119,6 +119,21 @@ def coincident_faces(obj, tol=3):
     So `dot > 0.9999` rather than `abs(dot) ~ 1`. Two faces at the same place
     pointing the SAME way are both visible and one of them is going to
     shimmer; two pointing at each other are just a join.
+
+    WHAT THIS DOES NOT CATCH, stated so nobody trusts it further than it goes:
+    two faces that are coplanar and same-facing but only PARTLY overlap, with
+    different centres and different areas. `WL_Wall_Postern_Gate` had exactly
+    that -- a flanking wall running 0.90 m past the gate block put their two
+    outer faces in one plane over that strip -- and this check saw nothing.
+    Catching it properly needs polygon intersection per plane, and the cheap
+    approximations (bucket by plane, compare bounding boxes) produce false
+    positives on the kit's own arch bands, which are deliberately coplanar with
+    the wall they stand in.
+
+    The thing that DOES find it costs one render: put the module against a
+    bright magenta world. A hole shows magenta; two fighting surfaces show
+    black with a moire in them. `build_assets.py` renders every family by
+    default for this reason.
     """
     me = obj.data
     buckets = {}

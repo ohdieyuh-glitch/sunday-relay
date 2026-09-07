@@ -18,7 +18,7 @@ is the art library's.
 
 ## What exists
 
-**55 assets, 156 meshes, 248,977 triangles.** All built, all exported to GLB and
+**55 assets, 156 meshes, 248,813 triangles.** All built, all exported to GLB and
 FBX, all validated, 0 failures.
 
 | group | assets | what it answers |
@@ -232,10 +232,21 @@ Report: `wonderland/art/blender/validation/VALIDATION_REPORT.json`.
 | triangle budget per asset | — |
 | deterministic rebuild (mesh hashes) | — |
 
-Four further defects were found **by looking at renders**, not by any check:
-filigree panels lying flat on their backs, an attic floating over an unfilled
-spandrel, a torn spandrel web under the royal gate's arch, and the black
-terraces. That is why `build_assets.py` renders by default.
+Several further defects were found **by looking at renders**, not by any
+check: filigree panels lying flat on their backs, an attic floating over an
+unfilled spandrel, a torn spandrel web under the royal gate's arch, the
+ceremonial arch's columns buried inside the piers they were meant to stand
+against, and a wall stair whose full-height stringer hid every tread. That is
+why `build_assets.py` renders by default.
+
+One class needs a render of its own. Two surfaces that are coplanar, face the
+same way and only PARTLY overlap have different centres and different areas, so
+the coincident-face check cannot see them — and `WL_Wall_Postern_Gate` had a
+pair, where a flanking wall ran 0.90 m past the gate block. `build_assets.py
+--surface-check` renders each family against a bright magenta world with no
+ground: **a hole shows magenta, two fighting surfaces show black with a moire
+in them.** That distinction is what identified it; the fix was to make the two
+lengths butt rather than overlap.
 
 ---
 

@@ -155,6 +155,10 @@ def main():
     ap.add_argument("--only", default=None, help="build one family group only")
     ap.add_argument("--no-render", action="store_true")
     ap.add_argument("--no-blend", action="store_true")
+    ap.add_argument("--surface-check", action="store_true",
+                    help="also render each family against a bright magenta "
+                         "world: a HOLE shows magenta, two fighting "
+                         "surfaces show black with a moire in them")
     args = ap.parse_args()
 
     for d in (EXPORTS, MANIFESTS, VALIDATION, SOURCE):
@@ -260,7 +264,7 @@ def main():
              manifest["counts"]["triangles"], stacks))
 
     if not args.no_render:
-        render_sheets(specs)
+        render_sheets(specs, surface_check=args.surface_check)
     return 0
 
 
@@ -338,8 +342,17 @@ def render_spelled(seeds=9, max_bodies=3):
     print("  render -> KIT_spelled_towers.png (%d towers)" % len(lines))
 
 
-def render_sheets(specs):
-    """One contact sheet per family group, plus the spelled-tower sheet."""
+def render_sheets(specs, surface_check=False):
+    """One contact sheet per family group, plus the spelled-tower sheet.
+
+    `surface_check` adds a second pass of each family against a bright magenta
+    world with no ground. It is the only thing in this pipeline that finds two
+    COPLANAR, SAME-FACING, PARTLY OVERLAPPING surfaces -- the check in
+    `validate_assets.py` compares faces that share a centre and cannot see
+    them. `WL_Wall_Postern_Gate` had a pair; they showed as two black bands
+    with a moire, and black rather than magenta is what said "two surfaces"
+    instead of "no surface".
+    """
     out = os.path.join(ROOT, "validation", "renders")
     os.makedirs(out, exist_ok=True)
     groups = {}
@@ -361,6 +374,18 @@ def render_sheets(specs):
                        lens=85.0, target_bias=0.46)
         P.render(os.path.join(out, "KIT_%s.png" % group), res=res, samples=24)
         print("  render -> KIT_%s.png" % group)
+        if surface_check:
+            P.clear_rig()
+            P.rig(ground=False)
+            bg = bpy.context.scene.world.node_tree.nodes["Background"]
+            bg.inputs[0].default_value = (1.0, 0.0, 0.8, 1.0)
+            bg.inputs[1].default_value = 4.0
+            P.frame_camera(allo, res, azimuth=80.0, elevation=7.0, margin=1.05,
+                           lens=85.0, target_bias=0.46)
+            P.render(os.path.join(out, "SURFACE_%s.png" % group), res=res,
+                     samples=10)
+            print("  render -> SURFACE_%s.png  (magenta = hole, black = z-fight)"
+                  % group)
     render_spelled()
 
 

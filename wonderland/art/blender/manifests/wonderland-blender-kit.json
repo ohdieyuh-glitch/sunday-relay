@@ -1,7 +1,7 @@
 {
   "schema": "wonderland-blender-kit/1",
   "kit_version": "1.0.0",
-  "generated_utc": "2026-09-07T21:26:18+00:00",
+  "generated_utc": "2026-09-07T21:40:29+00:00",
   "generator": "wonderland/art/blender/scripts/build_assets.py",
   "blender": "4.5.13 LTS",
   "conventions": {
@@ -66,7 +66,7 @@
   "counts": {
     "assets": 55,
     "meshes": 156,
-    "triangles": 248977,
+    "triangles": 248813,
     "by_role": {
       "foot": 4,
       "body": 11,
@@ -9194,7 +9194,7 @@
         1075.8
       ],
       "base_z_uu": 0.0,
-      "tris_total": 2376,
+      "tris_total": 2212,
       "tri_budget": 22000,
       "over_budget": false,
       "nanite_recommended": true,
@@ -9309,9 +9309,9 @@
           }
         },
         "stone": {
-          "verts": 800,
-          "faces": 705,
-          "tris": 1440,
+          "verts": 682,
+          "faces": 631,
+          "tris": 1292,
           "degenerate_faces": 0,
           "loose_verts": 0,
           "materials": [
@@ -9339,11 +9339,11 @@
           "height_m": 10.47,
           "base_z_uu": 0.0,
           "normals": {
-            "faces": 705,
-            "shells": 41,
+            "faces": 631,
+            "shells": 28,
             "inverted_shells": 0,
             "inverted_faces": 0,
-            "open_shells": 4,
+            "open_shells": 2,
             "zero_normal_faces": 0
           },
           "material": "MI_V2_IvoryStone",
@@ -9365,7 +9365,7 @@
               10.470000267028809,
               2.25
             ],
-            "bytes": 89680
+            "bytes": 77336
           },
           "fbx_read": {
             "unit_scale_factor": 0.9999999776482582,
@@ -9374,9 +9374,9 @@
           }
         },
         "stone_dark": {
-          "verts": 32,
-          "faces": 24,
-          "tris": 48,
+          "verts": 16,
+          "faces": 16,
+          "tris": 32,
           "degenerate_faces": 0,
           "loose_verts": 0,
           "materials": [
@@ -9389,7 +9389,7 @@
           "bbox_min_uu": [
             -680.0,
             -105.0,
-            320.0
+            606.0
           ],
           "bbox_max_uu": [
             680.0,
@@ -9399,16 +9399,16 @@
           "size_uu": [
             1360.0,
             210.0,
-            300.0
+            14.0
           ],
-          "height_m": 3.0,
-          "base_z_uu": 320.0,
+          "height_m": 0.14,
+          "base_z_uu": 606.0,
           "normals": {
-            "faces": 24,
-            "shells": 4,
+            "faces": 16,
+            "shells": 1,
             "inverted_shells": 0,
             "inverted_faces": 0,
-            "open_shells": 3,
+            "open_shells": 1,
             "zero_normal_faces": 0
           },
           "material": "MI_V2_Stone",
@@ -9422,7 +9422,7 @@
             "meshes": 1,
             "min_yup": [
               -6.800000190734863,
-              3.200000047683716,
+              6.059999942779541,
               -1.0499999523162842
             ],
             "max_yup": [
@@ -9430,11 +9430,11 @@
               6.199999809265137,
               1.0499999523162842
             ],
-            "bytes": 4636
+            "bytes": 3000
           },
           "fbx_read": {
             "unit_scale_factor": 0.9999999776482582,
-            "stored_z_min": 320.0,
+            "stored_z_min": 606.0,
             "stored_z_max": 620.0
           }
         }

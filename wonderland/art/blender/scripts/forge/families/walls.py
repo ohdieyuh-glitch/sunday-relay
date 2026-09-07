@@ -210,20 +210,31 @@ def wall_postern_gate(f):
     LEN = 13.6
     SPAN, RISE, SPRING = 3.20, 1.60, 3.30
     ht = WALL_T * 0.5
-    # the two solid lengths either side of the opening
+    # THE FLANKING LENGTHS BUTT THE GATE BLOCK, they do not overlap it. They
+    # first ran 0.90 m past it, which put the flanking wall's face and the gate
+    # wall's face in the SAME PLANE over that strip -- classic z-fighting, and
+    # it rendered as two black bands with a moire in them. It was not a hole:
+    # a render against a magenta world showed the bands black rather than
+    # magenta, which is what said "two surfaces", not "no surface".
+    #
+    # The coincident-face check does not see this. It compares faces that share
+    # a CENTRE; these two only partly overlap and have different areas. That
+    # limit is written into the check's own docstring.
+    GATE_HALF = SPAN * 0.5 + 1.80
     for sgn in (-1.0, 1.0):
-        seg = (LEN - SPAN) * 0.5 - 0.9
-        _wall_section(p, d, seg, x0=sgn * (SPAN * 0.5 + 0.9 + seg * 0.5), slits=False)
+        seg = LEN * 0.5 - GATE_HALF
+        _wall_section(p, d, seg, x0=sgn * (GATE_HALF + seg * 0.5), slits=False)
     # the gate block: piers, a pointed arch, and the wall carried over it
     for sgn in (-1.0, 1.0):
         p.box(1.80, WALL_T + 0.50, SPRING, at=(sgn * (SPAN * 0.5 + 0.90), 0.0, 0.0),
               chamfer=0.16, centre_z=False)
-    for dy in (-1.0, 1.0):
-        E.arch_band(p, SPAN, RISE, 1.10, 0.60,
-                    at=(0.0, dy * (ht - 0.30), SPRING), kind="pointed", steps=11,
-                    keystone=True)
-    d.box(SPAN, WALL_T - 2.0, RISE + 0.4, at=(0.0, 0.0, SPRING - 0.1),
-          centre_z=False)
+    # ONE band the full thickness of the wall, not two thin ones at the faces.
+    # Two bands leave the middle of the passage soffit open, and the dark box
+    # put there to close it was SPAN wide -- so it filled the arch head and
+    # rendered as a black slab in the opening. A single band's intrados IS the
+    # soffit, and there is nothing to close.
+    E.arch_band(p, SPAN, RISE, WALL_T, 0.60, at=(0.0, 0.0, SPRING),
+                kind="pointed", steps=11, keystone=True)
     E.arched_wall(p, SPAN, RISE, WALK_Z - 0.62 - SPRING, SPAN * 0.5 + 1.80,
                   WALL_T, kind="pointed", steps=11, thickness=0.60,
                   at=(0.0, 0.0, SPRING))
