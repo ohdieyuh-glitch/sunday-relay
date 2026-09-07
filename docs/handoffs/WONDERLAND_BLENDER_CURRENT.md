@@ -213,7 +213,24 @@ mushrooms.
 
 ## What was validated, and how
 
-`python3 scripts/validate_assets.py` → **44 assets checked, 0 failures.**
+`python3 scripts/validate_assets.py` → **55 assets checked, 0 failures.**
+
+**COVERAGE IS NOW ASSERTED, not asserted-about.** This line said 44 for a
+while — written when the kit had 44 assets, left behind when walls and
+roofscape took it to 55. The report had said `checked 55` throughout, so no
+asset ever escaped validation; the document was wrong, not the pipeline.
+
+The failure that sentence *described* was real and one edit away, though:
+`build_assets.py` and `validate_assets.py` each carried a hand-written family
+list, and adding a family to the builder alone would have exported,
+manifested and shipped assets that nothing checked. So the list became one
+(`forge/registry.py`, imported by both) and the validator now compares the set
+of assets it built against the set the manifest contains, naming the
+difference either way and failing on a stale `counts.assets` too. Exempt
+groups: **none**, and `registry.EXEMPT_GROUPS` says it should stay that way.
+
+`python3 scripts/validate_assets.py --self-test` manufactures the gap five
+ways and proves the check catches all of them.
 Report: `wonderland/art/blender/validation/VALIDATION_REPORT.json`.
 
 | check | what it caught while building this kit |

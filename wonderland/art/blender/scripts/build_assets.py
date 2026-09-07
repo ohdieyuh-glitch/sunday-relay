@@ -41,8 +41,7 @@ from forge import kit as K                          # noqa: E402
 from forge import mesh as M                         # noqa: E402
 from forge import preview as P                      # noqa: E402
 from forge import units as U                        # noqa: E402
-from forge.families import (civic, details, hero, roofscape,         # noqa: E402
-                            thresholds, towers, walls)
+from forge.registry import EXEMPT_GROUPS, FAMILIES              # noqa: E402
 
 ROOT = os.path.normpath(os.path.join(HERE, ".."))
 EXPORTS = os.path.join(ROOT, "exports")
@@ -50,15 +49,6 @@ SOURCE = os.path.join(ROOT, "source")
 MANIFESTS = os.path.join(ROOT, "manifests")
 VALIDATION = os.path.join(ROOT, "validation")
 
-FAMILIES = (
-    ("towers", towers),
-    ("thresholds", thresholds),
-    ("civic", civic),
-    ("walls", walls),
-    ("roofscape", roofscape),
-    ("details", details),
-    ("hero", hero),
-)
 
 #: Bumped when the geometry of the kit changes in a way the world session
 #: must re-import for. The manifest carries it; so does every asset record.

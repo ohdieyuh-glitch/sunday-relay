@@ -59,17 +59,13 @@ from forge import export as X                       # noqa: E402
 from forge import kit as K                          # noqa: E402
 from forge import mesh as M                         # noqa: E402
 from forge import units as U                        # noqa: E402
-from forge.families import (civic, details, hero, roofscape,         # noqa: E402
-                            thresholds, towers, walls)
+from forge.registry import (EXEMPT_GROUPS, FAMILIES,            # noqa: E402
+                            group_names)
 
 ROOT = os.path.normpath(os.path.join(HERE, ".."))
 REPO = os.path.normpath(os.path.join(ROOT, "..", "..", ".."))
 MANIFEST = os.path.join(ROOT, "manifests", "wonderland-blender-kit.json")
 MATERIALS_V2 = os.path.join(REPO, "wonderland", "v2", "materials_v2.py")
-
-FAMILIES = (("towers", towers), ("thresholds", thresholds), ("civic", civic),
-            ("walls", walls), ("roofscape", roofscape),
-            ("details", details), ("hero", hero))
 
 TOL_M = 0.02            # 2 cm: tighter than any authored feature, looser than fp
 
@@ -307,6 +303,66 @@ def check_asset(spec, objs, mats_available):
     return bad
 
 
+def check_coverage(discovered, manifest_path=MANIFEST):
+    """EVERY exportable asset in the manifest must have been validated.
+
+    THIS IS THE CHECK THE 55-vs-44 SCARE ASKED FOR. The scare itself was a
+    stale sentence in the handoff -- the report said `checked 55, failures 0`
+    while the document still said 44, written when the kit had 44 -- so no
+    asset had ever escaped validation. But the failure it DESCRIBED was real
+    and one edit away: `build_assets.py` and `validate_assets.py` each carried
+    their own hand-written family list, and adding a family to the builder
+    alone would have exported, manifested and shipped assets nothing checked.
+
+    Two things now stand in the way. The lists became one (`forge/registry.py`),
+    and this compares the set of asset ids the validator actually built against
+    the set the manifest actually contains, naming the difference either way.
+    A stale manifest fails as loudly as a missed family, which is right: both
+    mean the thing shipped is not the thing checked.
+
+    Returns failure strings; empty when coverage is exact.
+    """
+    bad = []
+    if not os.path.exists(manifest_path):
+        return ["no manifest at %s -- run build_assets.py before validating"
+                % os.path.relpath(manifest_path, ROOT)]
+    with open(manifest_path, encoding="utf-8") as fh:
+        man = json.load(fh)
+
+    listed = {a["asset_id"]: a for a in man.get("assets", [])}
+    exempt = set(EXEMPT_GROUPS)
+    expected = {aid for aid, a in listed.items()
+                if a.get("family_group") not in exempt}
+
+    missing = sorted(expected - set(discovered))
+    extra = sorted(set(discovered) - set(listed))
+    for aid in missing:
+        bad.append("coverage: %s is in the manifest and was NOT validated "
+                   "(family_group %r)" % (aid, listed[aid].get("family_group")))
+    for aid in extra:
+        bad.append("coverage: %s was validated and is NOT in the manifest -- "
+                   "the manifest is stale; re-run build_assets.py" % aid)
+
+    if man.get("counts", {}).get("assets") != len(listed):
+        bad.append("coverage: manifest counts.assets is %r but it lists %d "
+                   "assets" % (man.get("counts", {}).get("assets"), len(listed)))
+
+    # every manifest part must name an export that exists on disk
+    for aid, a in sorted(listed.items()):
+        if a.get("family_group") in exempt:
+            continue
+        for key, part in sorted(a.get("parts", {}).items()):
+            for fmt in ("glb", "fbx"):
+                rel = part.get(fmt)
+                if not rel:
+                    bad.append("coverage: %s/%s has no %s path in the manifest"
+                               % (aid, key, fmt.upper()))
+                elif not os.path.exists(os.path.join(ROOT, rel)):
+                    bad.append("coverage: %s/%s names %s but the file is not "
+                               "there" % (aid, key, rel))
+    return bad
+
+
 def check_kit(specs):
     """Structural checks over the whole kit rather than one module."""
     bad = []
@@ -344,12 +400,60 @@ def check_kit(specs):
 # --------------------------------------------------------------------------
 
 
+def self_test():
+    """Prove the coverage check bites, in the style of `gauntlet-check.py`.
+
+    A check nobody has watched fail is a check nobody should trust. This one
+    exists because a documentation line said 44 while the report said 55, and
+    the whole point of the fix is that such a gap can no longer be silent -- so
+    the gap is manufactured here, four ways, and the check has to catch all of
+    them.
+    """
+    import tempfile
+
+    def manifest(assets, count=None):
+        d = {"counts": {"assets": len(assets) if count is None else count},
+             "assets": [{"asset_id": a, "family_group": "towers", "parts": {}}
+                        for a in assets]}
+        fh = tempfile.NamedTemporaryFile("w", suffix=".json", delete=False)
+        json.dump(d, fh)
+        fh.close()
+        return fh.name
+
+    ok = manifest(["A", "B"])
+    assert not check_coverage(["A", "B"], ok), "an exact match must pass"
+
+    bad = check_coverage(["A"], manifest(["A", "B"]))
+    assert any("B is in the manifest and was NOT validated" in b for b in bad), \
+        "a family present in the manifest but not discovered must fail"
+
+    bad = check_coverage(["A", "B", "C"], manifest(["A", "B"]))
+    assert any("C was validated and is NOT in the manifest" in b for b in bad), \
+        "a stale manifest must fail"
+
+    bad = check_coverage(["A", "B"], manifest(["A", "B"], count=44))
+    assert any("counts.assets is 44" in b for b in bad), \
+        "a counts field disagreeing with the asset list must fail -- this is "\
+        "the exact shape of the 55-vs-44 report"
+
+    bad = check_coverage([], "/nonexistent/manifest.json")
+    assert any("no manifest" in b for b in bad), "a missing manifest must fail"
+
+    print("coverage self-test OK -- the check bites on all five cases")
+    return 0
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--json", default=os.path.join(ROOT, "validation",
                                                    "VALIDATION_REPORT.json"))
     ap.add_argument("--quiet", action="store_true")
+    ap.add_argument("--self-test", action="store_true",
+                    help="prove the coverage check bites, then exit")
     args = ap.parse_args()
+
+    if args.self_test:
+        return self_test()
 
     mats = world_materials()
     if mats is None:
@@ -392,9 +496,10 @@ def main():
                 print("  ok   %s" % spec.asset_id)
 
     kit_bad = check_kit(specs)
-    for line in kit_bad:
+    cov_bad = check_coverage([s.asset_id for s in specs])
+    for line in kit_bad + cov_bad:
         print("  FAIL (kit) %s" % line)
-    failures += kit_bad
+    failures += kit_bad + cov_bad
 
     report = {
         "checked_assets": checked,
@@ -403,6 +508,11 @@ def main():
                           else "%d MI_V2_* names parsed from materials_v2.py" % len(mats),
         "per_asset": per_asset,
         "kit_level": kit_bad,
+        "coverage": cov_bad,
+        "coverage_rule": ("every asset in the manifest is discovered by the "
+                          "validator and reported; exempt groups: %s"
+                          % (", ".join(EXEMPT_GROUPS) or "none")),
+        "families": list(group_names()),
         "mesh_hashes": hashes,
     }
     os.makedirs(os.path.dirname(args.json), exist_ok=True)

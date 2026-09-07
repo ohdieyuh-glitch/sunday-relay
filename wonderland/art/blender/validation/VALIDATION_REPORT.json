@@ -60,6 +60,17 @@
     "WL_Hero_Gate_Royal": []
   },
   "kit_level": [],
+  "coverage": [],
+  "coverage_rule": "every asset in the manifest is discovered by the validator and reported; exempt groups: none",
+  "families": [
+    "towers",
+    "thresholds",
+    "civic",
+    "walls",
+    "roofscape",
+    "details",
+    "hero"
+  ],
   "mesh_hashes": {
     "WL_Tower_Base_Battered": {
       "stone": "14ed466298741bd1af745b4a00103c235b5aeeb7315233bd154596d3a817e92b",
