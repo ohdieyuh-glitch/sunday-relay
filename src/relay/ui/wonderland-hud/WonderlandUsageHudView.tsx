@@ -14,6 +14,7 @@ import type {
   WonderlandUsageHud,
   WonderlandUsageMeter,
 } from '../../mission/wonderland/wonderland-usage-meter';
+import type { WonderlandUsageAuthorityStatus } from '../../mission/wonderland/wonderland-usage-authority';
 
 /**
  * THE WONDERLAND USAGE HUD — the top-left corner, rendered.
@@ -51,6 +52,13 @@ import type {
  *
  * SIMULATED SAYS SO, on the HUD's own face rather than in a corner of the page.
  * No usage authority exists yet, so this is what it will normally say.
+ *
+ * AND SO DOES STALE. The authority's reading travels beside the HUD rather than
+ * inside it — what to draw and how much to believe it are different questions —
+ * and the reading is rendered as WORDS, never as a colour or a dimmed stroke.
+ * The geometry is frozen canon; the honesty lines under it are where a new fact
+ * about the data belongs, and a viewer who has to learn that a faded meter means
+ * "old" has not been told anything.
  */
 
 /**
@@ -93,6 +101,19 @@ const MINIMUM_VISIBLE_ARC = 0.004;
  * window the viewport crops to.
  */
 const MASK_REGION = { x: -20, y: -20, width: 140, height: 140 } as const;
+
+/**
+ * The word for each reading. Uppercase and plain, because a viewer should not
+ * have to learn that a dimmed stroke means "old".
+ *
+ * `known` has no entry: a current reading needs no caveat, and printing one
+ * would train a reader to ignore the line that matters.
+ */
+const READING_LABEL: Readonly<Record<string, string>> = {
+  not_reported: 'NO USAGE AUTHORITY REPORTING',
+  stale: 'STALE · LAST REPORTED FIGURES',
+  unavailable: 'USAGE AUTHORITY UNAVAILABLE',
+};
 
 function ChannelStroke({
   channel,
@@ -205,10 +226,20 @@ function figureText(meter: WonderlandUsageMeter): string {
 
 export function WonderlandUsageHudView({
   hud,
+  status,
   reducedMotion = false,
   instanceId,
 }: {
   readonly hud: WonderlandUsageHud;
+  /**
+   * How much to believe the figures, from the usage authority.
+   *
+   * Optional, and its absence is not "everything is fine": a HUD rendered with
+   * no status says only what the meters themselves say, which for an
+   * unconfigured world is that nothing has been reported. Passing a status adds
+   * the reading — `stale`, `unavailable` — that the meters alone cannot express.
+   */
+  readonly status?: WonderlandUsageAuthorityStatus;
   readonly reducedMotion?: boolean;
   /**
    * DISTINGUISHES THIS HUD'S SVG IDS FROM ANOTHER'S, and a page showing two
@@ -285,9 +316,20 @@ export function WonderlandUsageHudView({
         ))}
       </dl>
 
-      {simulated && <p className="wh-provenance">SIMULATED · NO USAGE AUTHORITY REPORTING</p>}
-      {hud.compoundAgent.unavailableReason !== null && (
-        <p className="wh-reason">{hud.compoundAgent.unavailableReason}</p>
+      {/*
+        THE READING OUTRANKS THE PROVENANCE LINE. "Simulated" and "stale" are
+        both true of a stale live figure, and showing both would leave a reader
+        deciding which one to act on. The authority's own word wins.
+      */}
+      {status !== undefined && status.reading !== 'known' ? (
+        <p className="wh-provenance" data-reading={status.reading}>
+          {READING_LABEL[status.reading]}
+        </p>
+      ) : (
+        simulated && <p className="wh-provenance">SIMULATED · NO USAGE AUTHORITY REPORTING</p>
+      )}
+      {(status?.reason ?? hud.compoundAgent.unavailableReason) !== null && (
+        <p className="wh-reason">{status?.reason ?? hud.compoundAgent.unavailableReason}</p>
       )}
     </div>
   );

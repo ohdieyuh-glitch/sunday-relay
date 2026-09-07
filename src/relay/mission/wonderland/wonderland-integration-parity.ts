@@ -33,6 +33,11 @@ import {
   WONDERLAND_USAGE_SWOOSH_FIELDS,
   WONDERLAND_USAGE_VIEWPORT_FIELDS,
 } from './wonderland-usage-meter';
+import {
+  WONDERLAND_USAGE_AUTHORITY_STATUS_FIELDS,
+  WONDERLAND_USAGE_READINGS,
+} from './wonderland-usage-authority';
+import type { WonderlandUsageAuthorityStatus } from './wonderland-usage-authority';
 import type {
   WonderlandSwooshSegment,
   WonderlandUsageChannelStyle,
@@ -94,6 +99,13 @@ const _JuliusEmbodimentNullableIsExact: SameKeys<
   NullableKeysOf<JuliusEmbodiment>
 > = true;
 void _JuliusEmbodimentNullableIsExact;
+
+const AUTHORITY_STATUS_NULLABLE = ['reason', 'ageSeconds', 'authorityId'] as const;
+const _AuthorityStatusNullableIsExact: SameKeys<
+  (typeof AUTHORITY_STATUS_NULLABLE)[number],
+  NullableKeysOf<WonderlandUsageAuthorityStatus>
+> = true;
+void _AuthorityStatusNullableIsExact;
 
 const USAGE_VIEWPORT_NULLABLE = [] as const;
 const _UsageViewportNullableIsExact: SameKeys<
@@ -174,6 +186,11 @@ export const WONDERLAND_INTEGRATION_CPP_STRUCT_PARITY: readonly {
     fields: WONDERLAND_USAGE_METER_FIELDS,
   },
   {
+    cppStruct: 'FWonderlandUsageAuthorityStatus',
+    tsInterface: 'WonderlandUsageAuthorityStatus',
+    fields: WONDERLAND_USAGE_AUTHORITY_STATUS_FIELDS,
+  },
+  {
     cppStruct: 'FWonderlandUsageHud',
     tsInterface: 'WonderlandUsageHud',
     fields: WONDERLAND_USAGE_HUD_FIELDS,
@@ -230,6 +247,13 @@ export const WONDERLAND_INTEGRATION_CPP_ENUM_PARITY: readonly {
     zeroMember: 'top_left',
   },
   {
+    cppEnum: 'EWonderlandUsageReading',
+    source: 'WONDERLAND_USAGE_READINGS',
+    members: WONDERLAND_USAGE_READINGS,
+    nullable: false,
+    zeroMember: 'not_reported',
+  },
+  {
     cppEnum: 'EWonderlandUsageChannel',
     source: 'WONDERLAND_USAGE_CHANNELS',
     members: WONDERLAND_USAGE_CHANNELS,
@@ -251,6 +275,7 @@ export const WONDERLAND_INTEGRATION_NULLABLE_FIELDS: Readonly<
 > = Object.freeze({
   FWonderlandJuliusEmbodiment: JULIUS_EMBODIMENT_NULLABLE,
   FWonderlandUsageChannelStyle: CHANNEL_STYLE_NULLABLE,
+  FWonderlandUsageAuthorityStatus: AUTHORITY_STATUS_NULLABLE,
   FWonderlandUsageViewport: USAGE_VIEWPORT_NULLABLE,
   FWonderlandSwooshSegment: SWOOSH_SEGMENT_NULLABLE,
   FWonderlandUsageSwoosh: USAGE_SWOOSH_NULLABLE,

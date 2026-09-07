@@ -15,6 +15,11 @@ import type {
   WonderlandUsageChannel,
   WonderlandUsageMeter,
 } from '../../mission/wonderland/wonderland-usage-meter';
+import {
+  applyWonderlandUsageReport,
+  emptyWonderlandUsageAuthority,
+  projectWonderlandUsageFromAuthority,
+} from '../../mission/wonderland/wonderland-usage-authority';
 import { WonderlandUsageHudView } from './WonderlandUsageHudView';
 
 /**
@@ -279,5 +284,100 @@ describe('the Wonderland usage HUD', () => {
     expect(html.indexOf('data-channel="compound_agent"')).toBeLessThan(
       html.indexOf('data-channel="single_agent"'),
     );
+  });
+});
+
+/* ------------------------------------------------- the authority reading */
+
+describe('the HUD says how much to believe its own figures', () => {
+  const AUTHORITY_AT = '2026-09-07T10:00:00.000Z';
+  const later = (seconds: number): string =>
+    new Date(Date.parse(AUTHORITY_AT) + seconds * 1000).toISOString();
+
+  const bound = (readAtIso: string, unavailableReason: string | null = null) => {
+    const state = applyWonderlandUsageReport(
+      emptyWonderlandUsageAuthority({ projectId: 'p1' }),
+      {
+        schemaVersion: 'relay-wonderland-usage-report.v1',
+        projectId: 'p1',
+        revision: 1,
+        reportedAtIso: AUTHORITY_AT,
+        authorityId: 'a1',
+        unavailableReason,
+        compoundAgent: {
+          current: 300, maximum: 480, reference: 480,
+          tierId: 't3', tierLabel: 'TIER III', unitLabel: 'WONDER',
+        },
+        singleAgent: {
+          current: 40, maximum: 120, reference: 120,
+          tierId: 't1', tierLabel: 'TIER I', unitLabel: 'WONDER',
+        },
+      },
+    );
+    const projection = projectWonderlandUsageFromAuthority(state, readAtIso);
+    return renderToStaticMarkup(
+      <WonderlandUsageHudView
+        hud={projection.hud}
+        status={projection.status}
+        reducedMotion
+        instanceId="authority"
+      />,
+    );
+  };
+
+  it('says nothing extra when the figures are current', () => {
+    const html = bound(later(10));
+    expect(html).not.toContain('STALE');
+    expect(html).not.toContain('SIMULATED');
+    expect(html).toContain('300 / 480 WONDER');
+  });
+
+  it('labels stale figures as stale, and still shows them', () => {
+    // A stale figure is information. Hiding it leaves a founder with nothing.
+    const html = bound(later(600));
+    expect(html).toContain('STALE');
+    expect(html).toContain('300 / 480 WONDER');
+    expect(html).toContain('may have moved');
+  });
+
+  it('tells a refusing authority apart from a silent one', () => {
+    const refusing = bound(later(10), 'The metering service is not reachable.');
+    expect(refusing).toContain('USAGE AUTHORITY UNAVAILABLE');
+    expect(refusing).toContain('not reachable');
+    expect(refusing).toContain('UNKNOWN');
+
+    const silent = renderToStaticMarkup(
+      <WonderlandUsageHudView
+        hud={
+          projectWonderlandUsageFromAuthority(
+            emptyWonderlandUsageAuthority({ projectId: 'p1' }),
+            AUTHORITY_AT,
+          ).hud
+        }
+        status={
+          projectWonderlandUsageFromAuthority(
+            emptyWonderlandUsageAuthority({ projectId: 'p1' }),
+            AUTHORITY_AT,
+          ).status
+        }
+        reducedMotion
+        instanceId="silent"
+      />,
+    );
+    expect(silent).toContain('NO USAGE AUTHORITY REPORTING');
+    expect(silent).not.toContain('UNAVAILABLE');
+  });
+
+  it('lets the reading outrank the provenance line rather than showing both', () => {
+    // "Simulated" and "stale" are both true of a stale live figure, and showing
+    // both leaves a reader deciding which to act on.
+    const html = bound(later(600));
+    expect(html).not.toContain('SIMULATED · NO USAGE AUTHORITY REPORTING');
+  });
+
+  it('renders the reading as WORDS, never as a colour alone', () => {
+    const html = bound(later(600));
+    // A viewer who has to learn that a faded meter means "old" has not been told.
+    expect(/STALE[^<]*/.test(html)).toBe(true);
   });
 });

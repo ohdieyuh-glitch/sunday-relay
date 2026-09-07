@@ -337,3 +337,69 @@ struct FWonderlandUsageHud
 	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Usage")
 	FString ObservedAtIso;
 };
+
+/* ------------------------------------------------------- the authority */
+
+// Mirrors WONDERLAND_USAGE_READINGS. How much to believe the figures.
+//
+// `NotReported` sits at ordinal 0 because the struct zero-fills: a
+// default-constructed reading must mean "nobody has said", never "known". The
+// four are genuinely four — silence, a refusal, an old answer and a current one
+// are different facts, and a boolean would collapse the pairs that matter most.
+UENUM(BlueprintType)
+enum class EWonderlandUsageReading : uint8
+{
+	// No authority has ever spoken. Not zero. Not empty.
+	NotReported,
+	// Reported recently enough to still mean it.
+	Known,
+	// Reported, and long enough ago that the figures may have moved. The
+	// numbers ARE still shown — a stale figure is information — and labelled.
+	Stale,
+	// An authority spoke and said it cannot supply figures. A different fact
+	// from silence: the system is there and refusing.
+	Unavailable
+};
+
+// Mirrors WonderlandUsageAuthorityStatus. How much to believe the HUD.
+//
+// Kept apart from FWonderlandUsageHud deliberately: that is what to DRAW, and
+// this is how much to believe it. A renderer made to dig the second out of the
+// first would eventually stop bothering.
+USTRUCT(BlueprintType)
+struct FWonderlandUsageAuthorityStatus
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Usage")
+	EWonderlandUsageReading Reading = EWonderlandUsageReading::NotReported;
+
+	// A sentence whenever the reading is not Known. Never a bare enum.
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Usage")
+	FWonderlandText Reason;
+
+	// Age of the held report at the observation instant, when computable.
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Usage")
+	FWonderlandNumber AgeSeconds;
+
+	// The revision the figures came from. 0 when none have.
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Usage")
+	int64 Revision = 0;
+
+	// Who reported them. Carried for traceability, never interpreted.
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Usage")
+	FWonderlandText AuthorityId;
+
+	// Reports refused because they named another project. Counted separately
+	// from the other two, because a mis-routed fan-out, a schema drift and
+	// ordinary replay traffic are three problems and one counter would present
+	// them as one.
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Usage")
+	int64 ForeignProjectReportsRejected = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Usage")
+	int64 StaleRevisionsRejected = 0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Usage")
+	int64 MalformedReportsRejected = 0;
+};
