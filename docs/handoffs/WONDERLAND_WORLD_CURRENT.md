@@ -10,7 +10,7 @@ session.
 | CHECKOUT | `/home/thomasajvt13/dev/sunday-relay` (git worktree; the primary checkout is `sunday-relay-main`, detached at `b2dc9f2`, and is the Julius/platform stream) |
 | BRANCH | `relay/wonderland-v2` |
 | SHA AT START | `d9245bf` |
-| SHA AT END | `e8d44e5` (pushed) |
+| SHA AT END | `09b5349` (pushed). A fresh session should `git log --oneline -6` — 993385e, e3952ae, 9655bad, 200aeff, 9086b78, 09b5349 are PASS 30–33. |
 | LOCK | `wonderland/.gauntlet-lock` = `writer=claude step=0 since=2026-08-25`. Unchanged. `gauntlet-check.py` clean on every commit. |
 | MAP | `/Game/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2` (classic container) |
 | RENDERED THIS SESSION | **Nothing.** No engine, no Studio, no GPU frame. Every number below is offline, measured off `layout_v2.ALL` and the built meshkit geometry. |
