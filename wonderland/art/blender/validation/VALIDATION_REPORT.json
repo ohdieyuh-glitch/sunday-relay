@@ -1,0 +1,261 @@
+{
+  "checked_assets": 44,
+  "failures": 0,
+  "material_check": "59 MI_V2_* names parsed from materials_v2.py",
+  "per_asset": {
+    "WL_Tower_Base_Battered": [],
+    "WL_Tower_Base_Arcaded": [],
+    "WL_Tower_Base_Buttressed": [],
+    "WL_Tower_Base_Terraced": [],
+    "WL_Tower_Mid_Ashlar": [],
+    "WL_Tower_Mid_Arcade": [],
+    "WL_Tower_Mid_Ribbed": [],
+    "WL_Tower_Mid_Balconied": [],
+    "WL_Tower_Mid_Lantern": [],
+    "WL_Tower_Mid_Fluted": [],
+    "WL_Tower_Mid_Oriel": [],
+    "WL_Tower_Mid_Machicolated": [],
+    "WL_Tower_Crown_Cone": [],
+    "WL_Tower_Crown_Tiered": [],
+    "WL_Tower_Crown_Onion": [],
+    "WL_Tower_Crown_Belvedere": [],
+    "WL_Tower_Crown_Cap": [],
+    "WL_Tower_Crown_Pavilion": [],
+    "WL_Tower_Crown_Ribbed": [],
+    "WL_Spire_Needle": [],
+    "WL_Spire_Barbed": [],
+    "WL_Spire_Twisted": [],
+    "WL_Spire_Ringed": [],
+    "WL_Spire_Cluster": [],
+    "WL_Arch_Ceremonial": [],
+    "WL_Arch_Garden_Rose": [],
+    "WL_Arch_Trefoil_Screen": [],
+    "WL_Arch_Twin_Tiered": [],
+    "WL_Gatehouse_Twin": [],
+    "WL_Gatehouse_Screen": [],
+    "WL_Colonnade_Straight": [],
+    "WL_Colonnade_Arcade": [],
+    "WL_Colonnade_Curved": [],
+    "WL_Bridge_Arc": [],
+    "WL_Bridge_Sky": [],
+    "WL_Bridge_Flying": [],
+    "WL_Detail_Balustrade_Run": [],
+    "WL_Detail_Newel_Urn": [],
+    "WL_Detail_Screen_Filigree": [],
+    "WL_Detail_Balcony_Bracket": [],
+    "WL_Detail_Pinnacle_Grand": [],
+    "WL_Detail_Oriel_Bay": [],
+    "WL_Hero_GreatSpire": [],
+    "WL_Hero_Gate_Royal": []
+  },
+  "kit_level": [],
+  "mesh_hashes": {
+    "WL_Tower_Base_Battered": {
+      "stone": "14ed466298741bd1af745b4a00103c235b5aeeb7315233bd154596d3a817e92b",
+      "stone_dark": "dff390d80dcd4c6596ef1a1269bd4dabcc8fc31a5bbf12fa1e22262abc74094c"
+    },
+    "WL_Tower_Base_Arcaded": {
+      "stone": "d4aa932322be65dc63fd40b8fa5797b20667baf5b499b1a50dc9608c0e750072",
+      "stone_dark": "72743f2bf0afc7e92b07bfacdb52d381926cbb2df23f029792a48af1dc439a88"
+    },
+    "WL_Tower_Base_Buttressed": {
+      "stone": "9dfc47b5eed789a628445a7d2244c90568d38e4fce5388c6e22b505daf5f6437",
+      "stone_dark": "e1029f2ead94a77210bcf139ca2b0ff0ffd61c1acb83067f2712298bd8477753"
+    },
+    "WL_Tower_Base_Terraced": {
+      "stone": "6cc12a49f51c38200680662b8606c01673914b51f24addf814d27cec0fafd002"
+    },
+    "WL_Tower_Mid_Ashlar": {
+      "stone": "bc613cad9ac45910752a9297407ee27fa94e0735e578a8af4cc0ea626155a00b"
+    },
+    "WL_Tower_Mid_Arcade": {
+      "glass": "ecd9021f668baa2fc3d1988f57199ed98b254997ee898efb1608bfa5593ea5c0",
+      "stone": "9f15fa2c490b9832ea8bac228057a107fb13c23ba07c9bbec8e14c4def0f3413"
+    },
+    "WL_Tower_Mid_Ribbed": {
+      "stone": "489889d616db14c644b9294d6b7cf0717bb3eb596f4f1f2a93e2d4214350f1f4"
+    },
+    "WL_Tower_Mid_Balconied": {
+      "glass": "81a4f51c45b4dfb34086d54ae49a9faf383b9d57f82edb7e454359882662df76",
+      "stone": "b290daaaf0c065e46292f6ab21b9ff4c0db0f7a446fe97b43eae3879b9d9ae3a"
+    },
+    "WL_Tower_Mid_Lantern": {
+      "glass": "4b06846b565df528505ff0cbc203a84dadf3685a1d11063b54c9f8abc57edab6",
+      "stone": "5f4795069b9b9c3a847bf89a3877f6563118871c8a6890031efc4a035a428863"
+    },
+    "WL_Tower_Mid_Fluted": {
+      "stone": "f5e726a7d6828e1b907debf13700f140aed63b694e0547339ea21abd92b020c0"
+    },
+    "WL_Tower_Mid_Oriel": {
+      "glass": "80fa8a221156099f8480196f965e525aadfff2873dbb51bab09339f76df2359f",
+      "stone": "a4ebce2f461928e6a88b77083f60b345db5b8fff29e2e38ca33253672f3baab2"
+    },
+    "WL_Tower_Mid_Machicolated": {
+      "gold": "2c753d95bfe9d8178bd2d4a6f9a79431365b0ec8e6df7b5bb2327dd115c74ca6",
+      "roof": "b7bfdb3e9430538df682cd805a1a53368bf8b899fe0f31aa7789f3634d35ac1c",
+      "stone": "7f713214979549fffa60992a5ccb15032605be23596edc172423506a9e28be98"
+    },
+    "WL_Tower_Crown_Cone": {
+      "gold": "162a01fd5b644e78334399ed4691f4c1e24ea1624a13f7be16a52251f7a49465",
+      "roof": "df00c35ca24651fdef9dd0c87f14d29d1160991b3a61e88b1f1175e180b0cc60",
+      "stone": "f15253d6766a8447165b956e527098e91b54eb2b1ad1dc4d28b6a5ffcd60ce11"
+    },
+    "WL_Tower_Crown_Tiered": {
+      "gold": "4067bc36fcc30b760d74d155604d9d3dab218a03a3a946a4d3948bc2f72ca4ef",
+      "roof_alt": "7b8366a5308aea23fdcee9d8f1285fde503323a5b362f30804bb14dd1ff1b3dd",
+      "stone": "7e7c2fabc470287f5af5635f6db8f2e329fa36c1ef00ca23396d675e63344161"
+    },
+    "WL_Tower_Crown_Onion": {
+      "glass": "6b6d8450630424dbf0132b7e6397b53c39b6d572d5d03917aa4f1a245ccccafd",
+      "gold": "3eef8f3740198119477bff30bd6df2748673e9e00411d9ad690470c3c4a6e55e",
+      "roof": "c6504917d5d1d3bf38bae7e9ae32b8d6409b7d268b83898efef5213938671362",
+      "stone": "4c06cf4892ff80dbc26b070f868f10ea0e453e9854e46d294b02537eeaff590f"
+    },
+    "WL_Tower_Crown_Belvedere": {
+      "gold": "b72a0796c3cf28a443618497bd60a7cf7019d0bbc23040deabd48e231bdc0978",
+      "roof": "8111280fd671b8d1309142d4b30c3a9b271f47a0354d80481d89e910d7c2c5a7",
+      "stone": "5a24d3a5e55f7dea7635bda173cd451dba88ce79689c64fcd1d6c3e30aa1fc31"
+    },
+    "WL_Tower_Crown_Cap": {
+      "gold": "1a45bfb007d098167aede1ad38f6073de908bb1fe36368f3b1523e6cef3f964f",
+      "roof": "f4f44f5b33a360880b3ed6475f5217f5ab400cc756fd253d97ce46d4555ae438",
+      "stone": "f8536c7e33ffb2759cc6e31d26718da3a6aa59565e593dea3d26fd3b38e53b91"
+    },
+    "WL_Tower_Crown_Pavilion": {
+      "glass": "ad09254dfe46a1ed9a8b173e7e8abe9a6bb124047f039d62e129514484b20ff0",
+      "gold": "240e9c0113d59364725b9feba671714bc6294cc4908a0ae95c96835a809fdacb",
+      "roof": "e29eab3bd648512dd8cbea202795f7daaa39b9d44d3a343481978d1f1325cd49",
+      "stone": "fd81653c644fdb7fc1457a6404554f6893d2444ca4b085881bf124c5b61e64c9"
+    },
+    "WL_Tower_Crown_Ribbed": {
+      "gold": "6e8c179cef7d983fb3eaea191ad6fc52450c9dfea28cf0de782a3413b251390f",
+      "roof_alt": "6dec1375df0cec8134d24cfe79149389338c640f9873bfdf6d02d5089aa4235f",
+      "stone": "816f8ce4a7699dd38c5fdc565793be259bb27d7af9666e2d4a77d18e641fa6ee"
+    },
+    "WL_Spire_Needle": {
+      "gold": "d703f830b2bdfbc9204d80e1c807f6cd8fc1991b511975370dc960ea15e01cee",
+      "roof": "db407d1b6fd2724ebff492d2a54eadd62b9b35435d39f097f4824f74b647aa73",
+      "stone": "c411b7980985597242e9a68c40826cead8049e543f88c29e66564a9570c9e924"
+    },
+    "WL_Spire_Barbed": {
+      "gold": "f451220ea38bebae6a38243007775772bd423db3f8eaa08f22a0f5a460b73f1a",
+      "roof": "30d040515fd2e957d711b8dc21eff6376f4a9e50ca3c78d0f4dad1117cebc5f2",
+      "stone": "d781c0d267cf8ea609031c349682600a801e28c6d40be9546183138ee805533d"
+    },
+    "WL_Spire_Twisted": {
+      "gold": "fec7d710bd2bc14df278f89e1c2b6138665389845b5ea8f76f983ed1aba6db0b",
+      "roof": "c3cc0d0d4cf964c41da9dbea7eb033969f843155811d4fd06c831cc19ebaa403",
+      "stone": "1933402d3e151a6cedf383ab94139b31078d3f912080e8aa3c1d0fdc522c6046"
+    },
+    "WL_Spire_Ringed": {
+      "gold": "f69616815bd6f35537ece93d7ea3ef6913229714ea3e8abfafdaaa6e0cdf98a0",
+      "roof_alt": "7b666d6e889ca680691ffad6b2176d5d4699c4545bea7404f5387d6547559ea3",
+      "stone": "b4dd9c7a4bdf7f9254b2c33eb1c5330f2b4f155a781f3d01e5fe62709f75c754"
+    },
+    "WL_Spire_Cluster": {
+      "gold": "f6e3ec3c42459044472df2b188fb9be0e689892611e87c6cfff115df887e823c",
+      "roof": "88ac37075f031b2b5cc6c029d8ed36343754b203fa5c5513627a39c918ff5ec1",
+      "stone": "f2d7404fdebe409e89537a75290f612a194be12e1c251ccba5c6fb73f8579352"
+    },
+    "WL_Arch_Ceremonial": {
+      "gold": "77c7197dc459abacdd9fd7ece0214c44508f0bd7d96027c957083bf584f24aa2",
+      "stone": "d1ead338b2c9fa115bc0617fa734fe04ed533274f5ce95fe279c75c2363cbcdf",
+      "veg_anchor": "6bb6fbc07b3d9dce54b61b53dc8f113f9039d8f9b24108b78752c86846932a58"
+    },
+    "WL_Arch_Garden_Rose": {
+      "gold": "fd5ec9a03529bcad031bbb3c1f7a2a3d0e83c593830e10933bb65fd167112477",
+      "stone": "797db3e4372b4a6fa59b0fe69ea35c91543ed0a10acc6e3f18670f7d48dd0283",
+      "veg_anchor": "23a66e8a011da969613f584412a2eff49c72df8aa0d74c68d16ad47f623b1bb9"
+    },
+    "WL_Arch_Trefoil_Screen": {
+      "gold": "56b7e00f68e6df876f8473c1f16aa2072867d93283f91022ba03c94f14696193",
+      "stone": "df6994c2f9d16c5cf701ce8f3e90e5a151b0e6e8cb5bae14c0d793fa9590c081"
+    },
+    "WL_Arch_Twin_Tiered": {
+      "gold": "6c9b55180da7413cd2b63a2ae7eefde0eaa16c4d1491b1299777db5d57cef1bb",
+      "stone": "b7b4212ec8047971f5561a73ecedf13e4d94e74d513bf46af2352ec654bcd7f0",
+      "stone_dark": "6ee2aba92897dfa03a0a3042b1c03ea3e3f8c01a438658c55e7d935a9a53b95c"
+    },
+    "WL_Gatehouse_Twin": {
+      "glass": "fe6ddca73441ca3bfefbaba7fe14008455e869ad6a0352f5add347e1e42798ab",
+      "gold": "97b2ac86b7da3c7911fb6570ce497ccb5afd5affa34000012219b71e1d82f3bd",
+      "roof": "7e7d5ff306ac42cbdaef445176e79b63b72a720a95e4f289cf9e788ca8081146",
+      "stone": "ca90419bc82440980d83c5fa1a1b074263ad35e4039d7c8f205f2eae213b1a05",
+      "stone_dark": "e9be5d4b07a105b9f05011f09d4884293356167e9c25008e59657479b2fc3d23"
+    },
+    "WL_Gatehouse_Screen": {
+      "gold": "be385dfe6545318a3890536675ce35d9f5fe0712274028c1b10e3e0c00adfe14",
+      "gold_aged": "b4e83aa1da28f31407e8af1e43d72e23ca2fb360c2e7688566e530f9263bf3f7",
+      "stone": "68490e4fc4c8e8663e3b84cad809379042c52320d2514e45fb88bc67960e86d6",
+      "veg_anchor": "f3a16f3b55499b28afb768f366d50809881626a49cc0bf58a03a0b92f8cf0da7"
+    },
+    "WL_Colonnade_Straight": {
+      "stone": "12bd95c2b18a0d8ce470ca072a6871aea05f3ecae83cd162a5c86926358555e8"
+    },
+    "WL_Colonnade_Arcade": {
+      "stone": "1aa15299cc3194876d7404e8157ac7ec74d64c4dd1492de5f65e51307d279216",
+      "stone_dark": "42466fea0b84e2ced1d50f67ceeaeb38600911ed5285b267a20986b925fe57ed"
+    },
+    "WL_Colonnade_Curved": {
+      "stone": "a0819689a7ac2831f3b59fa6dacb4218dda4a775801c9236f12da13c16bac66d"
+    },
+    "WL_Bridge_Arc": {
+      "stone": "37ba58f4933524f507efb517807141d6a4e338079e750589c9a4806e9e88b892",
+      "stone_dark": "2f0a343f1cc6ec0100254abd933082d7400af914c8d41aa3618d2dc7aeff116c"
+    },
+    "WL_Bridge_Sky": {
+      "glass": "01fd0b43ca1d26902af368f5c754f3817324ac9df690899e396f1246c29a3df8",
+      "gold": "9cefff73b2653416435a48a845948b97f9c7292d108ac40bee850c65b2a29797",
+      "roof": "c6884aa029339b60ea8f54c3b788f13631d00dcf723b5e6cfea34e1e577418b1",
+      "stone": "22740982b6ba9eef8c24871dbf3b310cc2a2e4352b75e533adb0983170b8f34d"
+    },
+    "WL_Bridge_Flying": {
+      "gold": "c354c994b436bc6df32143b1261c1e3eeb974ed5ca35a1b3c40154e60fbb880b",
+      "stone": "d351a929cde47ccc32f37be505cae342d496d0ec6c3b4f1ed8638997fec906f4"
+    },
+    "WL_Detail_Balustrade_Run": {
+      "stone": "489bafa5aa4aa4a08c830e95b2fe68627baf72e0502e6167ef851a42d06dc7c1"
+    },
+    "WL_Detail_Newel_Urn": {
+      "gold": "af3ed122f46fab0279f5ee921165cceaffa8fa6cb51afdcbc7fe175be5166fe6",
+      "stone": "dc4c5f3693257d9af87efa82acafe12c5c6637a9d61081dbb0fe67810789f290"
+    },
+    "WL_Detail_Screen_Filigree": {
+      "gold": "25e32b82894bf94779c6e1b1e50deadb91e6a1938b76235b7d95802233f6934e",
+      "gold_aged": "554d9328eb6af37db2a5d97d7b98955c77aef5ddd43f991783c8179c0fbe1764",
+      "stone": "44b968c7923c12db773407795402f21718170dca193b76c9d8803495b163cfce",
+      "veg_anchor": "f65e885d5911a1ef988ba613182eba77895d5b909e59a1d76c10c1ba01134035"
+    },
+    "WL_Detail_Balcony_Bracket": {
+      "stone": "ffde676aa0362faadde3ea9f73eb46ab456252bb4013a9a873c214ff174ad8e6"
+    },
+    "WL_Detail_Pinnacle_Grand": {
+      "gold": "d55883632393bf0234dc497f62f0a4c004d3dcaeb92ffbc435fc9be9d3217ec4",
+      "roof": "d49cc26d4c9334e5ef3179f4f1854a5430096f84c57fe137a44ad78127327937",
+      "stone": "fcc6235abf1b223dbf68bb138be80c502138e4bc69dfbcbacf730f8779e2c1e9"
+    },
+    "WL_Detail_Oriel_Bay": {
+      "glass": "259c0652d0e9597d95d3d9b3a19412c02921b0627ff19cdf2ac276aa3915393f",
+      "gold": "d41dcd308603fb3f47c6c139637bb1520bf65f7a0dafaab2259d48f3c24c1a55",
+      "roof_alt": "e9f33497002acd44c3cc68781c839f1471dd23748d07a829039bd83da932dd77",
+      "stone": "56466b7c9447acab30e25f596619c682ecf623ef8149db2a26be26f0b3cadc40"
+    },
+    "WL_Hero_GreatSpire": {
+      "glass": "bcd03302e94403ce72efc9428a539e3c54e0134cf4d737861eaec08b56c60a04",
+      "glass_cool": "86961caa06226cebe2303ce7e36d8ed25640b25fbb278f6dcd1efcb221585f6a",
+      "gold": "42820da77241367849c2b4dd599477a9884defe91e428e782dccd629273d4ebf",
+      "gold_aged": "081692bf089083157ca88f05b7941f1553801bf467650c3e5201c50e28131b7e",
+      "roof": "103e7544b91b8231ee4c1101fd6399cd0e89a8083b6439be4d883d7f5b3b5824",
+      "stone": "1485ffeb0c90ba5eb92f08fcc7790ecb09f00f0b347f93a3161ab277dbc5b4cb",
+      "stone_dark": "e59329963478b3d5f7d068c0d275f507a334b385d5caea2fa7eb9e371305dfea"
+    },
+    "WL_Hero_Gate_Royal": {
+      "glass": "f4b4adf897759453a83e4f4d025ddb0820f2c35e5b4b444e6d96fa91595a0ce4",
+      "gold": "19fbdf7647173e522da4d3098c29d4a9fdfa2402666fd34a8238f5e91aad62b2",
+      "roof": "a06bfd190c12bfe7cc36dbd3e812e4ff165a0ff0288ed21a058c7bfbe57f2814",
+      "stone": "1db36fa09c6ce290acfcf214485651244cbf2e1e5edc3e73b3775a09f5ebffe9",
+      "stone_dark": "3fd251122d176ad0c97e9cec9ea13ac06213a66ad8e37f14950cc09010f14674",
+      "veg_anchor": "d171cba98f4005c560389bc1c689daf7b61ca45a62a4539e13332f912d438b1a"
+    }
+  }
+}
