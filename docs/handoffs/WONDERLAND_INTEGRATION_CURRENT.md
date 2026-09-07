@@ -401,6 +401,55 @@ gone from it entirely.
 
 ---
 
+### 15–23. The integration spine (session of 2026-09-07, second half)
+
+Nine layers, built after a READ-ONLY audit of the Julius kernel. See
+`docs/handoffs/WONDERLAND_UNREAL_HANDOFF.md` for the receiving side's copy.
+
+| module | what it is |
+|---|---|
+| `wonderland-envelope.ts` | the only shape that crosses into a world |
+| `wonderland-ordering.ts` | which fact is newer, on two axes |
+| `wonderland-rehydration.ts` | joining a mission already under way |
+| `wonderland-ledger-adapter.ts` | reading the ledger as it is really written |
+| `wonderland-visual-transitions.ts` | legality derived from the kernel's guard |
+| `wonderland-usage-accounting.ts` | which meter a unit of work belongs to |
+| `wonderland-diagnostics.ts` | what an operator may safely be shown |
+| `wonderland-session.ts` | the fold that composes all of it |
+| `WonderlandEnvelope.h/.cpp` | the Unreal mirror, held by parity |
+
+**Three findings from the audit changed the design, and two were defects in
+this stream's own earlier work.**
+
+1. **`sequence` is per RUN, not per project.** `stream_id` is the run id on
+   every Julius write path, so two runs in one project both count 1, 2, 3.
+   `JuliusEmbodiment` documented its cursor as "highest applied PROJECT
+   sequence", which is not imprecise but WRONG: run B's third event would be
+   refused as stale because run A had already reached three. `WonderlandCursor`
+   is per run.
+
+2. **`run.created` / `run.transitioned` are persisted in a different payload
+   shape with NO `facts` key.** `juliusTransitionState` reads `facts.to`, so
+   against the real database the reading degraded from `julius_run_state`
+   precision to `event_type` precision — for exactly the two event types that
+   carry the run's state machine. The dev fixture carries `facts.to` and
+   therefore passed. Green in the suite, degraded in production: the worst shape
+   a defect can have. `wonderland-ledger-adapter.ts` handles both shapes and its
+   tests are built from the real writers' payloads, not the fixture.
+
+3. **`JuliusRuntimeApi.inspectRun` + `timeline(sinceSequence)`** is already the
+   snapshot-plus-tail pair rehydration needs, and `julius-state-path.ts` exposes
+   the kernel's own legality guard for probing. Both are now used rather than
+   reimplemented.
+
+**Two things the composition taught me by failing tests I wrote from
+assumption:** a mission does not go `prompt_architect → coding` (planning hands
+off first: PLANNING → READY → EXECUTING), and `settle` cannot fire on a
+kernel-path completion, because `complete`'s only kernel predecessor is
+VERIFYING and both draw `stand_still`.
+
+---
+
 ## What is REAL and what is not
 
 Read this table before saying anything about this stream out loud. The
@@ -412,6 +461,10 @@ distinction between the middle two rows is the one that gets misreported.
 | Julius kernel state → visual state | **real**, total over `JULIUS_MISSION_STATES` |
 | `JuliusOperationalEvent` → `WonderlandEvent` normalizer | **real**, pure, tested — **and nothing calls it yet** |
 | the event reducer, the ending guards, the reconnect fold | **real**, tested against events constructed in the test files |
+| the envelope, ordering, rehydration and the composed session fold | **real**, tested; ordering verified by mutation on both axes |
+| visual-transition legality | **real**, DERIVED from the kernel's own guard rather than declared |
+| the ledger adapter | **real**, and tested against the persistence layer's actual payload shapes |
+| the usage accounting boundary | **real** contract; no authority attributes spend into it yet |
 | per-project isolation across many worlds | **real**, proven by referential identity, mutation-verified |
 | the entry contract (admission vs presentation) | **real**, and its honest answer today is `ADMITTED · NOTHING CAN SHOW IT` |
 | HUD geometry, palette, capacity model | **real** and shared with Unreal by bidirectional parity |
@@ -485,10 +538,12 @@ UNKNOWN). What remains is genuinely blocked on other sessions or on assets.
       produce sequences 1, 2, 3…, so a project-scoped cursor sees duplicates and
       interleaving. **A cursor cannot be correct against this.**
 
-   Our reducer is SAFE against (a) — `Number.isSafeInteger(undefined)` is false,
-   so malformed rows are counted stale and dropped rather than rendered. It is
-   not safe against (b), and neither is anything else. **Raise both with the
-   Julius session.**
+   **Both are now DEFENDED on the consuming side, and neither is fixed.**
+   `wonderland-ledger-adapter.ts` refuses non-Julius rows by default (defending
+   against (a) reaching a consumer at all) and reads both persisted payload
+   shapes, and `WonderlandCursor` is scoped per run (defending against (b)).
+   The SQL and the sequence allocation are still wrong and are still the Julius
+   session's to fix. **Raise both with them.**
 
 4. **No Bridge route serves the world snapshot.** `projectWonderlandWorld` has
    no non-test caller anywhere.
@@ -801,10 +856,10 @@ mission moves the world.**
 **A. Starting SHA** — `b2dc9f2` (`origin/main`, unchanged throughout; this
 stream never merged into or from `relay/wonderland-v2`).
 
-**B. Ending SHA** — `defe621` on `relay/wonderland-integration`, pushed to both
+**B. Ending SHA** — `8e76418` on `relay/wonderland-integration`, pushed to both
 that ref and `claude/relay-wonderland-integration-ojr5x6` (same commits).
 
-**C. Integration layers completed** — fourteen, listed under "What was built":
+**C. Integration layers completed** — twenty-three, listed under "What was built":
 the state seam, the HUD, the link, the Unreal receiver, the HUD freeze, the
 usage authority, the bridge session, the ending guards, the animation plan, the
 entry contract, the wall between worlds, the executable honesty ladder, the

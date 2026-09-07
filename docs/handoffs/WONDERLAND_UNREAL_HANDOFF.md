@@ -259,6 +259,41 @@ meeting.
 
 ---
 
+## 10b. The composed fold — start here
+
+`wonderland-session.ts` is the one place the layers compose, and a receiver
+should mirror its shape rather than re-composing them differently.
+
+```
+openWonderlandSession({ projectId })
+  → recoverWonderlandSession(session, snapshot)   // sets the state, no plan
+  → applyWonderlandEnvelope(session, envelope)    // ordering → legality → plan
+```
+
+`applyWonderlandEnvelope` returns `{ session, ordering, legality, plan, reason }`.
+
+- `plan` is **null** when nothing was applied — not a `hold`. A hold is a real
+  instruction ("keep playing, do not restart"); returning one for a refused
+  event would say a decision was made about it.
+- Recovery returns **no plan** either: arriving at a state you were never
+  watching is not a transition, and a `wake` into the middle of a mission would
+  perform an entrance that never happened. Show the clip; do not play into it.
+- A refusal at any stage leaves the visual state exactly where it was.
+
+**Two paths that are not what you would guess**, both enforced by the derived
+table:
+
+- `prompt_architect → coding` is **not** a move. Planning hands off first
+  (PLANNING → READY → EXECUTING), so the real path passes through `handoff`.
+- `coding → complete` is **not** a move. Verification stands between them.
+
+And one consequence worth knowing before you tune blends: **`settle` never fires
+on a kernel-path completion.** `complete`'s only kernel predecessor is
+VERIFYING, and both draw `stand_still`, so the plan holds. The ending is told by
+the readout and `terminal`, not by the body.
+
+---
+
 ## 11. Recorded-real samples
 
 **None exist.** No real Julius event has ever been captured
