@@ -584,6 +584,67 @@ export const JULIUS_OPERATIONAL_EVENT_VISUAL_STATE: Readonly<
   'budget.denied': 'blocked',
 });
 
+/* ------------------------------------------------------------- transitions */
+
+/**
+ * WHAT A LATER EVENT IS ALLOWED TO DO TO AN ENDING.
+ *
+ * Almost every transition is permitted, and that is deliberate: the runtime is
+ * the authority on the order it did things in, and a world that second-guessed
+ * it would be inventing a second opinion about a mission it is only watching.
+ * `idle` straight to `complete` is a real sequence — it is what a client sees
+ * when it connects to a mission that finished before it arrived.
+ *
+ * TWO THINGS ARE REFUSED, and both are refusals about ENDINGS:
+ *
+ *  1. NOTHING UN-COMPLETES A COMPLETED MISSION. Once a real ending has been
+ *     reported, a later running state — `coding`, `verifying` — is refused. It
+ *     is either a stale delivery the sequence check should already have caught,
+ *     or genuinely new work, and genuinely new work belongs to a new mission id.
+ *     Accepting it would take a completion back, and a completion a founder
+ *     already saw is the single worst thing to retract.
+ *
+ *  2. A SECOND, DIFFERENT ENDING DOES NOT REPLACE THE FIRST. `mission.failed`
+ *     after `mission.completed` is a contradiction, and the honest resolution is
+ *     that the first authoritative ending is the one that happened. The second
+ *     is counted, not applied — a world that showed whichever arrived last would
+ *     flip its verdict on delivery order.
+ *
+ * Both refusals are COUNTED rather than silent. A world holding a state it
+ * refused two updates to is in a different situation from one nothing has
+ * contradicted, and an operator needs to be able to see that.
+ */
+export const JULIUS_TRANSITION_VERDICTS = [
+  'applied',
+  'refused_would_uncomplete',
+  'refused_second_ending',
+] as const;
+export type JuliusTransitionVerdict = (typeof JULIUS_TRANSITION_VERDICTS)[number];
+
+const ENDING_MEMBERS: ReadonlySet<string> = new Set<string>(JULIUS_ENDING_STATES);
+
+/** True for the three states that assert a mission is over. */
+export const isJuliusEndingState = (state: JuliusVisualState | null): boolean =>
+  state !== null && ENDING_MEMBERS.has(state);
+
+/**
+ * Whether a state may replace the one held, given whether an ending has latched.
+ *
+ * `terminal` is the gate rather than the current visual state, because `error`
+ * is reachable mid-run — a failed verification that a repair follows — and
+ * refusing everything after it would freeze the world on a recoverable fault.
+ */
+export function juliusTransitionVerdict(input: {
+  readonly from: JuliusVisualState | null;
+  readonly to: JuliusVisualState;
+  readonly terminal: boolean;
+}): JuliusTransitionVerdict {
+  if (!input.terminal) return 'applied';
+  if (!isJuliusEndingState(input.to)) return 'refused_would_uncomplete';
+  if (input.from !== null && input.to !== input.from) return 'refused_second_ending';
+  return 'applied';
+}
+
 /* --------------------------------------------------------- the embodiment */
 
 /**
@@ -633,6 +694,10 @@ export interface JuliusEmbodiment {
   readonly unmodelledEventsIgnored: number;
   /** Times the sequence jumped by more than one. Replay is how it is repaired. */
   readonly sequenceGapsObserved: number;
+  /** Ordered events refused because applying them would retract a completion. */
+  readonly uncompletingEventsRefused: number;
+  /** Ordered events refused because a mission cannot end twice, differently. */
+  readonly contradictoryEndingsRefused: number;
 }
 
 export const JULIUS_EMBODIMENT_FIELDS = exactKeys<JuliusEmbodiment>()([
@@ -657,6 +722,8 @@ export const JULIUS_EMBODIMENT_FIELDS = exactKeys<JuliusEmbodiment>()([
   'foreignMissionEventsSkipped',
   'unmodelledEventsIgnored',
   'sequenceGapsObserved',
+  'uncompletingEventsRefused',
+  'contradictoryEndingsRefused',
 ] as const);
 
 /** The sentence an unobserved Julius carries. One wording, one place. */
@@ -697,6 +764,8 @@ export function emptyJuliusEmbodiment(input: {
     foreignMissionEventsSkipped: 0,
     unmodelledEventsIgnored: 0,
     sequenceGapsObserved: 0,
+    uncompletingEventsRefused: 0,
+    contradictoryEndingsRefused: 0,
   });
 }
 
@@ -781,6 +850,23 @@ export function applyJuliusEvent(
     return Object.freeze({
       ...advanced,
       unmodelledEventsIgnored: current.unmodelledEventsIgnored + 1,
+    });
+  }
+
+  const verdict = juliusTransitionVerdict({
+    from: current.visualState,
+    to: reading.visualState,
+    terminal: current.terminal,
+  });
+  if (verdict !== 'applied') {
+    // The cursor still moves: the event was delivered in order and refusing its
+    // CONTENT is not a reason to ask for it again.
+    return Object.freeze({
+      ...advanced,
+      uncompletingEventsRefused:
+        current.uncompletingEventsRefused + (verdict === 'refused_would_uncomplete' ? 1 : 0),
+      contradictoryEndingsRefused:
+        current.contradictoryEndingsRefused + (verdict === 'refused_second_ending' ? 1 : 0),
     });
   }
 

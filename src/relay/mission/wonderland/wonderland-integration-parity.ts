@@ -23,6 +23,11 @@ import {
 } from './wonderland-julius-state';
 import type { JuliusEmbodiment } from './wonderland-julius-state';
 import {
+  WONDERLAND_ANIMATION_PLAN_FIELDS,
+  WONDERLAND_ANIMATION_TRANSITIONS,
+} from './wonderland-julius-animation';
+import type { WonderlandAnimationPlan } from './wonderland-julius-animation';
+import {
   WONDERLAND_HUD_ANCHORS,
   WONDERLAND_SWOOSH_SEGMENT_FIELDS,
   WONDERLAND_USAGE_CHANNELS,
@@ -105,6 +110,13 @@ const _JuliusEmbodimentNullableIsExact: SameKeys<
 > = true;
 void _JuliusEmbodimentNullableIsExact;
 
+const ANIMATION_PLAN_NULLABLE = ['attentionRequired'] as const;
+const _AnimationPlanNullableIsExact: SameKeys<
+  (typeof ANIMATION_PLAN_NULLABLE)[number],
+  NullableKeysOf<WonderlandAnimationPlan>
+> = true;
+void _AnimationPlanNullableIsExact;
+
 const LINK_STATUS_NULLABLE = ['lastSnapshotAtIso'] as const;
 const _LinkStatusNullableIsExact: SameKeys<
   (typeof LINK_STATUS_NULLABLE)[number],
@@ -171,6 +183,11 @@ export const WONDERLAND_INTEGRATION_CPP_STRUCT_PARITY: readonly {
     cppStruct: 'FWonderlandJuliusEmbodiment',
     tsInterface: 'JuliusEmbodiment',
     fields: JULIUS_EMBODIMENT_FIELDS,
+  },
+  {
+    cppStruct: 'FWonderlandAnimationPlan',
+    tsInterface: 'WonderlandAnimationPlan',
+    fields: WONDERLAND_ANIMATION_PLAN_FIELDS,
   },
   {
     cppStruct: 'FWonderlandUsageChannelStyle',
@@ -260,6 +277,22 @@ export const WONDERLAND_INTEGRATION_CPP_ENUM_PARITY: readonly {
     zeroMember: 'Unobserved',
   },
   {
+    /**
+     * ORDINAL 0 IS `Hold`, AND THAT IS THE SAFE DEFAULT ON PURPOSE.
+     *
+     * A USTRUCT arrives zero-filled, so a plan nothing filled in says "keep
+     * playing what you are playing". The alternative orderings are all worse:
+     * a default of `Interrupt` would cut on a struct nobody wrote, and a
+     * default of `Dormant` would fade the dog out whenever a message was
+     * dropped — a transport fault rendered as a fact about the mission.
+     */
+    cppEnum: 'EWonderlandAnimationTransition',
+    source: 'WONDERLAND_ANIMATION_TRANSITIONS',
+    members: WONDERLAND_ANIMATION_TRANSITIONS,
+    nullable: false,
+    zeroMember: 'hold',
+  },
+  {
     cppEnum: 'EWonderlandUsageStatus',
     source: 'WONDERLAND_USAGE_STATUSES',
     members: WONDERLAND_USAGE_STATUSES,
@@ -308,6 +341,7 @@ export const WONDERLAND_INTEGRATION_NULLABLE_FIELDS: Readonly<
   Record<string, readonly string[]>
 > = Object.freeze({
   FWonderlandJuliusEmbodiment: JULIUS_EMBODIMENT_NULLABLE,
+  FWonderlandAnimationPlan: ANIMATION_PLAN_NULLABLE,
   FWonderlandUsageChannelStyle: CHANNEL_STYLE_NULLABLE,
   FWonderlandLinkStatus: LINK_STATUS_NULLABLE,
   FWonderlandUsageAuthorityStatus: AUTHORITY_STATUS_NULLABLE,

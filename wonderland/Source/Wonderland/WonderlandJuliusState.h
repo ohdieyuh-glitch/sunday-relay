@@ -166,6 +166,95 @@ struct FWonderlandJuliusEmbodiment
 	// Times the sequence jumped by more than one. Replay is how it is repaired.
 	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Julius")
 	int64 SequenceGapsObserved = 0;
+
+	// Events that arrived IN ORDER and were still refused, because applying them
+	// would have taken back a completion the founder already saw. Distinct from
+	// StaleEventsRejected on purpose: that counter is about the wire, this one is
+	// about a contradiction the wire delivered perfectly.
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Julius")
+	int64 UncompletingEventsRefused = 0;
+
+	// Second, DIFFERENT endings refused. A mission that reports completed and
+	// then failed is a contradiction, and the first authoritative ending is the
+	// one that happened; a world showing whichever landed last would flip its
+	// verdict on delivery order.
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Julius")
+	int64 ContradictoryEndingsRefused = 0;
+};
+
+/* -------------------------------------------------------- the animation */
+
+// Mirrors WONDERLAND_ANIMATION_TRANSITIONS. HOW to get from the clip that is
+// playing to the one that should be.
+//
+// This is a CONTRACT rather than a renderer's business because two surfaces draw
+// this dog: if each decided its own blend rules, the browser would ease into an
+// error the world cut to, and the same mission would feel urgent in one and calm
+// in the other.
+UENUM(BlueprintType)
+enum class EWonderlandAnimationTransition : uint8
+{
+	// Ordinal 0. The same clip. Do NOT restart it — a looping walk that restarted
+	// on every unrelated event twitches once per event, which reads as the world
+	// stuttering.
+	Hold,
+	// From Dormant. The world has just learned what Julius is doing.
+	Wake,
+	// The ordinary case: one piece of work becoming another.
+	CrossFade,
+	// A state that needs a person. CUTS, at zero milliseconds. A graceful
+	// quarter-second fade into "your agent stopped" is a quarter second spent
+	// making the most important frame in the session look like the others.
+	Interrupt,
+	// Into a real ending. Slower than a cross-fade on purpose: a finish that
+	// snaps reads as a failure.
+	Settle,
+	// Back to no observation. The only transition that REMOVES information, so it
+	// is slow and never a cut.
+	Dormant
+};
+
+// Mirrors WonderlandAnimationPlan. What a renderer should DO at the moment a
+// state changes — decided in TypeScript, executed here.
+//
+// It names no asset. That is what makes the clips replaceable: a real animation
+// drops in behind a plan that never mentioned it.
+USTRUCT(BlueprintType)
+struct FWonderlandAnimationPlan
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Julius")
+	FString SchemaVersion;
+
+	// The clip currently playing. Dormant when nothing has been observed.
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Julius")
+	EWonderlandDogAnimation From = EWonderlandDogAnimation::Dormant;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Julius")
+	EWonderlandDogAnimation To = EWonderlandDogAnimation::Dormant;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Julius")
+	EWonderlandAnimationTransition Transition = EWonderlandAnimationTransition::Hold;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Julius")
+	int32 BlendMs = 0;
+
+	// Whether the destination clip loops. A one-shot must be allowed to finish.
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Julius")
+	bool bLoop = false;
+
+	// Additive, never a replacement. Rides on top of whatever is playing.
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Julius")
+	EWonderlandDogOverlay Overlay = EWonderlandDogOverlay::None;
+
+	// Null when unobserved — an unknown state neither asks nor rests.
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Julius")
+	FWonderlandFlag AttentionRequired;
+
+	// Always a sentence. A renderer logging a transition should log WHY.
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Julius")
+	FString Reason;
 };
 
 /* ------------------------------------------------------------- resolvers */
@@ -193,3 +282,11 @@ WONDERLAND_API EWonderlandDogAnimation WonderlandAnimationForJuliusState(EWonder
 // True for Blocked and Error, and for nothing else. Stated once because "does
 // this need me" is the question a HUD asks most often.
 WONDERLAND_API bool WonderlandJuliusStateAsksForAHuman(EWonderlandJuliusState State);
+
+// The blend duration for a transition, in milliseconds. Interrupt and Hold are
+// both 0 and they are not the same thing: Hold plays on, Interrupt cuts.
+WONDERLAND_API int32 WonderlandAnimationBlendMs(EWonderlandAnimationTransition Transition);
+
+// Whether a clip loops. `HaltSlump` does not: a stopped agent settles once and
+// stays stopped, and a looping collapse reads as repeatedly falling over.
+WONDERLAND_API bool WonderlandAnimationLoops(EWonderlandDogAnimation Animation);

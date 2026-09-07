@@ -24,6 +24,7 @@ import {
   JULIUS_RUN_STATE_VISUAL_STATE,
   JULIUS_STATE_SOURCES,
   JULIUS_TERMINAL_EVENTS,
+  JULIUS_TRANSITION_VERDICTS,
   JULIUS_UNOBSERVED_REASON,
   JULIUS_VISUAL_STATES,
   JULIUS_VISUAL_STATE_ACTIVITY,
@@ -31,14 +32,16 @@ import {
   RELAY_MISSION_STATE_VISUAL_STATE,
   applyJuliusEvent,
   emptyJuliusEmbodiment,
+  isJuliusEndingState,
   isJuliusMissionState,
   isMissionPhase,
+  juliusTransitionVerdict,
   juliusReplayCursor,
   readJuliusState,
   rehydrateJuliusEmbodiment,
   resolveJuliusVisualState,
 } from './wonderland-julius-state';
-import type { JuliusVisualState } from './wonderland-julius-state';
+import type { JuliusEmbodiment, JuliusVisualState } from './wonderland-julius-state';
 import {
   JULIUS_TO_WONDERLAND_EVENT_TYPE,
   normalizeJuliusOperationalEvent,
@@ -747,5 +750,132 @@ describe('the seam is honest about what it does not cover', () => {
       ...JULIUS_MISSION_STATES.map((state) => JULIUS_RUN_STATE_VISUAL_STATE[state]),
     ]);
     for (const state of JULIUS_VISUAL_STATES) expect(reachable.has(state)).toBe(true);
+  });
+});
+
+/* ---------------------------------------------- refusing to un-complete */
+
+/**
+ * THE GUARD, WHICH IS ABOUT TRUTHFULNESS AND NOT ABOUT ORDERING.
+ *
+ * The sequence check already refuses events that arrive LATE. This is the
+ * different case: an event that is perfectly in order and still contradicts a
+ * completion a founder has already seen. Ordering cannot resolve that, because
+ * both events are real and one of them is wrong.
+ */
+describe('once a mission has ended', () => {
+  const ended = (eventType: WonderlandEventType): JuliusEmbodiment =>
+    applyJuliusEvent(
+      emptyJuliusEmbodiment({ projectId: PROJECT }),
+      worldEvent({ eventType, missionId: 'mission-1' }),
+    );
+
+  it('latches terminal on a real ending and nothing else', () => {
+    const done = ended('mission.completed');
+    expect(done.terminal).toBe(true);
+    expect(done.visualState).toBe('complete');
+
+    // `verification.passed` says a check passed. It does not say the run is over.
+    const midRun = applyJuliusEvent(
+      emptyJuliusEmbodiment({ projectId: PROJECT }),
+      worldEvent({ eventType: 'verification.passed' }),
+    );
+    expect(midRun.terminal).toBe(false);
+  });
+
+  it('refuses an in-order running state that would retract the completion', () => {
+    const done = ended('mission.completed');
+    const after = applyJuliusEvent(done, worldEvent({ eventType: 'agent.implementing' }));
+
+    expect(after.visualState).toBe('complete');
+    expect(after.animation).toBe(done.animation);
+    expect(after.terminal).toBe(true);
+    expect(after.uncompletingEventsRefused).toBe(1);
+    expect(after.contradictoryEndingsRefused).toBe(0);
+  });
+
+  it('refuses a second, different ending rather than showing whichever landed last', () => {
+    const done = ended('mission.completed');
+    const contradicted = applyJuliusEvent(done, worldEvent({ eventType: 'mission.failed' }));
+
+    expect(contradicted.visualState).toBe('complete');
+    expect(contradicted.contradictoryEndingsRefused).toBe(1);
+    expect(contradicted.uncompletingEventsRefused).toBe(0);
+  });
+
+  it('accepts a redundant repeat of the SAME ending', () => {
+    const done = ended('mission.completed');
+    const again = applyJuliusEvent(done, worldEvent({ eventType: 'agent.complete' }));
+
+    expect(again.visualState).toBe('complete');
+    expect(again.uncompletingEventsRefused).toBe(0);
+    expect(again.contradictoryEndingsRefused).toBe(0);
+  });
+
+  it('still advances the cursor, because a refused event was delivered fine', () => {
+    const done = ended('mission.completed');
+    const refusal = worldEvent({ eventType: 'agent.implementing' });
+    const after = applyJuliusEvent(done, refusal);
+
+    expect(after.sequence).toBe(refusal.sequence);
+    expect(juliusReplayCursor(after)).toBe(refusal.sequence);
+    // A refusal is not a stale delivery and must not be counted as one.
+    expect(after.staleEventsRejected).toBe(done.staleEventsRejected);
+  });
+
+  it('does not freeze the world on a recoverable mid-run error', () => {
+    // `error` is an ENDING state but `agent.error` is not an ending EVENT, so a
+    // repair after a failed verification still animates. The gate is terminal.
+    const failed = applyJuliusEvent(
+      emptyJuliusEmbodiment({ projectId: PROJECT }),
+      worldEvent({ eventType: 'agent.error' }),
+    );
+    expect(failed.visualState).toBe('error');
+    expect(failed.terminal).toBe(false);
+
+    const repairing = applyJuliusEvent(failed, worldEvent({ eventType: 'agent.repairing' }));
+    expect(repairing.visualState).toBe('repair');
+    expect(repairing.uncompletingEventsRefused).toBe(0);
+  });
+
+  it('decides the verdict from terminal alone, over every pair of states', () => {
+    for (const from of JULIUS_VISUAL_STATES) {
+      for (const to of JULIUS_VISUAL_STATES) {
+        expect(juliusTransitionVerdict({ from, to, terminal: false })).toBe('applied');
+
+        const verdict = juliusTransitionVerdict({ from, to, terminal: true });
+        if (!JULIUS_ENDING_STATES.includes(to)) {
+          expect(verdict).toBe('refused_would_uncomplete');
+        } else if (to === from) {
+          expect(verdict).toBe('applied');
+        } else {
+          expect(verdict).toBe('refused_second_ending');
+        }
+        expect(JULIUS_TRANSITION_VERDICTS).toContain(verdict);
+      }
+    }
+  });
+
+  it('agrees with the ending list about what an ending is', () => {
+    for (const state of JULIUS_VISUAL_STATES) {
+      expect(isJuliusEndingState(state)).toBe(JULIUS_ENDING_STATES.includes(state));
+    }
+    expect(isJuliusEndingState(null)).toBe(false);
+  });
+
+  it('survives replay: a refused stream folds to the same state as a clean one', () => {
+    const events = [
+      worldEvent({ eventType: 'agent.implementing', missionId: 'mission-1' }),
+      worldEvent({ eventType: 'mission.completed', missionId: 'mission-1' }),
+      worldEvent({ eventType: 'agent.implementing', missionId: 'mission-1' }),
+      worldEvent({ eventType: 'mission.failed', missionId: 'mission-1' }),
+    ];
+    const folded = rehydrateJuliusEmbodiment({ projectId: PROJECT }, events);
+
+    expect(folded.visualState).toBe('complete');
+    expect(folded.terminal).toBe(true);
+    expect(folded.uncompletingEventsRefused).toBe(1);
+    expect(folded.contradictoryEndingsRefused).toBe(1);
+    expect(folded.sequence).toBe(events[events.length - 1].sequence);
   });
 });

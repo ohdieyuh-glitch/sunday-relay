@@ -91,3 +91,34 @@ bool WonderlandJuliusStateAsksForAHuman(EWonderlandJuliusState State)
 	// answer must not be re-derived by whoever is asking.
 	return State == EWonderlandJuliusState::Blocked || State == EWonderlandJuliusState::Error;
 }
+
+int32 WonderlandAnimationBlendMs(EWonderlandAnimationTransition Transition)
+{
+	// These are the numbers BOTH surfaces use. A renderer that picked its own
+	// would be exactly the drift the shared contract exists to prevent, and it
+	// would not look like a bug: the world would simply feel different from the
+	// website for the same mission.
+	switch (Transition)
+	{
+	// Not a fast blend. A cut. The frame that says a person is needed is the
+	// next frame, not one eased into.
+	case EWonderlandAnimationTransition::Interrupt: return 0;
+	// The clip has not changed and must not restart.
+	case EWonderlandAnimationTransition::Hold:      return 0;
+	case EWonderlandAnimationTransition::Wake:      return 260;
+	case EWonderlandAnimationTransition::CrossFade: return 180;
+	case EWonderlandAnimationTransition::Settle:    return 420;
+	case EWonderlandAnimationTransition::Dormant:   return 520;
+	default:                                        return 0;
+	}
+}
+
+bool WonderlandAnimationLoops(EWonderlandDogAnimation Animation)
+{
+	// `HaltSlump` is the single one-shot: a stopped agent settles once and stays
+	// stopped, and a looping collapse reads as repeatedly falling over. Written
+	// as one exception rather than eleven cases so a clip added to the shared
+	// vocabulary loops by default — the safe answer, since a clip that wrongly
+	// loops looks alive and one that wrongly stops looks frozen.
+	return Animation != EWonderlandDogAnimation::HaltSlump;
+}
