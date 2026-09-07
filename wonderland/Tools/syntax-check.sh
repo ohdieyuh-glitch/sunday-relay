@@ -20,7 +20,7 @@ SRC="$HERE/../Source/Wonderland"
 STUBS="$HERE/SyntaxStubs"
 
 # unit:max-known-stub-errors. 0 means it parses clean today.
-BASELINE="WonderlandDogAnimation.cpp:0 WonderlandJuliusState.cpp:0 WonderlandModule.cpp:0 WonderlandHubGameMode.cpp:0 WonderlandDogPawn.cpp:5"
+BASELINE="WonderlandDogAnimation.cpp:0 WonderlandEntry.cpp:0 WonderlandJuliusState.cpp:0 WonderlandModule.cpp:0 WonderlandHubGameMode.cpp:0 WonderlandDogPawn.cpp:5"
 
 # HEADERS ARE CHECKED TOO, STANDALONE, and that gap cost a whole layer.
 #
@@ -33,9 +33,25 @@ BASELINE="WonderlandDogAnimation.cpp:0 WonderlandJuliusState.cpp:0 WonderlandMod
 # A header is checked with `-x c++` so g++ treats it as a unit rather than
 # precompiling it. Each carries its own baseline for the same reason a .cpp
 # does: WonderlandHubLevel.h uses UDataAsset, which the stubs do not model.
-HEADER_BASELINE="RelayWorldState.h:0 WonderlandTypes.h:0 WonderlandDogAnimation.h:0 WonderlandDogPawn.h:0 WonderlandHubGameMode.h:0 WonderlandHubLevel.h:2 WonderlandJuliusState.h:0 WonderlandUsageHud.h:0"
+HEADER_BASELINE="RelayWorldState.h:0 WonderlandTypes.h:0 WonderlandDogAnimation.h:0 WonderlandDogPawn.h:0 WonderlandHubGameMode.h:0 WonderlandHubLevel.h:2 WonderlandJuliusState.h:0 WonderlandUsageHud.h:0 WonderlandEntry.h:0"
 
 status=0
+
+# THE BASELINES ARE HAND-MAINTAINED, so a file added without an entry would be
+# silently unchecked — the same shape of gap that let two whole headers go
+# unparsed until the baseline above was added. So enumerate the directory and
+# require every unit to be listed. Adding a name is the sanctioned fix; being
+# forgotten is not an option this script leaves open.
+for path in "$SRC"/*.h "$SRC"/*.cpp; do
+  unit="$(basename "$path")"
+  case " $HEADER_BASELINE $BASELINE " in
+    *" $unit:"*) ;;
+    *)
+      echo "FAIL $unit: not listed in HEADER_BASELINE or BASELINE, so nothing parses it"
+      status=1
+      ;;
+  esac
+done
 
 for entry in $HEADER_BASELINE; do
   unit="${entry%%:*}"; allowed="${entry##*:}"

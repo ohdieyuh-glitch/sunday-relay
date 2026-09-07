@@ -28,6 +28,14 @@ import {
 } from './wonderland-julius-animation';
 import type { WonderlandAnimationPlan } from './wonderland-julius-animation';
 import {
+  WONDERLAND_ADMISSIONS,
+  WONDERLAND_ENTRY_FIELDS,
+  WONDERLAND_PRESENTATIONS,
+  WONDERLAND_RENDERER_KINDS,
+  WONDERLAND_RENDERER_OFFER_FIELDS,
+} from './wonderland-entry';
+import type { WonderlandEntry, WonderlandRendererOffer } from './wonderland-entry';
+import {
   WONDERLAND_HUD_ANCHORS,
   WONDERLAND_SWOOSH_SEGMENT_FIELDS,
   WONDERLAND_USAGE_CHANNELS,
@@ -110,6 +118,28 @@ const _JuliusEmbodimentNullableIsExact: SameKeys<
 > = true;
 void _JuliusEmbodimentNullableIsExact;
 
+const ENTRY_NULLABLE = [
+  'admissionReason',
+  'sessionId',
+  'admittedAtIso',
+  'presentationReason',
+  'rendererId',
+  'rendererKind',
+  'presentingSinceIso',
+] as const;
+const _EntryNullableIsExact: SameKeys<
+  (typeof ENTRY_NULLABLE)[number],
+  NullableKeysOf<WonderlandEntry>
+> = true;
+void _EntryNullableIsExact;
+
+const RENDERER_OFFER_NULLABLE = [] as const;
+const _RendererOfferNullableIsExact: SameKeys<
+  (typeof RENDERER_OFFER_NULLABLE)[number],
+  NullableKeysOf<WonderlandRendererOffer>
+> = true;
+void _RendererOfferNullableIsExact;
+
 const ANIMATION_PLAN_NULLABLE = ['attentionRequired'] as const;
 const _AnimationPlanNullableIsExact: SameKeys<
   (typeof ANIMATION_PLAN_NULLABLE)[number],
@@ -183,6 +213,16 @@ export const WONDERLAND_INTEGRATION_CPP_STRUCT_PARITY: readonly {
     cppStruct: 'FWonderlandJuliusEmbodiment',
     tsInterface: 'JuliusEmbodiment',
     fields: JULIUS_EMBODIMENT_FIELDS,
+  },
+  {
+    cppStruct: 'FWonderlandEntry',
+    tsInterface: 'WonderlandEntry',
+    fields: WONDERLAND_ENTRY_FIELDS,
+  },
+  {
+    cppStruct: 'FWonderlandRendererOffer',
+    tsInterface: 'WonderlandRendererOffer',
+    fields: WONDERLAND_RENDERER_OFFER_FIELDS,
   },
   {
     cppStruct: 'FWonderlandAnimationPlan',
@@ -293,6 +333,35 @@ export const WONDERLAND_INTEGRATION_CPP_ENUM_PARITY: readonly {
     zeroMember: 'hold',
   },
   {
+    cppEnum: 'EWonderlandAdmission',
+    source: 'WONDERLAND_ADMISSIONS',
+    members: WONDERLAND_ADMISSIONS,
+    nullable: false,
+    zeroMember: 'not_requested',
+  },
+  {
+    cppEnum: 'EWonderlandPresentation',
+    source: 'WONDERLAND_PRESENTATIONS',
+    members: WONDERLAND_PRESENTATIONS,
+    nullable: false,
+    zeroMember: 'no_renderer',
+  },
+  {
+    /**
+     * NULLABLE, AND THE ABSENCE IS NOT EITHER KIND.
+     *
+     * A zero-filled offer claiming to be `UnrealPixelStream` would describe an
+     * approximation as the real world; one claiming `EmbeddedScene` would
+     * understate a real stream. A renderer that did not say what it is has said
+     * nothing, and `Unobserved` is that.
+     */
+    cppEnum: 'EWonderlandRendererKind',
+    source: 'WONDERLAND_RENDERER_KINDS',
+    members: WONDERLAND_RENDERER_KINDS,
+    nullable: true,
+    zeroMember: 'Unobserved',
+  },
+  {
     cppEnum: 'EWonderlandUsageStatus',
     source: 'WONDERLAND_USAGE_STATUSES',
     members: WONDERLAND_USAGE_STATUSES,
@@ -342,6 +411,8 @@ export const WONDERLAND_INTEGRATION_NULLABLE_FIELDS: Readonly<
 > = Object.freeze({
   FWonderlandJuliusEmbodiment: JULIUS_EMBODIMENT_NULLABLE,
   FWonderlandAnimationPlan: ANIMATION_PLAN_NULLABLE,
+  FWonderlandEntry: ENTRY_NULLABLE,
+  FWonderlandRendererOffer: RENDERER_OFFER_NULLABLE,
   FWonderlandUsageChannelStyle: CHANNEL_STYLE_NULLABLE,
   FWonderlandLinkStatus: LINK_STATUS_NULLABLE,
   FWonderlandUsageAuthorityStatus: AUTHORITY_STATUS_NULLABLE,
