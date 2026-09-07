@@ -264,3 +264,65 @@ describe('the four approved states still read the way they were approved', () =>
     }
   });
 });
+
+/* ------------------------------------------- what the freeze costs, measured */
+
+/**
+ * HOW MUCH OF THE BLUE STROKE THE GREEN RING COVERS.
+ *
+ * The founder asked for the single-agent bar to swoop BEHIND the compound one,
+ * and it does. This measures the price of that, because the price is real and
+ * should be a number in the repository rather than a surprise later.
+ *
+ * The compound ring covers the first third of the blue spine. The HUD draws the
+ * REMAINING fraction from the tail, so a single-agent meter below about a third
+ * has its entire fill inside the covered span and draws the same as empty —
+ * which is exactly the range where "you are nearly out" needs to be legible.
+ *
+ * THIS TEST CHANGES NOTHING. The geometry is frozen by instruction and this
+ * asserts what the frozen geometry does, so it fails if anyone moves the two
+ * strokes relative to each other — in either direction, including a fix. It is
+ * a record, not a verdict: whether to spend anything on it is the founder's
+ * call, and the options that do NOT touch geometry (draining the blue from the
+ * tip instead of the tail, or lifting its head marker above the ring) are noted
+ * in the handoff.
+ */
+describe('the cost of drawing the blue behind the green', () => {
+  const SAMPLES = 600;
+
+  const covered = (t: number): boolean => {
+    const blue = wonderlandSwooshAt(t, WONDERLAND_SINGLE_SWOOSH);
+    for (let i = 0; i <= SAMPLES; i += 1) {
+      const green = wonderlandSwooshAt(i / SAMPLES, WONDERLAND_COMPOUND_SWOOSH);
+      if (Math.hypot(green.x - blue.x, green.y - blue.y) <= green.halfWidth) return true;
+    }
+    return false;
+  };
+
+  it('covers the first third of the blue spine, and only the first third', () => {
+    // One contiguous span from the tail. Two spans would mean the blue crossed
+    // back under the ring, which the layout does not do.
+    let lastCovered = -1;
+    let spans = 0;
+    let previous = false;
+    for (let i = 0; i <= SAMPLES; i += 1) {
+      const hit = covered(i / SAMPLES);
+      if (hit && !previous) spans += 1;
+      if (hit) lastCovered = i;
+      previous = hit;
+    }
+    expect(spans).toBe(1);
+    expect(lastCovered / SAMPLES).toBeGreaterThan(0.30);
+    expect(lastCovered / SAMPLES).toBeLessThan(0.36);
+  });
+
+  it('leaves a low single-agent reading with nothing visible to read', () => {
+    // The consequence, stated as the assertion rather than left to be inferred.
+    expect(covered(0.05)).toBe(true);
+    expect(covered(0.2)).toBe(true);
+    expect(covered(0.3)).toBe(true);
+    // And the upper two thirds are readable, which is why the bar works at all.
+    expect(covered(0.5)).toBe(false);
+    expect(covered(0.9)).toBe(false);
+  });
+});

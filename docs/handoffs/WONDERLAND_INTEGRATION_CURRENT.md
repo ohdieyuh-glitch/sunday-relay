@@ -509,6 +509,49 @@ UNKNOWN). What remains is genuinely blocked on other sessions or on assets.
 
 ---
 
+## One measured cost of the frozen HUD — A FOUNDER DECISION, NOT A BUG TO FIX
+
+**Verified by rendering the real component in headless Chromium and measuring
+the geometry numerically. Nothing was changed.**
+
+The single-agent (blue) stroke swoops behind the compound (green) one, exactly
+as asked. The price is that **the compound ring covers the first 33.3% of the
+blue spine**, in one contiguous span from its tail:
+
+| single-agent remaining | visible bright fill |
+|---|---|
+| 3% | **0.0%** of the stroke |
+| 10% | **0.0%** |
+| 20% | **0.0%** |
+| 35% | 1.7% |
+| 50% | 16.7% |
+| 75% | 41.7% |
+| 100% | 66.7% |
+
+The HUD draws the REMAINING fraction from the tail, so **any single-agent
+reading at or below about a third draws the same as empty** — and that is
+precisely the range where "you are nearly out" needs to be legible. Above a
+third the bar reads correctly and the design works.
+
+This is recorded rather than repaired because the geometry is frozen by explicit
+instruction. `wonderland-hud-canon.test.ts` now pins the measurement, so it
+fails if anyone moves the two strokes relative to each other — including a fix.
+
+**Two options that would NOT touch geometry**, if the founder wants it
+addressed:
+
+1. **Drain the blue from the tip instead of the tail.** The readable outer two
+   thirds would then carry the low readings. Spine, widths, control points,
+   overlap and draw order stay byte-identical and the canon digest still passes;
+   what changes is which end the `stroke-dashoffset` starts from.
+2. **Lift the blue's head marker above the ring in the draw order**, keeping the
+   body behind it. The bar still passes behind the green; only the small bright
+   head stays visible, so a low reading has something to point at.
+
+Both are presentation changes. Neither is taken without the founder saying so.
+
+---
+
 ## Landing → world, as it actually is
 
 `index.html` → `src/relay/main.tsx` → `RelayBetaEntry` → `RelayPreviewApp`.
