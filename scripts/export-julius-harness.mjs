@@ -130,6 +130,7 @@ const EXCLUDED_FILES = [
 const KERNEL_DEPENDANT_EXCLUSIONS = [
   { path: 'src/relay/workspace/julius-tools/node-tool-adapter.ts', reason: 'the local in-process tool adapter (bounded host filesystem + /bin/bash). Since #208 every tool effect goes through the independent executor control plane and the live harness has no import through which this adapter could arrive; it survives for the offline tooling audit and its tests' },
   { path: 'src/relay/mission/wonderland/wonderland-julius-state.ts', reason: "the Wonderland integration layer's read of Julius. It imports JULIUS_MISSION_STATES and JuliusOperationalEventType to derive what the WORLD SHOWS from what the kernel reports, and the direction is strictly one-way: it has no writer, no port, no adapter and nothing the kernel could call. Julius does not know a world exists, which is the same separation the Gauntlet Loop keeps" },
+  { path: 'src/relay/mission/wonderland/wonderland-julius-link.ts', reason: "the same layer's composition of the two below — normalize, fold, and label where the events came from. It imports only JuliusOperationalEvent as a type; a Julius deployment that never renders a world neither reaches it nor is affected by it" },
   { path: 'src/relay/mission/wonderland/wonderland-julius-normalizer.ts', reason: 'the same layer\'s adapter from a JuliusOperationalEvent to a WonderlandEvent. Pure, read-only over one event, and invoked by whatever composes the two — nothing in the kernel imports it, so a Julius deployment that never renders a world is unaffected by its existence' },
 ];
 

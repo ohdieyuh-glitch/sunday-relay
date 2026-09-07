@@ -412,6 +412,14 @@ export const RELAY_MISSION_STATE_VISUAL_STATE: Readonly<
  * real negative result that a repair can follow, and this table says what is
  * happening, never whether the mission is over. Only `mission.completed` and
  * `mission.failed` end things, and they do it through `JULIUS_TERMINAL_EVENTS`.
+ *
+ * `verification.finding` IS ABSENT, and it was here for an hour. A finding is
+ * EVIDENCE, not an activity: it is produced during a review and it can be
+ * produced during Relay's own verification, so mapping it to either one is a
+ * guess that is wrong half the time. Leaving it unmapped keeps whatever state
+ * the run was actually in, which is right in both cases. It was caught by the
+ * dev-script fold, where a finding recorded mid-review flipped the world to
+ * `verifying` and back — a stage change nothing performed.
  */
 export const JULIUS_EVENT_VISUAL_STATE: Readonly<
   Partial<Record<WonderlandEventType, JuliusVisualState>>
@@ -428,7 +436,6 @@ export const JULIUS_EVENT_VISUAL_STATE: Readonly<
   'agent.complete': 'complete',
   'agent.error': 'error',
   'verification.started': 'verifying',
-  'verification.finding': 'verifying',
   'verification.failed': 'error',
   'verification.passed': 'verifying',
 });
@@ -547,6 +554,10 @@ export function readJuliusState(event: WonderlandEvent): JuliusStateReading | nu
  *    failing; a reroute exists precisely so it is not.
  *  - `repair.scheduled` is an INTENTION. "Announce facts, not intentions" is
  *    the rule, and the fact arrives as `run.transitioned` to `REPAIRING`.
+ *  - `finding.recorded` is EVIDENCE, for the same reason
+ *    `verification.finding` is absent from the world-event table above: a
+ *    finding is produced during a review AND during verification, so mapping it
+ *    to either is a guess that is wrong half the time.
  *  - `evidence.recorded`, `context.compiled`, `budget.reserved/settled`,
  *    `subagent.*`, `recovery.action`, `approval.decided` describe work about
  *    the mission rather than a change in what Julius is doing.
@@ -568,7 +579,6 @@ export const JULIUS_OPERATIONAL_EVENT_VISUAL_STATE: Readonly<
   'run.completed': 'complete',
   'run.failed': 'error',
   'review.started': 'independent_review',
-  'finding.recorded': 'independent_review',
   'verification.decided': 'verifying',
   'approval.requested': 'blocked',
   'budget.denied': 'blocked',

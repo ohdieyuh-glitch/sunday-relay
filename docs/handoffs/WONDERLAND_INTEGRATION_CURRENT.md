@@ -102,7 +102,28 @@ sampled by **arc length** (Bézier `t` runs fast through gentle stretches, so ra
 `t` would draw a different length for the same spend depending where it fell).
 Both surfaces read the same struct, so a redraw is editing those numbers once.
 
-### 3. The Unreal receiver
+### 3. The link — the piece that composes the seam
+
+`src/relay/mission/wonderland/wonderland-julius-link.ts`
+
+`createWonderlandJuliusLink` → `observeJuliusEvents(link, kernelEvents, …)` runs
+the whole chain in one call: normalize, fold, and return the world events for
+the caller's own durable log (a link that kept them would be a second event
+store with no replay). Immutable — `observe` returns a NEW link — which is what
+makes "the stream arrived in two pieces" testable as the normal case it is.
+
+**Its label is the point.** A link declares `live_runtime` or
+`development_fixture`, the label travels on the status, and a surface reaching
+the embodiment has necessarily passed it. `WONDERLAND_JULIUS_DEV_SCRIPT` is a
+scripted twelve-event run in the kernel's own shape (`run.transitioned` with
+`facts.to`, exactly as the runtime emits it), and `wonderlandJuliusDevLink()`
+returns the LINK rather than the embodiment so nothing can reach the state
+without the label saying it is not a mission.
+
+This is the shape the Bridge wiring will take. The next session's task is to
+swap the in-memory source for the real one, not to invent a composition.
+
+### 4. The Unreal receiver
 
 Two new headers, mirrored field-for-field and enforced by
 `wonderland-cpp-parity.test.ts`:
@@ -114,10 +135,19 @@ Two new headers, mirrored field-for-field and enforced by
   `FWonderlandUsageChannelStyle`, `EWonderlandUsageStatus`,
   `EWonderlandUsageChannel`, `EWonderlandHudAnchor`
 
+`WonderlandJuliusState.cpp` makes the state machine executable in Unreal:
+`WonderlandActivityForJuliusState`, `WonderlandMotionForActivity`,
+`WonderlandAnimationForJuliusState` (COMPOSED from the other two and the
+existing motion→clip resolver, never a fourth table) and
+`WonderlandJuliusStateAsksForAHuman`. Each switch is compared case by case
+against the TypeScript map it mirrors, and the parity test asserts that no
+direct state-to-clip switch exists — not merely that the composed one is right.
+
 The parity test now merges `wonderland-integration-parity.ts` with the
 document's own table and applies every check to the union, in both directions.
 Verified by injecting a `bWonderlandApproved` field and watching three
-assertions fail.
+assertions fail, and by flipping one resolver case and watching the failure
+name it.
 
 ---
 
@@ -233,6 +263,10 @@ New, all passing:
   is never zero, per-channel ceilings, drain/replenish and provenance
   degradation, arc-length uniformity, the measured right-facing reversal,
   nesting without crossing.
+- `wonderland-julius-link.test.ts` — 16 tests. The whole chain from the
+  kernel's event shape to the clip, the labelled fixture, dense sequence
+  allocation, immutability, and the fold being identical whether the stream
+  arrives whole or in pieces.
 - `wonderland-hud.test.tsx` — 15 tests. Anchor, palette provenance, UNKNOWN,
   the drain agreeing with the readout, no animation loop, and the mask-id
   collision guard.
@@ -270,6 +304,14 @@ session.
   remainder under its own numbers — every figure on screen correct and the
   picture wrong. `instanceId` now distinguishes them, and `useId` alone is not
   enough because it restarts per `renderToStaticMarkup` call.
+- **Two tables disagreed about one kernel event.** `finding.recorded` resolved
+  to `independent_review` read directly and to `verifying` after normalizing
+  into `verification.finding` — so a finding recorded mid-review flipped the
+  world to a stage nothing performed. A finding is EVIDENCE, not an activity,
+  and it is produced during review AND during verification, so mapping it to
+  either is a guess that is wrong half the time. Both mappings removed; a test
+  now holds the two tables against each other for every kernel event that has
+  both a world type and a visual state. Found by folding the dev script.
 - **A frame loop in the HUD.** `relay-dog-motion-boundary.test.ts` allows
   exactly one `requestAnimationFrame` owner in the whole website. The first HUD
   draft added a second; the drain is now an SVG mask whose dash offset CSS

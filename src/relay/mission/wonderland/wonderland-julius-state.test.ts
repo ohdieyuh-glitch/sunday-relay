@@ -685,6 +685,24 @@ describe('normalizing a real Julius runtime event', () => {
     );
     expect(visualOnly.sort()).toEqual(['approval.requested', 'budget.denied', 'verification.decided']);
   });
+
+  it('never lets the two tables disagree about one kernel event', () => {
+    // A kernel event reaches the world by BOTH paths: read directly, and
+    // normalized into a world event and read through the other table. Two
+    // answers for one event is drift with a delay fuse — a finding recorded
+    // mid-review resolved to `independent_review` one way and `verifying` the
+    // other, and the world flipped stage for something nothing performed.
+    const offenders: string[] = [];
+    for (const [kernelType, worldType] of Object.entries(JULIUS_TO_WONDERLAND_EVENT_TYPE)) {
+      const direct =
+        JULIUS_OPERATIONAL_EVENT_VISUAL_STATE[kernelType as keyof typeof JULIUS_OPERATIONAL_EVENT_VISUAL_STATE];
+      const viaWorld = JULIUS_EVENT_VISUAL_STATE[worldType as WonderlandEventType];
+      if (direct !== undefined && viaWorld !== undefined && direct !== viaWorld) {
+        offenders.push(`${kernelType}: direct ${direct}, via ${worldType} ${viaWorld}`);
+      }
+    }
+    expect(offenders).toEqual([]);
+  });
 });
 
 /* ------------------------------------------------------------ coverage */
