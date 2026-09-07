@@ -226,13 +226,39 @@ export function planWonderlandAnimation(
   next: JuliusEmbodiment,
   input: { readonly overlay?: WonderlandDogOverlay } = {},
 ): WonderlandAnimationPlan {
-  const from = previous?.animation ?? 'dormant';
-  const to = next.animation;
+  return planWonderlandAnimationFor({
+    fromClip: previous?.animation ?? 'dormant',
+    toState: next.visualState,
+    terminal: next.terminal,
+    attentionRequired: next.attentionRequired,
+    overlay: input.overlay,
+  });
+}
+
+/**
+ * The same decision, from the facts alone rather than from two embodiments.
+ *
+ * The embodiment form above is the convenient one where an embodiment already
+ * exists. This is the CORE, and it exists because the composition layer holds a
+ * visual state and a clip rather than a fold — asking it to assemble an
+ * embodiment just to be handed one back would be a shape invented for the
+ * function's benefit rather than the caller's.
+ */
+export function planWonderlandAnimationFor(input: {
+  readonly fromClip: WonderlandDogAnimation;
+  /** Null when nothing is observed, which resolves to `dormant`. */
+  readonly toState: JuliusVisualState | null;
+  readonly terminal: boolean;
+  readonly attentionRequired: boolean | null;
+  readonly overlay?: WonderlandDogOverlay;
+}): WonderlandAnimationPlan {
+  const from = input.fromClip;
+  const to = wonderlandClipForJuliusState(input.toState);
   const { transition, reason } = chooseTransition({
     from,
     to,
-    toState: next.visualState,
-    terminal: next.terminal,
+    toState: input.toState,
+    terminal: input.terminal,
   });
   return Object.freeze({
     schemaVersion: WONDERLAND_ANIMATION_SCHEMA_V1,
@@ -242,7 +268,7 @@ export function planWonderlandAnimation(
     blendMs: WONDERLAND_ANIMATION_BLEND_MS[transition],
     loop: WONDERLAND_ANIMATION_LOOPS[to],
     overlay: input.overlay ?? 'none',
-    attentionRequired: next.attentionRequired,
+    attentionRequired: input.attentionRequired,
     reason,
   });
 }
