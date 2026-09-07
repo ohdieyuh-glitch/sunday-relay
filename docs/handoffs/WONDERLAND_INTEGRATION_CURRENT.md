@@ -195,73 +195,241 @@ name it.
 
 ---
 
+### 5. The HUD, frozen (`a15d251`)
+
+`src/relay/mission/wonderland/wonderland-hud-canon.test.ts` (15 tests)
+
+The founder settled the geometry over five messages and then said: **do not
+redesign it.** So the geometry is pinned by a digest — every control point
+formatted at `toFixed(6)` and joined into one string, with the canonical value
+written into the test. A 0.0004 nudge to any point fails it (verified). The
+viewport, anchor, hues, emphasis order, channel order, the six shape invariants
+(opens right / travels right / swoops down / is a ring / blue crosses behind /
+blue swoops) and the four approved readings are all pinned alongside it.
+
+**Treat the HUD as a frozen presentation component.** Work below it, not on it.
+
+### 6. The usage authority (`a15d251`)
+
+`src/relay/mission/wonderland/wonderland-usage-authority.ts` (27 tests)
+
+Provider-neutral. A report carries a project, a revision, an observation
+timestamp, an authority id, and per-channel `current` / `maximum` / `reference`
+/ `tierId` / `tierLabel` / `unitLabel`. `current` is the REMAINDER, never the
+spend; the one `maximum - current` conversion lives in `usedUnitsFrom` so the
+bar and the readout cannot measure different things again.
+
+Four readings, and `not_reported` is ordinal 0 so a zero-filled struct says
+Relay has not spoken rather than claiming an empty meter. An unreadable
+timestamp reads STALE, because "I cannot tell how old this is" is not "it is
+current". A report from the future is NOT stale — clock skew is ordinary and a
+healthy system should not flicker. Foreign-project reports, stale revisions and
+malformed reports are each counted separately.
+
+Tier changes move `maximum` and `reference`, not a percentage: the bar's
+PHYSICAL capacity changes, which is what the founder asked for.
+
+### 7. The bridge session (`eac4443`)
+
+`src/relay/mission/wonderland/wonderland-bridge.ts` (28 tests)
+
+Adopts Unreal's pre-existing `EWonderlandLinkState` rather than inventing a
+seventh vocabulary, and moves it out of the C++-only allowlist. Reconnect delay
+doubles from 1s to a 30s ceiling with no jitter (a client that jittered would
+make a reconnect storm untestable).
+
+Four rules, each tested: a lost connection never changes the visual state,
+never sets terminal, never clears the usage figures, and never moves the
+cursor. **A disconnection is never a completion**, mechanically.
+
+### 8. The ending guards (`ea4fb36`)
+
+The sequence check refuses events that arrive LATE. This is the other case: an
+event delivered perfectly in order that still contradicts a completion the
+founder already saw. Once a mission has ended, a later running state is refused
+(`refused_would_uncomplete`), and a second DIFFERENT ending does not replace the
+first (`refused_second_ending`) — a world showing whichever landed last would
+flip its verdict on delivery order. Both are counted, and the cursor still
+advances: refusing an event's CONTENT is not a reason to ask for it again.
+
+The gate is `terminal`, not the visual state, so a mid-run `error` still
+recovers into `repair` instead of freezing the world on a recoverable fault.
+
+### 9. The animation plan (`ea4fb36`)
+
+`src/relay/mission/wonderland/wonderland-julius-animation.ts` (34 tests)
+
+STATE LOGIC and ANIMATION PRESENTATION are separated here. Six transitions —
+`hold`, `wake`, `cross_fade`, `interrupt`, `settle`, `dormant` — with blend
+durations both surfaces share, because if each renderer chose its own the
+browser would ease into an error the world cut to.
+
+The one rule that is not about aesthetics: **a state that needs a human cuts.**
+A failure that is also an ENDING still cuts — the person outranks the ceremony.
+
+Required clips are DERIVED: eleven states collapse to nine clips plus
+`dormant`. There is no smaller honest phase one, because a state shown by a
+clip that means something else is worse than a placeholder — a placeholder
+reads as missing, a wrong clip reads as a fact. Three states share
+`stand_still`, which is why `terminal` and `attentionRequired` travel with the
+plan rather than being read off the body. The plan names no asset, no file and
+no provider, and a test holds it to that: that is what keeps clips replaceable.
+
+C++ ordinal 0 is `Hold`, so a zero-filled plan says "keep playing". `Interrupt`
+at 0 would cut on a struct nobody wrote; `Dormant` would fade the dog out
+whenever a message dropped, rendering a transport fault as a fact about the
+mission.
+
+### 10. The entry contract (`2758c0c`)
+
+`src/relay/mission/wonderland/wonderland-entry.ts` (31 tests)
+`src/relay/ui/wonderland-entry/wonderland-renderers.ts` (10 tests)
+
+`ENTER WONDERLAND` had no `onClick`, and the reason it stayed that way matters
+more than the fix: there is a real bridge route behind it,
+`POST /wonderland/presence/join`, and it really can succeed. Wiring it to an
+`entered` flag would produce a working request that leaves the founder looking
+at the landing page.
+
+So entry has two axes and neither may be inferred from the other:
+
+| axis | question | who answers |
+|---|---|---|
+| ADMISSION | did the world let this person in? | the bridge |
+| PRESENTATION | is anything actually SHOWING it? | a renderer, by claiming it |
+
+Being in Wonderland is `presentation === 'presenting'` and nothing else,
+defined in one place so no surface decides for itself that admitted is close
+enough. `ADMITTED · NOTHING CAN SHOW IT` is a real state and today's true one.
+
+The empty renderer list is pinned by a test, so whoever ships the first world
+client must change the sentence people are told in the same commit. A second
+test walks the whole path with a renderer handed in, proving the gap is the
+ASSET and not the wiring.
+
+### 11. The wall between worlds (`9891a79`)
+
+`src/relay/mission/wonderland/wonderland-worlds.ts` (27 tests)
+
+Every other module holds ONE world. A founder with three projects has three
+worlds, one tab and one stream. Getting the routing wrong does not throw and
+shows no red state — project A's mission animates project B's dog, which looks
+exactly like the product working.
+
+So the guarantee is **referential identity**: routing anything leaves every
+other world the same frozen object. Equality would pass for an implementation
+that rebuilt every world and got the values right; identity only passes if the
+others were never touched. Mutation-verified both ways — routing by the focused
+world fails four tests, and rebuilding every world while keeping every value
+correct still fails three.
+
+Routing goes through one function, so there is exactly one place that could
+break it. Not mirrored into C++ deliberately: an Unreal client shows one world,
+and a multi-tenant container has no business in a single-tenant process.
+
+---
+
 ## What is REAL and what is not
+
+Read this table before saying anything about this stream out loud. The
+distinction between the middle two rows is the one that gets misreported.
 
 | | state |
 |---|---|
 | Julius phase → visual state mapping | **real**, total over the live runtime's own 28-member union |
 | Julius kernel state → visual state | **real**, total over `JULIUS_MISSION_STATES` |
 | `JuliusOperationalEvent` → `WonderlandEvent` normalizer | **real**, pure, tested — **and nothing calls it yet** |
-| the event reducer / reconnect fold | **real**, tested against constructed events |
-| HUD geometry, palette, capacity model | **real** and shared with Unreal by parity |
-| the numbers in the HUD | **SIMULATED FIXTURE.** No usage authority exists. The HUD says so on its own face. |
-| Unreal rendering any of it | **not built.** The headers exist; no `.cpp`, no widget, no client. |
-| a live Julius mission driving the world | **NO.** Not once. See "Live Run 2" below. |
+| the event reducer, the ending guards, the reconnect fold | **real**, tested against events constructed in the test files |
+| per-project isolation across many worlds | **real**, proven by referential identity, mutation-verified |
+| the entry contract (admission vs presentation) | **real**, and its honest answer today is `ADMITTED · NOTHING CAN SHOW IT` |
+| HUD geometry, palette, capacity model | **real** and shared with Unreal by bidirectional parity |
+| the usage authority (KNOWN / NOT-REPORTED / STALE / UNAVAILABLE) | **real** contract; **no authority reports into it** |
+| the numbers in the HUD | **SIMULATED FIXTURE.** The HUD says so on its own face. |
+| Unreal rendering any of it | **not built.** Headers parse; no widget, no client, no frame. |
+| a live Julius mission driving the world | **NO. Not once.** |
 
-**Do not describe this as "Julius is connected".** It is INTEGRATION-READY: the
-contract, the reducer, the HUD and the Unreal structs all exist and are tested
-against events constructed inside the test files. Every test in
-`wonderland-julius-state.test.ts` says so in its own header comment.
+**Do not describe this as "Julius is connected".** The honest word is
+INTEGRATION-READY. Using the brief's own five-way scale:
+
+| level | what is at it |
+|---|---|
+| REAL (live Julius drove it) | nothing |
+| RECORDED-EVENT VERIFIED (a captured real event replayed through it) | nothing — no capture has ever been taken |
+| INTEGRATION-READY (contract + reducer + parity, exercised by constructed events) | the state machine, the normalizer, the bridge session, the usage authority, the entry contract, the worlds record, the animation plan |
+| SIMULATED (labelled fixture) | every figure the HUD draws |
+| NOT BUILT | the Unreal client, the world snapshot route, any renderer at all |
+
+A test that manufactures its own input and then reports the world connected is
+exactly the untruth this repository is built to refuse, so every suite in this
+stream carries that statement in its own header comment.
 
 ---
 
 ## The gaps this stream found and did NOT close
 
-Ordered by how much they block the next step.
+Ordered by how much they block the next step. Gap 6 in the previous revision
+("ENTER WONDERLAND is a readiness label, not a launch") is now MODELLED rather
+than closed — the contract exists and says truthfully that nothing can render.
 
-1. **`observeRelayTransition` is battle-scoped.** `WonderlandBackend`'s
-   Relay→Wonderland seam (`wonderland-backend.ts`) looks a BATTLE up by mission
-   id and returns `[]` when there is none — so an ordinary Julius run, which is
-   what a founder actually runs, produces no world events at all. The
-   normalizer this stream added is the replacement path; **wiring it is the next
-   task**. See "Exact next task".
+1. **`observeRelayTransition` is battle-scoped.** `wonderland-backend.ts` looks
+   a BATTLE up by mission id and returns `[]` when there is none — so an
+   ordinary Julius run, which is what a founder actually runs, produces no world
+   events at all. The normalizer this stream added is the replacement path;
+   **wiring it is still the next task.**
 
 2. **`server.ts` forwards 9 of 28 phases.** `relay-bridge/server.ts:1162`
    filters `onPhaseTransition` down to the nine members of the hand-copied
-   `RelayMissionPhase`. The domain now handles all 28; widening that filter is a
-   one-line change in a file the Julius session edits constantly, so it was
-   deliberately left alone.
+   `RelayMissionPhase`. The domain handles all 28. Widening it is a one-line
+   change in a file the Julius session edits constantly, so it was deliberately
+   left alone.
 
-3. **A Julius payload can reach the browser malformed.** (Found, not fixed —
-   it is in `src/relay/persistence/`, the Julius session's territory.)
-   `PostgresWonderlandTransaction.replay()` selects from
-   `relay_wonderland.events` with **no `event_type` filter**, while
-   `JuliusEventPostgresRepository.append()` writes Julius events into that same
-   table with `event_type = 'julius.…'` and `visibility = 'PROJECT'` — which is
-   not a member of `WonderlandVisibility`. A Julius payload has no `eventId`,
-   `eventType` or `sequence`, so `DistributedWonderlandRealtime`'s
-   `event.sequence <= cursor` guard passes (`undefined <= n` is false) and the
-   SSE wire would carry `id: undefined\nevent: undefined`.
-   `JuliusTimelinePostgresRepository` filters `AND event_type LIKE 'julius.%'`
-   correctly; the Wonderland replay does not. **Raise with the Julius session.**
+3. **A Julius payload can reach the browser malformed. TWO separate bugs, both
+   re-verified this session.** Found, not fixed — `src/relay/persistence/` is
+   the Julius session's territory.
+
+   a. **No `event_type` filter on replay.**
+      `wonderland-postgres.ts:175` selects `payload FROM relay_wonderland.events
+      WHERE project_id=$1 AND sequence>$2` with no type filter, while
+      `julius-event-postgres.ts` writes into that same table with
+      `event_type = 'julius.…'` and `visibility = 'PROJECT'` (not a member of
+      `WonderlandVisibility`). A Julius payload is
+      `{schemaVersion:'relay-julius-event.v1', …}` — no `eventId`, no
+      `eventType`, no `sequence`. **The correct pattern already exists three
+      files away**: `julius-timeline-postgres.ts:41` filters
+      `AND event_type LIKE 'julius.%'`. The Wonderland replay is the one that
+      forgot.
+
+   b. **Sequences are allocated per stream and replayed per project.** Both
+      writers allocate from `stream_sequences` keyed by a STREAM
+      (`wonderland-postgres.ts:164` takes a `streamId`;
+      `julius-event-postgres.ts` uses `event.runId`), but `replay()` orders by
+      `sequence` scoped to `project_id`. Two runs in one project therefore both
+      produce sequences 1, 2, 3…, so a project-scoped cursor sees duplicates and
+      interleaving. **A cursor cannot be correct against this.**
+
+   Our reducer is SAFE against (a) — `Number.isSafeInteger(undefined)` is false,
+   so malformed rows are counted stale and dropped rather than rendered. It is
+   not safe against (b), and neither is anything else. **Raise both with the
+   Julius session.**
 
 4. **No Bridge route serves the world snapshot.** `projectWonderlandWorld` has
-   no non-test caller anywhere. `wonderland/UNREAL_SESSION_CHECKLIST.md` records
-   this and it is still true.
+   no non-test caller anywhere.
 
-5. **No C++ client and no C++ HUD.** `HTTP`, `Json`, `UMG`, `Slate` are all in
-   `Wonderland.Build.cs` and entirely unused. Nothing constructs an
-   `FWonderlandWorld`; nothing calls `AWonderlandDogPawn::ApplyWorldState`;
-   `FWonderlandLinkStatus` has no writer. On `relay/wonderland-v2` there IS a
-   `UWonderlandRelayLink` GameInstance subsystem that pushes world state to
-   registered pawns and is fail-closed without a configured Bridge URL — that
-   is the right receiver to bind to, and it lives on the world session's line.
+5. **No renderer exists, in any form.** No pixel-streaming player, no
+   signalling client, no embedded world scene; `HTTP`, `Json`, `UMG` and
+   `Slate` are in `Wonderland.Build.cs` and entirely unused. Nothing constructs
+   an `FWonderlandWorld`. This is now written down as
+   `BUILT_IN_WONDERLAND_RENDERERS = []` with a test pinning it empty, so it can
+   no longer be forgotten — but it is still the largest missing piece by far.
+   On `relay/wonderland-v2` there IS a `UWonderlandRelayLink` GameInstance
+   subsystem that pushes world state to registered pawns and is fail-closed
+   without a configured Bridge URL. **That is the receiver to bind to**, and it
+   lives on the world session's line.
 
-6. **`ENTER WONDERLAND` is a readiness label, not a launch.**
-   `src/relay/ui/relay-experience/wonderland-handoff.ts` computes reachability
-   and names `POST /wonderland/presence/join` as the entrance; nothing calls it,
-   the button is disabled, and there is **no Pixel Streaming, WebRTC or
-   signalling code anywhere in the repository**.
+6. **No captured real Julius event exists.** Not one has ever been recorded, so
+   even RECORDED-EVENT VERIFIED is out of reach without either a live run or a
+   capture from one. This is the cheapest step up the honesty ladder and it
+   needs the Julius session, not this one.
 
 ---
 
@@ -296,48 +464,61 @@ any branch.
 
 ## Tests
 
-New, all passing:
+Every suite this stream added, with what each one is actually for:
 
-- `wonderland-julius-state.test.ts` — 49 tests. Vocabulary, the bijection, the
-  three derivations, event reading precedence, the reducer's ordering rules,
-  reconnect equivalence, and the rules that must not bend (no transport
-  condition produces a completion; `terminal` latches; blocked/error never
-  reach complete).
-- `wonderland-usage-meter.test.ts` — 46 tests. Capacity-vs-percentage, unknown
-  is never zero, per-channel ceilings, drain/replenish and provenance
-  degradation, arc-length uniformity, the measured right-facing reversal,
-  nesting without crossing.
-- `wonderland-julius-link.test.ts` — 16 tests. The whole chain from the
-  kernel's event shape to the clip, the labelled fixture, dense sequence
-  allocation, immutability, and the fold being identical whether the stream
-  arrives whole or in pieces.
-- `wonderland-hud.test.tsx` — 15 tests. Anchor, palette provenance, UNKNOWN,
-  the drain agreeing with the readout, no animation loop, and the mask-id
-  collision guard.
+| suite | tests | what it proves |
+|---|---|---|
+| `wonderland-julius-state.test.ts` | 59 | vocabulary, the bijection, three derivations, event-reading precedence, the reducer's ordering rules, reconnect equivalence, and the ending guards |
+| `wonderland-usage-meter.test.ts` | 46 | capacity-vs-percentage, unknown is never zero, per-channel ceilings, drain/replenish, provenance |
+| `wonderland-hud-canon.test.ts` | 15 | **the freeze.** Digest of every control point; fails on a 0.0004 nudge |
+| `wonderland-usage-authority.test.ts` | 27 | KNOWN / NOT-REPORTED / STALE / UNAVAILABLE, skew, unreadable timestamps, the three rejection counters |
+| `wonderland-bridge.test.ts` | 28 | link states, reconnect backoff, and the four things a lost connection may never do |
+| `wonderland-julius-animation.test.ts` | 34 | transitions, the interrupt rule, derived clip coverage, no asset/provider leakage |
+| `wonderland-entry.test.ts` | 31 | admission and presentation as separate axes; being admitted is not being there |
+| `wonderland-entry-availability.test.ts` | 10 | this build ships no renderer, pinned against the repository |
+| `wonderland-worlds.test.ts` | 27 | per-project isolation by referential identity |
+| `wonderland-cpp-parity.test.ts` | 41 | every struct and enum, bidirectionally, against the real `.h` files |
+| `wonderland-hud.test.tsx` | 21 | the rendered HUD: mask region, per-instance ids, reading labels |
+| `wonderland-julius-link.test.ts` | — | the composition and its `live_runtime` / `development_fixture` label |
 
-Extended: `wonderland-cpp-parity.test.ts` (union of both parity tables),
-`wonderland/Tools/syntax-check.sh` (now checks every header standalone — it only
-ever parsed the four `.cpp` files, so a header no translation unit includes was
-never parsed by anything, which is exactly the shape of both new headers).
+**595 passing across the wonderland slice and its boundary tests**, 0 failed,
+0 skipped. Plus the repository boundary scanner, the core boundary test, the
+Julius harness drift gate, and the C++ syntax check — all clean.
 
-**Gates run green on this branch**: `typecheck` (all four projects), `build`,
-`relay:build`, `relay:bridge:build`, `relay-repository-boundary.mjs`,
-`relay-parity-gate.mjs`, `relay:surface-parity:check:strict`,
-`relay:yc-demo:check`, `relay:cli:contract-verify`,
-`relay:persistence:contract-verify`, `relay:persistence:recovery-drill`,
-`relay:workspace:verify`, `relay:claude:contract-verify`,
-`wonderland/Tools/syntax-check.sh`, `git diff --check`.
+### The full suite, and its one failure
 
-`npm test` is green **except one pre-existing environmental failure**:
-`claude-code.test.ts > classifies an API-key environment as disallowed` expects
-`sourceClass` `api_key` and gets `gateway`, because this cloud sandbox sets
-Anthropic gateway variables. Confirmed unrelated — it fails identically with
-`origin/main`'s connector code checked out.
+`npm test` at `9891a79`: **9,657 passing, 1 failed, 22 todo across 502 files**
+(163s). The failure is **not this stream's** and is recorded here rather than
+rounded off:
 
-`npm run wonderland:hud:preview` renders the HUD across four states —
-typical, nearly spent, untouched, nothing reported — to
-`generated/wonderland-hud-preview.html` for visual iteration without a GPU or a
-session.
+`src/relay/workspace/julius-tools/executor-repair-regression.test.ts` fails as
+an **unhandled rejection**, not an assertion —
+`RemoteExecutorControlPlane.call` throws `EXECUTOR_UNAVAILABLE` from a promise
+that escapes the test
+(`remote-executor-control-plane.ts:65`). Evidence it is pre-existing:
+
+- the file passes **14/14 in isolation**; it only fails under full-suite
+  parallel load,
+- `git diff b2dc9f2..HEAD -- src/relay/workspace relay-bridge` is **empty** —
+  this stream does not touch that subtree at all.
+
+It is a genuine latent defect (a floating promise, surfacing as a race), and it
+belongs to the **Julius session**. Worth raising with them; do not "fix" it from
+this stream.
+
+### What was mutation-verified
+
+Passing tests are not evidence unless they can fail. These were each broken on
+purpose and confirmed to fail:
+
+| mutation | tests that caught it |
+|---|---|
+| HUD control point nudged by 0.0004 | the canon digest |
+| ending guard bypassed in the reducer | 3 |
+| interrupt rule disabled | 4 |
+| a C++ field renamed, an enum member renamed | 2 parity tests |
+| routing by the focused world instead of the event's project | 4 |
+| every world rebuilt, all values still correct | 3 (identity, not equality) |
 
 ---
 
@@ -387,6 +568,31 @@ session.
   exactly one `requestAnimationFrame` owner in the whole website. The first HUD
   draft added a second; the drain is now an SVG mask whose dash offset CSS
   transitions, with no script running per frame.
+
+---
+
+- **`WONDERLAND_ACTIVITY_CLIP` was used before it was declared, with the
+  imports it needed sitting mid-file.** A temporal-dead-zone error at module
+  evaluation. `tsc` did not object because the reference was inside an
+  initializer it could not order; nothing caught it but reading the file.
+- **Two comments in the animation module described code that did not exist.**
+  A ten-item list described as "nine of the eleven", and "`verifying` and
+  `complete` share `stand_still`" when `attention` shares it too. Both replaced
+  with a derivation over the whole vocabulary, so the count cannot drift from
+  the list again.
+- **A test fixture claimed every visual state was reachable from an event
+  type.** Three are not: `idle`, `handoff` and `blocked` arrive in the payload,
+  and the kernel has no idle at all — a RUN is never idle, a MISSION is. A
+  hand-built embodiment would have hidden that; driving the fixtures through the
+  real reducer surfaced it immediately.
+- **The C++ syntax check's baselines are hand-maintained, so a file added
+  without an entry was silently unchecked.** Exactly the gap its own comment
+  records having already cost two whole headers. It now enumerates the source
+  directory and fails on anything unlisted.
+- **`unofferedConfirmationsRefused` tripped the parity authority sweep.** The
+  regex is deliberately broad, but the rename it forced produced the better
+  word: what arrives from a renderer is a CLAIM this module weighs, not a fact
+  it is obliged to record. Renamed rather than allowlisted.
 
 ---
 
@@ -454,3 +660,77 @@ events.** Concretely, in a composition root (not in the kernel and not in
 Then, and only then, drive `rehydrateJuliusEmbodiment` from the real stream and
 record the evidence here. **Do not claim Julius is connected before a real
 mission moves the world.**
+
+---
+
+## Final report (the brief's A–L)
+
+**A. Starting SHA** — `b2dc9f2` (`origin/main`, unchanged throughout; this
+stream never merged into or from `relay/wonderland-v2`).
+
+**B. Ending SHA** — `9891a79` on `relay/wonderland-integration`, pushed to both
+that ref and `claude/relay-wonderland-integration-ojr5x6` (same commits).
+
+**C. Integration layers completed** — eleven, listed under "What was built":
+the state seam, the HUD, the link, the Unreal receiver, the HUD freeze, the
+usage authority, the bridge session, the ending guards, the animation plan, the
+entry contract, and the wall between worlds.
+
+**D. HUD data progress** — the geometry is frozen and pinned by digest. Beneath
+it there is now a provider-neutral usage contract with four readings, per-channel
+tier ladders that change PHYSICAL capacity, three rejection counters, and an
+authority id carried for traceability and never interpreted. **No authority
+reports into it**, so every figure drawn is still a labelled fixture. The visual
+layer knows nothing about billing or providers, and a test sweeps its output for
+provider names and key shapes.
+
+**E. Event bridge** — Julius events normalize to a provider-independent
+contract; the reducer rejects stale and out-of-order deliveries, counts sequence
+gaps, and rehydrates by folding a replay through the same function a live stream
+uses. Reconnect backoff doubles to a 30s ceiling. No provider payload reaches
+Unreal and nothing binds Unreal to PostgreSQL internals — the C++ side sees only
+mirrored structs.
+
+**F. State machine and animation** — eleven visual states, total over all three
+Relay vocabularies, in the product's own words with no model brand mapped to any
+animation. Impossible transitions are refused and counted rather than silently
+dropped. `blocked` and `error` can never appear as `complete`. Animation
+presentation is a separate module that names no asset.
+
+**G. Landing → world** — modelled honestly rather than claimed. The entry
+contract separates admission from presentation; today's true state is
+`ADMITTED · NOTHING CAN SHOW IT`, and the empty renderer list is pinned by a
+test so the first world client cannot ship without updating that sentence.
+
+**H. Identity** — enforced at three levels: the reducer rejects foreign-project
+events, the usage authority rejects foreign-project reports, and the worlds
+record routes by the message's OWN project and leaves every other world
+referentially identical. Mutation-verified.
+
+**I. Genuinely connected to real Julius** — **nothing.** No provider call, no
+Julius mission, no Unreal build, no GPU frame, no captured real event. See the
+five-way table under "What is REAL and what is not".
+
+**J. Still simulated** — every number the HUD draws, and every event any test
+folds. All of it labelled.
+
+**K. Tests and evidence** — 595 passing across the wonderland slice and its
+boundary tests, 0 failed, 0 skipped; plus the repository boundary scanner, the
+core boundary test, the Julius harness drift gate and the C++ syntax check. Six
+deliberate mutations confirmed the important suites can actually fail. The full
+`npm test` run for the final commit is recorded below.
+
+**L. The next five gaps** — in order:
+
+1. Wire the normalizer into a composition root so an ordinary Julius run
+   produces world events (see "Exact next integration task").
+2. Fix the two `relay_wonderland.events` defects (gap 3) — **Julius session.**
+   Step 1 must not reach production before this.
+3. Capture one real Julius event stream and replay it through
+   `rehydrateJuliusEmbodiment`. This is the cheapest step up the honesty ladder
+   and the only one that moves anything off INTEGRATION-READY.
+4. Bind `UWonderlandRelayLink` on `relay/wonderland-v2` as the first renderer,
+   and register it in `BUILT_IN_WONDERLAND_RENDERERS`.
+5. Widen `server.ts`'s nine-phase filter to all 28 — one line, in a file the
+   Julius session owns.
+
