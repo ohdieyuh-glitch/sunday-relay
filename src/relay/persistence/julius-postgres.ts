@@ -1,5 +1,6 @@
 import type { Pool } from 'pg';
-import { JULIUS_RUNTIME_VERSION, transitionMission, type JuliusEvidence, type JuliusMissionState, type JuliusTask, type JuliusVerificationDecision } from '../mission/julius';
+import { JULIUS_RUNTIME_VERSION, transitionMission, type JuliusBrainEntry, type JuliusEvidence, type JuliusMissionState, type JuliusTask, type JuliusVerificationDecision } from '../mission/julius';
+import { brainKindToStored } from './julius-brain-kinds';
 
 export interface JuliusRunRecord { readonly runId:string;readonly missionId:string;readonly projectId:string;readonly state:JuliusMissionState;readonly cardRevision:string;readonly missionContractRevision:number;readonly projectBrainRevision:number;readonly version:number; }
 export interface ClaimedJuliusTask { readonly taskId:string;readonly runId:string;readonly role:string;readonly taskType:string;readonly leaseGeneration:number;readonly attempt:number; }
@@ -83,6 +84,44 @@ export class JuliusPostgresRepository {
    * Only BLOCKED tasks of this run move; the update is a no-op for any other.
    */
   async appendDecision(input:{decisionId:string;runId:string;taskId:string;policyRevision:string;idempotencyKey:string;occurredAt:string;decision:JuliusVerificationDecision;releaseTaskIds?:readonly string[]}):Promise<boolean>{return this.transaction(async client=>{const result=await client.query(`INSERT INTO relay_wonderland.julius_verification_decisions(decision_id,run_id,task_id,action,reason_code,safe_summary,evidence_ids,policy_revision,occurred_at,idempotency_key) VALUES($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9,$10) ON CONFLICT(run_id,idempotency_key) DO NOTHING`,[input.decisionId,input.runId,input.taskId,input.decision.action,input.decision.reasonCode,input.decision.safeSummary,json(input.decision.evidenceIds),input.policyRevision,input.occurredAt,input.idempotencyKey]);if(result.rowCount!==1)return false;const releases=[...new Set(input.releaseTaskIds??[])];if(releases.length>0){await client.query(`UPDATE relay_wonderland.julius_tasks SET state='RUNNABLE',version=version+1,updated_at=$3 WHERE run_id=$1 AND task_id=ANY($2::text[]) AND state='BLOCKED'`,[input.runId,releases,input.occurredAt]);}return true;});}
+  /**
+   * ONE STATEMENT, AND THE RUN ROW IS THE COUNTER.
+   *
+   * `UNIQUE(run_id,revision)` cannot be satisfied by two callers that each read
+   * `max(revision)+1`, so the revision is allocated by an UPDATE of the run row,
+   * which takes that row's lock for the duration and therefore serialises
+   * concurrent appends to one run without a retry loop and without SERIALIZABLE.
+   *
+   * `GREATEST(project_brain_revision, max(revision))` because the bootstrap
+   * seeds entries at revisions 1..N and leaves the run's own counter at 0: the
+   * first runtime append has to continue the sequence rather than collide with
+   * it. From then on the column IS the counter, which is what it was for —
+   * nothing else advanced it.
+   *
+   * `NOT EXISTS` on the entry id makes a replay a true no-op. Without it the
+   * UPDATE would still fire, the INSERT would be swallowed by ON CONFLICT, and
+   * the revision would drift upward on every retried tick — a counter counting
+   * attempts instead of entries.
+   */
+  async appendBrainEntry(input:{runId:string;projectId:string;taskId:string|null;workerId:string;entryId:string;kind:JuliusBrainEntry['kind'];safeText:string;evidenceIds:readonly string[];occurredAt:string}):Promise<boolean>{
+    const result=await this.pool.query(
+      `WITH allocated AS (
+         UPDATE relay_wonderland.julius_runs r
+            SET project_brain_revision = GREATEST(
+                  r.project_brain_revision,
+                  COALESCE((SELECT max(b.revision) FROM relay_wonderland.julius_brain_entries b WHERE b.run_id = r.run_id), 0)
+                ) + 1
+          WHERE r.run_id = $2 AND r.project_id = $3
+            AND NOT EXISTS (SELECT 1 FROM relay_wonderland.julius_brain_entries e WHERE e.entry_id = $1)
+          RETURNING r.project_brain_revision AS revision
+       )
+       INSERT INTO relay_wonderland.julius_brain_entries(entry_id,run_id,project_id,task_id,worker_id,entry_kind,safe_content,evidence_ids,revision,created_at)
+       SELECT $1,$2,$3,$4,$5,$6,$7,$8::jsonb,allocated.revision,$9 FROM allocated
+       ON CONFLICT(entry_id) DO NOTHING`,
+      [input.entryId,input.runId,input.projectId,input.taskId,input.workerId,brainKindToStored(input.kind),input.safeText,json([...input.evidenceIds]),input.occurredAt],
+    );
+    return result.rowCount===1;
+  }
   private async event(client:{query:(sql:string,values?:readonly unknown[])=>Promise<{rows:any[];rowCount:number|null}>},input:{eventId:string;projectId:string;streamId:string;type:string;occurredAt:string;payload:unknown}){const sequence=await client.query('INSERT INTO relay_wonderland.stream_sequences(stream_id,next_sequence) VALUES($1,2) ON CONFLICT(stream_id) DO UPDATE SET next_sequence=relay_wonderland.stream_sequences.next_sequence+1 RETURNING next_sequence-1 AS sequence',[input.streamId]);await client.query(`INSERT INTO relay_wonderland.events(event_id,stream_id,project_id,sequence,event_type,visibility,payload,occurred_at) VALUES($1,$2,$3,$4,$5,'PROJECT',$6::jsonb,$7)`,[input.eventId,input.streamId,input.projectId,Number(sequence.rows[0].sequence),input.type,json({schemaVersion:'relay-julius-event.v1',...input}),input.occurredAt]);await client.query('INSERT INTO relay_wonderland.outbox(outbox_id,event_id,project_id) VALUES($1,$2,$3)',[`outbox:${input.eventId}`,input.eventId,input.projectId]);}
   private mapRun(row:Record<string,unknown>):JuliusRunRecord{return{runId:String(row.run_id),missionId:String(row.mission_id),projectId:String(row.project_id),state:String(row.state)as JuliusMissionState,cardRevision:String(row.card_revision),missionContractRevision:Number(row.mission_contract_revision),projectBrainRevision:Number(row.project_brain_revision),version:Number(row.version)};}
   private parseRun(value:unknown):JuliusRunRecord{return typeof value==='string'?JSON.parse(value)as JuliusRunRecord:value as JuliusRunRecord;}
