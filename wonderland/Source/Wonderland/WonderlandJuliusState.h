@@ -35,6 +35,7 @@
 
 #include "CoreMinimal.h"
 #include "WonderlandTypes.h"
+#include "WonderlandDogAnimation.h"
 #include "WonderlandJuliusState.generated.h"
 
 /* ------------------------------------------------------------ the state */
@@ -166,3 +167,29 @@ struct FWonderlandJuliusEmbodiment
 	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Julius")
 	int64 SequenceGapsObserved = 0;
 };
+
+/* ------------------------------------------------------------- resolvers */
+
+// The world receives Activity, Motion and Animation already filled in by Relay.
+// These exist for the other case: a Blueprint, an editor preview or a test that
+// holds only the STATE.
+//
+// Every one is a pure switch mirroring a TypeScript table, compared case by case
+// by wonderland-cpp-parity.test.ts — the same treatment the motion→clip resolver
+// gets. A second opinion about which clip a state plays is how the 3D dog and
+// the 2D dog end up showing different behaviour for the same Relay state.
+
+// Idle is a state Relay observed; Unobserved is the absence of one. They do not
+// collapse, here or anywhere.
+WONDERLAND_API EWonderlandDogActivity WonderlandActivityForJuliusState(EWonderlandJuliusState State);
+
+WONDERLAND_API EWonderlandDogMotion WonderlandMotionForActivity(EWonderlandDogActivity Activity);
+
+// Composed from the two above and the motion→clip resolver, never a fourth
+// table: a direct state-to-clip map would be a place for the chain to disagree
+// with itself.
+WONDERLAND_API EWonderlandDogAnimation WonderlandAnimationForJuliusState(EWonderlandJuliusState State);
+
+// True for Blocked and Error, and for nothing else. Stated once because "does
+// this need me" is the question a HUD asks most often.
+WONDERLAND_API bool WonderlandJuliusStateAsksForAHuman(EWonderlandJuliusState State);

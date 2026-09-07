@@ -21,6 +21,14 @@ import {
   WONDERLAND_INTEGRATION_CPP_STRUCT_PARITY,
   WONDERLAND_INTEGRATION_NULLABLE_FIELDS,
 } from './wonderland-integration-parity';
+import {
+  JULIUS_VISUAL_STATES,
+  JULIUS_VISUAL_STATE_ACTIVITY,
+} from './wonderland-julius-state';
+import {
+  OFFICIAL_RELAY_DOG_ACTIVITIES,
+  OFFICIAL_RELAY_DOG_ACTIVITY_MOTION,
+} from '../../shared/official-relay-dog-states';
 
 /**
  * THE PARITY TABLE IS THE UNION OF TWO HALVES, AND EVERY CHECK BELOW APPLIES TO
@@ -1046,3 +1054,106 @@ describe('the name mappers are themselves correct', () => {
     expect(canonicalEnumToken('Unobserved')).not.toBe(canonicalEnumToken('NotObserved'));
   });
 });
+
+/* ------------------------------- behavioural parity: the Julius resolvers */
+
+describe('the C++ Julius resolvers match the TypeScript tables', () => {
+  const CPP_FILE = 'WonderlandJuliusState.cpp';
+  const source = existsSync(join(CPP_DIR, CPP_FILE))
+    ? readFileSync(join(CPP_DIR, CPP_FILE), 'utf8')
+    : '';
+  const stripped = stripComments(source);
+
+  const parseCases = (from: string, to: string): Map<string, string> => {
+    const cases = new Map<string, string>();
+    for (const match of stripped.matchAll(
+      new RegExp(`case\\s+${from}::(\\w+)\\s*:\\s*return\\s+${to}::(\\w+)\\s*;`, 'g'),
+    )) {
+      cases.set(canonicalEnumToken(match[1]), canonicalEnumToken(match[2]));
+    }
+    return cases;
+  };
+
+  const stateCases = parseCases('EWonderlandJuliusState', 'EWonderlandDogActivity');
+  const activityCases = parseCases('EWonderlandDogActivity', 'EWonderlandDogMotion');
+
+  it('the file exists and both resolvers were parsed', () => {
+    expect(source.length, `${CPP_FILE} is missing or empty`).toBeGreaterThan(0);
+    // A regex that matched nothing would call the empty result agreement, which
+    // is the failure mode this whole file is built around.
+    expect(stateCases.size, 'no Julius-state cases parsed').toBe(JULIUS_VISUAL_STATES.length);
+    expect(activityCases.size, 'no activity cases parsed').toBe(
+      OFFICIAL_RELAY_DOG_ACTIVITIES.length,
+    );
+  });
+
+  it('every Julius state resolves to the activity TypeScript resolves it to', () => {
+    const offenders: string[] = [];
+    for (const state of JULIUS_VISUAL_STATES) {
+      const expected = canonicalEnumToken(JULIUS_VISUAL_STATE_ACTIVITY[state]);
+      const actual = stateCases.get(canonicalEnumToken(state));
+      if (actual !== expected) {
+        offenders.push(`${state}: C++ returns ${actual ?? 'nothing'}, TypeScript returns ${expected}`);
+      }
+    }
+    expect(
+      offenders,
+      'the world and the website would disagree about what Julius is doing',
+    ).toEqual([]);
+  });
+
+  it('every activity resolves to the motion TypeScript resolves it to', () => {
+    const offenders: string[] = [];
+    for (const activity of OFFICIAL_RELAY_DOG_ACTIVITIES) {
+      const expected = canonicalEnumToken(OFFICIAL_RELAY_DOG_ACTIVITY_MOTION[activity]);
+      const actual = activityCases.get(canonicalEnumToken(activity));
+      if (actual !== expected) {
+        offenders.push(`${activity}: C++ returns ${actual ?? 'nothing'}, TypeScript returns ${expected}`);
+      }
+    }
+    expect(offenders, 'the 3D dog would move differently from the 2D dog').toEqual([]);
+  });
+
+  it('an unobserved state resolves to an unobserved activity, never to idle', () => {
+    // The branch that matters most, and it is answered before the switch so it
+    // has its own line to find. Idle is a state Relay observed; Unobserved is
+    // the absence of one.
+    expect(stripped).toMatch(
+      /State\s*==\s*EWonderlandJuliusState::Unobserved[\s\S]{0,160}EWonderlandDogActivity::Unobserved/,
+    );
+    expect(stateCases.get('idle')).toBe('idle');
+    expect(stateCases.has('unobserved')).toBe(false);
+  });
+
+  it('the clip resolver is COMPOSED, so there is no fourth table to disagree with', () => {
+    expect(stripped).toMatch(
+      /WonderlandAnimationForJuliusState[\s\S]{0,300}WonderlandAnimationForMotion\s*\(\s*WonderlandMotionForActivity\s*\(\s*WonderlandActivityForJuliusState/,
+    );
+    // And it must NOT carry its own state→clip switch.
+    expect(
+      parseCases('EWonderlandJuliusState', 'EWonderlandDogAnimation').size,
+      'a direct state-to-clip switch is a second opinion about the same question',
+    ).toBe(0);
+  });
+
+  it('asks for a human on exactly the two states whose behaviour asks for one', () => {
+    const asking = JULIUS_VISUAL_STATES.filter(
+      (state) =>
+        officialRelayDogBehaviourAttention(JULIUS_VISUAL_STATE_ACTIVITY[state]),
+    );
+    expect([...asking].sort()).toEqual(['blocked', 'error']);
+    // The C++ predicate names the same two and nothing else.
+    const predicate = /WonderlandJuliusStateAsksForAHuman[\s\S]{0,400}?\n\}/.exec(stripped);
+    expect(predicate, 'the predicate was not found').not.toBeNull();
+    const body = (predicate as RegExpExecArray)[0];
+    const named = [...body.matchAll(/EWonderlandJuliusState::(\w+)/g)].map((m) =>
+      canonicalEnumToken(m[1]),
+    );
+    expect([...new Set(named)].sort()).toEqual(['blocked', 'error']);
+  });
+});
+
+/** `attentionRequired` for an activity, without importing the whole view. */
+function officialRelayDogBehaviourAttention(activity: string): boolean {
+  return activity === 'waiting_for_user' || activity === 'error';
+}
