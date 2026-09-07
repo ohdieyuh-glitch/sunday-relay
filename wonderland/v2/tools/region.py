@@ -2,6 +2,7 @@
 """Where in Wonderland can you stand and have nothing to walk to?
 
     python3 wonderland/v2/tools/region.py [--cell 10] [--decile 90]
+                                          [--bar 71,37,63]
                                           [--sectors] [--json out.json]
 
 The four audits this project already has each answer one question well, and
@@ -53,6 +54,18 @@ plan-view audit exists to stop that happening again.
 
 `--sectors` adds a bearing-by-ring table of the same world: coarser, and
 useful for seeing whether a fault is one pocket or a whole rim.
+
+## Comparing two worlds
+
+`--decile` recomputes the bar from whichever world it is looking at, which is
+the right default and the WRONG thing to quote across a change: repairing a
+region pulls the whole distribution in, the bar tightens with it, and a
+region that did not move can be reported as having grown. Measured on the
+first repair this tool drove, the p90s went 71 / 37 / 63 m to 67 / 30 / 59.
+
+`--bar built,arch,road` (metres) pins them instead, so a before and an after
+are scored by one ruler. Quote the pinned number for a change and the
+recomputed one for "where is the world worst NOW".
 """
 import json
 import math
@@ -252,9 +265,13 @@ def main():
 
     cell_m = float(opt("cell", "10"))
     decile = float(opt("decile", "90"))
+    bar = opt("bar", None)
     out_json = opt("json", None)
 
     cells, thr, cell, (built, arch, road) = sample(cell_m, decile)
+    if bar:
+        vals = [float(v) * 100.0 for v in bar.split(",")]
+        thr = dict(zip(("built", "arch", "road"), vals))
     regs, n_poor = flood(cells, thr, cell)
 
     area_ha = len(cells) * (cell_m ** 2) / 1e4
@@ -274,10 +291,12 @@ def main():
               % (name, v[len(v) // 2], v[int(0.90 * len(v))],
                  v[int(0.99 * len(v))], v[-1]))
 
-    print("\nFORSAKEN GROUND -- past the world's own %.0fth percentile on ALL THREE"
-          % decile)
-    print("  the bar, set by this world: built > %.0f m, arch > %.0f m, road > %.0f m"
-          % (thr["built"] / 100.0, thr["arch"] / 100.0, thr["road"] / 100.0))
+    print("\nFORSAKEN GROUND -- past %s on ALL THREE"
+          % ("a PINNED bar" if bar else
+             "the world's own %.0fth percentile" % decile))
+    print("  the bar, %s: built > %.0f m, arch > %.0f m, road > %.0f m"
+          % ("given on the command line" if bar else "set by this world",
+             thr["built"] / 100.0, thr["arch"] / 100.0, thr["road"] / 100.0))
     print("  %d cells = %d m2 (%.2f ha, %.1f%% of the accessible world) in %d regions\n"
           % (n_poor, n_poor * (cell_m ** 2), n_poor * (cell_m ** 2) / 1e4,
              100.0 * n_poor / len(cells), len(regs)))
@@ -324,6 +343,7 @@ def main():
     if out_json:
         with open(out_json, "w") as fh:
             json.dump({"thresholds_m": {k: v / 100.0 for k, v in thr.items()},
+                       "bar_pinned": bool(bar),
                        "cell_m": cell_m, "decile": decile,
                        "ground_cells": len(cells), "forsaken_cells": n_poor,
                        "regions": regs}, fh, indent=1)

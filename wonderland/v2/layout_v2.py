@@ -7227,10 +7227,295 @@ def _wayside(bands):
 WAYSIDE = _band("V2_Skyline", _wayside(
     [OUTER_WORLD, SIGNATURE, LANDMARKS, PALACE, FLANKS, REARWORLD]))
 
+
+# ===========================================================================
+# THE SOUTH REACH  (2026-09-06)
+# ===========================================================================
+#
+# `tools/region.py` measured three distances over the whole accessible world
+# -- to a built silhouette >= 25 m, to any architecture at all, to a road --
+# and found that 84% of the ground failing all three at once is ONE region:
+#
+#     6,600 m2, centre (123, -311) m, r 334 m, bearing 292 deg, South Meadows
+#     at its worst 128 m from a silhouette, 105 m from ANY architecture,
+#     109 m from a road, against world medians of 34 / 10 / 20 m
+#
+# Nothing was hiding it. `emptiness --scaled` reports 304 m2 empty in the
+# whole world because the far tier's tolerance is 55 m and this ground has
+# TREES on it; `walkable --window=world` reports 0 of 60 quarters closed
+# because you can walk there perfectly well; `hierarchy` reports the density
+# falling monotonically outward because it is supposed to. Every one of those
+# is right. The ground is reachable, correctly sparse for its tier, and has
+# things standing on it -- and there is nothing to arrive AT.
+#
+# What is around it says the same thing three times:
+#
+#     D02_grove   14 placements   0 arch  0 prop  14 veg
+#     D11_meadow  28 placements   0 arch  0 prop  28 veg
+#     D18_meadow  23 placements   0 arch  0 prop  23 veg
+#
+# Sixty-five pieces between three named quarters and not one of them is
+# built. That is not an accident of placement: `_DISTRICT_SEEDS` gives South
+# Meadows the palette ("meadow", "wood", "meadow"), which contains no built
+# kind at all, so the district was ALWAYS going to be landscape. Its one
+# authored landmark stands at r 260 m and the district's ground runs to 358.
+# The last road on this bearing stops at 259 m. Everything past the rotunda
+# is a hundred metres of grass with a mushroom in it.
+#
+# THE FIX IS NOT DENSITY. Filling 6,600 m2 with props would move the number
+# and make the world worse -- the brief for this tier is a hierarchy, and a
+# meadow that reads as a meadow is correct. What the region has never had is
+# a REASON, and a reason has four parts:
+#
+#   1. THE SOUTH WAY -- 84 m of road out of the ring, so the movement network
+#      reaches the last hundred metres of the world instead of stopping short
+#      of it. This is what the 109 m answers.
+#   2. THE SOUTH GATE -- a `gatehouse_district` astride the way, so the reach
+#      is ENTERED. A threshold is the cheapest way to say "this is somewhere
+#      else", and `FOOT_PARTS` already knows a gatehouse is piers around an
+#      opening rather than a block.
+#   3. THE SOUTH RING -- the terminus, at the audit's own reported centre. A
+#      45 m arch on the approach axis inside a circle of eight 21 m arches:
+#      one silhouette, walked through rather than looked at, and the only
+#      thing in Wonderland made of nothing but arches. Amber and rose glass
+#      screens between alternate pairs carry the district's colour at
+#      architectural size.
+#   4. THE LAST COLONNADE -- the world's southern edge, made deliberate. The
+#      ground here does not taper, it stops, and a horizon that stops at
+#      nothing reads as an unfinished map. Nineteen columns on an arc at
+#      346 m turn the edge into a made line you can stand at.
+#
+# Plus one threshold each for D11 and D18 where their road spur meets them,
+# so those two quarters stop being the only named places in the world with no
+# built thing in them at all.
+#
+# SITED AT THE AUDIT'S OWN CENTRE, which is the habit this file already has:
+# `_QUARTER_SITES` says in its own comment that its coordinates are "the
+# audit's own reported centres for every remaining region over ~400 m2, which
+# is the difference between filling a world and filling the part of it
+# somebody happened to look at". This is the same move, one instrument later.
+#
+# EVERY SIZE IS MEASURED OFF THE BUILT MESH, via `skyline.bboxes()`:
+# arch_stone is 8.65 m tall and 11.0 m across its piers at scale 1,
+# column_ornate 9.50 m, gatehouse_district 28.4 m, glass_screen 23.9 m.
+# Nothing here is sized from a docstring -- PASS 29 found four recipes
+# authored to sizes their docstrings did not have.
+
+#: uu. The terminus, and it is region.py's reported centre for the worst
+#: region, not a bearing chosen by eye.
+_SR_RING = (12300.0, -31100.0)
+#: uu. Where the way leaves the ring circuit: RingRoad1_27_Seg2, the road
+#: segment nearest the region, measured rather than assumed.
+_SR_ROAD_HEAD = (6495.0, -25082.0)
+#: uu. The dogleg, so the way is a route through a landscape and not a ruler
+#: line laid between two points.
+_SR_BEND = (9600.0, -27800.0)
+
+#: The district's own accent pair and glass, from `_DEPTH_ACCENT` and
+#: `_DISTRICT_LANDMARKS` -- read, not restated, so a colour change in one
+#: place cannot leave the reach behind.
+_SR_ROOF, _SR_METAL = _DEPTH_ACCENT["SouthMeadows"]
+_SR_GLASS = "MI_V2_GlassAmber"
+
+
+def _sr_arch(x, y, yaw, s, tag, mat="MI_V2_IvoryStone"):
+    """One stone arch, and the ring base that stops it floating on grass.
+
+    `arch_stone` is in `_PROTECT`, so `_declutter` clears the scatter that has
+    grown through it -- which is the whole reason this reach can be authored
+    on ground the country layer has already planted.
+    """
+    return [A("arch_stone", x, y, 0.0, yaw=yaw, s=s, mat=mat, label=tag),
+            A("stone_ring_base", x, y, -2.0, yaw=yaw, s=s * 1.15,
+              mat="MI_V2_Stone", label=tag + "_Base")]
+
+
+def _south_reach():
+    out = []
+    rx, ry = _SR_RING
+    hx, hy = _SR_ROAD_HEAD
+    bx, by = _SR_BEND
+
+    # --- 1. THE SOUTH WAY, in two legs ------------------------------------
+    out += _road(hx, hy, bx, by, 620.0, "SouthWay0", style="wood")
+    out += _road(bx, by, rx, ry, 620.0, "SouthWay1", style="wood")
+    b_in = math.atan2(ry - by, rx - bx)          # the bearing you arrive on
+    ux, uy = math.cos(b_in), math.sin(b_in)
+    px, py = -uy, ux                             # across the way
+
+    # waymarkers down the way, in the district's own glass
+    for i in range(1, 6):
+        t = i / 6.0
+        wx, wy = bx + (rx - bx) * t, by + (ry - by) * t
+        for sgn in (1.0, -1.0):
+            mx, my = wx + px * sgn * 950.0, wy + py * sgn * 950.0
+            out.append(A("waymarker", mx, my, 0.0, yaw=math.degrees(b_in) + 90.0,
+                         s=0.85, mat="MI_V2_IvoryStone",
+                         label="SouthWay_Mark%d_%d" % (i, int(sgn))))
+            out.append(A("waymarker_lamp", mx, my, 0.0, yaw=math.degrees(b_in) + 90.0,
+                         s=0.85, mat=_SR_GLASS,
+                         label="SouthWay_Lamp%d_%d" % (i, int(sgn))))
+
+    # --- 2. THE SOUTH GATE, astride the way -------------------------------
+    # DRESSED THE WAY THIS WORLD DRESSES A GATE, which `_depth_build` settled
+    # in PASS 29 and paid for: the district's colour rides the banner balls
+    # ABOVE the ivory finial, because the first version of that gate wore a
+    # coloured cone of r 124 uu inside an ivory roof of r 400 and was
+    # invisible in every frame. The first version of THIS gate had a roof_ogee
+    # on top instead, which put the threshold at 38.4 m against the terminus
+    # it announces at 45.0 -- 1.17x, and PASS 29 recorded the risk of "a
+    # gatehouse that outranks the landmark it announces" in this same file.
+    # Undressed it is 29.8 m, and the ring is 1.5x it.
+    gsc = 1.05
+    gx, gy = bx + (rx - bx) * 0.34, by + (ry - by) * 0.34
+    out.append(A("gatehouse_district", gx, gy, 0.0, yaw=math.degrees(b_in),
+                 s=gsc, mat="MI_V2_IvoryStone", label="SouthGate_House"))
+    out.append(A("gatehouse_glass", gx, gy, 0.0, yaw=math.degrees(b_in),
+                 s=gsc, mat=_SR_GLASS, label="SouthGate_Glass"))
+    for sgn in (1.0, -1.0):
+        fx, fy = gx + px * sgn * 900.0 * gsc, gy + py * sgn * 900.0 * gsc
+        out.append(A("gate_finial_ball", fx, fy, 2860.0 * gsc,
+                     yaw=math.degrees(b_in), s=2.4 * gsc, mat=_SR_ROOF,
+                     label="SouthGate_Ball%d" % int(sgn)))
+        out.append(A("finial_spire", fx, fy, 3170.0 * gsc,
+                     yaw=math.degrees(b_in), s=1.1 * gsc, mat=_SR_METAL,
+                     label="SouthGate_Spire%d" % int(sgn)))
+    # the way runs THROUGH it, so it is paved under the arch or the threshold
+    # is a gate standing on grass
+    out.append(A("terrace_platform", gx, gy, ROAD_Z, yaw=math.degrees(b_in),
+                 sxyz=(0.42 * gsc, 1.05 * gsc, 0.35), mat="MI_V2_PlazaGrey",
+                 label="SouthGate_Paving"))
+
+    # --- 3. THE SOUTH RING ------------------------------------------------
+    #
+    # The court first, so the arches stand on something made. terrace_platform
+    # is 1,440 along X and 740 along Y at scale 1, and `yaw=90` swaps which
+    # scale axis is which -- an arithmetic note this file has already paid for
+    # once, so the tiles here are all laid at their own yaw with sxyz in the
+    # tile's own frame.
+    for k in range(6):
+        a = math.pi * k / 3.0 + 0.3
+        out.append(A("terrace_platform", rx + math.cos(a) * 1500.0,
+                     ry + math.sin(a) * 1500.0, ROAD_Z,
+                     yaw=math.degrees(a), sxyz=(2.60, 3.10, 0.35),
+                     mat=("MI_V2_PlazaWarm", "MI_V2_PlazaCream",
+                          "MI_V2_PlazaGrey")[k % 3],
+                     label="SouthRing_Court%d" % k))
+    out.append(A("stone_ring_base", rx, ry, -2.0, s=9.0, mat="MI_V2_Stone",
+                 label="SouthRing_Plinth"))
+
+    # THE GREAT ARCH. 8.65 m and 11.0 m across the piers at scale 1, measured;
+    # at 5.2 that is 45.0 m tall with its piers 28.6 m apart, which is a thing
+    # you walk THROUGH rather than up to. It stands across the approach so the
+    # way runs under it: yaw + 90, because arch_stone spans its own local X.
+    out += _sr_arch(rx, ry, math.degrees(b_in) + 90.0, 5.2, "SouthRing_Great")
+    out.append(A("gate_finial_ball", rx, ry, 4560.0, s=1.9, mat=_SR_METAL,
+                 label="SouthRing_GreatFinial"))
+
+    # THE EIGHT. At 34 m out and scale 2.4 -> 20.8 m each, turned tangentially
+    # so every one of them is a gateway on the way in, whichever side you come
+    # from. A ring of thresholds is the point: the founder's brief asks for
+    # spaces that are unfamiliar, and there is nothing else in Wonderland made
+    # only of arches.
+    for k in range(8):
+        a = 2.0 * math.pi * k / 8.0 + b_in
+        ax, ay = rx + math.cos(a) * 3400.0, ry + math.sin(a) * 3400.0
+        out += _sr_arch(ax, ay, math.degrees(a) + 90.0, 2.4,
+                        "SouthRing_Arch%d" % k,
+                        mat=("MI_V2_IvoryStone", "MI_V2_Stone")[k % 2])
+        # COLOUR AT ARCHITECTURAL SIZE, between alternate pairs. glass_screen
+        # is 23.9 m tall and 20.8 m across at scale 1; at 0.62 it is 14.8 m,
+        # which sits UNDER the 20.8 m arches beside it rather than competing.
+        if k % 2 == 0:
+            m = a + math.pi / 8.0
+            out.append(A("glass_screen", rx + math.cos(m) * 3400.0,
+                         ry + math.sin(m) * 3400.0, 0.0,
+                         yaw=math.degrees(m) + 90.0, s=0.62,
+                         mat="MI_V2_IvoryStone",
+                         label="SouthRing_Screen%d" % k))
+            out.append(A("glass_screen_panes", rx + math.cos(m) * 3400.0,
+                         ry + math.sin(m) * 3400.0, 0.0,
+                         yaw=math.degrees(m) + 90.0, s=0.62,
+                         mat=(_SR_GLASS, "MI_V2_GlassRose")[(k // 2) % 2],
+                         label="SouthRing_ScreenGlass%d" % k))
+        out.append(A("waymarker", rx + math.cos(a) * 4300.0,
+                     ry + math.sin(a) * 4300.0, 0.0, yaw=math.degrees(a) + 90.0,
+                     s=0.9, mat="MI_V2_IvoryStone",
+                     label="SouthRing_Mark%d" % k))
+        out.append(A("waymarker_lamp", rx + math.cos(a) * 4300.0,
+                     ry + math.sin(a) * 4300.0, 0.0, yaw=math.degrees(a) + 90.0,
+                     s=0.9, mat=_SR_GLASS, label="SouthRing_Lamp%d" % k))
+
+    # --- 4. THE LAST COLONNADE -- the world's southern edge ---------------
+    #
+    # `_H_R1` is 34,000 uu, the far edge of the walkable world; the quilt
+    # stops at 35,000 and the ground slab carries on to 1,500 m. So the edge
+    # is a fact about the WORLD, not about the terrain, and until now nothing
+    # marked it. Nineteen columns at 346 m over 42 deg of bearing is a line
+    # you can walk to and stand at, with 12 m between neighbours so it is a
+    # colonnade rather than a fence: the Dog goes through it anywhere.
+    for k in range(19):
+        a = math.radians(272.0 + 42.0 * k / 18.0)
+        cx, cy = math.cos(a) * 34600.0, math.sin(a) * 34600.0
+        out.append(A("column_ornate", cx, cy, 0.0, yaw=math.degrees(a),
+                     s=2.2, mat="MI_V2_IvoryStone", label="SouthEdge_Col%d" % k))
+        if k % 6 == 0:
+            out.append(A("stone_ring_base", cx, cy, -2.0, s=2.6,
+                         mat="MI_V2_Stone", label="SouthEdge_Base%d" % k))
+    for k, a in enumerate((math.radians(272.0), math.radians(314.0))):
+        cx, cy = math.cos(a) * 34600.0, math.sin(a) * 34600.0
+        out += _sr_arch(cx, cy, math.degrees(a) + 90.0, 2.0,
+                        "SouthEdge_End%d" % k)
+
+    # --- 5. THE TWO MEADOWS GET A THRESHOLD -------------------------------
+    #
+    # D11 and D18 are two of the three quarters in Wonderland with no built
+    # piece of any kind in them. This does not change the meadow BUILDER --
+    # eleven meadows share it and a meadow is meant to read as landscape --
+    # it gives these two, which bound the worst region, the one thing a
+    # destination needs: something at the door.
+    # LABELLED INTO THE QUARTER THEY STAND IN. `hierarchy.collect` reads a
+    # quarter tag as the label's first two underscore fields with a numeric
+    # first one -- "D11_meadow_..." -- so a gate labelled "D11MeadowGate_..."
+    # stands at the quarter's centre and is invisible to every per-quarter
+    # number the audit prints. The first version of this was exactly that, and
+    # the audit went on reporting D11 and D18 at arch=0 with a gate in each.
+    for tag, (mx, my) in (("D11_meadow", (6400.0, -27700.0)),
+                          ("D18_meadow", (21700.0, -23900.0))):
+        a = math.atan2(-my, -mx)                 # face back toward the world
+        out += _sr_arch(mx, my, math.degrees(a) + 90.0, 1.9,
+                        "%s_Gate" % tag)
+        for sgn in (1.0, -1.0):
+            wx = mx - math.sin(a) * sgn * 1500.0
+            wy = my + math.cos(a) * sgn * 1500.0
+            out.append(A("waymarker", wx, wy, 0.0, yaw=math.degrees(a) + 90.0,
+                         s=0.8, mat="MI_V2_IvoryStone",
+                         label="%s_GateMark%d" % (tag, int(sgn))))
+            out.append(A("waymarker_lamp", wx, wy, 0.0, yaw=math.degrees(a) + 90.0,
+                         s=0.8, mat=_SR_GLASS,
+                         label="%s_GateLamp%d" % (tag, int(sgn))))
+        out.append(A("terrace_platform", mx + math.cos(a) * 900.0,
+                     my + math.sin(a) * 900.0, ROAD_Z, yaw=math.degrees(a),
+                     sxyz=(1.5, 2.2, 0.35), mat="MI_V2_PlazaWarm",
+                     label="%s_GateCourt" % tag))
+    return out
+
+
+SOUTH_REACH = _band("V2_Skyline", _south_reach())
+
+#: The country layer planted this ground before the reach was authored on it,
+#: so the trees standing inside the new arches come out -- the same in-place
+#: declutter the signature skyline and the district landmarks already use, and
+#: for the same reason. `arch_stone` and `column_ornate` are both already in
+#: `_PROTECT`, so nothing here needed a new rule.
+for _bandref in (OUTER_WORLD, GROUND_QUILT, HORIZON, LANDMARKS, DEPTH):
+    _bandref[:] = _declutter(_bandref, also=SOUTH_REACH)
+
+
 BUILD_BANDS = [FOREGROUND, COURTYARD, GARDEN, PALACE, FLANK_GROUND, FLANKS,
                REARWORLD, CAM_FOREGROUNDS, GROUND_QUILT, OUTER_WORLD, PLAZA_ORNAMENT,
                PROCESSIONAL_BORDER, HORIZON, APPROACH_SIDES, PLAZA_WALL_DRESS,
-               SIGNATURE, LANDMARKS, DEPTH, COURT_DRESS, WAYSIDE]
+               SIGNATURE, LANDMARKS, DEPTH, COURT_DRESS, WAYSIDE, SOUTH_REACH]
 
 # ---------------------------------------------------------------------------
 # NOTHING IS BUILT ON A VIEWPOINT (2026-09-03)
