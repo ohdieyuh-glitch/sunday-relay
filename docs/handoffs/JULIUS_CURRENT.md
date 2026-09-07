@@ -67,6 +67,53 @@ relied on until the token is actually gone.
 
 ---
 
+## 0b. Where the work lives now (2026-09-07)
+
+| Branch | PR | Base | State |
+|---|---|---|---|
+| `relay/julius-run-34037313976-defects` | **#234** | `main` | worker-authored, CI green, MERGEABLE, **0 reviews** — the blocker |
+| `relay/julius-brain-and-beta-gate` | **#235** (draft) | #234 | this session's work, stacked |
+| `relay/coder-ceiling-mission-budget` | — | `main` | **superseded**, kept as the record. Do not land. |
+
+### The authorship constraint, which is not obvious and is load-bearing
+
+`julius-main-provenance.mjs` answers `unprovenanced` unless the pull request that
+landed the current `main` commit was **authored by `julius-worker[bot]`**
+(`WORKER_AUTHOR_LOGINS`). This coding environment holds **only** the founder
+credential — `gh auth status` says `ohdieyuh-glitch`, and there is no worker App
+credential in `~/.config/gh/hosts.yml` or the environment.
+
+**Therefore #235 cannot land on `main` as authored, and merging it would make
+`main` unprovenanced and block every paid live mission** until a worker-authored
+PR landed on top. It is a draft for exactly that reason. To land it, the commits
+must be re-authored through the worker App, or carried into a worker-authored
+pull request.
+
+This is also why #234 — worker-authored, in a different session's environment —
+is the only currently available route to trusted main.
+
+### What #235 contains
+
+- **The Project Brain's write side, wired into the run loop.** Verification
+  decisions now persist, guarded by `decisionRecorded` so a replay writes nothing
+  and moves no revision. Revisions are allocated by the store under the run row's
+  lock and continue past a bootstrap seed. `brainKindToStored` closes a trap
+  where OBJECTIVE/REQUIREMENT/EVIDENCE would have been rejected by migration
+  014's CHECK **inside a paid mission** while passing every in-memory test.
+- **The Beta Gate** (`npm run relay:beta-gate`), with its CODING AGENT probe
+  repointed from the superseded `coder-budget.ts` to `julius-allocation-runtime.ts`.
+- **A schema reader fix that #234 also needs** — the evidence-dump check could
+  not see migration 001, so half the database was invisible to it.
+- **`project-brain.tsv` and `sessions.tsv`**, making two Beta Gate rows
+  measurable rather than permanently unknown.
+
+Gates on #235: typecheck clean on all four projects, Julius domain and
+persistence suites green, #234's own paid-run reproduction still green,
+repository-boundary / parity / harness-manifest / `git diff --check` all pass.
+**Provider calls this session: zero.**
+
+---
+
 ## 0. The checkouts, and why the divergence matters
 
 | Checkout | Branch | HEAD | Tree | Contains |
