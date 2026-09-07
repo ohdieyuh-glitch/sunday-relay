@@ -5670,8 +5670,25 @@ def _gold_screen(x, y, yaw_deg, s, tag, bays=3):
 #: its gold is on the left half of the frame. +x is frame-left from HeroCam0
 #: -- `Garden_L_Tree` at (1350, 2300) projects to -28.9 deg, which is how the
 #: sign was checked rather than assumed.
+#: uu. NO SCREEN MAY STAND INSIDE A LOCKED LENS, and PASS 31 shipped one that
+#: did. `GoldScreen0` was sited against HeroCam0's bearing and distance and
+#: against nothing else, and `GardenLeft04` stands at (3000, 3000): the screen's
+#: run passed 2.0 m from that lens and `GoldScreen0_Leaf1` took FIFTY-FIVE PER
+#: CENT of the frame's area from 3.9 m away. Every gate passed. The camera
+#: standpoint check in `verify_v2_layout` asks whether a piece reaches INTO a
+#: lens and it does not, so the world had a gold gate in a camera's face and no
+#: instrument that could say so. `tools/framescape.py --crowd` is that
+#: instrument now, and this is the number it enforces.
+_GS_LENS = 900.0
+
 _GOLD_SCREENS = (
-    (2600.0, 3350.0, 118.0, 1.40, 5),      # -31 deg, 40 m: the reference's own
+    # MOVED 12 m along its own perpendicular (PASS 34). The direction was not a
+    # coin toss: away from GardenLeft04 is also further frame-left and further
+    # back from HeroCam0 -- 54.7 m at +42.0 deg where it was 43.6 m at +36.6 --
+    # and the founder's reference carries 86% of its gold in the left half of
+    # the frame. The fix for the lens and the fix for the composition were the
+    # same move, which is usually the sign the cause was found.
+    (3660.0, 3913.0, 118.0, 1.40, 5),      # +42 deg, 55 m: the reference's own
     (4300.0, 5200.0, 131.0, 1.30, 4),      # further out and further left
     # DEEPER IN THE LEFT GARDEN, and this one was sited by measurement rather
     # than by eye. Its first position (1900, 6400) stood 9.6 m from the LEFT
