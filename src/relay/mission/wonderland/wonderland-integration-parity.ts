@@ -31,6 +31,7 @@ import {
   WONDERLAND_USAGE_METER_FIELDS,
   WONDERLAND_USAGE_STATUSES,
   WONDERLAND_USAGE_SWOOSH_FIELDS,
+  WONDERLAND_USAGE_VIEWPORT_FIELDS,
 } from './wonderland-usage-meter';
 import type {
   WonderlandSwooshSegment,
@@ -38,6 +39,7 @@ import type {
   WonderlandUsageHud,
   WonderlandUsageMeter,
   WonderlandUsageSwoosh,
+  WonderlandUsageViewport,
 } from './wonderland-usage-meter';
 
 /**
@@ -93,6 +95,13 @@ const _JuliusEmbodimentNullableIsExact: SameKeys<
 > = true;
 void _JuliusEmbodimentNullableIsExact;
 
+const USAGE_VIEWPORT_NULLABLE = [] as const;
+const _UsageViewportNullableIsExact: SameKeys<
+  (typeof USAGE_VIEWPORT_NULLABLE)[number],
+  NullableKeysOf<WonderlandUsageViewport>
+> = true;
+void _UsageViewportNullableIsExact;
+
 const SWOOSH_SEGMENT_NULLABLE = [] as const;
 const _SwooshSegmentNullableIsExact: SameKeys<
   (typeof SWOOSH_SEGMENT_NULLABLE)[number],
@@ -143,6 +152,11 @@ export const WONDERLAND_INTEGRATION_CPP_STRUCT_PARITY: readonly {
     cppStruct: 'FWonderlandUsageChannelStyle',
     tsInterface: 'WonderlandUsageChannelStyle',
     fields: WONDERLAND_USAGE_CHANNEL_STYLE_FIELDS,
+  },
+  {
+    cppStruct: 'FWonderlandUsageViewport',
+    tsInterface: 'WonderlandUsageViewport',
+    fields: WONDERLAND_USAGE_VIEWPORT_FIELDS,
   },
   {
     cppStruct: 'FWonderlandSwooshSegment',
@@ -237,6 +251,7 @@ export const WONDERLAND_INTEGRATION_NULLABLE_FIELDS: Readonly<
 > = Object.freeze({
   FWonderlandJuliusEmbodiment: JULIUS_EMBODIMENT_NULLABLE,
   FWonderlandUsageChannelStyle: CHANNEL_STYLE_NULLABLE,
+  FWonderlandUsageViewport: USAGE_VIEWPORT_NULLABLE,
   FWonderlandSwooshSegment: SWOOSH_SEGMENT_NULLABLE,
   FWonderlandUsageSwoosh: USAGE_SWOOSH_NULLABLE,
   FWonderlandUsageMeter: USAGE_METER_NULLABLE,

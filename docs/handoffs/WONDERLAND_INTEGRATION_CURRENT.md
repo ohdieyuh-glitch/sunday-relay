@@ -81,9 +81,29 @@ from `juliusReplayCursor(state)` — not a special case.
 
 Top-left. Two channels, bound separately: **green Compound Agent** (the
 dominant outer frame, longer tail) and **blue single agent** (a concentric
-inner hook, thinner, shorter). Both swoop; both open RIGHT and travel left to
-right, which is the mandated REVERSAL of the Kingdom Hearts reference whose
-green ring opens left.
+inner ring, thinner, shorter). Both swoop.
+
+The composition is the Kingdom Hearts reference MIRRORED. There, a thick green
+ring wraps a portrait at the RIGHT-hand end of the HUD, its gap opens LEFT, and
+a long tail sweeps away to the left, descending and tapering over the bars.
+Here the ring sits in the anchored top-left corner, its gap opens RIGHT, and the
+tail leaves the ring travelling RIGHT — swooping DOWN as it goes, exactly as the
+reference's swoops down as it goes left. Three facts are MEASURED rather than
+trusted, because a mirrored curve is the easiest thing to get backwards:
+
+- the aperture faces right — the spine's extreme point is interior and on the
+  left, and both ends sit well right of it
+- the swoop travels right — the tip is the right-most point in the shape
+- the swoop descends — the tip sits BELOW the point the tail leaves the ring
+  (an earlier draft had it rising, which is a mirror in x only: the gesture was
+  upside down and read as a flick rather than a swoop)
+
+`WONDERLAND_USAGE_VIEWPORT` is the window onto the unit box, and it is part of
+the contract rather than a number each renderer picks — the drawing is a ring
+with a tail beside it, so it fills the width and occupies a band of the height,
+and rendering the whole square would put a third of the HUD into empty space. A
+window, never a squash: the aspect is preserved, so a stroke's thickness means
+the same thing in both axes.
 
 The meaning is not a percentage:
 

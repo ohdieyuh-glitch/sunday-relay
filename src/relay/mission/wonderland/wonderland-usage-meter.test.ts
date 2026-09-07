@@ -17,6 +17,7 @@ import {
   WONDERLAND_USAGE_STATUSES,
   WONDERLAND_USAGE_SWOOSH_FIELDS,
   WONDERLAND_USAGE_UNAVAILABLE_REASON,
+  WONDERLAND_USAGE_VIEWPORT,
   applyWonderlandUsageDelta,
   projectWonderlandUsageHud,
   projectWonderlandUsageMeter,
@@ -403,6 +404,17 @@ describe('the swoosh geometry', () => {
     expect(spine[spine.length - 1].x - leftMost.x).toBeGreaterThan(0.2);
   });
 
+  it('SWOOPS DOWN as it travels, mirroring the reference', () => {
+    // The reference's tail descends as it sweeps left. Reversed, it descends as
+    // it sweeps right. An earlier draft had it rising, which is a mirror in x
+    // only — the gesture was upside down and it read as a flick rather than a
+    // swoop.
+    const leaves = wonderlandSwooshAt(0.72);
+    const tip = wonderlandSwooshAt(1);
+    expect(tip.y).toBeGreaterThan(leaves.y);
+    expect(tip.x).toBeGreaterThan(leaves.x);
+  });
+
   it('finishes travelling to the right, so the frame reads left to right', () => {
     const tip = wonderlandSwooshAt(1);
     const justBefore = wonderlandSwooshAt(0.97);
@@ -493,6 +505,34 @@ describe('the swoosh geometry', () => {
   });
 });
 
+describe('the window onto the unit box', () => {
+  it('is wide, because the drawing is', () => {
+    expect(WONDERLAND_USAGE_VIEWPORT.width / WONDERLAND_USAGE_VIEWPORT.height).toBeGreaterThan(
+      1.4,
+    );
+  });
+
+  it('contains every point of both shapes, so nothing is cropped away', () => {
+    const v = WONDERLAND_USAGE_VIEWPORT;
+    for (const shape of Object.values(WONDERLAND_USAGE_CHANNEL_SWOOSH)) {
+      for (const point of wonderlandSwooshOutline({ to: 1, samples: 96, shape })) {
+        expect(point.x).toBeGreaterThanOrEqual(v.x - 0.002);
+        expect(point.x).toBeLessThanOrEqual(v.x + v.width + 0.002);
+        expect(point.y).toBeGreaterThanOrEqual(v.y - 0.002);
+        expect(point.y).toBeLessThanOrEqual(v.y + v.height + 0.002);
+      }
+    }
+  });
+
+  it('preserves aspect — a window, never a squash', () => {
+    // If the window scaled the axes differently, a stroke's thickness would
+    // mean two different things and the ring would render as an ellipse it was
+    // never authored as.
+    expect(WONDERLAND_USAGE_VIEWPORT.width).toBe(1);
+    expect(WONDERLAND_USAGE_VIEWPORT.x).toBe(0);
+  });
+});
+
 /* ------------------------------------------------------------- channels */
 
 describe('two bars, bound separately', () => {
@@ -548,9 +588,11 @@ describe('two bars, bound separately', () => {
     // Two arcs that crossed would force a viewer to work out which belonged to
     // which number. Concentric arcs never do — measured by sweeping both at the
     // same arc fraction and checking the single stroke stays inside.
-    const centre = { x: 0.31, y: 0.5 };
+    const centre = { x: 0.28, y: 0.46 };
     for (let i = 0; i <= 24; i += 1) {
-      const t = (i / 24) * 0.72;
+      // Bounded to the RING. Past it both shapes are on their tails, where
+      // "inside" is a different question and the next test asks it.
+      const t = (i / 24) * 0.55;
       const outer = wonderlandSwooshAt(t, WONDERLAND_COMPOUND_SWOOSH);
       const inner = wonderlandSwooshAt(t, WONDERLAND_SINGLE_SWOOSH);
       const radius = (p: { x: number; y: number }): number =>

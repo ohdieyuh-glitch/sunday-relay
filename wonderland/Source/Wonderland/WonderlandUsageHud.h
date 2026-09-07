@@ -121,6 +121,37 @@ struct FWonderlandUsageChannelStyle
 	int64 Emphasis = 0;
 };
 
+/* ---------------------------------------------------------- the viewport */
+
+// Mirrors WonderlandUsageViewport. The window onto the unit box.
+//
+// The shapes live in a 0..1 box in both axes — that is what lets this module and
+// the browser agree about a point without also agreeing about a widget's size.
+// The composition is a ring with a tail beside it, so it fills the width and
+// occupies a band of the height; drawing the whole square would put a third of
+// the HUD into empty space. Both surfaces crop by THIS, so a redrawn shape that
+// needs more room changes one struct.
+//
+// A WINDOW, not a scale. The aspect is preserved, so nothing is squashed and a
+// stroke's thickness means the same thing in both axes.
+USTRUCT(BlueprintType)
+struct FWonderlandUsageViewport
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Usage")
+	double X = 0.0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Usage")
+	double Y = 0.0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Usage")
+	double Width = 1.0;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Usage")
+	double Height = 1.0;
+};
+
 /* ------------------------------------------------------------- the shape */
 
 // Mirrors WonderlandSwooshSegment. One cubic of the spine.

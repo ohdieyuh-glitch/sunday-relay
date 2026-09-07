@@ -379,55 +379,59 @@ export const WONDERLAND_USAGE_CHANNEL_STYLE: Readonly<
 });
 
 /**
- * THE COMPOUND FRAME: the long swoop, and it faces RIGHT.
+ * THE COMPOUND FRAME: the reference's ring and tail, MIRRORED.
  *
- * The direction is explicit and it is a REVERSAL of the reference that inspired
- * it. There, the long green ring wraps a portrait at the right-hand end of the
- * HUD and its gap opens toward the LEFT, back into the bars. Mirrored for
- * Wonderland, the ring sits in the anchored top-left corner, its gap opens to
- * the RIGHT, and the stroke leaves the ring travelling right across the top —
- * which is also why it belongs in this corner at all: the ornament is the
- * anchor and the bars grow away from it.
+ * The reference is a thick green ring wrapping a portrait at the RIGHT-hand end
+ * of the HUD, its gap opening LEFT, with a long tail sweeping away to the left
+ * and tapering to a point over the bars. Wonderland reverses all of it: the ring
+ * sits in the anchored top-left corner, its gap opens RIGHT, and the tail leaves
+ * the ring travelling RIGHT — swooping DOWN as it goes, exactly as the
+ * reference's swoops down as it goes left.
  *
- * The spine is a 250-degree elliptical arc in three cubic segments plus a tail.
- * The 110-degree gap is on the right, so the aperture faces right, and the
- * final segment ends further right than anything else in the shape. Both facts
- * are asserted in the test by MEASURING the spine, because a mirrored curve is
- * the single easiest thing to get backwards and the easiest not to notice.
+ * Three facts a test measures rather than trusts, because a mirrored curve is
+ * the easiest thing to get backwards and the hardest to notice:
+ *
+ *   the aperture faces right   the spine's extreme point is INTERIOR and on the
+ *                              left, and both ends sit well to the right of it
+ *   the swoop travels right    the tip is the right-most point in the shape
+ *   the swoop descends         the tip sits BELOW the point the tail leaves
+ *
+ * A 280-degree elliptical ring in four cubic segments, then the tail. The tail's
+ * first control point continues the ring's own exit direction, so the two join
+ * without a crease — a crease is not a flourish, it is the seam of two curves
+ * that were never joined.
  */
 export const WONDERLAND_COMPOUND_SWOOSH: WonderlandUsageSwoosh = Object.freeze({
-  startX: 0.4675,
-  startY: 0.7107,
+  startX: 0.3975,
+  startY: 0.6765,
   segments: Object.freeze([
     Object.freeze({
-      control1X: 0.3906, control1Y: 0.7831,
-      control2X: 0.2821, control2Y: 0.7955,
-      endX: 0.1937, endY: 0.7421,
+      control1X: 0.3119, control1Y: 0.7291,
+      control2X: 0.2046, control2Y: 0.7191,
+      endX: 0.1289, endY: 0.6515,
     }),
     Object.freeze({
-      control1X: 0.1054, control1Y: 0.6886,
-      control2X: 0.0550, control2Y: 0.5800,
-      endX: 0.0667, endY: 0.4681,
+      control1X: 0.0533, control1Y: 0.5840,
+      control2X: 0.0254, control2Y: 0.4733,
+      endX: 0.0592, endY: 0.3745,
     }),
     Object.freeze({
-      control1X: 0.0783, control1Y: 0.3562,
-      control2X: 0.1496, control2Y: 0.2635,
-      endX: 0.2466, endY: 0.2344,
+      control1X: 0.0930, control1Y: 0.2757,
+      control2X: 0.1812, control2Y: 0.2100,
+      endX: 0.2800, endY: 0.2100,
     }),
-    /**
-     * The tail, leaving the ring TANGENTIALLY.
-     *
-     * Its first control point is the ring's own exit direction extended, which
-     * is the whole reason the arc stops at 255 degrees rather than carrying on
-     * around: past the top the ring is already heading DOWN, so a tail that
-     * then rose to the right folded back over itself and put a visible crease
-     * in the stroke. A crease is not a flourish — it is the seam of two curves
-     * that were never joined.
-     */
     Object.freeze({
-      control1X: 0.4764, control1Y: 0.1652,
-      control2X: 0.7500, control2Y: 0.1150,
-      endX: 0.9550, endY: 0.1050,
+      control1X: 0.3788, control1Y: 0.2100,
+      control2X: 0.4670, control2Y: 0.2757,
+      endX: 0.5008, endY: 0.3745,
+    }),
+    // The tail: out of the ring's upper-right gap edge, DOWN and away to the
+    // right, flattening as it tapers. Its first control point is the ring's own
+    // exit tangent extended.
+    Object.freeze({
+      control1X: 0.5656, control1Y: 0.5637,
+      control2X: 0.7800, control2Y: 0.6300,
+      endX: 0.9700, endY: 0.6150,
     }),
   ]),
   // SLENDER, and that is the direction rather than a preference. "Elegant
@@ -436,53 +440,57 @@ export const WONDERLAND_COMPOUND_SWOOSH: WonderlandUsageSwoosh = Object.freeze({
   // reading as a drawn stroke and starts reading as a filled shape.
   tailWidth: 0.030,
   tipWidth: 0.004,
-  taperStart: 0.80,
+  taperStart: 0.78,
   taperExponent: 1.5,
 });
 
 /**
- * THE SINGLE-AGENT STROKE: the same swoop, nested INSIDE the frame.
+ * THE SINGLE-AGENT STROKE: the same gesture, nested INSIDE the frame.
  *
- * It swoops, and the founder's direction is that it must: a straight bar beside
- * a curved frame reads as two widgets that happened to be placed together. This
- * is one drawing. So the blue is a CONCENTRIC inner hook — the same centre, the
- * same 205-degree span, the same tangential tail — at about six tenths of the
- * radius, and it runs behind the green all the way out.
+ * It swoops, and the direction is that it must: a straight bar beside a curved
+ * frame reads as two widgets that happened to be placed together. This is one
+ * drawing. So the blue is a CONCENTRIC inner ring on the same centre and the
+ * same 280-degree span at a little over half the radius, with its own tail
+ * leaving on the same tangent and running right — where the reference's straight
+ * MP bar sits, and doing the reference's job.
  *
- * "Simpler" survives the change, as weight rather than as shape: thinner, a
- * shorter tail that stops well short of the frame's tip, and a width that
+ * "Simpler" survives the change as WEIGHT rather than as form: half the
+ * thickness, a tail that stops well short of the frame's tip, and a width that
  * barely tapers where the frame's comes to a point. That is what keeps the
  * hierarchy legible without a label — the same gesture, quieter.
  *
  * Concentric is also what keeps the two readable at a glance: two strokes that
- * cross would force a viewer to work out which arc belonged to which number,
+ * crossed would force a viewer to work out which arc belonged to which number,
  * and nested arcs never cross.
  */
 export const WONDERLAND_SINGLE_SWOOSH: WonderlandUsageSwoosh = Object.freeze({
-  startX: 0.4077,
-  startY: 0.6318,
+  startX: 0.3440,
+  startY: 0.5778,
   segments: Object.freeze([
     Object.freeze({
-      control1X: 0.3600, control1Y: 0.6771,
-      control2X: 0.2927, control2Y: 0.6848,
-      endX: 0.2379, endY: 0.6514,
+      control1X: 0.2974, control1Y: 0.6064,
+      control2X: 0.2389, control2Y: 0.6009,
+      endX: 0.1977, endY: 0.5642,
     }),
     Object.freeze({
-      control1X: 0.1830, control1Y: 0.6179,
-      control2X: 0.1518, control2Y: 0.5500,
-      endX: 0.1590, endY: 0.4800,
+      control1X: 0.1565, control1Y: 0.5274,
+      control2X: 0.1413, control2Y: 0.4672,
+      endX: 0.1597, endY: 0.4135,
     }),
     Object.freeze({
-      control1X: 0.1663, control1Y: 0.4100,
-      control2X: 0.2105, control2Y: 0.3521,
-      endX: 0.2707, endY: 0.3339,
+      control1X: 0.1781, control1Y: 0.3598,
+      control2X: 0.2262, control2Y: 0.3240,
+      endX: 0.2800, endY: 0.3240,
     }),
-    // The tail, leaving tangentially exactly as the frame's does, and stopping
-    // short of it so the frame keeps the last word.
     Object.freeze({
-      control1X: 0.4621, control1Y: 0.2758,
-      control2X: 0.6800, control2Y: 0.3000,
-      endX: 0.8600, endY: 0.3500,
+      control1X: 0.3338, control1Y: 0.3240,
+      control2X: 0.3819, control2Y: 0.3598,
+      endX: 0.4003, endY: 0.4135,
+    }),
+    Object.freeze({
+      control1X: 0.4457, control1Y: 0.5459,
+      control2X: 0.6200, control2Y: 0.6000,
+      endX: 0.7800, endY: 0.5850,
     }),
   ]),
   // Half the frame's weight. The hierarchy has to survive the fact that this
@@ -493,6 +501,44 @@ export const WONDERLAND_SINGLE_SWOOSH: WonderlandUsageSwoosh = Object.freeze({
   tipWidth: 0.0110,
   taperStart: 0.70,
   taperExponent: 1.0,
+});
+
+/* ------------------------------------------------------------- viewport */
+
+/**
+ * THE WINDOW ONTO THE UNIT BOX, so the HUD is WIDE rather than square.
+ *
+ * The shapes live in a 0..1 box in both axes — that is what lets the browser and
+ * Unreal agree about a point without also agreeing about a widget's size. But
+ * the composition is a ring with a tail beside it, which occupies the full width
+ * and a band of the height, and rendering the whole square would put a third of
+ * the HUD's height into empty space above and below the drawing.
+ *
+ * So the viewport is part of the CONTRACT rather than a number each renderer
+ * picks. Both surfaces crop identically, and a redrawn shape that needs more
+ * room changes this once. It is a WINDOW and not a scale: the aspect is
+ * preserved, so nothing is squashed, and a stroke's thickness means the same
+ * thing in both axes.
+ */
+export interface WonderlandUsageViewport {
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+}
+
+export const WONDERLAND_USAGE_VIEWPORT_FIELDS = exactKeys<WonderlandUsageViewport>()([
+  'x',
+  'y',
+  'width',
+  'height',
+] as const);
+
+export const WONDERLAND_USAGE_VIEWPORT: WonderlandUsageViewport = Object.freeze({
+  x: 0,
+  y: 0.17,
+  width: 1,
+  height: 0.58,
 });
 
 /** Which spine each channel is drawn on. Total, so a channel cannot be shapeless. */

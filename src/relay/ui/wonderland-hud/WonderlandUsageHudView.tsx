@@ -5,6 +5,7 @@ import {
   WONDERLAND_USAGE_CHANNEL_STYLE,
   WONDERLAND_USAGE_CHANNEL_SWOOSH,
   WONDERLAND_USAGE_TRANSITION,
+  WONDERLAND_USAGE_VIEWPORT,
   wonderlandSwooshSpineSvgPath,
   wonderlandSwooshSvgPath,
 } from '../../mission/wonderland/wonderland-usage-meter';
@@ -52,8 +53,21 @@ import type {
  * No usage authority exists yet, so this is what it will normally say.
  */
 
-/** The HUD's own viewBox. The contract's shapes live in a 0..1 unit box. */
+/**
+ * Unit-box coordinates are multiplied by this before they reach the SVG, so the
+ * numbers in the markup are readable and the dash arithmetic stays in integers.
+ * The contract's shapes live in a 0..1 box; the window onto it is the
+ * contract's too.
+ */
 const VIEW = 100;
+
+/** The cropped window, in viewBox units. Wide, because the drawing is. */
+const VIEW_BOX = [
+  WONDERLAND_USAGE_VIEWPORT.x * VIEW,
+  WONDERLAND_USAGE_VIEWPORT.y * VIEW,
+  WONDERLAND_USAGE_VIEWPORT.width * VIEW,
+  WONDERLAND_USAGE_VIEWPORT.height * VIEW,
+].join(' ');
 
 /**
  * How much of the spine the leading highlight covers, as an arc fraction.
@@ -218,7 +232,7 @@ export function WonderlandUsageHudView({
     <div className="wh" data-anchor={hud.anchor} aria-live="polite">
       <svg
         className="wh-canvas"
-        viewBox={`0 0 ${VIEW} ${VIEW}`}
+        viewBox={VIEW_BOX}
         role="img"
         aria-label="Wonderland usage"
         focusable="false"

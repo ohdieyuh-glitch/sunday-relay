@@ -111,8 +111,8 @@ const html = `<!doctype html><meta charset="utf-8">
   .scene{background:radial-gradient(120% 90% at 20% 15%,#152234 0%,#070b12 60%,#04060a 100%);
     padding:1.25rem 1.25rem 2rem}
   h2{margin:0 0 .5rem;font-size:10px;letter-spacing:.24em;color:#5d6b83;font-weight:400}
-  .frame{position:relative;height:290px}
-  .frame .wh{position:absolute;top:0;left:0;width:290px}
+  .frame{position:relative;height:190px}
+  .frame .wh{position:absolute;top:0;left:0;width:320px}
   footer{padding:1rem 1.25rem;color:#4d5a70;letter-spacing:.1em;font-size:10px}
 ${css}
 </style>
