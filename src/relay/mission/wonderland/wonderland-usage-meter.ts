@@ -379,124 +379,132 @@ export const WONDERLAND_USAGE_CHANNEL_STYLE: Readonly<
 });
 
 /**
- * THE COMPOUND FRAME: the reference's ring and tail, MIRRORED.
+ * THE COMPOUND FRAME: the long swoop, and it faces RIGHT.
  *
- * The reference is a thick green ring wrapping a portrait at the RIGHT-hand end
- * of the HUD, its gap opening LEFT, with a long tail leaving the ring and
- * sweeping away to the left while DESCENDING, tapering to a point over the
- * bars. Wonderland reverses the whole layout, not just the curve: the ring sits
- * in the anchored top-left corner, its gap opens RIGHT, and the tail leaves the
- * ring travelling RIGHT while descending — the same gesture, handed the other
- * way.
+ * PERMANENT. The founder has settled this shape and declared it the health bar
+ * until they say otherwise. Do not redesign it, do not "improve" the curve, and
+ * do not re-derive it from any reference image — `wonderland-hud-canon.test.ts`
+ * pins every control point by digest and will fail on a nudge of 0.0004.
  *
- * Four facts a test measures rather than trusting, because a mirrored figure is
- * the easiest thing to get half-right:
+ * The direction is explicit and it is a REVERSAL of the reference that inspired
+ * it. There, the long green ring wraps a portrait at the right-hand end of the
+ * HUD and its gap opens toward the LEFT, back into the bars. Mirrored for
+ * Wonderland, the ring sits in the anchored top-left corner, its gap opens to
+ * the RIGHT, and the stroke leaves the ring travelling right across the top —
+ * which is also why it belongs in this corner at all: the ornament is the
+ * anchor and the bars grow away from it.
  *
- *   the aperture faces right   the spine's extreme point is INTERIOR and on the
- *                              left, and both ends sit well to the right of it
- *   the swoop travels right    the tip is the right-most point in the shape
- *   the swoop descends         the tip sits BELOW where the tail leaves the ring
- *   the ring is a RING         280 degrees of it, not an arc with a flourish
- *
- * A circle, not an ellipse: `WONDERLAND_USAGE_VIEWPORT` crops without scaling
- * the axes differently, so equal radii in the unit box render as equal radii on
- * screen. An ellipse here would be a ring the shape was never authored as.
+ * The spine is a 255-degree arc in three cubic segments plus a tail. The gap is
+ * on the right, so the aperture faces right, and the tail ends further right
+ * than anything else in the shape. Both facts are asserted in the test by
+ * MEASURING the spine, because a mirrored curve is the single easiest thing to
+ * get backwards and the easiest not to notice.
  */
 export const WONDERLAND_COMPOUND_SWOOSH: WonderlandUsageSwoosh = Object.freeze({
-  startX: 0.3891,
-  startY: 0.5854,
+  startX: 0.4675,
+  startY: 0.7107,
   segments: Object.freeze([
     Object.freeze({
-      control1X: 0.3497, control1Y: 0.6610,
-      control2X: 0.2638, control2Y: 0.7000,
-      endX: 0.1810, endY: 0.6797,
+      control1X: 0.3906, control1Y: 0.7831,
+      control2X: 0.2821, control2Y: 0.7955,
+      endX: 0.1937, endY: 0.7421,
     }),
     Object.freeze({
-      control1X: 0.0982, control1Y: 0.6594,
-      control2X: 0.0400, control2Y: 0.5852,
-      endX: 0.0400, endY: 0.5000,
+      control1X: 0.1054, control1Y: 0.6886,
+      control2X: 0.0550, control2Y: 0.5800,
+      endX: 0.0667, endY: 0.4681,
     }),
     Object.freeze({
-      control1X: 0.0400, control1Y: 0.4148,
-      control2X: 0.0982, control2Y: 0.3406,
-      endX: 0.1810, endY: 0.3203,
+      control1X: 0.0783, control1Y: 0.3562,
+      control2X: 0.1496, control2Y: 0.2635,
+      endX: 0.2466, endY: 0.2344,
     }),
+    /**
+     * The tail, leaving the ring TANGENTIALLY.
+     *
+     * Its first control point is the ring's own exit direction extended, which
+     * is the whole reason the arc stops at 255 degrees rather than carrying on
+     * around: past the top the ring is already heading down, so a tail that
+     * then rose to the right folded back over itself and put a visible crease
+     * in the stroke. A crease is not a flourish — it is the seam of two curves
+     * that were never joined.
+     */
     Object.freeze({
-      control1X: 0.2638, control1Y: 0.3000,
-      control2X: 0.3497, control2Y: 0.3390,
-      endX: 0.3891, endY: 0.4146,
-    }),
-    // The tail: out of the ring's upper gap edge, DOWN and away to the right,
-    // flattening as it tapers. Its first control point is the ring's own exit
-    // tangent extended, so the two join without a crease — a crease is not a
-    // flourish, it is the seam of two curves that were never joined.
-    Object.freeze({
-      control1X: 0.4584, control1Y: 0.5476,
-      control2X: 0.7000, control2Y: 0.6150,
-      endX: 0.9400, endY: 0.6000,
+      control1X: 0.4764, control1Y: 0.1652,
+      control2X: 0.7500, control2Y: 0.1150,
+      endX: 0.9550, endY: 0.1050,
     }),
   ]),
-  // Thick around the ring, and thinning the moment it leaves it. `taperStart`
-  // is set to almost exactly the ring's share of the arc length: a tail that
-  // kept the ring's weight for another fifth of the stroke stopped reading as
-  // a flick and made the whole figure read as a wave instead of a ring with a
-  // tail — which is what the reference is.
-  tailWidth: 0.031,
+  // SLENDER, and that is the direction rather than a preference. "Elegant
+  // rather than bulky" rules out an arcade-weight ring: at a radius of a
+  // quarter of the box, a half-width past about 0.035 stops reading as a drawn
+  // stroke and starts reading as a filled shape.
+  tailWidth: 0.030,
   tipWidth: 0.004,
-  taperStart: 0.63,
-  taperExponent: 1.35,
+  taperStart: 0.80,
+  taperExponent: 1.5,
 });
 
 /**
- * THE SINGLE-AGENT SWOOP: the same gesture, running BEHIND the frame.
+ * THE SINGLE-AGENT STROKE: the same swoop, nested INSIDE the frame.
  *
- * It swoops, and the direction is that it must. A dead-straight bar beside a
- * ring reads as two widgets that happened to be placed together; this is one
- * drawing, and the blue is the second stroke of it. So it dives out of the
- * frame's left side, sweeps down and under the ring, and flies away to the
- * right — the frame's own gesture, at lower amplitude.
+ * PERMANENT, on the same terms as the frame above.
  *
- * BEHIND IS LITERAL, not adjacent. It starts ON the frame's stroke and passes
- * under the ring's lower arc, so the frame occludes it at both crossings — and
- * the frame's `emphasis` is what makes that true rather than accidental, since
- * the contract's draw order paints the Compound channel last. The reference
- * does the same thing with its MP bar, whose near end disappears behind the
- * ring rather than stopping politely beside it.
+ * It swoops, and the founder's direction is that it must: a straight bar beside
+ * a curved frame reads as two widgets that happened to be placed together. This
+ * is one drawing. So the blue is a CONCENTRIC inner hook — the same centre, the
+ * same span, the same tangential tail — at about six tenths of the radius, and
+ * it runs inside the green the whole way out.
  *
- * "Simpler" survives as WEIGHT rather than as form: three quarters of the
- * frame's thickness, fewer segments, a shallower sweep, a tail that stops well
- * short of the frame's tip, and a width that barely tapers where the frame's
- * comes to a point. That is what keeps the hierarchy legible without a label —
- * the same gesture, quieter.
+ * WHY CONCENTRIC AND NOT CROSSING, which is the choice that was tried both ways.
+ * An earlier draft ran the blue UNDER the green so the frame occluded it at two
+ * crossings. It looked better in a still and it broke the instrument: the frame
+ * covered the first third of the blue spine, so every single-agent reading below
+ * about a third had its entire fill hidden and drew identically to empty —
+ * exactly the range where "you are nearly out" has to be legible. Nested arcs
+ * never cross, so nothing is ever hidden, and a viewer never has to work out
+ * which arc belongs to which number. The canon test measures the overlap and
+ * holds it at zero.
+ *
+ * "Simpler" survives the change, as weight rather than as shape: thinner, a
+ * shorter tail that stops well short of the frame's tip, and a width that
+ * barely tapers where the frame's comes to a point. That is what keeps the
+ * hierarchy legible without a label — the same gesture, quieter.
  */
 export const WONDERLAND_SINGLE_SWOOSH: WonderlandUsageSwoosh = Object.freeze({
-  // ON the frame's stroke, not beside it: the ring's spine passes within a
-  // hair of this point, so the blue emerges from behind the green.
-  startX: 0.0550,
-  startY: 0.5700,
+  startX: 0.4077,
+  startY: 0.6318,
   segments: Object.freeze([
-    // Down and under the ring's lower arc — the second crossing, and the one
-    // that makes the stroke read as passing THROUGH rather than around.
     Object.freeze({
-      control1X: 0.0950, control1Y: 0.6720,
-      control2X: 0.2500, control2Y: 0.7010,
-      endX: 0.4400, endY: 0.7080,
+      control1X: 0.3600, control1Y: 0.6771,
+      control2X: 0.2927, control2Y: 0.6848,
+      endX: 0.2379, endY: 0.6514,
     }),
-    // Out to the right, RISING as it goes. Most of the sweep is deliberately
-    // in this half: the first half is behind the ring, and a swoop nobody can
-    // see is a straight line as far as a viewer is concerned.
     Object.freeze({
-      control1X: 0.6300, control1Y: 0.7140,
-      control2X: 0.7800, control2Y: 0.6950,
-      endX: 0.9050, endY: 0.6550,
+      control1X: 0.1830, control1Y: 0.6179,
+      control2X: 0.1518, control2Y: 0.5500,
+      endX: 0.1590, endY: 0.4800,
+    }),
+    Object.freeze({
+      control1X: 0.1663, control1Y: 0.4100,
+      control2X: 0.2105, control2Y: 0.3521,
+      endX: 0.2707, endY: 0.3339,
+    }),
+    // The tail, leaving tangentially exactly as the frame's does, and stopping
+    // short of it so the frame keeps the last word.
+    Object.freeze({
+      control1X: 0.4621, control1Y: 0.2758,
+      control2X: 0.6800, control2Y: 0.3000,
+      endX: 0.8600, endY: 0.3500,
     }),
   ]),
-  // Substantial enough to read as its own instrument. An earlier draft was half
-  // this and disappeared under the frame's glow — a meter a viewer cannot see is
-  // not a quieter instrument, it is an absent one.
-  tailWidth: 0.0230,
-  tipWidth: 0.0195,
-  taperStart: 0.74,
+  // Half the frame's weight. The hierarchy has to survive the fact that this
+  // stroke is often the FULLER of the two — a single agent on a small tier runs
+  // out sooner — and a bright arc at equal thickness would read as the louder
+  // instrument precisely when it is the smaller one.
+  tailWidth: 0.0145,
+  tipWidth: 0.0110,
+  taperStart: 0.70,
   taperExponent: 1.0,
 });
 
@@ -541,9 +549,12 @@ export const WONDERLAND_USAGE_VIEWPORT_FIELDS = exactKeys<WonderlandUsageViewpor
 
 export const WONDERLAND_USAGE_VIEWPORT: WonderlandUsageViewport = Object.freeze({
   x: 0,
-  y: 0.27,
+  // Framed from the MEASURED extent of the two strokes, half-widths included,
+  // rather than chosen by eye: they occupy y 0.101..0.805, so this leaves a
+  // little under two points of air at each edge and clips no stroke anywhere.
+  y: 0.06,
   width: 1,
-  height: 0.48,
+  height: 0.88,
 });
 
 

@@ -78,34 +78,38 @@ function digest(shape: WonderlandUsageSwoosh): string {
 }
 
 /**
- * THE APPROVED COMPOUND FRAME.
+ * THE APPROVED COMPOUND FRAME — PERMANENT.
  *
- * A 305-degree ring centred at (0.225, 0.50) with radius 0.185, its gap facing
- * right, plus a tail leaving the upper gap edge on the ring's own tangent and
- * falling away to the right.
+ * A 255-degree arc centred near (0.3225, 0.500) at radius ~0.267, its gap
+ * facing RIGHT, plus a tail that leaves the upper gap edge on the ring's own
+ * tangent and RISES away to the right, tapering to a point.
+ *
+ * The founder settled this shape and declared it the health bar until they say
+ * otherwise. Changing these numbers is not a refactor.
  */
 const CANON_COMPOUND = [
-  '0.389100,0.585400',
-  '0.349700,0.661000,0.263800,0.700000,0.181000,0.679700',
-  '0.098200,0.659400,0.040000,0.585200,0.040000,0.500000',
-  '0.040000,0.414800,0.098200,0.340600,0.181000,0.320300',
-  '0.263800,0.300000,0.349700,0.339000,0.389100,0.414600',
-  '0.458400,0.547600,0.700000,0.615000,0.940000,0.600000',
-  '0.031000,0.004000,0.630000,1.350000',
+  '0.467500,0.710700',
+  '0.390600,0.783100,0.282100,0.795500,0.193700,0.742100',
+  '0.105400,0.688600,0.055000,0.580000,0.066700,0.468100',
+  '0.078300,0.356200,0.149600,0.263500,0.246600,0.234400',
+  '0.476400,0.165200,0.750000,0.115000,0.955000,0.105000',
+  '0.030000,0.004000,0.800000,1.500000',
 ].join(',');
 
 /**
- * THE APPROVED SINGLE-AGENT STROKE.
+ * THE APPROVED SINGLE-AGENT STROKE — PERMANENT.
  *
- * Starts on the frame's own spine, dives under the ring's lower arc, and rises
- * away to the right — most of its sweep in the visible half, because the first
- * half is behind the ring.
+ * A CONCENTRIC inner hook at about two thirds of the frame's radius, sharing
+ * its centre and its gesture, with a tangential tail that stops well short of
+ * the frame's tip. It never crosses the green and is never hidden by it.
  */
 const CANON_SINGLE = [
-  '0.055000,0.570000',
-  '0.095000,0.672000,0.250000,0.701000,0.440000,0.708000',
-  '0.630000,0.714000,0.780000,0.695000,0.905000,0.655000',
-  '0.023000,0.019500,0.740000,1.000000',
+  '0.407700,0.631800',
+  '0.360000,0.677100,0.292700,0.684800,0.237900,0.651400',
+  '0.183000,0.617900,0.151800,0.550000,0.159000,0.480000',
+  '0.166300,0.410000,0.210500,0.352100,0.270700,0.333900',
+  '0.462100,0.275800,0.680000,0.300000,0.860000,0.350000',
+  '0.014500,0.011000,0.700000,1.000000',
 ].join(',');
 
 describe('the canonical HUD geometry is frozen', () => {
@@ -126,7 +130,7 @@ describe('the canonical HUD geometry is frozen', () => {
   });
 
   it('has not changed the window onto the unit box', () => {
-    expect(WONDERLAND_USAGE_VIEWPORT).toEqual({ x: 0, y: 0.27, width: 1, height: 0.48 });
+    expect(WONDERLAND_USAGE_VIEWPORT).toEqual({ x: 0, y: 0.06, width: 1, height: 0.88 });
   });
 
   it('has not changed the corner', () => {
@@ -173,27 +177,49 @@ describe('the canonical HUD keeps the properties the direction named', () => {
     expect(Math.max(...points.map((p) => p.x))).toBeCloseTo(points[points.length - 1].x, 5);
   });
 
-  it('SWOOPS DOWN as it travels', () => {
-    expect(wonderlandSwooshAt(1).y).toBeGreaterThan(wonderlandSwooshAt(0.72).y);
+  it('RISES as it travels — the tail lifts away from the ring', () => {
+    // Smaller y is higher on screen. The tail leaves the ring's upper gap edge
+    // already heading up, and keeps going, which is why it stops at 255 degrees
+    // rather than carrying on around: past the top the ring heads down, and a
+    // tail that then rose folded back over itself and creased the stroke.
+    expect(wonderlandSwooshAt(1).y).toBeLessThan(wonderlandSwooshAt(0.72).y);
+    expect(wonderlandSwooshAt(0.72).y).toBeLessThan(wonderlandSwooshAt(0.6).y);
   });
 
-  it('is a RING — constant radius, and a circle rather than an ellipse', () => {
+  it('is a RING — near-constant radius about one centre', () => {
+    // Hand-authored cubics rather than a true circle, so the tolerance is the
+    // honest one measured off the shape: within about a tenth of the radius.
+    // Tight enough that an ellipse or a spiral fails, loose enough that the
+    // drawn curve passes without anyone being tempted to "correct" it.
     const radii = spine(WONDERLAND_COMPOUND_SWOOSH)
-      .filter((p) => p.t <= 0.6)
-      .map((p) => Math.hypot(p.x - 0.225, p.y - 0.5));
-    expect(Math.max(...radii) - Math.min(...radii)).toBeLessThan(0.008);
+      .filter((p) => p.t <= 0.55)
+      .map((p) => Math.hypot(p.x - 0.3225, p.y - 0.5));
+    const spread = Math.max(...radii) - Math.min(...radii);
+    expect(spread).toBeLessThan(0.03);
+    const mean = radii.reduce((a, b) => a + b, 0) / radii.length;
+    expect(mean).toBeGreaterThan(0.24);
+    expect(mean).toBeLessThan(0.29);
   });
 
-  it('runs the blue BEHIND the green, crossing the frame rather than passing beside it', () => {
-    const ring = spine(WONDERLAND_COMPOUND_SWOOSH, 257);
-    const inside = (point: { x: number; y: number }): boolean =>
-      Math.min(...ring.map((r) => Math.hypot(r.x - point.x, r.y - point.y))) <
-      WONDERLAND_COMPOUND_SWOOSH.tailWidth;
-    const samples = spine(WONDERLAND_SINGLE_SWOOSH).map(inside);
-    expect(samples[0], 'the blue must START inside the frame footprint').toBe(true);
-    expect(samples.filter((v, i) => i > 0 && v !== samples[i - 1]).length).toBeGreaterThanOrEqual(
-      1,
-    );
+  it('NESTS the blue inside the frame, concentric and never crossing', () => {
+    // The choice that was tried both ways. Running the blue UNDER the green
+    // looked better in a still and broke the instrument: the frame covered the
+    // first third of the blue spine, so every reading below about a third drew
+    // identically to empty. Nested arcs never cross, so nothing is ever hidden.
+    const centre = { x: 0.3225, y: 0.5 };
+    const ringRadius = spine(WONDERLAND_COMPOUND_SWOOSH)
+      .filter((p) => p.t <= 0.55)
+      .map((p) => Math.hypot(p.x - centre.x, p.y - centre.y));
+    const meanRing = ringRadius.reduce((a, b) => a + b, 0) / ringRadius.length;
+
+    const blue = spine(WONDERLAND_SINGLE_SWOOSH).filter((p) => p.t <= 0.55);
+    const blueRadii = blue.map((p) => Math.hypot(p.x - centre.x, p.y - centre.y));
+    const meanBlue = blueRadii.reduce((a, b) => a + b, 0) / blueRadii.length;
+
+    // INSIDE, and by enough to read as a second ring rather than a thick edge.
+    expect(meanBlue).toBeLessThan(meanRing);
+    expect(meanBlue / meanRing).toBeGreaterThan(0.55);
+    expect(meanBlue / meanRing).toBeLessThan(0.80);
   });
 
   it('keeps the blue a SWOOP, not a straight bar', () => {
@@ -265,64 +291,48 @@ describe('the four approved states still read the way they were approved', () =>
   });
 });
 
-/* ------------------------------------------- what the freeze costs, measured */
+/* ---------------------------------------- what the nesting buys, measured */
 
 /**
- * HOW MUCH OF THE BLUE STROKE THE GREEN RING COVERS.
+ * THE TWO STROKES NEVER OVERLAP, AND THAT IS THE POINT.
  *
- * The founder asked for the single-agent bar to swoop BEHIND the compound one,
- * and it does. This measures the price of that, because the price is real and
- * should be a number in the repository rather than a surprise later.
+ * This replaces a test that measured the opposite. An earlier draft ran the
+ * blue UNDER the green so the frame occluded it at two crossings; measuring it
+ * showed the frame covered the first 33.3% of the blue spine, so every
+ * single-agent reading at or below about a third had its entire fill inside the
+ * covered span and drew identically to empty — precisely the range where "you
+ * are nearly out" has to be legible. The founder settled on the nested form,
+ * which has none of that, and this asserts the property rather than the story.
  *
- * The compound ring covers the first third of the blue spine. The HUD draws the
- * REMAINING fraction from the tail, so a single-agent meter below about a third
- * has its entire fill inside the covered span and draws the same as empty —
- * which is exactly the range where "you are nearly out" needs to be legible.
- *
- * THIS TEST CHANGES NOTHING. The geometry is frozen by instruction and this
- * asserts what the frozen geometry does, so it fails if anyone moves the two
- * strokes relative to each other — in either direction, including a fix. It is
- * a record, not a verdict: whether to spend anything on it is the founder's
- * call, and the options that do NOT touch geometry (draining the blue from the
- * tip instead of the tail, or lifting its head marker above the ring) are noted
- * in the handoff.
+ * A test for zero overlap is worth keeping rather than deleting: it is the one
+ * thing that would silently break if anyone widened either stroke, moved the
+ * inner radius, or "tidied" the two curves toward each other.
  */
-describe('the cost of drawing the blue behind the green', () => {
-  const SAMPLES = 600;
+describe('the nested strokes never hide each other', () => {
+  const SAMPLES = 500;
 
-  const covered = (t: number): boolean => {
-    const blue = wonderlandSwooshAt(t, WONDERLAND_SINGLE_SWOOSH);
-    for (let i = 0; i <= SAMPLES; i += 1) {
-      const green = wonderlandSwooshAt(i / SAMPLES, WONDERLAND_COMPOUND_SWOOSH);
-      if (Math.hypot(green.x - blue.x, green.y - blue.y) <= green.halfWidth) return true;
-    }
-    return false;
-  };
+  const sample = (shape: WonderlandUsageSwoosh) =>
+    Array.from({ length: SAMPLES + 1 }, (_, i) => wonderlandSwooshAt(i / SAMPLES, shape));
 
-  it('covers the first third of the blue spine, and only the first third', () => {
-    // One contiguous span from the tail. Two spans would mean the blue crossed
-    // back under the ring, which the layout does not do.
-    let lastCovered = -1;
-    let spans = 0;
-    let previous = false;
-    for (let i = 0; i <= SAMPLES; i += 1) {
-      const hit = covered(i / SAMPLES);
-      if (hit && !previous) spans += 1;
-      if (hit) lastCovered = i;
-      previous = hit;
+  it('leaves a clear gap between the two stroke edges everywhere', () => {
+    const green = sample(WONDERLAND_COMPOUND_SWOOSH);
+    let closest = Number.POSITIVE_INFINITY;
+    for (const blue of sample(WONDERLAND_SINGLE_SWOOSH)) {
+      for (const g of green) {
+        const gap = Math.hypot(g.x - blue.x, g.y - blue.y) - (g.halfWidth + blue.halfWidth);
+        if (gap < closest) closest = gap;
+      }
     }
-    expect(spans).toBe(1);
-    expect(lastCovered / SAMPLES).toBeGreaterThan(0.30);
-    expect(lastCovered / SAMPLES).toBeLessThan(0.36);
+    // Edge to edge, not centre to centre: this is the number that decides
+    // whether the two ever touch on screen.
+    expect(closest).toBeGreaterThan(0.02);
   });
 
-  it('leaves a low single-agent reading with nothing visible to read', () => {
-    // The consequence, stated as the assertion rather than left to be inferred.
-    expect(covered(0.05)).toBe(true);
-    expect(covered(0.2)).toBe(true);
-    expect(covered(0.3)).toBe(true);
-    // And the upper two thirds are readable, which is why the bar works at all.
-    expect(covered(0.5)).toBe(false);
-    expect(covered(0.9)).toBe(false);
+  it('hides no part of the blue spine, at any reading', () => {
+    const green = sample(WONDERLAND_COMPOUND_SWOOSH);
+    const covered = sample(WONDERLAND_SINGLE_SWOOSH).filter((blue) =>
+      green.some((g) => Math.hypot(g.x - blue.x, g.y - blue.y) <= g.halfWidth),
+    );
+    expect(covered.length).toBe(0);
   });
 });

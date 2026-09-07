@@ -28,7 +28,7 @@ import {
   wonderlandUsageFixture,
   wonderlandUsageHudFixture,
 } from './wonderland-usage-meter';
-import type { WonderlandUsageMeter } from './wonderland-usage-meter';
+import type { WonderlandUsageMeter, WonderlandUsageSwoosh } from './wonderland-usage-meter';
 
 const AT = '2026-09-07T10:00:00.000Z';
 
@@ -404,30 +404,31 @@ describe('the swoosh geometry', () => {
     expect(spine[spine.length - 1].x - leftMost.x).toBeGreaterThan(0.2);
   });
 
-  it('is a RING — most of a circle, not an arc with a flourish', () => {
+  it('is a RING — near-constant radius about one centre, not an arc with a flourish', () => {
     const ring = Array.from({ length: 129 }, (_, i) =>
-      wonderlandSwooshAt((i / 128) * 0.60, WONDERLAND_COMPOUND_SWOOSH),
+      wonderlandSwooshAt((i / 128) * 0.55, WONDERLAND_COMPOUND_SWOOSH),
     );
-    const centre = { x: 0.225, y: 0.5 };
+    const centre = { x: 0.3225, y: 0.5 };
     const radii = ring.map((p) => Math.hypot(p.x - centre.x, p.y - centre.y));
-    // Constant radius over the ring portion, and a CIRCLE rather than an
-    // ellipse: the viewport crops without scaling the axes differently, so
-    // equal radii in the unit box are equal radii on screen.
-    expect(Math.max(...radii) - Math.min(...radii)).toBeLessThan(0.008);
+    // Hand-authored cubics rather than a true circle, so the tolerance is the
+    // one measured off the shape: within about a tenth of the radius. Tight
+    // enough that an ellipse or a spiral fails, loose enough that nobody is
+    // tempted to "correct" the drawn curve toward a compass circle.
+    expect(Math.max(...radii) - Math.min(...radii)).toBeLessThan(0.03);
     // And it wraps: the spine passes above, left of, and below the centre.
     expect(ring.some((p) => p.y < centre.y - 0.1)).toBe(true);
     expect(ring.some((p) => p.x < centre.x - 0.1)).toBe(true);
     expect(ring.some((p) => p.y > centre.y + 0.1)).toBe(true);
   });
 
-  it('SWOOPS DOWN as it travels, mirroring the reference', () => {
-    // The reference's tail descends as it sweeps left. Reversed, it descends as
-    // it sweeps right. An earlier draft had it rising, which is a mirror in x
-    // only — the gesture was upside down and it read as a flick rather than a
-    // swoop.
+  it('RISES as it travels, lifting away from the ring', () => {
+    // Smaller y is higher on screen. The tail leaves the ring's upper gap edge
+    // already heading up and keeps going — which is exactly why the arc stops
+    // at 255 degrees: past the top the ring heads down, and a tail that then
+    // rose would fold back over itself and crease the stroke.
     const leaves = wonderlandSwooshAt(0.72);
     const tip = wonderlandSwooshAt(1);
-    expect(tip.y).toBeGreaterThan(leaves.y);
+    expect(tip.y).toBeLessThan(leaves.y);
     expect(tip.x).toBeGreaterThan(leaves.x);
   });
 
@@ -522,10 +523,13 @@ describe('the swoosh geometry', () => {
 });
 
 describe('the window onto the unit box', () => {
-  it('is wide, because the drawing is', () => {
-    expect(WONDERLAND_USAGE_VIEWPORT.width / WONDERLAND_USAGE_VIEWPORT.height).toBeGreaterThan(
-      1.4,
-    );
+  it('crops only what the drawing does not use', () => {
+    // Not a fixed aspect — the crop follows the shape. The ring and its rising
+    // tail occupy a tall band (measured: y 0.101..0.805 with half-widths), so
+    // the window is nearly the full box vertically and trimming it to some
+    // preferred wideness would clip a stroke.
+    expect(WONDERLAND_USAGE_VIEWPORT.width / WONDERLAND_USAGE_VIEWPORT.height).toBeGreaterThan(1);
+    expect(WONDERLAND_USAGE_VIEWPORT.height).toBeLessThan(1);
   });
 
   it('contains every point of both shapes, so nothing is cropped away', () => {
@@ -585,12 +589,13 @@ describe('two bars, bound separately', () => {
   });
 
   it('keeps the single-agent stroke the simpler shape — as weight, not as form', () => {
-    // It is a BAR and it swoops: a dead-straight rectangle beside a ring reads
-    // as two widgets placed together, and the reference's own bar has an angled
-    // end for the same reason. "Simpler" survives as weight — half the
-    // thickness, one segment against five, and no point at the end.
+    // It is a concentric inner hook and it swoops: a dead-straight rectangle
+    // beside a ring reads as two widgets placed together. "Simpler" therefore
+    // cannot mean FEWER SEGMENTS — the two share a gesture, so they share a
+    // segment count — it means weight. Half the thickness, a tail that stops
+    // short, and no point at the end.
     expect(WONDERLAND_SINGLE_SWOOSH.segments.length).toBeGreaterThan(1);
-    expect(WONDERLAND_SINGLE_SWOOSH.segments.length).toBeLessThan(
+    expect(WONDERLAND_SINGLE_SWOOSH.segments.length).toBe(
       WONDERLAND_COMPOUND_SWOOSH.segments.length,
     );
     expect(WONDERLAND_SINGLE_SWOOSH.tailWidth).toBeLessThan(
@@ -615,35 +620,34 @@ describe('two bars, bound separately', () => {
     expect(Math.abs(middle.y - chordY)).toBeGreaterThan(0.03);
   });
 
-  it('crosses BEHIND the frame at both ends of the ring, not around it', () => {
-    // Adjacent is not behind. The stroke has to enter the frame's footprint and
-    // leave it, so the ring occludes it twice.
+  it('NESTS inside the frame without ever crossing it', () => {
+    // Tried both ways. Running the blue UNDER the green occluded the first
+    // third of its spine, so every single-agent reading below about a third
+    // drew identically to empty — the range where "nearly out" must be legible.
+    // Nested arcs never cross, so nothing is ever hidden.
     const ring = Array.from({ length: 257 }, (_, i) =>
       wonderlandSwooshAt(i / 256, WONDERLAND_COMPOUND_SWOOSH),
     );
-    const inside = (point: { x: number; y: number }): boolean =>
-      Math.min(...ring.map((r) => Math.hypot(r.x - point.x, r.y - point.y))) <
-      WONDERLAND_COMPOUND_SWOOSH.tailWidth;
-    const samples = Array.from({ length: 129 }, (_, i) =>
-      inside(wonderlandSwooshAt(i / 128, WONDERLAND_SINGLE_SWOOSH)),
+    const covered = Array.from({ length: 129 }, (_, i) =>
+      wonderlandSwooshAt(i / 128, WONDERLAND_SINGLE_SWOOSH),
+    ).filter((point) =>
+      ring.some((r) => Math.hypot(r.x - point.x, r.y - point.y) <= r.halfWidth),
     );
-    const crossings = samples.filter((v, i) => i > 0 && v !== samples[i - 1]).length;
-    expect(samples[0]).toBe(true);
-    expect(crossings).toBeGreaterThanOrEqual(1);
+    expect(covered.length).toBe(0);
   });
 
-  it('starts the bar BEHIND the frame, the way the reference does', () => {
-    // The reference's blue bar does not stop politely beside the ring — its
-    // near end disappears behind it. Mirrored, the bar's LEFT end does.
-    const barStart = wonderlandSwooshAt(0, WONDERLAND_SINGLE_SWOOSH);
-    const ring = Array.from({ length: 129 }, (_, i) =>
-      wonderlandSwooshAt(i / 128, WONDERLAND_COMPOUND_SWOOSH),
-    );
-    const nearest = Math.min(
-      ...ring.map((point) => Math.hypot(point.x - barStart.x, point.y - barStart.y)),
-    );
-    // Inside the frame's stroke, not merely close to it.
-    expect(nearest).toBeLessThan(WONDERLAND_COMPOUND_SWOOSH.tailWidth);
+  it('shares the frame`s centre at a smaller radius', () => {
+    const centre = { x: 0.3225, y: 0.5 };
+    const meanRadius = (shape: WonderlandUsageSwoosh): number => {
+      const radii = Array.from({ length: 97 }, (_, i) =>
+        wonderlandSwooshAt((i / 96) * 0.55, shape),
+      ).map((p) => Math.hypot(p.x - centre.x, p.y - centre.y));
+      return radii.reduce((a, b) => a + b, 0) / radii.length;
+    };
+    const ratio = meanRadius(WONDERLAND_SINGLE_SWOOSH) / meanRadius(WONDERLAND_COMPOUND_SWOOSH);
+    // Inside, and by enough to read as a second ring rather than a thick edge.
+    expect(ratio).toBeGreaterThan(0.55);
+    expect(ratio).toBeLessThan(0.80);
   });
 
   it('lets the frame paint over the bar, so behind means behind', () => {

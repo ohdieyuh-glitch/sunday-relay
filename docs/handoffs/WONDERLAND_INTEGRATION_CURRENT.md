@@ -195,16 +195,18 @@ name it.
 
 ---
 
-### 5. The HUD, frozen (`a15d251`)
+### 5. The HUD, frozen (`a15d251`, geometry settled later — see "The permanent HUD")
 
 `src/relay/mission/wonderland/wonderland-hud-canon.test.ts` (15 tests)
 
-The founder settled the geometry over five messages and then said: **do not
-redesign it.** So the geometry is pinned by a digest — every control point
+The founder settled the geometry and then said: **do not redesign it.** The
+shape they settled on is the NESTED CONCENTRIC form — see "The permanent HUD"
+below for what it is and why the crossing variant was rejected. The geometry is
+pinned by a digest — every control point
 formatted at `toFixed(6)` and joined into one string, with the canonical value
 written into the test. A 0.0004 nudge to any point fails it (verified). The
 viewport, anchor, hues, emphasis order, channel order, the six shape invariants
-(opens right / travels right / swoops down / is a ring / blue crosses behind /
+(opens right / travels right / tail rises / is a ring / blue nests inside /
 blue swoops) and the four approved readings are all pinned alongside it.
 
 **Treat the HUD as a frozen presentation component.** Work below it, not on it.
@@ -509,46 +511,49 @@ UNKNOWN). What remains is genuinely blocked on other sessions or on assets.
 
 ---
 
-## One measured cost of the frozen HUD — A FOUNDER DECISION, NOT A BUG TO FIX
+## The permanent HUD — SETTLED, DO NOT REDESIGN
 
-**Verified by rendering the real component in headless Chromium and measuring
-the geometry numerically. Nothing was changed.**
+**The founder has declared the current shape the health bar "until I say
+otherwise."** It is the nested concentric form: a green Compound frame whose
+ring sits in the top-left with its gap opening RIGHT and a tail that leaves the
+ring tangentially and RISES away to the right; and a blue single-agent stroke
+that is a CONCENTRIC inner hook at about two thirds of the radius, sharing the
+frame's centre and gesture, with its own tangential tail stopping short of the
+frame's tip.
 
-The single-agent (blue) stroke swoops behind the compound (green) one, exactly
-as asked. The price is that **the compound ring covers the first 33.3% of the
-blue spine**, in one contiguous span from its tail:
+Do not redesign it, do not "improve" the curve, and do not re-derive it from any
+reference image. `wonderland-hud-canon.test.ts` pins every control point by
+digest and fails on a nudge of 0.0004 (verified).
 
-| single-agent remaining | visible bright fill |
+### Why nested rather than crossing — this was tried both ways
+
+An intermediate design ran the blue UNDER the green so the frame occluded it at
+two crossings. It looked better in a still and it broke the instrument. Measured
+off the real geometry:
+
+| single-agent remaining | visible fill, crossing design |
 |---|---|
 | 3% | **0.0%** of the stroke |
-| 10% | **0.0%** |
 | 20% | **0.0%** |
 | 35% | 1.7% |
-| 50% | 16.7% |
-| 75% | 41.7% |
 | 100% | 66.7% |
 
-The HUD draws the REMAINING fraction from the tail, so **any single-agent
-reading at or below about a third draws the same as empty** — and that is
-precisely the range where "you are nearly out" needs to be legible. Above a
-third the bar reads correctly and the design works.
+The frame covered the first **33.3%** of the blue spine, so every reading at or
+below about a third drew identically to empty — exactly the range where "you are
+nearly out" has to be legible.
 
-This is recorded rather than repaired because the geometry is frozen by explicit
-instruction. `wonderland-hud-canon.test.ts` now pins the measurement, so it
-fails if anyone moves the two strokes relative to each other — including a fix.
+**The permanent nested design has zero overlap.** Measured edge-to-edge, the two
+strokes never come within 0.048 of touching, and no part of the blue spine is
+ever covered. The canon test asserts both, so anyone who widens a stroke, moves
+the inner radius, or tidies the two curves toward each other will fail it.
 
-**Two options that would NOT touch geometry**, if the founder wants it
-addressed:
+### What the geometry actually is, measured
 
-1. **Drain the blue from the tip instead of the tail.** The readable outer two
-   thirds would then carry the low readings. Spine, widths, control points,
-   overlap and draw order stay byte-identical and the canon digest still passes;
-   what changes is which end the `stroke-dashoffset` starts from.
-2. **Lift the blue's head marker above the ring in the draw order**, keeping the
-   body behind it. The bar still passes behind the green; only the small bright
-   head stays visible, so a low reading has something to point at.
-
-Both are presentation changes. Neither is taken without the founder saying so.
+- Compound ring: centre ≈ (0.3225, 0.500), radius ≈ 0.267, 255 degrees
+- Single ring: same centre, radius ≈ 0.180 — about two thirds
+- Both strokes, half-widths included, occupy x 0.035..0.959 and y 0.101..0.805
+- `WONDERLAND_USAGE_VIEWPORT` is `{ x: 0, y: 0.06, width: 1, height: 0.88 }`,
+  framed from that measured extent rather than chosen by eye
 
 ---
 
@@ -646,6 +651,7 @@ purpose and confirmed to fail:
 | the live-origin requirement dropped from a capture | 5 |
 | the double-click guard removed from the entry hook | 1 |
 | the simulated HUD fixture put back on the production path | 2 |
+| a control point of the permanent geometry nudged by 0.0004 | 1 (the digest) |
 
 ---
 
