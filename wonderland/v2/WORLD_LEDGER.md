@@ -2289,8 +2289,66 @@ hemisphere lift. Moving them blind risks re-breaking a call the founder
 already made.
 
 Then: the `Approach_Canopy0..3` and `ApproachSideL/R` canopies at 37–84 m
-(vegetation still owns 56.2% of the ceiling), and the paving material — our
-low row is pale/stone 42.3% where the reference is gold 57.9% + grey 21.2% +
-pale 4.1%.
+(vegetation still owns 56.2% of the ceiling).
+
+And a warning about the ground's colour. Our low row is pale/stone 42.3% +
+gold 48.0% + grey 4.1% where the reference is gold 57.9% + grey 21.2% + pale
+4.1%. That looks like a material gap and is not one: "pale" is
+bright-and-desaturated and "grey" is dark-and-desaturated, the gold shares
+are already close, and the difference between the two buckets is luminance.
+It is the shadow gap above, seen on the paving. **Do not darken the paving
+albedo to close it** — that bakes an exposure error into a material. Measure
+it again after the lighting pass.
 
 Full detail and the render command list: `docs/handoffs/WONDERLAND_WORLD_CURRENT.md`.
+
+
+---
+
+# PASS 33 — the reference's city is taller than its trees
+
+PASS 32's premise, checked against the reference IMAGE rather than an
+impression, by classifying the top-most non-sky pixel of every column:
+
+    ceiling owner    reference   our PASS 26 render   offline model
+    built              71.5%           33.0%             30.2%
+    vegetation         28.5%           67.0%             69.8%
+
+Two things fall out. The offline silhouette model tracks the real render
+within THREE POINTS -- the first cross-check against pixels anything here has
+had, and reason to trust it more than `frame.py`. And the reference's trees
+are enormous and still own only 28.5% of its ceiling, because the spire field
+behind them out-tops them. The target was never "less green".
+
+At -43..-23 and +23..+29 the tallest built thing was a DISTRICT TOWER losing
+to a canopy by 0.4 to 4.3 degrees. `_DT_LIFT = 1.25` stretches the whole
+`tower_district` rung vertically; footprint untouched, the same lesson as
+`spire`. Applied to the RUNG, uniformly, and not to the two towers standing
+in HeroCam0's flanks: tuning individual pieces to win named columns of one
+benchmark frame is how a world comes to look right from exactly one place.
+
+    ceiling owner:  built 43.8% -> 55.8%,  vegetation 56.2% -> 44.2%
+
+Every gate byte-identical: 13,686 placements, route 190 legs / 2,306 m,
+walkable 0 of 30 and 0 of 60, region 1,800 m2, hierarchy 302 landmarks,
+wayfinding worst 64 m, camera_framing / occlusion / marble_paths PASS.
+
+## What this pass refused to do
+
+The remaining losing columns were sorted against the reference, not swept up.
+-45..-49 and +43..+49 are the frame's extreme margins and the reference's own
+trees own those. -33..-25 loses by 5.6-8.7 deg, and the reference's right
+tree covers -16 to -50, so vegetation there is faithful.
+
++31..+41 is the one genuine hole -- the reference has dense spires and our
+city tops at +14.4 deg. A siting probe over the wedge (26-46 deg, 120-300 m)
+found NO FREE GROUND: every candidate centre falls inside an existing
+quarter, nearest placement 97-693 uu. What stands there is the Royal Gardens
+landmark, `S17_garden`, `S16_meadow` and a ring road -- a coherent GARDEN
+district. Dropping a city cluster on it would overwrite a district's identity
+and its road tree to win six columns of one frame. That is a district palette
+decision for a considered pass.
+
+`SkyGold0` (+37..+39, loses by 1.5 deg) and `GiantMushroom_Vine1` (+43..+49,
+1.9 deg) would both flip by nudging a floating prop upward. Left alone: that
+is benchmark-gaming, not world-building.

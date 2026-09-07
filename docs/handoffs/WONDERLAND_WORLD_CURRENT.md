@@ -10,7 +10,7 @@ session.
 | CHECKOUT | `/home/thomasajvt13/dev/sunday-relay` (git worktree; the primary checkout is `sunday-relay-main`, detached at `b2dc9f2`, and is the Julius/platform stream) |
 | BRANCH | `relay/wonderland-v2` |
 | SHA AT START | `d9245bf` |
-| SHA AT END | `200aeff` (pushed) |
+| SHA AT END | `e8d44e5` (pushed) |
 | LOCK | `wonderland/.gauntlet-lock` = `writer=claude step=0 since=2026-08-25`. Unchanged. `gauntlet-check.py` clean on every commit. |
 | MAP | `/Game/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2` (classic container) |
 | RENDERED THIS SESSION | **Nothing.** No engine, no Studio, no GPU frame. Every number below is offline, measured off `layout_v2.ALL` and the built meshkit geometry. |
@@ -274,6 +274,63 @@ Result: topmost silhouette owner **built 30.2% → 43.8%**, vegetation
 
 ---
 
+## PASS 33 — the reference's city is taller than its trees
+
+The premise of PASS 32 was checked against the reference **image itself**
+rather than against an impression, by classifying the top-most non-sky pixel
+of every column:
+
+| ceiling owner | reference | our PASS 26 render | offline model |
+|---|---|---|---|
+| built | **71.5%** | 33.0% | 30.2% |
+| vegetation | 28.5% | 67.0% | 69.8% |
+
+Two things fall out. First, **the offline silhouette model tracks the real
+render within three points**, which is the first time anything here has been
+cross-checked against pixels — use it with more confidence than `frame.py`.
+Second, the reference's trees are *enormous* and still own only 28.5% of its
+ceiling, because the spire field behind them out-tops them. The target was
+never "less green".
+
+At −43..−23 and +23..+29 the tallest built thing was a **district tower**
+losing to a canopy by 0.4° to 4.3°. `tower_district` is the mid-distance
+landmark rung, 4,130 uu at scale 1.06–1.35. `_DT_LIFT = 1.25` stretches the
+whole rung vertically — footprint untouched, same lesson as `spire`.
+
+Applied to the **rung, uniformly**, not to the two towers standing in
+HeroCam0's flanks. Tuning individual pieces to win named columns of one
+benchmark frame is how a world comes to look right from exactly one place,
+which is what the 33-camera suite exists to prevent.
+
+Ceiling owner: **built 43.8% → 55.8%**, vegetation 56.2% → 44.2%. Every gate
+byte-identical: route 190 legs / 2,306 m, walkable 0 of 30 and 0 of 60,
+region 1,800 m², hierarchy 302 landmarks, wayfinding worst 64 m.
+
+### What PASS 33 found and deliberately did NOT do
+
+The remaining losses were sorted against the reference rather than swept up:
+
+- **−45..−49 and +43..+49** — the frame's extreme margins. The reference's
+  own trees own these. **Correct as-is; leave them.**
+- **−33..−25** — `Tower_R0/R1` at 51–76 m lose by 5.6–8.7°, but the
+  reference's right tree covers −16° to −50°, so vegetation owning this is
+  faithful. **Leave.**
+- **+31..+41** — the one genuine hole. The reference has dense spires there;
+  our city at those bearings tops at only +14.4°. A siting probe over the
+  wedge (26–46°, 120–300 m) found **no free ground**: every candidate centre
+  falls inside an existing quarter, with the nearest placement 97–693 uu
+  away. What stands there is the **Royal Gardens landmark, `S17_garden`,
+  `S16_meadow` and a ring road** — a coherent *garden* district, not empty
+  ground. Dropping a city cluster on it would overwrite a district's identity
+  and its road tree to win six columns of one frame. **This is a district
+  palette decision for a considered pass, not a quick fix.**
+
+Two near-misses were also left alone on purpose: `SkyGold0` at +37..+39 loses
+by 1.5° and `GiantMushroom_Vine1` at +43..+49 by 1.9°. Both would flip by
+nudging a floating prop upward, and that is benchmark-gaming, not world-building.
+
+---
+
 ## OFFLINE VERIFIED vs VISUALLY PROVEN
 
 **Visually proven: nothing since PASS 26.** There is no engine, no Studio and
@@ -325,13 +382,23 @@ hemisphere lift. Moving them blind risks re-breaking a call the founder
 already made. **PASS 33 should be the lighting pass and it must have a render
 in the loop.**
 
-**2. Vegetation still owns 56.2% of the frame's ceiling.** `ClockTree` is
-correct. What remains are `Approach_Canopy0..3` and the `ApproachSideL/R`
-canopies at 37–84 m. Same treatment as PASS 32: move outward, do not delete.
+**2. Vegetation owns 44.2% of the ceiling against the reference's 28.5%,**
+and the honest remainder is small. PASS 33 sorted every losing column: the
+frame margins are faithful and should stay, and the one real hole is
+frame-left +31..+41, which needs a **district palette decision** (see PASS 33
+above) rather than more tree-moving. Do not move `ClockTree`, `Tower_R0/R1`
+or the margin canopies — they match the reference.
 
-**3. The low row is pale where the reference is warm.** Ours pale/stone 42.3%
-+ gold 48.0%; reference gold 57.9% + grey 21.2% + pale **4.1%**. Our paving
-material reads near-white. MATERIAL, not light.
+**3. The low row is pale where the reference is grey — and that is
+mismatch 1 again, not a material.** Ours pale/stone 42.3% + gold 48.0% +
+grey 4.1%; reference gold 57.9% + grey **21.2%** + pale **4.1%**. The two
+buckets differ only in luminance — "pale" is bright-and-desaturated, "grey"
+is dark-and-desaturated, and the gold shares are already close (48.0 against
+57.9). So this is the same paving under different light, not different
+paving. **Do not darken the paving albedo to close it** — that bakes an
+exposure error into a material and will read wrong the moment the lighting is
+fixed. Re-measure this row after PASS 33 and only then ask whether any
+material work is left.
 
 **4. A dip in the middle distance.** Silhouette tops by depth band:
 0–40 m +12.3°, 40–90 m +21.2°, 90–180 m +14.0°, **180–260 m +7.9°,
@@ -354,7 +421,11 @@ which does not share the far city's occupancy list.
    reaches roughly the reference's 12 / 20 / 42%. Change one light at a time
    and render between changes — this project has broken shade three times by
    moving two knobs at once.
-3. Then mismatch 2 (approach canopies outward), then 3 (paving material).
+3. Then mismatch 4 (the 180–360 m band is the thinnest part of the world's
+   profile, +7.9° and +5.6° against +14.0° nearer and +13.2° beyond).
+4. Only then the frame-left +31..+41 hole, and only as a considered decision
+   about what `Royal Gardens` / `S17_garden` / `S16_meadow` should be. It is
+   a district-identity question, not a hole to plug.
 
 ## Other open world problems
 

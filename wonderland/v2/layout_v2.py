@@ -6450,6 +6450,31 @@ def _signature_skyline():
                          label="Spire_%s_Ring%d" % (who, k)))
 
     # --- 3. THE DISTRICT TOWERS, the rung that was missing ----------------
+    #
+    # PASS 33 STRETCHED THE WHOLE RUNG, and the reason is a property of the
+    # founder's reference that took three passes to name: ITS CITY IS TALLER
+    # THAN ITS TREES. Classifying the reference's own pixels column by column,
+    # built mass owns 71.5% of its ceiling and vegetation 28.5% -- and the
+    # trees it does have are enormous. They do not own the frame because the
+    # spire field behind them out-tops them, not because they are small.
+    #
+    # Ours was the other way round (67.0% vegetation in the PASS 26 render,
+    # 69.8% in the offline model, which is how closely the model tracks).
+    # PASS 32 moved one tree and took the model to 43.8% built. What was left
+    # was not a tree problem at all: at -43..-23 and +23..+29 the tallest
+    # built thing is a DISTRICT TOWER and it loses to a canopy by 0.4 to 4.3
+    # degrees. Half of those columns flip on a lift of a fifth.
+    #
+    # The lift is applied to the RUNG, uniformly, and not to the two towers
+    # that happen to stand in HeroCam0's flanks. Tuning individual pieces to
+    # win named columns of one benchmark frame is how a world comes to look
+    # right from exactly one place, which is the failure this project's
+    # camera suite exists to prevent. `tower_district` is 4,130 uu; 1.25
+    # makes the rung 52-70 m tall against a castle at 130.
+    #
+    # Vertical only, like `_castle_group`'s `spire`: no footprint moves, so
+    # `_sig_site`'s clearances, the road tree and the walk are untouched.
+    _DT_LIFT = 1.25
     # One per inner district that should read as BUILT. Water Gardens and
     # Mushroom Grove are deliberately absent: a district whose identity is
     # water or fungus does not announce itself with a stone keep, and giving
@@ -6470,8 +6495,10 @@ def _signature_skyline():
         x, y = pt
         yaw = (bearing * 3.0) % 90.0
         out.append(A("tower_district", x, y, 0.0, yaw=yaw, s=sc,
+                     sxyz=(sc, sc, sc * _DT_LIFT),
                      mat="MI_V2_IvoryStone", label="DistrictTower_%s" % who))
-        out.append(A("roof_flat_crenellated", x, y, 4130.0 * sc, yaw=yaw, s=0.0001,
+        out.append(A("roof_flat_crenellated", x, y, 4130.0 * sc * _DT_LIFT,
+                     yaw=yaw, s=0.0001,
                      mat=roof, label="DistrictTower_%s_RoofTint" % who))
         for k, cyaw in enumerate((0.0, 90.0)):
             out.append(A("terrace_platform", x, y, ROAD_Z, yaw=cyaw + yaw,
