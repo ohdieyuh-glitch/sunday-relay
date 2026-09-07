@@ -8,19 +8,9 @@ import {
   type CompoundAgentDraft, type OnboardingStepId,
 } from '../relay-experience/onboarding';
 import { WonderlandUsageHudView } from '../wonderland-hud';
-import { wonderlandUsageHudFixture } from '../../mission/wonderland/wonderland-usage-meter';
+import { useWonderlandUsage } from '../wonderland-hud/useWonderlandUsage';
 import { useRelayWorld } from './useRelayWorld';
 import type { WorldStage } from './world-stage';
-
-/**
- * A FIXED INSTANT FOR THE HUD FIXTURE.
- *
- * The fixture is simulated data and its timestamp is part of that data, so it
- * is a constant rather than `new Date()`: a clock read here would make the
- * component's output depend on when it rendered, and a simulated reading that
- * refreshes its own timestamp looks more live than one that does not.
- */
-const WONDERLAND_HUD_FIXTURE_INSTANT = '2026-01-01T00:00:00.000Z';
 
 /**
  * THE RELAY WORLD — Aquala, the passage, and Relay, in one mounted scene.
@@ -52,6 +42,9 @@ export function RelayWorld({ initialStage, initialStep, onActivated }: {
 }): JSX.Element {
   const reducedMotion = usePrefersReducedMotion();
   const [draft, setDraftState] = useState<CompoundAgentDraft>(() => loadAgentDraft());
+  // The HUD's only source of figures. Nothing reports into it yet, so it reads
+  // `not_reported` and the HUD says so on its own face.
+  const usage = useWonderlandUsage({ projectId: draft.cardId });
   const [step, setStep] = useState<OnboardingStepId>(() => {
     if (initialStep !== undefined) return initialStep;
     const stored = loadAgentDraft();
@@ -164,12 +157,21 @@ export function RelayWorld({ initialStage, initialStep, onActivated }: {
           rather than a child of the Relay chrome so the stage's own opacity
           fade cannot half-dissolve a number a founder is reading.
 
-          The fixture is SIMULATED and the HUD says so on its own face. No
-          usage authority exists yet, and wiring a placeholder that looked live
-          would be the exact untruth the contract is built to refuse. */}
+          FED FROM THE USAGE AUTHORITY, never directly. It used to be handed a
+          simulated fixture here, which put invented figures on the normal
+          production path — the thing this repository's own rule forbids and
+          `usage-integration.test.tsx` already enforces for the other usage bar.
+          It also meant the authority's refusals (foreign project, stale
+          revision, malformed report) never ran, because there was a way to put
+          numbers on screen without passing through them.
+
+          Nothing reports usage yet, so what this draws is Unknown, labelled
+          NO USAGE AUTHORITY REPORTING. That is the truth, and it is what the
+          HUD is designed to say. */}
       {world.stage === 'relay' && (
         <WonderlandUsageHudView
-          hud={wonderlandUsageHudFixture(WONDERLAND_HUD_FIXTURE_INSTANT)}
+          hud={usage.hud}
+          status={usage.status}
           reducedMotion={reducedMotion}
         />
       )}
