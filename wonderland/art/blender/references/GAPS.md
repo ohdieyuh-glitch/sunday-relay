@@ -111,7 +111,41 @@ world's arches are round or plain pointed.
 
 **Answered by** `elements.arch_curve(kind="ogee")`, used on 14 assets.
 
-## GAP 8 — mushroom architecture is in the SKYLINE, not only on the ground
+## GAP 8 — the city has no EDGE
+
+A city reads as a place rather than as a cluster because it stops on purpose.
+The reference has a walled, terraced boundary between the garden you stand in
+and the city behind it, with towers standing ON that line.
+
+`layout_v2` could not draw it. PASS 30's South Reach ends on nineteen columns
+"so the world's southern edge is a made line rather than a fade" — the right
+instinct reached with the wrong tool, because a colonnade is transparent and an
+edge has to be opaque somewhere. `gatehouse_district` is a point, not a line.
+
+**Answered by** `families/walls.py`: a curtain run that butts to itself, a
+D-plan mural tower, a postern that drops into a run without re-planning it, a
+90-degree corner bastion, and a stair. All five share one wall-walk height
+(6.20 m) and the stair reaches it in 20 risers of 0.310 m, so the circuit is a
+ROUTE `walkable.py` can use rather than scenery.
+
+## GAP 9 — the middle distance is small BUILDINGS, and there were none
+
+Between the reference's foreground garden and its skyline of needles is a band
+of two- and three-storey buildings with pitched roofs, dormers, chimneys and
+overhanging upper floors. It occupies more of the picture than the spires do.
+
+Wonderland has a `hamlet` district whose roof vocabulary is a cone, and every
+other module in this kit is a tower or a monument — so a generator building the
+middle distance had a choice between a 40 m tower and a garden bench.
+
+**Answered by** `families/roofscape.py`: three house bodies on one shared
+6.4 x 5.2 m plan (so they terrace), plus a dormer, a chimney and a shopfront as
+clip-ons. The key element is `elements.roof_ridged`, whose `ridge_frac`
+parameter is a gable at 1.0 and a hip below it — a ridge has two completely
+different silhouettes where a cone has one, which is why a street of them reads
+as many buildings.
+
+## GAP 10 — mushroom architecture is in the SKYLINE, not only on the ground
 
 `WONDERLAND_ART_DIRECTION.md` lists "giant red-and-white spotted mushrooms ...
 at several scales" from the founder reference, and the reference image has
@@ -140,25 +174,28 @@ generator can put it on the skyline.
 
 ## Next five, in the order I would do them
 
-1. **Curtain wall and towers-on-a-wall.** The reference has a walled edge to its
-   city and the kit has colonnades but no defensible wall. A wall run with a
-   wall-walk, plus a half-round mural tower that butts into it, would let a
-   generator draw the city's EDGE — which is what makes a city read as a place
-   rather than a cluster.
-2. **Roofscape: gables, dormers, chimneys, a hipped-roof house body.** Every
-   module here is a tower or a monument. The reference's middle distance is
-   mostly small buildings, and the current world's hamlet has no roof
-   vocabulary beyond a cone.
-3. **Stairs and terracing as modules.** `walkable.py` audits step height over
-   every surface; a stair FAMILY (straight flight, quarter-landing, curved
-   flight, ramped terrace) sized to pass it would let the generator build the
-   reference's layered ground instead of flat quarters.
-4. **A second hero at district scale — the water garden.** Both heroes here are
-   dry and vertical. The reference's `water_garden` quarter has nothing
-   singular in it, and a tiered basin/cascade landmark would use the existing
-   `MI_V2_Water` material the kit never touches.
-5. **Damaged and overgrown variants of the existing modules.** One extra
-   parameter on three or four bodies (a broken parapet, a missing bay, ivy
-   anchors over more of the face) would double the apparent vocabulary at
-   almost no authoring cost, and would break the regularity that a purely
-   modular city always drifts toward.
+The first two on this list at the end of the first pass — the curtain wall and
+the roofscape — were built, and are GAP 8 and GAP 9 above. What follows is what
+is left.
+
+1. **The rest of the stair vocabulary.** `WL_Wall_Stair_Flight` proved the
+   riser (0.310 m, 20 of them, reaching 6.20 m exactly) but it is one straight
+   flight against a wall. A quarter-landing, a curved flight and a ramped
+   terrace on the same riser would let the generator build the reference's
+   layered GROUND, which is currently flat inside every quarter.
+2. **A water-garden hero.** Both heroes are dry and vertical. The
+   `water_garden` quarter has nothing singular in it, and a tiered
+   basin/cascade landmark would use `MI_V2_Water`, which this kit never
+   touches.
+3. **Damaged and overgrown variants** of four or five existing bodies. One
+   extra parameter each (a broken parapet, a missing bay, ivy anchors over more
+   of the face) would roughly double the apparent vocabulary at almost no
+   authoring cost, and break the regularity a purely modular city drifts
+   toward.
+4. **A market/awning layer for the roofscape.** The houses have a shopfront;
+   what a street actually reads as inhabited by is the stuff in front of it —
+   awnings, stalls, hanging signs, crates. Small, cheap, and the reference's
+   middle ground is full of it.
+5. **Terrace and retaining-wall modules.** The reference's garden is on
+   several levels held by low walls with balustrades on top. The kit has the
+   balustrade and the curtain wall but nothing between them at garden scale.

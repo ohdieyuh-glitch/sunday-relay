@@ -18,7 +18,7 @@ is the art library's.
 
 ## What exists
 
-**44 assets, 119 meshes, 226,204 triangles.** All built, all exported to GLB and
+**55 assets, 156 meshes, 248,977 triangles.** All built, all exported to GLB and
 FBX, all validated, 0 failures.
 
 | group | assets | what it answers |
@@ -26,6 +26,8 @@ FBX, all validated, 0 failures.
 | `towers` | 24 | the skyline. 4 feet, 8 bodies, 7 crowns, 5 spires |
 | `thresholds` | 6 | 4 arches, 2 gatehouses — the things you walk through |
 | `civic` | 6 | 3 colonnades, 3 bridges — the horizontals |
+| `walls` | 5 | the city's EDGE: curtain run, mural tower, postern, corner bastion, stair |
+| `roofscape` | 6 | the middle distance: 3 house bodies, dormer, chimney, shopfront |
 | `details` | 6 | balustrade, newel+urn, gold screen, balcony, pinnacle, oriel |
 | `hero` | 2 | `WL_Hero_GreatSpire` (118.2 m), `WL_Hero_Gate_Royal` (48.9 m) |
 
@@ -61,7 +63,20 @@ honest reference pair (`marble-royal-garden-cam0-founder-reference.png` against
    a generator can find two towers to join.
 6. **The threshold is an event.** 22 m of clear opening on `WL_Hero_Gate_Royal`.
 7. **The ogee** is the reference's actual line — 14 assets use it.
-8. **Mushroom architecture belongs in the skyline**, not only on the ground:
+8. **The city had no edge.** PASS 30's South Reach ended on nineteen columns
+   "so the world's southern edge is a made line rather than a fade" — the right
+   instinct with the wrong tool, since a colonnade is transparent.
+   `families/walls.py` is a circuit: a curtain run that butts to itself, a
+   D-plan mural tower, a postern that drops into a run without re-planning it,
+   a corner bastion, and a stair. All five share a 6.20 m wall-walk and the
+   stair reaches it in 20 risers of 0.310 m, so it is a ROUTE, not scenery.
+9. **The middle distance is small buildings and there were none.** The hamlet's
+   roof vocabulary is a cone; every other module in this kit is a tower or a
+   monument. `families/roofscape.py` adds three house bodies on one shared
+   6.4 x 5.2 m plan (so they terrace) plus a dormer, chimney and shopfront as
+   clip-ons. `elements.roof_ridged`'s `ridge_frac` is a gable at 1.0 and a hip
+   below it — a ridge has two silhouettes where a cone has one.
+10. **Mushroom architecture belongs in the skyline**, not only on the ground:
    `WL_Tower_Crown_Cap`.
 
 ---
@@ -180,10 +195,11 @@ So the manifest states the intended classification per asset (`category`:
 
 - `landmark` — `WL_Hero_GreatSpire`, `WL_Hero_Gate_Royal`
 - `ARCH` — every `WL_Tower_*`, `WL_Arch_*`, `WL_Gatehouse_*`, `WL_Colonnade_*`,
-  `WL_Bridge_*`, `WL_Spire_*`, `WL_Detail_Screen_Filigree`,
-  `WL_Detail_Pinnacle_Grand`
+  `WL_Bridge_*`, `WL_Spire_*`, `WL_Wall_*`, `WL_House_*`,
+  `WL_Detail_Screen_Filigree`, `WL_Detail_Pinnacle_Grand`
 - `prop` — `WL_Detail_Balustrade_Run`, `WL_Detail_Newel_Urn`,
-  `WL_Detail_Balcony_Bracket`, `WL_Detail_Oriel_Bay`
+  `WL_Detail_Balcony_Bracket`, `WL_Detail_Oriel_Bay`, `WL_Roof_Dormer`,
+  `WL_Roof_Chimney`
 
 **Watch the prefix matching.** `hierarchy.py` matches on name prefixes and
 `LANDMARK_RIDERS` exists because glazing was being counted as separate
@@ -209,7 +225,8 @@ Report: `wonderland/art/blender/validation/VALIDATION_REPORT.json`.
 | socket radii on the ladder | — |
 | a foot/body has geometry AT its top socket | the belfry stage declared a socket 4.4 m above where its masonry stopped |
 | every rung a body can leave you on has a terminator | the XL rung had none after a crown became a body; the first spelling test drew a tower with an open top |
-| no coincident coplanar faces | `tower_base_terraced` laid a full disc on each terrace top — every terrace rendered solid black |
+| no coincident coplanar faces (same place, SAME normal direction) | `tower_base_terraced` laid a full disc on each terrace top — every terrace rendered solid black. Then the check itself was wrong twice and both are recorded in `validate_assets.py`: at a 1% area tolerance it missed a 3.40 m wall top z-fighting under a 3.60 m string course, and at 35% with merely-parallel normals it reported 58 assets because two STACKED boxes share a face centre at their interface. Requiring the same normal DIRECTION separates a z-fight from a join. It then found 8 real defects across the kit. |
+| every rung's terminator, every foot usable | — |
 | no inverted closed shells (signed volume per shell) | `WL_Tower_Mid_Oriel`'s three bay hoods, from an open partial-revolve `recalc_face_normals` had no outside to point at |
 | no degenerate faces, loose verts, zero normals | — |
 | triangle budget per asset | — |
@@ -263,17 +280,25 @@ Stated plainly, in the style `WONDERLAND.md` uses:
 
 ## Next five asset families, highest impact first
 
-1. **Curtain wall + mural towers.** The kit has colonnades but no defensible
-   wall, so a generator cannot draw the city's *edge* — which is what makes a
-   city read as a place rather than a cluster.
-2. **Roofscape: gables, dormers, chimneys, a hipped-roof house body.** Every
-   module here is a tower or a monument; the reference's middle distance is
-   mostly small buildings and the hamlet has no roof vocabulary beyond a cone.
-3. **Stairs and terracing as modules**, sized to pass `walkable.py`'s step-height
-   audit, so the generator can build the reference's layered ground.
-4. **A water-garden hero.** Both heroes are dry and vertical; the
+The first two on this list partway through the session — the curtain wall and
+the roofscape — were then built, and are gaps 8 and 9 above. What is left:
+
+1. **The rest of the stair vocabulary.** `WL_Wall_Stair_Flight` fixes the riser
+   (0.310 m, 20 of them, reaching 6.20 m exactly) but it is one straight flight
+   against a wall. A quarter-landing, a curved flight and a ramped terrace on
+   the same riser would let the generator build the reference's layered
+   GROUND, which is flat inside every quarter today.
+2. **A water-garden hero.** Both heroes are dry and vertical; the
    `water_garden` quarter has nothing singular in it, and `MI_V2_Water` is a
    material this kit never touches.
-5. **Damaged and overgrown variants** of four or five existing bodies. One extra
-   parameter each would roughly double the apparent vocabulary at almost no
-   authoring cost, and break the regularity a purely modular city drifts toward.
+3. **Damaged and overgrown variants** of four or five existing bodies. One
+   extra parameter each would roughly double the apparent vocabulary at almost
+   no authoring cost, and break the regularity a purely modular city drifts
+   toward.
+4. **A market/awning layer for the roofscape.** The houses have a shopfront;
+   what makes a street read as inhabited is what stands in front of it —
+   awnings, stalls, hanging signs. Small, cheap, and the reference's middle
+   ground is full of it.
+5. **Terrace and retaining walls at garden scale.** The reference's garden is
+   on several levels held by low walls with balustrades on top. The kit has the
+   balustrade and the curtain wall and nothing between them.

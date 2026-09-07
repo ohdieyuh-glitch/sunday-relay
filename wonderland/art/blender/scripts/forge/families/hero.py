@@ -75,7 +75,7 @@ def hero_great_spire(f):
     d.lathe([(6.40, 3.60), (6.40, 12.70)], segments=24)
     E.corbel_table(p, 12.70, 11.70, count=40, depth=0.46, drop=0.72)
     p.lathe([(12.10, 13.42), (11.20, 14.20), (10.40, 14.60)], segments=32,
-            smooth=False)
+            smooth=False, cap_bottom=False)
 
     # ---- the shaft: 23 m of ribbed, battered wall -------------------------
     shaft = p.lathe(M.entasis(10.40, 8.60, 14.60, 38.00, steps=8, belly=0.026),
@@ -96,7 +96,8 @@ def hero_great_spire(f):
         d.box(0.90, 1.20, 12.20, at=(x * 0.62, y * 0.62, 38.00), rot=(0, 0, a),
               chamfer=0.12, centre_z=False)
     E.corbel_table(p, 50.20, 8.40, count=30, depth=0.38, drop=0.58)
-    p.lathe([(8.90, 50.78), (8.90, 52.40)], segments=28, smooth=False)
+    p.lathe([(8.90, 50.78), (8.90, 52.40)], segments=28, smooth=False,
+            cap_bottom=False)
 
     # ---- the gallery: the widest thing above the base ---------------------
     E.balcony_ring(p, 52.40, 8.70, out=1.90, thickness=0.42, corbels=24,
@@ -116,7 +117,7 @@ def hero_great_spire(f):
               cap_bottom=False, cap_top=False)
     E.corbel_table(p, 69.60, 6.70, count=24, depth=0.34, drop=0.52)
     p.lathe([(7.10, 70.12), (7.10, 71.40), (6.20, 72.60)], segments=32,
-            smooth=False)
+            smooth=False, cap_bottom=False)
 
     # ---- eight flying ribs, leaning in ------------------------------------
     #

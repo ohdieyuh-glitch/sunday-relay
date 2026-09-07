@@ -10,7 +10,9 @@ and runtime behaviour. This gives the Unreal generator better things to place.
 wonderland/art/blender/
   scripts/
     forge/            the kernel: units, kit grammar, bmesh helpers, elements
-    forge/families/   THE ART. one module per asset family
+    forge/families/   THE ART. one module per asset family:
+                        towers, thresholds, civic, walls, roofscape,
+                        details, hero
     build_assets.py   build everything, export, measure, write the manifest
     validate_assets.py  fail loudly on an invalid asset
   references/GAPS.md  which reference gap each family answers

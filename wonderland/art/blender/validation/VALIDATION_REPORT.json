@@ -1,5 +1,5 @@
 {
-  "checked_assets": 44,
+  "checked_assets": 55,
   "failures": 0,
   "material_check": "59 MI_V2_* names parsed from materials_v2.py",
   "per_asset": {
@@ -39,6 +39,17 @@
     "WL_Bridge_Arc": [],
     "WL_Bridge_Sky": [],
     "WL_Bridge_Flying": [],
+    "WL_Wall_Curtain_Run": [],
+    "WL_Wall_Mural_Tower": [],
+    "WL_Wall_Postern_Gate": [],
+    "WL_Wall_Corner_Bastion": [],
+    "WL_Wall_Stair_Flight": [],
+    "WL_House_Gabled": [],
+    "WL_House_Hipped": [],
+    "WL_House_Jettied": [],
+    "WL_Roof_Dormer": [],
+    "WL_Roof_Chimney": [],
+    "WL_House_Shopfront": [],
     "WL_Detail_Balustrade_Run": [],
     "WL_Detail_Newel_Urn": [],
     "WL_Detail_Screen_Filigree": [],
@@ -84,7 +95,7 @@
       "stone": "5f4795069b9b9c3a847bf89a3877f6563118871c8a6890031efc4a035a428863"
     },
     "WL_Tower_Mid_Fluted": {
-      "stone": "f5e726a7d6828e1b907debf13700f140aed63b694e0547339ea21abd92b020c0"
+      "stone": "d495c8be653036390df7017987dfd76c25dfcf21fee86c5216e499a6bd03a38b"
     },
     "WL_Tower_Mid_Oriel": {
       "glass": "80fa8a221156099f8480196f965e525aadfff2873dbb51bab09339f76df2359f",
@@ -213,6 +224,65 @@
       "gold": "c354c994b436bc6df32143b1261c1e3eeb974ed5ca35a1b3c40154e60fbb880b",
       "stone": "d351a929cde47ccc32f37be505cae342d496d0ec6c3b4f1ed8638997fec906f4"
     },
+    "WL_Wall_Curtain_Run": {
+      "stone": "4ae1e4b12664e814b35cc2bdde015290a148f502834c568c02ce304899d0d411",
+      "stone_dark": "c7d282aaba5c8c037bc75f3e9eaaf24a22973ab9edb9e1e35d140a7b4c988338"
+    },
+    "WL_Wall_Mural_Tower": {
+      "glass": "cca140097f018d35e1b829ea13011bd831b39fba87689ae3527ed6ca3d089caa",
+      "gold": "b136f29c213b2db247c7e28454a9c746efae7d69c8bfaa1c3819661f9b0daefb",
+      "roof": "f8e8edeff714855bc1cc2402d1a1bd71823633f4a84a693112a66f84396b199a",
+      "stone": "6b0f47909845779ef111310ef206f5aed4510d70f711dbddb070feb28e73b407",
+      "stone_dark": "9e8f4651368d760ee03a02eae5de58029cd05bc96fdb9273a9d6360e7a3333d4"
+    },
+    "WL_Wall_Postern_Gate": {
+      "gold": "ccf047814b7ae858270e101a428bfed7cdc0d0bcf6a8e0a6c6bb4153a3b917b6",
+      "stone": "2e14d8bc38b842ed140af8ded2b62db93ff68ce160c0b229c8f9510392bd25cb",
+      "stone_dark": "1b4d7395479060c43c411a4596f560d2c6c1468a62c9e86a4906c2fb699311ad"
+    },
+    "WL_Wall_Corner_Bastion": {
+      "gold": "4a2574c68d4b1264b9c6573979ca5b5f6d6e4f45a1fe437b60013527c8f80c92",
+      "stone": "8e2cc1b6256d052632dcbbb9f0c98266ebd97e801069f1b797d65edd88b334d5",
+      "stone_dark": "92a70984ccbf1bffe5e940896f59653936fc54922db43e0617bf09f03a8bb0cd"
+    },
+    "WL_Wall_Stair_Flight": {
+      "gold": "17a62fc233d524173ed609a113ce965ee5c1f878455b6f927eaaf27f13f9e1a3",
+      "stone": "62c9a80f7845b121c846b28a56837104ebe086ea5519c43fc4db5e698ccb0e62"
+    },
+    "WL_House_Gabled": {
+      "glass": "a366b0065e94f859b75347e911d083dbd0e3f6f240ee30852b6279f8443e49db",
+      "gold": "e91edfb86b751e5b15e2e5f3a42c60b3dfcdf3fe7ff6e3bd33999ac7d9dda16d",
+      "roof": "211ca557b18be8a873f7119b2fb5fbc3f4118f3aa3fb677eb4fe6cd2530b6e30",
+      "stone": "e8571ec66bc418672e78147e3dd59febe589b4e397f6d25cb076c00a242a5f37"
+    },
+    "WL_House_Hipped": {
+      "glass": "8fa389313bed299e9a401997b3e271429f82eef77ebb0f20630d55ff01dff4f7",
+      "gold": "3f1cb60e09faff1e1721b94d58eb498c51f1b22cf1343cbb41fc0fa845485a1b",
+      "roof_alt": "747b643e073b4639e6af75fff6d1678237cbee7e3729b5e264e183a5f8da5ce6",
+      "stone": "f7076ef3a31e28d022627ae2992e322cf130a8117807010e448da08f96cea956"
+    },
+    "WL_House_Jettied": {
+      "glass": "326c46b1997199c256aa0a313cc04fb5f903c3635914a526ed3adfd7a7c543a4",
+      "gold": "a3fb23149183bed902d9168504a0dd0840cb9a296e30f960b098a05f7515157f",
+      "roof": "2109b8e5b89eea1b214183d90850f9e87c6391b90fbc005522563046593b7d22",
+      "stone": "b179c880fda70885657ee8bf944f2d1f42523ed9ef19a258300642871bbbec46",
+      "stone_dark": "0574ded512a58f22d602c47aa26bc2f75094ca26f50bdea21318217c97935050"
+    },
+    "WL_Roof_Dormer": {
+      "glass": "352dbfe573cc4bdbf030822b241a5bcb11df9ad6ed16f00f9085fd29954b87d4",
+      "roof": "307f329671782a217ed5bb6d74c9f7a523ca4be5eaf01d73250cbe44d4663da9",
+      "stone": "15f90f1090d23db20592e20421f31c75eded4a245a2be4c29d283976a815f3d3"
+    },
+    "WL_Roof_Chimney": {
+      "stone": "0fbb1535499a2f69a5c08402a09761e95cb6e0bca1885844c2a3d6df89095783",
+      "stone_dark": "d74e979e4c6a8481b81aea7479efcda6e2539a145be4fd87b56d5b5a9ef0c7f7"
+    },
+    "WL_House_Shopfront": {
+      "glass": "6845b629ef7279bcefbcae71312f1c9d422613d8ecbcc2189e9fd3fa921d8c0f",
+      "gold": "f4f349f7fa49e31fb4ac23737a8aa4c9396284a3a74a92e15409d461870e59e7",
+      "stone": "372d14750b6c64e8778cbdb07f147908b9cc61eb1a37485a547456424fb78a88",
+      "stone_dark": "480761d6017924b640a206fbbb48ecfbb0745538dfe91729ef9997890d6f7c92"
+    },
     "WL_Detail_Balustrade_Run": {
       "stone": "489bafa5aa4aa4a08c830e95b2fe68627baf72e0502e6167ef851a42d06dc7c1"
     },
@@ -246,7 +316,7 @@
       "gold": "42820da77241367849c2b4dd599477a9884defe91e428e782dccd629273d4ebf",
       "gold_aged": "081692bf089083157ca88f05b7941f1553801bf467650c3e5201c50e28131b7e",
       "roof": "103e7544b91b8231ee4c1101fd6399cd0e89a8083b6439be4d883d7f5b3b5824",
-      "stone": "1485ffeb0c90ba5eb92f08fcc7790ecb09f00f0b347f93a3161ab277dbc5b4cb",
+      "stone": "c4b5ac0419034fa17a9cc92bbe784017342939b21a4d9329ccecd1ef1110fdf2",
       "stone_dark": "e59329963478b3d5f7d068c0d275f507a334b385d5caea2fa7eb9e371305dfea"
     },
     "WL_Hero_Gate_Royal": {

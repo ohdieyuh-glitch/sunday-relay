@@ -41,7 +41,8 @@ from forge import kit as K                          # noqa: E402
 from forge import mesh as M                         # noqa: E402
 from forge import preview as P                      # noqa: E402
 from forge import units as U                        # noqa: E402
-from forge.families import civic, details, hero, thresholds, towers  # noqa: E402
+from forge.families import (civic, details, hero, roofscape,         # noqa: E402
+                            thresholds, towers, walls)
 
 ROOT = os.path.normpath(os.path.join(HERE, ".."))
 EXPORTS = os.path.join(ROOT, "exports")
@@ -53,6 +54,8 @@ FAMILIES = (
     ("towers", towers),
     ("thresholds", thresholds),
     ("civic", civic),
+    ("walls", walls),
+    ("roofscape", roofscape),
     ("details", details),
     ("hero", hero),
 )

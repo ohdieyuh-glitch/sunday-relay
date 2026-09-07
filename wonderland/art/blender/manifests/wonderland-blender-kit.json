@@ -1,7 +1,7 @@
 {
   "schema": "wonderland-blender-kit/1",
   "kit_version": "1.0.0",
-  "generated_utc": "2026-09-07T21:00:21+00:00",
+  "generated_utc": "2026-09-07T21:26:18+00:00",
   "generator": "wonderland/art/blender/scripts/build_assets.py",
   "blender": "4.5.13 LTS",
   "conventions": {
@@ -64,18 +64,18 @@
     }
   },
   "counts": {
-    "assets": 44,
-    "meshes": 119,
-    "triangles": 226204,
+    "assets": 55,
+    "meshes": 156,
+    "triangles": 248977,
     "by_role": {
       "foot": 4,
-      "body": 8,
+      "body": 11,
       "crown": 7,
       "needle": 5,
-      "threshold": 6,
-      "screen": 4,
+      "threshold": 7,
+      "screen": 7,
       "span": 3,
-      "detail": 5,
+      "detail": 9,
       "hero": 2
     },
     "legal_tower_stacks_up_to_3_bodies": 692,
@@ -1724,7 +1724,7 @@
         1680.0
       ],
       "base_z_uu": 0.0,
-      "tris_total": 1728,
+      "tris_total": 1660,
       "tri_budget": 9000,
       "over_budget": false,
       "nanite_recommended": true,
@@ -1751,8 +1751,8 @@
       "parts": {
         "stone": {
           "verts": 904,
-          "faces": 736,
-          "tris": 1728,
+          "faces": 734,
+          "tris": 1660,
           "degenerate_faces": 0,
           "loose_verts": 0,
           "materials": [
@@ -1780,7 +1780,7 @@
           "height_m": 16.8,
           "base_z_uu": 0.0,
           "normals": {
-            "faces": 736,
+            "faces": 734,
             "shells": 20,
             "inverted_shells": 0,
             "inverted_faces": 0,
@@ -1806,7 +1806,7 @@
               16.799999237060547,
               3.240000009536743
             ],
-            "bytes": 90092
+            "bytes": 87376
           },
           "fbx_read": {
             "unit_scale_factor": 0.9999999776482582,
@@ -8526,6 +8526,3297 @@
       "part_count": 2
     },
     {
+      "asset_id": "WL_Wall_Curtain_Run",
+      "kit_version": "1.0.0",
+      "family": "wall",
+      "family_group": "walls",
+      "category": "structure",
+      "silhouette_role": "screen",
+      "note": "13.6 m of battered curtain wall with a walk, parapets and merlons both sides; butts end to end into any length",
+      "districts": [
+        "city",
+        "castle",
+        "plaza",
+        "hamlet"
+      ],
+      "params": {
+        "length_m": 13.6,
+        "walk_z_m": 6.2,
+        "thickness_m": 3.4,
+        "parapet_m": 1.15
+      },
+      "origin_rule": "footing at z = 0; +X is the module front",
+      "units": {
+        "authored": "metres",
+        "manifest": "unreal units (cm)",
+        "uu_per_metre": 100.0
+      },
+      "height_uu": 807.0,
+      "bbox_min_uu": [
+        -680.0,
+        -225.0,
+        0.0
+      ],
+      "bbox_max_uu": [
+        680.0,
+        225.0,
+        807.0
+      ],
+      "size_uu": [
+        1360.0,
+        450.0,
+        807.0
+      ],
+      "base_z_uu": 0.0,
+      "tris_total": 762,
+      "tri_budget": 16000,
+      "over_budget": false,
+      "nanite_recommended": true,
+      "collision_recommended": true,
+      "uv": "planar-world-2m (not a lightmap unwrap)",
+      "sockets": [
+        {
+          "name": "bottom",
+          "kind": "ground",
+          "z_uu": 0.0,
+          "radius_uu": 680.0,
+          "rung": "XL",
+          "note": ""
+        },
+        {
+          "name": "walk",
+          "kind": "bridge_end",
+          "z_uu": 620.0,
+          "radius_uu": 680.0,
+          "rung": "XL",
+          "note": "3.4 m wall-walk at 6.20 m; every module in this family shares it"
+        },
+        {
+          "name": "end_a",
+          "kind": "pier",
+          "z_uu": 0.0,
+          "radius_uu": 170.0,
+          "rung": null,
+          "note": "square section at x = -6.80 m; butts to another run"
+        },
+        {
+          "name": "end_b",
+          "kind": "pier",
+          "z_uu": 0.0,
+          "radius_uu": 170.0,
+          "rung": null,
+          "note": "square section at x = +6.80 m; butts to another run"
+        }
+      ],
+      "parts": {
+        "stone": {
+          "verts": 428,
+          "faces": 375,
+          "tris": 750,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_IvoryStone"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -680.0,
+            -225.0,
+            0.0
+          ],
+          "bbox_max_uu": [
+            680.0,
+            225.0,
+            807.0
+          ],
+          "size_uu": [
+            1360.0,
+            450.0,
+            807.0
+          ],
+          "height_m": 8.07,
+          "base_z_uu": 0.0,
+          "normals": {
+            "faces": 375,
+            "shells": 27,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 2,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_IvoryStone",
+          "mesh_name": "WL_Wall_Curtain_Run",
+          "glb": "exports/glb/WL_Wall_Curtain_Run.glb",
+          "fbx": "exports/fbx/WL_Wall_Curtain_Run.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_IvoryStone"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -6.800000190734863,
+              0,
+              -2.25
+            ],
+            "max_yup": [
+              6.800000190734863,
+              8.069999694824219,
+              2.25
+            ],
+            "bytes": 53604
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 0.0,
+            "stored_z_max": 807.0
+          }
+        },
+        "stone_dark": {
+          "verts": 8,
+          "faces": 6,
+          "tris": 12,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_Stone"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -680.0,
+            -105.0,
+            606.0
+          ],
+          "bbox_max_uu": [
+            680.0,
+            105.0,
+            620.0
+          ],
+          "size_uu": [
+            1360.0,
+            210.0,
+            14.0
+          ],
+          "height_m": 0.14,
+          "base_z_uu": 606.0,
+          "normals": {
+            "faces": 6,
+            "shells": 1,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 1,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_Stone",
+          "mesh_name": "WL_Wall_Curtain_Run_stone_dark",
+          "glb": "exports/glb/WL_Wall_Curtain_Run_stone_dark.glb",
+          "fbx": "exports/fbx/WL_Wall_Curtain_Run_stone_dark.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_Stone"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -6.800000190734863,
+              6.059999942779541,
+              -1.0499999523162842
+            ],
+            "max_yup": [
+              6.800000190734863,
+              6.199999809265137,
+              1.0499999523162842
+            ],
+            "bytes": 2108
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 606.0,
+            "stored_z_max": 620.0
+          }
+        }
+      },
+      "part_count": 2
+    },
+    {
+      "asset_id": "WL_Wall_Mural_Tower",
+      "kit_version": "1.0.0",
+      "family": "wall",
+      "family_group": "walls",
+      "category": "structure",
+      "silhouette_role": "screen",
+      "note": "19.4 m D-plan mural tower with the wall's own walk through it; flat back so the curtain butts into it cleanly",
+      "districts": [
+        "city",
+        "castle",
+        "hamlet"
+      ],
+      "params": {
+        "radius_m": 4.4,
+        "plan": "D, 220 degrees",
+        "walk_z_m": 6.2
+      },
+      "origin_rule": "footing at z = 0; +X is the module front",
+      "units": {
+        "authored": "metres",
+        "manifest": "unreal units (cm)",
+        "uu_per_metre": 100.0
+      },
+      "height_uu": 1955.0,
+      "bbox_min_uu": [
+        -493.65,
+        -524.86,
+        0.0
+      ],
+      "bbox_max_uu": [
+        528.0,
+        524.86,
+        1955.0
+      ],
+      "size_uu": [
+        1021.65,
+        1049.72,
+        1955.0
+      ],
+      "base_z_uu": 0.0,
+      "tris_total": 2262,
+      "tri_budget": 20000,
+      "over_budget": false,
+      "nanite_recommended": true,
+      "collision_recommended": true,
+      "uv": "planar-world-2m (not a lightmap unwrap)",
+      "sockets": [
+        {
+          "name": "bottom",
+          "kind": "ground",
+          "z_uu": 0.0,
+          "radius_uu": 528.0,
+          "rung": null,
+          "note": ""
+        },
+        {
+          "name": "walk",
+          "kind": "bridge_end",
+          "z_uu": 620.0,
+          "radius_uu": 528.0,
+          "rung": null,
+          "note": "the curtain's 6.20 m walk passes through the tower"
+        },
+        {
+          "name": "end_a",
+          "kind": "pier",
+          "z_uu": 0.0,
+          "radius_uu": 170.0,
+          "rung": null,
+          "note": "the wall butts on the flat back, at y = -2.29 m, either side"
+        },
+        {
+          "name": "end_b",
+          "kind": "pier",
+          "z_uu": 0.0,
+          "radius_uu": 170.0,
+          "rung": null,
+          "note": "the wall butts on the flat back, at y = -2.29 m, either side"
+        }
+      ],
+      "parts": {
+        "glass": {
+          "verts": 16,
+          "faces": 12,
+          "tris": 24,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_GlassAmber"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -467.21,
+            -9.37,
+            760.0
+          ],
+          "bbox_max_uu": [
+            235.85,
+            403.04,
+            983.6
+          ],
+          "size_uu": [
+            703.06,
+            412.41,
+            223.6
+          ],
+          "height_m": 2.236,
+          "base_z_uu": 760.0,
+          "normals": {
+            "faces": 12,
+            "shells": 2,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 2,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_GlassAmber",
+          "mesh_name": "WL_Wall_Mural_Tower_glass",
+          "glb": "exports/glb/WL_Wall_Mural_Tower_glass.glb",
+          "fbx": "exports/fbx/WL_Wall_Mural_Tower_glass.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_GlassAmber"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -4.672091007232666,
+              7.599999904632568,
+              -4.030406475067139
+            ],
+            "max_yup": [
+              2.3584816455841064,
+              9.836000442504883,
+              0.0936928242444992
+            ],
+            "bytes": 3148
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 760.0,
+            "stored_z_max": 983.6000366210938
+          }
+        },
+        "gold": {
+          "verts": 227,
+          "faces": 238,
+          "tris": 444,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_Gold"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -27.0,
+            -27.0,
+            1860.0
+          ],
+          "bbox_max_uu": [
+            27.0,
+            27.0,
+            1955.0
+          ],
+          "size_uu": [
+            54.0,
+            54.0,
+            95.0
+          ],
+          "height_m": 0.95,
+          "base_z_uu": 1860.0,
+          "normals": {
+            "faces": 238,
+            "shells": 3,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 0,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_Gold",
+          "mesh_name": "WL_Wall_Mural_Tower_gold",
+          "glb": "exports/glb/WL_Wall_Mural_Tower_gold.glb",
+          "fbx": "exports/fbx/WL_Wall_Mural_Tower_gold.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_Gold"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -0.27000001072883606,
+              18.600000381469727,
+              -0.27000001072883606
+            ],
+            "max_yup": [
+              0.27000001072883606,
+              19.549999237060547,
+              0.27000001072883606
+            ],
+            "bytes": 16696
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 1860.0,
+            "stored_z_max": 1954.9998779296875
+          }
+        },
+        "roof": {
+          "verts": 97,
+          "faces": 97,
+          "tris": 190,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_RoofRose"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -282.0,
+            -282.0,
+            1590.0
+          ],
+          "bbox_max_uu": [
+            282.0,
+            282.0,
+            1900.0
+          ],
+          "size_uu": [
+            564.0,
+            564.0,
+            310.0
+          ],
+          "height_m": 3.1,
+          "base_z_uu": 1590.0,
+          "normals": {
+            "faces": 97,
+            "shells": 1,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 0,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_RoofRose",
+          "mesh_name": "WL_Wall_Mural_Tower_roof",
+          "glb": "exports/glb/WL_Wall_Mural_Tower_roof.glb",
+          "fbx": "exports/fbx/WL_Wall_Mural_Tower_roof.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_RoofRose"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -2.819999933242798,
+              15.899999618530273,
+              -2.819999933242798
+            ],
+            "max_yup": [
+              2.819999933242798,
+              19,
+              2.819999933242798
+            ],
+            "bytes": 6204
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 1590.0,
+            "stored_z_max": 1900.0
+          }
+        },
+        "stone": {
+          "verts": 876,
+          "faces": 842,
+          "tris": 1592,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_IvoryStone"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -493.65,
+            -524.86,
+            0.0
+          ],
+          "bbox_max_uu": [
+            528.0,
+            524.86,
+            1590.0
+          ],
+          "size_uu": [
+            1021.65,
+            1049.72,
+            1590.0
+          ],
+          "height_m": 15.9,
+          "base_z_uu": 0.0,
+          "normals": {
+            "faces": 842,
+            "shells": 37,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 1,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_IvoryStone",
+          "mesh_name": "WL_Wall_Mural_Tower",
+          "glb": "exports/glb/WL_Wall_Mural_Tower.glb",
+          "fbx": "exports/fbx/WL_Wall_Mural_Tower.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_IvoryStone"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -4.936527252197266,
+              0,
+              -5.248617172241211
+            ],
+            "max_yup": [
+              5.279999732971191,
+              15.899999618530273,
+              5.248617172241211
+            ],
+            "bytes": 101564
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 0.0,
+            "stored_z_max": 1590.0
+          }
+        },
+        "stone_dark": {
+          "verts": 8,
+          "faces": 6,
+          "tris": 12,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_Stone"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -352.0,
+            -238.6,
+            185.0
+          ],
+          "bbox_max_uu": [
+            352.0,
+            -148.6,
+            1195.0
+          ],
+          "size_uu": [
+            704.0,
+            90.0,
+            1010.0
+          ],
+          "height_m": 10.1,
+          "base_z_uu": 185.0,
+          "normals": {
+            "faces": 6,
+            "shells": 1,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 0,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_Stone",
+          "mesh_name": "WL_Wall_Mural_Tower_stone_dark",
+          "glb": "exports/glb/WL_Wall_Mural_Tower_stone_dark.glb",
+          "fbx": "exports/fbx/WL_Wall_Mural_Tower_stone_dark.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_Stone"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -3.5199999809265137,
+              1.850000023841858,
+              1.4860000610351562
+            ],
+            "max_yup": [
+              3.5199999809265137,
+              11.950000762939453,
+              2.385999917984009
+            ],
+            "bytes": 2108
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 185.0,
+            "stored_z_max": 1195.0001220703125
+          }
+        }
+      },
+      "part_count": 5
+    },
+    {
+      "asset_id": "WL_Wall_Postern_Gate",
+      "kit_version": "1.0.0",
+      "family": "wall",
+      "family_group": "walls",
+      "category": "structure",
+      "silhouette_role": "threshold",
+      "note": "a drop-in replacement for a curtain run with a 3.2 m pointed postern through it; identical length, ends and walk height",
+      "districts": [
+        "city",
+        "castle",
+        "hamlet",
+        "plaza"
+      ],
+      "params": {
+        "length_m": 13.6,
+        "opening_m": 3.2,
+        "walk_z_m": 6.2
+      },
+      "origin_rule": "footing at z = 0; +X is the module front",
+      "units": {
+        "authored": "metres",
+        "manifest": "unreal units (cm)",
+        "uu_per_metre": 100.0
+      },
+      "height_uu": 1075.8,
+      "bbox_min_uu": [
+        -680.0,
+        -225.0,
+        0.0
+      ],
+      "bbox_max_uu": [
+        680.0,
+        225.0,
+        1075.8
+      ],
+      "size_uu": [
+        1360.0,
+        450.0,
+        1075.8
+      ],
+      "base_z_uu": 0.0,
+      "tris_total": 2376,
+      "tri_budget": 22000,
+      "over_budget": false,
+      "nanite_recommended": true,
+      "collision_recommended": true,
+      "uv": "planar-world-2m (not a lightmap unwrap)",
+      "sockets": [
+        {
+          "name": "bottom",
+          "kind": "ground",
+          "z_uu": 0.0,
+          "radius_uu": 680.0,
+          "rung": "XL",
+          "note": ""
+        },
+        {
+          "name": "passage",
+          "kind": "pier",
+          "z_uu": 0.0,
+          "radius_uu": 160.0,
+          "rung": null,
+          "note": "3.2 m clear opening, 3.3 m to the springing"
+        },
+        {
+          "name": "walk",
+          "kind": "bridge_end",
+          "z_uu": 620.0,
+          "radius_uu": 680.0,
+          "rung": "XL",
+          "note": "the walk carries over the gate; the circuit is unbroken"
+        },
+        {
+          "name": "end_a",
+          "kind": "pier",
+          "z_uu": 0.0,
+          "radius_uu": 170.0,
+          "rung": null,
+          "note": "x = -6.80 m; same section as the run"
+        },
+        {
+          "name": "end_b",
+          "kind": "pier",
+          "z_uu": 0.0,
+          "radius_uu": 170.0,
+          "rung": null,
+          "note": "x = +6.80 m; same section as the run"
+        }
+      ],
+      "parts": {
+        "gold": {
+          "verts": 454,
+          "faces": 476,
+          "tris": 888,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_Gold"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -271.42,
+            -21.42,
+            1037.4
+          ],
+          "bbox_max_uu": [
+            271.42,
+            21.42,
+            1075.8
+          ],
+          "size_uu": [
+            542.84,
+            42.84,
+            38.4
+          ],
+          "height_m": 0.384,
+          "base_z_uu": 1037.4,
+          "normals": {
+            "faces": 476,
+            "shells": 6,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 0,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_Gold",
+          "mesh_name": "WL_Wall_Postern_Gate_gold",
+          "glb": "exports/glb/WL_Wall_Postern_Gate_gold.glb",
+          "fbx": "exports/fbx/WL_Wall_Postern_Gate_gold.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_Gold"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -2.714200019836426,
+              10.37399959564209,
+              -0.2142000049352646
+            ],
+            "max_yup": [
+              2.714200019836426,
+              10.758000373840332,
+              0.2142000049352646
+            ],
+            "bytes": 28636
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 1037.39990234375,
+            "stored_z_max": 1075.800048828125
+          }
+        },
+        "stone": {
+          "verts": 800,
+          "faces": 705,
+          "tris": 1440,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_IvoryStone"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -680.0,
+            -225.0,
+            0.0
+          ],
+          "bbox_max_uu": [
+            680.0,
+            225.0,
+            1047.0
+          ],
+          "size_uu": [
+            1360.0,
+            450.0,
+            1047.0
+          ],
+          "height_m": 10.47,
+          "base_z_uu": 0.0,
+          "normals": {
+            "faces": 705,
+            "shells": 41,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 4,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_IvoryStone",
+          "mesh_name": "WL_Wall_Postern_Gate",
+          "glb": "exports/glb/WL_Wall_Postern_Gate.glb",
+          "fbx": "exports/fbx/WL_Wall_Postern_Gate.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_IvoryStone"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -6.800000190734863,
+              0,
+              -2.25
+            ],
+            "max_yup": [
+              6.800000190734863,
+              10.470000267028809,
+              2.25
+            ],
+            "bytes": 89680
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 0.0,
+            "stored_z_max": 1047.0
+          }
+        },
+        "stone_dark": {
+          "verts": 32,
+          "faces": 24,
+          "tris": 48,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_Stone"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -680.0,
+            -105.0,
+            320.0
+          ],
+          "bbox_max_uu": [
+            680.0,
+            105.0,
+            620.0
+          ],
+          "size_uu": [
+            1360.0,
+            210.0,
+            300.0
+          ],
+          "height_m": 3.0,
+          "base_z_uu": 320.0,
+          "normals": {
+            "faces": 24,
+            "shells": 4,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 3,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_Stone",
+          "mesh_name": "WL_Wall_Postern_Gate_stone_dark",
+          "glb": "exports/glb/WL_Wall_Postern_Gate_stone_dark.glb",
+          "fbx": "exports/fbx/WL_Wall_Postern_Gate_stone_dark.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_Stone"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -6.800000190734863,
+              3.200000047683716,
+              -1.0499999523162842
+            ],
+            "max_yup": [
+              6.800000190734863,
+              6.199999809265137,
+              1.0499999523162842
+            ],
+            "bytes": 4636
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 320.0,
+            "stored_z_max": 620.0
+          }
+        }
+      },
+      "part_count": 3
+    },
+    {
+      "asset_id": "WL_Wall_Corner_Bastion",
+      "kit_version": "1.0.0",
+      "family": "wall",
+      "family_group": "walls",
+      "category": "structure",
+      "silhouette_role": "screen",
+      "note": "90-degree wall corner with a canted five-sided bastion in the outside angle; the walk turns with it",
+      "districts": [
+        "city",
+        "castle",
+        "plaza"
+      ],
+      "params": {
+        "arm_m": 5.2,
+        "turn_deg": 90.0,
+        "walk_z_m": 6.2
+      },
+      "origin_rule": "footing at z = 0; +X is the module front",
+      "units": {
+        "authored": "metres",
+        "manifest": "unreal units (cm)",
+        "uu_per_metre": 100.0
+      },
+      "height_uu": 1165.4,
+      "bbox_min_uu": [
+        -225.0,
+        -551.0,
+        0.0
+      ],
+      "bbox_max_uu": [
+        690.0,
+        690.0,
+        1165.4
+      ],
+      "size_uu": [
+        915.0,
+        1241.0,
+        1165.4
+      ],
+      "base_z_uu": 0.0,
+      "tris_total": 1735,
+      "tri_budget": 24000,
+      "over_budget": false,
+      "nanite_recommended": true,
+      "collision_recommended": true,
+      "uv": "planar-world-2m (not a lightmap unwrap)",
+      "sockets": [
+        {
+          "name": "bottom",
+          "kind": "ground",
+          "z_uu": 0.0,
+          "radius_uu": 800.0,
+          "rung": null,
+          "note": ""
+        },
+        {
+          "name": "walk",
+          "kind": "bridge_end",
+          "z_uu": 620.0,
+          "radius_uu": 800.0,
+          "rung": null,
+          "note": "the walk turns the corner at 6.20 m"
+        },
+        {
+          "name": "end_a",
+          "kind": "pier",
+          "z_uu": 0.0,
+          "radius_uu": 170.0,
+          "rung": null,
+          "note": "arm along +X ends at x = +8.90 m; butts to a run"
+        },
+        {
+          "name": "end_b",
+          "kind": "pier",
+          "z_uu": 0.0,
+          "radius_uu": 170.0,
+          "rung": null,
+          "note": "arm along +Y ends at y = +8.90 m; butts to a run rotated 90 deg"
+        }
+      ],
+      "parts": {
+        "gold": {
+          "verts": 227,
+          "faces": 238,
+          "tris": 444,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_Gold"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            273.54,
+            -326.46,
+            1114.2
+          ],
+          "bbox_max_uu": [
+            326.46,
+            -273.54,
+            1165.4
+          ],
+          "size_uu": [
+            52.92,
+            52.92,
+            51.2
+          ],
+          "height_m": 0.512,
+          "base_z_uu": 1114.2,
+          "normals": {
+            "faces": 238,
+            "shells": 3,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 0,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_Gold",
+          "mesh_name": "WL_Wall_Corner_Bastion_gold",
+          "glb": "exports/glb/WL_Wall_Corner_Bastion_gold.glb",
+          "fbx": "exports/fbx/WL_Wall_Corner_Bastion_gold.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_Gold"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              2.7353999614715576,
+              11.142000198364258,
+              2.7353999614715576
+            ],
+            "max_yup": [
+              3.2646000385284424,
+              11.654000282287598,
+              3.2646000385284424
+            ],
+            "bytes": 14968
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 1114.2000732421875,
+            "stored_z_max": 1165.4000244140625
+          }
+        },
+        "stone": {
+          "verts": 702,
+          "faces": 620,
+          "tris": 1251,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_IvoryStone"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -225.0,
+            -551.0,
+            0.0
+          ],
+          "bbox_max_uu": [
+            690.0,
+            690.0,
+            1127.0
+          ],
+          "size_uu": [
+            915.0,
+            1241.0,
+            1127.0
+          ],
+          "height_m": 11.27,
+          "base_z_uu": 0.0,
+          "normals": {
+            "faces": 620,
+            "shells": 40,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 3,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_IvoryStone",
+          "mesh_name": "WL_Wall_Corner_Bastion",
+          "glb": "exports/glb/WL_Wall_Corner_Bastion.glb",
+          "fbx": "exports/fbx/WL_Wall_Corner_Bastion.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_IvoryStone"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -2.249999761581421,
+              0,
+              -6.900000095367432
+            ],
+            "max_yup": [
+              6.900000095367432,
+              11.270000457763672,
+              5.510000228881836
+            ],
+            "bytes": 83684
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 0.0,
+            "stored_z_max": 1127.0
+          }
+        },
+        "stone_dark": {
+          "verts": 26,
+          "faces": 19,
+          "tris": 40,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_Stone"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -153.0,
+            -427.5,
+            606.0
+          ],
+          "bbox_max_uu": [
+            690.0,
+            690.0,
+            620.0
+          ],
+          "size_uu": [
+            843.0,
+            1117.5,
+            14.0
+          ],
+          "height_m": 0.14,
+          "base_z_uu": 606.0,
+          "normals": {
+            "faces": 19,
+            "shells": 3,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 3,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_Stone",
+          "mesh_name": "WL_Wall_Corner_Bastion_stone_dark",
+          "glb": "exports/glb/WL_Wall_Corner_Bastion_stone_dark.glb",
+          "fbx": "exports/fbx/WL_Wall_Corner_Bastion_stone_dark.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_Stone"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -1.5299999713897705,
+              6.059999942779541,
+              -6.900000095367432
+            ],
+            "max_yup": [
+              6.900000095367432,
+              6.199999809265137,
+              4.275000095367432
+            ],
+            "bytes": 4012
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 606.0,
+            "stored_z_max": 620.0
+          }
+        }
+      },
+      "part_count": 3
+    },
+    {
+      "asset_id": "WL_Wall_Stair_Flight",
+      "kit_version": "1.0.0",
+      "family": "wall",
+      "family_group": "walls",
+      "category": "structure",
+      "silhouette_role": "detail",
+      "note": "20 risers of 0.310 m reaching the 6.20 m wall-walk exactly; raking stringer and rail, flat back",
+      "districts": [
+        "city",
+        "castle",
+        "plaza",
+        "hamlet"
+      ],
+      "params": {
+        "risers": 20,
+        "riser_m": 0.31,
+        "going_m": 0.36,
+        "rise_total_m": 6.2,
+        "walk_z_m": 6.2
+      },
+      "origin_rule": "footing at z = 0; +X is the module front",
+      "units": {
+        "authored": "metres",
+        "manifest": "unreal units (cm)",
+        "uu_per_metre": 100.0
+      },
+      "height_uu": 830.0,
+      "bbox_min_uu": [
+        -15.0,
+        0.0,
+        0.0
+      ],
+      "bbox_max_uu": [
+        786.0,
+        338.0,
+        830.0
+      ],
+      "size_uu": [
+        801.0,
+        338.0,
+        830.0
+      ],
+      "base_z_uu": 0.0,
+      "tris_total": 1868,
+      "tri_budget": 14000,
+      "over_budget": false,
+      "nanite_recommended": true,
+      "collision_recommended": true,
+      "uv": "planar-world-2m (not a lightmap unwrap)",
+      "sockets": [
+        {
+          "name": "bottom",
+          "kind": "ground",
+          "z_uu": 0.0,
+          "radius_uu": 360.0,
+          "rung": null,
+          "note": ""
+        },
+        {
+          "name": "back",
+          "kind": "bridge_end",
+          "z_uu": 0.0,
+          "radius_uu": 360.0,
+          "rung": null,
+          "note": "flat back at y = 0; stand it against a curtain face"
+        },
+        {
+          "name": "walk",
+          "kind": "bridge_end",
+          "z_uu": 620.0,
+          "radius_uu": 60.0,
+          "rung": null,
+          "note": "arrives on the 6.20 m wall-walk at x = +7.20 m"
+        }
+      ],
+      "parts": {
+        "gold": {
+          "verts": 227,
+          "faces": 238,
+          "tris": 444,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_Gold"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            726.0,
+            278.0,
+            745.0
+          ],
+          "bbox_max_uu": [
+            774.0,
+            326.0,
+            830.0
+          ],
+          "size_uu": [
+            48.0,
+            48.0,
+            85.0
+          ],
+          "height_m": 0.85,
+          "base_z_uu": 745.0,
+          "normals": {
+            "faces": 238,
+            "shells": 3,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 0,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_Gold",
+          "mesh_name": "WL_Wall_Stair_Flight_gold",
+          "glb": "exports/glb/WL_Wall_Stair_Flight_gold.glb",
+          "fbx": "exports/fbx/WL_Wall_Stair_Flight_gold.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_Gold"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              7.260000228881836,
+              7.449999809265137,
+              -3.259999990463257
+            ],
+            "max_yup": [
+              7.739999771118164,
+              8.300000190734863,
+              -2.7799999713897705
+            ],
+            "bytes": 16624
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 745.0,
+            "stored_z_max": 830.0
+          }
+        },
+        "stone": {
+          "verts": 742,
+          "faces": 792,
+          "tris": 1424,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_IvoryStone"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -15.0,
+            0.0,
+            0.0
+          ],
+          "bbox_max_uu": [
+            786.0,
+            338.0,
+            745.0
+          ],
+          "size_uu": [
+            801.0,
+            338.0,
+            745.0
+          ],
+          "height_m": 7.45,
+          "base_z_uu": 0.0,
+          "normals": {
+            "faces": 792,
+            "shells": 15,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 1,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_IvoryStone",
+          "mesh_name": "WL_Wall_Stair_Flight",
+          "glb": "exports/glb/WL_Wall_Stair_Flight.glb",
+          "fbx": "exports/fbx/WL_Wall_Stair_Flight.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_IvoryStone"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -0.15000009536743164,
+              0,
+              -3.380000114440918
+            ],
+            "max_yup": [
+              7.860000133514404,
+              7.449999809265137,
+              0
+            ],
+            "bytes": 72444
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 0.0,
+            "stored_z_max": 745.0
+          }
+        }
+      },
+      "part_count": 2
+    },
+    {
+      "asset_id": "WL_House_Gabled",
+      "kit_version": "1.0.0",
+      "family": "house",
+      "family_group": "roofscape",
+      "category": "structure",
+      "silhouette_role": "body",
+      "note": "two storeys under a full gable, 6.4 x 5.2 m plan, eaves at 6.10 m; the town's default building and the one a terrace is made of",
+      "districts": [
+        "hamlet",
+        "city",
+        "tea_terrace",
+        "grove"
+      ],
+      "params": {
+        "storeys": 2,
+        "eaves_z_m": 6.1,
+        "ridge_frac": 1.0,
+        "plan_m": [
+          6.4,
+          5.2
+        ]
+      },
+      "origin_rule": "footing at z = 0; +X is the module front",
+      "units": {
+        "authored": "metres",
+        "manifest": "unreal units (cm)",
+        "uu_per_metre": 100.0
+      },
+      "height_uu": 1057.0,
+      "bbox_min_uu": [
+        -357.0,
+        -313.6,
+        0.0
+      ],
+      "bbox_max_uu": [
+        357.0,
+        313.6,
+        1057.0
+      ],
+      "size_uu": [
+        714.0,
+        627.2,
+        1057.0
+      ],
+      "base_z_uu": 0.0,
+      "tris_total": 2760,
+      "tri_budget": 12000,
+      "over_budget": false,
+      "nanite_recommended": true,
+      "collision_recommended": true,
+      "uv": "planar-world-2m (not a lightmap unwrap)",
+      "sockets": [
+        {
+          "name": "bottom",
+          "kind": "ground",
+          "z_uu": 0.0,
+          "radius_uu": 320.0,
+          "rung": null,
+          "note": ""
+        },
+        {
+          "name": "eaves",
+          "kind": "bridge_end",
+          "z_uu": 610.0,
+          "radius_uu": 320.0,
+          "rung": null,
+          "note": "eaves at 6.10 m; dormers and chimneys mount from here"
+        },
+        {
+          "name": "end_a",
+          "kind": "pier",
+          "z_uu": 0.0,
+          "radius_uu": 260.0,
+          "rung": null,
+          "note": "gable wall at x = -3.20 m; butts into a terrace"
+        },
+        {
+          "name": "end_b",
+          "kind": "pier",
+          "z_uu": 0.0,
+          "radius_uu": 260.0,
+          "rung": null,
+          "note": "gable wall at x = +3.20 m; butts into a terrace"
+        }
+      ],
+      "parts": {
+        "glass": {
+          "verts": 80,
+          "faces": 60,
+          "tris": 120,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_GlassAmber"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -216.63,
+            -290.72,
+            62.0
+          ],
+          "bbox_max_uu": [
+            216.63,
+            283.68,
+            530.6
+          ],
+          "size_uu": [
+            433.27,
+            574.4,
+            468.6
+          ],
+          "height_m": 4.686,
+          "base_z_uu": 62.0,
+          "normals": {
+            "faces": 60,
+            "shells": 10,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 10,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_GlassAmber",
+          "mesh_name": "WL_House_Gabled_glass",
+          "glb": "exports/glb/WL_House_Gabled_glass.glb",
+          "fbx": "exports/fbx/WL_House_Gabled_glass.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_GlassAmber"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -2.1663334369659424,
+              0.6200000047683716,
+              -2.8368000984191895
+            ],
+            "max_yup": [
+              2.1663334369659424,
+              5.306000232696533,
+              2.9072000980377197
+            ],
+            "bytes": 9872
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 62.0,
+            "stored_z_max": 530.6000366210938
+          }
+        },
+        "gold": {
+          "verts": 454,
+          "faces": 476,
+          "tris": 888,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_Gold"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -356.5,
+            -16.5,
+            995.0
+          ],
+          "bbox_max_uu": [
+            356.5,
+            16.5,
+            1057.0
+          ],
+          "size_uu": [
+            713.0,
+            33.0,
+            62.0
+          ],
+          "height_m": 0.62,
+          "base_z_uu": 995.0,
+          "normals": {
+            "faces": 476,
+            "shells": 6,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 0,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_Gold",
+          "mesh_name": "WL_House_Gabled_gold",
+          "glb": "exports/glb/WL_House_Gabled_gold.glb",
+          "fbx": "exports/fbx/WL_House_Gabled_gold.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_Gold"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -3.565000057220459,
+              9.949999809265137,
+              -0.16500000655651093
+            ],
+            "max_yup": [
+              3.565000057220459,
+              10.569999694824219,
+              0.16500000655651093
+            ],
+            "bytes": 32212
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 995.0,
+            "stored_z_max": 1057.0
+          }
+        },
+        "roof": {
+          "verts": 22,
+          "faces": 19,
+          "tris": 36,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_RoofRose"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -354.0,
+            -294.0,
+            591.0
+          ],
+          "bbox_max_uu": [
+            354.0,
+            294.0,
+            915.0
+          ],
+          "size_uu": [
+            708.0,
+            588.0,
+            324.0
+          ],
+          "height_m": 3.24,
+          "base_z_uu": 591.0,
+          "normals": {
+            "faces": 19,
+            "shells": 2,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 1,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_RoofRose",
+          "mesh_name": "WL_House_Gabled_roof",
+          "glb": "exports/glb/WL_House_Gabled_roof.glb",
+          "fbx": "exports/fbx/WL_House_Gabled_roof.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_RoofRose"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -3.5399999618530273,
+              5.909999847412109,
+              -2.940000057220459
+            ],
+            "max_yup": [
+              3.5399999618530273,
+              9.149999618530273,
+              2.940000057220459
+            ],
+            "bytes": 3840
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 591.0,
+            "stored_z_max": 914.9999389648438
+          }
+        },
+        "stone": {
+          "verts": 952,
+          "faces": 858,
+          "tris": 1716,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_IvoryStone"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -357.0,
+            -313.6,
+            0.0
+          ],
+          "bbox_max_uu": [
+            357.0,
+            313.6,
+            995.0
+          ],
+          "size_uu": [
+            714.0,
+            627.2,
+            995.0
+          ],
+          "height_m": 9.95,
+          "base_z_uu": 0.0,
+          "normals": {
+            "faces": 858,
+            "shells": 47,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 3,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_IvoryStone",
+          "mesh_name": "WL_House_Gabled",
+          "glb": "exports/glb/WL_House_Gabled.glb",
+          "fbx": "exports/fbx/WL_House_Gabled.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_IvoryStone"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -3.570000171661377,
+              0,
+              -3.135999917984009
+            ],
+            "max_yup": [
+              3.570000171661377,
+              9.949999809265137,
+              3.135999917984009
+            ],
+            "bytes": 112412
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 0.0,
+            "stored_z_max": 995.0
+          }
+        }
+      },
+      "part_count": 4
+    },
+    {
+      "asset_id": "WL_House_Hipped",
+      "kit_version": "1.0.0",
+      "family": "house",
+      "family_group": "roofscape",
+      "category": "structure",
+      "silhouette_role": "body",
+      "note": "three storeys under a hip with a chimney; finished on all four sides, so it works free-standing or on a corner",
+      "districts": [
+        "hamlet",
+        "city",
+        "clock",
+        "tea_terrace"
+      ],
+      "params": {
+        "storeys": 3,
+        "eaves_z_m": 9.149999999999999,
+        "ridge_frac": 0.42,
+        "plan_m": [
+          6.4,
+          5.2
+        ]
+      },
+      "origin_rule": "footing at z = 0; +X is the module front",
+      "units": {
+        "authored": "metres",
+        "manifest": "unreal units (cm)",
+        "uu_per_metre": 100.0
+      },
+      "height_uu": 1257.0,
+      "bbox_min_uu": [
+        -356.0,
+        -313.6,
+        0.0
+      ],
+      "bbox_max_uu": [
+        356.0,
+        313.6,
+        1257.0
+      ],
+      "size_uu": [
+        712.0,
+        627.2,
+        1257.0
+      ],
+      "base_z_uu": 0.0,
+      "tris_total": 3404,
+      "tri_budget": 16000,
+      "over_budget": false,
+      "nanite_recommended": true,
+      "collision_recommended": true,
+      "uv": "planar-world-2m (not a lightmap unwrap)",
+      "sockets": [
+        {
+          "name": "bottom",
+          "kind": "ground",
+          "z_uu": 0.0,
+          "radius_uu": 320.0,
+          "rung": null,
+          "note": ""
+        },
+        {
+          "name": "eaves",
+          "kind": "bridge_end",
+          "z_uu": 915.0,
+          "radius_uu": 320.0,
+          "rung": null,
+          "note": "eaves at 9.15 m; dormers and chimneys mount from here"
+        },
+        {
+          "name": "end_a",
+          "kind": "pier",
+          "z_uu": 0.0,
+          "radius_uu": 260.0,
+          "rung": null,
+          "note": "x = -3.20 m"
+        },
+        {
+          "name": "end_b",
+          "kind": "pier",
+          "z_uu": 0.0,
+          "radius_uu": 260.0,
+          "rung": null,
+          "note": "x = +3.20 m"
+        }
+      ],
+      "parts": {
+        "glass": {
+          "verts": 128,
+          "faces": 96,
+          "tris": 192,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_GlassAmber"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -216.63,
+            -290.72,
+            62.0
+          ],
+          "bbox_max_uu": [
+            216.63,
+            283.68,
+            835.6
+          ],
+          "size_uu": [
+            433.27,
+            574.4,
+            773.6
+          ],
+          "height_m": 7.736,
+          "base_z_uu": 62.0,
+          "normals": {
+            "faces": 96,
+            "shells": 16,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 16,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_GlassAmber",
+          "mesh_name": "WL_House_Hipped_glass",
+          "glb": "exports/glb/WL_House_Hipped_glass.glb",
+          "fbx": "exports/fbx/WL_House_Hipped_glass.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_GlassAmber"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -2.1663334369659424,
+              0.6200000047683716,
+              -2.8368000984191895
+            ],
+            "max_yup": [
+              2.1663334369659424,
+              8.355999946594238,
+              2.9072000980377197
+            ],
+            "bytes": 14916
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 62.0,
+            "stored_z_max": 835.5999755859375
+          }
+        },
+        "gold": {
+          "verts": 227,
+          "faces": 238,
+          "tris": 444,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_Gold"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -18.0,
+            -18.0,
+            1160.0
+          ],
+          "bbox_max_uu": [
+            18.0,
+            18.0,
+            1232.0
+          ],
+          "size_uu": [
+            36.0,
+            36.0,
+            72.0
+          ],
+          "height_m": 0.72,
+          "base_z_uu": 1160.0,
+          "normals": {
+            "faces": 238,
+            "shells": 3,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 0,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_Gold",
+          "mesh_name": "WL_House_Hipped_gold",
+          "glb": "exports/glb/WL_House_Hipped_gold.glb",
+          "fbx": "exports/fbx/WL_House_Hipped_gold.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_Gold"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -0.18000000715255737,
+              11.600000381469727,
+              -0.18000000715255737
+            ],
+            "max_yup": [
+              0.18000000715255737,
+              12.319999694824219,
+              0.18000000715255737
+            ],
+            "bytes": 16176
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 1160.0,
+            "stored_z_max": 1232.0
+          }
+        },
+        "roof_alt": {
+          "verts": 22,
+          "faces": 19,
+          "tris": 36,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_RoofLilac"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -356.0,
+            -296.0,
+            896.0
+          ],
+          "bbox_max_uu": [
+            356.0,
+            296.0,
+            1170.0
+          ],
+          "size_uu": [
+            712.0,
+            592.0,
+            274.0
+          ],
+          "height_m": 2.74,
+          "base_z_uu": 896.0,
+          "normals": {
+            "faces": 19,
+            "shells": 2,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 1,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_RoofLilac",
+          "mesh_name": "WL_House_Hipped_roof_alt",
+          "glb": "exports/glb/WL_House_Hipped_roof_alt.glb",
+          "fbx": "exports/fbx/WL_House_Hipped_roof_alt.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_RoofLilac"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -3.559999942779541,
+              8.960000038146973,
+              -2.9600000381469727
+            ],
+            "max_yup": [
+              3.559999942779541,
+              11.699999809265137,
+              2.9600000381469727
+            ],
+            "bytes": 3848
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 896.0,
+            "stored_z_max": 1170.0
+          }
+        },
+        "stone": {
+          "verts": 1512,
+          "faces": 1366,
+          "tris": 2732,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_IvoryStone"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -337.0,
+            -313.6,
+            0.0
+          ],
+          "bbox_max_uu": [
+            337.0,
+            313.6,
+            1257.0
+          ],
+          "size_uu": [
+            674.0,
+            627.2,
+            1257.0
+          ],
+          "height_m": 12.57,
+          "base_z_uu": 0.0,
+          "normals": {
+            "faces": 1366,
+            "shells": 73,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 4,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_IvoryStone",
+          "mesh_name": "WL_House_Hipped",
+          "glb": "exports/glb/WL_House_Hipped.glb",
+          "fbx": "exports/fbx/WL_House_Hipped.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_IvoryStone"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -3.369999885559082,
+              0,
+              -3.135999917984009
+            ],
+            "max_yup": [
+              3.369999885559082,
+              12.570000648498535,
+              3.135999917984009
+            ],
+            "bytes": 177388
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 0.0,
+            "stored_z_max": 1257.0001220703125
+          }
+        }
+      },
+      "part_count": 4
+    },
+    {
+      "asset_id": "WL_House_Jettied",
+      "kit_version": "1.0.0",
+      "family": "house",
+      "family_group": "roofscape",
+      "category": "structure",
+      "silhouette_role": "body",
+      "note": "two oversailing storeys on brackets over an inset ground floor; the wall is in three planes and the street reads as narrow",
+      "districts": [
+        "hamlet",
+        "tea_terrace",
+        "city",
+        "clock"
+      ],
+      "params": {
+        "storeys": 3,
+        "jetties": 2,
+        "eaves_z_m": 9.149999999999999,
+        "plan_m": [
+          6.4,
+          5.2
+        ]
+      },
+      "origin_rule": "footing at z = 0; +X is the module front",
+      "units": {
+        "authored": "metres",
+        "manifest": "unreal units (cm)",
+        "uu_per_metre": 100.0
+      },
+      "height_uu": 1303.0,
+      "bbox_min_uu": [
+        -369.5,
+        -313.6,
+        0.0
+      ],
+      "bbox_max_uu": [
+        369.5,
+        313.6,
+        1303.0
+      ],
+      "size_uu": [
+        739.0,
+        627.2,
+        1303.0
+      ],
+      "base_z_uu": 0.0,
+      "tris_total": 3476,
+      "tri_budget": 22000,
+      "over_budget": false,
+      "nanite_recommended": true,
+      "collision_recommended": true,
+      "uv": "planar-world-2m (not a lightmap unwrap)",
+      "sockets": [
+        {
+          "name": "bottom",
+          "kind": "ground",
+          "z_uu": 0.0,
+          "radius_uu": 320.0,
+          "rung": null,
+          "note": ""
+        },
+        {
+          "name": "eaves",
+          "kind": "bridge_end",
+          "z_uu": 915.0,
+          "radius_uu": 320.0,
+          "rung": null,
+          "note": "eaves at 9.15 m; dormers and chimneys mount from here"
+        },
+        {
+          "name": "end_a",
+          "kind": "pier",
+          "z_uu": 0.0,
+          "radius_uu": 260.0,
+          "rung": null,
+          "note": "x = -3.20 m"
+        },
+        {
+          "name": "end_b",
+          "kind": "pier",
+          "z_uu": 0.0,
+          "radius_uu": 260.0,
+          "rung": null,
+          "note": "x = +3.20 m"
+        }
+      ],
+      "parts": {
+        "glass": {
+          "verts": 80,
+          "faces": 60,
+          "tris": 120,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_GlassAmber"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -216.63,
+            -290.72,
+            367.0
+          ],
+          "bbox_max_uu": [
+            216.63,
+            283.68,
+            835.6
+          ],
+          "size_uu": [
+            433.27,
+            574.4,
+            468.6
+          ],
+          "height_m": 4.686,
+          "base_z_uu": 367.0,
+          "normals": {
+            "faces": 60,
+            "shells": 10,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 10,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_GlassAmber",
+          "mesh_name": "WL_House_Jettied_glass",
+          "glb": "exports/glb/WL_House_Jettied_glass.glb",
+          "fbx": "exports/fbx/WL_House_Jettied_glass.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_GlassAmber"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -2.1663334369659424,
+              3.6700000762939453,
+              -2.8368000984191895
+            ],
+            "max_yup": [
+              2.1663334369659424,
+              8.355999946594238,
+              2.9072000980377197
+            ],
+            "bytes": 9876
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 367.0,
+            "stored_z_max": 835.5999755859375
+          }
+        },
+        "gold": {
+          "verts": 454,
+          "faces": 476,
+          "tris": 888,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_Gold"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -369.5,
+            -19.5,
+            1225.0
+          ],
+          "bbox_max_uu": [
+            369.5,
+            19.5,
+            1303.0
+          ],
+          "size_uu": [
+            739.0,
+            39.0,
+            78.0
+          ],
+          "height_m": 0.78,
+          "base_z_uu": 1225.0,
+          "normals": {
+            "faces": 476,
+            "shells": 6,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 0,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_Gold",
+          "mesh_name": "WL_House_Jettied_gold",
+          "glb": "exports/glb/WL_House_Jettied_gold.glb",
+          "fbx": "exports/fbx/WL_House_Jettied_gold.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_Gold"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -3.694999933242798,
+              12.25,
+              -0.19499999284744263
+            ],
+            "max_yup": [
+              3.694999933242798,
+              13.029999732971191,
+              0.19499999284744263
+            ],
+            "bytes": 31180
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 1225.0,
+            "stored_z_max": 1303.0
+          }
+        },
+        "roof": {
+          "verts": 22,
+          "faces": 19,
+          "tris": 36,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_RoofRose"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -362.0,
+            -302.0,
+            896.0
+          ],
+          "bbox_max_uu": [
+            362.0,
+            302.0,
+            1245.0
+          ],
+          "size_uu": [
+            724.0,
+            604.0,
+            349.0
+          ],
+          "height_m": 3.49,
+          "base_z_uu": 896.0,
+          "normals": {
+            "faces": 19,
+            "shells": 2,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 1,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_RoofRose",
+          "mesh_name": "WL_House_Jettied_roof",
+          "glb": "exports/glb/WL_House_Jettied_roof.glb",
+          "fbx": "exports/fbx/WL_House_Jettied_roof.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_RoofRose"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -3.619999885559082,
+              8.960000038146973,
+              -3.0199999809265137
+            ],
+            "max_yup": [
+              3.619999885559082,
+              12.449999809265137,
+              3.0199999809265137
+            ],
+            "bytes": 3844
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 896.0,
+            "stored_z_max": 1245.0
+          }
+        },
+        "stone": {
+          "verts": 1352,
+          "faces": 1210,
+          "tris": 2420,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_IvoryStone"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -337.0,
+            -313.6,
+            0.0
+          ],
+          "bbox_max_uu": [
+            337.0,
+            313.6,
+            915.0
+          ],
+          "size_uu": [
+            674.0,
+            627.2,
+            915.0
+          ],
+          "height_m": 9.15,
+          "base_z_uu": 0.0,
+          "normals": {
+            "faces": 1210,
+            "shells": 71,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 5,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_IvoryStone",
+          "mesh_name": "WL_House_Jettied",
+          "glb": "exports/glb/WL_House_Jettied.glb",
+          "fbx": "exports/fbx/WL_House_Jettied.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_IvoryStone"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -3.369999885559082,
+              0,
+              -3.135999917984009
+            ],
+            "max_yup": [
+              3.369999885559082,
+              9.15000057220459,
+              3.135999917984009
+            ],
+            "bytes": 161180
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 0.0,
+            "stored_z_max": 915.0000610351562
+          }
+        },
+        "stone_dark": {
+          "verts": 8,
+          "faces": 6,
+          "tris": 12,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_Stone"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -275.2,
+            -223.6,
+            34.0
+          ],
+          "bbox_max_uu": [
+            275.2,
+            223.6,
+            305.0
+          ],
+          "size_uu": [
+            550.4,
+            447.2,
+            271.0
+          ],
+          "height_m": 2.71,
+          "base_z_uu": 34.0,
+          "normals": {
+            "faces": 6,
+            "shells": 1,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 0,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_Stone",
+          "mesh_name": "WL_House_Jettied_stone_dark",
+          "glb": "exports/glb/WL_House_Jettied_stone_dark.glb",
+          "fbx": "exports/fbx/WL_House_Jettied_stone_dark.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_Stone"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -2.752000093460083,
+              0.3400000035762787,
+              -2.2360000610351562
+            ],
+            "max_yup": [
+              2.752000093460083,
+              3.049999952316284,
+              2.2360000610351562
+            ],
+            "bytes": 2104
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 34.0,
+            "stored_z_max": 305.0
+          }
+        }
+      },
+      "part_count": 5
+    },
+    {
+      "asset_id": "WL_Roof_Dormer",
+      "kit_version": "1.0.0",
+      "family": "roof",
+      "family_group": "roofscape",
+      "category": "prop",
+      "silhouette_role": "detail",
+      "note": "gabled dormer with an ogee light, foot cut to the family's 45-degree pitch",
+      "districts": [
+        "hamlet",
+        "city",
+        "tea_terrace",
+        "clock"
+      ],
+      "params": {
+        "pitch_deg": 45.0,
+        "width_m": 1.55
+      },
+      "origin_rule": "footing at z = 0; +X is the module front",
+      "units": {
+        "authored": "metres",
+        "manifest": "unreal units (cm)",
+        "uu_per_metre": 100.0
+      },
+      "height_uu": 258.0,
+      "bbox_min_uu": [
+        -93.5,
+        -142.62,
+        0.0
+      ],
+      "bbox_max_uu": [
+        93.5,
+        87.4,
+        258.0
+      ],
+      "size_uu": [
+        187.0,
+        230.02,
+        258.0
+      ],
+      "base_z_uu": 0.0,
+      "tris_total": 240,
+      "tri_budget": 4000,
+      "over_budget": false,
+      "nanite_recommended": true,
+      "collision_recommended": false,
+      "uv": "planar-world-2m (not a lightmap unwrap)",
+      "sockets": [
+        {
+          "name": "back",
+          "kind": "bridge_end",
+          "z_uu": 0.0,
+          "radius_uu": 77.5,
+          "rung": null,
+          "note": "the foot is cut to a 45-degree slope; beds into any roof in this family, ridge across X"
+        }
+      ],
+      "parts": {
+        "glass": {
+          "verts": 8,
+          "faces": 6,
+          "tris": 12,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_GlassAmber"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -2.4,
+            -116.8,
+            52.0
+          ],
+          "bbox_max_uu": [
+            2.4,
+            -58.32,
+            150.12
+          ],
+          "size_uu": [
+            4.8,
+            58.48,
+            98.12
+          ],
+          "height_m": 0.9812,
+          "base_z_uu": 52.0,
+          "normals": {
+            "faces": 6,
+            "shells": 1,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 1,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_GlassAmber",
+          "mesh_name": "WL_Roof_Dormer_glass",
+          "glb": "exports/glb/WL_Roof_Dormer_glass.glb",
+          "fbx": "exports/fbx/WL_Roof_Dormer_glass.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_GlassAmber"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -0.024000022560358047,
+              0.5199999809265137,
+              0.5831999778747559
+            ],
+            "max_yup": [
+              0.024000022560358047,
+              1.5011999607086182,
+              1.1679999828338623
+            ],
+            "bytes": 2304
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 52.0,
+            "stored_z_max": 150.1199951171875
+          }
+        },
+        "roof": {
+          "verts": 22,
+          "faces": 19,
+          "tris": 36,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_RoofRose"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -93.5,
+            -101.0,
+            153.0
+          ],
+          "bbox_max_uu": [
+            93.5,
+            87.4,
+            258.0
+          ],
+          "size_uu": [
+            187.0,
+            188.4,
+            105.0
+          ],
+          "height_m": 1.05,
+          "base_z_uu": 153.0,
+          "normals": {
+            "faces": 19,
+            "shells": 2,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 0,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_RoofRose",
+          "mesh_name": "WL_Roof_Dormer_roof",
+          "glb": "exports/glb/WL_Roof_Dormer_roof.glb",
+          "fbx": "exports/fbx/WL_Roof_Dormer_roof.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_RoofRose"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -0.9350000619888306,
+              1.5299999713897705,
+              -0.8740000128746033
+            ],
+            "max_yup": [
+              0.9350000619888306,
+              2.5799999237060547,
+              1.0099999904632568
+            ],
+            "bytes": 3840
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 153.0,
+            "stored_z_max": 258.0
+          }
+        },
+        "stone": {
+          "verts": 108,
+          "faces": 96,
+          "tris": 192,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_IvoryStone"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -77.5,
+            -142.62,
+            0.0
+          ],
+          "bbox_max_uu": [
+            77.5,
+            85.0,
+            200.0
+          ],
+          "size_uu": [
+            155.0,
+            227.62,
+            200.0
+          ],
+          "height_m": 2.0,
+          "base_z_uu": 0.0,
+          "normals": {
+            "faces": 96,
+            "shells": 6,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 0,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_IvoryStone",
+          "mesh_name": "WL_Roof_Dormer",
+          "glb": "exports/glb/WL_Roof_Dormer.glb",
+          "fbx": "exports/fbx/WL_Roof_Dormer.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_IvoryStone"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -0.7749999761581421,
+              0,
+              -0.8500000238418579
+            ],
+            "max_yup": [
+              0.7749999761581421,
+              2,
+              1.426200032234192
+            ],
+            "bytes": 13768
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 0.0,
+            "stored_z_max": 200.0
+          }
+        }
+      },
+      "part_count": 3
+    },
+    {
+      "asset_id": "WL_Roof_Chimney",
+      "kit_version": "1.0.0",
+      "family": "roof",
+      "family_group": "roofscape",
+      "category": "prop",
+      "silhouette_role": "detail",
+      "note": "four-flue stack with a corbelled cap and open pots; raking foot",
+      "districts": [
+        "hamlet",
+        "city",
+        "tea_terrace",
+        "clock",
+        "grove"
+      ],
+      "params": {
+        "flues": 4,
+        "pitch_deg": 45.0
+      },
+      "origin_rule": "footing at z = 0; +X is the module front",
+      "units": {
+        "authored": "metres",
+        "manifest": "unreal units (cm)",
+        "uu_per_metre": 100.0
+      },
+      "height_uu": 436.0,
+      "bbox_min_uu": [
+        -105.92,
+        -105.92,
+        0.0
+      ],
+      "bbox_max_uu": [
+        105.92,
+        105.92,
+        436.0
+      ],
+      "size_uu": [
+        211.84,
+        211.84,
+        436.0
+      ],
+      "base_z_uu": 0.0,
+      "tris_total": 592,
+      "tri_budget": 6000,
+      "over_budget": false,
+      "nanite_recommended": true,
+      "collision_recommended": false,
+      "uv": "planar-world-2m (not a lightmap unwrap)",
+      "sockets": [
+        {
+          "name": "back",
+          "kind": "bridge_end",
+          "z_uu": 0.0,
+          "radius_uu": 80.6,
+          "rung": null,
+          "note": "the foot rakes to the family's 45-degree pitch across Y"
+        }
+      ],
+      "parts": {
+        "stone": {
+          "verts": 252,
+          "faces": 208,
+          "tris": 464,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_IvoryStone"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -105.92,
+            -105.92,
+            0.0
+          ],
+          "bbox_max_uu": [
+            105.92,
+            105.92,
+            436.0
+          ],
+          "size_uu": [
+            211.85,
+            211.85,
+            436.0
+          ],
+          "height_m": 4.36,
+          "base_z_uu": 0.0,
+          "normals": {
+            "faces": 208,
+            "shells": 10,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 0,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_IvoryStone",
+          "mesh_name": "WL_Roof_Chimney",
+          "glb": "exports/glb/WL_Roof_Chimney.glb",
+          "fbx": "exports/fbx/WL_Roof_Chimney.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_IvoryStone"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -1.0592460632324219,
+              0,
+              -1.0592460632324219
+            ],
+            "max_yup": [
+              1.0592460632324219,
+              4.360000133514404,
+              1.0592460632324219
+            ],
+            "bytes": 31808
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 0.0,
+            "stored_z_max": 436.0
+          }
+        },
+        "stone_dark": {
+          "verts": 72,
+          "faces": 96,
+          "tris": 128,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_Stone"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -62.4,
+            -49.4,
+            426.0
+          ],
+          "bbox_max_uu": [
+            62.4,
+            49.4,
+            434.0
+          ],
+          "size_uu": [
+            124.8,
+            98.8,
+            8.0
+          ],
+          "height_m": 0.08,
+          "base_z_uu": 426.0,
+          "normals": {
+            "faces": 96,
+            "shells": 4,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 0,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_Stone",
+          "mesh_name": "WL_Roof_Chimney_stone_dark",
+          "glb": "exports/glb/WL_Roof_Chimney_stone_dark.glb",
+          "fbx": "exports/fbx/WL_Roof_Chimney_stone_dark.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_Stone"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -0.6239999532699585,
+              4.260000228881836,
+              -0.49399998784065247
+            ],
+            "max_yup": [
+              0.6239999532699585,
+              4.340000152587891,
+              0.49399998784065247
+            ],
+            "bytes": 7420
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 426.0000305175781,
+            "stored_z_max": 434.0
+          }
+        }
+      },
+      "part_count": 2
+    },
+    {
+      "asset_id": "WL_House_Shopfront",
+      "kit_version": "1.0.0",
+      "family": "house",
+      "family_group": "roofscape",
+      "category": "structure",
+      "silhouette_role": "detail",
+      "note": "three round-arched shop bays on columns with glazed stalls and a fascia; clips to any body in this family",
+      "districts": [
+        "hamlet",
+        "city",
+        "tea_terrace",
+        "plaza"
+      ],
+      "params": {
+        "bays": 3,
+        "width_m": 6.4,
+        "projection_m": 1.05
+      },
+      "origin_rule": "footing at z = 0; +X is the module front",
+      "units": {
+        "authored": "metres",
+        "manifest": "unreal units (cm)",
+        "uu_per_metre": 100.0
+      },
+      "height_uu": 342.0,
+      "bbox_min_uu": [
+        -347.55,
+        -12.0,
+        0.0
+      ],
+      "bbox_max_uu": [
+        347.55,
+        132.72,
+        342.0
+      ],
+      "size_uu": [
+        695.1,
+        144.72,
+        342.0
+      ],
+      "base_z_uu": 0.0,
+      "tris_total": 3452,
+      "tri_budget": 16000,
+      "over_budget": false,
+      "nanite_recommended": true,
+      "collision_recommended": true,
+      "uv": "planar-world-2m (not a lightmap unwrap)",
+      "sockets": [
+        {
+          "name": "back",
+          "kind": "bridge_end",
+          "z_uu": 0.0,
+          "radius_uu": 320.0,
+          "rung": null,
+          "note": "flat back at y = 0; clips to any house body's +Y face"
+        }
+      ],
+      "parts": {
+        "glass": {
+          "verts": 24,
+          "faces": 18,
+          "tris": 36,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_GlassAmber"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -289.53,
+            86.3,
+            72.0
+          ],
+          "bbox_max_uu": [
+            289.53,
+            94.3,
+            202.0
+          ],
+          "size_uu": [
+            579.07,
+            8.0,
+            130.0
+          ],
+          "height_m": 1.3,
+          "base_z_uu": 72.0,
+          "normals": {
+            "faces": 18,
+            "shells": 3,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 3,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_GlassAmber",
+          "mesh_name": "WL_House_Shopfront_glass",
+          "glb": "exports/glb/WL_House_Shopfront_glass.glb",
+          "fbx": "exports/fbx/WL_House_Shopfront_glass.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_GlassAmber"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -2.8953335285186768,
+              0.7200000286102295,
+              -0.9430000185966492
+            ],
+            "max_yup": [
+              2.8953335285186768,
+              2.0199999809265137,
+              -0.8629999756813049
+            ],
+            "bytes": 3992
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 72.0,
+            "stored_z_max": 202.0
+          }
+        },
+        "gold": {
+          "verts": 240,
+          "faces": 210,
+          "tris": 420,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_Gold"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -293.5,
+            118.65,
+            289.5
+          ],
+          "bbox_max_uu": [
+            293.5,
+            124.95,
+            330.5
+          ],
+          "size_uu": [
+            587.0,
+            6.3,
+            41.0
+          ],
+          "height_m": 0.41,
+          "base_z_uu": 289.5,
+          "normals": {
+            "faces": 210,
+            "shells": 15,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 0,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_Gold",
+          "mesh_name": "WL_House_Shopfront_gold",
+          "glb": "exports/glb/WL_House_Shopfront_gold.glb",
+          "fbx": "exports/fbx/WL_House_Shopfront_gold.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_Gold"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -2.93500018119812,
+              2.8949997425079346,
+              -1.249500036239624
+            ],
+            "max_yup": [
+              2.93500018119812,
+              3.305000066757202,
+              -1.186500072479248
+            ],
+            "bytes": 30688
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 289.4999694824219,
+            "stored_z_max": 330.5
+          }
+        },
+        "stone": {
+          "verts": 1544,
+          "faces": 1304,
+          "tris": 2960,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_IvoryStone"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -347.55,
+            -12.0,
+            0.0
+          ],
+          "bbox_max_uu": [
+            347.55,
+            132.72,
+            342.0
+          ],
+          "size_uu": [
+            695.1,
+            144.72,
+            342.0
+          ],
+          "height_m": 3.42,
+          "base_z_uu": 0.0,
+          "normals": {
+            "faces": 1304,
+            "shells": 32,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 1,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_IvoryStone",
+          "mesh_name": "WL_House_Shopfront",
+          "glb": "exports/glb/WL_House_Shopfront.glb",
+          "fbx": "exports/fbx/WL_House_Shopfront.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_IvoryStone"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -3.4755001068115234,
+              0,
+              -1.327199935913086
+            ],
+            "max_yup": [
+              3.4755001068115234,
+              3.4200000762939453,
+              0.12000000476837158
+            ],
+            "bytes": 127312
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 0.0,
+            "stored_z_max": 342.0
+          }
+        },
+        "stone_dark": {
+          "verts": 24,
+          "faces": 18,
+          "tris": 36,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_Stone"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -298.0,
+            10.5,
+            34.0
+          ],
+          "bbox_max_uu": [
+            298.0,
+            52.5,
+            229.0
+          ],
+          "size_uu": [
+            596.0,
+            42.0,
+            195.0
+          ],
+          "height_m": 1.95,
+          "base_z_uu": 34.0,
+          "normals": {
+            "faces": 18,
+            "shells": 3,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 0,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_Stone",
+          "mesh_name": "WL_House_Shopfront_stone_dark",
+          "glb": "exports/glb/WL_House_Shopfront_stone_dark.glb",
+          "fbx": "exports/fbx/WL_House_Shopfront_stone_dark.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_Stone"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -2.9800000190734863,
+              0.3400000035762787,
+              -0.5249999761581421
+            ],
+            "max_yup": [
+              2.9800000190734863,
+              2.2899999618530273,
+              -0.10500000417232513
+            ],
+            "bytes": 3796
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 34.0,
+            "stored_z_max": 229.0
+          }
+        }
+      },
+      "part_count": 4
+    },
+    {
       "asset_id": "WL_Detail_Balustrade_Run",
       "kit_version": "1.0.0",
       "family": "balustrade",
@@ -9948,7 +13239,7 @@
         11820.0
       ],
       "base_z_uu": 0.0,
-      "tris_total": 39058,
+      "tris_total": 38972,
       "tri_budget": 140000,
       "over_budget": false,
       "nanite_recommended": true,
@@ -10316,8 +13607,8 @@
         },
         "stone": {
           "verts": 15100,
-          "faces": 13354,
-          "tris": 28252,
+          "faces": 13351,
+          "tris": 28166,
           "degenerate_faces": 0,
           "loose_verts": 0,
           "materials": [
@@ -10345,11 +13636,11 @@
           "height_m": 85.46,
           "base_z_uu": 0.0,
           "normals": {
-            "faces": 13354,
+            "faces": 13351,
             "shells": 476,
             "inverted_shells": 0,
             "inverted_faces": 0,
-            "open_shells": 15,
+            "open_shells": 14,
             "zero_normal_faces": 0
           },
           "material": "MI_V2_IvoryStone",
@@ -10371,7 +13662,7 @@
               85.45999908447266,
               15.454656600952148
             ],
-            "bytes": 1384288
+            "bytes": 1380828
           },
           "fbx_read": {
             "unit_scale_factor": 0.9999999776482582,

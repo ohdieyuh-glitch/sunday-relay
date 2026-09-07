@@ -59,7 +59,8 @@ from forge import export as X                       # noqa: E402
 from forge import kit as K                          # noqa: E402
 from forge import mesh as M                         # noqa: E402
 from forge import units as U                        # noqa: E402
-from forge.families import civic, details, hero, thresholds, towers  # noqa: E402
+from forge.families import (civic, details, hero, roofscape,         # noqa: E402
+                            thresholds, towers, walls)
 
 ROOT = os.path.normpath(os.path.join(HERE, ".."))
 REPO = os.path.normpath(os.path.join(ROOT, "..", "..", ".."))
@@ -67,6 +68,7 @@ MANIFEST = os.path.join(ROOT, "manifests", "wonderland-blender-kit.json")
 MATERIALS_V2 = os.path.join(REPO, "wonderland", "v2", "materials_v2.py")
 
 FAMILIES = (("towers", towers), ("thresholds", thresholds), ("civic", civic),
+            ("walls", walls), ("roofscape", roofscape),
             ("details", details), ("hero", hero))
 
 TOL_M = 0.02            # 2 cm: tighter than any authored feature, looser than fp
@@ -100,9 +102,23 @@ def coincident_faces(obj, tol=3):
     """Count faces sharing a centroid cell with a near-parallel neighbour.
 
     Hashed on the rounded centroid rather than compared pairwise, so a 13,000
-    face hero costs one pass instead of 85 million comparisons. Two faces in
-    the same millimetre cell whose normals are parallel to within a degree and
-    whose areas agree to 1% are the same face drawn twice.
+    face hero costs one pass instead of 85 million comparisons. Two faces whose
+    centres agree to a millimetre and whose normals are parallel are in the
+    same plane at the same place, and one of them is going to flicker.
+
+    THE NORMALS MUST POINT THE SAME WAY, not merely be parallel, and getting
+    that wrong is instructive. Widening the area tolerance from 1% to 35% --
+    to catch a 3.40 m wall top under a 3.60 m string course, which z-fights
+    exactly as badly as two identical faces -- made the check report 58 assets.
+    It was right about the wall and wrong about everything else: two boxes
+    STACKED on each other share a face centre at their interface too, and
+    those two faces point in OPPOSITE directions. They are interior faces of a
+    union. They are hidden, they cannot flicker, and a kit assembled by
+    stacking has thousands of them.
+
+    So `dot > 0.9999` rather than `abs(dot) ~ 1`. Two faces at the same place
+    pointing the SAME way are both visible and one of them is going to
+    shimmer; two pointing at each other are just a join.
     """
     me = obj.data
     buckets = {}
@@ -112,8 +128,8 @@ def coincident_faces(obj, tol=3):
         key = (round(c.x, tol), round(c.y, tol), round(c.z, tol))
         n = p.normal
         for other_n, other_area in buckets.get(key, ()):
-            if abs(abs(n.dot(other_n)) - 1.0) < 2e-4 and \
-               abs(p.area - other_area) < 0.01 * max(p.area, other_area, 1e-9):
+            if n.dot(other_n) > 0.9999 and \
+               abs(p.area - other_area) < 0.35 * max(p.area, other_area, 1e-9):
                 hits += 1
                 break
         buckets.setdefault(key, []).append((n.copy(), p.area))
@@ -243,10 +259,21 @@ def check_asset(spec, objs, mats_available):
             bad.append("%s: socket %r sits at z = %.2f m, outside the module "
                        "(0 .. %.2f m)" % (aid, sock.name, sock.z, height))
 
+    # THE STACK INVARIANT APPLIES TO STACK MODULES, and membership is decided
+    # by the SOCKET, not by the role name. A tower body joins the module below
+    # it through a `tower`-kind bottom socket; a house sits on the ground
+    # through a `ground` one. Both are legitimately "body" -- a house is a
+    # building mass -- and only the first owes anyone a top socket. Keying the
+    # rule on the role name instead would have forced houses to invent a join
+    # nothing will ever use.
     top = spec.socket("top")
-    if spec.role in ("foot", "body"):
+    bottom = spec.socket("bottom")
+    in_stack = (spec.role == "foot"
+                or (bottom is not None and bottom.kind == "tower"))
+    if in_stack:
         if top is None:
-            bad.append("%s: a %s must publish a top socket" % (aid, spec.role))
+            bad.append("%s: a %s in the stack grammar must publish a top socket"
+                       % (aid, spec.role))
         else:
             if abs(top.z - height) > TOL_M:
                 bad.append("%s: top socket at %.2f m but the geometry ends at "

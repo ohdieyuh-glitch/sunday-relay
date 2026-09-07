@@ -383,7 +383,10 @@ def tower_mid_fluted(f):
         t = i / 7.0
         r = (1.0 - 0.10 * t) * (1.0 + 0.020 * math.sin(math.pi * t ** 0.85))
         sections.append([(px * r, py * r, H * t) for (px, py) in plan])
-    p.loft(sections, smooth=True)
+    # NOT capped: the base ring below and the socket collar above already close
+    # this shaft, and a loft cap would lay a second up-facing disc in the same
+    # plane as the collar's. The validator's coincident-face check found it.
+    p.loft(sections, smooth=True, cap_ends=False)
     p.lathe([(MD * 1.08, 0.0), (MD * 1.08, 0.42), (MD * 0.98, 0.70)],
             segments=24, smooth=False)
     for z in (5.60, 11.20):

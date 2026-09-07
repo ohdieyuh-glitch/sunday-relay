@@ -561,6 +561,43 @@ def filigree_panel(part, width, height, at=(0, 0, 0), rot=(0, 0, 0), bar=0.075,
     return made
 
 
+def roof_ridged(part, length, width, height, at=(0.0, 0.0, 0.0), rot=(0.0, 0.0, 0.0),
+                overhang=0.32, ridge_frac=1.0, matrix=None):
+    """A pitched roof on a ridge running along X. One helper, two roofs.
+
+    `ridge_frac` 1.0 puts the ridge the full length of the building and the two
+    ends become vertical GABLES. Anything less pulls the ridge in and the ends
+    become sloped HIPS. That is the only difference between the two roofs any
+    town is made of, so it is one parameter rather than two functions -- and it
+    means a generator can blend between them.
+
+    Written face by face rather than as a loft between two rings, because a
+    loft to a ridge collapses two of its four corners onto each other and emits
+    a pair of zero-area quads for every roof in the world.
+    """
+    hl = length * 0.5 + overhang
+    hw = width * 0.5 + overhang
+    rl = hl * max(0.0, min(1.0, float(ridge_frac)))
+    verts = [(-hl, -hw, 0.0), (hl, -hw, 0.0), (hl, hw, 0.0), (-hl, hw, 0.0),
+             (-rl, 0.0, height), (rl, 0.0, height)]
+    faces = [(0, 1, 5, 4), (2, 3, 4, 5), (3, 0, 4), (1, 2, 5), (0, 3, 2, 1)]
+    mat = M.xform(at, rot)
+    if matrix is not None:
+        mat = matrix @ mat
+    made = part._append(verts, faces, mat)
+    # The eaves board: the shadow line that stops a roof looking like a lid.
+    # TUCKED UNDER the roof edge, not proud of it -- at 12 cm wider than the
+    # roof it caught the light as a hard black lip all round every house.
+    # 3 cm clear of the roof's own base plane, so its top face does not land
+    # in the same plane as the top string course of the storey below -- two
+    # up-facing faces at one height, which is the z-fight this kit keeps
+    # rediscovering.
+    made += part.box(length + overhang * 2.0 - 0.10, width + overhang * 2.0 - 0.10,
+                     0.16, at=(0.0, 0.0, -0.19), matrix=mat, chamfer=0.04,
+                     centre_z=False)
+    return made
+
+
 def rib_set(part, z0, z1, radius, count=8, width=0.30, out=0.22, taper=0.86,
             matrix=None):
     """Vertical ribs up a shaft or a dome. Verticals are what make a needle
