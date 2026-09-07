@@ -2398,7 +2398,7 @@ def _quarter_lake(cx, cy, sgn, seed, tag, H=None):
     spot in the whole southern half measures under 25 m -- so a lake is a KIND
     of quarter instead, and the Water Gardens district makes some of its
     quarters lakes.
-    
+
     The sheet is `garden_lawn` wearing MI_V2_Water: 48 x 48 of displaced grid,
     which under a water material is ripple rather than plate. Sunk 8 uu so the
     shore has an edge, with an island at its middle carrying the fountain, a
@@ -3047,7 +3047,7 @@ def _distance_sites():
     to remove. Cut to twenty-three the profile fell monotonically and the
     coverage went ragged instead: two holes of 1.3 ha each at 320 m, big
     enough to read as gaps in the horizon line.
-    
+
     Both symptoms are the same cause -- a ring generator cannot distribute a
     sparse tier evenly. So: candidates on a golden-angle spiral, which is
     uniform BY AREA rather than by radius, kept only if they clear everything
@@ -5317,11 +5317,50 @@ def _fc_cap_ceiling(x, y):
     return cz + d * math.tan(math.radians(_FC_CEIL + _HERO_PITCH))
 
 
+#: uu. MEASURED MESH RADII, because the rank was interpenetrating itself.
+#:
+#: `hierarchy.py` reported 191 embedded landmarks and every one of them was a
+#: far-city tower standing inside a DIFFERENT cluster's tower. The cause is
+#: arithmetic: cluster centres are `_FC_SPACING` (2,600 uu) apart while a
+#: cluster scatters its members out to 2,800 uu, so adjacent clusters fully
+#: interleave -- and at s=7 a tower is 12.5 m across, so interleaved members
+#: overlap. Read from HeroCam0 that is not a city, it is a smear: the
+#: reference's skyline is DISTINCT NEEDLES against sky, and two towers sharing
+#: a footprint read as one fat mass with no gap of sky between them.
+#:
+#: These are the real mesh radii from `assets_v2`, not `FOOT`. `FOOT` says
+#: (400, 400) for a tower and that is correct for what it is for -- a walker
+#: should not graze a tower -- but 400 is 2.2x the mesh and using it here
+#: would thin the rank for a clearance nobody can walk to at 360-580 m.
+#:   tower_capped  revolve to r=150, balcony ring at r=178   -> 178
+#:   castle_hall   1260 x 860 cornice box, hypot(630, 430)   -> 763
+_FC_TOWER_R = 178.0
+_FC_HALL_R = 763.0
+#: uu. Sky between the needles. 2 m at 400 m is a fifth of a pixel at 1080p
+#: and it is not there to be seen -- it is there so the rejection is decided
+#: by a margin rather than by a tangent.
+_FC_GAP = 200.0
+#: A member gets six draws before the rank gives up on it. One draw and a
+#: hard reject would thin the near edge, where the big leads are, far more
+#: than the far one -- the opposite of the density the band exists to add.
+_FC_MEMBER_TRIES = 6
+
+
+def _fc_clear(x, y, r, occ):
+    """Does a body of radius `r` at (x, y) miss everything already placed?"""
+    for (qx, qy, qr) in occ:
+        d = qr + r + _FC_GAP
+        if (qx - x) ** 2 + (qy - y) ** 2 < d * d:
+            return False
+    return True
+
+
 def _far_city():
     """A dense rank of small, slender spires under the castle's silhouette."""
     r0, r1 = _FC_BAND
     out = []
     kept = []
+    occ = []                     # (x, y, mesh radius) of every body placed
     for k in range(_FC_TRIES):
         u = (k + 0.5) / _FC_TRIES
         # sqrt over the annulus so the draw is even over AREA; a linear draw
@@ -5357,9 +5396,6 @@ def _far_city():
         # one dominant per cluster and the rest stepping down, so a cluster is
         # a silhouette and not a comb
         for i in range(n):
-            a2 = 6.2831853 * (i / float(n)) + _rnd(i, k, 312)
-            rr = 500.0 + 2300.0 * _rnd(i, k, 313)
-            tx, ty = x + math.cos(a2) * rr, y + math.sin(a2) * rr
             lead = 1.00 if i == 0 else (0.52 + 0.38 * _rnd(i, k, 314))
             cap, caph = _far_cap(i, k, 5)
             # SOLVED FROM THE MEASURED STACK, and the first version of this
@@ -5381,6 +5417,22 @@ def _far_city():
             stack = 1100.0 + caph + 300.0 * 0.85
             s_max = ceil_uu / stack
             s = max(1.20, min(7.00, s_max * lead))
+            # AND NOW WHERE IT STANDS, which used to be one draw taken on
+            # trust. The scale is solved from the site's ceiling and does not
+            # depend on the member's own position, so the size is known before
+            # the position is chosen and the position can be REJECTED for it.
+            tx = ty = None
+            rad = _FC_TOWER_R * s
+            for t in range(_FC_MEMBER_TRIES):
+                a2 = 6.2831853 * (i / float(n)) + _rnd(i, k, 312 + t * 7)
+                rr = 500.0 + 2300.0 * _rnd(i, k, 313 + t * 7)
+                cx_, cy_ = x + math.cos(a2) * rr, y + math.sin(a2) * rr
+                if _fc_clear(cx_, cy_, rad, occ):
+                    tx, ty = cx_, cy_
+                    break
+            if tx is None:
+                continue
+            occ.append((tx, ty, rad))
             out.append(A("tower_capped", tx, ty, 0, yaw=_rnd(i, k, 315) * 360.0,
                          s=s, mat="MI_V2_IvoryStone",
                          label="%s_Tower%d" % (tag, i)))
@@ -5398,10 +5450,19 @@ def _far_city():
         # their feet reads as posts in a field; the reference's city has roof
         # mass all the way down to where the trees start.
         for i in range(2 + int(2.0 * _rnd(k, 311, 4))):
-            a2 = 6.2831853 * _rnd(i, k, 317)
-            rr = 900.0 + 2200.0 * _rnd(i, k, 318)
-            hx, hy = x + math.cos(a2) * rr, y + math.sin(a2) * rr
             hs = 0.9 + 0.9 * _rnd(i, k, 319)
+            hx = hy = None
+            hrad = _FC_HALL_R * hs
+            for t in range(_FC_MEMBER_TRIES):
+                a2 = 6.2831853 * _rnd(i, k, 317 + t * 7)
+                rr = 900.0 + 2200.0 * _rnd(i, k, 318 + t * 7)
+                cx_, cy_ = x + math.cos(a2) * rr, y + math.sin(a2) * rr
+                if _fc_clear(cx_, cy_, hrad, occ):
+                    hx, hy = cx_, cy_
+                    break
+            if hx is None:
+                continue
+            occ.append((hx, hy, hrad))
             out.append(A("castle_hall", hx, hy, 0, yaw=_rnd(i, k, 320) * 360.0,
                          s=hs, mat="MI_V2_IvoryStone", label="%s_Hall%d" % (tag, i)))
             out.append(A(("roof_hip", "roof_flat_crenellated")[i % 2], hx, hy,
@@ -5434,6 +5495,161 @@ def _far_city():
 
 
 FAR_CITY = _band("V2_Skyline", _far_city())
+
+
+# ---------------------------------------------------------------------------
+# THE GOLD SCREENS  (PASS 31, batch two)
+# ---------------------------------------------------------------------------
+#
+# The founder's reference and the MILESTONE26 capture, both classified by
+# colour family over the whole frame:
+#
+#     family       reference   ours
+#     gold              4.3%    0.3%     14x short
+#     dark             31.6%    6.9%      4.6x short
+#     green             9.5%   35.7%      3.8x too much
+#     violet            1.7%    0.3%
+#     rose/pink         1.3%    0.9%
+#     sky blue          8.3%    8.5%      matched
+#
+# Gold is the reference's signature after the pink towers, and it is not
+# scattered: 86% of every gold pixel in that frame is on the LEFT half,
+# peaking at -31 deg off-axis, and vertically it peaks twice -- 27% at
+# -4 deg and 21% at +13 deg. That is one tall structure standing in the left
+# garden at the middle distance, not a sprinkling of finials.
+#
+# Solved back through HeroCam0's own projection: a mass spanning -4 to +13 deg
+# of elevation from an eye 2.62 m up is about 10 m tall at roughly 39 m out,
+# on bearing 59 deg. So that is where these go -- weighted left, at 30-60 m,
+# 9-13 m tall, in the kit's own gold gate language rather than a new recipe.
+#
+# NOT ON THE AXIS AND NOT IN THE CORRIDOR. `verify_v2_layout` checks the gate
+# view and the hero corridor, and the arrival composition is locked by
+# FOUNDATION.md; every screen here stands in the flank planting beside the
+# path, off the centreline, where the reference's own gold stands.
+
+#: uu. `gate_leaf` is hinged at its own x=0 and runs 400 uu to +x; the arch
+#: `gate_arch_gold` springs from piers at +/-190, so its opening is 380. One
+#: bay is therefore 400 uu at scale 1 and NOT the 800 the first version of
+#: this used -- that placed leaves at bay centres, so each one filled half of
+#: a bay and the arch above it spanned 3.8 m of an 11.2 m opening. Every
+#: number here is read off the recipe in assets_v2, which is the only way this
+#: file has ever got a size right.
+_GS_BAY = 400.0
+
+
+def _gold_screen(x, y, yaw_deg, s, tag, bays=3):
+    """A filigree screen: gold gate leaves between piers, arched and finialed.
+
+    `gate_leaf` 5.70 m tall and 4.0 m wide, `gate_pier` 6.50 m,
+    `gate_arch_gold` 8.32 m, `finial_spire` 3.00 m -- all measured. A
+    three-bay screen at s=1.4 is 11.6 m to the crown and 16.8 m across, which
+    at 40 m subtends 24 deg of width and 14 of height: the size and place the
+    reference's own gold occupies in this frame.
+
+    It is OPEN WORK and that is the point. `gate_leaf` is seven pickets of
+    5.5 uu radius across 400 of width, `gate_arch_gold` two hoops and some
+    spandrel bars, `floral_arch_trellis` two hoops and a lattice -- roughly a
+    tenth of their bounding boxes is solid. The bounding-box ink this adds to
+    HeroCam0 is 30 points; the gold the founder's frame actually carries is
+    4.3% of its pixels, and a tenth of thirty is where that lands.
+    """
+    out = []
+    a = math.radians(yaw_deg)
+    ux, uy = math.cos(a), math.sin(a)
+    span = _GS_BAY * s
+    for i in range(bays + 1):
+        t = (i - bays / 2.0) * span
+        px_, py_ = x + ux * t, y + uy * t
+        out.append(A("gate_pier", px_, py_, 0.0, yaw=yaw_deg, s=s,
+                     mat="MI_V2_IvoryStone", label="%s_Pier%d" % (tag, i)))
+        out.append(A("gate_finial_ball", px_, py_, 650.0 * s, yaw=yaw_deg,
+                     s=s * 1.5, mat="MI_V2_Gold", label="%s_PierBall%d" % (tag, i)))
+        out.append(A("finial_spire", px_, py_, 650.0 * s + 190.0 * s, yaw=yaw_deg,
+                     s=s * 1.1, mat="MI_V2_GoldAged",
+                     label="%s_PierSpire%d" % (tag, i)))
+    # A GATE HAS AN OPENING, and the first version of this did not: five solid
+    # screens went into the left garden and `walkable --window=world` reported
+    # "LEFT landmark 66 m NO" -- one of the eighteen named destinations walled
+    # off by ornament. `gate_leaf`'s FOOT is 2.1 x 0.4 m and it fills its bay,
+    # so the bay in the middle simply does not get one. The arch above it
+    # stays: what you walk through is a gateway, which is what the reference
+    # shows and what `gatehouse_district` has always been in this world.
+    open_bay = bays // 2
+    for i in range(bays):
+        # the LEFT pier of this bay: the leaf hinges there and swings to +x
+        t = (i - bays / 2.0) * span
+        px_, py_ = x + ux * t, y + uy * t
+        if i != open_bay:
+            out.append(A("gate_leaf", px_, py_, 0.0, yaw=yaw_deg, s=s,
+                         mat="MI_V2_Gold", label="%s_Leaf%d" % (tag, i)))
+        # the arch springs from the two piers, so it is centred on the bay
+        mx, my = px_ + ux * span * 0.5, py_ + uy * span * 0.5
+        out.append(A("gate_arch_gold", mx, my, 560.0 * s, yaw=yaw_deg, s=s,
+                     mat="MI_V2_Gold", label="%s_Arch%d" % (tag, i)))
+        # the reference's filigree reads as a LATTICE with depth, which needs
+        # a second plane behind the first rather than a denser texture. The
+        # trellis hoop is 5 m across at scale 1 against the bay's 4, so it
+        # takes 0.78 to sit inside the arch instead of straddling it.
+        out.append(A("floral_arch_trellis", mx, my, 40.0 * s,
+                     yaw=yaw_deg, s=s * 0.78, mat="MI_V2_GoldAged",
+                     label="%s_Trellis%d" % (tag, i)))
+    return out
+
+
+#: (x, y, yaw, scale, bays). WEIGHTED LEFT, because the reference is: 86% of
+#: its gold is on the left half of the frame. +x is frame-left from HeroCam0
+#: -- `Garden_L_Tree` at (1350, 2300) projects to -28.9 deg, which is how the
+#: sign was checked rather than assumed.
+_GOLD_SCREENS = (
+    (2600.0, 3350.0, 118.0, 1.40, 5),      # -31 deg, 40 m: the reference's own
+    (4300.0, 5200.0, 131.0, 1.30, 4),      # further out and further left
+    # DEEPER IN THE LEFT GARDEN, and this one was sited by measurement rather
+    # than by eye. Its first position (1900, 6400) stood 9.6 m from the LEFT
+    # landmark, whose approach is a SIX-CELL KEYHOLE between Tower_L2, the
+    # giant mushroom's cap, a mature trunk and two hedge masses -- a pocket
+    # that has always been that tight and that nothing had ever closed.
+    # `GoldScreen2_Pier1` and `_Leaf1` closed it, and `walkable --window=world`
+    # reported "LEFT landmark NO" while every other destination stayed green:
+    # 405,811 cells reached, one named place lost to ornament.
+    #
+    # A probe over the left garden (angle 20-46 deg frame-left, 54-98 m, every
+    # pier on ground the spawn flood already reaches, 1.9 m clear of any
+    # solid, 12 m from every named destination) found 56 sites out of 930 --
+    # 538 of the rejects hit existing geometry, which is the left garden
+    # saying it is not empty. This is the one that keeps the original intent:
+    # deeper than the other three (87 m against 44, 69, 53) so the gold reads
+    # at three distances instead of one.
+    (3000.0, 8000.0, 124.0, 1.55, 2),      # deeper in the left garden
+    # ONE on the right, not two. The reference keeps 14% of its gold there
+    # and 86% on the left; five screens evenly spread would be a fence around
+    # the arrival, which is neither the reference nor a garden.
+    (-3100.0, 4100.0, 62.0, 1.20, 3),
+)
+
+
+def _gold():
+    out = []
+    for i, (x, y, yaw, s, bays) in enumerate(_GOLD_SCREENS):
+        out += _gold_screen(x, y, yaw, s, "GoldScreen%d" % i, bays=bays)
+    # AND THE KEYS. The reference has gold keys and a teapot hanging in the
+    # sky above the city; `HOVER` had two keys, one teapot and one cup. Six
+    # more, spread across the arc rather than clustered on the axis, high
+    # enough to sit in the band the reference puts them in (+18 to +30 deg).
+    for i in range(6):
+        a = math.radians(52.0 + 15.0 * i)
+        r = 5200.0 + 2600.0 * _rnd(i, 771, 1)
+        out.append(A(("key_ornate", "tea_cup_small", "key_ornate")[i % 3],
+                     math.cos(a) * r, -150.0 + math.sin(a) * r,
+                     2600.0 + 1500.0 * _rnd(i, 771, 2),
+                     yaw=37.0 * i, s=0.85 + 0.5 * _rnd(i, 771, 3),
+                     mat=("MI_V2_Gold", "MI_V2_Ceramic", "MI_V2_GoldAged")[i % 3],
+                     label="SkyGold%d" % i))
+    return out
+
+
+GOLD = _band("V2_Garden", _gold())
+
 
 
 
@@ -5882,6 +6098,25 @@ def solid_boxes(it):
     yaw = math.radians(it["rot"][1])
     co, si = math.cos(yaw), math.sin(yaw)
     ox, oy = it["pos"][0], it["pos"][1]
+    # NOTHING ABOVE THE WALKER'S HEAD IS AN OBSTACLE.
+    #
+    # This model is plan-view and `walkable.py` says so in its own docstring:
+    # "it knows nothing about steps, risers or z". That is fine for a wall and
+    # wrong for a thing in the air, and Wonderland has twenty-seven of those
+    # carrying a FOOT entry -- twenty clock faces hung 8.5 m up trees and
+    # mushrooms, three urns on top of 8.3 m columns, the floating teapot and
+    # the floating teacups. Every one of them has been walling off the ground
+    # beneath it in every traversal audit this project has run.
+    #
+    # It was found by adding six more: PASS 31's sky gold put a `tea_cup_small`
+    # (FOOT 1.3 x 1.3 m) at 27 m altitude over the left garden and
+    # `walkable --window=world` reported "LEFT landmark 66 m NO" -- a named
+    # destination closed by a teacup in the sky.
+    #
+    # 400 uu is four metres, comfortably over the Dog and under every roof cap
+    # and finial that sits on a body which blocks in its own right.
+    if it["pos"][2] > 400.0:
+        return
     parts = FOOT_PARTS.get(a)
     if parts:
         for (lx, ly, hx, hy) in parts:
@@ -7784,7 +8019,7 @@ BUILD_BANDS = [FOREGROUND, COURTYARD, GARDEN, PALACE, FLANK_GROUND, FLANKS,
                REARWORLD, CAM_FOREGROUNDS, GROUND_QUILT, OUTER_WORLD, PLAZA_ORNAMENT,
                PROCESSIONAL_BORDER, HORIZON, APPROACH_SIDES, PLAZA_WALL_DRESS,
                SIGNATURE, LANDMARKS, DEPTH, COURT_DRESS, WAYSIDE, SOUTH_REACH,
-               FAR_CITY]
+               FAR_CITY, GOLD]
 
 # ---------------------------------------------------------------------------
 # NOTHING IS BUILT ON A VIEWPOINT (2026-09-03)
