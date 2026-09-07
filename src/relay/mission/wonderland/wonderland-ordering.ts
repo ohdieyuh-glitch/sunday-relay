@@ -95,6 +95,19 @@ export interface WonderlandCursor {
   readonly sequence: number;
   /** Highest accepted run revision. A state older than this is history. */
   readonly revision: number;
+  /**
+   * Whether `revision` came from a SNAPSHOT rather than from an event.
+   *
+   * It changes what a tie means, and the difference is not academic. Two events
+   * can legitimately share a revision — a run does not transition on every
+   * event — so an event at the held revision is not automatically old. A
+   * snapshot is different: it is the run's own row AT that revision, so it is
+   * strictly newer than any event of that same generation. Without this
+   * distinction a reconnect after COMPLETE would accept the replayed
+   * revision-6 CODING event and walk the world backwards, which is the precise
+   * failure the whole ordering layer exists to prevent.
+   */
+  readonly revisionFromSnapshot: boolean;
   /** The last accepted event's id, so an immediate retry is a duplicate. */
   readonly lastEventId: string | null;
   readonly lastAcceptedAtIso: string | null;
@@ -118,6 +131,7 @@ export const WONDERLAND_CURSOR_FIELDS = exactKeys<WonderlandCursor>()([
   'runId',
   'sequence',
   'revision',
+  'revisionFromSnapshot',
   'lastEventId',
   'lastAcceptedAtIso',
   'accepted',
@@ -143,6 +157,7 @@ export function openWonderlandCursor(input: {
     runId: input.runId ?? null,
     sequence: 0,
     revision: 0,
+    revisionFromSnapshot: false,
     lastEventId: null,
     lastAcceptedAtIso: null,
     accepted: 0,
@@ -197,6 +212,10 @@ export function wonderlandOrderingVerdict(
   // run has already moved on — the sequence check would accept it and the world
   // would go backwards. The revision is the run's own version and cannot.
   if (envelope.revision < cursor.revision) return 'stale_revision';
+  // A tie is stale only against a snapshot. See `revisionFromSnapshot`.
+  if (cursor.revisionFromSnapshot && envelope.revision === cursor.revision) {
+    return 'stale_revision';
+  }
 
   if (envelope.sequence <= cursor.sequence) return 'stale_sequence';
 
@@ -248,6 +267,9 @@ export function applyWonderlandOrdering(
       // Revision only ever rises. An accepted event that names an older
       // revision than one already seen does not take the run backwards.
       revision: Math.max(cursor.revision, envelope.revision),
+      // An accepted event re-establishes the revision from the EVENT stream, so
+      // later events at that revision are peers again rather than history.
+      revisionFromSnapshot: false,
       lastEventId: envelope.eventId,
       lastAcceptedAtIso: envelope.occurredAt,
       accepted: cursor.accepted + 1,
