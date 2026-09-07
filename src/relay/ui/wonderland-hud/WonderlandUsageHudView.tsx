@@ -78,6 +78,22 @@ const HEAD_ARC = 0.035;
 /** Below this the remainder is drawn as nothing rather than as a speck. */
 const MINIMUM_VISIBLE_ARC = 0.004;
 
+/**
+ * THE MASK REGION, STATED, because its default is a trap.
+ *
+ * A `<mask>` defaults to `x=-10% y=-10% width=120% height=120%`, and under
+ * `userSpaceOnUse` those percentages resolve against the VIEWPORT — not against
+ * the content, and not against the unit box. So the moment the viewBox was
+ * cropped to a wide band, the default region ended around y=52 while the ring's
+ * lower arc and the whole single-agent bar sit near y=66: both were masked away
+ * and rendered as bare track. Every number on screen stayed correct and half the
+ * drawing went dark, which is the same class of defect as the shared mask id.
+ *
+ * The unit box is 0..100 after scaling, so this covers it with margin whatever
+ * window the viewport crops to.
+ */
+const MASK_REGION = { x: -20, y: -20, width: 140, height: 140 } as const;
+
 function ChannelStroke({
   channel,
   meter,
@@ -122,7 +138,7 @@ function ChannelStroke({
           A dash of 1 with a gap of 1 means offset 0 shows everything and
           offset 1 shows nothing.
         */}
-        <mask id={revealId} maskUnits="userSpaceOnUse">
+        <mask id={revealId} maskUnits="userSpaceOnUse" {...MASK_REGION}>
           <path
             className="wh-reveal"
             d={spinePath}
@@ -141,7 +157,7 @@ function ChannelStroke({
           sits exactly at the remainder, so it travels WITH the reveal instead of
           being positioned each frame.
         */}
-        <mask id={headId} maskUnits="userSpaceOnUse">
+        <mask id={headId} maskUnits="userSpaceOnUse" {...MASK_REGION}>
           <path
             className="wh-reveal"
             d={spinePath}

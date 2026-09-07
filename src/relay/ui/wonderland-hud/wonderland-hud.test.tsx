@@ -140,6 +140,25 @@ describe('the Wonderland usage HUD', () => {
     expect(offsets(40)).not.toEqual(offsets(360));
   });
 
+  it('masks over the whole unit box, not over the cropped viewBox', () => {
+    // A <mask> defaults to a region that is a PERCENTAGE OF THE VIEWPORT. Once
+    // the viewBox was cropped to a wide band that default stopped around y=52,
+    // while the ring's lower arc and the entire single-agent bar sit near y=66
+    // — both masked away, both rendering as bare track, every number on screen
+    // still correct.
+    const html = render(meter('compound_agent'), meter('single_agent'));
+    const regions = [...html.matchAll(/<mask[^>]*>/g)].map((m) => m[0]);
+    expect(regions.length).toBeGreaterThan(0);
+    for (const region of regions) {
+      expect(region).toContain('maskUnits="userSpaceOnUse"');
+      // Covers 0..100 in both axes, with margin.
+      expect(Number(/x="(-?[\d.]+)"/.exec(region)?.[1])).toBeLessThanOrEqual(0);
+      expect(Number(/y="(-?[\d.]+)"/.exec(region)?.[1])).toBeLessThanOrEqual(0);
+      expect(Number(/width="([\d.]+)"/.exec(region)?.[1])).toBeGreaterThanOrEqual(100);
+      expect(Number(/height="([\d.]+)"/.exec(region)?.[1])).toBeGreaterThanOrEqual(100);
+    }
+  });
+
   it('never intercepts the world it sits over', () => {
     const css = readFileSync(join(__dirname, 'wonderland-hud.css'), 'utf8');
     expect(css).toMatch(/pointer-events:\s*none/);

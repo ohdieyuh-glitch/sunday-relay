@@ -83,27 +83,40 @@ Top-left. Two channels, bound separately: **green Compound Agent** (the
 dominant outer frame, longer tail) and **blue single agent** (a concentric
 inner ring, thinner, shorter). Both swoop.
 
-The composition is the Kingdom Hearts reference MIRRORED. There, a thick green
-ring wraps a portrait at the RIGHT-hand end of the HUD, its gap opens LEFT, and
-a long tail sweeps away to the left, descending and tapering over the bars.
-Here the ring sits in the anchored top-left corner, its gap opens RIGHT, and the
-tail leaves the ring travelling RIGHT — swooping DOWN as it goes, exactly as the
-reference's swoops down as it goes left. Three facts are MEASURED rather than
-trusted, because a mirrored curve is the easiest thing to get backwards:
+The composition is the Kingdom Hearts reference MIRRORED — the whole layout,
+not just the curve. There: a thick green ring wraps a portrait at the RIGHT-hand
+end of the HUD, its gap opens LEFT, a long tail leaves the ring and sweeps away
+to the left while descending, and a straight blue MP bar runs along the bottom
+with its near end passing BEHIND the ring. Here: the ring sits in the anchored
+top-left corner, its gap opens RIGHT, the tail leaves travelling RIGHT while
+descending, and the blue bar runs left to right with its LEFT end behind the
+ring — which is also the direction given in as many words, "the single-agent bar
+swoops right, behind the Compound frame". The frame's `emphasis` puts it last in
+the draw order, so behind is literal rather than approximate.
+
+Five facts are MEASURED rather than trusted, because a mirrored figure is the
+easiest thing to get half-right:
 
 - the aperture faces right — the spine's extreme point is interior and on the
   left, and both ends sit well right of it
 - the swoop travels right — the tip is the right-most point in the shape
-- the swoop descends — the tip sits BELOW the point the tail leaves the ring
-  (an earlier draft had it rising, which is a mirror in x only: the gesture was
-  upside down and read as a flick rather than a swoop)
+- the swoop descends — the tip sits BELOW where the tail leaves the ring
+- the ring is a RING — constant radius over 305 degrees, and a circle rather
+  than an ellipse
+- the bar starts BEHIND the frame — its first point is inside the frame's own
+  stroke, not merely near it
+
+`taperStart` sits at almost exactly the ring's share of the arc length. A tail
+that kept the ring's weight for another fifth of the stroke stopped reading as a
+flick and made the whole figure read as a wave rather than as a ring with a
+tail, which is what the reference is.
 
 `WONDERLAND_USAGE_VIEWPORT` is the window onto the unit box, and it is part of
 the contract rather than a number each renderer picks — the drawing is a ring
-with a tail beside it, so it fills the width and occupies a band of the height,
-and rendering the whole square would put a third of the HUD into empty space. A
-window, never a squash: the aspect is preserved, so a stroke's thickness means
-the same thing in both axes.
+with a bar beside it, so it fills the width and occupies a band of the height at
+roughly the reference's own 2.1:1. A window, never a squash: the aspect is
+preserved, so a stroke's thickness means the same thing in both axes and the
+ring does not render as an ellipse it was never authored as.
 
 The meaning is not a percentage:
 
@@ -333,6 +346,13 @@ session.
   `fillFraction` (spend) beside a readout of the remainder made an untouched
   meter read `480 / 480` next to an empty bar. Both halves were correct; together
   they were nonsense. The meter now drains: `remainingFraction` is drawn.
+- **An SVG mask's default region is a percentage of the VIEWPORT.** Cropping
+  the viewBox to a wide band left that default ending around y=52, while the
+  ring's lower arc and the entire single-agent bar sit near y=66 — both masked
+  away, both rendering as bare track. Every number on screen stayed correct and
+  half the drawing went dark, which is the same class of defect as the shared
+  mask id below and was invisible until the viewBox stopped being square. The
+  region is stated explicitly now, and a test reads it out of the markup.
 - **SVG mask ids are document-global.** Two HUDs on one page shared them, so the
   first one's mask painted both and the second showed the FIRST meter's
   remainder under its own numbers — every figure on screen correct and the
