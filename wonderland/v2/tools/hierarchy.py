@@ -60,11 +60,50 @@ ARCH = ("tower_capped", "castle_", "garden_wall", "retaining_wall", "gate_pier",
         # world's tallest architecture would have registered as zero
         # architecture, which is the same fail-open shape as a missing FOOT
         # entry and would have been just as quiet.
-        "spire_great", "spire_signature", "spire_halo_ring", "tower_district")
+        "spire_great", "spire_signature", "spire_halo_ring", "tower_district",
+        # AND THE SAME THING HAPPENED AGAIN, one pass later. The note above
+        # was written for the signature skyline; PASS 29 then authored a whole
+        # architectural vocabulary -- fourteen district landmarks and seven
+        # depth recipes -- and none of it was added here. Every one of these
+        # was classed `prop`, beside the garden benches and the finial balls:
+        #
+        #   floating_stair 124.6 m   key_colossal 84.0   clock_grand 54.4
+        #   glass_pavilion  54.0     teapot_pavilion 48.2  gear_monument 31.0
+        #   gatehouse_district 28.4  orrery_gold 26.4    glass_screen 23.9
+        #   lantern_strange 21.8     cloister_square 20.2  tower_clock 11.9
+        #
+        # Measured, from `skyline.bboxes()`. A world whose fourteen district
+        # landmarks are props reports its districts as having no architecture,
+        # which is exactly what it did: eleven meadows and three groves at
+        # arch=0 with a 54 m rotunda standing in one of them.
+        "arch_stone", "column_ornate", "gatehouse_", "cloister_square",
+        "glass_screen", "glass_pavilion", "teapot_pavilion", "bridge_arc",
+        "clock_grand", "tower_clock", "floating_stair", "stairs_broad",
+        "gear_monument", "orrery_gold", "lantern_strange", "key_colossal",
+        # `flower_colossal` is three 20 m blooms in metal and glass and it is
+        # the Royal Gardens' district landmark. VEG matches "flower_", so
+        # until now it was VEGETATION -- a landmark counted as scrub. ARCH is
+        # tested before VEG in `klass`, so naming it here is the whole fix.
+        "flower_colossal")
 #: The silhouette pieces -- what reads at distance and gives a place a name.
 LANDMARK = ("finial_spire", "mushroom_landmark", "mushroom_giant", "castle_tower",
             "castle_dome", "tower_capped", "clock_ornate", "heart_topiary",
-            "spire_great", "spire_signature", "tower_district")
+            "spire_great", "spire_signature", "tower_district",
+            # the fourteen district landmarks, which are the things this
+            # world's outer districts are actually named for
+            "clock_grand", "gear_monument", "floating_stair", "lantern_strange",
+            "teapot_pavilion", "glass_pavilion", "key_colossal",
+            "flower_colossal")
+#: Glazing, gills and water that RIDE a frame which is itself the landmark.
+#: `is_landmark` matches by prefix, so `mushroom_giant` has always also matched
+#: its own gills, spots and rim -- every giant mushroom in Wonderland has been
+#: counted four times, and adding the district landmarks by prefix would have
+#: doubled each of those too. One piece, one landmark.
+LANDMARK_RIDERS = ("mushroom_giant_gills", "mushroom_giant_spots",
+                   "mushroom_giant_rim", "glass_pavilion_lights",
+                   "flower_colossal_bloom", "lantern_strange_glass",
+                   "glass_screen_panes", "gatehouse_glass",
+                   "fountain_grand_water")
 #: Everything green.
 VEG = ("tree_", "canopy_", "topiary_", "hedge_", "shrub_", "rose_", "blossom_",
        "flower_", "lavender_", "mushroom_", "ivy_", "vine_")
@@ -83,6 +122,8 @@ def klass(asset):
 
 
 def is_landmark(asset):
+    if asset in LANDMARK_RIDERS:
+        return False
     return any(asset.startswith(p) for p in LANDMARK)
 
 
