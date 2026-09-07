@@ -122,12 +122,22 @@ def _top_m(bb, p):
 
 
 def collect():
-    """Built silhouettes, all architecture, and the road segments."""
+    """Built silhouettes, all architecture, and the road segments.
+
+    ONLY WHAT STANDS IN THE ACCESSIBLE WORLD. Everything past `R_OUT` is
+    backdrop -- the horizon band, the far horizon, and from PASS 31 a city of
+    376 towers at 360-580 m. A cell at 350 m would otherwise find one of those
+    thirty metres away and report itself well served by architecture nobody
+    can walk to, which would have silently undone the measurement PASS 30's
+    whole South Reach argument rests on. Scenery is not content.
+    """
     boxes = SKY.bboxes()
     built, arch, road = [], [], []
     for p in LAYOUT.ALL:
         a = p["asset"]
         lab = p.get("label") or ""
+        if math.hypot(p["pos"][0], p["pos"][1]) > R_OUT:
+            continue
         if a == "terrace_platform" and "_Seg" in lab:
             road.append((p["pos"][0], p["pos"][1]))
         k = HIER_TOOL.klass(a)

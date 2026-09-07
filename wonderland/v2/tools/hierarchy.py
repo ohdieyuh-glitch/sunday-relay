@@ -485,7 +485,16 @@ def main():
     # known by. It cannot see occlusion and does not claim to; what it finds
     # is stretches of road with no beacon within sight at all, which is a
     # different and much more common failure than a beacon behind a tree.
-    marks = [(p["pos"][0], p["pos"][1]) for p in LAYOUT.ALL if is_landmark(p["asset"])]
+    # A LANDMARK YOU CANNOT REACH IS SCENERY. `_H_R1` is the far edge of the
+    # walkable world; everything past it is backdrop, and PASS 31's far city
+    # put 376 more `tower_capped` out there at 360-580 m. Counting those here
+    # would have improved "distance from a road to the nearest landmark" by
+    # adding towers no road goes to -- a wayfinding number flattered by
+    # scenery, which is the fail-open shape this file already records twice.
+    reach = getattr(LAYOUT, "_H_R1", 34000.0)
+    marks = [(p["pos"][0], p["pos"][1]) for p in LAYOUT.ALL
+             if is_landmark(p["asset"])
+             and math.hypot(p["pos"][0], p["pos"][1]) <= reach]
     SIGHT = 12000.0          # 120 m: the far arc is 340 m, quarters ~50 m
     per_road, blind = {}, []
     for key, pl in roads.items():
@@ -515,9 +524,12 @@ def main():
         print("    %-26s %2d segments, nearest landmark %.0f m" % (k, n, d / 100.0))
 
     solid = [p for p in pts if p["k"] != "surface"]
-    print("\nWORLD: %d solid placements, %d surface, %d landmarks, %d quarters"
+    inside = sum(1 for p in solid if p["landmark"] and p["r"] <= reach)
+    print("\nWORLD: %d solid placements, %d surface, %d landmarks (%d inside the "
+          "walkable world, %d backdrop), %d quarters"
           % (len(solid), len(pts) - len(solid),
-             sum(1 for p in solid if p["landmark"]), len(qs)))
+             sum(1 for p in solid if p["landmark"]), inside,
+             sum(1 for p in solid if p["landmark"]) - inside, len(qs)))
 
     out = next((a.split("=")[1] for a in sys.argv[1:] if a.startswith("--json=")), None)
     if out:

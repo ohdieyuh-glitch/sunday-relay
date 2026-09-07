@@ -631,10 +631,29 @@ LOOK = {
     # the 5-32 deg of elevation HeroCam0 frames. They cast no shadow -- a
     # kilometre of shadow-mapped cloud is a cost with an unpredictable effect
     # on a world whose light budget was just measured.
-    "meshClouds": 1, "cloudCount": 38,
-    "cloudRingKm": (2.6, 13.5), "cloudAltKm": (1.30, 2.30), "cloudScale": (5.0, 12.0),
-    "cloudVeilCount": 8, "cloudVeilRingKm": (5.0, 17.0), "cloudVeilAltKm": (3.2, 4.4),
-    "cloudVeilScale": (14.0, 26.0),
+    # THE SKY WAS A BLUE VOID, AND THE REFERENCE'S IS NOT (PASS 31).
+    #
+    # The founder's cam0 reference and the MILESTONE26 capture were put
+    # through the same colour classification, band by band, top of frame
+    # down. In the band the spires stand in:
+    #
+    #     cloud share, band 2 of 8    reference 7.0%    ours 0.6%
+    #     cloud share, whole frame    reference 1.4%    ours 0.6% above horizon
+    #
+    # Not absent -- MISPLACED. Thirty-eight cumulus drawn over a 2.6-13.5 km
+    # ring at 1.3-2.3 km altitude are mostly too far and too high to sit in
+    # the frame at all, and the sqrt area draw puts most of them at the far
+    # edge. In the reference the cloud bank is LOW and BEHIND THE CITY: the
+    # spires overlap it, which is what gives that frame its depth.
+    #
+    # So the ring comes in and down and the count goes up. At 4 km and 0.8 km
+    # altitude a cloud sits at +11.3 deg true, which is +13.3 deg in HeroCam0
+    # -- the band the far city's towers top out in, so the two overlap the way
+    # the reference's do. The high veils stay high; they are the upper sky.
+    "meshClouds": 1, "cloudCount": 96,
+    "cloudRingKm": (2.2, 9.0), "cloudAltKm": (0.62, 1.85), "cloudScale": (6.0, 15.0),
+    "cloudVeilCount": 14, "cloudVeilRingKm": (4.5, 15.0), "cloudVeilAltKm": (2.6, 4.0),
+    "cloudVeilScale": (16.0, 30.0),
     "volumetricFog": 1, "fogScattering": 0.20,
     # restrained magic: a small rune disc at the viewpoint, low glow
     "portal": 1, "portalRadius": 250.0, "portalGlow": 1200.0, "portalLightIntensity": 8000.0,

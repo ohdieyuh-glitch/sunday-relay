@@ -4987,6 +4987,40 @@ def _horizon():
         _HORIZON_AT.append((x, y))
         tag = "Horizon%03d" % len(kept)
         pick = _rnd(k, 141, 2)
+        # CITY WHERE THE FOUNDER LOOKS, COUNTRY WHERE THEY DO NOT.
+        #
+        # `tools/frame.py` rasterised HeroCam0 against the founder's own
+        # reference and the two frames disagree in one enormous way:
+        #
+        #     upper five bands   reference  veg 17/12/20/18/31%  built 13/28/46/40/29
+        #                        ours       veg 54/63/61/55/61%  built  1/ 8/20/25/33
+        #
+        # Three times the vegetation and half the architecture. This draw is
+        # where a large part of that comes from: 62% of every horizon mass in
+        # Wonderland was a WOODED RIDGE, uniformly, in every direction --
+        # including straight down the arrival axis, where the reference shows
+        # a city from one side of the frame to the other.
+        #
+        # Uniform is the defect, not the ridge. A hierarchy is what this world
+        # is built on and a skyline is no different: the hero arc reads as
+        # CITY, the flanks and the rear read as country, and the contrast
+        # between them is the "garden/urban" the brief asks for. So the pick
+        # is biased by BEARING rather than the ridge being deleted -- outside
+        # the hero arc nothing here changes at all.
+        # THE MAP IS WRITTEN OUT, because the scaling trick was backwards.
+        # The first version multiplied `pick` by 0.32 to "reduce" ridges, and
+        # `pick < 0.62` selects the ridge -- so shrinking pick made ridges
+        # MORE likely, and the audit counted ten of ten sites in the hero arc
+        # still wooded. A monotone rescale cannot move a threshold's share in
+        # the direction you want unless you check which side you are on.
+        _b_axis = abs(((math.degrees(math.atan2(y, x)) - 90.0) + 180.0) % 360.0 - 180.0)
+        if _b_axis < 74.0:
+            if pick < 0.20:                    # ridge, 20% (was 62)
+                pick = pick / 0.20 * 0.62
+            elif pick < 0.85:                  # towers, 65% (was 26)
+                pick = 0.62 + (pick - 0.20) / 0.65 * 0.26
+            else:                              # a giant, 15% (was 12)
+                pick = 0.88 + (pick - 0.85) / 0.15 * 0.12
         if pick < 0.62:
             # A WOODED RIDGE. hedge_mass at 4-7x is a 13-22 m green mass, and
             # a line of them at this range is a treeline: the cheapest object
@@ -5167,6 +5201,240 @@ def _far_horizon():
 
 
 HORIZON = _band("V2_Skyline", _horizon() + _far_horizon())
+
+
+# ---------------------------------------------------------------------------
+# THE FAR CITY  (PASS 31, 2026-09-07)
+# ---------------------------------------------------------------------------
+#
+# `tools/frame.py` rasterised HeroCam0 out of the measured meshes and put the
+# founder's own reference through the same band analysis. They disagree in one
+# enormous, specific way:
+#
+#     upper five bands    reference   veg 17/12/20/18/31 %   built 13/28/46/40/29
+#                         ours        veg 54/63/61/55/61 %   built  1/ 8/20/25/33
+#
+# Three times the vegetation, and between a half and a fifth of the
+# architecture. The reference is a CITY behind a garden. Ours is a garden with
+# a castle in it, and the band where the reference puts a thousand spires is
+# where ours puts sky and crowns.
+#
+# WHY IT IS THIN, AND WHY THAT WAS RIGHT AT THE TIME. `CITY`'s own comment
+# records the founder on 2026-08-28: "beyond the castle the world starts to
+# look too deep and messy". Layers 4 and 5 had been "eight groups of four
+# towers at scale 2.0-4.6 stacked behind the castle on its own silhouette --
+# thirty-two giant tower tops and no hierarchy", and PASS 06 correctly cut
+# them to three distinct silhouettes with air between. That judgement is not
+# reversed here and must not be: what the founder rejected was BIG NEAR MASS
+# ON THE CASTLE'S OUTLINE.
+#
+# The reference gets its density the opposite way -- from very many SMALL,
+# SLENDER, DISTANT spires sitting BELOW the castle's silhouette line. Layer 5
+# says exactly this in its own comment, "the city goes on, quietly", and then
+# delivers eight clusters of two towers over 136 degrees of bearing: about
+# twelve towers inside HeroCam0's hundred-degree frame, where the reference
+# has a hundred. It is under-delivered against its own stated intent by
+# roughly six times.
+#
+# THE ARITHMETIC THAT KEEPS PASS 06's JUDGEMENT. HeroCam0 stands at
+# (0, -150, 262) with pitch -2, so a piece's elevation IN FRAME is its true
+# elevation plus two degrees. The castle focal plane at 95-130 m reads to
+# about +18 deg. Every tower here is sized so its cap lands under `_FC_CEIL`
+# degrees in that frame:
+#
+#     top_uu <= cz + d * tan(radians(_FC_CEIL - 2))
+#
+# At 500 m that is a 91 m tower; at 750 m, 133 m. The rank therefore fills the
+# band between the castle's feet and the horizon and never crosses its
+# outline -- density where the reference has density, silence where the
+# founder asked for it.
+
+#: The founder's locked arrival camera, read from `v2_config` rather than
+#: restated -- FOUNDATION.md locks its position, and a second copy of a locked
+#: number is the "two descriptions of one quantity" defect this ledger records.
+def _hero_eye():
+    try:
+        import v2_config as _C
+        for c in _C.HERO_CAMS:
+            if "HeroCam0" in c["tags"]:
+                return tuple(c["location"]), c["rotation"][0]
+    except Exception:
+        pass
+    return (0.0, -150.0, 262.0), -2.0
+
+
+_HERO_EYE, _HERO_PITCH = _hero_eye()
+
+#: deg. The ceiling in HeroCam0's frame. The castle reads to about +18, so
+#: +15 leaves three degrees of clear sky under its silhouette. PASS 06's
+#: judgement is kept by ARITHMETIC: what the founder rejected was "thirty-two
+#: giant tower tops at scale 2.0-4.6" -- 135 to 310 m -- stacked ON the
+#: castle's outline. At 350 m this ceiling yields an 83 m tower, which is a
+#: city street behind a castle and not a second castle.
+_FC_CEIL = 15.0
+#: uu. The rank's depth, and the FIRST version of this had it wrong.
+#:
+#: It ran 460-760 m, outside `_HORIZON_BAND`, to avoid fighting anything for
+#: ground. Measured from HeroCam0 afterwards: 284 pieces landed in the frame
+#: and contributed 2.41% of it against the existing city's 44.73%, with their
+#: tops at a median of +3.2 deg -- because the keep-outs pushed every one of
+#: them to 576-777 m, and a 106 m tower at 700 m is half a degree wide. A
+#: hairline at the edge of the world is the "painted flat" the brief warns
+#: about, not a city.
+#:
+#: The reference's spires are not a kilometre away. They stand immediately
+#: behind the garden. So the rank goes where they are -- but NOT nearer than
+#: `_H_R1`, the far edge of the walkable world at 340 m. A second attempt put
+#: the band at 260-520 m and would have dropped eighty-metre towers into
+#: ground the Dog walks and the quarters stand on, which is a bigger defect
+#: than the one it was fixing and would have undone PASS 30's whole South
+#: Reach argument. 360 m is where the walkable world ends and the backdrop
+#: begins; the rank starts exactly there.
+_FC_BAND = (36000.0, 58000.0)
+#: deg. The arc it covers. HeroCam0 sees +/-50 deg about the +y axis; this is
+#: wider so the city does not stop at the frame edge, which is the one thing
+#: that would make it read as a painted flat.
+_FC_ARC = 76.0
+#: How many cluster positions to try. The spacing rule keeps what fits, and
+#: most are rejected: the arc is crowded by design.
+_FC_TRIES = 900
+#: uu. Between cluster centres. At 480 m, 2,600 uu is 3.1 deg. THE SPACING IS
+#: THE DENSITY: at 5,000 the rank came out as fifteen clusters over 152 deg,
+#: one every ten degrees, which is a row of separate keeps and not a city. The
+#: reference has a spire about every degree.
+_FC_SPACING = 2600.0
+
+_FAR_CITY_AT = []
+FAR_CITY_NOTES = []
+
+
+def _fc_cap_ceiling(x, y):
+    """The tallest a tower here may be, in uu, to stay under `_FC_CEIL`."""
+    cx, cy, cz = _HERO_EYE
+    d = math.hypot(x - cx, y - cy)
+    # frame elevation = true elevation - pitch, so a ceiling of _FC_CEIL in
+    # the FRAME is _FC_CEIL + pitch in the world
+    return cz + d * math.tan(math.radians(_FC_CEIL + _HERO_PITCH))
+
+
+def _far_city():
+    """A dense rank of small, slender spires under the castle's silhouette."""
+    r0, r1 = _FC_BAND
+    out = []
+    kept = []
+    for k in range(_FC_TRIES):
+        u = (k + 0.5) / _FC_TRIES
+        # sqrt over the annulus so the draw is even over AREA; a linear draw
+        # crowds the near edge and leaves the far one bare, which reads as one
+        # row of towers rather than a city with depth.
+        r = math.sqrt(r0 * r0 + (r1 * r1 - r0 * r0) * _rnd(k, 311, 1))
+        b = 90.0 + (_rnd(k, 311, 2) - 0.5) * 2.0 * _FC_ARC
+        a = math.radians(b)
+        x, y = math.cos(a) * r, math.sin(a) * r
+        if any((qx - x) ** 2 + (qy - y) ** 2 < _FC_SPACING ** 2 for (qx, qy) in kept):
+            continue
+        # THE KEEP-OUTS ARE WHY THE FIRST TWO ATTEMPTS FAILED, and they are
+        # worth stating as sizes rather than as habits. `_horizon` uses 9,000
+        # uu between its own masses and `_sig_free` 11,000 around the approved
+        # city; carried over unexamined they blanket the whole hero arc at
+        # this range and left four clusters of a hundred and ninety tries. A
+        # backdrop tower needs to not INTERSECT its neighbour, not to have a
+        # hundred and twenty metres of clear country around it.
+        if any((qx - x) ** 2 + (qy - y) ** 2 < 5500.0 ** 2 for (qx, qy) in _HORIZON_AT):
+            continue                           # a horizon mass holds this
+        if any((px - x) ** 2 + (py - y) ** 2 < 7000.0 ** 2 for (px, py) in _CITY_POINTS):
+            continue                           # the approved city holds this
+        # AND NOTHING GOES WHERE THE DOG WALKS. Belt and braces beside the
+        # band's own inner radius: a quarter's reach can pass 360 m.
+        if any(math.hypot(q["x"] - x, q["y"] - y) < q.get("reach", 3000.0) + 3000.0
+               for q in SITES):
+            continue
+        kept.append((x, y))
+        _FAR_CITY_AT.append((x, y))
+        tag = "FarCity%03d" % len(kept)
+        ceil_uu = _fc_cap_ceiling(x, y)
+        n = 4 + int(5.0 * _rnd(k, 311, 3))
+        # one dominant per cluster and the rest stepping down, so a cluster is
+        # a silhouette and not a comb
+        for i in range(n):
+            a2 = 6.2831853 * (i / float(n)) + _rnd(i, k, 312)
+            rr = 500.0 + 2300.0 * _rnd(i, k, 313)
+            tx, ty = x + math.cos(a2) * rr, y + math.sin(a2) * rr
+            lead = 1.00 if i == 0 else (0.52 + 0.38 * _rnd(i, k, 314))
+            cap, caph = _far_cap(i, k, 5)
+            # SOLVED FROM THE MEASURED STACK, and the first version of this
+            # line was the exact defect this ledger keeps recording. It read
+            #
+            #     s_max = (ceil_uu - 1100.0) / 6730.0
+            #
+            # where 6,730 is `tower_district`'s height. `tower_capped` is
+            # 1,100 uu -- ELEVEN METRES at scale 1, not 67 -- so every tower
+            # in the rank came out 6.1x too short, seventeen metres of city
+            # behind a hundred-and-thirty-metre castle, and the coverage audit
+            # scored zero columns above six degrees from HeroCam0. Sized from
+            # a number that belonged to a different recipe: PASS 29 caught
+            # four of these and this is the fifth.
+            #
+            # The stack is tower + its cap + the finial that may sit on it,
+            # all scaled together, so the ceiling is solved against the thing
+            # that actually reaches it.
+            stack = 1100.0 + caph + 300.0 * 0.85
+            s_max = ceil_uu / stack
+            s = max(1.20, min(7.00, s_max * lead))
+            out.append(A("tower_capped", tx, ty, 0, yaw=_rnd(i, k, 315) * 360.0,
+                         s=s, mat="MI_V2_IvoryStone",
+                         label="%s_Tower%d" % (tag, i)))
+            out.append(A(cap, tx, ty, 1100.0 * s, s=s,
+                         mat=("MI_V2_RoofPink", "MI_V2_RoofLilac",
+                              "MI_V2_RoofRose", "MI_V2_RoofBlue")[(i + k) % 4],
+                         label="%s_TowerCap%d" % (tag, i)))
+            # A SPIRE, not a stump. The reference's skyline is needles; a
+            # capped drum alone reads as a silo at this range.
+            if _rnd(i, k, 316) < 0.62:
+                out.append(A("finial_spire", tx, ty, 1100.0 * s + caph * s,
+                             s=s * 0.85, mat="MI_V2_IvoryStone",
+                             label="%s_TowerSpire%d" % (tag, i)))
+        # THE BODY UNDER THE SPIRES. A rank of towers with nothing between
+        # their feet reads as posts in a field; the reference's city has roof
+        # mass all the way down to where the trees start.
+        for i in range(2 + int(2.0 * _rnd(k, 311, 4))):
+            a2 = 6.2831853 * _rnd(i, k, 317)
+            rr = 900.0 + 2200.0 * _rnd(i, k, 318)
+            hx, hy = x + math.cos(a2) * rr, y + math.sin(a2) * rr
+            hs = 0.9 + 0.9 * _rnd(i, k, 319)
+            out.append(A("castle_hall", hx, hy, 0, yaw=_rnd(i, k, 320) * 360.0,
+                         s=hs, mat="MI_V2_IvoryStone", label="%s_Hall%d" % (tag, i)))
+            out.append(A(("roof_hip", "roof_flat_crenellated")[i % 2], hx, hy,
+                         900.0 * hs, yaw=_rnd(i, k, 320) * 360.0, s=hs,
+                         mat=("MI_V2_RoofRose", "MI_V2_RoofPink",
+                              "MI_V2_RoofLilac")[(i + k) % 3],
+                         label="%s_HallRoof%d" % (tag, i)))
+    # NO SIGHTLINE IS CLEARED TO IT, AND THAT IS A DECISION.
+    #
+    # PASS 29 recorded that `_reveal_city` "could not see five of the founder's
+    # seven things" because the district landmarks are sited after it runs, and
+    # the fix was a second reveal pass. The same reasoning would say to add a
+    # third for this rank -- and it would be wrong. `_reveal_city` exists so a
+    # walker can SEE WHERE THEY ARE GOING, and nobody walks to a backdrop: this
+    # city stands beyond `_H_R1`, outside the world the Dog can reach. Drawing
+    # cones from thirty-three cameras to thirty-nine clusters at 360-580 m
+    # would clear woodland along nearly every bearing in Wonderland to reveal
+    # scenery, which is how a filter written to open one view removes a forest.
+    #
+    # The rank does not need it. Its towers stand 60-110 m at 450-600 m, which
+    # is +8 to +13 deg from HeroCam0's eye, and the generated woodland's crowns
+    # top out around 20 m -- above +8 deg only inside about 90 m of the camera,
+    # which is the near framing the founder's own reference also has.
+    FAR_CITY_NOTES.append(
+        "far city: %d clusters of %d..%d towers over %.0f deg at %.0f-%.0f m, "
+        "capped at %.0f deg in HeroCam0" %
+        (len(kept), 3, 6, 2 * _FC_ARC, _FC_BAND[0] / 100.0, _FC_BAND[1] / 100.0,
+         _FC_CEIL))
+    return out
+
+
+FAR_CITY = _band("V2_Skyline", _far_city())
+
 
 
 def _ground_quilt():
@@ -7515,7 +7783,8 @@ for _bandref in (OUTER_WORLD, GROUND_QUILT, HORIZON, LANDMARKS, DEPTH):
 BUILD_BANDS = [FOREGROUND, COURTYARD, GARDEN, PALACE, FLANK_GROUND, FLANKS,
                REARWORLD, CAM_FOREGROUNDS, GROUND_QUILT, OUTER_WORLD, PLAZA_ORNAMENT,
                PROCESSIONAL_BORDER, HORIZON, APPROACH_SIDES, PLAZA_WALL_DRESS,
-               SIGNATURE, LANDMARKS, DEPTH, COURT_DRESS, WAYSIDE, SOUTH_REACH]
+               SIGNATURE, LANDMARKS, DEPTH, COURT_DRESS, WAYSIDE, SOUTH_REACH,
+               FAR_CITY]
 
 # ---------------------------------------------------------------------------
 # NOTHING IS BUILT ON A VIEWPOINT (2026-09-03)
