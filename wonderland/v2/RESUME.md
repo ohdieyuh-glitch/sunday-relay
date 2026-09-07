@@ -304,3 +304,36 @@ VEGETATION. Every arch/ha number in `WORLD_LEDGER.md` before PASS 30
 under-reports.
 
 Full detail: `WORLD_LEDGER.md`, PASS 30.
+
+## PASS 31–32 (2026-09-07) — fidelity to the founder's reference
+
+The brief became MAXIMUM VISUAL FIDELITY TO THE REFERENCE IMAGES. The only
+honest instrument for tone and palette is real pixels on both sides:
+`reference/marble-royal-garden-cam0-founder-reference.png` against
+`reference/renders/V2_MILESTONE26_HeroCam0_1080p.png`.
+
+PASS 31 built a far city at 360–580 m, retuned the clouds, put gold at four
+depths in the left garden, and found two things older than itself: 27
+airborne props (clock faces up trees, floating teacups) had been walling off
+ground in every traversal audit this world has ever run, and the far city was
+standing inside itself — 277 of 566 pieces were pure interpenetration,
+removed with the arc's silhouette unchanged.
+
+PASS 32 asked what owns the top of HeroCam0's frame. Vegetation owned 69.8%
+of the ceiling where the reference has a continuous city; one crown at 28 m
+roofed +11.8° to +46° with the city hidden behind it. The reference's foliage
+is asymmetric — light left, heavy right — and ours was the mirror. Moving the
+left group out and closing the two sky notches beside the castle took built
+mass from 30.2% to 43.8% of the ceiling.
+
+The transferable rule from PASS 32: **to raise a silhouette use `spire`, not
+`scale`.** Scaling a castle group grows its footprint too, and doing that to
+two palaces at 100 m doubled the walking tour from 190 legs to 377.
+
+**Nothing since PASS 26 has been rendered.** Passes 28–32 are offline-only.
+The next session should get a render before anything else, then do the
+lighting pass: our ground carries essentially no cast shadow (ground-row dark
+0.5/3.3/8.9% against the reference's 12/20/42%).
+
+Full detail: `WORLD_LEDGER.md`, PASS 31 and 32, and
+`docs/handoffs/WONDERLAND_WORLD_CURRENT.md`.

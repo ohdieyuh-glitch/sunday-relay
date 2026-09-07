@@ -2123,3 +2123,174 @@ One measurement defect found and not fixed: `_lm_setting` labels a landmark's
 approach paving `_Spur%d`, and every audit here counts a road by `_Seg`.
 Fourteen district landmarks are approached by something no audit calls a
 road. Right on the ground, wrong in the measurement.
+
+---
+
+# PASS 31 — the reference is a city behind a garden (`e3952ae`, `9655bad`)
+
+The brief changed to MAXIMUM VISUAL FIDELITY TO THE FOUNDER'S REFERENCE. From
+here the authority is
+`reference/marble-royal-garden-cam0-founder-reference.png` and the audits are
+guardrails, not goals.
+
+Only HeroCam0 has real pixels on both sides — that reference against
+`reference/renders/V2_MILESTONE26_HeroCam0_1080p.png`. That pair is the only
+trustworthy instrument for tone and palette. `tools/frame.py` (new, offline
+mass model) is good for same-model before/after ONLY; its docstring records
+that it over-fills so badly that 411 new towers moved nothing.
+
+## `e3952ae`
+
+A far city at 360–580 m under a +15° ceiling; a bearing bias in `_horizon`
+that had been INVERTED (`pick < 0.62` selects the ridge, and multiplying
+`pick` by 0.32 to "reduce" ridges made them commoner — the site count proved
+it, 10 of 10 hero-arc sites still wooded); a cloud retune; and two audit
+leaks that the new scenery opened: `hierarchy` counted 495 backdrop
+`tower_capped` as landmarks, and `region` had no radius filter, so a cell at
+350 m could find a far-city tower 30 m away. Closing the second restated PASS
+30's own pinned figure as 1,800 m², not 1,300.
+
+Three attempts at the far city are worth keeping. v1 at 460–760 m: keep-outs
+pushed everything to 576–777 m, 284 pieces, 2.41% ink, tops at +3.2° — a
+hairline at the world's edge. v2 at 260–520 m would have dropped 80 m towers
+into walkable ground and undone PASS 30. And every tower was first sized from
+`tower_district`'s 6,730 uu when `tower_capped` is **1,100** — 6.1× too
+short, and the coverage audit scored zero columns above +6°. Sized from a
+number belonging to a different recipe: PASS 29 caught four of these; that
+was the fifth.
+
+## `9655bad`
+
+**Gold at four depths.** The reference carries 86% of its gold in the left
+half of the frame and ours carried it at one distance. Four filigree screens
+at 44, 53, 69 and 87 m, every bay but the centre one leafed. The bay geometry
+was wrong first: `gate_leaf` hinges at x=0 and runs 400 uu, `gate_arch_gold`
+springs from piers 380 apart, and 800 uu bays put each leaf across half a bay
+with the arch spanning 3.8 m of an 11.2 m opening.
+
+**A gate has an opening.** Five solid screens closed `LEFT landmark`. Opening
+the centre bay was not enough: the third screen at (1900, 6400) stood 9.6 m
+from that landmark, whose approach is a SIX-CELL KEYHOLE between `Tower_L2`,
+the giant mushroom's cap, a mature trunk and two hedge masses — a pocket
+always that tight and never before closed. A probe over the left garden
+(20–46° frame-left, 54–98 m, every pier on ground the spawn flood already
+reaches, 1.9 m clear of any solid, 12 m from every named destination) found
+56 sites of 930; **538 of the rejects hit existing geometry**, which is the
+left garden saying it is not empty. It moved to (3000, 8000).
+
+**An airborne prop is not a wall.** Tracing that blockage found a defect
+older than this pass: `solid_boxes` gave a ground footprint to 27 placements
+that hang in the air — 20 clock faces up trees, 3 urns on columns, the
+floating teapot and its cups — so *every traversal audit this world has ever
+run* had been walling off ground under things you can walk beneath. Anything
+above 400 uu no longer blocks.
+
+**A skyline of needles needs the needles apart.** `hierarchy` reported 191
+embedded landmarks, nearly all a far-city tower inside a *different*
+cluster's tower: cluster centres 2,600 uu apart, members scattered to 2,800,
+and at s=7 a tower is 12.5 m across. The rank now rejects a member whose
+measured MESH radius (178 uu for `tower_capped`, 763 for `castle_hall`, read
+off `assets_v2` — not `FOOT`, which is a walker-clearance number 2.2× the
+mesh) overlaps anything placed.
+
+    from HeroCam0, 100 deg arc   pieces   >+1deg   >+6deg   median top
+    before (overlapping)            566    79.8%    78.0%     +13.4 deg
+    after  (spaced)                 289    80.2%    79.2%     +13.0 deg
+
+277 pieces were pure interpenetration — draw calls producing no silhouette.
+Embedded landmarks 191 → 6; the six left are the audit's `FOOT` margin.
+Landmarks inside the walkable world unchanged at 302.
+
+---
+
+# PASS 32 — a tree was standing in front of the city (`200aeff`)
+
+One question asked of the reference: **what owns the top of the frame?** In
+the reference, a warm dense continuous city between two dark trees. Measured
+per degree across HeroCam0's 100° arc, ours was vegetation 69.8% / built
+30.2%.
+
+`Garden_L_Tree_Canopy0` — one crown at 28 m — owned the ceiling from +11.8°
+to +46°, thirty-four of the frame's hundred degrees, with the city standing
+at +19° to +28° in those same columns, present and hidden. PASS 28 had
+already found these crowns (the eight largest presences in the frame) and
+made them BLOSSOM rather than move them: that fixed their colour and left
+them a roof.
+
+The reference's foliage is ASYMMETRIC — left margin only +50° to +36°, right
+one huge dark tree from −16° to −50°. Ours was the MIRROR: heavy left, light
+right. `ClockTree` already runs −29° to −50° and was left alone. The left
+group moved out as one rigid piece by `_GLT_DX, _GLT_DY = 900, 200` uu and
+now runs +27° to +49°.
+
+The same profile found the two lowest ceilings in the whole frame at −15..−11
+(+16.8°) and +11..+15 (+19.1°), every neighbour at +26 to +32. They are City1
+and City2, the two smallest clusters of the founder-approved focal plane,
+standing exactly where the reference's spire field is densest.
+
+**And the first fix for that was wrong, which is the useful part.**
+
+                            before     via scale     via spire
+    ceiling at -15..-11      +16.8       +22.9         +24.5 deg
+    ceiling at +11..+15      +19.1       +26.3         +26.6 deg
+    route legs / length    190/2306    377/4878      190/2306
+
+Lifting the two clusters by `scale` closed the notches and DOUBLED the
+walking tour, because scaling a cluster grows its hall, arcade, bays, dome,
+bridge and every tower offset — two palaces at 100 m had grown across ground
+the world walks through. The gap measured was ELEVATION, so `_castle_group`
+gained `spire`: tower bodies scale `(s, s, s * spire)`, caps and finials ride
+up at their own scale, no footprint changes. It closed the notches further
+and cost the walk nothing.
+
+**Rule: if you need a silhouette taller, reach for `spire`, never `scale`.**
+
+Nothing moved a camera; nothing moved behind the castle or onto its outline.
+City3 keeps the axis at s 1.7 and stays dominant. PASS 06 rejected
+thirty-two giant towers stacked on the castle's silhouette at 350 m; these
+two are on its flanks at 100–115 m, in front of it, at their original ground
+scale.
+
+    topmost silhouette owner, 100 deg arc:  built 30.2% -> 43.8%
+                                            vegetation 69.8% -> 56.2%
+
+## Gates at `200aeff`
+
+    verify_v2_layout        PASS  13,686 placements, 914 surfaces,
+                                  0 step violations, 33 standpoints clear
+    verify_v2_dryrun        PASS  0 failures, 0 errors
+    verify_v2_marble_paths  PASS
+    walkable --window=world PASS  0 of 30 destinations, 0 of 60 quarters
+    route                   PASS  190 legs, 2,306 m -- unchanged
+    region --bar=70,37,63         1,800 m2 in 4 regions -- unchanged
+    emptiness --scaled            3 regions over 3 cells, 6 in all
+    hierarchy               PASS  302 walkable-world landmarks -- unchanged
+    camera_framing          PASS
+    occlusion               PASS
+
+## Next
+
+**PASS 33 is the lighting pass, and it must have a render in the loop.** The
+largest measured gap to the reference is not geometry:
+
+                          reference    ours
+    dark (<70/255)          42.9%     27.1%
+    median luminance          81       120
+    p10 (shadow depth)        23        43
+    ground row, dark      12/20/42%   0.5/3.3/8.9%
+
+Our ground carries essentially no cast shadow. The cause is the shadowless
+fill budget in `v2_config.LOOK` — `canopyFillLux` 9,000, a second PASS 26
+fill, `bounceLux` 2,400 and `skyLightIntensity` 1.6 against a 60,000-lux key.
+It was NOT touched this session, deliberately: those values were tuned across
+PASS 08/08b/08c/24/26 against real renders, and a founder judgement is in
+that history — the right side reading "excessively dark" is what caused the
+hemisphere lift. Moving them blind risks re-breaking a call the founder
+already made.
+
+Then: the `Approach_Canopy0..3` and `ApproachSideL/R` canopies at 37–84 m
+(vegetation still owns 56.2% of the ceiling), and the paving material — our
+low row is pale/stone 42.3% where the reference is gold 57.9% + grey 21.2% +
+pale 4.1%.
+
+Full detail and the render command list: `docs/handoffs/WONDERLAND_WORLD_CURRENT.md`.
