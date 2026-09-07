@@ -329,6 +329,76 @@ and a multi-tenant container has no business in a single-tenant process.
 
 ---
 
+### 12. The honesty ladder, as a function (`a4672cb`)
+
+`src/relay/mission/wonderland/wonderland-evidence.ts` (22 tests)
+
+The five-rung table below is now executable. A CAPTURE of Julius events carries
+where it came from; `verifyWonderlandCapture` replays it through the real
+normalizer and the real reducer — not a simplified fold, which would measure
+code that does not ship — and says which rung it establishes.
+
+Two properties make it worth having:
+
+- **`real` is unreachable from this module**, by construction and by test.
+  `real` means a live run drove the world AS IT RAN; a replay is not that,
+  however genuine the recording. No input produces it.
+- **Claiming a live origin costs something.** A capture may only call itself
+  recorded from a live run if it names the run AND when it was taken. Without
+  both it is downgraded to `synthesised` — at CONSTRUCTION, so a file on disk
+  cannot sit there claiming a live origin and survive being read by something
+  that never called the verifier.
+
+A capture can only ever establish two of the five rungs, exported as data. A
+real recording of events the model does not map lands on `integration_ready`:
+it proves the code runs and nothing about a mission.
+
+`wonderlandEvidenceClaim` holds the sentence a person may say, because that
+sentence is what gets copied into a demo script and is the exact point where
+"real events, replayed" becomes "Julius is connected". A test asserts the word
+"connected" never appears in it.
+
+### 13. ENTER WONDERLAND does something (`6f6f854`)
+
+`src/relay/ui/wonderland-entry/join-wonderland.ts` (10 tests)
+`src/relay/ui/wonderland-entry/useWonderlandEntry.ts` (10 tests)
+
+The button now runs the entry state machine. One network call, and it is the
+only thing in the path that touches the network. **The only route to `admitted`
+is a 2xx that NAMED a session** — not a 200 with an unreadable body, not a 200
+with no session in it, not the request having been sent. A request that never
+completed says "could not be reached" rather than "refused", because a founder
+acts on those differently.
+
+The hook holds no `isLoading`, no `error` and no `entered`: a hook with its own
+flags beside a state machine will eventually disagree with it. A second click
+in the same frame cannot post twice — guarded by a ref, because React batches
+and a second join is a second presence.
+
+**Verified in the shipped bundle**: the label, the route and the renderer gap
+are all present, with no Node-only code or credential name alongside them.
+
+### 14. The HUD reads from the authority (`2a3fbd8`)
+
+`src/relay/ui/wonderland-hud/useWonderlandUsage.ts` (+ 10 tests)
+
+The HUD was mounted in `RelayWorld` and handed a simulated fixture directly, on
+the normal production path — `#/relay` is the Relay experience, not a preview
+route. That broke this repository's own rule, which the OTHER usage bar already
+obeys and tests (`usage-integration.test.tsx`).
+
+The deeper problem: a fixture passed straight to the view meant the authority's
+REFUSALS never ran. A surface able to put figures on screen without passing
+through `applyWonderlandUsageReport` is a second, unguarded way in. Everything
+now goes through one door.
+
+**What a founder sees today is UNKNOWN, labelled NO USAGE AUTHORITY
+REPORTING** — the true state, and what the HUD was designed to say. Confirmed
+in the shipped bundle: the label is present and `wonderlandUsageHudFixture` is
+gone from it entirely.
+
+---
+
 ## What is REAL and what is not
 
 Read this table before saying anything about this stream out loud. The
@@ -344,7 +414,9 @@ distinction between the middle two rows is the one that gets misreported.
 | the entry contract (admission vs presentation) | **real**, and its honest answer today is `ADMITTED · NOTHING CAN SHOW IT` |
 | HUD geometry, palette, capacity model | **real** and shared with Unreal by bidirectional parity |
 | the usage authority (KNOWN / NOT-REPORTED / STALE / UNAVAILABLE) | **real** contract; **no authority reports into it** |
-| the numbers in the HUD | **SIMULATED FIXTURE.** The HUD says so on its own face. |
+| the numbers in the HUD | **NOTHING REPORTS THEM.** Production shows `UNKNOWN` / `NO USAGE AUTHORITY REPORTING`. The simulated fixture is no longer reachable from the app and is gone from the shipped bundle. |
+| the entry path (`ENTER WONDERLAND`) | **real** as far as `admitted`; the button runs the state machine and posts to the real bridge route |
+| the honesty ladder itself | **real and executable** — `verifyWonderlandCapture` grades a capture, and `real` is unreachable from it by construction |
 | Unreal rendering any of it | **not built.** Headers parse; no widget, no client, no frame. |
 | a live Julius mission driving the world | **NO. Not once.** |
 
@@ -353,10 +425,10 @@ INTEGRATION-READY. Using the brief's own five-way scale:
 
 | level | what is at it |
 |---|---|
-| REAL (live Julius drove it) | nothing |
-| RECORDED-EVENT VERIFIED (a captured real event replayed through it) | nothing — no capture has ever been taken |
+| REAL (live Julius drove it) | nothing. Unreachable from any replay, by construction |
+| RECORDED-EVENT VERIFIED (a captured real event replayed through it) | nothing — no capture has ever been taken. The machinery to grade one now exists |
 | INTEGRATION-READY (contract + reducer + parity, exercised by constructed events) | the state machine, the normalizer, the bridge session, the usage authority, the entry contract, the worlds record, the animation plan |
-| SIMULATED (labelled fixture) | every figure the HUD draws |
+| SIMULATED (labelled fixture) | the dev event script, and nothing a production surface loads |
 | NOT BUILT | the Unreal client, the world snapshot route, any renderer at all |
 
 A test that manufactures its own input and then reports the world connected is
@@ -367,9 +439,13 @@ stream carries that statement in its own header comment.
 
 ## The gaps this stream found and did NOT close
 
-Ordered by how much they block the next step. Gap 6 in the previous revision
-("ENTER WONDERLAND is a readiness label, not a launch") is now MODELLED rather
-than closed — the contract exists and says truthfully that nothing can render.
+Ordered by how much they block the next step.
+
+Two gaps from earlier revisions are now CLOSED and are not repeated below:
+"ENTER WONDERLAND is a readiness label, not a launch" (the button runs the
+entry state machine and posts to the real route), and "the HUD is fed a
+simulated fixture" (it reads from the usage authority and production draws
+UNKNOWN). What remains is genuinely blocked on other sessions or on assets.
 
 1. **`observeRelayTransition` is battle-scoped.** `wonderland-backend.ts` looks
    a BATTLE up by mission id and returns `[]` when there is none — so an
@@ -477,13 +553,18 @@ Every suite this stream added, with what each one is actually for:
 | `wonderland-entry.test.ts` | 31 | admission and presentation as separate axes; being admitted is not being there |
 | `wonderland-entry-availability.test.ts` | 10 | this build ships no renderer, pinned against the repository |
 | `wonderland-worlds.test.ts` | 27 | per-project isolation by referential identity |
+| `wonderland-evidence.test.ts` | 22 | the honesty ladder; `real` unreachable; live claims that are not paid for |
+| `join-wonderland.test.ts` | 10 | every possible bridge answer, folded; the only route to admitted |
+| `useWonderlandEntry.test.tsx` | 10 | the button's state; no double post; never stranded on ENTERING |
+| `wonderland-hud-production.test.tsx` | 10 | production loads no simulated figure; the authority's refusals actually run |
 | `wonderland-cpp-parity.test.ts` | 41 | every struct and enum, bidirectionally, against the real `.h` files |
 | `wonderland-hud.test.tsx` | 21 | the rendered HUD: mask region, per-instance ids, reading labels |
 | `wonderland-julius-link.test.ts` | — | the composition and its `live_runtime` / `development_fixture` label |
 
-**595 passing across the wonderland slice and its boundary tests**, 0 failed,
-0 skipped. Plus the repository boundary scanner, the core boundary test, the
-Julius harness drift gate, and the C++ syntax check — all clean.
+**2,128 passing across the whole UI and wonderland slices**, 0 failed. Plus the
+repository boundary scanner, the core boundary test, the Julius harness drift
+gate, the C++ syntax check, `npm run typecheck` (all four projects) and
+`npm run build` — all clean.
 
 ### The full suite, and its one failure
 
@@ -519,6 +600,9 @@ purpose and confirmed to fail:
 | a C++ field renamed, an enum member renamed | 2 parity tests |
 | routing by the focused world instead of the event's project | 4 |
 | every world rebuilt, all values still correct | 3 (identity, not equality) |
+| the live-origin requirement dropped from a capture | 5 |
+| the double-click guard removed from the entry hook | 1 |
+| the simulated HUD fixture put back on the production path | 2 |
 
 ---
 
@@ -668,21 +752,24 @@ mission moves the world.**
 **A. Starting SHA** — `b2dc9f2` (`origin/main`, unchanged throughout; this
 stream never merged into or from `relay/wonderland-v2`).
 
-**B. Ending SHA** — `9891a79` on `relay/wonderland-integration`, pushed to both
+**B. Ending SHA** — `2a3fbd8` on `relay/wonderland-integration`, pushed to both
 that ref and `claude/relay-wonderland-integration-ojr5x6` (same commits).
 
-**C. Integration layers completed** — eleven, listed under "What was built":
+**C. Integration layers completed** — fourteen, listed under "What was built":
 the state seam, the HUD, the link, the Unreal receiver, the HUD freeze, the
 usage authority, the bridge session, the ending guards, the animation plan, the
-entry contract, and the wall between worlds.
+entry contract, the wall between worlds, the executable honesty ladder, the
+entry button, and the HUD's authority wiring.
 
 **D. HUD data progress** — the geometry is frozen and pinned by digest. Beneath
-it there is now a provider-neutral usage contract with four readings, per-channel
+it there is a provider-neutral usage contract with four readings, per-channel
 tier ladders that change PHYSICAL capacity, three rejection counters, and an
-authority id carried for traceability and never interpreted. **No authority
-reports into it**, so every figure drawn is still a labelled fixture. The visual
-layer knows nothing about billing or providers, and a test sweeps its output for
-provider names and key shapes.
+authority id carried for traceability and never interpreted. The mounted HUD now
+READS FROM IT — the simulated fixture is unreachable from the app and absent
+from the shipped bundle. **No authority reports into it**, so production draws
+`UNKNOWN` and says `NO USAGE AUTHORITY REPORTING`. The visual layer knows
+nothing about billing or providers, and a test sweeps its output for provider
+names and key shapes.
 
 **E. Event bridge** — Julius events normalize to a provider-independent
 contract; the reducer rejects stale and out-of-order deliveries, counts sequence
@@ -697,10 +784,11 @@ animation. Impossible transitions are refused and counted rather than silently
 dropped. `blocked` and `error` can never appear as `complete`. Animation
 presentation is a separate module that names no asset.
 
-**G. Landing → world** — modelled honestly rather than claimed. The entry
-contract separates admission from presentation; today's true state is
-`ADMITTED · NOTHING CAN SHOW IT`, and the empty renderer list is pinned by a
-test so the first world client cannot ship without updating that sentence.
+**G. Landing → world** — built, not merely modelled. `ENTER WONDERLAND` runs
+the entry state machine and posts to the real bridge route; admission and
+presentation stay separate, and the honest end of the path in this build is
+`ADMITTED · NOTHING CAN SHOW IT`. The empty renderer list is pinned by a test so
+the first world client cannot ship without updating that sentence.
 
 **H. Identity** — enforced at three levels: the reducer rejects foreign-project
 events, the usage authority rejects foreign-project reports, and the worlds
@@ -708,11 +796,13 @@ record routes by the message's OWN project and leaves every other world
 referentially identical. Mutation-verified.
 
 **I. Genuinely connected to real Julius** — **nothing.** No provider call, no
-Julius mission, no Unreal build, no GPU frame, no captured real event. See the
-five-way table under "What is REAL and what is not".
+Julius mission, no Unreal build, no GPU frame, no captured real event. This is
+now enforced rather than merely stated: `verifyWonderlandCapture` cannot return
+`real` for any input, and the only Julius event stream in the repository is
+synthesised.
 
-**J. Still simulated** — every number the HUD draws, and every event any test
-folds. All of it labelled.
+**J. Still simulated** — every event any test or demo folds. The HUD no longer
+draws simulated numbers on any production path; it draws `UNKNOWN`.
 
 **K. Tests and evidence** — 595 passing across the wonderland slice and its
 boundary tests, 0 failed, 0 skipped; plus the repository boundary scanner, the
@@ -726,9 +816,10 @@ deliberate mutations confirmed the important suites can actually fail. The full
    produces world events (see "Exact next integration task").
 2. Fix the two `relay_wonderland.events` defects (gap 3) — **Julius session.**
    Step 1 must not reach production before this.
-3. Capture one real Julius event stream and replay it through
-   `rehydrateJuliusEmbodiment`. This is the cheapest step up the honesty ladder
-   and the only one that moves anything off INTEGRATION-READY.
+3. Capture one real Julius event stream and grade it with
+   `verifyWonderlandCapture`. The machinery is built and waiting; this is the
+   cheapest step up the honesty ladder and the only one that moves anything off
+   INTEGRATION-READY. It needs a live run, so it needs the Julius session.
 4. Bind `UWonderlandRelayLink` on `relay/wonderland-v2` as the first renderer,
    and register it in `BUILT_IN_WONDERLAND_RENDERERS`.
 5. Widen `server.ts`'s nine-phase filter to all 28 — one line, in a file the
