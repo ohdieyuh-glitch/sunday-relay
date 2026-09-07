@@ -93,3 +93,20 @@ dump "SELECT e.payload->>'taskId' AS task_id,e.event_type,e.payload->'facts'->>'
 # `NULL` is a real answer everywhere and always means "not known here", never zero: a reviewer
 # that never started has no exit code, and 0 would say it exited cleanly.
 dump "SELECT e.payload->>'taskId' AS task_id,t.role,e.payload->'facts'->>'diag_stage' AS stage,e.payload->'facts'->>'diag_transport' AS transport,e.payload->'facts'->>'diag_provider' AS provider,e.payload->'facts'->>'diag_servedModel' AS served_model,e.payload->'facts'->>'diag_processExitCode' AS process_exit_code,e.payload->'facts'->>'diag_timedOut' AS timed_out,e.payload->'facts'->>'diag_outputBytesObserved' AS output_bytes_observed,e.payload->'facts'->>'diag_outputByteLimit' AS output_byte_limit,e.payload->'facts'->>'diag_outputTruncated' AS output_truncated,e.payload->'facts'->>'diag_jsonDetected' AS json_detected,e.payload->'facts'->>'diag_jsonParseable' AS json_parseable,e.payload->'facts'->>'diag_reviewObjectCount' AS review_object_count,e.payload->'facts'->>'diag_verdictPresent' AS verdict_present,e.payload->'facts'->>'diag_verdictValid' AS verdict_valid,e.payload->'facts'->>'diag_summaryPresent' AS summary_present,e.payload->'facts'->>'diag_failureShape' AS failure_shape,e.payload->'facts'->>'diag_providerHttpStatus' AS provider_http_status,e.payload->'facts'->>'diag_serviceHttpStatus' AS service_http_status,e.payload->'facts'->>'diag_requestedModel' AS requested_model,e.payload->'facts'->>'diag_responseId' AS response_id,e.payload->'facts'->>'diag_validationPassed' AS validation_passed,e.payload->'facts'->>'diag_validationReasonCode' AS validation_reason_code,e.payload->'facts'->>'diag_validationField' AS validation_field,e.payload->'facts'->>'diag_resultSubtype' AS result_subtype,e.payload->'facts'->>'diag_isError' AS is_error,e.payload->'facts'->>'diag_numTurns' AS num_turns,e.payload->'facts'->>'diag_toolUseCount' AS tool_use_count,e.payload->'facts'->>'diag_permissionDenials' AS permission_denials,e.payload->'facts'->>'diag_implementationPresent' AS implementation_present,e.payload->'facts'->>'diag_costUsdMicros' AS cost_usd_micros,e.payload->'facts'->>'diag_costCeilingUsdMicros' AS cost_ceiling_usd_micros,e.payload->'facts'->>'diag_costSource' AS cost_source,e.payload->'facts'->>'diag_runtimeStarted' AS runtime_started,e.payload->'facts'->>'code' AS julius_code,e.payload->'facts'->>'errorRetryable' AS retryable,e.occurred_at FROM relay_wonderland.events e LEFT JOIN relay_wonderland.julius_tasks t ON t.task_id=e.payload->>'taskId' WHERE e.payload->'facts'->>'diag_transport' IS NOT NULL ORDER BY e.occurred_at" worker-diagnostics.tsv
+
+# WHAT THE RUN LEARNED, AND WHO IT RAN FOR.
+#
+# Two tables the bundle has never carried, and both answer a Beta Gate row that could otherwise
+# only guess.
+#
+# `julius_brain_entries` is the Project Brain. Until now it had one writer — the bootstrap seed —
+# so a bundle could not distinguish "the run recorded nothing" from "nothing was ever dumped".
+# Identifiers, kind, revision and time only: `safe_content` is deliberately NOT selected, because
+# it is worker-authored prose and this bundle's rule is that no model-written text has a column.
+#
+# `execution_sessions.player_id` is the account the mission belongs to. Both bounded missions
+# declare tenant `tenant` and run under an operator token, so today it reads as the operator and
+# the ACCOUNT / ONBOARDING row correctly FAILS; the day a real account starts a mission it reads
+# as that account. Identifiers only — the same class the run and mission columns already carry.
+dump "SELECT entry_id,entry_kind,worker_id,task_id,revision,created_at FROM relay_wonderland.julius_brain_entries ORDER BY revision" project-brain.tsv
+dump "SELECT execution_id,mission_id,project_id,player_id,agent_id,state FROM relay_wonderland.execution_sessions ORDER BY execution_id" sessions.tsv

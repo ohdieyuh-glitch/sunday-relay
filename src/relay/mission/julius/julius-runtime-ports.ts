@@ -338,10 +338,62 @@ export interface JuliusRuntimeReader {
   activeTaskCount(runId: string, projectId: string): Promise<number>;
 }
 
+/**
+ * WRITING TO THE PROJECT BRAIN.
+ *
+ * `julius_brain_entries` existed from migration 014 with eight entry kinds, and
+ * the runtime READ it to compile every worker's context — but it had exactly one
+ * writer, the bootstrap seed, so five of those kinds had no producer at all. A
+ * Project Brain that only ever holds what was written before the run started is
+ * a read-only seed, not durable project intelligence.
+ *
+ * THE ENTRY ID IS THE IDEMPOTENCY KEY. Every other append on this store carries
+ * a separate `idempotencyKey`; this one does not, because the brain table's
+ * primary key already is one and a second key would be a second thing to keep
+ * consistent. A caller derives the id from what produced the entry — a decision,
+ * a finding, a repair — so a replayed tick writes nothing and, importantly,
+ * does not advance the revision either.
+ *
+ * REVISIONS ARE ALLOCATED BY THE STORE, never by the caller. `UNIQUE(run_id,
+ * revision)` means two workers that both computed "the next one" would collide,
+ * so the implementation takes the run row's own `project_brain_revision` as an
+ * atomic counter and returns entries in that order. That is what the column was
+ * for; nothing else was advancing it.
+ */
+export interface JuliusBrainAppend {
+  readonly runId: string;
+  readonly projectId: string;
+  /** The task this knowledge came out of, or null for run-level knowledge. */
+  readonly taskId: string | null;
+  readonly workerId: string;
+  /** Deterministic per source. This IS the idempotency key. */
+  readonly entryId: string;
+  readonly kind: JuliusBrainEntry['kind'];
+  /**
+   * ALREADY SAFE. This text is persisted verbatim and read back into another
+   * worker's context packet, so the caller owns its safety — the store does not
+   * redact, and a store that did would be redaction nobody could audit.
+   */
+  readonly safeText: string;
+  readonly evidenceIds: readonly string[];
+  readonly occurredAt: string;
+}
+
+export interface JuliusBrainWriter {
+  /**
+   * True when this call wrote a new entry. False when the entry already existed
+   * — a replay — or when the run does not exist in this project. False is not
+   * an error: it is the answer "nothing was added", and the revision did not
+   * move either.
+   */
+  appendBrainEntry(input: JuliusBrainAppend): Promise<boolean>;
+}
+
 /** Everything the runtime writes and reads, in one bag the caller composes. */
 export interface JuliusRuntimeStore
   extends JuliusRunWriter, JuliusResultWriter, JuliusContextWriter,
-  JuliusEventWriter, JuliusTrajectoryWriter, JuliusRuntimeReader, JuliusFindingWriter {}
+  JuliusEventWriter, JuliusTrajectoryWriter, JuliusRuntimeReader, JuliusFindingWriter,
+  JuliusBrainWriter {}
 
 /* --------------------------------------------------- role/task vocabulary */
 

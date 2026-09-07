@@ -127,6 +127,17 @@ export function createJuliusMemoryStore(): JuliusMemoryStore {
   const findings: JuliusReviewerFinding[] = [];
   const criteria = new Map<string, JuliusAcceptanceCriterion[]>();
   const brain = new Map<string, JuliusBrainEntry[]>();
+  /**
+   * THE MODEL'S COPY OF THE REVISION COUNTER.
+   *
+   * PostgreSQL allocates from `GREATEST(project_brain_revision, max(revision))`,
+   * so a seeded run whose rows carry revisions 1..N continues at N+1 even though
+   * the run row still says 0. Seeded entries here carry no revision at all, so
+   * the count stands in for the same fact — otherwise the model would hand out 1
+   * where production hands out N+1 and the two would disagree about a number
+   * that reaches context snapshots and trajectory rows.
+   */
+  const brainRevisions = new Map<string, number>();
   const results: ResultRow[] = [];
   const resultKeys = new Set<string>();
   const resultGenerations = new Set<string>();
@@ -177,7 +188,10 @@ export function createJuliusMemoryStore(): JuliusMemoryStore {
     },
     seedCriteria(runId, values) { criteria.set(runId, values.map((value) => ({ ...value }))); },
     seedFinding(finding) { findings.push({ ...finding }); },
-    seedBrain(runId, entries) { brain.set(runId, entries.map((entry) => ({ ...entry }))); },
+    seedBrain(runId, entries) {
+      brain.set(runId, entries.map((entry) => ({ ...entry })));
+      brainRevisions.set(runId, entries.length);
+    },
 
     /* --------------------------------------------------------- inspection */
     taskRow(taskId) { const row = tasks.get(taskId); return row ? { ...row } : null; },
@@ -457,6 +471,33 @@ export function createJuliusMemoryStore(): JuliusMemoryStore {
         task.state = 'RUNNABLE';
         task.version += 1;
       }
+      return true;
+    },
+
+    /* ----------------------------------------------------- Project Brain */
+    async appendBrainEntry(input) {
+      const run = runs.get(input.runId);
+      if (run === undefined || run.projectId !== input.projectId) return false;
+      const existing = brain.get(input.runId) ?? [];
+      // A REPLAY MOVES NOTHING. Production reaches the same answer by guarding
+      // its counter UPDATE with NOT EXISTS on the entry id, so an idempotent
+      // call cannot leave the revision one higher than the entries justify.
+      if (existing.some((entry) => entry.entryId === input.entryId)) return false;
+      const revision = Math.max(run.projectBrainRevision, brainRevisions.get(input.runId) ?? 0) + 1;
+      brainRevisions.set(input.runId, revision);
+      runs.set(input.runId, { ...run, projectBrainRevision: revision });
+      brain.set(input.runId, [...existing, {
+        entryId: input.entryId,
+        kind: input.kind,
+        text: input.safeText,
+        // The row holds ONE task id; the compiler's shape holds a list.
+        taskIds: input.taskId === null ? [] : [input.taskId],
+        // Matching the read path exactly: stored entries carry no role
+        // restriction, and INTERNAL rather than PUBLIC because calling a stored
+        // entry PUBLIC would be a claim nobody checked.
+        allowedRoles: ['PROMPT_ARCHITECT', 'CODING_AGENT', 'INDEPENDENT_REVIEWER'],
+        sensitivity: 'INTERNAL',
+      }]);
       return true;
     },
 
