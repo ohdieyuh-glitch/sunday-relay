@@ -6849,6 +6849,33 @@ def _lm_court(x, y, tag, r, n=8, pier=1.0, cone="topiary_cone_roses",
     return out
 
 
+#: uu / scale. THE AVENUE. Sized off the recipes, not chosen: `column_ornate`
+#: is 9.5 m tall and 1.8 m wide at scale 1 (aspect 5.13) and
+#: `topiary_cone_plain` 3.2 m at 2.4 (aspect 1.29), against `canopy_large`'s
+#: 0.46. The canopy this replaces subtended 17 deg of width from 21 m and
+#: closed over the middle of the way; a column subtends 6. Narrow is the whole
+#: mechanism.
+#:
+#: THE OFFSET WAS SOLVED AGAINST BOTH AUDITS, not picked. Three were measured
+#: end to end, because the first one traded a frame for a walk:
+#:
+#:            mean built share    route legs / tour
+#:   16 m          62.8%             220 / 2,736 m
+#:   27 m          62.6%             179 / 2,123 m
+#:   30 m          61.6%             184 / 2,122 m
+#:   (before)      56.6%             190 / 2,306 m
+#:
+#: At 16 m the composition is best by two tenths of a point and the tour is
+#: 430 m LONGER than it was -- 182 new footprints threaded along fourteen
+#: approaches. At 27 the frames are the same and the tour is SHORTER than the
+#: baseline, because the copses this replaces stood at 21 m with real trunks
+#: and the approaches opened when they left. Two tenths of a point is not
+#: worth six hundred metres of walking.
+_LM_AVENUE_OFF = 2700.0
+_LM_AVENUE_COL = 1.70
+_LM_AVENUE_CONE = 3.40
+
+
 def _lm_setting(x, y, tag, sc, glass, reach):
     """The GROUND a landmark stands on, and the way you arrive at it.
 
@@ -6894,10 +6921,61 @@ def _lm_setting(x, y, tag, sc, glass, reach):
                 out.append(A("waymarker_lamp", sx + px * sgn * 900.0, sy + py * sgn * 900.0, 0.0,
                              yaw=math.degrees(b) + 90.0, s=0.8, mat=glass,
                              label="%s_SpurLamp%d_%d" % (tag, i, int(sgn))))
-        if i % 3 == 1:
-            for sgn in (1.0, -1.0):
-                out += _tree_group(sx + px * sgn * 2100.0, sy + py * sgn * 2100.0,
-                                   7700 + i * 11 + int(sgn), "%s_SpurTree%d_%d" % (tag, i, int(sgn)), 1.05)
+        # --- THE AVENUE (PASS 35) -------------------------------------
+        #
+        # This was two copses -- `_tree_group` at stations 1 and 4, 21 m either
+        # side -- and it was hiding the thing it dressed. `framescape.py`
+        # measured every district camera against its own district's
+        # architecture and the approach planting WON:
+        #
+        #     WaterGardenCam15   landmark +25.7 deg   avenue +45.6   -19.9
+        #     ClockQuarterCam13           +12.9              +23.1   -10.2
+        #     GroveRoadCam18              +51.9              +59.3    -7.3
+        #     CloisterCam31               +74.2              +43.3   +30.9  ok
+        #
+        # The cause is a shape, not a count. `canopy_large` at this scale is
+        # 8.4 m ACROSS and sits 15 m up: a blob with an aspect of 0.46, and
+        # two of them either side of a 20 m way meet over the middle of it.
+        # Eleven of the thirty-three frames were more than half roofed by
+        # vegetation and the district cameras were the worst of them, each one
+        # looking down its own district's approach at leaves.
+        #
+        # A PROCESSIONAL WAY IS COLUMNAR. `column_ornate` has an aspect of
+        # 5.13 (9.5 m tall, 1.8 m wide) and `topiary_cone_plain` 1.29 -- a
+        # cypress. Alternating them at EVERY station, closer in at 16 m,
+        # makes an avenue you walk between rather than under: more pieces
+        # along the way, far less sky taken, and the ceiling they hold is
+        # BUILT. The trees are not deleted -- they move to the far station
+        # and out to 34 m, where a way should end in leaves.
+        for sgn in (1.0, -1.0):
+            ax = sx + px * sgn * _LM_AVENUE_OFF
+            ay = sy + py * sgn * _LM_AVENUE_OFF
+            if i % 2 == 0:
+                out.append(A("column_ornate", ax, ay, 0.0, yaw=math.degrees(b) + 90.0,
+                             s=_LM_AVENUE_COL, mat="MI_V2_IvoryStone",
+                             label="%s_AvenueCol%d_%d" % (tag, i, int(sgn))))
+                out.append(A("gate_finial_ball", ax, ay, 950.0 * _LM_AVENUE_COL,
+                             yaw=math.degrees(b), s=_LM_AVENUE_COL * 0.85,
+                             mat="MI_V2_Gold",
+                             label="%s_AvenueBall%d_%d" % (tag, i, int(sgn))))
+            else:
+                out.append(A("topiary_cone_plain", ax, ay, 0.0,
+                             yaw=math.degrees(b) + 90.0, s=_LM_AVENUE_CONE,
+                             mat=("MI_V2_LeafDark", "MI_V2_LeafMid")[i % 2],
+                             label="%s_AvenueCone%d_%d" % (tag, i, int(sgn))))
+        # THE COPSES ARE GONE AND THE FIRST ATTEMPT TO KEEP THEM WAS WRONG.
+        # Moved to "the far station, where a way should end in leaves", they
+        # went to i == 6 -- and station 6 is `reach + 9900` uu back along the
+        # approach, which is the end nearest the ORIGIN, not the landmark. On
+        # a district at 150 m that lands two thousand uu from the plaza. The
+        # census said so at once: RearWorldCam10 appeared in the veg-roofed
+        # list at 74% held by `LMWaterGardens_SpurTree6`, and PathCam02 --
+        # inside the arrival corridor -- fell from 80.8% built to 60.8%. I had
+        # moved fourteen copses toward the cameras.
+        #
+        # They are not re-sited, they are dropped. The avenue is planting: a
+        # cypress at every odd station either side is 42 trees per way where
+        # the copses were 8, and none of them is 8 m across.
         if i % 3 == 2:
             for sgn in (1.0, -1.0):
                 out += _ground_patch(sx + px * sgn * 1500.0, sy + py * sgn * 1500.0, 0,
