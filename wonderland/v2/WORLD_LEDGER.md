@@ -2444,3 +2444,34 @@ holding a third of the ceiling.
 **Run `framescape.py` before and after every composition change.** Three
 separate fixes this session were measured at one camera and moved the problem
 to another.
+
+## PASS 38 (`385c1ff`) -- a frame edge is not a lid
+
+`_cam_foreground` plants the two garden cameras' near field "low at the centre
+and taller at the edges, so it frames the composition instead of blocking it".
+The intent was right and the arithmetic never checked the top of the frame: a
+`canopy_medium` at s 1.15 on z 780 tops 10.7 m, eight metres from a 2.0 m eye,
+and a 90 deg fov at 16:9 puts the picture's top edge at +26.2 deg -- 6.1 m of
+height at that distance. Everything above it was outside the frame and
+everything below was the frame. Crown top is 620 uu now against the 608 the
+edge cuts.
+
+And the right garden's tree, the move PASS 32 made on the left one for HeroCam0
+and never made on its mirror. It had a cost worth naming BEFORE paying: from
+HeroCam0 that tree sits at -43.8 deg, on the frame's right edge, where the
+reference carries its heavy foliage. Measured rather than assumed -- HeroCam0
+did not move at all, because `ClockTree` already holds that edge and this tree
+was behind it.
+
+    GardenRight05  15.0% -> 29.2%    GardenLeft04  35.8% -> 40.0%
+    mean built share, 33 cameras:  67.2% -> 67.8%   (reference 71.5%)
+
+TWO FRAMES WERE LOOKED AT AND NOT CHANGED. `GroveRoadCam18` is roofed by
+`Q03_grove_Giant_Cap` at 25 m -- a giant mushroom cap over a grove road in the
+Mushroom Grove district is that district's identity, and 71.5% is the number
+for a frame looking at the city, not for every frame. And `ClockQuarterCam13`
+is held by `mushroom_landmark`, which is **1,743 uu tall at scale 1 against
+`tower_clock`'s 1,190**: a district's fungus out-tops its clock tower before
+either is scaled. That is a RECIPE hierarchy defect, not a placement one, and
+it is the next real question -- check the mushroom recipes against
+`tower_clock` and `tower_district` before moving anything.

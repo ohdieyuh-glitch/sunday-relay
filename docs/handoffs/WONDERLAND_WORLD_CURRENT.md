@@ -10,7 +10,7 @@ session.
 | CHECKOUT | `/home/thomasajvt13/dev/sunday-relay` (git worktree; the primary checkout is `sunday-relay-main`, detached at `b2dc9f2`, and is the Julius/platform stream) |
 | BRANCH | `relay/wonderland-v2` |
 | SHA AT START | `d9245bf` |
-| SHA AT END | `f67a9f0` (pushed). `git log --oneline -11` walks PASS 30-37: 993385e, e3952ae, 9655bad, 200aeff, 9086b78, 09b5349, 28c4d30, 0250fa2, 6738435, b43de04, f67a9f0. |
+| SHA AT END | `385c1ff` (pushed). `git log --oneline -12` walks PASS 30-38: 993385e, e3952ae, 9655bad, 200aeff, 9086b78, 09b5349, 28c4d30, 0250fa2, 6738435, b43de04, f67a9f0, b2f0d54, 385c1ff. |
 | LOCK | `wonderland/.gauntlet-lock` = `writer=claude step=0 since=2026-08-25`. Unchanged. `gauntlet-check.py` clean on every commit. |
 | MAP | `/Game/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2` (classic container) |
 | RENDERED THIS SESSION | **Nothing.** No engine, no Studio, no GPU frame. Every number below is offline, measured off `layout_v2.ALL` and the built meshkit geometry. |
@@ -331,7 +331,7 @@ nudging a floating prop upward, and that is benchmark-gaming, not world-building
 
 ---
 
-## PASS 34-37 — the world measured from all thirty-three cameras
+## PASS 34-38 — the world measured from all thirty-three cameras
 
 **Everything before PASS 34 was measured at HeroCam0.** The suite exists so
 the world is judged as a world; `tools/framescape.py` is the instrument that
@@ -345,14 +345,14 @@ finally asks it. Two modes:
 
 ### The headline
 
-| | PASS 33 | PASS 37 |
+| | PASS 33 | PASS 38 |
 |---|---|---|
-| mean built share of the ceiling, 33 cameras | **56.6%** | **67.2%** |
+| mean built share of the ceiling, 33 cameras | **56.6%** | **67.8%** |
 | frames more than half roofed by vegetation | 11 | **9** |
 | pieces taking >14% of a frame from inside 40 m | 44 | see below |
 | route | 190 legs / 2,306 m | **179 legs / 2,123 m** |
 
-The reference is 71.5%. The world went from 56.6 to 67.2 and the walking tour
+The reference is 71.5%. The world went from 56.6 to 67.8 and the walking tour
 got *shorter*.
 
 ### PASS 34 (`0250fa2`) — the instrument, and a regression of mine
@@ -423,6 +423,32 @@ terminating an avenue with nothing in it.
     TeaTerraceCam16   12.5% -> 50.0%      RearWorldCam10   45.8% -> 61.7%
     MushroomGrove14   30.8% -> 40.8%      ReverseCam03     39.2% -> 45.0%
 
+### PASS 38 (`385c1ff`) — a frame edge is not a lid
+
+`_cam_foreground` plants the two garden cameras' near field "low at the centre
+and taller at the edges". The intent was right and the arithmetic never
+checked the top of the frame: it stood a `canopy_medium` topping **10.7 m only
+8.3 m from a 2.0 m eye**, when a 90° fov at 16:9 puts the picture's top edge at
++26.2° — 6.1 m of height at that distance. Everything above was outside the
+frame; everything below was the frame. The piece meant to frame a corner was
+roofing the shot.
+
+Also the right garden's tree, the move PASS 32 made on the left one for
+HeroCam0 and never made on its mirror. It had a cost worth naming first — from
+HeroCam0 that tree sits at −43.8°, where the reference carries its heavy
+foliage — so it was measured rather than assumed, and **HeroCam0 did not move
+at all**, because `ClockTree` already holds that edge.
+
+    GardenRight05   15.0% -> 29.2%      GardenLeft04   35.8% -> 40.0%
+
+**Two frames were looked at and deliberately not changed.** `GroveRoadCam18`
+is roofed by a giant mushroom cap over a grove road in the Mushroom Grove
+district — that is the district's identity, and 71.5% is the number for a
+frame looking at the city, not for every frame. `ClockQuarterCam13` is held by
+`mushroom_landmark`, **1,743 uu tall at scale 1 against `tower_clock`'s
+1,190** — a real finding about the recipe hierarchy, and a bigger question
+than that pass should absorb.
+
 ---
 
 ## OFFLINE VERIFIED vs VISUALLY PROVEN
@@ -462,12 +488,14 @@ luminance 81 vs **120**, p10 23 vs **43**, ground row dark 11.7/19.5/42.4% vs
 judgement in that history (the right side reading "excessively dark" is what
 caused the hemisphere lift). It needs a render in the loop.
 
-**2. Nine frames are still more than half roofed by vegetation**, worst
-`GardenRight05` 15.0%, `ClockQuarterCam13` 18.3%, `GroveRoadCam18` 21.7%.
-`GardenRight05`'s ceiling is `Garden_R_Tree_Canopy0` — the mirror of the tree
-PASS 32 moved for HeroCam0, never moved for its own camera.
-`ClockQuarterCam13`'s is `FlankL_NearMush_Landmark`, a giant mushroom at 33 m.
-Grove and mushroom cameras being green is correct; these three are not those.
+**2. A recipe-hierarchy defect: `mushroom_landmark` is 1,743 uu tall at scale
+1 and `tower_clock` is 1,190.** A district's fungus out-tops its clock tower
+before either is scaled, which is why `ClockQuarterCam13` is 18.3% built and
+held by a mushroom at 33 m while its city stands at 171 m. This is the honest
+version of "nine frames are still veg-roofed": three of those nine
+(`GroveRoadCam18`, `MushroomGroveCam14`, and arguably `GardenRight05`) are
+garden and grove cameras where green is correct, and the ones that are wrong
+are wrong for this reason.
 
 **3. The 180–360 m band is the thinnest part of the world's silhouette** —
 tops at +7.9° and +5.6°, against +14.0° nearer and +13.2° in the backdrop.
@@ -489,8 +517,11 @@ ceiling holders are `ClockTree_Canopy0` and the `ApproachSide` canopies.
    shadowless fill budget until the ground row reaches roughly the reference's
    12/20/42%. One light at a time — this project has broken shade three times
    by moving two knobs at once.
-3. Then mismatch 2 (`Garden_R_Tree` for its own camera, the same move PASS 32
-   made at HeroCam0), then mismatch 4.
+3. Then mismatch 2 — the mushroom/clock-tower height inversion. Note this is
+   a RECIPE question, not a placement one: check `mushroom_landmark` and
+   `mushroom_giant` against `tower_clock` and `tower_district` before moving
+   anything, because a district whose identity is fungus should still not
+   out-top the architecture that names it.
 4. **Run `framescape.py` before and after every composition change from now
    on.** Three separate fixes this session were measured at one camera and
    moved the problem to another; the census is the cheapest way to not do that
