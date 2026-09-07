@@ -795,7 +795,7 @@ mission moves the world.**
 **A. Starting SHA** — `b2dc9f2` (`origin/main`, unchanged throughout; this
 stream never merged into or from `relay/wonderland-v2`).
 
-**B. Ending SHA** — `2a3fbd8` on `relay/wonderland-integration`, pushed to both
+**B. Ending SHA** — `defe621` on `relay/wonderland-integration`, pushed to both
 that ref and `claude/relay-wonderland-integration-ojr5x6` (same commits).
 
 **C. Integration layers completed** — fourteen, listed under "What was built":
@@ -847,11 +847,13 @@ synthesised.
 **J. Still simulated** — every event any test or demo folds. The HUD no longer
 draws simulated numbers on any production path; it draws `UNKNOWN`.
 
-**K. Tests and evidence** — 595 passing across the wonderland slice and its
-boundary tests, 0 failed, 0 skipped; plus the repository boundary scanner, the
-core boundary test, the Julius harness drift gate and the C++ syntax check. Six
-deliberate mutations confirmed the important suites can actually fail. The full
-`npm test` run for the final commit is recorded below.
+**K. Tests and evidence** — 2,128 passing across the UI and wonderland slices; plus the repository boundary scanner, the
+core boundary test, the Julius harness drift gate and the C++ syntax check. Nine
+deliberate mutations confirmed the important suites can actually fail, and the
+HUD was rendered in headless Chromium and measured rather than assumed. Full
+`npm test` at the final SHA: **9,709 passing, 1 failing** — the pre-existing
+floating-promise race in `executor-repair-regression.test.ts`, in a subtree this
+stream does not touch.
 
 **L. The next five gaps** — in order:
 
