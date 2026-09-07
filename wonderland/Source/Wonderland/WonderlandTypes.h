@@ -434,11 +434,16 @@ enum class EWonderlandTerminalProvenance : uint8
 	LiveProvider
 };
 
-/* --------------------------------------------- the link (C++ only) */
+/* ------------------------------------------------------ the link */
 
 // The client's relationship to the Bridge, kept strictly separate from world
-// content. Relay does not model the client's socket, so there is nothing here to
-// mirror and the parity test records this enum as C++-only.
+// content.
+//
+// THIS USED TO SAY "C++ ONLY". It carried the note that Relay does not model the
+// client's socket, so there was nothing to mirror — and that stopped being true
+// when src/relay/mission/wonderland/wonderland-bridge.ts was written. These six
+// states are now Relay's WonderlandLinkState, member for member, and the parity
+// test holds them together; the C++-only allowlist entry is gone.
 //
 // Stale keeps the last snapshot and the world must DIM: it never pretends a dead
 // link is a live one, and it never blanks the world either, because "we lost

@@ -102,8 +102,6 @@ const CPP_ONLY_STRUCTS: Readonly<Record<string, string>> = {
     'carries a nullable number. Unreal numerics cannot be null, so absence needs its own flag.',
   FWonderlandFlag:
     'carries a nullable boolean. false is an answer; this struct can say there was none.',
-  FWonderlandLinkStatus:
-    'the client\'s relationship to the Bridge. Transport state, not world content — Relay never sends it, so it has no projection field.',
   FWonderlandDogProportions:
     'the identity constants a renderer needs at build time. Read back from the skin, never authored in C++.',
   FWonderlandHubZone:
@@ -114,8 +112,6 @@ const CPP_ONLY_STRUCTS: Readonly<Record<string, string>> = {
  * C++ enums with no TypeScript counterpart.
  */
 const CPP_ONLY_ENUMS: Readonly<Record<string, string>> = {
-  EWonderlandLinkState:
-    'pairing/expiry/refusal states of the Bridge link. Relay does not model the client\'s socket, so there is nothing to mirror.',
   EWonderlandHubZoneKind:
     'hub-level authoring vocabulary. Purely presentational, and deliberately not part of the contract.',
 };

@@ -34,6 +34,11 @@ import {
   WONDERLAND_USAGE_VIEWPORT_FIELDS,
 } from './wonderland-usage-meter';
 import {
+  WONDERLAND_LINK_STATES,
+  WONDERLAND_LINK_STATUS_FIELDS,
+} from './wonderland-bridge';
+import type { WonderlandLinkStatus } from './wonderland-bridge';
+import {
   WONDERLAND_USAGE_AUTHORITY_STATUS_FIELDS,
   WONDERLAND_USAGE_READINGS,
 } from './wonderland-usage-authority';
@@ -99,6 +104,13 @@ const _JuliusEmbodimentNullableIsExact: SameKeys<
   NullableKeysOf<JuliusEmbodiment>
 > = true;
 void _JuliusEmbodimentNullableIsExact;
+
+const LINK_STATUS_NULLABLE = ['lastSnapshotAtIso'] as const;
+const _LinkStatusNullableIsExact: SameKeys<
+  (typeof LINK_STATUS_NULLABLE)[number],
+  NullableKeysOf<WonderlandLinkStatus>
+> = true;
+void _LinkStatusNullableIsExact;
 
 const AUTHORITY_STATUS_NULLABLE = ['reason', 'ageSeconds', 'authorityId'] as const;
 const _AuthorityStatusNullableIsExact: SameKeys<
@@ -186,6 +198,21 @@ export const WONDERLAND_INTEGRATION_CPP_STRUCT_PARITY: readonly {
     fields: WONDERLAND_USAGE_METER_FIELDS,
   },
   {
+    /**
+     * THE LINK MOVES OUT OF THE C++-ONLY ALLOWLIST HERE.
+     *
+     * `WonderlandTypes.h` has carried this struct since the world module was
+     * written, under a comment saying "Relay does not model the client's socket,
+     * so there is nothing here to mirror". `wonderland-bridge.ts` is that model,
+     * so the record is no longer true and the allowlist entry is gone — which
+     * the parity test enforces from the other side too: an allowlist naming
+     * something now mirrored fails just as loudly as a missing mirror.
+     */
+    cppStruct: 'FWonderlandLinkStatus',
+    tsInterface: 'WonderlandLinkStatus',
+    fields: WONDERLAND_LINK_STATUS_FIELDS,
+  },
+  {
     cppStruct: 'FWonderlandUsageAuthorityStatus',
     tsInterface: 'WonderlandUsageAuthorityStatus',
     fields: WONDERLAND_USAGE_AUTHORITY_STATUS_FIELDS,
@@ -247,6 +274,13 @@ export const WONDERLAND_INTEGRATION_CPP_ENUM_PARITY: readonly {
     zeroMember: 'top_left',
   },
   {
+    cppEnum: 'EWonderlandLinkState',
+    source: 'WONDERLAND_LINK_STATES',
+    members: WONDERLAND_LINK_STATES,
+    nullable: false,
+    zeroMember: 'never_connected',
+  },
+  {
     cppEnum: 'EWonderlandUsageReading',
     source: 'WONDERLAND_USAGE_READINGS',
     members: WONDERLAND_USAGE_READINGS,
@@ -275,6 +309,7 @@ export const WONDERLAND_INTEGRATION_NULLABLE_FIELDS: Readonly<
 > = Object.freeze({
   FWonderlandJuliusEmbodiment: JULIUS_EMBODIMENT_NULLABLE,
   FWonderlandUsageChannelStyle: CHANNEL_STYLE_NULLABLE,
+  FWonderlandLinkStatus: LINK_STATUS_NULLABLE,
   FWonderlandUsageAuthorityStatus: AUTHORITY_STATUS_NULLABLE,
   FWonderlandUsageViewport: USAGE_VIEWPORT_NULLABLE,
   FWonderlandSwooshSegment: SWOOSH_SEGMENT_NULLABLE,
