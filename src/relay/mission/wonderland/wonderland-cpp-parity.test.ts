@@ -8,14 +8,45 @@ import {
   OFFICIAL_RELAY_DOG_WIDTH,
 } from '../../shared/official-relay-dog-sprite';
 import {
-  WONDERLAND_CPP_ENUM_PARITY,
+  WONDERLAND_CPP_ENUM_PARITY as WONDERLAND_DOCUMENT_CPP_ENUM_PARITY,
   WONDERLAND_CPP_NULLABLE_CARRIERS,
-  WONDERLAND_CPP_STRUCT_PARITY,
+  WONDERLAND_CPP_STRUCT_PARITY as WONDERLAND_DOCUMENT_CPP_STRUCT_PARITY,
   WONDERLAND_CPP_UNOBSERVED_MEMBER,
   WONDERLAND_DOG_MOTIONS,
   WONDERLAND_MOTION_ANIMATION,
-  WONDERLAND_NULLABLE_FIELDS,
+  WONDERLAND_NULLABLE_FIELDS as WONDERLAND_DOCUMENT_NULLABLE_FIELDS,
 } from './wonderland-contracts';
+import {
+  WONDERLAND_INTEGRATION_CPP_ENUM_PARITY,
+  WONDERLAND_INTEGRATION_CPP_STRUCT_PARITY,
+  WONDERLAND_INTEGRATION_NULLABLE_FIELDS,
+} from './wonderland-integration-parity';
+
+/**
+ * THE PARITY TABLE IS THE UNION OF TWO HALVES, AND EVERY CHECK BELOW APPLIES TO
+ * THE WHOLE OF IT.
+ *
+ * The world DOCUMENT's records live in `wonderland-contracts.ts`; the
+ * INTEGRATION layer's — Julius's embodied state and the usage meter — live in
+ * `wonderland-integration-parity.ts`, because the contracts module supplies
+ * `exactKeys` to those modules and a table there would have to import back from
+ * them. Merging here rather than at either source keeps that cycle out of the
+ * product code while leaving the guarantee unchanged: a header struct or enum
+ * absent from the union still fails, and a record naming something the headers
+ * do not declare still fails.
+ */
+const WONDERLAND_CPP_STRUCT_PARITY = [
+  ...WONDERLAND_DOCUMENT_CPP_STRUCT_PARITY,
+  ...WONDERLAND_INTEGRATION_CPP_STRUCT_PARITY,
+];
+const WONDERLAND_CPP_ENUM_PARITY = [
+  ...WONDERLAND_DOCUMENT_CPP_ENUM_PARITY,
+  ...WONDERLAND_INTEGRATION_CPP_ENUM_PARITY,
+];
+const WONDERLAND_NULLABLE_FIELDS: Readonly<Record<string, readonly string[]>> = Object.freeze({
+  ...WONDERLAND_DOCUMENT_NULLABLE_FIELDS,
+  ...WONDERLAND_INTEGRATION_NULLABLE_FIELDS,
+});
 
 /**
  * WONDERLAND — TypeScript ↔ C++ parity.

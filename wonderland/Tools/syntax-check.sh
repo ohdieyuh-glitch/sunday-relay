@@ -22,7 +22,33 @@ STUBS="$HERE/SyntaxStubs"
 # unit:max-known-stub-errors. 0 means it parses clean today.
 BASELINE="WonderlandDogAnimation.cpp:0 WonderlandModule.cpp:0 WonderlandHubGameMode.cpp:0 WonderlandDogPawn.cpp:5"
 
+# HEADERS ARE CHECKED TOO, STANDALONE, and that gap cost a whole layer.
+#
+# Only four .cpp files exist; every other declaration in this module is
+# header-only, and a header no translation unit includes was never parsed by
+# anything. `WonderlandJuliusState.h` and `WonderlandUsageHud.h` are exactly
+# that shape — the C++ side of the Julius/HUD seam, with no .cpp yet — so a
+# malformed one would have passed this script silently.
+#
+# A header is checked with `-x c++` so g++ treats it as a unit rather than
+# precompiling it. Each carries its own baseline for the same reason a .cpp
+# does: WonderlandHubLevel.h uses UDataAsset, which the stubs do not model.
+HEADER_BASELINE="RelayWorldState.h:0 WonderlandTypes.h:0 WonderlandDogAnimation.h:0 WonderlandDogPawn.h:0 WonderlandHubGameMode.h:0 WonderlandHubLevel.h:2 WonderlandJuliusState.h:0 WonderlandUsageHud.h:0"
+
 status=0
+
+for entry in $HEADER_BASELINE; do
+  unit="${entry%%:*}"; allowed="${entry##*:}"
+  n=$(g++ -fsyntax-only -std=c++17 -x c++ -I"$STUBS" -I"$SRC" "$SRC/$unit" 2>&1 | grep -c "error:" || true)
+  if [ "$n" -gt "$allowed" ]; then
+    echo "FAIL $unit: $n errors (baseline $allowed) — a real regression or a new engine symbol needing a stub"
+    g++ -fsyntax-only -std=c++17 -x c++ -I"$STUBS" -I"$SRC" "$SRC/$unit" 2>&1 | grep "error:" | head -4
+    status=1
+  else
+    echo "ok   $unit: $n errors (baseline $allowed)"
+  fi
+done
+
 for entry in $BASELINE; do
   unit="${entry%%:*}"; allowed="${entry##*:}"
   n=$(g++ -fsyntax-only -std=c++17 -I"$STUBS" -I"$SRC" "$SRC/$unit" 2>&1 | grep -c "error:" || true)
