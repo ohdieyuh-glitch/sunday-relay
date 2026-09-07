@@ -59,11 +59,11 @@ export interface WonderlandDiagnostics {
   readonly reconnectAttempts: number;
 
   /* the cursor */
-  readonly lastAcceptedSequence: number;
-  readonly lastAcceptedRevision: number;
+  readonly lastAppliedSequence: number;
+  readonly lastAppliedRevision: number;
   readonly revisionFromSnapshot: boolean;
-  readonly lastAcceptedAtIso: string | null;
-  readonly eventsAccepted: number;
+  readonly lastAppliedAtIso: string | null;
+  readonly eventsApplied: number;
 
   /* what was thrown away, by kind */
   readonly duplicatesRejected: number;
@@ -105,11 +105,11 @@ export const WONDERLAND_DIAGNOSTICS_FIELDS = exactKeys<WonderlandDiagnostics>()(
   'linkState',
   'lastSnapshotAtIso',
   'reconnectAttempts',
-  'lastAcceptedSequence',
-  'lastAcceptedRevision',
+  'lastAppliedSequence',
+  'lastAppliedRevision',
   'revisionFromSnapshot',
-  'lastAcceptedAtIso',
-  'eventsAccepted',
+  'lastAppliedAtIso',
+  'eventsApplied',
   'duplicatesRejected',
   'staleSequencesRejected',
   'staleRevisionsRejected',
@@ -176,11 +176,11 @@ export function projectWonderlandDiagnostics(input: {
     lastSnapshotAtIso: input.link.lastSnapshotAtIso,
     reconnectAttempts: input.reconnectAttempts,
 
-    lastAcceptedSequence: c.sequence,
-    lastAcceptedRevision: c.revision,
+    lastAppliedSequence: c.sequence,
+    lastAppliedRevision: c.revision,
     revisionFromSnapshot: c.revisionFromSnapshot,
-    lastAcceptedAtIso: c.lastAcceptedAtIso,
-    eventsAccepted: c.accepted,
+    lastAppliedAtIso: c.lastAppliedAtIso,
+    eventsApplied: c.applied,
 
     duplicatesRejected: c.duplicates,
     staleSequencesRejected: c.staleSequences,

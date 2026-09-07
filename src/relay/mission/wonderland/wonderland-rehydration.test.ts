@@ -146,7 +146,7 @@ describe('adopting a snapshot', () => {
     // that were never seen.
     const recovery = adoptWonderlandSnapshot(fresh(), snapshot('EXECUTING', 7));
     expect(recovery.cursor.sequence).toBe(0);
-    expect(recovery.cursor.accepted).toBe(0);
+    expect(recovery.cursor.applied).toBe(0);
   });
 
   it('binds the run and instance it names', () => {

@@ -36,6 +36,19 @@ import {
 } from './wonderland-entry';
 import type { WonderlandEntry, WonderlandRendererOffer } from './wonderland-entry';
 import {
+  WONDERLAND_ENVELOPE_FIELDS,
+  WONDERLAND_WORKER_ROLES,
+} from './wonderland-envelope';
+import type { WonderlandEnvelope } from './wonderland-envelope';
+import {
+  WONDERLAND_CURSOR_FIELDS,
+  WONDERLAND_ORDERING_VERDICTS,
+} from './wonderland-ordering';
+import type { WonderlandCursor } from './wonderland-ordering';
+import { WONDERLAND_RUN_SNAPSHOT_FIELDS } from './wonderland-rehydration';
+import type { WonderlandRunSnapshot } from './wonderland-rehydration';
+import { WONDERLAND_USAGE_ATTRIBUTIONS } from './wonderland-usage-accounting';
+import {
   WONDERLAND_HUD_ANCHORS,
   WONDERLAND_SWOOSH_SEGMENT_FIELDS,
   WONDERLAND_USAGE_CHANNELS,
@@ -117,6 +130,40 @@ const _JuliusEmbodimentNullableIsExact: SameKeys<
   NullableKeysOf<JuliusEmbodiment>
 > = true;
 void _JuliusEmbodimentNullableIsExact;
+
+const ENVELOPE_NULLABLE = [
+  'worldSessionId',
+  'juliusInstanceId',
+  'missionId',
+  'runId',
+  'taskId',
+  'workerRole',
+  'sourceState',
+] as const;
+const _EnvelopeNullableIsExact: SameKeys<
+  (typeof ENVELOPE_NULLABLE)[number],
+  NullableKeysOf<WonderlandEnvelope>
+> = true;
+void _EnvelopeNullableIsExact;
+
+const CURSOR_NULLABLE = ['juliusInstanceId', 'runId', 'lastEventId', 'lastAppliedAtIso'] as const;
+const _CursorNullableIsExact: SameKeys<
+  (typeof CURSOR_NULLABLE)[number],
+  NullableKeysOf<WonderlandCursor>
+> = true;
+void _CursorNullableIsExact;
+
+const RUN_SNAPSHOT_NULLABLE = [
+  'juliusInstanceId',
+  'missionId',
+  'activeTasks',
+  'pendingApprovals',
+] as const;
+const _RunSnapshotNullableIsExact: SameKeys<
+  (typeof RUN_SNAPSHOT_NULLABLE)[number],
+  NullableKeysOf<WonderlandRunSnapshot>
+> = true;
+void _RunSnapshotNullableIsExact;
 
 const ENTRY_NULLABLE = [
   'admissionReason',
@@ -213,6 +260,21 @@ export const WONDERLAND_INTEGRATION_CPP_STRUCT_PARITY: readonly {
     cppStruct: 'FWonderlandJuliusEmbodiment',
     tsInterface: 'JuliusEmbodiment',
     fields: JULIUS_EMBODIMENT_FIELDS,
+  },
+  {
+    cppStruct: 'FWonderlandEnvelope',
+    tsInterface: 'WonderlandEnvelope',
+    fields: WONDERLAND_ENVELOPE_FIELDS,
+  },
+  {
+    cppStruct: 'FWonderlandCursor',
+    tsInterface: 'WonderlandCursor',
+    fields: WONDERLAND_CURSOR_FIELDS,
+  },
+  {
+    cppStruct: 'FWonderlandRunSnapshot',
+    tsInterface: 'WonderlandRunSnapshot',
+    fields: WONDERLAND_RUN_SNAPSHOT_FIELDS,
   },
   {
     cppStruct: 'FWonderlandEntry',
@@ -333,6 +395,32 @@ export const WONDERLAND_INTEGRATION_CPP_ENUM_PARITY: readonly {
     zeroMember: 'hold',
   },
   {
+    /**
+     * NULLABLE, and the absence is not a slot. Attributing unlabelled work to
+     * the Coding Agent would put it on the wrong instrument, so a role that did
+     * not travel is `Unobserved` rather than a guess.
+     */
+    cppEnum: 'EWonderlandWorkerRole',
+    source: 'WONDERLAND_WORKER_ROLES',
+    members: WONDERLAND_WORKER_ROLES,
+    nullable: true,
+    zeroMember: 'Unobserved',
+  },
+  {
+    cppEnum: 'EWonderlandOrderingVerdict',
+    source: 'WONDERLAND_ORDERING_VERDICTS',
+    members: WONDERLAND_ORDERING_VERDICTS,
+    nullable: false,
+    zeroMember: 'applied',
+  },
+  {
+    cppEnum: 'EWonderlandUsageAttribution',
+    source: 'WONDERLAND_USAGE_ATTRIBUTIONS',
+    members: WONDERLAND_USAGE_ATTRIBUTIONS,
+    nullable: false,
+    zeroMember: 'unattributed',
+  },
+  {
     cppEnum: 'EWonderlandAdmission',
     source: 'WONDERLAND_ADMISSIONS',
     members: WONDERLAND_ADMISSIONS,
@@ -412,6 +500,9 @@ export const WONDERLAND_INTEGRATION_NULLABLE_FIELDS: Readonly<
   FWonderlandJuliusEmbodiment: JULIUS_EMBODIMENT_NULLABLE,
   FWonderlandAnimationPlan: ANIMATION_PLAN_NULLABLE,
   FWonderlandEntry: ENTRY_NULLABLE,
+  FWonderlandEnvelope: ENVELOPE_NULLABLE,
+  FWonderlandCursor: CURSOR_NULLABLE,
+  FWonderlandRunSnapshot: RUN_SNAPSHOT_NULLABLE,
   FWonderlandRendererOffer: RENDERER_OFFER_NULLABLE,
   FWonderlandUsageChannelStyle: CHANNEL_STYLE_NULLABLE,
   FWonderlandLinkStatus: LINK_STATUS_NULLABLE,

@@ -785,6 +785,11 @@ const AUTHORITY_WORDS = /approv|authoriz|decision|granted|allow|permit|consent|c
 const RELAY_OWNED_AUTHORITY_FIELDS: readonly { readonly field: string; readonly reason: string }[] = [
   { field: 'verdict', reason: "the Reviewer's verdict, which Relay owns and Wonderland only displays" },
   { field: 'authority', reason: 'the constant `relay_decides` — it says who decides, which is the opposite of claiming to' },
+  {
+    field: 'pendingApprovals',
+    reason:
+      "Julius's own count of human gates it is waiting on, read from `JuliusRunView` and carried so a world can show that a person is being waited for. It is a number Relay observes, never one Wonderland issues — there is no shape this field could take that would let the world approve anything",
+  },
 ];
 
 describe('nothing on either side of the seam can express "Wonderland approved this"', () => {

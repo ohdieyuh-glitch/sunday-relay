@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <string>
 #include <vector>
+#include <map>
 #include <cmath>
 #define UCLASS(...)
 #define USTRUCT(...)
@@ -20,7 +21,7 @@
 #define WONDERLAND_API
 using int64 = std::int64_t; using uint64 = std::uint64_t; using int16 = std::int16_t; using uint16 = std::uint16_t;
 using uint8 = std::uint8_t; using int32 = std::int32_t; using uint32 = std::uint32_t;
-struct FString { FString(){} FString(const char*){} };
+struct FString { FString(){} FString(const char*){} bool operator<(const FString&) const { return false; } };
 struct FName { FName(){} FName(const char*){} };
 struct FText {};
 template<typename T> struct TArray { std::vector<T> v;
@@ -28,6 +29,11 @@ template<typename T> struct TArray { std::vector<T> v;
   T& operator[](int32 i){ return v[(size_t)i]; } const T& operator[](int32 i) const { return v[(size_t)i]; }
   T* begin(){return v.data();} T* end(){return v.data()+v.size();}
   const T* begin() const {return v.data();} const T* end() const {return v.data()+v.size();} };
+template<typename K, typename V> struct TMap { std::map<K,V> m;
+  int32 Num() const { return (int32)m.size(); } void Add(const K& k, const V& v){ m[k]=v; }
+  V* Find(const K& k){ auto it=m.find(k); return it==m.end()?nullptr:&it->second; }
+  auto begin(){return m.begin();} auto end(){return m.end();}
+  auto begin() const {return m.begin();} auto end() const {return m.end();} };
 struct FVector { double X=0,Y=0,Z=0; FVector(){} explicit FVector(double u):X(u),Y(u),Z(u){} FVector(double a,double b,double c):X(a),Y(b),Z(c){}
   FVector operator*(double s) const { return FVector(X*s,Y*s,Z*s); }
   FVector operator+(const FVector& o) const { return FVector(X+o.X,Y+o.Y,Z+o.Z); } };

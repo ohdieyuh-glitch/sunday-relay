@@ -179,7 +179,7 @@ export function wonderlandSnapshotVerdict(
   if (cursor.runId !== null && snapshot.runId !== cursor.runId) return 'foreign_run';
   if (!Number.isSafeInteger(snapshot.revision) || snapshot.revision < 0) return 'malformed';
   if (snapshot.runId.length === 0) return 'malformed';
-  if (cursor.accepted > 0 && snapshot.revision <= cursor.revision) return 'stale_revision';
+  if (cursor.applied > 0 && snapshot.revision <= cursor.revision) return 'stale_revision';
   return 'adopted';
 }
 
@@ -228,7 +228,7 @@ export function adoptWonderlandSnapshot(
       revision: Math.max(cursor.revision, snapshot.revision),
       // The row is strictly newer than any event of its own generation.
       revisionFromSnapshot: true,
-      lastAcceptedAtIso: snapshot.observedAtIso,
+      lastAppliedAtIso: snapshot.observedAtIso,
     }),
     verdict,
     visualState: JULIUS_RUN_STATE_VISUAL_STATE[snapshot.state],
@@ -298,7 +298,7 @@ export function rehydrateWonderland(input: {
     const step = applyWonderlandOrdering(cursor, envelope);
     cursor = step.cursor;
     verdicts.push(step.verdict);
-    if (step.verdict === 'accepted') applied.push(envelope);
+    if (step.verdict === 'applied') applied.push(envelope);
   }
 
   return {

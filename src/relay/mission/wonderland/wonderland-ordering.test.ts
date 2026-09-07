@@ -56,7 +56,7 @@ describe('the cursor', () => {
     expect(c.revision).toBe(0);
     expect(c.runId).toBeNull();
     expect(c.lastEventId).toBeNull();
-    expect(c.accepted).toBe(0);
+    expect(c.applied).toBe(0);
     expect(Object.keys(c).sort()).toEqual([...WONDERLAND_CURSOR_FIELDS].sort());
   });
 
@@ -75,7 +75,7 @@ describe('the cursor', () => {
   });
 
   it('names exactly one verdict that changes what a world shows', () => {
-    expect([...WONDERLAND_APPLIED_VERDICTS]).toEqual(['accepted']);
+    expect([...WONDERLAND_APPLIED_VERDICTS]).toEqual(['applied']);
     expect(new Set(WONDERLAND_ORDERING_VERDICTS).size).toBe(WONDERLAND_ORDERING_VERDICTS.length);
   });
 });
@@ -131,10 +131,10 @@ describe('identity is checked before order', () => {
       event({ runId: 'run-b', sequence: 1, eventId: 'b1' }),
     ]);
     expect(a.sequence).toBe(3);
-    expect(a.accepted).toBe(3);
+    expect(a.applied).toBe(3);
     // Run B's sequence 1 is accepted even though run A has reached 3.
     expect(b.sequence).toBe(1);
-    expect(b.accepted).toBe(1);
+    expect(b.applied).toBe(1);
     expect(b.staleSequences).toBe(0);
   });
 });
@@ -148,14 +148,14 @@ describe('staleness, on both axes', () => {
     const { verdict, cursor: after } = applyWonderlandOrdering(c, first);
     expect(verdict).toBe('duplicate');
     expect(after.duplicates).toBe(1);
-    expect(after.accepted).toBe(1);
+    expect(after.applied).toBe(1);
   });
 
   it('refuses a sequence at or behind the cursor', () => {
     const c = fold(cursor(), [event({ sequence: 5 })]);
     expect(wonderlandOrderingVerdict(c, event({ sequence: 5, eventId: 'x' }))).toBe('stale_sequence');
     expect(wonderlandOrderingVerdict(c, event({ sequence: 4, eventId: 'y' }))).toBe('stale_sequence');
-    expect(wonderlandOrderingVerdict(c, event({ sequence: 6, eventId: 'z' }))).toBe('accepted');
+    expect(wonderlandOrderingVerdict(c, event({ sequence: 6, eventId: 'z' }))).toBe('applied');
   });
 
   it('refuses an older REVISION even when its sequence runs ahead', () => {
@@ -260,7 +260,7 @@ describe('a stale CODING event cannot overwrite COMPLETE', () => {
     expect(c.sequence).toBe(3);
     expect(c.revision).toBe(3);
     expect(c.lastEventId).toBe(finishing.eventId);
-    expect(c.accepted).toBe(3);
+    expect(c.applied).toBe(3);
   });
 });
 
@@ -294,7 +294,7 @@ describe('resuming', () => {
     const twice = fold(once, stream);
     expect(twice.sequence).toBe(once.sequence);
     expect(twice.revision).toBe(once.revision);
-    expect(twice.accepted).toBe(once.accepted);
+    expect(twice.applied).toBe(once.applied);
     // Every event of the second pass is refused, and visibly so. They land in
     // different buckets on purpose: the earlier two are behind the run's
     // revision, the last one merely repeats a sequence already applied.
@@ -318,7 +318,7 @@ describe('across every verdict', () => {
       event({ sequence: 1, eventId: 'old' }),
       event({ sequence: -3 }),
     ]);
-    expect(c.accepted).toBe(1);
+    expect(c.applied).toBe(1);
     const refused =
       c.duplicates +
       c.staleSequences +

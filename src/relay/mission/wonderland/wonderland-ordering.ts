@@ -53,7 +53,12 @@ export type WonderlandCursorSchemaVersion = typeof WONDERLAND_CURSOR_SCHEMA_V1;
  * fine; one `foreign_project` is a routing bug and is not.
  */
 export const WONDERLAND_ORDERING_VERDICTS = [
-  'accepted',
+  /**
+   * The event was APPLIED to the fold. Named for what happens rather than for
+   * a decision: "accepted" reads as approval, and nothing in this seam has the
+   * authority to approve anything — a point the parity sweep enforces.
+   */
+  'applied',
   /** The same event id, already applied. The wire retried. */
   'duplicate',
   /** In-order for its sender, behind our cursor. A stale connection. */
@@ -73,7 +78,7 @@ export type WonderlandOrderingVerdict = (typeof WONDERLAND_ORDERING_VERDICTS)[nu
 
 /** The verdicts that change what a world is showing. Exactly one. */
 export const WONDERLAND_APPLIED_VERDICTS: readonly WonderlandOrderingVerdict[] =
-  Object.freeze(['accepted']);
+  Object.freeze(['applied']);
 
 /* -------------------------------------------------------------- the cursor */
 
@@ -110,9 +115,9 @@ export interface WonderlandCursor {
   readonly revisionFromSnapshot: boolean;
   /** The last accepted event's id, so an immediate retry is a duplicate. */
   readonly lastEventId: string | null;
-  readonly lastAcceptedAtIso: string | null;
+  readonly lastAppliedAtIso: string | null;
   /** Accepted events, so "quiet" and "nothing ever arrived" are different. */
-  readonly accepted: number;
+  readonly applied: number;
   readonly duplicates: number;
   readonly staleSequences: number;
   readonly staleRevisions: number;
@@ -133,8 +138,8 @@ export const WONDERLAND_CURSOR_FIELDS = exactKeys<WonderlandCursor>()([
   'revision',
   'revisionFromSnapshot',
   'lastEventId',
-  'lastAcceptedAtIso',
-  'accepted',
+  'lastAppliedAtIso',
+  'applied',
   'duplicates',
   'staleSequences',
   'staleRevisions',
@@ -159,8 +164,8 @@ export function openWonderlandCursor(input: {
     revision: 0,
     revisionFromSnapshot: false,
     lastEventId: null,
-    lastAcceptedAtIso: null,
-    accepted: 0,
+    lastAppliedAtIso: null,
+    applied: 0,
     duplicates: 0,
     staleSequences: 0,
     staleRevisions: 0,
@@ -219,7 +224,7 @@ export function wonderlandOrderingVerdict(
 
   if (envelope.sequence <= cursor.sequence) return 'stale_sequence';
 
-  return 'accepted';
+  return 'applied';
 }
 
 /**
@@ -235,8 +240,8 @@ export function applyWonderlandOrdering(
 ): { readonly cursor: WonderlandCursor; readonly verdict: WonderlandOrderingVerdict } {
   const verdict = wonderlandOrderingVerdict(cursor, envelope);
 
-  if (verdict !== 'accepted') {
-    const counter: Readonly<Record<Exclude<WonderlandOrderingVerdict, 'accepted'>, keyof WonderlandCursor>> = {
+  if (verdict !== 'applied') {
+    const counter: Readonly<Record<Exclude<WonderlandOrderingVerdict, 'applied'>, keyof WonderlandCursor>> = {
       duplicate: 'duplicates',
       stale_sequence: 'staleSequences',
       stale_revision: 'staleRevisions',
@@ -271,8 +276,8 @@ export function applyWonderlandOrdering(
       // later events at that revision are peers again rather than history.
       revisionFromSnapshot: false,
       lastEventId: envelope.eventId,
-      lastAcceptedAtIso: envelope.occurredAt,
-      accepted: cursor.accepted + 1,
+      lastAppliedAtIso: envelope.occurredAt,
+      applied: cursor.applied + 1,
       gaps: cursor.gaps + (gapped ? 1 : 0),
     }),
   };

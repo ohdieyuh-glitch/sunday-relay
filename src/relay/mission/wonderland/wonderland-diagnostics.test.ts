@@ -92,8 +92,8 @@ describe('the shape', () => {
     expect(d.juliusInstanceId).toBe('julius-1');
     expect(d.runId).toBe('run-1');
     expect(d.visualState).toBe('coding');
-    expect(d.lastAcceptedSequence).toBe(1);
-    expect(d.lastAcceptedRevision).toBe(1);
+    expect(d.lastAppliedSequence).toBe(1);
+    expect(d.lastAppliedRevision).toBe(1);
     expect(d.linkState).toBe('live');
     expect(d.usageReading).toBe('not_reported');
     expect(d.entryAdmission).toBe('not_requested');
@@ -117,13 +117,13 @@ describe('what it says about a stream', () => {
     expect(d.foreignProjectsRejected).toBe(1);
     expect(d.foreignRunsRejected).toBe(1);
     expect(d.staleSequencesRejected + d.staleRevisionsRejected).toBe(1);
-    expect(d.eventsAccepted).toBe(1);
+    expect(d.eventsApplied).toBe(1);
   });
 
   it('counts a gap as degraded even when everything that arrived was accepted', () => {
     const d = project({ cursor: cursorWith([event({ sequence: 1 }), event({ sequence: 9 })]) });
     expect(d.sequenceGaps).toBe(1);
-    expect(d.eventsAccepted).toBe(2);
+    expect(d.eventsApplied).toBe(2);
     expect(d.degraded).toBe(true);
   });
 
