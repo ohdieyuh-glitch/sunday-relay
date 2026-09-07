@@ -856,7 +856,7 @@ mission moves the world.**
 **A. Starting SHA** — `b2dc9f2` (`origin/main`, unchanged throughout; this
 stream never merged into or from `relay/wonderland-v2`).
 
-**B. Ending SHA** — `8e76418` on `relay/wonderland-integration`, pushed to both
+**B. Ending SHA** — `e8a09ec` on `relay/wonderland-integration`, pushed to both
 that ref and `claude/relay-wonderland-integration-ojr5x6` (same commits).
 
 **C. Integration layers completed** — twenty-three, listed under "What was built":
@@ -912,9 +912,20 @@ draws simulated numbers on any production path; it draws `UNKNOWN`.
 core boundary test, the Julius harness drift gate and the C++ syntax check. Nine
 deliberate mutations confirmed the important suites can actually fail, and the
 HUD was rendered in headless Chromium and measured rather than assumed. Full
-`npm test` at the final SHA: **9,709 passing, 1 failing** — the pre-existing
-floating-promise race in `executor-repair-regression.test.ts`, in a subtree this
-stream does not touch.
+`npm test` at the final SHA: **9,877 passing, 1 failing across 514 files**.
+
+The failure is environmental and not this stream's:
+`claude-code.test.ts > classifies an API-key environment as disallowed` sets
+`ANTHROPIC_API_KEY` and expects `sourceClass === 'api_key'`, but this cloud
+sandbox has Anthropic **gateway** variables set, so the classifier correctly
+answers `gateway`. `git diff <base>..HEAD -- src/relay/connectors` is empty.
+
+An earlier full run in the same session failed one DIFFERENT test — a
+floating-promise race in `executor-repair-regression.test.ts`, which passes
+14/14 alone and only fails under parallel load. Both are pre-existing, both are
+in subtrees this stream does not touch, and the pair of them is worth knowing
+about: this suite has at least two failures that depend on the machine and the
+scheduler rather than on the code.
 
 **L. The next five gaps** — in order:
 
