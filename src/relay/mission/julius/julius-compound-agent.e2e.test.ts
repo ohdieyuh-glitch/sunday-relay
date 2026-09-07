@@ -190,12 +190,35 @@ describe('scenario 1 — a mission through three roles, a failed review and a re
     // SECRET entries are excluded by the compiler, so the key never travels.
     expect(text).not.toContain('sk-must-never-appear');
     // Provenance: every snapshot names the revisions it was compiled from.
+    //
+    // `projectBrainRevision` was pinned to the constant 3 here, and that was a
+    // true statement only for as long as NOTHING WROTE TO THE BRAIN. The run
+    // now records its own verification decisions, so a snapshot compiled after
+    // a decision really is compiled from a later revision, and a snapshot that
+    // still said 3 would be misreporting what it read. The property the line
+    // was reaching for is the one asserted instead: the revision starts at the
+    // seeded value, never goes backwards, and ends where the run's own counter
+    // ended — which the constant could not check and this does.
+    let previousBrainRevision = 0;
     for (const snapshot of contexts) {
       expect(snapshot.missionContractRevision).toBe(7);
-      expect(snapshot.projectBrainRevision).toBe(3);
+      expect(snapshot.projectBrainRevision,
+        'a snapshot cannot be compiled from a brain older than the seed').toBeGreaterThanOrEqual(3);
+      expect(snapshot.projectBrainRevision,
+        'and context provenance never moves backwards').toBeGreaterThanOrEqual(previousBrainRevision);
+      previousBrainRevision = snapshot.projectBrainRevision;
       expect(snapshot.cardRevision).toBe('card-r1');
       expect(snapshot.contentHash.startsWith('sha256:')).toBe(true);
     }
+    // A snapshot cannot have read a decision that had not been made when it was
+    // compiled, and the last task's decision is recorded AFTER the last context
+    // — so the final snapshot legitimately trails the counter. Bounded, not
+    // equal, is the true statement.
+    const finalRevision = (await harness.store.loadRun('run-1', 'prj-1'))?.projectBrainRevision ?? 0;
+    expect(previousBrainRevision,
+      'no snapshot may claim a revision the store never reached').toBeLessThanOrEqual(finalRevision);
+    expect(previousBrainRevision, 'and the run did write to its own brain before the last context').toBeGreaterThan(3);
+    expect(finalRevision, 'which the store agrees with').toBeGreaterThan(previousBrainRevision - 1);
   });
 
   it('leaves an operational ledger and a trajectory that agree about the run', async () => {

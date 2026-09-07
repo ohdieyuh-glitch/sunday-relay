@@ -942,6 +942,41 @@ async function verifyExecutedTask(input: {
     facts: { reasonCode: decision.reasonCode, criteriaMissing: action.criteriaMissing.length },
   });
 
+  /**
+   * WHAT THE RUN DECIDED, KEPT WHERE THE NEXT WORKER WILL READ IT.
+   *
+   * The Project Brain has been compiled into every worker's context since
+   * migration 014 and written to by exactly one thing — the bootstrap seed — so
+   * a run's own conclusions died with it. A verification decision is the first
+   * thing worth keeping: it is the record of why a task was accepted, halted or
+   * sent back, and a repair that cannot see that reasoning is a repair working
+   * from the same blindness that produced the finding.
+   *
+   * GUARDED BY THE DECISION'S OWN WRITE, not by a second idempotency key. The
+   * entry id is derived from exactly what `appendDecision` keys on, so the two
+   * agree by construction: a replayed tick writes neither, and the brain
+   * revision does not drift on retried ticks. `decisionRecorded` is false for a
+   * duplicate, and this is inside that guard for the same reason scheduling a
+   * repair is — the write that records a decision is the one that acts on it.
+   *
+   * The text is assembled from three closed values. `safeSummary` is already
+   * safe by contract, `action` and `reasonCode` are closed vocabularies, and no
+   * reviewer prose, diff or provider body reaches this row.
+   */
+  if (decisionRecorded) {
+    await deps.store.appendBrainEntry({
+      runId: run.runId,
+      projectId: run.projectId,
+      taskId: subject.taskId,
+      workerId: input.workerId,
+      entryId: `brain:decision:${subject.taskId}:${decision.action}:${decision.reasonCode}`,
+      kind: 'DECISION',
+      safeText: `${decision.action} (${decision.reasonCode}): ${decision.safeSummary}`,
+      evidenceIds: decision.evidenceIds,
+      occurredAt: deps.clock.now(),
+    });
+  }
+
   if (decision.action === 'REPAIR') {
     /**
      * ONE DECISION, ONE ROUND. `appendDecision` is idempotent by key, and a
