@@ -1,0 +1,95 @@
+/*
+ * WONDERLAND USAGE HUD — the top-left corner.
+ *
+ * NO COLOUR OF THE METER IS IN THIS FILE. Every stroke, track and highlight
+ * hue comes from `WONDERLAND_USAGE_CHANNEL_STYLE` through inline attributes,
+ * because Unreal draws the same HUD from the same struct and a hue that lived
+ * only here would be one Unreal had to guess at. What IS here is the chrome the
+ * two surfaces do not share: the page's own type, spacing and glass.
+ *
+ * `wh-` is the namespace. Nothing else in the repository uses it.
+ */
+
+.wh {
+  position: fixed;
+  top: clamp(0.75rem, 2vh, 1.5rem);
+  left: clamp(0.75rem, 2vw, 1.5rem);
+  z-index: 40;
+  width: clamp(230px, 24vw, 330px);
+  /* The HUD reports; it never intercepts. A world you cannot click through is
+     a world with a dead corner. */
+  pointer-events: none;
+  user-select: none;
+  font-family: 'Fira Code', ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.wh-canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+  filter: drop-shadow(0 6px 18px rgba(0, 0, 0, 0.55));
+}
+
+/* The unspent frame sits behind the fill and never animates: it is furniture,
+   and furniture that moved would read as a second signal. */
+.wh-track {
+  transition: none;
+}
+
+.wh-readout {
+  margin: -0.35rem 0 0;
+  display: grid;
+  gap: 0.15rem;
+}
+
+.wh-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  line-height: 1.15;
+}
+
+.wh-row dt {
+  margin: 0;
+  font-size: clamp(0.52rem, 1.05vw, 0.62rem);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  /* The label carries the channel's own hue, set inline from the contract. */
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.7);
+}
+
+.wh-row dd {
+  margin: 0;
+  font-size: clamp(0.6rem, 1.15vw, 0.72rem);
+  letter-spacing: 0.05em;
+  color: #eef4ff;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.7);
+}
+
+/* The two honesty lines. Deliberately plain text rather than an icon: a symbol
+   for "this is not real data" is a symbol somebody has to already know. */
+.wh-provenance,
+.wh-reason {
+  margin: 0.3rem 0 0;
+  font-size: clamp(0.46rem, 0.9vw, 0.55rem);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgba(233, 240, 255, 0.62);
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.7);
+}
+
+.wh-reason {
+  letter-spacing: 0.06em;
+  text-transform: none;
+  color: rgba(233, 240, 255, 0.5);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wh-fill,
+  .wh-head {
+    transition: none !important;
+  }
+}

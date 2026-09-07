@@ -15,6 +15,7 @@ import './ui/entry-home/relay-entry-home.css';
 import './ui/landing/relay-landing.css';
 import './ui/relay-experience/relay-experience.css';
 import './ui/relay-world/relay-world.css';
+import './ui/wonderland-hud/wonderland-hud.css';
 import './ui/project-workspace/relay-project-workspace.css';
 import './ui/project-settings/relay-project-settings.css';
 import './ui/chrome/relay-chrome.css';

@@ -164,12 +164,36 @@ export interface WonderlandUsageMeter {
   readonly capacityUnits: WonderlandFigure;
   readonly usedUnits: WonderlandFigure;
   readonly remainingUnits: WonderlandFigure;
-  /** The tier ceiling this HUD draws a full arc for. */
+  /**
+   * The tier ceiling this HUD draws a full arc for, IN THIS CHANNEL'S LADDER.
+   *
+   * Per channel, not per HUD. The two bars are different instruments with
+   * different shapes and different tier ladders, and sharing one ceiling would
+   * squash the smaller instrument into a stub of its own stroke — a single
+   * agent on its top tier would draw a quarter of a bar because a Compound
+   * Agent can buy more.
+   */
   readonly referenceCapacityUnits: WonderlandFigure;
   /** capacity / reference, clamped to 0..1. The meter's PHYSICAL LENGTH. */
   readonly capacitySpan: WonderlandFigure;
-  /** used / capacity, clamped to 0..1. How much of that length is spent. */
+  /** used / capacity, clamped to 0..1. How much of that length is SPENT. */
   readonly fillFraction: WonderlandFigure;
+  /**
+   * remaining / capacity, clamped to 0..1. How much is LEFT — and this is the
+   * one a renderer draws.
+   *
+   * BOTH EXIST BECAUSE A METER THAT DRAINS AND A NUMBER THAT COUNTS DOWN HAVE
+   * TO AGREE. Drawing `fillFraction` while printing what is left produced an
+   * untouched meter reading "480 / 480" beside an empty bar: the picture was
+   * measuring spend and the words were measuring remainder, and each was
+   * correct on its own. A usage meter drains, so the stroke is the remainder
+   * and the readout is the remainder.
+   *
+   * `fillFraction` stays, because "how much has been spent" is a real question
+   * and deriving it from its complement at three call sites is how the two
+   * drift apart again.
+   */
+  readonly remainingFraction: WonderlandFigure;
   readonly status: WonderlandUsageStatus;
   /** A sentence whenever the meter cannot show a real reading. */
   readonly unavailableReason: string | null;
@@ -192,6 +216,7 @@ export const WONDERLAND_USAGE_METER_FIELDS = exactKeys<WonderlandUsageMeter>()([
   'referenceCapacityUnits',
   'capacitySpan',
   'fillFraction',
+  'remainingFraction',
   'status',
   'unavailableReason',
   'provenance',
@@ -371,61 +396,102 @@ export const WONDERLAND_USAGE_CHANNEL_STYLE: Readonly<
  * the single easiest thing to get backwards and the easiest not to notice.
  */
 export const WONDERLAND_COMPOUND_SWOOSH: WonderlandUsageSwoosh = Object.freeze({
-  startX: 0.4348,
-  startY: 0.7616,
+  startX: 0.4675,
+  startY: 0.7107,
   segments: Object.freeze([
     Object.freeze({
-      control1X: 0.3371, control1Y: 0.8475,
-      control2X: 0.2037, control2Y: 0.8279,
-      endX: 0.1244, endY: 0.7161,
+      control1X: 0.3906, control1Y: 0.7831,
+      control2X: 0.2821, control2Y: 0.7955,
+      endX: 0.1937, endY: 0.7421,
     }),
     Object.freeze({
-      control1X: 0.0452, control1Y: 0.6043,
-      control2X: 0.0452, control2Y: 0.4357,
-      endX: 0.1244, endY: 0.3239,
+      control1X: 0.1054, control1Y: 0.6886,
+      control2X: 0.0550, control2Y: 0.5800,
+      endX: 0.0667, endY: 0.4681,
     }),
     Object.freeze({
-      control1X: 0.2037, control1Y: 0.2121,
-      control2X: 0.3371, control2Y: 0.1925,
-      endX: 0.4348, endY: 0.2784,
+      control1X: 0.0783, control1Y: 0.3562,
+      control2X: 0.1496, control2Y: 0.2635,
+      endX: 0.2466, endY: 0.2344,
     }),
-    // The tail: out of the ring's upper-right gap edge and away to the right.
+    /**
+     * The tail, leaving the ring TANGENTIALLY.
+     *
+     * Its first control point is the ring's own exit direction extended, which
+     * is the whole reason the arc stops at 255 degrees rather than carrying on
+     * around: past the top the ring is already heading DOWN, so a tail that
+     * then rose to the right folded back over itself and put a visible crease
+     * in the stroke. A crease is not a flourish — it is the seam of two curves
+     * that were never joined.
+     */
     Object.freeze({
-      control1X: 0.5600, control1Y: 0.1900,
-      control2X: 0.7400, control2Y: 0.1450,
-      endX: 0.9450, endY: 0.1650,
+      control1X: 0.4764, control1Y: 0.1652,
+      control2X: 0.7500, control2Y: 0.1150,
+      endX: 0.9550, endY: 0.1050,
     }),
   ]),
-  tailWidth: 0.062,
-  tipWidth: 0.006,
-  taperStart: 0.72,
-  taperExponent: 1.4,
+  // SLENDER, and that is the direction rather than a preference. "Elegant
+  // rather than bulky" rules out the reference's arcade-weight ring: at a
+  // radius of a quarter of the box, a half-width past about 0.035 stops
+  // reading as a drawn stroke and starts reading as a filled shape.
+  tailWidth: 0.030,
+  tipWidth: 0.004,
+  taperStart: 0.80,
+  taperExponent: 1.5,
 });
 
 /**
- * THE SINGLE-AGENT STROKE: shorter, thinner, near-constant, inside the frame.
+ * THE SINGLE-AGENT STROKE: the same swoop, nested INSIDE the frame.
  *
- * Deliberately the simpler shape — the reference's straight MP bar, given a
- * slight lean and a slight bow so it belongs to the same drawing as the ring
- * rather than sitting next to it. It stops well short of the frame's tip, so
- * the hierarchy is legible at a glance without reading a label.
+ * It swoops, and the founder's direction is that it must: a straight bar beside
+ * a curved frame reads as two widgets that happened to be placed together. This
+ * is one drawing. So the blue is a CONCENTRIC inner hook — the same centre, the
+ * same 205-degree span, the same tangential tail — at about six tenths of the
+ * radius, and it runs behind the green all the way out.
  *
- * Its width barely tapers. A stroke that came to a point would read as the
- * Compound frame's little brother; this one reads as a different instrument.
+ * "Simpler" survives the change, as weight rather than as shape: thinner, a
+ * shorter tail that stops well short of the frame's tip, and a width that
+ * barely tapers where the frame's comes to a point. That is what keeps the
+ * hierarchy legible without a label — the same gesture, quieter.
+ *
+ * Concentric is also what keeps the two readable at a glance: two strokes that
+ * cross would force a viewer to work out which arc belonged to which number,
+ * and nested arcs never cross.
  */
 export const WONDERLAND_SINGLE_SWOOSH: WonderlandUsageSwoosh = Object.freeze({
-  startX: 0.4150,
-  startY: 0.6450,
+  startX: 0.4077,
+  startY: 0.6318,
   segments: Object.freeze([
     Object.freeze({
-      control1X: 0.5400, control1Y: 0.6600,
-      control2X: 0.6600, control2Y: 0.6300,
-      endX: 0.7850, endY: 0.5600,
+      control1X: 0.3600, control1Y: 0.6771,
+      control2X: 0.2927, control2Y: 0.6848,
+      endX: 0.2379, endY: 0.6514,
+    }),
+    Object.freeze({
+      control1X: 0.1830, control1Y: 0.6179,
+      control2X: 0.1518, control2Y: 0.5500,
+      endX: 0.1590, endY: 0.4800,
+    }),
+    Object.freeze({
+      control1X: 0.1663, control1Y: 0.4100,
+      control2X: 0.2105, control2Y: 0.3521,
+      endX: 0.2707, endY: 0.3339,
+    }),
+    // The tail, leaving tangentially exactly as the frame's does, and stopping
+    // short of it so the frame keeps the last word.
+    Object.freeze({
+      control1X: 0.4621, control1Y: 0.2758,
+      control2X: 0.6800, control2Y: 0.3000,
+      endX: 0.8600, endY: 0.3500,
     }),
   ]),
-  tailWidth: 0.034,
-  tipWidth: 0.026,
-  taperStart: 0.55,
+  // Half the frame's weight. The hierarchy has to survive the fact that this
+  // stroke is often the FULLER of the two — a single agent on a small tier runs
+  // out sooner — and a bright arc at equal thickness would read as the louder
+  // instrument precisely when it is the smaller one.
+  tailWidth: 0.0145,
+  tipWidth: 0.0110,
+  taperStart: 0.70,
   taperExponent: 1.0,
 });
 
@@ -630,6 +696,38 @@ export function wonderlandSwooshOutline(input: {
 }
 
 /**
+ * The SPINE as an open SVG path — the centre line, with no width.
+ *
+ * A renderer that wants to reveal the ribbon PROGRESSIVELY needs a curve to
+ * travel along, and the outline is a closed loop that goes out and comes back.
+ * Stroking this line inside an SVG mask, with a dash pattern, reveals the
+ * tapered ribbon along the arc without any script running per frame — which is
+ * the whole reason it exists: the website has exactly one animation loop by
+ * architectural rule, and it belongs to the world's scene.
+ */
+export function wonderlandSwooshSpineSvgPath(input: {
+  readonly to?: number;
+  readonly samples?: number;
+  readonly shape?: WonderlandUsageSwoosh;
+  readonly scale?: number;
+  readonly precision?: number;
+}): string {
+  const to = clamp01(input.to ?? 1);
+  const samples = Math.max(2, Math.min(Math.trunc(input.samples ?? 64), 512));
+  const scale = Number.isFinite(input.scale) && input.scale !== undefined ? input.scale : 1;
+  const precision = Math.max(0, Math.min(Math.trunc(input.precision ?? 3), 8));
+  if (to <= 0) return '';
+  const points: string[] = [];
+  for (let i = 0; i < samples; i += 1) {
+    const sample = wonderlandSwooshAt((to * i) / (samples - 1), input.shape);
+    points.push(
+      `${(sample.x * scale).toFixed(precision)} ${(sample.y * scale).toFixed(precision)}`,
+    );
+  }
+  return `M ${points[0]} ${points.slice(1).map((point) => `L ${point}`).join(' ')}`;
+}
+
+/**
  * The same outline as an SVG path.
  *
  * A convenience for the browser and nothing more — it is a pure string built
@@ -746,6 +844,7 @@ export function projectWonderlandUsageMeter(
     referenceCapacityUnits: figure(reference),
     capacitySpan: ratio(capacity, reference),
     fillFraction: ratio(used, capacity),
+    remainingFraction: ratio(known ? Math.max(0, capacity - used) : null, capacity),
     status,
     unavailableReason: unavailable
       ? (observation.unavailableReason ?? WONDERLAND_USAGE_UNAVAILABLE_REASON)
@@ -788,6 +887,7 @@ export function applyWonderlandUsageDelta(
     usedUnits: figure(used),
     remainingUnits: figure(Math.max(0, capacity - used)),
     fillFraction: ratio(used, capacity),
+    remainingFraction: ratio(Math.max(0, capacity - used), capacity),
     provenance,
     simulated: provenance !== 'live',
     observedAtIso: delta.atIso,
@@ -874,6 +974,20 @@ export function projectWonderlandUsageHud(input: {
  * a renderer handed a bad clock draws an endpoint, never an overshoot past a
  * full or empty bar.
  */
+/**
+ * How long a change takes, and on what curve. ONE declaration, both surfaces.
+ *
+ * `cssTimingFunction` is the nearest CSS cubic-bézier to the smoothstep below —
+ * nearest, not identical, because CSS parameterises by its own x and smoothstep
+ * by time. The difference is under a percent of the travel and it is stated
+ * here rather than left for someone to discover: a renderer that needs the two
+ * to match EXACTLY must sample `wonderlandUsageEase` itself.
+ */
+export const WONDERLAND_USAGE_TRANSITION = Object.freeze({
+  durationMs: 520,
+  cssTimingFunction: 'cubic-bezier(0.5, 0, 0.5, 1)',
+});
+
 export function wonderlandUsageEase(from: number, to: number, progress: number): number {
   const a = Number.isFinite(from) ? from : 0;
   const b = Number.isFinite(to) ? to : a;
@@ -893,16 +1007,48 @@ export function wonderlandUsageEase(from: number, to: number, progress: number):
  * this; it exists so a designer can look at the shape.
  */
 export const WONDERLAND_USAGE_FIXTURE_TIERS: readonly {
+  readonly channel: WonderlandUsageChannel;
   readonly tierId: string;
   readonly tierLabel: string;
   readonly capacityUnits: number;
 }[] = Object.freeze([
-  Object.freeze({ tierId: 'fixture-small', tierLabel: 'FIXTURE · SMALL', capacityUnits: 120 }),
-  Object.freeze({ tierId: 'fixture-large', tierLabel: 'FIXTURE · LARGE', capacityUnits: 480 }),
+  Object.freeze({
+    channel: 'compound_agent' as WonderlandUsageChannel,
+    tierId: 'fixture-compound-small', tierLabel: 'FIXTURE · COMPOUND I', capacityUnits: 240,
+  }),
+  Object.freeze({
+    channel: 'compound_agent' as WonderlandUsageChannel,
+    tierId: 'fixture-compound-large', tierLabel: 'FIXTURE · COMPOUND III', capacityUnits: 480,
+  }),
+  Object.freeze({
+    channel: 'single_agent' as WonderlandUsageChannel,
+    tierId: 'fixture-single-small', tierLabel: 'FIXTURE · SINGLE I', capacityUnits: 60,
+  }),
+  Object.freeze({
+    channel: 'single_agent' as WonderlandUsageChannel,
+    tierId: 'fixture-single-large', tierLabel: 'FIXTURE · SINGLE II', capacityUnits: 120,
+  }),
 ]);
 
-/** The reference ceiling the fixtures draw against. Fixture data, not a plan. */
-export const WONDERLAND_USAGE_FIXTURE_REFERENCE = 480;
+/**
+ * The ceiling each channel's fixtures draw against — the top of that channel's
+ * own ladder, DERIVED from the tiers above rather than restated, so a fixture
+ * tier added past the ceiling cannot silently draw past the end of its stroke.
+ */
+export const WONDERLAND_USAGE_FIXTURE_REFERENCE: Readonly<
+  Record<WonderlandUsageChannel, number>
+> = Object.freeze(
+  Object.fromEntries(
+    WONDERLAND_USAGE_CHANNELS.map((channel) => [
+      channel,
+      Math.max(
+        ...WONDERLAND_USAGE_FIXTURE_TIERS.filter((tier) => tier.channel === channel).map(
+          (tier) => tier.capacityUnits,
+        ),
+      ),
+    ]),
+  ) as Record<WonderlandUsageChannel, number>,
+);
 
 export function wonderlandUsageFixture(input: {
   readonly channel: WonderlandUsageChannel;
@@ -911,7 +1057,7 @@ export function wonderlandUsageFixture(input: {
   readonly observedAtIso: string;
 }): WonderlandUsageMeter {
   const tier = WONDERLAND_USAGE_FIXTURE_TIERS.find(
-    (candidate) => candidate.tierId === input.tierId,
+    (candidate) => candidate.tierId === input.tierId && candidate.channel === input.channel,
   );
   return projectWonderlandUsageMeter({
     channel: input.channel,
@@ -920,16 +1066,11 @@ export function wonderlandUsageFixture(input: {
     unitLabel: tier === undefined ? null : 'WONDER',
     capacityUnits: tier?.capacityUnits ?? null,
     usedUnits: tier === undefined ? null : input.usedUnits,
-    referenceCapacityUnits: WONDERLAND_USAGE_FIXTURE_REFERENCE,
+    referenceCapacityUnits: WONDERLAND_USAGE_FIXTURE_REFERENCE[input.channel],
     provenance: 'simulated',
     observedAtIso: input.observedAtIso,
   });
 }
-
-/* --------------------------------------------------------------- parity */
-
-/** Every provenance, re-exported so the C++ enum mirrors one list. */
-export const WONDERLAND_USAGE_PROVENANCES = PROVENANCES;
 
 /**
  * A whole labelled HUD, so the two bars can be looked at side by side before
@@ -939,16 +1080,21 @@ export function wonderlandUsageHudFixture(observedAtIso: string): WonderlandUsag
   return projectWonderlandUsageHud({
     compoundAgent: wonderlandUsageFixture({
       channel: 'compound_agent',
-      tierId: 'fixture-large',
+      tierId: 'fixture-compound-large',
       usedUnits: 186,
       observedAtIso,
     }),
     singleAgent: wonderlandUsageFixture({
       channel: 'single_agent',
-      tierId: 'fixture-small',
+      tierId: 'fixture-single-large',
       usedUnits: 78,
       observedAtIso,
     }),
     observedAtIso,
   });
 }
+
+/* --------------------------------------------------------------- parity */
+
+/** Every provenance, re-exported so the C++ enum mirrors one list. */
+export const WONDERLAND_USAGE_PROVENANCES = PROVENANCES;

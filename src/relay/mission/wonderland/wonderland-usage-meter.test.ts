@@ -108,13 +108,13 @@ describe('a tier changes the meter\'s length, not only its percentage', () => {
     expect(large.fillFraction.value).toBeCloseTo(1 / 6, 10);
   });
 
-  it('draws the SAME absolute filled length for the same spend', () => {
+  it('drains the SAME absolute length for the same spend', () => {
     // This is the whole point of splitting the two fields. Fifty units spent is
     // fifty units of meter, whatever the tier — which is exactly what a single
     // percentage cannot say.
-    const filled = (m: WonderlandUsageMeter): number =>
+    const drained = (m: WonderlandUsageMeter): number =>
       (m.capacitySpan.value as number) * (m.fillFraction.value as number);
-    expect(filled(small)).toBeCloseTo(filled(large), 10);
+    expect(drained(small)).toBeCloseTo(drained(large), 10);
   });
 
   it('leaves more of a larger meter unspent', () => {
@@ -139,6 +139,7 @@ describe('what the meter says when nobody has told it anything', () => {
       blank.referenceCapacityUnits,
       blank.capacitySpan,
       blank.fillFraction,
+      blank.remainingFraction,
     ]) {
       expect(figure.known).toBe(false);
       expect(figure.value).toBeNull();
@@ -174,10 +175,27 @@ describe('what the meter says when nobody has told it anything', () => {
     expect(broken.usedUnits.known).toBe(false);
   });
 
-  it('clamps an over-spend to a full meter rather than an impossible one', () => {
+  it('clamps an over-spend to an empty meter rather than an impossible one', () => {
     const over = meter({ capacityUnits: 100, usedUnits: 250 });
     expect(over.fillFraction.value).toBe(1);
+    expect(over.remainingFraction.value).toBe(0);
     expect(over.remainingUnits.value).toBe(0);
+  });
+
+  it('keeps the stroke and the readout measuring the same thing', () => {
+    // The bug this pins: drawing spend while printing remainder made an
+    // untouched meter read "480 / 480" beside an empty bar. Both were right on
+    // their own, and together they were nonsense.
+    for (const used of [0, 25, 50, 99, 100]) {
+      const m = meter({ capacityUnits: 100, usedUnits: used });
+      expect(m.remainingFraction.value).toBeCloseTo(
+        (m.remainingUnits.value as number) / 100,
+        10,
+      );
+      expect(
+        (m.fillFraction.value as number) + (m.remainingFraction.value as number),
+      ).toBeCloseTo(1, 10);
+    }
   });
 });
 
@@ -194,14 +212,31 @@ describe('a simulated meter says so', () => {
   it('labels its own fixtures, so a designer can look without the world lying', () => {
     const fixture = wonderlandUsageFixture({
       channel: 'single_agent',
-      tierId: 'fixture-small',
+      tierId: 'fixture-single-small',
       usedUnits: 30,
       observedAtIso: AT,
     });
     expect(fixture.simulated).toBe(true);
     expect(fixture.provenance).toBe('simulated');
     expect(fixture.tierLabel).toContain('FIXTURE');
-    expect(fixture.referenceCapacityUnits.value).toBe(WONDERLAND_USAGE_FIXTURE_REFERENCE);
+    expect(fixture.referenceCapacityUnits.value).toBe(
+      WONDERLAND_USAGE_FIXTURE_REFERENCE.single_agent,
+    );
+  });
+
+  it('gives each channel its own ceiling, so the smaller instrument is not a stub', () => {
+    // One shared ceiling would draw a single agent on its TOP tier as a quarter
+    // of a bar, purely because a Compound Agent can buy more.
+    expect(WONDERLAND_USAGE_FIXTURE_REFERENCE.compound_agent).not.toBe(
+      WONDERLAND_USAGE_FIXTURE_REFERENCE.single_agent,
+    );
+    const top = wonderlandUsageFixture({
+      channel: 'single_agent',
+      tierId: 'fixture-single-large',
+      usedUnits: 10,
+      observedAtIso: AT,
+    });
+    expect(top.capacitySpan.value).toBe(1);
   });
 
   it('has nothing to say about a fixture tier that does not exist', () => {
@@ -230,6 +265,7 @@ describe('spending and returning capacity', () => {
     });
     expect(drained.usedUnits.value).toBe(65);
     expect(drained.remainingUnits.value).toBe(35);
+    expect(drained.remainingFraction.value).toBeCloseTo(0.35, 10);
 
     const returned = applyWonderlandUsageDelta(drained, {
       kind: 'replenish',
@@ -485,23 +521,48 @@ describe('two bars, bound separately', () => {
       return total;
     };
     expect(spineLength(WONDERLAND_COMPOUND_SWOOSH)).toBeGreaterThan(
-      spineLength(WONDERLAND_SINGLE_SWOOSH) * 2,
+      spineLength(WONDERLAND_SINGLE_SWOOSH) * 1.3,
     );
     expect(WONDERLAND_COMPOUND_SWOOSH.tailWidth).toBeGreaterThan(
       WONDERLAND_SINGLE_SWOOSH.tailWidth,
     );
   });
 
-  it('keeps the single-agent stroke the simpler shape', () => {
-    // The reference's straight MP bar, given a lean. One segment against four,
-    // and a width that barely tapers rather than coming to a point.
-    expect(WONDERLAND_SINGLE_SWOOSH.segments.length).toBe(1);
-    expect(WONDERLAND_COMPOUND_SWOOSH.segments.length).toBeGreaterThan(1);
+  it('keeps the single-agent stroke the simpler shape — as weight, not as form', () => {
+    // It swoops too: a straight bar beside a curved frame reads as two widgets
+    // that happened to be placed together. "Simpler" survives as thinner, a
+    // shorter tail, and a width that barely tapers where the frame's comes to
+    // a point.
+    expect(WONDERLAND_SINGLE_SWOOSH.segments.length).toBeGreaterThan(1);
+    expect(WONDERLAND_SINGLE_SWOOSH.tailWidth).toBeLessThan(
+      WONDERLAND_COMPOUND_SWOOSH.tailWidth * 0.6,
+    );
     const singleTaper =
       WONDERLAND_SINGLE_SWOOSH.tipWidth / WONDERLAND_SINGLE_SWOOSH.tailWidth;
     const compoundTaper =
       WONDERLAND_COMPOUND_SWOOSH.tipWidth / WONDERLAND_COMPOUND_SWOOSH.tailWidth;
     expect(singleTaper).toBeGreaterThan(compoundTaper);
+  });
+
+  it('nests the two strokes so they never cross', () => {
+    // Two arcs that crossed would force a viewer to work out which belonged to
+    // which number. Concentric arcs never do — measured by sweeping both at the
+    // same arc fraction and checking the single stroke stays inside.
+    const centre = { x: 0.31, y: 0.5 };
+    for (let i = 0; i <= 24; i += 1) {
+      const t = (i / 24) * 0.72;
+      const outer = wonderlandSwooshAt(t, WONDERLAND_COMPOUND_SWOOSH);
+      const inner = wonderlandSwooshAt(t, WONDERLAND_SINGLE_SWOOSH);
+      const radius = (p: { x: number; y: number }): number =>
+        Math.hypot(p.x - centre.x, p.y - centre.y);
+      expect(radius(inner)).toBeLessThan(radius(outer));
+    }
+  });
+
+  it('stops the inner tail short of the frame, so the frame has the last word', () => {
+    expect(wonderlandSwooshAt(1, WONDERLAND_SINGLE_SWOOSH).x).toBeLessThan(
+      wonderlandSwooshAt(1, WONDERLAND_COMPOUND_SWOOSH).x,
+    );
   });
 
   it('draws every channel on a real shape', () => {

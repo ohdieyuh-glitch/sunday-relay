@@ -7,8 +7,20 @@ import {
   firstIncompleteStep, isConfigured, loadAgentDraft, saveAgentDraft,
   type CompoundAgentDraft, type OnboardingStepId,
 } from '../relay-experience/onboarding';
+import { WonderlandUsageHudView } from '../wonderland-hud';
+import { wonderlandUsageHudFixture } from '../../mission/wonderland/wonderland-usage-meter';
 import { useRelayWorld } from './useRelayWorld';
 import type { WorldStage } from './world-stage';
+
+/**
+ * A FIXED INSTANT FOR THE HUD FIXTURE.
+ *
+ * The fixture is simulated data and its timestamp is part of that data, so it
+ * is a constant rather than `new Date()`: a clock read here would make the
+ * component's output depend on when it rendered, and a simulated reading that
+ * refreshes its own timestamp looks more live than one that does not.
+ */
+const WONDERLAND_HUD_FIXTURE_INSTANT = '2026-01-01T00:00:00.000Z';
 
 /**
  * THE RELAY WORLD — Aquala, the passage, and Relay, in one mounted scene.
@@ -144,6 +156,22 @@ export function RelayWorld({ initialStage, initialStep, onActivated }: {
             webgl={world.telemetry.webgl}
           />
         </div>
+      )}
+
+      {/* THE USAGE HUD, over the Relay stage only.
+          Aquala is the arrival and has no capacity to report; a meter there
+          would be furniture pretending to be a reading. It is a fixed overlay
+          rather than a child of the Relay chrome so the stage's own opacity
+          fade cannot half-dissolve a number a founder is reading.
+
+          The fixture is SIMULATED and the HUD says so on its own face. No
+          usage authority exists yet, and wiring a placeholder that looked live
+          would be the exact untruth the contract is built to refuse. */}
+      {world.stage === 'relay' && (
+        <WonderlandUsageHudView
+          hud={wonderlandUsageHudFixture(WONDERLAND_HUD_FIXTURE_INSTANT)}
+          reducedMotion={reducedMotion}
+        />
       )}
 
       {/* The scroll track lives here so it exists only while Aquala does. */}

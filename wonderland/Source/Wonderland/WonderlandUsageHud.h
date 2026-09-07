@@ -243,9 +243,16 @@ struct FWonderlandUsageMeter
 	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Usage")
 	FWonderlandFigure CapacitySpan;
 
-	// used / capacity, clamped to 0..1. How much of that length is spent.
+	// used / capacity, clamped to 0..1. How much of that length is SPENT.
 	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Usage")
 	FWonderlandFigure FillFraction;
+
+	// remaining / capacity, clamped to 0..1. How much is LEFT — and this is the
+	// one a renderer draws. Both exist because a meter that drains and a number
+	// that counts down have to agree: drawing spend while printing remainder
+	// gave an untouched meter reading "480 / 480" beside an empty bar.
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Usage")
+	FWonderlandFigure RemainingFraction;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Usage")
 	EWonderlandUsageStatus Status = EWonderlandUsageStatus::Unavailable;
