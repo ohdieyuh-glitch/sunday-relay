@@ -249,6 +249,20 @@ MATERIALS = {
         "unreal": "MI_V2_LeafMid", "rgb": (0.18, 0.32, 0.13),
         "metallic": 0.0, "roughness": 0.66, "emissive": 0.0,
         "use": "an ivy/planting attachment surface, not a plant"},
+    # WATER IS A SURFACE, NOT A VOLUME. `assets_v2.fountain_grand_water` sets
+    # the precedent: the stone and the water are separate meshes so the water
+    # takes MI_V2_Water and the stone does not. Every water plane in this kit
+    # is a flat lid on a basin whose depth is real geometry, so the material
+    # has something to be transparent ONTO and the world session can swap the
+    # material without touching a single stone.
+    "water": {
+        "unreal": "MI_V2_Water", "rgb": (0.36, 0.52, 0.55),
+        "metallic": 0.0, "roughness": 0.06, "emissive": 0.0,
+        "use": "a still water surface; a flat lid on a basin with real depth"},
+    "water_lit": {
+        "unreal": "MI_V2_GlassTeal", "rgb": (0.24, 0.62, 0.62),
+        "metallic": 0.0, "roughness": 0.09, "emissive": 1.3,
+        "use": "falling and lit water -- cascades, spouts, the emissive teal"},
 }
 
 #: A part written with no material named lands here.

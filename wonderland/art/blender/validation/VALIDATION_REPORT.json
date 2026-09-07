@@ -1,5 +1,5 @@
 {
-  "checked_assets": 63,
+  "checked_assets": 71,
   "failures": 0,
   "material_check": "59 MI_V2_* names parsed from materials_v2.py",
   "per_asset": {
@@ -58,6 +58,14 @@
     "WL_Stair_Ceremonial": [],
     "WL_Stair_Garden": [],
     "WL_Ramp_Terrace": [],
+    "WL_Garden_Retaining_Run": [],
+    "WL_Garden_Retaining_Corner_In": [],
+    "WL_Garden_Retaining_Corner_Out": [],
+    "WL_Garden_Retaining_Curved": [],
+    "WL_Garden_Planter_Wall": [],
+    "WL_Garden_Overlook": [],
+    "WL_Garden_Gate_Threshold": [],
+    "WL_Garden_Pavilion_Base": [],
     "WL_Detail_Balustrade_Run": [],
     "WL_Detail_Newel_Urn": [],
     "WL_Detail_Screen_Filigree": [],
@@ -77,6 +85,7 @@
     "walls",
     "roofscape",
     "stairs",
+    "gardens",
     "details",
     "hero"
   ],
@@ -333,6 +342,47 @@
     "WL_Ramp_Terrace": {
       "stone": "500a4ac2063df0cbf435338a31e5c69addddf3ba30808f46b860617d51c81eea",
       "stone_dark": "7e6b20257dd5af0ec1358fb4edf9141345c4d9c955533441106b603e97276fd3"
+    },
+    "WL_Garden_Retaining_Run": {
+      "stone": "bf849664ac1813a9b238039ebede4e27161358a5b3f7075f374d5038cd8d07fe",
+      "stone_dark": "3ea631c67279b3d6e184222123ad991a87f82283669156946cbfc46a0822e38c",
+      "veg_anchor": "605ba28b30db6e87c078ba3214070d44fc9c61517711a75fb713a86713677c85"
+    },
+    "WL_Garden_Retaining_Corner_In": {
+      "stone": "39381850ab1e455959765a402a800e61ea2ce430f244ee47302c5f88a69ffc28",
+      "stone_dark": "46457521eb56fb2a716ee84c5116798fdc71188c7a548624a11b438c9b2d2160",
+      "veg_anchor": "511841fef901c6b22356f820377eef1d963bab86d0ab19c21d9662c284d93c85"
+    },
+    "WL_Garden_Retaining_Corner_Out": {
+      "gold": "9659a3e5ee546220a5288156a3e67cfb9556e0bb145f19f82163ff1ef2310067",
+      "stone": "b087085b0f213adc5dd719d09c89ef924d8092f5929ef2a6b3c8d5c3ae7f7eec",
+      "stone_dark": "416b4ef7cd02fb9ad68dc366238e2cdc45040b02a3482d9824d71017e20a91fb",
+      "veg_anchor": "be522aa5a510258adff5e079b36e6861562bfc0d86ea3810c5901b97946a5cbc"
+    },
+    "WL_Garden_Retaining_Curved": {
+      "stone": "cdfa00360f696241c82ef9921cae2ae14877da977c7e27a9bc0d04ee4dca5a6f",
+      "stone_dark": "35b5e3d07e8c6e36946665c2f9840e437635b473e87a4ff6509ae88042557902",
+      "veg_anchor": "bfad05f1dce218fea49f2c87eb4c0f6bbfe772b754667cd2880a0719fc7fb493"
+    },
+    "WL_Garden_Planter_Wall": {
+      "stone": "8f8fa6538b61319fd5962104d57210fda0d3443a63f658c5386723618d3a2017",
+      "stone_dark": "fb71bfcdde2ffb085a8a67d92b26e5e63b1a51d130eb6022afa99bfc9a5bac53",
+      "veg_anchor": "34707dbe19079719b52fcaf6b6ff0b6c7230325409aa9ca8e0c25c8e3570be76"
+    },
+    "WL_Garden_Overlook": {
+      "gold": "2b55030f1485d155f14ec3bea905729dfe146bf4b7d1aadcabfd8069c2cc3cab",
+      "stone": "b11bfe2eeb9cdb500065515850efdf22643e6c89c5b05f7929409f1cf5f894c6",
+      "stone_dark": "e24d1eb45009946d74a79cf6d7ada974bb701c7d03def70da6f04bd5720e1562"
+    },
+    "WL_Garden_Gate_Threshold": {
+      "gold": "aec1331e9046a8adb287408331780858850a81056beff16f8a84b70905bcf1f6",
+      "stone": "edb57d14321c378c203fb1292a0956bd854f3b1d00c590eb0421a388bdbc9142",
+      "stone_dark": "6715c47de997accedef449e51e51d5798aa95dfb824ddf8374c6e96ee6c1f4ef",
+      "veg_anchor": "6e5fa276016919dcfd550cf58e3fb893d5175e38d6991d5dae13a6bbdd645451"
+    },
+    "WL_Garden_Pavilion_Base": {
+      "stone": "5c5014e7bea200739f1fe68d5a2ec128e1ce194b0a7fcfd44b6564364aaf3e15",
+      "stone_dark": "6668b45e260647f3fa1634ac978e1ad7cf7b15aad56c64f437cdaaa14474a4c7"
     },
     "WL_Detail_Balustrade_Run": {
       "stone": "489bafa5aa4aa4a08c830e95b2fe68627baf72e0502e6167ef851a42d06dc7c1"

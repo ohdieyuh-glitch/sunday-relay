@@ -1,7 +1,7 @@
 {
   "schema": "wonderland-blender-kit/1",
   "kit_version": "1.0.0",
-  "generated_utc": "2026-09-07T22:52:14+00:00",
+  "generated_utc": "2026-09-07T23:04:51+00:00",
   "generator": "wonderland/art/blender/scripts/build_assets.py",
   "blender": "4.5.13 LTS",
   "conventions": {
@@ -61,28 +61,37 @@
     "veg_anchor": {
       "unreal": "MI_V2_LeafMid",
       "use": "an ivy/planting attachment surface, not a plant"
+    },
+    "water": {
+      "unreal": "MI_V2_Water",
+      "use": "a still water surface; a flat lid on a basin with real depth"
+    },
+    "water_lit": {
+      "unreal": "MI_V2_GlassTeal",
+      "use": "falling and lit water -- cascades, spouts, the emissive teal"
     }
   },
   "counts": {
-    "assets": 63,
-    "meshes": 171,
-    "triangles": 263937,
+    "assets": 71,
+    "meshes": 196,
+    "triangles": 270575,
     "by_role": {
       "foot": 4,
       "body": 11,
       "crown": 7,
       "needle": 5,
-      "threshold": 7,
+      "threshold": 8,
       "screen": 7,
       "span": 3,
-      "detail": 9,
+      "detail": 10,
       "route": 8,
+      "terrace": 6,
       "hero": 2
     },
     "legal_tower_stacks_up_to_3_bodies": 692,
     "rung_coverage": {
       "XL": {
-        "leaves_you_here": 5,
+        "leaves_you_here": 6,
         "terminators": 1
       },
       "L": {
@@ -13496,6 +13505,2377 @@
             "unit_scale_factor": 0.9999999776482582,
             "stored_z_min": 26.0,
             "stored_z_max": 186.0
+          }
+        }
+      },
+      "part_count": 2
+    },
+    {
+      "asset_id": "WL_Garden_Retaining_Run",
+      "kit_version": "1.0.0",
+      "family": "garden",
+      "family_group": "gardens",
+      "category": "structure",
+      "silhouette_role": "terrace",
+      "note": "8.00 m of 1-in-12 battered retaining wall holding T2 at 3.10 m; coping, weeps, and a planting anchor behind the coping",
+      "districts": [
+        "royal_garden",
+        "water_garden",
+        "tea_terrace",
+        "plaza",
+        "grove"
+      ],
+      "params": {
+        "length_m": 8.0,
+        "retains_m": 3.1,
+        "rung": "T2",
+        "batter": "1:12",
+        "thickness_m": 1.1,
+        "balustrade": "WL_Detail_Balustrade_Run fits the coping exactly"
+      },
+      "origin_rule": "footing at z = 0; +X is the module front",
+      "units": {
+        "authored": "metres",
+        "manifest": "unreal units (cm)",
+        "uu_per_metre": 100.0
+      },
+      "height_uu": 310.0,
+      "bbox_min_uu": [
+        -400.0,
+        -87.0,
+        0.0
+      ],
+      "bbox_max_uu": [
+        400.0,
+        67.0,
+        310.0
+      ],
+      "size_uu": [
+        800.0,
+        154.0,
+        310.0
+      ],
+      "base_z_uu": 0.0,
+      "tris_total": 128,
+      "tri_budget": 9000,
+      "over_budget": false,
+      "nanite_recommended": true,
+      "collision_recommended": true,
+      "uv": "planar-world-2m (not a lightmap unwrap)",
+      "sockets": [
+        {
+          "name": "bottom",
+          "kind": "ground",
+          "z_uu": 0.0,
+          "radius_uu": 400.0,
+          "rung": null,
+          "note": ""
+        },
+        {
+          "name": "top_route",
+          "kind": "route",
+          "z_uu": 310.0,
+          "radius_uu": 400.0,
+          "rung": null,
+          "note": "the retained terrace at 3.10 m (T2) is walkable to +Y"
+        },
+        {
+          "name": "edge",
+          "kind": "edge",
+          "z_uu": 310.0,
+          "radius_uu": 400.0,
+          "rung": null,
+          "note": "coping line; WL_Detail_Balustrade_Run is exactly 8.00 m and sits here"
+        },
+        {
+          "name": "end_a",
+          "kind": "pier",
+          "z_uu": 0.0,
+          "radius_uu": 55.0,
+          "rung": null,
+          "note": "butts at x = -4.00 m"
+        },
+        {
+          "name": "end_b",
+          "kind": "pier",
+          "z_uu": 0.0,
+          "radius_uu": 55.0,
+          "rung": null,
+          "note": "butts at x = +4.00 m"
+        }
+      ],
+      "parts": {
+        "stone": {
+          "verts": 40,
+          "faces": 34,
+          "tris": 68,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_IvoryStone"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -400.0,
+            -87.0,
+            0.0
+          ],
+          "bbox_max_uu": [
+            400.0,
+            67.0,
+            304.0
+          ],
+          "size_uu": [
+            800.0,
+            154.0,
+            304.0
+          ],
+          "height_m": 3.04,
+          "base_z_uu": 0.0,
+          "normals": {
+            "faces": 34,
+            "shells": 3,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 2,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_IvoryStone",
+          "mesh_name": "WL_Garden_Retaining_Run",
+          "glb": "exports/glb/WL_Garden_Retaining_Run.glb",
+          "fbx": "exports/fbx/WL_Garden_Retaining_Run.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_IvoryStone"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -4,
+              0,
+              -0.6699999570846558
+            ],
+            "max_yup": [
+              4,
+              3.0399999618530273,
+              0.8700000047683716
+            ],
+            "bytes": 5984
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 0.0,
+            "stored_z_max": 304.0
+          }
+        },
+        "stone_dark": {
+          "verts": 32,
+          "faces": 24,
+          "tris": 48,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_Stone"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -390.0,
+            -83.6,
+            62.0
+          ],
+          "bbox_max_uu": [
+            390.0,
+            56.1,
+            310.0
+          ],
+          "size_uu": [
+            780.0,
+            139.7,
+            248.0
+          ],
+          "height_m": 2.48,
+          "base_z_uu": 62.0,
+          "normals": {
+            "faces": 24,
+            "shells": 4,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 1,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_Stone",
+          "mesh_name": "WL_Garden_Retaining_Run_stone_dark",
+          "glb": "exports/glb/WL_Garden_Retaining_Run_stone_dark.glb",
+          "fbx": "exports/fbx/WL_Garden_Retaining_Run_stone_dark.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_Stone"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -3.9000000953674316,
+              0.6200000047683716,
+              -0.5609999895095825
+            ],
+            "max_yup": [
+              3.9000000953674316,
+              3.0999999046325684,
+              0.8360000252723694
+            ],
+            "bytes": 4648
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 62.0,
+            "stored_z_max": 310.0
+          }
+        },
+        "veg_anchor": {
+          "verts": 8,
+          "faces": 6,
+          "tris": 12,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_LeafMid"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -385.0,
+            14.0,
+            280.0
+          ],
+          "bbox_max_uu": [
+            385.0,
+            48.0,
+            290.0
+          ],
+          "size_uu": [
+            770.0,
+            34.0,
+            10.0
+          ],
+          "height_m": 0.1,
+          "base_z_uu": 280.0,
+          "normals": {
+            "faces": 6,
+            "shells": 1,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 1,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_LeafMid",
+          "mesh_name": "WL_Garden_Retaining_Run_veg_anchor",
+          "glb": "exports/glb/WL_Garden_Retaining_Run_veg_anchor.glb",
+          "fbx": "exports/fbx/WL_Garden_Retaining_Run_veg_anchor.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_LeafMid"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -3.8499999046325684,
+              2.799999952316284,
+              -0.48000001907348633
+            ],
+            "max_yup": [
+              3.8499999046325684,
+              2.8999998569488525,
+              -0.14000000059604645
+            ],
+            "bytes": 2124
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 280.0,
+            "stored_z_max": 290.0
+          }
+        }
+      },
+      "part_count": 3
+    },
+    {
+      "asset_id": "WL_Garden_Retaining_Corner_In",
+      "kit_version": "1.0.0",
+      "family": "garden",
+      "family_group": "gardens",
+      "category": "structure",
+      "silhouette_role": "terrace",
+      "note": "90-degree inside corner with a mitred quoin; two 5.00 m arms on the same section as the run",
+      "districts": [
+        "royal_garden",
+        "water_garden",
+        "tea_terrace",
+        "plaza"
+      ],
+      "params": {
+        "arm_m": 5.0,
+        "turn_deg": 90.0,
+        "retains_m": 3.1,
+        "rung": "T2",
+        "corner": "inside"
+      },
+      "origin_rule": "footing at z = 0; +X is the module front",
+      "units": {
+        "authored": "metres",
+        "manifest": "unreal units (cm)",
+        "uu_per_metre": 100.0
+      },
+      "height_uu": 310.0,
+      "bbox_min_uu": [
+        -87.0,
+        -87.0,
+        0.0
+      ],
+      "bbox_max_uu": [
+        555.0,
+        555.0,
+        310.0
+      ],
+      "size_uu": [
+        642.0,
+        642.0,
+        310.0
+      ],
+      "base_z_uu": 0.0,
+      "tris_total": 250,
+      "tri_budget": 9000,
+      "over_budget": false,
+      "nanite_recommended": true,
+      "collision_recommended": true,
+      "uv": "planar-world-2m (not a lightmap unwrap)",
+      "sockets": [
+        {
+          "name": "bottom",
+          "kind": "ground",
+          "z_uu": 0.0,
+          "radius_uu": 610.0,
+          "rung": null,
+          "note": ""
+        },
+        {
+          "name": "top_route",
+          "kind": "route",
+          "z_uu": 310.0,
+          "radius_uu": 500.0,
+          "rung": null,
+          "note": "T2 terrace at 3.10 m"
+        },
+        {
+          "name": "edge",
+          "kind": "edge",
+          "z_uu": 310.0,
+          "radius_uu": 500.0,
+          "rung": null,
+          "note": "coping turns the corner at 3.10 m"
+        },
+        {
+          "name": "end_a",
+          "kind": "pier",
+          "z_uu": 0.0,
+          "radius_uu": 55.0,
+          "rung": null,
+          "note": "arm along +X ends at x = +5.55 m"
+        },
+        {
+          "name": "end_b",
+          "kind": "pier",
+          "z_uu": 0.0,
+          "radius_uu": 55.0,
+          "rung": null,
+          "note": "arm along +Y ends at y = +5.55 m"
+        }
+      ],
+      "parts": {
+        "stone": {
+          "verts": 114,
+          "faces": 101,
+          "tris": 202,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_IvoryStone"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -87.0,
+            -87.0,
+            0.0
+          ],
+          "bbox_max_uu": [
+            555.0,
+            555.0,
+            304.0
+          ],
+          "size_uu": [
+            642.0,
+            642.0,
+            304.0
+          ],
+          "height_m": 3.04,
+          "base_z_uu": 0.0,
+          "normals": {
+            "faces": 101,
+            "shells": 7,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 3,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_IvoryStone",
+          "mesh_name": "WL_Garden_Retaining_Corner_In",
+          "glb": "exports/glb/WL_Garden_Retaining_Corner_In.glb",
+          "fbx": "exports/fbx/WL_Garden_Retaining_Corner_In.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_IvoryStone"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -0.8700000047683716,
+              0,
+              -5.550000190734863
+            ],
+            "max_yup": [
+              5.550000190734863,
+              3.0399999618530273,
+              0.8700000047683716
+            ],
+            "bytes": 15092
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 0.0,
+            "stored_z_max": 304.0
+          }
+        },
+        "stone_dark": {
+          "verts": 16,
+          "faces": 12,
+          "tris": 24,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_Stone"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -56.1,
+            -23.1,
+            302.0
+          ],
+          "bbox_max_uu": [
+            545.0,
+            545.0,
+            310.0
+          ],
+          "size_uu": [
+            601.1,
+            568.1,
+            8.0
+          ],
+          "height_m": 0.08,
+          "base_z_uu": 302.0,
+          "normals": {
+            "faces": 12,
+            "shells": 2,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 2,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_Stone",
+          "mesh_name": "WL_Garden_Retaining_Corner_In_stone_dark",
+          "glb": "exports/glb/WL_Garden_Retaining_Corner_In_stone_dark.glb",
+          "fbx": "exports/fbx/WL_Garden_Retaining_Corner_In_stone_dark.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_Stone"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -0.5609999895095825,
+              3.0199999809265137,
+              -5.450000286102295
+            ],
+            "max_yup": [
+              5.449999809265137,
+              3.0999999046325684,
+              0.23099999129772186
+            ],
+            "bytes": 2976
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 302.0,
+            "stored_z_max": 310.0
+          }
+        },
+        "veg_anchor": {
+          "verts": 16,
+          "faces": 12,
+          "tris": 24,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_LeafMid"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -48.0,
+            14.0,
+            280.0
+          ],
+          "bbox_max_uu": [
+            540.0,
+            540.0,
+            290.0
+          ],
+          "size_uu": [
+            588.0,
+            526.0,
+            10.0
+          ],
+          "height_m": 0.1,
+          "base_z_uu": 280.0,
+          "normals": {
+            "faces": 12,
+            "shells": 2,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 2,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_LeafMid",
+          "mesh_name": "WL_Garden_Retaining_Corner_In_veg_anchor",
+          "glb": "exports/glb/WL_Garden_Retaining_Corner_In_veg_anchor.glb",
+          "fbx": "exports/fbx/WL_Garden_Retaining_Corner_In_veg_anchor.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_LeafMid"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -0.47999992966651917,
+              2.799999952316284,
+              -5.400000095367432
+            ],
+            "max_yup": [
+              5.399999618530273,
+              2.8999998569488525,
+              -0.14000000059604645
+            ],
+            "bytes": 2980
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 280.0,
+            "stored_z_max": 290.0
+          }
+        }
+      },
+      "part_count": 3
+    },
+    {
+      "asset_id": "WL_Garden_Retaining_Corner_Out",
+      "kit_version": "1.0.0",
+      "family": "garden",
+      "family_group": "gardens",
+      "category": "structure",
+      "silhouette_role": "terrace",
+      "note": "90-degree outside corner with a gold urn on the quoin; the projecting bay a terrace pushes over the level below",
+      "districts": [
+        "royal_garden",
+        "water_garden",
+        "tea_terrace",
+        "plaza"
+      ],
+      "params": {
+        "arm_m": 5.0,
+        "turn_deg": 90.0,
+        "retains_m": 3.1,
+        "rung": "T2",
+        "corner": "outside",
+        "urn": "gold"
+      },
+      "origin_rule": "footing at z = 0; +X is the module front",
+      "units": {
+        "authored": "metres",
+        "manifest": "unreal units (cm)",
+        "uu_per_metre": 100.0
+      },
+      "height_uu": 428.0,
+      "bbox_min_uu": [
+        -555.0,
+        -87.0,
+        0.0
+      ],
+      "bbox_max_uu": [
+        87.0,
+        555.0,
+        428.0
+      ],
+      "size_uu": [
+        642.0,
+        642.0,
+        428.0
+      ],
+      "base_z_uu": 0.0,
+      "tris_total": 568,
+      "tri_budget": 10000,
+      "over_budget": false,
+      "nanite_recommended": true,
+      "collision_recommended": true,
+      "uv": "planar-world-2m (not a lightmap unwrap)",
+      "sockets": [
+        {
+          "name": "bottom",
+          "kind": "ground",
+          "z_uu": 0.0,
+          "radius_uu": 610.0,
+          "rung": null,
+          "note": ""
+        },
+        {
+          "name": "top_route",
+          "kind": "route",
+          "z_uu": 310.0,
+          "radius_uu": 500.0,
+          "rung": null,
+          "note": "T2 terrace at 3.10 m"
+        },
+        {
+          "name": "edge",
+          "kind": "edge",
+          "z_uu": 310.0,
+          "radius_uu": 500.0,
+          "rung": null,
+          "note": "coping turns the corner at 3.10 m"
+        },
+        {
+          "name": "end_a",
+          "kind": "pier",
+          "z_uu": 0.0,
+          "radius_uu": 55.0,
+          "rung": null,
+          "note": "arm along -X ends at x = -5.55 m"
+        },
+        {
+          "name": "end_b",
+          "kind": "pier",
+          "z_uu": 0.0,
+          "radius_uu": 55.0,
+          "rung": null,
+          "note": "arm along -Y ends at y = -5.55 m"
+        }
+      ],
+      "parts": {
+        "gold": {
+          "verts": 146,
+          "faces": 162,
+          "tris": 288,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_Gold"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -35.0,
+            -34.32,
+            340.0
+          ],
+          "bbox_max_uu": [
+            55.0,
+            54.32,
+            428.0
+          ],
+          "size_uu": [
+            90.0,
+            88.63,
+            88.0
+          ],
+          "height_m": 0.88,
+          "base_z_uu": 340.0,
+          "normals": {
+            "faces": 162,
+            "shells": 1,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 0,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_Gold",
+          "mesh_name": "WL_Garden_Retaining_Corner_Out_gold",
+          "glb": "exports/glb/WL_Garden_Retaining_Corner_Out_gold.glb",
+          "fbx": "exports/fbx/WL_Garden_Retaining_Corner_Out_gold.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_Gold"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -0.3499999940395355,
+              3.4000000953674316,
+              -0.5431634783744812
+            ],
+            "max_yup": [
+              0.550000011920929,
+              4.28000020980835,
+              0.34316349029541016
+            ],
+            "bytes": 12064
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 340.0,
+            "stored_z_max": 428.0000305175781
+          }
+        },
+        "stone": {
+          "verts": 132,
+          "faces": 116,
+          "tris": 232,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_IvoryStone"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -555.0,
+            -87.0,
+            0.0
+          ],
+          "bbox_max_uu": [
+            87.0,
+            555.0,
+            340.0
+          ],
+          "size_uu": [
+            642.0,
+            642.0,
+            340.0
+          ],
+          "height_m": 3.4,
+          "base_z_uu": 0.0,
+          "normals": {
+            "faces": 116,
+            "shells": 8,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 3,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_IvoryStone",
+          "mesh_name": "WL_Garden_Retaining_Corner_Out",
+          "glb": "exports/glb/WL_Garden_Retaining_Corner_Out.glb",
+          "fbx": "exports/fbx/WL_Garden_Retaining_Corner_Out.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_IvoryStone"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -5.550000190734863,
+              0,
+              -5.550000190734863
+            ],
+            "max_yup": [
+              0.8700000047683716,
+              3.3999998569488525,
+              0.8700000047683716
+            ],
+            "bytes": 17384
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 0.0,
+            "stored_z_max": 340.0
+          }
+        },
+        "stone_dark": {
+          "verts": 16,
+          "faces": 12,
+          "tris": 24,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_Stone"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -545.0,
+            -23.1,
+            302.0
+          ],
+          "bbox_max_uu": [
+            56.1,
+            545.0,
+            310.0
+          ],
+          "size_uu": [
+            601.1,
+            568.1,
+            8.0
+          ],
+          "height_m": 0.08,
+          "base_z_uu": 302.0,
+          "normals": {
+            "faces": 12,
+            "shells": 2,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 2,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_Stone",
+          "mesh_name": "WL_Garden_Retaining_Corner_Out_stone_dark",
+          "glb": "exports/glb/WL_Garden_Retaining_Corner_Out_stone_dark.glb",
+          "fbx": "exports/fbx/WL_Garden_Retaining_Corner_Out_stone_dark.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_Stone"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -5.449999809265137,
+              3.0199999809265137,
+              -5.450000286102295
+            ],
+            "max_yup": [
+              0.5610002279281616,
+              3.0999999046325684,
+              0.23099999129772186
+            ],
+            "bytes": 2976
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 302.0,
+            "stored_z_max": 310.0
+          }
+        },
+        "veg_anchor": {
+          "verts": 16,
+          "faces": 12,
+          "tris": 24,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_LeafMid"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -540.0,
+            14.0,
+            280.0
+          ],
+          "bbox_max_uu": [
+            48.0,
+            540.0,
+            290.0
+          ],
+          "size_uu": [
+            588.0,
+            526.0,
+            10.0
+          ],
+          "height_m": 0.1,
+          "base_z_uu": 280.0,
+          "normals": {
+            "faces": 12,
+            "shells": 2,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 2,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_LeafMid",
+          "mesh_name": "WL_Garden_Retaining_Corner_Out_veg_anchor",
+          "glb": "exports/glb/WL_Garden_Retaining_Corner_Out_veg_anchor.glb",
+          "fbx": "exports/fbx/WL_Garden_Retaining_Corner_Out_veg_anchor.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_LeafMid"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -5.399999618530273,
+              2.799999952316284,
+              -5.400000095367432
+            ],
+            "max_yup": [
+              0.48000022768974304,
+              2.8999998569488525,
+              -0.14000000059604645
+            ],
+            "bytes": 2980
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 280.0,
+            "stored_z_max": 290.0
+          }
+        }
+      },
+      "part_count": 4
+    },
+    {
+      "asset_id": "WL_Garden_Retaining_Curved",
+      "kit_version": "1.0.0",
+      "family": "garden",
+      "family_group": "gardens",
+      "category": "structure",
+      "silhouette_role": "terrace",
+      "note": "45-degree retaining arc on an 11.00 m radius; origin is the ARC CENTRE, eight make a 22 m circle",
+      "districts": [
+        "royal_garden",
+        "water_garden",
+        "plaza"
+      ],
+      "params": {
+        "radius_m": 11.0,
+        "arc_deg": 45.0,
+        "retains_m": 3.1,
+        "rung": "T2",
+        "origin": "arc centre",
+        "closes_circle_with": 8
+      },
+      "origin_rule": "footing at z = 0; +X is the module front",
+      "units": {
+        "authored": "metres",
+        "manifest": "unreal units (cm)",
+        "uu_per_metre": 100.0
+      },
+      "height_uu": 310.0,
+      "bbox_min_uu": [
+        0.0,
+        -455.01,
+        0.0
+      ],
+      "bbox_max_uu": [
+        1189.0,
+        455.01,
+        310.0
+      ],
+      "size_uu": [
+        1189.0,
+        910.02,
+        310.0
+      ],
+      "base_z_uu": 0.0,
+      "tris_total": 564,
+      "tri_budget": 9000,
+      "over_budget": false,
+      "nanite_recommended": true,
+      "collision_recommended": true,
+      "uv": "planar-world-2m (not a lightmap unwrap)",
+      "sockets": [
+        {
+          "name": "bottom",
+          "kind": "ground",
+          "z_uu": 0.0,
+          "radius_uu": 1180.83,
+          "rung": null,
+          "note": ""
+        },
+        {
+          "name": "top_route",
+          "kind": "route",
+          "z_uu": 310.0,
+          "radius_uu": 1100.0,
+          "rung": null,
+          "note": "T2 terrace at 3.10 m, inside the arc"
+        },
+        {
+          "name": "edge",
+          "kind": "edge",
+          "z_uu": 310.0,
+          "radius_uu": 1155.0,
+          "rung": null,
+          "note": "coping follows the 11 m arc"
+        },
+        {
+          "name": "end_a",
+          "kind": "pier",
+          "z_uu": 0.0,
+          "radius_uu": 55.0,
+          "rung": null,
+          "note": "45 degrees of an 11 m circle; eight close it"
+        }
+      ],
+      "parts": {
+        "stone": {
+          "verts": 137,
+          "faces": 146,
+          "tris": 284,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_IvoryStone"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            0.0,
+            -455.01,
+            0.0
+          ],
+          "bbox_max_uu": [
+            1189.0,
+            455.01,
+            304.0
+          ],
+          "size_uu": [
+            1189.0,
+            910.02,
+            304.0
+          ],
+          "height_m": 3.04,
+          "base_z_uu": 0.0,
+          "normals": {
+            "faces": 146,
+            "shells": 1,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 0,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_IvoryStone",
+          "mesh_name": "WL_Garden_Retaining_Curved",
+          "glb": "exports/glb/WL_Garden_Retaining_Curved.glb",
+          "fbx": "exports/fbx/WL_Garden_Retaining_Curved.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_IvoryStone"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              0,
+              0,
+              -4.550106525421143
+            ],
+            "max_yup": [
+              11.889999389648438,
+              3.0399999618530273,
+              4.550105571746826
+            ],
+            "bytes": 16584
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 0.0,
+            "stored_z_max": 304.0
+          }
+        },
+        "stone_dark": {
+          "verts": 69,
+          "faces": 82,
+          "tris": 148,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_Stone"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            0.0,
+            -442.07,
+            302.0
+          ],
+          "bbox_max_uu": [
+            1165.0,
+            442.07,
+            310.0
+          ],
+          "size_uu": [
+            1165.0,
+            884.13,
+            8.0
+          ],
+          "height_m": 0.08,
+          "base_z_uu": 302.0,
+          "normals": {
+            "faces": 82,
+            "shells": 1,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 0,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_Stone",
+          "mesh_name": "WL_Garden_Retaining_Curved_stone_dark",
+          "glb": "exports/glb/WL_Garden_Retaining_Curved_stone_dark.glb",
+          "fbx": "exports/fbx/WL_Garden_Retaining_Curved_stone_dark.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_Stone"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              0,
+              3.0199999809265137,
+              -4.420662879943848
+            ],
+            "max_yup": [
+              11.65000057220459,
+              3.0999999046325684,
+              4.420665740966797
+            ],
+            "bytes": 9268
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 302.0,
+            "stored_z_max": 310.0
+          }
+        },
+        "veg_anchor": {
+          "verts": 70,
+          "faces": 82,
+          "tris": 132,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_LeafMid"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            0.0,
+            -395.45,
+            280.0
+          ],
+          "bbox_max_uu": [
+            1079.0,
+            395.45,
+            290.0
+          ],
+          "size_uu": [
+            1079.0,
+            790.91,
+            10.0
+          ],
+          "height_m": 0.1,
+          "base_z_uu": 280.0,
+          "normals": {
+            "faces": 82,
+            "shells": 1,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 1,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_LeafMid",
+          "mesh_name": "WL_Garden_Retaining_Curved_veg_anchor",
+          "glb": "exports/glb/WL_Garden_Retaining_Curved_veg_anchor.glb",
+          "fbx": "exports/fbx/WL_Garden_Retaining_Curved_veg_anchor.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_LeafMid"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              0,
+              2.799999952316284,
+              -3.9545481204986572
+            ],
+            "max_yup": [
+              10.789999008178711,
+              2.9000000953674316,
+              3.9545483589172363
+            ],
+            "bytes": 6620
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 280.0,
+            "stored_z_max": 290.0
+          }
+        }
+      },
+      "part_count": 3
+    },
+    {
+      "asset_id": "WL_Garden_Planter_Wall",
+      "kit_version": "1.0.0",
+      "family": "garden",
+      "family_group": "gardens",
+      "category": "prop",
+      "silhouette_role": "detail",
+      "note": "6.00 m raised bed at 0.93 m (three risers); end piers, a sunk soil pan and a veg_anchor surface the world session plants",
+      "districts": [
+        "royal_garden",
+        "tea_terrace",
+        "water_garden",
+        "plaza",
+        "grove"
+      ],
+      "params": {
+        "length_m": 6.0,
+        "height_m": 0.9299999999999999,
+        "risers_equivalent": 3,
+        "planting": "veg_anchor, not modelled"
+      },
+      "origin_rule": "footing at z = 0; +X is the module front",
+      "units": {
+        "authored": "metres",
+        "manifest": "unreal units (cm)",
+        "uu_per_metre": 100.0
+      },
+      "height_uu": 103.0,
+      "bbox_min_uu": [
+        -317.0,
+        -97.0,
+        0.0
+      ],
+      "bbox_max_uu": [
+        317.0,
+        97.0,
+        103.0
+      ],
+      "size_uu": [
+        634.0,
+        194.0,
+        103.0
+      ],
+      "base_z_uu": 0.0,
+      "tris_total": 164,
+      "tri_budget": 4000,
+      "over_budget": false,
+      "nanite_recommended": true,
+      "collision_recommended": true,
+      "uv": "planar-world-2m (not a lightmap unwrap)",
+      "sockets": [
+        {
+          "name": "bottom",
+          "kind": "ground",
+          "z_uu": 0.0,
+          "radius_uu": 300.0,
+          "rung": "M",
+          "note": ""
+        },
+        {
+          "name": "top_route",
+          "kind": "route",
+          "z_uu": 93.0,
+          "radius_uu": 300.0,
+          "rung": "M",
+          "note": "0.93 m = 3 risers; a legal step up as well as a bed"
+        },
+        {
+          "name": "end_a",
+          "kind": "pier",
+          "z_uu": 0.0,
+          "radius_uu": 80.0,
+          "rung": null,
+          "note": "butts at x = -3.00 m"
+        },
+        {
+          "name": "end_b",
+          "kind": "pier",
+          "z_uu": 0.0,
+          "radius_uu": 80.0,
+          "rung": null,
+          "note": "butts at x = +3.00 m"
+        }
+      ],
+      "parts": {
+        "stone": {
+          "verts": 80,
+          "faces": 70,
+          "tris": 140,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_IvoryStone"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -317.0,
+            -97.0,
+            0.0
+          ],
+          "bbox_max_uu": [
+            317.0,
+            97.0,
+            103.0
+          ],
+          "size_uu": [
+            634.0,
+            194.0,
+            103.0
+          ],
+          "height_m": 1.03,
+          "base_z_uu": 0.0,
+          "normals": {
+            "faces": 70,
+            "shells": 5,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 2,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_IvoryStone",
+          "mesh_name": "WL_Garden_Planter_Wall",
+          "glb": "exports/glb/WL_Garden_Planter_Wall.glb",
+          "fbx": "exports/fbx/WL_Garden_Planter_Wall.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_IvoryStone"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -3.1700000762939453,
+              0,
+              -0.9700000286102295
+            ],
+            "max_yup": [
+              3.1700000762939453,
+              1.0299999713897705,
+              0.9700000286102295
+            ],
+            "bytes": 11056
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 0.0,
+            "stored_z_max": 103.0
+          }
+        },
+        "stone_dark": {
+          "verts": 8,
+          "faces": 6,
+          "tris": 12,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_Stone"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -278.0,
+            -58.0,
+            65.0
+          ],
+          "bbox_max_uu": [
+            278.0,
+            58.0,
+            75.0
+          ],
+          "size_uu": [
+            556.0,
+            116.0,
+            10.0
+          ],
+          "height_m": 0.1,
+          "base_z_uu": 65.0,
+          "normals": {
+            "faces": 6,
+            "shells": 1,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 1,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_Stone",
+          "mesh_name": "WL_Garden_Planter_Wall_stone_dark",
+          "glb": "exports/glb/WL_Garden_Planter_Wall_stone_dark.glb",
+          "fbx": "exports/fbx/WL_Garden_Planter_Wall_stone_dark.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_Stone"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -2.7799999713897705,
+              0.6499999761581421,
+              -0.5799999833106995
+            ],
+            "max_yup": [
+              2.7799999713897705,
+              0.75,
+              0.5799999833106995
+            ],
+            "bytes": 2104
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 65.0,
+            "stored_z_max": 75.0
+          }
+        },
+        "veg_anchor": {
+          "verts": 8,
+          "faces": 6,
+          "tris": 12,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_LeafMid"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -275.0,
+            -55.0,
+            69.0
+          ],
+          "bbox_max_uu": [
+            275.0,
+            55.0,
+            85.0
+          ],
+          "size_uu": [
+            550.0,
+            110.0,
+            16.0
+          ],
+          "height_m": 0.16,
+          "base_z_uu": 69.0,
+          "normals": {
+            "faces": 6,
+            "shells": 1,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 1,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_LeafMid",
+          "mesh_name": "WL_Garden_Planter_Wall_veg_anchor",
+          "glb": "exports/glb/WL_Garden_Planter_Wall_veg_anchor.glb",
+          "fbx": "exports/fbx/WL_Garden_Planter_Wall_veg_anchor.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_LeafMid"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -2.75,
+              0.6899999976158142,
+              -0.550000011920929
+            ],
+            "max_yup": [
+              2.75,
+              0.8500000238418579,
+              0.550000011920929
+            ],
+            "bytes": 2092
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 69.0,
+            "stored_z_max": 85.0
+          }
+        }
+      },
+      "part_count": 3
+    },
+    {
+      "asset_id": "WL_Garden_Overlook",
+      "kit_version": "1.0.0",
+      "family": "garden",
+      "family_group": "gardens",
+      "category": "structure",
+      "silhouette_role": "terrace",
+      "note": "semicircular belvedere on a corbelled bowl, 8 m across, floor at T2; drops into a terrace edge in place of a retaining run",
+      "districts": [
+        "royal_garden",
+        "water_garden",
+        "plaza",
+        "tea_terrace"
+      ],
+      "params": {
+        "radius_m": 4.0,
+        "floor_z_m": 3.1,
+        "rung": "T2",
+        "replaces": "WL_Garden_Retaining_Run"
+      },
+      "origin_rule": "footing at z = 0; +X is the module front",
+      "units": {
+        "authored": "metres",
+        "manifest": "unreal units (cm)",
+        "uu_per_metre": 100.0
+      },
+      "height_uu": 632.0,
+      "bbox_min_uu": [
+        -43.0,
+        -433.0,
+        0.0
+      ],
+      "bbox_max_uu": [
+        430.0,
+        433.0,
+        632.0
+      ],
+      "size_uu": [
+        473.0,
+        866.0,
+        632.0
+      ],
+      "base_z_uu": 0.0,
+      "tris_total": 2908,
+      "tri_budget": 20000,
+      "over_budget": false,
+      "nanite_recommended": true,
+      "collision_recommended": true,
+      "uv": "planar-world-2m (not a lightmap unwrap)",
+      "sockets": [
+        {
+          "name": "bottom",
+          "kind": "ground",
+          "z_uu": 0.0,
+          "radius_uu": 430.0,
+          "rung": null,
+          "note": "the bowl reaches down to 0.80 m; the ground below is open"
+        },
+        {
+          "name": "top_route",
+          "kind": "route",
+          "z_uu": 310.0,
+          "radius_uu": 366.0,
+          "rung": null,
+          "note": "8 m semicircular floor at 3.10 m (T2), open on the -X side"
+        },
+        {
+          "name": "edge",
+          "kind": "edge",
+          "z_uu": 310.0,
+          "radius_uu": 400.0,
+          "rung": null,
+          "note": "the rail arc"
+        },
+        {
+          "name": "end_a",
+          "kind": "pier",
+          "z_uu": 0.0,
+          "radius_uu": 55.0,
+          "rung": null,
+          "note": "replaces one 8.00 m retaining run in a terrace edge"
+        }
+      ],
+      "parts": {
+        "gold": {
+          "verts": 454,
+          "faces": 476,
+          "tris": 888,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_Gold"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -24.0,
+            -414.0,
+            540.0
+          ],
+          "bbox_max_uu": [
+            24.0,
+            414.0,
+            632.0
+          ],
+          "size_uu": [
+            48.0,
+            828.0,
+            92.0
+          ],
+          "height_m": 0.92,
+          "base_z_uu": 540.0,
+          "normals": {
+            "faces": 476,
+            "shells": 6,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 0,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_Gold",
+          "mesh_name": "WL_Garden_Overlook_gold",
+          "glb": "exports/glb/WL_Garden_Overlook_gold.glb",
+          "fbx": "exports/fbx/WL_Garden_Overlook_gold.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_Gold"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -0.23999999463558197,
+              5.400000095367432,
+              -4.139999866485596
+            ],
+            "max_yup": [
+              0.23999999463558197,
+              6.320000171661377,
+              4.139999866485596
+            ],
+            "bytes": 31704
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 540.0,
+            "stored_z_max": 632.0
+          }
+        },
+        "stone": {
+          "verts": 1009,
+          "faces": 1178,
+          "tris": 1928,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_IvoryStone"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -43.0,
+            -433.0,
+            0.0
+          ],
+          "bbox_max_uu": [
+            430.0,
+            433.0,
+            540.0
+          ],
+          "size_uu": [
+            473.0,
+            866.0,
+            540.0
+          ],
+          "height_m": 5.4,
+          "base_z_uu": 0.0,
+          "normals": {
+            "faces": 1178,
+            "shells": 22,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 3,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_IvoryStone",
+          "mesh_name": "WL_Garden_Overlook",
+          "glb": "exports/glb/WL_Garden_Overlook.glb",
+          "fbx": "exports/fbx/WL_Garden_Overlook.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_IvoryStone"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -0.4300000071525574,
+              0,
+              -4.329999923706055
+            ],
+            "max_yup": [
+              4.300000190734863,
+              5.399999618530273,
+              4.329999923706055
+            ],
+            "bytes": 73880
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 0.0,
+            "stored_z_max": 539.9999389648438
+          }
+        },
+        "stone_dark": {
+          "verts": 48,
+          "faces": 68,
+          "tris": 92,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_Stone"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -0.0,
+            -366.0,
+            310.0
+          ],
+          "bbox_max_uu": [
+            366.0,
+            366.0,
+            315.0
+          ],
+          "size_uu": [
+            366.0,
+            732.0,
+            5.0
+          ],
+          "height_m": 0.05,
+          "base_z_uu": 310.0,
+          "normals": {
+            "faces": 68,
+            "shells": 1,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 1,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_Stone",
+          "mesh_name": "WL_Garden_Overlook_stone_dark",
+          "glb": "exports/glb/WL_Garden_Overlook_stone_dark.glb",
+          "fbx": "exports/fbx/WL_Garden_Overlook_stone_dark.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_Stone"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -1.599836849663916e-07,
+              3.0999999046325684,
+              -3.6600000858306885
+            ],
+            "max_yup": [
+              3.6600000858306885,
+              3.1500000953674316,
+              3.6600000858306885
+            ],
+            "bytes": 6380
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 310.0,
+            "stored_z_max": 315.0
+          }
+        }
+      },
+      "part_count": 3
+    },
+    {
+      "asset_id": "WL_Garden_Gate_Threshold",
+      "kit_version": "1.0.0",
+      "family": "garden",
+      "family_group": "gardens",
+      "category": "structure",
+      "silhouette_role": "threshold",
+      "note": "drop-in replacement for a retaining run with a 2.40 m ogee pedestrian gate through the bank; identical length, ends and coping",
+      "districts": [
+        "royal_garden",
+        "water_garden",
+        "tea_terrace",
+        "grove"
+      ],
+      "params": {
+        "length_m": 8.0,
+        "opening_m": 2.4,
+        "retains_m": 3.1,
+        "rung": "T2",
+        "arch": "ogee"
+      },
+      "origin_rule": "footing at z = 0; +X is the module front",
+      "units": {
+        "authored": "metres",
+        "manifest": "unreal units (cm)",
+        "uu_per_metre": 100.0
+      },
+      "height_uu": 489.2,
+      "bbox_min_uu": [
+        -400.0,
+        -88.98,
+        0.0
+      ],
+      "bbox_max_uu": [
+        400.0,
+        67.0,
+        489.2
+      ],
+      "size_uu": [
+        800.0,
+        155.98,
+        489.2
+      ],
+      "base_z_uu": 0.0,
+      "tris_total": 1644,
+      "tri_budget": 14000,
+      "over_budget": false,
+      "nanite_recommended": true,
+      "collision_recommended": true,
+      "uv": "planar-world-2m (not a lightmap unwrap)",
+      "sockets": [
+        {
+          "name": "bottom",
+          "kind": "ground",
+          "z_uu": 0.0,
+          "radius_uu": 400.0,
+          "rung": null,
+          "note": ""
+        },
+        {
+          "name": "passage",
+          "kind": "pier",
+          "z_uu": 0.0,
+          "radius_uu": 120.0,
+          "rung": null,
+          "note": "2.40 m clear, 1.55 m to the springing, 2.60 m to the crown"
+        },
+        {
+          "name": "top_route",
+          "kind": "route",
+          "z_uu": 310.0,
+          "radius_uu": 400.0,
+          "rung": null,
+          "note": "T2 terrace carries over"
+        },
+        {
+          "name": "edge",
+          "kind": "edge",
+          "z_uu": 310.0,
+          "radius_uu": 400.0,
+          "rung": null,
+          "note": "coping at 3.10 m"
+        },
+        {
+          "name": "end_a",
+          "kind": "pier",
+          "z_uu": 0.0,
+          "radius_uu": 55.0,
+          "rung": null,
+          "note": "x = -4.00 m, same section as the run"
+        },
+        {
+          "name": "end_b",
+          "kind": "pier",
+          "z_uu": 0.0,
+          "radius_uu": 55.0,
+          "rung": null,
+          "note": "x = +4.00 m, same section as the run"
+        }
+      ],
+      "parts": {
+        "gold": {
+          "verts": 454,
+          "faces": 476,
+          "tris": 888,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_Gold"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -190.12,
+            -25.12,
+            463.6
+          ],
+          "bbox_max_uu": [
+            190.12,
+            5.12,
+            489.2
+          ],
+          "size_uu": [
+            380.24,
+            30.24,
+            25.6
+          ],
+          "height_m": 0.256,
+          "base_z_uu": 463.6,
+          "normals": {
+            "faces": 476,
+            "shells": 6,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 0,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_Gold",
+          "mesh_name": "WL_Garden_Gate_Threshold_gold",
+          "glb": "exports/glb/WL_Garden_Gate_Threshold_gold.glb",
+          "fbx": "exports/fbx/WL_Garden_Gate_Threshold_gold.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_Gold"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -1.9012000560760498,
+              4.636000156402588,
+              -0.05119999498128891
+            ],
+            "max_yup": [
+              1.9012000560760498,
+              4.892000198364258,
+              0.25119999051094055
+            ],
+            "bytes": 28904
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 463.6000061035156,
+            "stored_z_max": 489.20001220703125
+          }
+        },
+        "stone": {
+          "verts": 352,
+          "faces": 330,
+          "tris": 684,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_IvoryStone"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -400.0,
+            -88.98,
+            0.0
+          ],
+          "bbox_max_uu": [
+            400.0,
+            67.0,
+            470.0
+          ],
+          "size_uu": [
+            800.0,
+            155.98,
+            470.0
+          ],
+          "height_m": 4.7,
+          "base_z_uu": 0.0,
+          "normals": {
+            "faces": 330,
+            "shells": 12,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 2,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_IvoryStone",
+          "mesh_name": "WL_Garden_Gate_Threshold",
+          "glb": "exports/glb/WL_Garden_Gate_Threshold.glb",
+          "fbx": "exports/fbx/WL_Garden_Gate_Threshold.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_IvoryStone"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -4,
+              0,
+              -0.6699999570846558
+            ],
+            "max_yup": [
+              4,
+              4.699999809265137,
+              0.8898333311080933
+            ],
+            "bytes": 36248
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 0.0,
+            "stored_z_max": 469.9999694824219
+          }
+        },
+        "stone_dark": {
+          "verts": 32,
+          "faces": 24,
+          "tris": 48,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_Stone"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -390.0,
+            -23.1,
+            0.0
+          ],
+          "bbox_max_uu": [
+            390.0,
+            56.1,
+            310.0
+          ],
+          "size_uu": [
+            780.0,
+            79.2,
+            310.0
+          ],
+          "height_m": 3.1,
+          "base_z_uu": 0.0,
+          "normals": {
+            "faces": 24,
+            "shells": 4,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 1,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_Stone",
+          "mesh_name": "WL_Garden_Gate_Threshold_stone_dark",
+          "glb": "exports/glb/WL_Garden_Gate_Threshold_stone_dark.glb",
+          "fbx": "exports/fbx/WL_Garden_Gate_Threshold_stone_dark.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_Stone"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -3.9000000953674316,
+              0,
+              -0.5609999895095825
+            ],
+            "max_yup": [
+              3.9000000953674316,
+              3.0999999046325684,
+              0.23099999129772186
+            ],
+            "bytes": 4632
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 0.0,
+            "stored_z_max": 310.0
+          }
+        },
+        "veg_anchor": {
+          "verts": 16,
+          "faces": 12,
+          "tris": 24,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_LeafMid"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -385.0,
+            14.0,
+            280.0
+          ],
+          "bbox_max_uu": [
+            385.0,
+            48.0,
+            290.0
+          ],
+          "size_uu": [
+            770.0,
+            34.0,
+            10.0
+          ],
+          "height_m": 0.1,
+          "base_z_uu": 280.0,
+          "normals": {
+            "faces": 12,
+            "shells": 2,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 0,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_LeafMid",
+          "mesh_name": "WL_Garden_Gate_Threshold_veg_anchor",
+          "glb": "exports/glb/WL_Garden_Gate_Threshold_veg_anchor.glb",
+          "fbx": "exports/fbx/WL_Garden_Gate_Threshold_veg_anchor.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_LeafMid"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -3.8500001430511475,
+              2.799999952316284,
+              -0.48000001907348633
+            ],
+            "max_yup": [
+              3.8500001430511475,
+              2.8999998569488525,
+              -0.14000000059604645
+            ],
+            "bytes": 2972
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 280.0,
+            "stored_z_max": 290.0
+          }
+        }
+      },
+      "part_count": 4
+    },
+    {
+      "asset_id": "WL_Garden_Pavilion_Base",
+      "kit_version": "1.0.0",
+      "family": "garden",
+      "family_group": "gardens",
+      "category": "structure",
+      "silhouette_role": "terrace",
+      "note": "octagonal raised court, 9 m across, floor at T2, with an XL tower socket -- a pavilion or a small tower stands on it",
+      "districts": [
+        "royal_garden",
+        "tea_terrace",
+        "water_garden",
+        "plaza"
+      ],
+      "params": {
+        "radius_m": 4.5,
+        "sides": 8,
+        "floor_z_m": 3.1,
+        "rung": "T2",
+        "carries": "XL tower foot"
+      },
+      "origin_rule": "footing at z = 0; +X is the module front",
+      "units": {
+        "authored": "metres",
+        "manifest": "unreal units (cm)",
+        "uu_per_metre": 100.0
+      },
+      "height_uu": 404.0,
+      "bbox_min_uu": [
+        -481.47,
+        -481.47,
+        0.0
+      ],
+      "bbox_max_uu": [
+        481.47,
+        481.47,
+        404.0
+      ],
+      "size_uu": [
+        962.94,
+        962.94,
+        404.0
+      ],
+      "base_z_uu": 0.0,
+      "tris_total": 412,
+      "tri_budget": 12000,
+      "over_budget": false,
+      "nanite_recommended": true,
+      "collision_recommended": true,
+      "uv": "planar-world-2m (not a lightmap unwrap)",
+      "sockets": [
+        {
+          "name": "bottom",
+          "kind": "ground",
+          "z_uu": 0.0,
+          "radius_uu": 492.0,
+          "rung": null,
+          "note": ""
+        },
+        {
+          "name": "top_route",
+          "kind": "route",
+          "z_uu": 310.0,
+          "radius_uu": 450.0,
+          "rung": null,
+          "note": "9 m octagonal floor at 3.10 m (T2); the +X face is open"
+        },
+        {
+          "name": "top",
+          "kind": "tower",
+          "z_uu": 310.0,
+          "radius_uu": 680.0,
+          "rung": "XL",
+          "note": "an XL-rung tower foot may stand here -- the join between the garden kit and the tower kit"
+        },
+        {
+          "name": "edge",
+          "kind": "edge",
+          "z_uu": 310.0,
+          "radius_uu": 450.0,
+          "rung": null,
+          "note": "seven kerb blocks; the eighth bay is the entry"
+        }
+      ],
+      "parts": {
+        "stone": {
+          "verts": 216,
+          "faces": 172,
+          "tris": 384,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_IvoryStone"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -481.47,
+            -481.47,
+            0.0
+          ],
+          "bbox_max_uu": [
+            481.47,
+            481.47,
+            404.0
+          ],
+          "size_uu": [
+            962.94,
+            962.94,
+            404.0
+          ],
+          "height_m": 4.04,
+          "base_z_uu": 0.0,
+          "normals": {
+            "faces": 172,
+            "shells": 12,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 4,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_IvoryStone",
+          "mesh_name": "WL_Garden_Pavilion_Base",
+          "glb": "exports/glb/WL_Garden_Pavilion_Base.glb",
+          "fbx": "exports/fbx/WL_Garden_Pavilion_Base.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_IvoryStone"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -4.814720153808594,
+              0,
+              -4.814720153808594
+            ],
+            "max_yup": [
+              4.814720153808594,
+              4.039999961853027,
+              4.814720153808594
+            ],
+            "bytes": 26088
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 0.0,
+            "stored_z_max": 404.0
+          }
+        },
+        "stone_dark": {
+          "verts": 16,
+          "faces": 10,
+          "tris": 28,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_Stone"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -388.03,
+            -388.03,
+            305.0
+          ],
+          "bbox_max_uu": [
+            388.03,
+            388.03,
+            310.0
+          ],
+          "size_uu": [
+            776.06,
+            776.06,
+            5.0
+          ],
+          "height_m": 0.05,
+          "base_z_uu": 305.0,
+          "normals": {
+            "faces": 10,
+            "shells": 1,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 1,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_Stone",
+          "mesh_name": "WL_Garden_Pavilion_Base_stone_dark",
+          "glb": "exports/glb/WL_Garden_Pavilion_Base_stone_dark.glb",
+          "fbx": "exports/fbx/WL_Garden_Pavilion_Base_stone_dark.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_Stone"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -3.88029408454895,
+              3.049999952316284,
+              -3.88029408454895
+            ],
+            "max_yup": [
+              3.88029408454895,
+              3.0999999046325684,
+              3.88029408454895
+            ],
+            "bytes": 2980
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 305.0,
+            "stored_z_max": 310.0
           }
         }
       },

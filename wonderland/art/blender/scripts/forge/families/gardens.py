@@ -73,9 +73,12 @@ def _retaining_face(part, dark, veg, length, x0=0.0, matrix=None, coping=True):
         # makes a retaining wall read as a made edge rather than as a slope
         made += part.box(length, THICK + 0.44, 0.22, at=(x0, -0.10, TERRACE_Z - 0.34),
                          matrix=matrix, chamfer=0.05, centre_z=False)
-        made += part.box(length, THICK + 0.26, 0.12, at=(x0, -0.04, TERRACE_Z - 0.12),
+        # the coping stops 6 cm down and the wearing course fills it. Both
+        # topping out at TERRACE_Z put two up-facing faces in one plane and
+        # every coping in the family rendered with a black strip along it.
+        made += part.box(length, THICK + 0.26, 0.06, at=(x0, -0.04, TERRACE_Z - 0.12),
                          matrix=matrix, chamfer=0.03, centre_z=False)
-        dark.box(length - 0.20, THICK * 0.72, 0.06, at=(x0, ht * 0.30, TERRACE_Z - 0.06),
+        dark.box(length - 0.20, THICK * 0.72, 0.08, at=(x0, ht * 0.30, TERRACE_Z - 0.08),
                  matrix=matrix, centre_z=False)
     # planting spills OVER a garden wall; the anchor sits just behind the coping
     veg.box(length - 0.30, 0.34, 0.10, at=(x0, ht - 0.24, TERRACE_Z - 0.30),
@@ -143,7 +146,7 @@ def garden_retaining_corner_in(f):
              (ht, ht, TERRACE_Z - 0.34), (-ht, ht, TERRACE_Z - 0.34)]], smooth=False)
     p.box(THICK + 0.44, THICK + 0.44, 0.22, at=(-0.10, -0.10, TERRACE_Z - 0.34),
           chamfer=0.05, centre_z=False)
-    p.box(THICK + 0.26, THICK + 0.26, 0.12, at=(-0.04, -0.04, TERRACE_Z - 0.12),
+    p.box(THICK + 0.26, THICK + 0.26, 0.06, at=(-0.04, -0.04, TERRACE_Z - 0.12),
           chamfer=0.03, centre_z=False)
     return K.ModuleSpec(
         "WL_Garden_Retaining_Corner_In", "garden", "structure", "terrace",
@@ -183,7 +186,7 @@ def garden_retaining_corner_out(f):
              (ht, ht, TERRACE_Z - 0.34), (-ht, ht, TERRACE_Z - 0.34)]], smooth=False)
     p.box(THICK + 0.44, THICK + 0.44, 0.22, at=(0.10, 0.10, TERRACE_Z - 0.34),
           chamfer=0.05, centre_z=False)
-    p.box(THICK + 0.26, THICK + 0.26, 0.12, at=(0.04, 0.04, TERRACE_Z - 0.12),
+    p.box(THICK + 0.26, THICK + 0.26, 0.06, at=(0.04, 0.04, TERRACE_Z - 0.12),
           chamfer=0.03, centre_z=False)
     # the outward corner is the one that gets an urn, because it is the one
     # the level below can see
@@ -222,24 +225,36 @@ def garden_retaining_curved(f):
     v = f.part("veg_anchor")
     R = 11.00
     ARC = 45.0
-    SEG = 14
+    SEG = 16
     ht = THICK * 0.5
+    turn = M.xform((0, 0, 0), (0, 0, -ARC * 0.5))
 
-    def ring(r_out, r_in, z0, z1, arc=ARC, pad=0.0):
-        prof = [(r_in, z0), (r_out, z0), (r_out, z1), (r_in, z1)]
-        return p.lathe(prof, segments=SEG, arc=arc + pad,
-                       matrix=M.xform((0, 0, 0), (0, 0, -(arc + pad) * 0.5)),
-                       smooth=False)
-
-    # the battered face, as a lathed frustum
-    p.lathe([(R - ht, 0.0), (R + ht + BATTER, 0.0),
-             (R + ht, TERRACE_Z - 0.34), (R - ht, TERRACE_Z - 0.34)],
-            segments=SEG, arc=ARC, matrix=M.xform((0, 0, 0), (0, 0, -ARC * 0.5)),
-            smooth=False)
-    ring(R + ht + 0.34, R - ht - 0.10, TERRACE_Z - 0.34, TERRACE_Z - 0.12, pad=0.6)
-    ring(R + ht + 0.16, R - ht - 0.04, TERRACE_Z - 0.12, TERRACE_Z, pad=0.4)
-    d.lathe([(R - ht + 0.10, TERRACE_Z - 0.06), (R - ht + 0.10, TERRACE_Z - 0.06)],
-            segments=4, arc=1.0) if False else None
+    # ONE CLOSED SECTION, revolved. The first version stacked a battered
+    # frustum and two coping rings as separate partial lathes with different
+    # arc padding; where their end caps failed to line up the module rendered
+    # with a black wedge out of it. A section that closes on itself has exactly
+    # two end caps and they are the section.
+    section = [
+        (R - ht - 0.10, 0.0),                       # inner foot (inside the bank)
+        (R + ht + BATTER, 0.0),                     # outer foot
+        (R + ht, TERRACE_Z - 0.34),                 # top of the battered face
+        (R + ht + 0.34, TERRACE_Z - 0.34),          # coping oversail
+        (R + ht + 0.34, TERRACE_Z - 0.12),
+        (R + ht + 0.16, TERRACE_Z - 0.12),
+        (R + ht + 0.16, TERRACE_Z - 0.06),
+        (R - ht - 0.10, TERRACE_Z - 0.06),          # back to the bank at coping level
+        (R - ht - 0.10, 0.0),
+    ]
+    p.lathe(section, segments=SEG, arc=ARC, matrix=turn, smooth=False)
+    # the wearing course BEDS 2 cm into the coping rather than sitting exactly
+    # on it. Coincident faces are depth-sorted fine in an engine but Cycles
+    # shows a hairline of background along the seam at a grazing angle, and a
+    # hairline in a contact sheet is indistinguishable from a real gap.
+    d.lathe([(R - ht - 0.06, TERRACE_Z - 0.08), (R + ht + 0.10, TERRACE_Z - 0.08),
+             (R + ht + 0.10, TERRACE_Z), (R - ht - 0.06, TERRACE_Z),
+             (R - ht - 0.06, TERRACE_Z - 0.08)],
+            segments=SEG, arc=ARC - 0.4,
+            matrix=M.xform((0, 0, 0), (0, 0, -(ARC - 0.4) * 0.5)), smooth=False)
     v.lathe([(R - ht + 0.06, TERRACE_Z - 0.30), (R - ht + 0.34, TERRACE_Z - 0.30),
              (R - ht + 0.34, TERRACE_Z - 0.20), (R - ht + 0.06, TERRACE_Z - 0.20)],
             segments=SEG, arc=ARC - 2.0,
@@ -312,8 +327,13 @@ def garden_overlook(f):
     g = f.part("gold")
     R = 4.00
     SEG = 22
-    # the corbelled bowl carrying the projecting floor
-    p.lathe([(0.0, TERRACE_Z - 2.30), (R * 0.42, TERRACE_Z - 1.90),
+    # THE BOWL REACHES THE GROUND. It first stopped 0.80 m short, on the
+    # reasoning that an overlook projects over the level below -- but that left
+    # a module whose lowest geometry was at +0.80 m with nothing at z = 0, which
+    # is a floating asset, not a cantilever. The validator's origin rule caught
+    # it. A corbelled bowl rising from the lower level is also the more honest
+    # structure: something has to carry 8 m of projecting floor.
+    p.lathe([(0.0, 0.0), (R * 0.30, 0.55), (R * 0.42, TERRACE_Z - 1.90),
              (R * 0.78, TERRACE_Z - 1.05), (R * 0.96, TERRACE_Z - 0.50),
              (R, TERRACE_Z - 0.34)], segments=SEG, arc=180.0,
             matrix=M.xform((0, 0, 0), (0, 0, -90.0)), smooth=True)
@@ -395,8 +415,10 @@ def garden_gate_threshold(f):
           at=(0.0, ht * 0.4, 0.0), centre_z=False)
     p.box(SPAN + 2.20, THICK + 0.44, 0.22, at=(0.0, -0.10, TERRACE_Z - 0.34),
           chamfer=0.05, centre_z=False)
-    p.box(SPAN + 2.20, THICK + 0.26, 0.12, at=(0.0, -0.04, TERRACE_Z - 0.12),
+    p.box(SPAN + 2.20, THICK + 0.26, 0.06, at=(0.0, -0.04, TERRACE_Z - 0.12),
           chamfer=0.03, centre_z=False)
+    d.box(SPAN + 2.00, THICK * 0.72, 0.06, at=(0.0, THICK * 0.15, TERRACE_Z - 0.06),
+          centre_z=False)
     for sgn in (-1.0, 1.0):
         E.pinnacle(p, (sgn * (SPAN * 0.5 + 0.55), -0.10, TERRACE_Z), 1.60, 0.24, gold=g)
     return K.ModuleSpec(

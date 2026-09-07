@@ -24,7 +24,7 @@ below, and add one line to `FAMILIES`. That is the whole ceremony, and it is
 now impossible to do it for the builder and not for the validator.
 """
 
-from .families import (civic, details, hero, roofscape, stairs,
+from .families import (civic, details, gardens, hero, roofscape, stairs,
                        thresholds, towers, walls)
 
 #: (group name, module). Group name reaches the manifest as `family_group` and
@@ -36,6 +36,7 @@ FAMILIES = (
     ("walls", walls),
     ("roofscape", roofscape),
     ("stairs", stairs),
+    ("gardens", gardens),
     ("details", details),
     ("hero", hero),
 )
