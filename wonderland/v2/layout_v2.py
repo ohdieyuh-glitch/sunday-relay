@@ -5955,6 +5955,72 @@ PROCESSIONAL_BORDER = _band("V2_Garden", _processional_border())
 # untouched and still hashes identical; this fills between them, in their own
 # language, and stops 28 m clear of the corridor the layout gate protects.
 
+#: uu. THE FLANK WALK. The band runs |x| 2,900..6,400; this is the lane down
+#: the middle of it, and its width is not invented -- both flank cameras were
+#: sited by a clearance search and both chose |x| = 4,350, which is the middle
+#: of this.
+_FLANK_WALK_X = 4400.0
+_FLANK_WALK_LO, _FLANK_WALK_HI = 3700.0, 5100.0
+_FLANK_WALK_Y0, _FLANK_WALK_Y1 = 2400.0, 8600.0
+#: uu. Half the distance between the kerbs. 620 put the inner kerb at |x| 3,780
+#: and `walkable --window=world` lost "R lane y=4500": that strip is already
+#: the tightest ground in the arrival -- `BeyondR_Wall0`, `GoldScreen3`,
+#: `Court_MushRCap`, `Garden_R_Tree_Trunk` and `Tower_R0` all crowd it, and the
+#: trace showed a 67-cell pocket that `FlankWalkR_Col2_1` closed. A 7.6 m walk
+#: keeps its ornament out of that strip and is still a walk.
+_FLANK_KERB = 380.0
+
+
+def _flank_walks():
+    """A garden walk down each flank, with ornament, because there was one.
+
+    The flanks were a planted band with a bare lane through the middle that
+    only the camera-siting search knew about. A lane nothing is built on is
+    not a walk, it is a gap -- and the audit that found it (`framescape.py`,
+    the ceiling census) found the frames looking down it roofed by the trees
+    on either side.
+
+    So the gap becomes a place: paving, plinthed urns down both kerbs in the
+    rhythm this band already uses on its shoulder, and a column at every
+    fourth station for the vertical the frames have none of. The same language
+    as PASS 35's landmark avenues, at garden scale, and it earns its own
+    traversal -- this is 62 m of new paved walk on each flank.
+    """
+    out = []
+    n = 9
+    for side in (1, -1):
+        tag = "FlankWalk%s" % ("L" if side > 0 else "R")
+        x = side * _FLANK_WALK_X
+        for i in range(n):
+            y = _FLANK_WALK_Y0 + (_FLANK_WALK_Y1 - _FLANK_WALK_Y0) * i / float(n - 1)
+            out.append(A("terrace_platform", x, y, ROAD_Z, yaw=90.0,
+                         sxyz=(0.86, 0.62, 0.35),
+                         mat=("MI_V2_PlazaWarm", "MI_V2_PlazaCream",
+                              "MI_V2_PlazaGrey")[i % 3],
+                         label="%s_Paving%d" % (tag, i)))
+            for sgn in (1.0, -1.0):
+                kx = x + sgn * _FLANK_KERB
+                if i % 4 == 2:
+                    out.append(A("column_ornate", kx, y, 0.0, yaw=90.0, s=1.35,
+                                 mat="MI_V2_IvoryStone",
+                                 label="%s_Col%d_%d" % (tag, i, int(sgn))))
+                    out.append(A("gate_finial_ball", kx, y, 950.0 * 1.35,
+                                 s=1.15, mat="MI_V2_Gold",
+                                 label="%s_ColBall%d_%d" % (tag, i, int(sgn))))
+                elif i % 2 == 0:
+                    out.append(A("pedestal_finial", kx, y, 0.0, s=0.9,
+                                 mat="MI_V2_IvoryStone",
+                                 label="%s_Plinth%d_%d" % (tag, i, int(sgn))))
+                    out.append(A("garden_urn", kx, y, 131.0, s=0.58,
+                                 mat="MI_V2_Ceramic",
+                                 label="%s_Urn%d_%d" % (tag, i, int(sgn))))
+                else:
+                    out.append(A("topiary_cone_plain", kx, y, 0.0, yaw=30.0 * i,
+                                 s=1.5, mat=("MI_V2_LeafDark", "MI_V2_LeafMid")[i % 2],
+                                 label="%s_Cone%d_%d" % (tag, i, int(sgn))))
+    return out
+
+
 def _approach_sides():
     out = []
     for side in (1, -1):
@@ -5977,7 +6043,23 @@ def _approach_sides():
             # axis the band is now beds, ornament and low topiary; beyond it,
             # trees and hedge masses. Same thirty pieces a side, the mass moved
             # outward, and the near band gains the flower colour batch D wants.
-            near = abs(x) < 4200.0
+            #
+            # BATCH B MOVED THE PROBLEM, IT DID NOT SOLVE IT (PASS 36). Sending
+            # the tall mass outward past 42 m was measured on SkylineCam06 and
+            # on nothing else, and `FlankLeftCam08` STANDS AT x = 4350 looking
+            # straight up this band: `framescape.py` found that frame 90%
+            # roofed by vegetation with `ApproachSideL_Canopy2` at 42 m and
+            # bearing -1.5 deg, dead centre. The recomposition had put the
+            # trees exactly where the flank camera lives.
+            #
+            # There is a lane here and this is the second instrument to find
+            # it. The flank cameras were sited (founder, 2026-08-28) at "the
+            # clearest spot on a 5x5 search" and both landed at |x| = 4350 --
+            # the siting DISCOVERED a walk down the middle of a 35 m band, and
+            # nobody built it. `_flank_walks` builds it below; here the tall
+            # mass simply keeps off it, the way planting keeps off a path.
+            lane = _FLANK_WALK_LO <= abs(x) <= _FLANK_WALK_HI
+            near = abs(x) < 4200.0 or lane
             if pick < (0.10 if near else 0.36):
                 t = 1.05 + 0.4 * _rnd(i, seed, 4)
                 out += [
@@ -6026,6 +6108,7 @@ def _approach_sides():
 
 
 APPROACH_SIDES = _band("V2_Garden", _approach_sides())
+FLANK_WALKS = _band("V2_Garden", _flank_walks())
 
 
 # ---------------------------------------------------------------------------
@@ -8208,7 +8291,7 @@ for _bandref in (OUTER_WORLD, GROUND_QUILT, HORIZON, LANDMARKS, DEPTH):
 
 BUILD_BANDS = [FOREGROUND, COURTYARD, GARDEN, PALACE, FLANK_GROUND, FLANKS,
                REARWORLD, CAM_FOREGROUNDS, GROUND_QUILT, OUTER_WORLD, PLAZA_ORNAMENT,
-               PROCESSIONAL_BORDER, HORIZON, APPROACH_SIDES, PLAZA_WALL_DRESS,
+               PROCESSIONAL_BORDER, HORIZON, APPROACH_SIDES, FLANK_WALKS, PLAZA_WALL_DRESS,
                SIGNATURE, LANDMARKS, DEPTH, COURT_DRESS, WAYSIDE, SOUTH_REACH,
                FAR_CITY, GOLD]
 

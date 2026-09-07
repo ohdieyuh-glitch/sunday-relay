@@ -246,7 +246,7 @@ def main():
               % (name, s["built"], s["veg"], s["sky"], s["med"], s["boss"][:30], s["bossn"]))
     if not only:
         w = [r for r in rows if r[1]["sky"] > 25.0]
-        v = [r for r in rows if r[1]["veg"] > 55.0]
+        v = [r for r in rows if r[1]["veg"] > 50.0]
         b = [r for r in rows if r[1]["bossn"] > 33.0]
         print("\n%d of %d frames are more than a quarter open sky:" % (len(w), len(rows)))
         for n, s in sorted(w, key=lambda r: -r[1]["sky"]):
