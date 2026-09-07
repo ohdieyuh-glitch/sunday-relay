@@ -86,13 +86,21 @@ inner ring, thinner, shorter). Both swoop.
 The composition is the Kingdom Hearts reference MIRRORED — the whole layout,
 not just the curve. There: a thick green ring wraps a portrait at the RIGHT-hand
 end of the HUD, its gap opens LEFT, a long tail leaves the ring and sweeps away
-to the left while descending, and a straight blue MP bar runs along the bottom
-with its near end passing BEHIND the ring. Here: the ring sits in the anchored
+to the left while descending, and a blue MP bar runs along the bottom with
+its near end passing BEHIND the ring. Here: the ring sits in the anchored
 top-left corner, its gap opens RIGHT, the tail leaves travelling RIGHT while
-descending, and the blue bar runs left to right with its LEFT end behind the
-ring — which is also the direction given in as many words, "the single-agent bar
-swoops right, behind the Compound frame". The frame's `emphasis` puts it last in
-the draw order, so behind is literal rather than approximate.
+descending, and the blue SWOOPS left to right — diving out of the frame's left
+side, under the ring's lower arc, and away to the right.
+
+The blue swoops rather than running straight, and that is the direction in as
+many words: "the single-agent bar swoops right, behind the Compound frame". A
+dead-straight bar beside a ring reads as two widgets placed together; this is
+one drawing and the blue is its second stroke. BEHIND is literal, not adjacent —
+the stroke starts on the frame's own stroke and crosses under the ring, so the
+frame occludes it, and the frame's `emphasis` is what makes that true rather
+than accidental. Most of the sweep sits in the RIGHT half deliberately: the left
+half is behind the ring, and a swoop nobody can see is a straight line as far as
+a viewer is concerned.
 
 Five facts are MEASURED rather than trusted, because a mirrored figure is the
 easiest thing to get half-right:
@@ -103,8 +111,11 @@ easiest thing to get half-right:
 - the swoop descends — the tip sits BELOW where the tail leaves the ring
 - the ring is a RING — constant radius over 305 degrees, and a circle rather
   than an ellipse
-- the bar starts BEHIND the frame — its first point is inside the frame's own
-  stroke, not merely near it
+- the blue starts BEHIND the frame — its first point is inside the frame's own
+  stroke, not merely near it — and CROSSES it, entering the ring's footprint and
+  leaving, so the occlusion happens rather than being implied
+- the blue swoops — its midpoint sits well off the chord between its ends, by
+  more than a hint
 
 `taperStart` sits at almost exactly the ring's share of the arc length. A tail
 that kept the ring's weight for another fifth of the stroke stopped reading as a

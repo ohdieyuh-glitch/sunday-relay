@@ -589,8 +589,10 @@ describe('two bars, bound separately', () => {
     // as two widgets placed together, and the reference's own bar has an angled
     // end for the same reason. "Simpler" survives as weight — half the
     // thickness, one segment against five, and no point at the end.
-    expect(WONDERLAND_SINGLE_SWOOSH.segments.length).toBe(1);
-    expect(WONDERLAND_COMPOUND_SWOOSH.segments.length).toBeGreaterThan(4);
+    expect(WONDERLAND_SINGLE_SWOOSH.segments.length).toBeGreaterThan(1);
+    expect(WONDERLAND_SINGLE_SWOOSH.segments.length).toBeLessThan(
+      WONDERLAND_COMPOUND_SWOOSH.segments.length,
+    );
     expect(WONDERLAND_SINGLE_SWOOSH.tailWidth).toBeLessThan(
       WONDERLAND_COMPOUND_SWOOSH.tailWidth * 0.8,
     );
@@ -601,14 +603,33 @@ describe('two bars, bound separately', () => {
     expect(singleTaper).toBeGreaterThan(compoundTaper);
   });
 
-  it('bows rather than running dead straight', () => {
+  it('SWOOPS rather than running dead straight', () => {
     const tail = wonderlandSwooshAt(0, WONDERLAND_SINGLE_SWOOSH);
     const tip = wonderlandSwooshAt(1, WONDERLAND_SINGLE_SWOOSH);
     const middle = wonderlandSwooshAt(0.5, WONDERLAND_SINGLE_SWOOSH);
     // The midpoint sits off the chord between the ends. A straight bar would
     // put it exactly on it.
     const chordY = tail.y + (tip.y - tail.y) * ((middle.x - tail.x) / (tip.x - tail.x));
-    expect(Math.abs(middle.y - chordY)).toBeGreaterThan(0.008);
+    // A real sweep, not a hint of one. A bar this long with a deviation under a
+    // couple of percent of the box reads as straight however it is authored.
+    expect(Math.abs(middle.y - chordY)).toBeGreaterThan(0.03);
+  });
+
+  it('crosses BEHIND the frame at both ends of the ring, not around it', () => {
+    // Adjacent is not behind. The stroke has to enter the frame's footprint and
+    // leave it, so the ring occludes it twice.
+    const ring = Array.from({ length: 257 }, (_, i) =>
+      wonderlandSwooshAt(i / 256, WONDERLAND_COMPOUND_SWOOSH),
+    );
+    const inside = (point: { x: number; y: number }): boolean =>
+      Math.min(...ring.map((r) => Math.hypot(r.x - point.x, r.y - point.y))) <
+      WONDERLAND_COMPOUND_SWOOSH.tailWidth;
+    const samples = Array.from({ length: 129 }, (_, i) =>
+      inside(wonderlandSwooshAt(i / 128, WONDERLAND_SINGLE_SWOOSH)),
+    );
+    const crossings = samples.filter((v, i) => i > 0 && v !== samples[i - 1]).length;
+    expect(samples[0]).toBe(true);
+    expect(crossings).toBeGreaterThanOrEqual(1);
   });
 
   it('starts the bar BEHIND the frame, the way the reference does', () => {

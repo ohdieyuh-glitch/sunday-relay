@@ -448,37 +448,52 @@ export const WONDERLAND_COMPOUND_SWOOSH: WonderlandUsageSwoosh = Object.freeze({
 });
 
 /**
- * THE SINGLE-AGENT BAR: the reference's MP bar, and it runs BEHIND the frame.
+ * THE SINGLE-AGENT SWOOP: the same gesture, running BEHIND the frame.
  *
- * The reference's blue bar is a long horizontal bar on the far side of the HUD
- * from the ring, and its near end passes BEHIND the ring rather than stopping
- * politely beside it. Mirrored, the bar runs left to right along the bottom and
- * its LEFT end disappears behind the ring — which is also, exactly, the
- * direction given: the single-agent bar swoops right, behind the Compound
- * frame. The draw order makes it true rather than approximate: the frame's
- * `emphasis` puts it last, so it paints over the bar.
+ * It swoops, and the direction is that it must. A dead-straight bar beside a
+ * ring reads as two widgets that happened to be placed together; this is one
+ * drawing, and the blue is the second stroke of it. So it dives out of the
+ * frame's left side, sweeps down and under the ring, and flies away to the
+ * right — the frame's own gesture, at lower amplitude.
  *
- * It is a BAR and it swoops. A dead-straight rectangle beside a ring reads as
- * two widgets that happened to be placed together, so the bar carries a shallow
- * bow and a width that barely tapers — the reference's own bar has an angled
- * end for the same reason. It is the simpler shape by WEIGHT: half the frame's
- * thickness, one segment against five, and no point at the end.
+ * BEHIND IS LITERAL, not adjacent. It starts ON the frame's stroke and passes
+ * under the ring's lower arc, so the frame occludes it at both crossings — and
+ * the frame's `emphasis` is what makes that true rather than accidental, since
+ * the contract's draw order paints the Compound channel last. The reference
+ * does the same thing with its MP bar, whose near end disappears behind the
+ * ring rather than stopping politely beside it.
+ *
+ * "Simpler" survives as WEIGHT rather than as form: three quarters of the
+ * frame's thickness, fewer segments, a shallower sweep, a tail that stops well
+ * short of the frame's tip, and a width that barely tapers where the frame's
+ * comes to a point. That is what keeps the hierarchy legible without a label —
+ * the same gesture, quieter.
  */
 export const WONDERLAND_SINGLE_SWOOSH: WonderlandUsageSwoosh = Object.freeze({
-  // Starts INSIDE the ring's footprint — the ring's lower arc crosses this
-  // height between x 0.1375 and x 0.3125 — so the bar emerges from behind it.
-  startX: 0.1500,
-  startY: 0.6630,
+  // ON the frame's stroke, not beside it: the ring's spine passes within a
+  // hair of this point, so the blue emerges from behind the green.
+  startX: 0.0550,
+  startY: 0.5700,
   segments: Object.freeze([
+    // Down and under the ring's lower arc — the second crossing, and the one
+    // that makes the stroke read as passing THROUGH rather than around.
     Object.freeze({
-      control1X: 0.4200, control1Y: 0.6940,
-      control2X: 0.7000, control2Y: 0.6900,
-      endX: 0.9200, endY: 0.6600,
+      control1X: 0.0950, control1Y: 0.6720,
+      control2X: 0.2500, control2Y: 0.7010,
+      endX: 0.4400, endY: 0.7080,
+    }),
+    // Out to the right, RISING as it goes. Most of the sweep is deliberately
+    // in this half: the first half is behind the ring, and a swoop nobody can
+    // see is a straight line as far as a viewer is concerned.
+    Object.freeze({
+      control1X: 0.6300, control1Y: 0.7140,
+      control2X: 0.7800, control2Y: 0.6950,
+      endX: 0.9050, endY: 0.6550,
     }),
   ]),
-  // Substantial enough to read as a BAR. The first version was half this and
-  // disappeared under the frame's glow — a meter a viewer cannot see is not a
-  // quieter instrument, it is an absent one.
+  // Substantial enough to read as its own instrument. An earlier draft was half
+  // this and disappeared under the frame's glow — a meter a viewer cannot see is
+  // not a quieter instrument, it is an absent one.
   tailWidth: 0.0230,
   tipWidth: 0.0195,
   taperStart: 0.74,
@@ -528,7 +543,7 @@ export const WONDERLAND_USAGE_VIEWPORT: WonderlandUsageViewport = Object.freeze(
   x: 0,
   y: 0.27,
   width: 1,
-  height: 0.47,
+  height: 0.48,
 });
 
 
