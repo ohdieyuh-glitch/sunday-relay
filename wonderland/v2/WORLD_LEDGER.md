@@ -1941,3 +1941,185 @@ cluster of separate towers rather than one grouped landmark; the gatehouses at
 25-28 m are the tallest thing in several district frames and may outrank the
 landmark they announce; and the district glass tints are unmeasured on the
 depth pieces at these sizes.
+
+---
+
+# PASS 30 — 2026-09-06/07: the region nobody could see, and the audit that could not see it
+
+**Offline only. Nothing rendered.** Every number here comes from
+`layout_v2.ALL` and the built meshkit geometry.
+
+## The problem with passing
+
+All four standing audits passed on this world:
+
+    emptiness --scaled        304 m2 empty in the whole world
+    walkable --window=world   0 of 60 quarters unreachable, 0 of 30 stops
+    hierarchy                 GROUND core:far 10.05x, 0 nested, 0 stray roads
+    camera_framing            every camera's near band accounted for
+
+And `D02_grove`, `D11_meadow` and `D18_meadow` — three neighbouring quarters —
+held 65 placements between them of which 65 were vegetation. Not one built
+piece, one giant mushroom each.
+
+Every audit was right. **A place can be full of actors, reachable, correctly
+sparse for its own tier, and still be nothing to arrive at.** Presence is not
+a destination, and none of the four could tell the difference.
+
+## `tools/region.py`
+
+Three distances over the whole accessible world — to a built silhouette
+>= 25 m, to any architecture at all, to a road — and ground is FORSAKEN where
+all three are past the world's OWN 90th percentile. Flood-filled into
+contiguous regions, ranked by AREA, because "where are the most square metres
+of it" is the question three passes inside one twenty-metre patch failed to
+ask.
+
+Two things it had to be built around, both already in this ledger:
+
+1. **BUILT, not tall.** Its first version's worst region had 81 m of
+   silhouette in it and the 81 m was a HOT-AIR BALLOON, with four tree
+   canopies behind it. `skyline.py` found the balloon in PASS 28 and
+   `occlusion.py` found the canopies in the same pass, and this tool
+   reproduced both on its first run. A tree is scenery.
+2. **A self-calibrating bar cannot compare two worlds.** Repairing a region
+   pulls the whole distribution in, the bar tightens with it, and an
+   untouched region reads as having GROWN — measured on this very pass, the
+   Far Orchards hole went "900 m2 -> 1,600" while nothing there moved.
+   `--bar` pins it. Quote the pinned number for a change.
+
+## The classifier was fail-open, and its own comment said so
+
+`hierarchy.py`'s `ARCH` tuple carries a note added when the signature skyline
+would otherwise have "registered as zero architecture, which is the same
+fail-open shape as a missing FOOT entry and would have been just as quiet."
+
+PASS 29 then authored a whole architectural vocabulary and none of it was
+added. `floating_stair` 124.6 m, `key_colossal` 84.0, `clock_grand` 54.4,
+`glass_pavilion` 54.0, `teapot_pavilion` 48.2, `gear_monument` 31.0,
+`gatehouse_district` 28.4, `orrery_gold` 26.4, `glass_screen` 23.9,
+`lantern_strange` 21.8, `cloister_square` 20.2, `tower_clock` 11.9,
+`arch_stone`, `column_ornate`, `bridge_arc`, `stairs_broad` — **all sixteen
+classed `prop`**, beside the garden benches and the finial balls. So eleven
+meadows and three groves reported `arch=0` with a 54 m rotunda standing in
+one of them.
+
+`flower_colossal` was worse than a prop. `VEG` matches `"flower_"`, so the
+Royal Gardens' district landmark — three 20 m blooms in metal and glass —
+was VEGETATION. `ARCH` is tested before `VEG` in `klass`, so naming it was
+the whole fix.
+
+And `is_landmark` matches by prefix, so `mushroom_giant` has always also
+matched its own gills, spots and rim: **every giant mushroom in Wonderland
+was counted four times.** `LANDMARK_RIDERS` ends that.
+
+    on the SAME world, unchanged:
+      landmarks                          383  ->  401
+      road to nearest landmark, median    20  ->   18 m
+                                 p90      43  ->   32 m
+                                 worst    83  ->   58 m
+      arch per hectare at 175-200 m     21.1  -> 36.7
+
+**Every arch/ha figure written in this file before PASS 30 under-reports.**
+
+## The worst region
+
+    6,800 m2, centre (120, -312) m, r 334 m, bearing 291 deg, South Meadows
+    83% of ALL the forsaken ground in Wonderland
+    at its worst  105 m from ANY architecture
+                  128 m from anything 25 m tall
+                  109 m from a road
+    world medians  10 / 33 / 20 m
+
+Not bad luck. `_DISTRICT_SEEDS` gives South Meadows the palette
+`("meadow", "wood", "meadow")`, which contains **no built kind**, so the
+district was always going to be landscape. Its one authored landmark stands
+at 260 m, its ground runs to 358, and the last road on that bearing stopped
+at 259. Everything past the rotunda was a hundred metres of grass.
+
+## What was built, and what was deliberately not
+
+THE FIX IS NOT DENSITY. Filling 6,800 m2 with props would have moved the
+number and made the world worse: the brief for this tier is a hierarchy and a
+meadow that reads as a meadow is correct. What the region never had was a
+REASON.
+
+    THE SOUTH WAY       84 m of road out of the ring circuit, two legs
+    THE SOUTH GATE      a gatehouse astride it
+    THE SOUTH RING      a 45 m arch on the approach axis inside a circle of
+                        eight 20.8 m arches, amber and rose glass between
+                        alternate pairs -- the only thing in Wonderland made
+                        of nothing but arches, and you walk through all of it
+    THE LAST COLONNADE  19 columns on an arc at 346 m, 12 m apart, so the
+                        world's southern edge is a made line and not a fade
+    TWO THRESHOLDS      one each for D11_meadow and D18_meadow
+
+Sited at the audit's own reported centre, which is what `_QUARTER_SITES`
+already says it does: "the audit's own reported centres ... the difference
+between filling a world and filling the part of it somebody happened to look
+at". Same move, one instrument later.
+
+## Three defects this pass introduced and caught before any render
+
+1. **The gate outranked the terminus it announces.** Dressed with a
+   `roof_ogee` on top it stood at 38.4 m against a 45.0 m ring — 1.17x. PASS
+   29 recorded exactly this risk in this file. Redressed the way
+   `_depth_build` dresses a gate (colour on the banner balls above the ivory
+   finial, because a coloured cone inside a white roof is invisible), it is
+   29.8 m and the ring is 1.5x it.
+2. **The meadow thresholds were labelled out of their own quarters.**
+   `hierarchy.collect` reads a quarter tag as the label's first two fields
+   with a numeric first one; `D11MeadowGate_Arch` parses to nothing, so the
+   audit went on reporting `D11_meadow` at arch=0 with a gate standing at its
+   centre. *A gate that cannot see something reports success* — the seventh
+   of this shape in this file.
+3. **`portal_ring` was going to be the monument.** Never placed in this world,
+   12.2 m across, and standing it up with `pitch=90` looked like the
+   enchanted, unfamiliar thing the brief asks for. It is a torus of minor
+   radius 7 uu — a wire hoop 7 cm thick. At the scale needed it would have
+   read as a hairline, which is precisely how the great spire failed in PASS
+   28. `region.py` still handles pitch in its height read, because the next
+   piece stood up that way will be solid.
+
+## Before -> after, both worlds on the BEFORE world's own bar
+
+    built > 70 m, arch > 37 m, road > 63 m
+
+    forsaken ground            8,200 m2 in 4 regions  ->  1,300 m2 in 3
+    the South Meadows region         6,800 m2         ->  gone
+    worst region           South Meadows 6,800 m2     ->  Far Orchards 900
+
+On each world's own recomputed bar the whole distribution moved:
+
+    to any architecture      p90  37 -> 30 m     max  105 -> 85 m
+    to a built silhouette    p90  70 -> 65 m
+    to a road                p90  63 -> 59 m
+
+    D11_meadow   28 pieces arch 0 prop 0  ->  32, arch 1 prop 4, 39.1/ha
+    D18_meadow   23 pieces arch 0 prop 0  ->  28, arch 1 prop 4, 23.4/ha
+    D02_grove    14 pieces arch 0         ->  unchanged, still all vegetation
+
+## Regressions, re-proved
+
+    route         196 legs over 12 stops, 2,323 m -- IDENTICAL before and after
+    walkable      0 of 30 stops, 0 of 60 quarters closed; flood 76% both sides
+    step height   0 violations over 914 surfaces (was 888)
+    cameras       33 standpoints clear; no camera's band changed
+    hierarchy     0 nested, 0 roads crossing a quarter they do not serve,
+                  the 2 embedded landmarks are the pre-existing pair
+    emptiness     --scaled 304 m2 unchanged; --radius=900 world total
+                  59,712 -> 51,376 m2, and the 17,712 m2 south region is gone
+
+## Next
+
+**Far Orchards, 1,600 m2, centre (326, -86) m, r 337, bearing 345** — 64% of
+what is left. And the question this pass raises and does not answer: two more
+districts have palettes with no built kind in them at all, `The Long Woods`
+`("wood","meadow","wood")` and `West Wood` `("wood","wood","meadow")`.
+Changing `_DISTRICT_SEEDS` regenerates a district and is a bigger move than
+authoring a reach.
+
+One measurement defect found and not fixed: `_lm_setting` labels a landmark's
+approach paving `_Spur%d`, and every audit here counts a road by `_Seg`.
+Fourteen district landmarks are approached by something no audit calls a
+road. Right on the ground, wrong in the measurement.

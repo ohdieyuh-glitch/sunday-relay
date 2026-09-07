@@ -275,3 +275,32 @@ bash wonderland/v2/tools/capture_locomotion.sh   # the Dog walks it
 
 Baselines for before/after are `~/wonderland-v2-renders/V2_PASS26_*.png` (all
 eight locked cameras) and `V2_PASS_170/171/172` (cam 0/6/2, mid-pass).
+
+
+---
+
+# Update — 2026-09-06/07, PASS 30: the region nobody could see
+
+**The durable handoff for the world stream now lives in
+`docs/handoffs/WONDERLAND_WORLD_CURRENT.md`.** Read that first; this file is
+the history behind it.
+
+Branch `relay/wonderland-v2`, HEAD `5a73259`, worktree
+`/home/thomasajvt13/dev/sunday-relay`. Nothing rendered.
+
+A sixth instrument, `tools/region.py`: **can you stand somewhere and have
+nothing to walk to?** All four older audits passed on a world with three
+neighbouring quarters made of nothing but plants, because presence is not a
+destination and none of them could tell the difference. It found one region
+holding 83% of the world's forsaken ground -- South Meadows, 6,800 m2 at
+(120, -312) m, 105 m from any architecture -- and the South Reach was built
+there: a way, a gate, a 45 m arch inside a ring of eight, a colonnade at the
+world's edge, and a threshold for each of the two meadows. 8,200 m2 forsaken
+-> 1,300 on one pinned ruler; the region is gone; the tour is byte-identical.
+
+It also found that `hierarchy.py` classed all sixteen of PASS 29's
+architectural recipes as `prop` and the Royal Gardens' district landmark as
+VEGETATION. Every arch/ha number in `WORLD_LEDGER.md` before PASS 30
+under-reports.
+
+Full detail: `WORLD_LEDGER.md`, PASS 30.
