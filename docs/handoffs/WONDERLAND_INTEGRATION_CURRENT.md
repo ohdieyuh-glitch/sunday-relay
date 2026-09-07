@@ -276,6 +276,20 @@ Extended: `wonderland-cpp-parity.test.ts` (union of both parity tables),
 ever parsed the four `.cpp` files, so a header no translation unit includes was
 never parsed by anything, which is exactly the shape of both new headers).
 
+**Gates run green on this branch**: `typecheck` (all four projects), `build`,
+`relay:build`, `relay:bridge:build`, `relay-repository-boundary.mjs`,
+`relay-parity-gate.mjs`, `relay:surface-parity:check:strict`,
+`relay:yc-demo:check`, `relay:cli:contract-verify`,
+`relay:persistence:contract-verify`, `relay:persistence:recovery-drill`,
+`relay:workspace:verify`, `relay:claude:contract-verify`,
+`wonderland/Tools/syntax-check.sh`, `git diff --check`.
+
+`npm test` is green **except one pre-existing environmental failure**:
+`claude-code.test.ts > classifies an API-key environment as disallowed` expects
+`sourceClass` `api_key` and gets `gateway`, because this cloud sandbox sets
+Anthropic gateway variables. Confirmed unrelated — it fails identically with
+`origin/main`'s connector code checked out.
+
 `npm run wonderland:hud:preview` renders the HUD across four states —
 typical, nearly spent, untouched, nothing reported — to
 `generated/wonderland-hud-preview.html` for visual iteration without a GPU or a
@@ -312,6 +326,12 @@ session.
   either is a guess that is wrong half the time. Both mappings removed; a test
   now holds the two tables against each other for every kernel event that has
   both a world type and a visual state. Found by folding the dev script.
+- **A preview runner that built its command at runtime.**
+  `relay-repository-boundary.mjs` refuses a file run from package.json that
+  assembles a child command, because a deployment-capable path must be readable
+  without executing it — and the first preview had an `.mjs` wrapper doing
+  `execFileSync(join(ROOT, 'node_modules/.bin/esbuild'), …)`. The scanner was
+  right; the wrapper is gone and the npm script carries two literal commands.
 - **A frame loop in the HUD.** `relay-dog-motion-boundary.test.ts` allows
   exactly one `requestAnimationFrame` owner in the whole website. The first HUD
   draft added a second; the drain is now an SVG mask whose dash offset CSS

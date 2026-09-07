@@ -27,13 +27,22 @@ import {
 const AT = '2026-01-01T00:00:00.000Z';
 
 /**
- * The repository root, supplied by the runner.
+ * The repository root: the working directory, because npm runs a script there.
  *
- * Not `import.meta.url`: this file is bundled to CommonJS (react-dom's server
- * build is CJS and requires `stream`), and `import.meta` does not exist there.
- * The Bridge's tsconfig forbids it outright for the same reason.
+ * NOT `import.meta.url`, for two reasons. This file is bundled to CommonJS —
+ * react-dom's server build is CJS and requires `stream` — and `import.meta`
+ * does not exist there; the Bridge's tsconfig forbids it outright for the same
+ * reason.
+ *
+ * And NOT a path computed by a runner script either. `relay-repository-boundary.mjs`
+ * refuses a file run from package.json that builds a child command at runtime,
+ * because a deployment-capable path has to be readable without executing it.
+ * The first version of this preview had an `.mjs` wrapper calling
+ * `execFileSync(join(ROOT, 'node_modules/.bin/esbuild'), …)` and the scanner
+ * was right about it. The bundle and the run are two literal commands in the
+ * npm script now, and there is no wrapper left to analyse.
  */
-const ROOT = resolve(process.env.WONDERLAND_HUD_PREVIEW_ROOT ?? process.cwd());
+const ROOT = resolve(process.cwd());
 
 /**
  * Every combination worth looking at, INCLUDING the ones that are not pretty.
