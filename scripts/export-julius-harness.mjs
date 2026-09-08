@@ -216,6 +216,10 @@ const FILE_RULES = [
   ['src/relay/mission/julius/julius-repair-lineage.ts', 'REPAIR'],
   ['src/relay/mission/julius/julius-release-runtime.ts', 'TASK GRAPH / SCHEDULER'],
   ['src/relay/mission/julius/julius-review-stage.ts', 'INDEPENDENT REVIEWER'],
+  // The task/sprint contract is the SUBJECT a review is applied to, and the
+  // gate that decides whether coding may start at all. It belongs with the
+  // task graph rather than the reviewer: the reviewer consumes it, Julius owns it.
+  ['src/relay/mission/julius/julius-task-contract.ts', 'TASK GRAPH / SCHEDULER'],
   ['src/relay/mission/julius/julius-allocation-runtime.ts', 'LEASES / BUDGETS / PERMISSIONS'],
   ['src/relay/mission/julius/julius-recovery.ts', 'RECOVERY / CONTINUATION'],
   ['src/relay/mission/julius/julius-continuation.ts', 'RECOVERY / CONTINUATION'],

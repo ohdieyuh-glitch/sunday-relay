@@ -10,6 +10,7 @@ export * from './julius-repair-runtime';
 export * from './julius-repair-lineage';
 export * from './julius-release-runtime';
 export * from './julius-review-stage';
+export * from './julius-task-contract';
 export * from './julius-allocation-runtime';
 export * from './julius-trajectory';
 export * from './julius-events';
