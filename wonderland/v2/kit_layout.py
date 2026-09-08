@@ -854,12 +854,130 @@ def _castle_precinct(bands):
     return out
 
 
+#: (camera, distance down its axis, lateral, the stair spelling, why). A GARDEN
+#: LEVEL IS A HELD EDGE PLUS A WAY UP, and both halves are in the manifest's own
+#: socket grammar: a retaining run publishes `top_route` at z=310 and every
+#: T2 flight publishes `bottom_route` at z=0 and `top_route` at z=310, so a
+#: flight and the edge it serves meet at a number neither of them guessed.
+#:
+#: SEVEN OF THE EIGHT STAIR MODULES HAD NEVER BEEN PLACED. The kit's own note on
+#: them, learned the expensive way and recorded in the forge's README, is that
+#: stairs to a flat plane are stairs to nowhere -- so this batch does not place
+#: a flight anywhere it has not first built the edge for it to climb.
+GARDEN_LEVELS = (
+    ("WaterGardenCam15", 10000.0, 0.0, "WL_Stair_Quarter_Landing",
+     "the water gardens' own terrace, 100 m down the camera that names them"),
+    ("GlassPavilionCam28", 8000.0, -4000.0, "WL_Stair_Curved",
+     "the pavilion's approach, where the ground already steps"),
+    ("GlassPavilionCam28", 10000.0, 4000.0, "WL_Stair_HalfTurn",
+     "a second level behind the first, so the flight has two storeys to climb"),
+)
+
+#: uu. One terrace level, and it is the retaining run's own `top_route`.
+LEVEL_UU = 310.0
+
+#: Filled by `_garden_levels`.
+LEVEL_CHOSEN = []
+
+
+def _garden_levels(bands):
+    """Held edges with a way up them, in the districts that are all planting.
+
+    The world's garden cameras are the densest ground in it -- `GardenLeft04`
+    and `GardenRight05` have no clear axis at all -- which is correct for a
+    garden and is also why they have no STRUCTURE. A garden district that is
+    only planting reads as a park; what makes it a garden is a level held by a
+    wall you can walk along and reach by a flight.
+
+    Every module here meets the one below it at a published socket, never at a
+    number typed into this file: `top_route` on the retaining runs is 310 uu,
+    which is exactly the `top_route` of a T2 flight and the `landing` of the
+    half-turn. `WL_Stair_HalfTurn` climbs two of them, so its site gets the
+    second level its own grammar asks for.
+
+    LIKE `_castle_precinct`, THIS MOVED THE CENSUS BY NOTHING, measured after
+    the fact: mean built 74.82% before and after, to the decimal. It is ground
+    structure 3 to 6 m tall and the frames it stands in are roofed at +29
+    degrees, so it was never going to hold a column. Judge it on what it is:
+    seven of the eight stair modules had never been placed, and the two garden
+    cameras with the densest ground in the world had no built structure at all.
+    """
+    out, chosen = [], []
+    for n, (cam, dist, lat, flight, why) in enumerate(GARDEN_LEVELS):
+        gx, gy = on_axis(cam, dist, lat)
+        spot = _nudge(bands, gx, gy, "GardenLevel%d" % (n + 1),
+                      max_neighbours=64, step=1500.0, tries=14)
+        if spot is None:
+            continue
+        cx, cy = spot
+        tag = "KitLevel%d" % (n + 1)
+        bearing = float((n * 37) % 360)
+        rad = math.radians(bearing)
+        ax, ay = math.cos(rad), math.sin(rad)
+        nx, ny = -ay, ax
+        RUN = 800.0
+        two = flight == "WL_Stair_HalfTurn"
+        # the held edge: runs along the bearing, turned in at one end and out
+        # at the other, with a curved section so the wall is not a ruler
+        for i in range(-3, 4):
+            t = RUN * i
+            x, y = cx + ax * t, cy + ay * t
+            if i == -3:
+                aid = "WL_Garden_Retaining_Corner_In"
+            elif i == 3:
+                aid = "WL_Garden_Retaining_Corner_Out"
+            elif i == 2:
+                aid = "WL_Garden_Retaining_Curved"
+            elif i == 0:
+                continue                       # the flight goes here
+            else:
+                aid = "WL_Garden_Retaining_Run"
+            out += KIT.placements_for(aid, (x, y, 0.0), rot=(0.0, bearing, 0.0),
+                                      label="%s_Edge%d" % (tag, i + 3))
+        # the way up, in the gap the edge left for it
+        out += KIT.placements_for(flight, (cx, cy, 0.0),
+                                  rot=(0.0, bearing + 180.0, 0.0),
+                                  label="%s_Flight" % tag)
+        if two:
+            # a second held edge one level up, which is what a half-turn climbs
+            for i in (-2, -1, 1, 2):
+                x = cx + ax * RUN * i + nx * 1600.0
+                y = cy + ay * RUN * i + ny * 1600.0
+                out += KIT.placements_for("WL_Garden_Retaining_Run",
+                                          (x, y, LEVEL_UU), rot=(0.0, bearing, 0.0),
+                                          label="%s_Upper%d" % (tag, i + 2))
+        top = LEVEL_UU * (2.0 if two else 1.0)
+        # what the level is FOR: something to stand on it and look from
+        out += KIT.placements_for("WL_Garden_Overlook",
+                                  (cx + nx * 900.0, cy + ny * 900.0, LEVEL_UU),
+                                  rot=(0.0, bearing + 90.0, 0.0),
+                                  label="%s_Overlook" % tag)
+        for sgn in (-1.0, 1.0):
+            out += KIT.placements_for("WL_Garden_Planter_Wall",
+                                      (cx + ax * sgn * 1500.0 + nx * 1900.0,
+                                       cy + ay * sgn * 1500.0 + ny * 1900.0, top),
+                                      rot=(0.0, bearing, 0.0),
+                                      label="%s_Bed%d" % (tag, 1 if sgn < 0 else 2))
+        out += KIT.placements_for("WL_Garden_Gate_Threshold",
+                                  (cx + ax * 2600.0, cy + ay * 2600.0, 0.0),
+                                  rot=(0.0, bearing + 90.0, 0.0),
+                                  label="%s_Gate" % tag)
+        out += KIT.placements_for("WL_Detail_Balustrade_Run",
+                                  (cx + nx * 77.0, cy + ny * 77.0, LEVEL_UU),
+                                  rot=(0.0, bearing, 0.0),
+                                  label="%s_Rail" % tag)
+        chosen.append((cx, cy, flight, why))
+    LEVEL_CHOSEN[:] = chosen
+    return out
+
+
 PASSES = (("tea_terrace", _tea_terrace), ("water_court", _water_court),
           ("depth_stand", _depth_stand), ("clock_quarter", _clock_quarter),
           ("hamlet_street", _hamlet_street),
           ("ceiling_break", _ceiling_break),
           ("green_ceiling", _green_ceiling),
-          ("castle_precinct", _castle_precinct))
+          ("castle_precinct", _castle_precinct),
+          ("garden_levels", _garden_levels))
 
 
 #: Every placement a screen refused, with the camera and the numbers.

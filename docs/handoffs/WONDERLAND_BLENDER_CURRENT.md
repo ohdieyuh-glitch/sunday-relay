@@ -40,6 +40,30 @@ real defects. Then the world's own gates: `verify_v2_layout`,
 | Blender renders | 21 contact sheets + 7 assemblies, Cycles CPU. Not a preview of an Unreal frame. |
 | assets that failed | **none in the forge** — `validate_assets.py` is 101 modules, 0 failures. Three PLACEMENTS were refused (a planter bed 7.7 m from `TeapotCam24`); `kit_layout.REFUSED` names them. |
 
+**The Unreal validation checklist, and which half can be answered offline.**
+An editor answers the right column; everything in the left was checked this
+session without one, and the check that answers it is named so nobody re-does
+it by eye.
+
+| question | answered offline by |
+|---|---|
+| units and scale | the manifest declares metres authored / uu published / 100 uu per metre, and `import_kit_offline_test.py` asserts the FBX is baked cm with `UnitScaleFactor` 1 |
+| transforms and origins | `verify_kit_bridge` — *parts share a transform*: 210 multi-mesh sites, every part of a module at one origin, rotation and scale identical |
+| materials | *materials* — 14 distinct, every one already in `materials_v2.INSTANCES`; one slot per mesh is structural in the forge |
+| sockets and join planes | *sockets bear* and *stack geometry* — every spelling's bodies publish a `top`, 33 stacks with every rung above the one below, and `validate_assets.py` checks butt planes to 6 cm |
+| z-fighting / coincident surfaces | `validate_assets.py`'s `coplanar_overlaps` and cross-part `coincident_faces` — 101 modules, 0 failures |
+| dependencies | *plan is honest* — 313 rows, every mesh key covered, every destination under `/Game/WonderlandV2/Kit`, 0 missing FBX |
+| route clearance | `tools/walkable.py` — 0 of 19 destinations unreachable, with three curtain-wall precincts placed |
+| camera clearance | *camera clearance* — per placement, height-aware; `clearance_for()` |
+
+| still needs the editor | why |
+|---|---|
+| **the import itself** | there is no `unreal` module here |
+| Nanite, collision | `nanite_recommended` is a measured triangle count against a stated rule. A rule is not a profile. |
+| lightmap UVs | the UVs are a planar world projection at 2 m per tile; the V2 materials are procedural, so this is enough for them and not for baked light |
+| cook viability | nothing offline can answer it |
+| every visual claim | **no Unreal frame has been rendered.** The 21 Cycles contact sheets are Blender, and the census evidence is arithmetic. |
+
 **The exact next pass, in order.**
 
 1. **Get an editor.** `import_kit.py --plan` then `--execute`, then re-run
