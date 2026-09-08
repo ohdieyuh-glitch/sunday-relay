@@ -137,15 +137,106 @@ export function validateArchitectPlan(raw: unknown): PlanValidation {
     return { ok: false, reason: 'handoff.allowedFileScope must name at least one path', reasonCode: 'handoff_allowed_scope_empty' };
   }
 
-  // No field may claim work already happened.
-  const serialized = JSON.stringify(v).toLowerCase();
-  for (const claim of ['files were edited', 'tests were run', 'i ran the tests', 'i edited']) {
-    if (serialized.includes(claim)) {
-      return { ok: false, reason: `plan claims work that did not happen: "${claim}"`, reasonCode: 'plan_false_work_claim' };
-    }
+  // No CLAIM FIELD may say work already happened.
+  const claim = findFalseWorkClaim(v);
+  if (claim !== null) {
+    return {
+      ok: false,
+      reason: `plan claims work that did not happen: "${claim.phrase}"`,
+      reasonCode: 'plan_false_work_claim',
+      // BOTH HALVES, and both are safe. The phrase is one of four literals this
+      // file owns, and the path is structural. Paid run 34185920678 refused a
+      // 14,581-byte plan with this code and nothing else, and there was no way
+      // to tell a real completion claim from a prohibition that names one.
+      reasonField: `${claim.path} :: ${claim.phrase}`,
+    };
   }
 
   return { ok: true, plan: normalizePlan(v) };
+}
+
+/**
+ * THE FOUR PHRASES A PLAN MAY NOT CLAIM, and the fields that may nonetheless
+ * contain them.
+ *
+ * WHY THIS IS NOT A SUBSTRING SCAN OVER THE WHOLE DOCUMENT ANY MORE.
+ *
+ * The architect's charter tells it, in these words, never to say that files
+ * were edited or that tests were run. The plan schema then asks it for
+ * `prohibitedActions` and `handoff.prohibitedActions` — lists whose entire
+ * purpose is to state what must NOT be done. A plan that lists "claiming that
+ * files were edited before the Coding Agent runs" as a prohibited action is
+ * doing exactly what it was asked to do, and `JSON.stringify(plan)` could not
+ * tell that apart from the plan opening with "Done — I edited the files."
+ *
+ * Paid run 34185920678 died on that ambiguity: a schema-valid 14,581-byte plan
+ * from `gpt-5.6-sol` was refused with `plan_false_work_claim` and no field, no
+ * phrase and no path, so nobody could say which of the two it was. The mission
+ * spent the architect's dispatch and produced no plan.
+ *
+ * THE RULE IS NOT WEAKENED — it is aimed. A completion claim is a claim, and a
+ * claim lives in a field that ASSERTS. The two prohibition lists ASSERT NOTHING;
+ * they forbid. Every other string in the document is still scanned, including
+ * risks, assumptions, decisions, steps, criteria, the test plan and the whole of
+ * the handoff apart from its prohibitions — so `objectiveSummary` saying "I
+ * edited the fixture" is refused exactly as before.
+ *
+ * The walk reports WHERE, which is the other half of the repair: a refusal that
+ * cannot be explained is a refusal nobody can act on.
+ */
+const FALSE_WORK_CLAIMS = ['files were edited', 'tests were run', 'i ran the tests', 'i edited'] as const;
+
+/**
+ * The fields whose content is a PROHIBITION rather than an assertion. Named as
+ * exact paths, not as a key name: a key called `prohibitedActions` appearing
+ * somewhere unexpected must not silently become an exemption.
+ */
+const CLAIM_EXEMPT_PATHS = new Set(['plan.prohibitedActions', 'plan.handoff.prohibitedActions']);
+
+/**
+ * A PATH SEGMENT IS ONLY EMITTED IF IT IS A NAME, NOT PROSE.
+ *
+ * The walk descends through `Object.keys`, and those keys come from the MODEL's
+ * JSON. A plan that nested a claim under a key the model invented would put
+ * that key into `reasonField`, which reaches the published evidence bundle —
+ * the one place this repository refuses to put model-authored text. So each
+ * segment is held to the same alphabet `safeFailureClass` uses, and anything
+ * else becomes a placeholder that still says a level was descended.
+ *
+ * The workflow's credential scan is the second layer, and this is deliberately
+ * not left to it: a bundle is refused wholesale when that scan fires, so a
+ * model-chosen key would cost the evidence for the whole run.
+ */
+const SAFE_PATH_SEGMENT = /^[A-Za-z][A-Za-z0-9_]{0,63}$/u;
+const safeSegment = (key: string): string => (SAFE_PATH_SEGMENT.test(key) ? key : '<field>');
+
+function findFalseWorkClaim(value: unknown, path = 'plan'): { path: string; phrase: string } | null {
+  // The exemption is checked on the SANITISED path, which is the same string a
+  // schema-conforming plan produces: `prohibitedActions` is a safe segment, so
+  // the real field still matches, and a model-chosen key that sanitised to
+  // `<field>` never can.
+  if (CLAIM_EXEMPT_PATHS.has(path)) return null;
+  if (typeof value === 'string') {
+    const haystack = value.toLowerCase();
+    const phrase = FALSE_WORK_CLAIMS.find((candidate) => haystack.includes(candidate));
+    return phrase === undefined ? null : { path, phrase };
+  }
+  if (Array.isArray(value)) {
+    for (const [index, item] of value.entries()) {
+      const found = findFalseWorkClaim(item, `${path}[${index}]`);
+      if (found !== null) return found;
+    }
+    return null;
+  }
+  if (value !== null && typeof value === 'object') {
+    // Sorted, so the reported path is the same one every time for a plan that
+    // trips the rule twice. A diagnostic that moves is a diagnostic nobody trusts.
+    for (const key of Object.keys(value as Record<string, unknown>).sort()) {
+      const found = findFalseWorkClaim((value as Record<string, unknown>)[key], `${path}.${safeSegment(key)}`);
+      if (found !== null) return found;
+    }
+  }
+  return null;
 }
 
 function normalizePlan(v: Record<string, unknown>): ArchitectPlan {

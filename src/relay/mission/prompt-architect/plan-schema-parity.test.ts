@@ -109,7 +109,7 @@ describe('states the strict schema PERMITS and Julius refuses', () => {
     refusedWith(mutate((p) => { p.handoff.allowedFileScope = []; }), 'handoff_allowed_scope_empty');
   });
 
-  it('8. any field may claim work that never happened — JSON Schema cannot express this at all', () => {
+  it('8. any CLAIM field may claim work that never happened — JSON Schema cannot express this at all', () => {
     // The only drift no schema keyword could close. It is a claim about
     // MEANING, so the charter is the only place it can be prevented, and the
     // validator is the only place it can be caught.
@@ -118,6 +118,100 @@ describe('states the strict schema PERMITS and Julius refuses', () => {
     }
     // Case-insensitively, and anywhere in the document.
     refusedWith(mutate((p) => { p.handoff.boundedTask = 'I EDITED the fixture.'; }), 'plan_false_work_claim');
+  });
+});
+
+/**
+ * PAID RUN 34185920678 — the plan the validator could not explain refusing.
+ *
+ * A schema-valid 14,581-byte plan from `gpt-5.6-sol` was refused with
+ * `plan_false_work_claim` and no field, no phrase and no path. The architect's
+ * charter names those four phrases IN THE PROHIBITION ITSELF, and the schema
+ * then asks the architect for `prohibitedActions` and
+ * `handoff.prohibitedActions` — lists whose whole purpose is to say what must
+ * not be done. `JSON.stringify(plan)` could not tell a plan that FORBIDS
+ * claiming work from a plan that CLAIMS it.
+ */
+describe('a prohibition that names the forbidden act is not a claim', () => {
+  it('may say so in prohibitedActions, at either level, without being refused', () => {
+    const topLevel = mutate((p) => {
+      (p as { prohibitedActions: string[] }).prohibitedActions = ['claiming that files were edited before the Coding Agent runs'];
+    });
+    expect(validateArchitectPlan(topLevel).ok, 'a top-level prohibition naming the act').toBe(true);
+
+    const inHandoff = mutate((p) => {
+      (p.handoff as { prohibitedActions: string[] }).prohibitedActions = ['stating that tests were run', 'saying I ran the tests'];
+    });
+    expect(validateArchitectPlan(inHandoff).ok, 'a handoff prohibition naming the act').toBe(true);
+  });
+
+  it('and the exemption is EXACTLY those two paths — every other field still refuses', () => {
+    // The hole this could have opened, closed by name. Each of these is a field
+    // that ASSERTS, and an assertion that names completed work is a claim
+    // wherever it appears.
+    const claimFields: readonly ((plan: ReturnType<typeof mutate>) => void)[] = [
+      (p) => { p.objectiveSummary = 'files were edited'; },
+      (p) => { p.handoff.objective = 'tests were run'; },
+      (p) => { p.handoff.boundedTask = 'i edited the module'; },
+      (p) => { p.acceptanceCriteria = ['i ran the tests']; },
+      (p) => { p.testPlan = ['tests were run']; },
+      (p) => { p.handoff.acceptanceCriteria = ['files were edited']; },
+      (p) => { p.handoff.requiredTests = ['i ran the tests']; },
+      (p) => { p.handoff.expectedEvidence = ['files were edited']; },
+      (p) => { (p.assumptions[0] as { statement: string }).statement = 'files were edited'; },
+      (p) => { (p.architectureDecisions[0] as { rationale: string }).rationale = 'i edited it'; },
+      (p) => { (p.implementationSteps[0] as { description: string }).description = 'tests were run'; },
+      (p) => { (p.risks[0] as { mitigation: string }).mitigation = 'i ran the tests'; },
+    ];
+    for (const [index, change] of claimFields.entries()) {
+      refusedWith(mutate(change), 'plan_false_work_claim');
+      expect(index, 'every claim field was exercised').toBeLessThan(claimFields.length);
+    }
+  });
+
+  it('names the phrase AND the path, so the next refusal is explicable', () => {
+    const result = validateArchitectPlan(mutate((p) => { p.testPlan = ['ok', 'tests were run']; }));
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reasonField).toBe('plan.testPlan[1] :: tests were run');
+  });
+
+  it('reports the SAME path for a plan that trips twice, whatever order the model emitted its keys in', () => {
+    // A diagnostic that depends on JSON key ORDER is a diagnostic that moves
+    // between two runs of the same model, and an operator comparing two paid
+    // failures would be comparing noise. The keys are walked sorted, so the
+    // answer is a property of the DOCUMENT rather than of its serialisation.
+    const build = (objectiveLast: boolean) => {
+      const plan = mutate((p) => { p.testPlan = ['i ran the tests']; }) as unknown as Record<string, unknown>;
+      if (objectiveLast) {
+        // Re-inserting moves the key to the END of the insertion order, while
+        // alphabetically it still sorts first.
+        delete plan.objectiveSummary;
+        plan.objectiveSummary = 'files were edited';
+      } else {
+        plan.objectiveSummary = 'files were edited';
+      }
+      return plan;
+    };
+    const emittedFirst = validateArchitectPlan(build(false));
+    const emittedLast = validateArchitectPlan(build(true));
+    expect(emittedFirst.ok).toBe(false);
+    if (emittedFirst.ok || emittedLast.ok) return;
+    expect(Object.keys(build(true)).indexOf('objectiveSummary'),
+      'the fixture really did move the key to the end').toBeGreaterThan(
+      Object.keys(build(false)).indexOf('objectiveSummary'));
+    expect(emittedFirst.reasonField).toBe(emittedLast.reasonField);
+    expect(emittedFirst.reasonField, 'sorted keys put objectiveSummary before testPlan')
+      .toBe('plan.objectiveSummary :: files were edited');
+  });
+
+  it('a key merely NAMED prohibitedActions somewhere else is not exempt', () => {
+    // The exemption is two exact paths, not a key name — otherwise a nested
+    // object could smuggle a claim through by choosing its own field name.
+    const smuggled = mutate((p) => {
+      (p.handoff as unknown as Record<string, unknown>).extra = { prohibitedActions: ['files were edited'] };
+    });
+    refusedWith(smuggled, 'plan_false_work_claim');
   });
 });
 
@@ -177,5 +271,34 @@ describe('the reason code is a closed vocabulary', () => {
     if (arrayFailure.ok) return;
     expect(arrayFailure.reasonField).toBe('risks');
     expect(arrayFailure.reasonField).toMatch(/^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z][A-Za-z0-9_]*)?$/u);
+  });
+});
+
+describe('the reported path can never carry model prose into the evidence bundle', () => {
+  it('replaces a model-chosen key with a placeholder, keeping the closed phrase', () => {
+    // ASSEMBLED, NOT WRITTEN. A credential-shaped literal in this file would be
+    // a finding for `relay-repository-boundary.mjs` — which is the scanner
+    // working, and the reason this test exists at all. The pieces are joined at
+    // runtime so the source carries no key shape and the walk still sees one.
+    const credentialShapedKey = ['sk', 'ant', 'notarealkey000000000000'].join('-');
+    const hostile = mutate((p) => {
+      (p as unknown as Record<string, unknown>)[credentialShapedKey] = 'files were edited';
+    });
+    const result = validateArchitectPlan(hostile);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reasonField).toBe('plan.<field> :: files were edited');
+    expect(result.reasonField).not.toContain(credentialShapedKey);
+  });
+
+  it('every reported segment is a name, and the phrase is one of the four literals', () => {
+    const result = validateArchitectPlan(mutate((p) => { p.objectiveSummary = 'i edited it'; }));
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    const [path, phrase] = result.reasonField!.split(' :: ');
+    expect(['files were edited', 'tests were run', 'i ran the tests', 'i edited']).toContain(phrase);
+    for (const segment of path!.replace(/\[\d+\]/gu, '').split('.')) {
+      expect(segment, `segment ${segment}`).toMatch(/^([A-Za-z][A-Za-z0-9_]{0,63}|<field>)$/u);
+    }
   });
 });
