@@ -324,22 +324,35 @@ connection precisely so its read gets a fresh snapshot OUTSIDE any caller's
 transaction, and wrapping it would break `persist`. It must never adopt the
 helper.
 
-**Adopted in SIX of the eight**, after auditing every transaction body for
+**ALL EIGHT now retry.** `julius-tool-postgres` already did; the other seven
+adopted `serializableTransaction` after every transaction body was audited for
 purity (a retry runs the effect again, so a transaction that also spent money
-would spend twice): `julius-postgres`, `julius-event`, `julius-lifecycle`,
-`julius-repair`, `julius-subagent`, `julius-recovery`. `julius-tool-postgres`
-already retried.
+would spend twice).
 
-**ONE IS LEFT OUT, AND THE REASON IS NOT SCAFFOLDING.**
-`julius-tool-settlement-postgres`'s **COMMIT is instrumented**:
-`fault('BEFORE_COMMIT')` and `fault('AFTER_COMMIT')` bracket it so a crash can
-be simulated on either side, and its test drives all four fault points. The
-shared helper OWNS the commit, so adopting it would move the commit out from
-between its own fault points — `AFTER_COMMIT` would fire before the settlement
-was durable, and a drill that exists to prove exactly-once settlement on the
-money path would quietly measure something else. It keeps its own transaction
-and keeps its exposure. Closing that gap means teaching the helper about the
-commit boundary, which is a change to the helper.
+**`julius-tool-settlement` was last, and it decided the design.** Its COMMIT is
+instrumented — `fault('BEFORE_COMMIT')` and `fault('AFTER_COMMIT')` bracket it
+so a crash can be simulated on either side of durability, which is what an
+exactly-once drill measures. A helper that merely owned the COMMIT would have
+moved it out from between those points and turned that drill into a false
+proof. So the helper grew hooks keeping the real commit where it was, and the
+asymmetry between them is the design:
+
+| | |
+|---|---|
+| `beforeCommit` throws | nothing durable → ROLLBACK, and NOT retried: a caller's refusal is not a database race |
+| `afterCommit` throws | the work IS durable → never retried, and **not because of what the error looks like** |
+| `40001` **at** COMMIT | PostgreSQL aborted this transaction → definitely nothing settled → run it all again, starting from the `settlement_id` identity read, which is what makes the replay safe |
+| any other commit failure | `CommitOutcomeUnknownError`, never retried — a connection lost mid-flush may have committed and been unable to say so. Unknown is not zero here either. |
+
+**A hole I closed in my own draft:** it decided durability by the error's SHAPE,
+so a post-commit hook throwing something 40001-shaped would have replayed a
+committed transaction. Durability is now a fact the loop records, and the
+mutation removing it turns the suite red.
+
+**One deliberate behaviour change:** settlement's replay path (`created:false`)
+now passes through the same boundary rather than committing without the fault
+points. Its commit is a real commit — it releases the `FOR UPDATE` the identity
+read took — so instrumenting one commit and not the other was the anomaly.
 
 **A SECOND CORRECTION, found by mutating my own work.**
 `recordSubagentAndTaskWithinLimits` had **no test at all** — live paid-path
