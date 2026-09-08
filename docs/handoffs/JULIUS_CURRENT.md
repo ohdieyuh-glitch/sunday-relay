@@ -977,6 +977,20 @@ was considered and not done: a worker would then read the agreement's state as
 mission knowledge rather than receive it as its charge, and the two could
 drift.
 
+#### Section 12C — the repair trajectory is complete, and the bundle carries it
+
+The trajectory is the record evals read to say what a run did, and until now
+its DISPATCH rows could not say which agreement a dispatch ran under: a repair
+lineage whose rounds ran under two revisions read as one story. Every DISPATCH
+and RETRY row for a bound task now carries `contractTaskId`, `contractRevision`
+and `bindingDigest` in its safe facts (null for the architect and its review —
+a fact, not an omission). And the live evidence bundle gains `trajectory.tsv`:
+kind, task, worker, provider, outcome, cost, duration, tokens, the closed safe
+facts and the instant, ordered as they happened — which is exactly the "repair
+path" and "cost" the founder asked to be preserved for the paid rerun, per row
+rather than as a summary. The dump-enumeration test validates the new query
+against the migrations like every other.
+
 #### Section 12D — the Beta Gate measures the binding, not only the lock
 
 `TASK CONTRACT LOCK` used to pass on the lock table alone: a contract locked
@@ -997,6 +1011,23 @@ build (FAIL naming the review), the right revision under a different digest
 logic were run against them. Two of the five SURVIVED the first three cases
 (a missing claim row, and a digest-only mismatch, were untested); the cases
 above were added for them and all five now die.
+
+#### Section 12F — trust verification from this environment, stated precisely
+
+`scripts/julius-main-provenance.mjs` and the review-currency check shell out to
+`gh api`, and this container has no `gh` binary, so neither script can be RUN
+here. On the day the repair lands, the watch's independent verification
+(exact containment of `d8c9fab1`'s changes, candidate author
+`julius-worker[bot]`, approver a different login, tree equality with the
+reviewed head, accepted-main monotonicity, review currency) is done through the
+GitHub MCP tools — `get_commit`, `pull_request_read` (`get`, `get_reviews`,
+`get_commits`), `list_commits`, and the Actions artifact listing for the
+`julius-accepted-main-<sha>` checkpoints — and the paid workflow's own step
+"Gate: the code this job will run is reviewed, current and not rolled back"
+remains the authority at dispatch: it runs the same scripts with the worker's
+credential and refuses on its own. Nothing here weakens or reimplements those
+gates; the pre-check exists so that a dispatch is never attempted against a
+`main` the gate would refuse.
 
 #### The gate, as run on the committed tree in this container
 

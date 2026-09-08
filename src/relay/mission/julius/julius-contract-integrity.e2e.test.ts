@@ -808,6 +808,22 @@ describe('the worker handoff carries the locked revision it executes', () => {
     expect(repair?.binding).toEqual(bindingOf(harness, 'repair:build-1:1:task'));
   });
 
+  it('every DISPATCH trajectory row of a bound task names the agreement it ran under; the unbound ones say null', async () => {
+    const harness = build({ reviewer: [REVIEW_ACCEPT, REVIEW_REJECT, REVIEW_ACCEPT, REVIEW_ACCEPT] });
+    await drain(harness);
+    const rows = harness.store.trajectory().filter((event) => event.kind === 'DISPATCH' && event.outcome === 'COMPLETED');
+    const rowFor = (taskId: string) => rows.find((event) => event.taskId === taskId);
+    for (const taskId of ['build-1', 'build-1:review', 'repair:build-1:1:task', 'repair:build-1:1:task:review']) {
+      const binding = bindingOf(harness, taskId);
+      expect(rowFor(taskId)?.safeFacts, `${taskId} trajectory row`).toMatchObject({
+        contractTaskId: 'build-1', contractRevision: binding?.contractRevision, bindingDigest: binding?.bindingDigest,
+      });
+    }
+    for (const taskId of ['plan-1', 'plan-1:review']) {
+      expect(rowFor(taskId)?.safeFacts, `${taskId} trajectory row`).toMatchObject({ contractTaskId: null, contractRevision: null, bindingDigest: null });
+    }
+  });
+
   it('the architect and its review are handed no charge — they produce the terms', async () => {
     const harness = build();
     await drain(harness);
