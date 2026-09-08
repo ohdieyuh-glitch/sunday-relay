@@ -575,9 +575,9 @@ KEY and a forge mesh had no key. It has one now.
 
 | | |
 |---|---|
-| `layout_v2.ALL` | 13,816 → **14,679** |
-| kit placements | **747** — 52 of 101 modules, 160 meshes, in `V2_Arrival`, `V2_Castle`, `V2_Garden`, `V2_Props`, `V2_Skyline` |
-| batches | `tea_terrace` 37, `water_court` 35, `depth_stand` 204, `clock_quarter` 43, `hamlet_street` 142, `ceiling_break` 42, `green_ceiling` 136, `castle_precinct` 108 |
+| `layout_v2.ALL` | 13,816 → **14,796** |
+| kit placements | **864** — 58 of 101 modules, in `V2_Arrival`, `V2_Castle`, `V2_Garden`, `V2_Props`, `V2_Skyline` |
+| batches | `tea_terrace` 37, `water_court` 35, `depth_stand` 204, `clock_quarter` 43, `hamlet_street` 142, `ceiling_break` 42, `green_ceiling` 136, `castle_precinct` 108, `garden_levels` 117 |
 | mean built across 33 cameras | 67.78% → **74.82%** (reference 71.5%) |
 | cameras moved | 24 of 33 |
 | frames more than half green | 9 → 5 |
@@ -623,7 +623,7 @@ then lays a retaining run 2,400 uu either side of it, which is how the tea
 terrace came to stand 2,272 uu from `TeapotCam24`. `verify_kit_bridge` caught
 that by walking placements rather than decisions.
 
-### One batch that measured nothing, kept and labelled
+### Two batches that measured nothing, kept and labelled
 
 `castle_precinct` puts three walled precincts on ground `emptiness.py` found
 empty, at the distance mismatch #3 calls thinnest. Measured against that ring
@@ -631,7 +631,11 @@ afterwards: p50 top +0.4 → +0.5, built 65.0% → 65.3%, census unchanged to th
 decimal. **631 pieces into a ring holding 67,608 cannot move a percentile.**
 It is kept for the coverage it does answer — five kit families had zero
 presence in the world — and its docstring now says that instead of claiming the
-band. Recorded here so the next pass does not re-derive the null result.
+band. `garden_levels` is the same: three terraced gardens with a flight up each,
+in the two districts whose ground is densest and whose structure was nothing but
+planting; mean built 74.82% before and after, to the decimal. Ground structure
+3–6 m tall cannot hold a column in a frame roofed at +29°. Recorded here so the
+next pass does not re-derive either null result.
 
 ### What is NOT proven, stated plainly
 

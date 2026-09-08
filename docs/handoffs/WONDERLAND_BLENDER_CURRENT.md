@@ -13,7 +13,7 @@ is the art library's.
 | LOCK | `wonderland/.gauntlet-lock` = `writer=claude`, read before writing, unchanged. `wonderland/art/` is unowned by `gauntlet-check.py` (shared). |
 | BLENDER | `bpy` 4.5.13 LTS, installed via pip. Real Blender, headless — the same bmesh, the same exporters, Cycles on CPU. |
 | RENDERED | **Yes.** Twenty-one Cycles contact sheets and seven ASSEMBLY renders in `wonderland/art/blender/validation/renders/`. No Unreal frame — see "What is unproven". |
-| PLACED | **Yes.** 747 kit placements in `layout_v2.ALL` — 52 of 101 modules, 160 meshes, 8 batches. See "The kit is in the world now". |
+| PLACED | **Yes.** 864 kit placements in `layout_v2.ALL` — 58 of 101 modules, 9 batches. See "The kit is in the world now". |
 
 ---
 
@@ -79,8 +79,8 @@ it by eye.
    `kit_layout.EDGE_PINNED` names all six with their numbers and why nothing
    placed can move them. This is the single most expensive lesson in the file.
 4. Families still unplaced: `hero` (deliberately — see below), and the
-   remainder of `stairs`, `details`, `roofscape`, `thresholds`. 52 of 101
-   modules are placed.
+   remainder of `details`, `roofscape`, `thresholds`. **58 of 101 modules are
+   placed**; `stairs` went 1 of 8 to 6 of 8.
 5. `HamletCam17` and two other arcs are walled by other cameras —
    `kit_layout.SKIPPED` records each with the numbers. They need the incumbent
    moved, not another stand.
@@ -531,7 +531,7 @@ it was.
 | file | what it does |
 |---|---|
 | `wonderland/v2/kit_v2.py` | the bridge. `import_kit_assets(ctx)` returns `{key: asset path}` in exactly `build_assets`'s shape, so the two dicts merge and nothing else in the pipeline changes. `placements_for()` expands one module into one placement per MESH; `stack()` bears each module on the measured `top` socket of the one below; `spellings()` walks the socket grammar for legal foot→body→crown chains. |
-| `wonderland/v2/kit_layout.py` | eight batches, 747 placements. Seven answer a number from `tools/framescape.py`; the eighth answers a coverage gap and says so. |
+| `wonderland/v2/kit_layout.py` | nine batches, 864 placements. Seven answer a number from `tools/framescape.py`; two answer a coverage gap and say so, with the null result measured and written down. |
 | `wonderland/v2/verify_kit_bridge.py` | fourteen checks, no engine and no Blender |
 | `wonderland/v2/assets_v2.py` | the only wiring: `known_asset_keys()` admits the kit's mesh keys, `build_assets()` merges the import. Both guarded — an unbuilt kit is an empty set and every kit placement then fails LOUDLY. |
 
@@ -557,10 +557,11 @@ bbox and was invisible to every instrument that reads one — including the
 
 **Batches:** `tea_terrace` 37, `water_court` 35, `depth_stand` 204,
 `clock_quarter` 43, `hamlet_street` 142, `ceiling_break` 42, `green_ceiling`
-136, `castle_precinct` 108.
+136, `castle_precinct` 108, `garden_levels` 117.
 
-**Families still unplaced:** `hero` (2 modules), and the remainder of `stairs`,
-`details`, `roofscape`, `thresholds`. `WL_Hero_GreatSpire` is deliberately not
+**Families still unplaced:** `hero` (2 modules), and the remainder of
+`details`, `roofscape`, `thresholds`. 58 of 101 modules are placed; `stairs`
+went 1 of 8 to 6 of 8 with `garden_levels`. `WL_Hero_GreatSpire` is deliberately not
 placed — it is 118 m and the world already stands a 194 m `spire_great`, so a
 second one is a competing landmark rather than a contribution. That is the
 world stream's call, not the kit's.
