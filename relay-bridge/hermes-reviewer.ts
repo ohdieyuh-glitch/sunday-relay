@@ -18,6 +18,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { safeText } from './redact';
 import type { JuliusReviewCharge, JuliusReviewStage } from '../src/relay/mission/julius/julius-review-stage';
+import type { JuliusContractReviewCharge } from '../src/relay/mission/julius/julius-task-contract';
 import { parseUsageFile } from './reviewer-harness/hermes/runner';
 
 export type HermesVerdict = 'approved' | 'changes_required' | 'unable_to_review';
@@ -572,6 +573,17 @@ interface ReviewPacketFields {
    */
   stage?: undefined;
   charge?: undefined;
+  /**
+   * THE LOCKED TASK CONTRACT this review grades against, when Julius dispatched
+   * one. Optional because two callers legitimately have none: the older reviewer
+   * harness, and a plan review, whose subject is the document that will become
+   * the contract's detail rather than work done under it.
+   *
+   * A VALUE, HANDED DOWN. This module never derives it — a reviewer that could
+   * fetch its own charge would be choosing what it is graded against, which is
+   * the defect the stage charge already exists to prevent, one level up.
+   */
+  contract?: JuliusContractReviewCharge;
   /** Prior blocking findings, for a repair review that must judge their resolution. */
   priorFindings?: string[];
   missionId: string;
@@ -682,6 +694,35 @@ export function buildReviewPrompt(p: ReviewPacket): string {
       ...priorFindingsBlock,
       `RELAY VERIFICATION EVIDENCE:\n${p.relayEvidence.map((e) => `- ${e}`).join('\n')}`,
     ];
+  /**
+   * THE LOCKED CONTRACT, QUOTED, when Julius dispatched one.
+   *
+   * This is what makes a finding checkable: every blocking criterion carries the
+   * mission's own id, so a finding names `[criterion-x]` rather than a paraphrase
+   * nobody can match back. The binding is printed too — a review and the
+   * implementation it judges are the same agreement only if they name the same
+   * revision and digest, and a durable record of what the reviewer was shown is
+   * how that stops being a claim about code paths.
+   */
+  const contractBlock = p.contract === undefined ? [] : [
+    'THE LOCKED TASK CONTRACT (the agreement this work was dispatched under — grade against THIS, not against your own',
+    'reading of the request; every finding must name the criterion id it fails):',
+    `  CONTRACT: ${p.contract.binding.contractId} revision ${p.contract.binding.contractRevision}`,
+    `  BINDING DIGEST: ${p.contract.binding.bindingDigest}`,
+    `  OBJECTIVE: ${p.contract.objective}`,
+    `  RESPONSIBILITY BOUNDARY: ${p.contract.responsibilityBoundary}`,
+    `  BLOCKING ACCEPTANCE CRITERIA:\n${p.contract.blockingCriteria.map((line) => `    - ${line}`).join('\n') || '    - (none stated)'}`,
+    `  REQUIRED EVIDENCE: ${p.contract.requiredEvidence.join(', ') || '(none stated)'}`,
+    `  REQUIRED CHECKS: ${p.contract.requiredChecks.join(' && ') || '(none stated)'}`,
+    `  IN SCOPE: ${p.contract.inScope.join(', ') || '(none stated)'}`,
+    `  OUT OF SCOPE: ${p.contract.outOfScope.join(', ') || '(none)'}`,
+    `  PERMITTED PATHS: ${p.contract.permittedPaths.join(', ') || '(none stated)'}`,
+    `  PROHIBITED: ${p.contract.prohibitedActions.join('; ') || '(none)'}`,
+    `  CONTRACT REVIEW CRITERIA:\n${p.contract.contractReviewCriteria.map((line) => `    - ${line}`).join('\n') || '    - (none stated)'}`,
+    `  FAILURE CONDITIONS: ${p.contract.failureConditions.join('; ') || '(none stated)'}`,
+    `  STOPPING CONDITION: ${p.contract.stoppingCondition}`,
+    '',
+  ];
   return [
     ...head,
     '',
@@ -700,6 +741,7 @@ export function buildReviewPrompt(p: ReviewPacket): string {
     "FOUNDER'S ORIGINAL REQUEST:",
     p.originalRequest,
     '',
+    ...contractBlock,
     ...body,
     '',
     `RUBRIC: ${rubric}`,

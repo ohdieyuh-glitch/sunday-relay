@@ -1,3 +1,4 @@
+import type { JuliusContractReviewCharge } from './julius-task-contract';
 import type{JuliusWorker,JuliusWorkerRegistry,JuliusWorkerRole}from'./julius-runtime';import{workerAllowedByCard,type JuliusCardPolicy}from'./julius-policy';
 export const JULIUS_ERROR_CODES=['RATE_LIMIT','TIMEOUT','AUTH_CONFIGURATION','PROVIDER_UNAVAILABLE','INVALID_REQUEST','WORKER_EXECUTION_FAILURE','POLICY_DENIED','BUDGET_DENIED','CANCELLED']as const;export type JuliusErrorCode=typeof JULIUS_ERROR_CODES[number];
 /**
@@ -204,7 +205,17 @@ export interface JuliusProviderResult{readonly workerId:string;readonly provider
  * behaves exactly as before.
  */
 export interface JuliusDispatchAllocation{readonly usdMicros:number;readonly policyVersion:string;readonly basis:string;}
-export interface JuliusDispatchInput{readonly taskId:string;readonly contextId:string;readonly taskType?:string;readonly allocation?:JuliusDispatchAllocation;readonly signal?:AbortSignal;}
+/**
+ * THE LOCKED TERMS THIS DISPATCH RUNS UNDER, computed by Julius and handed to
+ * the adapter.
+ *
+ * The same inversion `taskType` uses: an adapter must not reach into the store
+ * for the contract any more than it may parse a stage out of a task id. Julius
+ * proved the lock at the gate and hands the charge down; a reviewer that could
+ * look one up would be choosing what it is graded against. Optional, so an
+ * unbound role and the older reviewer harness are unchanged.
+ */
+export interface JuliusDispatchInput{readonly taskId:string;readonly contextId:string;readonly taskType?:string;readonly allocation?:JuliusDispatchAllocation;readonly contract?:JuliusContractReviewCharge;readonly signal?:AbortSignal;}
 export interface JuliusProviderAdapter{readonly adapterId:string;dispatch(input:JuliusDispatchInput):Promise<JuliusProviderResult>;}
 export interface JuliusProviderHealth{readonly providerId:string;readonly state:'CLOSED'|'OPEN'|'HALF_OPEN';readonly consecutiveFailures:number;readonly openedAt:string|null;readonly active:number;readonly concurrencyLimit:number;}
 export class JuliusProviderHealthRegistry{private readonly values=new Map<string,JuliusProviderHealth>();set(value:JuliusProviderHealth){this.values.set(value.providerId,structuredClone(value));}available(providerId:string){const value=this.values.get(providerId);return value===undefined||(value.state!=='OPEN'&&value.active<value.concurrencyLimit);}get(providerId:string){const value=this.values.get(providerId);return value?structuredClone(value):null;}}

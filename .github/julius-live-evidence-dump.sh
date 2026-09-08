@@ -110,3 +110,16 @@ dump "SELECT e.payload->>'taskId' AS task_id,t.role,e.payload->'facts'->>'diag_s
 # as that account. Identifiers only — the same class the run and mission columns already carry.
 dump "SELECT entry_id,entry_kind,worker_id,task_id,revision,created_at FROM relay_wonderland.julius_brain_entries ORDER BY revision" project-brain.tsv
 dump "SELECT execution_id,mission_id,project_id,player_id,agent_id,state FROM relay_wonderland.execution_sessions ORDER BY execution_id" sessions.tsv
+
+# WHAT THE CODER WAS CHARGED WITH, AND WHETHER IT WAS AGREED BEFORE IT RAN.
+#
+# A build may not be dispatched without a LOCKED task contract, so this table is what turns that
+# from a code path into evidence: the bundle shows the revision, its lock state, the instant it
+# stopped being arguable and who accepted it. Without it, "the reviewer graded against the same
+# agreement the coder worked under" is unfalsifiable after the database is destroyed.
+#
+# IDENTIFIERS AND STATE ONLY. `safe_terms` is deliberately NOT selected — the objective, the
+# criteria statements and the scope are prose, and some of it is architect-authored after a
+# revision, which is exactly the class this bundle refuses a column. `binding_digest` IS selected
+# and is safe by construction: it is a sha256 of the terms, never the terms.
+dump "SELECT contract_id,contract_revision,task_id,state,binding_digest,locked_at,locked_by_evaluator_id,created_at FROM relay_wonderland.julius_task_contracts ORDER BY contract_id,contract_revision" task-contracts.tsv

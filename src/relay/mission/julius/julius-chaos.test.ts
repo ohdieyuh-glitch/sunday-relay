@@ -109,6 +109,83 @@ describe('a crash at each transaction boundary', () => {
 });
 /* ---------------------------------------------- the expensive double-run */
 
+/**
+ * THE WINDOW THAT STRANDED A RUN, AND WHAT THE OLD ASSERTION MISSED.
+ *
+ * `acceptWorkerResult` moves a task out of ACTIVE in its own transaction; the
+ * verification decision is a SEPARATE write. A process that dies between them
+ * leaves a SUCCEEDED task with no decision, and nothing ever looks at it again:
+ * the claim query offers RUNNABLE tasks only, so the run parks in VERIFYING
+ * permanently.
+ *
+ * The boundary loop above reached this exact window and passed, because it asked
+ * whether the task wedged in an IMPOSSIBLE state. It did not. A mission that
+ * never finishes, in a perfectly legal state, with the money already spent, is
+ * the failure that question cannot see — so this asks the other one: does the
+ * run still REACH a terminal state?
+ */
+describe('a crash between accepting a result and recording its decision', () => {
+  const advanceUntilTerminal = async (harness: ReturnType<typeof build>, ticks = 12) => {
+    for (let index = 0; index < ticks; index += 1) {
+      const report = await harness.loop.tick(scope);
+      if (report.claimed === 0) {
+        const advance = await harness.loop.advanceRun('run-1', 'prj-1');
+        if (advance === null || (!advance.changed && advance.resumedVerifications === 0)) break;
+      }
+    }
+    return harness.store.loadRun('run-1', 'prj-1');
+  };
+
+  it('strands nothing: the restart runs the verification that never ran, and the run completes', async () => {
+    const harness = build();
+    const { report } = await crashAt(harness, 'appendDecision');
+    expect(report.fired, 'the boundary was reached').toBe(true);
+
+    // The shape the crash leaves: the work is durably done and unjudged.
+    expect(harness.store.taskRow('task-1')!.state).toBe('SUCCEEDED');
+    expect(await harness.store.decisionsForRun('run-1', 'prj-1')).toEqual([]);
+
+    harness.store.restart();
+    const run = await advanceUntilTerminal(harness);
+
+    expect(await harness.store.decisionsForRun('run-1', 'prj-1'), 'the decision was resumed')
+      .toHaveLength(1);
+    expect(run?.state, 'and the run reached a terminal state rather than parking forever')
+      .toBe('COMPLETED');
+    // AND IT WAS NOT PAID FOR TWICE. The result was already accepted; what was
+    // missing was Julius's judgement of it, and that costs nothing to redo.
+    expect(harness.adapters.get(CODER.adapterId)!.dispatches).toHaveLength(1);
+  });
+
+  it('attributes the resumed decision to the runtime, never to a worker that did not make it', async () => {
+    const harness = build();
+    await crashAt(harness, 'appendDecision');
+    harness.store.restart();
+    await advanceUntilTerminal(harness);
+
+    const decided = harness.store.events().filter((event) => event.type === 'verification.decided');
+    expect(decided).toHaveLength(1);
+    expect(decided[0]?.workerId).toBe('julius-verification-resume');
+  });
+
+  it('is idempotent: a second resume adds no decision and no second repair round', async () => {
+    const harness = build();
+    await crashAt(harness, 'appendDecision');
+    harness.store.restart();
+    await advanceUntilTerminal(harness);
+    const after = await harness.store.decisionsForRun('run-1', 'prj-1');
+
+    const tasksBefore = (await harness.store.tasksForRun('run-1', 'prj-1')).length;
+    await harness.loop.advanceRun('run-1', 'prj-1');
+    await harness.loop.advanceRun('run-1', 'prj-1');
+    expect(await harness.store.decisionsForRun('run-1', 'prj-1')).toEqual(after);
+    expect((await harness.store.tasksForRun('run-1', 'prj-1')).length, 'no task was minted by re-asking')
+      .toBe(tasksBefore);
+    expect(harness.store.events().filter((event) => event.type === 'verification.decided'),
+      'and no second decision event').toHaveLength(1);
+  });
+});
+
 describe('nothing is executed twice across a crash', () => {
   it('does not re-dispatch a task whose result was already accepted', async () => {
     const harness = build();

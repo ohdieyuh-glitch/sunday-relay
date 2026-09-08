@@ -4,12 +4,273 @@
 > repository evidence does not. Update it whenever meaningful state changes and
 > before ending a session. Never rely on `/resume` as the sole record.
 
+**Most recent session:** 2026-09-08, the **Claude Code cloud session**. Read
+**§00** first: it holds the current branch, the three commits it added, a
+security finding about the merge-provenance credential, and the founder-only
+actions that gate everything else. Everything from §0a onward is the earlier
+local record.
+
+---
+
 **Session date:** 2026-09-06
 **Checkout:** `/home/thomasajvt13/dev/sunday-relay-main` (a linked worktree)
 **Branch:** `relay/coder-ceiling-mission-budget`
 **HEAD:** see §8 for the current commit list (the branch is rebuilt as work lands)
 **Base:** `origin/main` = `b2dc9f239eeb54764beca97a2966afa24c7cc3a4` (#233)
 **Working tree:** clean; ahead of `origin/main`, **not pushed**.
+
+---
+
+## 00. CLOUD SESSION 2026-09-08 — the task/sprint contract, and a credential finding
+
+> Written by the **Claude Code cloud session** (`claude.ai/code`), not the local
+> Chromebook checkout. Everything below §00 is the earlier local record and is
+> still accurate except where this section says otherwise.
+
+**Branch:** `claude/julius-core-beta-readiness-nef10e`, pushed.
+**Base:** `origin/relay/julius-brain-and-beta-gate` (`983017a0`) — PR #235's head,
+which contains PR #234's head (`be949de2`), which is based on `origin/main`
+(`b2dc9f23`). So this branch is the **top of a three-deep stack**.
+
+**Why that base, rather than `main`.** #234 rewrites the exact seams a task
+contract has to bind to — `julius-task-pipeline.ts`, `julius-run-loop.ts`,
+`julius-runtime-ports.ts`, the repair role/stage inheritance and the release
+rule — and #235 adds the Project Brain writer this work reads alongside. Basing
+on `main` would have meant re-solving both and then colliding with both. The
+cost is that this branch cannot land until the two beneath it do.
+
+### 00a. SECURITY / PROVENANCE FINDING — confirmed independently from the cloud
+
+`julius-review-currency.mjs` justifies `ohdieyuh-glitch` as the external
+approver on the stated ground that "the credential ... was removed on 2026-09-05
+when the worker App replaced it — so an approval carrying this login is a
+statement by someone outside the environment being reviewed", and adds that if
+it is ever put back the entry "stops meaning anything and belongs in
+`NON_ATTESTING_IDENTITIES` instead."
+
+The local session recorded on 2026-09-07 that `gh auth status` in the local
+checkout still reported that login. **This cloud session confirms it from a
+second, independent environment:** `mcp__github__get_me` returns
+`ohdieyuh-glitch` (id 225496319) with repository write. So the stated
+precondition of the merge-provenance model is false in at least two of the
+environments Julius is developed from.
+
+Consequences, stated precisely:
+
+- **This session did not approve anything.** It could have approved PR #234 —
+  authored by `julius-worker[bot]`, so `evaluateReviewCurrency`'s
+  author≠approver rule would have permitted it — and that would have been a
+  coding agent exercising founder authority, which is the arrangement the whole
+  model exists to prevent. It was not exploited and must not be.
+- **This session also cannot author a landable PR.** `WORKER_AUTHOR_LOGINS` is
+  `['julius-worker[bot]']`, and a pull request opened with this credential is
+  authored by `ohdieyuh-glitch`, so merging one would make `main`
+  `unprovenanced` and block every paid live mission until a worker-authored PR
+  landed on top. That is the same constraint #235 documents for itself.
+- **The remedy is the founder's, and it is a credential change, not a code
+  change.** Either the founder's token is genuinely removed from every coding
+  environment (which is what the file already claims), or `ohdieyuh-glitch`
+  moves to `NON_ATTESTING_IDENTITIES` and a different external authority is
+  configured. Weakening the gate to make CI green would be the wrong direction
+  and was not done.
+
+### 00b. What this session built
+
+Three commits, all provider-free, all on the branch above.
+
+**1. `c4c9474d` — the task/sprint contract domain** (`julius-task-contract.ts`).
+
+Julius had a Mission Contract and a per-worker context packet and nothing in
+between: no statement of what THIS task was charged with, agreed before
+implementation and handed unchanged to whoever reviews it. #234 fixed the
+reviewer's RUBRIC; this is the SUBJECT the rubric is applied to.
+
+- Draft → challenge → revise → accept, and then **Julius, and only Julius,
+  locks**. The evaluator's `ACCEPT` is an input to the lock, never the lock:
+  a reviewer that could lock would be the orchestrator.
+- `contractRevision` + `bindingDigest` is what every downstream record carries,
+  so "were these compiled from the same agreement" is one equality. Currency has
+  four answers — CURRENT, STALE, **FOREIGN**, INDETERMINATE. A newer revision
+  than the one locked is FOREIGN *even when it carries the current digest*, and
+  a same-revision digest mismatch is FOREIGN rather than stale, because a retry
+  would succeed and hide it.
+- A worker's revision cannot move `runId`, `taskId`, `missionContractRevision`,
+  the **criterion ids** or the **budget**. The proposal type forbids them at
+  compile time and provider output is not compiled, so the restatement at
+  runtime is what actually holds — a spread-only implementation type-checks and
+  fails the hostile-proposal test. Criterion TEXT is deliberately not frozen;
+  clarifying a criterion is the point of the challenge cycle.
+- Revision 1 is **seeded by Julius from the Mission Contract** — objective,
+  blocking criteria with the mission's own ids, constraints, and the money as
+  the same two numbers `juliusAllocationPolicy` takes. The architect's
+  contribution is a revision against terms it cannot rewrite.
+- All eight load-bearing branches were mutated and every mutation went red.
+
+Also in that commit: **`relay-core-boundary.test.ts` was passing by whitespace.**
+The mission-purity rule matched `/from\s+['"]node:/` — one or more spaces — and
+`julius-context-snapshot.ts` is written densely with none, so its `node:crypto`
+import walked past the guard and the rule was a claim the mission layer did not
+satisfy. The check now separates the two populations: everything outside
+`mission/julius` imports no `node:` builtin **at any spacing**, and the julius
+domain (already documented as non-pure) may import **`node:crypto` and nothing
+else**. Both still forbid fs and process, and the mission barrel is asserted not
+to re-export julius. Verified by injecting `node:fs` into a julius file and a
+dense `node:crypto` into a non-julius one — the second used to pass.
+
+**2. `7f046bef` — migration 023 and `JuliusContractPostgresRepository`.**
+
+- **One locked revision** is a partial unique index
+  (`julius_task_contract_single_lock`), not an application check.
+- **A lock moves forward or not at all**: locking N while N−1 is locked IS
+  superseding, in one write; the same revision twice and an older revision than
+  the one held are refused.
+- **A revision is immutable** — every write is an INSERT, so a replay is a no-op
+  and different terms at a stored revision are refused rather than overwriting
+  terms another party holds.
+- **The digest is re-derived on read** and a locked row whose terms no longer
+  produce it is refused (`contract_absent`, which blocks). Proven by writing
+  past the repository with `jsonb_set`, exactly as an outside edit would.
+
+**A real database found a bug the in-memory model structurally cannot.** Two
+concurrent locks of one revision made `lockTaskContract` THROW: under
+SERIALIZABLE, two transactions taking `FOR UPDATE` on the same row abort one
+with `40001`, and only `23505` was translated. Both are now the same ordinary
+outcome, and the answer is **re-read rather than asserted** — announcing
+"another revision is locked" without looking would be a claim about a race this
+transaction never saw.
+
+**PostgreSQL 16 was actually run in this cloud container** (see §00d), so
+migrations 001–023 applied from empty and every case above is a real-database
+result, not a shape assertion.
+
+**3. `80262c60` — the gate, wired into the run loop.**
+
+- The check lives in `prepareClaimedTask`, which runs **before `admitTask`**, so
+  a refusal costs no execution attempt. It fails **closed and loud** (task
+  FAILED with its own reason code) because retrying a dispatch cannot make a
+  contract agreed.
+- It is a **different question from the release rule**: `evaluateJuliusRelease`
+  asks whether the build's dependencies are accepted, this asks whether what the
+  build was asked to do has been agreed. A run can satisfy the first and not the
+  second.
+- **The lock is written before the release.** Of the two states a crash can
+  leave, both are safe; the reverse order has a third — released with nothing
+  locked — where the gate would refuse a task the run already announced as ready.
+- **Who is bound**: the Coding Agent, by its lineage ROOT's contract (a repair
+  round and a bounded sub-agent both climb to it, so a worker cannot escape the
+  mission's terms by spawning a child and writing that child's contract); and
+  the reviewer of a coding task, by the same root. The Prompt Architect and its
+  own review are exempt because they PRODUCE the terms.
+- **Rule 2 is recorded, not assumed**: each dispatch writes its binding onto
+  `task.claimed`, and the e2e reads both rows back off the ledger and puts them
+  through `evaluateJuliusSharedBinding`.
+- **The reviewer now receives the locked contract**: Julius computes
+  `juliusContractReviewCharge` and hands it down on the dispatch — the same
+  inversion `taskType` uses — and `buildReviewPrompt` renders the binding, the
+  blocking criteria **by their mission ids**, the scope, the prohibitions, the
+  required checks, the failure conditions and the stopping condition, with the
+  instruction that every finding must name the criterion id it fails. A contract
+  cannot widen what a plan review may demand; #234's repair still holds.
+- **Bootstrap authors revision 1**, and a mission that does not state enough to
+  derive one is refused AT BOOTSTRAP (`task_contract_not_derivable`) rather than
+  accepted into a run whose build can never be dispatched.
+- The Beta Gate gains a **TASK CONTRACT LOCK** row and the evidence bundle a
+  **`task-contracts.tsv`** (identifiers, state, digest, lock instant and
+  evaluator — never `safe_terms`, which is prose). On paid run 34037313976's own
+  artifact it reads FAIL and is now the **second** of the top three gaps, which
+  is correct: that run had no contract at all, and its reviewer was grading
+  against prose.
+
+**4. `<commit 4>` — a crash could strand a run forever, and nothing was asking.**
+
+Found while proving the lock's own crash semantics, and it is older and wider
+than the contract work.
+
+`acceptWorkerResult` moves a task out of ACTIVE in its own transaction; the
+verification decision is a **separate write**. A process that dies between them
+leaves a **SUCCEEDED task with no decision**, and nothing ever looks at it
+again — the claim query offers RUNNABLE tasks only. The run then parks in
+VERIFYING **permanently**.
+
+It parks *honestly* — completion requires a decision per task, so nothing false
+is reported — which is exactly why nothing detected it. The chaos suite reached
+this window and passed, because it asked whether the task wedged in an
+**impossible** state. It did not. A mission that never finishes, in a perfectly
+legal state, with the money already spent, is the failure that question cannot
+see.
+
+`resumeUnverifiedTasks` runs the verification the run is owed. It:
+
+- **re-verifies rather than requeues** — the result is durably accepted, so
+  sending the worker again would pay twice; what is missing is only Julius's
+  judgement, which costs nothing to redo;
+- is **idempotent by construction** — `appendDecision`'s key is
+  `<taskId>:<action>:<reasonCode>` and the brain entry id derives from the same
+  three, so the resumed decision IS the decision the crashed tick would have
+  written, and no second repair round is minted;
+- **skips a task with a pending review**, which is not stranded — verification
+  answers SCHEDULE_REVIEW there and sweeping every tick would re-announce a
+  review already on its way;
+- lives in **`advanceRun`**, not `tick`: a stranded run has no claimable task, so
+  a tick never names it, and `advanceRun` is called with the run id by exactly
+  the caller that has noticed nothing moved. It runs **before** `targetRunState`,
+  because a resumed decision can release a BLOCKED task or complete the run;
+- is attributed to **`julius-verification-resume`**, never to the worker whose
+  process is gone.
+
+`JuliusRunAdvance` gains `resumedVerifications`, and
+`driveJuliusRunToTerminal` treats it as progress: `changed` means the RUN STATE
+moved, and an accepted plan releases a BLOCKED build while the run stays READY —
+reading `changed` alone would have reported a stall on the very tick that
+unblocked the run, and abandoned the mission one step from finishing. That was a
+real defect in the first version of this wiring, caught by driving the test the
+way the live driver drives.
+
+Three chaos cases hold it, and removing the resume call turns five tests red.
+
+### 00c. What this session did NOT do, and why
+
+- **No paid live mission was dispatched.** The repairs for paid run
+  `34037313976` are in **PR #234, which is still open and unmerged**, so `main`
+  is the same `b2dc9f23` that run failed on. Running it would have burned money
+  on known-broken code. This is the brief's own rule and it was followed.
+- **No approval, no merge, no `main` push.** See §00a.
+- **No world, Blender, HUD or Unreal work.**
+
+### 00d. Facts worth not rediscovering (cloud container)
+
+- **Real PostgreSQL 16 is available and can be run here.** `initdb` refuses to
+  run as root, so: `chmod 755 /var/tmp`, `mkdir -p /var/tmp/relaypg/{data,sock}`,
+  `chown -R postgres:postgres /var/tmp/relaypg`, then
+  `su postgres -s /bin/bash -c "/usr/lib/postgresql/16/bin/initdb -D /var/tmp/relaypg/data -U relay --auth=trust"`
+  and `pg_ctl -D … -o '-p 55432 -k /var/tmp/relaypg/sock -c listen_addresses=127.0.0.1' -l /var/tmp/relaypg/pg.log start -w`.
+  Then `DATABASE_URL=postgres://relay@127.0.0.1:55432/relay_test JULIUS_REAL_POSTGRES=1 npx vitest run src/relay/persistence/real-infra-julius.test.ts`.
+  **Do not use the scratchpad directory for `PGDATA`** — `/tmp/claude-0` is mode
+  0700 root and the `postgres` user cannot traverse it.
+- **`ANTHROPIC_BASE_URL` is set in this container.** It made
+  `claude-code.test.ts > classifies an API-key environment as disallowed` fail
+  here and pass everywhere else, because `classifyClaudeAuth` checks provider
+  overrides first. The test now establishes its own precondition; that was a
+  test reporting the environment rather than the code.
+- **The GitHub MCP identity here is `ohdieyuh-glitch`,** not the worker App. See §00a.
+- Docker is present; the Docker-gated half of `real-infra-julius.test.ts` was
+  not exercised (it needs `JULIUS_SANDBOX_IMAGE`).
+
+### 00e. The founder-only actions, in order
+
+1. **Approve and merge PR #234.** Worker-authored, all CI green, MERGEABLE/CLEAN,
+   zero reviews. Nothing else gates the paid path. Monotonicity is already
+   satisfied — the `julius-accepted-main-<sha>` artifacts for `f131098c` and
+   `67ade6ea` are both contained in `main`, and the rule is containment of all
+   that exist, so a forward merge stays `monotonic` with no new dispatch.
+2. **Decide how #235 and this branch land.** Both are authored by
+   `ohdieyuh-glitch` and therefore cannot land as authored (§00a). Either
+   re-author the commits through the worker App, or carry them into a
+   worker-authored PR. They are a stack: #234 → #235 → this branch.
+3. **Resolve the credential finding** (§00a) — a credential change, not a code
+   change.
+4. Only then is a paid rerun of `julius-live-mission-2` justified, and it should
+   be preceded by the zero-spend preflight.
 
 ---
 

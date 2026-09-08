@@ -634,6 +634,14 @@ export function createLiveHermesReviewerAdapter(input: {
       const packet: ReviewPacket = {
         stage,
         charge,
+        /**
+         * THE LOCKED CONTRACT, WHEN JULIUS DISPATCHED ONE. It arrives on the
+         * dispatch — computed by Julius from the contract its gate proved — and
+         * is never looked up here: a reviewer that could fetch its own charge
+         * would be choosing what it grades against. Absent for a plan review,
+         * whose subject is the document that becomes the contract's detail.
+         */
+        ...(dispatch.contract === undefined ? {} : { contract: dispatch.contract }),
         missionId: snapshot.packet.missionId,
         // THE FINDINGS ARE NOT THE FOUNDER'S REQUEST. `packetText` joins every
         // block, so the FINDING entries Julius compiled for a repair review

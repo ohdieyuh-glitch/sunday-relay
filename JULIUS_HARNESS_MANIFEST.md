@@ -25,7 +25,7 @@ Edges counted by the trace between included files; "type" = type-only imports, e
 
 | from | to | edges | type |
 | --- | --- | --- | --- |
-| bridge provider stacks (hosted Claude, Hermes, redaction) | kernel (src/relay/mission/julius/) | 1 | 1 |
+| bridge provider stacks (hosted Claude, Hermes, redaction) | kernel (src/relay/mission/julius/) | 2 | 2 |
 | C.A.R.D. record (src/relay/integration/compound-agent/, entitlement) | kernel (src/relay/mission/julius/) | 1 | 0 |
 | C.A.R.D. record (src/relay/integration/compound-agent/, entitlement) | Relay vocabulary (mission/contracts.ts, protocol/enums.ts) | 1 | 1 |
 | entrypoint (relay-bridge/julius-live-mission.ts) | executor + tool substrate (src/relay/workspace/julius-tools/) | 2 | 1 |
@@ -96,7 +96,7 @@ One claimed task all the way through: policy, budget reservation, context compil
 | --- | --- | --- |
 | `src/relay/mission/julius/julius-execution-coordinator.ts` | traced | `src/relay/mission/julius/index.ts` |
 | `src/relay/mission/julius/julius-release-runtime.ts` | traced | `src/relay/mission/julius/index.ts` |
-| `src/relay/mission/julius/julius-task-contract.ts` | traced | `src/relay/mission/julius/index.ts` |
+| `src/relay/mission/julius/julius-task-contract.ts` | traced | `src/relay/mission/julius/julius-router.ts` |
 | `src/relay/mission/julius/julius-task-pipeline.ts` | traced | `src/relay/mission/julius/index.ts` |
 
 ### 04 C.A.R.D. POLICY
@@ -154,7 +154,7 @@ The judgement role: the Hermes reviewer process runner in an isolated profile, p
 | `relay-bridge/reviewer-harness/hermes/hermes-provider.ts` | traced | `relay-bridge/reviewer-harness/hermes/isolated-profile.ts` |
 | `relay-bridge/reviewer-harness/hermes/isolated-profile.ts` | traced | `relay-bridge/reviewer-harness/hermes/runner.ts` |
 | `relay-bridge/reviewer-harness/hermes/runner.ts` | traced | `relay-bridge/hermes-reviewer.ts` |
-| `src/relay/mission/julius/julius-review-stage.ts` | traced | `src/relay/mission/julius/index.ts` |
+| `src/relay/mission/julius/julius-review-stage.ts` | traced | `src/relay/mission/julius/julius-task-contract.ts` |
 
 ### 09 AGENT TURN LOOP
 
