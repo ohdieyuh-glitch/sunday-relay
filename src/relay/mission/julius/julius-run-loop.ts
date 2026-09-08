@@ -496,6 +496,26 @@ export class JuliusRunLoop {
       }, this.deps, preflight));
     }
 
+    /**
+     * ONLY THE RUNS THIS TICK TOUCHED, WHICH IS NOT EVERY RUN THAT NEEDS ONE.
+     *
+     * A run whose only outstanding task is SUCCEEDED-and-undecided — the state
+     * a crash between `acceptWorkerResult` and the decision leaves — has
+     * nothing claimable and no lease to sweep, so it is never touched here and
+     * `advanceRun` never runs the verification it is owed.
+     *
+     * THAT IS A LIMIT OF `tick`, NOT A DEFECT IN THE RUNTIME, because no
+     * production caller uses `tick` alone: `driveJuliusRunToTerminal` calls
+     * `advanceRun` explicitly whenever a tick claimed nothing, for exactly this
+     * window. A future scheduler that calls `tick` on its own must do the same,
+     * or a paid answer will sit verified by nobody. Making `tick` self
+     * sufficient would mean enumerating runs with stranded verifications, which
+     * is a store query that does not exist yet and should be added deliberately
+     * rather than inferred from a loop that happens to be here.
+     *
+     * `julius-chaos.test.ts` drives the resume the way that driver does, so it
+     * tests the contract production relies on rather than a shape nothing uses.
+     */
     const runs: JuliusRunAdvance[] = [];
     for (const runId of touchedRunIds) {
       const advance = await this.advanceRun(runId, scope.projectId);
