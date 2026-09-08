@@ -286,6 +286,59 @@ own profile dotenv at `$HERMES_PROFILE_HOME/.hermes/.env`, so the reviewer bills
 through that profile and the credential never enters the mission process. The
 preflight reports its absence there "for the record", as its own code says.
 
+### SERIALIZATION FAILURES — a real defect the in-memory store cannot show
+
+`relay/julius-serialization-hardening`, branched from trusted `main`, pushed.
+
+`BEGIN ISOLATION LEVEL SERIALIZABLE` does not remove concurrency; it detects it
+and aborts one transaction with `40001 could not serialize access due to
+read/write dependencies among transactions`, which is PostgreSQL asking for the
+transaction to be **run again**. Eight of the nine Julius repositories that open
+one rolled back and rethrew, so that request reached the run loop as a task or
+run failure.
+
+**Measured, not argued.** Two transactions of exactly the shape those
+repositories use — read one task row, write another, no `FOR UPDATE` between —
+against a real PostgreSQL 16 in this container:
+
+```
+CROSS-WRITE: {"code":"40001","message":"could not serialize access due to
+              read/write dependencies among transactions"}
+SENTINEL:    {"code":"40001","message":"optimistic_concurrency_conflict"}
+```
+
+**The second line is why the retry could not simply be added.**
+`julius-postgres.ts` threw its own stale-version sentinel wearing PostgreSQL's
+code, and that one must never be retried — the caller's `expectedVersion` is
+stale, so a second attempt reads the same stale value and fails identically. A
+loop that could not tell them apart would spin. Nothing read that code: all four
+consumers match on the message. So the sentinel now has `JULIUS_STALE_VERSION`,
+and `serializableTransaction` retries only a failure PostgreSQL raised —
+verified by code **and** by the words PostgreSQL used.
+
+**Adopted in `julius-postgres.ts` only, deliberately.** These seven open a
+SERIALIZABLE transaction and still do not retry:
+
+`julius-context-postgres` · `julius-event-postgres` · `julius-lifecycle-postgres`
+· `julius-recovery-postgres` · `julius-repair-postgres` ·
+`julius-subagent-postgres` · `julius-tool-settlement-postgres`
+
+Each inlines its own bespoke transaction body rather than sharing a helper, and
+a retry is only sound when the effect is pure database work. Changing eight of
+them without proving that for each would trade a defect that is proven for one
+that is not. `julius-tool-postgres` already retried; so does
+`TransactionalWonderlandDatabase` — whose own sentinel, note, still wears
+`40001` and is therefore retried three times pointlessly. That is a separate,
+smaller finding, recorded rather than changed here.
+
+**The helper's first draft released the pooled client twice**, and `pg` throws
+on that — so the first concurrent pair it was written for failed on the double
+release rather than on serialization. Its own test caught it before it went
+anywhere; a mutation now holds it closed.
+
+Suite 9,457 passing / exit 0, every gate, real-PostgreSQL suite 4 passing, five
+mutations red. Harness manifest regenerated (109 production files).
+
 ### REAL POSTGRESQL, RUN HERE — 5 passed
 
 Not a claim about CI. A PostgreSQL 16 instance was started in this container and
