@@ -1,4 +1,21 @@
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
+import { serializableTransaction } from './postgres-serializable';
+
+/**
+ * THE STALE-VERSION SENTINEL'S OWN CODE, which used to be `40001`.
+ *
+ * Borrowing PostgreSQL's serialization-failure code made two different facts
+ * indistinguishable: "the database aborted you, run it again" and "your
+ * expectedVersion is stale, running it again reads the same stale value". A
+ * retry loop that could not tell them apart would spin on the second, which is
+ * exactly why this repository could not retry the first.
+ *
+ * Nothing read the code. All four consumers — the run loop, the bridge
+ * bootstrap, the chaos suite, and the in-memory store's parity — match on the
+ * MESSAGE, which is unchanged. The in-memory store throws it with no code at
+ * all, so the two stores agree more closely than they did.
+ */
+export const JULIUS_STALE_VERSION = 'julius_stale_version';
 import { JULIUS_RUNTIME_VERSION, transitionMission, type JuliusEvidence, type JuliusMissionState, type JuliusTask, type JuliusVerificationDecision } from '../mission/julius';
 
 export interface JuliusRunRecord { readonly runId:string;readonly missionId:string;readonly projectId:string;readonly state:JuliusMissionState;readonly cardRevision:string;readonly missionContractRevision:number;readonly projectBrainRevision:number;readonly version:number; }
@@ -22,9 +39,9 @@ export class JuliusPostgresRepository {
   }
   async loadRun(runId:string,projectId:string):Promise<JuliusRunRecord|null>{const result=await this.pool.query<Record<string,unknown>>('SELECT * FROM relay_wonderland.julius_runs WHERE run_id=$1 AND project_id=$2',[runId,projectId]);return result.rows[0]?this.mapRun(result.rows[0]):null;}
   async transition(input:{commandId:string;runId:string;projectId:string;expectedVersion:number;to:JuliusMissionState;reasonCode:string;safeSummary:string;evidenceIds:readonly string[];occurredAt:string}):Promise<JuliusRunRecord>{
-    return this.transaction(async client=>{const current=await client.query('SELECT * FROM relay_wonderland.julius_runs WHERE run_id=$1 AND project_id=$2 FOR UPDATE',[input.runId,input.projectId]);if(!current.rows[0])throw new Error('julius_run_not_found');const run=this.mapRun(current.rows[0]);if(run.version!==input.expectedVersion)throw Object.assign(new Error('optimistic_concurrency_conflict'),{code:'40001',retryable:false});
+    return this.transaction(async client=>{const current=await client.query('SELECT * FROM relay_wonderland.julius_runs WHERE run_id=$1 AND project_id=$2 FOR UPDATE',[input.runId,input.projectId]);if(!current.rows[0])throw new Error('julius_run_not_found');const run=this.mapRun(current.rows[0]);if(run.version!==input.expectedVersion)throw Object.assign(new Error('optimistic_concurrency_conflict'),{code:JULIUS_STALE_VERSION,retryable:false});
       const transition=transitionMission({transitionId:`transition:${input.commandId}`,missionId:run.missionId,current:run.state,to:input.to,reasonCode:input.reasonCode,safeSummary:input.safeSummary,evidenceIds:input.evidenceIds,occurredAt:input.occurredAt});
-      const updated=await client.query('UPDATE relay_wonderland.julius_runs SET state=$2,version=version+1,updated_at=$3 WHERE run_id=$1 AND version=$4 RETURNING *',[input.runId,input.to,input.occurredAt,input.expectedVersion]);if(updated.rowCount!==1)throw Object.assign(new Error('optimistic_concurrency_conflict'),{code:'40001'});
+      const updated=await client.query('UPDATE relay_wonderland.julius_runs SET state=$2,version=version+1,updated_at=$3 WHERE run_id=$1 AND version=$4 RETURNING *',[input.runId,input.to,input.occurredAt,input.expectedVersion]);if(updated.rowCount!==1)throw Object.assign(new Error('optimistic_concurrency_conflict'),{code:JULIUS_STALE_VERSION,retryable:false});
       await client.query(`INSERT INTO relay_wonderland.julius_transitions(transition_id,run_id,from_state,to_state,reason_code,safe_summary,evidence_ids,runtime_version,occurred_at,sequence) VALUES($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9,$10)`,[transition.transitionId,input.runId,transition.from,transition.to,transition.reasonCode,transition.safeSummary,json(transition.evidenceIds),transition.runtimeVersion,transition.occurredAt,run.version]);
       await this.event(client,{eventId:`julius:${input.commandId}`,projectId:input.projectId,streamId:input.runId,type:'julius.run.transitioned',occurredAt:input.occurredAt,payload:transition});return this.mapRun(updated.rows[0]);});
   }
@@ -86,5 +103,18 @@ export class JuliusPostgresRepository {
   private async event(client:{query:(sql:string,values?:readonly unknown[])=>Promise<{rows:any[];rowCount:number|null}>},input:{eventId:string;projectId:string;streamId:string;type:string;occurredAt:string;payload:unknown}){const sequence=await client.query('INSERT INTO relay_wonderland.stream_sequences(stream_id,next_sequence) VALUES($1,2) ON CONFLICT(stream_id) DO UPDATE SET next_sequence=relay_wonderland.stream_sequences.next_sequence+1 RETURNING next_sequence-1 AS sequence',[input.streamId]);await client.query(`INSERT INTO relay_wonderland.events(event_id,stream_id,project_id,sequence,event_type,visibility,payload,occurred_at) VALUES($1,$2,$3,$4,$5,'PROJECT',$6::jsonb,$7)`,[input.eventId,input.streamId,input.projectId,Number(sequence.rows[0].sequence),input.type,json({schemaVersion:'relay-julius-event.v1',...input}),input.occurredAt]);await client.query('INSERT INTO relay_wonderland.outbox(outbox_id,event_id,project_id) VALUES($1,$2,$3)',[`outbox:${input.eventId}`,input.eventId,input.projectId]);}
   private mapRun(row:Record<string,unknown>):JuliusRunRecord{return{runId:String(row.run_id),missionId:String(row.mission_id),projectId:String(row.project_id),state:String(row.state)as JuliusMissionState,cardRevision:String(row.card_revision),missionContractRevision:Number(row.mission_contract_revision),projectBrainRevision:Number(row.project_brain_revision),version:Number(row.version)};}
   private parseRun(value:unknown):JuliusRunRecord{return typeof value==='string'?JSON.parse(value)as JuliusRunRecord:value as JuliusRunRecord;}
-  private async transaction<T>(effect:(client:any)=>Promise<T>):Promise<T>{const client=await this.pool.connect();try{await client.query('BEGIN ISOLATION LEVEL SERIALIZABLE');const value=await effect(client);await client.query('COMMIT');return value;}catch(error){await client.query('ROLLBACK').catch(()=>undefined);throw error;}finally{client.release();}}
+  /**
+  * SERIALIZABLE, AND PREPARED FOR WHAT SERIALIZABLE DOES.
+  *
+  * This used to roll back and rethrow, so `40001 could not serialize access due
+  * to read/write dependencies among transactions` — a condition PostgreSQL
+  * raises to say "run it again" — reached the Julius run loop as a task or run
+  * failure. Proven against a real PostgreSQL 16 with two transactions of
+  * exactly this shape, not argued from the manual.
+  *
+  * The retry lives in `serializableTransaction`, which retries ONLY a failure
+  * PostgreSQL itself reported. The stale-version sentinel below is not one, and
+  * no longer wears its code.
+  */
+ private async transaction<T>(effect:(client:PoolClient)=>Promise<T>):Promise<T>{return serializableTransaction(this.pool,effect);}
 }
