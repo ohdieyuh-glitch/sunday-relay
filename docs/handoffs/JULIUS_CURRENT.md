@@ -175,8 +175,53 @@ token, over-widening the exemption to `objectiveSummary`, removing the path
 truncation, unsorting the walk, publishing a raw model key, and matching the
 exemption on the truncated path.
 
-**It is not on `main`** — see §00a for why this environment cannot author a
-landable PR, and §00g for the exact landing path.
+### Part 4 — a refused plan is corrected once, not fatal
+
+The defect the two runs really exposed. A plan that parses and then breaks one
+of Julius's OWN rules is a **self-inflicted, self-correctable** error, and it
+killed the mission outright — while every other recoverable failure in the run
+gets one bounded attempt at recovery. The architect is now told what it broke
+(the closed reason code and the structural path, **never its own text back**)
+and asked once more. Strictly once; a second refusal is the failure it always
+was. All fifteen reason codes have a correction, and an unparseable answer gets
+the same one.
+
+The correction spends inside the architect's **already-reserved** allocation —
+300,000 µUSD against two calls of roughly 20,000 µUSD each — so no ceiling is
+raised and no budget rule is relaxed. `plan_attempts` records how many calls one
+dispatch bought. The connector sends `store: false` and no
+`previous_response_id`, so the second call is genuinely independent.
+
+### WHERE THE LANDABLE FIX IS
+
+**`relay/julius-architect-gate-fix`, branched from trusted `main`
+(`872f1790`), pushed.** Four commits, every gate green:
+
+| Commit | What |
+|---|---|
+| `98a4a002` | the aimed rule, the surviving diagnostic, the charter |
+| `2f729388` | a test that asserted an auth precondition instead of establishing it |
+| `7b2150fb` | a test that discarded the rejection it provoked, exiting 1 on a green suite |
+| `5127618a` | the one correction, and `docs/JULIUS_PAID_RUNS_2026_09_08.md` |
+
+Suite **9,468 passing, 0 failed, 0 errors, exit 0**; typecheck, build,
+relay:build, relay:bridge:build, repository-boundary, parity-gate,
+surface-parity strict, yc-demo, cli contract-verify, `git diff --check`, and all
+four drills. The two middle commits are pre-existing defects that made the gate
+red in this container and are droppable on their own — nothing depends on them.
+
+**This session must not open that PR.** `julius-main-provenance.mjs` requires
+the candidate author to be `julius-worker[bot]` and the approver to be someone
+else; this environment holds `ohdieyuh-glitch` (§00a), so a PR opened here would
+be authored by the review authority and fail its own provenance check — and
+approving it would be the impersonation the invariant exists to prevent. The
+founder opens it through the worker-authored path.
+
+**The two earlier commits on `relay/julius-contract-stack-rebased`
+(`24d91a40`, `526d5d35`) are SUPERSEDED by `98a4a002`** and should not be landed
+beside it. This branch will be rebased onto the gate fix once that lands and its
+real SHA is known — not before, because rebasing onto an unlanded branch just
+moves the guess.
 
 ---
 
