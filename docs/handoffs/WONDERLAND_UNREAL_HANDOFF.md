@@ -558,7 +558,7 @@ MISSION`.
 | REAL — a live run drove the world | **nothing** |
 | RECORDED-EVENT VERIFIED | **nothing** — no capture has ever been taken |
 | INTEGRATION-READY | the envelope, ordering, rehydration, state machine, ledger adapter, accounting, animation plan, entry contract, HUD contract |
-| BUILT AND VERIFIED WITHOUT AN ENGINE | the usage geometry, the usage subsystem, the draw plan, the bands, the composition, the ordering rule and the run subsystem — 228 executable checks, a 66-sample geometry fixture and a 26-case ordering table, both generated from the TypeScript |
+| BUILT AND VERIFIED WITHOUT AN ENGINE | the usage geometry, the usage subsystem, the draw plan, the bands, the composition, the ordering rule and the run subsystem — 652 executable checks (152 + 50 + 450), a 66-sample geometry fixture and a 26-case ordering table, both generated from the TypeScript |
 | BUILT AND UNVERIFIED | the Slate paint in `WonderlandUsageHudWidget.cpp`. It parses; nothing here can run it |
 | SIMULATED | the dev script |
 | NOT BUILT | a world-snapshot route, the dog renderer, the swarm, every widget other than the usage HUD |
