@@ -221,12 +221,35 @@ and asked exactly once more, and only when the mission's allocation still has
 money in it. The Coding Agent has no such analogue and got none: it edits files,
 so its output is a diff on disk rather than a document that can be malformed.
 
-**This session must not open that PR.** `julius-main-provenance.mjs` requires
-the candidate author to be `julius-worker[bot]` and the approver to be someone
-else; this environment holds `ohdieyuh-glitch` (§00a), so a PR opened here would
-be authored by the review authority and fail its own provenance check — and
-approving it would be the impersonation the invariant exists to prevent. The
-founder opens it through the worker-authored path.
+**This session must not open that PR, and CANNOT.** Established empirically,
+not from documentation:
+
+* `julius-main-provenance.mjs:192` requires `pull.authorLogin` to be in
+  `WORKER_AUTHOR_LOGINS = ['julius-worker[bot]']`.
+* PR #234's `user.login` really is `julius-worker[bot]` — GitHub **App** id
+  325202980, `github.com/apps/julius-worker` — and its `merged_by` is
+  `ohdieyuh-glitch`. App authors, founder merges.
+* `mcp__github__get_me` from this session returns `ohdieyuh-glitch` (id
+  225496319), which is the review authority. No worker App credential is
+  present in this container, and probing the token environment is blocked here
+  (correctly).
+* The session that authored #234 — `session_01Rg4GG4cY71gpyELD89PQkb`, a local
+  CLI session on the founder's machine — is `disconnected` with
+  `computer_unreachable`, and `ListAgents` reports no reachable peer.
+
+So a PR opened here would be authored by the approver: it would fail provenance
+at that line, the paid workflow's trust gate would refuse the resulting `main`,
+and Tasks 1 and 2 would be *further* blocked rather than unblocked. Opening it
+is worse than not opening it.
+
+**The branch is fully PR-ready at `d8c9fab1`** (8 commits), with the body
+committed as `docs/JULIUS_ARCHITECT_GATE_PR.md` so it can be opened unchanged:
+
+```
+gh pr create --base main --head relay/julius-architect-gate-fix \
+  --title "Julius: the architect and reviewer refusals of paid run 34186711214" \
+  --body-file docs/JULIUS_ARCHITECT_GATE_PR.md
+```
 
 **The two earlier commits on `relay/julius-contract-stack-rebased`
 (`24d91a40`, `526d5d35`) are SUPERSEDED by `98a4a002`** and should not be landed
