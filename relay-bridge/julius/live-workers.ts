@@ -150,8 +150,23 @@ const ARCHITECT_CHARTER = [
   'Read the mission context below and produce the structured plan the output schema requires.',
   'You plan; you do not implement, review, or approve your own work.',
   'This is a PLAN ONLY. No work has been done yet and no file has been touched.',
-  'Never state or imply that files were edited, that tests were run, that you edited anything,',
-  'or that you ran the tests — a plan that claims completed work is refused outright.',
+  /**
+   * THE BAN, STATED WITHOUT HANDING BACK THE BANNED STRINGS.
+   *
+   * The first version of this line quoted all four refused phrases verbatim,
+   * and the schema then asks for `prohibitedActions` — so the most obedient
+   * possible answer was to echo them straight back. Paid runs 34185920678 and
+   * 34186711214 both died on `plan_false_work_claim`, on two independent
+   * samples of the same mission, and neither could say where. The validator
+   * now exempts the fields that ENUMERATE a condition, but a phrase echoed
+   * into an implementation step or an assumption is still a claim and still
+   * refused — so the charter stops supplying the text to echo.
+   */
+  'Write the entire plan in the FUTURE tense: what is to be done, not what has been done.',
+  'Never assert or imply that any file has already been changed, that any test has already',
+  'been executed, or that you yourself have performed any of the work — a plan that claims',
+  'completed work is refused outright, wherever the claim appears.',
+  'State that rule in your own words if you must state it at all; do not quote these sentences back.',
   'Every required string must be substantive: objectiveSummary, each assumption statement,',
   'each architecture decision and its rationale, and the handoff objective and bounded task',
   'must each be non-empty and meaningful. An empty string is refused.',
@@ -165,6 +180,7 @@ const ARCHITECT_REVISION_CHARTER = [
   'in the mission context. Keep the mission objective and every acceptance criterion exactly as stated;',
   'revise the plan so that each finding is addressed, and say in the plan how each one was addressed.',
   'Do not claim any finding is resolved by implementation work — none has happened.',
+  'The revised plan stays in the future tense throughout, exactly as the first one had to.',
 ].join(' ');
 
 /**
@@ -194,6 +210,7 @@ const planDiagnostics = (input: {
   readonly validationPassed: boolean;
   readonly validationReasonCode?: string | null;
   readonly validationField?: string | null;
+  readonly validationClaimPhrase?: string | null;
   readonly outputBytes?: number | null;
 }): Record<string, unknown> => ({
   stage: 'plan',
@@ -208,6 +225,7 @@ const planDiagnostics = (input: {
   validationPassed: input.validationPassed,
   validationReasonCode: input.validationReasonCode ?? null,
   validationField: input.validationField ?? null,
+  validationClaimPhrase: input.validationClaimPhrase ?? null,
   outputBytesObserved: input.outputBytes ?? null,
 });
 
@@ -306,6 +324,7 @@ export function createLiveArchitectAdapter(input: {
             requestedModel: input.config.model, servedModel: outcome.actualModel,
             responseId: outcome.responseId, jsonParseable: true, validationPassed: false,
             validationReasonCode: validation.reasonCode, validationField: validation.reasonField ?? null,
+            validationClaimPhrase: validation.reasonClaim ?? null,
             outputBytes: Buffer.byteLength(outcome.outputText, 'utf8'),
           }));
       }
