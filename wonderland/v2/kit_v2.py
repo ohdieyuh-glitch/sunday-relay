@@ -225,6 +225,16 @@ def spellings(want=8, max_bodies=2, min_height_uu=0.0):
     so deduping on the crown alone gives eight different towers standing on
     eight identical undercrofts, which is the procedural monotony
     `framescape.py` already measures as "one piece holding the ceiling".
+
+    AND ON THE SHAFT, which is the same argument one level down and the version
+    this function did not make. Chains sort tallest first, so for every (foot,
+    crown) pair the tallest body combination wins -- and
+    `Tower_Mid_Machicolated + Tower_Mid_Fluted` is that pair for most of them.
+    Twelve spellings came back with twelve crowns and THREE shafts between them,
+    and `Tower_Mid_Balconied`, `Tower_Mid_Lantern` and `Tower_Mid_Oriel` were
+    never spelled at all: three modules the forge built and the world could not
+    reach. A second pass admits a chain that introduces a body nothing else has
+    used, even when both its ends are already spoken for.
     """
     def top(a):
         s = socket(a["asset_id"], "top")
@@ -266,28 +276,36 @@ def spellings(want=8, max_bodies=2, min_height_uu=0.0):
         return z + height_uu(ch[-1]["asset_id"])
 
     found.sort(key=lambda ch: -total(ch))
-    out, used_top, used_foot = [], set(), set()
-    for ch in found:
-        if total(ch) < min_height_uu:
-            continue
-        t, f = ch[-1]["asset_id"], ch[0]["asset_id"]
-        if t in used_top or f in used_foot:
-            continue
-        used_top.add(t)
-        used_foot.add(f)
+    out, used_top, used_foot, used_body = [], set(), set(), set()
+
+    def take(ch):
+        used_top.add(ch[-1]["asset_id"])
+        used_foot.add(ch[0]["asset_id"])
+        used_body.update(m["asset_id"] for m in ch[1:-1])
         out.append(([m["asset_id"] for m in ch], total(ch)))
+
+    tall = [ch for ch in found if total(ch) >= min_height_uu]
+    # 1. a new foot AND a new crown -- the tallest of each, as before
+    for ch in tall:
         if len(out) >= want:
             break
-    for ch in found:
+        if ch[-1]["asset_id"] in used_top or ch[0]["asset_id"] in used_foot:
+            continue
+        take(ch)
+    # 2. a new SHAFT, even where both ends are spoken for
+    for ch in tall:
         if len(out) >= want:
             break
-        if total(ch) < min_height_uu:
+        if not any(m["asset_id"] not in used_body for m in ch[1:-1]):
             continue
-        t = ch[-1]["asset_id"]
-        if t in used_top:
+        take(ch)
+    # 3. anything with a crown not yet used
+    for ch in tall:
+        if len(out) >= want:
+            break
+        if ch[-1]["asset_id"] in used_top:
             continue
-        used_top.add(t)
-        out.append(([m["asset_id"] for m in ch], total(ch)))
+        take(ch)
     return out
 
 

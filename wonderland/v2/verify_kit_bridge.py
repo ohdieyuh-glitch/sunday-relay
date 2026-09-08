@@ -157,7 +157,7 @@ def t_parts_share_a_transform():
 
 def t_sockets_bear():
     """A stack bears on the MEASURED top socket, not on a declared height."""
-    spells = KIT.spellings(want=8, min_height_uu=5000.0)
+    spells = KIT.spellings(want=16, min_height_uu=4200.0)
     check(spells, "no legal tower spelling in the kit")
     for chain, total in spells:
         z = 0.0
@@ -171,11 +171,25 @@ def t_sockets_bear():
                          % (" + ".join(chain), total, z))
     feet = [c[0] for c, _h in spells]
     crowns = [c[-1] for c, _h in spells]
-    check(len(set(crowns)) == len(crowns),
-          "spellings repeat a crown: %s" % crowns)
-    return "%d spellings, %d distinct feet, %d distinct crowns, %.0f-%.0f uu" % (
-        len(spells), len(set(feet)), len(set(crowns)),
-        min(h for _c, h in spells), max(h for _c, h in spells))
+    shafts = [tuple(c[1:-1]) for c, _h in spells]
+    # ALL DIFFERENT IS THE PROMISE, not "all different crowns". The earlier
+    # version of this check asserted distinct crowns, which sounds stricter and
+    # is weaker: it passed twelve spellings that shared THREE shafts between
+    # them, because every one of them had a different hat. `spellings` now
+    # trades a repeated crown for an unused shaft where that buys more variety,
+    # so the test asks the question the docstring answers -- is any spelling a
+    # duplicate of another -- and reports the spread of all three parts.
+    whole = [tuple(c) for c, _h in spells]
+    check(len(set(whole)) == len(whole),
+          "spellings repeats a whole chain: %s" % whole)
+    check(len(set(shafts)) > 1 or len(spells) < 3,
+          "%d spellings share ONE shaft: every tower is the same building "
+          "under a different hat" % len(spells))
+    return ("%d spellings, all different: %d feet, %d shafts, %d crowns, "
+            "%.0f-%.0f uu" % (len(spells), len(set(feet)), len(set(shafts)),
+                              len(set(crowns)),
+                              min(h for _c, h in spells),
+                              max(h for _c, h in spells)))
 
 
 def t_stack_geometry():

@@ -437,7 +437,7 @@ def _clock_quarter(bands):
     """
     cx, cy = 14537.0, -1296.0
     out = []
-    spells = KIT.spellings(want=12, min_height_uu=4200.0)[5:]
+    spells = KIT.spellings(want=16, min_height_uu=4200.0)[5:]
     ring = [(2600.0, 20.0), (3400.0, 95.0), (2900.0, 168.0),
             (3800.0, 242.0), (3100.0, 310.0)]
     for i, (r, a) in enumerate(ring):
@@ -725,7 +725,7 @@ def _ceiling_break(bands):
     pass left it (+16.6 built). A batch that placed it would have scored.
     """
     out, taken, chosen = [], [], []
-    spells = KIT.spellings(want=12, min_height_uu=4200.0)
+    spells = KIT.spellings(want=16, min_height_uu=4200.0)
     ladder = [h for _c, h in spells]
     for cam, boss, arc, el in CEILING_BREAK:
         got = spots_on_bearing(cam, bands, arc, el, ladder, 8, taken)
@@ -838,7 +838,7 @@ def _green_ceiling(bands):
     rather than the batch quietly shrinking.
     """
     out, taken, chosen = [], [], []
-    spells = KIT.spellings(want=12, min_height_uu=4200.0)
+    spells = KIT.spellings(want=16, min_height_uu=4200.0)
     ladder = [h for _c, h in spells]
     for cam, arc, el in GREEN_CEILINGS:
         if cam in GROVE_CAMS:
@@ -1319,6 +1319,122 @@ def _sky_bridges(bands):
     return out
 
 
+#: uu. The wall-walk a curtain run publishes, and the height
+#: `WL_Wall_Stair_Flight` climbs to. Not a number chosen here: both come from
+#: the manifest, and the stair's note says "20 risers of 0.310 m reaching the
+#: 6.20 m wall-walk exactly".
+WALK_UU = 620.0
+
+#: uu. T1, the low terrace `Stair_Ceremonial`, `Stair_Garden` and
+#: `Ramp_Terrace` all climb to -- 1.55 m, deliberately off the kit's 0.310 m
+#: riser because a ceremonial rise is shallower than a working one.
+T1_UU = 155.0
+
+#: What each precinct gets that the others do not, so three walled enclosures
+#: do not read as one enclosure built three times.
+PRECINCT_SPECIAL = ("WL_Gatehouse_Twin", "WL_Arch_Twin_Tiered",
+                    "WL_Gatehouse_Twin__aged")
+
+#: Filled by `_precinct_works`.
+WORKS_CHOSEN = []
+
+
+def _precinct_works(bands):
+    """What a wall is for: a way up it, a way through it, and a court behind it.
+
+    `_castle_precinct` built three curtain walls and left them as scenery. This
+    is the sixteen modules that turn one into a place, and every one of them
+    keys into something already standing at a socket the manifest publishes:
+
+      `WL_Wall_Stair_Flight`   20 risers to `walk` at 620 -- the exact height a
+                               curtain run publishes. The one module in the kit
+                               whose whole purpose is another module.
+      `WL_Bridge_Flying`       a raking brace with a `back` socket, leaning on
+                               the wall's outer face; the kit's only diagonal
+      `WL_Colonnade_Curved`    authored about the PLAZA's centre, not its own:
+                               its bbox runs x 1887..2575, so six copies at one
+                               position, 60 degrees apart, close a ring
+      `WL_Stair_Ceremonial`    ) three ways onto that ring's low platform, all
+      `WL_Ramp_Terrace`        ) climbing to T1 -- a stair, a ramp and a garden
+      `WL_Stair_Garden`        ) step, because a court has more than one door
+
+    THE RUINED HALF IS PLACED WITH THE RUINED HALF. `_castle_precinct` weathers
+    the far end of each wall run; the overgrown house, the overgrown retaining
+    run, the broken balustrade and the aged tower stub go there and nowhere
+    else, so the precinct reads as one place with a history rather than a new
+    wall with old bits sprinkled through it.
+    """
+    out, chosen = [], []
+    for n, (cx, cy, bearing, _why) in enumerate(PRECINCT_CHOSEN):
+        rad = math.radians(bearing)
+        ax, ay = math.cos(rad), math.sin(rad)
+        nx, ny = -ay, ax
+        tag = "KitWorks%d" % (n + 1)
+
+        def at(along, into, z=0.0):
+            return (cx + ax * along + nx * into, cy + ay * along + ny * into, z)
+
+        # up the wall, from inside. The stair's flat back is its y = 0 and a
+        # curtain run is 450 deep, so it stands on the inner face.
+        out += KIT.placements_for("WL_Wall_Stair_Flight", at(-BAY_UU, 225.0),
+                                  rot=(0.0, bearing, 0.0),
+                                  label="%s_WallStair" % tag)
+        # A SECOND WAY UP, and a different one. `WL_Stair_Straight_T3` climbs
+        # `top_route` 620 -- the same wall-walk -- but it is a free flight with
+        # `edge_l`/`edge_r` rather than a flat back, so it stands off the wall
+        # instead of against it. Two routes onto a wall-walk is what a wall
+        # with a garrison looks like; one is a fire escape.
+        out += KIT.placements_for("WL_Stair_Straight_T3", at(BAY_UU * 2.0, 700.0),
+                                  rot=(0.0, bearing + 180.0, 0.0),
+                                  label="%s_WalkStair" % tag)
+        # and a brace against the outer one
+        out += KIT.placements_for("WL_Bridge_Flying", at(BAY_UU, -1400.0),
+                                  rot=(0.0, bearing + 90.0, 0.0),
+                                  label="%s_Brace" % tag)
+        # through it
+        out += KIT.placements_for(PRECINCT_SPECIAL[n % len(PRECINCT_SPECIAL)],
+                                  at(0.0, -2600.0), rot=(0.0, bearing + 90.0, 0.0),
+                                  label="%s_Entrance" % tag)
+        # the round court behind it, on a T1 platform
+        for k in range(6):
+            out += KIT.placements_for("WL_Colonnade_Curved", at(0.0, 4200.0, T1_UU),
+                                      rot=(0.0, bearing + 60.0 * k, 0.0),
+                                      label="%s_Court%d" % (tag, k + 1))
+        for aid, off, lab in (("WL_Stair_Ceremonial", 0.0, "Steps"),
+                              ("WL_Ramp_Terrace", 120.0, "Ramp"),
+                              ("WL_Stair_Garden", 240.0, "Postern")):
+            a2 = math.radians(bearing + 90.0 + off)
+            out += KIT.placements_for(
+                aid, (cx + nx * 4200.0 + ax * 0.0 - math.cos(a2) * 2600.0,
+                      cy + ny * 4200.0 + ay * 0.0 - math.sin(a2) * 2600.0, 0.0),
+                rot=(0.0, bearing + 90.0 + off, 0.0),
+                label="%s_%s" % (tag, lab))
+        # a span on the court's own axis
+        out += KIT.placements_for("WL_Bridge_Arc" if n else "WL_Bridge_Arc__aged",
+                                  at(0.0, 2000.0), rot=(0.0, bearing + 90.0, 0.0),
+                                  label="%s_Span" % tag)
+        # the ruined end -- with the wall's own ruined end, never scattered
+        far = BAY_UU * 3.0
+        out += KIT.placements_for("WL_Tower_Base_Buttressed__aged",
+                                  at(far + 1200.0, 600.0), rot=(0.0, bearing, 0.0),
+                                  label="%s_Stub" % tag)
+        out += KIT.placements_for("WL_House_Jettied__overgrown",
+                                  at(far, 2400.0), rot=(0.0, bearing + 180.0, 0.0),
+                                  label="%s_Ruin" % tag)
+        for i in (0, 1):
+            out += KIT.placements_for(
+                "WL_Garden_Retaining_Run__overgrown",
+                at(far - 800.0 * i, 1500.0), rot=(0.0, bearing, 0.0),
+                label="%s_Overgrown%d" % (tag, i + 1))
+            out += KIT.placements_for(
+                "WL_Detail_Balustrade_Run__broken",
+                at(far - 800.0 * i, 1500.0 + 77.0), rot=(0.0, bearing, 0.0),
+                label="%s_Broken%d" % (tag, i + 1))
+        chosen.append((cx, cy, bearing, PRECINCT_SPECIAL[n % len(PRECINCT_SPECIAL)]))
+    WORKS_CHOSEN[:] = chosen
+    return out
+
+
 PASSES = (("tea_terrace", _tea_terrace), ("water_court", _water_court),
           ("depth_stand", _depth_stand), ("clock_quarter", _clock_quarter),
           ("hamlet_street", _hamlet_street),
@@ -1327,6 +1443,7 @@ PASSES = (("tea_terrace", _tea_terrace), ("water_court", _water_court),
           ("castle_precinct", _castle_precinct),
           ("garden_levels", _garden_levels),
           ("street_fabric", _street_fabric),
+          ("precinct_works", _precinct_works),
           ("sky_bridges", _sky_bridges))
 
 

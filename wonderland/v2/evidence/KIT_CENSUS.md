@@ -8,7 +8,7 @@ not the placements.
 | | placements | mean built | cameras moved | one piece holds a third | frames over half green |
 |---|---|---|---|---|---|
 | before | 13,816 | 67.78% | — | 10 | 9 |
-| after | 15,260 | **76.08%** | 26 of 33 | 9 | 5 |
+| after | 15,390 | **76.39%** | 26 of 33 | 9 | 4 |
 
 The founder's reference, classified from its own pixels, is built **71.5%**.
 
@@ -337,6 +337,47 @@ than maintained by hand, and `SKIPPED` names each one it declines.
     green_ceiling         139 -> 209 placements
     ClockQuarterCam13    75.0% -> 59.2% (overlapping) -> **80.0%** (deduplicated)
     mean built          75.38% -> 75.48%              -> **76.08%**
+
+## Twelve towers with three shafts between them
+
+`kit_v2.spellings` deduped chains on BOTH ENDS, and its docstring says why:
+chains sort tallest first, so the tallest foot wins every sort and deduping on
+the crown alone gives "eight different towers standing on eight identical
+undercrofts, which is the procedural monotony `framescape.py` already
+measures".
+
+It did not make the same argument about the SHAFT. For every (foot, crown)
+pair the tallest body combination wins, and `Tower_Mid_Machicolated +
+Tower_Mid_Fluted` is that pair for most of them: twelve spellings came back
+with twelve crowns and **three shafts between them**, and
+`Tower_Mid_Balconied`, `Tower_Mid_Lantern` and `Tower_Mid_Oriel` were never
+spelled at all — three modules the forge built and the world could not reach.
+
+A second pass now admits a chain that introduces a body nothing else has used,
+even when both its ends are already spoken for. **16 spellings, 7 distinct
+shafts, every tower module reachable.**
+
+This is the same defect the census names as mismatch #4, found one level down
+in the grammar rather than in the placements — and it was invisible from the
+outside, because every tower already had a different foot and a different crown.
+
+## The last modules, and the two held back
+
+98 of 101 modules are placed. `_precinct_works` spent sixteen of them by giving
+the three curtain walls what a wall is for — a way up (two: `Wall_Stair_Flight`
+against the face at its published `walk` of 620, and `Stair_Straight_T3`
+standing free at the same height), a way through (`Gatehouse_Twin`,
+`Arch_Twin_Tiered`, and the aged gatehouse), and a court behind it: six
+`Colonnade_Curved` closing a ring — that module is authored about the PLAZA's
+centre, not its own, so six copies at one position 60 degrees apart make the
+ring — on a T1 platform reached by a ceremonial stair, a ramp and a garden
+step. The overgrown house, overgrown retaining run, broken balustrade and aged
+tower stub go at the wall's own weathered end and nowhere else.
+
+**`Hero_GreatSpire` and `Hero_Gate_Royal` are deliberately not placed.** The
+spire is 118 m and the world already stands a 194 m `spire_great`; a second one
+is a competing landmark, not a contribution, and where a world's landmarks
+stand is the world stream's call and not the kit's.
 
 ## Not proven
 

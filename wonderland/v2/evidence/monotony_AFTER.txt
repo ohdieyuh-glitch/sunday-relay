@@ -12,11 +12,11 @@ DistrictTower_RoyalGardens              9      80     49%  -
 KitBreak03_4_gold                       8     111     42%  ClockQuarter13 29%, TeaTerrace16 30%
 DistrictTower_NorthReach                8      38     53%  -
 City6_Tower0                            7      66     59%  WorldNorth19 23%, EastReach20 26%
+City3_Tower2_Roof                       7      36     56%  -
 GiantMushroom                           6      88     81%  FlankLeft08 20%
-City17_Tower0_Roof                      6      76     91%  -
+City17_Tower0_Roof                      6      78     88%  -
 DistrictTower_LanternHamlets            6      51     71%  -
 DistrictTower_TowerRise                 6      42     43%  -
-City3_Tower2_Roof                       6      32     62%  -
 KitGreen06_4_roof                       6      23     35%  -
 KitDepth01_4_roof                       6      20     65%  -
 KitBreak02_3                            6      20     60%  -
