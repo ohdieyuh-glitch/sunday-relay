@@ -1170,6 +1170,58 @@ not because anything was cleaned up.
 Until one of those happens the paid path is where it was: `origin/main` at
 `872f1790`, no `julius-worker[bot]` PR open, Tasks 1 and 2 NOT COMPLETE.
 
+### 00k. THE WHOLE EVIDENCE CHAIN, PROVEN ON A REAL DATABASE, PROVIDER-FREE
+
+**The join nobody had tested.** Three things were each proven separately: the
+RUNTIME against an in-memory store (a program agreeing with itself), the DUMP's
+column names against the migration SQL read as text, and the BETA GATE against
+TSV fixtures written by hand in its own test. Between them sat the join that
+actually decides whether a paid run leaves usable evidence: **a real run's rows,
+read out of PostgreSQL by the dump's own queries, parsed by the gate.** That is
+exactly where free dry runs #1 and #2 failed — `evidence.tsv` and `findings.tsv`
+arrived reading `unavailable` because a query named a column the migrations
+never created — and a paid run cannot be repeated for free to find out.
+
+`src/relay/persistence/julius-live-chain.e2e.test.ts` (env-gated, same gate as
+the real-infra suite) closes it:
+
+1. seeds the deployment through the **production** `MissionSeedStore`, creates
+   the run through `JuliusPostgresRepository`, walks `CREATED → PLANNING →
+   READY` (the transition table refuses the shortcut), seeds the build's
+   contract as a DRAFT exactly as the bootstrap writes it;
+2. drives a **complete mission** through the production Postgres store with
+   scripted adapters — plan, plan review accepts, build, **build review
+   REJECTS**, repair round, re-review accepts — to `COMPLETED`;
+3. runs the **14 queries the shipping dump script contains**, extracted from
+   the script itself, with the same `-A -F '\t'` flags, and refuses the
+   `unavailable` sentinel on every file;
+4. hands the result to the **Beta Gate**, which passes ten runtime rows from
+   database output: PROJECT CREATION, JULIUS MISSION START, PROMPT ARCHITECT,
+   CODING AGENT, **TASK CONTRACT LOCK**, INDEPENDENT REVIEWER, REPAIR LOOP,
+   VERIFICATION, VERIFIED COMPLETION, PROJECT BRAIN PERSISTENCE — with the
+   contract row earning the STRONG basis ("the build and its review were
+   claimed under that revision and digest"), the logic added the same day and
+   never before read against real rows;
+5. then **moves the claim's recorded revision in the database** — the one place
+   a mismatch can be manufactured without touching code, and the shape a stale
+   handoff leaves behind — re-dumps, and requires the gate to FAIL naming
+   revision 99.
+
+**Mutations, both killed.** L1: a dump query names a column the migrations never
+created → the test fails (this is the dry-run #1/#2 defect, now caught before a
+paid run rather than after). L2: the gate stops comparing the binding a build
+ran under → survived against the happy path alone, which is why step 5 exists;
+with it, killed.
+
+**What it does NOT cover, stated rather than implied:** the dump script wraps
+each query in `docker exec` against the mission's container; there is no
+container here, so the TRANSPORT is unexercised — the `first-live-topology` job
+covers that. The SQL, the row shapes and the gate's reading of them are covered.
+
+Also confirmed the same session: all 23 migrations apply from empty to a fresh
+database (59 tables in `relay_wonderland`), and all 14 dump queries execute
+against it.
+
 ### 00i. The next paid rerun — the record it must leave (template, to be filled by the run)
 
 > Not a run. This is the shape the record takes the moment the watch dispatches
