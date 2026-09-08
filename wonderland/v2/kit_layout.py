@@ -751,11 +751,115 @@ def _green_ceiling(bands):
     return out
 
 
+#: Empty ground the world's own `tools/emptiness.py` found, at the distance
+#: `tools/skyline.py` calls the thinnest part of the silhouette: (centre, the
+#: bearing the wall runs along, the cameras that can see it). The regions
+#: `emptiness.py` marks "castle sightline, deliberate" are NOT in this list and
+#: must not be -- a sightline is empty on purpose.
+#:
+#: 180-360 M IS THE WORLD'S THINNEST BAND, mismatch #3 in its own handoff: tops
+#: at +7.9 and +5.6 degrees against +14.0 nearer in. A 40 m precinct at 300 m
+#: reads at about +8, which is exactly that band and exactly why the batch goes
+#: here rather than somewhere it would score better on a ceiling.
+PRECINCTS = (
+    ((-20606.0, -24316.0), 20.0, "ReverseCam03 +37, ScaleCam07 +40, ClockQuarterCam13 +5"),
+    ((14730.0, 29419.0), -65.0, "HeroCam_V2_MarbleReference +26, PlayerCam01 +26, PathCam02 +29"),
+    ((12518.0, -24042.0), 105.0, "ReverseCam03 -25, GardenLeft04 +26, ScaleCam07 -28"),
+)
+
+#: uu. A curtain run is 13.6 m and butts end to end into any length, so a bay
+#: is its own footprint and nothing here is a guess.
+BAY_UU = 1360.0
+
+#: Filled by `_castle_precinct`.
+PRECINCT_CHOSEN = []
+
+
+def _castle_precinct(bands):
+    """A curtain wall with its towers, its gate and its ruin, on empty ground.
+
+    FIVE FAMILIES HAD ZERO PRESENCE IN THE WORLD -- walls, thresholds, civic,
+    hero, and every one of the nine weathered variants. A kit that ships a
+    postern gate nobody can walk to is a catalogue, not content, and the
+    weathering axis in particular was built to say that a wall has a history:
+    an unbroken pristine curtain says the opposite of what it was made for.
+
+    IT MOVED NO INSTRUMENT, AND THAT IS RECORDED HERE RATHER THAN GLOSSED.
+    This batch was placed aiming at mismatch #3 -- the 180-360 m ring is the
+    thinnest part of the world's silhouette -- and measured against that ring
+    afterwards it did nothing worth a number:
+
+        ring 180-360 m   p50 top +0.4 -> +0.5    built 65.0% -> 65.3%
+
+    631 pieces into a ring that already holds 67,608 cannot move a percentile,
+    and the 33-camera census is unchanged to the decimal because a 40 m
+    precinct at 300 m reads at +8 degrees against frame edges of +29. The
+    original version of this docstring said the batch "fills" that band. It
+    does not, the measurement above is why, and an overclaim in a comment is
+    the same defect as an overclaim in a UI.
+
+    WHAT IT IS ACTUALLY FOR, then, stated as the coverage it is: five families
+    had zero presence in the world and three audited-empty regions had no built
+    edge. Both are real gaps in a castle world and neither is a silhouette
+    defect. Judge this batch on that, not on a census delta it was never going
+    to produce.
+
+    The ruined stretch is deliberate and it is placed at the FAR end of each
+    run, so a viewer reads the wall as intact where it meets the world and
+    failing where it runs out. A wall aged evenly reads as a texture; a wall
+    aged at one end reads as a history.
+    """
+    out, chosen = [], []
+    for n, (centre, bearing, seen) in enumerate(PRECINCTS):
+        spot = _nudge(bands, centre[0], centre[1], "Precinct%d" % (n + 1),
+                      max_neighbours=48, step=1600.0, tries=12)
+        if spot is None:
+            continue
+        cx, cy = spot
+        rad = math.radians(bearing)
+        ax, ay = math.cos(rad), math.sin(rad)          # along the wall
+        nx, ny = -ay, ax                               # into the precinct
+        tag = "KitPrecinct%d" % (n + 1)
+        BAYS = 9
+        half = (BAYS - 1) / 2.0
+        for i in range(BAYS):
+            t = (i - half) * BAY_UU
+            x, y = cx + ax * t, cy + ay * t
+            far = i >= BAYS - 3                        # the stretch that failed
+            if i == 0 or i == BAYS - 1:
+                aid = "WL_Wall_Corner_Bastion"
+            elif i == BAYS // 2:
+                aid = "WL_Wall_Postern_Gate"
+            elif i % 3 == 1:
+                aid = "WL_Wall_Mural_Tower__ruined" if far else "WL_Wall_Mural_Tower"
+            else:
+                aid = "WL_Wall_Curtain_Run__aged" if far else "WL_Wall_Curtain_Run"
+            out += KIT.placements_for(aid, (x, y, 0.0), rot=(0.0, bearing, 0.0),
+                                      label="%s_Bay%d" % (tag, i))
+        # inside the wall: a colonnade along it, and the ceremonial arch on the
+        # postern's own axis so the gate leads somewhere
+        for j, aid in enumerate(("WL_Colonnade_Arcade", "WL_Colonnade_Straight",
+                                 "WL_Colonnade_Arcade__ruined")):
+            t = (j - 1) * 2400.0
+            x = cx + ax * t + nx * 3200.0
+            y = cy + ay * t + ny * 3200.0
+            out += KIT.placements_for(aid, (x, y, 0.0), rot=(0.0, bearing, 0.0),
+                                      label="%s_Court%d" % (tag, j))
+        out += KIT.placements_for("WL_Arch_Ceremonial",
+                                  (cx + nx * 1800.0, cy + ny * 1800.0, 0.0),
+                                  rot=(0.0, bearing + 90.0, 0.0),
+                                  label="%s_Arch" % tag)
+        chosen.append((cx, cy, bearing, seen))
+    PRECINCT_CHOSEN[:] = chosen
+    return out
+
+
 PASSES = (("tea_terrace", _tea_terrace), ("water_court", _water_court),
           ("depth_stand", _depth_stand), ("clock_quarter", _clock_quarter),
           ("hamlet_street", _hamlet_street),
           ("ceiling_break", _ceiling_break),
-          ("green_ceiling", _green_ceiling))
+          ("green_ceiling", _green_ceiling),
+          ("castle_precinct", _castle_precinct))
 
 
 #: Every placement a screen refused, with the camera and the numbers.

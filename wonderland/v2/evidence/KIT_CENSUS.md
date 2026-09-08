@@ -8,7 +8,7 @@ not the placements.
 | | placements | mean built | cameras moved | one piece holds a third | frames over half green |
 |---|---|---|---|---|---|
 | before | 13,816 | 67.78% | — | 10 | 9 |
-| after | 14,571 | **74.82%** | 24 of 33 | 9 | 5 |
+| after | 14,679 | **74.82%** | 24 of 33 | 9 | 5 |
 
 The founder's reference, classified from its own pixels, is built **71.5%**.
 
@@ -98,6 +98,33 @@ top of the picture.** No placement can move it — see the strict `>` above. Bot
 the mushroom is the world stream's asset: this is world mismatch #2 (a
 district's fungus out-topping its architecture) standing on the one frame with
 a ground truth.
+
+## A batch that measured nothing, kept anyway, and labelled
+
+`castle_precinct` puts three walled precincts -- curtain runs, mural towers,
+corner bastions, a postern gate, a colonnade and a ceremonial arch, weathered
+at the far end of each run -- on ground `tools/emptiness.py` found empty, at
+the distance the world's mismatch #3 calls its thinnest.
+
+Measured against that ring afterwards, it did nothing:
+
+| ring | p50 top | built% |
+|---|---|---|
+| 180-360 m | +0.4 -> +0.5 | 65.0% -> 65.3% |
+
+and the 33-camera census is unchanged to the decimal. 631 pieces into a ring
+holding 67,608 cannot move a percentile, and a 40 m precinct at 300 m reads at
++8 degrees against frame edges of +29.
+
+**It is kept, and relabelled.** Five families had ZERO presence in the world --
+`walls`, `thresholds`, `civic`, `variants` (all nine weathered modules) and
+most of `civic` -- and three audited-empty regions had no built edge. That is a
+coverage gap in a castle world, and it is a different thing from a silhouette
+defect. Modules placed went 42 of 101 to 52 of 101.
+
+The reason this is written down rather than quietly dropped: a batch that
+produces no number is not automatically waste, and a batch that claims a number
+it did not produce is worse than one that admits none.
 
 ## Not proven
 
