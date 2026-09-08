@@ -17,6 +17,15 @@
  */
 
 import {
+  WONDERLAND_AUTONOMY_LEVELS,
+  WONDERLAND_CARD_SCOPE_FIELDS,
+  WONDERLAND_HYDRATION_FIELDS,
+} from './wonderland-hydration';
+import type {
+  WonderlandCardScope,
+  WonderlandHydration,
+} from './wonderland-hydration';
+import {
   WONDERLAND_BRAIN_CITATION_FIELDS,
   WONDERLAND_BRAIN_KINDS,
 } from './wonderland-brain-scope';
@@ -234,6 +243,20 @@ const _UsageViewportNullableIsExact: SameKeys<
 > = true;
 void _UsageViewportNullableIsExact;
 
+const CARD_SCOPE_NULLABLE = ['autonomy'] as const;
+const _CardScopeNullableIsExact: SameKeys<
+  (typeof CARD_SCOPE_NULLABLE)[number],
+  NullableKeysOf<WonderlandCardScope>
+> = true;
+void _CardScopeNullableIsExact;
+
+const HYDRATION_NULLABLE = ['worldSessionId'] as const;
+const _HydrationNullableIsExact: SameKeys<
+  (typeof HYDRATION_NULLABLE)[number],
+  NullableKeysOf<WonderlandHydration>
+> = true;
+void _HydrationNullableIsExact;
+
 const BRAIN_CITATION_NULLABLE = [] as const;
 const _BrainCitationNullableIsExact: SameKeys<
   (typeof BRAIN_CITATION_NULLABLE)[number],
@@ -362,6 +385,28 @@ export const WONDERLAND_INTEGRATION_CPP_STRUCT_PARITY: readonly {
     cppStruct: 'FWonderlandRunSnapshot',
     tsInterface: 'WonderlandRunSnapshot',
     fields: WONDERLAND_RUN_SNAPSHOT_FIELDS,
+  },
+  {
+    /**
+     * THE SNAPSHOT HALF OF THE SEAM, mirrored because a world adopts it
+     * WHOLESALE. The envelope is incremental and lean; this carries usage,
+     * Project Brain, C.A.R.D. and activity, which change on their own
+     * schedules and would be paid for on every event if they rode along.
+     */
+    cppStruct: 'FWonderlandHydration',
+    tsInterface: 'WonderlandHydration',
+    fields: WONDERLAND_HYDRATION_FIELDS,
+  },
+  {
+    /**
+     * Mirrored so the NARROWNESS is checkable. `CardVersion` carries provider
+     * and model names; the field list here is the guarantee that none of them
+     * crosses, and a C++ side that had grown a `Models` array would be leaking
+     * them onto the surface a player can inspect.
+     */
+    cppStruct: 'FWonderlandCardScope',
+    tsInterface: 'WonderlandCardScope',
+    fields: WONDERLAND_CARD_SCOPE_FIELDS,
   },
   {
     cppStruct: 'FWonderlandEntry',
@@ -495,6 +540,17 @@ export const WONDERLAND_INTEGRATION_CPP_ENUM_PARITY: readonly {
     cppEnum: 'EWonderlandJuliusStateSource',
     source: 'JULIUS_STATE_SOURCES',
     members: JULIUS_STATE_SOURCES,
+    nullable: true,
+    zeroMember: 'Unobserved',
+  },
+  {
+    /**
+     * Ordinal 0 is `Unobserved` and no level occupies it. Guessing the
+     * cautious level would still claim a fact nobody stated.
+     */
+    cppEnum: 'EWonderlandAutonomy',
+    source: 'WONDERLAND_AUTONOMY_LEVELS',
+    members: WONDERLAND_AUTONOMY_LEVELS,
     nullable: true,
     zeroMember: 'Unobserved',
   },
@@ -657,6 +713,8 @@ export const WONDERLAND_INTEGRATION_NULLABLE_FIELDS: Readonly<
   FWonderlandLinkStatus: LINK_STATUS_NULLABLE,
   FWonderlandUsageAuthorityStatus: AUTHORITY_STATUS_NULLABLE,
   FWonderlandUsageViewport: USAGE_VIEWPORT_NULLABLE,
+  FWonderlandHydration: HYDRATION_NULLABLE,
+  FWonderlandCardScope: CARD_SCOPE_NULLABLE,
   FWonderlandBrainCitation: BRAIN_CITATION_NULLABLE,
   FWonderlandActivityReading: ACTIVITY_READING_NULLABLE,
   FWonderlandWorkerActivity: WORKER_ACTIVITY_NULLABLE,

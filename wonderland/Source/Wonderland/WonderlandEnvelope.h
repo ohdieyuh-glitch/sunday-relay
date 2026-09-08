@@ -329,3 +329,124 @@ WONDERLAND_API bool WonderlandOrderingVerdictApplies(EWonderlandOrderingVerdict 
 WONDERLAND_API bool WonderlandAttributionChannel(
 	EWonderlandUsageAttribution Attribution,
 	EWonderlandUsageChannel& OutChannel);
+
+/* --------------------------------------------------------- the hydration */
+
+// Mirrors WONDERLAND_AUTONOMY_LEVELS. Whether the run will stop and ask.
+UENUM(BlueprintType)
+enum class EWonderlandAutonomy : uint8
+{
+	// Ordinal 0. The record did not say. NOT `Supervised` — guessing the
+	// cautious level still claims a fact nobody stated.
+	Unobserved,
+	Supervised,
+	Autonomous,
+	Unchained
+};
+
+// Mirrors WonderlandCardScope. What a world may know about a C.A.R.D.
+//
+// DELIBERATELY LITTLE. `CardVersion` carries `models` — PROVIDER AND MODEL
+// NAMES — along with tools, permissions and budgets. None of it may reach a
+// world: the visual vocabulary is provider-free by construction and a test
+// asserts it, so leaking the names through the C.A.R.D. would undo that from
+// the side door, on the surface a player can inspect.
+//
+// A role slot is therefore reported as FILLED OR NOT, never by whom. Which
+// model occupies the Coding Agent slot is Relay's business and changes nothing
+// a world draws. Budgets are absent for a different reason: the usage authority
+// already owns capacity, and a second source for "how much is left" is the
+// duplicated authority the ownership table forbids.
+USTRUCT(BlueprintType)
+struct FWonderlandCardScope
+{
+	GENERATED_BODY()
+
+	// Opaque handle. Compared, never parsed.
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Card")
+	FString CardRevision;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Card")
+	bool bHasPromptArchitect = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Card")
+	bool bHasCodingAgent = false;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Card")
+	bool bHasIndependentReviewer = false;
+
+	// MAY spawn a swarm, which is not "is running one" — that is `Swarming` on
+	// the activity axis. A world needs this one to leave room before any clone
+	// exists.
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Card")
+	bool bSwarmEligible = false;
+
+	// From the repository's own closed role vocabulary, safe to carry precisely
+	// because it is closed: these are Relay's words for functions, not anybody's
+	// product names.
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Card")
+	TArray<FString> EligibleSwarmRoles;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Card")
+	EWonderlandAutonomy Autonomy = EWonderlandAutonomy::Unobserved;
+};
+
+// Mirrors WonderlandHydration. Everything a world needs to draw itself cold.
+//
+// TWO KINDS OF THING TRAVEL ON THIS SEAM, and the split is the design.
+// FWonderlandEnvelope is INCREMENTAL: one event, lean, ordered by sequence,
+// carrying a phase and its identity and nothing more, because it arrives
+// constantly and anything on it is paid for every time. This is the SNAPSHOT:
+// sent once on join and once per reconnect, so usage, Project Brain, C.A.R.D.
+// and activity live here where they cost nothing per event.
+//
+// WHICH IS WHY USAGE IS NOT ON THE ENVELOPE. Capacity does not change per
+// event; a meter reading on every transition would send the same two numbers
+// thousands of times and still be stale in between, because usage moves on its
+// own schedule. It is a report with its own revision.
+//
+// A HYDRATION IS ADOPTED WHOLESALE, which is what makes its identity checks the
+// most important ones on the seam: a mis-routed one replaces everything at once
+// with another project's picture, and nothing arriving later contradicts it.
+USTRUCT(BlueprintType)
+struct FWonderlandHydration
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Hydration")
+	FString SchemaVersion;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Hydration")
+	FString ProjectId;
+
+	// The world session this was cut for. Absent when unscoped.
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Hydration")
+	FWonderlandText WorldSessionId;
+
+	// The run, its state, its revision, and the sequence it is consistent with.
+	// The tail resumes from exactly there — never the transcript.
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Hydration")
+	FWonderlandRunSnapshot Run;
+
+	// Both meters as the usage authority projected them. Never recomputed here.
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Hydration")
+	FWonderlandUsageHud Usage;
+
+	// How much to believe those figures. Relay's verdict, carried verbatim.
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Hydration")
+	FWonderlandUsageAuthorityStatus UsageStatus;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Hydration")
+	FWonderlandActivityReading Activity;
+
+	// Counts and revisions. Never content.
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Hydration")
+	FWonderlandBrainCitation Brain;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Hydration")
+	FWonderlandCardScope Card;
+
+	// When this was cut, not when anything in it last changed.
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Hydration")
+	FString ObservedAtIso;
+};
