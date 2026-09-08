@@ -191,7 +191,17 @@ off the clip.
 
 ---
 
-## 8. HUD bindings — THE GEOMETRY IS FROZEN
+## 8. HUD bindings — THE GEOMETRY IS FROZEN, AND THE HUD IS YOURS
+
+**This HUD is an Unreal surface. It is mounted on no web page.** Both meters
+report what a Compound Agent is spending *while it works*, so they live where
+the work happens. The website's landing is an arrival and its Relay stage is
+where an agent is named before it has done anything; a meter on either would be
+furniture. The React component in `src/relay/ui/wonderland-hud/` exists only as
+the REFERENCE rendering — it pins the geometry by digest and drives the preview
+harness (`npm run wonderland:hud:preview`), and a test fails if any production
+surface mounts it. **Build it in the world; do not expect the browser to.**
+
 
 The founder has settled the usage HUD and declared it permanent. **Do not
 redesign it, do not reintroduce the crossing variant, do not change its

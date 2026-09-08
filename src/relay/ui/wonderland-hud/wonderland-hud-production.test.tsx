@@ -8,7 +8,6 @@ import {
   emptyWonderlandUsageAuthority,
 } from '../../mission/wonderland/wonderland-usage-authority';
 import type { WonderlandUsageReport } from '../../mission/wonderland/wonderland-usage-authority';
-import { RelayWorld } from '../relay-world';
 import { WonderlandUsageHudView } from './WonderlandUsageHudView';
 import { useWonderlandUsage } from './useWonderlandUsage';
 import type { WonderlandUsageController } from './useWonderlandUsage';
@@ -30,29 +29,18 @@ afterEach(() => {
   cleanup();
 });
 
-describe('the HUD on the real Relay stage', () => {
-  it('shows no simulated figure and no simulated label', () => {
-    render(createElement(RelayWorld, { initialStage: 'relay' as const }));
-    const body = document.body.textContent ?? '';
-    expect(body).not.toContain('SIMULATED');
-    expect(body).toContain('NO USAGE AUTHORITY REPORTING');
-  });
-
-  it('says UNKNOWN rather than a number nobody reported', () => {
-    // Unknown is not zero. A meter reading 0 would be a claim about a budget.
-    render(createElement(RelayWorld, { initialStage: 'relay' as const }));
-    const body = document.body.textContent ?? '';
-    expect(body).toContain('UNKNOWN');
-    expect(body).not.toMatch(/\b0 ?\/ ?0\b/);
-  });
-
-  it('draws no meter at all on the arrival stage', () => {
-    // Aquala has no capacity to report; a meter there would be furniture
-    // pretending to be a reading.
-    render(createElement(RelayWorld, { initialStage: 'aquala' as const }));
-    expect(document.body.textContent ?? '').not.toContain('NO USAGE AUTHORITY REPORTING');
-  });
-});
+/**
+ * NOTE ON WHAT MOVED. This file used to open by asserting the HUD rendered on
+ * the Relay stage with no simulated figure. It no longer renders there at all —
+ * the meters belong to Wonderland, the Unreal world — so those cases now live
+ * in `wonderland-hud-placement.test.tsx` as the inverse assertion.
+ *
+ * What remains here is the part that is still load-bearing: the hook that feeds
+ * the HUD, which is the contract the Unreal side consumes. Its rule is
+ * unchanged and is the reason the simulated fixture was removed in the first
+ * place — figures reach the HUD only through the usage authority, so the
+ * authority's refusals cannot be bypassed.
+ */
 
 /* ------------------------------------------------------------- the hook */
 

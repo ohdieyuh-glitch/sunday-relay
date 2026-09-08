@@ -7,8 +7,6 @@ import {
   firstIncompleteStep, isConfigured, loadAgentDraft, saveAgentDraft,
   type CompoundAgentDraft, type OnboardingStepId,
 } from '../relay-experience/onboarding';
-import { WonderlandUsageHudView } from '../wonderland-hud';
-import { useWonderlandUsage } from '../wonderland-hud/useWonderlandUsage';
 import { useRelayWorld } from './useRelayWorld';
 import type { WorldStage } from './world-stage';
 
@@ -42,9 +40,6 @@ export function RelayWorld({ initialStage, initialStep, onActivated }: {
 }): JSX.Element {
   const reducedMotion = usePrefersReducedMotion();
   const [draft, setDraftState] = useState<CompoundAgentDraft>(() => loadAgentDraft());
-  // The HUD's only source of figures. Nothing reports into it yet, so it reads
-  // `not_reported` and the HUD says so on its own face.
-  const usage = useWonderlandUsage({ projectId: draft.cardId });
   const [step, setStep] = useState<OnboardingStepId>(() => {
     if (initialStep !== undefined) return initialStep;
     const stored = loadAgentDraft();
@@ -151,30 +146,21 @@ export function RelayWorld({ initialStage, initialStep, onActivated }: {
         </div>
       )}
 
-      {/* THE USAGE HUD, over the Relay stage only.
-          Aquala is the arrival and has no capacity to report; a meter there
-          would be furniture pretending to be a reading. It is a fixed overlay
-          rather than a child of the Relay chrome so the stage's own opacity
-          fade cannot half-dissolve a number a founder is reading.
+      {/* THE USAGE HUD IS NOT HERE, and that is deliberate.
 
-          FED FROM THE USAGE AUTHORITY, never directly. It used to be handed a
-          simulated fixture here, which put invented figures on the normal
-          production path — the thing this repository's own rule forbids and
-          `usage-integration.test.tsx` already enforces for the other usage bar.
-          It also meant the authority's refusals (foreign project, stale
-          revision, malformed report) never ran, because there was a way to put
-          numbers on screen without passing through them.
+          Both meters — the green Compound Agent bar and the blue single-agent
+          bar — belong to WONDERLAND, the Unreal world. They report what a
+          Compound Agent is spending while it works, and this screen is where a
+          founder NAMES one before it has done anything. A meter here would be
+          furniture: a reading about work that has not started, on a surface the
+          world does not own.
 
-          Nothing reports usage yet, so what this draws is Unknown, labelled
-          NO USAGE AUTHORITY REPORTING. That is the truth, and it is what the
-          HUD is designed to say. */}
-      {world.stage === 'relay' && (
-        <WonderlandUsageHudView
-          hud={usage.hud}
-          status={usage.status}
-          reducedMotion={reducedMotion}
-        />
-      )}
+          The contract, the frozen geometry, the usage authority and the C++
+          mirror all still exist and are what the Unreal HUD is built from. The
+          React component survives as the reference rendering that pins that
+          geometry by digest and drives the preview harness — it is not a
+          production surface, and `wonderland-hud-placement.test.tsx` fails if it
+          is mounted on one again. */}
 
       {/* The scroll track lives here so it exists only while Aquala does. */}
       {world.stage === 'aquala' && (

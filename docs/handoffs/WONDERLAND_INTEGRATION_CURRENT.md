@@ -380,7 +380,7 @@ and a second join is a second presence.
 **Verified in the shipped bundle**: the label, the route and the renderer gap
 are all present, with no Node-only code or credential name alongside them.
 
-### 14. The HUD reads from the authority (`2a3fbd8`)
+### 14. The HUD reads from the authority (`2a3fbd8`) — AND IS NOT A WEB SURFACE
 
 `src/relay/ui/wonderland-hud/useWonderlandUsage.ts` (+ 10 tests)
 
@@ -394,10 +394,23 @@ REFUSALS never ran. A surface able to put figures on screen without passing
 through `applyWonderlandUsageReport` is a second, unguarded way in. Everything
 now goes through one door.
 
-**What a founder sees today is UNKNOWN, labelled NO USAGE AUTHORITY
-REPORTING** — the true state, and what the HUD was designed to say. Confirmed
-in the shipped bundle: the label is present and `wonderlandUsageHudFixture` is
-gone from it entirely.
+**SUPERSEDED IN PLACEMENT, NOT IN CONTRACT.** The founder has since ruled that
+both meters belong to WONDERLAND, the Unreal world — they report what a Compound
+Agent is spending *while it works*, and the landing is an arrival while the
+Relay stage is where an agent is NAMED before it has done anything. A meter on
+either is furniture reporting on work that has not started.
+
+The HUD is therefore mounted on no web surface. It is gone from the shipped
+bundle entirely — component, stylesheet and all. What survives is everything the
+Unreal side is built from: the frozen geometry and its digest, the usage
+authority and its four readings, the accounting boundary, and the C++ mirror.
+The React component remains as the REFERENCE rendering that pins the geometry
+and drives the preview harness. `wonderland-hud-placement.test.tsx` fails if any
+production surface mounts it again.
+
+The authority wiring below still stands and is the contract Unreal consumes:
+figures reach the HUD only through `applyWonderlandUsageReport`, so its refusals
+cannot be bypassed.
 
 ---
 
@@ -469,7 +482,7 @@ distinction between the middle two rows is the one that gets misreported.
 | the entry contract (admission vs presentation) | **real**, and its honest answer today is `ADMITTED · NOTHING CAN SHOW IT` |
 | HUD geometry, palette, capacity model | **real** and shared with Unreal by bidirectional parity |
 | the usage authority (KNOWN / NOT-REPORTED / STALE / UNAVAILABLE) | **real** contract; **no authority reports into it** |
-| the numbers in the HUD | **NOTHING REPORTS THEM.** Production shows `UNKNOWN` / `NO USAGE AUTHORITY REPORTING`. The simulated fixture is no longer reachable from the app and is gone from the shipped bundle. |
+| the numbers in the HUD | **NOTHING REPORTS THEM**, and the HUD is not a web surface at all — it belongs to the Unreal world. Component, stylesheet and fixture are all absent from the shipped bundle. |
 | the entry path (`ENTER WONDERLAND`) | **real** as far as `admitted`; the button runs the state machine and posts to the real bridge route |
 | the honesty ladder itself | **real and executable** — `verifyWonderlandCapture` grades a capture, and `real` is unreachable from it by construction |
 | Unreal rendering any of it | **not built.** Headers parse; no widget, no client, no frame. |
@@ -868,12 +881,13 @@ entry button, and the HUD's authority wiring.
 **D. HUD data progress** — the geometry is frozen and pinned by digest. Beneath
 it there is a provider-neutral usage contract with four readings, per-channel
 tier ladders that change PHYSICAL capacity, three rejection counters, and an
-authority id carried for traceability and never interpreted. The mounted HUD now
-READS FROM IT — the simulated fixture is unreachable from the app and absent
-from the shipped bundle. **No authority reports into it**, so production draws
-`UNKNOWN` and says `NO USAGE AUTHORITY REPORTING`. The visual layer knows
-nothing about billing or providers, and a test sweeps its output for provider
-names and key shapes.
+authority id carried for traceability and never interpreted. **The HUD is an
+UNREAL surface and is mounted on no web page** — the founder ruled that both
+meters live in the world, where the spending happens. The React component is the
+reference rendering that pins the geometry and drives the preview harness, and a
+test fails if a production surface mounts it. **No authority reports into it
+yet.** The visual layer knows nothing about billing or providers, and a test
+sweeps its output for provider names and key shapes.
 
 **E. Event bridge** — Julius events normalize to a provider-independent
 contract; the reducer rejects stale and out-of-order deliveries, counts sequence
