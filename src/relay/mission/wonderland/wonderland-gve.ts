@@ -3,7 +3,8 @@
  *
  * A GVE is play that improves something real. Three classes, and the class says
  * what it improves: PROJECT (the actual software), AGENT (the Compound Agent, its
- * PSP, its skills), HYBRID (both). An experience that improves neither is a
+ * C.A.R.D., its skills), HYBRID (both). An experience that improves neither is
+ * a
  * minigame, and Wonderland does not ship one.
  *
  * ONE GVE IS BUILT: `runaway_dog_research_chase`. The user chases a runaway Relay

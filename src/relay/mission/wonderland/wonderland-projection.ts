@@ -197,8 +197,8 @@ export function projectWonderlandLoopSignal(
 
 /**
  * A skin request. There is deliberately NO width, height, pose or silhouette
- * field: the identity documents state that the palette may be overridden per PSP
- * and the poses and proportions may not, so the request type simply cannot
+ * field: the identity documents state that the palette may be overridden per
+ * C.A.R.D. and the poses and proportions may not, so the request type simply cannot
  * express the forbidden change. A rule enforced by the absence of a field
  * cannot be violated by a caller who did not read the rule.
  */
@@ -213,7 +213,7 @@ export interface WonderlandSkinRequest {
   readonly chakraTier?: unknown;
 }
 
-/** The Dog as shipped: the existing PSP colorway id, untiered. */
+/** The Dog as shipped: the existing C.A.R.D. colorway id, untiered. */
 export const WONDERLAND_DEFAULT_SKIN_REQUEST: WonderlandSkinRequest = Object.freeze({
   skinId: 'official-cream',
   displayName: 'Official Cream',

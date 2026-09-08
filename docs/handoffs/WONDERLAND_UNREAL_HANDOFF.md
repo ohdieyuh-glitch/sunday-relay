@@ -191,7 +191,7 @@ off the clip.
 
 ---
 
-## 8. HUD bindings — THE GEOMETRY IS FROZEN, AND THE HUD IS YOURS
+## 8. HUD bindings — THE GEOMETRY IS FROZEN, AND THE HUD IS BUILT
 
 **This HUD is an Unreal surface. It is mounted on no web page.** Both meters
 report what a Compound Agent is spending *while it works*, so they live where
@@ -199,8 +199,38 @@ the work happens. The website's landing is an arrival and its Relay stage is
 where an agent is named before it has done anything; a meter on either would be
 furniture. The React component in `src/relay/ui/wonderland-hud/` exists only as
 the REFERENCE rendering — it pins the geometry by digest and drives the preview
-harness (`npm run wonderland:hud:preview`), and a test fails if any production
-surface mounts it. **Build it in the world; do not expect the browser to.**
+harness (`npm run wonderland:hud:preview`), and
+`wonderland-hud-placement.test.tsx` fails if any production surface mounts it.
+
+**The Unreal side now exists.** What is in the client, and what each piece is:
+
+| file | what it is |
+|---|---|
+| `WonderlandUsageGeometry.h/.cpp` | the arc-length poly-Bézier sampler, the draw plan, the ribbon strip, the band builder |
+| `WonderlandUsageGeometry.canonical.cpp` | **GENERATED** — the control points, the palette in linear, the viewport crop |
+| `WonderlandUsageGeometry.golden.tsv` | **GENERATED** — 66 samples of the TypeScript sampler |
+| `WonderlandUsageSubsystem.h/.cpp` | the GameInstance subsystem that holds the reading. The only authoritative client-side state |
+| `WonderlandUsageHudWidget.h/.cpp` | the `UUserWidget` that paints both meters. Owns nothing |
+
+Regenerate the two generated files with `npm run wonderland:geometry:export`;
+`npm run wonderland:geometry:check` fails when they are stale. **Never hand-edit
+them** — the control points are founder-frozen and digest-pinned on the
+TypeScript side, so a hand-kept copy would drift while that digest went on
+passing.
+
+Three commands verify it without an engine, and it is worth knowing what each
+one does and does not claim:
+
+| command | proves | does not prove |
+|---|---|---|
+| `wonderland:cpp:syntax` | every header and translation unit parses | that anything behaves |
+| `wonderland:geometry:verify` | the C++ sampler computes the same curve as the TypeScript, to 1e-4 (observed 1e-6) | that a widget draws |
+| `wonderland:usage:verify` | 152 checks over the ordering rules, the draw plan, the bands and the composition | that a widget draws |
+
+**The Slate calls in `WonderlandUsageHudWidget.cpp` are proven by nothing.**
+There is no Unreal Engine in this repository; that file has never been compiled
+against real UMG headers or seen to put a pixel on a screen. It is the part that
+still needs you.
 
 
 The founder has settled the usage HUD and declared it permanent. **Do not
@@ -227,6 +257,84 @@ COMPOUND. An agent working alone is SINGLE. Anything unattributable is reported
 and never assigned, and makes the account `partial` — in which case **both**
 channels read UNKNOWN rather than showing subtotals whose meaning depends on
 what was left out.
+
+---
+
+## 8b. WHO IS AUTHORITATIVE FOR WHAT
+
+The one table to read before adding a field anywhere. Every row names the system
+that DECIDES the thing; everything downstream of it holds a copy and may not
+argue with it.
+
+| the fact | decided by | held by | never decided by |
+|---|---|---|---|
+| units spent | Julius / the usage authority | the subsystem's `FWonderlandUsageHud` | the client, the widget, a fixture |
+| capacity for this tier | the usage authority | same | the client |
+| subscription-tier maximum (`ReferenceCapacityUnits`) | the usage authority | same | the client — it is a billing fact, not a display constant |
+| how much to believe the figures (`Reading`) | the usage authority | `FWonderlandUsageAuthorityStatus`, verbatim | the client. A dropped link is reported in the LINK status beside it, never by editing this |
+| whether this client's socket is alive | **the client** | `FWonderlandLinkStatus` | Relay — it cannot see the world's socket |
+| which reading this client currently holds | **the client** | the subsystem's revision + counters | Relay — pushes arrive out of order and only the receiver knows what it has |
+| mission state | the Julius kernel's guarded machine | `FWonderlandJuliusEmbodiment.VisualState` | the world. A renderer may not move a run |
+| which visual state a mission state maps to | `wonderland-julius-state.ts`, derived from the kernel | same | the widget |
+| Compound Agent state / Single Agent state | Julius | the embodiment | the HUD. The meters report SPEND, not activity |
+| the active agent | Julius | the embodiment's `AgentId` | the client, which must render `Unknown` when none travelled |
+| the curve, the palette, the crop | the contract (`wonderland-usage-meter.ts`) | generated into `WonderlandUsageGeometry.canonical.cpp` | either renderer |
+| the arithmetic from a reading to arcs | `wonderlandMeterDrawPlan`, mirrored as `WonderlandMeterDrawPlan` | both renderers, identically | either renderer alone |
+| where the two meters sit relative to each other | the palette's `Emphasis` | both renderers | a Z-order or a canvas ordering |
+
+### The chain, end to end
+
+```
+Julius kernel                    run state, revision, operational events
+  │                              julius-runtime-api.ts · julius-state-path.ts
+  ▼
+integration layer (pure TS)      normalize → order → rehydrate → visual state
+  │                              wonderland-{normalizer,ordering,rehydration,
+  │                              visual-transitions,session}.ts
+  │                              usage: wonderland-usage-authority.ts projects
+  │                              the meters and says how current they are
+  ▼
+envelope                         wonderland-envelope.ts — the ONLY shape that
+  │                              crosses. No provider payload ever does
+  ▼
+transport                        the Bridge. See §6
+  ▼
+UWonderlandUsageSubsystem        RUNTIME STATE. Accepts or refuses the push,
+  │                              holds one reading, counts what it refused,
+  │                              broadcasts on change. Owns no arithmetic
+  ▼
+WonderlandMeterDrawPlan          the mirrored arithmetic: reading → arcs
+  │
+  ▼
+WonderlandBuildMeterBands        arcs → unit-space vertex strips
+  │
+  ▼
+UWonderlandUsageHudWidget        PRESENTATION. Scales to the widget, paints,
+                                 decides nothing, keeps nothing
+```
+
+Read it as a one-way street. Nothing below a line may write to anything above
+it, and the two places that could be tempted are the two the rules name
+loudest: the widget may not hold a figure, and the client may not edit the
+authority's verdict about its own numbers.
+
+### What the layering means for /MAS
+
+The swarm is not built and this document does not describe it. What matters
+here is that nothing above **forecloses** it:
+
+- Usage attribution already distinguishes `compound_orchestrated` from
+  `single_agent`, and the rule is that attribution follows the ORCHESTRATOR.
+  Two or three Compound clones spending under one primary all land in the
+  Compound channel without a contract change.
+- `EWonderlandWorkerRole` carries a `Specialist` token rather than a fixed list,
+  so a spawned specialist has a slot the day it exists.
+- The subsystem is keyed by PROJECT, not by agent, so more than one active
+  agent inside a project needs no re-binding.
+
+What would foreclose it, and is therefore not done anywhere: collapsing agent
+activity into a single boolean, keying runtime state by "the" agent, or letting
+the HUD assume exactly one worker.
 
 ---
 
@@ -330,8 +438,30 @@ MISSION`.
 | REAL — a live run drove the world | **nothing** |
 | RECORDED-EVENT VERIFIED | **nothing** — no capture has ever been taken |
 | INTEGRATION-READY | the envelope, ordering, rehydration, state machine, ledger adapter, accounting, animation plan, entry contract, HUD contract |
+| BUILT AND VERIFIED WITHOUT AN ENGINE | the usage geometry (numerically, against the TypeScript), the usage subsystem's ordering and held state, the draw plan, the bands, the composition — 152 checks plus a 66-sample fixture |
+| BUILT AND UNVERIFIED | the Slate paint in `WonderlandUsageHudWidget.cpp`. It parses; nothing here can run it |
 | SIMULATED | the dev script |
-| NOT BUILT | the Unreal client, a world-snapshot route, any renderer at all |
+| NOT BUILT | a world-snapshot route, the dog renderer, the swarm, every widget other than the usage HUD |
 
-**Do not describe this as "Julius is connected."** Build the receiver; the
-sending side is ready for events it has never seen.
+**Do not describe this as "Julius is connected."** The usage receiver now
+exists and is tested; nothing has ever been sent to it, no provider call has
+ever been made, and no real Julius event has ever been captured. The sending
+side is ready for events it has never seen, and the receiving side is ready for
+a push it has never had.
+
+---
+
+## 12. C.A.R.D., and the word it replaced
+
+**C.A.R.D. is the vocabulary. Never PSP.** All new integration work uses it,
+and `wonderland-card-vocabulary.test.ts` enforces that the Wonderland layer and
+the Unreal client stay clean — a build failure, not a review comment.
+
+The historical surface — `src/relay/psp/`,
+`src/relay/ui/psp-import/` and their callers — predates the rename, is
+load-bearing, and is **deliberately not renamed**: it would touch persisted
+formats, boundary allowlists and a UI import flow for no behavioural gain. The
+same test holds it at a counted ceiling so the old surface cannot grow, and the
+ceiling is meant to be lowered whenever something legitimately migrates. Four
+prose occurrences inside the new layer were migrated when the gate went in;
+what remains is identifiers and paths.

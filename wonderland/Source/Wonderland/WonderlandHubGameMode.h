@@ -6,7 +6,8 @@
 //
 // DELIBERATELY THIN. The mode spawns and possesses; it holds no Relay state and
 // makes no Relay decision. Relay remains authoritative for Missions, Loops,
-// Brain, PSPs, permissions, verification and durable state — the pawn READS a
+// Brain, C.A.R.D.s, permissions, verification and durable state — the pawn
+// READS a
 // world snapshot through the Bridge's explicit contract and writes nothing
 // back. A game mode that owned engineering truth would be the architecture
 // violation Wonderland exists to avoid.

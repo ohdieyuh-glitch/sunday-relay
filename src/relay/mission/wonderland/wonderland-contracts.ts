@@ -432,7 +432,8 @@ export function wonderlandBreathAt(elapsedSeconds: number): WonderlandBreath {
 /**
  * A skin TRANSFORMS the Relay Dog. It never replaces it.
  *
- * The identity docs are explicit: the palette may be overridden per PSP, and
+ * The identity docs are explicit: the palette may be overridden per C.A.R.D.,
+ * and
  * `OFFICIAL_RELAY_DOG_POSES` — the silhouette, ears, visor, eyes, proportions —
  * may not. So this struct carries colour and carries the proportions as
  * READ-BACK facts stamped from the official sprite module. There is no field a
