@@ -258,6 +258,111 @@ int main(int argc, char** argv)
 		Refuses(Huge, EWonderlandWireError::TooLarge, "a payload past the byte ceiling");
 	}
 
+	/* --------------------------------------------------- the SSE framing */
+	{
+		const std::string Frame =
+			"id: 42\nevent: wonderland.envelope\ndata: " + Base() + "\n\n";
+		int32 Start = 0, Len = 0;
+		Check(WonderlandWireReadSseData(Frame.c_str(), (int32)Frame.size(), Start, Len),
+			"a real SSE frame yields its data line");
+		const FWonderlandEnvelopeDecode R =
+			WonderlandDecodeEnvelopeBytes(Frame.c_str() + Start, Len);
+		Check(R.bOk, "and the payload inside it decodes");
+		Check(R.Envelope.Sequence == 42, "with its fields intact");
+
+		int32 S2 = 0, L2 = 0;
+		Check(!WonderlandWireReadSseData(": heartbeat\n\n", 13, S2, L2),
+			"a heartbeat carries nothing to apply");
+		Check(!WonderlandWireReadSseData("data:\n\n", 7, S2, L2),
+			"an empty data line is nothing, not an empty document");
+		Check(!WonderlandWireReadSseData("id: 1\nevent: x\n\n", 16, S2, L2),
+			"a frame with no data line");
+		const char* NoSpace = "data:{\"a\":1}\n\n";
+		Check(WonderlandWireReadSseData(NoSpace, (int32)std::strlen(NoSpace), S2, L2),
+			"the space after the colon is optional");
+		Check(L2 == 7, "and no space is consumed when there is none");
+		// EXACTLY ONE, per the SSE grammar — not "as many as there are". The
+		// difference is invisible for JSON, whose parser skips leading space
+		// anyway, and it is still the spec: a field that begins with a space
+		// keeps every space but the first.
+		const char* TwoSpaces = "data:  {\"a\":1}\n\n";
+		int32 S3 = 0, L3 = 0;
+		Check(WonderlandWireReadSseData(TwoSpaces, (int32)std::strlen(TwoSpaces), S3, L3),
+			"a double-spaced data line still yields data");
+		Check(L3 == 8, "and exactly one of the two spaces is consumed");
+	}
+
+	/* -------------------------------------- the delivery, envelope+activity */
+	if (argc > 2)
+	{
+		std::ifstream File(argv[2]);
+		if (!File)
+		{
+			std::printf("FAIL cannot open delivery file %s\n", argv[2]);
+			Failures += 1;
+		}
+		else
+		{
+			std::string Line;
+			int Cases = 0;
+			while (std::getline(File, Line))
+			{
+				if (Line.empty()) { continue; }
+				const size_t T1 = Line.find('\t');
+				const size_t T2 = Line.find('\t', T1 + 1);
+				if (T1 == std::string::npos || T2 == std::string::npos)
+				{
+					std::printf("FAIL malformed delivery line\n"); Failures += 1; continue;
+				}
+				const std::string Name = Line.substr(0, T1);
+				const std::string Expect = Line.substr(T1 + 1, T2 - T1 - 1);
+				const std::string Json = Line.substr(T2 + 1);
+				const FWonderlandDeliveryDecode R =
+					WonderlandDecodeDeliveryBytes(Json.c_str(), (int32)Json.size());
+				Cases += 1;
+				Checks += 1;
+				if (Expect == "ok")
+				{
+					if (!R.bOk)
+					{
+						Failures += 1;
+						std::printf("FAIL delivery %s refused as %s (%s)\n", Name.c_str(),
+							WonderlandWireErrorName(R.Refusal.Error), R.Refusal.Field.s.c_str());
+					}
+					else if (Name == "delivery-every-signal")
+					{
+						// The whole vocabulary, in one reading, and the worker
+						// fold beside it.
+						Check(R.Activity.Signals.Num() > 0, "signals decode");
+						Check(R.Activity.Workers.Num() == 1, "the worker fold decodes");
+						Check(R.Activity.ActiveSubagents == 3, "counts decode");
+						Check(R.Activity.ObservedAtIso.bKnown, "a present observedAtIso is known");
+					}
+					else if (Name == "delivery-quiet")
+					{
+						// A quiet run says so: no signals, and an observation
+						// time that is honestly absent rather than zero.
+						Check(R.Activity.Signals.Num() == 0, "a quiet reading has no signals");
+						Check(!R.Activity.ObservedAtIso.bKnown, "and an unknown observedAtIso");
+					}
+				}
+				else if (R.bOk)
+				{
+					Failures += 1;
+					std::printf("FAIL delivery %s accepted, wanted %s\n", Name.c_str(), Expect.c_str());
+				}
+				else if (Expect != WonderlandWireErrorName(R.Refusal.Error))
+				{
+					Failures += 1;
+					std::printf("FAIL delivery %s refused as %s, wanted %s\n", Name.c_str(),
+						WonderlandWireErrorName(R.Refusal.Error), Expect.c_str());
+				}
+			}
+			Check(Cases >= 5, "the generated delivery file carried cases");
+			std::printf("deliveries: %d\n", Cases);
+		}
+	}
+
 	/* ------------------------- the generated fixtures, from the TypeScript */
 	if (argc > 1)
 	{

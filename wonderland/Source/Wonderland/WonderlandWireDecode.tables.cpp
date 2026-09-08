@@ -40,10 +40,22 @@ static const FWonderlandWireToken EWonderlandWorkerRoleTokens[] = {
 	{ "SPECIALIST", static_cast<uint8>(EWonderlandWorkerRole::Specialist) },
 };
 
+// EWonderlandActivitySignal — from JULIUS_ACTIVITY_SIGNALS. Zero member: Unobserved.
+static const FWonderlandWireToken EWonderlandActivitySignalTokens[] = {
+	{ "awaiting_approval", static_cast<uint8>(EWonderlandActivitySignal::AwaitingApproval) },
+	{ "provider_degraded", static_cast<uint8>(EWonderlandActivitySignal::ProviderDegraded) },
+	{ "recovering", static_cast<uint8>(EWonderlandActivitySignal::Recovering) },
+	{ "retrying", static_cast<uint8>(EWonderlandActivitySignal::Retrying) },
+	{ "switching_worker", static_cast<uint8>(EWonderlandActivitySignal::SwitchingWorker) },
+	{ "swarming", static_cast<uint8>(EWonderlandActivitySignal::Swarming) },
+	{ "retrieving_context", static_cast<uint8>(EWonderlandActivitySignal::RetrievingContext) },
+};
+
 const FWonderlandWireEnumTable WonderlandWireEnumTables[] = {
 	{ "EWonderlandJuliusState", EWonderlandJuliusStateTokens, 11, true },
 	{ "EWonderlandJuliusStateSource", EWonderlandJuliusStateSourceTokens, 3, true },
 	{ "EWonderlandWorkerRole", EWonderlandWorkerRoleTokens, 4, true },
+	{ "EWonderlandActivitySignal", EWonderlandActivitySignalTokens, 7, true },
 };
 
-const int32 WonderlandWireEnumTableCount = 3;
+const int32 WonderlandWireEnumTableCount = 4;

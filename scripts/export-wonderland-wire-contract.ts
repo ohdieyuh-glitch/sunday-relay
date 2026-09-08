@@ -122,6 +122,7 @@ const DECODED_ENUMS = [
   'EWonderlandJuliusState',
   'EWonderlandJuliusStateSource',
   'EWonderlandWorkerRole',
+  'EWonderlandActivitySignal',
 ] as const;
 
 /**

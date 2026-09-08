@@ -483,43 +483,32 @@ const char* WonderlandWireErrorName(EWonderlandWireError Error)
 
 /* --------------------------------------------------------- the envelope */
 
-FWonderlandEnvelopeDecode WonderlandDecodeEnvelopeBytes(const char* Bytes, int32 Length)
+namespace
 {
-	FWonderlandEnvelopeDecode Result;
 
-	if (Bytes == nullptr || Length <= 0)
-	{
-		Result.Refusal.Error = EWonderlandWireError::NotJson;
-		return Result;
-	}
-	if (Length > WonderlandWireMaxBytes)
-	{
-		Result.Refusal.Error = EWonderlandWireError::TooLarge;
-		return Result;
-	}
+// Parse bytes into one JSON value, with every document-level rule applied.
+bool ParseDocument(const char* Bytes, int32 Length, FJsonValue& Out, EWonderlandWireError& Error)
+{
+	if (Bytes == nullptr || Length <= 0) { Error = EWonderlandWireError::NotJson; return false; }
+	if (Length > WonderlandWireMaxBytes) { Error = EWonderlandWireError::TooLarge; return false; }
 
 	FParser Parser;
 	Parser.Data = Bytes;
 	Parser.Length = Length;
-	FJsonValue Root;
-	if (!Parser.ReadValue(Root))
-	{
-		Result.Refusal.Error = Parser.Error;
-		return Result;
-	}
+	if (!Parser.ReadValue(Out)) { Error = Parser.Error; return false; }
 	Parser.SkipSpace();
 	// A second value after the first is a second document, not a longer one.
-	if (Parser.At != Parser.Length)
-	{
-		Result.Refusal.Error = EWonderlandWireError::NotJson;
-		return Result;
-	}
-	if (Root.Kind != EJsonKind::Object)
-	{
-		Result.Refusal.Error = EWonderlandWireError::NotObject;
-		return Result;
-	}
+	if (Parser.At != Parser.Length) { Error = EWonderlandWireError::NotJson; return false; }
+	if (Out.Kind != EJsonKind::Object) { Error = EWonderlandWireError::NotObject; return false; }
+	return true;
+}
 
+// The envelope, from an object already parsed. ONE implementation, used by both
+// the bare-envelope entry point and the delivery one — a second reader would be
+// a second set of rules to drift.
+FWonderlandEnvelopeDecode DecodeEnvelopeObject(const FJsonValue& Root)
+{
+	FWonderlandEnvelopeDecode Result;
 	FWonderlandEnvelope Envelope;
 	FFieldReader Reader{ Root, Result.Refusal };
 
@@ -608,4 +597,215 @@ FWonderlandEnvelopeDecode WonderlandDecodeEnvelopeBytes(const char* Bytes, int32
 	Result.bOk = true;
 	Result.Envelope = Envelope;
 	return Result;
+}
+
+} // namespace
+
+FWonderlandEnvelopeDecode WonderlandDecodeEnvelopeBytes(const char* Bytes, int32 Length)
+{
+	FWonderlandEnvelopeDecode Result;
+	FJsonValue Root;
+	EWonderlandWireError Error = EWonderlandWireError::None;
+	if (!ParseDocument(Bytes, Length, Root, Error))
+	{
+		Result.Refusal.Error = Error;
+		return Result;
+	}
+	return DecodeEnvelopeObject(Root);
+}
+
+/* --------------------------------------------------------- the delivery */
+
+FWonderlandDeliveryDecode WonderlandDecodeDeliveryBytes(const char* Bytes, int32 Length)
+{
+	FWonderlandDeliveryDecode Result;
+
+	FJsonValue Root;
+	EWonderlandWireError Error = EWonderlandWireError::None;
+	if (!ParseDocument(Bytes, Length, Root, Error))
+	{
+		Result.Refusal.Error = Error;
+		return Result;
+	}
+
+	const FJsonValue* EnvelopeValue = Field(Root, "envelope");
+	if (EnvelopeValue == nullptr)
+	{
+		Result.Refusal = { EWonderlandWireError::MissingField, FString("envelope") };
+		return Result;
+	}
+	if (EnvelopeValue->Kind != EJsonKind::Object)
+	{
+		Result.Refusal = { EWonderlandWireError::WrongType, FString("envelope") };
+		return Result;
+	}
+
+	// THE SAME READER, not a second one. Every rule proven for a bare envelope
+	// holds here without being restated.
+	const FWonderlandEnvelopeDecode Envelope = DecodeEnvelopeObject(*EnvelopeValue);
+	if (!Envelope.bOk)
+	{
+		Result.Refusal = Envelope.Refusal;
+		return Result;
+	}
+
+	const FJsonValue* ActivityValue = Field(Root, "activity");
+	if (ActivityValue == nullptr)
+	{
+		Result.Refusal = { EWonderlandWireError::MissingField, FString("activity") };
+		return Result;
+	}
+	if (ActivityValue->Kind != EJsonKind::Object)
+	{
+		Result.Refusal = { EWonderlandWireError::WrongType, FString("activity") };
+		return Result;
+	}
+
+	FWonderlandActivityReading Activity;
+	FFieldReader Reader{ *ActivityValue, Result.Refusal };
+	Reader.RequiredString("schemaVersion", Activity.SchemaVersion);
+	Reader.RequiredIdentity("projectId", Activity.ProjectId);
+	Reader.RequiredString("runId", Activity.RunId);
+	Reader.NullableText("observedAtIso", Activity.ObservedAtIso);
+
+	int64 ActiveSubagents = 0;
+	int64 SubagentsDenied = 0;
+	int64 UnusedEvents = 0;
+	Reader.RequiredInteger("activeSubagents", ActiveSubagents);
+	Reader.RequiredInteger("subagentsDenied", SubagentsDenied);
+	Reader.RequiredInteger("unusedEvents", UnusedEvents);
+
+	// SIGNALS. Every member is looked up, and an unknown one is refused rather
+	// than skipped: a signal Relay raised and this build cannot name is a world
+	// showing LESS than is true, which reads as a calm run.
+	const FJsonValue* Signals = Field(*ActivityValue, "signals");
+	if (Signals == nullptr) { Reader.Reject(EWonderlandWireError::MissingField, "signals"); }
+	else if (Signals->Kind != EJsonKind::Array) { Reader.Reject(EWonderlandWireError::WrongType, "signals"); }
+	else
+	{
+		for (const FJsonValue& Item : Signals->Items)
+		{
+			if (Item.Kind != EJsonKind::String)
+			{
+				Reader.Reject(EWonderlandWireError::WrongType, "signals");
+				break;
+			}
+			uint8 Found = 0;
+			if (!WonderlandWireLookupToken("EWonderlandActivitySignal", FString(Item.Text.c_str()), Found))
+			{
+				Reader.Reject(EWonderlandWireError::UnknownToken, "signals");
+				break;
+			}
+			Activity.Signals.Add(static_cast<EWonderlandActivitySignal>(Found));
+		}
+	}
+
+	// WORKERS. The per-worker fold, same rule for its own signals.
+	const FJsonValue* Workers = Field(*ActivityValue, "workers");
+	if (Workers == nullptr) { Reader.Reject(EWonderlandWireError::MissingField, "workers"); }
+	else if (Workers->Kind != EJsonKind::Array) { Reader.Reject(EWonderlandWireError::WrongType, "workers"); }
+	else
+	{
+		for (const FJsonValue& Item : Workers->Items)
+		{
+			if (Reader.bFailed) { break; }
+			if (Item.Kind != EJsonKind::Object)
+			{
+				Reader.Reject(EWonderlandWireError::WrongType, "workers");
+				break;
+			}
+			FWonderlandWorkerActivity Worker;
+			FFieldReader WorkerReader{ Item, Result.Refusal };
+			WorkerReader.RequiredIdentity("workerId", Worker.WorkerId);
+			if (WorkerReader.bFailed) { Reader.bFailed = true; break; }
+
+			const FJsonValue* WorkerSignals = Field(Item, "signals");
+			if (WorkerSignals == nullptr || WorkerSignals->Kind != EJsonKind::Array)
+			{
+				Reader.Reject(EWonderlandWireError::MissingField, "workers.signals");
+				break;
+			}
+			for (const FJsonValue& Signal : WorkerSignals->Items)
+			{
+				if (Signal.Kind != EJsonKind::String)
+				{
+					Reader.Reject(EWonderlandWireError::WrongType, "workers.signals");
+					break;
+				}
+				uint8 Found = 0;
+				if (!WonderlandWireLookupToken("EWonderlandActivitySignal", FString(Signal.Text.c_str()), Found))
+				{
+					Reader.Reject(EWonderlandWireError::UnknownToken, "workers.signals");
+					break;
+				}
+				Worker.Signals.Add(static_cast<EWonderlandActivitySignal>(Found));
+			}
+			if (Reader.bFailed) { break; }
+			Activity.Workers.Add(Worker);
+		}
+	}
+
+	if (Reader.bFailed) { return Result; }
+
+	// Counts are counts. A negative one is not a smaller number, it is a
+	// different kind of thing, and it would render as a subagent that unspawned.
+	if (ActiveSubagents < 0) { Result.Refusal = { EWonderlandWireError::NumberOutOfRange, FString("activeSubagents") }; return Result; }
+	if (SubagentsDenied < 0) { Result.Refusal = { EWonderlandWireError::NumberOutOfRange, FString("subagentsDenied") }; return Result; }
+	if (UnusedEvents < 0) { Result.Refusal = { EWonderlandWireError::NumberOutOfRange, FString("unusedEvents") }; return Result; }
+
+	// THE TWO HALVES MUST AGREE ABOUT WHOSE RUN THIS IS. A delivery whose
+	// activity named another project would push one run's signals onto another's
+	// world, and every downstream check compares against the envelope alone.
+	if (!(Activity.ProjectId == Envelope.Envelope.ProjectId))
+	{
+		Result.Refusal = { EWonderlandWireError::IdentityRejected, FString("activity.projectId") };
+		return Result;
+	}
+	if (Envelope.Envelope.RunId.bKnown && !(Activity.RunId == Envelope.Envelope.RunId.Value))
+	{
+		Result.Refusal = { EWonderlandWireError::IdentityRejected, FString("activity.runId") };
+		return Result;
+	}
+
+	Activity.ActiveSubagents = ActiveSubagents;
+	Activity.SubagentsDenied = SubagentsDenied;
+	Activity.UnusedEvents = UnusedEvents;
+
+	Result.bOk = true;
+	Result.Envelope = Envelope.Envelope;
+	Result.Activity = Activity;
+	return Result;
+}
+
+/* -------------------------------------------------------- the SSE frame */
+
+bool WonderlandWireReadSseData(const char* Frame, int32 Length, int32& OutStart, int32& OutLength)
+{
+	OutStart = 0;
+	OutLength = 0;
+	if (Frame == nullptr || Length <= 0) { return false; }
+
+	int32 At = 0;
+	while (At < Length)
+	{
+		int32 LineEnd = At;
+		while (LineEnd < Length && Frame[LineEnd] != '\n') { LineEnd += 1; }
+
+		// `: heartbeat` is a comment line and carries nothing to apply. Not an
+		// error — a stream that says nothing is still a live stream.
+		const int32 LineLength = LineEnd - At;
+		if (LineLength >= 5 && std::memcmp(Frame + At, "data:", 5) == 0)
+		{
+			int32 Start = At + 5;
+			// Exactly one optional space after the colon, per the SSE grammar.
+			if (Start < LineEnd && Frame[Start] == ' ') { Start += 1; }
+			OutStart = Start;
+			OutLength = LineEnd - Start;
+			// A `data:` line with nothing after it is an empty payload, which
+			// is not a document — reported as no data rather than as JSON.
+			return OutLength > 0;
+		}
+		At = LineEnd + 1;
+	}
+	return false;
 }

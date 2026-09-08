@@ -138,6 +138,41 @@ enum : int32
 // the engine session can see it.
 FWonderlandEnvelopeDecode WonderlandDecodeEnvelopeBytes(const char* Bytes, int32 Length);
 
+/* ------------------------------------------------------- the delivery */
+
+// WHAT AN SSE FRAME ACTUALLY CARRIES.
+//
+// The bridge writes `data: {"envelope":…,"activity":…}` — a WonderlandDelivery,
+// not a bare envelope. Both halves are needed together, because
+// `UWonderlandJuliusSubsystem::ApplyEnvelope` takes the activity beside the
+// envelope: the reduction that produced it lives in TypeScript and is tested
+// there, and a second reduction in C++ would be a second answer to "what is
+// this run doing".
+//
+// The ACTIVITY IS SHIPPED WHOLE rather than as a delta, so a client that just
+// reconnected can adopt it without having applied every previous one.
+struct FWonderlandDeliveryDecode
+{
+	bool bOk = false;
+	FWonderlandWireRefusal Refusal;
+	FWonderlandEnvelope Envelope;
+	FWonderlandActivityReading Activity;
+};
+
+// Decode one delivery. The envelope half is decoded by exactly the same code
+// path as above; there is no second envelope reader to drift from the first.
+FWonderlandDeliveryDecode WonderlandDecodeDeliveryBytes(const char* Bytes, int32 Length);
+
+/* ------------------------------------------------------- the SSE frame */
+
+// Find the `data:` payload inside one SSE frame.
+//
+// Part of the path and therefore part of what is proven: a frame is
+// `id: …\nevent: …\ndata: …\n\n`, comment lines begin with `:`, and a
+// heartbeat carries no data at all. Returns false for a frame with no data
+// line — which is not an error, just nothing to apply.
+bool WonderlandWireReadSseData(const char* Frame, int32 Length, int32& OutStart, int32& OutLength);
+
 // A refusal as a stable, payload-free string, for a log line. Every value is a
 // literal from this file: there is no path by which a project's own text
 // reaches a log through this.

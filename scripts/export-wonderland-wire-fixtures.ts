@@ -23,6 +23,11 @@ import { join } from 'node:path';
 import { wonderlandEnvelope } from '../src/relay/mission/wonderland/wonderland-envelope';
 import { JULIUS_VISUAL_STATES } from '../src/relay/mission/wonderland/wonderland-julius-state';
 import { WONDERLAND_WORKER_ROLES } from '../src/relay/mission/wonderland/wonderland-envelope';
+import {
+  JULIUS_ACTIVITY_SIGNALS,
+  emptyJuliusActivity,
+  wonderlandJuliusActivity,
+} from '../src/relay/mission/wonderland/wonderland-julius-activity';
 
 const AT = '2026-09-08T00:00:00.000Z';
 
@@ -48,6 +53,12 @@ interface Fixture {
 }
 
 const cases: Fixture[] = [];
+/**
+ * Deliveries are a SECOND file: the C++ reads them with a different entry point,
+ * and mixing the two would mean the harness had to guess which decoder each line
+ * wanted. Same format, same freshness rule.
+ */
+const deliveries: Fixture[] = [];
 const ok = (name: string, value: unknown) =>
   cases.push({ name, expect: 'ok', json: JSON.stringify(value) });
 const refused = (name: string, expect: string, value: unknown) =>
@@ -114,6 +125,87 @@ refused('missing-metadata', 'missing_field', without('metadata'));
 refused('nested-metadata', 'wrong_type', damage({ metadata: { nested: { a: 1 } } }));
 refused('array-metadata', 'wrong_type', damage({ metadata: { list: [1, 2] } }));
 
+/* ---------------------------------------------- what an SSE frame carries */
+
+// The bridge writes `data: {"envelope":…,"activity":…}` — a WonderlandDelivery.
+// These are that shape, built from the real activity fold rather than a
+// hand-written object, so the client is held to what the server sends.
+const activity = (over: Partial<ReturnType<typeof emptyJuliusActivity>> = {}) => ({
+  ...emptyJuliusActivity({ projectId: 'project-alpha', runId: 'run-1' }),
+  ...over,
+});
+
+const delivery = (
+  env: ReturnType<typeof wonderlandEnvelope> = envelope(),
+  act: ReturnType<typeof emptyJuliusActivity> = activity(),
+) => ({ envelope: env, activity: act });
+
+deliveries.push({ name: 'delivery-quiet', expect: 'ok', json: JSON.stringify(delivery()) });
+deliveries.push({
+  name: 'delivery-every-signal',
+  expect: 'ok',
+  json: JSON.stringify(delivery(envelope(), activity({
+    signals: [...JULIUS_ACTIVITY_SIGNALS],
+    workers: [{ workerId: 'worker-1', signals: [...JULIUS_ACTIVITY_SIGNALS] }],
+    activeSubagents: 3,
+    subagentsDenied: 1,
+    observedAtIso: AT,
+    unusedEvents: 2,
+  }))),
+});
+// The fold, run for real over real events, rather than a shape typed by hand.
+deliveries.push({
+  name: 'delivery-real-fold',
+  expect: 'ok',
+  json: JSON.stringify(delivery(envelope({ state: 'blocked' }), wonderlandJuliusActivity(
+    emptyJuliusActivity({ projectId: 'project-alpha', runId: 'run-1' }),
+    [{
+      schemaVersion: 'relay-julius-event.v1', eventId: 'e1', projectId: 'project-alpha',
+      runId: 'run-1', taskId: 'task-1', workerId: 'worker-1', type: 'approval.requested',
+      occurredAt: AT, facts: {},
+    } as never],
+  ))),
+});
+
+// A delivery whose halves disagree about whose run it is. Nothing downstream
+// compares them — every later check reads the envelope alone — so if this one
+// crossed, one run's signals would land on another's world.
+deliveries.push({
+  name: 'delivery-foreign-activity-project',
+  expect: 'identity_rejected',
+  json: JSON.stringify(delivery(envelope(), activity({ projectId: 'project-beta' } as never))),
+});
+deliveries.push({
+  name: 'delivery-foreign-activity-run',
+  expect: 'identity_rejected',
+  json: JSON.stringify(delivery(envelope(), activity({ runId: 'run-9' } as never))),
+});
+deliveries.push({
+  name: 'delivery-unknown-signal',
+  expect: 'unknown_token',
+  json: JSON.stringify(delivery(envelope(), activity({ signals: ['transcending'] } as never))),
+});
+deliveries.push({
+  name: 'delivery-negative-subagents',
+  expect: 'number_out_of_range',
+  json: JSON.stringify(delivery(envelope(), activity({ activeSubagents: -1 } as never))),
+});
+deliveries.push({
+  name: 'delivery-missing-activity',
+  expect: 'missing_field',
+  json: JSON.stringify({ envelope: envelope() }),
+});
+deliveries.push({
+  name: 'delivery-missing-envelope',
+  expect: 'missing_field',
+  json: JSON.stringify({ activity: activity() }),
+});
+deliveries.push({
+  name: 'delivery-broken-envelope',
+  expect: 'unknown_token',
+  json: JSON.stringify({ envelope: { ...envelope(), state: 'ascended' }, activity: activity() }),
+});
+
 /* --------------------------------------------------------- the writing */
 
 /**
@@ -123,19 +215,23 @@ refused('array-metadata', 'wrong_type', damage({ metadata: { list: [1, 2] } }));
  * lives in the source tree for the same reason.
  */
 export const WONDERLAND_WIRE_FIXTURES_PATH = join('wonderland', 'Tools', 'WireHarness', 'fixtures.tsv');
+export const WONDERLAND_WIRE_DELIVERIES_PATH = join('wonderland', 'Tools', 'WireHarness', 'deliveries.tsv');
 
-/** The file, rendered. Exported so a test compares the same bytes. */
-export function renderWonderlandWireFixtures(): string {
+const render = (items: readonly Fixture[]): string => {
   // A tab or a newline inside a payload would break the format silently, so it
   // is refused loudly instead. `JSON.stringify` escapes both, but a fixture
   // added later could carry a raw one.
-  for (const item of cases) {
+  for (const item of items) {
     if (item.json.includes('\t') || item.json.includes('\n')) {
       throw new Error(`export-wonderland-wire-fixtures: ${item.name} contains a raw tab or newline.`);
     }
   }
-  return `${cases.map((c) => `${c.name}\t${c.expect}\t${c.json}`).join('\n')}\n`;
-}
+  return `${items.map((c) => `${c.name}\t${c.expect}\t${c.json}`).join('\n')}\n`;
+};
+
+/** The files, rendered. Exported so a test compares the same bytes. */
+export function renderWonderlandWireFixtures(): string { return render(cases); }
+export function renderWonderlandWireDeliveries(): string { return render(deliveries); }
 
 function main(): void {
   const root = process.cwd();
@@ -143,11 +239,17 @@ function main(): void {
     console.error('export-wonderland-wire-fixtures: run from the repository root.');
     process.exit(1);
   }
-  const path = join(root, WONDERLAND_WIRE_FIXTURES_PATH);
-  const body = renderWonderlandWireFixtures();
+  const artefacts = [
+    { path: join(root, WONDERLAND_WIRE_FIXTURES_PATH), body: renderWonderlandWireFixtures() },
+    { path: join(root, WONDERLAND_WIRE_DELIVERIES_PATH), body: renderWonderlandWireDeliveries() },
+  ];
+  const path = artefacts[0].path;
+  const body = artefacts.map((a) => a.body).join('');
 
   if (process.argv.includes('--check')) {
-    const onDisk = existsSync(path) ? readFileSync(path, 'utf8') : null;
+    const onDisk = artefacts
+      .map((a) => (existsSync(a.path) ? readFileSync(a.path, 'utf8') : null))
+      .join('');
     if (onDisk !== body) {
       console.error(
         'export-wonderland-wire-fixtures --check: the fixtures are stale.\n' +
@@ -157,14 +259,16 @@ function main(): void {
       );
       process.exit(1);
     }
-    console.log(`wonderland wire fixtures current (${cases.length} cases)`);
+    console.log(`wonderland wire fixtures current (${cases.length} + ${deliveries.length} cases)`);
     return;
   }
 
-  writeFileSync(path, body);
+  for (const artefact of artefacts) writeFileSync(artefact.path, artefact.body);
+  void path;
   const accepted = cases.filter((c) => c.expect === 'ok').length;
   console.log(
-    `wonderland wire fixtures -> ${cases.length} cases (${accepted} accepted, ${cases.length - accepted} refused)`,
+    `wonderland wire fixtures -> ${cases.length} envelopes (${accepted} accepted), ` +
+      `${deliveries.length} deliveries`,
   );
 }
 

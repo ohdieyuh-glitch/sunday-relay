@@ -15,6 +15,7 @@ OUT="$(mktemp -d)"
 trap 'rm -rf "$OUT"' EXIT
 
 FIXTURES="${1:-$HERE/WireHarness/fixtures.tsv}"
+DELIVERIES="${2:-$HERE/WireHarness/deliveries.tsv}"
 
 # BUILT AND RUN TWICE. See geometry-parity-check.sh for why: a hand-written stub
 # returned a dangling reference, every check passed at -O0, and the same build
@@ -32,7 +33,7 @@ build_harness() {
 
 run_harness() {
 	local bin="$1" out="$2"
-	if ! "$bin" "$FIXTURES" > "$out" 2>&1; then
+	if ! "$bin" "$FIXTURES" "$DELIVERIES" > "$out" 2>&1; then
 		echo "FAIL $(basename "$bin") reported failures:"
 		cat "$out"
 		exit 1

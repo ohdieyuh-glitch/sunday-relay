@@ -6,9 +6,12 @@ import { JULIUS_VISUAL_STATES } from './wonderland-julius-state';
 import { WONDERLAND_WORKER_ROLES } from './wonderland-envelope';
 import { wonderlandWireEnums } from './wonderland-wire-contract';
 import {
+  WONDERLAND_WIRE_DELIVERIES_PATH,
   WONDERLAND_WIRE_FIXTURES_PATH,
+  renderWonderlandWireDeliveries,
   renderWonderlandWireFixtures,
 } from '../../../../scripts/export-wonderland-wire-fixtures';
+import { JULIUS_ACTIVITY_SIGNALS } from './wonderland-julius-activity';
 
 /**
  * THE CANONICAL FIXTURES, AS A CONTRACT WITH THE C++ SIDE.
@@ -48,6 +51,10 @@ describe('the fixture file', () => {
       readFileSync(join(process.cwd(), PATH), 'utf8'),
       'the wire fixtures are stale — run `npm run wonderland:wire:fixtures` and READ the diff',
     ).toBe(renderWonderlandWireFixtures());
+    expect(
+      readFileSync(join(process.cwd(), WONDERLAND_WIRE_DELIVERIES_PATH), 'utf8'),
+      'the delivery fixtures are stale — run `npm run wonderland:wire:fixtures`',
+    ).toBe(renderWonderlandWireDeliveries());
   });
 
   it('parses as three columns on every line', () => {
@@ -147,6 +154,51 @@ describe('nothing crosses that the client contract excludes', () => {
         expect(item.length, `${row.name}.${key} is long enough to be prose`).toBeLessThan(120);
         expect(item, `${row.name}.${key} contains a sentence`).not.toMatch(/\.\s+[A-Z]/);
       }
+    }
+  });
+});
+
+describe('the delivery fixtures — what an SSE frame really carries', () => {
+  const rows = readFileSync(join(process.cwd(), WONDERLAND_WIRE_DELIVERIES_PATH), 'utf8')
+    .split('\n')
+    .filter((line) => line.trim() !== '')
+    .map((line) => {
+      const [name, expect_, json] = line.split('\t');
+      return { name, expect: expect_, json };
+    });
+
+  it('carries the envelope AND the activity, because ApplyEnvelope takes both', () => {
+    // The reduction that produces the activity lives in TypeScript and is
+    // tested there; a second reduction in C++ would be a second answer to
+    // "what is this run doing". So it travels beside the envelope.
+    const quiet = rows.find((r) => r.name === 'delivery-quiet');
+    expect(quiet).toBeDefined();
+    const parsed = JSON.parse(quiet!.json) as Record<string, unknown>;
+    expect(Object.keys(parsed).sort()).toEqual(['activity', 'envelope']);
+  });
+
+  it('exercises every activity signal', () => {
+    const every = rows.find((r) => r.name === 'delivery-every-signal');
+    expect(every).toBeDefined();
+    const parsed = JSON.parse(every!.json) as { activity: { signals: string[] } };
+    expect([...parsed.activity.signals].sort()).toEqual([...JULIUS_ACTIVITY_SIGNALS].sort());
+  });
+
+  it('sends halves that disagree about identity, and expects a refusal', () => {
+    // Nothing downstream compares them — every later check reads the envelope
+    // alone — so a delivery whose activity named another project would push one
+    // run's signals onto another's world.
+    for (const name of ['delivery-foreign-activity-project', 'delivery-foreign-activity-run']) {
+      const row = rows.find((r) => r.name === name);
+      expect(row, `no fixture named ${name}`).toBeDefined();
+      expect(row!.expect).toBe('identity_rejected');
+    }
+  });
+
+  it('carries no provider name or credential either', () => {
+    const everything = rows.map((r) => r.json).join(' ').toLowerCase();
+    for (const name of ['gpt', 'claude', 'hermes', 'openai', 'anthropic', 'sk-']) {
+      expect(everything, `a delivery fixture mentions ${name}`).not.toContain(name);
     }
   });
 });
