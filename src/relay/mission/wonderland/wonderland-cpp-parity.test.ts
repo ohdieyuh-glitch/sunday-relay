@@ -25,6 +25,7 @@ import {
   JULIUS_VISUAL_STATES,
   JULIUS_VISUAL_STATE_ACTIVITY,
 } from './wonderland-julius-state';
+import { wonderlandCppEnumMember } from './wonderland-wire-contract';
 import {
   OFFICIAL_RELAY_DOG_ACTIVITIES,
   OFFICIAL_RELAY_DOG_ACTIVITY_MOTION,
@@ -861,6 +862,40 @@ describe('absence survives the crossing into C++', () => {
       .filter(([, members]) => enumNames(members).includes(WONDERLAND_CPP_UNOBSERVED_MEMBER))
       .map(([name]) => name),
   );
+
+  it('every Relay token maps to a member the headers actually declare', () => {
+    /**
+     * THE DIRECTION A DECODER NEEDS.
+     *
+     * Every other check here normalises BOTH sides to a common token and
+     * compares, which proves the two agree. A client has to PRODUCE a C++
+     * member from a wire token, and that is a different question: it can only
+     * be answered by one rule, running forwards, landing on a name that
+     * exists. `wonderlandCppEnumMember` is that rule, it is product code rather
+     * than a test helper because the generated wire contract publishes it, and
+     * this is where it is held to the real headers.
+     *
+     * Without this, the mapping could quietly stop matching — `Game3dShooter`
+     * against `Game3DShooter`, say — and the only symptom would be a world in
+     * which everything reads as `Unobserved`.
+     */
+    const offenders: string[] = [];
+    for (const entry of WONDERLAND_CPP_ENUM_PARITY) {
+      const members = parsedEnums.get(entry.cppEnum);
+      if (!members) continue; // reported by the enum-parity test
+      const declared = new Set(enumNames(members));
+      for (const token of entry.members) {
+        const produced = wonderlandCppEnumMember(token);
+        if (!declared.has(produced)) {
+          offenders.push(`${entry.cppEnum}: "${token}" -> ${produced}, which the header does not declare`);
+        }
+      }
+    }
+    expect(
+      offenders,
+      'a decoder following the published mapping would leave these at ordinal 0, which reads as Unobserved',
+    ).toEqual([]);
+  });
 
   it('the nullable manifest names exactly the structs the parity table names', () => {
     /**

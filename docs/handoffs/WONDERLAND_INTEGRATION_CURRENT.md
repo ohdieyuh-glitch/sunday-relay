@@ -897,6 +897,40 @@ documented defence rather than covered by tests that only appear to cover them.
 
 ---
 
+### 42. The decode contract nobody had written down
+
+`Wonderland.Build.cs` has depended on `Json` and `JsonUtilities` since the
+module existed. **No C++ file uses them.** The wire → USTRUCT decode is
+unwritten, and the two shapes do not correspond one to one in two places that
+both fail quietly:
+
+- **90 nullable fields** cross as a value or `null` and land in a carrier with
+  its own `bKnown`. A name-matching decoder leaves it zero-filled, which reads
+  as "Relay did not say" for a figure Relay did say.
+- **41 enums** carry `snake_case`, `SCREAMING_SNAKE` and — in one vocabulary —
+  `SPACE SEPARATED` tokens against `PascalCase` members. An unmatched token
+  leaves ordinal 0, which is `Unobserved` everywhere it matters. A broken
+  decoder therefore produces a world that looks like Relay is silent.
+
+`docs/handoffs/WONDERLAND_WIRE_CONTRACT.md` publishes the whole mapping and is
+GENERATED from the same parity tables the headers are held to, so it cannot
+describe a seam that no longer exists. `wonderland:wire:check` fails when it
+drifts, the same shape as the ordering fixture.
+
+**The mapping is now held to the real headers in the DIRECTION a decoder runs
+it.** Every other parity check normalises both sides to a common token and
+proves they agree; a client has to PRODUCE a member from a token, land on a
+name that exists, and that is a different question. The new check found a real
+gap on its first run: `PROVENANCES` holds `LIVE LOCAL` with a SPACE, and a
+mapping that split on underscores alone produced `Live local` — a member no
+header declares, which a decoder would have left at `Unobserved`.
+
+That is the argument for the whole exercise. The gap had been there since the
+enum was written, every existing test passed, and it would have surfaced as
+"Relay isn't reporting provenance" during the paid engine hours.
+
+---
+
 ---
 
 ## What is REAL and what is not
@@ -927,6 +961,7 @@ distinction between the middle two rows is the one that gets misreported.
 | the transport boundary (scope, decode, validate, order, fold) | **real**, tested against reconnects, mis-routed fan-outs and replayed tails |
 | the Julius world routes | **real**, authorised per request against `project_members`, and READING through `WonderlandJuliusReaderPostgres` — proven end to end over real HTTP against a stubbed database |
 | the two world reads | **real**, mutation-verified — and no statement has ever run against a live PostgreSQL |
+| the wire → USTRUCT decode contract | **real** and generated from the parity tables; the DECODER it describes is **not built** |
 | the Unreal ordering rule | **real**, replayed through 26 cases generated from the TypeScript, 450 checks |
 | the Project Brain scope | **real** contract, canary-tested; no authority cites into it yet |
 | Unreal DRAWING any of it | **not proven.** `WonderlandUsageHudWidget.cpp` parses and has never been compiled against real UMG headers or seen to put a pixel on a screen. |

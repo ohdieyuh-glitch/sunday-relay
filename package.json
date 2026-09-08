@@ -75,7 +75,9 @@
     "wonderland:ordering:export": "esbuild scripts/export-wonderland-ordering-fixture.ts --bundle --platform=node --format=cjs --outfile=generated/export-wonderland-ordering-fixture.cjs --log-level=warning && node generated/export-wonderland-ordering-fixture.cjs",
     "wonderland:ordering:check": "esbuild scripts/export-wonderland-ordering-fixture.ts --bundle --platform=node --format=cjs --outfile=generated/export-wonderland-ordering-fixture.cjs --log-level=warning && node generated/export-wonderland-ordering-fixture.cjs --check",
     "wonderland:ordering:verify": "bash wonderland/Tools/ordering-parity-check.sh",
-    "wonderland:julius:verify": "bash wonderland/Tools/julius-subsystem-check.sh"
+    "wonderland:julius:verify": "bash wonderland/Tools/julius-subsystem-check.sh",
+    "wonderland:wire:export": "esbuild scripts/export-wonderland-wire-contract.ts --bundle --platform=node --format=cjs --outfile=generated/export-wonderland-wire-contract.cjs --log-level=warning && node generated/export-wonderland-wire-contract.cjs",
+    "wonderland:wire:check": "esbuild scripts/export-wonderland-wire-contract.ts --bundle --platform=node --format=cjs --outfile=generated/export-wonderland-wire-contract.cjs --log-level=warning && node generated/export-wonderland-wire-contract.cjs --check"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.3.220",

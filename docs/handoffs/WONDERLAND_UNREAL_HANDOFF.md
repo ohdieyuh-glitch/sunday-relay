@@ -107,6 +107,33 @@ EXECUTION: A–M below, none of which can be done without Unreal.
 The two open cloud-side DECISIONS, neither of which blocks A–M:
 the Project Brain kind vocabulary above, and an authority that reports usage.
 
+### The decode, which is unwritten and has two quiet traps
+
+`Wonderland.Build.cs` has depended on `Json` and `JsonUtilities` since the
+module existed and **no C++ file uses them**. Writing that decoder is step D's
+real work, and two things about it will not announce themselves:
+
+**Absence.** TypeScript has `null`; Unreal's numerics, strings and bools do
+not. Ninety fields cross as a value-or-`null` and land in a carrier —
+`FWonderlandText`, `FWonderlandNumber`, `FWonderlandFlag`, each
+`{ bKnown, Value }`. A decoder that maps by NAME alone leaves the carrier
+zero-filled, and a zero-filled carrier reads as "Relay did not say" for a
+figure Relay did say. Every real number silently becomes an unknown.
+
+**Vocabulary.** Relay's tokens are `snake_case`, `SCREAMING_SNAKE`, and in one
+case `SPACE SEPARATED`. Unreal's members are `PascalCase`. An unmatched token
+leaves the ordinal at 0, and 0 in every nullable-mirroring enum here is
+`Unobserved` — so a broken decoder produces a world that looks like Relay is
+reporting nothing, which is the hardest possible symptom to diagnose with an
+engine open and hours on the clock.
+
+**`docs/handoffs/WONDERLAND_WIRE_CONTRACT.md` is the full mapping**: every
+carrier field, every enum's token→member table, every struct that crosses. It
+is GENERATED from the same parity tables that hold the headers, so it cannot
+describe a seam the headers no longer have; `npm run wonderland:wire:check`
+fails when it drifts. Read it before writing the decoder rather than after
+debugging one.
+
 ### The Unreal proof checklist (A–M)
 
 Nothing on this list can be done cloud-side. **Each item is a thing to SEE**,
