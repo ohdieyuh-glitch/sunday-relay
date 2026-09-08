@@ -572,7 +572,15 @@ def spots_on_bearing(cam, bands, arc, min_el, height_uu, want, taken,
     # uu of ground, well inside the spacing this batch demands, so a fixed step
     # walked eleven bearings and placed two stands. The step is the angle that
     # actually separates two stands at the depth they will stand at.
+    #
+    # AND IT MUST STILL SAMPLE A NARROW ARC. That spacing is 13 degrees, which
+    # on an arc 11 degrees wide tries exactly ONE bearing -- and one blocked
+    # bearing then reads as "no clear ground" for the whole arc. It refused the
+    # founder's own reference frame, the one camera in the suite with a ground
+    # truth to miss. Sample any arc at least four ways whatever the spacing;
+    # `taken` still keeps two stands from landing on top of each other.
     step = max(1.5, math.degrees(math.atan2(apart, 11000.0)))
+    step = min(step, max(1.5, (hi - lo) / 3.0))
     th = lo
     while th <= hi and len(out) < want:
         d = 12200.0
@@ -675,7 +683,8 @@ GREEN_CEILINGS = (
     ("WaterGardenCam15", (22.9, 35.6), 17.7),       # 18 cols, edge +29.4, built 38.3%
     ("ReverseCam03", (16.9, 23.6), 15.0),           # 10 cols, edge +29.4, built 56.7%
     ("ReverseCam03", (-28.1, -22.9), 16.4),         #  8 cols, edge +29.4, built 56.7%
-    ("HeroCam_V2_MarbleReference", (-35.0, -23.8), 29.1),  # 16 cols, edge +33.8, built 57.5%
+    ("HeroCam_V2_MarbleReference", (-36.2, -23.8), 29.1),  # 16 cols, edge +33.8, built 57.5%
+    ("HeroCam_V2_MarbleReference", (-49.6, -43.8), 29.1),  #  8 cols, edge +33.8, built 57.5%
     ("HamletCam17", (0.4, 31.1), 25.2),             # 42 cols, edge +29.4, built 60.8%
     ("WorldCam12", (-35.0, -24.1), 16.8),           # 23 cols, edge +30.2, built 63.3%
     ("WorldCam12", (-21.9, -15.7), 12.7),           #  9 cols, edge +30.2, built 63.3%

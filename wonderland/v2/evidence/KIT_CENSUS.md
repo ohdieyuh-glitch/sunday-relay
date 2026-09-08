@@ -8,7 +8,7 @@ not the placements.
 | | placements | mean built | cameras moved | one piece holds a third | frames over half green |
 |---|---|---|---|---|---|
 | before | 13,816 | 67.78% | — | 10 | 9 |
-| after | 14,489 | **73.61%** | 21 of 33 | 9 | 5 |
+| after | 14,529 | **73.99%** | 23 of 33 | 9 | 5 |
 
 The founder's reference, classified from its own pixels, is built **71.5%**.
 
@@ -58,6 +58,22 @@ at 1,535 uu from behind needs `(h - 170) > 0.70 · r`; at any distance a stand
 may legally occupy that is a 400 m tower. **The swag has to move or shrink, and
 it is the world stream's asset, not the kit's.** It still went 71% → 61%,
 because the depth stands took columns beside it.
+
+## The fifth zero: a narrow arc sampled once
+
+The bearing step is the angle that separates two stands on the ground -- 2,600
+uu at 11 km is 13 degrees. On an arc 11 degrees wide that tries exactly ONE
+bearing, and one blocked bearing reads as "no clear ground" for the whole arc.
+It refused **the founder's own reference frame**, the one camera in the suite
+with a ground truth to miss: `HeroCam_V2_MarbleReference` is built 60.0% where
+the image it reproduces is 71.5%. Sampling any arc at least four ways found it
+ground at 9,200 uu on bearing -36.2 and took the frame 57.5% -> 60.0%.
+
+It is still 11.5 points short. Its remaining green tops out at +29.1 from 29.7
+m away, which needs a 63 m tower inside 10.9 km on two narrow bearings, and the
+ground there is nearly all spoken for. **That gap is the next pass's first
+job**, and it is the most valuable number in this file: every other camera is
+judged against a reading, this one against a picture.
 
 ## Not proven
 
