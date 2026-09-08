@@ -1,4 +1,4 @@
-import{execFile}from'node:child_process';import{promisify}from'node:util';import{chmod,mkdtemp,readFile,writeFile}from'node:fs/promises';import{tmpdir}from'node:os';import{join}from'node:path';import{createHash}from'node:crypto';import{Pool}from'pg';import{afterAll,beforeAll,describe,expect,it}from'vitest';import{TransactionalWonderlandDatabase,WONDERLAND_MIGRATIONS,migrationVersion}from'./wonderland-postgres';import{JuliusToolPostgresRepository}from'./julius-tool-postgres';import{JuliusPostgresRepository}from'./julius-postgres';import type{JuliusBrainEntry}from'../mission/julius';import{JuliusToolRecoveryPostgresRepository}from'./julius-tool-recovery-postgres';import{JuliusToolSettlementPostgresRepository}from'./julius-tool-settlement-postgres';import{JuliusContractPostgresRepository}from'./julius-contract-postgres';import{juliusTaskContractBindingDigest,reviseJuliusTaskContract,mayDispatchUnderContract,type JuliusTaskContract}from'../mission/julius';import{DockerJuliusSandboxAdapter}from'../workspace/julius-tools/docker-sandbox-adapter';import{DockerExecutorReceiptStore}from'../workspace/julius-tools/executor-receipt-store';import{enforceableCeilingFor}from'../workspace/julius-tools/workspace-provisioning';
+import{execFile}from'node:child_process';import{promisify}from'node:util';import{chmod,mkdtemp,readFile,writeFile}from'node:fs/promises';import{tmpdir}from'node:os';import{join}from'node:path';import{createHash}from'node:crypto';import{Pool}from'pg';import{afterAll,beforeAll,describe,expect,it}from'vitest';import{TransactionalWonderlandDatabase,WONDERLAND_MIGRATIONS,migrationVersion}from'./wonderland-postgres';import{JuliusToolPostgresRepository}from'./julius-tool-postgres';import{JuliusPostgresRepository}from'./julius-postgres';import type{JuliusBrainEntry}from'../mission/julius';import{JuliusToolRecoveryPostgresRepository}from'./julius-tool-recovery-postgres';import{JuliusToolSettlementPostgresRepository}from'./julius-tool-settlement-postgres';import{JuliusContractPostgresRepository}from'./julius-contract-postgres';import{JuliusReadPostgresRepository}from'./julius-read-postgres';import{createJuliusContextSnapshot,juliusTaskContractBindingDigest,reviseJuliusTaskContract,mayDispatchUnderContract,type JuliusTask,type JuliusTaskContract,type JuliusWorker}from'../mission/julius';import{DockerJuliusSandboxAdapter}from'../workspace/julius-tools/docker-sandbox-adapter';import{DockerExecutorReceiptStore}from'../workspace/julius-tools/executor-receipt-store';import{enforceableCeilingFor}from'../workspace/julius-tools/workspace-provisioning';
 const stable=(value:any):string=>value===null||typeof value!=='object'?JSON.stringify(value):Array.isArray(value)?`[${value.map(stable).join(',')}]`:`{${Object.keys(value).sort().map(k=>`${JSON.stringify(k)}:${stable(value[k])}`).join(',')}}`;const sha=(value:any)=>createHash('sha256').update(stable(value)).digest('hex');const run=promisify(execFile);
 const postgresEnabled=process.env.JULIUS_REAL_INFRA==='1'||process.env.JULIUS_REAL_POSTGRES==='1',dockerEnabled=process.env.JULIUS_REAL_INFRA==='1'&&Boolean(process.env.JULIUS_SANDBOX_IMAGE),suite=postgresEnabled||dockerEnabled?describe:describe.todo,postgresTest=postgresEnabled?it:it.todo,dockerTest=dockerEnabled?it:it.todo;let pool:Pool;
 suite('Julius real PostgreSQL and Docker infrastructure',()=>{beforeAll(async()=>{if(!postgresEnabled)return;pool=new Pool({connectionString:process.env.DATABASE_URL});await new TransactionalWonderlandDatabase(pool).migrate();await pool.query(`INSERT INTO relay_wonderland.players(player_id)VALUES('tenant');INSERT INTO relay_wonderland.projects(project_id)VALUES('project');INSERT INTO relay_wonderland.project_members(project_id,player_id,role)VALUES('project','tenant','OWNER');INSERT INTO relay_wonderland.agents(agent_id,owner_id)VALUES('agent','tenant');INSERT INTO relay_wonderland.card_versions(card_version_id,agent_id,owner_id,version,snapshot)VALUES('card-v','agent','tenant',1,'{}');INSERT INTO relay_wonderland.mission_contracts(mission_id,project_id,stage,canonical_hash,snapshot)VALUES('mission','project','READY','hash','{}');INSERT INTO relay_wonderland.execution_sessions(execution_id,mission_id,project_id,player_id,agent_id,card_version_id,state,workspace_isolation_ref,snapshot,checkpoint)VALUES('execution','mission','project','tenant','agent','card-v','RUNNING','sandbox','{}','{}');INSERT INTO relay_wonderland.julius_runs(run_id,mission_id,project_id,state,runtime_version,card_revision,mission_contract_revision,project_brain_revision)VALUES('run','mission','project','EXECUTING','1','card',1,0);INSERT INTO relay_wonderland.julius_tasks(task_id,run_id,role,task_type,state,ordinal,worker_id,lease_owner,lease_generation,lease_expires_at)VALUES('task','run','CODING_AGENT','code','ACTIVE',1,'worker','scheduler',3,now()+interval '10 minutes');INSERT INTO relay_wonderland.julius_tasks(task_id,run_id,role,task_type,state,ordinal,next_attempt_at)VALUES('claim-task','run','CODING_AGENT','code','RUNNABLE',2,now());INSERT INTO relay_wonderland.budget_reservations(reservation_id,execution_id,worker_id,operation_key,idempotency_key,state,tool_calls,runtime_ms,expires_at)VALUES('budget','execution','worker','tool','tool-inv','RESERVED',1,10000,now()+interval '10 minutes')`);});afterAll(async()=>pool?.end());
@@ -195,5 +195,40 @@ suite('Julius real PostgreSQL and Docker infrastructure',()=>{beforeAll(async()=
   const stale=await Promise.all(rows.slice(0,5).map(row=>lock(row,'evaluator-late')));
   expect(stale.every(result=>!result.locked&&result.reasonCode==='newer_revision_is_locked')).toBe(true);
   expect(await lockedCount()).toBe(1);
+ },30000);
+ /**
+  * THE PROJECT BRAIN, READ BACK INTO A WORKER'S PACKET — ON THE REAL DATABASE.
+  *
+  * The write path above proved the counter and the CHECK. What a worker
+  * actually receives is the other half: the production READER maps the stored
+  * kinds back (ACCEPTANCE_UPDATE → REQUIREMENT, and anything it cannot classify
+  * → ARTIFACT), scopes task-bound entries to their task, and the context
+  * compiler hashes the Brain revision into the packet, so a packet compiled
+  * against a stale Brain is a different document. None of that is provable in
+  * memory, where the "store" is the same Map the compiler reads.
+  */
+ postgresTest('reads the Brain a run wrote back into the next worker\'s compiled context, kinds and scope intact',async()=>{
+  const reader=new JuliusReadPostgresRepository(pool);
+  const entries=await reader.brainEntriesForRun('run','project');
+  /* Five entries, with the stored kinds mapped back — the three that went through the mapping come back as what the compiler can classify, never dropped. Compared as a SET: the earlier case appended them concurrently, so which of two concurrent appends took the lower revision is not a fact this test may assert. */
+  const byId=<T extends{entryId:string}>(list:readonly T[]):T[]=>[...list].sort((a,b)=>a.entryId.localeCompare(b.entryId));
+  expect(byId(entries).map(entry=>[entry.entryId,entry.kind,entry.taskIds])).toEqual([
+   ['brain-a','DECISION',['task']],['brain-b','FINDING',['task']],['brain-evidence','ARTIFACT',['task']],
+   ['brain-objective','CONSTRAINT',[]],['brain-requirement','REQUIREMENT',['task']],
+  ]);
+  const revision=Number((await pool.query(`SELECT project_brain_revision AS r FROM relay_wonderland.julius_runs WHERE run_id='run'`)).rows[0].r);
+  expect(revision,'five appends, five revisions').toBe(5);
+  const worker:JuliusWorker={workerId:'worker',role:'CODING_AGENT',adapterId:'adapter',providerId:'provider',capabilities:['implement'],taskTypes:['code'],concurrencyLimit:1,timeoutMs:1000,maxRetries:0,status:'AVAILABLE'};
+  const task:JuliusTask={taskId:'task',missionId:'mission',parentTaskId:null,dependencyIds:[],requiredEvidenceTypes:[],taskType:'code',role:'CODING_AGENT',ordinal:1,state:'ACTIVE'};
+  const compile=(forTask:JuliusTask,projectBrainRevision:number)=>createJuliusContextSnapshot({contextId:`ctx:${forTask.taskId}:${projectBrainRevision}`,runId:'run',task:forTask,worker,entries,maxCharacters:4000,missionContractRevision:1,cardRevision:'card',projectBrainRevision,dependencyTaskIds:[],evidenceIds:[],findingIds:[],acceptanceCriterionIds:[]});
+  /* THE TASK THE ENTRIES WERE WRITTEN FOR sees all five; another task in the run sees only the run-level knowledge. Scope is decided by the row, not by the caller. */
+  const own=compile(task,revision);
+  expect([...own.sourceEntryIds].sort()).toEqual(['brain-a','brain-b','brain-evidence','brain-objective','brain-requirement']);
+  expect(own.projectBrainRevision).toBe(5);
+  const other=compile({...task,taskId:'claim-task'},revision);
+  expect(other.sourceEntryIds).toEqual(['brain-objective']);
+  /* THE HASH COVERS THE BRAIN REVISION: the same entries under a stale revision are a different packet, so an honest retry deduplicates and a stale one does not. */
+  expect(compile(task,revision-1).contentHash).not.toBe(own.contentHash);
+  expect(compile(task,revision).contentHash).toBe(own.contentHash);
  },30000);
 });
