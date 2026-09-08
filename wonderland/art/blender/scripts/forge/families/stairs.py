@@ -212,7 +212,8 @@ def stair_half_turn(f):
          K.Socket("top_route", rise, W * 0.5, "route",
                   "arrives at 6.20 m (T3) heading BACK along -X, offset +Y"),
          K.Socket("wall_join", 0.0, 0.22, "pier",
-                  "the spine wall at y = +1.58 m takes a retaining wall")],
+                  "the spine wall's outer face, at y = +%.2f m, takes a "
+                  "retaining wall" % (W * 0.5 + GAP * 0.5 + 0.22))],
         districts=("castle", "city", "royal_garden", "plaza"),
         note="10 + half-landing + 10 folded 180 degrees: T3 in 3.9 m of plan "
              "instead of 7.2 m",

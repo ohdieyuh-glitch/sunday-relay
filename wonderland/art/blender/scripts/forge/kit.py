@@ -153,6 +153,36 @@ def risers_for(z_m):
     return int(round(n)) if abs(n - round(n)) < 0.02 else None
 
 
+#: The socket names each kind may use. A hand-maintained allowlist, in the
+#: style of the CLI allowlists elsewhere in this repository, and for the same
+#: reason: adding a name is a one-line reviewed change, while a typo is a
+#: socket a generator will look for and never find.
+#:
+#: The kinds are not decoration. `tower` and `crown` are the STACK, and their
+#: names are fixed at two: a stack is spelled by asking a module for `top` and
+#: the next for `bottom`, so a module that called its join `top_socket` would be
+#: invisible to `compatible()` and to every spelling in the manifest -- which is
+#: exactly the class of mistake nothing else here would catch.
+SOCKET_NAMES = {
+    "ground": ("bottom",),
+    "tower": ("bottom", "top"),
+    "crown": ("top", "lantern"),
+    "pier": ("end_a", "end_b", "passage", "portal", "wall_join"),
+    "bridge_end": ("back", "back_a", "back_b", "deck", "eaves", "end_a",
+                   "end_b", "gallery", "walk"),
+    "route": ("bottom_route", "deck_route", "floor_route", "foot_route",
+              "head_route", "landing", "passage", "shelter", "top_route",
+              "walk", "walk_l", "walk_r"),
+    "edge": ("balustrade", "board", "counter", "edge", "edge_l", "edge_r",
+             "shopfront", "terrace_edge", "water_surface"),
+}
+
+#: Socket names that come in pairs: publishing one without the other is a
+#: module that can only be joined from one side, which for a run is a bug.
+SOCKET_PAIRS = (("end_a", "end_b"), ("back_a", "back_b"),
+                ("walk_l", "walk_r"), ("edge_l", "edge_r"))
+
+
 class Socket(object):
     """One place another module may be joined.
 

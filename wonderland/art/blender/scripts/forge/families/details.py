@@ -103,7 +103,11 @@ def detail_newel_urn(f):
         "WL_Detail_Newel_Urn", "balustrade", "prop", "detail",
         f.emit("WL_Detail_Newel_Urn"),
         [K.Socket("bottom", 0.0, 0.53, "ground"),
-         K.Socket("end_a", 0.0, 0.40, "pier", "a balustrade run butts on any face")],
+         # `wall_join`, not `end_a`: a newel is a POINT a run butts against on
+         # whichever face suits, not one end of a run with another end
+         # somewhere else.
+         K.Socket("wall_join", 0.0, 0.40, "pier",
+                  "a balustrade run butts on any face")],
         districts=("royal_garden", "plaza", "tea_terrace", "water_garden"),
         note="panelled newel with a two-handled gold urn; the punctuation on a balustrade",
         params={"urn": "gold, two handles"}, tri_budget=4000, collision=True)

@@ -172,30 +172,103 @@ generator can put it on the skyline.
   a solved ceiling) and it is a different problem — silhouette at a distance
   where these modules' detail is invisible.
 
-## Next five, in the order I would do them
+## GAP 11 — the ground was flat inside every quarter
 
-The first two on this list at the end of the first pass — the curtain wall and
-the roofscape — were built, and are GAP 8 and GAP 9 above. What follows is what
-is left.
+The reference's garden is on LEVELS. Ours is a plane with things standing on
+it, and the only vertical route in the kit was `WL_Wall_Stair_Flight`: one
+straight flight, against a wall, reaching the wall-walk. A quarter you cannot
+climb is a quarter with one composition in it.
 
-1. **The rest of the stair vocabulary.** `WL_Wall_Stair_Flight` proved the
-   riser (0.310 m, 20 of them, reaching 6.20 m exactly) but it is one straight
-   flight against a wall. A quarter-landing, a curved flight and a ramped
-   terrace on the same riser would let the generator build the reference's
-   layered GROUND, which is currently flat inside every quarter.
-2. **A water-garden hero.** Both heroes are dry and vertical. The
-   `water_garden` quarter has nothing singular in it, and a tiered
-   basin/cascade landmark would use `MI_V2_Water`, which this kit never
-   touches.
-3. **Damaged and overgrown variants** of four or five existing bodies. One
-   extra parameter each (a broken parapet, a missing bay, ivy anchors over more
-   of the face) would roughly double the apparent vocabulary at almost no
-   authoring cost, and break the regularity a purely modular city drifts
-   toward.
-4. **A market/awning layer for the roofscape.** The houses have a shopfront;
-   what a street actually reads as inhabited by is the stuff in front of it —
-   awnings, stalls, hanging signs, crates. Small, cheap, and the reference's
-   middle ground is full of it.
-5. **Terrace and retaining-wall modules.** The reference's garden is on
-   several levels held by low walls with balustrades on top. The kit has the
-   balustrade and the curtain wall but nothing between them at garden scale.
+`families/stairs.py` and `families/gardens.py` are the answer, and the thing
+that makes them a SYSTEM rather than sixteen models is two ladders:
+
+    riser        0.310 m, everywhere, without exception
+    route ladder T1 1.55  T2 3.10  T3 6.20 (= the wall-walk)  T4 9.30
+
+Every flight arrives on a rung. Every terrace is retained at a rung. So "get
+from here to there" is a lookup, not a measurement, and a generator can
+substitute a curved flight for a straight one without re-planning anything.
+
+The one module that breaks the riser does it on purpose and says so:
+`WL_Stair_Ceremonial` is 0.155 on 0.900, which is 9.8 degrees — the pitch a
+processional flight has and a functional one does not. Its params carry
+`off_ladder_reason`, which is what stops the validator failing it and what
+stops anybody copying it by accident.
+
+## GAP 12 — the water quarter had no water in it
+
+`MI_V2_Water` is in `materials_v2.py` and this library had never used it. The
+world's `water_garden` quarter was ground you could stand on with nothing to
+walk to.
+
+`assets_v2.fountain_grand` already exists and is good, so a second fountain
+would have been the mistake `CLAUDE.md` opens with. What the world has NO
+example of is water used ARCHITECTURALLY — a sheet of it held in a made edge,
+at a scale you walk along rather than stand at.
+
+`WL_Hero_Water_Court` is 34 m of still water in a colonnaded court, and its
+whole argument is arithmetic: a reflection doubles whatever stands at the head
+of it, so putting `WL_Hero_GreatSpire` there makes a 236 m composition and the
+second 118 m costs one flat quad. Everything else in the family serves the
+route: canal units that butt, a crossing that substitutes for one, a cascade
+that drops T2 in the same ten risers the dry stairs use, a pavilion that stands
+IN the sheet, and a pool you go DOWN to.
+
+## GAP 13 — the street was architecture with nobody in it
+
+The roofscape family gave Wonderland small buildings and one of them a ground
+floor worth looking at. What no module provided is the stuff IN FRONT of a
+building, and that layer is the whole difference between an architectural model
+and a place people live.
+
+`families/market.py` is deliberately NOT clutter. Crates and baskets at 40 cm
+do nothing for a silhouette, cost draw calls and are invisible past 30 m. Every
+module here changes the street's OUTLINE at the distance a camera actually
+stands: an awning breaks a vertical facade with a horizontal, a canopy roofs
+ground that had none, a hanging sign projects INTO the street so a row of
+facades stops being a plane, and a covered passage darkens a gap so the street
+looks like it has depth behind it.
+
+Two of the six hang off a facade and foot on nothing. That is what
+`ModuleSpec.mounts` is for, and it is the mirror of `excavates`: a module may
+float only when it names what carries it.
+
+## GAP 14 — a modular city drifts towards regularity
+
+This is the gap that is not in the reference photograph, it is in the METHOD.
+Ninety modules assembled by a generator produce a city where every wall is the
+same age, and the eye reads that as a product line before it reads it as a
+place.
+
+`forge/weathering.py` answers it with parameters rather than models. Age is
+surface erosion scaled by exposure; overgrowth stands `veg_anchor` volumes on
+ledges; damage cuts the module through with a tilted ragged plane. Nine
+variants exist because each adds a FORM the kit lacked — a broken mural tower, a
+ruined colonnade, a balustrade with its rail gone — and not one exists to make
+the asset count larger.
+
+The rule that makes them usable is that a variant's sockets are a subset of its
+base's at the same places: age and overgrowth may not move a join at all, and
+damage may only drop a join it destroyed and has to say which. A weathered
+module is therefore a drop-in substitution anywhere its base fits.
+
+## Next, in the order I would do them
+
+Session 1's list is done: the stair vocabulary is GAP 11, the water hero GAP 12,
+the market layer GAP 13, the variants GAP 14, and the terrace walls are part of
+GAP 11. What is left:
+
+1. **Interiors of the thresholds.** Every gate here is a solid you walk past.
+   None has a passage you walk THROUGH with a ceiling over you, and a gate is
+   the one module a player is guaranteed to be inside.
+2. **A LOD story.** Everything is authored at one density and that density
+   suits a camera at 30 m. `report_performance.py` names the modules spending
+   triangles a distant camera cannot resolve; a coarser spelling of the crowns
+   would matter most, because a skyline is mostly crowns.
+3. **Ground at the 1 m scale** — paving, kerbs, single steps. Stairs and
+   gardens connect LEVELS; what joins two modules on the SAME level is still a
+   terrain material, and the reference's plaza is not a texture.
+4. **A second roof language.** Everything is rose or lilac tile. The reference
+   has lead, copper and thatch in its middle distance and the palette has room.
+5. **Night.** `glass` and `water_lit` are emissive in V2 and no module has been
+   composed for the dark.

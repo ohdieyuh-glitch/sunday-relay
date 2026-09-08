@@ -180,8 +180,13 @@ def market_canopy(f):
         "WL_Market_Canopy", "market", "structure", "detail",
         f.emit("WL_Market_Canopy"),
         [K.Socket("bottom", 0.0, W * 0.5, "ground"),
-         K.Socket("shelter", HEAD, W * 0.5, "route",
-                  "2.10 m clear under the beams; the ground stays walkable"),
+         # `passage` AT THE GROUND, not `shelter` at head height. A `route`
+         # socket says "you can walk here"; 2.10 m was the CLEARANCE, and
+         # publishing it as a route made the canopy claim a walkable level two
+         # metres up that no flight in the kit could reach.
+         K.Socket("passage", 0.0, W * 0.5, "route",
+                  "the ground under the canopy stays walkable; %.2f m clear "
+                  "to the beams" % HEAD),
          K.Socket("counter", 1.02, W * 0.5, "edge", "the stall counter at 1.02 m")],
         districts=("hamlet", "plaza", "city", "tea_terrace"),
         note="5.20 x 4.00 m open four-post canopy with a striped hipped roof "
@@ -199,17 +204,27 @@ def market_arcade_insert(f):
     walk -- the reference's middle distance has exactly this, and it is why
     its buildings read as a terrace rather than as separate objects.
 
-    Its roof deck is walkable at 3.35 m, so a first-floor balcony opens onto it.
+    ITS ELEVATIONS ARE ON THE RISER, and they were not. The walk was 0.30 m --
+    0.97 of this kit's riser -- and the deck 3.37, which is 9.9 risers above
+    it, so a flight to either arrived one to three centimetres short. Both are
+    now whole risers off the ground datum, which is what a `route` socket
+    promises.
+
+    ITS BACK IS AT y = 0, and it was not that either: the plinth was centred on
+    D/2 with an extra 0.30 of width, so 0.175 m of it stood BEHIND the mounting
+    plane and inside the house it clips to.
     """
     p = f.part("stone")
     d = f.part("stone_dark")
     W, D = BAY_X, 3.30
     BAYS = 3
-    p.box(W + 0.40, D + 0.30, 0.30, at=(0.0, D * 0.5, 0.0), chamfer=0.06,
-          centre_z=False)
+    WALK = K.RISER_M                                  # one riser, not 0.30
+    DECK = WALK + K.RISER_M * 10.0                    # eleven risers off grade
+    p.box(W + 0.40, D + 0.30, WALK, at=(0.0, (D + 0.30) * 0.5, 0.0),
+          chamfer=0.06, centre_z=False)
     for i in range(BAYS + 1):
         x = -W * 0.5 + W * i / BAYS
-        E.column(p, (x, D - 0.60, 0.30), 2.35, 0.24, flutes=8)
+        E.column(p, (x, D - 0.60, WALK), 2.35, 0.24, flutes=8)
     for i in range(BAYS):
         x = -W * 0.5 + W * (i + 0.5) / BAYS
         span = W / BAYS - 0.52
@@ -228,34 +243,37 @@ def market_arcade_insert(f):
         E.arched_wall(p, span, span * 0.42, 0.48, W / (BAYS * 2.0) + 0.06, 1.00,
                       kind="ogee", steps=11, thickness=0.24,
                       at=(x, D - 0.60, 2.65))
-    p.box(W + 0.30, D + 0.20, 0.24, at=(0.0, D * 0.5 - 0.10, 3.37 - 0.24),
+    p.box(W + 0.30, D + 0.20, 0.24, at=(0.0, (D + 0.20) * 0.5, DECK - 0.24),
           chamfer=0.05, centre_z=False)
-    E.wear_course(d, 3.37, w=W - 0.30, d=D - 0.70, thickness=0.05,
+    E.wear_course(d, DECK, w=W - 0.30, d=D - 0.70, thickness=0.05,
                   at=(0.0, D * 0.5 - 0.20))
     for i in range(9):
         x = -W * 0.5 + W * i / 8.0
         p.lathe([(0.0, 0.0), (0.075, 0.0), (0.062, 0.20), (0.105, 0.42),
                  (0.058, 0.74), (0.070, 0.94), (0.0, 1.04)], segments=8,
-                smooth=True, matrix=M.xform((x, D - 0.30, 3.37)))
-    p.box(W + 0.20, 0.30, 0.14, at=(0.0, D - 0.30, 4.41), chamfer=0.03,
+                smooth=True, matrix=M.xform((x, D - 0.30, DECK)))
+    p.box(W + 0.20, 0.30, 0.14, at=(0.0, D - 0.30, DECK + 1.04), chamfer=0.03,
           centre_z=False)
-    E.wear_course(d, 0.30, w=W - 0.20, d=D - 1.10, thickness=0.05,
+    E.wear_course(d, WALK, w=W - 0.20, d=D - 1.10, thickness=0.05,
                   at=(0.0, D * 0.5 - 0.30))
     return K.ModuleSpec(
         "WL_Market_Arcade_Insert", "market", "structure", "screen",
         f.emit("WL_Market_Arcade_Insert"),
         [K.Socket("back", 0.0, W * 0.5, "bridge_end",
                   "flat back at y = 0; clips to a roofscape house's +Y face"),
-         K.Socket("walk", 0.30, W * 0.5, "route", "covered walk at 0.30 m, 2.65 m clear"),
-         K.Socket("deck_route", 3.37, W * 0.5, "route",
-                  "the roof is a walkable balcony deck at 3.37 m"),
+         K.Socket("walk", WALK, W * 0.5, "route",
+                  "covered walk at %.3f m (one riser), 2.65 m clear" % WALK),
+         K.Socket("deck_route", DECK, W * 0.5, "route",
+                  "the roof is a walkable balcony deck at %.2f m "
+                  "(eleven risers)" % DECK),
          K.Socket("end_a", 0.0, D * 0.5, "pier", "butts to the next insert at x = -3.20 m"),
          K.Socket("end_b", 0.0, D * 0.5, "pier", "butts to the next insert at x = +3.20 m")],
         districts=("hamlet", "city", "plaza", "tea_terrace"),
         note="three ogee bays of covered walk over one house bay, with a "
-             "balustraded roof deck at 3.37 m; butts into a continuous arcade",
+             "balustraded roof deck; butts into a continuous arcade",
         params={"width_m": W, "depth_m": D, "bays": BAYS,
-                "deck_z_m": 3.37, "spans": "exactly one roofscape bay"},
+                "walk_z_m": round(WALK, 3), "deck_z_m": round(DECK, 3),
+                "spans": "exactly one roofscape bay"},
         tri_budget=22000, collision=True)
 
 
@@ -334,9 +352,13 @@ def market_covered_passage(f):
     W, LEN = 3.20, 7.00
     SPRING, RISE = 2.80, 1.30
     CROWN = SPRING + RISE
-    DECK = CROWN + 0.42
+    # THE DECK LANDS ON A RISER. At CROWN + 0.42 it sat at 4.52 m, which is
+    # 14.6 risers off the datum; the slab is thickened instead so the roof is a
+    # level a flight of this kit's own stairs can arrive at.
+    DECK = K.RISER_M * 15.0
+    SLAB = DECK - CROWN
     for sgn in (-1.0, 1.0):
-        p.box(0.90, LEN, DECK - 0.32, at=(sgn * (W * 0.5 + 0.45), 0.0, 0.0),
+        p.box(0.90, LEN, DECK - SLAB, at=(sgn * (W * 0.5 + 0.45), 0.0, 0.0),
               chamfer=0.08, centre_z=False)
     # the vault itself (in the darker part, so the passage reads as shade),
     # then the ribs standing proud of it
@@ -348,7 +370,7 @@ def market_covered_passage(f):
         E.arch_band(p, W - 0.16, RISE - 0.07, 0.52, 0.42, at=(0.0, y, SPRING),
                     kind="pointed", steps=13, keystone=(i in (0, NB)))
     # the deck over it, and a cornice under the deck
-    p.box(W + 1.80, LEN + 0.24, 0.32, at=(0.0, 0.0, DECK - 0.32), chamfer=0.05,
+    p.box(W + 1.80, LEN + 0.24, SLAB, at=(0.0, 0.0, DECK - SLAB), chamfer=0.05,
           centre_z=False)
     for i in range(3):
         y = -LEN * 0.32 + LEN * 0.32 * i

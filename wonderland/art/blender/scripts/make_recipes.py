@@ -42,6 +42,7 @@ import io
 import json
 import math
 import os
+import re
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -99,16 +100,41 @@ class Kit(object):
         sz = self.size(aid)
         return 0.5 * math.hypot(sz[0], sz[1])
 
+    def butt_planes(self, aid):
+        """The x/y planes a module declares it JOINS on, from its own notes.
+
+        A run's mesh reaches past its butt plane on purpose -- a balustrade's
+        end blocks, a house's eaves, a coping's overhang -- so its bbox says it
+        collides with the next run when the two are laid exactly as designed.
+        The joint is where the socket says it is, so that is what a footprint
+        is trimmed to.
+        """
+        out = {}
+        for sk in self.a(aid).get("sockets") or []:
+            if sk.get("kind") not in ("pier", "bridge_end"):
+                continue
+            m = re.search(r"\b([xy]) = ([+-]?[0-9.]+)", sk.get("note") or "")
+            if m:
+                out.setdefault(m.group(1), []).append(float(m.group(2)) * 100.0)
+        return {k: (min(v), max(v)) for k, v in out.items() if len(v) >= 2}
+
     def plan_box(self, aid, at, yaw):
         """The module's ground footprint, placed and yawed. Right angles only.
 
         Uses `bbox_min_uu`/`bbox_max_uu` rather than `size_uu`, because those
-        are the only numbers that know where a module's ORIGIN sits inside it.
+        are the only numbers that know where a module's ORIGIN sits inside it,
+        then trims to the declared butt planes so laid-as-designed runs do not
+        read as clashes.
         """
         if abs(yaw % 90.0) > 1e-6:
             return None
         a = self.a(aid)
-        lo, hi = a["bbox_min_uu"], a["bbox_max_uu"]
+        lo, hi = list(a["bbox_min_uu"]), list(a["bbox_max_uu"])
+        butts = self.butt_planes(aid)
+        for axis, i in (("x", 0), ("y", 1)):
+            if axis in butts:
+                b0, b1 = butts[axis]
+                lo[i], hi[i] = max(lo[i], b0), min(hi[i], b1)
         corners = [(lo[0], lo[1]), (hi[0], lo[1]), (hi[0], hi[1]), (lo[0], hi[1])]
         k = int(round(yaw / 90.0)) % 4
         out = []
@@ -190,18 +216,33 @@ def spellings(kit, want=6, max_bodies=2):
             for e in ends:
                 if kit.rung(bot(e)["radius_uu"]) == r:
                     found.append(chain + [e])
-    # tallest first, and no two spellings sharing the same crown, so a cluster
-    # reads as several kinds of tower rather than one repeated
+    # TALLEST FIRST, AND NO TWO SPELLINGS SHARING A CROWN **OR** A FOOT. The
+    # first version deduped on the crown alone, and every stack in the cluster
+    # came up on `WL_Tower_Base_Arcaded` -- the tallest foot wins every sort, so
+    # seven different towers stood on seven identical undercrofts. Varying both
+    # ends is what makes a stand of towers read as a city rather than as a
+    # product line.
     found.sort(key=lambda c: -sum(kit.height(m["asset_id"]) for m in c))
-    out, used_top = [], set()
+    out, used_top, used_foot = [], set(), set()
     for c in found:
-        key = c[-1]["asset_id"]
-        if key in used_top:
+        top_id, foot_id = c[-1]["asset_id"], c[0]["asset_id"]
+        if top_id in used_top or foot_id in used_foot:
             continue
-        used_top.add(key)
+        used_top.add(top_id)
+        used_foot.add(foot_id)
         out.append(c)
         if len(out) >= want:
             break
+    # feet run out before crowns do, so once every foot is used, fall back to
+    # varying the crown alone rather than returning three towers
+    for c in found:
+        if len(out) >= want:
+            break
+        top_id = c[-1]["asset_id"]
+        if top_id in used_top:
+            continue
+        used_top.add(top_id)
+        out.append(c)
     return out
 
 
@@ -408,7 +449,9 @@ def recipe_market_street(kit):
         return {"name": "market_street", "unbuildable": [house], "placements": []}
     bay = kit.size(house)[0]
     depth = kit.size(house)[1]
-    street = depth + 1200.0                     # 12 m of street between fronts
+    # 16 m between fronts, not 12: at 12 the arcade insert's 3.60 m projection
+    # and the canopies down the middle met with 6 cm to spare.
+    street = depth + 1600.0
     items = []
     for side in (-1.0, 1.0):
         y = side * street * 0.5
@@ -467,6 +510,173 @@ def recipe_market_street(kit):
                  "is continuous; the street is one house depth plus 12 m; "
                  "mounted modules are placed ON the facade plane, which is the "
                  "measured half-depth from a house's centre"),
+        "placements": items,
+    }
+
+
+def recipe_wall_circuit(kit):
+    """A CLOSED rectangular circuit: runs, four corners, a postern, a tower.
+
+    The one composition whose correctness is arithmetic rather than taste. A
+    circuit closes or it does not, and it closes only if each side is exactly
+    two corner arms plus a whole number of run lengths -- which is the check at
+    the bottom of this function, done on the numbers the manifest measured
+    rather than on the ones the modules were authored with.
+    """
+    need = ["WL_Wall_Curtain_Run", "WL_Wall_Corner_Bastion"]
+    missing = [n for n in need if not kit.has(n)]
+    if missing:
+        return {"name": "wall_circuit", "unbuildable": missing, "placements": []}
+    run, corner = "WL_Wall_Curtain_Run", "WL_Wall_Corner_Bastion"
+    L = kit.size(run)[0]
+    arm = _arm_of(kit, corner)
+    nx, ny = 3, 2
+    A = (2.0 * arm + nx * L) * 0.5              # half the circuit in X
+    B = (2.0 * arm + ny * L) * 0.5
+    items = []
+    for (sx, sy, yaw) in ((-1, -1, 0.0), (1, -1, 90.0), (1, 1, 180.0), (-1, 1, 270.0)):
+        items.append(place(corner, (sx * A, sy * B, 0.0), yaw,
+                           "corner bastion, arms turning the circuit",
+                           "wall_circuit"))
+    for side in (-1.0, 1.0):
+        for i in range(nx):
+            x = -A + arm + L * (i + 0.5)
+            mod = run
+            why = "curtain run %d on the %s side" % (i + 1,
+                                                     "-Y" if side < 0 else "+Y")
+            if side < 0 and i == nx // 2 and kit.has("WL_Wall_Postern_Gate"):
+                mod = "WL_Wall_Postern_Gate"
+                why = ("the postern, substituted for a run: identical length, "
+                       "ends and walk height")
+            items.append(place(mod, (x, side * B, 0.0), 0.0, why, "wall_circuit"))
+        for j in range(ny):
+            y = -B + arm + L * (j + 0.5)
+            items.append(place(run, (side * A, y, 0.0), 90.0,
+                               "curtain run %d on the %s side"
+                               % (j + 1, "-X" if side < 0 else "+X"),
+                               "wall_circuit"))
+    if kit.has("WL_Wall_Mural_Tower"):
+        # YAW 0 ON THE +Y WALL, so the D projects OUTWARD. At 180 its drum
+        # pointed into the enclosure and the render showed the inside of it.
+        items.append(place("WL_Wall_Mural_Tower", (-A + arm + L * 0.5, B, 0.0),
+                           0.0, "a mural tower ON the wall line, its D "
+                                "projecting outward", "wall_circuit",
+                           abuts=(run,)))
+    perimeter = 2.0 * (2.0 * A + 2.0 * B)
+    notes = ["side X = 2 arms (%.2f m) + %d runs (%.2f m) = %.2f m"
+             % (arm * 2.0 / 100.0, nx, L / 100.0, 2.0 * A / 100.0),
+             "side Y = 2 arms + %d runs = %.2f m" % (ny, 2.0 * B / 100.0),
+             "perimeter %.2f m, and it closes exactly" % (perimeter / 100.0)]
+    return {
+        "name": "wall_circuit",
+        "for": "a city that is walled rather than fenced: a closed circuit "
+               "with a gate in it and a tower on it",
+        "rule": ("each side is two corner arms plus a whole number of measured "
+                 "run lengths, so the circuit closes by construction; the "
+                 "postern substitutes for a run because it IS a run's length"),
+        "notes": notes,
+        "closure": {"arm_uu": arm, "run_uu": L, "runs_x": nx, "runs_y": ny,
+                    "side_x_uu": 2.0 * A, "side_y_uu": 2.0 * B,
+                    "perimeter_uu": perimeter},
+        "placements": items,
+    }
+
+
+def _centred(kit, aid, x, y, yaw, z=0.0):
+    """The origin that puts a module's FOOTPRINT centre at (x, y).
+
+    Half this kit is not centred on its own origin -- a stair starts at its
+    bottom tread, a storefront at a corner -- so "place it in the middle of the
+    slot" is arithmetic on the bounding box, not `at=(x, y)`.
+    """
+    box = kit.plan_box(aid, (0.0, 0.0, 0.0), yaw)
+    if box is None:
+        return (x, y, z)
+    cx = (box[0] + box[2]) * 0.5
+    cy = (box[1] + box[3]) * 0.5
+    return (x - cx, y - cy, z)
+
+
+def _arm_of(kit, corner):
+    """How far a corner bastion's arm reaches, read from its own socket note."""
+    sk = kit.socket(corner, "end_a")
+    m = re.search(r"x = ([+-]?[0-9.]+)", (sk.get("note") or "") if sk else "")
+    return float(m.group(1)) * 100.0 if m else kit.size(corner)[0]
+
+
+def recipe_terrace_flight(kit):
+    """Lower garden -> stair -> mid terrace -> retaining wall -> upper court.
+
+    The route the gardens and stairs families were built to make, laid out end
+    to end so the elevations can be checked against each other rather than
+    each module being right on its own.
+    """
+    need = ["WL_Garden_Retaining_Run", "WL_Stair_Straight_T2",
+            "WL_Garden_Pavilion_Base"]
+    missing = [n for n in need if not kit.has(n)]
+    if missing:
+        return {"name": "terrace_flight", "unbuildable": missing,
+                "placements": []}
+    run, stair = "WL_Garden_Retaining_Run", "WL_Stair_Straight_T2"
+    L = kit.size(run)[0]
+    T2 = kit.socket(run, "top_route")["z_uu"]
+    items, notes = [], []
+    # the terrace edge: seven runs along X, with a stair and an overlook cut in
+    slots = list(range(-3, 4))
+    for i in slots:
+        x = i * L
+        if i == 0:
+            items.append(place(stair, _centred(kit, stair, x, 0.0, 180.0, 0.0),
+                               180.0, "the flight cut into the edge, arriving "
+                                      "at the terrace's own T2", "terrace_flight",
+                               abuts=(run,)))
+            continue
+        if i == 2 and kit.has("WL_Garden_Overlook"):
+            # AT YAW 90, because its two ends are its -Y and +Y ends: laid
+            # unturned it presented 4.73 m to an 8.00 m slot.
+            items.append(place("WL_Garden_Overlook",
+                               _centred(kit, "WL_Garden_Overlook", x, 0.0, 90.0,
+                                        0.0),
+                               90.0, "the overlook, turned into the edge in "
+                                     "place of one run", "terrace_flight"))
+            continue
+        items.append(place(run, (x, 0.0, 0.0), 0.0,
+                           "retaining run %+d" % i, "terrace_flight"))
+    # the balustrade along the coping, one run per retaining run
+    if kit.has("WL_Detail_Balustrade_Run"):
+        bal = "WL_Detail_Balustrade_Run"
+        for i in slots:
+            if i in (0, 2):
+                continue
+            items.append(place(bal, (i * L, kit.size(run)[1] * 0.5, T2), 0.0,
+                               "balustrade on the coping at T2",
+                               "terrace_flight", abuts=(run,)))
+    # the upper court, standing ON the terrace
+    pav = "WL_Garden_Pavilion_Base"
+    items.append(place(pav, (0.0, kit.size(pav)[1] * 0.5 + 600.0, T2), 0.0,
+                       "the upper court, on the retained terrace at T2",
+                       "terrace_flight"))
+    if kit.has("WL_Garden_Planter_Wall"):
+        for sx in (-1.0, 1.0):
+            items.append(place("WL_Garden_Planter_Wall",
+                               (sx * 1400.0, kit.size(pav)[1] + 900.0, T2), 0.0,
+                               "a raised bed on the upper terrace",
+                               "terrace_flight"))
+    notes.append("the terrace is at %.2f m and the flight's top_route is at "
+                 "%.2f m: the same number, which is the point"
+                 % (T2 / 100.0, kit.socket(stair, "top_route")["z_uu"] / 100.0))
+    return {
+        "name": "terrace_flight",
+        "for": "lower garden, stair, mid terrace, retaining wall, upper court "
+               "-- the walkable route the garden family exists to make",
+        "not_included": ("the terrace FILL. These modules make an edge and a "
+                         "way up; the ground behind the edge is the world "
+                         "session's terrain, and this kit does not model it"),
+        "rule": ("the edge is laid at the retaining run's measured length; the "
+                 "flight and the overlook substitute for runs because both are "
+                 "that length; everything on the terrace is placed at the "
+                 "run's own measured top_route, not at a typed elevation"),
+        "notes": notes,
         "placements": items,
     }
 
@@ -552,7 +762,8 @@ def check(kit, recipe):
 def build(manifest):
     kit = Kit(manifest)
     recipes = []
-    for fn in (recipe_skyline, recipe_threshold, recipe_water_garden,
+    for fn in (recipe_skyline, recipe_threshold, recipe_wall_circuit,
+               recipe_terrace_flight, recipe_water_garden,
                recipe_market_street):
         r = fn(kit)
         if r is None:

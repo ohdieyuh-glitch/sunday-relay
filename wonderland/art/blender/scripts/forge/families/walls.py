@@ -326,10 +326,15 @@ def wall_corner_bastion(f):
         f.emit("WL_Wall_Corner_Bastion"),
         [K.Socket("bottom", 0.0, 8.0, "ground"),
          K.Socket("walk", WALK_Z, 8.0, "bridge_end", "the walk turns the corner at 6.20 m"),
+         # THE NUMBER IS COMPUTED, NOT TYPED. It said 8.90 m and the arms end
+         # at 6.90; nothing compared a socket note against the geometry it
+         # describes until the grammar check did.
          K.Socket("end_a", 0.0, WALL_T * 0.5, "pier",
-                  "arm along +X ends at x = +8.90 m; butts to a run"),
+                  "arm along +X ends at x = +%.2f m; butts to a run"
+                  % (ARM * 0.5 + ht + ARM * 0.5)),
          K.Socket("end_b", 0.0, WALL_T * 0.5, "pier",
-                  "arm along +Y ends at y = +8.90 m; butts to a run rotated 90 deg")],
+                  "arm along +Y ends at y = +%.2f m; butts to a run rotated "
+                  "90 deg" % (ARM * 0.5 + ht + ARM * 0.5))],
         districts=("city", "castle", "plaza"),
         note="90-degree wall corner with a canted five-sided bastion in the "
              "outside angle; the walk turns with it",

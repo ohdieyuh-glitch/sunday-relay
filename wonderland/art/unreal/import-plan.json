@@ -13,7 +13,7 @@
     "assets": 93,
     "meshes": 281,
     "missing_sources": 0,
-    "nanite_requested": 93,
+    "nanite_requested": 19,
     "collision_requested": 64,
     "by_data_layer": {
       "V2_Castle": 26,
@@ -50,12 +50,20 @@
       "variant_of": null,
       "destination_path": "/Game/WonderlandV2/Kit/towers",
       "data_layer": "V2_Skyline",
-      "nanite_requested": true,
+      "nanite_requested": false,
       "collision_requested": false,
       "height_uu": 920.0,
       "excavation_uu": 0.0,
       "mounts_on": null,
-      "style": null,
+      "style": {
+        "slender_broad": 1.0,
+        "low_monumental": 0.41,
+        "open_solid": 1.0,
+        "gold_stone": 1.0,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.883,
+        "ceremonial_residential": 0.525
+      },
       "sockets": [
         {
           "name": "bottom",
@@ -112,7 +120,15 @@
       "height_uu": 1240.0,
       "excavation_uu": 0.0,
       "mounts_on": null,
-      "style": null,
+      "style": {
+        "slender_broad": 0.892,
+        "low_monumental": 0.504,
+        "open_solid": 0.993,
+        "gold_stone": 1.0,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.85,
+        "ceremonial_residential": 0.525
+      },
       "sockets": [
         {
           "name": "bottom",
@@ -164,12 +180,20 @@
       "variant_of": null,
       "destination_path": "/Game/WonderlandV2/Kit/towers",
       "data_layer": "V2_Skyline",
-      "nanite_requested": true,
+      "nanite_requested": false,
       "collision_requested": false,
       "height_uu": 1080.0,
       "excavation_uu": 0.0,
       "mounts_on": null,
-      "style": null,
+      "style": {
+        "slender_broad": 0.933,
+        "low_monumental": 0.46,
+        "open_solid": 1.0,
+        "gold_stone": 1.0,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.783,
+        "ceremonial_residential": 0.525
+      },
       "sockets": [
         {
           "name": "bottom",
@@ -221,12 +245,20 @@
       "variant_of": null,
       "destination_path": "/Game/WonderlandV2/Kit/towers",
       "data_layer": "V2_Skyline",
-      "nanite_requested": true,
+      "nanite_requested": false,
       "collision_requested": false,
       "height_uu": 760.0,
       "excavation_uu": 0.0,
       "mounts_on": null,
-      "style": null,
+      "style": {
+        "slender_broad": 1.0,
+        "low_monumental": 0.35,
+        "open_solid": 0.901,
+        "gold_stone": 1.0,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.567,
+        "ceremonial_residential": 0.525
+      },
       "sockets": [
         {
           "name": "bottom",
@@ -266,12 +298,20 @@
       "variant_of": null,
       "destination_path": "/Game/WonderlandV2/Kit/towers",
       "data_layer": "V2_Skyline",
-      "nanite_requested": true,
+      "nanite_requested": false,
       "collision_requested": false,
       "height_uu": 1460.0,
       "excavation_uu": 0.0,
       "mounts_on": null,
-      "style": null,
+      "style": {
+        "slender_broad": 0.701,
+        "low_monumental": 0.555,
+        "open_solid": 1.0,
+        "gold_stone": 1.0,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.788,
+        "ceremonial_residential": 0.55
+      },
       "sockets": [
         {
           "name": "bottom",
@@ -316,7 +356,15 @@
       "height_uu": 1320.0,
       "excavation_uu": 0.0,
       "mounts_on": null,
-      "style": null,
+      "style": {
+        "slender_broad": 0.749,
+        "low_monumental": 0.524,
+        "open_solid": 0.98,
+        "gold_stone": 0.0,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.85,
+        "ceremonial_residential": 0.55
+      },
       "sockets": [
         {
           "name": "bottom",
@@ -368,12 +416,20 @@
       "variant_of": null,
       "destination_path": "/Game/WonderlandV2/Kit/towers",
       "data_layer": "V2_Skyline",
-      "nanite_requested": true,
+      "nanite_requested": false,
       "collision_requested": false,
       "height_uu": 1640.0,
       "excavation_uu": 0.0,
       "mounts_on": null,
-      "style": null,
+      "style": {
+        "slender_broad": 0.503,
+        "low_monumental": 0.592,
+        "open_solid": 1.0,
+        "gold_stone": 1.0,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.917,
+        "ceremonial_residential": 0.55
+      },
       "sockets": [
         {
           "name": "bottom",
@@ -418,7 +474,15 @@
       "height_uu": 1280.0,
       "excavation_uu": 0.0,
       "mounts_on": null,
-      "style": null,
+      "style": {
+        "slender_broad": 0.654,
+        "low_monumental": 0.514,
+        "open_solid": 0.993,
+        "gold_stone": 0.644,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.562,
+        "ceremonial_residential": 0.55
+      },
       "sockets": [
         {
           "name": "bottom",
@@ -470,12 +534,20 @@
       "variant_of": null,
       "destination_path": "/Game/WonderlandV2/Kit/towers",
       "data_layer": "V2_Skyline",
-      "nanite_requested": true,
+      "nanite_requested": false,
       "collision_requested": false,
       "height_uu": 900.0,
       "excavation_uu": 0.0,
       "mounts_on": null,
-      "style": null,
+      "style": {
+        "slender_broad": 0.596,
+        "low_monumental": 0.403,
+        "open_solid": 0.965,
+        "gold_stone": 0.0,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.725,
+        "ceremonial_residential": 0.55
+      },
       "sockets": [
         {
           "name": "bottom",
@@ -527,12 +599,20 @@
       "variant_of": null,
       "destination_path": "/Game/WonderlandV2/Kit/towers",
       "data_layer": "V2_Skyline",
-      "nanite_requested": true,
+      "nanite_requested": false,
       "collision_requested": false,
       "height_uu": 1680.0,
       "excavation_uu": 0.0,
       "mounts_on": null,
-      "style": null,
+      "style": {
+        "slender_broad": 0.338,
+        "low_monumental": 0.599,
+        "open_solid": 1.0,
+        "gold_stone": 1.0,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.775,
+        "ceremonial_residential": 0.55
+      },
       "sockets": [
         {
           "name": "bottom",
@@ -572,12 +652,20 @@
       "variant_of": null,
       "destination_path": "/Game/WonderlandV2/Kit/towers",
       "data_layer": "V2_Skyline",
-      "nanite_requested": true,
+      "nanite_requested": false,
       "collision_requested": false,
       "height_uu": 1340.0,
       "excavation_uu": 0.0,
       "mounts_on": null,
-      "style": null,
+      "style": {
+        "slender_broad": 0.631,
+        "low_monumental": 0.528,
+        "open_solid": 1.0,
+        "gold_stone": 0.409,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.7,
+        "ceremonial_residential": 0.55
+      },
       "sockets": [
         {
           "name": "bottom",
@@ -634,7 +722,15 @@
       "height_uu": 940.0,
       "excavation_uu": 0.0,
       "mounts_on": null,
-      "style": null,
+      "style": {
+        "slender_broad": 0.913,
+        "low_monumental": 0.417,
+        "open_solid": 0.979,
+        "gold_stone": 0.982,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.883,
+        "ceremonial_residential": 0.55
+      },
       "sockets": [
         {
           "name": "bottom",
@@ -698,12 +794,20 @@
       "variant_of": null,
       "destination_path": "/Game/WonderlandV2/Kit/towers",
       "data_layer": "V2_Skyline",
-      "nanite_requested": true,
+      "nanite_requested": false,
       "collision_requested": false,
       "height_uu": 1560.0,
       "excavation_uu": 0.0,
       "mounts_on": null,
-      "style": null,
+      "style": {
+        "slender_broad": 0.374,
+        "low_monumental": 0.576,
+        "open_solid": 0.99,
+        "gold_stone": 0.9,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.85,
+        "ceremonial_residential": 0.425
+      },
       "sockets": [
         {
           "name": "bottom",
@@ -767,12 +871,20 @@
       "variant_of": null,
       "destination_path": "/Game/WonderlandV2/Kit/towers",
       "data_layer": "V2_Skyline",
-      "nanite_requested": true,
+      "nanite_requested": false,
       "collision_requested": false,
       "height_uu": 1106.1,
       "excavation_uu": 0.0,
       "mounts_on": null,
-      "style": null,
+      "style": {
+        "slender_broad": 0.494,
+        "low_monumental": 0.468,
+        "open_solid": 1.0,
+        "gold_stone": 0.0,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.75,
+        "ceremonial_residential": 0.425
+      },
       "sockets": [
         {
           "name": "bottom",
@@ -836,12 +948,20 @@
       "variant_of": null,
       "destination_path": "/Game/WonderlandV2/Kit/towers",
       "data_layer": "V2_Skyline",
-      "nanite_requested": true,
+      "nanite_requested": false,
       "collision_requested": false,
       "height_uu": 1420.0,
       "excavation_uu": 0.0,
       "mounts_on": null,
-      "style": null,
+      "style": {
+        "slender_broad": 0.616,
+        "low_monumental": 0.547,
+        "open_solid": 1.0,
+        "gold_stone": 0.245,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.675,
+        "ceremonial_residential": 0.425
+      },
       "sockets": [
         {
           "name": "bottom",
@@ -922,7 +1042,15 @@
       "height_uu": 1510.0,
       "excavation_uu": 0.0,
       "mounts_on": null,
-      "style": null,
+      "style": {
+        "slender_broad": 0.576,
+        "low_monumental": 0.566,
+        "open_solid": 0.672,
+        "gold_stone": 0.982,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.537,
+        "ceremonial_residential": 0.425
+      },
       "sockets": [
         {
           "name": "bottom",
@@ -986,12 +1114,20 @@
       "variant_of": null,
       "destination_path": "/Game/WonderlandV2/Kit/towers",
       "data_layer": "V2_Skyline",
-      "nanite_requested": true,
+      "nanite_requested": false,
       "collision_requested": false,
       "height_uu": 955.0,
       "excavation_uu": 0.0,
       "mounts_on": null,
-      "style": null,
+      "style": {
+        "slender_broad": 0.825,
+        "low_monumental": 0.422,
+        "open_solid": 1.0,
+        "gold_stone": 0.965,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.275,
+        "ceremonial_residential": 0.425
+      },
       "sockets": [
         {
           "name": "bottom",
@@ -1060,7 +1196,15 @@
       "height_uu": 1380.0,
       "excavation_uu": 0.0,
       "mounts_on": null,
-      "style": null,
+      "style": {
+        "slender_broad": 0.808,
+        "low_monumental": 0.538,
+        "open_solid": 1.0,
+        "gold_stone": 0.824,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.56,
+        "ceremonial_residential": 0.425
+      },
       "sockets": [
         {
           "name": "bottom",
@@ -1136,12 +1280,20 @@
       "variant_of": null,
       "destination_path": "/Game/WonderlandV2/Kit/towers",
       "data_layer": "V2_Skyline",
-      "nanite_requested": true,
+      "nanite_requested": false,
       "collision_requested": false,
       "height_uu": 1135.0,
       "excavation_uu": 0.0,
       "mounts_on": null,
-      "style": null,
+      "style": {
+        "slender_broad": 0.671,
+        "low_monumental": 0.476,
+        "open_solid": 1.0,
+        "gold_stone": 0.898,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.575,
+        "ceremonial_residential": 0.425
+      },
       "sockets": [
         {
           "name": "bottom",
@@ -1205,12 +1357,20 @@
       "variant_of": null,
       "destination_path": "/Game/WonderlandV2/Kit/towers",
       "data_layer": "V2_Skyline",
-      "nanite_requested": true,
+      "nanite_requested": false,
       "collision_requested": false,
       "height_uu": 2460.0,
       "excavation_uu": 0.0,
       "mounts_on": null,
-      "style": null,
+      "style": {
+        "slender_broad": 0.153,
+        "low_monumental": 0.719,
+        "open_solid": 1.0,
+        "gold_stone": 0.883,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.85,
+        "ceremonial_residential": 0.4
+      },
       "sockets": [
         {
           "name": "bottom",
@@ -1274,12 +1434,20 @@
       "variant_of": null,
       "destination_path": "/Game/WonderlandV2/Kit/towers",
       "data_layer": "V2_Skyline",
-      "nanite_requested": true,
+      "nanite_requested": false,
       "collision_requested": false,
       "height_uu": 2110.0,
       "excavation_uu": 0.0,
       "mounts_on": null,
-      "style": null,
+      "style": {
+        "slender_broad": 0.238,
+        "low_monumental": 0.671,
+        "open_solid": 1.0,
+        "gold_stone": 0.69,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.917,
+        "ceremonial_residential": 0.4
+      },
       "sockets": [
         {
           "name": "bottom",
@@ -1343,12 +1511,20 @@
       "variant_of": null,
       "destination_path": "/Game/WonderlandV2/Kit/towers",
       "data_layer": "V2_Skyline",
-      "nanite_requested": true,
+      "nanite_requested": false,
       "collision_requested": false,
       "height_uu": 2285.0,
       "excavation_uu": 0.0,
       "mounts_on": null,
-      "style": null,
+      "style": {
+        "slender_broad": 0.183,
+        "low_monumental": 0.696,
+        "open_solid": 1.0,
+        "gold_stone": 0.898,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.633,
+        "ceremonial_residential": 0.4
+      },
       "sockets": [
         {
           "name": "bottom",
@@ -1412,12 +1588,20 @@
       "variant_of": null,
       "destination_path": "/Game/WonderlandV2/Kit/towers",
       "data_layer": "V2_Skyline",
-      "nanite_requested": true,
+      "nanite_requested": false,
       "collision_requested": false,
       "height_uu": 2020.0,
       "excavation_uu": 0.0,
       "mounts_on": null,
-      "style": null,
+      "style": {
+        "slender_broad": 0.233,
+        "low_monumental": 0.657,
+        "open_solid": 1.0,
+        "gold_stone": 0.0,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.688,
+        "ceremonial_residential": 0.4
+      },
       "sockets": [
         {
           "name": "bottom",
@@ -1481,12 +1665,20 @@
       "variant_of": null,
       "destination_path": "/Game/WonderlandV2/Kit/towers",
       "data_layer": "V2_Skyline",
-      "nanite_requested": true,
+      "nanite_requested": false,
       "collision_requested": false,
       "height_uu": 1835.0,
       "excavation_uu": 0.0,
       "mounts_on": null,
-      "style": null,
+      "style": {
+        "slender_broad": 0.317,
+        "low_monumental": 0.627,
+        "open_solid": 0.996,
+        "gold_stone": 0.562,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.863,
+        "ceremonial_residential": 0.4
+      },
       "sockets": [
         {
           "name": "bottom",
@@ -1555,7 +1747,15 @@
       "height_uu": 2973.2,
       "excavation_uu": 0.0,
       "mounts_on": null,
-      "style": null,
+      "style": {
+        "slender_broad": 0.619,
+        "low_monumental": 0.779,
+        "open_solid": 1.0,
+        "gold_stone": 0.802,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.675,
+        "ceremonial_residential": 0.3
+      },
       "sockets": [
         {
           "name": "bottom",
@@ -1619,12 +1819,20 @@
       "variant_of": null,
       "destination_path": "/Game/WonderlandV2/Kit/thresholds",
       "data_layer": "V2_Castle",
-      "nanite_requested": true,
+      "nanite_requested": false,
       "collision_requested": true,
       "height_uu": 900.0,
       "excavation_uu": 0.0,
       "mounts_on": null,
-      "style": null,
+      "style": {
+        "slender_broad": 0.576,
+        "low_monumental": 0.403,
+        "open_solid": 1.0,
+        "gold_stone": 0.86,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.137,
+        "ceremonial_residential": 0.3
+      },
       "sockets": [
         {
           "name": "bottom",
@@ -1688,12 +1896,20 @@
       "variant_of": null,
       "destination_path": "/Game/WonderlandV2/Kit/thresholds",
       "data_layer": "V2_Castle",
-      "nanite_requested": true,
+      "nanite_requested": false,
       "collision_requested": true,
       "height_uu": 903.2,
       "excavation_uu": 0.0,
       "mounts_on": null,
-      "style": null,
+      "style": {
+        "slender_broad": 0.618,
+        "low_monumental": 0.404,
+        "open_solid": 0.933,
+        "gold_stone": 0.444,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.462,
+        "ceremonial_residential": 0.3
+      },
       "sockets": [
         {
           "name": "bottom",
@@ -1750,7 +1966,15 @@
       "height_uu": 2106.2,
       "excavation_uu": 0.0,
       "mounts_on": null,
-      "style": null,
+      "style": {
+        "slender_broad": 0.582,
+        "low_monumental": 0.671,
+        "open_solid": 0.913,
+        "gold_stone": 0.985,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.762,
+        "ceremonial_residential": 0.3
+      },
       "sockets": [
         {
           "name": "bottom",
@@ -1819,7 +2043,15 @@
       "height_uu": 2605.0,
       "excavation_uu": 0.0,
       "mounts_on": null,
-      "style": null,
+      "style": {
+        "slender_broad": 0.755,
+        "low_monumental": 0.737,
+        "open_solid": 0.937,
+        "gold_stone": 0.908,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.85,
+        "ceremonial_residential": 0.3
+      },
       "sockets": [
         {
           "name": "bottom",
@@ -1912,7 +2144,15 @@
       "height_uu": 1464.8,
       "excavation_uu": 0.0,
       "mounts_on": null,
-      "style": null,
+      "style": {
+        "slender_broad": 0.647,
+        "low_monumental": 0.556,
+        "open_solid": 0.736,
+        "gold_stone": 0.0,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.537,
+        "ceremonial_residential": 0.3
+      },
       "sockets": [
         {
           "name": "bottom",
@@ -1993,7 +2233,15 @@
       "height_uu": 779.0,
       "excavation_uu": 0.0,
       "mounts_on": null,
-      "style": null,
+      "style": {
+        "slender_broad": 1.0,
+        "low_monumental": 0.358,
+        "open_solid": 0.726,
+        "gold_stone": 1.0,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.587,
+        "ceremonial_residential": 0.475
+      },
       "sockets": [
         {
           "name": "bottom",
@@ -2046,7 +2294,15 @@
       "height_uu": 993.0,
       "excavation_uu": 0.0,
       "mounts_on": null,
-      "style": null,
+      "style": {
+        "slender_broad": 1.0,
+        "low_monumental": 0.434,
+        "open_solid": 0.876,
+        "gold_stone": 1.0,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.575,
+        "ceremonial_residential": 0.475
+      },
       "sockets": [
         {
           "name": "bottom",
@@ -2119,7 +2375,15 @@
       "height_uu": 738.0,
       "excavation_uu": 0.0,
       "mounts_on": null,
-      "style": null,
+      "style": {
+        "slender_broad": 1.0,
+        "low_monumental": 0.341,
+        "open_solid": 0.552,
+        "gold_stone": 1.0,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.45,
+        "ceremonial_residential": 0.475
+      },
       "sockets": [
         {
           "name": "bottom",
@@ -2135,7 +2399,15 @@
           "z_uu": 0.0,
           "radius_uu": 190.0,
           "rung": null,
-          "note": "60 degrees of a 24 m circle; six close it"
+          "note": "the -30-degree end; 60 degrees of a 24 m circle, six close it"
+        },
+        {
+          "name": "end_b",
+          "kind": "pier",
+          "z_uu": 0.0,
+          "radius_uu": 190.0,
+          "rung": null,
+          "note": "the +30-degree end; the next segment starts here"
         }
       ],
       "parts": [
@@ -2159,12 +2431,20 @@
       "variant_of": null,
       "destination_path": "/Game/WonderlandV2/Kit/civic",
       "data_layer": "V2_Castle",
-      "nanite_requested": true,
+      "nanite_requested": false,
       "collision_requested": true,
       "height_uu": 765.0,
       "excavation_uu": 0.0,
       "mounts_on": null,
-      "style": null,
+      "style": {
+        "slender_broad": 1.0,
+        "low_monumental": 0.352,
+        "open_solid": 0.8,
+        "gold_stone": 1.0,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.312,
+        "ceremonial_residential": 0.425
+      },
       "sockets": [
         {
           "name": "bottom",
@@ -2224,12 +2504,20 @@
       "variant_of": null,
       "destination_path": "/Game/WonderlandV2/Kit/civic",
       "data_layer": "V2_Castle",
-      "nanite_requested": true,
+      "nanite_requested": false,
       "collision_requested": true,
       "height_uu": 1200.83,
       "excavation_uu": 0.0,
       "mounts_on": null,
-      "style": null,
+      "style": {
+        "slender_broad": 1.0,
+        "low_monumental": 0.494,
+        "open_solid": 0.9,
+        "gold_stone": 0.835,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.862,
+        "ceremonial_residential": 0.425
+      },
       "sockets": [
         {
           "name": "end_a",
@@ -2313,12 +2601,20 @@
       "variant_of": null,
       "destination_path": "/Game/WonderlandV2/Kit/civic",
       "data_layer": "V2_Castle",
-      "nanite_requested": true,
+      "nanite_requested": false,
       "collision_requested": true,
       "height_uu": 1830.0,
       "excavation_uu": 0.0,
       "mounts_on": null,
-      "style": null,
+      "style": {
+        "slender_broad": 0.619,
+        "low_monumental": 0.626,
+        "open_solid": 0.948,
+        "gold_stone": 0.854,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.783,
+        "ceremonial_residential": 0.425
+      },
       "sockets": [
         {
           "name": "bottom",
@@ -2329,7 +2625,7 @@
           "note": "the outer pier stands at x = +12 m"
         },
         {
-          "name": "end_a",
+          "name": "back",
           "kind": "bridge_end",
           "z_uu": 0.0,
           "radius_uu": 105.0,
@@ -2370,12 +2666,20 @@
       "variant_of": null,
       "destination_path": "/Game/WonderlandV2/Kit/walls",
       "data_layer": "V2_Castle",
-      "nanite_requested": true,
+      "nanite_requested": false,
       "collision_requested": true,
       "height_uu": 807.0,
       "excavation_uu": 0.0,
       "mounts_on": null,
-      "style": null,
+      "style": {
+        "slender_broad": 0.931,
+        "low_monumental": 0.369,
+        "open_solid": 1.0,
+        "gold_stone": 1.0,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.837,
+        "ceremonial_residential": 0.475
+      },
       "sockets": [
         {
           "name": "bottom",
@@ -2443,12 +2747,20 @@
       "variant_of": null,
       "destination_path": "/Game/WonderlandV2/Kit/walls",
       "data_layer": "V2_Castle",
-      "nanite_requested": true,
+      "nanite_requested": false,
       "collision_requested": true,
       "height_uu": 1955.0,
       "excavation_uu": 0.0,
       "mounts_on": null,
-      "style": null,
+      "style": {
+        "slender_broad": 0.471,
+        "low_monumental": 0.647,
+        "open_solid": 0.986,
+        "gold_stone": 0.954,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.883,
+        "ceremonial_residential": 0.475
+      },
       "sockets": [
         {
           "name": "bottom",
@@ -2552,12 +2864,20 @@
       "variant_of": null,
       "destination_path": "/Game/WonderlandV2/Kit/walls",
       "data_layer": "V2_Castle",
-      "nanite_requested": true,
+      "nanite_requested": false,
       "collision_requested": true,
       "height_uu": 1075.8,
       "excavation_uu": 0.0,
       "mounts_on": null,
-      "style": null,
+      "style": {
+        "slender_broad": 0.815,
+        "low_monumental": 0.459,
+        "open_solid": 0.999,
+        "gold_stone": 0.987,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.838,
+        "ceremonial_residential": 0.3
+      },
       "sockets": [
         {
           "name": "bottom",
@@ -2645,12 +2965,20 @@
       "variant_of": null,
       "destination_path": "/Game/WonderlandV2/Kit/walls",
       "data_layer": "V2_Castle",
-      "nanite_requested": true,
+      "nanite_requested": false,
       "collision_requested": true,
       "height_uu": 1165.4,
       "excavation_uu": 0.0,
       "mounts_on": null,
-      "style": null,
+      "style": {
+        "slender_broad": 0.746,
+        "low_monumental": 0.484,
+        "open_solid": 0.999,
+        "gold_stone": 0.99,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.85,
+        "ceremonial_residential": 0.475
+      },
       "sockets": [
         {
           "name": "bottom",
@@ -2674,7 +3002,7 @@
           "z_uu": 0.0,
           "radius_uu": 170.0,
           "rung": null,
-          "note": "arm along +X ends at x = +8.90 m; butts to a run"
+          "note": "arm along +X ends at x = +6.90 m; butts to a run"
         },
         {
           "name": "end_b",
@@ -2682,7 +3010,7 @@
           "z_uu": 0.0,
           "radius_uu": 170.0,
           "rung": null,
-          "note": "arm along +Y ends at y = +8.90 m; butts to a run rotated 90 deg"
+          "note": "arm along +Y ends at y = +6.90 m; butts to a run rotated 90 deg"
         }
       ],
       "parts": [
@@ -2730,12 +3058,20 @@
       "variant_of": null,
       "destination_path": "/Game/WonderlandV2/Kit/walls",
       "data_layer": "V2_Castle",
-      "nanite_requested": true,
+      "nanite_requested": false,
       "collision_requested": true,
       "height_uu": 830.0,
       "excavation_uu": 0.0,
       "mounts_on": null,
-      "style": null,
+      "style": {
+        "slender_broad": 0.707,
+        "low_monumental": 0.378,
+        "open_solid": 0.999,
+        "gold_stone": 0.986,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.837,
+        "ceremonial_residential": 0.575
+      },
       "sockets": [
         {
           "name": "bottom",
@@ -2795,12 +3131,20 @@
       "variant_of": null,
       "destination_path": "/Game/WonderlandV2/Kit/roofscape",
       "data_layer": "V2_Skyline",
-      "nanite_requested": true,
+      "nanite_requested": false,
       "collision_requested": true,
       "height_uu": 1057.0,
       "excavation_uu": 0.0,
       "mounts_on": null,
-      "style": null,
+      "style": {
+        "slender_broad": 0.563,
+        "low_monumental": 0.454,
+        "open_solid": 0.999,
+        "gold_stone": 0.759,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.525,
+        "ceremonial_residential": 0.525
+      },
       "sockets": [
         {
           "name": "bottom",
@@ -2892,12 +3236,20 @@
       "variant_of": null,
       "destination_path": "/Game/WonderlandV2/Kit/roofscape",
       "data_layer": "V2_Skyline",
-      "nanite_requested": true,
+      "nanite_requested": false,
       "collision_requested": true,
       "height_uu": 1257.0,
       "excavation_uu": 0.0,
       "mounts_on": null,
-      "style": null,
+      "style": {
+        "slender_broad": 0.492,
+        "low_monumental": 0.508,
+        "open_solid": 0.999,
+        "gold_stone": 0.71,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.75,
+        "ceremonial_residential": 0.525
+      },
       "sockets": [
         {
           "name": "bottom",
@@ -2989,12 +3341,20 @@
       "variant_of": null,
       "destination_path": "/Game/WonderlandV2/Kit/roofscape",
       "data_layer": "V2_Skyline",
-      "nanite_requested": true,
+      "nanite_requested": false,
       "collision_requested": true,
       "height_uu": 1303.0,
       "excavation_uu": 0.0,
       "mounts_on": null,
-      "style": null,
+      "style": {
+        "slender_broad": 0.493,
+        "low_monumental": 0.519,
+        "open_solid": 0.994,
+        "gold_stone": 0.818,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.75,
+        "ceremonial_residential": 0.525
+      },
       "sockets": [
         {
           "name": "bottom",
@@ -3098,12 +3458,20 @@
       "variant_of": null,
       "destination_path": "/Game/WonderlandV2/Kit/roofscape",
       "data_layer": "V2_Skyline",
-      "nanite_requested": true,
+      "nanite_requested": false,
       "collision_requested": false,
       "height_uu": 258.0,
       "excavation_uu": 0.0,
       "mounts_on": null,
-      "style": null,
+      "style": {
+        "slender_broad": 0.675,
+        "low_monumental": 0.01,
+        "open_solid": 0.999,
+        "gold_stone": 0.752,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.75,
+        "ceremonial_residential": 0.7
+      },
       "sockets": [
         {
           "name": "back",
@@ -3159,12 +3527,20 @@
       "variant_of": null,
       "destination_path": "/Game/WonderlandV2/Kit/roofscape",
       "data_layer": "V2_Skyline",
-      "nanite_requested": true,
+      "nanite_requested": false,
       "collision_requested": false,
       "height_uu": 436.0,
       "excavation_uu": 0.0,
       "mounts_on": null,
-      "style": null,
+      "style": {
+        "slender_broad": 0.431,
+        "low_monumental": 0.175,
+        "open_solid": 1.0,
+        "gold_stone": 1.0,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.6,
+        "ceremonial_residential": 0.7
+      },
       "sockets": [
         {
           "name": "back",
@@ -3208,12 +3584,20 @@
       "variant_of": null,
       "destination_path": "/Game/WonderlandV2/Kit/roofscape",
       "data_layer": "V2_Skyline",
-      "nanite_requested": true,
+      "nanite_requested": false,
       "collision_requested": true,
       "height_uu": 342.0,
       "excavation_uu": 0.0,
       "mounts_on": null,
-      "style": null,
+      "style": {
+        "slender_broad": 1.0,
+        "low_monumental": 0.099,
+        "open_solid": 0.95,
+        "gold_stone": 0.186,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.7,
+        "ceremonial_residential": 0.575
+      },
       "sockets": [
         {
           "name": "back",
@@ -3281,12 +3665,20 @@
       "variant_of": null,
       "destination_path": "/Game/WonderlandV2/Kit/stairs",
       "data_layer": "V2_Garden",
-      "nanite_requested": true,
+      "nanite_requested": false,
       "collision_requested": true,
       "height_uu": 479.0,
       "excavation_uu": 0.0,
       "mounts_on": null,
-      "style": null,
+      "style": {
+        "slender_broad": 0.672,
+        "low_monumental": 0.205,
+        "open_solid": 0.956,
+        "gold_stone": 1.0,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.45,
+        "ceremonial_residential": 0.5
+      },
       "sockets": [
         {
           "name": "bottom_route",
@@ -3342,12 +3734,20 @@
       "variant_of": null,
       "destination_path": "/Game/WonderlandV2/Kit/stairs",
       "data_layer": "V2_Garden",
-      "nanite_requested": true,
+      "nanite_requested": false,
       "collision_requested": true,
       "height_uu": 895.0,
       "excavation_uu": 0.0,
       "mounts_on": null,
-      "style": null,
+      "style": {
+        "slender_broad": 0.679,
+        "low_monumental": 0.401,
+        "open_solid": 0.94,
+        "gold_stone": 0.966,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.675,
+        "ceremonial_residential": 0.5
+      },
       "sockets": [
         {
           "name": "bottom_route",
@@ -3415,12 +3815,20 @@
       "variant_of": null,
       "destination_path": "/Game/WonderlandV2/Kit/stairs",
       "data_layer": "V2_Garden",
-      "nanite_requested": true,
+      "nanite_requested": false,
       "collision_requested": true,
       "height_uu": 479.0,
       "excavation_uu": 0.0,
       "mounts_on": null,
-      "style": null,
+      "style": {
+        "slender_broad": 0.788,
+        "low_monumental": 0.205,
+        "open_solid": 0.944,
+        "gold_stone": 1.0,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.137,
+        "ceremonial_residential": 0.5
+      },
       "sockets": [
         {
           "name": "bottom_route",
@@ -3480,12 +3888,20 @@
       "variant_of": null,
       "destination_path": "/Game/WonderlandV2/Kit/stairs",
       "data_layer": "V2_Garden",
-      "nanite_requested": true,
+      "nanite_requested": false,
       "collision_requested": true,
       "height_uu": 789.0,
       "excavation_uu": 0.0,
       "mounts_on": null,
-      "style": null,
+      "style": {
+        "slender_broad": 0.655,
+        "low_monumental": 0.362,
+        "open_solid": 0.98,
+        "gold_stone": 0.986,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.675,
+        "ceremonial_residential": 0.5
+      },
       "sockets": [
         {
           "name": "bottom_route",
@@ -3517,7 +3933,7 @@
           "z_uu": 0.0,
           "radius_uu": 22.0,
           "rung": null,
-          "note": "the spine wall at y = +1.58 m takes a retaining wall"
+          "note": "the spine wall's outer face, at y = +1.80 m, takes a retaining wall"
         }
       ],
       "parts": [
@@ -3565,12 +3981,20 @@
       "variant_of": null,
       "destination_path": "/Game/WonderlandV2/Kit/stairs",
       "data_layer": "V2_Garden",
-      "nanite_requested": true,
+      "nanite_requested": false,
       "collision_requested": true,
       "height_uu": 478.0,
       "excavation_uu": 0.0,
       "mounts_on": null,
-      "style": null,
+      "style": {
+        "slender_broad": 0.901,
+        "low_monumental": 0.204,
+        "open_solid": 0.985,
+        "gold_stone": 1.0,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.312,
+        "ceremonial_residential": 0.5
+      },
       "sockets": [
         {
           "name": "bottom_route",
@@ -3626,12 +4050,20 @@
       "variant_of": null,
       "destination_path": "/Game/WonderlandV2/Kit/stairs",
       "data_layer": "V2_Garden",
-      "nanite_requested": true,
+      "nanite_requested": false,
       "collision_requested": true,
       "height_uu": 505.0,
       "excavation_uu": 0.0,
       "mounts_on": null,
-      "style": null,
+      "style": {
+        "slender_broad": 1.0,
+        "low_monumental": 0.221,
+        "open_solid": 1.0,
+        "gold_stone": 0.928,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.617,
+        "ceremonial_residential": 0.5
+      },
       "sockets": [
         {
           "name": "bottom_route",
@@ -3699,12 +4131,20 @@
       "variant_of": null,
       "destination_path": "/Game/WonderlandV2/Kit/stairs",
       "data_layer": "V2_Garden",
-      "nanite_requested": true,
+      "nanite_requested": false,
       "collision_requested": true,
       "height_uu": 189.0,
       "excavation_uu": 0.0,
       "mounts_on": null,
-      "style": null,
+      "style": {
+        "slender_broad": 0.948,
+        "low_monumental": 0.0,
+        "open_solid": 0.999,
+        "gold_stone": 1.0,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.12,
+        "ceremonial_residential": 0.5
+      },
       "sockets": [
         {
           "name": "bottom_route",
@@ -3772,12 +4212,20 @@
       "variant_of": null,
       "destination_path": "/Game/WonderlandV2/Kit/stairs",
       "data_layer": "V2_Garden",
-      "nanite_requested": true,
+      "nanite_requested": false,
       "collision_requested": true,
       "height_uu": 207.0,
       "excavation_uu": 0.0,
       "mounts_on": null,
-      "style": null,
+      "style": {
+        "slender_broad": 1.0,
+        "low_monumental": 0.0,
+        "open_solid": 1.0,
+        "gold_stone": 1.0,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.438,
+        "ceremonial_residential": 0.5
+      },
       "sockets": [
         {
           "name": "bottom_route",
@@ -3845,12 +4293,20 @@
       "variant_of": null,
       "destination_path": "/Game/WonderlandV2/Kit/gardens",
       "data_layer": "V2_Garden",
-      "nanite_requested": true,
+      "nanite_requested": false,
       "collision_requested": true,
       "height_uu": 310.0,
       "excavation_uu": 0.0,
       "mounts_on": null,
-      "style": null,
+      "style": {
+        "slender_broad": 1.0,
+        "low_monumental": 0.068,
+        "open_solid": 1.0,
+        "gold_stone": 1.0,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.25,
+        "ceremonial_residential": 0.5
+      },
       "sockets": [
         {
           "name": "bottom",
@@ -3938,12 +4394,20 @@
       "variant_of": null,
       "destination_path": "/Game/WonderlandV2/Kit/gardens",
       "data_layer": "V2_Garden",
-      "nanite_requested": true,
+      "nanite_requested": false,
       "collision_requested": true,
       "height_uu": 310.0,
       "excavation_uu": 0.0,
       "mounts_on": null,
-      "style": null,
+      "style": {
+        "slender_broad": 1.0,
+        "low_monumental": 0.068,
+        "open_solid": 1.0,
+        "gold_stone": 1.0,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.312,
+        "ceremonial_residential": 0.5
+      },
       "sockets": [
         {
           "name": "bottom",
@@ -4031,12 +4495,20 @@
       "variant_of": null,
       "destination_path": "/Game/WonderlandV2/Kit/gardens",
       "data_layer": "V2_Garden",
-      "nanite_requested": true,
+      "nanite_requested": false,
       "collision_requested": true,
       "height_uu": 428.0,
       "excavation_uu": 0.0,
       "mounts_on": null,
-      "style": null,
+      "style": {
+        "slender_broad": 0.884,
+        "low_monumental": 0.169,
+        "open_solid": 1.0,
+        "gold_stone": 0.9,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.312,
+        "ceremonial_residential": 0.5
+      },
       "sockets": [
         {
           "name": "bottom",
@@ -4076,7 +4548,7 @@
           "z_uu": 0.0,
           "radius_uu": 55.0,
           "rung": null,
-          "note": "arm along -Y ends at y = -5.55 m"
+          "note": "arm along +Y ends at y = +5.55 m"
         }
       ],
       "parts": [
@@ -4136,12 +4608,20 @@
       "variant_of": null,
       "destination_path": "/Game/WonderlandV2/Kit/gardens",
       "data_layer": "V2_Garden",
-      "nanite_requested": true,
+      "nanite_requested": false,
       "collision_requested": true,
       "height_uu": 310.0,
       "excavation_uu": 0.0,
       "mounts_on": null,
-      "style": null,
+      "style": {
+        "slender_broad": 1.0,
+        "low_monumental": 0.068,
+        "open_solid": 1.0,
+        "gold_stone": 1.0,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.317,
+        "ceremonial_residential": 0.5
+      },
       "sockets": [
         {
           "name": "bottom",
@@ -4173,7 +4653,15 @@
           "z_uu": 0.0,
           "radius_uu": 55.0,
           "rung": null,
-          "note": "45 degrees of an 11 m circle; eight close it"
+          "note": "the -22.5-degree end; 45 degrees of an 11 m circle, eight close it"
+        },
+        {
+          "name": "end_b",
+          "kind": "pier",
+          "z_uu": 0.0,
+          "radius_uu": 55.0,
+          "rung": null,
+          "note": "the +22.5-degree end; the next arc starts here"
         }
       ],
       "parts": [
@@ -4221,12 +4709,20 @@
       "variant_of": null,
       "destination_path": "/Game/WonderlandV2/Kit/gardens",
       "data_layer": "V2_Garden",
-      "nanite_requested": true,
+      "nanite_requested": false,
       "collision_requested": true,
       "height_uu": 103.0,
       "excavation_uu": 0.0,
       "mounts_on": null,
-      "style": null,
+      "style": {
+        "slender_broad": 1.0,
+        "low_monumental": 0.0,
+        "open_solid": 1.0,
+        "gold_stone": 1.0,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.25,
+        "ceremonial_residential": 0.7
+      },
       "sockets": [
         {
           "name": "bottom",
@@ -4306,12 +4802,20 @@
       "variant_of": null,
       "destination_path": "/Game/WonderlandV2/Kit/gardens",
       "data_layer": "V2_Garden",
-      "nanite_requested": true,
+      "nanite_requested": false,
       "collision_requested": true,
       "height_uu": 632.0,
       "excavation_uu": 0.0,
       "mounts_on": null,
-      "style": null,
+      "style": {
+        "slender_broad": 0.848,
+        "low_monumental": 0.292,
+        "open_solid": 0.891,
+        "gold_stone": 0.939,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.312,
+        "ceremonial_residential": 0.5
+      },
       "sockets": [
         {
           "name": "bottom",
@@ -4343,7 +4847,15 @@
           "z_uu": 0.0,
           "radius_uu": 55.0,
           "rung": null,
-          "note": "replaces one 8.00 m retaining run in a terrace edge"
+          "note": "the -Y end at y = -4.00 m; replaces one 8.00 m retaining run in a terrace edge"
+        },
+        {
+          "name": "end_b",
+          "kind": "pier",
+          "z_uu": 0.0,
+          "radius_uu": 55.0,
+          "rung": null,
+          "note": "the +Y end at y = +4.00 m; the terrace edge carries on from here"
         }
       ],
       "parts": [
@@ -4391,12 +4903,20 @@
       "variant_of": null,
       "destination_path": "/Game/WonderlandV2/Kit/gardens",
       "data_layer": "V2_Garden",
-      "nanite_requested": true,
+      "nanite_requested": false,
       "collision_requested": true,
       "height_uu": 489.2,
       "excavation_uu": 0.0,
       "mounts_on": null,
-      "style": null,
+      "style": {
+        "slender_broad": 0.919,
+        "low_monumental": 0.211,
+        "open_solid": 1.0,
+        "gold_stone": 0.968,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.138,
+        "ceremonial_residential": 0.3
+      },
       "sockets": [
         {
           "name": "bottom",
@@ -4504,12 +5024,20 @@
       "variant_of": null,
       "destination_path": "/Game/WonderlandV2/Kit/gardens",
       "data_layer": "V2_Garden",
-      "nanite_requested": true,
+      "nanite_requested": false,
       "collision_requested": true,
       "height_uu": 404.0,
       "excavation_uu": 0.0,
       "mounts_on": null,
-      "style": null,
+      "style": {
+        "slender_broad": 1.0,
+        "low_monumental": 0.151,
+        "open_solid": 1.0,
+        "gold_stone": 1.0,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.312,
+        "ceremonial_residential": 0.5
+      },
       "sockets": [
         {
           "name": "bottom",
@@ -4582,7 +5110,15 @@
       "height_uu": 666.0,
       "excavation_uu": 55.0,
       "mounts_on": null,
-      "style": null,
+      "style": {
+        "slender_broad": 1.0,
+        "low_monumental": 0.308,
+        "open_solid": 0.737,
+        "gold_stone": 0.934,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.317,
+        "ceremonial_residential": 0.05
+      },
       "sockets": [
         {
           "name": "bottom",
@@ -4595,10 +5131,10 @@
         {
           "name": "water_surface",
           "kind": "edge",
-          "z_uu": 18.0,
+          "z_uu": 19.0,
           "radius_uu": 1700.0,
           "rung": null,
-          "note": "still sheet at 0.18 m; 34.0 x 9.0 m, MI_V2_Water"
+          "note": "still sheet at 0.19 m; 34.0 x 9.0 m, MI_V2_Water"
         },
         {
           "name": "head_route",
@@ -4619,7 +5155,7 @@
         {
           "name": "walk_l",
           "kind": "route",
-          "z_uu": 34.0,
+          "z_uu": 31.0,
           "radius_uu": 110.0,
           "rung": null,
           "note": "colonnade walk, -Y"
@@ -4627,7 +5163,7 @@
         {
           "name": "walk_r",
           "kind": "route",
-          "z_uu": 34.0,
+          "z_uu": 31.0,
           "radius_uu": 110.0,
           "rung": null,
           "note": "colonnade walk, +Y"
@@ -4702,12 +5238,20 @@
       "variant_of": null,
       "destination_path": "/Game/WonderlandV2/Kit/water",
       "data_layer": "V2_Garden",
-      "nanite_requested": true,
+      "nanite_requested": false,
       "collision_requested": true,
       "height_uu": 533.0,
       "excavation_uu": 55.0,
       "mounts_on": null,
-      "style": null,
+      "style": {
+        "slender_broad": 0.887,
+        "low_monumental": 0.238,
+        "open_solid": 0.995,
+        "gold_stone": 0.842,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.183,
+        "ceremonial_residential": 0.5
+      },
       "sockets": [
         {
           "name": "bottom_route",
@@ -4728,7 +5272,7 @@
         {
           "name": "water_surface",
           "kind": "edge",
-          "z_uu": 18.0,
+          "z_uu": 19.0,
           "radius_uu": 160.0,
           "rung": null,
           "note": "the catch basin at the foot"
@@ -4807,12 +5351,20 @@
       "variant_of": null,
       "destination_path": "/Game/WonderlandV2/Kit/water",
       "data_layer": "V2_Garden",
-      "nanite_requested": true,
+      "nanite_requested": false,
       "collision_requested": true,
-      "height_uu": 86.5,
+      "height_uu": 87.5,
       "excavation_uu": 55.0,
       "mounts_on": null,
-      "style": null,
+      "style": {
+        "slender_broad": 1.0,
+        "low_monumental": 0.0,
+        "open_solid": 1.0,
+        "gold_stone": 1.0,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.312,
+        "ceremonial_residential": 0.5
+      },
       "sockets": [
         {
           "name": "bottom",
@@ -4825,7 +5377,7 @@
         {
           "name": "water_surface",
           "kind": "edge",
-          "z_uu": 18.0,
+          "z_uu": 19.0,
           "radius_uu": 400.0,
           "rung": null,
           "note": "3.20 m of still water, 0.12 m below the walk"
@@ -4833,18 +5385,18 @@
         {
           "name": "walk_l",
           "kind": "route",
-          "z_uu": 30.0,
+          "z_uu": 31.0,
           "radius_uu": 105.0,
           "rung": null,
-          "note": "walk at 0.30 m, -Y"
+          "note": "walk at 0.310 m (one riser), -Y"
         },
         {
           "name": "walk_r",
           "kind": "route",
-          "z_uu": 30.0,
+          "z_uu": 31.0,
           "radius_uu": 105.0,
           "rung": null,
-          "note": "walk at 0.30 m, +Y"
+          "note": "walk at 0.310 m (one riser), +Y"
         },
         {
           "name": "end_a",
@@ -4908,12 +5460,20 @@
       "variant_of": null,
       "destination_path": "/Game/WonderlandV2/Kit/water",
       "data_layer": "V2_Garden",
-      "nanite_requested": true,
+      "nanite_requested": false,
       "collision_requested": true,
-      "height_uu": 353.0,
+      "height_uu": 354.0,
       "excavation_uu": 55.0,
       "mounts_on": null,
-      "style": null,
+      "style": {
+        "slender_broad": 1.0,
+        "low_monumental": 0.109,
+        "open_solid": 0.901,
+        "gold_stone": 0.96,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.317,
+        "ceremonial_residential": 0.425
+      },
       "sockets": [
         {
           "name": "bottom",
@@ -4926,7 +5486,7 @@
         {
           "name": "water_surface",
           "kind": "edge",
-          "z_uu": 18.0,
+          "z_uu": 19.0,
           "radius_uu": 400.0,
           "rung": null,
           "note": "the canal carries through"
@@ -4934,26 +5494,26 @@
         {
           "name": "deck_route",
           "kind": "route",
-          "z_uu": 123.0,
+          "z_uu": 124.0,
           "radius_uu": 180.0,
           "rung": "S",
-          "note": "3.60 m deck at 1.23 m, crossing in Y"
+          "note": "3.60 m deck at 1.24 m, crossing in Y"
         },
         {
           "name": "walk_l",
           "kind": "route",
-          "z_uu": 30.0,
+          "z_uu": 31.0,
           "radius_uu": 105.0,
           "rung": null,
-          "note": "walk at 0.30 m, -Y"
+          "note": "walk at 0.310 m (one riser), -Y"
         },
         {
           "name": "walk_r",
           "kind": "route",
-          "z_uu": 30.0,
+          "z_uu": 31.0,
           "radius_uu": 105.0,
           "rung": null,
-          "note": "walk at 0.30 m, +Y"
+          "note": "walk at 0.310 m (one riser), +Y"
         },
         {
           "name": "end_a",
@@ -5031,10 +5591,18 @@
       "data_layer": "V2_Garden",
       "nanite_requested": true,
       "collision_requested": true,
-      "height_uu": 1277.0,
+      "height_uu": 1276.0,
       "excavation_uu": 55.0,
       "mounts_on": null,
-      "style": null,
+      "style": {
+        "slender_broad": 0.8,
+        "low_monumental": 0.513,
+        "open_solid": 0.792,
+        "gold_stone": 0.976,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.183,
+        "ceremonial_residential": 0.05
+      },
       "sockets": [
         {
           "name": "bottom",
@@ -5047,7 +5615,7 @@
         {
           "name": "water_surface",
           "kind": "edge",
-          "z_uu": 18.0,
+          "z_uu": 19.0,
           "radius_uu": 730.0,
           "rung": null,
           "note": "the sheet the pavilion stands in"
@@ -5055,15 +5623,15 @@
         {
           "name": "floor_route",
           "kind": "route",
-          "z_uu": 125.0,
+          "z_uu": 124.0,
           "radius_uu": 312.0,
           "rung": null,
-          "note": "the pavilion floor at 1.25 m, reached from a crossing or a jetty"
+          "note": "the pavilion floor at 1.24 m (four risers), reached from a crossing or a jetty"
         },
         {
           "name": "top",
           "kind": "crown",
-          "z_uu": 1222.0,
+          "z_uu": 1221.0,
           "radius_uu": 0.0,
           "rung": null,
           "note": "terminal"
@@ -5150,12 +5718,20 @@
       "variant_of": null,
       "destination_path": "/Game/WonderlandV2/Kit/water",
       "data_layer": "V2_Garden",
-      "nanite_requested": true,
+      "nanite_requested": false,
       "collision_requested": true,
       "height_uu": 365.0,
       "excavation_uu": 55.0,
       "mounts_on": null,
-      "style": null,
+      "style": {
+        "slender_broad": 1.0,
+        "low_monumental": 0.119,
+        "open_solid": 1.0,
+        "gold_stone": 0.164,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.083,
+        "ceremonial_residential": 0.5
+      },
       "sockets": [
         {
           "name": "bottom",
@@ -5184,7 +5760,7 @@
         {
           "name": "water_surface",
           "kind": "edge",
-          "z_uu": 18.0,
+          "z_uu": 19.0,
           "radius_uu": 400.0,
           "rung": null,
           "note": "the catch basin below"
@@ -5263,12 +5839,20 @@
       "variant_of": null,
       "destination_path": "/Game/WonderlandV2/Kit/water",
       "data_layer": "V2_Garden",
-      "nanite_requested": true,
+      "nanite_requested": false,
       "collision_requested": true,
       "height_uu": 177.0,
       "excavation_uu": 175.0,
       "mounts_on": null,
-      "style": null,
+      "style": {
+        "slender_broad": 1.0,
+        "low_monumental": 0.0,
+        "open_solid": 1.0,
+        "gold_stone": 1.0,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.183,
+        "ceremonial_residential": 0.5
+      },
       "sockets": [
         {
           "name": "bottom",
@@ -5281,10 +5865,10 @@
         {
           "name": "floor_route",
           "kind": "route",
-          "z_uu": -125.0,
+          "z_uu": -124.0,
           "radius_uu": 650.0,
           "rung": null,
-          "note": "the pool walk at -1.55 m (T1 below grade)"
+          "note": "the pool walk at -1.24 m, the bottom tread of the four flights"
         },
         {
           "name": "water_surface",
@@ -5348,12 +5932,20 @@
       "variant_of": null,
       "destination_path": "/Game/WonderlandV2/Kit/market",
       "data_layer": "V2_Props",
-      "nanite_requested": true,
+      "nanite_requested": false,
       "collision_requested": false,
       "height_uu": 78.54,
       "excavation_uu": 0.0,
       "mounts_on": "facade",
-      "style": null,
+      "style": {
+        "slender_broad": 1.0,
+        "low_monumental": 0.0,
+        "open_solid": 1.0,
+        "gold_stone": 1.0,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.7,
+        "ceremonial_residential": 0.7
+      },
       "sockets": [
         {
           "name": "back",
@@ -5429,12 +6021,20 @@
       "variant_of": null,
       "destination_path": "/Game/WonderlandV2/Kit/market",
       "data_layer": "V2_Props",
-      "nanite_requested": true,
+      "nanite_requested": false,
       "collision_requested": true,
       "height_uu": 450.0,
       "excavation_uu": 0.0,
       "mounts_on": null,
-      "style": null,
+      "style": {
+        "slender_broad": 0.845,
+        "low_monumental": 0.185,
+        "open_solid": 0.772,
+        "gold_stone": 0.975,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.7,
+        "ceremonial_residential": 0.575
+      },
       "sockets": [
         {
           "name": "bottom",
@@ -5445,12 +6045,12 @@
           "note": ""
         },
         {
-          "name": "shelter",
+          "name": "passage",
           "kind": "route",
-          "z_uu": 210.0,
+          "z_uu": 0.0,
           "radius_uu": 260.0,
           "rung": null,
-          "note": "2.10 m clear under the beams; the ground stays walkable"
+          "note": "the ground under the canopy stays walkable; 2.10 m clear to the beams"
         },
         {
           "name": "counter",
@@ -5530,12 +6130,20 @@
       "variant_of": null,
       "destination_path": "/Game/WonderlandV2/Kit/market",
       "data_layer": "V2_Props",
-      "nanite_requested": true,
+      "nanite_requested": false,
       "collision_requested": true,
-      "height_uu": 455.0,
+      "height_uu": 459.0,
       "excavation_uu": 0.0,
       "mounts_on": null,
-      "style": null,
+      "style": {
+        "slender_broad": 0.896,
+        "low_monumental": 0.191,
+        "open_solid": 0.946,
+        "gold_stone": 1.0,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.7,
+        "ceremonial_residential": 0.475
+      },
       "sockets": [
         {
           "name": "back",
@@ -5548,18 +6156,18 @@
         {
           "name": "walk",
           "kind": "route",
-          "z_uu": 30.0,
+          "z_uu": 31.0,
           "radius_uu": 320.0,
           "rung": null,
-          "note": "covered walk at 0.30 m, 2.65 m clear"
+          "note": "covered walk at 0.310 m (one riser), 2.65 m clear"
         },
         {
           "name": "deck_route",
           "kind": "route",
-          "z_uu": 337.0,
+          "z_uu": 341.0,
           "radius_uu": 320.0,
           "rung": null,
-          "note": "the roof is a walkable balcony deck at 3.37 m"
+          "note": "the roof is a walkable balcony deck at 3.41 m (eleven risers)"
         },
         {
           "name": "end_a",
@@ -5589,7 +6197,7 @@
           "asset_path": "/Game/WonderlandV2/Kit/market/WL_Market_Arcade_Insert",
           "material_instance": "MI_V2_IvoryStone",
           "material_path": "/Game/WonderlandV2/Materials/Instances/MI_V2_IvoryStone",
-          "triangles": 3736
+          "triangles": 3740
         },
         {
           "part": "stone_dark",
@@ -5611,12 +6219,20 @@
       "variant_of": null,
       "destination_path": "/Game/WonderlandV2/Kit/market",
       "data_layer": "V2_Props",
-      "nanite_requested": true,
+      "nanite_requested": false,
       "collision_requested": false,
       "height_uu": 133.0,
       "excavation_uu": 0.0,
       "mounts_on": "facade",
-      "style": null,
+      "style": {
+        "slender_broad": 0.867,
+        "low_monumental": 0.0,
+        "open_solid": 0.955,
+        "gold_stone": 0.0,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.7,
+        "ceremonial_residential": 0.7
+      },
       "sockets": [
         {
           "name": "back",
@@ -5680,12 +6296,20 @@
       "variant_of": null,
       "destination_path": "/Game/WonderlandV2/Kit/market",
       "data_layer": "V2_Props",
-      "nanite_requested": true,
+      "nanite_requested": false,
       "collision_requested": true,
-      "height_uu": 452.0,
+      "height_uu": 465.0,
       "excavation_uu": 0.0,
       "mounts_on": null,
-      "style": null,
+      "style": {
+        "slender_broad": 0.918,
+        "low_monumental": 0.195,
+        "open_solid": 0.982,
+        "gold_stone": 0.943,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.7,
+        "ceremonial_residential": 0.3
+      },
       "sockets": [
         {
           "name": "bottom",
@@ -5722,10 +6346,10 @@
         {
           "name": "deck_route",
           "kind": "route",
-          "z_uu": 452.0,
+          "z_uu": 465.0,
           "radius_uu": 250.0,
           "rung": null,
-          "note": "the roof deck at 4.52 m"
+          "note": "the roof deck at 4.65 m"
         }
       ],
       "parts": [
@@ -5785,12 +6409,20 @@
       "variant_of": null,
       "destination_path": "/Game/WonderlandV2/Kit/market",
       "data_layer": "V2_Props",
-      "nanite_requested": true,
+      "nanite_requested": false,
       "collision_requested": true,
       "height_uu": 443.0,
       "excavation_uu": 0.0,
       "mounts_on": null,
-      "style": null,
+      "style": {
+        "slender_broad": 0.828,
+        "low_monumental": 0.18,
+        "open_solid": 1.0,
+        "gold_stone": 0.673,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.7,
+        "ceremonial_residential": 0.575
+      },
       "sockets": [
         {
           "name": "bottom",
@@ -5906,12 +6538,20 @@
       "variant_of": null,
       "destination_path": "/Game/WonderlandV2/Kit/details",
       "data_layer": "V2_Props",
-      "nanite_requested": true,
+      "nanite_requested": false,
       "collision_requested": true,
       "height_uu": 137.0,
       "excavation_uu": 0.0,
       "mounts_on": null,
-      "style": null,
+      "style": {
+        "slender_broad": 1.0,
+        "low_monumental": 0.0,
+        "open_solid": 0.848,
+        "gold_stone": 1.0,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.45,
+        "ceremonial_residential": 0.7
+      },
       "sockets": [
         {
           "name": "bottom",
@@ -5959,12 +6599,20 @@
       "variant_of": null,
       "destination_path": "/Game/WonderlandV2/Kit/details",
       "data_layer": "V2_Props",
-      "nanite_requested": true,
+      "nanite_requested": false,
       "collision_requested": true,
       "height_uu": 292.0,
       "excavation_uu": 0.0,
       "mounts_on": null,
-      "style": null,
+      "style": {
+        "slender_broad": 0.351,
+        "low_monumental": 0.049,
+        "open_solid": 0.997,
+        "gold_stone": 0.051,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.312,
+        "ceremonial_residential": 0.7
+      },
       "sockets": [
         {
           "name": "bottom",
@@ -5975,7 +6623,7 @@
           "note": ""
         },
         {
-          "name": "end_a",
+          "name": "wall_join",
           "kind": "pier",
           "z_uu": 0.0,
           "radius_uu": 40.0,
@@ -6016,12 +6664,20 @@
       "variant_of": null,
       "destination_path": "/Game/WonderlandV2/Kit/details",
       "data_layer": "V2_Props",
-      "nanite_requested": true,
+      "nanite_requested": false,
       "collision_requested": true,
       "height_uu": 639.0,
       "excavation_uu": 0.0,
       "mounts_on": null,
-      "style": null,
+      "style": {
+        "slender_broad": 0.702,
+        "low_monumental": 0.295,
+        "open_solid": 0.686,
+        "gold_stone": 0.0,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.383,
+        "ceremonial_residential": 0.475
+      },
       "sockets": [
         {
           "name": "bottom",
@@ -6105,12 +6761,20 @@
       "variant_of": null,
       "destination_path": "/Game/WonderlandV2/Kit/details",
       "data_layer": "V2_Props",
-      "nanite_requested": true,
+      "nanite_requested": false,
       "collision_requested": true,
       "height_uu": 248.0,
       "excavation_uu": 0.0,
       "mounts_on": null,
-      "style": null,
+      "style": {
+        "slender_broad": 0.99,
+        "low_monumental": 0.0,
+        "open_solid": 0.843,
+        "gold_stone": 1.0,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.738,
+        "ceremonial_residential": 0.7
+      },
       "sockets": [
         {
           "name": "back",
@@ -6142,12 +6806,20 @@
       "variant_of": null,
       "destination_path": "/Game/WonderlandV2/Kit/details",
       "data_layer": "V2_Props",
-      "nanite_requested": true,
+      "nanite_requested": false,
       "collision_requested": true,
       "height_uu": 940.0,
       "excavation_uu": 0.0,
       "mounts_on": null,
-      "style": null,
+      "style": {
+        "slender_broad": 0.219,
+        "low_monumental": 0.417,
+        "open_solid": 1.0,
+        "gold_stone": 0.73,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.762,
+        "ceremonial_residential": 0.575
+      },
       "sockets": [
         {
           "name": "bottom",
@@ -6203,12 +6875,20 @@
       "variant_of": null,
       "destination_path": "/Game/WonderlandV2/Kit/details",
       "data_layer": "V2_Props",
-      "nanite_requested": true,
+      "nanite_requested": false,
       "collision_requested": true,
       "height_uu": 640.0,
       "excavation_uu": 0.0,
       "mounts_on": null,
-      "style": null,
+      "style": {
+        "slender_broad": 0.48,
+        "low_monumental": 0.296,
+        "open_solid": 1.0,
+        "gold_stone": 0.0,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.75,
+        "ceremonial_residential": 0.7
+      },
       "sockets": [
         {
           "name": "back",
@@ -6281,7 +6961,15 @@
       "height_uu": 11820.0,
       "excavation_uu": 0.0,
       "mounts_on": null,
-      "style": null,
+      "style": {
+        "slender_broad": 0.181,
+        "low_monumental": 1.0,
+        "open_solid": 0.903,
+        "gold_stone": 0.728,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.85,
+        "ceremonial_residential": 0.05
+      },
       "sockets": [
         {
           "name": "bottom",
@@ -6414,7 +7102,15 @@
       "height_uu": 4890.0,
       "excavation_uu": 0.0,
       "mounts_on": null,
-      "style": null,
+      "style": {
+        "slender_broad": 0.611,
+        "low_monumental": 0.936,
+        "open_solid": 0.856,
+        "gold_stone": 0.523,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.617,
+        "ceremonial_residential": 0.05
+      },
       "sockets": [
         {
           "name": "bottom",
@@ -6522,12 +7218,20 @@
       "variant_of": "WL_Wall_Curtain_Run",
       "destination_path": "/Game/WonderlandV2/Kit/variants/Weathered",
       "data_layer": "V2_Castle",
-      "nanite_requested": true,
+      "nanite_requested": false,
       "collision_requested": true,
       "height_uu": 810.8,
       "excavation_uu": 0.0,
       "mounts_on": null,
-      "style": null,
+      "style": {
+        "slender_broad": 0.93,
+        "low_monumental": 0.37,
+        "open_solid": 1.0,
+        "gold_stone": 1.0,
+        "pristine_aged": 0.6,
+        "garden_urban": 0.837,
+        "ceremonial_residential": 0.475
+      },
       "sockets": [
         {
           "name": "bottom",
@@ -6607,12 +7311,20 @@
       "variant_of": "WL_Wall_Mural_Tower",
       "destination_path": "/Game/WonderlandV2/Kit/variants/Weathered",
       "data_layer": "V2_Castle",
-      "nanite_requested": true,
+      "nanite_requested": false,
       "collision_requested": true,
       "height_uu": 1242.23,
       "excavation_uu": 0.0,
       "mounts_on": null,
-      "style": null,
+      "style": {
+        "slender_broad": 0.654,
+        "low_monumental": 0.504,
+        "open_solid": 1.0,
+        "gold_stone": 0.939,
+        "pristine_aged": 0.7,
+        "garden_urban": 0.883,
+        "ceremonial_residential": 0.475
+      },
       "sockets": [
         {
           "name": "bottom",
@@ -6704,12 +7416,20 @@
       "variant_of": "WL_Tower_Base_Buttressed",
       "destination_path": "/Game/WonderlandV2/Kit/variants/Weathered",
       "data_layer": "V2_Castle",
-      "nanite_requested": true,
+      "nanite_requested": false,
       "collision_requested": false,
       "height_uu": 1080.0,
       "excavation_uu": 0.0,
       "mounts_on": null,
-      "style": null,
+      "style": {
+        "slender_broad": 0.933,
+        "low_monumental": 0.46,
+        "open_solid": 1.0,
+        "gold_stone": 1.0,
+        "pristine_aged": 0.55,
+        "garden_urban": 0.783,
+        "ceremonial_residential": 0.525
+      },
       "sockets": [
         {
           "name": "bottom",
@@ -6778,7 +7498,15 @@
       "height_uu": 2602.47,
       "excavation_uu": 0.0,
       "mounts_on": null,
-      "style": null,
+      "style": {
+        "slender_broad": 0.755,
+        "low_monumental": 0.737,
+        "open_solid": 0.934,
+        "gold_stone": 0.909,
+        "pristine_aged": 0.5,
+        "garden_urban": 0.85,
+        "ceremonial_residential": 0.3
+      },
       "sockets": [
         {
           "name": "bottom",
@@ -6883,7 +7611,15 @@
       "height_uu": 845.39,
       "excavation_uu": 0.0,
       "mounts_on": null,
-      "style": null,
+      "style": {
+        "slender_broad": 1.0,
+        "low_monumental": 0.383,
+        "open_solid": 0.906,
+        "gold_stone": 1.0,
+        "pristine_aged": 0.65,
+        "garden_urban": 0.575,
+        "ceremonial_residential": 0.475
+      },
       "sockets": [
         {
           "name": "bottom",
@@ -6955,12 +7691,20 @@
       "variant_of": "WL_Bridge_Arc",
       "destination_path": "/Game/WonderlandV2/Kit/variants/Weathered",
       "data_layer": "V2_Castle",
-      "nanite_requested": true,
+      "nanite_requested": false,
       "collision_requested": true,
       "height_uu": 768.03,
       "excavation_uu": 0.0,
       "mounts_on": null,
-      "style": null,
+      "style": {
+        "slender_broad": 1.0,
+        "low_monumental": 0.353,
+        "open_solid": 0.815,
+        "gold_stone": 1.0,
+        "pristine_aged": 0.45,
+        "garden_urban": 0.312,
+        "ceremonial_residential": 0.425
+      },
       "sockets": [
         {
           "name": "bottom",
@@ -7032,12 +7776,20 @@
       "variant_of": "WL_House_Jettied",
       "destination_path": "/Game/WonderlandV2/Kit/variants/Weathered",
       "data_layer": "V2_Castle",
-      "nanite_requested": true,
+      "nanite_requested": false,
       "collision_requested": true,
       "height_uu": 1303.16,
       "excavation_uu": 0.0,
       "mounts_on": null,
-      "style": null,
+      "style": {
+        "slender_broad": 0.494,
+        "low_monumental": 0.52,
+        "open_solid": 0.994,
+        "gold_stone": 0.821,
+        "pristine_aged": 0.3,
+        "garden_urban": 0.75,
+        "ceremonial_residential": 0.525
+      },
       "sockets": [
         {
           "name": "bottom",
@@ -7153,12 +7905,20 @@
       "variant_of": "WL_Garden_Retaining_Run",
       "destination_path": "/Game/WonderlandV2/Kit/variants/Weathered",
       "data_layer": "V2_Castle",
-      "nanite_requested": true,
+      "nanite_requested": false,
       "collision_requested": true,
       "height_uu": 311.43,
       "excavation_uu": 0.0,
       "mounts_on": null,
-      "style": null,
+      "style": {
+        "slender_broad": 1.0,
+        "low_monumental": 0.069,
+        "open_solid": 1.0,
+        "gold_stone": 1.0,
+        "pristine_aged": 0.35,
+        "garden_urban": 0.25,
+        "ceremonial_residential": 0.5
+      },
       "sockets": [
         {
           "name": "bottom",
@@ -7246,12 +8006,20 @@
       "variant_of": "WL_Detail_Balustrade_Run",
       "destination_path": "/Game/WonderlandV2/Kit/variants/Weathered",
       "data_layer": "V2_Castle",
-      "nanite_requested": true,
+      "nanite_requested": false,
       "collision_requested": true,
       "height_uu": 155.41,
       "excavation_uu": 0.0,
       "mounts_on": null,
-      "style": null,
+      "style": {
+        "slender_broad": 1.0,
+        "low_monumental": 0.0,
+        "open_solid": 0.976,
+        "gold_stone": 1.0,
+        "pristine_aged": 0.55,
+        "garden_urban": 0.45,
+        "ceremonial_residential": 0.7
+      },
       "sockets": [
         {
           "name": "bottom",

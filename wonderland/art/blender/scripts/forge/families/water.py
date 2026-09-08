@@ -48,12 +48,17 @@ RISER = K.RISER_M
 FREEBOARD = 0.12
 #: Depth of real geometry under every water surface in this family.
 DEPTH = 0.55
+#: THE PAVING LEVEL, and it is ONE RISER above the ground datum rather than the
+#: round 0.30 m it started as. A `route` socket is a level you can climb to, and
+#: 0.30 m is 0.97 of this kit's 0.310 m riser -- a step 1 cm short at the top of
+#: every canal walk in the world. One riser costs nothing and is reachable.
+PAVE = K.RISER_M
 
 
 def _basin(part, dark, water, w, d, at=(0.0, 0.0, 0.0), matrix=None, kerb=0.42):
     """A rectangular basin with a real floor, real walls and a flat lid.
 
-    Returns the water surface z. The kerb stands 0.30 m proud so the basin
+    Returns the water surface z. The kerb stands one riser proud so the basin
     reads as HELD -- a pool flush with its paving reads as a puddle.
     """
     mat = M.xform(at)
@@ -65,7 +70,7 @@ def _basin(part, dark, water, w, d, at=(0.0, 0.0, 0.0), matrix=None, kerb=0.42):
                              (w + kerb * 2.0, kerb, 0.0, -(hd + kerb * 0.5)),
                              (kerb, d, hw + kerb * 0.5, 0.0),
                              (kerb, d, -(hw + kerb * 0.5), 0.0)):
-        part.box(bw, bd, 0.30, at=(bx, by, 0.0), matrix=mat, chamfer=0.05,
+        part.box(bw, bd, PAVE, at=(bx, by, 0.0), matrix=mat, chamfer=0.05,
                  centre_z=False)
     # THE TANK LINING REACHES THE KERB, not the ground plane. It first stopped
     # at z = 0 while the water surface sat at 0.18 m, which left 18 cm of open
@@ -76,10 +81,10 @@ def _basin(part, dark, water, w, d, at=(0.0, 0.0, 0.0), matrix=None, kerb=0.42):
     dark.box(w, d, 0.10, at=(0.0, 0.0, -DEPTH), matrix=mat, centre_z=False)
     for (bw, bd, bx, by) in ((w, 0.16, 0.0, hd - 0.08), (w, 0.16, 0.0, -(hd - 0.08)),
                              (0.16, d, hw - 0.08, 0.0), (0.16, d, -(hw - 0.08), 0.0)):
-        dark.box(bw, bd, DEPTH + 0.30, at=(bx, by, -DEPTH), matrix=mat,
+        dark.box(bw, bd, DEPTH + PAVE, at=(bx, by, -DEPTH), matrix=mat,
                  centre_z=False)
     # the surface: one flat quad, and nothing else
-    zw = 0.30 - FREEBOARD
+    zw = PAVE - FREEBOARD
     water.box(w - 0.06, d - 0.06, 0.04, at=(0.0, 0.0, zw - 0.04), matrix=mat,
               centre_z=False)
     return zw
@@ -135,10 +140,10 @@ def water_basin_reflecting(f):
     # the flanking colonnades -- OPEN, so the reflection stays deep
     for sgn in (-1.0, 1.0):
         y = sgn * (D * 0.5 + 0.52 + 1.90)
-        p.box(W + 1.60, 2.20, 0.34, at=(0.0, y, 0.0), chamfer=0.06, centre_z=False)
+        p.box(W + 1.60, 2.20, PAVE, at=(0.0, y, 0.0), chamfer=0.06, centre_z=False)
         for i in range(9):
             x = -W * 0.5 + W * i / 8.0
-            E.column(p, (x, y, 0.34), 4.20, 0.34, flutes=10)
+            E.column(p, (x, y, PAVE), 4.20, 0.34, flutes=10)
         p.box(W + 1.20, 1.30, 0.42, at=(0.0, y, 4.54), chamfer=0.08, centre_z=False)
         p.box(W + 1.60, 1.60, 0.30, at=(0.0, y, 4.96), chamfer=0.07, centre_z=False)
         for i in range(9):
@@ -157,8 +162,8 @@ def water_basin_reflecting(f):
                   "the raised court at 1.55 m (T1) at the +X end -- put the "
                   "thing to be reflected HERE"),
          K.Socket("foot_route", 0.62, 1.10, "route", "the sill at the -X end"),
-         K.Socket("walk_l", 0.34, 1.10, "route", "colonnade walk, -Y"),
-         K.Socket("walk_r", 0.34, 1.10, "route", "colonnade walk, +Y")],
+         K.Socket("walk_l", PAVE, 1.10, "route", "colonnade walk, -Y"),
+         K.Socket("walk_r", PAVE, 1.10, "route", "colonnade walk, +Y")],
         districts=("water_garden", "royal_garden", "plaza"),
         note="34 x 9 m reflecting basin with an open flanking colonnade and a "
              "T1 head court; built so that whatever stands at the head is "
@@ -249,16 +254,18 @@ def water_canal_run(f):
     zw = _basin(p, d, w, RUN, CH, kerb=0.40)
     for sgn in (-1.0, 1.0):
         y = sgn * (CH * 0.5 + 0.40 + WALK * 0.5)
-        p.box(RUN, WALK, 0.30, at=(0.0, y, 0.0), chamfer=0.05, centre_z=False)
-        E.wear_course(d, 0.30, w=RUN - 0.10, d=WALK - 0.44, at=(0.0, y))
+        p.box(RUN, WALK, PAVE, at=(0.0, y, 0.0), chamfer=0.05, centre_z=False)
+        E.wear_course(d, PAVE, w=RUN - 0.10, d=WALK - 0.44, at=(0.0, y))
     return K.ModuleSpec(
         "WL_Water_Canal_Run", "water", "structure", "terrace",
         f.emit("WL_Water_Canal_Run"),
         [K.Socket("bottom", 0.0, RUN * 0.5, "ground"),
          K.Socket("water_surface", zw, RUN * 0.5, "edge",
-                  "3.20 m of still water, %.2f m below the walk" % (0.30 - zw)),
-         K.Socket("walk_l", 0.30, WALK * 0.5, "route", "walk at 0.30 m, -Y"),
-         K.Socket("walk_r", 0.30, WALK * 0.5, "route", "walk at 0.30 m, +Y"),
+                  "3.20 m of still water, %.2f m below the walk" % (PAVE - zw)),
+         K.Socket("walk_l", PAVE, WALK * 0.5, "route",
+                  "walk at %.3f m (one riser), -Y" % PAVE),
+         K.Socket("walk_r", PAVE, WALK * 0.5, "route",
+                  "walk at %.3f m (one riser), +Y" % PAVE),
          K.Socket("end_a", 0.0, CH * 0.5, "pier", "butts at x = -4.00 m"),
          K.Socket("end_b", 0.0, CH * 0.5, "pier", "butts at x = +4.00 m")],
         districts=("water_garden", "royal_garden", "plaza", "tea_terrace"),
@@ -278,18 +285,18 @@ def water_canal_crossing(f):
 
     THE ELEVATIONS ARE ARITHMETIC, and the first version got them wrong in
     three ways at once, which is why they are spelled out here. The deck sat
-    at 2.04 m, which is 5.6 risers above a 0.30 m walk, so its five steps
+    at 2.04 m, which is 5.6 risers above the walk, so its five steps
     stopped 0.19 m short of it. Those steps ran INWARD from the walk, which
     put them under the deck they were meant to reach. And the spandrel wall
     ran to the deck's TOP rather than to its soffit, so 28.8 m2 of wall face
     and deck face lay in one plane pointing the same way -- the z-fight this
     kit keeps rediscovering, and the one the validator did catch.
 
-    So the deck is now 3 risers above the walk (0.30 + 3 x 0.310 = 1.23), the
+    So the deck is now 3 risers above the walk, which is itself one riser, the
     flights climb OUTWARD onto the walk where there is room for them, and the
     spandrel stops at the soffit, where a spandrel stops. Everything else
     follows: the slab is 0.26, so the soffit is 0.97; the arch springs from the
-    kerb at 0.30 and rises 0.60, so its crown is at 0.90 with 0.07 m of
+    kerb and rises 0.60, so its crown clears the sheet by 0.72 m with 0.07 m of
     spandrel over it; and the ring's 0.26 m of extrados is buried in the slab,
     which is what a deck sitting on an arch looks like.
 
@@ -305,10 +312,10 @@ def water_canal_crossing(f):
     zw = _basin(p, d, w, RUN, CH, kerb=0.40)
 
     RISERS = 3
-    DECK_Z = 0.30 + RISERS * RISER                    # 1.23 m, on the ladder
+    DECK_Z = PAVE + RISERS * RISER                    # four risers off the datum
     SLAB = 0.26
     SOFFIT = DECK_Z - SLAB                            # 0.97 m
-    SPRING = 0.30                                     # the kerb top
+    SPRING = PAVE                                     # the kerb top
     RISE, RING = 0.60, 0.26
     DECK_W, DECK_Y = 3.60, 2.30
     GOING = 0.360
@@ -329,11 +336,11 @@ def water_canal_crossing(f):
 
     for sgn in (-1.0, 1.0):
         y = sgn * (CH * 0.5 + 0.40 + WALK * 0.5)
-        p.box(RUN, WALK, 0.30, at=(0.0, y, 0.0), chamfer=0.05, centre_z=False)
-        E.wear_course(d, 0.30, w=RUN - 0.10, d=WALK - 0.44, at=(0.0, y))
+        p.box(RUN, WALK, PAVE, at=(0.0, y, 0.0), chamfer=0.05, centre_z=False)
+        E.wear_course(d, PAVE, w=RUN - 0.10, d=WALK - 0.44, at=(0.0, y))
         # the approach: OUTWARD from the deck edge, onto the walk. `rot` maps
         # the flight's own +X climb onto -sgn*Y, so both flights climb inward.
-        foot = (0.0, sgn * (DECK_Y + FLIGHT), 0.30)
+        foot = (0.0, sgn * (DECK_Y + FLIGHT), PAVE)
         yaw = -90.0 * sgn
         E.stair_flight(p, RISERS, DECK_W, going=GOING, riser=RISER,
                        at=foot, rot=(0.0, 0.0, yaw))
@@ -361,8 +368,10 @@ def water_canal_crossing(f):
          K.Socket("water_surface", zw, RUN * 0.5, "edge", "the canal carries through"),
          K.Socket("deck_route", DECK_Z, DECK_W * 0.5, "route",
                   "%.2f m deck at %.2f m, crossing in Y" % (DECK_W, DECK_Z)),
-         K.Socket("walk_l", 0.30, WALK * 0.5, "route", "walk at 0.30 m, -Y"),
-         K.Socket("walk_r", 0.30, WALK * 0.5, "route", "walk at 0.30 m, +Y"),
+         K.Socket("walk_l", PAVE, WALK * 0.5, "route",
+                  "walk at %.3f m (one riser), -Y" % PAVE),
+         K.Socket("walk_r", PAVE, WALK * 0.5, "route",
+                  "walk at %.3f m (one riser), +Y" % PAVE),
          K.Socket("end_a", 0.0, CH * 0.5, "pier", "butts into a canal run at x = -4.00 m"),
          K.Socket("end_b", 0.0, CH * 0.5, "pier", "butts into a canal run at x = +4.00 m")],
         districts=("water_garden", "royal_garden", "plaza"),
@@ -391,7 +400,7 @@ def water_pavilion(f):
     gl = f.part("glass")
     w = f.part("water")
     R = 3.90
-    FLOOR = 1.25
+    FLOOR = RISER * 4.0                               # 1.24 m: four risers
     # the piers, standing in water
     for (x, y, a) in K.radial(8, R * 0.94, phase=math.pi / 8.0):
         d.box(0.86, 0.86, FLOOR - 0.30, at=(x, y, -DEPTH), rot=(0, 0, a),
@@ -428,10 +437,11 @@ def water_pavilion(f):
         "WL_Water_Pavilion", "water", "landmark", "hero",
         f.emit("WL_Water_Pavilion"),
         [K.Socket("bottom", 0.0, R + 3.86, "ground"),
-         K.Socket("water_surface", 0.30 - FREEBOARD, R + 3.4, "edge",
+         K.Socket("water_surface", PAVE - FREEBOARD, R + 3.4, "edge",
                   "the sheet the pavilion stands in"),
          K.Socket("floor_route", FLOOR, R * 0.80, "route",
-                  "the pavilion floor at 1.25 m, reached from a crossing or a jetty"),
+                  "the pavilion floor at %.2f m (four risers), reached from a "
+                  "crossing or a jetty" % FLOOR),
          K.Socket("top", FLOOR + 9.62 + 1.35, 0.0, "crown", "terminal")],
         districts=("water_garden", "royal_garden", "tea_terrace"),
         note="open octagonal pavilion on eight piers standing in a 14.6 m "
@@ -542,8 +552,9 @@ def water_sunken_pool(f):
         f.emit("WL_Water_Sunken_Pool"),
         [K.Socket("bottom", 0.0, R + 3.20, "ground",
                   "the rim is at z = 0; the module goes DOWN from it"),
-         K.Socket("floor_route", -DROP + 0.30, R + 1.0, "route",
-                  "the pool walk at -1.55 m (T1 below grade)"),
+         K.Socket("floor_route", -RISER * 4.0, R + 1.0, "route",
+                  "the pool walk at %.2f m, the bottom tread of the four "
+                  "flights" % (-RISER * 4.0)),
          K.Socket("water_surface", -DROP + 0.18, R, "edge", "11 m sheet at -1.37 m"),
          K.Socket("edge", 0.0, R + 3.10, "edge", "the rim; a balustrade may run it")],
         districts=("water_garden", "royal_garden", "tea_terrace"),

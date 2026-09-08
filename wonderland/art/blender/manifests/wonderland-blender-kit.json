@@ -1,7 +1,7 @@
 {
   "schema": "wonderland-blender-kit/1",
   "kit_version": "1.0.0",
-  "generated_utc": "2026-09-08T00:29:14+00:00",
+  "generated_utc": "2026-09-08T01:04:09+00:00",
   "generator": "wonderland/art/blender/scripts/build_assets.py",
   "blender": "4.5.13 LTS",
   "conventions": {
@@ -20,49 +20,98 @@
       "at_0": "slender",
       "at_1": "broad",
       "provenance": "measured",
-      "unknown_is": "null, and it renders as Unknown -- never 0"
+      "unknown_is": "null, and it renders as Unknown -- never 0",
+      "observed": {
+        "n": 93,
+        "min": 0.153,
+        "median": 0.808,
+        "max": 1.0,
+        "unknown": 0
+      }
     },
     {
       "axis": "low_monumental",
       "at_0": "low-rise",
       "at_1": "monumental",
       "provenance": "measured",
-      "unknown_is": "null, and it renders as Unknown -- never 0"
+      "unknown_is": "null, and it renders as Unknown -- never 0",
+      "observed": {
+        "n": 93,
+        "min": 0.0,
+        "median": 0.401,
+        "max": 1.0,
+        "unknown": 0
+      }
     },
     {
       "axis": "open_solid",
       "at_0": "open",
       "at_1": "solid",
       "provenance": "measured",
-      "unknown_is": "null, and it renders as Unknown -- never 0"
+      "unknown_is": "null, and it renders as Unknown -- never 0",
+      "observed": {
+        "n": 93,
+        "min": 0.552,
+        "median": 0.997,
+        "max": 1.0,
+        "unknown": 0
+      }
     },
     {
       "axis": "gold_stone",
       "at_0": "gold-light",
       "at_1": "stone-heavy",
       "provenance": "measured",
-      "unknown_is": "null, and it renders as Unknown -- never 0"
+      "unknown_is": "null, and it renders as Unknown -- never 0",
+      "observed": {
+        "n": 93,
+        "min": 0.0,
+        "median": 0.965,
+        "max": 1.0,
+        "unknown": 0
+      }
     },
     {
       "axis": "pristine_aged",
       "at_0": "pristine",
       "at_1": "aged",
       "provenance": "declared",
-      "unknown_is": "null, and it renders as Unknown -- never 0"
+      "unknown_is": "null, and it renders as Unknown -- never 0",
+      "observed": {
+        "n": 93,
+        "min": 0.0,
+        "median": 0.0,
+        "max": 0.7,
+        "unknown": 0
+      }
     },
     {
       "axis": "garden_urban",
       "at_0": "garden",
       "at_1": "urban",
       "provenance": "derived",
-      "unknown_is": "null, and it renders as Unknown -- never 0"
+      "unknown_is": "null, and it renders as Unknown -- never 0",
+      "observed": {
+        "n": 93,
+        "min": 0.083,
+        "median": 0.675,
+        "max": 0.917,
+        "unknown": 0
+      }
     },
     {
       "axis": "ceremonial_residential",
       "at_0": "ceremonial",
       "at_1": "residential",
       "provenance": "derived",
-      "unknown_is": "null, and it renders as Unknown -- never 0"
+      "unknown_is": "null, and it renders as Unknown -- never 0",
+      "observed": {
+        "n": 93,
+        "min": 0.05,
+        "median": 0.5,
+        "max": 0.7,
+        "unknown": 0
+      }
     }
   ],
   "route_ladder_uu": {
@@ -8206,7 +8255,15 @@
           "z_uu": 0.0,
           "radius_uu": 190.0,
           "rung": null,
-          "note": "60 degrees of a 24 m circle; six close it"
+          "note": "the -30-degree end; 60 degrees of a 24 m circle, six close it"
+        },
+        {
+          "name": "end_b",
+          "kind": "pier",
+          "z_uu": 0.0,
+          "radius_uu": 190.0,
+          "rung": null,
+          "note": "the +30-degree end; the next segment starts here"
         }
       ],
       "parts": {
@@ -8920,7 +8977,7 @@
           "note": "the outer pier stands at x = +12 m"
         },
         {
-          "name": "end_a",
+          "name": "back",
           "kind": "bridge_end",
           "z_uu": 0.0,
           "radius_uu": 105.0,
@@ -10100,7 +10157,7 @@
           "z_uu": 0.0,
           "radius_uu": 170.0,
           "rung": null,
-          "note": "arm along +X ends at x = +8.90 m; butts to a run"
+          "note": "arm along +X ends at x = +6.90 m; butts to a run"
         },
         {
           "name": "end_b",
@@ -10108,7 +10165,7 @@
           "z_uu": 0.0,
           "radius_uu": 170.0,
           "rung": null,
-          "note": "arm along +Y ends at y = +8.90 m; butts to a run rotated 90 deg"
+          "note": "arm along +Y ends at y = +6.90 m; butts to a run rotated 90 deg"
         }
       ],
       "parts": {
@@ -13216,7 +13273,7 @@
           "z_uu": 0.0,
           "radius_uu": 22.0,
           "rung": null,
-          "note": "the spine wall at y = +1.58 m takes a retaining wall"
+          "note": "the spine wall's outer face, at y = +1.80 m, takes a retaining wall"
         }
       ],
       "parts": {
@@ -14997,7 +15054,7 @@
           "z_uu": 0.0,
           "radius_uu": 55.0,
           "rung": null,
-          "note": "arm along -Y ends at y = -5.55 m"
+          "note": "arm along +Y ends at y = +5.55 m"
         }
       ],
       "parts": {
@@ -15358,7 +15415,15 @@
           "z_uu": 0.0,
           "radius_uu": 55.0,
           "rung": null,
-          "note": "45 degrees of an 11 m circle; eight close it"
+          "note": "the -22.5-degree end; 45 degrees of an 11 m circle, eight close it"
+        },
+        {
+          "name": "end_b",
+          "kind": "pier",
+          "z_uu": 0.0,
+          "radius_uu": 55.0,
+          "rung": null,
+          "note": "the +22.5-degree end; the next arc starts here"
         }
       ],
       "parts": {
@@ -15949,7 +16014,15 @@
           "z_uu": 0.0,
           "radius_uu": 55.0,
           "rung": null,
-          "note": "replaces one 8.00 m retaining run in a terrace edge"
+          "note": "the -Y end at y = -4.00 m; replaces one 8.00 m retaining run in a terrace edge"
+        },
+        {
+          "name": "end_b",
+          "kind": "pier",
+          "z_uu": 0.0,
+          "radius_uu": 55.0,
+          "rung": null,
+          "note": "the +Y end at y = +4.00 m; the terrace edge carries on from here"
         }
       ],
       "parts": {
@@ -16778,7 +16851,7 @@
           9.0
         ],
         "aspect": 3.78,
-        "water_z_m": 0.18,
+        "water_z_m": 0.19,
         "depth_m": 0.55,
         "head_rung": "T1",
         "colonnade_bays": 8,
@@ -16812,7 +16885,7 @@
       "style": {
         "slender_broad": 1.0,
         "low_monumental": 0.308,
-        "open_solid": 0.739,
+        "open_solid": 0.737,
         "gold_stone": 0.934,
         "pristine_aged": 0.0,
         "garden_urban": 0.317,
@@ -16838,10 +16911,10 @@
         {
           "name": "water_surface",
           "kind": "edge",
-          "z_uu": 18.0,
+          "z_uu": 19.0,
           "radius_uu": 1700.0,
           "rung": null,
-          "note": "still sheet at 0.18 m; 34.0 x 9.0 m, MI_V2_Water"
+          "note": "still sheet at 0.19 m; 34.0 x 9.0 m, MI_V2_Water"
         },
         {
           "name": "head_route",
@@ -16862,7 +16935,7 @@
         {
           "name": "walk_l",
           "kind": "route",
-          "z_uu": 34.0,
+          "z_uu": 31.0,
           "radius_uu": 110.0,
           "rung": null,
           "note": "colonnade walk, -Y"
@@ -16870,7 +16943,7 @@
         {
           "name": "walk_r",
           "kind": "route",
-          "z_uu": 34.0,
+          "z_uu": 31.0,
           "radius_uu": 110.0,
           "rung": null,
           "note": "colonnade walk, +Y"
@@ -16999,7 +17072,7 @@
               5.260000228881836,
               8.020000457763672
             ],
-            "bytes": 510816
+            "bytes": 498528
           },
           "fbx_read": {
             "unit_scale_factor": 0.9999999776482582,
@@ -17088,12 +17161,12 @@
           "bbox_min_uu": [
             -1697.0,
             -447.0,
-            14.0
+            15.0
           ],
           "bbox_max_uu": [
             1697.0,
             447.0,
-            18.0
+            19.0
           ],
           "size_uu": [
             3394.0,
@@ -17101,7 +17174,7 @@
             4.0
           ],
           "height_m": 0.04,
-          "base_z_uu": 14.0,
+          "base_z_uu": 15.0,
           "normals": {
             "faces": 6,
             "shells": 1,
@@ -17121,20 +17194,20 @@
             "meshes": 1,
             "min_yup": [
               -16.969999313354492,
-              0.14000000059604645,
+              0.15000000596046448,
               -4.46999979019165
             ],
             "max_yup": [
               16.969999313354492,
-              0.18000000715255737,
+              0.1899999976158142,
               4.46999979019165
             ],
             "bytes": 2100
           },
           "fbx_read": {
             "unit_scale_factor": 0.9999999776482582,
-            "stored_z_min": 14.0,
-            "stored_z_max": 18.0
+            "stored_z_min": 15.000000953674316,
+            "stored_z_max": 19.0
           }
         },
         "water_lit": {
@@ -17153,7 +17226,7 @@
           "bbox_min_uu": [
             1342.0,
             -255.0,
-            8.0
+            9.0
           ],
           "bbox_max_uu": [
             1452.0,
@@ -17163,10 +17236,10 @@
           "size_uu": [
             110.0,
             510.0,
-            157.0
+            156.0
           ],
-          "height_m": 1.57,
-          "base_z_uu": 8.0,
+          "height_m": 1.56,
+          "base_z_uu": 9.0,
           "normals": {
             "faces": 12,
             "shells": 2,
@@ -17186,20 +17259,20 @@
             "meshes": 1,
             "min_yup": [
               13.420000076293945,
-              0.07999999821186066,
+              0.09000000357627869,
               -2.5500001907348633
             ],
             "max_yup": [
               14.520000457763672,
-              1.6500000953674316,
+              1.649999976158142,
               2.5500001907348633
             ],
             "bytes": 3032
           },
           "fbx_read": {
             "unit_scale_factor": 0.9999999776482582,
-            "stored_z_min": 8.0,
-            "stored_z_max": 165.00001525878906
+            "stored_z_min": 9.0,
+            "stored_z_max": 165.0
           }
         }
       },
@@ -17255,7 +17328,7 @@
         "slender_broad": 0.887,
         "low_monumental": 0.238,
         "open_solid": 0.995,
-        "gold_stone": 0.841,
+        "gold_stone": 0.842,
         "pristine_aged": 0.0,
         "garden_urban": 0.183,
         "ceremonial_residential": 0.5
@@ -17288,7 +17361,7 @@
         {
           "name": "water_surface",
           "kind": "edge",
-          "z_uu": 18.0,
+          "z_uu": 19.0,
           "radius_uu": 160.0,
           "rung": null,
           "note": "the catch basin at the foot"
@@ -17397,14 +17470,14 @@
           "bbox_max_uu": [
             -70.0,
             280.0,
-            30.0
+            31.0
           ],
           "size_uu": [
             320.0,
             560.0,
-            85.0
+            86.0
           ],
-          "height_m": 0.85,
+          "height_m": 0.86,
           "base_z_uu": -55.0,
           "normals": {
             "faces": 30,
@@ -17430,7 +17503,7 @@
             ],
             "max_yup": [
               -0.6999999284744263,
-              0.30000001192092896,
+              0.3100000023841858,
               2.799999952316284
             ],
             "bytes": 4332
@@ -17438,7 +17511,7 @@
           "fbx_read": {
             "unit_scale_factor": 0.9999999776482582,
             "stored_z_min": -55.0,
-            "stored_z_max": 30.000001907348633
+            "stored_z_max": 31.0
           }
         },
         "water": {
@@ -17457,7 +17530,7 @@
           "bbox_min_uu": [
             -387.0,
             -277.0,
-            14.0
+            15.0
           ],
           "bbox_max_uu": [
             356.0,
@@ -17467,10 +17540,10 @@
           "size_uu": [
             743.0,
             554.0,
-            301.0
+            300.0
           ],
-          "height_m": 3.01,
-          "base_z_uu": 14.0,
+          "height_m": 3.0,
+          "base_z_uu": 15.0,
           "normals": {
             "faces": 66,
             "shells": 11,
@@ -17490,7 +17563,7 @@
             "meshes": 1,
             "min_yup": [
               -3.869999885559082,
-              0.14000000059604645,
+              0.15000000596046448,
               -2.7699999809265137
             ],
             "max_yup": [
@@ -17502,7 +17575,7 @@
           },
           "fbx_read": {
             "unit_scale_factor": 0.9999999776482582,
-            "stored_z_min": 14.0,
+            "stored_z_min": 15.000000953674316,
             "stored_z_max": 315.0
           }
         },
@@ -17592,7 +17665,7 @@
         "length_m": 8.0,
         "channel_m": 3.2,
         "walk_m": 2.1,
-        "water_z_m": 0.18,
+        "water_z_m": 0.19,
         "depth_m": 0.55
       },
       "origin_rule": "z = 0 is the GROUND DATUM; +X is the module front. excavation_uu is how far the module is cut in below it.",
@@ -17604,7 +17677,7 @@
         "manifest": "unreal units (cm)",
         "uu_per_metre": 100.0
       },
-      "height_uu": 86.5,
+      "height_uu": 87.5,
       "bbox_min_uu": [
         -440.0,
         -410.0,
@@ -17613,12 +17686,12 @@
       "bbox_max_uu": [
         440.0,
         410.0,
-        31.5
+        32.5
       ],
       "size_uu": [
         880.0,
         820.0,
-        86.5
+        87.5
       ],
       "style": {
         "slender_broad": 1.0,
@@ -17649,7 +17722,7 @@
         {
           "name": "water_surface",
           "kind": "edge",
-          "z_uu": 18.0,
+          "z_uu": 19.0,
           "radius_uu": 400.0,
           "rung": null,
           "note": "3.20 m of still water, 0.12 m below the walk"
@@ -17657,18 +17730,18 @@
         {
           "name": "walk_l",
           "kind": "route",
-          "z_uu": 30.0,
+          "z_uu": 31.0,
           "radius_uu": 105.0,
           "rung": null,
-          "note": "walk at 0.30 m, -Y"
+          "note": "walk at 0.310 m (one riser), -Y"
         },
         {
           "name": "walk_r",
           "kind": "route",
-          "z_uu": 30.0,
+          "z_uu": 31.0,
           "radius_uu": 105.0,
           "rung": null,
-          "note": "walk at 0.30 m, +Y"
+          "note": "walk at 0.310 m (one riser), +Y"
         },
         {
           "name": "end_a",
@@ -17709,14 +17782,14 @@
           "bbox_max_uu": [
             440.0,
             410.0,
-            30.0
+            31.0
           ],
           "size_uu": [
             880.0,
             820.0,
-            30.0
+            31.0
           ],
-          "height_m": 0.3,
+          "height_m": 0.31,
           "base_z_uu": 0.0,
           "normals": {
             "faces": 84,
@@ -17742,7 +17815,7 @@
             ],
             "max_yup": [
               4.400000095367432,
-              0.30000001192092896,
+              0.3100000023841858,
               4.099999904632568
             ],
             "bytes": 12560
@@ -17750,7 +17823,7 @@
           "fbx_read": {
             "unit_scale_factor": 0.9999999776482582,
             "stored_z_min": 0.0,
-            "stored_z_max": 30.000001907348633
+            "stored_z_max": 31.0
           }
         },
         "stone_dark": {
@@ -17774,14 +17847,14 @@
           "bbox_max_uu": [
             400.0,
             388.0,
-            31.5
+            32.5
           ],
           "size_uu": [
             800.0,
             776.0,
-            86.5
+            87.5
           ],
-          "height_m": 0.865,
+          "height_m": 0.875,
           "base_z_uu": -55.0,
           "normals": {
             "faces": 42,
@@ -17807,15 +17880,15 @@
             ],
             "max_yup": [
               4,
-              0.3149999976158142,
+              0.32499998807907104,
               3.879999876022339
             ],
-            "bytes": 5972
+            "bytes": 5976
           },
           "fbx_read": {
             "unit_scale_factor": 0.9999999776482582,
             "stored_z_min": -55.0,
-            "stored_z_max": 31.5
+            "stored_z_max": 32.5
           }
         },
         "water": {
@@ -17834,12 +17907,12 @@
           "bbox_min_uu": [
             -397.0,
             -157.0,
-            14.0
+            15.0
           ],
           "bbox_max_uu": [
             397.0,
             157.0,
-            18.0
+            19.0
           ],
           "size_uu": [
             794.0,
@@ -17847,7 +17920,7 @@
             4.0
           ],
           "height_m": 0.04,
-          "base_z_uu": 14.0,
+          "base_z_uu": 15.0,
           "normals": {
             "faces": 6,
             "shells": 1,
@@ -17867,20 +17940,20 @@
             "meshes": 1,
             "min_yup": [
               -3.9700000286102295,
-              0.14000000059604645,
+              0.15000000596046448,
               -1.5700000524520874
             ],
             "max_yup": [
               3.9700000286102295,
-              0.18000000715255737,
+              0.1899999976158142,
               1.5700000524520874
             ],
-            "bytes": 2104
+            "bytes": 2100
           },
           "fbx_read": {
             "unit_scale_factor": 0.9999999776482582,
-            "stored_z_min": 14.0,
-            "stored_z_max": 18.0
+            "stored_z_min": 15.000000953674316,
+            "stored_z_max": 19.0
           }
         }
       },
@@ -17902,7 +17975,7 @@
       "params": {
         "length_m": 8.0,
         "deck_w_m": 3.6,
-        "deck_z_m": 1.23,
+        "deck_z_m": 1.24,
         "risers_each_side": 3,
         "riser_m": 0.31,
         "headroom_over_water_m": 0.72,
@@ -17917,7 +17990,7 @@
         "manifest": "unreal units (cm)",
         "uu_per_metre": 100.0
       },
-      "height_uu": 353.0,
+      "height_uu": 354.0,
       "bbox_min_uu": [
         -440.0,
         -410.0,
@@ -17926,12 +17999,12 @@
       "bbox_max_uu": [
         440.0,
         410.0,
-        298.0
+        299.0
       ],
       "size_uu": [
         880.0,
         820.0,
-        353.0
+        354.0
       ],
       "style": {
         "slender_broad": 1.0,
@@ -17962,7 +18035,7 @@
         {
           "name": "water_surface",
           "kind": "edge",
-          "z_uu": 18.0,
+          "z_uu": 19.0,
           "radius_uu": 400.0,
           "rung": null,
           "note": "the canal carries through"
@@ -17970,26 +18043,26 @@
         {
           "name": "deck_route",
           "kind": "route",
-          "z_uu": 123.0,
+          "z_uu": 124.0,
           "radius_uu": 180.0,
           "rung": "S",
-          "note": "3.60 m deck at 1.23 m, crossing in Y"
+          "note": "3.60 m deck at 1.24 m, crossing in Y"
         },
         {
           "name": "walk_l",
           "kind": "route",
-          "z_uu": 30.0,
+          "z_uu": 31.0,
           "radius_uu": 105.0,
           "rung": null,
-          "note": "walk at 0.30 m, -Y"
+          "note": "walk at 0.310 m (one riser), -Y"
         },
         {
           "name": "walk_r",
           "kind": "route",
-          "z_uu": 30.0,
+          "z_uu": 31.0,
           "radius_uu": 105.0,
           "rung": null,
-          "note": "walk at 0.30 m, +Y"
+          "note": "walk at 0.310 m (one riser), +Y"
         },
         {
           "name": "end_a",
@@ -18025,12 +18098,12 @@
           "bbox_min_uu": [
             -190.0,
             -223.0,
-            228.0
+            229.0
           ],
           "bbox_max_uu": [
             190.0,
             223.0,
-            298.0
+            299.0
           ],
           "size_uu": [
             380.0,
@@ -18038,7 +18111,7 @@
             70.0
           ],
           "height_m": 0.7,
-          "base_z_uu": 228.0,
+          "base_z_uu": 229.0,
           "normals": {
             "faces": 952,
             "shells": 12,
@@ -18058,20 +18131,20 @@
             "meshes": 1,
             "min_yup": [
               -1.9000000953674316,
-              2.2799999713897705,
+              2.2899999618530273,
               -2.2300000190734863
             ],
             "max_yup": [
               1.9000000953674316,
-              2.9800000190734863,
+              2.990000009536743,
               2.2300000190734863
             ],
             "bytes": 62140
           },
           "fbx_read": {
             "unit_scale_factor": 0.9999999776482582,
-            "stored_z_min": 228.0,
-            "stored_z_max": 298.0
+            "stored_z_min": 229.0,
+            "stored_z_max": 299.0
           }
         },
         "stone": {
@@ -18095,14 +18168,14 @@
           "bbox_max_uu": [
             440.0,
             410.0,
-            245.0
+            246.0
           ],
           "size_uu": [
             880.0,
             820.0,
-            245.0
+            246.0
           ],
-          "height_m": 2.45,
+          "height_m": 2.46,
           "base_z_uu": 0.0,
           "normals": {
             "faces": 1034,
@@ -18128,15 +18201,15 @@
             ],
             "max_yup": [
               4.400000095367432,
-              2.450000047683716,
+              2.4600000381469727,
               4.099999904632568
             ],
-            "bytes": 89160
+            "bytes": 89164
           },
           "fbx_read": {
             "unit_scale_factor": 0.9999999776482582,
             "stored_z_min": 0.0,
-            "stored_z_max": 245.0
+            "stored_z_max": 246.0
           }
         },
         "stone_dark": {
@@ -18160,14 +18233,14 @@
           "bbox_max_uu": [
             400.0,
             388.0,
-            124.5
+            125.5
           ],
           "size_uu": [
             800.0,
             776.0,
-            179.5
+            180.5
           ],
-          "height_m": 1.795,
+          "height_m": 1.805,
           "base_z_uu": -55.0,
           "normals": {
             "faces": 48,
@@ -18193,7 +18266,7 @@
             ],
             "max_yup": [
               4,
-              1.2450000047683716,
+              1.2549999952316284,
               3.879999876022339
             ],
             "bytes": 6824
@@ -18201,7 +18274,7 @@
           "fbx_read": {
             "unit_scale_factor": 0.9999999776482582,
             "stored_z_min": -55.0,
-            "stored_z_max": 124.5
+            "stored_z_max": 125.5
           }
         },
         "water": {
@@ -18220,12 +18293,12 @@
           "bbox_min_uu": [
             -397.0,
             -157.0,
-            14.0
+            15.0
           ],
           "bbox_max_uu": [
             397.0,
             157.0,
-            18.0
+            19.0
           ],
           "size_uu": [
             794.0,
@@ -18233,7 +18306,7 @@
             4.0
           ],
           "height_m": 0.04,
-          "base_z_uu": 14.0,
+          "base_z_uu": 15.0,
           "normals": {
             "faces": 6,
             "shells": 1,
@@ -18253,20 +18326,20 @@
             "meshes": 1,
             "min_yup": [
               -3.9700000286102295,
-              0.14000000059604645,
+              0.15000000596046448,
               -1.5700000524520874
             ],
             "max_yup": [
               3.9700000286102295,
-              0.18000000715255737,
+              0.1899999976158142,
               1.5700000524520874
             ],
             "bytes": 2112
           },
           "fbx_read": {
             "unit_scale_factor": 0.9999999776482582,
-            "stored_z_min": 14.0,
-            "stored_z_max": 18.0
+            "stored_z_min": 15.000000953674316,
+            "stored_z_max": 19.0
           }
         }
       },
@@ -18287,7 +18360,7 @@
       ],
       "params": {
         "radius_m": 3.9,
-        "floor_z_m": 1.25,
+        "floor_z_m": 1.24,
         "bays": 8,
         "stands_in_water": true
       },
@@ -18300,7 +18373,7 @@
         "manifest": "unreal units (cm)",
         "uu_per_metre": 100.0
       },
-      "height_uu": 1277.0,
+      "height_uu": 1276.0,
       "bbox_min_uu": [
         -776.0,
         -776.0,
@@ -18309,17 +18382,17 @@
       "bbox_max_uu": [
         776.0,
         776.0,
-        1222.0
+        1221.0
       ],
       "size_uu": [
         1552.0,
         1552.0,
-        1277.0
+        1276.0
       ],
       "style": {
         "slender_broad": 0.8,
         "low_monumental": 0.513,
-        "open_solid": 0.78,
+        "open_solid": 0.792,
         "gold_stone": 0.976,
         "pristine_aged": 0.0,
         "garden_urban": 0.183,
@@ -18345,7 +18418,7 @@
         {
           "name": "water_surface",
           "kind": "edge",
-          "z_uu": 18.0,
+          "z_uu": 19.0,
           "radius_uu": 730.0,
           "rung": null,
           "note": "the sheet the pavilion stands in"
@@ -18353,15 +18426,15 @@
         {
           "name": "floor_route",
           "kind": "route",
-          "z_uu": 125.0,
+          "z_uu": 124.0,
           "radius_uu": 312.0,
           "rung": null,
-          "note": "the pavilion floor at 1.25 m, reached from a crossing or a jetty"
+          "note": "the pavilion floor at 1.24 m (four risers), reached from a crossing or a jetty"
         },
         {
           "name": "top",
           "kind": "crown",
-          "z_uu": 1222.0,
+          "z_uu": 1221.0,
           "radius_uu": 0.0,
           "rung": null,
           "note": "terminal"
@@ -18384,12 +18457,12 @@
           "bbox_min_uu": [
             -52.0,
             -50.7,
-            975.0
+            974.0
           ],
           "bbox_max_uu": [
             52.0,
             50.7,
-            1065.0
+            1064.0
           ],
           "size_uu": [
             104.0,
@@ -18397,7 +18470,7 @@
             90.0
           ],
           "height_m": 0.9,
-          "base_z_uu": 975.0,
+          "base_z_uu": 974.0,
           "normals": {
             "faces": 14,
             "shells": 1,
@@ -18417,20 +18490,20 @@
             "meshes": 1,
             "min_yup": [
               -0.5199999809265137,
-              9.75,
+              9.739999771118164,
               -0.5069625377655029
             ],
             "max_yup": [
               0.5199999809265137,
-              10.649999618530273,
+              10.640000343322754,
               0.5069625377655029
             ],
-            "bytes": 2776
+            "bytes": 2788
           },
           "fbx_read": {
             "unit_scale_factor": 0.9999999776482582,
-            "stored_z_min": 975.0,
-            "stored_z_max": 1065.0
+            "stored_z_min": 974.0,
+            "stored_z_max": 1064.0
           }
         },
         "gold": {
@@ -18449,12 +18522,12 @@
           "bbox_min_uu": [
             -36.0,
             -36.0,
-            1087.0
+            1086.0
           ],
           "bbox_max_uu": [
             36.0,
             36.0,
-            1222.0
+            1221.0
           ],
           "size_uu": [
             72.0,
@@ -18462,7 +18535,7 @@
             135.0
           ],
           "height_m": 1.35,
-          "base_z_uu": 1087.0,
+          "base_z_uu": 1086.0,
           "normals": {
             "faces": 238,
             "shells": 3,
@@ -18482,20 +18555,20 @@
             "meshes": 1,
             "min_yup": [
               -0.36000001430511475,
-              10.869999885559082,
+              10.859999656677246,
               -0.36000001430511475
             ],
             "max_yup": [
               0.36000001430511475,
-              12.220000267028809,
+              12.210000038146973,
               0.36000001430511475
             ],
             "bytes": 16692
           },
           "fbx_read": {
             "unit_scale_factor": 0.9999999776482582,
-            "stored_z_min": 1087.0,
-            "stored_z_max": 1222.0
+            "stored_z_min": 1086.0,
+            "stored_z_max": 1221.0
           }
         },
         "roof": {
@@ -18514,12 +18587,12 @@
           "bbox_min_uu": [
             -382.2,
             -382.2,
-            665.0
+            664.0
           ],
           "bbox_max_uu": [
             382.2,
             382.2,
-            975.0
+            974.0
           ],
           "size_uu": [
             764.4,
@@ -18527,7 +18600,7 @@
             310.0
           ],
           "height_m": 3.1,
-          "base_z_uu": 665.0,
+          "base_z_uu": 664.0,
           "normals": {
             "faces": 241,
             "shells": 1,
@@ -18547,20 +18620,20 @@
             "meshes": 1,
             "min_yup": [
               -3.822000026702881,
-              6.650000095367432,
+              6.639999866485596,
               -3.822000026702881
             ],
             "max_yup": [
               3.822000026702881,
-              9.75,
+              9.739999771118164,
               3.822000026702881
             ],
-            "bytes": 13692
+            "bytes": 13704
           },
           "fbx_read": {
             "unit_scale_factor": 0.9999999776482582,
-            "stored_z_min": 665.0,
-            "stored_z_max": 975.0
+            "stored_z_min": 664.0,
+            "stored_z_max": 974.0
           }
         },
         "stone": {
@@ -18584,14 +18657,14 @@
           "bbox_max_uu": [
             776.0,
             776.0,
-            1087.0
+            1086.0
           ],
           "size_uu": [
             1552.0,
             1552.0,
-            1087.0
+            1086.0
           ],
-          "height_m": 10.87,
+          "height_m": 10.86,
           "base_z_uu": 0.0,
           "normals": {
             "faces": 2900,
@@ -18617,7 +18690,7 @@
             ],
             "max_yup": [
               7.760000228881836,
-              10.869999885559082,
+              10.859999656677246,
               7.760000228881836
             ],
             "bytes": 276836
@@ -18625,7 +18698,7 @@
           "fbx_read": {
             "unit_scale_factor": 0.9999999776482582,
             "stored_z_min": 0.0,
-            "stored_z_max": 1087.0
+            "stored_z_max": 1086.0
           }
         },
         "stone_dark": {
@@ -18649,14 +18722,14 @@
           "bbox_max_uu": [
             730.0,
             730.0,
-            126.5
+            125.5
           ],
           "size_uu": [
             1460.0,
             1460.0,
-            181.5
+            180.5
           ],
-          "height_m": 1.815,
+          "height_m": 1.805,
           "base_z_uu": -55.0,
           "normals": {
             "faces": 152,
@@ -18682,7 +18755,7 @@
             ],
             "max_yup": [
               7.300000190734863,
-              1.2649999856948853,
+              1.2549999952316284,
               7.300000190734863
             ],
             "bytes": 21840
@@ -18690,7 +18763,7 @@
           "fbx_read": {
             "unit_scale_factor": 0.9999999776482582,
             "stored_z_min": -55.0,
-            "stored_z_max": 126.5
+            "stored_z_max": 125.5
           }
         },
         "water": {
@@ -18709,12 +18782,12 @@
           "bbox_min_uu": [
             -727.0,
             -727.0,
-            14.0
+            15.0
           ],
           "bbox_max_uu": [
             727.0,
             727.0,
-            18.0
+            19.0
           ],
           "size_uu": [
             1454.0,
@@ -18722,7 +18795,7 @@
             4.0
           ],
           "height_m": 0.04,
-          "base_z_uu": 14.0,
+          "base_z_uu": 15.0,
           "normals": {
             "faces": 6,
             "shells": 1,
@@ -18742,20 +18815,20 @@
             "meshes": 1,
             "min_yup": [
               -7.269999980926514,
-              0.14000000059604645,
+              0.15000000596046448,
               -7.269999980926514
             ],
             "max_yup": [
               7.269999980926514,
-              0.18000000715255737,
+              0.1899999976158142,
               7.269999980926514
             ],
             "bytes": 2096
           },
           "fbx_read": {
             "unit_scale_factor": 0.9999999776482582,
-            "stored_z_min": 14.0,
-            "stored_z_max": 18.0
+            "stored_z_min": 15.000000953674316,
+            "stored_z_max": 19.0
           }
         }
       },
@@ -18810,7 +18883,7 @@
         "slender_broad": 1.0,
         "low_monumental": 0.119,
         "open_solid": 1.0,
-        "gold_stone": 0.162,
+        "gold_stone": 0.164,
         "pristine_aged": 0.0,
         "garden_urban": 0.083,
         "ceremonial_residential": 0.5
@@ -18851,7 +18924,7 @@
         {
           "name": "water_surface",
           "kind": "edge",
-          "z_uu": 18.0,
+          "z_uu": 19.0,
           "radius_uu": 400.0,
           "rung": null,
           "note": "the catch basin below"
@@ -19020,7 +19093,7 @@
           "bbox_min_uu": [
             -457.0,
             -462.0,
-            14.0
+            15.0
           ],
           "bbox_max_uu": [
             457.0,
@@ -19030,10 +19103,10 @@
           "size_uu": [
             914.0,
             637.0,
-            273.0
+            272.0
           ],
-          "height_m": 2.73,
-          "base_z_uu": 14.0,
+          "height_m": 2.72,
+          "base_z_uu": 15.0,
           "normals": {
             "faces": 12,
             "shells": 2,
@@ -19053,7 +19126,7 @@
             "meshes": 1,
             "min_yup": [
               -4.570000171661377,
-              0.14000000059604645,
+              0.15000000596046448,
               -1.75
             ],
             "max_yup": [
@@ -19065,7 +19138,7 @@
           },
           "fbx_read": {
             "unit_scale_factor": 0.9999999776482582,
-            "stored_z_min": 14.0,
+            "stored_z_min": 15.000000953674316,
             "stored_z_max": 287.0
           }
         },
@@ -19211,10 +19284,10 @@
         {
           "name": "floor_route",
           "kind": "route",
-          "z_uu": -125.0,
+          "z_uu": -124.0,
           "radius_uu": 650.0,
           "rung": null,
-          "note": "the pool walk at -1.55 m (T1 below grade)"
+          "note": "the pool walk at -1.24 m, the bottom tread of the four flights"
         },
         {
           "name": "water_surface",
@@ -19852,12 +19925,12 @@
           "note": ""
         },
         {
-          "name": "shelter",
+          "name": "passage",
           "kind": "route",
-          "z_uu": 210.0,
+          "z_uu": 0.0,
           "radius_uu": 260.0,
           "rung": null,
-          "note": "2.10 m clear under the beams; the ground stays walkable"
+          "note": "the ground under the canopy stays walkable; 2.10 m clear to the beams"
         },
         {
           "name": "counter",
@@ -20204,7 +20277,7 @@
       "family_group": "market",
       "category": "structure",
       "silhouette_role": "screen",
-      "note": "three ogee bays of covered walk over one house bay, with a balustraded roof deck at 3.37 m; butts into a continuous arcade",
+      "note": "three ogee bays of covered walk over one house bay, with a balustraded roof deck; butts into a continuous arcade",
       "districts": [
         "hamlet",
         "city",
@@ -20215,7 +20288,8 @@
         "width_m": 6.4,
         "depth_m": 3.3,
         "bays": 3,
-        "deck_z_m": 3.37,
+        "walk_z_m": 0.31,
+        "deck_z_m": 3.41,
         "spans": "exactly one roofscape bay"
       },
       "origin_rule": "z = 0 is the GROUND DATUM; +X is the module front. excavation_uu is how far the module is cut in below it.",
@@ -20227,26 +20301,26 @@
         "manifest": "unreal units (cm)",
         "uu_per_metre": 100.0
       },
-      "height_uu": 455.0,
+      "height_uu": 459.0,
       "bbox_min_uu": [
         -354.8,
-        -20.0,
+        0.0,
         0.0
       ],
       "bbox_max_uu": [
         354.8,
-        345.0,
-        455.0
+        360.0,
+        459.0
       ],
       "size_uu": [
         709.6,
-        365.0,
-        455.0
+        360.0,
+        459.0
       ],
       "style": {
-        "slender_broad": 0.9,
-        "low_monumental": 0.188,
-        "open_solid": 0.673,
+        "slender_broad": 0.896,
+        "low_monumental": 0.191,
+        "open_solid": 0.946,
         "gold_stone": 1.0,
         "pristine_aged": 0.0,
         "garden_urban": 0.7,
@@ -20272,18 +20346,18 @@
         {
           "name": "walk",
           "kind": "route",
-          "z_uu": 30.0,
+          "z_uu": 31.0,
           "radius_uu": 320.0,
           "rung": null,
-          "note": "covered walk at 0.30 m, 2.65 m clear"
+          "note": "covered walk at 0.310 m (one riser), 2.65 m clear"
         },
         {
           "name": "deck_route",
           "kind": "route",
-          "z_uu": 337.0,
+          "z_uu": 341.0,
           "radius_uu": 320.0,
           "rung": null,
-          "note": "the roof is a walkable balcony deck at 3.37 m"
+          "note": "the roof is a walkable balcony deck at 3.41 m (eleven risers)"
         },
         {
           "name": "end_a",
@@ -20318,20 +20392,20 @@
           ],
           "bbox_min_uu": [
             -354.8,
-            -20.0,
+            0.0,
             0.0
           ],
           "bbox_max_uu": [
             354.8,
-            345.0,
-            455.0
+            360.0,
+            459.0
           ],
           "size_uu": [
             709.6,
-            365.0,
-            455.0
+            360.0,
+            459.0
           ],
-          "height_m": 4.55,
+          "height_m": 4.59,
           "base_z_uu": 0.0,
           "normals": {
             "faces": 1754,
@@ -20353,19 +20427,19 @@
             "min_yup": [
               -3.5480000972747803,
               0,
-              -3.4499998092651367
+              -3.5999999046325684
             ],
             "max_yup": [
               3.5480000972747803,
-              4.549999713897705,
-              0.20000004768371582
+              4.589999675750732,
+              0
             ],
-            "bytes": 155904
+            "bytes": 155888
           },
           "fbx_read": {
             "unit_scale_factor": 0.9999999776482582,
             "stored_z_min": 0.0,
-            "stored_z_max": 454.9999694824219
+            "stored_z_max": 458.9999694824219
           }
         },
         "stone_dark": {
@@ -20384,20 +20458,20 @@
           "bbox_min_uu": [
             -310.0,
             15.0,
-            26.5
+            27.5
           ],
           "bbox_max_uu": [
             310.0,
             275.0,
-            338.5
+            342.5
           ],
           "size_uu": [
             620.0,
             260.0,
-            312.0
+            315.0
           ],
-          "height_m": 3.12,
-          "base_z_uu": 26.5,
+          "height_m": 3.15,
+          "base_z_uu": 27.5,
           "normals": {
             "faces": 12,
             "shells": 2,
@@ -20417,20 +20491,20 @@
             "meshes": 1,
             "min_yup": [
               -3.0999999046325684,
-              0.26499998569488525,
+              0.2750000059604645,
               -2.75
             ],
             "max_yup": [
               3.0999999046325684,
-              3.384999990463257,
+              3.424999952316284,
               -0.15000009536743164
             ],
             "bytes": 2952
           },
           "fbx_read": {
             "unit_scale_factor": 0.9999999776482582,
-            "stored_z_min": 26.499998092651367,
-            "stored_z_max": 338.5
+            "stored_z_min": 27.5,
+            "stored_z_max": 342.5
           }
         }
       },
@@ -20736,7 +20810,7 @@
         "clear_m": 4.1,
         "ribs": 5,
         "lanterns": 3,
-        "deck_z_m": 4.52
+        "deck_z_m": 4.65
       },
       "origin_rule": "z = 0 is the GROUND DATUM; +X is the module front. excavation_uu is how far the module is cut in below it.",
       "excavation_uu": 0.0,
@@ -20747,7 +20821,7 @@
         "manifest": "unreal units (cm)",
         "uu_per_metre": 100.0
       },
-      "height_uu": 452.0,
+      "height_uu": 465.0,
       "bbox_min_uu": [
         -250.0,
         -379.12,
@@ -20756,16 +20830,16 @@
       "bbox_max_uu": [
         250.0,
         379.12,
-        452.0
+        465.0
       ],
       "size_uu": [
         500.0,
         758.24,
-        452.0
+        465.0
       ],
       "style": {
-        "slender_broad": 0.929,
-        "low_monumental": 0.186,
+        "slender_broad": 0.918,
+        "low_monumental": 0.195,
         "open_solid": 0.982,
         "gold_stone": 0.943,
         "pristine_aged": 0.0,
@@ -20816,10 +20890,10 @@
         {
           "name": "deck_route",
           "kind": "route",
-          "z_uu": 452.0,
+          "z_uu": 465.0,
           "radius_uu": 250.0,
           "rung": null,
-          "note": "the roof deck at 4.52 m"
+          "note": "the roof deck at 4.65 m"
         }
       ],
       "parts": {
@@ -20974,21 +21048,21 @@
           "bbox_max_uu": [
             250.0,
             379.12,
-            452.0
+            465.0
           ],
           "size_uu": [
             500.0,
             758.24,
-            452.0
+            465.0
           ],
-          "height_m": 4.52,
+          "height_m": 4.65,
           "base_z_uu": 0.0,
           "normals": {
             "faces": 320,
             "shells": 10,
             "inverted_shells": 0,
             "inverted_faces": 0,
-            "open_shells": 1,
+            "open_shells": 0,
             "zero_normal_faces": 0
           },
           "material": "MI_V2_IvoryStone",
@@ -21007,7 +21081,7 @@
             ],
             "max_yup": [
               2.5,
-              4.519999980926514,
+              4.650000095367432,
               3.7911999225616455
             ],
             "bytes": 39000
@@ -21015,7 +21089,7 @@
           "fbx_read": {
             "unit_scale_factor": 0.9999999776482582,
             "stored_z_min": 0.0,
-            "stored_z_max": 452.0
+            "stored_z_max": 465.0
           }
         },
         "stone_dark": {
@@ -21803,7 +21877,7 @@
           "note": ""
         },
         {
-          "name": "end_a",
+          "name": "wall_join",
           "kind": "pier",
           "z_uu": 0.0,
           "radius_uu": 40.0,

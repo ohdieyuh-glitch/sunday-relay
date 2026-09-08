@@ -455,6 +455,101 @@ def check_asset(spec, objs, mats_available):
                        "(%.2f .. %.2f m)"
                        % (aid, sock.name, sock.z, z_lo + TOL_M, z_hi - TOL_M))
 
+    # ---- the socket GRAMMAR, not just the socket geometry ------------------
+    #
+    # Everything above checks that a socket describes real geometry. These
+    # check that it describes it in the language the rest of the kit reads:
+    # a name from the allowlist, both halves of a pair, ends that are actually
+    # at the ends, a route on the route ladder, a stair that arrives on a whole
+    # number of risers, and a span whose two ends are at one height. A socket
+    # that is geometrically perfect and named `top_socket` is invisible to
+    # `compatible()` and to every generator downstream.
+    names = {sk.name for sk in spec.sockets}
+    if len(names) != len(spec.sockets):
+        bad.append("%s: two sockets share a name" % aid)
+    for sock in spec.sockets:
+        allowed = K.SOCKET_NAMES.get(sock.kind, ())
+        if sock.name not in allowed:
+            bad.append("%s: socket %r is kind %r, whose names are %s -- add it "
+                       "to kit.SOCKET_NAMES if it is a real new join"
+                       % (aid, sock.name, sock.kind, ", ".join(allowed)))
+    for a_name, b_name in K.SOCKET_PAIRS:
+        if (a_name in names) != (b_name in names):
+            bad.append("%s: publishes %s without %s -- a run joined from one "
+                       "side only" % (aid, a_name if a_name in names else b_name,
+                                      b_name if a_name in names else a_name))
+
+    # A BUTT PLANE HAS TO HAVE MASONRY ON IT. The first version of this check
+    # asserted that NOTHING reached past the declared plane, and it was wrong
+    # about nine modules and right about none: a terrace of houses butts at the
+    # bay width and its EAVES overhang, which is what eaves are. What matters
+    # is the opposite -- that the module actually has geometry AT the plane it
+    # says it joins on, so two runs laid end to end touch instead of gapping.
+    for sock in spec.sockets:
+        if sock.kind not in ("pier", "bridge_end"):
+            continue
+        m = re.search(r"\b([xy]) = ([+-]?[0-9.]+)", sock.note or "")
+        if not m:
+            continue
+        axis, want = m.group(1), float(m.group(2))
+        vals = [(v.co.x if axis == "x" else v.co.y)
+                for obj in all_objs for v in obj.data.vertices]
+        if not vals:
+            continue
+        if want < min(vals) - TOL_M or want > max(vals) + TOL_M:
+            bad.append("%s: socket %r joins at %s = %.2f m, outside the module "
+                       "(%.2f .. %.2f m)"
+                       % (aid, sock.name, axis, want, min(vals), max(vals)))
+        elif not any(abs(v - want) <= 0.06 for v in vals):
+            bad.append("%s: socket %r joins at %s = %.2f m and there is no "
+                       "geometry within 6 cm of that plane -- two of these laid "
+                       "end to end would not touch" % (aid, sock.name, axis, want))
+
+    # A ROUTE IS A LEVEL YOU CAN CLIMB TO. Not "on the T-ladder", which was the
+    # first rule here and flagged nine modules that were right: a bridge deck
+    # and a pavilion floor are not terrace elevations. The rule that means
+    # something is that a route sits a WHOLE number of risers above the ground
+    # datum or above another route in the same module, because that is what a
+    # flight of the kit's own stairs can actually reach. It found four routes
+    # out by one to three centimetres and one socket that was not a route.
+    routes = sorted({0.0} | {sk.z for sk in spec.sockets if sk.kind == "route"})
+    for sock in spec.sockets:
+        if sock.kind != "route" or abs(sock.z) <= TOL_M:
+            continue
+        if spec.params.get("off_ladder_reason"):
+            continue
+        reach = False
+        for base in routes:
+            if abs(base - sock.z) <= TOL_M:
+                continue
+            n = (sock.z - base) / K.RISER_M
+            if abs(n - round(n)) <= 0.03 and abs(round(n)) >= 1:
+                reach = True
+                break
+        if not reach:
+            bad.append("%s: route %r at %.3f m is not a whole number of %.3f m "
+                       "risers above the datum or above another route here -- "
+                       "a flight arriving at it has a short step at the top"
+                       % (aid, sock.name, sock.z, K.RISER_M))
+
+    # a stair arrives on a WHOLE number of risers, or says why not
+    lo_r, hi_r = spec.socket("bottom_route"), spec.socket("top_route")
+    if lo_r is not None and hi_r is not None:
+        rise = hi_r.z - lo_r.z
+        n = rise / K.RISER_M
+        if abs(n - round(n)) > 0.02 and not off_ladder:
+            bad.append("%s: climbs %.3f m, which is %.2f risers of %.3f m -- a "
+                       "flight that does not arrive on a whole riser has a "
+                       "short step at the top" % (aid, rise, n, K.RISER_M))
+
+    # a span's two ends are at ONE height, or it is a ramp nobody asked for
+    ends = [spec.socket(n) for n in ("end_a", "end_b")]
+    if all(e is not None for e in ends) and ends[0].kind == "bridge_end":
+        if abs(ends[0].z - ends[1].z) > TOL_M:
+            bad.append("%s: its two deck ends are at %.3f m and %.3f m -- a "
+                       "span lands level or it is a ramp"
+                       % (aid, ends[0].z, ends[1].z))
+
     # THE STACK INVARIANT APPLIES TO STACK MODULES, and membership is decided
     # by the SOCKET, not by the role name. A tower body joins the module below
     # it through a `tower`-kind bottom socket; a house sits on the ground

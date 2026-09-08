@@ -107,9 +107,33 @@ Never the other way round.
    rather than in the family — a kit whose modules each invent their own column
    reads as a kit.
 3. Return a `kit.ModuleSpec`. Do not state a dimension; the pipeline measures.
-4. Add the builder to that family's `BUILDERS` tuple.
+4. Add the builder to that family's `BUILDERS` tuple. A NEW family also needs
+   one line in `forge/registry.py` — that file is the single list both scripts
+   import, and the coverage check compares what it validated against what the
+   manifest contains, in both directions.
 5. `build_assets.py`, then `validate_assets.py`, then **look at the render.**
-   Four of the defects fixed while building this kit were invisible in the
+   Several of the defects fixed while building this kit were invisible in the
    numbers and obvious in a picture: filigree panels lying flat, an attic
    floating over an unfilled spandrel, a torn spandrel web under an arch, and
    every terrace of `tower_base_terraced` rendering solid black.
+
+## Four rules a new module has to keep
+
+These are the ones the validator will fail you on, and each exists because
+something in this kit broke it:
+
+- **z = 0 is the GROUND DATUM.** Not the lowest vertex. Cut below it only by
+  declaring `excavates=`, and the declaration is checked against the
+  measurement. Float above it only by declaring `mounts=` and publishing the
+  `bridge_end` face that carries you.
+- **A wearing course is never FLUSH.** Either recess the slab and let the
+  course fill it (`elements.landing`) or lay the course proud
+  (`elements.wear_course`). Two up-facing surfaces in one plane shadow each
+  other in Cycles and render solid black; sixteen modules had a pair.
+- **Solids OVERLAP, they do not butt.** Two boxes meeting exactly face to face
+  lose one of their two coincident faces to `Part._append`'s duplicate guard,
+  and the shell that is left encloses negative volume.
+- **A `route` socket is a level you can CLIMB to** — a whole number of 0.310 m
+  risers above the ground datum or above another route in the same module. If
+  your module genuinely needs another pitch, put `off_ladder_reason` in its
+  params and say why, as `WL_Stair_Ceremonial` does.

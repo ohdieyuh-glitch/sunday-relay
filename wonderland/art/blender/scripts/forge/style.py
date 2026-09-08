@@ -223,8 +223,30 @@ def profile(spec, objs, size_m, height_m):
             for k, v in out.items()}
 
 
-def axis_table():
-    """The manifest's one copy of what the axes mean and where they come from."""
-    return [{"axis": n, "at_0": a, "at_1": b, "provenance": p,
-             "unknown_is": "null, and it renders as Unknown -- never 0"}
-            for (n, a, b, p) in AXES]
+def axis_table(records=None):
+    """What the axes mean, where they come from, and how the kit is spread.
+
+    THE SPREAD IS PART OF THE ANSWER. `open_solid` reads 1.0 for two thirds of
+    this kit, which is not a broken measurement -- two thirds of the kit is
+    walls, terraces, ground and troughs, and those are solid. But a consumer
+    sorting on a number needs to know where the information actually is, so
+    each axis carries the observed min, median and max rather than leaving
+    somebody to discover that 0.95 is already unusual.
+    """
+    table = []
+    for (n, a, b, prov) in AXES:
+        entry = {"axis": n, "at_0": a, "at_1": b, "provenance": prov,
+                 "unknown_is": "null, and it renders as Unknown -- never 0"}
+        if records:
+            vals = sorted(r["style"][n] for r in records
+                          if r.get("style", {}).get(n) is not None)
+            if vals:
+                entry["observed"] = {
+                    "n": len(vals),
+                    "min": round(vals[0], 3),
+                    "median": round(vals[len(vals) // 2], 3),
+                    "max": round(vals[-1], 3),
+                    "unknown": len(records) - len(vals),
+                }
+        table.append(entry)
+    return table

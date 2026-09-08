@@ -154,8 +154,13 @@ def garden_retaining_corner_in(f):
         [K.Socket("bottom", 0.0, ARM + THICK, "ground"),
          K.Socket("top_route", TERRACE_Z, ARM, "route", "T2 terrace at 3.10 m"),
          K.Socket("edge", TERRACE_Z, ARM, "edge", "coping turns the corner at 3.10 m"),
-         K.Socket("end_a", 0.0, THICK * 0.5, "pier", "arm along +X ends at x = +5.55 m"),
-         K.Socket("end_b", 0.0, THICK * 0.5, "pier", "arm along +Y ends at y = +5.55 m")],
+         # THE NUMBER IS COMPUTED, NOT TYPED. Its twin below said -5.55 on an
+         # arm that runs the other way, and nothing compared a socket note
+         # against the geometry it describes until the grammar check did.
+         K.Socket("end_a", 0.0, THICK * 0.5, "pier",
+                  "arm along +X ends at x = +%.2f m" % (ARM + ht)),
+         K.Socket("end_b", 0.0, THICK * 0.5, "pier",
+                  "arm along +Y ends at y = +%.2f m" % (ARM + ht))],
         districts=("royal_garden", "water_garden", "tea_terrace", "plaza"),
         note="90-degree inside corner with a mitred quoin; two 5.00 m arms on "
              "the same section as the run",
@@ -202,8 +207,10 @@ def garden_retaining_corner_out(f):
         [K.Socket("bottom", 0.0, ARM + THICK, "ground"),
          K.Socket("top_route", TERRACE_Z, ARM, "route", "T2 terrace at 3.10 m"),
          K.Socket("edge", TERRACE_Z, ARM, "edge", "coping turns the corner at 3.10 m"),
-         K.Socket("end_a", 0.0, THICK * 0.5, "pier", "arm along -X ends at x = -5.55 m"),
-         K.Socket("end_b", 0.0, THICK * 0.5, "pier", "arm along -Y ends at y = -5.55 m")],
+         K.Socket("end_a", 0.0, THICK * 0.5, "pier",
+                  "arm along -X ends at x = %+.2f m" % (-(ARM + ht))),
+         K.Socket("end_b", 0.0, THICK * 0.5, "pier",
+                  "arm along +Y ends at y = %+.2f m" % (ARM + ht))],
         districts=("royal_garden", "water_garden", "tea_terrace", "plaza"),
         note="90-degree outside corner with a gold urn on the quoin; the "
              "projecting bay a terrace pushes over the level below",
@@ -266,7 +273,10 @@ def garden_retaining_curved(f):
          K.Socket("top_route", TERRACE_Z, R, "route", "T2 terrace at 3.10 m, inside the arc"),
          K.Socket("edge", TERRACE_Z, R + ht, "edge", "coping follows the 11 m arc"),
          K.Socket("end_a", 0.0, THICK * 0.5, "pier",
-                  "45 degrees of an 11 m circle; eight close it")],
+                  "the -%.1f-degree end; 45 degrees of an 11 m circle, eight "
+                  "close it" % (ARC * 0.5)),
+         K.Socket("end_b", 0.0, THICK * 0.5, "pier",
+                  "the +%.1f-degree end; the next arc starts here" % (ARC * 0.5))],
         districts=("royal_garden", "water_garden", "plaza"),
         note="45-degree retaining arc on an 11.00 m radius; origin is the ARC "
              "CENTRE, eight make a 22 m circle",
@@ -386,8 +396,15 @@ def garden_overlook(f):
          K.Socket("top_route", TERRACE_Z, R - 0.34, "route",
                   "8 m semicircular floor at 3.10 m (T2), open on the -X side"),
          K.Socket("edge", TERRACE_Z, R, "edge", "the rail arc"),
+         # THE PLANES ARE NAMED, because a generator laying a terrace edge has
+         # to know that this module occupies exactly one 8.00 m run's worth of
+         # it even though its bowl is 8.66 m across.
          K.Socket("end_a", 0.0, THICK * 0.5, "pier",
-                  "replaces one 8.00 m retaining run in a terrace edge")],
+                  "the -Y end at y = %+.2f m; replaces one 8.00 m retaining "
+                  "run in a terrace edge" % (-RUN * 0.5)),
+         K.Socket("end_b", 0.0, THICK * 0.5, "pier",
+                  "the +Y end at y = %+.2f m; the terrace edge carries on "
+                  "from here" % (RUN * 0.5))],
         districts=("royal_garden", "water_garden", "plaza", "tea_terrace"),
         note="semicircular belvedere on a corbelled bowl, 8 m across, floor at "
              "T2; drops into a terrace edge in place of a retaining run",

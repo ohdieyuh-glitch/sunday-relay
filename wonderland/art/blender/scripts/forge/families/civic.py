@@ -162,8 +162,15 @@ def colonnade_curved(f):
     return K.ModuleSpec(
         "WL_Colonnade_Curved", "colonnade", "structure", "screen",
         f.emit("WL_Colonnade_Curved"),
+        # BOTH ENDS, because a 60-degree segment has two of them and six of
+        # these close a circle. It published one and the pair rule caught it.
         [K.Socket("bottom", 0.0, R + 1.9, "ground"),
-         K.Socket("end_a", 0.0, 1.9, "pier", "60 degrees of a 24 m circle; six close it")],
+         K.Socket("end_a", 0.0, 1.9, "pier",
+                  "the -%.0f-degree end; 60 degrees of a 24 m circle, six "
+                  "close it" % (ARC * 0.5)),
+         K.Socket("end_b", 0.0, 1.9, "pier",
+                  "the +%.0f-degree end; the next segment starts here"
+                  % (ARC * 0.5))],
         districts=("plaza", "royal_garden", "cloister"),
         note="60-degree colonnade segment on a 24 m radius; six make a round plaza",
         params={"radius_m": R, "arc_deg": ARC, "bays": BAYS}, tri_budget=26000,
@@ -330,7 +337,11 @@ def bridge_flying(f):
         "WL_Bridge_Flying", "bridge", "structure", "span",
         f.emit("WL_Bridge_Flying"),
         [K.Socket("bottom", 0.0, 1.6, "ground", "the outer pier stands at x = +12 m"),
-         K.Socket("end_a", 0.0, 1.05, "bridge_end",
+         # `back`, not `end_a`: this is the ONE-ended module in the kit. A
+         # flying brace bears on a shaft at one end and stands on its own pier
+         # at the other, so there is no second run end to publish, and calling
+         # the bearing face `end_a` promised one.
+         K.Socket("back", 0.0, 1.05, "bridge_end",
                   "the head bears on a shaft face at x = 0, z = 16.0-17.5 m")],
         districts=("castle", "city", "cloister"),
         note="raking half-arch brace with a pinnacled outer pier; the kit's only diagonal",

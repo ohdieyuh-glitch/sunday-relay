@@ -6,8 +6,8 @@
   "generated_by": "wonderland/art/blender/scripts/make_recipes.py",
   "ownership": "these are PROPOSALS. World placement belongs to the world session; nothing here has been placed into any map and this file does not touch one.",
   "counts": {
-    "recipes": 4,
-    "placements": 76,
+    "recipes": 6,
+    "placements": 106,
     "failed_checks": 0
   },
   "recipes": [
@@ -16,15 +16,15 @@
       "for": "the reference's dense stand of slender towers at several heights",
       "rule": "spellings are walked from the socket grammar (a `top` and a `bottom` of kind tower on the same rung), tallest first and no two sharing a crown; each storey sits at the MEASURED top socket of the one below; ring radii come from the feet's own footprint radii, not from a chosen number",
       "notes": [
-        "outer ring pushed out to 3397 uu so the two rings clear each other by 4 m",
-        "outer ring radius 3397 uu, inner 1099 uu, both derived from the sum of the feet's own measured widths"
+        "outer ring pushed out to 3691 uu so the two rings clear each other by 4 m",
+        "outer ring radius 3691 uu, inner 1099 uu, both derived from the sum of the feet's own measured widths"
       ],
       "stacks": 7,
       "placements": [
         {
           "module": "WL_Tower_Base_Arcaded",
           "at_uu": [
-            3397.45,
+            3690.7,
             0.0,
             0.0
           ],
@@ -36,7 +36,7 @@
         {
           "module": "WL_Tower_Mid_Machicolated",
           "at_uu": [
-            3397.45,
+            3690.7,
             0.0,
             1240.0
           ],
@@ -48,7 +48,7 @@
         {
           "module": "WL_Tower_Mid_Fluted",
           "at_uu": [
-            3397.45,
+            3690.7,
             0.0,
             2180.0
           ],
@@ -60,7 +60,7 @@
         {
           "module": "WL_Spire_Needle",
           "at_uu": [
-            3397.45,
+            3690.7,
             0.0,
             3860.0
           ],
@@ -70,10 +70,10 @@
           "abuts": []
         },
         {
-          "module": "WL_Tower_Base_Arcaded",
+          "module": "WL_Tower_Base_Buttressed",
           "at_uu": [
-            1049.87,
-            3231.17,
+            1140.49,
+            3510.06,
             0.0
           ],
           "yaw_deg": 0.0,
@@ -84,9 +84,9 @@
         {
           "module": "WL_Tower_Mid_Machicolated",
           "at_uu": [
-            1049.87,
-            3231.17,
-            1240.0
+            1140.49,
+            3510.06,
+            1080.0
           ],
           "yaw_deg": 0.0,
           "why": "storey 2 of skyline_outer_2",
@@ -96,9 +96,9 @@
         {
           "module": "WL_Tower_Mid_Fluted",
           "at_uu": [
-            1049.87,
-            3231.17,
-            2180.0
+            1140.49,
+            3510.06,
+            2020.0
           ],
           "yaw_deg": 0.0,
           "why": "storey 3 of skyline_outer_2",
@@ -108,9 +108,9 @@
         {
           "module": "WL_Spire_Twisted",
           "at_uu": [
-            1049.87,
-            3231.17,
-            3860.0
+            1140.49,
+            3510.06,
+            3700.0
           ],
           "yaw_deg": 0.0,
           "why": "storey 4 of skyline_outer_2",
@@ -118,10 +118,10 @@
           "abuts": []
         },
         {
-          "module": "WL_Tower_Base_Arcaded",
+          "module": "WL_Tower_Base_Battered",
           "at_uu": [
-            -2748.59,
-            1996.97,
+            -2985.84,
+            2169.34,
             0.0
           ],
           "yaw_deg": 0.0,
@@ -132,9 +132,9 @@
         {
           "module": "WL_Tower_Mid_Machicolated",
           "at_uu": [
-            -2748.59,
-            1996.97,
-            1240.0
+            -2985.84,
+            2169.34,
+            920.0
           ],
           "yaw_deg": 0.0,
           "why": "storey 2 of skyline_outer_3",
@@ -144,9 +144,9 @@
         {
           "module": "WL_Tower_Mid_Fluted",
           "at_uu": [
-            -2748.59,
-            1996.97,
-            2180.0
+            -2985.84,
+            2169.34,
+            1860.0
           ],
           "yaw_deg": 0.0,
           "why": "storey 3 of skyline_outer_3",
@@ -156,9 +156,9 @@
         {
           "module": "WL_Spire_Barbed",
           "at_uu": [
-            -2748.59,
-            1996.97,
-            3860.0
+            -2985.84,
+            2169.34,
+            3540.0
           ],
           "yaw_deg": 0.0,
           "why": "storey 4 of skyline_outer_3",
@@ -166,10 +166,10 @@
           "abuts": []
         },
         {
-          "module": "WL_Tower_Base_Arcaded",
+          "module": "WL_Tower_Base_Terraced",
           "at_uu": [
-            -2748.59,
-            -1996.97,
+            -2985.84,
+            -2169.34,
             0.0
           ],
           "yaw_deg": 0.0,
@@ -180,9 +180,9 @@
         {
           "module": "WL_Tower_Mid_Machicolated",
           "at_uu": [
-            -2748.59,
-            -1996.97,
-            1240.0
+            -2985.84,
+            -2169.34,
+            760.0
           ],
           "yaw_deg": 0.0,
           "why": "storey 2 of skyline_outer_4",
@@ -192,9 +192,9 @@
         {
           "module": "WL_Tower_Mid_Fluted",
           "at_uu": [
-            -2748.59,
-            -1996.97,
-            2180.0
+            -2985.84,
+            -2169.34,
+            1700.0
           ],
           "yaw_deg": 0.0,
           "why": "storey 3 of skyline_outer_4",
@@ -204,9 +204,9 @@
         {
           "module": "WL_Spire_Ringed",
           "at_uu": [
-            -2748.59,
-            -1996.97,
-            3860.0
+            -2985.84,
+            -2169.34,
+            3380.0
           ],
           "yaw_deg": 0.0,
           "why": "storey 4 of skyline_outer_4",
@@ -216,8 +216,8 @@
         {
           "module": "WL_Tower_Base_Arcaded",
           "at_uu": [
-            1049.87,
-            -3231.17,
+            1140.49,
+            -3510.06,
             0.0
           ],
           "yaw_deg": 0.0,
@@ -228,8 +228,8 @@
         {
           "module": "WL_Tower_Mid_Arcade",
           "at_uu": [
-            1049.87,
-            -3231.17,
+            1140.49,
+            -3510.06,
             1240.0
           ],
           "yaw_deg": 0.0,
@@ -240,8 +240,8 @@
         {
           "module": "WL_Tower_Mid_Ribbed",
           "at_uu": [
-            1049.87,
-            -3231.17,
+            1140.49,
+            -3510.06,
             2560.0
           ],
           "yaw_deg": 0.0,
@@ -252,8 +252,8 @@
         {
           "module": "WL_Tower_Crown_Belvedere",
           "at_uu": [
-            1049.87,
-            -3231.17,
+            1140.49,
+            -3510.06,
             4200.0
           ],
           "yaw_deg": 0.0,
@@ -361,7 +361,7 @@
       "checks": [],
       "counts": {
         "placements": 28,
-        "modules": 12
+        "modules": 15
       }
     },
     {
@@ -494,6 +494,422 @@
       "counts": {
         "placements": 10,
         "modules": 4
+      }
+    },
+    {
+      "name": "wall_circuit",
+      "for": "a city that is walled rather than fenced: a closed circuit with a gate in it and a tower on it",
+      "rule": "each side is two corner arms plus a whole number of measured run lengths, so the circuit closes by construction; the postern substitutes for a run because it IS a run's length",
+      "notes": [
+        "side X = 2 arms (13.80 m) + 3 runs (13.60 m) = 54.60 m",
+        "side Y = 2 arms + 2 runs = 41.00 m",
+        "perimeter 191.20 m, and it closes exactly"
+      ],
+      "closure": {
+        "arm_uu": 690.0,
+        "run_uu": 1360.0,
+        "runs_x": 3,
+        "runs_y": 2,
+        "side_x_uu": 5460.0,
+        "side_y_uu": 4100.0,
+        "perimeter_uu": 19120.0
+      },
+      "placements": [
+        {
+          "module": "WL_Wall_Corner_Bastion",
+          "at_uu": [
+            -2730.0,
+            -2050.0,
+            0.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "corner bastion, arms turning the circuit",
+          "part_of": "wall_circuit",
+          "abuts": []
+        },
+        {
+          "module": "WL_Wall_Corner_Bastion",
+          "at_uu": [
+            2730.0,
+            -2050.0,
+            0.0
+          ],
+          "yaw_deg": 90.0,
+          "why": "corner bastion, arms turning the circuit",
+          "part_of": "wall_circuit",
+          "abuts": []
+        },
+        {
+          "module": "WL_Wall_Corner_Bastion",
+          "at_uu": [
+            2730.0,
+            2050.0,
+            0.0
+          ],
+          "yaw_deg": 180.0,
+          "why": "corner bastion, arms turning the circuit",
+          "part_of": "wall_circuit",
+          "abuts": []
+        },
+        {
+          "module": "WL_Wall_Corner_Bastion",
+          "at_uu": [
+            -2730.0,
+            2050.0,
+            0.0
+          ],
+          "yaw_deg": 270.0,
+          "why": "corner bastion, arms turning the circuit",
+          "part_of": "wall_circuit",
+          "abuts": []
+        },
+        {
+          "module": "WL_Wall_Curtain_Run",
+          "at_uu": [
+            -1360.0,
+            -2050.0,
+            0.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "curtain run 1 on the -Y side",
+          "part_of": "wall_circuit",
+          "abuts": []
+        },
+        {
+          "module": "WL_Wall_Postern_Gate",
+          "at_uu": [
+            0.0,
+            -2050.0,
+            0.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "the postern, substituted for a run: identical length, ends and walk height",
+          "part_of": "wall_circuit",
+          "abuts": []
+        },
+        {
+          "module": "WL_Wall_Curtain_Run",
+          "at_uu": [
+            1360.0,
+            -2050.0,
+            0.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "curtain run 3 on the -Y side",
+          "part_of": "wall_circuit",
+          "abuts": []
+        },
+        {
+          "module": "WL_Wall_Curtain_Run",
+          "at_uu": [
+            -2730.0,
+            -680.0,
+            0.0
+          ],
+          "yaw_deg": 90.0,
+          "why": "curtain run 1 on the -X side",
+          "part_of": "wall_circuit",
+          "abuts": []
+        },
+        {
+          "module": "WL_Wall_Curtain_Run",
+          "at_uu": [
+            -2730.0,
+            680.0,
+            0.0
+          ],
+          "yaw_deg": 90.0,
+          "why": "curtain run 2 on the -X side",
+          "part_of": "wall_circuit",
+          "abuts": []
+        },
+        {
+          "module": "WL_Wall_Curtain_Run",
+          "at_uu": [
+            -1360.0,
+            2050.0,
+            0.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "curtain run 1 on the +Y side",
+          "part_of": "wall_circuit",
+          "abuts": []
+        },
+        {
+          "module": "WL_Wall_Curtain_Run",
+          "at_uu": [
+            0.0,
+            2050.0,
+            0.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "curtain run 2 on the +Y side",
+          "part_of": "wall_circuit",
+          "abuts": []
+        },
+        {
+          "module": "WL_Wall_Curtain_Run",
+          "at_uu": [
+            1360.0,
+            2050.0,
+            0.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "curtain run 3 on the +Y side",
+          "part_of": "wall_circuit",
+          "abuts": []
+        },
+        {
+          "module": "WL_Wall_Curtain_Run",
+          "at_uu": [
+            2730.0,
+            -680.0,
+            0.0
+          ],
+          "yaw_deg": 90.0,
+          "why": "curtain run 1 on the +X side",
+          "part_of": "wall_circuit",
+          "abuts": []
+        },
+        {
+          "module": "WL_Wall_Curtain_Run",
+          "at_uu": [
+            2730.0,
+            680.0,
+            0.0
+          ],
+          "yaw_deg": 90.0,
+          "why": "curtain run 2 on the +X side",
+          "part_of": "wall_circuit",
+          "abuts": []
+        },
+        {
+          "module": "WL_Wall_Mural_Tower",
+          "at_uu": [
+            -1360.0,
+            2050.0,
+            0.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "a mural tower ON the wall line, its D projecting outward",
+          "part_of": "wall_circuit",
+          "abuts": [
+            "WL_Wall_Curtain_Run"
+          ]
+        }
+      ],
+      "checks": [],
+      "counts": {
+        "placements": 15,
+        "modules": 4
+      }
+    },
+    {
+      "name": "terrace_flight",
+      "for": "lower garden, stair, mid terrace, retaining wall, upper court -- the walkable route the garden family exists to make",
+      "not_included": "the terrace FILL. These modules make an edge and a way up; the ground behind the edge is the world session's terrain, and this kit does not model it",
+      "rule": "the edge is laid at the retaining run's measured length; the flight and the overlook substitute for runs because both are that length; everything on the terrace is placed at the run's own measured top_route, not at a typed elevation",
+      "notes": [
+        "the terrace is at 3.10 m and the flight's top_route is at 3.10 m: the same number, which is the point"
+      ],
+      "placements": [
+        {
+          "module": "WL_Garden_Retaining_Run",
+          "at_uu": [
+            -2400.0,
+            0.0,
+            0.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "retaining run -3",
+          "part_of": "terrace_flight",
+          "abuts": []
+        },
+        {
+          "module": "WL_Garden_Retaining_Run",
+          "at_uu": [
+            -1600.0,
+            0.0,
+            0.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "retaining run -2",
+          "part_of": "terrace_flight",
+          "abuts": []
+        },
+        {
+          "module": "WL_Garden_Retaining_Run",
+          "at_uu": [
+            -800.0,
+            0.0,
+            0.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "retaining run -1",
+          "part_of": "terrace_flight",
+          "abuts": []
+        },
+        {
+          "module": "WL_Stair_Straight_T2",
+          "at_uu": [
+            183.75,
+            0.0,
+            0.0
+          ],
+          "yaw_deg": 180.0,
+          "why": "the flight cut into the edge, arriving at the terrace's own T2",
+          "part_of": "terrace_flight",
+          "abuts": [
+            "WL_Garden_Retaining_Run"
+          ]
+        },
+        {
+          "module": "WL_Garden_Retaining_Run",
+          "at_uu": [
+            800.0,
+            0.0,
+            0.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "retaining run +1",
+          "part_of": "terrace_flight",
+          "abuts": []
+        },
+        {
+          "module": "WL_Garden_Overlook",
+          "at_uu": [
+            1600.0,
+            -193.5,
+            0.0
+          ],
+          "yaw_deg": 90.0,
+          "why": "the overlook, turned into the edge in place of one run",
+          "part_of": "terrace_flight",
+          "abuts": []
+        },
+        {
+          "module": "WL_Garden_Retaining_Run",
+          "at_uu": [
+            2400.0,
+            0.0,
+            0.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "retaining run +3",
+          "part_of": "terrace_flight",
+          "abuts": []
+        },
+        {
+          "module": "WL_Detail_Balustrade_Run",
+          "at_uu": [
+            -2400.0,
+            77.0,
+            310.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "balustrade on the coping at T2",
+          "part_of": "terrace_flight",
+          "abuts": [
+            "WL_Garden_Retaining_Run"
+          ]
+        },
+        {
+          "module": "WL_Detail_Balustrade_Run",
+          "at_uu": [
+            -1600.0,
+            77.0,
+            310.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "balustrade on the coping at T2",
+          "part_of": "terrace_flight",
+          "abuts": [
+            "WL_Garden_Retaining_Run"
+          ]
+        },
+        {
+          "module": "WL_Detail_Balustrade_Run",
+          "at_uu": [
+            -800.0,
+            77.0,
+            310.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "balustrade on the coping at T2",
+          "part_of": "terrace_flight",
+          "abuts": [
+            "WL_Garden_Retaining_Run"
+          ]
+        },
+        {
+          "module": "WL_Detail_Balustrade_Run",
+          "at_uu": [
+            800.0,
+            77.0,
+            310.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "balustrade on the coping at T2",
+          "part_of": "terrace_flight",
+          "abuts": [
+            "WL_Garden_Retaining_Run"
+          ]
+        },
+        {
+          "module": "WL_Detail_Balustrade_Run",
+          "at_uu": [
+            2400.0,
+            77.0,
+            310.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "balustrade on the coping at T2",
+          "part_of": "terrace_flight",
+          "abuts": [
+            "WL_Garden_Retaining_Run"
+          ]
+        },
+        {
+          "module": "WL_Garden_Pavilion_Base",
+          "at_uu": [
+            0.0,
+            1081.47,
+            310.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "the upper court, on the retained terrace at T2",
+          "part_of": "terrace_flight",
+          "abuts": []
+        },
+        {
+          "module": "WL_Garden_Planter_Wall",
+          "at_uu": [
+            -1400.0,
+            1862.94,
+            310.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "a raised bed on the upper terrace",
+          "part_of": "terrace_flight",
+          "abuts": []
+        },
+        {
+          "module": "WL_Garden_Planter_Wall",
+          "at_uu": [
+            1400.0,
+            1862.94,
+            310.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "a raised bed on the upper terrace",
+          "part_of": "terrace_flight",
+          "abuts": []
+        }
+      ],
+      "checks": [],
+      "counts": {
+        "placements": 15,
+        "modules": 6
       }
     },
     {
@@ -637,7 +1053,7 @@
           "module": "WL_House_Jettied",
           "at_uu": [
             -1478.0,
-            -913.6,
+            -1113.6,
             0.0
           ],
           "yaw_deg": 0.0,
@@ -649,7 +1065,7 @@
           "module": "WL_Market_Awning",
           "at_uu": [
             -1478.0,
-            -600.0,
+            -800.0,
             0.0
           ],
           "yaw_deg": 0.0,
@@ -663,7 +1079,7 @@
           "module": "WL_House_Jettied",
           "at_uu": [
             -739.0,
-            -913.6,
+            -1113.6,
             0.0
           ],
           "yaw_deg": 0.0,
@@ -675,7 +1091,7 @@
           "module": "WL_Market_Hanging_Sign",
           "at_uu": [
             -739.0,
-            -600.0,
+            -800.0,
             0.0
           ],
           "yaw_deg": 0.0,
@@ -689,7 +1105,7 @@
           "module": "WL_House_Jettied",
           "at_uu": [
             0.0,
-            -913.6,
+            -1113.6,
             0.0
           ],
           "yaw_deg": 0.0,
@@ -701,7 +1117,7 @@
           "module": "WL_Market_Awning",
           "at_uu": [
             0.0,
-            -600.0,
+            -800.0,
             0.0
           ],
           "yaw_deg": 0.0,
@@ -715,7 +1131,7 @@
           "module": "WL_House_Jettied",
           "at_uu": [
             739.0,
-            -913.6,
+            -1113.6,
             0.0
           ],
           "yaw_deg": 0.0,
@@ -727,7 +1143,7 @@
           "module": "WL_Market_Hanging_Sign",
           "at_uu": [
             739.0,
-            -600.0,
+            -800.0,
             0.0
           ],
           "yaw_deg": 0.0,
@@ -741,7 +1157,7 @@
           "module": "WL_House_Jettied",
           "at_uu": [
             1478.0,
-            -913.6,
+            -1113.6,
             0.0
           ],
           "yaw_deg": 0.0,
@@ -753,7 +1169,7 @@
           "module": "WL_Market_Awning",
           "at_uu": [
             1478.0,
-            -600.0,
+            -800.0,
             0.0
           ],
           "yaw_deg": 0.0,
@@ -767,7 +1183,7 @@
           "module": "WL_House_Jettied",
           "at_uu": [
             -1478.0,
-            913.6,
+            1113.6,
             0.0
           ],
           "yaw_deg": 180.0,
@@ -779,7 +1195,7 @@
           "module": "WL_Market_Awning",
           "at_uu": [
             -1478.0,
-            600.0,
+            800.0,
             0.0
           ],
           "yaw_deg": 180.0,
@@ -793,7 +1209,7 @@
           "module": "WL_House_Jettied",
           "at_uu": [
             -739.0,
-            913.6,
+            1113.6,
             0.0
           ],
           "yaw_deg": 180.0,
@@ -805,7 +1221,7 @@
           "module": "WL_Market_Hanging_Sign",
           "at_uu": [
             -739.0,
-            600.0,
+            800.0,
             0.0
           ],
           "yaw_deg": 180.0,
@@ -819,7 +1235,7 @@
           "module": "WL_House_Jettied",
           "at_uu": [
             0.0,
-            913.6,
+            1113.6,
             0.0
           ],
           "yaw_deg": 180.0,
@@ -831,7 +1247,7 @@
           "module": "WL_Market_Awning",
           "at_uu": [
             0.0,
-            600.0,
+            800.0,
             0.0
           ],
           "yaw_deg": 180.0,
@@ -845,7 +1261,7 @@
           "module": "WL_House_Jettied",
           "at_uu": [
             739.0,
-            913.6,
+            1113.6,
             0.0
           ],
           "yaw_deg": 180.0,
@@ -857,7 +1273,7 @@
           "module": "WL_Market_Hanging_Sign",
           "at_uu": [
             739.0,
-            600.0,
+            800.0,
             0.0
           ],
           "yaw_deg": 180.0,
@@ -871,7 +1287,7 @@
           "module": "WL_House_Jettied",
           "at_uu": [
             1478.0,
-            913.6,
+            1113.6,
             0.0
           ],
           "yaw_deg": 180.0,
@@ -883,7 +1299,7 @@
           "module": "WL_Market_Awning",
           "at_uu": [
             1478.0,
-            600.0,
+            800.0,
             0.0
           ],
           "yaw_deg": 180.0,
@@ -897,7 +1313,7 @@
           "module": "WL_Market_Arcade_Insert",
           "at_uu": [
             -739.0,
-            -600.0,
+            -800.0,
             0.0
           ],
           "yaw_deg": 0.0,
@@ -911,7 +1327,7 @@
           "module": "WL_Market_Arcade_Insert",
           "at_uu": [
             0.0,
-            -600.0,
+            -800.0,
             0.0
           ],
           "yaw_deg": 0.0,
@@ -925,7 +1341,7 @@
           "module": "WL_Market_Arcade_Insert",
           "at_uu": [
             739.0,
-            -600.0,
+            -800.0,
             0.0
           ],
           "yaw_deg": 0.0,
@@ -975,7 +1391,7 @@
           "module": "WL_Market_Covered_Passage",
           "at_uu": [
             2097.5,
-            -913.6,
+            -1113.6,
             0.0
           ],
           "yaw_deg": 0.0,
@@ -987,7 +1403,7 @@
           "module": "WL_Market_Corner_Storefront",
           "at_uu": [
             -2306.71,
-            -600.0,
+            -800.0,
             0.0
           ],
           "yaw_deg": 0.0,

@@ -252,7 +252,7 @@ def main():
                           "wonderland/v2/materials_v2.py."),
             "uv": "planar-world projection at 2 m per tile; NOT a lightmap unwrap",
         },
-        "style_axes": S.axis_table(),
+        "style_axes": S.axis_table(records),
         "route_ladder_uu": {k: round(U.m_to_uu(v), 3)
                             for k, v in K.ROUTE_LADDER.items()},
         "riser_uu": round(U.m_to_uu(K.RISER_M), 3),
