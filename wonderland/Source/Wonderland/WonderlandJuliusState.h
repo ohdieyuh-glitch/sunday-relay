@@ -401,6 +401,97 @@ struct FWonderlandActivityReading
 	int64 ForeignEvents = 0;
 };
 
+/* ------------------------------------------------- activity accents */
+
+// Mirrors WONDERLAND_ACTIVITY_ACCENTS. What the activity axis asks a world to
+// SHOW, without saying what showing it looks like.
+//
+// The phase decides which CLIP is playing and there is one answer at a time.
+// Activity is concurrent — a Coding Agent can be retrying while a swarm runs
+// and an approval sits open — so it cannot use the same channel. An accent
+// rides on whatever the phase is playing; a signal that replaced the base clip
+// would mean a run stopped looking like it was coding the moment it retried.
+//
+// AN ACCENT IS AN INTENT, NOT A CLIP, which is what lets this exist before the
+// engine does. `AwaitingInput` says a person is being waited on; whether that
+// is a raised head, a UI pip or a colour is the renderer's business and can
+// change without this enum moving. Naming clips here would be inventing
+// animation assets without Unreal.
+//
+// FEWER ACCENTS THAN SIGNALS, deliberately: `Retrying` and `SwitchingWorker`
+// are both "attempted again by other means" and a viewer does not need two
+// visual languages for one situation. The dominant SIGNAL travels separately,
+// so a renderer that wants to tell them apart still can.
+UENUM(BlueprintType)
+enum class EWonderlandActivityAccent : uint8
+{
+	// Ordinal 0. NO ACCENT WAS STATED, which covers two different situations
+	// and deliberately does not distinguish them here: Relay has said nothing
+	// about the run, or the run is running and nothing was signalled. The
+	// intent's `Reason` says which, in words, because that is where a
+	// distinction a renderer does not branch on belongs.
+	//
+	// Named `Unobserved` to match every other nullable-mirroring enum in this
+	// module. A zero-filled struct must not read as a real accent, and one enum
+	// spelling that differently is one a reader has to stop and check.
+	Unobserved,
+	// A person is being waited on. The run is not working; it is asking.
+	AwaitingInput,
+	// Something failed and the run carried on. Degraded, NOT stopped.
+	Strained,
+	// The same work, attempted again or by other means.
+	Reattempting,
+	// More than one worker present. What /MAS looks like from outside.
+	Accompanied,
+	// Reading before acting: context assembled for a worker.
+	Recalling
+};
+
+// Mirrors WonderlandActivityIntent. What to show for the signals true right now.
+USTRUCT(BlueprintType)
+struct FWonderlandActivityIntent
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Activity")
+	FString SchemaVersion;
+
+	// Most urgent first, deduplicated. A renderer may show all of them, the
+	// first few, or only the dominant one — the ORDER is the contract, how many
+	// a surface has room for is not.
+	//
+	// PRIORITY IS DERIVED from Relay's signal vocabulary, which is already
+	// ordered most-urgent-first. A client re-ranking these would be a second
+	// opinion about urgency, free to disagree with the one the product states.
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Activity")
+	TArray<EWonderlandActivityAccent> Accents;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Activity")
+	EWonderlandActivityAccent Dominant = EWonderlandActivityAccent::Unobserved;
+
+	// The signal behind the dominant accent, because two signals can share one.
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Activity")
+	EWonderlandActivitySignal DominantSignal = EWonderlandActivitySignal::Unobserved;
+
+	// TRUE ONLY FOR A HUMAN GATE. Everything else is the run working, noisily
+	// perhaps, and a world that cut its animation for a retry would flicker
+	// through a perfectly normal recovery. An open gate is different in kind:
+	// nothing happens until a person acts, and a viewer needs to notice.
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Activity")
+	bool bInterrupt = false;
+
+	// The run ended holding signals, so they are kept and not shown. A finished
+	// run is not retrying and not waiting for anybody, whatever its last signal
+	// said — and a surface must be able to tell this from "nothing was
+	// signalled at all".
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Activity")
+	bool bSuppressedByTerminal = false;
+
+	// Always a sentence. A renderer logging an accent should log why.
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Activity")
+	FString Reason;
+};
+
 /* ---------------------------------------------------- project brain scope */
 
 // Mirrors WONDERLAND_BRAIN_KINDS. What KIND of thing a retrieval pulled in.

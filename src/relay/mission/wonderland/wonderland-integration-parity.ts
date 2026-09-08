@@ -17,6 +17,11 @@
  */
 
 import {
+  WONDERLAND_ACTIVITY_ACCENTS,
+  WONDERLAND_ACTIVITY_INTENT_FIELDS,
+} from './wonderland-activity-animation';
+import type { WonderlandActivityIntent } from './wonderland-activity-animation';
+import {
   WONDERLAND_AUTONOMY_LEVELS,
   WONDERLAND_CARD_SCOPE_FIELDS,
   WONDERLAND_HYDRATION_FIELDS,
@@ -243,6 +248,13 @@ const _UsageViewportNullableIsExact: SameKeys<
 > = true;
 void _UsageViewportNullableIsExact;
 
+const ACTIVITY_INTENT_NULLABLE = ['dominant', 'dominantSignal'] as const;
+const _ActivityIntentNullableIsExact: SameKeys<
+  (typeof ACTIVITY_INTENT_NULLABLE)[number],
+  NullableKeysOf<WonderlandActivityIntent>
+> = true;
+void _ActivityIntentNullableIsExact;
+
 const CARD_SCOPE_NULLABLE = ['autonomy'] as const;
 const _CardScopeNullableIsExact: SameKeys<
   (typeof CARD_SCOPE_NULLABLE)[number],
@@ -399,6 +411,17 @@ export const WONDERLAND_INTEGRATION_CPP_STRUCT_PARITY: readonly {
   },
   {
     /**
+     * The activity axis's presentation half. Mirrored so a client cannot
+     * re-rank urgency: the order is Relay's, derived from the signal
+     * vocabulary, and a second opinion about which signal matters most would
+     * be free to disagree with the one the product states.
+     */
+    cppStruct: 'FWonderlandActivityIntent',
+    tsInterface: 'WonderlandActivityIntent',
+    fields: WONDERLAND_ACTIVITY_INTENT_FIELDS,
+  },
+  {
+    /**
      * Mirrored so the NARROWNESS is checkable. `CardVersion` carries provider
      * and model names; the field list here is the guarantee that none of them
      * crosses, and a C++ side that had grown a `Models` array would be leaking
@@ -540,6 +563,17 @@ export const WONDERLAND_INTEGRATION_CPP_ENUM_PARITY: readonly {
     cppEnum: 'EWonderlandJuliusStateSource',
     source: 'JULIUS_STATE_SOURCES',
     members: JULIUS_STATE_SOURCES,
+    nullable: true,
+    zeroMember: 'Unobserved',
+  },
+  {
+    /**
+     * Ordinal 0 is `None` — nothing to show, which is not the same as nothing
+     * happening. No accent occupies it.
+     */
+    cppEnum: 'EWonderlandActivityAccent',
+    source: 'WONDERLAND_ACTIVITY_ACCENTS',
+    members: WONDERLAND_ACTIVITY_ACCENTS,
     nullable: true,
     zeroMember: 'Unobserved',
   },
@@ -714,6 +748,7 @@ export const WONDERLAND_INTEGRATION_NULLABLE_FIELDS: Readonly<
   FWonderlandUsageAuthorityStatus: AUTHORITY_STATUS_NULLABLE,
   FWonderlandUsageViewport: USAGE_VIEWPORT_NULLABLE,
   FWonderlandHydration: HYDRATION_NULLABLE,
+  FWonderlandActivityIntent: ACTIVITY_INTENT_NULLABLE,
   FWonderlandCardScope: CARD_SCOPE_NULLABLE,
   FWonderlandBrainCitation: BRAIN_CITATION_NULLABLE,
   FWonderlandActivityReading: ACTIVITY_READING_NULLABLE,
