@@ -167,6 +167,13 @@ export const safeReviewDiagnostics=(value:unknown):JuliusSafeDiagnostics|null=>{
    * Null for every other rule and for every other role.
    */
   validationClaimPhrase:safeToken(v.validationClaimPhrase),
+  /**
+   * HOW MANY PROVIDER CALLS ONE ARCHITECT DISPATCH BOUGHT. A refused plan may
+   * be corrected once, so a dispatch is no longer one call by definition — and
+   * a retry the record could not show would be a spend nobody could account
+   * for. Null for a role that makes no such attempt.
+   */
+  planAttempts:safeCount(v.planAttempts),
   /* --- Coding Agent (build stage). Null for the other two roles. --- */
   /** The runtime's own result subtype, e.g. `success` / `error_max_turns`. */
   resultSubtype:safeToken(v.resultSubtype),
