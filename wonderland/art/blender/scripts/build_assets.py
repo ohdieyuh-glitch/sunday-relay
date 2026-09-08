@@ -26,6 +26,7 @@ Nothing here decides what anything looks like. Art is in `forge/families/`.
 import argparse
 import datetime
 import json
+import math
 import os
 import sys
 import traceback
@@ -64,6 +65,39 @@ NANITE_MIN_TRIS = 5000
 KIT_VERSION = "1.0.0"
 
 
+#: Vertical bins in the silhouette profile. `v2/tools/skyline.PROFILE_BINS`.
+PROFILE_BINS = 12
+
+
+def _profile_uu(parts, lo_z_uu, hi_z_uu, bins=PROFILE_BINS):
+    """The widest horizontal radius in each vertical bin, in uu.
+
+    Sampled off the vertices, exactly as `skyline._profile` samples a recipe's,
+    so a kit module and a procedural one are measured the same way. A bin with
+    no vertex of its own inherits its neighbour, because a gap in the sampling
+    is not a hole in the silhouette.
+    """
+    span = float(hi_z_uu) - float(lo_z_uu)
+    prof = [0.0] * bins
+    if span <= 1e-6:
+        return prof
+    for obj in parts.values():
+        for v in obj.data.vertices:
+            z = U.m_to_uu(v.co.z)
+            k = int((z - lo_z_uu) / span * bins)
+            k = 0 if k < 0 else (bins - 1 if k >= bins else k)
+            r = math.hypot(U.m_to_uu(v.co.x), U.m_to_uu(v.co.y))
+            if r > prof[k]:
+                prof[k] = r
+    for k in range(1, bins):
+        if prof[k] == 0.0:
+            prof[k] = prof[k - 1]
+    for k in range(bins - 2, -1, -1):
+        if prof[k] == 0.0:
+            prof[k] = prof[k + 1]
+    return [round(v, 2) for v in prof]
+
+
 def build_one(builder, group, write_blend=True):
     """Build one module, export it, and return its manifest record."""
     M.clear_scene()
@@ -82,6 +116,11 @@ def build_one(builder, group, write_blend=True):
         if meta is None:
             continue
         meta["normals"] = X.normals_report(obj)
+        # PER MESH, because the world places one mesh per material and
+        # `skyline.bboxes()` is keyed by the placement's asset -- which is the
+        # mesh name, not the module's.
+        meta["profile_uu"] = _profile_uu({key: obj}, meta["bbox_min_uu"][2],
+                                         meta["bbox_max_uu"][2])
         meta["material"] = K.unreal_material(key)
         meta["mesh_name"] = obj.name
 
@@ -145,6 +184,15 @@ def build_one(builder, group, write_blend=True):
                            [U.uu_to_m(hi[a] - lo[a]) for a in range(3)],
                            U.uu_to_m(height_uu)),
         "base_z_uu": round(lo_z, 3),
+        # THE SILHOUETTE PROFILE, MEASURED, so the world's own instruments can
+        # rank a kit module against a procedural one. `v2/tools/skyline.py`
+        # builds a bbox-and-profile table by running every `assets_v2` recipe
+        # and sampling its vertices; a forge module is not a recipe, so it had
+        # no row and `framescape.py` counted seven 60 m towers as nothing at
+        # all. Twelve bins is that tool's own PROFILE_BINS, and the number is
+        # the widest horizontal radius in each vertical twelfth.
+        "profile_uu": _profile_uu(spec.parts, lo_z, hi_z),
+        "radius_uu": round(max(abs(lo[0]), abs(hi[0]), abs(lo[1]), abs(hi[1])), 2),
         "tris_total": total_tris,
         "tri_budget": spec.tri_budget,
         "over_budget": bool(spec.tri_budget and total_tris > spec.tri_budget),

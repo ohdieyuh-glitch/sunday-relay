@@ -1710,6 +1710,17 @@ def build_assets(ctx, keys=None, log=print):
                     out[key] = path
             except Exception as exc:
                 log("V2 ASSET %s FAILED: %s" % (key, exc))
+    # THE FORGE KIT JOINS HERE AND NOWHERE ELSE. `import_kit_assets` returns
+    # `{key: asset path}` in exactly this dict's shape, so `build_v2.Placer`
+    # resolves a forge mesh by the same lookup it uses for a recipe and no
+    # other file in the pipeline changes. Offline it returns {} and logs that
+    # it did -- a silently absent kit and a placed one must never read alike.
+    try:
+        import kit_v2
+        out.update(kit_v2.import_kit_assets(ctx, log=log))
+    except Exception as exc:                               # noqa: BLE001
+        log("V2 KIT: not merged (%s: %s); the forge kit is NOT in this build"
+            % (type(exc).__name__, exc))
     return out
 
 
@@ -2200,11 +2211,29 @@ def variant_families():
     }
 
 
+def kit_mesh_keys():
+    """The Blender forge kit's mesh keys, or an empty set if it is not built.
+
+    IMPORTED LAZILY AND GUARDED, on purpose. `assets_v2` is the composition
+    root for what a layout may name, and it must keep working in a checkout
+    where `wonderland/art/blender` has never been run -- the manifest is a
+    build product. An unbuilt kit is an empty set and every kit placement then
+    fails `known_asset_keys` LOUDLY, which is the honest reading: the world
+    names meshes that this checkout cannot supply.
+    """
+    try:
+        import kit_v2
+        return set(kit_v2.mesh_keys())
+    except Exception:                                      # noqa: BLE001
+        return set()
+
+
 def known_asset_keys():
-    """Every key a layout may name: the recipes plus every variant key."""
+    """Every key a layout may name: the recipes, every variant key, the kit."""
     keys = set(RECIPES)
     for prefix, (count, _folder) in variant_families().items():
         keys.update("%s_%d" % (prefix, v) for v in range(count))
+    keys |= kit_mesh_keys()
     return keys
 
 

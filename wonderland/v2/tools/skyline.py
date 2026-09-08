@@ -99,6 +99,46 @@ def _profile(mesh, zlo, ztop):
     return prof
 
 
+def _kit_bboxes():
+    """(stamp, {mesh key: bbox row}) for the Blender forge kit, from its manifest.
+
+    Every number here was MEASURED by `wonderland/art/blender` off the geometry
+    it exported -- the same discipline this table applies to a recipe, and the
+    reason the kit's manifest carries `profile_uu` at all. Keyed by MESH name,
+    because a module with four materials is four meshes sharing an origin and
+    the world places one material per asset.
+
+    Returns an empty table, and says nothing, when the manifest is absent: the
+    kit is optional and a world built without it is a legitimate world.
+    """
+    man = os.path.join(V2, "..", "art", "blender", "manifests",
+                       "wonderland-blender-kit.json")
+    man = os.path.normpath(man)
+    if not os.path.exists(man):
+        return "nokit", {}
+    stamp = str(int(os.path.getmtime(man)))
+    try:
+        with open(man) as fh:
+            blob = json.load(fh)
+    except Exception as exc:                            # noqa: BLE001
+        sys.stderr.write("skyline: forge manifest unreadable (%s)\n" % exc)
+        return "badkit", {}
+    rows = {}
+    for a in blob.get("assets", []):
+        for part in (a.get("parts") or {}).values():
+            lo, hi = part["bbox_min_uu"], part["bbox_max_uu"]
+            prof = part.get("profile_uu") or a.get("profile_uu")
+            if not prof:
+                continue
+            rows[part["mesh_name"]] = {
+                "zlo": lo[2], "ztop": hi[2],
+                "rx": max(abs(lo[0]), abs(hi[0])),
+                "ry": max(abs(lo[1]), abs(hi[1])),
+                "prof": list(prof),
+            }
+    return stamp, rows
+
+
 def bboxes():
     """Measured z-extent of every recipe, built once on the offline backend.
 
@@ -110,6 +150,15 @@ def bboxes():
         return _BBOX_CACHE
     src = os.path.join(V2, "assets_v2.py")
     stamp = str(int(os.path.getmtime(src)))
+    # THE FORGE KIT IS IN THIS TABLE TOO, and the stamp counts its manifest.
+    # `bboxes()` used to build itself by running every `assets_v2` recipe, so a
+    # Blender-forge module -- which is not a recipe -- had no row, and
+    # `framescape.py` counted seven 60 m towers placed in the Clock Quarter as
+    # NOTHING AT ALL: the census was unchanged to the decimal. A tool that
+    # silently ignores a whole class of world content is worse than one that
+    # fails, so the kit's own MEASURED numbers go in beside the recipes'.
+    kit_stamp, kit_rows = _kit_bboxes()
+    stamp = stamp + "+" + kit_stamp
     path = os.path.join(HERE, "__pycache__", "skyline_bbox.json")
     try:
         with open(path) as fh:
@@ -138,9 +187,10 @@ def bboxes():
     try:
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "w") as fh:
-            json.dump({"stamp": stamp, "bbox": out}, fh)
+            json.dump({"stamp": stamp, "bbox": dict(out, **kit_rows)}, fh)
     except Exception:
         pass
+    out.update(kit_rows)
     _BBOX_CACHE = out
     return out
 

@@ -8541,6 +8541,26 @@ def _drop_trees_growing_through_each_other(bands):
 
 _drop_trees_growing_through_each_other(BUILD_BANDS)
 
+# THE BLENDER FORGE KIT'S OWN BANDS, appended here rather than authored in
+# this file. `kit_layout.py` places 101 modules built by
+# `wonderland/art/blender` against the mismatches `tools/framescape.py`
+# measures; `kit_v2.py` turns each module into ordinary placements -- one per
+# MESH, because a module with four materials is four meshes sharing an origin
+# and the world places one material per asset.
+#
+# Appended AFTER `_drop_trees_growing_through_each_other`, which only ever
+# drops trees, and before ALL, so every instrument that walks ALL sees them.
+try:
+    import kit_layout as _KIT_LAYOUT
+    BUILD_BANDS = BUILD_BANDS + _KIT_LAYOUT.build(BUILD_BANDS)
+except Exception as _kit_exc:                     # noqa: BLE001
+    # SAID OUT LOUD. A layout that silently loses a band is a layout whose
+    # audits pass while the world is short of everything the band held.
+    import sys as _sys
+    _sys.stderr.write("layout_v2: kit_layout NOT loaded (%s: %s); the forge "
+                      "kit is not in this world\n"
+                      % (type(_kit_exc).__name__, _kit_exc))
+
 #: Everything the layout declares: what the builder walks, plus the two bands
 #: it places by their own rules (SKY is the dome/atmosphere, HOVER is lifted
 #: props). Derived from BUILD_BANDS rather than restated.
