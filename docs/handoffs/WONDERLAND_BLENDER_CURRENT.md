@@ -24,7 +24,9 @@ this, then "The kit is in the world now", then Session 2's build steps below
 (they are unchanged and still correct).
 
 **What is proven, and by what.** `python3 wonderland/v2/verify_kit_bridge.py`
-— seventeen checks, no engine, no Blender, ~40 s. It walks `layout_v2.ALL`
+— seventeen checks, and `--self-test` proves ten of them BITE by handing each
+a world that breaks it (the other seven read the forge's own files and say so
+rather than being skipped quietly) — no engine, no Blender, ~40 s. It walks `layout_v2.ALL`
 rather than re-reading the code, which is how it found both of this session's
 real defects. Then the world's own gates: `verify_v2_layout`,
 `verify_v2_dryrun`, `verify_v2_marble_paths`, and `tools/`

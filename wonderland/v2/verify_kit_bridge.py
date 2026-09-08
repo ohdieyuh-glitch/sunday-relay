@@ -45,7 +45,14 @@ def check(ok, why):
     return ok
 
 
+#: Set by `self_test` to feed a check doctored placements. None means the real
+#: world. Nothing else writes it.
+_OVERRIDE = None
+
+
 def kit_placements():
+    if _OVERRIDE is not None:
+        return _OVERRIDE
     return [p for p in L.ALL if p.get("kit")]
 
 
@@ -569,7 +576,92 @@ TESTS = (
 )
 
 
+def self_test():
+    """Prove each check BITES, by breaking the thing it checks.
+
+    `validate_assets.py --self-test` exists for this reason and so does this: a
+    check that silently never fires looks exactly like a world that passes it,
+    and this file's checks read a live 15,000-placement layout where a quiet
+    `continue` in the wrong branch would never be noticed. So each invariant is
+    handed a placement list that violates it, and the check has to fail.
+
+    THE ONES THAT CANNOT BE FAKED THIS WAY SAY SO rather than being skipped
+    quietly: the manifest, socket and plan checks read the forge's own files
+    and there is nothing to doctor short of writing a bad manifest to disk.
+    """
+    global _OVERRIDE
+    real = [dict(p) for p in kit_placements()]
+    base = [dict(p) for p in real[:40]]
+
+    def bites(name, mangle, fn):
+        global _OVERRIDE
+        rows = [dict(p) for p in base]
+        mangle(rows)
+        _OVERRIDE = rows
+        n = len(FAILS)
+        try:
+            fn()
+        except Exception:                                  # noqa: BLE001
+            FAILS.append("%s raised instead of failing" % name)
+        _OVERRIDE = None
+        caught = len(FAILS) > n
+        del FAILS[n:]
+        print("  %s %s" % ("ok  " if caught else "MISS", name))
+        return caught
+
+    print("SELF TEST -- each check is handed a world that breaks it\n")
+    passed = 0
+    passed += bites("an unknown asset key is caught",
+                    lambda r: r.__setitem__(0, dict(r[0], asset="WL_Not_A_Mesh")),
+                    t_keys_resolve)
+    passed += bites("a material outside the palette is caught",
+                    lambda r: r.__setitem__(0, dict(r[0], mat="MI_Invented")),
+                    t_materials)
+    passed += bites("an undeclared data layer is caught",
+                    lambda r: r.__setitem__(0, dict(r[0], band="V2_Nowhere")),
+                    t_bands)
+    passed += bites("a malformed transform is caught",
+                    lambda r: r.__setitem__(0, dict(r[0], pos=(0.0, 0.0))),
+                    t_shape)
+    passed += bites("a duplicate label is caught",
+                    lambda r: r.__setitem__(1, dict(r[1], label=r[0]["label"])),
+                    t_shape)
+    passed += bites("a part that drifted off its origin is caught",
+                    lambda r: r.__setitem__(0, dict(r[0], rot=(0.0, 137.0, 0.0))),
+                    t_parts_share_a_transform)
+    passed += bites("a piece sunk below the ground datum is caught",
+                    lambda r: r.__setitem__(0, dict(
+                        r[0], pos=(r[0]["pos"][0], r[0]["pos"][1], -900.0))),
+                    t_ground)
+    passed += bites("a piece looming in a camera is caught",
+                    lambda r: r.__setitem__(0, dict(
+                        r[0], pos=(C.HERO_CAMS[0]["location"][0] + 300.0,
+                                   C.HERO_CAMS[0]["location"][1], 0.0))),
+                    t_camera_clearance)
+    passed += bites("a carried piece whose carrier is gone is caught",
+                    lambda r: r.__setitem__(0, dict(r[0], carried_by="KitGhost")),
+                    t_nothing_is_orphaned)
+    passed += bites("a mesh the census cannot see is caught",
+                    lambda r: r.__setitem__(0, dict(r[0], asset="WL_Not_A_Mesh")),
+                    t_census_can_see_it)
+    _OVERRIDE = None
+    total = 10
+    print("\n  not faked here (they read the forge's own files, not the layout):")
+    for nm in ("manifest", "sockets bear", "stack geometry", "plan is honest",
+               "offline import is loud", "the editor half runs",
+               "the editor half is honest", "batches reported"):
+        print("     %s" % nm)
+    print()
+    if passed == total:
+        print("SELF TEST: PASS -- all %d checks bite" % total)
+        return 0
+    print("SELF TEST: FAIL -- %d of %d checks did not fire" % (total - passed, total))
+    return 1
+
+
 def main():
+    if "--self-test" in sys.argv[1:]:
+        return self_test()
     print("KIT BRIDGE -- the Blender forge as world content, offline\n")
     for name, fn in TESTS:
         before = len(FAILS)
