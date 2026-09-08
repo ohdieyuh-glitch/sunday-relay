@@ -441,6 +441,7 @@ export function coderContractBrief(contract: JuliusContractReviewCharge): string
     `  PERMITTED PATHS:\n${list(contract.permittedPaths, '(none stated)')}`,
     `  PROHIBITED ACTIONS:\n${list(contract.prohibitedActions, '(none)')}`,
     `  BLOCKING ACCEPTANCE CRITERIA:\n${list(contract.blockingCriteria, '(none stated)')}`,
+    `  REVIEW CRITERIA (what the independent reviewer will check):\n${list(contract.contractReviewCriteria, '(none stated)')}`,
     `  REQUIRED EVIDENCE: ${contract.requiredEvidence.join(', ') || '(none stated)'}`,
     `  REQUIRED CHECKS:\n${list(contract.requiredChecks, '(none stated)')}`,
     `  FAILURE CONDITIONS:\n${list(contract.failureConditions, '(none stated)')}`,

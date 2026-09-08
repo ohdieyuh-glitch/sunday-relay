@@ -79,9 +79,12 @@ App-JWT → `POST /app/installations/{id}/access_tokens` flow, or whatever
 minted #234's token), then:
 
 ```bash
-export GH_TOKEN='<installation access token>'    # the App's, never the founder's PAT
-git push "https://x-access-token:${GH_TOKEN}@github.com/ohdieyuh-glitch/sunday-relay.git" \
-  relay/julius-architect-gate-fix-worker
+# Authenticate gh AND git from the App's token, read from a file or a prompt —
+# never pasted into a URL or a shell history line. (The repository's boundary
+# scanner refuses inline-credential URLs in any file, docs included.)
+gh auth login --with-token < /path/to/installation-token     # the App's token, never the founder's PAT
+gh auth setup-git                                             # git pushes use gh's credential helper
+git push origin relay/julius-architect-gate-fix-worker
 
 # The committed body names a stale head by construction; rewrite that one line
 # to the pushed head in a temporary copy and open with it.
@@ -126,6 +129,22 @@ git rev-list --count origin/main^@          # 1 parent: a squash
 No `julius-accept-main` dispatch is required for monotonicity: the existing
 checkpoints (`f131098c`, `67ade6ea`) stay contained in a forward-merged `main`.
 Dispatching it anyway records a fresh checkpoint and costs nothing.
+
+**If `main` moves before the merge** (anything else lands first), the gate's
+"pre-merge parent contained in the reviewed candidate" rule will refuse a head
+that does not contain the new `main`. Then, as the App on the worker branch:
+`git rebase origin/main` (the tree-identity check against the reference no
+longer applies; re-run the three Step 1 verifications for identity and count),
+push, wait for CI, **re-approve at the new head**, and squash-merge at that
+head. Never merge an approval that names an older head.
+
+Every rule the gate applies, for reference (`scripts/julius-main-provenance.mjs`):
+`main` readable and still while the check runs · exactly one parent (a squash)
+· exactly one merged PR records that commit as its merge result · that PR's
+base is `main` and its base never changed · its author is `julius-worker[bot]`
+· `main`'s tree equals the PR head's tree · the pre-merge parent is contained
+in the PR head · plus review currency (an `APPROVED` review by a different
+login bound to that exact head).
 
 ## Step 4 — nothing else
 
