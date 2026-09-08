@@ -98,6 +98,23 @@ export interface WonderlandRunSnapshot {
   readonly state: JuliusMissionState;
   /** `julius_runs.version`. The authority on which snapshot is newer. */
   readonly revision: number;
+  /**
+   * The ledger sequence this snapshot is consistent with, when the reader can
+   * say — `MAX(sequence)` for the run, read in the same pass as the row.
+   *
+   * WHY IT HAD TO EXIST, and the failure it closes. Only a state TRANSITION
+   * bumps `julius_runs.version`; `review.started`, `finding.recorded` and both
+   * subagent events do not. So after adopting a snapshot at revision 10, every
+   * genuinely new event of those kinds also arrives at revision 10 and the
+   * revision tie-break refused all of them — the world went DEAF until the run
+   * happened to change state. Reproduced end to end before this field existed.
+   *
+   * Null when the reader genuinely cannot supply it, and the conservative
+   * tie-break still applies in that case. What is never done is GUESSING one:
+   * a guess too high skips events and a guess too low claims to have applied
+   * events nobody saw.
+   */
+  readonly atSequence: number | null;
   /** When the snapshot was taken, not when the run last changed. */
   readonly observedAtIso: string;
   /** Null when the reader could not supply it. Never a guessed zero. */
@@ -113,6 +130,7 @@ export const WONDERLAND_RUN_SNAPSHOT_FIELDS = exactKeys<WonderlandRunSnapshot>()
   'missionId',
   'state',
   'revision',
+  'atSequence',
   'observedAtIso',
   'activeTasks',
   'pendingApprovals',
@@ -123,6 +141,7 @@ export function wonderlandRunSnapshot(input: {
   readonly runId: string;
   readonly state: JuliusMissionState;
   readonly revision: number;
+  readonly atSequence?: number | null;
   readonly observedAtIso: string;
   readonly juliusInstanceId?: string | null;
   readonly missionId?: string | null;
@@ -137,6 +156,14 @@ export function wonderlandRunSnapshot(input: {
     missionId: input.missionId ?? null,
     state: input.state,
     revision: input.revision,
+    // A position or nothing. A negative or fractional sequence is a reader
+    // fault, and carrying it would put a cursor somewhere no event can be.
+    atSequence:
+      typeof input.atSequence === 'number' &&
+      Number.isSafeInteger(input.atSequence) &&
+      input.atSequence >= 0
+        ? input.atSequence
+        : null,
     observedAtIso: input.observedAtIso,
     activeTasks: input.activeTasks ?? null,
     pendingApprovals: input.pendingApprovals ?? null,
@@ -200,10 +227,25 @@ export interface WonderlandRecovery {
 /**
  * Adopt a snapshot. THE STATE IS SET, NOT REPLAYED.
  *
- * The cursor's SEQUENCE is deliberately left alone. A snapshot carries no
- * sequence and inventing one would either skip events (if guessed high) or
- * claim to have applied events that were never seen (if guessed low). The
- * revision rises; the event position does not move.
+ * TWO MODES, AND THE DIFFERENCE IS THE READER'S HONESTY ABOUT ITS OWN POSITION.
+ *
+ * WITH `atSequence` — the reader read `MAX(sequence)` for the run alongside the
+ * row, so the snapshot's place in the stream is KNOWN. The cursor moves to it,
+ * and everything at or before it is refused on SEQUENCE, which is precise: a
+ * pre-snapshot replay is behind, and genuinely new work is ahead, whatever the
+ * revision happens to be. `revisionFromSnapshot` is then left off, because the
+ * blunt tie-break it drives is not only unnecessary but WRONG — only a state
+ * transition bumps `julius_runs.version`, so new review, finding and subagent
+ * events all arrive at the snapshot's own revision and the tie-break refused
+ * every one of them. The world went deaf until the run changed state.
+ *
+ * WITHOUT it — the reader could not say, so the conservative tie-break stands:
+ * anything AT the snapshot's revision is treated as already absorbed. That
+ * refuses some genuinely new events, which is the safer of the two errors when
+ * position is unknown: showing stale work is worse than showing less of it.
+ *
+ * What is never done is GUESSING a sequence. Too high skips events; too low
+ * claims to have applied events nobody saw.
  */
 export function adoptWonderlandSnapshot(
   cursor: WonderlandCursor,
@@ -220,14 +262,20 @@ export function adoptWonderlandSnapshot(
       reason: SNAPSHOT_REFUSALS[verdict],
     });
   }
+  const positioned = snapshot.atSequence !== null;
   return Object.freeze({
     cursor: Object.freeze({
       ...cursor,
       juliusInstanceId: snapshot.juliusInstanceId ?? cursor.juliusInstanceId,
       runId: snapshot.runId,
       revision: Math.max(cursor.revision, snapshot.revision),
-      // The row is strictly newer than any event of its own generation.
-      revisionFromSnapshot: true,
+      // Never backwards. A snapshot that named an older position than one we
+      // have already passed would otherwise re-open events we applied.
+      sequence: positioned
+        ? Math.max(cursor.sequence, snapshot.atSequence as number)
+        : cursor.sequence,
+      // Only the unpositioned snapshot needs the blunt instrument. See above.
+      revisionFromSnapshot: !positioned,
       lastAppliedAtIso: snapshot.observedAtIso,
     }),
     verdict,

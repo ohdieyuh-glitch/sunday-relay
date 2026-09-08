@@ -176,6 +176,7 @@ const RUN_SNAPSHOT_NULLABLE = [
   'missionId',
   'activeTasks',
   'pendingApprovals',
+  'atSequence',
 ] as const;
 const _RunSnapshotNullableIsExact: SameKeys<
   (typeof RUN_SNAPSHOT_NULLABLE)[number],

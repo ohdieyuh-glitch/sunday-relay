@@ -267,6 +267,22 @@ struct FWonderlandRunSnapshot
 	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Envelope")
 	int64 Revision = 0;
 
+	/**
+	 * The ledger sequence this snapshot is consistent with, when the reader
+	 * could say. Unknown otherwise — never guessed, because too high skips
+	 * events and too low claims to have applied events nobody saw.
+	 *
+	 * WHY IT EXISTS, and the failure it closes. Only a state TRANSITION bumps
+	 * `julius_runs.version`; `review.started`, `finding.recorded` and both
+	 * subagent events do not. So after adopting a snapshot at revision 10,
+	 * every genuinely new event of those kinds also arrived at revision 10 and
+	 * the revision tie-break refused all of them — the world went DEAF until
+	 * the run happened to change state. With a position, the far more precise
+	 * sequence check does that job instead.
+	 */
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Envelope")
+	FWonderlandNumber AtSequence;
+
 	// When the snapshot was TAKEN, not when the run last changed.
 	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Envelope")
 	FString ObservedAtIso;

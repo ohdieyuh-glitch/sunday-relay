@@ -69,6 +69,15 @@ static FWonderlandRunSnapshot Snapshot(int64 Revision, const char* RunId = "run-
 	return S;
 }
 
+/** The same snapshot, from a reader that could say where in the stream it sat. */
+static FWonderlandRunSnapshot PositionedSnapshot(int64 Revision, int64 AtSequence)
+{
+	FWonderlandRunSnapshot S = Snapshot(Revision);
+	S.AtSequence.bKnown = true;
+	S.AtSequence.Value = static_cast<double>(AtSequence);
+	return S;
+}
+
 int main()
 {
 	FSubsystemCollectionBase Collection;
@@ -204,6 +213,61 @@ int main()
 		Check(S.GetEmbodiment().bTerminal, "and the run reaches its real ending");
 		Check(!S.GetCursor().bRevisionFromSnapshot,
 			"an accepted event puts the position back on the event stream");
+	}
+
+	/* ------------------------- a POSITIONED snapshot, and the deafness it fixes */
+	{
+		// THE DEFECT THIS BLOCK EXISTS FOR. Only a state transition bumps
+		// `julius_runs.version`, so a burst of genuinely new review, finding and
+		// subagent work all arrives at the revision the snapshot was taken at.
+		// With only the revision tie-break, every one of them was refused and the
+		// world went deaf until the run happened to change state.
+		UWonderlandJuliusSubsystem S;
+		S.Initialize(Collection);
+		S.BindProject(TEXT("project-alpha"));
+
+		S.AdoptSnapshot(PositionedSnapshot(10, 40), State(EWonderlandJuliusState::Coding, false));
+		Check(S.HasState(), "a positioned snapshot is adopted");
+		Check(S.GetCursor().Revision == 10, "and sets the revision");
+		Check(S.GetResumeAfterSequence() == 40,
+			"and moves the resume position to where the snapshot sat");
+		Check(!S.GetCursor().bRevisionFromSnapshot,
+			"and leaves the blunt tie-break OFF, because sequence now does that job");
+
+		// New work at the SAME revision: the case that used to go dark.
+		Check(S.ApplyEnvelope(Env("after-1", 41, 10), State(EWonderlandJuliusState::IndependentReview, false),
+				FWonderlandActivityReading()) == EWonderlandOrderingVerdict::Applied,
+			"new work at the snapshot's own revision is heard");
+		Check(S.GetEmbodiment().VisualState == EWonderlandJuliusState::IndependentReview,
+			"and moves the world");
+
+		// The tail the snapshot already absorbed, at the same revision: refused,
+		// and refused on the axis that actually knows.
+		Check(S.ApplyEnvelope(Env("before-1", 12, 10), State(EWonderlandJuliusState::PromptArchitect, false),
+				FWonderlandActivityReading()) == EWonderlandOrderingVerdict::StaleSequence,
+			"a replayed pre-snapshot event is refused on SEQUENCE");
+		Check(S.GetEmbodiment().VisualState == EWonderlandJuliusState::IndependentReview,
+			"and cannot take the world backwards");
+
+		// An older revision is still refused on revision, which is checked first
+		// on purpose: a stale replica can be ahead on its own stream.
+		Check(S.ApplyEnvelope(Env("older", 900, 4), State(EWonderlandJuliusState::Idle, false),
+				FWonderlandActivityReading()) == EWonderlandOrderingVerdict::StaleRevision,
+			"an older revision is still refused on REVISION");
+	}
+
+	/* ------------------------------ a snapshot never drags the cursor back */
+	{
+		UWonderlandJuliusSubsystem S;
+		S.Initialize(Collection);
+		S.BindProject(TEXT("project-alpha"));
+		S.ApplyEnvelope(Env("e1", 90, 5), State(EWonderlandJuliusState::Coding, false),
+			FWonderlandActivityReading());
+
+		S.AdoptSnapshot(PositionedSnapshot(9, 12), State(EWonderlandJuliusState::Verifying, false));
+		Check(S.GetResumeAfterSequence() == 90,
+			"a snapshot naming a position we have passed does not re-open applied events");
+		Check(S.GetCursor().Revision == 9, "though its newer revision is still taken");
 	}
 
 	/* ---------------------------------------------- snapshots are refused too */

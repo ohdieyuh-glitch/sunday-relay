@@ -122,10 +122,30 @@ void UWonderlandJuliusSubsystem::AdoptSnapshot(
 		Cursor.JuliusInstanceId = Snapshot.JuliusInstanceId;
 	}
 	Cursor.Revision = Snapshot.Revision;
-	// THE SEQUENCE IS DELIBERATELY UNTOUCHED. A snapshot says what is true now
-	// without saying which events produced it, so there is still a tail to
-	// replay and the world must ask for it from where it actually is.
-	Cursor.bRevisionFromSnapshot = true;
+
+	// TWO MODES, AND THE DIFFERENCE IS THE READER'S HONESTY ABOUT ITS POSITION.
+	//
+	// WITH a sequence, the snapshot's place in the stream is KNOWN, so the
+	// cursor moves to it and everything at or before it is refused on
+	// SEQUENCE — precise, because a pre-snapshot replay is behind and new work
+	// is ahead whatever the revision happens to be. The blunt revision
+	// tie-break is then left OFF, because it is not merely unnecessary but
+	// wrong: only a transition bumps the run version, so new review, finding
+	// and subagent events all arrive at the snapshot's own revision and the
+	// tie-break refused every one. The world went deaf until the run moved.
+	//
+	// WITHOUT one, the conservative tie-break stands. It refuses some genuinely
+	// new events, which is the safer of the two errors when position is
+	// unknown: showing stale work is worse than showing less of it.
+	//
+	// Never backwards. A snapshot naming a position we have already passed
+	// would otherwise re-open events this world applied.
+	const bool bPositioned = Snapshot.AtSequence.bKnown;
+	if (bPositioned)
+	{
+		Cursor.Sequence = FMath::Max(Cursor.Sequence, static_cast<int64>(Snapshot.AtSequence.Value));
+	}
+	Cursor.bRevisionFromSnapshot = !bPositioned;
 
 	Embodiment = InEmbodiment;
 	bStateApplied = true;
