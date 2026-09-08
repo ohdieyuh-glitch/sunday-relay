@@ -234,6 +234,43 @@ beside it. This branch will be rebased onto the gate fix once that lands and its
 real SHA is known — not before, because rebasing onto an unlanded branch just
 moves the guess.
 
+### THE BETA GATE, RUN AGAINST THE REAL PAID BUNDLE — 3/15, exit 1
+
+Not a repository reading. The `julius-live-evidence` artifact from paid run
+**34186711214** was downloaded and the gate pointed at it:
+
+```
+node scripts/wonderland-beta-gate.mjs --evidence <downloaded artifact dir>
+```
+
+| | |
+|---|---|
+| **PASS** | PROJECT CREATION, JULIUS MISSION START, PERMISSIONS / MISSION BOUNDARIES (3 signed executor receipts, 0 invocations, 0 denials) |
+| **FAIL** | PROMPT ARCHITECT (task FAILED, no accepted artifact), CODING AGENT (BLOCKED), INDEPENDENT REVIEWER / REPAIR LOOP / VERIFICATION (never reached), VERIFIED COMPLETION (run FAILED), RESTART / RECOVERY and FAILURE RECOVERY (unexercised) |
+| **no dump** | ACCOUNT / ONBOARDING, TASK CONTRACT LOCK, PROJECT BRAIN PERSISTENCE |
+| **NOT BUILT** | WONDER WEB OUTPUT |
+
+**The three "no readable dump" rows are honest, not a defect.** The gate reads
+`sessions.tsv`, `task-contracts.tsv` and `project-brain.tsv`; the dump script
+writes all three — but only on this branch. Trusted `main` writes **none** of
+them, and the bundle came from `main`. Checked, not assumed: the gate and the
+dump agree on every filename.
+
+**`XAI_API_KEY: MISSING` in that bundle is also not a defect**, and it looks
+like one. The live step deliberately does not receive it: `julius-live-hermes.sh`
+refuses to run without it (`${XAI_API_KEY:?}`) and writes it into the reviewer's
+own profile dotenv at `$HERMES_PROFILE_HOME/.hermes/.env`, so the reviewer bills
+through that profile and the credential never enters the mission process. The
+preflight reports its absence there "for the record", as its own code says.
+
+### What the bundle proves about the money
+
+`budget.tsv` holds one allocation (300,000 µUSD, `ESTIMATE`,
+`julius-allocation.v1`, remaining 20,000,000) and one reservation, and **no
+settlement row**. That is correct: a provider was called and reported no cost,
+so the spend is Unknown. A release would have claimed nothing was spent, and a
+zero would have claimed it was free.
+
 ---
 
 ## 00. CLOUD SESSION 2026-09-08 — the task/sprint contract, and a credential finding
