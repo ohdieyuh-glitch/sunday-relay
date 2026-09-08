@@ -96,6 +96,20 @@ describe('the retry loop itself, with a fake pool', () => {
     expect(releases()).toBe(3);
   });
 
+  it('a throwing effect ROLLS BACK and never commits', async () => {
+    // THE INVARIANT CALLERS LEAN ON when they leave by throwing rather than
+    // returning — `julius-subagent-postgres` does exactly that to refuse a
+    // sub-agent without committing. It belongs here, where a fake pool can see
+    // the statements; a database test cannot distinguish COMMIT from ROLLBACK
+    // when the transaction wrote nothing, which is how an earlier version of
+    // that check passed while proving nothing.
+    const { pool, statements } = fakePool();
+    await expect(serializableTransaction(pool, async () => { throw new Error('refused'); }, noSleep))
+      .rejects.toThrow('refused');
+    expect(statements).toEqual(['BEGIN ISOLATION', 'ROLLBACK']);
+    expect(statements, 'no COMMIT follows a throw').not.toContain('COMMIT');
+  });
+
   it('never retries something the database did not raise', async () => {
     const { pool } = fakePool();
     let attempts = 0;

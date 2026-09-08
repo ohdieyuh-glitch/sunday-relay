@@ -1,4 +1,4 @@
-import type { Pool } from 'pg';
+import type { Pool } from 'pg';import{serializableTransaction}from'./postgres-serializable';
 
 import type {
   JuliusSubagentContext, JuliusSubagentRecord, JuliusSubagentState, JuliusSubagentStore,JuliusTask,
@@ -27,6 +27,24 @@ const parsed = <T>(value: unknown, fallback: T): T => {
 
 /** The states that count against the per-parent active bound. */
 const ACTIVE_STATES = ['AUTHORIZED', 'ACTIVE'] as const;
+
+/**
+ * A C.A.R.D. REFUSAL IS NOT AN ERROR, AND MUST NOT COMMIT.
+ *
+ * This path used to issue `ROLLBACK` and return the denial from inside the
+ * transaction body. That is correct on its own and wrong under a retrying
+ * wrapper: a normal return resolves the effect, and the wrapper then commits —
+ * after an explicit rollback. So the refusal leaves by the one path that always
+ * rolls back, carrying its answer with it, and is converted back into the
+ * ordinary return value outside.
+ *
+ * It is deliberately NOT a serialization failure, so `serializableTransaction`
+ * does not retry it: the limits it checked will read the same on a second
+ * attempt, and retrying a refusal is how a bounded sub-agent becomes a loop.
+ */
+class SubagentDenied extends Error {
+  constructor(readonly denialReason: string) { super('julius_subagent_denied'); }
+}
 
 export class JuliusSubagentPostgresRepository implements JuliusSubagentStore {
   constructor(private readonly pool: Pool) {}
@@ -72,10 +90,10 @@ export class JuliusSubagentPostgresRepository implements JuliusSubagentStore {
   }
 
   async recordSubagentAndTaskWithinLimits(input:{record:JuliusSubagentRecord;task:JuliusTask;maxActive:number;maxTotal:number;maxDepth:number}):Promise<{recorded:boolean;duplicate:boolean;denialReason:string|null}>{
-    const client=await this.pool.connect();try{await client.query('BEGIN ISOLATION LEVEL SERIALIZABLE');await client.query('SELECT pg_advisory_xact_lock(hashtext($1))',[input.record.runId]);const duplicate=await client.query('SELECT 1 FROM relay_wonderland.julius_subagents WHERE request_id=$1 AND run_id=$2 AND project_id=$3',[input.record.requestId,input.record.runId,input.record.projectId]);if(duplicate.rows[0]){await client.query('COMMIT');return{recorded:false,duplicate:true,denialReason:null};}const collision=await client.query('SELECT 1 FROM relay_wonderland.julius_subagents WHERE request_id=$1',[input.record.requestId]);if(collision.rows[0])throw new Error('subagent_request_scope_conflict');
-      const counts=await client.query<{parent_depth:string;active_children:string;total_children:string}>(`SELECT COALESCE((SELECT depth FROM relay_wonderland.julius_subagents WHERE run_id=$1 AND child_task_id=$2),0)::text parent_depth,(SELECT count(*) FROM relay_wonderland.julius_subagents WHERE run_id=$1 AND parent_task_id=$2 AND state=ANY($3))::text active_children,(SELECT count(*) FROM relay_wonderland.julius_subagents WHERE run_id=$1)::text total_children`,[input.record.runId,input.record.parentTaskId,ACTIVE_STATES]);const row=counts.rows[0];const denial=Number(row.parent_depth)+1>input.maxDepth?'CARD_SUBAGENT_DEPTH_LIMIT':Number(row.active_children)>=input.maxActive?'CARD_SUBAGENT_ACTIVE_LIMIT':Number(row.total_children)>=input.maxTotal?'CARD_SUBAGENT_TOTAL_LIMIT':null;if(denial){await client.query('ROLLBACK');return{recorded:false,duplicate:false,denialReason:denial};}
-      await client.query(`INSERT INTO relay_wonderland.julius_tasks(task_id,run_id,parent_task_id,role,task_type,state,ordinal,required_evidence_types) VALUES($1,$2,$3,$4,$5,$6,$7,$8::jsonb)`,[input.task.taskId,input.record.runId,input.task.parentTaskId,input.task.role,input.task.taskType,input.task.state,input.task.ordinal,json(input.task.requiredEvidenceTypes)]);await client.query(`INSERT INTO relay_wonderland.julius_subagents(request_id,run_id,project_id,parent_task_id,child_task_id,depth,capability,permissions,budget_reservation_id,state) VALUES($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9,$10)`,[input.record.requestId,input.record.runId,input.record.projectId,input.record.parentTaskId,input.record.childTaskId,input.record.depth,input.record.capability,json(input.record.permissions),input.record.budgetReservationId,input.record.state]);await client.query('COMMIT');return{recorded:true,duplicate:false,denialReason:null};
-    }catch(error){await client.query('ROLLBACK').catch(()=>undefined);throw error;}finally{client.release();}
+    return serializableTransaction(this.pool,async client=>{await client.query('SELECT pg_advisory_xact_lock(hashtext($1))',[input.record.runId]);const duplicate=await client.query('SELECT 1 FROM relay_wonderland.julius_subagents WHERE request_id=$1 AND run_id=$2 AND project_id=$3',[input.record.requestId,input.record.runId,input.record.projectId]);if(duplicate.rows[0]){return{recorded:false,duplicate:true,denialReason:null};}const collision=await client.query('SELECT 1 FROM relay_wonderland.julius_subagents WHERE request_id=$1',[input.record.requestId]);if(collision.rows[0])throw new Error('subagent_request_scope_conflict');
+      const counts=await client.query<{parent_depth:string;active_children:string;total_children:string}>(`SELECT COALESCE((SELECT depth FROM relay_wonderland.julius_subagents WHERE run_id=$1 AND child_task_id=$2),0)::text parent_depth,(SELECT count(*) FROM relay_wonderland.julius_subagents WHERE run_id=$1 AND parent_task_id=$2 AND state=ANY($3))::text active_children,(SELECT count(*) FROM relay_wonderland.julius_subagents WHERE run_id=$1)::text total_children`,[input.record.runId,input.record.parentTaskId,ACTIVE_STATES]);const row=counts.rows[0];const denial=Number(row.parent_depth)+1>input.maxDepth?'CARD_SUBAGENT_DEPTH_LIMIT':Number(row.active_children)>=input.maxActive?'CARD_SUBAGENT_ACTIVE_LIMIT':Number(row.total_children)>=input.maxTotal?'CARD_SUBAGENT_TOTAL_LIMIT':null;if(denial)throw new SubagentDenied(denial);
+      await client.query(`INSERT INTO relay_wonderland.julius_tasks(task_id,run_id,parent_task_id,role,task_type,state,ordinal,required_evidence_types) VALUES($1,$2,$3,$4,$5,$6,$7,$8::jsonb)`,[input.task.taskId,input.record.runId,input.task.parentTaskId,input.task.role,input.task.taskType,input.task.state,input.task.ordinal,json(input.task.requiredEvidenceTypes)]);await client.query(`INSERT INTO relay_wonderland.julius_subagents(request_id,run_id,project_id,parent_task_id,child_task_id,depth,capability,permissions,budget_reservation_id,state) VALUES($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9,$10)`,[input.record.requestId,input.record.runId,input.record.projectId,input.record.parentTaskId,input.record.childTaskId,input.record.depth,input.record.capability,json(input.record.permissions),input.record.budgetReservationId,input.record.state]);return{recorded:true,duplicate:false,denialReason:null};
+    }).catch(error=>{if(error instanceof SubagentDenied)return{recorded:false,duplicate:false,denialReason:error.denialReason};throw error;});
   }
 
   async loadSubagent(runId: string, requestId: string): Promise<JuliusSubagentRecord | null> {
