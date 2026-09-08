@@ -1,0 +1,461 @@
+{
+  "schema": "wonderland-first-unreal-proof/1",
+  "kit_version": "1.0.0",
+  "from_manifest": "manifests/wonderland-blender-kit.json",
+  "generated_by": "wonderland/art/blender/scripts/make_proof_pack.py",
+  "purpose": "the smallest set of this kit whose import would prove the pipeline end to end: every material, both ends of the scale, both sides of the Nanite line, one complete tower stack, and each awkward case in the export contract",
+  "selection": "by requirement, re-derived from the manifest every run",
+  "proven": {
+    "imported_into_an_editor": false,
+    "note": "nothing in this pack has been imported. It names what to import first and why, and that is all it claims."
+  },
+  "unmet_requirements": [],
+  "counts": {
+    "assets": 18,
+    "meshes": 64,
+    "triangles": 103663,
+    "materials_covered": 11
+  },
+  "assets": [
+    {
+      "asset_id": "WL_Colonnade_Arcade__ruined",
+      "why": [
+        "a DAMAGED variant, whose socket list is shorter than its base's"
+      ],
+      "family_group": "variants",
+      "height_uu": 845.39,
+      "tris_total": 5901,
+      "part_count": 3,
+      "materials": [
+        "MI_V2_IvoryStone",
+        "MI_V2_LeafMid",
+        "MI_V2_Stone"
+      ],
+      "nanite_recommended": true,
+      "collision_recommended": true,
+      "variant_of": "WL_Colonnade_Arcade",
+      "meshes": [
+        "WL_Colonnade_Arcade__ruined",
+        "WL_Colonnade_Arcade__ruined_stone_dark",
+        "WL_Colonnade_Arcade__ruined_veg_anchor"
+      ]
+    },
+    {
+      "asset_id": "WL_Detail_Screen_Filigree",
+      "why": [
+        "carries MI_V2_GoldAged"
+      ],
+      "family_group": "details",
+      "height_uu": 639.0,
+      "tris_total": 2508,
+      "part_count": 4,
+      "materials": [
+        "MI_V2_Gold",
+        "MI_V2_GoldAged",
+        "MI_V2_IvoryStone",
+        "MI_V2_LeafMid"
+      ],
+      "nanite_recommended": false,
+      "collision_recommended": true,
+      "variant_of": null,
+      "meshes": [
+        "WL_Detail_Screen_Filigree",
+        "WL_Detail_Screen_Filigree_gold",
+        "WL_Detail_Screen_Filigree_gold_aged",
+        "WL_Detail_Screen_Filigree_veg_anchor"
+      ]
+    },
+    {
+      "asset_id": "WL_Garden_Retaining_Run",
+      "why": [
+        "carries MI_V2_LeafMid"
+      ],
+      "family_group": "gardens",
+      "height_uu": 310.0,
+      "tris_total": 128,
+      "part_count": 3,
+      "materials": [
+        "MI_V2_IvoryStone",
+        "MI_V2_LeafMid",
+        "MI_V2_Stone"
+      ],
+      "nanite_recommended": false,
+      "collision_recommended": true,
+      "variant_of": null,
+      "meshes": [
+        "WL_Garden_Retaining_Run",
+        "WL_Garden_Retaining_Run_stone_dark",
+        "WL_Garden_Retaining_Run_veg_anchor"
+      ]
+    },
+    {
+      "asset_id": "WL_Gatehouse_Twin__aged",
+      "why": [
+        "a weathered VARIANT, exported like any other"
+      ],
+      "family_group": "variants",
+      "height_uu": 2602.47,
+      "tris_total": 14116,
+      "part_count": 6,
+      "materials": [
+        "MI_V2_GlassAmber",
+        "MI_V2_Gold",
+        "MI_V2_IvoryStone",
+        "MI_V2_LeafMid",
+        "MI_V2_RoofRose",
+        "MI_V2_Stone"
+      ],
+      "nanite_recommended": true,
+      "collision_recommended": true,
+      "variant_of": "WL_Gatehouse_Twin",
+      "meshes": [
+        "WL_Gatehouse_Twin__aged",
+        "WL_Gatehouse_Twin__aged_glass",
+        "WL_Gatehouse_Twin__aged_gold",
+        "WL_Gatehouse_Twin__aged_roof",
+        "WL_Gatehouse_Twin__aged_stone_dark",
+        "WL_Gatehouse_Twin__aged_veg_anchor"
+      ]
+    },
+    {
+      "asset_id": "WL_Hero_GreatSpire",
+      "why": [
+        "the TALLEST module: a scale error is unmissable on it",
+        "the heaviest mesh in the kit",
+        "the most-parted module: several meshes that must share one origin"
+      ],
+      "family_group": "hero",
+      "height_uu": 11820.0,
+      "tris_total": 38972,
+      "part_count": 7,
+      "materials": [
+        "MI_V2_GlassAmber",
+        "MI_V2_GlassTeal",
+        "MI_V2_Gold",
+        "MI_V2_GoldAged",
+        "MI_V2_IvoryStone",
+        "MI_V2_RoofRose",
+        "MI_V2_Stone"
+      ],
+      "nanite_recommended": true,
+      "collision_recommended": true,
+      "variant_of": null,
+      "meshes": [
+        "WL_Hero_GreatSpire",
+        "WL_Hero_GreatSpire_glass",
+        "WL_Hero_GreatSpire_glass_cool",
+        "WL_Hero_GreatSpire_gold",
+        "WL_Hero_GreatSpire_gold_aged",
+        "WL_Hero_GreatSpire_roof",
+        "WL_Hero_GreatSpire_stone_dark"
+      ]
+    },
+    {
+      "asset_id": "WL_Market_Awning",
+      "why": [
+        "the SHORTEST module: the other end of the same check",
+        "a MOUNTED module: carried by a facade, with no footing at all"
+      ],
+      "family_group": "market",
+      "height_uu": 78.54,
+      "tris_total": 824,
+      "part_count": 4,
+      "materials": [
+        "MI_V2_Bronze",
+        "MI_V2_IvoryStone",
+        "MI_V2_RoofLilac",
+        "MI_V2_RoofRose"
+      ],
+      "nanite_recommended": false,
+      "collision_recommended": false,
+      "variant_of": null,
+      "meshes": [
+        "WL_Market_Awning",
+        "WL_Market_Awning_metal",
+        "WL_Market_Awning_roof",
+        "WL_Market_Awning_roof_alt"
+      ]
+    },
+    {
+      "asset_id": "WL_Market_Corner_Storefront",
+      "why": [
+        "carries MI_V2_RoofLilac"
+      ],
+      "family_group": "market",
+      "height_uu": 443.0,
+      "tris_total": 466,
+      "part_count": 6,
+      "materials": [
+        "MI_V2_GlassAmber",
+        "MI_V2_Gold",
+        "MI_V2_IvoryStone",
+        "MI_V2_RoofLilac",
+        "MI_V2_RoofRose",
+        "MI_V2_Stone"
+      ],
+      "nanite_recommended": false,
+      "collision_recommended": true,
+      "variant_of": null,
+      "meshes": [
+        "WL_Market_Corner_Storefront",
+        "WL_Market_Corner_Storefront_glass",
+        "WL_Market_Corner_Storefront_gold",
+        "WL_Market_Corner_Storefront_roof",
+        "WL_Market_Corner_Storefront_roof_alt",
+        "WL_Market_Corner_Storefront_stone_dark"
+      ]
+    },
+    {
+      "asset_id": "WL_Market_Hanging_Sign",
+      "why": [
+        "carries MI_V2_Bronze",
+        "carries MI_V2_Gold"
+      ],
+      "family_group": "market",
+      "height_uu": 133.0,
+      "tris_total": 336,
+      "part_count": 3,
+      "materials": [
+        "MI_V2_Bronze",
+        "MI_V2_Gold",
+        "MI_V2_IvoryStone"
+      ],
+      "nanite_recommended": false,
+      "collision_recommended": false,
+      "variant_of": null,
+      "meshes": [
+        "WL_Market_Hanging_Sign",
+        "WL_Market_Hanging_Sign_gold",
+        "WL_Market_Hanging_Sign_metal"
+      ]
+    },
+    {
+      "asset_id": "WL_Ramp_Terrace",
+      "why": [
+        "carries MI_V2_IvoryStone",
+        "carries MI_V2_Stone"
+      ],
+      "family_group": "stairs",
+      "height_uu": 207.0,
+      "tris_total": 48,
+      "part_count": 2,
+      "materials": [
+        "MI_V2_IvoryStone",
+        "MI_V2_Stone"
+      ],
+      "nanite_recommended": false,
+      "collision_recommended": true,
+      "variant_of": null,
+      "meshes": [
+        "WL_Ramp_Terrace",
+        "WL_Ramp_Terrace_stone_dark"
+      ]
+    },
+    {
+      "asset_id": "WL_Roof_Dormer",
+      "why": [
+        "carries MI_V2_GlassAmber",
+        "carries MI_V2_RoofRose"
+      ],
+      "family_group": "roofscape",
+      "height_uu": 258.0,
+      "tris_total": 240,
+      "part_count": 3,
+      "materials": [
+        "MI_V2_GlassAmber",
+        "MI_V2_IvoryStone",
+        "MI_V2_RoofRose"
+      ],
+      "nanite_recommended": false,
+      "collision_recommended": false,
+      "variant_of": null,
+      "meshes": [
+        "WL_Roof_Dormer",
+        "WL_Roof_Dormer_glass",
+        "WL_Roof_Dormer_roof"
+      ]
+    },
+    {
+      "asset_id": "WL_Stair_Straight_T3",
+      "why": [
+        "just BELOW the Nanite threshold"
+      ],
+      "family_group": "stairs",
+      "height_uu": 895.0,
+      "tris_total": 4256,
+      "part_count": 2,
+      "materials": [
+        "MI_V2_Gold",
+        "MI_V2_IvoryStone"
+      ],
+      "nanite_recommended": false,
+      "collision_recommended": true,
+      "variant_of": null,
+      "meshes": [
+        "WL_Stair_Straight_T3",
+        "WL_Stair_Straight_T3_gold"
+      ]
+    },
+    {
+      "asset_id": "WL_Tower_Base_Arcaded",
+      "why": [
+        "the foot of a complete legal tower stack"
+      ],
+      "family_group": "towers",
+      "height_uu": 1240.0,
+      "tris_total": 8388,
+      "part_count": 2,
+      "materials": [
+        "MI_V2_IvoryStone",
+        "MI_V2_Stone"
+      ],
+      "nanite_recommended": true,
+      "collision_recommended": false,
+      "variant_of": null,
+      "meshes": [
+        "WL_Tower_Base_Arcaded",
+        "WL_Tower_Base_Arcaded_stone_dark"
+      ]
+    },
+    {
+      "asset_id": "WL_Tower_Crown_Belvedere",
+      "why": [
+        "the crown of a complete legal tower stack"
+      ],
+      "family_group": "towers",
+      "height_uu": 1510.0,
+      "tris_total": 9718,
+      "part_count": 3,
+      "materials": [
+        "MI_V2_Gold",
+        "MI_V2_IvoryStone",
+        "MI_V2_RoofRose"
+      ],
+      "nanite_recommended": true,
+      "collision_recommended": false,
+      "variant_of": null,
+      "meshes": [
+        "WL_Tower_Crown_Belvedere",
+        "WL_Tower_Crown_Belvedere_gold",
+        "WL_Tower_Crown_Belvedere_roof"
+      ]
+    },
+    {
+      "asset_id": "WL_Tower_Crown_Pavilion",
+      "why": [
+        "just ABOVE the Nanite threshold"
+      ],
+      "family_group": "towers",
+      "height_uu": 1380.0,
+      "tris_total": 5062,
+      "part_count": 4,
+      "materials": [
+        "MI_V2_GlassAmber",
+        "MI_V2_Gold",
+        "MI_V2_IvoryStone",
+        "MI_V2_RoofRose"
+      ],
+      "nanite_recommended": true,
+      "collision_recommended": false,
+      "variant_of": null,
+      "meshes": [
+        "WL_Tower_Crown_Pavilion",
+        "WL_Tower_Crown_Pavilion_glass",
+        "WL_Tower_Crown_Pavilion_gold",
+        "WL_Tower_Crown_Pavilion_roof"
+      ]
+    },
+    {
+      "asset_id": "WL_Tower_Mid_Arcade",
+      "why": [
+        "the body of a complete legal tower stack"
+      ],
+      "family_group": "towers",
+      "height_uu": 1320.0,
+      "tris_total": 10488,
+      "part_count": 2,
+      "materials": [
+        "MI_V2_GlassAmber",
+        "MI_V2_IvoryStone"
+      ],
+      "nanite_recommended": true,
+      "collision_recommended": false,
+      "variant_of": null,
+      "meshes": [
+        "WL_Tower_Mid_Arcade",
+        "WL_Tower_Mid_Arcade_glass"
+      ]
+    },
+    {
+      "asset_id": "WL_Water_Canal_Run",
+      "why": [
+        "carries MI_V2_Water"
+      ],
+      "family_group": "water",
+      "height_uu": 86.5,
+      "tris_total": 264,
+      "part_count": 3,
+      "materials": [
+        "MI_V2_IvoryStone",
+        "MI_V2_Stone",
+        "MI_V2_Water"
+      ],
+      "nanite_recommended": false,
+      "collision_recommended": true,
+      "variant_of": null,
+      "meshes": [
+        "WL_Water_Canal_Run",
+        "WL_Water_Canal_Run_stone_dark",
+        "WL_Water_Canal_Run_water"
+      ]
+    },
+    {
+      "asset_id": "WL_Water_Spillway_Wall",
+      "why": [
+        "carries MI_V2_GlassTeal"
+      ],
+      "family_group": "water",
+      "height_uu": 365.0,
+      "tris_total": 354,
+      "part_count": 4,
+      "materials": [
+        "MI_V2_GlassTeal",
+        "MI_V2_IvoryStone",
+        "MI_V2_Stone",
+        "MI_V2_Water"
+      ],
+      "nanite_recommended": false,
+      "collision_recommended": true,
+      "variant_of": null,
+      "meshes": [
+        "WL_Water_Spillway_Wall",
+        "WL_Water_Spillway_Wall_stone_dark",
+        "WL_Water_Spillway_Wall_water",
+        "WL_Water_Spillway_Wall_water_lit"
+      ]
+    },
+    {
+      "asset_id": "WL_Water_Sunken_Pool",
+      "why": [
+        "the deepest EXCAVATION: geometry below the ground datum"
+      ],
+      "family_group": "water",
+      "height_uu": 177.0,
+      "tris_total": 1594,
+      "part_count": 3,
+      "materials": [
+        "MI_V2_IvoryStone",
+        "MI_V2_Stone",
+        "MI_V2_Water"
+      ],
+      "nanite_recommended": false,
+      "collision_recommended": true,
+      "variant_of": null,
+      "meshes": [
+        "WL_Water_Sunken_Pool",
+        "WL_Water_Sunken_Pool_stone_dark",
+        "WL_Water_Sunken_Pool_water"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,1006 @@
+{
+  "schema": "wonderland-placement-recipes/1",
+  "kit_version": "1.0.0",
+  "units": "unreal units (1 uu = 1 cm); +X front, Z up, yaw about Z",
+  "from_manifest": "manifests/wonderland-blender-kit.json",
+  "generated_by": "wonderland/art/blender/scripts/make_recipes.py",
+  "ownership": "these are PROPOSALS. World placement belongs to the world session; nothing here has been placed into any map and this file does not touch one.",
+  "counts": {
+    "recipes": 4,
+    "placements": 76,
+    "failed_checks": 0
+  },
+  "recipes": [
+    {
+      "name": "needle_skyline_cluster",
+      "for": "the reference's dense stand of slender towers at several heights",
+      "rule": "spellings are walked from the socket grammar (a `top` and a `bottom` of kind tower on the same rung), tallest first and no two sharing a crown; each storey sits at the MEASURED top socket of the one below; ring radii come from the feet's own footprint radii, not from a chosen number",
+      "notes": [
+        "outer ring pushed out to 3397 uu so the two rings clear each other by 4 m",
+        "outer ring radius 3397 uu, inner 1099 uu, both derived from the sum of the feet's own measured widths"
+      ],
+      "stacks": 7,
+      "placements": [
+        {
+          "module": "WL_Tower_Base_Arcaded",
+          "at_uu": [
+            3397.45,
+            0.0,
+            0.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "storey 1 of skyline_outer_1",
+          "part_of": "skyline_outer_1",
+          "abuts": []
+        },
+        {
+          "module": "WL_Tower_Mid_Machicolated",
+          "at_uu": [
+            3397.45,
+            0.0,
+            1240.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "storey 2 of skyline_outer_1",
+          "part_of": "skyline_outer_1",
+          "abuts": []
+        },
+        {
+          "module": "WL_Tower_Mid_Fluted",
+          "at_uu": [
+            3397.45,
+            0.0,
+            2180.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "storey 3 of skyline_outer_1",
+          "part_of": "skyline_outer_1",
+          "abuts": []
+        },
+        {
+          "module": "WL_Spire_Needle",
+          "at_uu": [
+            3397.45,
+            0.0,
+            3860.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "storey 4 of skyline_outer_1",
+          "part_of": "skyline_outer_1",
+          "abuts": []
+        },
+        {
+          "module": "WL_Tower_Base_Arcaded",
+          "at_uu": [
+            1049.87,
+            3231.17,
+            0.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "storey 1 of skyline_outer_2",
+          "part_of": "skyline_outer_2",
+          "abuts": []
+        },
+        {
+          "module": "WL_Tower_Mid_Machicolated",
+          "at_uu": [
+            1049.87,
+            3231.17,
+            1240.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "storey 2 of skyline_outer_2",
+          "part_of": "skyline_outer_2",
+          "abuts": []
+        },
+        {
+          "module": "WL_Tower_Mid_Fluted",
+          "at_uu": [
+            1049.87,
+            3231.17,
+            2180.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "storey 3 of skyline_outer_2",
+          "part_of": "skyline_outer_2",
+          "abuts": []
+        },
+        {
+          "module": "WL_Spire_Twisted",
+          "at_uu": [
+            1049.87,
+            3231.17,
+            3860.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "storey 4 of skyline_outer_2",
+          "part_of": "skyline_outer_2",
+          "abuts": []
+        },
+        {
+          "module": "WL_Tower_Base_Arcaded",
+          "at_uu": [
+            -2748.59,
+            1996.97,
+            0.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "storey 1 of skyline_outer_3",
+          "part_of": "skyline_outer_3",
+          "abuts": []
+        },
+        {
+          "module": "WL_Tower_Mid_Machicolated",
+          "at_uu": [
+            -2748.59,
+            1996.97,
+            1240.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "storey 2 of skyline_outer_3",
+          "part_of": "skyline_outer_3",
+          "abuts": []
+        },
+        {
+          "module": "WL_Tower_Mid_Fluted",
+          "at_uu": [
+            -2748.59,
+            1996.97,
+            2180.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "storey 3 of skyline_outer_3",
+          "part_of": "skyline_outer_3",
+          "abuts": []
+        },
+        {
+          "module": "WL_Spire_Barbed",
+          "at_uu": [
+            -2748.59,
+            1996.97,
+            3860.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "storey 4 of skyline_outer_3",
+          "part_of": "skyline_outer_3",
+          "abuts": []
+        },
+        {
+          "module": "WL_Tower_Base_Arcaded",
+          "at_uu": [
+            -2748.59,
+            -1996.97,
+            0.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "storey 1 of skyline_outer_4",
+          "part_of": "skyline_outer_4",
+          "abuts": []
+        },
+        {
+          "module": "WL_Tower_Mid_Machicolated",
+          "at_uu": [
+            -2748.59,
+            -1996.97,
+            1240.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "storey 2 of skyline_outer_4",
+          "part_of": "skyline_outer_4",
+          "abuts": []
+        },
+        {
+          "module": "WL_Tower_Mid_Fluted",
+          "at_uu": [
+            -2748.59,
+            -1996.97,
+            2180.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "storey 3 of skyline_outer_4",
+          "part_of": "skyline_outer_4",
+          "abuts": []
+        },
+        {
+          "module": "WL_Spire_Ringed",
+          "at_uu": [
+            -2748.59,
+            -1996.97,
+            3860.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "storey 4 of skyline_outer_4",
+          "part_of": "skyline_outer_4",
+          "abuts": []
+        },
+        {
+          "module": "WL_Tower_Base_Arcaded",
+          "at_uu": [
+            1049.87,
+            -3231.17,
+            0.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "storey 1 of skyline_outer_5",
+          "part_of": "skyline_outer_5",
+          "abuts": []
+        },
+        {
+          "module": "WL_Tower_Mid_Arcade",
+          "at_uu": [
+            1049.87,
+            -3231.17,
+            1240.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "storey 2 of skyline_outer_5",
+          "part_of": "skyline_outer_5",
+          "abuts": []
+        },
+        {
+          "module": "WL_Tower_Mid_Ribbed",
+          "at_uu": [
+            1049.87,
+            -3231.17,
+            2560.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "storey 3 of skyline_outer_5",
+          "part_of": "skyline_outer_5",
+          "abuts": []
+        },
+        {
+          "module": "WL_Tower_Crown_Belvedere",
+          "at_uu": [
+            1049.87,
+            -3231.17,
+            4200.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "storey 4 of skyline_outer_5",
+          "part_of": "skyline_outer_5",
+          "abuts": []
+        },
+        {
+          "module": "WL_Tower_Base_Arcaded",
+          "at_uu": [
+            0.0,
+            1099.15,
+            0.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "storey 1 of skyline_inner_1",
+          "part_of": "skyline_inner_1",
+          "abuts": []
+        },
+        {
+          "module": "WL_Tower_Mid_Machicolated",
+          "at_uu": [
+            0.0,
+            1099.15,
+            1240.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "storey 2 of skyline_inner_1",
+          "part_of": "skyline_inner_1",
+          "abuts": []
+        },
+        {
+          "module": "WL_Tower_Mid_Fluted",
+          "at_uu": [
+            0.0,
+            1099.15,
+            2180.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "storey 3 of skyline_inner_1",
+          "part_of": "skyline_inner_1",
+          "abuts": []
+        },
+        {
+          "module": "WL_Spire_Cluster",
+          "at_uu": [
+            0.0,
+            1099.15,
+            3860.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "storey 4 of skyline_inner_1",
+          "part_of": "skyline_inner_1",
+          "abuts": []
+        },
+        {
+          "module": "WL_Tower_Base_Arcaded",
+          "at_uu": [
+            -0.0,
+            -1099.15,
+            0.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "storey 1 of skyline_inner_2",
+          "part_of": "skyline_inner_2",
+          "abuts": []
+        },
+        {
+          "module": "WL_Tower_Mid_Arcade",
+          "at_uu": [
+            -0.0,
+            -1099.15,
+            1240.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "storey 2 of skyline_inner_2",
+          "part_of": "skyline_inner_2",
+          "abuts": []
+        },
+        {
+          "module": "WL_Tower_Mid_Ribbed",
+          "at_uu": [
+            -0.0,
+            -1099.15,
+            2560.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "storey 3 of skyline_inner_2",
+          "part_of": "skyline_inner_2",
+          "abuts": []
+        },
+        {
+          "module": "WL_Tower_Crown_Onion",
+          "at_uu": [
+            -0.0,
+            -1099.15,
+            4200.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "storey 4 of skyline_inner_2",
+          "part_of": "skyline_inner_2",
+          "abuts": []
+        }
+      ],
+      "checks": [],
+      "counts": {
+        "placements": 28,
+        "modules": 12
+      }
+    },
+    {
+      "name": "royal_threshold",
+      "for": "an arrival: the gate you walk to, and what lines the walk",
+      "rule": "the curtain butts the gate's measured half-width and then itself at the measured run length; the arch stands one gate half-depth plus 9 m clear; the colonnade count is the approach length divided by a colonnade's measured length",
+      "placements": [
+        {
+          "module": "WL_Hero_Gate_Royal",
+          "at_uu": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "the gate, on the axis",
+          "part_of": "threshold",
+          "abuts": []
+        },
+        {
+          "module": "WL_Wall_Curtain_Run",
+          "at_uu": [
+            0.0,
+            -1262.7,
+            0.0
+          ],
+          "yaw_deg": 90.0,
+          "why": "curtain run 1, -Y of the gate",
+          "part_of": "threshold",
+          "abuts": []
+        },
+        {
+          "module": "WL_Wall_Curtain_Run",
+          "at_uu": [
+            0.0,
+            -2622.7,
+            0.0
+          ],
+          "yaw_deg": 90.0,
+          "why": "curtain run 2, -Y of the gate",
+          "part_of": "threshold",
+          "abuts": []
+        },
+        {
+          "module": "WL_Wall_Curtain_Run",
+          "at_uu": [
+            0.0,
+            -3982.7,
+            0.0
+          ],
+          "yaw_deg": 90.0,
+          "why": "curtain run 3, -Y of the gate",
+          "part_of": "threshold",
+          "abuts": []
+        },
+        {
+          "module": "WL_Wall_Curtain_Run",
+          "at_uu": [
+            0.0,
+            1262.7,
+            0.0
+          ],
+          "yaw_deg": 90.0,
+          "why": "curtain run 1, +Y of the gate",
+          "part_of": "threshold",
+          "abuts": []
+        },
+        {
+          "module": "WL_Wall_Curtain_Run",
+          "at_uu": [
+            0.0,
+            2622.7,
+            0.0
+          ],
+          "yaw_deg": 90.0,
+          "why": "curtain run 2, +Y of the gate",
+          "part_of": "threshold",
+          "abuts": []
+        },
+        {
+          "module": "WL_Wall_Curtain_Run",
+          "at_uu": [
+            0.0,
+            3982.7,
+            0.0
+          ],
+          "yaw_deg": 90.0,
+          "why": "curtain run 3, +Y of the gate",
+          "part_of": "threshold",
+          "abuts": []
+        },
+        {
+          "module": "WL_Arch_Ceremonial",
+          "at_uu": [
+            3915.0,
+            0.0,
+            0.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "the arch out in front, clear of the gate by 9 m",
+          "part_of": "threshold",
+          "abuts": []
+        },
+        {
+          "module": "WL_Colonnade_Arcade",
+          "at_uu": [
+            3010.0,
+            -998.1,
+            0.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "colonnade 1 along the approach",
+          "part_of": "threshold",
+          "abuts": []
+        },
+        {
+          "module": "WL_Colonnade_Arcade",
+          "at_uu": [
+            3010.0,
+            998.1,
+            0.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "colonnade 1 along the approach",
+          "part_of": "threshold",
+          "abuts": []
+        }
+      ],
+      "checks": [],
+      "counts": {
+        "placements": 10,
+        "modules": 4
+      }
+    },
+    {
+      "name": "water_garden",
+      "for": "the walkable route the water family was built to make: lower garden, canal, crossing, cascade, upper terrace",
+      "rule": "canal units are laid at their own measured length so their ends butt; the crossing substitutes for a run in the middle because it is the same module length; the upper terrace sits at the cascade's MEASURED top_route socket, not at a typed elevation",
+      "placements": [
+        {
+          "module": "WL_Hero_Water_Court",
+          "at_uu": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "the reflecting basin; its head is at +X",
+          "part_of": "water_garden",
+          "abuts": []
+        },
+        {
+          "module": "WL_Water_Canal_Run",
+          "at_uu": [
+            -2484.5,
+            0.0,
+            0.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "canal unit 1 (run)",
+          "part_of": "water_garden",
+          "abuts": []
+        },
+        {
+          "module": "WL_Water_Canal_Run",
+          "at_uu": [
+            -3364.5,
+            0.0,
+            0.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "canal unit 2 (run)",
+          "part_of": "water_garden",
+          "abuts": []
+        },
+        {
+          "module": "WL_Water_Canal_Crossing",
+          "at_uu": [
+            -4244.5,
+            0.0,
+            0.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "canal unit 3 (crossing)",
+          "part_of": "water_garden",
+          "abuts": []
+        },
+        {
+          "module": "WL_Water_Canal_Run",
+          "at_uu": [
+            -5124.5,
+            0.0,
+            0.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "canal unit 4 (run)",
+          "part_of": "water_garden",
+          "abuts": []
+        },
+        {
+          "module": "WL_Water_Canal_Run",
+          "at_uu": [
+            -6004.5,
+            0.0,
+            0.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "canal unit 5 (run)",
+          "part_of": "water_garden",
+          "abuts": []
+        },
+        {
+          "module": "WL_Water_Cascade_Stair",
+          "at_uu": [
+            -7287.5,
+            0.0,
+            0.0
+          ],
+          "yaw_deg": 180.0,
+          "why": "the cascade, climbing away from the canal to T2",
+          "part_of": "water_garden",
+          "abuts": []
+        },
+        {
+          "module": "WL_Garden_Pavilion_Base",
+          "at_uu": [
+            -8171.97,
+            0.0,
+            310.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "the upper terrace, at the cascade's own top route",
+          "part_of": "water_garden",
+          "abuts": []
+        },
+        {
+          "module": "WL_Water_Pavilion",
+          "at_uu": [
+            0.0,
+            2178.0,
+            0.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "a pavilion standing in its own sheet, off the basin's flank",
+          "part_of": "water_garden",
+          "abuts": []
+        },
+        {
+          "module": "WL_Water_Sunken_Pool",
+          "at_uu": [
+            3710.5,
+            0.0,
+            0.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "the sunken pool beyond the head, going DOWN",
+          "part_of": "water_garden",
+          "abuts": []
+        }
+      ],
+      "checks": [],
+      "counts": {
+        "placements": 10,
+        "modules": 7
+      }
+    },
+    {
+      "name": "market_street",
+      "for": "a street that reads as inhabited: two terraces, and the awning, sign, arcade and canopy layer between them",
+      "rule": "houses are laid at their own measured bay width so a terrace is continuous; the street is one house depth plus 12 m; mounted modules are placed ON the facade plane, which is the measured half-depth from a house's centre",
+      "placements": [
+        {
+          "module": "WL_House_Jettied",
+          "at_uu": [
+            -1478.0,
+            -913.6,
+            0.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "house 1, -Y terrace",
+          "part_of": "market_street",
+          "abuts": []
+        },
+        {
+          "module": "WL_Market_Awning",
+          "at_uu": [
+            -1478.0,
+            -600.0,
+            0.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "awning on house 1's street facade",
+          "part_of": "market_street",
+          "abuts": [
+            "WL_House_Jettied"
+          ]
+        },
+        {
+          "module": "WL_House_Jettied",
+          "at_uu": [
+            -739.0,
+            -913.6,
+            0.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "house 2, -Y terrace",
+          "part_of": "market_street",
+          "abuts": []
+        },
+        {
+          "module": "WL_Market_Hanging_Sign",
+          "at_uu": [
+            -739.0,
+            -600.0,
+            0.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "sign projecting from house 2",
+          "part_of": "market_street",
+          "abuts": [
+            "WL_House_Jettied"
+          ]
+        },
+        {
+          "module": "WL_House_Jettied",
+          "at_uu": [
+            0.0,
+            -913.6,
+            0.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "house 3, -Y terrace",
+          "part_of": "market_street",
+          "abuts": []
+        },
+        {
+          "module": "WL_Market_Awning",
+          "at_uu": [
+            0.0,
+            -600.0,
+            0.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "awning on house 3's street facade",
+          "part_of": "market_street",
+          "abuts": [
+            "WL_House_Jettied"
+          ]
+        },
+        {
+          "module": "WL_House_Jettied",
+          "at_uu": [
+            739.0,
+            -913.6,
+            0.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "house 4, -Y terrace",
+          "part_of": "market_street",
+          "abuts": []
+        },
+        {
+          "module": "WL_Market_Hanging_Sign",
+          "at_uu": [
+            739.0,
+            -600.0,
+            0.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "sign projecting from house 4",
+          "part_of": "market_street",
+          "abuts": [
+            "WL_House_Jettied"
+          ]
+        },
+        {
+          "module": "WL_House_Jettied",
+          "at_uu": [
+            1478.0,
+            -913.6,
+            0.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "house 5, -Y terrace",
+          "part_of": "market_street",
+          "abuts": []
+        },
+        {
+          "module": "WL_Market_Awning",
+          "at_uu": [
+            1478.0,
+            -600.0,
+            0.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "awning on house 5's street facade",
+          "part_of": "market_street",
+          "abuts": [
+            "WL_House_Jettied"
+          ]
+        },
+        {
+          "module": "WL_House_Jettied",
+          "at_uu": [
+            -1478.0,
+            913.6,
+            0.0
+          ],
+          "yaw_deg": 180.0,
+          "why": "house 1, +Y terrace",
+          "part_of": "market_street",
+          "abuts": []
+        },
+        {
+          "module": "WL_Market_Awning",
+          "at_uu": [
+            -1478.0,
+            600.0,
+            0.0
+          ],
+          "yaw_deg": 180.0,
+          "why": "awning on house 1's street facade",
+          "part_of": "market_street",
+          "abuts": [
+            "WL_House_Jettied"
+          ]
+        },
+        {
+          "module": "WL_House_Jettied",
+          "at_uu": [
+            -739.0,
+            913.6,
+            0.0
+          ],
+          "yaw_deg": 180.0,
+          "why": "house 2, +Y terrace",
+          "part_of": "market_street",
+          "abuts": []
+        },
+        {
+          "module": "WL_Market_Hanging_Sign",
+          "at_uu": [
+            -739.0,
+            600.0,
+            0.0
+          ],
+          "yaw_deg": 180.0,
+          "why": "sign projecting from house 2",
+          "part_of": "market_street",
+          "abuts": [
+            "WL_House_Jettied"
+          ]
+        },
+        {
+          "module": "WL_House_Jettied",
+          "at_uu": [
+            0.0,
+            913.6,
+            0.0
+          ],
+          "yaw_deg": 180.0,
+          "why": "house 3, +Y terrace",
+          "part_of": "market_street",
+          "abuts": []
+        },
+        {
+          "module": "WL_Market_Awning",
+          "at_uu": [
+            0.0,
+            600.0,
+            0.0
+          ],
+          "yaw_deg": 180.0,
+          "why": "awning on house 3's street facade",
+          "part_of": "market_street",
+          "abuts": [
+            "WL_House_Jettied"
+          ]
+        },
+        {
+          "module": "WL_House_Jettied",
+          "at_uu": [
+            739.0,
+            913.6,
+            0.0
+          ],
+          "yaw_deg": 180.0,
+          "why": "house 4, +Y terrace",
+          "part_of": "market_street",
+          "abuts": []
+        },
+        {
+          "module": "WL_Market_Hanging_Sign",
+          "at_uu": [
+            739.0,
+            600.0,
+            0.0
+          ],
+          "yaw_deg": 180.0,
+          "why": "sign projecting from house 4",
+          "part_of": "market_street",
+          "abuts": [
+            "WL_House_Jettied"
+          ]
+        },
+        {
+          "module": "WL_House_Jettied",
+          "at_uu": [
+            1478.0,
+            913.6,
+            0.0
+          ],
+          "yaw_deg": 180.0,
+          "why": "house 5, +Y terrace",
+          "part_of": "market_street",
+          "abuts": []
+        },
+        {
+          "module": "WL_Market_Awning",
+          "at_uu": [
+            1478.0,
+            600.0,
+            0.0
+          ],
+          "yaw_deg": 180.0,
+          "why": "awning on house 5's street facade",
+          "part_of": "market_street",
+          "abuts": [
+            "WL_House_Jettied"
+          ]
+        },
+        {
+          "module": "WL_Market_Arcade_Insert",
+          "at_uu": [
+            -739.0,
+            -600.0,
+            0.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "arcade clipped to the -Y terrace's facade",
+          "part_of": "market_street",
+          "abuts": [
+            "WL_House_Jettied"
+          ]
+        },
+        {
+          "module": "WL_Market_Arcade_Insert",
+          "at_uu": [
+            0.0,
+            -600.0,
+            0.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "arcade clipped to the -Y terrace's facade",
+          "part_of": "market_street",
+          "abuts": [
+            "WL_House_Jettied"
+          ]
+        },
+        {
+          "module": "WL_Market_Arcade_Insert",
+          "at_uu": [
+            739.0,
+            -600.0,
+            0.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "arcade clipped to the -Y terrace's facade",
+          "part_of": "market_street",
+          "abuts": [
+            "WL_House_Jettied"
+          ]
+        },
+        {
+          "module": "WL_Market_Canopy",
+          "at_uu": [
+            -912.0,
+            0.0,
+            0.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "canopy 1 down the middle of the street",
+          "part_of": "market_street",
+          "abuts": []
+        },
+        {
+          "module": "WL_Market_Canopy",
+          "at_uu": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "canopy 2 down the middle of the street",
+          "part_of": "market_street",
+          "abuts": []
+        },
+        {
+          "module": "WL_Market_Canopy",
+          "at_uu": [
+            912.0,
+            0.0,
+            0.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "canopy 3 down the middle of the street",
+          "part_of": "market_street",
+          "abuts": []
+        },
+        {
+          "module": "WL_Market_Covered_Passage",
+          "at_uu": [
+            2097.5,
+            -913.6,
+            0.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "the passage at the +X end of the -Y terrace",
+          "part_of": "market_street",
+          "abuts": []
+        },
+        {
+          "module": "WL_Market_Corner_Storefront",
+          "at_uu": [
+            -2306.71,
+            -600.0,
+            0.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "the corner where the -Y terrace turns",
+          "part_of": "market_street",
+          "abuts": []
+        }
+      ],
+      "checks": [],
+      "counts": {
+        "placements": 28,
+        "modules": 7
+      }
+    }
+  ]
+}
