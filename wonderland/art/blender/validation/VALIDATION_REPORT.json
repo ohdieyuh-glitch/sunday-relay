@@ -1,5 +1,5 @@
 {
-  "checked_assets": 71,
+  "checked_assets": 93,
   "failures": 0,
   "material_check": "59 MI_V2_* names parsed from materials_v2.py",
   "per_asset": {
@@ -66,6 +66,19 @@
     "WL_Garden_Overlook": [],
     "WL_Garden_Gate_Threshold": [],
     "WL_Garden_Pavilion_Base": [],
+    "WL_Hero_Water_Court": [],
+    "WL_Water_Cascade_Stair": [],
+    "WL_Water_Canal_Run": [],
+    "WL_Water_Canal_Crossing": [],
+    "WL_Water_Pavilion": [],
+    "WL_Water_Spillway_Wall": [],
+    "WL_Water_Sunken_Pool": [],
+    "WL_Market_Awning": [],
+    "WL_Market_Canopy": [],
+    "WL_Market_Arcade_Insert": [],
+    "WL_Market_Hanging_Sign": [],
+    "WL_Market_Covered_Passage": [],
+    "WL_Market_Corner_Storefront": [],
     "WL_Detail_Balustrade_Run": [],
     "WL_Detail_Newel_Urn": [],
     "WL_Detail_Screen_Filigree": [],
@@ -73,7 +86,16 @@
     "WL_Detail_Pinnacle_Grand": [],
     "WL_Detail_Oriel_Bay": [],
     "WL_Hero_GreatSpire": [],
-    "WL_Hero_Gate_Royal": []
+    "WL_Hero_Gate_Royal": [],
+    "WL_Wall_Curtain_Run__aged": [],
+    "WL_Wall_Mural_Tower__ruined": [],
+    "WL_Tower_Base_Buttressed__aged": [],
+    "WL_Gatehouse_Twin__aged": [],
+    "WL_Colonnade_Arcade__ruined": [],
+    "WL_Bridge_Arc__aged": [],
+    "WL_House_Jettied__overgrown": [],
+    "WL_Garden_Retaining_Run__overgrown": [],
+    "WL_Detail_Balustrade_Run__broken": []
   },
   "kit_level": [],
   "coverage": [],
@@ -86,8 +108,11 @@
     "roofscape",
     "stairs",
     "gardens",
+    "water",
+    "market",
     "details",
-    "hero"
+    "hero",
+    "variants"
   ],
   "mesh_hashes": {
     "WL_Tower_Base_Battered": {
@@ -99,7 +124,7 @@
       "stone_dark": "72743f2bf0afc7e92b07bfacdb52d381926cbb2df23f029792a48af1dc439a88"
     },
     "WL_Tower_Base_Buttressed": {
-      "stone": "9dfc47b5eed789a628445a7d2244c90568d38e4fce5388c6e22b505daf5f6437",
+      "stone": "10dbbcdeb483027924b0f6e20029e25e6a98512751be45c1d17dd35adad88852",
       "stone_dark": "e1029f2ead94a77210bcf139ca2b0ff0ffd61c1acb83067f2712298bd8477753"
     },
     "WL_Tower_Base_Terraced": {
@@ -141,7 +166,7 @@
       "stone": "f15253d6766a8447165b956e527098e91b54eb2b1ad1dc4d28b6a5ffcd60ce11"
     },
     "WL_Tower_Crown_Tiered": {
-      "gold": "4067bc36fcc30b760d74d155604d9d3dab218a03a3a946a4d3948bc2f72ca4ef",
+      "gold": "4271c2f2f3d45953ac18c436d0e61d2ca8c3b9b13531a73d335d398fe2ac4e76",
       "roof_alt": "7b8366a5308aea23fdcee9d8f1285fde503323a5b362f30804bb14dd1ff1b3dd",
       "stone": "7e7c2fabc470287f5af5635f6db8f2e329fa36c1ef00ca23396d675e63344161"
     },
@@ -233,14 +258,14 @@
       "stone": "12bd95c2b18a0d8ce470ca072a6871aea05f3ecae83cd162a5c86926358555e8"
     },
     "WL_Colonnade_Arcade": {
-      "stone": "1aa15299cc3194876d7404e8157ac7ec74d64c4dd1492de5f65e51307d279216",
+      "stone": "1f56e07296e70f3e3c8d3b1db2fddd602f172b2fa34951f926a1e6d0a360b6ee",
       "stone_dark": "42466fea0b84e2ced1d50f67ceeaeb38600911ed5285b267a20986b925fe57ed"
     },
     "WL_Colonnade_Curved": {
       "stone": "a0819689a7ac2831f3b59fa6dacb4218dda4a775801c9236f12da13c16bac66d"
     },
     "WL_Bridge_Arc": {
-      "stone": "37ba58f4933524f507efb517807141d6a4e338079e750589c9a4806e9e88b892",
+      "stone": "6e679d5759f6a0cbd10859b45d22fc6aa63af3ca4fcd43add031f029c7b3326e",
       "stone_dark": "2f0a343f1cc6ec0100254abd933082d7400af914c8d41aa3618d2dc7aeff116c"
     },
     "WL_Bridge_Sky": {
@@ -261,7 +286,7 @@
       "glass": "cca140097f018d35e1b829ea13011bd831b39fba87689ae3527ed6ca3d089caa",
       "gold": "b136f29c213b2db247c7e28454a9c746efae7d69c8bfaa1c3819661f9b0daefb",
       "roof": "f8e8edeff714855bc1cc2402d1a1bd71823633f4a84a693112a66f84396b199a",
-      "stone": "6b0f47909845779ef111310ef206f5aed4510d70f711dbddb070feb28e73b407",
+      "stone": "46b4e10b0b24ccf58ae011750cb25e57ca38157ffe802c13ea988826225ea5f9",
       "stone_dark": "9e8f4651368d760ee03a02eae5de58029cd05bc96fdb9273a9d6360e7a3333d4"
     },
     "WL_Wall_Postern_Gate": {
@@ -295,7 +320,7 @@
       "gold": "a3fb23149183bed902d9168504a0dd0840cb9a296e30f960b098a05f7515157f",
       "roof": "2109b8e5b89eea1b214183d90850f9e87c6391b90fbc005522563046593b7d22",
       "stone": "b179c880fda70885657ee8bf944f2d1f42523ed9ef19a258300642871bbbec46",
-      "stone_dark": "0574ded512a58f22d602c47aa26bc2f75094ca26f50bdea21318217c97935050"
+      "stone_dark": "b7c596715d25e01f5c32e9ebbb1a2708e6f5f070e13f99eae2ef7d96c455e2b2"
     },
     "WL_Roof_Dormer": {
       "glass": "352dbfe573cc4bdbf030822b241a5bcb11df9ad6ed16f00f9085fd29954b87d4",
@@ -365,9 +390,9 @@
       "veg_anchor": "bfad05f1dce218fea49f2c87eb4c0f6bbfe772b754667cd2880a0719fc7fb493"
     },
     "WL_Garden_Planter_Wall": {
-      "stone": "8f8fa6538b61319fd5962104d57210fda0d3443a63f658c5386723618d3a2017",
-      "stone_dark": "fb71bfcdde2ffb085a8a67d92b26e5e63b1a51d130eb6022afa99bfc9a5bac53",
-      "veg_anchor": "34707dbe19079719b52fcaf6b6ff0b6c7230325409aa9ca8e0c25c8e3570be76"
+      "stone": "694e673ee9b585621b0b536764f71aeebf1ab1c5413b6e78713623075cca4f4a",
+      "stone_dark": "852da906ae7e0e4c2386306886b05388a5675c7b38c7c367a6c3a7703409418d",
+      "veg_anchor": "958fbe8d1b0867497a48bb4fb862b52a6ae16efb53f8d9ea5442727c6358c863"
     },
     "WL_Garden_Overlook": {
       "gold": "2b55030f1485d155f14ec3bea905729dfe146bf4b7d1aadcabfd8069c2cc3cab",
@@ -382,7 +407,86 @@
     },
     "WL_Garden_Pavilion_Base": {
       "stone": "5c5014e7bea200739f1fe68d5a2ec128e1ce194b0a7fcfd44b6564364aaf3e15",
-      "stone_dark": "6668b45e260647f3fa1634ac978e1ad7cf7b15aad56c64f437cdaaa14474a4c7"
+      "stone_dark": "6b5adf54ac8bdb8cfd0665dd76f659771218851f62766a8aa6dfe56a8e4b4d1c"
+    },
+    "WL_Hero_Water_Court": {
+      "gold": "4ea7b1629420f47e11c9182c7f81523b44ace95da09d1d7d39d2be8d9a7330a1",
+      "stone": "ace590a718ef513bb74f95f874bdb99ebb226ab3e8cbe484eb03914a7651f29c",
+      "stone_dark": "480857f2ef72756dd4dc9f585cdbce91ca5cb497f1a9af8b839966a41f13a750",
+      "water": "989b97daefb01518863e5e67db33ff95e343edb3c279186e36d4fce9723facb8",
+      "water_lit": "c1e4657e57d5755984dedbed80a5e8e481591377ea9de623baf75f9869753e2d"
+    },
+    "WL_Water_Cascade_Stair": {
+      "stone": "c7650276d2a4a1d2a3a454ec54995c6f1c5e0c353da78fe6654c27280aab9045",
+      "stone_dark": "0d50041e6f761e5e3151720e3f41c56968218f1cb643a52a1bd9d7a7f4219670",
+      "water": "58a55024163dc379e013bc91d69ba557c12a0caed84214d4aa722a30aaebe219",
+      "water_lit": "d60b9a439cf55a86b3d8eebf37d6fa4c88afde8e0661975a0091805f3eb37248"
+    },
+    "WL_Water_Canal_Run": {
+      "stone": "91f624ab8754972ce0edf36d269577f343d0623bc29673798544f368267e8c1e",
+      "stone_dark": "372ec1446c2c14c02ba07a5798a617c04d9648295ed53e7e66e833c7c19c0bb0",
+      "water": "86b133bb62ef0b7ed3e9f22878053d7c664d4a474b30969e47b9346f19ab3029"
+    },
+    "WL_Water_Canal_Crossing": {
+      "gold": "c3e4ccfca0538c8486dcf8400e3ee907bb03bbc99c3be03f39262cb86b18a098",
+      "stone": "c1a177615386eb17ab625c0d069ab997e14410f13c4f7e37bcdc454fc32f8fc4",
+      "stone_dark": "140b46c412549f69b190eeae841540956f38b208d2f9cdb9d9e69a87f219fef6",
+      "water": "86b133bb62ef0b7ed3e9f22878053d7c664d4a474b30969e47b9346f19ab3029"
+    },
+    "WL_Water_Pavilion": {
+      "glass": "9681b9c6a5d65d861a95c64977c1aa1c54f27cb5276f64abbe7cd0c3ab424458",
+      "gold": "78f662749c016a34aae34a02f9d4423c5f9b6c0a6b65b4428a42b8ea1d6391cf",
+      "roof": "0cbb84c250c0215adf65b4a4fc87b54ecfe876475958928b14dd940fa7e5ba69",
+      "stone": "e2defea3abc5fb42b92afdb151830991b5395fa143fc17d184a5d355a3f6b0d8",
+      "stone_dark": "6fb01454803a454540bc020de7143f562a630a69342dfd2f90fc7086ed3e41ce",
+      "water": "cce3119e1cf2f9616543699d1acaa24eafc8481d9aa93cbb17dab1b5e46d8006"
+    },
+    "WL_Water_Spillway_Wall": {
+      "stone": "8f05770149874a878bd66e0dbd3a104dad0c5d139734a8c06cb92bd0b338eabc",
+      "stone_dark": "3520fd77d849e2e1d3503556ddb654e7cba2a0ccfee6326aef46438164e49d2d",
+      "water": "95439d49478f2a3c5ecb96a754575cb53ecc82149b80e0601cffdf3cf8c98762",
+      "water_lit": "dcd0b2c554cc84f93b4fb4a69bea8c418297e69874f89e2750a8595adb7f5cc8"
+    },
+    "WL_Water_Sunken_Pool": {
+      "stone": "cb1699a4a0e5c8673a0231acb5f9d2252855306982ea8f0ef20468978abd302e",
+      "stone_dark": "f8af5893e0554d948c0fa87c08f73ee72dd654641887024e1482f73231b01e76",
+      "water": "01f5df94260ccf980c5e89687dc67a15f3df9652a184cac4fc994831f9e84798"
+    },
+    "WL_Market_Awning": {
+      "metal": "b53f6c7b517d773ac3cdf0ea9d6ad737ed4e399eb624ce0c3495413f8969afbd",
+      "roof": "e47e326f161b53daee9d0220eec882623661f6d18034c9e88f33ac3e4fbb341e",
+      "roof_alt": "75e7dd7e4c67a1a616d28866464fad630f49dcdc28712e9130c17482d5717e16",
+      "stone": "1de52f8fd73e8d765ffa6bf7ede4daf131bcacaf811d114037c3686c98bee11c"
+    },
+    "WL_Market_Canopy": {
+      "gold": "066c457e1bff7c194702c2337981bbe2991b722e4f3ca7ba59c8d0a28d15afde",
+      "metal": "5bb9523e47bc6fcc571abbb9491dd0b6c90f818068a19be0268309785d98d98e",
+      "roof": "1faa65fb9fca23c19da579eb4e7f24746090f681f93cc92b21ee71b64b7d5699",
+      "roof_alt": "735a943f6ec0e240b10c83fb9054521bbd9b430492ddb2cb3e2ff52d9006db7d",
+      "stone": "d6df15e3d12d9a875816d08329f6a54fedf4bef05a1afca299acdcd4c994fc0a"
+    },
+    "WL_Market_Arcade_Insert": {
+      "stone": "f82fe990d9a1f497465527a3cc209a83d6f9310acb2d41a1f7e8b57157149703",
+      "stone_dark": "9dbe9c090357837807755e7f9cf25a35d3b5185bf6d50572aa825cb86201395f"
+    },
+    "WL_Market_Hanging_Sign": {
+      "gold": "4617ba33f52bcb69b8b0af9f7bb2061497b8875a36a431a04c48bb50b7d8ccb4",
+      "metal": "f26706146d04037488107a5cebf6759df5c8f30d89cebed7263f738c0859a76d",
+      "stone": "f9e496c95497eafa273e46564b6f9495ca39a0ddead60d18b3fe49647f5df3f6"
+    },
+    "WL_Market_Covered_Passage": {
+      "glass": "3b8aa9ab21ad469096196bc04f8ba5a939e21570495a650b4f6ba20c592c2e95",
+      "gold": "36ec8f1b4a78d2597be25ce597626a5ed0dd3dd3e1c3df7b0660f601d1c32512",
+      "stone": "00e579c6f93b88ce1dfb8f95fc68900e1fafc6ab438f9f00c936c22d98395db3",
+      "stone_dark": "08393220205cf8374a00bdd1b0b4a593ecda8f588335ff51bec56c28e03d5303"
+    },
+    "WL_Market_Corner_Storefront": {
+      "glass": "ca2597777db1a031e52435e22b064bf2ce55e1ca83857d6e20d5eec7ee8da855",
+      "gold": "80ce758823569082c84a0f7ce8ccbbd302ac11a69ae66462770048a87363ee35",
+      "roof": "c68e2890525fef36984911437d5f4a87a9055e4cba3d7dbce0fa41f3bb43e480",
+      "roof_alt": "af1741920395dac9f5b23a62e0376991622d7d1da02dc4da672a63df7f326ab9",
+      "stone": "2463423c54dd461b9b4c7943375f23c2f9880b3d9ae7386fde81264cd9f146cd",
+      "stone_dark": "1a50183dc501b3bff4142c0b05f6b0aba6022d29b97aa1c1c2edd8416f32f4d4"
     },
     "WL_Detail_Balustrade_Run": {
       "stone": "489bafa5aa4aa4a08c830e95b2fe68627baf72e0502e6167ef851a42d06dc7c1"
@@ -409,7 +513,7 @@
       "glass": "259c0652d0e9597d95d3d9b3a19412c02921b0627ff19cdf2ac276aa3915393f",
       "gold": "d41dcd308603fb3f47c6c139637bb1520bf65f7a0dafaab2259d48f3c24c1a55",
       "roof_alt": "e9f33497002acd44c3cc68781c839f1471dd23748d07a829039bd83da932dd77",
-      "stone": "56466b7c9447acab30e25f596619c682ecf623ef8149db2a26be26f0b3cadc40"
+      "stone": "1bb0b65600e277aa427e05907c6ec6797e0287456d47ea2ffc9ab1db28b610ee"
     },
     "WL_Hero_GreatSpire": {
       "glass": "bcd03302e94403ce72efc9428a539e3c54e0134cf4d737861eaec08b56c60a04",
@@ -427,6 +531,56 @@
       "stone": "1db36fa09c6ce290acfcf214485651244cbf2e1e5edc3e73b3775a09f5ebffe9",
       "stone_dark": "3fd251122d176ad0c97e9cec9ea13ac06213a66ad8e37f14950cc09010f14674",
       "veg_anchor": "d171cba98f4005c560389bc1c689daf7b61ca45a62a4539e13332f912d438b1a"
+    },
+    "WL_Wall_Curtain_Run__aged": {
+      "stone": "3e34a655658a4cdf79504a8cebfff2158e5f65b1152f5b8dd0084de428e63d5a",
+      "stone_dark": "c7d282aaba5c8c037bc75f3e9eaaf24a22973ab9edb9e1e35d140a7b4c988338",
+      "veg_anchor": "88dfd9d74e0447db8c04391d3316ee948541058da8fd3aad2993cabe1cf60b7a"
+    },
+    "WL_Wall_Mural_Tower__ruined": {
+      "glass": "583e88456e5e66818dbe0ad1b76634b4b3778424e820b732bef6a38f696c381f",
+      "stone": "8e63234a3a7647761a5495671af1d2dfb7c04d4594ae0997d919a4a66af7f4cb",
+      "stone_dark": "b3959425e0963f2d2d750663de202a5c4cca87e899cc97df844fc8471193b2d5",
+      "veg_anchor": "18295d2eebad1691497028cb053085d09fbb28af0c7910b848a8aa055e1e537c"
+    },
+    "WL_Tower_Base_Buttressed__aged": {
+      "stone": "d7afedd437815fca8ca07f7905cc904703d25e9553fb6bc785a351a07b390e19",
+      "stone_dark": "704247b3a0aef7f00b4ab9c1eadb73aa77690a52eee3c5ea2ee3276facc5fe83",
+      "veg_anchor": "cceb1e94259fe86a157a5483ffc72cc138d886224e2f782625e5e87ace974d4e"
+    },
+    "WL_Gatehouse_Twin__aged": {
+      "glass": "d0e1b7cccefb65f11f0bec25d19451cc2a09808c1cfd5ea9db2437126f8cd2f4",
+      "gold": "da74da81d5cb80db4a41cfec6cfad35f6300b4167ae91ae95054247edfa9cecb",
+      "roof": "8ea937380f15f27a00f82fdcb6d448643aedad3c15920cbed0a54103c2ac92ba",
+      "stone": "54538347c988fe028538a1889879e79fe1ae05532af99b3e158d4482d4a642e0",
+      "stone_dark": "8f771eefcefeb0363b80079d995eca536c9e42b59ad74fc2d70379b39af97bdd",
+      "veg_anchor": "57a07c488871df19ed015adae1c458cab38195efa1d059b44b7ea23676bcd4a0"
+    },
+    "WL_Colonnade_Arcade__ruined": {
+      "stone": "b8cf8f5e20bc14e91214517c1dcda2cdb69c6a67a887f93f61754279da41f56f",
+      "stone_dark": "62f8794b9dfe8db8b3dc9c626b09fe3d5bf88ee88a6ebb9ddefdd0d61e309867",
+      "veg_anchor": "e5381c8e8bf4f2a049a9a46edfad96d770bb8d7dc61293bbae676b370861b24f"
+    },
+    "WL_Bridge_Arc__aged": {
+      "stone": "2db50915f921fdc0ced349a43fc9ee0d5c94443ab90d3b059b640405ef97116b",
+      "stone_dark": "912780504d1d8a2d91b68cf40a83e4f62500a17447165e02111d841e1c9409bf",
+      "veg_anchor": "ed4ab71be4bfafa3cc5ed7651d74f0dcfb9be9538924b54316486cadb0d522a3"
+    },
+    "WL_House_Jettied__overgrown": {
+      "glass": "7be3d286cbbc40cf68f9523cf0e69f6bfc38b0fce79dfbdcd0686e32c831a8c9",
+      "gold": "22e50b79b0865462517c6f3a339b39e853e5bac142b6759c9936fdfa6ce42a4d",
+      "roof": "cec95c34d872aa9ab59b399433816bf6a2a519ebaab19429ba18268c90d78a20",
+      "stone": "ab343b06688553c92192497290ee8ecca17d858d5c5d70a6bbe90cb53c9fe362",
+      "stone_dark": "3c8f342fce2e4b97023e19217a34e04efd43ddb2bd2fd5d61b02e4c1503c6755",
+      "veg_anchor": "9ae56d9a42a53c23f0d859035e005dbba38cb35a170fbb4148aed7df8ef83e03"
+    },
+    "WL_Garden_Retaining_Run__overgrown": {
+      "stone": "bad6ae841a210f1e1b2eb684f02be7900c06c194f8ae2e7deee517b0717e69c4",
+      "stone_dark": "9280324ca6a83a5b32f179025b75476508a3210670975a43ba5f5e0188aec3f1",
+      "veg_anchor": "d884c39eea0c20c5a086ac2e0344edc01681c2e3432d76ed8026bdb3416405ea"
+    },
+    "WL_Detail_Balustrade_Run__broken": {
+      "stone": "8e29001a8aea4cb5bf5494ffd8f3722e5323593fe310bb4f152dcfbac6df219b"
     }
   }
 }

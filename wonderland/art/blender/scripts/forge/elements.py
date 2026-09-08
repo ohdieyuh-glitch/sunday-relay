@@ -474,6 +474,18 @@ def arched_wall(part, span, rise, top_z, outer_x, depth, kind="round", steps=14,
     to make, so it is manifold by construction and the arch band standing in it
     can never disagree with the wall around it.
     """
+    reach = span * 0.5 + thickness
+    if outer_x < reach - 1e-9:
+        # THE WALL CANNOT BE NARROWER THAN ITS OWN OPENING. `WL_Colonnade_Arcade`
+        # asked for outer_x 1.800 against an extrados springing at 1.825, and
+        # the outline then ran 2.5 cm BACKWARDS along the bottom before turning
+        # up -- a reversed sliver, coplanar with the pier top under it, black in
+        # every render of that module. Caught here rather than clamped, because
+        # a wall silently 2.5 cm wider than asked for is its own surprise.
+        raise ValueError(
+            "arched_wall: outer_x %.3f is inside its own extrados springing "
+            "%.3f (span %.3f, thickness %.3f) -- the outline would fold back"
+            % (outer_x, reach, span, thickness))
     curve = arch_curve(span, rise, steps=steps, kind=kind)
     inner = []
     for (x, z) in curve:
@@ -686,6 +698,43 @@ def rake_balustrade(part, run, rise, y, height=1.05, spacing=0.72, rail=0.20,
          (run + 0.20, y + rail * 0.9, z0 + rise + height + 0.18), (-0.10, y + rail * 0.9, z0 + height + 0.18)]],
         matrix=mat, smooth=False)
     return made
+
+
+#: How far a laid wearing course stands above the slab it is laid on.
+WEAR_PROUD = 0.015
+
+
+def wear_course(dark, top_z, w=None, d=None, poly=None, thickness=0.07,
+                at=(0.0, 0.0), rot=0.0, matrix=None):
+    """A darker walking surface laid ON a slab, standing 15 mm proud of it.
+
+    THE ONE RULE IS THAT IT IS NEVER FLUSH, and it is the rule this kit has
+    broken more often than any other. Sixteen modules put a `stone_dark` course
+    whose TOP was exactly the top of the stone under it: a walk, a deck, a
+    plinth, a pavilion floor, both approaches of `WL_Bridge_Arc`. Two up-facing
+    surfaces in one plane shadow each other in Cycles, so every one of them
+    rendered SOLID BLACK -- and the per-object coincident-face check could not
+    see any of it, because the two surfaces are in different meshes with
+    different centres and different areas.
+
+    There are exactly two ways to lay a course and both are fine. `landing()`
+    RECESSES the slab 6 cm and lets the course fill the hole, which is right
+    when the slab is yours to change. This lays the course PROUD, which is
+    right everywhere else: it needs no change to the prism, lathe or box it
+    sits on, and 15 mm of arris is what a laid paving course actually looks
+    like. What neither does is flush.
+
+    Give it `w`/`d` for a rectangle or `poly` for anything else.
+    """
+    z1 = float(top_z) + WEAR_PROUD
+    z0 = z1 - float(thickness)
+    mat = M.xform((at[0], at[1], 0.0), (0.0, 0.0, rot))
+    if matrix is not None:
+        mat = matrix @ mat
+    if poly is not None:
+        return dark.prism(poly, z1 - z0, z0=z0, matrix=mat)
+    return dark.box(w, d, z1 - z0, at=(0.0, 0.0, z0), matrix=mat,
+                    centre_z=False)
 
 
 def landing(part, w, d, thickness=0.42, at=(0.0, 0.0, 0.0), rot=(0.0, 0.0, 0.0),

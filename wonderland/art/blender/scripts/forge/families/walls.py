@@ -151,7 +151,9 @@ def wall_mural_tower(f):
                    segments=16, arc=220.0,
                    matrix=M.xform((0, 0, 0), (0, 0, -110.0)), smooth=False)
     p.displace(body, 0.030, 1.6, seed=211)
-    p.box(R * 1.94, 1.30, 12.60, at=(0.0, -R * 0.52, 0.0), chamfer=0.16,
+    # 12.44, not 12.60: level with the drum's cap the back wall put 8 m2 of
+    # up-facing stone in the drum's own plane. The drum now oversails it.
+    p.box(R * 1.94, 1.30, 12.44, at=(0.0, -R * 0.52, 0.0), chamfer=0.16,
           centre_z=False)
     d.box(R * 1.60, 0.90, 10.10, at=(0.0, -R * 0.44, 1.85), centre_z=False)
     for (x, y, a) in K.radial(3, R * 1.00, phase=1.05):

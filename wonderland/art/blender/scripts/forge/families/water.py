@@ -67,11 +67,17 @@ def _basin(part, dark, water, w, d, at=(0.0, 0.0, 0.0), matrix=None, kerb=0.42):
                              (kerb, d, -(hw + kerb * 0.5), 0.0)):
         part.box(bw, bd, 0.30, at=(bx, by, 0.0), matrix=mat, chamfer=0.05,
                  centre_z=False)
-    # the tank: floor and four sides, DEPTH down
+    # THE TANK LINING REACHES THE KERB, not the ground plane. It first stopped
+    # at z = 0 while the water surface sat at 0.18 m, which left 18 cm of open
+    # tank above the waterline -- and since the lining is `stone_dark` the
+    # canal modules rendered with a black band down each side. A basin's inner
+    # face above the waterline is visible and is meant to be; it just has to
+    # exist all the way up to the coping.
     dark.box(w, d, 0.10, at=(0.0, 0.0, -DEPTH), matrix=mat, centre_z=False)
     for (bw, bd, bx, by) in ((w, 0.16, 0.0, hd - 0.08), (w, 0.16, 0.0, -(hd - 0.08)),
                              (0.16, d, hw - 0.08, 0.0), (0.16, d, -(hw - 0.08), 0.0)):
-        dark.box(bw, bd, DEPTH, at=(bx, by, -DEPTH), matrix=mat, centre_z=False)
+        dark.box(bw, bd, DEPTH + 0.30, at=(bx, by, -DEPTH), matrix=mat,
+                 centre_z=False)
     # the surface: one flat quad, and nothing else
     zw = 0.30 - FREEBOARD
     water.box(w - 0.06, d - 0.06, 0.04, at=(0.0, 0.0, zw - 0.04), matrix=mat,
@@ -111,18 +117,19 @@ def water_basin_reflecting(f):
                     matrix=M.xform((HEAD - 3.40, 0.0, 0.0), (0.0, 0.0, 45.0)))
     p.box(7.30, D + 5.70, 0.22, at=(HEAD - 3.40, 0.0, T1), chamfer=0.05,
           centre_z=False)
-    d.box(6.30, D + 4.70, 0.06, at=(HEAD - 3.40, 0.0, T1 + 0.22 - 0.08),
-          centre_z=False)
+    E.wear_course(d, T1 + 0.22, w=6.30, d=D + 4.70, at=(HEAD - 3.40, 0.0))
     # five steps down from the head to the basin walk: the way in
     for i in range(5):
-        p.box(0.44, D + 3.60, RISER, at=(HEAD - 6.90 - 0.44 * i, 0.0,
+        p.box(0.44, D + 3.60, RISER, at=(HEAD - 7.10 - 0.44 * i, 0.0,
                                          T1 - RISER * (i + 1)),
               chamfer=0.03, centre_z=False)
     # a spillway at the head: the only moving water in the module
     for k in (-1.0, 1.0):
         wl.box(1.10, 0.30, T1 - zw + 0.20, at=(HEAD - 6.95, k * 2.40, zw - 0.10),
                centre_z=False)
-        p.box(1.50, 0.62, 0.34, at=(HEAD - 6.95, k * 2.40, T1 - 0.34),
+        # the spout head stands PROUD of the court paving; level with the top
+        # step it shared a plane with it
+        p.box(1.50, 0.62, 0.64, at=(HEAD - 6.95, k * 2.40, T1 - 0.34),
               chamfer=0.05, centre_z=False)
 
     # the flanking colonnades -- OPEN, so the reflection stays deep
@@ -160,7 +167,7 @@ def water_basin_reflecting(f):
                 "water_z_m": round(zw, 3), "depth_m": DEPTH,
                 "head_rung": "T1", "colonnade_bays": 8,
                 "reflects": "put a hero at head_route"},
-        tri_budget=90000, collision=True)
+        tri_budget=90000, collision=True, excavates=DEPTH)
 
 
 def water_cascade_stair(f):
@@ -198,8 +205,10 @@ def water_cascade_stair(f):
     # the water: a still pool on each tread, a lit sheet down each riser
     for i in range(N):
         x0 = GOING * i - 0.03
+        # THE POOL LIES ON THE TREAD, it is not flush with it. Sunk so its
+        # surface WAS the tread's top, all ten of them rendered black.
         w.box(GOING - 0.02, CH - 0.06, 0.05,
-              at=(x0 + GOING * 0.5, 0.0, RISER * (i + 1) - 0.05), centre_z=False)
+              at=(x0 + GOING * 0.5, 0.0, RISER * (i + 1)), centre_z=False)
         wl.box(0.07, CH - 0.06, RISER * 0.92,
                at=(x0 + 0.01, 0.0, RISER * i + RISER * 0.04), centre_z=False)
     # the catch basin at the foot
@@ -221,7 +230,7 @@ def water_cascade_stair(f):
              "drops in wherever WL_Stair_Straight_T2 would",
         params={"risers": N, "rise_m": rise, "rung": "T2", "channel_m": CH,
                 "still": "MI_V2_Water", "falling": "MI_V2_GlassTeal (emissive)"},
-        tri_budget=22000, collision=True)
+        tri_budget=22000, collision=True, excavates=DEPTH)
 
 
 def water_canal_run(f):
@@ -241,7 +250,7 @@ def water_canal_run(f):
     for sgn in (-1.0, 1.0):
         y = sgn * (CH * 0.5 + 0.40 + WALK * 0.5)
         p.box(RUN, WALK, 0.30, at=(0.0, y, 0.0), chamfer=0.05, centre_z=False)
-        d.box(RUN - 0.10, WALK - 0.44, 0.07, at=(0.0, y, 0.30 - 0.07), centre_z=False)
+        E.wear_course(d, 0.30, w=RUN - 0.10, d=WALK - 0.44, at=(0.0, y))
     return K.ModuleSpec(
         "WL_Water_Canal_Run", "water", "structure", "terrace",
         f.emit("WL_Water_Canal_Run"),
@@ -257,15 +266,35 @@ def water_canal_run(f):
              "as the retaining run and the balustrade run",
         params={"length_m": RUN, "channel_m": CH, "walk_m": WALK,
                 "water_z_m": round(zw, 3), "depth_m": DEPTH},
-        tri_budget=6000, collision=True)
+        tri_budget=6000, collision=True, excavates=DEPTH)
 
 
 def water_canal_crossing(f):
-    """A flat bridge over the canal, on the same 8 m module. 5.4 m of deck.
+    """A humped footbridge over the canal, on the same 8 m module. 3.6 m deck.
 
     A canal you cannot cross cuts a garden in half. This is the canal run with
     a segmental arch and a deck over it -- same length, same channel, same
     walks -- so it substitutes into a canal anywhere without re-planning.
+
+    THE ELEVATIONS ARE ARITHMETIC, and the first version got them wrong in
+    three ways at once, which is why they are spelled out here. The deck sat
+    at 2.04 m, which is 5.6 risers above a 0.30 m walk, so its five steps
+    stopped 0.19 m short of it. Those steps ran INWARD from the walk, which
+    put them under the deck they were meant to reach. And the spandrel wall
+    ran to the deck's TOP rather than to its soffit, so 28.8 m2 of wall face
+    and deck face lay in one plane pointing the same way -- the z-fight this
+    kit keeps rediscovering, and the one the validator did catch.
+
+    So the deck is now 3 risers above the walk (0.30 + 3 x 0.310 = 1.23), the
+    flights climb OUTWARD onto the walk where there is room for them, and the
+    spandrel stops at the soffit, where a spandrel stops. Everything else
+    follows: the slab is 0.26, so the soffit is 0.97; the arch springs from the
+    kerb at 0.30 and rises 0.60, so its crown is at 0.90 with 0.07 m of
+    spandrel over it; and the ring's 0.26 m of extrados is buried in the slab,
+    which is what a deck sitting on an arch looks like.
+
+    Headroom over the sheet is 0.72 m. This is a garden canal, not a
+    navigation: the arch is there to be seen and reflected, not rowed through.
     """
     p = f.part("stone")
     d = f.part("stone_dark")
@@ -274,53 +303,76 @@ def water_canal_crossing(f):
     RUN, CH = 8.00, 3.20
     WALK = 2.10
     zw = _basin(p, d, w, RUN, CH, kerb=0.40)
-    DECK_W = 5.40
-    E.arch_band(p, CH + 0.80, 0.95, DECK_W, 0.42, at=(0.0, 0.0, 0.42),
+
+    RISERS = 3
+    DECK_Z = 0.30 + RISERS * RISER                    # 1.23 m, on the ladder
+    SLAB = 0.26
+    SOFFIT = DECK_Z - SLAB                            # 0.97 m
+    SPRING = 0.30                                     # the kerb top
+    RISE, RING = 0.60, 0.26
+    DECK_W, DECK_Y = 3.60, 2.30
+    GOING = 0.360
+    FLIGHT = GOING * RISERS                           # 1.08 m of walk each side
+    RAIL_X = 1.72
+
+    # the arch, and the spandrel that stops where the deck starts
+    E.arch_band(p, CH, RISE, DECK_W, RING, at=(0.0, 0.0, SPRING),
                 rot=(0.0, 0.0, 90.0), kind="round", steps=13, keystone=True)
-    E.arched_wall(p, CH + 0.80, 0.95, 1.62, CH * 0.5 + 1.30, DECK_W * 0.92,
-                  kind="round", steps=13, thickness=0.42, rot=(0.0, 0.0, 90.0),
-                  at=(0.0, 0.0, 0.42))
-    p.box(DECK_W + 0.40, CH + 3.40, 0.26, at=(0.0, 0.0, 1.78), chamfer=0.05,
+    E.arched_wall(p, CH, RISE, SOFFIT - SPRING, 2.10, DECK_W * 0.92,
+                  kind="round", steps=13, thickness=RING,
+                  rot=(0.0, 0.0, 90.0), at=(0.0, 0.0, SPRING))
+
+    # the deck: slab, then a darker wearing course in its own part
+    p.box(DECK_W + 0.40, DECK_Y * 2.0, SLAB, at=(0.0, 0.0, SOFFIT), chamfer=0.05,
           centre_z=False)
-    d.box(DECK_W - 0.50, CH + 3.00, 0.06, at=(0.0, 0.0, 2.04 - 0.08), centre_z=False)
+    E.wear_course(d, DECK_Z, w=DECK_W, d=DECK_Y * 2.0 - 0.40)
+
     for sgn in (-1.0, 1.0):
         y = sgn * (CH * 0.5 + 0.40 + WALK * 0.5)
         p.box(RUN, WALK, 0.30, at=(0.0, y, 0.0), chamfer=0.05, centre_z=False)
-        # steps up onto the deck from each walk
-        for i in range(5):
-            p.box(DECK_W, 0.34, K.RISER_M,
-                  at=(0.0, sgn * (CH * 0.5 + 1.50 - 0.34 * i), 0.30 + K.RISER_M * i),
-                  chamfer=0.03, centre_z=False)
+        E.wear_course(d, 0.30, w=RUN - 0.10, d=WALK - 0.44, at=(0.0, y))
+        # the approach: OUTWARD from the deck edge, onto the walk. `rot` maps
+        # the flight's own +X climb onto -sgn*Y, so both flights climb inward.
+        foot = (0.0, sgn * (DECK_Y + FLIGHT), 0.30)
+        yaw = -90.0 * sgn
+        E.stair_flight(p, RISERS, DECK_W, going=GOING, riser=RISER,
+                       at=foot, rot=(0.0, 0.0, yaw))
+        for cy in (-1.0, 1.0):
+            E.stair_cheek(p, FLIGHT, RISER * RISERS, cy * (DECK_W * 0.5 + 0.21),
+                          thickness=0.42, top=0.34, at=foot, rot=(0.0, 0.0, yaw))
+
+    # newel piers at the four deck corners, and a level rail between them
     for sx in (-1.0, 1.0):
         for sy in (-1.0, 1.0):
-            p.box(0.62, 0.62, 1.15, at=(sx * DECK_W * 0.5, sy * (CH * 0.5 + 1.60), 2.04),
-                  chamfer=0.07, centre_z=False)
-            E.finial(p, (sx * DECK_W * 0.5, sy * (CH * 0.5 + 1.60), 3.19), 0.70,
+            p.box(0.56, 0.56, 1.05, at=(sx * RAIL_X, sy * (DECK_Y - 0.25), DECK_Z),
+                  chamfer=0.06, centre_z=False)
+            E.finial(p, (sx * RAIL_X, sy * (DECK_Y - 0.25), DECK_Z + 1.05), 0.70,
                      radius=0.12, gold=g)
-        for i in range(7):
-            y = -(CH * 0.5 + 1.50) + (CH + 3.0) * i / 6.0
-            p.lathe([(0.0, 0.0), (0.085, 0.0), (0.070, 0.24), (0.125, 0.50),
-                     (0.075, 0.86), (0.090, 1.10), (0.0, 1.22)], segments=8,
-                    smooth=True, matrix=M.xform((sx * DECK_W * 0.5, y, 2.04)))
-        p.box(0.42, CH + 3.0, 0.20, at=(sx * DECK_W * 0.5, 0.0, 3.26),
-              chamfer=0.04, centre_z=False)
+        # a rake_balustrade with rise 0 IS a level balustrade, and using it
+        # keeps the bridge rail the same profile as every stair rail in the kit
+        E.rake_balustrade(p, (DECK_Y - 0.25) * 2.0, 0.0, 0.0, height=0.86,
+                          spacing=0.68, rail=0.18, z0=0.0,
+                          at=(sx * RAIL_X, -(DECK_Y - 0.25), DECK_Z),
+                          rot=(0.0, 0.0, 90.0))
     return K.ModuleSpec(
         "WL_Water_Canal_Crossing", "water", "structure", "span",
         f.emit("WL_Water_Canal_Crossing"),
         [K.Socket("bottom", 0.0, RUN * 0.5, "ground"),
          K.Socket("water_surface", zw, RUN * 0.5, "edge", "the canal carries through"),
-         K.Socket("deck_route", 2.04, DECK_W * 0.5, "route",
-                  "5.40 m deck at 2.04 m, crossing in Y"),
+         K.Socket("deck_route", DECK_Z, DECK_W * 0.5, "route",
+                  "%.2f m deck at %.2f m, crossing in Y" % (DECK_W, DECK_Z)),
          K.Socket("walk_l", 0.30, WALK * 0.5, "route", "walk at 0.30 m, -Y"),
          K.Socket("walk_r", 0.30, WALK * 0.5, "route", "walk at 0.30 m, +Y"),
          K.Socket("end_a", 0.0, CH * 0.5, "pier", "butts into a canal run at x = -4.00 m"),
          K.Socket("end_b", 0.0, CH * 0.5, "pier", "butts into a canal run at x = +4.00 m")],
         districts=("water_garden", "royal_garden", "plaza"),
-        note="drop-in replacement for a canal run carrying a 5.40 m deck over "
-             "a segmental arch; steps up from both walks",
-        params={"length_m": RUN, "deck_w_m": DECK_W, "deck_z_m": 2.04,
+        note="drop-in replacement for a canal run carrying a %.2f m deck three "
+             "risers above the walk on a segmental arch" % DECK_W,
+        params={"length_m": RUN, "deck_w_m": DECK_W, "deck_z_m": DECK_Z,
+                "risers_each_side": RISERS, "riser_m": RISER,
+                "headroom_over_water_m": round(SPRING + RISE - zw, 3),
                 "arch": "round segmental"},
-        tri_budget=26000, collision=True)
+        tri_budget=22000, collision=True, excavates=DEPTH)
 
 
 def water_pavilion(f):
@@ -347,7 +399,7 @@ def water_pavilion(f):
     p.lathe([(R + 0.34, FLOOR - 0.44), (R + 0.34, FLOOR - 0.22)], segments=24,
             smooth=False)
     p.prism(M.ngon(8, R + 0.30, phase=math.pi / 8.0), 0.22, z0=FLOOR - 0.22)
-    d.prism(M.ngon(8, R - 0.10, phase=math.pi / 8.0), 0.06, z0=FLOOR - 0.06)
+    E.wear_course(d, FLOOR, poly=M.ngon(8, R - 0.10, phase=math.pi / 8.0))
     E.arcade_ring(p, FLOOR, R * 0.86, bays=8, height=4.30, pier=0.52, depth=0.80,
                   kind="ogee", columns=True, spandrel=False, phase=math.pi / 8.0)
     E.corbel_table(p, FLOOR + 4.30, R * 0.90, count=16, depth=0.26, drop=0.38)
@@ -386,7 +438,7 @@ def water_pavilion(f):
              "sheet; ogee arcade, ribbed dome, glazed lantern",
         params={"radius_m": R, "floor_z_m": FLOOR, "bays": 8,
                 "stands_in_water": True},
-        tri_budget=60000, collision=True)
+        tri_budget=60000, collision=True, excavates=DEPTH)
 
 
 def water_spillway_wall(f):
@@ -439,7 +491,7 @@ def water_spillway_wall(f):
         params={"length_m": RUN, "retains_m": Z, "rung": "T2",
                 "substitutes_for": "WL_Garden_Retaining_Run",
                 "falling": "MI_V2_GlassTeal (emissive)"},
-        tri_budget=10000, collision=True)
+        tri_budget=10000, collision=True, excavates=DEPTH)
 
 
 def water_sunken_pool(f):
@@ -456,25 +508,34 @@ def water_sunken_pool(f):
     R = 5.50
     DROP = T1
     SEG = 28
-    # the retaining bowl, five risers down
-    for i in range(5):
+    # THE BOWL IS ONE CLOSED SECTION, revolved. Five separate revolved rings
+    # welded into a shell `recalc_face_normals` then wound inside-out -- the
+    # same lesson `WL_Garden_Retaining_Curved` taught: a section that closes on
+    # itself has an unambiguous inside.
+    section = [(R, -DROP)]
+    for i in range(5):                        # the stepped bank, rising outward
         rr = R + 1.30 + 0.36 * i
-        p.lathe([(rr, -RISER * (i + 1)), (rr + 0.40, -RISER * (i + 1)),
-                 (rr + 0.40, -RISER * i), (rr, -RISER * i), (rr, -RISER * (i + 1))],
-                segments=SEG, smooth=False)
-    p.lathe([(R, -DROP), (R + 1.30, -DROP), (R + 1.30, -DROP + 0.30),
-             (R, -DROP + 0.30), (R, -DROP)], segments=SEG, smooth=False)
-    d.lathe([(0.0, -DROP - 0.10), (R, -DROP - 0.10), (R, -DROP + 0.02),
-             (0.0, -DROP + 0.02), (0.0, -DROP - 0.10)], segments=SEG, smooth=False)
+        section.append((rr, -DROP + RISER * i))
+        section.append((rr, -DROP + RISER * (i + 1)))
+    section.append((R + 1.30 + 0.36 * 5, 0.0))
+    section.append((R + 3.10, 0.0))           # the rim, out at grade
+    section.append((R + 3.10, -DROP - 0.20))  # and down the outside of the cut
+    section.append((R, -DROP - 0.20))
+    section.append((R, -DROP))
+    p.lathe(section, segments=SEG, smooth=False)
+    d.lathe([(0.0, -DROP - 0.20), (R, -DROP - 0.20), (R, -DROP + 0.02),
+             (0.0, -DROP + 0.02)], segments=SEG, smooth=False)
     w.lathe([(0.0, -DROP + 0.14), (R - 0.08, -DROP + 0.14),
-             (R - 0.08, -DROP + 0.18), (0.0, -DROP + 0.18), (0.0, -DROP + 0.14)],
+             (R - 0.08, -DROP + 0.18), (0.0, -DROP + 0.18)],
             segments=SEG, smooth=False)
     # four flights down, on the cardinal bearings
     for k in range(4):
         m = M.xform((0, 0, 0), (0, 0, 90.0 * k))
         for i in range(5):
             rr = R + 1.30 + 0.36 * i
-            p.box(0.44, 2.20, RISER, at=(rr + 0.20, 0.0, -RISER * (i + 1)),
+            # RISER + 0.02, so each tread stands 2 cm proud of the bank tread
+            # it is cut into. Level with it, all four flights were black.
+            p.box(0.44, 2.20, RISER + 0.02, at=(rr + 0.20, 0.0, -RISER * (i + 1)),
                   matrix=m, chamfer=0.03, centre_z=False)
     return K.ModuleSpec(
         "WL_Water_Sunken_Pool", "water", "structure", "terrace",
@@ -490,7 +551,7 @@ def water_sunken_pool(f):
              "only module in the kit that uses the route ladder downward",
         params={"radius_m": R, "drop_m": DROP, "rung": "T1 (below grade)",
                 "flights": 4, "direction": "down"},
-        tri_budget=16000, collision=True)
+        tri_budget=16000, collision=True, excavates=DROP + 0.20)
 
 
 BUILDERS = (

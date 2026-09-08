@@ -54,13 +54,14 @@ if HERE not in sys.path:
     sys.path.insert(0, HERE)
 
 import bpy                                          # noqa: E402
+from mathutils import Vector                        # noqa: E402
 
 from forge import export as X                       # noqa: E402
 from forge import kit as K                          # noqa: E402
 from forge import mesh as M                         # noqa: E402
 from forge import units as U                        # noqa: E402
-from forge.registry import (EXEMPT_GROUPS, FAMILIES,            # noqa: E402
-                            group_names)
+from forge.registry import EXEMPT_GROUPS, group_names           # noqa: E402
+from forge.registry import groups as GROUPS                     # noqa: E402
 
 ROOT = os.path.normpath(os.path.join(HERE, ".."))
 REPO = os.path.normpath(os.path.join(ROOT, "..", "..", ".."))
@@ -94,27 +95,35 @@ def mesh_hash(obj):
     return h.hexdigest()
 
 
-def coincident_faces(obj, tol=3):
-    """Count faces sharing a centroid cell with a near-parallel neighbour.
+def coincident_faces(objs, tol=3):
+    """Coplanar, same-facing faces at the same place, ACROSS THE WHOLE MODULE.
 
     Hashed on the rounded centroid rather than compared pairwise, so a 13,000
     face hero costs one pass instead of 85 million comparisons. Two faces whose
-    centres agree to a millimetre and whose normals are parallel are in the
-    same plane at the same place, and one of them is going to flicker.
+    centres agree to a millimetre and whose normals point the same way are in
+    the same plane at the same place, and one of them is going to flicker.
+
+    IT TAKES EVERY PART AT ONCE, and that is the second thing this check got
+    wrong. It first ran per object, once for each material part -- which is
+    exactly the wrong grouping, because the renderer does not care which mesh a
+    face came from. The kit's own house style put a darker wearing course on
+    top of every walk, deck and plinth, in its own part because a part is one
+    material; where that course topped out FLUSH with the stone under it, two
+    up-facing faces sat in one plane in two different objects and the surface
+    rendered solid black. `WL_Market_Arcade_Insert` had two of them, a metre
+    apart, and the per-object check passed it. The fix in the geometry is the
+    one `elements.landing` already documents -- drop the slab and let the
+    course fill the recess -- and the fix in the check is this argument.
 
     THE NORMALS MUST POINT THE SAME WAY, not merely be parallel, and getting
-    that wrong is instructive. Widening the area tolerance from 1% to 35% --
-    to catch a 3.40 m wall top under a 3.60 m string course, which z-fights
+    that wrong is instructive too. Widening the area tolerance from 1% to 35%
+    -- to catch a 3.40 m wall top under a 3.60 m string course, which z-fights
     exactly as badly as two identical faces -- made the check report 58 assets.
     It was right about the wall and wrong about everything else: two boxes
-    STACKED on each other share a face centre at their interface too, and
-    those two faces point in OPPOSITE directions. They are interior faces of a
-    union. They are hidden, they cannot flicker, and a kit assembled by
-    stacking has thousands of them.
-
-    So `dot > 0.9999` rather than `abs(dot) ~ 1`. Two faces at the same place
-    pointing the SAME way are both visible and one of them is going to
-    shimmer; two pointing at each other are just a join.
+    STACKED on each other share a face centre at their interface, and those two
+    faces point in OPPOSITE directions. They are interior faces of a union.
+    They are hidden, they cannot flicker, and a kit assembled by stacking has
+    thousands of them.
 
     WHAT THIS DOES NOT CATCH, stated so nobody trusts it further than it goes:
     two faces that are coplanar and same-facing but only PARTLY overlap, with
@@ -128,23 +137,160 @@ def coincident_faces(obj, tol=3):
 
     The thing that DOES find it costs one render: put the module against a
     bright magenta world. A hole shows magenta; two fighting surfaces show
-    black with a moire in them. `build_assets.py` renders every family by
-    default for this reason.
+    black with a moire in them. `build_assets.py --surface-check` renders every
+    family that way for this reason.
+
+    Returns a list of `(key_a, key_b, (x, y, z))`, so a report can say WHERE.
     """
-    me = obj.data
     buckets = {}
-    hits = 0
-    for p in me.polygons:
-        c = p.center
-        key = (round(c.x, tol), round(c.y, tol), round(c.z, tol))
-        n = p.normal
-        for other_n, other_area in buckets.get(key, ()):
-            if n.dot(other_n) > 0.9999 and \
-               abs(p.area - other_area) < 0.35 * max(p.area, other_area, 1e-9):
-                hits += 1
-                break
-        buckets.setdefault(key, []).append((n.copy(), p.area))
+    hits = []
+    for key, obj in sorted(objs.items()):
+        for p in obj.data.polygons:
+            c = obj.matrix_world @ p.center
+            cell = (round(c.x, tol), round(c.y, tol), round(c.z, tol))
+            n = (obj.matrix_world.to_3x3() @ p.normal).normalized()
+            for other_key, other_n, other_area in buckets.get(cell, ()):
+                if n.dot(other_n) > 0.9999 and \
+                   abs(p.area - other_area) < 0.35 * max(p.area, other_area, 1e-9):
+                    hits.append((other_key, key, (c.x, c.y, c.z)))
+                    break
+            buckets.setdefault(cell, []).append((key, n, p.area))
     return hits
+
+
+def _point_in_poly(pt, poly):
+    """Even-odd test, in the plane's own 2D basis."""
+    x, y = pt
+    inside = False
+    n = len(poly)
+    for i in range(n):
+        x0, y0 = poly[i]
+        x1, y1 = poly[(i + 1) % n]
+        if (y0 > y) != (y1 > y):
+            t = (y - y0) / (y1 - y0)
+            if x < x0 + t * (x1 - x0):
+                inside = not inside
+    return inside
+
+
+def _plane_basis(n):
+    a = Vector((0.0, 0.0, 1.0)) if abs(n.z) < 0.9 else Vector((1.0, 0.0, 0.0))
+    u = n.cross(a).normalized()
+    return u, n.cross(u).normalized()
+
+
+def coplanar_overlaps(objs, min_area=0.04, up_from=0.985, ang=0.002, off=0.003):
+    """Two SEPARATE surfaces lying in one plane, facing one way, OVERLAPPING.
+
+    This is the check `coincident_faces` says it cannot do, and the reason it
+    is worth doing anyway is that the defect is not rare: it is what the kit's
+    own house style produces by accident. A darker wearing course laid on a
+    walk, a deck or a coping, topping out FLUSH with the stone under it, puts
+    two up-facing surfaces in one plane. Their centres differ, their areas
+    differ, and `coincident_faces` is blind to them -- so `WL_Bridge_Arc`
+    shipped with both deck approaches solid black, and nothing said so.
+
+    WHY BLACK RATHER THAN A FLICKER, which is worth knowing because it is the
+    signature to look for. In a rasteriser coincident faces shimmer. In Cycles
+    they go black: a ray lands on one surface and the shadow ray it sends
+    towards the sun immediately hits the other one, a hair away, so the surface
+    shadows itself completely. Every solid-black panel in this kit's history --
+    terrace tops, landings, postern bands, wearing courses -- is this.
+
+    HOW IT AVOIDS THE FALSE POSITIVES that stopped the cheap versions:
+
+      * faces are bucketed by QUANTISED PLANE (normal and offset), so only
+        genuinely coplanar, genuinely same-facing faces are ever compared
+      * within a plane, faces sharing a vertex are unioned into ONE surface, so
+        a triangulated slab top is one patch rather than fifty overlapping ones
+      * overlap is tested by POINT IN POLYGON, not by bounding box. A bounding
+        box says a lathe's annular top overlaps anything inside its own hole,
+        which reported 32 phantoms on one conical roof alone
+      * only UP-FACING surfaces are reported. A pair of down-facing faces at
+        the bottom of a stack is coincident too, and is buried in the solid,
+        unlit, and cannot show. Restricting to a normal within 10 degrees of
+        straight up took the kit from 448 hits to 52, and the ones sampled were
+        all real -- two of them visible in renders already committed.
+
+    So it does not claim to find every coplanar pair. It finds the ones that
+    are going to be looked at, which is the useful half. The magenta pass in
+    `build_assets.py --surface-check` remains the catch-all.
+
+    Returns a list of `(keys_a, keys_b, overlap_m2, (x, y, z))`.
+    """
+    planes = {}
+    for key, obj in sorted(objs.items()):
+        mw, mn = obj.matrix_world, obj.matrix_world.to_3x3()
+        for poly in obj.data.polygons:
+            n = mn @ poly.normal
+            if n.length < 1e-9:
+                continue
+            n = n.normalized()
+            if n.z < up_from:
+                continue
+            c = mw @ poly.center
+            pk = (round(n.x / ang), round(n.y / ang), round(n.z / ang),
+                  round(n.dot(c) / off))
+            vs = [tuple(round(v, 4) for v in (mw @ obj.data.vertices[i].co))
+                  for i in poly.vertices]
+            planes.setdefault(pk, []).append((key, vs, poly.area, n))
+
+    out = []
+    for _pk, faces in planes.items():
+        if len(faces) < 2:
+            continue
+        parent = list(range(len(faces)))
+
+        def find(i):
+            while parent[i] != i:
+                parent[i] = parent[parent[i]]
+                i = parent[i]
+            return i
+
+        seen = {}
+        for i, (_k, vs, _a, _n) in enumerate(faces):
+            for v in vs:
+                j = seen.setdefault(v, i)
+                ri, rj = find(i), find(j)
+                if ri != rj:
+                    parent[ri] = rj
+        groups = {}
+        for i, (k, vs, a, _n) in enumerate(faces):
+            groups.setdefault(find(i), []).append((k, vs, a))
+        if len(groups) < 2:
+            continue
+        n0 = faces[0][3]
+        u, w = _plane_basis(n0)
+        # THE PLANE'S OWN OFFSET, or the reported point loses its height: u and
+        # w span the plane, so `u*cx + w*cy` alone puts every up-facing hit at
+        # z = 0 and the report names a place nobody can find.
+        d0 = n0.dot(Vector(faces[0][1][0]))
+        flat = []
+        for mem in groups.values():
+            keys, polys, area = set(), [], 0.0
+            for (k, vs, a) in mem:
+                keys.add(k)
+                area += a
+                polys.append([(Vector(v).dot(u), Vector(v).dot(w)) for v in vs])
+            flat.append((sorted(keys), polys, area))
+        for i in range(len(flat)):
+            for j in range(i + 1, len(flat)):
+                ka, pa, aa = flat[i]
+                kb, pb, ab = flat[j]
+                small, big = (pa, pb) if aa <= ab else (pb, pa)
+                shared, where = 0.0, None
+                for face in small:
+                    cx = sum(q[0] for q in face) / len(face)
+                    cy = sum(q[1] for q in face) / len(face)
+                    if any(_point_in_poly((cx, cy), g) for g in big):
+                        xs = [q[0] for q in face]
+                        ys = [q[1] for q in face]
+                        shared += (max(xs) - min(xs)) * (max(ys) - min(ys))
+                        where = u * cx + w * cy + n0 * d0
+                if shared >= min_area and where is not None:
+                    out.append(("+".join(ka), "+".join(kb), shared,
+                                (where.x, where.y, where.z)))
+    return out
 
 
 def geometry_reaches(obj_list, z_m, radius_m, tol=TOL_M):
@@ -182,11 +328,45 @@ def check_asset(spec, objs, mats_available):
         return ["%s: emitted no geometry" % aid]
     base_z, height = min(zs), max(zs) - min(zs)
 
-    K.apply_measured_terminals(spec, height)
+    K.apply_measured_terminals(spec, base_z + height)
 
-    if abs(base_z) > TOL_M:
-        bad.append("%s: footing is at z = %.3f m, not 0 (the kit's origin rule)"
-                   % (aid, base_z))
+    # z = 0 is the GROUND DATUM. A module may be cut into it only as far as it
+    # declares, and the declaration is checked against the measurement -- so
+    # this is stricter than "nothing below zero", not looser. See
+    # `kit.ModuleSpec.excavates`.
+    dig = getattr(spec, "excavates", 0.0)
+    mounts = getattr(spec, "mounts", None)
+    if mounts:
+        # A MOUNTED MODULE IS CARRIED BY A FACE, NOT BY THE GROUND. It may
+        # float, but it may not sink, and it has to publish the flat face it
+        # is carried on -- otherwise "mounts" is just a way of switching the
+        # footing rule off. See `kit.ModuleSpec.mounts`.
+        if base_z < -TOL_M:
+            bad.append("%s: mounts on %s but has geometry at z = %.3f m, below "
+                       "the ground datum" % (aid, mounts, base_z))
+        if not any(sk.kind == "bridge_end" for sk in spec.sockets):
+            bad.append("%s: mounts on %s but publishes no bridge_end socket, so "
+                       "nothing says which face carries it" % (aid, mounts))
+    elif abs(base_z + dig) > TOL_M:
+        if dig:
+            bad.append("%s: declares excavates=%.3f m but its lowest geometry "
+                       "is at z = %.3f m" % (aid, dig, base_z))
+        else:
+            bad.append("%s: footing is at z = %.3f m, not 0, and it declares no "
+                       "excavation (the kit's ground-datum rule)" % (aid, base_z))
+
+    # ONE PASS OVER EVERY PART. See `coincident_faces`: the renderer does not
+    # care which mesh a face came from, so neither may this.
+    for (ka, kb, at) in coincident_faces(objs):
+        bad.append("%s: %s and %s put a face in the same plane at "
+                   "(%.2f, %.2f, %.2f) facing the same way -- it renders black"
+                   % (aid, ka, kb, at[0], at[1], at[2]))
+
+    for (ka, kb, m2, at) in coplanar_overlaps(objs):
+        bad.append("%s: %s and %s share %.2f m2 of one up-facing plane at "
+                   "(%.2f, %.2f, %.2f) -- coincident surfaces shadow each "
+                   "other and render solid black"
+                   % (aid, ka, kb, m2, at[0], at[1], at[2]))
 
     for key, obj in sorted(objs.items()):
         me = obj.data
@@ -201,6 +381,9 @@ def check_asset(spec, objs, mats_available):
             bad.append("%s/%s: no UV layer" % (aid, key))
 
         meta = X.measure(obj)
+        if meta is None:
+            bad.append("%s/%s: the mesh has no vertices at all" % (aid, key))
+            continue
         if meta["degenerate_faces"]:
             bad.append("%s/%s: %d degenerate face(s)" % (aid, key, meta["degenerate_faces"]))
         if meta["loose_verts"]:
@@ -215,11 +398,6 @@ def check_asset(spec, objs, mats_available):
         if nrm["inverted_shells"]:
             bad.append("%s/%s: %d closed shell(s) wound inside-out (%d faces)"
                        % (aid, key, nrm["inverted_shells"], nrm["inverted_faces"]))
-
-        dupes = coincident_faces(obj)
-        if dupes:
-            bad.append("%s/%s: %d coincident coplanar face(s) -- they render "
-                       "as black or as noise" % (aid, key, dupes))
 
         # ---- the exported files must agree with the mesh -------------------
         glb = os.path.join(ROOT, "exports", "glb", obj.name + ".glb")
@@ -266,9 +444,16 @@ def check_asset(spec, objs, mats_available):
             if K.rung_of(sock.radius) is None:
                 bad.append("%s: socket %r radius %.3f m is off the ladder %s"
                            % (aid, sock.name, sock.radius, sorted(K.LADDER)))
-        if sock.z < -TOL_M or sock.z > height + TOL_M:
+        # A SOCKET LIVES IN THE MODULE'S OWN SPACE, whose origin is the ground
+        # datum. So the legal band runs from the datum (or the module's own
+        # floor, if it is cut in below it) to the highest vertex -- a mounted
+        # module publishes a socket AT the datum it does not itself reach, and
+        # that is the point of it.
+        z_lo, z_hi = min(0.0, base_z) - TOL_M, base_z + height + TOL_M
+        if not (z_lo <= sock.z <= z_hi):
             bad.append("%s: socket %r sits at z = %.2f m, outside the module "
-                       "(0 .. %.2f m)" % (aid, sock.name, sock.z, height))
+                       "(%.2f .. %.2f m)"
+                       % (aid, sock.name, sock.z, z_lo + TOL_M, z_hi - TOL_M))
 
     # THE STACK INVARIANT APPLIES TO STACK MODULES, and membership is decided
     # by the SOCKET, not by the role name. A tower body joins the module below
@@ -388,6 +573,44 @@ def check_kit(specs):
             bad.append("rung %s: a body can leave a stack here and NO crown or "
                        "spire fits it -- that stack can never be finished" % rung)
 
+    # A VARIANT'S SOCKETS ARE A SUBSET OF ITS BASE'S, at the same places.
+    #
+    # This is what makes a weathered module safe to substitute into a spelled
+    # stack: `age` and `overgrowth` are not allowed to move a join at all, and
+    # `damage` may only DROP the sockets it destroyed. Without the rule the
+    # variants would be a second kit that merely resembles the first, and a
+    # generator would have to know which was which.
+    by_id = {s.asset_id: s for s in specs}
+    for s in specs:
+        base_id = s.params.get("variant_of")
+        if not base_id:
+            continue
+        base = by_id.get(base_id)
+        if base is None:
+            bad.append("%s: says it is a variant of %s, which is not in the kit"
+                       % (s.asset_id, base_id))
+            continue
+        destroyed = set(s.params.get("sockets_destroyed") or ())
+        for sock in s.sockets:
+            b = base.socket(sock.name)
+            if b is None:
+                bad.append("%s: publishes socket %r, which its base %s does not"
+                           % (s.asset_id, sock.name, base_id))
+            elif abs(b.z - sock.z) > TOL_M or abs(b.radius - sock.radius) > TOL_M:
+                bad.append("%s: socket %r moved from (z %.3f, r %.3f) to "
+                           "(z %.3f, r %.3f) -- a variant may drop a join, "
+                           "never move one"
+                           % (s.asset_id, sock.name, b.z, b.radius,
+                              sock.z, sock.radius))
+        missing = {b.name for b in base.sockets} - {x.name for x in s.sockets}
+        unexplained = missing - destroyed
+        if unexplained:
+            bad.append("%s: lost socket(s) %s without saying they were "
+                       "destroyed" % (s.asset_id, ", ".join(sorted(unexplained))))
+        if destroyed and not s.params.get("damage"):
+            bad.append("%s: claims destroyed sockets but declares no damage"
+                       % s.asset_id)
+
     # every foot must be able to carry at least one body
     for s in specs:
         if s.role != "foot":
@@ -440,6 +663,41 @@ def self_test():
     assert any("no manifest" in b for b in bad), "a missing manifest must fail"
 
     print("coverage self-test OK -- the check bites on all five cases")
+
+    # ---- and the surface checks, on geometry built for the purpose ---------
+    from forge import mesh as MK
+
+    def two_slabs(dz_a, dz_b, inset, offset=0.0):
+        """Two boxes whose tops differ by `dz_b - dz_a`, the smaller inset."""
+        MK.clear_scene()
+        f = MK.Forge()
+        a = f.part("stone")
+        b = f.part("stone_dark")
+        a.box(4.0, 4.0, 1.0 + dz_a, at=(0.0, 0.0, 0.0), centre_z=False)
+        b.box(4.0 - inset, 4.0 - inset, 0.2 + dz_b, at=(offset, 0.0, 0.8),
+              centre_z=False)
+        return f.emit("SelfTest")
+
+    flush = two_slabs(0.0, 0.0, 1.2)          # both top out at 1.00
+    hits = coplanar_overlaps(flush)
+    assert hits, "a course laid flush with the slab under it must fail"
+    assert hits[0][2] > 5.0, "and the reported area must be the real overlap"
+
+    proud = two_slabs(0.0, 0.015, 1.2)        # the course stands 15 mm proud
+    assert not coplanar_overlaps(proud), \
+        "a course standing proud of its slab must pass -- this is what "\
+        "elements.wear_course builds"
+
+    same = two_slabs(0.0, 0.0, 0.0)           # identical footprints
+    assert coincident_faces(same), \
+        "two identical faces in one place must fail the centroid check too"
+
+    apart = two_slabs(0.0, 0.0, 1.2, offset=6.0)   # same plane, 3 m away
+    assert not coplanar_overlaps(apart), \
+        "two coplanar surfaces that do not overlap must pass"
+
+    MK.clear_scene()
+    print("surface self-test OK -- flush fails, proud passes, disjoint passes")
     return 0
 
 
@@ -464,8 +722,8 @@ def main():
     hashes = {}
     specs = []
 
-    for group, module in FAMILIES:
-        for builder in module.BUILDERS:
+    for group, group_builders in GROUPS():
+        for builder in group_builders:
             M.clear_scene()
             forge = M.Forge()
             spec = builder(forge)

@@ -258,7 +258,10 @@ def detail_oriel_bay(f):
     gl.prism(gplan, 2.30, z0=1.95)
     p.box(0.16, D * 0.9, 2.45, at=(0.0, D * 0.55, 1.90), chamfer=0.035,
           centre_z=False)
-    p.box(W + 0.30, 0.20, 0.22, at=(0.0, 0.0, 4.60), chamfer=0.05, centre_z=False)
+    # NO SEPARATE BACK BAND HERE. One was drawn, 3.50 x 0.20 x 0.22 at 4.60,
+    # and it was wholly inside the cornice prism below except for the 6 cm it
+    # stuck out BEHIND the mounting plane -- so it contributed nothing but a
+    # coplanar top and a module that no longer butted flat to a wall.
     p.prism([(-W * 0.5 - 0.16, -0.04), (-W * 0.30 - 0.14, D + 0.16),
              (W * 0.30 + 0.14, D + 0.16), (W * 0.5 + 0.16, -0.04)],
             0.22, z0=4.60)

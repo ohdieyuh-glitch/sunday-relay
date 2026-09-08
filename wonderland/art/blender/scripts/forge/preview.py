@@ -59,6 +59,10 @@ def rig(sun_energy=3.2, sun_angle=(56.0, 0.0, 128.0), sky=0.45, ground=True):
     scene.collection.objects.link(fill)
     fill.rotation_euler = (math.radians(70.0), 0.0, math.radians(-40.0))
 
+    # NOTE FOR BELOW-GRADE MODULES. This plane sits at z = 0 and will hide
+    # anything under it -- `WL_Water_Sunken_Pool` goes 1.55 m down and rendered
+    # as a black ring on an unbroken floor until it was rendered with
+    # `ground=False`. That is the rig, not the mesh.
     if ground:
         me = bpy.data.meshes.new("ForgeGround")
         S = 4000.0
@@ -100,6 +104,45 @@ def bounds(objs):
     return lo, hi
 
 
+def view_basis(azimuth, elevation):
+    """(view, right, up) for a camera at `azimuth`/`elevation`, in degrees.
+
+    `view` points from the subject TOWARDS the camera, so the camera sits at
+    `target + view * distance` and looks back down `-view`.
+    """
+    az, el = math.radians(azimuth), math.radians(elevation)
+    view = Vector((math.cos(az) * math.cos(el), math.sin(az) * math.cos(el),
+                   math.sin(el)))
+    right = view.cross(Vector((0.0, 0.0, 1.0)))
+    right = right.normalized() if right.length > 1e-6 else Vector((1.0, 0.0, 0.0))
+    return view, right, right.cross(-view).normalized()
+
+
+def projected_half_extents(objs, azimuth=38.0, elevation=14.0, target_bias=0.50):
+    """How wide and how tall the subject is IN THE CAMERA'S OWN BASIS.
+
+    Returns `(target, half_right, half_up)` in metres. Everything that needs to
+    know the shape of a shot -- where to put the camera, and what shape the
+    frame should be -- needs exactly this pair, and computing it in one place
+    is what lets `build_assets._sheet_res` size a contact sheet to its row
+    instead of guessing at a fudge factor.
+    """
+    bpy.context.view_layer.update()
+    lo, hi = bounds(objs)
+    centre = (lo + hi) * 0.5
+    _view, right, up = view_basis(azimuth, elevation)
+    target = Vector((centre.x, centre.y, lo.z + (hi.z - lo.z) * target_bias))
+    half_r = half_u = 0.0
+    for o in objs:
+        if o.type != "MESH":
+            continue
+        for v in o.data.vertices:
+            d = (o.matrix_world @ v.co) - target
+            half_r = max(half_r, abs(d.dot(right)))
+            half_u = max(half_u, abs(d.dot(up)))
+    return target, max(half_r, 0.5), max(half_u, 0.5)
+
+
 def frame_camera(objs, res, azimuth=38.0, elevation=14.0, margin=1.06,
                  lens=52.0, target_bias=0.50):
     """Put a camera where the whole of `objs` fits, looking at it.
@@ -113,8 +156,6 @@ def frame_camera(objs, res, azimuth=38.0, elevation=14.0, margin=1.06,
     its own field of view; the larger answer wins.
     """
     scene = bpy.context.scene
-    lo, hi = bounds(objs)
-    centre = (lo + hi) * 0.5
 
     cam_data = bpy.data.cameras.new("ForgeCam")
     cam_data.lens = float(lens)
@@ -123,24 +164,9 @@ def frame_camera(objs, res, azimuth=38.0, elevation=14.0, margin=1.06,
     scene.collection.objects.link(cam)
     scene.camera = cam
 
-    az, el = math.radians(azimuth), math.radians(elevation)
-    view = Vector((math.cos(az) * math.cos(el), math.sin(az) * math.cos(el),
-                   math.sin(el)))                       # camera -> subject is -view
-    right = view.cross(Vector((0.0, 0.0, 1.0)))
-    right = right.normalized() if right.length > 1e-6 else Vector((1.0, 0.0, 0.0))
-    up = right.cross(-view).normalized()
-
-    target = Vector((centre.x, centre.y, lo.z + (hi.z - lo.z) * target_bias))
-    half_r = half_u = 0.0
-    for o in objs:
-        if o.type != "MESH":
-            continue
-        for v in o.data.vertices:
-            d = (o.matrix_world @ v.co) - target
-            half_r = max(half_r, abs(d.dot(right)))
-            half_u = max(half_u, abs(d.dot(up)))
-    half_r = max(half_r, 0.5)
-    half_u = max(half_u, 0.5)
+    view, _right, _up = view_basis(azimuth, elevation)
+    target, half_r, half_u = projected_half_extents(objs, azimuth, elevation,
+                                                    target_bias)
 
     sensor_w = cam_data.sensor_width
     sensor_h = sensor_w * float(res[1]) / float(res[0])

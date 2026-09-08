@@ -168,7 +168,7 @@ def house_jettied(f):
     p.box(BAY_X * 0.90, BAY_Y * 0.90, 0.34, at=(0.0, 0.0, 0.0), chamfer=0.07,
           centre_z=False)
     # likewise: the recessed ground floor stands ON the plinth
-    d.box(BAY_X * 0.86, BAY_Y * 0.86, STOREY - 0.34, at=(0.0, 0.0, 0.34),
+    d.box(BAY_X * 0.86, BAY_Y * 0.86, STOREY - 0.46, at=(0.0, 0.0, 0.34),
           centre_z=False)
     for sgn in (-1.0, 1.0):
         for dy in (-1.0, 1.0):

@@ -290,13 +290,24 @@ def garden_planter_wall(f):
     H = K.RISER_M * 3
     p.box(LEN + 0.24, W + 0.24, 0.18, at=(0.0, 0.0, 0.0), chamfer=0.04, centre_z=False)
     p.box(LEN, W, H - 0.36, at=(0.0, 0.0, 0.18), chamfer=0.05, centre_z=False)
-    p.box(LEN + 0.30, W + 0.30, 0.18, at=(0.0, 0.0, H - 0.18), chamfer=0.045,
-          centre_z=False)
+    # THE COPING IS A RIM, NOT A LID. It was one solid slab across the whole
+    # top, so the soil pan and the planting under it were sealed inside the
+    # module -- a planter with no opening, and 6.45 m2 of pan lying in the same
+    # plane as the wall head it was buried in. Four runs leave the bed open.
+    COPE = 0.42
+    for (bw, bd, bx, by) in (
+            (LEN + 0.30, COPE, 0.0, (W + 0.30 - COPE) * 0.5),
+            (LEN + 0.30, COPE, 0.0, -(W + 0.30 - COPE) * 0.5),
+            (COPE, W + 0.30 - COPE * 2.0, (LEN + 0.30 - COPE) * 0.5, 0.0),
+            (COPE, W + 0.30 - COPE * 2.0, -(LEN + 0.30 - COPE) * 0.5, 0.0)):
+        p.box(bw, bd, 0.18, at=(bx, by, H - 0.18), chamfer=0.045, centre_z=False)
     for sgn in (-1.0, 1.0):
         p.box(0.34, W + 0.34, H + 0.10, at=(sgn * LEN * 0.5, 0.0, 0.0),
               chamfer=0.05, centre_z=False)
-    d.box(LEN - 0.44, W - 0.44, 0.10, at=(0.0, 0.0, H - 0.28), centre_z=False)
-    v.box(LEN - 0.50, W - 0.50, 0.16, at=(0.0, 0.0, H - 0.24), centre_z=False)
+    # soil, then the planting surface standing on it: each sits ON the last,
+    # never level with it
+    d.box(LEN - 0.44, W - 0.44, 0.06, at=(0.0, 0.0, H - 0.18), centre_z=False)
+    v.box(LEN - 0.50, W - 0.50, 0.07, at=(0.0, 0.0, H - 0.12), centre_z=False)
     return K.ModuleSpec(
         "WL_Garden_Planter_Wall", "garden", "prop", "detail",
         f.emit("WL_Garden_Planter_Wall"),
@@ -457,7 +468,8 @@ def garden_pavilion_base(f):
                     run=M.CORNICE_CORBEL, segments=8)
     p.prism(M.ngon(8, R + 0.34, phase=math.pi / 8.0), 0.16, z0=TERRACE_Z - 0.22)
     p.prism(M.ngon(8, R, phase=math.pi / 8.0), 0.06, z0=TERRACE_Z - 0.06)
-    d.prism(M.ngon(8, R - 0.30, phase=math.pi / 8.0), 0.05, z0=TERRACE_Z - 0.05)
+    E.wear_course(d, TERRACE_Z, poly=M.ngon(8, R - 0.30, phase=math.pi / 8.0),
+                  thickness=0.05)
     for i, (x, y, a) in enumerate(K.radial(8, R - 0.16, phase=math.pi / 8.0)):
         if i == 0:
             continue                    # the way in

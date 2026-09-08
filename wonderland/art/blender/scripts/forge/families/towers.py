@@ -152,9 +152,11 @@ def tower_base_buttressed(f):
     # a smooth ramp reads as one grey triangle.
     for (x, y, a) in K.radial(6, XL * 0.86):
         m = M.xform((x, y, 0.0), (0.0, 0.0, a))
+        # the top stage dies 0.14 m BELOW the core's cap: at the same height
+        # its weathering's own base quad and the cap were one up-facing plane
         for (reach, half, z0, z1) in ((3.30, 1.16, 0.62, 3.60),
                                       (2.35, 0.98, 3.60, 6.70),
-                                      (1.45, 0.82, 6.70, H - 1.2)):
+                                      (1.45, 0.82, 6.70, H - 1.34)):
             p.prism([(0.0, -half), (reach, -half * 0.72), (reach, half * 0.72),
                      (0.0, half)], z1 - z0, z0=z0, matrix=m)
             # the weathering: a wedge shedding water off the offset
@@ -495,7 +497,9 @@ def tower_crown_tiered(f):
         if shrink:
             r.lathe(M.bell(radius, h, steps=8, flare=0.16, z0=z), segments=20,
                     smooth=True)
-            g.lathe(M.moulding(radius * shrink * 1.10, z + h * 0.86, (
+            # +0.03 so the collar's own base disc is not in the same plane as
+            # the next tier's -- both buried, both coincident, and free to fix
+            g.lathe(M.moulding(radius * shrink * 1.10, z + h * 0.86 + 0.03, (
                 (0.14, 0.0), (0.03, 0.12), (-0.05, 0.12), (-0.12, 0.02))),
                 segments=18)
             radius *= shrink

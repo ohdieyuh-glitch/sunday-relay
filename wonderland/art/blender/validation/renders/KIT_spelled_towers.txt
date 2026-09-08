@@ -5,8 +5,8 @@ Left to right in KIT_spelled_towers.png.
  40.70 m  Tower_Base_Arcaded + Tower_Mid_Arcade + Tower_Crown_Belvedere
  52.70 m  Tower_Base_Terraced + Tower_Mid_Ashlar + Tower_Mid_Machicolated + Spire_Barbed
  61.95 m  Tower_Base_Terraced + Tower_Mid_Arcade + Tower_Mid_Oriel + Tower_Mid_Ribbed + Tower_Crown_Ribbed
- 45.55 m  Tower_Base_Terraced + Tower_Mid_Arcade + Tower_Mid_Oriel + Tower_Crown_Ribbed
+ 74.00 m  Tower_Base_Buttressed__aged + Tower_Mid_Machicolated + Tower_Mid_Fluted + Tower_Mid_Fluted + Spire_Ringed
  37.60 m  Tower_Base_Battered + Tower_Mid_Ashlar + Tower_Crown_Pavilion
- 37.40 m  Tower_Base_Arcaded + Tower_Mid_Machicolated + Tower_Crown_Cone
- 52.30 m  Tower_Base_Terraced + Tower_Mid_Arcade + Tower_Mid_Ribbed + Tower_Crown_Belvedere
+ 39.20 m  Tower_Base_Buttressed__aged + Tower_Mid_Ashlar + Tower_Crown_Pavilion
+ 52.40 m  Tower_Base_Buttressed__aged + Tower_Mid_Arcade + Tower_Mid_Balconied + Tower_Crown_Cone
  47.15 m  Tower_Base_Battered + Tower_Mid_Arcade + Tower_Mid_Oriel + Tower_Crown_Ribbed

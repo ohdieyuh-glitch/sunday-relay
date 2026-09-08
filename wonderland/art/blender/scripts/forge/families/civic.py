@@ -99,8 +99,11 @@ def colonnade_arcade(f):
         E.arch_band(p, BAY - 1.05, RISE, 3.30, 0.55, at=(x, 0.0, SPRING),
                     kind="round", steps=11, keystone=True)
         d.box(BAY - 1.10, 1.10, 0.60, at=(x, 0.0, SPRING - 0.05), centre_z=False)
+        # 0.50, not 0.55: at 0.55 the wall's extrados springing lands OUTSIDE
+        # its own outer_x. It also gives the band a 5 cm proud reveal, which is
+        # what an arch ring in a spandrel is supposed to have.
         E.arched_wall(p, BAY - 1.05, RISE, DECK - SPRING - 0.55, BAY * 0.5,
-                      3.10, kind="round", steps=11, thickness=0.55,
+                      3.10, kind="round", steps=11, thickness=0.50,
                       at=(x, 0.0, SPRING))
     p.box(LEN + 1.2, 4.20, 0.46, at=(0.0, 0.0, DECK - 0.46), chamfer=0.10,
           centre_z=False)
@@ -190,7 +193,10 @@ def bridge_arc(f):
     E.arch_band(p, SPAN, RISE, W, 1.15, at=(0.0, 0.0, 1.70), kind="round", steps=17,
                 keystone=True)
     d.box(SPAN * 0.94, W * 0.42, 0.70, at=(0.0, 0.0, 1.66), centre_z=False)
-    E.arched_wall(p, SPAN, RISE, DECK - 1.70, SPAN * 0.5 + 3.0, W * 0.86,
+    # THE SPANDREL STOPS AT THE SOFFIT, not at the deck's top surface. It ran
+    # to DECK, so both haunches put 24.9 m2 of up-facing wall in the same plane
+    # as the deck slab above them and both approaches rendered solid black.
+    E.arched_wall(p, SPAN, RISE, DECK - 0.46 - 1.70, SPAN * 0.5 + 3.0, W * 0.86,
                   kind="round", steps=17, thickness=1.15, at=(0.0, 0.0, 1.70))
     p.box(SPAN + 7.0, W + 0.9, 0.46, at=(0.0, 0.0, DECK - 0.46), chamfer=0.10,
           centre_z=False)

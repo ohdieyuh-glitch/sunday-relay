@@ -317,7 +317,7 @@ class ModuleSpec(object):
 
     def __init__(self, asset_id, family, category, role, parts, sockets,
                  districts=(), note="", params=None, tri_budget=None,
-                 nanite=True, collision=False):
+                 nanite=True, collision=False, excavates=0.0, mounts=None):
         if category not in CATEGORIES:
             raise ValueError("unknown category %r for %s" % (category, asset_id))
         if role not in ROLES:
@@ -334,6 +334,37 @@ class ModuleSpec(object):
         self.tri_budget = tri_budget
         self.nanite = bool(nanite)
         self.collision = bool(collision)
+        # HOW FAR BELOW THE GROUND DATUM THIS MODULE IS CUT IN, in metres.
+        #
+        # The kit's origin rule is "footing at z = 0", and the water family is
+        # the first thing to show that the rule was stating a CONSEQUENCE
+        # rather than the intent. A basin has depth; its tank is under the
+        # paving by construction, and a reflecting pool whose lowest geometry
+        # sat at z = 0 would be a tray sitting on the lawn.
+        #
+        # So z = 0 is the GROUND DATUM -- the plane at which the module meets
+        # the terrain around it -- and geometry may go below it only when the
+        # module says how far. The validator then checks the DECLARED depth
+        # against the MEASURED one, which is a tighter rule than the old one,
+        # not a looser one: before, a module could not go below zero at all;
+        # now it can, and it has to be right about it to the centimetre.
+        self.excavates = float(excavates)
+        # WHAT CARRIES THIS MODULE, when it is not the ground.
+        #
+        # `excavates` said a module may go BELOW the datum if it declares it.
+        # The market family asks the mirror question: an awning and a hanging
+        # sign have no footing at all, because a facade carries them. Their
+        # lowest geometry is 2 m up and always will be, and the footing rule
+        # would have to be either broken for them or widened for everything.
+        #
+        # So a module may FLOAT above the datum only when it names what holds
+        # it, and the validator then requires the thing that makes that claim
+        # checkable: a `bridge_end` socket, which is the kit's flat mounting
+        # face. `mounts="facade"` therefore reads "this hangs off a wall, and
+        # here is the wall it hangs off" -- not "this one is exempt".
+        self.mounts = str(mounts) if mounts else None
+        if self.mounts and self.excavates:
+            raise ValueError("%s both excavates and mounts" % asset_id)
         for key in self.parts:
             if key not in MATERIALS:
                 raise ValueError("%s writes part %r with no material" % (asset_id, key))
@@ -350,8 +381,8 @@ class ModuleSpec(object):
 # --------------------------------------------------------------------------
 
 
-def apply_measured_terminals(spec, height_m):
-    """Set every terminal socket's z from the MEASURED height of the module.
+def apply_measured_terminals(spec, top_m):
+    """Set every terminal socket's z from the MEASURED TOP of the module.
 
     A `crown` socket with radius 0 says "the stack ends here", so its z is a
     statement about where the module ends -- and a builder cannot measure
@@ -360,12 +391,20 @@ def apply_measured_terminals(spec, height_m):
     harmless for stacking, since nothing joins there, and dishonest in a
     manifest that claims every number is measured.
 
+    `top_m` IS THE HIGHEST VERTEX, NOT THE HEIGHT. Those are the same number
+    for every module that foots on z = 0, which is why this took an excavating
+    module to expose: `WL_Water_Pavilion` stands in a basin cut 0.55 m in, so
+    its 12.77 m of height ends at z = 12.22, and passing the height put its
+    terminal socket half a metre above its own finial. The socket is a position
+    in the module's space; the ground datum is the origin of that space; a
+    height is neither.
+
     Called by BOTH `build_assets.py` and `validate_assets.py`, from here, so
-    the two cannot disagree about what a module's height is.
+    the two cannot disagree about where a module ends.
     """
     for sock in spec.sockets:
         if sock.kind == "crown" and sock.radius <= 1e-9:
-            sock.z = float(height_m)
+            sock.z = float(top_m)
     return spec
 
 

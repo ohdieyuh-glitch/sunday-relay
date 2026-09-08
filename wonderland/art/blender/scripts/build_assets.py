@@ -40,8 +40,10 @@ from forge import export as X                       # noqa: E402
 from forge import kit as K                          # noqa: E402
 from forge import mesh as M                         # noqa: E402
 from forge import preview as P                      # noqa: E402
+from forge import style as S                        # noqa: E402
 from forge import units as U                        # noqa: E402
-from forge.registry import EXEMPT_GROUPS, FAMILIES              # noqa: E402
+from forge.registry import EXEMPT_GROUPS                        # noqa: E402
+from forge.registry import groups as GROUPS                    # noqa: E402
 
 ROOT = os.path.normpath(os.path.join(HERE, ".."))
 EXPORTS = os.path.join(ROOT, "exports")
@@ -52,6 +54,9 @@ VALIDATION = os.path.join(ROOT, "validation")
 
 #: Bumped when the geometry of the kit changes in a way the world session
 #: must re-import for. The manifest carries it; so does every asset record.
+#: The measured triangle count at or above which Nanite is recommended.
+NANITE_MIN_TRIS = 5000
+
 KIT_VERSION = "1.0.0"
 
 
@@ -101,8 +106,9 @@ def build_one(builder, group, write_blend=True):
 
     # terminal socket heights come from the MEASUREMENT, never the builder.
     # The rule lives in kit.apply_measured_terminals so the validator applies
-    # exactly the same one.
-    K.apply_measured_terminals(spec, U.uu_to_m(height_uu))
+    # exactly the same one. It is handed the TOP, not the height -- see the
+    # excavation note there.
+    K.apply_measured_terminals(spec, U.uu_to_m(hi_z))
 
     if write_blend:
         os.makedirs(SOURCE, exist_ok=True)
@@ -120,18 +126,34 @@ def build_one(builder, group, write_blend=True):
         "note": spec.note,
         "districts": list(spec.districts),
         "params": spec.params,
-        "origin_rule": "footing at z = 0; +X is the module front",
+        "origin_rule": ("z = 0 is the GROUND DATUM; +X is the module front. "
+                        "excavation_uu is how far the module is cut in below it."),
+        "excavation_uu": round(U.m_to_uu(getattr(spec, "excavates", 0.0)), 2),
+        "mounts_on": getattr(spec, "mounts", None),
+        "variant_of": spec.params.get("variant_of"),
         "units": {"authored": "metres", "manifest": "unreal units (cm)",
                   "uu_per_metre": U.UU_PER_METRE},
         "height_uu": round(height_uu, 2),
         "bbox_min_uu": [round(v, 2) for v in lo],
         "bbox_max_uu": [round(v, 2) for v in hi],
         "size_uu": [round(hi[a] - lo[a], 2) for a in range(3)],
+        "style": S.profile(spec, spec.parts,
+                           [U.uu_to_m(hi[a] - lo[a]) for a in range(3)],
+                           U.uu_to_m(height_uu)),
         "base_z_uu": round(lo_z, 3),
         "tris_total": total_tris,
         "tri_budget": spec.tri_budget,
         "over_budget": bool(spec.tri_budget and total_tris > spec.tri_budget),
-        "nanite_recommended": spec.nanite,
+        # NANITE IS RECOMMENDED FROM THE MEASUREMENT, not from a default.
+        # `ModuleSpec.nanite` defaults to True and no builder had reconsidered
+        # it, so the first import plan asked for Nanite on all 93 assets --
+        # including a 336-triangle hanging sign. The marble importer's own note
+        # says why that is wrong: Nanite pays on dense static opaque geometry
+        # and its per-mesh overhead is pure loss on engine-scale primitives.
+        # An author may still say "never" by passing nanite=False.
+        "nanite_recommended": bool(spec.nanite) and total_tris >= NANITE_MIN_TRIS,
+        "nanite_rule": ("recommended when the module is >= %d triangles and the "
+                        "builder has not opted out" % NANITE_MIN_TRIS),
         "collision_recommended": spec.collision,
         "uv": "planar-world-2m (not a lightmap unwrap)",
         "sockets": [s.as_dict(U.m_to_uu) for s in spec.sockets],
@@ -167,10 +189,10 @@ def main():
                 os.remove(os.path.join(d, name))
 
     records, specs, failures = [], [], []
-    for group, module in FAMILIES:
+    for group, group_builders in GROUPS():
         if args.only and args.only != group:
             continue
-        for builder in module.BUILDERS:
+        for builder in group_builders:
             try:
                 rec, spec = build_one(builder, group, write_blend=not args.no_blend)
                 records.append(rec)
@@ -230,6 +252,10 @@ def main():
                           "wonderland/v2/materials_v2.py."),
             "uv": "planar-world projection at 2 m per tile; NOT a lightmap unwrap",
         },
+        "style_axes": S.axis_table(),
+        "route_ladder_uu": {k: round(U.m_to_uu(v), 3)
+                            for k, v in K.ROUTE_LADDER.items()},
+        "riser_uu": round(U.m_to_uu(K.RISER_M), 3),
         "radius_ladder_uu": {k: round(U.m_to_uu(v), 3) for k, v in K.LADDER.items()},
         "ladder_tolerance_uu": round(U.m_to_uu(K.LADDER_TOLERANCE_M), 3),
         "materials": {k: {"unreal": v["unreal"], "use": v["use"]}
@@ -241,6 +267,7 @@ def main():
             "by_role": by_role,
             "legal_tower_stacks_up_to_3_bodies": stacks,
             "rung_coverage": by_rung,
+            "variants": sum(1 for r in records if r.get("variant_of")),
         },
         "assets": records,
     }
@@ -254,7 +281,8 @@ def main():
              manifest["counts"]["triangles"], stacks))
 
     if not args.no_render:
-        render_sheets(specs, surface_check=args.surface_check)
+        render_sheets(specs, surface_check=args.surface_check,
+                      only=args.only)
     return 0
 
 
@@ -276,13 +304,13 @@ def render_spelled(seeds=9, max_bodies=3):
     out = os.path.join(ROOT, "validation", "renders")
     M.clear_scene()
     library, by_role = {}, {}
-    for _group, module in FAMILIES:
-        for builder in module.BUILDERS:
+    for _group, group_builders in GROUPS():
+        for builder in group_builders:
             forge = M.Forge()
             spec = builder(forge)
             forge.parts = {}
             zs = [v.co.z for o in spec.parts.values() for v in o.data.vertices]
-            K.apply_measured_terminals(spec, max(zs) - min(zs))
+            K.apply_measured_terminals(spec, max(zs))
             for o in spec.parts.values():
                 o.hide_render = True
             library[spec.asset_id] = (spec, max(zs) - min(zs))
@@ -332,8 +360,76 @@ def render_spelled(seeds=9, max_bodies=3):
     print("  render -> KIT_spelled_towers.png (%d towers)" % len(lines))
 
 
-def render_sheets(specs, surface_check=False):
-    """One contact sheet per family group, plus the spelled-tower sheet.
+def _sheet_res(objs, azimuth, elevation, target_bias, width=1700,
+               lo=360, hi=1150):
+    """Pick a frame whose SHAPE matches the row's, so no pixels go to sky.
+
+    A contact sheet is a row, and a row of ten modules is ten times wider than
+    it is tall. Rendered into a fixed 1800x700 the camera fits the WIDTH, the
+    subjects fill a fifth of the height, and the water family came back as a
+    band of miniatures across the middle of a grey field.
+
+    The right shape is not a fudge factor, it is the same number the camera
+    already solves: `frame_camera` fits the projected half-extents and the
+    larger constraint wins, so a frame of exactly `half_up / half_right` makes
+    BOTH constraints bind at once and nothing is wasted in either axis.
+    """
+    _target, half_r, half_u = P.projected_half_extents(objs, azimuth, elevation,
+                                                       target_bias)
+    return (int(width), int(min(hi, max(lo, width * half_u / half_r))))
+
+
+def _chunk_builders(builders, limit_m=100.0):
+    """Split a family into rows no wider than `limit_m`, keeping kit order.
+
+    WHY A FAMILY IS NOT ALWAYS ONE PICTURE. The sheet's job is to let a
+    silhouette be judged, and a silhouette is judged from a LOW angle -- these
+    render at 7 degrees of elevation for exactly that reason. But ten modules
+    laid end to end are 140 m of row against 13 m of height, and a frame that
+    contains all of it puts every module at 200 px. Raising the camera would
+    fix the frame and lose the thing being looked at; wrapping the row into a
+    grid at 7 degrees would put the front row in front of the back one.
+
+    So a long family becomes several sheets. Each is still a low row, each
+    module keeps its share of the pixels, and nothing is hidden behind
+    anything. It costs one more PNG per family and no honesty at all.
+    """
+    rows, row, width = [], [], 0.0
+    for b, w in builders:
+        if row and width + w > limit_m:
+            rows.append(row)
+            row, width = [], 0.0
+        row.append(b)
+        width += w + 6.0
+    if row:
+        rows.append(row)
+    # DO NOT LEAVE A ROW OF ONE. A last chunk with a single module in it fills
+    # a 1700 px frame on its own and reads as a hero shot of a mid stage.
+    if len(rows) > 1 and len(rows[-1]) == 1:
+        # pop FIRST, then index. `rows[-2] = rows[-2] + rows.pop()` evaluates
+        # the right side before resolving the target, so on a two-row family
+        # (stairs) it indexed -2 into a list that had just become length 1.
+        tail = rows.pop()
+        rows[-1] = rows[-1] + tail
+    return rows
+
+
+def _build_row(builders):
+    """Build one row of modules into a clean scene. Returns (objects, max dig)."""
+    M.clear_scene()
+    objs_groups, digs = [], 0.0
+    for b in builders:
+        forge = M.Forge()
+        spec = b(forge)
+        objs_groups.append(list(spec.parts.values()))
+        digs = max(digs, getattr(spec, "excavates", 0.0))
+        forge.parts = {}
+    P.lineup(objs_groups, gap=6.0)
+    return [o for o in bpy.data.objects if o.type == "MESH"], digs
+
+
+def render_sheets(specs, surface_check=False, only=None):
+    """Contact sheets per family group, plus the spelled-tower sheet.
 
     `surface_check` adds a second pass of each family against a bright magenta
     world with no ground. It is the only thing in this pipeline that finds two
@@ -345,37 +441,49 @@ def render_sheets(specs, surface_check=False):
     """
     out = os.path.join(ROOT, "validation", "renders")
     os.makedirs(out, exist_ok=True)
-    groups = {}
-    for group, module in FAMILIES:
-        groups[group] = [b for b in module.BUILDERS]
-    for group, builders in groups.items():
-        M.clear_scene()
-        objs_groups = []
-        for b in builders:
+    AZ, EL, BIAS = 80.0, 7.0, 0.46
+
+    for group, group_builders in GROUPS():
+        if only and only != group:
+            continue
+        # measure every module once, so the row splitter knows what it is
+        # packing before it packs it
+        measured = []
+        for b in group_builders:
+            M.clear_scene()
             forge = M.Forge()
             spec = b(forge)
-            objs_groups.append(list(spec.parts.values()))
-            forge.parts = {}
-        P.lineup(objs_groups, gap=6.0)
-        allo = [o for o in bpy.data.objects if o.type == "MESH"]
-        P.rig()
-        res = (1800, 700)
-        P.frame_camera(allo, res, azimuth=80.0, elevation=7.0, margin=1.05,
-                       lens=85.0, target_bias=0.46)
-        P.render(os.path.join(out, "KIT_%s.png" % group), res=res, samples=24)
-        print("  render -> KIT_%s.png" % group)
-        if surface_check:
-            P.clear_rig()
-            P.rig(ground=False)
-            bg = bpy.context.scene.world.node_tree.nodes["Background"]
-            bg.inputs[0].default_value = (1.0, 0.0, 0.8, 1.0)
-            bg.inputs[1].default_value = 4.0
-            P.frame_camera(allo, res, azimuth=80.0, elevation=7.0, margin=1.05,
-                           lens=85.0, target_bias=0.46)
-            P.render(os.path.join(out, "SURFACE_%s.png" % group), res=res,
-                     samples=10)
-            print("  render -> SURFACE_%s.png  (magenta = hole, black = z-fight)"
-                  % group)
+            lo, hi = P.bounds(list(spec.parts.values()))
+            measured.append((b, hi.x - lo.x))
+        rows = _chunk_builders(measured)
+        for n, builders in enumerate(rows, start=1):
+            stem = group if len(rows) == 1 else "%s_%dof%d" % (group, n, len(rows))
+            allo, digs = _build_row(builders)
+            # THE GROUND PLANE HIDES AN EXCAVATION. It sits at z = 0, which is
+            # the ground datum, so a module cut into the datum renders as its
+            # own rim on an unbroken floor -- `WL_Water_Sunken_Pool` came back
+            # as a black ellipse. A row with anything below the datum is
+            # rendered without it, and gives up its cast shadow to be seen.
+            P.rig(ground=(digs <= 0.0))
+            res = _sheet_res(allo, AZ, EL, BIAS)
+            P.frame_camera(allo, res, azimuth=AZ, elevation=EL, margin=1.04,
+                           lens=85.0, target_bias=BIAS)
+            P.render(os.path.join(out, "KIT_%s.png" % stem), res=res, samples=24)
+            print("  render -> KIT_%s.png  %dx%d  %d module(s)%s"
+                  % (stem, res[0], res[1], len(builders),
+                     "  (no ground: excavates)" if digs else ""))
+            if surface_check:
+                P.clear_rig()
+                P.rig(ground=False)
+                bg = bpy.context.scene.world.node_tree.nodes["Background"]
+                bg.inputs[0].default_value = (1.0, 0.0, 0.8, 1.0)
+                bg.inputs[1].default_value = 4.0
+                P.frame_camera(allo, res, azimuth=AZ, elevation=EL, margin=1.04,
+                               lens=85.0, target_bias=BIAS)
+                P.render(os.path.join(out, "SURFACE_%s.png" % stem), res=res,
+                         samples=10)
+                print("  render -> SURFACE_%s.png  (magenta = hole, black = z-fight)"
+                      % stem)
     render_spelled()
 
 
