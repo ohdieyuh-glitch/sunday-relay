@@ -1060,7 +1060,7 @@ distinction between the middle two rows is the one that gets misreported.
 | the Julius world routes | **real**, authorised per request against `project_members`, and READING through `WonderlandJuliusReaderPostgres` — proven end to end over real HTTP against a stubbed database |
 | the two world reads | **real**, mutation-verified, and RUN AGAINST A REAL PostgreSQL 16.13 — real migration chain from empty, two seeded projects, 30 tests |
 | the wire → USTRUCT decode contract | **real** and generated from the parity tables |
-| the wire DECODER | **real** — envelope, activity and SSE framing, 139 checks at -O0 and -O2 under ASan/UBSan, driven by fixtures the TypeScript generated. Never compiled against Unreal |
+| the wire DECODER | **real** — envelope, activity, usage HUD and SSE framing; 171 checks at -O0 and -O2 under ASan/UBSan, driven by 71 fixtures the TypeScript generated. Never compiled against Unreal |
 | the Unreal ordering rule | **real**, replayed through 26 cases generated from the TypeScript, 450 checks |
 | the Project Brain scope | **real** contract, canary-tested; no authority cites into it yet |
 | Unreal DRAWING any of it | **not proven.** `WonderlandUsageHudWidget.cpp` parses and has never been compiled against real UMG headers or seen to put a pixel on a screen. |
@@ -1440,12 +1440,12 @@ In order:
 1. **Set `DATABASE_URL` on the Railway bridge.** One environment variable; both
    world dependencies are built from it. Without it the route answers 503,
    which is correct rather than broken.
-2. **A decoder for the HYDRATION and the USAGE HUD.**
-   `WonderlandDecodeDeliveryBytes` covers the per-event path — envelope plus
-   activity — which is what `ApplyEnvelope` takes. `/wonderland/julius/hydrate`
-   returns a larger shape, and `UWonderlandUsageSubsystem::ApplyUsage` needs the
-   meters. Same rules, same generated tables, same harness; `WONDERLAND_WIRE_CONTRACT.md`
-   already lists every carrier field in both.
+2. **A decoder for the HYDRATION WRAPPER.** The envelope, the activity reading
+   and the usage HUD all decode — which is everything `ApplyEnvelope` and
+   `ApplyUsage` take. `/wonderland/julius/hydrate` wraps those plus the Project
+   Brain citation and the C.A.R.D. scope, and that wrapper is the remaining
+   piece. Same rules, same generated tables, same harness;
+   `WONDERLAND_WIRE_CONTRACT.md` lists every carrier field in it.
 3. **Run A–M.** Nothing about it can be done here.
 4. **Capture one real Julius event stream** and grade it with
    `verifyWonderlandCapture` — still the cheapest step up the honesty ladder and

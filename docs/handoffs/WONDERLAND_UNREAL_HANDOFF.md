@@ -118,8 +118,18 @@ the proof is unusual and deliberate.
 |---|---|
 | entry | `WonderlandDecodeDeliveryBytes` — an SSE `data:` payload, `{envelope, activity}` |
 | also | `WonderlandDecodeEnvelopeBytes` for a bare envelope; the same reader underneath |
+| usage | `WonderlandDecodeUsageBytes` — the HUD, for `UWonderlandUsageSubsystem::ApplyUsage` |
 | framing | `WonderlandWireReadSseData` finds the data line; a heartbeat yields nothing, without erroring |
-| run it | `npm run wonderland:wire:verify` |
+| run it | `npm run wonderland:wire:verify` — 171 checks over 71 generated fixtures |
+
+**The usage figures are the ones to be careful with.** Every one is
+`{ bKnown, Value, Reason }`, and the production reading today is ALL UNKNOWN —
+two tracks and no remainder, because no authority reports into the usage
+contract yet. A decoder handing the widget `0.0` with `bKnown` false renders as
+an empty meter, which is a claim that the founder has nothing left. Two
+contradictions are refused rather than resolved: known-with-null, and
+unknown-carrying-a-number. And the two meters are checked against their own
+`channel`, because swapped they would draw real figures on the wrong arc.
 
 **It parses its own JSON, and that is not an oversight.** A decoder built on
 `FJsonObjectConverter` could not be executed in the environment that wrote it
@@ -172,9 +182,11 @@ engine open and hours on the clock.
 carrier field, every enum's token→member table, every struct that crosses. It
 is GENERATED from the same parity tables that hold the headers, so it cannot
 describe a seam the headers no longer have; `npm run wonderland:wire:check`
-fails when it drifts. The decoder covers the ENVELOPE and the ACTIVITY READING;
-the other structs in that document — the hydration, the usage HUD — still need
-one, and the same rules apply to them.
+fails when it drifts. The decoder covers the ENVELOPE, the ACTIVITY READING and the USAGE HUD — which
+is everything `ApplyEnvelope` and `ApplyUsage` take. The full hydration payload
+from `/wonderland/julius/hydrate` wraps those plus the Project Brain citation
+and the C.A.R.D. scope; decoding the wrapper is the remaining piece, and the
+same rules and the same generated tables apply to it.
 
 ### The Unreal proof checklist (A–M)
 
