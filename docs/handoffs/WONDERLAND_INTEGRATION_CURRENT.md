@@ -651,8 +651,12 @@ nothing in the Bridge can answer "may this player read this project's runs?".
 wired. The default everyone reaches for — any authenticated player may read any
 project — is a cross-tenant read of mission state, C.A.R.D. slots and spend, and
 a route that opened when its authorisation was unconfigured would work
-perfectly wherever nobody had wired it. **That port is the one genuinely
-missing piece on this path.**
+perfectly wherever nobody had wired it.
+
+> **Superseded.** That port was built in the session below (38–40). What is
+> still missing on this path is `WonderlandJuliusReader`, and the route still
+> answers 503 — for a different reason.
+
 
 #### Two narrowings worth knowing about
 
@@ -684,6 +688,125 @@ rejected by tsc — because I read a batch of gate results and pushed on the tes
 count without reading the `tsc` line in the same output. Fixed in the commit
 after, with the isolating mutation re-verified against the corrected fixtures.
 
+### 38–40. The authorisation seam, the chain proof, the cursor matrix (session of 2026-09-08, third part)
+
+Three commits: `501f5c5`, `5a49b81`, `b9f6324`.
+
+#### The membership authority already existed, and was reused
+
+The instruction was to find the canonical authority rather than invent one, and
+there was one: **`relay_wonderland.project_members`**, since migration 001, and
+already read in production by `julius-tool-postgres.ts` to decide whether a
+tool invocation's tenant is a member. Nothing new was modelled.
+
+Two facts about that table shaped the capability design. It has **no CHECK
+constraint on `role`**, and **only `OWNER` is ever written**. So the capability
+table names OWNER and nothing else, and every absent role — a `VIEWER` the
+product starts writing next month included — grants nothing until somebody
+teaches this build about it. Denying an unknown role is the only safe reading
+of a column that can hold anything.
+
+| layer | file | what it owns |
+|---|---|---|
+| domain | `wonderland-authorization.ts` | roles → capabilities. Holds NO records; reaches nothing |
+| port | `WonderlandProjectMembershipSource` | `lookup({playerId, projectId})` |
+| adapter | `wonderland-membership-postgres.ts` | the query. **Throws** rather than returning null when it cannot answer |
+| route | `wonderland-julius-routes.ts` | asks per request; 503 without the port |
+
+**`null` and a throw mean different things and the route treats them
+differently.** Null is "there is no such row" — a denial, 403. A throw is "the
+authority could not be reached" — 503, because calling that a denial sends an
+operator hunting permissions that were never the issue, and calling it a grant
+is the worst outcome available.
+
+#### The attack the route is shaped around
+
+Name somebody else's run id, be authorised for a project you genuinely DO
+belong to, and read a run you do not. It works against any design that resolves
+a project FROM a run id, because the attacker then chooses the project they are
+authorised against.
+
+**Nothing here resolves a project from a run.** The project comes from the
+query and is authorised on its own; the run is then checked against THAT
+project. A run in another project and a run that does not exist get the same
+answer — 404, `{"error":"permission denied"}` — so the route is not a
+membership oracle either.
+
+#### The chain, driven by the real kernel
+
+`wonderland-chain.e2e.test.ts` runs the actual `JuliusRunLoop` through
+`createJuliusHarness`, takes the **23 real events** it emitted, shapes them the
+way `julius-postgres.ts` actually persists them, and pushes them through
+producer → ingress → hydration → reconnect → animation intent. No hand-written
+event anywhere in it.
+
+Two of its assertions were wrong on the first pass and both are worth
+recording. `retrieving_context` nets to EMPTY across the run, because
+`context.compiled` raises it and `worker.dispatched` clears it — the assertion
+was rewritten to watch the raise and the clear at the real events. And a
+secret-leak test **passed with the sanitiser removed**, because this kernel's
+event facts never carried brain text in the first place: it proved the fixture,
+not the boundary. Replaced with structural assertions (primitives only, ≤16
+entries, ≤120 chars) and confirmed by raising the sanitiser's cap and watching
+it fail.
+
+#### The cursor matrix, and two tests that looked stronger than they were
+
+Ordering has two clocks with three positions each, so the space is nine cells
+and every earlier test covered a corner. **Three cells had no coverage
+anywhere.** The interesting one is a revision AHEAD of a sequence already
+passed — a pair that cannot occur in a healthy ledger, since both clocks are
+per-run and monotonic. It is refused on sequence, and what matters is that the
+refusal carries nothing: had it moved the held revision past the run's real
+one, one bad frame would leave a client silently deaf for the rest of the
+mission.
+
+The invariants are now swept over the whole space rather than sampled:
+
+- **A refusal restores byte-identically** once its one counter is put back —
+  a whole-object comparison, so a refusal that helpfully updates a timestamp,
+  or a cursor field added next year, is caught with nobody editing the test.
+- **Every refusal counts under its OWN name.** The first version summed the
+  counters, and a `foreign_julius` filed as `foreign_project` still added up.
+
+Both of those escaped as mutations until the tests were made structural, which
+is the same lesson as every other escape in this stream: the gap was in the
+TEST.
+
+**Project switches re-authorise.** Same session, same origin, same player —
+none of it carries a permission across a project boundary. The route asks its
+membership port about the project in each query, in order; on the client side a
+grant re-pointed without a fresh cursor draws nothing rather than folding two
+projects together.
+
+#### A gate I did not run, and what it caught
+
+`scripts/ci-test-accounting.test.ts` flagged the chain proof from `5a49b81`:
+`drain()` exited its tick loop with a bare `if (report.claimed === 0) return;`,
+and the rule refuses that in a test file because it ends a test with whatever
+assertions happened to run first. It was right for a reason beyond the pattern
+— the loop ALSO gave up silently at its tick ceiling, so a kernel that never
+quiesced would have handed every assertion below a partial event stream, and
+most of them would still have passed. Restructured so the loop condition is the
+exit and the ceiling throws.
+
+**I found it two commits late because I ran the wonderland and bridge suites
+and not `scripts/`.** That is the same failure as the typecheck miss recorded
+above: reading part of a gate and pushing on the part that was green. The gate
+set in `CLAUDE.md` is a list, and a list read partially is not a gate.
+
+#### One line deliberately left uncovered
+
+`applyWonderlandOrdering` takes `Math.max(cursor.revision, envelope.revision)`
+on an accepted envelope. It is unreachable: the verdict already refuses
+anything below the held revision, so the max is always the envelope's. A
+mutation of it escapes the entire 900-test Wonderland slice, and **no test can
+distinguish it** — so it is left as documented defence rather than covered by a
+test that only appears to cover it. Recorded here so nobody spends an afternoon
+rediscovering that.
+
+---
+
 ---
 
 ## What is REAL and what is not
@@ -712,7 +835,7 @@ distinction between the middle two rows is the one that gets misreported.
 | the Unreal usage and run subsystems | **real**, 213 executable checks over refusals, held state, snapshot adoption in both modes, and reconnect (152 + 61) |
 | a real Julius event becoming an envelope | **real** and tested — and nothing has ever fed it a row from a live database |
 | the transport boundary (scope, decode, validate, order, fold) | **real**, tested against reconnects, mis-routed fan-outs and replayed tails |
-| the Julius world routes | **real**, and answering 503 until a membership port exists |
+| the Julius world routes | **real**, authorised per request against `project_members` — and answering 503 until a `WonderlandJuliusReader` exists |
 | the Unreal ordering rule | **real**, replayed through 26 cases generated from the TypeScript, 450 checks |
 | the Project Brain scope | **real** contract, canary-tested; no authority cites into it yet |
 | Unreal DRAWING any of it | **not proven.** `WonderlandUsageHudWidget.cpp` parses and has never been compiled against real UMG headers or seen to put a pixel on a screen. |
@@ -1074,25 +1197,67 @@ purpose and confirmed to fail:
 
 ## Exact next integration task
 
-**Wire the normalizer into the Bridge so an ordinary Julius run produces world
-events.** Concretely, in a composition root (not in the kernel and not in
-`WonderlandBackend`):
+**Implement `WonderlandJuliusReader` and construct it, with
+`WonderlandMembershipPostgres`, in `server.ts`.** That is the whole remaining
+cloud-side gap: the route is written, authorised and tested; every test supplies
+a fake reader; nothing builds a real one, and `server.ts` passes neither
+dependency — so the deployed route answers 503, correctly.
 
-1. Subscribe to Julius operational events for a run.
-2. Call `normalizeJuliusOperationalEvents(events, { baseSequence, nextEventId,
-   identity })` — the ledger allocates the sequence; the normalizer must not.
-3. Append the results where `GET /wonderland/events` can replay them. That route
-   currently reads `WonderlandBackend.empty()`'s in-memory log
-   (`server.ts:1153`); `DistributedWonderlandRealtime` +
-   `PostgresWonderlandFanout` exist, are tested, and are **constructed nowhere
-   outside tests**.
-4. Fix gap 3 before step 3 reaches production, or Julius payloads already in
-   `relay_wonderland.events` will be replayed onto the SSE wire as
-   `id: undefined`.
+Two methods, and the hard part is in the first:
 
-Then, and only then, drive `rehydrateJuliusEmbodiment` from the real stream and
-record the evidence here. **Do not claim Julius is connected before a real
-mission moves the world.**
+```
+hydrate({ projectId, runId, worldSessionId }) -> WonderlandHydration | null
+events({ projectId, runId, afterSequence, limit }) -> { rows, revision }
+```
+
+1. **`events` is nearly written already.** `julius-timeline-postgres.ts` reads
+   `relay_wonderland.events` by `stream_id + project_id + sequence >` with an
+   `event_type LIKE 'julius.%'` filter; this needs the same query returning the
+   RAW row shape `WonderlandLedgerRow` rather than a projected timeline entry,
+   plus `julius_runs.version` read in the same statement.
+
+2. **`hydrate` must read the run row and `MAX(sequence)` IN ONE PASS.** A
+   revision from one moment and a sequence from another describe a run that
+   never existed. This is not a style preference — it is the field that closed
+   the post-snapshot deafness defect, and a torn read reintroduces it.
+
+3. **Do not guess `atSequence`.** Null is a supported answer and the
+   conservative tie-break handles it. Guessing high skips events; guessing low
+   claims to have applied events nobody saw. Both are demonstrated as executable
+   tests in `wonderland-cursor-hardening.test.ts` — read them before deciding
+   this is over-cautious.
+
+4. **The honest answers for the parts with no authority.** Usage has no
+   authority reporting into it and the Project Brain has nothing citing into it,
+   so `emptyWonderlandUsageAuthority` and `noWonderlandBrainCitation` are the
+   TRUE readings today, not placeholders — they render UNKNOWN, which is what
+   is actually known.
+
+5. **`WonderlandCardScope` is the one place this gets awkward.**
+   `hasPromptArchitect` and friends are booleans, not nullables, so a reader
+   that cannot resolve `julius_runs.card_revision` against
+   `relay_wonderland.card_versions` has no way to say "I could not look" — it
+   would report the slots EMPTY, which is a claim. Either resolve the card
+   properly or widen the contract to nullable. **Do not report false.**
+
+6. **The activity fold is server-side, and must be over the whole run.** Signals
+   are set/clear, not monotonic — `context.compiled` raises `retrieving_context`
+   and `worker.dispatched` clears it — so a partial fold can report a signal
+   that was cleared an hour ago. Folding the run's events on the server is
+   exactly how the client is spared the transcript; it is not a contradiction of
+   the reconnect rule, which is about what crosses the wire.
+
+Then, and only then, drive a real mission through it and record the evidence
+here. **Do not claim Julius is connected before a real mission moves the
+world.**
+
+### The older next-task, still true and now second
+
+Wiring the normalizer into a composition root so an ordinary Julius run
+produces world events on `GET /wonderland/events` remains open —
+`observeRelayTransition` is battle-scoped and returns `[]` for an ordinary run.
+The reader above is the narrower path to a moving world, because it reads the
+ledger directly rather than depending on that route.
 
 ---
 

@@ -18,63 +18,103 @@ Read this first. Everything below it is the detail.
 | | |
 |---|---|
 | BRANCH | `relay/wonderland-integration`, also `claude/relay-wonderland-integration-ojr5x6` — same commits, two refs |
-| SHA | `075113e` (check `git log -1` — that is authoritative) |
+| SHA | `b9f6324` (check `git log -1` — that is authoritative) |
 | WHAT HAS RUN LIVE | **nothing.** No provider call, no Julius mission, no Unreal build, no frame |
 
 **The remaining work is compile, import, connect, display, drive, reconnect,
 capture — not invent.** Every contract on this seam exists, is mirrored into
 C++, and is held by a test. What is missing is an engine and one port.
 
+### Authorisation: BUILT. Read this before you assume otherwise.
+
+An earlier revision of this document said a project-membership check was the
+one thing not built. **It is built now**, and the shape matters to anyone
+wiring a client:
+
+| piece | where | what it is |
+|---|---|---|
+| the authority | `relay_wonderland.project_members` | already existed since migration 001, already used in production by `julius-tool-postgres.ts`. NOT a second membership model — reused |
+| the domain | `wonderland-authorization.ts` | roles → capabilities. Holds no records and reaches nothing |
+| the port | `WonderlandProjectMembershipSource` | one method, `lookup({playerId, projectId})` |
+| the adapter | `wonderland-membership-postgres.ts` | the query, and it THROWS rather than returning null when it cannot answer |
+| the route | `wonderland-julius-routes.ts` | asks per request, never caches into the session |
+
+The properties a client can rely on, each held by a test:
+
+- The player is explicit (the browser session) and the project is explicit (the
+  query). **Nothing resolves a project FROM a run id** — the run is checked
+  against the AUTHORISED project, never the other way round, because a run id
+  is as attacker-controlled as a project id and resolving one from the other
+  lets somebody pick the project they are then authorised against.
+- A `projectId` in the query is **a request to be authorised, never an
+  authorisation**.
+- A missing run and a forbidden run give the **same** answer: 404, body
+  `{"error":"permission denied"}`. No membership oracle, no project name.
+- `null` from the port is a DENIAL (no such row). A port that *throws* is an
+  authority that could not answer, and that is **503**, not 403 — reporting it
+  as a denial sends an operator hunting permissions that were never the issue.
+- An unrecognised role grants nothing. The column has no CHECK constraint, so a
+  role the product starts writing before the capability table learns about it
+  is denied rather than assumed.
+- Changing project mid-stream re-authorises. Same session, same origin, same
+  player — none of it carries a permission across a project boundary.
+
 ### The one thing that is genuinely not built
 
-**A project-membership check.** The browser session this Bridge issues names a
-PLAYER and an ORIGIN and **not a project**. Nothing can currently answer "may
-this player read this project's runs?", so `/wonderland/julius/*` returns
-**503** until a `WonderlandProjectMembership` is wired. That is deliberate: the
-tempting default — any authenticated player may read any project — is a
-cross-tenant read of mission state, C.A.R.D. slots and spend, and a route that
-opened up when its authorisation was unconfigured would work perfectly in every
-environment where nobody had wired it.
+**`WonderlandJuliusReader` has no production implementation.** The port is
+defined in `wonderland-julius-routes.ts` and every test supplies a fake; nothing
+constructs a real one, and `server.ts` passes neither it nor the membership
+source. So the deployed route still answers **503** — correctly, and for a
+different reason than it used to.
 
-The battle routes get away without one because `WonderlandBackend.eventsFor`
-filters by participation inside the backend. There is no equivalent for a run.
+That is the last cloud-side gap on this seam. Everything else on the path from
+a `relay_wonderland.events` row to a drawn frame exists and is tested.
 
-### The Unreal proof checklist
+### The Unreal proof checklist (A–M)
 
-Nothing on this list can be done cloud-side. Each item is a thing to SEE.
+Nothing on this list can be done cloud-side. **Each item is a thing to SEE**,
+and none of it may be described as done from a screenshot of a fixture. The
+lettering matches the founder's evidence chain; the detail under each is what
+this stream can tell you about it.
 
-1. **It compiles.** `wonderland/Source/Wonderland/*` against real UE headers.
-   Expect UHT to want `.generated.h` files that here are one-line stubs.
-2. **The HUD draws.** Both meters, top left, green Compound outside and blue
-   single agent nested behind it. `WonderlandUsageHudWidget.cpp` is the only
-   file on this seam that has never been compiled against real UMG — the Slate
-   calls are the unproven part, and the geometry underneath them is not.
-3. **A bigger tier is a LONGER track**, not a differently-shaded one. Push two
-   `FWonderlandUsageHud`s with different `ReferenceCapacityUnits` and watch the
-   arc's physical length change.
-4. **Unknown draws as unknown.** Push a default `FWonderlandUsageHud`: tracks
-   appear, no remainder, no zero.
-5. **The dog animates from a phase.** Push envelopes through
-   `UWonderlandJuliusSubsystem::ApplyEnvelope` and watch the clip follow.
-6. **An accent rides on top.** Push an activity reading with
-   `AwaitingApproval` and confirm the base clip does not change.
-7. **Reconnect.** Disconnect mid-run, let Julius progress, adopt a positioned
-   hydration, replay the tail, and confirm the world lands on the right state
-   without replaying the transcript.
-8. **A foreign push changes nothing.** Send another project's envelope and
-   watch the counters move while the world does not.
-9. **Capture the proof.** Nothing above may be described as done from a
-   screenshot of a fixture.
+| | step | what proves it |
+|---|---|---|
+| **A** | the module compiles | `wonderland/Source/Wonderland/*` against real UE headers. Expect UHT to want `.generated.h` files that are one-line stubs here. Build log, zero errors |
+| **B** | the widget compiles | `WonderlandUsageHudWidget.cpp` is **the only file on this seam never compiled against real UMG**. The Slate calls are the unproven part; the geometry underneath them is proven numerically (66 samples, worst deviation 1e-6) |
+| **C** | the world launches | editor opens, PIE enters the hub, the Dog is the default pawn by construction (`AWonderlandHubGameMode`) |
+| **D** | the transport connects | point the client at a running Bridge; SSE opens, the heartbeat arrives |
+| **E** | the project session authenticates | redeem a pairing grant, then call `/wonderland/julius/hydrate?projectId=…&runId=…`. **A 503 here means the reader is still unwired, not that you did it wrong** |
+| **F** | a Julius mission runs | a real run, not a fixture. This is the first moment anything on this seam has been REAL |
+| **G** | the dog animates from a phase | push envelopes through `UWonderlandJuliusSubsystem::ApplyEnvelope` and watch the clip follow the visual state |
+| **H** | an accent rides on top | an activity reading with `AwaitingApproval` — the base clip must NOT change. Accent and phase are two axes and the second must not overwrite the first |
+| **I** | both meters draw | top left, GREEN Compound outside, BLUE Single nested behind. A bigger tier is a **LONGER track**, not a differently-shaded one: push two `FWonderlandUsageHud`s with different `ReferenceCapacityUnits` and watch the arc's physical length change. A default one draws tracks with no remainder and **no zero** |
+| **J** | disconnect and reconnect | drop the link mid-run and let Julius progress while it is down |
+| **K** | rehydration is proven | adopt a positioned hydration, replay the tail, land on the right state **without replaying the transcript**. Watch the event count: a reconnect costs one hydration plus the events after `atSequence`, and a run with four thousand events must not cost four thousand deliveries |
+| **L** | the three endings drive | COMPLETE, BLOCKED and ERROR each reached and drawn. Note that `blocked` is drawn by BOTH a resumable PAUSED run and a terminal CANCELLED one — `terminal` comes from the kernel, never from the picture |
+| **M** | the evidence is captured | screenshots and video into `docs/relay/WONDERLAND_SLICE_EVIDENCE.md`, with hashes of the media files |
+
+Two more that are cheap while the engine is in front of you:
+
+- **A foreign push changes nothing.** Send another project's envelope and watch
+  the counters move while the world does not.
+- **The animation vocabulary holds.** Every accent is an INTENT
+  (`awaiting_input`, `strained`, `reattempting`, `accompanied`, `recalling`) —
+  if a renderer needed a word this seam does not have, that is a finding worth
+  bringing back, not a thing to work around locally.
+
+**Until A–M actually happen, every engine-facing claim in this repository
+stays UNPROVEN, and this document says so in three places on purpose.**
 
 ### What to wire, in order
 
 ```
-1. WonderlandProjectMembership          the missing port. Without it, 503.
-2. WonderlandJuliusReader               hydrate() + events(); both read
-                                        MAX(sequence) with the run row, in ONE
-                                        pass — a revision from one moment and a
-                                        sequence from another describe a run
-                                        that never existed.
+1. WonderlandProjectMembership          BUILT — WonderlandMembershipPostgres.
+                                        Construct it with the pool.
+2. WonderlandJuliusReader               THE MISSING ONE. hydrate() + events();
+                                        both read MAX(sequence) with the run
+                                        row, in ONE pass — a revision from one
+                                        moment and a sequence from another
+                                        describe a run that never existed.
 3. pass both into handleWonderlandJuliusRoute in server.ts
 4. UWonderlandJuliusSubsystem::BindProject / AdoptSnapshot / ApplyEnvelope
 5. UWonderlandUsageSubsystem::BindProject / ApplyUsage

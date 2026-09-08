@@ -61,10 +61,19 @@ const REVIEWER = worker({
 const capabilityFor = (item: { role: string }) =>
   item.role === 'PROMPT_ARCHITECT' ? 'plan' : item.role === 'INDEPENDENT_REVIEWER' ? 'review' : 'implement';
 
+/**
+ * Run the kernel until it has nothing left to claim.
+ *
+ * THE TICK CEILING IS AN ERROR, NOT AN EXIT. A loop that never quiesced would
+ * otherwise hand every assertion below a PARTIAL event stream, and most of them
+ * would still pass — the run simply would not have reached review or repair.
+ * A silent cap is how a test starts proving less than its name says.
+ */
 async function drain(loop: JuliusRunLoop, maxTicks = 12): Promise<void> {
-  for (let tick = 0; tick < maxTicks; tick += 1) {
-    const report = await loop.tick(scope);
-    if (report.claimed === 0) return;
+  let claimed = 1;
+  for (let tick = 0; claimed > 0; tick += 1) {
+    if (tick >= maxTicks) throw new Error(`the run loop still had work after ${maxTicks} ticks`);
+    claimed = (await loop.tick(scope)).claimed;
   }
 }
 
