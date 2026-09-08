@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  CommitOutcomeUnknownError,
   SERIALIZABLE_MAX_ATTEMPTS,
   isTransientSerializationFailure,
   serializableTransaction,
@@ -130,5 +131,122 @@ describe('the retry loop itself, with a fake pool', () => {
     })).rejects.toThrow('could not serialize');
     expect(delays, 'increasing, and bounded by the attempt limit').toEqual([5, 10, 15, 20]);
     expect(order[1], 'the client was already back in the pool when the first sleep began').toBe('sleep:1');
+  });
+});
+
+/**
+ * THE COMMIT BOUNDARY, which is where exactly-once lives.
+ *
+ * `julius-tool-settlement-postgres` instruments its commit with
+ * `fault('BEFORE_COMMIT')` and `fault('AFTER_COMMIT')` so a crash can be
+ * simulated on either side of durability. A retrying helper that owned the
+ * commit and offered no hooks would move the commit out from between them and
+ * turn an exactly-once drill into a false proof — which is why that repository
+ * stayed outside this helper. These cases are the semantics that let it in.
+ */
+describe('the commit boundary', () => {
+  const fakePool = (commitFails?: () => unknown) => {
+    const statements: string[] = [];
+    let released = 0;
+    const client = {
+      query: async (sql: string) => {
+        const head = sql.split(' ').slice(0, 2).join(' ');
+        statements.push(head);
+        if (head === 'COMMIT' && commitFails) {
+          const failure = commitFails();
+          // A null means "this attempt commits cleanly", so the fake can script
+          // a commit that fails twice and then succeeds.
+          if (failure !== null) throw failure;
+        }
+        return { rows: [] };
+      },
+      release: () => { released += 1; },
+    };
+    return { statements, releases: () => released, pool: { connect: async () => client } as never };
+  };
+  const noSleep = { sleep: async () => undefined };
+  const transient = () => Object.assign(new Error('could not serialize access due to concurrent update'), { code: '40001' });
+
+  it('runs the hooks around the REAL commit, in order', async () => {
+    const { pool, statements } = fakePool();
+    const order: string[] = [];
+    await serializableTransaction(pool, async () => { order.push('effect'); return 'v'; }, {
+      ...noSleep,
+      beforeCommit: async () => { order.push(`before:${statements.includes('COMMIT')}`); },
+      afterCommit: async () => { order.push(`after:${statements.includes('COMMIT')}`); },
+    });
+    // The hook names are only meaningful if the COMMIT really is between them.
+    expect(order).toEqual(['effect', 'before:false', 'after:true']);
+  });
+
+  it('a BEFORE_COMMIT failure rolls back, commits nothing, and is not retried', async () => {
+    const { pool, statements } = fakePool();
+    let effects = 0;
+    await expect(serializableTransaction(pool, async () => { effects += 1; }, {
+      ...noSleep, beforeCommit: async () => { throw new Error('fault:BEFORE_COMMIT'); },
+    })).rejects.toThrow('fault:BEFORE_COMMIT');
+    expect(statements, 'never committed').not.toContain('COMMIT');
+    expect(statements.at(-1), 'and the drill still sees ROLLBACK last').toBe('ROLLBACK');
+    expect(effects, 'a caller refusal is not a database race').toBe(1);
+  });
+
+  it('an AFTER_COMMIT failure NEVER retries — the work is already durable', async () => {
+    const { pool, statements } = fakePool();
+    let effects = 0;
+    await expect(serializableTransaction(pool, async () => { effects += 1; }, {
+      ...noSleep, afterCommit: async () => { throw new Error('fault:AFTER_COMMIT'); },
+    })).rejects.toThrow('fault:AFTER_COMMIT');
+    expect(effects, 'exactly once').toBe(1);
+    expect(statements.filter((s) => s === 'COMMIT'), 'committed once').toHaveLength(1);
+    expect(statements, 'and no rollback of a finished transaction').not.toContain('ROLLBACK');
+  });
+
+  it('and not even when the AFTER_COMMIT error is serialization-SHAPED', async () => {
+    // THE HOLE THIS CLOSES, found while writing the helper: deciding by the
+    // error's shape rather than by what happened would replay a committed
+    // transaction whenever a post-commit hook threw something 40001-shaped.
+    const { pool, statements } = fakePool();
+    let effects = 0;
+    await expect(serializableTransaction(pool, async () => { effects += 1; }, {
+      ...noSleep, afterCommit: async () => { throw transient(); },
+    })).rejects.toThrow('could not serialize');
+    expect(effects, 'durability is a fact, not an error shape').toBe(1);
+    expect(statements.filter((s) => s === 'COMMIT')).toHaveLength(1);
+  });
+
+  it('a serialization failure AT COMMIT means nothing was committed, so it retries', async () => {
+    // PostgreSQL raises 40001 for a transaction IT aborted. Definitely nothing
+    // durable, so running it again is safe and is the whole point.
+    let commits = 0;
+    const { pool, statements } = fakePool(() => { commits += 1; return commits < 3 ? transient() : null; });
+    let effects = 0;
+    const value = await serializableTransaction(pool, async () => { effects += 1; return 'committed'; }, noSleep);
+    expect(value).toBe('committed');
+    expect(effects, 'the effect ran again each time').toBe(3);
+    expect(statements.filter((s) => s === 'ROLLBACK'), 'each aborted attempt rolled back').toHaveLength(2);
+  });
+
+  it('any OTHER commit failure is UNKNOWN, and unknown never retries', async () => {
+    // A connection lost mid-flush: the server may have committed and been
+    // unable to say so. Retrying is how exactly-once becomes twice; reporting a
+    // plain failure is how a settlement that DID happen gets re-attempted.
+    const { pool } = fakePool(() => Object.assign(new Error('Connection terminated unexpectedly'), { code: 'ECONNRESET' }));
+    let effects = 0;
+    const error = await serializableTransaction(pool, async () => { effects += 1; }, noSleep)
+      .then(() => null).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(CommitOutcomeUnknownError);
+    expect((error as CommitOutcomeUnknownError).message).toBe('commit_outcome_unknown');
+    expect((error as CommitOutcomeUnknownError).commitError, 'the cause is kept, not swallowed')
+      .toMatchObject({ code: 'ECONNRESET' });
+    expect(effects, 'asked exactly once — the caller decides, by identity').toBe(1);
+  });
+
+  it('distinguishes definitely-aborted from unknown, which is the whole distinction', async () => {
+    let commits = 0;
+    const { pool } = fakePool(() => { commits += 1; return commits === 1 ? transient() : Object.assign(new Error('boom'), { code: '08006' }); });
+    const error = await serializableTransaction(pool, async () => 'v', noSleep).then(() => null).catch((e: unknown) => e);
+    // First commit: definitely aborted, so it ran again. Second: unknown, so it stopped.
+    expect(commits).toBe(2);
+    expect(error).toBeInstanceOf(CommitOutcomeUnknownError);
   });
 });

@@ -61,10 +61,60 @@ export function isTransientSerializationFailure(error: unknown): boolean {
  */
 export const SERIALIZABLE_MAX_ATTEMPTS = 5;
 
+/**
+ * A COMMIT WHOSE OUTCOME NOBODY KNOWS.
+ *
+ * PostgreSQL raises `40001` for a transaction IT aborted, so a serialization
+ * failure at COMMIT means definitely-not-committed and is safe to run again.
+ * Every other COMMIT failure — a connection lost mid-flush above all — leaves
+ * the question open: the server may have committed and been unable to say so.
+ *
+ * Retrying that is how an exactly-once settlement becomes twice. Reporting it as
+ * a failure is how a settlement that DID happen gets re-attempted by a caller
+ * who believes nothing did. So it is neither: it is its own answer, and the
+ * caller decides — for `julius-tool-settlement-postgres` that means letting its
+ * `settlement_id` identity check resolve it on a later, deliberate attempt.
+ *
+ * Unknown is not zero here either.
+ */
+export class CommitOutcomeUnknownError extends Error {
+  constructor(readonly commitError: unknown) {
+    super('commit_outcome_unknown');
+    this.name = 'CommitOutcomeUnknownError';
+  }
+}
+
+/**
+ * HOOKS THAT BRACKET THE REAL COMMIT, so a caller can keep a commit-boundary
+ * crash drill while still getting the retry.
+ *
+ * `julius-tool-settlement-postgres` instruments its commit with
+ * `fault('BEFORE_COMMIT')` and `fault('AFTER_COMMIT')` precisely so a crash can
+ * be simulated on either side of durability. A helper that owned the commit and
+ * offered no hooks would move the commit out from between them and turn that
+ * drill into a false proof, which is why that repository stayed outside this
+ * helper until now.
+ *
+ * THE ASYMMETRY IS THE POINT, and it is not stylistic:
+ *
+ *   `beforeCommit` throws  → nothing is durable → ROLLBACK, and NOT retried:
+ *                            it is the caller's own refusal, not a database
+ *                            race, and re-running the effect would just call it
+ *                            again.
+ *   `afterCommit` throws   → the work IS durable → never retried, ever. This is
+ *                            the "never replay after a known successful commit"
+ *                            rule, and it is the one that keeps settlement
+ *                            exactly-once.
+ */
+export interface CommitBoundaryHooks {
+  readonly beforeCommit?: () => Promise<void>;
+  readonly afterCommit?: () => Promise<void>;
+}
+
 export async function serializableTransaction<T>(
   pool: Pool,
   effect: (client: PoolClient) => Promise<T>,
-  deps: { readonly sleep?: (ms: number) => Promise<void> } = {},
+  deps: { readonly sleep?: (ms: number) => Promise<void> } & CommitBoundaryHooks = {},
 ): Promise<T> {
   const sleep = deps.sleep ?? ((ms: number) => new Promise<void>((resolve) => { setTimeout(resolve, ms); }));
   for (let attempt = 1; ; attempt += 1) {
@@ -76,14 +126,39 @@ export async function serializableTransaction<T>(
     // is still handed back BEFORE the backoff, because holding a pooled client
     // across a sleep is how a retry storm becomes pool exhaustion.
     let released = false;
+    let committed = false;
     const release = () => { if (!released) { released = true; client.release(); } };
     try {
       await client.query('BEGIN ISOLATION LEVEL SERIALIZABLE');
       const value = await effect(client);
-      await client.query('COMMIT');
+      await deps.beforeCommit?.();
+
+      // THE COMMIT IS ITS OWN PHASE, because its failures do not mean what a
+      // failure inside the effect means. A `40001` here is the server saying it
+      // aborted — definitely nothing durable, safe to run again. Anything else
+      // leaves durability unknown, and unknown never retries.
+      try {
+        await client.query('COMMIT');
+      } catch (commitError) {
+        if (isTransientSerializationFailure(commitError)) throw commitError;
+        throw new CommitOutcomeUnknownError(commitError);
+      }
+
+      // PAST THIS LINE THE WORK IS DURABLE, and the flag says so to the catch
+      // below. Deciding there by the error's SHAPE would be a hole: an
+      // `afterCommit` that happened to throw something serialization-shaped
+      // would be retried, replaying a committed transaction — the exact failure
+      // the settlement identity exists to prevent. Durability is a fact about
+      // what happened, not about what the error looks like.
+      committed = true;
+      await deps.afterCommit?.();
       return value;
     } catch (error) {
-      await client.query('ROLLBACK').catch(() => undefined);
+      // No ROLLBACK once committed: the transaction is over, and issuing one
+      // asks PostgreSQL to end a transaction that is not in progress.
+      if (!committed) await client.query('ROLLBACK').catch(() => undefined);
+      if (committed) throw error;
+      if (error instanceof CommitOutcomeUnknownError) throw error;
       if (attempt >= SERIALIZABLE_MAX_ATTEMPTS || !isTransientSerializationFailure(error)) throw error;
       release();
       await sleep(5 * attempt);
