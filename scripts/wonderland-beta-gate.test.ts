@@ -595,13 +595,15 @@ describe('the Beta Gate’s capability axis', () => {
    */
   it('expires a drill attestation whose subject has changed since it ran', () => {
     const target = implementedBy('RESTART / RECOVERY');
+    expect(target.length, 'the row must name more than one file for this to mean anything').toBeGreaterThan(1);
     const dir = withProof(completingBundle(), {
-      digests: [digest(target[0]!), `sha256:${'0'.repeat(64)}`, digest(target[2]!)],
+      // Every file but the last still hashes correctly; the last one moved.
+      digests: [...target.slice(0, -1).map(digest), `sha256:${'0'.repeat(64)}`],
     });
     const row = rowFor(evaluate(dir), 'RESTART / RECOVERY');
     expect(row.verdict).toBe('FAIL');
     expect(row.capability).toBe('STALE');
-    expect(row.basis).toContain(target[1]!);
+    expect(row.basis).toContain(target.at(-1)!);
     expect(row.basis).toContain('has changed since the drill ran');
   });
 
@@ -615,7 +617,7 @@ describe('the Beta Gate’s capability axis', () => {
     const row = rowFor(evaluate(withProof(completingBundle(), { paths: [target[0]!] })), 'RESTART / RECOVERY');
     expect(row.verdict).toBe('FAIL');
     expect(row.capability).toBe('UNPROVEN');
-    expect(row.capabilityBasis).toContain(`it did not exercise ${target[1]}, ${target[2]}`);
+    expect(row.capabilityBasis).toContain(`it did not exercise ${target.slice(1).join(', ')}`);
   });
 
   it('refuses an attestation that names a path outside this repository', () => {
@@ -652,6 +654,21 @@ describe('the Beta Gate’s capability axis', () => {
     const row = rowFor(evaluate(dir), 'RESTART / RECOVERY');
     expect(row.verdict).toBe('FAIL');
     expect(row.capabilityBasis).toContain('its transcript records 1 failed step(s)');
+  });
+
+  /**
+   * AND IT DOES NOT OVERSTATE THE MISSION EITHER. "NOT EXERCISED THIS MISSION"
+   * is a claim about the run; a bundle that could not READ the table says so
+   * instead. Unknown is not zero here any more than it is anywhere else.
+   */
+  it('says a bundle could not say, rather than claiming the mission did not do it', () => {
+    const dir = withProof(completingBundle());
+    writeFileSync(join(dir, 'julius-live-evidence', 'failures.tsv'), 'unavailable\n');
+    const row = rowFor(evaluate(dir), 'RESTART / RECOVERY');
+    expect(row.verdict).toBe('CAPABILITY PROVEN');
+    expect(row.mission).toBe('UNKNOWN');
+    expect(row.basis).toContain('THIS MISSION CANNOT SAY WHETHER IT WAS EXERCISED');
+    expect(row.basis, 'and it does not claim a run it could not read never recovered').not.toContain('NOT EXERCISED THIS MISSION');
   });
 
   it('reads an attestation supplied beside the bundle rather than inside it', () => {

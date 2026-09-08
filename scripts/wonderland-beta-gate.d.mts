@@ -71,6 +71,14 @@ export interface BetaGateReport {
   readonly summary: BetaGateSummary;
 }
 
+/**
+ * The columns a drill attestation is written with. Exported so a drill writes
+ * the ledger the gate reads, rather than the two agreeing by hand — which is
+ * how two free dry runs shipped `unavailable` for tables whose column names had
+ * drifted apart.
+ */
+export declare const CAPABILITY_PROOF_COLUMNS: readonly string[];
+
 export interface BetaGateOptions {
   /**
    * A directory holding `capability-proofs.tsv` and its transcripts, when they

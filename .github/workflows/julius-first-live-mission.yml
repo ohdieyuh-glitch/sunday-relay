@@ -673,6 +673,34 @@ jobs:
           docker exec julius-executor sh -c 'ls -1 "$EXECUTOR_RECEIPT_ROOT" 2>/dev/null | head -n 200' \
             > julius-live-evidence/receipt-ids.txt 2>/dev/null || true
 
+          # WHAT THIS MISSION DID NOT DO, PROVEN ANYWAY.
+          #
+          # A healthy mission never crashes, so it never exercises restart
+          # recovery, and the Beta Gate refuses to infer a capability from the
+          # fact that its source is in the tree. Requiring a paid run to break
+          # itself to score the row would be asking the product to lie in the
+          # other direction. So the drill runs here, after the mission, and the
+          # bundle carries its attestation beside the mission's own rows: the
+          # gate then reports RESTART / RECOVERY as CAPABILITY PROVEN — NOT
+          # EXERCISED THIS MISSION, which is the true sentence.
+          #
+          # IN A DATABASE OF ITS OWN, and after the dump has already run, so the
+          # drill's mission cannot appear in this mission's evidence by any
+          # route. Nothing here may fail the job: the mission has already run
+          # and its evidence is already collected, and a missing capability
+          # proof is a row the gate reports as unproven, not a reason to lose
+          # the artifact. No provider credential is involved — the drill's three
+          # role adapters are fakes and only the recovery path is production.
+          if docker exec -e PGPASSWORD julius-postgres createdb -U "$PGUSER" julius_recovery_drill 2>/dev/null; then
+            if DATABASE_URL="${DATABASE_URL%/*}/julius_recovery_drill" \
+                npm run julius:recovery-drill --silent -- --out /tmp/julius-capability-proofs > /dev/null 2>&1; then
+              cp /tmp/julius-capability-proofs/capability-proofs.tsv \
+                 /tmp/julius-capability-proofs/julius-recovery-drill.transcript.txt \
+                 julius-live-evidence/ 2>/dev/null || true
+            fi
+            rm -rf /tmp/julius-capability-proofs
+          fi
+
       - name: Refuse to publish evidence that contains credential material
         if: always()
         env:
