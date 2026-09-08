@@ -48,6 +48,16 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
 import type { BrowserSessionStore } from './browser-session/grants';
+import {
+  WONDERLAND_DENIAL_MESSAGE,
+  WONDERLAND_UNAVAILABLE_MESSAGE,
+  authorizeWonderlandProjectCapability,
+} from '../src/relay/mission/wonderland/wonderland-authorization';
+import type {
+  WonderlandAuthorizationDecision,
+  WonderlandMembership,
+  WonderlandProjectCapability,
+} from '../src/relay/mission/wonderland/wonderland-authorization';
 import { sessionTokenFrom } from './browser-session/routes';
 import { emptyJuliusActivity } from '../src/relay/mission/wonderland/wonderland-julius-activity';
 import { ingestWonderlandRows } from '../src/relay/mission/wonderland/wonderland-ingress';
@@ -56,25 +66,39 @@ import type {
 } from '../src/relay/mission/wonderland/wonderland-ingress';
 import { openWonderlandCursor } from '../src/relay/mission/wonderland/wonderland-ordering';
 import type { WonderlandLedgerRow } from '../src/relay/mission/wonderland/wonderland-ledger-adapter';
+import { wonderlandHydrationVerdict } from '../src/relay/mission/wonderland/wonderland-hydration';
 import type { WonderlandHydration } from '../src/relay/mission/wonderland/wonderland-hydration';
 
 /** The largest page one request will serve. A cursor gets the rest. */
 export const WONDERLAND_JULIUS_PAGE_LIMIT = 500;
 
 /**
- * May this player read this project?
+ * The canonical membership record for one player in one project, or null.
  *
- * DELIBERATELY ITS OWN PORT rather than a flag on the session. The answer is a
- * property of the project's membership, changes without the session changing,
- * and must be asked per request — a session issued while somebody was a member
- * must stop reading the moment they are not.
+ * DELIBERATELY ITS OWN PORT rather than a flag on the session. Membership is a
+ * property of the project, changes without the session changing, and must be
+ * asked per request — a session issued while somebody was a member has to stop
+ * reading the moment they are not.
+ *
+ * THE PORT RETURNS THE RECORD, NOT A VERDICT. The decision lives in
+ * `wonderland-authorization.ts` where it is pure and tested; a port that
+ * answered yes-or-no would put an authorisation decision inside whatever
+ * happened to implement it, and there would be as many decisions as
+ * implementations.
+ *
+ * NULL MEANS NO ROW. An implementation that cannot reach its store must THROW,
+ * not return null — those are different facts with different safe answers, and
+ * a lookup failure read as an absence is a denial where a 503 belonged.
  */
-export interface WonderlandProjectMembership {
-  mayReadProject(input: {
+export interface WonderlandProjectMembershipSource {
+  lookup(input: {
     readonly playerId: string;
     readonly projectId: string;
-  }): Promise<boolean>;
+  }): Promise<WonderlandMembership | null>;
 }
+
+/** The capability every route here requires. Read-only, and narrowed further downstream. */
+export const WONDERLAND_WORLD_CAPABILITY: WonderlandProjectCapability = 'read_world_state';
 
 /** What the routes need from Julius. Read-only, and narrow on purpose. */
 export interface WonderlandJuliusReader {
@@ -113,7 +137,9 @@ export interface WonderlandJuliusRouteRequest {
 export interface WonderlandJuliusRouteDeps {
   readonly sessions: BrowserSessionStore;
   readonly reader?: WonderlandJuliusReader;
-  readonly membership?: WonderlandProjectMembership;
+  readonly membership?: WonderlandProjectMembershipSource;
+  /** Called with every decision, granted or not. For an operator's log only. */
+  readonly onAuthorization?: (decision: WonderlandAuthorizationDecision) => void;
   readonly response?: ServerResponse;
   readonly request?: IncomingMessage;
   readonly heartbeatMs?: number;
@@ -182,18 +208,48 @@ export async function authorizeWonderlandJulius(
   // FAIL CLOSED. See the header: a route that opened up when its authorisation
   // was unconfigured would work perfectly wherever nobody had wired it.
   if (!deps.membership || !deps.reader) {
-    return {
-      ok: false,
-      status: 503,
-      error: 'Julius world streaming is not configured on this deployment',
-    };
+    return { ok: false, status: 503, error: WONDERLAND_UNAVAILABLE_MESSAGE };
   }
 
-  const permitted = await deps.membership.mayReadProject({
-    playerId: verified.participantId,
-    projectId: query.projectId,
-  });
-  if (!permitted) return { ok: false, status: 403, error: 'permission denied' };
+  // THE PROJECT ID IN THE QUERY IS A REQUEST TO BE AUTHORISED, NEVER AN
+  // AUTHORISATION. It arrived from a browser and the session does not carry
+  // one, so the only thing that makes it trustworthy is this lookup.
+  //
+  // AND IT IS THE ONLY SOURCE OF PROJECT IDENTITY HERE. Nothing resolves a
+  // project from the RUN id, which is equally attacker-controlled: doing so
+  // would let somebody name a run they have no rights to, have the server
+  // discover its project, and be authorised against the project they just
+  // caused it to pick. The run is checked against the AUTHORISED project
+  // later, never the other way round.
+  let membership: WonderlandMembership | null;
+  try {
+    membership = await deps.membership.lookup({
+      playerId: verified.participantId,
+      projectId: query.projectId,
+    });
+  } catch {
+    // A store that could not answer is NOT a denial. The request may have been
+    // perfectly authorised; reporting it as denied sends an operator hunting
+    // permissions that were never the issue, and reporting it as granted would
+    // be the worst outcome available.
+    return { ok: false, status: 503, error: WONDERLAND_UNAVAILABLE_MESSAGE };
+  }
+
+  const decision = authorizeWonderlandProjectCapability(
+    {
+      playerId: verified.participantId,
+      projectId: query.projectId,
+      capability: WONDERLAND_WORLD_CAPABILITY,
+    },
+    membership,
+  );
+  deps.onAuthorization?.(decision);
+  if (!decision.granted) {
+    // ONE SENTENCE FOR EVERY DENIAL. The decision knows more and that stays in
+    // the log: a body that said "not a member" where another said "no such
+    // project" is a membership oracle.
+    return { ok: false, status: 403, error: WONDERLAND_DENIAL_MESSAGE };
+  }
 
   return {
     ok: true,
@@ -273,7 +329,22 @@ export async function handleWonderlandJuliusRoute(
       runId: authorized.grant.runId as string,
       worldSessionId: authorized.sessionId,
     });
-    if (hydration === null) return { status: 404, body: { error: 'run not found' } };
+    // NOT FOUND AND NOT YOURS LOOK THE SAME. A 404 that only appeared for runs
+    // that do not exist would confirm the existence of every run that does.
+    if (hydration === null) return { status: 404, body: { error: WONDERLAND_DENIAL_MESSAGE } };
+
+    // THE RUN IS CHECKED AGAINST THE AUTHORISED PROJECT, and this is the check
+    // that stops the attack the whole route is shaped around: name somebody
+    // else's run id, be authorised for a project you DO belong to, and read a
+    // run you do not. The authorisation decided a project; the run must belong
+    // to that project, not the other way round.
+    //
+    // Verified here rather than trusted to the reader. A reader that filtered
+    // correctly makes this redundant, and a reader that did not makes it the
+    // only thing standing between a tenant and somebody else's mission.
+    if (wonderlandHydrationVerdict(authorized.grant.projectId, hydration) !== 'accepted') {
+      return { status: 404, body: { error: WONDERLAND_DENIAL_MESSAGE } };
+    }
     return { status: 200, body: { data: hydration } };
   }
 
