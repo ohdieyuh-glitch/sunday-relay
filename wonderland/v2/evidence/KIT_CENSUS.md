@@ -8,7 +8,7 @@ not the placements.
 | | placements | mean built | cameras moved | one piece holds a third | frames over half green |
 |---|---|---|---|---|---|
 | before | 13,816 | 67.78% | — | 10 | 9 |
-| after | 14,529 | **73.99%** | 23 of 33 | 9 | 5 |
+| after | 14,571 | **74.82%** | 24 of 33 | 9 | 5 |
 
 The founder's reference, classified from its own pixels, is built **71.5%**.
 
@@ -59,21 +59,45 @@ may legally occupy that is a 400 m tower. **The swag has to move or shrink, and
 it is the world stream's asset, not the kit's.** It still went 71% → 61%,
 because the depth stands took columns beside it.
 
-## The fifth zero: a narrow arc sampled once
+## The fifth and sixth zeros: an angle measured as a distance, twice
 
-The bearing step is the angle that separates two stands on the ground -- 2,600
-uu at 11 km is 13 degrees. On an arc 11 degrees wide that tries exactly ONE
-bearing, and one blocked bearing reads as "no clear ground" for the whole arc.
-It refused **the founder's own reference frame**, the one camera in the suite
-with a ground truth to miss: `HeroCam_V2_MarbleReference` is built 60.0% where
-the image it reproduces is 71.5%. Sampling any arc at least four ways found it
-ground at 9,200 uu on bearing -36.2 and took the frame 57.5% -> 60.0%.
+Both are the same confusion in different clothes, and both cost stands that
+fitted.
 
-It is still 11.5 points short. Its remaining green tops out at +29.1 from 29.7
-m away, which needs a 63 m tower inside 10.9 km on two narrow bearings, and the
-ground there is nearly all spoken for. **That gap is the next pass's first
-job**, and it is the most valuable number in this file: every other camera is
-judged against a reading, this one against a picture.
+**The bearing step.** It is derived from the ground two stands need between
+them -- 2,600 uu at 11 km is 13 degrees. On an arc 11 degrees wide that tries
+exactly ONE bearing, and one blocked bearing reads as "no clear ground" for the
+whole arc. It refused the founder's reference frame.
+
+**The separation test.** Same number, same error: two stands 2,600 uu apart on
+the ground are 15 degrees apart at 10 km, so a stand on one arc of a frame
+silently refused every spot on the arc 13 degrees away. What a frame cares
+about is how far apart two towers LOOK; what the ground cares about is that
+they do not intersect, and that is a much smaller number. Separation is now
+`MIN_SEP_DEG` in the frame plus 1,400 uu on the ground.
+
+Together: `HeroCam_V2_MarbleReference` 57.5% -> 61.7%, `TeaTerraceCam16` 82.5%
+-> 95.8%, `ClockGrandCam23` to 100%, mean built 73.61% -> 74.82%.
+
+## The founder's reference frame, in detail
+
+It is built **61.7%** against the 71.5% of the image it reproduces, and it is
+the most valuable number in this file: every other camera is judged against a
+reading, this one against a picture. Its ceiling, per column:
+
+| columns | holder | elevation | distance | room to the frame edge |
+|---|---|---|---|---|
+| 26 | `GiantMushroom_Spots` | +33.8 | 34.8 m | **0.0 — pinned** |
+| 13 | `ClockTree_Canopy1` | +29.1 | 29.7 m | +4.7 |
+| 8 | `ClockTree_Canopy0` | +29.1 | 29.7 m | +4.7 |
+| 1 | `Approach_Canopy2` | +18.3 | 63.9 m | +15.6 |
+
+**More than half its green is one giant mushroom at 35 m, reaching above the
+top of the picture.** No placement can move it — see the strict `>` above. Both
+`ClockTree` arcs now carry a stand. The rest of the gap is the mushroom's, and
+the mushroom is the world stream's asset: this is world mismatch #2 (a
+district's fungus out-topping its architecture) standing on the one frame with
+a ground truth.
 
 ## Not proven
 

@@ -549,8 +549,19 @@ def frame_edge(cam):
 BREAK_OVERSHOOT = 4.0
 
 
+#: The bearing two stands must differ by, in degrees, before they read as two
+#: pieces rather than a clump. SEPARATION IS AN ANGLE, NOT A DISTANCE, and
+#: `apart` alone got that wrong the same way the bearing step did: 2,600 uu at
+#: 10 km is 15 degrees of arc, so a stand on one arc of a frame silently
+#: refused every spot on the arc 13 degrees away -- which is how the founder's
+#: reference frame ended up with one stand where three fitted. What the frame
+#: cares about is how far apart two towers look; what the GROUND cares about is
+#: that they do not intersect, and that is a much smaller number.
+MIN_SEP_DEG = 6.0
+
+
 def spots_on_bearing(cam, bands, arc, min_el, height_uu, want, taken,
-                     apart=2600.0):
+                     apart=1400.0):
     """Clear ground ACROSS a boss's arc that tops INSIDE the frame above it.
 
     Spread, not a wall. Each spot is taken on a different bearing inside the
@@ -580,7 +591,7 @@ def spots_on_bearing(cam, bands, arc, min_el, height_uu, want, taken,
     # truth to miss. Sample any arc at least four ways whatever the spacing;
     # `taken` still keeps two stands from landing on top of each other.
     step = max(1.5, math.degrees(math.atan2(apart, 11000.0)))
-    step = min(step, max(1.5, (hi - lo) / 3.0))
+    step = min(step, max(MIN_SEP_DEG / 2.0, (hi - lo) / 3.0))
     th = lo
     while th <= hi and len(out) < want:
         d = 12200.0
@@ -591,7 +602,10 @@ def spots_on_bearing(cam, bands, arc, min_el, height_uu, want, taken,
                 continue
             x, y = at_bearing(cam, th, d)
             d -= 600.0
-            if any(math.hypot(x - px, y - py) < apart for px, py in taken):
+            if any(math.hypot(x - px, y - py) < apart for px, py, _c, _t in taken):
+                continue
+            if any(c == cam and abs(t - th) < MIN_SEP_DEG
+                   for _px, _py, c, t in taken):
                 continue
             if any(math.hypot(x - c[1][0], y - c[1][1]) < CAM_CLEARANCE
                    for c in _CAMS):
@@ -600,7 +614,7 @@ def spots_on_bearing(cam, bands, arc, min_el, height_uu, want, taken,
                 continue
             out.append((x, y, th, top,
                         math.hypot(x - loc[0], y - loc[1])))
-            taken.append((x, y))
+            taken.append((x, y, cam, th))
             break
         th += step
     return out
