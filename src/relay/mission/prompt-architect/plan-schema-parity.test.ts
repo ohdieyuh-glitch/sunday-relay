@@ -154,6 +154,51 @@ describe('a field that ENUMERATES a condition is not a field that CLAIMS one', (
     expect(validateArchitectPlan(inHandoff).ok, 'a handoff prohibition naming the act').toBe(true);
   });
 
+  it('PAID RUN 34186711214 — a plan that forbids the claim at BOTH levels is accepted whole', () => {
+    /**
+     * THE REGRESSION THIS RULE COST A PAID MISSION TO LEARN, pinned as one
+     * scenario rather than two field pokes. The architect's charter named all
+     * four banned phrases inside the prohibition, and the schema then asks for
+     * `prohibitedActions` at both levels — so the most obedient possible answer
+     * carried them in both places at once, which is the document below.
+     *
+     * The 14,550-byte plan the run actually bought was never persisted: the
+     * evidence bundle is built by allowlist and a model's plan is not on it. So
+     * this is not that document; it is the SHAPE the rule could not tell apart
+     * from a plan claiming the work, and the whole plan is validated rather
+     * than one mutated field, because that is how it arrives.
+     */
+    const forbidsAtBothLevels = mutate((p) => {
+      (p as { prohibitedActions: string[] }).prohibitedActions = [
+        'claiming that files were edited before the Coding Agent has run',
+      ];
+      (p.handoff as { prohibitedActions: string[] }).prohibitedActions = [
+        'stating that tests were run before the executor has run them',
+        'saying I ran the tests',
+      ];
+      p.acceptanceCriteria = ['AC-1: the fixture test passes'];
+      p.testPlan = ['npm run mission-test'];
+      (p.risks[0] as { mitigation: string }).mitigation = 'Review the diff before claiming files were edited.';
+    });
+    const result = validateArchitectPlan(forbidsAtBothLevels);
+    expect(result.ok, result.ok ? '' : `run 34186711214 would fail again: ${result.reason}`).toBe(true);
+
+    // AND THE SAME DOCUMENT WITH ONE ASSERTING FIELD CHANGED IS STILL REFUSED,
+    // so the case above is the exemption working rather than the rule gone.
+    const alsoClaims = mutate((p) => {
+      (p as { prohibitedActions: string[] }).prohibitedActions = [
+        'claiming that files were edited before the Coding Agent has run',
+      ];
+      p.objectiveSummary = 'Done — files were edited and the fixture is green.';
+    });
+    const refused = validateArchitectPlan(alsoClaims);
+    expect(refused.ok).toBe(false);
+    if (refused.ok) return;
+    expect(refused.reasonCode).toBe('plan_false_work_claim');
+    expect(refused.reasonField).toBe('plan.objectiveSummary');
+    expect(refused.reasonClaim).toBe('files_were_edited');
+  });
+
   it('exempts the condition fields, at either level', () => {
     const conditionFields: readonly (readonly [string, (plan: ReturnType<typeof mutate>) => void])[] = [
       ['acceptanceCriteria', (p) => { p.acceptanceCriteria = ['i ran the tests and they passed']; }],
