@@ -701,7 +701,7 @@ describe('the evidence dump names only tables and columns the migrations create'
       // A refused plan is corrected once, so a dispatch is no longer one call
       // by definition; a retry the artifact could not show would be a spend
       // nobody could account for.
-      'planAttempts',
+      'planAttempts', 'reviewAttempts',
     ]) {
       expect(query, `the diagnostics dump must select ${key}`).toContain(`'diag_${key}'`);
     }

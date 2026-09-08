@@ -191,6 +191,39 @@ const ARCHITECT_REVISION_CHARTER = [
  * dressed as facts, and the first one recorded every plan review as a build
  * review. A dispatch whose stage cannot be read is refused, not reviewed.
  */
+/**
+ * HOW TO ASK AGAIN FOR A REVIEW THAT ARRIVED IN THE WRONG SHAPE.
+ *
+ * Keyed on the CLOSED failure shape the Hermes reader assigned, so nothing the
+ * model wrote travels back into the next prompt — the text was malformed, and
+ * quoting it invites the same answer. A shape with no correction is one a
+ * second ask cannot fix, and null is what keeps the re-ask from being bought.
+ */
+const REVIEW_ATTEMPT_LIMIT = 2;
+
+function reviewCorrectionFor(shape: string): string | null {
+  switch (shape) {
+    case 'review_json_absent':
+      return 'CORRECTION — your previous answer contained no JSON report at all. Emit exactly one JSON object in the shape given above, with no prose before or after it and no code fence.';
+    case 'review_json_unparseable':
+      return 'CORRECTION — your previous answer contained a JSON object that could not be parsed. Emit exactly one WELL-FORMED JSON object in the shape given above: every key and string double-quoted, no trailing commas, no comments, and no backslash escape other than the ones JSON defines.';
+    case 'review_json_ambiguous':
+      return 'CORRECTION — your previous answer contained MORE THAN ONE object carrying a verdict, so which one was your review could not be known. Emit exactly one JSON object, and quote no other object containing a verdict anywhere in your answer.';
+    case 'review_verdict_missing':
+      return 'CORRECTION — your previous answer contained JSON with no verdict. Emit exactly one JSON object whose "verdict" is one of "approved", "changes_required" or "unable_to_review".';
+    case 'review_verdict_invalid':
+      return 'CORRECTION — your previous answer carried a verdict outside the permitted set. The "verdict" must be exactly one of "approved", "changes_required" or "unable_to_review", spelled in lower case.';
+    case 'review_summary_missing':
+    case 'review_summary_invalid':
+      return 'CORRECTION — your previous answer had no usable "summary". Emit exactly one JSON object whose "summary" is a non-empty string stating what you reviewed and what you concluded.';
+    default:
+      // A timeout, a 503, a refused credential, a dead process, an oversized
+      // answer, a rejected request, a classifier disagreement: none is a shape
+      // a re-ask repairs, and each is handled where it is classified.
+      return null;
+  }
+}
+
 const reviewStageOfDispatch = (taskType: string | undefined): JuliusReviewStage | null =>
   (taskType === undefined ? null : reviewStageOf(taskType));
 
@@ -752,7 +785,38 @@ export function createLiveHermesReviewerAdapter(input: {
         testOutput: charge.subject === 'IMPLEMENTATION' ? (input.artifacts.get(testOutputRef(snapshot.runId)) ?? '') : '',
         relayEvidence: [...snapshot.evidenceIds],
       };
-      const outcome: HermesOutcome = await run({ packet, config: input.config });
+      /**
+       * ONE CORRECTED RE-ASK, ON THE SHAPES A RE-ASK CAN FIX.
+       *
+       * Paid run 33802017460 bought a real plan, a real diff and passing tests,
+       * and both reviews then failed to parse: no verdict reached Julius and
+       * the run ended FAILED with zero decisions. Those shapes are
+       * `retryable: false` for a good reason — a plain retry asks the identical
+       * question and gets the identical answer — but a CORRECTION is not a
+       * retry. It names the shape defect, from the CLOSED shape token and never
+       * from the model's own (malformed) text — which is structural, not
+       * merely intended: `review_incomplete` carries a safe message, a shape
+       * and diagnostics, and the review text is not among them.
+       *
+       * ONLY the shapes where an answer ARRIVED in the wrong shape. A timeout,
+       * a 503, a refused credential, a process that died and an oversized
+       * output are not shape defects: three are already retryable at the task
+       * level and the rest need a human or a smaller request, and re-asking
+       * would spend for nothing. `review_output_too_large` is deliberately
+       * excluded — a runaway answer asked again is a second runaway answer.
+       */
+      let reviewAttempts = 0;
+      let reviewCorrection: string | undefined;
+      let outcome: HermesOutcome;
+      for (;;) {
+      reviewAttempts += 1;
+      outcome = await run({ packet: { ...packet, ...(reviewCorrection === undefined ? {} : { correction: reviewCorrection }) }, config: input.config });
+      if (outcome.kind === 'review_incomplete' && reviewAttempts < REVIEW_ATTEMPT_LIMIT) {
+        const remedy = reviewCorrectionFor(outcome.shape);
+        if (remedy !== null) { reviewCorrection = remedy; continue; }
+      }
+      break;
+      }
       if (outcome.kind === 'launch_failed') {
         throw new JuliusDispatchError('PROVIDER_UNAVAILABLE', false, `Hermes reviewer could not launch: ${safeClaim(outcome.safeMessage, 120)}.`, 'reviewer_launch_failed');
       }
@@ -819,7 +883,7 @@ export function createLiveHermesReviewerAdapter(input: {
          */
         throw new JuliusDispatchError(
           code, retryable, `Hermes review incomplete: ${safeClaim(outcome.safeMessage, 120)}.`, outcome.shape,
-          { ...outcome.diagnostics, stage },
+          { ...outcome.diagnostics, stage, reviewAttempts },
         );
       }
       if (outcome.result.verdict === 'unable_to_review') {

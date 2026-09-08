@@ -174,6 +174,13 @@ export const safeReviewDiagnostics=(value:unknown):JuliusSafeDiagnostics|null=>{
    * for. Null for a role that makes no such attempt.
    */
   planAttempts:safeCount(v.planAttempts),
+  /**
+   * HOW MANY REVIEW CALLS ONE REVIEWER DISPATCH BOUGHT. A review that arrived
+   * in the wrong shape is asked once more with the defect named, so a reviewer
+   * dispatch is no longer one call by definition either. Null for a role that
+   * makes no such attempt.
+   */
+  reviewAttempts:safeCount(v.reviewAttempts),
   /* --- Coding Agent (build stage). Null for the other two roles. --- */
   /** The runtime's own result subtype, e.g. `success` / `error_max_turns`. */
   resultSubtype:safeToken(v.resultSubtype),
