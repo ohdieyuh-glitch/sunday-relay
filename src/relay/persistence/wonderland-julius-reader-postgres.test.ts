@@ -103,8 +103,11 @@ describe('hydrating a run', () => {
     expect(runQuery.sql).toContain('MAX(e.sequence)');
     expect(runQuery.sql).toContain('julius_tasks');
     expect(runQuery.sql).toContain('julius_approvals');
-    // One statement, so one consistent view of all four facts.
-    expect(runQuery.sql.split(';').filter((part) => part.trim() !== '').length).toBe(1);
+    // One statement, so one consistent view of all five facts. Comments are
+    // stripped first: prose is allowed a semicolon, SQL is not.
+    const withoutComments = runQuery.sql.replace(/--[^\n]*/g, '');
+    expect(withoutComments).not.toContain(';');
+    expect(withoutComments.trim().split(/\bSELECT\b/).length).toBeGreaterThan(1);
 
     expect(hydration?.run.revision).toBe(7);
     expect(hydration?.run.atSequence).toBe(42);

@@ -109,6 +109,12 @@ export class WonderlandJuliusReaderPostgres {
                 WHERE t.run_id=r.run_id AND t.state='ACTIVE') AS active_tasks,
               (SELECT count(*) FROM relay_wonderland.julius_approvals a
                 WHERE a.run_id=r.run_id AND a.state='PENDING') AS pending_approvals,
+              -- THE DATABASE'S CLOCK, in the same statement as everything
+              -- above it. Postgres now() is the transaction start time, so it
+              -- names the instant this consistent read was taken; a Date() in
+              -- this process would name a slightly later instant on a clock of
+              -- its own, and "when this hydration was cut" would then be a time
+              -- at which none of it was true.
               now() AS observed_at
          FROM relay_wonderland.julius_runs r
         WHERE r.run_id=$1 AND r.project_id=$2`,
