@@ -27,6 +27,8 @@ import { join } from 'node:path';
 import {
   WONDERLAND_COMPOUND_SWOOSH,
   WONDERLAND_SINGLE_SWOOSH,
+  WONDERLAND_USAGE_CHANNEL_STYLE,
+  WONDERLAND_USAGE_VIEWPORT,
   wonderlandSwooshAt,
 } from '../src/relay/mission/wonderland/wonderland-usage-meter';
 import type { WonderlandUsageSwoosh } from '../src/relay/mission/wonderland/wonderland-usage-meter';
@@ -110,6 +112,118 @@ const shapeBody = (name: string, shape: WonderlandUsageSwoosh): string =>
     '}',
   ].join('\n');
 
+/* --------------------------------------------------------- the palette */
+
+/**
+ * THE SAME COLOURS, PRE-CONVERTED, BECAUSE UNREAL CANNOT READ CSS.
+ *
+ * The contract states the palette as CSS strings, which is what the browser
+ * wants and what a designer can read. A renderer that had to parse `rgba(63,
+ * 214, 160, 0.45)` at run time would need a string parser in C++ for no reason,
+ * and one that carried a hand-typed copy of the numbers would drift from the
+ * approved palette the first time a colour moved.
+ *
+ * So the conversion happens HERE, once, at export: CSS is parsed, sRGB is
+ * linearised, and the client holds finished FLinearColors that were generated
+ * from the same constants the browser renders. `--check` fails when they go
+ * stale, so a colour changed in the contract and not re-exported is a build
+ * failure rather than a HUD that is subtly the wrong green.
+ */
+
+interface Rgba {
+  readonly r: number;
+  readonly g: number;
+  readonly b: number;
+  readonly a: number;
+}
+
+/** Parse the two CSS forms the palette actually uses. Anything else stops. */
+function parseCss(value: string): Rgba {
+  const hex = /^#([0-9a-f]{6})$/i.exec(value.trim());
+  if (hex !== null) {
+    const n = Number.parseInt(hex[1], 16);
+    return { r: (n >> 16) & 255, g: (n >> 8) & 255, b: n & 255, a: 1 };
+  }
+  const rgba = /^rgba?\(([^)]+)\)$/i.exec(value.trim());
+  if (rgba !== null) {
+    const parts = rgba[1].split(',').map((part) => Number.parseFloat(part.trim()));
+    if (parts.length >= 3 && parts.slice(0, 3).every(Number.isFinite)) {
+      return { r: parts[0], g: parts[1], b: parts[2], a: parts.length > 3 ? parts[3] : 1 };
+    }
+  }
+  // Deliberately fatal. A palette entry this script cannot read is a colour the
+  // world would render as something nobody chose, and shipping that quietly is
+  // worse than not shipping the export.
+  throw new Error(`export-wonderland-geometry-fixture: cannot parse CSS colour ${value}`);
+}
+
+/**
+ * sRGB channel to linear, by the piecewise sRGB transfer function.
+ *
+ * Unreal's own FLinearColor::FromSRGBColor uses this curve, so a colour
+ * converted here lands where the engine would have put it — and the HUD in the
+ * world matches the HUD in the browser rather than being a shade off.
+ */
+const linear = (channel: number): number => {
+  const c = Math.min(1, Math.max(0, channel / 255));
+  return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+};
+
+const colourLiteral = (css: string): string => {
+  const { r, g, b, a } = parseCss(css);
+  return `FLinearColor(${f(linear(r))}, ${f(linear(g))}, ${f(linear(b))}, ${f(a)})`;
+};
+
+const paletteBody = (name: string, style: (typeof WONDERLAND_USAGE_CHANNEL_STYLE)['compound_agent']): string =>
+  [
+    `const FWonderlandUsagePalette& Wonderland${name}Palette()`,
+    '{',
+    '\tstatic const FWonderlandUsagePalette Palette = []{',
+    '\t\tFWonderlandUsagePalette P;',
+    `\t\tP.Accent = ${colourLiteral(style.accent)};`,
+    `\t\tP.Bright = ${colourLiteral(style.bright)};`,
+    `\t\tP.Glow = ${colourLiteral(style.glow)};`,
+    `\t\tP.Track = ${colourLiteral(style.track)};`,
+    `\t\tP.Emphasis = ${style.emphasis};`,
+    '\t\treturn P;',
+    '\t}();',
+    '\treturn Palette;',
+    '}',
+  ].join('\n');
+
+/* ------------------------------------------------------------- viewport */
+
+/**
+ * The crop, generated for the same reason the shapes are.
+ *
+ * The window onto the unit box is a product decision — it was measured from the
+ * two strokes' actual extent — and a client that carried its own copy would
+ * clip a redrawn shape the browser showed whole. Doubles rather than floats
+ * here because the mirrored struct is doubles: `d` on a float literal assigned
+ * to a double would round twice.
+ */
+const d = (n: number): string => n.toFixed(6);
+
+const viewport = [
+  'const FWonderlandUsageViewport& WonderlandUsageViewport()',
+  '{',
+  '\tstatic const FWonderlandUsageViewport Window = []{',
+  '\t\tFWonderlandUsageViewport V;',
+  `\t\tV.X = ${d(WONDERLAND_USAGE_VIEWPORT.x)};`,
+  `\t\tV.Y = ${d(WONDERLAND_USAGE_VIEWPORT.y)};`,
+  `\t\tV.Width = ${d(WONDERLAND_USAGE_VIEWPORT.width)};`,
+  `\t\tV.Height = ${d(WONDERLAND_USAGE_VIEWPORT.height)};`,
+  '\t\treturn V;',
+  '\t}();',
+  '\treturn Window;',
+  '}',
+].join('\n');
+
+const palette = `${paletteBody('Compound', WONDERLAND_USAGE_CHANNEL_STYLE.compound_agent)}
+
+${paletteBody('Single', WONDERLAND_USAGE_CHANNEL_STYLE.single_agent)}
+`;
+
 const generated = `// WONDERLAND USAGE GEOMETRY — THE CANONICAL SHAPES.
 //
 // GENERATED by scripts/export-wonderland-geometry-fixture.ts from the frozen
@@ -138,6 +252,9 @@ namespace
 ${shapeBody('Compound', WONDERLAND_COMPOUND_SWOOSH)}
 
 ${shapeBody('Single', WONDERLAND_SINGLE_SWOOSH)}
+
+${palette}
+${viewport}
 `;
 
 /* --------------------------------------------------------- emit, or verify */

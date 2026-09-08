@@ -106,6 +106,8 @@ const CPP_ONLY_STRUCTS: Readonly<Record<string, string>> = {
     'the identity constants a renderer needs at build time. Read back from the skin, never authored in C++.',
   FWonderlandHubZone:
     'a hub-level authoring description. Level layout is Unreal\'s own business and Relay holds no opinion about it.',
+  FWonderlandUsagePalette:
+    'the channel palette converted to linear at export time. The contract states these colours as CSS, which the browser renders directly; a TypeScript mirror of the converted form would be an interface nothing in the browser would ever read.',
 };
 
 /**

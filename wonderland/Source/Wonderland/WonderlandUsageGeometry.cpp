@@ -166,3 +166,107 @@ void WonderlandSwooshOutline(
 		OutPoints.Add(Back[Step]);
 	}
 }
+
+/* ------------------------------------------------------------ draw plan */
+
+const float WonderlandMeterHeadArc = 0.035f;
+const float WonderlandMeterMinimumVisibleArc = 0.004f;
+
+FWonderlandMeterDrawPlan WonderlandMeterDrawPlan(const FWonderlandUsageMeter& Meter)
+{
+	FWonderlandMeterDrawPlan Plan;
+
+	// A CAPACITY NOBODY REPORTED STILL DRAWS THE FRAME. The swoosh is the HUD's
+	// furniture and its absence would read as a broken HUD rather than an
+	// unreported one. What an unknown capacity never does is draw a REMAINDER.
+	Plan.TrackFraction = Meter.CapacitySpan.bKnown
+		? Clamp01(static_cast<float>(Meter.CapacitySpan.Value))
+		: 1.f;
+
+	Plan.bRemainderKnown = Meter.RemainingFraction.bKnown;
+	Plan.RemainderOfTrack = Plan.bRemainderKnown
+		? Clamp01(static_cast<float>(Meter.RemainingFraction.Value))
+		: 0.f;
+	Plan.RemainderFraction = Plan.TrackFraction * Plan.RemainderOfTrack;
+
+	Plan.bTrackVisible = Plan.TrackFraction > WonderlandMeterMinimumVisibleArc;
+	Plan.bRemainderVisible =
+		Plan.bRemainderKnown && Plan.RemainderFraction > WonderlandMeterMinimumVisibleArc;
+
+	// The head is the remainder's LEADING edge: it ends where the remainder does
+	// and reaches back a fixed arc, scaled with the track so a short tier is not
+	// all highlight. Clamped at the tail because a remainder shorter than the
+	// highlight would otherwise start below zero.
+	Plan.HeadEndFraction = Plan.RemainderFraction;
+	Plan.HeadStartFraction = FMath::Max(
+		0.f, Plan.RemainderFraction - WonderlandMeterHeadArc * Plan.TrackFraction);
+	Plan.bHeadVisible = Plan.bRemainderVisible && Plan.HeadEndFraction > Plan.HeadStartFraction;
+
+	return Plan;
+}
+
+/* --------------------------------------------------------- ribbon strip */
+
+void WonderlandSwooshRibbonStrip(
+	const FWonderlandSwooshSampler& Sampler,
+	float From,
+	float To,
+	int32 Steps,
+	TArray<FVector2D>& OutPoints)
+{
+	OutPoints.Reset();
+	const float Start = Clamp01(From);
+	const float End = Clamp01(To);
+	const int32 Count = FMath::Max(Steps, 2);
+	if (Sampler.IsEmpty() || End <= Start)
+	{
+		return;
+	}
+
+	OutPoints.Reserve(Count * 2);
+	for (int32 Step = 0; Step < Count; ++Step)
+	{
+		const float T = Start + (End - Start) * static_cast<float>(Step) / static_cast<float>(Count - 1);
+		const FWonderlandSwooshSample Point = Sampler.Sample(T);
+		// The normal is the tangent turned a quarter turn, exactly as the
+		// outline does it. Widths are half-widths precisely so this is an offset
+		// either way rather than a division.
+		const FVector2D Normal(-Point.TangentY, Point.TangentX);
+		const FVector2D Centre(Point.X, Point.Y);
+		OutPoints.Add(Centre + Normal * Point.HalfWidth);
+		OutPoints.Add(Centre - Normal * Point.HalfWidth);
+	}
+}
+
+/* ------------------------------------------------------------ the bands */
+
+void WonderlandBuildMeterBands(
+	const FWonderlandSwooshSampler& Sampler,
+	const FWonderlandUsageMeter& Meter,
+	int32 Steps,
+	FWonderlandMeterBands& OutBands)
+{
+	OutBands.Track.Reset();
+	OutBands.Remainder.Reset();
+	OutBands.Head.Reset();
+
+	const FWonderlandMeterDrawPlan Plan = WonderlandMeterDrawPlan(Meter);
+	const int32 Count = FMath::Max(Steps, 2);
+
+	if (Plan.bTrackVisible)
+	{
+		WonderlandSwooshRibbonStrip(Sampler, 0.f, Plan.TrackFraction, Count, OutBands.Track);
+	}
+	if (Plan.bRemainderVisible)
+	{
+		WonderlandSwooshRibbonStrip(Sampler, 0.f, Plan.RemainderFraction, Count, OutBands.Remainder);
+	}
+	if (Plan.bHeadVisible)
+	{
+		// The head is a BAND rather than a prefix — it ends at the remainder and
+		// reaches back a fixed arc — so it takes both bounds. Fewer steps because
+		// it is a fraction of the length at the same resolution.
+		WonderlandSwooshRibbonStrip(
+			Sampler, Plan.HeadStartFraction, Plan.HeadEndFraction, FMath::Max(Count / 6, 2), OutBands.Head);
+	}
+}

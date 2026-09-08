@@ -16,13 +16,72 @@ STUBS="$HERE/SyntaxStubs"
 OUT="$(mktemp -d)"
 trap 'rm -rf "$OUT"' EXIT
 
-g++ -std=c++17 -O1 -I"$STUBS" -I"$SRC" \
-  "$HERE/GeometryHarness/main.cpp" \
-  "$SRC/WonderlandUsageGeometry.cpp" \
-  "$SRC/WonderlandUsageGeometry.canonical.cpp" \
-  -o "$OUT/harness"
+# BUILT WITH THE SANITIZERS ON, and that is not belt-and-braces.
+#
+# The stubs are hand-written, and a hand-written stub can be wrong in ways a
+# parse cannot see. One was: FMath::Max returned `decltype(a>b?a:b)`, which for
+# two lvalues is a REFERENCE to the function's own parameter. Every check passed
+# at -O0 because the dead stack slot still held the right number, and the same
+# build aborted at -O1 with a Reserve() of -1073741824. ASan and UBSan name that
+# directly instead of leaving it to whichever optimisation level happens to be
+# in the script that day.
+# BUILT AND RUN TWICE, UNOPTIMISED AND OPTIMISED, AND THAT IS NOT PARANOIA.
+#
+# The stubs are hand-written, and a hand-written stub can be wrong in ways a
+# parse cannot see. One was: FMath::Max returned `decltype(a>b?a:b)`, which for
+# two lvalues is a REFERENCE to the function's own parameter. Every check passed
+# at -O0, because the dead stack slot still held the right number; the same
+# build aborted at -O1 with a Reserve() of -1073741824. The DISAGREEMENT between
+# the two levels is what exposes that class, so both are run and both must pass.
+#
+# The sanitizers are on as well, and the two settings need each other. ASan
+# names that defect precisely — "stack-use-after-return ... in FMath::Max" — but
+# only in the -O2 build; at -O0 and -O1 it reported nothing, because the
+# reference had not yet been reused. Optimisation is what makes the bug
+# observable and the sanitizer is what makes it legible, so the check runs both
+# rather than picking one and hoping.
+SANITIZE="-g -fsanitize=address,undefined -fno-sanitize-recover=all"
 
-"$OUT/harness" > "$OUT/actual.tsv"
+build_harness() {
+	# shellcheck disable=SC2086
+	g++ -std=c++17 "$1" $SANITIZE -I"$STUBS" -I"$SRC" \
+	  "$HERE/GeometryHarness/main.cpp" \
+	  "$SRC/WonderlandUsageGeometry.cpp" \
+	  "$SRC/WonderlandUsageGeometry.canonical.cpp" \
+	  -o "$2"
+}
+
+# THE OUTPUT IS SHOWN WHEN IT FAILS, which sounds obvious and was not.
+#
+# The first version redirected each run to a file and printed only the last one.
+# Under `set -e` a failing harness exited the script the moment it returned
+# non-zero, so every "FAIL <what broke>" line sat unread in a temp directory
+# that the EXIT trap then deleted: four deliberate mutations came back as a bare
+# exit code with no output at all. A check that cannot say what failed is worse
+# than no check, because it looks like one.
+run_harness() {
+	local bin="$1" out="$2"
+	if ! "$bin" > "$out" 2>&1; then
+		echo "FAIL $(basename "$bin") reported failures:"
+		cat "$out"
+		exit 1
+	fi
+}
+
+build_harness -O0 "$OUT/harness-O0"
+build_harness -O2 "$OUT/harness-O2"
+run_harness "$OUT/harness-O0" "$OUT/actual-O0.tsv"
+run_harness "$OUT/harness-O2" "$OUT/actual.tsv"
+
+# The two levels must AGREE as well as both succeed. Numbers that shift with the
+# optimiser are a defect wherever they live, and would otherwise show up as a
+# tolerance that mysteriously needed loosening.
+if ! diff -q "$OUT/actual-O0.tsv" "$OUT/actual.tsv" > /dev/null; then
+	echo "FAIL the sampler computes different numbers at -O0 and -O2:"
+	diff "$OUT/actual-O0.tsv" "$OUT/actual.tsv" | head -10
+	exit 1
+fi
+
 grep -v '^#' "$SRC/WonderlandUsageGeometry.golden.tsv" > "$OUT/expected.tsv"
 
 # COMPARED NUMERICALLY, WITH A STATED TOLERANCE, AND THE REASON MATTERS.

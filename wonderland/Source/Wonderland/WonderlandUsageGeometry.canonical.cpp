@@ -60,3 +60,44 @@ const FWonderlandUsageSwoosh& WonderlandSingleSwoosh()
 	}();
 	return Shape;
 }
+
+const FWonderlandUsagePalette& WonderlandCompoundPalette()
+{
+	static const FWonderlandUsagePalette Palette = []{
+		FWonderlandUsagePalette P;
+		P.Accent = FLinearColor(0.049707f, 0.672443f, 0.351533f, 1.000000f);
+		P.Bright = FLinearColor(0.473531f, 1.000000f, 0.775822f, 1.000000f);
+		P.Glow = FLinearColor(0.049707f, 0.672443f, 0.351533f, 0.450000f);
+		P.Track = FLinearColor(0.049707f, 0.672443f, 0.351533f, 0.140000f);
+		P.Emphasis = 0;
+		return P;
+	}();
+	return Palette;
+}
+
+const FWonderlandUsagePalette& WonderlandSinglePalette()
+{
+	static const FWonderlandUsagePalette Palette = []{
+		FWonderlandUsagePalette P;
+		P.Accent = FLinearColor(0.088656f, 0.391572f, 1.000000f, 1.000000f);
+		P.Bright = FLinearColor(0.552011f, 0.775822f, 1.000000f, 1.000000f);
+		P.Glow = FLinearColor(0.088656f, 0.391572f, 1.000000f, 0.400000f);
+		P.Track = FLinearColor(0.088656f, 0.391572f, 1.000000f, 0.130000f);
+		P.Emphasis = 1;
+		return P;
+	}();
+	return Palette;
+}
+
+const FWonderlandUsageViewport& WonderlandUsageViewport()
+{
+	static const FWonderlandUsageViewport Window = []{
+		FWonderlandUsageViewport V;
+		V.X = 0.000000;
+		V.Y = 0.060000;
+		V.Width = 1.000000;
+		V.Height = 0.880000;
+		return V;
+	}();
+	return Window;
+}

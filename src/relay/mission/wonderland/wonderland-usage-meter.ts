@@ -823,6 +823,132 @@ export function wonderlandSwooshSvgPath(input: {
   return `M ${at(points[0])} ${points.slice(1).map((p) => `L ${at(p)}`).join(' ')} Z`;
 }
 
+/* ------------------------------------------------------------ draw plan */
+
+/**
+ * THE ARITHMETIC BETWEEN A READING AND A DRAWING, IN ONE PLACE.
+ *
+ * Two surfaces draw this meter — the reference component in the browser and the
+ * Unreal HUD widget — and until this existed each did its own conversion from
+ * `capacitySpan` and `remainingFraction` into arcs. That is exactly the kind of
+ * duplication that produces a HUD which is subtly different in the product from
+ * the one that was approved: the same reading, two rounding rules, two
+ * visibility thresholds, and nobody able to say which is canon.
+ *
+ * So the plan is computed once, here, and both renderers consume it without
+ * doing arithmetic of their own. Each field is expressed in the units its
+ * consumer needs, rather than in one form both have to convert:
+ *
+ *   `trackFraction`      arc of the WHOLE shape the track covers. Unreal walks
+ *                        the spine to exactly this.
+ *   `remainderOfTrack`   0..1 along the TRACK. The SVG reveal is a dash offset
+ *                        on a path whose `pathLength` is normalised to 1, so
+ *                        this is the number that mask wants.
+ *   `remainderFraction`  the same remainder as arc of the whole shape. What a
+ *                        renderer that draws geometry rather than masking it
+ *                        needs, and never derivable by multiplying in the
+ *                        renderer without the clamp being applied twice.
+ *
+ * A CAPACITY NOBODY REPORTED STILL DRAWS THE FRAME. The track falls back to the
+ * full shape, because the swoosh is the HUD's furniture and its absence would
+ * read as a broken HUD rather than an unreported one. What an unknown capacity
+ * never does is draw a REMAINDER — a full arc would claim capacity nobody
+ * confirmed, and an empty one would claim it had all been spent.
+ */
+
+/** How much of the spine the leading highlight covers, as an arc fraction. */
+export const WONDERLAND_METER_HEAD_ARC = 0.035;
+
+/** Below this an arc is drawn as nothing rather than as a speck. */
+export const WONDERLAND_METER_MINIMUM_VISIBLE_ARC = 0.004;
+
+export interface WonderlandMeterDrawPlan {
+  /** Arc fraction of the whole shape the track occupies. Clamped to 0..1. */
+  readonly trackFraction: number;
+  /** True once the track is long enough to be a shape rather than a speck. */
+  readonly trackVisible: boolean;
+  /** Remainder along the track, 0..1. Zero whenever the remainder is unknown. */
+  readonly remainderOfTrack: number;
+  /** The same remainder as an arc fraction of the whole shape. */
+  readonly remainderFraction: number;
+  /**
+   * Whether a remainder was REPORTED. Distinct from `remainderVisible`: a
+   * reported remainder of zero is a real measurement that draws nothing, and an
+   * unreported one is silence that also draws nothing. A renderer that could
+   * not tell them apart would print the same caption over both.
+   */
+  readonly remainderKnown: boolean;
+  /** Whether to draw the remainder at all. */
+  readonly remainderVisible: boolean;
+  /** Arc fraction of the whole shape where the leading highlight begins. */
+  readonly headStartFraction: number;
+  /** Arc fraction of the whole shape where it ends — the remainder's own tip. */
+  readonly headEndFraction: number;
+  readonly headVisible: boolean;
+}
+
+export const WONDERLAND_METER_DRAW_PLAN_FIELDS = exactKeys<WonderlandMeterDrawPlan>()([
+  'trackFraction',
+  'trackVisible',
+  'remainderOfTrack',
+  'remainderFraction',
+  'remainderKnown',
+  'remainderVisible',
+  'headStartFraction',
+  'headEndFraction',
+  'headVisible',
+] as const);
+
+/** Into 0..1, treating a non-finite value as 0 rather than propagating NaN. */
+const clampUnit = (value: number): number =>
+  !Number.isFinite(value) ? 0 : value < 0 ? 0 : value > 1 ? 1 : value;
+
+/**
+ * Turn one meter into the arcs that draw it.
+ *
+ * CLAMPED HERE AND NOWHERE ELSE. `projectWonderlandUsageMeter` already clamps
+ * what it computes, but a meter can also arrive from a fixture, a replayed
+ * capture or a future authority, and a renderer handed 1.4 would draw past the
+ * end of its own curve. Clamping in the plan means every consumer inherits it
+ * and none of them has to remember.
+ */
+export function wonderlandMeterDrawPlan(meter: WonderlandUsageMeter): WonderlandMeterDrawPlan {
+  const trackFraction = meter.capacitySpan.known
+    ? clampUnit(meter.capacitySpan.value as number)
+    : 1;
+  const remainderKnown = meter.remainingFraction.known;
+  const remainderOfTrack = remainderKnown
+    ? clampUnit(meter.remainingFraction.value as number)
+    : 0;
+  const remainderFraction = trackFraction * remainderOfTrack;
+
+  const trackVisible = trackFraction > WONDERLAND_METER_MINIMUM_VISIBLE_ARC;
+  const remainderVisible =
+    remainderKnown && remainderFraction > WONDERLAND_METER_MINIMUM_VISIBLE_ARC;
+
+  // The head is the remainder's LEADING edge, so it ends where the remainder
+  // does and reaches back by a fixed arc. Clamped at the tail because a
+  // remainder shorter than the highlight would otherwise start below zero and
+  // draw a highlight longer than the thing it highlights.
+  const headEndFraction = remainderFraction;
+  const headStartFraction = Math.max(
+    0,
+    remainderFraction - WONDERLAND_METER_HEAD_ARC * trackFraction,
+  );
+
+  return Object.freeze({
+    trackFraction,
+    trackVisible,
+    remainderOfTrack,
+    remainderFraction,
+    remainderKnown,
+    remainderVisible,
+    headStartFraction,
+    headEndFraction,
+    headVisible: remainderVisible && headEndFraction > headStartFraction,
+  });
+}
+
 /* ------------------------------------------------------------ projection */
 
 /**

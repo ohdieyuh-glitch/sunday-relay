@@ -23,6 +23,10 @@ import {
   projectWonderlandUsageMeter,
   wonderlandSwooshAt,
   wonderlandSwooshOutline,
+  wonderlandMeterDrawPlan,
+  WONDERLAND_METER_DRAW_PLAN_FIELDS,
+  WONDERLAND_METER_HEAD_ARC,
+  WONDERLAND_METER_MINIMUM_VISIBLE_ARC,
   wonderlandSwooshSvgPath,
   wonderlandUsageEase,
   wonderlandUsageFixture,
@@ -249,6 +253,158 @@ describe('a simulated meter says so', () => {
     });
     expect(missing.capacityUnits.known).toBe(false);
     expect(missing.status).toBe('unavailable');
+  });
+});
+
+/* ------------------------------------------------------------ draw plan */
+
+describe('the draw plan both surfaces render from', () => {
+  // THE VALIDATIONS THE DIRECTIVE NAMES BY HAND. Each of these was listed as a
+  // thing the HUD must be shown to do, and each is a property of the plan
+  // rather than of a renderer, which is the point of extracting it: proving it
+  // once proves it for the browser and for Unreal at the same time.
+
+  it('accepts dynamic values rather than a hardcoded percentage', () => {
+    const readings = [0, 0.25, 0.5, 0.75, 1];
+    const seen = readings.map(
+      (left) => wonderlandMeterDrawPlan(meter({ usedUnits: 100 * (1 - left) })).remainderOfTrack,
+    );
+    expect(seen).toEqual(readings);
+    expect(new Set(seen).size).toBe(readings.length);
+  });
+
+  it('clamps a reading that arrives outside its own range', () => {
+    // projectWonderlandUsageMeter clamps what it computes, so an out-of-range
+    // value has to be introduced directly — which is exactly how one would
+    // arrive from a replayed capture or a future authority.
+    const wild: WonderlandUsageMeter = {
+      ...meter(),
+      capacitySpan: { known: true, value: 1.8, reason: null },
+      remainingFraction: { known: true, value: -0.4, reason: null },
+    } as WonderlandUsageMeter;
+    const plan = wonderlandMeterDrawPlan(wild);
+    expect(plan.trackFraction).toBe(1);
+    expect(plan.remainderOfTrack).toBe(0);
+    expect(plan.remainderFraction).toBe(0);
+    expect(plan.headStartFraction).toBeGreaterThanOrEqual(0);
+  });
+
+  it('refuses to propagate a non-finite reading as geometry', () => {
+    const broken: WonderlandUsageMeter = {
+      ...meter(),
+      capacitySpan: { known: true, value: Number.NaN, reason: null },
+      remainingFraction: { known: true, value: Number.POSITIVE_INFINITY, reason: null },
+    } as WonderlandUsageMeter;
+    const plan = wonderlandMeterDrawPlan(broken);
+    expect(Number.isFinite(plan.trackFraction)).toBe(true);
+    expect(Number.isFinite(plan.remainderFraction)).toBe(true);
+    expect(plan.trackFraction).toBe(0);
+  });
+
+  it('draws nothing at zero capacity, and says the track is not there', () => {
+    const empty = wonderlandMeterDrawPlan(meter({ capacityUnits: 0, usedUnits: 0 }));
+    expect(empty.trackFraction).toBe(0);
+    expect(empty.trackVisible).toBe(false);
+    expect(empty.remainderFraction).toBe(0);
+    expect(empty.remainderVisible).toBe(false);
+    expect(empty.headVisible).toBe(false);
+  });
+
+  it('fills the whole arc at full capacity', () => {
+    const full = wonderlandMeterDrawPlan(
+      meter({ capacityUnits: 300, usedUnits: 0, referenceCapacityUnits: 300 }),
+    );
+    expect(full.trackFraction).toBe(1);
+    expect(full.trackVisible).toBe(true);
+    expect(full.remainderOfTrack).toBe(1);
+    expect(full.remainderFraction).toBe(1);
+    expect(full.remainderVisible).toBe(true);
+  });
+
+  it('gives a bigger tier a PHYSICALLY LONGER track, not a differently shaded one', () => {
+    // The founder asked for higher tiers to visibly increase capacity, and this
+    // is where that lives: the tier ceiling moves the track's own length.
+    const small = wonderlandMeterDrawPlan(
+      meter({ capacityUnits: 100, usedUnits: 0, referenceCapacityUnits: 400 }),
+    );
+    const large = wonderlandMeterDrawPlan(
+      meter({ capacityUnits: 400, usedUnits: 0, referenceCapacityUnits: 400 }),
+    );
+    expect(large.trackFraction).toBeGreaterThan(small.trackFraction);
+    expect(small.trackFraction).toBeCloseTo(0.25, 10);
+    expect(large.trackFraction).toBe(1);
+
+    // And both are FULL, so the difference a viewer sees is length rather than
+    // fill: two untouched tiers must not look like one that has been spent.
+    expect(small.remainderOfTrack).toBe(1);
+    expect(large.remainderOfTrack).toBe(1);
+    expect(large.remainderFraction).toBeGreaterThan(small.remainderFraction);
+  });
+
+  it('draws the frame but never a remainder when capacity was not reported', () => {
+    const unknown = wonderlandMeterDrawPlan(meter({ capacityUnits: null }));
+    expect(unknown.trackFraction).toBe(1);
+    expect(unknown.trackVisible).toBe(true);
+    expect(unknown.remainderKnown).toBe(false);
+    expect(unknown.remainderVisible).toBe(false);
+    expect(unknown.remainderFraction).toBe(0);
+  });
+
+  it('tells a reported zero apart from an unreported remainder', () => {
+    // Both draw nothing, and they are not the same fact. A renderer that could
+    // not distinguish them would caption "0 left" over silence.
+    const spent = wonderlandMeterDrawPlan(meter({ capacityUnits: 100, usedUnits: 100 }));
+    const silent = wonderlandMeterDrawPlan(meter({ usedUnits: null }));
+    expect(spent.remainderKnown).toBe(true);
+    expect(spent.remainderVisible).toBe(false);
+    expect(silent.remainderKnown).toBe(false);
+    expect(silent.remainderVisible).toBe(false);
+  });
+
+  it('drops a remainder too short to be a shape rather than drawing a speck', () => {
+    const speck = wonderlandMeterDrawPlan(
+      meter({ capacityUnits: 100000, usedUnits: 99999.8, referenceCapacityUnits: 100000 }),
+    );
+    expect(speck.remainderKnown).toBe(true);
+    expect(speck.remainderFraction).toBeGreaterThan(0);
+    expect(speck.remainderFraction).toBeLessThan(WONDERLAND_METER_MINIMUM_VISIBLE_ARC);
+    expect(speck.remainderVisible).toBe(false);
+  });
+
+  it('keeps the leading highlight inside the remainder it highlights', () => {
+    for (const usedUnits of [0, 1, 50, 97, 99, 100]) {
+      const plan = wonderlandMeterDrawPlan(meter({ capacityUnits: 100, usedUnits }));
+      expect(plan.headStartFraction).toBeGreaterThanOrEqual(0);
+      expect(plan.headEndFraction).toBe(plan.remainderFraction);
+      expect(plan.headStartFraction).toBeLessThanOrEqual(plan.headEndFraction);
+      expect(plan.headEndFraction).toBeLessThanOrEqual(plan.trackFraction);
+    }
+  });
+
+  it('scales the highlight with the track, so a short tier is not all highlight', () => {
+    const short = wonderlandMeterDrawPlan(
+      meter({ capacityUnits: 40, usedUnits: 0, referenceCapacityUnits: 400 }),
+    );
+    const long = wonderlandMeterDrawPlan(
+      meter({ capacityUnits: 400, usedUnits: 0, referenceCapacityUnits: 400 }),
+    );
+    const arc = (p: ReturnType<typeof wonderlandMeterDrawPlan>): number =>
+      p.headEndFraction - p.headStartFraction;
+    expect(arc(short)).toBeLessThan(arc(long));
+    expect(arc(long)).toBeCloseTo(WONDERLAND_METER_HEAD_ARC, 10);
+  });
+
+  it('never draws a head without a remainder under it', () => {
+    for (const usedUnits of [0, 25, 50, 99.99, 100]) {
+      const plan = wonderlandMeterDrawPlan(meter({ capacityUnits: 100, usedUnits }));
+      if (plan.headVisible) expect(plan.remainderVisible).toBe(true);
+    }
+    expect(wonderlandMeterDrawPlan(meter({ usedUnits: null })).headVisible).toBe(false);
+  });
+
+  it('names every field it carries, so the C++ mirror cannot drift', () => {
+    const plan = wonderlandMeterDrawPlan(meter());
+    expect(Object.keys(plan).sort()).toEqual([...WONDERLAND_METER_DRAW_PLAN_FIELDS].sort());
   });
 });
 

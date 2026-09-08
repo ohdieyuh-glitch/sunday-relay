@@ -50,6 +50,7 @@ import type { WonderlandRunSnapshot } from './wonderland-rehydration';
 import { WONDERLAND_USAGE_ATTRIBUTIONS } from './wonderland-usage-accounting';
 import {
   WONDERLAND_HUD_ANCHORS,
+  WONDERLAND_METER_DRAW_PLAN_FIELDS,
   WONDERLAND_SWOOSH_SAMPLE_FIELDS,
   WONDERLAND_SWOOSH_SEGMENT_FIELDS,
   WONDERLAND_USAGE_CHANNELS,
@@ -71,6 +72,7 @@ import {
 } from './wonderland-usage-authority';
 import type { WonderlandUsageAuthorityStatus } from './wonderland-usage-authority';
 import type {
+  WonderlandMeterDrawPlan,
   WonderlandSwooshSample,
   WonderlandSwooshSegment,
   WonderlandUsageChannelStyle,
@@ -217,6 +219,13 @@ const _UsageViewportNullableIsExact: SameKeys<
 > = true;
 void _UsageViewportNullableIsExact;
 
+const METER_DRAW_PLAN_NULLABLE = [] as const;
+const _MeterDrawPlanNullableIsExact: SameKeys<
+  (typeof METER_DRAW_PLAN_NULLABLE)[number],
+  NullableKeysOf<WonderlandMeterDrawPlan>
+> = true;
+void _MeterDrawPlanNullableIsExact;
+
 const SWOOSH_SAMPLE_NULLABLE = [] as const;
 const _SwooshSampleNullableIsExact: SameKeys<
   (typeof SWOOSH_SAMPLE_NULLABLE)[number],
@@ -342,6 +351,21 @@ export const WONDERLAND_INTEGRATION_CPP_STRUCT_PARITY: readonly {
     cppStruct: 'FWonderlandUsageMeter',
     tsInterface: 'WonderlandUsageMeter',
     fields: WONDERLAND_USAGE_METER_FIELDS,
+  },
+  {
+    /**
+     * THE ARITHMETIC BETWEEN A READING AND A DRAWING, MIRRORED SO IT CANNOT FORK.
+     *
+     * Unlike the meter, this never travels: each surface computes it locally
+     * from the meter it was given. It is mirrored because the two surfaces must
+     * compute the SAME plan, and the fields are what makes that checkable —
+     * a C++ port that had quietly dropped `bRemainderKnown` and inferred it
+     * from a zero would draw a reported empty meter and an unreported one
+     * identically, and no test written in its own terms would notice.
+     */
+    cppStruct: 'FWonderlandMeterDrawPlan',
+    tsInterface: 'WonderlandMeterDrawPlan',
+    fields: WONDERLAND_METER_DRAW_PLAN_FIELDS,
   },
   {
     /**
@@ -535,6 +559,7 @@ export const WONDERLAND_INTEGRATION_NULLABLE_FIELDS: Readonly<
   FWonderlandLinkStatus: LINK_STATUS_NULLABLE,
   FWonderlandUsageAuthorityStatus: AUTHORITY_STATUS_NULLABLE,
   FWonderlandUsageViewport: USAGE_VIEWPORT_NULLABLE,
+  FWonderlandMeterDrawPlan: METER_DRAW_PLAN_NULLABLE,
   FWonderlandSwooshSample: SWOOSH_SAMPLE_NULLABLE,
   FWonderlandSwooshSegment: SWOOSH_SEGMENT_NULLABLE,
   FWonderlandUsageSwoosh: USAGE_SWOOSH_NULLABLE,

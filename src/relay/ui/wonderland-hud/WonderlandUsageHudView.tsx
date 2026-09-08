@@ -6,6 +6,8 @@ import {
   WONDERLAND_USAGE_CHANNEL_SWOOSH,
   WONDERLAND_USAGE_TRANSITION,
   WONDERLAND_USAGE_VIEWPORT,
+  WONDERLAND_METER_HEAD_ARC,
+  wonderlandMeterDrawPlan,
   wonderlandSwooshSpineSvgPath,
   wonderlandSwooshSvgPath,
 } from '../../mission/wonderland/wonderland-usage-meter';
@@ -77,14 +79,15 @@ const VIEW_BOX = [
   WONDERLAND_USAGE_VIEWPORT.height * VIEW,
 ].join(' ');
 
-/**
- * How much of the spine the leading highlight covers, as an arc fraction.
- * Small enough to read as an edge rather than as a second colour band.
+/*
+ * HEAD_ARC AND MINIMUM_VISIBLE_ARC USED TO LIVE HERE.
+ *
+ * They are `WONDERLAND_METER_HEAD_ARC` and
+ * `WONDERLAND_METER_MINIMUM_VISIBLE_ARC` in the contract now, along with the
+ * arithmetic that used them, because the Unreal HUD needs the same two numbers
+ * and a copy in a stylesheet is a copy that drifts. This file reads the plan
+ * they produce; it no longer decides when a remainder is too short to draw.
  */
-const HEAD_ARC = 0.035;
-
-/** Below this the remainder is drawn as nothing rather than as a speck. */
-const MINIMUM_VISIBLE_ARC = 0.004;
 
 /**
  * THE MASK REGION, STATED, because its default is a trap.
@@ -132,9 +135,13 @@ function ChannelStroke({
   // A capacity nobody reported still draws the frame: the shape is the HUD's
   // furniture, and its absence would read as a broken HUD rather than as an
   // unreported one. What it does NOT draw is any remainder.
-  const span = meter.capacitySpan.known ? (meter.capacitySpan.value as number) : 1;
-  const left = meter.remainingFraction.known ? (meter.remainingFraction.value as number) : 0;
-  const visible = meter.remainingFraction.known && left * span > MINIMUM_VISIBLE_ARC;
+  // EVERY NUMBER BELOW COMES FROM THE CONTRACT, NOT FROM THIS FILE. The plan
+  // is what Unreal draws from too, so a threshold or a clamp changed in one
+  // place changes both surfaces or neither.
+  const plan = wonderlandMeterDrawPlan(meter);
+  const span = plan.trackFraction;
+  const left = plan.remainderOfTrack;
+  const visible = plan.remainderVisible;
 
   const trackPath = wonderlandSwooshSvgPath({ to: span, shape, scale: VIEW });
   const spinePath = wonderlandSwooshSpineSvgPath({ to: span, shape, scale: VIEW });
@@ -151,7 +158,7 @@ function ChannelStroke({
   const headId = `wh-head-${instanceId}-${channel}`;
 
   return (
-    <g className={`wh-stroke wh-stroke--${channel}`} data-known={meter.remainingFraction.known}>
+    <g className={`wh-stroke wh-stroke--${channel}`} data-known={plan.remainderKnown}>
       <defs>
         {/*
           `pathLength="1"` normalises the dash arithmetic to the fraction the
@@ -187,8 +194,8 @@ function ChannelStroke({
             stroke="#fff"
             strokeWidth={maskWidth}
             strokeLinecap="butt"
-            strokeDasharray={`${HEAD_ARC} 1`}
-            strokeDashoffset={1 + HEAD_ARC - left}
+            strokeDasharray={`${WONDERLAND_METER_HEAD_ARC} 1`}
+            strokeDashoffset={1 + WONDERLAND_METER_HEAD_ARC - left}
             style={transitionStyle}
           />
         </mask>
