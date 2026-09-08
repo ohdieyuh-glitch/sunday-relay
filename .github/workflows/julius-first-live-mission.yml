@@ -695,14 +695,20 @@ jobs:
           # launch, so a mission that never got that far would ABORT this step
           # on the expansion below and lose the evidence collected above it.
           # Guarded, not assumed.
-          if [ -n "${DATABASE_URL:-}" ] \
-            && docker exec -e PGPASSWORD julius-postgres createdb -U "$PGUSER" julius_recovery_drill 2>/dev/null; then
-            if DATABASE_URL="${DATABASE_URL%/*}/julius_recovery_drill" \
-                npm run julius:recovery-drill --silent -- --out /tmp/julius-capability-proofs > /dev/null 2>&1; then
-              cp /tmp/julius-capability-proofs/capability-proofs.tsv \
-                 /tmp/julius-capability-proofs/julius-recovery-drill.transcript.txt \
-                 julius-live-evidence/ 2>/dev/null || true
-            fi
+          if [ -n "${DATABASE_URL:-}" ]; then
+            # ONE DATABASE PER DRILL, and each drill refuses a database that
+            # already holds its run, so none can read another's rows as its own.
+            for drill in recovery-drill failure-recovery-drill repair-loop-drill; do
+              db="julius_${drill//-/_}"
+              if docker exec -e PGPASSWORD julius-postgres createdb -U "$PGUSER" "$db" 2>/dev/null; then
+                DATABASE_URL="${DATABASE_URL%/*}/$db" \
+                  npm run "julius:$drill" --silent -- --out /tmp/julius-capability-proofs > /dev/null 2>&1 || true
+              fi
+            done
+            # The ledger is merged by the drills, so one copy carries all three.
+            cp /tmp/julius-capability-proofs/capability-proofs.tsv \
+               /tmp/julius-capability-proofs/*.transcript.txt \
+               julius-live-evidence/ 2>/dev/null || true
             rm -rf /tmp/julius-capability-proofs
           fi
 

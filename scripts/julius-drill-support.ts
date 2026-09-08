@@ -17,7 +17,7 @@
  */
 
 import { createHash } from 'node:crypto';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Pool } from 'pg';
 
@@ -120,6 +120,31 @@ export function writeAttestation(input: {
     input.transcriptFile,
     recordedAt,
   ].join('\t'));
-  writeFileSync(join(input.outDir, 'capability-proofs.tsv'),
-    `${[CAPABILITY_PROOF_COLUMNS.join('\t'), ...rows, `(${rows.length} rows)`].join('\n')}\n`);
+  /**
+   * MERGED, NEVER OVERWRITTEN.
+   *
+   * Three drills run into one directory in CI and in a mission bundle, and the
+   * gate reads ONE ledger. A writer that truncated would leave the last drill's
+   * proof and silently discard the other two — a directory that looks complete
+   * and proves a third of what it says. Rows for THIS drill are replaced (a
+   * rerun supersedes itself); every other drill's rows are carried through
+   * untouched.
+   */
+  const ledger = join(input.outDir, 'capability-proofs.tsv');
+  const header = CAPABILITY_PROOF_COLUMNS.join('\t');
+  const kept: string[] = [];
+  if (existsSync(ledger)) {
+    const lines = readFileSync(ledger, 'utf8').split('\n')
+      .filter((line) => line.length > 0 && !/^\(\d+ rows?\)$/.test(line));
+    const existingHeader = lines[0] ?? '';
+    if (existingHeader !== header) {
+      // Overwriting would destroy evidence this writer cannot read; saying
+      // nothing would be worse. The drill fails on its own output instead.
+      throw new Error('capability_proof_ledger_header_mismatch: refusing to overwrite a ledger this drill cannot merge');
+    }
+    const mine = `${input.capability}\t${input.drill}\t`;
+    kept.push(...lines.slice(1).filter((line) => !line.startsWith(mine)));
+  }
+  const all = [...kept, ...rows];
+  writeFileSync(ledger, `${[header, ...all, `(${all.length} rows)`].join('\n')}\n`);
 }
