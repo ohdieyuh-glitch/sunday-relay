@@ -13,13 +13,14 @@ import { JuliusSubagentPostgresRepository } from './julius-subagent-postgres';
 import { JuliusLifecyclePostgresRepository } from './julius-lifecycle-postgres';
 import { JuliusTimelinePostgresRepository } from './julius-timeline-postgres';
 import { JuliusVerificationPostgresRepository } from './julius-verification-postgres';
+import { JuliusContractPostgresRepository } from './julius-contract-postgres';
 import { createJuliusMemoryStore } from '../mission/julius';
 import type {
   JuliusClaimedTask, JuliusContextWriter, JuliusEventWriter, JuliusResultReceiptRow,
   JuliusResultWriter, JuliusRunRow, JuliusRunWriter, JuliusRuntimeReader,
   JuliusApprovalStore, JuliusBrainWriter, JuliusFindingWriter, JuliusLifecycleStore,
   JuliusRecoveryDriver, JuliusTimelineReader,
-  JuliusRuntimeStore, JuliusSubagentStore, JuliusTrajectoryWriter,
+  JuliusRuntimeStore, JuliusSubagentStore, JuliusTaskContractStore, JuliusTrajectoryWriter,
 } from '../mission/julius';
 
 /**
@@ -98,6 +99,15 @@ const timeline: JuliusTimelineReader = new JuliusTimelinePostgresRepository(pool
 const findings: JuliusFindingWriter = new JuliusVerificationPostgresRepository(pool);
 
 /**
+ * The contract repository satisfies the task-contract port directly. This
+ * assignment is the load-bearing half of migration 023: a port method the
+ * repository does not implement — or implements with a different shape — stops
+ * this file compiling, which is how the memory model and the database are held
+ * to one contract without a database being present.
+ */
+const taskContracts: JuliusTaskContractStore = new JuliusContractPostgresRepository(pool);
+
+/**
  * THE TWO LEDGERS NEED A ONE-LINE ADAPTER, AND THAT IS THE POINT.
  *
  * Both repositories name their method `append`; the composed port cannot,
@@ -141,6 +151,11 @@ const composed: JuliusRuntimeStore & JuliusSubagentStore
   reviewCompletedFor: reader.reviewCompletedFor.bind(reader),
   activeTaskCount: reader.activeTaskCount.bind(reader),
   recordFinding: findings.recordFinding.bind(findings),
+  putTaskContract: taskContracts.putTaskContract.bind(taskContracts),
+  challengeTaskContract: taskContracts.challengeTaskContract.bind(taskContracts),
+  lockTaskContract: taskContracts.lockTaskContract.bind(taskContracts),
+  loadTaskContract: taskContracts.loadTaskContract.bind(taskContracts),
+  taskContractRevisions: taskContracts.taskContractRevisions.bind(taskContracts),
   recoverExpired: recovery.recoverExpired.bind(recovery),
   subagentContext: subagents.subagentContext.bind(subagents),
   recordSubagent: subagents.recordSubagent.bind(subagents),
