@@ -70,6 +70,10 @@ import {
 } from './browser-session/routes';
 import { WonderlandBackend } from '../src/relay/mission/wonderland/wonderland-backend';
 import { handleWonderlandRoute, isWonderlandRoute } from './wonderland-routes';
+import {
+  handleWonderlandJuliusRoute,
+  isWonderlandJuliusRoute,
+} from './wonderland-julius-routes';
 
 const MAX_BODY_BYTES = 64 * 1024;
 
@@ -502,6 +506,31 @@ export function createBridgeServer(
             send(res, githubAuthResult.status, githubAuthResult.body, cors);
             return;
           }
+        }
+
+        // THE JULIUS WORLD ROUTES SIT IN FRONT OF THE BATTLE ONES, because
+        // `isWonderlandRoute` claims the whole `/wonderland/` prefix and would
+        // otherwise swallow these and 404 them.
+        //
+        // NO READER AND NO MEMBERSHIP PORT ARE PASSED, and that is not an
+        // oversight. The browser session this bridge issues names a player and
+        // an origin and NOT a project, so nothing here can yet answer "may this
+        // player read this project's runs?" — and the tempting default, any
+        // authenticated player may read any project, is a cross-tenant read of
+        // mission state, C.A.R.D. slots and spend. The route answers 503 until
+        // both are wired, which is the only safe thing an unconfigured
+        // authorisation can do.
+        if (isWonderlandJuliusRoute(path.replace('/relay-api', ''))) {
+          const juliusResult = await handleWonderlandJuliusRoute({
+            method,
+            path: path.replace('/relay-api', ''),
+            url: (req.url ?? '/').replace('/relay-api', ''),
+            authorization: typeof req.headers.authorization === 'string' ? req.headers.authorization : undefined,
+            origin,
+            now: Date.now(),
+          }, { sessions: browserSessions, response: res, request: req });
+          if (juliusResult !== null) send(res, juliusResult.status, juliusResult.body, cors);
+          return;
         }
 
         if (isWonderlandRoute(path.replace('/relay-api', ''))) {
