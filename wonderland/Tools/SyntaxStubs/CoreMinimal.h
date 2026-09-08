@@ -19,9 +19,19 @@
 #define ensure(x) (x)
 #define TEXT(x) x
 #define WONDERLAND_API
+// A dynamic multicast delegate, reduced to what a PARSE needs. Broadcast is a
+// no-op: nothing here dispatches, and a stub that pretended to would invite a
+// test to believe it had observed a listener run.
+#define DECLARE_DYNAMIC_MULTICAST_DELEGATE(Name) \
+  struct Name { void Broadcast() {} void Clear() {} }
+#define BlueprintAssignable
 using int64 = std::int64_t; using uint64 = std::uint64_t; using int16 = std::int16_t; using uint16 = std::uint16_t;
 using uint8 = std::uint8_t; using int32 = std::int32_t; using uint32 = std::uint32_t;
-struct FString { FString(){} FString(const char*){} bool operator<(const FString&) const { return false; } };
+struct FString { std::string s; FString(){} FString(const char* c):s(c?c:""){}
+  bool operator<(const FString& o) const { return s<o.s; }
+  bool operator==(const FString& o) const { return s==o.s; }
+  bool operator!=(const FString& o) const { return s!=o.s; }
+  bool IsEmpty() const { return s.empty(); } void Reset(){ s.clear(); } };
 struct FName { FName(){} FName(const char*){} };
 struct FText {};
 template<typename T> struct TArray { std::vector<T> v;
