@@ -71,14 +71,28 @@
 .rx-nogl { position: absolute; top: var(--rx-pad); right: var(--rx-pad); z-index: 3; }
 
 /* ---- the configuration rail --------------------------------------------- */
+
+/* THE RAIL SHARES A COLUMN WITH THE USAGE HUD, AND MUST BEGIN BELOW IT.
+   The Wonderland usage HUD is a fixed top-left overlay on the Relay stage, and
+   this rail is anchored left too — so a rail centred in the whole viewport grows
+   upward into the HUD's readout and the two sets of type overlap. Seen by
+   rendering the real app; no test catches it, because jsdom has no layout.
+
+   The reserve is the HUD's own width clamp times its 100:88 viewBox aspect,
+   plus its readout block and top offset. Duplicating the clamp is deliberate:
+   a fixed overlay in another subtree cannot publish a custom property to this
+   one, and a clamp that moves with the HUD is safer than a constant that does
+   not. Mobile is unaffected — the rail is already a bottom sheet there. */
 .rx-panel {
+  --rx-hud-reserve: calc(clamp(230px, 24vw, 330px) * 0.88 + 6.5rem);
   position: absolute;
   left: var(--rx-pad);
-  top: 50%;
+  /* Centred in the band BELOW the HUD, not in the viewport. */
+  top: calc(var(--rx-hud-reserve) + (100vh - var(--rx-hud-reserve)) / 2);
   transform: translateY(-50%);
   z-index: 3;
   width: min(340px, 34vw);
-  max-height: 76vh;
+  max-height: calc(100vh - var(--rx-hud-reserve) - var(--rx-pad) * 2);
   overflow-y: auto;
   display: flex;
   flex-direction: column;
