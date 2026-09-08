@@ -737,6 +737,7 @@ function reviewSnapshot(taskId: string): JuliusContextSnapshot {
     contextId: 'ctx-resume-1', runId: 'run-live', taskId, workerId,
     workerRole: 'INDEPENDENT_REVIEWER', compilerVersion: JULIUS_CONTEXT_COMPILER_VERSION,
     missionContractRevision: 1, cardRevision: 'card-test-1', projectBrainRevision: 0,
+    taskContractRevision: 1, taskContractDigest: 'sha256:resume-contract',
     sourceEntryIds: [], dependencyTaskIds: [], evidenceIds: [], findingIds: [],
     acceptanceCriterionIds: ['AC-1'], contentHash: 'sha256:resume-test',
     characterCount: 24, redactionCount: 0, truncated: false,

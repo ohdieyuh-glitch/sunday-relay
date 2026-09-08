@@ -27,7 +27,7 @@ class PoolStub{
   };
  }
  async end(){}
-}const snapshot={contextId:'context',runId:'run',taskId:'task',workerId:'worker',workerRole:'CODING_AGENT',compilerVersion:'julius-context.v1' as const,missionContractRevision:1,cardRevision:'card',projectBrainRevision:2,sourceEntryIds:['entry'],dependencyTaskIds:['dependency'],evidenceIds:['evidence'],findingIds:['finding'],acceptanceCriterionIds:['criterion'],contentHash:'sha256:x',characterCount:10,redactionCount:1,truncated:false,packet:{missionId:'mission',taskId:'task',workerId:'worker',sourceEntryIds:['entry'],blocks:[],truncated:false}};describe('Julius context persistence',()=>{
+}const snapshot={contextId:'context',runId:'run',taskId:'task',workerId:'worker',workerRole:'CODING_AGENT',compilerVersion:'julius-context.v1' as const,missionContractRevision:1,cardRevision:'card',projectBrainRevision:2,taskContractRevision:1,taskContractDigest:'sha256:contract',sourceEntryIds:['entry'],dependencyTaskIds:['dependency'],evidenceIds:['evidence'],findingIds:['finding'],acceptanceCriterionIds:['criterion'],contentHash:'sha256:x',characterCount:10,redactionCount:1,truncated:false,packet:{missionId:'mission',taskId:'task',workerId:'worker',sourceEntryIds:['entry'],blocks:[],truncated:false}};describe('Julius context persistence',()=>{
  it('tenant-scopes and idempotently stores snapshot metadata rather than arbitrary transcripts',async()=>{
   const pool=new PoolStub();
   expect(await new JuliusContextPostgresRepository(pool as unknown as Pool).persist({projectId:'project',snapshot})).toBe('context');

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { createJuliusMemoryStore, type JuliusMemoryStore } from './julius-memory-store';
+import { createJuliusContextSnapshot } from './julius-context-snapshot';
 import {
   juliusTaskContractBindingDigest,
   lockJuliusTaskContract,
@@ -269,5 +270,59 @@ describe('what survives a restart', () => {
     // would mint a second lock instant and a second evaluator attribution.
     expect(await lock(store, contract(), 'evaluator-after-restart'))
       .toEqual({ locked: false, reasonCode: 'contract_revision_already_locked', lockedRevision: 1 });
+  });
+});
+
+/**
+ * THE CONTEXT A WORKER IS HANDED NAMES THE AGREEMENT IT WAS COMPILED UNDER.
+ *
+ * `JuliusContextWriter.persist` deduplicates on
+ * `(task_id, worker_id, content_hash)`. Two packets whose TEXT is identical but
+ * whose contracts differ are not the same document — one describes terms that
+ * no longer bind — and a store that returned the older row would hand a retry a
+ * context recorded against an agreement nobody holds. This is that property,
+ * proven at the hash rather than asserted about the caller.
+ */
+describe('a context carries its contract binding, and the hash says so', () => {
+  const packetFor = (binding: { revision: number; digest: string } | null) => createJuliusContextSnapshot({
+    contextId: 'context-1', runId: 'run-1',
+    task: {
+      taskId: 'run-1:build', missionId: 'mission-1', parentTaskId: null, dependencyIds: [],
+      requiredEvidenceTypes: ['TEST'], taskType: 'build', role: 'CODING_AGENT', ordinal: 1, state: 'RUNNABLE',
+    },
+    worker: {
+      workerId: 'coder', role: 'CODING_AGENT', providerId: 'anthropic', adapterId: 'coder-adapter',
+      capabilities: ['implement'], taskTypes: ['build'],
+      concurrencyLimit: 1, timeoutMs: 60_000, maxRetries: 1, status: 'AVAILABLE',
+    },
+    entries: [], maxCharacters: 4_000,
+    missionContractRevision: 3, cardRevision: 'card-1', projectBrainRevision: 0,
+    taskContractRevision: binding?.revision ?? null,
+    taskContractDigest: binding?.digest ?? null,
+    dependencyTaskIds: [], evidenceIds: [], findingIds: [], acceptanceCriterionIds: [],
+  });
+
+  it('two contexts that differ ONLY in the contract revision are different documents', () => {
+    const first = packetFor({ revision: 1, digest: 'sha256:aaa' });
+    const second = packetFor({ revision: 2, digest: 'sha256:aaa' });
+    expect(second.contentHash).not.toBe(first.contentHash);
+  });
+
+  it('and two that differ only in the digest are too — a reworded revision is a new agreement', () => {
+    const first = packetFor({ revision: 2, digest: 'sha256:aaa' });
+    const second = packetFor({ revision: 2, digest: 'sha256:bbb' });
+    expect(second.contentHash).not.toBe(first.contentHash);
+  });
+
+  it('an unbound role records null rather than a zero nobody measured', () => {
+    const unbound = packetFor(null);
+    expect(unbound.taskContractRevision).toBeNull();
+    expect(unbound.taskContractDigest).toBeNull();
+    expect(unbound.contentHash).not.toBe(packetFor({ revision: 1, digest: 'sha256:aaa' }).contentHash);
+  });
+
+  it('the same agreement compiles to the same hash, so an honest retry still deduplicates', () => {
+    expect(packetFor({ revision: 1, digest: 'sha256:aaa' }).contentHash)
+      .toBe(packetFor({ revision: 1, digest: 'sha256:aaa' }).contentHash);
   });
 });
