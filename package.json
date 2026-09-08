@@ -71,7 +71,11 @@
     "wonderland:geometry:check": "esbuild scripts/export-wonderland-geometry-fixture.ts --bundle --platform=node --format=cjs --outfile=generated/export-wonderland-geometry-fixture.cjs --log-level=warning && node generated/export-wonderland-geometry-fixture.cjs --check",
     "wonderland:geometry:verify": "bash wonderland/Tools/geometry-parity-check.sh",
     "wonderland:cpp:syntax": "bash wonderland/Tools/syntax-check.sh",
-    "wonderland:usage:verify": "bash wonderland/Tools/usage-subsystem-check.sh"
+    "wonderland:usage:verify": "bash wonderland/Tools/usage-subsystem-check.sh",
+    "wonderland:ordering:export": "esbuild scripts/export-wonderland-ordering-fixture.ts --bundle --platform=node --format=cjs --outfile=generated/export-wonderland-ordering-fixture.cjs --log-level=warning && node generated/export-wonderland-ordering-fixture.cjs",
+    "wonderland:ordering:check": "esbuild scripts/export-wonderland-ordering-fixture.ts --bundle --platform=node --format=cjs --outfile=generated/export-wonderland-ordering-fixture.cjs --log-level=warning && node generated/export-wonderland-ordering-fixture.cjs --check",
+    "wonderland:ordering:verify": "bash wonderland/Tools/ordering-parity-check.sh",
+    "wonderland:julius:verify": "bash wonderland/Tools/julius-subsystem-check.sh"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.3.220",
