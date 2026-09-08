@@ -1158,6 +1158,39 @@ If it fails: the first causal blocker is the earliest row above that is not
 what the design says, classified RUNTIME / PERSISTENCE / PROVIDER / EXTERNAL,
 reproduced provider-free, fixed, and taken back through the worker-PR runbook.
 
+### 00j. Where this session left things (2026-09-08, ~14:50Z)
+
+**Branch `relay/julius-contract-stack-rebased`**, pushed, 36 commits over
+`main` `872f1790`; the newest fourteen, oldest last:
+
+- `423f2867` Docs: the contract stack's rebase onto the repair, rehearsed and recorded
+- `e59626d6` Handoff: the dispatch path checked ahead of the day it is needed
+- `75ee1cf2` Julius: the coder sees the review criteria, and the two renderings of the contract are held to every field
+- `a1ca0d3f` Docs: the runbook's re-authoring step is dry-run verified, and the blocker section names the current generation
+- `4087f12c` Docs: the founder's runbook for landing the 34186711214 repair as a worker-authored PR
+- `059e89fe` Julius: the Project Brain a run wrote is read back into a worker's packet, proven on PostgreSQL
+- `a63ce319` Julius: every dispatch row names the agreement it ran under, and the bundle carries the trajectory
+- `f27c217d` Julius: the coder receives the locked terms it is bound by
+- `49d00201` Beta Gate: the contract row measures the binding a build ran under, not only the lock
+- `416a7640` Julius: a stale handoff cannot buy a provider, and the reviewer holds the coder's binding
+- `a4ff8f74` Julius: prove a crash after the answer is bought never buys it twice
+- `8c0f3eca` Handoff: all eight repositories retry, and settlement's boundary is the design
+- `7d04f7cc` Handoff: six of eight retry, and the two corrections behind that number
+- `8eed1d5a` Handoff: correct the serialization count, and name the three still exposed
+
+**Every gate green on the tree as pushed** (§00h's table, re-run before each
+commit that touched code). **Nothing paid was dispatched.** `origin/main` is
+`872f1790`; no `julius-worker[bot]` PR exists; the hourly watch
+(`trig_01PvdqADjSgk5aUH9dvugJEZ`, :35 UTC) carries the verbatim dispatch
+payload and the MCP-based trust checks.
+
+**The one action that unblocks Signal Task 1** is the founder's:
+`docs/JULIUS_WORKER_PR_RUNBOOK.md`, Step 1 dry-run verified. After that squash
+lands, `docs/JULIUS_STACK_REBASE_NOTES.md` carries this branch onto it with
+three known resolutions, verified against the whole suite (9,716 tests).
+
+**Task 1 and Task 2 remain NOT COMPLETE** — they need the paid rerun.
+
 ---
 
 ## 0a. PR #234 SUPERSEDES THIS BRANCH'S HEADLINE FIX — READ FIRST
