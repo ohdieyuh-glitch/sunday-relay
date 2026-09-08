@@ -331,6 +331,78 @@ describe('membership is asked per request, never cached into the session', () =>
     expect(after?.status).toBe(403);
   });
 
+  it('re-authorises when the same session names a DIFFERENT project', async () => {
+    // A project switch mid-stream is a NEW request to authorise, not a
+    // continuation of one already granted. The session is the same, the origin
+    // is the same, the player is the same — and none of that carries a
+    // permission across a project boundary.
+    const asked: string[] = [];
+    const deps = {
+      sessions: sessions('player-1'),
+      reader: reader([row(1, 'run.transitioned', { to: 'EXECUTING' })], hydrationFor()),
+      membership: {
+        lookup: async ({ playerId, projectId }: { playerId: string; projectId: string }) => {
+          asked.push(projectId);
+          return projectId === PROJECT ? { playerId, projectId, role: 'OWNER' } : null;
+        },
+      },
+    };
+
+    const first = await handleWonderlandJuliusRoute(request('/wonderland/julius/events'), deps);
+    expect(first?.status).toBe(200);
+
+    const switched = await handleWonderlandJuliusRoute(
+      request('/wonderland/julius/events', `projectId=project-beta&runId=${RUN}`),
+      deps,
+    );
+    expect(switched?.status).toBe(403);
+    expect((switched?.body as { error: string }).error).toBe('permission denied');
+
+    // Asked about the project in each QUERY, in order — never once about the
+    // first and then assumed for the second.
+    expect(asked).toEqual([PROJECT, 'project-beta']);
+  });
+
+  it('scopes the grant to the project each request named, with nothing carried over', async () => {
+    // The positive half: a switch a member is entitled to make succeeds, and
+    // what comes back is scoped to the NEW project. A grant that still named
+    // the first would send the second project's reader the wrong filter.
+    const deps = {
+      sessions: sessions('player-1'),
+      reader: reader(),
+      membership: membership(true),
+    };
+
+    const first = await authorizeWonderlandJulius(request('/wonderland/julius/events'), deps);
+    const second = await authorizeWonderlandJulius(
+      request('/wonderland/julius/events', `projectId=project-beta&runId=run-9`),
+      deps,
+    );
+
+    expect(first.ok && first.grant).toEqual({ projectId: PROJECT, runId: RUN });
+    expect(second.ok && second.grant).toEqual({ projectId: 'project-beta', runId: 'run-9' });
+  });
+
+  it('asks the membership port once for every request, and never fewer', async () => {
+    // Memoising a decision per session is the shortcut this forbids: it would
+    // make revocation and a project switch both invisible.
+    let calls = 0;
+    const deps = {
+      sessions: sessions('player-1'),
+      reader: reader(),
+      membership: {
+        lookup: async ({ playerId, projectId }: { playerId: string; projectId: string }) => {
+          calls += 1;
+          return { playerId, projectId, role: 'OWNER' };
+        },
+      },
+    };
+    for (let i = 0; i < 3; i += 1) {
+      await handleWonderlandJuliusRoute(request('/wonderland/julius/events'), deps);
+    }
+    expect(calls).toBe(3);
+  });
+
   it('denies a role the build does not recognise', async () => {
     // The column has no CHECK constraint. A role the product starts writing
     // before the capability table learns about it grants nothing.
