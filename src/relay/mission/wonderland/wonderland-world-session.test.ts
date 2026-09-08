@@ -30,7 +30,7 @@ const presenting = (): WonderlandEntry => {
   const offered = offerWonderlandRenderer(admitted, {
     rendererId: 'unreal-pixel-stream',
     kind: 'unreal_pixel_stream',
-    atIso: AT,
+    description: 'The Unreal world, pixel-streamed.',
   });
   return claimWonderlandPresenting(offered, { rendererId: 'unreal-pixel-stream', atIso: AT });
 };
@@ -98,7 +98,7 @@ describe('nothing is scoped to a door that did not open', () => {
     const requested = requestWonderlandAdmission(
       beginWonderlandEntry({ projectId: PROJECT, playerId: PLAYER }),
     );
-    const denied = refuseWonderlandAdmission(requested, { reason: 'no seat', atIso: AT });
+    const denied = refuseWonderlandAdmission(requested, { reason: 'no seat' });
     const bound = bindWonderlandWorldSession({ entry: denied, runId: RUN, boundAtIso: AT });
     expect(bound.ok).toBe(false);
     if (bound.ok) return;
@@ -130,7 +130,11 @@ describe('nothing is scoped to a door that did not open', () => {
         requestWonderlandAdmission(beginWonderlandEntry({ projectId: PROJECT, playerId: PLAYER })),
         { sessionId: 'bridge-session-9', atIso: AT },
       ),
-      { rendererId: 'unreal-pixel-stream', kind: 'unreal_pixel_stream', atIso: AT },
+      {
+        rendererId: 'unreal-pixel-stream',
+        kind: 'unreal_pixel_stream',
+        description: 'The Unreal world, pixel-streamed.',
+      },
     );
     expect(offered.rendererKind).not.toBeNull();
 
