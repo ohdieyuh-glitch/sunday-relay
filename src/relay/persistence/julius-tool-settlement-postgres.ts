@@ -7,6 +7,24 @@ const stable=(value:any):string=>value===null||typeof value!=='object'?JSON.stri
 const digest=(value:unknown)=>createHash('sha256').update(stable(value)).digest('hex');
 
 /** The sole DB authority for terminal tool truth. External artifact bytes must be finalized before this call. */
+/**
+ * WHY THIS ONE DOES NOT USE `serializableTransaction`, though it opens the same
+ * SERIALIZABLE transaction the rest of Julius now retries.
+ *
+ * ITS COMMIT IS INSTRUMENTED. `fault('BEFORE_COMMIT')` and
+ * `fault('AFTER_COMMIT')` bracket `COMMIT` precisely so a crash can be
+ * simulated on either side of it, and `julius-tool-settlement-postgres.test.ts`
+ * drives all four points. The shared helper owns the COMMIT, so adopting it
+ * would move the commit out from between its own fault points — `AFTER_COMMIT`
+ * would fire before the settlement was durable, and a drill that exists to
+ * prove exactly-once settlement would be quietly measuring something else.
+ *
+ * So it keeps its own transaction, and keeps its exposure: a genuine `40001`
+ * here still reaches the caller. That is a real remaining gap, recorded rather
+ * than traded for a weakened crash drill on the money path. Closing it means
+ * teaching the helper about the commit boundary, which is a change to the
+ * helper rather than to this file.
+ */
 export class JuliusToolSettlementPostgresRepository implements JuliusToolSettlementStore {
  constructor(private readonly pool:Pool,private readonly artifactStore?:ArtifactStorePort,private readonly fault?: (point:'AFTER_BUDGET'|'AFTER_EVIDENCE'|'AFTER_TASK'|'BEFORE_COMMIT'|'AFTER_COMMIT')=>void|Promise<void>){}
  async settle(command:JuliusToolSettlementCommand):Promise<JuliusToolSettlementResult>{
