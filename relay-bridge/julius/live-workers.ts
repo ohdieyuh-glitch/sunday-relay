@@ -29,6 +29,7 @@ import {
   reviewChargeFor,
   reviewStageOf,
   type JuliusContextSnapshot,
+  type JuliusDispatchAllocation,
   type JuliusProviderAdapter,
   type JuliusProviderResult,
   type JuliusReviewStage,
@@ -191,6 +192,24 @@ const ARCHITECT_REVISION_CHARTER = [
  * dressed as facts, and the first one recorded every plan review as a build
  * review. A dispatch whose stage cannot be read is refused, not reviewed.
  */
+/**
+ * A CORRECTION IS A SPEND, AND A SPEND NEEDS BUDGET.
+ *
+ * The architect's allocation is a RESERVATION against the run's budget rather
+ * than a per-call cap — only the hosted coder is handed its ceiling as a limit
+ * — so two calls inside one dispatch cannot exceed a reservation already made.
+ * What they can do is buy a second call for a mission that has nothing left,
+ * which is the ceiling being ignored rather than respected.
+ *
+ * So a dispatch whose allocation says the mission is exhausted gets its first
+ * ask and no correction, and the original refusal surfaces exactly as it did
+ * before this file learned to re-ask. An adapter handed no allocation at all
+ * behaves as it always has: Julius did not bound this dispatch, and inventing a
+ * bound here would be this file deciding a budget it cannot see.
+ */
+const correctionAffordable = (allocation: JuliusDispatchAllocation | undefined): boolean =>
+  allocation === undefined || allocation.usdMicros > 0;
+
 /**
  * HOW TO ASK AGAIN FOR A REVIEW THAT ARRIVED IN THE WRONG SHAPE.
  *
@@ -405,7 +424,7 @@ export function createLiveArchitectAdapter(input: {
       let parseFailed = false;
       try { parsed = JSON.parse(outcome.outputText); } catch { parseFailed = true; }
       if (parseFailed) {
-        if (attempts < PLAN_ATTEMPT_LIMIT) {
+        if (attempts < PLAN_ATTEMPT_LIMIT && correctionAffordable(dispatch.allocation)) {
           correction = 'CORRECTION — your previous answer was REFUSED: it was not parseable JSON. Answer with exactly one JSON object conforming to the output schema, and nothing else — no prose before or after it, and no code fence.';
           continue;
         }
@@ -420,7 +439,7 @@ export function createLiveArchitectAdapter(input: {
       }
       const validation = validateArchitectPlan(parsed);
       if (!validation.ok) {
-        const remedy = attempts < PLAN_ATTEMPT_LIMIT
+        const remedy = attempts < PLAN_ATTEMPT_LIMIT && correctionAffordable(dispatch.allocation)
           ? planCorrection(validation.reasonCode, validation.reasonField ?? null)
           : null;
         if (remedy !== null) { correction = remedy; continue; }
@@ -811,7 +830,7 @@ export function createLiveHermesReviewerAdapter(input: {
       for (;;) {
       reviewAttempts += 1;
       outcome = await run({ packet: { ...packet, ...(reviewCorrection === undefined ? {} : { correction: reviewCorrection }) }, config: input.config });
-      if (outcome.kind === 'review_incomplete' && reviewAttempts < REVIEW_ATTEMPT_LIMIT) {
+      if (outcome.kind === 'review_incomplete' && reviewAttempts < REVIEW_ATTEMPT_LIMIT && correctionAffordable(dispatch.allocation)) {
         const remedy = reviewCorrectionFor(outcome.shape);
         if (remedy !== null) { reviewCorrection = remedy; continue; }
       }

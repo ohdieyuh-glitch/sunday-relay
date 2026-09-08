@@ -1310,6 +1310,62 @@ describe('an incomplete review reaches Julius as the failure it actually was', (
     }
   });
 
+  it('an exhausted mission buys no correction, and the refusal is the one it always was', async () => {
+    // A CORRECTION IS A SPEND. The architect's allocation is a reservation
+    // rather than a per-call cap, so a second call cannot exceed it — but
+    // buying one for a mission with nothing left is the ceiling being ignored.
+    const { prompts, fetchImpl } = rounds('The plan looks fine to me.', APPROVED);
+    const artifacts = createLiveArtifactExchange();
+    artifacts.put(planRef('run-live'), JSON.stringify(VALID_PLAN));
+    const adapter = createLiveHermesReviewerAdapter({
+      worker,
+      contexts: { snapshotFor: () => reviewSnapshot('build-1:review') },
+      artifacts,
+      config: loadHermesConfig(LIVE_ENV as never),
+      testCommand: 'npm run mission-test',
+      run: (async (input: { packet: ReviewPacket }) => runRemoteHermesReview({
+        packet: input.packet, config: REMOTE_CFG, runId: 'run-live',
+        deps: { now: () => '2026-09-04T00:00:00.000Z', sleep: () => Promise.resolve(), fetchImpl: fetchImpl as typeof fetch },
+      })) as never,
+    });
+    const failure = await adapter.dispatch({
+      taskId: 'build-1:review', contextId: 'ctx-resume-1', taskType: 'review:plan',
+      allocation: { usdMicros: 0, basis: 'EXHAUSTED', policyVersion: 'julius-allocation.v1' },
+    })
+      .then(() => { throw new Error('the dispatch was expected to fail'); })
+      .catch((error: unknown) => error as { failureClass: string | null; diagnostics?: Record<string, unknown> });
+
+    expect(prompts, 'asked once, and never again').toHaveLength(1);
+    expect(failure.failureClass, 'and it fails exactly as it did before the re-ask existed').toBe('review_json_absent');
+    expect(failure.diagnostics?.reviewAttempts).toBe(1);
+  });
+
+  it('a mission that still has budget does buy the correction', async () => {
+    // The other side of the guard: a positive allocation changes nothing about
+    // the behaviour proved above, so the refusal is the budget's and not a
+    // silent disabling of the re-ask.
+    const { prompts, fetchImpl } = rounds('The plan looks fine to me.', APPROVED);
+    const artifacts = createLiveArtifactExchange();
+    artifacts.put(planRef('run-live'), JSON.stringify(VALID_PLAN));
+    const adapter = createLiveHermesReviewerAdapter({
+      worker,
+      contexts: { snapshotFor: () => reviewSnapshot('build-1:review') },
+      artifacts,
+      config: loadHermesConfig(LIVE_ENV as never),
+      testCommand: 'npm run mission-test',
+      run: (async (input: { packet: ReviewPacket }) => runRemoteHermesReview({
+        packet: input.packet, config: REMOTE_CFG, runId: 'run-live',
+        deps: { now: () => '2026-09-04T00:00:00.000Z', sleep: () => Promise.resolve(), fetchImpl: fetchImpl as typeof fetch },
+      })) as never,
+    });
+    const result = await adapter.dispatch({
+      taskId: 'build-1:review', contextId: 'ctx-resume-1', taskType: 'review:plan',
+      allocation: { usdMicros: 300_000, basis: 'ESTIMATE', policyVersion: 'julius-allocation.v1' },
+    });
+    expect(prompts, 'the correction was bought').toHaveLength(2);
+    expect(result.status).toBe('SUCCEEDED');
+  });
+
   it('a failure that is NOT a shape defect is never re-asked', async () => {
     // A timeout, a 503 and a refused credential describe an answer that did not
     // arrive. Two of them are already retryable at the TASK level, where the

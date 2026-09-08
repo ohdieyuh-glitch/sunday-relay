@@ -185,6 +185,22 @@ diagnostics, and the review text is not among them. The adapter could not quote
 it if it wanted to. `review_attempts` records the call count beside
 `plan_attempts`.
 
+## A correction is a spend, so it obeys the ceiling
+
+Checked rather than assumed. `evaluateJuliusAllocation` gives every non-coder
+role `basis: 'ESTIMATE'` at the pipeline's fixed estimate, and only the hosted
+coder is handed its allocation as an actual spend LIMIT. So the architect's
+300,000 µUSD is a **reservation against the run budget**, not a per-call cap,
+and two calls inside one dispatch cannot exceed a reservation already made.
+
+What they could do is buy a second call for a mission with nothing left — the
+ceiling ignored rather than respected. So a dispatch whose allocation reports
+`usdMicros <= 0` gets its first ask and **no correction**, on both roles, and
+the original refusal surfaces exactly as it did before either loop existed. An
+adapter handed no allocation behaves as it always has: Julius did not bound that
+dispatch, and inventing a bound in the adapter would be the connector deciding a
+budget it cannot see.
+
 ## What is proven, and what is not
 
 Provider-free, through the real composition root: a plan refused for any of the
@@ -195,7 +211,9 @@ none of the model's own text. On the reviewer: prose first and a real verdict
 second now succeeds; each correctable shape is told what it specifically got
 wrong; a model that answers with prose twice fails as before, after two calls;
 and a timeout, a 503 and a refused credential are each asked exactly once.
-Eighteen mutations across the three changes each turn the suite red.
+And the budget guard both ways: an exhausted mission is asked exactly once, a
+funded one buys the correction. Twenty mutations across the four changes each
+turn the suite red.
 
 **Not proven:** that the specific plans runs 34185920678 and 34186711214
 produced would now pass. Their text was never persisted — the evidence bundle is
