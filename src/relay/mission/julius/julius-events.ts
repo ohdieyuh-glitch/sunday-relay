@@ -48,7 +48,7 @@ export const JULIUS_OPERATIONAL_EVENT_TYPES=[
  /* evidence and verification */
  'evidence.recorded','review.started','finding.recorded','verification.decided','repair.scheduled',
  /* the task/sprint contract: what a worker was charged with, and when it stopped being arguable */
- 'contract.locked','contract.refused',
+ 'contract.proposed','contract.locked','contract.refused',
  /* bounded children */
  'subagent.spawned','subagent.denied','subagent.completed',
  /* budget */

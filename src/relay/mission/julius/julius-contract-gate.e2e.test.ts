@@ -293,3 +293,117 @@ describe('a crash between the lock and the release', () => {
     expect(refusals.map((event) => event.facts.reasonCode)).toContain('lock_contended');
   });
 });
+
+/**
+ * THE ARCHITECT PROPOSES THE DETAIL, AND JULIUS LOCKS IT.
+ *
+ * Revision 1 is Julius's, cut from the Mission Contract, and it cannot hold what
+ * only a planner knows — the exact checks, the narrowed boundary. The architect
+ * proposes those in its result; Julius sanitises, refuses every mission-owned
+ * field, stores what survives as a DRAFT, and the accepting plan review locks
+ * THAT revision. This drives the whole cycle through the real run loop.
+ */
+describe('the full cycle — seed, propose, challenge, accept, lock', () => {
+  const withProposal = (
+    proposal: unknown,
+    contracts: 'draft' | 'locked' = 'draft',
+    reviewerScript = [REVIEW_ACCEPT, REVIEW_ACCEPT, REVIEW_ACCEPT, REVIEW_ACCEPT],
+  ) => {
+    const harness = createJuliusHarness({
+      workers: [
+        { worker: ARCHITECT, script: [{ ...PLAN_OK, contractProposal: proposal }, PLAN_OK] },
+        { worker: CODER, script: [BUILD_OK, BUILD_OK] },
+        { worker: REVIEWER, script: reviewerScript },
+      ],
+      card: cardPolicy({ allowedProviders: ['openai', 'anthropic', 'hermes'], capabilities: ['plan', 'implement', 'review'], concurrency: 1 }),
+      verification: verificationPolicy({ reviewerRequired: true, maxRepairRounds: 3 }),
+      capabilityFor,
+    });
+    harness.store.seedRun(RUN);
+    seedTaskContractInto(harness.store, { runId: 'run-1', projectId: 'prj-1', taskId: 'build-1', state: contracts });
+    harness.store.seedTask('run-1', task({ taskId: 'plan-1', ordinal: 0, role: 'PROMPT_ARCHITECT', taskType: 'plan', requiredEvidenceTypes: ['ARTIFACT'] }));
+    harness.store.seedTask('run-1', task({
+      taskId: 'build-1', ordinal: 1, role: 'CODING_AGENT', taskType: 'build',
+      state: 'BLOCKED', dependencyIds: ['plan-1'], requiredEvidenceTypes: ['TEST'],
+    }));
+    harness.store.seedCriteria('run-1', [{ criterionId: 'ac-1', description: 'The tests pass.', requiredEvidenceTypes: [] }]);
+    return harness;
+  };
+
+  it('stores the architect’s revision as a DRAFT and locks THAT one', async () => {
+    const harness = withProposal({
+      responsibilityBoundary: 'Implement src/slug.ts and its unit test; touch nothing else.',
+      requiredChecks: ['npm test -- src/slug.test.ts'],
+      permittedPaths: ['src/slug.ts', 'src/slug.test.ts'],
+    });
+    await drain(harness);
+
+    const revisions = await harness.store.taskContractRevisions({ projectId: 'prj-1', taskId: 'build-1' });
+    expect(revisions.map((row) => [row.contractRevision, row.state]))
+      .toEqual([[1, 'DRAFT'], [2, 'LOCKED']]);
+
+    const locked = await harness.store.loadTaskContract({ projectId: 'prj-1', taskId: 'build-1' });
+    expect(locked?.requiredChecks).toEqual(['npm test -- src/slug.test.ts']);
+    expect(locked?.permittedPaths).toEqual(['src/slug.ts', 'src/slug.test.ts']);
+    expect(locked?.responsibilityBoundary).toContain('touch nothing else');
+
+    // AND THE CODER RAN UNDER IT — the binding on the dispatch names revision 2.
+    expect(bindingOf(harness, 'build-1')?.contractRevision).toBe(2);
+    expect(bindingOf(harness, 'build-1:review')?.contractRevision).toBe(2);
+    expect(harness.store.taskRow('build-1')?.state).toBe('SUCCEEDED');
+  });
+
+  it('a hostile proposal cannot move the money or the criteria, and the run still completes', async () => {
+    const harness = withProposal({
+      objective: 'anything at all',
+      budget: { ceilingUsdMicros: 999_000_000, maxRepairRounds: 99 },
+      blockingAcceptanceCriteria: [],
+      runId: 'run-hijack', taskId: 'build-hijack', state: 'LOCKED', bindingDigest: 'sha256:0',
+    });
+    await drain(harness);
+
+    const locked = await harness.store.loadTaskContract({ projectId: 'prj-1', taskId: 'build-1' });
+    expect(locked?.state).toBe('LOCKED');
+    expect(locked?.budget).toEqual({ ceilingUsdMicros: 20_000_000, maxRepairRounds: 3 });
+    expect(locked?.blockingAcceptanceCriteria.map((c) => c.criterionId)).toEqual(['criterion-1']);
+    expect(locked?.runId).toBe('run-1');
+    expect(locked?.objective, 'the one field it MAY propose did move').toBe('anything at all');
+    expect(harness.store.taskRow('build-1')?.state).toBe('SUCCEEDED');
+  });
+
+  it('a malformed proposal is recorded and the run continues on the revision it has', async () => {
+    const harness = withProposal('not an object at all');
+    await drain(harness);
+
+    const refusals = harness.store.events().filter((event) => event.type === 'contract.refused');
+    expect(refusals.map((event) => event.facts.reasonCode)).toContain('proposal_shape_refused');
+    const revisions = await harness.store.taskContractRevisions({ projectId: 'prj-1', taskId: 'build-1' });
+    expect(revisions.map((row) => row.contractRevision), 'no revision was cut').toEqual([1]);
+    expect(revisions[0]?.state, 'and the seeded one was locked instead').toBe('LOCKED');
+    expect(harness.store.taskRow('build-1')?.state, 'the plan is still the plan').toBe('SUCCEEDED');
+  });
+
+  it('refuses to revise terms that are ALREADY LOCKED — changing those is a decision', async () => {
+    // Reachable whenever a planner finishes after the build's terms were agreed.
+    // Allowing it would make "coding began under the terms that were locked"
+    // false for the rest of the coder's run, retroactively.
+    const harness = withProposal({ requiredChecks: ['npm test'] }, 'locked');
+    await drain(harness);
+
+    const refusals = harness.store.events().filter((event) => event.type === 'contract.refused');
+    expect(refusals.map((event) => event.facts.reasonCode)).toContain('contract_already_locked');
+    const revisions = await harness.store.taskContractRevisions({ projectId: 'prj-1', taskId: 'build-1' });
+    expect(revisions.map((row) => [row.contractRevision, row.state])).toEqual([[1, 'LOCKED']]);
+    expect(revisions[0]?.requiredChecks, 'the locked terms are untouched').toEqual([]);
+  });
+
+  it('announces the proposal only after the durable write, and names the revision', async () => {
+    const harness = withProposal({ requiredChecks: ['npm test'] });
+    await drain(harness);
+    const proposed = harness.store.events().filter((event) => event.type === 'contract.proposed');
+    expect(proposed).toHaveLength(1);
+    expect(proposed[0]?.facts).toMatchObject({
+      contractTaskId: 'build-1', contractRevision: 2, proposedBy: 'PROMPT_ARCHITECT',
+    });
+  });
+});

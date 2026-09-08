@@ -211,6 +211,45 @@ const planDiagnostics = (input: {
   outputBytesObserved: input.outputBytes ?? null,
 });
 
+/**
+ * MAP A VALIDATED ARCHITECT PLAN ONTO A CONTRACT PROPOSAL.
+ *
+ * Reads only fields `validateArchitectPlan` has already accepted, and reads them
+ * defensively anyway: this runs on provider output, and a mapper that assumed
+ * its input would be the thing that turned a validated plan into a crash.
+ * `undefined` when nothing usable is there — Julius then keeps the revision it
+ * has, which is the seeded one, and the run continues.
+ *
+ * ACCEPTANCE CRITERIA ARE DELIBERATELY NOT MAPPED. The architect states them as
+ * prose with no mission ids, and the contract's criteria carry the MISSION's
+ * ids; proposing them would be refused by `reviseJuliusTaskContract` anyway, and
+ * sending a field that is always refused would make every plan log a refusal.
+ */
+function contractProposalFromPlan(plan: unknown): Record<string, unknown> | undefined {
+  if (plan === null || typeof plan !== 'object') return undefined;
+  const value = plan as Record<string, unknown>;
+  const handoff = value.handoff !== null && typeof value.handoff === 'object'
+    ? value.handoff as Record<string, unknown>
+    : {};
+  const strings = (raw: unknown): string[] | undefined =>
+    (Array.isArray(raw) && raw.every((entry) => typeof entry === 'string') && raw.length > 0
+      ? raw as string[]
+      : undefined);
+  const text = (raw: unknown): string | undefined =>
+    (typeof raw === 'string' && raw.trim().length > 0 ? raw : undefined);
+
+  const proposal: Record<string, unknown> = {};
+  const set = (key: string, candidate: unknown): void => { if (candidate !== undefined) proposal[key] = candidate; };
+  set('objective', text(handoff.objective) ?? text(value.objectiveSummary));
+  set('responsibilityBoundary', text(handoff.boundedTask));
+  set('inScope', strings(handoff.allowedFileScope));
+  set('permittedPaths', strings(handoff.allowedFileScope));
+  set('prohibitedActions', strings(handoff.prohibitedActions) ?? strings(value.prohibitedActions));
+  set('requiredChecks', strings(handoff.requiredTests) ?? strings(value.testPlan));
+  set('expectedOutputs', strings(handoff.expectedEvidence));
+  return Object.keys(proposal).length === 0 ? undefined : proposal;
+}
+
 export function createLiveArchitectAdapter(input: {
   readonly worker: JuliusWorker;
   readonly contexts: CompiledContextSource;
@@ -314,6 +353,23 @@ export function createLiveArchitectAdapter(input: {
         workerId: input.worker.workerId,
         providerId: input.worker.providerId,
         status: 'SUCCEEDED',
+        /**
+         * THE CONTRACT REVISION THE PLAN IMPLIES, read off the validated plan
+         * rather than asked for separately.
+         *
+         * The architect already states the bounded handoff it proposes — the
+         * objective, the task boundary, the allowed file scope, the required
+         * tests, the prohibited actions and the expected evidence — and every
+         * one of those is a field of the task contract. So this is a MAPPING of
+         * output the schema already validates, not a new capability, not a
+         * second prompt, and not a second paid call.
+         *
+         * NOTHING HERE BINDS ANYONE. It is a proposal: Julius sanitises it
+         * against an allowlist, refuses every mission-owned field, refuses a
+         * result that could not be reviewed against, and stores what survives as
+         * a DRAFT that the plan review then challenges or accepts.
+         */
+        contractProposal: contractProposalFromPlan(parsed),
         safeSummary: `Prompt Architect plan produced by observed model ${safeClaim(outcome.actualModel ?? 'unknown', 80)} (response ${safeClaim(outcome.responseId ?? 'unknown', 80)}).`,
         evidence: [{
           type: 'ARTIFACT',

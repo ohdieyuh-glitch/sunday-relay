@@ -146,7 +146,13 @@ export function worker(over: Partial<JuliusWorker> & Pick<JuliusWorker, 'workerI
 
 export type ScriptedOutcome =
   /** `usdMicros: null` reports NO cost — Unknown, which is not zero. */
-  | { readonly kind: 'succeed'; readonly evidence?: readonly Record<string, unknown>[]; readonly usdMicros?: number | null }
+  | {
+    readonly kind: 'succeed';
+    readonly evidence?: readonly Record<string, unknown>[];
+    readonly usdMicros?: number | null;
+    /** What this worker PROPOSES for its task contract. Unsanitised on purpose — a test may send a hostile shape. */
+    readonly contractProposal?: unknown;
+  }
   /** `costUsdMicros` is what the boundary billed before it failed, as its diagnostics would carry. */
   | {
     readonly kind: 'fail';
@@ -208,6 +214,7 @@ export function scriptedAdapter(
           ...(step.usdMicros === null ? {} : { usdMicros: step.usdMicros ?? 1_000 }),
           inputTokens: 10, outputTokens: 10, toolCalls: 1, runtimeMs: 5,
         },
+        ...(step.contractProposal === undefined ? {} : { contractProposal: step.contractProposal }),
       };
       return result;
     },
