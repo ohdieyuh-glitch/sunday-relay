@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -8,10 +9,12 @@ import { evaluate, type BetaGateReport, type BetaVerdict } from './wonderland-be
 /**
  * THE GATE, HELD TO ITS OWN RULE.
  *
- * What is worth testing here is not that fourteen rows appear. It is that the
+ * What is worth testing here is not that fifteen rows appear. It is that the
  * gate CANNOT be talked into an optimistic answer: no repository state, however
  * complete, may produce a PASS for a capability that runs at mission time. Every
- * PASS has to be read out of a real run.
+ * PASS has to be read out of a real run — and, since the gate now also answers
+ * "what is Julius READY to do", every CAPABILITY PROVEN has to be read out of a
+ * drill that RAN, whose attestation still matches the code in this tree.
  *
  * The bundles below are written from the shapes the live workflow actually
  * uploads — `runs.tsv`, `tasks.tsv`, `failures.tsv`, `decisions.tsv`,
@@ -106,14 +109,15 @@ const CONTRACT_EVENT_COLUMNS = [
 const contractEvents = (rows: readonly (readonly string[])[]) => tsv(CONTRACT_EVENT_COLUMNS, rows);
 
 describe('the Wonderland Beta Gate', () => {
-  const VERDICTS: readonly BetaVerdict[] = ['PASS', 'FAIL', 'NOT BUILT'];
+  const VERDICTS: readonly BetaVerdict[] = ['PASS', 'CAPABILITY PROVEN', 'FAIL', 'NOT BUILT'];
 
-  it('answers with exactly three values, whatever it is pointed at', () => {
+  it('answers with exactly four values, whatever it is pointed at', () => {
     for (const report of [evaluate(null), evaluate(failingBundle()), evaluate(completingBundle())]) {
       expect(report.results.length, 'the fifteen declared capabilities').toBe(15);
       for (const row of report.results) {
         expect(VERDICTS, `${row.id} answered ${row.verdict}`).toContain(row.verdict);
         expect(row.basis.length, `${row.id} must name what it read`).toBeGreaterThan(0);
+        expect(row.capabilityBasis.length, `${row.id} must say why the capability axis answered`).toBeGreaterThan(0);
       }
     }
   });
@@ -431,5 +435,297 @@ describe('the Wonderland Beta Gate', () => {
     expect(optimistic.filter((verdict) => verdict === 'PASS').length, 'the mutant answer: everything that exists')
       .toBe(real.filter((row) => row.verdict !== 'NOT BUILT').length);
     expect(real.filter((row) => row.verdict === 'PASS').length, 'the real one, with no mission ever completed').toBe(0);
+  });
+});
+
+/**
+ * THE SECOND QUESTION: WHAT IS JULIUS READY TO DO?
+ *
+ * Everything above reads one mission. These read the other axis — the one that
+ * exists because a flawless mission never crashes, and a gate with a single
+ * boolean must then either call recovery unproven (false: the drill proves it)
+ * or require a healthy paid run to break itself for a point (worse).
+ *
+ * The fixtures below FABRICATE drill attestations, which is exactly what they
+ * must do: what is under test is the gate's reader, not Julius's readiness. The
+ * digests are computed from the real files in this tree, because that binding —
+ * a proof expiring the moment the code it drove changes — is the property that
+ * keeps a capability proof from becoming folklore.
+ */
+describe('the Beta Gate’s capability axis', () => {
+  const PROOF_COLUMNS = [
+    'capability', 'drill', 'outcome', 'steps', 'infrastructure',
+    'exercised_path', 'exercised_digest', 'transcript', 'recorded_at',
+  ];
+  const REPO = join(__dirname, '..');
+  const digest = (path: string) => `sha256:${createHash('sha256').update(readFileSync(join(REPO, path))).digest('hex')}`;
+
+  const transcriptFor = (steps: number, verdict = 'JULIUS RESTART RECOVERY VERIFIED') =>
+    [...Array.from({ length: steps }, (_, index) => `  [PASS] ${index + 1}. step ${index + 1}`), '', verdict, ''].join('\n');
+
+  /** The files the gate itself says a row is built on — never a list retyped here. */
+  const implementedBy = (id: string): readonly string[] =>
+    evaluate(null).results.find((row) => row.id === id)!.implementedBy;
+
+  interface ProofOptions {
+    readonly capability?: string;
+    readonly drill?: string;
+    readonly outcome?: string;
+    readonly steps?: number;
+    readonly paths?: readonly string[];
+    readonly digests?: readonly string[];
+    readonly transcript?: string | null;
+    readonly transcriptSteps?: number;
+    readonly transcriptVerdict?: string;
+  }
+
+  /** Writes an attestation into a bundle and returns the bundle root. */
+  function withProof(dir: string, options: ProofOptions = {}): string {
+    const capability = options.capability ?? 'RESTART / RECOVERY';
+    const paths = options.paths ?? implementedBy(capability);
+    const steps = options.steps ?? 10;
+    const transcriptName = options.transcript === undefined ? 'julius-recovery-drill.transcript.txt' : options.transcript;
+    writeFileSync(join(dir, 'julius-live-evidence', 'capability-proofs.tsv'), tsv(PROOF_COLUMNS,
+      paths.map((path, index) => [
+        capability,
+        options.drill ?? 'npm run julius:recovery-drill',
+        options.outcome ?? 'VERIFIED',
+        String(steps),
+        'real-postgres,two-processes',
+        path,
+        options.digests?.[index] ?? digest(path),
+        transcriptName ?? '',
+        '2026-09-08T00:00:00.000Z',
+      ])));
+    if (transcriptName !== null) {
+      writeFileSync(join(dir, 'julius-live-evidence', transcriptName),
+        transcriptFor(options.transcriptSteps ?? steps, options.transcriptVerdict));
+    }
+    return dir;
+  }
+
+  const rowFor = (report: BetaGateReport, id: string) => report.results.find((row) => row.id === id)!;
+
+  /**
+   * THE FOUNDER'S SENTENCE, LITERALLY. A mission in which nothing was
+   * interrupted must not be made to say it recovered, and must not be made to
+   * say recovery is unproven either.
+   */
+  it('reports RESTART / RECOVERY as CAPABILITY PROVEN — NOT EXERCISED THIS MISSION on a flawless run', () => {
+    const row = rowFor(evaluate(withProof(completingBundle())), 'RESTART / RECOVERY');
+    expect(row.verdict).toBe('CAPABILITY PROVEN');
+    expect(row.mission, 'and the mission axis still says, truthfully, that nothing restarted').toBe('NOT EXERCISED');
+    expect(row.capability).toBe('PROVEN');
+    expect(row.basis).toContain('NOT EXERCISED THIS MISSION');
+    expect(row.basis).toContain('nothing was interrupted in this run');
+    expect(row.basis, 'and it names the drill that did prove it').toContain('npm run julius:recovery-drill');
+  });
+
+  /**
+   * AND THE MEANINGS DO NOT COLLAPSE. A run that DID crash and recover is a
+   * different fact from one that never had to, and the gate keeps them apart:
+   * the first reads PASS/EXERCISED, the second CAPABILITY PROVEN/NOT EXERCISED.
+   * Reaching 15/15 by making those one value is the thing this test forbids.
+   */
+  it('still reports a mission that DID crash and recover as having done so', () => {
+    const dir = withProof(completingBundle());
+    writeFileSync(join(dir, 'julius-live-evidence', 'failures.tsv'),
+      tsv(['task_id', 'role', 'event_type', 'julius_code', 'failure_class', 'error_retryable', 'reason_code', 'recovery_action', 'occurred_at'], [
+        [`${RUN}:build`, 'CODING_AGENT', 'julius.recovery.action', '', '', '', 'LEASE_EXPIRED', 'REQUEUED', 't'],
+      ]));
+    const row = rowFor(evaluate(dir), 'RESTART / RECOVERY');
+    expect(row.verdict).toBe('PASS');
+    expect(row.mission).toBe('EXERCISED');
+    expect(row.basis).toContain('REQUEUED');
+    expect(row.basis, 'a run that recovered does not report itself as not having').not.toContain('NOT EXERCISED');
+  });
+
+  /**
+   * THE LAUNDRY RULE. A capability this run exercised AND BROKE reads FAIL
+   * however good the drill is. "What did this run prove" has an answer, and the
+   * answer is bad; a drill about the path cannot overwrite it.
+   */
+  it('never lets a drill rescue a capability this run exercised and broke', () => {
+    const dir = completingBundle();
+    // Retries were scheduled and nothing recovered: FAILURE RECOVERY, exercised and broken.
+    writeFileSync(join(dir, 'julius-live-evidence', 'failures.tsv'),
+      tsv(['task_id', 'role', 'event_type', 'julius_code', 'failure_class', 'error_retryable', 'reason_code', 'recovery_action', 'occurred_at'], [
+        [`${RUN}:nowhere`, 'CODING_AGENT', 'julius.retry.scheduled', 'TIMEOUT', 'worker_timeout', 'true', '', '', 't'],
+      ]));
+    withProof(dir, { capability: 'FAILURE RECOVERY', drill: 'npm run julius:failure-drill' });
+    const row = rowFor(evaluate(dir), 'FAILURE RECOVERY');
+    expect(row.verdict, 'a drill proves the path, not this run').toBe('FAIL');
+    expect(row.mission).toBe('FAILED');
+    expect(row.capability, 'and the proof is still reported as sound — it simply does not apply').toBe('PROVEN');
+  });
+
+  /**
+   * AND NO DRILL WALKS THE MISSION'S OWN PATH FOR IT. The eight capabilities a
+   * run must physically walk between "a project exists" and "COMPLETED" admit
+   * no capability proof at all, so 15/15 cannot be reached by drilling.
+   */
+  it('refuses a drill attestation for a capability the mission itself must walk', () => {
+    const dir = withProof(failingBundle(), { capability: 'VERIFIED COMPLETION', drill: 'npm run lifecycle-drill' });
+    const row = rowFor(evaluate(dir), 'VERIFIED COMPLETION');
+    expect(row.verdict, 'the run ended FAILED and no drill changes that').toBe('FAIL');
+    expect(row.capability).toBe('NOT ADMISSIBLE');
+    expect(row.capabilityBasis, 'and the gate says the evidence was seen and refused, rather than dropping it')
+      .toContain('a mission must walk it itself');
+    expect(row.capabilityBasis).toContain('an attestation is present and inadmissible');
+  });
+
+  it('lets no drill lift a mission-required row even where the mission is merely silent', () => {
+    const dir = completingBundle();
+    // A bundle with no architect task at all: the mission is silent, not broken.
+    writeFileSync(join(dir, 'julius-live-evidence', 'tasks.tsv'),
+      tsv(['task_id', 'task_type', 'role', 'state', 'ordinal', 'parent_task_id'], [
+        [`${RUN}:build`, 'build', 'CODING_AGENT', 'SUCCEEDED', '1', ''],
+      ]));
+    withProof(dir, { capability: 'PROMPT ARCHITECT', drill: 'npm run architect-drill' });
+    const row = rowFor(evaluate(dir), 'PROMPT ARCHITECT');
+    expect(row.mission).toBe('NOT EXERCISED');
+    expect(row.verdict).toBe('FAIL');
+  });
+
+  /**
+   * CURRENCY. A proof describes the code it drove. Edit that code and the proof
+   * describes something that is no longer here — so it expires, loudly, naming
+   * the file that moved. This is what stops capability proofs accumulating as
+   * folklore about a tree that has since changed underneath them.
+   */
+  it('expires a drill attestation whose subject has changed since it ran', () => {
+    const target = implementedBy('RESTART / RECOVERY');
+    const dir = withProof(completingBundle(), {
+      digests: [digest(target[0]!), `sha256:${'0'.repeat(64)}`, digest(target[2]!)],
+    });
+    const row = rowFor(evaluate(dir), 'RESTART / RECOVERY');
+    expect(row.verdict).toBe('FAIL');
+    expect(row.capability).toBe('STALE');
+    expect(row.basis).toContain(target[1]!);
+    expect(row.basis).toContain('has changed since the drill ran');
+  });
+
+  /**
+   * COVERAGE. A drill that touched one of a row's three implementation files
+   * has not proven the row; a drill for something else entirely certainly has
+   * not. The gate names what went undriven rather than saying "no".
+   */
+  it('refuses a drill that did not exercise every file the row is built on', () => {
+    const target = implementedBy('RESTART / RECOVERY');
+    const row = rowFor(evaluate(withProof(completingBundle(), { paths: [target[0]!] })), 'RESTART / RECOVERY');
+    expect(row.verdict).toBe('FAIL');
+    expect(row.capability).toBe('UNPROVEN');
+    expect(row.capabilityBasis).toContain(`it did not exercise ${target[1]}, ${target[2]}`);
+  });
+
+  it('refuses an attestation that names a path outside this repository', () => {
+    const row = rowFor(evaluate(withProof(completingBundle(), {
+      paths: ['../../etc/passwd'], digests: [`sha256:${'0'.repeat(64)}`],
+    })), 'RESTART / RECOVERY');
+    expect(row.verdict).toBe('FAIL');
+    expect(row.capabilityBasis).toContain('which is not a file in this repository');
+  });
+
+  /**
+   * TRANSCRIPT. The gate reads the drill's own words and holds them to the
+   * count the drill declared, rather than trusting the word VERIFIED in a cell
+   * beside them. Four ways that fails, four different sentences.
+   */
+  it('holds the drill to its own transcript', () => {
+    const cases: readonly [ProofOptions, string][] = [
+      [{ outcome: 'FAILED' }, 'the drill recorded FAILED, not VERIFIED'],
+      [{ transcript: null }, 'is not in this bundle'],
+      [{ transcriptSteps: 7 }, 'it declares 10 step(s) and its transcript shows 7'],
+      [{ transcriptVerdict: 'mostly fine' }, 'does not end on a VERIFIED line'],
+    ];
+    for (const [options, expected] of cases) {
+      const row = rowFor(evaluate(withProof(completingBundle(), options)), 'RESTART / RECOVERY');
+      expect(row.verdict, expected).toBe('FAIL');
+      expect(row.capabilityBasis).toContain(expected);
+    }
+  });
+
+  it('refuses a transcript carrying a failed step, whatever the ledger says', () => {
+    const dir = withProof(completingBundle());
+    writeFileSync(join(dir, 'julius-live-evidence', 'julius-recovery-drill.transcript.txt'),
+      `${transcriptFor(9)}\n  [FAIL] 10. the fresh process never found the run\nJULIUS RESTART RECOVERY VERIFIED\n`);
+    const row = rowFor(evaluate(dir), 'RESTART / RECOVERY');
+    expect(row.verdict).toBe('FAIL');
+    expect(row.capabilityBasis).toContain('its transcript records 1 failed step(s)');
+  });
+
+  it('reads an attestation supplied beside the bundle rather than inside it', () => {
+    const outside = mkdtempSync(join(tmpdir(), 'beta-gate-drills-'));
+    const staged = withProof(completingBundle());
+    for (const name of ['capability-proofs.tsv', 'julius-recovery-drill.transcript.txt']) {
+      writeFileSync(join(outside, name), readFileSync(join(staged, 'julius-live-evidence', name), 'utf8'));
+    }
+    const bundleOnly = completingBundle();
+    expect(rowFor(evaluate(bundleOnly), 'RESTART / RECOVERY').verdict, 'without it, nothing').toBe('FAIL');
+    const report = evaluate(bundleOnly, { capabilityDir: outside });
+    expect(rowFor(report, 'RESTART / RECOVERY').verdict).toBe('CAPABILITY PROVEN');
+    expect(report.capabilitySource).toBe(outside);
+  });
+
+  /**
+   * THE LOAD-BEARING PROPERTY, RESTATED FOR THE NEW AXIS. A drill's SOURCE
+   * sitting in this tree is not a drill that ran. Every file the recovery row
+   * names is present and the suite is green, and the row is still FAIL.
+   */
+  it('cannot capability-prove anything from repository state alone', () => {
+    const report = evaluate(null);
+    expect(report.capabilitySource).toBeNull();
+    expect(report.results.filter((row) => row.verdict === 'CAPABILITY PROVEN'), 'a drill that exists is not a drill that ran').toEqual([]);
+    expect(report.summary.provenByDrill).toBe(0);
+  });
+
+  /**
+   * NO CAPABILITY PROOF IS A CONSTANT — the capability-axis twin of the
+   * reachability test above. For every row a drill is admissible on, SOME
+   * attestation must reach PROVEN; a row where none can is a FAIL someone typed.
+   */
+  it('every row a drill is admissible on can actually be proven by one', () => {
+    const admissible = evaluate(null).results.filter((row) => !row.missionRequired && row.verdict !== 'NOT BUILT');
+    expect(admissible.length, 'and there are several, or this test proves nothing').toBeGreaterThan(3);
+    for (const row of admissible) {
+      const dir = completingBundle();
+      // Silence the mission axis, so what is measured is the capability axis alone.
+      for (const name of ['failures.tsv', 'tasks.tsv', 'project-brain.tsv', 'receipt-ids.txt', 'sessions.tsv']) {
+        writeFileSync(join(dir, 'julius-live-evidence', name), 'unavailable\n');
+      }
+      withProof(dir, { capability: row.id, drill: `npm run drill:${row.id}` });
+      expect(rowFor(evaluate(dir), row.id).verdict, `${row.id} must be reachable as CAPABILITY PROVEN`).toBe('CAPABILITY PROVEN');
+    }
+  });
+
+  /**
+   * MUTATION: THE CURRENCY CHECK IS LOAD-BEARING. Drop it — accept any
+   * attestation whose outcome cell reads VERIFIED — and a drill run against
+   * code that has since been rewritten still reports the capability proven,
+   * which is precisely the folklore this gate exists to refuse.
+   */
+  it('MUTATION: without the digest binding, a drill from a rewritten tree would still read PROVEN', () => {
+    const stale = withProof(completingBundle(), { digests: implementedBy('RESTART / RECOVERY').map(() => `sha256:${'0'.repeat(64)}`) });
+    const row = rowFor(evaluate(stale), 'RESTART / RECOVERY');
+    expect(row.capability, 'the real gate').toBe('STALE');
+    expect(row.verdict).toBe('FAIL');
+    // The mutant: the same ledger read as a boolean on the `outcome` column.
+    const ledger = readFileSync(join(stale, 'julius-live-evidence', 'capability-proofs.tsv'), 'utf8');
+    expect(ledger, 'which every row still claims').toContain('VERIFIED');
+  });
+
+  /**
+   * BOTH QUESTIONS, ANSWERED SEPARATELY. The summary is where a reader looks
+   * first, so it must never present one number that means either thing.
+   */
+  it('summarises what the run proved and what Julius is ready to do as different counts', () => {
+    const report = evaluate(withProof(completingBundle()));
+    const s = report.summary;
+    expect(s.total).toBe(15);
+    expect(s.exercised + s.failed + s.notExercised + s.unknown, 'the mission axis partitions every built row')
+      .toBe(s.total - s.notBuilt);
+    expect(s.provenByMission + s.provenByDrill + s.unproven + s.notBuilt, 'and the verdict partitions all of them').toBe(s.total);
+    expect(s.provenByDrill, 'recovery, proven by drill and not by this run').toBe(1);
+    expect(s.provenByMission).toBe(report.results.filter((row) => row.verdict === 'PASS').length);
   });
 });
