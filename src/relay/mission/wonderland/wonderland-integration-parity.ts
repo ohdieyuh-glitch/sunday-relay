@@ -17,6 +17,11 @@
  */
 
 import {
+  WONDERLAND_BRAIN_CITATION_FIELDS,
+  WONDERLAND_BRAIN_KINDS,
+} from './wonderland-brain-scope';
+import type { WonderlandBrainCitation } from './wonderland-brain-scope';
+import {
   JULIUS_ACTIVITY_READING_FIELDS,
   JULIUS_ACTIVITY_SIGNALS,
   JULIUS_WORKER_ACTIVITY_FIELDS,
@@ -228,6 +233,13 @@ const _UsageViewportNullableIsExact: SameKeys<
 > = true;
 void _UsageViewportNullableIsExact;
 
+const BRAIN_CITATION_NULLABLE = [] as const;
+const _BrainCitationNullableIsExact: SameKeys<
+  (typeof BRAIN_CITATION_NULLABLE)[number],
+  NullableKeysOf<WonderlandBrainCitation>
+> = true;
+void _BrainCitationNullableIsExact;
+
 const ACTIVITY_READING_NULLABLE = ['observedAtIso'] as const;
 const _ActivityReadingNullableIsExact: SameKeys<
   (typeof ACTIVITY_READING_NULLABLE)[number],
@@ -324,6 +336,21 @@ export const WONDERLAND_INTEGRATION_CPP_STRUCT_PARITY: readonly {
     cppStruct: 'FWonderlandWorkerActivity',
     tsInterface: 'JuliusWorkerActivity',
     fields: JULIUS_WORKER_ACTIVITY_FIELDS,
+  },
+  {
+    /**
+     * THE STRUCT THAT EXISTS TO BE NARROW.
+     *
+     * Mirrored so the narrowness is checkable: the field list IS the guarantee
+     * that no project text crosses, and a C++ side that had quietly grown a
+     * `Summary` for the best of reasons would be carrying the substance of
+     * somebody's work into the least trusted process in the system. The
+     * TypeScript proves the same thing from the other end, by compiling a real
+     * packet from canary text and searching the citation for it.
+     */
+    cppStruct: 'FWonderlandBrainCitation',
+    tsInterface: 'WonderlandBrainCitation',
+    fields: WONDERLAND_BRAIN_CITATION_FIELDS,
   },
   {
     cppStruct: 'FWonderlandCursor',
@@ -467,6 +494,18 @@ export const WONDERLAND_INTEGRATION_CPP_ENUM_PARITY: readonly {
     cppEnum: 'EWonderlandJuliusStateSource',
     source: 'JULIUS_STATE_SOURCES',
     members: JULIUS_STATE_SOURCES,
+    nullable: true,
+    zeroMember: 'Unobserved',
+  },
+  {
+    /**
+     * The kernel's own kind vocabulary, uppercase there and PascalCase here.
+     * Ordinal 0 is `Unobserved` for the array-member reason: an element nobody
+     * wrote must not read as a real kind.
+     */
+    cppEnum: 'EWonderlandBrainKind',
+    source: 'WONDERLAND_BRAIN_KINDS',
+    members: WONDERLAND_BRAIN_KINDS,
     nullable: true,
     zeroMember: 'Unobserved',
   },
@@ -617,6 +656,7 @@ export const WONDERLAND_INTEGRATION_NULLABLE_FIELDS: Readonly<
   FWonderlandLinkStatus: LINK_STATUS_NULLABLE,
   FWonderlandUsageAuthorityStatus: AUTHORITY_STATUS_NULLABLE,
   FWonderlandUsageViewport: USAGE_VIEWPORT_NULLABLE,
+  FWonderlandBrainCitation: BRAIN_CITATION_NULLABLE,
   FWonderlandActivityReading: ACTIVITY_READING_NULLABLE,
   FWonderlandWorkerActivity: WORKER_ACTIVITY_NULLABLE,
   FWonderlandMeterDrawPlan: METER_DRAW_PLAN_NULLABLE,

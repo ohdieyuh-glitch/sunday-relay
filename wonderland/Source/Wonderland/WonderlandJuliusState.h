@@ -400,3 +400,109 @@ struct FWonderlandActivityReading
 	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Julius")
 	int64 ForeignEvents = 0;
 };
+
+/* ---------------------------------------------------- project brain scope */
+
+// Mirrors WONDERLAND_BRAIN_KINDS. What KIND of thing a retrieval pulled in.
+//
+// A KIND IS NOT CONTENT. "Three constraints and two decisions were retrieved"
+// says something real about the shape of a context without saying what any of
+// them were, which is the line the whole scope draws.
+UENUM(BlueprintType)
+enum class EWonderlandBrainKind : uint8
+{
+	// Ordinal 0. Not a kind: the zero value of an unset array member.
+	Unobserved,
+	Objective,
+	Requirement,
+	Constraint,
+	Decision,
+	Finding,
+	Repair,
+	Handoff,
+	Artifact,
+	Evidence
+};
+
+// Mirrors WonderlandBrainCitation. What a world may know about one context
+// retrieval — and, by its shape, everything it may not.
+//
+// THE CLIENT IS NOT THE DATABASE OF RECORD, and this struct is where that stops
+// being a principle and becomes a type. Project Brain entries carry free TEXT
+// and a sensitivity of PUBLIC, INTERNAL or SECRET; Relay filters and redacts,
+// and what survives is still the substance of somebody's work. A game client is
+// the wrong place for it: the least trusted process in the system, the one a
+// player can attach a debugger to, and the one with no business holding the
+// copy that outlives the run.
+//
+// SO NO TEXT CROSSES — not truncated, not summarised, not "just the
+// objectives". Every field below is a number, a flag, an opaque handle or a
+// closed-vocabulary token, and the TypeScript side proves it by compiling a
+// real packet from entries whose text is a canary and asserting the canary
+// appears nowhere in the citation.
+//
+// BOUNDED BY CONSTRUCTION. The counters are per KIND, so a brain with a million
+// entries produces the same struct as one with three. No HUD change can pull a
+// payload across, because there is no payload to pull.
+//
+// SENSITIVITY IS DELIBERATELY ABSENT. Reporting "this touched SECRET material"
+// would tell anyone watching the world that secret material exists and roughly
+// when it is read, which is most of what a side channel is worth.
+// `RedactionCount` covers the honest need without naming the class of thing.
+USTRUCT(BlueprintType)
+struct FWonderlandBrainCitation
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Brain")
+	FString SchemaVersion;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Brain")
+	FString ProjectId;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Brain")
+	FString RunId;
+
+	// Opaque handle. The world groups by it and never parses it.
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Brain")
+	FString TaskId;
+
+	// Which Project Brain revision the context came from. "It read the brief"
+	// and "it read the brief as it was three revisions ago" differ.
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Brain")
+	int64 BrainRevision = 0;
+
+	// How many entries reached the packet. Not which.
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Brain")
+	int64 EntryCount = 0;
+
+	// Counts per kind, in EWonderlandBrainKind order, one entry per kind so a
+	// zero is a REPORTED zero. An entry of a kind this client does not know is
+	// counted in EntryCount and in no bucket — the disagreement between the two
+	// is the signal that the kernel's vocabulary moved.
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Brain")
+	TArray<int64> KindCounts;
+
+	// A size, never the characters.
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Brain")
+	int64 CharacterCount = 0;
+
+	// Something was removed, and how much. Never what.
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Brain")
+	int64 RedactionCount = 0;
+
+	// The budget cut the context short: a worker that did not see everything,
+	// and a candidate explanation for whatever happens next.
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Brain")
+	bool bTruncated = false;
+
+	// Opaque, and useful because it is: two retrievals with the same hash read
+	// the same thing, so a pointless recompile is visible without anybody
+	// seeing the content. EMPTY MEANS NOBODY REPORTED — a citation is mostly
+	// zeroes, and this is what tells "found nothing" from "was never told".
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Brain")
+	FString ContentHash;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Brain")
+	FString ObservedAtIso;
+};

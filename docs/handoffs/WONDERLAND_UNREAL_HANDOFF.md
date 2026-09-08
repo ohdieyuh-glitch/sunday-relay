@@ -203,6 +203,53 @@ on the cursor carries this, and an accepted event clears it.
 
 ---
 
+## 5b. PROJECT BRAIN — WHAT YOU MAY KNOW, AND WHAT YOU MAY NOT
+
+**The client is not the database of record.** A `JuliusBrainEntry` carries free
+TEXT and a sensitivity of PUBLIC, INTERNAL or SECRET. Relay filters SECRET out
+and redacts key-shaped substrings, and what survives is still the substance of
+somebody's work — objectives, constraints, decisions, findings. A game client is
+the wrong place for it: the least trusted process in the system, the one a
+player can attach a debugger to, and the one with no business holding the copy
+that outlives the run.
+
+**So no text crosses.** Not truncated, not summarised, not "just the
+objectives". `FWonderlandBrainCitation` carries counts, revisions and flags:
+
+| field | what it tells you |
+|---|---|
+| `BrainRevision` | which revision the context came from — "it read the brief" and "it read the brief three revisions ago" differ |
+| `EntryCount` | how many entries reached the packet. Not which |
+| `KindCounts` | per kind, all nine present, so a zero is a REPORTED zero |
+| `CharacterCount` | a size, never the characters |
+| `RedactionCount` | something was removed, and how much. Never what |
+| `bTruncated` | the budget cut it short: a worker that did not see everything, and a candidate explanation for whatever happens next |
+| `ContentHash` | opaque, and useful because it is — two retrievals with the same hash read the same thing |
+
+Rules a receiver must not break:
+
+- **`ContentHash` empty means NOBODY REPORTED.** A citation is mostly zeroes, so
+  this is the field that tells "a retrieval found nothing" from "no retrieval was
+  ever reported". Check it before rendering "0 entries".
+- **An entry of a kind you do not know is counted in `EntryCount` and in no
+  bucket.** The disagreement between the total and the sum of the buckets is the
+  signal that the kernel's vocabulary moved — do not paper over it.
+- **Do not add a field.** The narrowness is the guarantee, and it is checked from
+  both ends: the parity table holds the field list, and a TypeScript test
+  compiles a real packet from entries whose text is a canary and asserts the
+  canary appears nowhere in the citation.
+
+**Sensitivity is deliberately absent.** Reporting "this retrieval touched SECRET
+material" would tell anyone watching the world that secret material exists and
+roughly when it is read, which is most of what a side channel is worth.
+`RedactionCount` covers the honest need without naming the class of thing.
+
+**Bounded by construction**, which §13 requires: the shape is O(kinds), so a
+brain with a million entries produces the same struct as one with three. There
+is no HUD change that can pull a payload across, because there is no payload.
+
+---
+
 ## 6. Transport
 
 Use the smallest seam that exists; do not build a second one.
