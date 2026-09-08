@@ -94,6 +94,16 @@ describe('storing a contract revision', () => {
       .rejects.toThrow('julius_task_contract_revision_conflict');
   });
 
+  it('refuses a SECOND contract for one task at a revision — one agreement governs a task', async () => {
+    // Production's `julius_task_contract_one_per_task` index refuses this; the
+    // model must too, or a task could be bound to two agreements at once and
+    // every "which contract governs" answer would depend on read order.
+    const store = storeWithRun();
+    await put(store, contract());
+    await expect(put(store, contract({ contractId: 'contract-2' })))
+      .rejects.toThrow('julius_task_contract_one_per_task');
+  });
+
   it('refuses a contract for a run this project does not own', async () => {
     const store = storeWithRun();
     expect(await store.putTaskContract({ projectId: 'prj-other', contract: contract(), occurredAt: AT })).toBe(false);

@@ -2,7 +2,8 @@ import type { Pool } from 'pg';
 
 import type {
   JuliusAcceptanceCriterion, JuliusBrainEntry, JuliusEvidence, JuliusReviewerFinding,
-  JuliusRecordedDecision, JuliusRuntimeReader, JuliusTask, JuliusVerificationDecision, JuliusWorkerRole,
+  JuliusRecordedDecision, JuliusRuntimeReader, JuliusTask, JuliusTaskContractBinding,
+  JuliusVerificationDecision, JuliusWorkerRole,
 } from '../mission/julius';
 import { brainKindFromStored } from './julius-brain-kinds';
 
@@ -188,6 +189,28 @@ export class JuliusReadPostgresRepository implements JuliusRuntimeReader {
       [runId, projectId],
     );
     return Number(result.rows[0]?.active ?? 0);
+  }
+
+  /**
+   * THE BINDING A TASK WAS DISPATCHED UNDER, from its durable `task.claimed`
+   * event. Filtered on the project as every read here is, and on the event
+   * type, so a caller holding a task id from another tenant reads nothing.
+   * The newest claim wins for the same reason the in-memory store's does: the
+   * work was done against the binding current at the last dispatch.
+   */
+  async executedBindingFor(taskId: string, projectId: string): Promise<JuliusTaskContractBinding | null> {
+    const result = await this.pool.query<{ payload: unknown }>(
+      `SELECT e.payload FROM relay_wonderland.events e
+        WHERE e.project_id=$2 AND e.event_type='julius.task.claimed' AND e.payload->>'taskId'=$1
+        ORDER BY e.sequence DESC LIMIT 1`,
+      [taskId, projectId],
+    );
+    const payload = parsed<{ facts?: Record<string, unknown> }>(result.rows[0]?.payload, {});
+    const facts = payload.facts ?? {};
+    return typeof facts.contractId === 'string' && typeof facts.contractTaskId === 'string'
+      && typeof facts.contractRevision === 'number' && typeof facts.bindingDigest === 'string'
+      ? { contractId: facts.contractId, taskId: facts.contractTaskId, contractRevision: facts.contractRevision, bindingDigest: facts.bindingDigest }
+      : null;
   }
 
   async reviewCompletedFor(taskId: string, projectId: string): Promise<boolean> {

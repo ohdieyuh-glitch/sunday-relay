@@ -123,3 +123,10 @@ dump "SELECT execution_id,mission_id,project_id,player_id,agent_id,state FROM re
 # revision, which is exactly the class this bundle refuses a column. `binding_digest` IS selected
 # and is safe by construction: it is a sha256 of the terms, never the terms.
 dump "SELECT contract_id,contract_revision,task_id,state,binding_digest,locked_at,locked_by_evaluator_id,created_at FROM relay_wonderland.julius_task_contracts ORDER BY contract_id,contract_revision" task-contracts.tsv
+
+# WHAT HAPPENED TO THE AGREEMENT, as identifiers and tokens only. A refusal here is the
+# reason a coder or reviewer was NOT dispatched — a stale handoff, a review that did not hold
+# the coder's binding, a lock that was never taken — and without it the bundle could show a
+# task FAILED under a contract that looks perfectly locked. No terms, no prose: revisions,
+# digests, task ids and the closed reason code.
+dump "SELECT e.payload->>'taskId' AS task_id,e.event_type,e.payload->'facts'->>'reasonCode' AS reason_code,e.payload->'facts'->>'contractTaskId' AS contract_task_id,e.payload->'facts'->>'contractId' AS contract_id,e.payload->'facts'->>'contractRevision' AS contract_revision,e.payload->'facts'->>'bindingDigest' AS binding_digest,e.payload->'facts'->>'recordedRevision' AS recorded_revision,e.payload->'facts'->>'currentRevision' AS current_revision,e.payload->'facts'->>'reviewRevision' AS review_revision,e.payload->'facts'->>'implementationRevision' AS implementation_revision,e.payload->'facts'->>'role' AS role,e.occurred_at FROM relay_wonderland.events e WHERE e.event_type IN('julius.contract.proposed','julius.contract.challenged','julius.contract.locked','julius.contract.refused') ORDER BY e.occurred_at" contract-events.tsv

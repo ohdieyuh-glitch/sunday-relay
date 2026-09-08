@@ -24,11 +24,10 @@ import {
 } from './julius-router';
 import { JuliusWorkerRegistry, type JuliusTask, type JuliusWorker } from './julius-runtime';
 import { lockJuliusTaskContract, seedJuliusTaskContract, type JuliusTaskContract } from './julius-task-contract';
-import { repairLineageRootOf } from './julius-repair-lineage';
 import type { JuliusCardPolicy } from './julius-policy';
 import type { JuliusVerificationPolicy } from './julius-verification-runtime';
 import { createJuliusMemoryStore, type JuliusMemoryStore } from './julius-memory-store';
-import { fixedResourceEstimate, type JuliusPipelineDependencies } from './julius-task-pipeline';
+import { fixedResourceEstimate, juliusContractSubjectTaskId, type JuliusPipelineDependencies } from './julius-task-pipeline';
 import { JuliusRunLoop, type JuliusPolicySource, type JuliusRunLoopConfig } from './julius-run-loop';
 import type { JuliusBudgetPort, JuliusClock, JuliusIdFactory } from './julius-runtime-ports';
 import type { JuliusAllocationPolicy } from './julius-allocation-runtime';
@@ -381,14 +380,16 @@ export function seedRun(
   });
   for (const task of input.tasks) harness.store.seedTask(runId, task);
 
-  // One contract per lineage ROOT: a repair is governed by the contract of the
-  // task it repairs, exactly as `juliusContractSubjectTaskId` resolves it.
+  // One contract per SUBJECT, resolved by the runtime's own rule rather than a
+  // copy of it: a repair is governed by the contract of the task it repairs, a
+  // specialist by the coding work it was spawned under or by itself, and the
+  // architect and its review by none.
   const contracts = input.taskContracts ?? 'locked';
   if (contracts !== 'none') {
-    const seededTasks = input.tasks.map((value) => ({ ...value, missionId }));
+    const seededTasks = input.tasks.map((value) => ({ ...value, missionId })) as readonly JuliusTask[];
     const roots = new Set(seededTasks
-      .filter((value) => value.role === 'CODING_AGENT')
-      .map((value) => repairLineageRootOf(value as JuliusTask, seededTasks as readonly JuliusTask[]).taskId));
+      .map((value) => juliusContractSubjectTaskId(value, seededTasks))
+      .filter((value): value is string => value !== null));
     for (const taskId of roots) {
       void harness.store.putTaskContract({
         projectId,

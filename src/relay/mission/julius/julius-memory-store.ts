@@ -525,6 +525,15 @@ export function createJuliusMemoryStore(): JuliusMemoryStore {
       }
       const run = runs.get(input.contract.runId);
       if (run === undefined || run.projectId !== input.projectId) return false;
+      // ONE CONTRACT PER TASK, modelled. Production's
+      // `julius_task_contract_one_per_task` refuses a second contract id at a
+      // task's revision; the model must refuse it too or the two disagree
+      // about whether a task can be governed by two agreements at once.
+      const other = [...contracts.values()].find(
+        (row) => row.taskId === input.contract.taskId && row.contractRevision === input.contract.contractRevision
+          && row.contractId !== input.contract.contractId && runs.get(row.runId)?.projectId === input.projectId,
+      );
+      if (other !== undefined) throw new Error('julius_task_contract_one_per_task');
       contracts.set(key, input.contract);
       return true;
     },
@@ -829,6 +838,20 @@ export function createJuliusMemoryStore(): JuliusMemoryStore {
       // reviews of the same task and both must count.
       return [...tasks.values()].some((task) =>
         task.parentTaskId === taskId && task.role === 'INDEPENDENT_REVIEWER' && task.state === 'SUCCEEDED');
+    },
+
+    async executedBindingFor(taskId, projectId) {
+      const row = tasks.get(taskId);
+      if (row === undefined || !inProject(row.runId, projectId)) return null;
+      // The LAST claim, because a task claimed twice was dispatched under the
+      // binding current at its last dispatch, and that is the one its work
+      // was done against.
+      const claimed = [...eventLog].reverse().find((event) => event.type === 'task.claimed' && event.taskId === taskId);
+      const facts = claimed?.facts ?? {};
+      return typeof facts.contractId === 'string' && typeof facts.contractTaskId === 'string'
+        && typeof facts.contractRevision === 'number' && typeof facts.bindingDigest === 'string'
+        ? { contractId: facts.contractId, taskId: facts.contractTaskId, contractRevision: facts.contractRevision, bindingDigest: facts.bindingDigest }
+        : null;
     },
   };
 }

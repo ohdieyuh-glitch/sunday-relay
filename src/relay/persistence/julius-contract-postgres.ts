@@ -50,15 +50,39 @@ export class JuliusContractPostgresRepository implements JuliusTaskContractStore
         contract.missionContractRevision, contract.state, JSON.stringify(terms(contract)),
         contract.bindingDigest, contract.lockedAt, contract.lockedByEvaluatorId, input.occurredAt,
       ],
-    );
+    ).catch((error: unknown) => {
+      /**
+       * A CONCURRENT PROPOSAL FOR THE SAME REVISION lands on the SECOND unique
+       * index — `julius_task_contract_one_per_task` — before the ON CONFLICT
+       * arbiter on the primary key ever sees the winner's row, and PostgreSQL
+       * reports that as 23505 rather than as "did nothing". Sequentially the
+       * arbiter always wins and this branch is unreachable, which is how a
+       * real race on a real database was the first thing to reach it: the
+       * losing architect's proposal died with a raw constraint name instead
+       * of the one answer this method exists to give. Either way the fact is
+       * the same — the row exists now — so it is looked at, below.
+       */
+      if ((error as { code?: unknown }).code === '23505') return { rowCount: 0 };
+      throw error;
+    });
     if (inserted.rowCount === 1) return true;
 
     // NOT INSERTED. Either the row is already there — a replay — or the run is
-    // not this project's. The two are distinguished by looking, because
-    // reporting "already stored" for a contract that was never stored would
-    // let a caller proceed as if it had been.
+    // not this project's, or ANOTHER contract holds this task's revision. The
+    // three are distinguished by looking, because reporting "already stored"
+    // for a contract that was never stored would let a caller proceed as if
+    // it had been, and a second contract for one task is a caller's defect
+    // that must be named, not a replay.
     const existing = await this.readRow(contract.contractId, contract.contractRevision, input.projectId);
-    if (existing === null) return false;
+    if (existing === null) {
+      const other = await this.pool.query<{ contract_id: string }>(
+        `SELECT contract_id FROM relay_wonderland.julius_task_contracts
+          WHERE task_id=$1 AND contract_revision=$2 AND project_id=$3`,
+        [contract.taskId, contract.contractRevision, input.projectId],
+      );
+      if (other.rows[0] !== undefined) throw new Error('julius_task_contract_one_per_task');
+      return false;
+    }
     // The LOCK FIELDS are excluded from the digest on purpose, so a stored
     // LOCKED row and the DRAFT a retry re-proposes compare equal. Only the
     // TERMS differing is a conflict.
