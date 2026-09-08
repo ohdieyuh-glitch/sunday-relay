@@ -138,6 +138,39 @@ The reason this is written down rather than quietly dropped: a batch that
 produces no number is not automatically waste, and a batch that claims a number
 it did not produce is worse than one that admits none.
 
+## The other half of mismatch #4, which needed a new instrument
+
+`framescape` asks "what holds THIS frame" thirty-three times. The world
+handoff's complaint is different -- "the same great spire or the same swag
+roofing frame after frame" -- and that defect lives ACROSS frames, where every
+per-frame number for it can be small. `tools/monotony.py` asks it directly, and
+groups pieces by the SITE they stand on rather than by parsing their labels
+(`GreatSpire_Body`, `GreatSpire_TowerCap2` and `GreatSpire_WayTree4_1_Canopy0`
+share a prefix and are a tower, its cap, and a tree beside it).
+
+    site                        frames  columns  pinned   holds 20%+ of
+    GreatSpire_Body                 14      323     71%   WorldNorth19 58%,
+                                                          GreatSpire22 46%,
+                                                          FloatingStair26 30%,
+                                                          GiantBloom29 27%
+    DistrictTower_RoyalGardens       8       73     53%   -
+    KitDepth05_4                     7      112     76%   RearWorld10 35%
+
+**Exactly one site holds a fifth or more of three or more frames, and it is the
+great spire.** 71% of its columns are pinned to their frames' top edges, so no
+placement can moderate it: it is a 194 m landmark and how far it reaches is a
+siting decision, not a layout one.
+
+A landmark roofing many frames is not automatically a defect -- being seen from
+everywhere is what a landmark is for. `evidence/monotony_AFTER.txt` is the run.
+
+**And the kit is now on that list.** `KitDepth05_4` holds 35% of
+`RearWorldCam10` and 20% of `MushroomGroveCam14`; three more kit stands roof
+five or six frames each. They are each a different spelling, so they are not
+the same OBJECT frame after frame -- but a future pass adding more depth stands
+should run this tool first, because the batch that fixed monotony is two frames
+away from causing it.
+
 ## Not proven
 
 No frame here has been rendered. These are silhouette censuses computed from
