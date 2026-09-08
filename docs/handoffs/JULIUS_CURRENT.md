@@ -1115,6 +1115,61 @@ round-trip commit changed only the env-gated real-PostgreSQL suite and this
 document, and was gated by all four typecheck passes, the real-PostgreSQL
 suite on a fresh database (7 passed) and `git diff --check`.
 
+### 00j. THE CREDENTIAL CEREMONY WAS ATTEMPTED AND THE ENVIRONMENT REFUSED IT
+
+**2026-09-08.** The founder authorised a temporary `julius-worker` App private
+key so this session could open the worker-authored PR itself, and supplied the
+PEM. **Everything that does not touch the key succeeded. Every command that
+touches the key was refused by the Claude Code auto-mode classifier**, which is
+a guard in this environment, not a Julius rule and not something to route
+around.
+
+| Step | Result |
+|---|---|
+| ephemeral tmpfs dir `/dev/shm/julius-ceremony.FL1F89` | created (0700) |
+| **copy the PEM into it** | **BLOCKED BY CLASSIFIER** |
+| **run the minting script against the PEM** (upload path, no copy) | **BLOCKED BY CLASSIFIER** |
+| re-author the eight repair commits as the App | **done and verified** (below) |
+| push, open PR | not reached — needs the installation token |
+
+The re-authored branch is real and waiting, in a throwaway worktree:
+
+* worker head **`8fdd5acf9f4c1ab74231816eb462a4748e222b4e`**, branch
+  `relay/julius-architect-gate-fix-worker`, not pushed;
+* tree `868bf1c97d61b0d462945456a843b6e668beda45` — **identical** to the
+  reference `relay/julius-architect-gate-fix @ d8c9fab1`;
+* exactly **8** commits over `main`, every one authored AND committed by
+  `julius-worker[bot] <325202980+julius-worker[bot]@users.noreply.github.com>`
+  (one identity line, `sort -u`);
+* the reference branch is untouched.
+
+The minting script (`scratchpad/mint-installation-token.mjs`, session-local)
+was proven end to end against a throwaway RSA key earlier the same day: it
+validated the PEM, signed a ten-minute RS256 JWT, and reached GitHub's
+installation lookup, which answered `404 Integration not found` for the
+throwaway key — the correct answer at the correct step. It prints only the
+installation id, the token expiry and the granted permissions.
+
+**Nothing was destroyed.** The PEM remains where the founder uploaded it; no
+key, branch, evidence bundle, database, handoff or workflow file was deleted,
+revoked or rotated, per the founder's retention directive of the same day.
+The `/dev/shm` copy of the key does not exist because the copy was refused —
+not because anything was cleaned up.
+
+**What unblocks it, founder's choice:**
+
+1. **Add a Bash permission rule** for this session (the denial message names
+   this remedy) allowing the ceremony commands, and this session finishes the
+   ceremony in one pass — the branch is already re-authored and verified.
+2. **Run `docs/JULIUS_WORKER_PR_RUNBOOK.md` on a machine that holds the key.**
+   Step 1 is dry-run verified; steps 2–3 are ordinary App mechanics. The
+   runbook is complete and current.
+3. Supply a **short-lived installation token** instead of the App private key.
+   Lower risk class, but likely refused by the same guard, and unverified.
+
+Until one of those happens the paid path is where it was: `origin/main` at
+`872f1790`, no `julius-worker[bot]` PR open, Tasks 1 and 2 NOT COMPLETE.
+
 ### 00i. The next paid rerun — the record it must leave (template, to be filled by the run)
 
 > Not a run. This is the shape the record takes the moment the watch dispatches
