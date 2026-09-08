@@ -204,6 +204,41 @@ def t_stack_geometry():
     return "%d stacks, every rung above the one below" % checked
 
 
+def t_nothing_is_orphaned():
+    """A module that mounts on a facade is actually carried by one.
+
+    `Roof_Dormer`, `Roof_Chimney`, `House_Shopfront`, `Detail_Oriel_Bay` and
+    `Detail_Balcony_Bracket` publish a `back` socket and NO `bottom`: the
+    manifest is saying they do not stand on the ground. Two ways that goes
+    wrong, and this checks both:
+
+    A batch can place one with no host at all -- a dormer in a field.
+
+    Or a host can be removed after the fact. `KitStreet3_House0` was refused
+    for standing 644 uu from `FloatingStairCam26`, and its dormer, shopfront
+    and oriel are SHORT: they passed every test the house failed, and stayed
+    hanging in the air where a house used to be. `kit_layout.carried()` and the
+    screen's second pass are the fix; this is what found it.
+    """
+    ps = kit_placements()
+    alive = {p["label"] for p in ps}
+    dangling = [p["label"] for p in ps
+                if p.get("carried_by") and p["carried_by"] not in alive]
+    check(not dangling, "%d placement(s) name a carrier that is not in the "
+                        "world: %s" % (len(dangling), dangling[:4]))
+    mounted, loose = 0, []
+    for p in ps:
+        rec = KIT.asset(p["kit"])
+        names = {s["name"] for s in (rec.get("sockets") or [])}
+        if "back" in names and "bottom" not in names:
+            mounted += 1
+            if not p.get("carried_by"):
+                loose.append(p["label"])
+    check(not loose, "%d placement(s) of a facade-mounted module stand on "
+                     "nothing: %s" % (len(loose), loose[:4]))
+    return "%d facade-mounted placements, every one naming a carrier that exists" % mounted
+
+
 def t_camera_clearance():
     """No kit placement looms in a camera: `kit_layout.clearance_for`, per piece.
 
@@ -337,6 +372,7 @@ TESTS = (
     ("parts share a transform", t_parts_share_a_transform),
     ("sockets bear", t_sockets_bear),
     ("stack geometry", t_stack_geometry),
+    ("nothing is orphaned", t_nothing_is_orphaned),
     ("camera clearance", t_camera_clearance),
     ("ground datum", t_ground),
     ("the census can see it", t_census_can_see_it),

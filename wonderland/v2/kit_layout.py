@@ -437,24 +437,36 @@ def _hamlet_street(bands):
         yaw = 0.0 if side < 0 else 180.0
         for i in range(5):
             x = cx + (i - 2) * BAY
+            sd = "L" if side < 0 else "R"
+            host = "KitHamlet_House%s%d" % (sd, i + 1)
             out += KIT.placements_for("WL_House_Jettied", (x, y, 0.0),
-                                      rot=(0.0, yaw, 0.0),
-                                      label="KitHamlet_House%s%d"
-                                            % ("L" if side < 0 else "R", i + 1))
+                                      rot=(0.0, yaw, 0.0), label=host)
+            # THE AWNING AND THE SIGN ARE CARRIED BY THAT HOUSE. Both declare
+            # `mounts_on: facade` and publish a `back` socket with no `bottom`,
+            # and the forge authored the mount height into the geometry -- the
+            # awning's own bbox starts 192 uu up -- so z stays 0 and the piece
+            # lands at 1.9 m on the wall. What was missing was saying so: they
+            # were placed on the facade and not DECLARED to be, so a screen
+            # that removed the house would have left them in the air.
             if i % 2 == 0:
-                out += KIT.placements_for(
+                out += carried(KIT.placements_for(
                     "WL_Market_Awning", (x, y - side * 313.0, 0.0),
                     rot=(0.0, yaw, 0.0),
-                    label="KitHamlet_Awning%s%d" % ("L" if side < 0 else "R", i + 1))
+                    label="KitHamlet_Awning%s%d" % (sd, i + 1)), host)
             else:
-                out += KIT.placements_for(
+                out += carried(KIT.placements_for(
                     "WL_Market_Hanging_Sign", (x, y - side * 313.0, 0.0),
                     rot=(0.0, yaw, 0.0),
-                    label="KitHamlet_Sign%s%d" % ("L" if side < 0 else "R", i + 1))
+                    label="KitHamlet_Sign%s%d" % (sd, i + 1)), host)
     for i in (-1, 0, 1):
-        out += KIT.placements_for("WL_Market_Arcade_Insert",
-                                  (cx + i * BAY, cy - STREET * 0.5 + 313.0, 0.0),
-                                  label="KitHamlet_Arcade%d" % (i + 2))
+        # the arcade is INSERTED INTO the left terrace's ground floor, so it is
+        # carried by the house at the same bay: the row runs x = cx + (k-2)*BAY
+        # for k in 0..4, so bay i belongs to house k = i + 2.
+        out += carried(KIT.placements_for(
+            "WL_Market_Arcade_Insert",
+            (cx + i * BAY, cy - STREET * 0.5 + 313.0, 0.0),
+            label="KitHamlet_Arcade%d" % (i + 2)),
+            "KitHamlet_HouseL%d" % (i + 3))
         out += KIT.placements_for("WL_Market_Canopy",
                                   (cx + i * 900.0, cy, 0.0),
                                   label="KitHamlet_Canopy%d" % (i + 2))
@@ -971,17 +983,184 @@ def _garden_levels(bands):
     return out
 
 
+#: (camera, distance down its axis, lateral, why). A LANE IS THE ONE PLACE THE
+#: WHOLE KIT MEETS: ground that is laid rather than assumed, houses with three
+#: different roofs on it, and the pieces that only exist BECAUSE there is a
+#: facade to carry them.
+STREET_SITES = (
+    ("ColossalKeyCam25", 5000.0, 3000.0, "the only clear axis in the eastern quarter"),
+    ("LanternLaneCam27", 9000.0, -3000.0, "the lantern hamlets, which the census says are 83% built and have no street"),
+    ("GiantBloomCam29", 7000.0, 3000.0, "behind the bloom, where the hamlet thins out"),
+)
+
+#: uu. A house is 6.4-7.4 m on plan and a lane wants air between its doors.
+PLOT_UU = 1000.0
+
+#: Filled by `_street_fabric`.
+STREET_CHOSEN = []
+
+
+def _street_fabric(bands):
+    """A lane: laid ground, three roofs, and the pieces that need a wall.
+
+    THE MOUNTED FAMILY IS THE POINT. `Roof_Dormer`, `Roof_Chimney`,
+    `House_Shopfront`, `Detail_Oriel_Bay` and `Detail_Balcony_Bracket` publish
+    a `back` socket and NO `bottom` -- they do not stand on the ground, they
+    are carried by a facade, and until this batch there was no facade in
+    Wonderland carrying one. Five modules that cannot be placed alone is not a
+    gap in the layout; it is a gap in the world's building stock.
+
+    Every mount height is the HOST's published socket, never a guess: the
+    gabled house publishes `eaves` at 610 uu and the hipped at 915, so that is
+    where the dormer and the chimney go, and the chimney tops out at 1,351
+    against a 1,257 house because a stack rises above its ridge.
+
+    The ground is laid rather than assumed -- a verge between kerbs, a runnel
+    down the fall, tree grates where the planting goes, a corner at each end,
+    and broad steps where the lane changes level. `Ground_Steps_Broad` is three
+    0.310 m risers, which is the same `RISER_M` every stair in the kit uses, so
+    the lane's level change and a garden's are the same height by construction.
+
+    THE THIRD BATCH RUNNING TO A CENSUS NULL, and stated for the third time
+    rather than left for a reader to notice: mean built 74.82% before and
+    after, to the decimal. A house is 10 to 13 m and these lanes stand 50 to
+    110 m out under frames roofed at +29 degrees. Ground fabric does not hold
+    ceilings. What it does is spend 24 modules that had never been placed, five
+    of which CANNOT be placed alone.
+    """
+    out, chosen = [], []
+    for n, (cam, dist, lat, why) in enumerate(STREET_SITES):
+        gx, gy = on_axis(cam, dist, lat)
+        spot = _nudge(bands, gx, gy, "Street%d" % (n + 1),
+                      max_neighbours=64, step=1600.0, tries=14)
+        if spot is None:
+            continue
+        cx, cy = spot
+        tag = "KitStreet%d" % (n + 1)
+        bearing = float((n * 53 + 15) % 360)
+        rad = math.radians(bearing)
+        ax, ay = math.cos(rad), math.sin(rad)      # along the lane
+        nx, ny = -ay, ax                           # across it, to the houses
+        HOUSES = ("WL_House_Gabled", "WL_House_Hipped", "WL_House_Jettied")
+        EAVES = {"WL_House_Gabled": 610.0, "WL_House_Hipped": 915.0,
+                 "WL_House_Jettied": 915.0}
+        for i in range(-2, 3):
+            t = PLOT_UU * i
+            # ---- the ground, laid ------------------------------------------
+            gx2, gy2 = cx + ax * t, cy + ay * t
+            if i == -2 or i == 2:
+                lay = "WL_Ground_Kerb_Corner"
+            elif i == 0:
+                lay = "WL_Ground_Steps_Broad"
+            else:
+                lay = "WL_Ground_Drain_Channel"
+            out += KIT.placements_for(lay, (gx2, gy2, 0.0), rot=(0.0, bearing, 0.0),
+                                      label="%s_Lay%d" % (tag, i + 2))
+            out += KIT.placements_for("WL_Ground_Verge_Run",
+                                      (gx2 - nx * 620.0, gy2 - ny * 620.0, 0.0),
+                                      rot=(0.0, bearing, 0.0),
+                                      label="%s_Verge%d" % (tag, i + 2))
+            if i % 2 == 0:
+                out += KIT.placements_for("WL_Ground_Tree_Grate",
+                                          (gx2 - nx * 900.0, gy2 - ny * 900.0, 0.0),
+                                          rot=(0.0, bearing, 0.0),
+                                          label="%s_Grate%d" % (tag, i + 2))
+            else:
+                out += KIT.placements_for("WL_Ground_Step_Single",
+                                          (gx2 - nx * 900.0, gy2 - ny * 900.0, 0.0),
+                                          rot=(0.0, bearing, 0.0),
+                                          label="%s_Step%d" % (tag, i + 2))
+            # ---- the house, and what its wall carries -----------------------
+            host = HOUSES[(i + 2) % 3]
+            hx = gx2 + nx * 1500.0
+            hy = gy2 + ny * 1500.0
+            face = bearing + 180.0                 # the wall that faces the lane
+            out += KIT.placements_for(host, (hx, hy, 0.0), rot=(0.0, face, 0.0),
+                                      label="%s_House%d" % (tag, i + 2))
+            # the facade plane, half a plan depth in front of the house centre
+            fx = hx - nx * (KIT.asset(host)["size_uu"][1] * 0.5)
+            fy = hy - ny * (KIT.asset(host)["size_uu"][1] * 0.5)
+            eaves = EAVES[host]
+            carrier = "%s_House%d" % (tag, i + 2)
+            if host == "WL_House_Hipped":
+                out += carried(KIT.placements_for(
+                    "WL_Roof_Chimney", (hx, hy, eaves), rot=(0.0, face, 0.0),
+                    label="%s_Stack%d" % (tag, i + 2)), carrier)
+            else:
+                out += carried(KIT.placements_for(
+                    "WL_Roof_Dormer", (fx, fy, eaves), rot=(0.0, face, 0.0),
+                    label="%s_Dormer%d" % (tag, i + 2)), carrier)
+            if i in (-1, 1):
+                out += carried(KIT.placements_for(
+                    "WL_House_Shopfront", (fx, fy, 0.0), rot=(0.0, face, 0.0),
+                    label="%s_Shop%d" % (tag, i + 2)), carrier)
+            if i == 0:
+                out += carried(KIT.placements_for(
+                    "WL_Detail_Oriel_Bay", (fx, fy, 380.0), rot=(0.0, face, 0.0),
+                    label="%s_Oriel" % tag), carrier)
+            if i == -2:
+                out += carried(KIT.placements_for(
+                    "WL_Detail_Balcony_Bracket", (fx, fy, 420.0),
+                    rot=(0.0, face, 0.0),
+                    label="%s_Balcony" % tag), carrier)
+        # ---- the ends: a threshold each way, and the lane's punctuation -----
+        for sgn, aid in ((-1.0, "WL_Gatehouse_Screen"), (1.0, "WL_Arch_Trefoil_Screen")):
+            out += KIT.placements_for(aid, (cx + ax * sgn * 3000.0,
+                                            cy + ay * sgn * 3000.0, 0.0),
+                                      rot=(0.0, bearing + 90.0, 0.0),
+                                      label="%s_End%d" % (tag, 1 if sgn < 0 else 2))
+        out += KIT.placements_for("WL_Arch_Garden_Rose",
+                                  (cx - nx * 2600.0, cy - ny * 2600.0, 0.0),
+                                  rot=(0.0, bearing, 0.0), label="%s_RoseArch" % tag)
+        out += KIT.placements_for("WL_Detail_Screen_Filigree",
+                                  (cx - nx * 1900.0, cy - ny * 1900.0, 0.0),
+                                  rot=(0.0, bearing, 0.0), label="%s_Screen" % tag)
+        out += KIT.placements_for("WL_Detail_Pinnacle_Grand",
+                                  (cx + ax * 2200.0 - nx * 1900.0,
+                                   cy + ay * 2200.0 - ny * 1900.0, 0.0),
+                                  rot=(0.0, bearing, 0.0), label="%s_Pinnacle" % tag)
+        for sgn in (-1.0, 1.0):
+            out += KIT.placements_for("WL_Detail_Newel_Urn",
+                                      (cx + ax * sgn * 2200.0 - nx * 620.0,
+                                       cy + ay * sgn * 2200.0 - ny * 620.0, 31.0),
+                                      rot=(0.0, bearing, 0.0),
+                                      label="%s_Newel%d" % (tag, 1 if sgn < 0 else 2))
+        chosen.append((cx, cy, bearing, why))
+    STREET_CHOSEN[:] = chosen
+    return out
+
+
 PASSES = (("tea_terrace", _tea_terrace), ("water_court", _water_court),
           ("depth_stand", _depth_stand), ("clock_quarter", _clock_quarter),
           ("hamlet_street", _hamlet_street),
           ("ceiling_break", _ceiling_break),
           ("green_ceiling", _green_ceiling),
           ("castle_precinct", _castle_precinct),
-          ("garden_levels", _garden_levels))
+          ("garden_levels", _garden_levels),
+          ("street_fabric", _street_fabric))
 
 
 #: Every placement a screen refused, with the camera and the numbers.
 REFUSED = []
+
+
+def carried(placements, host_label):
+    """Mark placements as carried by a host, so a screen cannot orphan them.
+
+    `Roof_Dormer`, `Roof_Chimney`, `House_Shopfront`, `Detail_Oriel_Bay` and
+    `Detail_Balcony_Bracket` publish a `back` socket and no `bottom`: they are
+    carried by a facade and have no meaning without one. `_screen` works on
+    placements, and a dormer is a short placement that passes every test its
+    host fails -- so when `KitStreet3_House0` was refused for standing 644 uu
+    from FloatingStairCam26, its dormer, its shopfront and its oriel stayed
+    exactly where they were, hanging in the air where a house used to be.
+
+    `verify_kit_bridge` found it. The fix is that a carried piece names its
+    carrier and the screen drops it with them.
+    """
+    for p in placements:
+        p["carried_by"] = host_label
+    return placements
 
 
 def _screen(name, band):
@@ -1015,6 +1194,19 @@ def _screen(name, band):
                                      bad[2]))
             continue
         keep.append(p)
+    # SECOND PASS: nothing carried may outlive its carrier. Run to a fixed
+    # point, because a carrier can itself be carried.
+    while True:
+        alive = {p["label"] for p in keep}
+        orphans = [p for p in keep
+                   if p.get("carried_by") and p["carried_by"] not in alive]
+        if not orphans:
+            break
+        for p in orphans:
+            REFUSED.append("%s: %s is carried by %s, which was refused"
+                           % (name, p["label"], p["carried_by"]))
+        drop = {p["label"] for p in orphans}
+        keep = [p for p in keep if p["label"] not in drop]
     return keep
 
 

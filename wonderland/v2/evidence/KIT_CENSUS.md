@@ -8,7 +8,7 @@ not the placements.
 | | placements | mean built | cameras moved | one piece holds a third | frames over half green |
 |---|---|---|---|---|---|
 | before | 13,816 | 67.78% | — | 10 | 9 |
-| after | 14,796 | **74.82%** | 24 of 33 | 9 | 5 |
+| after | 15,157 | **74.82%** | 24 of 33 | 9 | 5 |
 
 The founder's reference, classified from its own pixels, is built **71.5%**.
 
@@ -99,7 +99,7 @@ the mushroom is the world stream's asset: this is world mismatch #2 (a
 district's fungus out-topping its architecture) standing on the one frame with
 a ground truth.
 
-## Two batches that measured nothing, kept anyway, and labelled
+## Three batches that measured nothing, kept anyway, and labelled
 
 `castle_precinct` puts three walled precincts -- curtain runs, mural towers,
 corner bastions, a postern gate, a colonnade and a ceremonial arch, weathered
@@ -132,7 +132,33 @@ Seven of the eight stair modules had never been placed. The forge's own rule is
 that stairs to a flat plane are stairs to nowhere, so neither batch places a
 flight anywhere it has not first built the edge for it to climb: `top_route` on
 a retaining run is 310 uu, which is exactly the `top_route` of a T2 flight and
-the `landing` of the half-turn. Modules placed went 42 of 101 to **58 of 101**.
+the `landing` of the half-turn.
+
+`street_fabric` is the third: three lanes with laid ground -- a verge between
+kerbs, a runnel down the fall, tree grates, broad steps at the level change --
+and houses of three roof types facing them. Mean built 74.82% before and after,
+to the decimal, for the same reason: a house is 10 to 13 m under a frame roofed
+at +29 degrees.
+
+**It is the batch that mattered most for coverage, because five of its modules
+CANNOT BE PLACED ALONE.** `Roof_Dormer`, `Roof_Chimney`, `House_Shopfront`,
+`Detail_Oriel_Bay` and `Detail_Balcony_Bracket` publish a `back` socket and no
+`bottom`: the manifest is saying they are carried by a facade. Until this batch
+there was no facade in Wonderland carrying one. Every mount height is the
+host's own published socket -- the gabled house's `eaves` at 610 uu, the
+hipped's at 915 -- so the dormer and the chimney sit where the house says, and
+the chimney tops out at 1,351 against a 1,257 house because a stack rises above
+its ridge.
+
+Modules placed went 42 of 101 to **77 of 101**.
+
+### THE COVERAGE BATCHES ARE A DIFFERENT KIND OF WORK, and mixing the two is
+how a placement pass fools itself. Seven batches answer a measured census
+number and are judged by whether it moved. Three answer "this module has never
+been in the world" and are judged by coverage; all three moved the census by
+zero and each says so in its own docstring. **A batch that produces no number
+is not automatically waste, and a batch that claims a number it did not produce
+is worse than one that admits none.**
 
 The reason this is written down rather than quietly dropped: a batch that
 produces no number is not automatically waste, and a batch that claims a number
