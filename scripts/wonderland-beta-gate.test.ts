@@ -620,6 +620,34 @@ describe('the Beta Gate’s capability axis', () => {
     expect(row.capabilityBasis).toContain(`it did not exercise ${target.slice(1).join(', ')}`);
   });
 
+  it('expires an attestation naming a file that is no longer here, and says which', () => {
+    const target = implementedBy('RESTART / RECOVERY');
+    const dir = withProof(completingBundle(), {
+      paths: [...target, 'src/relay/mission/julius/julius-recovery-deleted.ts'],
+      digests: [...target.map(digest), `sha256:${'0'.repeat(64)}`],
+    });
+    const row = rowFor(evaluate(dir), 'RESTART / RECOVERY');
+    expect(row.capability).toBe('STALE');
+    expect(row.capabilityBasis).toContain('is no longer in this repository');
+  });
+
+  /**
+   * ONE DRILL, ONE STORY. Reading the step count and transcript out of the
+   * first row alone would let every row after it say anything.
+   */
+  it('refuses a ledger whose rows disagree about the run they describe', () => {
+    const dir = completingBundle();
+    const target = implementedBy('RESTART / RECOVERY');
+    writeFileSync(join(dir, 'julius-live-evidence', 'capability-proofs.tsv'), tsv(PROOF_COLUMNS,
+      target.map((path, index) => ['RESTART / RECOVERY', 'npm run julius:recovery-drill', 'VERIFIED',
+        index === 0 ? '10' : '4', 'real-postgres', path, digest(path), 'julius-recovery-drill.transcript.txt',
+        '2026-09-08T00:00:00.000Z'])));
+    writeFileSync(join(dir, 'julius-live-evidence', 'julius-recovery-drill.transcript.txt'), transcriptFor(10));
+    const row = rowFor(evaluate(dir), 'RESTART / RECOVERY');
+    expect(row.verdict).toBe('FAIL');
+    expect(row.capabilityBasis).toContain('its rows disagree about steps');
+  });
+
   it('refuses an attestation that names a path outside this repository', () => {
     const row = rowFor(evaluate(withProof(completingBundle(), {
       paths: ['../../etc/passwd'], digests: [`sha256:${'0'.repeat(64)}`],
