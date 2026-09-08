@@ -6,9 +6,8 @@ import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { Pool } from 'pg';
 
-import {
-  CAPABILITY, CAPABILITY_PROOF_COLUMNS, DRILL_COMMAND, EXERCISED, TRANSCRIPT_FILE,
-} from './julius-recovery-drill';
+import { CAPABILITY_PROOF_COLUMNS } from './julius-drill-support';
+import { CAPABILITY, DRILL_COMMAND, EXERCISED, TRANSCRIPT_FILE } from './julius-recovery-drill';
 import { CAPABILITY_PROOF_COLUMNS as GATE_COLUMNS, evaluate } from './wonderland-beta-gate.mjs';
 
 /**
