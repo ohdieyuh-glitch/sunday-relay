@@ -99,6 +99,12 @@ function completingBundle(): string {
 const verdictFor = (report: BetaGateReport, id: string): BetaVerdict =>
   report.results.find((row) => row.id === id)!.verdict;
 
+const CONTRACT_EVENT_COLUMNS = [
+  'task_id', 'event_type', 'reason_code', 'contract_task_id', 'contract_id', 'contract_revision', 'binding_digest',
+  'recorded_revision', 'current_revision', 'review_revision', 'implementation_revision', 'role', 'occurred_at',
+];
+const contractEvents = (rows: readonly (readonly string[])[]) => tsv(CONTRACT_EVENT_COLUMNS, rows);
+
 describe('the Wonderland Beta Gate', () => {
   const VERDICTS: readonly BetaVerdict[] = ['PASS', 'FAIL', 'NOT BUILT'];
 
@@ -308,6 +314,13 @@ describe('the Wonderland Beta Gate', () => {
       [`contract:${RUN}:build`, '1', `${RUN}:build`, 'SUPERSEDED', `sha256:${'a'.repeat(64)}`, 't1', 'reviewer:hermes', 't0'],
       [`contract:${RUN}:build`, '2', `${RUN}:build`, 'LOCKED', `sha256:${'b'.repeat(64)}`, 't2', 'reviewer:hermes', 't1'],
     ]));
+    // And the build and its review were CLAIMED under that lock — the same
+    // revision and digest — which the lock table alone cannot say.
+    write('contract-events.tsv', contractEvents([
+      [`${RUN}:build`, 'julius.contract.locked', '', `${RUN}:build`, `contract:${RUN}:build`, '2', `sha256:${'b'.repeat(64)}`, '', '', '', '', '', 't2'],
+      [`${RUN}:build`, 'julius.task.claimed', '', `${RUN}:build`, `contract:${RUN}:build`, '2', `sha256:${'b'.repeat(64)}`, '', '', '', '', 'CODING_AGENT', 't3'],
+      [`${RUN}:build:review`, 'julius.task.claimed', '', `${RUN}:build`, `contract:${RUN}:build`, '2', `sha256:${'b'.repeat(64)}`, '', '', '', '', 'INDEPENDENT_REVIEWER', 't4'],
+    ]));
 
     const report = evaluate(dir);
     const notPassing = report.results.filter((row) => row.verdict !== 'PASS');
@@ -316,6 +329,95 @@ describe('the Wonderland Beta Gate', () => {
       .toEqual([`WONDER WEB OUTPUT: NOT BUILT — ${report.results.find((row) => row.id === 'WONDER WEB OUTPUT')!.basis}`]);
     expect(report.gaps.map((row) => row.id), 'and the only gap left is the one nobody has built')
       .toEqual(['WONDER WEB OUTPUT']);
+  });
+
+  /**
+   * LOCKED IS NOT RUN UNDER. The two bundles below carry a contract locked
+   * before the build and would have passed the row on the lock table alone;
+   * each is exactly the run the stale-handoff and reviewer-binding guards
+   * exist to refuse, and the gate must read them as the guards would.
+   */
+  it('a build claimed under an older revision than the lock turns TASK CONTRACT LOCK to FAIL', () => {
+    const dir = completingBundle();
+    const write = (name: string, text: string) => writeFileSync(join(dir, 'julius-live-evidence', name), text);
+    write('task-contracts.tsv', tsv(['contract_id', 'contract_revision', 'task_id', 'state', 'binding_digest', 'locked_at', 'locked_by_evaluator_id', 'created_at'], [
+      [`contract:${RUN}:build`, '2', `${RUN}:build`, 'LOCKED', `sha256:${'b'.repeat(64)}`, 't2', 'reviewer:hermes', 't1'],
+    ]));
+    write('contract-events.tsv', contractEvents([
+      [`${RUN}:build`, 'julius.task.claimed', '', `${RUN}:build`, `contract:${RUN}:build`, '1', `sha256:${'a'.repeat(64)}`, '', '', '', '', 'CODING_AGENT', 't3'],
+    ]));
+    const row = evaluate(dir).results.find((value) => value.id === 'TASK CONTRACT LOCK')!;
+    expect(row.verdict).toBe('FAIL');
+    expect(row.basis).toContain('claimed under revision 1 while revision 2 is the lock');
+  });
+
+  it('a binding refusal on the build turns TASK CONTRACT LOCK to FAIL even though the lock looks perfect', () => {
+    const dir = completingBundle();
+    const write = (name: string, text: string) => writeFileSync(join(dir, 'julius-live-evidence', name), text);
+    write('task-contracts.tsv', tsv(['contract_id', 'contract_revision', 'task_id', 'state', 'binding_digest', 'locked_at', 'locked_by_evaluator_id', 'created_at'], [
+      [`contract:${RUN}:build`, '2', `${RUN}:build`, 'LOCKED', `sha256:${'b'.repeat(64)}`, 't2', 'reviewer:hermes', 't1'],
+    ]));
+    write('contract-events.tsv', contractEvents([
+      [`${RUN}:build`, 'julius.task.claimed', '', `${RUN}:build`, `contract:${RUN}:build`, '1', `sha256:${'a'.repeat(64)}`, '', '', '', '', 'CODING_AGENT', 't3'],
+      [`${RUN}:build`, 'julius.contract.refused', 'binding_stale', `${RUN}:build`, `contract:${RUN}:build`, '', '', '1', '2', '', '', 'CODING_AGENT', 't4'],
+    ]));
+    const row = evaluate(dir).results.find((value) => value.id === 'TASK CONTRACT LOCK')!;
+    expect(row.verdict).toBe('FAIL');
+    expect(row.basis).toContain('binding_stale');
+  });
+
+  it('a contract-events dump with NO claim row for the build turns TASK CONTRACT LOCK to FAIL — absence is not agreement', () => {
+    const dir = completingBundle();
+    const write = (name: string, text: string) => writeFileSync(join(dir, 'julius-live-evidence', name), text);
+    write('task-contracts.tsv', tsv(['contract_id', 'contract_revision', 'task_id', 'state', 'binding_digest', 'locked_at', 'locked_by_evaluator_id', 'created_at'], [
+      [`contract:${RUN}:build`, '2', `${RUN}:build`, 'LOCKED', `sha256:${'b'.repeat(64)}`, 't2', 'reviewer:hermes', 't1'],
+    ]));
+    write('contract-events.tsv', contractEvents([
+      [`${RUN}:build`, 'julius.contract.locked', '', `${RUN}:build`, `contract:${RUN}:build`, '2', `sha256:${'b'.repeat(64)}`, '', '', '', '', '', 't2'],
+    ]));
+    const row = evaluate(dir).results.find((value) => value.id === 'TASK CONTRACT LOCK')!;
+    expect(row.verdict).toBe('FAIL');
+    expect(row.basis).toContain('carries no recorded contract binding on its claim');
+  });
+
+  it('a review claimed under a different revision than the build turns TASK CONTRACT LOCK to FAIL, naming the review', () => {
+    const dir = completingBundle();
+    const write = (name: string, text: string) => writeFileSync(join(dir, 'julius-live-evidence', name), text);
+    write('task-contracts.tsv', tsv(['contract_id', 'contract_revision', 'task_id', 'state', 'binding_digest', 'locked_at', 'locked_by_evaluator_id', 'created_at'], [
+      [`contract:${RUN}:build`, '2', `${RUN}:build`, 'LOCKED', `sha256:${'b'.repeat(64)}`, 't2', 'reviewer:hermes', 't1'],
+    ]));
+    write('contract-events.tsv', contractEvents([
+      [`${RUN}:build`, 'julius.task.claimed', '', `${RUN}:build`, `contract:${RUN}:build`, '2', `sha256:${'b'.repeat(64)}`, '', '', '', '', 'CODING_AGENT', 't3'],
+      [`${RUN}:build:review`, 'julius.task.claimed', '', `${RUN}:build`, `contract:${RUN}:build`, '3', `sha256:${'c'.repeat(64)}`, '', '', '', '', 'INDEPENDENT_REVIEWER', 't4'],
+    ]));
+    const row = evaluate(dir).results.find((value) => value.id === 'TASK CONTRACT LOCK')!;
+    expect(row.verdict).toBe('FAIL');
+    expect(row.basis).toContain(`review ${RUN}:build:review was claimed under revision 3 while revision 2 is the lock`);
+  });
+
+  it('a build claimed under the right revision but a different digest turns TASK CONTRACT LOCK to FAIL — two records agreeing on a number is not agreement', () => {
+    const dir = completingBundle();
+    const write = (name: string, text: string) => writeFileSync(join(dir, 'julius-live-evidence', name), text);
+    write('task-contracts.tsv', tsv(['contract_id', 'contract_revision', 'task_id', 'state', 'binding_digest', 'locked_at', 'locked_by_evaluator_id', 'created_at'], [
+      [`contract:${RUN}:build`, '2', `${RUN}:build`, 'LOCKED', `sha256:${'b'.repeat(64)}`, 't2', 'reviewer:hermes', 't1'],
+    ]));
+    write('contract-events.tsv', contractEvents([
+      [`${RUN}:build`, 'julius.task.claimed', '', `${RUN}:build`, `contract:${RUN}:build`, '2', `sha256:${'a'.repeat(64)}`, '', '', '', '', 'CODING_AGENT', 't3'],
+    ]));
+    const row = evaluate(dir).results.find((value) => value.id === 'TASK CONTRACT LOCK')!;
+    expect(row.verdict).toBe('FAIL');
+    expect(row.basis).toContain(`build ${RUN}:build was claimed under a digest that is not the lock's`);
+  });
+
+  it('a bundle without the contract-events dump keeps the weaker proof and says so', () => {
+    const dir = completingBundle();
+    const write = (name: string, text: string) => writeFileSync(join(dir, 'julius-live-evidence', name), text);
+    write('task-contracts.tsv', tsv(['contract_id', 'contract_revision', 'task_id', 'state', 'binding_digest', 'locked_at', 'locked_by_evaluator_id', 'created_at'], [
+      [`contract:${RUN}:build`, '1', `${RUN}:build`, 'LOCKED', `sha256:${'b'.repeat(64)}`, 't2', 'reviewer:hermes', 't1'],
+    ]));
+    const row = evaluate(dir).results.find((value) => value.id === 'TASK CONTRACT LOCK')!;
+    expect(row.verdict).toBe('PASS');
+    expect(row.basis).toContain('not measurable');
   });
 
   /**

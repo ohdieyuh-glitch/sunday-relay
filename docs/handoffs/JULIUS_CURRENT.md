@@ -919,6 +919,27 @@ subject using the runtime's own resolver rather than a copy of the rule. The
 audit is enumerated, not implied: twelve placements across all four role
 shapes, and the only nulls are `plan-1` and `plan-1:review`.
 
+#### Section 12D — the Beta Gate measures the binding, not only the lock
+
+`TASK CONTRACT LOCK` used to pass on the lock table alone: a contract locked
+before the build. That cannot tell a build claimed under an OLDER revision, or a
+review claimed under a NEWER one, from the run it exists to certify — exactly
+the two shapes the guards above refuse. The live evidence dump now writes the
+`julius.task.claimed` rows of every bound task into `contract-events.tsv`
+beside the contract events (the revision and digest each coder and reviewer
+actually executed under), and the row requires, when that file is present,
+that the build and its review were claimed under the governing lock's revision
+and digest and that no `binding_*` / `implementation_binding_absent` refusal
+touched either. An older bundle without the dump keeps the weaker proof and its
+basis says so. Six gate cases hold it — a stale claim (FAIL naming both
+revisions), a binding refusal (FAIL naming the reason), a missing claim row
+(FAIL: absence is not agreement), a review at a different revision than the
+build (FAIL naming the review), the right revision under a different digest
+(FAIL), and no dump (PASS, "not measurable") — and five mutations of the gate
+logic were run against them. Two of the five SURVIVED the first three cases
+(a missing claim row, and a digest-only mismatch, were untested); the cases
+above were added for them and all five now die.
+
 #### The gate, as run on the committed tree in this container
 
 | Gate | Result |
