@@ -26,6 +26,8 @@ struct FName { FName(){} FName(const char*){} };
 struct FText {};
 template<typename T> struct TArray { std::vector<T> v;
   int32 Num() const { return (int32)v.size(); } void Add(const T& x){ v.push_back(x); }
+  bool IsValidIndex(int32 i) const { return i>=0 && (size_t)i<v.size(); }
+  void Reset(){ v.clear(); } void Reserve(int32 n){ v.reserve((size_t)n); } void Empty(){ v.clear(); }
   T& operator[](int32 i){ return v[(size_t)i]; } const T& operator[](int32 i) const { return v[(size_t)i]; }
   T* begin(){return v.data();} T* end(){return v.data()+v.size();}
   const T* begin() const {return v.data();} const T* end() const {return v.data()+v.size();} };
@@ -37,6 +39,10 @@ template<typename K, typename V> struct TMap { std::map<K,V> m;
 struct FVector { double X=0,Y=0,Z=0; FVector(){} explicit FVector(double u):X(u),Y(u),Z(u){} FVector(double a,double b,double c):X(a),Y(b),Z(c){}
   FVector operator*(double s) const { return FVector(X*s,Y*s,Z*s); }
   FVector operator+(const FVector& o) const { return FVector(X+o.X,Y+o.Y,Z+o.Z); } };
+struct FVector2D { double X=0,Y=0; FVector2D(){} FVector2D(double a,double b):X(a),Y(b){}
+  FVector2D operator*(double s) const { return FVector2D(X*s,Y*s); }
+  FVector2D operator+(const FVector2D& o) const { return FVector2D(X+o.X,Y+o.Y); }
+  FVector2D operator-(const FVector2D& o) const { return FVector2D(X-o.X,Y-o.Y); } };
 struct FRotator { double Pitch=0,Yaw=0,Roll=0; FRotator(){} FRotator(double p,double y,double r):Pitch(p),Yaw(y),Roll(r){} };
 struct FTransform {};
 struct FColor {}; struct FLinearColor {};
@@ -64,12 +70,13 @@ struct FMath {
   static float Fmod(float a,float b){ return std::fmod(a,b); }
   static float Abs(float x){ return std::fabs(x); }
   template<typename T> static T Clamp(T v,T a,T b){ return v<a?a:(v>b?b:v); }
-  template<typename T> static T Max(T a,T b){ return a>b?a:b; }
-  template<typename T> static T Min(T a,T b){ return a<b?a:b; }
+  template<typename A, typename B> static auto Max(A a,B b) -> decltype(a>b?a:b) { return a>b?a:b; }
+  template<typename A, typename B> static auto Min(A a,B b) -> decltype(a<b?a:b) { return a<b?a:b; }
   static float Lerp(float a,float b,float t){ return a+(b-a)*t; }
   static bool IsFinite(float x){ return std::isfinite(x); }
   static bool IsNaN(float x){ return std::isnan(x); }
   static float Sqrt(float x){ return std::sqrt(x); }
+  static float Pow(float a,float b){ return std::pow(a,b); }
   static constexpr float Pi = 3.14159265358979323846f; };
 #define PI 3.14159265358979323846f
 #define UE_SMALL_NUMBER 1.e-8f

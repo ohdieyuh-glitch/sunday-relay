@@ -571,6 +571,22 @@ export interface WonderlandSwooshSample {
   readonly halfWidth: number;
 }
 
+/**
+ * The sample's shape is mirrored into `FWonderlandSwooshSample` so the Unreal
+ * renderer walks the SAME curve this module describes rather than a re-drawn
+ * approximation of it. `WonderlandUsageGeometry.golden.tsv` is generated from
+ * `wonderlandSwooshAt` and the C++ sampler is diffed against it numerically, so
+ * a divergence in either direction is a build failure, not a visual one.
+ */
+export const WONDERLAND_SWOOSH_SAMPLE_FIELDS = exactKeys<WonderlandSwooshSample>()([
+  't',
+  'x',
+  'y',
+  'tangentX',
+  'tangentY',
+  'halfWidth',
+] as const);
+
 const cubic = (t: number, a: number, b: number, c: number, d: number): number => {
   const u = 1 - t;
   return u * u * u * a + 3 * u * u * t * b + 3 * u * t * t * c + t * t * t * d;

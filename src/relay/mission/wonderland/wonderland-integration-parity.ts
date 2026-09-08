@@ -50,6 +50,7 @@ import type { WonderlandRunSnapshot } from './wonderland-rehydration';
 import { WONDERLAND_USAGE_ATTRIBUTIONS } from './wonderland-usage-accounting';
 import {
   WONDERLAND_HUD_ANCHORS,
+  WONDERLAND_SWOOSH_SAMPLE_FIELDS,
   WONDERLAND_SWOOSH_SEGMENT_FIELDS,
   WONDERLAND_USAGE_CHANNELS,
   WONDERLAND_USAGE_CHANNEL_STYLE_FIELDS,
@@ -70,6 +71,7 @@ import {
 } from './wonderland-usage-authority';
 import type { WonderlandUsageAuthorityStatus } from './wonderland-usage-authority';
 import type {
+  WonderlandSwooshSample,
   WonderlandSwooshSegment,
   WonderlandUsageChannelStyle,
   WonderlandUsageHud,
@@ -215,6 +217,13 @@ const _UsageViewportNullableIsExact: SameKeys<
 > = true;
 void _UsageViewportNullableIsExact;
 
+const SWOOSH_SAMPLE_NULLABLE = [] as const;
+const _SwooshSampleNullableIsExact: SameKeys<
+  (typeof SWOOSH_SAMPLE_NULLABLE)[number],
+  NullableKeysOf<WonderlandSwooshSample>
+> = true;
+void _SwooshSampleNullableIsExact;
+
 const SWOOSH_SEGMENT_NULLABLE = [] as const;
 const _SwooshSegmentNullableIsExact: SameKeys<
   (typeof SWOOSH_SEGMENT_NULLABLE)[number],
@@ -305,6 +314,24 @@ export const WONDERLAND_INTEGRATION_CPP_STRUCT_PARITY: readonly {
     cppStruct: 'FWonderlandSwooshSegment',
     tsInterface: 'WonderlandSwooshSegment',
     fields: WONDERLAND_SWOOSH_SEGMENT_FIELDS,
+  },
+  {
+    /**
+     * A SAMPLE IS NOT A CONTRACT THE WORLD RECEIVES — IT IS ONE IT RECOMPUTES.
+     *
+     * Every other struct here crosses the wire. This one never does: the world
+     * is told the swoosh SHAPE and derives samples from it locally, because a
+     * renderer that asked Relay for 64 points per meter per frame would be the
+     * per-frame backend call the directive forbids. The parity entry exists
+     * anyway, because the two samplers must agree about what a sample IS for
+     * `WonderlandUsageGeometry.golden.tsv` to mean anything: the fixture is
+     * generated from the TypeScript field-by-field, and a C++ struct that had
+     * drifted would still diff clean against a fixture written in its own
+     * shape. Mirroring the type is what keeps the numeric check honest.
+     */
+    cppStruct: 'FWonderlandSwooshSample',
+    tsInterface: 'WonderlandSwooshSample',
+    fields: WONDERLAND_SWOOSH_SAMPLE_FIELDS,
   },
   {
     cppStruct: 'FWonderlandUsageSwoosh',
@@ -508,6 +535,7 @@ export const WONDERLAND_INTEGRATION_NULLABLE_FIELDS: Readonly<
   FWonderlandLinkStatus: LINK_STATUS_NULLABLE,
   FWonderlandUsageAuthorityStatus: AUTHORITY_STATUS_NULLABLE,
   FWonderlandUsageViewport: USAGE_VIEWPORT_NULLABLE,
+  FWonderlandSwooshSample: SWOOSH_SAMPLE_NULLABLE,
   FWonderlandSwooshSegment: SWOOSH_SEGMENT_NULLABLE,
   FWonderlandUsageSwoosh: USAGE_SWOOSH_NULLABLE,
   FWonderlandUsageMeter: USAGE_METER_NULLABLE,
