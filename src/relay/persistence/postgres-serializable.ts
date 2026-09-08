@@ -11,12 +11,18 @@ import type { Pool, PoolClient } from 'pg';
  * documentation says an application using this isolation level must be prepared
  * to retry.
  *
- * Julius's repositories were not. Eight of the nine that open a SERIALIZABLE
- * transaction rolled back and rethrew, so a condition the database raises to
- * say "try again" reached the run loop as a failure. `julius-tool-postgres.ts`
- * already retried, and `TransactionalWonderlandDatabase.transaction` already
- * retried; the rest did not, which made the behaviour a property of which file
- * you happened to be in.
+ * Julius's repositories were not. SEVEN OF THE EIGHT that execute a
+ * SERIALIZABLE `BEGIN` rolled back and rethrew, so a condition the database
+ * raises to say "try again" reached the run loop as a failure.
+ * `julius-tool-postgres.ts` already retried, and
+ * `TransactionalWonderlandDatabase.transaction` already retried; the rest did
+ * not, which made the behaviour a property of which file you happened to be in.
+ *
+ * `julius-context-postgres.ts` is deliberately NOT among them and must not be:
+ * it takes a dedicated connection precisely so its read gets a fresh snapshot
+ * OUTSIDE any caller's transaction, and it says so at length. An earlier count
+ * here said "eight of nine" by matching that file's prose rather than its
+ * code — the kind of error a comment can carry and a test cannot.
  *
  * Proven against a real PostgreSQL 16 rather than argued: two transactions of
  * exactly the shape these repositories use — read one task row, write another,

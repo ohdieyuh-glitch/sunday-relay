@@ -12,8 +12,9 @@ suite('Julius real PostgreSQL and Docker infrastructure',()=>{beforeAll(async()=
   * it and aborts one transaction with `40001 could not serialize access due to
   * read/write dependencies among transactions`. That is transient by
   * definition — PostgreSQL is asking for the transaction to be run again — and
-  * eight of the nine Julius repositories that open one used to roll back and
-  * rethrow, so the run loop received a task failure instead of a retry request.
+  * seven of the eight Julius repositories that execute a SERIALIZABLE `BEGIN`
+  * used to roll back and rethrow, so the run loop received a task failure
+  * instead of a retry request.
   *
   * The in-memory store cannot show this: it has no serializable snapshot, no
   * read-write dependency graph and nothing to abort. Only a real database does.

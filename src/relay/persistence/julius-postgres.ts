@@ -109,8 +109,9 @@ export class JuliusPostgresRepository {
   * This used to roll back and rethrow, so `40001 could not serialize access due
   * to read/write dependencies among transactions` — a condition PostgreSQL
   * raises to say "run it again" — reached the Julius run loop as a task or run
-  * failure. Proven against a real PostgreSQL 16 with two transactions of
-  * exactly this shape, not argued from the manual.
+  * failure, here and in six other repositories. Proven against a real
+  * PostgreSQL 16 with two transactions of exactly this shape, not argued from
+  * the manual.
   *
   * The retry lives in `serializableTransaction`, which retries ONLY a failure
   * PostgreSQL itself reported. The stale-version sentinel below is not one, and
