@@ -1,7 +1,7 @@
 {
   "schema": "wonderland-blender-kit/1",
   "kit_version": "1.0.0",
-  "generated_utc": "2026-09-08T01:04:09+00:00",
+  "generated_utc": "2026-09-08T01:27:20+00:00",
   "generator": "wonderland/art/blender/scripts/build_assets.py",
   "blender": "4.5.13 LTS",
   "conventions": {
@@ -22,9 +22,9 @@
       "provenance": "measured",
       "unknown_is": "null, and it renders as Unknown -- never 0",
       "observed": {
-        "n": 93,
+        "n": 101,
         "min": 0.153,
-        "median": 0.808,
+        "median": 0.845,
         "max": 1.0,
         "unknown": 0
       }
@@ -36,9 +36,9 @@
       "provenance": "measured",
       "unknown_is": "null, and it renders as Unknown -- never 0",
       "observed": {
-        "n": 93,
+        "n": 101,
         "min": 0.0,
-        "median": 0.401,
+        "median": 0.369,
         "max": 1.0,
         "unknown": 0
       }
@@ -50,9 +50,9 @@
       "provenance": "measured",
       "unknown_is": "null, and it renders as Unknown -- never 0",
       "observed": {
-        "n": 93,
-        "min": 0.552,
-        "median": 0.997,
+        "n": 101,
+        "min": 0.557,
+        "median": 0.999,
         "max": 1.0,
         "unknown": 0
       }
@@ -64,9 +64,9 @@
       "provenance": "measured",
       "unknown_is": "null, and it renders as Unknown -- never 0",
       "observed": {
-        "n": 93,
+        "n": 101,
         "min": 0.0,
-        "median": 0.965,
+        "median": 0.975,
         "max": 1.0,
         "unknown": 0
       }
@@ -78,7 +78,7 @@
       "provenance": "declared",
       "unknown_is": "null, and it renders as Unknown -- never 0",
       "observed": {
-        "n": 93,
+        "n": 101,
         "min": 0.0,
         "median": 0.0,
         "max": 0.7,
@@ -92,7 +92,7 @@
       "provenance": "derived",
       "unknown_is": "null, and it renders as Unknown -- never 0",
       "observed": {
-        "n": 93,
+        "n": 101,
         "min": 0.083,
         "median": 0.675,
         "max": 0.917,
@@ -106,7 +106,7 @@
       "provenance": "derived",
       "unknown_is": "null, and it renders as Unknown -- never 0",
       "observed": {
-        "n": 93,
+        "n": 101,
         "min": 0.05,
         "median": 0.5,
         "max": 0.7,
@@ -176,12 +176,28 @@
     "water_lit": {
       "unreal": "MI_V2_GlassTeal",
       "use": "falling and lit water -- cascades, spouts, the emissive teal"
+    },
+    "paving": {
+      "unreal": "MI_V2_PlazaCream",
+      "use": "the walked surface: plaza slabs, landings, the top of a step"
+    },
+    "paving_warm": {
+      "unreal": "MI_V2_PlazaWarm",
+      "use": "the second tint, so a laid surface has more than one stone in it"
+    },
+    "paving_shade": {
+      "unreal": "MI_V2_PlazaShade",
+      "use": "the dark inlay: a medallion's band, a runnel's floor, a joint"
+    },
+    "kerb": {
+      "unreal": "MI_V2_Kerb",
+      "use": "kerbs, gutters, tree surrounds -- the edge of the made surface"
     }
   },
   "counts": {
-    "assets": 93,
-    "meshes": 281,
-    "triangles": 347706,
+    "assets": 101,
+    "meshes": 313,
+    "triangles": 350518,
     "by_role": {
       "foot": 5,
       "body": 12,
@@ -190,9 +206,9 @@
       "threshold": 10,
       "screen": 11,
       "span": 5,
-      "detail": 15,
-      "route": 9,
-      "terrace": 10,
+      "detail": 17,
+      "route": 11,
+      "terrace": 14,
       "hero": 4
     },
     "legal_tower_stacks_up_to_3_bodies": 865,
@@ -8209,7 +8225,7 @@
       },
       "height_uu": 738.0,
       "bbox_min_uu": [
-        0.0,
+        1886.91,
         -1364.54,
         0.0
       ],
@@ -8219,14 +8235,14 @@
         738.0
       ],
       "size_uu": [
-        2575.0,
+        688.09,
         2729.08,
         738.0
       ],
       "style": {
         "slender_broad": 1.0,
         "low_monumental": 0.341,
-        "open_solid": 0.552,
+        "open_solid": 0.557,
         "gold_stone": 1.0,
         "pristine_aged": 0.0,
         "garden_urban": 0.45,
@@ -8268,8 +8284,8 @@
       ],
       "parts": {
         "stone": {
-          "verts": 4042,
-          "faces": 3589,
+          "verts": 4036,
+          "faces": 3456,
           "tris": 7808,
           "degenerate_faces": 0,
           "loose_verts": 0,
@@ -8281,7 +8297,7 @@
             "UVMap"
           ],
           "bbox_min_uu": [
-            0.0,
+            1886.91,
             -1364.54,
             0.0
           ],
@@ -8291,14 +8307,14 @@
             738.0
           ],
           "size_uu": [
-            2575.0,
+            688.09,
             2729.08,
             738.0
           ],
           "height_m": 7.38,
           "base_z_uu": 0.0,
           "normals": {
-            "faces": 3589,
+            "faces": 3456,
             "shells": 66,
             "inverted_shells": 0,
             "inverted_faces": 0,
@@ -8315,7 +8331,7 @@
             ],
             "meshes": 1,
             "min_yup": [
-              0,
+              18.869070053100586,
               0,
               -13.645423889160156
             ],
@@ -8324,7 +8340,7 @@
               7.380000114440918,
               13.645419120788574
             ],
-            "bytes": 317844
+            "bytes": 334632
           },
           "fbx_read": {
             "unit_scale_factor": 0.9999999776482582,
@@ -15353,7 +15369,7 @@
       },
       "height_uu": 310.0,
       "bbox_min_uu": [
-        0.0,
+        956.22,
         -455.01,
         0.0
       ],
@@ -15363,7 +15379,7 @@
         310.0
       ],
       "size_uu": [
-        1189.0,
+        232.78,
         910.02,
         310.0
       ],
@@ -15377,7 +15393,7 @@
         "ceremonial_residential": 0.5
       },
       "base_z_uu": 0.0,
-      "tris_total": 564,
+      "tris_total": 532,
       "tri_budget": 9000,
       "over_budget": false,
       "nanite_recommended": false,
@@ -15428,9 +15444,9 @@
       ],
       "parts": {
         "stone": {
-          "verts": 137,
-          "faces": 146,
-          "tris": 284,
+          "verts": 136,
+          "faces": 130,
+          "tris": 268,
           "degenerate_faces": 0,
           "loose_verts": 0,
           "materials": [
@@ -15441,7 +15457,7 @@
             "UVMap"
           ],
           "bbox_min_uu": [
-            0.0,
+            956.22,
             -455.01,
             0.0
           ],
@@ -15451,14 +15467,14 @@
             304.0
           ],
           "size_uu": [
-            1189.0,
+            232.78,
             910.02,
             304.0
           ],
           "height_m": 3.04,
           "base_z_uu": 0.0,
           "normals": {
-            "faces": 146,
+            "faces": 130,
             "shells": 1,
             "inverted_shells": 0,
             "inverted_faces": 0,
@@ -15475,7 +15491,7 @@
             ],
             "meshes": 1,
             "min_yup": [
-              0,
+              9.562152862548828,
               0,
               -4.550106525421143
             ],
@@ -15484,7 +15500,7 @@
               3.0399999618530273,
               4.550105571746826
             ],
-            "bytes": 16584
+            "bytes": 15928
           },
           "fbx_read": {
             "unit_scale_factor": 0.9999999776482582,
@@ -15493,9 +15509,9 @@
           }
         },
         "stone_dark": {
-          "verts": 69,
-          "faces": 82,
-          "tris": 148,
+          "verts": 68,
+          "faces": 66,
+          "tris": 132,
           "degenerate_faces": 0,
           "loose_verts": 0,
           "materials": [
@@ -15506,7 +15522,7 @@
             "UVMap"
           ],
           "bbox_min_uu": [
-            0.0,
+            961.29,
             -442.07,
             302.0
           ],
@@ -15516,18 +15532,18 @@
             310.0
           ],
           "size_uu": [
-            1165.0,
+            203.71,
             884.13,
             8.0
           ],
           "height_m": 0.08,
           "base_z_uu": 302.0,
           "normals": {
-            "faces": 82,
+            "faces": 66,
             "shells": 1,
             "inverted_shells": 0,
             "inverted_faces": 0,
-            "open_shells": 0,
+            "open_shells": 1,
             "zero_normal_faces": 0
           },
           "material": "MI_V2_Stone",
@@ -15540,7 +15556,7 @@
             ],
             "meshes": 1,
             "min_yup": [
-              0,
+              9.61292839050293,
               3.0199999809265137,
               -4.420662879943848
             ],
@@ -15549,7 +15565,7 @@
               3.0999999046325684,
               4.420665740966797
             ],
-            "bytes": 9268
+            "bytes": 8612
           },
           "fbx_read": {
             "unit_scale_factor": 0.9999999776482582,
@@ -15558,8 +15574,8 @@
           }
         },
         "veg_anchor": {
-          "verts": 70,
-          "faces": 82,
+          "verts": 68,
+          "faces": 66,
           "tris": 132,
           "degenerate_faces": 0,
           "loose_verts": 0,
@@ -15571,7 +15587,7 @@
             "UVMap"
           ],
           "bbox_min_uu": [
-            0.0,
+            977.87,
             -395.45,
             280.0
           ],
@@ -15581,14 +15597,14 @@
             290.0
           ],
           "size_uu": [
-            1079.0,
+            101.13,
             790.91,
             10.0
           ],
           "height_m": 0.1,
           "base_z_uu": 280.0,
           "normals": {
-            "faces": 82,
+            "faces": 66,
             "shells": 1,
             "inverted_shells": 0,
             "inverted_faces": 0,
@@ -15605,7 +15621,7 @@
             ],
             "meshes": 1,
             "min_yup": [
-              0,
+              9.778688430786133,
               2.799999952316284,
               -3.9545481204986572
             ],
@@ -15614,7 +15630,7 @@
               2.9000000953674316,
               3.9545483589172363
             ],
-            "bytes": 6620
+            "bytes": 8620
           },
           "fbx_read": {
             "unit_scale_factor": 0.9999999776482582,
@@ -15970,7 +15986,7 @@
         "slender_broad": 0.848,
         "low_monumental": 0.292,
         "open_solid": 0.891,
-        "gold_stone": 0.939,
+        "gold_stone": 0.93,
         "pristine_aged": 0.0,
         "garden_urban": 0.312,
         "ceremonial_residential": 0.5
@@ -16092,8 +16108,8 @@
           }
         },
         "stone": {
-          "verts": 1009,
-          "faces": 1178,
+          "verts": 1007,
+          "faces": 1156,
           "tris": 1928,
           "degenerate_faces": 0,
           "loose_verts": 0,
@@ -16122,7 +16138,7 @@
           "height_m": 5.4,
           "base_z_uu": 0.0,
           "normals": {
-            "faces": 1178,
+            "faces": 1156,
             "shells": 22,
             "inverted_shells": 0,
             "inverted_faces": 0,
@@ -16148,7 +16164,7 @@
               5.399999618530273,
               4.329999923706055
             ],
-            "bytes": 73880
+            "bytes": 76632
           },
           "fbx_read": {
             "unit_scale_factor": 0.9999999776482582,
@@ -16831,6 +16847,2887 @@
         }
       },
       "part_count": 2
+    },
+    {
+      "asset_id": "WL_Ground_Kerb_Run",
+      "kit_version": "1.0.0",
+      "family": "ground",
+      "family_group": "ground",
+      "category": "structure",
+      "silhouette_role": "terrace",
+      "note": "8.00 m kerb with a dished gutter and 2.40 m of laid walk behind it; the same length as the retaining and balustrade runs",
+      "districts": [
+        "city",
+        "plaza",
+        "hamlet",
+        "castle",
+        "clock"
+      ],
+      "params": {
+        "length_m": 8.0,
+        "walk_m": 2.4,
+        "kerb_m": 0.31,
+        "gutter": "dished, MI_V2_PlazaShade"
+      },
+      "origin_rule": "z = 0 is the GROUND DATUM; +X is the module front. excavation_uu is how far the module is cut in below it.",
+      "excavation_uu": 0.0,
+      "mounts_on": null,
+      "variant_of": null,
+      "units": {
+        "authored": "metres",
+        "manifest": "unreal units (cm)",
+        "uu_per_metre": 100.0
+      },
+      "height_uu": 31.0,
+      "bbox_min_uu": [
+        -400.0,
+        -62.0,
+        0.0
+      ],
+      "bbox_max_uu": [
+        400.0,
+        257.0,
+        31.0
+      ],
+      "size_uu": [
+        800.0,
+        319.0,
+        31.0
+      ],
+      "style": {
+        "slender_broad": 1.0,
+        "low_monumental": 0.0,
+        "open_solid": 1.0,
+        "gold_stone": 1.0,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.85,
+        "ceremonial_residential": 0.5
+      },
+      "base_z_uu": 0.0,
+      "tris_total": 148,
+      "tri_budget": 1200,
+      "over_budget": false,
+      "nanite_recommended": false,
+      "nanite_rule": "recommended when the module is >= 5000 triangles and the builder has not opted out",
+      "collision_recommended": true,
+      "uv": "planar-world-2m (not a lightmap unwrap)",
+      "sockets": [
+        {
+          "name": "bottom",
+          "kind": "ground",
+          "z_uu": 0.0,
+          "radius_uu": 400.0,
+          "rung": null,
+          "note": ""
+        },
+        {
+          "name": "walk",
+          "kind": "route",
+          "z_uu": 31.0,
+          "radius_uu": 120.0,
+          "rung": null,
+          "note": "the paved walk at 0.310 m (one riser), +Y of the kerb"
+        },
+        {
+          "name": "edge",
+          "kind": "edge",
+          "z_uu": 31.0,
+          "radius_uu": 400.0,
+          "rung": null,
+          "note": "the kerb line; a balustrade or a bollard run follows it"
+        },
+        {
+          "name": "end_a",
+          "kind": "pier",
+          "z_uu": 0.0,
+          "radius_uu": 30.0,
+          "rung": null,
+          "note": "butts at x = -4.00 m"
+        },
+        {
+          "name": "end_b",
+          "kind": "pier",
+          "z_uu": 0.0,
+          "radius_uu": 30.0,
+          "rung": null,
+          "note": "butts at x = +4.00 m"
+        }
+      ],
+      "parts": {
+        "kerb": {
+          "verts": 16,
+          "faces": 14,
+          "tris": 28,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_Kerb"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -400.0,
+            -17.0,
+            0.0
+          ],
+          "bbox_max_uu": [
+            400.0,
+            17.0,
+            31.0
+          ],
+          "size_uu": [
+            800.0,
+            34.0,
+            31.0
+          ],
+          "height_m": 0.31,
+          "base_z_uu": 0.0,
+          "normals": {
+            "faces": 14,
+            "shells": 1,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 0,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_Kerb",
+          "mesh_name": "WL_Ground_Kerb_Run_kerb",
+          "glb": "exports/glb/WL_Ground_Kerb_Run_kerb.glb",
+          "fbx": "exports/fbx/WL_Ground_Kerb_Run_kerb.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_Kerb"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -4,
+              0,
+              -0.17000000178813934
+            ],
+            "max_yup": [
+              4,
+              0.3100000023841858,
+              0.17000000178813934
+            ],
+            "bytes": 3172
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 0.0,
+            "stored_z_max": 31.0
+          }
+        },
+        "paving": {
+          "verts": 32,
+          "faces": 24,
+          "tris": 48,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_PlazaCream"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -400.0,
+            17.0,
+            22.0
+          ],
+          "bbox_max_uu": [
+            400.0,
+            257.0,
+            31.0
+          ],
+          "size_uu": [
+            800.0,
+            240.0,
+            9.0
+          ],
+          "height_m": 0.09,
+          "base_z_uu": 22.0,
+          "normals": {
+            "faces": 24,
+            "shells": 4,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 4,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_PlazaCream",
+          "mesh_name": "WL_Ground_Kerb_Run_paving",
+          "glb": "exports/glb/WL_Ground_Kerb_Run_paving.glb",
+          "fbx": "exports/fbx/WL_Ground_Kerb_Run_paving.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_PlazaCream"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -4,
+              0.2199999988079071,
+              -2.570000171661377
+            ],
+            "max_yup": [
+              4,
+              0.3100000023841858,
+              -0.16999995708465576
+            ],
+            "bytes": 4588
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 22.0,
+            "stored_z_max": 31.0
+          }
+        },
+        "paving_shade": {
+          "verts": 16,
+          "faces": 12,
+          "tris": 24,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_PlazaShade"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -400.0,
+            -62.0,
+            0.0
+          ],
+          "bbox_max_uu": [
+            400.0,
+            257.0,
+            22.0
+          ],
+          "size_uu": [
+            800.0,
+            319.0,
+            22.0
+          ],
+          "height_m": 0.22,
+          "base_z_uu": 0.0,
+          "normals": {
+            "faces": 12,
+            "shells": 2,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 2,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_PlazaShade",
+          "mesh_name": "WL_Ground_Kerb_Run_paving_shade",
+          "glb": "exports/glb/WL_Ground_Kerb_Run_paving_shade.glb",
+          "fbx": "exports/fbx/WL_Ground_Kerb_Run_paving_shade.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_PlazaShade"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -4,
+              0,
+              -2.570000171661377
+            ],
+            "max_yup": [
+              4,
+              0.2199999988079071,
+              0.6200000047683716
+            ],
+            "bytes": 2912
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 0.0,
+            "stored_z_max": 22.0
+          }
+        },
+        "paving_warm": {
+          "verts": 32,
+          "faces": 24,
+          "tris": 48,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_PlazaWarm"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -400.0,
+            17.0,
+            22.0
+          ],
+          "bbox_max_uu": [
+            400.0,
+            257.0,
+            31.0
+          ],
+          "size_uu": [
+            800.0,
+            240.0,
+            9.0
+          ],
+          "height_m": 0.09,
+          "base_z_uu": 22.0,
+          "normals": {
+            "faces": 24,
+            "shells": 4,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 4,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_PlazaWarm",
+          "mesh_name": "WL_Ground_Kerb_Run_paving_warm",
+          "glb": "exports/glb/WL_Ground_Kerb_Run_paving_warm.glb",
+          "fbx": "exports/fbx/WL_Ground_Kerb_Run_paving_warm.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_PlazaWarm"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -4,
+              0.2199999988079071,
+              -2.570000171661377
+            ],
+            "max_yup": [
+              4,
+              0.3100000023841858,
+              -0.16999995708465576
+            ],
+            "bytes": 4612
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 22.0,
+            "stored_z_max": 31.0
+          }
+        }
+      },
+      "part_count": 4
+    },
+    {
+      "asset_id": "WL_Ground_Kerb_Corner",
+      "kit_version": "1.0.0",
+      "family": "ground",
+      "family_group": "ground",
+      "category": "structure",
+      "silhouette_role": "terrace",
+      "note": "90-degree kerb corner on a 1.60 m radius with two 4.00 m arms; butts a kerb run either way",
+      "districts": [
+        "city",
+        "plaza",
+        "hamlet",
+        "castle"
+      ],
+      "params": {
+        "radius_m": 1.6,
+        "arm_m": 4.0,
+        "turn_deg": 90.0
+      },
+      "origin_rule": "z = 0 is the GROUND DATUM; +X is the module front. excavation_uu is how far the module is cut in below it.",
+      "excavation_uu": 0.0,
+      "mounts_on": null,
+      "variant_of": null,
+      "units": {
+        "authored": "metres",
+        "manifest": "unreal units (cm)",
+        "uu_per_metre": 100.0
+      },
+      "height_uu": 31.0,
+      "bbox_min_uu": [
+        -17.0,
+        -17.0,
+        0.0
+      ],
+      "bbox_max_uu": [
+        400.0,
+        400.0,
+        31.0
+      ],
+      "size_uu": [
+        417.0,
+        417.0,
+        31.0
+      ],
+      "style": {
+        "slender_broad": 1.0,
+        "low_monumental": 0.0,
+        "open_solid": 1.0,
+        "gold_stone": 1.0,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.838,
+        "ceremonial_residential": 0.5
+      },
+      "base_z_uu": 0.0,
+      "tris_total": 252,
+      "tri_budget": 1600,
+      "over_budget": false,
+      "nanite_recommended": false,
+      "nanite_rule": "recommended when the module is >= 5000 triangles and the builder has not opted out",
+      "collision_recommended": true,
+      "uv": "planar-world-2m (not a lightmap unwrap)",
+      "sockets": [
+        {
+          "name": "bottom",
+          "kind": "ground",
+          "z_uu": 0.0,
+          "radius_uu": 620.0,
+          "rung": null,
+          "note": ""
+        },
+        {
+          "name": "walk",
+          "kind": "route",
+          "z_uu": 31.0,
+          "radius_uu": 120.0,
+          "rung": null,
+          "note": "the 2.40 m walk turns the corner behind the kerb"
+        },
+        {
+          "name": "end_a",
+          "kind": "pier",
+          "z_uu": 0.0,
+          "radius_uu": 30.0,
+          "rung": null,
+          "note": "arm along +X ends at x = +4.00 m"
+        },
+        {
+          "name": "end_b",
+          "kind": "pier",
+          "z_uu": 0.0,
+          "radius_uu": 30.0,
+          "rung": null,
+          "note": "arm along +Y ends at y = +4.00 m"
+        }
+      ],
+      "parts": {
+        "kerb": {
+          "verts": 76,
+          "faces": 70,
+          "tris": 140,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_Kerb"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -17.0,
+            -17.0,
+            0.0
+          ],
+          "bbox_max_uu": [
+            400.0,
+            400.0,
+            31.0
+          ],
+          "size_uu": [
+            417.0,
+            417.0,
+            31.0
+          ],
+          "height_m": 0.31,
+          "base_z_uu": 0.0,
+          "normals": {
+            "faces": 70,
+            "shells": 3,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 0,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_Kerb",
+          "mesh_name": "WL_Ground_Kerb_Corner_kerb",
+          "glb": "exports/glb/WL_Ground_Kerb_Corner_kerb.glb",
+          "fbx": "exports/fbx/WL_Ground_Kerb_Corner_kerb.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_Kerb"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -0.16999995708465576,
+              0,
+              -4
+            ],
+            "max_yup": [
+              4,
+              0.3100000023841858,
+              0.17000000178813934
+            ],
+            "bytes": 9876
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 0.0,
+            "stored_z_max": 31.0
+          }
+        },
+        "paving": {
+          "verts": 30,
+          "faces": 20,
+          "tris": 56,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_PlazaCream"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            17.0,
+            17.0,
+            22.0
+          ],
+          "bbox_max_uu": [
+            400.0,
+            400.0,
+            31.0
+          ],
+          "size_uu": [
+            383.0,
+            383.0,
+            9.0
+          ],
+          "height_m": 0.09,
+          "base_z_uu": 22.0,
+          "normals": {
+            "faces": 20,
+            "shells": 1,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 1,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_PlazaCream",
+          "mesh_name": "WL_Ground_Kerb_Corner_paving",
+          "glb": "exports/glb/WL_Ground_Kerb_Corner_paving.glb",
+          "fbx": "exports/fbx/WL_Ground_Kerb_Corner_paving.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_PlazaCream"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              0.17000000178813934,
+              0.2199999988079071,
+              -4
+            ],
+            "max_yup": [
+              4,
+              0.3100000023841858,
+              -0.17000000178813934
+            ],
+            "bytes": 4512
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 22.0,
+            "stored_z_max": 31.0
+          }
+        },
+        "paving_shade": {
+          "verts": 30,
+          "faces": 20,
+          "tris": 56,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_PlazaShade"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            17.0,
+            17.0,
+            0.0
+          ],
+          "bbox_max_uu": [
+            400.0,
+            400.0,
+            22.0
+          ],
+          "size_uu": [
+            383.0,
+            383.0,
+            22.0
+          ],
+          "height_m": 0.22,
+          "base_z_uu": 0.0,
+          "normals": {
+            "faces": 20,
+            "shells": 1,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 1,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_PlazaShade",
+          "mesh_name": "WL_Ground_Kerb_Corner_paving_shade",
+          "glb": "exports/glb/WL_Ground_Kerb_Corner_paving_shade.glb",
+          "fbx": "exports/fbx/WL_Ground_Kerb_Corner_paving_shade.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_PlazaShade"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              0.17000000178813934,
+              0,
+              -4
+            ],
+            "max_yup": [
+              4,
+              0.2199999988079071,
+              -0.17000000178813934
+            ],
+            "bytes": 4524
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 0.0,
+            "stored_z_max": 22.0
+          }
+        }
+      },
+      "part_count": 3
+    },
+    {
+      "asset_id": "WL_Ground_Step_Single",
+      "kit_version": "1.0.0",
+      "family": "ground",
+      "family_group": "ground",
+      "category": "structure",
+      "silhouette_role": "route",
+      "note": "a single 0.310 m riser across 8.00 m with a shade-tint nosing and laid surfaces at both levels",
+      "districts": [
+        "plaza",
+        "city",
+        "royal_garden",
+        "tea_terrace",
+        "cloister"
+      ],
+      "params": {
+        "length_m": 8.0,
+        "risers": 1,
+        "riser_m": 0.31,
+        "going_m": 0.44
+      },
+      "origin_rule": "z = 0 is the GROUND DATUM; +X is the module front. excavation_uu is how far the module is cut in below it.",
+      "excavation_uu": 0.0,
+      "mounts_on": null,
+      "variant_of": null,
+      "units": {
+        "authored": "metres",
+        "manifest": "unreal units (cm)",
+        "uu_per_metre": 100.0
+      },
+      "height_uu": 63.5,
+      "bbox_min_uu": [
+        -400.0,
+        -242.0,
+        0.0
+      ],
+      "bbox_max_uu": [
+        400.0,
+        242.0,
+        63.5
+      ],
+      "size_uu": [
+        800.0,
+        484.0,
+        63.5
+      ],
+      "style": {
+        "slender_broad": 1.0,
+        "low_monumental": 0.0,
+        "open_solid": 1.0,
+        "gold_stone": 1.0,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.53,
+        "ceremonial_residential": 0.5
+      },
+      "base_z_uu": 0.0,
+      "tris_total": 160,
+      "tri_budget": 1400,
+      "over_budget": false,
+      "nanite_recommended": false,
+      "nanite_rule": "recommended when the module is >= 5000 triangles and the builder has not opted out",
+      "collision_recommended": true,
+      "uv": "planar-world-2m (not a lightmap unwrap)",
+      "sockets": [
+        {
+          "name": "bottom",
+          "kind": "ground",
+          "z_uu": 0.0,
+          "radius_uu": 400.0,
+          "rung": null,
+          "note": ""
+        },
+        {
+          "name": "bottom_route",
+          "kind": "route",
+          "z_uu": 31.0,
+          "radius_uu": 400.0,
+          "rung": null,
+          "note": "the lower surface, one riser off the datum"
+        },
+        {
+          "name": "top_route",
+          "kind": "route",
+          "z_uu": 62.0,
+          "radius_uu": 400.0,
+          "rung": null,
+          "note": "the upper surface, two risers off the datum"
+        },
+        {
+          "name": "end_a",
+          "kind": "pier",
+          "z_uu": 0.0,
+          "radius_uu": 22.0,
+          "rung": null,
+          "note": "butts at x = -4.00 m"
+        },
+        {
+          "name": "end_b",
+          "kind": "pier",
+          "z_uu": 0.0,
+          "radius_uu": 22.0,
+          "rung": null,
+          "note": "butts at x = +4.00 m"
+        }
+      ],
+      "parts": {
+        "kerb": {
+          "verts": 16,
+          "faces": 14,
+          "tris": 28,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_Kerb"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -400.0,
+            -22.0,
+            0.0
+          ],
+          "bbox_max_uu": [
+            400.0,
+            22.0,
+            62.0
+          ],
+          "size_uu": [
+            800.0,
+            44.0,
+            62.0
+          ],
+          "height_m": 0.62,
+          "base_z_uu": 0.0,
+          "normals": {
+            "faces": 14,
+            "shells": 1,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 0,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_Kerb",
+          "mesh_name": "WL_Ground_Step_Single_kerb",
+          "glb": "exports/glb/WL_Ground_Step_Single_kerb.glb",
+          "fbx": "exports/fbx/WL_Ground_Step_Single_kerb.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_Kerb"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -4,
+              0,
+              -0.2199999988079071
+            ],
+            "max_yup": [
+              4,
+              0.6200000047683716,
+              0.2199999988079071
+            ],
+            "bytes": 3176
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 0.0,
+            "stored_z_max": 62.0
+          }
+        },
+        "paving": {
+          "verts": 32,
+          "faces": 24,
+          "tris": 48,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_PlazaCream"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -400.0,
+            -242.0,
+            22.0
+          ],
+          "bbox_max_uu": [
+            199.5,
+            242.0,
+            62.0
+          ],
+          "size_uu": [
+            599.5,
+            484.0,
+            40.0
+          ],
+          "height_m": 0.4,
+          "base_z_uu": 22.0,
+          "normals": {
+            "faces": 24,
+            "shells": 4,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 4,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_PlazaCream",
+          "mesh_name": "WL_Ground_Step_Single_paving",
+          "glb": "exports/glb/WL_Ground_Step_Single_paving.glb",
+          "fbx": "exports/fbx/WL_Ground_Step_Single_paving.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_PlazaCream"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -4,
+              0.2199999988079071,
+              -2.4200000762939453
+            ],
+            "max_yup": [
+              1.9950001239776611,
+              0.6200000047683716,
+              2.4200000762939453
+            ],
+            "bytes": 4608
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 22.0,
+            "stored_z_max": 62.0
+          }
+        },
+        "paving_shade": {
+          "verts": 24,
+          "faces": 18,
+          "tris": 36,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_PlazaShade"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -400.0,
+            -242.0,
+            0.0
+          ],
+          "bbox_max_uu": [
+            400.0,
+            242.0,
+            63.5
+          ],
+          "size_uu": [
+            800.0,
+            484.0,
+            63.5
+          ],
+          "height_m": 0.635,
+          "base_z_uu": 0.0,
+          "normals": {
+            "faces": 18,
+            "shells": 3,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 2,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_PlazaShade",
+          "mesh_name": "WL_Ground_Step_Single_paving_shade",
+          "glb": "exports/glb/WL_Ground_Step_Single_paving_shade.glb",
+          "fbx": "exports/fbx/WL_Ground_Step_Single_paving_shade.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_PlazaShade"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -4,
+              0,
+              -2.4200000762939453
+            ],
+            "max_yup": [
+              4,
+              0.6349999904632568,
+              2.4200000762939453
+            ],
+            "bytes": 3760
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 0.0,
+            "stored_z_max": 63.5
+          }
+        },
+        "paving_warm": {
+          "verts": 32,
+          "faces": 24,
+          "tris": 48,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_PlazaWarm"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -199.5,
+            -242.0,
+            22.0
+          ],
+          "bbox_max_uu": [
+            400.0,
+            242.0,
+            62.0
+          ],
+          "size_uu": [
+            599.5,
+            484.0,
+            40.0
+          ],
+          "height_m": 0.4,
+          "base_z_uu": 22.0,
+          "normals": {
+            "faces": 24,
+            "shells": 4,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 4,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_PlazaWarm",
+          "mesh_name": "WL_Ground_Step_Single_paving_warm",
+          "glb": "exports/glb/WL_Ground_Step_Single_paving_warm.glb",
+          "fbx": "exports/fbx/WL_Ground_Step_Single_paving_warm.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_PlazaWarm"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -1.9950001239776611,
+              0.2199999988079071,
+              -2.4200000762939453
+            ],
+            "max_yup": [
+              4,
+              0.6200000047683716,
+              2.4200000762939453
+            ],
+            "bytes": 4632
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 22.0,
+            "stored_z_max": 62.0
+          }
+        }
+      },
+      "part_count": 4
+    },
+    {
+      "asset_id": "WL_Ground_Steps_Broad",
+      "kit_version": "1.0.0",
+      "family": "ground",
+      "family_group": "ground",
+      "category": "structure",
+      "silhouette_role": "route",
+      "note": "three 0.310 m risers on a 0.90 m going across 8.00 m: 19 degrees, a place to stand as much as a way up",
+      "districts": [
+        "plaza",
+        "royal_garden",
+        "tea_terrace",
+        "cloister",
+        "city"
+      ],
+      "params": {
+        "length_m": 8.0,
+        "risers": 3,
+        "riser_m": 0.31,
+        "going_m": 0.9,
+        "pitch_deg": 19.0
+      },
+      "origin_rule": "z = 0 is the GROUND DATUM; +X is the module front. excavation_uu is how far the module is cut in below it.",
+      "excavation_uu": 0.0,
+      "mounts_on": null,
+      "variant_of": null,
+      "units": {
+        "authored": "metres",
+        "manifest": "unreal units (cm)",
+        "uu_per_metre": 100.0
+      },
+      "height_uu": 124.0,
+      "bbox_min_uu": [
+        -400.0,
+        -410.0,
+        0.0
+      ],
+      "bbox_max_uu": [
+        400.0,
+        346.0,
+        124.0
+      ],
+      "size_uu": [
+        800.0,
+        756.0,
+        124.0
+      ],
+      "style": {
+        "slender_broad": 1.0,
+        "low_monumental": 0.0,
+        "open_solid": 1.0,
+        "gold_stone": 1.0,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.53,
+        "ceremonial_residential": 0.5
+      },
+      "base_z_uu": 0.0,
+      "tris_total": 240,
+      "tri_budget": 2600,
+      "over_budget": false,
+      "nanite_recommended": false,
+      "nanite_rule": "recommended when the module is >= 5000 triangles and the builder has not opted out",
+      "collision_recommended": true,
+      "uv": "planar-world-2m (not a lightmap unwrap)",
+      "sockets": [
+        {
+          "name": "bottom",
+          "kind": "ground",
+          "z_uu": 0.0,
+          "radius_uu": 400.0,
+          "rung": null,
+          "note": ""
+        },
+        {
+          "name": "bottom_route",
+          "kind": "route",
+          "z_uu": 31.0,
+          "radius_uu": 400.0,
+          "rung": null,
+          "note": "the lower surface, one riser off the datum"
+        },
+        {
+          "name": "top_route",
+          "kind": "route",
+          "z_uu": 124.0,
+          "radius_uu": 400.0,
+          "rung": null,
+          "note": "1.24 m up: four risers off the datum, three above the lower surface"
+        },
+        {
+          "name": "end_a",
+          "kind": "pier",
+          "z_uu": 0.0,
+          "radius_uu": 45.0,
+          "rung": null,
+          "note": "butts at x = -4.00 m"
+        },
+        {
+          "name": "end_b",
+          "kind": "pier",
+          "z_uu": 0.0,
+          "radius_uu": 45.0,
+          "rung": null,
+          "note": "butts at x = +4.00 m"
+        }
+      ],
+      "parts": {
+        "kerb": {
+          "verts": 46,
+          "faces": 42,
+          "tris": 84,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_Kerb"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -400.0,
+            -186.0,
+            0.0
+          ],
+          "bbox_max_uu": [
+            400.0,
+            270.0,
+            93.0
+          ],
+          "size_uu": [
+            800.0,
+            456.0,
+            93.0
+          ],
+          "height_m": 0.93,
+          "base_z_uu": 0.0,
+          "normals": {
+            "faces": 42,
+            "shells": 2,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 1,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_Kerb",
+          "mesh_name": "WL_Ground_Steps_Broad_kerb",
+          "glb": "exports/glb/WL_Ground_Steps_Broad_kerb.glb",
+          "fbx": "exports/fbx/WL_Ground_Steps_Broad_kerb.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_Kerb"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -4,
+              0,
+              -2.700000047683716
+            ],
+            "max_yup": [
+              4,
+              0.9300000071525574,
+              1.8600000143051147
+            ],
+            "bytes": 6976
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 0.0,
+            "stored_z_max": 93.0
+          }
+        },
+        "paving": {
+          "verts": 32,
+          "faces": 24,
+          "tris": 48,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_PlazaCream"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -400.0,
+            -410.0,
+            22.0
+          ],
+          "bbox_max_uu": [
+            199.5,
+            346.0,
+            124.0
+          ],
+          "size_uu": [
+            599.5,
+            756.0,
+            102.0
+          ],
+          "height_m": 1.02,
+          "base_z_uu": 22.0,
+          "normals": {
+            "faces": 24,
+            "shells": 4,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 4,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_PlazaCream",
+          "mesh_name": "WL_Ground_Steps_Broad_paving",
+          "glb": "exports/glb/WL_Ground_Steps_Broad_paving.glb",
+          "fbx": "exports/fbx/WL_Ground_Steps_Broad_paving.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_PlazaCream"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -4,
+              0.2199999988079071,
+              -3.4600000381469727
+            ],
+            "max_yup": [
+              1.9950001239776611,
+              1.2400000095367432,
+              4.099999904632568
+            ],
+            "bytes": 4608
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 22.0,
+            "stored_z_max": 124.0
+          }
+        },
+        "paving_shade": {
+          "verts": 40,
+          "faces": 30,
+          "tris": 60,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_PlazaShade"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -400.0,
+            -410.0,
+            0.0
+          ],
+          "bbox_max_uu": [
+            400.0,
+            346.0,
+            115.0
+          ],
+          "size_uu": [
+            800.0,
+            756.0,
+            115.0
+          ],
+          "height_m": 1.15,
+          "base_z_uu": 0.0,
+          "normals": {
+            "faces": 30,
+            "shells": 5,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 4,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_PlazaShade",
+          "mesh_name": "WL_Ground_Steps_Broad_paving_shade",
+          "glb": "exports/glb/WL_Ground_Steps_Broad_paving_shade.glb",
+          "fbx": "exports/fbx/WL_Ground_Steps_Broad_paving_shade.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_PlazaShade"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -4,
+              0,
+              -3.4600000381469727
+            ],
+            "max_yup": [
+              4,
+              1.149999976158142,
+              4.099999904632568
+            ],
+            "bytes": 5444
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 0.0,
+            "stored_z_max": 115.0
+          }
+        },
+        "paving_warm": {
+          "verts": 32,
+          "faces": 24,
+          "tris": 48,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_PlazaWarm"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -199.5,
+            -410.0,
+            22.0
+          ],
+          "bbox_max_uu": [
+            400.0,
+            346.0,
+            124.0
+          ],
+          "size_uu": [
+            599.5,
+            756.0,
+            102.0
+          ],
+          "height_m": 1.02,
+          "base_z_uu": 22.0,
+          "normals": {
+            "faces": 24,
+            "shells": 4,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 4,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_PlazaWarm",
+          "mesh_name": "WL_Ground_Steps_Broad_paving_warm",
+          "glb": "exports/glb/WL_Ground_Steps_Broad_paving_warm.glb",
+          "fbx": "exports/fbx/WL_Ground_Steps_Broad_paving_warm.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_PlazaWarm"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -1.9950001239776611,
+              0.2199999988079071,
+              -3.4600000381469727
+            ],
+            "max_yup": [
+              4,
+              1.2400000095367432,
+              4.099999904632568
+            ],
+            "bytes": 4632
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 22.0,
+            "stored_z_max": 124.0
+          }
+        }
+      },
+      "part_count": 4
+    },
+    {
+      "asset_id": "WL_Ground_Plaza_Medallion",
+      "kit_version": "1.0.0",
+      "family": "ground",
+      "family_group": "ground",
+      "category": "prop",
+      "silhouette_role": "detail",
+      "note": "9.00 m inlaid medallion, 0.10 m proud: a moulded rim, two shade bands, a sixteen-ray figure and a gold centre",
+      "districts": [
+        "plaza",
+        "royal_garden",
+        "cloister",
+        "city"
+      ],
+      "params": {
+        "diameter_m": 9.0,
+        "rays": 16,
+        "proud_m": 0.1
+      },
+      "origin_rule": "z = 0 is the GROUND DATUM; +X is the module front. excavation_uu is how far the module is cut in below it.",
+      "excavation_uu": 0.0,
+      "mounts_on": null,
+      "variant_of": null,
+      "units": {
+        "authored": "metres",
+        "manifest": "unreal units (cm)",
+        "uu_per_metre": 100.0
+      },
+      "height_uu": 10.0,
+      "bbox_min_uu": [
+        -450.0,
+        -450.0,
+        0.0
+      ],
+      "bbox_max_uu": [
+        450.0,
+        450.0,
+        10.0
+      ],
+      "size_uu": [
+        900.0,
+        900.0,
+        10.0
+      ],
+      "style": {
+        "slender_broad": 1.0,
+        "low_monumental": 0.0,
+        "open_solid": 1.0,
+        "gold_stone": 0.943,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.588,
+        "ceremonial_residential": 0.7
+      },
+      "base_z_uu": 0.0,
+      "tris_total": 1396,
+      "tri_budget": 3000,
+      "over_budget": false,
+      "nanite_recommended": false,
+      "nanite_rule": "recommended when the module is >= 5000 triangles and the builder has not opted out",
+      "collision_recommended": false,
+      "uv": "planar-world-2m (not a lightmap unwrap)",
+      "sockets": [
+        {
+          "name": "bottom",
+          "kind": "ground",
+          "z_uu": 0.0,
+          "radius_uu": 450.0,
+          "rung": null,
+          "note": ""
+        },
+        {
+          "name": "edge",
+          "kind": "edge",
+          "z_uu": 10.0,
+          "radius_uu": 450.0,
+          "rung": null,
+          "note": "the moulded rim; paving butts to it at any bearing"
+        }
+      ],
+      "parts": {
+        "gold": {
+          "verts": 50,
+          "faces": 72,
+          "tris": 96,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_Gold"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -62.0,
+            -62.0,
+            6.0
+          ],
+          "bbox_max_uu": [
+            62.0,
+            62.0,
+            9.5
+          ],
+          "size_uu": [
+            124.0,
+            124.0,
+            3.5
+          ],
+          "height_m": 0.035,
+          "base_z_uu": 6.0,
+          "normals": {
+            "faces": 72,
+            "shells": 1,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 1,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_Gold",
+          "mesh_name": "WL_Ground_Plaza_Medallion_gold",
+          "glb": "exports/glb/WL_Ground_Plaza_Medallion_gold.glb",
+          "fbx": "exports/fbx/WL_Ground_Plaza_Medallion_gold.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_Gold"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -0.6200000047683716,
+              0.05999999865889549,
+              -0.6200000047683716
+            ],
+            "max_yup": [
+              0.6200000047683716,
+              0.0949999988079071,
+              0.6200000047683716
+            ],
+            "bytes": 6548
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 6.0,
+            "stored_z_max": 9.5
+          }
+        },
+        "kerb": {
+          "verts": 160,
+          "faces": 122,
+          "tris": 316,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_Kerb"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -450.0,
+            -450.0,
+            0.0
+          ],
+          "bbox_max_uu": [
+            450.0,
+            450.0,
+            10.0
+          ],
+          "size_uu": [
+            900.0,
+            900.0,
+            10.0
+          ],
+          "height_m": 0.1,
+          "base_z_uu": 0.0,
+          "normals": {
+            "faces": 122,
+            "shells": 1,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 1,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_Kerb",
+          "mesh_name": "WL_Ground_Plaza_Medallion_kerb",
+          "glb": "exports/glb/WL_Ground_Plaza_Medallion_kerb.glb",
+          "fbx": "exports/fbx/WL_Ground_Plaza_Medallion_kerb.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_Kerb"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -4.5,
+              0,
+              -4.5
+            ],
+            "max_yup": [
+              4.5,
+              0.10000000149011612,
+              4.5
+            ],
+            "bytes": 13348
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 0.0,
+            "stored_z_max": 10.0
+          }
+        },
+        "paving": {
+          "verts": 82,
+          "faces": 120,
+          "tris": 160,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_PlazaCream"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -422.0,
+            -422.0,
+            0.0
+          ],
+          "bbox_max_uu": [
+            422.0,
+            422.0,
+            6.0
+          ],
+          "size_uu": [
+            844.0,
+            844.0,
+            6.0
+          ],
+          "height_m": 0.06,
+          "base_z_uu": 0.0,
+          "normals": {
+            "faces": 120,
+            "shells": 1,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 1,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_PlazaCream",
+          "mesh_name": "WL_Ground_Plaza_Medallion_paving",
+          "glb": "exports/glb/WL_Ground_Plaza_Medallion_paving.glb",
+          "fbx": "exports/fbx/WL_Ground_Plaza_Medallion_paving.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_PlazaCream"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -4.21999979019165,
+              0,
+              -4.21999979019165
+            ],
+            "max_yup": [
+              4.21999979019165,
+              0.05999999865889549,
+              4.21999979019165
+            ],
+            "bytes": 9956
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 0.0,
+            "stored_z_max": 6.0
+          }
+        },
+        "paving_shade": {
+          "verts": 320,
+          "faces": 244,
+          "tris": 632,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_PlazaShade"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -358.0,
+            -358.0,
+            6.0
+          ],
+          "bbox_max_uu": [
+            358.0,
+            358.0,
+            7.8
+          ],
+          "size_uu": [
+            716.0,
+            716.0,
+            1.8
+          ],
+          "height_m": 0.018,
+          "base_z_uu": 6.0,
+          "normals": {
+            "faces": 244,
+            "shells": 2,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 2,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_PlazaShade",
+          "mesh_name": "WL_Ground_Plaza_Medallion_paving_shade",
+          "glb": "exports/glb/WL_Ground_Plaza_Medallion_paving_shade.glb",
+          "fbx": "exports/fbx/WL_Ground_Plaza_Medallion_paving_shade.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_PlazaShade"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -3.5799999237060547,
+              0.05999999865889549,
+              -3.5799999237060547
+            ],
+            "max_yup": [
+              3.5799999237060547,
+              0.07800000160932541,
+              3.5799999237060547
+            ],
+            "bytes": 25584
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 6.0,
+            "stored_z_max": 7.800000190734863
+          }
+        },
+        "paving_warm": {
+          "verts": 128,
+          "faces": 96,
+          "tris": 192,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_PlazaWarm"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -339.0,
+            -339.0,
+            6.0
+          ],
+          "bbox_max_uu": [
+            339.0,
+            339.0,
+            8.5
+          ],
+          "size_uu": [
+            678.0,
+            678.0,
+            2.5
+          ],
+          "height_m": 0.025,
+          "base_z_uu": 6.0,
+          "normals": {
+            "faces": 96,
+            "shells": 16,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 16,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_PlazaWarm",
+          "mesh_name": "WL_Ground_Plaza_Medallion_paving_warm",
+          "glb": "exports/glb/WL_Ground_Plaza_Medallion_paving_warm.glb",
+          "fbx": "exports/fbx/WL_Ground_Plaza_Medallion_paving_warm.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_PlazaWarm"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -3.390000104904175,
+              0.05999999865889549,
+              -3.390000104904175
+            ],
+            "max_yup": [
+              3.3899998664855957,
+              0.08500000089406967,
+              3.390000104904175
+            ],
+            "bytes": 14744
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 6.0,
+            "stored_z_max": 8.5
+          }
+        }
+      },
+      "part_count": 5
+    },
+    {
+      "asset_id": "WL_Ground_Verge_Run",
+      "kit_version": "1.0.0",
+      "family": "ground",
+      "family_group": "ground",
+      "category": "structure",
+      "silhouette_role": "terrace",
+      "note": "8.00 m planted verge between two kerbs; the surface is veg_anchor and the world session plants it",
+      "districts": [
+        "city",
+        "plaza",
+        "hamlet",
+        "royal_garden",
+        "grove"
+      ],
+      "params": {
+        "length_m": 8.0,
+        "width_m": 1.8,
+        "planting": "veg_anchor, not modelled"
+      },
+      "origin_rule": "z = 0 is the GROUND DATUM; +X is the module front. excavation_uu is how far the module is cut in below it.",
+      "excavation_uu": 0.0,
+      "mounts_on": null,
+      "variant_of": null,
+      "units": {
+        "authored": "metres",
+        "manifest": "unreal units (cm)",
+        "uu_per_metre": 100.0
+      },
+      "height_uu": 31.0,
+      "bbox_min_uu": [
+        -400.0,
+        -118.0,
+        0.0
+      ],
+      "bbox_max_uu": [
+        400.0,
+        118.0,
+        31.0
+      ],
+      "size_uu": [
+        800.0,
+        236.0,
+        31.0
+      ],
+      "style": {
+        "slender_broad": 1.0,
+        "low_monumental": 0.0,
+        "open_solid": 1.0,
+        "gold_stone": 1.0,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.53,
+        "ceremonial_residential": 0.5
+      },
+      "base_z_uu": 0.0,
+      "tris_total": 80,
+      "tri_budget": 700,
+      "over_budget": false,
+      "nanite_recommended": false,
+      "nanite_rule": "recommended when the module is >= 5000 triangles and the builder has not opted out",
+      "collision_recommended": true,
+      "uv": "planar-world-2m (not a lightmap unwrap)",
+      "sockets": [
+        {
+          "name": "bottom",
+          "kind": "ground",
+          "z_uu": 0.0,
+          "radius_uu": 400.0,
+          "rung": null,
+          "note": ""
+        },
+        {
+          "name": "edge",
+          "kind": "edge",
+          "z_uu": 31.0,
+          "radius_uu": 118.0,
+          "rung": null,
+          "note": "the two kerb lines, 2.36 m apart"
+        },
+        {
+          "name": "end_a",
+          "kind": "pier",
+          "z_uu": 0.0,
+          "radius_uu": 118.0,
+          "rung": null,
+          "note": "butts at x = -4.00 m"
+        },
+        {
+          "name": "end_b",
+          "kind": "pier",
+          "z_uu": 0.0,
+          "radius_uu": 118.0,
+          "rung": null,
+          "note": "butts at x = +4.00 m"
+        }
+      ],
+      "parts": {
+        "kerb": {
+          "verts": 32,
+          "faces": 28,
+          "tris": 56,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_Kerb"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -400.0,
+            -118.0,
+            0.0
+          ],
+          "bbox_max_uu": [
+            400.0,
+            118.0,
+            31.0
+          ],
+          "size_uu": [
+            800.0,
+            236.0,
+            31.0
+          ],
+          "height_m": 0.31,
+          "base_z_uu": 0.0,
+          "normals": {
+            "faces": 28,
+            "shells": 2,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 0,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_Kerb",
+          "mesh_name": "WL_Ground_Verge_Run_kerb",
+          "glb": "exports/glb/WL_Ground_Verge_Run_kerb.glb",
+          "fbx": "exports/fbx/WL_Ground_Verge_Run_kerb.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_Kerb"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -4,
+              0,
+              -1.1799999475479126
+            ],
+            "max_yup": [
+              4,
+              0.3100000023841858,
+              1.1799999475479126
+            ],
+            "bytes": 5140
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 0.0,
+            "stored_z_max": 31.0
+          }
+        },
+        "paving_shade": {
+          "verts": 8,
+          "faces": 6,
+          "tris": 12,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_PlazaShade"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -400.0,
+            -90.0,
+            0.0
+          ],
+          "bbox_max_uu": [
+            400.0,
+            90.0,
+            10.0
+          ],
+          "size_uu": [
+            800.0,
+            180.0,
+            10.0
+          ],
+          "height_m": 0.1,
+          "base_z_uu": 0.0,
+          "normals": {
+            "faces": 6,
+            "shells": 1,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 1,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_PlazaShade",
+          "mesh_name": "WL_Ground_Verge_Run_paving_shade",
+          "glb": "exports/glb/WL_Ground_Verge_Run_paving_shade.glb",
+          "fbx": "exports/fbx/WL_Ground_Verge_Run_paving_shade.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_PlazaShade"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -4,
+              0,
+              -0.8999999761581421
+            ],
+            "max_yup": [
+              4,
+              0.10000000149011612,
+              0.8999999761581421
+            ],
+            "bytes": 2072
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 0.0,
+            "stored_z_max": 10.0
+          }
+        },
+        "veg_anchor": {
+          "verts": 8,
+          "faces": 6,
+          "tris": 12,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_LeafMid"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -395.0,
+            -82.0,
+            10.0
+          ],
+          "bbox_max_uu": [
+            395.0,
+            82.0,
+            23.0
+          ],
+          "size_uu": [
+            790.0,
+            164.0,
+            13.0
+          ],
+          "height_m": 0.13,
+          "base_z_uu": 10.0,
+          "normals": {
+            "faces": 6,
+            "shells": 1,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 1,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_LeafMid",
+          "mesh_name": "WL_Ground_Verge_Run_veg_anchor",
+          "glb": "exports/glb/WL_Ground_Verge_Run_veg_anchor.glb",
+          "fbx": "exports/fbx/WL_Ground_Verge_Run_veg_anchor.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_LeafMid"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -3.950000047683716,
+              0.10000000149011612,
+              -0.8199999928474426
+            ],
+            "max_yup": [
+              3.950000047683716,
+              0.22999998927116394,
+              0.8199999928474426
+            ],
+            "bytes": 2116
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 10.0,
+            "stored_z_max": 22.999998092651367
+          }
+        }
+      },
+      "part_count": 3
+    },
+    {
+      "asset_id": "WL_Ground_Drain_Channel",
+      "kit_version": "1.0.0",
+      "family": "ground",
+      "family_group": "ground",
+      "category": "structure",
+      "silhouette_role": "terrace",
+      "note": "8.00 m runnel with two bronze grates and laid paving each side; the detail that says a surface sheds water",
+      "districts": [
+        "city",
+        "plaza",
+        "cloister",
+        "castle"
+      ],
+      "params": {
+        "length_m": 8.0,
+        "channel_m": 0.34,
+        "grates": 2
+      },
+      "origin_rule": "z = 0 is the GROUND DATUM; +X is the module front. excavation_uu is how far the module is cut in below it.",
+      "excavation_uu": 0.0,
+      "mounts_on": null,
+      "variant_of": null,
+      "units": {
+        "authored": "metres",
+        "manifest": "unreal units (cm)",
+        "uu_per_metre": 100.0
+      },
+      "height_uu": 31.0,
+      "bbox_min_uu": [
+        -400.0,
+        -243.0,
+        0.0
+      ],
+      "bbox_max_uu": [
+        400.0,
+        243.0,
+        31.0
+      ],
+      "size_uu": [
+        800.0,
+        486.0,
+        31.0
+      ],
+      "style": {
+        "slender_broad": 1.0,
+        "low_monumental": 0.0,
+        "open_solid": 1.0,
+        "gold_stone": 1.0,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.763,
+        "ceremonial_residential": 0.5
+      },
+      "base_z_uu": 0.0,
+      "tris_total": 360,
+      "tri_budget": 2000,
+      "over_budget": false,
+      "nanite_recommended": false,
+      "nanite_rule": "recommended when the module is >= 5000 triangles and the builder has not opted out",
+      "collision_recommended": true,
+      "uv": "planar-world-2m (not a lightmap unwrap)",
+      "sockets": [
+        {
+          "name": "bottom",
+          "kind": "ground",
+          "z_uu": 0.0,
+          "radius_uu": 400.0,
+          "rung": null,
+          "note": ""
+        },
+        {
+          "name": "walk",
+          "kind": "route",
+          "z_uu": 31.0,
+          "radius_uu": 400.0,
+          "rung": null,
+          "note": "the paved surface at 0.310 m, runnel down the middle"
+        },
+        {
+          "name": "end_a",
+          "kind": "pier",
+          "z_uu": 0.0,
+          "radius_uu": 17.0,
+          "rung": null,
+          "note": "butts at x = -4.00 m"
+        },
+        {
+          "name": "end_b",
+          "kind": "pier",
+          "z_uu": 0.0,
+          "radius_uu": 17.0,
+          "rung": null,
+          "note": "butts at x = +4.00 m"
+        }
+      ],
+      "parts": {
+        "metal": {
+          "verts": 144,
+          "faces": 108,
+          "tris": 216,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_Bronze"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -245.0,
+            -21.5,
+            25.2
+          ],
+          "bbox_max_uu": [
+            245.0,
+            21.5,
+            30.5
+          ],
+          "size_uu": [
+            490.0,
+            43.0,
+            5.3
+          ],
+          "height_m": 0.053,
+          "base_z_uu": 25.2,
+          "normals": {
+            "faces": 108,
+            "shells": 18,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 0,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_Bronze",
+          "mesh_name": "WL_Ground_Drain_Channel_metal",
+          "glb": "exports/glb/WL_Ground_Drain_Channel_metal.glb",
+          "fbx": "exports/fbx/WL_Ground_Drain_Channel_metal.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_Bronze"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -2.450000047683716,
+              0.25200000405311584,
+              -0.2150000035762787
+            ],
+            "max_yup": [
+              2.450000047683716,
+              0.3050000071525574,
+              0.2150000035762787
+            ],
+            "bytes": 16424
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 25.200000762939453,
+            "stored_z_max": 30.5
+          }
+        },
+        "paving": {
+          "verts": 32,
+          "faces": 24,
+          "tris": 48,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_PlazaCream"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -400.0,
+            -243.0,
+            22.0
+          ],
+          "bbox_max_uu": [
+            199.5,
+            243.0,
+            31.0
+          ],
+          "size_uu": [
+            599.5,
+            486.0,
+            9.0
+          ],
+          "height_m": 0.09,
+          "base_z_uu": 22.0,
+          "normals": {
+            "faces": 24,
+            "shells": 4,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 4,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_PlazaCream",
+          "mesh_name": "WL_Ground_Drain_Channel_paving",
+          "glb": "exports/glb/WL_Ground_Drain_Channel_paving.glb",
+          "fbx": "exports/fbx/WL_Ground_Drain_Channel_paving.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_PlazaCream"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -4,
+              0.2199999988079071,
+              -2.430000066757202
+            ],
+            "max_yup": [
+              1.9950001239776611,
+              0.3100000023841858,
+              2.430000066757202
+            ],
+            "bytes": 4612
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 22.0,
+            "stored_z_max": 31.0
+          }
+        },
+        "paving_shade": {
+          "verts": 28,
+          "faces": 24,
+          "tris": 48,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_PlazaShade"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -400.0,
+            -243.0,
+            0.0
+          ],
+          "bbox_max_uu": [
+            400.0,
+            243.0,
+            31.0
+          ],
+          "size_uu": [
+            800.0,
+            486.0,
+            31.0
+          ],
+          "height_m": 0.31,
+          "base_z_uu": 0.0,
+          "normals": {
+            "faces": 24,
+            "shells": 2,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 2,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_PlazaShade",
+          "mesh_name": "WL_Ground_Drain_Channel_paving_shade",
+          "glb": "exports/glb/WL_Ground_Drain_Channel_paving_shade.glb",
+          "fbx": "exports/fbx/WL_Ground_Drain_Channel_paving_shade.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_PlazaShade"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -4,
+              0,
+              -2.430000066757202
+            ],
+            "max_yup": [
+              4,
+              0.3100000023841858,
+              2.430000066757202
+            ],
+            "bytes": 4348
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 0.0,
+            "stored_z_max": 31.0
+          }
+        },
+        "paving_warm": {
+          "verts": 32,
+          "faces": 24,
+          "tris": 48,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_PlazaWarm"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -199.5,
+            -243.0,
+            22.0
+          ],
+          "bbox_max_uu": [
+            400.0,
+            243.0,
+            31.0
+          ],
+          "size_uu": [
+            599.5,
+            486.0,
+            9.0
+          ],
+          "height_m": 0.09,
+          "base_z_uu": 22.0,
+          "normals": {
+            "faces": 24,
+            "shells": 4,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 4,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_PlazaWarm",
+          "mesh_name": "WL_Ground_Drain_Channel_paving_warm",
+          "glb": "exports/glb/WL_Ground_Drain_Channel_paving_warm.glb",
+          "fbx": "exports/fbx/WL_Ground_Drain_Channel_paving_warm.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_PlazaWarm"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -1.9950001239776611,
+              0.2199999988079071,
+              -2.430000066757202
+            ],
+            "max_yup": [
+              4,
+              0.3100000023841858,
+              2.430000066757202
+            ],
+            "bytes": 4636
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 22.0,
+            "stored_z_max": 31.0
+          }
+        }
+      },
+      "part_count": 4
+    },
+    {
+      "asset_id": "WL_Ground_Tree_Grate",
+      "kit_version": "1.0.0",
+      "family": "ground",
+      "family_group": "ground",
+      "category": "prop",
+      "silhouette_role": "detail",
+      "note": "2.40 m tree surround with a 1.40 m opening; the planting is veg_anchor and the world session grows it",
+      "districts": [
+        "city",
+        "plaza",
+        "hamlet",
+        "tea_terrace",
+        "grove"
+      ],
+      "params": {
+        "surround_m": 2.4,
+        "opening_m": 1.4,
+        "planting": "veg_anchor, not modelled"
+      },
+      "origin_rule": "z = 0 is the GROUND DATUM; +X is the module front. excavation_uu is how far the module is cut in below it.",
+      "excavation_uu": 0.0,
+      "mounts_on": null,
+      "variant_of": null,
+      "units": {
+        "authored": "metres",
+        "manifest": "unreal units (cm)",
+        "uu_per_metre": 100.0
+      },
+      "height_uu": 31.0,
+      "bbox_min_uu": [
+        -340.0,
+        -120.0,
+        0.0
+      ],
+      "bbox_max_uu": [
+        340.0,
+        120.0,
+        31.0
+      ],
+      "size_uu": [
+        680.0,
+        240.0,
+        31.0
+      ],
+      "style": {
+        "slender_broad": 1.0,
+        "low_monumental": 0.0,
+        "open_solid": 1.0,
+        "gold_stone": 1.0,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.56,
+        "ceremonial_residential": 0.7
+      },
+      "base_z_uu": 0.0,
+      "tris_total": 208,
+      "tri_budget": 900,
+      "over_budget": false,
+      "nanite_recommended": false,
+      "nanite_rule": "recommended when the module is >= 5000 triangles and the builder has not opted out",
+      "collision_recommended": true,
+      "uv": "planar-world-2m (not a lightmap unwrap)",
+      "sockets": [
+        {
+          "name": "bottom",
+          "kind": "ground",
+          "z_uu": 0.0,
+          "radius_uu": 340.0,
+          "rung": null,
+          "note": ""
+        },
+        {
+          "name": "walk",
+          "kind": "route",
+          "z_uu": 31.0,
+          "radius_uu": 120.0,
+          "rung": null,
+          "note": "the paving around the opening, at 0.310 m"
+        },
+        {
+          "name": "edge",
+          "kind": "edge",
+          "z_uu": 31.0,
+          "radius_uu": 120.0,
+          "rung": null,
+          "note": "the surround; the 1.40 m opening is inside it"
+        }
+      ],
+      "parts": {
+        "kerb": {
+          "verts": 56,
+          "faces": 56,
+          "tris": 112,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_Kerb"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -120.0,
+            -120.0,
+            0.0
+          ],
+          "bbox_max_uu": [
+            120.0,
+            120.0,
+            31.0
+          ],
+          "size_uu": [
+            240.0,
+            240.0,
+            31.0
+          ],
+          "height_m": 0.31,
+          "base_z_uu": 0.0,
+          "normals": {
+            "faces": 56,
+            "shells": 1,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 0,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_Kerb",
+          "mesh_name": "WL_Ground_Tree_Grate_kerb",
+          "glb": "exports/glb/WL_Ground_Tree_Grate_kerb.glb",
+          "fbx": "exports/fbx/WL_Ground_Tree_Grate_kerb.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_Kerb"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -1.2000000476837158,
+              0,
+              -1.2000000476837158
+            ],
+            "max_yup": [
+              1.2000000476837158,
+              0.3100000023841858,
+              1.2000000476837158
+            ],
+            "bytes": 8584
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 0.0,
+            "stored_z_max": 31.0
+          }
+        },
+        "paving": {
+          "verts": 16,
+          "faces": 12,
+          "tris": 24,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_PlazaCream"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -340.0,
+            -120.0,
+            22.0
+          ],
+          "bbox_max_uu": [
+            340.0,
+            -1.0,
+            31.0
+          ],
+          "size_uu": [
+            680.0,
+            119.0,
+            9.0
+          ],
+          "height_m": 0.09,
+          "base_z_uu": 22.0,
+          "normals": {
+            "faces": 12,
+            "shells": 2,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 2,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_PlazaCream",
+          "mesh_name": "WL_Ground_Tree_Grate_paving",
+          "glb": "exports/glb/WL_Ground_Tree_Grate_paving.glb",
+          "fbx": "exports/fbx/WL_Ground_Tree_Grate_paving.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_PlazaCream"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -3.4000000953674316,
+              0.2199999988079071,
+              0.009999990463256836
+            ],
+            "max_yup": [
+              3.4000000953674316,
+              0.3100000023841858,
+              1.2000000476837158
+            ],
+            "bytes": 2940
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 22.0,
+            "stored_z_max": 31.0
+          }
+        },
+        "paving_shade": {
+          "verts": 24,
+          "faces": 18,
+          "tris": 36,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_PlazaShade"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -340.0,
+            -120.0,
+            0.0
+          ],
+          "bbox_max_uu": [
+            340.0,
+            120.0,
+            22.0
+          ],
+          "size_uu": [
+            680.0,
+            240.0,
+            22.0
+          ],
+          "height_m": 0.22,
+          "base_z_uu": 0.0,
+          "normals": {
+            "faces": 18,
+            "shells": 3,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 1,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_PlazaShade",
+          "mesh_name": "WL_Ground_Tree_Grate_paving_shade",
+          "glb": "exports/glb/WL_Ground_Tree_Grate_paving_shade.glb",
+          "fbx": "exports/fbx/WL_Ground_Tree_Grate_paving_shade.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_PlazaShade"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -3.4000000953674316,
+              0,
+              -1.2000000476837158
+            ],
+            "max_yup": [
+              3.4000000953674316,
+              0.2199999988079071,
+              1.2000000476837158
+            ],
+            "bytes": 3792
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 0.0,
+            "stored_z_max": 22.0
+          }
+        },
+        "paving_warm": {
+          "verts": 16,
+          "faces": 12,
+          "tris": 24,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_PlazaWarm"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -340.0,
+            1.0,
+            22.0
+          ],
+          "bbox_max_uu": [
+            340.0,
+            120.0,
+            31.0
+          ],
+          "size_uu": [
+            680.0,
+            119.0,
+            9.0
+          ],
+          "height_m": 0.09,
+          "base_z_uu": 22.0,
+          "normals": {
+            "faces": 12,
+            "shells": 2,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 2,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_PlazaWarm",
+          "mesh_name": "WL_Ground_Tree_Grate_paving_warm",
+          "glb": "exports/glb/WL_Ground_Tree_Grate_paving_warm.glb",
+          "fbx": "exports/fbx/WL_Ground_Tree_Grate_paving_warm.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_PlazaWarm"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -3.4000000953674316,
+              0.2199999988079071,
+              -1.2000000476837158
+            ],
+            "max_yup": [
+              3.4000000953674316,
+              0.3100000023841858,
+              -0.009999990463256836
+            ],
+            "bytes": 2968
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 22.0,
+            "stored_z_max": 31.0
+          }
+        },
+        "veg_anchor": {
+          "verts": 8,
+          "faces": 6,
+          "tris": 12,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_LeafMid"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -65.0,
+            -65.0,
+            8.0
+          ],
+          "bbox_max_uu": [
+            65.0,
+            65.0,
+            19.0
+          ],
+          "size_uu": [
+            130.0,
+            130.0,
+            11.0
+          ],
+          "height_m": 0.11,
+          "base_z_uu": 8.0,
+          "normals": {
+            "faces": 6,
+            "shells": 1,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 0,
+            "zero_normal_faces": 0
+          },
+          "material": "MI_V2_LeafMid",
+          "mesh_name": "WL_Ground_Tree_Grate_veg_anchor",
+          "glb": "exports/glb/WL_Ground_Tree_Grate_veg_anchor.glb",
+          "fbx": "exports/fbx/WL_Ground_Tree_Grate_veg_anchor.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_LeafMid"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -0.6499999761581421,
+              0.07999999821186066,
+              -0.6499999761581421
+            ],
+            "max_yup": [
+              0.6499999761581421,
+              0.1899999976158142,
+              0.6499999761581421
+            ],
+            "bytes": 2120
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 8.0,
+            "stored_z_max": 19.0
+          }
+        }
+      },
+      "part_count": 5
     },
     {
       "asset_id": "WL_Hero_Water_Court",

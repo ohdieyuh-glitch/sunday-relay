@@ -54,6 +54,10 @@ VALIDATION = os.path.join(ROOT, "validation")
 
 #: Bumped when the geometry of the kit changes in a way the world session
 #: must re-import for. The manifest carries it; so does every asset record.
+#: (azimuth, elevation, target bias) per family sheet, where the default is
+#: wrong. The default is a silhouette shot from close to the ground.
+SHEET_SHOTS = {"ground": (74.0, 30.0, 0.5)}
+
 #: The measured triangle count at or above which Nanite is recommended.
 NANITE_MIN_TRIS = 5000
 
@@ -441,9 +445,13 @@ def render_sheets(specs, surface_check=False, only=None):
     """
     out = os.path.join(ROOT, "validation", "renders")
     os.makedirs(out, exist_ok=True)
-    AZ, EL, BIAS = 80.0, 7.0, 0.46
 
     for group, group_builders in GROUPS():
+        # 7 DEGREES IS THE SILHOUETTE ANGLE and it is the wrong one for a
+        # family with no silhouette. The ground modules are 0.31 m tall over
+        # 8 m, so at 7 degrees they are eight white slivers; the thing to look
+        # at on a kerb is its PLAN, and that wants the camera up.
+        AZ, EL, BIAS = SHEET_SHOTS.get(group, (80.0, 7.0, 0.46))
         if only and only != group:
             continue
         # measure every module once, so the row splitter knows what it is

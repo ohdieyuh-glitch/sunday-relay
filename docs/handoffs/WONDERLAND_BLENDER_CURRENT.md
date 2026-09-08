@@ -12,7 +12,7 @@ is the art library's.
 | SCOPE | `wonderland/art/**` and this file. Nothing else in the repository was touched. |
 | LOCK | `wonderland/.gauntlet-lock` = `writer=claude`, read before writing, unchanged. `wonderland/art/` is unowned by `gauntlet-check.py` (shared). |
 | BLENDER | `bpy` 4.5.13 LTS, installed via pip. Real Blender, headless — the same bmesh, the same exporters, Cycles on CPU. |
-| RENDERED | **Yes.** Twenty Cycles contact sheets and six ASSEMBLY renders in `wonderland/art/blender/validation/renders/`. No Unreal frame — see "What is unproven". |
+| RENDERED | **Yes.** Twenty-one Cycles contact sheets and seven ASSEMBLY renders in `wonderland/art/blender/validation/renders/`. No Unreal frame — see "What is unproven". |
 
 ---
 
@@ -91,7 +91,7 @@ yours; nothing here has touched a map.
 
 ## What exists
 
-**93 assets, 281 meshes, 347,706 triangles.** All built, all exported to GLB and
+**101 assets, 313 meshes, 350,518 triangles.** All built, all exported to GLB and
 FBX, all validated, **0 failures**.
 
 | group | assets | what it answers |
@@ -103,6 +103,7 @@ FBX, all validated, **0 failures**.
 | `roofscape` | 6 | the middle distance: 3 house bodies, dormer, chimney, shopfront |
 | `stairs` | 8 | the vertical vocabulary: straight, quarter, half-turn, curved, ceremonial, garden, ramp |
 | `gardens` | 8 | retaining runs, corners, a curved arc, planter, overlook, gate, pavilion base |
+| `ground` | 8 | the made surface: kerbs, a corner, single and broad steps, a medallion, verge, runnel, tree grate |
 | `water` | 7 | a 34 m reflecting basin and the canal, crossing, cascade, pavilion and pool around it |
 | `market` | 6 | the inhabited layer: awning, canopy, arcade, sign, passage, corner shop |
 | `details` | 6 | balustrade, newel+urn, gold screen, balcony, pinnacle, oriel |
@@ -143,7 +144,14 @@ reasons it gave still stand. Beyond those:
    module built the ordinary way, so a ruin cannot drift from the thing it is a
    ruin of. See "Variants" below for the socket rule that makes them
    substitutable.
-5. **Style axes in the manifest.** Seven of them, each labelled `measured`,
+5. **`ground` (8 modules), and it contains no flat paving.** For a flat
+   surface a material IS the right answer, and modelling 128 slabs per 8 m
+   tile would cost hundreds of triangles to say what `MI_V2_PlazaCream`
+   already says. What a material cannot do is RELIEF: a kerb is 15 cm of
+   shadow, a runnel is the line that says a surface sheds water, a single
+   riser is where two levels meet, a medallion is why a plaza has a centre.
+   The whole family is 2,900 triangles.
+6. **Style axes in the manifest.** Seven of them, each labelled `measured`,
    `declared` or `derived` — so a generator can ask for slender, monumental,
    open, gold-light, aged, garden, ceremonial and get an answer rather than a
    family name. See "Style" below.
@@ -205,6 +213,8 @@ name is not in it. Nothing new needs authoring.
 | `metal` | `MI_V2_Bronze` | railings, ties, awning frames |
 | `glass` / `glass_cool` | `MI_V2_GlassAmber` / `MI_V2_GlassTeal` | emissive in V2, so a lantern lights itself |
 | `water` / `water_lit` | `MI_V2_Water` / `MI_V2_GlassTeal` | still sheets; falling water, which glows |
+| `paving` / `paving_warm` / `paving_shade` | `MI_V2_PlazaCream` / `MI_V2_PlazaWarm` / `MI_V2_PlazaShade` | the walked surface, its second tint, and the dark inlay |
+| `kerb` | `MI_V2_Kerb` | kerbs, gutters, tree surrounds -- the edge of the made surface |
 | `veg_anchor` | `MI_V2_LeafMid` | **not a plant.** See below. |
 
 **`*_veg_anchor` meshes are optional and you may simply not import them.** They
@@ -458,9 +468,9 @@ Session 1's list is complete. What is left, in the order I would take it:
    suits a camera at 30 m. `report_performance.py` says which modules are
    spending triangles a distant camera cannot resolve; a second, coarser
    spelling of the crowns would matter most, since a skyline is mostly crowns.
-3. **Ground: paving, kerbs, steps at the 1 m scale.** The stairs and gardens
-   families connect LEVELS. What joins two modules on the SAME level is still
-   the world's terrain material, and the reference's plaza is not a texture.
+3. **Cobbled and unmade ground.** `families/ground.py` gives a plaza its kerbs
+   and its runnels; what it does not give is the OTHER surface -- the cobble
+   the reference's lanes are laid in, which `MI_V2_Cobble` already exists for.
 4. **A second roof language.** Everything is rose or lilac tile. The reference
    has lead, copper and thatch in its middle distance, and the palette has room.
 5. **Night.** `glass` and `water_lit` are emissive in V2 and no module has been

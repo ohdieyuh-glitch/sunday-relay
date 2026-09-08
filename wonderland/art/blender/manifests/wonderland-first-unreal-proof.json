@@ -11,10 +11,10 @@
   },
   "unmet_requirements": [],
   "counts": {
-    "assets": 18,
-    "meshes": 64,
-    "triangles": 103663,
-    "materials_covered": 11
+    "assets": 20,
+    "meshes": 73,
+    "triangles": 105159,
+    "materials_covered": 15
   },
   "assets": [
     {
@@ -66,29 +66,6 @@
       ]
     },
     {
-      "asset_id": "WL_Garden_Retaining_Run",
-      "why": [
-        "carries MI_V2_LeafMid"
-      ],
-      "family_group": "gardens",
-      "height_uu": 310.0,
-      "tris_total": 128,
-      "part_count": 3,
-      "materials": [
-        "MI_V2_IvoryStone",
-        "MI_V2_LeafMid",
-        "MI_V2_Stone"
-      ],
-      "nanite_recommended": false,
-      "collision_recommended": true,
-      "variant_of": null,
-      "meshes": [
-        "WL_Garden_Retaining_Run",
-        "WL_Garden_Retaining_Run_stone_dark",
-        "WL_Garden_Retaining_Run_veg_anchor"
-      ]
-    },
-    {
       "asset_id": "WL_Gatehouse_Twin__aged",
       "why": [
         "a weathered VARIANT, exported like any other"
@@ -115,6 +92,84 @@
         "WL_Gatehouse_Twin__aged_roof",
         "WL_Gatehouse_Twin__aged_stone_dark",
         "WL_Gatehouse_Twin__aged_veg_anchor"
+      ]
+    },
+    {
+      "asset_id": "WL_Ground_Kerb_Run",
+      "why": [
+        "carries MI_V2_PlazaCream",
+        "carries MI_V2_PlazaWarm"
+      ],
+      "family_group": "ground",
+      "height_uu": 31.0,
+      "tris_total": 148,
+      "part_count": 4,
+      "materials": [
+        "MI_V2_Kerb",
+        "MI_V2_PlazaCream",
+        "MI_V2_PlazaShade",
+        "MI_V2_PlazaWarm"
+      ],
+      "nanite_recommended": false,
+      "collision_recommended": true,
+      "variant_of": null,
+      "meshes": [
+        "WL_Ground_Kerb_Run_kerb",
+        "WL_Ground_Kerb_Run_paving",
+        "WL_Ground_Kerb_Run_paving_shade",
+        "WL_Ground_Kerb_Run_paving_warm"
+      ]
+    },
+    {
+      "asset_id": "WL_Ground_Plaza_Medallion",
+      "why": [
+        "the SHORTEST module: the other end of the same check"
+      ],
+      "family_group": "ground",
+      "height_uu": 10.0,
+      "tris_total": 1396,
+      "part_count": 5,
+      "materials": [
+        "MI_V2_Gold",
+        "MI_V2_Kerb",
+        "MI_V2_PlazaCream",
+        "MI_V2_PlazaShade",
+        "MI_V2_PlazaWarm"
+      ],
+      "nanite_recommended": false,
+      "collision_recommended": false,
+      "variant_of": null,
+      "meshes": [
+        "WL_Ground_Plaza_Medallion_gold",
+        "WL_Ground_Plaza_Medallion_kerb",
+        "WL_Ground_Plaza_Medallion_paving",
+        "WL_Ground_Plaza_Medallion_paving_shade",
+        "WL_Ground_Plaza_Medallion_paving_warm"
+      ]
+    },
+    {
+      "asset_id": "WL_Ground_Verge_Run",
+      "why": [
+        "carries MI_V2_Kerb",
+        "carries MI_V2_LeafMid",
+        "carries MI_V2_PlazaShade"
+      ],
+      "family_group": "ground",
+      "height_uu": 31.0,
+      "tris_total": 80,
+      "part_count": 3,
+      "materials": [
+        "MI_V2_Kerb",
+        "MI_V2_LeafMid",
+        "MI_V2_PlazaShade"
+      ],
+      "nanite_recommended": false,
+      "collision_recommended": true,
+      "variant_of": null,
+      "meshes": [
+        "WL_Ground_Verge_Run_kerb",
+        "WL_Ground_Verge_Run_paving_shade",
+        "WL_Ground_Verge_Run_veg_anchor"
       ]
     },
     {
@@ -153,7 +208,6 @@
     {
       "asset_id": "WL_Market_Awning",
       "why": [
-        "the SHORTEST module: the other end of the same check",
         "a MOUNTED module: carried by a facade, with no footing at all"
       ],
       "family_group": "market",

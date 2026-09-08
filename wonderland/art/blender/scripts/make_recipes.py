@@ -604,6 +604,86 @@ def _arm_of(kit, corner):
     return float(m.group(1)) * 100.0 if m else kit.size(corner)[0]
 
 
+def recipe_street_ground(kit):
+    """The made surface itself: kerbs turning a corner, verge, runnel, trees.
+
+    The one recipe whose modules are all under a metre tall, and the reason it
+    exists is that a family of ground modules cannot be judged from a contact
+    sheet -- eight objects 0.31 m tall in a row are eight white slivers. Laid
+    together they are a street corner, which is the only way to see whether the
+    kerb, the verge and the runnel agree with each other.
+    """
+    need = ["WL_Ground_Kerb_Run", "WL_Ground_Kerb_Corner"]
+    missing = [n for n in need if not kit.has(n)]
+    if missing:
+        return {"name": "street_ground", "unbuildable": missing, "placements": []}
+    run, corner = "WL_Ground_Kerb_Run", "WL_Ground_Kerb_Corner"
+    L = kit.size(run)[0]
+    arm = L * 0.5
+    items = [place(corner, (0.0, 0.0, 0.0), 0.0,
+                   "the corner: the kerb turns on its own 1.60 m radius",
+                   "street_ground")]
+    for i in range(3):
+        items.append(place(run, (arm + L * (i + 0.5), 0.0, 0.0), 0.0,
+                           "kerb run %d along +X" % (i + 1), "street_ground"))
+    for j in range(2):
+        items.append(place(run, (0.0, arm + L * (j + 0.5), 0.0), 90.0,
+                           "kerb run %d along +Y" % (j + 1), "street_ground"))
+    # EVERY NUMBER HERE IS IN UU. The first draft typed metres -- a tree grate
+    # at y = 1.6 rather than 160 -- and the footprint check caught nine clashes
+    # in one run, which is what it is for.
+    walk_back = kit.a(run)["bbox_max_uu"][1]           # the walk's far edge
+    road = kit.a(run)["bbox_min_uu"][1]                # the kerb's road face
+    if kit.has("WL_Ground_Verge_Run"):
+        v = "WL_Ground_Verge_Run"
+        vy = walk_back + kit.size(v)[1] * 0.5 + 10.0
+        for i in range(3):
+            items.append(place(v, (arm + L * (i + 0.5), vy, 0.0), 0.0,
+                               "verge behind the walk, run %d" % (i + 1),
+                               "street_ground"))
+    if kit.has("WL_Ground_Tree_Grate"):
+        g = "WL_Ground_Tree_Grate"
+        for i in range(2):
+            items.append(place(g, (arm + L * (i + 1.0), 140.0, 0.0), 0.0,
+                               "a tree in the walk", "street_ground",
+                               abuts=(run,)))
+    if kit.has("WL_Ground_Drain_Channel"):
+        dch = "WL_Ground_Drain_Channel"
+        dy = road - kit.size(dch)[1] * 0.5 - 40.0
+        for i in range(3):
+            items.append(place(dch, (arm + L * (i + 0.5), dy, 0.0), 0.0,
+                               "the runnel down the middle of the road",
+                               "street_ground"))
+        if kit.has("WL_Ground_Plaza_Medallion"):
+            med = "WL_Ground_Plaza_Medallion"
+            items.append(place(med, (arm + L * 3.6, dy, 0.0), 0.0,
+                               "the medallion, where the street opens into a "
+                               "plaza", "street_ground"))
+    if kit.has("WL_Ground_Steps_Broad"):
+        st = "WL_Ground_Steps_Broad"
+        sy = walk_back + kit.size("WL_Ground_Verge_Run")[1] \
+            + kit.size(st)[1] * 0.5 + 60.0
+        items.append(place(st, (arm + L * 1.5, sy, 0.0), 0.0,
+                           "three shallow risers off the verge",
+                           "street_ground"))
+    if kit.has("WL_Ground_Step_Single"):
+        items.append(place("WL_Ground_Step_Single",
+                           (-kit.size("WL_Ground_Step_Single")[1] * 0.5 - 60.0,
+                            road - 600.0, 0.0), 90.0,
+                           "one riser where the road changes level",
+                           "street_ground"))
+    return {
+        "name": "street_ground",
+        "for": "the made surface: what a plaza is, once it stops being a "
+               "terrain material",
+        "rule": ("kerb runs are laid at their own measured length from the "
+                 "corner's arm end, so they butt; the verge sits one kerb "
+                 "depth behind the walk; everything is one riser off the "
+                 "ground datum, which is the level the water family paves at"),
+        "placements": items,
+    }
+
+
 def recipe_terrace_flight(kit):
     """Lower garden -> stair -> mid terrace -> retaining wall -> upper court.
 
@@ -763,8 +843,8 @@ def build(manifest):
     kit = Kit(manifest)
     recipes = []
     for fn in (recipe_skyline, recipe_threshold, recipe_wall_circuit,
-               recipe_terrace_flight, recipe_water_garden,
-               recipe_market_street):
+               recipe_street_ground, recipe_terrace_flight,
+               recipe_water_garden, recipe_market_street):
         r = fn(kit)
         if r is None:
             continue

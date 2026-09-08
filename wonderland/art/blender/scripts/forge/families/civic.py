@@ -143,7 +143,11 @@ def colonnade_curved(f):
     H = 7.8
     step = math.radians(ARC) / BAYS
     a0 = -math.radians(ARC) * 0.5
-    p.lathe([(R - 1.75, 0.0), (R + 1.75, 0.0), (R + 1.75, 0.46), (R - 1.75, 0.46)],
+    # THE SECTION CLOSES ON ITSELF. Left open, `mesh.lathe` seals the partial
+    # revolve by capping it back to the AXIS -- which for a module whose origin
+    # is its own 24 m arc centre is a 22 m disc of stone nobody asked for.
+    p.lathe([(R - 1.75, 0.0), (R + 1.75, 0.0), (R + 1.75, 0.46),
+             (R - 1.75, 0.46), (R - 1.75, 0.0)],
             segments=BAYS * 4, arc=ARC + 4.0,
             matrix=M.xform((0, 0, 0), (0, 0, -ARC * 0.5 - 2.0)), smooth=False)
     for i in range(BAYS + 1):
@@ -152,7 +156,8 @@ def colonnade_curved(f):
     for (r_in, r_out, z, h) in ((R - 1.05, R + 1.05, 6.06, 0.50),
                                 (R - 1.30, R + 1.30, 6.56, 0.42),
                                 (R - 1.10, R + 1.10, 6.98, 0.40)):
-        p.lathe([(r_in, z), (r_out, z), (r_out, z + h), (r_in, z + h)],
+        p.lathe([(r_in, z), (r_out, z), (r_out, z + h), (r_in, z + h),
+                 (r_in, z)],
                 segments=BAYS * 5, arc=ARC + 3.0,
                 matrix=M.xform((0, 0, 0), (0, 0, -ARC * 0.5 - 1.5)), smooth=False)
     for i in range(BAYS * 3 + 1):

@@ -126,7 +126,9 @@ def build(manifest):
 
     unmet = []
 
-    # 1. every material slot the kit uses, cheapest carrier of each
+    # 1. every material slot the kit uses, cheapest carrier of each. Four of
+    #    them arrived with the ground family and none of them had ever been in
+    #    an export, which is exactly what a by-requirement pack is for.
     for mat in sorted({m for a in assets for m in _materials(a) if m}):
         carriers = [a for a in assets if mat in _materials(a)]
         if not carriers:

@@ -262,8 +262,11 @@ def garden_retaining_curved(f):
              (R - ht - 0.06, TERRACE_Z - 0.08)],
             segments=SEG, arc=ARC - 0.4,
             matrix=M.xform((0, 0, 0), (0, 0, -(ARC - 0.4) * 0.5)), smooth=False)
+    # CLOSED, like the section above it: an open rectangle swept 45 degrees
+    # about an 11 m axis came back as a green wedge the size of the quadrant
     v.lathe([(R - ht + 0.06, TERRACE_Z - 0.30), (R - ht + 0.34, TERRACE_Z - 0.30),
-             (R - ht + 0.34, TERRACE_Z - 0.20), (R - ht + 0.06, TERRACE_Z - 0.20)],
+             (R - ht + 0.34, TERRACE_Z - 0.20), (R - ht + 0.06, TERRACE_Z - 0.20),
+             (R - ht + 0.06, TERRACE_Z - 0.30)],
             segments=SEG, arc=ARC - 2.0,
             matrix=M.xform((0, 0, 0), (0, 0, -(ARC - 2.0) * 0.5)), smooth=False)
     return K.ModuleSpec(
@@ -380,7 +383,8 @@ def garden_overlook(f):
                 matrix=M.xform((math.cos(a) * (R - 0.10), math.sin(a) * (R - 0.10),
                                 TERRACE_Z)))
     p.lathe([(R - 0.32, TERRACE_Z + 1.60), (R + 0.12, TERRACE_Z + 1.60),
-             (R + 0.12, TERRACE_Z + 1.86), (R - 0.32, TERRACE_Z + 1.86)],
+             (R + 0.12, TERRACE_Z + 1.86), (R - 0.32, TERRACE_Z + 1.86),
+             (R - 0.32, TERRACE_Z + 1.60)],
             segments=SEG, arc=182.0, matrix=M.xform((0, 0, 0), (0, 0, -91.0)),
             smooth=False)
     for sgn in (-1.0, 1.0):

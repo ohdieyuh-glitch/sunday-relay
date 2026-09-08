@@ -3,18 +3,31 @@
   "kit_version": "1.0.0",
   "from_manifest": "manifests/wonderland-blender-kit.json",
   "totals": {
-    "assets": 93,
-    "meshes": 281,
-    "triangles": 347706,
-    "median_triangles": 2090,
-    "mean_triangles": 3738,
+    "assets": 101,
+    "meshes": 313,
+    "triangles": 350518,
+    "median_triangles": 1852,
+    "mean_triangles": 3470,
     "largest": "WL_Hero_GreatSpire",
     "largest_triangles": 38972,
     "over_budget": []
   },
   "density": {
-    "median_tris_per_m_height": 270.8,
+    "median_tris_per_m_height": 274.1,
     "heaviest_per_m_height": [
+      {
+        "asset_id": "WL_Ground_Plaza_Medallion",
+        "family_group": "ground",
+        "tris": 1396,
+        "meshes": 5,
+        "height_m": 0.1,
+        "tris_per_m_height": 13960.0,
+        "tris_per_m2_ground": 17.2,
+        "over_budget": false,
+        "budget": 3000,
+        "nanite_recommended": false,
+        "hidden_area_share": 0.697
+      },
       {
         "asset_id": "WL_Hero_Water_Court",
         "family_group": "water",
@@ -55,30 +68,17 @@
         "hidden_area_share": 0.256
       },
       {
-        "asset_id": "WL_Colonnade_Curved",
-        "family_group": "civic",
-        "tris": 7808,
-        "meshes": 1,
-        "height_m": 7.38,
-        "tris_per_m_height": 1058.0,
-        "tris_per_m2_ground": 11.1,
-        "over_budget": false,
-        "budget": 26000,
-        "nanite_recommended": true,
-        "hidden_area_share": 0.496
-      },
-      {
-        "asset_id": "WL_Water_Canal_Crossing",
-        "family_group": "water",
-        "tris": 3744,
+        "asset_id": "WL_Ground_Drain_Channel",
+        "family_group": "ground",
+        "tris": 360,
         "meshes": 4,
-        "height_m": 3.54,
-        "tris_per_m_height": 1057.6,
-        "tris_per_m2_ground": 51.9,
+        "height_m": 0.31,
+        "tris_per_m_height": 1161.3,
+        "tris_per_m2_ground": 9.3,
         "over_budget": false,
-        "budget": 22000,
+        "budget": 2000,
         "nanite_recommended": false,
-        "hidden_area_share": 0.482
+        "hidden_area_share": 0.508
       }
     ],
     "note": "triangles per metre of height is the silhouette measure: a 118 m needle spending 330 a metre is buying skyline, a 1.5 m prop spending 1,200 a metre is buying nothing anybody will resolve"
@@ -114,6 +114,19 @@
         "hidden_area_share": 0.734
       },
       {
+        "asset_id": "WL_Ground_Plaza_Medallion",
+        "family_group": "ground",
+        "tris": 1396,
+        "meshes": 5,
+        "height_m": 0.1,
+        "tris_per_m_height": 13960.0,
+        "tris_per_m2_ground": 17.2,
+        "over_budget": false,
+        "budget": 3000,
+        "nanite_recommended": false,
+        "hidden_area_share": 0.697
+      },
+      {
         "asset_id": "WL_Tower_Crown_Pavilion",
         "family_group": "towers",
         "tris": 5062,
@@ -125,6 +138,19 @@
         "budget": 22000,
         "nanite_recommended": true,
         "hidden_area_share": 0.696
+      },
+      {
+        "asset_id": "WL_Colonnade_Curved",
+        "family_group": "civic",
+        "tris": 7808,
+        "meshes": 1,
+        "height_m": 7.38,
+        "tris_per_m_height": 1058.0,
+        "tris_per_m2_ground": 41.6,
+        "over_budget": false,
+        "budget": 26000,
+        "nanite_recommended": true,
+        "hidden_area_share": 0.681
       },
       {
         "asset_id": "WL_Tower_Crown_Belvedere",
@@ -164,32 +190,6 @@
         "budget": 160000,
         "nanite_recommended": true,
         "hidden_area_share": 0.58
-      },
-      {
-        "asset_id": "WL_Tower_Crown_Ribbed",
-        "family_group": "towers",
-        "tris": 2822,
-        "meshes": 3,
-        "height_m": 11.35,
-        "tris_per_m_height": 248.6,
-        "tris_per_m2_ground": 28.1,
-        "over_budget": false,
-        "budget": 13000,
-        "nanite_recommended": false,
-        "hidden_area_share": 0.573
-      },
-      {
-        "asset_id": "WL_Tower_Base_Arcaded",
-        "family_group": "towers",
-        "tris": 8388,
-        "meshes": 2,
-        "height_m": 12.4,
-        "tris_per_m_height": 676.5,
-        "tris_per_m2_ground": 23.3,
-        "over_budget": false,
-        "budget": 26000,
-        "nanite_recommended": true,
-        "hidden_area_share": 0.569
       }
     ],
     "note": "the share of surface AREA no ray from outside reaches. It is the price of building by union rather than by boolean, it is the same price that makes these meshes manifold, and nothing here removes it -- this says which modules would gain most if a union pass is ever wanted"
@@ -207,8 +207,13 @@
     },
     "gardens": {
       "assets": 8,
-      "tris": 6722,
+      "tris": 6690,
       "meshes": 25
+    },
+    "ground": {
+      "assets": 8,
+      "tris": 2844,
+      "meshes": 32
     },
     "hero": {
       "assets": 2,
@@ -394,11 +399,11 @@
       "meshes": 1,
       "height_m": 7.38,
       "tris_per_m_height": 1058.0,
-      "tris_per_m2_ground": 11.1,
+      "tris_per_m2_ground": 41.6,
       "over_budget": false,
       "budget": 26000,
       "nanite_recommended": true,
-      "hidden_area_share": 0.496
+      "hidden_area_share": 0.681
     },
     {
       "asset_id": "WL_Water_Pavilion",
@@ -762,7 +767,7 @@
       "over_budget": false,
       "budget": 20000,
       "nanite_recommended": false,
-      "hidden_area_share": 0.433
+      "hidden_area_share": 0.467
     },
     {
       "asset_id": "WL_Tower_Crown_Ribbed",
@@ -1051,6 +1056,19 @@
       "hidden_area_share": 0.305
     },
     {
+      "asset_id": "WL_Ground_Plaza_Medallion",
+      "family_group": "ground",
+      "tris": 1396,
+      "meshes": 5,
+      "height_m": 0.1,
+      "tris_per_m_height": 13960.0,
+      "tris_per_m2_ground": 17.2,
+      "over_budget": false,
+      "budget": 3000,
+      "nanite_recommended": false,
+      "hidden_area_share": 0.697
+    },
+    {
       "asset_id": "WL_Market_Canopy",
       "family_group": "market",
       "tris": 1388,
@@ -1300,15 +1318,15 @@
     {
       "asset_id": "WL_Garden_Retaining_Curved",
       "family_group": "gardens",
-      "tris": 564,
+      "tris": 532,
       "meshes": 3,
       "height_m": 3.1,
-      "tris_per_m_height": 181.9,
-      "tris_per_m2_ground": 5.2,
+      "tris_per_m_height": 171.6,
+      "tris_per_m2_ground": 25.1,
       "over_budget": false,
       "budget": 9000,
       "nanite_recommended": false,
-      "hidden_area_share": 0.21
+      "hidden_area_share": 0.274
     },
     {
       "asset_id": "WL_Market_Corner_Storefront",
@@ -1335,6 +1353,19 @@
       "budget": 12000,
       "nanite_recommended": false,
       "hidden_area_share": 0.42
+    },
+    {
+      "asset_id": "WL_Ground_Drain_Channel",
+      "family_group": "ground",
+      "tris": 360,
+      "meshes": 4,
+      "height_m": 0.31,
+      "tris_per_m_height": 1161.3,
+      "tris_per_m2_ground": 9.3,
+      "over_budget": false,
+      "budget": 2000,
+      "nanite_recommended": false,
+      "hidden_area_share": 0.508
     },
     {
       "asset_id": "WL_Water_Spillway_Wall",
@@ -1376,6 +1407,19 @@
       "hidden_area_share": 0.419
     },
     {
+      "asset_id": "WL_Ground_Kerb_Corner",
+      "family_group": "ground",
+      "tris": 252,
+      "meshes": 3,
+      "height_m": 0.31,
+      "tris_per_m_height": 812.9,
+      "tris_per_m2_ground": 14.5,
+      "over_budget": false,
+      "budget": 1600,
+      "nanite_recommended": false,
+      "hidden_area_share": 0.574
+    },
+    {
       "asset_id": "WL_Garden_Retaining_Corner_In",
       "family_group": "gardens",
       "tris": 250,
@@ -1415,6 +1459,32 @@
       "hidden_area_share": 0.167
     },
     {
+      "asset_id": "WL_Ground_Steps_Broad",
+      "family_group": "ground",
+      "tris": 240,
+      "meshes": 4,
+      "height_m": 1.24,
+      "tris_per_m_height": 193.5,
+      "tris_per_m2_ground": 4.0,
+      "over_budget": false,
+      "budget": 2600,
+      "nanite_recommended": false,
+      "hidden_area_share": 0.293
+    },
+    {
+      "asset_id": "WL_Ground_Tree_Grate",
+      "family_group": "ground",
+      "tris": 208,
+      "meshes": 5,
+      "height_m": 0.31,
+      "tris_per_m_height": 671.0,
+      "tris_per_m2_ground": 12.7,
+      "over_budget": false,
+      "budget": 900,
+      "nanite_recommended": false,
+      "hidden_area_share": 0.398
+    },
+    {
       "asset_id": "WL_Stair_Garden",
       "family_group": "stairs",
       "tris": 188,
@@ -1426,6 +1496,32 @@
       "budget": 8000,
       "nanite_recommended": false,
       "hidden_area_share": 0.239
+    },
+    {
+      "asset_id": "WL_Ground_Step_Single",
+      "family_group": "ground",
+      "tris": 160,
+      "meshes": 4,
+      "height_m": 0.64,
+      "tris_per_m_height": 252.0,
+      "tris_per_m2_ground": 4.1,
+      "over_budget": false,
+      "budget": 1400,
+      "nanite_recommended": false,
+      "hidden_area_share": 0.466
+    },
+    {
+      "asset_id": "WL_Ground_Kerb_Run",
+      "family_group": "ground",
+      "tris": 148,
+      "meshes": 4,
+      "height_m": 0.31,
+      "tris_per_m_height": 477.4,
+      "tris_per_m2_ground": 5.8,
+      "over_budget": false,
+      "budget": 1200,
+      "nanite_recommended": false,
+      "hidden_area_share": 0.244
     },
     {
       "asset_id": "WL_Garden_Retaining_Run__overgrown",
@@ -1452,6 +1548,19 @@
       "budget": 9000,
       "nanite_recommended": false,
       "hidden_area_share": 0.242
+    },
+    {
+      "asset_id": "WL_Ground_Verge_Run",
+      "family_group": "ground",
+      "tris": 80,
+      "meshes": 3,
+      "height_m": 0.31,
+      "tris_per_m_height": 258.1,
+      "tris_per_m2_ground": 4.2,
+      "over_budget": false,
+      "budget": 700,
+      "nanite_recommended": false,
+      "hidden_area_share": 0.189
     },
     {
       "asset_id": "WL_Ramp_Terrace",

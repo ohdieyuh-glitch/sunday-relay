@@ -293,6 +293,26 @@ MATERIALS = {
         "unreal": "MI_V2_GlassTeal", "rgb": (0.24, 0.62, 0.62),
         "metallic": 0.0, "roughness": 0.09, "emissive": 1.3,
         "use": "falling and lit water -- cascades, spouts, the emissive teal"},
+    # THE GROUND'S OWN MATERIALS, and they were already in the world. V2 has
+    # four plaza tints, a kerb and three path stones; this kit had used none of
+    # them because it had no ground module. A ground module that reached for
+    # `stone` would have made its paving the same surface as a tower shaft.
+    "paving": {
+        "unreal": "MI_V2_PlazaCream", "rgb": (0.50, 0.47, 0.40),
+        "metallic": 0.0, "roughness": 0.74, "emissive": 0.0,
+        "use": "the walked surface: plaza slabs, landings, the top of a step"},
+    "paving_warm": {
+        "unreal": "MI_V2_PlazaWarm", "rgb": (0.56, 0.48, 0.35),
+        "metallic": 0.0, "roughness": 0.74, "emissive": 0.0,
+        "use": "the second tint, so a laid surface has more than one stone in it"},
+    "paving_shade": {
+        "unreal": "MI_V2_PlazaShade", "rgb": (0.30, 0.28, 0.24),
+        "metallic": 0.0, "roughness": 0.78, "emissive": 0.0,
+        "use": "the dark inlay: a medallion's band, a runnel's floor, a joint"},
+    "kerb": {
+        "unreal": "MI_V2_Kerb", "rgb": (0.46, 0.42, 0.35),
+        "metallic": 0.0, "roughness": 0.80, "emissive": 0.0,
+        "use": "kerbs, gutters, tree surrounds -- the edge of the made surface"},
 }
 
 #: A part written with no material named lands here.

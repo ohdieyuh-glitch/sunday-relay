@@ -10,12 +10,13 @@
     "wonderland/marble/import-marble-world.py (AssetImportTask, the guarded Interchange options, spawn_actor_from_class)"
   ],
   "counts": {
-    "assets": 93,
-    "meshes": 281,
+    "assets": 101,
+    "meshes": 313,
     "missing_sources": 0,
     "nanite_requested": 19,
-    "collision_requested": 64,
+    "collision_requested": 71,
     "by_data_layer": {
+      "V2_Arrival": 8,
       "V2_Castle": 26,
       "V2_Garden": 23,
       "V2_Props": 12,
@@ -25,6 +26,7 @@
       "/Game/WonderlandV2/Kit/civic": 6,
       "/Game/WonderlandV2/Kit/details": 6,
       "/Game/WonderlandV2/Kit/gardens": 8,
+      "/Game/WonderlandV2/Kit/ground": 8,
       "/Game/WonderlandV2/Kit/hero": 2,
       "/Game/WonderlandV2/Kit/market": 6,
       "/Game/WonderlandV2/Kit/roofscape": 6,
@@ -2378,7 +2380,7 @@
       "style": {
         "slender_broad": 1.0,
         "low_monumental": 0.341,
-        "open_solid": 0.552,
+        "open_solid": 0.557,
         "gold_stone": 1.0,
         "pristine_aged": 0.0,
         "garden_urban": 0.45,
@@ -4675,7 +4677,7 @@
           "asset_path": "/Game/WonderlandV2/Kit/gardens/WL_Garden_Retaining_Curved",
           "material_instance": "MI_V2_IvoryStone",
           "material_path": "/Game/WonderlandV2/Materials/Instances/MI_V2_IvoryStone",
-          "triangles": 284
+          "triangles": 268
         },
         {
           "part": "stone_dark",
@@ -4687,7 +4689,7 @@
           "asset_path": "/Game/WonderlandV2/Kit/gardens/WL_Garden_Retaining_Curved_stone_dark",
           "material_instance": "MI_V2_Stone",
           "material_path": "/Game/WonderlandV2/Materials/Instances/MI_V2_Stone",
-          "triangles": 148
+          "triangles": 132
         },
         {
           "part": "veg_anchor",
@@ -4811,7 +4813,7 @@
         "slender_broad": 0.848,
         "low_monumental": 0.292,
         "open_solid": 0.891,
-        "gold_stone": 0.939,
+        "gold_stone": 0.93,
         "pristine_aged": 0.0,
         "garden_urban": 0.312,
         "ceremonial_residential": 0.5
@@ -5096,6 +5098,846 @@
           "material_instance": "MI_V2_Stone",
           "material_path": "/Game/WonderlandV2/Materials/Instances/MI_V2_Stone",
           "triangles": 28
+        }
+      ]
+    },
+    {
+      "asset_id": "WL_Ground_Kerb_Run",
+      "family_group": "ground",
+      "variant_of": null,
+      "destination_path": "/Game/WonderlandV2/Kit/ground",
+      "data_layer": "V2_Arrival",
+      "nanite_requested": false,
+      "collision_requested": true,
+      "height_uu": 31.0,
+      "excavation_uu": 0.0,
+      "mounts_on": null,
+      "style": {
+        "slender_broad": 1.0,
+        "low_monumental": 0.0,
+        "open_solid": 1.0,
+        "gold_stone": 1.0,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.85,
+        "ceremonial_residential": 0.5
+      },
+      "sockets": [
+        {
+          "name": "bottom",
+          "kind": "ground",
+          "z_uu": 0.0,
+          "radius_uu": 400.0,
+          "rung": null,
+          "note": ""
+        },
+        {
+          "name": "walk",
+          "kind": "route",
+          "z_uu": 31.0,
+          "radius_uu": 120.0,
+          "rung": null,
+          "note": "the paved walk at 0.310 m (one riser), +Y of the kerb"
+        },
+        {
+          "name": "edge",
+          "kind": "edge",
+          "z_uu": 31.0,
+          "radius_uu": 400.0,
+          "rung": null,
+          "note": "the kerb line; a balustrade or a bollard run follows it"
+        },
+        {
+          "name": "end_a",
+          "kind": "pier",
+          "z_uu": 0.0,
+          "radius_uu": 30.0,
+          "rung": null,
+          "note": "butts at x = -4.00 m"
+        },
+        {
+          "name": "end_b",
+          "kind": "pier",
+          "z_uu": 0.0,
+          "radius_uu": 30.0,
+          "rung": null,
+          "note": "butts at x = +4.00 m"
+        }
+      ],
+      "parts": [
+        {
+          "part": "kerb",
+          "mesh_name": "WL_Ground_Kerb_Run_kerb",
+          "source": "/home/user/sunday-relay/wonderland/art/blender/exports/fbx/WL_Ground_Kerb_Run_kerb.fbx",
+          "source_exists": true,
+          "destination_path": "/Game/WonderlandV2/Kit/ground",
+          "destination_name": "WL_Ground_Kerb_Run_kerb",
+          "asset_path": "/Game/WonderlandV2/Kit/ground/WL_Ground_Kerb_Run_kerb",
+          "material_instance": "MI_V2_Kerb",
+          "material_path": "/Game/WonderlandV2/Materials/Instances/MI_V2_Kerb",
+          "triangles": 28
+        },
+        {
+          "part": "paving",
+          "mesh_name": "WL_Ground_Kerb_Run_paving",
+          "source": "/home/user/sunday-relay/wonderland/art/blender/exports/fbx/WL_Ground_Kerb_Run_paving.fbx",
+          "source_exists": true,
+          "destination_path": "/Game/WonderlandV2/Kit/ground",
+          "destination_name": "WL_Ground_Kerb_Run_paving",
+          "asset_path": "/Game/WonderlandV2/Kit/ground/WL_Ground_Kerb_Run_paving",
+          "material_instance": "MI_V2_PlazaCream",
+          "material_path": "/Game/WonderlandV2/Materials/Instances/MI_V2_PlazaCream",
+          "triangles": 48
+        },
+        {
+          "part": "paving_shade",
+          "mesh_name": "WL_Ground_Kerb_Run_paving_shade",
+          "source": "/home/user/sunday-relay/wonderland/art/blender/exports/fbx/WL_Ground_Kerb_Run_paving_shade.fbx",
+          "source_exists": true,
+          "destination_path": "/Game/WonderlandV2/Kit/ground",
+          "destination_name": "WL_Ground_Kerb_Run_paving_shade",
+          "asset_path": "/Game/WonderlandV2/Kit/ground/WL_Ground_Kerb_Run_paving_shade",
+          "material_instance": "MI_V2_PlazaShade",
+          "material_path": "/Game/WonderlandV2/Materials/Instances/MI_V2_PlazaShade",
+          "triangles": 24
+        },
+        {
+          "part": "paving_warm",
+          "mesh_name": "WL_Ground_Kerb_Run_paving_warm",
+          "source": "/home/user/sunday-relay/wonderland/art/blender/exports/fbx/WL_Ground_Kerb_Run_paving_warm.fbx",
+          "source_exists": true,
+          "destination_path": "/Game/WonderlandV2/Kit/ground",
+          "destination_name": "WL_Ground_Kerb_Run_paving_warm",
+          "asset_path": "/Game/WonderlandV2/Kit/ground/WL_Ground_Kerb_Run_paving_warm",
+          "material_instance": "MI_V2_PlazaWarm",
+          "material_path": "/Game/WonderlandV2/Materials/Instances/MI_V2_PlazaWarm",
+          "triangles": 48
+        }
+      ]
+    },
+    {
+      "asset_id": "WL_Ground_Kerb_Corner",
+      "family_group": "ground",
+      "variant_of": null,
+      "destination_path": "/Game/WonderlandV2/Kit/ground",
+      "data_layer": "V2_Arrival",
+      "nanite_requested": false,
+      "collision_requested": true,
+      "height_uu": 31.0,
+      "excavation_uu": 0.0,
+      "mounts_on": null,
+      "style": {
+        "slender_broad": 1.0,
+        "low_monumental": 0.0,
+        "open_solid": 1.0,
+        "gold_stone": 1.0,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.838,
+        "ceremonial_residential": 0.5
+      },
+      "sockets": [
+        {
+          "name": "bottom",
+          "kind": "ground",
+          "z_uu": 0.0,
+          "radius_uu": 620.0,
+          "rung": null,
+          "note": ""
+        },
+        {
+          "name": "walk",
+          "kind": "route",
+          "z_uu": 31.0,
+          "radius_uu": 120.0,
+          "rung": null,
+          "note": "the 2.40 m walk turns the corner behind the kerb"
+        },
+        {
+          "name": "end_a",
+          "kind": "pier",
+          "z_uu": 0.0,
+          "radius_uu": 30.0,
+          "rung": null,
+          "note": "arm along +X ends at x = +4.00 m"
+        },
+        {
+          "name": "end_b",
+          "kind": "pier",
+          "z_uu": 0.0,
+          "radius_uu": 30.0,
+          "rung": null,
+          "note": "arm along +Y ends at y = +4.00 m"
+        }
+      ],
+      "parts": [
+        {
+          "part": "kerb",
+          "mesh_name": "WL_Ground_Kerb_Corner_kerb",
+          "source": "/home/user/sunday-relay/wonderland/art/blender/exports/fbx/WL_Ground_Kerb_Corner_kerb.fbx",
+          "source_exists": true,
+          "destination_path": "/Game/WonderlandV2/Kit/ground",
+          "destination_name": "WL_Ground_Kerb_Corner_kerb",
+          "asset_path": "/Game/WonderlandV2/Kit/ground/WL_Ground_Kerb_Corner_kerb",
+          "material_instance": "MI_V2_Kerb",
+          "material_path": "/Game/WonderlandV2/Materials/Instances/MI_V2_Kerb",
+          "triangles": 140
+        },
+        {
+          "part": "paving",
+          "mesh_name": "WL_Ground_Kerb_Corner_paving",
+          "source": "/home/user/sunday-relay/wonderland/art/blender/exports/fbx/WL_Ground_Kerb_Corner_paving.fbx",
+          "source_exists": true,
+          "destination_path": "/Game/WonderlandV2/Kit/ground",
+          "destination_name": "WL_Ground_Kerb_Corner_paving",
+          "asset_path": "/Game/WonderlandV2/Kit/ground/WL_Ground_Kerb_Corner_paving",
+          "material_instance": "MI_V2_PlazaCream",
+          "material_path": "/Game/WonderlandV2/Materials/Instances/MI_V2_PlazaCream",
+          "triangles": 56
+        },
+        {
+          "part": "paving_shade",
+          "mesh_name": "WL_Ground_Kerb_Corner_paving_shade",
+          "source": "/home/user/sunday-relay/wonderland/art/blender/exports/fbx/WL_Ground_Kerb_Corner_paving_shade.fbx",
+          "source_exists": true,
+          "destination_path": "/Game/WonderlandV2/Kit/ground",
+          "destination_name": "WL_Ground_Kerb_Corner_paving_shade",
+          "asset_path": "/Game/WonderlandV2/Kit/ground/WL_Ground_Kerb_Corner_paving_shade",
+          "material_instance": "MI_V2_PlazaShade",
+          "material_path": "/Game/WonderlandV2/Materials/Instances/MI_V2_PlazaShade",
+          "triangles": 56
+        }
+      ]
+    },
+    {
+      "asset_id": "WL_Ground_Step_Single",
+      "family_group": "ground",
+      "variant_of": null,
+      "destination_path": "/Game/WonderlandV2/Kit/ground",
+      "data_layer": "V2_Arrival",
+      "nanite_requested": false,
+      "collision_requested": true,
+      "height_uu": 63.5,
+      "excavation_uu": 0.0,
+      "mounts_on": null,
+      "style": {
+        "slender_broad": 1.0,
+        "low_monumental": 0.0,
+        "open_solid": 1.0,
+        "gold_stone": 1.0,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.53,
+        "ceremonial_residential": 0.5
+      },
+      "sockets": [
+        {
+          "name": "bottom",
+          "kind": "ground",
+          "z_uu": 0.0,
+          "radius_uu": 400.0,
+          "rung": null,
+          "note": ""
+        },
+        {
+          "name": "bottom_route",
+          "kind": "route",
+          "z_uu": 31.0,
+          "radius_uu": 400.0,
+          "rung": null,
+          "note": "the lower surface, one riser off the datum"
+        },
+        {
+          "name": "top_route",
+          "kind": "route",
+          "z_uu": 62.0,
+          "radius_uu": 400.0,
+          "rung": null,
+          "note": "the upper surface, two risers off the datum"
+        },
+        {
+          "name": "end_a",
+          "kind": "pier",
+          "z_uu": 0.0,
+          "radius_uu": 22.0,
+          "rung": null,
+          "note": "butts at x = -4.00 m"
+        },
+        {
+          "name": "end_b",
+          "kind": "pier",
+          "z_uu": 0.0,
+          "radius_uu": 22.0,
+          "rung": null,
+          "note": "butts at x = +4.00 m"
+        }
+      ],
+      "parts": [
+        {
+          "part": "kerb",
+          "mesh_name": "WL_Ground_Step_Single_kerb",
+          "source": "/home/user/sunday-relay/wonderland/art/blender/exports/fbx/WL_Ground_Step_Single_kerb.fbx",
+          "source_exists": true,
+          "destination_path": "/Game/WonderlandV2/Kit/ground",
+          "destination_name": "WL_Ground_Step_Single_kerb",
+          "asset_path": "/Game/WonderlandV2/Kit/ground/WL_Ground_Step_Single_kerb",
+          "material_instance": "MI_V2_Kerb",
+          "material_path": "/Game/WonderlandV2/Materials/Instances/MI_V2_Kerb",
+          "triangles": 28
+        },
+        {
+          "part": "paving",
+          "mesh_name": "WL_Ground_Step_Single_paving",
+          "source": "/home/user/sunday-relay/wonderland/art/blender/exports/fbx/WL_Ground_Step_Single_paving.fbx",
+          "source_exists": true,
+          "destination_path": "/Game/WonderlandV2/Kit/ground",
+          "destination_name": "WL_Ground_Step_Single_paving",
+          "asset_path": "/Game/WonderlandV2/Kit/ground/WL_Ground_Step_Single_paving",
+          "material_instance": "MI_V2_PlazaCream",
+          "material_path": "/Game/WonderlandV2/Materials/Instances/MI_V2_PlazaCream",
+          "triangles": 48
+        },
+        {
+          "part": "paving_shade",
+          "mesh_name": "WL_Ground_Step_Single_paving_shade",
+          "source": "/home/user/sunday-relay/wonderland/art/blender/exports/fbx/WL_Ground_Step_Single_paving_shade.fbx",
+          "source_exists": true,
+          "destination_path": "/Game/WonderlandV2/Kit/ground",
+          "destination_name": "WL_Ground_Step_Single_paving_shade",
+          "asset_path": "/Game/WonderlandV2/Kit/ground/WL_Ground_Step_Single_paving_shade",
+          "material_instance": "MI_V2_PlazaShade",
+          "material_path": "/Game/WonderlandV2/Materials/Instances/MI_V2_PlazaShade",
+          "triangles": 36
+        },
+        {
+          "part": "paving_warm",
+          "mesh_name": "WL_Ground_Step_Single_paving_warm",
+          "source": "/home/user/sunday-relay/wonderland/art/blender/exports/fbx/WL_Ground_Step_Single_paving_warm.fbx",
+          "source_exists": true,
+          "destination_path": "/Game/WonderlandV2/Kit/ground",
+          "destination_name": "WL_Ground_Step_Single_paving_warm",
+          "asset_path": "/Game/WonderlandV2/Kit/ground/WL_Ground_Step_Single_paving_warm",
+          "material_instance": "MI_V2_PlazaWarm",
+          "material_path": "/Game/WonderlandV2/Materials/Instances/MI_V2_PlazaWarm",
+          "triangles": 48
+        }
+      ]
+    },
+    {
+      "asset_id": "WL_Ground_Steps_Broad",
+      "family_group": "ground",
+      "variant_of": null,
+      "destination_path": "/Game/WonderlandV2/Kit/ground",
+      "data_layer": "V2_Arrival",
+      "nanite_requested": false,
+      "collision_requested": true,
+      "height_uu": 124.0,
+      "excavation_uu": 0.0,
+      "mounts_on": null,
+      "style": {
+        "slender_broad": 1.0,
+        "low_monumental": 0.0,
+        "open_solid": 1.0,
+        "gold_stone": 1.0,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.53,
+        "ceremonial_residential": 0.5
+      },
+      "sockets": [
+        {
+          "name": "bottom",
+          "kind": "ground",
+          "z_uu": 0.0,
+          "radius_uu": 400.0,
+          "rung": null,
+          "note": ""
+        },
+        {
+          "name": "bottom_route",
+          "kind": "route",
+          "z_uu": 31.0,
+          "radius_uu": 400.0,
+          "rung": null,
+          "note": "the lower surface, one riser off the datum"
+        },
+        {
+          "name": "top_route",
+          "kind": "route",
+          "z_uu": 124.0,
+          "radius_uu": 400.0,
+          "rung": null,
+          "note": "1.24 m up: four risers off the datum, three above the lower surface"
+        },
+        {
+          "name": "end_a",
+          "kind": "pier",
+          "z_uu": 0.0,
+          "radius_uu": 45.0,
+          "rung": null,
+          "note": "butts at x = -4.00 m"
+        },
+        {
+          "name": "end_b",
+          "kind": "pier",
+          "z_uu": 0.0,
+          "radius_uu": 45.0,
+          "rung": null,
+          "note": "butts at x = +4.00 m"
+        }
+      ],
+      "parts": [
+        {
+          "part": "kerb",
+          "mesh_name": "WL_Ground_Steps_Broad_kerb",
+          "source": "/home/user/sunday-relay/wonderland/art/blender/exports/fbx/WL_Ground_Steps_Broad_kerb.fbx",
+          "source_exists": true,
+          "destination_path": "/Game/WonderlandV2/Kit/ground",
+          "destination_name": "WL_Ground_Steps_Broad_kerb",
+          "asset_path": "/Game/WonderlandV2/Kit/ground/WL_Ground_Steps_Broad_kerb",
+          "material_instance": "MI_V2_Kerb",
+          "material_path": "/Game/WonderlandV2/Materials/Instances/MI_V2_Kerb",
+          "triangles": 84
+        },
+        {
+          "part": "paving",
+          "mesh_name": "WL_Ground_Steps_Broad_paving",
+          "source": "/home/user/sunday-relay/wonderland/art/blender/exports/fbx/WL_Ground_Steps_Broad_paving.fbx",
+          "source_exists": true,
+          "destination_path": "/Game/WonderlandV2/Kit/ground",
+          "destination_name": "WL_Ground_Steps_Broad_paving",
+          "asset_path": "/Game/WonderlandV2/Kit/ground/WL_Ground_Steps_Broad_paving",
+          "material_instance": "MI_V2_PlazaCream",
+          "material_path": "/Game/WonderlandV2/Materials/Instances/MI_V2_PlazaCream",
+          "triangles": 48
+        },
+        {
+          "part": "paving_shade",
+          "mesh_name": "WL_Ground_Steps_Broad_paving_shade",
+          "source": "/home/user/sunday-relay/wonderland/art/blender/exports/fbx/WL_Ground_Steps_Broad_paving_shade.fbx",
+          "source_exists": true,
+          "destination_path": "/Game/WonderlandV2/Kit/ground",
+          "destination_name": "WL_Ground_Steps_Broad_paving_shade",
+          "asset_path": "/Game/WonderlandV2/Kit/ground/WL_Ground_Steps_Broad_paving_shade",
+          "material_instance": "MI_V2_PlazaShade",
+          "material_path": "/Game/WonderlandV2/Materials/Instances/MI_V2_PlazaShade",
+          "triangles": 60
+        },
+        {
+          "part": "paving_warm",
+          "mesh_name": "WL_Ground_Steps_Broad_paving_warm",
+          "source": "/home/user/sunday-relay/wonderland/art/blender/exports/fbx/WL_Ground_Steps_Broad_paving_warm.fbx",
+          "source_exists": true,
+          "destination_path": "/Game/WonderlandV2/Kit/ground",
+          "destination_name": "WL_Ground_Steps_Broad_paving_warm",
+          "asset_path": "/Game/WonderlandV2/Kit/ground/WL_Ground_Steps_Broad_paving_warm",
+          "material_instance": "MI_V2_PlazaWarm",
+          "material_path": "/Game/WonderlandV2/Materials/Instances/MI_V2_PlazaWarm",
+          "triangles": 48
+        }
+      ]
+    },
+    {
+      "asset_id": "WL_Ground_Plaza_Medallion",
+      "family_group": "ground",
+      "variant_of": null,
+      "destination_path": "/Game/WonderlandV2/Kit/ground",
+      "data_layer": "V2_Arrival",
+      "nanite_requested": false,
+      "collision_requested": false,
+      "height_uu": 10.0,
+      "excavation_uu": 0.0,
+      "mounts_on": null,
+      "style": {
+        "slender_broad": 1.0,
+        "low_monumental": 0.0,
+        "open_solid": 1.0,
+        "gold_stone": 0.943,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.588,
+        "ceremonial_residential": 0.7
+      },
+      "sockets": [
+        {
+          "name": "bottom",
+          "kind": "ground",
+          "z_uu": 0.0,
+          "radius_uu": 450.0,
+          "rung": null,
+          "note": ""
+        },
+        {
+          "name": "edge",
+          "kind": "edge",
+          "z_uu": 10.0,
+          "radius_uu": 450.0,
+          "rung": null,
+          "note": "the moulded rim; paving butts to it at any bearing"
+        }
+      ],
+      "parts": [
+        {
+          "part": "gold",
+          "mesh_name": "WL_Ground_Plaza_Medallion_gold",
+          "source": "/home/user/sunday-relay/wonderland/art/blender/exports/fbx/WL_Ground_Plaza_Medallion_gold.fbx",
+          "source_exists": true,
+          "destination_path": "/Game/WonderlandV2/Kit/ground",
+          "destination_name": "WL_Ground_Plaza_Medallion_gold",
+          "asset_path": "/Game/WonderlandV2/Kit/ground/WL_Ground_Plaza_Medallion_gold",
+          "material_instance": "MI_V2_Gold",
+          "material_path": "/Game/WonderlandV2/Materials/Instances/MI_V2_Gold",
+          "triangles": 96
+        },
+        {
+          "part": "kerb",
+          "mesh_name": "WL_Ground_Plaza_Medallion_kerb",
+          "source": "/home/user/sunday-relay/wonderland/art/blender/exports/fbx/WL_Ground_Plaza_Medallion_kerb.fbx",
+          "source_exists": true,
+          "destination_path": "/Game/WonderlandV2/Kit/ground",
+          "destination_name": "WL_Ground_Plaza_Medallion_kerb",
+          "asset_path": "/Game/WonderlandV2/Kit/ground/WL_Ground_Plaza_Medallion_kerb",
+          "material_instance": "MI_V2_Kerb",
+          "material_path": "/Game/WonderlandV2/Materials/Instances/MI_V2_Kerb",
+          "triangles": 316
+        },
+        {
+          "part": "paving",
+          "mesh_name": "WL_Ground_Plaza_Medallion_paving",
+          "source": "/home/user/sunday-relay/wonderland/art/blender/exports/fbx/WL_Ground_Plaza_Medallion_paving.fbx",
+          "source_exists": true,
+          "destination_path": "/Game/WonderlandV2/Kit/ground",
+          "destination_name": "WL_Ground_Plaza_Medallion_paving",
+          "asset_path": "/Game/WonderlandV2/Kit/ground/WL_Ground_Plaza_Medallion_paving",
+          "material_instance": "MI_V2_PlazaCream",
+          "material_path": "/Game/WonderlandV2/Materials/Instances/MI_V2_PlazaCream",
+          "triangles": 160
+        },
+        {
+          "part": "paving_shade",
+          "mesh_name": "WL_Ground_Plaza_Medallion_paving_shade",
+          "source": "/home/user/sunday-relay/wonderland/art/blender/exports/fbx/WL_Ground_Plaza_Medallion_paving_shade.fbx",
+          "source_exists": true,
+          "destination_path": "/Game/WonderlandV2/Kit/ground",
+          "destination_name": "WL_Ground_Plaza_Medallion_paving_shade",
+          "asset_path": "/Game/WonderlandV2/Kit/ground/WL_Ground_Plaza_Medallion_paving_shade",
+          "material_instance": "MI_V2_PlazaShade",
+          "material_path": "/Game/WonderlandV2/Materials/Instances/MI_V2_PlazaShade",
+          "triangles": 632
+        },
+        {
+          "part": "paving_warm",
+          "mesh_name": "WL_Ground_Plaza_Medallion_paving_warm",
+          "source": "/home/user/sunday-relay/wonderland/art/blender/exports/fbx/WL_Ground_Plaza_Medallion_paving_warm.fbx",
+          "source_exists": true,
+          "destination_path": "/Game/WonderlandV2/Kit/ground",
+          "destination_name": "WL_Ground_Plaza_Medallion_paving_warm",
+          "asset_path": "/Game/WonderlandV2/Kit/ground/WL_Ground_Plaza_Medallion_paving_warm",
+          "material_instance": "MI_V2_PlazaWarm",
+          "material_path": "/Game/WonderlandV2/Materials/Instances/MI_V2_PlazaWarm",
+          "triangles": 192
+        }
+      ]
+    },
+    {
+      "asset_id": "WL_Ground_Verge_Run",
+      "family_group": "ground",
+      "variant_of": null,
+      "destination_path": "/Game/WonderlandV2/Kit/ground",
+      "data_layer": "V2_Arrival",
+      "nanite_requested": false,
+      "collision_requested": true,
+      "height_uu": 31.0,
+      "excavation_uu": 0.0,
+      "mounts_on": null,
+      "style": {
+        "slender_broad": 1.0,
+        "low_monumental": 0.0,
+        "open_solid": 1.0,
+        "gold_stone": 1.0,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.53,
+        "ceremonial_residential": 0.5
+      },
+      "sockets": [
+        {
+          "name": "bottom",
+          "kind": "ground",
+          "z_uu": 0.0,
+          "radius_uu": 400.0,
+          "rung": null,
+          "note": ""
+        },
+        {
+          "name": "edge",
+          "kind": "edge",
+          "z_uu": 31.0,
+          "radius_uu": 118.0,
+          "rung": null,
+          "note": "the two kerb lines, 2.36 m apart"
+        },
+        {
+          "name": "end_a",
+          "kind": "pier",
+          "z_uu": 0.0,
+          "radius_uu": 118.0,
+          "rung": null,
+          "note": "butts at x = -4.00 m"
+        },
+        {
+          "name": "end_b",
+          "kind": "pier",
+          "z_uu": 0.0,
+          "radius_uu": 118.0,
+          "rung": null,
+          "note": "butts at x = +4.00 m"
+        }
+      ],
+      "parts": [
+        {
+          "part": "kerb",
+          "mesh_name": "WL_Ground_Verge_Run_kerb",
+          "source": "/home/user/sunday-relay/wonderland/art/blender/exports/fbx/WL_Ground_Verge_Run_kerb.fbx",
+          "source_exists": true,
+          "destination_path": "/Game/WonderlandV2/Kit/ground",
+          "destination_name": "WL_Ground_Verge_Run_kerb",
+          "asset_path": "/Game/WonderlandV2/Kit/ground/WL_Ground_Verge_Run_kerb",
+          "material_instance": "MI_V2_Kerb",
+          "material_path": "/Game/WonderlandV2/Materials/Instances/MI_V2_Kerb",
+          "triangles": 56
+        },
+        {
+          "part": "paving_shade",
+          "mesh_name": "WL_Ground_Verge_Run_paving_shade",
+          "source": "/home/user/sunday-relay/wonderland/art/blender/exports/fbx/WL_Ground_Verge_Run_paving_shade.fbx",
+          "source_exists": true,
+          "destination_path": "/Game/WonderlandV2/Kit/ground",
+          "destination_name": "WL_Ground_Verge_Run_paving_shade",
+          "asset_path": "/Game/WonderlandV2/Kit/ground/WL_Ground_Verge_Run_paving_shade",
+          "material_instance": "MI_V2_PlazaShade",
+          "material_path": "/Game/WonderlandV2/Materials/Instances/MI_V2_PlazaShade",
+          "triangles": 12
+        },
+        {
+          "part": "veg_anchor",
+          "mesh_name": "WL_Ground_Verge_Run_veg_anchor",
+          "source": "/home/user/sunday-relay/wonderland/art/blender/exports/fbx/WL_Ground_Verge_Run_veg_anchor.fbx",
+          "source_exists": true,
+          "destination_path": "/Game/WonderlandV2/Kit/ground",
+          "destination_name": "WL_Ground_Verge_Run_veg_anchor",
+          "asset_path": "/Game/WonderlandV2/Kit/ground/WL_Ground_Verge_Run_veg_anchor",
+          "material_instance": "MI_V2_LeafMid",
+          "material_path": "/Game/WonderlandV2/Materials/Instances/MI_V2_LeafMid",
+          "triangles": 12
+        }
+      ]
+    },
+    {
+      "asset_id": "WL_Ground_Drain_Channel",
+      "family_group": "ground",
+      "variant_of": null,
+      "destination_path": "/Game/WonderlandV2/Kit/ground",
+      "data_layer": "V2_Arrival",
+      "nanite_requested": false,
+      "collision_requested": true,
+      "height_uu": 31.0,
+      "excavation_uu": 0.0,
+      "mounts_on": null,
+      "style": {
+        "slender_broad": 1.0,
+        "low_monumental": 0.0,
+        "open_solid": 1.0,
+        "gold_stone": 1.0,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.763,
+        "ceremonial_residential": 0.5
+      },
+      "sockets": [
+        {
+          "name": "bottom",
+          "kind": "ground",
+          "z_uu": 0.0,
+          "radius_uu": 400.0,
+          "rung": null,
+          "note": ""
+        },
+        {
+          "name": "walk",
+          "kind": "route",
+          "z_uu": 31.0,
+          "radius_uu": 400.0,
+          "rung": null,
+          "note": "the paved surface at 0.310 m, runnel down the middle"
+        },
+        {
+          "name": "end_a",
+          "kind": "pier",
+          "z_uu": 0.0,
+          "radius_uu": 17.0,
+          "rung": null,
+          "note": "butts at x = -4.00 m"
+        },
+        {
+          "name": "end_b",
+          "kind": "pier",
+          "z_uu": 0.0,
+          "radius_uu": 17.0,
+          "rung": null,
+          "note": "butts at x = +4.00 m"
+        }
+      ],
+      "parts": [
+        {
+          "part": "metal",
+          "mesh_name": "WL_Ground_Drain_Channel_metal",
+          "source": "/home/user/sunday-relay/wonderland/art/blender/exports/fbx/WL_Ground_Drain_Channel_metal.fbx",
+          "source_exists": true,
+          "destination_path": "/Game/WonderlandV2/Kit/ground",
+          "destination_name": "WL_Ground_Drain_Channel_metal",
+          "asset_path": "/Game/WonderlandV2/Kit/ground/WL_Ground_Drain_Channel_metal",
+          "material_instance": "MI_V2_Bronze",
+          "material_path": "/Game/WonderlandV2/Materials/Instances/MI_V2_Bronze",
+          "triangles": 216
+        },
+        {
+          "part": "paving",
+          "mesh_name": "WL_Ground_Drain_Channel_paving",
+          "source": "/home/user/sunday-relay/wonderland/art/blender/exports/fbx/WL_Ground_Drain_Channel_paving.fbx",
+          "source_exists": true,
+          "destination_path": "/Game/WonderlandV2/Kit/ground",
+          "destination_name": "WL_Ground_Drain_Channel_paving",
+          "asset_path": "/Game/WonderlandV2/Kit/ground/WL_Ground_Drain_Channel_paving",
+          "material_instance": "MI_V2_PlazaCream",
+          "material_path": "/Game/WonderlandV2/Materials/Instances/MI_V2_PlazaCream",
+          "triangles": 48
+        },
+        {
+          "part": "paving_shade",
+          "mesh_name": "WL_Ground_Drain_Channel_paving_shade",
+          "source": "/home/user/sunday-relay/wonderland/art/blender/exports/fbx/WL_Ground_Drain_Channel_paving_shade.fbx",
+          "source_exists": true,
+          "destination_path": "/Game/WonderlandV2/Kit/ground",
+          "destination_name": "WL_Ground_Drain_Channel_paving_shade",
+          "asset_path": "/Game/WonderlandV2/Kit/ground/WL_Ground_Drain_Channel_paving_shade",
+          "material_instance": "MI_V2_PlazaShade",
+          "material_path": "/Game/WonderlandV2/Materials/Instances/MI_V2_PlazaShade",
+          "triangles": 48
+        },
+        {
+          "part": "paving_warm",
+          "mesh_name": "WL_Ground_Drain_Channel_paving_warm",
+          "source": "/home/user/sunday-relay/wonderland/art/blender/exports/fbx/WL_Ground_Drain_Channel_paving_warm.fbx",
+          "source_exists": true,
+          "destination_path": "/Game/WonderlandV2/Kit/ground",
+          "destination_name": "WL_Ground_Drain_Channel_paving_warm",
+          "asset_path": "/Game/WonderlandV2/Kit/ground/WL_Ground_Drain_Channel_paving_warm",
+          "material_instance": "MI_V2_PlazaWarm",
+          "material_path": "/Game/WonderlandV2/Materials/Instances/MI_V2_PlazaWarm",
+          "triangles": 48
+        }
+      ]
+    },
+    {
+      "asset_id": "WL_Ground_Tree_Grate",
+      "family_group": "ground",
+      "variant_of": null,
+      "destination_path": "/Game/WonderlandV2/Kit/ground",
+      "data_layer": "V2_Arrival",
+      "nanite_requested": false,
+      "collision_requested": true,
+      "height_uu": 31.0,
+      "excavation_uu": 0.0,
+      "mounts_on": null,
+      "style": {
+        "slender_broad": 1.0,
+        "low_monumental": 0.0,
+        "open_solid": 1.0,
+        "gold_stone": 1.0,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.56,
+        "ceremonial_residential": 0.7
+      },
+      "sockets": [
+        {
+          "name": "bottom",
+          "kind": "ground",
+          "z_uu": 0.0,
+          "radius_uu": 340.0,
+          "rung": null,
+          "note": ""
+        },
+        {
+          "name": "walk",
+          "kind": "route",
+          "z_uu": 31.0,
+          "radius_uu": 120.0,
+          "rung": null,
+          "note": "the paving around the opening, at 0.310 m"
+        },
+        {
+          "name": "edge",
+          "kind": "edge",
+          "z_uu": 31.0,
+          "radius_uu": 120.0,
+          "rung": null,
+          "note": "the surround; the 1.40 m opening is inside it"
+        }
+      ],
+      "parts": [
+        {
+          "part": "kerb",
+          "mesh_name": "WL_Ground_Tree_Grate_kerb",
+          "source": "/home/user/sunday-relay/wonderland/art/blender/exports/fbx/WL_Ground_Tree_Grate_kerb.fbx",
+          "source_exists": true,
+          "destination_path": "/Game/WonderlandV2/Kit/ground",
+          "destination_name": "WL_Ground_Tree_Grate_kerb",
+          "asset_path": "/Game/WonderlandV2/Kit/ground/WL_Ground_Tree_Grate_kerb",
+          "material_instance": "MI_V2_Kerb",
+          "material_path": "/Game/WonderlandV2/Materials/Instances/MI_V2_Kerb",
+          "triangles": 112
+        },
+        {
+          "part": "paving",
+          "mesh_name": "WL_Ground_Tree_Grate_paving",
+          "source": "/home/user/sunday-relay/wonderland/art/blender/exports/fbx/WL_Ground_Tree_Grate_paving.fbx",
+          "source_exists": true,
+          "destination_path": "/Game/WonderlandV2/Kit/ground",
+          "destination_name": "WL_Ground_Tree_Grate_paving",
+          "asset_path": "/Game/WonderlandV2/Kit/ground/WL_Ground_Tree_Grate_paving",
+          "material_instance": "MI_V2_PlazaCream",
+          "material_path": "/Game/WonderlandV2/Materials/Instances/MI_V2_PlazaCream",
+          "triangles": 24
+        },
+        {
+          "part": "paving_shade",
+          "mesh_name": "WL_Ground_Tree_Grate_paving_shade",
+          "source": "/home/user/sunday-relay/wonderland/art/blender/exports/fbx/WL_Ground_Tree_Grate_paving_shade.fbx",
+          "source_exists": true,
+          "destination_path": "/Game/WonderlandV2/Kit/ground",
+          "destination_name": "WL_Ground_Tree_Grate_paving_shade",
+          "asset_path": "/Game/WonderlandV2/Kit/ground/WL_Ground_Tree_Grate_paving_shade",
+          "material_instance": "MI_V2_PlazaShade",
+          "material_path": "/Game/WonderlandV2/Materials/Instances/MI_V2_PlazaShade",
+          "triangles": 36
+        },
+        {
+          "part": "paving_warm",
+          "mesh_name": "WL_Ground_Tree_Grate_paving_warm",
+          "source": "/home/user/sunday-relay/wonderland/art/blender/exports/fbx/WL_Ground_Tree_Grate_paving_warm.fbx",
+          "source_exists": true,
+          "destination_path": "/Game/WonderlandV2/Kit/ground",
+          "destination_name": "WL_Ground_Tree_Grate_paving_warm",
+          "asset_path": "/Game/WonderlandV2/Kit/ground/WL_Ground_Tree_Grate_paving_warm",
+          "material_instance": "MI_V2_PlazaWarm",
+          "material_path": "/Game/WonderlandV2/Materials/Instances/MI_V2_PlazaWarm",
+          "triangles": 24
+        },
+        {
+          "part": "veg_anchor",
+          "mesh_name": "WL_Ground_Tree_Grate_veg_anchor",
+          "source": "/home/user/sunday-relay/wonderland/art/blender/exports/fbx/WL_Ground_Tree_Grate_veg_anchor.fbx",
+          "source_exists": true,
+          "destination_path": "/Game/WonderlandV2/Kit/ground",
+          "destination_name": "WL_Ground_Tree_Grate_veg_anchor",
+          "asset_path": "/Game/WonderlandV2/Kit/ground/WL_Ground_Tree_Grate_veg_anchor",
+          "material_instance": "MI_V2_LeafMid",
+          "material_path": "/Game/WonderlandV2/Materials/Instances/MI_V2_LeafMid",
+          "triangles": 12
         }
       ]
     },

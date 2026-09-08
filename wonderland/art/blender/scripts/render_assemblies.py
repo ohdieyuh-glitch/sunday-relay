@@ -46,7 +46,9 @@ OUT = os.path.join(ROOT, "validation", "renders")
 #: looked ALONG rather than at.
 SHOTS = {
     "needle_skyline_cluster": dict(azimuth=68.0, elevation=4.0, res=(1700, 900)),
-    "royal_threshold": dict(azimuth=182.0, elevation=6.0, res=(1700, 700)),
+    # 8, not 182: the arch and the colonnades are on the +X APPROACH, so a
+    # camera behind the gate sees a gate and nothing it is the threshold TO.
+    "royal_threshold": dict(azimuth=32.0, elevation=6.0, res=(1700, 700)),
     "wall_circuit": dict(azimuth=52.0, elevation=13.0, res=(1700, 620)),
     # 262, not 118: the retaining runs batter on their -Y face, so the LOW
     # side is -Y and that is the side a retaining wall is a retaining wall
@@ -59,6 +61,8 @@ SHOTS = {
     # 40, not 6: at 6 the street receded straight away from the camera and the
     # near house hid the four behind it. A street is looked ACROSS.
     "market_street": dict(azimuth=40.0, elevation=12.0, res=(1700, 640)),
+    # ground has no silhouette; what there is to see is its PLAN
+    "street_ground": dict(azimuth=62.0, elevation=34.0, res=(1700, 760)),
 }
 DEFAULT_SHOT = dict(azimuth=70.0, elevation=10.0, res=(1700, 700))
 

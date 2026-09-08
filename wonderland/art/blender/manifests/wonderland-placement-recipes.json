@@ -6,8 +6,8 @@
   "generated_by": "wonderland/art/blender/scripts/make_recipes.py",
   "ownership": "these are PROPOSALS. World placement belongs to the world session; nothing here has been placed into any map and this file does not touch one.",
   "counts": {
-    "recipes": 6,
-    "placements": 106,
+    "recipes": 7,
+    "placements": 123,
     "failed_checks": 0
   },
   "recipes": [
@@ -702,6 +702,226 @@
       "counts": {
         "placements": 15,
         "modules": 4
+      }
+    },
+    {
+      "name": "street_ground",
+      "for": "the made surface: what a plaza is, once it stops being a terrain material",
+      "rule": "kerb runs are laid at their own measured length from the corner's arm end, so they butt; the verge sits one kerb depth behind the walk; everything is one riser off the ground datum, which is the level the water family paves at",
+      "placements": [
+        {
+          "module": "WL_Ground_Kerb_Corner",
+          "at_uu": [
+            0.0,
+            0.0,
+            0.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "the corner: the kerb turns on its own 1.60 m radius",
+          "part_of": "street_ground",
+          "abuts": []
+        },
+        {
+          "module": "WL_Ground_Kerb_Run",
+          "at_uu": [
+            800.0,
+            0.0,
+            0.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "kerb run 1 along +X",
+          "part_of": "street_ground",
+          "abuts": []
+        },
+        {
+          "module": "WL_Ground_Kerb_Run",
+          "at_uu": [
+            1600.0,
+            0.0,
+            0.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "kerb run 2 along +X",
+          "part_of": "street_ground",
+          "abuts": []
+        },
+        {
+          "module": "WL_Ground_Kerb_Run",
+          "at_uu": [
+            2400.0,
+            0.0,
+            0.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "kerb run 3 along +X",
+          "part_of": "street_ground",
+          "abuts": []
+        },
+        {
+          "module": "WL_Ground_Kerb_Run",
+          "at_uu": [
+            0.0,
+            800.0,
+            0.0
+          ],
+          "yaw_deg": 90.0,
+          "why": "kerb run 1 along +Y",
+          "part_of": "street_ground",
+          "abuts": []
+        },
+        {
+          "module": "WL_Ground_Kerb_Run",
+          "at_uu": [
+            0.0,
+            1600.0,
+            0.0
+          ],
+          "yaw_deg": 90.0,
+          "why": "kerb run 2 along +Y",
+          "part_of": "street_ground",
+          "abuts": []
+        },
+        {
+          "module": "WL_Ground_Verge_Run",
+          "at_uu": [
+            800.0,
+            385.0,
+            0.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "verge behind the walk, run 1",
+          "part_of": "street_ground",
+          "abuts": []
+        },
+        {
+          "module": "WL_Ground_Verge_Run",
+          "at_uu": [
+            1600.0,
+            385.0,
+            0.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "verge behind the walk, run 2",
+          "part_of": "street_ground",
+          "abuts": []
+        },
+        {
+          "module": "WL_Ground_Verge_Run",
+          "at_uu": [
+            2400.0,
+            385.0,
+            0.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "verge behind the walk, run 3",
+          "part_of": "street_ground",
+          "abuts": []
+        },
+        {
+          "module": "WL_Ground_Tree_Grate",
+          "at_uu": [
+            1200.0,
+            140.0,
+            0.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "a tree in the walk",
+          "part_of": "street_ground",
+          "abuts": [
+            "WL_Ground_Kerb_Run"
+          ]
+        },
+        {
+          "module": "WL_Ground_Tree_Grate",
+          "at_uu": [
+            2000.0,
+            140.0,
+            0.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "a tree in the walk",
+          "part_of": "street_ground",
+          "abuts": [
+            "WL_Ground_Kerb_Run"
+          ]
+        },
+        {
+          "module": "WL_Ground_Drain_Channel",
+          "at_uu": [
+            800.0,
+            -345.0,
+            0.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "the runnel down the middle of the road",
+          "part_of": "street_ground",
+          "abuts": []
+        },
+        {
+          "module": "WL_Ground_Drain_Channel",
+          "at_uu": [
+            1600.0,
+            -345.0,
+            0.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "the runnel down the middle of the road",
+          "part_of": "street_ground",
+          "abuts": []
+        },
+        {
+          "module": "WL_Ground_Drain_Channel",
+          "at_uu": [
+            2400.0,
+            -345.0,
+            0.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "the runnel down the middle of the road",
+          "part_of": "street_ground",
+          "abuts": []
+        },
+        {
+          "module": "WL_Ground_Plaza_Medallion",
+          "at_uu": [
+            3280.0,
+            -345.0,
+            0.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "the medallion, where the street opens into a plaza",
+          "part_of": "street_ground",
+          "abuts": []
+        },
+        {
+          "module": "WL_Ground_Steps_Broad",
+          "at_uu": [
+            1600.0,
+            931.0,
+            0.0
+          ],
+          "yaw_deg": 0.0,
+          "why": "three shallow risers off the verge",
+          "part_of": "street_ground",
+          "abuts": []
+        },
+        {
+          "module": "WL_Ground_Step_Single",
+          "at_uu": [
+            -302.0,
+            -662.0,
+            0.0
+          ],
+          "yaw_deg": 90.0,
+          "why": "one riser where the road changes level",
+          "part_of": "street_ground",
+          "abuts": []
+        }
+      ],
+      "checks": [],
+      "counts": {
+        "placements": 17,
+        "modules": 8
       }
     },
     {

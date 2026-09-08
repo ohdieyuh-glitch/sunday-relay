@@ -91,6 +91,11 @@ GROUP_LAYER = {
     "roofscape": "V2_Skyline",
     "stairs": "V2_Garden",
     "gardens": "V2_Garden",
+    # THE MADE SURFACE IS THE ARRIVAL. `V2_Arrival` is where the plaza a player
+    # lands in lives, and paving, kerbs and a medallion are that plaza; letting
+    # them fall through to the `V2_Props` default would have put a city's
+    # ground in the same layer as its garden benches.
+    "ground": "V2_Arrival",
     "water": "V2_Garden",
     "market": "V2_Props",
     "details": "V2_Props",

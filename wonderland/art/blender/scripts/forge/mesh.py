@@ -207,7 +207,17 @@ class Part(object):
             # `WL_Tower_Mid_Oriel`'s three bay hoods came out inside-out
             # because of exactly this, and the validator's signed-volume test
             # is what found it. Closing the shell makes the answer determinate.
-            for end, rev in ((0, True), (len(prof) - 1, False)):
+            # ...BUT NOT WHEN THE PROFILE ALREADY CLOSES ON ITSELF. A section
+            # whose first point equals its last is a loop: swept, it is a tube,
+            # and the two radial end faces close it completely. Adding pies to
+            # THAT fills the whole sector back to the axis, which is how
+            # `WL_Ground_Kerb_Corner`'s kerb ring came out as a solid quadrant
+            # of paving-height stone fighting the walk laid on top of it. The
+            # magenta test said black rather than magenta, which is what named
+            # it as two surfaces instead of a hole.
+            loop = (abs(prof[0][0] - prof[-1][0]) < 1e-9
+                    and abs(prof[0][1] - prof[-1][1]) < 1e-9)
+            for end, rev in (() if loop else ((0, True), (len(prof) - 1, False))):
                 kind, row = index[end]
                 if kind != "ring":
                     continue

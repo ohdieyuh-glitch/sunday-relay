@@ -252,6 +252,53 @@ base's at the same places: age and overgrowth may not move a join at all, and
 damage may only drop a join it destroyed and has to say which. A weathered
 module is therefore a drop-in substitution anywhere its base fits.
 
+## GAP 15 — the ground was a material, and a plaza is not a texture
+
+Everything this kit had built STANDS on the ground. Nothing was the ground.
+The world's answer is `MI_V2_PlazaCream` and its four siblings, and for a flat
+surface that is the right answer: modelling an 8 m tile as 128 slabs would cost
+hundreds of triangles to say what the material already says, hundreds of times
+over.
+
+What a material cannot do is RELIEF, and relief is most of what makes a made
+surface read:
+
+  * a KERB is 15 cm of shadow, and 15 cm of shadow is the whole difference
+    between a street and a field with buildings in it
+  * a RUNNEL says the surface sheds water, which means somebody built it
+  * a SINGLE RISER is how two paved areas become two rooms -- you cross it
+    without deciding to, and the plan reads as a composition afterwards
+  * a MEDALLION is why a plaza has a centre. Without one it is a gap between
+    buildings
+  * a TREE GRATE is the hole a street tree stands in, and the world already
+    has better trees than this kit would write
+
+`families/ground.py` is eight modules and 2,900 triangles for the whole family.
+It contains no flat paving on purpose, and the four new material slots
+(`paving`, `paving_warm`, `paving_shade`, `kerb`) all name instances
+`materials_v2.py` already defines -- reaching for `stone` would have made a
+plaza slab the same surface as a tower shaft, which is the one thing the V2
+palette went out of its way to separate.
+
+It also found a bug in the kernel that had been there since the first pass, and
+the bug was in three other modules as well. `mesh.lathe` closes a PARTIAL
+revolve by adding pie slices back to the axis, so an open profile does not
+leave an open shell. It was adding them to closed profiles too, where the swept
+tube is already sealed by its own two radial faces -- so a closed section swept
+90 degrees came back as a solid quadrant of stone filling the corner. The
+magenta pass said BLACK rather than magenta, which is what named it as two
+surfaces rather than a hole.
+
+The guard is now in `lathe`: a section whose first point equals its last gets
+no pies. But it only helps a section that says it is closed, and three others
+were rectangles written as four points without the fifth --
+`WL_Colonnade_Curved`'s plinth and cornices and `WL_Garden_Retaining_Curved`'s
+planting strip. Those modules' origins are their own ARC CENTRES, 24 m and 11 m
+away, so each pie was a disc that size: the retaining run had a green wedge the
+size of its own quadrant, which is what made it visible at all. The colonnade's
+were stone on stone at ground level and had been invisible in every render
+since the module was written.
+
 ## Next, in the order I would do them
 
 Session 1's list is done: the stair vocabulary is GAP 11, the water hero GAP 12,

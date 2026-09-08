@@ -133,6 +133,10 @@ something in this kit broke it:
 - **Solids OVERLAP, they do not butt.** Two boxes meeting exactly face to face
   lose one of their two coincident faces to `Part._append`'s duplicate guard,
   and the shell that is left encloses negative volume.
+- **A PARTIAL revolve wants a CLOSED profile.** `mesh.lathe` seals an open
+  partial revolve by capping it back to the axis, which is right for a profile
+  that does not close on itself and is a solid pie slice for one that does.
+  Repeat the first point as the last and the tube seals on its own ring.
 - **A `route` socket is a level you can CLIMB to** — a whole number of 0.310 m
   risers above the ground datum or above another route in the same module. If
   your module genuinely needs another pitch, put `off_ladder_reason` in its
