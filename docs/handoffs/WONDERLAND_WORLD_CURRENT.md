@@ -575,11 +575,11 @@ KEY and a forge mesh had no key. It has one now.
 
 | | |
 |---|---|
-| `layout_v2.ALL` | 13,816 → **14,796** |
-| kit placements | **864** — 58 of 101 modules, in `V2_Arrival`, `V2_Castle`, `V2_Garden`, `V2_Props`, `V2_Skyline` |
+| `layout_v2.ALL` | 13,816 → **15,170** |
+| kit placements | **1,238** — 79 of 101 modules, in `V2_Arrival`, `V2_Castle`, `V2_Garden`, `V2_Props`, `V2_Skyline` |
 | batches | `tea_terrace` 37, `water_court` 35, `depth_stand` 204, `clock_quarter` 43, `hamlet_street` 142, `ceiling_break` 42, `green_ceiling` 136, `castle_precinct` 108, `garden_levels` 117 |
-| mean built across 33 cameras | 67.78% → **74.82%** (reference 71.5%) |
-| cameras moved | 24 of 33 |
+| mean built across 33 cameras | 67.78% → **75.38%** (reference 71.5%) |
+| cameras moved | 25 of 33 |
 | frames more than half green | 9 → 5 |
 | one piece holding a third | 10 → 9 |
 

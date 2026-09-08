@@ -8,7 +8,7 @@ not the placements.
 | | placements | mean built | cameras moved | one piece holds a third | frames over half green |
 |---|---|---|---|---|---|
 | before | 13,816 | 67.78% | — | 10 | 9 |
-| after | 15,095 | **72.33%** | 24 of 33 | 10 | 6 |
+| after | 15,170 | **75.38%** | 25 of 33 | 9 | 4 |
 
 The founder's reference, classified from its own pixels, is built **71.5%**.
 
@@ -236,14 +236,17 @@ whether or not the thing holding it is a wall in front of the lens.
 
 So the corrected figures, all against a `BEFORE` of 67.78%:
 
-| | before | with the flat rule | calibrated |
-|---|---|---|---|
-| mean built | 67.78% | 74.82% (inflated) | **72.33%** |
-| frames over half green | 9 | 5 | 6 |
-| one piece holding a third | 10 | 9 | 10 |
+| | before | with the flat rule | calibrated | calibrated + ladder |
+|---|---|---|---|---|
+| mean built | 67.78% | 74.82% (inflated) | 72.33% | **75.38%** |
+| frames over half green | 9 | 5 | 6 | **4** |
+| one piece holding a third | 10 | 9 | 10 | **9** |
+| frames below the reference | 16 | 14 | 14 | **13** |
 
-Still past the founder's 71.5% reference, and it is a number that would survive
-someone opening the frame.
+The last column is the one to read. **The honest rule plus a better search
+beats the wrong rule on every measure** — because the rule never made those
+frames unfixable, it only made the tallest spelling the wrong tool for them.
+See "Recovering the ground honestly" below.
 
 **Is 45 degrees the right cap?** Measured, not chosen. Over the 45,924
 piece/camera pairs the world's OWN placements make inside a frame:
@@ -264,6 +267,34 @@ Two more things follow from it, both found by the screen firing:
 - **What looms is the top, not the module.** A 12 m sky bridge slung 30 m up
   reaches 42 m. Asking the module for its height alone would have let it stand
   10 m from a lens on the strength of being a small module.
+
+## Recovering the ground honestly: search the ladder, not the top of it
+
+The calibrated clearance rule cost census because it shrank the ground a 63 m
+tower may stand on. It does not shrink the ground a **48 m** tower may stand
+on, and elevation is a ratio: a 48 m tower at 8 km reaches what a 63 m one
+reaches at 10.5 km, and needs 4,660 uu of camera clearance instead of 6,150.
+
+`spots_on_bearing` asked only the tallest spelling and threw away every spot
+where a shorter one fits — which, once the clearance rule was right, was the
+majority of them. It now walks the whole ladder, tallest first, and takes the
+first height that fits.
+
+**And the height is part of the spot.** Both a spot's elevation in the frame
+and its camera clearance were computed for one specific spelling, so handing it
+a taller one afterwards invalidates both. The first version of the ladder
+search did exactly that — rotating blindly through the spelling table — and the
+screen refused 25 stands chosen for a 48 m tower and given a 63 m one.
+`_spelling_of()` now picks a chain that really is the validated height.
+
+    ceiling_break   42 (flat rule) -> 14 (calibrated) -> 41 (ladder)
+    green_ceiling  136             -> 95             -> 139
+    mean built      74.82% (bad)   -> 72.33%         -> 75.38%
+
+Both above where the flat rule had them, on ground that survives the rule --
+and the census above where the wrong rule ever got it. `ClockQuarterCam13`,
+the worst frame in the suite when this branch started at 18.3% built, is
+**75.0%**.
 
 ## Not proven
 

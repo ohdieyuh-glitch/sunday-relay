@@ -610,7 +610,7 @@ BREAK_OVERSHOOT = 4.0
 MIN_SEP_DEG = 6.0
 
 
-def spots_on_bearing(cam, bands, arc, min_el, height_uu, want, taken,
+def spots_on_bearing(cam, bands, arc, min_el, heights, want, taken,
                      apart=1400.0):
     """Clear ground ACROSS a boss's arc that tops INSIDE the frame above it.
 
@@ -629,6 +629,14 @@ def spots_on_bearing(cam, bands, arc, min_el, height_uu, want, taken,
     ceiling = frame_edge(cam) + BREAK_OVERSHOOT
     loc = _BY_NAME[cam][0]
     out = []
+    # THE WHOLE LADDER, TALLEST FIRST, NOT JUST THE TALLEST. Elevation is a
+    # ratio of height to distance, so a 48 m tower at 8 km reaches what a 63 m
+    # one reaches at 10.5 km -- and it needs 4,660 uu of camera clearance
+    # instead of 6,150. Asking only the tallest spelling threw away every spot
+    # where a shorter one fits, and the clearance rule made those the majority.
+    ladder = sorted({float(h) for h in
+                     (heights if isinstance(heights, (list, tuple, set))
+                      else [heights])}, reverse=True)
     # A BEARING STEP IS NOT A DISTANCE. Three degrees apart at 11.6 km is 600
     # uu of ground, well inside the spacing this batch demands, so a fixed step
     # walked eleven bearings and placed two stands. The step is the angle that
@@ -644,29 +652,55 @@ def spots_on_bearing(cam, bands, arc, min_el, height_uu, want, taken,
     step = min(step, max(MIN_SEP_DEG / 2.0, (hi - lo) / 3.0))
     th = lo
     while th <= hi and len(out) < want:
-        d = 12200.0
-        while d >= 4200.0:
-            top = tops_at(cam, d, height_uu)
-            if top <= min_el + BREAK_MARGIN or top > ceiling:
+        got = None
+        for height_uu in ladder:
+            d = 12200.0
+            while d >= 4200.0:
+                top = tops_at(cam, d, height_uu)
+                if top <= min_el + BREAK_MARGIN or top > ceiling:
+                    d -= 600.0
+                    continue
+                x, y = at_bearing(cam, th, d)
                 d -= 600.0
-                continue
-            x, y = at_bearing(cam, th, d)
-            d -= 600.0
-            if any(math.hypot(x - px, y - py) < apart for px, py, _c, _t in taken):
-                continue
-            if any(c == cam and abs(t - th) < MIN_SEP_DEG
-                   for _px, _py, c, t in taken):
-                continue
-            if looms(x, y, height_uu):
-                continue
-            if _neighbours(bands, x, y) > 34:
-                continue
-            out.append((x, y, th, top,
-                        math.hypot(x - loc[0], y - loc[1])))
-            taken.append((x, y, cam, th))
-            break
+                if any(math.hypot(x - px, y - py) < apart
+                       for px, py, _c, _t in taken):
+                    continue
+                if any(c == cam and abs(t - th) < MIN_SEP_DEG
+                       for _px, _py, c, t in taken):
+                    continue
+                if looms(x, y, height_uu):
+                    continue
+                if _neighbours(bands, x, y) > 34:
+                    continue
+                got = (x, y, th, top, math.hypot(x - loc[0], y - loc[1]),
+                       height_uu)
+                break
+            if got:
+                break
+        if got:
+            # THE HEIGHT IS PART OF THE SPOT. It was validated against `looms`
+            # for THIS spelling: handing the spot a taller one afterwards is
+            # how 25 stands were chosen for a 48 m tower and then given a 63 m
+            # one, which the screen then refused. The caller picks a spelling
+            # that actually is this tall.
+            out.append(got)
+            taken.append((got[0], got[1], cam, th))
         th += step
     return out
+
+
+def _spelling_of(spells, height_uu, seed=0):
+    """A spelling that really is `height_uu` tall, varied by `seed`.
+
+    `spots_on_bearing` validates a spot against a specific height -- both its
+    elevation in the frame and its camera clearance depend on it -- so the
+    stand that lands there has to be that tall. Rotating blindly through the
+    spelling table put a 63 m tower on ground cleared for a 48 m one.
+    """
+    same = [c for c in spells if abs(c[1] - float(height_uu)) < 1.0]
+    if not same:
+        same = sorted(spells, key=lambda c: abs(c[1] - float(height_uu)))[:1]
+    return same[seed % len(same)]
 
 
 def _ceiling_break(bands):
@@ -691,20 +725,20 @@ def _ceiling_break(bands):
     pass left it (+16.6 built). A batch that placed it would have scored.
     """
     out, taken, chosen = [], [], []
-    spells = KIT.spellings(want=12, min_height_uu=5200.0)
-    tallest = max(h for _c, h in spells)
+    spells = KIT.spellings(want=12, min_height_uu=4200.0)
+    ladder = [h for _c, h in spells]
     for cam, boss, arc, el in CEILING_BREAK:
-        got = spots_on_bearing(cam, bands, arc, el, tallest, 8, taken)
+        got = spots_on_bearing(cam, bands, arc, el, ladder, 8, taken)
         if not got:
             SKIPPED.append("%s: nothing between %+.1f (over %s) and %+.1f "
                            "(the frame's edge plus %.0f) on bearings %s"
                            % (cam, el + BREAK_MARGIN, boss,
                               frame_edge(cam) + BREAK_OVERSHOOT,
                               BREAK_OVERSHOOT, arc))
-        for (x, y, th, top, r) in got:
-            chosen.append((x, y, th, top, r, cam, boss))
-    for i, (x, y, _th, _top, _r, _cam, _boss) in enumerate(chosen):
-        chain, _h = spells[i % len(spells)]
+        for (x, y, th, top, r, h) in got:
+            chosen.append((x, y, th, top, r, cam, boss, h))
+    for i, (x, y, _th, _top, _r, _cam, _boss, want_h) in enumerate(chosen):
+        chain, _h = _spelling_of(spells, want_h, i)
         out += KIT.stack(chain, (x, y, 0.0), rot=(0.0, float((i * 63) % 360), 0.0),
                          label="KitBreak%02d" % (i + 1), band="V2_Skyline")
         out += KIT.placements_for("WL_Ground_Plaza_Medallion", (x, y, 0.0),
@@ -775,23 +809,23 @@ def _green_ceiling(bands):
     rather than the batch quietly shrinking.
     """
     out, taken, chosen = [], [], []
-    spells = KIT.spellings(want=12, min_height_uu=5200.0)
-    tallest = max(h for _c, h in spells)
+    spells = KIT.spellings(want=12, min_height_uu=4200.0)
+    ladder = [h for _c, h in spells]
     for cam, arc, el in GREEN_CEILINGS:
         if cam in GROVE_CAMS:
             continue
-        got = spots_on_bearing(cam, bands, arc, el, tallest, 2, taken)
+        got = spots_on_bearing(cam, bands, arc, el, ladder, 2, taken)
         if not got:
             SKIPPED.append("%s: no clear ground on %s topping between %+.1f and "
                            "%+.1f" % (cam, arc, el + BREAK_MARGIN,
                                       frame_edge(cam) + BREAK_OVERSHOOT))
-        for (x, y, th, top, r) in got:
-            chosen.append((x, y, th, top, r, cam))
+        for (x, y, th, top, r, h) in got:
+            chosen.append((x, y, th, top, r, cam, h))
     # a different offset into the spelling table from `_ceiling_break`, so the
     # two passes do not put the same tower in two frames of the same district
     off = len(BREAK_CHOSEN)
-    for i, (x, y, _th, _top, _r, _cam) in enumerate(chosen):
-        chain, _h = spells[(i + off) % len(spells)]
+    for i, (x, y, _th, _top, _r, _cam, want_h) in enumerate(chosen):
+        chain, _h = _spelling_of(spells, want_h, i + off)
         out += KIT.stack(chain, (x, y, 0.0), rot=(0.0, float((i * 41 + 20) % 360), 0.0),
                          label="KitGreen%02d" % (i + 1), band="V2_Skyline")
         out += KIT.placements_for("WL_Ground_Plaza_Medallion", (x, y, 0.0),
