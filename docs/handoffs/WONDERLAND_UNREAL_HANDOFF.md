@@ -107,11 +107,52 @@ EXECUTION: A–M below, none of which can be done without Unreal.
 The two open cloud-side DECISIONS, neither of which blocks A–M:
 the Project Brain kind vocabulary above, and an authority that reports usage.
 
-### The decode, which is unwritten and has two quiet traps
+### The decode, which is BUILT — and how to run it
 
-`Wonderland.Build.cs` has depended on `Json` and `JsonUtilities` since the
-module existed and **no C++ file uses them**. Writing that decoder is step D's
-real work, and two things about it will not announce themselves:
+An earlier revision of this section said the decoder was unwritten. It is
+written now: `WonderlandWireDecode.h/.cpp`, with its enum tables generated from
+the same parity contract. **Read this before touching it**, because the shape of
+the proof is unusual and deliberate.
+
+| | |
+|---|---|
+| entry | `WonderlandDecodeDeliveryBytes` — an SSE `data:` payload, `{envelope, activity}` |
+| also | `WonderlandDecodeEnvelopeBytes` for a bare envelope; the same reader underneath |
+| framing | `WonderlandWireReadSseData` finds the data line; a heartbeat yields nothing, without erroring |
+| run it | `npm run wonderland:wire:verify` |
+
+**It parses its own JSON, and that is not an oversight.** A decoder built on
+`FJsonObjectConverter` could not be executed in the environment that wrote it
+and would have shipped unproven — and it would map by NAME, which is the one
+thing this seam cannot do. The parser here is small, strict and dependency-free,
+so the code that ships is the code the harness runs at -O0 and -O2 under ASan
+and UBSan, with the two builds required to agree.
+
+**Nothing is defaulted.** Twelve named refusals cover malformed JSON, duplicate
+keys, trailing content, wrong types, unknown tokens, non-finite and fractional
+numbers, values past the exact-integer range, blank identity, and depth/size
+ceilings. `false` is not unknown, `zero` is not unknown, `missing` is not
+`empty`, and an empty string is a VALUE — each of those has a test. Identity is
+validated before anything a subsystem could be handed.
+
+**An unknown token is refused by name**, never left at ordinal 0. That is the
+whole point: zero is `Unobserved` in every enum this reads, so a decoder that
+fell back to it would make a broken client look like a silent Relay.
+
+**The two halves of a delivery must agree about whose run it is.** Nothing
+downstream compares them, so a delivery whose activity named another project
+would push one run's signals onto another's world.
+
+`wonderland/Tools/WireHarness/fixtures.tsv` and `deliveries.tsv` are GENERATED
+by calling the real `wonderlandEnvelope()` and serialising it exactly as the
+bridge does, then damaged one field at a time for the refusal cases. Every
+visual state, every worker role and every activity signal has a fixture, so a
+vocabulary that moves on one side is caught by name. Regenerate with
+`npm run wonderland:wire:fixtures`; a TypeScript test holds them fresh.
+
+### The two traps it closes, for anyone changing it
+
+Neither announces itself, which is why the decoder is shaped the way it is:
 
 **Absence.** TypeScript has `null`; Unreal's numerics, strings and bools do
 not. Ninety fields cross as a value-or-`null` and land in a carrier —
@@ -131,8 +172,9 @@ engine open and hours on the clock.
 carrier field, every enum's token→member table, every struct that crosses. It
 is GENERATED from the same parity tables that hold the headers, so it cannot
 describe a seam the headers no longer have; `npm run wonderland:wire:check`
-fails when it drifts. Read it before writing the decoder rather than after
-debugging one.
+fails when it drifts. The decoder covers the ENVELOPE and the ACTIVITY READING;
+the other structs in that document — the hydration, the usage HUD — still need
+one, and the same rules apply to them.
 
 ### The Unreal proof checklist (A–M)
 
@@ -146,7 +188,7 @@ this stream can tell you about it.
 | **A** | the module compiles | `wonderland/Source/Wonderland/*` against real UE headers. Expect UHT to want `.generated.h` files that are one-line stubs here. Build log, zero errors |
 | **B** | the widget compiles | `WonderlandUsageHudWidget.cpp` is **the only file on this seam never compiled against real UMG**. The Slate calls are the unproven part; the geometry underneath them is proven numerically (66 samples, worst deviation 1e-6) |
 | **C** | the world launches | editor opens, PIE enters the hub, the Dog is the default pawn by construction (`AWonderlandHubGameMode`) |
-| **D** | the transport connects | point the client at a running Bridge; SSE opens, the heartbeat arrives |
+| **D** | the transport connects | point the client at a running Bridge; SSE opens, the heartbeat arrives. The decode is BUILT — `WonderlandDecodeDeliveryBytes` — so this step is wiring a socket to it, not writing one |
 | **E** | the project session authenticates | redeem a pairing grant, then call `/wonderland/julius/hydrate?projectId=…&runId=…`. **A 503 here means the reader is still unwired, not that you did it wrong** |
 | **F** | a Julius mission runs | a real run, not a fixture. This is the first moment anything on this seam has been REAL |
 | **G** | the dog animates from a phase | push envelopes through `UWonderlandJuliusSubsystem::ApplyEnvelope` and watch the clip follow the visual state |

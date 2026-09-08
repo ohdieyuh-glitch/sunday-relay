@@ -931,6 +931,104 @@ enum was written, every existing test passed, and it would have surfaced as
 
 ---
 
+### 43–44. The real database, and the decoder (session of 2026-09-08, fifth part)
+
+Two gaps that had been described as closed by proxy: SQL proven by a stub, and
+a decode contract proven by a document.
+
+#### The reader, against a real PostgreSQL
+
+`wonderland-julius-reader-real-postgres.test.ts` runs the PRODUCTION class —
+not a re-spelling of its query — against a cluster built by the real migration
+chain from empty. Thirty tests, gated on `JULIUS_REAL_POSTGRES=1` plus
+`WONDERLAND_TEST_DATABASE_URL`, the same switch `real-infra-julius.test.ts`
+uses. Without them they report as **todo**: visibly not run, rather than
+passing on nothing.
+
+To run it here: `initdb` as the `postgres` user (it refuses to run as root),
+start on a spare port, create a database, then
+
+```
+JULIUS_REAL_POSTGRES=1 WONDERLAND_TEST_DATABASE_URL=postgres://… \
+  npx vitest run src/relay/persistence/wonderland-julius-reader-real-postgres.test.ts
+```
+
+**The real schema corrected the fixture three times**, and each is the sort of
+thing only a cluster says out loud:
+
+| constraint | what it caught |
+|---|---|
+| `CHECK((state='ACTIVE')=(lease_owner IS NOT NULL))` | a seeded task that was ACTIVE with no lease |
+| `CHECK((state='PENDING')=(decided_at IS NULL))` | a decided approval that named nobody |
+| `UNIQUE(stream_id, sequence)` | a Julius append landing on a battle row's number |
+
+That last one is worth keeping: **the sequence space is per stream and shared
+across writers.** Julius allocates from `relay_wonderland.stream_sequences`;
+anything writing to the same `stream_id` without that allocator can collide
+with it.
+
+#### Five mutations escaped, and every one was the FIXTURE
+
+With one run per project, run-scope and project-scope are redundant — either
+can be deleted with every test still green. With one approval and it PENDING,
+the state filter is decorative. With only `julius.%` rows, the prefix filter is
+too. The seed now carries a second run inside project A at higher sequences,
+rows written onto project A's stream id **under project B** (`stream_id` has no
+foreign key, so nothing in the schema stops that), battle rows from the other
+writer on the shared table, and approvals on three runs across two projects.
+Fifteen mutations, all caught — including one proving the reader still refuses
+an unknown kernel state on a database that has genuinely lost its CHECK.
+
+#### And two of my assertions were wrong
+
+A snapshot's `atSequence` is `MAX(sequence)` over the ledger; an ordering
+cursor's `sequence` is the last APPLIED envelope. Silent events move the first
+and not the second, so **they legitimately differ** — the snapshot is never
+behind, which is the direction that matters. What converges between a cold
+hydrate and a folded stream is the REVISION, not the position. And the run row
+and the event stream can legitimately disagree about the phase: a review
+starting under an EXECUTING run is exactly what the second axis exists to show.
+
+#### The decoder, which did not exist
+
+`Wonderland.Build.cs` had depended on `Json` and `JsonUtilities` since the
+module was written and **no C++ file used them**. The path from an SSE frame to
+a USTRUCT was unwritten.
+
+It exists now, it does not map by name, and it parses its own JSON — so the
+code that ships is the code the harness runs at -O0 and -O2 under ASan and
+UBSan. A decoder on the engine's JSON API could not have been executed in the
+environment that wrote it.
+
+Twelve named refusals, nothing defaulted, identity validated before a subsystem
+could be reached. An unknown token is refused BY NAME rather than left at
+ordinal 0 — zero is `Unobserved` everywhere here, so the fallback would make a
+broken client look like a silent Relay, which is the hardest symptom there is
+to diagnose with an engine open.
+
+**The delivery's two halves must agree about whose run it is.** Nothing
+downstream compares them; every later check reads the envelope alone.
+
+#### The fixture pairing (§3)
+
+46 envelope fixtures and 10 delivery fixtures, produced by calling the REAL
+`wonderlandEnvelope()` and the REAL activity fold and serialising them exactly
+as the bridge does, then damaged one field at a time for the refusals. Every
+visual state, worker role and activity signal has one.
+
+The link is load-bearing, and that was checked rather than assumed: adding a
+state to `JULIUS_VISUAL_STATES` and regenerating only the fixtures made the C++
+refuse `state-ascended` as `unknown_token` immediately.
+
+They live in the source tree, not `generated/` — which is gitignored, so a
+fresh checkout would find no fixtures and the harness would report success over
+an empty file. A TypeScript test holds them fresh and sweeps them for provider
+names and credentials; the `metadata-dropped` fixture is BUILT with a
+secret-shaped key, and its absence is the sanitiser working on the real
+construction path rather than a fixture that politely omitted one.
+
+---
+
 ---
 
 ## What is REAL and what is not
@@ -960,8 +1058,9 @@ distinction between the middle two rows is the one that gets misreported.
 | a real Julius event becoming an envelope | **real** and tested — and nothing has ever fed it a row from a live database |
 | the transport boundary (scope, decode, validate, order, fold) | **real**, tested against reconnects, mis-routed fan-outs and replayed tails |
 | the Julius world routes | **real**, authorised per request against `project_members`, and READING through `WonderlandJuliusReaderPostgres` — proven end to end over real HTTP against a stubbed database |
-| the two world reads | **real**, mutation-verified — and no statement has ever run against a live PostgreSQL |
-| the wire → USTRUCT decode contract | **real** and generated from the parity tables; the DECODER it describes is **not built** |
+| the two world reads | **real**, mutation-verified, and RUN AGAINST A REAL PostgreSQL 16.13 — real migration chain from empty, two seeded projects, 30 tests |
+| the wire → USTRUCT decode contract | **real** and generated from the parity tables |
+| the wire DECODER | **real** — envelope, activity and SSE framing, 139 checks at -O0 and -O2 under ASan/UBSan, driven by fixtures the TypeScript generated. Never compiled against Unreal |
 | the Unreal ordering rule | **real**, replayed through 26 cases generated from the TypeScript, 450 checks |
 | the Project Brain scope | **real** contract, canary-tested; no authority cites into it yet |
 | Unreal DRAWING any of it | **not proven.** `WonderlandUsageHudWidget.cpp` parses and has never been compiled against real UMG headers or seen to put a pixel on a screen. |
@@ -1330,28 +1429,29 @@ purpose and confirmed to fail:
 
 ## Exact next integration task
 
-**There is no cloud-side one left on this seam.** The reader, the membership
-authority and the route are built, wired and tested; the remaining uncertainty
-is ENGINE EXECUTION — the A–M checklist in the Unreal handoff, none of which can
-be done without Unreal.
+**Still nothing cloud-side on this seam, and now with less taken on trust.**
+The reader has run against a real PostgreSQL; the decoder exists and is driven
+by fixtures the server generated. What remains is ENGINE EXECUTION — A–M in the
+Unreal handoff — plus the decoders for the structs the envelope path does not
+cover.
 
-Two cloud-side DECISIONS are open, and neither blocks A–M:
+In order:
 
-1. **The Project Brain kind vocabulary.** `julius_brain_entries.entry_kind`
-   holds `RESEARCH_NOTE` and `ACCEPTANCE_UPDATE`, which `WONDERLAND_BRAIN_KINDS`
-   does not have; the citation has `OBJECTIVE`, `REQUIREMENT` and `EVIDENCE`,
-   which nothing sources. `scopeWonderlandBrain` drops what it does not
-   recognise, so citing on the overlap would report a smaller retrieval than
-   happened. Until the two are reconciled the reader cites nothing, which is
-   true.
-
-2. **An authority that reports usage.** The contract, the four readings, the
-   tier ladders and both meters exist and are mirrored into C++. Nothing
-   attributes spend into them, so the HUD draws UNKNOWN — correctly.
-
-**And one operational step**, whenever the founder wants the deployed bridge to
-serve a world: set `DATABASE_URL` on Railway. Both dependencies are built from
-it; without it the route answers 503, which is correct rather than broken.
+1. **Set `DATABASE_URL` on the Railway bridge.** One environment variable; both
+   world dependencies are built from it. Without it the route answers 503,
+   which is correct rather than broken.
+2. **A decoder for the HYDRATION and the USAGE HUD.**
+   `WonderlandDecodeDeliveryBytes` covers the per-event path — envelope plus
+   activity — which is what `ApplyEnvelope` takes. `/wonderland/julius/hydrate`
+   returns a larger shape, and `UWonderlandUsageSubsystem::ApplyUsage` needs the
+   meters. Same rules, same generated tables, same harness; `WONDERLAND_WIRE_CONTRACT.md`
+   already lists every carrier field in both.
+3. **Run A–M.** Nothing about it can be done here.
+4. **Capture one real Julius event stream** and grade it with
+   `verifyWonderlandCapture` — still the cheapest step up the honesty ladder and
+   the only one that moves anything off INTEGRATION-READY.
+5. **Two contract decisions**, neither blocking: the Project Brain kind
+   vocabulary (section 41) and an authority that reports usage.
 
 ### The older next-task, still true and now second
 
