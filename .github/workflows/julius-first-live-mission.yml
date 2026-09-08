@@ -691,7 +691,12 @@ jobs:
           # proof is a row the gate reports as unproven, not a reason to lose
           # the artifact. No provider credential is involved — the drill's three
           # role adapters are fakes and only the recovery path is production.
-          if docker exec -e PGPASSWORD julius-postgres createdb -U "$PGUSER" julius_recovery_drill 2>/dev/null; then
+          # `set -u` is in force and DATABASE_URL is exported by the executor
+          # launch, so a mission that never got that far would ABORT this step
+          # on the expansion below and lose the evidence collected above it.
+          # Guarded, not assumed.
+          if [ -n "${DATABASE_URL:-}" ] \
+            && docker exec -e PGPASSWORD julius-postgres createdb -U "$PGUSER" julius_recovery_drill 2>/dev/null; then
             if DATABASE_URL="${DATABASE_URL%/*}/julius_recovery_drill" \
                 npm run julius:recovery-drill --silent -- --out /tmp/julius-capability-proofs > /dev/null 2>&1; then
               cp /tmp/julius-capability-proofs/capability-proofs.tsv \
