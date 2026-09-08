@@ -1158,10 +1158,17 @@ Every suite this stream added, with what each one is actually for:
 | `wonderland-hud.test.tsx` | 21 | the rendered HUD: mask region, per-instance ids, reading labels |
 | `wonderland-julius-link.test.ts` | — | the composition and its `live_runtime` / `development_fixture` label |
 
-**2,128 passing across the whole UI and wonderland slices**, 0 failed. Plus the
-repository boundary scanner, the core boundary test, the Julius harness drift
-gate, the C++ syntax check, `npm run typecheck` (all four projects) and
-`npm run build` — all clean.
+**989 passing across the Wonderland slice** (52 files: the mission modules, the
+Postgres reader, and both bridge route suites), 0 failed. Plus the repository
+boundary scanner, the core boundary test, the Julius harness drift gate, the
+surface-parity gate, the C++ syntax check, the ordering and geometry fixtures,
+the wire-contract freshness check, `npm run typecheck` (all four projects),
+`npm run build`, `relay:build` and `relay:bridge:build` — all clean.
+
+The gate list in `CLAUDE.md` is a LIST, and reading part of it is how two
+defects reached `origin` in this stream: a failing typecheck under a green test
+count, and a test that could pass on half a run under a green wonderland
+slice. Run all of it.
 
 ### The full suite, and its one failure
 
@@ -1361,8 +1368,10 @@ ledger directly rather than depending on that route.
 **A. Starting SHA** — `b2dc9f2` (`origin/main`, unchanged throughout; this
 stream never merged into or from `relay/wonderland-v2`).
 
-**B. Ending SHA** — `e8a09ec` on `relay/wonderland-integration`, pushed to both
-that ref and `claude/relay-wonderland-integration-ojr5x6` (same commits).
+**B. Ending SHA** — see `git log -1`, which is authoritative. This report's
+figures were taken at `4a4ba77` on `relay/wonderland-integration`, pushed to
+both that ref and `claude/relay-wonderland-integration-ojr5x6` (same commits).
+Sections 38–42 above cover everything after the original A–L brief.
 
 **C. Integration layers completed** — twenty-three, listed under "What was built":
 the state seam, the HUD, the link, the Unreal receiver, the HUD freeze, the
@@ -1414,11 +1423,15 @@ synthesised.
 **J. Still simulated** — every event any test or demo folds. The HUD no longer
 draws simulated numbers on any production path; it draws `UNKNOWN`.
 
-**K. Tests and evidence** — 2,128 passing across the UI and wonderland slices; plus the repository boundary scanner, the
-core boundary test, the Julius harness drift gate and the C++ syntax check. Nine
-deliberate mutations confirmed the important suites can actually fail, and the
-HUD was rendered in headless Chromium and measured rather than assumed. Full
-`npm test` at the final SHA: **9,877 passing, 1 failing across 514 files**.
+**K. Tests and evidence** — 989 passing across the Wonderland slice at the time
+of writing; plus the repository boundary scanner, the core boundary test, the
+Julius harness drift gate, the surface-parity gate, the C++ syntax check, the
+ordering and geometry fixtures and the wire-contract freshness check. Roughly
+seventy deliberate mutations across this stream confirmed the suites can
+actually fail — with several escapes on first pass, every one of them a gap in
+the TEST rather than the code. The HUD was rendered in headless Chromium and
+measured rather than assumed. Full `npm test` at `1ad7160`: **10,186 passing,
+1 failing across 530 files** (184s).
 
 The failure is environmental and not this stream's:
 `claude-code.test.ts > classifies an API-key environment as disallowed` sets
@@ -1433,18 +1446,26 @@ in subtrees this stream does not touch, and the pair of them is worth knowing
 about: this suite has at least two failures that depend on the machine and the
 scheduler rather than on the code.
 
-**L. The next five gaps** — in order:
+**L. The next five gaps** — REVISED after sessions 38–42, in order. The first
+three are no longer software architecture:
 
-1. Wire the normalizer into a composition root so an ordinary Julius run
-   produces world events (see "Exact next integration task").
-2. Fix the two `relay_wonderland.events` defects (gap 3) — **Julius session.**
-   Step 1 must not reach production before this.
-3. Capture one real Julius event stream and grade it with
-   `verifyWonderlandCapture`. The machinery is built and waiting; this is the
-   cheapest step up the honesty ladder and the only one that moves anything off
-   INTEGRATION-READY. It needs a live run, so it needs the Julius session.
-4. Bind `UWonderlandRelayLink` on `relay/wonderland-v2` as the first renderer,
-   and register it in `BUILT_IN_WONDERLAND_RENDERERS`.
-5. Widen `server.ts`'s nine-phase filter to all 28 — one line, in a file the
-   Julius session owns.
+1. **Set `DATABASE_URL` on the Railway bridge.** One environment variable; both
+   world dependencies are built from it. Until then `/wonderland/julius/*`
+   answers 503, correctly.
+2. **Write the wire → USTRUCT decoder** against
+   `docs/handoffs/WONDERLAND_WIRE_CONTRACT.md`. Unwritten, and the two traps in
+   it fail quietly — see section 42. Needs the engine to prove, not to write.
+3. **Run A–M** in the Unreal handoff. Everything cloud-side that A–M depends on
+   exists and is tested; nothing about A–M can be done here.
+4. **Capture one real Julius event stream** and grade it with
+   `verifyWonderlandCapture`. Still the cheapest step up the honesty ladder and
+   still the only one that moves anything off INTEGRATION-READY. Needs a live
+   run, so it needs the Julius session.
+5. **Two contract decisions**, neither blocking: the Project Brain kind
+   vocabulary (section 41) and an authority that reports usage.
+
+Two items from the original list are superseded rather than done. Wiring the
+normalizer into `GET /wonderland/events` is no longer the path to a moving
+world — the Julius reader reads the ledger directly — and `server.ts`'s
+nine-phase filter belongs to the Julius session and does not gate this seam.
 
