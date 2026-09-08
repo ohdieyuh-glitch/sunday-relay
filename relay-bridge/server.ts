@@ -74,6 +74,15 @@ import {
   handleWonderlandJuliusRoute,
   isWonderlandJuliusRoute,
 } from './wonderland-julius-routes';
+import type {
+  WonderlandJuliusReader,
+  WonderlandProjectMembershipSource,
+} from './wonderland-julius-routes';
+import {
+  WonderlandJuliusReaderPostgres,
+  WonderlandMembershipPostgres,
+} from '../src/relay/persistence';
+import type { Pool } from 'pg';
 
 const MAX_BODY_BYTES = 64 * 1024;
 
@@ -144,6 +153,48 @@ function readBody(req: IncomingMessage): Promise<unknown> {
     req.on('error', () => reject(new Error('request error')));
   });
 }
+
+/**
+ * The database the world routes read from, or null.
+ *
+ * A SEPARATE, EXPORTED DECISION because it is the one that decides whether
+ * `/wonderland/julius/*` can answer at all, and it is otherwise invisible: an
+ * empty `DATABASE_URL` and an absent one produce the same 401 for every request
+ * that has no session, so a test driving the server cannot tell them apart. It
+ * is tested here directly instead.
+ *
+ * BLANK IS ABSENT. A deployment that sets the variable and leaves it empty has
+ * not configured a database, and building a pool for it would trade the honest
+ * "this deployment is not configured" for a connection error on first use.
+ */
+export const wonderlandJuliusDatabaseUrl = (env: NodeJS.ProcessEnv): string | null => {
+  const url = env.DATABASE_URL;
+  return typeof url === 'string' && url.trim() !== '' ? url : null;
+};
+
+/** The two reads the world routes need. Both, or the route cannot answer. */
+export interface WonderlandJuliusWorld {
+  readonly reader: WonderlandJuliusReader;
+  readonly membership: WonderlandProjectMembershipSource;
+}
+
+/**
+ * BOTH DEPENDENCIES, FROM ONE POOL, OR NEITHER.
+ *
+ * A separate function because "both or neither" is the property that matters
+ * and it is invisible from outside: a bridge wired with membership and no
+ * reader answers 503 exactly like an unwired one, so no request can tell them
+ * apart — and the half-wired state is the one that would later be "fixed" by
+ * relaxing the reader check rather than by supplying a reader.
+ *
+ * ONE POOL for both, so a membership answer and the read it authorises come
+ * from the same database. Two pools would be two connection strings waiting to
+ * disagree.
+ */
+export const wonderlandJuliusWorld = (pool: Pool): WonderlandJuliusWorld => ({
+  reader: new WonderlandJuliusReaderPostgres(pool),
+  membership: new WonderlandMembershipPostgres(pool),
+});
 
 export function createBridgeServer(
   config: BridgeConfig,
@@ -230,6 +281,16 @@ export function createBridgeServer(
   brainStore: BrainMemoryStore | null = null,
   /** Authoritative Wonderland state. Inject a durable restored instance in production. */
   wonderlandBackend: WonderlandBackend | null = null,
+  /**
+   * The two world reads, injected instead of built from `DATABASE_URL`.
+   *
+   * Null in production, where they are built lazily from the environment. A
+   * test injects them because the branches past the membership lookup are
+   * otherwise unreachable without a live Postgres: an unwired bridge, a wired
+   * one whose database is unreachable, and a wired one missing HALF its
+   * dependencies all answer 503, so no request can tell them apart.
+   */
+  juliusWorld: WonderlandJuliusWorld | null = null,
 ): Server {
   /**
    * Browser pairing state lives in MEMORY, for the lifetime of this process.
@@ -246,6 +307,31 @@ export function createBridgeServer(
    * ANY is absent the routes answer 503, so an unconfigured bridge says "no
    * sign-in" rather than fabricating a session.
    */
+  /**
+   * THE JULIUS WORLD ROUTES' TWO DEPENDENCIES, OR NEITHER.
+   *
+   * Both come from one pool and both are absent together when `DATABASE_URL` is
+   * not set — which keeps the route's fail-closed 503 exactly as it was for a
+   * deployment with no database, rather than half-wiring it into a state where
+   * membership can be checked and nothing can be read.
+   *
+   * The pool is created LAZILY, on the first world request, so a bridge that
+   * never serves one opens no connection. `pg` is imported dynamically for the
+   * same reason: the module is only loaded where it is actually used.
+   */
+  let juliusWorldDeps: WonderlandJuliusWorld | null | undefined = juliusWorld ?? undefined;
+  const resolveJuliusWorld = async () => {
+    if (juliusWorldDeps !== undefined) return juliusWorldDeps;
+    const url = wonderlandJuliusDatabaseUrl(process.env);
+    if (url === null) {
+      juliusWorldDeps = null;
+      return juliusWorldDeps;
+    }
+    const { Pool } = await import('pg');
+    juliusWorldDeps = wonderlandJuliusWorld(new Pool({ connectionString: url }));
+    return juliusWorldDeps;
+  };
+
   const oauthStateStore = createOAuthStateStore();
   const githubOAuthConfig = githubOAuthConfigFromEnv(process.env);
   const githubCallbackUrl = typeof process.env.RELAY_GITHUB_APP_CALLBACK_URL === 'string'
@@ -512,15 +598,17 @@ export function createBridgeServer(
         // `isWonderlandRoute` claims the whole `/wonderland/` prefix and would
         // otherwise swallow these and 404 them.
         //
-        // NO READER AND NO MEMBERSHIP PORT ARE PASSED, and that is not an
-        // oversight. The browser session this bridge issues names a player and
-        // an origin and NOT a project, so nothing here can yet answer "may this
-        // player read this project's runs?" — and the tempting default, any
-        // authenticated player may read any project, is a cross-tenant read of
-        // mission state, C.A.R.D. slots and spend. The route answers 503 until
-        // both are wired, which is the only safe thing an unconfigured
-        // authorisation can do.
+        // BOTH DEPENDENCIES OR NEITHER. Without `DATABASE_URL` there is no
+        // membership authority and no reader, and the route answers 503 — the
+        // only safe thing an unconfigured authorisation can do, since the
+        // tempting default (any authenticated player may read any project) is
+        // a cross-tenant read of mission state, C.A.R.D. slots and spend.
+        //
+        // The browser session names a PLAYER and an ORIGIN and not a project,
+        // so the project in the query is a request to be authorised; the
+        // membership port is what makes it an authorisation.
         if (isWonderlandJuliusRoute(path.replace('/relay-api', ''))) {
+          const world = await resolveJuliusWorld();
           const juliusResult = await handleWonderlandJuliusRoute({
             method,
             path: path.replace('/relay-api', ''),
@@ -528,7 +616,13 @@ export function createBridgeServer(
             authorization: typeof req.headers.authorization === 'string' ? req.headers.authorization : undefined,
             origin,
             now: Date.now(),
-          }, { sessions: browserSessions, response: res, request: req });
+          }, {
+            sessions: browserSessions,
+            reader: world?.reader,
+            membership: world?.membership,
+            response: res,
+            request: req,
+          });
           if (juliusResult !== null) send(res, juliusResult.status, juliusResult.body, cors);
           return;
         }

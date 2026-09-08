@@ -67,3 +67,13 @@ export { JuliusToolPostgresRepository } from './julius-tool-postgres';
 
 export { JuliusToolRecoveryPostgresRepository } from './julius-tool-recovery-postgres';
 export { JuliusToolSettlementPostgresRepository } from './julius-tool-settlement-postgres';
+
+/**
+ * The Wonderland world routes' two reads.
+ *
+ * Exported together because the Bridge wires them together — a membership
+ * check with nothing to read, or a reader with nothing authorising it, is a
+ * half-configured route and the composition root refuses to build one.
+ */
+export { WonderlandMembershipPostgres, WonderlandRunScopePostgres } from './wonderland-membership-postgres';
+export { WonderlandJuliusReaderPostgres } from './wonderland-julius-reader-postgres';

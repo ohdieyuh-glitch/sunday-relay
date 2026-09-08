@@ -18,7 +18,7 @@ Read this first. Everything below it is the detail.
 | | |
 |---|---|
 | BRANCH | `relay/wonderland-integration`, also `claude/relay-wonderland-integration-ojr5x6` — same commits, two refs |
-| SHA | `b9f6324` (check `git log -1` — that is authoritative) |
+| SHA | `bb880c3`+ (check `git log -1` — that is authoritative) |
 | WHAT HAS RUN LIVE | **nothing.** No provider call, no Julius mission, no Unreal build, no frame |
 
 **The remaining work is compile, import, connect, display, drive, reconnect,
@@ -59,16 +59,53 @@ The properties a client can rely on, each held by a test:
 - Changing project mid-stream re-authorises. Same session, same origin, same
   player — none of it carries a permission across a project boundary.
 
+### The reader is built too, and the route is wired
+
+`WonderlandJuliusReaderPostgres` (in `src/relay/persistence/`) implements the
+two reads, and `server.ts` constructs it — with the membership source, from one
+pool — when `DATABASE_URL` is set. **Both dependencies or neither**: a bridge
+with membership and no reader answers 503 exactly like an unwired one, which is
+the half-configured state that would later be "fixed" by relaxing a check
+instead of supplying a reader, so the factory builds them together.
+
+| method | what it does |
+|---|---|
+| `hydrate` | run state, `julius_runs.version`, `MAX(sequence)`, active tasks and pending approvals — **in ONE statement**, so all five describe the same instant |
+| `events` | raw `WonderlandLedgerRow`s after a cursor plus the run's version, also one statement, anchored on the RUN and joining the events so the revision comes back even when the page is empty |
+
+The activity fold is bounded by the position that same statement returned
+(`sequence <= atSequence`), so the fold and the state describe one moment. It
+covers the WHOLE run, not a window, because signals are raised AND cleared —
+`context.compiled` raises `retrieving_context` and `worker.dispatched` clears
+it — and a partial fold reports a signal that stopped being true an hour ago.
+
+**What the hydration does not claim**, and each is a real limit rather than a
+placeholder:
+
+- **Usage draws UNKNOWN.** No authority attributes spend into the usage
+  contract yet. Both meters, every figure.
+- **No Project Brain is cited.** `julius_context_snapshots` holds almost
+  exactly what a citation wants, but its kinds come from
+  `julius_brain_entries.entry_kind`, whose vocabulary is NOT the citation's:
+  `RESEARCH_NOTE` and `ACCEPTANCE_UPDATE` have no counterpart, and `OBJECTIVE`,
+  `REQUIREMENT` and `EVIDENCE` have no source. Citing on the overlap alone
+  would report a smaller retrieval than happened, as a fact. **Reconciling the
+  two vocabularies is the next contract decision on this seam.**
+- **The C.A.R.D. slots are NULL.** `julius_runs.card_revision` is free text
+  with no foreign key and nothing in the persistence layer reads
+  `card_versions`, so the revision crosses as a real opaque handle and the
+  three slots say "nobody looked". `FWonderlandCardScope` now carries them as
+  `FWonderlandFlag` rather than `bool` for exactly this: a zero-filled USTRUCT
+  would have handed a renderer `false` — "the Coding Agent slot is empty" — for
+  a run whose card nobody resolved.
+
 ### The one thing that is genuinely not built
 
-**`WonderlandJuliusReader` has no production implementation.** The port is
-defined in `wonderland-julius-routes.ts` and every test supplies a fake; nothing
-constructs a real one, and `server.ts` passes neither it nor the membership
-source. So the deployed route still answers **503** — correctly, and for a
-different reason than it used to.
+**Nothing cloud-side.** The remaining uncertainty on this seam is ENGINE
+EXECUTION: A–M below, none of which can be done without Unreal.
 
-That is the last cloud-side gap on this seam. Everything else on the path from
-a `relay_wonderland.events` row to a drawn frame exists and is tested.
+The two open cloud-side DECISIONS, neither of which blocks A–M:
+the Project Brain kind vocabulary above, and an authority that reports usage.
 
 ### The Unreal proof checklist (A–M)
 
@@ -109,13 +146,12 @@ stays UNPROVEN, and this document says so in three places on purpose.**
 
 ```
 1. WonderlandProjectMembership          BUILT — WonderlandMembershipPostgres.
-                                        Construct it with the pool.
-2. WonderlandJuliusReader               THE MISSING ONE. hydrate() + events();
-                                        both read MAX(sequence) with the run
-                                        row, in ONE pass — a revision from one
-                                        moment and a sequence from another
-                                        describe a run that never existed.
-3. pass both into handleWonderlandJuliusRoute in server.ts
+2. WonderlandJuliusReader               BUILT — WonderlandJuliusReaderPostgres.
+3. server.ts                            WIRED — set DATABASE_URL on the bridge
+                                        and both are constructed from one pool.
+                                        Without it the route answers 503, which
+                                        is the only safe thing an unconfigured
+                                        authorisation can do.
 4. UWonderlandJuliusSubsystem::BindProject / AdoptSnapshot / ApplyEnvelope
 5. UWonderlandUsageSubsystem::BindProject / ApplyUsage
 6. bind the HUD widget to OnUsageChanged

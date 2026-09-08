@@ -366,14 +366,19 @@ struct FWonderlandCardScope
 	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Card")
 	FString CardRevision;
 
+	// A SLOT, OR THE ABSENCE OF AN ANSWER. FWonderlandFlag rather than bool
+	// because a zero-filled USTRUCT would otherwise hand a renderer `false` —
+	// "the Coding Agent slot is empty" — for a hydration whose reader simply
+	// could not resolve the C.A.R.D. behind the run. `bKnown` false means
+	// nobody looked; only `bKnown && !bValue` is an empty slot.
 	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Card")
-	bool bHasPromptArchitect = false;
+	FWonderlandFlag HasPromptArchitect;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Card")
-	bool bHasCodingAgent = false;
+	FWonderlandFlag HasCodingAgent;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Card")
-	bool bHasIndependentReviewer = false;
+	FWonderlandFlag HasIndependentReviewer;
 
 	// MAY spawn a swarm, which is not "is running one" — that is `Swarming` on
 	// the activity axis. A world needs this one to leave room before any clone

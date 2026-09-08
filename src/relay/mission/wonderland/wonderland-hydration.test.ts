@@ -63,6 +63,39 @@ describe('what a world may know about a C.A.R.D.', () => {
     expect(JSON.stringify(scope)).not.toContain('model');
   });
 
+  it('says NULL, not empty, when nobody could read the record', () => {
+    // The failure this closes. `julius_runs.card_revision` is free text with no
+    // foreign key, and nothing in the persistence layer reads
+    // `relay_wonderland.card_versions` — so the reader that is about to be
+    // written cannot resolve the slots. Reporting them `false` would draw three
+    // unfilled roles as a fact about a C.A.R.D. nobody has seen.
+    const unresolved = scopeWonderlandCard({ cardRevision: 'card:v3' });
+    expect(unresolved.hasPromptArchitect).toBeNull();
+    expect(unresolved.hasCodingAgent).toBeNull();
+    expect(unresolved.hasIndependentReviewer).toBeNull();
+  });
+
+  it('distinguishes a slot the record says is EMPTY from one nobody read', () => {
+    // Present-and-blank is an answer; absent is not. Those are different facts
+    // and only the first may be drawn.
+    const read = scopeWonderlandCard({
+      cardRevision: 'card:v3',
+      promptArchitect: '',
+      codingAgent: null,
+      reviewer: '   ',
+    });
+    expect(read.hasPromptArchitect).toBe(false);
+    expect(read.hasCodingAgent).toBe(false);
+    expect(read.hasIndependentReviewer).toBe(false);
+
+    // And a partial read stays partial: one slot resolved does not make the
+    // other two answerable.
+    const partial = scopeWonderlandCard({ cardRevision: 'card:v3', codingAgent: 'x' });
+    expect(partial.hasCodingAgent).toBe(true);
+    expect(partial.hasPromptArchitect).toBeNull();
+    expect(partial.hasIndependentReviewer).toBeNull();
+  });
+
   it('never carries a provider or model name, whatever it is handed', () => {
     // The inversion is the guarantee: `models`, `tools` and `permissions` are
     // not parameters, so no expression in the scope could copy one.

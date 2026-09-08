@@ -78,7 +78,14 @@ export interface WonderlandCardScope {
   /** Opaque handle. The world compares it and never parses it. */
   readonly cardRevision: string;
   /**
-   * A role SLOT is filled. Never which provider fills it.
+   * A role SLOT is filled, or NULL when nobody could look.
+   *
+   * NULL IS NOT FALSE, AND THIS IS WHERE THAT BIT. A reader that cannot
+   * resolve the C.A.R.D. behind a run — which is every reader today, because
+   * `julius_runs.card_revision` is free text with no foreign key and nothing in
+   * the persistence layer reads `relay_wonderland.card_versions` — would
+   * otherwise report all three slots EMPTY, and a world would draw three
+   * unfilled roles as a fact. Unknown is not zero here as everywhere else.
    *
    * Named `has*` rather than `*Assigned` for two reasons, and the second is
    * the one that matters: `has` reads as a question a world ASKS, while
@@ -88,9 +95,9 @@ export interface WonderlandCardScope {
    * same substring trap as `sk-` inside `task-`. The rename fixes the real
    * problem and sidesteps the accidental one.)
    */
-  readonly hasPromptArchitect: boolean;
-  readonly hasCodingAgent: boolean;
-  readonly hasIndependentReviewer: boolean;
+  readonly hasPromptArchitect: boolean | null;
+  readonly hasCodingAgent: boolean | null;
+  readonly hasIndependentReviewer: boolean | null;
   /**
    * Whether this C.A.R.D. permits a swarm at all.
    *
@@ -132,7 +139,13 @@ export const WONDERLAND_CARD_SCOPE_FIELDS = exactKeys<WonderlandCardScope>()([
  */
 export interface WonderlandCardInput {
   readonly cardRevision: string;
-  /** The slot assignments, as the record holds them. Emptiness means unfilled. */
+  /**
+   * The slot assignments, as the record holds them.
+   *
+   * PRESENT-AND-EMPTY is "the record says nobody". ABSENT is "I could not read
+   * the record" — omit the property rather than passing a blank, because a
+   * blank is an answer and this module will report it as one.
+   */
   readonly promptArchitect?: string | null;
   readonly codingAgent?: string | null;
   readonly reviewer?: string | null;
@@ -145,8 +158,19 @@ const isAutonomy = (value: unknown): value is WonderlandAutonomyLevel =>
   typeof value === 'string' &&
   (WONDERLAND_AUTONOMY_LEVELS as readonly string[]).includes(value);
 
-const assigned = (value: string | null | undefined): boolean =>
-  typeof value === 'string' && value.trim() !== '';
+/**
+ * Whether a slot is filled, and whether that is even knowable.
+ *
+ * ABSENT MEANS UNKNOWN; PRESENT-AND-EMPTY MEANS EMPTY. A caller that resolved
+ * the record and found nothing in the slot passes `null` or `''` and gets
+ * `false` — a real answer. A caller that could not resolve the record omits the
+ * property entirely and gets `null`. The distinction is the whole point: those
+ * are different facts and only one of them may be drawn.
+ */
+const slotFilled = (value: string | null | undefined, supplied: boolean): boolean | null => {
+  if (!supplied) return null;
+  return typeof value === 'string' && value.trim() !== '';
+};
 
 /** Narrow a C.A.R.D. record into what a world may know. THE ONLY CONSTRUCTOR. */
 export function scopeWonderlandCard(input: WonderlandCardInput): WonderlandCardScope {
@@ -157,9 +181,9 @@ export function scopeWonderlandCard(input: WonderlandCardInput): WonderlandCardS
 
   return Object.freeze({
     cardRevision: input.cardRevision,
-    hasPromptArchitect: assigned(input.promptArchitect),
-    hasCodingAgent: assigned(input.codingAgent),
-    hasIndependentReviewer: assigned(input.reviewer),
+    hasPromptArchitect: slotFilled(input.promptArchitect, 'promptArchitect' in input),
+    hasCodingAgent: slotFilled(input.codingAgent, 'codingAgent' in input),
+    hasIndependentReviewer: slotFilled(input.reviewer, 'reviewer' in input),
     swarmEligible: swarmRoles.length > 0,
     eligibleSwarmRoles: Object.freeze([...new Set(swarmRoles)].sort()),
     autonomy: isAutonomy(input.autonomy) ? input.autonomy : null,

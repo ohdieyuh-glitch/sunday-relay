@@ -653,9 +653,9 @@ project — is a cross-tenant read of mission state, C.A.R.D. slots and spend, a
 a route that opened when its authorisation was unconfigured would work
 perfectly wherever nobody had wired it.
 
-> **Superseded.** That port was built in the session below (38–40). What is
-> still missing on this path is `WonderlandJuliusReader`, and the route still
-> answers 503 — for a different reason.
+> **Superseded.** Both ports were built in the sessions below (38–40 and 41).
+> The route reads through `WonderlandJuliusReaderPostgres` when `DATABASE_URL`
+> is set, and answers 503 when it is not.
 
 
 #### Two narrowings worth knowing about
@@ -807,6 +807,96 @@ rediscovering that.
 
 ---
 
+### 41. The reader, and the contract change it forced (session of 2026-09-08, fourth part)
+
+**The last cloud-side port.** `WonderlandJuliusReaderPostgres` implements the
+two reads the world routes have been written against for three sessions, and
+`server.ts` constructs it with the membership source — from ONE pool, so a
+membership answer and the read it authorises come from one database.
+
+#### One statement per answer
+
+A hydration carries a run's STATE, its REVISION and the ledger POSITION that
+state includes. Read in three statements those describe a run that never
+existed. So `hydrate` issues one query with the counts and the `MAX(sequence)`
+hanging off the run row as sub-selects, and `events` is anchored on the RUN with
+a `LEFT JOIN LATERAL` onto the events — which is also why the revision comes
+back when the page is empty, where a query anchored on the events table returns
+nothing and leaves the caller inventing one.
+
+The activity fold is the one thing SQL cannot do, and it is bounded by the
+position that same statement returned. Unbounded, it would see events written
+since, the client would be told about them here AND receive them again in the
+tail, and the subagent counters — which move up as well as down, unlike the
+signals — would be applied twice.
+
+#### The contract change: a slot that nobody read is not an empty slot
+
+Building the reader turned up something the contract could not express.
+`julius_runs.card_revision` is **free text with no foreign key**, and **nothing
+in the persistence layer reads `relay_wonderland.card_versions`** — the type
+lives in `wonderland-backend.ts`, the in-memory battle backend. So no reader can
+resolve which roles a run's C.A.R.D. fills.
+
+`WonderlandCardScope.hasCodingAgent` was a `bool`, so the only thing the reader
+could have said was `false`: three unfilled roles, drawn as a fact, about a
+record nobody had seen. The three fields are now `boolean | null`, mirrored as
+`FWonderlandFlag` rather than `bool` — a zero-filled USTRUCT would have handed a
+renderer the same lie on the C++ side. `scopeWonderlandCard` distinguishes a
+slot the record says is EMPTY (the property is present and blank) from one
+nobody read (the property is absent), because those are different facts and only
+one of them may be drawn.
+
+This is the ordinary shape of the rule that runs through the whole product —
+unknown is not zero — arriving at a place nobody had looked.
+
+#### What it refuses to make up
+
+| part | what it reports | why |
+|---|---|---|
+| usage | UNKNOWN, every figure | no authority attributes spend into the contract |
+| Project Brain | nothing cited | see below — a vocabulary mismatch, not an absence |
+| C.A.R.D. slots | null | nothing can resolve the record |
+| C.A.R.D. revision | the real handle | `julius_runs.card_revision` IS that, opaque and carried |
+
+**The Project Brain mismatch is a finding, not a gap.**
+`julius_context_snapshots` holds almost exactly what a citation wants — revision,
+character count, redaction count, truncation, content hash. Its kinds come from
+`julius_brain_entries.entry_kind`, whose vocabulary is not the citation's:
+`RESEARCH_NOTE` and `ACCEPTANCE_UPDATE` have no counterpart, and `OBJECTIVE`,
+`REQUIREMENT` and `EVIDENCE` have no source. `scopeWonderlandBrain` silently
+drops kinds it does not know, so citing on the overlap would report a smaller
+retrieval than happened, as a fact. **Reconciling the two vocabularies is the
+next contract decision on this seam** and it is deliberately not guessed at.
+
+#### The first end-to-end proof over real HTTP
+
+`relay-bridge/wonderland-julius-server.test.ts` boots the actual bridge, mints a
+real browser session through the real pairing flow, and drives
+`/wonderland/julius/hydrate` and `/events` — the streaming one read a chunk at a
+time, because it is SSE and stays open. Only the database is a stub, answering
+the shapes `pg` actually returns (`bigint` as a string, `timestamptz` as
+something `new Date()` parses). It proves the hydration crosses with its
+revision and position intact, that `null` survives JSON as `null`, that a
+non-member and a non-existent run get the same answer, and that no provider name
+appears on either path.
+
+The world had to become injectable for that. Without it, an unwired bridge, a
+wired one whose database is unreachable, and a wired one missing HALF its
+dependencies all answer 503 — indistinguishable from outside, which is exactly
+how a half-wired route survives. Three mutations of `server.ts` escaped every
+test until the injection existed.
+
+#### Two lines nothing can distinguish
+
+Recorded so nobody re-derives them. `applyWonderlandOrdering`'s `Math.max` on an
+accepted envelope's revision is unreachable (the verdict already refuses
+anything lower), and skipping the pool construction when `DATABASE_URL` is
+blank changes no observable behaviour (both paths 503). Both are left as
+documented defence rather than covered by tests that only appear to cover them.
+
+---
+
 ---
 
 ## What is REAL and what is not
@@ -835,7 +925,8 @@ distinction between the middle two rows is the one that gets misreported.
 | the Unreal usage and run subsystems | **real**, 213 executable checks over refusals, held state, snapshot adoption in both modes, and reconnect (152 + 61) |
 | a real Julius event becoming an envelope | **real** and tested — and nothing has ever fed it a row from a live database |
 | the transport boundary (scope, decode, validate, order, fold) | **real**, tested against reconnects, mis-routed fan-outs and replayed tails |
-| the Julius world routes | **real**, authorised per request against `project_members` — and answering 503 until a `WonderlandJuliusReader` exists |
+| the Julius world routes | **real**, authorised per request against `project_members`, and READING through `WonderlandJuliusReaderPostgres` — proven end to end over real HTTP against a stubbed database |
+| the two world reads | **real**, mutation-verified — and no statement has ever run against a live PostgreSQL |
 | the Unreal ordering rule | **real**, replayed through 26 cases generated from the TypeScript, 450 checks |
 | the Project Brain scope | **real** contract, canary-tested; no authority cites into it yet |
 | Unreal DRAWING any of it | **not proven.** `WonderlandUsageHudWidget.cpp` parses and has never been compiled against real UMG headers or seen to put a pixel on a screen. |
@@ -1197,59 +1288,28 @@ purpose and confirmed to fail:
 
 ## Exact next integration task
 
-**Implement `WonderlandJuliusReader` and construct it, with
-`WonderlandMembershipPostgres`, in `server.ts`.** That is the whole remaining
-cloud-side gap: the route is written, authorised and tested; every test supplies
-a fake reader; nothing builds a real one, and `server.ts` passes neither
-dependency — so the deployed route answers 503, correctly.
+**There is no cloud-side one left on this seam.** The reader, the membership
+authority and the route are built, wired and tested; the remaining uncertainty
+is ENGINE EXECUTION — the A–M checklist in the Unreal handoff, none of which can
+be done without Unreal.
 
-Two methods, and the hard part is in the first:
+Two cloud-side DECISIONS are open, and neither blocks A–M:
 
-```
-hydrate({ projectId, runId, worldSessionId }) -> WonderlandHydration | null
-events({ projectId, runId, afterSequence, limit }) -> { rows, revision }
-```
+1. **The Project Brain kind vocabulary.** `julius_brain_entries.entry_kind`
+   holds `RESEARCH_NOTE` and `ACCEPTANCE_UPDATE`, which `WONDERLAND_BRAIN_KINDS`
+   does not have; the citation has `OBJECTIVE`, `REQUIREMENT` and `EVIDENCE`,
+   which nothing sources. `scopeWonderlandBrain` drops what it does not
+   recognise, so citing on the overlap would report a smaller retrieval than
+   happened. Until the two are reconciled the reader cites nothing, which is
+   true.
 
-1. **`events` is nearly written already.** `julius-timeline-postgres.ts` reads
-   `relay_wonderland.events` by `stream_id + project_id + sequence >` with an
-   `event_type LIKE 'julius.%'` filter; this needs the same query returning the
-   RAW row shape `WonderlandLedgerRow` rather than a projected timeline entry,
-   plus `julius_runs.version` read in the same statement.
+2. **An authority that reports usage.** The contract, the four readings, the
+   tier ladders and both meters exist and are mirrored into C++. Nothing
+   attributes spend into them, so the HUD draws UNKNOWN — correctly.
 
-2. **`hydrate` must read the run row and `MAX(sequence)` IN ONE PASS.** A
-   revision from one moment and a sequence from another describe a run that
-   never existed. This is not a style preference — it is the field that closed
-   the post-snapshot deafness defect, and a torn read reintroduces it.
-
-3. **Do not guess `atSequence`.** Null is a supported answer and the
-   conservative tie-break handles it. Guessing high skips events; guessing low
-   claims to have applied events nobody saw. Both are demonstrated as executable
-   tests in `wonderland-cursor-hardening.test.ts` — read them before deciding
-   this is over-cautious.
-
-4. **The honest answers for the parts with no authority.** Usage has no
-   authority reporting into it and the Project Brain has nothing citing into it,
-   so `emptyWonderlandUsageAuthority` and `noWonderlandBrainCitation` are the
-   TRUE readings today, not placeholders — they render UNKNOWN, which is what
-   is actually known.
-
-5. **`WonderlandCardScope` is the one place this gets awkward.**
-   `hasPromptArchitect` and friends are booleans, not nullables, so a reader
-   that cannot resolve `julius_runs.card_revision` against
-   `relay_wonderland.card_versions` has no way to say "I could not look" — it
-   would report the slots EMPTY, which is a claim. Either resolve the card
-   properly or widen the contract to nullable. **Do not report false.**
-
-6. **The activity fold is server-side, and must be over the whole run.** Signals
-   are set/clear, not monotonic — `context.compiled` raises `retrieving_context`
-   and `worker.dispatched` clears it — so a partial fold can report a signal
-   that was cleared an hour ago. Folding the run's events on the server is
-   exactly how the client is spared the transcript; it is not a contradiction of
-   the reconnect rule, which is about what crosses the wire.
-
-Then, and only then, drive a real mission through it and record the evidence
-here. **Do not claim Julius is connected before a real mission moves the
-world.**
+**And one operational step**, whenever the founder wants the deployed bridge to
+serve a world: set `DATABASE_URL` on Railway. Both dependencies are built from
+it; without it the route answers 503, which is correct rather than broken.
 
 ### The older next-task, still true and now second
 

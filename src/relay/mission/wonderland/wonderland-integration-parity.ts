@@ -255,7 +255,12 @@ const _ActivityIntentNullableIsExact: SameKeys<
 > = true;
 void _ActivityIntentNullableIsExact;
 
-const CARD_SCOPE_NULLABLE = ['autonomy'] as const;
+const CARD_SCOPE_NULLABLE = [
+  'autonomy',
+  'hasPromptArchitect',
+  'hasCodingAgent',
+  'hasIndependentReviewer',
+] as const;
 const _CardScopeNullableIsExact: SameKeys<
   (typeof CARD_SCOPE_NULLABLE)[number],
   NullableKeysOf<WonderlandCardScope>
