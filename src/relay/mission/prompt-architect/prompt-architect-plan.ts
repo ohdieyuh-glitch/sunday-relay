@@ -58,6 +58,15 @@ export type PlanValidation =
      * literal from the lists below — never text a model produced.
      */
     readonly reasonField?: string;
+    /**
+     * WHICH FALSE-WORK PHRASE FIRED, when the rule was `plan_false_work_claim`.
+     *
+     * Separate from `reasonField` because the two are different kinds of fact:
+     * the field is WHERE and the claim is WHAT, and the diagnostics allowlist
+     * admits a structural path in one column and a token in another. Absent for
+     * every other rule, which have no phrase.
+     */
+    readonly reasonClaim?: ArchitectPlanClaimToken;
   };
 
 const isStringArray = (v: unknown): v is string[] =>
@@ -144,11 +153,17 @@ export function validateArchitectPlan(raw: unknown): PlanValidation {
       ok: false,
       reason: `plan claims work that did not happen: "${claim.phrase}"`,
       reasonCode: 'plan_false_work_claim',
-      // BOTH HALVES, and both are safe. The phrase is one of four literals this
-      // file owns, and the path is structural. Paid run 34185920678 refused a
-      // 14,581-byte plan with this code and nothing else, and there was no way
-      // to tell a real completion claim from a prohibition that names one.
-      reasonField: `${claim.path} :: ${claim.phrase}`,
+      // BOTH HALVES, IN TWO FIELDS, because the diagnostics allowlist reads
+      // them differently. `reasonField` is a structural path and nothing else —
+      // `safeFieldName` publishes a path and drops anything carrying prose, so
+      // a "path :: phrase" string would have been dropped whole and the operator
+      // would have read an empty `validation_field` for a SECOND time.
+      // `reasonClaim` is a token from the closed set above, which the same
+      // allowlist keeps as an ordinary token. Paid runs 34185920678 and
+      // 34186711214 both refused with this code and neither could say which of
+      // the four phrases fired, or where.
+      reasonField: claim.path,
+      reasonClaim: claim.token,
     };
   }
 
@@ -184,14 +199,60 @@ export function validateArchitectPlan(raw: unknown): PlanValidation {
  * The walk reports WHERE, which is the other half of the repair: a refusal that
  * cannot be explained is a refusal nobody can act on.
  */
-const FALSE_WORK_CLAIMS = ['files were edited', 'tests were run', 'i ran the tests', 'i edited'] as const;
+const FALSE_WORK_CLAIMS = [
+  { phrase: 'files were edited', token: 'files_were_edited' },
+  { phrase: 'tests were run', token: 'tests_were_run' },
+  { phrase: 'i ran the tests', token: 'i_ran_the_tests' },
+  { phrase: 'i edited', token: 'i_edited' },
+] as const;
+
+/** Which of the four phrases fired, as a token the diagnostics allowlist keeps. */
+export type ArchitectPlanClaimToken = (typeof FALSE_WORK_CLAIMS)[number]['token'];
 
 /**
- * The fields whose content is a PROHIBITION rather than an assertion. Named as
- * exact paths, not as a key name: a key called `prohibitedActions` appearing
- * somewhere unexpected must not silently become an exemption.
+ * THE FIELDS THAT ENUMERATE CONDITIONS RATHER THAN ASSERT A STATE.
+ *
+ * The first version of this repair exempted the two prohibition lists, on the
+ * theory that the architect had named the forbidden act while forbidding it.
+ * Paid runs 34185920678 and 34186711214 then refused TWO independent
+ * `gpt-5.6-sol` samples of the same mission with the same code — 14,581 bytes
+ * and 14,550 bytes, different response ids — which makes the trip systematic
+ * rather than a sampling accident, and means a two-path exemption chosen by
+ * guesswork may not even cover the field that fired.
+ *
+ * So the line is drawn where it actually belongs. A completion claim is an
+ * ASSERTION ABOUT THE WORK'S STATE. These fields assert nothing of the kind:
+ *
+ *   the two prohibition lists    name an act that must NOT happen
+ *   the acceptance criteria      state a CONDITION that must hold at the end,
+ *                                and "the tests were run and exited zero" is
+ *                                the correct English for one
+ *   the test plan / requiredTests  enumerate checks still to be performed
+ *   expectedEvidence             names artefacts that do not exist yet
+ *   risks                        describe what might go wrong, including
+ *                                someone wrongly believing work was done
+ *
+ * WHAT IS STILL SCANNED is every field the Coding Agent reads as its charge or
+ * that describes what the plan believes has happened: `objectiveSummary`, the
+ * handoff's objective and bounded task, each implementation step, each
+ * assumption, and each architecture decision and rationale. A plan that opens
+ * "Done — I edited the files" is refused exactly as before, and so is one whose
+ * bounded task says it. That is the claim that could mislead a coder; a
+ * criterion phrased in the perfect tense never could.
+ *
+ * EXACT PATHS, NEVER KEY NAMES. A nested object that called its own field
+ * `acceptanceCriteria` must not become an exemption by choosing a name.
  */
-const CLAIM_EXEMPT_PATHS = new Set(['plan.prohibitedActions', 'plan.handoff.prohibitedActions']);
+const CLAIM_EXEMPT_PATHS = new Set([
+  'plan.prohibitedActions',
+  'plan.handoff.prohibitedActions',
+  'plan.acceptanceCriteria',
+  'plan.handoff.acceptanceCriteria',
+  'plan.testPlan',
+  'plan.handoff.requiredTests',
+  'plan.handoff.expectedEvidence',
+  'plan.risks',
+]);
 
 /**
  * A PATH SEGMENT IS ONLY EMITTED IF IT IS A NAME, NOT PROSE.
@@ -203,27 +264,56 @@ const CLAIM_EXEMPT_PATHS = new Set(['plan.prohibitedActions', 'plan.handoff.proh
  * segment is held to the same alphabet `safeFailureClass` uses, and anything
  * else becomes a placeholder that still says a level was descended.
  *
- * The workflow's credential scan is the second layer, and this is deliberately
- * not left to it: a bundle is refused wholesale when that scan fires, so a
- * model-chosen key would cost the evidence for the whole run.
+ * The placeholder is a WORD, not `<field>`, because the diagnostics allowlist
+ * (`safeFieldName` in `julius-router.ts`) admits a structural path and nothing
+ * else; a bracketed placeholder would be dropped there and the operator would
+ * read an empty `validation_field` — the exact hole this repair exists to
+ * close. The workflow's credential scan is the second layer, and this is
+ * deliberately not left to it: a bundle is refused wholesale when that scan
+ * fires, so a model-chosen key would cost the evidence for the whole run.
  */
-const SAFE_PATH_SEGMENT = /^[A-Za-z][A-Za-z0-9_]{0,63}$/u;
-const safeSegment = (key: string): string => (SAFE_PATH_SEGMENT.test(key) ? key : '<field>');
+const SAFE_PATH_SEGMENT = /^[A-Za-z][A-Za-z0-9_]{0,31}$/u;
+const UNNAMEABLE_SEGMENT = 'unnameable';
+const safeSegment = (key: string): string => (SAFE_PATH_SEGMENT.test(key) ? key : UNNAMEABLE_SEGMENT);
 
-function findFalseWorkClaim(value: unknown, path = 'plan'): { path: string; phrase: string } | null {
+/**
+ * THE REPORTED PATH IS BOUNDED, because the document being walked is not.
+ *
+ * `validateArchitectPlan` runs before anything enforces the provider schema's
+ * `additionalProperties: false`, so a model may nest arbitrarily deep and the
+ * honest depth of a claim is not bounded by this repository. `safeFieldName`
+ * bounds what it will publish, and a path longer than that is dropped whole —
+ * so a deep claim would arrive with no field at all. Truncating here keeps the
+ * useful prefix and says, in the path itself, that it was truncated.
+ */
+const MAX_REPORTED_SEGMENTS = 8;
+const renderPath = (segments: readonly string[]): string =>
+  (segments.length <= MAX_REPORTED_SEGMENTS
+    ? segments.join('')
+    : `${segments.slice(0, MAX_REPORTED_SEGMENTS).join('')}.deeper`);
+
+function findFalseWorkClaim(
+  value: unknown,
+  segments: readonly string[] = ['plan'],
+): { path: string; phrase: string; token: ArchitectPlanClaimToken } | null {
   // The exemption is checked on the SANITISED path, which is the same string a
   // schema-conforming plan produces: `prohibitedActions` is a safe segment, so
   // the real field still matches, and a model-chosen key that sanitised to
-  // `<field>` never can.
-  if (CLAIM_EXEMPT_PATHS.has(path)) return null;
+  // `unnameable` never can. It is also checked on the UNTRUNCATED join, so a
+  // deep document cannot bring an exempt path within the budget and be skipped.
+  if (CLAIM_EXEMPT_PATHS.has(segments.join(''))) return null;
   if (typeof value === 'string') {
     const haystack = value.toLowerCase();
-    const phrase = FALSE_WORK_CLAIMS.find((candidate) => haystack.includes(candidate));
-    return phrase === undefined ? null : { path, phrase };
+    const claim = FALSE_WORK_CLAIMS.find((candidate) => haystack.includes(candidate.phrase));
+    return claim === undefined
+      ? null
+      : { path: renderPath(segments), phrase: claim.phrase, token: claim.token };
   }
   if (Array.isArray(value)) {
     for (const [index, item] of value.entries()) {
-      const found = findFalseWorkClaim(item, `${path}[${index}]`);
+      // A bounded index: an array longer than this is a document nobody is
+      // reading field by field, and an unbounded number would be unbounded text.
+      const found = findFalseWorkClaim(item, [...segments, index < 1000 ? `[${index}]` : '[many]']);
       if (found !== null) return found;
     }
     return null;
@@ -232,7 +322,7 @@ function findFalseWorkClaim(value: unknown, path = 'plan'): { path: string; phra
     // Sorted, so the reported path is the same one every time for a plan that
     // trips the rule twice. A diagnostic that moves is a diagnostic nobody trusts.
     for (const key of Object.keys(value as Record<string, unknown>).sort()) {
-      const found = findFalseWorkClaim((value as Record<string, unknown>)[key], `${path}.${safeSegment(key)}`);
+      const found = findFalseWorkClaim((value as Record<string, unknown>)[key], [...segments, `.${safeSegment(key)}`]);
       if (found !== null) return found;
     }
   }

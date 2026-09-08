@@ -121,19 +121,28 @@ describe('states the strict schema PERMITS and Julius refuses', () => {
   });
 });
 
-/**
- * PAID RUN 34185920678 — the plan the validator could not explain refusing.
- *
- * A schema-valid 14,581-byte plan from `gpt-5.6-sol` was refused with
- * `plan_false_work_claim` and no field, no phrase and no path. The architect's
- * charter names those four phrases IN THE PROHIBITION ITSELF, and the schema
- * then asks the architect for `prohibitedActions` and
- * `handoff.prohibitedActions` — lists whose whole purpose is to say what must
- * not be done. `JSON.stringify(plan)` could not tell a plan that FORBIDS
- * claiming work from a plan that CLAIMS it.
- */
-describe('a prohibition that names the forbidden act is not a claim', () => {
-  it('may say so in prohibitedActions, at either level, without being refused', () => {
+describe('a field that ENUMERATES a condition is not a field that CLAIMS one', () => {
+  /**
+   * THE LINE, and why it is drawn here rather than around two field names.
+   *
+   * The first repair exempted the two `prohibitedActions` lists, on the theory
+   * that the architect had named the forbidden act while forbidding it. Paid
+   * run 34186711214 then refused a SECOND independent `gpt-5.6-sol` sample of
+   * the same mission with the same code — 14,550 bytes against 14,581, a
+   * different response id — which makes the trip systematic rather than a
+   * sampling accident, and means an exemption chosen by guesswork may not even
+   * cover the field that fired.
+   *
+   * So the rule is aimed at what a completion claim IS: an assertion about the
+   * state of the work. The fields below assert nothing of the kind — a
+   * prohibition names an act that must not happen, an acceptance criterion
+   * states a condition that must hold at the END, a test plan enumerates checks
+   * still to be performed, expected evidence names artefacts that do not exist
+   * yet, and a risk describes what might go wrong. "The tests were run and
+   * exited zero" is the correct English for a criterion and could not mislead
+   * anybody about what has already happened.
+   */
+  it('exempts the prohibition lists at either level', () => {
     const topLevel = mutate((p) => {
       (p as { prohibitedActions: string[] }).prohibitedActions = ['claiming that files were edited before the Coding Agent runs'];
     });
@@ -145,35 +154,51 @@ describe('a prohibition that names the forbidden act is not a claim', () => {
     expect(validateArchitectPlan(inHandoff).ok, 'a handoff prohibition naming the act').toBe(true);
   });
 
-  it('and the exemption is EXACTLY those two paths — every other field still refuses', () => {
-    // The hole this could have opened, closed by name. Each of these is a field
-    // that ASSERTS, and an assertion that names completed work is a claim
-    // wherever it appears.
-    const claimFields: readonly ((plan: ReturnType<typeof mutate>) => void)[] = [
-      (p) => { p.objectiveSummary = 'files were edited'; },
-      (p) => { p.handoff.objective = 'tests were run'; },
-      (p) => { p.handoff.boundedTask = 'i edited the module'; },
-      (p) => { p.acceptanceCriteria = ['i ran the tests']; },
-      (p) => { p.testPlan = ['tests were run']; },
-      (p) => { p.handoff.acceptanceCriteria = ['files were edited']; },
-      (p) => { p.handoff.requiredTests = ['i ran the tests']; },
-      (p) => { p.handoff.expectedEvidence = ['files were edited']; },
-      (p) => { (p.assumptions[0] as { statement: string }).statement = 'files were edited'; },
-      (p) => { (p.architectureDecisions[0] as { rationale: string }).rationale = 'i edited it'; },
-      (p) => { (p.implementationSteps[0] as { description: string }).description = 'tests were run'; },
-      (p) => { (p.risks[0] as { mitigation: string }).mitigation = 'i ran the tests'; },
+  it('exempts the condition fields, at either level', () => {
+    const conditionFields: readonly (readonly [string, (plan: ReturnType<typeof mutate>) => void])[] = [
+      ['acceptanceCriteria', (p) => { p.acceptanceCriteria = ['i ran the tests and they passed']; }],
+      ['handoff.acceptanceCriteria', (p) => { p.handoff.acceptanceCriteria = ['files were edited under fixtures/']; }],
+      ['testPlan', (p) => { p.testPlan = ['tests were run with npm test']; }],
+      ['handoff.requiredTests', (p) => { p.handoff.requiredTests = ['i ran the tests']; }],
+      ['handoff.expectedEvidence', (p) => { p.handoff.expectedEvidence = ['a transcript showing tests were run']; }],
+      ['risks[].mitigation', (p) => { (p.risks[0] as { mitigation: string }).mitigation = 'confirm files were edited before review'; }],
     ];
-    for (const [index, change] of claimFields.entries()) {
-      refusedWith(mutate(change), 'plan_false_work_claim');
-      expect(index, 'every claim field was exercised').toBeLessThan(claimFields.length);
+    for (const [name, change] of conditionFields) {
+      const result = validateArchitectPlan(mutate(change));
+      expect(result.ok, `${name} enumerates a condition and must not be refused`).toBe(true);
     }
   });
 
-  it('names the phrase AND the path, so the next refusal is explicable', () => {
-    const result = validateArchitectPlan(mutate((p) => { p.testPlan = ['ok', 'tests were run']; }));
+  it('and every ASSERTING field still refuses — the hole this could have opened, closed by name', () => {
+    // Each of these is read by the Coding Agent as its charge, or states what
+    // the plan believes has already happened. An assertion that names completed
+    // work is a claim wherever it appears.
+    const claimFields: readonly (readonly [string, (plan: ReturnType<typeof mutate>) => void])[] = [
+      ['objectiveSummary', (p) => { p.objectiveSummary = 'files were edited'; }],
+      ['handoff.objective', (p) => { p.handoff.objective = 'tests were run'; }],
+      ['handoff.boundedTask', (p) => { p.handoff.boundedTask = 'i edited the module'; }],
+      ['assumptions[].statement', (p) => { (p.assumptions[0] as { statement: string }).statement = 'files were edited'; }],
+      ['architectureDecisions[].rationale', (p) => { (p.architectureDecisions[0] as { rationale: string }).rationale = 'i edited it'; }],
+      ['implementationSteps[].description', (p) => { (p.implementationSteps[0] as { description: string }).description = 'tests were run'; }],
+      ['requirements[].statement', (p) => { (p.requirements[0] as { statement: string }).statement = 'i ran the tests'; }],
+      ['contextRefs', (p) => { (p as { contextRefs: string[] }).contextRefs = ['i edited']; }],
+    ];
+    for (const [name, change] of claimFields) {
+      const result = validateArchitectPlan(mutate(change));
+      expect(result.ok, `${name} asserts, so a completion claim in it must be refused`).toBe(false);
+      if (result.ok) continue;
+      expect(result.reasonCode, name).toBe('plan_false_work_claim');
+    }
+  });
+
+  it('names WHERE and WHICH, so the next refusal is explicable without another paid run', () => {
+    const result = validateArchitectPlan(mutate((p) => { (p as { contextRefs: string[] }).contextRefs = ['ok', 'tests were run']; }));
     expect(result.ok).toBe(false);
     if (result.ok) return;
-    expect(result.reasonField).toBe('plan.testPlan[1] :: tests were run');
+    // The path alone. A "path :: phrase" string would be dropped whole by the
+    // diagnostics allowlist, which is the reason the two halves travel apart.
+    expect(result.reasonField, 'the index is part of the answer').toBe('plan.contextRefs[1]');
+    expect(result.reasonClaim, 'and which of the four phrases fired').toBe('tests_were_run');
   });
 
   it('reports the SAME path for a plan that trips twice, whatever order the model emitted its keys in', () => {
@@ -182,7 +207,7 @@ describe('a prohibition that names the forbidden act is not a claim', () => {
     // failures would be comparing noise. The keys are walked sorted, so the
     // answer is a property of the DOCUMENT rather than of its serialisation.
     const build = (objectiveLast: boolean) => {
-      const plan = mutate((p) => { p.testPlan = ['i ran the tests']; }) as unknown as Record<string, unknown>;
+      const plan = mutate((p) => { (p.requirements[0] as { statement: string }).statement = 'i ran the tests'; }) as unknown as Record<string, unknown>;
       if (objectiveLast) {
         // Re-inserting moves the key to the END of the insertion order, while
         // alphabetically it still sorts first.
@@ -201,17 +226,27 @@ describe('a prohibition that names the forbidden act is not a claim', () => {
       'the fixture really did move the key to the end').toBeGreaterThan(
       Object.keys(build(false)).indexOf('objectiveSummary'));
     expect(emittedFirst.reasonField).toBe(emittedLast.reasonField);
-    expect(emittedFirst.reasonField, 'sorted keys put objectiveSummary before testPlan')
-      .toBe('plan.objectiveSummary :: files were edited');
+    expect(emittedFirst.reasonClaim).toBe(emittedLast.reasonClaim);
+    expect(emittedFirst.reasonField, 'sorted keys put objectiveSummary before requirements')
+      .toBe('plan.objectiveSummary');
   });
 
   it('a key merely NAMED prohibitedActions somewhere else is not exempt', () => {
-    // The exemption is two exact paths, not a key name — otherwise a nested
-    // object could smuggle a claim through by choosing its own field name.
+    // The exemption is a set of exact paths, not a key name — otherwise a
+    // nested object could smuggle a claim through by choosing its own field name.
     const smuggled = mutate((p) => {
       (p.handoff as unknown as Record<string, unknown>).extra = { prohibitedActions: ['files were edited'] };
     });
     refusedWith(smuggled, 'plan_false_work_claim');
+  });
+
+  it('and neither is a DEEPER copy of an exempt path', () => {
+    // `plan.testPlan` is exempt; `plan.handoff.extra.testPlan` is a different
+    // path and is scanned, because the exemption is checked on the whole join.
+    const nested = mutate((p) => {
+      (p.handoff as unknown as Record<string, unknown>).extra = { testPlan: ['files were edited'] };
+    });
+    refusedWith(nested, 'plan_false_work_claim');
   });
 });
 
@@ -287,18 +322,54 @@ describe('the reported path can never carry model prose into the evidence bundle
     const result = validateArchitectPlan(hostile);
     expect(result.ok).toBe(false);
     if (result.ok) return;
-    expect(result.reasonField).toBe('plan.<field> :: files were edited');
+    expect(result.reasonField).toBe('plan.unnameable');
+    expect(result.reasonClaim).toBe('files_were_edited');
     expect(result.reasonField).not.toContain(credentialShapedKey);
   });
 
-  it('every reported segment is a name, and the phrase is one of the four literals', () => {
-    const result = validateArchitectPlan(mutate((p) => { p.objectiveSummary = 'i edited it'; }));
+  it('bounds a path the model made arbitrarily deep, and says that it did', () => {
+    // Nothing enforces the provider schema's `additionalProperties: false`
+    // before this validator runs, so the depth of a claim is the model's
+    // choice. An unbounded path is unbounded text in a published artifact, and
+    // one longer than the allowlist admits would be dropped to nothing.
+    const deep = mutate((p) => {
+      let node: Record<string, unknown> = p as unknown as Record<string, unknown>;
+      for (let level = 0; level < 14; level += 1) {
+        const child: Record<string, unknown> = {};
+        node.nested = child;
+        node = child;
+      }
+      node.leaf = 'files were edited';
+    });
+    const result = validateArchitectPlan(deep);
     expect(result.ok).toBe(false);
     if (result.ok) return;
-    const [path, phrase] = result.reasonField!.split(' :: ');
-    expect(['files were edited', 'tests were run', 'i ran the tests', 'i edited']).toContain(phrase);
-    for (const segment of path!.replace(/\[\d+\]/gu, '').split('.')) {
-      expect(segment, `segment ${segment}`).toMatch(/^([A-Za-z][A-Za-z0-9_]{0,63}|<field>)$/u);
+    expect(result.reasonField, 'truncated, and it says so in the path').toBe('plan.nested.nested.nested.nested.nested.nested.nested.deeper');
+    expect(result.reasonClaim).toBe('files_were_edited');
+  });
+
+  it('every reported path is a structure the diagnostics allowlist can publish', () => {
+    // The grammar `safeFieldName` accepts in `julius-router.ts`, restated: a
+    // value this side emits that the other side drops is a refusal with an
+    // empty `validation_field`, which is exactly what cost paid runs
+    // 34185920678 and 34186711214 their explanation. The two ends are pinned
+    // together for real in `julius-policy-router.test.ts`.
+    const FIELD_PATH = /^[A-Za-z][A-Za-z0-9_]{0,31}(\.[A-Za-z][A-Za-z0-9_]{0,31}|\[(?:\d{1,3}|many)\])*$/u;
+    const claimants: readonly ((plan: ReturnType<typeof mutate>) => void)[] = [
+      (p) => { p.objectiveSummary = 'i edited it'; },
+      (p) => { p.handoff.boundedTask = 'files were edited'; },
+      (p) => { (p as { contextRefs: string[] }).contextRefs = ['a', 'b', 'tests were run']; },
+      (p) => { (p.architectureDecisions[0] as { rationale: string }).rationale = 'i ran the tests'; },
+      (p) => { (p as unknown as Record<string, unknown>)['not a name'] = 'i edited'; },
+    ];
+    for (const change of claimants) {
+      const result = validateArchitectPlan(mutate(change));
+      expect(result.ok).toBe(false);
+      if (result.ok) continue;
+      expect(result.reasonField!.length, 'and bounded').toBeLessThanOrEqual(160);
+      expect(result.reasonField, result.reasonField).toMatch(FIELD_PATH);
+      expect(['files_were_edited', 'tests_were_run', 'i_ran_the_tests', 'i_edited'])
+        .toContain(result.reasonClaim);
     }
   });
 });

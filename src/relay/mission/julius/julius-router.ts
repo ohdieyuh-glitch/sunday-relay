@@ -107,11 +107,27 @@ const safeExitCode=(value:unknown):number|null=>typeof value==='number'&&Number.
 const safeModel=(value:unknown):string|null=>typeof value==='string'&&MODEL_TOKEN.test(value)&&!CREDENTIAL_SHAPED.test(value)?value:null;
 const safeEnum=<T extends string>(value:unknown,allowed:readonly T[]):T|null=>typeof value==='string'&&(allowed as readonly string[]).includes(value)?value as T:null;
 /**
- * A FIELD NAME THIS REPOSITORY WROTE, not a value a model produced. Admits the
- * camelCase and dotted forms the validator's own key lists use
- * (`objectiveSummary`, `handoff.allowedFileScope`) and nothing longer than one.
+ * A FIELD PATH THIS REPOSITORY WROTE, not a value a model produced.
+ *
+ * WHY IT ADMITS A PATH AND NOT ONLY A NAME. The first version took at most two
+ * dotted segments, which the flat key lists (`objectiveSummary`,
+ * `handoff.allowedFileScope`) fit exactly — and every deeper answer was dropped
+ * to null on the way to the artifact. `plan.handoff.boundedTask` is three
+ * segments; `plan.testPlan[1]` carries an index. So the rule that walks a plan
+ * structurally had nowhere to report WHERE, and paid runs 34185920678 and
+ * 34186711214 each recorded `plan_false_work_claim` with an empty
+ * `validation_field`. Widening the grammar is what makes that column able to
+ * hold the answer at all.
+ *
+ * IT IS STILL STRUCTURE, NOT PROSE. Every segment is an identifier or a decimal
+ * index: no spaces, no punctuation a sentence needs, and a bounded total
+ * length. `prompt-architect-plan.ts` sanitises each segment before it builds
+ * the path, so a key a model invented arrives as `unnameable` rather than as
+ * its own text; this is the second layer, and it refuses the whole value rather
+ * than trimming it.
  */
-const safeFieldName=(value:unknown):string|null=>typeof value==='string'&&/^[A-Za-z][A-Za-z0-9_]{0,31}(\.[A-Za-z][A-Za-z0-9_]{0,31})?$/.test(value)?value:null;
+const FIELD_PATH=/^[A-Za-z][A-Za-z0-9_]{0,31}(\.[A-Za-z][A-Za-z0-9_]{0,31}|\[(?:\d{1,3}|many)\])*$/;
+const safeFieldName=(value:unknown):string|null=>typeof value==='string'&&value.length<=160&&FIELD_PATH.test(value)?value:null;
 /** A provider response identifier: bounded, and refused when credential-shaped. */
 const safeResponseId=(value:unknown):string|null=>typeof value==='string'&&/^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(value)&&!CREDENTIAL_SHAPED.test(value)?value:null;
 export type JuliusSafeDiagnostics=Readonly<Record<string,string|number|boolean|null>>;
@@ -144,6 +160,14 @@ export const safeReviewDiagnostics=(value:unknown):JuliusSafeDiagnostics|null=>{
   /** A member of the closed `ArchitectPlanReasonCode` union, never validator prose. */
   validationReasonCode:safeToken(v.validationReasonCode),
   validationField:safeFieldName(v.validationField),
+  /**
+   * WHICH FALSE-WORK PHRASE A REFUSED PLAN CARRIED, as a token from the
+   * validator's own closed set (`files_were_edited`, `tests_were_run`,
+   * `i_ran_the_tests`, `i_edited`). The path says WHERE and this says WHAT;
+   * neither alone explained the two paid refusals that recorded only the code.
+   * Null for every other rule and for every other role.
+   */
+  validationClaimPhrase:safeToken(v.validationClaimPhrase),
   /* --- Coding Agent (build stage). Null for the other two roles. --- */
   /** The runtime's own result subtype, e.g. `success` / `error_max_turns`. */
   resultSubtype:safeToken(v.resultSubtype),
