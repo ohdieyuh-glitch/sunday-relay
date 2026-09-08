@@ -324,24 +324,39 @@ connection precisely so its read gets a fresh snapshot OUTSIDE any caller's
 transaction, and wrapping it would break `persist`. It must never adopt the
 helper.
 
-**Adopted in four**, after auditing every transaction body for purity (a retry
-runs the effect again, so a transaction that also spent money would spend
-twice): `julius-postgres`, `julius-event`, `julius-lifecycle`, `julius-repair`.
-Every one reaches only `client.query`; the `pool.query` calls in
-`julius-lifecycle` and `julius-subagent` are in other methods, and
-`julius-tool-settlement`'s `appendTrajectory`/`appendEvent` take the client.
+**Adopted in SIX of the eight**, after auditing every transaction body for
+purity (a retry runs the effect again, so a transaction that also spent money
+would spend twice): `julius-postgres`, `julius-event`, `julius-lifecycle`,
+`julius-repair`, `julius-subagent`, `julius-recovery`. `julius-tool-postgres`
+already retried.
 
-**Three remain exposed, each for a stated reason, not for lack of trying:**
+**ONE IS LEFT OUT, AND THE REASON IS NOT SCAFFOLDING.**
+`julius-tool-settlement-postgres`'s **COMMIT is instrumented**:
+`fault('BEFORE_COMMIT')` and `fault('AFTER_COMMIT')` bracket it so a crash can
+be simulated on either side, and its test drives all four fault points. The
+shared helper OWNS the commit, so adopting it would move the commit out from
+between its own fault points — `AFTER_COMMIT` would fire before the settlement
+was durable, and a drill that exists to prove exactly-once settlement on the
+money path would quietly measure something else. It keeps its own transaction
+and keeps its exposure. Closing that gap means teaching the helper about the
+commit boundary, which is a change to the helper.
 
-| Repository | Why not yet |
-|---|---|
-| `julius-subagent-postgres` | a DELIBERATE early `ROLLBACK` then `return {recorded:false,…}` inside the body. Under the helper that return resolves the effect and COMMIT follows an explicit ROLLBACK. Fixing it changes what the method MEANS, not how it is wrapped. |
-| `julius-recovery-postgres` | two SERIALIZABLE transactions, scaffolding unlike the other five |
-| `julius-tool-settlement-postgres` | shares the suffix but not the prefix |
+**A SECOND CORRECTION, found by mutating my own work.**
+`recordSubagentAndTaskWithinLimits` had **no test at all** — live paid-path
+code, the C.A.R.D. sub-agent limit, unexercised on the PostgreSQL side. The
+case written for it asserted "no task row — the rollback really happened", and
+a mutation making the refusal COMMIT **passed it**: the denial check precedes
+every write in that method, so COMMIT and ROLLBACK are indistinguishable from
+outside. Two consequences, both recorded in the code:
 
-Doing those three mechanically would trade a proven defect for an unproven one,
-in the persistence layer of a system about to spend money. They are the named
-next piece of this work.
+* the earlier claim that this file's early `ROLLBACK` made the transform risky
+  was wrong — nothing had been written, so it was safe either way;
+* the invariant moved to where a fake pool can see the statements — *a throwing
+  effect issues ROLLBACK and never COMMIT*, in `postgres-serializable.test.ts`,
+  which does turn red when a COMMIT is injected after the rollback.
+
+The refusal still leaves by throwing, so it cannot commit whatever a later edit
+moves above the check.
 
 **The helper's first draft released the pooled client twice**, and `pg` throws
 on that — so the first concurrent pair it was written for failed on the double
