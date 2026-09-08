@@ -13,7 +13,7 @@ is the art library's.
 | LOCK | `wonderland/.gauntlet-lock` = `writer=claude`, read before writing, unchanged. `wonderland/art/` is unowned by `gauntlet-check.py` (shared). |
 | BLENDER | `bpy` 4.5.13 LTS, installed via pip. Real Blender, headless — the same bmesh, the same exporters, Cycles on CPU. |
 | RENDERED | **Yes.** Twenty-one Cycles contact sheets and seven ASSEMBLY renders in `wonderland/art/blender/validation/renders/`. No Unreal frame — see "What is unproven". |
-| PLACED | **Yes.** 1,238 kit placements in `layout_v2.ALL` — 79 of 101 modules, 11 batches. See "The kit is in the world now". |
+| PLACED | **Yes.** 1,328 kit placements in `layout_v2.ALL` — 79 of 101 modules, 11 batches. See "The kit is in the world now". |
 
 ---
 
@@ -550,10 +550,10 @@ bbox and was invisible to every instrument that reads one — including the
 **A kit the census cannot see is a kit that cannot be measured.**
 
 **Result against the census** (`wonderland/v2/evidence/`): mean built
-67.78% → **75.38%** across 33 cameras, past the founder reference's 71.5%.
-25 of 33 cameras moved; frames more than half roofed by vegetation 9 → **4**.
+67.78% → **76.08%** across 33 cameras, past the founder reference's 71.5%.
+26 of 33 cameras moved; frames more than half roofed by vegetation 9 → 5.
 `ClockQuarterCam13`, the worst frame in the suite at 18.3% when this branch
-started, is **75.0%**. (An intermediate figure of 74.82% was inflated by a
+started, is **80.0%**. (An intermediate figure of 74.82% was inflated by a
 clearance rule that let 63 m towers stand 27 m from a camera, in shot, topping
 at +66°; the honest rule plus a better search beats it. See
 `evidence/KIT_CENSUS.md`.) Frames more than half roofed by vegetation 9 → 5.

@@ -498,10 +498,9 @@ version of "nine frames are still veg-roofed": three of those nine
 garden and grove cameras where green is correct, and the ones that are wrong
 are wrong for this reason.
 
-> **PARTLY ANSWERED** by the forge kit (`201e9e6b`, branch
-> `claude/wonderland-blender-forge-pjinco`). `ClockQuarterCam13` is now 36.7%
-> built, up from 18.3%, and its mushroom holds 25% of the ceiling instead of
-> 35% — five spelled towers stand in the Clock Quarter and two more break the
+> **PARTLY ANSWERED** by the forge kit (branch
+> `claude/wonderland-blender-forge-pjinco`). `ClockQuarterCam13` is now **80.0%**
+> built, up from 18.3%, and its mushroom no longer holds a third of the ceiling — five spelled towers stand in the Clock Quarter and two more break the
 > mushroom's own arc. **The recipe inversion itself is untouched and is still
 > yours**: 1,743 vs 1,190 is a recipe question, and a kit tower standing beside
 > a mushroom does not make the district's clock tower taller than its fungus.
@@ -575,11 +574,11 @@ KEY and a forge mesh had no key. It has one now.
 
 | | |
 |---|---|
-| `layout_v2.ALL` | 13,816 → **15,170** |
-| kit placements | **1,238** — 79 of 101 modules, in `V2_Arrival`, `V2_Castle`, `V2_Garden`, `V2_Props`, `V2_Skyline` |
+| `layout_v2.ALL` | 13,816 → **15,260** |
+| kit placements | **1,328** — 79 of 101 modules, in `V2_Arrival`, `V2_Castle`, `V2_Garden`, `V2_Props`, `V2_Skyline` |
 | batches | `tea_terrace` 37, `water_court` 35, `depth_stand` 204, `clock_quarter` 43, `hamlet_street` 142, `ceiling_break` 42, `green_ceiling` 136, `castle_precinct` 108, `garden_levels` 117 |
-| mean built across 33 cameras | 67.78% → **75.38%** (reference 71.5%) |
-| cameras moved | 25 of 33 |
+| mean built across 33 cameras | 67.78% → **76.08%** (reference 71.5%) |
+| cameras moved | 26 of 33 |
 | frames more than half green | 9 → 5 |
 | one piece holding a third | 10 → 9 |
 

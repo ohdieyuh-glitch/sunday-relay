@@ -8,7 +8,7 @@ not the placements.
 | | placements | mean built | cameras moved | one piece holds a third | frames over half green |
 |---|---|---|---|---|---|
 | before | 13,816 | 67.78% | — | 10 | 9 |
-| after | 15,170 | **75.38%** | 25 of 33 | 9 | 4 |
+| after | 15,260 | **76.08%** | 26 of 33 | 9 | 5 |
 
 The founder's reference, classified from its own pixels, is built **71.5%**.
 
@@ -295,6 +295,48 @@ Both above where the flat rule had them, on ground that survives the rule --
 and the census above where the wrong rule ever got it. `ClockQuarterCam13`,
 the worst frame in the suite when this branch started at 18.3% built, is
 **75.0%**.
+
+## A target list read through its own results oscillates
+
+The most useful methodological trap this branch hit, and it is not obvious.
+
+`GREEN_CEILINGS` is a measurement — the arcs where vegetation holds a ceiling
+with room above it — taken from a census run and recorded, because
+`kit_layout` cannot measure it itself (`layout_v2` imports it and the census
+imports `layout_v2`). Ten batches later the table was stale, so it was
+re-measured against the world as it stood.
+
+**Every arc the kit had already fixed vanished from the new table — because the
+kit had fixed it.** Dropping the entry drops the stand; dropping the stand
+re-opens the arc. `green_ceiling` went from 139 placements to 42 and
+`ClockQuarterCam13` went back toward where it started.
+
+The fix is to measure the world **without** the batches whose output is being
+judged: the scan runs against `PASSES` minus `ceiling_break`, `green_ceiling`
+and `depth_stand`. The arcs that come back are the ones the world has with no
+kit ceiling work in it at all, which is a stable thing to aim at and does not
+move when the aim succeeds.
+
+The refreshed table also relaxed one rule that turned out to be arbitrary. Arcs
+were filtered to `|bearing| <= 35 degrees` — "past that is the frame's corner".
+A flat 35 is the same judgement applied to a 90-degree lens and a 100-degree
+one, which is to say applied to neither, and it excluded the largest reachable
+arc of `FlankLeftCam08` (the third-worst frame in the suite) and a six-column
+arc of the founder's own reference. It is now 0.9 of each camera's own half-fov.
+
+And it exposed a third thing: **an arc with two owners is an arc both do
+badly.** `CEILING_BREAK` (the boss table) and `GREEN_CEILINGS` are measured the
+same way and overlap wherever a frame's biggest green run IS its boss —
+`ClockQuarterCam13`'s (-19.9, 12.4) is `ceiling_break`'s (-19.9, 10.9). Both
+batches chased the same ground, the first took the good spots and the second
+took the leftovers, and the frame fell from 75.0% built to 59.2%. The boss
+table runs first and owns its arcs; the overlap is now detected in code rather
+than maintained by hand, and `SKIPPED` names each one it declines.
+
+    green stands           10 -> 15
+    green_ceiling         139 -> 209 placements
+    ClockQuarterCam13    75.0% -> 59.2% (overlapping) -> **80.0%** (deduplicated)
+    mean built          75.38% -> 75.48%              -> **76.08%**
 
 ## Not proven
 

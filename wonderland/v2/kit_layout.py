@@ -771,22 +771,51 @@ BENCH_BUILT = 71.5
 #: over 22 cameras; what is left is the arcs that are
 #:   below `BENCH_BUILT`      -- a frame already past the reference is left alone
 #:   not in `GROVE_CAMS`      -- a wood keeps its canopy
-#:   inside 35 degrees        -- past that is the frame's corner, where a tower
-#:                              is peripheral clutter rather than a skyline
-#:   at least 8 columns wide  -- narrower is a gap between two canopies, and
+#:   inside 0.9 of the half-fov -- past that is the frame's outer rim, where a
+#:                              tower is peripheral clutter rather than a
+#:                              skyline. THIS WAS A FLAT 35 DEGREES and the
+#:                              flat number cost the two frames that most
+#:                              needed it: `FlankLeftCam08` is the third-worst
+#:                              frame in the suite and its largest reachable
+#:                              arc runs 35.6 to 43.9, and the founder's own
+#:                              reference had a six-column arc at -47. A
+#:                              fraction of the frame is the same judgement
+#:                              applied to a 90 and a 100 degree lens; 35 was
+#:                              the same judgement applied to neither.
+#:   at least 6 columns wide  -- narrower is a gap between two canopies, and
 #:                              filling it buys a column and costs a building
 GREEN_CEILINGS = (
-    ("ClockQuarterCam13", (20.6, 31.1), 11.4),      # 15 cols, edge +29.4, built 34.2%
-    ("WaterGardenCam15", (22.9, 35.6), 17.7),       # 18 cols, edge +29.4, built 38.3%
-    ("ReverseCam03", (16.9, 23.6), 15.0),           # 10 cols, edge +29.4, built 56.7%
-    ("ReverseCam03", (-28.1, -22.9), 16.4),         #  8 cols, edge +29.4, built 56.7%
-    ("HeroCam_V2_MarbleReference", (-36.2, -23.8), 29.1),  # 16 cols, edge +33.8, built 57.5%
-    ("HeroCam_V2_MarbleReference", (-49.6, -43.8), 29.1),  #  8 cols, edge +33.8, built 57.5%
-    ("HamletCam17", (0.4, 31.1), 25.2),             # 42 cols, edge +29.4, built 60.8%
-    ("WorldCam12", (-35.0, -24.1), 16.8),           # 23 cols, edge +30.2, built 63.3%
-    ("WorldCam12", (-21.9, -15.7), 12.7),           #  9 cols, edge +30.2, built 63.3%
-    ("FlankRightCam09", (-23.6, -11.6), 25.0),      # 17 cols, edge +29.4, built 67.5%
-    ("FlankRightCam09", (22.9, 31.1), 25.2),        # 12 cols, edge +29.4, built 67.5%
+    # MEASURED WITH THE KIT'S OWN CEILING BATCHES SWITCHED OFF, and that is not
+    # a detail. Re-measuring this table against the world as it stands drops
+    # every arc these batches already answered -- because they answered it --
+    # which removes the stand, which re-opens the arc. A target list read
+    # through its own results oscillates. Done naively it took `green_ceiling`
+    # from 139 placements to 42 and put `ClockQuarterCam13` back where it
+    # started. The scan is run against `PASSES` minus `ceiling_break`,
+    # `green_ceiling` and `depth_stand`, so the arcs are the ones the world
+    # has WITHOUT the kit's ceiling work, which is a stable thing to aim at.
+    #
+    # Arcs are clipped to 0.9 of each camera's own half-fov; the built% is the
+    # frame without the kit's ceiling batches.
+    ("ClockQuarterCam13", (-19.9, 12.4), 21.5),     # 44 cols, edge +29.4, built 18.3%
+    ("ClockQuarterCam13", (14.6, 31.1), 11.4),      # 23 cols, edge +29.4, built 18.3%
+    ("ClockQuarterCam13", (-40.5, -34.9), 15.7),    # 14 cols, edge +29.4, built 18.3%
+    ("ClockQuarterCam13", (36.4, 40.5), 9.9),       # 12 cols, edge +29.4, built 18.3%
+    ("WaterGardenCam15", (16.9, 35.6), 18.8),       # 26 cols, edge +29.4, built 31.7%
+    ("FlankLeftCam08", (35.6, 40.5), 17.0),         # 12 cols, edge +29.4, built 33.3%
+    ("FlankLeftCam08", (2.6, 6.4), 23.9),           #  6 cols, edge +29.4, built 33.3%
+    ("ReverseCam03", (-28.1, -13.9), 16.4),         # 20 cols, edge +29.4, built 45.0%
+    ("ReverseCam03", (16.9, 23.6), 15.0),           # 10 cols, edge +29.4, built 45.0%
+    ("ReverseCam03", (5.6, 9.4), 11.5),             #  6 cols, edge +29.4, built 45.0%
+    ("HamletCam17", (0.4, 40.5), 25.2),             # 60 cols, edge +29.4, built 46.7%
+    ("TeaTerraceCam16", (-16.9, -4.1), 25.1),       # 18 cols, edge +29.4, built 50.8%
+    ("TeaTerraceCam16", (37.1, 40.5), 19.8),        # 11 cols, edge +29.4, built 50.8%
+    ("TeaTerraceCam16", (22.9, 29.6), 19.8),        # 10 cols, edge +29.4, built 50.8%
+    ("TeaTerraceCam16", (12.4, 16.9), 10.1),        #  7 cols, edge +29.4, built 50.8%
+    ("HeroCam_V2_MarbleReference", (-36.2, -23.8), 29.1),  # 16 cols, edge +33.8, built 56.7%
+    ("HeroCam_V2_MarbleReference", (-45.0, -43.8), 29.1),  #  8 cols, edge +33.8, built 56.7%
+    ("PathCam02", (-31.1, -27.4), 21.0),            #  6 cols, edge +29.4, built 60.8%
+    ("WorldCam12", (-41.0, -24.1), 16.8),           # 23 cols, edge +30.2, built 63.3%
 )
 
 #: Filled by `_green_ceiling`.
@@ -813,6 +842,18 @@ def _green_ceiling(bands):
     ladder = [h for _c, h in spells]
     for cam, arc, el in GREEN_CEILINGS:
         if cam in GROVE_CAMS:
+            continue
+        # AN ARC WITH TWO OWNERS IS AN ARC BOTH DO BADLY. `CEILING_BREAK` and
+        # this table are measured the same way and overlap where a frame's
+        # biggest green run IS its boss: `ClockQuarterCam13`'s (-19.9, 12.4) is
+        # `ceiling_break`'s (-19.9, 10.9). Both batches then chased the same
+        # ground, `ceiling_break` took the good spots and this one took what was
+        # left over -- and the frame went from 75.0% built to 59.2%. The boss
+        # table runs first and owns its arcs.
+        if any(b_cam == cam and arc[0] < b_arc[1] and b_arc[0] < arc[1]
+               for b_cam, _boss, b_arc, _el in CEILING_BREAK):
+            SKIPPED.append("%s: %s is ceiling_break's arc; not chased twice"
+                           % (cam, arc))
             continue
         got = spots_on_bearing(cam, bands, arc, el, ladder, 2, taken)
         if not got:

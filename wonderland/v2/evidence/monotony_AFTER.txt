@@ -7,22 +7,22 @@ when its columns are pinned to the frame edge.
 
 site                               frames columns  pinned  frames it holds 20%+ of
 ----------------------------------------------------------------------------------------------------------------------
-GreatSpire_Body                        14     334     68%  WorldNorth19 58%, GreatSpire22 46%, FloatingStair26 30%, GiantBloom29 27%
+GreatSpire_Body                        14     337     68%  WorldNorth19 58%, GreatSpire22 46%, FloatingStair26 30%, GiantBloom29 27%
 DistrictTower_RoyalGardens              9      80     49%  -
-KitBreak03_4_gold                       8     114     42%  ClockQuarter13 30%, TeaTerrace16 30%
+KitBreak03_4_gold                       8     111     42%  ClockQuarter13 29%, TeaTerrace16 30%
 DistrictTower_NorthReach                8      38     53%  -
 City6_Tower0                            7      66     59%  WorldNorth19 23%, EastReach20 26%
 GiantMushroom                           6      88     81%  FlankLeft08 20%
 City17_Tower0_Roof                      6      76     91%  -
 DistrictTower_LanternHamlets            6      51     71%  -
 DistrictTower_TowerRise                 6      42     43%  -
-City3_Tower2_Roof                       6      31     65%  -
-KitBreak02_3                            6      27     44%  -
-KitDepth01_4_roof                       6      24     54%  -
-KitGreen04_4_roof                       6      24     33%  -
-KitGreen05_4_roof                       6      14     57%  -
+City3_Tower2_Roof                       6      32     62%  -
+KitGreen06_4_roof                       6      23     35%  -
+KitDepth01_4_roof                       6      20     65%  -
+KitBreak02_3                            6      20     60%  -
+KitSpan_KitGreen02_KitGreen06           6      15     40%  -
+KitGreen13_4_roof                       6      14     57%  -
 FarCity036_TowerCap0                    6      14     21%  -
-KitGreen06_4_gold                       6      13     31%  -
 
 1 site(s) hold 20%+ of THREE OR MORE frames:
    GreatSpire_Body                5 frames, 68% of its columns pinned
