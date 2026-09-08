@@ -181,7 +181,19 @@ result, not a shape assertion.
   is correct: that run had no contract at all, and its reviewer was grading
   against prose.
 
-**4. `<commit 4>` — a crash could strand a run forever, and nothing was asking.**
+**4. `3a8c6686` — the reviewer is handed the contract, and a crash can no longer strand a run.**
+
+Two things, and the second was found while proving the first.
+
+*The reviewer now receives the locked contract.* Julius builds the charge from
+the contract its gate proved and hands it down on the dispatch — the same
+inversion `taskType` uses. `buildReviewPrompt` renders the binding, the blocking
+criteria **by their mission ids**, the scope, the prohibitions, the required
+checks, the failure conditions and the stopping condition, and instructs that
+every finding name the criterion id it fails. The Beta Gate gains a **TASK
+CONTRACT LOCK** row and the evidence bundle a **`task-contracts.tsv`**.
+
+*And a crash could strand a run forever.*
 
 Found while proving the lock's own crash semantics, and it is older and wider
 than the contract work.
