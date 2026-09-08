@@ -9,10 +9,11 @@ continue from here alone.
 | | |
 |---|---|
 | SESSION | 2026-09-07 → **2026-09-08** — Relay's Wonderland **integration** stream (session 3 of 3) |
+| THE ONE MISSING PORT | a project-membership check. `/wonderland/julius/*` answers 503 without it, deliberately. See §31–37. |
 | CHECKOUT | `/home/user/sunday-relay` (cloud session, fresh clone; no worktrees) |
 | BRANCH | `relay/wonderland-integration`, also pushed to `claude/relay-wonderland-integration-ojr5x6` (the harness's designated branch — same commits, two refs) |
 | BASE | `origin/main` at `b2dc9f2` |
-| SHA AT END | `f32e5ef` — and check `git log -1 relay/wonderland-integration`, which is authoritative |
+| SHA AT END | `075113e` — and check `git log -1 relay/wonderland-integration`, which is authoritative |
 | WHAT RAN LIVE | **Nothing.** No provider call, no Julius mission, no Unreal build, no GPU frame. Every figure in the HUD is a labelled simulated fixture. |
 | WHAT RUNS OFFLINE | **five harnesses that COMPILE AND EXECUTE the real C++**, reached by seven npm commands: `wonderland:cpp:syntax`, `:geometry:verify`, `:usage:verify`, `:ordering:verify`, `:julius:verify`, plus `:geometry:check` and `:ordering:check` for generated-artefact staleness. 652 checks (152 usage + 50 run + 450 ordering) and a 66-sample geometry fixture. |
 | WHAT IS STILL UNPROVEN | the Slate paint in `WonderlandUsageHudWidget.cpp`. It parses; no engine here can run it, and the file says so in its own header. |
@@ -600,6 +601,91 @@ both to render in a browser engine.
 
 ---
 
+### 31–37. The runtime path (session of 2026-09-08, second half)
+
+**This is the session the chain was joined.** Everything before it was built
+from both ends: a ledger adapter that read rows, an envelope that worlds
+consume, ordering, rehydration, two Unreal subsystems — and
+`wonderlandEnvelope()` with NO PRODUCTION CALLER. Seven commits.
+
+| module | what it is |
+|---|---|
+| `wonderland-envelope-producer.ts` | a real kernel event becomes an envelope. THE JOIN |
+| `wonderland-hydration.ts` | the snapshot half: usage, brain, C.A.R.D., activity, in one payload |
+| `wonderland-ingress.ts` | the transport boundary: scope → decode → validate → order → fold |
+| `wonderland-activity-animation.ts` | the seven signals as ordered animation intents |
+| `wonderland-world-session.ts` | the door bound to the stream, project and run together |
+| `relay-bridge/wonderland-julius-routes.ts` | hydrate + SSE over the transport that existed |
+
+#### The transport question, answered by audit rather than by building
+
+`/wonderland/events` already serves SSE with replay-from-cursor, live subscribe
+and a heartbeat. `PostgresWonderlandFanout` already pushes identifiers over
+LISTEN/NOTIFY, so nothing polls. Browser sessions already authenticate,
+origin-bound and revocable. All deployed. **What it serves is BATTLE events** —
+that was the whole gap, and the fix was a Julius path onto the same transport
+rather than a second one. A Pixel Streaming data channel carries pixels and
+input; mission state has a durable ordered source already.
+
+#### The defect, found by wiring it up
+
+**Only a state TRANSITION bumps `julius_runs.version`.** `review.started`,
+`finding.recorded` and both subagent writers do not — checked in the
+persistence layer, none of them touch it. So a snapshot at revision 10 and a
+burst of genuinely new review activity, also at revision 10, collided: the
+revision tie-break refused every one and **the world went deaf until the run
+changed state.** Reproduced end to end through the real production path before
+anything was changed.
+
+`WonderlandRunSnapshot.atSequence` closes it, and the field did not exist for a
+good reason that turned out to be answerable: inventing a sequence skips events
+if guessed high and claims applied events if guessed low. The answer is that
+the READER supplies it — `MAX(sequence)` alongside the run row — rather than the
+adopter inventing it.
+
+#### What the routes refuse to do
+
+The browser session names a PLAYER and an ORIGIN and **not a project**, so
+nothing in the Bridge can answer "may this player read this project's runs?".
+`/wonderland/julius/*` therefore answers **503** until a membership port is
+wired. The default everyone reaches for — any authenticated player may read any
+project — is a cross-tenant read of mission state, C.A.R.D. slots and spend, and
+a route that opened when its authorisation was unconfigured would work
+perfectly wherever nobody had wired it. **That port is the one genuinely
+missing piece on this path.**
+
+#### Two narrowings worth knowing about
+
+`CardVersion` carries `models` — provider and model names — plus tools,
+permissions and budgets. **None of it crosses.** Role slots are reported as
+FILLED OR NOT, never by whom, because the visual vocabulary is provider-free by
+construction and leaking the names through the C.A.R.D. would undo that from
+the side door, on the surface a player can inspect. Budgets are absent because
+the usage authority already owns capacity.
+
+Activity accents are INTENTS, not clips. `awaiting_input` says a person is
+being waited on; whether that is a raised head, a pip or a colour is the
+renderer's business. A test forbids the words clip, colour, sprite, mesh,
+texture and montage in the vocabulary, because naming one would be inventing
+animation assets without the engine.
+
+#### Process notes, including one failure
+
+Six modules, all mutation-verified — 38 deliberate breakages, every one caught
+after the gaps they exposed were closed. Several escaped on a first pass and
+every one of those was a gap in the TEST rather than the code: a blank-vs-blank
+comparison invisible unless both sides are blank, a redundant clause shadowed by
+one checked earlier, and a scope-before-fold ordering invisible unless the
+foreign rows would actually raise a signal.
+
+**One commit went out with a failing typecheck.** The world-session tests passed
+at runtime and did not compile — extra properties are ignored by JavaScript and
+rejected by tsc — because I read a batch of gate results and pushed on the test
+count without reading the `tsc` line in the same output. Fixed in the commit
+after, with the isolating mutation re-verified against the corrected fixtures.
+
+---
+
 ## What is REAL and what is not
 
 Read this table before saying anything about this stream out loud. The
@@ -623,7 +709,10 @@ distinction between the middle two rows is the one that gets misreported.
 | the entry path (`ENTER WONDERLAND`) | **real** as far as `admitted`; the button runs the state machine and posts to the real bridge route |
 | the honesty ladder itself | **real and executable** — `verifyWonderlandCapture` grades a capture, and `real` is unreachable from it by construction |
 | the Unreal usage geometry | **real**, and proven numerically against the TypeScript sampler — 66 samples, worst deviation 1e-6 |
-| the Unreal usage and run subsystems | **real**, 202 executable checks over refusals, held state, snapshot adoption and reconnect (152 + 50) |
+| the Unreal usage and run subsystems | **real**, 213 executable checks over refusals, held state, snapshot adoption in both modes, and reconnect (152 + 61) |
+| a real Julius event becoming an envelope | **real** and tested — and nothing has ever fed it a row from a live database |
+| the transport boundary (scope, decode, validate, order, fold) | **real**, tested against reconnects, mis-routed fan-outs and replayed tails |
+| the Julius world routes | **real**, and answering 503 until a membership port exists |
 | the Unreal ordering rule | **real**, replayed through 26 cases generated from the TypeScript, 450 checks |
 | the Project Brain scope | **real** contract, canary-tested; no authority cites into it yet |
 | Unreal DRAWING any of it | **not proven.** `WonderlandUsageHudWidget.cpp` parses and has never been compiled against real UMG headers or seen to put a pixel on a screen. |

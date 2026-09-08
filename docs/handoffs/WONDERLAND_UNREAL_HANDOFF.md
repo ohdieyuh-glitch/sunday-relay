@@ -11,6 +11,78 @@ against this expecting real events later; do not describe it as connected.
 
 ---
 
+## 0. THURSDAY: WHAT IS LEFT WHEN THE ENGINE ARRIVES
+
+Read this first. Everything below it is the detail.
+
+| | |
+|---|---|
+| BRANCH | `relay/wonderland-integration`, also `claude/relay-wonderland-integration-ojr5x6` — same commits, two refs |
+| SHA | `075113e` (check `git log -1` — that is authoritative) |
+| WHAT HAS RUN LIVE | **nothing.** No provider call, no Julius mission, no Unreal build, no frame |
+
+**The remaining work is compile, import, connect, display, drive, reconnect,
+capture — not invent.** Every contract on this seam exists, is mirrored into
+C++, and is held by a test. What is missing is an engine and one port.
+
+### The one thing that is genuinely not built
+
+**A project-membership check.** The browser session this Bridge issues names a
+PLAYER and an ORIGIN and **not a project**. Nothing can currently answer "may
+this player read this project's runs?", so `/wonderland/julius/*` returns
+**503** until a `WonderlandProjectMembership` is wired. That is deliberate: the
+tempting default — any authenticated player may read any project — is a
+cross-tenant read of mission state, C.A.R.D. slots and spend, and a route that
+opened up when its authorisation was unconfigured would work perfectly in every
+environment where nobody had wired it.
+
+The battle routes get away without one because `WonderlandBackend.eventsFor`
+filters by participation inside the backend. There is no equivalent for a run.
+
+### The Unreal proof checklist
+
+Nothing on this list can be done cloud-side. Each item is a thing to SEE.
+
+1. **It compiles.** `wonderland/Source/Wonderland/*` against real UE headers.
+   Expect UHT to want `.generated.h` files that here are one-line stubs.
+2. **The HUD draws.** Both meters, top left, green Compound outside and blue
+   single agent nested behind it. `WonderlandUsageHudWidget.cpp` is the only
+   file on this seam that has never been compiled against real UMG — the Slate
+   calls are the unproven part, and the geometry underneath them is not.
+3. **A bigger tier is a LONGER track**, not a differently-shaded one. Push two
+   `FWonderlandUsageHud`s with different `ReferenceCapacityUnits` and watch the
+   arc's physical length change.
+4. **Unknown draws as unknown.** Push a default `FWonderlandUsageHud`: tracks
+   appear, no remainder, no zero.
+5. **The dog animates from a phase.** Push envelopes through
+   `UWonderlandJuliusSubsystem::ApplyEnvelope` and watch the clip follow.
+6. **An accent rides on top.** Push an activity reading with
+   `AwaitingApproval` and confirm the base clip does not change.
+7. **Reconnect.** Disconnect mid-run, let Julius progress, adopt a positioned
+   hydration, replay the tail, and confirm the world lands on the right state
+   without replaying the transcript.
+8. **A foreign push changes nothing.** Send another project's envelope and
+   watch the counters move while the world does not.
+9. **Capture the proof.** Nothing above may be described as done from a
+   screenshot of a fixture.
+
+### What to wire, in order
+
+```
+1. WonderlandProjectMembership          the missing port. Without it, 503.
+2. WonderlandJuliusReader               hydrate() + events(); both read
+                                        MAX(sequence) with the run row, in ONE
+                                        pass — a revision from one moment and a
+                                        sequence from another describe a run
+                                        that never existed.
+3. pass both into handleWonderlandJuliusRoute in server.ts
+4. UWonderlandJuliusSubsystem::BindProject / AdoptSnapshot / ApplyEnvelope
+5. UWonderlandUsageSubsystem::BindProject / ApplyUsage
+6. bind the HUD widget to OnUsageChanged
+```
+
+---
+
 ## 1. The event schema
 
 One shape crosses the boundary: `WonderlandEnvelope`, in
@@ -270,6 +342,76 @@ Reconnect backoff: double from 1s to a 30s ceiling, no jitter
 
 ---
 
+## 6b. THE PATH, END TO END — what carries what, and who owns it
+
+Added the session a Julius event first became an envelope. Before it, the chain
+was built from both ends and never joined: `wonderlandEnvelope()` had NO
+production caller, so every layer below was waiting for events nothing produced.
+
+```
+relay_wonderland.events row
+  │   readWonderlandLedgerRow           row → JuliusOperationalEvent
+  │                                     handles BOTH persisted payload shapes
+  ▼
+JuliusOperationalEvent
+  │   ingestWonderlandRows              THE TRANSPORT BOUNDARY
+  │     ├─ SCOPE     is this session granted this project's run?
+  │     ├─ DECODE    readable as a Julius event?
+  │     ├─ VALIDATE  produceWonderlandEnvelope → phase, or a named refusal
+  │     ├─ ORDER     applyWonderlandOrdering → revision then sequence
+  │     └─ FOLD      wonderlandJuliusActivity → the second axis
+  ▼
+WonderlandDelivery { envelope, activity }
+  │   GET /wonderland/julius/events     SSE, replay-from-cursor, heartbeat
+  ▼
+UWonderlandJuliusSubsystem::ApplyEnvelope(envelope, embodiment, activity)
+```
+
+and, once on join and once per reconnect:
+
+```
+JuliusRunView + usage authority + brain citation + C.A.R.D. record
+  │   wonderlandHydration               assembles and NARROWS. Computes nothing
+  ▼
+WonderlandHydration
+  │   GET /wonderland/julius/hydrate
+  ▼
+UWonderlandJuliusSubsystem::AdoptSnapshot   sets revision AND position
+UWonderlandUsageSubsystem::ApplyUsage       the meters, already projected
+```
+
+### Two shapes, and why usage is not on the envelope
+
+**INCREMENTAL** is the envelope: one event, lean, ordered by sequence, carrying
+a phase and its identity and nothing more, because it arrives constantly and
+anything on it is paid for every time.
+
+**SNAPSHOT** is the hydration: usage, Project Brain, C.A.R.D. and activity, sent
+once on join and once per reconnect. Capacity does not change per event — a
+meter reading on every transition would send the same two numbers thousands of
+times and still be stale in between, because usage moves on its own schedule.
+
+### The defect this session found, because it matters for reconnect
+
+**Only a state TRANSITION bumps `julius_runs.version`.** `review.started`,
+`finding.recorded` and both subagent writers do not — verified in the
+persistence layer. So a snapshot at revision 10 and a burst of genuinely new
+review activity, also at revision 10 because the run's state had not moved,
+collided: the revision tie-break refused every one and **the world went deaf
+until the run happened to change state.**
+
+`WonderlandRunSnapshot.atSequence` closes it. With a position the cursor moves
+there and everything at or before it is refused on SEQUENCE — precise, because
+a pre-snapshot replay is behind and new work is ahead whatever the revision is.
+Without one the conservative tie-break stands, which refuses some genuinely new
+events and is the safer error when position is unknown.
+
+**A reader must therefore read `MAX(sequence)` in the same pass as the run row.**
+A revision from one moment and a sequence from another describe a run that never
+existed.
+
+---
+
 ## 7. Animation intents
 
 `planWonderlandAnimation` (`wonderland-julius-animation.ts`) returns a
@@ -336,7 +478,7 @@ one does and does not claim:
 | `wonderland:geometry:verify` | the C++ sampler computes the same curve as the TypeScript, to 1e-4 (observed 1e-6) | that a widget draws |
 | `wonderland:usage:verify` | 152 checks over the usage subsystem's refusals, the draw plan, the bands and the composition | that a widget draws |
 | `wonderland:ordering:verify` | the C++ ordering rule against 26 cases generated from the real TypeScript — 450 checks over the verdict AND the whole folded cursor | anything about transport |
-| `wonderland:julius:verify` | 50 checks over the run subsystem: snapshot adoption, the tail replay after a reconnect, a dropped link, a project switch | anything about transport |
+| `wonderland:julius:verify` | 61 checks over the run subsystem: snapshot adoption in both modes, the tail replay after a reconnect, a dropped link, a project switch | anything about transport |
 
 **The ordering rule is the one piece a client genuinely re-implements**, because
 only the receiver can decide which of several envelopes arriving over a real
@@ -558,7 +700,9 @@ MISSION`.
 | REAL — a live run drove the world | **nothing** |
 | RECORDED-EVENT VERIFIED | **nothing** — no capture has ever been taken |
 | INTEGRATION-READY | the envelope, ordering, rehydration, state machine, ledger adapter, accounting, animation plan, entry contract, HUD contract |
-| BUILT AND VERIFIED WITHOUT AN ENGINE | the usage geometry, the usage subsystem, the draw plan, the bands, the composition, the ordering rule and the run subsystem — 652 executable checks (152 + 50 + 450), a 66-sample geometry fixture and a 26-case ordering table, both generated from the TypeScript |
+| BUILT AND VERIFIED WITHOUT AN ENGINE | the usage geometry, both subsystems, the draw plan, the bands, the composition, the ordering rule — 663 C++ checks (152 usage + 61 run + 450 ordering), a 66-sample geometry fixture and a 26-case ordering table, both generated from the TypeScript |
+| BUILT AND VERIFIED IN TYPESCRIPT | the envelope producer, the hydration snapshot, the ingress boundary, the Julius routes, the activity→animation contract and the world-session binding — every one mutation-verified |
+| BUILT AND WAITING ON ONE PORT | `/wonderland/julius/hydrate` and `/wonderland/julius/events`. They answer 503 until a project-membership check exists, which is the only safe thing an unconfigured authorisation can do |
 | BUILT AND UNVERIFIED | the Slate paint in `WonderlandUsageHudWidget.cpp`. It parses; nothing here can run it |
 | SIMULATED | the dev script |
 | NOT BUILT | a world-snapshot route, the dog renderer, the swarm, every widget other than the usage HUD |
