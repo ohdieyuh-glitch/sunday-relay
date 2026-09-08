@@ -24,23 +24,38 @@ Machine bar: UE 5.4, ~32 GB RAM, dedicated GPU, ~200 GB free disk.
 | 11 | GVE interaction | the representative GVE reads real Relay execution/verification | video of the interaction + the Relay-side record it reflects |
 | 12 | Evidence captured | collect 1–11 into `docs/relay/WONDERLAND_SLICE_EVIDENCE.md` | the document, with hashes of the media files |
 
-## A GAP FOUND BY CHECKING THE SEAM, not yet closed
+## THE GAP THIS ONCE RECORDED IS CLOSED
 
-**No Bridge route serves the Wonderland world snapshot.** `RelayWorldState.h`
-mirrors `wonderland-contracts.ts` field for field and says it reads through
-"the Bridge's explicit read contract" — and `grep -rn wonderland
-relay-bridge/*.ts` returns NOTHING outside tests. The domain has the
-projections (`projectWonderlandMission`, `projectWonderlandLoopSignal`,
-`projectWonderlandAttestation`); no route composes and serves them.
+An earlier revision of this file said no Bridge route served Wonderland, and
+that `grep -rn wonderland relay-bridge/*.ts` returned nothing outside tests.
+**Both are now false.** Step 10 does not strand for lack of a server endpoint.
 
-Without it, step 10 strands on the paid machine for lack of a SERVER endpoint —
-a thing that can be built and tested on the Chromebook. It is the highest-value
-remaining local preparation, and it is deliberately NOT built in the same
-change as this checklist: a Bridge route carries the auth model (operator
-Bearer vs browser Relay-Session, and an Unreal client is neither), and that
-design deserves a full session, its own tests, and an independent review — not
-an edge-of-context patch. Recorded here so the next session starts at the
-decision, not at the discovery.
+| route | what it serves |
+|---|---|
+| `GET /wonderland/events` | the battle event stream — SSE, replay from a cursor, live subscribe, heartbeat |
+| `GET /wonderland/julius/hydrate` | one run's state, revision and ledger position, plus usage, activity, Project Brain scope and C.A.R.D. scope |
+| `GET /wonderland/julius/events` | that run's events after a cursor, scoped, ordered and folded |
+
+**The auth model the earlier note wanted a full session for now exists**, and it
+is worth knowing before the paid hours start:
+
+- An Unreal client is neither an operator nor a browser, and it does not need to
+  be. It carries a **browser session** — origin-bound, expiring, revocable —
+  minted by the CLI pairing flow the founder already runs. `Bearer` is the
+  operator scheme and never reaches a world.
+- The session names a PLAYER, not a project. The `projectId` in the query is a
+  **request to be authorised**, checked per request against
+  `relay_wonderland.project_members`. Nothing resolves a project from a run id.
+- A run in another project and a run that does not exist give the same answer:
+  404, `{"error":"permission denied"}`.
+- **Only a `control`-scoped grant carries a player id.** A read-only session has
+  no participant, so it cannot read a world at all — worth knowing before an
+  afternoon is spent on a 401.
+- With no `DATABASE_URL` on the bridge, every world route answers **503**. That
+  is correct, not broken: an unconfigured authorisation must not open up.
+
+So step 10's remaining work is a client that holds a session token and calls
+those two routes — and steps 1–9 and 11–12, which need the engine.
 
 ## What cannot be prepared here, and why
 
