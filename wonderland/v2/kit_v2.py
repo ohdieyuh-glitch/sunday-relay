@@ -189,10 +189,17 @@ def stack(chain, pos, rot=(0.0, 0.0, 0.0), label=None, band=None):
     rather than declared. Returns placements for the whole stack.
     """
     out, z = [], float(pos[2])
+    unit = label or "KitStack"
     for i, aid in enumerate(chain):
-        out += placements_for(aid, (pos[0], pos[1], z), rot=rot,
-                              label="%s_%d" % (label or "KitStack", i + 1),
-                              band=band)
+        rungs = placements_for(aid, (pos[0], pos[1], z), rot=rot,
+                               label="%s_%d" % (unit, i + 1), band=band)
+        # A STACK IS ONE THING. Its rungs bear on each other, so a screen that
+        # removes the crown and keeps the base leaves a decapitated tower --
+        # worse than either keeping or dropping the whole stand. `unit` says
+        # they live or die together; `kit_layout._screen` honours it.
+        for pl in rungs:
+            pl["unit"] = unit
+        out += rungs
         top = socket(aid, "top")
         if top is None:
             break

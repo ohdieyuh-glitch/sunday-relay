@@ -54,16 +54,58 @@ CAM_CLEARANCE = 2600.0
 MAX_LOOM_DEG = 45.0
 
 #: Nothing may stand nearer than this whatever its height, so no camera ever
-#: ends up inside a kerb.
+#: ends up inside a kerb. This one IS unconditional -- a piece behind a lens is
+#: still a piece the lens is standing inside.
 MIN_CLEARANCE = 900.0
+
+#: Degrees added to a camera's half-fov before a piece counts as out of shot.
+#: Generous on purpose: a camera can be re-aimed and a placement is forever.
+LOOM_FOV_MARGIN = 12.0
 
 
 def clearance_for(height_uu, eye_uu=170.0):
-    """How far a piece `height_uu` tall must stand off a camera at `eye_uu`."""
+    """How far a piece `height_uu` tall must stand off a camera at `eye_uu`.
+
+    45 degrees is not a taste. Measured over the 45,924 piece/camera pairs the
+    world's OWN placements make inside a frame, the elevation of a top reads
+    p50 +2.2, p90 +8.6, p99 +22.5 and p99.9 +43.2. A 45 degree cap therefore
+    refuses 38 of the world's own pieces -- 0.08% -- so the kit is held to
+    exactly the standard the world already keeps, and not a stricter one.
+    """
     rise = max(0.0, float(height_uu) - float(eye_uu))
     if rise <= 0.0:
         return MIN_CLEARANCE
     return max(MIN_CLEARANCE, rise / math.tan(math.radians(MAX_LOOM_DEG)))
+
+
+def looms(x, y, height_uu, cams=None):
+    """The camera a piece would loom in, or None. Bearing first, then distance.
+
+    A CAMERA LOOKING AWAY CANNOT HAVE ANYTHING LOOM IN IT, and ignoring that is
+    how a 45 degree cap -- which refuses only 0.08% of the world's own pieces
+    -- came to refuse every spot `_ceiling_break` had. Requiring 61 m from all
+    thirty-three cameras regardless of where they point leaves almost no ground
+    in a world this dense, and most of what it refuses is behind a lens.
+
+    So: the piece must be IN the picture before its height is a problem, which
+    is the same test `framescape.census` applies before it counts anything. The
+    margin on the half-fov is generous on purpose -- a camera can be re-aimed,
+    a placement is forever, and the honest direction for this test is to flag
+    one piece too many rather than one too few.
+    """
+    for name, loc, yaw, fov, _pitch in (cams or _CAMS):
+        d = math.hypot(x - loc[0], y - loc[1])
+        if d < MIN_CLEARANCE:
+            return (name, d, MIN_CLEARANCE)
+        need = clearance_for(height_uu, loc[2])
+        if d >= need:
+            continue
+        th = math.degrees(math.atan2(x - loc[0], y - loc[1])) - (yaw - 90.0)
+        th = (th + 180.0) % 360.0 - 180.0
+        if abs(th) > fov / 2.0 + LOOM_FOV_MARGIN:
+            continue                      # behind the lens, or off its edge
+        return (name, d, need)
+    return None
 
 _CAMS = [(c["name"], c["location"], c["rotation"][1], c["fov"], c["rotation"][0])
          for c in C.HERO_CAMS]
@@ -161,7 +203,7 @@ BATCHES = []
 
 
 def _nudge(bands, x, y, why, max_neighbours=40, step=1400.0, tries=8,
-           radius=0.0):
+           radius=0.0, height_uu=0.0):
     """The nearest spot to (x, y) that is clear of cameras and not crowded.
 
     A stand that is simply DROPPED when its first choice is taken makes a batch
@@ -181,10 +223,7 @@ def _nudge(bands, x, y, why, max_neighbours=40, step=1400.0, tries=8,
         a = k * 2.399963                              # the golden angle, in radians
         r = 0.0 if k == 0 else step * math.sqrt(float(k))
         px, py = x + r * math.cos(a), y + r * math.sin(a)
-        near_cam = any(math.hypot(px - loc[0], py - loc[1])
-                       < CAM_CLEARANCE + float(radius)
-                       for _n, loc, _y, _f, _p in _CAMS)
-        if near_cam:
+        if looms(px, py, max(height_uu, CAM_CLEARANCE + float(radius))):
             continue
         if _neighbours(bands, px, py) > max_neighbours:
             continue
@@ -338,8 +377,7 @@ def spots_for(cam, bands, want, window, taken, lat_step=2200.0, lat_max=11000.0)
             lat += lat_step
             if any(math.hypot(x - px, y - py) < 3000.0 for px, py in taken):
                 continue
-            if any(math.hypot(x - c[1][0], y - c[1][1]) < CAM_CLEARANCE
-                   for c in _CAMS):
+            if looms(x, y, 6320.0):        # the tallest spelling, not the low end
                 continue
             if _neighbours(bands, x, y) > 34:
                 continue
@@ -619,8 +657,7 @@ def spots_on_bearing(cam, bands, arc, min_el, height_uu, want, taken,
             if any(c == cam and abs(t - th) < MIN_SEP_DEG
                    for _px, _py, c, t in taken):
                 continue
-            if any(math.hypot(x - c[1][0], y - c[1][1]) < CAM_CLEARANCE
-                   for c in _CAMS):
+            if looms(x, y, height_uu):
                 continue
             if _neighbours(bands, x, y) > 34:
                 continue
@@ -1130,6 +1167,83 @@ def _street_fabric(bands):
     return out
 
 
+#: uu. A `WL_Bridge_Sky` is a 32 m span whose ends are published at z 402. Two
+#: stands carry one when their centres are far enough apart that the deck
+#: reaches past both shafts and near enough that it does not hang in air: a
+#: stand's shaft is about 400 uu of radius, so the span plus two half-shafts is
+#: the far end of the window and the span itself is the near one. Outside it the
+#: bridge is not spanning anything and this batch does not place one.
+SPAN_UU = 3236.0
+SPAN_WINDOW = (SPAN_UU, SPAN_UU + 880.0)
+
+#: uu. Where a sky bridge's soffit sits on the shafts it links. Every spelling
+#: in `KIT.spellings` is 5,400 uu or taller, so a deck at 30 m is inside the
+#: shaft of both ends with room above and below.
+SPAN_Z = 3000.0
+
+#: Filled by `_sky_bridges`.
+SPAN_CHOSEN = []
+
+
+def _sky_bridges(bands):
+    """The kit's own towers, linked -- and the only batch that could move a frame.
+
+    `WL_Bridge_Sky` publishes `end_a` and `end_b` and NO `bottom`: like the
+    dormers, it does not stand on the ground. Unlike the dormers it needs TWO
+    carriers, and the only way one exists in Wonderland is if two stands
+    happen to be the right distance apart -- which `spots_on_bearing` never
+    aimed for, because it was placing towers to fill ceilings.
+
+    So this reads the stands back out of the batches that made them and links
+    the pairs whose spacing the module can actually reach. A bridge whose ends
+    do not land on a shaft is a bridge hanging in the air, and `SPAN_WINDOW` is
+    the span the manifest publishes rather than a tolerance chosen to make more
+    pairs qualify.
+
+    Both ends are `carried()` by their stands, so if a screen ever removes one
+    tower the bridge goes with it rather than being left slung from nothing.
+    """
+    out, chosen, taken = [], [], set()
+    stands = {}
+    for band in bands:
+        for it in band:
+            lab = it.get("label") or ""
+            if not it.get("kit"):
+                continue
+            head = lab.split("_")[0]
+            if not head.startswith(("KitDepth", "KitBreak", "KitGreen",
+                                    "KitClockTower")):
+                continue
+            stands.setdefault(head, (it["pos"][0], it["pos"][1], lab))
+    keys = sorted(stands)
+    lo, hi = SPAN_WINDOW
+    for i, a in enumerate(keys):
+        if a in taken:
+            continue
+        for b in keys[i + 1:]:
+            if b in taken:
+                continue
+            ax, ay, alab = stands[a]
+            bx, by, blab = stands[b]
+            d = math.hypot(bx - ax, by - ay)
+            if not (lo <= d <= hi):
+                continue
+            mx, my = (ax + bx) * 0.5, (ay + by) * 0.5
+            bearing = math.degrees(math.atan2(by - ay, bx - ax))
+            span = carried(KIT.placements_for(
+                "WL_Bridge_Sky", (mx, my, SPAN_Z), rot=(0.0, bearing, 0.0),
+                label="KitSpan_%s_%s" % (a, b), band="V2_Skyline"), alab)
+            for pl in span:
+                pl["carried_also_by"] = blab
+            out += span
+            chosen.append((a, b, d, mx, my))
+            taken.add(a)
+            taken.add(b)
+            break
+    SPAN_CHOSEN[:] = chosen
+    return out
+
+
 PASSES = (("tea_terrace", _tea_terrace), ("water_court", _water_court),
           ("depth_stand", _depth_stand), ("clock_quarter", _clock_quarter),
           ("hamlet_street", _hamlet_street),
@@ -1137,7 +1251,8 @@ PASSES = (("tea_terrace", _tea_terrace), ("water_court", _water_court),
           ("green_ceiling", _green_ceiling),
           ("castle_precinct", _castle_precinct),
           ("garden_levels", _garden_levels),
-          ("street_fabric", _street_fabric))
+          ("street_fabric", _street_fabric),
+          ("sky_bridges", _sky_bridges))
 
 
 #: Every placement a screen refused, with the camera and the numbers.
@@ -1163,7 +1278,7 @@ def carried(placements, host_label):
     return placements
 
 
-def _screen(name, band):
+def _screen(name, band, placed=()):
     """Refuse any placement that would loom in a camera, and say which.
 
     RUN ON PLACEMENTS, NOT ON DECISIONS. A batch clears its CENTRE and then
@@ -1181,23 +1296,40 @@ def _screen(name, band):
             h = KIT.height_uu(p["kit"])
         except Exception:                                  # noqa: BLE001
             pass
-        need = clearance_for(h)
-        bad = None
-        for cn, loc, _y, _f, _pi in _CAMS:
-            d = math.hypot(p["pos"][0] - loc[0], p["pos"][1] - loc[1])
-            if d < need:
-                bad = (cn, d, need, h)
-                break
+        # HOW HIGH IT REACHES, NOT HOW TALL IT IS. A 12 m sky bridge slung
+        # between two towers 30 m up tops out at 42 m, and asking the module
+        # for its height alone would have let it stand 10 m from a lens on the
+        # strength of being a small module. What looms is the top.
+        h += max(0.0, float(p["pos"][2]))
+        bad = looms(p["pos"][0], p["pos"][1], h)
         if bad:
-            REFUSED.append("%s: %s (%.0f uu tall) is %.0f uu from %s and needs "
-                           "%.0f" % (name, p["label"], bad[3], bad[1], bad[0],
-                                     bad[2]))
+            REFUSED.append("%s: %s (reaches %.0f uu) is %.0f uu from %s, in "
+                           "shot, and needs %.0f"
+                           % (name, p["label"], h, bad[1], bad[0], bad[2]))
             continue
         keep.append(p)
+    # A UNIT IS ONE THING. `kit_v2.stack` marks a spelled tower's rungs with a
+    # shared `unit` because they bear on each other: refusing the crown and
+    # keeping the base leaves a decapitated tower, which is worse than either
+    # answer on its own. If any part of a unit was refused, the rest goes.
+    gone = {p["unit"] for p in band
+            if p.get("unit") and p not in keep} - {None}
+    if gone:
+        for p in keep:
+            if p.get("unit") in gone:
+                REFUSED.append("%s: %s goes with the rest of unit %s"
+                               % (name, p["label"], p["unit"]))
+        keep = [p for p in keep if p.get("unit") not in gone]
     # SECOND PASS: nothing carried may outlive its carrier. Run to a fixed
     # point, because a carrier can itself be carried.
+    #
+    # A CARRIER CAN BE IN AN EARLIER BATCH. `_sky_bridges` links stands that
+    # `depth_stand` and `clock_quarter` made, so a screen that looked only at
+    # its own batch declared every bridge an orphan and refused all five.
+    # `placed` is everything the passes before this one kept.
+    outside = {p["label"] for band0 in placed for p in band0}
     while True:
-        alive = {p["label"] for p in keep}
+        alive = {p["label"] for p in keep} | outside
         orphans = [p for p in keep
                    if p.get("carried_by") and p["carried_by"] not in alive]
         if not orphans:
@@ -1223,7 +1355,11 @@ def build(existing_bands=()):
     out = []
     del REFUSED[:]
     for name, fn in PASSES:
-        band = _screen(name, fn(existing_bands))
+        # EACH PASS SEES WHAT THE ONES BEFORE IT PLACED. `_sky_bridges` has to
+        # -- it links stands the earlier batches made, and given only the
+        # world's own bands it found none and placed nothing. It also stops the
+        # later batches crowding ground the earlier ones already took.
+        band = _screen(name, fn(tuple(existing_bands) + tuple(out)), out)
         BATCHES.append((name, len(band)))
         if band:
             out.append(band)

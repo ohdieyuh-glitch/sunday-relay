@@ -8,7 +8,7 @@ not the placements.
 | | placements | mean built | cameras moved | one piece holds a third | frames over half green |
 |---|---|---|---|---|---|
 | before | 13,816 | 67.78% | — | 10 | 9 |
-| after | 15,157 | **74.82%** | 24 of 33 | 9 | 5 |
+| after | 15,095 | **72.33%** | 24 of 33 | 10 | 6 |
 
 The founder's reference, classified from its own pixels, is built **71.5%**.
 
@@ -196,6 +196,74 @@ five or six frames each. They are each a different spelling, so they are not
 the same OBJECT frame after frame -- but a future pass adding more depth stands
 should run this tool first, because the batch that fixed monotony is two frames
 away from causing it.
+
+## The camera-clearance rule, wrong three times
+
+Worth the space because each version was wrong in a different, instructive way,
+and the last one is calibrated against the world rather than chosen.
+
+**1. A flat 2,600 uu.** It cannot tell a 3 m retaining wall from a 63 m tower.
+It refused the ground the Tea Terraces are named for and waved through any
+tower that cleared the same circle.
+
+**2. Height-aware, at 45 degrees.** `clearance_for(h)` is the distance at which
+a piece's own height subtends `MAX_LOOM_DEG`. Better — but applied to all
+thirty-three cameras regardless of where they point, it required 61 m of
+clearance from every lens in the world and left `_ceiling_break` with nowhere
+at all to stand. Most of what it refused was **behind** a camera.
+
+**3. Height-aware AND bearing-aware.** A camera looking away cannot have
+anything loom in it, which is the same test `framescape.census` applies before
+it counts anything. `looms()` checks the fov first (plus a 12-degree margin,
+because a camera can be re-aimed and a placement is forever) and the distance
+second.
+
+### AND IT COST 2.5 POINTS OF CENSUS, WHICH IS THE HONEST PRICE
+
+An earlier version of this file reported mean built **74.82%**. That number was
+inflated and this one is not. The flat rule had let `green_ceiling` put 63 m
+towers on ground like this:
+
+| ground | camera | distance | bearing | half-fov | its top reads |
+|---|---|---|---|---|---|
+| (6007, -14615) | GroveRoadCam18 | **27.8 m** | +23.9 | 45 | **+65.7** |
+| (5590, -16337) | GroveRoadCam18 | **26.7 m** | -14.0 | 45 | **+66.5** |
+| (931, -5388) | ScaleCam07 | 53.2 m | -10.1 | 45 | +49.1 |
+
+Three towers standing in a camera's face, dead in shot, filling two-thirds of
+its vertical field. They scored well because the census counts a held column
+whether or not the thing holding it is a wall in front of the lens.
+
+So the corrected figures, all against a `BEFORE` of 67.78%:
+
+| | before | with the flat rule | calibrated |
+|---|---|---|---|
+| mean built | 67.78% | 74.82% (inflated) | **72.33%** |
+| frames over half green | 9 | 5 | 6 |
+| one piece holding a third | 10 | 9 | 10 |
+
+Still past the founder's 71.5% reference, and it is a number that would survive
+someone opening the frame.
+
+**Is 45 degrees the right cap?** Measured, not chosen. Over the 45,924
+piece/camera pairs the world's OWN placements make inside a frame:
+
+| p50 | p90 | p99 | p99.9 | max |
+|---|---|---|---|---|
+| +2.2 | +8.6 | +22.5 | +43.2 | +76.2 |
+
+A 45-degree cap refuses **38 of the world's own pieces, 0.08%**. The kit is
+held to exactly the standard the world already keeps, and not a stricter one.
+
+Two more things follow from it, both found by the screen firing:
+
+- **A stack is one thing.** The rule refused a stand's CROWN and kept its base,
+  leaving a decapitated tower — worse than either answer alone. `kit_v2.stack`
+  now marks a spelling's rungs with a shared `unit` and the screen drops them
+  together.
+- **What looms is the top, not the module.** A 12 m sky bridge slung 30 m up
+  reaches 42 m. Asking the module for its height alone would have let it stand
+  10 m from a lens on the strength of being a small module.
 
 ## Not proven
 

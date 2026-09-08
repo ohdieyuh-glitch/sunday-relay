@@ -240,40 +240,58 @@ def t_nothing_is_orphaned():
 
 
 def t_camera_clearance():
-    """No kit placement looms in a camera: `kit_layout.clearance_for`, per piece.
+    """No kit placement looms in a camera that can see it.
 
-    The rule is height-aware on purpose. A flat 2,600 uu refused the tea
-    terrace the Tea Terraces are named for while waving through any tower that
-    cleared the same circle, because a distance alone cannot tell a 3 m
-    retaining wall from a 63 m one. What a camera cannot have is a piece
-    filling its lens, so the clearance is the distance at which the piece's own
-    height subtends `MAX_LOOM_DEG`.
+    The rule is height-aware AND bearing-aware, and both halves were learned:
+
+    A flat distance cannot tell a 3 m retaining wall from a 63 m tower, so
+    `clearance_for()` is the distance at which a piece's own height subtends
+    `MAX_LOOM_DEG`. 45 degrees is measured rather than chosen -- over the
+    45,924 piece/camera pairs the world's own placements make inside a frame,
+    the elevation of a top reads p99.9 +43.2, so the cap refuses 0.08% of the
+    world's own pieces and holds the kit to the world's own standard.
+
+    Applied to all thirty-three cameras regardless of where they POINT, though,
+    it demanded 61 m of clearance from every lens in a world this dense and
+    left one batch with nowhere to stand at all -- and most of what it refused
+    was behind a camera. So a piece must be in shot before its height is a
+    problem, which is the test `framescape.census` applies before it counts
+    anything.
+
+    THE EXEMPTION IS PRINTED, not hidden: the count of placements that clear
+    the rule only because they are out of shot is reported every run, because
+    an exemption nobody can see is an exemption nobody checks.
     """
-    cams = [(c["name"], c["location"]) for c in C.HERO_CAMS]
-    near, worst = [], 0.0
+    near, exempt, tight = [], 0, 0.0
     for p in kit_placements():
-        x, y, _z = p["pos"]
+        x, y, z = p["pos"]
         try:
-            h = KIT.height_uu(p["kit"])
+            h = KIT.height_uu(p["kit"]) + max(0.0, z)
         except Exception:                                  # noqa: BLE001
-            h = 0.0
-        need = KL.clearance_for(h)
-        for n, loc in cams:
+            h = max(0.0, z)
+        bad = KL.looms(x, y, h)
+        if bad:
+            near.append("%s (reaches %.0f uu) is %.0f uu from %s, needs %.0f"
+                        % (p["label"], h, bad[1], bad[0], bad[2]))
+            continue
+        for _n, loc, _yaw, _fov, _pi in KL._CAMS:
             d = math.hypot(x - loc[0], y - loc[1])
+            need = KL.clearance_for(h, loc[2])
             if d < need:
-                near.append("%s (%.0f uu tall) is %.0f uu from %s, needs %.0f"
-                            % (p["label"], h, d, n, need))
-            elif need > 0:
-                worst = max(worst, need / max(d, 1.0))
-    check(not near, "%d kit placement(s) loom in a camera: %s"
+                exempt += 1
+                break
+            if need > 0:
+                tight = max(tight, need / max(d, 1.0))
+    check(not near, "%d kit placement(s) loom in a camera that can see them: %s"
                     % (len(near), near[:4]))
-    NOTES.append("%d placement(s) refused by the screen for looming"
-                 % len(KL.REFUSED))
+    NOTES.append("%d placement(s) are inside a camera's clearance but OUT OF "
+                 "SHOT, and pass on that ground alone" % exempt)
+    NOTES.append("%d placement(s) refused by the screen" % len(KL.REFUSED))
     for why in KL.REFUSED[:6]:
         NOTES.append("refused: %s" % why)
-    return ("%d placements, none within %.0f deg of any of %d cameras "
-            "(tightest sits at %.0f%% of its own clearance)"
-            % (len(kit_placements()), KL.MAX_LOOM_DEG, len(cams), 100.0 * worst))
+    return ("%d placements, none looming in a camera that frames it "
+            "(cap %.0f deg; tightest in-shot piece sits at %.0f%% of its "
+            "clearance)" % (len(kit_placements()), KL.MAX_LOOM_DEG, 100.0 * tight))
 
 
 def t_ground():
