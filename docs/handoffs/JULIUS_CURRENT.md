@@ -782,6 +782,13 @@ gaps, because that run had no contract at all.
 
 ### 00g. The highest-impact remaining Julius beta blocker
 
+> **2026-09-08, later:** PR #234 HAS merged (`main` = `872f1790`, §0). The
+> blocker is now the next generation: the 34186711214 repair on
+> `relay/julius-architect-gate-fix @ d8c9fab1` needs a **worker-authored PR**,
+> which no environment this session can reach is able to open. The founder's
+> exact steps are in `docs/JULIUS_WORKER_PR_RUNBOOK.md` (Step 1 dry-run
+> verified here). Everything below is the earlier record.
+
 **Nothing engineering-side. It is the merge of PR #234.**
 
 Julius's Signal Task 1 — one real paid mission reaching verified completion
