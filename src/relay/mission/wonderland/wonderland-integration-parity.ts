@@ -17,6 +17,15 @@
  */
 
 import {
+  JULIUS_ACTIVITY_READING_FIELDS,
+  JULIUS_ACTIVITY_SIGNALS,
+  JULIUS_WORKER_ACTIVITY_FIELDS,
+} from './wonderland-julius-activity';
+import type {
+  JuliusActivityReading,
+  JuliusWorkerActivity,
+} from './wonderland-julius-activity';
+import {
   JULIUS_EMBODIMENT_FIELDS,
   JULIUS_STATE_SOURCES,
   JULIUS_VISUAL_STATES,
@@ -219,6 +228,20 @@ const _UsageViewportNullableIsExact: SameKeys<
 > = true;
 void _UsageViewportNullableIsExact;
 
+const ACTIVITY_READING_NULLABLE = ['observedAtIso'] as const;
+const _ActivityReadingNullableIsExact: SameKeys<
+  (typeof ACTIVITY_READING_NULLABLE)[number],
+  NullableKeysOf<JuliusActivityReading>
+> = true;
+void _ActivityReadingNullableIsExact;
+
+const WORKER_ACTIVITY_NULLABLE = [] as const;
+const _WorkerActivityNullableIsExact: SameKeys<
+  (typeof WORKER_ACTIVITY_NULLABLE)[number],
+  NullableKeysOf<JuliusWorkerActivity>
+> = true;
+void _WorkerActivityNullableIsExact;
+
 const METER_DRAW_PLAN_NULLABLE = [] as const;
 const _MeterDrawPlanNullableIsExact: SameKeys<
   (typeof METER_DRAW_PLAN_NULLABLE)[number],
@@ -283,6 +306,24 @@ export const WONDERLAND_INTEGRATION_CPP_STRUCT_PARITY: readonly {
     cppStruct: 'FWonderlandEnvelope',
     tsInterface: 'WonderlandEnvelope',
     fields: WONDERLAND_ENVELOPE_FIELDS,
+  },
+  {
+    /**
+     * THE SECOND AXIS. `FWonderlandJuliusEmbodiment` says which phase a run is
+     * in, and there is one answer; this says what else is true, and there can
+     * be several. Mirrored rather than left to the client because the whole
+     * value of the vocabulary is that a world cannot add to it: every signal is
+     * raised by an event Julius really emits, and a client free to invent one
+     * would be free to render a tool call nobody reported.
+     */
+    cppStruct: 'FWonderlandActivityReading',
+    tsInterface: 'JuliusActivityReading',
+    fields: JULIUS_ACTIVITY_READING_FIELDS,
+  },
+  {
+    cppStruct: 'FWonderlandWorkerActivity',
+    tsInterface: 'JuliusWorkerActivity',
+    fields: JULIUS_WORKER_ACTIVITY_FIELDS,
   },
   {
     cppStruct: 'FWonderlandCursor',
@@ -431,6 +472,23 @@ export const WONDERLAND_INTEGRATION_CPP_ENUM_PARITY: readonly {
   },
   {
     /**
+     * `nullable` HERE MEANS SOMETHING SLIGHTLY DIFFERENT, AND IT MATTERS.
+     *
+     * The other nullable enums carry an absent VALUE. This one is an array
+     * member, and an array of these is routinely EMPTY — which is not absence
+     * of a value but the report "nothing was signalled". The zero member exists
+     * for the same structural reason regardless: a TArray element that nobody
+     * wrote must not read as a real activity, so ordinal 0 is `Unobserved` and
+     * no signal occupies it.
+     */
+    cppEnum: 'EWonderlandActivitySignal',
+    source: 'JULIUS_ACTIVITY_SIGNALS',
+    members: JULIUS_ACTIVITY_SIGNALS,
+    nullable: true,
+    zeroMember: 'Unobserved',
+  },
+  {
+    /**
      * ORDINAL 0 IS `Hold`, AND THAT IS THE SAFE DEFAULT ON PURPOSE.
      *
      * A USTRUCT arrives zero-filled, so a plan nothing filled in says "keep
@@ -559,6 +617,8 @@ export const WONDERLAND_INTEGRATION_NULLABLE_FIELDS: Readonly<
   FWonderlandLinkStatus: LINK_STATUS_NULLABLE,
   FWonderlandUsageAuthorityStatus: AUTHORITY_STATUS_NULLABLE,
   FWonderlandUsageViewport: USAGE_VIEWPORT_NULLABLE,
+  FWonderlandActivityReading: ACTIVITY_READING_NULLABLE,
+  FWonderlandWorkerActivity: WORKER_ACTIVITY_NULLABLE,
   FWonderlandMeterDrawPlan: METER_DRAW_PLAN_NULLABLE,
   FWonderlandSwooshSample: SWOOSH_SAMPLE_NULLABLE,
   FWonderlandSwooshSegment: SWOOSH_SEGMENT_NULLABLE,

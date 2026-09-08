@@ -67,6 +67,65 @@ chain — do not add a fourth table.
 
 ---
 
+## 2b. The second axis — WHAT ELSE IS TRUE
+
+`EWonderlandJuliusState` answers "which phase", and there is exactly one answer:
+a run is coding or reviewing or repairing, never two. **That is not enough to
+describe a run**, and the directive is explicit that the answer must not collapse
+into one loading boolean. A Coding Agent can be retrying while a subagent swarm
+runs and an approval sits open, and a vocabulary with room for one of those would
+have to pick — with the pick made by whichever event arrived last.
+
+So there is a second, orthogonal vocabulary. `FWonderlandActivityReading` carries
+a SET, not a value.
+
+| signal | raised by | cleared by |
+|---|---|---|
+| `AwaitingApproval` | `approval.requested` | `approval.decided` |
+| `ProviderDegraded` | `provider.failure` | `worker.completed` |
+| `Recovering` | `recovery.action` | `worker.completed`, `task.claimed` |
+| `Retrying` | `retry.scheduled` | `worker.dispatched`, `worker.completed` |
+| `SwitchingWorker` | `reroute.selected`, `fallback.selected` | `worker.dispatched` |
+| `Swarming` | `subagent.spawned` | the COUNT reaching zero |
+| `RetrievingContext` | `context.compiled` | `worker.dispatched` |
+
+Rules a receiver must not break:
+
+- **Signals are raised and cleared by events and by nothing else.** No signal
+  expires on a timer or a guess. One stuck on is a stream that stopped — a fact
+  worth seeing, not one to tidy away.
+- **An empty set means NOTHING WAS REPORTED**, never that the run is calm.
+  `Idle` is a visual STATE and is a different claim.
+- **`Swarming` follows the count, not the last event.** Two subagents spawning
+  and one completing leaves one running.
+- **A run that ends keeps its signals.** A run that completed with an approval
+  outstanding still had one outstanding.
+- **`ProviderDegraded` is not `Error`.** A provider failed and the run carried
+  on; the visual state says whether it stopped.
+- Signals are collected **per worker as well as per run**, so three concurrent
+  Compound clones are three entries. Nothing assumes one agent.
+
+### What the founder asked to see that Julius does not yet say
+
+Recorded in `JULIUS_ACTIVITY_NOT_YET_EMITTED`, and **do not render these**: a
+signal derived from something that does not mean it — "the run is coding, so it
+is probably using a tool" — is indistinguishable from knowledge until the guess
+is wrong in front of the founder.
+
+| asked for | why it cannot be shown | what would fix it |
+|---|---|---|
+| tool usage | no event reports a tool call at all. `worker.dispatched` and `worker.completed` bracket the work and everything between is silent | a tool-level event pair |
+| research | nothing reports a worker reading outside the workspace | the same tool-level events |
+| interpreting | nothing marks the gap between a mission arriving and a worker being selected; a run queued behind another would render as interpreting for as long as it waited | an explicit event |
+| planning | the Prompt Architect phase is visible; nothing distinguishes planning from having planned | an `architect.planning` / `architect.planned` pair |
+| Project Brain vs memory | `context.compiled` says context was assembled, not from where | a fact on the existing event naming the source — no new type needed |
+
+That table is the ask for whoever owns the kernel. It is not something this layer
+can supply, and a test fails if an entry is listed as missing while a signal
+covers it.
+
+---
+
 ## 3. Legal transitions
 
 `JULIUS_VISUAL_TRANSITIONS` in `wonderland-visual-transitions.ts` is **derived

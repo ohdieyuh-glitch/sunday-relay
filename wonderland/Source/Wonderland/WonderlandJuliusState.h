@@ -290,3 +290,113 @@ WONDERLAND_API int32 WonderlandAnimationBlendMs(EWonderlandAnimationTransition T
 // Whether a clip loops. `HaltSlump` does not: a stopped agent settles once and
 // stays stopped, and a looping collapse reads as repeatedly falling over.
 WONDERLAND_API bool WonderlandAnimationLoops(EWonderlandDogAnimation Animation);
+
+/* -------------------------------------------------------- activity signals */
+
+// Mirrors JULIUS_ACTIVITY_SIGNALS. What a run is doing BESIDES which phase it
+// is in.
+//
+// EWonderlandJuliusState answers "which phase" and there is exactly one answer:
+// a run is coding or reviewing or repairing, never two. These are the other
+// axis, and there can be several at once — a Coding Agent can be retrying while
+// a subagent swarm runs and an approval sits open. Folding them into the state
+// enum would mean choosing between `Coding` and "retrying" for a run doing
+// both, with the choice made by whichever event arrived last.
+//
+// RAISED AND CLEARED BY EVENTS, NEVER INFERRED AND NEVER TIMED OUT. Relay's
+// `JULIUS_ACTIVITY_RULES` names the event types that do each; nothing in a
+// client may add a signal, and no signal expires on a guess. A signal stuck on
+// is a stream that stopped, which is a fact worth seeing rather than one to
+// tidy away.
+//
+// AN EMPTY SET MEANS NOTHING WAS REPORTED, not that nothing is happening.
+// Julius emits no event for a great deal of what it does — there is no tool-use
+// event, no research event, nothing marking interpretation or planning — and a
+// world that read silence as calm would be inventing the most reassuring
+// possible answer. Relay's `JULIUS_ACTIVITY_NOT_YET_EMITTED` records each gap
+// and what the kernel would have to emit to close it.
+UENUM(BlueprintType)
+enum class EWonderlandActivitySignal : uint8
+{
+	// Ordinal 0. Not a signal: the zero value of an unset array member. A
+	// default-constructed element must not read as a real activity.
+	Unobserved,
+	// A human gate is open. The run waits on a person, not on a model.
+	AwaitingApproval,
+	// A provider failed and the run continued. Degraded, NOT errored.
+	ProviderDegraded,
+	Recovering,
+	Retrying,
+	// Work moved to a different worker: a reroute or a fallback.
+	SwitchingWorker,
+	// Subagents are running. This is what /MAS looks like from outside.
+	Swarming,
+	// Context was compiled for a worker. Project Brain and memory are not yet
+	// distinguishable — `context.compiled` reports that context was assembled
+	// and not which source it came from.
+	RetrievingContext
+};
+
+// Mirrors JuliusWorkerActivity. One worker's signals.
+//
+// A LIST OF WORKERS RATHER THAN A FIELD ON THE RUN, deliberately. /MAS spawns
+// two or three Compound clones under one primary, and a shape that could only
+// describe "the" agent would have to be replaced the day that ships.
+USTRUCT(BlueprintType)
+struct FWonderlandWorkerActivity
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Julius")
+	FString WorkerId;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Julius")
+	TArray<EWonderlandActivitySignal> Signals;
+};
+
+// Mirrors JuliusActivityReading.
+USTRUCT(BlueprintType)
+struct FWonderlandActivityReading
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Julius")
+	FString SchemaVersion;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Julius")
+	FString ProjectId;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Julius")
+	FString RunId;
+
+	// Signals true for the run, in Relay's order. EMPTY MEANS NOTHING WAS
+	// REPORTED — never that the run is idle. Idle is a visual STATE.
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Julius")
+	TArray<EWonderlandActivitySignal> Signals;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Julius")
+	TArray<FWonderlandWorkerActivity> Workers;
+
+	// Spawned and not yet reported complete. `Swarming` follows THIS rather than
+	// the last event: two spawning and one completing leaves one running, and
+	// clearing on the first completion would put the swarm away mid-work.
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Julius")
+	int64 ActiveSubagents = 0;
+
+	// Spawns Julius refused. A denial is a fact, not an absence.
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Julius")
+	int64 SubagentsDenied = 0;
+
+	// When the last event that moved anything occurred. Absent until one has.
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Julius")
+	FWonderlandText ObservedAtIso;
+
+	// Events read whose type raises and clears nothing. Not an error: most of
+	// the catalogue is about other concerns.
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Julius")
+	int64 UnusedEvents = 0;
+
+	// Events refused for naming another project or run.
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Julius")
+	int64 ForeignEvents = 0;
+};
