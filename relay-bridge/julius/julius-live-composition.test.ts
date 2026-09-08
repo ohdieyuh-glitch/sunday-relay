@@ -955,6 +955,33 @@ describe('the task contract is locked before the coder runs, and binds its revie
     }
   });
 
+  it('the coder\'s prompt carries the locked terms — the same charge its reviewer grades against', async () => {
+    const { memory, fakes } = await driveLiveMission(['approved']);
+    const locked = await memory.loadTaskContract({ projectId: 'prj-live', taskId: 'build-1' });
+    expect(locked?.state).toBe('LOCKED');
+
+    // The hosted coder's prompt, as the runner received it.
+    const prompt = fakes.prompts[0];
+    expect(prompt).toBeDefined();
+    expect(prompt).toContain('--- TASK CONTRACT (locked; the reviewer grades against exactly this) ---');
+    expect(prompt).toContain(`CONTRACT: ${locked!.contractId} revision ${locked!.contractRevision}`);
+    expect(prompt).toContain(`BINDING DIGEST: ${locked!.bindingDigest}`);
+    // The objective is whatever revision was LOCKED — here the architect's revision 2, not the seeded text.
+    expect(prompt).toContain(`OBJECTIVE: ${locked!.objective}`);
+    expect(prompt).toContain('ROUND: build');
+    expect(prompt).toContain('[AC-1] The fixture test passes.');
+    // After the plan, not instead of it: the plan is what the coder builds,
+    // the contract is what the build is held to.
+    expect(prompt!.indexOf('--- ARCHITECT PLAN ---')).toBeLessThan(prompt!.indexOf('--- TASK CONTRACT'));
+
+    // And it is the SAME document the reviewer was handed: one binding digest
+    // in the coder's prompt and in the build review's packet.
+    const buildReview = fakes.packets.find((packet) => packet.stage === 'build');
+    expect(buildReview?.contract?.binding.bindingDigest).toBe(locked!.bindingDigest);
+    expect(buildReview?.contract?.objective).toBe(locked!.objective);
+    expect(locked!.contractRevision, 'the architect revised the seeded terms and THAT revision was locked').toBe(2);
+  });
+
   it('the architect is NOT bound, and null says so rather than an absence', async () => {
     // The plan task is not the contract's subject and has none. Reporting a
     // digest for it would be inventing an agreement; omitting the fact would

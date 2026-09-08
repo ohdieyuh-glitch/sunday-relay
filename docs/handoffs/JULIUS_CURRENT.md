@@ -253,6 +253,30 @@ gh pr create --base main --head relay/julius-architect-gate-fix \
   --body-file docs/JULIUS_ARCHITECT_GATE_PR.md
 ```
 
+**Watch cycle 2026-09-08 14:05Z (after the founder re-centred the paid mission):**
+`origin/main` still `872f1790`; `relay/julius-architect-gate-fix` still
+`d8c9fab1`; a GitHub search for open PRs by `app/julius-worker` returns **none**,
+and no open PR has that branch as its head. **No worker-authored PR exists.**
+Two facts for whoever opens it:
+
+* **How #234 was authored, from the evidence rather than memory:** every commit
+  on its head (`be949de2`, `84a354b1`, `e944260b`, …) has BOTH author and
+  committer `julius-worker[bot] <325202980+julius-worker[bot]@users.noreply.github.com>`,
+  and the squash on `main` (`872f1790`) keeps that author with `GitHub` as
+  committer. So the commits were created with the App's installation credential
+  (API-created commits, or local git with that identity pushed under the
+  installation token), from the founder's local session
+  `session_01Rg4GG4cY71gpyELD89PQkb`. That credential is not in this container.
+* **The committed PR body is one commit stale.** `docs/JULIUS_ARCHITECT_GATE_PR.md`
+  on the branch says `Head SHA: 6e3ccd39…`; the branch tip is `d8c9fab1`. The
+  re-authored commits will have new SHAs anyway, so the body's head line should
+  be rewritten by the opener, not by this session (the branch is not to be
+  touched from here).
+
+The hourly watch (`trig_01PvdqADjSgk5aUH9dvugJEZ`, :35) now checks BOTH main and
+the worker-PR search every cycle and reports `FOUNDER ACTION REQUIRED — PR #n`
+the moment a merge-ready one exists.
+
 **The two earlier commits on `relay/julius-contract-stack-rebased`
 (`24d91a40`, `526d5d35`) are SUPERSEDED by `98a4a002`** and should not be landed
 beside it. This branch will be rebased onto the gate fix once that lands and its
@@ -918,6 +942,40 @@ reserved. The fixture that seeds a deployment now seeds one contract per
 subject using the runtime's own resolver rather than a copy of the rule. The
 audit is enumerated, not implied: twelve placements across all four role
 shapes, and the only nulls are `plan-1` and `plan-1:review`.
+
+#### The coder receives the terms it is bound by
+
+Until this change the contract charge reached only the reviewer, on the stated
+reasoning that a coder "is bound by the contract but does not review against
+it". So the coder was briefed by the plan in its context packet, the reviewer
+graded against the locked contract, and "the coder executed under the
+contract" meant only that a binding was written beside its claim. Now every
+bound dispatch — build, repair round, sub-agent child — carries the same
+`JuliusContractReviewCharge` the reviewer gets (stage `build` / `repair:build`
+for the round), the hosted Claude coder renders it as a `--- TASK CONTRACT ---`
+block after the architect plan (objective, boundary, scope, permitted paths,
+prohibited actions, blocking criteria, required evidence and checks, failure
+conditions, stopping condition, and the contract id, revision and digest), the
+scripted adapter records it, and the e2e suite asserts the coder, its repair,
+its review and its re-review hold one charge whose binding equals the binding
+on each claim. The architect and its review receive none. This is a change to
+the live coder prompt on the paid path, made deliberately: the reviewer and the
+coder now hold one document rather than two readings of a plan.
+
+#### Section 12B — the contract and the Project Brain
+
+Decided and proven rather than assumed: the Brain does NOT carry the contract.
+The terms reach a worker on its dispatch (the charge above), and the packet's
+content hash already covers both the Brain revision and the contract revision
+and digest, so a packet compiled under either a different Brain or a different
+agreement is a different document. What the Brain does carry — the DECISION
+entry Julius writes when it accepts or repairs — is keyed on exactly what the
+decision is keyed on, and the crash-after-LOCK case now asserts that the
+resumed acceptance writes it once: no second Brain entry for an acceptance that
+happened once. Writing `contract.locked` / `contract.challenged` into the Brain
+was considered and not done: a worker would then read the agreement's state as
+mission knowledge rather than receive it as its charge, and the two could
+drift.
 
 #### Section 12D — the Beta Gate measures the binding, not only the lock
 
