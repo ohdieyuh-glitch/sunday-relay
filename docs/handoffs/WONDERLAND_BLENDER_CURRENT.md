@@ -7,13 +7,63 @@ is the art library's.
 
 | | |
 |---|---|
-| SESSION | 2026-09-08 — Blender asset forge, second pass |
+| SESSION | 2026-09-08 — Blender asset forge, second pass; then the world-integration pass (see "SESSION 3 — DO THIS FIRST") |
 | BRANCH | `claude/wonderland-blender-forge-pjinco`, cut from `origin/relay/wonderland-v2` at `0b07f0f` |
 | SCOPE | `wonderland/art/**` and this file. Nothing else in the repository was touched. |
 | LOCK | `wonderland/.gauntlet-lock` = `writer=claude`, read before writing, unchanged. `wonderland/art/` is unowned by `gauntlet-check.py` (shared). |
 | BLENDER | `bpy` 4.5.13 LTS, installed via pip. Real Blender, headless — the same bmesh, the same exporters, Cycles on CPU. |
 | RENDERED | **Yes.** Twenty-one Cycles contact sheets and seven ASSEMBLY renders in `wonderland/art/blender/validation/renders/`. No Unreal frame — see "What is unproven". |
 | PLACED | **Yes.** 747 kit placements in `layout_v2.ALL` — 52 of 101 modules, 160 meshes, 8 batches. See "The kit is in the world now". |
+
+---
+
+## SESSION 3 — DO THIS FIRST
+
+The kit crossed from an offline library into world content this session. Read
+this, then "The kit is in the world now", then Session 2's build steps below
+(they are unchanged and still correct).
+
+**What is proven, and by what.** `python3 wonderland/v2/verify_kit_bridge.py`
+— fourteen checks, no engine, no Blender, ~40 s. It walks `layout_v2.ALL`
+rather than re-reading the code, which is how it found both of this session's
+real defects. Then the world's own gates: `verify_v2_layout`,
+`verify_v2_dryrun`, `verify_v2_marble_paths`, and `tools/`
+`camera_framing`, `occlusion`, `walkable`, `region`, `emptiness`, `hierarchy`,
+`framescape`. All green at `c19381b8`.
+
+**What is NOT proven — the honest ledger.**
+
+| | |
+|---|---|
+| meshes imported into an editor | **0 of 313.** No Unreal Engine, no `unreal` module, no GPU in the container. `import-plan.json` reads `imported_into_an_editor: false`. |
+| frames rendered from Unreal | **0.** Every before/after in `wonderland/v2/evidence/` is a silhouette census computed from `layout_v2.ALL` and measured bounding boxes — the same arithmetic the engine would use to place the actors, run without one. |
+| Blender renders | 21 contact sheets + 7 assemblies, Cycles CPU. Not a preview of an Unreal frame. |
+| assets that failed | **none in the forge** — `validate_assets.py` is 101 modules, 0 failures. Three PLACEMENTS were refused (a planter bed 7.7 m from `TeapotCam24`); `kit_layout.REFUSED` names them. |
+
+**The exact next pass, in order.**
+
+1. **Get an editor.** `import_kit.py --plan` then `--execute`, then re-run
+   `verify_kit_bridge.py` — its `plan is honest` check reads the `proven` block
+   and will report what the editor actually claimed. **Do not set
+   `imported_into_an_editor: true` by hand.**
+2. **`HeroCam_V2_MarbleReference` is 61.7% built against a 71.5% ground
+   truth** — the only camera in the suite judged against a picture rather than
+   a reading. 26 of its 48 green columns are ONE giant mushroom at 35 m pinned
+   above the frame edge, unmovable by anything placed. That is a world-stream
+   recipe question (mismatch #2), and it is the highest-value thing left.
+3. **Do NOT spend a pass on the six edge-pinned frames.**
+   `kit_layout.EDGE_PINNED` names all six with their numbers and why nothing
+   placed can move them. This is the single most expensive lesson in the file.
+4. Families still unplaced: `hero` (deliberately — see below), and the
+   remainder of `stairs`, `details`, `roofscape`, `thresholds`. 52 of 101
+   modules are placed.
+5. `HamletCam17` and two other arcs are walled by other cameras —
+   `kit_layout.SKIPPED` records each with the numbers. They need the incumbent
+   moved, not another stand.
+
+**Commits this session:** `f6e7bb9d` (the bridge), `201e9e6b` (narrow-arc
+sampling), `a2f69ffc` (handoffs), `fc2f6ec1` (angular separation), `7842b9e3`
+(castle precinct + the corrected overclaim), `c19381b8` (end-state numbers).
 
 ---
 
