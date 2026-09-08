@@ -14,6 +14,7 @@ session.
 | LOCK | `wonderland/.gauntlet-lock` = `writer=claude step=0 since=2026-08-25`. Unchanged. `gauntlet-check.py` clean on every commit. |
 | MAP | `/Game/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2` (classic container) |
 | RENDERED THIS SESSION | **Nothing.** No engine, no Studio, no GPU frame. Every number below is offline, measured off `layout_v2.ALL` and the built meshkit geometry. |
+| AMENDED 2026-09-08 | by the kit stream on `claude/wonderland-blender-forge-pjinco` at `201e9e6b` — additive only. See "The forge kit is in the world". Still no engine, no GPU frame. |
 
 ---
 
@@ -497,19 +498,157 @@ version of "nine frames are still veg-roofed": three of those nine
 garden and grove cameras where green is correct, and the ones that are wrong
 are wrong for this reason.
 
+> **PARTLY ANSWERED** by the forge kit (`201e9e6b`, branch
+> `claude/wonderland-blender-forge-pjinco`). `ClockQuarterCam13` is now 36.7%
+> built, up from 18.3%, and its mushroom holds 25% of the ceiling instead of
+> 35% — five spelled towers stand in the Clock Quarter and two more break the
+> mushroom's own arc. **The recipe inversion itself is untouched and is still
+> yours**: 1,743 vs 1,190 is a recipe question, and a kit tower standing beside
+> a mushroom does not make the district's clock tower taller than its fungus.
+
 **3. The 180–360 m band is the thinnest part of the world's silhouette** —
 tops at +7.9° and +5.6°, against +14.0° nearer and +13.2° in the backdrop.
+
+> **ANSWERED** (`f6e7bb9d`). Fifteen spelled towers of 54–63 m now stand at
+> 9–12 km on the axes of the six frames whose median top was below their own
+> edge. `depth_stand` is that batch; `kit_layout.HEADROOM_FRAMES` is the list
+> and why each is on it.
 
 **4. Nine frames have ONE piece holding a third of the ceiling** —
 `ClockGrandCam23` 71%, `TeapotCam24` 68%, `WorldNorthCam19` 58%. Procedural
 monotony: the same great spire or the same swag roofing frame after frame.
 
+> **MEASURED PER COLUMN, AND IT SPLITS IN TWO** (`f6e7bb9d`). This is the most
+> useful thing this stream can hand back, because it says which half is worth
+> anyone's time.
+>
+> `framescape.census` clips every elevation to the frame's top edge
+> (`el = min(el, hv)`) and awards a column on a **strict `>`**. So where the
+> incumbent already reads the edge, **no piece placed anywhere can ever take
+> that column** — not a taller one, not a nearer one. Six of the ten are pinned
+> that way:
+>
+> | frame | holder | raw top | frame edge |
+> |---|---|---|---|
+> | `TeapotCam24` | `DPTeaTerraces_Gatehouse` 68% | +50.0 | +33.8 |
+> | `WorldNorthCam19` | `GreatSpire_Body` 58% | +63.2 | +31.5 |
+> | `GroveRoadCam18` | `Q03_grove_Giant_Cap` 57% | +51.9 | +29.4 |
+> | `GreatSpireCam22` | `GreatSpire_Body` 47% | +33.5 | +33.8 |
+> | `WaterGardenCam15` | `Rear_FrameR_SlimCanopy2` 43% | +34.7 | +29.4 |
+> | `EastReachCam20` | `NorthWay8_VergeCanopy2_1` 40% | +55.7 | +30.2 |
+>
+> **Adding anything to those six costs a pass and changes the census by zero.**
+> They move only if the incumbent moves or shrinks. `kit_layout.EDGE_PINNED`
+> carries the table so nobody re-derives it.
+>
+> Of the four with real room, `ClockQuarterCam13` came off the list (35% → 25%).
+> `ClockGrandCam23` went 71% → 61% and `GateArchCam30` 41% → 39%, but **both
+> are held by the same swag standing 15 m from two cameras 1.7 m apart** —
+> out-topping a foreground piece at 1,535 uu from behind needs
+> `(h − 170) > 0.70·r`, which at any legal distance is a 400 m tower.
+> `DPClockQuarter_Swag` has to move or shrink. **That is a world-stream asset,
+> not a kit one.** Count now 9 of 33.
+
 **5. HeroCam0 itself is 56.7% built against the reference's 71.5%** — now
 *below* the suite mean, which it was above three passes ago. Its remaining
 ceiling holders are `ClockTree_Canopy0` and the `ApproachSide` canopies.
 
+> **60.0% as of `201e9e6b`, and this is now the most valuable number in the
+> suite.** Every other camera is judged against a reading; this one is judged
+> against a picture. It is still 11.5 points short. Its remaining green is
+> `ClockTree_Canopy0` topping at +29.1 from 29.7 m, which needs a 63 m tower
+> inside 10.9 km on two narrow bearings (−49.6..−43.8 and −36.2..−23.8), and
+> the ground there is nearly all spoken for — one stand fitted, at 9,200 uu on
+> bearing −36.2. **Closing the rest of that gap is the first job of the next
+> pass.**
+
+## The forge kit is in the world (a different branch — read this before merging)
+
+**Branch `claude/wonderland-blender-forge-pjinco`, SHA `201e9e6b`.** Not on
+`relay/wonderland-v2`. This section is additive: nothing the world stream wrote
+above was changed except the five mismatches, which carry `>` blocks saying
+what moved and what is still yours.
+
+`wonderland/art/blender` had built 101 modules with measured sockets and a
+manifest, and none of it was reachable from the world — Wonderland places by
+KEY and a forge mesh had no key. It has one now.
+
+| | |
+|---|---|
+| `layout_v2.ALL` | 13,816 → **14,529** |
+| kit placements | **597** — 42 modules, 131 meshes, in `V2_Arrival`, `V2_Garden`, `V2_Props`, `V2_Skyline` |
+| batches | `tea_terrace` 37, `water_court` 35, `depth_stand` 204, `clock_quarter` 43, `hamlet_street` 142, `ceiling_break` 28, `green_ceiling` 108 |
+| mean built across 33 cameras | 67.78% → **73.99%** (reference 71.5%) |
+| cameras moved | 23 of 33 |
+| frames more than half green | 9 → 5 |
+| one piece holding a third | 10 → 9 |
+
+Only three files outside `wonderland/v2/kit_*` changed: `assets_v2.py` (two
+guarded hooks — `known_asset_keys` admits the kit, `build_assets` merges the
+import), `layout_v2.py` (one `try` block appending the bands), and
+`tools/skyline.py` (reads the kit's measured bounding boxes).
+
+### Five times a placement pass measured as ZERO, and why
+
+Each was an instrument, not the placements. Worth knowing before the next pass
+spends itself the same way.
+
+1. **`skyline.bboxes()` could not see the kit.** It built its table by running
+   every `assets_v2` recipe, so a forge mesh had no bbox and was invisible to
+   the census. Fixed at root: `build_assets.py` writes a measured `profile_uu`
+   per mesh, `skyline._kit_bboxes()` reads it.
+2. **Forward is `(−cos yaw, sin yaw)`, not `(cos yaw, sin yaw)`.**
+   `framescape` computes a bearing as `atan2(dx, dy) − (yaw − 90)`. The obvious
+   spelling is right only for the two cameras at yaw 90 and 270; seven towers
+   stood 131° off the axis of the camera they were meant to fill.
+3. **A frame at its own top edge cannot be moved by anything taller** — the
+   strict `>` above. `HEADROOM_FRAMES` is the list of frames that can be.
+4. **`tops_at` ignored pitch**, reading `WorldCam12` — which looks 16° down — a
+   full 16° high. The two cameras whose pitch is 0 hid it. **`WorldCam12` turns
+   out to be unreachable by any ground-standing tower:** it stands 62 m up
+   looking down, so the tallest 63 m spelling tops out at +18.6 even at the
+   clearance limit.
+5. **A 13° bearing step samples an 11° arc once.** One blocked bearing then
+   reads as "no clear ground" for the whole arc — and the arc it refused was
+   the founder's reference frame.
+
+### One rule of the world's that turned out to be the wrong shape
+
+A flat camera clearance cannot tell a 3 m retaining wall from a 63 m tower. At
+2,600 uu it refused the ground the Tea Terraces are named for while waving
+through any tower that cleared the same circle. `kit_layout.clearance_for()`
+is the distance at which a piece's **own height** subtends 45°, screened per
+placement downstream of every batch — because a batch clears its CENTRE and
+then lays a retaining run 2,400 uu either side of it, which is how the tea
+terrace came to stand 2,272 uu from `TeapotCam24`. `verify_kit_bridge` caught
+that by walking placements rather than decisions.
+
+### What is NOT proven, stated plainly
+
+**No mesh has been in an editor and no frame has been rendered.** There is no
+Unreal Engine, no `unreal` module and no GPU in the container this was written
+in. `wonderland/art/unreal/import-plan.json` still reads
+`imported_into_an_editor: false`, and `assets_v2.build_assets` logs
+`V2 KIT: no unreal module; 0 forge meshes imported` on every offline run — the
+dry run's summary reads `assets=149/462` for exactly that reason, and that is
+the honest number, not a bug. Everything above is arithmetic over
+`layout_v2.ALL` and measured bounding boxes: the same arithmetic the engine
+would use to place the actors, run without one.
+
+The first thing a session with an editor should do is
+`python3 wonderland/art/unreal/import_kit.py --plan`, then `--execute` inside
+the editor, then re-run `verify_kit_bridge.py` — its `plan is honest` check
+reads the `proven` block and will say what the editor actually claimed.
+
+---
+
 ## The exact next pass
 
+0. **From the kit stream** (`claude/wonderland-blender-forge-pjinco`): close
+   `HeroCam_V2_MarbleReference`'s remaining 11.5 points — it is the only camera
+   with a ground truth. Then `DPClockQuarter_Swag`, which holds two frames at
+   61% and 39% from 15 m and cannot be beaten from behind. Do **not** spend a
+   pass on the six edge-pinned frames; the table above says why.
 1. **Get a render.** Ten passes now sit unrendered (28–37). Nothing in
    mismatch 1 can be judged without one, and the palette comparison that drove
    PASS 31–33 is only trustworthy with real pixels on both sides.
