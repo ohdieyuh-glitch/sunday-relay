@@ -253,7 +253,7 @@ no migration — the durable audit is already `task.claimed`'s binding facts and
 `task-contracts.tsv`, and a third copy of one fact is the drift this repository
 keeps finding.
 
-**6. `<commit 6>` — the architect actually proposes the contract now.**
+**6. `3e74a3b8` — the architect actually proposes the contract now.**
 
 Until this, revision 1 was Julius's seed and nothing ever cut a second one:
 `reviseJuliusTaskContract` existed with no producer, which is the exact
