@@ -14,7 +14,7 @@ session.
 | LOCK | `wonderland/.gauntlet-lock` = `writer=claude step=0 since=2026-08-25`. Unchanged. `gauntlet-check.py` clean on every commit. |
 | MAP | `/Game/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2` (classic container) |
 | RENDERED THIS SESSION | **Nothing.** No engine, no Studio, no GPU frame. Every number below is offline, measured off `layout_v2.ALL` and the built meshkit geometry. |
-| AMENDED 2026-09-08 | by the kit stream on `claude/wonderland-blender-forge-pjinco` at `201e9e6b` — additive only. See "The forge kit is in the world". Still no engine, no GPU frame. |
+| AMENDED 2026-09-08 | by the kit stream on `claude/wonderland-blender-forge-pjinco` at `7842b9e3` — additive only. See "The forge kit is in the world". Still no engine, no GPU frame. |
 
 ---
 
@@ -564,7 +564,7 @@ ceiling holders are `ClockTree_Canopy0` and the `ApproachSide` canopies.
 
 ## The forge kit is in the world (a different branch — read this before merging)
 
-**Branch `claude/wonderland-blender-forge-pjinco`, SHA `201e9e6b`.** Not on
+**Branch `claude/wonderland-blender-forge-pjinco`, SHA `7842b9e3`.** Not on
 `relay/wonderland-v2`. This section is additive: nothing the world stream wrote
 above was changed except the five mismatches, which carry `>` blocks saying
 what moved and what is still yours.
@@ -575,11 +575,11 @@ KEY and a forge mesh had no key. It has one now.
 
 | | |
 |---|---|
-| `layout_v2.ALL` | 13,816 → **14,529** |
-| kit placements | **597** — 42 modules, 131 meshes, in `V2_Arrival`, `V2_Garden`, `V2_Props`, `V2_Skyline` |
-| batches | `tea_terrace` 37, `water_court` 35, `depth_stand` 204, `clock_quarter` 43, `hamlet_street` 142, `ceiling_break` 28, `green_ceiling` 108 |
-| mean built across 33 cameras | 67.78% → **73.99%** (reference 71.5%) |
-| cameras moved | 23 of 33 |
+| `layout_v2.ALL` | 13,816 → **14,679** |
+| kit placements | **747** — 52 of 101 modules, 160 meshes, in `V2_Arrival`, `V2_Castle`, `V2_Garden`, `V2_Props`, `V2_Skyline` |
+| batches | `tea_terrace` 37, `water_court` 35, `depth_stand` 204, `clock_quarter` 43, `hamlet_street` 142, `ceiling_break` 42, `green_ceiling` 136, `castle_precinct` 108 |
+| mean built across 33 cameras | 67.78% → **74.82%** (reference 71.5%) |
+| cameras moved | 24 of 33 |
 | frames more than half green | 9 → 5 |
 | one piece holding a third | 10 → 9 |
 
@@ -622,6 +622,16 @@ placement downstream of every batch — because a batch clears its CENTRE and
 then lays a retaining run 2,400 uu either side of it, which is how the tea
 terrace came to stand 2,272 uu from `TeapotCam24`. `verify_kit_bridge` caught
 that by walking placements rather than decisions.
+
+### One batch that measured nothing, kept and labelled
+
+`castle_precinct` puts three walled precincts on ground `emptiness.py` found
+empty, at the distance mismatch #3 calls thinnest. Measured against that ring
+afterwards: p50 top +0.4 → +0.5, built 65.0% → 65.3%, census unchanged to the
+decimal. **631 pieces into a ring holding 67,608 cannot move a percentile.**
+It is kept for the coverage it does answer — five kit families had zero
+presence in the world — and its docstring now says that instead of claiming the
+band. Recorded here so the next pass does not re-derive the null result.
 
 ### What is NOT proven, stated plainly
 

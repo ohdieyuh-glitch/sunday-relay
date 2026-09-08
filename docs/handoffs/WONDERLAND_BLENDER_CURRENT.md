@@ -13,7 +13,7 @@ is the art library's.
 | LOCK | `wonderland/.gauntlet-lock` = `writer=claude`, read before writing, unchanged. `wonderland/art/` is unowned by `gauntlet-check.py` (shared). |
 | BLENDER | `bpy` 4.5.13 LTS, installed via pip. Real Blender, headless — the same bmesh, the same exporters, Cycles on CPU. |
 | RENDERED | **Yes.** Twenty-one Cycles contact sheets and seven ASSEMBLY renders in `wonderland/art/blender/validation/renders/`. No Unreal frame — see "What is unproven". |
-| PLACED | **Yes, as of `201e9e6b`.** 597 kit placements are in `layout_v2.ALL` — 42 modules, 131 meshes. See "The kit is in the world now". |
+| PLACED | **Yes.** 747 kit placements in `layout_v2.ALL` — 52 of 101 modules, 160 meshes, 8 batches. See "The kit is in the world now". |
 
 ---
 
@@ -433,9 +433,9 @@ says which modules would gain most if a union pass is ever wanted.
   a two-light rig.** They show form, proportion, silhouette and the
   stone/gold/roof balance. They are **not** a preview of an Unreal frame: no V2
   material graph, no Lumen, no sky, no fog.
-- ~~**Nothing has been placed.**~~ **No longer true as of `201e9e6b`** — 597
-  placements are in `layout_v2.ALL`, each in a declared data layer, and every
-  world audit has been re-run over them. See "The kit is in the world now".
+- ~~**Nothing has been placed.**~~ **No longer true** — 747 placements are in
+  `layout_v2.ALL`, each in a declared data layer, and every world audit has
+  been re-run over them. See "The kit is in the world now".
   What is still true is that no engine has resolved one: the placements are a
   Python description, like the rest of `layout_v2`.
 - **The assemblies show modules meeting, not terrain.** A terrace edge is an
@@ -457,7 +457,7 @@ it was.
 | file | what it does |
 |---|---|
 | `wonderland/v2/kit_v2.py` | the bridge. `import_kit_assets(ctx)` returns `{key: asset path}` in exactly `build_assets`'s shape, so the two dicts merge and nothing else in the pipeline changes. `placements_for()` expands one module into one placement per MESH; `stack()` bears each module on the measured `top` socket of the one below; `spellings()` walks the socket grammar for legal foot→body→crown chains. |
-| `wonderland/v2/kit_layout.py` | seven batches, 597 placements, each answering a number from `tools/framescape.py` rather than a hunch |
+| `wonderland/v2/kit_layout.py` | eight batches, 747 placements. Seven answer a number from `tools/framescape.py`; the eighth answers a coverage gap and says so. |
 | `wonderland/v2/verify_kit_bridge.py` | fourteen checks, no engine and no Blender |
 | `wonderland/v2/assets_v2.py` | the only wiring: `known_asset_keys()` admits the kit's mesh keys, `build_assets()` merges the import. Both guarded — an unbuilt kit is an empty set and every kit placement then fails LOUDLY. |
 
@@ -476,9 +476,20 @@ bbox and was invisible to every instrument that reads one — including the
 **A kit the census cannot see is a kit that cannot be measured.**
 
 **Result against the census** (`wonderland/v2/evidence/`): mean built
-67.78% → **73.99%** across 33 cameras, past the founder reference's 71.5%.
-23 of 33 cameras moved. Frames more than half roofed by vegetation 9 → 5.
-`TeaTerraceCam16` +34.2, `ClockQuarterCam13` +17.5.
+67.78% → **74.82%** across 33 cameras, past the founder reference's 71.5%.
+24 of 33 cameras moved. Frames more than half roofed by vegetation 9 → 5.
+`TeaTerraceCam16` 50.0% → 95.8%, `ClockQuarterCam13` 18.3% → 39.2%,
+`HeroCam_V2_MarbleReference` 56.7% → 61.7% against its 71.5% ground truth.
+
+**Batches:** `tea_terrace` 37, `water_court` 35, `depth_stand` 204,
+`clock_quarter` 43, `hamlet_street` 142, `ceiling_break` 42, `green_ceiling`
+136, `castle_precinct` 108.
+
+**Families still unplaced:** `hero` (2 modules), and the remainder of `stairs`,
+`details`, `roofscape`, `thresholds`. `WL_Hero_GreatSpire` is deliberately not
+placed — it is 118 m and the world already stands a 194 m `spire_great`, so a
+second one is a competing landmark rather than a contribution. That is the
+world stream's call, not the kit's.
 
 **Guardrails, all green:** `verify_v2_layout`, `verify_v2_dryrun`,
 `verify_v2_marble_paths`, `camera_framing`, `occlusion`, `walkable` (0 of 19
