@@ -363,6 +363,110 @@ int main(int argc, char** argv)
 		}
 	}
 
+	/* ------------------------------- the usage HUD, for the usage subsystem */
+	if (argc > 3)
+	{
+		std::ifstream File(argv[3]);
+		if (!File)
+		{
+			std::printf("FAIL cannot open usage file %s\n", argv[3]);
+			Failures += 1;
+		}
+		else
+		{
+			std::string Line;
+			int Cases = 0;
+			while (std::getline(File, Line))
+			{
+				if (Line.empty()) { continue; }
+				const size_t T1 = Line.find('\t');
+				const size_t T2 = Line.find('\t', T1 + 1);
+				if (T1 == std::string::npos || T2 == std::string::npos)
+				{
+					std::printf("FAIL malformed usage line\n"); Failures += 1; continue;
+				}
+				const std::string Name = Line.substr(0, T1);
+				const std::string Expect = Line.substr(T1 + 1, T2 - T1 - 1);
+				const std::string Json = Line.substr(T2 + 1);
+				const FWonderlandUsageDecode R =
+					WonderlandDecodeUsageBytes(Json.c_str(), (int32)Json.size());
+				Cases += 1;
+				Checks += 1;
+				if (Expect == "ok")
+				{
+					if (!R.bOk)
+					{
+						Failures += 1;
+						std::printf("FAIL usage %s refused as %s (%s)\n", Name.c_str(),
+							WonderlandWireErrorName(R.Refusal.Error), R.Refusal.Field.s.c_str());
+					}
+					else if (Name == "usage-all-unknown")
+					{
+						// THE PRODUCTION READING. No authority reports into the
+						// usage contract, so this is what a world draws today:
+						// two tracks and NO remainder. A decoder that mapped by
+						// name would hand the widget 0.0 with bKnown false,
+						// which renders as an empty meter — a claim that the
+						// founder has nothing left.
+						Check(!R.Hud.CompoundAgent.CapacityUnits.bKnown, "unknown capacity stays unknown");
+						Check(!R.Hud.CompoundAgent.UsedUnits.bKnown, "unknown usage stays unknown");
+						Check(!R.Hud.SingleAgent.RemainingUnits.bKnown, "unknown remainder stays unknown");
+						Check(R.Hud.CompoundAgent.CapacityUnits.Value == 0.0, "and its value is not a measurement");
+						// AND THE REASON TRAVELS WITH THE ABSENCE. "Not
+						// observed" and "stale" are different facts about the
+						// same missing number, and the HUD says which — a
+						// decoder that dropped the reason would flatten them.
+						Check(R.Hud.CompoundAgent.CapacityUnits.Reason == EWonderlandUnknownReason::NotObserved,
+							"the reason for the absence crosses");
+						Check(R.Hud.SingleAgent.UsedUnits.Reason == EWonderlandUnknownReason::NotObserved,
+							"on both meters");
+						// The two arcs are still told apart.
+						Check(R.Hud.CompoundAgent.Channel == EWonderlandUsageChannel::CompoundAgent, "compound channel");
+						Check(R.Hud.SingleAgent.Channel == EWonderlandUsageChannel::SingleAgent, "single channel");
+					}
+					else if (Name == "usage-reason-stale")
+					{
+						// A reason that is NOT the zero member. Without one of
+						// these, a decoder that hardcoded the default would pass
+						// every check — the mutation escaped until this existed.
+						Check(R.Hud.CompoundAgent.CapacityUnits.Reason == EWonderlandUnknownReason::Stale,
+							"a non-default reason crosses intact");
+						Check(!R.Hud.CompoundAgent.CapacityUnits.bKnown, "and it is still an absence");
+					}
+					else if (Name == "usage-reason-unreadable")
+					{
+						Check(R.Hud.CompoundAgent.CapacityUnits.Reason == EWonderlandUnknownReason::Unreadable,
+							"and so does another one");
+					}
+					else if (Name == "usage-known")
+					{
+						Check(R.Hud.CompoundAgent.CapacityUnits.bKnown, "a reported capacity is known");
+						Check(R.Hud.CompoundAgent.UsedUnits.bKnown, "a reported usage is known");
+						Check(R.Hud.CompoundAgent.UsedUnits.Value > 0.0, "and carries its figure");
+						// A BIGGER TIER IS A LONGER TRACK — the reference
+						// capacity is what makes the arc physically longer, and
+						// it has to survive the crossing as a figure.
+						Check(R.Hud.CompoundAgent.ReferenceCapacityUnits.bKnown, "the reference capacity crosses");
+						Check(R.Hud.CompoundAgent.TierId.bKnown, "the tier id crosses as known");
+					}
+				}
+				else if (R.bOk)
+				{
+					Failures += 1;
+					std::printf("FAIL usage %s accepted, wanted %s\n", Name.c_str(), Expect.c_str());
+				}
+				else if (Expect != WonderlandWireErrorName(R.Refusal.Error))
+				{
+					Failures += 1;
+					std::printf("FAIL usage %s refused as %s, wanted %s\n", Name.c_str(),
+						WonderlandWireErrorName(R.Refusal.Error), Expect.c_str());
+				}
+			}
+			Check(Cases >= 5, "the generated usage file carried cases");
+			std::printf("usages: %d\n", Cases);
+		}
+	}
+
 	/* ------------------------- the generated fixtures, from the TypeScript */
 	if (argc > 1)
 	{

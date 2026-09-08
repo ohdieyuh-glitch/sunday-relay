@@ -8,9 +8,12 @@ import { wonderlandWireEnums } from './wonderland-wire-contract';
 import {
   WONDERLAND_WIRE_DELIVERIES_PATH,
   WONDERLAND_WIRE_FIXTURES_PATH,
+  WONDERLAND_WIRE_USAGES_PATH,
   renderWonderlandWireDeliveries,
   renderWonderlandWireFixtures,
+  renderWonderlandWireUsages,
 } from '../../../../scripts/export-wonderland-wire-fixtures';
+import { RELAY_UNKNOWN_REASONS } from '../../shared/llmops';
 import { JULIUS_ACTIVITY_SIGNALS } from './wonderland-julius-activity';
 
 /**
@@ -55,6 +58,10 @@ describe('the fixture file', () => {
       readFileSync(join(process.cwd(), WONDERLAND_WIRE_DELIVERIES_PATH), 'utf8'),
       'the delivery fixtures are stale — run `npm run wonderland:wire:fixtures`',
     ).toBe(renderWonderlandWireDeliveries());
+    expect(
+      readFileSync(join(process.cwd(), WONDERLAND_WIRE_USAGES_PATH), 'utf8'),
+      'the usage fixtures are stale — run `npm run wonderland:wire:fixtures`',
+    ).toBe(renderWonderlandWireUsages());
   });
 
   it('parses as three columns on every line', () => {
@@ -199,6 +206,67 @@ describe('the delivery fixtures — what an SSE frame really carries', () => {
     const everything = rows.map((r) => r.json).join(' ').toLowerCase();
     for (const name of ['gpt', 'claude', 'hermes', 'openai', 'anthropic', 'sk-']) {
       expect(everything, `a delivery fixture mentions ${name}`).not.toContain(name);
+    }
+  });
+});
+
+describe('the usage fixtures — what the meters carry', () => {
+  const rows = readFileSync(join(process.cwd(), WONDERLAND_WIRE_USAGES_PATH), 'utf8')
+    .split('\n')
+    .filter((line) => line.trim() !== '')
+    .map((line) => {
+      const [name, expect_, json] = line.split('\t');
+      return { name, expect: expect_, json };
+    });
+
+  it('makes the PRODUCTION reading — all unknown — the first case', () => {
+    // No authority reports into the usage contract, so this is what a world
+    // actually draws today: two tracks and no remainder. It is the important
+    // case, not the degenerate one.
+    const unknown = rows.find((r) => r.name === 'usage-all-unknown');
+    expect(unknown).toBeDefined();
+    const hud = JSON.parse(unknown!.json) as {
+      compoundAgent: Record<string, { known?: boolean }>;
+      singleAgent: Record<string, { known?: boolean }>;
+    };
+    for (const meter of [hud.compoundAgent, hud.singleAgent]) {
+      for (const field of ['capacityUnits', 'usedUnits', 'remainingUnits']) {
+        expect(meter[field].known, `${field} should be unknown`).toBe(false);
+      }
+    }
+  });
+
+  it('carries every unknown reason, not just the zero member', () => {
+    // `not_observed` is ordinal 0 in C++, so a fixture set containing only that
+    // one cannot tell a decoder that READS the reason from one that hardcodes
+    // the default. That mutation escaped until these existed.
+    for (const reason of RELAY_UNKNOWN_REASONS) {
+      expect(rows.some((r) => r.name === `usage-reason-${reason}`), `no fixture for ${reason}`).toBe(true);
+    }
+  });
+
+  it('mislabels ONE meter at a time, so each channel check stands alone', () => {
+    // A full swap is refused by either check, so with only that fixture either
+    // one can be deleted while the other still catches it.
+    for (const name of ['usage-compound-slot-holds-single', 'usage-single-slot-holds-compound']) {
+      const row = rows.find((r) => r.name === name);
+      expect(row, `no fixture named ${name}`).toBeDefined();
+      expect(row!.expect).toBe('identity_rejected');
+    }
+  });
+
+  it('sends both figure contradictions', () => {
+    // known-with-null draws 0.0 as a measurement; unknown-with-a-value lets a
+    // renderer read either half and get a different answer.
+    for (const name of ['usage-known-with-null-value', 'usage-unknown-with-value']) {
+      expect(rows.some((r) => r.name === name), `no fixture named ${name}`).toBe(true);
+    }
+  });
+
+  it('carries no provider name', () => {
+    const everything = rows.map((r) => r.json).join(' ').toLowerCase();
+    for (const name of ['gpt', 'claude', 'openai', 'anthropic', 'hermes']) {
+      expect(everything, `a usage fixture mentions ${name}`).not.toContain(name);
     }
   });
 });

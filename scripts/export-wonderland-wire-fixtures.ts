@@ -28,6 +28,12 @@ import {
   emptyJuliusActivity,
   wonderlandJuliusActivity,
 } from '../src/relay/mission/wonderland/wonderland-julius-activity';
+import { wonderlandUsageHudFixture } from '../src/relay/mission/wonderland/wonderland-usage-meter';
+import { RELAY_UNKNOWN_REASONS } from '../src/relay/shared/llmops';
+import {
+  emptyWonderlandUsageAuthority,
+  projectWonderlandUsageFromAuthority,
+} from '../src/relay/mission/wonderland/wonderland-usage-authority';
 
 const AT = '2026-09-08T00:00:00.000Z';
 
@@ -59,6 +65,8 @@ const cases: Fixture[] = [];
  * wanted. Same format, same freshness rule.
  */
 const deliveries: Fixture[] = [];
+/** The usage HUD, read by `UWonderlandUsageSubsystem::ApplyUsage`. */
+const usages: Fixture[] = [];
 const ok = (name: string, value: unknown) =>
   cases.push({ name, expect: 'ok', json: JSON.stringify(value) });
 const refused = (name: string, expect: string, value: unknown) =>
@@ -206,6 +214,112 @@ deliveries.push({
   json: JSON.stringify({ envelope: { ...envelope(), state: 'ascended' }, activity: activity() }),
 });
 
+/* --------------------------------------------- what the usage HUD carries */
+
+// UNKNOWN IS THE PRODUCTION READING TODAY: no authority reports into the usage
+// contract, so this is what a world actually draws — two tracks and no
+// remainder. It is the most important case, not the degenerate one.
+const unknownHud = projectWonderlandUsageFromAuthority(
+  emptyWonderlandUsageAuthority({ projectId: 'project-alpha' }), AT).hud;
+usages.push({ name: 'usage-all-unknown', expect: 'ok', json: JSON.stringify(unknownHud) });
+
+// And a fully-reported one, from the fixture the geometry harness already
+// measures, so the decoder and the sampler agree about the same numbers.
+const knownHud = wonderlandUsageHudFixture(AT);
+usages.push({ name: 'usage-known', expect: 'ok', json: JSON.stringify(knownHud) });
+
+// THE SWAP. Two real meters, exchanged. Every figure is genuine and every one
+// is attributed to the wrong instrument — the green Compound arc would draw the
+// single agent's spend. Nothing about the numbers looks wrong.
+usages.push({
+  name: 'usage-swapped-channels',
+  expect: 'identity_rejected',
+  json: JSON.stringify({
+    ...knownHud, compoundAgent: knownHud.singleAgent, singleAgent: knownHud.compoundAgent,
+  }),
+});
+
+// A figure that claims to be known and carries nothing. This is the shape a
+// partly-written report has, and accepting it draws 0.0 as a measurement.
+// ONE meter mislabelled, not both. A full swap is caught by either check, so
+// with only that fixture each one can be deleted while the other still refuses
+// — and a single mislabelled arc is the likelier bug anyway.
+usages.push({
+  name: 'usage-compound-slot-holds-single',
+  expect: 'identity_rejected',
+  json: JSON.stringify({ ...knownHud, compoundAgent: knownHud.singleAgent }),
+});
+usages.push({
+  name: 'usage-single-slot-holds-compound',
+  expect: 'identity_rejected',
+  json: JSON.stringify({ ...knownHud, singleAgent: knownHud.compoundAgent }),
+});
+// EVERY reason, on a figure that is genuinely absent. `not_observed` is the
+// ZERO member, so a fixture carrying only that one cannot tell a decoder that
+// reads the reason from one that hardcodes the default — and "not reported"
+// and "stale" are different facts about the same missing number.
+for (const reason of RELAY_UNKNOWN_REASONS) {
+  usages.push({
+    name: `usage-reason-${reason}`,
+    expect: 'ok',
+    json: JSON.stringify({
+      ...unknownHud,
+      compoundAgent: {
+        ...unknownHud.compoundAgent,
+        capacityUnits: { known: false, value: null, reason },
+      },
+    }),
+  });
+}
+
+usages.push({
+  name: 'usage-known-with-null-value',
+  expect: 'wrong_type',
+  json: JSON.stringify({
+    ...knownHud,
+    compoundAgent: {
+      ...knownHud.compoundAgent,
+      capacityUnits: { ...knownHud.compoundAgent.capacityUnits, value: null },
+    },
+  }),
+});
+// And the opposite: not observed, and yet carrying a number.
+usages.push({
+  name: 'usage-unknown-with-value',
+  expect: 'wrong_type',
+  json: JSON.stringify({
+    ...unknownHud,
+    singleAgent: {
+      ...unknownHud.singleAgent,
+      usedUnits: { ...unknownHud.singleAgent.usedUnits, value: 12 },
+    },
+  }),
+});
+usages.push({
+  name: 'usage-unknown-status-token',
+  expect: 'unknown_token',
+  json: JSON.stringify({
+    ...knownHud, compoundAgent: { ...knownHud.compoundAgent, status: 'probably_fine' },
+  }),
+});
+usages.push({
+  name: 'usage-missing-meter',
+  expect: 'missing_field',
+  json: JSON.stringify({ schemaVersion: knownHud.schemaVersion, anchor: knownHud.anchor,
+    observedAtIso: knownHud.observedAtIso, compoundAgent: knownHud.compoundAgent }),
+});
+usages.push({
+  name: 'usage-non-finite-figure',
+  // The conversion says out-of-range directly, which is more precise than
+  // "not finite" — the finite check behind it remains for a platform whose
+  // conversion returns HUGE_VAL instead of throwing.
+  expect: 'number_out_of_range',
+  // `JSON.stringify` turns Infinity into null, so the non-finite case has to be
+  // written as literal JSON — which is also exactly how it would arrive from a
+  // writer that was not JavaScript.
+  json: JSON.stringify(knownHud).replace('"value":186', '"value":1e400'),
+});
+
 /* --------------------------------------------------------- the writing */
 
 /**
@@ -216,6 +330,7 @@ deliveries.push({
  */
 export const WONDERLAND_WIRE_FIXTURES_PATH = join('wonderland', 'Tools', 'WireHarness', 'fixtures.tsv');
 export const WONDERLAND_WIRE_DELIVERIES_PATH = join('wonderland', 'Tools', 'WireHarness', 'deliveries.tsv');
+export const WONDERLAND_WIRE_USAGES_PATH = join('wonderland', 'Tools', 'WireHarness', 'usages.tsv');
 
 const render = (items: readonly Fixture[]): string => {
   // A tab or a newline inside a payload would break the format silently, so it
@@ -232,6 +347,7 @@ const render = (items: readonly Fixture[]): string => {
 /** The files, rendered. Exported so a test compares the same bytes. */
 export function renderWonderlandWireFixtures(): string { return render(cases); }
 export function renderWonderlandWireDeliveries(): string { return render(deliveries); }
+export function renderWonderlandWireUsages(): string { return render(usages); }
 
 function main(): void {
   const root = process.cwd();
@@ -242,6 +358,7 @@ function main(): void {
   const artefacts = [
     { path: join(root, WONDERLAND_WIRE_FIXTURES_PATH), body: renderWonderlandWireFixtures() },
     { path: join(root, WONDERLAND_WIRE_DELIVERIES_PATH), body: renderWonderlandWireDeliveries() },
+    { path: join(root, WONDERLAND_WIRE_USAGES_PATH), body: renderWonderlandWireUsages() },
   ];
   const path = artefacts[0].path;
   const body = artefacts.map((a) => a.body).join('');
@@ -259,7 +376,8 @@ function main(): void {
       );
       process.exit(1);
     }
-    console.log(`wonderland wire fixtures current (${cases.length} + ${deliveries.length} cases)`);
+    console.log(
+      `wonderland wire fixtures current (${cases.length} + ${deliveries.length} + ${usages.length} cases)`);
     return;
   }
 
@@ -268,7 +386,7 @@ function main(): void {
   const accepted = cases.filter((c) => c.expect === 'ok').length;
   console.log(
     `wonderland wire fixtures -> ${cases.length} envelopes (${accepted} accepted), ` +
-      `${deliveries.length} deliveries`,
+      `${deliveries.length} deliveries, ${usages.length} usages`,
   );
 }
 

@@ -123,6 +123,11 @@ const DECODED_ENUMS = [
   'EWonderlandJuliusStateSource',
   'EWonderlandWorkerRole',
   'EWonderlandActivitySignal',
+  'EWonderlandUsageChannel',
+  'EWonderlandUsageStatus',
+  'EWonderlandProvenance',
+  'EWonderlandHudAnchor',
+  'EWonderlandUnknownReason',
 ] as const;
 
 /**

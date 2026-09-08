@@ -320,6 +320,10 @@ struct FFieldReader
 	FWonderlandWireRefusal& Refusal;
 	bool bFailed = false;
 
+	// RECORDS THE FIRST REASON AND SETS bFailed ITSELF. Setting bFailed before
+	// calling this SILENCES the reason — the refusal then comes back with
+	// `None`, which reads as "no error" and is exactly the quiet failure this
+	// file exists to prevent. It happened here, and the harness caught it.
 	bool Reject(EWonderlandWireError Error, const char* Name)
 	{
 		if (!bFailed)
@@ -808,4 +812,155 @@ bool WonderlandWireReadSseData(const char* Frame, int32 Length, int32& OutStart,
 		At = LineEnd + 1;
 	}
 	return false;
+}
+
+/* ------------------------------------------------------------ the usage */
+
+namespace
+{
+
+// A figure, with its absence and the REASON for it. Three fields, and getting
+// any of them wrong draws a number the founder does not have.
+bool ReadFigure(const FJsonValue& Owner, const char* Name, FFieldReader& Reader, FWonderlandFigure& Out)
+{
+	const FJsonValue* Value = Field(Owner, Name);
+	if (Value == nullptr) { return Reader.Reject(EWonderlandWireError::MissingField, Name); }
+	if (Value->Kind != EJsonKind::Object) { return Reader.Reject(EWonderlandWireError::WrongType, Name); }
+
+	FFieldReader Inner{ *Value, Reader.Refusal };
+	bool bKnown = false;
+	if (!Inner.RequiredBool("known", bKnown)) { Reader.bFailed = true; return false; }
+
+	const FJsonValue* Number = Field(*Value, "value");
+	if (Number == nullptr) { return Reader.Reject(EWonderlandWireError::MissingField, Name); }
+
+	if (bKnown)
+	{
+		// KNOWN AND NULL IS A CONTRADICTION, and the one worth refusing: it is
+		// the shape a partly-written report has, and accepting it would draw
+		// 0.0 as a measurement.
+		if (Number->Kind != EJsonKind::Number)
+		{
+			return Reader.Reject(EWonderlandWireError::WrongType, Name);
+		}
+		if (!std::isfinite(Number->Number))
+		{
+			return Reader.Reject(EWonderlandWireError::NumberNotFinite, Name);
+		}
+		Out.bKnown = true;
+		Out.Value = Number->Number;
+	}
+	else
+	{
+		// UNKNOWN AND A VALUE is the other contradiction. A figure that says it
+		// was not observed and carries a number would let a renderer read
+		// either half and get a different answer.
+		if (Number->Kind != EJsonKind::Null)
+		{
+			return Reader.Reject(EWonderlandWireError::WrongType, Name);
+		}
+		Out.bKnown = false;
+		Out.Value = 0.0;
+	}
+
+	// The reason for the absence. Null means Relay did not say WHY, which is
+	// itself an answer and maps to the zero member.
+	uint8 Reason = 0;
+	if (!Inner.NullableEnum("reason", "EWonderlandUnknownReason", Reason))
+	{
+		Reader.bFailed = true;
+		return false;
+	}
+	Out.Reason = static_cast<EWonderlandUnknownReason>(Reason);
+	return true;
+}
+
+bool ReadMeter(const FJsonValue& Owner, const char* Name, FFieldReader& Reader, FWonderlandUsageMeter& Out)
+{
+	const FJsonValue* Value = Field(Owner, Name);
+	if (Value == nullptr) { return Reader.Reject(EWonderlandWireError::MissingField, Name); }
+	if (Value->Kind != EJsonKind::Object) { return Reader.Reject(EWonderlandWireError::WrongType, Name); }
+
+	FFieldReader Meter{ *Value, Reader.Refusal };
+	Meter.RequiredString("schemaVersion", Out.SchemaVersion);
+	Meter.RequiredString("observedAtIso", Out.ObservedAtIso);
+	Meter.NullableText("tierId", Out.TierId);
+	Meter.NullableText("tierLabel", Out.TierLabel);
+	Meter.NullableText("unitLabel", Out.UnitLabel);
+	Meter.NullableText("unavailableReason", Out.UnavailableReason);
+
+	uint8 Channel = 0;
+	uint8 Status = 0;
+	uint8 Provenance = 0;
+	uint8 Anchor = 0;
+	Meter.RequiredEnum("channel", "EWonderlandUsageChannel", Channel);
+	Meter.RequiredEnum("status", "EWonderlandUsageStatus", Status);
+	Meter.RequiredEnum("provenance", "EWonderlandProvenance", Provenance);
+	Meter.RequiredEnum("anchor", "EWonderlandHudAnchor", Anchor);
+	Meter.RequiredBool("simulated", Out.bSimulated);
+
+	ReadFigure(*Value, "capacityUnits", Meter, Out.CapacityUnits);
+	ReadFigure(*Value, "usedUnits", Meter, Out.UsedUnits);
+	ReadFigure(*Value, "remainingUnits", Meter, Out.RemainingUnits);
+	ReadFigure(*Value, "referenceCapacityUnits", Meter, Out.ReferenceCapacityUnits);
+	ReadFigure(*Value, "capacitySpan", Meter, Out.CapacitySpan);
+	ReadFigure(*Value, "fillFraction", Meter, Out.FillFraction);
+	ReadFigure(*Value, "remainingFraction", Meter, Out.RemainingFraction);
+
+	if (Meter.bFailed) { Reader.bFailed = true; return false; }
+
+	Out.Channel = static_cast<EWonderlandUsageChannel>(Channel);
+	Out.Status = static_cast<EWonderlandUsageStatus>(Status);
+	Out.Provenance = static_cast<EWonderlandProvenance>(Provenance);
+	Out.Anchor = static_cast<EWonderlandHudAnchor>(Anchor);
+	return true;
+}
+
+} // namespace
+
+FWonderlandUsageDecode WonderlandDecodeUsageBytes(const char* Bytes, int32 Length)
+{
+	FWonderlandUsageDecode Result;
+
+	FJsonValue Root;
+	EWonderlandWireError Error = EWonderlandWireError::None;
+	if (!ParseDocument(Bytes, Length, Root, Error))
+	{
+		Result.Refusal.Error = Error;
+		return Result;
+	}
+
+	FWonderlandUsageHud Hud;
+	FFieldReader Reader{ Root, Result.Refusal };
+	Reader.RequiredString("schemaVersion", Hud.SchemaVersion);
+	Reader.RequiredString("observedAtIso", Hud.ObservedAtIso);
+
+	uint8 Anchor = 0;
+	Reader.RequiredEnum("anchor", "EWonderlandHudAnchor", Anchor);
+
+	ReadMeter(Root, "compoundAgent", Reader, Hud.CompoundAgent);
+	ReadMeter(Root, "singleAgent", Reader, Hud.SingleAgent);
+
+	if (Reader.bFailed) { return Result; }
+
+	// THE TWO METERS ARE NOT INTERCHANGEABLE, and this is the second line of
+	// defence for it — `wonderlandHydrationVerdict` is the first. Swapped, the
+	// green Compound arc would draw the single agent's spend and the blue one
+	// the compound's, and every number on screen would be real and attributed
+	// to the wrong instrument.
+	if (Hud.CompoundAgent.Channel != EWonderlandUsageChannel::CompoundAgent)
+	{
+		Result.Refusal = { EWonderlandWireError::IdentityRejected, FString("compoundAgent.channel") };
+		return Result;
+	}
+	if (Hud.SingleAgent.Channel != EWonderlandUsageChannel::SingleAgent)
+	{
+		Result.Refusal = { EWonderlandWireError::IdentityRejected, FString("singleAgent.channel") };
+		return Result;
+	}
+
+	Hud.Anchor = static_cast<EWonderlandHudAnchor>(Anchor);
+	Result.bOk = true;
+	Result.Hud = Hud;
+	return Result;
 }

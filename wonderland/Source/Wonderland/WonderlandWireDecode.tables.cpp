@@ -51,11 +51,56 @@ static const FWonderlandWireToken EWonderlandActivitySignalTokens[] = {
 	{ "retrieving_context", static_cast<uint8>(EWonderlandActivitySignal::RetrievingContext) },
 };
 
+// EWonderlandUsageChannel — from WONDERLAND_USAGE_CHANNELS. Zero member: compound_agent.
+static const FWonderlandWireToken EWonderlandUsageChannelTokens[] = {
+	{ "compound_agent", static_cast<uint8>(EWonderlandUsageChannel::CompoundAgent) },
+	{ "single_agent", static_cast<uint8>(EWonderlandUsageChannel::SingleAgent) },
+};
+
+// EWonderlandUsageStatus — from WONDERLAND_USAGE_STATUSES. Zero member: unavailable.
+static const FWonderlandWireToken EWonderlandUsageStatusTokens[] = {
+	{ "available", static_cast<uint8>(EWonderlandUsageStatus::Available) },
+	{ "limited", static_cast<uint8>(EWonderlandUsageStatus::Limited) },
+	{ "blocked", static_cast<uint8>(EWonderlandUsageStatus::Blocked) },
+	{ "updating", static_cast<uint8>(EWonderlandUsageStatus::Updating) },
+	{ "unavailable", static_cast<uint8>(EWonderlandUsageStatus::Unavailable) },
+};
+
+// EWonderlandProvenance — from PROVENANCES. Zero member: simulated.
+static const FWonderlandWireToken EWonderlandProvenanceTokens[] = {
+	{ "simulated", static_cast<uint8>(EWonderlandProvenance::Simulated) },
+	{ "live", static_cast<uint8>(EWonderlandProvenance::Live) },
+	{ "imported", static_cast<uint8>(EWonderlandProvenance::Imported) },
+	{ "manual", static_cast<uint8>(EWonderlandProvenance::Manual) },
+};
+
+// EWonderlandHudAnchor — from WONDERLAND_HUD_ANCHORS. Zero member: top_left.
+static const FWonderlandWireToken EWonderlandHudAnchorTokens[] = {
+	{ "top_left", static_cast<uint8>(EWonderlandHudAnchor::TopLeft) },
+	{ "top_right", static_cast<uint8>(EWonderlandHudAnchor::TopRight) },
+	{ "bottom_left", static_cast<uint8>(EWonderlandHudAnchor::BottomLeft) },
+	{ "bottom_right", static_cast<uint8>(EWonderlandHudAnchor::BottomRight) },
+};
+
+// EWonderlandUnknownReason — from RELAY_UNKNOWN_REASONS. Zero member: Unobserved.
+static const FWonderlandWireToken EWonderlandUnknownReasonTokens[] = {
+	{ "not_observed", static_cast<uint8>(EWonderlandUnknownReason::NotObserved) },
+	{ "insufficient_samples", static_cast<uint8>(EWonderlandUnknownReason::InsufficientSamples) },
+	{ "unknown_denominator", static_cast<uint8>(EWonderlandUnknownReason::UnknownDenominator) },
+	{ "stale", static_cast<uint8>(EWonderlandUnknownReason::Stale) },
+	{ "unreadable", static_cast<uint8>(EWonderlandUnknownReason::Unreadable) },
+};
+
 const FWonderlandWireEnumTable WonderlandWireEnumTables[] = {
 	{ "EWonderlandJuliusState", EWonderlandJuliusStateTokens, 11, true },
 	{ "EWonderlandJuliusStateSource", EWonderlandJuliusStateSourceTokens, 3, true },
 	{ "EWonderlandWorkerRole", EWonderlandWorkerRoleTokens, 4, true },
 	{ "EWonderlandActivitySignal", EWonderlandActivitySignalTokens, 7, true },
+	{ "EWonderlandUsageChannel", EWonderlandUsageChannelTokens, 2, false },
+	{ "EWonderlandUsageStatus", EWonderlandUsageStatusTokens, 5, false },
+	{ "EWonderlandProvenance", EWonderlandProvenanceTokens, 4, false },
+	{ "EWonderlandHudAnchor", EWonderlandHudAnchorTokens, 4, false },
+	{ "EWonderlandUnknownReason", EWonderlandUnknownReasonTokens, 5, true },
 };
 
-const int32 WonderlandWireEnumTableCount = 4;
+const int32 WonderlandWireEnumTableCount = 9;

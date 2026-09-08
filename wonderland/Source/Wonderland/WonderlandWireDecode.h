@@ -36,6 +36,7 @@
 #include "CoreMinimal.h"
 #include "WonderlandEnvelope.h"
 #include "WonderlandJuliusState.h"
+#include "WonderlandUsageHud.h"
 
 /* ------------------------------------------------------------- refusals */
 
@@ -162,6 +163,27 @@ struct FWonderlandDeliveryDecode
 // Decode one delivery. The envelope half is decoded by exactly the same code
 // path as above; there is no second envelope reader to drift from the first.
 FWonderlandDeliveryDecode WonderlandDecodeDeliveryBytes(const char* Bytes, int32 Length);
+
+/* ---------------------------------------------------------- the usage */
+
+// The HUD, decoded for `UWonderlandUsageSubsystem::ApplyUsage`.
+//
+// EVERY FIGURE IS A CARRIER, and that is the point of decoding it separately
+// from everything else. `FWonderlandFigure` is `{ bKnown, Value, Reason }`: a
+// meter whose capacity arrived as `null` must draw a track and NO REMAINDER,
+// and a decoder that mapped by name would hand it 0.0 with bKnown false — which
+// renders as an empty meter, a claim that the founder has nothing left.
+//
+// The REASON travels with the absence. "Not reported" and "stale" are different
+// facts about the same missing number, and the HUD says which.
+struct FWonderlandUsageDecode
+{
+	bool bOk = false;
+	FWonderlandWireRefusal Refusal;
+	FWonderlandUsageHud Hud;
+};
+
+FWonderlandUsageDecode WonderlandDecodeUsageBytes(const char* Bytes, int32 Length);
 
 /* ------------------------------------------------------- the SSE frame */
 
