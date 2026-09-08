@@ -19,6 +19,7 @@ a mesh has ever been in a level.
 import math
 import os
 import sys
+import types
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -383,6 +384,158 @@ def t_offline_import_is_loud():
     return "an editor is present; the offline path was not exercised"
 
 
+def _stub_engine(existing=(), empty_for=(), nanite_raises=False):
+    """A fake `unreal` module: records what the importer asks it to do."""
+    log = {"tasks": [], "nanite": [], "existing_checked": 0}
+
+    class _Task(object):
+        def __init__(self):
+            self.props = {}
+
+        def set_editor_property(self, k, v):
+            self.props[k] = v
+
+        def get_editor_property(self, k):
+            if k == "imported_object_paths":
+                name = self.props.get("destination_name")
+                if name in empty_for:
+                    return []
+                return ["%s/%s.%s" % (self.props.get("destination_path"),
+                                      name, name)]
+            return self.props.get(k)
+
+    class _Pipeline(object):
+        def __init__(self):
+            if nanite_raises:
+                raise RuntimeError("no Interchange pipeline on this build")
+            self._mesh = types.SimpleNamespace(
+                set_editor_property=lambda k, v: log["nanite"].append((k, v)))
+
+        def get_editor_property(self, k):
+            return self._mesh
+
+    def _import(tasks):
+        for t in tasks:
+            log["tasks"].append(dict(t.props))
+
+    def _exists(path):
+        log["existing_checked"] += 1
+        return path in existing
+
+    stub = types.ModuleType("unreal")
+    stub.AssetImportTask = _Task
+    stub.InterchangeGenericAssetsPipeline = _Pipeline
+    stub.AssetToolsHelpers = types.SimpleNamespace(
+        get_asset_tools=lambda: types.SimpleNamespace(import_asset_tasks=_import))
+    stub.EditorAssetLibrary = types.SimpleNamespace(does_asset_exist=_exists)
+    return stub, log
+
+
+def _with_engine(stub, fn):
+    """Run `fn` with `kit_v2.unreal` bound to a stub, then put it back."""
+    was = KIT.unreal
+    KIT.unreal = stub
+    try:
+        return fn()
+    finally:
+        KIT.unreal = was
+
+
+def t_the_editor_half_runs():
+    """Drive `import_kit_assets` against a stub engine. IT HAS NEVER RUN.
+
+    Every other check here exercises code that runs offline. This one is the
+    half that does not: `import_kit_assets` is what executes FIRST inside an
+    editor, and until this test the only thing proven about it was that it
+    returns `{}` and says so when there is no engine. A function whose first
+    real execution is in front of a founder is a function nobody has tested.
+
+    The stub is not a mock of the answer -- it records what the importer ASKS
+    for, and these checks read the requests: one task per mesh, every
+    destination under the kit root, Nanite requested for exactly the modules
+    the manifest recommends it for, and the returned dict in the shape
+    `assets_v2.build_assets` returns.
+    """
+    rows = KIT.plan()
+    stub, log = _stub_engine()
+    said = []
+    got = _with_engine(stub, lambda: KIT.import_kit_assets(log=said.append))
+    check(len(got) == len(rows),
+          "the stub imported %d of %d meshes" % (len(got), len(rows)))
+    check(len(log["tasks"]) == len(rows),
+          "%d import tasks for %d meshes -- one each is the contract"
+          % (len(log["tasks"]), len(rows)))
+    outside = [p for p in got.values() if not p.startswith(KIT.KIT_ROOT)]
+    check(not outside, "%d asset path(s) land outside %s: %s"
+                       % (len(outside), KIT.KIT_ROOT, outside[:3]))
+    bad_shape = [k for k, v in got.items() if not isinstance(v, str) or "." in v]
+    check(not bad_shape, "%d returned path(s) are not a bare asset path: %s"
+                         % (len(bad_shape), bad_shape[:3]))
+    want_nanite = {r["key"] for r in rows if r["nanite"]}
+    asked = {t["destination_name"] for t in log["tasks"] if "options" in t}
+    check(asked == want_nanite,
+          "Nanite asked for %d meshes, the manifest recommends it for %d"
+          % (len(asked), len(want_nanite)))
+    for t in log["tasks"][:1]:
+        check(t.get("automated") is True and t.get("replace_existing") is True
+              and t.get("save") is True,
+              "an import task is not automated/replacing/saving: %s" % t)
+    return ("%d meshes imported against a stub, one task each, Nanite asked "
+            "for %d, every path under %s" % (len(got), len(asked), KIT.KIT_ROOT))
+
+
+def t_the_editor_half_is_honest():
+    """It records what did NOT import, rather than returning a short dict.
+
+    Three ways an import goes wrong and all three must be visible: the engine
+    hands back no object path, the FBX is not on disk, and the Nanite option
+    is refused by the build. A silently-short dict looks exactly like a world
+    whose kit was never placed -- which is this project's most repeated
+    failure and the reason `import_kit_assets` logs rather than swallows.
+    """
+    rows = KIT.plan()
+    victim = rows[0]["key"]
+
+    stub, _log = _stub_engine(empty_for={victim})
+    said = []
+    got = _with_engine(stub, lambda: KIT.import_kit_assets(log=said.append))
+    check(victim not in got, "%s returned no path and was counted anyway" % victim)
+    check(any("FAILED" in s and victim in s for s in said),
+          "an import that produced no path was not reported: %s" % said[-3:])
+    check(any("%d forge mesh(es) available, %d failed" % (len(rows) - 1, 1) in s
+              for s in said),
+          "the summary line does not say one failed: %s" % said[-3:])
+
+    # already in the content browser -> reused, not re-imported
+    have = rows[0]["asset_path"]
+    stub2, log2 = _stub_engine(existing={have})
+    got2 = _with_engine(stub2, lambda: KIT.import_kit_assets(log=lambda _s: None))
+    check(got2.get(victim) == have,
+          "an asset already in the browser was not reused: %r" % got2.get(victim))
+    check(len(log2["tasks"]) == len(rows) - 1,
+          "a reused asset was re-imported: %d tasks for %d meshes"
+          % (len(log2["tasks"]), len(rows)))
+
+    # a build with no Interchange pipeline: say so, import anyway
+    stub3, log3 = _stub_engine(nanite_raises=True)
+    said3 = []
+    got3 = _with_engine(stub3, lambda: KIT.import_kit_assets(log=said3.append))
+    check(len(got3) == len(rows),
+          "a refused Nanite option lost %d mesh(es)" % (len(rows) - len(got3)))
+    check(any("NANITE NOT APPLIED" in s for s in said3),
+          "a refused Nanite option was swallowed rather than logged")
+
+    # `keys=` narrows the work
+    stub4, log4 = _stub_engine()
+    two = [r["key"] for r in rows[:2]]
+    got4 = _with_engine(stub4, lambda: KIT.import_kit_assets(
+        keys=two, log=lambda _s: None))
+    check(sorted(got4) == sorted(two),
+          "keys= imported %d meshes instead of 2" % len(got4))
+    return ("an empty import, a missing source, a reused asset, a refused "
+            "Nanite option and a `keys=` filter all behave and all say so")
+
+
 def t_batches_reported():
     """Every batch says how many placements it made, and why any was skipped."""
     check(KL.BATCHES, "kit_layout reported no batches")
@@ -410,6 +563,8 @@ TESTS = (
     ("the census can see it", t_census_can_see_it),
     ("plan is honest", t_plan_is_honest),
     ("offline import is loud", t_offline_import_is_loud),
+    ("the editor half runs", t_the_editor_half_runs),
+    ("the editor half is honest", t_the_editor_half_is_honest),
     ("batches reported", t_batches_reported),
 )
 

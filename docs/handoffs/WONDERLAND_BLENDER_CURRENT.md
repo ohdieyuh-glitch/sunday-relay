@@ -24,7 +24,7 @@ this, then "The kit is in the world now", then Session 2's build steps below
 (they are unchanged and still correct).
 
 **What is proven, and by what.** `python3 wonderland/v2/verify_kit_bridge.py`
-— fourteen checks, no engine, no Blender, ~40 s. It walks `layout_v2.ALL`
+— seventeen checks, no engine, no Blender, ~40 s. It walks `layout_v2.ALL`
 rather than re-reading the code, which is how it found both of this session's
 real defects. Then the world's own gates: `verify_v2_layout`,
 `verify_v2_dryrun`, `verify_v2_marble_paths`, and `tools/`
@@ -58,7 +58,7 @@ it by eye.
 
 | still needs the editor | why |
 |---|---|
-| **the import itself** | there is no `unreal` module here |
+| **the import itself** | there is no `unreal` module here. The CODE PATH is now driven end to end against a stub engine — 313 meshes, one task each, Nanite requested for exactly the 68 meshes the manifest recommends, plus an empty import, a missing source, a reused asset, a refused Nanite option and a `keys=` filter. That proves what the importer ASKS FOR. It does not prove an engine answers. |
 | Nanite, collision | `nanite_recommended` is a measured triangle count against a stated rule. A rule is not a profile. |
 | lightmap UVs | the UVs are a planar world projection at 2 m per tile; the V2 materials are procedural, so this is enough for them and not for baked light |
 | cook viability | nothing offline can answer it |

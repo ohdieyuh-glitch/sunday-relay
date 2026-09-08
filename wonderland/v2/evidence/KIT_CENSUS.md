@@ -379,6 +379,26 @@ spire is 118 m and the world already stands a 194 m `spire_great`; a second one
 is a competing landmark, not a contribution, and where a world's landmarks
 stand is the world stream's call and not the kit's.
 
+## The half that had never run
+
+Every other check in `verify_kit_bridge` exercises code that runs offline.
+`import_kit_assets` is the half that does not — it is what executes FIRST
+inside an editor, and until now the only thing proven about it was that it
+returns `{}` and says so when there is no engine. **A function whose first real
+execution is in front of a founder is a function nobody has tested.**
+
+It is now driven against a stub `unreal` module that records what the importer
+ASKS FOR rather than mocking the answer: 313 meshes, one import task each,
+every destination under the kit root, Nanite requested for exactly the 68
+meshes the manifest recommends it for, and the returned dict in the shape
+`assets_v2.build_assets` returns. Four failure modes too — an engine handing
+back no object path, a missing FBX, an asset already in the browser (reused,
+not re-imported), and a build with no Interchange pipeline (logged, imported
+anyway) — because a silently-short dict looks exactly like a world whose kit
+was never placed, which is this project's most repeated failure.
+
+**This proves what the importer asks for. It does not prove an engine answers.**
+
 ## Not proven
 
 No frame here has been rendered. These are silhouette censuses computed from
