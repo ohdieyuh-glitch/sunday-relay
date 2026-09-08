@@ -77,7 +77,10 @@
     "wonderland:ordering:verify": "bash wonderland/Tools/ordering-parity-check.sh",
     "wonderland:julius:verify": "bash wonderland/Tools/julius-subsystem-check.sh",
     "wonderland:wire:export": "esbuild scripts/export-wonderland-wire-contract.ts --bundle --platform=node --format=cjs --outfile=generated/export-wonderland-wire-contract.cjs --log-level=warning && node generated/export-wonderland-wire-contract.cjs",
-    "wonderland:wire:check": "esbuild scripts/export-wonderland-wire-contract.ts --bundle --platform=node --format=cjs --outfile=generated/export-wonderland-wire-contract.cjs --log-level=warning && node generated/export-wonderland-wire-contract.cjs --check"
+    "wonderland:wire:check": "esbuild scripts/export-wonderland-wire-contract.ts --bundle --platform=node --format=cjs --outfile=generated/export-wonderland-wire-contract.cjs --log-level=warning && node generated/export-wonderland-wire-contract.cjs --check",
+    "wonderland:wire:fixtures": "esbuild scripts/export-wonderland-wire-fixtures.ts --bundle --platform=node --format=cjs --outfile=generated/export-wonderland-wire-fixtures.cjs --log-level=warning && node generated/export-wonderland-wire-fixtures.cjs",
+    "wonderland:wire:fixtures:check": "esbuild scripts/export-wonderland-wire-fixtures.ts --bundle --platform=node --format=cjs --outfile=generated/export-wonderland-wire-fixtures.cjs --log-level=warning && node generated/export-wonderland-wire-fixtures.cjs --check",
+    "wonderland:wire:verify": "bash wonderland/Tools/wire-decode-check.sh"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.3.220",
