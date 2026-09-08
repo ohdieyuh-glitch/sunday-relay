@@ -22,7 +22,9 @@ import {
   JuliusProviderHealthRegistry, JuliusProviderRouter, JuliusDispatchError,
   type JuliusDispatchAllocation, type JuliusProviderAdapter, type JuliusProviderResult,
 } from './julius-router';
-import { JuliusWorkerRegistry, type JuliusWorker } from './julius-runtime';
+import { JuliusWorkerRegistry, type JuliusTask, type JuliusWorker } from './julius-runtime';
+import { lockJuliusTaskContract, seedJuliusTaskContract, type JuliusTaskContract } from './julius-task-contract';
+import { repairLineageRootOf } from './julius-repair-lineage';
 import type { JuliusCardPolicy } from './julius-policy';
 import type { JuliusVerificationPolicy } from './julius-verification-runtime';
 import { createJuliusMemoryStore, type JuliusMemoryStore } from './julius-memory-store';
@@ -295,6 +297,63 @@ export function createJuliusHarness(input: {
   return { store, clock, ids, budget, workers: registry, adapters, health, router, deps, loop, policies };
 }
 
+/**
+ * THE TASK CONTRACT A SEEDED RUN CARRIES.
+ *
+ * A deployment now seeds a contract at bootstrap and locks it when the plan
+ * review is accepted, and no Coding Agent may be dispatched without one. A
+ * fixture that skipped it would not be a smaller deployment, it would be a
+ * BROKEN one, and every test composing it would prove something about a run
+ * production cannot produce.
+ *
+ *   'locked'  the ordinary state, and the default: the terms are agreed, which
+ *             is what a test about scheduling, budgets or recovery assumes.
+ *   'draft'   seeded but not agreed — for tests that drive the real accept and
+ *             want the lock to happen where production performs it.
+ *   'none'    no contract at all, for the gate's own refusal cases.
+ */
+export type SeededContractState = 'locked' | 'draft' | 'none';
+
+/** A minimal valid contract for a seeded task, with the mission's own shape. */
+export function seededTaskContract(input: {
+  runId: string; taskId: string; state?: SeededContractState;
+}): JuliusTaskContract {
+  const seeded = seedJuliusTaskContract({
+    runId: input.runId, taskId: input.taskId, missionContractRevision: 1,
+    objective: 'The seeded mission objective.',
+    requirements: ['the seeded requirement'], constraints: ['the seeded constraint'],
+    acceptanceCriteria: [{ id: 'criterion-1', text: 'the seeded blocking criterion', blocking: true }],
+    filesInScope: [], filesOutOfScope: [],
+    spendUsd: 20, repairCycles: 3, requiredEvidence: ['TEST'],
+  });
+  if (!seeded.seeded) throw new Error(`fixture contract not derivable: ${seeded.reasonCode}`);
+  if (input.state !== 'locked' && input.state !== undefined) return seeded.contract;
+  const locked = lockJuliusTaskContract({
+    contract: seeded.contract, verdict: { verdict: 'ACCEPT', evaluatorId: 'fixture-evaluator' },
+    lockedAt: '2026-08-27T00:00:00.000Z',
+  });
+  if (locked.outcome !== 'LOCKED') throw new Error(`fixture contract not lockable: ${JSON.stringify(locked)}`);
+  return locked.contract;
+}
+
+/**
+ * Seed one task's contract directly, for the tests that build their task graph
+ * with `store.seedTask` rather than through {@link seedRun}. `'draft'` is the
+ * useful default there: those tests drive the real plan → review → accept
+ * sequence, and the lock then happens exactly where production performs it.
+ */
+export function seedTaskContractInto(
+  store: JuliusMemoryStore,
+  input: { runId: string; projectId: string; taskId: string; state?: SeededContractState },
+): void {
+  if (input.state === 'none') return;
+  void store.putTaskContract({
+    projectId: input.projectId,
+    contract: seededTaskContract({ runId: input.runId, taskId: input.taskId, state: input.state ?? 'draft' }),
+    occurredAt: '2026-08-27T00:00:00.000Z',
+  });
+}
+
 /** Seed a run in a state the scheduler will claim from, plus its tasks. */
 export function seedRun(
   harness: JuliusHarness,
@@ -302,6 +361,8 @@ export function seedRun(
     readonly runId?: string; readonly projectId?: string; readonly missionId?: string;
     readonly state?: Parameters<JuliusMemoryStore['seedRun']>[0]['state'];
     readonly tasks: readonly Parameters<JuliusMemoryStore['seedTask']>[1][];
+    /** Defaults to `'locked'` — see {@link SeededContractState}. */
+    readonly taskContracts?: SeededContractState;
   },
 ): { runId: string; projectId: string; missionId: string } {
   const runId = input.runId ?? 'run-1';
@@ -312,6 +373,23 @@ export function seedRun(
     cardRevision: 'card-r1', missionContractRevision: 1, projectBrainRevision: 0, version: 1,
   });
   for (const task of input.tasks) harness.store.seedTask(runId, task);
+
+  // One contract per lineage ROOT: a repair is governed by the contract of the
+  // task it repairs, exactly as `juliusContractSubjectTaskId` resolves it.
+  const contracts = input.taskContracts ?? 'locked';
+  if (contracts !== 'none') {
+    const seededTasks = input.tasks.map((value) => ({ ...value, missionId }));
+    const roots = new Set(seededTasks
+      .filter((value) => value.role === 'CODING_AGENT')
+      .map((value) => repairLineageRootOf(value as JuliusTask, seededTasks as readonly JuliusTask[]).taskId));
+    for (const taskId of roots) {
+      void harness.store.putTaskContract({
+        projectId,
+        contract: seededTaskContract({ runId, taskId, state: contracts }),
+        occurredAt: '2026-08-27T00:00:00.000Z',
+      });
+    }
+  }
   return { runId, projectId, missionId };
 }
 

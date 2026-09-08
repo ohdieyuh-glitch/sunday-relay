@@ -12,6 +12,7 @@ import {
   lockJuliusTaskContract,
   mayDispatchUnderContract,
   reviseJuliusTaskContract,
+  seedJuliusTaskContract,
   validateJuliusTaskContract,
   type JuliusTaskContract,
 } from './julius-task-contract';
@@ -536,5 +537,112 @@ describe('rule 6 — Julius keeps mission authority through the whole cycle', ()
     expect(relocked.contract.blockingAcceptanceCriteria.map((c) => c.criterionId)).toEqual(['AC-1', 'AC-2']);
     expect(relocked.contract.contractRevision).toBe(2);
     expect(relocked.contract.bindingDigest).not.toBe(first.bindingDigest);
+  });
+});
+
+describe('the seed — Julius authors revision 1, the architect proposes the rest', () => {
+  const terms = (overrides: Partial<Parameters<typeof seedJuliusTaskContract>[0]> = {}) => ({
+    runId: 'run-1', taskId: 'run-1:build', missionContractRevision: 2,
+    objective: 'Add a deterministic slug helper.',
+    requirements: ['ASCII output only'],
+    constraints: ['no new dependency'],
+    acceptanceCriteria: [
+      { id: 'AC-1', text: 'slug("A B") === "a-b"', blocking: true },
+      { id: 'AC-2', text: 'the README mentions it', blocking: false },
+    ],
+    filesInScope: ['src/slug.ts'], filesOutOfScope: ['package.json'],
+    spendUsd: 20, repairCycles: 3,
+    requiredEvidence: ['TEST'] as const,
+    ...overrides,
+  });
+
+  it('produces a valid, unlocked revision 1 from the mission', () => {
+    const outcome = seedJuliusTaskContract(terms());
+    expect(outcome.seeded).toBe(true);
+    if (!outcome.seeded) throw new Error('unreachable');
+    expect(validateJuliusTaskContract(outcome.contract)).toEqual({ valid: true, errors: [] });
+    expect(outcome.contract).toMatchObject({
+      contractId: 'contract:run-1:build', contractRevision: 1, state: 'DRAFT',
+      bindingDigest: null, missionContractRevision: 2,
+      objective: 'Add a deterministic slug helper.',
+    });
+  });
+
+  it('takes ONLY the blocking criteria, keeping the mission’s own ids', () => {
+    const outcome = seedJuliusTaskContract(terms());
+    if (!outcome.seeded) throw new Error('unreachable');
+    expect(outcome.contract.blockingAcceptanceCriteria.map((c) => c.criterionId)).toEqual(['AC-1']);
+  });
+
+  it('states the money as the two numbers the allocator takes', () => {
+    const outcome = seedJuliusTaskContract(terms());
+    if (!outcome.seeded) throw new Error('unreachable');
+    expect(outcome.contract.budget).toEqual({ ceilingUsdMicros: 20_000_000, maxRepairRounds: 3 });
+  });
+
+  it('carries the mission constraints and the out-of-scope paths as prohibitions', () => {
+    const outcome = seedJuliusTaskContract(terms());
+    if (!outcome.seeded) throw new Error('unreachable');
+    expect(outcome.contract.prohibitedActions).toEqual([
+      'violating the mission constraint: no new dependency',
+      'writing to package.json',
+    ]);
+    expect(outcome.contract.permittedPaths).toEqual(['src/slug.ts']);
+  });
+
+  it('leaves requiredChecks EMPTY rather than inventing commands the mission never named', () => {
+    const outcome = seedJuliusTaskContract(terms());
+    if (!outcome.seeded) throw new Error('unreachable');
+    expect(outcome.contract.requiredChecks).toEqual([]);
+  });
+
+  it.each([
+    ['an unknown spend ceiling', { spendUsd: null }, 'mission_spend_ceiling_unknown'],
+    ['unknown repair rounds', { repairCycles: null }, 'mission_repair_rounds_unknown'],
+    ['no blocking criterion', { acceptanceCriteria: [{ id: 'AC-2', text: 'x', blocking: false }] }, 'mission_has_no_blocking_criterion'],
+    ['a zero ceiling', { spendUsd: 0 }, 'mission_spend_ceiling_invalid'],
+    ['a negative ceiling', { spendUsd: -1 }, 'mission_spend_ceiling_invalid'],
+  ])('refuses to seed from %s rather than defaulting one', (_label, overrides, reasonCode) => {
+    expect(seedJuliusTaskContract(terms(overrides as never))).toEqual({ seeded: false, reasonCode });
+  });
+
+  it('refuses a mission with no required evidence — a criterion nothing can prove', () => {
+    const outcome = seedJuliusTaskContract(terms({ requiredEvidence: [] as never }));
+    expect(outcome.seeded).toBe(false);
+    if (outcome.seeded) throw new Error('unreachable');
+    expect(outcome.reasonCode).toMatch(/^contract_invalid:/u);
+  });
+
+  it('says "the granted repository" rather than inventing a narrower scope', () => {
+    const outcome = seedJuliusTaskContract(terms({ filesInScope: [] }));
+    if (!outcome.seeded) throw new Error('unreachable');
+    expect(outcome.contract.inScope).toEqual(['the granted repository']);
+    expect(outcome.contract.permittedPaths).toEqual([]);
+  });
+
+  it('a replayed bootstrap seeds the SAME contract, not a second one', () => {
+    const first = seedJuliusTaskContract(terms());
+    const second = seedJuliusTaskContract(terms());
+    if (!first.seeded || !second.seeded) throw new Error('unreachable');
+    expect(second.contract.contractId).toBe(first.contract.contractId);
+    expect(juliusTaskContractBindingDigest(second.contract)).toBe(juliusTaskContractBindingDigest(first.contract));
+  });
+
+  it('the architect may revise it, and still cannot move the money or the criteria', () => {
+    const seeded = seedJuliusTaskContract(terms());
+    if (!seeded.seeded) throw new Error('unreachable');
+    const revised = reviseJuliusTaskContract({
+      contract: seeded.contract,
+      proposal: {
+        requiredChecks: ['npm test -- src/slug.test.ts'],
+        responsibilityBoundary: 'Implement src/slug.ts and its unit test; touch nothing else.',
+        ...({ budget: { ceilingUsdMicros: 999_000_000, maxRepairRounds: 99 } } as object),
+      },
+    });
+    if (revised.outcome !== 'REVISED') throw new Error('unreachable');
+    expect(revised.contract.requiredChecks).toEqual(['npm test -- src/slug.test.ts']);
+    expect(revised.contract.budget).toEqual({ ceilingUsdMicros: 20_000_000, maxRepairRounds: 3 });
+    expect(revised.contract.blockingAcceptanceCriteria.map((c) => c.criterionId)).toEqual(['AC-1']);
+    expect(revised.contract.contractRevision).toBe(2);
   });
 });

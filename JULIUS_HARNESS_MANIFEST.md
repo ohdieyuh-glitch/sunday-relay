@@ -30,14 +30,14 @@ Edges counted by the trace between included files; "type" = type-only imports, e
 | C.A.R.D. record (src/relay/integration/compound-agent/, entitlement) | Relay vocabulary (mission/contracts.ts, protocol/enums.ts) | 1 | 1 |
 | entrypoint (relay-bridge/julius-live-mission.ts) | executor + tool substrate (src/relay/workspace/julius-tools/) | 2 | 1 |
 | entrypoint (relay-bridge/julius-live-mission.ts) | live composition (relay-bridge/julius/) | 6 | 0 |
-| entrypoint (relay-bridge/julius-live-mission.ts) | persistence (src/relay/persistence/) | 4 | 0 |
+| entrypoint (relay-bridge/julius-live-mission.ts) | persistence (src/relay/persistence/) | 5 | 0 |
 | entrypoint (relay-bridge/julius-live-mission.ts) | Relay↔Julius port (src/relay/integration/julius/) | 1 | 0 |
 | executor + tool substrate (src/relay/workspace/julius-tools/) | kernel (src/relay/mission/julius/) | 10 | 8 |
 | executor + tool substrate (src/relay/workspace/julius-tools/) | persistence (src/relay/persistence/) | 1 | 0 |
 | live composition (relay-bridge/julius/) | bridge provider stacks (hosted Claude, Hermes, redaction) | 7 | 2 |
 | live composition (relay-bridge/julius/) | connectors (gpt-architect, prompt-architect contracts) | 4 | 1 |
 | live composition (relay-bridge/julius/) | executor + tool substrate (src/relay/workspace/julius-tools/) | 2 | 0 |
-| live composition (relay-bridge/julius/) | kernel (src/relay/mission/julius/) | 6 | 3 |
+| live composition (relay-bridge/julius/) | kernel (src/relay/mission/julius/) | 6 | 2 |
 | live composition (relay-bridge/julius/) | persistence (src/relay/persistence/) | 10 | 2 |
 | live composition (relay-bridge/julius/) | Relay↔Julius port (src/relay/integration/julius/) | 1 | 0 |
 | persistence (src/relay/persistence/) | kernel (src/relay/mission/julius/) | 17 | 12 |
@@ -265,7 +265,7 @@ PostgreSQL authority for Julius: the repositories bound to the runtime ports, th
 | `relay-bridge/julius/postgres-store.ts` | traced | `relay-bridge/julius-live-mission.ts` |
 | `src/relay/persistence/julius-brain-kinds.ts` | traced | `src/relay/persistence/julius-postgres.ts` |
 | `src/relay/persistence/julius-context-postgres.ts` | traced | `relay-bridge/julius/postgres-store.ts` |
-| `src/relay/persistence/julius-contract-postgres.ts` | traced | `relay-bridge/julius/postgres-store.ts` |
+| `src/relay/persistence/julius-contract-postgres.ts` | traced | `relay-bridge/julius-live-mission.ts` |
 | `src/relay/persistence/julius-event-postgres.ts` | traced | `relay-bridge/julius/postgres-store.ts` |
 | `src/relay/persistence/julius-lifecycle-postgres.ts` | not composed by the live root | — |
 | `src/relay/persistence/julius-postgres.ts` | traced | `relay-bridge/julius-live-mission.ts` |

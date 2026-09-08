@@ -39,6 +39,7 @@ import { createJuliusContextSnapshot } from './julius-context-snapshot';
 import { evaluateJuliusVerification, type JuliusReviewerFinding, type JuliusVerificationPolicy } from './julius-verification-runtime';
 import { planJuliusRepair } from './julius-repair-runtime';
 import { repairRoundsBefore, repairTaskTypeFor } from './julius-repair-lineage';
+import { lockJuliusTaskContract, mayDispatchUnderContract, type JuliusTaskContractBinding } from './julius-task-contract';
 import { evaluateJuliusRelease } from './julius-release-runtime';
 import { evaluateJuliusAllocation, type JuliusAllocationPolicy, type JuliusExecutionAllocation } from './julius-allocation-runtime';
 import { JULIUS_RUNTIME_VERSION, type JuliusBrainEntry, type JuliusTask, type JuliusVerificationDecision, type JuliusWorker, type JuliusWorkerRole } from './julius-runtime';
@@ -242,6 +243,15 @@ export type JuliusTaskPreflight =
     readonly run: JuliusRunRow;
     readonly role: JuliusWorkerRole;
     readonly task: JuliusTask;
+    /**
+     * THE AGREEMENT THIS DISPATCH RUNS UNDER, carried from the gate that proved
+     * it rather than re-read downstream — two reads could see two different
+     * revisions, and the whole point of the binding is that one dispatch names
+     * exactly one. `null` for the roles that need no contract (see
+     * {@link juliusContractSubjectTaskId}), which is a fact rather than an
+     * absence: those tasks are not bound, not unbound-and-permitted-anyway.
+     */
+    readonly contractBinding: JuliusTaskContractBinding | null;
   };
 
 /**
@@ -264,6 +274,50 @@ export type JuliusTaskPreflight =
  * caller's identity — which is why `runClaimedTask` takes this result rather
  * than a raw claim.
  */
+/**
+ * WHICH TASK'S CONTRACT GOVERNS THIS ONE.
+ *
+ * `null` means this task needs no locked contract, and the two cases are
+ * deliberate rather than a whitelist:
+ *
+ *   THE PROMPT ARCHITECT plans and REVISES the contract, so requiring one
+ *   before it may run would deadlock the only role that can propose the terms.
+ *   Its own review is the challenge step, and is exempt for the same reason.
+ *
+ *   THE CODING AGENT is bound, and bound by ITS ROOT'S contract rather than
+ *   one of its own. `repair:build` is still the build, and a bounded sub-agent
+ *   is work its parent delegated — neither may be graded against terms of its
+ *   own, or a worker could escape the mission's by spawning a child. So the
+ *   walk climbs `parentTaskId` through every coding ancestor, which covers a
+ *   repair round, a sub-agent, and a sub-agent of a repair alike.
+ *
+ *   THE INDEPENDENT REVIEWER of a coding task is bound by that task's
+ *   contract, which is rule 2 — the thing being graded and the thing it is
+ *   graded against must be one document.
+ */
+export function juliusContractSubjectTaskId(task: JuliusTask, tasks: readonly JuliusTask[]): string | null {
+  const byId = new Map(tasks.map((item) => [item.taskId, item]));
+  const rootOf = (start: JuliusTask): string => {
+    const seen = new Set<string>([start.taskId]);
+    let current = start;
+    while (current.parentTaskId !== null) {
+      const parent = byId.get(current.parentTaskId);
+      // A parent in another role is a different kind of relationship — a review
+      // reviews, it does not own — and a cycle is a graph nobody can climb.
+      if (parent === undefined || parent.role !== current.role || seen.has(parent.taskId)) break;
+      seen.add(parent.taskId);
+      current = parent;
+    }
+    return current.taskId;
+  };
+  if (task.role === 'CODING_AGENT') return rootOf(task);
+  if (task.role === 'INDEPENDENT_REVIEWER' && task.parentTaskId !== null) {
+    const reviewed = byId.get(task.parentTaskId);
+    if (reviewed !== undefined && reviewed.role === 'CODING_AGENT') return rootOf(reviewed);
+  }
+  return null;
+}
+
 export async function prepareClaimedTask(
   request: JuliusPipelineRequest,
   deps: JuliusPipelineDependencies,
@@ -318,7 +372,50 @@ export async function prepareClaimedTask(
     return { kind: 'REFUSED', outcome: { kind: 'HALTED', taskId: claim.taskId, reasonCode: 'TASK_NOT_FOUND', safeSummary: 'The claimed task no longer exists in the run.' } };
   }
 
-  return { kind: 'ELIGIBLE', run, role, task };
+  /* ------------------------------------- 3. the task contract, before the attempt */
+  /**
+   * RULE 1 — CODING MUST NOT BEGIN BEFORE THE CONTRACT IS LOCKED.
+   *
+   * Placed here, in the one pre-execution gate, for the reason every other gate
+   * moved here: a refusal must cost no execution attempt. `admitTask` runs
+   * AFTER this returns, so a run that cannot show what its coder was charged
+   * with is stopped without spending one of its three turns on the question.
+   *
+   * It is a separate question from the release rule (#234), and both are
+   * needed. `evaluateJuliusRelease` asks whether the build's DEPENDENCIES are
+   * accepted; this asks whether what the build was asked to do has been AGREED.
+   * A run can satisfy the first and not the second — an accepted plan review
+   * whose contract was then revised — and dispatching on the graph alone sends
+   * a coder to work against terms nobody locked.
+   *
+   * FAIL CLOSED AND LOUD. The task ends FAILED with the gate's own reason code
+   * rather than being handed back, because nothing about retrying a dispatch
+   * causes a contract to become agreed; a quiet requeue would spin the run
+   * against a condition only a decision can change.
+   */
+  const contractTaskId = juliusContractSubjectTaskId(task, tasks);
+  if (contractTaskId !== null) {
+    const contract = await deps.store.loadTaskContract({ projectId: run.projectId, taskId: contractTaskId });
+    const verdict = mayDispatchUnderContract(contract);
+    if (!verdict.permitted) {
+      await deps.store.finishTask({ taskId: claim.taskId, owner: deps.owner, leaseGeneration: claim.leaseGeneration, state: 'FAILED', now: deps.clock.now() });
+      await ledger.event('contract.refused', {
+        taskId: claim.taskId,
+        facts: { reasonCode: verdict.reasonCode, contractTaskId, role: claim.role },
+      });
+      await ledger.trajectory('DISPATCH', { taskId: claim.taskId, policyRevision: request.policy.revision, outcome: 'CONTRACT_NOT_LOCKED', facts: { reasonCode: verdict.reasonCode } });
+      return {
+        kind: 'REFUSED',
+        outcome: {
+          kind: 'HALTED', taskId: claim.taskId, reasonCode: 'TASK_CONTRACT_NOT_LOCKED',
+          safeSummary: `The task contract governing ${contractTaskId} is not locked (${verdict.reasonCode}), so no work was dispatched.`,
+        },
+      };
+    }
+    return { kind: 'ELIGIBLE', run, role, task, contractBinding: verdict.binding };
+  }
+
+  return { kind: 'ELIGIBLE', run, role, task, contractBinding: null };
 }
 
 /**
@@ -350,9 +447,20 @@ export async function runClaimedTask(
    * being run. A generation above the attempt is not a discrepancy; it is a
    * task that was offered, or refused, more often than it was run.
    */
+  /**
+   * RULE 2 IS RECORDED, NOT ASSUMED. The binding the gate proved is written on
+   * this dispatch, so "the coder and its reviewer held the same agreement" is a
+   * durable comparison of two rows rather than a claim about code paths. Null
+   * for the roles that are not bound, which is a fact and not an absence.
+   */
   await ledger.event('task.claimed', {
     taskId: claim.taskId,
-    facts: { leaseGeneration: claim.leaseGeneration, attempt: claim.attempt, role: claim.role },
+    facts: {
+      leaseGeneration: claim.leaseGeneration, attempt: claim.attempt, role: claim.role,
+      contractId: preflight.contractBinding?.contractId ?? null,
+      contractRevision: preflight.contractBinding?.contractRevision ?? null,
+      bindingDigest: preflight.contractBinding?.bindingDigest ?? null,
+    },
   });
 
   let worker: JuliusWorker;
@@ -917,6 +1025,69 @@ async function verifyExecutedTask(input: {
   const release = (decision.action === 'ACCEPT' || decision.action === 'COMPLETE') && tasks.some((value) => value.state === 'BLOCKED')
     ? evaluateJuliusRelease({ tasks, decisions: [...decisions, recorded] })
     : { releasable: [] as readonly string[], withheld: [] };
+  /**
+   * THE LOCK HAPPENS BEFORE THE RELEASE, and that order is the whole guarantee.
+   *
+   * An accepting decision that releases a BLOCKED task is Julius agreeing that
+   * the work may start; the contract governing that work must stop being
+   * arguable at the same moment. Locking FIRST means the two orders a crash can
+   * produce are both safe:
+   *
+   *   lock, crash            nothing is released; the next tick re-verifies and
+   *                          the lock is idempotent, so it resumes cleanly.
+   *   lock, release, crash   the task is runnable and its terms are agreed,
+   *                          which is exactly the state that should exist.
+   *
+   * The reverse order has a third: released with nothing locked, where the
+   * dispatch gate would refuse a task the run had already announced as ready.
+   *
+   * A REFUSAL DOES NOT STOP THE DECISION. The decision is about the work that
+   * was reviewed and is true regardless; what a failed lock stops is the
+   * DISPATCH, at the gate, with its own reason. Recording the refusal here is
+   * what makes that later refusal explicable instead of mysterious.
+   *
+   * The evaluator is the reviewer whose acceptance this decision carries —
+   * `workerId` — so the durable row says who accepted the terms, not merely
+   * that something did.
+   */
+  if (decision.action === 'ACCEPT' || decision.action === 'COMPLETE') {
+    for (const releasedTaskId of release.releasable) {
+      const governed = tasks.find((value) => value.taskId === releasedTaskId);
+      const contractTaskId = governed === undefined ? null : juliusContractSubjectTaskId(governed, tasks);
+      if (contractTaskId === null) continue;
+      const contract = await deps.store.loadTaskContract({ projectId: run.projectId, taskId: contractTaskId });
+      if (contract === null) {
+        await ledger.event('contract.refused', { taskId: releasedTaskId, workerId: input.workerId, facts: { reasonCode: 'contract_absent', contractTaskId } });
+        continue;
+      }
+      const proposed = lockJuliusTaskContract({
+        contract, verdict: { verdict: 'ACCEPT', evaluatorId: input.workerId }, lockedAt: deps.clock.now(),
+      });
+      if (proposed.outcome !== 'LOCKED') {
+        // Already locked is the ordinary replay, and it is not a refusal worth
+        // announcing — the terms are agreed, which is what the caller needed.
+        const reasonCode = proposed.outcome === 'REFUSED' ? proposed.reasonCode : 'contract_challenged';
+        if (reasonCode !== 'contract_already_locked') {
+          await ledger.event('contract.refused', { taskId: releasedTaskId, workerId: input.workerId, facts: { reasonCode, contractTaskId } });
+        }
+        continue;
+      }
+      const locked = await deps.store.lockTaskContract({
+        projectId: run.projectId, contractId: contract.contractId, contractRevision: contract.contractRevision,
+        bindingDigest: proposed.contract.bindingDigest!, lockedAt: proposed.contract.lockedAt!, evaluatorId: input.workerId,
+      });
+      // ANNOUNCE FACTS, NOT INTENTIONS: `contract.locked` is written only after
+      // the durable write resolves, and a lost race is announced as the refusal
+      // it is rather than as a lock this tick did not perform.
+      await ledger.event(locked.locked ? 'contract.locked' : 'contract.refused', {
+        taskId: releasedTaskId, workerId: input.workerId,
+        facts: locked.locked
+          ? { contractTaskId, contractId: contract.contractId, contractRevision: contract.contractRevision, bindingDigest: proposed.contract.bindingDigest! }
+          : { contractTaskId, reasonCode: locked.reasonCode, lockedRevision: locked.lockedRevision },
+      });
+    }
+  }
+
   const decisionRecorded = await deps.store.appendDecision({
     decisionId: deps.ids.next('decision'),
     runId: run.runId,

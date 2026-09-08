@@ -293,14 +293,31 @@ describe('project settings assessment', () => {
 
 describe('capability probe helpers', () => {
   it('classifies an API-key environment as disallowed', () => {
-    const prev = process.env.ANTHROPIC_API_KEY;
+    // THE PRECONDITION HAS TO BE ESTABLISHED, NOT ASSUMED. `classifyClaudeAuth`
+    // checks the provider overrides FIRST and deliberately so — a gateway is a
+    // third-party path whatever else is set — so setting only the key proves
+    // nothing on a host that already exports `ANTHROPIC_BASE_URL`. Some do:
+    // Claude Code's own cloud container does, and this case failed there while
+    // passing everywhere else, which is a test reporting the environment rather
+    // than the code. Each higher-precedence variable is cleared and restored.
+    const previous = {
+      ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
+      ANTHROPIC_BASE_URL: process.env.ANTHROPIC_BASE_URL,
+      CLAUDE_CODE_USE_BEDROCK: process.env.CLAUDE_CODE_USE_BEDROCK,
+      CLAUDE_CODE_USE_VERTEX: process.env.CLAUDE_CODE_USE_VERTEX,
+    };
+    delete process.env.ANTHROPIC_BASE_URL;
+    delete process.env.CLAUDE_CODE_USE_BEDROCK;
+    delete process.env.CLAUDE_CODE_USE_VERTEX;
     process.env.ANTHROPIC_API_KEY = 'sk-test';
     try {
       const auth = classifyClaudeAuth('t', '/fake/claude');
       expect(auth.sourceClass).toBe('api_key');
       expect(auth.approvedForLiveRun).toBe(false);
     } finally {
-      if (prev === undefined) delete process.env.ANTHROPIC_API_KEY; else process.env.ANTHROPIC_API_KEY = prev;
+      for (const [name, value] of Object.entries(previous)) {
+        if (value === undefined) delete process.env[name]; else process.env[name] = value;
+      }
     }
   });
   it('returns null for a non-existent explicit executable', () => {
