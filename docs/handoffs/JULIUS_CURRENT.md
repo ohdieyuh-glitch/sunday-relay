@@ -277,6 +277,13 @@ The hourly watch (`trig_01PvdqADjSgk5aUH9dvugJEZ`, :35) now checks BOTH main and
 the worker-PR search every cycle and reports `FOUNDER ACTION REQUIRED — PR #n`
 the moment a merge-ready one exists.
 
+**The founder's step, written down:** `docs/JULIUS_WORKER_PR_RUNBOOK.md` —
+re-author the eight commits as the App on a new branch (tree byte-identical,
+verified by three commands), push and open the PR with the App's installation
+token, verify the PR author before anything else, approve at the head SHA,
+squash-merge at that exact head. Built from #234's own commits; the token
+minting is standard App mechanics this session could not exercise.
+
 **The two earlier commits on `relay/julius-contract-stack-rebased`
 (`24d91a40`, `526d5d35`) are SUPERSEDED by `98a4a002`** and should not be landed
 beside it. This branch will be rebased onto the gate fix once that lands and its
@@ -753,6 +760,11 @@ FAIL on paid run 34037313976's own artifact and is the second of the top three
 gaps, because that run had no contract at all.
 
 ### 00f. The founder-only actions, in order
+
+> **2026-09-08, later:** #234 has landed (§0). The action that now gates the
+> paid mission is opening the 34186711214 repair as a worker-authored PR —
+> the exact commands are in **`docs/JULIUS_WORKER_PR_RUNBOOK.md`**. Items 1–2
+> below are the earlier record.
 
 1. **Approve and merge PR #234.** Worker-authored, all CI green, MERGEABLE/CLEAN,
    zero reviews. Nothing else gates the paid path. Monotonicity is already
