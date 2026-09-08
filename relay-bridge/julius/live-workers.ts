@@ -26,9 +26,12 @@
 import { createHash } from 'node:crypto';
 import {
   JuliusDispatchError,
+  reviewChargeFor,
+  reviewStageOf,
   type JuliusContextSnapshot,
   type JuliusProviderAdapter,
   type JuliusProviderResult,
+  type JuliusReviewStage,
   type JuliusWorker,
 } from '../../src/relay/mission/julius';
 import {
@@ -43,6 +46,7 @@ import {
   type HostedQueryFn,
   type HostedRunOutcome,
 } from '../hosted-coding-agent/hosted-runner';
+import { DEFAULT_HOSTED_LIMITS, hostedLimitsForAllocation, type HostedLimits } from '../hosted-coding-agent/hosted-envelope';
 import {
   runHermesReview,
   type HermesConfig,
@@ -115,6 +119,10 @@ function requireSnapshot(contexts: CompiledContextSource, contextId: string): Ju
 const packetText = (snapshot: JuliusContextSnapshot): string =>
   snapshot.packet.blocks.map((block) => block.text).join('');
 
+/** The mission context WITHOUT the findings Julius compiled for a repair. */
+const missionText = (snapshot: JuliusContextSnapshot): string =>
+  snapshot.packet.blocks.filter((block) => block.kind !== 'FINDING').map((block) => block.text).join('');
+
 const nowIso = (): string => new Date().toISOString();
 
 /* ----------------------------------------------------- prompt architect */
@@ -152,34 +160,23 @@ const ARCHITECT_CHARTER = [
   'Architecture decisions are PROPOSALS: leave accepted false. Approval is not yours to give.',
 ].join(' ');
 
+const ARCHITECT_REVISION_CHARTER = [
+  'This is a PLAN REVISION. The Independent Reviewer rejected the prior plan for the REVIEW FINDING entries',
+  'in the mission context. Keep the mission objective and every acceptance criterion exactly as stated;',
+  'revise the plan so that each finding is addressed, and say in the plan how each one was addressed.',
+  'Do not claim any finding is resolved by implementation work — none has happened.',
+].join(' ');
+
 /**
- * WHICH REVIEW THIS IS, from the only carrier that reaches the adapter.
- *
- * The runtime names a review task `${reviewedTaskId}:review`, so the stage is
- * encoded in the id by construction. The first version of this read it from
- * whether a diff artifact existed — and the build runs BEFORE the plan review,
- * so by then a diff always exists and every plan review was recorded as a
- * build review. A durable field that is wrong is worse than one that is
- * absent, so anything this cannot read returns null rather than a guess.
+ * WHICH REVIEW THIS IS. Read from the task type Julius dispatches with —
+ * `review:plan`, `review:build`, `review:repair:plan`, `review:repair:build` —
+ * by the domain's own `reviewStageOf`. The first version of this read a diff
+ * artifact's existence, the second parsed the task id; both were guesses
+ * dressed as facts, and the first one recorded every plan review as a build
+ * review. A dispatch whose stage cannot be read is refused, not reviewed.
  */
-export function reviewStageOf(taskId: string): 'plan' | 'build' | null {
-  const reviewed = taskId.endsWith(':review') ? taskId.slice(0, -':review'.length) : taskId;
-  /**
-   * A SEGMENT, NOT A SUFFIX. An end-anchored match reads `run:…:plan` and
-   * `build-1`, and then returns null for a REPAIR re-review — whose reviewed id
-   * is `repair:build-1:1:task`, routed as `review:repair:build`. The repair path
-   * is exercised by the live composition, so anchoring on the end silently drops
-   * the stage on exactly the reviews a repaired run depends on.
-   */
-  const kinds = new Set(
-    reviewed.split(':')
-      .map((segment) => /^(plan|build)(-\d+)?$/u.exec(segment)?.[1])
-      .filter((kind): kind is 'plan' | 'build' => kind !== undefined),
-  );
-  // One kind is the stage. None cannot be read, and both is a shape this
-  // runtime does not build — neither is a guess worth publishing.
-  return kinds.size === 1 ? [...kinds][0]! : null;
-}
+const reviewStageOfDispatch = (taskType: string | undefined): JuliusReviewStage | null =>
+  (taskType === undefined ? null : reviewStageOf(taskType));
 
 /**
  * THE SAFE FACTS BESIDE A PLAN FAILURE.
@@ -231,11 +228,25 @@ export function createLiveArchitectAdapter(input: {
     adapterId: input.worker.adapterId,
     async dispatch(dispatch): Promise<JuliusProviderResult> {
       const snapshot = requireSnapshot(input.contexts, dispatch.contextId);
+      /**
+       * A PLAN REVISION IS THE ARCHITECT'S JOB. `repair:plan` arrives here
+       * because a repair inherits its subject's role; the prior plan is shown
+       * beside the reviewer's findings (compiled into the context by Julius as
+       * FINDING entries), the objective and criteria are unchanged, and the
+       * revised plan replaces the artifact the Coding Agent will read.
+       */
+      const revising = dispatch.taskType === 'repair:plan';
+      const priorPlan = revising ? input.artifacts.get(planRef(snapshot.runId)) : null;
+      if (revising && priorPlan === null) {
+        throw new JuliusDispatchError('WORKER_EXECUTION_FAILURE', false, 'The prior architect plan is not available to this process; a plan revision without it is refused.', 'prior_plan_unavailable');
+      }
       const outcome: GptRunOutcome = await run({
         apiKey: input.apiKey,
         config: input.config,
-        instructions: ARCHITECT_CHARTER,
-        input: packetText(snapshot),
+        instructions: revising ? `${ARCHITECT_CHARTER} ${ARCHITECT_REVISION_CHARTER}` : ARCHITECT_CHARTER,
+        input: revising
+          ? [packetText(snapshot), '--- PRIOR PLAN (rejected by the Independent Reviewer; revise it against the REVIEW FINDING entries above) ---', priorPlan].join('\n\n')
+          : packetText(snapshot),
         signal: dispatch.signal,
       });
       if (!outcome.ok) {
@@ -385,6 +396,30 @@ export function createLiveHostedCodingAdapter(input: {
       try { queryFn = await loadQuery(); } catch {
         throw new JuliusDispatchError('AUTH_CONFIGURATION', false, 'The hosted Claude Agent SDK runtime is not installed.');
       }
+      /**
+       * THE MISSION'S ALLOCATION IS THE EXECUTION LIMIT. Julius reserved
+       * `dispatch.allocation.usdMicros` for this dispatch from the mission
+       * budget; the hosted envelope is limited to exactly that, and the
+       * runtime is told to stop there. With no allocation — a composition
+       * without a policy — the envelope keeps its own conservative default,
+       * which is how paid run 34037313976 was refused at 50 cents of a $20
+       * mission: the limit was nobody's decision. Now it is Julius's.
+       */
+      const limits: HostedLimits = dispatch.allocation === undefined
+        ? DEFAULT_HOSTED_LIMITS
+        : hostedLimitsForAllocation(dispatch.allocation.usdMicros);
+      /**
+       * AN ALLOCATION BELOW ONE CENT BUYS NOTHING AND STILL BILLS.
+       *
+       * The envelope speaks whole cents, so anything under 10,000 micro-dollars
+       * floors to a 0¢ ceiling — and a runtime told to stop at $0 still bills
+       * the turn it takes to notice. Refusing before the dispatch spends
+       * nothing and says exactly why the mission cannot continue.
+       */
+      if (dispatch.allocation !== undefined && limits.maxCostCents < 1) {
+        throw new JuliusDispatchError('WORKER_EXECUTION_FAILURE', false,
+          'The remaining mission budget is below one cent; the hosted Coding Agent was not dispatched.', 'coder_allocation_below_one_cent');
+      }
       const outcome: HostedRunOutcome = await run({
         queryFn,
         prompt: [
@@ -397,6 +432,7 @@ export function createLiveHostedCodingAdapter(input: {
         workspacePath: input.workspacePath,
         apiKey: input.apiKey,
         requestedModel: input.requestedModel,
+        limits,
         now: nowIso,
       });
       if (outcome.kind !== 'completed') {
@@ -413,7 +449,10 @@ export function createLiveHostedCodingAdapter(input: {
          */
         const observed = 'observation' in outcome ? outcome.observation : null;
         const coderDiagnostics: Record<string, unknown> = {
-          stage: 'build',
+          // THE ROUND THAT SPENT THE MONEY. Fixing this to 'build' made a
+          // repair round's cost refusal indistinguishable from the first
+          // build's in the very artifact that exists to tell them apart.
+          stage: dispatch.taskType === 'repair:build' ? 'repair:build' : 'build',
           transport: 'hosted',
           provider: 'anthropic',
           requestedModel: input.requestedModel,
@@ -447,6 +486,25 @@ export function createLiveHostedCodingAdapter(input: {
            */
           implementationPresent: observed === null || observed.isError === null
             ? null : observed.isError === false,
+          /**
+           * THE MONEY, BESIDE THE REFUSAL. Paid run 34037313976 was refused for
+           * cost and the amount lived only in a message nothing persisted.
+           * Unknown stays Unknown: a runtime that reported no cost reads null
+           * with `costSource: unavailable`, never zero.
+           */
+          costUsdMicros: observed?.usage.totalCostUsd === null || observed?.usage.totalCostUsd === undefined
+            ? null : Math.round(observed.usage.totalCostUsd * 1_000_000),
+          costCeilingUsdMicros: limits.maxCostCents * 10_000,
+          costSource: observed?.usage.source ?? null,
+          /**
+           * DID THE RUNTIME EVER START? A run that never launched billed
+           * nothing; one that launched and was aborted — the timeout, which is
+           * the case a cost is LEAST likely to be reported for, because the
+           * SDK reports cost only in its final result message — billed an
+           * unknown amount. The ledger needs that difference to decide whether
+           * a hand-back may free the hold.
+           */
+          runtimeStarted: observed?.initSeen ?? false,
         };
         if (outcome.kind === 'timed_out') throw new JuliusDispatchError('TIMEOUT', true, 'Hosted Coding Agent timed out.', 'coder_timed_out', { ...coderDiagnostics, timedOut: true });
         if (outcome.kind === 'cancelled') throw new JuliusDispatchError('CANCELLED', false, 'Hosted Coding Agent run was cancelled.', 'coder_cancelled', coderDiagnostics);
@@ -529,31 +587,70 @@ export function createLiveHermesReviewerAdapter(input: {
     adapterId: input.worker.adapterId,
     async dispatch(dispatch): Promise<JuliusProviderResult> {
       const snapshot = requireSnapshot(input.contexts, dispatch.contextId);
-      const planArtifact = input.artifacts.get(planRef(snapshot.runId));
-      const diffArtifact = input.artifacts.get(diffRef(snapshot.runId));
-      if (planArtifact === null && diffArtifact === null) {
-        // The artifact exchange is same-process. After a restart both the plan
-        // and the diff are gone even though their tasks succeeded durably, and
-        // a review dispatched with neither would be a review of NOTHING whose
-        // approval could complete the mission. Refuse instead: a resumed run
-        // fails visibly rather than completing falsely. (Independent review
-        // finding F1, proven by probe; the durable artifact store is the
-        // recorded fix.) A legitimate first plan-review always has the plan.
-        throw new JuliusDispatchError('INVALID_REQUEST', false, 'Neither the architect plan nor the workspace diff artifact is available to this process; an independent review of nothing is refused.');
+      /**
+       * THE STAGE DECIDES WHAT IS REVIEWED. Paid run 34037313976's plan review
+       * judged a plan by an implementation rubric and produced six blocking
+       * findings demanding a diff and executed tests of a plan. The stage is
+       * canonical task metadata now, the charge for it is the domain's, and
+       * the packet carries only what the stage is about: a PLAN review sees
+       * the plan and no diff or test output even if one exists; an
+       * IMPLEMENTATION review requires the diff and is refused without it.
+       */
+      const stage = reviewStageOfDispatch(dispatch.taskType);
+      if (stage === null) {
+        throw new JuliusDispatchError('INVALID_REQUEST', false, 'The review dispatch names no known review stage; a review of an unknown stage is refused.', 'reviewer_stage_unknown');
       }
+      const charge = reviewChargeFor(stage);
+      const planArtifact = input.artifacts.get(planRef(snapshot.runId));
+      const diffArtifact = charge.subject === 'IMPLEMENTATION' ? input.artifacts.get(diffRef(snapshot.runId)) : null;
+      if (planArtifact === null) {
+        // The artifact exchange is same-process. After a restart the plan is
+        // gone even though its task succeeded durably, and a review dispatched
+        // without it would be a review of NOTHING whose approval could
+        // complete the mission. Refuse instead: a resumed run fails visibly
+        // rather than completing falsely. (Independent review finding F1.)
+        throw new JuliusDispatchError('INVALID_REQUEST', false, 'The architect plan artifact is not available to this process; an independent review of nothing is refused.', 'reviewer_plan_absent');
+      }
+      // AN EMPTY DIFF IS NO DIFF. The exchange stores whatever `git diff`
+      // printed, so a coder that edited nothing leaves an empty string — which
+      // is not an implementation, and a review of it is the plan review's
+      // mistake in the other direction.
+      if (charge.subject === 'IMPLEMENTATION' && (diffArtifact === null || diffArtifact.trim() === '')) {
+        throw new JuliusDispatchError('INVALID_REQUEST', false, 'No workspace diff artifact is available to this process; an implementation review of nothing is refused.', 'reviewer_implementation_absent');
+      }
+      /**
+       * The findings Julius compiled into this context, for a repair review.
+       *
+       * NOT REQUIRED, AND THE FIRST VERSION REFUSED WITHOUT THEM. Julius admits
+       * a repair round on the subject's own FAILED evidence as well as on a
+       * reviewer finding (`verifyTask` → EVIDENCE_FAILED), and such a round has
+       * no findings by construction. Refusing there would have failed a run
+       * that was repairing exactly as designed — a defect this change would
+       * have introduced. When findings exist the reviewer must judge their
+       * resolution; when none do, it judges the repaired work and its evidence.
+       */
+      const priorFindings = snapshot.packet.blocks.filter((block) => block.kind === 'FINDING').map((block) => block.text);
       const unifiedDiff = diffArtifact ?? '';
       const packet: ReviewPacket = {
+        stage,
+        charge,
         missionId: snapshot.packet.missionId,
-        originalRequest: safeClaim(packetText(snapshot), 8_000),
-        handoffJson: planArtifact ?? '{}',
+        // THE FINDINGS ARE NOT THE FOUNDER'S REQUEST. `packetText` joins every
+        // block, so the FINDING entries Julius compiled for a repair review
+        // would appear under "FOUNDER'S ORIGINAL REQUEST" as well as under the
+        // prior-findings heading, and a reviewer asked whether the plan is
+        // faithful to the request would be reading findings as the request.
+        originalRequest: safeClaim(missionText(snapshot), 8_000),
+        handoffJson: planArtifact,
         acceptanceCriteria: [...snapshot.acceptanceCriterionIds],
+        priorFindings,
         baseRevision: input.artifacts.get(baseRevisionRef(snapshot.runId)) ?? 'unknown',
-        artifactDigest: sha256(unifiedDiff),
+        artifactDigest: sha256(charge.subject === 'IMPLEMENTATION' ? unifiedDiff : planArtifact),
         changedFiles: [...new Set([...unifiedDiff.matchAll(/^\+\+\+ b\/(.+)$/gm)].map((match) => match[1]))],
         unifiedDiff,
         changedFileContents: '',
         testCommand: input.testCommand,
-        testOutput: input.artifacts.get(testOutputRef(snapshot.runId)) ?? '',
+        testOutput: charge.subject === 'IMPLEMENTATION' ? (input.artifacts.get(testOutputRef(snapshot.runId)) ?? '') : '',
         relayEvidence: [...snapshot.evidenceIds],
       };
       const outcome: HermesOutcome = await run({ packet, config: input.config });
@@ -623,7 +720,7 @@ export function createLiveHermesReviewerAdapter(input: {
          */
         throw new JuliusDispatchError(
           code, retryable, `Hermes review incomplete: ${safeClaim(outcome.safeMessage, 120)}.`, outcome.shape,
-          { ...outcome.diagnostics, stage: reviewStageOf(dispatch.taskId) },
+          { ...outcome.diagnostics, stage },
         );
       }
       if (outcome.result.verdict === 'unable_to_review') {

@@ -1,14 +1,22 @@
 import type { JuliusCardPolicy } from './julius-policy';
-import { flattenDiagnostics, JuliusDispatchError, JuliusProviderRouter, type JuliusProviderResult } from './julius-router';
+import { flattenDiagnostics, JuliusDispatchError, JuliusProviderRouter, type JuliusDispatchAllocation, type JuliusProviderResult } from './julius-router';
 import type { JuliusEvidence, JuliusTask, JuliusWorker, JuliusWorkerRole } from './julius-runtime';
 
+/** The cost a provider reported on its own result, or null when it reported none. */
+const reportedUsdMicros=(result:JuliusProviderResult|null):number|null=>{
+ const usage=result?.usage;
+ if(usage===null||usage===undefined||typeof usage!=='object')return null;
+ const value=(usage as Record<string,unknown>).usdMicros;
+ return typeof value==='number'&&Number.isFinite(value)?value:null;
+};
 export interface JuliusExecutionClaim { readonly runId:string;readonly projectId:string;readonly taskId:string;readonly leaseOwner:string;readonly leaseGeneration:number;readonly task:JuliusTask;readonly capability:string;readonly contextId:string; }
 export interface JuliusResourceRequest { readonly usdMicros:number;readonly inputTokens:number;readonly outputTokens:number;readonly toolCalls:number;readonly runtimeMs:number; }
 export interface JuliusResourceReservation { readonly reservationId:string;readonly state:'RESERVED'|'DENIED';readonly denialReason:string|null; }
 export interface JuliusExecutionPorts {
   reserve(input:{claim:JuliusExecutionClaim;worker:JuliusWorker;request:JuliusResourceRequest;idempotencyKey:string}):Promise<JuliusResourceReservation>;
   commit(input:{reservationId:string;result:JuliusProviderResult}):Promise<void>;
-  release(input:{reservationId:string;reason:string}):Promise<void>;
+  /** `usdMicros` is what the failed attempt billed, when the boundary reported it. Spent money is charged, not released. */
+  release(input:{reservationId:string;reason:string;usdMicros?:number|null;spendUnknown?:boolean}):Promise<void>;
   persistEvidence(input:{claim:JuliusExecutionClaim;worker:JuliusWorker;evidence:readonly JuliusEvidence[]}):Promise<void>;
   acceptResult(input:{claim:JuliusExecutionClaim;worker:JuliusWorker;result:JuliusProviderResult;idempotencyKey:string}):Promise<{duplicate:boolean}>;
   /**
@@ -21,7 +29,7 @@ export interface JuliusExecutionPorts {
   recordEvent(input:{runId:string;projectId:string;taskId:string|null;type:JuliusExecutionEventType;idempotencyKey:string;payload:Record<string,unknown>}):Promise<void>;
 }
 export type JuliusExecutionEventType='worker.selected'|'budget.reserved'|'budget.denied'|'worker.dispatched'|'worker.completed'|'retry.scheduled'|'task.failed';
-export interface JuliusExecutionRequest { readonly claim:JuliusExecutionClaim;readonly policy:JuliusCardPolicy;readonly role:JuliusWorkerRole;readonly taskType:string;readonly capability:string;readonly resources:JuliusResourceRequest;readonly operationId:string;readonly signal?:AbortSignal;/** Workers already tried for this task. Additive: omitted behaves exactly as before. */readonly excludedWorkerIds?:readonly string[]; }
+export interface JuliusExecutionRequest { readonly claim:JuliusExecutionClaim;readonly policy:JuliusCardPolicy;readonly role:JuliusWorkerRole;readonly taskType:string;readonly capability:string;readonly resources:JuliusResourceRequest;readonly operationId:string;readonly signal?:AbortSignal;/** Workers already tried for this task. Additive: omitted behaves exactly as before. */readonly excludedWorkerIds?:readonly string[];/** The execution ceiling Julius reserved for this dispatch, handed to the adapter. Additive. */readonly allocation?:JuliusDispatchAllocation; }
 /**
  * `failureClass` is the connector's safe subclass when one is known, already
  * narrowed to a machine token by {@link safeFailureClass}. It is additive:
@@ -66,17 +74,33 @@ export class JuliusExecutionCoordinator {
     const reservation=await this.ports.reserve({claim:request.claim,worker,request:request.resources,idempotencyKey:`${request.operationId}:budget`});
     if(reservation.state==='DENIED'){await this.event(request,'budget.denied',{reason:reservation.denialReason});return{status:'DENIED',code:'BUDGET_DENIED'};}
     await this.event(request,'budget.reserved',{reservationId:reservation.reservationId});
+    /**
+     * WHAT THE PROVIDER REPORTED, HELD WHERE THE CATCH CAN SEE IT.
+     *
+     * Everything after the dispatch can still throw — persisting evidence, a
+     * stale lease refusing the result, the settlement itself — and the catch
+     * read the billed amount only from the ERROR's diagnostics. A provider
+     * that answered, reported its cost, and was then dropped by a store write
+     * released its whole hold, and the mission could be granted that money a
+     * second time. The result is captured here so a failure after a paid
+     * answer still charges what the answer cost.
+     */
+    let answered:JuliusProviderResult|null=null;
     try{
       if(request.signal?.aborted)throw new JuliusDispatchError('CANCELLED',false,'Dispatch was cancelled.');
       await this.event(request,'worker.dispatched',{workerId:worker.workerId});
-      const result=await this.router.dispatch(worker,{taskId:request.claim.taskId,contextId:request.claim.contextId,signal:request.signal});
+      const result=await this.router.dispatch(worker,{taskId:request.claim.taskId,contextId:request.claim.contextId,taskType:request.taskType,signal:request.signal,...(request.allocation===undefined?{}:{allocation:request.allocation})});
+      answered=result;
       const evidence=normalizedEvidence(request.claim,worker,result);
       await this.ports.persistEvidence({claim:request.claim,worker,evidence});
       const receipt=await this.ports.acceptResult({claim:request.claim,worker,result,idempotencyKey:`${request.operationId}:result`});
       await this.ports.commit({reservationId:reservation.reservationId,result});
       await this.event(request,'worker.completed',{workerId:worker.workerId,duplicate:receipt.duplicate,evidenceCount:evidence.length});
       return{status:'COMPLETED',workerId:worker.workerId,duplicate:receipt.duplicate};
-    }catch(error){const failure=error instanceof JuliusDispatchError?error:new JuliusDispatchError('WORKER_EXECUTION_FAILURE',false,'Execution boundary failed.');await this.ports.release({reservationId:reservation.reservationId,reason:failure.code});
+    }catch(error){const failure=error instanceof JuliusDispatchError?error:new JuliusDispatchError('WORKER_EXECUTION_FAILURE',false,'Execution boundary failed.');const reported=reportedUsdMicros(answered);
+     const billed=reported??(typeof failure.diagnostics?.costUsdMicros==='number'?failure.diagnostics.costUsdMicros:null);
+     // A provider that ANSWERED ran, whatever the diagnostics say about it.
+     await this.ports.release({reservationId:reservation.reservationId,reason:failure.code,usdMicros:billed,spendUnknown:billed===null&&(answered!==null||failure.diagnostics?.runtimeStarted===true)});
      /* The class travels with the code on BOTH endings. A retry that is later
       * abandoned and a failure taken at once must leave the same diagnosis
       * behind, or the durable record would explain only the failures that

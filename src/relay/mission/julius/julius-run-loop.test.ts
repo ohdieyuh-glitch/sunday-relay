@@ -22,7 +22,9 @@ import { safeReasonCode } from './julius-router';
  * verification really follows execution, and that the run really advances.
  */
 
-const CODER = worker({ workerId: 'coder', role: 'CODING_AGENT', capabilities: ['implement'], taskTypes: ['build'] });
+// `repair:build` too: a repair is proven routable BEFORE it is scheduled, so a
+// coder that accepts no repair makes every blocking finding a REPAIR_UNROUTABLE halt.
+const CODER = worker({ workerId: 'coder', role: 'CODING_AGENT', capabilities: ['implement'], taskTypes: ['build', 'repair:build'] });
 const REVIEWER = worker({ workerId: 'reviewer', role: 'INDEPENDENT_REVIEWER', capabilities: ['review'], taskTypes: ['review:build'] });
 
 const scope = { projectId: 'prj-1' };
@@ -126,6 +128,40 @@ describe('the run state a task set implies', () => {
       dep('FAILED', 'plan'), dep('BLOCKED', 'build', ['plan']),
       dep('ACTIVE', 'other'),
     ]).state, 'and work in flight still outranks every other signal').toBe('EXECUTING');
+  });
+
+  /**
+   * SUCCEEDED IS NOT ACCEPTED (paid run 34037313976). A dependent is released
+   * only by Julius's acceptance of its dependency, so a SUCCEEDED dependency
+   * whose acceptance can no longer happen leaves the dependent as dead as a
+   * FAILED one — and answering WAITING there would be the first paid run's
+   * stall again, from the other side.
+   */
+  it('a blocked task behind a succeeded dependency waits only while that dependency can still be accepted', () => {
+    const child = (state: JuliusTask['state'], id: string, parentTaskId: string, taskType: string, role: JuliusTask['role']): JuliusTask =>
+      ({ ...task({ taskId: id }), state, parentTaskId, taskType, role } as JuliusTask);
+    const decision = (taskId: string, action: 'ACCEPT' | 'REPAIR' | 'HALT') => ({ taskId, action, reasonCode: 'x', evidenceIds: [], safeSummary: 'x' });
+    // A real plan task: the repair lineage rule requires a repair child to
+    // carry its parent's role and stage, so the parent must be the plan it is.
+    const plan: JuliusTask = { ...dep('SUCCEEDED', 'plan'), taskType: 'plan', role: 'PROMPT_ARCHITECT' };
+    const build = dep('BLOCKED', 'build', ['plan']);
+    // Review pending: waiting.
+    expect(targetRunState([plan, build, child('RUNNABLE', 'plan:review', 'plan', 'review:plan', 'INDEPENDENT_REVIEWER')]).state).toBe('READY');
+    expect(targetRunState([plan, build, child('SUCCEEDED', 'plan:review', 'plan', 'review:plan', 'INDEPENDENT_REVIEWER')]).state, 'verdict being decided').toBe('WAITING');
+    // The review FAILED for good, and nothing else can decide the plan: dead.
+    const failedReview = child('FAILED', 'plan:review', 'plan', 'review:plan', 'INDEPENDENT_REVIEWER');
+    const dead = targetRunState([plan, build, failedReview]);
+    expect(dead.state, 'the plan can never be accepted, so the build can never run').toBe('FAILED');
+    expect(dead.reasonCode).toBe('TASK_FAILED');
+    // A HALT is final too.
+    expect(targetRunState([plan, build, child('SUCCEEDED', 'plan:review', 'plan', 'review:plan', 'INDEPENDENT_REVIEWER')], [decision('plan', 'HALT')]).state).toBe('BLOCKED');
+    // A REPAIR with a live revision is still waiting; with a dead one it is not.
+    const revision = child('RUNNABLE', 'repair:plan:1:task', 'plan', 'repair:plan', 'PROMPT_ARCHITECT');
+    expect(targetRunState([plan, build, revision], [decision('plan', 'REPAIR')]).state).toBe('READY');
+    expect(targetRunState([plan, build, { ...revision, state: 'BLOCKED' }], [decision('plan', 'REPAIR')]).state).toBe('WAITING');
+    expect(targetRunState([plan, build, { ...revision, state: 'FAILED' }], [decision('plan', 'REPAIR')]).state).toBe('FAILED');
+    // An accepted plan: the build is simply an ordinary blocked task.
+    expect(targetRunState([plan, build], [decision('plan', 'ACCEPT')]).state).toBe('WAITING');
   });
 
   it('a blocked task with no dependencies is still treated as waiting, as it always was', () => {
@@ -317,8 +353,38 @@ describe('dependency wakeup', () => {
     const first = await harness.loop.tick(scope);
     expect(first.claimed).toBe(1);
     expect(first.outcomes[0].taskId).toBe('first');
-    // `second` is BLOCKED and its dependency only just succeeded.
+    // `second` was BLOCKED, and it is Julius's ACCEPT of `first` — written in
+    // the same durable write as the decision — that made it RUNNABLE. The
+    // claim query never offered it BLOCKED, and it is claimed on the NEXT tick.
+    expect(harness.store.taskRow('second')!.state).toBe('RUNNABLE');
+    expect(harness.adapters.get(CODER.adapterId)!.dispatches.map((d) => d.taskId)).toEqual(['first']);
+    const second = await harness.loop.tick(scope);
+    expect(second.outcomes.map((outcome) => outcome.taskId)).toEqual(['second']);
+  });
+
+  it('a BLOCKED task whose dependency SUCCEEDED but was not accepted is never offered', async () => {
+    // Reviewer required and none registered: `first` succeeds, its review is
+    // scheduled, nothing ACCEPTS it — so `second` must stay BLOCKED forever
+    // rather than run against unaccepted work.
+    const harness = createJuliusHarness({
+      workers: [{ worker: CODER, script: [{ kind: 'succeed' }] }],
+      verification: verificationPolicy({ reviewerRequired: true }),
+    });
+    seedRun(harness, {
+      tasks: [
+        task({ taskId: 'first', ordinal: 0 }),
+        task({ taskId: 'second', ordinal: 1, state: 'BLOCKED', dependencyIds: ['first'] }),
+      ],
+    });
+    await harness.loop.tick(scope);
+    expect(harness.store.taskRow('first')!.state).toBe('SUCCEEDED');
     expect(harness.store.taskRow('second')!.state).toBe('BLOCKED');
+    for (let tick = 0; tick < 3; tick += 1) {
+      const report = await harness.loop.tick(scope);
+      expect(report.outcomes.map((outcome) => outcome.taskId)).not.toContain('second');
+    }
+    expect(harness.store.taskRow('second')!.state).toBe('BLOCKED');
+    expect(harness.store.events().filter((event) => event.type === 'task.runnable')).toEqual([]);
   });
 
   it('hands it out once the dependency is satisfied, with no second mechanism', async () => {

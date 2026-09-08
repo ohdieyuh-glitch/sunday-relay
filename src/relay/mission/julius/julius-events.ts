@@ -41,6 +41,8 @@ export const JULIUS_OPERATIONAL_EVENT_TYPES=[
  'task.created','task.runnable','task.claimed','task.failed','task.cancelled',
  /* dispatch */
  'worker.selected','worker.dispatched','worker.completed','provider.failure','reroute.selected','fallback.selected','retry.scheduled',
+ /* budget: what one dispatch was allocated from the mission's money, before the reservation */
+ 'budget.allocated',
  /* context */
  'context.compiled',
  /* evidence and verification */

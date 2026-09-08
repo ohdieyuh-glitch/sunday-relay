@@ -17,7 +17,7 @@ Julius is the provider-neutral, deterministic orchestration kernel that turns an
 
 Static import closure from the two roots over the TypeScript AST (value and type edges), stopping at the declared boundaries below; plus declared production modules not reached from the live root (flagged); plus path-loaded assets. Tests, fixtures, fakes and UI are refused by category. A drift gate fails the generator when a production file imports the Julius kernel or port without being reached, declared or explicitly excluded, or when a declaration no longer matches the wiring.
 
-Represented: **104 production files** across 20/20 subsystems (2 roots, 82 traced, 8 not composed by the live root, 12 path-loaded assets). Line and byte totals, the coverage estimate and the commit SHA are printed by the generator and recorded in the export header; they are kept out of this file so it changes only when the file set or its classification changes.
+Represented: **108 production files** across 20/20 subsystems (2 roots, 86 traced, 8 not composed by the live root, 12 path-loaded assets). Line and byte totals, the coverage estimate and the commit SHA are printed by the generator and recorded in the export header; they are kept out of this file so it changes only when the file set or its classification changes.
 
 ## Dependency direction (observed, between coarse groups)
 
@@ -25,6 +25,7 @@ Edges counted by the trace between included files; "type" = type-only imports, e
 
 | from | to | edges | type |
 | --- | --- | --- | --- |
+| bridge provider stacks (hosted Claude, Hermes, redaction) | kernel (src/relay/mission/julius/) | 1 | 1 |
 | C.A.R.D. record (src/relay/integration/compound-agent/, entitlement) | kernel (src/relay/mission/julius/) | 1 | 0 |
 | C.A.R.D. record (src/relay/integration/compound-agent/, entitlement) | Relay vocabulary (mission/contracts.ts, protocol/enums.ts) | 1 | 1 |
 | entrypoint (relay-bridge/julius-live-mission.ts) | executor + tool substrate (src/relay/workspace/julius-tools/) | 2 | 1 |
@@ -33,7 +34,7 @@ Edges counted by the trace between included files; "type" = type-only imports, e
 | entrypoint (relay-bridge/julius-live-mission.ts) | Relay↔Julius port (src/relay/integration/julius/) | 1 | 0 |
 | executor + tool substrate (src/relay/workspace/julius-tools/) | kernel (src/relay/mission/julius/) | 10 | 8 |
 | executor + tool substrate (src/relay/workspace/julius-tools/) | persistence (src/relay/persistence/) | 1 | 0 |
-| live composition (relay-bridge/julius/) | bridge provider stacks (hosted Claude, Hermes, redaction) | 6 | 2 |
+| live composition (relay-bridge/julius/) | bridge provider stacks (hosted Claude, Hermes, redaction) | 7 | 2 |
 | live composition (relay-bridge/julius/) | connectors (gpt-architect, prompt-architect contracts) | 4 | 1 |
 | live composition (relay-bridge/julius/) | executor + tool substrate (src/relay/workspace/julius-tools/) | 2 | 0 |
 | live composition (relay-bridge/julius/) | kernel (src/relay/mission/julius/) | 6 | 3 |
@@ -46,7 +47,7 @@ Edges counted by the trace between included files; "type" = type-only imports, e
 
 - **entrypoint (relay-bridge/julius-live-mission.ts)** depends on: executor + tool substrate (src/relay/workspace/julius-tools/); live composition (relay-bridge/julius/); persistence (src/relay/persistence/); Relay↔Julius port (src/relay/integration/julius/).
 - **live composition (relay-bridge/julius/)** depends on: bridge provider stacks (hosted Claude, Hermes, redaction); connectors (gpt-architect, prompt-architect contracts); executor + tool substrate (src/relay/workspace/julius-tools/); kernel (src/relay/mission/julius/); persistence (src/relay/persistence/); Relay↔Julius port (src/relay/integration/julius/).
-- **bridge provider stacks (hosted Claude, Hermes, redaction)** depends on nothing outside itself (among included files).
+- **bridge provider stacks (hosted Claude, Hermes, redaction)** depends on: kernel (src/relay/mission/julius/).
 - **kernel (src/relay/mission/julius/)** depends on nothing outside itself (among included files).
 - **persistence (src/relay/persistence/)** depends on: kernel (src/relay/mission/julius/).
 - **Relay↔Julius port (src/relay/integration/julius/)** depends on: C.A.R.D. record (src/relay/integration/compound-agent/, entitlement); kernel (src/relay/mission/julius/); Relay vocabulary (mission/contracts.ts, protocol/enums.ts).
@@ -94,6 +95,7 @@ One claimed task all the way through: policy, budget reservation, context compil
 | production source | role | reached from |
 | --- | --- | --- |
 | `src/relay/mission/julius/julius-execution-coordinator.ts` | traced | `src/relay/mission/julius/index.ts` |
+| `src/relay/mission/julius/julius-release-runtime.ts` | traced | `src/relay/mission/julius/index.ts` |
 | `src/relay/mission/julius/julius-task-pipeline.ts` | traced | `src/relay/mission/julius/index.ts` |
 
 ### 04 C.A.R.D. POLICY
@@ -151,6 +153,7 @@ The judgement role: the Hermes reviewer process runner in an isolated profile, p
 | `relay-bridge/reviewer-harness/hermes/hermes-provider.ts` | traced | `relay-bridge/reviewer-harness/hermes/isolated-profile.ts` |
 | `relay-bridge/reviewer-harness/hermes/isolated-profile.ts` | traced | `relay-bridge/reviewer-harness/hermes/runner.ts` |
 | `relay-bridge/reviewer-harness/hermes/runner.ts` | traced | `relay-bridge/hermes-reviewer.ts` |
+| `src/relay/mission/julius/julius-review-stage.ts` | traced | `src/relay/mission/julius/index.ts` |
 
 ### 09 AGENT TURN LOOP
 
@@ -219,6 +222,7 @@ A repair round planned from reviewer findings and a REPAIR decision, bounded by 
 
 | production source | role | reached from |
 | --- | --- | --- |
+| `src/relay/mission/julius/julius-repair-lineage.ts` | traced | `src/relay/mission/julius/julius-runtime.ts` |
 | `src/relay/mission/julius/julius-repair-runtime.ts` | traced | `src/relay/mission/julius/index.ts` |
 
 ### 15 RECOVERY / CONTINUATION
@@ -236,6 +240,7 @@ The durable lease protocol (generation fencing, heartbeat, expiry, admission), a
 
 | production source | role | reached from |
 | --- | --- | --- |
+| `src/relay/mission/julius/julius-allocation-runtime.ts` | traced | `src/relay/mission/julius/index.ts` |
 | `src/relay/mission/julius/julius-bounded-runtime.ts` | traced | `src/relay/mission/julius/index.ts` |
 | `src/relay/mission/julius/julius-lease-protocol.ts` | traced | `src/relay/mission/julius/index.ts` |
 | `src/relay/mission/julius/julius-lifecycle-runtime.ts` | traced | `src/relay/mission/julius/index.ts` |

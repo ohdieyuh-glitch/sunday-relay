@@ -7,10 +7,22 @@ export function evaluateJuliusVerification(input:{task:JuliusTask;evidence:reado
  if(input.policy.reviewerRequired&&!input.reviewCompleted)return{action:'SCHEDULE_REVIEW',role:'INDEPENDENT_REVIEWER'};
  for(const finding of input.findings)if(finding.evidenceIds.length===0)throw new Error('reviewer_finding_requires_evidence');
  const evidenceIds=new Set(input.evidence.map(value=>value.evidenceId));for(const finding of input.findings)if(finding.evidenceIds.some(id=>!evidenceIds.has(id)))throw new Error('reviewer_finding_evidence_not_found');
- const criteriaSatisfied:string[]=[];const criteriaMissing:string[]=[];for(const criterion of input.criteria){const satisfied=criterion.requiredEvidenceTypes.every(type=>input.evidence.some(value=>value.taskId===input.task.taskId&&value.type===type&&value.status==='PASSED'));(satisfied?criteriaSatisfied:criteriaMissing).push(criterion.criterionId);}
- const blocking=input.findings.filter(value=>value.taskId===input.task.taskId&&value.blocking&&value.status==='OPEN').length;let decision=verifyTask(input.task,input.evidence,blocking);if(criteriaMissing.length&&decision.action==='ACCEPT')decision={action:'HALT',reasonCode:'ACCEPTANCE_CRITERIA_UNSATISFIED',evidenceIds:input.evidence.map(value=>value.evidenceId),safeSummary:'Required acceptance criteria lack passing evidence.'};
+ /**
+  * ACCEPTANCE CRITERIA ARE A MISSION CONDITION, judged when acceptance would
+  * complete the mission. They used to be judged against THIS task's evidence
+  * at every ACCEPT — so an accepted PLAN was halted for lacking the TEST
+  * evidence only the build can produce. That never surfaced while the build
+  * ran before the plan review (paid run 34037313976's own ordering); with the
+  * declared graph enforced, the plan is accepted first, and a plan cannot be
+  * held to the build's criteria. A criterion is satisfied by PASSED evidence
+  * of every type it requires, from any task in the run.
+  */
+ const criteriaSatisfied:string[]=[];const criteriaMissing:string[]=[];for(const criterion of input.criteria){const satisfied=criterion.requiredEvidenceTypes.every(type=>input.evidence.some(value=>value.type===type&&value.status==='PASSED'));(satisfied?criteriaSatisfied:criteriaMissing).push(criterion.criterionId);}
+ const blocking=input.findings.filter(value=>value.taskId===input.task.taskId&&value.blocking&&value.status==='OPEN').length;let decision=verifyTask(input.task,input.evidence,blocking);
  // The decision being made RIGHT NOW is about `input.task` and is, by
  // construction, that task's newest entry — appended last so the effective
  // rule reads it as current.
- const decisions=[...input.priorDecisions,{...decision,taskId:input.task.taskId}];return{action:'DECIDE',decision,criteriaSatisfied,criteriaMissing,missionCompletable:decision.action==='ACCEPT'&&missionMayComplete({state:'VERIFYING',tasks:input.allTasks,decisions})};
+ const wouldComplete=decision.action==='ACCEPT'&&missionMayComplete({state:'VERIFYING',tasks:input.allTasks,decisions:[...input.priorDecisions,{...decision,taskId:input.task.taskId}]});
+ if(criteriaMissing.length&&wouldComplete)decision={action:'HALT',reasonCode:'ACCEPTANCE_CRITERIA_UNSATISFIED',evidenceIds:input.evidence.map(value=>value.evidenceId),safeSummary:'Required acceptance criteria lack passing evidence.'};
+ return{action:'DECIDE',decision,criteriaSatisfied,criteriaMissing,missionCompletable:decision.action==='ACCEPT'&&wouldComplete};
 }

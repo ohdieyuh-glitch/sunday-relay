@@ -25,20 +25,23 @@ import {
 import type { GptRunOutcome } from '../../src/relay/connectors/gpt-architect';
 import { JuliusDispatchError, safeFailureClass } from '../../src/relay/mission/julius';
 import { compileHostedEnvelope } from '../hosted-coding-agent/hosted-envelope';
-import type { HostedQueryFn, HostedRunOutcome } from '../hosted-coding-agent/hosted-runner';
+import type { HostedQueryFn, HostedRunInput, HostedRunOutcome } from '../hosted-coding-agent/hosted-runner';
 import { loadHermesConfig, runHermesReview, type HermesOutcome, type ReviewPacket } from '../hermes-reviewer';
 import { runRemoteHermesReview, type RemoteHermesConfig } from '../hermes-remote-review';
+import { repairTaskTypeFor, reviewStageOf } from '../../src/relay/mission/julius';
+import { DEFAULT_HOSTED_LIMITS, type HostedLimits } from '../hosted-coding-agent/hosted-envelope';
 import {
   createLiveArtifactExchange,
+  createLiveArchitectAdapter,
   createLiveHermesReviewerAdapter,
   createLiveHostedCodingAdapter,
   diffRef,
   planRef,
-  reviewStageOf,
 } from './live-workers';
 import {
   ARCHITECT_WORKER,
   CODER_WORKER,
+  reviewerWorker,
   assembleLiveJuliusRuntime,
   createContextAndClaimHandoffs,
   createRunSpendBudget,
@@ -492,11 +495,11 @@ describe('a full mission drive with Julius in control', () => {
    * ATTEMPT NUMBER.
    *
    * This is the whole mission graph, on the real live configuration: a claim
-   * limit of 4 against a C.A.R.D. concurrency of 1. On the tick after `plan`
-   * succeeds, `build` and the plan's review task both become claimable — a
-   * review task is created BLOCKED on the task it reviews, and the claim query
-   * offers a BLOCKED task whose dependencies are all SUCCEEDED — so one of the
-   * two is claimed and handed straight back.
+   * limit of 4 against a C.A.R.D. concurrency of 1. Before the release rule,
+   * on the tick after `plan` succeeded `build` and the plan's review were BOTH
+   * claimable, so one was claimed and handed straight back; now only what
+   * Julius released is offered, and the hand-back is exercised by the build
+   * and the build's review instead.
    *
    * While the claim spent an execution attempt, that hand-back charged a task
    * for a provider that was never called, and a task yielded twice reached its
@@ -577,14 +580,17 @@ describe('a full mission drive with Julius in control', () => {
     expect(planFacts.diag_jsonParseable).toBe(false);
     expect(JSON.stringify(planFacts), 'no fact may be a stringified object').not.toContain('[object Object]');
     /**
-     * AND EACH REVIEW NAMES ITS OWN STAGE. Both reviews get the same unreadable
-     * answer here, so both fail — which is exactly the case that caught the
-     * first derivation: it read the stage from whether a diff artifact existed,
-     * and the build runs BEFORE the plan review, so every plan review was
-     * recorded as a build review.
+     * AND THE REVIEW NAMES ITS OWN STAGE — from the dispatched task type, not
+     * from whether a diff existed (the first derivation) or from the task id
+     * (the second). Under the declared graph an unreadable PLAN review ends
+     * the run before any build: the plan can never be accepted, so nothing is
+     * released, the coder never runs and no build review exists to misname.
+     * Paid run 34037313976 built first and reviewed the plan afterwards.
      */
     expect(planFacts.diag_stage, 'the plan review is a plan review').toBe('plan');
-    expect(factsFor('build-1:review').diag_stage, 'and the build review is not').toBe('build');
+    expect(memory.taskRow('build-1')?.state, 'the build was never released').toBe('BLOCKED');
+    expect(memory.taskRow('build-1:review'), 'and so there is no build review').toBeNull();
+    expect(failures.map((event) => event.taskId)).toEqual(['plan-1:review']);
   });
 
   it('CASE K: every task in the live graph reaches its first dispatch as attempt 1', async () => {
@@ -602,11 +608,13 @@ describe('a full mission drive with Julius in control', () => {
       expect(row.attempt, `${task.taskId} executed exactly once`).toBe(1);
     }
 
-    // And the hand-back really happened — otherwise this case proves nothing.
-    // A lease generation above the execution count is a claim that took
-    // ownership without spending an attempt, which is the repair itself.
+    // The race that produced hand-backs is gone: with the release rule only
+    // what Julius accepted is claimable, so the declared graph offers one
+    // task per tick and nothing is claimed and handed straight back. The
+    // attempt rule above is still the property under test; this records
+    // that the topology no longer exercises the hand-back at all.
     const yielded = tasks.filter((task) => memory.taskRow(task.taskId)!.leaseGeneration > 1);
-    expect(yielded.length, 'at least one task was claimed more times than it executed').toBeGreaterThan(0);
+    expect(yielded, 'no task was claimed more times than it executed').toEqual([]);
   });
 
   /**
@@ -658,7 +666,8 @@ describe('a full mission drive with Julius in control', () => {
   });
 
   it('a blocking review verdict forces exactly one Julius repair cycle, and completion is withheld when it stays blocking', async () => {
-    const { memory, fakes, outcome } = await driveLiveMission(['changes_required']);
+    // The plan review accepts; every implementation review rejects.
+    const { memory, fakes, outcome } = await driveLiveMission(['approved', 'changes_required']);
     expect(outcome.state).not.toBe('COMPLETED');
 
     const tasks = await memory.tasksForRun('run-live', 'prj-live');
@@ -733,9 +742,29 @@ describe('a resumed process cannot produce a vacuous review or a planless build'
       testCommand: 'npm run mission-test',
       run: fakeReviewer(log, [], ['approved']) as never,
     });
-    await expect(adapter.dispatch({ taskId: 'build-1:review', contextId: 'ctx-resume-1' }))
+    await expect(adapter.dispatch({ taskId: 'build-1:review', contextId: 'ctx-resume-1', taskType: 'review:build' }))
       .rejects.toMatchObject({ code: 'INVALID_REQUEST', safeMessage: expect.stringContaining('review of nothing is refused') });
     expect(log.order, 'Hermes must never have been invoked').toEqual([]);
+  });
+
+  it('the reviewer refuses a dispatch that names no stage, rather than guessing one', async () => {
+    const log: FakeLog = { order: [] };
+    const artifacts = createLiveArtifactExchange();
+    artifacts.put(planRef('run-live'), JSON.stringify(VALID_PLAN));
+    const adapter = createLiveHermesReviewerAdapter({
+      worker: {
+        workerId: 'independent-reviewer-hermes', role: 'INDEPENDENT_REVIEWER',
+        adapterId: 'hermes-local-live', providerId: 'xai', capabilities: ['review'],
+        taskTypes: ['review:build'], concurrencyLimit: 1, timeoutMs: 1_000, maxRetries: 1, status: 'AVAILABLE',
+      },
+      contexts, artifacts,
+      config: loadHermesConfig(LIVE_ENV as never),
+      testCommand: 'npm run mission-test',
+      run: fakeReviewer(log, [], ['approved']) as never,
+    });
+    await expect(adapter.dispatch({ taskId: 'build-1:review', contextId: 'ctx-resume-1' }))
+      .rejects.toMatchObject({ code: 'INVALID_REQUEST', failureClass: 'reviewer_stage_unknown' });
+    expect(log.order).toEqual([]);
   });
 
   it('the coder refuses a dispatch when the plan artifact is unavailable, before any effect or SDK load', async () => {
@@ -776,7 +805,7 @@ describe('a resumed process cannot produce a vacuous review or a planless build'
       worker, contexts, artifacts, config: loadHermesConfig(LIVE_ENV as never),
       testCommand: 'npm run mission-test', run: (async () => outcomeFor('changes_required')) as never,
     });
-    const result = await minorOnly.dispatch({ taskId: 'build-1:review', contextId: 'ctx-resume-1' });
+    const result = await minorOnly.dispatch({ taskId: 'build-1:review', contextId: 'ctx-resume-1', taskType: 'review:plan' });
     expect(result.evidence).toHaveLength(1);
     expect((result.evidence[0] as { status: string }).status).toBe('FAILED');
 
@@ -784,7 +813,7 @@ describe('a resumed process cannot produce a vacuous review or a planless build'
       worker, contexts, artifacts, config: loadHermesConfig(LIVE_ENV as never),
       testCommand: 'npm run mission-test', run: (async () => outcomeFor('unable_to_review')) as never,
     });
-    await expect(unable.dispatch({ taskId: 'build-1:review', contextId: 'ctx-resume-1' }))
+    await expect(unable.dispatch({ taskId: 'build-1:review', contextId: 'ctx-resume-1', taskType: 'review:plan' }))
       .rejects.toMatchObject({ code: 'WORKER_EXECUTION_FAILURE', safeMessage: expect.stringContaining('unable to review') });
   });
 });
@@ -1088,7 +1117,7 @@ describe('an incomplete review reaches Julius as the failure it actually was', (
         },
       })) as never,
     });
-    return adapter.dispatch({ taskId: 'build-1:review', contextId: 'ctx-resume-1' })
+    return adapter.dispatch({ taskId: 'build-1:review', contextId: 'ctx-resume-1', taskType: 'review:plan' })
       .then(() => { throw new Error('the dispatch was expected to fail'); })
       .catch((error: unknown) => error as { code: string; retryable: boolean; failureClass: string | null });
   };
@@ -1219,7 +1248,7 @@ describe('a paid reviewer failure can be diagnosed from the record alone', () =>
         packet: packetInput.packet, config: packetInput.config, spawnImpl: fakeChild(child),
       })) as never,
     });
-    return adapter.dispatch({ taskId: 'build-1:review', contextId: 'ctx-resume-1' })
+    return adapter.dispatch({ taskId: 'build-1:review', contextId: 'ctx-resume-1', taskType: 'review:build' })
       .then(() => { throw new Error('the dispatch was expected to fail'); })
       .catch((error: unknown) => error as JuliusDispatchError);
   };
@@ -1426,36 +1455,40 @@ describe('a refused plan names the rule it broke', () => {
  * WHICH REVIEW A FAILURE WAS, INCLUDING THE ONES A REPAIR CREATES.
  *
  * The first derivation read the stage from whether a diff artifact existed, and
- * the build runs BEFORE the plan review — so every plan review was recorded as
- * a build review. The second anchored on the end of the reviewed task id, which
- * reads `run:…:plan` and `build-1` and then returns null for a REPAIR
- * re-review, whose reviewed id is `repair:build-1:1:task`. A durable field that
- * is wrong is worse than one that is absent, and a repaired run's re-review is
- * exactly where a paid mission ends.
+ * the build ran BEFORE the plan review — so every plan review was recorded as a
+ * build review. The second parsed the task id. The stage is now the task TYPE
+ * Julius dispatches with, read by the domain's own `reviewStageOf`, and a
+ * dispatch that carries none is refused rather than guessed (see the adapter
+ * cases below).
  */
-describe('the review stage is read from the task id', () => {
-  it('names the ordinary plan and build reviews, in both id shapes', () => {
-    expect(reviewStageOf('plan-1:review')).toBe('plan');
-    expect(reviewStageOf('build-1:review')).toBe('build');
-    expect(reviewStageOf('run:526ca97da0e94b6223a5320a:plan:review')).toBe('plan');
-    expect(reviewStageOf('run:526ca97da0e94b6223a5320a:build:review')).toBe('build');
-  });
-
-  it('keeps the stage on a repair re-review, which is routed review:repair:build', () => {
-    expect(reviewStageOf('repair:build-1:1:task:review')).toBe('build');
-    expect(reviewStageOf('repair:plan-1:1:task:review')).toBe('plan');
-  });
-
-  it('returns null rather than guessing when it cannot be read', () => {
-    // A durable field that is wrong is worse than one that is absent.
-    expect(reviewStageOf('something:else:review')).toBeNull();
-    expect(reviewStageOf('')).toBeNull();
-    // Two kinds is not a tie to break.
-    expect(reviewStageOf('repair:plan-1:build-2:task:review')).toBeNull();
+describe('the review stage is read from the dispatched task type', () => {
+  it('names every stage, and only from a review type', () => {
+    expect(reviewStageOf('review:plan')).toBe('plan');
+    expect(reviewStageOf('review:build')).toBe('build');
+    expect(reviewStageOf('review:repair:plan')).toBe('repair:plan');
+    expect(reviewStageOf('review:repair:build')).toBe('repair:build');
+    expect(reviewStageOf('plan-1:review'), 'a task id is not a type').toBeNull();
+    expect(reviewStageOf('run:526ca97da0e94b6223a5320a:plan:review')).toBeNull();
   });
 });
 
+/* ------------------------------------------------------------------------ *
+ * THE FIRST PAID MISSION, REPRODUCED OFFLINE
+ * ------------------------------------------------------------------------ */
 
+/**
+ * RUN 33697109210 — the first paid Julius mission — failed here, and this is
+ * the shape it failed in: the `plan` task went FAILED, the `build` task
+ * stayed BLOCKED behind it, and the run reported "WAITING (stalled before
+ * terminal state) after 2 ticks". The uploaded evidence could say WHAT
+ * happened and not WHY: the normalized code lived only in the operational
+ * event stream, which nothing exported, and the database is destroyed with the
+ * job.
+ *
+ * The fixture is the real one — `seedMissionRun` seeds exactly that two-task
+ * graph — and only the architect's outcome is injected. No provider is
+ * contacted by any case in this file.
+ */
 /**
  * PAID ATTEMPT #4, REPLAYED THROUGH THE REAL LEDGER.
  *
@@ -1513,5 +1546,333 @@ describe('the reviewer HTTP status reaches the durable record', () => {
       expect(durable, `"${secret}" must not reach the durable record`).not.toContain(secret);
     }
     expect(durable, 'and nothing is a stringified object').not.toContain('[object Object]');
+  });
+});
+
+/* ------------------------------------------------------------------------ *
+ * PAID RUN 34037313976 — THE ADAPTERS' SHARE OF THE FOUR DEFECTS
+ * ------------------------------------------------------------------------ */
+
+const LIVE_REVIEWER_WORKER = {
+  workerId: 'independent-reviewer-hermes', role: 'INDEPENDENT_REVIEWER' as const,
+  adapterId: 'hermes-local-live', providerId: 'xai', capabilities: ['review'],
+  taskTypes: ['review:plan', 'review:build', 'review:repair:plan', 'review:repair:build'],
+  concurrencyLimit: 1, timeoutMs: 1_000, maxRetries: 1, status: 'AVAILABLE' as const,
+};
+
+/** A snapshot with the FINDING entries Julius compiles for a repair re-review. */
+function repairReviewSnapshot(taskId: string): JuliusContextSnapshot {
+  const snapshot = reviewSnapshot(taskId);
+  return {
+    ...snapshot, findingIds: ['f-1'],
+    packet: { ...snapshot.packet, blocks: [...snapshot.packet.blocks, { kind: 'FINDING', text: 'REVIEW FINDING f-1 [HIGH]: no verification strategy' }] },
+  };
+}
+
+function reviewerAdapterFor(input: { taskId: string; artifacts: ReturnType<typeof createLiveArtifactExchange>; packets: ReviewPacket[]; log: FakeLog; snapshot?: JuliusContextSnapshot }) {
+  return createLiveHermesReviewerAdapter({
+    worker: LIVE_REVIEWER_WORKER,
+    contexts: { snapshotFor: () => input.snapshot ?? reviewSnapshot(input.taskId) },
+    artifacts: input.artifacts,
+    config: loadHermesConfig(LIVE_ENV as never),
+    testCommand: 'npm run mission-test',
+    run: fakeReviewer(input.log, input.packets, ['changes_required']) as never,
+  });
+}
+
+describe('DEFECT 2 — the live reviewer adapter reviews the stage it was dispatched for', () => {
+  it('a PLAN review sees the plan and no diff or test output, even when a diff artifact exists', async () => {
+    const artifacts = createLiveArtifactExchange();
+    artifacts.put(planRef('run-live'), JSON.stringify(VALID_PLAN));
+    artifacts.put(diffRef('run-live'), DIFF_TEXT);
+    const packets: ReviewPacket[] = [];
+    const adapter = reviewerAdapterFor({ taskId: 'plan-1:review', artifacts, packets, log: { order: [] } });
+    const result = await adapter.dispatch({ taskId: 'plan-1:review', contextId: 'ctx-resume-1', taskType: 'review:plan' });
+    expect(packets).toHaveLength(1);
+    const packet = packets[0]!;
+    expect(packet.stage).toBe('plan');
+    expect(packet.charge?.subject).toBe('PLAN');
+    expect(packet.charge?.mustNotDemand).toContain('a unified diff');
+    expect(packet.handoffJson).toBe(JSON.stringify(VALID_PLAN));
+    expect(packet.unifiedDiff, 'no implementation is shown to a plan review').toBe('');
+    expect(packet.changedFiles).toEqual([]);
+    expect(packet.testOutput).toBe('');
+    // A rejecting verdict is EVIDENCE, nothing else: the adapter holds no store
+    // and returns findings for Julius to record and decide on.
+    expect(result.status).toBe('SUCCEEDED');
+    expect(result.evidence.every((item) => (item as { type: string }).type === 'REVIEW_FINDING')).toBe(true);
+    expect(Object.keys(result).sort()).toEqual(['evidence', 'providerId', 'safeSummary', 'status', 'usage', 'workerId']);
+  });
+
+  it('a BUILD review is refused when no implementation exists to judge, and an EMPTY diff is no implementation', async () => {
+    const artifacts = createLiveArtifactExchange();
+    artifacts.put(planRef('run-live'), JSON.stringify(VALID_PLAN));
+    const log: FakeLog = { order: [] };
+    const adapter = reviewerAdapterFor({ taskId: 'build-1:review', artifacts, packets: [], log });
+    await expect(adapter.dispatch({ taskId: 'build-1:review', contextId: 'ctx-resume-1', taskType: 'review:build' }))
+      .rejects.toMatchObject({ code: 'INVALID_REQUEST', failureClass: 'reviewer_implementation_absent' });
+    // The exchange stores whatever `git diff` printed, so a coder that edited
+    // nothing leaves an empty string — which is not an implementation either.
+    artifacts.put(diffRef('run-live'), '');
+    await expect(adapter.dispatch({ taskId: 'build-1:review', contextId: 'ctx-resume-1', taskType: 'review:build' }))
+      .rejects.toMatchObject({ code: 'INVALID_REQUEST', failureClass: 'reviewer_implementation_absent' });
+    expect(log.order).toEqual([]);
+  });
+
+  it('the findings are the findings, not the founder\'s request: they are not repeated into the request block', async () => {
+    const artifacts = createLiveArtifactExchange();
+    artifacts.put(planRef('run-live'), JSON.stringify(VALID_PLAN));
+    artifacts.put(diffRef('run-live'), DIFF_TEXT);
+    const packets: ReviewPacket[] = [];
+    const adapter = reviewerAdapterFor({
+      taskId: 'repair:build-1:1:task:review', artifacts, packets, log: { order: [] },
+      snapshot: repairReviewSnapshot('repair:build-1:1:task:review'),
+    });
+    await adapter.dispatch({ taskId: 'repair:build-1:1:task:review', contextId: 'ctx-resume-1', taskType: 'review:repair:build' });
+    expect(packets[0]!.priorFindings).toEqual(['REVIEW FINDING f-1 [HIGH]: no verification strategy']);
+    expect(packets[0]!.originalRequest, 'the request is the mission, not the verdict on it')
+      .not.toContain('REVIEW FINDING');
+    expect(packets[0]!.originalRequest).toContain('OBJECTIVE: resume test');
+  });
+
+  it('a BUILD review carries the diff and the implementation charge', async () => {
+    const artifacts = createLiveArtifactExchange();
+    artifacts.put(planRef('run-live'), JSON.stringify(VALID_PLAN));
+    artifacts.put(diffRef('run-live'), DIFF_TEXT);
+    const packets: ReviewPacket[] = [];
+    const adapter = reviewerAdapterFor({ taskId: 'build-1:review', artifacts, packets, log: { order: [] } });
+    await adapter.dispatch({ taskId: 'build-1:review', contextId: 'ctx-resume-1', taskType: 'review:build' });
+    expect(packets[0]!.stage).toBe('build');
+    expect(packets[0]!.charge?.subject).toBe('IMPLEMENTATION');
+    expect(packets[0]!.unifiedDiff).toBe(DIFF_TEXT);
+  });
+
+  it('a REPAIR review carries the prior findings, and proceeds without them when the round was admitted by failed evidence', async () => {
+    const artifacts = createLiveArtifactExchange();
+    artifacts.put(planRef('run-live'), JSON.stringify(VALID_PLAN));
+    artifacts.put(diffRef('run-live'), DIFF_TEXT);
+    const log: FakeLog = { order: [] };
+    /**
+     * NOT A REFUSAL. Julius admits a repair round on the subject's own FAILED
+     * evidence as well as on a reviewer finding, and such a round has no
+     * findings by construction — an earlier version of this adapter refused
+     * there, which would have failed a run that was repairing exactly as
+     * designed.
+     */
+    const bare: ReviewPacket[] = [];
+    const evidenceAdmitted = reviewerAdapterFor({ taskId: 'repair:build-1:1:task:review', artifacts, packets: bare, log });
+    const outcome = await evidenceAdmitted.dispatch({ taskId: 'repair:build-1:1:task:review', contextId: 'ctx-resume-1', taskType: 'review:repair:build' });
+    expect(outcome.status).toBe('SUCCEEDED');
+    expect(bare[0]!.stage).toBe('repair:build');
+    expect(bare[0]!.priorFindings).toEqual([]);
+    const packets: ReviewPacket[] = [];
+    const informed = reviewerAdapterFor({
+      taskId: 'repair:build-1:1:task:review', artifacts, packets, log, snapshot: repairReviewSnapshot('repair:build-1:1:task:review'),
+    });
+    await informed.dispatch({ taskId: 'repair:build-1:1:task:review', contextId: 'ctx-resume-1', taskType: 'review:repair:build' });
+    expect(packets[0]!.stage).toBe('repair:build');
+    expect(packets[0]!.priorFindings).toEqual(['REVIEW FINDING f-1 [HIGH]: no verification strategy']);
+    expect(packets[0]!.charge?.repair).toBe(true);
+  });
+
+  it('swapping the reviewer runner does not change what the stage means', async () => {
+    // Two different reviewer implementations receive the identical packet for
+    // the identical dispatch: the stage and charge are Julius's, not theirs.
+    const artifacts = createLiveArtifactExchange();
+    artifacts.put(planRef('run-live'), JSON.stringify(VALID_PLAN));
+    const seen: ReviewPacket[] = [];
+    for (const runner of [fakeReviewer({ order: [] }, seen, ['approved']), textReviewer({ order: [] }, seen, [JSON.stringify({ verdict: 'approved', summary: 'ok', findings: [], requirementsChecked: [] })])]) {
+      const adapter = createLiveHermesReviewerAdapter({
+        worker: LIVE_REVIEWER_WORKER, contexts: { snapshotFor: () => reviewSnapshot('plan-1:review') },
+        artifacts, config: loadHermesConfig(LIVE_ENV as never), testCommand: 'npm run mission-test', run: runner as never,
+      });
+      await adapter.dispatch({ taskId: 'plan-1:review', contextId: 'ctx-resume-1', taskType: 'review:plan' });
+    }
+    expect(seen).toHaveLength(2);
+    expect(seen[0]!.stage).toBe(seen[1]!.stage);
+    expect(seen[0]!.charge).toEqual(seen[1]!.charge);
+    expect(seen[0]!.unifiedDiff).toBe(seen[1]!.unifiedDiff);
+  });
+});
+
+describe('DEFECT 1 — the live coder adapter is limited to what Julius allocated', () => {
+  const coderAdapter = (input: { runs: HostedRunInput[]; cost?: number; refuse?: boolean }) => {
+    const log: FakeLog = { order: [] };
+    const artifacts = createLiveArtifactExchange();
+    artifacts.put(planRef('run-live'), JSON.stringify(VALID_PLAN));
+    const run = async (runInput: HostedRunInput): Promise<HostedRunOutcome> => {
+      input.runs.push(runInput);
+      const completed = await fakeCoder(log, [])(runInput) as Extract<HostedRunOutcome, { kind: 'completed' }>;
+      const observation = { ...completed.observation, usage: { ...completed.observation.usage, totalCostUsd: input.cost ?? 0.02 } };
+      if (input.refuse) {
+        return { kind: 'refused', refusalCode: 'coder_cost_exceeded', safeMessage: 'over', observation, envelope: completed.envelope, startedAt: completed.startedAt, completedAt: completed.completedAt } as HostedRunOutcome;
+      }
+      return { ...completed, observation };
+    };
+    return createLiveHostedCodingAdapter({
+      worker: {
+        workerId: 'coding-agent-claude-hosted', role: 'CODING_AGENT', adapterId: 'claude-agent-sdk-hosted-live', providerId: 'anthropic',
+        capabilities: ['implement'], taskTypes: ['build'], concurrencyLimit: 1, timeoutMs: 1_000, maxRetries: 1, status: 'AVAILABLE',
+      },
+      contexts: { snapshotFor: () => reviewSnapshot('build-1') }, artifacts, projectId: 'prj-live',
+      apiKey: 'FAKETESTNOTREAL-anthropic', requestedModel: 'claude-fable-5',
+      workspacePath: '/workspace/mission', testCommand: 'npm run mission-test',
+      shell: fakeShell(log, []), run: run as never, queryLoader: async () => fakeQuery,
+    });
+  };
+
+  it('with an allocation, the hosted limits ARE the allocation; without one, the conservative default', async () => {
+    const runs: HostedRunInput[] = [];
+    const adapter = coderAdapter({ runs, cost: 0.9 });
+    const granted = await adapter.dispatch({ taskId: 'build-1', contextId: 'ctx-resume-1', taskType: 'build', allocation: { usdMicros: 5_000_000, policyVersion: 'julius-allocation.v1', basis: 'CODER_SHARE' } });
+    expect((runs[0]!.limits as HostedLimits).maxCostCents).toBe(500);
+    expect((runs[0]!.limits as HostedLimits).maxTurns).toBe(DEFAULT_HOSTED_LIMITS.maxTurns);
+    expect(granted.status).toBe('SUCCEEDED');
+    expect((granted.usage as { usdMicros: number }).usdMicros).toBe(900_000);
+    await adapter.dispatch({ taskId: 'build-1', contextId: 'ctx-resume-1', taskType: 'build' });
+    expect(runs[1]!.limits).toBe(DEFAULT_HOSTED_LIMITS);
+  });
+
+  it('an allocation below one cent is refused BEFORE the runtime is reached, because a $0 ceiling still bills a turn', async () => {
+    const runs: HostedRunInput[] = [];
+    const adapter = coderAdapter({ runs });
+    await expect(adapter.dispatch({ taskId: 'build-1', contextId: 'ctx-resume-1', taskType: 'build', allocation: { usdMicros: 6_000, policyVersion: 'julius-allocation.v1', basis: 'CODER_REMAINDER' } }))
+      .rejects.toMatchObject({ code: 'WORKER_EXECUTION_FAILURE', failureClass: 'coder_allocation_below_one_cent' });
+    expect(runs, 'no hosted run was started').toEqual([]);
+  });
+
+  it('names the round that spent the money: a repair refusal is not recorded as the first build', async () => {
+    const runs: HostedRunInput[] = [];
+    const adapter = coderAdapter({ runs, cost: 5.25, refuse: true });
+    await expect(adapter.dispatch({ taskId: 'repair:build-1:1:task', contextId: 'ctx-resume-1', taskType: 'repair:build', allocation: { usdMicros: 5_000_000, policyVersion: 'julius-allocation.v1', basis: 'CODER_SHARE' } }))
+      .rejects.toMatchObject({ diagnostics: expect.objectContaining({ stage: 'repair:build' }) });
+  });
+
+  it('a cost refusal carries the money beside it: observed, ceiling and source', async () => {
+    const runs: HostedRunInput[] = [];
+    const adapter = coderAdapter({ runs, cost: 5.25, refuse: true });
+    await expect(adapter.dispatch({ taskId: 'build-1', contextId: 'ctx-resume-1', taskType: 'build', allocation: { usdMicros: 5_000_000, policyVersion: 'julius-allocation.v1', basis: 'CODER_SHARE' } }))
+      .rejects.toMatchObject({
+        code: 'WORKER_EXECUTION_FAILURE', failureClass: 'coder_cost_exceeded',
+        diagnostics: expect.objectContaining({ costUsdMicros: 5_250_000, costCeilingUsdMicros: 5_000_000, costSource: 'runtime_reported', stage: 'build' }),
+      });
+  });
+});
+
+/**
+ * THE REGISTRATION TABLE IS THE THING THAT FAILED.
+ *
+ * Paid run 34037313976 rejected a plan, minted a `repair:plan` task on the
+ * Coding Agent, and failed `PROVIDER_UNAVAILABLE` because nobody was
+ * registered to take it. The routability check now refuses such a repair
+ * before it exists, which turns that outage into a named halt — but a halt is
+ * still a dead mission. What keeps the mission ALIVE is this table, and it is
+ * one hand-maintained array away from the same failure.
+ */
+describe('every repair the planner can mint has a registered worker', () => {
+  const registrations = () => [ARCHITECT_WORKER, CODER_WORKER, reviewerWorker('xai')];
+
+  it('the seeded graph\'s two task types can each be repaired by their own role', () => {
+    // A repair inherits its subject's ROLE and STAGE, so these are exactly the
+    // two repairs the seeded plan → build graph can produce.
+    for (const [role, taskType] of [['PROMPT_ARCHITECT', 'repair:plan'], ['CODING_AGENT', 'repair:build']] as const) {
+      const takers = registrations().filter((worker) => worker.role === role && worker.taskTypes.includes(taskType));
+      expect(takers.map((worker) => worker.workerId), `${role} ${taskType} is routable`).toHaveLength(1);
+    }
+  });
+
+  it('and every repair has a reviewer for its own re-review', () => {
+    for (const taskType of ['review:plan', 'review:build', 'review:repair:plan', 'review:repair:build']) {
+      expect(reviewerWorker('xai').taskTypes, taskType).toContain(taskType);
+    }
+  });
+
+  it('the Coding Agent does NOT take a plan repair — the shape the paid run minted', () => {
+    expect(CODER_WORKER.taskTypes).not.toContain('repair:plan');
+    expect(CODER_WORKER.taskTypes).toContain('repair:build');
+    expect(ARCHITECT_WORKER.taskTypes).toContain('repair:plan');
+  });
+
+  it('a repair of a repair is still its stage, so one registration covers every round', () => {
+    // `repairTaskTypeFor` strips every prefix, so round two of a build repair
+    // is `repair:build` again and needs no further registration.
+    expect(repairTaskTypeFor('repair:build')).toBe('repair:build');
+    expect(repairTaskTypeFor('repair:plan')).toBe('repair:plan');
+    for (const worker of registrations()) {
+      for (const taskType of worker.taskTypes) {
+        expect(taskType, `${worker.workerId} registers a doubled repair type`).not.toMatch(/repair:repair:/u);
+      }
+    }
+  });
+});
+
+/**
+ * THE PLAN REVISION IS A PAID DISPATCH NOTHING HAD EXERCISED.
+ *
+ * `repair:plan` reaches the Prompt Architect because a repair inherits its
+ * subject's role. That branch shows the rejected plan beside the reviewer's
+ * findings and replaces the artifact the Coding Agent will read — production
+ * code on the paid path, and until these cases it ran for the first time in a
+ * mission that costs money.
+ */
+describe('the architect revises a rejected plan', () => {
+  const REVISED = { ...VALID_PLAN, objectiveSummary: 'Revised: add the verification strategy the review asked for.' };
+
+  const architectAdapter = (input: { artifacts: ReturnType<typeof createLiveArtifactExchange>; seen: Array<Record<string, unknown>>; snapshot?: JuliusContextSnapshot }) =>
+    createLiveArchitectAdapter({
+      worker: ARCHITECT_WORKER,
+      contexts: { snapshotFor: () => input.snapshot ?? reviewSnapshot('repair:plan-1:1:task') },
+      artifacts: input.artifacts,
+      config: { liveMode: true, model: 'gpt-5.6-sol', maxOutputTokens: 4_000 } as never,
+      apiKey: 'FAKETESTNOTREAL-openai',
+      run: (async (call: Record<string, unknown>) => {
+        input.seen.push(call);
+        return {
+          ok: true, actualModel: 'gpt-5.6-sol', responseId: 'resp_revision_1', status: 'completed',
+          outputText: JSON.stringify(REVISED),
+          usage: { inputTokens: 120, cachedInputTokens: 0, outputTokens: 60, reasoningTokens: 0, totalTokens: 180 },
+        };
+      }) as never,
+    });
+
+  it('shows the architect the plan it is revising, and says the revision is a revision', async () => {
+    const artifacts = createLiveArtifactExchange();
+    artifacts.put(planRef('run-live'), JSON.stringify(VALID_PLAN));
+    const seen: Array<Record<string, unknown>> = [];
+    const result = await architectAdapter({ artifacts, seen })
+      .dispatch({ taskId: 'repair:plan-1:1:task', contextId: 'ctx-resume-1', taskType: 'repair:plan' });
+
+    expect(result.status).toBe('SUCCEEDED');
+    const call = seen[0]!;
+    expect(String(call.input), 'the rejected plan is shown').toContain('PRIOR PLAN');
+    expect(String(call.input)).toContain(VALID_PLAN.objectiveSummary);
+    expect(String(call.instructions), 'and the charter says this is a revision').toContain('This is a PLAN REVISION');
+    expect(String(call.instructions)).toContain('Keep the mission objective and every acceptance criterion exactly as stated');
+    expect(String(call.instructions), 'and forbids claiming work that has not happened')
+      .toContain('Do not claim any finding is resolved by implementation work');
+    // The revision REPLACES the plan the Coding Agent will read.
+    expect(artifacts.get(planRef('run-live'))).toBe(JSON.stringify(REVISED));
+  });
+
+  it('a first plan is not a revision: no prior plan, no revision charter', async () => {
+    const artifacts = createLiveArtifactExchange();
+    const seen: Array<Record<string, unknown>> = [];
+    await architectAdapter({ artifacts, seen, snapshot: reviewSnapshot('plan-1') })
+      .dispatch({ taskId: 'plan-1', contextId: 'ctx-resume-1', taskType: 'plan' });
+    expect(String(seen[0]!.instructions)).not.toContain('This is a PLAN REVISION');
+    expect(String(seen[0]!.input)).not.toContain('PRIOR PLAN');
+  });
+
+  it('refuses to revise a plan this process cannot see, rather than writing a new one over it', async () => {
+    // The artifact exchange is same-process: after a restart the plan is gone
+    // even though its task succeeded durably. Revising from nothing would
+    // silently replace a reviewed plan with an unreviewed one.
+    const artifacts = createLiveArtifactExchange();
+    const seen: Array<Record<string, unknown>> = [];
+    await expect(architectAdapter({ artifacts, seen })
+      .dispatch({ taskId: 'repair:plan-1:1:task', contextId: 'ctx-resume-1', taskType: 'repair:plan' }))
+      .rejects.toMatchObject({ code: 'WORKER_EXECUTION_FAILURE', failureClass: 'prior_plan_unavailable' });
+    expect(seen, 'no provider was reached').toEqual([]);
+    expect(artifacts.get(planRef('run-live'))).toBeNull();
   });
 });

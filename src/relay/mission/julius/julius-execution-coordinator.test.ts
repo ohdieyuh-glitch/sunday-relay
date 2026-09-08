@@ -119,3 +119,51 @@ describe('safe reviewer diagnostics reach the durable event', () => {
     expect(Object.keys(failed).some((key) => key.startsWith('diag_')), 'no facts, no columns').toBe(false);
   });
 });
+
+/**
+ * A FAILURE AFTER THE PROVIDER ANSWERED STILL CHARGES WHAT THE ANSWER COST.
+ *
+ * The provider ran, reported its cost, and a store write then dropped the
+ * result — a stale lease, a duplicate generation, a failed evidence append.
+ * The billed amount was read only from the ERROR's diagnostics, so these paths
+ * released the whole hold and the mission could be granted that money twice.
+ */
+describe('a paid answer that a later step drops', () => {
+  const answering = (usage: unknown): JuliusProviderAdapter => ({
+    adapterId: 'adapter',
+    async dispatch() {
+      return { workerId: 'worker', providerId: 'provider', status: 'SUCCEEDED', safeSummary: 'done', evidence: [], usage };
+    },
+  });
+  const releases = (overrides: Partial<JuliusExecutionPorts>) => {
+    const seen: Array<{ usdMicros?: number | null; spendUnknown?: boolean }> = [];
+    const h = harness(answering({ usdMicros: 4_250_000 }), {
+      ...overrides,
+      async release(input) { seen.push({ usdMicros: input.usdMicros, spendUnknown: input.spendUnknown }); },
+    });
+    return { h, seen };
+  };
+
+  it('charges the reported cost when persisting the evidence throws', async () => {
+    const { h, seen } = releases({ async persistEvidence() { throw new Error('evidence_failed'); } });
+    expect((await h.coordinator.execute(request)).status).not.toBe('COMPLETED');
+    expect(seen, 'the hold is settled at what the provider billed, not handed back')
+      .toEqual([{ usdMicros: 4_250_000, spendUnknown: false }]);
+  });
+
+  it('charges it when a stale lease refuses the result', async () => {
+    const { h, seen } = releases({ async acceptResult() { throw new Error('stale_worker_result'); } });
+    await h.coordinator.execute(request);
+    expect(seen).toEqual([{ usdMicros: 4_250_000, spendUnknown: false }]);
+  });
+
+  it('and an answer that reported NO cost keeps its hold, because the provider still ran', async () => {
+    const seen: Array<{ usdMicros?: number | null; spendUnknown?: boolean }> = [];
+    const h = harness(answering({ inputTokens: 10 }), {
+      async acceptResult() { throw new Error('stale_worker_result'); },
+      async release(input) { seen.push({ usdMicros: input.usdMicros, spendUnknown: input.spendUnknown }); },
+    });
+    await h.coordinator.execute(request);
+    expect(seen).toEqual([{ usdMicros: null, spendUnknown: true }]);
+  });
+});

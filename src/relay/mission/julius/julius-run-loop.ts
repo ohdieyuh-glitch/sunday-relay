@@ -13,10 +13,11 @@
  * two things it does not implement, and the task-level work lives in the
  * pipeline module beside it.
  *
- * DEPENDENCY WAKEUP IS THE CLAIM QUERY'S JOB, and deliberately not this
- * module's. `claimRunnable` refuses any task with an unsatisfied dependency,
- * so a task becomes claimable the moment its last dependency reaches SUCCEEDED
- * or SKIPPED. A second wakeup mechanism here would be a race with the first.
+ * DEPENDENCY WAKEUP IS JULIUS'S DECISION, and deliberately not this module's.
+ * The claim query offers RUNNABLE tasks whose dependencies have succeeded, and
+ * the only path from BLOCKED to RUNNABLE is the pipeline's accepting decision,
+ * written together with the tasks it releases. SUCCEEDED alone released work
+ * once, and paid run 34037313976 built against an unreviewed plan for it.
  *
  * BOUNDED BY CONSTRUCTION. One tick claims at most `limit` tasks. There is no
  * `while (true)` anywhere in this file — the caller owns the cadence, so a
@@ -26,6 +27,7 @@
 import type { JuliusCardPolicy } from './julius-policy';
 import type { JuliusVerificationPolicy } from './julius-verification-runtime';
 import { missionMayComplete, type JuliusMissionState, type JuliusRecordedDecision, type JuliusTask } from './julius-runtime';
+import { canStillBeAccepted } from './julius-release-runtime';
 import { planRunStatePath, transitionIsLegal } from './julius-state-path';
 
 /**
@@ -185,8 +187,18 @@ function stillReachable(
   byId: ReadonlyMap<string, JuliusTask>,
   visiting: Set<string> = new Set(),
   settled: Map<string, boolean> = new Map(),
+  acceptable: (taskId: string) => boolean = () => true,
 ): boolean {
-  if (task.state === 'SUCCEEDED' || task.state === 'SKIPPED') return true;
+  if (task.state === 'SKIPPED') return true;
+  /**
+   * SUCCEEDED IS NOT ACCEPTED. A dependent is released only when Julius
+   * accepts its dependency, so a SUCCEEDED dependency whose acceptance can no
+   * longer happen — its review FAILED and nothing else can decide it, or its
+   * decision is a HALT — leaves the dependent as dead as a FAILED one would.
+   * `canStillBeAccepted` says which; without it (the pure-graph callers)
+   * SUCCEEDED counts as reachable, exactly as before.
+   */
+  if (task.state === 'SUCCEEDED') return acceptable(task.taskId);
   if (task.state === 'FAILED' || task.state === 'CANCELLED') return false;
   if (task.state !== 'BLOCKED') return true;
   const memo = settled.get(task.taskId);
@@ -198,7 +210,7 @@ function stillReachable(
       const dependency = byId.get(id);
       // A dependency the run does not hold can never become SUCCEEDED here,
       // so the task waiting on it is not waiting for anything either.
-      return dependency !== undefined && stillReachable(dependency, byId, visiting, settled);
+      return dependency !== undefined && stillReachable(dependency, byId, visiting, settled, acceptable);
     });
     settled.set(task.taskId, reachable);
     return reachable;
@@ -216,7 +228,8 @@ export function targetRunState(
   if (tasks.some((task) => task.state === 'RUNNABLE')) return { state: 'READY', reasonCode: 'TASKS_RUNNABLE' };
   const byId = new Map(tasks.map((task) => [task.taskId, task]));
   const settled = new Map<string, boolean>();
-  if (tasks.some((task) => task.state === 'BLOCKED' && stillReachable(task, byId, new Set(), settled))) {
+  const acceptable = canStillBeAccepted(tasks, decisions);
+  if (tasks.some((task) => task.state === 'BLOCKED' && stillReachable(task, byId, new Set(), settled, acceptable))) {
     return { state: 'WAITING', reasonCode: 'TASKS_BLOCKED' };
   }
   if (tasks.some((task) => task.state === 'FAILED')) return { state: 'FAILED', reasonCode: 'TASK_FAILED' };
@@ -409,6 +422,9 @@ export class JuliusRunLoop {
       const request = {
         claim, policy: policy.card, verification: policy.verification,
         capability: this.policies.capabilityFor(claim), signal,
+        // The pipeline needs to answer "could a repair of this be routed?"
+        // for a task that does not exist yet, so the resolver travels with it.
+        capabilityFor: (task: { taskId: string; taskType: string; role: string }) => this.policies.capabilityFor(task),
       };
       const preflight = await prepareClaimedTask(request, this.deps, scope);
       if (preflight.kind === 'REFUSED') {
@@ -436,10 +452,11 @@ export class JuliusRunLoop {
        *
        * The attempt is spent here rather than by the claim because the live
        * topology hands tasks back routinely — a claim limit of 4 against a
-       * C.A.R.D. concurrency of 1, with `build` and the plan's review task
-       * both claimable on the tick after the plan succeeds — so a task could
-       * be yielded twice and reach its FIRST real dispatch on attempt 3 of 3,
-       * where a rate limit is refused as exhausted without one provider call.
+       * C.A.R.D. concurrency of 1 — so a task could be yielded twice and
+       * reach its FIRST real dispatch on attempt 3 of 3, where a rate limit is
+       * refused as exhausted without one provider call. (Before the release
+       * rule, `build` and the plan's review were both claimable on the tick
+       * after the plan succeeded; now only what Julius released is.)
        *
        * `null` means the lease moved while we decided. The task is somebody
        * else's now: do not run it, and do not finish it either, because

@@ -17,6 +17,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { safeText } from './redact';
+import type { JuliusReviewCharge, JuliusReviewStage } from '../src/relay/mission/julius/julius-review-stage';
 import { parseUsageFile } from './reviewer-harness/hermes/runner';
 
 export type HermesVerdict = 'approved' | 'changes_required' | 'unable_to_review';
@@ -549,7 +550,30 @@ export function hermesPreflight(
   };
 }
 
-export interface ReviewPacket {
+/** A review Julius dispatched: the stage and its charge, always together. */
+export type ReviewPacket = ReviewPacketFields | (Omit<ReviewPacketFields, 'stage' | 'charge'> & {
+  readonly stage: JuliusReviewStage;
+  readonly charge: JuliusReviewCharge;
+});
+
+interface ReviewPacketFields {
+  /**
+   * WHICH STAGE THIS REVIEW IS, as Julius dispatched it, and what that stage
+   * charges the reviewer with.
+   *
+   * THE TWO TRAVEL TOGETHER OR NOT AT ALL. This module takes the stage and the
+   * charge as TYPES and never as values — the charge is Julius's statement of
+   * what a stage judges, and a reviewer that could look one up would be
+   * choosing its own charge. So a packet carrying a stage without its charge
+   * would announce "PLAN REVIEW" over an implementation rubric: the paid run's
+   * own defect, reintroduced. The union below makes that unrepresentable.
+   * Neither field means an implementation review, which is the only kind the
+   * older reviewer harness builds, so nothing it sends changes meaning.
+   */
+  stage?: undefined;
+  charge?: undefined;
+  /** Prior blocking findings, for a repair review that must judge their resolution. */
+  priorFindings?: string[];
   missionId: string;
   missionRevision?: string;
   originalRequest: string;
@@ -568,12 +592,98 @@ export interface ReviewPacket {
   relayEvidence: string[];
 }
 
+const LEGACY_IMPLEMENTATION_CHARGE: JuliusReviewCharge = Object.freeze({
+  stage: 'build', subject: 'IMPLEMENTATION', repair: false,
+  judges: Object.freeze([
+    'Does the implementation satisfy every acceptance criterion?',
+    'Did it stay inside the allowed file scope?',
+    'Is the behaviour correct for edge cases implied by the requirements?',
+    'Is the evidence sufficient?',
+  ]),
+  mustNotDemand: Object.freeze<string[]>([]),
+  requires: Object.freeze<JuliusReviewCharge['requires'][number][]>(['plan', 'diff']),
+});
+
 export function buildReviewPrompt(p: ReviewPacket): string {
+  const stage = p.stage ?? 'build';
+  /**
+   * THE CHARGE COMES FROM JULIUS. The Julius adapter always supplies the
+   * domain's charge for the stage it dispatched. A caller that supplies none —
+   * the older reviewer harness, which only ever reviews an implementation —
+   * gets the implementation rubric this prompt has always carried, so nothing
+   * it sends changes meaning. This module never reaches into the domain for
+   * it: the reviewer consumes a contract, it does not own one.
+   */
+  // The charge always arrives with the stage (the packet type makes one
+  // without the other unrepresentable); a packet with neither is the older
+  // harness's implementation review.
+  const charge: JuliusReviewCharge = p.charge ?? LEGACY_IMPLEMENTATION_CHARGE;
+  const rubric = charge.judges.map((question, index) => `(${index + 1}) ${question}`).join(' ');
+  const findings = p.priorFindings ?? [];
+  const priorFindingsBlock = charge.repair || findings.length > 0
+    ? [`PRIOR BLOCKING FINDINGS (${charge.repair ? 'this review must judge whether each is resolved' : 'for context'}):`,
+      ...(findings.length > 0 ? findings.map((finding) => `- ${finding}`)
+        : ['- (none recorded: this repair was admitted by failed evidence rather than by a reviewer finding, so judge the repaired work and its evidence)']), '']
+    : [];
+  const head = charge.subject === 'PLAN'
+    ? [
+      'You are an INDEPENDENT reviewer of a PLAN. Review the plan below strictly',
+      'against the founder\'s request, the acceptance criteria and the mission',
+      'constraints. Do NOT assume the planning agent\'s conclusion is correct —',
+      'judge the plan yourself. You have no write access and must not attempt',
+      'to modify anything.',
+      '',
+      `THIS IS A ${stage.toUpperCase()} REVIEW. No implementation exists yet, by design.`,
+      `Do NOT demand, and do NOT penalise the absence of: ${charge.mustNotDemand.join(', ')}.`,
+      'A finding that asks for any of those is out of scope for this stage and',
+      'must not be raised. Judge whether the PLAN, if executed, would satisfy',
+      'the criteria, and whether a coding agent could execute it as written.',
+    ]
+    : [
+      'You are an INDEPENDENT code reviewer. Review the change below strictly',
+      'against the stated requirements and the supplied evidence. Do NOT assume the',
+      "implementing agent's conclusion is correct — judge the artifact yourself.",
+      'You have no write access and must not attempt to modify anything.',
+      '',
+      `THIS IS A ${stage.toUpperCase()} REVIEW of an implementation.`,
+    ];
+  const body = charge.subject === 'PLAN'
+    ? [
+      'THE PLAN UNDER REVIEW (the validated Prompt Architect handoff):',
+      p.handoffJson,
+      '',
+      `ACCEPTANCE CRITERIA:\n${(p.acceptanceCriteria ?? []).map((c) => `- ${c}`).join('\n') || '- (none stated)'}`,
+      `ALLOWED FILES (the only files the plan may direct edits to): ${p.allowedFiles?.join(', ') || '(none stated)'}`,
+      `PROHIBITED FILES (the plan must leave unchanged): ${p.prohibitedFiles?.join(', ') || '(none stated)'}`,
+      '',
+      ...priorFindingsBlock,
+      `RELAY VERIFICATION EVIDENCE:\n${p.relayEvidence.map((e) => `- ${e}`).join('\n') || '- (none)'}`,
+    ]
+    : [
+      'IMPLEMENTATION HANDOFF (requirements):',
+      p.handoffJson,
+      '',
+      `ACCEPTANCE CRITERIA:\n${(p.acceptanceCriteria ?? []).map((c) => `- ${c}`).join('\n') || '- (none stated)'}`,
+      `ALLOWED FILES (the only files the agent could edit): ${p.allowedFiles?.join(', ') || '(none stated)'}`,
+      `PROHIBITED FILES (must be unchanged): ${p.prohibitedFiles?.join(', ') || '(none stated)'}`,
+      '',
+      `CHANGED FILES: ${p.changedFiles.join(', ') || '(none)'}`,
+      '',
+      'UNIFIED DIFF:',
+      p.unifiedDiff || '(empty)',
+      '',
+      'RESULTING FILE CONTENT:',
+      p.changedFileContents || '(empty)',
+      '',
+      `DETERMINISTIC TEST COMMAND: ${p.testCommand}`,
+      'TEST OUTPUT:',
+      p.testOutput || '(none)',
+      '',
+      ...priorFindingsBlock,
+      `RELAY VERIFICATION EVIDENCE:\n${p.relayEvidence.map((e) => `- ${e}`).join('\n')}`,
+    ];
   return [
-    'You are an INDEPENDENT code reviewer. Review the change below strictly',
-    'against the stated requirements and the supplied evidence. Do NOT assume the',
-    "implementing agent's conclusion is correct — judge the artifact yourself.",
-    'You have no write access and must not attempt to modify anything.',
+    ...head,
     '',
     'Respond with ONE JSON object and nothing else:',
     '{"verdict":"approved"|"changes_required"|"unable_to_review","summary":string,',
@@ -590,30 +700,9 @@ export function buildReviewPrompt(p: ReviewPacket): string {
     "FOUNDER'S ORIGINAL REQUEST:",
     p.originalRequest,
     '',
-    'IMPLEMENTATION HANDOFF (requirements):',
-    p.handoffJson,
+    ...body,
     '',
-    `ACCEPTANCE CRITERIA:\n${(p.acceptanceCriteria ?? []).map((c) => `- ${c}`).join('\n') || '- (none stated)'}`,
-    `ALLOWED FILES (the only files the agent could edit): ${p.allowedFiles?.join(', ') || '(none stated)'}`,
-    `PROHIBITED FILES (must be unchanged): ${p.prohibitedFiles?.join(', ') || '(none stated)'}`,
-    '',
-    `CHANGED FILES: ${p.changedFiles.join(', ') || '(none)'}`,
-    '',
-    'UNIFIED DIFF:',
-    p.unifiedDiff || '(empty)',
-    '',
-    'RESULTING FILE CONTENT:',
-    p.changedFileContents || '(empty)',
-    '',
-    `DETERMINISTIC TEST COMMAND: ${p.testCommand}`,
-    'TEST OUTPUT:',
-    p.testOutput || '(none)',
-    '',
-    `RELAY VERIFICATION EVIDENCE:\n${p.relayEvidence.map((e) => `- ${e}`).join('\n')}`,
-    '',
-    'RUBRIC: (1) Does the implementation satisfy every acceptance criterion?',
-    '(2) Did it stay inside the allowed file scope? (3) Is the behaviour correct for',
-    'edge cases implied by the requirements? (4) Is the evidence sufficient?',
+    `RUBRIC: ${rubric}`,
     'Emit the JSON now.',
   ].join('\n');
 }

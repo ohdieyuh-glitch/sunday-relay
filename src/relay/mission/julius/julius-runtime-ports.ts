@@ -149,9 +149,22 @@ export interface JuliusRunWriter {
   appendEvidence(input: {
     runId: string; projectId: string; idempotencyKey: string; evidence: JuliusEvidence;
   }): Promise<boolean>;
+  /**
+   * THE DECISION AND ITS RELEASE ARE ONE WRITE.
+   *
+   * `releaseTaskIds` names BLOCKED tasks this decision satisfies (computed by
+   * `evaluateJuliusRelease`); they become RUNNABLE in the same durable write
+   * as the decision, so no crash can leave an accepted plan with a build that
+   * nothing will ever release, or a released build with no decision behind it.
+   * A duplicate decision (idempotency conflict) moves nothing: the write that
+   * recorded it first already did. Only Julius calls this, and the claim query
+   * offers RUNNABLE tasks alone, so this is the only path from BLOCKED to
+   * claimable.
+   */
   appendDecision(input: {
     decisionId: string; runId: string; taskId: string; policyRevision: string;
     idempotencyKey: string; occurredAt: string; decision: JuliusVerificationDecision;
+    releaseTaskIds?: readonly string[];
   }): Promise<boolean>;
 }
 
@@ -247,11 +260,43 @@ export interface JuliusBudgetPort {
     usdMicros: number; inputTokens: number; outputTokens: number;
     toolCalls: number; runtimeMs: number; now: string;
   }): Promise<{ readonly state: 'RESERVED' | 'DENIED'; readonly denialReason: string | null }>;
+  /**
+   * UNKNOWN SPEND IS NOT ZERO SPEND. `usdMicros: null` means the boundary
+   * reported no cost, and the ledger must then keep holding what it reserved
+   * rather than freeing it: a runtime that answers without a cost has still
+   * been paid, and treating that as $0 hands the rest of the mission money it
+   * may already have spent.
+   */
   commit(input: {
-    reservationId: string; usdMicros: number; inputTokens: number; outputTokens: number;
+    reservationId: string; usdMicros: number | null; inputTokens: number; outputTokens: number;
     toolCalls: number; runtimeMs: number; receiptId: string | null; now: string;
   }): Promise<void>;
-  release(input: { reservationId: string; reason: string; now: string }): Promise<void>;
+  /**
+   * Hand a reservation back. `usdMicros` is what the failed attempt actually
+   * billed, when the boundary reported it — money already spent is CHARGED,
+   * never released, or a timed-out attempt would return its whole allocation
+   * to the ledger and the retry would be granted it a second time.
+   */
+  release(input: {
+    reservationId: string; reason: string; now: string;
+    usdMicros?: number | null;
+    /**
+     * The attempt reached a provider that started work and reported no cost.
+     * Unknown spend is not zero spend either: the hold is KEPT rather than
+     * freed, because a hosted runtime reports its cost only in a final message
+     * a timeout never delivers — the case where a hand-back would most often
+     * hand the retry money the first attempt had already spent.
+     */
+    spendUnknown?: boolean;
+  }): Promise<void>;
+  /**
+   * WHAT REMAINS, so an allocation can be derived from it: the ceiling minus
+   * every outstanding reservation and commitment, in micro-dollars. `null`
+   * means the ledger cannot say — Unknown, not zero — and the allocator then
+   * takes its conservative branch. Optional so a ledger that cannot answer is
+   * honest by omission rather than by inventing a number.
+   */
+  available?(input: { runId: string; projectId: string; now: string }): Promise<number | null>;
 }
 
 /* ------------------------------------------------------------- read ports */

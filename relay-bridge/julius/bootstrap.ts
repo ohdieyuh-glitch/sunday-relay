@@ -20,6 +20,14 @@
  * every later task are scheduled by Julius's own verification runtime, not
  * planned here — planning more would be this module pre-empting decisions the
  * runtime owns.
+ *
+ * `build` is seeded BLOCKED and stays BLOCKED until Julius ACCEPTS the plan —
+ * after the plan review, or after an accepted plan revision — which is when
+ * the accepting decision's own write releases it. The plan merely SUCCEEDING
+ * releases nothing: paid run 34037313976 built against a plan its review then
+ * rejected, because the claim query once offered any BLOCKED task whose
+ * dependencies had succeeded. The declared graph plan → plan review → build →
+ * build review is now enforced by the release rule, not by this seed alone.
  */
 
 import {
