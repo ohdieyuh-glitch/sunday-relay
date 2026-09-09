@@ -51,7 +51,48 @@ case "$HERMES_REF" in
   *[!0-9a-f]*|'') echo "hermes_ref_not_a_commit_sha:$HERMES_REF" >&2; exit 1;;
 esac
 [ "${#HERMES_REF}" -eq 40 ] || { echo 'hermes_ref_not_a_commit_sha' >&2; exit 1; }
-/opt/hermes-venv/bin/pip install --quiet "git+https://github.com/NousResearch/hermes-agent.git@${HERMES_REF}"
+
+# FETCH THE SOURCE OURSELVES, ONCE, WITH RETRIES — then install from disk.
+#
+# `pip install "git+https://…@<sha>"` was the whole install, and it made TWO
+# unauthenticated requests to github.com: a `--filter=blob:none` clone, then a
+# lazy blob fetch from the promisor remote during `git checkout`. The zero-spend
+# preflight for Live Run 3 was refused twice by HTTP 429 — once at the clone
+# (run 34388913340) and once at the promisor fetch (34389221834) — so both
+# halves of that path are exposed, and neither retried.
+#
+# `git fetch --depth 1 origin <sha>` asks for exactly the pinned commit and its
+# trees and blobs in one request. There is no partial clone and therefore no
+# promisor remote to come back to, which removes the second failure mode
+# outright rather than retrying it.
+#
+# THE CLONE STAYS UNAUTHENTICATED, deliberately. A token would raise the rate
+# limit and would also be readable by `setup.py` and every build hook in a
+# third-party repository, which is exactly the exposure this file exists to
+# avoid. Waiting is the cheaper trade: the limit is transient and this step
+# still runs before anything can reach a provider, so a refusal here costs a
+# job and never money.
+HERMES_SRC=/opt/hermes-src
+rm -rf "$HERMES_SRC"
+mkdir -p "$HERMES_SRC"
+git -C "$HERMES_SRC" init --quiet
+git -C "$HERMES_SRC" remote add origin https://github.com/NousResearch/hermes-agent.git
+fetched=''
+for delay in 0 5 15 30 60; do
+  [ "$delay" -eq 0 ] || { echo "hermes_source_fetch_retry_after_${delay}s"; sleep "$delay"; }
+  if git -C "$HERMES_SRC" fetch --quiet --depth 1 origin "$HERMES_REF" 2>&1; then fetched='yes'; break; fi
+done
+[ -n "$fetched" ] || { echo 'hermes_source_fetch_failed: upstream refused the pinned commit' >&2; exit 1; }
+git -C "$HERMES_SRC" checkout --quiet FETCH_HEAD
+
+# THE PIN IS NOW OURS TO PROVE. pip resolved the ref itself before; this script
+# does, so it says out loud which commit it is about to install. A checkout that
+# is not the pinned commit is a different Hermes, and an immutable pin nobody
+# checks is a tag with extra characters.
+got="$(git -C "$HERMES_SRC" rev-parse HEAD)"
+[ "$got" = "$HERMES_REF" ] || {
+  echo "hermes_source_not_pinned: checked out $got, expected $HERMES_REF" >&2; exit 1; }
+/opt/hermes-venv/bin/pip install --quiet "$HERMES_SRC"
 
 
 HERMES_BIN=/opt/hermes-venv/bin/hermes

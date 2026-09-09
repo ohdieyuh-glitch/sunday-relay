@@ -811,7 +811,7 @@ jobs:
           # The reviewer profile holds the xAI credential; it never outlives
           # the job.
           rm -rf /tmp/julius-hermes-home /tmp/julius-hermes-bin 2>/dev/null || true
-          rm -rf /opt/hermes-venv 2>/dev/null || true
+          rm -rf /opt/hermes-venv /opt/hermes-src 2>/dev/null || true
           # The signing key and the ledger lived inside the executor container's
           # own layer, so removing the container removed them. The receipt
           # transport lived on the host, root-owned: it is removed here, after
