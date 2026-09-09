@@ -977,6 +977,19 @@ was considered and not done: a worker would then read the agreement's state as
 mission knowledge rather than receive it as its charge, and the two could
 drift.
 
+#### Section 12A — the Project Brain, read back into a packet on the real database
+
+The write path was already proven on PostgreSQL (the run-row counter, the
+`entry_kind` CHECK, the replay guard). What a worker actually RECEIVES is the
+other half, and it is now proven there too: the production reader maps the
+stored kinds back (`ACCEPTANCE_UPDATE` → `REQUIREMENT`, anything it cannot
+classify → `ARTIFACT`, never dropped), scopes task-bound rows to their task
+(the task the entries were written for compiles all five; another task in the
+run compiles only the run-level constraint), and the packet's content hash
+covers the Brain revision, so the same entries under a stale revision are a
+different document. None of that is provable in memory, where the "store" is
+the Map the compiler reads.
+
 #### Section 12C — the repair trajectory is complete, and the bundle carries it
 
 The trajectory is the record evals read to say what a run did, and until now
@@ -1043,6 +1056,14 @@ gates; the pre-check exists so that a dispatch is never attempted against a
 | `git diff --check` | clean |
 | **real PostgreSQL 16** — migrations from empty, contract lock race, jsonb round trip, superseding, the binding CHECK, `one_per_task`, the corrupted-row read, **the six-round revision/acceptance race** | **6 passed**, 2 todo (Docker-gated) |
 | mutations (17, production code, each restored) | 17 killed |
+
+The same gate (every step above except the mutation row) was re-run in full
+before each later commit on the branch — `49d00201` (Beta Gate binding row),
+`f27c217d` (the coder's charge), `a63ce319` (trajectory) — and was green each
+time: 9,698 and 9,699 tests on the two later whole-repository runs. The Brain
+round-trip commit changed only the env-gated real-PostgreSQL suite and this
+document, and was gated by all four typecheck passes, the real-PostgreSQL
+suite on a fresh database (7 passed) and `git diff --check`.
 
 ---
 
