@@ -201,6 +201,86 @@ export interface HermesReviewDiagnostics {
    * status Hermes prints IS the provider's.
    */
   readonly serviceHttpStatus: number | null;
+
+  /* ------------------------------------------------ process lifecycle ----
+   *
+   * WHAT THE PROCESS DID, because paid run 34311556047 could not say.
+   *
+   * Its three reviewer failures each recorded `timed_out=true`,
+   * `output_bytes_observed=0` and no exit code, and that is ALSO what this
+   * transport records when the provider answers perfectly but slowly, when the
+   * connection is never established, when the credential is refused, and when
+   * the engine is retrying internally without a word. Hermes's `-z` mode
+   * buffers the whole answer and prints it in ONE write at the end, so zero
+   * bytes is the state of every in-flight review right up to the instant it
+   * finishes: measured here, the first stdout byte of a healthy review arrived
+   * at 34.7 s, all sixty of them at once, after the provider had been streaming
+   * for sixteen seconds. `outputBytesObserved` therefore answers nothing about
+   * whether a provider was ever reached, and the bundle had no other field that
+   * did. These are the facts this process can state on its own authority.
+   */
+  /** Whether a child process was actually created. False only on a spawn throw. */
+  readonly processStarted: boolean | null;
+  /** Whether the runtime gave that child a pid. The pid ITSELF is never recorded. */
+  readonly processPidObserved: boolean | null;
+  /** Whether ANY byte ever arrived on stdout. The distinction zero bytes cannot make. */
+  readonly firstOutputObserved: boolean | null;
+  /**
+   * Milliseconds from spawn to that first byte, or null when none arrived.
+   *
+   * This is the field that separates "the reviewer answered at 178 s and we
+   * nearly cut it off" from "nothing was ever going to arrive" — the two the
+   * failed run could not be told apart, and the two that call for opposite
+   * repairs.
+   */
+  readonly firstOutputAfterMs: number | null;
+  /** Milliseconds from spawn to this outcome, from the injected clock. */
+  readonly elapsedMs: number | null;
+  /** The window this attempt was given, so a reader can see the guillotine. */
+  readonly timeoutMs: number | null;
+  /** Whether the child was observed to exit at all, by any route. */
+  readonly exitObserved: boolean | null;
+  /**
+   * Which signals this process sent, in order, as a closed token
+   * (`SIGTERM` or `SIGTERM,SIGKILL`) — never a free string.
+   *
+   * A boolean would say that a signal was sent and not whether the first one
+   * was enough, which is the whole question when a reviewer will not die.
+   */
+  readonly signalSent: string | null;
+  /**
+   * HOW BIG THE QUESTION WAS: the rendered review packet, in bytes.
+   *
+   * Run 34311556047's packet measured 46,256 bytes on the wire against a
+   * 13,881-character plan, and neither number was in the bundle — so "did
+   * payload size contribute?" could only be answered by rebuilding the packet
+   * from a plan the bundle also did not carry. A byte count is a size, never a
+   * quotation: no part of the packet travels with it, which is also why the
+   * field is not named for the prompt. Two separate guards — the diagnostics
+   * leak test and the evidence-dump column test — use `prompt` as a canary for
+   * prompt CONTENT, and a field carrying an integer has no business tripping
+   * either on its name.
+   */
+  readonly packetBytes: number | null;
+  /**
+   * Whether the child was CONFIRMED gone before this outcome was reported.
+   *
+   * False is a leaked reviewer process holding an open provider connection into
+   * the next attempt. The old code sent one SIGTERM, never looked, and deleted
+   * the scratch directory out from under a process that might still be running
+   * in it.
+   */
+  readonly cleanupCompleted: boolean | null;
+  /**
+   * Whether a request actually reached the provider — and on THIS transport it
+   * is never knowable, so it is always null.
+   *
+   * Relay sees a pipe, not a socket: Hermes performs its own HTTP and says
+   * nothing until it is finished. Reporting `false` here would be an inference
+   * dressed as an observation, and unknown is not zero. A transport that can
+   * see the request (the remote harness, which owns the HTTP itself) may set it.
+   */
+  readonly providerRequestStarted: boolean | null;
 }
 
 /** What the reviewer's text structurally was — no part of it is retained. */
@@ -271,6 +351,20 @@ export function reviewDiagnostics(input: {
   readonly serviceHttpStatus?: number | null;
   /** Read for its SHAPE only; no part of it is retained. */
   readonly text?: string | null;
+  /* Process lifecycle. A transport that runs no process leaves every one of
+     these null, which is the honest reading for the remote and provider paths:
+     they did not observe a process, rather than observing that none started. */
+  readonly processStarted?: boolean | null;
+  readonly processPidObserved?: boolean | null;
+  readonly firstOutputObserved?: boolean | null;
+  readonly firstOutputAfterMs?: number | null;
+  readonly elapsedMs?: number | null;
+  readonly timeoutMs?: number | null;
+  readonly exitObserved?: boolean | null;
+  readonly signalSent?: string | null;
+  readonly cleanupCompleted?: boolean | null;
+  readonly providerRequestStarted?: boolean | null;
+  readonly packetBytes?: number | null;
 }): HermesReviewDiagnostics {
   return {
     stage: input.stage ?? null,
@@ -286,6 +380,21 @@ export function reviewDiagnostics(input: {
     serviceHttpStatus: input.serviceHttpStatus ?? null,
     ...reviewStructureFacts(input.text ?? null),
     failureShape: input.shape,
+    /* NULL IS THE DEFAULT, NOT FALSE. A caller that says nothing about the
+       process did not watch one; writing `false` would turn "nobody looked"
+       into "it never started", which is the exact confusion these fields were
+       added to end. */
+    processStarted: input.processStarted ?? null,
+    processPidObserved: input.processPidObserved ?? null,
+    firstOutputObserved: input.firstOutputObserved ?? null,
+    firstOutputAfterMs: input.firstOutputAfterMs ?? null,
+    elapsedMs: input.elapsedMs ?? null,
+    timeoutMs: input.timeoutMs ?? null,
+    exitObserved: input.exitObserved ?? null,
+    signalSent: input.signalSent ?? null,
+    cleanupCompleted: input.cleanupCompleted ?? null,
+    providerRequestStarted: input.providerRequestStarted ?? null,
+    packetBytes: input.packetBytes ?? null,
   };
 }
 
@@ -296,7 +405,28 @@ export interface HermesConfig {
   billingMode?: string;
   timeoutMs: number;
   maxOutputBytes: number;
+  /**
+   * How long a timed-out reviewer is given to die on SIGTERM before SIGKILL.
+   *
+   * Optional so that no existing configuration has to be rewritten to get the
+   * escalation; `DEFAULT_KILL_GRACE_MS` applies when it is absent. It exists as
+   * a field at all so a test can prove the escalation in milliseconds instead
+   * of waiting out the production grace.
+   */
+  killGraceMs?: number;
 }
+
+/**
+ * FIVE SECONDS, and it is a grace, not a deadline extension.
+ *
+ * The review is already over when this starts: the only question is whether the
+ * process that was running it is gone before Relay reports and deletes its
+ * scratch directory. Long enough for a normally-behaved child to finish its own
+ * shutdown, short enough that a stuck one does not delay the outcome. Measured
+ * against the real Hermes v0.18.2, a SIGTERM mid-request is honoured in about
+ * ten milliseconds, so in practice nothing waits.
+ */
+export const DEFAULT_KILL_GRACE_MS = 5_000;
 
 export function loadHermesConfig(env: NodeJS.ProcessEnv = process.env): HermesConfig {
   return {
@@ -373,6 +503,39 @@ export function classifyHermesUpstreamFailure(
     return { kind: 'authentication', status: Number.isFinite(status) ? status : null };
   }
   return { kind: 'upstream', status: Number.isFinite(status) ? status : null };
+}
+
+/**
+ * THE ENGINE'S OWN GIVE-UP LINE, so a reported timeout is still a timeout.
+ *
+ * Relay's window and the reviewer engine's are two different deadlines, and
+ * whichever fires first decides what the record can say. Paid run 34311556047
+ * hit Relay's: three attempts, each cut at exactly 180 s with no exit code, no
+ * status, and not one byte of output — because the engine had no deadline of
+ * its own and was still retrying in silence. Measured against the real Hermes
+ * v0.18.2, an unconfigured provider inherits the SDK default of 600 s with
+ * three retries, so Relay's 180 s can only ever arrive first and every distinct
+ * provider fault reaches the record as the same opaque shape.
+ *
+ * `.github/julius-live-hermes.sh` now gives the engine a deadline INSIDE
+ * Relay's window so it fails first and says why. That answer arrives as prose
+ * on stdout with a zero exit status — and without this, prose with no JSON in
+ * it classifies as `review_json_absent`, a WORKER_EXECUTION_FAILURE that is NOT
+ * retryable. Giving the engine a voice would then have made a transient
+ * provider timeout permanent, which is the opposite of the repair. A timeout is
+ * a timeout whichever clock caught it, and both stay retryable.
+ *
+ * NARROW ON PURPOSE. It matches the engine's own failure preamble, not the word
+ * "timeout" — and every caller applies it only where no verdict-bearing object
+ * exists, so a reviewer quoting this line while stating its own verdict is
+ * still read as a review.
+ */
+export function isEngineReportedTimeout(text: string): boolean {
+  /* Both lines are the engine's own, observed verbatim from Hermes v0.18.2
+     against an endpoint that accepted the connection and never answered:
+     the first is its request deadline, the second its stale-stream abort. */
+  return /(^|\n)\s*API call failed after \d+ retr(?:y|ies)\s*:[^\n]*\btimed? ?out\b/i.test(text)
+    || /(^|\n)\s*Provider has been unresponsive\b[^\n]*\bstale attempts\b/i.test(text);
 }
 
 export interface HermesPreflightResult {
@@ -1018,6 +1181,10 @@ export async function runHermesReview(input: {
   const cfg = input.config;
   const doSpawn = input.spawnImpl ?? spawn;
   const prompt = buildReviewPrompt(input.packet);
+  // MEASURED FROM THE ARGUMENT ACTUALLY PASSED, not from the packet's fields:
+  // what the reviewer reads is the rendered text, and a size derived from
+  // anything else would drift the moment the builder changes.
+  const packetBytes = Buffer.byteLength(prompt, 'utf8');
 
   // Empty scratch cwd — the reviewer has no path into the controlled project.
   const cwd = mkdtempSync(join(tmpdir(), 'relay-hermes-review-'));
@@ -1051,6 +1218,20 @@ export async function runHermesReview(input: {
   if (cfg.provider) args.push('--provider', cfg.provider);
 
   const startedAt = now();
+  /**
+   * ELAPSED TIME COMES FROM THE INJECTED CLOCK, not from `Date.now()`.
+   *
+   * `now` is the seam every other timestamp in this function already uses, so a
+   * test that controls it controls the durations too, and the duration a reader
+   * sees beside `startedAt`/`completedAt` is arithmetic on those same two
+   * values rather than a second, unrelated reading of the wall clock.
+   */
+  const sinceStart = (at: string): number | null => {
+    const from = Date.parse(startedAt);
+    const to = Date.parse(at);
+    return Number.isFinite(from) && Number.isFinite(to) ? to - from : null;
+  };
+  const killGraceMs = cfg.killGraceMs ?? DEFAULT_KILL_GRACE_MS;
 
   return await new Promise<HermesOutcome>((resolve) => {
     let child: ReturnType<typeof spawn>;
@@ -1072,6 +1253,20 @@ export async function runHermesReview(input: {
     let bytes = 0;
     let truncated = false;
     let settled = false;
+    /** Facts about the CHILD, kept beside the facts about its output. */
+    let exitObserved = false;
+    let signalSent: 'SIGTERM' | 'SIGTERM,SIGKILL' | null = null;
+    let firstOutputAfterMs: number | null = null;
+    /**
+     * ONCE THIS IS TRUE THE OUTCOME IS A TIMEOUT AND NOTHING ELSE.
+     *
+     * Termination is no longer instantaneous — the process is given a moment to
+     * die and then killed — and during that moment the child's `close` fires. A
+     * `close` handler that went on to parse whatever the reviewer flushed on its
+     * way out would settle a VERDICT built from the death rattle of a process
+     * Relay itself killed. That answer was never asked for and must never count.
+     */
+    let timedOut = false;
 
     /**
      * The corroborating facts this process actually observed.
@@ -1088,6 +1283,10 @@ export async function runHermesReview(input: {
       timedOut: boolean;
       /** Only ever `classifyHermesUpstreamFailure`'s own reading. */
       providerHttpStatus?: number | null;
+      /** Whether the child was confirmed gone. Only the timeout path can say. */
+      cleanupCompleted?: boolean | null;
+      /** The instant this outcome was reached, for the elapsed arithmetic. */
+      completedAt: string;
     }): HermesReviewDiagnostics => ({
       stage: null,
       transport: 'local',
@@ -1105,6 +1304,21 @@ export async function runHermesReview(input: {
       serviceHttpStatus: null,
       ...reviewStructureFacts(out),
       failureShape: input.shape,
+      /* WHAT THE PROCESS DID. Every one of these is something this function
+         watched happen; none is inferred from another. */
+      processStarted: true,
+      processPidObserved: typeof child.pid === 'number',
+      firstOutputObserved: bytes > 0,
+      firstOutputAfterMs,
+      elapsedMs: sinceStart(input.completedAt),
+      timeoutMs: cfg.timeoutMs,
+      exitObserved,
+      signalSent,
+      cleanupCompleted: input.cleanupCompleted ?? null,
+      /* NEVER KNOWABLE HERE. Relay reads a pipe; Hermes owns the socket and
+         says nothing until it is done. `false` would be a guess. */
+      providerRequestStarted: null,
+      packetBytes,
     });
     const finish = (o: HermesOutcome) => {
       if (settled) return;
@@ -1127,18 +1341,69 @@ export async function runHermesReview(input: {
       discardScratch();
       resolve(o);
     };
-    const timer = setTimeout(() => {
+    /**
+     * A BOUNDED WAIT FOR THE CHILD TO ACTUALLY BE GONE.
+     *
+     * Resolves true the moment `close` fires, false when the window passes with
+     * the process still up. It listens rather than polls, and it removes its own
+     * listener on the losing path so a reviewer that dies later cannot resolve a
+     * promise nobody is holding.
+     */
+    const waitForExit = (ms: number): Promise<boolean> => new Promise((done) => {
+      if (exitObserved) { done(true); return; }
+      const onClose = (): void => { clearTimeout(giveUp); done(true); };
+      const giveUp = setTimeout(() => { child.off('close', onClose); done(false); }, ms);
+      child.once('close', onClose);
+    });
+
+    /**
+     * THE TIMEOUT NOW ENDS THE PROCESS AND SAYS WHETHER IT DID.
+     *
+     * The old handler sent one SIGTERM, reported immediately, and deleted the
+     * scratch directory — so a reviewer that ignored the signal kept running,
+     * inside a directory Relay had just removed, holding a provider connection
+     * into the next attempt, and nothing recorded that any of this had happened.
+     * Measured against the real Hermes v0.18.2 that never occurred (SIGTERM is
+     * honoured in about ten milliseconds mid-request), which is exactly why it
+     * was invisible: the code was wrong and the binary was forgiving.
+     *
+     * SIGTERM, then a bounded grace, then SIGKILL, then a second grace, and the
+     * outcome carries `cleanupCompleted` either way. The review is over before
+     * any of this begins, so none of it extends the reviewer's window; it only
+     * decides how honest the record is.
+     */
+    const onTimeout = async (): Promise<void> => {
+      if (settled) return;
+      timedOut = true;
+      signalSent = 'SIGTERM';
       try { child.kill('SIGTERM'); } catch { /* already gone */ }
+      let gone = await waitForExit(killGraceMs);
+      if (!gone) {
+        signalSent = 'SIGTERM,SIGKILL';
+        try { child.kill('SIGKILL'); } catch { /* already gone */ }
+        gone = await waitForExit(killGraceMs);
+      }
+      const completedAt = now();
       finish({
         kind: 'review_incomplete', safeMessage: 'The Hermes reviewer timed out.', shape: 'review_timeout',
-        // The process was killed, so it has no exit code to report. `null`
-        // here is the difference between "it did not exit" and "it exited 0".
-        diagnostics: localDiagnostics({ shape: 'review_timeout', exitCode: null, timedOut: true }),
-        startedAt, completedAt: now(),
+        // THE EXIT CODE OF A PROCESS RELAY KILLED IS NOT A RESULT. A child that
+        // died on our signal reports no code of its own, and `null` is the
+        // difference between "it did not exit" and "it exited 0".
+        diagnostics: localDiagnostics({
+          shape: 'review_timeout', exitCode: null, timedOut: true,
+          cleanupCompleted: gone, completedAt,
+        }),
+        startedAt, completedAt,
       });
-    }, cfg.timeoutMs);
+    };
+    const timer = setTimeout(() => { void onTimeout(); }, cfg.timeoutMs);
 
     child.stdout?.on('data', (c: Buffer) => {
+      // WHEN THE FIRST BYTE ARRIVED, recorded once. Hermes prints a one-shot
+      // review in a single write at the very end, so this is the only field
+      // that can tell a review that answered late from one that never answered
+      // at all — and zero bytes at the ceiling is what both look like.
+      if (firstOutputAfterMs === null) firstOutputAfterMs = sinceStart(now());
       bytes += c.length;
       // PAST THE CEILING THE TEXT IS NO LONGER THE REVIEW. Dropping the
       // overflowing chunk and parsing what arrived would report a truncated
@@ -1147,8 +1412,39 @@ export async function runHermesReview(input: {
       if (bytes <= cfg.maxOutputBytes) out += c.toString('utf8'); else truncated = true;
     });
     child.stderr?.on('data', () => { /* never surfaced verbatim */ });
-    child.on('error', () => finish({ kind: 'launch_failed', safeMessage: 'The Hermes reviewer could not be started.' }));
+    child.on('error', () => {
+      // NOT AFTER A TIMEOUT. `error` can arrive while Relay is killing the
+      // child — a signal the runtime could not deliver — and reporting
+      // `launch_failed` for a process that ran for the whole window would name
+      // the wrong repair entirely. The timeout owns the outcome from the moment
+      // it fires; `finish` is a no-op once settled, and this covers the gap
+      // before it settles.
+      if (!timedOut) finish({ kind: 'launch_failed', safeMessage: 'The Hermes reviewer could not be started.' });
+    });
     child.on('close', (code) => {
+      exitObserved = true;
+      /**
+       * THE TIMEOUT OWNS THIS OUTCOME. Whatever the reviewer flushed while
+       * Relay was killing it is not an answer to the question Relay asked.
+       *
+       * THIS ONE LINE CARRIES THREE INVARIANTS, and they are not three
+       * independent mechanisms — they are three readings of it:
+       *
+       *   1. a late valid review, arriving after the window closed, is
+       *      REJECTED. Accepting it would let a run be approved by a reviewer
+       *      Relay had already given up on and killed.
+       *   2. a timeout yields NO ACCEPTED RESULT. There is no `reviewed`
+       *      outcome to hand the coordinator, so nothing can be accepted.
+       *   3. a timeout cannot be CHARGED TWICE. Julius charges from the
+       *      outcome it is handed; an outcome with no result and no served
+       *      model gives a second charge nothing to attach to.
+       *
+       * Delete this line and all three go at once. That is why seven tests
+       * fall over rather than one, and why the count is recorded here: a
+       * future reader who removes it expecting to break a single case has
+       * misread the dependency, not the tests.
+       */
+      if (timedOut) return;
       const completedAt = now();
       /**
        * A TRUNCATED ANSWER IS NEVER A VERDICT, even when the part that arrived
@@ -1199,23 +1495,42 @@ export async function runHermesReview(input: {
          * one the provider refused, then a process that died, then our own
          * ceiling, and only then the shape of what the model actually wrote.
          */
+        const engineTimedOut = upstream === null
+          && scanReviewJson(out).withVerdict.length === 0
+          && isEngineReportedTimeout(out);
         const shape: HermesReviewShape =
           upstream?.kind === 'authentication' ? 'review_authentication_failed'
             : upstream !== null ? 'review_provider_http_error'
-              : code !== 0 ? 'review_process_exit'
-                : truncated ? 'review_output_too_large'
-                  : classifyUnreadableReview(out);
+              // THE ENGINE SAID IT TIMED OUT, so this is a timeout that exited
+              // rather than one Relay had to kill. Same shape, same retryable
+              // verdict; the lifecycle facts below say which clock fired.
+              : engineTimedOut ? 'review_timeout'
+                : code !== 0 ? 'review_process_exit'
+                  : truncated ? 'review_output_too_large'
+                    : classifyUnreadableReview(out);
         finish({
           kind: 'review_incomplete',
           shape,
-          diagnostics: localDiagnostics({ shape, exitCode: code ?? null, timedOut: false, providerHttpStatus: upstream?.status ?? null }),
+          diagnostics: localDiagnostics({
+            // A TIMEOUT IS A TIMEOUT WHICHEVER CLOCK CAUGHT IT. `signalSent`
+            // stays null and an exit code is present when the engine reported
+            // it, so the record still separates the two.
+            shape, exitCode: code ?? null, timedOut: engineTimedOut,
+            providerHttpStatus: upstream?.status ?? null,
+            // IT EXITED BY ITSELF, so there is nothing left to clean up and no
+            // signal was ever sent. That is a different fact from a timeout
+            // whose child was confirmed dead, and the record shows which.
+            cleanupCompleted: true, completedAt,
+          }),
           safeMessage:
             upstream?.kind === 'authentication'
               ? 'The Hermes reviewer could not authenticate with its configured provider.'
               : upstream !== null
                 ? `The Hermes reviewer's provider returned HTTP ${String(upstream.status ?? 0)}.`
-                : code !== 0
-                  ? `The Hermes reviewer exited without a valid review (code ${code ?? 'unknown'}).`
+                : engineTimedOut
+                  ? 'The Hermes reviewer reported that its own provider request timed out.'
+                  : code !== 0
+                    ? `The Hermes reviewer exited without a valid review (code ${code ?? 'unknown'}).`
                   : truncated
                     ? `The Hermes reviewer produced more than the ${String(cfg.maxOutputBytes)}-byte ceiling allows.`
                     // SHAPE, NOT TEXT. `describeUnreadableReview` reports whether

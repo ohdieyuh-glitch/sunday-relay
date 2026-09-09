@@ -119,6 +119,33 @@ jobs:
       RELAY_HOSTED_CODING_MODEL: claude-fable-5
       RELAY_HERMES_PROVIDER: xai
       RELAY_HERMES_MODEL: grok-build-0.1
+      # TWO DEADLINES, IN THIS ORDER, and the order is the point.
+      #
+      # Paid run 34311556047's reviewer failed three times on `review:plan` at
+      # exactly 180 s each with zero bytes and no exit code, because Relay's
+      # window was the ONLY deadline: the engine had none configured and
+      # inherited its SDK default of 600 s with three retries, so Relay's cut
+      # always came first and every distinct provider fault reached the record
+      # as one indistinguishable shape. The reviewer engine now gets a deadline
+      # of its own, well inside Relay's, so it fails first and says why; the
+      # bootstrap refuses if these two are ever put back in the wrong order.
+      #
+      # 90 s is a whole provider request for one review, which the control run
+      # 34306850331 finished in far less — and if a review really needs more,
+      # the engine now says so and the failure is retryable, with three
+      # attempts. 400 s is Relay's backstop, and it is bounded by the JOB, not
+      # by taste: `timeout-minutes: 60` above, and a run may spend at most six
+      # reviewer attempts (three on `review:plan`, three on `review:build`), so
+      # 6 x 400 s is forty minutes and leaves the architect, the coder and the
+      # evidence dump their room. Measured against the real engine, its give-up
+      # at a 90 s deadline lands near 250 s, well before Relay's cut.
+      #
+      # Waiting longer buys no tokens — the provider bills for what it
+      # generates whether or not Relay is still reading — and the attempt
+      # ceiling is untouched, so this changes how long a failure takes to
+      # become legible, not what a run may spend.
+      RELAY_HERMES_TIMEOUT_MS: '400000'
+      HERMES_REQUEST_TIMEOUT_SECONDS: '90'
 
     steps:
       # Pinned to immutable commit SHAs. A mutable tag can be repointed by the
@@ -627,6 +654,11 @@ jobs:
         run: |
           set -uo pipefail
           mkdir -p julius-live-evidence
+          # WHICH REVIEWER ACTUALLY RAN, and under which two deadlines. Written
+          # by the Hermes bootstrap, which prints the same six lines to the
+          # public step log; run 34311556047 had none of them in its bundle.
+          cp /tmp/julius-hermes-bootstrap.evidence.txt \
+            julius-live-evidence/hermes-bootstrap.evidence.txt 2>/dev/null || true
           # The executor answers every refused request with a safe code and,
           # because dry run #2 left nothing to read, now writes one
           # executor-local diagnostic line per refusal to its own stderr:

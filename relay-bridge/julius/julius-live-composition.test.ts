@@ -70,6 +70,12 @@ const LIVE_ENV: Record<string, string> = {
 /** A secret-shaped canary planted in provider output; it must never persist. */
 const SECRET_CANARY = 'sk-canary-must-never-appear';
 
+/** What a reviewer that DID answer wrote, read by the real validator. */
+const APPROVING_REVIEW = JSON.stringify({
+  verdict: 'approved', summary: 'The plan satisfies every acceptance criterion.',
+  findings: [], requirementsChecked: [{ requirement: 'AC-1', status: 'passed', evidence: 'read the plan' }],
+});
+
 const VALID_PLAN = {
   objectiveSummary: 'Implement the mission fixture change.',
   assumptions: [], unresolvedQuestions: [], requirements: [],
@@ -133,7 +139,12 @@ function spawnEmitting(stdout: string, code = 0) {
     const child = new EventEmitter() as EventEmitter & { stdout: Readable; stderr: Readable; kill: () => boolean };
     child.stdout = new Readable({ read() { /* pushed below */ } });
     child.stderr = new Readable({ read() { /* never surfaced */ } });
-    child.kill = () => true;
+    /* A SIGNALLED PROCESS DIES. The runner now waits for the child it killed
+       to be gone before it reports, so a `kill` that returns true and leaves
+       the process running models a reviewer this repository has never met —
+       `hermes-reviewer-lifecycle.test.ts` owns the cases where one does — and
+       makes every timeout case here wait out the escalation grace instead. */
+    child.kill = () => { child.emit('close', null); return true; };
     setTimeout(() => {
       if (stdout !== '') child.stdout.push(Buffer.from(stdout, 'utf8'));
       child.stdout.push(null);
@@ -155,6 +166,40 @@ function spawnEmitting(stdout: string, code = 0) {
  * returns null. Nothing is hard-coded to succeed: a text this rig cannot parse
  * fails the dispatch exactly as a real one would.
  */
+/**
+ * A REVIEWER WHOSE PROCESS HANGS, for the first `hangFirst` dispatches.
+ *
+ * The shape paid run 34311556047 actually failed in: the child launches, never
+ * writes a byte, never exits, and Relay's window closes on it. Driving the real
+ * runner over a never-closing child is what makes this the same code path the
+ * paid run took, rather than a hand-built `review_timeout` outcome.
+ */
+function hangingReviewer(
+  log: FakeLog, packets: ReviewPacket[], hangFirst: number, answer: string,
+) {
+  let call = 0;
+  const spawnHanging = (() => {
+    const child = new EventEmitter() as EventEmitter & { stdout: Readable; stderr: Readable; kill: () => boolean };
+    child.stdout = new Readable({ read() { /* nothing ever arrives */ } });
+    child.stderr = new Readable({ read() { /* nothing ever arrives */ } });
+    child.kill = () => { child.emit('close', null); return true; };
+    return child as never;
+  }) as never;
+  return async (input: { packet: ReviewPacket }): Promise<HermesOutcome> => {
+    log.order.push('reviewer');
+    packets.push(input.packet);
+    const hangs = call < hangFirst;
+    call += 1;
+    return runHermesReview({
+      packet: input.packet,
+      // Milliseconds instead of the production three minutes: what is being
+      // proven is the ORDER of events, not the duration of one.
+      config: { ...loadHermesConfig(LIVE_ENV as never), timeoutMs: 30, killGraceMs: 10 },
+      spawnImpl: hangs ? spawnHanging : spawnEmitting(answer),
+    });
+  };
+}
+
 function textReviewer(log: FakeLog, packets: ReviewPacket[], texts: readonly string[]) {
   let call = 0;
   return async (input: { packet: ReviewPacket }): Promise<HermesOutcome> => {
@@ -231,6 +276,8 @@ function liveResolution(overrides: {
   architect?: () => Promise<GptRunOutcome>;
   /** Raw reviewer output, read by the real validator instead of a built outcome. */
   reviewerTexts?: readonly string[];
+  /** How many reviewer dispatches hang until Relay's window closes on them. */
+  reviewerHangsFirst?: number;
 }) {
   const log: FakeLog = { order: [] };
   const prompts: string[] = [];
@@ -246,9 +293,11 @@ function liveResolution(overrides: {
     runners: {
       architect: (overrides.architect ?? fakeArchitect(log)) as never,
       coder: fakeCoder(log, prompts) as never,
-      reviewer: (overrides.reviewerTexts !== undefined
-        ? textReviewer(log, packets, overrides.reviewerTexts)
-        : fakeReviewer(log, packets, overrides.verdicts ?? ['approved'])) as never,
+      reviewer: (overrides.reviewerHangsFirst !== undefined
+        ? hangingReviewer(log, packets, overrides.reviewerHangsFirst, APPROVING_REVIEW)
+        : overrides.reviewerTexts !== undefined
+          ? textReviewer(log, packets, overrides.reviewerTexts)
+          : fakeReviewer(log, packets, overrides.verdicts ?? ['approved'])) as never,
       queryLoader: async () => fakeQuery,
     },
   });
@@ -458,12 +507,13 @@ async function driveLiveMission(
   budget?: Parameters<typeof assembleLiveJuliusRuntime>[0]['budget'],
   architect?: () => Promise<GptRunOutcome>,
   reviewerTexts?: readonly string[],
+  reviewerHangsFirst?: number,
 ) {
   const memory = createJuliusMemoryStore();
   // Not narrowed to JuliusRuntimeStore: the drive loop runs the recovery sweep,
   // and the memory store is the recovery driver as well as the store.
   const handoffs = createContextAndClaimHandoffs(memory as unknown as JuliusRuntimeStore & JuliusRecoveryDriver);
-  const fakes = liveResolution({ verdicts, contexts: handoffs.contexts, architect, reviewerTexts });
+  const fakes = liveResolution({ verdicts, contexts: handoffs.contexts, architect, reviewerTexts, reviewerHangsFirst });
   expect(fakes.resolution.ok).toBe(true);
   seedMissionRun(memory);
   const runtime = assembleLiveJuliusRuntime({
@@ -574,6 +624,139 @@ describe('a full mission drive with Julius in control', () => {
       'each one an acceptance the reviewer actually issued').toBe(true);
     const reviewTasks = ['plan-1:review', 'build-1:review'].map((id) => memory.taskRow(id));
     for (const row of reviewTasks) expect(row?.state, 'both reviews succeeded').toBe('SUCCEEDED');
+  });
+
+  /**
+   * WHAT PAID RUN 34311556047 DID, DRIVEN HERE FOR NOTHING.
+   *
+   * Its Independent Reviewer hung on `review:plan` three times — 180 s each,
+   * zero bytes, no exit — the run FAILED after four ticks and the Coding Agent
+   * stayed BLOCKED. The safety behaviour was right and is what these cases
+   * pin: a reviewer that cannot answer must never become a build that runs.
+   * The reviewer is the REAL runner over a child that never writes and never
+   * exits, so this is the same code path the paid run took.
+   */
+  it('a reviewer that hangs on every attempt exhausts its ceiling and leaves the build BLOCKED', async () => {
+    const { memory, outcome, fakes } = await driveLiveMission(
+      ['approved'], undefined, undefined, undefined, Number.MAX_SAFE_INTEGER,
+    );
+
+    expect(outcome.state, 'a reviewer that never answered is not a completion').toBe('FAILED');
+    expect(memory.taskRow('plan-1:review')?.state).toBe('FAILED');
+    // THE WHOLE POINT. Never "the reviewer was unavailable, so the build ran".
+    expect(memory.taskRow('build-1')?.state, 'the build was never released').toBe('BLOCKED');
+    expect(memory.taskRow('build-1:review'), 'and so there is no build review').toBeNull();
+
+    /**
+     * THREE ATTEMPTS, AND ONLY THREE — the exact ledger the paid bundle holds.
+     *
+     * `failures.tsv` from run 34311556047 shows THREE `julius.retry.scheduled`
+     * rows and then one `julius.task.failed`: the coordinator classifies each
+     * retryable error as it happens, and the pipeline's own autonomy rule is
+     * what refuses the fourth ask. Retryable is permission to re-ask, never a
+     * licence to spend without one.
+     */
+    const scheduled = memory.events().filter((event) => event.type === 'retry.scheduled');
+    expect(scheduled).toHaveLength(3);
+    expect(fakes.log.order.filter((step) => step === 'reviewer')).toHaveLength(3);
+    for (const event of scheduled) {
+      const facts = event.facts as Record<string, unknown>;
+      // TIMEOUT STAYS RETRYABLE. It describes an answer that did not arrive,
+      // not one that arrived wrong, and nothing paid for is thrown away.
+      expect(facts.code).toBe('TIMEOUT');
+      expect(facts.errorRetryable).toBe(true);
+      expect(facts.failureClass).toBe('review_timeout');
+    }
+
+    /**
+     * AND EACH ROW SAYS WHICH ASK IT WAS — 1, 2, then 3.
+     *
+     * Run 34311556047's three reviewer rows were distinguishable only by
+     * `occurred_at`: a reader could count them and infer an order, but "this
+     * was the third and last ask" was nowhere on the record, and an inference
+     * is not evidence. This is the OUTER number — how many times Julius
+     * dispatched the task — which is not `planAttempts`/`reviewAttempts`, the
+     * provider calls made INSIDE one dispatch. Both are on the row now, and
+     * they answer different questions.
+     */
+    expect(scheduled.map((event) => (event.facts as Record<string, unknown>).attempt)).toEqual([1, 2, 3]);
+    // It rides every event, not only the failures: a second ask that happened
+    // must be visible from the dispatch row too, not only from its outcome.
+    const dispatched = memory.events().filter((event) => event.type === 'worker.dispatched'
+      && event.taskId === 'plan-1:review');
+    expect(dispatched.map((event) => (event.facts as Record<string, unknown>).attempt)).toEqual([1, 2, 3]);
+
+    const failed = memory.events().filter((event) => event.type === 'task.failed')
+      .find((event) => event.taskId === 'plan-1:review')!;
+    const facts = failed.facts as Record<string, unknown>;
+    expect(facts.reasonCode, 'and the run says WHY it stopped asking').toBe('RETRY_ATTEMPTS_EXHAUSTED');
+    expect(facts.code).toBe('TIMEOUT');
+
+    /**
+     * AND THE PROCESS FACTS SURVIVE TO THE DURABLE ROW.
+     *
+     * This is the half the paid bundle was missing. Three rows that read
+     * `timed_out=true, bytes=0, no exit code` cannot say whether the provider
+     * was slow, unreachable, or never asked — Hermes prints a one-shot review
+     * in a single write at the end, so zero bytes is what an in-flight review
+     * and a dead one both look like. These columns are the difference.
+     */
+    // ON THE DISPATCH ROWS, which is where the bundle reads them: the terminal
+    // `task.failed` is the pipeline's own autonomy decision and carries the
+    // reason code, not the worker's telemetry. `worker-diagnostics.tsv` selects
+    // exactly the rows that have a transport, which is these three.
+    const dispatch = scheduled.map((event) => event.facts as Record<string, unknown>);
+    for (const attempt of dispatch) {
+      expect(attempt.diag_processStarted).toBe(true);
+      expect(attempt.diag_processPidObserved).toBe(false);
+      expect(attempt.diag_firstOutputObserved).toBe(false);
+      expect(attempt.diag_firstOutputAfterMs).toBeNull();
+      expect(attempt.diag_exitObserved).toBe(true);
+      expect(attempt.diag_signalSent).toBe('SIGTERM');
+      expect(attempt.diag_cleanupCompleted, 'no reviewer was left running').toBe(true);
+      expect(attempt.diag_timeoutMs).toBe(30);
+      expect(attempt.diag_elapsedMs).not.toBeNull();
+      // UNKNOWN IS NULL. Relay reads a pipe, not a socket.
+      expect(attempt.diag_providerRequestStarted).toBeNull();
+      // And the fields the paid bundle DID have still read the same.
+      expect(attempt.diag_timedOut).toBe(true);
+      expect(attempt.diag_outputBytesObserved).toBe(0);
+      expect(attempt.diag_processExitCode).toBeNull();
+      expect(attempt.diag_servedModel).toBeNull();
+    }
+  });
+
+  it('a reviewer that hangs once and then answers still completes the run', async () => {
+    // Paid run 34306850331, the control: its first plan review timed out too,
+    // its second answered, and the mission COMPLETED. A retry is only worth
+    // having if it can actually recover, and this is that half.
+    const { memory, outcome, fakes } = await driveLiveMission(
+      ['approved'], undefined, undefined, undefined, 1,
+    );
+
+    expect(outcome.state).toBe('COMPLETED');
+    expect(memory.taskRow('plan-1:review')?.state).toBe('SUCCEEDED');
+    expect(memory.taskRow('build-1')?.state).toBe('SUCCEEDED');
+    expect(memory.events().filter((event) => event.type === 'retry.scheduled')).toHaveLength(1);
+    // Four reviewer dispatches: the hung plan review, its retry, and the build
+    // review — the retry is a fresh dispatch, never a resumed one.
+    expect(fakes.log.order.filter((step) => step === 'reviewer')).toHaveLength(3);
+  });
+
+  it('the retried review is asked the same question, never one that mentions the timeout', async () => {
+    // A timeout is Relay's fact about its own window, not feedback on a plan.
+    // Feeding it back would turn an infrastructure failure into a correction
+    // the reviewer is asked to act on.
+    const { fakes } = await driveLiveMission(['approved'], undefined, undefined, undefined, 1);
+    const planReviews = fakes.packets.filter((packet) => packet.unifiedDiff.length === 0);
+    expect(planReviews.length).toBeGreaterThanOrEqual(2);
+    expect(planReviews[1]).toEqual(planReviews[0]);
+    for (const packet of fakes.packets) {
+      const rendered = JSON.stringify(packet);
+      for (const word of ['timed out', 'timeout', 'SIGTERM', 'review_timeout']) {
+        expect(rendered.toLowerCase()).not.toContain(word.toLowerCase());
+      }
+    }
   });
 
   it('and the same rig still fails when the reviewer answers unreadably', async () => {
@@ -1549,7 +1732,12 @@ describe('a paid reviewer failure can be diagnosed from the record alone', () =>
     const child = new EventEmitter() as EventEmitter & { stdout: Readable; stderr: Readable; kill: () => boolean };
     child.stdout = new Readable({ read() { /* pushed below */ } });
     child.stderr = new Readable({ read() { /* never surfaced */ } });
-    child.kill = () => true;
+    /* A SIGNALLED PROCESS DIES. The runner now waits for the child it killed
+       to be gone before it reports, so a `kill` that returns true and leaves
+       the process running models a reviewer this repository has never met —
+       `hermes-reviewer-lifecycle.test.ts` owns the cases where one does — and
+       makes every timeout case here wait out the escalation grace instead. */
+    child.kill = () => { child.emit('close', null); return true; };
     setTimeout(() => {
       if (input.stdout !== undefined && input.stdout !== '') child.stdout.push(Buffer.from(input.stdout, 'utf8'));
       child.stdout.push(null);
