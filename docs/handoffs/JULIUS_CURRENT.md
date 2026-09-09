@@ -1222,6 +1222,49 @@ Also confirmed the same session: all 23 migrations apply from empty to a fresh
 database (59 tables in `relay_wonderland`), and all 14 dump queries execute
 against it.
 
+### 00l. WHAT A SUCCESSFUL PAID RUN CAN ACTUALLY SCORE — the Beta Gate's ceiling
+
+**"15/15" is not reachable by one clean mission, by construction.** This is a
+property of the instrument, not a defect in it, and it needs saying before a
+paid run comes back reading 11/15 and somebody calls that a failure.
+
+Four rows cannot be earned by a flawless single run:
+
+| Row | What it requires | Why a clean run cannot earn it |
+|---|---|---|
+| `WONDER WEB OUTPUT` | the module to exist | **NOT BUILT** — nobody has written it |
+| `ACCOUNT / ONBOARDING` | `sessions.tsv` naming a real player | both bounded missions run under an operator token, so it reads as the operator |
+| `FAILURE RECOVERY` | a `julius.retry.scheduled` whose task later SUCCEEDED | nothing to retry if nothing fails |
+| `RESTART / RECOVERY` | a non-empty `recovery_action` | nothing to reclaim if nothing crashes |
+
+And a fifth, `REPAIR LOOP`, needs a **rejected** review — a mission whose
+reviewer approves first time earns no repair round.
+
+So the arithmetic for a single paid mission, today:
+
+* flawless (no rejection, no retry, no crash) → **10/15**
+* with a rejected review and a repair round → **11/15**
+* plus one transient provider failure that retried and succeeded → **12/15**
+* plus a crash whose lease was reclaimed → **13/15**, which is the **ceiling**
+  until Wonder Web is built and a real account starts a mission
+
+Verified rather than reasoned: run 34186711214's `failures.tsv` carries **zero**
+`julius.retry.scheduled` rows and **zero** non-empty `recovery_action` values,
+so both rows read FAIL there — correctly, because neither path ran. And the
+provider-free chain proof in §00k, which DOES script a rejection and a repair,
+earns ten rows without receipts.
+
+**The design question, for the founder, not for me to answer by editing the
+gate.** `RESTART / RECOVERY` asks a paid mission to crash in order to prove
+recovery works. The recovery path is already proven by
+`relay:persistence:recovery-drill` and by the chaos suite, on demand and for
+free. Should that row accept a drill artifact as proof, or should it keep
+demanding a crash inside the measured mission? Making it accept the drill would
+raise the achievable score to 14/15; it would also mean the row no longer says
+"this mission recovered". **Nothing was changed either way** — weakening a gate
+to improve a number is the one thing the gate exists to prevent, and which of
+those two the row should mean is a product decision.
+
 ### 00i. The next paid rerun — the record it must leave (template, to be filled by the run)
 
 > Not a run. This is the shape the record takes the moment the watch dispatches
