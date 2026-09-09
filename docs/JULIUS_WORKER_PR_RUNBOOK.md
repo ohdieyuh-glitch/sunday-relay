@@ -212,10 +212,24 @@ login bound to that exact head).
 The cloud session's hourly watch (`trig_01PvdqADjSgk5aUH9dvugJEZ`, :35 UTC)
 notices the PR (reports `FOUNDER ACTION REQUIRED — PR #n` while it is open) and
 the landing; on landing it verifies containment, provenance, monotonicity and
-review currency through the GitHub API, runs the zero-spend preflight of
-`julius-first-live-mission.yml`, and, if green, dispatches the paid rerun of
-`julius-live-mission-2` under the founder's standing authorization. The record
-of that run goes to `docs/handoffs/JULIUS_CURRENT.md`.
+review currency through the GitHub API and reports what it found. The record
+goes to `docs/handoffs/JULIUS_CURRENT.md`.
+
+**IT DOES NOT SPEND, AND THIS PARAGRAPH USED TO SAY IT DID.** Until 2026-09-09
+it read "runs the zero-spend preflight … and, if green, dispatches the paid
+rerun … under the founder's standing authorization", and the standing
+authorization was real. It was withdrawn after paid run 34311556047, whose
+lesson was not that the run failed but that it was dispatched to answer no
+question — a new `main` sha is not a causal question, and spending on one buys
+nothing a reader can use. The watcher may inspect `main`, inspect worker PRs,
+verify provenance, verify a review's `commit_id`, verify tree equality, verify
+monotonicity and report founder actions. It may not dispatch a preflight, may
+not dispatch a paid mission, and may not infer paid authorization from a new
+`main` sha.
+
+Every paid mission now needs three things before it is dispatched: a specific
+causal or evidentiary question, a justified reason that answering it needs
+provider spend, and explicit founder authorization for that run.
 
 ## Never
 

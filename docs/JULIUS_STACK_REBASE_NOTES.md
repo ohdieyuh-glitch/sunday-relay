@@ -76,6 +76,28 @@ same three conflicts, resolved the same three ways. Result: 73 files,
 | `julius:harness:export` | manifest unchanged |
 | whole-repository `npx vitest run` | **505 files passed**, 1 skipped (env-gated real-infra), **9,716 tests passed**, 26 todo, exit 0 |
 
+**Performed for real, 2026-09-09, onto the landed `main`.** Not a dry run this
+time: the stack was replayed onto `origin/main` `755d9d2` — the squash of PR
+#237 — rather than onto the repair branch, which is the shape that actually
+lands. Sixty commits over the old `main` replayed as **58**, the same two
+superseded drafts dropped, stopping at the same three conflicts and resolved
+the same three ways. The result carries both sides (`PLAN_ATTEMPT_LIMIT`,
+`REVIEW_ATTEMPT_LIMIT`, `reasonClaim`, `planCorrection` from the repair;
+`executedBindingFor`, `coderContractBrief`, `contract.challenged`,
+`trajectory.tsv`, `CAPABILITY_PROOF_COLUMNS`, `runRecoveryDrill`,
+`contractProposalFromPlan` from the stack) and passed all four typechecks, the
+whole suite (**506 files, 9,759 tests, 0 failed**), every build, the repository
+boundary, the parity gate, strict surface parity, the YC demo check, the CLI,
+workspace, Claude and persistence contract verifiers, the persistence recovery
+drill, and `julius:harness:check` with the manifest **unchanged**.
+
+Six env-gated real-PostgreSQL suites passed too — 160 tests — **each in its own
+database**, which is how `julius-real-infra.yml` runs them. Run against ONE
+shared database they interfere: `julius-live-chain.e2e.test.ts` reads Beta Gate
+verdicts out of rows another suite left behind and reports FAIL. That is a
+property of the suites, not of this rebase, and it is recorded here so the next
+reader does not diagnose it as one.
+
 On the 2026-09-09 replay the resolved tree also passed all three typechecks and
 the ten seam files that hold both sides together — the contract integrity e2e,
 the whole prompt-architect suite, the policy router, the live composition and

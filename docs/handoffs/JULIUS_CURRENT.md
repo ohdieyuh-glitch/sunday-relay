@@ -2536,3 +2536,56 @@ budgeting and verifying, and today it does.
 
 The Independent Reviewer is already separate from any swarm: it is a distinct
 role with an enforced distinct `providerId`.
+
+---
+
+## §00q — The reviewer failure of 34311556047, and the landing candidate that follows it
+
+**Paid run 34311556047 did not reopen Task 1 or Task 2.** It is the latest live
+reliability evidence and nothing more: architect SUCCEEDED with a validated
+13,881-character plan, `review:plan` FAILED with three TIMEOUTs and a terminal
+`RETRY_ATTEMPTS_EXHAUSTED`, the Coding Agent stayed BLOCKED, the run FAILED
+after four ticks. **The safety behaviour was correct** and stays correct: a
+reviewer that cannot answer never becomes a build that runs.
+
+The diagnosis is `docs/JULIUS_PAID_RUN_34311556047_REVIEWER.md`, on
+`relay/julius-reviewer-timeout-diagnostics` off `main` `755d9d2`. In one
+sentence: **Relay's own 180 s timeout destroyed the diagnosis** — Hermes's `-z`
+mode buffers the whole review and prints it in one write at the end, so zero
+bytes is the state of every in-flight review as much as of a dead one, and the
+engine had no deadline of its own (600 s SDK default, three retries) so Relay's
+cut always came first, on every distinct provider fault, producing one
+indistinguishable shape. Seven probes against the real Hermes v0.18.2 at the
+pinned commit, no provider credential anywhere.
+
+### Two branches off `755d9d2`, deliberately not stacked
+
+| Branch | What it is | Gate |
+|---|---|---|
+| `relay/julius-reviewer-timeout-diagnostics` | the reviewer repair: ten process-lifecycle facts, a timeout that ends the process and proves it, an engine deadline inside Relay's window, the engine's own timeout still retryable | 9,492 tests, full gate green |
+| `relay/julius-contract-stack-worker` | the contract stack, 58 commits, re-authored as `julius-worker[bot]` | 9,759 tests, full gate green, six real-PostgreSQL suites |
+
+They overlap in `hermes-reviewer.ts`, `julius-router.ts`, `live-workers.ts` and
+`.github/julius-live-evidence-dump.sh`, so **whichever lands second needs a
+rebase**. The stack is the founder's stated priority and should land first.
+
+### One thing the reviewer repair deliberately does NOT carry
+
+The **outer** Julius attempt number — "this was dispatch 2 of 3" — is still not
+a recorded fact; a reader counts rows ordered by `occurred_at` instead.
+Recording it means widening `JuliusExecutionRequest` and threading it through
+`julius-task-pipeline.ts`, which is exactly the surface this stack rewrites, so
+putting it on the main-based branch would have manufactured a conflict for no
+gain. It belongs on top of the stack once the stack lands. The inner counters
+(`planAttempts`, `reviewAttempts`, from #237) are already in the bundle.
+
+### The watch routine no longer spends
+
+Its auto-dispatch was retired after this run and the runbook's Step 4 has been
+corrected to match. The watcher may inspect `main`, inspect worker PRs, verify
+provenance, verify a review's `commit_id`, verify tree equality, verify
+monotonicity, and report founder actions. It may not dispatch a preflight, may
+not dispatch a paid mission, and may not infer paid authorization from a new
+`main` sha. Every paid mission now needs a specific causal question, a justified
+reason that answering it needs provider spend, and explicit founder
+authorization.
