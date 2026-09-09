@@ -57,23 +57,39 @@ The rebase stops three times. Each stop, and its resolution:
    `git checkout --theirs docs/handoffs/JULIUS_CURRENT.md && git add …`, continue.
    (Every later handoff commit applied cleanly.)
 
-Result: **33 commits** over `origin/relay/julius-architect-gate-fix`, 53 files,
-+9,701 / −64.
+Result on 2026-09-08: **33 commits** over
+`origin/relay/julius-architect-gate-fix`, 53 files, +9,701 / −64.
+
+**Re-verified 2026-09-09, against the shape PR #237 will land.** The stack has
+grown since, and the recipe held exactly: 52 commits over `main` replay as
+**50** over the repair (the same two superseded drafts dropped), stopping at the
+same three conflicts, resolved the same three ways. Result: 73 files,
++13,060 / −79. The counts move with the branch; the three conflicts do not.
 
 ## What the resolved tree passed (2026-09-08, cloud container)
 
 | Check | Result |
 |---|---|
-| `npm run typecheck` (all four projects) | clean |
+| `npm run typecheck` (all four projects) | clean, on both dates |
 | contract integrity + gate e2e, prompt-architect suite (the repair's own tests), live composition, contract-brief parity, first-live-mission evidence test, Beta Gate, paid-run replay | **9 files, 378 tests passed** |
 | both sides present | `reasonClaim`, `PLAN_ATTEMPT_LIMIT`, `REVIEW_ATTEMPT_LIMIT` (repair) and `executedBindingFor`, `coderContractBrief`, `contract.challenged`, `trajectory.tsv` (stack) all in the tree |
 | `julius:harness:export` | manifest unchanged |
 | whole-repository `npx vitest run` | **505 files passed**, 1 skipped (env-gated real-infra), **9,716 tests passed**, 26 todo, exit 0 |
 
-The rebased branch itself exists only as `local/stack-on-gate-fix` in the
-cloud container's throwaway worktree (head `03a2b879` at the time of writing);
-it was deliberately not pushed, since no branch for it has been sanctioned. The
-recipe above reproduces it in under a minute.
+On the 2026-09-09 replay the resolved tree also passed all three typechecks and
+the ten seam files that hold both sides together — the contract integrity e2e,
+the whole prompt-architect suite, the policy router, the live composition and
+brief parity, the Beta Gate, the drill support and the first-live-mission
+evidence test — **399 tests, 0 failed**, and every symbol from both sides is
+present in the tree (`reasonClaim`, `PLAN_ATTEMPT_LIMIT`, `REVIEW_ATTEMPT_LIMIT`
+from the repair; `executedBindingFor`, `coderContractBrief`,
+`contract.challenged`, `trajectory.tsv`, `CAPABILITY_PROOF_COLUMNS`,
+`runRecoveryDrill` from the stack).
+
+The rebased branch exists only in the cloud container's throwaway worktree —
+`local/stack-on-gate-fix` on 09-08 (head `03a2b879`), `local/stack-on-237` on
+09-09 — and was deliberately not pushed either time, since no branch for it has
+been sanctioned. The recipe above reproduces it in under a minute.
 
 ## After the repair lands as a squash
 
