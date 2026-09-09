@@ -1423,8 +1423,27 @@ export async function runHermesReview(input: {
     });
     child.on('close', (code) => {
       exitObserved = true;
-      // THE TIMEOUT OWNS THIS OUTCOME. Whatever the reviewer flushed while
-      // Relay was killing it is not an answer to the question Relay asked.
+      /**
+       * THE TIMEOUT OWNS THIS OUTCOME. Whatever the reviewer flushed while
+       * Relay was killing it is not an answer to the question Relay asked.
+       *
+       * THIS ONE LINE CARRIES THREE INVARIANTS, and they are not three
+       * independent mechanisms — they are three readings of it:
+       *
+       *   1. a late valid review, arriving after the window closed, is
+       *      REJECTED. Accepting it would let a run be approved by a reviewer
+       *      Relay had already given up on and killed.
+       *   2. a timeout yields NO ACCEPTED RESULT. There is no `reviewed`
+       *      outcome to hand the coordinator, so nothing can be accepted.
+       *   3. a timeout cannot be CHARGED TWICE. Julius charges from the
+       *      outcome it is handed; an outcome with no result and no served
+       *      model gives a second charge nothing to attach to.
+       *
+       * Delete this line and all three go at once. That is why seven tests
+       * fall over rather than one, and why the count is recorded here: a
+       * future reader who removes it expecting to break a single case has
+       * misread the dependency, not the tests.
+       */
       if (timedOut) return;
       const completedAt = now();
       /**
