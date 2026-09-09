@@ -668,6 +668,24 @@ describe('a full mission drive with Julius in control', () => {
       expect(facts.failureClass).toBe('review_timeout');
     }
 
+    /**
+     * AND EACH ROW SAYS WHICH ASK IT WAS — 1, 2, then 3.
+     *
+     * Run 34311556047's three reviewer rows were distinguishable only by
+     * `occurred_at`: a reader could count them and infer an order, but "this
+     * was the third and last ask" was nowhere on the record, and an inference
+     * is not evidence. This is the OUTER number — how many times Julius
+     * dispatched the task — which is not `planAttempts`/`reviewAttempts`, the
+     * provider calls made INSIDE one dispatch. Both are on the row now, and
+     * they answer different questions.
+     */
+    expect(scheduled.map((event) => (event.facts as Record<string, unknown>).attempt)).toEqual([1, 2, 3]);
+    // It rides every event, not only the failures: a second ask that happened
+    // must be visible from the dispatch row too, not only from its outcome.
+    const dispatched = memory.events().filter((event) => event.type === 'worker.dispatched'
+      && event.taskId === 'plan-1:review');
+    expect(dispatched.map((event) => (event.facts as Record<string, unknown>).attempt)).toEqual([1, 2, 3]);
+
     const failed = memory.events().filter((event) => event.type === 'task.failed')
       .find((event) => event.taskId === 'plan-1:review')!;
     const facts = failed.facts as Record<string, unknown>;

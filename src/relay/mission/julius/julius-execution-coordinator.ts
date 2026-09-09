@@ -30,7 +30,26 @@ export interface JuliusExecutionPorts {
   recordEvent(input:{runId:string;projectId:string;taskId:string|null;type:JuliusExecutionEventType;idempotencyKey:string;payload:Record<string,unknown>}):Promise<void>;
 }
 export type JuliusExecutionEventType='worker.selected'|'budget.reserved'|'budget.denied'|'worker.dispatched'|'worker.completed'|'retry.scheduled'|'task.failed';
-export interface JuliusExecutionRequest { readonly claim:JuliusExecutionClaim;readonly policy:JuliusCardPolicy;readonly role:JuliusWorkerRole;readonly taskType:string;readonly capability:string;readonly resources:JuliusResourceRequest;readonly operationId:string;readonly signal?:AbortSignal;/** Workers already tried for this task. Additive: omitted behaves exactly as before. */readonly excludedWorkerIds?:readonly string[];/** The execution ceiling Julius reserved for this dispatch, handed to the adapter. Additive. */readonly allocation?:JuliusDispatchAllocation;/** The locked task contract this dispatch runs under, as a review charge. Additive. */readonly contract?:JuliusContractReviewCharge; }
+export interface JuliusExecutionRequest { readonly claim:JuliusExecutionClaim;readonly policy:JuliusCardPolicy;readonly role:JuliusWorkerRole;readonly taskType:string;readonly capability:string;readonly resources:JuliusResourceRequest;readonly operationId:string;readonly signal?:AbortSignal;/** Workers already tried for this task. Additive: omitted behaves exactly as before. */readonly excludedWorkerIds?:readonly string[];/** The execution ceiling Julius reserved for this dispatch, handed to the adapter. Additive. */readonly allocation?:JuliusDispatchAllocation;/** The locked task contract this dispatch runs under, as a review charge. Additive. */readonly contract?:JuliusContractReviewCharge;
+ /**
+  * WHICH DISPATCH THIS IS — 1, 2 or 3 of the task's attempt ceiling.
+  *
+  * Paid run 34311556047's reviewer failed three times and the bundle recorded
+  * three rows distinguishable only by `occurred_at`. A reader could COUNT them
+  * and infer the order; nobody could read "this was the third and last ask" as
+  * a fact, and an inference is not evidence — least of all in an artifact whose
+  * whole purpose is to explain a paid failure without buying another one.
+  *
+  * It is the OUTER number: how many times Julius dispatched this task, which is
+  * not `planAttempts`/`reviewAttempts` (how many provider calls one dispatch
+  * made). Both matter and they answer different questions.
+  *
+  * Deferred until now on purpose: recording it means widening this interface
+  * and threading it through the pipeline, and that is the surface the contract
+  * stack rewrote. Adding it before #238 landed would have manufactured a
+  * conflict for no gain. Optional, so a caller that omits it behaves exactly
+  * as before. */
+ readonly attempt?:number; }
 /**
  * `failureClass` is the connector's safe subclass when one is known, already
  * narrowed to a machine token by {@link safeFailureClass}. It is additive:
@@ -108,5 +127,13 @@ export class JuliusExecutionCoordinator {
       * happened to be non-retryable. */
      if(failure.retryable&&request.policy.automaticRetry){await this.event(request,'retry.scheduled',{code:failure.code,errorRetryable:true,failureClass:failure.failureClass,...flattenDiagnostics(failure.diagnostics)});return{status:'RETRY',code:failure.code,failureClass:failure.failureClass};}await this.event(request,'task.failed',{code:failure.code,errorRetryable:failure.retryable,failureClass:failure.failureClass,...flattenDiagnostics(failure.diagnostics)});return{status:'FAILED',code:failure.code,failureClass:failure.failureClass};}
   }
-  private event(request:JuliusExecutionRequest,type:JuliusExecutionEventType,payload:Record<string,unknown>){return this.ports.recordEvent({runId:request.claim.runId,projectId:request.claim.projectId,taskId:request.claim.taskId,type,idempotencyKey:`${request.operationId}:${type}`,payload});}
+  /**
+   * ON EVERY EVENT, not only the failures. `retry.scheduled` and `task.failed`
+   * are where a reader looks after a bad run, but `worker.dispatched` is where
+   * they look to see that a SECOND ask happened at all — and a fact present on
+   * one and absent on the other is the kind of gap that reads as a bug in the
+   * record. Facts are flat scalars by contract; a number is one. Omitted when
+   * the caller did not say, because unknown is not one.
+   */
+  private event(request:JuliusExecutionRequest,type:JuliusExecutionEventType,payload:Record<string,unknown>){return this.ports.recordEvent({runId:request.claim.runId,projectId:request.claim.projectId,taskId:request.claim.taskId,type,idempotencyKey:`${request.operationId}:${type}`,payload:typeof request.attempt==='number'?{...payload,attempt:request.attempt}:payload});}
 }
