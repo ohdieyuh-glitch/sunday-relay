@@ -41,7 +41,7 @@ import { createPostgresMissionSeedStore } from '../relay-bridge/julius/mission-s
 import { assembleLiveJuliusRuntime, driveJuliusRunToTerminal } from '../relay-bridge/julius/live-composition';
 import { scriptedAdapter, seededTaskContract, worker } from '../src/relay/mission/julius';
 import type { JuliusTask, ScriptedOutcome } from '../src/relay/mission/julius';
-import { DrillRecord, scalarReader, writeAttestation } from './julius-drill-support';
+import { DrillRecord, auditProviders, scalarReader, writeAttestation } from './julius-drill-support';
 
 export const CAPABILITY = 'REPAIR LOOP';
 /** The transcript's closing sentence; the gate requires an all-capitals VERIFIED line. */
@@ -176,11 +176,20 @@ async function orchestrate(pool: Pool, outDir: string, repoRoot: string): Promis
     repair !== null && repair.includes(' CODING_AGENT '), String(repair));
   record.step('the repair reached SUCCEEDED', repair !== null && repair.includes(' SUCCEEDED '), String(repair));
 
+  /**
+   * ASKED SO IT CAN FAIL. Counting REPAIR_UNROUTABLE alone passes on an empty
+   * result whatever the reason — including a predicate that never matched a
+   * row. The run's whole event count comes back in the same query, so a
+   * predicate that has stopped seeing this run reads as `0/0` and fails
+   * instead of reading as innocence.
+   */
   const unroutable = await scalar(
-    `SELECT count(*) FROM relay_wonderland.events
-      WHERE payload->'facts'->>'reasonCode'='REPAIR_UNROUTABLE' AND payload->>'runId'=$1`, [RUN_ID]);
+    `SELECT count(*) FILTER (WHERE payload->'facts'->>'reasonCode'='REPAIR_UNROUTABLE')::text
+            ||'/'||count(*)::text
+       FROM relay_wonderland.events WHERE payload->>'runId'=$1`, [RUN_ID]);
+  const [refusals, seen] = (unroutable ?? '0/0').split('/');
   record.step('no repair was minted that nothing could route — REPAIR_UNROUTABLE never fired',
-    unroutable === '0' || unroutable === null, `${unroutable} refusal(s)`);
+    refusals === '0' && Number(seen) > 0, `${refusals} refusal(s) among ${seen} event(s) for this run`);
 
   const rounds = await scalar(
     `SELECT count(*) FROM relay_wonderland.julius_tasks WHERE parent_task_id=$1 AND task_type LIKE 'repair:%'`, [BUILD]);
@@ -206,8 +215,9 @@ async function orchestrate(pool: Pool, outDir: string, repoRoot: string): Promis
   record.step('and the mission reached COMPLETED through the repair, not around it',
     outcome.state === 'COMPLETED', `${outcome.state} after ${outcome.ticks} tick(s)${outcome.haltCause ? ` (${outcome.haltCause})` : ''}`);
 
-  const calls = await scalar(`SELECT count(*) FROM relay_wonderland.events WHERE event_type='julius.provider.call'`);
-  record.step('zero provider calls were made (scripted adapters only)', calls === '0' || calls === null, `${calls} call(s)`);
+  const audit = await auditProviders(scalar, [RUN_ID]);
+  record.step('every dispatch went to the drill’s fake provider — and there WERE dispatches to check',
+    audit.dispatches > 0 && audit.providers === 'drill', `${audit.dispatches} dispatch(es), providers: ${audit.providers}`);
 
   const verified = record.seal(DRILL_NAME);
   file(verified);

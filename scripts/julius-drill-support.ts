@@ -85,6 +85,36 @@ export function scalarReader(pool: Pool) {
 }
 
 /**
+ * DID THIS DRILL REALLY SPEND NOTHING — and could that question have been
+ * answered wrongly?
+ *
+ * The first version of this check counted `julius.provider.call` events and
+ * required zero. There is no such event type: the vocabulary has
+ * `worker.selected`, `worker.dispatched`, `worker.completed` and
+ * `provider.failure`. So the query could only ever return zero, the step could
+ * only ever pass, and a transcript line that reads PASS on every possible
+ * database is not testimony — it is the exact vacuous pass these drills exist
+ * to refuse, written into one of them.
+ *
+ * This asks a question that can fail in both directions. `worker.selected`
+ * carries the `providerId` a dispatch was routed to, so a drill can assert that
+ * dispatches HAPPENED — the positive control, without which a broken predicate
+ * reads as innocence — and that every one of them named the fake provider and
+ * no real one.
+ */
+export async function auditProviders(
+  scalar: (sql: string, params?: readonly unknown[]) => Promise<string | null>,
+  runIds: readonly string[],
+): Promise<{ readonly dispatches: number; readonly providers: string }> {
+  const row = await scalar(
+    `SELECT count(*)::text||' '||coalesce(string_agg(DISTINCT payload->'facts'->>'providerId', ','),'none')
+       FROM relay_wonderland.events
+      WHERE event_type='julius.worker.selected' AND payload->>'runId' = ANY($1)`, [runIds]);
+  const [count, providers] = (row ?? '0 none').split(' ');
+  return { dispatches: Number.parseInt(count ?? '0', 10), providers: providers ?? 'none' };
+}
+
+/**
  * The ledger the Beta Gate reads. A FAILED drill still writes one, recording
  * the outcome it actually had — a drill that files nothing when it fails
  * teaches a reader that silence means success, and the gate refuses any row

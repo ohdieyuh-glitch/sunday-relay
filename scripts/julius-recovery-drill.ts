@@ -69,7 +69,7 @@ import { createJuliusPostgresRuntimeStore } from '../relay-bridge/julius/postgre
 import { createPostgresMissionSeedStore } from '../relay-bridge/julius/mission-seed';
 import { assembleLiveJuliusRuntime, driveJuliusRunToTerminal } from '../relay-bridge/julius/live-composition';
 import { scriptedAdapter, seededTaskContract, worker } from '../src/relay/mission/julius';
-import { DrillRecord, scalarReader, writeAttestation } from './julius-drill-support';
+import { DrillRecord, auditProviders, scalarReader, writeAttestation } from './julius-drill-support';
 import type { JuliusProviderAdapter, JuliusTask } from '../src/relay/mission/julius';
 
 
@@ -311,9 +311,9 @@ async function orchestrate(pool: Pool, outDir: string, repoRoot: string): Promis
   const planResults = await scalar(`SELECT count(*) FROM relay_wonderland.julius_worker_results WHERE task_id=$1`, [PLAN]);
   step('and it ran exactly ONCE after recovery — a replayed dispatch is a double spend, not a recovery',
     planResults === '1', `${planResults} result(s)`);
-  const receipts = await scalar(
-    `SELECT count(*) FROM relay_wonderland.events WHERE event_type='julius.provider.call' AND payload->>'taskId'=$1`, [PLAN]);
-  step('zero provider calls were made by either process (fake adapters only)', receipts === '0' || receipts === null);
+  const audit = await auditProviders(scalar, [RUN_ID]);
+  step('every dispatch went to the drill’s fake provider — and there WERE dispatches to check',
+    audit.dispatches > 0 && audit.providers === 'drill', `${audit.dispatches} dispatch(es), providers: ${audit.providers}`);
 
   const verified = record.seal(DRILL_NAME);
   fileAttestation(outDir, repoRoot, record, verified);
