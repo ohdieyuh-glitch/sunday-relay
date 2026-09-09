@@ -1518,6 +1518,85 @@ here (no confirm_live given)"*, which sits before every step gated on
 Passing `acknowledge_rerun` on the preflight is harmless: it is read only inside
 a step gated on `confirm_live`.
 
+### 00p. TASK 1 COMPLETE — JULIUS LIVE RUN 2 · TASK 2 COMPLETE — JULIUS BLOCKER KILL
+
+**2026-09-09 03:22–03:32Z.** The first paid Julius mission to reach verified
+completion. Filled from the run's own `julius-live-evidence` bundle and the
+Actions job, row by row; every value below is quoted from a file, not inferred.
+
+| Field | Value | Source |
+|---|---|---|
+| Actions run id | **34306850331** (run_number 22) | Actions API |
+| main SHA, frozen | `755d9d2222d4990ed6d57ad621552ccef57910f1` | `head_sha`; the squash of PR #237 |
+| zero-spend preflight | **34306484521**, success, LIVE step skipped | Actions API |
+| trust gate | step 6 *"reviewed, current and not rolled back"* — **success**, from the verifier pinned at `f131098c` | job steps |
+| rerun guard | step 9 ran and accepted `RERUN PAID MISSION` against two prior attempt markers | job steps |
+| mission inputs | `mission=julius-live-mission-2`, `confirm_live=RUN LIVE MISSION`, `acknowledge_rerun=RERUN PAID MISSION`, `max_ticks=32`, `hermes_ref` pinned default | dispatch |
+| durable run | `run:4bf13d0e833a042c74f57555`, mission `mission:julius-live-2`, card `card:julius-live:1` | `runs.tsv` |
+| **final state** | **COMPLETED** after **5 ticks**, 03:23:58 → 03:31:51 | `runs.tsv`, `live-mission.evidence.txt` |
+| tasks | plan, build, review:plan, review:build — **all four SUCCEEDED** | `tasks.tsv` |
+| verification decisions | `ACCEPT/TASK_VERIFIED` ×2 (plan 03:29:12, build 03:31:51) | `decisions.tsv` |
+| blocking findings | **0 rows** | `findings.tsv` |
+| requested models | `architect=gpt-5.6-sol coder=claude-fable-5 reviewer=xai/grok-build-0.1` | `live-mission.evidence.txt` |
+| **architect** | `ARTIFACT/PASSED` — *"Validated architect plan stored for this run (14563 chars, sha256:9b68053842372ece…)"* | `evidence.tsv` |
+| architect attempts | **one** — a single `PROMPT_ARCHITECT` allocation, and **no diagnostics row at all** | `budget.tsv`, `worker-diagnostics.tsv` |
+| plan review | approved, no blocking findings, **served model grok-build-0.1** | `evidence.tsv` |
+| coder allocation | `CODER_SHARE` **5,000,000 µUSD** = floor(20 / (1+3)) — `julius-allocation.v1` exactly | `budget.tsv` |
+| **the actual diff** | `run-summary.js` and `run-summary.test.js`, **4,595 chars / 116 added lines**, captured by executor invocation `…:build:diff:g1` | `workspace.diff`, `workspace-status.txt`, `evidence.tsv` |
+| test | `node --test` **exit 0** under executor invocation `…:build:test:g1` | `evidence.tsv` |
+| build review | approved, no blocking findings, grok-build-0.1 | `evidence.tsv` |
+| tool invocations | 3 × `shell.bash`, **all SUCCEEDED**; 6 signed executor receipts; executor logged only `executor_ready:8787` — **no refusal** | `tool-invocations.tsv`, `receipt-ids.txt`, `executor-diagnostics.txt` |
+| **cost** | **514,967 µUSD = $0.515**, the coder's settlement, against a $20 ceiling | `budget.tsv` |
+| founder rescue | **none** | — |
+
+#### TASK 2 — the boundary that killed two paid runs was crossed
+
+| | 34185920678 | 34186711214 | **34306850331** |
+|---|---|---|---|
+| plan | `validation_passed=false`, `plan_false_work_claim`, `validation_field` EMPTY | identical | **`ARTIFACT/PASSED`, 14,563 chars** |
+| plan bytes | 14,581 | 14,550 | 14,563 |
+| architect diagnostics rows | 1 (the refusal) | 1 | **0 — it never failed** |
+| architect allocations | 1 | 1 | **1 — no correction bought** |
+| coder / reviewer / decisions | none | none | **all present** |
+| outcome | FAILED after 1 tick | FAILED after 1 tick | **COMPLETED after 5** |
+
+**One honesty note, because the criterion assumed otherwise.** `validation_passed=t`
+does not literally appear. `worker-diagnostics.tsv` selects rows where
+`diag_transport` is set, and the architect writes that only on FAILURE paths — a
+success writes no row at all. The absence IS the evidence: a refusal would have
+produced a row, there is none, `failures.tsv` holds only a reviewer timeout, and
+`budget.tsv` shows exactly one architect allocation, so no correction was bought
+either. Same mission, same model, same document size, refused twice and
+validated on the first attempt now.
+
+#### The run also bought FAILURE RECOVERY, unasked
+
+The plan review **timed out** (`TIMEOUT` / `review_timeout`, `error_retryable=true`,
+`review_attempts=1`, 0 bytes observed), was retried, and SUCCEEDED. That row is
+the only entry in `failures.tsv`. `FAILURE RECOVERY` is now proven by MISSION
+evidence on a paid run, not only by drill.
+
+#### The Beta Gate over this bundle, both axes
+
+```
+WHAT THIS RUN PROVED:       9 of 15 exercised and working; 0 exercised and broken;
+                            2 never reached; 3 the bundle cannot say.
+WHAT JULIUS IS READY TO DO: 11 of 15 proven — 9 by this mission, 2 by drill.
+```
+
+Nine PASS by mission proof: PROJECT CREATION, JULIUS MISSION START, PROMPT
+ARCHITECT, CODING AGENT, INDEPENDENT REVIEWER, VERIFICATION, VERIFIED
+COMPLETION, FAILURE RECOVERY, PERMISSIONS / MISSION BOUNDARIES. **Zero rows
+exercised and broken.** With the three drills' attestations passed as
+`--capability`, REPAIR LOOP and RESTART / RECOVERY read CAPABILITY PROVEN — NOT
+EXERCISED THIS MISSION, which is the true sentence for a run that needed
+neither.
+
+The three rows reading *"the bundle cannot say"* — TASK CONTRACT LOCK, PROJECT
+BRAIN PERSISTENCE, ACCOUNT / ONBOARDING — are exactly the dumps that live on
+`relay/julius-contract-stack-rebased` and not on main, **as §00i predicted before
+the run**. Their absence is this commit's bundle shape, not a failed run.
+
 ### 00i. The next paid rerun — the record it must leave (template, to be filled by the run)
 
 > Not a run. This is the shape the record takes the moment the watch dispatches
