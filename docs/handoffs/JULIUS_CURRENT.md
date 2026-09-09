@@ -21,6 +21,95 @@ local record.
 
 ---
 
+## 0. PAID LIVE RUNS 2026-09-08 — #234 LANDED, AND THE ARCHITECT GATE IS THE NEW WALL
+
+**`origin/main` = `872f1790465c4d519d9a89c7e525fdaf23f5c3d0`** — PR #234, squash
+merged, founder-approved at the exact head `be949de2`. Every trust input
+verified independently before any dispatch:
+
+| Gate input | Verified |
+|---|---|
+| main's tree | `80d0cbe5…` — **identical** to the reviewed head's tree |
+| main's parents | exactly one (`b2dc9f23`), a squash |
+| candidate author | `julius-worker[bot]` ✓ |
+| approval | `APPROVED` by `ohdieyuh-glitch` at `commit_id be949de2`, author ≠ approver ✓ |
+| parent containment | `b2dc9f23` is contained in the reviewed head ✓ |
+| monotonicity | both live checkpoints (`f131098c`, `67ade6ea`) contained in main ✓ |
+
+The workflow's own gate agreed: **"the code this job will run is reviewed,
+current and not rolled back" — success**, on every dispatch below.
+
+### Run 34185756926 — ZERO-SPEND PREFLIGHT — **PASS** (2m07s)
+
+Inputs: `mission=julius-live-mission-2`, `confirm_live=""`,
+`acknowledge_rerun="RERUN PAID MISSION"`, `max_ticks=32`, `hermes_ref` default.
+
+Every stage green: trust gate, input gate, PostgreSQL 16 + independent executor,
+**Julius cannot reach the executor signing key**, receipt transport private to
+root and the executor, durable store + attestation + sandbox + in-sandbox git,
+Hermes install and ephemeral reviewer profile, Mission Contract valid and
+bounded, and all three roles resolving —
+`architect=gpt-5.6-sol coder=claude-fable-5 reviewer=xai/grok-build-0.1`.
+The LIVE step was **skipped**; the attempt marker was **not** written.
+**Provider calls: zero.**
+
+### Run 34185920678 — PAID — **FAILED at the Prompt Architect**
+
+Inputs identical except `confirm_live="RUN LIVE MISSION"`.
+
+| Field | Value |
+|---|---|
+| trusted-main SHA | `872f1790465c4d519d9a89c7e525fdaf23f5c3d0` |
+| mission | `mission:julius-live-2`, project `prj-julius-live-2`, namespace `julius-live-mission-2` |
+| durable run | `run:4bf13d0e833a042c74f57555` |
+| budget | ceiling **$20**, 3 repair cycles; architect allocated **300,000 µUSD** on basis `ESTIMATE`, policy `julius-allocation.v1`, remaining 20,000,000 µUSD |
+| provider calls | **one** — OpenAI, `gpt-5.6-sol`, response `resp_06601f0695580df5016a9f8ad2a46487d1b9328985008d1eb9` |
+| actual cost | **not reported by the provider** — Unknown, not zero; no settlement row |
+| architect output | 14,581 bytes, `json_detected=true`, `json_parseable=true` |
+| architect state | `validation_passed=false`, `validation_reason_code=`**`plan_false_work_claim`** |
+| coding agent | **never dispatched** |
+| diff captured | none (`workspace.diff` empty, `workspace-status.txt` empty) |
+| reviewer | **never dispatched** — no stage, no input, no findings |
+| repair trajectory | **none minted** |
+| verification | **no decisions** |
+| final durable state | `plan` **FAILED**, `build` **BLOCKED**, run **FAILED** after 1 tick |
+
+**#234's four repairs all held, and three of them are visible in this record:**
+`build` stayed **BLOCKED** rather than running against an unreviewed plan
+(defect 4); **no unroutable `repair:plan` was minted** (defect 3); the coder
+was allocated from the mission's own contract via `julius-allocation.v1`
+(defect 1's chain, exercised as far as the architect's own reservation). The
+stage-aware reviewer (defect 2) was not reached.
+
+**But Task 2 is NOT complete.** The run never crossed the boundaries that
+previously failed — no coder dispatch, no diff, no review — because it died
+earlier, at a gate run 34037313976 never reached.
+
+### The first causal blocker, and why it was invisible before
+
+`plan_false_work_claim` is a substring scan over `JSON.stringify(plan)` for four
+phrases. The architect's charter names those four phrases **in the prohibition
+itself** — "Never state or imply that files were edited, that tests were run…" —
+and the plan schema then asks the architect for `prohibitedActions` and
+`handoff.prohibitedActions`, lists whose entire purpose is to state what must
+not be done. A plan that forbids claiming work and a plan that claims it
+serialise the same.
+
+Fifteen validation rules carry a `reasonField`; **this one carried none**, so
+the bundle could say only that a banned phrase appeared somewhere in a 14 KB
+document. #234's reason-code instrumentation is what made the rule identifiable
+at all — before it, the record said `plan_validation_failed` and stopped.
+
+**Fixed in `24d91a40`** on `relay/julius-contract-stack-rebased`: the scan is a
+structural walk that skips the two prohibition paths **by exact path, never by
+key name**, reports the matched phrase and a **sanitised** path (model-chosen
+keys become `<field>`, because that string reaches the published bundle), and
+walks keys sorted so the diagnostic does not move between runs. Twelve claim
+fields still refuse; five mutations each go red. **It is not on `main`** — see
+§00a for why this environment cannot author a landable PR.
+
+---
+
 ## 00. CLOUD SESSION 2026-09-08 — the task/sprint contract, and a credential finding
 
 > Written by the **Claude Code cloud session** (`claude.ai/code`), not the local
