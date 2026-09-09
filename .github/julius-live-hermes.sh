@@ -31,6 +31,10 @@ set -euo pipefail
 : "${HERMES_PROFILE_HOME:?missing HERMES_PROFILE_HOME}"
 : "${HERMES_WRAPPER_DIR:?missing HERMES_WRAPPER_DIR}"
 : "${XAI_API_KEY:?missing XAI_API_KEY}"
+# BOTH DEADLINES ARE REQUIRED, because their ORDER is the invariant this script
+# now enforces and a missing one would silently switch the enforcement off.
+: "${HERMES_REQUEST_TIMEOUT_SECONDS:?missing HERMES_REQUEST_TIMEOUT_SECONDS}"
+: "${RELAY_HERMES_TIMEOUT_MS:?missing RELAY_HERMES_TIMEOUT_MS}"
 # The exact commit the founder's proven build runs. It is public upstream, so
 # there is nothing local to reproduce: `git status` in that checkout reports
 # "+1 carried commit" only because its shallow clone's origin ref is stale.
@@ -69,6 +73,57 @@ umask 077
 printf '%s=%s\n' 'XAI_API_KEY' "$XAI_API_KEY" > "$HERMES_PROFILE_HOME/.hermes/.env"
 chmod 0600 "$HERMES_PROFILE_HOME/.hermes/.env"
 
+# THE ENGINE GETS A DEADLINE OF ITS OWN, INSIDE RELAY'S.
+#
+# Paid run 34311556047's Independent Reviewer failed three times on `review:plan`
+# with `timed_out=true`, zero bytes, no exit code and no status — nine minutes
+# that could not say whether the provider was slow, unreachable, or never asked.
+# The cause was here: this script wrote only `.env`, and Hermes's
+# `get_provider_request_timeout` returns nothing unless `config.yaml` carries a
+# provider timeout, so the engine inherited the OpenAI SDK default of 600 s with
+# three retries. Its own give-up therefore sat around forty minutes while
+# Relay's window was three, and Relay's guillotine ALWAYS fell first — on every
+# distinct provider fault, producing one indistinguishable shape.
+#
+# Measured against the real Hermes v0.18.2 at this pinned commit, against an
+# endpoint that accepted the connection and never answered: with no deadline it
+# ran 420 s, made 30 connection attempts, printed nothing and never exited. With
+# `api_max_retries: 0` and a per-request deadline it reported and exited 0 —
+# at 127 s for a 30 s deadline, at 227 s for an 80 s one. Two points, so the
+# engine's total give-up is roughly `67 s + 2 x request_timeout`, not a fixed
+# multiple: there is a large constant in its connect-retry loop.
+#
+# THE CHECK BELOW USES THAT MEASURED SLOPE with the constant tripled, and it is
+# a floor rather than a proof — the retry behaviour is the engine's, it is
+# version-dependent, and a provider that answers differently may take another
+# path. What IS guaranteed is the other half: `runHermesReview` now records the
+# process lifecycle, so a window Relay closes itself is diagnosable whether or
+# not the engine got its word in first.
+#
+# ONLY THE TWO SECTIONS BELOW ARE WRITTEN. The model and the provider stay on
+# Julius's command line, where they already are: this file must not become a
+# second place that decides who reviews.
+cat > "$HERMES_PROFILE_HOME/.hermes/config.yaml" <<CONFIG
+providers:
+  ${HERMES_PROVIDER}:
+    request_timeout_seconds: ${HERMES_REQUEST_TIMEOUT_SECONDS}
+    stale_timeout_seconds: ${HERMES_REQUEST_TIMEOUT_SECONDS}
+agent:
+  api_max_retries: 0
+CONFIG
+chmod 0600 "$HERMES_PROFILE_HOME/.hermes/config.yaml"
+
+# AND THE ORDER IS CHECKED, NOT ASSUMED. If the engine's worst case does not fit
+# inside Relay's window then Relay cuts first again and the next paid failure is
+# as unreadable as the last, so this refuses before a provider is contacted.
+SLOPE=2
+CONSTANT_MS=180000
+worst_case_ms=$(( HERMES_REQUEST_TIMEOUT_SECONDS * SLOPE * 1000 + CONSTANT_MS ))
+if [ "$worst_case_ms" -ge "$RELAY_HERMES_TIMEOUT_MS" ]; then
+  echo "hermes_engine_deadline_not_inside_relay_window:${worst_case_ms}ms_vs_${RELAY_HERMES_TIMEOUT_MS}ms" >&2
+  exit 1
+fi
+
 # The wrapper is what Julius spawns. `runHermesReview` forwards {PATH, HOME}
 # only, so redirecting HOME here — and nowhere else — is what keeps the
 # credential away from the coding agent that shares the parent process.
@@ -97,7 +152,20 @@ if [ ! -s "$HERMES_PROFILE_HOME/.hermes/.env" ]; then
   echo 'hermes_profile_missing' >&2
   exit 1
 fi
+
+# AND THE DEADLINE IS PROVEN THE SAME WAY THE CREDENTIAL IS: by asking Hermes's
+# own resolver what it will use, rather than trusting that a file exists. Reading
+# a config file contacts nothing, so the preflight's zero-provider contract holds.
+resolved_timeout=$(env -u HERMES_HOME HOME="$HERMES_PROFILE_HOME" /opt/hermes-venv/bin/python -c \
+  'import sys; from hermes_cli.timeouts import get_provider_request_timeout as t; sys.stdout.write(str(t(sys.argv[1]) or 0))' \
+  "$HERMES_PROVIDER" 2>/dev/null || echo 0)
+if [ "${resolved_timeout%%.*}" != "$HERMES_REQUEST_TIMEOUT_SECONDS" ]; then
+  echo "hermes_request_timeout_not_resolvable_for_provider:$HERMES_PROVIDER" >&2
+  exit 1
+fi
 echo "hermes_executable=$HERMES_WRAPPER_DIR/hermes (wraps $HERMES_BIN)"
 echo "hermes_version=$("$HERMES_BIN" --version 2>/dev/null | head -n 1)"
 echo "hermes_profile=$HERMES_PROFILE_HOME (mode $(stat -c '%a' "$HERMES_PROFILE_HOME"))"
 echo "hermes_credential=REGISTERED"
+echo "hermes_request_timeout_seconds=$HERMES_REQUEST_TIMEOUT_SECONDS (resolved by hermes itself)"
+echo "relay_reviewer_window_ms=$RELAY_HERMES_TIMEOUT_MS (engine worst case ${worst_case_ms}ms, and it fits)"

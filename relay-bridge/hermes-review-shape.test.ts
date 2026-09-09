@@ -41,7 +41,12 @@ function fakeChild(input: {
     };
     child.stdout = new Readable({ read() { /* pushed below */ } });
     child.stderr = new Readable({ read() { /* never surfaced */ } });
-    child.kill = () => true;
+    /* A SIGNALLED PROCESS DIES. The runner now waits for the child it killed
+       to be gone before it reports, so a `kill` that returns true and leaves
+       the process running models a reviewer this repository has never met —
+       `hermes-reviewer-lifecycle.test.ts` owns the cases where one does — and
+       makes every timeout case here wait out the escalation grace instead. */
+    child.kill = () => { child.emit('close', null); return true; };
     setTimeout(() => {
       for (const chunk of input.stdoutChunks ?? (input.stdout !== undefined && input.stdout !== '' ? [input.stdout] : [])) {
         child.stdout.push(Buffer.from(chunk, 'utf8'));
