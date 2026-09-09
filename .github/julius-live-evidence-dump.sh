@@ -132,3 +132,11 @@ dump "SELECT contract_id,contract_revision,task_id,state,binding_digest,locked_a
 # and digest the coder and the reviewer actually executed under — so the gate can compare what
 # was locked with what was run, rather than trusting that the two are one document.
 dump "SELECT e.payload->>'taskId' AS task_id,e.event_type,e.payload->'facts'->>'reasonCode' AS reason_code,e.payload->'facts'->>'contractTaskId' AS contract_task_id,e.payload->'facts'->>'contractId' AS contract_id,e.payload->'facts'->>'contractRevision' AS contract_revision,e.payload->'facts'->>'bindingDigest' AS binding_digest,e.payload->'facts'->>'recordedRevision' AS recorded_revision,e.payload->'facts'->>'currentRevision' AS current_revision,e.payload->'facts'->>'reviewRevision' AS review_revision,e.payload->'facts'->>'implementationRevision' AS implementation_revision,e.payload->'facts'->>'role' AS role,e.occurred_at FROM relay_wonderland.events e WHERE e.event_type IN('julius.contract.proposed','julius.contract.challenged','julius.contract.locked','julius.contract.refused') OR (e.event_type='julius.task.claimed' AND e.payload->'facts'->>'contractId' IS NOT NULL) ORDER BY e.occurred_at" contract-events.tsv
+
+# WHAT THE RUN DID, ROW BY ROW. The trajectory is the record evals read: every context compile,
+# dispatch, retry, finding, verification and repair round, with the worker and provider that
+# answered, what it cost, how long it took, and — for a bound task — the contract revision and
+# digest it ran under. Without it the bundle can show what a run ENDED as and not the path it
+# took there; a paid rerun's repair path and cost are these rows. `safe_facts` is the closed
+# vocabulary the runtime writes, never prose.
+dump "SELECT event_kind,task_id,worker_id,provider_id,outcome,usd_micros,duration_ms,input_tokens,output_tokens,safe_facts,occurred_at FROM relay_wonderland.julius_trajectory_events ORDER BY occurred_at,trajectory_event_id" trajectory.tsv

@@ -470,6 +470,15 @@ export async function prepareClaimedTask(
  * findings are passed in rather than recomputed, so the run, the role and the
  * task row are each read once and the policy is evaluated in exactly one place.
  */
+/** The three closed values that name an agreement on a trajectory row; null when the role is unbound. */
+function bindingFacts(binding: JuliusTaskContractBinding | null): Record<string, string | number | null> {
+  return {
+    contractTaskId: binding?.taskId ?? null,
+    contractRevision: binding?.contractRevision ?? null,
+    bindingDigest: binding?.bindingDigest ?? null,
+  };
+}
+
 export async function runClaimedTask(
   request: JuliusPipelineRequest,
   deps: JuliusPipelineDependencies,
@@ -925,17 +934,24 @@ export async function runClaimedTask(
     });
     await ledger.trajectory(requeue ? 'RETRY' : 'DISPATCH', {
       taskId: claim.taskId, contextId, policyRevision: request.policy.revision, outcome: outcome.code,
-      facts: { failureClass: outcome.failureClass ?? null },
+      facts: { failureClass: outcome.failureClass ?? null, ...bindingFacts(preflight.contractBinding) },
     });
     if (requeue) return { kind: 'RETRY', taskId: claim.taskId, code: outcome.code, failureClass: outcome.failureClass ?? null };
     if (outcome.status === 'DENIED') return { kind: 'DENIED', taskId: claim.taskId, reasonCode: outcome.code };
     return { kind: 'FAILED', taskId: claim.taskId, code: outcome.code, failureClass: outcome.failureClass ?? null };
   }
 
+  /**
+   * THE AGREEMENT IS ON THE TRAJECTORY ROW. The trajectory is the record evals
+   * and the evidence bundle read to say what a run did; a dispatch row that
+   * could not say which revision it ran under would let a repair lineage read
+   * as one story when its rounds ran under two. Null for the unbound roles,
+   * which is a fact, not an omission.
+   */
   await ledger.trajectory('DISPATCH', {
     taskId: claim.taskId, workerId: outcome.workerId, contextId,
     policyRevision: request.policy.revision, outcome: 'COMPLETED',
-    facts: { duplicate: outcome.duplicate },
+    facts: { duplicate: outcome.duplicate, ...bindingFacts(preflight.contractBinding) },
   });
 
   /* ------------------------------- 3b. a contract revision the worker proposed */
