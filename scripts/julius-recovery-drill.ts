@@ -57,8 +57,7 @@
  */
 
 import { execFile } from 'node:child_process';
-import { createHash } from 'node:crypto';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { Pool } from 'pg';
@@ -70,22 +69,9 @@ import { createJuliusPostgresRuntimeStore } from '../relay-bridge/julius/postgre
 import { createPostgresMissionSeedStore } from '../relay-bridge/julius/mission-seed';
 import { assembleLiveJuliusRuntime, driveJuliusRunToTerminal } from '../relay-bridge/julius/live-composition';
 import { scriptedAdapter, seededTaskContract, worker } from '../src/relay/mission/julius';
+import { DrillRecord, scalarReader, writeAttestation } from './julius-drill-support';
 import type { JuliusProviderAdapter, JuliusTask } from '../src/relay/mission/julius';
-/**
- * THE COLUMNS THE BETA GATE READS, restated here rather than imported.
- *
- * Importing the gate would drag its module-scope `import.meta.url` and its
- * run-as-a-program guard into this bundle, where both would resolve to the
- * bundle itself and the gate would run in place of the drill. So the list is
- * declared, and `julius-recovery-drill.test.ts` asserts it is character for
- * character the gate's own — the same parity idiom the contract brief uses,
- * for the same reason: two writers of one document drift the day one of them
- * learns about a field.
- */
-export const CAPABILITY_PROOF_COLUMNS = [
-  'capability', 'drill', 'outcome', 'steps', 'infrastructure',
-  'exercised_path', 'exercised_digest', 'transcript', 'recorded_at',
-] as const;
+
 
 const runProcess = promisify(execFile);
 
@@ -112,6 +98,8 @@ const LEASE_MS = 2_000;
  * not a label it trusts.
  */
 export const CAPABILITY = 'RESTART / RECOVERY';
+/** The transcript's closing sentence; the gate requires an all-capitals VERIFIED line. */
+const DRILL_NAME = 'JULIUS RESTART RECOVERY';
 export const EXERCISED = [
   'src/relay/mission/julius/julius-recovery.ts',
   'src/relay/persistence/julius-recovery-postgres.ts',
@@ -239,16 +227,10 @@ async function resume(pool: Pool): Promise<void> {
 
 /* --------------------------------------------------------- orchestration */
 
-interface Step { readonly ok: boolean; readonly name: string; readonly detail: string }
-
 async function orchestrate(pool: Pool, outDir: string, repoRoot: string): Promise<number> {
-  const lines: string[] = [];
-  const steps: Step[] = [];
-  const emit = (line: string) => lines.push(line);
-  const step = (name: string, ok: boolean, detail = '') => {
-    steps.push({ ok, name, detail });
-    emit(`  [${ok ? 'PASS' : 'FAIL'}] ${steps.length}. ${name}${detail ? ` — ${detail}` : ''}`);
-  };
+  const record = new DrillRecord();
+  const emit = (line: string) => record.say(line);
+  const step = (name: string, ok: boolean, detail = '') => record.step(name, ok, detail);
   const self = process.argv[1] ?? '';
   const child = async (mode: string): Promise<{ code: number; stdout: string }> => {
     try {
@@ -259,13 +241,7 @@ async function orchestrate(pool: Pool, outDir: string, repoRoot: string): Promis
       return { code: typeof e.code === 'number' ? e.code : 1, stdout: e.stdout ?? '' };
     }
   };
-  const scalar = async (sql: string, params: readonly unknown[] = []): Promise<string | null> => {
-    const result = await pool.query(sql, [...params]);
-    const row = result.rows[0] as Record<string, unknown> | undefined;
-    if (row === undefined) return null;
-    const value = Object.values(row)[0];
-    return value === null || value === undefined ? null : String(value);
-  };
+  const scalar = scalarReader(pool);
 
   emit('JULIUS RESTART / RECOVERY DRILL (two processes, one real PostgreSQL, one real lease expiry, no provider call)');
   emit('');
@@ -286,9 +262,7 @@ async function orchestrate(pool: Pool, outDir: string, repoRoot: string): Promis
   if (priorRun !== '0' && priorRun !== null) {
     step('the drill was given a database that does not already hold its run', false,
       `${RUN_ID} is already recorded here; a drill must not read another run's evidence as its own`);
-    emit('');
-    emit('JULIUS RESTART RECOVERY DRILL FAILED: 1 step(s).');
-    writeAttestation({ outDir, repoRoot, lines, steps: steps.length, verified: false });
+    fileAttestation(outDir, repoRoot, record, record.seal(DRILL_NAME));
     return 8;
   }
 
@@ -341,58 +315,23 @@ async function orchestrate(pool: Pool, outDir: string, repoRoot: string): Promis
     `SELECT count(*) FROM relay_wonderland.events WHERE event_type='julius.provider.call' AND payload->>'taskId'=$1`, [PLAN]);
   step('zero provider calls were made by either process (fake adapters only)', receipts === '0' || receipts === null);
 
-  const failures = steps.filter((row) => !row.ok);
-  emit('');
-  if (failures.length > 0) {
-    emit(`JULIUS RESTART RECOVERY DRILL FAILED: ${failures.length} step(s).`);
-    writeAttestation({ outDir, repoRoot, lines, steps: steps.length, verified: false });
-    return 8;
-  }
-  emit('JULIUS RESTART RECOVERY VERIFIED');
-  writeAttestation({ outDir, repoRoot, lines, steps: steps.length, verified: true });
-  return 0;
+  const verified = record.seal(DRILL_NAME);
+  fileAttestation(outDir, repoRoot, record, verified);
+  return verified ? 0 : 8;
 }
 
 /* ------------------------------------------------------------ attestation */
 
 export const TRANSCRIPT_FILE = 'julius-recovery-drill.transcript.txt';
 export const DRILL_COMMAND = 'npm run julius:recovery-drill';
+export const INFRASTRUCTURE = 'real-postgres,two-processes,real-lease-expiry,no-provider-call';
 
-/**
- * The ledger the Beta Gate reads. A FAILED drill still writes one, recording
- * the outcome it actually had — a drill that files nothing when it fails
- * teaches a reader that silence means success, and the gate refuses any row
- * whose outcome is not VERIFIED anyway.
- *
- * The digest is taken at the moment the drill ran, which is what makes the
- * proof expire: edit one of these files and the gate recomputes a different
- * hash and reports CAPABILITY STALE rather than carrying yesterday's proof
- * forward over today's code.
- */
-export function writeAttestation(input: {
-  readonly outDir: string;
-  readonly repoRoot: string;
-  readonly lines: readonly string[];
-  readonly steps: number;
-  readonly verified: boolean;
-}): void {
-  mkdirSync(input.outDir, { recursive: true });
-  writeFileSync(join(input.outDir, TRANSCRIPT_FILE), `${input.lines.join('\n')}\n`);
-  const recordedAt = new Date().toISOString();
-  const rows = EXERCISED.map((path) => [
-    CAPABILITY,
-    DRILL_COMMAND,
-    input.verified ? 'VERIFIED' : 'FAILED',
-    String(input.steps),
-    'real-postgres,two-processes,real-lease-expiry,no-provider-call',
-    path,
-    `sha256:${createHash('sha256').update(readFileSync(join(input.repoRoot, path))).digest('hex')}`,
-    TRANSCRIPT_FILE,
-    recordedAt,
-  ].join('\t'));
-  writeFileSync(join(input.outDir, 'capability-proofs.tsv'),
-    `${[CAPABILITY_PROOF_COLUMNS.join('\t'), ...rows, `(${rows.length} rows)`].join('\n')}\n`);
-}
+const fileAttestation = (outDir: string, repoRoot: string, record: DrillRecord, verified: boolean): void =>
+  writeAttestation({
+    outDir, repoRoot, record, verified,
+    capability: CAPABILITY, drill: DRILL_COMMAND, exercised: EXERCISED,
+    infrastructure: INFRASTRUCTURE, transcriptFile: TRANSCRIPT_FILE,
+  });
 
 /* ------------------------------------------------------------------ entry */
 
