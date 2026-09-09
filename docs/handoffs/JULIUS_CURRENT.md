@@ -263,6 +263,31 @@ own profile dotenv at `$HERMES_PROFILE_HOME/.hermes/.env`, so the reviewer bills
 through that profile and the credential never enters the mission process. The
 preflight reports its absence there "for the record", as its own code says.
 
+### REAL POSTGRESQL, RUN HERE — 5 passed
+
+Not a claim about CI. A PostgreSQL 16 instance was started in this container and
+`real-infra-julius.test.ts` run against it on this branch:
+
+```
+initdb -D /tmp/juliuspg -A trust -U postgres && pg_ctl ... -p 55432
+DATABASE_URL=... JULIUS_REAL_POSTGRES=1 npx vitest run src/relay/persistence/real-infra-julius.test.ts
+→ Test Files 1 passed · Tests 5 passed | 2 todo
+```
+
+(The two todo cases are Docker-gated and need `JULIUS_SANDBOX_IMAGE`.)
+
+That suite is where the Project Brain writer and the task-contract store are
+proven against a real database rather than a fake, and it already covers the
+race that produced the `40001` serialization failure earlier in this session:
+*"TWO CONCURRENT LOCKS OF ONE REVISION: the index decides, and exactly one
+wins."* It also holds the binding CHECK in both directions, the jsonb round trip
+by re-derived digest, revision conflict, supersession in one write, and the
+refusal to roll an agreement back.
+
+`julius-store-conformance.test.ts` is deliberately NOT part of this: it is
+compile-time shape assertions holding the ports and the repositories together,
+and running it against a database would prove nothing it is for.
+
 ### What the bundle proves about the money
 
 `budget.tsv` holds one allocation (300,000 µUSD, `ESTIMATE`,
