@@ -316,20 +316,32 @@ consumers match on the message. So the sentinel now has `JULIUS_STALE_VERSION`,
 and `serializableTransaction` retries only a failure PostgreSQL raised —
 verified by code **and** by the words PostgreSQL used.
 
-**Adopted in `julius-postgres.ts` only, deliberately.** These seven open a
-SERIALIZABLE transaction and still do not retry:
+**A CORRECTION TO MY OWN COUNT.** The first commit said "eight of the nine".
+It is **seven of eight**, and the error is instructive:
+`julius-context-postgres.ts` was counted by matching that string in its PROSE.
+That file deliberately opens **no transaction at all** — it takes a dedicated
+connection precisely so its read gets a fresh snapshot OUTSIDE any caller's
+transaction, and wrapping it would break `persist`. It must never adopt the
+helper.
 
-`julius-context-postgres` · `julius-event-postgres` · `julius-lifecycle-postgres`
-· `julius-recovery-postgres` · `julius-repair-postgres` ·
-`julius-subagent-postgres` · `julius-tool-settlement-postgres`
+**Adopted in four**, after auditing every transaction body for purity (a retry
+runs the effect again, so a transaction that also spent money would spend
+twice): `julius-postgres`, `julius-event`, `julius-lifecycle`, `julius-repair`.
+Every one reaches only `client.query`; the `pool.query` calls in
+`julius-lifecycle` and `julius-subagent` are in other methods, and
+`julius-tool-settlement`'s `appendTrajectory`/`appendEvent` take the client.
 
-Each inlines its own bespoke transaction body rather than sharing a helper, and
-a retry is only sound when the effect is pure database work. Changing eight of
-them without proving that for each would trade a defect that is proven for one
-that is not. `julius-tool-postgres` already retried; so does
-`TransactionalWonderlandDatabase` — whose own sentinel, note, still wears
-`40001` and is therefore retried three times pointlessly. That is a separate,
-smaller finding, recorded rather than changed here.
+**Three remain exposed, each for a stated reason, not for lack of trying:**
+
+| Repository | Why not yet |
+|---|---|
+| `julius-subagent-postgres` | a DELIBERATE early `ROLLBACK` then `return {recorded:false,…}` inside the body. Under the helper that return resolves the effect and COMMIT follows an explicit ROLLBACK. Fixing it changes what the method MEANS, not how it is wrapped. |
+| `julius-recovery-postgres` | two SERIALIZABLE transactions, scaffolding unlike the other five |
+| `julius-tool-settlement-postgres` | shares the suffix but not the prefix |
+
+Doing those three mechanically would trade a proven defect for an unproven one,
+in the persistence layer of a system about to spend money. They are the named
+next piece of this work.
 
 **The helper's first draft released the pooled client twice**, and `pg` throws
 on that — so the first concurrent pair it was written for failed on the double
