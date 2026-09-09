@@ -1094,9 +1094,23 @@ describe('an incomplete review reaches Julius as the failure it actually was', (
   };
   const jsonRes = (body: unknown, status = 200): Response =>
     new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
-  const started = (state: unknown) => vi.fn()
-    .mockResolvedValueOnce(jsonRes({ accepted: true, runId: 'run-live' }))
-    .mockResolvedValueOnce(jsonRes(state));
+  /**
+   * A REVIEW SERVICE THAT ANSWERS ROUNDS, NOT A FIXED PAIR.
+   *
+   * One review is submit-then-poll. A shape the adapter corrects is asked
+   * again, which is a second submit and a second poll — so a fake that
+   * resolved exactly twice would answer the corrected ask with `undefined` and
+   * every corrected shape would arrive as a launch failure. It answers the
+   * same way every round, which is what a stubborn model does and the case
+   * these tests are about.
+   */
+  const started = (state: unknown) => {
+    let call = 0;
+    return vi.fn(async () => {
+      call += 1;
+      return call % 2 === 1 ? jsonRes({ accepted: true, runId: 'run-live' }) : jsonRes(state);
+    });
+  };
 
   /** Dispatches through the real adapter and returns the thrown Julius error. */
   const failureFrom = async (fetchImpl: unknown) => {
@@ -1184,7 +1198,11 @@ describe('an incomplete review reaches Julius as the failure it actually was', (
     const failure = await failureFrom(started({ runId: 'run-live', status: 'completed', reviewText: 'The plan looks fine to me.' }));
     expect(failure.failureClass, 'prose is absent JSON, not a dead credential').toBe('review_json_absent');
     expect(failure.code).toBe('WORKER_EXECUTION_FAILURE');
-    expect(failure.retryable, 'a model that wrote prose will write prose again').toBe(false);
+    expect(failure.retryable, 'a model that wrote prose TWICE will write prose again').toBe(false);
+    // AND IT WAS ASKED TWICE. Prose is a shape defect, so the adapter names it
+    // and re-asks once; a model that answers with prose again is the final
+    // failure this always was, and the record says two calls were bought.
+    expect((failure as { diagnostics?: Record<string, unknown> }).diagnostics?.reviewAttempts).toBe(2);
   });
 
   it('no incomplete review produces a verdict, a decision or a finding', async () => {
@@ -1198,6 +1216,119 @@ describe('an incomplete review reaches Julius as the failure it actually was', (
       const failure = await failureFrom(fetchImpl);
       expect(failure.code, 'a dispatch that failed produced no evidence').toBeDefined();
       expect(JSON.stringify(failure)).not.toContain('FAKETESTNOTREAL');
+    }
+  });
+
+  /**
+   * PAID RUN 33802017460 — A REAL PLAN, A REAL DIFF, PASSING TESTS, AND BOTH
+   * REVIEWS UNREADABLE.
+   *
+   * Julius never received a verdict and the run ended FAILED with zero
+   * decisions. The malformed shapes are `retryable: false` for a good reason —
+   * a plain retry asks the identical question and gets the identical answer —
+   * but a CORRECTION is a different act. It names the shape defect from the
+   * CLOSED shape token, never from the model's own (malformed) text, and asks
+   * once more.
+   */
+  /** Answers a scripted review text per round, and records every prompt it was given. */
+  const rounds = (...texts: readonly string[]) => {
+    const prompts: string[] = [];
+    let call = 0;
+    const fetchImpl = vi.fn(async (_url: unknown, init?: { body?: unknown }) => {
+      call += 1;
+      if (call % 2 === 1) {
+        prompts.push(String((JSON.parse(String(init?.body ?? '{}')) as { prompt?: unknown }).prompt ?? ''));
+        return jsonRes({ accepted: true, runId: 'run-live' });
+      }
+      const text = texts[Math.min(Math.ceil(call / 2) - 1, texts.length - 1)]!;
+      return jsonRes({ runId: 'run-live', status: 'completed', reviewText: text });
+    });
+    return { prompts, fetchImpl };
+  };
+
+  const APPROVED = JSON.stringify({
+    verdict: 'approved', summary: 'The plan satisfies every acceptance criterion.',
+    findings: [], requirementsChecked: [{ requirement: 'AC-1', status: 'passed', evidence: 'read the plan' }],
+  });
+
+  /** Dispatches through the real adapter and returns the SUCCESSFUL result. */
+  const resultFrom = async (fetchImpl: unknown) => {
+    const artifacts = createLiveArtifactExchange();
+    artifacts.put(planRef('run-live'), JSON.stringify(VALID_PLAN));
+    const adapter = createLiveHermesReviewerAdapter({
+      worker,
+      contexts: { snapshotFor: () => reviewSnapshot('build-1:review') },
+      artifacts,
+      config: loadHermesConfig(LIVE_ENV as never),
+      testCommand: 'npm run mission-test',
+      run: (async (input: { packet: ReviewPacket }) => runRemoteHermesReview({
+        packet: input.packet, config: REMOTE_CFG, runId: 'run-live',
+        deps: { now: () => '2026-09-04T00:00:00.000Z', sleep: () => Promise.resolve(), fetchImpl: fetchImpl as typeof fetch },
+      })) as never,
+    });
+    return adapter.dispatch({ taskId: 'build-1:review', contextId: 'ctx-resume-1', taskType: 'review:plan' });
+  };
+
+  it('prose first, a real verdict second: the run that died here now gets one', async () => {
+    const { prompts, fetchImpl } = rounds('The plan looks fine to me.', APPROVED);
+    const result = await resultFrom(fetchImpl);
+    expect(result.status, 'the review succeeded on the corrected ask').toBe('SUCCEEDED');
+    expect(prompts, 'exactly one correction was bought').toHaveLength(2);
+  });
+
+  it('the correction names the shape defect, and carries none of the unreadable answer', async () => {
+    const unreadable = 'The plan looks fine to me. Ship it.';
+    const { prompts, fetchImpl } = rounds(unreadable, APPROVED);
+    await resultFrom(fetchImpl);
+
+    const corrected = prompts[1]!;
+    expect(prompts[0], 'the first ask carried no correction').not.toContain('CORRECTION —');
+    expect(corrected, 'the second names what was wrong').toContain('contained no JSON report at all');
+    expect(corrected, 'and it is the last thing read before the emit instruction')
+      .toMatch(/CORRECTION —[\s\S]*Emit the JSON now\.$/u);
+    // THE UNREADABLE TEXT NEVER TRAVELS BACK, and that is STRUCTURAL rather
+    // than checked: `review_incomplete` carries a safe message, a closed shape
+    // and diagnostics, and the review text is not among them — the adapter
+    // could not quote it if it wanted to. This assertion is the second line,
+    // for the day someone adds the raw text to that outcome.
+    expect(corrected, 'never the answer itself').not.toContain(unreadable);
+  });
+
+  it('each correctable shape is told what it specifically got wrong', async () => {
+    const cases: readonly (readonly [string, string, string])[] = [
+      ['review_json_absent', 'The plan looks fine to me.', 'contained no JSON report at all'],
+      ['review_json_ambiguous', `${APPROVED}\n${APPROVED}`, 'MORE THAN ONE object carrying a verdict'],
+      ['review_verdict_missing', '{"summary":"ok","findings":[]}', 'contained JSON with no verdict'],
+      ['review_verdict_invalid', '{"verdict":"approve","summary":"ok","findings":[],"requirementsChecked":[]}', 'outside the permitted set'],
+    ];
+    for (const [shape, text, expected] of cases) {
+      const { prompts, fetchImpl } = rounds(text, APPROVED);
+      const result = await resultFrom(fetchImpl);
+      expect(prompts, `${shape} is re-asked once`).toHaveLength(2);
+      expect(prompts[1], `${shape} is told what it got wrong`).toContain(expected);
+      expect(result.status, `${shape} recovers`).toBe('SUCCEEDED');
+    }
+  });
+
+  it('a failure that is NOT a shape defect is never re-asked', async () => {
+    // A timeout, a 503 and a refused credential describe an answer that did not
+    // arrive. Two of them are already retryable at the TASK level, where the
+    // attempt ceiling and the spend budget govern; re-asking here would spend
+    // inside a dispatch for a defect no instruction can fix.
+    for (const [kind, body, status] of [
+      ['timed out', { runId: 'run-live', status: 'timed_out', failureKind: 'timed_out' }, 200],
+      ['capacity', { failureKind: 'capacity_exhausted' }, 503],
+      ['dead credential', { failureKind: 'authentication_failed' }, 401],
+    ] as const) {
+      let calls = 0;
+      const fetchImpl = vi.fn(async () => {
+        calls += 1;
+        return calls === 1 && status === 200 ? jsonRes({ accepted: true, runId: 'run-live' }) : jsonRes(body, status);
+      });
+      const failure = await resultFrom(fetchImpl)
+        .then(() => { throw new Error('the dispatch was expected to fail'); })
+        .catch((error: unknown) => error as { diagnostics?: Record<string, unknown> });
+      expect(failure.diagnostics?.reviewAttempts, `${kind} is asked exactly once`).toBe(1);
     }
   });
 });

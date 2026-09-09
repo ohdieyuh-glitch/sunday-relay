@@ -590,6 +590,24 @@ interface ReviewPacketFields {
   testCommand: string;
   testOutput: string;
   relayEvidence: string[];
+  /**
+   * WHAT THE PREVIOUS ANSWER GOT WRONG ABOUT ITS OWN SHAPE, when Julius is
+   * asking a second time.
+   *
+   * Paid run 33802017460 bought a real plan, a real diff and passing tests, and
+   * then BOTH reviews failed to parse — so Julius never received a verdict and
+   * the run ended FAILED with zero decisions. A plain retry would have asked
+   * the identical question and got the identical answer, which is exactly why
+   * those shapes are `retryable: false`. A CORRECTION is a different act: it
+   * names the shape defect and asks again.
+   *
+   * It is composed by the caller from a CLOSED failure shape — never from the
+   * model's own output, which is the text that was malformed — and it is
+   * emitted immediately before the emit instruction, where the last thing the
+   * reviewer reads is what its previous answer did wrong. Absent on a first
+   * ask, which is every ask that has ever been made before now.
+   */
+  correction?: string;
 }
 
 const LEGACY_IMPLEMENTATION_CHARGE: JuliusReviewCharge = Object.freeze({
@@ -703,6 +721,7 @@ export function buildReviewPrompt(p: ReviewPacket): string {
     ...body,
     '',
     `RUBRIC: ${rubric}`,
+    ...(p.correction === undefined ? [] : ['', p.correction]),
     'Emit the JSON now.',
   ].join('\n');
 }

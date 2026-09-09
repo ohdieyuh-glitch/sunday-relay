@@ -157,14 +157,45 @@ raised and no budget rule is relaxed. `diag_planAttempts` records how many calls
 one dispatch bought, because a retry the artifact could not show would be a
 spend nobody could account for.
 
+## The same defect on the other role that has killed a paid run
+
+Paid run **33802017460** bought a real plan, a real diff and passing tests, and
+then **both reviews failed to parse** — Julius never received a verdict and the
+run ended FAILED with zero decisions. That is the identical shape: an answer
+arrived, in the wrong shape, and the dispatch was terminal.
+
+The reviewer's malformed shapes are `retryable: false` for a good reason, stated
+in the code itself — *a plain retry asks the identical question and gets the
+identical answer*. A **correction** is not a retry. So the reviewer now gets the
+same one bounded corrected re-ask, on the six shapes where an answer ARRIVED in
+the wrong shape (`review_json_absent`, `review_json_unparseable`,
+`review_json_ambiguous`, `review_verdict_missing`, `review_verdict_invalid`,
+`review_summary_missing`/`_invalid`), each told what it specifically got wrong.
+
+**Never on the shapes a re-ask cannot fix.** A timeout, a 503, a refused
+credential, a dead process, a rejected request: those describe an answer that
+did not arrive. Two are already retryable at the *task* level, where the attempt
+ceiling and the run spend budget govern, and re-asking inside the dispatch would
+spend for nothing. `review_output_too_large` is excluded deliberately — a
+runaway answer asked again is a second runaway answer.
+
+**The unreadable text never travels back**, and that is structural rather than
+intended: `review_incomplete` carries a safe message, a closed shape token and
+diagnostics, and the review text is not among them. The adapter could not quote
+it if it wanted to. `review_attempts` records the call count beside
+`plan_attempts`.
+
 ## What is proven, and what is not
 
 Provider-free, through the real composition root: a plan refused for any of the
 fifteen rules recovers on the correction and the mission reaches COMPLETED; a
 plan refused twice fails exactly as before after exactly two calls; a valid plan
 buys nothing extra; the correction names the rule and the field and contains
-none of the model's own text. Twelve mutations across the two changes each turn
-the suite red.
+none of the model's own text. On the reviewer: prose first and a real verdict
+second now succeeds; each correctable shape is told what it specifically got
+wrong; a model that answers with prose twice fails as before, after two calls;
+and a timeout, a 503 and a refused credential are each asked exactly once.
+Eighteen mutations across the three changes each turn the suite red.
 
 **Not proven:** that the specific plans runs 34185920678 and 34186711214
 produced would now pass. Their text was never persisted — the evidence bundle is
