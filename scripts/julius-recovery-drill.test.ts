@@ -82,9 +82,14 @@ suite('the Julius restart/recovery drill, run for real', () => {
     const url = new URL(process.env.DATABASE_URL!);
     url.pathname = `/${database}`;
 
-    const { stdout } = await runProcess(process.execPath, [
-      join(__dirname, '..', 'dist-relay-bridge', 'julius-recovery-drill.cjs'), '--out', out,
-    ], { encoding: 'utf8', timeout: 300_000, env: { ...process.env, DATABASE_URL: url.toString() } });
+    // THROUGH THE NPM SCRIPT AN OPERATOR RUNS, which builds the bundle first.
+    // Reaching into the bundle directory instead would make this test depend
+    // on some earlier CI step having produced the artifact — exactly what
+    // `ci-test-accounting` exists to catch — and would let it run against a
+    // stale binary, which has cost this project a founder-facing failure once
+    // already (`reviewer pair-browser`, three hours stale).
+    const { stdout } = await runProcess('npm', ['run', 'julius:recovery-drill', '--silent', '--', '--out', out],
+      { encoding: 'utf8', timeout: 300_000, env: { ...process.env, DATABASE_URL: url.toString() } });
 
     expect(stdout, 'the drill must reach its own verdict line').toContain('JULIUS RESTART RECOVERY VERIFIED');
     expect(stdout, 'and the production sweep must be what moved it').toContain('REQUEUE/LEASE_EXPIRED');
@@ -105,9 +110,8 @@ suite('the Julius restart/recovery drill, run for real', () => {
      * the gate rejects, on the outcome column AND on the transcript.
      */
     const again = mkdtempSync(join(tmpdir(), 'julius-recovery-drill-again-'));
-    const second = await runProcess(process.execPath, [
-      join(__dirname, '..', 'dist-relay-bridge', 'julius-recovery-drill.cjs'), '--out', again,
-    ], { encoding: 'utf8', timeout: 300_000, env: { ...process.env, DATABASE_URL: url.toString() } })
+    const second = await runProcess('npm', ['run', 'julius:recovery-drill', '--silent', '--', '--out', again],
+      { encoding: 'utf8', timeout: 300_000, env: { ...process.env, DATABASE_URL: url.toString() } })
       .then(() => ({ code: 0 }), (error: { code?: number }) => ({ code: error.code ?? 1 }));
     expect(second.code, 'a dirty database is a drill failure, not a quiet pass').toBe(8);
     const ledger = readFileSync(join(again, 'capability-proofs.tsv'), 'utf8');

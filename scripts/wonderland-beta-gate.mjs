@@ -275,9 +275,22 @@ function capabilityProof(proofs, capability, probed) {
 
     const moved = claimed.find((row) => digestOf(row.exercised_path) !== row.exercised_digest);
     if (moved !== undefined) {
-      refuse('STALE', `${moved.exercised_path} has changed since the drill ran, so the drill no longer describes the code that is here`);
+      refuse('STALE', digestOf(moved.exercised_path) === null
+        ? `${moved.exercised_path} is no longer in this repository, so the drill describes code that is not here`
+        : `${moved.exercised_path} has changed since the drill ran, so the drill no longer describes the code that is here`);
       continue;
     }
+
+    /**
+     * ONE DRILL, ONE STORY. Every row of a drill describes the same run, so a
+     * ledger whose rows disagree about when it ran, what it ran against, how
+     * many steps it declared or which transcript it left is not one run's
+     * testimony — and reading only the first row would let the rest say
+     * anything at all.
+     */
+    const inconsistent = ['steps', 'infrastructure', 'transcript', 'recorded_at']
+      .find((column) => new Set(claimed.map((row) => row[column])).size > 1);
+    if (inconsistent !== undefined) { refuse('UNPROVEN', `its rows disagree about ${inconsistent}, so they do not describe one run`); continue; }
 
     const exercised = new Set(claimed.map((row) => row.exercised_path));
     const uncovered = probed.files.filter((path) => !exercised.has(path));
