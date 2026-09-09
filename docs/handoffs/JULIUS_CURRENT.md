@@ -1466,6 +1466,13 @@ deliberately mutates a claim revision in the database at the end.
 >   checkout of `relay/julius-contract-stack-rebased` against the DOWNLOADED
 >   bundle, exactly as was done for run 34186711214. Rows needing the five
 >   absent files will read "no dump", which is the honest answer.
+> * `capability-proofs.tsv` and the drill transcripts are **also absent**: the
+>   workflow step that runs the restart/recovery, failure-recovery and
+>   repair-loop drills after a mission lives on this stack. `RESTART / RECOVERY`,
+>   `FAILURE RECOVERY` and `REPAIR LOOP` will therefore read from the mission
+>   axis alone — which for a healthy run means NOT EXERCISED, not FAIL, and the
+>   capability axis can be answered separately by running the three drills
+>   locally and passing `--capability`.
 > * **TASK 2's proof is in `worker-diagnostics.tsv`**, whose columns the repair
 >   branch adds: `validation_passed`, `validation_reason_code`,
 >   `validation_field`, `validation_claim_phrase`, `plan_attempts`,
@@ -1495,7 +1502,8 @@ deliberately mutates a claim revision in the database at the end.
 | binding refusals (`binding_*`, `*_mismatch`) | only observable once the stack lands; **the stale-handoff and reviewer-binding guards are not on main**, so this run cannot exercise them | |
 | total cost (µUSD) and per-role settlement | `budget.tsv`, `worker-diagnostics.tsv` | |
 | final run state / halt cause | `runs.tsv`, `live-mission.evidence.txt` | |
-| Beta Gate over this bundle | run from a `relay/julius-contract-stack-rebased` checkout (the gate is absent on main): `node scripts/wonderland-beta-gate.mjs --evidence <downloaded dir>` | |
+| Beta Gate over this bundle — **both axes** | run from a `relay/julius-contract-stack-rebased` checkout (the gate is absent on main): `node scripts/wonderland-beta-gate.mjs --evidence <downloaded dir>`. Record BOTH result lines: *what this run proved* (the mission axis) and *what Julius is ready to do* (the verdict), never one blended number | |
+| capability proofs in the bundle | `capability-proofs.tsv` and the drill transcripts — **absent until the stack lands**, because the workflow step that runs the three drills after a mission is on this stack, not on main. Record Unknown; to answer the capability axis anyway, run the three drills locally and pass `--capability <dir>` | |
 
 Declarations, only when the rows above say so:
 
