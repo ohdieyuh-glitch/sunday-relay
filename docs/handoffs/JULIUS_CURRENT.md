@@ -1397,22 +1397,50 @@ gained `src/relay/persistence/julius-recovery-postgres.ts`: now that the file
 list decides what a drill must have driven, a re-export in it would let an
 attestation claim a file it never exercised.
 
+#### Two more drills, written the same evening
+
+The sentence above used to end "no drill has been written for them". Both now
+exist, on the same shared support (`scripts/julius-drill-support.ts`), each
+driving production code against a real PostgreSQL with scripted adapters and no
+provider client anywhere — and each proving the NEGATIVE direction in the same
+run, because only that makes the positive one mean anything.
+
+| Drill | Positive | Negative, in the same run |
+|---|---|---|
+| `npm run julius:failure-recovery-drill` | the architect times out, the runtime classifies it retryable, requeues rather than ends the task, spends exactly one further attempt, succeeds, and the mission completes | the architect fails `AUTH_CONFIGURATION`: **no** retry may be scheduled, one dispatch only, the durable record must say not-retryable, and the run must end FAILED rather than hang |
+| `npm run julius:repair-loop-drill` | a blocking finding becomes a REPAIR decision; the repair is the build's own child, inherits its subject's STAGE (`repair:build`, never `repair:repair:build`) and ROLE (the Coding Agent — what run 34037313976 got wrong); it is re-reviewed, accepted, and the mission completes through it | `REPAIR_UNROUTABLE` never fires and **exactly one** round is created against a ceiling of two — a loop that is bounded, not a loop |
+
+**A real defect the third drill exposed.** `writeAttestation` truncated the
+ledger, so three drills writing into one directory — which is what CI and a
+mission bundle both do — left the last one's proof and silently discarded the
+other two: a directory that looks complete and proves a third of what it says.
+The ledger merges now, a rerun replaces only its own rows, and a ledger written
+under a header the writer cannot read makes the drill FAIL rather than
+overwrite evidence it cannot understand.
+
+All three run in `first-live-topology` on every relevant PR, each in a database
+of its own, and that step fails if the gate refuses what they filed. All three
+also run after a paid mission, into the bundle.
+
 #### The new ceiling
 
 The §00l arithmetic, restated. A flawless single paid mission can now report
-**11 of 15 proven** — ten by the mission, one by drill — with `REPAIR LOOP`,
-`FAILURE RECOVERY`, `ACCOUNT / ONBOARDING` and `WONDER WEB OUTPUT` open; a
-mission with a rejected review and a repair round, **12**. `REPAIR LOOP` and
-`FAILURE RECOVERY` are now *drillable* and no drill has been written for them,
-which is honest work outstanding rather than a gate that flatters itself.
+**12 of 15 proven** — ten by the mission, two by drill — with `REPAIR LOOP`
+(which a flawless run does not exercise and whose drill then answers, taking it
+to **13**), `ACCOUNT / ONBOARDING` and `WONDER WEB OUTPUT` remaining. A mission
+that DOES repair earns `REPAIR LOOP` by mission proof and the drill's answer
+goes unused there — which is the two axes working rather than a number going
+up. The two rows still open need a real account to start a mission and Wonder
+Web to exist; neither is drillable, and neither has been quietly reclassified.
 
 **Verified end to end in this container on real PostgreSQL 16**, not reasoned:
-the drill passes its twelve steps, the gate accepts its attestation, a second
-run against the same database is refused and files `FAILED`, and the completed
-live-chain mission dumped by the shipping script's own queries — carrying that
-attestation — reads **9 rows proven by the mission and 1 by the drill**, with
-`TASK CONTRACT LOCK` correctly FAILED because that proof deliberately mutates a
-claim revision in the database at the end.
+each drill passes its twelve steps, the gate accepts all three attestations, a
+second run against the same database is refused and files `FAILED`, the CI loop
+reproduces verbatim (three drills, three databases, one merged ledger), and the
+completed live-chain mission dumped by the shipping script's own queries —
+carrying those attestations — reads **11 of 15 proven: 9 by the mission and 2
+by drill**, with `TASK CONTRACT LOCK` correctly FAILED because that proof
+deliberately mutates a claim revision in the database at the end.
 
 ### 00i. The next paid rerun — the record it must leave (template, to be filled by the run)
 
