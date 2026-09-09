@@ -85,6 +85,24 @@ stage-aware reviewer (defect 2) was not reached.
 previously failed — no coder dispatch, no diff, no review — because it died
 earlier, at a gate run 34037313976 never reached.
 
+### Run 34186711214 — PAID — **FAILED identically**
+
+Dispatched only to answer one question: is the trip a property of the model's
+sampling, or of the rule? Inputs identical to 34185920678.
+
+| Field | Value |
+|---|---|
+| provider calls | **one** — OpenAI, `gpt-5.6-sol`, response `resp_09fd5357c9101906016a9f8dc0f38087d1928c14addf805e51` |
+| architect output | **14,550 bytes** (against 14,581) — a different sample of the same mission |
+| architect state | `validation_passed=false`, `validation_reason_code=`**`plan_false_work_claim`**, `validation_field=`**empty** |
+| everything downstream | identical to 34185920678: no coder, no diff, no reviewer, no repair, no decisions |
+
+**Two independent samples, same rule, same wall.** That settles it as
+systematic rather than sampling-dependent, and it is why **no further paid
+rerun is justified until the fix is on `main`** — a third would be the
+"endlessly rerunning an unchanged failure" the paid-run authorisation
+explicitly excludes.
+
 ### The first causal blocker, and why it was invisible before
 
 `plan_false_work_claim` is a substring scan over `JSON.stringify(plan)` for four
@@ -100,13 +118,110 @@ the bundle could say only that a banned phrase appeared somewhere in a 14 KB
 document. #234's reason-code instrumentation is what made the rule identifiable
 at all — before it, the record said `plan_validation_failed` and stopped.
 
-**Fixed in `24d91a40`** on `relay/julius-contract-stack-rebased`: the scan is a
-structural walk that skips the two prohibition paths **by exact path, never by
-key name**, reports the matched phrase and a **sanitised** path (model-chosen
-keys become `<field>`, because that string reaches the published bundle), and
-walks keys sorted so the diagnostic does not move between runs. Twelve claim
-fields still refuse; five mutations each go red. **It is not on `main`** — see
-§00a for why this environment cannot author a landable PR.
+### The repair, in three parts
+
+Committed on `relay/julius-contract-stack-rebased` (`24d91a40`, then extended).
+The first draft of it would not have worked, and finding that out cost no money
+because the second failure had already forbidden another paid attempt.
+
+**1. The rule is aimed, not weakened.** The substring scan over
+`JSON.stringify(plan)` is now a structural walk, and the exemption is drawn
+where the distinction actually lies: a completion claim is an **assertion about
+the state of the work**, and a field that **enumerates a condition** is not one.
+Exempt, by exact path and never by key name: `prohibitedActions` at both levels,
+`acceptanceCriteria` at both levels, `testPlan`, `handoff.requiredTests`,
+`handoff.expectedEvidence`, `risks`. "The tests were run and exited zero" is the
+correct English for an acceptance criterion and could not mislead anyone about
+what has already happened. Still scanned — everything the Coding Agent reads as
+its charge: `objectiveSummary`, `handoff.objective`, `handoff.boundedTask`,
+every implementation step, assumption, requirement, architecture decision and
+rationale, and any field a model invents. A deeper copy of an exempt path
+(`handoff.extra.testPlan`) is scanned, because the exemption is matched on the
+whole join.
+
+**2. The diagnostic now survives the allowlist — which the first draft did
+not.** The draft reported `plan.testPlan[1] :: tests were run` in `reasonField`.
+That value would have been **dropped to null** by `safeFieldName` in
+`julius-router.ts`, whose grammar admitted at most two dotted segments and no
+index, and the operator would have read an **empty `validation_field` for a
+third time**. That grammar is a pre-existing defect, not one this change
+introduced: `plan.handoff.boundedTask` is three segments, so *no* nested
+refusal has ever been publishable. So:
+
+- `safeFieldName` accepts a bounded **structural path** — identifier segments,
+  decimal indices, 160 characters, and nothing a sentence needs. It still
+  refuses the composite `path :: phrase` form, prose, and key shapes.
+- `reasonField` carries the **path alone**; the new `reasonClaim` carries
+  **which of the four phrases** as a closed token (`tests_were_run`), published
+  through the existing token allowlist as `diag_validationClaimPhrase` and
+  dumped as `validation_claim_phrase`.
+- Model-chosen keys render as `unnameable` (a word, not `<field>`, which the
+  allowlist would have dropped); a path deeper than eight segments is truncated
+  and says so with a `.deeper` tail; keys are walked **sorted**, so two runs of
+  the same model produce the same path.
+- `julius-policy-router.test.ts` now exercises **both ends together** — the only
+  place the validator's output and the publisher's allowlist meet. A change to
+  either grammar that stops the answer reaching the artifact fails there rather
+  than in a paid run.
+
+**3. The charter stops handing the model the banned strings.** It quoted all
+four phrases verbatim inside the prohibition, and the schema then asks for
+`prohibitedActions` — so the most obedient possible answer was to echo them
+back. It now states the rule in the abstract ("write the entire plan in the
+future tense"), and asks the model not to quote the sentence back.
+
+Seven mutations each go red: narrowing `safeFieldName`, dropping the claim
+token, over-widening the exemption to `objectiveSummary`, removing the path
+truncation, unsorting the walk, publishing a raw model key, and matching the
+exemption on the truncated path.
+
+### Part 4 — a refused plan is corrected once, not fatal
+
+The defect the two runs really exposed. A plan that parses and then breaks one
+of Julius's OWN rules is a **self-inflicted, self-correctable** error, and it
+killed the mission outright — while every other recoverable failure in the run
+gets one bounded attempt at recovery. The architect is now told what it broke
+(the closed reason code and the structural path, **never its own text back**)
+and asked once more. Strictly once; a second refusal is the failure it always
+was. All fifteen reason codes have a correction, and an unparseable answer gets
+the same one.
+
+The correction spends inside the architect's **already-reserved** allocation —
+300,000 µUSD against two calls of roughly 20,000 µUSD each — so no ceiling is
+raised and no budget rule is relaxed. `plan_attempts` records how many calls one
+dispatch bought. The connector sends `store: false` and no
+`previous_response_id`, so the second call is genuinely independent.
+
+### WHERE THE LANDABLE FIX IS
+
+**`relay/julius-architect-gate-fix`, branched from trusted `main`
+(`872f1790`), pushed.** Four commits, every gate green:
+
+| Commit | What |
+|---|---|
+| `98a4a002` | the aimed rule, the surviving diagnostic, the charter |
+| `2f729388` | a test that asserted an auth precondition instead of establishing it |
+| `7b2150fb` | a test that discarded the rejection it provoked, exiting 1 on a green suite |
+| `5127618a` | the one correction, and `docs/JULIUS_PAID_RUNS_2026_09_08.md` |
+
+Suite **9,468 passing, 0 failed, 0 errors, exit 0**; typecheck, build,
+relay:build, relay:bridge:build, repository-boundary, parity-gate,
+surface-parity strict, yc-demo, cli contract-verify, `git diff --check`, and all
+four drills. The two middle commits are pre-existing defects that made the gate
+red in this container and are droppable on their own — nothing depends on them.
+
+**This session must not open that PR.** `julius-main-provenance.mjs` requires
+the candidate author to be `julius-worker[bot]` and the approver to be someone
+else; this environment holds `ohdieyuh-glitch` (§00a), so a PR opened here would
+be authored by the review authority and fail its own provenance check — and
+approving it would be the impersonation the invariant exists to prevent. The
+founder opens it through the worker-authored path.
+
+**The two earlier commits on `relay/julius-contract-stack-rebased`
+(`24d91a40`, `526d5d35`) are SUPERSEDED by `98a4a002`** and should not be landed
+beside it. This branch will be rebased onto the gate fix once that lands and its
+real SHA is known — not before, because rebasing onto an unlanded branch just
+moves the guess.
 
 ---
 
