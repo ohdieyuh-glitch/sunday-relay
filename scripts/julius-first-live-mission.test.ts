@@ -698,6 +698,10 @@ describe('the evidence dump names only tables and columns the migrations create'
       // with an empty field and no phrase, twice. The path says where and this
       // says which of the four phrases fired.
       'validationClaimPhrase',
+      // A refused plan is corrected once, so a dispatch is no longer one call
+      // by definition; a retry the artifact could not show would be a spend
+      // nobody could account for.
+      'planAttempts',
     ]) {
       expect(query, `the diagnostics dump must select ${key}`).toContain(`'diag_${key}'`);
     }
