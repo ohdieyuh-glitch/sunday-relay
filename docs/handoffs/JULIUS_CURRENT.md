@@ -202,13 +202,24 @@ dispatch bought. The connector sends `store: false` and no
 | `98a4a002` | the aimed rule, the surviving diagnostic, the charter |
 | `2f729388` | a test that asserted an auth precondition instead of establishing it |
 | `7b2150fb` | a test that discarded the rejection it provoked, exiting 1 on a green suite |
-| `5127618a` | the one correction, and `docs/JULIUS_PAID_RUNS_2026_09_08.md` |
+| `5127618a` | the architect's one correction, and `docs/JULIUS_PAID_RUNS_2026_09_08.md` |
+| `adb3c750` | the reviewer's one correction — the other role that killed a paid run |
+| `8c7ae60e` | a correction is a spend, so it obeys the mission ceiling |
 
-Suite **9,468 passing, 0 failed, 0 errors, exit 0**; typecheck, build,
+Suite **9,474 passing, 0 failed, 0 errors, exit 0**; typecheck, build,
 relay:build, relay:bridge:build, repository-boundary, parity-gate,
 surface-parity strict, yc-demo, cli contract-verify, `git diff --check`, and all
-four drills. The two middle commits are pre-existing defects that made the gate
+four drills. The two test commits are pre-existing defects that made the gate
 red in this container and are droppable on their own — nothing depends on them.
+
+**Both roles that have ever killed a paid mission are now self-correcting.**
+The architect (runs 34185920678 and 34186711214, `plan_false_work_claim`) and
+the reviewer (run 33802017460, both reviews unparseable) had the same defect: an
+answer ARRIVED, in the wrong shape, and the dispatch was terminal. Each is now
+told what its answer got wrong — from a closed token, never from its own text —
+and asked exactly once more, and only when the mission's allocation still has
+money in it. The Coding Agent has no such analogue and got none: it edits files,
+so its output is a diff on disk rather than a document that can be malformed.
 
 **This session must not open that PR.** `julius-main-provenance.mjs` requires
 the candidate author to be `julius-worker[bot]` and the approver to be someone
