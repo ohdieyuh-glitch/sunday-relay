@@ -15,6 +15,27 @@ Everything marked **verified** below was read from the repository or the
 GitHub API. Everything marked **standard mechanics** is the ordinary GitHub App
 flow and was not exercised from the cloud session, which has no App credential.
 
+> **THE PATH WAS WALKED, 2026-09-09 — PR #237.** This runbook is no longer a
+> proposal. A session holding the App credential followed it and opened
+> [#237](https://github.com/ohdieyuh-glitch/sunday-relay/pull/237):
+>
+> | | |
+> |---|---|
+> | author | `julius-worker[bot]` (App id 325202980) — the provenance route's requirement, met |
+> | head | `ebcebe1842b555efcf154ce295ae706fc25f4e7c` |
+> | tree | `868bf1c97d61b0d462945456a843b6e668beda45` — **identical** to the reviewed `d8c9fab1`, `git diff` empty |
+> | shape | 8 commits over `main` `872f1790`, one identity line, App as author AND committer |
+> | branch | `relay/julius-architect-gate-fix-worker` |
+>
+> The reference branch was never touched. Step 1's re-authoring produces a
+> different commit sha each time it is run (committer timestamps move) and the
+> same TREE every time — which is exactly what the tree-equality rule is for,
+> and why the sha in a PR body is stale by construction while the tree is not.
+>
+> **The one thing to watch.** #237's approval body quoted a 42-character sha —
+> two characters too many. The binding that matters is the review's `commit_id`,
+> which was correct; the prose was not. Read the `commit_id`, never the body.
+
 ## What is being landed — verified
 
 | | |
@@ -137,6 +158,46 @@ that does not contain the new `main`. Then, as the App on the worker branch:
 longer applies; re-run the three Step 1 verifications for identity and count),
 push, wait for CI, **re-approve at the new head**, and squash-merge at that
 head. Never merge an approval that names an older head.
+
+### Verifying the landing FROM A MACHINE WITH NO `gh` — verified 2026-09-09
+
+All three gates are pure rules behind `gh api` fetchers, and a Claude Code cloud
+container has no `gh`. Each now takes `--evidence <file>`: the same rule, fed
+the same object from JSON gathered however the operator can gather it (here,
+through the GitHub MCP tools). It is not a weaker mode — an omitted field
+arrives `undefined` and every rule answers indeterminate rather than passing,
+proven field by field in each gate's tests — and every output line carries
+`source=github` or `source=file:<path>` so a fed verdict is never mistaken for
+a fetched one.
+
+```bash
+node scripts/julius-review-currency.mjs  <owner/repo> <pr>    --evidence <file>
+node scripts/julius-main-provenance.mjs  <owner/repo> [main]  --evidence <file>
+node scripts/julius-main-monotonicity.mjs <owner/repo> [main] --evidence <file>
+```
+
+| Gate | Fields the file must carry |
+|---|---|
+| review currency | `headSha`, `headShaAfter`, `reviews`, `reviewComments`, `statuses`, `pullAuthorLogin`, `baseSha`, `baseShaAfter`, `baseContainedInHead` |
+| provenance | `mainSha`, `mainShaAfter`, `mainTreeSha`, `mainParents`, `pullRequests`, `reviewedTreeSha`, `reviewedHeadShaAfter`, `reviews`, `reviewComments`, `statuses`, `parentContainedInReviewedHead`, `baseRefChanged` |
+| monotonicity | `mainSha`, `mainShaAfter`, `acceptedShas`, `containment` |
+
+Run against PR #237 before its merge, this is what the real rule said — not a
+person restating it:
+
+```
+pr=ohdieyuh-glitch/sunday-relay#237 source=file:… review_currency=current
+base_integration=integrated merge_eligible=true
+head=ebcebe1842b555efcf154ce295ae706fc25f4e7c approved_by=ohdieyuh-glitch
+```
+
+### The NEXT worker PR is the contract stack
+
+`relay/julius-contract-stack-rebased` follows this repair through the same
+runbook, with two differences: **50 commits** in place of 8, and a rebase first.
+`docs/JULIUS_STACK_REBASE_NOTES.md` holds the recipe, re-verified on 2026-09-09
+against the shape #237 lands — three known conflicts, three known resolutions,
+all three typechecks and the whole 9,759-test suite green on the result.
 
 Every rule the gate applies, for reference (`scripts/julius-main-provenance.mjs`):
 `main` readable and still while the check runs · exactly one parent (a squash)
