@@ -1048,6 +1048,25 @@ logic were run against them. Two of the five SURVIVED the first three cases
 (a missing claim row, and a digest-only mismatch, were untested); the cases
 above were added for them and all five now die.
 
+#### The dispatch path, checked ahead of the day it is needed
+
+The three GitHub Actions tools the watch will use (`actions_run_trigger`,
+`actions_list`, `actions_get`) load in this environment with the expected
+shapes, and the paid workflow's `workflow_dispatch` inputs are exactly
+`confirm_live`, `acknowledge_rerun`, `max_ticks` (default `24`), `hermes_ref`
+(pinned default) and `mission` (default `julius-first-live`). The watch routine
+now carries the verbatim payload — `workflow_id: julius-first-live-mission.yml`,
+`ref: main`, `inputs: {mission: julius-live-mission-2, confirm_live: "",
+acknowledge_rerun: "RERUN PAID MISSION", max_ticks: "32"}` — and the exact
+MCP calls for each trust check, since no `gh` binary exists here. No run was
+dispatched: `main` has not moved.
+
+A note for the record: the repository's boundary scanner refused the first
+draft of the worker-PR runbook for a push URL carrying an inline token
+(`[secret] … possible connection URL with inline credentials`). The runbook now
+authenticates `gh` and git from a token file and pushes with a plain remote.
+That is the scanner doing its job on documentation, and it was right.
+
 #### Section 12F — trust verification from this environment, stated precisely
 
 `scripts/julius-main-provenance.mjs` and the review-currency check shell out to
