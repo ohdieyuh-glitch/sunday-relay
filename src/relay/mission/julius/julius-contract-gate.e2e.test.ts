@@ -6,6 +6,8 @@ import {
 import { juliusContractSubjectTaskId } from './julius-task-pipeline';
 import { evaluateJuliusSharedBinding, type JuliusTaskContractBinding } from './julius-task-contract';
 import type { JuliusTask } from './julius-runtime';
+import { injectJuliusFault } from './julius-fault-injection';
+import { JuliusRunLoop } from './julius-run-loop';
 
 /**
  * THE CONTRACT GATE, DRIVEN THROUGH THE REAL RUN LOOP.
@@ -50,9 +52,9 @@ const RUN = {
 function build(input: { contracts?: 'locked' | 'draft' | 'none' } = {}) {
   const harness = createJuliusHarness({
     workers: [
-      { worker: ARCHITECT, script: [PLAN_OK] },
-      { worker: CODER, script: [BUILD_OK] },
-      { worker: REVIEWER, script: [REVIEW_ACCEPT, REVIEW_ACCEPT] },
+      { worker: ARCHITECT, script: [PLAN_OK, PLAN_OK] },
+      { worker: CODER, script: [BUILD_OK, BUILD_OK] },
+      { worker: REVIEWER, script: [REVIEW_ACCEPT, REVIEW_ACCEPT, REVIEW_ACCEPT, REVIEW_ACCEPT] },
     ],
     card: cardPolicy({ allowedProviders: ['openai', 'anthropic', 'hermes'], capabilities: ['plan', 'implement', 'review'], concurrency: 1 }),
     verification: verificationPolicy({ reviewerRequired: true, maxRepairRounds: 3 }),
@@ -71,10 +73,20 @@ function build(input: { contracts?: 'locked' | 'draft' | 'none' } = {}) {
   return harness;
 }
 
-async function drain(harness: ReturnType<typeof build>, ticks = 14): Promise<void> {
+/**
+ * Drive the run the way `driveJuliusRunToTerminal` does — tick, and when a tick
+ * claims nothing, ask the run to advance. That second call is not a detail: a
+ * run with no claimable task is never named by a tick, so it is the only place
+ * a stranded run can be looked at, and a driver that skipped it would prove the
+ * recovery path exists without ever entering it.
+ */
+async function drain(harness: ReturnType<typeof build>, ticks = 16): Promise<void> {
   for (let index = 0; index < ticks; index += 1) {
-    const outcomes = await harness.loop.tick(scope);
-    if (outcomes.length === 0) return;
+    const report = await harness.loop.tick(scope);
+    if (report.claimed === 0) {
+      const advance = await harness.loop.advanceRun('run-1', 'prj-1');
+      if (advance === null || (!advance.changed && advance.resumedVerifications === 0)) break;
+    }
   }
 }
 
@@ -188,5 +200,96 @@ describe('which task’s contract governs which', () => {
       { ...task({ taskId: 'b', role: 'CODING_AGENT', parentTaskId: 'a' }), missionId: 'msn-1' },
     ] as readonly JuliusTask[];
     expect(juliusContractSubjectTaskId(cyclic[0]!, cyclic)).toBe('b');
+  });
+});
+
+/**
+ * A CRASH AT THE LOCK BOUNDARY.
+ *
+ * The lock is written before the release precisely so that a crash between them
+ * cannot leave a build announced runnable against unagreed terms. That is a
+ * claim about an instant, and a test cannot reach an instant by waiting — it has
+ * to cause it. Each case below fails ONE named store call, restarts, and asserts
+ * the run reaches a state that is safe and then finishes.
+ */
+describe('a crash between the lock and the release', () => {
+  const drive = async (harness: ReturnType<typeof build>, fault: { method: string; onCall: number }) => {
+    const faulted = injectJuliusFault(harness.store, fault);
+    const loop = new JuliusRunLoop(
+      { ...harness.deps, store: faulted.store }, harness.policies, { claimLimit: 5, leaseMs: 60_000 },
+    );
+    // Ticks until the fault fires, exactly as the chaos suite drives one.
+    for (let index = 0; index < 8 && !faulted.report.fired; index += 1) {
+      try { await loop.tick(scope); } catch { break; }
+    }
+    return faulted.report;
+  };
+
+  /**
+   * THE RESTART. Durable rows survive; the lease the dying process held does
+   * not — which is exactly what `JuliusMemoryStore.restart()` models, and what
+   * the chaos suite uses. Without it the task the fault interrupted stays ACTIVE
+   * under a lease that has 60 seconds left, and the "resumes cleanly" claim
+   * would be untestable rather than untrue.
+   */
+  const restart = (harness: ReturnType<typeof build>) => harness.store.restart();
+
+  it('a crash AFTER the lock and BEFORE the decision leaves the terms agreed and the build still blocked', async () => {
+    const harness = build({ contracts: 'draft' });
+    // `appendDecision` is the write that records the plan review's acceptance
+    // and releases the build. Failing it lands exactly in the window the
+    // ordering exists for.
+    const report = await drive(harness, { method: 'appendDecision', onCall: 1 });
+    expect(report.fired, 'the boundary was actually reached').toBe(true);
+
+    const contract = await harness.store.loadTaskContract({ projectId: 'prj-1', taskId: 'build-1' });
+    expect(contract?.state, 'the terms are agreed').toBe('LOCKED');
+    expect(harness.store.taskRow('build-1')?.state, 'and nothing was released').toBe('BLOCKED');
+    expect(harness.adapters.get(CODER.adapterId)!.dispatches, 'so no coder ran').toEqual([]);
+
+    // THE RESTART RESUMES RATHER THAN RE-AGREEING. The re-verification locks
+    // nothing new — the lock is idempotent — and the release then happens.
+    restart(harness);
+    await drain(harness);
+    expect(harness.store.events().filter((event) => event.type === 'contract.locked'), 'exactly one lock, ever').toHaveLength(1);
+    expect(harness.store.taskRow('build-1')?.state).toBe('SUCCEEDED');
+  });
+
+  it('a crash DURING the lock leaves nothing agreed and nothing released, and the retry agrees once', async () => {
+    const harness = build({ contracts: 'draft' });
+    const report = await drive(harness, { method: 'lockTaskContract', onCall: 1 });
+    expect(report.fired).toBe(true);
+
+    const contract = await harness.store.loadTaskContract({ projectId: 'prj-1', taskId: 'build-1' });
+    expect(contract?.state, 'the terms are still arguable').toBe('DRAFT');
+    expect(harness.store.taskRow('build-1')?.state, 'and the build is still blocked').toBe('BLOCKED');
+
+    restart(harness);
+    await drain(harness);
+    expect(harness.store.events().filter((event) => event.type === 'contract.locked')).toHaveLength(1);
+    expect(harness.store.taskRow('build-1')?.state).toBe('SUCCEEDED');
+  });
+
+  it('a contract that never locks parks the run rather than completing it', async () => {
+    // The store refuses every lock. The decision is still recorded — it is true
+    // about the work that was reviewed — and the build is released, so the
+    // DISPATCH GATE is the thing that has to hold. It does: the coder is never
+    // paid, and the run does not report COMPLETED.
+    const harness = build({ contracts: 'draft' });
+    const refusing = {
+      ...harness.store,
+      lockTaskContract: async () => ({ locked: false as const, reasonCode: 'lock_contended', lockedRevision: null }),
+    };
+    const loop = new JuliusRunLoop(
+      { ...harness.deps, store: refusing }, harness.policies, { claimLimit: 5, leaseMs: 60_000 },
+    );
+    for (let index = 0; index < 12; index += 1) {
+      const report = await loop.tick(scope);
+      if (report.outcomes.length === 0) break;
+    }
+    expect(harness.adapters.get(CODER.adapterId)!.dispatches, 'no coder was paid').toEqual([]);
+    expect(harness.store.taskRow('build-1')?.state).not.toBe('SUCCEEDED');
+    const refusals = harness.store.events().filter((event) => event.type === 'contract.refused');
+    expect(refusals.map((event) => event.facts.reasonCode)).toContain('lock_contended');
   });
 });

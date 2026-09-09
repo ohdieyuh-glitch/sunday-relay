@@ -463,7 +463,16 @@ export async function driveJuliusRunToTerminal(input: {
       const after = await input.store.loadRun(input.runId, input.projectId);
       lastState = after?.state ?? lastState;
       if (after !== null && terminal.has(after.state)) return { state: after.state, ticks: tick, stalled: false, haltCause: null };
-      if (advance === null || !advance.changed) {
+      /**
+       * A RESUMED VERIFICATION IS PROGRESS, even when the run state did not
+       * move. `advanceRun` runs any verification the run is owed — the window a
+       * crash between accepting a worker's result and recording the decision
+       * leaves open — and an accepted plan releases a BLOCKED build while the
+       * run stays READY. Reading `changed` alone would call that a stall on the
+       * very tick that unblocked the run, and the mission would be abandoned
+       * one step from finishing.
+       */
+      if (advance === null || (!advance.changed && advance.resumedVerifications === 0)) {
         return { state: lastState, ticks: tick, stalled: true, haltCause: await stallCause(lastState) };
       }
     }

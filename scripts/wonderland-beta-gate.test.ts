@@ -104,7 +104,7 @@ describe('the Wonderland Beta Gate', () => {
 
   it('answers with exactly three values, whatever it is pointed at', () => {
     for (const report of [evaluate(null), evaluate(failingBundle()), evaluate(completingBundle())]) {
-      expect(report.results.length, 'the fourteen declared capabilities').toBe(14);
+      expect(report.results.length, 'the fifteen declared capabilities').toBe(15);
       for (const row of report.results) {
         expect(VERDICTS, `${row.id} answered ${row.verdict}`).toContain(row.verdict);
         expect(row.basis.length, `${row.id} must name what it read`).toBeGreaterThan(0);
@@ -140,7 +140,12 @@ describe('the Wonderland Beta Gate', () => {
 
   it('names the top three gaps in creation-path order, not in severity guesswork', () => {
     const report = evaluate(failingBundle());
-    expect(report.gaps.map((row) => row.id)).toEqual(['CODING AGENT', 'REPAIR LOOP', 'VERIFIED COMPLETION']);
+    // TASK CONTRACT LOCK sits second because paid run 34037313976 had no task
+    // contract at all — the capability did not exist when it ran — and the gate
+    // reports that rather than skipping a row the bundle predates. Reading it as
+    // a gap is correct: the reviewer that produced six findings against a plan
+    // was grading against prose, which is precisely what this row detects.
+    expect(report.gaps.map((row) => row.id)).toEqual(['CODING AGENT', 'TASK CONTRACT LOCK', 'REPAIR LOOP']);
     expect(report.gaps.length, 'three, never more').toBeLessThanOrEqual(3);
   });
 
@@ -155,7 +160,7 @@ describe('the Wonderland Beta Gate', () => {
     expect(verdictFor(report, 'REPAIR LOOP')).toBe('PASS');
     expect(verdictFor(report, 'VERIFIED COMPLETION')).toBe('PASS');
     expect(report.gaps.map((row) => row.id), 'and the remaining gaps are off the creation path')
-      .toEqual(['ACCOUNT / ONBOARDING', 'WONDER WEB OUTPUT', 'PROJECT BRAIN PERSISTENCE']);
+      .toEqual(['TASK CONTRACT LOCK', 'ACCOUNT / ONBOARDING', 'WONDER WEB OUTPUT']);
   });
 
   /**
@@ -260,7 +265,7 @@ describe('the Wonderland Beta Gate', () => {
    * and if someone builds it, this test starts demanding a passing bundle for
    * it too.
    */
-  it('every capability that is built can be reached: one good run passes all thirteen', () => {
+  it('every capability that is built can be reached: one good run passes all fourteen', () => {
     const dir = mkdtempSync(join(tmpdir(), 'beta-gate-ideal-'));
     const bundle = join(dir, 'julius-live-evidence');
     mkdirSync(bundle);
@@ -297,6 +302,11 @@ describe('the Wonderland Beta Gate', () => {
     ]));
     write('sessions.tsv', tsv(['execution_id', 'mission_id', 'project_id', 'player_id', 'agent_id', 'state'], [
       ['exec-1', 'mission:julius-live-2', 'prj-julius-live-2', 'player:ada', 'agent:ada', 'RUNNING'],
+    ]));
+    // And the build ran under terms that were agreed before it started.
+    write('task-contracts.tsv', tsv(['contract_id', 'contract_revision', 'task_id', 'state', 'binding_digest', 'locked_at', 'locked_by_evaluator_id', 'created_at'], [
+      [`contract:${RUN}:build`, '1', `${RUN}:build`, 'SUPERSEDED', `sha256:${'a'.repeat(64)}`, 't1', 'reviewer:hermes', 't0'],
+      [`contract:${RUN}:build`, '2', `${RUN}:build`, 'LOCKED', `sha256:${'b'.repeat(64)}`, 't2', 'reviewer:hermes', 't1'],
     ]));
 
     const report = evaluate(dir);

@@ -39,10 +39,11 @@ import { createJuliusContextSnapshot } from './julius-context-snapshot';
 import { evaluateJuliusVerification, type JuliusReviewerFinding, type JuliusVerificationPolicy } from './julius-verification-runtime';
 import { planJuliusRepair } from './julius-repair-runtime';
 import { repairRoundsBefore, repairTaskTypeFor } from './julius-repair-lineage';
-import { lockJuliusTaskContract, mayDispatchUnderContract, type JuliusTaskContractBinding } from './julius-task-contract';
+import { juliusContractReviewCharge, lockJuliusTaskContract, mayDispatchUnderContract, type JuliusTaskContract, type JuliusTaskContractBinding } from './julius-task-contract';
 import { evaluateJuliusRelease } from './julius-release-runtime';
+import { reviewStageOf } from './julius-review-stage';
 import { evaluateJuliusAllocation, type JuliusAllocationPolicy, type JuliusExecutionAllocation } from './julius-allocation-runtime';
-import { JULIUS_RUNTIME_VERSION, type JuliusBrainEntry, type JuliusTask, type JuliusVerificationDecision, type JuliusWorker, type JuliusWorkerRole } from './julius-runtime';
+import { JULIUS_RUNTIME_VERSION, type JuliusBrainEntry, type JuliusRecordedDecision, type JuliusTask, type JuliusVerificationDecision, type JuliusWorker, type JuliusWorkerRole } from './julius-runtime';
 import { validateJuliusEvent, type JuliusOperationalEvent, type JuliusOperationalEventType } from './julius-events';
 import { validateTrajectoryEvent, type JuliusTrajectoryEvent, type JuliusTrajectoryKind } from './julius-trajectory';
 import {
@@ -252,6 +253,12 @@ export type JuliusTaskPreflight =
      * absence: those tasks are not bound, not unbound-and-permitted-anyway.
      */
     readonly contractBinding: JuliusTaskContractBinding | null;
+    /**
+     * The locked contract itself, read ONCE at the gate. A reviewer is charged
+     * with its terms and a second read could see a different revision — the
+     * whole point of a binding is that one dispatch names exactly one.
+     */
+    readonly contract: JuliusTaskContract | null;
   };
 
 /**
@@ -412,10 +419,10 @@ export async function prepareClaimedTask(
         },
       };
     }
-    return { kind: 'ELIGIBLE', run, role, task, contractBinding: verdict.binding };
+    return { kind: 'ELIGIBLE', run, role, task, contractBinding: verdict.binding, contract };
   }
 
-  return { kind: 'ELIGIBLE', run, role, task, contractBinding: null };
+  return { kind: 'ELIGIBLE', run, role, task, contractBinding: null, contract: null };
 }
 
 /**
@@ -436,6 +443,20 @@ export async function runClaimedTask(
   const { run, role, task } = preflight;
   const correlationId = `${claim.taskId}:${claim.leaseGeneration}`;
   const ledger = new RuntimeLedger(deps, run, correlationId);
+  /**
+   * RULE 5 — THE REVIEWER GRADES AGAINST THE CONTRACT.
+   *
+   * Built from the contract the gate proved, and handed DOWN to the adapter
+   * rather than looked up by it: a reviewer that could fetch its own charge
+   * would be choosing what it is graded against, which is the same inversion
+   * `taskType` exists for. Only a reviewer receives it — a coder is bound by
+   * the contract but does not review against it — and only for a stage this
+   * task actually is; an unknown review type is not guessed at.
+   */
+  const reviewStage = role === 'INDEPENDENT_REVIEWER' ? reviewStageOf(claim.taskType) : null;
+  const contractCharge = preflight.contract !== null && reviewStage !== null
+    ? juliusContractReviewCharge({ contract: preflight.contract, stage: reviewStage })
+    : null;
   /**
    * TWO NUMBERS THAT USED TO BE ONE, and this event carries both.
    *
@@ -647,6 +668,7 @@ export async function runClaimedTask(
       claim: executionClaim, policy: request.policy, role, taskType: claim.taskType,
       capability: request.capability, resources, operationId, signal: request.signal,
       ...(dispatchAllocation === undefined ? {} : { allocation: dispatchAllocation }),
+      ...(contractCharge === null ? {} : { contract: contractCharge }),
     });
   let lastProviderId = deps.router.providerOf(outcome.status === 'COMPLETED' ? outcome.workerId : null);
 
@@ -698,6 +720,7 @@ export async function runClaimedTask(
       capability: request.capability, resources,
       operationId: `${operationId}:reroute:${tried.length}`,
       signal: request.signal, excludedWorkerIds: tried,
+      ...(contractCharge === null ? {} : { contract: contractCharge }),
       ...(dispatchAllocation === undefined ? {} : { allocation: dispatchAllocation }),
     });
   }
@@ -859,6 +882,95 @@ function executionPorts(
     },
   };
 }
+
+/**
+ * RESUME A VERIFICATION THAT NEVER RAN.
+ *
+ * THE WINDOW THIS CLOSES. `acceptWorkerResult` moves a task out of ACTIVE in
+ * its own transaction; the verification decision is a SEPARATE write. A process
+ * that dies between them leaves a SUCCEEDED task with no decision — and nothing
+ * ever looks at it again, because the claim query offers RUNNABLE tasks only
+ * and a SUCCEEDED task is not one. The run then parks in VERIFYING forever.
+ *
+ * It parks HONESTLY — completion requires a decision per task, so nothing
+ * false is reported — but "the mission never finishes and the money is spent"
+ * is not a recovery. The chaos suite reached this window and asserted only that
+ * the run did not wedge in an impossible STATE; that a run could be permanently
+ * stranded in a possible one was the thing nobody was asking about.
+ *
+ * WHY NOT REQUEUE THE TASK INSTEAD. Returning it to RUNNABLE would send the
+ * worker again and pay for work that is already durably done. The result was
+ * accepted; what is missing is Julius's own judgement of it, and that costs
+ * nothing to redo.
+ *
+ * IT IS IDEMPOTENT BY CONSTRUCTION. `appendDecision`'s key is
+ * `<taskId>:<action>:<reasonCode>` and the brain entry's id is derived from the
+ * same three, so the decision this resume writes IS the decision the crashed
+ * tick would have written — a later replay adds nothing and does not mint a
+ * second repair round.
+ *
+ * A TASK WITH A PENDING REVIEW IS NOT STRANDED. Verification answers
+ * SCHEDULE_REVIEW while a required review has not completed, so sweeping such a
+ * task every tick would re-announce a review that is already on its way. The
+ * run is making progress; only a task with nothing left to wait for is resumed.
+ */
+export async function resumeUnverifiedTasks(input: {
+  deps: JuliusPipelineDependencies;
+  run: JuliusRunRow;
+  policy: JuliusCardPolicy;
+  verification: JuliusVerificationPolicy;
+  tasks: readonly JuliusTask[];
+  decisions: readonly JuliusRecordedDecision[];
+  /** The capability a task WOULD need, so a resumed REPAIR is proven routable before it exists. */
+  capabilityFor?: (task: { taskId: string; taskType: string; role: string }) => string;
+}): Promise<readonly JuliusTaskOutcome[]> {
+  const { deps, run, tasks, decisions } = input;
+  const decided = new Set(decisions.map((decision) => decision.taskId));
+  const pendingReviewSubjects = new Set(
+    tasks
+      .filter((task) => task.role === 'INDEPENDENT_REVIEWER' && task.parentTaskId !== null
+        && (task.state === 'BLOCKED' || task.state === 'RUNNABLE' || task.state === 'ACTIVE'))
+      .map((task) => task.parentTaskId as string),
+  );
+  const stranded = tasks.filter((task) => task.state === 'SUCCEEDED'
+    && !decided.has(task.taskId)
+    && !pendingReviewSubjects.has(task.taskId));
+  if (stranded.length === 0) return [];
+
+  const outcomes: JuliusTaskOutcome[] = [];
+  for (const task of stranded) {
+    const correlationId = `resume:${task.taskId}`;
+    const ledger = new RuntimeLedger(deps, run, correlationId);
+    const request: JuliusPipelineRequest = {
+      claim: {
+        taskId: task.taskId, runId: run.runId,
+        role: task.role, taskType: task.taskType, leaseGeneration: 0, attempt: 0,
+      },
+      policy: input.policy,
+      verification: input.verification,
+      // Never dispatched from here, so no capability is exercised; the value is
+      // the task's own type so a reader of the request can see what it was.
+      capability: task.taskType,
+      ...(input.capabilityFor === undefined ? {} : { capabilityFor: input.capabilityFor }),
+    };
+    outcomes.push(await verifyExecutedTask({
+      request, deps, run, ledger, task,
+      /**
+       * WHO PERFORMED THIS VERIFICATION, truthfully. It is not the worker that
+       * produced the result — that process is gone — and naming it would put a
+       * worker's id on a judgement it did not make. The decision itself is keyed
+       * on the task and the verdict, not on this, so the durable row is the same
+       * one the crashed tick would have written.
+       */
+      workerId: JULIUS_VERIFICATION_RESUME_WORKER,
+      duplicate: false,
+    }));
+  }
+  return outcomes;
+}
+
+/** The identity a resumed verification is attributed to. Never a worker's. */
+export const JULIUS_VERIFICATION_RESUME_WORKER = 'julius-verification-resume' as const;
 
 /* ------------------------------------------------------- the verification */
 

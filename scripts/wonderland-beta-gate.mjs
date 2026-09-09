@@ -226,6 +226,50 @@ const CAPABILITIES = [
     },
   },
   {
+    /**
+     * THE AGREEMENT THE BUILD RAN UNDER.
+     *
+     * A row rather than a footnote because the failure it detects is invisible
+     * in every other one: a mission can show a plan, a build, a review and a
+     * completion while the reviewer graded against its own reading of prose.
+     * PASS requires a LOCKED revision whose lock instant precedes the work —
+     * "locked at some point" would pass a contract agreed after the fact, which
+     * is the thing the ordering guarantee exists to prevent.
+     */
+    id: 'TASK CONTRACT LOCK', path: true,
+    build: () => built(
+      'src/relay/mission/julius/julius-task-contract.ts',
+      'src/relay/persistence/julius-contract-postgres.ts',
+      'src/relay/persistence/wonderland-migrations/023_julius_task_contracts.sql',
+    ),
+    prove: (ev) => {
+      if (!ev.present) return [false, 'no live evidence bundle'];
+      if (ev.file('task-contracts.tsv') === null) {
+        return [false, 'this bundle carries no readable task-contract dump, so what the coder was charged with is unknown'];
+      }
+      const contracts = ev.rows('task-contracts.tsv');
+      if (contracts.length === 0) return [false, 'no task contract was authored for this run'];
+      const locked = contracts.filter((row) => row.state === 'LOCKED');
+      if (locked.length === 0) {
+        return [false, `${contracts.length} contract revision(s) exist and none was ever locked, so no build could be dispatched`];
+      }
+      const build = ev.rows('tasks.tsv').find((row) => row.task_type === 'build');
+      if (build === undefined) return [false, 'a contract is locked but the run has no build task to have been governed by it'];
+      const governing = locked.find((row) => row.task_id === build.task_id);
+      if (governing === undefined) {
+        return [false, `the locked contract governs ${locked.map((row) => row.task_id).join(', ')}, not the build task ${build.task_id}`];
+      }
+      // A lock with no instant cannot be ordered against anything, and the
+      // migration's own CHECK forbids it — so reading one here means the dump,
+      // not the run, is what is wrong. Unknown, never assumed to be early.
+      if (!governing.locked_at) {
+        return [false, `${governing.contract_id} reads LOCKED with no lock instant, so it cannot be shown to precede the build`];
+      }
+      return [true,
+        `${governing.contract_id} revision ${governing.contract_revision} locked at ${governing.locked_at} by ${governing.locked_by_evaluator_id || '(unrecorded)'}, governing ${build.task_id}`];
+    },
+  },
+  {
     id: 'INDEPENDENT REVIEWER', path: true,
     build: () => built('relay-bridge/hermes-reviewer.ts', 'relay-bridge/hermes-remote-review.ts', 'src/relay/mission/reviewer-gate.ts'),
     prove: (ev) => {
