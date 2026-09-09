@@ -1229,6 +1229,30 @@ against it.
 > 34186711214 repair. Every row is a fact the bundle or the Actions run states;
 > **Unknown stays Unknown**, never inferred. Fill it from
 > `julius-live-evidence/` (the dump) and the Actions job log, in this order.
+>
+> **CORRECTION, 2026-09-08 — read this before filling anything in.** The paid
+> run executes on **`main` + the repair**, and the contract stack is NOT on
+> main. Verified by reading all three trees:
+>
+> * the bundle will carry **nine** files — `runs`, `tasks`, `evidence`,
+>   `decisions`, `findings`, `failures`, `budget`, `tool-invocations`,
+>   `worker-diagnostics` — and **not** `task-contracts.tsv`,
+>   `project-brain.tsv`, `sessions.tsv`, `contract-events.tsv` or
+>   `trajectory.tsv`. Those five arrive only when the contract stack lands.
+>   Their absence is the bundle being what that commit writes, **not** a failed
+>   run, and must not be recorded as one.
+> * **`scripts/wonderland-beta-gate.mjs` does not exist on `main` or on the
+>   repair branch.** The gate is an instrument on this stack: run it from a
+>   checkout of `relay/julius-contract-stack-rebased` against the DOWNLOADED
+>   bundle, exactly as was done for run 34186711214. Rows needing the five
+>   absent files will read "no dump", which is the honest answer.
+> * **TASK 2's proof is in `worker-diagnostics.tsv`**, whose columns the repair
+>   branch adds: `validation_passed`, `validation_reason_code`,
+>   `validation_field`, `validation_claim_phrase`, `plan_attempts`,
+>   `review_attempts`. A crossed architect boundary reads as
+>   `validation_passed=t`, or as one refusal that NAMES its field and claim
+>   phrase followed by a second attempt that passes — which is precisely what
+>   runs 34185920678 and 34186711214 could not produce.
 
 | Field | Where it comes from | Value |
 |---|---|---|
@@ -1239,27 +1263,31 @@ against it.
 | mission inputs | `mission=julius-live-mission-2`, `confirm_live=RUN LIVE MISSION`, `acknowledge_rerun=RERUN PAID MISSION`, `max_ticks=32`, `hermes_ref` default | |
 | budget ceiling / repair cycles | `runs.tsv`, mission contract (`spendUsd`, `repairCycles`) | |
 | provider calls (count, model, response ids) | `worker-diagnostics.tsv`, job log (`resp_…`) | |
-| architect: plan attempts, validation verdict, `reasonClaim` if refused | `worker-diagnostics.tsv` (`diag_*`), `failures.tsv` | |
+| architect: `plan_attempts`, `validation_passed`, `validation_reason_code`, `validation_field`, `validation_claim_phrase` | `worker-diagnostics.tsv`, `failures.tsv` — **this is TASK 2's evidence** | |
 | plan review: verdict, findings | `evidence.tsv` (REVIEW_FINDING), `findings.tsv`, `decisions.tsv` | |
-| contract: id, revision locked, digest, lock instant, evaluator | `task-contracts.tsv`, `contract-events.tsv` (`julius.contract.locked`) | |
-| contract: challenged revisions, if any | `contract-events.tsv` (`julius.contract.challenged`) | |
-| coder: claim binding (revision, digest), allocation, cost, outcome | `contract-events.tsv` (`julius.task.claimed`), `budget.tsv`, `trajectory.tsv` | |
+| contract: id, revision locked, digest, lock instant, evaluator | `task-contracts.tsv` — **absent until the stack lands**; record Unknown | |
+| contract: challenged revisions, if any | `contract-events.tsv` — **absent until the stack lands**; record Unknown | |
+| coder: allocation, cost, outcome | `budget.tsv`, `worker-diagnostics.tsv` (`cost_usd_micros`, `cost_source`, `runtime_started`); the claim binding needs `contract-events.tsv`, absent until the stack lands | |
 | the actual diff | the run's artifact / `evidence.tsv` DIFF row | |
 | build review: claim binding, verdict, findings | `contract-events.tsv`, `findings.tsv`, `evidence.tsv` | |
-| repair path: rounds, task ids, each round's binding and cost | `tasks.tsv` (`repair:*`), `trajectory.tsv` (REPAIR, DISPATCH rows) | |
+| repair path: rounds, task ids, cost | `tasks.tsv` (`repair:*`), `decisions.tsv`, `budget.tsv`; per-row trajectory needs `trajectory.tsv`, absent until the stack lands | |
 | verification decisions, in order | `decisions.tsv` | |
-| binding refusals, if any (`binding_*`, `*_mismatch`) | `contract-events.tsv` (`julius.contract.refused`) — any row here is a blocker to root-cause | |
-| total cost (µUSD) and per-role settlement | `budget.tsv`, `trajectory.tsv` | |
+| binding refusals (`binding_*`, `*_mismatch`) | only observable once the stack lands; **the stale-handoff and reviewer-binding guards are not on main**, so this run cannot exercise them | |
+| total cost (µUSD) and per-role settlement | `budget.tsv`, `worker-diagnostics.tsv` | |
 | final run state / halt cause | `runs.tsv`, `live-mission.evidence.txt` | |
-| Beta Gate over this bundle | `node scripts/wonderland-beta-gate.mjs --evidence <dir>` — rows PASS/FAIL with basis | |
+| Beta Gate over this bundle | run from a `relay/julius-contract-stack-rebased` checkout (the gate is absent on main): `node scripts/wonderland-beta-gate.mjs --evidence <downloaded dir>` | |
 
 Declarations, only when the rows above say so:
 
 - `TASK 1 COMPLETE — JULIUS LIVE RUN 2` when the final state is `COMPLETED`
   via `MISSION_VERIFIED` with no founder rescue.
-- `TASK 2 COMPLETE — JULIUS BLOCKER KILL` when, in addition, the architect
-  gate that killed 34185920678 and 34186711214 was crossed — a plan accepted,
-  or refused once with a named field and corrected — on this exact rerun.
+- `TASK 2 COMPLETE — JULIUS BLOCKER KILL` when, in addition,
+  `worker-diagnostics.tsv` shows the architect gate that killed 34185920678 and
+  34186711214 was CROSSED on this exact rerun: `validation_passed=t`, or one
+  refusal carrying a non-empty `validation_field` and `validation_claim_phrase`
+  followed by a second attempt (`plan_attempts=2`) that passed. Both prior runs
+  recorded `validation_passed=f` with an EMPTY `validation_field` and a single
+  attempt; either shape above is the repair working.
 
 If it fails: the first causal blocker is the earliest row above that is not
 what the design says, classified RUNTIME / PERSISTENCE / PROVIDER / EXTERNAL,
