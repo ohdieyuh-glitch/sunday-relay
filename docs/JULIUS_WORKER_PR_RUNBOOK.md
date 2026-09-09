@@ -36,7 +36,7 @@ the App as author with `GitHub` as committer.
 `relay/julius-architect-gate-fix @ d8c9fab1` is the reviewed reference. Work on
 a **new** branch; never rebase, amend or force-push the reference.
 
-## Step 1 — re-author the eight commits as the App — standard mechanics
+## Step 1 — re-author the eight commits as the App — **verified by dry run**
 
 ```bash
 git fetch origin main relay/julius-architect-gate-fix
@@ -50,6 +50,11 @@ WORKER_EMAIL='325202980+julius-worker[bot]@users.noreply.github.com'
 git -c user.name="$WORKER_NAME" -c user.email="$WORKER_EMAIL" rebase origin/main \
   --exec "git -c user.name='$WORKER_NAME' -c user.email='$WORKER_EMAIL' commit --amend --no-edit --reset-author"
 ```
+
+These exact commands were dry-run in the cloud container on 2026-09-08 in a
+throwaway worktree (never pushed, removed afterwards): all eight commits came
+out with the App as author and committer, the tree was byte-identical to the
+reference, the count was eight, and the reference branch was untouched.
 
 Verify before pushing — all three must hold:
 
