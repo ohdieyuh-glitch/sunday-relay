@@ -189,6 +189,8 @@ export const safeReviewDiagnostics=(value:unknown):JuliusSafeDiagnostics|null=>{
    * always writes null here rather than inferring one.
    */
   providerRequestStarted:safeNullableBool(v.providerRequestStarted),
+  /** Bytes of the rendered review packet. A size, never a quotation. */
+  packetBytes:safeCount(v.packetBytes),
   /* --- Prompt Architect (plan stage). Null for the reviewer, and vice versa. */
   requestedModel:safeModel(v.requestedModel),
   responseId:safeResponseId(v.responseId),

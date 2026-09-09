@@ -310,6 +310,57 @@ describe('what the reviewer process did, when the review did not arrive', () => 
     expect(d.processPidObserved).toBe(false);
   });
 
+  it('a COMPLETE review that arrives after the window closed is never accepted', async () => {
+    /**
+     * NO STALE REVIEW RESULT.
+     *
+     * The sharpest form of the rule, and the one that would be easiest to break
+     * by accident: the child writes a perfectly valid approval — not a fragment
+     * — but writes it after Relay's window has already closed on it. Accepting
+     * that would let a run be APPROVED by a reviewer Relay had given up on and
+     * killed, which is an approval nobody asked for arriving after the question
+     * was withdrawn. The verdict must be the timeout, every time.
+     */
+    const fake = processFake({ writes: [[60, APPROVED]], exitsAfterMs: null, diesOn: 'SIGTERM' });
+    const outcome = await run(fake, { timeoutMs: 30, killGraceMs: 40 });
+
+    expect(outcome.kind).toBe('review_incomplete');
+    expect(outcome.kind === 'review_incomplete' && outcome.shape).toBe('review_timeout');
+    const d = diagnosticsOf(outcome);
+    expect(d.verdictPresent, 'no verdict was read out of a withdrawn question').toBe(false);
+    expect(d.verdictValid).toBe(false);
+    expect(d.reviewObjectCount).toBe(0);
+  });
+
+  it('a timed-out attempt reports no served model and no completed review to charge for', async () => {
+    /**
+     * NO DUPLICATE SPEND, at the only boundary this function owns.
+     *
+     * Julius charges a dispatch from the outcome it is handed: a `reviewed`
+     * outcome is a completed review, and its `servedModel` is what the engine
+     * reported it actually ran. A timeout that leaked either — by reading the
+     * usage file of a process it had just killed, say — would let one attempt
+     * be counted as a review AND retried, charging the same work twice.
+     * `runHermesReview` returns `review_incomplete` with no result and no
+     * served model, so there is nothing for a second charge to attach to.
+     */
+    const fake = processFake({ writes: [[60, APPROVED]], exitsAfterMs: null, diesOn: 'SIGTERM' });
+    const outcome = await run(fake, { timeoutMs: 30, killGraceMs: 40 });
+    expect(outcome.kind).not.toBe('reviewed');
+    expect(Object.hasOwn(outcome, 'result'), 'a timeout carries no review to accept').toBe(false);
+    expect(diagnosticsOf(outcome).servedModel, 'and attests no model').toBeNull();
+  });
+
+  it('the reviewer records how big the question was, and never any of it', async () => {
+    const d = diagnosticsOf(await run(processFake({ exitsAfterMs: null, diesOn: 'SIGTERM' })));
+    expect(d.packetBytes, 'a real packet is not empty').toBeGreaterThan(100);
+    const rendered = JSON.stringify(d);
+    for (const fragment of [PACKET.unifiedDiff, PACKET.originalRequest, PACKET.changedFileContents]) {
+      expect(rendered).not.toContain(fragment);
+    }
+    expect(safeReviewDiagnostics(d)!.packetBytes).toBe(d.packetBytes);
+  });
+
   it('the production kill grace is a bounded number, not a wait for the process to feel like it', () => {
     expect(DEFAULT_KILL_GRACE_MS).toBeGreaterThan(0);
     expect(DEFAULT_KILL_GRACE_MS).toBeLessThanOrEqual(10_000);

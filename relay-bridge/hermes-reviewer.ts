@@ -249,6 +249,20 @@ export interface HermesReviewDiagnostics {
    */
   readonly signalSent: string | null;
   /**
+   * HOW BIG THE QUESTION WAS: the rendered review packet, in bytes.
+   *
+   * Run 34311556047's packet measured 46,256 bytes on the wire against a
+   * 13,881-character plan, and neither number was in the bundle — so "did
+   * payload size contribute?" could only be answered by rebuilding the packet
+   * from a plan the bundle also did not carry. A byte count is a size, never a
+   * quotation: no part of the packet travels with it, which is also why the
+   * field is not named for the prompt. Two separate guards — the diagnostics
+   * leak test and the evidence-dump column test — use `prompt` as a canary for
+   * prompt CONTENT, and a field carrying an integer has no business tripping
+   * either on its name.
+   */
+  readonly packetBytes: number | null;
+  /**
    * Whether the child was CONFIRMED gone before this outcome was reported.
    *
    * False is a leaked reviewer process holding an open provider connection into
@@ -350,6 +364,7 @@ export function reviewDiagnostics(input: {
   readonly signalSent?: string | null;
   readonly cleanupCompleted?: boolean | null;
   readonly providerRequestStarted?: boolean | null;
+  readonly packetBytes?: number | null;
 }): HermesReviewDiagnostics {
   return {
     stage: input.stage ?? null,
@@ -379,6 +394,7 @@ export function reviewDiagnostics(input: {
     signalSent: input.signalSent ?? null,
     cleanupCompleted: input.cleanupCompleted ?? null,
     providerRequestStarted: input.providerRequestStarted ?? null,
+    packetBytes: input.packetBytes ?? null,
   };
 }
 
@@ -1165,6 +1181,10 @@ export async function runHermesReview(input: {
   const cfg = input.config;
   const doSpawn = input.spawnImpl ?? spawn;
   const prompt = buildReviewPrompt(input.packet);
+  // MEASURED FROM THE ARGUMENT ACTUALLY PASSED, not from the packet's fields:
+  // what the reviewer reads is the rendered text, and a size derived from
+  // anything else would drift the moment the builder changes.
+  const packetBytes = Buffer.byteLength(prompt, 'utf8');
 
   // Empty scratch cwd — the reviewer has no path into the controlled project.
   const cwd = mkdtempSync(join(tmpdir(), 'relay-hermes-review-'));
@@ -1298,6 +1318,7 @@ export async function runHermesReview(input: {
       /* NEVER KNOWABLE HERE. Relay reads a pipe; Hermes owns the socket and
          says nothing until it is done. `false` would be a guess. */
       providerRequestStarted: null,
+      packetBytes,
     });
     const finish = (o: HermesOutcome) => {
       if (settled) return;

@@ -654,6 +654,11 @@ jobs:
         run: |
           set -uo pipefail
           mkdir -p julius-live-evidence
+          # WHICH REVIEWER ACTUALLY RAN, and under which two deadlines. Written
+          # by the Hermes bootstrap, which prints the same six lines to the
+          # public step log; run 34311556047 had none of them in its bundle.
+          cp /tmp/julius-hermes-bootstrap.evidence.txt \
+            julius-live-evidence/hermes-bootstrap.evidence.txt 2>/dev/null || true
           # The executor answers every refused request with a safe code and,
           # because dry run #2 left nothing to read, now writes one
           # executor-local diagnostic line per refusal to its own stderr:
