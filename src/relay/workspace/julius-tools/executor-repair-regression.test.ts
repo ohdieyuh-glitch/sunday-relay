@@ -266,10 +266,17 @@ describe('the adapter gate that actually produces the mount',()=>{
 
   /* The containment root is chosen by the trusted boundary, which is on the far side of this transport.
      A caller that supplies one is told, rather than having it silently replaced. */
-  it('refuses to carry a caller-supplied containment root over the wire',()=>{
+  it('refuses to carry a caller-supplied containment root over the wire',async()=>{
     const client=new RemoteExecutorControlPlane({endpoint:new URL('https://executor.internal'),serviceCredential:'scoped',callerId:'julius-prod',tenantId:'tenant',requestTimeoutMs:50});
     expect(()=>client.prepareWorkspace({sandboxId:'sandbox',sourceRef:'/ws',expectedLeaseGeneration:1,permittedWorkspaceRoot:'/'})).toThrow('executor_workspace_root_is_boundary_owned');
-    expect(()=>client.prepareWorkspace({sandboxId:'sandbox',sourceRef:'/ws',expectedLeaseGeneration:1})).not.toThrow();
+    /* THE ACCEPTING BRANCH RETURNS A PROMISE, and it is a REAL request to an endpoint that
+       does not exist — so it rejects, nothing awaited it, and vitest failed the whole run with
+       an unhandled rejection while every test passed. The assertion is about the SYNCHRONOUS
+       refusal, so the promise is captured and its rejection consumed: the check keeps its
+       meaning and the suite stops reporting an error nobody could locate. */
+    let accepted: Promise<unknown> | undefined;
+    expect(()=>{accepted=client.prepareWorkspace({sandboxId:'sandbox',sourceRef:'/ws',expectedLeaseGeneration:1});}).not.toThrow();
+    await expect(accepted).rejects.toThrow('EXECUTOR_UNAVAILABLE');
   });
 
   it('refuses a terminal payload encoding it does not implement',()=>{
