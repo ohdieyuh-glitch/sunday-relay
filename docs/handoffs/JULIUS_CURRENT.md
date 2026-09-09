@@ -1442,6 +1442,48 @@ carrying those attestations — reads **11 of 15 proven: 9 by the mission and 2
 by drill**, with `TASK CONTRACT LOCK` correctly FAILED because that proof
 deliberately mutates a claim revision in the database at the end.
 
+### 00n. WHAT THE PAID RUN WILL DO AFTER THE ARCHITECT GATE OPENS — bought for nothing
+
+**2026-09-09, on the tree PR #237 lands** (`relay/julius-architect-gate-fix`
+`d8c9fab1`, whose tree is byte-identical to #237's head `ebcebe18`).
+
+Two paid missions died at walls a provider-free drive would have found. The
+repair opens the architect gate; **nothing had ever driven the mission PAST it
+on that tree**. So it was driven: that tree's own composition root
+(`assembleLiveJuliusRuntime` + `driveJuliusRunToTerminal`), that tree's own
+bootstrap task graph (plan RUNNABLE with `ARTIFACT`; build BLOCKED behind it
+with `TEST`; criteria seeded with NO required evidence types), mission-2's own
+contract read from `.github/julius-missions/julius-live-mission-2/contract.json`
+— its real `spendUsd` and `repairCycles` — on a real PostgreSQL 16, with
+adapters that simply answer.
+
+| Shape | Result |
+|---|---|
+| the three roles all answer well | **COMPLETED after 4 ticks.** plan SUCCEEDED, review:plan SUCCEEDED, build SUCCEEDED, review:build SUCCEEDED; decisions `ACCEPT/TASK_VERIFIED` ×2; **zero failure events** |
+| the build review REJECTS once | **COMPLETED after 6 ticks.** a `repair:build` on `CODING_AGENT` was minted, routed, ran, and was re-reviewed and accepted; decisions `ACCEPT`, `REPAIR/BLOCKING_FINDINGS`, `ACCEPT`; **zero failure events** |
+
+The second shape matters as much as the first: it demonstrates on the tree that
+will run that a repair is minted as `repair:build` **on the Coding Agent** and
+is routable — which is exactly what paid run 34037313976 could not do when it
+minted a `repair:plan` nobody could route.
+
+**WHAT THIS DOES AND DOES NOT BUY, stated rather than implied.** The adapters
+are scripted, so this proves the ORCHESTRATION reaches a verified completion
+when the three roles answer — the run loop, the release rule, the verification
+decisions, the repair lineage, the allocation and the lifecycle, on real
+durable state. It proves NOTHING about the models. What the paid run still buys,
+and the only things left in front of it:
+
+1. whether the REAL architect's plan passes the repaired validator;
+2. whether the REAL coder's edits reach the sandbox as a captured diff;
+3. whether the REAL reviewer returns a verdict the adapter can parse.
+
+Every wall between those three is now known to be clear. The probe is kept at
+`scratchpad/drive-repair.probe.test.ts`; it runs from a detached worktree of the
+repair branch with `JULIUS_REAL_POSTGRES=1` and `DATABASE_URL`, and
+`PROBE_REJECT=1` selects the second shape. **Neither reference branch was
+touched** — the worktree is detached and the probe is untracked.
+
 ### 00i. The next paid rerun — the record it must leave (template, to be filled by the run)
 
 > Not a run. This is the shape the record takes the moment the watch dispatches
