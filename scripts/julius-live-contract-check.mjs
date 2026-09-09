@@ -41,6 +41,18 @@ const MISSION_LIMITS = Object.freeze({
   // its paid rerun. Its first paid attempt entered LIVE and did not complete,
   // and the repairs it needs cost more than one cycle allows.
   'julius-live-mission-2': Object.freeze({ spendUsd: 20, repairCycles: 3 }),
+  // Founder decision, 2026-09-09: mission 3 gets the same bounded budget. It is
+  // the run that has to exercise the repair loop and the Independent Reviewer
+  // end to end, and one repair cycle cannot demonstrate a repair LINEAGE. The
+  // ceiling is a bound and not a forecast — mission 2 spent $0.515 against this
+  // same grant — and it authorises nothing on its own: the paid dispatch still
+  // needs `confirm_live` typed by a human.
+  //
+  // Asked and answered rather than inferred. The mission's own contract already
+  // declared 20/3, and the zero-spend preflight refused it (run 34396331071)
+  // because a contract cannot grant itself a ceiling. That refusal was correct,
+  // and the grant belongs here, named, where raising it is visible.
+  'julius-live-mission-3': Object.freeze({ spendUsd: 20, repairCycles: 3 }),
 });
 
 /** The ceilings that apply to THIS contract, by its own declared namespace. */
