@@ -68,7 +68,12 @@ Result: **33 commits** over `origin/relay/julius-architect-gate-fix`, 53 files,
 | contract integrity + gate e2e, prompt-architect suite (the repair's own tests), live composition, contract-brief parity, first-live-mission evidence test, Beta Gate, paid-run replay | **9 files, 378 tests passed** |
 | both sides present | `reasonClaim`, `PLAN_ATTEMPT_LIMIT`, `REVIEW_ATTEMPT_LIMIT` (repair) and `executedBindingFor`, `coderContractBrief`, `contract.challenged`, `trajectory.tsv` (stack) all in the tree |
 | `julius:harness:export` | manifest unchanged |
-| whole-repository `npx vitest run` | see the line the session appends below once it completes |
+| whole-repository `npx vitest run` | **505 files passed**, 1 skipped (env-gated real-infra), **9,716 tests passed**, 26 todo, exit 0 |
+
+The rebased branch itself exists only as `local/stack-on-gate-fix` in the
+cloud container's throwaway worktree (head `03a2b879` at the time of writing);
+it was deliberately not pushed, since no branch for it has been sanctioned. The
+recipe above reproduces it in under a minute.
 
 ## After the repair lands as a squash
 
