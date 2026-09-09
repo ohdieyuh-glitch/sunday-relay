@@ -265,8 +265,45 @@ const CAPABILITIES = [
       if (!governing.locked_at) {
         return [false, `${governing.contract_id} reads LOCKED with no lock instant, so it cannot be shown to precede the build`];
       }
+      /**
+       * LOCKED IS NOT THE SAME AS RUN UNDER. A contract can be locked, and
+       * locked before the build, and the build can still have been claimed
+       * under an OLDER revision — or its review under a NEWER one — and the
+       * lock table alone cannot tell. The claim rows in `contract-events.tsv`
+       * carry the revision and digest each bound task actually executed under,
+       * and a `julius.contract.refused` row carrying a binding reason is the
+       * runtime saying it refused to run one of them. An older bundle without
+       * that dump keeps the weaker proof, and SAYS it is the weaker one.
+       */
+      const contractEvents = ev.file('contract-events.tsv') === null ? null : ev.rows('contract-events.tsv');
+      if (contractEvents === null) {
+        return [true,
+          `${governing.contract_id} revision ${governing.contract_revision} locked at ${governing.locked_at} by ${governing.locked_by_evaluator_id || '(unrecorded)'}, governing ${build.task_id}; the binding it was RUN under is not measurable — this bundle carries no contract-events dump`];
+      }
+      const review = ev.rows('tasks.tsv').find((row) => row.role === 'INDEPENDENT_REVIEWER' && row.parent_task_id === build.task_id);
+      const claimOf = (taskId) => contractEvents.filter((row) => row.event_type === 'julius.task.claimed' && row.task_id === taskId).pop();
+      const bindingMismatch = (label, claim) => {
+        if (claim === undefined) return `${label} carries no recorded contract binding on its claim`;
+        if (claim.contract_revision !== governing.contract_revision) {
+          return `${label} was claimed under revision ${claim.contract_revision} while revision ${governing.contract_revision} is the lock`;
+        }
+        if (claim.binding_digest !== governing.binding_digest) return `${label} was claimed under a digest that is not the lock's`;
+        return null;
+      };
+      const refused = contractEvents.find((row) => row.event_type === 'julius.contract.refused'
+        && (row.task_id === build.task_id || (review !== undefined && row.task_id === review.task_id))
+        && /^(binding_|implementation_binding_absent)/.test(row.reason_code));
+      if (refused !== undefined) {
+        return [false, `the runtime refused ${refused.task_id} under this contract (${refused.reason_code}), so the build was not proven to run under its agreed terms`];
+      }
+      const buildMismatch = bindingMismatch(`build ${build.task_id}`, claimOf(build.task_id));
+      if (buildMismatch !== null) return [false, buildMismatch];
+      if (review !== undefined) {
+        const reviewMismatch = bindingMismatch(`review ${review.task_id}`, claimOf(review.task_id));
+        if (reviewMismatch !== null) return [false, reviewMismatch];
+      }
       return [true,
-        `${governing.contract_id} revision ${governing.contract_revision} locked at ${governing.locked_at} by ${governing.locked_by_evaluator_id || '(unrecorded)'}, governing ${build.task_id}`];
+        `${governing.contract_id} revision ${governing.contract_revision} locked at ${governing.locked_at} by ${governing.locked_by_evaluator_id || '(unrecorded)'}, governing ${build.task_id}; the build${review === undefined ? '' : ' and its review'} were claimed under that revision and digest`];
     },
   },
   {
