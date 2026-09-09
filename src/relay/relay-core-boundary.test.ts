@@ -721,12 +721,59 @@ describe('Mission projection boundaries (Prompt 8.1)', () => {
   const missionDir = relay('mission');
   const missionFiles = walk(missionDir).filter((f) => !f.endsWith('.test.ts'));
 
+  /**
+   * `mission/julius` IS A DECLARED EXCEPTION, and it was passing by accident.
+   *
+   * The purity rule matched `/from\s+['"]node:/` — `\s+`, one or more spaces.
+   * `julius-context-snapshot.ts` is written in a dense style with no space
+   * after `from`, so its `import{createHash}from'node:crypto'` walked straight
+   * past the guard, and the rule as written was a claim about the mission layer
+   * that the mission layer did not satisfy. A whitespace-sensitive boundary
+   * check is not a boundary check: reformatting a file would silently change
+   * what it is allowed to import.
+   *
+   * The directory's non-purity is deliberate and already written down — see the
+   * purity note in `julius-runtime-ports.ts`. What was missing is a rule that
+   * says so, and that BOUNDS it. So the check now separates the two populations
+   * and each gets the stronger of the two statements available:
+   *
+   *   everything else       no `node:` import at any spacing, and no fs/process
+   *   `mission/julius`      `node:crypto` and nothing else, still no fs/process
+   *
+   * The browser boundary is unaffected and is asserted here rather than
+   * assumed: `src/relay/mission/index.ts` does not re-export `julius`, so the
+   * exception is reachable from the CLI and the bridge and from nothing the
+   * browser can walk to. `relay-boundary.test.ts` proves that independently by
+   * walking the real import graph from `main.tsx`.
+   */
+  const JULIUS_ALLOWED_NODE_BUILTINS = ['node:crypto'];
+  const isJuliusDomain = (file: string) => file.startsWith(join(missionDir, 'julius') + sep);
+
   it('the mission layer is a PURE projection — no Node, no child_process, no fs', () => {
-    for (const file of missionFiles) {
+    for (const file of missionFiles.filter((f) => !isJuliusDomain(f))) {
       const content = read(file);
-      expect(/from\s+['"]node:/.test(content), `${file} imports node builtins`).toBe(false);
+      // `\s*`, not `\s+`: a boundary that a formatter can move is not a boundary.
+      expect(/from\s*['"]node:/.test(content), `${file} imports node builtins`).toBe(false);
       expect(/child_process|readFileSync|writeFileSync|spawn\(/.test(content), `${file} touches Node process/fs`).toBe(false);
     }
+  });
+
+  it('the julius domain is the ONE declared exception, and it may reach node:crypto only', () => {
+    const juliusFiles = missionFiles.filter(isJuliusDomain);
+    expect(juliusFiles.length, 'the julius domain should not have vanished').toBeGreaterThan(20);
+    for (const file of juliusFiles) {
+      const content = read(file);
+      for (const [, builtin] of content.matchAll(/from\s*['"](node:[a-z/]+)['"]/g)) {
+        expect(JULIUS_ALLOWED_NODE_BUILTINS, `${file} imports ${builtin}`).toContain(builtin);
+      }
+      // The exception is about hashing, not about the machine. Everything the
+      // rest of the mission layer is forbidden, this directory is forbidden too.
+      expect(/child_process|readFileSync|writeFileSync|spawn\(/.test(content), `${file} touches Node process/fs`).toBe(false);
+    }
+  });
+
+  it('the julius exception is unreachable from the mission barrel the browser consumes', () => {
+    expect(/julius/.test(read(join(missionDir, 'index.ts'))), 'the mission barrel must not re-export the julius domain').toBe(false);
   });
 
   it('the mission layer does not import Relay Core internals, adapters, or the CLI', () => {
