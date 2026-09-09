@@ -129,4 +129,71 @@ suite('Julius real PostgreSQL and Docker infrastructure',()=>{beforeAll(async()=
   expect(mayDispatchUnderContract(await repo.loadTaskContract({projectId:'project',taskId:'task'})))
    .toEqual({permitted:false,reasonCode:'contract_absent'});
  },30000);
+ /**
+  * THE RACE THE FOUNDER NAMED — an architect's revision, an evaluator's
+  * acceptance, a rival revision and a second acceptance, concurrently, on one
+  * contract, and REPEATED: a race run once proves only that it was run once.
+  *
+  * The invariants are the database's to keep, which is why the in-memory model
+  * cannot stand in: at most one LOCKED revision at any instant (the partial
+  * unique index); a locked revision's stored terms hashing to the digest it was
+  * locked under (re-derived on read, so a torn write reads as absent rather than
+  * as an agreement); one document per (contract, revision), so two proposals
+  * for the same revision leave one stored and one REFUSED — never merged; and a
+  * lost race ANSWERED rather than thrown. 40001 and 23505 are outcomes here.
+  * The bounded retry the founder asked about lives one layer up: a refused lock
+  * is recorded on the ledger and the next tick's re-verification asks again,
+  * idempotently, which the crash-at-lock cases in the contract gate suite drive.
+  */
+ postgresTest('keeps exactly one coherent locked revision under concurrent revision and acceptance',async()=>{
+  await pool.query(`INSERT INTO relay_wonderland.julius_tasks(task_id,run_id,role,task_type,state,ordinal,next_attempt_at)VALUES('race-task','run','CODING_AGENT','code','RUNNABLE',3,now())`);
+  const repo=new JuliusContractPostgresRepository(pool),at=new Date().toISOString();
+  const base:JuliusTaskContract={contractId:'contract-race',runId:'run',taskId:'race-task',missionContractRevision:1,contractRevision:1,
+   objective:'Race the agreement and keep exactly one.',responsibilityBoundary:'Implementation and its unit tests only.',
+   requiredInputs:['the locked plan'],expectedOutputs:['a unified diff'],inScope:['src/race.ts'],outOfScope:['package.json'],
+   blockingAcceptanceCriteria:[{criterionId:'AC-1',statement:'the suite passes',requiredEvidenceTypes:['TEST']}],
+   requiredEvidence:['TEST'],requiredChecks:['npm test'],permittedPaths:['src/race.ts'],prohibitedActions:[],
+   dependencyTaskIds:['run:plan'],reviewCriteria:['Does the diff satisfy AC-1?'],failureConditions:['the suite does not pass'],
+   repairRules:[],budget:{ceilingUsdMicros:5_000_000,maxRepairRounds:3},stoppingCondition:'Stop when the suite passes.',
+   state:'DRAFT',bindingDigest:null,lockedAt:null,lockedByEvaluatorId:null};
+  expect(await repo.putTaskContract({projectId:'project',contract:base,occurredAt:at})).toBe(true);
+  const revise=(contract:JuliusTaskContract,check:string):JuliusTaskContract=>{const outcome=reviseJuliusTaskContract({contract,proposal:{requiredChecks:[check]}});if(outcome.outcome!=='REVISED')throw new Error(outcome.reasonCode);return outcome.contract;};
+  const put=(contract:JuliusTaskContract)=>repo.putTaskContract({projectId:'project',contract,occurredAt:at}).then(stored=>stored?'stored':'replayed',(error:Error)=>error.message);
+  const lock=(contract:JuliusTaskContract,evaluatorId:string)=>repo.lockTaskContract({projectId:'project',contractId:contract.contractId,contractRevision:contract.contractRevision,bindingDigest:juliusTaskContractBindingDigest(contract),lockedAt:new Date().toISOString(),evaluatorId});
+  const lockedCount=async()=>Number((await pool.query(`SELECT count(*) c FROM relay_wonderland.julius_task_contracts WHERE contract_id='contract-race' AND state='LOCKED'`)).rows[0].c);
+  let current=base;
+  for(let round=1;round<=6;round+=1){
+   const proposed=revise(current,`npm test -- round-${round}`),rival=revise(current,`npm test -- rival-${round}`);
+   /* Four parties at once on one contract: a proposal for N+1, two acceptances of N, and a rival proposal for N+1. */
+   const [stored,first,second,rivalStored]=await Promise.all([put(proposed),lock(current,`evaluator-${round}-a`),lock(current,`evaluator-${round}-b`),put(rival)]);
+   /* ONE document per revision: one proposal was stored, the other REFUSED as a conflict, whichever arrived first. */
+   expect([stored,rivalStored].sort()).toEqual(['julius_task_contract_revision_conflict','stored']);
+   /* ONE acceptance won; the other was ANSWERED, and answered with the revision that holds. */
+   const wins=[first,second].filter(result=>result.locked);
+   expect(wins,`round ${round}: exactly one lock`).toHaveLength(1);
+   const lost=[first,second].find(result=>!result.locked)!;
+   expect(lost).toMatchObject({locked:false});
+   expect(['contract_revision_already_locked','lock_contended']).toContain(lost.reasonCode);
+   expect(await lockedCount(),`round ${round}: one LOCKED row in the database`).toBe(1);
+   /* The agreement that holds is revision N, its terms hash to its binding, and dispatch is permitted under it. */
+   const held=await repo.loadTaskContract({projectId:'project',taskId:'race-task'});
+   expect(held).toMatchObject({contractRevision:round,state:'LOCKED'});
+   expect(juliusTaskContractBindingDigest(held!)).toBe(held!.bindingDigest);
+   expect(mayDispatchUnderContract(held).permitted).toBe(true);
+   /* Next round's candidate is whichever N+1 was stored — read back, never assumed. */
+   const rows=await repo.taskContractRevisions({projectId:'project',taskId:'race-task'});
+   current=rows[rows.length-1]!;
+   expect(current.contractRevision).toBe(round+1);
+   expect(current.state).toBe('DRAFT');
+  }
+  /* A SECOND CONTRACT FOR ONE TASK is a caller's defect and is named as one, through the repository, not only by the raw index. */
+  await expect(repo.putTaskContract({projectId:'project',contract:{...base,contractId:'contract-race-second'},occurredAt:at})).rejects.toThrow('julius_task_contract_one_per_task');
+  /* Six rounds later: five superseded, one locked, one draft — and nothing else. */
+  const rows=await repo.taskContractRevisions({projectId:'project',taskId:'race-task'});
+  expect(rows.map(row=>[row.contractRevision,row.state])).toEqual([[1,'SUPERSEDED'],[2,'SUPERSEDED'],[3,'SUPERSEDED'],[4,'SUPERSEDED'],[5,'SUPERSEDED'],[6,'LOCKED'],[7,'DRAFT']]);
+  /* AN AGREEMENT DOES NOT ROLL BACK, even under concurrency: six stale acceptances at once change nothing. */
+  const stale=await Promise.all(rows.slice(0,5).map(row=>lock(row,'evaluator-late')));
+  expect(stale.every(result=>!result.locked&&result.reasonCode==='newer_revision_is_locked')).toBe(true);
+  expect(await lockedCount()).toBe(1);
+ },30000);
 });

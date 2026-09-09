@@ -150,6 +150,7 @@ const composed: JuliusRuntimeStore & JuliusSubagentStore
   repairRoundsFor: reader.repairRoundsFor.bind(reader),
   reviewCompletedFor: reader.reviewCompletedFor.bind(reader),
   activeTaskCount: reader.activeTaskCount.bind(reader),
+  executedBindingFor: reader.executedBindingFor.bind(reader),
   recordFinding: findings.recordFinding.bind(findings),
   putTaskContract: taskContracts.putTaskContract.bind(taskContracts),
   challengeTaskContract: taskContracts.challengeTaskContract.bind(taskContracts),

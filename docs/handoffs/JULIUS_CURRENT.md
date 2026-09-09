@@ -5,10 +5,12 @@
 > before ending a session. Never rely on `/resume` as the sole record.
 
 **Most recent session:** 2026-09-08, the **Claude Code cloud session**. Read
-**§00** first: it holds the current branch, the three commits it added, a
-security finding about the merge-provenance credential, and the founder-only
-actions that gate everything else. Everything from §0a onward is the earlier
-local record.
+**§00** first: it holds the current branch, the commits it added, a security
+finding about the merge-provenance credential, and the founder-only actions
+that gate everything else. **§00h** is the newest work: stale-handoff
+rejection, the reviewer-binding guard, the challenge leg of the contract
+lifecycle, and the concurrent-proposal fix a real PostgreSQL race found.
+Everything from §0a onward is the earlier local record.
 
 ---
 
@@ -759,6 +761,178 @@ run of code that is known to fail.
 The second-order blocker, once it lands, is the authorship constraint in §00a:
 #235 and this branch cannot land as authored, and no amount of further
 engineering from this environment changes that.
+
+### 00h. SPRINT 2026-09-08 — stale handoff rejection and lock integrity
+
+> Branch `relay/julius-contract-stack-rebased`, on top of the serialization
+> hardening and the crash-after-purchase proof. Everything below is
+> provider-free and was run in this container. The founder's twelve-section
+> brief for this sprint is answered section by section; where a section named a
+> property the runtime did not actually have, the property was BUILT, not
+> asserted about.
+
+**What was true before this sprint, stated plainly.** The contract domain had
+the two comparisons the founder's rules depend on — `evaluateJuliusBindingCurrency`
+(is this handoff's binding still the agreement?) and `evaluateJuliusSharedBinding`
+(do the coder and the reviewer hold one binding?) — and **nothing on the
+runtime path called either.** Staleness held only because every dispatch
+compiled its packet fresh; the window between `prepareClaimedTask` reading the
+lock and the reservation being taken was open, and the reviewer's charge was
+built from whatever lock was current at ITS claim, never compared to the lock
+the coder executed under. The CHALLENGED state existed in the domain, the store
+and the migration and **no runtime path ever wrote it**: a plan the reviewer
+sent back left its contract a DRAFT indistinguishable from one nobody had read.
+And the architect's `repair:plan` round — the one round in which a proposal is
+most needed — could not propose at all, because its subject was resolved from
+the tasks that depend on the repair task, and nothing does.
+
+#### What was built
+
+| Rule | Where | What it does now |
+|---|---|---|
+| 2 — stale handoff | `julius-task-pipeline.ts`, after the context is compiled and **before the reservation** | Re-reads the lock, `evaluateJuliusBindingCurrency({recorded, contract})`; anything but CURRENT → task FAILED, `contract.refused` with `reasonCode` `binding_stale` / `binding_foreign` / `binding_indeterminate`, trajectory `DISPATCH:CONTRACT_STALE`, outcome HALTED `TASK_CONTRACT_STALE`. Never rebinds to the newest revision. |
+| 3 — one binding for coder and reviewer | same file, before the reviewer's `task.claimed` | Reads the subject's **executed** binding off the durable claim record (`executedBindingFor`, a new reader port with memory and PostgreSQL implementations) and `evaluateJuliusSharedBinding` against the reviewer's; a mismatch → review FAILED, `contract.refused` with `binding_revision_mismatch` / `binding_digest_mismatch` / `binding_contract_mismatch` / `implementation_binding_absent`, HALTED `REVIEW_CONTRACT_MISMATCH`. The coder's SUCCEEDED result is not discarded; grading it against other terms is what is refused. |
+| 1 — the challenge leg | decision path, before the lock block | A REPAIR decision on a Prompt Architect's work challenges every DRAFT contract governing the plan's dependents (read off the repair-lineage root): `contract.challenged` — a **new operational event type** — carrying contract id, revision, the decision's reason code and an objection count. LOCKED terms are never challenged; an already-CHALLENGED revision is not challenged twice, which is what makes a crash between the challenge and the decision resumable. |
+| 1 — the revision after a challenge | `proposeContractRevision` | The proposal's subject is resolved from the **lineage root's** dependents, so `repair:plan-1:1:task` proposes for `build-1`. |
+| 10 — evidence | `task.claimed` facts, `contract-events.tsv` | The claim record now carries `contractTaskId` beside contract id, revision and digest — the field the reviewer comparison is reconstructed from after a restart. The live evidence dump gains `contract-events.tsv` (proposed / challenged / locked / refused, with every revision and reason as columns, no prose). |
+| 8 — concurrency (found by the race, below) | `julius-contract-postgres.ts` | A concurrent rival proposal for the same revision used to die with the raw `julius_task_contract_one_per_task` constraint text — the second unique index fires before the ON CONFLICT arbiter on the primary key ever sees the winner. `putTaskContract` now treats 23505 as "the row exists now" and looks: same terms → replay (`false`); different terms → `julius_task_contract_revision_conflict`; another contract id at this task's revision → `julius_task_contract_one_per_task`. The memory model refuses a second contract per task too, so the two stores agree. |
+
+#### The lifecycle, driven for real
+
+`julius-contract-integrity.e2e.test.ts` (51 cases) drives the real run loop, or
+the real `prepareClaimedTask` → `admitTask` → `runClaimedTask` sequence the loop
+calls, against the memory store and the scripted adapters every other suite
+uses. **No parallel state machine.** The direct calls exist for one reason: the
+stale window is between two calls the loop makes in one breath, and calling
+them by hand is the only honest way to stand inside it.
+
+- **Section 1.** R1 seeded → architect proposes R2 → plan review REJECTS →
+  **R2 CHALLENGED** → `repair:plan` architect proposes R3 → re-review ACCEPTS →
+  **R3 LOCKED** → build and its review run under R3. Revisions read back as
+  `[[1,DRAFT],[2,CHALLENGED],[3,LOCKED]]`; the locked record's objective, scope,
+  criteria ids, evidence, permitted paths, failure conditions, repair rules,
+  budget, evaluator and digest are asserted; the ledger order is
+  `proposed:2 < challenged:2 < proposed:3 < locked:3 < runnable:build-1 <
+  claimed:build-1`; zero `contract.refused` events.
+- **Section 2.** Eight stale-handoff shapes — superseded revision; right
+  revision / wrong digest; right digest / wrong revision; both wrong; an
+  UNLOCKED draft cited as the agreement; a foreign contract; revision 0; and
+  the newest digest under the old revision number. Every one: HALTED
+  `TASK_CONTRACT_STALE`, **no adapter dispatch, no `budget.reserved`, the
+  budget's reservation table unchanged, no evidence, no result, task FAILED,
+  the reason durable**, exactly one claim record still naming the compiled
+  revision, and after a full drain nothing retried it under newer terms.
+- **Section 3.** N+1 through the runtime (the review is refused, the build
+  stays SUCCEEDED and bound to N); N−1 and a digest-only mismatch through the
+  handoff; a build with no recorded binding cannot be reviewed under a
+  contract; the control case shares the binding and completes.
+- **Section 4.** Each proposable category after LOCK — objective, scope,
+  criteria, evidence, tool permission, stopping, repair policy — refused with
+  `contract_already_locked`, one revision, the locked terms byte-identical, the
+  coder bound to the original digest. The store refuses an overwrite of a
+  locked revision (budget included). Work done under R1 stays bound to R1 after
+  R2 is legitimately locked.
+- **Sections 5–6.** build → finding → repair → re-review carry ONE binding
+  whose subject is the build, and each packet's `taskContractDigest` says so; a
+  repair proposing wider `permittedPaths` is refused against the lock. A
+  sub-agent child is dispatched under its parent's binding with the parent as
+  subject; a child proposing looser terms is refused; a child requesting a
+  permission its parent lacks never enters the graph.
+- **Section 7.** Crash after LOCK before the decision: the restart re-accepts
+  nothing, re-locks nothing, rewinds nothing (revision, digest, state,
+  evaluator and lock time identical before and after). Crash after the coder's
+  result before its review exists (`addTask` #2): the reviewer still receives
+  the exact locked contract, the coder is paid once. Crash after the reviewer
+  is claimed before it is admitted: the re-claim recomputes the same binding.
+- **Section 10.** The refusal's facts are `{contractId, contractTaskId,
+  currentRevision, currentState, owner, reasonCode, recordedRevision, role}`,
+  every value a string, number or null with no whitespace; the trajectory row
+  carries the same numbers.
+
+**Section 8, on PostgreSQL 16 in this container** (`real-infra-julius.test.ts`,
+6 passed): six rounds of four concurrent parties on one contract — a proposal
+for N+1, two acceptances of N, a rival proposal for N+1. Every round: exactly
+one proposal stored and the rival **refused as a conflict, never merged**;
+exactly one acceptance wins and the other is **answered**
+(`contract_revision_already_locked` or `lock_contended`), never thrown; one
+LOCKED row in the database; the held revision's terms hash to its binding and
+dispatch is permitted under it. After six rounds: five SUPERSEDED, one LOCKED,
+one DRAFT, and six concurrent stale acceptances change nothing. The bounded
+retry the brief asks about lives one layer up — a refused lock is a ledger
+event and the next tick's re-verification asks again, idempotently — and the
+crash-at-lock cases in the gate suite drive it.
+
+#### Two things the founder should know that are not bugs
+
+- **A CHALLENGED revision can still be locked** when the re-review of the
+  repaired plan accepts without a new proposal (the scripted architects in the
+  paid-run replay propose nothing). The record then reads
+  `challenged:1 < locked:1`, which is true: the objection was answered by
+  repairing the plan, not by changing the terms. Asserted, not hidden.
+- **A build claimed before this change** carries no `contractTaskId` on its
+  claim record, so its review would be refused `implementation_binding_absent`.
+  No live run spans the deployment — every paid run is terminal — so this is a
+  statement about old ledgers, not a migration.
+
+#### Section 11 — the mutations, each applied to production code, each killed
+
+Run by `scratchpad/mutations.py` against the two contract e2e suites and the
+two contract unit suites (159 tests); every file restored afterwards and
+`git status` compared before and after. **17 of 17 mutations went red** (M16–M17 were run after the specialist binding was added, against the two e2e suites).
+
+| Mutation (what was broken) | Killed by |
+|---|---|
+| M1 revision comparison — an older revision reads as CURRENT | contract unit ×1, integrity e2e ×3 |
+| M2 digest comparison — the digest is never compared | contract unit ×1, integrity e2e ×1 |
+| M3 lock check — CHALLENGED not refused by the dispatch gate | contract unit ×1, integrity e2e ×1 |
+| M4 task binding — the contract id is not compared | contract unit ×1, integrity e2e ×1 |
+| M5 repair inheritance — a repair binds to its own task, not its lineage root | gate e2e ×3, integrity e2e ×4 |
+| M6 reviewer binding — the shared-binding verdict is ignored | integrity e2e ×4 |
+| M7 post-lock mutation — a LOCKED contract accepts a new proposal | gate e2e ×1, integrity e2e ×9 |
+| M8 restart reconstruction — the executed binding cannot be read back from the ledger | gate e2e ×2, integrity e2e ×13 |
+| M9 stale guard — only FOREIGN refused; STALE and INDETERMINATE run | integrity e2e ×4 |
+| M10 store lock integrity — a lock granted to any digest | store unit ×1 |
+| M11 challenge — a rejected plan never challenges its terms | integrity e2e ×2 |
+| M12 proposal lineage — a plan revision cannot find its contract | integrity e2e ×1 |
+| M13 stale refusal leaves the task ACTIVE instead of FAILED | integrity e2e ×8 |
+| M14 claim record drops the contract subject | gate e2e ×2, integrity e2e ×23 |
+| M15 superseded lock — an older revision may be locked over a newer one | store unit ×1 |
+| M16 specialist binding — a specialist resolves to no subject (the old behaviour) | integrity e2e ×8 |
+| M17 specialist binding — a specialist with no coding ancestor is unbound instead of self-bound | integrity e2e ×4 |
+
+#### Section 9 — the binding audit, and the fourth null it found
+
+`resolveWorkerRole` accepts `SPECIALIST:*` and the router will pay for it, and
+`juliusContractSubjectTaskId` answered **null** for every specialist — the same
+null the architect gets, meaning "not bound", so a specialist child of a build
+would have run a provider under no agreement whatever its parent had locked.
+Nothing in production spawns one today; the compound-agent contract says
+specialists are spawned by Julius under its own policy, i.e. as sub-agents.
+
+Now a specialist is bound by the coding work it was spawned under (the parent
+chain is climbed through any role to the nearest Coding Agent, and that
+lineage's root is the subject — nested specialists included), and a specialist
+with **no** coding ancestor is bound to **itself**: it needs a contract of its
+own or it is refused `contract_absent` before admission, attempt 0, nothing
+reserved. The fixture that seeds a deployment now seeds one contract per
+subject using the runtime's own resolver rather than a copy of the rule. The
+audit is enumerated, not implied: twelve placements across all four role
+shapes, and the only nulls are `plan-1` and `plan-1:review`.
+
+#### The gate, as run on the committed tree in this container
+
+| Gate | Result |
+|---|---|
+| `npm test` (whole repository) | **504 files passed**, 1 skipped (env-gated real-infra), **9,688 tests passed**, 25 todo, exit 0, 183s |
+| `npm run typecheck` (all four projects) | clean |
+| `npm run build`, `relay:build`, `relay:bridge:build` | clean |
+| `relay-repository-boundary.mjs`, `relay-parity-gate.mjs` | clean |
+| `relay:surface-parity:check:strict`, `relay:yc-demo:check`, `relay:cli:contract-verify` | clean |
+| `relay:persistence:contract-verify`, `relay:persistence:recovery-drill`, `relay:workspace:verify`, `relay:claude:contract-verify` | clean |
+| `julius:harness:check` | current after `julius:harness:export`; the committed manifest is unchanged (the gitignored single-file export had gone stale, which is the check working) |
+| `git diff --check` | clean |
+| **real PostgreSQL 16** — migrations from empty, contract lock race, jsonb round trip, superseding, the binding CHECK, `one_per_task`, the corrupted-row read, **the six-round revision/acceptance race** | **6 passed**, 2 todo (Docker-gated) |
+| mutations (17, production code, each restored) | 17 killed |
 
 ---
 

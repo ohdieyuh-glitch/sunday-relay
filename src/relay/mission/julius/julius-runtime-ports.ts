@@ -44,7 +44,7 @@ import type { JuliusReviewerFinding, JuliusAcceptanceCriterion } from './julius-
 import type { JuliusContextSnapshot } from './julius-context-snapshot';
 import type { JuliusTrajectoryEvent } from './julius-trajectory';
 import type { JuliusBrainEntry } from './julius-runtime';
-import type { JuliusTaskContract } from './julius-task-contract';
+import type { JuliusTaskContract, JuliusTaskContractBinding } from './julius-task-contract';
 
 /* ------------------------------------------------------- ambient services */
 
@@ -337,6 +337,19 @@ export interface JuliusRuntimeReader {
    * run's full allowance. This is the number the bound is checked against.
    */
   activeTaskCount(runId: string, projectId: string): Promise<number>;
+  /**
+   * THE BINDING A TASK WAS ACTUALLY DISPATCHED UNDER, read back off the durable
+   * `task.claimed` record rather than recomputed from whatever is locked now.
+   *
+   * Those are different questions once a contract has been revised. The lock
+   * moves forward — revision 2 supersedes 1 — and a reviewer that read "the
+   * current lock" would grade work against terms the coder was never given.
+   * The reviewer's gate compares this record with its own binding, so the
+   * thing being graded and the thing being graded AGAINST are provably one
+   * document. Null when the task was never dispatched under a binding, which
+   * is a fact about the record and not an absence of one.
+   */
+  executedBindingFor(taskId: string, projectId: string): Promise<JuliusTaskContractBinding | null>;
 }
 
 /**
