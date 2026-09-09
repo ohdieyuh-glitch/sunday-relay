@@ -130,15 +130,22 @@ jobs:
       # of its own, well inside Relay's, so it fails first and says why; the
       # bootstrap refuses if these two are ever put back in the wrong order.
       #
-      # 120 s is a whole provider request for one review, which the control run
-      # 34306850331 finished in far less. 600 s is Relay's backstop: measured
-      # against the real engine, its give-up at a 120 s deadline is about 307 s.
+      # 90 s is a whole provider request for one review, which the control run
+      # 34306850331 finished in far less — and if a review really needs more,
+      # the engine now says so and the failure is retryable, with three
+      # attempts. 400 s is Relay's backstop, and it is bounded by the JOB, not
+      # by taste: `timeout-minutes: 60` above, and a run may spend at most six
+      # reviewer attempts (three on `review:plan`, three on `review:build`), so
+      # 6 x 400 s is forty minutes and leaves the architect, the coder and the
+      # evidence dump their room. Measured against the real engine, its give-up
+      # at a 90 s deadline lands near 250 s, well before Relay's cut.
+      #
       # Waiting longer buys no tokens — the provider bills for what it
       # generates whether or not Relay is still reading — and the attempt
-      # ceiling of three is untouched, so this changes how long a failure takes
-      # to become legible, not what a run may spend.
-      RELAY_HERMES_TIMEOUT_MS: '600000'
-      HERMES_REQUEST_TIMEOUT_SECONDS: '120'
+      # ceiling is untouched, so this changes how long a failure takes to
+      # become legible, not what a run may spend.
+      RELAY_HERMES_TIMEOUT_MS: '400000'
+      HERMES_REQUEST_TIMEOUT_SECONDS: '90'
 
     steps:
       # Pinned to immutable commit SHAs. A mutable tag can be repointed by the

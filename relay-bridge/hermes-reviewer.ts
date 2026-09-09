@@ -1391,7 +1391,15 @@ export async function runHermesReview(input: {
       if (bytes <= cfg.maxOutputBytes) out += c.toString('utf8'); else truncated = true;
     });
     child.stderr?.on('data', () => { /* never surfaced verbatim */ });
-    child.on('error', () => finish({ kind: 'launch_failed', safeMessage: 'The Hermes reviewer could not be started.' }));
+    child.on('error', () => {
+      // NOT AFTER A TIMEOUT. `error` can arrive while Relay is killing the
+      // child — a signal the runtime could not deliver — and reporting
+      // `launch_failed` for a process that ran for the whole window would name
+      // the wrong repair entirely. The timeout owns the outcome from the moment
+      // it fires; `finish` is a no-op once settled, and this covers the gap
+      // before it settles.
+      if (!timedOut) finish({ kind: 'launch_failed', safeMessage: 'The Hermes reviewer could not be started.' });
+    });
     child.on('close', (code) => {
       exitObserved = true;
       // THE TIMEOUT OWNS THIS OUTCOME. Whatever the reviewer flushed while

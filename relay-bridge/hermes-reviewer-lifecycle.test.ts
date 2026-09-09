@@ -50,6 +50,8 @@ function processFake(input: {
   readonly diesOn?: 'SIGTERM' | 'SIGKILL' | null;
   /** The runtime gave it no pid — a spawn that half-succeeded. */
   readonly withoutPid?: boolean;
+  /** An `error` event this many ms after a signal reaches it. */
+  readonly errorAfterSignalMs?: number;
 }) {
   const signals: string[] = [];
   const spawned: Array<{ cwd: string }> = [];
@@ -77,6 +79,9 @@ function processFake(input: {
       signals.push(signal ?? 'SIGTERM');
       // A REAL PROCESS DIES WHEN THE SIGNAL REACHES IT. Modelling `kill` as a
       // no-op would let a test pass while Relay leaked reviewers.
+      if (input.errorAfterSignalMs !== undefined) {
+        setTimeout(() => child.emit('error', new Error('the runtime could not deliver the signal')), input.errorAfterSignalMs);
+      }
       if (input.diesOn === signal || (input.diesOn === 'SIGTERM' && signal === 'SIGKILL')) close(null);
       return true;
     };
@@ -286,6 +291,17 @@ describe('what the reviewer process did, when the review did not arrive', () => 
     const forged = safeReviewDiagnostics({ ...d, signalSent: 'SIGSTOP; rm -rf /', elapsedMs: -1 });
     expect(forged!.signalSent).toBeNull();
     expect(forged!.elapsedMs).toBeNull();
+  });
+
+  it('an error raised while Relay is killing it is still a timeout, never a launch failure', async () => {
+    // `error` can arrive during the grace — a signal the runtime could not
+    // deliver — and `launch_failed` for a process that ran the whole window
+    // names the wrong repair entirely: it sends an operator to the executable
+    // path when the reviewer had in fact started and gone quiet.
+    const fake = processFake({ exitsAfterMs: null, diesOn: null, errorAfterSignalMs: 5 });
+    const outcome = await run(fake);
+    expect(outcome.kind).toBe('review_incomplete');
+    expect(diagnosticsOf(outcome).failureShape).toBe('review_timeout');
   });
 
   it('a spawn that yields no pid is recorded as such rather than as a healthy launch', async () => {
