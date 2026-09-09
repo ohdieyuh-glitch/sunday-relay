@@ -1234,11 +1234,69 @@ describe('F8 — Hermes is pinned to an immutable commit', () => {
     expect(fromScript, 'the two defaults must not drift apart').toBe(fromWorkflow);
   });
 
-  it('a non-SHA ref is refused before anything is installed', () => {
+  it('a non-SHA ref is refused before anything is fetched or installed', () => {
     const script = read('.github/julius-live-hermes.sh');
     expect(script).toContain('hermes_ref_not_a_commit_sha');
     const guardAt = script.indexOf('hermes_ref_not_a_commit_sha');
-    expect(guardAt, 'the guard must precede the install').toBeLessThan(script.indexOf('pip install --quiet "git+'));
+    const fetchAt = script.indexOf('git -C "$HERMES_SRC" fetch');
+    const installAt = script.indexOf('pip install --quiet "$HERMES_SRC"');
+    expect(fetchAt, 'the source is fetched by this script, not by pip').toBeGreaterThan(-1);
+    expect(installAt, 'and installed from that checkout').toBeGreaterThan(-1);
+    expect(guardAt, 'the guard must precede the fetch').toBeLessThan(fetchAt);
+    expect(guardAt, 'and the install').toBeLessThan(installAt);
+  });
+
+  /**
+   * THE PIN IS CHECKED AFTER THE CHECKOUT, NOT ONLY BEFORE THE FETCH.
+   *
+   * `pip install "git+…@<sha>"` used to resolve the ref itself; this script now
+   * does, which moves the obligation here. A fetch that lands on anything but
+   * the pinned commit installs a different Hermes, and the shape of the bug is
+   * that everything downstream still looks healthy — so the check is on the
+   * checked-out HEAD, and it refuses rather than warns.
+   */
+  it('the checked-out source is proven to BE the pinned commit before it is installed', () => {
+    const script = read('.github/julius-live-hermes.sh');
+    expect(script).toContain('hermes_source_not_pinned');
+    const verifyAt = script.indexOf('hermes_source_not_pinned');
+    expect(verifyAt, 'the check must precede the install').toBeLessThan(
+      script.indexOf('pip install --quiet "$HERMES_SRC"'));
+    expect(script, 'and it must compare the real HEAD, not the requested ref')
+      .toContain('git -C "$HERMES_SRC" rev-parse HEAD');
+  });
+
+  /**
+   * UPSTREAM REFUSED THIS TWICE, AT TWO DIFFERENT POINTS.
+   *
+   * Live Run 3's zero-spend preflight was rate-limited by github.com at the
+   * clone (run 34388913340) and then, on the confirmation re-run, at the
+   * promisor blob fetch `--filter=blob:none` forces during checkout
+   * (34389221834). A single depth-1 fetch of the pinned commit has no promisor
+   * remote to return to, and the retry loop covers the transient limit.
+   *
+   * The clone stays UNAUTHENTICATED on purpose: a token here would be readable
+   * by a third-party repository's build hooks, and this step runs before any
+   * provider can be reached, so a refusal costs a job and never money.
+   */
+  it('the pinned source is fetched with bounded retries and no credential', () => {
+    const script = read('.github/julius-live-hermes.sh');
+    expect(script, 'a single depth-1 fetch, so there is no promisor remote')
+      .toContain('fetch --quiet --depth 1 origin "$HERMES_REF"');
+    expect(script, 'a transient rate limit is retried, not fatal')
+      .toContain('hermes_source_fetch_retry_after_');
+    expect(script, 'and exhausting the retries names upstream, not the profile')
+      .toContain('hermes_source_fetch_failed');
+    expect(script, 'the remote is plain https with no credential in it')
+      .toContain('remote add origin https://github.com/NousResearch/hermes-agent.git');
+    for (const secret of ['GITHUB_TOKEN', 'GH_TOKEN', 'x-access-token', 'insteadOf', 'GIT_ASKPASS']) {
+      expect(script, `no credential may reach the third-party build: ${secret}`).not.toContain(secret);
+    }
+  });
+
+  /** Nothing this script creates may outlive the job. */
+  it('the fetched source is destroyed with the venv', () => {
+    expect(read(WORKFLOW_PATH), 'the cleanup step removes the source tree too')
+      .toContain('rm -rf /opt/hermes-venv /opt/hermes-src');
   });
 });
 
