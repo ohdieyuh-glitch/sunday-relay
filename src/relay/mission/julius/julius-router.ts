@@ -153,6 +153,42 @@ export const safeReviewDiagnostics=(value:unknown):JuliusSafeDiagnostics|null=>{
   failureShape:safeToken(v.failureShape),
   providerHttpStatus:safeHttpStatus(v.providerHttpStatus),
   serviceHttpStatus:safeHttpStatus(v.serviceHttpStatus),
+  /* --- What the reviewer's PROCESS did. Null for a transport that ran none.
+   *
+   * Paid run 34311556047 failed three times with `timed_out=true`,
+   * `output_bytes_observed=0` and no exit code — and that is also what the
+   * local transport records for a provider that answered slowly, a connection
+   * that was never made, a credential that was refused, and an engine retrying
+   * in silence. The reviewer's one-shot mode prints its whole answer in a
+   * single write at the end, so zero bytes is simply the state of every review
+   * that has not finished yet. These columns are what let the next failure be
+   * read instead of guessed. --- */
+  processStarted:safeNullableBool(v.processStarted),
+  processPidObserved:safeNullableBool(v.processPidObserved),
+  firstOutputObserved:safeNullableBool(v.firstOutputObserved),
+  /** Milliseconds to the first byte, or null when none ever arrived. */
+  firstOutputAfterMs:safeCount(v.firstOutputAfterMs),
+  elapsedMs:safeCount(v.elapsedMs),
+  /** The window the attempt was given, so the guillotine is visible beside it. */
+  timeoutMs:safeCount(v.timeoutMs),
+  exitObserved:safeNullableBool(v.exitObserved),
+  /**
+   * A CLOSED SET, NOT A SIGNAL NAME A CALLER CHOSE.
+   *
+   * `safeToken` refuses it (upper case, and a comma), and that is the right
+   * refusal: the only two answers this repository's reviewer path can produce
+   * are "SIGTERM was enough" and "SIGTERM was not, so it was killed". A boolean
+   * would collapse exactly the distinction worth recording.
+   */
+  signalSent:safeEnum(v.signalSent,['SIGTERM','SIGTERM,SIGKILL'] as const),
+  /** Whether the child was CONFIRMED gone before the outcome was reported. */
+  cleanupCompleted:safeNullableBool(v.cleanupCompleted),
+  /**
+   * Whether a request reached the provider — and only from a transport that
+   * can SEE the request. The local path reads a pipe, not a socket, so it
+   * always writes null here rather than inferring one.
+   */
+  providerRequestStarted:safeNullableBool(v.providerRequestStarted),
   /* --- Prompt Architect (plan stage). Null for the reviewer, and vice versa. */
   requestedModel:safeModel(v.requestedModel),
   responseId:safeResponseId(v.responseId),
