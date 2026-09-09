@@ -24,6 +24,7 @@
  */
 
 import { createHash } from 'node:crypto';
+import type { JuliusContractReviewCharge } from '../../src/relay/mission/julius/julius-task-contract';
 import {
   JuliusDispatchError,
   reviewChargeFor,
@@ -341,6 +342,45 @@ function planCorrection(reasonCode: ArchitectPlanReasonCode, field: string | nul
  */
 const PLAN_ATTEMPT_LIMIT = 2;
 
+/**
+ * MAP A VALIDATED ARCHITECT PLAN ONTO A CONTRACT PROPOSAL.
+ *
+ * Reads only fields `validateArchitectPlan` has already accepted, and reads them
+ * defensively anyway: this runs on provider output, and a mapper that assumed
+ * its input would be the thing that turned a validated plan into a crash.
+ * `undefined` when nothing usable is there — Julius then keeps the revision it
+ * has, which is the seeded one, and the run continues.
+ *
+ * ACCEPTANCE CRITERIA ARE DELIBERATELY NOT MAPPED. The architect states them as
+ * prose with no mission ids, and the contract's criteria carry the MISSION's
+ * ids; proposing them would be refused by `reviseJuliusTaskContract` anyway, and
+ * sending a field that is always refused would make every plan log a refusal.
+ */
+function contractProposalFromPlan(plan: unknown): Record<string, unknown> | undefined {
+  if (plan === null || typeof plan !== 'object') return undefined;
+  const value = plan as Record<string, unknown>;
+  const handoff = value.handoff !== null && typeof value.handoff === 'object'
+    ? value.handoff as Record<string, unknown>
+    : {};
+  const strings = (raw: unknown): string[] | undefined =>
+    (Array.isArray(raw) && raw.every((entry) => typeof entry === 'string') && raw.length > 0
+      ? raw as string[]
+      : undefined);
+  const text = (raw: unknown): string | undefined =>
+    (typeof raw === 'string' && raw.trim().length > 0 ? raw : undefined);
+
+  const proposal: Record<string, unknown> = {};
+  const set = (key: string, candidate: unknown): void => { if (candidate !== undefined) proposal[key] = candidate; };
+  set('objective', text(handoff.objective) ?? text(value.objectiveSummary));
+  set('responsibilityBoundary', text(handoff.boundedTask));
+  set('inScope', strings(handoff.allowedFileScope));
+  set('permittedPaths', strings(handoff.allowedFileScope));
+  set('prohibitedActions', strings(handoff.prohibitedActions) ?? strings(value.prohibitedActions));
+  set('requiredChecks', strings(handoff.requiredTests) ?? strings(value.testPlan));
+  set('expectedOutputs', strings(handoff.expectedEvidence));
+  return Object.keys(proposal).length === 0 ? undefined : proposal;
+}
+
 export function createLiveArchitectAdapter(input: {
   readonly worker: JuliusWorker;
   readonly contexts: CompiledContextSource;
@@ -464,6 +504,23 @@ export function createLiveArchitectAdapter(input: {
         workerId: input.worker.workerId,
         providerId: input.worker.providerId,
         status: 'SUCCEEDED',
+        /**
+         * THE CONTRACT REVISION THE PLAN IMPLIES, read off the validated plan
+         * rather than asked for separately.
+         *
+         * The architect already states the bounded handoff it proposes — the
+         * objective, the task boundary, the allowed file scope, the required
+         * tests, the prohibited actions and the expected evidence — and every
+         * one of those is a field of the task contract. So this is a MAPPING of
+         * output the schema already validates, not a new capability, not a
+         * second prompt, and not a second paid call.
+         *
+         * NOTHING HERE BINDS ANYONE. It is a proposal: Julius sanitises it
+         * against an allowlist, refuses every mission-owned field, refuses a
+         * result that could not be reviewed against, and stores what survives as
+         * a DRAFT that the plan review then challenges or accepts.
+         */
+        contractProposal: contractProposalFromPlan(parsed),
         safeSummary: `Prompt Architect plan produced by observed model ${safeClaim(outcome.actualModel ?? 'unknown', 80)} (response ${safeClaim(outcome.responseId ?? 'unknown', 80)}).`,
         evidence: [{
           type: 'ARTIFACT',
@@ -491,6 +548,38 @@ const CODER_CHARTER = [
   'Do not run commands; verification is executed separately by an independent executor.',
   'You implement; you do not review or approve your own work, and completion is decided by Julius.',
 ].join(' ');
+
+/**
+ * THE LOCKED CONTRACT, AS THE CODER'S CHARGE.
+ *
+ * The same document the independent reviewer will grade against, rendered for
+ * the worker that has to satisfy it. It arrives on the dispatch, computed by
+ * Julius from the contract its gate proved; the adapter never looks one up,
+ * because a worker that chose its own terms would be choosing what it is
+ * graded against. Every line is a closed field of the contract — no mission
+ * ids, no provider text, no prose of another worker's.
+ */
+export function coderContractBrief(contract: JuliusContractReviewCharge): string {
+  const list = (items: readonly string[], empty: string) => (items.length === 0 ? `    - ${empty}` : items.map((item) => `    - ${item}`).join('\n'));
+  return [
+    '--- TASK CONTRACT (locked; the reviewer grades against exactly this) ---',
+    `  CONTRACT: ${contract.binding.contractId} revision ${contract.binding.contractRevision}`,
+    `  BINDING DIGEST: ${contract.binding.bindingDigest}`,
+    `  ROUND: ${contract.stage}`,
+    `  OBJECTIVE: ${contract.objective}`,
+    `  RESPONSIBILITY BOUNDARY: ${contract.responsibilityBoundary}`,
+    `  IN SCOPE:\n${list(contract.inScope, '(none stated)')}`,
+    `  OUT OF SCOPE:\n${list(contract.outOfScope, '(none)')}`,
+    `  PERMITTED PATHS:\n${list(contract.permittedPaths, '(none stated)')}`,
+    `  PROHIBITED ACTIONS:\n${list(contract.prohibitedActions, '(none)')}`,
+    `  BLOCKING ACCEPTANCE CRITERIA:\n${list(contract.blockingCriteria, '(none stated)')}`,
+    `  REVIEW CRITERIA (what the independent reviewer will check):\n${list(contract.contractReviewCriteria, '(none stated)')}`,
+    `  REQUIRED EVIDENCE: ${contract.requiredEvidence.join(', ') || '(none stated)'}`,
+    `  REQUIRED CHECKS:\n${list(contract.requiredChecks, '(none stated)')}`,
+    `  FAILURE CONDITIONS:\n${list(contract.failureConditions, '(none stated)')}`,
+    `  STOPPING CONDITION: ${contract.stoppingCondition}`,
+  ].join('\n');
+}
 
 export function createLiveHostedCodingAdapter(input: {
   readonly worker: JuliusWorker;
@@ -579,6 +668,10 @@ export function createLiveHostedCodingAdapter(input: {
           packetText(snapshot),
           '--- ARCHITECT PLAN ---',
           plan,
+          // The locked terms, when Julius dispatched under one. Absent only for
+          // a composition that ran the coder without a contract, which the
+          // dispatch gate no longer permits on the live path.
+          ...(dispatch.contract === undefined ? [] : [coderContractBrief(dispatch.contract)]),
         ].join('\n\n'),
         workspacePath: input.workspacePath,
         apiKey: input.apiKey,
@@ -785,6 +878,14 @@ export function createLiveHermesReviewerAdapter(input: {
       const packet: ReviewPacket = {
         stage,
         charge,
+        /**
+         * THE LOCKED CONTRACT, WHEN JULIUS DISPATCHED ONE. It arrives on the
+         * dispatch — computed by Julius from the contract its gate proved — and
+         * is never looked up here: a reviewer that could fetch its own charge
+         * would be choosing what it grades against. Absent for a plan review,
+         * whose subject is the document that becomes the contract's detail.
+         */
+        ...(dispatch.contract === undefined ? {} : { contract: dispatch.contract }),
         missionId: snapshot.packet.missionId,
         // THE FINDINGS ARE NOT THE FOUNDER'S REQUEST. `packetText` joins every
         // block, so the FINDING entries Julius compiled for a repair review

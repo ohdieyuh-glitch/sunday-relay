@@ -23,6 +23,7 @@ import {
   createJuliusHarness,
   task,
   verificationPolicy,
+  seedTaskContractInto,
   worker,
 } from './julius-runtime-fixtures';
 
@@ -242,6 +243,7 @@ function buildRepairMission() {
     runId: 'run-1', missionId: 'msn-1', projectId: 'prj-1', state: 'READY',
     cardRevision: 'card-r1', missionContractRevision: 1, projectBrainRevision: 0, version: 1,
   });
+  seedTaskContractInto(harness.store, { runId: 'run-1', projectId: 'prj-1', taskId: 'build-1', state: 'locked' });
   harness.store.seedTask('run-1', task({ taskId: 'build-1', ordinal: 0, requiredEvidenceTypes: ['TEST'] }));
   return harness;
 }

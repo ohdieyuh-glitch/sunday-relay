@@ -609,7 +609,14 @@ describe('the evidence dump names only tables and columns the migrations create'
     const files = readdirSync(migrationsDirectory).filter((file) => file.endsWith('.sql')).sort();
     for (const file of files) {
       const sql = readFileSync(join(migrationsDirectory, file), 'utf8');
-      for (const match of sql.matchAll(/CREATE TABLE(?: IF NOT EXISTS)? relay_wonderland\.([a-z_]+)\s*\(([\s\S]*?)\n\);/gu)) {
+      // `\n\);` would have required the closing paren to start its own line, which is true of
+      // every table migration 011+ declares and of NOT ONE table in 001 — those are written one
+      // per line. So this schema, and every check built on it, silently covered the julius_*
+      // tables and nothing else: a dump naming a real column of a 001 table would fail as though
+      // the table did not exist. `\n?` admits the single-line form. The terminator stays `\);`
+      // because a close-paren immediately followed by a semicolon occurs only at the end of a
+      // statement — an inner `CHECK(side IN(1,2))` is `))` or `),`, never `);`.
+      for (const match of sql.matchAll(/CREATE TABLE(?: IF NOT EXISTS)? relay_wonderland\.([a-z_]+)\s*\(([\s\S]*?)\n?\);/gu)) {
         const columns = new Set<string>();
         for (const line of match[2].split(/[,\n]/u)) {
           const column = /^\s*([a-z_]+)\s+(?:text|jsonb|bigint|integer|boolean|timestamptz|numeric|double precision|bytea)\b/u.exec(line);
@@ -641,13 +648,41 @@ describe('the evidence dump names only tables and columns the migrations create'
     expect(workflow, 'an inline query would drift away from the validated script again').not.toContain('dump "SELECT');
   });
 
+  /**
+   * THE PARSER'S OWN COVERAGE.
+   *
+   * A schema reader that quietly sees half the migrations makes every check
+   * built on it weaker than it reads — and it fails in the safe-looking
+   * direction: a dump of a REAL table is reported as naming a table "no
+   * migration creates", which invites deleting the dump rather than fixing the
+   * reader. Migration 001 declares one table per line and 011+ declare them
+   * across many, so both shapes are pinned here against tables that exist.
+   */
+  it('reads both migration shapes, one-line and many-line', () => {
+    const tables = schema();
+
+    const sessions = tables.get('execution_sessions');
+    expect(sessions, 'a single-line CREATE TABLE from migration 001').toBeDefined();
+    for (const column of ['execution_id', 'mission_id', 'project_id', 'player_id', 'agent_id', 'state']) {
+      expect(sessions!.has(column), `execution_sessions.${column}`).toBe(true);
+    }
+    expect(sessions!.has('side'), 'an inner CHECK(...) constraint is not a column').toBe(false);
+
+    const runs = tables.get('julius_runs');
+    expect(runs, 'a many-line CREATE TABLE, which is what this reader already handled').toBeDefined();
+    expect(runs!.has('run_id') && runs!.has('project_id'), 'and it still handles it').toBe(true);
+
+    expect(tables.has('players') && tables.has('projects') && tables.has('mission_contracts'),
+      'the rest of 001 came with it, rather than one table being special-cased').toBe(true);
+  });
+
   it('every dumped table exists and every selected or ordered column is a real column', () => {
     const tables = schema();
     const dumps = queries();
     const everyDumpedFile = [...read('.github/julius-live-evidence-dump.sh').matchAll(/" ([a-z-]+\.tsv)$/gmu)].map((match) => match[1]).sort();
     expect(everyDumpedFile, 'every file the script writes, including the ones this regex cannot parse')
-      .toEqual(['budget.tsv', 'decisions.tsv', 'evidence.tsv', 'failures.tsv', 'findings.tsv', 'runs.tsv', 'tasks.tsv', 'tool-invocations.tsv', 'worker-diagnostics.tsv']);
-    expect(dumps.map((dump) => dump.file).sort()).toEqual(['decisions.tsv', 'evidence.tsv', 'findings.tsv', 'runs.tsv', 'tasks.tsv', 'tool-invocations.tsv']);
+      .toEqual(['budget.tsv', 'contract-events.tsv', 'decisions.tsv', 'evidence.tsv', 'failures.tsv', 'findings.tsv', 'project-brain.tsv', 'runs.tsv', 'sessions.tsv', 'task-contracts.tsv', 'tasks.tsv', 'tool-invocations.tsv', 'trajectory.tsv', 'worker-diagnostics.tsv']);
+    expect(dumps.map((dump) => dump.file).sort()).toEqual(['decisions.tsv', 'evidence.tsv', 'findings.tsv', 'project-brain.tsv', 'runs.tsv', 'sessions.tsv', 'task-contracts.tsv', 'tasks.tsv', 'tool-invocations.tsv', 'trajectory.tsv']);
     for (const dump of dumps) {
       const columns = tables.get(dump.table);
       expect(columns, `${dump.file} reads relay_wonderland.${dump.table}, which no migration creates`).toBeDefined();

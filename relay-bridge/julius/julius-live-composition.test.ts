@@ -18,6 +18,8 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   JULIUS_CONTEXT_COMPILER_VERSION,
   createJuliusMemoryStore,
+  juliusTaskContractBindingDigest,
+  seedJuliusTaskContract,
   type JuliusContextSnapshot,
   type JuliusRecoveryDriver,
   type JuliusRuntimeStore,
@@ -349,6 +351,12 @@ function fakeRuns(calls: Array<Record<string, unknown>>) {
     async createRun(input: { runId: string }) { version = 1; calls.push({ createRun: input }); return { runId: input.runId, state: 'CREATED', version }; },
     async addTask(input: { task: { taskId: string } }) { calls.push({ addTask: input.task }); return true; },
     async transition(input: { to: string }) { version += 1; calls.push({ transition: input.to }); return { state: input.to, version }; },
+    // Bootstrap authors the build's task contract before the run is READY, so a
+    // fake that omitted it would prove a bootstrap production cannot perform.
+    async putTaskContract(input: { contract: { contractId: string; taskId: string; contractRevision: number; state: string } }) {
+      calls.push({ putTaskContract: input.contract });
+      return true;
+    },
   };
 }
 
@@ -419,6 +427,20 @@ function seedMissionRun(store: ReturnType<typeof createJuliusMemoryStore>): void
     taskId: 'build-1', missionId: 'mission-live-1', parentTaskId: null, dependencyIds: ['plan-1'],
     requiredEvidenceTypes: ['TEST'], taskType: 'build', role: 'CODING_AGENT', ordinal: 1, state: 'BLOCKED',
   });
+  // THE BUILD'S TASK CONTRACT, exactly as `createLiveJuliusBootstrapPort` writes
+  // it: revision 1, a DRAFT, authored by Julius from the mission's own terms.
+  // The accepting plan review is what locks it, which is where the production
+  // pipeline locks it — so this drive exercises the real ordering rather than a
+  // pre-agreed shortcut.
+  const seeded = seedJuliusTaskContract({
+    runId: 'run-live', taskId: 'build-1', missionContractRevision: 1,
+    objective: 'Prove the live chain with a tiny fixture.',
+    requirements: ['Normalize a mission label.'], constraints: ['Touch only the fixture.'],
+    acceptanceCriteria: [{ id: 'AC-1', text: 'The fixture test passes.', blocking: true }],
+    filesInScope: [], filesOutOfScope: [], spendUsd: 5, repairCycles: 1, requiredEvidence: ['TEST'],
+  });
+  if (!seeded.seeded) throw new Error(`fixture contract not derivable: ${seeded.reasonCode}`);
+  void store.putTaskContract({ projectId: 'prj-live', contract: seeded.contract, occurredAt: '2026-09-08T00:00:00.000Z' });
   // Empty evidence-type list, matching the bootstrap: the runtime evaluates a
   // criterion's types against every verified task, so the TEST requirement is
   // carried by the build task's own requiredEvidenceTypes instead.
@@ -716,6 +738,7 @@ function reviewSnapshot(taskId: string): JuliusContextSnapshot {
     contextId: 'ctx-resume-1', runId: 'run-live', taskId, workerId,
     workerRole: 'INDEPENDENT_REVIEWER', compilerVersion: JULIUS_CONTEXT_COMPILER_VERSION,
     missionContractRevision: 1, cardRevision: 'card-test-1', projectBrainRevision: 0,
+    taskContractRevision: 1, taskContractDigest: 'sha256:resume-contract',
     sourceEntryIds: [], dependencyTaskIds: [], evidenceIds: [], findingIds: [],
     acceptanceCriterionIds: ['AC-1'], contentHash: 'sha256:resume-test',
     characterCount: 24, redactionCount: 0, truncated: false,
@@ -872,6 +895,128 @@ describe('the durable completion rule after a repair', () => {
     expect(outcome.state).toBe('VERIFYING');
     expect(outcome.stalled).toBe(true);
     expect(outcome.haltCause ?? '').toContain('REPAIR');
+  });
+});
+
+/**
+ * THE TASK CONTRACT, PROVEN IN A MISSION RATHER THAN IN A UNIT TEST.
+ *
+ * `julius-task-contract.ts` and its store are proven on their own, and the run
+ * loop is proven to refuse a dispatch whose contract is not locked. What was
+ * NOT proven anywhere is the property the contract exists for, in the shape a
+ * mission actually has it: that by the time the Coding Agent is dispatched the
+ * agreement is LOCKED, and that the reviewer of its work holds the SAME
+ * agreement — not an equal-looking one, the same digest.
+ *
+ * A run where those two diverge is the failure the whole mechanism is for: a
+ * coder judged against terms it was never given. It is invisible to a unit
+ * test, because a unit test constructs both sides itself.
+ *
+ * `seedMissionRun` seeds the build's contract exactly as the production
+ * bootstrap writes it — revision 1, DRAFT — and nothing here locks it by hand;
+ * the accepting plan review is what locks it, which is where production locks
+ * it too.
+ */
+describe('the task contract is locked before the coder runs, and binds its reviewer too', () => {
+  const claims = (memory: ReturnType<typeof createJuliusMemoryStore>) =>
+    memory.events()
+      .filter((event) => event.type === 'task.claimed')
+      .map((event) => ({ taskId: event.taskId, facts: event.facts as Record<string, unknown> }));
+
+  it('the build is dispatched under a LOCKED contract, and its review holds the same digest', async () => {
+    const { memory, outcome } = await driveLiveMission(['approved']);
+    expect(outcome.state, 'the drive must complete for this to mean anything').toBe('COMPLETED');
+
+    const contract = await memory.loadTaskContract({ projectId: 'prj-live', taskId: 'build-1' });
+    expect(contract, 'the build has a contract at all').not.toBeNull();
+    expect(contract!.state, 'and it is LOCKED, not still a draft').toBe('LOCKED');
+    expect(contract!.bindingDigest, 'a locked contract carries its binding').toMatch(/^sha256:[0-9a-f]{16,}$/u);
+    expect(contract!.lockedByEvaluatorId, 'and names who locked it').not.toBeNull();
+
+    // THE ORDER. The lock is not merely present at the end of the run — the
+    // build was CLAIMED carrying it, which is the only thing that proves the
+    // coder was never dispatched under an unagreed charge.
+    const build = claims(memory).find((claim) => claim.taskId === 'build-1');
+    expect(build, 'the build was claimed').toBeDefined();
+    expect(build!.facts.bindingDigest, 'the coder carried the binding into its dispatch')
+      .toBe(contract!.bindingDigest);
+    expect(build!.facts.contractRevision).toBe(contract!.contractRevision);
+
+    // THE SAME AGREEMENT, NOT AN EQUAL-LOOKING ONE. Every claim that carries a
+    // binding at all carries THIS one; a review of the build holding a
+    // different digest would be a review against terms the coder never had.
+    const bound = claims(memory).filter((claim) => claim.facts.bindingDigest !== null);
+    expect(bound.length, 'the coder and at least one reviewer are bound').toBeGreaterThan(1);
+    for (const claim of bound) {
+      expect(claim.facts.bindingDigest, `${claim.taskId} holds the coder's binding`)
+        .toBe(contract!.bindingDigest);
+      expect(claim.facts.contractId, `${claim.taskId} holds the coder's contract`)
+        .toBe(contract!.contractId);
+    }
+  });
+
+  it('the coder\'s prompt carries the locked terms — the same charge its reviewer grades against', async () => {
+    const { memory, fakes } = await driveLiveMission(['approved']);
+    const locked = await memory.loadTaskContract({ projectId: 'prj-live', taskId: 'build-1' });
+    expect(locked?.state).toBe('LOCKED');
+
+    // The hosted coder's prompt, as the runner received it.
+    const prompt = fakes.prompts[0];
+    expect(prompt).toBeDefined();
+    expect(prompt).toContain('--- TASK CONTRACT (locked; the reviewer grades against exactly this) ---');
+    expect(prompt).toContain(`CONTRACT: ${locked!.contractId} revision ${locked!.contractRevision}`);
+    expect(prompt).toContain(`BINDING DIGEST: ${locked!.bindingDigest}`);
+    // The objective is whatever revision was LOCKED — here the architect's revision 2, not the seeded text.
+    expect(prompt).toContain(`OBJECTIVE: ${locked!.objective}`);
+    expect(prompt).toContain('ROUND: build');
+    expect(prompt).toContain('[AC-1] The fixture test passes.');
+    // After the plan, not instead of it: the plan is what the coder builds,
+    // the contract is what the build is held to.
+    expect(prompt!.indexOf('--- ARCHITECT PLAN ---')).toBeLessThan(prompt!.indexOf('--- TASK CONTRACT'));
+
+    // And it is the SAME document the reviewer was handed: one binding digest
+    // in the coder's prompt and in the build review's packet.
+    const buildReview = fakes.packets.find((packet) => packet.stage === 'build');
+    expect(buildReview?.contract?.binding.bindingDigest).toBe(locked!.bindingDigest);
+    expect(buildReview?.contract?.objective).toBe(locked!.objective);
+    expect(locked!.contractRevision, 'the architect revised the seeded terms and THAT revision was locked').toBe(2);
+  });
+
+  it('the architect is NOT bound, and null says so rather than an absence', async () => {
+    // The plan task is not the contract's subject and has none. Reporting a
+    // digest for it would be inventing an agreement; omitting the fact would
+    // make "no contract" and "nothing was recorded" the same answer.
+    const { memory } = await driveLiveMission(['approved']);
+    const plan = claims(memory).find((claim) => claim.taskId === 'plan-1');
+    expect(plan, 'the plan was claimed').toBeDefined();
+    expect(plan!.facts.bindingDigest, 'the architect is bound by the MISSION contract, not a task one').toBeNull();
+    expect(plan!.facts.contractId).toBeNull();
+    expect('bindingDigest' in plan!.facts, 'and the fact is present, so null is an answer').toBe(true);
+  });
+
+  it('the binding a claim carried is the one the terms actually hash to', async () => {
+    // Re-derived from the stored terms rather than trusted as a label — the
+    // same check `loadTaskContract` performs on read, done here against the
+    // value a dispatch actually carried. A digest agreeing with the row but not
+    // with the terms would be a binding nobody could verify.
+    const { memory } = await driveLiveMission(['approved']);
+    const contract = await memory.loadTaskContract({ projectId: 'prj-live', taskId: 'build-1' });
+    expect(contract).not.toBeNull();
+    expect(juliusTaskContractBindingDigest(contract!), 're-derived from the terms themselves')
+      .toBe(contract!.bindingDigest);
+  });
+
+  it('only ONE revision is ever locked, however many the run wrote', async () => {
+    const { memory } = await driveLiveMission(['approved']);
+    const revisions = await memory.taskContractRevisions({ projectId: 'prj-live', taskId: 'build-1' });
+    expect(revisions.length, 'at least the seeded one').toBeGreaterThan(0);
+    expect(revisions.filter((row) => row.state === 'LOCKED'), 'at most one locked revision').toHaveLength(1);
+    // Every other revision is a draft or superseded — never a second live
+    // agreement sitting beside the one the coder was dispatched under.
+    for (const row of revisions) {
+      if (row.state === 'LOCKED') continue;
+      expect(['DRAFT', 'CHALLENGED', 'SUPERSEDED'], `revision ${row.contractRevision}`).toContain(row.state);
+    }
   });
 });
 

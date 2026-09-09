@@ -93,3 +93,50 @@ dump "SELECT e.payload->>'taskId' AS task_id,e.event_type,e.payload->'facts'->>'
 # `NULL` is a real answer everywhere and always means "not known here", never zero: a reviewer
 # that never started has no exit code, and 0 would say it exited cleanly.
 dump "SELECT e.payload->>'taskId' AS task_id,t.role,e.payload->'facts'->>'diag_stage' AS stage,e.payload->'facts'->>'diag_transport' AS transport,e.payload->'facts'->>'diag_provider' AS provider,e.payload->'facts'->>'diag_servedModel' AS served_model,e.payload->'facts'->>'diag_processExitCode' AS process_exit_code,e.payload->'facts'->>'diag_timedOut' AS timed_out,e.payload->'facts'->>'diag_outputBytesObserved' AS output_bytes_observed,e.payload->'facts'->>'diag_outputByteLimit' AS output_byte_limit,e.payload->'facts'->>'diag_outputTruncated' AS output_truncated,e.payload->'facts'->>'diag_jsonDetected' AS json_detected,e.payload->'facts'->>'diag_jsonParseable' AS json_parseable,e.payload->'facts'->>'diag_reviewObjectCount' AS review_object_count,e.payload->'facts'->>'diag_verdictPresent' AS verdict_present,e.payload->'facts'->>'diag_verdictValid' AS verdict_valid,e.payload->'facts'->>'diag_summaryPresent' AS summary_present,e.payload->'facts'->>'diag_failureShape' AS failure_shape,e.payload->'facts'->>'diag_providerHttpStatus' AS provider_http_status,e.payload->'facts'->>'diag_serviceHttpStatus' AS service_http_status,e.payload->'facts'->>'diag_requestedModel' AS requested_model,e.payload->'facts'->>'diag_responseId' AS response_id,e.payload->'facts'->>'diag_validationPassed' AS validation_passed,e.payload->'facts'->>'diag_validationReasonCode' AS validation_reason_code,e.payload->'facts'->>'diag_validationField' AS validation_field,e.payload->'facts'->>'diag_validationClaimPhrase' AS validation_claim_phrase,e.payload->'facts'->>'diag_planAttempts' AS plan_attempts,e.payload->'facts'->>'diag_reviewAttempts' AS review_attempts,e.payload->'facts'->>'diag_resultSubtype' AS result_subtype,e.payload->'facts'->>'diag_isError' AS is_error,e.payload->'facts'->>'diag_numTurns' AS num_turns,e.payload->'facts'->>'diag_toolUseCount' AS tool_use_count,e.payload->'facts'->>'diag_permissionDenials' AS permission_denials,e.payload->'facts'->>'diag_implementationPresent' AS implementation_present,e.payload->'facts'->>'diag_costUsdMicros' AS cost_usd_micros,e.payload->'facts'->>'diag_costCeilingUsdMicros' AS cost_ceiling_usd_micros,e.payload->'facts'->>'diag_costSource' AS cost_source,e.payload->'facts'->>'diag_runtimeStarted' AS runtime_started,e.payload->'facts'->>'code' AS julius_code,e.payload->'facts'->>'errorRetryable' AS retryable,e.occurred_at FROM relay_wonderland.events e LEFT JOIN relay_wonderland.julius_tasks t ON t.task_id=e.payload->>'taskId' WHERE e.payload->'facts'->>'diag_transport' IS NOT NULL ORDER BY e.occurred_at" worker-diagnostics.tsv
+
+# WHAT THE RUN LEARNED, AND WHO IT RAN FOR.
+#
+# Two tables the bundle has never carried, and both answer a Beta Gate row that could otherwise
+# only guess.
+#
+# `julius_brain_entries` is the Project Brain. Until now it had one writer — the bootstrap seed —
+# so a bundle could not distinguish "the run recorded nothing" from "nothing was ever dumped".
+# Identifiers, kind, revision and time only: `safe_content` is deliberately NOT selected, because
+# it is worker-authored prose and this bundle's rule is that no model-written text has a column.
+#
+# `execution_sessions.player_id` is the account the mission belongs to. Both bounded missions
+# declare tenant `tenant` and run under an operator token, so today it reads as the operator and
+# the ACCOUNT / ONBOARDING row correctly FAILS; the day a real account starts a mission it reads
+# as that account. Identifiers only — the same class the run and mission columns already carry.
+dump "SELECT entry_id,entry_kind,worker_id,task_id,revision,created_at FROM relay_wonderland.julius_brain_entries ORDER BY revision" project-brain.tsv
+dump "SELECT execution_id,mission_id,project_id,player_id,agent_id,state FROM relay_wonderland.execution_sessions ORDER BY execution_id" sessions.tsv
+
+# WHAT THE CODER WAS CHARGED WITH, AND WHETHER IT WAS AGREED BEFORE IT RAN.
+#
+# A build may not be dispatched without a LOCKED task contract, so this table is what turns that
+# from a code path into evidence: the bundle shows the revision, its lock state, the instant it
+# stopped being arguable and who accepted it. Without it, "the reviewer graded against the same
+# agreement the coder worked under" is unfalsifiable after the database is destroyed.
+#
+# IDENTIFIERS AND STATE ONLY. `safe_terms` is deliberately NOT selected — the objective, the
+# criteria statements and the scope are prose, and some of it is architect-authored after a
+# revision, which is exactly the class this bundle refuses a column. `binding_digest` IS selected
+# and is safe by construction: it is a sha256 of the terms, never the terms.
+dump "SELECT contract_id,contract_revision,task_id,state,binding_digest,locked_at,locked_by_evaluator_id,created_at FROM relay_wonderland.julius_task_contracts ORDER BY contract_id,contract_revision" task-contracts.tsv
+
+# WHAT HAPPENED TO THE AGREEMENT, as identifiers and tokens only. A refusal here is the
+# reason a coder or reviewer was NOT dispatched — a stale handoff, a review that did not hold
+# the coder's binding, a lock that was never taken — and without it the bundle could show a
+# task FAILED under a contract that looks perfectly locked. No terms, no prose: revisions,
+# digests, task ids and the closed reason code. A bound task's CLAIM is here too — the revision
+# and digest the coder and the reviewer actually executed under — so the gate can compare what
+# was locked with what was run, rather than trusting that the two are one document.
+dump "SELECT e.payload->>'taskId' AS task_id,e.event_type,e.payload->'facts'->>'reasonCode' AS reason_code,e.payload->'facts'->>'contractTaskId' AS contract_task_id,e.payload->'facts'->>'contractId' AS contract_id,e.payload->'facts'->>'contractRevision' AS contract_revision,e.payload->'facts'->>'bindingDigest' AS binding_digest,e.payload->'facts'->>'recordedRevision' AS recorded_revision,e.payload->'facts'->>'currentRevision' AS current_revision,e.payload->'facts'->>'reviewRevision' AS review_revision,e.payload->'facts'->>'implementationRevision' AS implementation_revision,e.payload->'facts'->>'role' AS role,e.occurred_at FROM relay_wonderland.events e WHERE e.event_type IN('julius.contract.proposed','julius.contract.challenged','julius.contract.locked','julius.contract.refused') OR (e.event_type='julius.task.claimed' AND e.payload->'facts'->>'contractId' IS NOT NULL) ORDER BY e.occurred_at" contract-events.tsv
+
+# WHAT THE RUN DID, ROW BY ROW. The trajectory is the record evals read: every context compile,
+# dispatch, retry, finding, verification and repair round, with the worker and provider that
+# answered, what it cost, how long it took, and — for a bound task — the contract revision and
+# digest it ran under. Without it the bundle can show what a run ENDED as and not the path it
+# took there; a paid rerun's repair path and cost are these rows. `safe_facts` is the closed
+# vocabulary the runtime writes, never prose.
+dump "SELECT event_kind,task_id,worker_id,provider_id,outcome,usd_micros,duration_ms,input_tokens,output_tokens,safe_facts,occurred_at FROM relay_wonderland.julius_trajectory_events ORDER BY occurred_at,trajectory_event_id" trajectory.tsv

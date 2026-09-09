@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { JuliusRunLoop } from './julius-run-loop';
 import { juliusAllocationPolicy } from './julius-allocation-runtime';
 import {
-  cardPolicy, createJuliusHarness, task, verificationPolicy, worker,
+  cardPolicy, createJuliusHarness, seedTaskContractInto, task, verificationPolicy, worker,
 } from './julius-runtime-fixtures';
 import type { JuliusRunRow } from './julius-runtime-ports';
 
@@ -62,6 +62,11 @@ function seed(harness: ReturnType<typeof createJuliusHarness>) {
     taskId: 'build-1', ordinal: 1, role: 'CODING_AGENT', taskType: 'build',
     state: 'BLOCKED', dependencyIds: ['plan-1'], requiredEvidenceTypes: ['TEST'],
   }));
+  // THE BUILD'S CONTRACT, SEEDED AS A DRAFT — exactly as bootstrap writes it.
+  // The lock is not seeded: this scenario drives the real plan review, and the
+  // accepting decision that releases `build-1` is what locks the terms it will
+  // be held to. A pre-locked fixture would hide that ordering.
+  seedTaskContractInto(harness.store, { runId: 'run-1', projectId: 'prj-1', taskId: 'build-1' });
   harness.store.seedCriteria('run-1', [{ criterionId: 'ac-1', description: 'A run summary is printed.', requiredEvidenceTypes: [] }]);
   harness.store.seedBrain('run-1', [
     { entryId: 'brain-1', kind: 'OBJECTIVE', text: 'Print a run summary.', taskIds: [], allowedRoles: ['PROMPT_ARCHITECT', 'CODING_AGENT', 'INDEPENDENT_REVIEWER'], sensitivity: 'INTERNAL' },

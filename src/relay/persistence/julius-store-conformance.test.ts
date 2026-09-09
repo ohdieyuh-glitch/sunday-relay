@@ -13,13 +13,14 @@ import { JuliusSubagentPostgresRepository } from './julius-subagent-postgres';
 import { JuliusLifecyclePostgresRepository } from './julius-lifecycle-postgres';
 import { JuliusTimelinePostgresRepository } from './julius-timeline-postgres';
 import { JuliusVerificationPostgresRepository } from './julius-verification-postgres';
+import { JuliusContractPostgresRepository } from './julius-contract-postgres';
 import { createJuliusMemoryStore } from '../mission/julius';
 import type {
   JuliusClaimedTask, JuliusContextWriter, JuliusEventWriter, JuliusResultReceiptRow,
   JuliusResultWriter, JuliusRunRow, JuliusRunWriter, JuliusRuntimeReader,
-  JuliusApprovalStore, JuliusFindingWriter, JuliusLifecycleStore,
+  JuliusApprovalStore, JuliusBrainWriter, JuliusFindingWriter, JuliusLifecycleStore,
   JuliusRecoveryDriver, JuliusTimelineReader,
-  JuliusRuntimeStore, JuliusSubagentStore, JuliusTrajectoryWriter,
+  JuliusRuntimeStore, JuliusSubagentStore, JuliusTaskContractStore, JuliusTrajectoryWriter,
 } from '../mission/julius';
 
 /**
@@ -63,6 +64,15 @@ const pool = null as unknown as Pool;
 const runWriter: JuliusRunWriter = new JuliusPostgresRepository(pool);
 
 /**
+ * ONE REPOSITORY, TWO PORTS. The same repository is also the Project Brain's
+ * writer, and this assignment is the whole proof — it is what refused the first
+ * attempt at wiring `appendBrainEntry`, which bound it off `runWriter` and
+ * therefore claimed the run-writer port had a method it does not. A narrow port
+ * that quietly grew would be a port nobody could reason about.
+ */
+const brainWriter: JuliusBrainWriter = new JuliusPostgresRepository(pool);
+
+/**
  * ONE REPOSITORY, TWO PORTS. The recovery repository both accepts worker
  * results and reclaims expired leases, and the runtime needs those separately:
  * the pipeline writes results and only the recovery sweep reclaims.
@@ -87,6 +97,15 @@ const timeline: JuliusTimelineReader = new JuliusTimelinePostgresRepository(pool
 
 /** The verification repository satisfies the finding-writer port directly. */
 const findings: JuliusFindingWriter = new JuliusVerificationPostgresRepository(pool);
+
+/**
+ * The contract repository satisfies the task-contract port directly. This
+ * assignment is the load-bearing half of migration 023: a port method the
+ * repository does not implement — or implements with a different shape — stops
+ * this file compiling, which is how the memory model and the database are held
+ * to one contract without a database being present.
+ */
+const taskContracts: JuliusTaskContractStore = new JuliusContractPostgresRepository(pool);
 
 /**
  * THE TWO LEDGERS NEED A ONE-LINE ADAPTER, AND THAT IS THE POINT.
@@ -117,6 +136,7 @@ const composed: JuliusRuntimeStore & JuliusSubagentStore
   finishTask: runWriter.finishTask.bind(runWriter),
   appendEvidence: runWriter.appendEvidence.bind(runWriter),
   appendDecision: runWriter.appendDecision.bind(runWriter),
+  appendBrainEntry: brainWriter.appendBrainEntry.bind(brainWriter),
   acceptWorkerResult: resultWriter.acceptWorkerResult.bind(resultWriter),
   persist: contextWriter.persist.bind(contextWriter),
   appendEvent: eventWriter.appendEvent.bind(eventWriter),
@@ -130,7 +150,13 @@ const composed: JuliusRuntimeStore & JuliusSubagentStore
   repairRoundsFor: reader.repairRoundsFor.bind(reader),
   reviewCompletedFor: reader.reviewCompletedFor.bind(reader),
   activeTaskCount: reader.activeTaskCount.bind(reader),
+  executedBindingFor: reader.executedBindingFor.bind(reader),
   recordFinding: findings.recordFinding.bind(findings),
+  putTaskContract: taskContracts.putTaskContract.bind(taskContracts),
+  challengeTaskContract: taskContracts.challengeTaskContract.bind(taskContracts),
+  lockTaskContract: taskContracts.lockTaskContract.bind(taskContracts),
+  loadTaskContract: taskContracts.loadTaskContract.bind(taskContracts),
+  taskContractRevisions: taskContracts.taskContractRevisions.bind(taskContracts),
   recoverExpired: recovery.recoverExpired.bind(recovery),
   subagentContext: subagents.subagentContext.bind(subagents),
   recordSubagent: subagents.recordSubagent.bind(subagents),

@@ -36,7 +36,7 @@ import { planRunStatePath, transitionIsLegal } from './julius-state-path';
  * runtime shares — two runtimes, one walk of one table.
  */
 export { planRunStatePath, transitionIsLegal };
-import { prepareClaimedTask, runClaimedTask, type JuliusPipelineDependencies, type JuliusTaskOutcome } from './julius-task-pipeline';
+import { prepareClaimedTask, resumeUnverifiedTasks, runClaimedTask, type JuliusPipelineDependencies, type JuliusTaskOutcome } from './julius-task-pipeline';
 import { continuationConcurrency } from './julius-continuation';
 import type { JuliusClaimedTask, JuliusRecoveryDriver, JuliusRunRow } from './julius-runtime-ports';
 import { validateJuliusEvent } from './julius-events';
@@ -105,6 +105,17 @@ export interface JuliusRunAdvance {
   readonly to: JuliusMissionState;
   readonly changed: boolean;
   readonly reasonCode: string;
+  /**
+   * VERIFICATIONS THIS CALL RESUMED, and a separate field rather than a wider
+   * `changed`.
+   *
+   * `changed` means the RUN STATE moved, and resuming a verification often does
+   * not move it — an accepted plan releases a BLOCKED build while the run stays
+   * READY, which is correct. A driver reading `changed` alone would call that a
+   * stall on the very tick that unblocked the run, so the two facts are
+   * reported separately and a driver treats either as progress.
+   */
+  readonly resumedVerifications: number;
 }
 
 export interface JuliusRunLoopConfig {
@@ -485,6 +496,26 @@ export class JuliusRunLoop {
       }, this.deps, preflight));
     }
 
+    /**
+     * ONLY THE RUNS THIS TICK TOUCHED, WHICH IS NOT EVERY RUN THAT NEEDS ONE.
+     *
+     * A run whose only outstanding task is SUCCEEDED-and-undecided — the state
+     * a crash between `acceptWorkerResult` and the decision leaves — has
+     * nothing claimable and no lease to sweep, so it is never touched here and
+     * `advanceRun` never runs the verification it is owed.
+     *
+     * THAT IS A LIMIT OF `tick`, NOT A DEFECT IN THE RUNTIME, because no
+     * production caller uses `tick` alone: `driveJuliusRunToTerminal` calls
+     * `advanceRun` explicitly whenever a tick claimed nothing, for exactly this
+     * window. A future scheduler that calls `tick` on its own must do the same,
+     * or a paid answer will sit verified by nobody. Making `tick` self
+     * sufficient would mean enumerating runs with stranded verifications, which
+     * is a store query that does not exist yet and should be added deliberately
+     * rather than inferred from a loop that happens to be here.
+     *
+     * `julius-chaos.test.ts` drives the resume the way that driver does, so it
+     * tests the contract production relies on rather than a shape nothing uses.
+     */
     const runs: JuliusRunAdvance[] = [];
     for (const runId of touchedRunIds) {
       const advance = await this.advanceRun(runId, scope.projectId);
@@ -511,6 +542,35 @@ export class JuliusRunLoop {
     const policy = run === null ? null : await this.policies.policyFor(run);
     cache.set(claim.runId, policy);
     return policy;
+  }
+
+  /**
+   * Run any verification this run is owed. Returns how many tasks were
+   * verified, so the caller can re-read only when something changed.
+   *
+   * A run whose policy cannot be resolved is left alone rather than verified
+   * under a guess: the verification policy decides whether a review is required
+   * and how many repair rounds are authorised, and inventing one would be
+   * Julius deciding a mission's terms for it.
+   */
+  async #resumeVerifications(
+    run: JuliusRunRow,
+    tasks: readonly JuliusTask[],
+    decisions: readonly JuliusRecordedDecision[],
+    projectId: string,
+  ): Promise<number> {
+    const policy = await this.policies.policyFor(run);
+    if (policy === null) return 0;
+    const outcomes = await resumeUnverifiedTasks({
+      deps: this.deps, run, policy: policy.card, verification: policy.verification, tasks, decisions,
+      // A resumed decision may be REPAIR, and a repair is proven routable
+      // before it exists — which needs the capability its task WOULD require.
+      // Without this the routability proof would be skipped on exactly the path
+      // that produced paid run 34037313976's unroutable `repair:plan`.
+      capabilityFor: (task) => this.policies.capabilityFor(task),
+    });
+    void projectId;
+    return outcomes.length;
   }
 
   /**
@@ -637,10 +697,38 @@ export class JuliusRunLoop {
     const run = await this.deps.store.loadRun(runId, projectId);
     if (run === null) return null;
 
-    const [tasks, decisions] = await Promise.all([
+    let [tasks, decisions] = await Promise.all([
       this.deps.store.tasksForRun(runId, projectId),
       this.deps.store.decisionsForRun(runId, projectId),
     ]);
+
+    /**
+     * A VERIFICATION THAT NEVER RAN IS RESUMED BEFORE THE STATE IS COMPUTED.
+     *
+     * A process that dies between `acceptWorkerResult` and the decision leaves
+     * a SUCCEEDED task nothing will look at again — the claim query offers
+     * RUNNABLE tasks only — and the run parks in VERIFYING permanently. It
+     * parks honestly, which is why nothing detected it: no false completion,
+     * just a mission that never finishes.
+     *
+     * HERE, rather than in `tick`, because a stranded run has no claimable task
+     * and a tick that claims nothing never names it. `advanceRun` is called
+     * with the run id by exactly the caller that has noticed nothing moved, so
+     * this is where the question "is anything owed on this run?" can be asked
+     * at all.
+     *
+     * AND BEFORE `targetRunState`, because a resumed decision can release a
+     * BLOCKED task, schedule a repair or complete the run — computing the
+     * target from the pre-resume rows would report the stall this just cleared.
+     */
+    const resumed = await this.#resumeVerifications(run, tasks, decisions, projectId);
+    if (resumed > 0) {
+      [tasks, decisions] = await Promise.all([
+        this.deps.store.tasksForRun(runId, projectId),
+        this.deps.store.decisionsForRun(runId, projectId),
+      ]);
+    }
+
     const target = targetRunState(tasks, decisions);
     // The graph's SHAPE, recorded once per run version so an eval can relate
     // cost and latency to how big the mission actually was. Idempotent by
@@ -655,7 +743,7 @@ export class JuliusRunLoop {
     });
     const path = planRunStatePath(run.state, target.state);
     if (path.length === 0) {
-      return { runId, from: run.state, to: run.state, changed: false, reasonCode: target.reasonCode };
+      return { runId, from: run.state, to: run.state, changed: false, reasonCode: target.reasonCode, resumedVerifications: resumed };
     }
 
     let current = run;
@@ -678,6 +766,7 @@ export class JuliusRunLoop {
         return {
           runId, from: run.state, to: current.state,
           changed: current.state !== run.state, reasonCode: 'CONCURRENT_ADVANCE',
+          resumedVerifications: resumed,
         };
       }
     }
@@ -708,6 +797,6 @@ export class JuliusRunLoop {
       validateJuliusEvent(event);
       await this.deps.store.appendEvent(event);
     }
-    return { runId, from: run.state, to: current.state, changed: true, reasonCode: target.reasonCode };
+    return { runId, from: run.state, to: current.state, changed: true, reasonCode: target.reasonCode, resumedVerifications: resumed };
   }
 }

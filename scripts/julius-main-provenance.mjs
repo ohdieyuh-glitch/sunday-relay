@@ -280,12 +280,57 @@ import { pathToFileURL } from 'node:url';
  * Reads the branch twice, around every other lookup, so a push landing while
  * the gate runs is caught rather than silently proved.
  */
+/**
+ * THE SAME RULE, WITHOUT A `gh` BINARY.
+ *
+ * The rule above is a pure function over one object; `main` below is only a
+ * fetcher, and it fetches with `gh api`. A Claude Code cloud container has no
+ * `gh` — so on the one machine that most needs to check a landing before
+ * spending money, the authoritative gate could not run at all, and its rules
+ * were being re-applied BY HAND from GitHub API responses read another way.
+ * Two implementations of a trust rule is one too many, and the hand-run one is
+ * the one nobody tests.
+ *
+ * `--evidence <file>` feeds the same object from JSON gathered however the
+ * operator can gather it. It is NOT a weaker mode: every field the rule reads
+ * that the file omits arrives `undefined`, and this rule answers
+ * `indeterminate` for an unreadable field rather than passing it — so a
+ * truncated or hand-trimmed evidence file cannot produce `provenant`. What the
+ * mode cannot do is prove the file describes the repository it names, so the
+ * output line says where the evidence came from and never claims otherwise.
+ */
+async function fromEvidenceFile(path) {
+  const { readFileSync } = await import('node:fs');
+  const parsed = JSON.parse(readFileSync(path, 'utf8'));
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('evidence file must hold a single JSON object');
+  }
+  return parsed;
+}
+
 async function main(argv) {
-  const [repo, branchArg] = argv;
+  const evidenceIndex = argv.indexOf('--evidence');
+  const evidencePath = evidenceIndex >= 0 ? argv[evidenceIndex + 1] : undefined;
+  const positional = evidenceIndex >= 0 ? [...argv.slice(0, evidenceIndex), ...argv.slice(evidenceIndex + 2)] : argv;
+  const [repo, branchArg] = positional;
   const branch = branchArg ?? 'main';
   if (typeof repo !== 'string' || !/^[\w.-]+\/[\w.-]+$/u.test(repo) || !/^[\w./-]+$/u.test(branch)) {
-    process.stderr.write('usage: julius-main-provenance.mjs <owner/repo> [branch]\n');
+    process.stderr.write('usage: julius-main-provenance.mjs <owner/repo> [branch] [--evidence <file>]\n');
     return 2;
+  }
+  if (evidenceIndex >= 0 && (typeof evidencePath !== 'string' || evidencePath === '')) {
+    process.stderr.write('usage: --evidence needs a path to a JSON object holding the fields evaluateMainProvenance reads\n');
+    return 2;
+  }
+  if (typeof evidencePath === 'string') {
+    let evaluated;
+    try {
+      evaluated = evaluateMainProvenance({ ...(await fromEvidenceFile(evidencePath)), branch });
+    } catch (error) {
+      process.stderr.write(`main_provenance_indeterminate: ${error instanceof Error ? error.message : 'evidence unreadable'}\n`);
+      return 1;
+    }
+    return report(repo, branch, evaluated, `file:${evidencePath}`);
   }
   const { execFileSync } = await import('node:child_process');
   const gh = (path) => {
@@ -364,7 +409,16 @@ async function main(argv) {
     return 1;
   }
 
-  const line = `repo=${repo} branch=${branch} provenance=${result.verdict}`
+  return report(repo, branch, result, 'github');
+}
+
+/**
+ * One line, and it names its SOURCE. A verdict read from a file and one read
+ * from GitHub are the same rule over different evidence, and a reader who
+ * cannot tell them apart cannot judge what the pass is worth.
+ */
+function report(repo, branch, result, source) {
+  const line = `repo=${repo} branch=${branch} source=${source} provenance=${result.verdict}`
     + ` main=${result.mainSha ?? 'unknown'} tree=${result.mainTreeSha ?? 'unknown'}`
     + ` pr=${result.prNumber ?? 'none'} reviewed_head=${result.reviewedHeadSha ?? 'none'}`
     + ` approved_by=${(result.approvedBy ?? []).join(',') || 'none'} reason=${result.reason}`;

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { buildReviewPrompt, type ReviewPacket } from './hermes-reviewer';
-import { reviewChargeFor } from '../src/relay/mission/julius';
+import { juliusContractReviewCharge, lockJuliusTaskContract, reviewChargeFor, seedJuliusTaskContract } from '../src/relay/mission/julius';
 
 /**
  * DEFECT 2 (paid run 34037313976): the plan review was handed the
@@ -107,5 +107,83 @@ describe('a REPAIR review', () => {
     expect(prompt).toContain('UNIFIED DIFF:');
     expect(prompt).toContain('- REVIEW FINDING f-9 [HIGH]: untested branch');
     expect(prompt).toMatch(/Is every prior blocking finding resolved/);
+  });
+});
+
+/**
+ * RULE 5 — THE REVIEWER GRADES AGAINST THE LOCKED CONTRACT.
+ *
+ * Paid run 34037313976's reviewer was given prose and graded against its own
+ * reading of it. A locked contract is a document with criterion IDS, so a
+ * finding can name the thing it fails instead of paraphrasing it, and the
+ * binding is printed so the record shows the review and the implementation were
+ * the same agreement.
+ */
+describe('the locked task contract in the review prompt', () => {
+  const contract = juliusContractReviewCharge({
+    contract: (() => {
+      const seeded = seedJuliusTaskContract({
+        runId: 'run-1', taskId: 'build-1', missionContractRevision: 2,
+        objective: 'Add a run summary.',
+        requirements: ['sum the durations'], constraints: ['no new dependency'],
+        acceptanceCriteria: [
+          { id: 'criterion-summarises', text: 'summarizeRuns returns count, totalMs and slowestId', blocking: true },
+          { id: 'criterion-readme', text: 'the README mentions it', blocking: false },
+        ],
+        filesInScope: ['run-summary.js'], filesOutOfScope: ['package.json'],
+        spendUsd: 20, repairCycles: 3, requiredEvidence: ['TEST'],
+      });
+      if (!seeded.seeded) throw new Error(seeded.reasonCode);
+      const locked = lockJuliusTaskContract({
+        contract: seeded.contract, verdict: { verdict: 'ACCEPT', evaluatorId: 'julius' },
+        lockedAt: '2026-09-08T00:00:00.000Z',
+      });
+      if (locked.outcome !== 'LOCKED') throw new Error('fixture did not lock');
+      return locked.contract;
+    })(),
+    stage: 'build',
+  })!;
+
+  const prompt = buildReviewPrompt({
+    ...base, stage: 'build', charge: reviewChargeFor('build'), contract,
+    unifiedDiff: '--- a/run-summary.js\n+++ b/run-summary.js\n+ok',
+  });
+
+  it('names the exact agreement — contract, revision and digest', () => {
+    expect(prompt).toContain('THE LOCKED TASK CONTRACT');
+    expect(prompt).toContain('contract:build-1 revision 1');
+    expect(prompt).toContain(contract.binding.bindingDigest);
+    expect(contract.binding.bindingDigest).toMatch(/^sha256:[0-9a-f]{64}$/u);
+  });
+
+  it('quotes every BLOCKING criterion by its id, and no non-blocking one', () => {
+    expect(prompt).toContain('[criterion-summarises] summarizeRuns returns count, totalMs and slowestId');
+    expect(prompt).not.toContain('criterion-readme');
+    expect(prompt).toMatch(/every finding must name the criterion id it fails/);
+  });
+
+  it('carries the scope, the prohibitions and the stopping condition', () => {
+    expect(prompt).toContain('PERMITTED PATHS: run-summary.js');
+    expect(prompt).toContain('OUT OF SCOPE: package.json');
+    expect(prompt).toContain('violating the mission constraint: no new dependency');
+    expect(prompt).toContain('writing to package.json');
+    expect(prompt).toMatch(/STOPPING CONDITION: Stop when every blocking acceptance criterion/);
+  });
+
+  it('omits the whole block when Julius dispatched no contract — nothing is invented', () => {
+    const without = buildReviewPrompt({ ...base, stage: 'build', charge: reviewChargeFor('build') });
+    expect(without).not.toContain('THE LOCKED TASK CONTRACT');
+    expect(without).not.toContain('BINDING DIGEST');
+  });
+
+  it('a plan review still refuses the implementation demands even with a contract attached', () => {
+    // The contract cannot widen what a plan review may demand — that is #234's
+    // repair, and a per-task override would reopen it.
+    const plan = buildReviewPrompt({ ...base, stage: 'plan', charge: reviewChargeFor('plan'), contract });
+    expect(plan).toContain('THIS IS A PLAN REVIEW');
+    for (const absent of ['completed edits', 'a unified diff', 'changed file contents', 'executed test output']) {
+      expect(plan).toContain(absent);
+    }
+    expect(plan).toMatch(/Do NOT demand, and do NOT penalise the absence of/);
   });
 });

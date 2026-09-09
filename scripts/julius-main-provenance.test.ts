@@ -466,6 +466,112 @@ describe('the CLI, against a stubbed GitHub', () => {
     expect(result.stdout).not.toContain('provenant');
   }, 30_000);
 
+  /**
+   * THE SAME RULE, ON A MACHINE WITH NO `gh`.
+   *
+   * A Claude Code cloud container has no `gh` binary, and it is exactly the
+   * machine that must check a landing before a paid mission is dispatched.
+   * Without this mode these rules get re-applied BY HAND there — a second
+   * implementation of a trust gate, and the one nobody tests. What matters is
+   * that the file mode is not a softer one: it reaches `provenant` on the same
+   * facts and, crucially, CANNOT be talked into one by an evidence file that
+   * simply leaves the awkward fields out.
+   */
+  const runWithEvidence = (evidence: unknown) => {
+    const directory = mkdtempSync(join(tmpdir(), 'julius-provenance-evidence-'));
+    const file = join(directory, 'evidence.json');
+    try {
+      writeFileSync(file, JSON.stringify(evidence));
+      try {
+        const stdout = execFileSync(process.execPath,
+          [resolve(import.meta.dirname, 'julius-main-provenance.mjs'), REPO, 'main', '--evidence', file],
+          { encoding: 'utf8', stdio: 'pipe' });
+        return { code: 0, stdout, stderr: '' };
+      } catch (error) {
+        const failure = error as { status?: number; stdout?: string; stderr?: string };
+        return { code: failure.status ?? -1, stdout: failure.stdout ?? '', stderr: failure.stderr ?? '' };
+      }
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  };
+
+  /** The same facts the stubbed GitHub above yields, as one object. */
+  const evidence = (over: Record<string, unknown> = {}) => ({
+    mainSha: MAIN,
+    mainShaAfter: MAIN,
+    mainTreeSha: TREE,
+    mainParents: [PARENT],
+    pullRequests: [{ number: 226, merged: true, mergeCommitSha: MAIN, authorLogin: WORKER, headSha: HEAD, baseRef: 'main' }],
+    reviewedTreeSha: TREE,
+    reviewedHeadShaAfter: HEAD,
+    reviews: [approval()],
+    reviewComments: [],
+    statuses: [],
+    parentContainedInReviewedHead: true,
+    baseRefChanged: false,
+    ...over,
+  });
+
+  it('reaches the same verdict from an evidence file, and says the evidence came from one', () => {
+    const result = runWithEvidence(evidence());
+    expect(result.code, result.stderr).toBe(0);
+    expect(result.stdout).toContain('provenance=provenant');
+    expect(result.stdout).toContain('source=file:');
+    expect(result.stdout).toContain(`approved_by=${APPROVER}`);
+  }, 30_000);
+
+  it('says so when the verdict came from GitHub instead', () => {
+    expect(runWithStub(routes()).stdout, 'a reader must be able to tell the two apart').toContain('source=github');
+  }, 30_000);
+
+  /**
+   * THE LOAD-BEARING PROPERTY. Every field the rule reads is one an operator
+   * assembling a file could omit — by mistake or otherwise. Each omission must
+   * cost the pass, or the mode is a way round the gate rather than a way to run
+   * it.
+   */
+  it('cannot be passed by an evidence file that simply omits an awkward field', () => {
+    const fields = [
+      'mainSha', 'mainShaAfter', 'mainTreeSha', 'mainParents', 'pullRequests',
+      'reviewedTreeSha', 'reviewedHeadShaAfter', 'reviews', 'parentContainedInReviewedHead', 'baseRefChanged',
+    ] as const;
+    for (const field of fields) {
+      const { [field]: _omitted, ...trimmed } = evidence();
+      const result = runWithEvidence(trimmed);
+      expect(result.code, `omitting ${field} must not pass: ${result.stdout}${result.stderr}`).toBe(1);
+      expect(result.stdout, `omitting ${field} must not print provenant`).not.toContain('provenance=provenant');
+    }
+  }, 60_000);
+
+  it('refuses an evidence file that is not a single JSON object, and one that is not JSON', () => {
+    for (const shape of [[evidence()], 'a string', 42, null]) {
+      expect(runWithEvidence(shape).code, `${JSON.stringify(shape)} is not an evidence object`).toBe(1);
+    }
+    const directory = mkdtempSync(join(tmpdir(), 'julius-provenance-bad-'));
+    try {
+      const file = join(directory, 'evidence.json');
+      writeFileSync(file, 'not json at all');
+      let code = 0;
+      try {
+        execFileSync(process.execPath,
+          [resolve(import.meta.dirname, 'julius-main-provenance.mjs'), REPO, 'main', '--evidence', file], { stdio: 'pipe' });
+      } catch (error) { code = (error as { status?: number }).status ?? -1; }
+      expect(code).toBe(1);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  }, 30_000);
+
+  it('--evidence without a path is a usage error, not a fetch', () => {
+    let code = 0;
+    try {
+      execFileSync(process.execPath,
+        [resolve(import.meta.dirname, 'julius-main-provenance.mjs'), REPO, 'main', '--evidence'], { stdio: 'pipe' });
+    } catch (error) { code = (error as { status?: number }).status ?? -1; }
+    expect(code).toBe(2);
+  }, 30_000);
+
   it('bad arguments are a usage error, not a silent pass', () => {
     const directory = mkdtempSync(join(tmpdir(), 'julius-provenance-args-'));
     try {

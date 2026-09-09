@@ -109,7 +109,143 @@ describe('a crash at each transaction boundary', () => {
 });
 /* ---------------------------------------------- the expensive double-run */
 
+/**
+ * THE WINDOW THAT STRANDED A RUN, AND WHAT THE OLD ASSERTION MISSED.
+ *
+ * `acceptWorkerResult` moves a task out of ACTIVE in its own transaction; the
+ * verification decision is a SEPARATE write. A process that dies between them
+ * leaves a SUCCEEDED task with no decision, and nothing ever looks at it again:
+ * the claim query offers RUNNABLE tasks only, so the run parks in VERIFYING
+ * permanently.
+ *
+ * The boundary loop above reached this exact window and passed, because it asked
+ * whether the task wedged in an IMPOSSIBLE state. It did not. A mission that
+ * never finishes, in a perfectly legal state, with the money already spent, is
+ * the failure that question cannot see — so this asks the other one: does the
+ * run still REACH a terminal state?
+ */
+describe('a crash between accepting a result and recording its decision', () => {
+  const advanceUntilTerminal = async (harness: ReturnType<typeof build>, ticks = 12) => {
+    for (let index = 0; index < ticks; index += 1) {
+      const report = await harness.loop.tick(scope);
+      if (report.claimed === 0) {
+        const advance = await harness.loop.advanceRun('run-1', 'prj-1');
+        if (advance === null || (!advance.changed && advance.resumedVerifications === 0)) break;
+      }
+    }
+    return harness.store.loadRun('run-1', 'prj-1');
+  };
+
+  it('strands nothing: the restart runs the verification that never ran, and the run completes', async () => {
+    const harness = build();
+    const { report } = await crashAt(harness, 'appendDecision');
+    expect(report.fired, 'the boundary was reached').toBe(true);
+
+    // The shape the crash leaves: the work is durably done and unjudged.
+    expect(harness.store.taskRow('task-1')!.state).toBe('SUCCEEDED');
+    expect(await harness.store.decisionsForRun('run-1', 'prj-1')).toEqual([]);
+
+    harness.store.restart();
+    const run = await advanceUntilTerminal(harness);
+
+    expect(await harness.store.decisionsForRun('run-1', 'prj-1'), 'the decision was resumed')
+      .toHaveLength(1);
+    expect(run?.state, 'and the run reached a terminal state rather than parking forever')
+      .toBe('COMPLETED');
+    // AND IT WAS NOT PAID FOR TWICE. The result was already accepted; what was
+    // missing was Julius's judgement of it, and that costs nothing to redo.
+    expect(harness.adapters.get(CODER.adapterId)!.dispatches).toHaveLength(1);
+  });
+
+  it('attributes the resumed decision to the runtime, never to a worker that did not make it', async () => {
+    const harness = build();
+    await crashAt(harness, 'appendDecision');
+    harness.store.restart();
+    await advanceUntilTerminal(harness);
+
+    const decided = harness.store.events().filter((event) => event.type === 'verification.decided');
+    expect(decided).toHaveLength(1);
+    expect(decided[0]?.workerId).toBe('julius-verification-resume');
+  });
+
+  it('is idempotent: a second resume adds no decision and no second repair round', async () => {
+    const harness = build();
+    await crashAt(harness, 'appendDecision');
+    harness.store.restart();
+    await advanceUntilTerminal(harness);
+    const after = await harness.store.decisionsForRun('run-1', 'prj-1');
+
+    const tasksBefore = (await harness.store.tasksForRun('run-1', 'prj-1')).length;
+    await harness.loop.advanceRun('run-1', 'prj-1');
+    await harness.loop.advanceRun('run-1', 'prj-1');
+    expect(await harness.store.decisionsForRun('run-1', 'prj-1')).toEqual(after);
+    expect((await harness.store.tasksForRun('run-1', 'prj-1')).length, 'no task was minted by re-asking')
+      .toBe(tasksBefore);
+    expect(harness.store.events().filter((event) => event.type === 'verification.decided'),
+      'and no second decision event').toHaveLength(1);
+  });
+});
+
 describe('nothing is executed twice across a crash', () => {
+  /**
+   * THE CRASH AFTER THE ANSWER WAS BOUGHT.
+   *
+   * A provider has answered, Julius has accepted the result durably, and the
+   * process dies BEFORE the verification decision is written. On restart the
+   * task is SUCCEEDED, undecided, and holds no lease — so the claim query will
+   * never offer it and the lease sweep will never find it. Two things must
+   * hold, and only one of them is about state:
+   *
+   *   the provider is NEVER asked again — the answer was already paid for;
+   *   the verification still happens — otherwise the mission strands having
+   *   spent the money and learned nothing.
+   *
+   * `resumeUnverifiedTasks` exists for exactly this and was reached by two
+   * tests only as a loop-termination condition. Nothing asserted either
+   * property.
+   *
+   * WHY THE RESUME IS DRIVEN THE WAY IT IS HERE. `tick()` advances only the
+   * runs it TOUCHED — the ones it claimed a task from — so a run whose only
+   * task is SUCCEEDED-and-undecided is never passed to `advanceRun`, and the
+   * resume never fires. That is not a production defect: the one driver that
+   * runs Julius (`driveJuliusRunToTerminal`) calls `advanceRun` explicitly
+   * whenever a tick claimed nothing, and says why. This case drives it the same
+   * way, so it tests the contract production actually relies on rather than a
+   * shape nothing uses.
+   */
+  it('a crash between the provider result and its verification never buys the answer twice', async () => {
+    const harness = build();
+    const adapter = harness.adapters.get(CODER.adapterId)!;
+
+    const { threw } = await crashAt(harness, 'appendDecision');
+    expect(threw, 'the verification write is where this crashes').toBe(true);
+    expect(adapter.dispatches, 'the provider answered once, and was paid for once').toHaveLength(1);
+    expect(harness.store.taskRow('task-1')?.state, 'the result landed durably').toBe('SUCCEEDED');
+    expect(await harness.store.decisionsForRun('run-1', scope.projectId), 'and the decision did not').toHaveLength(0);
+
+    // THE RESTART: a new loop, a new owner, the same durable facts.
+    harness.store.restart();
+    const resumed = new JuliusRunLoop(
+      { ...harness.deps, owner: 'worker-after-crash' }, harness.policies,
+      { claimLimit: 5, leaseMs: 60_000 },
+    );
+    for (let attempt = 0; attempt < 6; attempt += 1) {
+      const report = await resumed.tick(scope);
+      if (report.claimed === 0) await resumed.advanceRun('run-1', scope.projectId);
+      if (harness.store.taskRow('task-1')?.state !== 'SUCCEEDED') break;
+      if ((await harness.store.decisionsForRun('run-1', scope.projectId)).length > 0) break;
+    }
+
+    // THE ASSERTION THAT IS ABOUT MONEY. The rest is about state.
+    expect(adapter.dispatches, 'the provider was never asked again').toHaveLength(1);
+    expect(adapter.dispatches[0]!.taskId).toBe('task-1');
+
+    // And the run did not strand: the resume reached a verification decision.
+    const decisions = await harness.store.decisionsForRun('run-1', scope.projectId);
+    expect(decisions.length, 'verification happened on the restart, not on a re-dispatch').toBeGreaterThan(0);
+    expect(decisions.map((decision) => decision.taskId)).toContain('task-1');
+  });
+
   it('does not re-dispatch a task whose result was already accepted', async () => {
     const harness = build();
     // Crash AFTER the result is accepted — the task has moved and the

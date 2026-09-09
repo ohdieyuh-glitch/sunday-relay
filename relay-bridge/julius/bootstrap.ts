@@ -36,7 +36,7 @@ import {
   type JuliusBootstrapPort,
   type JuliusBootstrapRequest,
 } from '../../src/relay/integration/julius/julius-port';
-import type { JuliusMissionState, JuliusTask } from '../../src/relay/mission/julius';
+import { seedJuliusTaskContract, type JuliusMissionState, type JuliusTask, type JuliusTaskContract } from '../../src/relay/mission/julius';
 import type { MissionSeedStore } from './mission-seed';
 
 /** The store methods bootstrap needs — `JuliusPostgresRepository` satisfies this directly. */
@@ -47,6 +47,17 @@ export interface RunCreationStore {
     cardRevision: string; missionContractRevision: number; projectBrainRevision: number; occurredAt: string;
   }): Promise<{ readonly runId: string; readonly state: string; readonly version: number }>;
   addTask(input: { commandId: string; runId: string; projectId: string; task: JuliusTask }): Promise<boolean>;
+  /**
+   * THE TASK CONTRACT JULIUS AUTHORS BEFORE ANY WORKER SEES THE RUN.
+   *
+   * Revision 1 is Julius's, cut from the Mission Contract; the architect's
+   * contribution is a revision it proposes against terms it cannot rewrite.
+   * Seeding it HERE — rather than leaving the first draft to a worker — is what
+   * makes the dispatch gate usable: a build may not start without a locked
+   * contract, and a run whose contract nobody was obliged to write would stall
+   * waiting for a document that does not exist.
+   */
+  putTaskContract(input: { projectId: string; contract: JuliusTaskContract; occurredAt: string }): Promise<boolean>;
   transition(input: {
     commandId: string; runId: string; projectId: string; expectedVersion: number;
     to: 'PLANNING' | 'READY'; reasonCode: string; safeSummary: string;
@@ -152,6 +163,40 @@ export function createLiveJuliusBootstrapPort(deps: {
             role: 'CODING_AGENT', ordinal: 1, state: 'BLOCKED',
           } as JuliusTask,
         });
+        /**
+         * THE CONTRACT THE BUILD WILL BE HELD TO, written before the run is
+         * READY. Seeded from the mission's own terms, so the criteria ids, the
+         * money and the objective are Julius's rather than a worker's.
+         *
+         * A REFUSAL TO SEED IS A REFUSAL TO BOOTSTRAP. Unknown is not a
+         * default: a mission with no spend ceiling or no authorised repair
+         * rounds cannot have a contract derived from it, and bootstrapping
+         * anyway would produce a run whose build can never be dispatched — a
+         * stall whose cause is three layers away from its symptom. It says so
+         * here instead.
+         */
+        const seeded = seedJuliusTaskContract({
+          runId,
+          taskId: buildTaskId(runId),
+          missionContractRevision: Math.max(1, request.missionRevision),
+          objective: request.objective,
+          requirements: request.requirements,
+          constraints: request.constraints,
+          acceptanceCriteria: request.acceptanceCriteria,
+          filesInScope: request.scope.filesInScope,
+          filesOutOfScope: request.scope.filesOutOfScope,
+          spendUsd: request.limits.spendUsd,
+          repairCycles: request.limits.repairCycles,
+          // The build task's own declared evidence, quoted rather than guessed:
+          // it is what `verifyTask` actually enforces.
+          requiredEvidence: ['TEST'],
+        });
+        if (!seeded.seeded) {
+          return refuse('task_contract_not_derivable',
+            `The mission does not state enough for Julius to author the build's task contract (${seeded.reasonCode}).`);
+        }
+        await deps.runs.putTaskContract({ projectId: request.projectId, contract: seeded.contract, occurredAt: now() });
+
         let version = created.version;
         for (const step of ['PLANNING', 'READY'] as const) {
           const transitioned = await deps.runs.transition({

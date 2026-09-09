@@ -2,8 +2,10 @@ import type { Pool } from 'pg';
 
 import type {
   JuliusAcceptanceCriterion, JuliusBrainEntry, JuliusEvidence, JuliusReviewerFinding,
-  JuliusRecordedDecision, JuliusRuntimeReader, JuliusTask, JuliusVerificationDecision, JuliusWorkerRole,
+  JuliusRecordedDecision, JuliusRuntimeReader, JuliusTask, JuliusTaskContractBinding,
+  JuliusVerificationDecision, JuliusWorkerRole,
 } from '../mission/julius';
+import { brainKindFromStored } from './julius-brain-kinds';
 
 /**
  * THE READ SIDE THE RUNTIME NEEDED AND THE INHERITED STACK DID NOT HAVE.
@@ -157,7 +159,7 @@ export class JuliusReadPostgresRepository implements JuliusRuntimeReader {
       // vocabularies for one idea; the ones that do not overlap are carried as
       // ARTIFACT rather than dropped, because an entry the compiler cannot
       // classify is still context a worker may need.
-      kind: brainKind(String(row.entry_kind)),
+      kind: brainKindFromStored(String(row.entry_kind)),
       text: String(row.safe_content),
       taskIds: row.task_id === null ? [] : [String(row.task_id)],
       // Stored entries carry no role restriction, so they are readable by the
@@ -189,6 +191,28 @@ export class JuliusReadPostgresRepository implements JuliusRuntimeReader {
     return Number(result.rows[0]?.active ?? 0);
   }
 
+  /**
+   * THE BINDING A TASK WAS DISPATCHED UNDER, from its durable `task.claimed`
+   * event. Filtered on the project as every read here is, and on the event
+   * type, so a caller holding a task id from another tenant reads nothing.
+   * The newest claim wins for the same reason the in-memory store's does: the
+   * work was done against the binding current at the last dispatch.
+   */
+  async executedBindingFor(taskId: string, projectId: string): Promise<JuliusTaskContractBinding | null> {
+    const result = await this.pool.query<{ payload: unknown }>(
+      `SELECT e.payload FROM relay_wonderland.events e
+        WHERE e.project_id=$2 AND e.event_type='julius.task.claimed' AND e.payload->>'taskId'=$1
+        ORDER BY e.sequence DESC LIMIT 1`,
+      [taskId, projectId],
+    );
+    const payload = parsed<{ facts?: Record<string, unknown> }>(result.rows[0]?.payload, {});
+    const facts = payload.facts ?? {};
+    return typeof facts.contractId === 'string' && typeof facts.contractTaskId === 'string'
+      && typeof facts.contractRevision === 'number' && typeof facts.bindingDigest === 'string'
+      ? { contractId: facts.contractId, taskId: facts.contractTaskId, contractRevision: facts.contractRevision, bindingDigest: facts.bindingDigest }
+      : null;
+  }
+
   async reviewCompletedFor(taskId: string, projectId: string): Promise<boolean> {
     const result = await this.pool.query(
       `SELECT 1 FROM relay_wonderland.julius_tasks t
@@ -201,15 +225,9 @@ export class JuliusReadPostgresRepository implements JuliusRuntimeReader {
   }
 }
 
-/** Map a stored brain entry kind onto the context compiler's vocabulary. */
-function brainKind(stored: string): JuliusBrainEntry['kind'] {
-  switch (stored) {
-    case 'DECISION': return 'DECISION';
-    case 'FINDING': return 'FINDING';
-    case 'REPAIR': return 'REPAIR';
-    case 'HANDOFF': return 'HANDOFF';
-    case 'CONSTRAINT': return 'CONSTRAINT';
-    case 'ACCEPTANCE_UPDATE': return 'REQUIREMENT';
-    default: return 'ARTIFACT';
-  }
-}
+/**
+ * The read direction now lives in `./julius-brain-kinds.ts` beside the write
+ * direction it is the inverse of. It moved rather than being duplicated: two
+ * copies of one mapping is exactly the drift this repository keeps finding, and
+ * a pair can be tested as a pair against the migration's own CHECK list.
+ */

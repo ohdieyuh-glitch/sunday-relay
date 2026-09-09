@@ -300,6 +300,54 @@ jobs:
           done
           rm -rf /tmp/julius-evidence-check
           [ "$failed" -eq 0 ]
+      - name: The Julius capability drills hold on real PostgreSQL
+        # WHY THIS JOB. The Beta Gate reports RESTART / RECOVERY as CAPABILITY
+        # PROVEN only on a drill attestation whose recorded digests still match
+        # the tree it is read in — so the drill is the thing that must not rot,
+        # and it needs what only this job already has: a real PostgreSQL, a real
+        # wall clock for a lease to expire against, and two real processes. No
+        # provider credential is anywhere near it; the three C.A.R.D. adapters
+        # are fakes and the recovery path is production.
+        #
+        # ITS OWN DATABASE. The drill bootstraps a mission of its own, and one
+        # mission's rows belong in the bundle of the mission that ran it, never
+        # mixed into another run's evidence.
+        if: ${{ !cancelled() }}
+        env:
+          PGPASSWORD: ${{ steps.identity.outputs.database_password }}
+        run: |
+          set -euo pipefail
+          : "${DATABASE_URL:?the executor launch step exports it; without it PostgreSQL never came up}"
+          # ONE DATABASE PER DRILL. Each bootstraps a mission of its own, and a
+          # drill that could read another's rows is not testimony — the drills
+          # refuse a database that already holds their run for the same reason.
+          for drill in recovery-drill failure-recovery-drill repair-loop-drill; do
+            db="julius_${drill//-/_}"
+            docker exec -e PGPASSWORD julius-postgres createdb -U "$PGUSER" "$db"
+            DATABASE_URL="${DATABASE_URL%/*}/$db" \
+              npm run "julius:$drill" --silent -- --out /tmp/julius-capability-proofs
+          done
+          # AND THE GATE MUST ACCEPT WHAT THEY FILED. A drill that passes and
+          # files an attestation the gate then refuses — a renamed column, a file
+          # added to a row's probe and not to that drill's exercised list, a
+          # ledger one drill truncated over another's — is a drill that proves
+          # nothing, and this is the only place the two meet.
+          node --input-type=module -e '
+            import { evaluate } from "./scripts/wonderland-beta-gate.mjs";
+            const report = evaluate(null, { capabilityDir: "/tmp/julius-capability-proofs" });
+            let failed = 0;
+            for (const id of ["RESTART / RECOVERY", "FAILURE RECOVERY", "REPAIR LOOP"]) {
+              const row = report.results.find((value) => value.id === id);
+              if (!row || row.capability !== "PROVEN") {
+                console.error(`capability_proof_refused_by_gate: ${id} - ${row ? row.capability : "no such row"} - ${row ? row.capabilityBasis : ""}`);
+                failed += 1;
+                continue;
+              }
+              console.log(`${id}: ${row.verdict} - ${row.capabilityBasis}`);
+            }
+            if (failed > 0) process.exit(1);
+          '
+          rm -rf /tmp/julius-capability-proofs
       - name: Executor topology evidence
         if: always()
         run: |
