@@ -21,6 +21,7 @@ import { JuliusReadPostgresRepository } from '../../src/relay/persistence/julius
 import { JuliusVerificationPostgresRepository } from '../../src/relay/persistence/julius-verification-postgres';
 import { JuliusEventPostgresRepository } from '../../src/relay/persistence/julius-event-postgres';
 import { JuliusTrajectoryPostgresRepository } from '../../src/relay/persistence/julius-trajectory-postgres';
+import { JuliusContractPostgresRepository } from '../../src/relay/persistence/julius-contract-postgres';
 
 export function createJuliusPostgresRuntimeStore(pool: Pool): JuliusRuntimeStore & JuliusRecoveryDriver {
   const runs = new JuliusPostgresRepository(pool);
@@ -30,6 +31,7 @@ export function createJuliusPostgresRuntimeStore(pool: Pool): JuliusRuntimeStore
   const findings = new JuliusVerificationPostgresRepository(pool);
   const events = new JuliusEventPostgresRepository(pool);
   const trajectories = new JuliusTrajectoryPostgresRepository(pool);
+  const contracts = new JuliusContractPostgresRepository(pool);
   return {
     loadRun: runs.loadRun.bind(runs),
     transition: runs.transition.bind(runs),
@@ -58,5 +60,10 @@ export function createJuliusPostgresRuntimeStore(pool: Pool): JuliusRuntimeStore
     reviewCompletedFor: reader.reviewCompletedFor.bind(reader),
     activeTaskCount: reader.activeTaskCount.bind(reader),
     recordFinding: findings.recordFinding.bind(findings),
+    putTaskContract: contracts.putTaskContract.bind(contracts),
+    challengeTaskContract: contracts.challengeTaskContract.bind(contracts),
+    lockTaskContract: contracts.lockTaskContract.bind(contracts),
+    loadTaskContract: contracts.loadTaskContract.bind(contracts),
+    taskContractRevisions: contracts.taskContractRevisions.bind(contracts),
   };
 }

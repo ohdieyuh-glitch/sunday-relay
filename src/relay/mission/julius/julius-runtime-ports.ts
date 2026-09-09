@@ -44,6 +44,7 @@ import type { JuliusReviewerFinding, JuliusAcceptanceCriterion } from './julius-
 import type { JuliusContextSnapshot } from './julius-context-snapshot';
 import type { JuliusTrajectoryEvent } from './julius-trajectory';
 import type { JuliusBrainEntry } from './julius-runtime';
+import type { JuliusTaskContract } from './julius-task-contract';
 
 /* ------------------------------------------------------- ambient services */
 
@@ -389,11 +390,88 @@ export interface JuliusBrainWriter {
   appendBrainEntry(input: JuliusBrainAppend): Promise<boolean>;
 }
 
+/**
+ * THE TASK/SPRINT CONTRACT STORE.
+ *
+ * `julius-task-contract.ts` decides what a contract MEANS; this stores it. The
+ * split matters because two of the invariants can only be held by the store:
+ *
+ *   AT MOST ONE LOCKED REVISION. A second lock is refused by a partial unique
+ *   index, not by an application check — two workers racing to lock two
+ *   revisions of the same contract would both read "not locked yet" and both
+ *   write, and the coder and the reviewer would then hold different agreements
+ *   while every domain function said they agreed.
+ *
+ *   A REVISION IS IMMUTABLE. `putContract` inserts and never updates, so a
+ *   replayed tick that re-proposes the same revision writes nothing, and one
+ *   that proposes DIFFERENT terms at a revision already stored is refused
+ *   rather than silently overwriting terms someone may already hold.
+ *
+ * READING A LOCKED CONTRACT RE-DERIVES ITS DIGEST and refuses the row when it
+ * disagrees with what was recorded. The terms are stored as a document; a
+ * storage layer that normalised one of its values — or an edit made outside
+ * this code — would otherwise hand a caller a binding that no longer describes
+ * the terms beside it, and every downstream equality check would pass while
+ * comparing the wrong thing.
+ */
+export interface JuliusTaskContractStore {
+  /**
+   * Insert one contract revision. True when this call stored it.
+   *
+   * False is a REPLAY — the same revision with the same terms already exists.
+   * A conflicting proposal at an existing revision throws
+   * `julius_task_contract_revision_conflict`, because silently keeping either
+   * version would leave two parties holding different documents under one
+   * revision number.
+   */
+  putTaskContract(input: { projectId: string; contract: JuliusTaskContract; occurredAt: string }): Promise<boolean>;
+  /**
+   * Record an evaluator's challenge against a revision. True when this call
+   * moved it; false when it was already CHALLENGED. Refuses a locked or
+   * superseded revision — see {@link challengeJuliusTaskContract}, which
+   * decides the same thing on the domain side and is the caller's gate.
+   */
+  challengeTaskContract(input: {
+    projectId: string; contractId: string; contractRevision: number;
+  }): Promise<boolean>;
+  /**
+   * LOCK ONE REVISION, and supersede whichever revision was locked before, in
+   * one write. Julius calls this; an evaluator's ACCEPT is its input.
+   *
+   * The digest is supplied by the caller because {@link lockJuliusTaskContract}
+   * computed it from the accepted terms; the store re-derives it from what it
+   * holds and refuses a mismatch, so a caller cannot lock terms to a digest of
+   * something else.
+   */
+  lockTaskContract(input: {
+    projectId: string; contractId: string; contractRevision: number;
+    bindingDigest: string; lockedAt: string; evaluatorId: string;
+  }): Promise<JuliusTaskContractLockResult>;
+  /**
+   * The contract governing this task: the LOCKED revision when one exists,
+   * otherwise the highest revision on record. `null` when the task has none —
+   * which is a fact, not an error, and the dispatch gate reports it as
+   * `contract_absent` rather than as a failure to read.
+   */
+  loadTaskContract(input: { projectId: string; taskId: string }): Promise<JuliusTaskContract | null>;
+  /** Every revision of this task's contract, ascending. The audit trail. */
+  taskContractRevisions(input: { projectId: string; taskId: string }): Promise<readonly JuliusTaskContract[]>;
+}
+
+/**
+ * Why a value rather than a throw: losing a lock race is an ORDINARY outcome
+ * in a runtime with more than one worker, and the loser needs to know which
+ * revision won so it can re-read rather than retry into the same refusal.
+ */
+export type JuliusTaskContractLockResult =
+  | { readonly locked: true; readonly contract: JuliusTaskContract; readonly supersededRevision: number | null }
+  | { readonly locked: false; readonly reasonCode: string; readonly lockedRevision: number | null };
+
 /** Everything the runtime writes and reads, in one bag the caller composes. */
 export interface JuliusRuntimeStore
   extends JuliusRunWriter, JuliusResultWriter, JuliusContextWriter,
   JuliusEventWriter, JuliusTrajectoryWriter, JuliusRuntimeReader, JuliusFindingWriter,
-  JuliusBrainWriter {}
+  JuliusBrainWriter, JuliusTaskContractStore {}
 
 /* --------------------------------------------------- role/task vocabulary */
 

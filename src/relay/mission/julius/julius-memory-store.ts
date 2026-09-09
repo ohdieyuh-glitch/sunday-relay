@@ -45,6 +45,7 @@ import { transitionMission, type JuliusBrainEntry, type JuliusEvidence, type Jul
 import type { JuliusOperationalEvent } from './julius-events';
 import type { JuliusTrajectoryEvent } from './julius-trajectory';
 import type { JuliusContextSnapshot } from './julius-context-snapshot';
+import { juliusTaskContractBindingDigest, type JuliusTaskContract } from './julius-task-contract';
 import type { JuliusAcceptanceCriterion, JuliusReviewerFinding } from './julius-verification-runtime';
 import type {
   JuliusClaimedTask, JuliusResultReceiptRow, JuliusRunRow, JuliusRuntimeStore,
@@ -138,6 +139,12 @@ export function createJuliusMemoryStore(): JuliusMemoryStore {
    * that reaches context snapshots and trajectory rows.
    */
   const brainRevisions = new Map<string, number>();
+  /**
+   * TASK CONTRACTS, keyed `<contractId>@<revision>` because a revision is the
+   * unit that is stored, locked and superseded. PostgreSQL keys the same rows
+   * on `(contract_id, contract_revision)`.
+   */
+  const contracts = new Map<string, JuliusTaskContract>();
   const results: ResultRow[] = [];
   const resultKeys = new Set<string>();
   const resultGenerations = new Set<string>();
@@ -499,6 +506,99 @@ export function createJuliusMemoryStore(): JuliusMemoryStore {
         sensitivity: 'INTERNAL',
       }]);
       return true;
+    },
+
+    /* --------------------------------------------------- task contracts */
+    async putTaskContract(input) {
+      const key = `${input.contract.contractId}@${input.contract.contractRevision}`;
+      const existing = contracts.get(key);
+      if (existing !== undefined) {
+        // A REPLAY IS NOT AN OVERWRITE, and a different proposal at a stored
+        // revision is not a replay. The digest of the TERMS is what decides:
+        // the lock fields differ between a stored LOCKED row and the DRAFT a
+        // retry would re-propose, and treating that as a conflict would refuse
+        // an honest replay.
+        if (juliusTaskContractBindingDigest(existing) !== juliusTaskContractBindingDigest(input.contract)) {
+          throw new Error('julius_task_contract_revision_conflict');
+        }
+        return false;
+      }
+      const run = runs.get(input.contract.runId);
+      if (run === undefined || run.projectId !== input.projectId) return false;
+      contracts.set(key, input.contract);
+      return true;
+    },
+
+    async challengeTaskContract(input) {
+      const key = `${input.contractId}@${input.contractRevision}`;
+      const existing = contracts.get(key);
+      if (existing === undefined) return false;
+      if (existing.state === 'CHALLENGED') return false;
+      if (existing.state !== 'DRAFT') return false;
+      contracts.set(key, { ...existing, state: 'CHALLENGED' });
+      return true;
+    },
+
+    async lockTaskContract(input) {
+      const key = `${input.contractId}@${input.contractRevision}`;
+      const candidate = contracts.get(key);
+      if (candidate === undefined) return { locked: false, reasonCode: 'contract_revision_not_found', lockedRevision: null };
+      if (candidate.runId !== undefined && runs.get(candidate.runId)?.projectId !== input.projectId) {
+        return { locked: false, reasonCode: 'contract_not_in_project', lockedRevision: null };
+      }
+      // THE PARTIAL UNIQUE INDEX, modelled. Production refuses a second lock in
+      // the database; the model has to refuse it here or the two disagree about
+      // what a concurrent lock does.
+      const alreadyLocked = [...contracts.values()].find(
+        (row) => row.contractId === input.contractId && row.state === 'LOCKED',
+      );
+      // A lock moves forward or not at all — locking N while N-1 is locked IS
+      // superseding. Refused: the same revision twice, and an older revision
+      // than the one held, which would roll the agreement backwards under
+      // parties already holding the newer one.
+      if (alreadyLocked !== undefined && alreadyLocked.contractRevision >= input.contractRevision) {
+        return alreadyLocked.contractRevision === input.contractRevision
+          ? { locked: false, reasonCode: 'contract_revision_already_locked', lockedRevision: alreadyLocked.contractRevision }
+          : { locked: false, reasonCode: 'newer_revision_is_locked', lockedRevision: alreadyLocked.contractRevision };
+      }
+      if (candidate.state === 'SUPERSEDED') return { locked: false, reasonCode: 'contract_superseded', lockedRevision: null };
+      // The caller computed this from the accepted terms; re-deriving it here is
+      // what stops a caller locking one document to another document's digest.
+      if (juliusTaskContractBindingDigest(candidate) !== input.bindingDigest) {
+        return { locked: false, reasonCode: 'binding_digest_mismatch', lockedRevision: null };
+      }
+      const superseded = [...contracts.values()].filter(
+        (row) => row.contractId === input.contractId && row.contractRevision < input.contractRevision && row.state === 'LOCKED',
+      );
+      for (const row of superseded) contracts.set(`${row.contractId}@${row.contractRevision}`, { ...row, state: 'SUPERSEDED' });
+      const locked: JuliusTaskContract = {
+        ...candidate, state: 'LOCKED', bindingDigest: input.bindingDigest,
+        lockedAt: input.lockedAt, lockedByEvaluatorId: input.evaluatorId,
+      };
+      contracts.set(key, locked);
+      return { locked: true, contract: locked, supersededRevision: superseded[0]?.contractRevision ?? null };
+    },
+
+    async loadTaskContract(input) {
+      const rows = [...contracts.values()].filter(
+        (row) => row.taskId === input.taskId && runs.get(row.runId)?.projectId === input.projectId,
+      );
+      if (rows.length === 0) return null;
+      const lockedRow = rows.find((row) => row.state === 'LOCKED');
+      // A locked row whose terms no longer hash to its recorded binding is
+      // CORRUPT, not current: production re-derives the digest on read for the
+      // same reason, and returning it would hand a caller a binding that does
+      // not describe the terms beside it.
+      if (lockedRow !== undefined) {
+        return juliusTaskContractBindingDigest(lockedRow) === lockedRow.bindingDigest ? lockedRow : null;
+      }
+      return rows.reduce((newest, row) => (row.contractRevision > newest.contractRevision ? row : newest));
+    },
+
+    async taskContractRevisions(input) {
+      return [...contracts.values()]
+        .filter((row) => row.taskId === input.taskId && runs.get(row.runId)?.projectId === input.projectId)
+        .sort((a, b) => a.contractRevision - b.contractRevision);
     },
 
     /* ------------------------------------------------------------ context */
