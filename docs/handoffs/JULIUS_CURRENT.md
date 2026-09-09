@@ -979,7 +979,11 @@ scripted adapter records it, and the e2e suite asserts the coder, its repair,
 its review and its re-review hold one charge whose binding equals the binding
 on each claim. The architect and its review receive none. This is a change to
 the live coder prompt on the paid path, made deliberately: the reviewer and the
-coder now hold one document rather than two readings of a plan.
+coder now hold one document rather than two readings of a plan. The coder's
+brief also carries the contract's review criteria — what the reviewer will
+check — and `contract-brief-parity.test.ts` holds the two renderers to every
+content field of the charge, with a `satisfies` clause that refuses to compile
+when a field is added to the type without a value in the test.
 
 #### Section 12B — the contract and the Project Brain
 
@@ -1083,6 +1087,49 @@ time: 9,698 and 9,699 tests on the two later whole-repository runs. The Brain
 round-trip commit changed only the env-gated real-PostgreSQL suite and this
 document, and was gated by all four typecheck passes, the real-PostgreSQL
 suite on a fresh database (7 passed) and `git diff --check`.
+
+### 00i. The next paid rerun — the record it must leave (template, to be filled by the run)
+
+> Not a run. This is the shape the record takes the moment the watch dispatches
+> the paid rerun of `julius-live-mission-2` on a trusted `main` carrying the
+> 34186711214 repair. Every row is a fact the bundle or the Actions run states;
+> **Unknown stays Unknown**, never inferred. Fill it from
+> `julius-live-evidence/` (the dump) and the Actions job log, in this order.
+
+| Field | Where it comes from | Value |
+|---|---|---|
+| Actions run id | the dispatch response / `actions_list` | |
+| exact `main` SHA, frozen | the gate step "reviewed, current and not rolled back" | |
+| provenance verdict / approver / author | the same step's log (`julius-main-provenance.mjs`) | |
+| monotonicity checkpoint(s) contained | the same step | |
+| mission inputs | `mission=julius-live-mission-2`, `confirm_live=RUN LIVE MISSION`, `acknowledge_rerun=RERUN PAID MISSION`, `max_ticks=32`, `hermes_ref` default | |
+| budget ceiling / repair cycles | `runs.tsv`, mission contract (`spendUsd`, `repairCycles`) | |
+| provider calls (count, model, response ids) | `worker-diagnostics.tsv`, job log (`resp_…`) | |
+| architect: plan attempts, validation verdict, `reasonClaim` if refused | `worker-diagnostics.tsv` (`diag_*`), `failures.tsv` | |
+| plan review: verdict, findings | `evidence.tsv` (REVIEW_FINDING), `findings.tsv`, `decisions.tsv` | |
+| contract: id, revision locked, digest, lock instant, evaluator | `task-contracts.tsv`, `contract-events.tsv` (`julius.contract.locked`) | |
+| contract: challenged revisions, if any | `contract-events.tsv` (`julius.contract.challenged`) | |
+| coder: claim binding (revision, digest), allocation, cost, outcome | `contract-events.tsv` (`julius.task.claimed`), `budget.tsv`, `trajectory.tsv` | |
+| the actual diff | the run's artifact / `evidence.tsv` DIFF row | |
+| build review: claim binding, verdict, findings | `contract-events.tsv`, `findings.tsv`, `evidence.tsv` | |
+| repair path: rounds, task ids, each round's binding and cost | `tasks.tsv` (`repair:*`), `trajectory.tsv` (REPAIR, DISPATCH rows) | |
+| verification decisions, in order | `decisions.tsv` | |
+| binding refusals, if any (`binding_*`, `*_mismatch`) | `contract-events.tsv` (`julius.contract.refused`) — any row here is a blocker to root-cause | |
+| total cost (µUSD) and per-role settlement | `budget.tsv`, `trajectory.tsv` | |
+| final run state / halt cause | `runs.tsv`, `live-mission.evidence.txt` | |
+| Beta Gate over this bundle | `node scripts/wonderland-beta-gate.mjs --evidence <dir>` — rows PASS/FAIL with basis | |
+
+Declarations, only when the rows above say so:
+
+- `TASK 1 COMPLETE — JULIUS LIVE RUN 2` when the final state is `COMPLETED`
+  via `MISSION_VERIFIED` with no founder rescue.
+- `TASK 2 COMPLETE — JULIUS BLOCKER KILL` when, in addition, the architect
+  gate that killed 34185920678 and 34186711214 was crossed — a plan accepted,
+  or refused once with a named field and corrected — on this exact rerun.
+
+If it fails: the first causal blocker is the earliest row above that is not
+what the design says, classified RUNTIME / PERSISTENCE / PROVIDER / EXTERNAL,
+reproduced provider-free, fixed, and taken back through the worker-PR runbook.
 
 ---
 
