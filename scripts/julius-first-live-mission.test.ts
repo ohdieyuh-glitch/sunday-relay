@@ -410,6 +410,45 @@ describe('every mission declares its own durable accounting namespace', () => {
       expect(result.code).toBe(1);
       expect(result.output).toContain('above the 5 ceiling for a mission with no declared namespace');
     }, 30_000);
+
+    it('mission 3 carries its granted budget and passes its own checker', () => {
+      const contract = JSON.parse(read(`${MISSIONS_DIR}/julius-live-mission-3/contract.json`)) as Record<string, unknown>;
+      expect(contract.limits).toEqual({ spendUsd: 20, repairCycles: 3 });
+      expect(checkContract(contract).code, 'the committed contract must pass').toBe(0);
+    }, 30_000);
+
+    it('and mission 3 is still refused above its grant', () => {
+      const base = JSON.parse(read(`${MISSIONS_DIR}/julius-live-mission-3/contract.json`)) as Record<string, unknown>;
+      const overSpend = checkContract({ ...base, limits: { spendUsd: 21, repairCycles: 3 } });
+      expect(overSpend.code).toBe(1);
+      expect(overSpend.output).toContain('above the 20 ceiling for julius-live-mission-3');
+
+      const overRepair = checkContract({ ...base, limits: { spendUsd: 20, repairCycles: 4 } });
+      expect(overRepair.code).toBe(1);
+      expect(overRepair.output).toContain('above the 3 allowed for julius-live-mission-3');
+    }, 30_000);
+
+    /**
+     * THE TEST THAT WOULD HAVE CAUGHT IT.
+     *
+     * Mission 3 shipped declaring 20/3 with no grant. The whole suite passed and
+     * so did CI, because every check above builds a contract in a temporary file
+     * — none of them ran the checker over the contracts actually COMMITTED here.
+     * The refusal arrived instead from the zero-spend preflight (run
+     * 34396331071), three CI cycles later, which is a slow and expensive place
+     * to learn that a committed file cannot pass its own gate.
+     *
+     * So: every mission directory in the repository, through the real checker,
+     * exit 0. It generalises for free — a fourth mission is covered the moment
+     * its directory exists.
+     */
+    it('EVERY committed mission contract passes the real checker', () => {
+      for (const mission of MISSIONS) {
+        const contract = JSON.parse(read(`${MISSIONS_DIR}/${mission}/contract.json`)) as Record<string, unknown>;
+        const result = checkContract(contract);
+        expect(result.code, `${mission}/contract.json is refused by its own checker:\n${result.output}`).toBe(0);
+      }
+    }, 60_000);
   });
 
   it('a contract without a namespace is refused, rather than defaulted', () => {
