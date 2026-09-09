@@ -163,9 +163,23 @@ if [ "${resolved_timeout%%.*}" != "$HERMES_REQUEST_TIMEOUT_SECONDS" ]; then
   echo "hermes_request_timeout_not_resolvable_for_provider:$HERMES_PROVIDER" >&2
   exit 1
 fi
-echo "hermes_executable=$HERMES_WRAPPER_DIR/hermes (wraps $HERMES_BIN)"
-echo "hermes_version=$("$HERMES_BIN" --version 2>/dev/null | head -n 1)"
-echo "hermes_profile=$HERMES_PROFILE_HOME (mode $(stat -c '%a' "$HERMES_PROFILE_HOME"))"
-echo "hermes_credential=REGISTERED"
-echo "hermes_request_timeout_seconds=$HERMES_REQUEST_TIMEOUT_SECONDS (resolved by hermes itself)"
-echo "relay_reviewer_window_ms=$RELAY_HERMES_TIMEOUT_MS (engine worst case ${worst_case_ms}ms, and it fits)"
+# THE SAME SIX LINES, KEPT WHERE THE BUNDLE CAN READ THEM.
+#
+# Run 34311556047's evidence could not say which reviewer binary ran, under
+# which profile, or with which deadlines — those facts existed only in the
+# step log, which is not the artifact anyone reads a paid failure out of.
+# Every line is already printed to that public log and none of them is or
+# contains a credential: paths, a version string, a mode, two integers, and the
+# word REGISTERED. The evidence step copies this file into the bundle, where
+# the two credential scans see it like everything else.
+HERMES_BOOTSTRAP_EVIDENCE=${HERMES_BOOTSTRAP_EVIDENCE:-/tmp/julius-hermes-bootstrap.evidence.txt}
+{
+  echo "hermes_executable=$HERMES_WRAPPER_DIR/hermes (wraps $HERMES_BIN)"
+  echo "hermes_ref=$HERMES_REF"
+  echo "hermes_version=$("$HERMES_BIN" --version 2>/dev/null | head -n 1)"
+  echo "hermes_profile=$HERMES_PROFILE_HOME (mode $(stat -c '%a' "$HERMES_PROFILE_HOME"))"
+  echo "hermes_credential=REGISTERED"
+  echo "hermes_request_timeout_seconds=$HERMES_REQUEST_TIMEOUT_SECONDS (resolved by hermes itself)"
+  echo "relay_reviewer_window_ms=$RELAY_HERMES_TIMEOUT_MS (engine worst case ${worst_case_ms}ms, and it fits)"
+} | tee "$HERMES_BOOTSTRAP_EVIDENCE"
+chmod 0644 "$HERMES_BOOTSTRAP_EVIDENCE"
