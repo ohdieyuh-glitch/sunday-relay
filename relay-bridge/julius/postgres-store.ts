@@ -42,6 +42,7 @@ export function createJuliusPostgresRuntimeStore(pool: Pool): JuliusRuntimeStore
     finishTask: runs.finishTask.bind(runs),
     appendEvidence: runs.appendEvidence.bind(runs),
     appendDecision: runs.appendDecision.bind(runs),
+    appendBrainEntry: runs.appendBrainEntry.bind(runs),
     acceptWorkerResult: results.acceptWorkerResult.bind(results),
     recoverExpired: results.recoverExpired.bind(results),
     persist: contexts.persist.bind(contexts),

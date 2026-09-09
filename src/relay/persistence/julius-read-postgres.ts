@@ -4,6 +4,7 @@ import type {
   JuliusAcceptanceCriterion, JuliusBrainEntry, JuliusEvidence, JuliusReviewerFinding,
   JuliusRecordedDecision, JuliusRuntimeReader, JuliusTask, JuliusVerificationDecision, JuliusWorkerRole,
 } from '../mission/julius';
+import { brainKindFromStored } from './julius-brain-kinds';
 
 /**
  * THE READ SIDE THE RUNTIME NEEDED AND THE INHERITED STACK DID NOT HAVE.
@@ -157,7 +158,7 @@ export class JuliusReadPostgresRepository implements JuliusRuntimeReader {
       // vocabularies for one idea; the ones that do not overlap are carried as
       // ARTIFACT rather than dropped, because an entry the compiler cannot
       // classify is still context a worker may need.
-      kind: brainKind(String(row.entry_kind)),
+      kind: brainKindFromStored(String(row.entry_kind)),
       text: String(row.safe_content),
       taskIds: row.task_id === null ? [] : [String(row.task_id)],
       // Stored entries carry no role restriction, so they are readable by the
@@ -201,15 +202,9 @@ export class JuliusReadPostgresRepository implements JuliusRuntimeReader {
   }
 }
 
-/** Map a stored brain entry kind onto the context compiler's vocabulary. */
-function brainKind(stored: string): JuliusBrainEntry['kind'] {
-  switch (stored) {
-    case 'DECISION': return 'DECISION';
-    case 'FINDING': return 'FINDING';
-    case 'REPAIR': return 'REPAIR';
-    case 'HANDOFF': return 'HANDOFF';
-    case 'CONSTRAINT': return 'CONSTRAINT';
-    case 'ACCEPTANCE_UPDATE': return 'REQUIREMENT';
-    default: return 'ARTIFACT';
-  }
-}
+/**
+ * The read direction now lives in `./julius-brain-kinds.ts` beside the write
+ * direction it is the inverse of. It moved rather than being duplicated: two
+ * copies of one mapping is exactly the drift this repository keeps finding, and
+ * a pair can be tested as a pair against the migration's own CHECK list.
+ */

@@ -17,7 +17,7 @@ import { createJuliusMemoryStore } from '../mission/julius';
 import type {
   JuliusClaimedTask, JuliusContextWriter, JuliusEventWriter, JuliusResultReceiptRow,
   JuliusResultWriter, JuliusRunRow, JuliusRunWriter, JuliusRuntimeReader,
-  JuliusApprovalStore, JuliusFindingWriter, JuliusLifecycleStore,
+  JuliusApprovalStore, JuliusBrainWriter, JuliusFindingWriter, JuliusLifecycleStore,
   JuliusRecoveryDriver, JuliusTimelineReader,
   JuliusRuntimeStore, JuliusSubagentStore, JuliusTrajectoryWriter,
 } from '../mission/julius';
@@ -61,6 +61,15 @@ const pool = null as unknown as Pool;
 
 /** The main repository satisfies the run-writer port with no adapter at all. */
 const runWriter: JuliusRunWriter = new JuliusPostgresRepository(pool);
+
+/**
+ * ONE REPOSITORY, TWO PORTS. The same repository is also the Project Brain's
+ * writer, and this assignment is the whole proof — it is what refused the first
+ * attempt at wiring `appendBrainEntry`, which bound it off `runWriter` and
+ * therefore claimed the run-writer port had a method it does not. A narrow port
+ * that quietly grew would be a port nobody could reason about.
+ */
+const brainWriter: JuliusBrainWriter = new JuliusPostgresRepository(pool);
 
 /**
  * ONE REPOSITORY, TWO PORTS. The recovery repository both accepts worker
@@ -117,6 +126,7 @@ const composed: JuliusRuntimeStore & JuliusSubagentStore
   finishTask: runWriter.finishTask.bind(runWriter),
   appendEvidence: runWriter.appendEvidence.bind(runWriter),
   appendDecision: runWriter.appendDecision.bind(runWriter),
+  appendBrainEntry: brainWriter.appendBrainEntry.bind(brainWriter),
   acceptWorkerResult: resultWriter.acceptWorkerResult.bind(resultWriter),
   persist: contextWriter.persist.bind(contextWriter),
   appendEvent: eventWriter.appendEvent.bind(eventWriter),
