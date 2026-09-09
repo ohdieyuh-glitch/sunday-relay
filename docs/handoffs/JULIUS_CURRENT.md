@@ -308,7 +308,32 @@ cut.
 - Docker is present; the Docker-gated half of `real-infra-julius.test.ts` was
   not exercised (it needs `JULIUS_SANDBOX_IMAGE`).
 
-### 00e. The founder-only actions, in order
+### 00e. Tests and gates, as actually run in this container
+
+| Gate | Result |
+|---|---|
+| `npx vitest run` (whole repository) | **503 files passed**, 1 skipped (the env-gated real-infra suite), **9,617 tests passed**, 24 todo, **exit 0** |
+| `npm run typecheck` (all four projects) | clean |
+| `npm run build`, `relay:build`, `relay:bridge:build` | clean |
+| `relay-repository-boundary.mjs`, `relay-parity-gate.mjs` | clean |
+| `relay:surface-parity:check:strict`, `relay:yc-demo:check`, `relay:cli:contract-verify` | clean |
+| `relay:persistence:contract-verify`, `relay:persistence:recovery-drill` | clean |
+| `relay:workspace:verify`, `relay:claude:contract-verify` | clean |
+| `julius:harness:check` | current |
+| `git diff --check` | clean |
+| **real PostgreSQL 16** — migrations 001–023 from empty, the contract lock race, the jsonb round trip, superseding, the binding CHECK, `one_per_task`, the corrupted-row read | **passed** (see §00d for how to bring the cluster up) |
+
+The suite previously exited **1** on a fully green run: `executor-repair-regression.test.ts`
+started a real request and discarded the promise, so it rejected unheld and
+vitest reported an unhandled error nobody could locate. Fixed in `3a8c6686`.
+
+**Beta Gate, run with no evidence bundle: 0/15 PASS.** That is the correct
+answer and the instrument working — every runtime row requires a real run, and
+none has happened since these changes. The new `TASK CONTRACT LOCK` row reads
+FAIL on paid run 34037313976's own artifact and is the second of the top three
+gaps, because that run had no contract at all.
+
+### 00f. The founder-only actions, in order
 
 1. **Approve and merge PR #234.** Worker-authored, all CI green, MERGEABLE/CLEAN,
    zero reviews. Nothing else gates the paid path. Monotonicity is already
@@ -323,6 +348,24 @@ cut.
    change.
 4. Only then is a paid rerun of `julius-live-mission-2` justified, and it should
    be preceded by the zero-spend preflight.
+
+### 00g. The highest-impact remaining Julius beta blocker
+
+**Nothing engineering-side. It is the merge of PR #234.**
+
+Julius's Signal Task 1 — one real paid mission reaching verified completion
+without manual rescue — is blocked on a founder approval, not on code. `main` is
+still `b2dc9f23`, the exact commit paid run 34037313976 failed on; the repairs
+for all four of its defects sit in #234, worker-authored, all CI green,
+MERGEABLE/CLEAN, with **zero reviews** since 2026-09-06.
+
+Everything this session built sits on top of that, and every hour it stays
+unmerged is an hour in which the only way to test Julius live is to pay for a
+run of code that is known to fail.
+
+The second-order blocker, once it lands, is the authorship constraint in §00a:
+#235 and this branch cannot land as authored, and no amount of further
+engineering from this environment changes that.
 
 ---
 
