@@ -446,14 +446,54 @@ import { pathToFileURL } from 'node:url';
  *
  * Usage: node scripts/julius-review-currency.mjs <owner/repo> <pr-number>
  */
+/**
+ * THE SAME RULE, WITHOUT A `gh` BINARY — the identical note stands in
+ * `julius-main-provenance.mjs`. A Claude Code cloud container has none, and it
+ * is exactly the machine that must judge a candidate before a paid mission is
+ * dispatched; without a file mode the rule gets re-applied by hand there, which
+ * is a second implementation of a trust gate and the one nobody tests.
+ *
+ * NOT A SOFTER MODE. Every field this rule reads that the file omits arrives
+ * `undefined`, and the rule answers indeterminate for an unreadable field
+ * rather than passing it, so a trimmed file cannot reach `merge_eligible`. What
+ * it cannot do is prove the file describes the pull request it names, so the
+ * line says where the evidence came from.
+ */
+async function fromEvidenceFile(path) {
+  const { readFileSync } = await import('node:fs');
+  const parsed = JSON.parse(readFileSync(path, 'utf8'));
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('evidence file must hold a single JSON object');
+  }
+  return parsed;
+}
+
 async function main(argv) {
-  const [repo, prNumber] = argv;
+  const evidenceIndex = argv.indexOf('--evidence');
+  const evidencePath = evidenceIndex >= 0 ? argv[evidenceIndex + 1] : undefined;
+  const positional = evidenceIndex >= 0 ? [...argv.slice(0, evidenceIndex), ...argv.slice(evidenceIndex + 2)] : argv;
+  const [repo, prNumber] = positional;
   // Validated rather than interpolated as given: a crafted argument would
   // otherwise let the gate report a verdict for a different pull request.
   if (typeof repo !== 'string' || !/^[\w.-]+\/[\w.-]+$/u.test(repo)
     || typeof prNumber !== 'string' || !/^[1-9][0-9]*$/u.test(prNumber)) {
-    process.stderr.write('usage: julius-review-currency.mjs <owner/repo> <pr-number>\n');
+    process.stderr.write('usage: julius-review-currency.mjs <owner/repo> <pr-number> [--evidence <file>]\n');
     return 2;
+  }
+  if (evidenceIndex >= 0 && (typeof evidencePath !== 'string' || evidencePath === '')) {
+    process.stderr.write('usage: --evidence needs a path to a JSON object holding the fields evaluateMergeEligibility reads\n');
+    return 2;
+  }
+  if (typeof evidencePath === 'string') {
+    let evidence;
+    try {
+      evidence = await fromEvidenceFile(evidencePath);
+    } catch (error) {
+      process.stderr.write(`review_currency_indeterminate: ${error instanceof Error ? error.message : 'evidence unreadable'}\n`);
+      return 1;
+    }
+    return report(repo, prNumber, evaluateMergeEligibility(evidence),
+      evidence.headSha, evidence.baseSha, `file:${evidencePath}`);
   }
   const { execFileSync } = await import('node:child_process');
   const gh = (path) => {
@@ -510,11 +550,15 @@ async function main(argv) {
     return 1;
   }
 
-  const result = evaluateMergeEligibility({
+  return report(repo, prNumber, evaluateMergeEligibility({
     headSha, headShaAfter, reviews, reviewComments, statuses, pullAuthorLogin,
     baseSha, baseShaAfter, baseContainedInHead,
-  });
-  const line = `pr=${repo}#${prNumber} review_currency=${result.reviewCurrency.verdict}`
+  }), headSha, baseSha, 'github');
+}
+
+/** One line, and it names its SOURCE: the same rule over different evidence. */
+function report(repo, prNumber, result, headSha, baseSha, source) {
+  const line = `pr=${repo}#${prNumber} source=${source} review_currency=${result.reviewCurrency.verdict}`
     + ` base_integration=${result.baseIntegration}`
     + ` merge_eligible=${result.mergeEligible} head=${typeof headSha === 'string' ? headSha : 'unknown'}`
     + ` base=${typeof baseSha === 'string' ? baseSha : 'unknown'}`
