@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   JULIUS_CONTRACT_MISSION_OWNED_FIELDS,
+  JULIUS_CONTRACT_PROPOSAL_LIMITS,
   JULIUS_TASK_CONTRACT_VERSION,
   challengeJuliusTaskContract,
   evaluateJuliusBindingCurrency,
@@ -12,6 +13,7 @@ import {
   lockJuliusTaskContract,
   mayDispatchUnderContract,
   reviseJuliusTaskContract,
+  sanitizeJuliusContractProposal,
   seedJuliusTaskContract,
   validateJuliusTaskContract,
   type JuliusTaskContract,
@@ -644,5 +646,72 @@ describe('the seed — Julius authors revision 1, the architect proposes the res
     expect(revised.contract.budget).toEqual({ ceilingUsdMicros: 20_000_000, maxRepairRounds: 3 });
     expect(revised.contract.blockingAcceptanceCriteria.map((c) => c.criterionId)).toEqual(['AC-1']);
     expect(revised.contract.contractRevision).toBe(2);
+  });
+});
+
+describe('sanitising a proposal that came from a provider', () => {
+  it('keeps the fields a worker may propose', () => {
+    expect(sanitizeJuliusContractProposal({
+      objective: '  Add a slug helper.  ',
+      responsibilityBoundary: 'src/slug.ts only',
+      requiredChecks: ['npm test'],
+      permittedPaths: ['src/slug.ts'],
+    })).toEqual({
+      objective: 'Add a slug helper.',
+      responsibilityBoundary: 'src/slug.ts only',
+      requiredChecks: ['npm test'],
+      permittedPaths: ['src/slug.ts'],
+    });
+  });
+
+  it('DROPS every field not on the allowlist, mission-owned ones included', () => {
+    const result = sanitizeJuliusContractProposal({
+      objective: 'ok',
+      budget: { ceilingUsdMicros: 999_000_000, maxRepairRounds: 99 },
+      runId: 'run-hijack', taskId: 'other', contractRevision: 400,
+      blockingAcceptanceCriteria: [], state: 'LOCKED', bindingDigest: 'sha256:0',
+      somethingNobodyDeclared: true,
+    });
+    expect(result).toEqual({ objective: 'ok' });
+  });
+
+  it('refuses the whole proposal when a field it DID send is unusable', () => {
+    // Half a proposal is a document nobody wrote, and keeping Julius's text for
+    // the other half would attribute it to the worker.
+    expect(sanitizeJuliusContractProposal({ objective: '   ' })).toBeNull();
+    expect(sanitizeJuliusContractProposal({ objective: 42 })).toBeNull();
+    expect(sanitizeJuliusContractProposal({ requiredChecks: 'npm test' })).toBeNull();
+    expect(sanitizeJuliusContractProposal({ requiredChecks: ['ok', 7] })).toBeNull();
+    expect(sanitizeJuliusContractProposal({ inScope: [''] })).toBeNull();
+  });
+
+  it('refuses anything that is not an object, which provider output often is not', () => {
+    for (const value of [null, undefined, 'a plan', 7, true, ['a'], []]) {
+      expect(sanitizeJuliusContractProposal(value), JSON.stringify(value)).toBeNull();
+    }
+  });
+
+  it('bounds the size, because a contract shares the context budget with the findings', () => {
+    const { stringChars, entryChars, entriesPerList } = JULIUS_CONTRACT_PROPOSAL_LIMITS;
+    expect(sanitizeJuliusContractProposal({ objective: 'x'.repeat(stringChars) })).not.toBeNull();
+    expect(sanitizeJuliusContractProposal({ objective: 'x'.repeat(stringChars + 1) })).toBeNull();
+    expect(sanitizeJuliusContractProposal({ inScope: ['x'.repeat(entryChars + 1)] })).toBeNull();
+    expect(sanitizeJuliusContractProposal({
+      inScope: Array.from({ length: entriesPerList + 1 }, (_, index) => `file-${index}.ts`),
+    })).toBeNull();
+  });
+
+  it('a proposal that proposes nothing is null, not an empty revision', () => {
+    expect(sanitizeJuliusContractProposal({})).toBeNull();
+    expect(sanitizeJuliusContractProposal({ notAField: 'x' })).toBeNull();
+  });
+
+  it('what survives still cannot move a mission-owned field through the revision', () => {
+    const sanitized = sanitizeJuliusContractProposal({ objective: 'narrower', inScope: ['src/slug.ts'] })!;
+    const revised = reviseJuliusTaskContract({ contract: locked(), proposal: sanitized });
+    if (revised.outcome !== 'REVISED') throw new Error('unreachable');
+    expect(revised.contract.budget).toEqual({ ceilingUsdMicros: 5_000_000, maxRepairRounds: 3 });
+    expect(revised.contract.blockingAcceptanceCriteria.map((c) => c.criterionId)).toEqual(['AC-1', 'AC-2']);
+    expect(revised.contract.objective).toBe('narrower');
   });
 });

@@ -39,7 +39,7 @@ import { createJuliusContextSnapshot } from './julius-context-snapshot';
 import { evaluateJuliusVerification, type JuliusReviewerFinding, type JuliusVerificationPolicy } from './julius-verification-runtime';
 import { planJuliusRepair } from './julius-repair-runtime';
 import { repairRoundsBefore, repairTaskTypeFor } from './julius-repair-lineage';
-import { juliusContractReviewCharge, lockJuliusTaskContract, mayDispatchUnderContract, type JuliusTaskContract, type JuliusTaskContractBinding } from './julius-task-contract';
+import { juliusContractReviewCharge, lockJuliusTaskContract, mayDispatchUnderContract, reviseJuliusTaskContract, sanitizeJuliusContractProposal, type JuliusTaskContract, type JuliusTaskContractBinding } from './julius-task-contract';
 import { evaluateJuliusRelease } from './julius-release-runtime';
 import { reviewStageOf } from './julius-review-stage';
 import { evaluateJuliusAllocation, type JuliusAllocationPolicy, type JuliusExecutionAllocation } from './julius-allocation-runtime';
@@ -794,8 +794,109 @@ export async function runClaimedTask(
     facts: { duplicate: outcome.duplicate },
   });
 
+  /* ------------------------------- 3b. a contract revision the worker proposed */
+  /**
+   * THE ARCHITECT PROPOSES THE DETAIL, AND JULIUS STORES IT AS A DRAFT.
+   *
+   * Revision 1 is Julius's, seeded from the Mission Contract. What it cannot
+   * contain is the detail only a planner can supply — the exact checks, the
+   * narrowed boundary, the concrete outputs — so the architect proposes them and
+   * this is where the proposal becomes a durable revision.
+   *
+   * A DRAFT, NEVER A LOCK. The plan review is the challenge step and the
+   * accepting decision is what locks whatever revision is then current; a worker
+   * that could lock would be agreeing with itself.
+   *
+   * THREE REFUSALS BEFORE ANYTHING BINDS, and they are separate on purpose:
+   * `sanitizeJuliusContractProposal` refuses a shape a provider should not send,
+   * `reviseJuliusTaskContract` refuses every mission-owned field, and
+   * `validateJuliusTaskContract` (inside it) refuses a result that could not be
+   * reviewed against. A refusal is RECORDED and the run continues on the
+   * revision it already has — the plan is still the plan, and failing a task
+   * because its optional proposal was malformed would trade a worse contract for
+   * no mission.
+   */
+  if (outcome.contractProposal !== undefined && !outcome.duplicate) {
+    await proposeContractRevision({
+      deps, run, ledger, task,
+      tasks: await deps.store.tasksForRun(run.runId, run.projectId),
+      workerId: outcome.workerId, proposal: outcome.contractProposal,
+    });
+  }
+
   /* --------------------------------------------------- 4. verification */
   return verifyExecutedTask({ request, deps, run, ledger, task, workerId: outcome.workerId, duplicate: outcome.duplicate });
+}
+
+/**
+ * Store a worker's proposed contract revision, or record why it was refused.
+ *
+ * The contract is looked up by the task the proposal is ABOUT, which for a
+ * planner is the implementation task it is planning — the same resolution the
+ * dispatch gate uses, so a plan and the build it plans can never end up naming
+ * different contracts.
+ */
+async function proposeContractRevision(input: {
+  deps: JuliusPipelineDependencies;
+  run: JuliusRunRow;
+  ledger: RuntimeLedger;
+  task: JuliusTask;
+  tasks: readonly JuliusTask[];
+  workerId: string;
+  proposal: unknown;
+}): Promise<void> {
+  const { deps, run, ledger, task } = input;
+  const refuse = (reasonCode: string, contractTaskId: string | null): Promise<void> =>
+    ledger.event('contract.refused', {
+      taskId: task.taskId, workerId: input.workerId,
+      facts: { reasonCode, contractTaskId, proposedBy: task.role },
+    });
+
+  /**
+   * WHICH CONTRACT A PLANNER'S PROPOSAL IS ABOUT.
+   *
+   * A `plan` task is not itself bound — `juliusContractSubjectTaskId` returns
+   * null for the Prompt Architect, and must, or the role that writes the terms
+   * could not run before they existed. So the subject is resolved the other way:
+   * the tasks that DEPEND on this one and are bound by a contract. Exactly one
+   * is the ordinary graph (plan → build); more than one is a shape nobody has
+   * built, and guessing which the proposal meant would be Julius inventing an
+   * agreement.
+   */
+  const dependents = input.tasks
+    .filter((value) => value.dependencyIds.includes(task.taskId))
+    .map((value) => juliusContractSubjectTaskId(value, input.tasks))
+    .filter((value): value is string => value !== null);
+  const contractTaskId = juliusContractSubjectTaskId(task, input.tasks)
+    ?? (new Set(dependents).size === 1 ? dependents[0]! : null);
+  if (contractTaskId === null) return refuse('proposal_has_no_contract_subject', null);
+
+  const sanitized = sanitizeJuliusContractProposal(input.proposal);
+  if (sanitized === null) return refuse('proposal_shape_refused', contractTaskId);
+
+  const current = await deps.store.loadTaskContract({ projectId: run.projectId, taskId: contractTaskId });
+  if (current === null) return refuse('contract_absent', contractTaskId);
+  // A LOCKED contract is not revised by a worker finishing its task: changing
+  // agreed terms is a decision, and the decision path is where a revision is
+  // cut. Refusing here keeps "coding began under the terms that were locked"
+  // true for the whole of the coder's run.
+  if (current.state === 'LOCKED') return refuse('contract_already_locked', contractTaskId);
+
+  const revised = reviseJuliusTaskContract({ contract: current, proposal: sanitized });
+  if (revised.outcome !== 'REVISED') return refuse(revised.reasonCode, contractTaskId);
+
+  const stored = await deps.store.putTaskContract({
+    projectId: run.projectId, contract: revised.contract, occurredAt: deps.clock.now(),
+  }).catch(() => false);
+  if (!stored) return refuse('proposal_not_stored', contractTaskId);
+
+  await ledger.event('contract.proposed', {
+    taskId: task.taskId, workerId: input.workerId,
+    facts: {
+      contractTaskId, contractId: revised.contract.contractId,
+      contractRevision: revised.contract.contractRevision, proposedBy: task.role,
+    },
+  });
 }
 
 /* ------------------------------------------------------ execution ports */

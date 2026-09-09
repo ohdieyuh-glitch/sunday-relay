@@ -240,6 +240,46 @@ way the live driver drives.
 
 Three chaos cases hold it, and removing the resume call turns five tests red.
 
+**5. `9251c63f` — a context names the agreement it was compiled under.**
+
+`JuliusContextWriter.persist` deduplicates on
+`(task_id, worker_id, content_hash)`, and the hash did not cover the task
+contract. So a retry after the contract was revised, with a packet whose text
+happens to be unchanged, matched the row compiled under the PREVIOUS agreement,
+and the worker was handed a context recorded against terms nobody holds.
+`taskContractRevision` and `taskContractDigest` are on the snapshot and in the
+hash; null for an unbound role, and a null still changes the hash. No column and
+no migration — the durable audit is already `task.claimed`'s binding facts and
+`task-contracts.tsv`, and a third copy of one fact is the drift this repository
+keeps finding.
+
+**6. `<commit 6>` — the architect actually proposes the contract now.**
+
+Until this, revision 1 was Julius's seed and nothing ever cut a second one:
+`reviseJuliusTaskContract` existed with no producer, which is the exact
+unwired-capability pattern this repository keeps rediscovering.
+
+The architect already states a bounded handoff — objective, task boundary,
+allowed file scope, required tests, prohibited actions, expected evidence — and
+every one is a contract field. `contractProposalFromPlan` MAPS the validated
+plan onto a proposal; no new capability, no second prompt, **no second paid
+call**. It travels on `JuliusProviderResult.contractProposal` (typed `unknown`,
+because it is provider output) and Julius stores what survives three refusals as
+a **DRAFT**: an allowlist sanitiser, the mission-owned-field refusal, and
+structural validation. The accepting plan review then locks whatever revision is
+current — revision 2, the architect's.
+
+So the cycle in the brief is now real end to end: **seed → propose → challenge →
+accept → LOCK → coder and reviewer bound to the same revision**. The e2e drives
+it through the run loop and asserts the coder's dispatch names revision 2.
+
+A hostile proposal is bounded three ways and the run still completes; a
+malformed one is recorded as `contract.refused` and the run continues on the
+revision it has — trading a worse contract for no mission would be the wrong
+direction. A proposal against an ALREADY LOCKED contract is refused, because
+changing agreed terms is a decision and the decision path is where a revision is
+cut.
+
 ### 00c. What this session did NOT do, and why
 
 - **No paid live mission was dispatched.** The repairs for paid run

@@ -231,7 +231,17 @@ export class JuliusDispatchError extends Error{
  readonly diagnostics:JuliusSafeDiagnostics|null;
  constructor(readonly code:JuliusErrorCode,readonly retryable:boolean,readonly safeMessage:string,failureClass?:unknown,diagnostics?:unknown){super(code);this.failureClass=safeFailureClass(failureClass);this.diagnostics=diagnostics===undefined?null:safeReviewDiagnostics(diagnostics);}
 }
-export interface JuliusProviderResult{readonly workerId:string;readonly providerId:string;readonly status:'SUCCEEDED'|'FAILED';readonly safeSummary:string;readonly evidence:readonly unknown[];readonly usage:unknown;}
+/**
+ * A WORKER MAY PROPOSE A CONTRACT REVISION, and `unknown` is the honest type.
+ *
+ * The value comes from a provider, so it is not typed, not trusted and not
+ * necessarily an object. Julius sanitises it against an allowlist
+ * (`sanitizeJuliusContractProposal`), refuses every mission-owned field
+ * (`reviseJuliusTaskContract`) and refuses an incomplete result
+ * (`validateJuliusTaskContract`) before any of it binds anyone. Optional, so a
+ * worker that proposes nothing behaves exactly as before.
+ */
+export interface JuliusProviderResult{readonly workerId:string;readonly providerId:string;readonly status:'SUCCEEDED'|'FAILED';readonly safeSummary:string;readonly evidence:readonly unknown[];readonly usage:unknown;readonly contractProposal?:unknown;}
 /**
  * WHAT JULIUS TELLS AN ADAPTER, and nothing more.
  *

@@ -779,3 +779,77 @@ export function seedJuliusTaskContract(terms: JuliusMissionTerms): JuliusContrac
     ? { seeded: true, contract }
     : { seeded: false, reasonCode: `contract_invalid:${validation.errors[0]}` };
 }
+
+/* ------------------------------------------- a proposal from a provider */
+
+/**
+ * SANITISE A CONTRACT REVISION PROPOSED BY A WORKER.
+ *
+ * `reviseJuliusTaskContract` already refuses to move a mission-owned field, and
+ * `validateJuliusTaskContract` refuses an incomplete result. This is the layer
+ * before both: the value arrives from a PROVIDER, so it is `unknown` in the
+ * honest sense — not typed, not trusted, not necessarily an object.
+ *
+ * IT IS AN ALLOWLIST, and deliberately not a filter. Every key not named here
+ * is dropped rather than carried, so a field added to the contract later is
+ * absent from a proposal until someone decides it may be proposed. A rejected
+ * SHAPE is `null` rather than a partial object: half a proposal is a document
+ * nobody wrote, and merging one would produce terms that are neither the
+ * architect's nor Julius's.
+ *
+ * Strings are trimmed and bounded; arrays are bounded in length and per entry.
+ * The bounds are not security theatre — a context packet has a character budget
+ * and a contract that exceeded it would push the findings out of a repair's
+ * context, which is the failure `repairContextFindings` exists to prevent.
+ */
+const PROPOSAL_STRING_FIELDS = ['objective', 'responsibilityBoundary', 'stoppingCondition'] as const;
+const PROPOSAL_LIST_FIELDS = [
+  'requiredInputs', 'expectedOutputs', 'inScope', 'outOfScope', 'requiredChecks',
+  'permittedPaths', 'prohibitedActions', 'reviewCriteria', 'failureConditions', 'repairRules',
+] as const;
+
+/** Per-entry and per-field bounds. A contract is a page, not a transcript. */
+export const JULIUS_CONTRACT_PROPOSAL_LIMITS = Object.freeze({
+  stringChars: 2_000,
+  entryChars: 500,
+  entriesPerList: 40,
+});
+
+const boundedString = (value: unknown, max: number): string | null => {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed.length === 0 || trimmed.length > max ? null : trimmed;
+};
+
+export function sanitizeJuliusContractProposal(value: unknown): JuliusTaskContractProposal | null {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return null;
+  const source = value as Record<string, unknown>;
+  const proposal: Record<string, unknown> = {};
+
+  for (const field of PROPOSAL_STRING_FIELDS) {
+    if (!(field in source)) continue;
+    const text = boundedString(source[field], JULIUS_CONTRACT_PROPOSAL_LIMITS.stringChars);
+    // A field that is PRESENT and unusable is a refusal, not an omission: the
+    // worker meant to say something and what arrived cannot be used, and
+    // silently keeping Julius's own text would attribute it to the worker.
+    if (text === null) return null;
+    proposal[field] = text;
+  }
+
+  for (const field of PROPOSAL_LIST_FIELDS) {
+    if (!(field in source)) continue;
+    const raw = source[field];
+    if (!Array.isArray(raw) || raw.length > JULIUS_CONTRACT_PROPOSAL_LIMITS.entriesPerList) return null;
+    const entries: string[] = [];
+    for (const entry of raw) {
+      const text = boundedString(entry, JULIUS_CONTRACT_PROPOSAL_LIMITS.entryChars);
+      if (text === null) return null;
+      entries.push(text);
+    }
+    proposal[field] = Object.freeze(entries);
+  }
+
+  // Nothing proposable was proposed. `null` rather than an empty object, so a
+  // caller cannot cut a revision that changes nothing and calls itself new.
+  return Object.keys(proposal).length === 0 ? null : proposal as JuliusTaskContractProposal;
+}
