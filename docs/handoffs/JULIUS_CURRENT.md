@@ -1484,6 +1484,40 @@ repair branch with `JULIUS_REAL_POSTGRES=1` and `DATABASE_URL`, and
 `PROBE_REJECT=1` selects the second shape. **Neither reference branch was
 touched** — the worktree is detached and the probe is untracked.
 
+### 00o. THE TWO DISPATCHES, VERIFIED AGAINST THE WORKFLOW ITSELF
+
+Read from `.github/workflows/julius-first-live-mission.yml` on 2026-09-09, so
+the next dispatch is mechanical rather than remembered.
+
+**The inputs and their defaults.** `mission` defaults to `julius-first-live`, so
+mission 2 must be named explicitly; `max_ticks` defaults to `24`, so 32 must be
+passed; `confirm_live` and `acknowledge_rerun` default empty; `hermes_ref`
+defaults to the pinned commit `2ea39daeb1f675d72e5c21c9400f2d58d7e6d71a` and is
+left alone.
+
+| | zero-spend preflight | paid run |
+|---|---|---|
+| `mission` | `julius-live-mission-2` | same |
+| `confirm_live` | `""` | `RUN LIVE MISSION` |
+| `acknowledge_rerun` | `RERUN PAID MISSION` | same |
+| `max_ticks` | `32` | same |
+| `hermes_ref` | default | default |
+
+**THE ZERO-SPEND CLAIM IS TRUE, and here is why rather than that it is.** The
+validator refuses any `confirm_live` that is neither empty nor the exact phrase,
+so a typo cannot silently produce a free run believed to be paid. The roles
+preflight runs the entrypoint **without `--confirm-live`**, and that entrypoint
+resolves all three roles, reports SET/MISSING for every credential, and stops
+with **exit 5 before it constructs a provider client or opens a connection** —
+the step asserts on exactly that code, and any other exit fails the job. The
+provider keys are in the step's environment so readiness can be reported; no
+call is made with them. The run then halts at *"Preflight complete — stopping
+here (no confirm_live given)"*, which sits before every step gated on
+`confirm_live == 'RUN LIVE MISSION'`.
+
+Passing `acknowledge_rerun` on the preflight is harmless: it is read only inside
+a step gated on `confirm_live`.
+
 ### 00i. The next paid rerun — the record it must leave (template, to be filled by the run)
 
 > Not a run. This is the shape the record takes the moment the watch dispatches
