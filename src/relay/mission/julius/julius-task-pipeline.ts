@@ -833,6 +833,7 @@ export async function runClaimedTask(
     : await coordinator.execute({
       claim: executionClaim, policy: request.policy, role, taskType: claim.taskType,
       capability: request.capability, resources, operationId, signal: request.signal,
+      attempt: claim.attempt,
       ...(dispatchAllocation === undefined ? {} : { allocation: dispatchAllocation }),
       ...(contractCharge === null ? {} : { contract: contractCharge }),
     });
@@ -885,6 +886,7 @@ export async function runClaimedTask(
       claim: executionClaim, policy: request.policy, role, taskType: claim.taskType,
       capability: request.capability, resources,
       operationId: `${operationId}:reroute:${tried.length}`,
+      attempt: claim.attempt,
       signal: request.signal, excludedWorkerIds: tried,
       ...(contractCharge === null ? {} : { contract: contractCharge }),
       ...(dispatchAllocation === undefined ? {} : { allocation: dispatchAllocation }),
