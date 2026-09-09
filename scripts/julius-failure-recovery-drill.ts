@@ -49,7 +49,7 @@ import { createPostgresMissionSeedStore } from '../relay-bridge/julius/mission-s
 import { assembleLiveJuliusRuntime, driveJuliusRunToTerminal } from '../relay-bridge/julius/live-composition';
 import { scriptedAdapter, seededTaskContract, worker } from '../src/relay/mission/julius';
 import type { JuliusTask, ScriptedOutcome } from '../src/relay/mission/julius';
-import { DrillRecord, scalarReader, writeAttestation } from './julius-drill-support';
+import { DrillRecord, auditProviders, scalarReader, writeAttestation } from './julius-drill-support';
 
 export const CAPABILITY = 'FAILURE RECOVERY';
 /** The transcript's closing sentence; the gate requires an all-capitals VERIFIED line. */
@@ -237,9 +237,9 @@ async function orchestrate(pool: Pool, outDir: string, repoRoot: string): Promis
     b.outcome.state === 'FAILED', `${b.outcome.state} after ${b.outcome.ticks} tick(s)`);
 
   /* -------------------------------------------- and it cost nothing to prove */
-  const calls = await scalar(
-    `SELECT count(*) FROM relay_wonderland.events WHERE event_type='julius.provider.call'`);
-  record.step('zero provider calls were made (scripted adapters only)', calls === '0' || calls === null, `${calls} call(s)`);
+  const audit = await auditProviders(scalar, [TRANSIENT, PERMANENT]);
+  record.step('every dispatch in BOTH runs went to the drill’s fake provider — and there WERE dispatches to check',
+    audit.dispatches > 0 && audit.providers === 'drill', `${audit.dispatches} dispatch(es), providers: ${audit.providers}`);
 
   const verified = record.seal(DRILL_NAME);
   file(verified);
