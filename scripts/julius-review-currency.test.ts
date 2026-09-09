@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { execFileSync } from 'node:child_process';
-import { copyFileSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { copyFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
@@ -691,5 +691,85 @@ describe('the CLI entry guard', () => {
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }
+  }, 30_000);
+});
+
+/**
+ * THE SAME RULE, ON A MACHINE WITH NO `gh`.
+ *
+ * A Claude Code cloud container has no `gh` binary and is exactly the machine
+ * that must judge a candidate before a paid mission is dispatched. Without a
+ * file mode the rule gets re-applied by hand there — a second implementation of
+ * a trust gate, and the one nobody tests. The property that matters is that the
+ * mode is not a softer one: leaving the awkward field out of the file must cost
+ * the pass.
+ */
+describe('the CLI, fed an evidence file instead of GitHub', () => {
+  const REPO = 'owner/repo';
+  const evidence = (over: Record<string, unknown> = {}) => ({
+    headSha: A, headShaAfter: A,
+    reviews: [approved(A)], reviewComments: [],
+    statuses: [], pullAuthorLogin: WORKER,
+    baseSha: B, baseShaAfter: B, baseContainedInHead: true,
+    ...over,
+  });
+
+  const run = (value: unknown) => {
+    const directory = mkdtempSync(join(tmpdir(), 'julius-currency-evidence-'));
+    const file = join(directory, 'evidence.json');
+    try {
+      writeFileSync(file, JSON.stringify(value));
+      try {
+        const stdout = execFileSync(process.execPath,
+          [resolve(import.meta.dirname, 'julius-review-currency.mjs'), REPO, '237', '--evidence', file],
+          { encoding: 'utf8', stdio: 'pipe' });
+        return { code: 0, stdout, stderr: '' };
+      } catch (error) {
+        const failure = error as { status?: number; stdout?: string; stderr?: string };
+        return { code: failure.status ?? -1, stdout: failure.stdout ?? '', stderr: failure.stderr ?? '' };
+      }
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  };
+
+  it('reaches the same verdict from a file, and says the evidence came from one', () => {
+    const result = run(evidence());
+    expect(result.code, result.stderr).toBe(0);
+    expect(result.stdout).toContain('merge_eligible=true');
+    expect(result.stdout).toContain('source=file:');
+    expect(result.stdout).toContain(`head=${A}`);
+    expect(result.stdout).toContain(`approved_by=${APPROVER}`);
+  }, 30_000);
+
+  it('cannot be passed by a file that omits an awkward field', () => {
+    const fields = ['headSha', 'headShaAfter', 'reviews', 'baseSha', 'baseShaAfter', 'baseContainedInHead'] as const;
+    for (const field of fields) {
+      const { [field]: _omitted, ...trimmed } = evidence();
+      const result = run(trimmed);
+      expect(result.code, `omitting ${field} must not pass: ${result.stdout}${result.stderr}`).toBe(1);
+      expect(result.stdout).not.toContain('merge_eligible=true');
+    }
+  }, 60_000);
+
+  it('an approval naming a head that is not the one merging is refused from a file too', () => {
+    const result = run(evidence({ reviews: [approved(B)] }));
+    expect(result.code).toBe(1);
+    expect(result.stdout).not.toContain('merge_eligible=true');
+  }, 30_000);
+
+  it('refuses a file that is not a single JSON object', () => {
+    for (const shape of [[evidence()], 'a string', 42, null]) {
+      expect(run(shape).code, `${JSON.stringify(shape)} is not an evidence object`).toBe(1);
+    }
+  }, 30_000);
+
+  it('--evidence without a path is a usage error, not a fetch', () => {
+    let code = 0;
+    try {
+      execFileSync(process.execPath,
+        [resolve(import.meta.dirname, 'julius-review-currency.mjs'), REPO, '237', '--evidence'], { stdio: 'pipe' });
+    } catch (error) { code = (error as { status?: number }).status ?? -1; }
+    expect(code).toBe(2);
   }, 30_000);
 });
