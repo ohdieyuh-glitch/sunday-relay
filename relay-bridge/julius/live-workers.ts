@@ -29,6 +29,7 @@ import {
   reviewChargeFor,
   reviewStageOf,
   type JuliusContextSnapshot,
+  type JuliusDispatchAllocation,
   type JuliusProviderAdapter,
   type JuliusProviderResult,
   type JuliusReviewStage,
@@ -39,7 +40,7 @@ import {
   type GptArchitectConfig,
   type GptRunOutcome,
 } from '../../src/relay/connectors/gpt-architect';
-import { validateArchitectPlan } from '../../src/relay/mission/prompt-architect/prompt-architect-plan';
+import { validateArchitectPlan, type ArchitectPlanReasonCode } from '../../src/relay/mission/prompt-architect/prompt-architect-plan';
 import {
   loadHostedQuery,
   runHostedCodingAgent,
@@ -150,8 +151,23 @@ const ARCHITECT_CHARTER = [
   'Read the mission context below and produce the structured plan the output schema requires.',
   'You plan; you do not implement, review, or approve your own work.',
   'This is a PLAN ONLY. No work has been done yet and no file has been touched.',
-  'Never state or imply that files were edited, that tests were run, that you edited anything,',
-  'or that you ran the tests — a plan that claims completed work is refused outright.',
+  /**
+   * THE BAN, STATED WITHOUT HANDING BACK THE BANNED STRINGS.
+   *
+   * The first version of this line quoted all four refused phrases verbatim,
+   * and the schema then asks for `prohibitedActions` — so the most obedient
+   * possible answer was to echo them straight back. Paid runs 34185920678 and
+   * 34186711214 both died on `plan_false_work_claim`, on two independent
+   * samples of the same mission, and neither could say where. The validator
+   * now exempts the fields that ENUMERATE a condition, but a phrase echoed
+   * into an implementation step or an assumption is still a claim and still
+   * refused — so the charter stops supplying the text to echo.
+   */
+  'Write the entire plan in the FUTURE tense: what is to be done, not what has been done.',
+  'Never assert or imply that any file has already been changed, that any test has already',
+  'been executed, or that you yourself have performed any of the work — a plan that claims',
+  'completed work is refused outright, wherever the claim appears.',
+  'State that rule in your own words if you must state it at all; do not quote these sentences back.',
   'Every required string must be substantive: objectiveSummary, each assumption statement,',
   'each architecture decision and its rationale, and the handoff objective and bounded task',
   'must each be non-empty and meaningful. An empty string is refused.',
@@ -165,6 +181,7 @@ const ARCHITECT_REVISION_CHARTER = [
   'in the mission context. Keep the mission objective and every acceptance criterion exactly as stated;',
   'revise the plan so that each finding is addressed, and say in the plan how each one was addressed.',
   'Do not claim any finding is resolved by implementation work — none has happened.',
+  'The revised plan stays in the future tense throughout, exactly as the first one had to.',
 ].join(' ');
 
 /**
@@ -175,6 +192,57 @@ const ARCHITECT_REVISION_CHARTER = [
  * dressed as facts, and the first one recorded every plan review as a build
  * review. A dispatch whose stage cannot be read is refused, not reviewed.
  */
+/**
+ * A CORRECTION IS A SPEND, AND A SPEND NEEDS BUDGET.
+ *
+ * The architect's allocation is a RESERVATION against the run's budget rather
+ * than a per-call cap — only the hosted coder is handed its ceiling as a limit
+ * — so two calls inside one dispatch cannot exceed a reservation already made.
+ * What they can do is buy a second call for a mission that has nothing left,
+ * which is the ceiling being ignored rather than respected.
+ *
+ * So a dispatch whose allocation says the mission is exhausted gets its first
+ * ask and no correction, and the original refusal surfaces exactly as it did
+ * before this file learned to re-ask. An adapter handed no allocation at all
+ * behaves as it always has: Julius did not bound this dispatch, and inventing a
+ * bound here would be this file deciding a budget it cannot see.
+ */
+const correctionAffordable = (allocation: JuliusDispatchAllocation | undefined): boolean =>
+  allocation === undefined || allocation.usdMicros > 0;
+
+/**
+ * HOW TO ASK AGAIN FOR A REVIEW THAT ARRIVED IN THE WRONG SHAPE.
+ *
+ * Keyed on the CLOSED failure shape the Hermes reader assigned, so nothing the
+ * model wrote travels back into the next prompt — the text was malformed, and
+ * quoting it invites the same answer. A shape with no correction is one a
+ * second ask cannot fix, and null is what keeps the re-ask from being bought.
+ */
+const REVIEW_ATTEMPT_LIMIT = 2;
+
+function reviewCorrectionFor(shape: string): string | null {
+  switch (shape) {
+    case 'review_json_absent':
+      return 'CORRECTION — your previous answer contained no JSON report at all. Emit exactly one JSON object in the shape given above, with no prose before or after it and no code fence.';
+    case 'review_json_unparseable':
+      return 'CORRECTION — your previous answer contained a JSON object that could not be parsed. Emit exactly one WELL-FORMED JSON object in the shape given above: every key and string double-quoted, no trailing commas, no comments, and no backslash escape other than the ones JSON defines.';
+    case 'review_json_ambiguous':
+      return 'CORRECTION — your previous answer contained MORE THAN ONE object carrying a verdict, so which one was your review could not be known. Emit exactly one JSON object, and quote no other object containing a verdict anywhere in your answer.';
+    case 'review_verdict_missing':
+      return 'CORRECTION — your previous answer contained JSON with no verdict. Emit exactly one JSON object whose "verdict" is one of "approved", "changes_required" or "unable_to_review".';
+    case 'review_verdict_invalid':
+      return 'CORRECTION — your previous answer carried a verdict outside the permitted set. The "verdict" must be exactly one of "approved", "changes_required" or "unable_to_review", spelled in lower case.';
+    case 'review_summary_missing':
+    case 'review_summary_invalid':
+      return 'CORRECTION — your previous answer had no usable "summary". Emit exactly one JSON object whose "summary" is a non-empty string stating what you reviewed and what you concluded.';
+    default:
+      // A timeout, a 503, a refused credential, a dead process, an oversized
+      // answer, a rejected request, a classifier disagreement: none is a shape
+      // a re-ask repairs, and each is handled where it is classified.
+      return null;
+  }
+}
+
 const reviewStageOfDispatch = (taskType: string | undefined): JuliusReviewStage | null =>
   (taskType === undefined ? null : reviewStageOf(taskType));
 
@@ -194,6 +262,8 @@ const planDiagnostics = (input: {
   readonly validationPassed: boolean;
   readonly validationReasonCode?: string | null;
   readonly validationField?: string | null;
+  readonly validationClaimPhrase?: string | null;
+  readonly attempts?: number | null;
   readonly outputBytes?: number | null;
 }): Record<string, unknown> => ({
   stage: 'plan',
@@ -208,8 +278,68 @@ const planDiagnostics = (input: {
   validationPassed: input.validationPassed,
   validationReasonCode: input.validationReasonCode ?? null,
   validationField: input.validationField ?? null,
+  validationClaimPhrase: input.validationClaimPhrase ?? null,
   outputBytesObserved: input.outputBytes ?? null,
+  /** How many provider calls this ONE dispatch bought, including the correction. */
+  planAttempts: input.attempts ?? null,
 });
+
+/**
+ * WHAT TO TELL THE ARCHITECT SO IT CAN FIX ITS OWN ANSWER.
+ *
+ * Built from the validator's CLOSED reason code and its STRUCTURAL path, never
+ * from the model's own output. Feeding a refused plan back invites the model to
+ * repeat it, and this file already learned that lesson once: the charter used
+ * to quote the four banned phrases verbatim, and the most obedient possible
+ * answer was to echo them back.
+ *
+ * A code with no correction is one a second attempt cannot plausibly fix, and
+ * returning null for it is what keeps the retry from buying a second identical
+ * refusal.
+ */
+function planCorrection(reasonCode: ArchitectPlanReasonCode, field: string | null): string | null {
+  const at = field === null ? 'a required field' : `the field \`${field}\``;
+  switch (reasonCode) {
+    case 'plan_false_work_claim':
+      return `CORRECTION — your previous answer was REFUSED: ${at} asserted that work had already been done. Nothing has been done: no file has been changed, no test has been run, and the Coding Agent has not started. Produce the plan again with every field in the FUTURE tense, describing what is to be done. Do not restate this correction anywhere in the plan.`;
+    case 'objective_summary_empty':
+    case 'assumption_statement_empty':
+    case 'decision_statement_empty':
+    case 'decision_rationale_empty':
+    case 'handoff_objective_empty':
+    case 'handoff_bounded_task_empty':
+      return `CORRECTION — your previous answer was REFUSED: ${at} was empty or whitespace. Produce the plan again with every required string substantive and specific to this mission.`;
+    case 'handoff_allowed_scope_empty':
+      return 'CORRECTION — your previous answer was REFUSED: handoff.allowedFileScope named no path, which is an unbounded handoff. Produce the plan again, naming at least one concrete path drawn from the mission context.';
+    case 'decision_pre_accepted':
+      return 'CORRECTION — your previous answer was REFUSED: an architecture decision was marked accepted. Decisions are PROPOSALS and approval is not yours to give. Produce the plan again with every decision left unaccepted.';
+    case 'plan_object_invalid':
+    case 'handoff_missing':
+    case 'required_array_invalid':
+    case 'required_string_array_invalid':
+    case 'decision_object_invalid':
+    case 'handoff_array_invalid':
+      return `CORRECTION — your previous answer was REFUSED: ${at} was not the shape the output schema requires. Produce the plan again with every required field present and of exactly the declared type.`;
+    default:
+      return null;
+  }
+}
+
+/**
+ * ONE CORRECTION, AND WHY IT IS WORTH A SECOND CALL.
+ *
+ * A plan that parses and then breaks one of the validator's own rules is a
+ * SELF-INFLICTED, SELF-CORRECTABLE error, and until now it killed the mission
+ * outright. Paid runs 34185920678 and 34186711214 each bought one `gpt-5.6-sol`
+ * answer, had it refused over a single field, and ended FAILED with no coder,
+ * no diff, no review and no repair — while Julius's repair loop exists for
+ * exactly this shape of failure everywhere else in the run.
+ *
+ * STRICTLY ONE. A second refusal is the failure it always was, and the record
+ * says how many attempts were bought so the call count and the cost stay true —
+ * a retry nobody could see would be a spend nobody could account for.
+ */
+const PLAN_ATTEMPT_LIMIT = 2;
 
 export function createLiveArchitectAdapter(input: {
   readonly worker: JuliusWorker;
@@ -240,10 +370,18 @@ export function createLiveArchitectAdapter(input: {
       if (revising && priorPlan === null) {
         throw new JuliusDispatchError('WORKER_EXECUTION_FAILURE', false, 'The prior architect plan is not available to this process; a plan revision without it is refused.', 'prior_plan_unavailable');
       }
+      const baseCharter = revising ? `${ARCHITECT_CHARTER} ${ARCHITECT_REVISION_CHARTER}` : ARCHITECT_CHARTER;
+      let attempts = 0;
+      let correction: string | null = null;
+      for (;;) {
+      attempts += 1;
       const outcome: GptRunOutcome = await run({
         apiKey: input.apiKey,
         config: input.config,
-        instructions: revising ? `${ARCHITECT_CHARTER} ${ARCHITECT_REVISION_CHARTER}` : ARCHITECT_CHARTER,
+        // The correction goes in the INSTRUCTIONS, beside the charter it did
+        // not follow — not into the mission packet, which is Julius's own
+        // compiled context and is not the place to record a model's mistake.
+        instructions: correction === null ? baseCharter : `${baseCharter} ${correction}`,
         input: revising
           ? [packetText(snapshot), '--- PRIOR PLAN (rejected by the Independent Reviewer; revise it against the REVIEW FINDING entries above) ---', priorPlan].join('\n\n')
           : packetText(snapshot),
@@ -265,6 +403,7 @@ export function createLiveArchitectAdapter(input: {
         const failed = planDiagnostics({
           requestedModel: input.config.model, servedModel: outcome.actualModel ?? null,
           responseId: outcome.responseId ?? null, jsonParseable: false, validationPassed: false,
+          attempts,
         });
         switch (outcome.failureClass) {
           case 'authentication_failed':
@@ -282,18 +421,28 @@ export function createLiveArchitectAdapter(input: {
         }
       }
       let parsed: unknown;
-      try { parsed = JSON.parse(outcome.outputText); } catch {
+      let parseFailed = false;
+      try { parsed = JSON.parse(outcome.outputText); } catch { parseFailed = true; }
+      if (parseFailed) {
+        if (attempts < PLAN_ATTEMPT_LIMIT && correctionAffordable(dispatch.allocation)) {
+          correction = 'CORRECTION — your previous answer was REFUSED: it was not parseable JSON. Answer with exactly one JSON object conforming to the output schema, and nothing else — no prose before or after it, and no code fence.';
+          continue;
+        }
         // Julius's own classes, not the provider's: the call succeeded and what
         // came back was unusable, which is a different repair from a 500.
         throw new JuliusDispatchError('WORKER_EXECUTION_FAILURE', false, 'Prompt Architect output was not parseable JSON.', 'unparseable_plan_json',
           planDiagnostics({
             requestedModel: input.config.model, servedModel: outcome.actualModel,
             responseId: outcome.responseId, jsonParseable: false, validationPassed: false,
-            outputBytes: Buffer.byteLength(outcome.outputText, 'utf8'),
+            outputBytes: Buffer.byteLength(outcome.outputText, 'utf8'), attempts,
           }));
       }
       const validation = validateArchitectPlan(parsed);
       if (!validation.ok) {
+        const remedy = attempts < PLAN_ATTEMPT_LIMIT && correctionAffordable(dispatch.allocation)
+          ? planCorrection(validation.reasonCode, validation.reasonField ?? null)
+          : null;
+        if (remedy !== null) { correction = remedy; continue; }
         /**
          * THE RULE IT BROKE, as a closed token. Paid attempt #3 recorded
          * `plan_validation_failed` and stopped there: the reason was composed
@@ -306,7 +455,8 @@ export function createLiveArchitectAdapter(input: {
             requestedModel: input.config.model, servedModel: outcome.actualModel,
             responseId: outcome.responseId, jsonParseable: true, validationPassed: false,
             validationReasonCode: validation.reasonCode, validationField: validation.reasonField ?? null,
-            outputBytes: Buffer.byteLength(outcome.outputText, 'utf8'),
+            validationClaimPhrase: validation.reasonClaim ?? null,
+            outputBytes: Buffer.byteLength(outcome.outputText, 'utf8'), attempts,
           }));
       }
       input.artifacts.put(planRef(snapshot.runId), outcome.outputText);
@@ -328,6 +478,7 @@ export function createLiveArchitectAdapter(input: {
           toolCalls: 0,
         },
       };
+      }
     },
   };
 }
@@ -653,7 +804,38 @@ export function createLiveHermesReviewerAdapter(input: {
         testOutput: charge.subject === 'IMPLEMENTATION' ? (input.artifacts.get(testOutputRef(snapshot.runId)) ?? '') : '',
         relayEvidence: [...snapshot.evidenceIds],
       };
-      const outcome: HermesOutcome = await run({ packet, config: input.config });
+      /**
+       * ONE CORRECTED RE-ASK, ON THE SHAPES A RE-ASK CAN FIX.
+       *
+       * Paid run 33802017460 bought a real plan, a real diff and passing tests,
+       * and both reviews then failed to parse: no verdict reached Julius and
+       * the run ended FAILED with zero decisions. Those shapes are
+       * `retryable: false` for a good reason — a plain retry asks the identical
+       * question and gets the identical answer — but a CORRECTION is not a
+       * retry. It names the shape defect, from the CLOSED shape token and never
+       * from the model's own (malformed) text — which is structural, not
+       * merely intended: `review_incomplete` carries a safe message, a shape
+       * and diagnostics, and the review text is not among them.
+       *
+       * ONLY the shapes where an answer ARRIVED in the wrong shape. A timeout,
+       * a 503, a refused credential, a process that died and an oversized
+       * output are not shape defects: three are already retryable at the task
+       * level and the rest need a human or a smaller request, and re-asking
+       * would spend for nothing. `review_output_too_large` is deliberately
+       * excluded — a runaway answer asked again is a second runaway answer.
+       */
+      let reviewAttempts = 0;
+      let reviewCorrection: string | undefined;
+      let outcome: HermesOutcome;
+      for (;;) {
+      reviewAttempts += 1;
+      outcome = await run({ packet: { ...packet, ...(reviewCorrection === undefined ? {} : { correction: reviewCorrection }) }, config: input.config });
+      if (outcome.kind === 'review_incomplete' && reviewAttempts < REVIEW_ATTEMPT_LIMIT && correctionAffordable(dispatch.allocation)) {
+        const remedy = reviewCorrectionFor(outcome.shape);
+        if (remedy !== null) { reviewCorrection = remedy; continue; }
+      }
+      break;
+      }
       if (outcome.kind === 'launch_failed') {
         throw new JuliusDispatchError('PROVIDER_UNAVAILABLE', false, `Hermes reviewer could not launch: ${safeClaim(outcome.safeMessage, 120)}.`, 'reviewer_launch_failed');
       }
@@ -720,7 +902,7 @@ export function createLiveHermesReviewerAdapter(input: {
          */
         throw new JuliusDispatchError(
           code, retryable, `Hermes review incomplete: ${safeClaim(outcome.safeMessage, 120)}.`, outcome.shape,
-          { ...outcome.diagnostics, stage },
+          { ...outcome.diagnostics, stage, reviewAttempts },
         );
       }
       if (outcome.result.verdict === 'unable_to_review') {

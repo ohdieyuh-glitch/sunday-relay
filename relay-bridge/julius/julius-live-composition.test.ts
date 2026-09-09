@@ -1094,9 +1094,23 @@ describe('an incomplete review reaches Julius as the failure it actually was', (
   };
   const jsonRes = (body: unknown, status = 200): Response =>
     new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
-  const started = (state: unknown) => vi.fn()
-    .mockResolvedValueOnce(jsonRes({ accepted: true, runId: 'run-live' }))
-    .mockResolvedValueOnce(jsonRes(state));
+  /**
+   * A REVIEW SERVICE THAT ANSWERS ROUNDS, NOT A FIXED PAIR.
+   *
+   * One review is submit-then-poll. A shape the adapter corrects is asked
+   * again, which is a second submit and a second poll — so a fake that
+   * resolved exactly twice would answer the corrected ask with `undefined` and
+   * every corrected shape would arrive as a launch failure. It answers the
+   * same way every round, which is what a stubborn model does and the case
+   * these tests are about.
+   */
+  const started = (state: unknown) => {
+    let call = 0;
+    return vi.fn(async () => {
+      call += 1;
+      return call % 2 === 1 ? jsonRes({ accepted: true, runId: 'run-live' }) : jsonRes(state);
+    });
+  };
 
   /** Dispatches through the real adapter and returns the thrown Julius error. */
   const failureFrom = async (fetchImpl: unknown) => {
@@ -1184,7 +1198,11 @@ describe('an incomplete review reaches Julius as the failure it actually was', (
     const failure = await failureFrom(started({ runId: 'run-live', status: 'completed', reviewText: 'The plan looks fine to me.' }));
     expect(failure.failureClass, 'prose is absent JSON, not a dead credential').toBe('review_json_absent');
     expect(failure.code).toBe('WORKER_EXECUTION_FAILURE');
-    expect(failure.retryable, 'a model that wrote prose will write prose again').toBe(false);
+    expect(failure.retryable, 'a model that wrote prose TWICE will write prose again').toBe(false);
+    // AND IT WAS ASKED TWICE. Prose is a shape defect, so the adapter names it
+    // and re-asks once; a model that answers with prose again is the final
+    // failure this always was, and the record says two calls were bought.
+    expect((failure as { diagnostics?: Record<string, unknown> }).diagnostics?.reviewAttempts).toBe(2);
   });
 
   it('no incomplete review produces a verdict, a decision or a finding', async () => {
@@ -1198,6 +1216,175 @@ describe('an incomplete review reaches Julius as the failure it actually was', (
       const failure = await failureFrom(fetchImpl);
       expect(failure.code, 'a dispatch that failed produced no evidence').toBeDefined();
       expect(JSON.stringify(failure)).not.toContain('FAKETESTNOTREAL');
+    }
+  });
+
+  /**
+   * PAID RUN 33802017460 — A REAL PLAN, A REAL DIFF, PASSING TESTS, AND BOTH
+   * REVIEWS UNREADABLE.
+   *
+   * Julius never received a verdict and the run ended FAILED with zero
+   * decisions. The malformed shapes are `retryable: false` for a good reason —
+   * a plain retry asks the identical question and gets the identical answer —
+   * but a CORRECTION is a different act. It names the shape defect from the
+   * CLOSED shape token, never from the model's own (malformed) text, and asks
+   * once more.
+   */
+  /** Answers a scripted review text per round, and records every prompt it was given. */
+  const rounds = (...texts: readonly string[]) => {
+    const prompts: string[] = [];
+    let call = 0;
+    const fetchImpl = vi.fn(async (_url: unknown, init?: { body?: unknown }) => {
+      call += 1;
+      if (call % 2 === 1) {
+        prompts.push(String((JSON.parse(String(init?.body ?? '{}')) as { prompt?: unknown }).prompt ?? ''));
+        return jsonRes({ accepted: true, runId: 'run-live' });
+      }
+      const text = texts[Math.min(Math.ceil(call / 2) - 1, texts.length - 1)]!;
+      return jsonRes({ runId: 'run-live', status: 'completed', reviewText: text });
+    });
+    return { prompts, fetchImpl };
+  };
+
+  const APPROVED = JSON.stringify({
+    verdict: 'approved', summary: 'The plan satisfies every acceptance criterion.',
+    findings: [], requirementsChecked: [{ requirement: 'AC-1', status: 'passed', evidence: 'read the plan' }],
+  });
+
+  /** Dispatches through the real adapter and returns the SUCCESSFUL result. */
+  const resultFrom = async (fetchImpl: unknown) => {
+    const artifacts = createLiveArtifactExchange();
+    artifacts.put(planRef('run-live'), JSON.stringify(VALID_PLAN));
+    const adapter = createLiveHermesReviewerAdapter({
+      worker,
+      contexts: { snapshotFor: () => reviewSnapshot('build-1:review') },
+      artifacts,
+      config: loadHermesConfig(LIVE_ENV as never),
+      testCommand: 'npm run mission-test',
+      run: (async (input: { packet: ReviewPacket }) => runRemoteHermesReview({
+        packet: input.packet, config: REMOTE_CFG, runId: 'run-live',
+        deps: { now: () => '2026-09-04T00:00:00.000Z', sleep: () => Promise.resolve(), fetchImpl: fetchImpl as typeof fetch },
+      })) as never,
+    });
+    return adapter.dispatch({ taskId: 'build-1:review', contextId: 'ctx-resume-1', taskType: 'review:plan' });
+  };
+
+  it('prose first, a real verdict second: the run that died here now gets one', async () => {
+    const { prompts, fetchImpl } = rounds('The plan looks fine to me.', APPROVED);
+    const result = await resultFrom(fetchImpl);
+    expect(result.status, 'the review succeeded on the corrected ask').toBe('SUCCEEDED');
+    expect(prompts, 'exactly one correction was bought').toHaveLength(2);
+  });
+
+  it('the correction names the shape defect, and carries none of the unreadable answer', async () => {
+    const unreadable = 'The plan looks fine to me. Ship it.';
+    const { prompts, fetchImpl } = rounds(unreadable, APPROVED);
+    await resultFrom(fetchImpl);
+
+    const corrected = prompts[1]!;
+    expect(prompts[0], 'the first ask carried no correction').not.toContain('CORRECTION —');
+    expect(corrected, 'the second names what was wrong').toContain('contained no JSON report at all');
+    expect(corrected, 'and it is the last thing read before the emit instruction')
+      .toMatch(/CORRECTION —[\s\S]*Emit the JSON now\.$/u);
+    // THE UNREADABLE TEXT NEVER TRAVELS BACK, and that is STRUCTURAL rather
+    // than checked: `review_incomplete` carries a safe message, a closed shape
+    // and diagnostics, and the review text is not among them — the adapter
+    // could not quote it if it wanted to. This assertion is the second line,
+    // for the day someone adds the raw text to that outcome.
+    expect(corrected, 'never the answer itself').not.toContain(unreadable);
+  });
+
+  it('each correctable shape is told what it specifically got wrong', async () => {
+    const cases: readonly (readonly [string, string, string])[] = [
+      ['review_json_absent', 'The plan looks fine to me.', 'contained no JSON report at all'],
+      ['review_json_ambiguous', `${APPROVED}\n${APPROVED}`, 'MORE THAN ONE object carrying a verdict'],
+      ['review_verdict_missing', '{"summary":"ok","findings":[]}', 'contained JSON with no verdict'],
+      ['review_verdict_invalid', '{"verdict":"approve","summary":"ok","findings":[],"requirementsChecked":[]}', 'outside the permitted set'],
+    ];
+    for (const [shape, text, expected] of cases) {
+      const { prompts, fetchImpl } = rounds(text, APPROVED);
+      const result = await resultFrom(fetchImpl);
+      expect(prompts, `${shape} is re-asked once`).toHaveLength(2);
+      expect(prompts[1], `${shape} is told what it got wrong`).toContain(expected);
+      expect(result.status, `${shape} recovers`).toBe('SUCCEEDED');
+    }
+  });
+
+  it('an exhausted mission buys no correction, and the refusal is the one it always was', async () => {
+    // A CORRECTION IS A SPEND. The architect's allocation is a reservation
+    // rather than a per-call cap, so a second call cannot exceed it — but
+    // buying one for a mission with nothing left is the ceiling being ignored.
+    const { prompts, fetchImpl } = rounds('The plan looks fine to me.', APPROVED);
+    const artifacts = createLiveArtifactExchange();
+    artifacts.put(planRef('run-live'), JSON.stringify(VALID_PLAN));
+    const adapter = createLiveHermesReviewerAdapter({
+      worker,
+      contexts: { snapshotFor: () => reviewSnapshot('build-1:review') },
+      artifacts,
+      config: loadHermesConfig(LIVE_ENV as never),
+      testCommand: 'npm run mission-test',
+      run: (async (input: { packet: ReviewPacket }) => runRemoteHermesReview({
+        packet: input.packet, config: REMOTE_CFG, runId: 'run-live',
+        deps: { now: () => '2026-09-04T00:00:00.000Z', sleep: () => Promise.resolve(), fetchImpl: fetchImpl as typeof fetch },
+      })) as never,
+    });
+    const failure = await adapter.dispatch({
+      taskId: 'build-1:review', contextId: 'ctx-resume-1', taskType: 'review:plan',
+      allocation: { usdMicros: 0, basis: 'EXHAUSTED', policyVersion: 'julius-allocation.v1' },
+    })
+      .then(() => { throw new Error('the dispatch was expected to fail'); })
+      .catch((error: unknown) => error as { failureClass: string | null; diagnostics?: Record<string, unknown> });
+
+    expect(prompts, 'asked once, and never again').toHaveLength(1);
+    expect(failure.failureClass, 'and it fails exactly as it did before the re-ask existed').toBe('review_json_absent');
+    expect(failure.diagnostics?.reviewAttempts).toBe(1);
+  });
+
+  it('a mission that still has budget does buy the correction', async () => {
+    // The other side of the guard: a positive allocation changes nothing about
+    // the behaviour proved above, so the refusal is the budget's and not a
+    // silent disabling of the re-ask.
+    const { prompts, fetchImpl } = rounds('The plan looks fine to me.', APPROVED);
+    const artifacts = createLiveArtifactExchange();
+    artifacts.put(planRef('run-live'), JSON.stringify(VALID_PLAN));
+    const adapter = createLiveHermesReviewerAdapter({
+      worker,
+      contexts: { snapshotFor: () => reviewSnapshot('build-1:review') },
+      artifacts,
+      config: loadHermesConfig(LIVE_ENV as never),
+      testCommand: 'npm run mission-test',
+      run: (async (input: { packet: ReviewPacket }) => runRemoteHermesReview({
+        packet: input.packet, config: REMOTE_CFG, runId: 'run-live',
+        deps: { now: () => '2026-09-04T00:00:00.000Z', sleep: () => Promise.resolve(), fetchImpl: fetchImpl as typeof fetch },
+      })) as never,
+    });
+    const result = await adapter.dispatch({
+      taskId: 'build-1:review', contextId: 'ctx-resume-1', taskType: 'review:plan',
+      allocation: { usdMicros: 300_000, basis: 'ESTIMATE', policyVersion: 'julius-allocation.v1' },
+    });
+    expect(prompts, 'the correction was bought').toHaveLength(2);
+    expect(result.status).toBe('SUCCEEDED');
+  });
+
+  it('a failure that is NOT a shape defect is never re-asked', async () => {
+    // A timeout, a 503 and a refused credential describe an answer that did not
+    // arrive. Two of them are already retryable at the TASK level, where the
+    // attempt ceiling and the spend budget govern; re-asking here would spend
+    // inside a dispatch for a defect no instruction can fix.
+    for (const [kind, body, status] of [
+      ['timed out', { runId: 'run-live', status: 'timed_out', failureKind: 'timed_out' }, 200],
+      ['capacity', { failureKind: 'capacity_exhausted' }, 503],
+      ['dead credential', { failureKind: 'authentication_failed' }, 401],
+    ] as const) {
+      let calls = 0;
+      const fetchImpl = vi.fn(async () => {
+        calls += 1;
+        return calls === 1 && status === 200 ? jsonRes({ accepted: true, runId: 'run-live' }) : jsonRes(body, status);
+      });
+      const failure = await resultFrom(fetchImpl)
+        .then(() => { throw new Error('the dispatch was expected to fail'); })
+        .catch((error: unknown) => error as { diagnostics?: Record<string, unknown> });
+      expect(failure.diagnostics?.reviewAttempts, `${kind} is asked exactly once`).toBe(1);
     }
   });
 });
@@ -1450,6 +1637,160 @@ describe('a refused plan names the rule it broke', () => {
     expect(facts.diag_validationReasonCode).toBe('objective_summary_empty');
   });
 });
+
+/**
+ * A REFUSED PLAN IS A SELF-INFLICTED ERROR, AND JULIUS REPAIRS THOSE.
+ *
+ * Paid runs 34185920678 and 34186711214 each bought one `gpt-5.6-sol` answer,
+ * had it refused for a single field, and ended FAILED — no coder, no diff, no
+ * review, no repair. Everywhere else in the run a recoverable failure gets one
+ * bounded attempt at recovery; the architect's own validator was the exception,
+ * and the mission paid for it twice.
+ *
+ * The correction is built from the CLOSED reason code and the STRUCTURAL path,
+ * never from the model's own output, and it happens exactly once.
+ */
+describe('a refused plan is corrected once, and the record says it was', () => {
+  const VALID_PLAN = () => ({
+    objectiveSummary: 'Implement the mission fixture change.',
+    assumptions: [{ id: 'A1', statement: 'The fixture exists.', confidence: 'medium' }],
+    unresolvedQuestions: [],
+    requirements: [{ id: 'R1', statement: 'It must pass.', rationale: 'The contract says so.' }],
+    architectureDecisions: [{ id: 'D1', decision: 'Edit in place.', rationale: 'Smallest change.', alternativesConsidered: [], accepted: false }],
+    implementationSteps: [{ order: 1, description: 'Edit the fixture.', filesTouched: ['fixtures/a.ts'] }],
+    acceptanceCriteria: ['AC-1'], testPlan: ['npm run mission-test'],
+    risks: [], prohibitedActions: [], proposedContractAmendments: [], contextRefs: [],
+    handoff: {
+      objective: 'Implement the fixture change.',
+      boundedTask: 'Edit exactly the fixture files and make the test pass.',
+      acceptanceCriteria: ['AC-1'], requiredTests: ['npm run mission-test'],
+      allowedFileScope: ['fixtures/live-validation/'], prohibitedActions: [],
+      grantedTools: [], expectedEvidence: ['TEST'],
+      missionContractRef: 'contract-1', environmentRef: null,
+    },
+  });
+
+  /** An architect that answers a scripted sequence and records what it was told. */
+  const scripted = (...bodies: readonly unknown[]) => {
+    const instructions: string[] = [];
+    const architect = async (request: { instructions: string }): Promise<GptRunOutcome> => {
+      instructions.push(request.instructions);
+      const body = bodies[Math.min(instructions.length - 1, bodies.length - 1)];
+      return {
+        ok: true, status: 'completed',
+        outputText: typeof body === 'string' ? body : JSON.stringify(body),
+        actualModel: 'gpt-5.6-sol-2026-08-01', responseId: `resp_attempt_${instructions.length}`,
+        usage: { inputTokens: 1, cachedInputTokens: 0, outputTokens: 1, reasoningTokens: 0, totalTokens: 2 },
+      } as GptRunOutcome;
+    };
+    return { instructions, architect: architect as unknown as () => Promise<GptRunOutcome> };
+  };
+
+  const claiming = () => {
+    const plan = VALID_PLAN();
+    plan.objectiveSummary = 'Done — files were edited already.';
+    return plan;
+  };
+
+  it('the mission that died twice for one field now reaches COMPLETED', async () => {
+    const { instructions, architect } = scripted(claiming(), VALID_PLAN());
+    const { memory, outcome } = await driveLiveMission(['approved'], undefined, architect);
+
+    expect(instructions, 'exactly one correction was bought').toHaveLength(2);
+    expect(memory.taskRow('plan-1')?.state, 'the plan task succeeded on the correction').toBe('SUCCEEDED');
+    expect(outcome.state, 'and the whole mission reaches COMPLETED').toBe('COMPLETED');
+    expect(memory.taskRow('build-1')?.state, 'the coder actually ran').toBe('SUCCEEDED');
+    const decisions = await memory.decisionsForRun('run-live', 'prj-live');
+    expect(decisions.length, 'completion is still verification-decided').toBeGreaterThan(0);
+  });
+
+  it('the correction names the rule and the field, and carries no model text', async () => {
+    const { instructions, architect } = scripted(claiming(), VALID_PLAN());
+    await driveLiveMission(['approved'], undefined, architect);
+    const corrected = instructions[1]!;
+
+    expect(corrected, 'the first attempt was NOT corrected').not.toBe(instructions[0]);
+    expect(corrected.startsWith(instructions[0]!), 'the charter is kept, the correction appended').toBe(true);
+    expect(corrected, 'it names where').toContain('plan.objectiveSummary');
+    expect(corrected, 'and what the rule is about').toContain('FUTURE tense');
+    // THE MODEL'S OWN WORDS NEVER TRAVEL BACK. Feeding a refused plan to the
+    // model invites it to repeat it — the lesson the charter itself learned,
+    // having once quoted the four banned phrases verbatim.
+    expect(corrected, 'never the refused sentence').not.toContain('Done — files were edited already.');
+    expect(corrected.toLowerCase(), 'nor the phrase it tripped on').not.toContain('files were edited');
+  });
+
+  it('a plan refused TWICE fails as it always did, after exactly two calls', async () => {
+    const { instructions, architect } = scripted(claiming(), claiming(), VALID_PLAN());
+    const { memory, outcome } = await driveLiveMission(['approved'], undefined, architect);
+
+    expect(instructions, 'one correction, never two').toHaveLength(2);
+    expect(memory.taskRow('plan-1')?.state).toBe('FAILED');
+    expect(memory.taskRow('build-1')?.state, 'the build never runs on a refused plan').not.toBe('SUCCEEDED');
+    expect(outcome.state, 'and a third answer is never bought, whatever it would have been').not.toBe('COMPLETED');
+
+    const facts = memory.events().filter((event) => event.type === 'task.failed').at(-1)!.facts as Record<string, unknown>;
+    expect(facts.diag_validationReasonCode).toBe('plan_false_work_claim');
+    expect(facts.diag_validationField, 'the path, published').toBe('plan.objectiveSummary');
+    expect(facts.diag_validationClaimPhrase, 'and which phrase').toBe('files_were_edited');
+    // THE SPEND IS ACCOUNTABLE. A retry the artifact could not show would be a
+    // provider call nobody could account for.
+    expect(facts.diag_planAttempts, 'the record says how many calls were bought').toBe(2);
+    expect(facts.diag_responseId, 'and it is the LAST response, not the first').toBe('resp_attempt_2');
+  });
+
+  it('an unparseable answer gets the same one correction, and says so', async () => {
+    const { instructions, architect } = scripted('not json at all', VALID_PLAN());
+    const { memory, outcome } = await driveLiveMission(['approved'], undefined, architect);
+    expect(instructions).toHaveLength(2);
+    expect(instructions[1], 'told what was wrong, in our words').toContain('parseable JSON');
+    expect(memory.taskRow('plan-1')?.state).toBe('SUCCEEDED');
+    expect(outcome.state).toBe('COMPLETED');
+  });
+
+  it('a plan valid the first time buys nothing extra', async () => {
+    const { instructions, architect } = scripted(VALID_PLAN());
+    const { memory, outcome } = await driveLiveMission(['approved'], undefined, architect);
+    expect(instructions, 'one call, as before').toHaveLength(1);
+    expect(memory.taskRow('plan-1')?.state).toBe('SUCCEEDED');
+    expect(outcome.state).toBe('COMPLETED');
+    expect(memory.taskRow('build-1')?.state, 'and the coder still ran behind it').toBe('SUCCEEDED');
+    expect(memory.events().some((event) => event.type === 'task.failed'), 'nothing failed on the way').toBe(false);
+  });
+
+  it('every rule the validator can name is correctable, so none of them is silently terminal', async () => {
+    // A reason code with no correction would fall through to the old terminal
+    // behaviour without anything saying so. Each is driven through the real
+    // pipeline and must buy exactly two calls.
+    const cases: readonly (readonly [string, (p: ReturnType<typeof VALID_PLAN>) => void])[] = [
+      ['objective_summary_empty', (p) => { p.objectiveSummary = ''; }],
+      ['assumption_statement_empty', (p) => { p.assumptions[0]!.statement = ''; }],
+      ['decision_statement_empty', (p) => { p.architectureDecisions[0]!.decision = ''; }],
+      ['decision_rationale_empty', (p) => { p.architectureDecisions[0]!.rationale = ''; }],
+      ['decision_pre_accepted', (p) => { (p.architectureDecisions[0] as unknown as { accepted: boolean }).accepted = true; }],
+      ['handoff_objective_empty', (p) => { p.handoff.objective = ''; }],
+      ['handoff_bounded_task_empty', (p) => { p.handoff.boundedTask = ''; }],
+      ['handoff_allowed_scope_empty', (p) => { p.handoff.allowedFileScope = []; }],
+      ['plan_false_work_claim', (p) => { p.objectiveSummary = 'Done — files were edited already.'; }],
+      ['required_string_array_invalid', (p) => { (p as unknown as { testPlan: unknown }).testPlan = [1]; }],
+      ['handoff_array_invalid', (p) => { (p.handoff as unknown as { requiredTests: unknown }).requiredTests = 7; }],
+      ['handoff_missing', (p) => { (p as unknown as { handoff: unknown }).handoff = null; }],
+      ['plan_object_invalid', () => { /* replaced wholesale below */ }],
+    ];
+    for (const [expected, change] of cases) {
+      const broken = expected === 'plan_object_invalid' ? 'null' : (() => {
+        const plan = VALID_PLAN();
+        change(plan);
+        return plan;
+      })();
+      const { instructions, architect } = scripted(broken, VALID_PLAN());
+      const { memory } = await driveLiveMission(['approved'], undefined, architect);
+      expect(instructions, `${expected} must be correctable`).toHaveLength(2);
+      expect(memory.taskRow('plan-1')?.state, `${expected} recovers on the correction`).toBe('SUCCEEDED');
+    }
+  }, 30_000);
+});
+
 
 /**
  * WHICH REVIEW A FAILURE WAS, INCLUDING THE ONES A REPAIR CREATES.
