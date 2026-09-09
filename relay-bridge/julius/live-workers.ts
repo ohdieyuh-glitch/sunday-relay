@@ -24,6 +24,7 @@
  */
 
 import { createHash } from 'node:crypto';
+import type { JuliusContractReviewCharge } from '../../src/relay/mission/julius/julius-task-contract';
 import {
   JuliusDispatchError,
   reviewChargeFor,
@@ -548,6 +549,37 @@ const CODER_CHARTER = [
   'You implement; you do not review or approve your own work, and completion is decided by Julius.',
 ].join(' ');
 
+/**
+ * THE LOCKED CONTRACT, AS THE CODER'S CHARGE.
+ *
+ * The same document the independent reviewer will grade against, rendered for
+ * the worker that has to satisfy it. It arrives on the dispatch, computed by
+ * Julius from the contract its gate proved; the adapter never looks one up,
+ * because a worker that chose its own terms would be choosing what it is
+ * graded against. Every line is a closed field of the contract — no mission
+ * ids, no provider text, no prose of another worker's.
+ */
+export function coderContractBrief(contract: JuliusContractReviewCharge): string {
+  const list = (items: readonly string[], empty: string) => (items.length === 0 ? `    - ${empty}` : items.map((item) => `    - ${item}`).join('\n'));
+  return [
+    '--- TASK CONTRACT (locked; the reviewer grades against exactly this) ---',
+    `  CONTRACT: ${contract.binding.contractId} revision ${contract.binding.contractRevision}`,
+    `  BINDING DIGEST: ${contract.binding.bindingDigest}`,
+    `  ROUND: ${contract.stage}`,
+    `  OBJECTIVE: ${contract.objective}`,
+    `  RESPONSIBILITY BOUNDARY: ${contract.responsibilityBoundary}`,
+    `  IN SCOPE:\n${list(contract.inScope, '(none stated)')}`,
+    `  OUT OF SCOPE:\n${list(contract.outOfScope, '(none)')}`,
+    `  PERMITTED PATHS:\n${list(contract.permittedPaths, '(none stated)')}`,
+    `  PROHIBITED ACTIONS:\n${list(contract.prohibitedActions, '(none)')}`,
+    `  BLOCKING ACCEPTANCE CRITERIA:\n${list(contract.blockingCriteria, '(none stated)')}`,
+    `  REQUIRED EVIDENCE: ${contract.requiredEvidence.join(', ') || '(none stated)'}`,
+    `  REQUIRED CHECKS:\n${list(contract.requiredChecks, '(none stated)')}`,
+    `  FAILURE CONDITIONS:\n${list(contract.failureConditions, '(none stated)')}`,
+    `  STOPPING CONDITION: ${contract.stoppingCondition}`,
+  ].join('\n');
+}
+
 export function createLiveHostedCodingAdapter(input: {
   readonly worker: JuliusWorker;
   readonly contexts: CompiledContextSource;
@@ -635,6 +667,10 @@ export function createLiveHostedCodingAdapter(input: {
           packetText(snapshot),
           '--- ARCHITECT PLAN ---',
           plan,
+          // The locked terms, when Julius dispatched under one. Absent only for
+          // a composition that ran the coder without a contract, which the
+          // dispatch gate no longer permits on the live path.
+          ...(dispatch.contract === undefined ? [] : [coderContractBrief(dispatch.contract)]),
         ].join('\n\n'),
         workspacePath: input.workspacePath,
         apiKey: input.apiKey,

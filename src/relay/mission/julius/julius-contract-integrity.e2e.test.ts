@@ -631,6 +631,12 @@ describe('a crash at the lock boundary and after the coder\'s result', () => {
     expect(bindingOf(harness, 'build-1')?.bindingDigest).toBe(locked[0]?.digest);
     expect(bindingOf(harness, 'build-1:review')).toEqual(bindingOf(harness, 'build-1'));
     expect((await harness.store.loadRun('run-1', 'prj-1'))?.state).toBe('COMPLETED');
+    // THE PROJECT BRAIN AGREES WITH THE LEDGER. The decision's brain entry is
+    // keyed on exactly what the decision is keyed on, so the resumed acceptance
+    // writes it once; a second entry here would be the Brain remembering an
+    // acceptance that happened once as two.
+    const brain = await harness.store.brainEntriesForRun('run-1', 'prj-1');
+    expect(brain.filter((entry) => entry.kind === 'DECISION' && entry.entryId.startsWith('brain:decision:plan-1:'))).toHaveLength(1);
   });
 
   it('after the coder\'s result, before its review exists: the reviewer still receives the exact locked contract', async () => {
@@ -761,6 +767,70 @@ describe('R1 seeded → R2 proposed → challenged → R3 proposed → accepted 
     const revisions = await harness.store.taskContractRevisions({ projectId: 'prj-1', taskId: 'build-1' });
     expect(revisions.map((row) => [row.contractRevision, row.state])).toEqual([[1, 'LOCKED']]);
     expect((await harness.store.loadRun('run-1', 'prj-1'))?.state).toBe('COMPLETED');
+  });
+});
+
+/* ================================================================== */
+/*  THE CODER RECEIVES THE TERMS IT IS BOUND BY                          */
+/* ================================================================== */
+
+describe('the worker handoff carries the locked revision it executes', () => {
+  const chargeOf = (harness: JuliusHarness, adapterId: string, taskId: string) =>
+    harness.adapters.get(adapterId)!.dispatches.find((dispatch) => dispatch.taskId === taskId)?.contract;
+
+  it('the coder, the repair and the reviewer are each handed the same charge, and its binding is the one on their claims', async () => {
+    const harness = build({ reviewer: [REVIEW_ACCEPT, REVIEW_REJECT, REVIEW_ACCEPT, REVIEW_ACCEPT] });
+    await drain(harness);
+    expect((await harness.store.loadRun('run-1', 'prj-1'))?.state).toBe('COMPLETED');
+    const locked = await harness.store.loadTaskContract({ projectId: 'prj-1', taskId: 'build-1' });
+
+    const coder = chargeOf(harness, CODER.adapterId, 'build-1');
+    const repair = chargeOf(harness, CODER.adapterId, 'repair:build-1:1:task');
+    const review = chargeOf(harness, REVIEWER.adapterId, 'build-1:review');
+    const reReview = chargeOf(harness, REVIEWER.adapterId, 'repair:build-1:1:task:review');
+    for (const [label, charge] of [['coder', coder], ['repair', repair], ['review', review], ['re-review', reReview]] as const) {
+      expect(charge, `${label} was handed a charge`).toBeDefined();
+      expect(charge?.binding, `${label} holds the locked binding`).toEqual({
+        contractId: locked?.contractId, taskId: 'build-1', contractRevision: locked?.contractRevision, bindingDigest: locked?.bindingDigest,
+      });
+      expect(charge?.objective).toBe(locked?.objective);
+      expect(charge?.permittedPaths).toEqual(locked?.permittedPaths);
+      expect(charge?.stoppingCondition).toBe(locked?.stoppingCondition);
+      expect(charge?.blockingCriteria).toEqual(locked?.blockingAcceptanceCriteria.map((criterion) => `[${criterion.criterionId}] ${criterion.statement}`));
+    }
+    // The round is named for the coder; what is judged is named for the reviewer.
+    expect(coder?.stage).toBe('build');
+    expect(repair?.stage).toBe('repair:build');
+    expect(review?.stage).toBe('build');
+    expect(reReview?.stage).toBe('repair:build');
+    // And the charge each worker received IS the binding recorded on its claim.
+    expect(coder?.binding).toEqual(bindingOf(harness, 'build-1'));
+    expect(repair?.binding).toEqual(bindingOf(harness, 'repair:build-1:1:task'));
+  });
+
+  it('the architect and its review are handed no charge — they produce the terms', async () => {
+    const harness = build();
+    await drain(harness);
+    expect(chargeOf(harness, ARCHITECT.adapterId, 'plan-1')).toBeUndefined();
+    expect(chargeOf(harness, REVIEWER.adapterId, 'plan-1:review')).toBeUndefined();
+    expect(chargeOf(harness, CODER.adapterId, 'build-1')).toBeDefined();
+  });
+
+  it('a sub-agent child is handed its parent\'s charge, not one of its own', async () => {
+    const harness = build({ graph: 'build-only', subagents: true });
+    const spawned = await spawnJuliusSubagent({
+      run: RUN, policy: cardPolicy({
+        allowedProviders: ['openai', 'anthropic', 'hermes'], capabilities: ['plan', 'implement', 'review'], concurrency: 1,
+        autonomy: 'AUTONOMOUS', subagents: { allowed: true, maxDepth: 2, maxActive: 2, maxTotal: 3 },
+      }),
+      requestId: 'sub-charge', parentTaskId: 'build-1', role: 'CODING_AGENT', taskType: 'audit', capability: 'implement',
+      requestedPermissions: ['read'], runPermissions: ['read', 'write_worktree'], usdMicros: 500,
+    }, { store: harness.store, budget: harness.budget, clock: harness.clock, ids: harness.ids });
+    if (!spawned.authorized) throw new Error(spawned.reasonCode);
+    await drain(harness);
+    const child = chargeOf(harness, CODER.adapterId, spawned.childTask.taskId);
+    expect(child?.binding).toEqual(chargeOf(harness, CODER.adapterId, 'build-1')?.binding);
+    expect(child?.binding.taskId).toBe('build-1');
   });
 });
 

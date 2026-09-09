@@ -41,7 +41,7 @@ import { planJuliusRepair } from './julius-repair-runtime';
 import { repairLineageRootOf, repairRoundsBefore, repairTaskTypeFor } from './julius-repair-lineage';
 import { challengeJuliusTaskContract, evaluateJuliusBindingCurrency, evaluateJuliusSharedBinding, juliusContractReviewCharge, lockJuliusTaskContract, mayDispatchUnderContract, reviseJuliusTaskContract, sanitizeJuliusContractProposal, type JuliusTaskContract, type JuliusTaskContractBinding } from './julius-task-contract';
 import { evaluateJuliusRelease } from './julius-release-runtime';
-import { reviewStageOf } from './julius-review-stage';
+import { reviewStageOf, type JuliusReviewStage } from './julius-review-stage';
 import { evaluateJuliusAllocation, type JuliusAllocationPolicy, type JuliusExecutionAllocation } from './julius-allocation-runtime';
 import { JULIUS_RUNTIME_VERSION, type JuliusBrainEntry, type JuliusRecordedDecision, type JuliusTask, type JuliusVerificationDecision, type JuliusWorker, type JuliusWorkerRole } from './julius-runtime';
 import { validateJuliusEvent, type JuliusOperationalEvent, type JuliusOperationalEventType } from './julius-events';
@@ -483,15 +483,29 @@ export async function runClaimedTask(
    * RULE 5 — THE REVIEWER GRADES AGAINST THE CONTRACT.
    *
    * Built from the contract the gate proved, and handed DOWN to the adapter
-   * rather than looked up by it: a reviewer that could fetch its own charge
-   * would be choosing what it is graded against, which is the same inversion
-   * `taskType` exists for. Only a reviewer receives it — a coder is bound by
-   * the contract but does not review against it — and only for a stage this
-   * task actually is; an unknown review type is not guessed at.
+   * rather than looked up by it: a worker that could fetch its own charge
+   * would be choosing what it is bound by, which is the same inversion
+   * `taskType` exists for.
+   *
+   * THE CODER RECEIVES IT TOO. It used to reach only the reviewer, on the
+   * reasoning that a coder "is bound by the contract but does not review
+   * against it" — which left the coder briefed by the plan alone and made
+   * "the coder executed under the contract" mean only that a binding was
+   * written beside its claim. A worker must explicitly receive the locked
+   * revision it executes: the same objective, boundary, permitted paths,
+   * required checks and stopping condition the reviewer will grade against,
+   * carried on the dispatch, so that the two roles hold one document rather
+   * than two readings of a plan. The stage on a coder's charge names the
+   * round (`build` or `repair:build`); the reviewer's names what it judges.
+   * An unbound role receives none, and an unknown review type is not guessed
+   * at.
    */
   const reviewStage = role === 'INDEPENDENT_REVIEWER' ? reviewStageOf(claim.taskType) : null;
-  const contractCharge = preflight.contract !== null && reviewStage !== null
-    ? juliusContractReviewCharge({ contract: preflight.contract, stage: reviewStage })
+  const chargeStage: JuliusReviewStage | null = reviewStage
+    ?? (preflight.contractBinding === null || role === 'INDEPENDENT_REVIEWER' ? null
+      : claim.taskType.startsWith('repair:') ? 'repair:build' : 'build');
+  const contractCharge = preflight.contract !== null && chargeStage !== null
+    ? juliusContractReviewCharge({ contract: preflight.contract, stage: chargeStage })
     : null;
   /**
    * RULE 2, ENFORCED RATHER THAN RECORDED.
@@ -510,7 +524,7 @@ export async function runClaimedTask(
    * Fail closed and loud: a review that cannot show it holds the coder's
    * agreement is not run, and nothing about retrying it changes the record.
    */
-  if (contractCharge !== null && preflight.contractBinding !== null) {
+  if (reviewStage !== null && contractCharge !== null && preflight.contractBinding !== null) {
     const subjectTaskId = task.parentTaskId ?? preflight.contractBinding.taskId;
     const implementation = await deps.store.executedBindingFor(subjectTaskId, run.projectId);
     const shared = evaluateJuliusSharedBinding({ implementation, review: preflight.contractBinding });

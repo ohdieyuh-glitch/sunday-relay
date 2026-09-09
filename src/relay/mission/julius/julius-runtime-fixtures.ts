@@ -23,7 +23,7 @@ import {
   type JuliusDispatchAllocation, type JuliusProviderAdapter, type JuliusProviderResult,
 } from './julius-router';
 import { JuliusWorkerRegistry, type JuliusTask, type JuliusWorker } from './julius-runtime';
-import { lockJuliusTaskContract, seedJuliusTaskContract, type JuliusTaskContract } from './julius-task-contract';
+import { lockJuliusTaskContract, seedJuliusTaskContract, type JuliusTaskContract, type JuliusContractReviewCharge } from './julius-task-contract';
 import type { JuliusCardPolicy } from './julius-policy';
 import type { JuliusVerificationPolicy } from './julius-verification-runtime';
 import { createJuliusMemoryStore, type JuliusMemoryStore } from './julius-memory-store';
@@ -164,7 +164,7 @@ export type ScriptedOutcome =
 
 export interface ScriptedAdapter extends JuliusProviderAdapter {
   /** Everything Julius handed the adapter, so a test can assert what a dispatch carried. */
-  readonly dispatches: { taskId: string; contextId: string; taskType?: string; allocation?: JuliusDispatchAllocation }[];
+  readonly dispatches: { taskId: string; contextId: string; taskType?: string; allocation?: JuliusDispatchAllocation; contract?: JuliusContractReviewCharge }[];
 }
 
 /**
@@ -186,6 +186,7 @@ export function scriptedAdapter(
         taskId: input.taskId, contextId: input.contextId,
         ...(input.taskType === undefined ? {} : { taskType: input.taskType }),
         ...(input.allocation === undefined ? {} : { allocation: input.allocation }),
+        ...(input.contract === undefined ? {} : { contract: input.contract }),
       });
       const step = script[Math.min(index, script.length - 1)] ?? { kind: 'succeed' as const };
       index += 1;
