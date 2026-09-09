@@ -18,6 +18,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   JULIUS_CONTEXT_COMPILER_VERSION,
   createJuliusMemoryStore,
+  juliusTaskContractBindingDigest,
   seedJuliusTaskContract,
   type JuliusContextSnapshot,
   type JuliusRecoveryDriver,
@@ -894,6 +895,101 @@ describe('the durable completion rule after a repair', () => {
     expect(outcome.state).toBe('VERIFYING');
     expect(outcome.stalled).toBe(true);
     expect(outcome.haltCause ?? '').toContain('REPAIR');
+  });
+});
+
+/**
+ * THE TASK CONTRACT, PROVEN IN A MISSION RATHER THAN IN A UNIT TEST.
+ *
+ * `julius-task-contract.ts` and its store are proven on their own, and the run
+ * loop is proven to refuse a dispatch whose contract is not locked. What was
+ * NOT proven anywhere is the property the contract exists for, in the shape a
+ * mission actually has it: that by the time the Coding Agent is dispatched the
+ * agreement is LOCKED, and that the reviewer of its work holds the SAME
+ * agreement — not an equal-looking one, the same digest.
+ *
+ * A run where those two diverge is the failure the whole mechanism is for: a
+ * coder judged against terms it was never given. It is invisible to a unit
+ * test, because a unit test constructs both sides itself.
+ *
+ * `seedMissionRun` seeds the build's contract exactly as the production
+ * bootstrap writes it — revision 1, DRAFT — and nothing here locks it by hand;
+ * the accepting plan review is what locks it, which is where production locks
+ * it too.
+ */
+describe('the task contract is locked before the coder runs, and binds its reviewer too', () => {
+  const claims = (memory: ReturnType<typeof createJuliusMemoryStore>) =>
+    memory.events()
+      .filter((event) => event.type === 'task.claimed')
+      .map((event) => ({ taskId: event.taskId, facts: event.facts as Record<string, unknown> }));
+
+  it('the build is dispatched under a LOCKED contract, and its review holds the same digest', async () => {
+    const { memory, outcome } = await driveLiveMission(['approved']);
+    expect(outcome.state, 'the drive must complete for this to mean anything').toBe('COMPLETED');
+
+    const contract = await memory.loadTaskContract({ projectId: 'prj-live', taskId: 'build-1' });
+    expect(contract, 'the build has a contract at all').not.toBeNull();
+    expect(contract!.state, 'and it is LOCKED, not still a draft').toBe('LOCKED');
+    expect(contract!.bindingDigest, 'a locked contract carries its binding').toMatch(/^sha256:[0-9a-f]{16,}$/u);
+    expect(contract!.lockedByEvaluatorId, 'and names who locked it').not.toBeNull();
+
+    // THE ORDER. The lock is not merely present at the end of the run — the
+    // build was CLAIMED carrying it, which is the only thing that proves the
+    // coder was never dispatched under an unagreed charge.
+    const build = claims(memory).find((claim) => claim.taskId === 'build-1');
+    expect(build, 'the build was claimed').toBeDefined();
+    expect(build!.facts.bindingDigest, 'the coder carried the binding into its dispatch')
+      .toBe(contract!.bindingDigest);
+    expect(build!.facts.contractRevision).toBe(contract!.contractRevision);
+
+    // THE SAME AGREEMENT, NOT AN EQUAL-LOOKING ONE. Every claim that carries a
+    // binding at all carries THIS one; a review of the build holding a
+    // different digest would be a review against terms the coder never had.
+    const bound = claims(memory).filter((claim) => claim.facts.bindingDigest !== null);
+    expect(bound.length, 'the coder and at least one reviewer are bound').toBeGreaterThan(1);
+    for (const claim of bound) {
+      expect(claim.facts.bindingDigest, `${claim.taskId} holds the coder's binding`)
+        .toBe(contract!.bindingDigest);
+      expect(claim.facts.contractId, `${claim.taskId} holds the coder's contract`)
+        .toBe(contract!.contractId);
+    }
+  });
+
+  it('the architect is NOT bound, and null says so rather than an absence', async () => {
+    // The plan task is not the contract's subject and has none. Reporting a
+    // digest for it would be inventing an agreement; omitting the fact would
+    // make "no contract" and "nothing was recorded" the same answer.
+    const { memory } = await driveLiveMission(['approved']);
+    const plan = claims(memory).find((claim) => claim.taskId === 'plan-1');
+    expect(plan, 'the plan was claimed').toBeDefined();
+    expect(plan!.facts.bindingDigest, 'the architect is bound by the MISSION contract, not a task one').toBeNull();
+    expect(plan!.facts.contractId).toBeNull();
+    expect('bindingDigest' in plan!.facts, 'and the fact is present, so null is an answer').toBe(true);
+  });
+
+  it('the binding a claim carried is the one the terms actually hash to', async () => {
+    // Re-derived from the stored terms rather than trusted as a label — the
+    // same check `loadTaskContract` performs on read, done here against the
+    // value a dispatch actually carried. A digest agreeing with the row but not
+    // with the terms would be a binding nobody could verify.
+    const { memory } = await driveLiveMission(['approved']);
+    const contract = await memory.loadTaskContract({ projectId: 'prj-live', taskId: 'build-1' });
+    expect(contract).not.toBeNull();
+    expect(juliusTaskContractBindingDigest(contract!), 're-derived from the terms themselves')
+      .toBe(contract!.bindingDigest);
+  });
+
+  it('only ONE revision is ever locked, however many the run wrote', async () => {
+    const { memory } = await driveLiveMission(['approved']);
+    const revisions = await memory.taskContractRevisions({ projectId: 'prj-live', taskId: 'build-1' });
+    expect(revisions.length, 'at least the seeded one').toBeGreaterThan(0);
+    expect(revisions.filter((row) => row.state === 'LOCKED'), 'at most one locked revision').toHaveLength(1);
+    // Every other revision is a draft or superseded — never a second live
+    // agreement sitting beside the one the coder was dispatched under.
+    for (const row of revisions) {
+      if (row.state === 'LOCKED') continue;
+      expect(['DRAFT', 'CHALLENGED', 'SUPERSEDED'], `revision ${row.contractRevision}`).toContain(row.state);
+    }
   });
 });
 
