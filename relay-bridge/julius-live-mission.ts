@@ -35,6 +35,7 @@ import { createPublicKey, type KeyObject } from 'node:crypto';
 import { Pool } from 'pg';
 import { TransactionalWonderlandDatabase } from '../src/relay/persistence/wonderland-postgres';
 import { JuliusPostgresRepository } from '../src/relay/persistence/julius-postgres';
+import { JuliusContractPostgresRepository } from '../src/relay/persistence/julius-contract-postgres';
 import { JuliusToolPostgresRepository } from '../src/relay/persistence/julius-tool-postgres';
 import { JuliusToolSettlementPostgresRepository } from '../src/relay/persistence/julius-tool-settlement-postgres';
 import { RemoteExecutorControlPlane } from '../src/relay/workspace/julius-tools/remote-executor-control-plane';
@@ -322,8 +323,22 @@ async function main(argv: readonly string[]): Promise<number> {
       requiredCapabilities: entry.worker.capabilities,
     })), cardRevision);
 
+    /**
+     * TWO REPOSITORIES, ONE STORE SHAPE. Bootstrap needs the run writer AND the
+     * task-contract writer; they are separate classes because they own separate
+     * tables, and composing them here is what keeps `RunCreationStore` a narrow
+     * port rather than a class reference.
+     */
+    const bootstrapRuns = new JuliusPostgresRepository(pool);
+    const bootstrapContracts = new JuliusContractPostgresRepository(pool);
     const bootstrap = createLiveJuliusBootstrapPort({
-      runs: new JuliusPostgresRepository(pool),
+      runs: {
+        loadRun: bootstrapRuns.loadRun.bind(bootstrapRuns),
+        createRun: bootstrapRuns.createRun.bind(bootstrapRuns),
+        addTask: bootstrapRuns.addTask.bind(bootstrapRuns),
+        transition: bootstrapRuns.transition.bind(bootstrapRuns),
+        putTaskContract: bootstrapContracts.putTaskContract.bind(bootstrapContracts),
+      },
       seeds: createPostgresMissionSeedStore(pool),
       tenantId: contract.tenantId,
       executionId,

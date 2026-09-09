@@ -638,3 +638,144 @@ export function juliusContractReviewCharge(input: {
     failureConditions: contract.failureConditions,
   });
 }
+
+/* ---------------------------------------------------------------- the seed */
+
+/**
+ * WHAT JULIUS PUTS IN THE CONTRACT BEFORE ANY WORKER SEES IT.
+ *
+ * The brief has the Prompt Architect DRAFT the contract. In Julius's shape that
+ * would hand a worker the mission's own terms to write, and the very first rule
+ * of the cycle is that it may not: Julius retains mission authority, workers
+ * propose. So revision 1 is authored HERE, from the Mission Contract, and the
+ * architect's contribution is a REVISION — the detail it is genuinely closer
+ * to (the required implementation, the checks, the boundary) proposed against
+ * terms it cannot rewrite.
+ *
+ * That ordering is also what makes the gate usable. A build cannot be
+ * dispatched without a locked contract; if nothing seeded one, every mission
+ * would stall at the build waiting for a document nobody was obliged to write.
+ *
+ * THE SHAPE IS DECLARED HERE, not imported. `JuliusBootstrapRequest` lives in
+ * `integration/julius`, and this directory does not import from there — the
+ * domain states what it needs and a composition root maps the request onto it.
+ */
+export interface JuliusMissionTerms {
+  readonly runId: string;
+  readonly taskId: string;
+  readonly missionContractRevision: number;
+  readonly objective: string;
+  readonly requirements: readonly string[];
+  readonly constraints: readonly string[];
+  /** Only the BLOCKING criteria become contract criteria; the ids are the mission's. */
+  readonly acceptanceCriteria: readonly { readonly id: string; readonly text: string; readonly blocking: boolean }[];
+  readonly filesInScope: readonly string[];
+  readonly filesOutOfScope: readonly string[];
+  /** The mission's authorised spend. `null` is UNKNOWN, and a contract cannot be seeded from it. */
+  readonly spendUsd: number | null;
+  /** Authorised repair rounds. `null` is UNKNOWN, and is likewise refused. */
+  readonly repairCycles: number | null;
+  /** The evidence the implementation must produce, from the seeded build task. */
+  readonly requiredEvidence: readonly JuliusEvidence['type'][];
+}
+
+export type JuliusContractSeedOutcome =
+  | { readonly seeded: true; readonly contract: JuliusTaskContract }
+  | { readonly seeded: false; readonly reasonCode: string };
+
+/**
+ * UNKNOWN IS NOT A DEFAULT. A mission with no spend ceiling, no authorised
+ * repair rounds or no blocking criterion is REFUSED rather than seeded with a
+ * number nobody authorised — a contract whose budget was invented is a contract
+ * whose reviewer would be grading against an invented bar.
+ *
+ * `contractId` is derived from the task, so a replayed bootstrap seeds the same
+ * contract rather than a second one, and the store's `one_per_task` index and
+ * this derivation agree by construction.
+ */
+export function seedJuliusTaskContract(terms: JuliusMissionTerms): JuliusContractSeedOutcome {
+  if (terms.spendUsd === null) return { seeded: false, reasonCode: 'mission_spend_ceiling_unknown' };
+  if (terms.repairCycles === null) return { seeded: false, reasonCode: 'mission_repair_rounds_unknown' };
+  const blocking = terms.acceptanceCriteria.filter((criterion) => criterion.blocking);
+  if (blocking.length === 0) return { seeded: false, reasonCode: 'mission_has_no_blocking_criterion' };
+
+  const ceilingUsdMicros = Math.round(terms.spendUsd * 1_000_000);
+  if (!Number.isSafeInteger(ceilingUsdMicros) || ceilingUsdMicros <= 0) {
+    return { seeded: false, reasonCode: 'mission_spend_ceiling_invalid' };
+  }
+
+  const contract: JuliusTaskContract = {
+    contractId: `contract:${terms.taskId}`,
+    runId: terms.runId,
+    taskId: terms.taskId,
+    missionContractRevision: terms.missionContractRevision,
+    contractRevision: 1,
+    objective: terms.objective,
+    // Stated rather than left implied: the boundary a seeded contract can
+    // honestly assert is the mission's own, and the architect's revision is
+    // where a narrower one is proposed.
+    responsibilityBoundary:
+      'Implement the mission objective within the files in scope, and produce the evidence required below. '
+      + 'Reviewing, releasing and deciding acceptance belong to other roles.',
+    requiredInputs: [
+      'the locked task contract',
+      'the accepted plan',
+      ...terms.requirements.map((requirement) => `requirement: ${requirement}`),
+    ],
+    expectedOutputs: ['a unified diff of the change', 'the output of every required check'],
+    // A mission with no declared file scope is in scope for the repository it
+    // was granted; saying "the repository" is honest, and inventing a narrower
+    // list would be a constraint nobody authorised.
+    inScope: terms.filesInScope.length > 0 ? terms.filesInScope : ['the granted repository'],
+    outOfScope: terms.filesOutOfScope,
+    blockingAcceptanceCriteria: blocking.map((criterion) => ({
+      criterionId: criterion.id,
+      statement: criterion.text,
+      // The mission states criteria as prose and does not type their evidence.
+      // The build task's own `requiredEvidenceTypes` is what the runtime
+      // actually enforces, so the contract quotes THAT rather than guessing a
+      // per-criterion answer the mission never gave.
+      requiredEvidenceTypes: terms.requiredEvidence,
+    })),
+    requiredEvidence: terms.requiredEvidence,
+    // Empty, and honestly so: the mission does not name commands. The architect
+    // proposes them in its revision, where they can be reviewed.
+    requiredChecks: [],
+    permittedPaths: terms.filesInScope,
+    prohibitedActions: [
+      ...terms.constraints.map((constraint) => `violating the mission constraint: ${constraint}`),
+      ...terms.filesOutOfScope.map((path) => `writing to ${path}`),
+    ],
+    dependencyTaskIds: [],
+    reviewCriteria: [
+      'Does the change satisfy every blocking acceptance criterion, each shown by the required evidence?',
+      'Did the change stay inside the permitted paths, leaving the out-of-scope ones untouched?',
+      'Are the mission constraints respected?',
+    ],
+    failureConditions: [
+      'a blocking acceptance criterion is not satisfied',
+      'required evidence is absent',
+      'a path outside the permitted scope was written',
+    ],
+    repairRules: [
+      'a repair round addresses the recorded findings and does not widen the change',
+      `at most ${terms.repairCycles} repair round(s) are authorised`,
+    ],
+    // The same two numbers `juliusAllocationPolicy` takes, so the contract's
+    // statement of the money and the allocator's derivation of a per-dispatch
+    // share cannot disagree.
+    budget: { ceilingUsdMicros, maxRepairRounds: terms.repairCycles },
+    stoppingCondition:
+      'Stop when every blocking acceptance criterion is satisfied with its required evidence, '
+      + 'when the authorised repair rounds are spent, or when the mission budget is exhausted.',
+    state: 'DRAFT',
+    bindingDigest: null,
+    lockedAt: null,
+    lockedByEvaluatorId: null,
+  };
+
+  const validation = validateJuliusTaskContract(contract);
+  return validation.valid
+    ? { seeded: true, contract }
+    : { seeded: false, reasonCode: `contract_invalid:${validation.errors[0]}` };
+}

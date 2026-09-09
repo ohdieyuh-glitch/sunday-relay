@@ -18,6 +18,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   JULIUS_CONTEXT_COMPILER_VERSION,
   createJuliusMemoryStore,
+  seedJuliusTaskContract,
   type JuliusContextSnapshot,
   type JuliusRecoveryDriver,
   type JuliusRuntimeStore,
@@ -349,6 +350,12 @@ function fakeRuns(calls: Array<Record<string, unknown>>) {
     async createRun(input: { runId: string }) { version = 1; calls.push({ createRun: input }); return { runId: input.runId, state: 'CREATED', version }; },
     async addTask(input: { task: { taskId: string } }) { calls.push({ addTask: input.task }); return true; },
     async transition(input: { to: string }) { version += 1; calls.push({ transition: input.to }); return { state: input.to, version }; },
+    // Bootstrap authors the build's task contract before the run is READY, so a
+    // fake that omitted it would prove a bootstrap production cannot perform.
+    async putTaskContract(input: { contract: { contractId: string; taskId: string; contractRevision: number; state: string } }) {
+      calls.push({ putTaskContract: input.contract });
+      return true;
+    },
   };
 }
 
@@ -419,6 +426,20 @@ function seedMissionRun(store: ReturnType<typeof createJuliusMemoryStore>): void
     taskId: 'build-1', missionId: 'mission-live-1', parentTaskId: null, dependencyIds: ['plan-1'],
     requiredEvidenceTypes: ['TEST'], taskType: 'build', role: 'CODING_AGENT', ordinal: 1, state: 'BLOCKED',
   });
+  // THE BUILD'S TASK CONTRACT, exactly as `createLiveJuliusBootstrapPort` writes
+  // it: revision 1, a DRAFT, authored by Julius from the mission's own terms.
+  // The accepting plan review is what locks it, which is where the production
+  // pipeline locks it — so this drive exercises the real ordering rather than a
+  // pre-agreed shortcut.
+  const seeded = seedJuliusTaskContract({
+    runId: 'run-live', taskId: 'build-1', missionContractRevision: 1,
+    objective: 'Prove the live chain with a tiny fixture.',
+    requirements: ['Normalize a mission label.'], constraints: ['Touch only the fixture.'],
+    acceptanceCriteria: [{ id: 'AC-1', text: 'The fixture test passes.', blocking: true }],
+    filesInScope: [], filesOutOfScope: [], spendUsd: 5, repairCycles: 1, requiredEvidence: ['TEST'],
+  });
+  if (!seeded.seeded) throw new Error(`fixture contract not derivable: ${seeded.reasonCode}`);
+  void store.putTaskContract({ projectId: 'prj-live', contract: seeded.contract, occurredAt: '2026-09-08T00:00:00.000Z' });
   // Empty evidence-type list, matching the bootstrap: the runtime evaluates a
   // criterion's types against every verified task, so the TEST requirement is
   // carried by the build task's own requiredEvidenceTypes instead.

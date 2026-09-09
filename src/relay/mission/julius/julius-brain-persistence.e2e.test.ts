@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { JuliusRunLoop } from './julius-run-loop';
-import { cardPolicy, createJuliusHarness, task, verificationPolicy, worker } from './julius-runtime-fixtures';
+import { cardPolicy, createJuliusHarness, seedTaskContractInto, task, verificationPolicy, worker } from './julius-runtime-fixtures';
 import type { JuliusRunRow } from './julius-runtime-ports';
 
 /**
@@ -75,6 +75,7 @@ function build(reviewer: readonly { kind: 'succeed' }[]) {
     capabilityFor,
   });
   harness.store.seedRun(RUN);
+  seedTaskContractInto(harness.store, { runId: 'run-1', projectId: 'prj-1', taskId: 'build-1' });
   harness.store.seedTask('run-1', task({ taskId: 'plan-1', ordinal: 0, role: 'PROMPT_ARCHITECT', taskType: 'plan', requiredEvidenceTypes: ['ARTIFACT'] }));
   harness.store.seedTask('run-1', task({
     taskId: 'build-1', ordinal: 1, role: 'CODING_AGENT', taskType: 'build',

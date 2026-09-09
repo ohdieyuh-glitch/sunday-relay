@@ -5,7 +5,7 @@ import { JuliusRuntimeApi } from './julius-runtime-api';
 import { spawnJuliusSubagent } from './julius-subagent-runtime';
 import { summariseJuliusEvals, projectJuliusMetrics } from './julius-metrics';
 import {
-  cardPolicy, createJuliusHarness, task, verificationPolicy, worker,
+  cardPolicy, createJuliusHarness, seedTaskContractInto, task, verificationPolicy, worker,
 } from './julius-runtime-fixtures';
 import type { JuliusRunRow } from './julius-runtime-ports';
 
@@ -105,6 +105,9 @@ describe('scenario 1 — a mission through three roles, a failed review and a re
       capabilityFor,
     });
     harness.store.seedRun(RUN);
+    // The build's contract, as bootstrap writes it: a DRAFT. The accepting plan
+    // review is what locks it, which is where production locks it too.
+    seedTaskContractInto(harness.store, { runId: 'run-1', projectId: 'prj-1', taskId: 'build-1' });
     harness.store.seedTask('run-1', task({ taskId: 'plan-1', ordinal: 0, role: 'PROMPT_ARCHITECT', taskType: 'plan' }));
     harness.store.seedTask('run-1', task({
       taskId: 'build-1', ordinal: 1, role: 'CODING_AGENT', taskType: 'build',
@@ -286,6 +289,8 @@ describe('scenario 2 — a transient provider failure, a fallback, and a complet
       capabilityFor,
     });
     harness.store.seedRun(RUN);
+    // This scenario starts AT the build, so its terms are already agreed.
+    seedTaskContractInto(harness.store, { runId: 'run-1', projectId: 'prj-1', taskId: 'build-1', state: 'locked' });
     harness.store.seedTask('run-1', task({ taskId: 'build-1', ordinal: 0, requiredEvidenceTypes: ['TEST'] }));
     return harness;
   };
@@ -331,6 +336,7 @@ describe('scenario 2 — a transient provider failure, a fallback, and a complet
       capabilityFor,
     });
     harness.store.seedRun(RUN);
+    seedTaskContractInto(harness.store, { runId: 'run-1', projectId: 'prj-1', taskId: 'build-1', state: 'locked' });
     harness.store.seedTask('run-1', task({ taskId: 'build-1', ordinal: 0 }));
     await drain(harness.loop);
     expect(harness.adapters.get(BACKUP_CODER.adapterId)!.dispatches).toEqual([]);
@@ -354,6 +360,10 @@ describe('scenario 3 — a bounded sub-agent, across a restart', () => {
       capabilityFor,
     });
     harness.store.seedRun(RUN);
+    // The anchor is the coding lineage's ROOT, so its contract is the one a
+    // bounded sub-agent runs under too: a child may not be graded against terms
+    // of its own, or a worker could escape the mission's by spawning one.
+    seedTaskContractInto(harness.store, { runId: 'run-1', projectId: 'prj-1', taskId: 'anchor', state: 'locked' });
     harness.store.seedTask('run-1', task({ taskId: 'anchor', ordinal: 0 }));
     return harness;
   };
