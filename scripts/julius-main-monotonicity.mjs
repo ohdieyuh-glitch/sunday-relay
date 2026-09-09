@@ -188,12 +188,49 @@ import { pathToFileURL } from 'node:url';
  * Reads the branch twice, around the checkpoint lookups, so a push landing while
  * the guard runs is caught rather than silently accepted.
  */
+/**
+ * THE SAME RULE, WITHOUT A `gh` BINARY — see the identical note in
+ * `julius-main-provenance.mjs`. A container with no `gh` is exactly the machine
+ * that must check a landing before a paid mission is dispatched, and applying
+ * these rules by hand there means a second, untested implementation of a trust
+ * gate. `--evidence <file>` feeds this rule the same object from JSON. It is
+ * not weaker: an omitted field arrives `undefined` and this rule answers
+ * `indeterminate` rather than passing, so a trimmed file cannot reach
+ * `monotonic`. The output line names the source, because a reader must be able
+ * to tell a file-fed verdict from a fetched one.
+ */
+async function fromEvidenceFile(path) {
+  const { readFileSync } = await import('node:fs');
+  const parsed = JSON.parse(readFileSync(path, 'utf8'));
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('evidence file must hold a single JSON object');
+  }
+  return parsed;
+}
+
 async function main(argv) {
-  const [repo, branchArg] = argv;
+  const evidenceIndex = argv.indexOf('--evidence');
+  const evidencePath = evidenceIndex >= 0 ? argv[evidenceIndex + 1] : undefined;
+  const positional = evidenceIndex >= 0 ? [...argv.slice(0, evidenceIndex), ...argv.slice(evidenceIndex + 2)] : argv;
+  const [repo, branchArg] = positional;
   const branch = branchArg ?? 'main';
   if (typeof repo !== 'string' || !/^[\w.-]+\/[\w.-]+$/u.test(repo) || !/^[\w./-]+$/u.test(branch)) {
-    process.stderr.write('usage: julius-main-monotonicity.mjs <owner/repo> [branch]\n');
+    process.stderr.write('usage: julius-main-monotonicity.mjs <owner/repo> [branch] [--evidence <file>]\n');
     return 2;
+  }
+  if (evidenceIndex >= 0 && (typeof evidencePath !== 'string' || evidencePath === '')) {
+    process.stderr.write('usage: --evidence needs a path to a JSON object holding the fields evaluateMainMonotonicity reads\n');
+    return 2;
+  }
+  if (typeof evidencePath === 'string') {
+    let evaluated;
+    try {
+      evaluated = evaluateMainMonotonicity(await fromEvidenceFile(evidencePath));
+    } catch (error) {
+      process.stderr.write(`main_monotonicity_indeterminate: ${error instanceof Error ? error.message : 'evidence unreadable'}\n`);
+      return 1;
+    }
+    return report(repo, branch, evaluated, `file:${evidencePath}`);
   }
   const { execFileSync } = await import('node:child_process');
   const { collectPages } = await import('./julius-review-currency.mjs');
@@ -241,7 +278,12 @@ async function main(argv) {
     return 1;
   }
 
-  const line = `repo=${repo} branch=${branch} monotonicity=${result.verdict}`
+  return report(repo, branch, result, 'github');
+}
+
+/** One line, naming its SOURCE: the same rule over different evidence. */
+function report(repo, branch, result, source) {
+  const line = `repo=${repo} branch=${branch} source=${source} monotonicity=${result.verdict}`
     + ` main=${result.mainSha ?? 'unknown'}`
     + ` accepted=${(result.acceptedShas ?? []).length}`
     + ` missing=${(result.missingShas ?? []).length}`
