@@ -344,6 +344,15 @@ export function assembleLiveJuliusRuntime(options: {
   readonly maxRepairRounds: number;
   readonly owner?: string;
   readonly budget?: JuliusBudgetPort;
+  /**
+   * How long a claimed task's lease lasts. Ten minutes in production, where a
+   * dispatch is a provider call; a drill that must witness a REAL expiry — a
+   * process dying with the lease held and a fresh one reclaiming it off the
+   * wall clock — cannot wait that long, and faking `now` would prove the sweep
+   * against a clock nobody runs. Stated here so the drill shortens the lease
+   * rather than the truth.
+   */
+  readonly leaseMs?: number;
 }): LiveJuliusRuntime {
   const registry = new JuliusWorkerRegistry();
   const adapters = new Map<string, JuliusProviderAdapter>();
@@ -400,7 +409,7 @@ export function assembleLiveJuliusRuntime(options: {
     async policyFor() { return { card, verification }; },
     capabilityFor: (task) => (task.role === 'PROMPT_ARCHITECT' ? 'plan' : task.role === 'INDEPENDENT_REVIEWER' ? 'review' : 'implement'),
   };
-  const loop = new JuliusRunLoop(deps, policies, { claimLimit: 4, leaseMs: 600_000 });
+  const loop = new JuliusRunLoop(deps, policies, { claimLimit: 4, leaseMs: options.leaseMs ?? 600_000 });
   return { loop, registry, router, store: options.store, card, verification };
 }
 

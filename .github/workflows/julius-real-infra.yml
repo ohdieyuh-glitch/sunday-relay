@@ -300,6 +300,41 @@ jobs:
           done
           rm -rf /tmp/julius-evidence-check
           [ "$failed" -eq 0 ]
+      - name: The restart/recovery capability drill holds on real PostgreSQL
+        # WHY THIS JOB. The Beta Gate reports RESTART / RECOVERY as CAPABILITY
+        # PROVEN only on a drill attestation whose recorded digests still match
+        # the tree it is read in — so the drill is the thing that must not rot,
+        # and it needs what only this job already has: a real PostgreSQL, a real
+        # wall clock for a lease to expire against, and two real processes. No
+        # provider credential is anywhere near it; the three C.A.R.D. adapters
+        # are fakes and the recovery path is production.
+        #
+        # ITS OWN DATABASE. The drill bootstraps a mission of its own, and one
+        # mission's rows belong in the bundle of the mission that ran it, never
+        # mixed into another run's evidence.
+        if: ${{ !cancelled() }}
+        env:
+          PGPASSWORD: ${{ steps.identity.outputs.database_password }}
+        run: |
+          set -euo pipefail
+          docker exec -e PGPASSWORD julius-postgres createdb -U "$PGUSER" julius_recovery_drill
+          DATABASE_URL="${DATABASE_URL%/*}/julius_recovery_drill" \
+            npm run julius:recovery-drill --silent -- --out /tmp/julius-capability-proofs
+          # AND THE GATE MUST ACCEPT IT. A drill that passes and files an
+          # attestation the gate then refuses — a renamed column, a file added to
+          # the row's probe and not to the drill's exercised list — is a drill
+          # that proves nothing, and this is the only place the two meet.
+          node --input-type=module -e '
+            import { evaluate } from "./scripts/wonderland-beta-gate.mjs";
+            const row = evaluate(null, { capabilityDir: "/tmp/julius-capability-proofs" })
+              .results.find((value) => value.id === "RESTART / RECOVERY");
+            if (row.capability !== "PROVEN") {
+              console.error(`capability_proof_refused_by_gate: ${row.capability} - ${row.capabilityBasis}`);
+              process.exit(1);
+            }
+            console.log(`RESTART / RECOVERY: ${row.verdict} - ${row.capabilityBasis}`);
+          '
+          rm -rf /tmp/julius-capability-proofs
       - name: Executor topology evidence
         if: always()
         run: |

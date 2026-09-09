@@ -218,7 +218,7 @@ function readers(root) {
  *   number of `[PASS]` steps, carries no `[FAIL]`, and ends on a VERIFIED line.
  *   The gate reads the drill's words rather than a summary word about them.
  */
-const PROOF_COLUMNS = [
+export const CAPABILITY_PROOF_COLUMNS = [
   'capability', 'drill', 'outcome', 'steps', 'infrastructure',
   'exercised_path', 'exercised_digest', 'transcript', 'recorded_at',
 ];
@@ -258,7 +258,7 @@ function loadProofs(evidence, capabilityDir) {
 function capabilityProof(proofs, capability, probed) {
   const mine = proofs.rows.filter((row) => row.capability === capability.id);
   if (mine.length === 0) return { state: 'UNPROVEN', basis: 'no drill attestation names this capability' };
-  if (PROOF_COLUMNS.some((column) => mine.every((row) => row[column] === undefined))) {
+  if (CAPABILITY_PROOF_COLUMNS.some((column) => mine.every((row) => row[column] === undefined))) {
     return { state: 'UNPROVEN', basis: 'the attestation ledger is missing columns this gate reads' };
   }
   const drills = [...new Set(mine.map((row) => row.drill))];
@@ -637,7 +637,13 @@ const CAPABILITIES = [
      * here, and stays distinguishable from one that never had to.
      */
     id: 'RESTART / RECOVERY', path: false, missionRequired: false,
-    files: ['src/relay/mission/julius/julius-recovery.ts', 'src/relay/persistence/julius-recovery-postgres.ts', 'src/relay/persistence/index.ts'],
+    // THE TWO FILES THAT ARE THE CAPABILITY, and not the barrel beside them.
+    // `src/relay/persistence/index.ts` stood here as a token for "durable
+    // persistence exists"; now that this list decides what a drill must have
+    // driven to cover the row, naming a re-export would let an attestation
+    // claim a file it never exercised. What recovery IS: the deterministic
+    // plan, and the transactional sweep that reclaims an expired lease.
+    files: ['src/relay/mission/julius/julius-recovery.ts', 'src/relay/persistence/julius-recovery-postgres.ts'],
     prove: (ev) => {
       if (ev.file('failures.tsv') === null) {
         return unknown('this bundle carries no readable failure dump, so whether anything was recovered is unknown');
@@ -750,8 +756,13 @@ export function evaluate(evidenceDir, options = {}) {
       ...common, verdict, mission,
       capability: admissible ? proof.state : 'NOT ADMISSIBLE',
       capabilityBasis,
+      // "NOT EXERCISED THIS MISSION" is a claim about the run, so it is only
+      // made where the run's own rows support it. A bundle that could not say
+      // whether the behaviour happened says THAT instead — reporting the two
+      // as one sentence is the same substitution the Unknown rule forbids
+      // everywhere else in this product.
       basis: verdict === 'CAPABILITY PROVEN'
-        ? `NOT EXERCISED THIS MISSION — ${basis}; proven instead by a drill: ${proof.basis}`
+        ? `${mission === 'NOT EXERCISED' ? 'NOT EXERCISED THIS MISSION' : 'THIS MISSION CANNOT SAY WHETHER IT WAS EXERCISED'} — ${basis}; proven instead by a drill: ${proof.basis}`
         : (admissible && proof.state === 'STALE' ? `${basis}; the drill that once proved it is stale: ${proof.basis}` : basis),
     };
   });

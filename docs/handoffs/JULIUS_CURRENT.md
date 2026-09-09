@@ -1265,6 +1265,138 @@ raise the achievable score to 14/15; it would also mean the row no longer says
 to improve a number is the one thing the gate exists to prevent, and which of
 those two the row should mean is a product decision.
 
+**ANSWERED BY THE FOUNDER, 2026-09-08, and built — see §00m.** The row now
+accepts a drill, under conditions that make "accepts a drill" mean something.
+
+### 00m. THE FOUNDER'S ANSWER — MISSION PROOF and CAPABILITY PROOF are two questions
+
+The founder's instruction, in their words: *"Do NOT weaken the gate merely to
+increase a score. But also do NOT require a healthy paid mission to deliberately
+crash just to prove restart/recovery… A flawless paid run should therefore be
+able to report: RESTART/RECOVERY: CAPABILITY PROVEN — NOT EXERCISED THIS MISSION
+rather than pretending the mission recovered from a crash. Preserve the ability
+to separately detect when a real mission DID crash and recover."*
+
+That is now what it does. Two commits: the gate's evidence model, and the drill
+that can earn the new verdict.
+
+#### The model
+
+Every row carries **two** facts, and the report prints both:
+
+| Axis | Values | Read from |
+|---|---|---|
+| MISSION — *what did this run prove?* | `EXERCISED`, `FAILED`, `NOT EXERCISED`, `UNKNOWN` | that run's own durable rows, only |
+| CAPABILITY — *what is Julius ready to do?* | `PROVEN`, `STALE`, `UNPROVEN`, `NOT ADMISSIBLE` | a recorded drill attestation, only |
+
+and one verdict derived from them: `PASS`, `CAPABILITY PROVEN`, `FAIL`,
+`NOT BUILT`. A flawless mission reads
+
+```
+RESTART / RECOVERY   CAPABILITY PROVEN   NOT EXERCISED   NOT EXERCISED THIS MISSION —
+  nothing was interrupted in this run, so no lease was ever reclaimed; proven instead
+  by a drill: npm run julius:recovery-drill drove 2 production file(s) against
+  real-postgres,two-processes,real-lease-expiry,no-provider-call and passed 12 step(s)
+```
+
+and a mission that **did** crash and recover still reads `PASS` / `EXERCISED`,
+naming the recovery actions. The meanings did not collapse; that is the point.
+
+#### Three rules that keep the third verdict from becoming a laundry
+
+1. **A failed mission is never rescued.** Exercised and broken reads `FAIL`
+   whatever any drill says. The drill proves the path; it cannot un-break what
+   this run did.
+2. **Mission-required rows admit no drill at all.** The eight a run physically
+   walks between "a project exists" and COMPLETED — creation, start, plan,
+   build, contract lock, review, verification, completion — are
+   `NOT ADMISSIBLE`, so 15/15 cannot be reached by drilling past a mission that
+   never built anything. An attestation filed against one is reported as seen
+   and inadmissible, never silently dropped.
+3. **An attestation is evidence, not an assertion.** `capability-proofs.tsv` is
+   admissible only when its outcome is `VERIFIED`, every `exercised_path` still
+   hashes to the `exercised_digest` it recorded, those paths **cover every file
+   the row's own probe names**, and the drill's transcript is present with the
+   declared number of `[PASS]` steps and no `[FAIL]`. Edit a proven file and the
+   proof reports `CAPABILITY STALE` — capability proofs expire rather than
+   accumulating as folklore about a tree that has changed underneath them.
+
+Each row now publishes `implementedBy` in `--json`, so a drill author reads the
+coverage requirement out of the report instead of out of the gate's source.
+
+Six mutations were run against the new axis — a launderable failed mission,
+universal admissibility, and dropping each of the digest, coverage, transcript
+and outcome checks — and the tests kill all six.
+
+#### The drill that earns it
+
+`npm run julius:recovery-drill` (`scripts/julius-recovery-drill.ts`), two real
+processes over one real PostgreSQL:
+
+* **A** bootstraps a mission through the production seed store and ticks the
+  production run loop; its architect adapter calls `process.exit(87)`
+  mid-dispatch, leaving the task ACTIVE with the lease held, the generation
+  recorded and nothing written back. A crash, not a cancellation.
+* **the lease really expires** — the orchestrator asks the database whether
+  `lease_expires_at` has passed rather than injecting a future `now`, because a
+  sweep proven against a fabricated clock is proven against a clock nobody runs.
+  `assembleLiveJuliusRuntime` gained an optional `leaseMs` for this; production
+  still gets ten minutes.
+* **B** is a fresh process that has never seen the run. It assembles the same
+  production runtime and ticks; the run loop's own sweep reclaims the lease
+  through `recoverExpired` → `planJuliusRecovery`, requeues, and the mission
+  finishes.
+
+Twelve steps, and the refusals are the point: a recovery that **replays** the
+crashed dispatch is a double spend, so the drill fails unless the crash banked
+no result and the reclaimed task ran exactly once afterwards; a run that
+completes without the sweep having acted fails the same way; and a database
+that already holds the drill's run is refused outright, because a drill that
+reads the previous run's sweep and reports PASS about it is not testimony. A
+failed drill still files its ledger, recording `FAILED`, which the gate refuses
+on the outcome column and on the transcript both. Zero provider calls: the
+three C.A.R.D. adapters are fakes and only the recovery path is production.
+
+Where it runs:
+
+* **`first-live-topology`** on every relevant PR — it already has the real
+  PostgreSQL — and that step **fails if the gate refuses what the drill
+  produced**. This is what stops the drill and the gate drifting apart.
+* **after a paid mission**, in a database of its own and after the dump, copying
+  `capability-proofs.tsv` and the transcript into `julius-live-evidence/`, so a
+  paid bundle carries its own capability proof. Nothing there may fail the job.
+
+#### The audit of the other four rows — verdicts unchanged, as instructed
+
+| Row | What changed | Verdict |
+|---|---|---|
+| `REPAIR LOOP` | "no repair task" now reads NOT EXERCISED — a mission whose reviewer approves first time has not *failed* at repairing — and a drill is admissible | unchanged; no attestation exists |
+| `FAILURE RECOVERY` | separates "nothing failed retryably" (NOT EXERCISED) from "retries scheduled, none succeeded" (FAILED) and an unreadable dump (UNKNOWN) | unchanged; no attestation exists |
+| `ACCOUNT / ONBOARDING` | a missing dump reads UNKNOWN, an empty one NOT EXERCISED | unchanged |
+| `WONDER WEB OUTPUT` | gains an UNKNOWN branch for the day the module exists and its dump does not | unchanged — still NOT BUILT |
+
+`RESTART / RECOVERY`'s probe also dropped `src/relay/persistence/index.ts` and
+gained `src/relay/persistence/julius-recovery-postgres.ts`: now that the file
+list decides what a drill must have driven, a re-export in it would let an
+attestation claim a file it never exercised.
+
+#### The new ceiling
+
+The §00l arithmetic, restated. A flawless single paid mission can now report
+**11 of 15 proven** — ten by the mission, one by drill — with `REPAIR LOOP`,
+`FAILURE RECOVERY`, `ACCOUNT / ONBOARDING` and `WONDER WEB OUTPUT` open; a
+mission with a rejected review and a repair round, **12**. `REPAIR LOOP` and
+`FAILURE RECOVERY` are now *drillable* and no drill has been written for them,
+which is honest work outstanding rather than a gate that flatters itself.
+
+**Verified end to end in this container on real PostgreSQL 16**, not reasoned:
+the drill passes its twelve steps, the gate accepts its attestation, a second
+run against the same database is refused and files `FAILED`, and the completed
+live-chain mission dumped by the shipping script's own queries — carrying that
+attestation — reads **9 rows proven by the mission and 1 by the drill**, with
+`TASK CONTRACT LOCK` correctly FAILED because that proof deliberately mutates a
+claim revision in the database at the end.
+
 ### 00i. The next paid rerun — the record it must leave (template, to be filled by the run)
 
 > Not a run. This is the shape the record takes the moment the watch dispatches
