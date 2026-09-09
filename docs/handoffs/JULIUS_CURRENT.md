@@ -290,6 +290,14 @@ beside it. This branch will be rebased onto the gate fix once that lands and its
 real SHA is known — not before, because rebasing onto an unlanded branch just
 moves the guess.
 
+**That rebase has been rehearsed.** A dry `git merge-tree` of the two branches
+reported five conflicting files; the rebase was performed in a throwaway
+worktree (nothing pushed, neither branch touched), needed a hand at exactly
+three stops, and the resolved tree — 33 commits over `d8c9fab1` — passed all
+four typecheck passes and the nine load-bearing suites (378 tests) with both
+sides' changes present. The recipe, the three resolutions and the post-squash
+`--onto` step are in **`docs/JULIUS_STACK_REBASE_NOTES.md`**.
+
 ### THE BETA GATE, RUN AGAINST THE REAL PAID BUNDLE — 3/15, exit 1
 
 Not a repository reading. The `julius-live-evidence` artifact from paid run
