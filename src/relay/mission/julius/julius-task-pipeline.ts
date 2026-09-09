@@ -538,6 +538,19 @@ export async function runClaimedTask(
       missionContractRevision: run.missionContractRevision,
       cardRevision: run.cardRevision,
       projectBrainRevision: run.projectBrainRevision,
+      /**
+       * THE AGREEMENT THIS PACKET IS COMPILED UNDER. Null for a role that is
+       * not bound by one, which is a fact rather than an omission.
+       *
+       * It reaches the content hash, and that is why it is here rather than
+       * only on the event: `persist` deduplicates on
+       * `(task_id, worker_id, content_hash)`, so a retry after the contract was
+       * revised — with a packet whose text happens to be unchanged — would
+       * match the row compiled under the PREVIOUS agreement and hand the worker
+       * a context recorded against terms nobody holds any more.
+       */
+      taskContractRevision: preflight.contractBinding?.contractRevision ?? null,
+      taskContractDigest: preflight.contractBinding?.bindingDigest ?? null,
       dependencyTaskIds: task.dependencyIds,
       evidenceIds: evidence.filter((value) => task.dependencyIds.includes(value.taskId)).map((value) => value.evidenceId),
       findingIds: (priorFindings.length > 0 ? priorFindings : findings.filter((value) => value.taskId === task.taskId)).map((value) => value.findingId),
