@@ -84,7 +84,10 @@ evidence test — **399 tests, 0 failed**, and every symbol from both sides is
 present in the tree (`reasonClaim`, `PLAN_ATTEMPT_LIMIT`, `REVIEW_ATTEMPT_LIMIT`
 from the repair; `executedBindingFor`, `coderContractBrief`,
 `contract.challenged`, `trajectory.tsv`, `CAPABILITY_PROOF_COLUMNS`,
-`runRecoveryDrill` from the stack).
+`runRecoveryDrill` from the stack) — and the WHOLE repository suite on the
+rebased tree: **506 files passed**, 3 skipped (the env-gated real-infra
+suites), **9,759 tests passed**, 30 todo, exit 0. The two branches compose; that
+is now a measured fact on both dates rather than an expectation.
 
 The rebased branch exists only in the cloud container's throwaway worktree —
 `local/stack-on-gate-fix` on 09-08 (head `03a2b879`), `local/stack-on-237` on
