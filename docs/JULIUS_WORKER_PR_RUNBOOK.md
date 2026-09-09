@@ -1,0 +1,144 @@
+# Landing the 34186711214 repair as a worker-authored PR — founder runbook
+
+> **Who runs this:** the founder, on a machine that holds the `julius-worker`
+> GitHub App credential (App id `325202980`, `github.com/apps/julius-worker`).
+> **Why a runbook:** the fix is complete and gated on branch
+> `relay/julius-architect-gate-fix` at `d8c9fab1`, but its eight commits are
+> authored `Claude <noreply@anthropic.com>` and every environment that produced
+> them holds the review authority's credential, not the worker's. The
+> provenance gate (`scripts/julius-main-provenance.mjs`) requires the landed
+> pull request's **author** to be `julius-worker[bot]` and its **approver** to
+> be a different login. This is the shortest honest path from the branch to a
+> trusted `main`.
+
+Everything marked **verified** below was read from the repository or the
+GitHub API. Everything marked **standard mechanics** is the ordinary GitHub App
+flow and was not exercised from the cloud session, which has no App credential.
+
+## What is being landed — verified
+
+| | |
+|---|---|
+| branch | `relay/julius-architect-gate-fix`, head `d8c9fab1e120fa99e6fe3944eb9aa8bd2601169e` |
+| base | `origin/main` = `872f1790465c4d519d9a89c7e525fdaf23f5c3d0` (PR #234's squash) |
+| shape | 8 commits, 13 files, +1,703 / −29 |
+| PR body | `docs/JULIUS_ARCHITECT_GATE_PR.md` on the branch; its `Head SHA:` line reads `6e3ccd39…`, one commit stale by construction (the body cannot name the commit that contains it) |
+| title | `Julius: the architect and reviewer refusals of paid run 34186711214` |
+| commits, oldest first | `98a4a002` the aimed rule, the surviving diagnostic, the charter · `2f729388` test: auth precondition established · `7b2150fb` test: consume the provoked rejection · `5127618a` a refused plan is corrected once · `adb3c750` the reviewer's one bounded correction · `8c7ae60e` a correction is a spend · `6e3ccd39` test: pin run 34186711214's plan shape · `d8c9fab1` docs: the PR body |
+
+How #234 was authored — **verified** from its commits: author AND committer
+`julius-worker[bot] <325202980+julius-worker[bot]@users.noreply.github.com>`
+on every head commit, `merged_by` `ohdieyuh-glitch`, squash on `main` keeps
+the App as author with `GitHub` as committer.
+
+## Step 0 — do not touch the reference branch
+
+`relay/julius-architect-gate-fix @ d8c9fab1` is the reviewed reference. Work on
+a **new** branch; never rebase, amend or force-push the reference.
+
+## Step 1 — re-author the eight commits as the App — standard mechanics
+
+```bash
+git fetch origin main relay/julius-architect-gate-fix
+git checkout -B relay/julius-architect-gate-fix-worker origin/relay/julius-architect-gate-fix
+
+# The branch is already based on origin/main (872f1790), so this rewrites
+# authorship only. --reset-author takes the author from the -c identity, and
+# --amend sets the committer to it as well.
+WORKER_NAME='julius-worker[bot]'
+WORKER_EMAIL='325202980+julius-worker[bot]@users.noreply.github.com'
+git -c user.name="$WORKER_NAME" -c user.email="$WORKER_EMAIL" rebase origin/main \
+  --exec "git -c user.name='$WORKER_NAME' -c user.email='$WORKER_EMAIL' commit --amend --no-edit --reset-author"
+```
+
+Verify before pushing — all three must hold:
+
+```bash
+# 1. every commit is authored AND committed by the App
+git log --format='%an <%ae> | %cn <%ce>' origin/main..HEAD | sort -u
+#    → exactly one line: julius-worker[bot] <325202980+…> | julius-worker[bot] <325202980+…>
+
+# 2. the tree is byte-identical to the reviewed reference
+git diff --stat origin/relay/julius-architect-gate-fix HEAD
+#    → (no output)
+
+# 3. still exactly eight commits over main
+git rev-list --count origin/main..HEAD
+#    → 8
+```
+
+## Step 2 — push and open the PR **as the App** — standard mechanics
+
+Mint an installation access token for the App on this repository (the
+App-JWT → `POST /app/installations/{id}/access_tokens` flow, or whatever
+minted #234's token), then:
+
+```bash
+export GH_TOKEN='<installation access token>'    # the App's, never the founder's PAT
+git push "https://x-access-token:${GH_TOKEN}@github.com/ohdieyuh-glitch/sunday-relay.git" \
+  relay/julius-architect-gate-fix-worker
+
+# The committed body names a stale head by construction; rewrite that one line
+# to the pushed head in a temporary copy and open with it.
+sed "s/^Head SHA: .*/Head SHA: \`$(git rev-parse HEAD)\`/" docs/JULIUS_ARCHITECT_GATE_PR.md > /tmp/pr-body.md
+gh pr create --base main --head relay/julius-architect-gate-fix-worker \
+  --title "Julius: the architect and reviewer refusals of paid run 34186711214" \
+  --body-file /tmp/pr-body.md
+```
+
+Verify the author before anything else:
+
+```bash
+gh pr view --json number,author --jq '{number, login: .author.login, is_bot: .author.is_bot}'
+#    → login "app/julius-worker" (or "julius-worker[bot]"), is_bot true
+```
+
+If the author is `ohdieyuh-glitch`, the token was the founder's. **Close that
+PR** — merging it would make `main` `unprovenanced` and block every paid run —
+and mint the App token again.
+
+## Step 3 — review and merge as the founder — verified requirements
+
+1. Wait for CI on the PR head. (The branch was green in the cloud container
+   on every gate; CI is the authority.)
+2. Approve as `ohdieyuh-glitch` **at the PR's head SHA** — the review's
+   `commit_id` must equal the head that merges (review currency).
+3. Squash-merge at that exact head:
+
+```bash
+gh pr merge <number> --squash --match-head-commit "$(git rev-parse HEAD)"
+```
+
+4. Confirm the landing the way the gate will:
+
+```bash
+git fetch origin main
+git rev-parse origin/main^{tree}            # must equal …
+git rev-parse relay/julius-architect-gate-fix-worker^{tree}   # … this
+git rev-list --count origin/main^@          # 1 parent: a squash
+```
+
+No `julius-accept-main` dispatch is required for monotonicity: the existing
+checkpoints (`f131098c`, `67ade6ea`) stay contained in a forward-merged `main`.
+Dispatching it anyway records a fresh checkpoint and costs nothing.
+
+## Step 4 — nothing else
+
+The cloud session's hourly watch (`trig_01PvdqADjSgk5aUH9dvugJEZ`, :35 UTC)
+notices the PR (reports `FOUNDER ACTION REQUIRED — PR #n` while it is open) and
+the landing; on landing it verifies containment, provenance, monotonicity and
+review currency through the GitHub API, runs the zero-spend preflight of
+`julius-first-live-mission.yml`, and, if green, dispatches the paid rerun of
+`julius-live-mission-2` under the founder's standing authorization. The record
+of that run goes to `docs/handoffs/JULIUS_CURRENT.md`.
+
+## Never
+
+- open, approve or merge this PR with a credential that maps to
+  `ohdieyuh-glitch` in any coding environment — that is the credential finding
+  in `docs/handoffs/JULIUS_CURRENT.md` §00a, and a PR opened that way fails
+  provenance at `julius-main-provenance.mjs`;
+- rebase the branch onto anything other than `872f1790` before review — the
+  base the reviewer saw must be the base that merges;
+- weaken `WORKER_AUTHOR_LOGINS`, `EXTERNAL_APPROVER_LOGINS` or the tree-equality
+  check to make a differently-authored branch admissible.
