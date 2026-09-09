@@ -206,3 +206,33 @@ still completes the run.
 That question was destroyed by the instrument, and no amount of local work can
 recover it. It is the question the next paid run can now answer — which is the
 justification for one, not a claim that the provider was at fault.
+
+## The six invariants, and the mutation that kills each
+
+These are the properties the reviewer path must keep whatever else changes. Each
+line below was verified by making the change and watching the suite go red — not
+by reading the code and agreeing with it.
+
+| Invariant | Killing mutation | Result |
+|---|---|---|
+| a late valid review after a timeout is rejected | remove the `if (timedOut) return;` guard in the close handler | **7 tests fail** |
+| a timeout yields no accepted result | *same guard* | *same 7* |
+| a timeout attests no served model | `servedModel: null` → `servedModel: cfg.model ?? null` | **3 tests fail** |
+| a timeout cannot be charged twice | *same guard* | *same 7* |
+| every retry is a fresh process in a fresh directory | share one scratch path across attempts | **1 test fails** — and only that one |
+| three exhausted retries leave the build BLOCKED | `MAX_TASK_ATTEMPTS` 3 → 5 | **1 test fails** |
+
+**Three of the six are one mechanism, and that is worth knowing.** "A late review
+is rejected", "a timeout yields no accepted result" and "a timeout cannot be
+charged twice" are all enforced by the single `timedOut` guard in the `close`
+handler: once the window closes, the timeout owns the outcome, so there is no
+result to accept and nothing for a second charge to attach to. They are three
+readings of one line. Anyone removing that line is removing all three, which is
+why the guard carries a comment saying so and why seven tests fall over rather
+than one.
+
+The fresh-directory mutation is recorded twice on purpose. The first attempt at
+it forgot an import and failed 34 tests on its own breakage, which proves
+nothing about the invariant; the second compiles cleanly, typechecks, and fails
+exactly the one test that names the property. A mutation that breaks the build
+is not evidence.
