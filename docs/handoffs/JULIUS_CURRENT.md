@@ -1117,6 +1117,23 @@ suite on a fresh database (7 passed) and `git diff --check`.
 
 ### 00j. THE CREDENTIAL CEREMONY WAS ATTEMPTED AND THE ENVIRONMENT REFUSED IT
 
+> **UPDATE, 2026-09-08 ~20:05Z — A SECOND, INDEPENDENT BLOCKER.** The PEM is no
+> longer in this container. `/dev/shm/julius-ceremony.FL1F89/` is gone, and so
+> is every other reachable copy: `/mnt/user-data/working` is empty and nothing
+> matching a key is tracked in the repository (deliberately). **Nothing was
+> deleted, revoked or rotated by this session** — `/dev/shm` is RAM-backed
+> tmpfs, which a container restart empties by construction, and the founder's
+> KEEP directive itself classes the material derived in that directory as
+> derived credentials rather than Julius infrastructure. The persistent
+> `julius-worker` App private key the founder holds is untouched and still the
+> only thing that can open this PR.
+>
+> So the ceremony now has two blockers, either of which alone stops it: the
+> classifier refuses every command that touches a key, and this container holds
+> no key to touch. **Resuming it needs the founder either to run
+> `docs/JULIUS_WORKER_PR_RUNBOOK.md` themselves, or to supply the PEM again
+> AND grant the Bash permission rule named at the end of this section.**
+
 **2026-09-08.** The founder authorised a temporary `julius-worker` App private
 key so this session could open the worker-authored PR itself, and supplied the
 PEM. **Everything that does not touch the key succeeded. Every command that

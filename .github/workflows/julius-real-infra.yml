@@ -317,6 +317,7 @@ jobs:
           PGPASSWORD: ${{ steps.identity.outputs.database_password }}
         run: |
           set -euo pipefail
+          : "${DATABASE_URL:?the executor launch step exports it; without it PostgreSQL never came up}"
           docker exec -e PGPASSWORD julius-postgres createdb -U "$PGUSER" julius_recovery_drill
           DATABASE_URL="${DATABASE_URL%/*}/julius_recovery_drill" \
             npm run julius:recovery-drill --silent -- --out /tmp/julius-capability-proofs
