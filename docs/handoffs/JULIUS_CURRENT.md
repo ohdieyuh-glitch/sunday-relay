@@ -2589,3 +2589,66 @@ not dispatch a paid mission, and may not infer paid authorization from a new
 `main` sha. Every paid mission now needs a specific causal question, a justified
 reason that answering it needs provider spend, and explicit founder
 authorization.
+
+---
+
+## §00r — Both axes, read against both paid bundles and three real drills
+
+Run on the landing candidate, 2026-09-09, provider-free. Nothing was rewritten
+and no historical PASS was synthesized: the two bundles are exactly as their
+runs uploaded them.
+
+| Row | 34306850331 (COMPLETED) | 34311556047 (FAILED at the reviewer) |
+|---|---|---|
+| ACCOUNT / ONBOARDING | FAIL / UNKNOWN | FAIL / UNKNOWN |
+| PROJECT CREATION | **PASS** | **PASS** |
+| JULIUS MISSION START | **PASS** | **PASS** |
+| PROMPT ARCHITECT | **PASS** | **PASS** |
+| CODING AGENT | **PASS** | FAIL / FAILED — build is BLOCKED |
+| TASK CONTRACT LOCK | FAIL / UNKNOWN | FAIL / UNKNOWN |
+| INDEPENDENT REVIEWER | **PASS** | FAIL / FAILED — 0 review evidence rows |
+| REPAIR LOOP | **CAPABILITY PROVEN** | **CAPABILITY PROVEN** |
+| VERIFICATION | **PASS** | FAIL / NOT EXERCISED |
+| VERIFIED COMPLETION | **PASS** | FAIL / FAILED |
+| WONDER WEB OUTPUT | NOT BUILT | NOT BUILT |
+| PROJECT BRAIN PERSISTENCE | FAIL / UNKNOWN | FAIL / UNKNOWN |
+| RESTART / RECOVERY | **CAPABILITY PROVEN** | **CAPABILITY PROVEN** |
+| FAILURE RECOVERY | **PASS** — 1 task failed retryably and then SUCCEEDED | FAIL / FAILED — 3 retries scheduled, none reached SUCCEEDED |
+| PERMISSIONS / MISSION BOUNDARIES | **PASS** | **PASS** |
+
+**FAILURE RECOVERY is the row worth staring at.** The same capability, opposite
+verdicts on two runs of the same mission on the same commit: the successful run
+earned it *because* its first plan review timed out and its second answered, and
+the failed run lost it because three did not. The gate is measuring the thing,
+not the outcome it would prefer.
+
+The three CAPABILITY PROVEN rows come from drills run here on real PostgreSQL
+today — `julius:recovery-drill`, `julius:failure-recovery-drill`,
+`julius:repair-loop-drill`, twelve passing steps each, five attestation rows
+across five production files, no provider call. RESTART / RECOVERY and REPAIR
+LOOP were NOT EXERCISED by either paid mission and are proven instead; the gate
+says which, in the row itself.
+
+### The two UNKNOWN rows, and why they stay UNKNOWN
+
+`TASK CONTRACT LOCK` and `PROJECT BRAIN PERSISTENCE` read UNKNOWN on **both**
+bundles because both runs predate this stack: neither bundle carries a
+task-contract dump or a Project Brain dump, so there is nothing to read. That is
+the honest verdict and it is the one that must survive — a bundle cannot be
+back-filled with a capability its run never recorded.
+
+**What the stack changes is what the NEXT bundle can say, and that is already
+proven without spending.** `julius-live-chain.e2e.test.ts` drives a complete
+mission on real PostgreSQL, dumps it with the production dump script, and reads
+the gate against the result: ten rows reach PASS — `PROJECT CREATION`,
+`JULIUS MISSION START`, `PROMPT ARCHITECT`, `CODING AGENT`,
+**`TASK CONTRACT LOCK`**, `INDEPENDENT REVIEWER`, `REPAIR LOOP`, `VERIFICATION`,
+`VERIFIED COMPLETION` and **`PROJECT BRAIN PERSISTENCE`**. The contract row earns
+it the strong way — the claim rows in `contract-events.tsv` prove the build RAN
+under the lock, not merely that a lock existed — and the same test then moves the
+claim's recorded revision in the DATABASE and asks the same dump and the same
+gate again, so the refusal direction is read end to end on real rows too.
+
+So the answer to "what would a paid run newly prove" is not these rows: they are
+already proven on the production path. It is whether the binding holds against
+**real** worker output, which is the one thing a drill cannot stand in for.
