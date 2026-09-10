@@ -3126,3 +3126,121 @@ A gate that fires cheaply is worth more than a gate that cannot explain itself.
 The preflight caught §00m for nothing; this run caught Finding A for the price
 of one architect call, and the reason it cost a second dispatch to understand
 was Finding B. Both are now cheaper than they were.
+
+## 00p. THREE NUMBERS FOR ONE DEADLINE, AND THE MODEL A PAID RUN OUTRAN (2026-09-10)
+
+Paid Mission 4 completed, but its `review:plan` timed out on attempt 1 by **93
+milliseconds** — `elapsed_ms = 400093` against `timeout_ms = 400000` — and
+succeeded on attempt 2 at `381880 ms`, **95.4%** of the window. Reading the
+93 ms as a tuning problem would have been wrong twice over.
+
+### What was actually wrong
+
+**One limit, three numbers, and the one written where you would look was inert.**
+
+| where | value | binds anything? |
+|---|---|---|
+| `reviewerWorker` in `live-composition.ts` | `240_000` | **no** |
+| `loadHermesConfig` default | `180_000` | yes, when nothing overrode it |
+| `julius-first-live-mission.yml` literal | `400_000` | yes — this is what cut Mission 4 off |
+
+`JuliusWorker.timeoutMs` is validated by `JuliusWorkerRegistry.register`
+(`julius-runtime.ts:60`) and **never read again by anything in the repository**.
+A reader of the composition root learned 240 s; the review was actually killed
+at 400 s.
+
+**And the guard was checking the wrong pair.** `julius-live-hermes.sh` modelled
+the engine's worst case as `HERMES_REQUEST_TIMEOUT_SECONDS x 2 x 1000 +
+180_000` = **360_000 ms** and refused if that did not fit inside Relay's window.
+360_000 < 400_000, so it passed — while the real review ran **381_880 ms**,
+21.9 s past the number the bootstrap called the worst case. The guard compared
+the model against the window and nothing compared the model against reality.
+
+**400_000 was not careless, either.** It was `timeout-minutes: 60` divided by
+six reviewer attempts. The system was already at its structural ceiling, which
+is why this could not be fixed by raising a constant.
+
+### The repair
+
+`relay-bridge/reviewer-deadline.ts` is now the only place that decides how long
+a review may take. It derives the deadline deterministically from four inputs
+that are each stated rather than assumed:
+
+- the **analytical model** of the engine's own retry behaviour (retained as one
+  input, no longer trusted alone, because Mission 4 outran it);
+- the **durations paid runs were actually observed to reach**, recorded with
+  their run and task ids in `RECORDED_REVIEWER_OBSERVATIONS`;
+- an explicit **safety headroom** (`0.2`);
+- a **hard ceiling owed to the job**: `REVIEWER_JOB_SHARE_MS /
+  MAX_REVIEWER_ATTEMPTS`.
+
+```
+analytical 360000 | observed high water 400093 (CENSORED) | floor 400093
++20% headroom -> operative 480112   ceiling 500000   basis OBSERVED_CENSORED
+worst case 6 x 480112 = 48.01 min, inside a 50 min reviewer share of a 90 min job
+```
+
+**A cut-off observation is censored, and the type says so.** Mission 4's largest
+number, 400_093 ms, came from a review Relay *stopped*. Its true duration was
+never observed and cannot be recovered, so it is a **lower bound**, not a
+measurement. `observedHighWaterCensored` carries that and `basis` reports
+`OBSERVED_CENSORED` rather than pretending to a measurement.
+
+**Three observations are not a distribution.** The module never estimates a
+percentile, fits a curve, or reports a confidence. It knows the largest duration
+anyone has watched and whether that number is a measurement or a floor.
+Everything else stays unknown. With no observations at all,
+`observedHighWaterMs` is `null` — never `0`.
+
+**It refuses rather than clamps.** If floor + headroom will not fit under the
+ceiling, `ReviewerDeadlineUnsatisfiable` names both numbers and the two levers
+(`REVIEWER_JOB_SHARE_MS`, `MAX_REVIEWER_ATTEMPTS`). Clamping would hand back a
+deadline already known to be shorter than a review has taken.
+
+`RELAY_HERMES_TIMEOUT_MS` is **retired** — a second source is how the two came
+to disagree. The workflow literal is gone; `timeout-minutes` went 60 → 90 and is
+pinned to `JOB_BUDGET_MS` by a test. The bootstrap reads the policy by literal
+path (`node scripts/julius-reviewer-deadline.mjs <field>`) instead of modelling
+its own worst case — not `node -e`, and not a path in a variable, because
+`relay-repository-boundary.mjs` refuses a deployment path whose entry it cannot
+read, and it is right to.
+
+### The structural test found two more of the same defect
+
+Written to stop the reviewer's declared and operative deadlines from ever
+splitting again, it immediately failed on the other two roles:
+
+| role | declared was | actually bounded by | now |
+|---|---|---|---|
+| INDEPENDENT_REVIEWER | `240_000` | 400_000 (workflow) | derived, `480112` |
+| **CODING_AGENT** | `600_000` | **`DEFAULT_HOSTED_LIMITS.maxRuntimeMs` = 360_000** | derived |
+| PROMPT_ARCHITECT | `300_000` | `DEFAULT_TIMEOUT_MS` = 300_000 | derived |
+
+The coder was **wrong by four minutes**: the composition root promised ten and
+`hosted-runner.ts` aborts at six. The architect's two numbers agreed only by
+coincidence — one edit from disagreeing. All three now derive from the value
+that actually bounds them, and the test fails if a literal returns.
+
+Mutation-tested five ways; each mutation fails the suite and only the intended
+tests: reviewer literal restored (3 fail), coder literal restored (2), mirror
+headroom drift (2), workflow budget unpinned (1), censored observation
+relabelled a measurement (4).
+
+### What this deliberately did NOT do
+
+`JuliusWorker.timeoutMs` is **still not an enforcement primitive.** Making it one
+changes dispatch semantics for all three roles simultaneously — today every
+declared value is inert, so enforcing them could start killing dispatches that
+currently run past them. That is its own change, with its own compatibility
+analysis and its own paid evidence: **"Worker Deadline Enforcement"**, deferred
+by explicit founder decision.
+
+### FINDING F, recorded not repaired
+
+`RELAY_PROMPT_ARCHITECT_TIMEOUT_MS` has **two different defaults in two files**:
+`300_000` in `src/relay/connectors/gpt-architect/config.ts:30` and `90_000` in
+`relay-bridge/openai-architect.ts:95`. They are different call sites — the Julius
+mission architect and the bridge's own `/relay-api/architect/verify` — so the
+split may be intentional, but one environment variable with two defaults is the
+same trap this section is about. Nothing sets the variable today, so nothing is
+currently wrong; it is a latent divergence, not a live one.

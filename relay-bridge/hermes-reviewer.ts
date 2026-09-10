@@ -12,6 +12,7 @@
  * reviewer credit.
  */
 
+import { reviewerOperativeTimeoutMs } from './reviewer-deadline';
 import { spawn, spawnSync } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -484,7 +485,15 @@ export function loadHermesConfig(env: NodeJS.ProcessEnv = process.env): HermesCo
     model: env.RELAY_HERMES_MODEL,
     provider: env.RELAY_HERMES_PROVIDER,
     billingMode: env.RELAY_HERMES_BILLING_MODE,
-    timeoutMs: Number(env.RELAY_HERMES_TIMEOUT_MS ?? 180_000),
+    /**
+     * NOT FROM THE ENVIRONMENT. `RELAY_HERMES_TIMEOUT_MS` used to set this and
+     * a literal in `julius-first-live-mission.yml` used to supply it, which is
+     * how the operative limit came to differ from the one the live composition
+     * declared on the reviewer worker. There is now exactly one derivation and
+     * both consumers call it, so they cannot disagree. See
+     * `relay-bridge/reviewer-deadline.ts`.
+     */
+    timeoutMs: reviewerOperativeTimeoutMs(),
     maxOutputBytes: Number(env.RELAY_HERMES_MAX_OUTPUT ?? 512 * 1024),
   };
 }
@@ -699,7 +708,10 @@ export function hermesPreflight(
   const provider = cfg.provider ?? parsed.provider;
   if (!model) missing.push('hermes model (RELAY_HERMES_MODEL or a configured default)');
   if (!provider) missing.push('hermes provider (RELAY_HERMES_PROVIDER or a configured default)');
-  if (!Number.isFinite(cfg.timeoutMs) || cfg.timeoutMs <= 0) missing.push('RELAY_HERMES_TIMEOUT_MS');
+  // The deadline is derived, not configured, so a bad value here is a defect in
+  // the policy rather than a missing operator variable. It is still checked:
+  // silently reviewing with a nonsense deadline is the failure this replaced.
+  if (!Number.isFinite(cfg.timeoutMs) || cfg.timeoutMs <= 0) missing.push('reviewer deadline policy (relay-bridge/reviewer-deadline.ts)');
   if (!Number.isFinite(cfg.maxOutputBytes) || cfg.maxOutputBytes <= 0) missing.push('RELAY_HERMES_MAX_OUTPUT');
 
   /**

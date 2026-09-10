@@ -34,7 +34,11 @@ set -euo pipefail
 # BOTH DEADLINES ARE REQUIRED, because their ORDER is the invariant this script
 # now enforces and a missing one would silently switch the enforcement off.
 : "${HERMES_REQUEST_TIMEOUT_SECONDS:?missing HERMES_REQUEST_TIMEOUT_SECONDS}"
-: "${RELAY_HERMES_TIMEOUT_MS:?missing RELAY_HERMES_TIMEOUT_MS}"
+# RELAY'S OWN WINDOW IS NO LONGER AN ENVIRONMENT VARIABLE. It is derived below
+# by scripts/julius-reviewer-deadline.mjs, the same derivation the bridge uses
+# for both the Hermes transport and the reviewer worker's declared deadline.
+# Deriving it rather than accepting a literal is what stopped three numbers from
+# describing one limit.
 # The exact commit the founder's proven build runs. It is public upstream, so
 # there is nothing local to reproduce: `git status` in that checkout reports
 # "+1 carried commit" only because its shallow clone's origin ref is stale.
@@ -157,11 +161,24 @@ chmod 0600 "$HERMES_PROFILE_HOME/.hermes/config.yaml"
 # AND THE ORDER IS CHECKED, NOT ASSUMED. If the engine's worst case does not fit
 # inside Relay's window then Relay cuts first again and the next paid failure is
 # as unreadable as the last, so this refuses before a provider is contacted.
-SLOPE=2
-CONSTANT_MS=180000
-worst_case_ms=$(( HERMES_REQUEST_TIMEOUT_SECONDS * SLOPE * 1000 + CONSTANT_MS ))
-if [ "$worst_case_ms" -ge "$RELAY_HERMES_TIMEOUT_MS" ]; then
-  echo "hermes_engine_deadline_not_inside_relay_window:${worst_case_ms}ms_vs_${RELAY_HERMES_TIMEOUT_MS}ms" >&2
+# ONE FILE, NAMED LITERALLY, ONCE PER FIELD. Neither `node -e` nor a path held
+# in a variable: `relay-repository-boundary.mjs` refuses a deployment-capable
+# path whose entry it cannot READ, and both of those hide the entry from it. The
+# workflow runs this script from the repository root, the same place
+# `node scripts/julius-live-contract-check.mjs` is invoked from.
+RELAY_HERMES_TIMEOUT_MS="$(node scripts/julius-reviewer-deadline.mjs operativeTimeoutMs)" || {
+  echo "reviewer_deadline_policy_refused" >&2; exit 1; }
+export RELAY_HERMES_TIMEOUT_MS
+worst_case_ms="$(node scripts/julius-reviewer-deadline.mjs analyticalWorstCaseMs)"
+deadline_basis="$(node scripts/julius-reviewer-deadline.mjs basis)"
+deadline_floor_ms="$(node scripts/julius-reviewer-deadline.mjs floorMs)"
+# The engine's own deadline must still land INSIDE Relay's window, or Relay cuts
+# first and every distinct provider fault reaches the record as one shape again.
+# What changed is that Relay's window is now derived from the worst thing any
+# paid run was ever seen to do, not from a model that Paid Mission 4 outran.
+engine_deadline_ms=$(( HERMES_REQUEST_TIMEOUT_SECONDS * 2 * 1000 ))
+if [ "$engine_deadline_ms" -ge "$RELAY_HERMES_TIMEOUT_MS" ]; then
+  echo "hermes_engine_deadline_not_inside_relay_window:${engine_deadline_ms}ms_vs_${RELAY_HERMES_TIMEOUT_MS}ms" >&2
   exit 1
 fi
 
@@ -221,6 +238,6 @@ HERMES_BOOTSTRAP_EVIDENCE=${HERMES_BOOTSTRAP_EVIDENCE:-/tmp/julius-hermes-bootst
   echo "hermes_profile=$HERMES_PROFILE_HOME (mode $(stat -c '%a' "$HERMES_PROFILE_HOME"))"
   echo "hermes_credential=REGISTERED"
   echo "hermes_request_timeout_seconds=$HERMES_REQUEST_TIMEOUT_SECONDS (resolved by hermes itself)"
-  echo "relay_reviewer_window_ms=$RELAY_HERMES_TIMEOUT_MS (engine worst case ${worst_case_ms}ms, and it fits)"
+  echo "relay_reviewer_window_ms=$RELAY_HERMES_TIMEOUT_MS (basis ${deadline_basis}, floor ${deadline_floor_ms}ms, analytical ${worst_case_ms}ms)"
 } | tee "$HERMES_BOOTSTRAP_EVIDENCE"
 chmod 0644 "$HERMES_BOOTSTRAP_EVIDENCE"
