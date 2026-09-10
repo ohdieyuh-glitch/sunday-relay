@@ -29,3 +29,15 @@ and refuses if a PR for the branch is already open. It prints no credential
 material.
 
 Delete this branch once the PR is open.
+
+## Also carried here, because the session scratchpad is ephemeral
+
+`verify-landing.mjs` (the ten landing proofs) and `build-evidence.py` (fetches
+the GitHub facts they read) live only in a session scratchpad otherwise. If this
+container is reclaimed mid-landing they would be lost, and they are what proves
+a landing is trusted. They are here so any session can recover them:
+
+    node ceremony/verify-landing.mjs --repo <dir> --evidence <file>
+
+`AUDIT_README_CLASS.md` records the 2026-09-10 sweep for other assumptions of
+the kind that failed run 34433098911.
