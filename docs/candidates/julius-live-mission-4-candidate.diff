@@ -1,0 +1,158 @@
+diff --git a/src/relay/mission/julius/julius-memory-trust.ts b/src/relay/mission/julius/julius-memory-trust.ts
+index 6b6e562..45d02a2 100644
+--- a/src/relay/mission/julius/julius-memory-trust.ts
++++ b/src/relay/mission/julius/julius-memory-trust.ts
+@@ -85,6 +85,41 @@ export type JuliusMemoryOutcome<T> =
+   | { readonly outcome: 'OK'; readonly claim: T }
+   | { readonly outcome: 'REFUSED'; readonly reasonCode: string };
+ 
++/** The four ACTIVE standings in promotion/retrieval order. Terminal states rank nowhere. */
++const ACTIVE_TRUST_ORDER = ['UNVERIFIED', 'SUPPORTED', 'VERIFIED', 'APPROVED'] as const;
++
++const activeTrustRank = (trust: JuliusMemoryTrustState): number =>
++  (ACTIVE_TRUST_ORDER as readonly string[]).indexOf(trust);
++
++const isBlank = (value: string): boolean => typeof value !== 'string' || value.trim() === '';
++
++const refuse = <T>(reasonCode: string): JuliusMemoryOutcome<T> =>
++  ({ outcome: 'REFUSED', reasonCode });
++
++const admit = <T>(claim: T): JuliusMemoryOutcome<T> => ({ outcome: 'OK', claim });
++
++/** A fresh claim object with freshly-allocated nested collections. Purity lives here. */
++const copyClaim = (
++  claim: JuliusMemoryClaim,
++  over: Partial<{
++    trust: JuliusMemoryTrustState;
++    evidence: readonly JuliusMemoryEvidenceRef[];
++    supersedes: string | null;
++    contradicts: readonly string[];
++  }> = {},
++): JuliusMemoryClaim => ({
++  claimId: claim.claimId,
++  entryId: claim.entryId,
++  provenance: claim.provenance,
++  trust: over.trust !== undefined ? over.trust : claim.trust,
++  assertedBy: claim.assertedBy,
++  assertedAt: claim.assertedAt,
++  evidence: (over.evidence !== undefined ? over.evidence : claim.evidence)
++    .map((ref) => ({ kind: ref.kind, id: ref.id })),
++  supersedes: over.supersedes !== undefined ? over.supersedes : claim.supersedes,
++  contradicts: [...(over.contradicts !== undefined ? over.contradicts : claim.contradicts)],
++});
++
+ /**
+  * ADMIT A CANDIDATE. Auto-generation is allowed and this is where it happens.
+  *
+@@ -104,7 +139,25 @@ export function admitJuliusMemoryCandidate(_input: {
+   /** What the caller WOULD like. Recorded nowhere; a candidate is UNVERIFIED. */
+   readonly requestedTrust?: JuliusMemoryTrustState;
+ }): JuliusMemoryOutcome<JuliusMemoryClaim> {
+-  throw new Error('memory_trust_not_implemented');
++  if (isBlank(_input.claimId)) return refuse('blank_claim_id');
++  if (isBlank(_input.entryId)) return refuse('blank_entry_id');
++  if (isBlank(_input.assertedBy)) return refuse('blank_asserted_by');
++  if (!(JULIUS_MEMORY_PROVENANCE as readonly string[]).includes(_input.provenance)) {
++    return refuse('unknown_provenance');
++  }
++  // AUTO-GENERATE IS ALLOWED, AUTO-TRUST IS NOT: whatever `requestedTrust`
++  // asked for, a candidate is admitted UNVERIFIED.
++  return admit({
++    claimId: _input.claimId,
++    entryId: _input.entryId,
++    provenance: _input.provenance,
++    trust: 'UNVERIFIED',
++    assertedBy: _input.assertedBy,
++    assertedAt: _input.assertedAt,
++    evidence: (_input.evidence ?? []).map((ref) => ({ kind: ref.kind, id: ref.id })),
++    supersedes: null,
++    contradicts: [],
++  });
+ }
+ 
+ /**
+@@ -128,7 +181,36 @@ export function promoteJuliusMemoryClaim(_claim: JuliusMemoryClaim, _input: {
+   readonly evidence: readonly JuliusMemoryEvidenceRef[];
+   readonly at: string;
+ }): JuliusMemoryOutcome<JuliusMemoryClaim> {
+-  throw new Error('memory_trust_not_implemented');
++  // Terminal standings are never promoted again.
++  if (_claim.trust === 'CONTRADICTED' || _claim.trust === 'SUPERSEDED') {
++    return refuse('terminal_claim_not_promotable');
++  }
++  // CONTRADICTED and SUPERSEDED are not promotion targets: they are reached by
++  // contradictJuliusMemoryClaims and supersedeJuliusMemoryClaim, which record why.
++  const targetRank = activeTrustRank(_input.to);
++  if (targetRank < 0) return refuse('invalid_promotion_target');
++  // Promotion only ever RAISES standing.
++  if (targetRank <= activeTrustRank(_claim.trust)) return refuse('promotion_must_raise_standing');
++  if (isBlank(_input.by)) return refuse('blank_promoting_authority');
++
++  if (_input.to === 'VERIFIED') {
++    // A claim cannot verify itself.
++    if (_input.by === _claim.assertedBy) return refuse('self_verification');
++    const qualifies = _input.evidence.some((ref) => ref.kind === 'REVIEW' || ref.kind === 'FINDING');
++    if (!qualifies) return refuse('verification_evidence_required');
++  } else if (_input.to === 'APPROVED') {
++    const qualifies = _input.evidence.some((ref) => ref.kind === 'DECISION');
++    if (!qualifies) return refuse('decision_evidence_required');
++  } else if (_input.to === 'SUPPORTED') {
++    // Support must come from evidence the asserter did not supply.
++    if (_input.by === _claim.assertedBy) return refuse('self_support');
++    if (_input.evidence.length === 0) return refuse('supporting_evidence_required');
++  }
++
++  return admit(copyClaim(_claim, {
++    trust: _input.to,
++    evidence: [..._claim.evidence, ..._input.evidence],
++  }));
+ }
+ 
+ /**
+@@ -139,14 +221,29 @@ export function promoteJuliusMemoryClaim(_claim: JuliusMemoryClaim, _input: {
+ export function contradictJuliusMemoryClaims(
+   _a: JuliusMemoryClaim, _b: JuliusMemoryClaim, _at: string,
+ ): JuliusMemoryOutcome<readonly [JuliusMemoryClaim, JuliusMemoryClaim]> {
+-  throw new Error('memory_trust_not_implemented');
++  if (_a.claimId === _b.claimId) return refuse('claim_cannot_contradict_itself');
++  const mark = (claim: JuliusMemoryClaim, other: JuliusMemoryClaim): JuliusMemoryClaim =>
++    copyClaim(claim, {
++      // An adopted claim is not demoted by a bare assertion; everything else
++      // becomes CONTRADICTED. Neither claim is deleted.
++      trust: claim.trust === 'APPROVED' ? 'APPROVED' : 'CONTRADICTED',
++      contradicts: claim.contradicts.includes(other.claimId)
++        ? claim.contradicts
++        : [...claim.contradicts, other.claimId],
++    });
++  return admit([mark(_a, _b), mark(_b, _a)] as const);
+ }
+ 
+ /** REPLACE A CLAIM WITH A LATER ONE ABOUT THE SAME ENTRY. */
+ export function supersedeJuliusMemoryClaim(
+   _existing: JuliusMemoryClaim, _replacement: JuliusMemoryClaim, _at: string,
+ ): JuliusMemoryOutcome<readonly [JuliusMemoryClaim, JuliusMemoryClaim]> {
+-  throw new Error('memory_trust_not_implemented');
++  if (_existing.claimId === _replacement.claimId) return refuse('claim_cannot_supersede_itself');
++  if (_existing.entryId !== _replacement.entryId) return refuse('supersession_entry_mismatch');
++  return admit([
++    copyClaim(_existing, { trust: 'SUPERSEDED' }),
++    copyClaim(_replacement, { supersedes: _existing.claimId }),
++  ] as const);
+ }
+ 
+ /**
+@@ -159,5 +256,13 @@ export function retrieveTrustedJuliusMemory(
+   _claims: readonly JuliusMemoryClaim[],
+   _input: { readonly minimumTrust: JuliusMemoryTrustState; readonly role: JuliusWorkerRole },
+ ): readonly JuliusMemoryClaim[] {
+-  throw new Error('memory_trust_not_implemented');
++  const minimumRank = activeTrustRank(_input.minimumTrust);
++  return _claims
++    .filter((claim) => {
++      // CONTRADICTED and SUPERSEDED are never returned, whatever they once were.
++      const rank = activeTrustRank(claim.trust);
++      if (rank < 0) return false;
++      return rank >= minimumRank;
++    })
++    .map((claim) => copyClaim(claim));
+ }

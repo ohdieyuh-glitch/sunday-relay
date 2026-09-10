@@ -1,0 +1,5 @@
+# A candidate is a verbatim unified diff. A context line for a blank line is a
+# single space, which `git diff --check` reads as trailing whitespace. These
+# bytes must not be normalised or the candidate stops applying, so whitespace
+# checking is off for this directory only.
+*.diff -whitespace

@@ -3559,3 +3559,144 @@ the four drills.
 
 `hosted-runner.ts`'s fixed sentences, `maxCostCents`, mission spend governance,
 Mission 5's contract and its adversarial tests are all **untouched**.
+
+## 00o. PAID LIVE MISSION 4 — VERIFIED COMPLETION, AND THE NUMBER THAT SETTLED THE CAPACITY QUESTION (2026-09-10)
+
+**Run 34470535718** on trusted main `5be73c5653ba26b607b6e805c720ebddc549dd5f`.
+Durable run `run:c8910d0afb5608e0ea68aa72`. Evidence artifact **10150146877**.
+**COMPLETED after 5 ticks**, 11:20:07Z → 11:41:25Z. Terminal trajectory event:
+`COMPLETION / VERIFIED / MISSION_VERIFIED`, 4 tasks, 2 decisions.
+
+This is the first paid Julius mission to reach VERIFIED COMPLETION with real
+providers on every role. Attempt one (34459684814) died at the architect after
+one tick.
+
+### The capacity question is no longer a hypothesis
+
+§00n raised the architect ceiling as an explicitly **labelled hypothesis** and
+said so: Live Run 3 produced 15,638 characters of raw `outputText` under the
+same 4,000 ceiling and validated, and Mission 4 produced *zero* output rather
+than truncated JSON, so the evidence was ambiguous between reasoning-consumed
+budget and a content filter. The rerun measured it:
+
+```
+run:c8910d0afb5608e0ea68aa72:plan  PROMPT_ARCHITECT  openai/gpt-5.6-sol
+  output_tokens = 4158        <-- the old DEFAULT_MAX_OUTPUT_TOKENS was 4000
+  input_tokens  = 2303
+  output_bytes_observed = 19332   json_parseable = true   validation_passed = true
+  plan_attempts = 1   dispatch_attempt = 1   outcome = succeeded
+```
+
+**The plan that satisfies this mission does not fit in 4,000 output tokens.** It
+needed 4,158 — 158 over the old hard cap, on the first attempt, with no retry.
+Under the ceiling in force during attempt one, this exact call could not have
+completed. That is a measurement, not an inference from source code.
+
+Stated honestly about what it is: this is a *different* call to a
+non-deterministic model, so it does not prove attempt one's `incomplete_details`
+reason, which remains permanently unrecoverable (`store: false` plus the
+allowlist that discarded it — the observability defect §00n repaired). It does
+demonstrate that the mission's plan genuinely requires more than 4,000 output
+tokens, which is what the ceiling change was for.
+
+### The ceiling did not buy its way past the budget
+
+The founder's constraint was that a larger token limit must never silently
+bypass Julius's mission spend ceiling. It did not:
+
+| Event | Allocated | Basis | Remaining |
+|---|---|---|---|
+| plan | 300,000 µ$ | ESTIMATE | 19,700,000 |
+| plan:review (×2 attempts) | 300,000 µ$ | ESTIMATE | 19,700,000 |
+| build | **5,000,000 µ$** | CODER_SHARE | 19,400,000 |
+| build:review | 300,000 µ$ | ESTIMATE | 18,009,046 |
+
+The coder share is exactly `floor(20 / (1 + 3)) = $5.00` per
+`julius-allocation.v1`, against the contract's `spendUsd: 20`,
+`repairCycles: 3`. It settled at **1,390,954 µ$ = $1.390954**,
+`cost_basis = PROVIDER_REPORTED`, against a `cost_ceiling_usd_micros` of
+5,000,000. Architect and both reviewers settled `UNKNOWN` — token counts, never
+a price, because that is what those transports report. **Unknown stayed
+unknown.** Total known spend for the mission: **$1.39**.
+
+### The chain, hop by hop
+
+| Hop | Evidence |
+|---|---|
+| trusted main | run head `5be73c56`, repository trust gate passed |
+| immutable slice + sandbox | provisioner + host→sandbox diff proof passed |
+| REAL PAID architect | `gpt-5.6-sol`, `resp_05cb55d9…`, 19,332 chars, validated |
+| independent evaluator | `independent-reviewer-hermes` |
+| explicit disposition | `julius.contract.disposition` → **NO_CHALLENGE** / TASK_VERIFIED |
+| ACCEPT | `decision:94faff25…` ACCEPT / TASK_VERIFIED |
+| LOCK | contract revision 2, `sha256:7e55471e12e7214f…` |
+| REAL PAID coder | `claude-fable-5`, 11 turns, 10 tool calls, 0 permission denials |
+| implementation in sandbox only | 3 executor `shell.bash` invocations, all exit 0 |
+| tests | `TEST/PASSED`, deterministic command exit 0 |
+| REAL PAID reviewer, identical digest | build:review claimed under **the same** `sha256:7e55471e…` |
+| repair | none required — zero blocking findings, `findings.tsv` 0 rows |
+| Project Brain | 22 entries, including both DECISION entries |
+| VERIFIED COMPLETION | `COMPLETION / VERIFIED / MISSION_VERIFIED` |
+| candidate only | **`origin/main` unchanged at `5be73c56`; 0 commits since 11:19Z** |
+
+### What Julius actually built
+
+One file, `src/relay/mission/julius/julius-memory-trust.ts`: +110 / −5. All five
+`memory_trust_not_implemented` stubs replaced. It holds the rule the module
+exists for — *auto-generate is allowed, auto-trust is not*: a candidate is
+admitted `UNVERIFIED` whatever `requestedTrust` asked for; `VERIFIED` needs
+REVIEW/FINDING evidence from an authority that is not the asserter; `APPROVED`
+needs DECISION evidence; terminal standings are never promoted again;
+contradiction and supersession record and never delete; retrieval never returns
+a `CONTRADICTED` or `SUPERSEDED` claim; every function copies rather than
+mutates.
+
+**Verified independently of the sandbox**, on a detached worktree of trusted
+main with the candidate applied and *no* `node_modules`, running the contract's
+own command:
+
+```
+node --import ./.julius/loader.mjs --test src/relay/mission/julius/julius-memory-trust.test.ts
+  → tests 10, pass 10, fail 0, EXIT=0
+```
+
+Counterfactual on the same worktree without the candidate: **pass 1, fail 9**.
+The diff `git apply --check`s cleanly against `5be73c56`; the export surface is
+byte-identical (12 exports); no import was added; no non-erasable syntax; and
+the full four-pass `npm run typecheck` is clean.
+
+### Two findings this run produced. Neither blocked it.
+
+**FINDING D — the plan reviewer is running at 95.4% of its timeout.**
+`plan:review` attempt 1 **timed out**: `elapsed_ms = 400093` against
+`timeout_ms = 400000` — over by 93 milliseconds — with
+`first_output_observed = false`. SIGTERM was sent, `cleanup_completed = true`,
+`julius.retry.scheduled / TIMEOUT / retryable`. Attempt 2 succeeded with
+`first_output_after_ms = 381447`, `elapsed_ms = 381880` — **18.1 seconds of
+margin**. The reviewer is silent for ~381s and then emits everything at once, so
+the timeout is not measuring progress, it is racing a burst. The build review,
+by contrast, finished in 218,324 ms (54.6% of budget). The retry machinery built
+in §00e worked exactly as designed on its first real paid exercise — that is the
+good news, and the margin is the bad news. This is the next repair target.
+
+**FINDING E — the success path now carries fewer diagnostics than the failure
+path.** §00n added `providerStatus`, `incompleteReason`, `reasoningTokens`,
+`totalTokens`, `maxOutputTokens` and `elapsedMs` to failed architect dispatches.
+The succeeding architect row above carries `input_tokens` and `output_tokens`
+but none of the rest — so we cannot say from the evidence how much of those
+4,158 tokens were reasoning, nor what ceiling was in force. Nothing is *lied*
+about (absent renders unknown), but the asymmetry is backwards: the run we can
+learn most from is the one that worked.
+
+**FINDING C remains open and deliberately deferred** (§00n): on the retryable
+path the terminal `task.failed` row carries zero diagnostics because
+`JuliusDispatchOutcome` does not return them to `julius-task-pipeline.ts:916`.
+This run confirms the other half of that finding — the `julius.retry.scheduled`
+row for the reviewer timeout carried a full 59-key diagnostic payload.
+
+### Marker state
+
+`julius-live-mission-4-attempted` (10149390009) and
+`julius-live-mission-4-completed` (10150135422) both exist for run
+34470535718. A further dispatch of mission 4 therefore still requires
+`acknowledge_rerun`, which is correct.
