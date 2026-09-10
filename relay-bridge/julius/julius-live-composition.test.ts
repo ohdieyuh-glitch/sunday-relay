@@ -25,7 +25,7 @@ import {
   type JuliusRuntimeStore,
 } from '../../src/relay/mission/julius';
 import type { GptRunOutcome } from '../../src/relay/connectors/gpt-architect';
-import { JuliusDispatchError, safeFailureClass } from '../../src/relay/mission/julius';
+import { JuliusDispatchError, safeFailureClass, safeReviewDiagnostics } from '../../src/relay/mission/julius';
 import { compileHostedEnvelope } from '../hosted-coding-agent/hosted-envelope';
 import type { HostedQueryFn, HostedRunInput, HostedRunOutcome } from '../hosted-coding-agent/hosted-runner';
 import { loadHermesConfig, reviewDiagnostics, runHermesReview, type HermesOutcome, type ReviewPacket } from '../hermes-reviewer';
@@ -2638,6 +2638,114 @@ describe('DEFECT 1 — the live coder adapter is limited to what Julius allocate
         code: 'WORKER_EXECUTION_FAILURE', failureClass: 'coder_cost_exceeded',
         diagnostics: expect.objectContaining({ costUsdMicros: 5_250_000, costCeilingUsdMicros: 5_000_000, costSource: 'runtime_reported', stage: 'build' }),
       });
+  });
+});
+
+/**
+ * WHY THE BUILD FAILED HAS TO REACH THE ROW, AND THE PROVIDER'S WORDS MUST NOT.
+ *
+ * Paid Mission 5's rerun (run 34504244415) got the plan accepted after three
+ * reviewed repair rounds, locked the contract at revision 5, dispatched the
+ * coder — and the coder stopped after six of its twenty-six turns having
+ * changed nothing, for $0.885661. Every column the bundle had said the same
+ * thing the run already knew: `coder_provider_error_after_init`, which names
+ * the boundary and not the cause. The cause was in the runtime's final text,
+ * which by deliberate design never leaves `hosted-runner.ts`.
+ *
+ * These hold the repair to both halves at once, through the real adapter and
+ * the real allowlist: the classified reason arrives, and the text it was
+ * classified from does not.
+ */
+describe('a coder failure records WHY, in a closed vocabulary, and quotes nothing', () => {
+  const coderAdapterWithFinalText = (input: { runs: HostedRunInput[]; finalText?: string | null; refuse?: boolean; runnerReason?: string }) => {
+    const log: FakeLog = { order: [] };
+    const artifacts = createLiveArtifactExchange();
+    artifacts.put(planRef('run-live'), JSON.stringify(VALID_PLAN));
+    const run = async (runInput: HostedRunInput): Promise<HostedRunOutcome> => {
+      input.runs.push(runInput);
+      const completed = await fakeCoder(log, [])(runInput) as Extract<HostedRunOutcome, { kind: 'completed' }>;
+      // `in`, not `??`: an explicit null is the case where the runtime failed
+      // and said nothing, which is a different fact from not overriding it.
+      const observation = { ...completed.observation, finalText: 'finalText' in input ? input.finalText ?? null : completed.observation.finalText };
+      if (input.refuse) {
+        return {
+          kind: 'refused', refusalCode: 'coder_provider_error_after_init',
+          // The fixed sentence the runner really sends. It is constant on
+          // purpose and is not where the answer comes from.
+          safeMessage: 'The hosted run failed after it started.',
+          ...(input.runnerReason === undefined ? {} : { failureReason: input.runnerReason }),
+          observation, envelope: completed.envelope, startedAt: completed.startedAt, completedAt: completed.completedAt,
+        } as HostedRunOutcome;
+      }
+      return { ...completed, observation };
+    };
+    return createLiveHostedCodingAdapter({
+      worker: {
+        workerId: 'coding-agent-claude-hosted', role: 'CODING_AGENT', adapterId: 'claude-agent-sdk-hosted-live', providerId: 'anthropic',
+        capabilities: ['implement'], taskTypes: ['build'], concurrencyLimit: 1, timeoutMs: 1_000, maxRetries: 1, status: 'AVAILABLE',
+      },
+      contexts: { snapshotFor: () => reviewSnapshot('build-1') }, artifacts, projectId: 'prj-live',
+      apiKey: 'FAKETESTNOTREAL-anthropic', requestedModel: 'claude-fable-5',
+      workspacePath: '/workspace/mission', testCommand: 'npm run mission-test',
+      shell: fakeShell(log, []), run: run as never, queryLoader: async () => fakeQuery,
+    });
+  };
+
+  const failedDiagnostics = async (finalText: string | null): Promise<Record<string, unknown>> => {
+    const runs: HostedRunInput[] = [];
+    const adapter = coderAdapterWithFinalText({ runs, finalText, refuse: true });
+    const failure = await adapter
+      .dispatch({ taskId: 'build-1', contextId: 'ctx-resume-1', taskType: 'build' })
+      .then(() => null)
+      .catch((error: unknown) => error as { diagnostics?: Record<string, unknown> });
+    expect(failure, 'the refusal must fail the dispatch').not.toBeNull();
+    return failure!.diagnostics ?? {};
+  };
+
+  it('classifies the runtime\'s own final text into the vocabulary the domain admits', async () => {
+    const diagnostics = await failedDiagnostics('API Error: 429 {"type":"rate_limit_error"}');
+    expect(diagnostics.failureReason).toBe('rate_limited');
+    // And it survived `safeReviewDiagnostics`, which the dispatch error applies
+    // on construction — a value the domain refused would read null here.
+    expect(safeReviewDiagnostics(diagnostics)?.failureReason).toBe('rate_limited');
+  });
+
+  it('carries NO fragment of that text into any diagnostic value', async () => {
+    const diagnostics = await failedDiagnostics('API Error 401: invalid x-api-key sk-ant-api03-AAAABBBBCCCC for org acme-internal');
+    expect(diagnostics.failureReason).toBe('provider_auth_rejected');
+    const rendered = JSON.stringify(safeReviewDiagnostics(diagnostics));
+    for (const fragment of ['sk-ant', 'api03', 'AAAABBBB', 'x-api-key', 'acme-internal']) {
+      expect(rendered.includes(fragment), `${fragment} reached a durable row`).toBe(false);
+    }
+  });
+
+  it('says "no_message" when the runtime failed silently — not "unclassified", and never zero', async () => {
+    expect((await failedDiagnostics(null)).failureReason).toBe('no_message');
+  });
+
+  it('prefers the runner\'s own classification of the thrown error over the final text', async () => {
+    // On `coder_provider_error_after_init` the runtime THREW instead of
+    // finishing, so the cause is in the thrown error and the final text is
+    // whatever the stream had managed to emit before it. Mission 5's was 25
+    // bytes. The runner classifies the throw; this proves that answer wins.
+    const runs: HostedRunInput[] = [];
+    const adapter = coderAdapterWithFinalText({ runs, finalText: 'Execution error', refuse: true, runnerReason: 'provider_overloaded' });
+    const failure = await adapter
+      .dispatch({ taskId: 'build-1', contextId: 'ctx-resume-1', taskType: 'build' })
+      .then(() => null)
+      .catch((error: unknown) => error as { diagnostics?: Record<string, unknown> });
+    expect(failure!.diagnostics?.failureReason).toBe('provider_overloaded');
+  });
+
+  it('a build that WORKED has no failure reason, rather than one inferred from its summary', async () => {
+    // The success path shares this builder, so a classifier run on a healthy
+    // summary would read the word "error" in a test log as a failure.
+    const runs: HostedRunInput[] = [];
+    const adapter = coderAdapterWithFinalText({ runs, finalText: 'Implemented the change. 0 errors, 0 failures.' });
+    const granted = await adapter.dispatch({ taskId: 'build-1', contextId: 'ctx-resume-1', taskType: 'build' });
+    expect(granted.status).toBe('SUCCEEDED');
+    expect((granted.diagnostics as Record<string, unknown>).outcome).toBe('succeeded');
+    expect((granted.diagnostics as Record<string, unknown>).failureReason).toBeNull();
   });
 });
 

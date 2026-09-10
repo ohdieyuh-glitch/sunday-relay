@@ -2100,6 +2100,106 @@ describe('the budget dump explains what a mission was allowed to spend', () => {
 });
 
 /**
+ * A DIAGNOSTIC THE ALLOWLIST ADMITS AND THE BUNDLE DOES NOT EXPORT IS A
+ * DIAGNOSTIC NOBODY WILL EVER READ.
+ *
+ * `safeReviewDiagnostics` is the allowlist, `flattenDiagnostics` writes every
+ * one of its keys to the durable event as `diag_<key>`, and the dump query is
+ * the ONLY hop that survives the job: the PostgreSQL service is torn down with
+ * the runner, so a key with no column here exists for the length of one paid
+ * run and is then destroyed. That is not a theoretical gap. Repair #247 added
+ * six architect diagnostics to the allowlist — `providerStatus`,
+ * `incompleteReason`, `reasoningTokens`, `maxOutputTokens`, `totalTokens` — and
+ * added five of them to no query at all. Paid Mission 4's bundle carries none
+ * of those columns, and the run that would have used them had already been
+ * bought. The existing cases below pin four named cost facts, which is exactly
+ * why a half-wiring of six OTHER facts shipped past them: pinning specific
+ * columns proves those columns exist and says nothing about completeness.
+ *
+ * This is the completeness rule, in the only direction that matters — from the
+ * allowlist outward. An exemption is allowed and must be WRITTEN DOWN with its
+ * reason, because a diagnostic deliberately kept out of the bundle is a
+ * decision and a diagnostic silently kept out is the defect above.
+ */
+describe('every diagnostic the allowlist admits reaches the exported bundle', () => {
+  /**
+   * Keys the allowlist admits that the bundle deliberately does NOT export,
+   * each with the reason it is withheld. Empty today: every one of the 62 keys
+   * is a scalar identifier, count, flag or closed-vocabulary token, and none
+   * carries model-authored text. Adding a key here is a decision to destroy it
+   * with the database, so it costs a sentence.
+   */
+  const EXPORT_EXEMPT: Readonly<Record<string, string>> = Object.freeze({});
+
+  const allowlistKeys = (): readonly string[] => {
+    const source = read('src/relay/mission/julius/julius-router.ts');
+    const declaration = source.indexOf('export const safeReviewDiagnostics=');
+    expect(declaration, 'safeReviewDiagnostics must exist').toBeGreaterThan(-1);
+    const open = source.indexOf('return Object.freeze({', declaration);
+    expect(open, 'the allowlist must be a frozen object literal').toBeGreaterThan(-1);
+    const close = source.indexOf('\n });\n};', open);
+    expect(close, 'the allowlist literal must be closed').toBeGreaterThan(open);
+    const keys = [...source.slice(open, close).matchAll(/^ {2}([A-Za-z][A-Za-z0-9]*):/gmu)].map((match) => match[1]);
+    // A STRUCTURAL TEST THAT PARSES SOURCE MUST FAIL WHEN ITS PARSE STOPS
+    // WORKING, rather than passing over an empty set. Reformatting the
+    // allowlist is allowed; reformatting it into invisibility is not.
+    expect(keys.length, 'the allowlist parse returned implausibly few keys — fix the parse, not the floor').toBeGreaterThan(55);
+    expect(new Set(keys).size, 'a duplicated key would silently overwrite its twin').toBe(keys.length);
+    return keys;
+  };
+
+  const diagnosticsQuery = (): string => {
+    const query = read('.github/julius-live-evidence-dump.sh').split('\n').find((line) => line.startsWith('dump "SELECT') && line.includes('worker-diagnostics.tsv')) ?? '';
+    expect(query, 'the worker diagnostics dump must exist').not.toBe('');
+    return query;
+  };
+
+  it('exports every allowlisted key, or names the reason it does not', () => {
+    const query = diagnosticsQuery();
+    const missing = allowlistKeys().filter((key) => !(key in EXPORT_EXEMPT) && !query.includes(`'facts'->>'diag_${key}'`));
+    expect(
+      missing,
+      `these diagnostics reach the durable ledger and are destroyed with the database: ${missing.join(', ')}. Add a column to the worker-diagnostics dump, or an EXPORT_EXEMPT entry saying why not.`,
+    ).toEqual([]);
+  });
+
+  it('exports no diag_ column the allowlist would refuse', () => {
+    // The other direction: a column reading a key `safeReviewDiagnostics` never
+    // constructs is a column that reads null on every row forever, and looks
+    // exactly like a fact the run did not observe.
+    const keys = new Set(allowlistKeys());
+    const selected = [...diagnosticsQuery().matchAll(/'diag_([A-Za-z][A-Za-z0-9]*)'/gu)].map((match) => match[1]);
+    expect(selected.length, 'the query parse returned implausibly few columns').toBeGreaterThan(55);
+    expect(selected.filter((key) => !keys.has(key)), 'a column no allowlist key feeds is permanently null').toEqual([]);
+  });
+
+  it('keeps no stale exemption', () => {
+    const keys = new Set(allowlistKeys());
+    expect(Object.keys(EXPORT_EXEMPT).filter((key) => !keys.has(key)), 'an exemption for a key that no longer exists hides the next one').toEqual([]);
+    for (const [key, reason] of Object.entries(EXPORT_EXEMPT)) {
+      expect(reason.length, `${key} must say why it is withheld`).toBeGreaterThan(20);
+    }
+  });
+
+  it('gives every exported column a distinct alias', () => {
+    // Two columns sharing an alias is one column in the TSV, and the reader
+    // cannot tell which one survived.
+    const aliases = [...diagnosticsQuery().matchAll(/ AS ([a-z_]+)/gu)].map((match) => match[1]);
+    const duplicated = aliases.filter((alias, index) => aliases.indexOf(alias) !== index);
+    expect(duplicated, 'a duplicate alias silently drops a column from the bundle').toEqual([]);
+  });
+
+  it('carries the six facts #247 allowlisted and never exported', () => {
+    // The specific regression, named, so this file records what happened rather
+    // than only preventing its shape.
+    const query = diagnosticsQuery();
+    for (const fact of ['diag_providerStatus', 'diag_incompleteReason', 'diag_reasoningTokens', 'diag_maxOutputTokens', 'diag_totalTokens', 'diag_failureReason']) {
+      expect(query, `${fact} must reach the bundle`).toContain(`'facts'->>'${fact}'`);
+    }
+  });
+});
+
+/**
  * THE ARCHITECT'S OUTPUT CEILING IS GOVERNED, AND ITS BOUND IS NOT A GUESS.
  *
  * Paid Live Mission 4's first attempt (run 34459684814) died at the architect
