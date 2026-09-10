@@ -12,7 +12,7 @@ continue from here alone.
 | THE MISSING PORT | **CLOSED.** Membership is wired and the route authorises per request. See §31–37, and §45–49 for what came after. |
 | CHECKOUT | `/home/user/sunday-relay` (cloud session, fresh clone; no worktrees) |
 | BRANCH | `claude/julius-wonderland-integration-khaqs3`, continuing `relay/wonderland-integration` from `03fe982` |
-| BASE | `origin/main` at `b2dc9f2` (unchanged; main has since moved to `5be73c5` and this branch has NOT been rebased onto it) |
+| BASE | `origin/main` at `b2dc9f2`, **merged up to `5909ae0` on 2026-09-10** — the branch is 0 behind trusted main |
 | SHA AT END | check `git log -1 claude/julius-wonderland-integration-khaqs3`, which is authoritative |
 | WHAT RAN LIVE | **Nothing.** No provider call, no Julius mission, no Unreal build, no GPU frame. Every figure in the HUD is a labelled simulated fixture. **A real PostgreSQL 16.13 now runs in this environment** — that is a database, not a provider. |
 | WHAT RUNS OFFLINE | **five harnesses that COMPILE AND EXECUTE the real C++**, reached by nine npm commands: `wonderland:cpp:syntax`, `:geometry:verify`, `:usage:verify`, `:ordering:verify`, `:julius:verify`, `:wire:verify`, plus `:geometry:check`, `:ordering:check` and `:wire:fixtures:check` for generated-artefact staleness. **1,019 checks** (152 usage + 90 run + 450 ordering + 327 wire) and a 66-sample geometry fixture. |
@@ -1574,8 +1574,8 @@ In order:
 4. **An authority that reports usage.** The last placeholder in a hydration: the
    meters project from an empty authority and draw UNKNOWN, which is the true
    reading and not a stub, but nothing reports into the contract. Not blocking.
-5. **Decide whether to rebase onto the newer `main`.** This branch is based on
-   `b2dc9f2`; `origin/main` is at `5be73c5`. Untried.
+5. ~~Decide whether to rebase onto the newer `main`.~~ **DONE 2026-09-10** —
+   merged (not rebased) up to `5909ae0`, zero conflicts. Nothing to do.
 
 The Project Brain kind vocabulary is NO LONGER an open decision (section 46):
 the kernel's vocabulary and the citation's differ, an unrecognised kind is
@@ -1603,9 +1603,9 @@ Nothing above it is waiting on anything.
 |---|---|
 | branch | `claude/julius-wonderland-integration-khaqs3` (pushed) |
 | continues | `relay/wonderland-integration` from `03fe982` |
-| base | `origin/main` at `b2dc9f2` — NOT rebased onto `5be73c5` |
+| base | `origin/main` at `b2dc9f2`, **then merged up to `5909ae0`** (see below) |
 | working tree | clean |
-| merges with `origin/main`? | **YES, cleanly — tried and verified.** `git merge origin/main` auto-merged four files with no conflict; the merged tree typechecks and the whole Wonderland/persistence/bridge slice passes. It needs ONE follow-up: `npm run julius:harness:export`, because both sides changed the generated manifest. The probe branch was deleted; the merge has NOT been made on this branch, so the diff stays reviewable against `b2dc9f2`. |
+| synced with `origin/main`? | **YES — merged, not rebased, on 2026-09-10.** `origin/main` at `5909ae004f11ad88269159f0c30d505c8ca491ea` is an ancestor of this branch: **0 behind**. A MERGE rather than a rebase because this branch was already pushed and carries eleven reviewable commits; a rebase would rewrite published history and force-push over it. The merge was fully automatic — **zero conflicts**. |
 
 ### What is proven in the cloud, and how
 
@@ -1636,6 +1636,38 @@ Nothing above it is waiting on anything.
 **Roughly 20 deliberate mutations were run across this session's code and every
 one was caught**, except three that were confirmed EQUIVALENT and are labelled
 as such in the source rather than left looking proven.
+
+### The sync to trusted main (2026-09-10)
+
+`5909ae0` brings the Coding Agent execution-envelope repair (#249) and the
+reviewer-deadline derivation (#248). The two diffs overlap in exactly TWO files,
+both in the harness-manifest machinery — `scripts/export-julius-harness.mjs`
+(main declared `julius-context-integrity.ts` and `reviewer-deadline.ts`; this
+branch declared `wonderland-human-gate.ts`) and the generated
+`JULIUS_HARNESS_MANIFEST.md`. Git resolved both automatically; all three
+declarations were verified present afterwards, and `npm run julius:harness:export`
+reported the committed manifest already current (**81 kernel dependants
+classified**, up from 70).
+
+Verified after the merge:
+
+| gate | result |
+|---|---|
+| `typecheck` | PASS (all four projects) |
+| `wonderland:wire:verify` | 327 checks, 0 failures |
+| `wonderland:julius:verify` | 90 checks |
+| `julius:harness:export` | current, no diff |
+| the seam + everything the merge could disturb | **1,138 passing / 57 files** — the whole Wonderland domain, both reader suites (real PostgreSQL included), `wonderland-postgres`, both bridge route suites, the harness drift gate |
+| what MAIN brought in, on the merged tree | **840 passing / 46 files** — `hosted-coding-agent`, `reviewer-deadline`, the whole Julius mission domain |
+| `git diff --check` | clean |
+
+**One pre-existing failure was chased down rather than accepted.**
+`julius-live-chain.e2e.test.ts` fails in a combined persistence run
+("VERIFIED COMPLETION: FAIL — run ended EXECUTING"). It fails **identically on
+plain `origin/main` at `5909ae0`**, checked out and run on its own — so it is
+main's, not the merge's. `real-infra-julius.test.ts` failed once in a combined
+run and passes 7/7 alone against a fresh database; that is the same
+database-reuse artefact this file already records.
 
 ### What is waiting for the editor
 
@@ -1699,6 +1731,9 @@ git clone … && git checkout claude/julius-wonderland-integration-khaqs3
 npm ci
 npm run wonderland:wire:verify && npm run wonderland:julius:verify
 ```
+
+The branch already contains trusted main (`5909ae0`), so there is **no sync to
+do first** — do not rebase, do not pull, just check out and build.
 
 **Run the harnesses BEFORE opening the editor.** They take seconds, need no
 engine, and if one fails the problem is the checkout rather than Unreal. Then
