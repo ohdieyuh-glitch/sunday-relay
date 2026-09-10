@@ -41,6 +41,9 @@ import type { WonderlandUsageHud } from './wonderland-usage-meter';
 import type { WonderlandUsageAuthorityStatus } from './wonderland-usage-authority';
 import { wonderlandHumanGateBelongs } from './wonderland-human-gate';
 import type { WonderlandHumanGate } from './wonderland-human-gate';
+import { JULIUS_RUN_STATE_VISUAL_STATE } from './wonderland-julius-state';
+import type { JuliusVisualState } from './wonderland-julius-state';
+import { juliusMissionStateIsTerminal } from './wonderland-rehydration';
 
 export const WONDERLAND_HYDRATION_SCHEMA_V1 = 'relay-wonderland-hydration.v1' as const;
 export type WonderlandHydrationSchemaVersion = typeof WONDERLAND_HYDRATION_SCHEMA_V1;
@@ -224,6 +227,39 @@ export interface WonderlandHydration {
    * consistent with. The tail resumes from exactly there.
    */
   readonly run: WonderlandRunSnapshot;
+  /**
+   * THE DRAWABLE STATE, so a world hydrating cold has something to draw.
+   *
+   * `run.state` is the KERNEL's word — one of thirteen, and the vocabulary a
+   * mission is bookkept in. What a world DRAWS is one of eleven visual states,
+   * and the mapping between them is owned by `wonderland-julius-state.ts` and
+   * total over the kernel's union.
+   *
+   * WHY IT IS ON THE PAYLOAD AND NOT DERIVED BY THE CLIENT. A TypeScript caller
+   * can import that mapping; an Unreal client cannot — an adapter may not own a
+   * mission verdict, which is the boundary this whole layer is built around. So
+   * a world handed only the kernel's word would have to map it ITSELF, in
+   * engine code nobody reviewed, and there would be two answers to "what is
+   * this run doing" that agree until the day they do not.
+   *
+   * It is therefore CARRIED rather than computed here: the hydration assembles
+   * what the mapping said, exactly as it assembles what the usage authority
+   * said. THE ENVELOPE STILL OWNS THE LIVE STATE — this is the cold-start
+   * answer, and a run with no further events (one that has COMPLETED, say)
+   * would otherwise leave a world with nothing to draw for ever.
+   */
+  readonly visualState: JuliusVisualState;
+  /**
+   * Whether the run is OVER, from the kernel's state rather than the picture.
+   *
+   * Carried beside the visual state because it cannot be recovered from it:
+   * `blocked` and `error` are drawn differently and only one of them is
+   * terminal, and a world that inferred an ending from the drawing would be
+   * reading the picture as the fact. `blocked` and `error` may never appear as
+   * `complete`, and this is the field that lets a client obey that without
+   * knowing the kernel's vocabulary.
+   */
+  readonly terminal: boolean;
   /** Both meters, as the usage authority projected them. Never recomputed. */
   readonly usage: WonderlandUsageHud;
   /** How much to believe those figures. Relay's verdict, carried verbatim. */
@@ -258,6 +294,8 @@ export const WONDERLAND_HYDRATION_FIELDS = exactKeys<WonderlandHydration>()([
   'projectId',
   'worldSessionId',
   'run',
+  'visualState',
+  'terminal',
   'usage',
   'usageStatus',
   'activity',
@@ -292,6 +330,12 @@ export function wonderlandHydration(input: {
     projectId: input.run.projectId,
     worldSessionId: input.worldSessionId ?? null,
     run: input.run,
+    // THE MAPPING'S ANSWER, READ HERE RATHER THAN INVENTED HERE. It is total
+    // over the kernel's union, so there is no unmapped state to default — and
+    // no argument for one, which is why it is not an input the caller could
+    // get wrong.
+    visualState: JULIUS_RUN_STATE_VISUAL_STATE[input.run.state],
+    terminal: juliusMissionStateIsTerminal(input.run.state),
     usage: input.usage,
     usageStatus: input.usageStatus,
     activity: input.activity,
@@ -344,6 +388,16 @@ export function wonderlandHydrationVerdict(
     hydration.activity.projectId !== hydration.projectId ||
     hydration.activity.runId !== hydration.run.runId ||
     hydration.brain.projectId !== hydration.projectId
+  ) {
+    return 'inconsistent';
+  }
+  // THE PICTURE MUST MATCH THE RUN IT IS ABOUT. A hydration assembled with one
+  // run's state and another's drawing would be adopted wholesale and never
+  // contradicted — the world would animate the wrong mission under the right
+  // name. Recomputed rather than trusted, from the same total mapping.
+  if (
+    hydration.visualState !== JULIUS_RUN_STATE_VISUAL_STATE[hydration.run.state] ||
+    hydration.terminal !== juliusMissionStateIsTerminal(hydration.run.state)
   ) {
     return 'inconsistent';
   }

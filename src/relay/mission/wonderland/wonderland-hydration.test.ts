@@ -15,6 +15,9 @@ import {
 } from './wonderland-hydration';
 import type { WonderlandHydration } from './wonderland-hydration';
 import { emptyWonderlandUsageAuthority, projectWonderlandUsageFromAuthority } from './wonderland-usage-authority';
+import { JULIUS_MISSION_STATES } from '../julius/julius-runtime';
+import { JULIUS_RUN_STATE_VISUAL_STATE, JULIUS_VISUAL_STATES } from './wonderland-julius-state';
+import { scopeWonderlandHumanGate } from './wonderland-human-gate';
 
 const PROJECT = 'project-alpha';
 const RUN = 'run-1';
@@ -326,5 +329,103 @@ describe('a hydration is adopted wholesale, so it is judged carefully', () => {
     expect(wonderlandHydrationVerdict(PROJECT, swapped as WonderlandHydration)).toBe(
       'inconsistent',
     );
+  });
+});
+
+/* -------------------------- what a world hydrating cold can draw */
+
+describe('the drawable state travels with the hydration', () => {
+  it('carries Relay\'s own answer for every state the kernel can hold', () => {
+    // A TypeScript caller could import the mapping. An Unreal client cannot —
+    // an adapter may not own a mission verdict — so a world handed only the
+    // kernel's word would map it in engine code nobody reviewed, and there
+    // would be two answers to "what is this run doing".
+    for (const state of JULIUS_MISSION_STATES) {
+      const drawn = hydration({
+        run: wonderlandRunSnapshot({
+          projectId: PROJECT, runId: RUN, state, revision: 7, observedAtIso: AT,
+        }),
+      });
+      expect(JULIUS_VISUAL_STATES as readonly string[], state).toContain(drawn.visualState);
+      expect(drawn.visualState).toBe(JULIUS_RUN_STATE_VISUAL_STATE[state]);
+    }
+  });
+
+  it('answers a run that will never send another event', () => {
+    // The case the field exists for. A COMPLETED run sends no further events,
+    // so the envelope that normally carries the drawable state never arrives.
+    const done = hydration({
+      run: wonderlandRunSnapshot({
+        projectId: PROJECT, runId: RUN, state: 'COMPLETED', revision: 9, observedAtIso: AT,
+      }),
+    });
+    expect(done.visualState).toBe('complete');
+    expect(done.terminal).toBe(true);
+  });
+
+  it('keeps ENDED on its own axis, because the drawing cannot carry it', () => {
+    // `blocked` and `error` are drawn differently and only one is terminal.
+    const blocked = hydration({
+      run: wonderlandRunSnapshot({
+        projectId: PROJECT, runId: RUN, state: 'BLOCKED', revision: 7, observedAtIso: AT,
+      }),
+    });
+    const failed = hydration({
+      run: wonderlandRunSnapshot({
+        projectId: PROJECT, runId: RUN, state: 'FAILED', revision: 7, observedAtIso: AT,
+      }),
+    });
+    expect(blocked.terminal).toBe(false);
+    expect(failed.terminal).toBe(true);
+    // AND NEITHER MAY EVER APPEAR AS COMPLETE.
+    expect(blocked.visualState).not.toBe('complete');
+    expect(failed.visualState).not.toBe('complete');
+  });
+
+  it('refuses a picture assembled onto the wrong run', () => {
+    // A hydration carrying one run's state and another's drawing is adopted
+    // wholesale and never contradicted: the world animates the wrong mission
+    // under the right name. The verdict recomputes rather than trusting.
+    const sound = hydration();
+    expect(wonderlandHydrationVerdict(PROJECT, sound)).toBe('accepted');
+
+    const repainted = { ...sound, visualState: 'complete' } as WonderlandHydration;
+    expect(wonderlandHydrationVerdict(PROJECT, repainted)).toBe('inconsistent');
+
+    const relabelled = { ...sound, terminal: true } as WonderlandHydration;
+    expect(wonderlandHydrationVerdict(PROJECT, relabelled)).toBe('inconsistent');
+  });
+});
+
+/* ------------------------ what a person is being waited on for */
+
+describe('the open gates travel with the hydration', () => {
+  const gate = (over: Record<string, unknown> = {}) => scopeWonderlandHumanGate({
+    projectId: PROJECT, runId: RUN, gateId: 'gate-1', taskId: 'task-1',
+    operation: 'SPAWN_SUBAGENT', reasonCode: 'CARD_APPROVAL_REQUIRED', requestedAtIso: AT,
+    ...over,
+  })!;
+
+  it('is empty by default rather than absent, because the count carries unknown', () => {
+    expect(hydration().humanGates).toEqual([]);
+  });
+
+  it('accepts gates that belong to the run it is about', () => {
+    const gated = hydration({ humanGates: [gate()] });
+    expect(wonderlandHydrationVerdict(PROJECT, gated)).toBe('accepted');
+    expect(gated.humanGates[0].operation).toBe('SPAWN_SUBAGENT');
+  });
+
+  it('refuses ONE foreign gate among correct ones', () => {
+    // Checked exhaustively rather than sampled: a hydration is adopted
+    // wholesale, so a single foreign gate would show a person being waited on
+    // for something this world cannot see, and nothing later withdraws it.
+    for (const foreign of [
+      gate({ projectId: 'project-beta', gateId: 'gate-x' }),
+      gate({ runId: 'run-9', gateId: 'gate-y' }),
+    ]) {
+      const mixed = hydration({ humanGates: [gate(), foreign] });
+      expect(wonderlandHydrationVerdict(PROJECT, mixed)).toBe('inconsistent');
+    }
   });
 });

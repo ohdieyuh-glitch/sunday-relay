@@ -523,6 +523,28 @@ struct FWonderlandHydration
 	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Hydration")
 	FWonderlandRunSnapshot Run;
 
+	// THE DRAWABLE STATE, so a world hydrating cold has something to draw.
+	//
+	// `Run.State` is the KERNEL's word — one of thirteen, the vocabulary a
+	// mission is bookkept in — and what a world DRAWS is one of eleven. The
+	// mapping between them is Relay's, total over the kernel's union, and it is
+	// NOT MIRRORED HERE ON PURPOSE: a client that mapped it itself would be a
+	// second answer to "what is this run doing", agreeing with the first until
+	// the day it did not, and an adapter may not own a mission verdict.
+	//
+	// The ENVELOPE still owns the live state. This is the cold-start answer,
+	// and without it a run with no further events — one that has COMPLETED —
+	// would leave a world with nothing to draw for ever.
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Hydration")
+	EWonderlandJuliusState VisualState = EWonderlandJuliusState::Unobserved;
+
+	// Whether the run is OVER, from the KERNEL's state and not from the
+	// picture. It cannot be recovered from the drawing: `Blocked` and `Error`
+	// are drawn differently and only one is terminal, and a client inferring an
+	// ending from the drawing would be reading the picture as the fact.
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Hydration")
+	bool bTerminal = false;
+
 	// Both meters as the usage authority projected them. Never recomputed here.
 	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Hydration")
 	FWonderlandUsageHud Usage;

@@ -1427,6 +1427,17 @@ FWonderlandHydrationDecode WonderlandDecodeHydrationBytes(const char* Bytes, int
 	if (RunValue == nullptr) { return Result; }
 	if (!DecodeRunSnapshotObject(*RunValue, Result.Refusal, Hydration.Run)) { return Result; }
 
+	// THE DRAWABLE STATE, from Relay's own mapping. Required and refused when
+	// unknown: landing on `Unobserved` would draw a world that has been told
+	// nothing, for a run Relay described perfectly well.
+	{
+		uint8 Visual = 0;
+		FFieldReader StateReader{ Root, Result.Refusal };
+		if (!StateReader.RequiredEnum("visualState", "EWonderlandJuliusState", Visual)) { return Result; }
+		if (!StateReader.RequiredBool("terminal", Hydration.bTerminal)) { return Result; }
+		Hydration.VisualState = static_cast<EWonderlandJuliusState>(Visual);
+	}
+
 	const FJsonValue* UsageValue = RequiredObject(Root, "usage", Result.Refusal);
 	if (UsageValue == nullptr) { return Result; }
 	if (!DecodeUsageHudObject(*UsageValue, Result.Refusal, Hydration.Usage)) { return Result; }

@@ -566,8 +566,36 @@ int main(int argc, char** argv)
 					// that returned bOk over a zero-filled struct would pass a
 					// "did it refuse" harness completely, and look on screen
 					// exactly like a Relay reporting nothing.
-					if (Name == "hydration-full")
+					if (Name == "hydration-terminal-complete")
 					{
+						// THE CASE THE FIELD EXISTS FOR. A completed run sends no
+						// further events, so the envelope that normally carries
+						// the drawable state never arrives.
+						Check(R.Hydration.VisualState == EWonderlandJuliusState::Complete,
+							"a finished run hydrates with something to DRAW");
+						Check(R.Hydration.bTerminal, "and says it is over");
+					}
+					else if (Name == "hydration-blocked-not-terminal")
+					{
+						// DRAWN DIFFERENTLY, AND NOT OVER. `terminal` cannot be
+						// recovered from the picture, which is why it is carried.
+						Check(R.Hydration.VisualState == EWonderlandJuliusState::Blocked,
+							"a blocked run draws as blocked");
+						Check(!R.Hydration.bTerminal, "and is NOT over");
+					}
+					else if (Name == "hydration-failed-is-terminal")
+					{
+						Check(R.Hydration.VisualState == EWonderlandJuliusState::Error,
+							"a failed run draws as error");
+						Check(R.Hydration.bTerminal, "and IS over — same axis, different answer");
+						Check(R.Hydration.VisualState != EWonderlandJuliusState::Complete,
+							"and never as complete");
+					}
+					else if (Name == "hydration-full")
+					{
+						Check(R.Hydration.VisualState == EWonderlandJuliusState::Coding,
+							"the drawable state decodes from Relay's own mapping");
+						Check(!R.Hydration.bTerminal, "an executing run is not over");
 						CheckStr(R.Hydration.ProjectId, "project-alpha", "the hydration's project decodes");
 						CheckStr(R.Hydration.Run.RunId, "run-1", "the run id decodes");
 						CheckStr(R.Hydration.Run.State, "EXECUTING", "the kernel's own word decodes as text");

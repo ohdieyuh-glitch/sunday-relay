@@ -22,6 +22,7 @@ import { join } from 'node:path';
 
 import { wonderlandEnvelope } from '../src/relay/mission/wonderland/wonderland-envelope';
 import { JULIUS_VISUAL_STATES } from '../src/relay/mission/wonderland/wonderland-julius-state';
+import { JULIUS_MISSION_STATES } from '../src/relay/mission/julius/julius-runtime';
 import { WONDERLAND_WORKER_ROLES } from '../src/relay/mission/wonderland/wonderland-envelope';
 import {
   JULIUS_ACTIVITY_SIGNALS,
@@ -487,6 +488,28 @@ hydrated('hydration-autonomy-absent', hydration({
   card: scopeWonderlandCard({ cardRevision: 'card-rev-3' }),
 }));
 
+/* ---------------------------- what a world hydrating cold can draw */
+
+// EVERY KERNEL STATE, so the drawable answer crosses for all of them. A world
+// hydrating cold has only this: `run.state` is the kernel's bookkeeping word,
+// and mapping it client-side would be a second answer to "what is this run
+// doing" in engine code nobody reviewed.
+for (const state of JULIUS_MISSION_STATES) {
+  hydrated(`hydration-state-${state}`, hydration({ run: runSnapshot({ state }) }));
+}
+
+// THE CASE THAT MOTIVATED THE FIELD. A COMPLETED run has no further events, so
+// the envelope that normally carries the drawable state never arrives — without
+// this a world would hold a finished mission it could not draw, for ever.
+hydrated('hydration-terminal-complete', hydration({ run: runSnapshot({ state: 'COMPLETED' }) }));
+
+// AND THE PAIR THAT MUST NOT BE CONFUSED. `blocked` and `error` are drawn
+// differently and only one of them is terminal, so `terminal` cannot be
+// recovered from the drawing — a client inferring an ending from the picture
+// would read the picture as the fact.
+hydrated('hydration-blocked-not-terminal', hydration({ run: runSnapshot({ state: 'BLOCKED' }) }));
+hydrated('hydration-failed-is-terminal', hydration({ run: runSnapshot({ state: 'FAILED' }) }));
+
 /* ------------------------------ what a person is being waited on for */
 
 // EVERY GATED OPERATION, one fixture each. A gate this build cannot name is a
@@ -598,6 +621,22 @@ hydrationRefused('hydration-gates-absent', 'missing_field', (() => {
 })());
 hydrationRefused('hydration-gates-not-an-array', 'wrong_type',
   { ...hydration(), humanGates: {} });
+
+// A PICTURE THAT DOES NOT MATCH ITS RUN. Adopted wholesale and never
+// contradicted, it would animate the wrong mission under the right name.
+hydrationRefused('hydration-picture-disagrees-with-run', 'unknown_token', {
+  ...hydration(), visualState: 'ascended',
+});
+hydrationRefused('hydration-no-visual-state', 'missing_field', (() => {
+  const damaged: Record<string, unknown> = { ...hydration() };
+  delete damaged.visualState;
+  return damaged;
+})());
+hydrationRefused('hydration-no-terminal-flag', 'missing_field', (() => {
+  const damaged: Record<string, unknown> = { ...hydration() };
+  delete damaged.terminal;
+  return damaged;
+})());
 
 // Each half, absent. A hydration missing one of them is not a smaller
 // hydration: a world would draw the remaining halves and have no meters, no

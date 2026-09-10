@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { JULIUS_VISUAL_STATES } from './wonderland-julius-state';
+import { JULIUS_MISSION_STATES } from '../julius/julius-runtime';
 import { WONDERLAND_WORKER_ROLES } from './wonderland-envelope';
 import { wonderlandWireEnums } from './wonderland-wire-contract';
 import {
@@ -299,7 +300,8 @@ describe('the hydration fixtures — the payload a world adopts WHOLESALE', () =
     expect(full).toBeDefined();
     expect(Object.keys(JSON.parse(full!.json) as object).sort()).toEqual([
       'activity', 'brain', 'card', 'humanGates', 'observedAtIso', 'projectId',
-      'run', 'schemaVersion', 'usage', 'usageStatus', 'worldSessionId',
+      'run', 'schemaVersion', 'terminal', 'usage', 'usageStatus',
+      'visualState', 'worldSessionId',
     ]);
   });
 
@@ -520,5 +522,61 @@ describe('the hydration fixtures — what a person is being waited on for', () =
     };
     expect(parsed.humanGates).toEqual([]);
     expect(parsed.run.pendingApprovals).toBe(0);
+  });
+});
+
+describe('the hydration fixtures — what a world hydrating cold can draw', () => {
+  const rows = readFileSync(join(process.cwd(), WONDERLAND_WIRE_HYDRATIONS_PATH), 'utf8')
+    .split('\n')
+    .filter((line) => line.trim() !== '')
+    .map((line) => {
+      const [name, expect_, json] = line.split('\t');
+      return { name, expect: expect_, json };
+    });
+
+  it('sends a drawable state for every state the kernel can hold', () => {
+    // A world hydrating cold has only this. `run.state` is the kernel's
+    // bookkeeping word, and mapping it client-side would be a second answer to
+    // "what is this run doing" in engine code nobody reviewed — agreeing with
+    // Relay's until the day it did not.
+    for (const state of JULIUS_MISSION_STATES) {
+      const row = rows.find((r) => r.name === `hydration-state-${state}`);
+      expect(row, `no fixture for kernel state ${state}`).toBeDefined();
+      const parsed = JSON.parse(row!.json) as { visualState: string };
+      expect(JULIUS_VISUAL_STATES as readonly string[]).toContain(parsed.visualState);
+    }
+  });
+
+  it('draws a run that will never send another event', () => {
+    // The case the field exists for: a COMPLETED run sends no further events,
+    // so the envelope that normally carries the drawable state never arrives.
+    const row = rows.find((r) => r.name === 'hydration-terminal-complete');
+    const parsed = JSON.parse(row!.json) as { visualState: string; terminal: boolean };
+    expect(parsed.visualState).toBe('complete');
+    expect(parsed.terminal).toBe(true);
+  });
+
+  it('keeps ENDED and HOW IT IS DRAWN on separate axes', () => {
+    // `blocked` and `error` are drawn differently and only one is terminal, so
+    // the flag cannot be recovered from the picture. A client inferring an
+    // ending from the drawing would be reading the picture as the fact — and
+    // neither may ever appear as `complete`.
+    type Drawn = { visualState: string; terminal: boolean };
+    const blocked = JSON.parse(
+      rows.find((r) => r.name === 'hydration-blocked-not-terminal')!.json) as Drawn;
+    const failed = JSON.parse(
+      rows.find((r) => r.name === 'hydration-failed-is-terminal')!.json) as Drawn;
+    expect(blocked.visualState).toBe('blocked');
+    expect(blocked.terminal).toBe(false);
+    expect(failed.visualState).toBe('error');
+    expect(failed.terminal).toBe(true);
+    expect([blocked.visualState, failed.visualState]).not.toContain('complete');
+  });
+
+  it('refuses a picture that does not match its run, and the field being absent', () => {
+    expect(rows.find((r) => r.name === 'hydration-picture-disagrees-with-run')!.expect)
+      .toBe('unknown_token');
+    expect(rows.find((r) => r.name === 'hydration-no-visual-state')!.expect).toBe('missing_field');
+    expect(rows.find((r) => r.name === 'hydration-no-terminal-flag')!.expect).toBe('missing_field');
   });
 });
