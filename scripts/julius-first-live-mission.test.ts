@@ -882,6 +882,30 @@ describe('the evidence dump names only tables and columns the migrations create'
   });
 
   /**
+   * SILENCE IS NOT A DISPOSITION. Live Run 3 completed and the word "challenge"
+   * appears nowhere in its bundle — no `contract.challenged` event, correctly,
+   * and no record of the evaluator having examined the terms and raised nothing
+   * either. The two readings are opposite and the bundle could not separate
+   * them, so the dump has to carry the answer as its own column.
+   */
+  it('the contract dump exports the evaluator disposition, on both branches', () => {
+    const query = read('.github/julius-live-evidence-dump.sh').split('\n').find((line) => line.includes('contract-events.tsv')) ?? '';
+    expect(query, 'the contract-events dump must exist').not.toBe('');
+    expect(query, 'a NO_CHALLENGE row has no other event type to arrive under')
+      .toContain("'julius.contract.disposition'");
+    for (const key of ['disposition', 'evaluatorId', 'evidenceCount', 'evidenceIds', 'reasonCode']) {
+      expect(query, `the contract dump must select ${key}`).toContain(`'${key}'`);
+    }
+    // The ids are this repository's own finding identifiers. No finding text,
+    // no plan, no review prose has a column here — because none has a key in
+    // the flattened record.
+    for (const forbidden of ['explanation', 'objectionText', 'reviewText', 'prompt']) {
+      expect(query.includes(forbidden), `the contract dump must not export ${forbidden}`).toBe(false);
+    }
+    expect(query, 'the whole payload is never dumped').not.toMatch(/\bpayload\b(?!\s*(?:->|#>))/u);
+  });
+
+  /**
    * A SETTLEMENT WITHOUT ITS BASIS IS THE DEFECT ITSELF. `budget.tsv` recorded
    * `usdMicros` and could not say whether a blank meant free or unmeasured.
    */

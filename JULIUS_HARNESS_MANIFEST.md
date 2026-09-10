@@ -17,7 +17,7 @@ Julius is the provider-neutral, deterministic orchestration kernel that turns an
 
 Static import closure from the two roots over the TypeScript AST (value and type edges), stopping at the declared boundaries below; plus declared production modules not reached from the live root (flagged); plus path-loaded assets. Tests, fixtures, fakes and UI are refused by category. A drift gate fails the generator when a production file imports the Julius kernel or port without being reached, declared or explicitly excluded, or when a declaration no longer matches the wiring.
 
-Represented: **113 production files** across 20/20 subsystems (2 roots, 90 traced, 8 not composed by the live root, 13 path-loaded assets). Line and byte totals, the coverage estimate and the commit SHA are printed by the generator and recorded in the export header; they are kept out of this file so it changes only when the file set or its classification changes.
+Represented: **114 production files** across 20/20 subsystems (2 roots, 91 traced, 8 not composed by the live root, 13 path-loaded assets). Line and byte totals, the coverage estimate and the commit SHA are printed by the generator and recorded in the export header; they are kept out of this file so it changes only when the file set or its classification changes.
 
 ## Dependency direction (observed, between coarse groups)
 
@@ -94,6 +94,7 @@ One claimed task all the way through: policy, budget reservation, context compil
 
 | production source | role | reached from |
 | --- | --- | --- |
+| `src/relay/mission/julius/julius-contract-disposition.ts` | traced | `src/relay/mission/julius/index.ts` |
 | `src/relay/mission/julius/julius-execution-coordinator.ts` | traced | `src/relay/mission/julius/index.ts` |
 | `src/relay/mission/julius/julius-release-runtime.ts` | traced | `src/relay/mission/julius/index.ts` |
 | `src/relay/mission/julius/julius-task-contract.ts` | traced | `src/relay/mission/julius/julius-router.ts` |
@@ -117,7 +118,7 @@ Which registered worker may take a task, in the router’s own order; provider h
 
 | production source | role | reached from |
 | --- | --- | --- |
-| `src/relay/mission/julius/julius-router.ts` | traced | `src/relay/mission/julius/index.ts` |
+| `src/relay/mission/julius/julius-router.ts` | traced | `src/relay/mission/julius/julius-contract-disposition.ts` |
 
 ### 06 PROMPT ARCHITECT
 

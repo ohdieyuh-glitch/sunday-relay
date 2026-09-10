@@ -2745,3 +2745,41 @@ only what the mission's own test command proves; CI, the boundary scanners,
 typecheck and the drills are the gate, and they run afterwards. That is where
 the founder's pipeline already put them, and is why the sandbox never needed to
 run vitest.
+
+---
+
+## 00k. THE EVALUATOR NOW SAYS WHAT IT DECIDED, EITHER WAY (2026-09-10)
+
+Live Run 3's first qualification: *no independent challenge occurred, and no
+recorded reason explained that none was raised.* The word "challenge" appears
+nowhere in its bundle. That is two different facts wearing one silence — "the
+evaluator examined the terms and had no objection" and "the challenge leg never
+ran" — and on a paid run they are opposite conclusions.
+
+`julius.contract.disposition` is the answer, written on BOTH branches from one
+block in `julius-task-pipeline.ts` (two blocks would drift, and the branch that
+drifts is always the quiet one). An ACCEPT on a Prompt Architect's work now
+walks the same governed DRAFT contracts a REPAIR does and records
+`NO_CHALLENGE`; a REPAIR records `CHALLENGE`.
+
+**Two events, deliberately.** `contract.disposition` says what the evaluator
+DECIDED; `contract.challenged` says the contract's STATE changed. An accept
+changes no state. A challenge the store refused to write produces the first
+without the second — which is exactly what a reader chasing a stalled cycle
+needs. The disposition is written FIRST, so a crash between them leaves the
+decision on the record.
+
+**The rule the first draft got wrong**, recorded because it is a real trap:
+`challengeJuliusTaskContract` refuses a challenge with no objections, and that
+is right for a contract GATE, which needs something concrete to revise against.
+Copying it into the disposition would have refused a legitimate repair round
+admitted on the subject's own FAILED evidence (`verifyTask` → `EVIDENCE_FAILED`),
+which has no findings by construction — restoring the exact silence the record
+exists to end, on the runs most in need of explaining. So `CHALLENGE` with no
+finding ids is recorded; only `NO_CHALLENGE` *citing* findings is refused, since
+an evaluator naming its objections while saying it has none has not decided.
+
+Reason codes pass the same narrowing every other durable reason code does, so
+prose, a URL or a credential cannot arrive dressed as one. Finding ids travel as
+a bounded comma-joined string beside an exact count, so a truncated list never
+reads as a complete one. The bundle's `contract-events.tsv` gains the columns.
