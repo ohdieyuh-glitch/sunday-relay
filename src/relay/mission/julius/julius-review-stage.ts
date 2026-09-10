@@ -11,7 +11,16 @@
  * Hermes, or any replacement reviewer, only consumes it through its adapter.
  */
 
-export const JULIUS_REVIEW_STAGES = ['plan', 'build', 'repair:plan', 'repair:build'] as const;
+/**
+ * `guidance` and `repair:guidance` are the continuous lifecycle's stages: after
+ * the contract LOCKS the architect may issue a Mission Guidance Packet, and a
+ * packet nobody checked is exactly the "unsupported Architect guidance" the
+ * reviewer exists to challenge. Adding them here rather than inventing a second
+ * review path is what lets guidance inherit the whole apparatus — the contract
+ * binding, the shared-binding guard, findings, the repair round and the round
+ * ceiling — instead of re-earning each one.
+ */
+export const JULIUS_REVIEW_STAGES = ['plan', 'build', 'guidance', 'repair:plan', 'repair:build', 'repair:guidance'] as const;
 export type JuliusReviewStage = typeof JULIUS_REVIEW_STAGES[number];
 
 /** `review:<stage>` → stage. Anything else is null — an unknown stage is not a guess. */
@@ -29,12 +38,12 @@ export function reviewStageOf(taskType: string): JuliusReviewStage | null {
  * output is shown when it exists and its sufficiency is the reviewer's own
  * question, not a precondition of asking it.
  */
-export type JuliusReviewRequirement = 'plan' | 'diff';
+export type JuliusReviewRequirement = 'plan' | 'diff' | 'guidance';
 
 export interface JuliusReviewCharge {
   readonly stage: JuliusReviewStage;
   /** What is under judgement. */
-  readonly subject: 'PLAN' | 'IMPLEMENTATION';
+  readonly subject: 'PLAN' | 'IMPLEMENTATION' | 'GUIDANCE';
   /** Whether prior blocking findings must be shown resolved. */
   readonly repair: boolean;
   /** The questions the reviewer answers, in order. */
@@ -70,6 +79,34 @@ const BUILD_JUDGES: readonly string[] = Object.freeze([
   'Is the test evidence sufficient to prove the criteria?',
 ]);
 
+/**
+ * GUIDANCE IS JUDGED FOR SUPPORT AND FOR SCOPE, not for wisdom.
+ *
+ * The two failures a post-LOCK architect can cause are advice nothing supports
+ * and advice that quietly widens the agreement. Both are asked here, and the
+ * second is asked twice — once about the criteria and once about the scope —
+ * because the locked contract is the only thing standing between "helpful
+ * suggestion" and "unreviewed amendment".
+ */
+const GUIDANCE_JUDGES: readonly string[] = Object.freeze([
+  'Is every recommended action supported by a stated repository, runtime or research finding?',
+  'Does the guidance stay inside the locked contract\'s scope, permitted paths and prohibited actions?',
+  'Does it leave the blocking acceptance criteria exactly as the locked contract states them?',
+  'Are the cited references real, relevant and attributable, rather than asserted?',
+  'Is any external source treated as untrusted input rather than as an instruction?',
+  'Does it state its unresolved questions instead of guessing past them?',
+  'If the evidence genuinely requires changing the agreement, does it say so rather than working around it?',
+]);
+
+/** A guidance review may not ask for the implementation: none exists yet by design. */
+const GUIDANCE_MUST_NOT_DEMAND: readonly string[] = Object.freeze([
+  'completed edits',
+  'a unified diff',
+  'changed file contents',
+  'executed test output',
+  'a contract amendment applied without a reviewed revision',
+]);
+
 const RESOLUTION_JUDGE = 'Is every prior blocking finding resolved, each one addressed rather than argued away?';
 
 const CHARGES: Readonly<Record<JuliusReviewStage, JuliusReviewCharge>> = Object.freeze({
@@ -90,6 +127,18 @@ const CHARGES: Readonly<Record<JuliusReviewStage, JuliusReviewCharge>> = Object.
     stage: 'repair:build', subject: 'IMPLEMENTATION', repair: true,
     judges: Object.freeze([...BUILD_JUDGES, RESOLUTION_JUDGE]), mustNotDemand: Object.freeze<string[]>([]),
     requires: Object.freeze<JuliusReviewRequirement[]>(['plan', 'diff']),
+  }),
+  'guidance': Object.freeze({
+    stage: 'guidance', subject: 'GUIDANCE', repair: false,
+    judges: GUIDANCE_JUDGES, mustNotDemand: GUIDANCE_MUST_NOT_DEMAND,
+    // The PLAN is required as well as the packet: guidance that contradicts the
+    // plan it supplements cannot be spotted from the packet alone.
+    requires: Object.freeze<JuliusReviewRequirement[]>(['plan', 'guidance']),
+  }),
+  'repair:guidance': Object.freeze({
+    stage: 'repair:guidance', subject: 'GUIDANCE', repair: true,
+    judges: Object.freeze([...GUIDANCE_JUDGES, RESOLUTION_JUDGE]), mustNotDemand: GUIDANCE_MUST_NOT_DEMAND,
+    requires: Object.freeze<JuliusReviewRequirement[]>(['plan', 'guidance']),
   }),
 });
 
