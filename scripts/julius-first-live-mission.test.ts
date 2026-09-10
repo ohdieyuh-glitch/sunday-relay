@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { mkdtempSync, readdirSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve, sep } from 'node:path';
 import { parseLiveMissionContract } from '../relay-bridge/julius-live-mission';
@@ -53,11 +53,39 @@ const MISSIONS_DIR = '.github/julius-missions';
 const MISSIONS = readdirSync(resolve(ROOT, MISSIONS_DIR))
   .filter((name) => statSync(resolve(ROOT, MISSIONS_DIR, name)).isDirectory())
   .sort();
-/** Files a mission seeds that are not scaffolding — the ones the agent edits. */
+/**
+ * WHICH SEED A MISSION DECLARES.
+ *
+ * `workspace/` is a throwaway tree the mission invented; `slice.txt` names paths
+ * of THIS repository to copy byte-for-byte, for a mission whose subject is
+ * Sunday Relay itself. Exactly one, and the workflow and the provisioner both
+ * refuse a mission that declares both — so the tests below can branch on it
+ * rather than assume the older mode.
+ */
+const seedKindOf = (mission: string): 'workspace' | 'slice' => {
+  const tree = existsSync(resolve(ROOT, MISSIONS_DIR, mission, 'workspace'));
+  const slice = existsSync(resolve(ROOT, MISSIONS_DIR, mission, 'slice.txt'));
+  expect(tree !== slice, `${mission} must declare exactly one of workspace/ and slice.txt`).toBe(true);
+  return tree ? 'workspace' : 'slice';
+};
+
+/**
+ * Files a mission seeds that are not scaffolding — the ones the agent edits.
+ *
+ * A SLICE MISSION'S DELIVERABLES ARE ITS PATHS, and they are repository paths,
+ * so the basename is what a contract can readably name. `.julius/` is never
+ * among them: the loader is harness, seeded beside the slice and outside every
+ * path a slice may declare.
+ */
 const deliverablesOf = (mission: string): string[] =>
-  readdirSync(resolve(ROOT, MISSIONS_DIR, mission, 'workspace'))
-    .filter((name) => !['package.json', 'README.md'].includes(name))
-    .sort();
+  seedKindOf(mission) === 'workspace'
+    ? readdirSync(resolve(ROOT, MISSIONS_DIR, mission, 'workspace'))
+      .filter((name) => !['package.json', 'README.md'].includes(name))
+      .sort()
+    : read(`${MISSIONS_DIR}/${mission}/slice.txt`)
+      .split('\n').map((line) => line.replace(/#.*$/u, '').trim()).filter((line) => line !== '')
+      .map((path) => path.slice(path.lastIndexOf('/') + 1))
+      .sort();
 
 /** The workflow's `on:` block, up to the next top-level key. */
 const triggerBlock = (): string => {
@@ -567,6 +595,12 @@ describe('the mission itself is bounded and aimed away from this repository', ()
       expect(contract.ok ? 'accepted' : contract.problem, mission).toBe('accepted');
       if (!contract.ok) continue;
 
+      // A SLICE MISSION HAS NO STUBS TO RUN HERE. Its seed is this repository's
+      // own files at a trusted SHA, which already pass their own tests — the
+      // thing that must fail until the work is done is the mission's NEW test,
+      // and `scripts/julius-mission-slice.test.ts` exercises slice provisioning
+      // end to end against the real files instead.
+      if (seedKindOf(mission) === 'slice') continue;
       const directory = mkdtempSync(join(tmpdir(), `julius-stubs-${mission}-`));
       for (const file of readdirSync(resolve(ROOT, MISSIONS_DIR, mission, 'workspace'))) {
         writeFileSync(join(directory, file), read(`${MISSIONS_DIR}/${mission}/workspace/${file}`));

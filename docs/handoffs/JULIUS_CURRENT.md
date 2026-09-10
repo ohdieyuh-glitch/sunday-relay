@@ -2698,3 +2698,50 @@ same change that froze the document:
 **The standing testing policy from this point on:** a provider-free run is not a
 Julius mission. Preflights, drills and e2e chains prove wiring; only a paid run
 against real worker output proves the system.
+
+---
+
+## 00j. THE MISSION SANDBOX — JULIUS ENGINEERS RELAY WITHOUT TOUCHING IT (2026-09-10)
+
+**The founder's rule: Julius must never write directly to trusted Sunday Relay
+main.** Trusted SHA → isolated disposable sandbox → candidate diff →
+worker-authored branch → CI → main, and a failed mission must be able to destroy
+its own sandbox without damaging the canonical checkout.
+
+Design and the measured envelope: **`docs/JULIUS_MISSION_SANDBOX.md`**.
+
+**The constraint that shaped everything, measured rather than assumed:** the
+executor refuses a workspace whose backing filesystem exceeds
+`BETA_WORKSPACE_BYTES` = **4 MiB**, the sandbox runs `--network none`, each
+command gets **15 s**, and the coding agent is denied `Write`. So a Sunday Relay
+*checkout* can never be a mission workspace, and `npm ci` — hence vitest — can
+never run inside one.
+
+**What works instead, proven by running it.** A mission may now declare
+`slice.txt` instead of `workspace/`: repository-relative paths materialised with
+`git archive <trusted sha>`, byte-identical, paths preserved. Two
+dependency-free files under `.julius/` teach Node the extensionless imports
+Relay writes, so nothing is rewritten on the way in. Node 22 strips types under
+`node --test` with no flag and no dependency (verified against the real binary,
+22.22.2).
+
+Four properties proven end to end in `scripts/julius-mission-slice.test.ts`:
+byte identity with the repository; a real git repo with a base revision; real
+Relay source running under `node --test` with no deps and no network; and — the
+one the mode exists for — **the resulting diff `git apply --check`s cleanly
+against Sunday Relay**, and is correctly refused when reversed.
+
+**The limits, written down rather than discovered during a paid run.** Type
+stripping erases types, it does not compile: parameter properties, `enum` and
+`namespace` will not load. Swept across the 37 Julius production files, five use
+parameter properties (`julius-execution-coordinator`, `julius-router`,
+`julius-runtime-api`, `julius-tool-settlement`, `julius-tools`); there is no
+`enum` and no `namespace`. Of the ten files in the Project Brain surface, only
+`julius-runtime-api.ts` is affected. Sizes: whole Julius domain 517 KB across 37
+files; Project Brain surface ~283 KB — both far inside 4 MiB.
+
+**A green sandbox run is not a green repository.** The candidate diff has proven
+only what the mission's own test command proves; CI, the boundary scanners,
+typecheck and the drills are the gate, and they run afterwards. That is where
+the founder's pipeline already put them, and is why the sandbox never needed to
+run vitest.
