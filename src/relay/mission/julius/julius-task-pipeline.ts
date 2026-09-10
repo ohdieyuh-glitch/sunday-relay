@@ -41,9 +41,14 @@ import { createJuliusContextSnapshot } from './julius-context-snapshot';
 import { evaluateJuliusVerification, type JuliusReviewerFinding, type JuliusVerificationPolicy } from './julius-verification-runtime';
 import { planJuliusRepair } from './julius-repair-runtime';
 import { repairLineageRootOf, repairRoundsBefore, repairTaskTypeFor } from './julius-repair-lineage';
-import { challengeJuliusTaskContract, evaluateJuliusBindingCurrency, evaluateJuliusSharedBinding, juliusContractReviewCharge, lockJuliusTaskContract, mayDispatchUnderContract, reviseJuliusTaskContract, sanitizeJuliusContractProposal, type JuliusTaskContract, type JuliusTaskContractBinding } from './julius-task-contract';
+import { challengeJuliusTaskContract, evaluateJuliusBindingCurrency, evaluateJuliusSharedBinding, juliusContractReviewCharge, juliusTaskContractBinding, lockJuliusTaskContract, mayDispatchUnderContract, reviseJuliusTaskContract, sanitizeJuliusContractProposal, type JuliusTaskContract, type JuliusTaskContractBinding } from './julius-task-contract';
 import { evaluateJuliusRelease } from './julius-release-runtime';
 import { reviewStageOf, type JuliusReviewStage } from './julius-review-stage';
+import {
+  guidanceSubjectTaskId, issueJuliusGuidance, juliusCheckpointId, juliusGuidanceId, juliusGuidanceTaskId,
+  recordJuliusCheckpoint, routeJuliusCheckpoint, sanitizeJuliusGuidanceProposal, sanitizeJuliusGuidanceRequest,
+  type JuliusCheckpointOrigin,
+} from './julius-continuous-lifecycle';
 import { evaluateJuliusAllocation, type JuliusAllocationPolicy, type JuliusExecutionAllocation } from './julius-allocation-runtime';
 import { JULIUS_RUNTIME_VERSION, type JuliusBrainEntry, type JuliusRecordedDecision, type JuliusTask, type JuliusVerificationDecision, type JuliusWorker, type JuliusWorkerRole } from './julius-runtime';
 import { validateJuliusEvent, type JuliusOperationalEvent, type JuliusOperationalEventType } from './julius-events';
@@ -350,6 +355,22 @@ export function juliusContractSubjectTaskId(task: JuliusTask, tasks: readonly Ju
     if (worker.role.startsWith('SPECIALIST:')) {
       const ancestor = codingAncestorOf(worker);
       return ancestor === null ? worker.taskId : rootOf(ancestor);
+    }
+    /**
+     * A GUIDANCE TASK IS THE ONE ARCHITECT TASK THAT IS BOUND.
+     *
+     * The architect that DRAFTS the terms is bound by none — it is writing
+     * them. The architect that ADVISES under terms already locked is bound by
+     * exactly those, which is what makes the whole continuous lifecycle safe:
+     * the guidance task then passes the ordinary dispatch gate (refused unless
+     * LOCKED), records the ordinary binding on its claim, and its own review
+     * passes the ordinary shared-binding guard. Not one of those three had to
+     * be rebuilt for the new path; this line is what buys them.
+     */
+    const guided = guidanceSubjectTaskId(worker.taskId);
+    if (guided !== null) {
+      const subject = byId.get(guided);
+      return subject === undefined ? null : rootOf(subject);
     }
     // The Prompt Architect produces the terms and is bound by none.
     return null;
@@ -988,9 +1009,265 @@ export async function runClaimedTask(
     });
   }
 
+  /* ------------------------------- 3b. the continuous three-worker lifecycle */
+  if (!outcome.duplicate && (outcome.guidanceRequest !== undefined || outcome.guidance !== undefined)) {
+    await driveContinuousLifecycle({
+      deps, run, ledger, task, request, workerId: outcome.workerId,
+      ...(outcome.guidanceRequest === undefined ? {} : { guidanceRequest: outcome.guidanceRequest }),
+      ...(outcome.guidance === undefined ? {} : { guidance: outcome.guidance }),
+    });
+  }
+
   /* --------------------------------------------------- 4. verification */
   return verifyExecutedTask({ request, deps, run, ledger, task, workerId: outcome.workerId, duplicate: outcome.duplicate });
 }
+
+/**
+ * THE CONTINUOUS LIFECYCLE, driven from the one place a dispatch ends.
+ *
+ * Two directions cross here and they are deliberately not symmetric.
+ *
+ * A CODER MAY ASK. Its result may carry a `guidanceRequest`, which Julius turns
+ * into a checkpoint, routes, and — if the route says so — answers by minting a
+ * REAL TASK on the architect. Not a message, not a side channel: a task, so it
+ * is claimed under a lease, admitted against an attempt, dispatched under the
+ * locked contract, banked as evidence, reviewed and decided exactly like every
+ * other unit of work. That is the whole reason participation is expressed this
+ * way — a parallel channel would have to re-earn every one of those properties,
+ * and would get most of them wrong.
+ *
+ * AN ARCHITECT MAY ANSWER. A `guidance` result on a guidance task is sanitised,
+ * bound to the contract revision in force, and recorded. It cannot amend the
+ * contract: the packet has nowhere to put a contract term and the sanitizer
+ * refuses a proposal that names one.
+ *
+ * A REFUSAL IS RECORDED AND THE RUN CONTINUES, exactly as a malformed contract
+ * proposal is: failing a task because its optional guidance was unusable would
+ * trade worse advice for no mission.
+ */
+async function driveContinuousLifecycle(input: {
+  readonly deps: JuliusPipelineDependencies;
+  readonly run: JuliusRunRow;
+  readonly ledger: RuntimeLedger;
+  readonly task: JuliusTask;
+  readonly request: JuliusPipelineRequest;
+  readonly workerId: string;
+  readonly guidanceRequest?: unknown;
+  readonly guidance?: unknown;
+}): Promise<void> {
+  const { deps, run, ledger, task } = input;
+
+  if (input.guidance !== undefined) {
+    await issueGuidanceFromResult(input);
+  }
+
+  if (input.guidanceRequest === undefined) return;
+
+  // THE SUBJECT IS THE ASKING TASK ITSELF. A coder asks about its own build;
+  // routing a request onto some parent would answer a question nobody posed.
+  const subjectTaskId = task.taskId;
+  const tasks = await deps.store.tasksForRun(run.runId, run.projectId);
+  const priorGuidance = tasks.filter((row) => guidanceSubjectTaskId(row.taskId) === subjectTaskId);
+  const sequence = priorGuidance.length + 1;
+
+  const contractTaskId = juliusContractSubjectTaskId(task, tasks);
+  const contract = contractTaskId === null
+    ? null
+    : await deps.store.loadTaskContract({ projectId: run.projectId, taskId: contractTaskId });
+  const binding = contract === null ? null : juliusTaskContractBinding(contract);
+
+  const request = sanitizeJuliusGuidanceRequest(input.guidanceRequest);
+  const recorded = recordJuliusCheckpoint({
+    checkpointId: juliusCheckpointId(subjectTaskId, sequence),
+    runId: run.runId,
+    taskId: subjectTaskId,
+    sequence,
+    trigger: 'GUIDANCE_REQUESTED',
+    origin: originForRole(task.role),
+    binding,
+    evidenceIds: [],
+    // The worker's own bounded words about what it is stuck on, or Julius's
+    // sentence when the request arrived unusable. Never the provider's body.
+    safeSummary: request?.question ?? 'A worker asked for guidance and its request could not be read.',
+    recordedAt: deps.clock.now(),
+  });
+  if (recorded.outcome === 'REFUSED') {
+    await ledger.event('guidance.refused', {
+      taskId: subjectTaskId, workerId: input.workerId,
+      facts: { reasonCode: recorded.reasonCode, stage: 'checkpoint' },
+    });
+    return;
+  }
+
+  const checkpoint = recorded.checkpoint;
+  await ledger.event('checkpoint.recorded', {
+    taskId: subjectTaskId, workerId: input.workerId,
+    facts: {
+      checkpointId: checkpoint.checkpointId, trigger: checkpoint.trigger, origin: checkpoint.origin,
+      sequence: checkpoint.sequence, evidenceCount: checkpoint.evidenceIds.length,
+      contractRevision: binding?.contractRevision ?? null,
+      contractBindingDigest: binding?.bindingDigest ?? null,
+    },
+  });
+
+  // AN OUTSTANDING QUESTION SUPPRESSES THE NEXT ONE. This is the anti-spam rule
+  // and it is computed from durable task state, not from a counter.
+  const guidanceInFlight = priorGuidance.some(
+    (row) => row.state === 'RUNNABLE' || row.state === 'ACTIVE' || row.state === 'BLOCKED',
+  );
+  const routing = routeJuliusCheckpoint({
+    checkpoint, verdict: null, guidanceInFlight, contractState: contract?.state ?? null,
+  });
+  if (routing.route !== 'REQUEST_GUIDANCE') {
+    await ledger.event('checkpoint.verdict', {
+      taskId: subjectTaskId, workerId: input.workerId,
+      facts: { checkpointId: checkpoint.checkpointId, route: routing.route, reasonCode: routing.reasonCode },
+    });
+    return;
+  }
+
+  /**
+   * A GUIDANCE TASK NOBODY CAN CLAIM IS WORSE THAN NO GUIDANCE AT ALL.
+   *
+   * `scheduleRepair` learned this the expensive way on paid run 34037313976: a
+   * task minted for a role nothing serves does not fail, it SITS — RUNNABLE
+   * forever, with the mission unable to complete around it. The same preflight
+   * is applied here, and it is what lets this land safely ahead of the live
+   * architect's guidance charter: until a worker registers `guidance`, Julius
+   * records that it would have asked and carries on, rather than stalling a
+   * paid mission on a question no one can answer.
+   */
+  const capability = input.request.capabilityFor?.({
+    taskId: subjectTaskId, taskType: 'guidance', role: 'PROMPT_ARCHITECT',
+  });
+  if (capability !== undefined) {
+    const routes = deps.router.eligibleWorkerIds({
+      role: 'PROMPT_ARCHITECT', taskType: 'guidance', capability, policy: input.request.policy,
+    });
+    if (routes.length === 0) {
+      await ledger.event('checkpoint.verdict', {
+        taskId: subjectTaskId, workerId: input.workerId,
+        facts: {
+          checkpointId: checkpoint.checkpointId, route: 'CONTINUE',
+          reasonCode: 'GUIDANCE_UNROUTABLE', wouldHaveRouted: routing.route,
+        },
+      });
+      return;
+    }
+  }
+
+  const guidanceTask: JuliusTask = {
+    taskId: juliusGuidanceTaskId(subjectTaskId, sequence),
+    missionId: task.missionId,
+    parentTaskId: subjectTaskId,
+    dependencyIds: [],
+    requiredEvidenceTypes: ['ARTIFACT'],
+    taskType: 'guidance',
+    role: 'PROMPT_ARCHITECT',
+    ordinal: task.ordinal + 1,
+    // RUNNABLE, because BLOCKED is unreachable by the claim query and only
+    // `appendDecision({releaseTaskIds})` ever moves a task out of it.
+    state: 'RUNNABLE',
+  };
+  const created = await deps.store.addTask({
+    commandId: `guidance:${guidanceTask.taskId}`,
+    runId: run.runId, projectId: run.projectId, task: guidanceTask,
+  });
+  await ledger.event('checkpoint.verdict', {
+    taskId: subjectTaskId, workerId: input.workerId,
+    facts: {
+      checkpointId: checkpoint.checkpointId, route: routing.route, reasonCode: routing.reasonCode,
+      guidanceTaskId: guidanceTask.taskId, created,
+    },
+  });
+}
+
+/** `PROMPT_ARCHITECT` → itself; anything Julius does not recognise observes as JULIUS. */
+const originForRole = (role: JuliusWorkerRole): JuliusCheckpointOrigin =>
+  role === 'PROMPT_ARCHITECT' || role === 'CODING_AGENT' || role === 'INDEPENDENT_REVIEWER' ? role : 'JULIUS';
+
+/**
+ * Turn an architect's answer into a bound, versioned packet — or record why it
+ * could not be one.
+ *
+ * The contract is read FRESH rather than taken from the dispatch preflight: an
+ * architect that spent a long time researching may be answering under terms
+ * that have since been revised, and a packet stamped with the revision Julius
+ * remembers rather than the one in force would be the forgery
+ * `evaluateJuliusGuidanceCurrency` exists to make impossible.
+ */
+async function issueGuidanceFromResult(input: {
+  readonly deps: JuliusPipelineDependencies;
+  readonly run: JuliusRunRow;
+  readonly ledger: RuntimeLedger;
+  readonly task: JuliusTask;
+  readonly workerId: string;
+  readonly guidance?: unknown;
+}): Promise<void> {
+  const { deps, run, ledger, task } = input;
+  const refuse = async (reasonCode: string): Promise<void> => {
+    await ledger.event('guidance.refused', {
+      taskId: task.taskId, workerId: input.workerId, facts: { reasonCode, stage: 'issue' },
+    });
+  };
+
+  const subjectTaskId = guidanceSubjectTaskId(task.taskId);
+  if (subjectTaskId === null) return refuse('guidance_from_a_non_guidance_task');
+
+  const proposal = sanitizeJuliusGuidanceProposal(input.guidance);
+  if (proposal === null) return refuse('guidance_shape_refused');
+
+  const contractTaskId = juliusContractSubjectTaskId(
+    task, await deps.store.tasksForRun(run.runId, run.projectId),
+  );
+  const contract = contractTaskId === null
+    ? null
+    : await deps.store.loadTaskContract({ projectId: run.projectId, taskId: contractTaskId });
+  if (contract === null) return refuse('contract_absent');
+  const binding = juliusTaskContractBinding(contract);
+  // GUIDANCE EXISTS ONLY UNDER AN AGREEMENT. Before LOCK the architect holds the
+  // plan task and speaks through it; after SUPERSESSION there is no agreement
+  // left to advise under.
+  if (binding === null) return refuse('contract_not_locked');
+
+  const match = /:([1-9]\d*):task$/u.exec(task.taskId);
+  const revision = match === null ? 1 : Number(match[1]);
+  const issued = issueJuliusGuidance({
+    guidanceId: juliusGuidanceId(subjectTaskId, revision),
+    runId: run.runId,
+    taskId: subjectTaskId,
+    binding,
+    revision,
+    triggeringCheckpointId: juliusCheckpointId(subjectTaskId, revision),
+    proposal,
+    contractCriterionIds: contract.blockingAcceptanceCriteria.map((criterion) => criterion.criterionId),
+    issuedByWorkerId: input.workerId,
+    issuedAt: deps.clock.now(),
+  });
+  if (issued.outcome === 'REFUSED') return refuse(issued.reasonCode);
+
+  const packet = issued.packet;
+  // COUNTS AND IDENTIFIERS, never the advice itself. The packet's own text
+  // travels to the coder the way the plan does — as an artifact the composition
+  // owns — and the ledger records that it existed, under which agreement, and
+  // how much of it there was.
+  await ledger.event('guidance.issued', {
+    taskId: subjectTaskId, workerId: input.workerId,
+    facts: {
+      guidanceId: packet.guidanceId, guidanceRevision: packet.revision,
+      guidanceDigest: packet.packetDigest,
+      contractRevision: binding.contractRevision, contractBindingDigest: binding.bindingDigest,
+      recommendedActions: packet.recommendedActions.length,
+      additionalProhibitions: packet.additionalProhibitions.length,
+      references: packet.references.length,
+      webReferences: packet.references.filter((reference) => reference.kind === 'WEB').length,
+      corroboratedReferences: packet.references.filter((reference) => reference.trust === 'CORROBORATED').length,
+      affectedCriteria: packet.affectedCriterionIds.length,
+      unresolvedQuestions: packet.unresolvedQuestions.length,
+    },
+  });
+}
+
 
 /**
  * Store a worker's proposed contract revision, or record why it was refused.

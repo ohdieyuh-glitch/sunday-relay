@@ -551,6 +551,53 @@ export function sanitizeJuliusGuidanceProposal(value: unknown): JuliusGuidancePr
   });
 }
 
+/**
+ * WHAT A CODER MAY ASK FOR, MID-MISSION.
+ *
+ * Deliberately a QUESTION and its context, never an instruction: a coder that
+ * could tell the architect what to write would be the coder editing its own
+ * terms one indirection later. The same forbidden-field refusal applies, for
+ * the same reason — a request naming `inScope` is a scope change wearing a
+ * question mark.
+ */
+export interface JuliusGuidanceRequest {
+  readonly question: string;
+  readonly blockedOn: readonly string[];
+  readonly attempted: readonly string[];
+  readonly relevantPaths: readonly string[];
+}
+
+const REQUEST_LIST_FIELDS = ['blockedOn', 'attempted', 'relevantPaths'] as const;
+
+export function sanitizeJuliusGuidanceRequest(value: unknown): JuliusGuidanceRequest | null {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return null;
+  const source = value as Record<string, unknown>;
+  for (const forbidden of JULIUS_GUIDANCE_FORBIDDEN_FIELDS) {
+    if (forbidden in source) return null;
+  }
+  const question = trimmed(source.question, JULIUS_CHECKPOINT_LIMITS.summaryChars);
+  if (question === null) return null;
+  const lists: Record<string, readonly string[]> = {};
+  for (const field of REQUEST_LIST_FIELDS) {
+    const raw = source[field];
+    if (raw === undefined) { lists[field] = Object.freeze([]); continue; }
+    if (!Array.isArray(raw) || raw.length > JULIUS_GUIDANCE_LIMITS.entriesPerList) return null;
+    const entries: string[] = [];
+    for (const entry of raw) {
+      const text = trimmed(entry, JULIUS_GUIDANCE_LIMITS.entryChars);
+      if (text === null) return null;
+      entries.push(text);
+    }
+    lists[field] = Object.freeze(entries);
+  }
+  return Object.freeze({
+    question,
+    blockedOn: lists.blockedOn!,
+    attempted: lists.attempted!,
+    relevantPaths: lists.relevantPaths!,
+  });
+}
+
 function canonicalise(value: unknown, path: string): string {
   if (value === undefined) throw new Error(`julius_guidance_canonical_undefined:${path}`);
   if (value === null) return 'null';
@@ -777,8 +824,13 @@ export function routeJuliusCheckpoint(input: {
 export const juliusGuidanceTaskId = (subjectTaskId: string, revision: number): string =>
   `guidance:${subjectTaskId}:${revision}:task`;
 
-export const juliusCheckpointId = (runId: string, sequence: number): string =>
-  `checkpoint:${runId}:${sequence}`;
+/**
+ * Keyed by the SUBJECT and the sequence, not by the run, so the id is derivable
+ * from durable state on replay rather than minted from a counter a restart
+ * would lose — the same reason the repair ids are shaped the way they are.
+ */
+export const juliusCheckpointId = (subjectTaskId: string, sequence: number): string =>
+  `checkpoint:${subjectTaskId}:${sequence}`;
 
 export const juliusGuidanceId = (subjectTaskId: string, revision: number): string =>
   `guidance:${subjectTaskId}:${revision}`;

@@ -53,6 +53,12 @@ export const JULIUS_OPERATIONAL_EVENT_TYPES=[
   * challenge in it cannot otherwise say whether the terms were examined and
   * found sound, or whether the challenge leg simply never ran. */
  'contract.disposition',
+ /* THE CONTINUOUS LIFECYCLE. A checkpoint is a moment Julius judged worth a
+  * decision; a verdict is what the reviewer said about one; guidance is what
+  * the architect said after the contract locked. Before these four, the ledger
+  * recorded only boundaries — a task started, a task ended — and a mission's
+  * whole middle was unwritten. */
+ 'checkpoint.recorded','checkpoint.verdict','guidance.issued','guidance.refused',
  /* bounded children */
  'subagent.spawned','subagent.denied','subagent.completed',
  /* budget */

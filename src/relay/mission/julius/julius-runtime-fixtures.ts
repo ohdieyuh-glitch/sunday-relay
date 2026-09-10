@@ -151,6 +151,10 @@ export type ScriptedOutcome =
     readonly usdMicros?: number | null;
     /** What this worker PROPOSES for its task contract. Unsanitised on purpose — a test may send a hostile shape. */
     readonly contractProposal?: unknown;
+    /** A coder asking the architect something mid-mission. Unsanitised, for the same reason. */
+    readonly guidanceRequest?: unknown;
+    /** An architect answering, after the contract locked. Unsanitised, for the same reason. */
+    readonly guidance?: unknown;
   }
   /** `costUsdMicros` is what the boundary billed before it failed, as its diagnostics would carry. */
   | {
@@ -215,6 +219,8 @@ export function scriptedAdapter(
           inputTokens: 10, outputTokens: 10, toolCalls: 1, runtimeMs: 5,
         },
         ...(step.contractProposal === undefined ? {} : { contractProposal: step.contractProposal }),
+        ...(step.guidanceRequest === undefined ? {} : { guidanceRequest: step.guidanceRequest }),
+        ...(step.guidance === undefined ? {} : { guidance: step.guidance }),
       };
       return result;
     },
