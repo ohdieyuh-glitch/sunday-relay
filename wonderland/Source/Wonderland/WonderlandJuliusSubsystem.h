@@ -111,6 +111,35 @@ public:
 		const FWonderlandJuliusEmbodiment& Embodiment);
 
 	/**
+	 * Adopt a whole hydration — what `GET /wonderland/julius/hydrate` answers.
+	 *
+	 * THE JOIN, AND THE RECONNECT, IN ONE ACT. `AdoptSnapshot` sets the run and
+	 * nothing else, so a world that had just joined held a correct phase beside
+	 * an EMPTY ACTIVITY: no signals, no subagent counts, no gate. A run genuinely
+	 * waiting on a person drew as a calm run until the next event happened to
+	 * arrive — and for a run that has stopped, for ever. The server folds the
+	 * activity precisely so a rejoining client need not replay the transcript,
+	 * and until now nothing applied what it folded.
+	 *
+	 * IT TAKES NO EMBODIMENT, unlike `AdoptSnapshot` and `ApplyEnvelope`. Both of
+	 * those are handed one because their payload carries only the KERNEL's word
+	 * for the state and the mapping to a drawable one is Relay's. A hydration
+	 * carries `VisualState` and `bTerminal` already, so asking a caller for an
+	 * embodiment would be asking it to answer a question the payload answers —
+	 * and an engine-side answer would be a second authority for it.
+	 *
+	 * IT RETURNS A VERDICT, unlike `AdoptSnapshot`, because a JOIN is a moment a
+	 * caller waits on: "may I draw this world yet?" has an answer here and only
+	 * counters elsewhere. False means nothing was applied — not partly applied.
+	 *
+	 * The decoder has already refused a hydration that is internally
+	 * inconsistent or names another project than its own parts. This refuses one
+	 * that is foreign to the project THIS world is bound to, or older than what
+	 * is already held; the decoder cannot know either.
+	 */
+	bool AdoptHydration(const FWonderlandHydration& Hydration);
+
+	/**
 	 * Tell the subsystem what the world's own link is doing.
 	 *
 	 * The client's fact, beside Relay's. Nothing here touches the embodiment:
@@ -135,6 +164,14 @@ public:
 	UFUNCTION(BlueprintPure, Category = "Wonderland|Julius")
 	const FWonderlandLinkStatus& GetLinkStatus() const { return LinkStatus; }
 
+	/**
+	 * What this run is waiting for a PERSON to do. Empty until a hydration
+	 * says otherwise, and empty is NOT "nobody looked" — a world that has been
+	 * told nothing reports `HasState()` false, which is the different fact.
+	 */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Julius")
+	const TArray<FWonderlandHumanGate>& GetHumanGates() const { return HumanGates; }
+
 	/** Where this client is in the stream, and what it refused. */
 	const FWonderlandCursor& GetCursor() const { return Cursor; }
 
@@ -154,5 +191,6 @@ private:
 	FWonderlandJuliusEmbodiment Embodiment;
 	FWonderlandActivityReading Activity;
 	FWonderlandLinkStatus LinkStatus;
+	TArray<FWonderlandHumanGate> HumanGates;
 	bool bStateApplied = false;
 };

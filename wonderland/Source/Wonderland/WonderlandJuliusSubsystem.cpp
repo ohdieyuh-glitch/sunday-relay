@@ -28,6 +28,10 @@ void UWonderlandJuliusSubsystem::ClearHeldState()
 	// than an agent at rest.
 	Embodiment = FWonderlandJuliusEmbodiment();
 	Activity = FWonderlandActivityReading();
+	// GATES GO WITH EVERYTHING ELSE. A world that switched projects and kept
+	// the previous run's open gate would tell a founder they are being waited
+	// on by a mission they are no longer watching.
+	HumanGates.Empty();
 	bStateApplied = false;
 }
 
@@ -150,6 +154,100 @@ void UWonderlandJuliusSubsystem::AdoptSnapshot(
 	Embodiment = InEmbodiment;
 	bStateApplied = true;
 	OnJuliusChanged.Broadcast();
+}
+
+bool UWonderlandJuliusSubsystem::AdoptHydration(const FWonderlandHydration& Hydration)
+{
+	// EVERY REFUSAL FIRST, AND NOTHING APPLIED UNTIL THEY ALL PASS. A hydration
+	// is adopted WHOLESALE — the run, both meters, the activity, the citation,
+	// the C.A.R.D. and the gates replace themselves in one act — so a partial
+	// application would leave a world drawing two different moments with
+	// nothing to say which half is real.
+	if (!IsBound() || Hydration.ProjectId != Cursor.ProjectId)
+	{
+		++Cursor.ForeignProjects;
+		return false;
+	}
+	if (Cursor.RunId.bKnown && Cursor.RunId.Value != Hydration.Run.RunId)
+	{
+		++Cursor.ForeignRuns;
+		return false;
+	}
+	// THE RUN INSIDE MUST BE THE RUN NAMED OUTSIDE. The decoder checks this and
+	// so does the server's verdict; a hydration that reached here another way —
+	// a fixture, a replay, a caller that built one — would otherwise put
+	// another run's meters under this run's name, and every check downstream
+	// reads the outer identity alone.
+	//
+	// AND IT IS REDUNDANT TODAY, WHICH IS WORTH SAYING RATHER THAN IMPLYING
+	// OTHERWISE. Given the outer check above, an inner project that differs
+	// also differs from the cursor's, so `AdoptSnapshot` refuses it and the
+	// counter comparison below returns false anyway. A mutation deleting this
+	// block passes the harness, and that is correct rather than a gap: it is
+	// defence in depth against a future in which those two rules diverge, and
+	// it names the failure at the layer that can see both halves.
+	if (Hydration.Run.ProjectId != Hydration.ProjectId)
+	{
+		++Cursor.ForeignProjects;
+		return false;
+	}
+	// AN OLD ANSWER FROM A REPLICA THAT HAS NOT CAUGHT UP is not a recovery.
+	// Adopting it would undo events already applied.
+	if (Hydration.Run.Revision < Cursor.Revision)
+	{
+		++Cursor.StaleRevisions;
+		return false;
+	}
+
+	// THE EMBODIMENT, BUILT FROM WHAT THE PAYLOAD ALREADY SAYS. Relay's mapping
+	// decided the drawable state; nothing here re-decides it, and the fields
+	// this cannot know stay at their zero members, which read as "Relay has not
+	// said" rather than as an agent at rest.
+	FWonderlandJuliusEmbodiment Next;
+	Next.SchemaVersion = Hydration.Run.SchemaVersion;
+	Next.ProjectId = Hydration.ProjectId;
+	Next.MissionId = Hydration.Run.MissionId;
+	Next.VisualState = Hydration.VisualState;
+	// THE SOURCE IS THE RUN ROW, and saying so matters: it is the most
+	// authoritative of the three derivations, and a world that could not tell
+	// this from a phase-derived guess would weigh them the same.
+	Next.StateSource = EWonderlandJuliusStateSource::JuliusRunState;
+	Next.SourceState.bKnown = true;
+	Next.SourceState.Value = Hydration.Run.State;
+	Next.bTerminal = Hydration.bTerminal;
+	Next.Activity = WonderlandActivityForJuliusState(Hydration.VisualState);
+	Next.Motion = WonderlandMotionForActivity(Next.Activity);
+	Next.Animation = WonderlandAnimationForJuliusState(Hydration.VisualState);
+	Next.AttentionRequired.bKnown = true;
+	Next.AttentionRequired.bValue = WonderlandJuliusStateAsksForAHuman(Hydration.VisualState);
+
+	// EVERY REFUSAL AdoptSnapshot MAKES IS ONE OF THE FOUR ABOVE, so reaching
+	// here it must apply. VERIFIED RATHER THAN ASSUMED — the two sets of rules
+	// live in different methods and only one of them is edited at a time.
+	//
+	// BY THE COUNTERS, NOT BY `bStateApplied`, and the difference is the point.
+	// On a RECONNECT — which is what this method is for — state is already
+	// applied, so that flag stays true whether the snapshot was taken or
+	// refused, and a refusal would have been invisible: this would have gone on
+	// to apply another run's activity and gates over the held ones. The first
+	// version of this guard read the flag, and the harness case that exercises
+	// a split identity against a world that ALREADY HAS STATE is what found it.
+	const int64 RefusedBefore =
+		Cursor.ForeignProjects + Cursor.ForeignRuns + Cursor.StaleRevisions;
+	AdoptSnapshot(Hydration.Run, Next);
+	if (Cursor.ForeignProjects + Cursor.ForeignRuns + Cursor.StaleRevisions != RefusedBefore)
+	{
+		return false;
+	}
+
+	// AND THE HALVES A SNAPSHOT NEVER CARRIED. This is the whole reason this
+	// method exists: the server folds the activity so a rejoining world need
+	// not replay the transcript, and nothing applied what it folded.
+	Activity = Hydration.Activity;
+	HumanGates = Hydration.HumanGates;
+
+	OnJuliusChanged.Broadcast();
+	return true;
 }
 
 void UWonderlandJuliusSubsystem::SetLinkStatus(const FWonderlandLinkStatus& Status)

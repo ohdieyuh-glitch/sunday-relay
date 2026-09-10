@@ -26,6 +26,14 @@ static void Check(bool Condition, const char* What)
 	std::printf("FAIL %s\n", What);
 }
 
+static void CheckStr(const FString& Actual, const char* Expected, const char* What)
+{
+	++Checks;
+	if (Actual == FString(Expected)) { return; }
+	++Failures;
+	std::printf("FAIL %s (got \"%s\", wanted \"%s\")\n", What, Actual.s.c_str(), Expected);
+}
+
 static FWonderlandEnvelope Env(const char* EventId, int64 Sequence, int64 Revision)
 {
 	FWonderlandEnvelope E;
@@ -40,6 +48,54 @@ static FWonderlandEnvelope Env(const char* EventId, int64 Sequence, int64 Revisi
 	E.Sequence = Sequence;
 	E.Revision = Revision;
 	return E;
+}
+
+/**
+ * One hydration, as `GET /wonderland/julius/hydrate` answers it.
+ *
+ * Built here rather than decoded: the DECODER is proven by its own harness
+ * against fixtures the TypeScript generated, and what this file proves is what
+ * the SUBSYSTEM does with one once it has it.
+ */
+static FWonderlandHydration Hyd(
+	EWonderlandJuliusState Visual, const char* KernelState,
+	int64 Revision, int64 AtSequence, bool bGated)
+{
+	FWonderlandHydration H;
+	H.SchemaVersion = TEXT("relay-wonderland-hydration.v1");
+	H.ProjectId = TEXT("project-alpha");
+	H.VisualState = Visual;
+	H.bTerminal = (Visual == EWonderlandJuliusState::Complete
+		|| Visual == EWonderlandJuliusState::Error);
+	H.ObservedAtIso = TEXT("2026-09-08T00:00:00.000Z");
+
+	H.Run.SchemaVersion = TEXT("relay-wonderland-snapshot.v1");
+	H.Run.ProjectId = TEXT("project-alpha");
+	H.Run.RunId = TEXT("run-1");
+	H.Run.State = FString(KernelState);
+	H.Run.Revision = Revision;
+	H.Run.AtSequence.bKnown = true;
+	H.Run.AtSequence.Value = static_cast<double>(AtSequence);
+	H.Run.ObservedAtIso = TEXT("2026-09-08T00:00:00.000Z");
+
+	H.Activity.SchemaVersion = TEXT("relay-wonderland-activity.v1");
+	H.Activity.ProjectId = TEXT("project-alpha");
+	H.Activity.RunId = TEXT("run-1");
+	if (bGated)
+	{
+		H.Activity.Signals.Add(EWonderlandActivitySignal::AwaitingApproval);
+
+		FWonderlandHumanGate Gate;
+		Gate.SchemaVersion = TEXT("relay-wonderland-human-gate.v1");
+		Gate.ProjectId = TEXT("project-alpha");
+		Gate.RunId = TEXT("run-1");
+		Gate.GateId = TEXT("gate-1");
+		Gate.Operation = EWonderlandGatedOperation::SpawnSubagent;
+		Gate.ReasonCode = TEXT("CARD_APPROVAL_REQUIRED");
+		Gate.RequestedAtIso = TEXT("2026-09-08T00:00:00.000Z");
+		H.HumanGates.Add(Gate);
+	}
+	return H;
 }
 
 static FWonderlandJuliusEmbodiment State(EWonderlandJuliusState Visual, bool bTerminal)
@@ -310,6 +366,137 @@ int main()
 			"and starts a fresh cursor, so beta's first envelope is not stale");
 		Check(S.GetCursor().Applied == 0,
 			"with alpha's counters left behind rather than attributed to beta");
+	}
+
+	/* ------------------------------------------- adopting a whole hydration */
+	//
+	// THE DEFECT THIS CLOSES. `AdoptSnapshot` sets the run and nothing else, so
+	// a world that had just joined held a correct phase beside an EMPTY
+	// ACTIVITY — no signals, no subagent counts, no gate. A run genuinely
+	// waiting on a person drew as a calm run until the next event happened to
+	// arrive, and for a run that had stopped, for ever.
+	{
+		UWonderlandJuliusSubsystem S;
+		S.Initialize(Collection);
+		S.BindProject(TEXT("project-alpha"));
+
+		Check(S.AdoptHydration(Hyd(EWonderlandJuliusState::Blocked, TEXT("BLOCKED"), 9, 40, true)),
+			"a hydration for the bound project is adopted");
+		Check(S.HasState(), "and the world has been told something");
+		Check(S.GetEmbodiment().VisualState == EWonderlandJuliusState::Blocked,
+			"the drawable state comes from the payload, not from a second mapping");
+		CheckStr(S.GetEmbodiment().SourceState.Value, "BLOCKED",
+			"and the kernel's own word travels beside it");
+		Check(S.GetEmbodiment().StateSource == EWonderlandJuliusStateSource::JuliusRunState,
+			"attributed to the run row, which is the most authoritative source");
+		Check(S.GetEmbodiment().AttentionRequired.bKnown,
+			"whether a person is needed is ANSWERED rather than left unknown");
+
+		// THE HALVES A SNAPSHOT NEVER CARRIED.
+		Check(S.GetActivity().Signals.Num() == 1,
+			"the folded activity is APPLIED — the reason this method exists");
+		Check(S.GetActivity().Signals[0] == EWonderlandActivitySignal::AwaitingApproval,
+			"so a run waiting on a person does not draw as a calm one");
+		Check(S.GetHumanGates().Num() == 1, "and the open gate is held");
+		Check(S.GetHumanGates()[0].Operation == EWonderlandGatedOperation::SpawnSubagent,
+			"with the operation C.A.R.D. actually gated");
+
+		// THE POSITION, so the tail resumes from the hydration rather than from
+		// the beginning.
+		Check(S.GetResumeAfterSequence() == 40,
+			"and the tail resumes from the position the payload named");
+	}
+
+	/* ------------------------ what a hydration must be refused for */
+	{
+		UWonderlandJuliusSubsystem S;
+		S.Initialize(Collection);
+		S.BindProject(TEXT("project-alpha"));
+
+		FWonderlandHydration Foreign = Hyd(EWonderlandJuliusState::Coding, TEXT("EXECUTING"), 9, 40, false);
+		Foreign.ProjectId = TEXT("project-beta");
+		Foreign.Run.ProjectId = TEXT("project-beta");
+		Check(!S.AdoptHydration(Foreign), "a hydration for another project is refused");
+		Check(!S.HasState(), "and NOTHING of it is applied");
+		Check(S.GetCursor().ForeignProjects == 1, "and it is counted as foreign");
+
+		// AN INNER/OUTER MISMATCH. The decoder refuses this too; the subsystem
+		// repeats it because a hydration that arrived another way would
+		// otherwise put another run's meters under this run's name.
+		FWonderlandHydration Split = Hyd(EWonderlandJuliusState::Coding, TEXT("EXECUTING"), 9, 40, false);
+		Split.Run.ProjectId = TEXT("project-beta");
+		Check(!S.AdoptHydration(Split), "a hydration whose run names another project is refused");
+		Check(!S.HasState(), "and nothing of it is applied either");
+
+		// AND THE SAME MISMATCH ON A WORLD THAT ALREADY HAS STATE, which is the
+		// case a reconnect actually is. A guard that read `HasState()` to decide
+		// whether the snapshot was taken would be blind here — it is already
+		// true — and would go on to apply another run's activity and gates
+		// under this run's name. A mutation removing the check passed until
+		// this case existed.
+		UWonderlandJuliusSubsystem R;
+		R.Initialize(Collection);
+		R.BindProject(TEXT("project-alpha"));
+		R.ApplyEnvelope(Env("e1", 5, 3), State(EWonderlandJuliusState::Coding, false),
+			Signals({EWonderlandActivitySignal::Swarming}));
+		Check(R.HasState(), "the reconnecting world already holds state");
+
+		FWonderlandHydration SplitLive =
+			Hyd(EWonderlandJuliusState::Blocked, TEXT("BLOCKED"), 9, 40, true);
+		SplitLive.Run.ProjectId = TEXT("project-beta");
+		Check(!R.AdoptHydration(SplitLive),
+			"a split-identity hydration is refused even when state is already held");
+		Check(R.GetActivity().Signals.Num() == 1
+				&& R.GetActivity().Signals[0] == EWonderlandActivitySignal::Swarming,
+			"and NONE of its activity is applied over what was there");
+		Check(R.GetHumanGates().Num() == 0, "nor its gate");
+		Check(R.GetEmbodiment().VisualState == EWonderlandJuliusState::Coding,
+			"nor its drawable state");
+
+		// AN UNBOUND WORLD IS FOREIGN TO EVERYTHING. Silence about identity is
+		// not permission.
+		UWonderlandJuliusSubsystem U;
+		U.Initialize(Collection);
+		Check(!U.AdoptHydration(Hyd(EWonderlandJuliusState::Coding, TEXT("EXECUTING"), 9, 40, false)),
+			"an unbound world adopts no hydration at all");
+	}
+
+	/* --------------------- a hydration cannot undo what is already applied */
+	{
+		UWonderlandJuliusSubsystem S;
+		S.Initialize(Collection);
+		S.BindProject(TEXT("project-alpha"));
+		S.ApplyEnvelope(Env("e1", 12, 9), State(EWonderlandJuliusState::Complete, true),
+			Signals({}));
+
+		// AN OLD ANSWER FROM A REPLICA THAT HAS NOT CAUGHT UP. Adopting it
+		// would undo events this world already applied, and a COMPLETED run
+		// would go back to running.
+		Check(!S.AdoptHydration(Hyd(EWonderlandJuliusState::Coding, TEXT("EXECUTING"), 8, 40, false)),
+			"a hydration behind the held revision is refused");
+		Check(S.GetEmbodiment().VisualState == EWonderlandJuliusState::Complete,
+			"and a completed run does not go back to running");
+		Check(S.GetCursor().StaleRevisions == 1, "and it is counted as stale");
+
+		// AT THE SAME REVISION IT IS RECOVERY, not a contradiction: a snapshot
+		// is authoritative and the revision only moves on a transition.
+		Check(S.AdoptHydration(Hyd(EWonderlandJuliusState::Complete, TEXT("COMPLETED"), 9, 40, true)),
+			"a hydration at the held revision is adopted");
+	}
+
+	/* ------------- a project switch drops the gates with everything else */
+	{
+		UWonderlandJuliusSubsystem S;
+		S.Initialize(Collection);
+		S.BindProject(TEXT("project-alpha"));
+		S.AdoptHydration(Hyd(EWonderlandJuliusState::Blocked, TEXT("BLOCKED"), 9, 40, true));
+		Check(S.GetHumanGates().Num() == 1, "alpha's gate is held");
+
+		S.BindProject(TEXT("project-beta"));
+		// A FOUNDER MUST NOT BE TOLD they are being waited on by a mission they
+		// are no longer watching.
+		Check(S.GetHumanGates().Num() == 0, "and dropped when the world switches project");
+		Check(S.GetActivity().Signals.Num() == 0, "along with the signals it arrived with");
 	}
 
 	if (Failures > 0)
