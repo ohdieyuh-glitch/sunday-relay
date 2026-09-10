@@ -254,11 +254,20 @@ const worldOver = (rows: {
   readonly run?: Record<string, unknown> | null;
   readonly events?: readonly Record<string, unknown>[];
   readonly member?: boolean;
+  readonly citation?: Record<string, unknown> | null;
 }): WonderlandJuliusWorld => {
   const pool = {
     query: async (sql: string) => {
       if (sql.includes('project_members')) {
         return { rows: rows.member === false ? [] : [{ role: 'OWNER' }], rowCount: 1 };
+      }
+      // THE CITATION READ IS MATCHED FIRST, and by a table nothing else names.
+      // It JOINs `julius_runs r` and it uses a LEFT JOIN LATERAL, so both of
+      // the broader matchers below would swallow it — and answering the wrong
+      // statement proves something about a statement nobody issued.
+      if (sql.includes('julius_context_snapshots')) {
+        const citation = rows.citation ?? null;
+        return { rows: citation === null ? [] : [citation], rowCount: citation === null ? 0 : 1 };
       }
       if (sql.includes('LEFT JOIN LATERAL')) return { rows: rows.events ?? [], rowCount: 0 };
       if (sql.includes('julius_runs r')) {
@@ -272,8 +281,23 @@ const worldOver = (rows: {
 
 const RUN_ROW = {
   state: 'EXECUTING', version: '7', mission_id: 'mission-1', card_revision: 'card:v3',
-  at_sequence: '42', active_tasks: '1', pending_approvals: '0',
+  at_sequence: '42', active_tasks: '1', pending_approvals: '1',
+  // ONE OPEN GATE, the shape `json_agg` really hands back. A person is being
+  // waited on, and the count beside it agrees because both come from the same
+  // statement.
+  open_gates: [{
+    gate_id: 'appr-1', task_id: 'task-1', operation: 'MUTATE_FILESYSTEM',
+    reason_code: 'CARD_APPROVAL_REQUIRED', requested_at: '2026-09-08T00:00:00.000Z',
+  }],
   observed_at: '2026-09-08T00:00:00.000Z',
+};
+
+/** One context compilation, spelled the way `pg` hands the columns over. */
+const CITATION_ROW = {
+  task_id: 'task-1', project_brain_revision: '12', content_hash: 'sha256:6f1e',
+  character_count: '4096', redaction_count: '2', truncated: true,
+  created_at: '2026-09-08T00:00:00.000Z',
+  kinds: ['DECISION', 'FINDING', 'DECISION', 'RESEARCH_NOTE'],
 };
 
 describe('a fully wired bridge serves a world', () => {
@@ -282,7 +306,7 @@ describe('a fully wired bridge serves a world', () => {
     // browser session, the real server, the real authorisation, the real
     // reader, over real HTTP. Only the database is a stub, and it answers the
     // shapes `pg` actually returns.
-    const base = await boot(null, worldOver({ run: RUN_ROW }));
+    const base = await boot(null, worldOver({ run: RUN_ROW, citation: CITATION_ROW }));
     const token = await pairSession(base, 'player-1');
     const res = await get(base, `/relay-api/wonderland/julius/hydrate?${QUERY}`, {
       Authorization: `Relay-Session ${token}`,
@@ -291,20 +315,51 @@ describe('a fully wired bridge serves a world', () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     const hydration = (body.data ?? body) as {
-      run: { revision: number; atSequence: number; state: string };
-      card: { hasCodingAgent: boolean | null };
+      run: { revision: number; atSequence: number; state: string; pendingApprovals: number | null };
+      card: { hasCodingAgent: boolean | null; swarmEligible: boolean | null };
+      visualState: string;
+      terminal: boolean;
+      brain: { entryCount: number; contentHash: string; kindCounts: Record<string, number> };
+      humanGates: { gateId: string; operation: string; taskId: string | null }[];
     };
     expect(hydration.run.revision).toBe(7);
     expect(hydration.run.atSequence).toBe(42);
     expect(hydration.run.state).toBe('EXECUTING');
+
+    // THE DRAWABLE STATE CROSSES, so a world hydrating cold has something to
+    // draw without mapping thirteen kernel words itself.
+    expect(hydration.visualState).toBe('coding');
+    expect(hydration.terminal).toBe(false);
+
+    // THE CITATION IS REAL over HTTP: counts about a retrieval, and the kernel
+    // kind with no bucket counted in the total and nowhere else.
+    expect(hydration.brain.contentHash).toBe('sha256:6f1e');
+    expect(hydration.brain.entryCount).toBe(4);
+    expect(hydration.brain.kindCounts.DECISION).toBe(2);
+    expect(Object.values(hydration.brain.kindCounts).reduce((a, b) => a + b, 0)).toBe(3);
+
+    // AND WHAT A PERSON IS BEING WAITED ON FOR, beside the count that agrees
+    // with it because both were read in one statement.
+    expect(hydration.run.pendingApprovals).toBe(1);
+    expect(hydration.humanGates.length).toBe(1);
+    expect(hydration.humanGates[0].operation).toBe('MUTATE_FILESYSTEM');
+    expect(hydration.humanGates[0].taskId).toBe('task-1');
+
     // Unknown crosses the wire AS unknown. JSON has null, and this is the whole
-    // reason the contract stopped using a bare boolean.
+    // reason the contract stopped using a bare boolean — for the role slots and
+    // now for swarm eligibility beside them.
     expect(hydration.card.hasCodingAgent).toBeNull();
+    expect(hydration.card.swarmEligible).toBeNull();
+
     // And nothing about a provider survives the trip.
     const serialised = JSON.stringify(body).toLowerCase();
     for (const name of ['gpt', 'claude', 'openai', 'anthropic']) {
       expect(serialised).not.toContain(name);
     }
+    // Nor a sentence, from the citation or from the gate. Both tables hold one
+    // and neither column is in either SELECT.
+    expect(serialised).not.toContain('safe_content');
+    expect(serialised).not.toContain('saferationale');
   }, 30_000);
 
   it('refuses a member of ANOTHER project without saying so', async () => {
