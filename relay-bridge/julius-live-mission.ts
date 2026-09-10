@@ -35,6 +35,7 @@ import { createPublicKey, type KeyObject } from 'node:crypto';
 import { Pool } from 'pg';
 import { TransactionalWonderlandDatabase } from '../src/relay/persistence/wonderland-postgres';
 import { JuliusPostgresRepository } from '../src/relay/persistence/julius-postgres';
+import { JuliusContractPostgresRepository } from '../src/relay/persistence/julius-contract-postgres';
 import { JuliusToolPostgresRepository } from '../src/relay/persistence/julius-tool-postgres';
 import { JuliusToolSettlementPostgresRepository } from '../src/relay/persistence/julius-tool-settlement-postgres';
 import { RemoteExecutorControlPlane } from '../src/relay/workspace/julius-tools/remote-executor-control-plane';
@@ -85,7 +86,16 @@ export interface LiveMissionContractFile {
   readonly acceptanceCriteria: readonly { readonly id: string; readonly text: string; readonly blocking: boolean }[];
   readonly testCommand: string;
   readonly workspacePath: string;
-  readonly limits?: { readonly spendUsd?: number; readonly repairCycles?: number };
+  readonly limits?: {
+    readonly spendUsd?: number;
+    readonly repairCycles?: number;
+    /**
+     * The architect's output ceiling for THIS mission. Governed like the other
+     * two: declared in the contract, bounded by the reservation the run budget
+     * already makes, and refused by `julius-live-contract-check.mjs` otherwise.
+     */
+    readonly architectMaxOutputTokens?: number;
+  };
 }
 
 export function parseLiveMissionContract(raw: string): { ok: true; contract: LiveMissionContractFile } | { ok: false; problem: string } {
@@ -224,6 +234,7 @@ async function main(argv: readonly string[]): Promise<number> {
     env, projectId: contract.projectId, workspacePath: contract.workspacePath,
     testCommand: contract.testCommand,
     contexts: { snapshotFor: () => null }, artifacts, shell: null,
+    architectMaxOutputTokens: contract.limits?.architectMaxOutputTokens,
   });
 
   out('JULIUS LIVE MISSION — preflight');
@@ -308,6 +319,7 @@ async function main(argv: readonly string[]): Promise<number> {
     const resolution = resolveLiveWorkers({
       env, projectId: contract.projectId, workspacePath: contract.workspacePath,
       testCommand: contract.testCommand, contexts: handoffs.contexts, artifacts, shell,
+      architectMaxOutputTokens: contract.limits?.architectMaxOutputTokens,
     });
     if (!resolution.ok) {
       for (const problem of resolution.problems) out(`BLOCKED ${problem.role}: ${problem.missing.join(', ')}`);
@@ -322,8 +334,22 @@ async function main(argv: readonly string[]): Promise<number> {
       requiredCapabilities: entry.worker.capabilities,
     })), cardRevision);
 
+    /**
+     * TWO REPOSITORIES, ONE STORE SHAPE. Bootstrap needs the run writer AND the
+     * task-contract writer; they are separate classes because they own separate
+     * tables, and composing them here is what keeps `RunCreationStore` a narrow
+     * port rather than a class reference.
+     */
+    const bootstrapRuns = new JuliusPostgresRepository(pool);
+    const bootstrapContracts = new JuliusContractPostgresRepository(pool);
     const bootstrap = createLiveJuliusBootstrapPort({
-      runs: new JuliusPostgresRepository(pool),
+      runs: {
+        loadRun: bootstrapRuns.loadRun.bind(bootstrapRuns),
+        createRun: bootstrapRuns.createRun.bind(bootstrapRuns),
+        addTask: bootstrapRuns.addTask.bind(bootstrapRuns),
+        transition: bootstrapRuns.transition.bind(bootstrapRuns),
+        putTaskContract: bootstrapContracts.putTaskContract.bind(bootstrapContracts),
+      },
       seeds: createPostgresMissionSeedStore(pool),
       tenantId: contract.tenantId,
       executionId,

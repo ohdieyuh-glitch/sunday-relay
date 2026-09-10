@@ -23,6 +23,7 @@ import {
   createJuliusHarness,
   task,
   verificationPolicy,
+  seedTaskContractInto,
   worker,
 } from './julius-runtime-fixtures';
 
@@ -79,7 +80,7 @@ describe('missionMayComplete reads effective verification state', () => {
     )).toBe(true);
     // A repaired repair completes through the chain.
     expect(may(
-      [tsk('x'), repairOf('x'), repairOf('repair:x:1:task', 1, { taskType: 'repair:repair:build' })],
+      [tsk('x'), repairOf('x'), repairOf('repair:x:1:task', 1)],
       [dec('x', 'REPAIR'), dec('repair:x:1:task', 'REPAIR'), dec('repair:repair:x:1:task:1:task', 'ACCEPT')],
     )).toBe(true);
     // A FAILED repair task supersedes nothing even if somehow decided.
@@ -242,6 +243,7 @@ function buildRepairMission() {
     runId: 'run-1', missionId: 'msn-1', projectId: 'prj-1', state: 'READY',
     cardRevision: 'card-r1', missionContractRevision: 1, projectBrainRevision: 0, version: 1,
   });
+  seedTaskContractInto(harness.store, { runId: 'run-1', projectId: 'prj-1', taskId: 'build-1', state: 'locked' });
   harness.store.seedTask('run-1', task({ taskId: 'build-1', ordinal: 0, requiredEvidenceTypes: ['TEST'] }));
   return harness;
 }

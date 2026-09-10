@@ -41,10 +41,18 @@ export const JULIUS_OPERATIONAL_EVENT_TYPES=[
  'task.created','task.runnable','task.claimed','task.failed','task.cancelled',
  /* dispatch */
  'worker.selected','worker.dispatched','worker.completed','provider.failure','reroute.selected','fallback.selected','retry.scheduled',
+ /* budget: what one dispatch was allocated from the mission's money, before the reservation */
+ 'budget.allocated',
  /* context */
  'context.compiled',
  /* evidence and verification */
  'evidence.recorded','review.started','finding.recorded','verification.decided','repair.scheduled',
+ /* the task/sprint contract: what a worker was charged with, and when it stopped being arguable */
+ 'contract.proposed','contract.challenged','contract.locked','contract.refused',
+ /* WHAT THE EVALUATOR DECIDED, on both branches — because a bundle with no
+  * challenge in it cannot otherwise say whether the terms were examined and
+  * found sound, or whether the challenge leg simply never ran. */
+ 'contract.disposition',
  /* bounded children */
  'subagent.spawned','subagent.denied','subagent.completed',
  /* budget */

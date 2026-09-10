@@ -5,7 +5,7 @@ import { JuliusRuntimeApi } from './julius-runtime-api';
 import { spawnJuliusSubagent } from './julius-subagent-runtime';
 import { summariseJuliusEvals, projectJuliusMetrics } from './julius-metrics';
 import {
-  cardPolicy, createJuliusHarness, task, verificationPolicy, worker,
+  cardPolicy, createJuliusHarness, seedTaskContractInto, task, verificationPolicy, worker,
 } from './julius-runtime-fixtures';
 import type { JuliusRunRow } from './julius-runtime-ports';
 
@@ -27,22 +27,21 @@ import type { JuliusRunRow } from './julius-runtime-ports';
 
 const ARCHITECT = worker({
   workerId: 'architect', role: 'PROMPT_ARCHITECT',
-  capabilities: ['plan'], taskTypes: ['plan'], providerId: 'openai', adapterId: 'architect-adapter',
+  // `repair:plan` is a plan REVISION: a repair inherits its subject's role, so
+  // a rejected plan comes back to the architect with the findings in context.
+  capabilities: ['plan'], taskTypes: ['plan', 'repair:plan'], providerId: 'openai', adapterId: 'architect-adapter',
 });
 const CODER = worker({
   workerId: 'coder', role: 'CODING_AGENT',
-  // `repair:plan` as well as `repair:build`: `planJuliusRepair` names a repair
-  // task `repair:<original taskType>` and assigns it to a CODING_AGENT
-  // whatever the original role was, so a deployment must register a coding
-  // agent that accepts a repair of every task type it plans. That is a real
-  // deployment requirement and it is stated here rather than discovered when a
-  // repair cannot be routed.
-  capabilities: ['implement'], taskTypes: ['build', 'repair:build', 'repair:plan', 'audit'],
+  // `repair:build` covers every Coding Agent repair round: a repair of a
+  // repair is still `repair:build`. The coder does NOT accept `repair:plan` —
+  // that was the shape paid run 34037313976 minted and nobody could route.
+  capabilities: ['implement'], taskTypes: ['build', 'repair:build', 'audit'],
   providerId: 'anthropic', adapterId: 'coder-adapter',
 });
 const REVIEWER = worker({
   workerId: 'reviewer', role: 'INDEPENDENT_REVIEWER',
-  capabilities: ['review'], taskTypes: ['review:build', 'review:plan'],
+  capabilities: ['review'], taskTypes: ['review:build', 'review:plan', 'review:repair:build', 'review:repair:plan'],
   providerId: 'hermes', adapterId: 'reviewer-adapter',
 });
 const BACKUP_CODER = worker({
@@ -87,7 +86,10 @@ describe('scenario 1 — a mission through three roles, a failed review and a re
         {
           worker: REVIEWER,
           script: [
-            // The review SUCCEEDS as a task and its verdict is a BLOCKING
+            // The PLAN review comes first now — the build waits for it — and
+            // accepts the plan.
+            { kind: 'succeed', evidence: [{ type: 'REVIEW_FINDING', status: 'PASSED', safeSummary: 'The plan is sound.' }] },
+            // The BUILD review SUCCEEDS as a task and its verdict is a BLOCKING
             // finding — which is the case the product exists for, and the one
             // that produced nothing at all before the finding path was wired.
             { kind: 'succeed', evidence: [{ type: 'REVIEW_FINDING', status: 'FAILED', safeSummary: 'The branch is untested.' }] },
@@ -103,6 +105,9 @@ describe('scenario 1 — a mission through three roles, a failed review and a re
       capabilityFor,
     });
     harness.store.seedRun(RUN);
+    // The build's contract, as bootstrap writes it: a DRAFT. The accepting plan
+    // review is what locks it, which is where production locks it too.
+    seedTaskContractInto(harness.store, { runId: 'run-1', projectId: 'prj-1', taskId: 'build-1' });
     harness.store.seedTask('run-1', task({ taskId: 'plan-1', ordinal: 0, role: 'PROMPT_ARCHITECT', taskType: 'plan' }));
     harness.store.seedTask('run-1', task({
       taskId: 'build-1', ordinal: 1, role: 'CODING_AGENT', taskType: 'build',
@@ -118,16 +123,26 @@ describe('scenario 1 — a mission through three roles, a failed review and a re
     return harness;
   };
 
-  it('runs the architect first, and the coder only after it', async () => {
+  it('runs the architect first, then the plan review, and the coder only after Julius accepts the plan', async () => {
     const harness = build();
     const first = await harness.loop.tick(scope);
     expect(first.outcomes.map((outcome) => outcome.taskId)).toEqual(['plan-1']);
     expect(harness.adapters.get(CODER.adapterId)!.dispatches).toEqual([]);
+    // The plan SUCCEEDED and its review is scheduled; `build-1` stays BLOCKED.
+    expect(harness.store.taskRow('build-1')!.state).toBe('BLOCKED');
 
     const second = await harness.loop.tick(scope);
-    // `plan-1:review` becomes claimable in the same tick the plan succeeded,
-    // because the claim query is the only wakeup and it runs once per tick.
-    expect(second.outcomes.map((outcome) => outcome.taskId)).toContain('build-1');
+    // Only the plan's review is claimable: the plan succeeding released nothing.
+    expect(second.outcomes.map((outcome) => outcome.taskId)).toEqual(['plan-1:review']);
+    expect(harness.adapters.get(CODER.adapterId)!.dispatches, 'no build before the plan review').toEqual([]);
+    // The review ACCEPTED the plan (scripted PASSED finding) → Julius released the build.
+    expect(harness.store.taskRow('build-1')!.state).toBe('RUNNABLE');
+
+    const third = await harness.loop.tick(scope);
+    expect(third.outcomes.map((outcome) => outcome.taskId)).toEqual(['build-1']);
+    const runnable = harness.store.events().filter((event) => event.type === 'task.runnable' && event.taskId === 'build-1');
+    expect(runnable, 'released exactly once').toHaveLength(1);
+    expect(runnable[0]!.facts.unblockedBy).toBe('plan-1');
   });
 
   it('never schedules a review OF a review — the chain would not end', async () => {
@@ -178,12 +193,35 @@ describe('scenario 1 — a mission through three roles, a failed review and a re
     // SECRET entries are excluded by the compiler, so the key never travels.
     expect(text).not.toContain('sk-must-never-appear');
     // Provenance: every snapshot names the revisions it was compiled from.
+    //
+    // `projectBrainRevision` was pinned to the constant 3 here, and that was a
+    // true statement only for as long as NOTHING WROTE TO THE BRAIN. The run
+    // now records its own verification decisions, so a snapshot compiled after
+    // a decision really is compiled from a later revision, and a snapshot that
+    // still said 3 would be misreporting what it read. The property the line
+    // was reaching for is the one asserted instead: the revision starts at the
+    // seeded value, never goes backwards, and ends where the run's own counter
+    // ended — which the constant could not check and this does.
+    let previousBrainRevision = 0;
     for (const snapshot of contexts) {
       expect(snapshot.missionContractRevision).toBe(7);
-      expect(snapshot.projectBrainRevision).toBe(3);
+      expect(snapshot.projectBrainRevision,
+        'a snapshot cannot be compiled from a brain older than the seed').toBeGreaterThanOrEqual(3);
+      expect(snapshot.projectBrainRevision,
+        'and context provenance never moves backwards').toBeGreaterThanOrEqual(previousBrainRevision);
+      previousBrainRevision = snapshot.projectBrainRevision;
       expect(snapshot.cardRevision).toBe('card-r1');
       expect(snapshot.contentHash.startsWith('sha256:')).toBe(true);
     }
+    // A snapshot cannot have read a decision that had not been made when it was
+    // compiled, and the last task's decision is recorded AFTER the last context
+    // — so the final snapshot legitimately trails the counter. Bounded, not
+    // equal, is the true statement.
+    const finalRevision = (await harness.store.loadRun('run-1', 'prj-1'))?.projectBrainRevision ?? 0;
+    expect(previousBrainRevision,
+      'no snapshot may claim a revision the store never reached').toBeLessThanOrEqual(finalRevision);
+    expect(previousBrainRevision, 'and the run did write to its own brain before the last context').toBeGreaterThan(3);
+    expect(finalRevision, 'which the store agrees with').toBeGreaterThan(previousBrainRevision - 1);
   });
 
   it('leaves an operational ledger and a trajectory that agree about the run', async () => {
@@ -251,6 +289,8 @@ describe('scenario 2 — a transient provider failure, a fallback, and a complet
       capabilityFor,
     });
     harness.store.seedRun(RUN);
+    // This scenario starts AT the build, so its terms are already agreed.
+    seedTaskContractInto(harness.store, { runId: 'run-1', projectId: 'prj-1', taskId: 'build-1', state: 'locked' });
     harness.store.seedTask('run-1', task({ taskId: 'build-1', ordinal: 0, requiredEvidenceTypes: ['TEST'] }));
     return harness;
   };
@@ -296,6 +336,7 @@ describe('scenario 2 — a transient provider failure, a fallback, and a complet
       capabilityFor,
     });
     harness.store.seedRun(RUN);
+    seedTaskContractInto(harness.store, { runId: 'run-1', projectId: 'prj-1', taskId: 'build-1', state: 'locked' });
     harness.store.seedTask('run-1', task({ taskId: 'build-1', ordinal: 0 }));
     await drain(harness.loop);
     expect(harness.adapters.get(BACKUP_CODER.adapterId)!.dispatches).toEqual([]);
@@ -319,6 +360,10 @@ describe('scenario 3 — a bounded sub-agent, across a restart', () => {
       capabilityFor,
     });
     harness.store.seedRun(RUN);
+    // The anchor is the coding lineage's ROOT, so its contract is the one a
+    // bounded sub-agent runs under too: a child may not be graded against terms
+    // of its own, or a worker could escape the mission's by spawning one.
+    seedTaskContractInto(harness.store, { runId: 'run-1', projectId: 'prj-1', taskId: 'anchor', state: 'locked' });
     harness.store.seedTask('run-1', task({ taskId: 'anchor', ordinal: 0 }));
     return harness;
   };

@@ -36,6 +36,20 @@ export interface GptRunRequest {
   readonly signal?: AbortSignal;
 }
 
+/**
+ * WHAT THE PROVIDER SAID THE CALL CONSUMED.
+ *
+ * Named, because it is no longer the success path's private business: a call
+ * that FAILS was still billed, and the numbers are in the same response.
+ */
+export interface GptUsage {
+  readonly inputTokens: number | null;
+  readonly cachedInputTokens: number | null;
+  readonly outputTokens: number | null;
+  readonly reasoningTokens: number | null;
+  readonly totalTokens: number | null;
+}
+
 export interface GptRunSuccess {
   readonly ok: true;
   /** The provider response is the AUTHORITY for the actual model. */
@@ -44,13 +58,7 @@ export interface GptRunSuccess {
   readonly status: string;
   /** Raw structured text; the caller validates it before trusting it. */
   readonly outputText: string;
-  readonly usage: {
-    readonly inputTokens: number | null;
-    readonly cachedInputTokens: number | null;
-    readonly outputTokens: number | null;
-    readonly reasoningTokens: number | null;
-    readonly totalTokens: number | null;
-  };
+  readonly usage: GptUsage;
 }
 
 export interface GptRunFailure {
@@ -58,6 +66,34 @@ export interface GptRunFailure {
   readonly failureClass: GptFailureClass;
   /** Safe and redacted — never the raw provider payload. */
   readonly message: string;
+  /**
+   * PRESENT ONLY WHEN THE PROVIDER ANSWERED, and absent is not zero.
+   *
+   * Paid Live Mission 4's first attempt (run 34459684814) burned a real
+   * `gpt-5.6-sol` call for 62 seconds, came back `incomplete`, and recorded
+   * NOTHING about what it cost: this interface had no `usage` field at all, so
+   * the numbers the provider had just reported were computed and dropped on
+   * the floor one line later. `costBasis` was then honestly `UNKNOWN` — but it
+   * was unknown only because the answer had been discarded, which is the one
+   * kind of unknown this system is not allowed to manufacture.
+   *
+   * Failures raised BEFORE a response exists (no model configured, a thrown
+   * transport error) leave this undefined, because there genuinely is no usage
+   * to report and inventing one would be the opposite fix.
+   */
+  readonly usage?: GptUsage;
+  /**
+   * THE PROVIDER'S OWN REASON an otherwise-successful call stopped early —
+   * `max_output_tokens`, `content_filter`. A machine token, narrowed here, so
+   * it can travel into the durable record beside the failure class instead of
+   * living only in `message`, which the evidence allowlist withholds (as it
+   * should: a message is free text). Without it, "the plan was incomplete" and
+   * "the plan ran out of budget" are the same sentence, and the second is the
+   * one that says what to change.
+   */
+  readonly incompleteReason?: string | null;
+  /** The provider's own `status` when it answered — `incomplete`, `failed`. */
+  readonly providerStatus?: string | null;
   /** Present when the provider got far enough to identify itself. */
   readonly actualModel?: string;
   readonly responseId?: string;
@@ -66,6 +102,20 @@ export interface GptRunFailure {
 export type GptRunOutcome = GptRunSuccess | GptRunFailure;
 
 /** Never let a provider message carry request content or key material out. */
+/**
+ * A PROVIDER'S REASON, NARROWED TO A MACHINE TOKEN.
+ *
+ * `incomplete_details.reason` is provider-controlled text. It reaches a durable
+ * row, so it is held to the same shape every durable reason code is: lower
+ * snake-case, bounded. Anything else becomes null rather than travelling as
+ * prose — an unrecognised reason is honestly unknown, not quietly quoted.
+ */
+function safeReasonToken(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null;
+  const trimmed = raw.trim();
+  return /^[a-z][a-z0-9_]{0,63}$/.test(trimmed) ? trimmed : null;
+}
+
 function safeMessage(raw: unknown): string {
   const text = raw instanceof Error ? raw.message : String(raw ?? 'provider error');
   return text
@@ -128,7 +178,10 @@ export async function runGptArchitect(request: GptRunRequest): Promise<GptRunOut
       { signal: request.signal },
     );
 
-    const usage = {
+    /* Computed BEFORE the failure checks below, and now carried into every one
+     * of them: a refusal, an incomplete answer and a 500-after-work were all
+     * billed, and until this change all three reported nothing. */
+    const usage: GptUsage = {
       inputTokens: response.usage?.input_tokens ?? null,
       cachedInputTokens: response.usage?.input_tokens_details?.cached_tokens ?? null,
       outputTokens: response.usage?.output_tokens ?? null,
@@ -144,7 +197,8 @@ export async function runGptArchitect(request: GptRunRequest): Promise<GptRunOut
             return {
               ok: false, failureClass: 'refused',
               message: safeMessage(part.refusal),
-              actualModel: response.model, responseId: response.id,
+              actualModel: response.model, responseId: response.id, usage,
+              providerStatus: safeReasonToken(response.status),
             };
           }
         }
@@ -156,14 +210,17 @@ export async function runGptArchitect(request: GptRunRequest): Promise<GptRunOut
       return {
         ok: false, failureClass: 'incomplete_response',
         message: `The response was incomplete (${response.incomplete_details?.reason ?? 'unknown reason'}).`,
-        actualModel: response.model, responseId: response.id,
+        actualModel: response.model, responseId: response.id, usage,
+        providerStatus: safeReasonToken(response.status),
+        incompleteReason: safeReasonToken(response.incomplete_details?.reason),
       };
     }
     if (response.status !== 'completed') {
       return {
         ok: false, failureClass: 'provider_error',
         message: `The provider reported status "${response.status}".`,
-        actualModel: response.model, responseId: response.id,
+        actualModel: response.model, responseId: response.id, usage,
+        providerStatus: safeReasonToken(response.status),
       };
     }
 
@@ -172,7 +229,8 @@ export async function runGptArchitect(request: GptRunRequest): Promise<GptRunOut
       return {
         ok: false, failureClass: 'malformed_output',
         message: 'The provider returned no structured output.',
-        actualModel: response.model, responseId: response.id,
+        actualModel: response.model, responseId: response.id, usage,
+        providerStatus: safeReasonToken(response.status),
       };
     }
 

@@ -18,6 +18,8 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   JULIUS_CONTEXT_COMPILER_VERSION,
   createJuliusMemoryStore,
+  juliusTaskContractBindingDigest,
+  seedJuliusTaskContract,
   type JuliusContextSnapshot,
   type JuliusRecoveryDriver,
   type JuliusRuntimeStore,
@@ -25,20 +27,24 @@ import {
 import type { GptRunOutcome } from '../../src/relay/connectors/gpt-architect';
 import { JuliusDispatchError, safeFailureClass } from '../../src/relay/mission/julius';
 import { compileHostedEnvelope } from '../hosted-coding-agent/hosted-envelope';
-import type { HostedQueryFn, HostedRunOutcome } from '../hosted-coding-agent/hosted-runner';
-import { loadHermesConfig, runHermesReview, type HermesOutcome, type ReviewPacket } from '../hermes-reviewer';
+import type { HostedQueryFn, HostedRunInput, HostedRunOutcome } from '../hosted-coding-agent/hosted-runner';
+import { loadHermesConfig, reviewDiagnostics, runHermesReview, type HermesOutcome, type ReviewPacket } from '../hermes-reviewer';
+import { UNKNOWN_USAGE } from '../reviewer-harness/hermes/runner';
 import { runRemoteHermesReview, type RemoteHermesConfig } from '../hermes-remote-review';
+import { repairTaskTypeFor, reviewStageOf } from '../../src/relay/mission/julius';
+import { DEFAULT_HOSTED_LIMITS, type HostedLimits } from '../hosted-coding-agent/hosted-envelope';
 import {
   createLiveArtifactExchange,
+  createLiveArchitectAdapter,
   createLiveHermesReviewerAdapter,
   createLiveHostedCodingAdapter,
   diffRef,
   planRef,
-  reviewStageOf,
 } from './live-workers';
 import {
   ARCHITECT_WORKER,
   CODER_WORKER,
+  reviewerWorker,
   assembleLiveJuliusRuntime,
   createContextAndClaimHandoffs,
   createRunSpendBudget,
@@ -64,6 +70,12 @@ const LIVE_ENV: Record<string, string> = {
 
 /** A secret-shaped canary planted in provider output; it must never persist. */
 const SECRET_CANARY = 'sk-canary-must-never-appear';
+
+/** What a reviewer that DID answer wrote, read by the real validator. */
+const APPROVING_REVIEW = JSON.stringify({
+  verdict: 'approved', summary: 'The plan satisfies every acceptance criterion.',
+  findings: [], requirementsChecked: [{ requirement: 'AC-1', status: 'passed', evidence: 'read the plan' }],
+});
 
 const VALID_PLAN = {
   objectiveSummary: 'Implement the mission fixture change.',
@@ -128,7 +140,12 @@ function spawnEmitting(stdout: string, code = 0) {
     const child = new EventEmitter() as EventEmitter & { stdout: Readable; stderr: Readable; kill: () => boolean };
     child.stdout = new Readable({ read() { /* pushed below */ } });
     child.stderr = new Readable({ read() { /* never surfaced */ } });
-    child.kill = () => true;
+    /* A SIGNALLED PROCESS DIES. The runner now waits for the child it killed
+       to be gone before it reports, so a `kill` that returns true and leaves
+       the process running models a reviewer this repository has never met —
+       `hermes-reviewer-lifecycle.test.ts` owns the cases where one does — and
+       makes every timeout case here wait out the escalation grace instead. */
+    child.kill = () => { child.emit('close', null); return true; };
     setTimeout(() => {
       if (stdout !== '') child.stdout.push(Buffer.from(stdout, 'utf8'));
       child.stdout.push(null);
@@ -150,6 +167,40 @@ function spawnEmitting(stdout: string, code = 0) {
  * returns null. Nothing is hard-coded to succeed: a text this rig cannot parse
  * fails the dispatch exactly as a real one would.
  */
+/**
+ * A REVIEWER WHOSE PROCESS HANGS, for the first `hangFirst` dispatches.
+ *
+ * The shape paid run 34311556047 actually failed in: the child launches, never
+ * writes a byte, never exits, and Relay's window closes on it. Driving the real
+ * runner over a never-closing child is what makes this the same code path the
+ * paid run took, rather than a hand-built `review_timeout` outcome.
+ */
+function hangingReviewer(
+  log: FakeLog, packets: ReviewPacket[], hangFirst: number, answer: string,
+) {
+  let call = 0;
+  const spawnHanging = (() => {
+    const child = new EventEmitter() as EventEmitter & { stdout: Readable; stderr: Readable; kill: () => boolean };
+    child.stdout = new Readable({ read() { /* nothing ever arrives */ } });
+    child.stderr = new Readable({ read() { /* nothing ever arrives */ } });
+    child.kill = () => { child.emit('close', null); return true; };
+    return child as never;
+  }) as never;
+  return async (input: { packet: ReviewPacket }): Promise<HermesOutcome> => {
+    log.order.push('reviewer');
+    packets.push(input.packet);
+    const hangs = call < hangFirst;
+    call += 1;
+    return runHermesReview({
+      packet: input.packet,
+      // Milliseconds instead of the production three minutes: what is being
+      // proven is the ORDER of events, not the duration of one.
+      config: { ...loadHermesConfig(LIVE_ENV as never), timeoutMs: 30, killGraceMs: 10 },
+      spawnImpl: hangs ? spawnHanging : spawnEmitting(answer),
+    });
+  };
+}
+
 function textReviewer(log: FakeLog, packets: ReviewPacket[], texts: readonly string[]) {
   let call = 0;
   return async (input: { packet: ReviewPacket }): Promise<HermesOutcome> => {
@@ -196,6 +247,12 @@ function fakeReviewer(log: FakeLog, packets: ReviewPacket[], verdicts: Array<'ap
       },
       startedAt, completedAt: new Date().toISOString(),
       requestedModel: 'grok-build-0.1', servedModel: 'grok-build-0.1', provider: 'xai',
+      diagnostics: reviewDiagnostics({
+        transport: 'local', shape: null, outcome: 'succeeded', provider: 'xai',
+        requestedModel: 'grok-build-0.1', servedModel: 'grok-build-0.1',
+        elapsedMs: 1_234, timeoutMs: 400_000, processStarted: true, exitObserved: true,
+      }),
+      usage: UNKNOWN_USAGE,
     } as HermesOutcome;
   };
 }
@@ -226,6 +283,8 @@ function liveResolution(overrides: {
   architect?: () => Promise<GptRunOutcome>;
   /** Raw reviewer output, read by the real validator instead of a built outcome. */
   reviewerTexts?: readonly string[];
+  /** How many reviewer dispatches hang until Relay's window closes on them. */
+  reviewerHangsFirst?: number;
 }) {
   const log: FakeLog = { order: [] };
   const prompts: string[] = [];
@@ -241,9 +300,11 @@ function liveResolution(overrides: {
     runners: {
       architect: (overrides.architect ?? fakeArchitect(log)) as never,
       coder: fakeCoder(log, prompts) as never,
-      reviewer: (overrides.reviewerTexts !== undefined
-        ? textReviewer(log, packets, overrides.reviewerTexts)
-        : fakeReviewer(log, packets, overrides.verdicts ?? ['approved'])) as never,
+      reviewer: (overrides.reviewerHangsFirst !== undefined
+        ? hangingReviewer(log, packets, overrides.reviewerHangsFirst, APPROVING_REVIEW)
+        : overrides.reviewerTexts !== undefined
+          ? textReviewer(log, packets, overrides.reviewerTexts)
+          : fakeReviewer(log, packets, overrides.verdicts ?? ['approved'])) as never,
       queryLoader: async () => fakeQuery,
     },
   });
@@ -346,6 +407,12 @@ function fakeRuns(calls: Array<Record<string, unknown>>) {
     async createRun(input: { runId: string }) { version = 1; calls.push({ createRun: input }); return { runId: input.runId, state: 'CREATED', version }; },
     async addTask(input: { task: { taskId: string } }) { calls.push({ addTask: input.task }); return true; },
     async transition(input: { to: string }) { version += 1; calls.push({ transition: input.to }); return { state: input.to, version }; },
+    // Bootstrap authors the build's task contract before the run is READY, so a
+    // fake that omitted it would prove a bootstrap production cannot perform.
+    async putTaskContract(input: { contract: { contractId: string; taskId: string; contractRevision: number; state: string } }) {
+      calls.push({ putTaskContract: input.contract });
+      return true;
+    },
   };
 }
 
@@ -416,6 +483,20 @@ function seedMissionRun(store: ReturnType<typeof createJuliusMemoryStore>): void
     taskId: 'build-1', missionId: 'mission-live-1', parentTaskId: null, dependencyIds: ['plan-1'],
     requiredEvidenceTypes: ['TEST'], taskType: 'build', role: 'CODING_AGENT', ordinal: 1, state: 'BLOCKED',
   });
+  // THE BUILD'S TASK CONTRACT, exactly as `createLiveJuliusBootstrapPort` writes
+  // it: revision 1, a DRAFT, authored by Julius from the mission's own terms.
+  // The accepting plan review is what locks it, which is where the production
+  // pipeline locks it — so this drive exercises the real ordering rather than a
+  // pre-agreed shortcut.
+  const seeded = seedJuliusTaskContract({
+    runId: 'run-live', taskId: 'build-1', missionContractRevision: 1,
+    objective: 'Prove the live chain with a tiny fixture.',
+    requirements: ['Normalize a mission label.'], constraints: ['Touch only the fixture.'],
+    acceptanceCriteria: [{ id: 'AC-1', text: 'The fixture test passes.', blocking: true }],
+    filesInScope: [], filesOutOfScope: [], spendUsd: 5, repairCycles: 1, requiredEvidence: ['TEST'],
+  });
+  if (!seeded.seeded) throw new Error(`fixture contract not derivable: ${seeded.reasonCode}`);
+  void store.putTaskContract({ projectId: 'prj-live', contract: seeded.contract, occurredAt: '2026-09-08T00:00:00.000Z' });
   // Empty evidence-type list, matching the bootstrap: the runtime evaluates a
   // criterion's types against every verified task, so the TEST requirement is
   // carried by the build task's own requiredEvidenceTypes instead.
@@ -433,12 +514,13 @@ async function driveLiveMission(
   budget?: Parameters<typeof assembleLiveJuliusRuntime>[0]['budget'],
   architect?: () => Promise<GptRunOutcome>,
   reviewerTexts?: readonly string[],
+  reviewerHangsFirst?: number,
 ) {
   const memory = createJuliusMemoryStore();
   // Not narrowed to JuliusRuntimeStore: the drive loop runs the recovery sweep,
   // and the memory store is the recovery driver as well as the store.
   const handoffs = createContextAndClaimHandoffs(memory as unknown as JuliusRuntimeStore & JuliusRecoveryDriver);
-  const fakes = liveResolution({ verdicts, contexts: handoffs.contexts, architect, reviewerTexts });
+  const fakes = liveResolution({ verdicts, contexts: handoffs.contexts, architect, reviewerTexts, reviewerHangsFirst });
   expect(fakes.resolution.ok).toBe(true);
   seedMissionRun(memory);
   const runtime = assembleLiveJuliusRuntime({
@@ -492,11 +574,11 @@ describe('a full mission drive with Julius in control', () => {
    * ATTEMPT NUMBER.
    *
    * This is the whole mission graph, on the real live configuration: a claim
-   * limit of 4 against a C.A.R.D. concurrency of 1. On the tick after `plan`
-   * succeeds, `build` and the plan's review task both become claimable — a
-   * review task is created BLOCKED on the task it reviews, and the claim query
-   * offers a BLOCKED task whose dependencies are all SUCCEEDED — so one of the
-   * two is claimed and handed straight back.
+   * limit of 4 against a C.A.R.D. concurrency of 1. Before the release rule,
+   * on the tick after `plan` succeeded `build` and the plan's review were BOTH
+   * claimable, so one was claimed and handed straight back; now only what
+   * Julius released is offered, and the hand-back is exercised by the build
+   * and the build's review instead.
    *
    * While the claim spent an execution attempt, that hand-back charged a task
    * for a provider that was never called, and a task yielded twice reached its
@@ -551,6 +633,139 @@ describe('a full mission drive with Julius in control', () => {
     for (const row of reviewTasks) expect(row?.state, 'both reviews succeeded').toBe('SUCCEEDED');
   });
 
+  /**
+   * WHAT PAID RUN 34311556047 DID, DRIVEN HERE FOR NOTHING.
+   *
+   * Its Independent Reviewer hung on `review:plan` three times — 180 s each,
+   * zero bytes, no exit — the run FAILED after four ticks and the Coding Agent
+   * stayed BLOCKED. The safety behaviour was right and is what these cases
+   * pin: a reviewer that cannot answer must never become a build that runs.
+   * The reviewer is the REAL runner over a child that never writes and never
+   * exits, so this is the same code path the paid run took.
+   */
+  it('a reviewer that hangs on every attempt exhausts its ceiling and leaves the build BLOCKED', async () => {
+    const { memory, outcome, fakes } = await driveLiveMission(
+      ['approved'], undefined, undefined, undefined, Number.MAX_SAFE_INTEGER,
+    );
+
+    expect(outcome.state, 'a reviewer that never answered is not a completion').toBe('FAILED');
+    expect(memory.taskRow('plan-1:review')?.state).toBe('FAILED');
+    // THE WHOLE POINT. Never "the reviewer was unavailable, so the build ran".
+    expect(memory.taskRow('build-1')?.state, 'the build was never released').toBe('BLOCKED');
+    expect(memory.taskRow('build-1:review'), 'and so there is no build review').toBeNull();
+
+    /**
+     * THREE ATTEMPTS, AND ONLY THREE — the exact ledger the paid bundle holds.
+     *
+     * `failures.tsv` from run 34311556047 shows THREE `julius.retry.scheduled`
+     * rows and then one `julius.task.failed`: the coordinator classifies each
+     * retryable error as it happens, and the pipeline's own autonomy rule is
+     * what refuses the fourth ask. Retryable is permission to re-ask, never a
+     * licence to spend without one.
+     */
+    const scheduled = memory.events().filter((event) => event.type === 'retry.scheduled');
+    expect(scheduled).toHaveLength(3);
+    expect(fakes.log.order.filter((step) => step === 'reviewer')).toHaveLength(3);
+    for (const event of scheduled) {
+      const facts = event.facts as Record<string, unknown>;
+      // TIMEOUT STAYS RETRYABLE. It describes an answer that did not arrive,
+      // not one that arrived wrong, and nothing paid for is thrown away.
+      expect(facts.code).toBe('TIMEOUT');
+      expect(facts.errorRetryable).toBe(true);
+      expect(facts.failureClass).toBe('review_timeout');
+    }
+
+    /**
+     * AND EACH ROW SAYS WHICH ASK IT WAS — 1, 2, then 3.
+     *
+     * Run 34311556047's three reviewer rows were distinguishable only by
+     * `occurred_at`: a reader could count them and infer an order, but "this
+     * was the third and last ask" was nowhere on the record, and an inference
+     * is not evidence. This is the OUTER number — how many times Julius
+     * dispatched the task — which is not `planAttempts`/`reviewAttempts`, the
+     * provider calls made INSIDE one dispatch. Both are on the row now, and
+     * they answer different questions.
+     */
+    expect(scheduled.map((event) => (event.facts as Record<string, unknown>).attempt)).toEqual([1, 2, 3]);
+    // It rides every event, not only the failures: a second ask that happened
+    // must be visible from the dispatch row too, not only from its outcome.
+    const dispatched = memory.events().filter((event) => event.type === 'worker.dispatched'
+      && event.taskId === 'plan-1:review');
+    expect(dispatched.map((event) => (event.facts as Record<string, unknown>).attempt)).toEqual([1, 2, 3]);
+
+    const failed = memory.events().filter((event) => event.type === 'task.failed')
+      .find((event) => event.taskId === 'plan-1:review')!;
+    const facts = failed.facts as Record<string, unknown>;
+    expect(facts.reasonCode, 'and the run says WHY it stopped asking').toBe('RETRY_ATTEMPTS_EXHAUSTED');
+    expect(facts.code).toBe('TIMEOUT');
+
+    /**
+     * AND THE PROCESS FACTS SURVIVE TO THE DURABLE ROW.
+     *
+     * This is the half the paid bundle was missing. Three rows that read
+     * `timed_out=true, bytes=0, no exit code` cannot say whether the provider
+     * was slow, unreachable, or never asked — Hermes prints a one-shot review
+     * in a single write at the end, so zero bytes is what an in-flight review
+     * and a dead one both look like. These columns are the difference.
+     */
+    // ON THE DISPATCH ROWS, which is where the bundle reads them: the terminal
+    // `task.failed` is the pipeline's own autonomy decision and carries the
+    // reason code, not the worker's telemetry. `worker-diagnostics.tsv` selects
+    // exactly the rows that have a transport, which is these three.
+    const dispatch = scheduled.map((event) => event.facts as Record<string, unknown>);
+    for (const attempt of dispatch) {
+      expect(attempt.diag_processStarted).toBe(true);
+      expect(attempt.diag_processPidObserved).toBe(false);
+      expect(attempt.diag_firstOutputObserved).toBe(false);
+      expect(attempt.diag_firstOutputAfterMs).toBeNull();
+      expect(attempt.diag_exitObserved).toBe(true);
+      expect(attempt.diag_signalSent).toBe('SIGTERM');
+      expect(attempt.diag_cleanupCompleted, 'no reviewer was left running').toBe(true);
+      expect(attempt.diag_timeoutMs).toBe(30);
+      expect(attempt.diag_elapsedMs).not.toBeNull();
+      // UNKNOWN IS NULL. Relay reads a pipe, not a socket.
+      expect(attempt.diag_providerRequestStarted).toBeNull();
+      // And the fields the paid bundle DID have still read the same.
+      expect(attempt.diag_timedOut).toBe(true);
+      expect(attempt.diag_outputBytesObserved).toBe(0);
+      expect(attempt.diag_processExitCode).toBeNull();
+      expect(attempt.diag_servedModel).toBeNull();
+    }
+  });
+
+  it('a reviewer that hangs once and then answers still completes the run', async () => {
+    // Paid run 34306850331, the control: its first plan review timed out too,
+    // its second answered, and the mission COMPLETED. A retry is only worth
+    // having if it can actually recover, and this is that half.
+    const { memory, outcome, fakes } = await driveLiveMission(
+      ['approved'], undefined, undefined, undefined, 1,
+    );
+
+    expect(outcome.state).toBe('COMPLETED');
+    expect(memory.taskRow('plan-1:review')?.state).toBe('SUCCEEDED');
+    expect(memory.taskRow('build-1')?.state).toBe('SUCCEEDED');
+    expect(memory.events().filter((event) => event.type === 'retry.scheduled')).toHaveLength(1);
+    // Four reviewer dispatches: the hung plan review, its retry, and the build
+    // review — the retry is a fresh dispatch, never a resumed one.
+    expect(fakes.log.order.filter((step) => step === 'reviewer')).toHaveLength(3);
+  });
+
+  it('the retried review is asked the same question, never one that mentions the timeout', async () => {
+    // A timeout is Relay's fact about its own window, not feedback on a plan.
+    // Feeding it back would turn an infrastructure failure into a correction
+    // the reviewer is asked to act on.
+    const { fakes } = await driveLiveMission(['approved'], undefined, undefined, undefined, 1);
+    const planReviews = fakes.packets.filter((packet) => packet.unifiedDiff.length === 0);
+    expect(planReviews.length).toBeGreaterThanOrEqual(2);
+    expect(planReviews[1]).toEqual(planReviews[0]);
+    for (const packet of fakes.packets) {
+      const rendered = JSON.stringify(packet);
+      for (const word of ['timed out', 'timeout', 'SIGTERM', 'review_timeout']) {
+        expect(rendered.toLowerCase()).not.toContain(word.toLowerCase());
+      }
+    }
+  });
+
   it('and the same rig still fails when the reviewer answers unreadably', async () => {
     // The control. Without it the case above proves only that a fixture can be
     // made to pass, not that the parser is on the path.
@@ -577,14 +792,17 @@ describe('a full mission drive with Julius in control', () => {
     expect(planFacts.diag_jsonParseable).toBe(false);
     expect(JSON.stringify(planFacts), 'no fact may be a stringified object').not.toContain('[object Object]');
     /**
-     * AND EACH REVIEW NAMES ITS OWN STAGE. Both reviews get the same unreadable
-     * answer here, so both fail — which is exactly the case that caught the
-     * first derivation: it read the stage from whether a diff artifact existed,
-     * and the build runs BEFORE the plan review, so every plan review was
-     * recorded as a build review.
+     * AND THE REVIEW NAMES ITS OWN STAGE — from the dispatched task type, not
+     * from whether a diff existed (the first derivation) or from the task id
+     * (the second). Under the declared graph an unreadable PLAN review ends
+     * the run before any build: the plan can never be accepted, so nothing is
+     * released, the coder never runs and no build review exists to misname.
+     * Paid run 34037313976 built first and reviewed the plan afterwards.
      */
     expect(planFacts.diag_stage, 'the plan review is a plan review').toBe('plan');
-    expect(factsFor('build-1:review').diag_stage, 'and the build review is not').toBe('build');
+    expect(memory.taskRow('build-1')?.state, 'the build was never released').toBe('BLOCKED');
+    expect(memory.taskRow('build-1:review'), 'and so there is no build review').toBeNull();
+    expect(failures.map((event) => event.taskId)).toEqual(['plan-1:review']);
   });
 
   it('CASE K: every task in the live graph reaches its first dispatch as attempt 1', async () => {
@@ -602,11 +820,13 @@ describe('a full mission drive with Julius in control', () => {
       expect(row.attempt, `${task.taskId} executed exactly once`).toBe(1);
     }
 
-    // And the hand-back really happened — otherwise this case proves nothing.
-    // A lease generation above the execution count is a claim that took
-    // ownership without spending an attempt, which is the repair itself.
+    // The race that produced hand-backs is gone: with the release rule only
+    // what Julius accepted is claimable, so the declared graph offers one
+    // task per tick and nothing is claimed and handed straight back. The
+    // attempt rule above is still the property under test; this records
+    // that the topology no longer exercises the hand-back at all.
     const yielded = tasks.filter((task) => memory.taskRow(task.taskId)!.leaseGeneration > 1);
-    expect(yielded.length, 'at least one task was claimed more times than it executed').toBeGreaterThan(0);
+    expect(yielded, 'no task was claimed more times than it executed').toEqual([]);
   });
 
   /**
@@ -658,7 +878,8 @@ describe('a full mission drive with Julius in control', () => {
   });
 
   it('a blocking review verdict forces exactly one Julius repair cycle, and completion is withheld when it stays blocking', async () => {
-    const { memory, fakes, outcome } = await driveLiveMission(['changes_required']);
+    // The plan review accepts; every implementation review rejects.
+    const { memory, fakes, outcome } = await driveLiveMission(['approved', 'changes_required']);
     expect(outcome.state).not.toBe('COMPLETED');
 
     const tasks = await memory.tasksForRun('run-live', 'prj-live');
@@ -707,6 +928,7 @@ function reviewSnapshot(taskId: string): JuliusContextSnapshot {
     contextId: 'ctx-resume-1', runId: 'run-live', taskId, workerId,
     workerRole: 'INDEPENDENT_REVIEWER', compilerVersion: JULIUS_CONTEXT_COMPILER_VERSION,
     missionContractRevision: 1, cardRevision: 'card-test-1', projectBrainRevision: 0,
+    taskContractRevision: 1, taskContractDigest: 'sha256:resume-contract',
     sourceEntryIds: [], dependencyTaskIds: [], evidenceIds: [], findingIds: [],
     acceptanceCriterionIds: ['AC-1'], contentHash: 'sha256:resume-test',
     characterCount: 24, redactionCount: 0, truncated: false,
@@ -733,9 +955,29 @@ describe('a resumed process cannot produce a vacuous review or a planless build'
       testCommand: 'npm run mission-test',
       run: fakeReviewer(log, [], ['approved']) as never,
     });
-    await expect(adapter.dispatch({ taskId: 'build-1:review', contextId: 'ctx-resume-1' }))
+    await expect(adapter.dispatch({ taskId: 'build-1:review', contextId: 'ctx-resume-1', taskType: 'review:build' }))
       .rejects.toMatchObject({ code: 'INVALID_REQUEST', safeMessage: expect.stringContaining('review of nothing is refused') });
     expect(log.order, 'Hermes must never have been invoked').toEqual([]);
+  });
+
+  it('the reviewer refuses a dispatch that names no stage, rather than guessing one', async () => {
+    const log: FakeLog = { order: [] };
+    const artifacts = createLiveArtifactExchange();
+    artifacts.put(planRef('run-live'), JSON.stringify(VALID_PLAN));
+    const adapter = createLiveHermesReviewerAdapter({
+      worker: {
+        workerId: 'independent-reviewer-hermes', role: 'INDEPENDENT_REVIEWER',
+        adapterId: 'hermes-local-live', providerId: 'xai', capabilities: ['review'],
+        taskTypes: ['review:build'], concurrencyLimit: 1, timeoutMs: 1_000, maxRetries: 1, status: 'AVAILABLE',
+      },
+      contexts, artifacts,
+      config: loadHermesConfig(LIVE_ENV as never),
+      testCommand: 'npm run mission-test',
+      run: fakeReviewer(log, [], ['approved']) as never,
+    });
+    await expect(adapter.dispatch({ taskId: 'build-1:review', contextId: 'ctx-resume-1' }))
+      .rejects.toMatchObject({ code: 'INVALID_REQUEST', failureClass: 'reviewer_stage_unknown' });
+    expect(log.order).toEqual([]);
   });
 
   it('the coder refuses a dispatch when the plan artifact is unavailable, before any effect or SDK load', async () => {
@@ -776,7 +1018,7 @@ describe('a resumed process cannot produce a vacuous review or a planless build'
       worker, contexts, artifacts, config: loadHermesConfig(LIVE_ENV as never),
       testCommand: 'npm run mission-test', run: (async () => outcomeFor('changes_required')) as never,
     });
-    const result = await minorOnly.dispatch({ taskId: 'build-1:review', contextId: 'ctx-resume-1' });
+    const result = await minorOnly.dispatch({ taskId: 'build-1:review', contextId: 'ctx-resume-1', taskType: 'review:plan' });
     expect(result.evidence).toHaveLength(1);
     expect((result.evidence[0] as { status: string }).status).toBe('FAILED');
 
@@ -784,7 +1026,7 @@ describe('a resumed process cannot produce a vacuous review or a planless build'
       worker, contexts, artifacts, config: loadHermesConfig(LIVE_ENV as never),
       testCommand: 'npm run mission-test', run: (async () => outcomeFor('unable_to_review')) as never,
     });
-    await expect(unable.dispatch({ taskId: 'build-1:review', contextId: 'ctx-resume-1' }))
+    await expect(unable.dispatch({ taskId: 'build-1:review', contextId: 'ctx-resume-1', taskType: 'review:plan' }))
       .rejects.toMatchObject({ code: 'WORKER_EXECUTION_FAILURE', safeMessage: expect.stringContaining('unable to review') });
   });
 });
@@ -843,6 +1085,128 @@ describe('the durable completion rule after a repair', () => {
     expect(outcome.state).toBe('VERIFYING');
     expect(outcome.stalled).toBe(true);
     expect(outcome.haltCause ?? '').toContain('REPAIR');
+  });
+});
+
+/**
+ * THE TASK CONTRACT, PROVEN IN A MISSION RATHER THAN IN A UNIT TEST.
+ *
+ * `julius-task-contract.ts` and its store are proven on their own, and the run
+ * loop is proven to refuse a dispatch whose contract is not locked. What was
+ * NOT proven anywhere is the property the contract exists for, in the shape a
+ * mission actually has it: that by the time the Coding Agent is dispatched the
+ * agreement is LOCKED, and that the reviewer of its work holds the SAME
+ * agreement — not an equal-looking one, the same digest.
+ *
+ * A run where those two diverge is the failure the whole mechanism is for: a
+ * coder judged against terms it was never given. It is invisible to a unit
+ * test, because a unit test constructs both sides itself.
+ *
+ * `seedMissionRun` seeds the build's contract exactly as the production
+ * bootstrap writes it — revision 1, DRAFT — and nothing here locks it by hand;
+ * the accepting plan review is what locks it, which is where production locks
+ * it too.
+ */
+describe('the task contract is locked before the coder runs, and binds its reviewer too', () => {
+  const claims = (memory: ReturnType<typeof createJuliusMemoryStore>) =>
+    memory.events()
+      .filter((event) => event.type === 'task.claimed')
+      .map((event) => ({ taskId: event.taskId, facts: event.facts as Record<string, unknown> }));
+
+  it('the build is dispatched under a LOCKED contract, and its review holds the same digest', async () => {
+    const { memory, outcome } = await driveLiveMission(['approved']);
+    expect(outcome.state, 'the drive must complete for this to mean anything').toBe('COMPLETED');
+
+    const contract = await memory.loadTaskContract({ projectId: 'prj-live', taskId: 'build-1' });
+    expect(contract, 'the build has a contract at all').not.toBeNull();
+    expect(contract!.state, 'and it is LOCKED, not still a draft').toBe('LOCKED');
+    expect(contract!.bindingDigest, 'a locked contract carries its binding').toMatch(/^sha256:[0-9a-f]{16,}$/u);
+    expect(contract!.lockedByEvaluatorId, 'and names who locked it').not.toBeNull();
+
+    // THE ORDER. The lock is not merely present at the end of the run — the
+    // build was CLAIMED carrying it, which is the only thing that proves the
+    // coder was never dispatched under an unagreed charge.
+    const build = claims(memory).find((claim) => claim.taskId === 'build-1');
+    expect(build, 'the build was claimed').toBeDefined();
+    expect(build!.facts.bindingDigest, 'the coder carried the binding into its dispatch')
+      .toBe(contract!.bindingDigest);
+    expect(build!.facts.contractRevision).toBe(contract!.contractRevision);
+
+    // THE SAME AGREEMENT, NOT AN EQUAL-LOOKING ONE. Every claim that carries a
+    // binding at all carries THIS one; a review of the build holding a
+    // different digest would be a review against terms the coder never had.
+    const bound = claims(memory).filter((claim) => claim.facts.bindingDigest !== null);
+    expect(bound.length, 'the coder and at least one reviewer are bound').toBeGreaterThan(1);
+    for (const claim of bound) {
+      expect(claim.facts.bindingDigest, `${claim.taskId} holds the coder's binding`)
+        .toBe(contract!.bindingDigest);
+      expect(claim.facts.contractId, `${claim.taskId} holds the coder's contract`)
+        .toBe(contract!.contractId);
+    }
+  });
+
+  it('the coder\'s prompt carries the locked terms — the same charge its reviewer grades against', async () => {
+    const { memory, fakes } = await driveLiveMission(['approved']);
+    const locked = await memory.loadTaskContract({ projectId: 'prj-live', taskId: 'build-1' });
+    expect(locked?.state).toBe('LOCKED');
+
+    // The hosted coder's prompt, as the runner received it.
+    const prompt = fakes.prompts[0];
+    expect(prompt).toBeDefined();
+    expect(prompt).toContain('--- TASK CONTRACT (locked; the reviewer grades against exactly this) ---');
+    expect(prompt).toContain(`CONTRACT: ${locked!.contractId} revision ${locked!.contractRevision}`);
+    expect(prompt).toContain(`BINDING DIGEST: ${locked!.bindingDigest}`);
+    // The objective is whatever revision was LOCKED — here the architect's revision 2, not the seeded text.
+    expect(prompt).toContain(`OBJECTIVE: ${locked!.objective}`);
+    expect(prompt).toContain('ROUND: build');
+    expect(prompt).toContain('[AC-1] The fixture test passes.');
+    // After the plan, not instead of it: the plan is what the coder builds,
+    // the contract is what the build is held to.
+    expect(prompt!.indexOf('--- ARCHITECT PLAN ---')).toBeLessThan(prompt!.indexOf('--- TASK CONTRACT'));
+
+    // And it is the SAME document the reviewer was handed: one binding digest
+    // in the coder's prompt and in the build review's packet.
+    const buildReview = fakes.packets.find((packet) => packet.stage === 'build');
+    expect(buildReview?.contract?.binding.bindingDigest).toBe(locked!.bindingDigest);
+    expect(buildReview?.contract?.objective).toBe(locked!.objective);
+    expect(locked!.contractRevision, 'the architect revised the seeded terms and THAT revision was locked').toBe(2);
+  });
+
+  it('the architect is NOT bound, and null says so rather than an absence', async () => {
+    // The plan task is not the contract's subject and has none. Reporting a
+    // digest for it would be inventing an agreement; omitting the fact would
+    // make "no contract" and "nothing was recorded" the same answer.
+    const { memory } = await driveLiveMission(['approved']);
+    const plan = claims(memory).find((claim) => claim.taskId === 'plan-1');
+    expect(plan, 'the plan was claimed').toBeDefined();
+    expect(plan!.facts.bindingDigest, 'the architect is bound by the MISSION contract, not a task one').toBeNull();
+    expect(plan!.facts.contractId).toBeNull();
+    expect('bindingDigest' in plan!.facts, 'and the fact is present, so null is an answer').toBe(true);
+  });
+
+  it('the binding a claim carried is the one the terms actually hash to', async () => {
+    // Re-derived from the stored terms rather than trusted as a label — the
+    // same check `loadTaskContract` performs on read, done here against the
+    // value a dispatch actually carried. A digest agreeing with the row but not
+    // with the terms would be a binding nobody could verify.
+    const { memory } = await driveLiveMission(['approved']);
+    const contract = await memory.loadTaskContract({ projectId: 'prj-live', taskId: 'build-1' });
+    expect(contract).not.toBeNull();
+    expect(juliusTaskContractBindingDigest(contract!), 're-derived from the terms themselves')
+      .toBe(contract!.bindingDigest);
+  });
+
+  it('only ONE revision is ever locked, however many the run wrote', async () => {
+    const { memory } = await driveLiveMission(['approved']);
+    const revisions = await memory.taskContractRevisions({ projectId: 'prj-live', taskId: 'build-1' });
+    expect(revisions.length, 'at least the seeded one').toBeGreaterThan(0);
+    expect(revisions.filter((row) => row.state === 'LOCKED'), 'at most one locked revision').toHaveLength(1);
+    // Every other revision is a draft or superseded — never a second live
+    // agreement sitting beside the one the coder was dispatched under.
+    for (const row of revisions) {
+      if (row.state === 'LOCKED') continue;
+      expect(['DRAFT', 'CHALLENGED', 'SUPERSEDED'], `revision ${row.contractRevision}`).toContain(row.state);
+    }
   });
 });
 
@@ -918,11 +1282,21 @@ describe('the live mission contract file', () => {
  * contacted by any case in this file.
  */
 describe('the first paid attempt, reproduced: a failing Prompt Architect', () => {
-  const architectFailure = (failureClass: GptRunOutcome extends { ok: false } ? never : string, message: string) =>
-    async (): Promise<GptRunOutcome> => ({ ok: false, failureClass: failureClass as never, message });
+  /** `extra` carries what a real post-response failure carries: the provider
+   *  answered, so it reported usage, and may have said why it stopped. */
+  const architectFailure = (
+    failureClass: GptRunOutcome extends { ok: false } ? never : string,
+    message: string,
+    extra: Partial<Extract<GptRunOutcome, { ok: false }>> = {},
+  ) =>
+    async (): Promise<GptRunOutcome> => ({ ok: false, failureClass: failureClass as never, message, ...extra });
 
-  const failedRun = async (failureClass: string, message = 'safe provider message') => {
-    const driven = await driveLiveMission(['approved'], undefined, architectFailure(failureClass as never, message));
+  const failedRun = async (
+    failureClass: string,
+    message = 'safe provider message',
+    extra: Partial<Extract<GptRunOutcome, { ok: false }>> = {},
+  ) => {
+    const driven = await driveLiveMission(['approved'], undefined, architectFailure(failureClass as never, message, extra));
     const tasks = await driven.memory.tasksForRun('run-live', 'prj-live');
     const failures = driven.memory.events().filter((event) => event.type === 'task.failed' || event.type === 'retry.scheduled');
     return { ...driven, tasks, failures };
@@ -985,6 +1359,118 @@ describe('the first paid attempt, reproduced: a failing Prompt Architect', () =>
    * used to write no task id at all, so the two columns that say WHO stopped
    * were blank for exactly that run.
    */
+  /**
+   * PAID LIVE MISSION 4, ATTEMPT ONE, REPRODUCED — run 34459684814.
+   *
+   * The architect burned 62 seconds of `gpt-5.6-sol` and returned
+   * `status: incomplete` having emitted no JSON. Its durable row recorded the
+   * class and nothing else: no tokens, no ceiling, no reason. The connector had
+   * computed the provider's usage and dropped it one line later on every
+   * failure path, and the provider's own `incomplete_details.reason` survived
+   * only inside a free-text message the evidence allowlist withholds — so the
+   * cause could be established only by reading the connector's source.
+   *
+   * A paid failure has to be diagnosable and costable from its own evidence.
+   */
+  it('records what an incomplete plan consumed, the ceiling it consumed, and why it stopped', async () => {
+    const { failures } = await failedRun('incomplete_response', 'safe provider message', {
+      usage: { inputTokens: 4_210, cachedInputTokens: null, outputTokens: 4_000, reasoningTokens: 3_968, totalTokens: 8_210 },
+      incompleteReason: 'max_output_tokens',
+      providerStatus: 'incomplete',
+    });
+    const facts = failures.at(-1)!.facts;
+
+    expect(facts.failureClass, 'the class the run actually produced').toBe('incomplete_response');
+    // THE THREE THAT WERE MISSING.
+    expect(facts.diag_incompleteReason, 'the provider\'s own word for why it stopped').toBe('max_output_tokens');
+    expect(facts.diag_reasoningTokens, 'what the reasoning consumed — the number that explains it').toBe(3_968);
+    expect(facts.diag_maxOutputTokens, 'against the ceiling in force, so the comparison is checkable').toBe(4_000);
+    // AND WHAT IT COST, which a failed call was billed for either way.
+    expect(facts.diag_inputTokens).toBe(4_210);
+    expect(facts.diag_outputTokens).toBe(4_000);
+    // Still honestly UNKNOWN in dollars: this transport reports tokens, never a price.
+    expect(facts.diag_costBasis, 'tokens are not a price, and one is never inferred from the other').toBe('UNKNOWN');
+    // AND WHAT THE PROVIDER CALLED IT, plus the wall clock a reader would otherwise guess at.
+    expect(facts.diag_providerStatus).toBe('incomplete');
+    expect(facts.diag_totalTokens).toBe(8_210);
+    expect(typeof facts.diag_elapsedMs, 'the call took real time and the row says how much').toBe('number');
+  });
+
+  /**
+   * A FAILURE BEFORE VALIDATION MUST NOT REPORT FAILED VALIDATION.
+   *
+   * `validation_passed=false` on Mission 4's row said the plan was validated
+   * and rejected. Nothing was validated: the connector returned first. Those
+   * are different sentences about a paid run and only one of them is true.
+   */
+  it('does not claim a validation verdict it never reached', async () => {
+    const { failures } = await failedRun('incomplete_response', 'safe provider message', {
+      usage: { inputTokens: 10, cachedInputTokens: null, outputTokens: 0, reasoningTokens: 0, totalTokens: 10 },
+      incompleteReason: 'max_output_tokens',
+      providerStatus: 'incomplete',
+    });
+    const facts = failures.at(-1)!.facts;
+    expect(facts.diag_validationPassed, 'null is "never reached", which is what happened').toBeNull();
+    expect(facts.diag_validationReasonCode, 'and no reason, because there was no verdict').toBeNull();
+  });
+
+  /**
+   * THE PROVIDER ANSWERED WITH NOTHING vs NEVER ANSWERED — a real distinction.
+   * The first is an observation that no JSON was produced; the second observed
+   * nothing at all, and `false` there would be a reading nobody took.
+   */
+  it('separates "no JSON was produced" from "nothing was observed"', async () => {
+    const answered = await failedRun('incomplete_response', 'm', {
+      usage: { inputTokens: 1, cachedInputTokens: null, outputTokens: 0, reasoningTokens: 0, totalTokens: 1 },
+      responseId: 'resp_x', providerStatus: 'incomplete',
+    });
+    expect(answered.failures.at(-1)!.facts.diag_jsonParseable, 'it answered, and no JSON was in it').toBe(false);
+
+    const never = await failedRun('model_unavailable');
+    expect(never.failures.at(-1)!.facts.diag_jsonParseable, 'nothing was observed, so nothing is claimed').toBeNull();
+  });
+
+  /**
+   * ABSENT IS NOT ZERO. A failure raised BEFORE the provider answered has no
+   * usage to report, and writing 0 would be a measurement nobody took.
+   * `model_unavailable` is that shape and is not retryable, so the row that
+   * ends the task is the one carrying the diagnostics.
+   */
+  it('reports null, not zero, when the call never reached the provider', async () => {
+    const { failures } = await failedRun('model_unavailable');
+    const facts = failures.at(-1)!.facts;
+    expect(facts.diag_inputTokens).toBeNull();
+    expect(facts.diag_outputTokens).toBeNull();
+    expect(facts.diag_reasoningTokens).toBeNull();
+    expect(facts.diag_incompleteReason).toBeNull();
+    expect(facts.diag_maxOutputTokens, 'the ceiling is a fact of the request, so it is known even here').toBe(4_000);
+  });
+
+  /**
+   * A RETRYABLE FAILURE CARRIES ITS DIAGNOSTICS ON EVERY ATTEMPT IT SCHEDULES.
+   *
+   * Recorded because the retry path and the terminal path do not agree, and the
+   * disagreement is worth pinning rather than discovering twice: each
+   * `retry.scheduled` row carries the full diagnostic set, and the `task.failed`
+   * row written when the run's own autonomy declines to retry again carries
+   * none — `JuliusDispatchOutcome` returns the code and the class to the
+   * pipeline but not the diagnostics, so the pipeline has nothing to write.
+   *
+   * It did not affect Paid Live Mission 4, whose architect failure was NOT
+   * retryable and whose terminal row carried everything. Repairing it means
+   * widening a core return type, which is its own change; this test holds the
+   * half that works so a later repair can be measured against it.
+   */
+  it('carries the diagnostics on each scheduled retry', async () => {
+    const { failures } = await failedRun('rate_limited');
+    const scheduled = failures.filter((event) => event.type === 'retry.scheduled');
+    expect(scheduled.length, 'a retryable class must schedule at least one retry').toBeGreaterThan(0);
+    for (const event of scheduled) {
+      expect(event.facts.diag_maxOutputTokens, 'every scheduled retry says what ceiling it ran under').toBe(4_000);
+      expect(event.facts.diag_requestedModel).not.toBeUndefined();
+    }
+  });
+
   it('names the task on the failure row, so the evidence can name the role', async () => {
     const { failures } = await failedRun('provider_error');
     const last = failures.at(-1)!;
@@ -1065,9 +1551,23 @@ describe('an incomplete review reaches Julius as the failure it actually was', (
   };
   const jsonRes = (body: unknown, status = 200): Response =>
     new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
-  const started = (state: unknown) => vi.fn()
-    .mockResolvedValueOnce(jsonRes({ accepted: true, runId: 'run-live' }))
-    .mockResolvedValueOnce(jsonRes(state));
+  /**
+   * A REVIEW SERVICE THAT ANSWERS ROUNDS, NOT A FIXED PAIR.
+   *
+   * One review is submit-then-poll. A shape the adapter corrects is asked
+   * again, which is a second submit and a second poll — so a fake that
+   * resolved exactly twice would answer the corrected ask with `undefined` and
+   * every corrected shape would arrive as a launch failure. It answers the
+   * same way every round, which is what a stubborn model does and the case
+   * these tests are about.
+   */
+  const started = (state: unknown) => {
+    let call = 0;
+    return vi.fn(async () => {
+      call += 1;
+      return call % 2 === 1 ? jsonRes({ accepted: true, runId: 'run-live' }) : jsonRes(state);
+    });
+  };
 
   /** Dispatches through the real adapter and returns the thrown Julius error. */
   const failureFrom = async (fetchImpl: unknown) => {
@@ -1088,7 +1588,7 @@ describe('an incomplete review reaches Julius as the failure it actually was', (
         },
       })) as never,
     });
-    return adapter.dispatch({ taskId: 'build-1:review', contextId: 'ctx-resume-1' })
+    return adapter.dispatch({ taskId: 'build-1:review', contextId: 'ctx-resume-1', taskType: 'review:plan' })
       .then(() => { throw new Error('the dispatch was expected to fail'); })
       .catch((error: unknown) => error as { code: string; retryable: boolean; failureClass: string | null });
   };
@@ -1155,7 +1655,11 @@ describe('an incomplete review reaches Julius as the failure it actually was', (
     const failure = await failureFrom(started({ runId: 'run-live', status: 'completed', reviewText: 'The plan looks fine to me.' }));
     expect(failure.failureClass, 'prose is absent JSON, not a dead credential').toBe('review_json_absent');
     expect(failure.code).toBe('WORKER_EXECUTION_FAILURE');
-    expect(failure.retryable, 'a model that wrote prose will write prose again').toBe(false);
+    expect(failure.retryable, 'a model that wrote prose TWICE will write prose again').toBe(false);
+    // AND IT WAS ASKED TWICE. Prose is a shape defect, so the adapter names it
+    // and re-asks once; a model that answers with prose again is the final
+    // failure this always was, and the record says two calls were bought.
+    expect((failure as { diagnostics?: Record<string, unknown> }).diagnostics?.reviewAttempts).toBe(2);
   });
 
   it('no incomplete review produces a verdict, a decision or a finding', async () => {
@@ -1169,6 +1673,175 @@ describe('an incomplete review reaches Julius as the failure it actually was', (
       const failure = await failureFrom(fetchImpl);
       expect(failure.code, 'a dispatch that failed produced no evidence').toBeDefined();
       expect(JSON.stringify(failure)).not.toContain('FAKETESTNOTREAL');
+    }
+  });
+
+  /**
+   * PAID RUN 33802017460 — A REAL PLAN, A REAL DIFF, PASSING TESTS, AND BOTH
+   * REVIEWS UNREADABLE.
+   *
+   * Julius never received a verdict and the run ended FAILED with zero
+   * decisions. The malformed shapes are `retryable: false` for a good reason —
+   * a plain retry asks the identical question and gets the identical answer —
+   * but a CORRECTION is a different act. It names the shape defect from the
+   * CLOSED shape token, never from the model's own (malformed) text, and asks
+   * once more.
+   */
+  /** Answers a scripted review text per round, and records every prompt it was given. */
+  const rounds = (...texts: readonly string[]) => {
+    const prompts: string[] = [];
+    let call = 0;
+    const fetchImpl = vi.fn(async (_url: unknown, init?: { body?: unknown }) => {
+      call += 1;
+      if (call % 2 === 1) {
+        prompts.push(String((JSON.parse(String(init?.body ?? '{}')) as { prompt?: unknown }).prompt ?? ''));
+        return jsonRes({ accepted: true, runId: 'run-live' });
+      }
+      const text = texts[Math.min(Math.ceil(call / 2) - 1, texts.length - 1)]!;
+      return jsonRes({ runId: 'run-live', status: 'completed', reviewText: text });
+    });
+    return { prompts, fetchImpl };
+  };
+
+  const APPROVED = JSON.stringify({
+    verdict: 'approved', summary: 'The plan satisfies every acceptance criterion.',
+    findings: [], requirementsChecked: [{ requirement: 'AC-1', status: 'passed', evidence: 'read the plan' }],
+  });
+
+  /** Dispatches through the real adapter and returns the SUCCESSFUL result. */
+  const resultFrom = async (fetchImpl: unknown) => {
+    const artifacts = createLiveArtifactExchange();
+    artifacts.put(planRef('run-live'), JSON.stringify(VALID_PLAN));
+    const adapter = createLiveHermesReviewerAdapter({
+      worker,
+      contexts: { snapshotFor: () => reviewSnapshot('build-1:review') },
+      artifacts,
+      config: loadHermesConfig(LIVE_ENV as never),
+      testCommand: 'npm run mission-test',
+      run: (async (input: { packet: ReviewPacket }) => runRemoteHermesReview({
+        packet: input.packet, config: REMOTE_CFG, runId: 'run-live',
+        deps: { now: () => '2026-09-04T00:00:00.000Z', sleep: () => Promise.resolve(), fetchImpl: fetchImpl as typeof fetch },
+      })) as never,
+    });
+    return adapter.dispatch({ taskId: 'build-1:review', contextId: 'ctx-resume-1', taskType: 'review:plan' });
+  };
+
+  it('prose first, a real verdict second: the run that died here now gets one', async () => {
+    const { prompts, fetchImpl } = rounds('The plan looks fine to me.', APPROVED);
+    const result = await resultFrom(fetchImpl);
+    expect(result.status, 'the review succeeded on the corrected ask').toBe('SUCCEEDED');
+    expect(prompts, 'exactly one correction was bought').toHaveLength(2);
+  });
+
+  it('the correction names the shape defect, and carries none of the unreadable answer', async () => {
+    const unreadable = 'The plan looks fine to me. Ship it.';
+    const { prompts, fetchImpl } = rounds(unreadable, APPROVED);
+    await resultFrom(fetchImpl);
+
+    const corrected = prompts[1]!;
+    expect(prompts[0], 'the first ask carried no correction').not.toContain('CORRECTION —');
+    expect(corrected, 'the second names what was wrong').toContain('contained no JSON report at all');
+    expect(corrected, 'and it is the last thing read before the emit instruction')
+      .toMatch(/CORRECTION —[\s\S]*Emit the JSON now\.$/u);
+    // THE UNREADABLE TEXT NEVER TRAVELS BACK, and that is STRUCTURAL rather
+    // than checked: `review_incomplete` carries a safe message, a closed shape
+    // and diagnostics, and the review text is not among them — the adapter
+    // could not quote it if it wanted to. This assertion is the second line,
+    // for the day someone adds the raw text to that outcome.
+    expect(corrected, 'never the answer itself').not.toContain(unreadable);
+  });
+
+  it('each correctable shape is told what it specifically got wrong', async () => {
+    const cases: readonly (readonly [string, string, string])[] = [
+      ['review_json_absent', 'The plan looks fine to me.', 'contained no JSON report at all'],
+      ['review_json_ambiguous', `${APPROVED}\n${APPROVED}`, 'MORE THAN ONE object carrying a verdict'],
+      ['review_verdict_missing', '{"summary":"ok","findings":[]}', 'contained JSON with no verdict'],
+      ['review_verdict_invalid', '{"verdict":"approve","summary":"ok","findings":[],"requirementsChecked":[]}', 'outside the permitted set'],
+    ];
+    for (const [shape, text, expected] of cases) {
+      const { prompts, fetchImpl } = rounds(text, APPROVED);
+      const result = await resultFrom(fetchImpl);
+      expect(prompts, `${shape} is re-asked once`).toHaveLength(2);
+      expect(prompts[1], `${shape} is told what it got wrong`).toContain(expected);
+      expect(result.status, `${shape} recovers`).toBe('SUCCEEDED');
+    }
+  });
+
+  it('an exhausted mission buys no correction, and the refusal is the one it always was', async () => {
+    // A CORRECTION IS A SPEND. The architect's allocation is a reservation
+    // rather than a per-call cap, so a second call cannot exceed it — but
+    // buying one for a mission with nothing left is the ceiling being ignored.
+    const { prompts, fetchImpl } = rounds('The plan looks fine to me.', APPROVED);
+    const artifacts = createLiveArtifactExchange();
+    artifacts.put(planRef('run-live'), JSON.stringify(VALID_PLAN));
+    const adapter = createLiveHermesReviewerAdapter({
+      worker,
+      contexts: { snapshotFor: () => reviewSnapshot('build-1:review') },
+      artifacts,
+      config: loadHermesConfig(LIVE_ENV as never),
+      testCommand: 'npm run mission-test',
+      run: (async (input: { packet: ReviewPacket }) => runRemoteHermesReview({
+        packet: input.packet, config: REMOTE_CFG, runId: 'run-live',
+        deps: { now: () => '2026-09-04T00:00:00.000Z', sleep: () => Promise.resolve(), fetchImpl: fetchImpl as typeof fetch },
+      })) as never,
+    });
+    const failure = await adapter.dispatch({
+      taskId: 'build-1:review', contextId: 'ctx-resume-1', taskType: 'review:plan',
+      allocation: { usdMicros: 0, basis: 'EXHAUSTED', policyVersion: 'julius-allocation.v1' },
+    })
+      .then(() => { throw new Error('the dispatch was expected to fail'); })
+      .catch((error: unknown) => error as { failureClass: string | null; diagnostics?: Record<string, unknown> });
+
+    expect(prompts, 'asked once, and never again').toHaveLength(1);
+    expect(failure.failureClass, 'and it fails exactly as it did before the re-ask existed').toBe('review_json_absent');
+    expect(failure.diagnostics?.reviewAttempts).toBe(1);
+  });
+
+  it('a mission that still has budget does buy the correction', async () => {
+    // The other side of the guard: a positive allocation changes nothing about
+    // the behaviour proved above, so the refusal is the budget's and not a
+    // silent disabling of the re-ask.
+    const { prompts, fetchImpl } = rounds('The plan looks fine to me.', APPROVED);
+    const artifacts = createLiveArtifactExchange();
+    artifacts.put(planRef('run-live'), JSON.stringify(VALID_PLAN));
+    const adapter = createLiveHermesReviewerAdapter({
+      worker,
+      contexts: { snapshotFor: () => reviewSnapshot('build-1:review') },
+      artifacts,
+      config: loadHermesConfig(LIVE_ENV as never),
+      testCommand: 'npm run mission-test',
+      run: (async (input: { packet: ReviewPacket }) => runRemoteHermesReview({
+        packet: input.packet, config: REMOTE_CFG, runId: 'run-live',
+        deps: { now: () => '2026-09-04T00:00:00.000Z', sleep: () => Promise.resolve(), fetchImpl: fetchImpl as typeof fetch },
+      })) as never,
+    });
+    const result = await adapter.dispatch({
+      taskId: 'build-1:review', contextId: 'ctx-resume-1', taskType: 'review:plan',
+      allocation: { usdMicros: 300_000, basis: 'ESTIMATE', policyVersion: 'julius-allocation.v1' },
+    });
+    expect(prompts, 'the correction was bought').toHaveLength(2);
+    expect(result.status).toBe('SUCCEEDED');
+  });
+
+  it('a failure that is NOT a shape defect is never re-asked', async () => {
+    // A timeout, a 503 and a refused credential describe an answer that did not
+    // arrive. Two of them are already retryable at the TASK level, where the
+    // attempt ceiling and the spend budget govern; re-asking here would spend
+    // inside a dispatch for a defect no instruction can fix.
+    for (const [kind, body, status] of [
+      ['timed out', { runId: 'run-live', status: 'timed_out', failureKind: 'timed_out' }, 200],
+      ['capacity', { failureKind: 'capacity_exhausted' }, 503],
+      ['dead credential', { failureKind: 'authentication_failed' }, 401],
+    ] as const) {
+      let calls = 0;
+      const fetchImpl = vi.fn(async () => {
+        calls += 1;
+        return calls === 1 && status === 200 ? jsonRes({ accepted: true, runId: 'run-live' }) : jsonRes(body, status);
+      });
+      const failure = await resultFrom(fetchImpl)
+        .then(() => { throw new Error('the dispatch was expected to fail'); })
+        .catch((error: unknown) => error as { diagnostics?: Record<string, unknown> });
+      expect(failure.diagnostics?.reviewAttempts, `${kind} is asked exactly once`).toBe(1);
     }
   });
 });
@@ -1188,7 +1861,12 @@ describe('a paid reviewer failure can be diagnosed from the record alone', () =>
     const child = new EventEmitter() as EventEmitter & { stdout: Readable; stderr: Readable; kill: () => boolean };
     child.stdout = new Readable({ read() { /* pushed below */ } });
     child.stderr = new Readable({ read() { /* never surfaced */ } });
-    child.kill = () => true;
+    /* A SIGNALLED PROCESS DIES. The runner now waits for the child it killed
+       to be gone before it reports, so a `kill` that returns true and leaves
+       the process running models a reviewer this repository has never met —
+       `hermes-reviewer-lifecycle.test.ts` owns the cases where one does — and
+       makes every timeout case here wait out the escalation grace instead. */
+    child.kill = () => { child.emit('close', null); return true; };
     setTimeout(() => {
       if (input.stdout !== undefined && input.stdout !== '') child.stdout.push(Buffer.from(input.stdout, 'utf8'));
       child.stdout.push(null);
@@ -1219,7 +1897,7 @@ describe('a paid reviewer failure can be diagnosed from the record alone', () =>
         packet: packetInput.packet, config: packetInput.config, spawnImpl: fakeChild(child),
       })) as never,
     });
-    return adapter.dispatch({ taskId: 'build-1:review', contextId: 'ctx-resume-1' })
+    return adapter.dispatch({ taskId: 'build-1:review', contextId: 'ctx-resume-1', taskType: 'review:build' })
       .then(() => { throw new Error('the dispatch was expected to fail'); })
       .catch((error: unknown) => error as JuliusDispatchError);
   };
@@ -1423,39 +2101,197 @@ describe('a refused plan names the rule it broke', () => {
 });
 
 /**
- * WHICH REVIEW A FAILURE WAS, INCLUDING THE ONES A REPAIR CREATES.
+ * A REFUSED PLAN IS A SELF-INFLICTED ERROR, AND JULIUS REPAIRS THOSE.
  *
- * The first derivation read the stage from whether a diff artifact existed, and
- * the build runs BEFORE the plan review — so every plan review was recorded as
- * a build review. The second anchored on the end of the reviewed task id, which
- * reads `run:…:plan` and `build-1` and then returns null for a REPAIR
- * re-review, whose reviewed id is `repair:build-1:1:task`. A durable field that
- * is wrong is worse than one that is absent, and a repaired run's re-review is
- * exactly where a paid mission ends.
+ * Paid runs 34185920678 and 34186711214 each bought one `gpt-5.6-sol` answer,
+ * had it refused for a single field, and ended FAILED — no coder, no diff, no
+ * review, no repair. Everywhere else in the run a recoverable failure gets one
+ * bounded attempt at recovery; the architect's own validator was the exception,
+ * and the mission paid for it twice.
+ *
+ * The correction is built from the CLOSED reason code and the STRUCTURAL path,
+ * never from the model's own output, and it happens exactly once.
  */
-describe('the review stage is read from the task id', () => {
-  it('names the ordinary plan and build reviews, in both id shapes', () => {
-    expect(reviewStageOf('plan-1:review')).toBe('plan');
-    expect(reviewStageOf('build-1:review')).toBe('build');
-    expect(reviewStageOf('run:526ca97da0e94b6223a5320a:plan:review')).toBe('plan');
-    expect(reviewStageOf('run:526ca97da0e94b6223a5320a:build:review')).toBe('build');
+describe('a refused plan is corrected once, and the record says it was', () => {
+  const VALID_PLAN = () => ({
+    objectiveSummary: 'Implement the mission fixture change.',
+    assumptions: [{ id: 'A1', statement: 'The fixture exists.', confidence: 'medium' }],
+    unresolvedQuestions: [],
+    requirements: [{ id: 'R1', statement: 'It must pass.', rationale: 'The contract says so.' }],
+    architectureDecisions: [{ id: 'D1', decision: 'Edit in place.', rationale: 'Smallest change.', alternativesConsidered: [], accepted: false }],
+    implementationSteps: [{ order: 1, description: 'Edit the fixture.', filesTouched: ['fixtures/a.ts'] }],
+    acceptanceCriteria: ['AC-1'], testPlan: ['npm run mission-test'],
+    risks: [], prohibitedActions: [], proposedContractAmendments: [], contextRefs: [],
+    handoff: {
+      objective: 'Implement the fixture change.',
+      boundedTask: 'Edit exactly the fixture files and make the test pass.',
+      acceptanceCriteria: ['AC-1'], requiredTests: ['npm run mission-test'],
+      allowedFileScope: ['fixtures/live-validation/'], prohibitedActions: [],
+      grantedTools: [], expectedEvidence: ['TEST'],
+      missionContractRef: 'contract-1', environmentRef: null,
+    },
   });
 
-  it('keeps the stage on a repair re-review, which is routed review:repair:build', () => {
-    expect(reviewStageOf('repair:build-1:1:task:review')).toBe('build');
-    expect(reviewStageOf('repair:plan-1:1:task:review')).toBe('plan');
+  /** An architect that answers a scripted sequence and records what it was told. */
+  const scripted = (...bodies: readonly unknown[]) => {
+    const instructions: string[] = [];
+    const architect = async (request: { instructions: string }): Promise<GptRunOutcome> => {
+      instructions.push(request.instructions);
+      const body = bodies[Math.min(instructions.length - 1, bodies.length - 1)];
+      return {
+        ok: true, status: 'completed',
+        outputText: typeof body === 'string' ? body : JSON.stringify(body),
+        actualModel: 'gpt-5.6-sol-2026-08-01', responseId: `resp_attempt_${instructions.length}`,
+        usage: { inputTokens: 1, cachedInputTokens: 0, outputTokens: 1, reasoningTokens: 0, totalTokens: 2 },
+      } as GptRunOutcome;
+    };
+    return { instructions, architect: architect as unknown as () => Promise<GptRunOutcome> };
+  };
+
+  const claiming = () => {
+    const plan = VALID_PLAN();
+    plan.objectiveSummary = 'Done — files were edited already.';
+    return plan;
+  };
+
+  it('the mission that died twice for one field now reaches COMPLETED', async () => {
+    const { instructions, architect } = scripted(claiming(), VALID_PLAN());
+    const { memory, outcome } = await driveLiveMission(['approved'], undefined, architect);
+
+    expect(instructions, 'exactly one correction was bought').toHaveLength(2);
+    expect(memory.taskRow('plan-1')?.state, 'the plan task succeeded on the correction').toBe('SUCCEEDED');
+    expect(outcome.state, 'and the whole mission reaches COMPLETED').toBe('COMPLETED');
+    expect(memory.taskRow('build-1')?.state, 'the coder actually ran').toBe('SUCCEEDED');
+    const decisions = await memory.decisionsForRun('run-live', 'prj-live');
+    expect(decisions.length, 'completion is still verification-decided').toBeGreaterThan(0);
   });
 
-  it('returns null rather than guessing when it cannot be read', () => {
-    // A durable field that is wrong is worse than one that is absent.
-    expect(reviewStageOf('something:else:review')).toBeNull();
-    expect(reviewStageOf('')).toBeNull();
-    // Two kinds is not a tie to break.
-    expect(reviewStageOf('repair:plan-1:build-2:task:review')).toBeNull();
+  it('the correction names the rule and the field, and carries no model text', async () => {
+    const { instructions, architect } = scripted(claiming(), VALID_PLAN());
+    await driveLiveMission(['approved'], undefined, architect);
+    const corrected = instructions[1]!;
+
+    expect(corrected, 'the first attempt was NOT corrected').not.toBe(instructions[0]);
+    expect(corrected.startsWith(instructions[0]!), 'the charter is kept, the correction appended').toBe(true);
+    expect(corrected, 'it names where').toContain('plan.objectiveSummary');
+    expect(corrected, 'and what the rule is about').toContain('FUTURE tense');
+    // THE MODEL'S OWN WORDS NEVER TRAVEL BACK. Feeding a refused plan to the
+    // model invites it to repeat it — the lesson the charter itself learned,
+    // having once quoted the four banned phrases verbatim.
+    expect(corrected, 'never the refused sentence').not.toContain('Done — files were edited already.');
+    expect(corrected.toLowerCase(), 'nor the phrase it tripped on').not.toContain('files were edited');
   });
+
+  it('a plan refused TWICE fails as it always did, after exactly two calls', async () => {
+    const { instructions, architect } = scripted(claiming(), claiming(), VALID_PLAN());
+    const { memory, outcome } = await driveLiveMission(['approved'], undefined, architect);
+
+    expect(instructions, 'one correction, never two').toHaveLength(2);
+    expect(memory.taskRow('plan-1')?.state).toBe('FAILED');
+    expect(memory.taskRow('build-1')?.state, 'the build never runs on a refused plan').not.toBe('SUCCEEDED');
+    expect(outcome.state, 'and a third answer is never bought, whatever it would have been').not.toBe('COMPLETED');
+
+    const facts = memory.events().filter((event) => event.type === 'task.failed').at(-1)!.facts as Record<string, unknown>;
+    expect(facts.diag_validationReasonCode).toBe('plan_false_work_claim');
+    expect(facts.diag_validationField, 'the path, published').toBe('plan.objectiveSummary');
+    expect(facts.diag_validationClaimPhrase, 'and which phrase').toBe('files_were_edited');
+    // THE SPEND IS ACCOUNTABLE. A retry the artifact could not show would be a
+    // provider call nobody could account for.
+    expect(facts.diag_planAttempts, 'the record says how many calls were bought').toBe(2);
+    expect(facts.diag_responseId, 'and it is the LAST response, not the first').toBe('resp_attempt_2');
+  });
+
+  it('an unparseable answer gets the same one correction, and says so', async () => {
+    const { instructions, architect } = scripted('not json at all', VALID_PLAN());
+    const { memory, outcome } = await driveLiveMission(['approved'], undefined, architect);
+    expect(instructions).toHaveLength(2);
+    expect(instructions[1], 'told what was wrong, in our words').toContain('parseable JSON');
+    expect(memory.taskRow('plan-1')?.state).toBe('SUCCEEDED');
+    expect(outcome.state).toBe('COMPLETED');
+  });
+
+  it('a plan valid the first time buys nothing extra', async () => {
+    const { instructions, architect } = scripted(VALID_PLAN());
+    const { memory, outcome } = await driveLiveMission(['approved'], undefined, architect);
+    expect(instructions, 'one call, as before').toHaveLength(1);
+    expect(memory.taskRow('plan-1')?.state).toBe('SUCCEEDED');
+    expect(outcome.state).toBe('COMPLETED');
+    expect(memory.taskRow('build-1')?.state, 'and the coder still ran behind it').toBe('SUCCEEDED');
+    expect(memory.events().some((event) => event.type === 'task.failed'), 'nothing failed on the way').toBe(false);
+  });
+
+  it('every rule the validator can name is correctable, so none of them is silently terminal', async () => {
+    // A reason code with no correction would fall through to the old terminal
+    // behaviour without anything saying so. Each is driven through the real
+    // pipeline and must buy exactly two calls.
+    const cases: readonly (readonly [string, (p: ReturnType<typeof VALID_PLAN>) => void])[] = [
+      ['objective_summary_empty', (p) => { p.objectiveSummary = ''; }],
+      ['assumption_statement_empty', (p) => { p.assumptions[0]!.statement = ''; }],
+      ['decision_statement_empty', (p) => { p.architectureDecisions[0]!.decision = ''; }],
+      ['decision_rationale_empty', (p) => { p.architectureDecisions[0]!.rationale = ''; }],
+      ['decision_pre_accepted', (p) => { (p.architectureDecisions[0] as unknown as { accepted: boolean }).accepted = true; }],
+      ['handoff_objective_empty', (p) => { p.handoff.objective = ''; }],
+      ['handoff_bounded_task_empty', (p) => { p.handoff.boundedTask = ''; }],
+      ['handoff_allowed_scope_empty', (p) => { p.handoff.allowedFileScope = []; }],
+      ['plan_false_work_claim', (p) => { p.objectiveSummary = 'Done — files were edited already.'; }],
+      ['required_string_array_invalid', (p) => { (p as unknown as { testPlan: unknown }).testPlan = [1]; }],
+      ['handoff_array_invalid', (p) => { (p.handoff as unknown as { requiredTests: unknown }).requiredTests = 7; }],
+      ['handoff_missing', (p) => { (p as unknown as { handoff: unknown }).handoff = null; }],
+      ['plan_object_invalid', () => { /* replaced wholesale below */ }],
+    ];
+    for (const [expected, change] of cases) {
+      const broken = expected === 'plan_object_invalid' ? 'null' : (() => {
+        const plan = VALID_PLAN();
+        change(plan);
+        return plan;
+      })();
+      const { instructions, architect } = scripted(broken, VALID_PLAN());
+      const { memory } = await driveLiveMission(['approved'], undefined, architect);
+      expect(instructions, `${expected} must be correctable`).toHaveLength(2);
+      expect(memory.taskRow('plan-1')?.state, `${expected} recovers on the correction`).toBe('SUCCEEDED');
+    }
+  }, 30_000);
 });
 
 
+/**
+ * WHICH REVIEW A FAILURE WAS, INCLUDING THE ONES A REPAIR CREATES.
+ *
+ * The first derivation read the stage from whether a diff artifact existed, and
+ * the build ran BEFORE the plan review — so every plan review was recorded as a
+ * build review. The second parsed the task id. The stage is now the task TYPE
+ * Julius dispatches with, read by the domain's own `reviewStageOf`, and a
+ * dispatch that carries none is refused rather than guessed (see the adapter
+ * cases below).
+ */
+describe('the review stage is read from the dispatched task type', () => {
+  it('names every stage, and only from a review type', () => {
+    expect(reviewStageOf('review:plan')).toBe('plan');
+    expect(reviewStageOf('review:build')).toBe('build');
+    expect(reviewStageOf('review:repair:plan')).toBe('repair:plan');
+    expect(reviewStageOf('review:repair:build')).toBe('repair:build');
+    expect(reviewStageOf('plan-1:review'), 'a task id is not a type').toBeNull();
+    expect(reviewStageOf('run:526ca97da0e94b6223a5320a:plan:review')).toBeNull();
+  });
+});
+
+/* ------------------------------------------------------------------------ *
+ * THE FIRST PAID MISSION, REPRODUCED OFFLINE
+ * ------------------------------------------------------------------------ */
+
+/**
+ * RUN 33697109210 — the first paid Julius mission — failed here, and this is
+ * the shape it failed in: the `plan` task went FAILED, the `build` task
+ * stayed BLOCKED behind it, and the run reported "WAITING (stalled before
+ * terminal state) after 2 ticks". The uploaded evidence could say WHAT
+ * happened and not WHY: the normalized code lived only in the operational
+ * event stream, which nothing exported, and the database is destroyed with the
+ * job.
+ *
+ * The fixture is the real one — `seedMissionRun` seeds exactly that two-task
+ * graph — and only the architect's outcome is injected. No provider is
+ * contacted by any case in this file.
+ */
 /**
  * PAID ATTEMPT #4, REPLAYED THROUGH THE REAL LEDGER.
  *
@@ -1513,5 +2349,412 @@ describe('the reviewer HTTP status reaches the durable record', () => {
       expect(durable, `"${secret}" must not reach the durable record`).not.toContain(secret);
     }
     expect(durable, 'and nothing is a stringified object').not.toContain('[object Object]');
+  });
+});
+
+/* ------------------------------------------------------------------------ *
+ * PAID RUN 34037313976 — THE ADAPTERS' SHARE OF THE FOUR DEFECTS
+ * ------------------------------------------------------------------------ */
+
+const LIVE_REVIEWER_WORKER = {
+  workerId: 'independent-reviewer-hermes', role: 'INDEPENDENT_REVIEWER' as const,
+  adapterId: 'hermes-local-live', providerId: 'xai', capabilities: ['review'],
+  taskTypes: ['review:plan', 'review:build', 'review:repair:plan', 'review:repair:build'],
+  concurrencyLimit: 1, timeoutMs: 1_000, maxRetries: 1, status: 'AVAILABLE' as const,
+};
+
+/** A snapshot with the FINDING entries Julius compiles for a repair re-review. */
+function repairReviewSnapshot(taskId: string): JuliusContextSnapshot {
+  const snapshot = reviewSnapshot(taskId);
+  return {
+    ...snapshot, findingIds: ['f-1'],
+    packet: { ...snapshot.packet, blocks: [...snapshot.packet.blocks, { kind: 'FINDING', text: 'REVIEW FINDING f-1 [HIGH]: no verification strategy' }] },
+  };
+}
+
+function reviewerAdapterFor(input: { taskId: string; artifacts: ReturnType<typeof createLiveArtifactExchange>; packets: ReviewPacket[]; log: FakeLog; snapshot?: JuliusContextSnapshot }) {
+  return createLiveHermesReviewerAdapter({
+    worker: LIVE_REVIEWER_WORKER,
+    contexts: { snapshotFor: () => input.snapshot ?? reviewSnapshot(input.taskId) },
+    artifacts: input.artifacts,
+    config: loadHermesConfig(LIVE_ENV as never),
+    testCommand: 'npm run mission-test',
+    run: fakeReviewer(input.log, input.packets, ['changes_required']) as never,
+  });
+}
+
+describe('DEFECT 2 — the live reviewer adapter reviews the stage it was dispatched for', () => {
+  it('a PLAN review sees the plan and no diff or test output, even when a diff artifact exists', async () => {
+    const artifacts = createLiveArtifactExchange();
+    artifacts.put(planRef('run-live'), JSON.stringify(VALID_PLAN));
+    artifacts.put(diffRef('run-live'), DIFF_TEXT);
+    const packets: ReviewPacket[] = [];
+    const adapter = reviewerAdapterFor({ taskId: 'plan-1:review', artifacts, packets, log: { order: [] } });
+    const result = await adapter.dispatch({ taskId: 'plan-1:review', contextId: 'ctx-resume-1', taskType: 'review:plan' });
+    expect(packets).toHaveLength(1);
+    const packet = packets[0]!;
+    expect(packet.stage).toBe('plan');
+    expect(packet.charge?.subject).toBe('PLAN');
+    expect(packet.charge?.mustNotDemand).toContain('a unified diff');
+    expect(packet.handoffJson).toBe(JSON.stringify(VALID_PLAN));
+    expect(packet.unifiedDiff, 'no implementation is shown to a plan review').toBe('');
+    expect(packet.changedFiles).toEqual([]);
+    expect(packet.testOutput).toBe('');
+    // A rejecting verdict is EVIDENCE, nothing else: the adapter holds no store
+    // and returns findings for Julius to record and decide on.
+    expect(result.status).toBe('SUCCEEDED');
+    expect(result.evidence.every((item) => (item as { type: string }).type === 'REVIEW_FINDING')).toBe(true);
+    // `diagnostics` is the reviewer's own lifecycle, narrowed by the domain
+    // allowlist before it reaches any durable row. It is listed here because
+    // this assertion is a LEAK check — a new key on this result is exactly what
+    // it exists to catch — and because the plan review's record must carry no
+    // more than the build review's does.
+    expect(Object.keys(result).sort()).toEqual(['diagnostics', 'evidence', 'providerId', 'safeSummary', 'status', 'usage', 'workerId']);
+    expect(JSON.stringify(result.diagnostics), 'and it quotes no part of the plan it read')
+      .not.toContain(VALID_PLAN.objectiveSummary);
+  });
+
+  /**
+   * THE GAP LIVE RUN 3 EXPOSED. Both of its reviews were APPROVED and its
+   * `worker-diagnostics.tsv` came back with zero rows — the adapter returned
+   * `usage: { toolCalls: 0 }` and nothing else on the succeeding path, so the
+   * served model survived only because a prose evidence summary happened to
+   * name it, and the elapsed time of a healthy review survived nowhere.
+   */
+  it('a review that SUCCEEDED carries the same lifecycle a failed one does', async () => {
+    const artifacts = createLiveArtifactExchange();
+    artifacts.put(planRef('run-live'), JSON.stringify(VALID_PLAN));
+    const packets: ReviewPacket[] = [];
+    const adapter = reviewerAdapterFor({ taskId: 'plan-1:review', artifacts, packets, log: { order: [] } });
+    const result = await adapter.dispatch({ taskId: 'plan-1:review', contextId: 'ctx-resume-1', taskType: 'review:plan' });
+    expect(result.status).toBe('SUCCEEDED');
+    const diagnostics = result.diagnostics as Record<string, unknown>;
+
+    // The evidence dump keys on transport, so this is the field that decides
+    // whether the attempt gets a row at all.
+    expect(diagnostics.transport).toBe('local');
+    expect(diagnostics.outcome, 'stated, never inferred from a null failure shape').toBe('succeeded');
+    expect(diagnostics.failureShape, 'and there is no failure to shape').toBeNull();
+    // Which review this was, and how many provider calls the dispatch bought —
+    // both known to the dispatch and to neither transport.
+    expect(diagnostics.stage).toBe('plan');
+    expect(diagnostics.reviewAttempts).toBe(1);
+    // The model that answered, on a row rather than inside a sentence.
+    expect(diagnostics.servedModel).toBe('grok-build-0.1');
+    expect(diagnostics.requestedModel).toBe('grok-build-0.1');
+    // The pair that answers "was the window big enough?" for free.
+    expect(diagnostics.elapsedMs).toBe(1_234);
+    expect(diagnostics.timeoutMs).toBe(400_000);
+    expect(typeof diagnostics.startedAt).toBe('string');
+    expect(typeof diagnostics.completedAt).toBe('string');
+    // Nothing was billed to Relay here and no harness estimate was reported, so
+    // the basis is UNKNOWN — which is not zero, and is why the reservation is
+    // held rather than settled.
+    expect(diagnostics.costBasis).toBe('UNKNOWN');
+    expect(diagnostics.estimatedCostUsdMicros).toBeNull();
+    expect((result.usage as { costBasis: string }).costBasis).toBe('UNKNOWN');
+  });
+
+  /**
+   * ELAPSED TIME IS DERIVED ONLY WHERE NOBODY MEASURED IT — the remote and
+   * provider transports run no process and time nothing — and it is derived
+   * from two instants that are both on the same row, so the arithmetic can be
+   * checked rather than trusted.
+   */
+  it('derives an elapsed time only when the transport measured none', async () => {
+    const artifacts = createLiveArtifactExchange();
+    artifacts.put(planRef('run-live'), JSON.stringify(VALID_PLAN));
+    const unmeasured = createLiveHermesReviewerAdapter({
+      worker: LIVE_REVIEWER_WORKER,
+      contexts: { snapshotFor: () => reviewSnapshot('plan-1:review') },
+      artifacts,
+      config: loadHermesConfig(LIVE_ENV as never),
+      testCommand: 'npm run mission-test',
+      run: (async () => ({
+        kind: 'reviewed',
+        result: { verdict: 'approved', summary: 'No blocking findings.', findings: [], requirementsChecked: [], parseRepaired: false },
+        startedAt: '2026-09-09T23:03:10.000Z', completedAt: '2026-09-09T23:06:36.500Z',
+        requestedModel: 'grok-build-0.1', servedModel: 'grok-build-0.1', provider: 'xai',
+        diagnostics: reviewDiagnostics({ transport: 'remote', shape: null, outcome: 'succeeded' }),
+        usage: UNKNOWN_USAGE,
+      })) as never,
+    });
+    const result = await unmeasured.dispatch({ taskId: 'plan-1:review', contextId: 'ctx-resume-1', taskType: 'review:plan' });
+    const diagnostics = result.diagnostics as Record<string, unknown>;
+    expect(diagnostics.elapsedMs, 'the difference between the two instants beside it').toBe(206_500);
+    expect(diagnostics.startedAt).toBe('2026-09-09T23:03:10.000Z');
+    expect(diagnostics.completedAt).toBe('2026-09-09T23:06:36.500Z');
+  });
+
+  it('a BUILD review is refused when no implementation exists to judge, and an EMPTY diff is no implementation', async () => {
+    const artifacts = createLiveArtifactExchange();
+    artifacts.put(planRef('run-live'), JSON.stringify(VALID_PLAN));
+    const log: FakeLog = { order: [] };
+    const adapter = reviewerAdapterFor({ taskId: 'build-1:review', artifacts, packets: [], log });
+    await expect(adapter.dispatch({ taskId: 'build-1:review', contextId: 'ctx-resume-1', taskType: 'review:build' }))
+      .rejects.toMatchObject({ code: 'INVALID_REQUEST', failureClass: 'reviewer_implementation_absent' });
+    // The exchange stores whatever `git diff` printed, so a coder that edited
+    // nothing leaves an empty string — which is not an implementation either.
+    artifacts.put(diffRef('run-live'), '');
+    await expect(adapter.dispatch({ taskId: 'build-1:review', contextId: 'ctx-resume-1', taskType: 'review:build' }))
+      .rejects.toMatchObject({ code: 'INVALID_REQUEST', failureClass: 'reviewer_implementation_absent' });
+    expect(log.order).toEqual([]);
+  });
+
+  it('the findings are the findings, not the founder\'s request: they are not repeated into the request block', async () => {
+    const artifacts = createLiveArtifactExchange();
+    artifacts.put(planRef('run-live'), JSON.stringify(VALID_PLAN));
+    artifacts.put(diffRef('run-live'), DIFF_TEXT);
+    const packets: ReviewPacket[] = [];
+    const adapter = reviewerAdapterFor({
+      taskId: 'repair:build-1:1:task:review', artifacts, packets, log: { order: [] },
+      snapshot: repairReviewSnapshot('repair:build-1:1:task:review'),
+    });
+    await adapter.dispatch({ taskId: 'repair:build-1:1:task:review', contextId: 'ctx-resume-1', taskType: 'review:repair:build' });
+    expect(packets[0]!.priorFindings).toEqual(['REVIEW FINDING f-1 [HIGH]: no verification strategy']);
+    expect(packets[0]!.originalRequest, 'the request is the mission, not the verdict on it')
+      .not.toContain('REVIEW FINDING');
+    expect(packets[0]!.originalRequest).toContain('OBJECTIVE: resume test');
+  });
+
+  it('a BUILD review carries the diff and the implementation charge', async () => {
+    const artifacts = createLiveArtifactExchange();
+    artifacts.put(planRef('run-live'), JSON.stringify(VALID_PLAN));
+    artifacts.put(diffRef('run-live'), DIFF_TEXT);
+    const packets: ReviewPacket[] = [];
+    const adapter = reviewerAdapterFor({ taskId: 'build-1:review', artifacts, packets, log: { order: [] } });
+    await adapter.dispatch({ taskId: 'build-1:review', contextId: 'ctx-resume-1', taskType: 'review:build' });
+    expect(packets[0]!.stage).toBe('build');
+    expect(packets[0]!.charge?.subject).toBe('IMPLEMENTATION');
+    expect(packets[0]!.unifiedDiff).toBe(DIFF_TEXT);
+  });
+
+  it('a REPAIR review carries the prior findings, and proceeds without them when the round was admitted by failed evidence', async () => {
+    const artifacts = createLiveArtifactExchange();
+    artifacts.put(planRef('run-live'), JSON.stringify(VALID_PLAN));
+    artifacts.put(diffRef('run-live'), DIFF_TEXT);
+    const log: FakeLog = { order: [] };
+    /**
+     * NOT A REFUSAL. Julius admits a repair round on the subject's own FAILED
+     * evidence as well as on a reviewer finding, and such a round has no
+     * findings by construction — an earlier version of this adapter refused
+     * there, which would have failed a run that was repairing exactly as
+     * designed.
+     */
+    const bare: ReviewPacket[] = [];
+    const evidenceAdmitted = reviewerAdapterFor({ taskId: 'repair:build-1:1:task:review', artifacts, packets: bare, log });
+    const outcome = await evidenceAdmitted.dispatch({ taskId: 'repair:build-1:1:task:review', contextId: 'ctx-resume-1', taskType: 'review:repair:build' });
+    expect(outcome.status).toBe('SUCCEEDED');
+    expect(bare[0]!.stage).toBe('repair:build');
+    expect(bare[0]!.priorFindings).toEqual([]);
+    const packets: ReviewPacket[] = [];
+    const informed = reviewerAdapterFor({
+      taskId: 'repair:build-1:1:task:review', artifacts, packets, log, snapshot: repairReviewSnapshot('repair:build-1:1:task:review'),
+    });
+    await informed.dispatch({ taskId: 'repair:build-1:1:task:review', contextId: 'ctx-resume-1', taskType: 'review:repair:build' });
+    expect(packets[0]!.stage).toBe('repair:build');
+    expect(packets[0]!.priorFindings).toEqual(['REVIEW FINDING f-1 [HIGH]: no verification strategy']);
+    expect(packets[0]!.charge?.repair).toBe(true);
+  });
+
+  it('swapping the reviewer runner does not change what the stage means', async () => {
+    // Two different reviewer implementations receive the identical packet for
+    // the identical dispatch: the stage and charge are Julius's, not theirs.
+    const artifacts = createLiveArtifactExchange();
+    artifacts.put(planRef('run-live'), JSON.stringify(VALID_PLAN));
+    const seen: ReviewPacket[] = [];
+    for (const runner of [fakeReviewer({ order: [] }, seen, ['approved']), textReviewer({ order: [] }, seen, [JSON.stringify({ verdict: 'approved', summary: 'ok', findings: [], requirementsChecked: [] })])]) {
+      const adapter = createLiveHermesReviewerAdapter({
+        worker: LIVE_REVIEWER_WORKER, contexts: { snapshotFor: () => reviewSnapshot('plan-1:review') },
+        artifacts, config: loadHermesConfig(LIVE_ENV as never), testCommand: 'npm run mission-test', run: runner as never,
+      });
+      await adapter.dispatch({ taskId: 'plan-1:review', contextId: 'ctx-resume-1', taskType: 'review:plan' });
+    }
+    expect(seen).toHaveLength(2);
+    expect(seen[0]!.stage).toBe(seen[1]!.stage);
+    expect(seen[0]!.charge).toEqual(seen[1]!.charge);
+    expect(seen[0]!.unifiedDiff).toBe(seen[1]!.unifiedDiff);
+  });
+});
+
+describe('DEFECT 1 — the live coder adapter is limited to what Julius allocated', () => {
+  const coderAdapter = (input: { runs: HostedRunInput[]; cost?: number; refuse?: boolean }) => {
+    const log: FakeLog = { order: [] };
+    const artifacts = createLiveArtifactExchange();
+    artifacts.put(planRef('run-live'), JSON.stringify(VALID_PLAN));
+    const run = async (runInput: HostedRunInput): Promise<HostedRunOutcome> => {
+      input.runs.push(runInput);
+      const completed = await fakeCoder(log, [])(runInput) as Extract<HostedRunOutcome, { kind: 'completed' }>;
+      const observation = { ...completed.observation, usage: { ...completed.observation.usage, totalCostUsd: input.cost ?? 0.02 } };
+      if (input.refuse) {
+        return { kind: 'refused', refusalCode: 'coder_cost_exceeded', safeMessage: 'over', observation, envelope: completed.envelope, startedAt: completed.startedAt, completedAt: completed.completedAt } as HostedRunOutcome;
+      }
+      return { ...completed, observation };
+    };
+    return createLiveHostedCodingAdapter({
+      worker: {
+        workerId: 'coding-agent-claude-hosted', role: 'CODING_AGENT', adapterId: 'claude-agent-sdk-hosted-live', providerId: 'anthropic',
+        capabilities: ['implement'], taskTypes: ['build'], concurrencyLimit: 1, timeoutMs: 1_000, maxRetries: 1, status: 'AVAILABLE',
+      },
+      contexts: { snapshotFor: () => reviewSnapshot('build-1') }, artifacts, projectId: 'prj-live',
+      apiKey: 'FAKETESTNOTREAL-anthropic', requestedModel: 'claude-fable-5',
+      workspacePath: '/workspace/mission', testCommand: 'npm run mission-test',
+      shell: fakeShell(log, []), run: run as never, queryLoader: async () => fakeQuery,
+    });
+  };
+
+  it('with an allocation, the hosted limits ARE the allocation; without one, the conservative default', async () => {
+    const runs: HostedRunInput[] = [];
+    const adapter = coderAdapter({ runs, cost: 0.9 });
+    const granted = await adapter.dispatch({ taskId: 'build-1', contextId: 'ctx-resume-1', taskType: 'build', allocation: { usdMicros: 5_000_000, policyVersion: 'julius-allocation.v1', basis: 'CODER_SHARE' } });
+    expect((runs[0]!.limits as HostedLimits).maxCostCents).toBe(500);
+    expect((runs[0]!.limits as HostedLimits).maxTurns).toBe(DEFAULT_HOSTED_LIMITS.maxTurns);
+    expect(granted.status).toBe('SUCCEEDED');
+    expect((granted.usage as { usdMicros: number }).usdMicros).toBe(900_000);
+    await adapter.dispatch({ taskId: 'build-1', contextId: 'ctx-resume-1', taskType: 'build' });
+    expect(runs[1]!.limits).toBe(DEFAULT_HOSTED_LIMITS);
+  });
+
+  it('an allocation below one cent is refused BEFORE the runtime is reached, because a $0 ceiling still bills a turn', async () => {
+    const runs: HostedRunInput[] = [];
+    const adapter = coderAdapter({ runs });
+    await expect(adapter.dispatch({ taskId: 'build-1', contextId: 'ctx-resume-1', taskType: 'build', allocation: { usdMicros: 6_000, policyVersion: 'julius-allocation.v1', basis: 'CODER_REMAINDER' } }))
+      .rejects.toMatchObject({ code: 'WORKER_EXECUTION_FAILURE', failureClass: 'coder_allocation_below_one_cent' });
+    expect(runs, 'no hosted run was started').toEqual([]);
+  });
+
+  it('names the round that spent the money: a repair refusal is not recorded as the first build', async () => {
+    const runs: HostedRunInput[] = [];
+    const adapter = coderAdapter({ runs, cost: 5.25, refuse: true });
+    await expect(adapter.dispatch({ taskId: 'repair:build-1:1:task', contextId: 'ctx-resume-1', taskType: 'repair:build', allocation: { usdMicros: 5_000_000, policyVersion: 'julius-allocation.v1', basis: 'CODER_SHARE' } }))
+      .rejects.toMatchObject({ diagnostics: expect.objectContaining({ stage: 'repair:build' }) });
+  });
+
+  it('a cost refusal carries the money beside it: observed, ceiling and source', async () => {
+    const runs: HostedRunInput[] = [];
+    const adapter = coderAdapter({ runs, cost: 5.25, refuse: true });
+    await expect(adapter.dispatch({ taskId: 'build-1', contextId: 'ctx-resume-1', taskType: 'build', allocation: { usdMicros: 5_000_000, policyVersion: 'julius-allocation.v1', basis: 'CODER_SHARE' } }))
+      .rejects.toMatchObject({
+        code: 'WORKER_EXECUTION_FAILURE', failureClass: 'coder_cost_exceeded',
+        diagnostics: expect.objectContaining({ costUsdMicros: 5_250_000, costCeilingUsdMicros: 5_000_000, costSource: 'runtime_reported', stage: 'build' }),
+      });
+  });
+});
+
+/**
+ * THE REGISTRATION TABLE IS THE THING THAT FAILED.
+ *
+ * Paid run 34037313976 rejected a plan, minted a `repair:plan` task on the
+ * Coding Agent, and failed `PROVIDER_UNAVAILABLE` because nobody was
+ * registered to take it. The routability check now refuses such a repair
+ * before it exists, which turns that outage into a named halt — but a halt is
+ * still a dead mission. What keeps the mission ALIVE is this table, and it is
+ * one hand-maintained array away from the same failure.
+ */
+describe('every repair the planner can mint has a registered worker', () => {
+  const registrations = () => [ARCHITECT_WORKER, CODER_WORKER, reviewerWorker('xai')];
+
+  it('the seeded graph\'s two task types can each be repaired by their own role', () => {
+    // A repair inherits its subject's ROLE and STAGE, so these are exactly the
+    // two repairs the seeded plan → build graph can produce.
+    for (const [role, taskType] of [['PROMPT_ARCHITECT', 'repair:plan'], ['CODING_AGENT', 'repair:build']] as const) {
+      const takers = registrations().filter((worker) => worker.role === role && worker.taskTypes.includes(taskType));
+      expect(takers.map((worker) => worker.workerId), `${role} ${taskType} is routable`).toHaveLength(1);
+    }
+  });
+
+  it('and every repair has a reviewer for its own re-review', () => {
+    for (const taskType of ['review:plan', 'review:build', 'review:repair:plan', 'review:repair:build']) {
+      expect(reviewerWorker('xai').taskTypes, taskType).toContain(taskType);
+    }
+  });
+
+  it('the Coding Agent does NOT take a plan repair — the shape the paid run minted', () => {
+    expect(CODER_WORKER.taskTypes).not.toContain('repair:plan');
+    expect(CODER_WORKER.taskTypes).toContain('repair:build');
+    expect(ARCHITECT_WORKER.taskTypes).toContain('repair:plan');
+  });
+
+  it('a repair of a repair is still its stage, so one registration covers every round', () => {
+    // `repairTaskTypeFor` strips every prefix, so round two of a build repair
+    // is `repair:build` again and needs no further registration.
+    expect(repairTaskTypeFor('repair:build')).toBe('repair:build');
+    expect(repairTaskTypeFor('repair:plan')).toBe('repair:plan');
+    for (const worker of registrations()) {
+      for (const taskType of worker.taskTypes) {
+        expect(taskType, `${worker.workerId} registers a doubled repair type`).not.toMatch(/repair:repair:/u);
+      }
+    }
+  });
+});
+
+/**
+ * THE PLAN REVISION IS A PAID DISPATCH NOTHING HAD EXERCISED.
+ *
+ * `repair:plan` reaches the Prompt Architect because a repair inherits its
+ * subject's role. That branch shows the rejected plan beside the reviewer's
+ * findings and replaces the artifact the Coding Agent will read — production
+ * code on the paid path, and until these cases it ran for the first time in a
+ * mission that costs money.
+ */
+describe('the architect revises a rejected plan', () => {
+  const REVISED = { ...VALID_PLAN, objectiveSummary: 'Revised: add the verification strategy the review asked for.' };
+
+  const architectAdapter = (input: { artifacts: ReturnType<typeof createLiveArtifactExchange>; seen: Array<Record<string, unknown>>; snapshot?: JuliusContextSnapshot }) =>
+    createLiveArchitectAdapter({
+      worker: ARCHITECT_WORKER,
+      contexts: { snapshotFor: () => input.snapshot ?? reviewSnapshot('repair:plan-1:1:task') },
+      artifacts: input.artifacts,
+      config: { liveMode: true, model: 'gpt-5.6-sol', maxOutputTokens: 4_000 } as never,
+      apiKey: 'FAKETESTNOTREAL-openai',
+      run: (async (call: Record<string, unknown>) => {
+        input.seen.push(call);
+        return {
+          ok: true, actualModel: 'gpt-5.6-sol', responseId: 'resp_revision_1', status: 'completed',
+          outputText: JSON.stringify(REVISED),
+          usage: { inputTokens: 120, cachedInputTokens: 0, outputTokens: 60, reasoningTokens: 0, totalTokens: 180 },
+        };
+      }) as never,
+    });
+
+  it('shows the architect the plan it is revising, and says the revision is a revision', async () => {
+    const artifacts = createLiveArtifactExchange();
+    artifacts.put(planRef('run-live'), JSON.stringify(VALID_PLAN));
+    const seen: Array<Record<string, unknown>> = [];
+    const result = await architectAdapter({ artifacts, seen })
+      .dispatch({ taskId: 'repair:plan-1:1:task', contextId: 'ctx-resume-1', taskType: 'repair:plan' });
+
+    expect(result.status).toBe('SUCCEEDED');
+    const call = seen[0]!;
+    expect(String(call.input), 'the rejected plan is shown').toContain('PRIOR PLAN');
+    expect(String(call.input)).toContain(VALID_PLAN.objectiveSummary);
+    expect(String(call.instructions), 'and the charter says this is a revision').toContain('This is a PLAN REVISION');
+    expect(String(call.instructions)).toContain('Keep the mission objective and every acceptance criterion exactly as stated');
+    expect(String(call.instructions), 'and forbids claiming work that has not happened')
+      .toContain('Do not claim any finding is resolved by implementation work');
+    // The revision REPLACES the plan the Coding Agent will read.
+    expect(artifacts.get(planRef('run-live'))).toBe(JSON.stringify(REVISED));
+  });
+
+  it('a first plan is not a revision: no prior plan, no revision charter', async () => {
+    const artifacts = createLiveArtifactExchange();
+    const seen: Array<Record<string, unknown>> = [];
+    await architectAdapter({ artifacts, seen, snapshot: reviewSnapshot('plan-1') })
+      .dispatch({ taskId: 'plan-1', contextId: 'ctx-resume-1', taskType: 'plan' });
+    expect(String(seen[0]!.instructions)).not.toContain('This is a PLAN REVISION');
+    expect(String(seen[0]!.input)).not.toContain('PRIOR PLAN');
+  });
+
+  it('refuses to revise a plan this process cannot see, rather than writing a new one over it', async () => {
+    // The artifact exchange is same-process: after a restart the plan is gone
+    // even though its task succeeded durably. Revising from nothing would
+    // silently replace a reviewed plan with an unreviewed one.
+    const artifacts = createLiveArtifactExchange();
+    const seen: Array<Record<string, unknown>> = [];
+    await expect(architectAdapter({ artifacts, seen })
+      .dispatch({ taskId: 'repair:plan-1:1:task', contextId: 'ctx-resume-1', taskType: 'repair:plan' }))
+      .rejects.toMatchObject({ code: 'WORKER_EXECUTION_FAILURE', failureClass: 'prior_plan_unavailable' });
+    expect(seen, 'no provider was reached').toEqual([]);
+    expect(artifacts.get(planRef('run-live'))).toBeNull();
   });
 });

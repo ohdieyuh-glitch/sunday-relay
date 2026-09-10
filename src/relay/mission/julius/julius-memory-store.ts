@@ -45,6 +45,7 @@ import { transitionMission, type JuliusBrainEntry, type JuliusEvidence, type Jul
 import type { JuliusOperationalEvent } from './julius-events';
 import type { JuliusTrajectoryEvent } from './julius-trajectory';
 import type { JuliusContextSnapshot } from './julius-context-snapshot';
+import { juliusTaskContractBindingDigest, type JuliusTaskContract } from './julius-task-contract';
 import type { JuliusAcceptanceCriterion, JuliusReviewerFinding } from './julius-verification-runtime';
 import type {
   JuliusClaimedTask, JuliusResultReceiptRow, JuliusRunRow, JuliusRuntimeStore,
@@ -127,6 +128,23 @@ export function createJuliusMemoryStore(): JuliusMemoryStore {
   const findings: JuliusReviewerFinding[] = [];
   const criteria = new Map<string, JuliusAcceptanceCriterion[]>();
   const brain = new Map<string, JuliusBrainEntry[]>();
+  /**
+   * THE MODEL'S COPY OF THE REVISION COUNTER.
+   *
+   * PostgreSQL allocates from `GREATEST(project_brain_revision, max(revision))`,
+   * so a seeded run whose rows carry revisions 1..N continues at N+1 even though
+   * the run row still says 0. Seeded entries here carry no revision at all, so
+   * the count stands in for the same fact — otherwise the model would hand out 1
+   * where production hands out N+1 and the two would disagree about a number
+   * that reaches context snapshots and trajectory rows.
+   */
+  const brainRevisions = new Map<string, number>();
+  /**
+   * TASK CONTRACTS, keyed `<contractId>@<revision>` because a revision is the
+   * unit that is stored, locked and superseded. PostgreSQL keys the same rows
+   * on `(contract_id, contract_revision)`.
+   */
+  const contracts = new Map<string, JuliusTaskContract>();
   const results: ResultRow[] = [];
   const resultKeys = new Set<string>();
   const resultGenerations = new Set<string>();
@@ -177,7 +195,10 @@ export function createJuliusMemoryStore(): JuliusMemoryStore {
     },
     seedCriteria(runId, values) { criteria.set(runId, values.map((value) => ({ ...value }))); },
     seedFinding(finding) { findings.push({ ...finding }); },
-    seedBrain(runId, entries) { brain.set(runId, entries.map((entry) => ({ ...entry }))); },
+    seedBrain(runId, entries) {
+      brain.set(runId, entries.map((entry) => ({ ...entry })));
+      brainRevisions.set(runId, entries.length);
+    },
 
     /* --------------------------------------------------------- inspection */
     taskRow(taskId) { const row = tasks.get(taskId); return row ? { ...row } : null; },
@@ -299,16 +320,18 @@ export function createJuliusMemoryStore(): JuliusMemoryStore {
           // for an ordinary claim. A runtime whose recovery never runs stalls
           // such a task, which is the safe direction — the unbounded reclaim
           // was the unsafe one. The PostgreSQL claim carries the same rule.
-          // BLOCKED IS CLAIMABLE ONCE ITS DEPENDENCIES ARE SATISFIED, and the
-          // inherited claim query did not say so. `JuliusTaskGraph` promotes
-          // BLOCKED to RUNNABLE when its dependencies succeed, but nothing
-          // performs that promotion against the database — so a task inserted
-          // BLOCKED (which is exactly how a scheduled review or repair task is
-          // inserted, since it must not run before what it depends on) could
-          // never be claimed at all. The dependency predicate below is already
-          // the gate; the state check was a second, stricter one that made the
-          // first unreachable.
-          if (task.state !== 'RUNNABLE' && task.state !== 'BLOCKED') return false;
+          // RUNNABLE ONLY. BLOCKED used to be claimable once its dependencies
+          // had SUCCEEDED, and that is how paid run 34037313976 ran `build`
+          // before anyone had reviewed the plan: SUCCEEDED is not ACCEPTED.
+          // Julius alone moves a task from BLOCKED to RUNNABLE, in the same
+          // durable write as the decision that satisfied it (`appendDecision`
+          // with `releaseTaskIds`). Tasks whose dependencies are already
+          // satisfied when Julius creates them — a review of a task that has
+          // succeeded, a repair, a sub-agent — are created RUNNABLE. The
+          // dependency predicate below stays as a second gate: a RUNNABLE task
+          // with a dependency that has not succeeded is still never offered.
+          // The PostgreSQL claim carries the same rule.
+          if (task.state !== 'RUNNABLE') return false;
           return dependenciesSatisfied(task);
         })
         // The claim query orders by run creation, then ordinal, then task id.
@@ -447,7 +470,144 @@ export function createJuliusMemoryStore(): JuliusMemoryStore {
       decisionKeys.add(key);
       decisions.push({ ...input.decision, taskId: input.taskId, runId: input.runId });
       decisionRunIds.set(input.decisionId, input.runId);
+      // THE RELEASE IS PART OF THE SAME WRITE. Only a BLOCKED task of this run
+      // moves; anything else named here is left exactly as it was.
+      for (const taskId of input.releaseTaskIds ?? []) {
+        const task = tasks.get(taskId);
+        if (task === undefined || task.runId !== input.runId || task.state !== 'BLOCKED') continue;
+        task.state = 'RUNNABLE';
+        task.version += 1;
+      }
       return true;
+    },
+
+    /* ----------------------------------------------------- Project Brain */
+    async appendBrainEntry(input) {
+      const run = runs.get(input.runId);
+      if (run === undefined || run.projectId !== input.projectId) return false;
+      const existing = brain.get(input.runId) ?? [];
+      // A REPLAY MOVES NOTHING. Production reaches the same answer by guarding
+      // its counter UPDATE with NOT EXISTS on the entry id, so an idempotent
+      // call cannot leave the revision one higher than the entries justify.
+      if (existing.some((entry) => entry.entryId === input.entryId)) return false;
+      const revision = Math.max(run.projectBrainRevision, brainRevisions.get(input.runId) ?? 0) + 1;
+      brainRevisions.set(input.runId, revision);
+      runs.set(input.runId, { ...run, projectBrainRevision: revision });
+      brain.set(input.runId, [...existing, {
+        entryId: input.entryId,
+        kind: input.kind,
+        text: input.safeText,
+        // The row holds ONE task id; the compiler's shape holds a list.
+        taskIds: input.taskId === null ? [] : [input.taskId],
+        // Matching the read path exactly: stored entries carry no role
+        // restriction, and INTERNAL rather than PUBLIC because calling a stored
+        // entry PUBLIC would be a claim nobody checked.
+        allowedRoles: ['PROMPT_ARCHITECT', 'CODING_AGENT', 'INDEPENDENT_REVIEWER'],
+        sensitivity: 'INTERNAL',
+      }]);
+      return true;
+    },
+
+    /* --------------------------------------------------- task contracts */
+    async putTaskContract(input) {
+      const key = `${input.contract.contractId}@${input.contract.contractRevision}`;
+      const existing = contracts.get(key);
+      if (existing !== undefined) {
+        // A REPLAY IS NOT AN OVERWRITE, and a different proposal at a stored
+        // revision is not a replay. The digest of the TERMS is what decides:
+        // the lock fields differ between a stored LOCKED row and the DRAFT a
+        // retry would re-propose, and treating that as a conflict would refuse
+        // an honest replay.
+        if (juliusTaskContractBindingDigest(existing) !== juliusTaskContractBindingDigest(input.contract)) {
+          throw new Error('julius_task_contract_revision_conflict');
+        }
+        return false;
+      }
+      const run = runs.get(input.contract.runId);
+      if (run === undefined || run.projectId !== input.projectId) return false;
+      // ONE CONTRACT PER TASK, modelled. Production's
+      // `julius_task_contract_one_per_task` refuses a second contract id at a
+      // task's revision; the model must refuse it too or the two disagree
+      // about whether a task can be governed by two agreements at once.
+      const other = [...contracts.values()].find(
+        (row) => row.taskId === input.contract.taskId && row.contractRevision === input.contract.contractRevision
+          && row.contractId !== input.contract.contractId && runs.get(row.runId)?.projectId === input.projectId,
+      );
+      if (other !== undefined) throw new Error('julius_task_contract_one_per_task');
+      contracts.set(key, input.contract);
+      return true;
+    },
+
+    async challengeTaskContract(input) {
+      const key = `${input.contractId}@${input.contractRevision}`;
+      const existing = contracts.get(key);
+      if (existing === undefined) return false;
+      if (existing.state === 'CHALLENGED') return false;
+      if (existing.state !== 'DRAFT') return false;
+      contracts.set(key, { ...existing, state: 'CHALLENGED' });
+      return true;
+    },
+
+    async lockTaskContract(input) {
+      const key = `${input.contractId}@${input.contractRevision}`;
+      const candidate = contracts.get(key);
+      if (candidate === undefined) return { locked: false, reasonCode: 'contract_revision_not_found', lockedRevision: null };
+      if (candidate.runId !== undefined && runs.get(candidate.runId)?.projectId !== input.projectId) {
+        return { locked: false, reasonCode: 'contract_not_in_project', lockedRevision: null };
+      }
+      // THE PARTIAL UNIQUE INDEX, modelled. Production refuses a second lock in
+      // the database; the model has to refuse it here or the two disagree about
+      // what a concurrent lock does.
+      const alreadyLocked = [...contracts.values()].find(
+        (row) => row.contractId === input.contractId && row.state === 'LOCKED',
+      );
+      // A lock moves forward or not at all — locking N while N-1 is locked IS
+      // superseding. Refused: the same revision twice, and an older revision
+      // than the one held, which would roll the agreement backwards under
+      // parties already holding the newer one.
+      if (alreadyLocked !== undefined && alreadyLocked.contractRevision >= input.contractRevision) {
+        return alreadyLocked.contractRevision === input.contractRevision
+          ? { locked: false, reasonCode: 'contract_revision_already_locked', lockedRevision: alreadyLocked.contractRevision }
+          : { locked: false, reasonCode: 'newer_revision_is_locked', lockedRevision: alreadyLocked.contractRevision };
+      }
+      if (candidate.state === 'SUPERSEDED') return { locked: false, reasonCode: 'contract_superseded', lockedRevision: null };
+      // The caller computed this from the accepted terms; re-deriving it here is
+      // what stops a caller locking one document to another document's digest.
+      if (juliusTaskContractBindingDigest(candidate) !== input.bindingDigest) {
+        return { locked: false, reasonCode: 'binding_digest_mismatch', lockedRevision: null };
+      }
+      const superseded = [...contracts.values()].filter(
+        (row) => row.contractId === input.contractId && row.contractRevision < input.contractRevision && row.state === 'LOCKED',
+      );
+      for (const row of superseded) contracts.set(`${row.contractId}@${row.contractRevision}`, { ...row, state: 'SUPERSEDED' });
+      const locked: JuliusTaskContract = {
+        ...candidate, state: 'LOCKED', bindingDigest: input.bindingDigest,
+        lockedAt: input.lockedAt, lockedByEvaluatorId: input.evaluatorId,
+      };
+      contracts.set(key, locked);
+      return { locked: true, contract: locked, supersededRevision: superseded[0]?.contractRevision ?? null };
+    },
+
+    async loadTaskContract(input) {
+      const rows = [...contracts.values()].filter(
+        (row) => row.taskId === input.taskId && runs.get(row.runId)?.projectId === input.projectId,
+      );
+      if (rows.length === 0) return null;
+      const lockedRow = rows.find((row) => row.state === 'LOCKED');
+      // A locked row whose terms no longer hash to its recorded binding is
+      // CORRUPT, not current: production re-derives the digest on read for the
+      // same reason, and returning it would hand a caller a binding that does
+      // not describe the terms beside it.
+      if (lockedRow !== undefined) {
+        return juliusTaskContractBindingDigest(lockedRow) === lockedRow.bindingDigest ? lockedRow : null;
+      }
+      return rows.reduce((newest, row) => (row.contractRevision > newest.contractRevision ? row : newest));
+    },
+
+    async taskContractRevisions(input) {
+      return [...contracts.values()]
+        .filter((row) => row.taskId === input.taskId && runs.get(row.runId)?.projectId === input.projectId)
+        .sort((a, b) => a.contractRevision - b.contractRevision);
     },
 
     /* ------------------------------------------------------------ context */
@@ -678,6 +838,20 @@ export function createJuliusMemoryStore(): JuliusMemoryStore {
       // reviews of the same task and both must count.
       return [...tasks.values()].some((task) =>
         task.parentTaskId === taskId && task.role === 'INDEPENDENT_REVIEWER' && task.state === 'SUCCEEDED');
+    },
+
+    async executedBindingFor(taskId, projectId) {
+      const row = tasks.get(taskId);
+      if (row === undefined || !inProject(row.runId, projectId)) return null;
+      // The LAST claim, because a task claimed twice was dispatched under the
+      // binding current at its last dispatch, and that is the one its work
+      // was done against.
+      const claimed = [...eventLog].reverse().find((event) => event.type === 'task.claimed' && event.taskId === taskId);
+      const facts = claimed?.facts ?? {};
+      return typeof facts.contractId === 'string' && typeof facts.contractTaskId === 'string'
+        && typeof facts.contractRevision === 'number' && typeof facts.bindingDigest === 'string'
+        ? { contractId: facts.contractId, taskId: facts.contractTaskId, contractRevision: facts.contractRevision, bindingDigest: facts.bindingDigest }
+        : null;
     },
   };
 }

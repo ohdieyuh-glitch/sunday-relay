@@ -24,6 +24,7 @@ import {
   reviewDiagnostics,
 } from './hermes-reviewer';
 import type { HermesOutcome, ReviewPacket } from './hermes-reviewer';
+import { UNKNOWN_USAGE } from './reviewer-harness/hermes/runner';
 import { normalizeObservation } from '../src/relay/mission/evidence';
 import { defaultMissionConfig, type RelayMissionConfig } from '../src/relay/mission/mission-config';
 import { codingHandoffDigest, type CodingOutcome } from './coding';
@@ -207,6 +208,8 @@ const approvedReview = (): HermesOutcome => ({
   provider: 'Anthropic',
   requestedModel: 'claude-opus-4-8',
   servedModel: 'claude-opus-4-8',
+  diagnostics: reviewDiagnostics({ transport: 'local', shape: null, outcome: 'succeeded', provider: 'Anthropic', requestedModel: 'claude-opus-4-8', servedModel: 'claude-opus-4-8' }),
+  usage: UNKNOWN_USAGE,
   result: {
     verdict: 'approved',
     summary: 'The implementation satisfies every acceptance criterion.',
@@ -758,6 +761,8 @@ describe('14-20. only a genuine, current, approving review can complete the miss
         provider: 'Anthropic',
         requestedModel: 'claude-opus-4-8',
         servedModel: 'claude-opus-4-8',
+        diagnostics: reviewDiagnostics({ transport: 'local', shape: null, outcome: 'succeeded', provider: 'Anthropic', requestedModel: 'claude-opus-4-8', servedModel: 'claude-opus-4-8' }),
+        usage: UNKNOWN_USAGE,
         result: {
           verdict: 'approved',
           summary: 'Approved with a blocking caveat.',
@@ -2244,6 +2249,8 @@ const rejectedReview = (): HermesOutcome => ({
   provider: 'xAI',
   requestedModel: 'grok-build-0.1',
   servedModel: 'grok-build-0.1',
+  diagnostics: reviewDiagnostics({ transport: 'local', shape: null, outcome: 'succeeded', provider: 'xAI', requestedModel: 'grok-build-0.1', servedModel: 'grok-build-0.1' }),
+  usage: UNKNOWN_USAGE,
   result: {
     verdict: 'changes_required',
     summary: 'The guard is missing.',
@@ -2267,6 +2274,8 @@ const repairedReview = (): HermesOutcome => ({
   provider: 'xAI',
   requestedModel: 'grok-build-0.1',
   servedModel: 'grok-build-0.1',
+  diagnostics: reviewDiagnostics({ transport: 'local', shape: null, outcome: 'succeeded', provider: 'xAI', requestedModel: 'grok-build-0.1', servedModel: 'grok-build-0.1' }),
+  usage: UNKNOWN_USAGE,
   result: {
     verdict: 'approved',
     summary: 'The guard is present now.',
@@ -2284,6 +2293,8 @@ const advisoryReview = (): HermesOutcome => ({
   provider: 'xAI',
   requestedModel: 'grok-build-0.1',
   servedModel: 'grok-build-0.1',
+  diagnostics: reviewDiagnostics({ transport: 'local', shape: null, outcome: 'succeeded', provider: 'xAI', requestedModel: 'grok-build-0.1', servedModel: 'grok-build-0.1' }),
+  usage: UNKNOWN_USAGE,
   result: {
     verdict: 'approved',
     summary: 'Fine, with a note.',

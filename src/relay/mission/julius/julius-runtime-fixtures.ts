@@ -20,15 +20,17 @@
 
 import {
   JuliusProviderHealthRegistry, JuliusProviderRouter, JuliusDispatchError,
-  type JuliusProviderAdapter, type JuliusProviderResult,
+  type JuliusDispatchAllocation, type JuliusProviderAdapter, type JuliusProviderResult,
 } from './julius-router';
-import { JuliusWorkerRegistry, type JuliusWorker } from './julius-runtime';
+import { JuliusWorkerRegistry, type JuliusTask, type JuliusWorker } from './julius-runtime';
+import { lockJuliusTaskContract, seedJuliusTaskContract, type JuliusTaskContract, type JuliusContractReviewCharge } from './julius-task-contract';
 import type { JuliusCardPolicy } from './julius-policy';
 import type { JuliusVerificationPolicy } from './julius-verification-runtime';
 import { createJuliusMemoryStore, type JuliusMemoryStore } from './julius-memory-store';
-import { fixedResourceEstimate, type JuliusPipelineDependencies } from './julius-task-pipeline';
+import { fixedResourceEstimate, juliusContractSubjectTaskId, type JuliusPipelineDependencies } from './julius-task-pipeline';
 import { JuliusRunLoop, type JuliusPolicySource, type JuliusRunLoopConfig } from './julius-run-loop';
 import type { JuliusBudgetPort, JuliusClock, JuliusIdFactory } from './julius-runtime-ports';
+import type { JuliusAllocationPolicy } from './julius-allocation-runtime';
 
 /* ---------------------------------------------------------------- clock */
 
@@ -87,13 +89,37 @@ export function createMemoryBudget(ceilingUsdMicros: number): MemoryBudget {
     async commit(input) {
       const row = held.get(input.reservationId);
       if (row === undefined || row.state !== 'RESERVED') return;
-      held.set(input.reservationId, { usdMicros: input.usdMicros, state: 'COMMITTED' });
+      // UNKNOWN SETTLES AT WHAT IT RESERVED. `null` is "the boundary reported
+      // no cost", and freeing the hold on that would hand the rest of the
+      // mission money this dispatch may already have spent.
+      held.set(input.reservationId, { usdMicros: input.usdMicros ?? row.usdMicros, state: 'COMMITTED' });
     },
     async release(input) {
       const row = held.get(input.reservationId);
       if (row === undefined || row.state !== 'RESERVED') return;
-      held.set(input.reservationId, { usdMicros: 0, state: 'RELEASED' });
+      // SPENT MONEY IS CHARGED, NOT RELEASED, AND CHARGED AT WHAT IT COST.
+      //
+      // A failed attempt that billed before it failed settles at what it
+      // billed — not at what it was allowed to bill. Clamping to the hold
+      // would hide real overspend from the ledger and let the mission be
+      // granted money it has already spent; recording the excess drives
+      // `available()` down, and past zero it denies the next dispatch, which
+      // is the honest direction for a ceiling that has been exceeded. Only an
+      // attempt that spent nothing hands its whole hold back.
+      const spent = typeof input.usdMicros === 'number' && Number.isFinite(input.usdMicros) && input.usdMicros > 0
+        ? input.usdMicros : 0;
+      // AND UNKNOWN SPEND KEEPS ITS HOLD. A hosted runtime reports cost only
+      // in the final message a timeout never delivers, so the attempt most
+      // likely to have billed is the one least likely to say so.
+      if (spent === 0 && input.spendUnknown === true) {
+        held.set(input.reservationId, { usdMicros: row.usdMicros, state: 'COMMITTED' });
+        return;
+      }
+      held.set(input.reservationId, spent > 0
+        ? { usdMicros: spent, state: 'COMMITTED' }
+        : { usdMicros: 0, state: 'RELEASED' });
     },
+    async available() { return ceilingUsdMicros - outstanding(); },
     remainingUsdMicros() { return ceilingUsdMicros - outstanding(); },
     reservations() {
       return [...held.entries()].map(([reservationId, row]) => ({ reservationId, state: row.state, usdMicros: row.usdMicros }));
@@ -118,12 +144,27 @@ export function worker(over: Partial<JuliusWorker> & Pick<JuliusWorker, 'workerI
 /* ------------------------------------------------------- scripted adapter */
 
 export type ScriptedOutcome =
-  | { readonly kind: 'succeed'; readonly evidence?: readonly Record<string, unknown>[]; readonly usdMicros?: number }
-  | { readonly kind: 'fail'; readonly code: 'RATE_LIMIT' | 'TIMEOUT' | 'AUTH_CONFIGURATION' | 'PROVIDER_UNAVAILABLE' | 'WORKER_EXECUTION_FAILURE' }
+  /** `usdMicros: null` reports NO cost — Unknown, which is not zero. */
+  | {
+    readonly kind: 'succeed';
+    readonly evidence?: readonly Record<string, unknown>[];
+    readonly usdMicros?: number | null;
+    /** What this worker PROPOSES for its task contract. Unsanitised on purpose — a test may send a hostile shape. */
+    readonly contractProposal?: unknown;
+  }
+  /** `costUsdMicros` is what the boundary billed before it failed, as its diagnostics would carry. */
+  | {
+    readonly kind: 'fail';
+    readonly code: 'RATE_LIMIT' | 'TIMEOUT' | 'AUTH_CONFIGURATION' | 'PROVIDER_UNAVAILABLE' | 'WORKER_EXECUTION_FAILURE';
+    readonly costUsdMicros?: number;
+    /** Whether the provider runtime launched — the difference between spending nothing and spending an unknown amount. */
+    readonly runtimeStarted?: boolean;
+  }
   | { readonly kind: 'malformed' };
 
 export interface ScriptedAdapter extends JuliusProviderAdapter {
-  readonly dispatches: { taskId: string; contextId: string }[];
+  /** Everything Julius handed the adapter, so a test can assert what a dispatch carried. */
+  readonly dispatches: { taskId: string; contextId: string; taskType?: string; allocation?: JuliusDispatchAllocation; contract?: JuliusContractReviewCharge }[];
 }
 
 /**
@@ -135,17 +176,30 @@ export function scriptedAdapter(
   target: JuliusWorker,
   script: readonly ScriptedOutcome[],
 ): ScriptedAdapter {
-  const dispatches: { taskId: string; contextId: string }[] = [];
+  const dispatches: ScriptedAdapter['dispatches'] = [];
   let index = 0;
   return {
     adapterId: target.adapterId,
     dispatches,
     async dispatch(input) {
-      dispatches.push({ taskId: input.taskId, contextId: input.contextId });
+      dispatches.push({
+        taskId: input.taskId, contextId: input.contextId,
+        ...(input.taskType === undefined ? {} : { taskType: input.taskType }),
+        ...(input.allocation === undefined ? {} : { allocation: input.allocation }),
+        ...(input.contract === undefined ? {} : { contract: input.contract }),
+      });
       const step = script[Math.min(index, script.length - 1)] ?? { kind: 'succeed' as const };
       index += 1;
       if (step.kind === 'fail') {
-        throw new JuliusDispatchError(step.code, step.code === 'RATE_LIMIT' || step.code === 'TIMEOUT', 'Scripted provider failure.');
+        throw new JuliusDispatchError(
+          step.code, step.code === 'RATE_LIMIT' || step.code === 'TIMEOUT', 'Scripted provider failure.', undefined,
+          step.costUsdMicros === undefined && step.runtimeStarted === undefined
+            ? undefined
+            : {
+              ...(step.costUsdMicros === undefined ? {} : { costUsdMicros: step.costUsdMicros }),
+              ...(step.runtimeStarted === undefined ? {} : { runtimeStarted: step.runtimeStarted }),
+            },
+        );
       }
       if (step.kind === 'malformed') {
         return { workerId: 'someone-else', providerId: target.providerId, status: 'SUCCEEDED', safeSummary: 'x', evidence: [], usage: {} };
@@ -154,7 +208,13 @@ export function scriptedAdapter(
         workerId: target.workerId, providerId: target.providerId, status: 'SUCCEEDED',
         safeSummary: `${target.role} completed ${input.taskId}.`,
         evidence: step.evidence ?? [{ type: 'TEST', status: 'PASSED', safeSummary: 'Suite passed.' }],
-        usage: { usdMicros: step.usdMicros ?? 1_000, inputTokens: 10, outputTokens: 10, toolCalls: 1, runtimeMs: 5 },
+        usage: {
+          // `null` omits the field entirely, which is how a worker reports a
+          // cost it does not know — never as a zero.
+          ...(step.usdMicros === null ? {} : { usdMicros: step.usdMicros ?? 1_000 }),
+          inputTokens: 10, outputTokens: 10, toolCalls: 1, runtimeMs: 5,
+        },
+        ...(step.contractProposal === undefined ? {} : { contractProposal: step.contractProposal }),
       };
       return result;
     },
@@ -199,6 +259,8 @@ export function createJuliusHarness(input: {
   readonly card?: JuliusCardPolicy;
   readonly verification?: JuliusVerificationPolicy;
   readonly budgetUsdMicros?: number;
+  /** An allocation policy for the pipeline; absent, dispatches reserve the fixed estimate. */
+  readonly allocation?: JuliusAllocationPolicy;
   readonly config?: Partial<JuliusRunLoopConfig>;
   readonly owner?: string;
   readonly capabilityFor?: (task: { taskId: string; taskType: string; role: string }) => string;
@@ -224,6 +286,7 @@ export function createJuliusHarness(input: {
   const deps: JuliusPipelineDependencies = {
     store, router, budget, clock, ids,
     resources: fixedResourceEstimate({ usdMicros: 2_000, inputTokens: 100, outputTokens: 100, toolCalls: 1, runtimeMs: 1_000 }),
+    ...(input.allocation === undefined ? {} : { allocation: input.allocation }),
     owner: input.owner ?? 'worker-a',
     contextCharacterBudget: 4_000,
   };
@@ -241,6 +304,63 @@ export function createJuliusHarness(input: {
   return { store, clock, ids, budget, workers: registry, adapters, health, router, deps, loop, policies };
 }
 
+/**
+ * THE TASK CONTRACT A SEEDED RUN CARRIES.
+ *
+ * A deployment now seeds a contract at bootstrap and locks it when the plan
+ * review is accepted, and no Coding Agent may be dispatched without one. A
+ * fixture that skipped it would not be a smaller deployment, it would be a
+ * BROKEN one, and every test composing it would prove something about a run
+ * production cannot produce.
+ *
+ *   'locked'  the ordinary state, and the default: the terms are agreed, which
+ *             is what a test about scheduling, budgets or recovery assumes.
+ *   'draft'   seeded but not agreed — for tests that drive the real accept and
+ *             want the lock to happen where production performs it.
+ *   'none'    no contract at all, for the gate's own refusal cases.
+ */
+export type SeededContractState = 'locked' | 'draft' | 'none';
+
+/** A minimal valid contract for a seeded task, with the mission's own shape. */
+export function seededTaskContract(input: {
+  runId: string; taskId: string; state?: SeededContractState;
+}): JuliusTaskContract {
+  const seeded = seedJuliusTaskContract({
+    runId: input.runId, taskId: input.taskId, missionContractRevision: 1,
+    objective: 'The seeded mission objective.',
+    requirements: ['the seeded requirement'], constraints: ['the seeded constraint'],
+    acceptanceCriteria: [{ id: 'criterion-1', text: 'the seeded blocking criterion', blocking: true }],
+    filesInScope: [], filesOutOfScope: [],
+    spendUsd: 20, repairCycles: 3, requiredEvidence: ['TEST'],
+  });
+  if (!seeded.seeded) throw new Error(`fixture contract not derivable: ${seeded.reasonCode}`);
+  if (input.state !== 'locked' && input.state !== undefined) return seeded.contract;
+  const locked = lockJuliusTaskContract({
+    contract: seeded.contract, verdict: { verdict: 'ACCEPT', evaluatorId: 'fixture-evaluator' },
+    lockedAt: '2026-08-27T00:00:00.000Z',
+  });
+  if (locked.outcome !== 'LOCKED') throw new Error(`fixture contract not lockable: ${JSON.stringify(locked)}`);
+  return locked.contract;
+}
+
+/**
+ * Seed one task's contract directly, for the tests that build their task graph
+ * with `store.seedTask` rather than through {@link seedRun}. `'draft'` is the
+ * useful default there: those tests drive the real plan → review → accept
+ * sequence, and the lock then happens exactly where production performs it.
+ */
+export function seedTaskContractInto(
+  store: JuliusMemoryStore,
+  input: { runId: string; projectId: string; taskId: string; state?: SeededContractState },
+): void {
+  if (input.state === 'none') return;
+  void store.putTaskContract({
+    projectId: input.projectId,
+    contract: seededTaskContract({ runId: input.runId, taskId: input.taskId, state: input.state ?? 'draft' }),
+    occurredAt: '2026-08-27T00:00:00.000Z',
+  });
+}
+
 /** Seed a run in a state the scheduler will claim from, plus its tasks. */
 export function seedRun(
   harness: JuliusHarness,
@@ -248,6 +368,8 @@ export function seedRun(
     readonly runId?: string; readonly projectId?: string; readonly missionId?: string;
     readonly state?: Parameters<JuliusMemoryStore['seedRun']>[0]['state'];
     readonly tasks: readonly Parameters<JuliusMemoryStore['seedTask']>[1][];
+    /** Defaults to `'locked'` — see {@link SeededContractState}. */
+    readonly taskContracts?: SeededContractState;
   },
 ): { runId: string; projectId: string; missionId: string } {
   const runId = input.runId ?? 'run-1';
@@ -258,6 +380,25 @@ export function seedRun(
     cardRevision: 'card-r1', missionContractRevision: 1, projectBrainRevision: 0, version: 1,
   });
   for (const task of input.tasks) harness.store.seedTask(runId, task);
+
+  // One contract per SUBJECT, resolved by the runtime's own rule rather than a
+  // copy of it: a repair is governed by the contract of the task it repairs, a
+  // specialist by the coding work it was spawned under or by itself, and the
+  // architect and its review by none.
+  const contracts = input.taskContracts ?? 'locked';
+  if (contracts !== 'none') {
+    const seededTasks = input.tasks.map((value) => ({ ...value, missionId })) as readonly JuliusTask[];
+    const roots = new Set(seededTasks
+      .map((value) => juliusContractSubjectTaskId(value, seededTasks))
+      .filter((value): value is string => value !== null));
+    for (const taskId of roots) {
+      void harness.store.putTaskContract({
+        projectId,
+        contract: seededTaskContract({ runId, taskId, state: contracts }),
+        occurredAt: '2026-08-27T00:00:00.000Z',
+      });
+    }
+  }
   return { runId, projectId, missionId };
 }
 

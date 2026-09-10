@@ -1,5 +1,16 @@
 # Sunday Relay — Current State
 
+> ## ⚠ FOR JULIUS, READ `docs/handoffs/JULIUS_CURRENT.md` INSTEAD.
+> The phase record below stops at **Prompt 8.7 (2026-07-23)** and describes the
+> Relay product surface. Everything about Julius since — the live mission rig,
+> six paid attempts and what each of them failed on, the Wonderland Beta Gate,
+> and the current blocker — is in `docs/handoffs/JULIUS_CURRENT.md`, which is
+> updated every session. This file still calls itself a single source of truth;
+> for Julius it is not one, and a session that trusted it would be six weeks out
+> of date. `docs/JULIUS_BETA_READINESS.md` is the third record, and it stops at
+> 2026-09-02.
+
+
 > The single source of truth for where Relay stands. Update at every phase
 > boundary. Last updated: **2026-07-23 (Prompt 8.7 GATE A — YC demo
 > integration + acceptance: `relay:yc-demo:check` preflight +

@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 
 import {
   ACCEPTED_MAIN_ARTIFACT_PREFIX,
@@ -217,4 +219,80 @@ describe('reading checkpoints from an artifact list', () => {
     // malformed case, and that one is refused loudly.
     expect(acceptedShasFrom([{ id: 1, name: `${ACCEPTED_MAIN_ARTIFACT_PREFIX}nonsense`, expired: false }])).toBeNull();
   });
+});
+
+/**
+ * THE SAME RULE, ON A MACHINE WITH NO `gh`.
+ *
+ * A Claude Code cloud container has no `gh` binary, and it is exactly the
+ * machine that must check a landing before a paid mission is dispatched.
+ * Without a file mode these rules get re-applied BY HAND there — a second
+ * implementation of a trust gate, and the one nobody tests. What matters is
+ * that the mode is not a softer one: an evidence file that leaves out the
+ * awkward field must cost the pass, or it is a way round the gate rather than
+ * a way to run it.
+ */
+describe('the CLI, fed an evidence file instead of GitHub', () => {
+  const REPO = 'owner/repo';
+  const evidence = (over: Record<string, unknown> = {}) => ({
+    mainSha: NEW, mainShaAfter: NEW, acceptedShas: [OLD], containment: { [OLD]: true }, ...over,
+  });
+
+  const run = (value: unknown) => {
+    const directory = mkdtempSync(join(tmpdir(), 'julius-monotonicity-evidence-'));
+    const file = join(directory, 'evidence.json');
+    try {
+      writeFileSync(file, JSON.stringify(value));
+      try {
+        const stdout = execFileSync(process.execPath,
+          [resolve(import.meta.dirname, 'julius-main-monotonicity.mjs'), REPO, 'main', '--evidence', file],
+          { encoding: 'utf8', stdio: 'pipe' });
+        return { code: 0, stdout, stderr: '' };
+      } catch (error) {
+        const failure = error as { status?: number; stdout?: string; stderr?: string };
+        return { code: failure.status ?? -1, stdout: failure.stdout ?? '', stderr: failure.stderr ?? '' };
+      }
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  };
+
+  it('reaches the same verdict from a file, and says the evidence came from one', () => {
+    const result = run(evidence());
+    expect(result.code, result.stderr).toBe(0);
+    expect(result.stdout).toContain('monotonicity=monotonic');
+    expect(result.stdout).toContain('source=file:');
+    expect(result.stdout).toContain(`main=${NEW}`);
+  }, 30_000);
+
+  it('cannot be passed by a file that omits an awkward field', () => {
+    for (const field of ['mainSha', 'mainShaAfter', 'acceptedShas', 'containment'] as const) {
+      const { [field]: _omitted, ...trimmed } = evidence();
+      const result = run(trimmed);
+      expect(result.code, `omitting ${field} must not pass`).toBe(1);
+      expect(result.stdout).not.toContain('monotonicity=monotonic');
+    }
+  }, 60_000);
+
+  it('a checkpoint the file says is NOT contained is refused, not ignored', () => {
+    const result = run(evidence({ containment: { [OLD]: false } }));
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain('monotonicity=');
+    expect(result.stdout).not.toContain('monotonic ');
+  }, 30_000);
+
+  it('refuses a file that is not a single JSON object', () => {
+    for (const shape of [[evidence()], 'a string', 42, null]) {
+      expect(run(shape).code, `${JSON.stringify(shape)} is not an evidence object`).toBe(1);
+    }
+  }, 30_000);
+
+  it('--evidence without a path is a usage error, not a fetch', () => {
+    let code = 0;
+    try {
+      execFileSync(process.execPath,
+        [resolve(import.meta.dirname, 'julius-main-monotonicity.mjs'), REPO, 'main', '--evidence'], { stdio: 'pipe' });
+    } catch (error) { code = (error as { status?: number }).status ?? -1; }
+    expect(code).toBe(2);
+  }, 30_000);
 });

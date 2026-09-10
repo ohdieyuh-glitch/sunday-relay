@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { mkdtempSync, readdirSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve, sep } from 'node:path';
 import { parseLiveMissionContract } from '../relay-bridge/julius-live-mission';
@@ -53,11 +53,39 @@ const MISSIONS_DIR = '.github/julius-missions';
 const MISSIONS = readdirSync(resolve(ROOT, MISSIONS_DIR))
   .filter((name) => statSync(resolve(ROOT, MISSIONS_DIR, name)).isDirectory())
   .sort();
-/** Files a mission seeds that are not scaffolding — the ones the agent edits. */
+/**
+ * WHICH SEED A MISSION DECLARES.
+ *
+ * `workspace/` is a throwaway tree the mission invented; `slice.txt` names paths
+ * of THIS repository to copy byte-for-byte, for a mission whose subject is
+ * Sunday Relay itself. Exactly one, and the workflow and the provisioner both
+ * refuse a mission that declares both — so the tests below can branch on it
+ * rather than assume the older mode.
+ */
+const seedKindOf = (mission: string): 'workspace' | 'slice' => {
+  const tree = existsSync(resolve(ROOT, MISSIONS_DIR, mission, 'workspace'));
+  const slice = existsSync(resolve(ROOT, MISSIONS_DIR, mission, 'slice.txt'));
+  expect(tree !== slice, `${mission} must declare exactly one of workspace/ and slice.txt`).toBe(true);
+  return tree ? 'workspace' : 'slice';
+};
+
+/**
+ * Files a mission seeds that are not scaffolding — the ones the agent edits.
+ *
+ * A SLICE MISSION'S DELIVERABLES ARE ITS PATHS, and they are repository paths,
+ * so the basename is what a contract can readably name. `.julius/` is never
+ * among them: the loader is harness, seeded beside the slice and outside every
+ * path a slice may declare.
+ */
 const deliverablesOf = (mission: string): string[] =>
-  readdirSync(resolve(ROOT, MISSIONS_DIR, mission, 'workspace'))
-    .filter((name) => !['package.json', 'README.md'].includes(name))
-    .sort();
+  seedKindOf(mission) === 'workspace'
+    ? readdirSync(resolve(ROOT, MISSIONS_DIR, mission, 'workspace'))
+      .filter((name) => !['package.json', 'README.md'].includes(name))
+      .sort()
+    : read(`${MISSIONS_DIR}/${mission}/slice.txt`)
+      .split('\n').map((line) => line.replace(/#.*$/u, '').trim()).filter((line) => line !== '')
+      .map((path) => path.slice(path.lastIndexOf('/') + 1))
+      .sort();
 
 /** The workflow's `on:` block, up to the next top-level key. */
 const triggerBlock = (): string => {
@@ -410,6 +438,45 @@ describe('every mission declares its own durable accounting namespace', () => {
       expect(result.code).toBe(1);
       expect(result.output).toContain('above the 5 ceiling for a mission with no declared namespace');
     }, 30_000);
+
+    it('mission 3 carries its granted budget and passes its own checker', () => {
+      const contract = JSON.parse(read(`${MISSIONS_DIR}/julius-live-mission-3/contract.json`)) as Record<string, unknown>;
+      expect(contract.limits).toEqual({ spendUsd: 20, repairCycles: 3 });
+      expect(checkContract(contract).code, 'the committed contract must pass').toBe(0);
+    }, 30_000);
+
+    it('and mission 3 is still refused above its grant', () => {
+      const base = JSON.parse(read(`${MISSIONS_DIR}/julius-live-mission-3/contract.json`)) as Record<string, unknown>;
+      const overSpend = checkContract({ ...base, limits: { spendUsd: 21, repairCycles: 3 } });
+      expect(overSpend.code).toBe(1);
+      expect(overSpend.output).toContain('above the 20 ceiling for julius-live-mission-3');
+
+      const overRepair = checkContract({ ...base, limits: { spendUsd: 20, repairCycles: 4 } });
+      expect(overRepair.code).toBe(1);
+      expect(overRepair.output).toContain('above the 3 allowed for julius-live-mission-3');
+    }, 30_000);
+
+    /**
+     * THE TEST THAT WOULD HAVE CAUGHT IT.
+     *
+     * Mission 3 shipped declaring 20/3 with no grant. The whole suite passed and
+     * so did CI, because every check above builds a contract in a temporary file
+     * — none of them ran the checker over the contracts actually COMMITTED here.
+     * The refusal arrived instead from the zero-spend preflight (run
+     * 34396331071), three CI cycles later, which is a slow and expensive place
+     * to learn that a committed file cannot pass its own gate.
+     *
+     * So: every mission directory in the repository, through the real checker,
+     * exit 0. It generalises for free — a fourth mission is covered the moment
+     * its directory exists.
+     */
+    it('EVERY committed mission contract passes the real checker', () => {
+      for (const mission of MISSIONS) {
+        const contract = JSON.parse(read(`${MISSIONS_DIR}/${mission}/contract.json`)) as Record<string, unknown>;
+        const result = checkContract(contract);
+        expect(result.code, `${mission}/contract.json is refused by its own checker:\n${result.output}`).toBe(0);
+      }
+    }, 60_000);
   });
 
   it('a contract without a namespace is refused, rather than defaulted', () => {
@@ -510,8 +577,23 @@ describe('the mission itself is bounded and aimed away from this repository', ()
       const deliverables = deliverablesOf(mission);
       expect(deliverables.length, `${mission} must seed something to edit`).toBeGreaterThan(0);
       const contract = JSON.parse(read(`${MISSIONS_DIR}/${mission}/contract.json`)) as
-        { objective: string; requirements: string[] };
-      const asks = [contract.objective, ...contract.requirements].join(' ');
+        { objective: string; requirements: string[]; constraints?: string[] };
+      /**
+       * A SLICE MISSION LEGITIMATELY SEEDS FILES THE CODER MUST NOT EDIT.
+       *
+       * A throwaway tree contains only what the mission invented, so everything
+       * in it is a deliverable and the objective and requirements name it all. A
+       * slice also carries the modules the deliverable is TYPED AGAINST — the
+       * coder has to read them, and its instruction about them is "do not edit
+       * these", which belongs in the constraints. The rule is unchanged: every
+       * seeded file must be named by the contract that seeded it. Only where
+       * the naming may appear widens, and only for the seed kind that has
+       * somewhere else to put it.
+       */
+      const asks = [
+        contract.objective, ...contract.requirements,
+        ...(seedKindOf(mission) === 'slice' ? contract.constraints ?? [] : []),
+      ].join(' ');
       expect(asks, `${mission}: the contract must ask for edits, never for a new file`).not.toMatch(/\bCreate\b/u);
       for (const file of deliverables) {
         expect(asks, `${mission}: ${file} must be named by the contract it is seeded for`).toContain(file);
@@ -528,6 +610,12 @@ describe('the mission itself is bounded and aimed away from this repository', ()
       expect(contract.ok ? 'accepted' : contract.problem, mission).toBe('accepted');
       if (!contract.ok) continue;
 
+      // A SLICE MISSION HAS NO STUBS TO RUN HERE. Its seed is this repository's
+      // own files at a trusted SHA, which already pass their own tests — the
+      // thing that must fail until the work is done is the mission's NEW test,
+      // and `scripts/julius-mission-slice.test.ts` exercises slice provisioning
+      // end to end against the real files instead.
+      if (seedKindOf(mission) === 'slice') continue;
       const directory = mkdtempSync(join(tmpdir(), `julius-stubs-${mission}-`));
       for (const file of readdirSync(resolve(ROOT, MISSIONS_DIR, mission, 'workspace'))) {
         writeFileSync(join(directory, file), read(`${MISSIONS_DIR}/${mission}/workspace/${file}`));
@@ -609,7 +697,14 @@ describe('the evidence dump names only tables and columns the migrations create'
     const files = readdirSync(migrationsDirectory).filter((file) => file.endsWith('.sql')).sort();
     for (const file of files) {
       const sql = readFileSync(join(migrationsDirectory, file), 'utf8');
-      for (const match of sql.matchAll(/CREATE TABLE(?: IF NOT EXISTS)? relay_wonderland\.([a-z_]+)\s*\(([\s\S]*?)\n\);/gu)) {
+      // `\n\);` would have required the closing paren to start its own line, which is true of
+      // every table migration 011+ declares and of NOT ONE table in 001 — those are written one
+      // per line. So this schema, and every check built on it, silently covered the julius_*
+      // tables and nothing else: a dump naming a real column of a 001 table would fail as though
+      // the table did not exist. `\n?` admits the single-line form. The terminator stays `\);`
+      // because a close-paren immediately followed by a semicolon occurs only at the end of a
+      // statement — an inner `CHECK(side IN(1,2))` is `))` or `),`, never `);`.
+      for (const match of sql.matchAll(/CREATE TABLE(?: IF NOT EXISTS)? relay_wonderland\.([a-z_]+)\s*\(([\s\S]*?)\n?\);/gu)) {
         const columns = new Set<string>();
         for (const line of match[2].split(/[,\n]/u)) {
           const column = /^\s*([a-z_]+)\s+(?:text|jsonb|bigint|integer|boolean|timestamptz|numeric|double precision|bytea)\b/u.exec(line);
@@ -641,13 +736,41 @@ describe('the evidence dump names only tables and columns the migrations create'
     expect(workflow, 'an inline query would drift away from the validated script again').not.toContain('dump "SELECT');
   });
 
+  /**
+   * THE PARSER'S OWN COVERAGE.
+   *
+   * A schema reader that quietly sees half the migrations makes every check
+   * built on it weaker than it reads — and it fails in the safe-looking
+   * direction: a dump of a REAL table is reported as naming a table "no
+   * migration creates", which invites deleting the dump rather than fixing the
+   * reader. Migration 001 declares one table per line and 011+ declare them
+   * across many, so both shapes are pinned here against tables that exist.
+   */
+  it('reads both migration shapes, one-line and many-line', () => {
+    const tables = schema();
+
+    const sessions = tables.get('execution_sessions');
+    expect(sessions, 'a single-line CREATE TABLE from migration 001').toBeDefined();
+    for (const column of ['execution_id', 'mission_id', 'project_id', 'player_id', 'agent_id', 'state']) {
+      expect(sessions!.has(column), `execution_sessions.${column}`).toBe(true);
+    }
+    expect(sessions!.has('side'), 'an inner CHECK(...) constraint is not a column').toBe(false);
+
+    const runs = tables.get('julius_runs');
+    expect(runs, 'a many-line CREATE TABLE, which is what this reader already handled').toBeDefined();
+    expect(runs!.has('run_id') && runs!.has('project_id'), 'and it still handles it').toBe(true);
+
+    expect(tables.has('players') && tables.has('projects') && tables.has('mission_contracts'),
+      'the rest of 001 came with it, rather than one table being special-cased').toBe(true);
+  });
+
   it('every dumped table exists and every selected or ordered column is a real column', () => {
     const tables = schema();
     const dumps = queries();
     const everyDumpedFile = [...read('.github/julius-live-evidence-dump.sh').matchAll(/" ([a-z-]+\.tsv)$/gmu)].map((match) => match[1]).sort();
     expect(everyDumpedFile, 'every file the script writes, including the ones this regex cannot parse')
-      .toEqual(['decisions.tsv', 'evidence.tsv', 'failures.tsv', 'findings.tsv', 'runs.tsv', 'tasks.tsv', 'tool-invocations.tsv', 'worker-diagnostics.tsv']);
-    expect(dumps.map((dump) => dump.file).sort()).toEqual(['decisions.tsv', 'evidence.tsv', 'findings.tsv', 'runs.tsv', 'tasks.tsv', 'tool-invocations.tsv']);
+      .toEqual(['budget.tsv', 'contract-events.tsv', 'cost-accounting.tsv', 'decisions.tsv', 'evidence.tsv', 'failures.tsv', 'findings.tsv', 'project-brain.tsv', 'runs.tsv', 'sessions.tsv', 'task-contracts.tsv', 'tasks.tsv', 'tool-invocations.tsv', 'trajectory.tsv', 'worker-diagnostics.tsv']);
+    expect(dumps.map((dump) => dump.file).sort()).toEqual(['decisions.tsv', 'evidence.tsv', 'findings.tsv', 'project-brain.tsv', 'runs.tsv', 'sessions.tsv', 'task-contracts.tsv', 'tasks.tsv', 'tool-invocations.tsv', 'trajectory.tsv']);
     for (const dump of dumps) {
       const columns = tables.get(dump.table);
       expect(columns, `${dump.file} reads relay_wonderland.${dump.table}, which no migration creates`).toBeDefined();
@@ -694,6 +817,28 @@ describe('the evidence dump names only tables and columns the migrations create'
       // The Prompt Architect half. Paid attempt #3 failed here and the artifact
       // could not say which rule refused the plan.
       'requestedModel', 'responseId', 'validationPassed', 'validationReasonCode', 'validationField',
+      // Paid runs 34185920678 and 34186711214 recorded `plan_false_work_claim`
+      // with an empty field and no phrase, twice. The path says where and this
+      // says which of the four phrases fired.
+      'validationClaimPhrase',
+      // A refused plan is corrected once, so a dispatch is no longer one call
+      // by definition; a retry the artifact could not show would be a spend
+      // nobody could account for.
+      'planAttempts', 'reviewAttempts',
+      // THE ATTEMPT ITSELF. Live Run 3 COMPLETED and produced no rows here at
+      // all, because diagnostics were flattened onto the two failure events and
+      // onto nothing else. `outcome` is what lets a healthy attempt be filtered
+      // apart from a failure nobody classified — `failureShape` is null for
+      // both — and the two instants are what stop a reader reconstructing the
+      // start by subtracting an elapsed time from `occurred_at`.
+      'outcome', 'startedAt', 'completedAt',
+      // Which locked terms the attempt actually ran under, on the same row as
+      // the attempt. `trajectory.tsv` has them too; a diagnostics row that
+      // needs a join to say what bound it is one that gets read without it.
+      'contractRevision', 'contractBindingDigest',
+      // The cost vocabulary all three roles answer in. `costSource` is the
+      // hosted runtime's own word for itself and only the coder has one.
+      'costBasis', 'estimatedCostUsdMicros', 'inputTokens', 'outputTokens',
     ]) {
       expect(query, `the diagnostics dump must select ${key}`).toContain(`'diag_${key}'`);
     }
@@ -711,6 +856,79 @@ describe('the evidence dump names only tables and columns the migrations create'
       .toContain("e.payload->'facts'->>'diag_transport' IS NOT NULL");
     expect(query, 'and it never descends into a nested diagnostics object')
       .not.toContain("->'diagnostics'");
+    // The event type is the authority on which ending a row is. `diag_outcome`
+    // says the same thing from the adapter's side, and the two disagreeing is
+    // itself a finding — which needs both to be present to be visible.
+    expect(query, 'the event type is on the row, not inferred from the diagnostics')
+      .toContain('e.event_type');
+  });
+
+  /**
+   * WHAT THE MISSION COST, WITH THE UNKNOWN PART STILL VISIBLE.
+   *
+   * Live Run 3 settled one component with a runtime-reported $0.608861 and
+   * three with no amount at all, and `budget.tsv` had one column for both — so
+   * the honest answer ("at least $0.61, three components unreported") had to be
+   * worked out by hand from a TSV, which is exactly how the floor came to be
+   * quoted as the total. Hand-checked because the query GROUPs, which the
+   * simple SELECT/FROM parser above cannot read.
+   */
+  it('the cost rollup keeps billed, estimated and unknown on three separate axes', () => {
+    const query = read('.github/julius-live-evidence-dump.sh').split('\n').find((line) => line.includes('cost-accounting.tsv')) ?? '';
+    expect(query, 'the cost rollup must exist').not.toBe('');
+
+    // ONLY the two bases that describe money someone was charged. An estimate
+    // summed here would be a harness's price table presented as a bill.
+    expect(query, 'known cost is the spend bases and nothing else')
+      .toContain("IN ('PROVIDER_REPORTED','MEASURED_FROM_USAGE')");
+    expect(query, 'and the harness estimate is summed on its own axis')
+      .toContain("'estimatedUsdMicros'");
+    // NOT DROPPED, AND NOT ZERO. The count is the whole point: a sum that
+    // silently skips its nulls is a floor, and a floor without its count reads
+    // as a total.
+    expect(query, 'settlements that reported nothing are counted, never summed as zero')
+      .toContain("count(*) FILTER (WHERE e.payload->'facts'->>'usdMicros' IS NULL)");
+    expect(query, 'and it is per role, because the founder\'s question was per role')
+      .toContain("'role'");
+    expect(query, 'settlements only — a reservation is not a spend')
+      .toContain("e.event_type='julius.budget.settled'");
+    // No credential, no prose, no payload dump: the same rule every other query here obeys.
+    expect(query, 'the whole payload is never dumped').not.toMatch(/\bpayload\b(?!\s*(?:->|#>))/u);
+  });
+
+  /**
+   * SILENCE IS NOT A DISPOSITION. Live Run 3 completed and the word "challenge"
+   * appears nowhere in its bundle — no `contract.challenged` event, correctly,
+   * and no record of the evaluator having examined the terms and raised nothing
+   * either. The two readings are opposite and the bundle could not separate
+   * them, so the dump has to carry the answer as its own column.
+   */
+  it('the contract dump exports the evaluator disposition, on both branches', () => {
+    const query = read('.github/julius-live-evidence-dump.sh').split('\n').find((line) => line.includes('contract-events.tsv')) ?? '';
+    expect(query, 'the contract-events dump must exist').not.toBe('');
+    expect(query, 'a NO_CHALLENGE row has no other event type to arrive under')
+      .toContain("'julius.contract.disposition'");
+    for (const key of ['disposition', 'evaluatorId', 'evidenceCount', 'evidenceIds', 'reasonCode']) {
+      expect(query, `the contract dump must select ${key}`).toContain(`'${key}'`);
+    }
+    // The ids are this repository's own finding identifiers. No finding text,
+    // no plan, no review prose has a column here — because none has a key in
+    // the flattened record.
+    for (const forbidden of ['explanation', 'objectionText', 'reviewText', 'prompt']) {
+      expect(query.includes(forbidden), `the contract dump must not export ${forbidden}`).toBe(false);
+    }
+    expect(query, 'the whole payload is never dumped').not.toMatch(/\bpayload\b(?!\s*(?:->|#>))/u);
+  });
+
+  /**
+   * A SETTLEMENT WITHOUT ITS BASIS IS THE DEFECT ITSELF. `budget.tsv` recorded
+   * `usdMicros` and could not say whether a blank meant free or unmeasured.
+   */
+  it('the budget dump carries the settlement basis beside the amount', () => {
+    const query = read('.github/julius-live-evidence-dump.sh').split('\n').find((line) => line.includes('budget.tsv')) ?? '';
+    for (const key of ['costBasis', 'estimatedUsdMicros', 'usdMicros', 'role']) {
+      expect(query, `the budget dump must select ${key}`).toContain(`'${key}'`);
+    }
   });
 
   /**
@@ -1191,11 +1409,69 @@ describe('F8 — Hermes is pinned to an immutable commit', () => {
     expect(fromScript, 'the two defaults must not drift apart').toBe(fromWorkflow);
   });
 
-  it('a non-SHA ref is refused before anything is installed', () => {
+  it('a non-SHA ref is refused before anything is fetched or installed', () => {
     const script = read('.github/julius-live-hermes.sh');
     expect(script).toContain('hermes_ref_not_a_commit_sha');
     const guardAt = script.indexOf('hermes_ref_not_a_commit_sha');
-    expect(guardAt, 'the guard must precede the install').toBeLessThan(script.indexOf('pip install --quiet "git+'));
+    const fetchAt = script.indexOf('git -C "$HERMES_SRC" fetch');
+    const installAt = script.indexOf('pip install --quiet "$HERMES_SRC"');
+    expect(fetchAt, 'the source is fetched by this script, not by pip').toBeGreaterThan(-1);
+    expect(installAt, 'and installed from that checkout').toBeGreaterThan(-1);
+    expect(guardAt, 'the guard must precede the fetch').toBeLessThan(fetchAt);
+    expect(guardAt, 'and the install').toBeLessThan(installAt);
+  });
+
+  /**
+   * THE PIN IS CHECKED AFTER THE CHECKOUT, NOT ONLY BEFORE THE FETCH.
+   *
+   * `pip install "git+…@<sha>"` used to resolve the ref itself; this script now
+   * does, which moves the obligation here. A fetch that lands on anything but
+   * the pinned commit installs a different Hermes, and the shape of the bug is
+   * that everything downstream still looks healthy — so the check is on the
+   * checked-out HEAD, and it refuses rather than warns.
+   */
+  it('the checked-out source is proven to BE the pinned commit before it is installed', () => {
+    const script = read('.github/julius-live-hermes.sh');
+    expect(script).toContain('hermes_source_not_pinned');
+    const verifyAt = script.indexOf('hermes_source_not_pinned');
+    expect(verifyAt, 'the check must precede the install').toBeLessThan(
+      script.indexOf('pip install --quiet "$HERMES_SRC"'));
+    expect(script, 'and it must compare the real HEAD, not the requested ref')
+      .toContain('git -C "$HERMES_SRC" rev-parse HEAD');
+  });
+
+  /**
+   * UPSTREAM REFUSED THIS TWICE, AT TWO DIFFERENT POINTS.
+   *
+   * Live Run 3's zero-spend preflight was rate-limited by github.com at the
+   * clone (run 34388913340) and then, on the confirmation re-run, at the
+   * promisor blob fetch `--filter=blob:none` forces during checkout
+   * (34389221834). A single depth-1 fetch of the pinned commit has no promisor
+   * remote to return to, and the retry loop covers the transient limit.
+   *
+   * The clone stays UNAUTHENTICATED on purpose: a token here would be readable
+   * by a third-party repository's build hooks, and this step runs before any
+   * provider can be reached, so a refusal costs a job and never money.
+   */
+  it('the pinned source is fetched with bounded retries and no credential', () => {
+    const script = read('.github/julius-live-hermes.sh');
+    expect(script, 'a single depth-1 fetch, so there is no promisor remote')
+      .toContain('fetch --quiet --depth 1 origin "$HERMES_REF"');
+    expect(script, 'a transient rate limit is retried, not fatal')
+      .toContain('hermes_source_fetch_retry_after_');
+    expect(script, 'and exhausting the retries names upstream, not the profile')
+      .toContain('hermes_source_fetch_failed');
+    expect(script, 'the remote is plain https with no credential in it')
+      .toContain('remote add origin https://github.com/NousResearch/hermes-agent.git');
+    for (const secret of ['GITHUB_TOKEN', 'GH_TOKEN', 'x-access-token', 'insteadOf', 'GIT_ASKPASS']) {
+      expect(script, `no credential may reach the third-party build: ${secret}`).not.toContain(secret);
+    }
+  });
+
+  /** Nothing this script creates may outlive the job. */
+  it('the fetched source is destroyed with the venv', () => {
+    expect(read(WORKFLOW_PATH), 'the cleanup step removes the source tree too')
+      .toContain('rm -rf /opt/hermes-venv /opt/hermes-src');
   });
 });
 
@@ -1756,5 +2032,166 @@ describe('the trust gate runs before anything the candidate controls', () => {
     expect(gate).toContain('GH_TOKEN: ${{ github.token }}');
     expect(gate, 'a stored credential would be a second authority nobody reviewed')
       .not.toMatch(/secrets\./u);
+  });
+});
+
+/**
+ * WHAT EACH DISPATCH WAS ALLOWED TO SPEND.
+ *
+ * Paid run 34037313976 was refused for cost and the bundle could not say what
+ * the ceiling was, who set it, or how much of the mission remained — the
+ * amount lived only in a message nothing persisted. `budget.tsv` is the row
+ * that answers it, and these hold it to real columns and named fact keys
+ * rather than a whole payload, exactly as the failure query is held.
+ */
+describe('the budget dump explains what a mission was allowed to spend', () => {
+  const budgetQuery = () => {
+    const query = read('.github/julius-live-evidence-dump.sh').split('\n').find((line) => line.includes('budget.tsv')) ?? '';
+    expect(query, 'the budget dump must exist').not.toBe('');
+    return query;
+  };
+
+  it('reads the events table by real columns, and never exports a whole payload', () => {
+    const query = budgetQuery();
+    const eventsDdl = /CREATE TABLE relay_wonderland\.events\(([\s\S]*?)\);/u
+      .exec(read('src/relay/persistence/wonderland-migrations/001_wonderland_runtime.sql'))?.[1] ?? '';
+    expect(eventsDdl, 'the events table must exist in the migrations').not.toBe('');
+    for (const column of ['event_type', 'payload', 'occurred_at']) {
+      expect(eventsDdl.includes(column), `events.${column} is not a column the migrations create`).toBe(true);
+    }
+    expect(query, 'a whole payload would carry whatever a worker put in it').not.toMatch(/->'facts'(?!->>)/u);
+    expect(query).not.toMatch(/SELECT[^"]*\be\.payload\b\s*(?:,|AS|FROM)/u);
+  });
+
+  it('names the four budget event types the runtime actually emits', () => {
+    const query = budgetQuery();
+    const catalogue = read('src/relay/mission/julius/julius-events.ts');
+    for (const type of ['budget.allocated', 'budget.reserved', 'budget.settled', 'budget.denied']) {
+      expect(query, `${type} must be exported`).toContain(`julius.${type}`);
+      expect(catalogue, `${type} must be a declared event type`).toContain(`'${type}'`);
+    }
+  });
+
+  it('the worker diagnostics export the cost facts, including whether the runtime started at all', () => {
+    // `runtimeStarted` is what decides whether a failed attempt's hold is kept
+    // or handed back, so a budget that behaves unexpectedly is explained by
+    // this column or by a second paid run.
+    const query = read('.github/julius-live-evidence-dump.sh').split('\n').find((line) => line.includes('worker-diagnostics.tsv')) ?? '';
+    for (const fact of ['diag_costUsdMicros', 'diag_costCeilingUsdMicros', 'diag_costSource', 'diag_runtimeStarted']) {
+      expect(query, `${fact} must be exported`).toContain(`'facts'->>'${fact}'`);
+    }
+    // And every one of them is a key the diagnostics allowlist actually admits.
+    const allowlist = read('src/relay/mission/julius/julius-router.ts');
+    for (const key of ['costUsdMicros', 'costCeilingUsdMicros', 'costSource', 'runtimeStarted']) {
+      expect(allowlist, `${key} must survive safeReviewDiagnostics`).toContain(`${key}:safe`);
+    }
+  });
+
+  it('exports the facts that answer WHO SET THE CEILING and WHAT REMAINED', () => {
+    const query = budgetQuery();
+    for (const fact of ['allocatedUsdMicros', 'allocationBasis', 'shareUsdMicros', 'remainingUsdMicros', 'allocationPolicy', 'usdMicros']) {
+      expect(query, `${fact} is what the paid run's bundle could not say`).toContain(`'facts'->>'${fact}'`);
+    }
+    // The facts the pipeline actually writes beside an allocation.
+    const pipeline = read('src/relay/mission/julius/julius-task-pipeline.ts');
+    expect(pipeline).toContain('allocatedUsdMicros: allocation.usdMicros');
+    expect(pipeline).toContain('allocationPolicy: allocation.policyVersion');
+  });
+});
+
+/**
+ * THE ARCHITECT'S OUTPUT CEILING IS GOVERNED, AND ITS BOUND IS NOT A GUESS.
+ *
+ * Paid Live Mission 4's first attempt (run 34459684814) died at the architect
+ * with `incomplete_response` and no output. The connector had always capped the
+ * architect at 4,000 output tokens while the run budget had always RESERVED
+ * 20,000 per dispatch — two numbers describing the same call, disagreeing by 5x,
+ * neither stated anywhere a mission author would look.
+ *
+ * The ceiling is now the mission's to raise, in its contract, beside `spendUsd`
+ * and `repairCycles`. The bound is the reservation itself: a mission may not buy
+ * more output than the budget already covers, which is what stops a raised token
+ * limit from outrunning the mission's own spend ceiling by arriving unbudgeted.
+ *
+ * The bound lives in two files — the composition owns it, and the contract
+ * checker is dependency-free and cannot import a bundled module, so it repeats
+ * the number. These hold the two to each other.
+ */
+describe('the architect output ceiling is bounded by the budget that reserves it', () => {
+  const checker = resolve(ROOT, 'scripts/julius-live-contract-check.mjs');
+  const runChecker = (contract: unknown): { code: number; output: string } => {
+    const file = join(mkdtempSync(join(realpathSync(tmpdir()), 'julius-ceiling-')), 'contract.json');
+    writeFileSync(file, JSON.stringify(contract));
+    try {
+      return { code: 0, output: execFileSync(process.execPath, [checker, file], { encoding: 'utf8' }) };
+    } catch (error) {
+      const failure = error as { status?: number; stdout?: string; stderr?: string };
+      return { code: failure.status ?? 1, output: `${failure.stdout ?? ''}${failure.stderr ?? ''}` };
+    }
+  };
+  const missionFour = () => JSON.parse(read(`${MISSIONS_DIR}/julius-live-mission-4/contract.json`)) as
+    { limits: { architectMaxOutputTokens?: number } };
+
+  /** The one number, read from each file that states it. */
+  const declared = (relative: string, pattern: RegExp): number => {
+    const match = pattern.exec(read(relative));
+    expect(match, `${relative} must state the reservation`).not.toBeNull();
+    return Number(match![1]!.replace(/_/gu, ''));
+  };
+
+  it('the composition and the contract checker name the SAME reservation', () => {
+    const composition = declared(
+      'relay-bridge/julius/live-composition.ts',
+      /export const ARCHITECT_OUTPUT_TOKEN_RESERVATION = ([0-9_]+)/u,
+    );
+    const script = declared(
+      'scripts/julius-live-contract-check.mjs',
+      /const ARCHITECT_OUTPUT_TOKEN_RESERVATION = ([0-9_]+)/u,
+    );
+    expect(script, 'a drift here would let a contract buy output the budget never reserved').toBe(composition);
+  });
+
+  it('the reservation is the number the run budget actually reserves per dispatch', () => {
+    const reservation = declared(
+      'relay-bridge/julius/live-composition.ts',
+      /export const ARCHITECT_OUTPUT_TOKEN_RESERVATION = ([0-9_]+)/u,
+    );
+    expect(
+      read('relay-bridge/julius/live-composition.ts'),
+      'the estimate must USE the constant, or the bound describes a reservation nobody makes',
+    ).toMatch(/outputTokens: ARCHITECT_OUTPUT_TOKEN_RESERVATION/u);
+    expect(reservation).toBeGreaterThan(0);
+  });
+
+  it('mission 4 declares a ceiling, and it passes its own checker', () => {
+    const contract = missionFour();
+    expect(contract.limits.architectMaxOutputTokens, 'the mission that needed it declares it').toBeGreaterThan(4_000);
+    expect(runChecker(contract).code, 'and the declared value is within the reservation').toBe(0);
+  });
+
+  it('refuses a ceiling above the reservation, naming both numbers', () => {
+    const reservation = declared(
+      'scripts/julius-live-contract-check.mjs',
+      /const ARCHITECT_OUTPUT_TOKEN_RESERVATION = ([0-9_]+)/u,
+    );
+    const contract = missionFour();
+    contract.limits.architectMaxOutputTokens = reservation + 1;
+    const result = runChecker(contract);
+    expect(result.code, 'a mission may not buy more output than the budget reserved').not.toBe(0);
+    expect(result.output).toMatch(/architectMaxOutputTokens is \d+, above the \d+ output tokens/u);
+  });
+
+  it('refuses a ceiling that is not a positive integer', () => {
+    for (const bad of [0, -1, 1.5]) {
+      const contract = missionFour();
+      contract.limits.architectMaxOutputTokens = bad;
+      expect(runChecker(contract).code, `${bad} is not a ceiling`).not.toBe(0);
+    }
+  });
+
+  it('leaves a mission that declares nothing on the connector default', () => {
+    const contract = missionFour();
+    delete contract.limits.architectMaxOutputTokens;
+    expect(runChecker(contract).code, 'the field is optional; silence is not a refusal').toBe(0);
   });
 });

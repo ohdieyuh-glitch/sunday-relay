@@ -119,3 +119,172 @@ describe('safe reviewer diagnostics reach the durable event', () => {
     expect(Object.keys(failed).some((key) => key.startsWith('diag_')), 'no facts, no columns').toBe(false);
   });
 });
+
+/**
+ * A FAILURE AFTER THE PROVIDER ANSWERED STILL CHARGES WHAT THE ANSWER COST.
+ *
+ * The provider ran, reported its cost, and a store write then dropped the
+ * result — a stale lease, a duplicate generation, a failed evidence append.
+ * The billed amount was read only from the ERROR's diagnostics, so these paths
+ * released the whole hold and the mission could be granted that money twice.
+ */
+describe('a paid answer that a later step drops', () => {
+  const answering = (usage: unknown): JuliusProviderAdapter => ({
+    adapterId: 'adapter',
+    async dispatch() {
+      return { workerId: 'worker', providerId: 'provider', status: 'SUCCEEDED', safeSummary: 'done', evidence: [], usage };
+    },
+  });
+  const releases = (overrides: Partial<JuliusExecutionPorts>) => {
+    const seen: Array<{ usdMicros?: number | null; spendUnknown?: boolean }> = [];
+    const h = harness(answering({ usdMicros: 4_250_000 }), {
+      ...overrides,
+      async release(input) { seen.push({ usdMicros: input.usdMicros, spendUnknown: input.spendUnknown }); },
+    });
+    return { h, seen };
+  };
+
+  it('charges the reported cost when persisting the evidence throws', async () => {
+    const { h, seen } = releases({ async persistEvidence() { throw new Error('evidence_failed'); } });
+    expect((await h.coordinator.execute(request)).status).not.toBe('COMPLETED');
+    expect(seen, 'the hold is settled at what the provider billed, not handed back')
+      .toEqual([{ usdMicros: 4_250_000, spendUnknown: false }]);
+  });
+
+  it('charges it when a stale lease refuses the result', async () => {
+    const { h, seen } = releases({ async acceptResult() { throw new Error('stale_worker_result'); } });
+    await h.coordinator.execute(request);
+    expect(seen).toEqual([{ usdMicros: 4_250_000, spendUnknown: false }]);
+  });
+
+  it('and an answer that reported NO cost keeps its hold, because the provider still ran', async () => {
+    const seen: Array<{ usdMicros?: number | null; spendUnknown?: boolean }> = [];
+    const h = harness(answering({ inputTokens: 10 }), {
+      async acceptResult() { throw new Error('stale_worker_result'); },
+      async release(input) { seen.push({ usdMicros: input.usdMicros, spendUnknown: input.spendUnknown }); },
+    });
+    await h.coordinator.execute(request);
+    expect(seen).toEqual([{ usdMicros: null, spendUnknown: true }]);
+  });
+});
+
+/**
+ * AND THEY HAVE TO SURVIVE SUCCESS.
+ *
+ * Live Run 3 COMPLETED, and its `worker-diagnostics.tsv` came back with zero
+ * rows: diagnostics were flattened onto `task.failed` and `retry.scheduled` and
+ * onto nothing else, so a reviewer that answered correctly left less behind
+ * than one that timed out. There was no healthy attempt to read a sick one
+ * against — which is exactly what the timeout repair of paid run 34311556047
+ * had needed, and had to buy a paid failure to get.
+ */
+describe('safe diagnostics reach the durable event on the succeeding ending too', () => {
+  const BINDING = {
+    contractId: 'contract', taskId: 'task', contractRevision: 2,
+    bindingDigest: 'sha256:e35b6d88bf79ec266f5a884a9e832521e97db50d2c4b4e3cc65844f281ba6942',
+  };
+  const contract = { stage: 'build' as const, binding: BINDING } as never;
+  const answering = (diagnostics: unknown): JuliusProviderAdapter => ({
+    adapterId: 'adapter',
+    async dispatch() {
+      return {
+        workerId: 'worker', providerId: 'provider', status: 'SUCCEEDED' as const,
+        safeSummary: 'done', evidence: [{ type: 'TEST', status: 'PASSED', safeSummary: 'tests pass' }],
+        usage: { usdMicros: 8 }, diagnostics,
+      };
+    },
+  });
+  const completedRow = async (diagnostics: unknown, withContract = true) => {
+    const rows: Record<string, unknown>[] = [];
+    const h = harness(answering(diagnostics), { async recordEvent(input) { rows.push({ type: input.type, ...input.payload }); } });
+    expect(await h.coordinator.execute(withContract ? { ...request, contract } : request)).toMatchObject({ status: 'COMPLETED' });
+    return rows.find((row) => row.type === 'worker.completed')!;
+  };
+
+  it('writes the healthy attempt: served model, elapsed time and the window it fitted in', async () => {
+    const row = await completedRow({
+      transport: 'local', stage: 'build', provider: 'xai', servedModel: 'grok-build-0.1',
+      requestedModel: 'grok-build-0.1', outcome: 'succeeded',
+      elapsedMs: 178_000, timeoutMs: 400_000, firstOutputAfterMs: 34_700, packetBytes: 46_256,
+      processStarted: true, exitObserved: true, processExitCode: 0,
+      startedAt: '2026-09-09T23:03:10.429Z', completedAt: '2026-09-09T23:06:36.379Z',
+      reviewAttempts: 1,
+    });
+    // The evidence dump keys on transport, so this is the field that decides
+    // whether a row exists at all.
+    expect(row.diag_transport).toBe('local');
+    expect(row.diag_servedModel, 'the model that answered, on a row rather than in prose').toBe('grok-build-0.1');
+    expect(row.diag_requestedModel).toBe('grok-build-0.1');
+    // The pair that answers "was the window big enough?" without a paid failure.
+    expect(row.diag_elapsedMs).toBe(178_000);
+    expect(row.diag_timeoutMs).toBe(400_000);
+    expect(row.diag_firstOutputAfterMs).toBe(34_700);
+    expect(row.diag_startedAt).toBe('2026-09-09T23:03:10.429Z');
+    expect(row.diag_completedAt).toBe('2026-09-09T23:06:36.379Z');
+    expect(row.diag_reviewAttempts).toBe(1);
+    // The event's own facts are untouched beside them.
+    expect(row).toMatchObject({ workerId: 'worker', duplicate: false, evidenceCount: 1 });
+  });
+
+  /**
+   * JULIUS OWNS THE VERDICT ON ITS OWN ATTEMPT. An adapter that reported
+   * `outcome: 'failed'` on a dispatch Julius accepted, or a binding digest
+   * other than the one it was dispatched under, would be attesting to exactly
+   * the things the contract stack exists to establish independently of it.
+   */
+  it('lets the adapter describe the transport and never the verdict or the binding', async () => {
+    const row = await completedRow({
+      transport: 'local', outcome: 'failed', failureShape: 'review_timeout',
+      contractRevision: 99,
+      contractBindingDigest: 'sha256:0000000000000000000000000000000000000000000000000000000000000000',
+    });
+    expect(row.diag_outcome, 'Julius accepted the result; the attempt succeeded').toBe('succeeded');
+    expect(row.diag_contractRevision, "the revision Julius dispatched under, not the adapter's").toBe(2);
+    expect(row.diag_contractBindingDigest).toBe(BINDING.bindingDigest);
+    // The adapter's own transport facts still travel — only the two Julius owns are overwritten.
+    expect(row.diag_failureShape).toBe('review_timeout');
+  });
+
+  /**
+   * AN UNBOUND DISPATCH IS BOUND TO NOTHING, and says so. A plan precedes the
+   * lock, so Julius hands it no contract — and an adapter that filled those two
+   * keys anyway would be attesting to a binding that does not exist, on the one
+   * row a reader trusts for exactly that.
+   */
+  it('writes a null binding when Julius dispatched no contract, whatever the adapter claimed', async () => {
+    const row = await completedRow({
+      transport: 'local',
+      contractRevision: 7,
+      contractBindingDigest: 'sha256:1111111111111111111111111111111111111111111111111111111111111111',
+    }, false);
+    expect(row.diag_contractRevision).toBeNull();
+    expect(row.diag_contractBindingDigest).toBeNull();
+  });
+
+  /** The same allowlist as the failure path, so one ending cannot leak what the other refuses. */
+  it('narrows the success record by the same allowlist', async () => {
+    const row = await completedRow({
+      transport: 'local',
+      reviewText: 'Authorization: Bearer FAKESECRET123456789',
+      stdout: 'sk-live-FAKESECRET123456789',
+      servedModel: 'sk-live-FAKESECRET123456789',
+    });
+    expect(JSON.stringify(row)).not.toContain('FAKESECRET123456789');
+    expect(row.diag_reviewText, 'a key nobody listed cannot reach the row').toBeUndefined();
+    expect(row.diag_servedModel, 'and a credential-shaped model is refused outright').toBeNull();
+  });
+
+  /**
+   * A ROW OF NULLS IS NOT EVIDENCE. The dump keys on `diag_transport` precisely
+   * so a worker with no lifecycle to report produces no row rather than an
+   * empty one, and that only holds if nothing is written here.
+   */
+  it('writes nothing when the adapter reported nothing', async () => {
+    for (const nothing of [undefined, null, 'not an object', ['diagnostics']]) {
+      const row = await completedRow(nothing, false);
+      expect(Object.keys(row).filter((key) => key.startsWith('diag_')),
+        `${JSON.stringify(nothing)} must not become a row of nulls`).toEqual([]);
+      expect(row.evidenceCount, 'and the event itself is unchanged').toBe(1);
+    }
+  });
+});

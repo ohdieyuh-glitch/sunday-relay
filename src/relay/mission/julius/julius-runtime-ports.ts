@@ -44,6 +44,7 @@ import type { JuliusReviewerFinding, JuliusAcceptanceCriterion } from './julius-
 import type { JuliusContextSnapshot } from './julius-context-snapshot';
 import type { JuliusTrajectoryEvent } from './julius-trajectory';
 import type { JuliusBrainEntry } from './julius-runtime';
+import type { JuliusTaskContract, JuliusTaskContractBinding } from './julius-task-contract';
 
 /* ------------------------------------------------------- ambient services */
 
@@ -149,9 +150,22 @@ export interface JuliusRunWriter {
   appendEvidence(input: {
     runId: string; projectId: string; idempotencyKey: string; evidence: JuliusEvidence;
   }): Promise<boolean>;
+  /**
+   * THE DECISION AND ITS RELEASE ARE ONE WRITE.
+   *
+   * `releaseTaskIds` names BLOCKED tasks this decision satisfies (computed by
+   * `evaluateJuliusRelease`); they become RUNNABLE in the same durable write
+   * as the decision, so no crash can leave an accepted plan with a build that
+   * nothing will ever release, or a released build with no decision behind it.
+   * A duplicate decision (idempotency conflict) moves nothing: the write that
+   * recorded it first already did. Only Julius calls this, and the claim query
+   * offers RUNNABLE tasks alone, so this is the only path from BLOCKED to
+   * claimable.
+   */
   appendDecision(input: {
     decisionId: string; runId: string; taskId: string; policyRevision: string;
     idempotencyKey: string; occurredAt: string; decision: JuliusVerificationDecision;
+    releaseTaskIds?: readonly string[];
   }): Promise<boolean>;
 }
 
@@ -247,11 +261,43 @@ export interface JuliusBudgetPort {
     usdMicros: number; inputTokens: number; outputTokens: number;
     toolCalls: number; runtimeMs: number; now: string;
   }): Promise<{ readonly state: 'RESERVED' | 'DENIED'; readonly denialReason: string | null }>;
+  /**
+   * UNKNOWN SPEND IS NOT ZERO SPEND. `usdMicros: null` means the boundary
+   * reported no cost, and the ledger must then keep holding what it reserved
+   * rather than freeing it: a runtime that answers without a cost has still
+   * been paid, and treating that as $0 hands the rest of the mission money it
+   * may already have spent.
+   */
   commit(input: {
-    reservationId: string; usdMicros: number; inputTokens: number; outputTokens: number;
+    reservationId: string; usdMicros: number | null; inputTokens: number; outputTokens: number;
     toolCalls: number; runtimeMs: number; receiptId: string | null; now: string;
   }): Promise<void>;
-  release(input: { reservationId: string; reason: string; now: string }): Promise<void>;
+  /**
+   * Hand a reservation back. `usdMicros` is what the failed attempt actually
+   * billed, when the boundary reported it — money already spent is CHARGED,
+   * never released, or a timed-out attempt would return its whole allocation
+   * to the ledger and the retry would be granted it a second time.
+   */
+  release(input: {
+    reservationId: string; reason: string; now: string;
+    usdMicros?: number | null;
+    /**
+     * The attempt reached a provider that started work and reported no cost.
+     * Unknown spend is not zero spend either: the hold is KEPT rather than
+     * freed, because a hosted runtime reports its cost only in a final message
+     * a timeout never delivers — the case where a hand-back would most often
+     * hand the retry money the first attempt had already spent.
+     */
+    spendUnknown?: boolean;
+  }): Promise<void>;
+  /**
+   * WHAT REMAINS, so an allocation can be derived from it: the ceiling minus
+   * every outstanding reservation and commitment, in micro-dollars. `null`
+   * means the ledger cannot say — Unknown, not zero — and the allocator then
+   * takes its conservative branch. Optional so a ledger that cannot answer is
+   * honest by omission rather than by inventing a number.
+   */
+  available?(input: { runId: string; projectId: string; now: string }): Promise<number | null>;
 }
 
 /* ------------------------------------------------------------- read ports */
@@ -291,12 +337,154 @@ export interface JuliusRuntimeReader {
    * run's full allowance. This is the number the bound is checked against.
    */
   activeTaskCount(runId: string, projectId: string): Promise<number>;
+  /**
+   * THE BINDING A TASK WAS ACTUALLY DISPATCHED UNDER, read back off the durable
+   * `task.claimed` record rather than recomputed from whatever is locked now.
+   *
+   * Those are different questions once a contract has been revised. The lock
+   * moves forward — revision 2 supersedes 1 — and a reviewer that read "the
+   * current lock" would grade work against terms the coder was never given.
+   * The reviewer's gate compares this record with its own binding, so the
+   * thing being graded and the thing being graded AGAINST are provably one
+   * document. Null when the task was never dispatched under a binding, which
+   * is a fact about the record and not an absence of one.
+   */
+  executedBindingFor(taskId: string, projectId: string): Promise<JuliusTaskContractBinding | null>;
 }
+
+/**
+ * WRITING TO THE PROJECT BRAIN.
+ *
+ * `julius_brain_entries` existed from migration 014 with eight entry kinds, and
+ * the runtime READ it to compile every worker's context — but it had exactly one
+ * writer, the bootstrap seed, so five of those kinds had no producer at all. A
+ * Project Brain that only ever holds what was written before the run started is
+ * a read-only seed, not durable project intelligence.
+ *
+ * THE ENTRY ID IS THE IDEMPOTENCY KEY. Every other append on this store carries
+ * a separate `idempotencyKey`; this one does not, because the brain table's
+ * primary key already is one and a second key would be a second thing to keep
+ * consistent. A caller derives the id from what produced the entry — a decision,
+ * a finding, a repair — so a replayed tick writes nothing and, importantly,
+ * does not advance the revision either.
+ *
+ * REVISIONS ARE ALLOCATED BY THE STORE, never by the caller. `UNIQUE(run_id,
+ * revision)` means two workers that both computed "the next one" would collide,
+ * so the implementation takes the run row's own `project_brain_revision` as an
+ * atomic counter and returns entries in that order. That is what the column was
+ * for; nothing else was advancing it.
+ */
+export interface JuliusBrainAppend {
+  readonly runId: string;
+  readonly projectId: string;
+  /** The task this knowledge came out of, or null for run-level knowledge. */
+  readonly taskId: string | null;
+  readonly workerId: string;
+  /** Deterministic per source. This IS the idempotency key. */
+  readonly entryId: string;
+  readonly kind: JuliusBrainEntry['kind'];
+  /**
+   * ALREADY SAFE. This text is persisted verbatim and read back into another
+   * worker's context packet, so the caller owns its safety — the store does not
+   * redact, and a store that did would be redaction nobody could audit.
+   */
+  readonly safeText: string;
+  readonly evidenceIds: readonly string[];
+  readonly occurredAt: string;
+}
+
+export interface JuliusBrainWriter {
+  /**
+   * True when this call wrote a new entry. False when the entry already existed
+   * — a replay — or when the run does not exist in this project. False is not
+   * an error: it is the answer "nothing was added", and the revision did not
+   * move either.
+   */
+  appendBrainEntry(input: JuliusBrainAppend): Promise<boolean>;
+}
+
+/**
+ * THE TASK/SPRINT CONTRACT STORE.
+ *
+ * `julius-task-contract.ts` decides what a contract MEANS; this stores it. The
+ * split matters because two of the invariants can only be held by the store:
+ *
+ *   AT MOST ONE LOCKED REVISION. A second lock is refused by a partial unique
+ *   index, not by an application check — two workers racing to lock two
+ *   revisions of the same contract would both read "not locked yet" and both
+ *   write, and the coder and the reviewer would then hold different agreements
+ *   while every domain function said they agreed.
+ *
+ *   A REVISION IS IMMUTABLE. `putContract` inserts and never updates, so a
+ *   replayed tick that re-proposes the same revision writes nothing, and one
+ *   that proposes DIFFERENT terms at a revision already stored is refused
+ *   rather than silently overwriting terms someone may already hold.
+ *
+ * READING A LOCKED CONTRACT RE-DERIVES ITS DIGEST and refuses the row when it
+ * disagrees with what was recorded. The terms are stored as a document; a
+ * storage layer that normalised one of its values — or an edit made outside
+ * this code — would otherwise hand a caller a binding that no longer describes
+ * the terms beside it, and every downstream equality check would pass while
+ * comparing the wrong thing.
+ */
+export interface JuliusTaskContractStore {
+  /**
+   * Insert one contract revision. True when this call stored it.
+   *
+   * False is a REPLAY — the same revision with the same terms already exists.
+   * A conflicting proposal at an existing revision throws
+   * `julius_task_contract_revision_conflict`, because silently keeping either
+   * version would leave two parties holding different documents under one
+   * revision number.
+   */
+  putTaskContract(input: { projectId: string; contract: JuliusTaskContract; occurredAt: string }): Promise<boolean>;
+  /**
+   * Record an evaluator's challenge against a revision. True when this call
+   * moved it; false when it was already CHALLENGED. Refuses a locked or
+   * superseded revision — see {@link challengeJuliusTaskContract}, which
+   * decides the same thing on the domain side and is the caller's gate.
+   */
+  challengeTaskContract(input: {
+    projectId: string; contractId: string; contractRevision: number;
+  }): Promise<boolean>;
+  /**
+   * LOCK ONE REVISION, and supersede whichever revision was locked before, in
+   * one write. Julius calls this; an evaluator's ACCEPT is its input.
+   *
+   * The digest is supplied by the caller because {@link lockJuliusTaskContract}
+   * computed it from the accepted terms; the store re-derives it from what it
+   * holds and refuses a mismatch, so a caller cannot lock terms to a digest of
+   * something else.
+   */
+  lockTaskContract(input: {
+    projectId: string; contractId: string; contractRevision: number;
+    bindingDigest: string; lockedAt: string; evaluatorId: string;
+  }): Promise<JuliusTaskContractLockResult>;
+  /**
+   * The contract governing this task: the LOCKED revision when one exists,
+   * otherwise the highest revision on record. `null` when the task has none —
+   * which is a fact, not an error, and the dispatch gate reports it as
+   * `contract_absent` rather than as a failure to read.
+   */
+  loadTaskContract(input: { projectId: string; taskId: string }): Promise<JuliusTaskContract | null>;
+  /** Every revision of this task's contract, ascending. The audit trail. */
+  taskContractRevisions(input: { projectId: string; taskId: string }): Promise<readonly JuliusTaskContract[]>;
+}
+
+/**
+ * Why a value rather than a throw: losing a lock race is an ORDINARY outcome
+ * in a runtime with more than one worker, and the loser needs to know which
+ * revision won so it can re-read rather than retry into the same refusal.
+ */
+export type JuliusTaskContractLockResult =
+  | { readonly locked: true; readonly contract: JuliusTaskContract; readonly supersededRevision: number | null }
+  | { readonly locked: false; readonly reasonCode: string; readonly lockedRevision: number | null };
 
 /** Everything the runtime writes and reads, in one bag the caller composes. */
 export interface JuliusRuntimeStore
   extends JuliusRunWriter, JuliusResultWriter, JuliusContextWriter,
-  JuliusEventWriter, JuliusTrajectoryWriter, JuliusRuntimeReader, JuliusFindingWriter {}
+  JuliusEventWriter, JuliusTrajectoryWriter, JuliusRuntimeReader, JuliusFindingWriter,
+  JuliusBrainWriter, JuliusTaskContractStore {}
 
 /* --------------------------------------------------- role/task vocabulary */
 

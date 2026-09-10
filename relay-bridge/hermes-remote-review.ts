@@ -405,11 +405,12 @@ export async function runRemoteHermesReview(input: {
       usage !== null && usage !== undefined && typeof usage.model === 'string' && usage.model.trim() !== ''
         ? safeText(usage.model)
         : null;
+    const completedAt = now();
     return {
       kind: 'reviewed',
       result,
       startedAt,
-      completedAt: now(),
+      completedAt,
       // The bridge asks the remote service for a review, not for a specific
       // model — the service's own configuration decides. What the bridge
       // requested is therefore nothing, and the mission layer reports the
@@ -417,6 +418,37 @@ export async function runRemoteHermesReview(input: {
       requestedModel: null,
       servedModel,
       provider: null,
+      /**
+       * WHAT THIS TRANSPORT CAN HONESTLY ATTEST ABOUT A REVIEW THAT WORKED.
+       *
+       * The service ran a process nobody here can see, so every process
+       * lifecycle field stays null — which is the same answer this path gives
+       * on its failure branches, and is not the same answer as `false`. What it
+       * does know is the shape of the text it received and the model the
+       * service reported answered, and those are what the row carries.
+       */
+      diagnostics: reviewDiagnostics({
+        transport: 'remote', shape: null, outcome: 'succeeded',
+        servedModel,
+        outputBytesObserved: Buffer.byteLength(state.reviewText, 'utf8'),
+        outputByteLimit: REMOTE_REVIEW_LIMITS.maxOutputBytes,
+        text: state.reviewText,
+      }),
+      /**
+       * The service forwards Hermes's own usage. It reports no cost of any
+       * kind over this wire, so the figure is absent rather than zero and the
+       * tokens are what a later measurement would have to work from.
+       */
+      usage: {
+        inputTokens: typeof usage?.inputTokens === 'number' ? usage.inputTokens : null,
+        outputTokens: typeof usage?.outputTokens === 'number' ? usage.outputTokens : null,
+        totalTokens: null,
+        model: servedModel,
+        apiCalls: null,
+        costMicros: null,
+        currency: null,
+        source: servedModel === null ? 'unavailable' : 'harness_reported',
+      },
     };
   }
 }

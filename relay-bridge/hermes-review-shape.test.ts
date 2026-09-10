@@ -41,7 +41,12 @@ function fakeChild(input: {
     };
     child.stdout = new Readable({ read() { /* pushed below */ } });
     child.stderr = new Readable({ read() { /* never surfaced */ } });
-    child.kill = () => true;
+    /* A SIGNALLED PROCESS DIES. The runner now waits for the child it killed
+       to be gone before it reports, so a `kill` that returns true and leaves
+       the process running models a reviewer this repository has never met —
+       `hermes-reviewer-lifecycle.test.ts` owns the cases where one does — and
+       makes every timeout case here wait out the escalation grace instead. */
+    child.kill = () => { child.emit('close', null); return true; };
     setTimeout(() => {
       for (const chunk of input.stdoutChunks ?? (input.stdout !== undefined && input.stdout !== '' ? [input.stdout] : [])) {
         child.stdout.push(Buffer.from(chunk, 'utf8'));
@@ -463,10 +468,42 @@ describe('an upstream failure carries the status the provider returned', () => {
     });
     if (outcome.kind !== 'review_incomplete') throw new Error('unreachable');
     expect(outcome.diagnostics.providerHttpStatus).toBe(401);
-    const serialized = JSON.stringify(outcome.diagnostics);
-    for (const secret of ['FAKESECRET123456789', 'sk-live', 'Authorization', 'Bearer', 'prompt', 'invalid api-key']) {
-      expect(serialized, `"${secret}" must not reach the diagnostics`).not.toContain(secret);
+    /**
+     * VALUES AND KEYS, CHECKED SEPARATELY — because they leak differently.
+     *
+     * This used to serialise the whole object and search it for each canary,
+     * which conflated the two. A byte COUNT added so a paid failure could say
+     * how big the question was was first named for the prompt it measures, and
+     * tripped this guard on its own field NAME while carrying nothing but an
+     * integer. Loosening the canary list to accommodate it would have been the
+     * wrong repair — `prompt` is in that list because the fixture body carries
+     * `"prompt":"the whole review prompt"`, and that is exactly what must never
+     * survive — so the field was renamed to `packetBytes` AND this guard was
+     * made precise, so the next honest field does not have to be renamed too.
+     *
+     * So: no canary in any VALUE, and the KEY SET is the allowlist itself, so a
+     * leak cannot arrive dressed as a new field either. Both directions are
+     * proven by mutation below.
+     */
+    const entries = Object.entries(outcome.diagnostics);
+    const values = JSON.stringify(entries.map(([, value]) => value));
+    const CANARIES = ['FAKESECRET123456789', 'sk-live', 'Authorization', 'Bearer', 'prompt', 'invalid api-key'];
+    for (const secret of CANARIES) {
+      expect(values, `"${secret}" must not reach any diagnostic VALUE`).not.toContain(secret);
     }
+    // A SUBSET, NOT AN EQUALITY. The domain's allowlist spans all three roles
+    // and returns every field; this transport fills in the reviewer's. What
+    // must hold is that it invented none — a key outside the allowlist is
+    // dropped at the boundary and would reach the durable row as nothing.
+    const allowed = new Set(Object.keys(safeReviewDiagnostics(outcome.diagnostics)!));
+    const keys = entries.map(([key]) => key);
+    expect(keys.filter((key) => !allowed.has(key)), 'a field the record does not declare').toEqual([]);
+
+    // AND THE GUARD STILL BITES, in both directions.
+    const leakedValue = { ...outcome.diagnostics, failureShape: `HTTP 401 ${SECRET}` };
+    expect(JSON.stringify(Object.values(leakedValue))).toContain('FAKESECRET123456789');
+    expect(Object.keys({ ...outcome.diagnostics, [SECRET]: 1 }).filter((key) => !allowed.has(key)))
+      .toEqual([SECRET]);
   });
 });
 

@@ -17,6 +17,9 @@
  * is no partial composition and no fallback worker.
  */
 
+import { DEFAULT_HOSTED_LIMITS } from '../hosted-coding-agent/hosted-envelope';
+import { DEFAULT_TIMEOUT_MS as ARCHITECT_OPERATIVE_TIMEOUT_MS } from '../../src/relay/connectors/gpt-architect/config';
+import { reviewerOperativeTimeoutMs } from '../reviewer-deadline';
 import { randomUUID } from 'node:crypto';
 import {
   JuliusProviderHealthRegistry,
@@ -24,6 +27,7 @@ import {
   JuliusRunLoop,
   JuliusWorkerRegistry,
   fixedResourceEstimate,
+  juliusAllocationPolicy,
   type JuliusBudgetPort,
   type JuliusCardPolicy,
   type JuliusClaimedTask,
@@ -45,6 +49,23 @@ import { loadHermesConfig } from '../hermes-reviewer';
 import type { runGptArchitect } from '../../src/relay/connectors/gpt-architect';
 import type { runHostedCodingAgent, HostedQueryFn } from '../hosted-coding-agent/hosted-runner';
 import type { runHermesReview } from '../hermes-reviewer';
+
+/**
+ * THE OUTPUT TOKENS THE RUN BUDGET ALREADY RESERVES FOR ONE DISPATCH.
+ *
+ * `fixedResourceEstimate` has always reserved 20,000 output tokens per
+ * dispatch, and the connector has always capped the architect at 4,000
+ * (`DEFAULT_MAX_OUTPUT_TOKENS`). The two numbers describe the SAME call and did
+ * not agree: Julius was reserving budget for a request five times larger than
+ * the one it was willing to make.
+ *
+ * This is now the ceiling a mission may raise its architect to, and no higher.
+ * That is the whole safety property: a mission cannot buy more output than the
+ * reservation already covers, so a larger token limit can never outrun the
+ * mission's own `spendUsd` ceiling by arriving unbudgeted. Raising the ceiling
+ * beyond this would mean raising the reservation, deliberately, here.
+ */
+export const ARCHITECT_OUTPUT_TOKEN_RESERVATION = 20_000;
 import {
   createLiveArchitectAdapter,
   createLiveHermesReviewerAdapter,
@@ -59,24 +80,40 @@ import type { ShellEffectPort, TaskClaimSource } from './executor-effects';
 export const ARCHITECT_WORKER: JuliusWorker = {
   workerId: 'prompt-architect-openai', role: 'PROMPT_ARCHITECT',
   adapterId: 'openai-architect-live', providerId: 'openai',
-  capabilities: ['plan'], taskTypes: ['plan'],
-  concurrencyLimit: 1, timeoutMs: 300_000, maxRetries: 1, status: 'AVAILABLE',
+  // `repair:plan` is a PLAN REVISION: a repair inherits its subject's role and
+  // stage, so a rejected plan comes back here with the reviewer's findings in
+  // its context, not to the Coding Agent. Paid run 34037313976 minted the
+  // latter, and nobody could route it.
+  capabilities: ['plan'], taskTypes: ['plan', 'repair:plan'],
+  /**
+   * DERIVED, not restated. This read `300_000`, which happened to equal the
+   * connector's `DEFAULT_TIMEOUT_MS` — the number that actually bounds the
+   * call. Equal by coincidence is not the same as equal by construction: two
+   * literals agreeing today is exactly the arrangement that let the reviewer's
+   * declared and operative deadlines drift 160 s apart unnoticed.
+   */
+  concurrencyLimit: 1, timeoutMs: ARCHITECT_OPERATIVE_TIMEOUT_MS, maxRetries: 1, status: 'AVAILABLE',
 };
 
 export const CODER_WORKER: JuliusWorker = {
   workerId: 'coding-agent-claude-hosted', role: 'CODING_AGENT',
   adapterId: 'claude-agent-sdk-hosted-live', providerId: 'anthropic',
   capabilities: ['implement'],
-  // A repair task is named `repair:<original taskType>` and always routes to
-  // a CODING_AGENT, so the deployment registers those types explicitly — the
-  // runtime documents that nothing detects the omission until a repair
-  // cannot be routed. `repair:plan` is deliberately NOT registered: the
-  // repair inherits the plan task's ARTIFACT evidence requirement, which the
-  // coding adapter does not produce, so a routed repair:plan is a paid
-  // dispatch guaranteed to HALT. An immediate routing refusal is the honest
-  // failure. (Independent review finding F3.)
+  // A repair is `repair:<stage>` on the subject's own role, and a second
+  // round is still `repair:build`, so this one registration covers every
+  // Coding Agent repair round. `repair:plan` belongs to the Prompt Architect.
+  // The pipeline proves a repair routable BEFORE creating it, so an omission
+  // here halts the run with `REPAIR_UNROUTABLE` rather than spending an
+  // attempt on `PROVIDER_UNAVAILABLE` (paid run 34037313976, tick 5).
   taskTypes: ['build', 'repair:build'],
-  concurrencyLimit: 1, timeoutMs: 600_000, maxRetries: 1, status: 'AVAILABLE',
+  /**
+   * THIS ONE WAS ACTUALLY WRONG, by four minutes. It declared `600_000` while
+   * `hosted-runner.ts` aborts the run at `DEFAULT_HOSTED_LIMITS.maxRuntimeMs`,
+   * which is 360_000. A reader of this composition root would have budgeted ten
+   * minutes for a coder the runtime kills at six. Same defect as the reviewer's,
+   * found by the same structural test, fixed the same way.
+   */
+  concurrencyLimit: 1, timeoutMs: DEFAULT_HOSTED_LIMITS.maxRuntimeMs, maxRetries: 1, status: 'AVAILABLE',
 };
 
 export const reviewerWorker = (providerId: string): JuliusWorker => ({
@@ -84,7 +121,16 @@ export const reviewerWorker = (providerId: string): JuliusWorker => ({
   adapterId: 'hermes-local-live', providerId,
   capabilities: ['review'],
   taskTypes: ['review:plan', 'review:build', 'review:repair:build', 'review:repair:plan'],
-  concurrencyLimit: 1, timeoutMs: 240_000, maxRetries: 1, status: 'AVAILABLE',
+  /**
+   * THE SAME CALL `loadHermesConfig` MAKES. This used to read `240_000`, a
+   * number nothing enforced, while the limit that actually cut a review off was
+   * 400_000 from the workflow environment — 160 s apart, with the inert one
+   * written here where a reader would look for it. Both now come from
+   * `resolveReviewerDeadline`, so the declared and the operative deadline are
+   * the same value by construction and `reviewer-deadline.test.ts` fails if a
+   * literal is ever put back.
+   */
+  concurrencyLimit: 1, timeoutMs: reviewerOperativeTimeoutMs(), maxRetries: 1, status: 'AVAILABLE',
 });
 
 export interface LiveRoleProblem {
@@ -121,6 +167,12 @@ export function resolveLiveWorkers(options: {
   readonly artifacts: LiveArtifactExchange;
   /** Absent shell = no executor = no coding agent. Never a local fallback. */
   readonly shell: ShellEffectPort | null;
+  /**
+   * The mission contract's `limits.architectMaxOutputTokens`, when it declares
+   * one. Bounded by `ARCHITECT_OUTPUT_TOKEN_RESERVATION`; absent means the
+   * environment's default stands.
+   */
+  readonly architectMaxOutputTokens?: number | null;
   /** Test seams: inject fakes here; production callers omit them. */
   readonly runners?: {
     readonly architect?: typeof runGptArchitect;
@@ -132,7 +184,24 @@ export function resolveLiveWorkers(options: {
   const problems: LiveRoleProblem[] = [];
   const entries: LiveWorkerEntry[] = [];
 
-  const architectConfig = readGptArchitectConfig(options.env);
+  /**
+   * THE MISSION MAY RAISE ITS OWN ARCHITECT CEILING, WITHIN THE RESERVATION.
+   *
+   * The environment supplies the default; the mission contract governs the
+   * exception, the same way it governs `spendUsd` and `repairCycles`. A
+   * declared value is bounded at parse time and again by
+   * `julius-live-contract-check.mjs`; anything absent or unusable leaves the
+   * environment's answer untouched, so a mission that says nothing behaves
+   * exactly as every mission did before.
+   */
+  const envArchitectConfig = readGptArchitectConfig(options.env);
+  const declaredCeiling = options.architectMaxOutputTokens;
+  const architectConfig = typeof declaredCeiling === 'number'
+      && Number.isInteger(declaredCeiling)
+      && declaredCeiling > 0
+      && declaredCeiling <= ARCHITECT_OUTPUT_TOKEN_RESERVATION
+    ? { ...envArchitectConfig, maxOutputTokens: declaredCeiling }
+    : envArchitectConfig;
   const architectReadiness = evaluateReadiness(architectConfig);
   const hermes = loadHermesConfig(options.env);
   const requested = {
@@ -234,13 +303,39 @@ export function createRunSpendBudget(ceilingUsdMicros: number): JuliusBudgetPort
     async commit(input) {
       const row = held.get(input.reservationId);
       if (row === undefined || row.state !== 'RESERVED') return;
-      held.set(input.reservationId, { usdMicros: input.usdMicros, state: 'COMMITTED' });
+      // UNKNOWN SETTLES AT WHAT IT RESERVED. `null` is "the boundary reported
+      // no cost", and freeing the hold on that would hand the rest of the
+      // mission money this dispatch may already have spent.
+      held.set(input.reservationId, { usdMicros: input.usdMicros ?? row.usdMicros, state: 'COMMITTED' });
     },
     async release(input) {
       const row = held.get(input.reservationId);
       if (row === undefined || row.state !== 'RESERVED') return;
-      held.set(input.reservationId, { usdMicros: 0, state: 'RELEASED' });
+      // SPENT MONEY IS CHARGED, NOT RELEASED, AND CHARGED AT WHAT IT COST.
+      //
+      // A failed attempt that billed before it failed settles at what it
+      // billed — not at what it was allowed to bill. Clamping to the hold
+      // would hide real overspend from the ledger and let the mission be
+      // granted money it has already spent; recording the excess drives
+      // `available()` down, and past zero it denies the next dispatch, which
+      // is the honest direction for a ceiling that has been exceeded. Only an
+      // attempt that spent nothing hands its whole hold back.
+      const spent = typeof input.usdMicros === 'number' && Number.isFinite(input.usdMicros) && input.usdMicros > 0
+        ? input.usdMicros : 0;
+      // AND UNKNOWN SPEND KEEPS ITS HOLD. A hosted runtime reports cost only
+      // in the final message a timeout never delivers, so the attempt most
+      // likely to have billed is the one least likely to say so.
+      if (spent === 0 && input.spendUnknown === true) {
+        held.set(input.reservationId, { usdMicros: row.usdMicros, state: 'COMMITTED' });
+        return;
+      }
+      held.set(input.reservationId, spent > 0
+        ? { usdMicros: spent, state: 'COMMITTED' }
+        : { usdMicros: 0, state: 'RELEASED' });
     },
+    // What an allocation may be derived from: the ceiling minus everything
+    // held or spent. This ledger can always answer, so it never says null.
+    async available() { return ceilingUsdMicros - outstanding(); },
   };
 }
 
@@ -315,6 +410,15 @@ export function assembleLiveJuliusRuntime(options: {
   readonly maxRepairRounds: number;
   readonly owner?: string;
   readonly budget?: JuliusBudgetPort;
+  /**
+   * How long a claimed task's lease lasts. Ten minutes in production, where a
+   * dispatch is a provider call; a drill that must witness a REAL expiry — a
+   * process dying with the lease held and a fresh one reclaiming it off the
+   * wall clock — cannot wait that long, and faking `now` would prove the sweep
+   * against a clock nobody runs. Stated here so the drill shortens the lease
+   * rather than the truth.
+   */
+  readonly leaseMs?: number;
 }): LiveJuliusRuntime {
   const registry = new JuliusWorkerRegistry();
   const adapters = new Map<string, JuliusProviderAdapter>();
@@ -352,7 +456,18 @@ export function assembleLiveJuliusRuntime(options: {
     clock: { now: () => new Date().toISOString() },
     ids: { next: (kind) => `${kind}:${randomUUID()}` },
     resources: fixedResourceEstimate({
-      usdMicros: 300_000, inputTokens: 50_000, outputTokens: 20_000, toolCalls: 10, runtimeMs: 300_000,
+      usdMicros: 300_000, inputTokens: 50_000, outputTokens: ARCHITECT_OUTPUT_TOKEN_RESERVATION,
+      toolCalls: 10, runtimeMs: 300_000,
+    }),
+    /**
+     * THE MISSION CONTRACT GOVERNS THE CODING AGENT'S SPEND. The same two
+     * contract fields that seed the run budget and the repair bound derive
+     * the per-dispatch allocation: each Coding Agent round may spend an equal
+     * share of `spendUsd` over the build and every authorised repair round,
+     * never more than remains. See docs/JULIUS_PAID_RUN_34037313976_REPAIRS.md.
+     */
+    allocation: juliusAllocationPolicy({
+      ceilingUsdMicros: options.spendCeilingUsdMicros, authorizedRepairRounds: options.maxRepairRounds,
     }),
     owner: options.owner ?? 'julius-live-mission',
     contextCharacterBudget: 24_000,
@@ -361,7 +476,7 @@ export function assembleLiveJuliusRuntime(options: {
     async policyFor() { return { card, verification }; },
     capabilityFor: (task) => (task.role === 'PROMPT_ARCHITECT' ? 'plan' : task.role === 'INDEPENDENT_REVIEWER' ? 'review' : 'implement'),
   };
-  const loop = new JuliusRunLoop(deps, policies, { claimLimit: 4, leaseMs: 600_000 });
+  const loop = new JuliusRunLoop(deps, policies, { claimLimit: 4, leaseMs: options.leaseMs ?? 600_000 });
   return { loop, registry, router, store: options.store, card, verification };
 }
 
@@ -424,7 +539,16 @@ export async function driveJuliusRunToTerminal(input: {
       const after = await input.store.loadRun(input.runId, input.projectId);
       lastState = after?.state ?? lastState;
       if (after !== null && terminal.has(after.state)) return { state: after.state, ticks: tick, stalled: false, haltCause: null };
-      if (advance === null || !advance.changed) {
+      /**
+       * A RESUMED VERIFICATION IS PROGRESS, even when the run state did not
+       * move. `advanceRun` runs any verification the run is owed — the window a
+       * crash between accepting a worker's result and recording the decision
+       * leaves open — and an accepted plan releases a BLOCKED build while the
+       * run stays READY. Reading `changed` alone would call that a stall on the
+       * very tick that unblocked the run, and the mission would be abandoned
+       * one step from finishing.
+       */
+      if (advance === null || (!advance.changed && advance.resumedVerifications === 0)) {
         return { state: lastState, ticks: tick, stalled: true, haltCause: await stallCause(lastState) };
       }
     }

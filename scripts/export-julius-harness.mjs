@@ -224,6 +224,39 @@ const FILE_RULES = [
   ['src/relay/mission/julius/julius-artifacts.ts', 'ARTIFACTS / EVIDENCE'],
   ['src/relay/mission/julius/julius-verification-runtime.ts', 'VERIFICATION'],
   ['src/relay/mission/julius/julius-repair-runtime.ts', 'REPAIR'],
+  ['src/relay/mission/julius/julius-repair-lineage.ts', 'REPAIR'],
+  ['src/relay/mission/julius/julius-release-runtime.ts', 'TASK GRAPH / SCHEDULER'],
+  ['src/relay/mission/julius/julius-review-stage.ts', 'INDEPENDENT REVIEWER'],
+  // The task/sprint contract is the SUBJECT a review is applied to, and the
+  // gate that decides whether coding may start at all. It belongs with the
+  // task graph rather than the reviewer: the reviewer consumes it, Julius owns it.
+  ['src/relay/mission/julius/julius-task-contract.ts', 'TASK GRAPH / SCHEDULER'],
+  // The evaluator supplies the verdict; JULIUS writes the record of it, on both
+  // branches. Same subsystem as the contract it is a disposition ON, for the
+  // same reason: a reviewer consuming terms does not own the account of them.
+  ['src/relay/mission/julius/julius-contract-disposition.ts', 'TASK GRAPH / SCHEDULER'],
+  // Project Brain v2's trust core: what a memory is worth, and on whose
+  // authority. Seeded as a STUB for paid Live Mission 4, so nothing imports it
+  // yet and the trace does not reach it — this rule is written now so that the
+  // day the mission's implementation lands and a caller appears, the file is
+  // already classified rather than tripping the drift gate on the landing.
+  // Same subsystem as the Project Brain it qualifies: v1 entries keep their
+  // text and scope, and this says who asserted them and how far that is checked.
+  ['src/relay/mission/julius/julius-memory-trust.ts', 'DURABLE STATE / PROJECT BRAIN'],
+  // The context integrity layer: which of those memories may reach a worker's
+  // packet, in what order, and what happens when two of them cannot both be
+  // true. Seeded as a STUB for paid Live Mission 5, so nothing imports it yet
+  // and the trace does not reach it — declared now, for the same reason the
+  // trust core above is, so the landing that finally gives it a caller does not
+  // also trip the drift gate. Same subsystem as the Project Brain it reads and
+  // the compiler it will sit inside: `julius-runtime.ts` and
+  // `julius-context-snapshot.ts` are both already here.
+  ['src/relay/mission/julius/julius-context-integrity.ts', 'DURABLE STATE / PROJECT BRAIN'],
+  ['src/relay/mission/julius/julius-allocation-runtime.ts', 'LEASES / BUDGETS / PERMISSIONS'],
+  // Allocation decides what a dispatch MAY spend; this decides what is known
+  // about what it DID spend, and on whose authority. Same subsystem: both are
+  // the budget's own arithmetic, and neither is a worker's to state.
+  ['src/relay/mission/julius/julius-cost-accounting.ts', 'LEASES / BUDGETS / PERMISSIONS'],
   ['src/relay/mission/julius/julius-recovery.ts', 'RECOVERY / CONTINUATION'],
   ['src/relay/mission/julius/julius-continuation.ts', 'RECOVERY / CONTINUATION'],
   ['src/relay/mission/julius/julius-lease-protocol.ts', 'LEASES / BUDGETS / PERMISSIONS'],
@@ -245,6 +278,11 @@ const FILE_RULES = [
   ['relay-bridge/julius/live-workers.ts', 'LIVE PROVIDER COMPOSITION'],
   ['relay-bridge/hosted-coding-agent/', 'CODING AGENT'],
   ['relay-bridge/hermes-reviewer.ts', 'INDEPENDENT REVIEWER'],
+  // The one derivation that decides how long a review may take, read by the
+  // Hermes transport and by the reviewer worker's declared deadline alike.
+  // Same subsystem as the reviewer whose deadline it is: a limit that governs
+  // the Independent Reviewer belongs with it, not in a policy annex.
+  ['relay-bridge/reviewer-deadline.ts', 'INDEPENDENT REVIEWER'],
   ['relay-bridge/reviewer-harness/hermes/', 'INDEPENDENT REVIEWER'],
   ['relay-bridge/redact.ts', 'INDEPENDENT REVIEWER'],
   // Relay ↔ Julius seam and vocabularies.

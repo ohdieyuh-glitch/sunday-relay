@@ -1,3 +1,4 @@
+import { coderMaxRuntimeMs, coderMaxTurns } from './coder-envelope';
 /**
  * THE HOSTED CODING AGENT'S SAFETY ENVELOPE — PURE.
  *
@@ -57,11 +58,42 @@ export interface HostedLimits {
   readonly maxCostCents: number;
 }
 
+/**
+ * TURNS AND RUNTIME ARE DERIVED; COST IS NOT.
+ *
+ * These read `12` and `6 * 60_000`, sized by the first mission that fit inside
+ * them. Paid Mission 4 finished in 11 turns of 12 — one turn of margin nobody
+ * could see — and Paid Mission 5 spent both: a runtime abort at ~363 s, then
+ * `error_max_turns` at 13 turns, with the mission substantially implemented.
+ * `coder-envelope.ts` derives both from what paid runs were observed to do.
+ *
+ * `maxCostCents` stays a flat conservative floor for a run NOBODY budgeted, and
+ * `hostedLimitsForAllocation` is still the only thing that raises it. A larger
+ * turn or runtime allowance must never move the money, which is the whole
+ * reason the money can stay an independent hard bound.
+ */
 export const DEFAULT_HOSTED_LIMITS: HostedLimits = Object.freeze({
-  maxTurns: 12,
-  maxRuntimeMs: 6 * 60_000,
+  maxTurns: coderMaxTurns(),
+  maxRuntimeMs: coderMaxRuntimeMs(),
   maxCostCents: 50,
 });
+
+/**
+ * THE LIMIT JULIUS RESERVED, as hosted limits.
+ *
+ * The 50 cent default above is the ceiling for a run NOBODY has budgeted — a
+ * conservative floor, not a mission policy. Paid run 34037313976 authorised
+ * $20 and was refused at 50 cents after the work was done, because nothing
+ * carried the mission's allocation down to this envelope. This is the one
+ * seam that does: the amount is what Julius reserved for the dispatch, in
+ * micro-dollars, and it becomes both the post-hoc ceiling and the runtime's
+ * own `maxBudgetUsd` stop. Rounded DOWN to whole cents so the envelope never
+ * admits more than the reservation. Turns and runtime keep their bounds.
+ */
+export function hostedLimitsForAllocation(usdMicros: number, base: HostedLimits = DEFAULT_HOSTED_LIMITS): HostedLimits {
+  if (!Number.isFinite(usdMicros) || usdMicros < 0) throw new Error('hosted_allocation_invalid');
+  return Object.freeze({ ...base, maxCostCents: Math.floor(usdMicros / 10_000) });
+}
 
 /**
  * The environment the hosted agent's child process receives.
@@ -122,6 +154,15 @@ export interface HostedEnvelope {
 export function compileHostedEnvelope(input: {
   workspacePath: string;
   requestedModel?: string | null;
+  /**
+   * THE LIMITS THIS RUN WAS ACTUALLY GRANTED.
+   *
+   * `HostedLimits.maxTurns` used to be decorative: `hosted-runner.ts` read
+   * runtime and cost off the limits but built the envelope without them, so the
+   * SDK's turn ceiling always came from `DEFAULT_HOSTED_LIMITS` and a caller
+   * could raise `maxTurns` to forty and still stop at twelve. It binds now.
+   */
+  limits?: HostedLimits;
 }): HostedEnvelope {
   const requested = typeof input.requestedModel === 'string' && input.requestedModel.trim() !== ''
     ? input.requestedModel.trim()
@@ -135,7 +176,7 @@ export function compileHostedEnvelope(input: {
     // to prompt. Containment is the tool restriction, the pinned cwd, the
     // empty settings sources and Relay's post-run inspection — never a dialog.
     permissionMode: 'acceptEdits',
-    maxTurns: DEFAULT_HOSTED_LIMITS.maxTurns,
+    maxTurns: (input.limits ?? DEFAULT_HOSTED_LIMITS).maxTurns,
     settingSources: [],
     includePartialMessages: false,
   };

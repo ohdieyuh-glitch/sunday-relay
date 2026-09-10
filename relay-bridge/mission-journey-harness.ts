@@ -12,7 +12,8 @@
 import { buildAttestation, digest, type ExecutionAttestation } from './attestation';
 import { codingHandoffDigest, type CodingOutcome } from './coding';
 import type { MissionRoleDeps } from './mission';
-import type { HermesOutcome } from './hermes-reviewer';
+import { reviewDiagnostics, type HermesOutcome } from './hermes-reviewer';
+import { UNKNOWN_USAGE } from './reviewer-harness/hermes/runner';
 import type { OpenAiArchitectResult } from './openai-architect';
 import type { CodingTerminalState } from './types';
 
@@ -166,6 +167,11 @@ const approvedReview = (): HermesOutcome => ({
   provider: 'Anthropic',
   requestedModel: 'claude-opus-4-8',
   servedModel: 'claude-opus-4-8',
+  // A fixture observed no transport and ran no process, so every lifecycle
+  // field is null. `UNKNOWN_USAGE` for the same reason: a harness that reports
+  // a cost it did not incur is the thing this record exists to prevent.
+  diagnostics: reviewDiagnostics({ transport: 'local', shape: null, outcome: 'succeeded', provider: 'Anthropic', requestedModel: 'claude-opus-4-8', servedModel: 'claude-opus-4-8' }),
+  usage: UNKNOWN_USAGE,
   result: {
     verdict: 'approved',
     summary: 'The implementation satisfies every acceptance criterion.',
@@ -190,6 +196,11 @@ const rejectedReview = (): HermesOutcome => ({
   provider: 'Anthropic',
   requestedModel: 'claude-opus-4-8',
   servedModel: 'claude-opus-4-8',
+  // A fixture observed no transport and ran no process, so every lifecycle
+  // field is null. `UNKNOWN_USAGE` for the same reason: a harness that reports
+  // a cost it did not incur is the thing this record exists to prevent.
+  diagnostics: reviewDiagnostics({ transport: 'local', shape: null, outcome: 'succeeded', provider: 'Anthropic', requestedModel: 'claude-opus-4-8', servedModel: 'claude-opus-4-8' }),
+  usage: UNKNOWN_USAGE,
   result: {
     verdict: 'changes_required',
     summary: 'The normalizer does not guard empty input.',

@@ -80,7 +80,16 @@ jobs:
   first-live-mission:
     name: Preflight, then the live mission
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    # THE JOB BUDGET IS SHARED OUT, not a taste. It is `JOB_BUDGET_MS` in
+    # relay-bridge/reviewer-deadline.ts and a structural test fails if the two
+    # disagree. 60 -> 90 when the reviewer deadline was derived (50 minutes: six
+    # attempts at 480112 ms); 90 -> 120 when the coder got a derived share of its
+    # own (30 minutes: two attempts at 734386 ms), because Paid Mission 5 spent
+    # both the old 12-turn and 360000 ms ceilings with the work substantially
+    # done. `coder-envelope.test.ts` proves the reviewer share, the coder share,
+    # the architect's own ceiling and a stated infrastructure allowance all fit
+    # inside this number.
+    timeout-minutes: 120
     environment: julius-live-validation
     defaults:
       run:
@@ -119,6 +128,42 @@ jobs:
       RELAY_HOSTED_CODING_MODEL: claude-fable-5
       RELAY_HERMES_PROVIDER: xai
       RELAY_HERMES_MODEL: grok-build-0.1
+      # TWO DEADLINES, IN THIS ORDER, and the order is the point.
+      #
+      # Paid run 34311556047's reviewer failed three times on `review:plan` at
+      # exactly 180 s each with zero bytes and no exit code, because Relay's
+      # window was the ONLY deadline: the engine had none configured and
+      # inherited its SDK default of 600 s with three retries, so Relay's cut
+      # always came first and every distinct provider fault reached the record
+      # as one indistinguishable shape. The reviewer engine now gets a deadline
+      # of its own, well inside Relay's, so it fails first and says why; the
+      # bootstrap refuses if these two are ever put back in the wrong order.
+      #
+      # 90 s is a whole provider request for one review, which the control run
+      # 34306850331 finished in far less — and if a review really needs more,
+      # the engine now says so and the failure is retryable, with three
+      # attempts.
+      #
+      # RELAY'S OWN BACKSTOP IS NO LONGER SET HERE. It was `400000`, chosen as
+      # `timeout-minutes: 60` divided by six reviewer attempts, and guarded
+      # against a modelled engine worst case of 360000 ms. Paid Mission 4's
+      # `review:plan` was cut off at 400093 ms and then SUCCEEDED at 381880 ms,
+      # so the model was optimistic by 21.9 s and the literal it was compared
+      # against was the tightest the job would allow. A literal here also meant
+      # the live composition's reviewer worker could declare a different number
+      # — it declared 240000, which nothing enforced.
+      #
+      # `scripts/julius-reviewer-deadline.mjs` now derives the window from the
+      # analytical model, the durations paid runs were actually observed to
+      # reach, an explicit headroom, and a ceiling owed to the job; the Hermes
+      # bootstrap exports the result and the bridge derives the identical value
+      # for both the transport and the declared worker deadline.
+      #
+      # Waiting longer buys no tokens — the provider bills for what it
+      # generates whether or not Relay is still reading — and the attempt
+      # ceiling is untouched, so this changes how long a failure takes to
+      # become legible, not what a run may spend.
+      HERMES_REQUEST_TIMEOUT_SECONDS: '90'
 
     steps:
       # Pinned to immutable commit SHAs. A mutable tag can be repointed by the
@@ -268,8 +313,18 @@ jobs:
           esac
           [ -f ".github/julius-missions/$MISSION/contract.json" ] || {
             echo "mission_contract_missing: .github/julius-missions/$MISSION/contract.json" >&2; exit 1; }
-          [ -d ".github/julius-missions/$MISSION/workspace" ] || {
-            echo "mission_workspace_seed_missing: .github/julius-missions/$MISSION/workspace" >&2; exit 1; }
+          # A MISSION MUST DECLARE EXACTLY ONE SEED. `workspace/` is a throwaway
+          # tree the mission invented; `slice.txt` names paths of THIS repository
+          # to copy byte-for-byte, for a mission whose subject is Sunday Relay
+          # itself. Neither is a fallback for the other, and a mission declaring
+          # both would leave nothing able to say what the coder was editing —
+          # so both cases are refused here, before the rig is built.
+          seed_dir=".github/julius-missions/$MISSION/workspace"
+          seed_slice=".github/julius-missions/$MISSION/slice.txt"
+          if [ -d "$seed_dir" ] && [ -f "$seed_slice" ]; then
+            echo "mission_seed_ambiguous: $MISSION declares both workspace/ and slice.txt" >&2; exit 1; fi
+          [ -d "$seed_dir" ] || [ -f "$seed_slice" ] || {
+            echo "mission_workspace_seed_missing: neither $seed_dir nor $seed_slice" >&2; exit 1; }
 
           # THE ACCOUNTING NAMESPACE IS THE CONTRACT'S, read from the contract
           # rather than assumed from the directory name: the marker artifacts a
@@ -424,6 +479,13 @@ jobs:
         env:
           # The seed tree is the MISSION's; the script is generic.
           JULIUS_MISSION_DIR: ${{ env.MISSION_DIR }}
+          # SLICE MODE READS A REVISION, NOT THE WORKING TREE. The checkout is
+          # already at this commit, so naming it changes nothing about WHAT is
+          # copied — it changes what could go wrong: an unexpectedly dirty
+          # runner cannot leak an uncommitted file into a paid mission, and the
+          # slice is provably the trusted tree rather than whatever is on disk.
+          # Ignored entirely by a mission that ships its own throwaway tree.
+          JULIUS_SLICE_REV: ${{ github.sha }}
         run: ./.github/julius-live-workspace.sh
 
       - name: Start PostgreSQL 16 and the independent executor
@@ -627,6 +689,11 @@ jobs:
         run: |
           set -uo pipefail
           mkdir -p julius-live-evidence
+          # WHICH REVIEWER ACTUALLY RAN, and under which two deadlines. Written
+          # by the Hermes bootstrap, which prints the same six lines to the
+          # public step log; run 34311556047 had none of them in its bundle.
+          cp /tmp/julius-hermes-bootstrap.evidence.txt \
+            julius-live-evidence/hermes-bootstrap.evidence.txt 2>/dev/null || true
           # The executor answers every refused request with a safe code and,
           # because dry run #2 left nothing to read, now writes one
           # executor-local diagnostic line per refusal to its own stderr:
@@ -672,6 +739,45 @@ jobs:
           # the entries are sha256 scope names, safe to publish.
           docker exec julius-executor sh -c 'ls -1 "$EXECUTOR_RECEIPT_ROOT" 2>/dev/null | head -n 200' \
             > julius-live-evidence/receipt-ids.txt 2>/dev/null || true
+
+          # WHAT THIS MISSION DID NOT DO, PROVEN ANYWAY.
+          #
+          # A healthy mission never crashes, so it never exercises restart
+          # recovery, and the Beta Gate refuses to infer a capability from the
+          # fact that its source is in the tree. Requiring a paid run to break
+          # itself to score the row would be asking the product to lie in the
+          # other direction. So the drill runs here, after the mission, and the
+          # bundle carries its attestation beside the mission's own rows: the
+          # gate then reports RESTART / RECOVERY as CAPABILITY PROVEN — NOT
+          # EXERCISED THIS MISSION, which is the true sentence.
+          #
+          # IN A DATABASE OF ITS OWN, and after the dump has already run, so the
+          # drill's mission cannot appear in this mission's evidence by any
+          # route. Nothing here may fail the job: the mission has already run
+          # and its evidence is already collected, and a missing capability
+          # proof is a row the gate reports as unproven, not a reason to lose
+          # the artifact. No provider credential is involved — the drill's three
+          # role adapters are fakes and only the recovery path is production.
+          # `set -u` is in force and DATABASE_URL is exported by the executor
+          # launch, so a mission that never got that far would ABORT this step
+          # on the expansion below and lose the evidence collected above it.
+          # Guarded, not assumed.
+          if [ -n "${DATABASE_URL:-}" ]; then
+            # ONE DATABASE PER DRILL, and each drill refuses a database that
+            # already holds its run, so none can read another's rows as its own.
+            for drill in recovery-drill failure-recovery-drill repair-loop-drill; do
+              db="julius_${drill//-/_}"
+              if docker exec -e PGPASSWORD julius-postgres createdb -U "$PGUSER" "$db" 2>/dev/null; then
+                DATABASE_URL="${DATABASE_URL%/*}/$db" \
+                  npm run "julius:$drill" --silent -- --out /tmp/julius-capability-proofs > /dev/null 2>&1 || true
+              fi
+            done
+            # The ledger is merged by the drills, so one copy carries all three.
+            cp /tmp/julius-capability-proofs/capability-proofs.tsv \
+               /tmp/julius-capability-proofs/*.transcript.txt \
+               julius-live-evidence/ 2>/dev/null || true
+            rm -rf /tmp/julius-capability-proofs
+          fi
 
       - name: Refuse to publish evidence that contains credential material
         if: always()
@@ -740,7 +846,7 @@ jobs:
           # The reviewer profile holds the xAI credential; it never outlives
           # the job.
           rm -rf /tmp/julius-hermes-home /tmp/julius-hermes-bin 2>/dev/null || true
-          rm -rf /opt/hermes-venv 2>/dev/null || true
+          rm -rf /opt/hermes-venv /opt/hermes-src 2>/dev/null || true
           # The signing key and the ledger lived inside the executor container's
           # own layer, so removing the container removed them. The receipt
           # transport lived on the host, root-owned: it is removed here, after

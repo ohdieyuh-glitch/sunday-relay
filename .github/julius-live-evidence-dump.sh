@@ -57,7 +57,33 @@ dump "SELECT invocation_id,tool_id,state,requested_at FROM relay_wonderland.juli
 # One row names no task: the run loop's own `julius.run.failed`, the run's ending rather than a
 # worker's. The pipeline emits that type too — an unresolvable role, a policy denial, a repair it
 # cannot plan — and those DO name their task. Blank means the run's ending; the type alone does not.
-dump "SELECT e.payload->>'taskId' AS task_id,t.role,e.event_type,e.payload->'facts'->>'code' AS julius_code,e.payload->'facts'->>'failureClass' AS failure_class,e.payload->'facts'->>'errorRetryable' AS error_retryable,e.payload->'facts'->>'reasonCode' AS reason_code,e.payload->'facts'->>'action' AS recovery_action,e.occurred_at FROM relay_wonderland.events e LEFT JOIN relay_wonderland.julius_tasks t ON t.task_id=e.payload->>'taskId' WHERE e.event_type IN ('julius.task.failed','julius.provider.failure','julius.run.failed','julius.retry.scheduled','julius.recovery.action') ORDER BY e.occurred_at" failures.tsv
+dump "SELECT e.payload->>'taskId' AS task_id,t.role,e.event_type,e.payload->'facts'->>'code' AS julius_code,e.payload->'facts'->>'failureClass' AS failure_class,e.payload->'facts'->>'errorRetryable' AS error_retryable,e.payload->'facts'->>'reasonCode' AS reason_code,e.payload->'facts'->>'action' AS recovery_action,e.occurred_at FROM relay_wonderland.events e LEFT JOIN relay_wonderland.julius_tasks t ON t.task_id=e.payload->>'taskId' WHERE e.event_type IN ('julius.task.failed','julius.provider.failure','julius.run.failed','julius.retry.scheduled','julius.recovery.action','julius.budget.denied') ORDER BY e.occurred_at" failures.tsv
+
+# WHAT EACH DISPATCH WAS ALLOWED TO SPEND, AND WHAT IT SPENT.
+# Paid run 34037313976 was refused for cost and the bundle could not say what the
+# ceiling was, who set it, or how much of the mission remained — the amount lived
+# only in a message nothing persisted. The mission contract now derives a bounded
+# allocation per Coding Agent dispatch (`julius-allocation.v1`); these are the
+# rows that prove which round was granted what, and what the ledger settled.
+dump "SELECT e.payload->>'taskId' AS task_id,e.event_type,e.payload->'facts'->>'role' AS role,e.payload->'facts'->>'allocatedUsdMicros' AS allocated_usd_micros,e.payload->'facts'->>'allocationBasis' AS allocation_basis,e.payload->'facts'->>'shareUsdMicros' AS share_usd_micros,e.payload->'facts'->>'remainingUsdMicros' AS remaining_usd_micros,e.payload->'facts'->>'allocationPolicy' AS allocation_policy,e.payload->'facts'->>'usdMicros' AS settled_usd_micros,e.payload->'facts'->>'costBasis' AS cost_basis,e.payload->'facts'->>'estimatedUsdMicros' AS estimated_usd_micros,e.payload->'facts'->>'reason' AS reason,e.payload->'facts'->>'reservationId' AS reservation_id,e.occurred_at FROM relay_wonderland.events e WHERE e.event_type IN ('julius.budget.allocated','julius.budget.reserved','julius.budget.settled','julius.budget.denied') ORDER BY e.occurred_at" budget.tsv
+
+# WHAT THE MISSION COST, PER ROLE, WITH THE UNKNOWN PART STILL VISIBLE.
+#
+# `budget.tsv` above holds every component; this is the arithmetic over them, done here so
+# nobody has to do it by hand over a TSV — which is precisely how Live Run 3's $0.608861 came
+# to be quoted as a mission total. That run settled ONE component with a runtime-reported
+# figure and THREE with nothing at all, and the honest reading is "at least $0.61".
+#
+# THE THREE SUMS ARE DELIBERATELY NOT ONE.
+#   `known_usd_micros`     — only PROVIDER_REPORTED and MEASURED_FROM_USAGE. Money someone was
+#                            charged. A FLOOR whenever `unknown_components` is non-zero.
+#   `estimated_usd_micros` — a harness's own arithmetic (Hermes writes an `estimated_cost` from
+#                            token counts and its own price table). Recorded, never added to the
+#                            known total: an estimate is not a bill.
+#   `unknown_components`   — settlements that reported no amount at all. NOT zero-cost ones.
+#
+# Adding these three together would produce the very number this file exists to prevent.
+dump "SELECT COALESCE(e.payload->'facts'->>'role','UNKNOWN_ROLE') AS role,count(*)::text AS components,COALESCE(sum(CASE WHEN e.payload->'facts'->>'costBasis' IN ('PROVIDER_REPORTED','MEASURED_FROM_USAGE') THEN (e.payload->'facts'->>'usdMicros')::numeric ELSE 0 END),0)::text AS known_usd_micros,COALESCE(sum(COALESCE((e.payload->'facts'->>'estimatedUsdMicros')::numeric,0)),0)::text AS estimated_usd_micros,count(*) FILTER (WHERE e.payload->'facts'->>'usdMicros' IS NULL)::text AS unknown_components,count(*) FILTER (WHERE e.payload->'facts'->>'costBasis'='ESTIMATED')::text AS estimated_components FROM relay_wonderland.events e WHERE e.event_type='julius.budget.settled' GROUP BY 1 ORDER BY 1" cost-accounting.tsv
 
 # THE FACTS THAT LET SOMEONE DEBUG THE CLASS, WITHOUT BUYING A SECOND PAID RUN.
 #
@@ -84,4 +110,51 @@ dump "SELECT e.payload->>'taskId' AS task_id,t.role,e.event_type,e.payload->'fac
 #
 # `NULL` is a real answer everywhere and always means "not known here", never zero: a reviewer
 # that never started has no exit code, and 0 would say it exited cleanly.
-dump "SELECT e.payload->>'taskId' AS task_id,t.role,e.payload->'facts'->>'diag_stage' AS stage,e.payload->'facts'->>'diag_transport' AS transport,e.payload->'facts'->>'diag_provider' AS provider,e.payload->'facts'->>'diag_servedModel' AS served_model,e.payload->'facts'->>'diag_processExitCode' AS process_exit_code,e.payload->'facts'->>'diag_timedOut' AS timed_out,e.payload->'facts'->>'diag_outputBytesObserved' AS output_bytes_observed,e.payload->'facts'->>'diag_outputByteLimit' AS output_byte_limit,e.payload->'facts'->>'diag_outputTruncated' AS output_truncated,e.payload->'facts'->>'diag_jsonDetected' AS json_detected,e.payload->'facts'->>'diag_jsonParseable' AS json_parseable,e.payload->'facts'->>'diag_reviewObjectCount' AS review_object_count,e.payload->'facts'->>'diag_verdictPresent' AS verdict_present,e.payload->'facts'->>'diag_verdictValid' AS verdict_valid,e.payload->'facts'->>'diag_summaryPresent' AS summary_present,e.payload->'facts'->>'diag_failureShape' AS failure_shape,e.payload->'facts'->>'diag_providerHttpStatus' AS provider_http_status,e.payload->'facts'->>'diag_serviceHttpStatus' AS service_http_status,e.payload->'facts'->>'diag_requestedModel' AS requested_model,e.payload->'facts'->>'diag_responseId' AS response_id,e.payload->'facts'->>'diag_validationPassed' AS validation_passed,e.payload->'facts'->>'diag_validationReasonCode' AS validation_reason_code,e.payload->'facts'->>'diag_validationField' AS validation_field,e.payload->'facts'->>'diag_resultSubtype' AS result_subtype,e.payload->'facts'->>'diag_isError' AS is_error,e.payload->'facts'->>'diag_numTurns' AS num_turns,e.payload->'facts'->>'diag_toolUseCount' AS tool_use_count,e.payload->'facts'->>'diag_permissionDenials' AS permission_denials,e.payload->'facts'->>'diag_implementationPresent' AS implementation_present,e.payload->'facts'->>'code' AS julius_code,e.payload->'facts'->>'errorRetryable' AS retryable,e.occurred_at FROM relay_wonderland.events e LEFT JOIN relay_wonderland.julius_tasks t ON t.task_id=e.payload->>'taskId' WHERE e.payload->'facts'->>'diag_transport' IS NOT NULL ORDER BY e.occurred_at" worker-diagnostics.tsv
+dump "SELECT e.payload->>'taskId' AS task_id,t.role,e.payload->'facts'->>'diag_stage' AS stage,e.payload->'facts'->>'diag_transport' AS transport,e.payload->'facts'->>'diag_provider' AS provider,e.payload->'facts'->>'diag_servedModel' AS served_model,e.payload->'facts'->>'diag_processExitCode' AS process_exit_code,e.payload->'facts'->>'diag_timedOut' AS timed_out,e.payload->'facts'->>'diag_outputBytesObserved' AS output_bytes_observed,e.payload->'facts'->>'diag_outputByteLimit' AS output_byte_limit,e.payload->'facts'->>'diag_outputTruncated' AS output_truncated,e.payload->'facts'->>'diag_jsonDetected' AS json_detected,e.payload->'facts'->>'diag_jsonParseable' AS json_parseable,e.payload->'facts'->>'diag_reviewObjectCount' AS review_object_count,e.payload->'facts'->>'diag_verdictPresent' AS verdict_present,e.payload->'facts'->>'diag_verdictValid' AS verdict_valid,e.payload->'facts'->>'diag_summaryPresent' AS summary_present,e.payload->'facts'->>'diag_failureShape' AS failure_shape,e.payload->'facts'->>'diag_providerHttpStatus' AS provider_http_status,e.payload->'facts'->>'diag_serviceHttpStatus' AS service_http_status,e.payload->'facts'->>'diag_processStarted' AS process_started,e.payload->'facts'->>'diag_processPidObserved' AS process_pid_observed,e.payload->'facts'->>'diag_firstOutputObserved' AS first_output_observed,e.payload->'facts'->>'diag_firstOutputAfterMs' AS first_output_after_ms,e.payload->'facts'->>'diag_elapsedMs' AS elapsed_ms,e.payload->'facts'->>'diag_timeoutMs' AS timeout_ms,e.payload->'facts'->>'diag_exitObserved' AS exit_observed,e.payload->'facts'->>'diag_signalSent' AS signal_sent,e.payload->'facts'->>'diag_cleanupCompleted' AS cleanup_completed,e.payload->'facts'->>'diag_providerRequestStarted' AS provider_request_started,e.payload->'facts'->>'diag_packetBytes' AS packet_bytes,e.payload->'facts'->>'diag_requestedModel' AS requested_model,e.payload->'facts'->>'diag_responseId' AS response_id,e.payload->'facts'->>'diag_validationPassed' AS validation_passed,e.payload->'facts'->>'diag_validationReasonCode' AS validation_reason_code,e.payload->'facts'->>'diag_validationField' AS validation_field,e.payload->'facts'->>'diag_validationClaimPhrase' AS validation_claim_phrase,e.payload->'facts'->>'diag_planAttempts' AS plan_attempts,e.payload->'facts'->>'diag_reviewAttempts' AS review_attempts,e.payload->'facts'->>'attempt' AS dispatch_attempt,e.payload->'facts'->>'diag_resultSubtype' AS result_subtype,e.payload->'facts'->>'diag_isError' AS is_error,e.payload->'facts'->>'diag_numTurns' AS num_turns,e.payload->'facts'->>'diag_toolUseCount' AS tool_use_count,e.payload->'facts'->>'diag_permissionDenials' AS permission_denials,e.payload->'facts'->>'diag_implementationPresent' AS implementation_present,e.payload->'facts'->>'diag_costUsdMicros' AS cost_usd_micros,e.payload->'facts'->>'diag_costCeilingUsdMicros' AS cost_ceiling_usd_micros,e.payload->'facts'->>'diag_costSource' AS cost_source,e.payload->'facts'->>'diag_runtimeStarted' AS runtime_started,e.payload->'facts'->>'diag_outcome' AS outcome,e.payload->'facts'->>'diag_startedAt' AS started_at,e.payload->'facts'->>'diag_completedAt' AS completed_at,e.payload->'facts'->>'diag_contractRevision' AS contract_revision,e.payload->'facts'->>'diag_contractBindingDigest' AS contract_binding_digest,e.payload->'facts'->>'diag_costBasis' AS cost_basis,e.payload->'facts'->>'diag_estimatedCostUsdMicros' AS estimated_cost_usd_micros,e.payload->'facts'->>'diag_inputTokens' AS input_tokens,e.payload->'facts'->>'diag_outputTokens' AS output_tokens,e.payload->'facts'->>'evidenceCount' AS evidence_count,e.event_type,e.payload->'facts'->>'code' AS julius_code,e.payload->'facts'->>'errorRetryable' AS retryable,e.occurred_at FROM relay_wonderland.events e LEFT JOIN relay_wonderland.julius_tasks t ON t.task_id=e.payload->>'taskId' WHERE e.payload->'facts'->>'diag_transport' IS NOT NULL ORDER BY e.occurred_at" worker-diagnostics.tsv
+
+# WHAT THE RUN LEARNED, AND WHO IT RAN FOR.
+#
+# Two tables the bundle has never carried, and both answer a Beta Gate row that could otherwise
+# only guess.
+#
+# `julius_brain_entries` is the Project Brain. Until now it had one writer — the bootstrap seed —
+# so a bundle could not distinguish "the run recorded nothing" from "nothing was ever dumped".
+# Identifiers, kind, revision and time only: `safe_content` is deliberately NOT selected, because
+# it is worker-authored prose and this bundle's rule is that no model-written text has a column.
+#
+# `execution_sessions.player_id` is the account the mission belongs to. Both bounded missions
+# declare tenant `tenant` and run under an operator token, so today it reads as the operator and
+# the ACCOUNT / ONBOARDING row correctly FAILS; the day a real account starts a mission it reads
+# as that account. Identifiers only — the same class the run and mission columns already carry.
+dump "SELECT entry_id,entry_kind,worker_id,task_id,revision,created_at FROM relay_wonderland.julius_brain_entries ORDER BY revision" project-brain.tsv
+dump "SELECT execution_id,mission_id,project_id,player_id,agent_id,state FROM relay_wonderland.execution_sessions ORDER BY execution_id" sessions.tsv
+
+# WHAT THE CODER WAS CHARGED WITH, AND WHETHER IT WAS AGREED BEFORE IT RAN.
+#
+# A build may not be dispatched without a LOCKED task contract, so this table is what turns that
+# from a code path into evidence: the bundle shows the revision, its lock state, the instant it
+# stopped being arguable and who accepted it. Without it, "the reviewer graded against the same
+# agreement the coder worked under" is unfalsifiable after the database is destroyed.
+#
+# IDENTIFIERS AND STATE ONLY. `safe_terms` is deliberately NOT selected — the objective, the
+# criteria statements and the scope are prose, and some of it is architect-authored after a
+# revision, which is exactly the class this bundle refuses a column. `binding_digest` IS selected
+# and is safe by construction: it is a sha256 of the terms, never the terms.
+dump "SELECT contract_id,contract_revision,task_id,state,binding_digest,locked_at,locked_by_evaluator_id,created_at FROM relay_wonderland.julius_task_contracts ORDER BY contract_id,contract_revision" task-contracts.tsv
+
+# WHAT HAPPENED TO THE AGREEMENT, as identifiers and tokens only. A refusal here is the
+# reason a coder or reviewer was NOT dispatched — a stale handoff, a review that did not hold
+# the coder's binding, a lock that was never taken — and without it the bundle could show a
+# task FAILED under a contract that looks perfectly locked. No terms, no prose: revisions,
+# digests, task ids and the closed reason code. A bound task's CLAIM is here too — the revision
+# and digest the coder and the reviewer actually executed under — so the gate can compare what
+# was locked with what was run, rather than trusting that the two are one document.
+dump "SELECT e.payload->>'taskId' AS task_id,e.event_type,e.payload->'facts'->>'reasonCode' AS reason_code,e.payload->'facts'->>'disposition' AS disposition,e.payload->'facts'->>'evaluatorId' AS evaluator_id,e.payload->'facts'->>'evidenceCount' AS evidence_count,e.payload->'facts'->>'evidenceIds' AS evidence_ids,e.payload->'facts'->>'contractTaskId' AS contract_task_id,e.payload->'facts'->>'contractId' AS contract_id,e.payload->'facts'->>'contractRevision' AS contract_revision,e.payload->'facts'->>'bindingDigest' AS binding_digest,e.payload->'facts'->>'recordedRevision' AS recorded_revision,e.payload->'facts'->>'currentRevision' AS current_revision,e.payload->'facts'->>'reviewRevision' AS review_revision,e.payload->'facts'->>'implementationRevision' AS implementation_revision,e.payload->'facts'->>'role' AS role,e.occurred_at FROM relay_wonderland.events e WHERE e.event_type IN('julius.contract.proposed','julius.contract.challenged','julius.contract.locked','julius.contract.refused','julius.contract.disposition') OR (e.event_type='julius.task.claimed' AND e.payload->'facts'->>'contractId' IS NOT NULL) ORDER BY e.occurred_at" contract-events.tsv
+
+# WHAT THE RUN DID, ROW BY ROW. The trajectory is the record evals read: every context compile,
+# dispatch, retry, finding, verification and repair round, with the worker and provider that
+# answered, what it cost, how long it took, and — for a bound task — the contract revision and
+# digest it ran under. Without it the bundle can show what a run ENDED as and not the path it
+# took there; a paid rerun's repair path and cost are these rows. `safe_facts` is the closed
+# vocabulary the runtime writes, never prose.
+dump "SELECT event_kind,task_id,worker_id,provider_id,outcome,usd_micros,duration_ms,input_tokens,output_tokens,safe_facts,occurred_at FROM relay_wonderland.julius_trajectory_events ORDER BY occurred_at,trajectory_event_id" trajectory.tsv

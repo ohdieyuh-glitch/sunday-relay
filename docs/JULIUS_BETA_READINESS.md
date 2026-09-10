@@ -571,7 +571,8 @@ runner user, which is the file-reading coding agent's user; a sudo or
 Docker-socket holder can still read it. The signing key and the ledger stay
 under `/executor-private` and are never bind-mounted anywhere; each sandbox is
 handed only `<root>/<sha256(sandboxId)>` at `/julius-receipts-root`: the preflight
-reads that from the daemon's own mount table while its third sandbox exists, and
+reads that from the daemon's own mount table while the sandbox running its
+receipt-scope probe exists, and
 proves from inside that the workload, uid 65532, cannot even list the root-owned
 receipt mount. The executor-private shape is kept
 in the topology job as an expected-failure regression: green only when the

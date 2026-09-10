@@ -1,5 +1,6 @@
 import{describe,expect,it}from'vitest';import{JuliusDispatchError,JuliusProviderHealthRegistry,JuliusProviderRouter,JuliusWorkerRegistry,evaluateJuliusPolicy,normalizeProviderError,type JuliusCardPolicy,type JuliusProviderAdapter,type JuliusWorker}from'.';
 import{safeReviewDiagnostics}from'./julius-router';
+import{validateArchitectPlan}from'../prompt-architect/prompt-architect-plan';
 const policy:JuliusCardPolicy={revision:'card-7',autonomy:'UNCHAINED',allowedProviders:['openai','anthropic'],capabilities:['code'],network:false,filesystemMutation:true,fallback:true,automaticRetry:true,subagents:{allowed:true,maxDepth:2,maxActive:2,maxTotal:4},iterativeReview:{allowed:true,maxRounds:3},concurrency:2,approvals:['ACCESS_NETWORK']};
 const worker=(id:string,providerId:string,adapterId=id):JuliusWorker=>({workerId:id,role:'CODING_AGENT',providerId,adapterId,capabilities:['code'],taskTypes:['implementation'],concurrencyLimit:1,timeoutMs:1000,maxRetries:2,status:'AVAILABLE'});
 describe('Julius C.A.R.D. policy',()=>{it('keeps hard denials in Unchained mode',()=>{expect(evaluateJuliusPolicy(policy,{operation:'UNCHAINED_CONTINUATION'}).effect).toBe('LIMITED');expect(evaluateJuliusPolicy(policy,{operation:'ACCESS_NETWORK'}).effect).toBe('DENY');expect(evaluateJuliusPolicy(policy,{operation:'USE_PROVIDER',providerId:'forbidden'}).effect).toBe('DENY');});it('bounds sub-agents and gauntlet rounds',()=>{expect(evaluateJuliusPolicy(policy,{operation:'SPAWN_SUBAGENT',depth:1,active:0,total:1}).effect).toBe('LIMITED');expect(evaluateJuliusPolicy(policy,{operation:'SPAWN_SUBAGENT',depth:2,active:0,total:1}).reasonCode).toBe('CARD_SUBAGENT_DEPTH_LIMIT');expect(evaluateJuliusPolicy(policy,{operation:'CONTINUE_ITERATIVE_REVIEW',round:3}).effect).toBe('DENY');});});
@@ -248,5 +249,109 @@ describe('safe review diagnostics', () => {
     expect(JSON.stringify(error.diagnostics)).not.toContain('FAKESECRET123456789');
     // And an error given none carries none, rather than an empty shell.
     expect(new JuliusDispatchError('TIMEOUT', true, 'safe', 'review_timeout').diagnostics).toBeNull();
+  });
+});
+
+/**
+ * THE TWO ENDS OF THE ARCHITECT REFUSAL, PINNED TOGETHER.
+ *
+ * `validateArchitectPlan` decides WHERE a false-work claim was and WHICH phrase
+ * it was; `safeReviewDiagnostics` decides what may be published. Those are
+ * different files with different rules, and the gap between them is not
+ * theoretical: `safeFieldName` took at most two dotted segments, so every
+ * nested or indexed answer became null on the way to the artifact. Paid runs
+ * 34185920678 and 34186711214 each recorded `plan_false_work_claim` with an
+ * empty `validation_field`, and there was no way to tell which of the plan's
+ * fields had tripped it.
+ *
+ * This is the only place both sides are exercised together, so a change to
+ * either grammar that stops the answer reaching the artifact fails here rather
+ * than in a paid run.
+ */
+describe('an architect refusal survives the diagnostics allowlist intact', () => {
+  const refuse = (change: (plan: Record<string, unknown>) => void) => {
+    const plan: Record<string, unknown> = {
+      objectiveSummary: 'Implement the mission fixture change.',
+      assumptions: [{ id: 'A1', statement: 'The fixture exists.', confidence: 'medium' }],
+      unresolvedQuestions: [],
+      requirements: [{ id: 'R1', statement: 'It must pass.', rationale: 'The contract says so.' }],
+      architectureDecisions: [{ id: 'D1', decision: 'Edit in place.', rationale: 'Smallest change.', alternativesConsidered: [], accepted: false }],
+      implementationSteps: [{ order: 1, description: 'Edit the fixture.', filesTouched: ['fixtures/a.ts'] }],
+      acceptanceCriteria: ['AC-1'],
+      testPlan: ['npm test'],
+      risks: [{ id: 'RISK1', risk: 'None material.', mitigation: 'Review.', severity: 'low' }],
+      prohibitedActions: [],
+      proposedContractAmendments: [],
+      contextRefs: [],
+      handoff: {
+        objective: 'Implement the fixture change.',
+        boundedTask: 'Edit exactly the fixture files and make the test pass.',
+        acceptanceCriteria: ['AC-1'],
+        requiredTests: ['npm test'],
+        allowedFileScope: ['fixtures/'],
+        prohibitedActions: [],
+        grantedTools: [],
+        missionContractRef: 'contract-1',
+        environmentRef: null,
+        expectedEvidence: ['TEST'],
+      },
+    };
+    change(plan);
+    const validation = validateArchitectPlan(plan);
+    expect(validation.ok, 'the fixture must be refused for this to test anything').toBe(false);
+    if (validation.ok) throw new Error('unreachable');
+    return validation;
+  };
+
+  it('publishes the path and the phrase for every shape the walk can produce', () => {
+    const cases: readonly (readonly [string, (plan: Record<string, unknown>) => void])[] = [
+      ['a top-level field', (p) => { p.objectiveSummary = 'files were edited'; }],
+      ['a nested field, three segments deep', (p) => { (p.handoff as Record<string, unknown>).boundedTask = 'i edited the module'; }],
+      ['an indexed element', (p) => { p.contextRefs = ['ok', 'tests were run']; }],
+      ['an index inside a nested object', (p) => { (p.architectureDecisions as Record<string, unknown>[])[0]!.rationale = 'i ran the tests'; }],
+      ['a key no name could be published for', (p) => { p['not a name'] = 'i edited'; }],
+    ];
+    for (const [name, change] of cases) {
+      const validation = refuse(change);
+      const safe = safeReviewDiagnostics({
+        transport: 'openai', stage: 'plan', jsonParseable: true, validationPassed: false,
+        validationReasonCode: validation.reasonCode,
+        validationField: validation.reasonField ?? null,
+        validationClaimPhrase: validation.reasonClaim ?? null,
+      })!;
+      expect(safe.validationField, `${name}: the path must survive`).toBe(validation.reasonField);
+      expect(safe.validationField, `${name}: and must not be null`).not.toBeNull();
+      expect(safe.validationClaimPhrase, `${name}: the phrase must survive`).toBe(validation.reasonClaim);
+      expect(safe.validationReasonCode).toBe('plan_false_work_claim');
+    }
+  });
+
+  it('still refuses a path carrying anything a sentence needs', () => {
+    // The widened grammar is a PATH grammar, not a free-text one. The composite
+    // `path :: phrase` form an earlier draft emitted is exactly what it drops —
+    // which is why the two halves travel in two columns.
+    for (const hostile of [
+      'plan.testPlan[1] :: tests were run',
+      'plan.<field>',
+      'plan.handoff.boundedTask; DROP TABLE',
+      'plan.handoff.boundedTask files were edited',
+      `plan.${'a'.repeat(200)}`,
+      // ASSEMBLED, NOT WRITTEN: a credential-shaped literal in this file is a
+      // finding for `relay-repository-boundary.mjs`, which is that scanner
+      // working. The pieces join at runtime so the source carries no key shape
+      // and the allowlist still sees one.
+      ['sk', 'ant', 'notarealkey000000000000'].join('-'),
+    ]) {
+      expect(safeReviewDiagnostics({ transport: 'openai', validationField: hostile })!.validationField, hostile).toBeNull();
+    }
+  });
+
+  it('and a claim phrase that is not one of the validator tokens', () => {
+    for (const hostile of ['Files Were Edited', 'i edited the file at /home/founder', 'TOKEN', '']) {
+      expect(safeReviewDiagnostics({ transport: 'openai', validationClaimPhrase: hostile })!.validationClaimPhrase, hostile).toBeNull();
+    }
+    expect(safeReviewDiagnostics({ transport: 'openai', validationClaimPhrase: 'tests_were_run' })!.validationClaimPhrase).toBe('tests_were_run');
+    // A role that validated no plan reports no phrase, rather than an empty one.
+    expect(safeReviewDiagnostics({ transport: 'local', failureShape: 'review_json_absent' })!.validationClaimPhrase).toBeNull();
   });
 });

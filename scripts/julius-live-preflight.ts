@@ -30,9 +30,12 @@
  *     coding agent. Proving `git rev-parse` alone would not catch it.
  *
  * IT SPENDS NOTHING. No provider client is constructed and no credential is
- * printed; the only commands it runs are `git rev-parse HEAD` and
- * `git --no-pager diff` — the same two reads the live coding adapter issues —
- * and it restores the file it touched.
+ * printed; the only commands it runs are `git rev-parse HEAD`, `git ls-files`
+ * and `git --no-pager diff` — reads, two of them the ones the live coding
+ * adapter itself issues — and it restores, byte for byte, the one file it
+ * touched. WHICH file that is, it asks git rather than assuming: see
+ * `julius-live-probe-file.ts`, and run 34433098911, where the assumed name did
+ * not exist in the first mission sliced out of Sunday Relay.
  *
  * IT IS A LEGITIMATE PARTICIPANT IN THE DURABLE SCHEMA. Free dry run #2
  * (run 33635375764) failed at its first `createSandbox` with SQLSTATE 23503:
@@ -55,6 +58,7 @@ import { RemoteExecutorControlPlane } from '../src/relay/workspace/julius-tools/
 import type { ExecutorOperation } from '../src/relay/workspace/julius-tools/executor-operation-request';
 import { EXECUTOR_SANDBOX_LIMITS, EXECUTOR_SANDBOX_POLICY } from '../relay-bridge/julius/sandbox-limits';
 import { cleanupPreflightIdentity, migrateIfNeeded, preflightIdentityFor, preflightNonce, seedPreflightIdentity, seedPreflightInvocation, type PreflightIdentity } from './julius-live-preflight-identity';
+import { resolveProbeFile } from './julius-live-probe-file';
 import type {
   JuliusSandboxLimits,
   JuliusSandboxPolicy,
@@ -313,8 +317,11 @@ async function roundTrips(pool: Pool, identity: PreflightIdentity, out: (line: s
   out(`  sandbox: network=${PREFLIGHT_POLICY.network} workspaceBytes=${PREFLIGHT_LIMITS.workspaceBytes} outputBytes=${PREFLIGHT_LIMITS.outputBytes}`);
 
   const marker = `julius-live-preflight-${Date.now()}`;
-  const probeFile = join(workspace, 'README.md');
-  let restore: string | null = null;
+  /* Resolved from git's own tracked list once the sandbox is proven, never
+   * assumed from a filename. See `julius-live-probe-file.ts`. */
+  let probeFile: string | null = null;
+  let probePath = '(none chosen)';
+  let restore: Buffer | null = null;
   try {
     const result = await runInSandbox('git rev-parse HEAD');
     out('  createSandbox / prepareWorkspace: OK (ceiling enforceable, ancestry unrenameable, mount live)');
@@ -335,12 +342,45 @@ async function roundTrips(pool: Pool, identity: PreflightIdentity, out: (line: s
     out(`  base revision resolved inside the sandbox: ${revision}`);
     out('  receipts verified against EXECUTOR_KEY_ID — attestation is configured.');
 
+    /* WHICH FILE TO WRITE TO, ASKED OF GIT RATHER THAN ASSUMED.
+     *
+     * The probe needs a file `git diff` will report, so it asks the sandbox's
+     * OWN git — the same view that will capture the mission's diff — what it
+     * tracks, and picks the first tracked text file from that list. Until
+     * Mission 4 this was the literal string `README.md`: true of every mission
+     * seeded from a throwaway tree, and false of the first mission sliced out
+     * of Sunday Relay itself, which failed here on ENOENT before reaching a
+     * provider. A workspace with nothing tracked and readable cannot produce a
+     * reviewable diff at all, so that is a stated failure, not a skip. */
+    const resolved = await resolveProbeFile(runInSandbox, (relative) => readFileSync(join(workspace, relative)));
+    if (!resolved.ok && resolved.failure === 'list_failed') {
+      out('PREFLIGHT FAILED: the sandbox could not list the workspace\'s tracked files.');
+      out('  Without that list the host→sandbox hand-off cannot be probed at all.');
+      out(`  stderr (first 400 chars): ${resolved.stderr.slice(0, 400)}`);
+      return 1;
+    }
+    if (!resolved.ok) {
+      out('PREFLIGHT FAILED: the mission workspace has no tracked text file to probe the hand-off with.');
+      out(`  git tracks ${resolved.tracked} path(s); ${resolved.examined} were examined and none could carry the proof.`);
+      for (const rejection of resolved.rejected.slice(0, 10)) out(`    rejected ${rejection.path}: ${rejection.reason}`);
+      out('  A workspace whose files git does not track produces an empty `git diff`, so the Independent');
+      out('  Reviewer would be handed nothing no matter what the coding agent wrote. Check that the');
+      out('  provisioner committed the seed (throwaway-tree mode) or the slice (slice mode).');
+      return 1;
+    }
+    probePath = resolved.path;
+    probeFile = join(workspace, probePath);
+    restore = resolved.content;
+    out(`  hand-off probe file, chosen from git's own tracked list: ${probePath} (${restore.length} bytes; ${resolved.examined} of ${resolved.tracked} tracked path(s) examined)`);
+
     /* The hand-off itself: write on the HOST exactly as the coding agent
      * does, then capture the diff from a sandbox exactly as the mission does,
      * and require the change to be visible. An empty diff here means the
-     * Independent Reviewer would be handed nothing to review. */
-    restore = readFileSync(probeFile, 'utf8');
-    writeFileSync(probeFile, `${restore}\n${marker}\n`);
+     * Independent Reviewer would be handed nothing to review.
+     * Bytes, not a decoded string: the file is restored EXACTLY as found, so a
+     * missing trailing newline or a CRLF ending cannot become a diff the
+     * mission never asked for. */
+    writeFileSync(probeFile, Buffer.concat([restore, Buffer.from(`\n${marker}\n`, 'utf8')]));
     const diff = await runInSandbox('git --no-pager diff');
     if (diff.status !== 'SUCCEEDED' || diff.exitCode !== 0) {
       out('PREFLIGHT FAILED: the sandbox could not capture a workspace diff.');
@@ -349,17 +389,19 @@ async function roundTrips(pool: Pool, identity: PreflightIdentity, out: (line: s
     }
     if (!diff.stdout.includes(marker)) {
       out('PREFLIGHT FAILED: a change written on the host did NOT appear in the diff captured inside the sandbox.');
-      out(`  the diff was ${diff.stdout.length} bytes and did not contain the probe marker.`);
+      out(`  the probe wrote to ${probePath}; the diff was ${diff.stdout.length} bytes and did not contain the marker.`);
       out('  The Independent Reviewer would be handed an empty diff — a review of nothing — after the');
       out('  mission had already paid an architect and a coding agent. Common causes: the deliverables are');
       out('  untracked (git diff never reports those), the workspace is not the live bind mount, or git');
       out('  refused the repository inside the sandbox.');
       return 1;
     }
-    out(`  host-written change is visible in the sandbox diff (${diff.stdout.length} bytes) — the reviewer will see real work.`);
+    out(`  host-written change to ${probePath} is visible in the sandbox diff (${diff.stdout.length} bytes) — the reviewer will see real work.`);
 
     /* The receipt transport's isolation. The scope itself is proven from the daemon's mount
-     * table while the third sandbox exists (`proveReceiptScope`, between prepare and execute).
+     * table while THE SANDBOX THAT RUNS THE SCOPE PROBE exists (`proveReceiptScope`, between
+   * prepare and execute) — named by its role, not counted, because the number of round-trips
+   * before it has already changed once.
      * What is proven from INSIDE is the workload's view: it runs as uid 65532, cannot list the
      * root-owned receipt mount at all, and finds nothing under /executor-private. */
     const scope = await runInSandbox([
@@ -386,8 +428,8 @@ async function roundTrips(pool: Pool, identity: PreflightIdentity, out: (line: s
   } finally {
     // The probe must leave the mission's workspace exactly as it found it, or
     // the run would open with a diff nobody asked for.
-    if (restore !== null) {
-      try { writeFileSync(probeFile, restore); } catch { out('  WARNING: the preflight probe could not restore README.md.'); }
+    if (restore !== null && probeFile !== null) {
+      try { writeFileSync(probeFile, restore); } catch { out(`  WARNING: the preflight probe could not restore ${probePath}.`); }
     }
   }
 }
