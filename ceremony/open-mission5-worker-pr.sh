@@ -26,6 +26,20 @@ BODY_FILE="${PR_BODY_FILE:-PR_BODY_MISSION5.md}"
 
 APP_ID="${JULIUS_WORKER_APP_ID:-${1:-}}"
 [ -n "$APP_ID" ] || { echo 'need the julius-worker App ID: export JULIUS_WORKER_APP_ID=<id> (or pass it as $1)' >&2; exit 2; }
+
+# THE APP ID IS NOT THE BOT USER ID, and they are easy to confuse because the
+# bot's commit address is built from the USER id:
+#   325202980+julius-worker[bot]@users.noreply.github.com
+# That number is the bot's user id and appears as `user.id` on every PR it
+# opens. The App ID is a different, much smaller number, on the app's settings
+# page (Settings -> Developer settings -> GitHub Apps -> julius-worker -> "App ID").
+# Signing a JWT with the user id yields a 401 that used to surface as a Python
+# KeyError several lines later, which is how one run died having created nothing.
+if [ "$APP_ID" = '325202980' ]; then
+  echo 'JULIUS_WORKER_APP_ID is 325202980, which is the BOT USER id, not the App ID.' >&2
+  echo 'Find the App ID on the app settings page for julius-worker; it is a much smaller number.' >&2
+  exit 2
+fi
 [ -n "${JULIUS_WORKER_APP_PEM:-}" ] || { echo 'JULIUS_WORKER_APP_PEM is not set in this shell' >&2; exit 2; }
 [ -f "$BODY_FILE" ] || { echo "PR body not found: $BODY_FILE" >&2; exit 2; }
 
@@ -64,11 +78,21 @@ jwt_sig="$(printf '%s.%s' "$jwt_header" "$jwt_claim" \
   | openssl dgst -binary -sha256 -sign <(printf '%s' "$JULIUS_WORKER_APP_PEM") | b64)"
 JWT="${jwt_header}.${jwt_claim}.${jwt_sig}"
 
+# Each step says what GitHub actually answered. A missing field used to raise a
+# KeyError and die under `set -e` with a traceback and no diagnosis; GitHub's own
+# message ("A JWT could not be decoded", "Integration not found") names the fault.
+# The reader is a FILE, not inline Python: inline Python inside this script is
+# how the ceremony has failed twice (see ceremony/github-field.py).
+field() { python3 "$(dirname "$0")/github-field.py" "$1" "$2"; }
+
 install_id="$(curl -sS -H "Authorization: Bearer $JWT" -H 'Accept: application/vnd.github+json' \
-  "https://api.github.com/repos/$REPO/installation" | python3 -c 'import sys,json; print(json.load(sys.stdin)["id"])')"
+  "https://api.github.com/repos/$REPO/installation" | field id 'looking up the installation')" || {
+    echo 'the App could not be identified — check JULIUS_WORKER_APP_ID and JULIUS_WORKER_APP_PEM' >&2; exit 1; }
+echo "  installation $install_id resolved"
+
 TOKEN="$(curl -sS -X POST -H "Authorization: Bearer $JWT" -H 'Accept: application/vnd.github+json' \
-  "https://api.github.com/app/installations/$install_id/access_tokens" \
-  | python3 -c 'import sys,json; print(json.load(sys.stdin)["token"])')"
+  "https://api.github.com/app/installations/$install_id/access_tokens" | field token 'minting the token')" || {
+    echo 'could not mint an installation token' >&2; exit 1; }
 unset JWT jwt_sig
 [ -n "$TOKEN" ] || { echo 'could not mint an installation token' >&2; exit 1; }
 echo '  token minted (not printed)'
@@ -93,8 +117,8 @@ PY
 )"
 number="$(printf '%s' "$payload" | curl -sS -X POST -H "Authorization: token $TOKEN" \
   -H 'Accept: application/vnd.github+json' --data-binary @- \
-  "https://api.github.com/repos/$REPO/pulls" \
-  | python3 -c 'import sys,json; d=json.load(sys.stdin); print(d.get("number") or d)')"
+  "https://api.github.com/repos/$REPO/pulls" | field number 'creating the pull request')" || {
+    echo 'the pull request was NOT created — nothing was changed on GitHub' >&2; exit 1; }
 
 echo '== reading it back =='
 curl -sS -H "Authorization: token $TOKEN" -H 'Accept: application/vnd.github+json' \
