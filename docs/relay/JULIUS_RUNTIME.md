@@ -93,6 +93,50 @@ repository's truthfulness rules exist to prevent.
 | recovery sweep | yes | yes | yes | yes | yes | — |
 | realtime delivery | — | outbox + dead-letter | **projection only** | — | — | cursor read |
 
+## The continuous three-worker lifecycle (ADR-021)
+
+All three slots participate throughout a mission, at meaningful execution
+checkpoints, and participation is expressed in TASKS rather than beside them —
+so it inherits the lease, the attempt, the contract gate, evidence, review,
+repair and recovery instead of re-earning them. The adapter seam is unchanged:
+`dispatch(input) => result` is still one promise in and one result out, plus two
+optional result fields (`guidanceRequest`, `guidance`) mirroring
+`contractProposal`.
+
+**Checkpoints** are event-driven. Ten closed triggers — contract drafted,
+contract revision proposed, guidance requested, implementation milestone,
+subsystem discovered, test failed, material evidence, security-sensitive change,
+repair round entered, pre-completion verification. There is no timer, no token
+count and no polling anywhere in the module.
+
+**Guidance** is what the Prompt Architect may say after the contract LOCKS. It
+is bound to the exact revision it was written under, versioned per subject, and
+structurally unable to carry a contract term: the packet has no `objective`, no
+`inScope`, no `blockingAcceptanceCriteria`, no `budget` and no `permittedPaths`,
+and the sanitizer refuses a proposal naming one. A genuine change to the
+agreement uses the existing revision model — a new immutable revision, a
+reviewer challenge, a re-lock with a new digest, and stale handoffs invalid.
+
+**Verdicts** give the Independent Reviewer a continuous vocabulary — `CONTINUE`,
+`WARNING`, `CHALLENGE`, `REPAIR_REQUIRED`, `BLOCK` — and it is deliberately not
+the decision vocabulary. `juliusDecisionForVerdict` is partial: only
+`REPAIR_REQUIRED` and `BLOCK` map to an action, and no verdict maps to an
+accepting one. `routeJuliusCheckpoint` returns a named intention and performs
+none of it.
+
+**Two review stages** (`guidance`, `repair:guidance`) join the existing review
+vocabulary, so a guidance packet is reviewed by the ordinary machinery and a
+rejected one is repaired on the architect as `repair:guidance`.
+
+**Not armed in the live composition.** No live worker registers `guidance`: the
+live architect adapter has no guidance charter or output schema, and giving the
+architect real research or tool use is a provider-side change owing its own paid
+proof. Julius refuses to mint a task nothing can route — it records that it
+would have asked and carries on — so the mechanism is inert rather than
+hazardous until a worker registers the task type.
+
+---
+
 ## Known gaps, stated rather than implied
 
 **C.A.R.D. policy is not persisted.** `julius_runs` stores a `card_revision`
@@ -106,6 +150,14 @@ detecting it.
 **Provider health is in-memory.** `JuliusProviderHealthRegistry` is a `Map`.
 A restart forgets every open circuit, so a provider that was failing is tried
 again immediately after a deploy.
+
+**The architect still has no research capability.** ADR-021 makes the Prompt
+Architect callable throughout a mission and gives its guidance a place to cite
+sources, with a trust level and a kind that includes `WEB`. Nothing fetches
+anything: the live call sends no `tools`, a test pins that it never will by
+accident, and `JuliusGuidanceReference` records where something was read rather
+than what it said. Enabling real retrieval is a provider-side change and owes
+its own paid evidence.
 
 **Two attempt ceilings disagree.** The dispatch path bounds attempts with
 `MAX_TASK_ATTEMPTS`; `recoverExpired` bounds requeues with a `maxRetries`

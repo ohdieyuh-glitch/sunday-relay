@@ -3559,3 +3559,84 @@ the four drills.
 
 `hosted-runner.ts`'s fixed sentences, `maxCostCents`, mission spend governance,
 Mission 5's contract and its adversarial tests are all **untouched**.
+
+## 00t. ALL THREE WORKERS, ALL MISSION LONG (ADR-021, 2026-09-10)
+
+Founder directive: evolve Julius from a mostly sequential three-slot pipeline
+into a continuously active Compound AI Agent. The map came first, and it found
+the cause was **structural, not tuning**:
+
+| what was checked | what was there |
+|---|---|
+| the event catalogue | 41 types, **every one a boundary transition** |
+| one dispatch | a single un-instrumented `await` |
+| the adapter port | `dispatch(input) => result` — no callback channel |
+| `runJuliusAgentTurnLoop` | no ledger, no emit; Julius cannot see turn 3 of 12 |
+| worker context | compiled **once**, before dispatch |
+| the Prompt Architect | **no tools, no research** — pinned by its own test |
+
+A mission's whole middle was unwritten, and the two slots that were not the
+coder had no way to participate in it.
+
+### The decision, in one line
+
+**Julius's unit of participation stays the TASK**, so continuous participation
+inherits the lease, the attempt, the contract gate, evidence, review, repair and
+recovery rather than re-earning them. A coder's `guidanceRequest` becomes a
+checkpoint, a route, and a real task on the architect. The adapter seam is
+unchanged — still one promise in and one result out, plus two optional result
+fields mirroring `contractProposal`.
+
+### One line bought three guards
+
+`juliusContractSubjectTaskId` now resolves a guidance task to its subject's
+contract. The architect that DRAFTS terms is bound by none — it is writing them;
+the architect that ADVISES under terms already locked is bound by exactly those.
+So a guidance task passes the ordinary dispatch gate (refused unless LOCKED),
+records the ordinary binding on its claim, and its own review passes the
+ordinary shared-binding guard. Requirements 1, 3, 4 and 9 fell out of guards
+that already existed. This is the clearest "search before you build" payoff in
+the repository so far.
+
+### What the tests caught that I got wrong
+
+- The disjointness test — which reads the contract's own field list out of its
+  source — rejected my first draft immediately: I had named a guidance field
+  `prohibitedActions`, colliding with the contract term of the same name. It is
+  now `additionalProhibitions`, **narrower than the contract and never wider**,
+  since a prohibition can only restrict what the coder may do and can never
+  grant permission the agreement withheld.
+- Two of the fifteen mutations escaped the first pass — Julius minting a
+  guidance task against the route it computed, and declining in silence. Both
+  are now proofs, the second a structural one forbidding a bare `return` in the
+  issuer. A refusal the record cannot show is the same failure as Mission 5's
+  missing coder diagnostics: the answer existed and nothing kept it.
+
+### Deliberately not armed
+
+**No live worker registers `guidance`.** The live architect adapter has no
+guidance charter and no output schema for a packet, and giving the architect
+real research or tool use is a provider-side change (`gpt-runner.ts` sends no
+`tools`, and `gpt-architect.test.ts:77` pins that) which owes its own paid
+proof. So Julius applies the same routability preflight `scheduleRepair` uses:
+until a worker registers the task type, it records that it **would** have asked
+and carries on. A task minted for a role nothing serves does not fail — it sits
+RUNNABLE forever with the mission unable to complete around it, which is what
+paid run 34037313976 taught.
+
+Arming it later is a registration plus an adapter, with no change to anything
+ADR-021 decided.
+
+### Proof
+
+27 provider-free deterministic proofs numbered against the directive's twelve,
+42 domain cases, and 15 of 15 mutations caught on the authorization, lock and
+checkpoint paths. No paid run was dispatched: the Anthropic account is unfunded
+and the directive forbade it.
+
+### Still open after this
+
+- The architect's **research capability** — designed for, not enabled.
+- **Worker Deadline Enforcement** (`JuliusWorker.timeoutMs` as a real primitive)
+  remains its own separate change, never incidental.
+- Findings E, C and F are unrepaired, as recorded in §00p, §00r and §00s.
