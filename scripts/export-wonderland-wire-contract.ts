@@ -143,6 +143,7 @@ const DECODED_ENUMS = [
   'EWonderlandUsageReading',
   'EWonderlandAutonomy',
   'EWonderlandBrainKind',
+  'EWonderlandGatedOperation',
 ] as const;
 
 /**

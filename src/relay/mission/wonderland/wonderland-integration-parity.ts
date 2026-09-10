@@ -26,6 +26,11 @@ import {
   WONDERLAND_CARD_SCOPE_FIELDS,
   WONDERLAND_HYDRATION_FIELDS,
 } from './wonderland-hydration';
+import {
+  WONDERLAND_GATED_OPERATIONS,
+  WONDERLAND_HUMAN_GATE_FIELDS,
+} from './wonderland-human-gate';
+import type { WonderlandHumanGate } from './wonderland-human-gate';
 import type {
   WonderlandCardScope,
   WonderlandHydration,
@@ -270,6 +275,13 @@ const _CardScopeNullableIsExact: SameKeys<
 > = true;
 void _CardScopeNullableIsExact;
 
+const HUMAN_GATE_NULLABLE = ['taskId'] as const;
+const _HumanGateNullableIsExact: SameKeys<
+  (typeof HUMAN_GATE_NULLABLE)[number],
+  NullableKeysOf<WonderlandHumanGate>
+> = true;
+void _HumanGateNullableIsExact;
+
 const HYDRATION_NULLABLE = ['worldSessionId'] as const;
 const _HydrationNullableIsExact: SameKeys<
   (typeof HYDRATION_NULLABLE)[number],
@@ -440,6 +452,18 @@ export const WONDERLAND_INTEGRATION_CPP_STRUCT_PARITY: readonly {
     fields: WONDERLAND_CARD_SCOPE_FIELDS,
   },
   {
+    /**
+     * THE ONE MOMENT IN A RUN WHERE A PERSON IS REQUIRED, mirrored so the
+     * narrowness is checkable. `JuliusApprovalRecord` carries `safeRationale`,
+     * `decisionReason` and `decidedBy` — a sentence and a person's name — and
+     * the field list here is the guarantee that none of them crosses onto the
+     * surface a player can attach a debugger to.
+     */
+    cppStruct: 'FWonderlandHumanGate',
+    tsInterface: 'WonderlandHumanGate',
+    fields: WONDERLAND_HUMAN_GATE_FIELDS,
+  },
+  {
     cppStruct: 'FWonderlandEntry',
     tsInterface: 'WonderlandEntry',
     fields: WONDERLAND_ENTRY_FIELDS,
@@ -593,6 +617,19 @@ export const WONDERLAND_INTEGRATION_CPP_ENUM_PARITY: readonly {
     cppEnum: 'EWonderlandAutonomy',
     source: 'WONDERLAND_AUTONOMY_LEVELS',
     members: WONDERLAND_AUTONOMY_LEVELS,
+    nullable: true,
+    zeroMember: 'Unobserved',
+  },
+  {
+    /**
+     * What C.A.R.D. can gate, which is the kernel's `JuliusPolicyOperation`.
+     * SCREAMING_SNAKE there and PascalCase here. Ordinal 0 is `Unobserved` so
+     * an unset array member — or a token this build cannot name — never reads
+     * as a real gate, which would draw a boundary that does not exist.
+     */
+    cppEnum: 'EWonderlandGatedOperation',
+    source: 'WONDERLAND_GATED_OPERATIONS',
+    members: WONDERLAND_GATED_OPERATIONS,
     nullable: true,
     zeroMember: 'Unobserved',
   },
@@ -758,6 +795,7 @@ export const WONDERLAND_INTEGRATION_NULLABLE_FIELDS: Readonly<
   FWonderlandHydration: HYDRATION_NULLABLE,
   FWonderlandActivityIntent: ACTIVITY_INTENT_NULLABLE,
   FWonderlandCardScope: CARD_SCOPE_NULLABLE,
+  FWonderlandHumanGate: HUMAN_GATE_NULLABLE,
   FWonderlandBrainCitation: BRAIN_CITATION_NULLABLE,
   FWonderlandActivityReading: ACTIVITY_READING_NULLABLE,
   FWonderlandWorkerActivity: WORKER_ACTIVITY_NULLABLE,

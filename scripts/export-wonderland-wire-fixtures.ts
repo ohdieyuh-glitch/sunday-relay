@@ -43,6 +43,11 @@ import {
   scopeWonderlandCard,
   wonderlandHydration,
 } from '../src/relay/mission/wonderland/wonderland-hydration';
+import {
+  WONDERLAND_GATED_OPERATIONS,
+  scopeWonderlandHumanGate,
+  scopeWonderlandHumanGates,
+} from '../src/relay/mission/wonderland/wonderland-human-gate';
 
 const AT = '2026-09-08T00:00:00.000Z';
 
@@ -394,6 +399,24 @@ const cardResolved = scopeWonderlandCard({
  */
 const cardUnresolved = scopeWonderlandCard({ cardRevision: 'card-rev-3' });
 
+/**
+ * TWO OPEN GATES: one on a task and one on the run itself.
+ *
+ * Both shapes matter — `taskId` is nullable precisely because C.A.R.D. can gate
+ * a run-level operation, and a fixture set with only task gates would let a
+ * decoder that required the id pass.
+ */
+const openGates = scopeWonderlandHumanGates([
+  {
+    projectId: 'project-alpha', runId: 'run-1', gateId: 'gate-1', taskId: 'task-1',
+    operation: 'SPAWN_SUBAGENT', reasonCode: 'CARD_APPROVAL_REQUIRED', requestedAtIso: AT,
+  },
+  {
+    projectId: 'project-alpha', runId: 'run-1', gateId: 'gate-2', taskId: null,
+    operation: 'ACCESS_NETWORK', reasonCode: 'CARD_APPROVAL_REQUIRED', requestedAtIso: AT,
+  },
+]).gates;
+
 const hydration = (over: Partial<Parameters<typeof wonderlandHydration>[0]> = {}) =>
   wonderlandHydration({
     run: runSnapshot(),
@@ -405,6 +428,7 @@ const hydration = (over: Partial<Parameters<typeof wonderlandHydration>[0]> = {}
     card: cardResolved,
     observedAtIso: AT,
     worldSessionId: 'world-1',
+    humanGates: openGates,
     ...over,
   });
 
@@ -426,6 +450,7 @@ hydrated('hydration-production-unknowns', hydration({
   brain: noWonderlandBrainCitation({ projectId: 'project-alpha', runId: 'run-1' }),
   run: runSnapshot({ atSequence: null, activeTasks: null, pendingApprovals: null }),
   worldSessionId: null,
+  humanGates: [],
 }));
 
 // A run the reader could not place in the ledger. The world then asks for
@@ -462,6 +487,52 @@ hydrated('hydration-autonomy-absent', hydration({
   card: scopeWonderlandCard({ cardRevision: 'card-rev-3' }),
 }));
 
+/* ------------------------------ what a person is being waited on for */
+
+// EVERY GATED OPERATION, one fixture each. A gate this build cannot name is a
+// person being waited on that a world would not draw, and the run would look
+// merely slow — so the vocabulary has to cross whole, and each member has to be
+// exercised rather than assumed from the enum's presence.
+for (const operation of WONDERLAND_GATED_OPERATIONS) {
+  hydrated(`hydration-gate-${operation}`, hydration({
+    humanGates: scopeWonderlandHumanGates([{
+      projectId: 'project-alpha', runId: 'run-1', gateId: `gate-${operation}`,
+      taskId: 'task-1', operation, reasonCode: 'CARD_APPROVAL_REQUIRED',
+      requestedAtIso: AT,
+    }]).gates,
+  }));
+}
+
+// A RUN-LEVEL GATE, with no task. `taskId` is nullable precisely because
+// C.A.R.D. gates run-level operations too, and a decoder that required the id
+// would refuse the gate that stops the whole run.
+hydrated('hydration-gate-run-level', hydration({
+  humanGates: scopeWonderlandHumanGates([{
+    projectId: 'project-alpha', runId: 'run-1', gateId: 'gate-run',
+    taskId: null, operation: 'UNCHAINED_CONTINUATION',
+    reasonCode: 'CARD_UNCHAINED_DENIED', requestedAtIso: AT,
+  }]).gates,
+}));
+
+// NOBODY IS BEING WAITED ON, and somebody looked. An empty list beside a known
+// count of zero is a fact; the count is what carries "nobody counted".
+hydrated('hydration-gate-none', hydration({
+  humanGates: [],
+  run: runSnapshot({ pendingApprovals: 0 }),
+}));
+
+// A REASON CODE THE SERVER WOULD NOT REPEAT. The kernel's column is free text;
+// anything that is not a machine name is dropped to empty rather than drawn, so
+// a sentence cannot reach a game client through this field.
+hydrated('hydration-gate-unrepeatable-reason', hydration({
+  humanGates: scopeWonderlandHumanGates([{
+    projectId: 'project-alpha', runId: 'run-1', gateId: 'gate-prose', taskId: 'task-1',
+    operation: 'MUTATE_FILESYSTEM',
+    reasonCode: 'The founder must confirm this write. Ask them in person.',
+    requestedAtIso: AT,
+  }]).gates,
+}));
+
 /* ------------------------------- and what a world must refuse to adopt */
 
 // THE MIS-ROUTED HYDRATION, three ways. Each is adopted WHOLESALE if it gets
@@ -492,6 +563,41 @@ hydrationRefused('hydration-future-schema', 'schema_rejected',
 
 hydrationRefused('hydration-blank-project', 'identity_rejected',
   { ...hydration(), projectId: '' });
+
+// A GATE FROM ANOTHER RUN, AND FROM ANOTHER PROJECT. One foreign gate among
+// correct ones would show a person being waited on for something this world
+// cannot see, and nothing arriving afterwards would withdraw it.
+hydrationRefused('hydration-foreign-gate-project', 'identity_rejected', {
+  ...hydration(),
+  humanGates: [...openGates, scopeWonderlandHumanGate({
+    projectId: 'project-beta', runId: 'run-1', gateId: 'gate-x', taskId: null,
+    operation: 'ACCESS_NETWORK', reasonCode: 'CARD_APPROVAL_REQUIRED', requestedAtIso: AT,
+  })],
+});
+hydrationRefused('hydration-foreign-gate-run', 'identity_rejected', {
+  ...hydration(),
+  humanGates: [...openGates, scopeWonderlandHumanGate({
+    projectId: 'project-alpha', runId: 'run-9', gateId: 'gate-x', taskId: null,
+    operation: 'ACCESS_NETWORK', reasonCode: 'CARD_APPROVAL_REQUIRED', requestedAtIso: AT,
+  })],
+});
+
+// AN OPERATION THIS BUILD CANNOT NAME. Refused rather than landed on ordinal 0,
+// which is `Unobserved` and would draw a gate with no boundary on it.
+hydrationRefused('hydration-gate-unknown-operation', 'unknown_token', {
+  ...hydration(),
+  humanGates: [{ ...openGates[0], operation: 'SUMMON_THE_FOUNDER' }],
+});
+
+// THE FIELD ITSELF, ABSENT. A bridge that does not send gates is not a run
+// waiting on nobody, and of the two this build must not guess the second.
+hydrationRefused('hydration-gates-absent', 'missing_field', (() => {
+  const damaged: Record<string, unknown> = { ...hydration() };
+  delete damaged.humanGates;
+  return damaged;
+})());
+hydrationRefused('hydration-gates-not-an-array', 'wrong_type',
+  { ...hydration(), humanGates: {} });
 
 // Each half, absent. A hydration missing one of them is not a smaller
 // hydration: a world would draw the remaining halves and have no meters, no

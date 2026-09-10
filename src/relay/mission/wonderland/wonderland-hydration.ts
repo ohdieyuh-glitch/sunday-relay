@@ -39,6 +39,8 @@ import type { WonderlandBrainCitation } from './wonderland-brain-scope';
 import type { WonderlandRunSnapshot } from './wonderland-rehydration';
 import type { WonderlandUsageHud } from './wonderland-usage-meter';
 import type { WonderlandUsageAuthorityStatus } from './wonderland-usage-authority';
+import { wonderlandHumanGateBelongs } from './wonderland-human-gate';
+import type { WonderlandHumanGate } from './wonderland-human-gate';
 
 export const WONDERLAND_HYDRATION_SCHEMA_V1 = 'relay-wonderland-hydration.v1' as const;
 export type WonderlandHydrationSchemaVersion = typeof WONDERLAND_HYDRATION_SCHEMA_V1;
@@ -232,6 +234,21 @@ export interface WonderlandHydration {
   readonly brain: WonderlandBrainCitation;
   /** Which role slots are filled and what the record permits. Never who. */
   readonly card: WonderlandCardScope;
+  /**
+   * What this run is waiting for a PERSON to do, typed.
+   *
+   * `run.pendingApprovals` says HOW MANY gates are open and is the authority on
+   * the number; this says WHICH ONES, and may carry fewer. The two are read in
+   * one statement so they cannot disagree about a moment, and where they
+   * disagree about a COUNT that difference is itself the report — a gate whose
+   * operation this build cannot name is counted and not described, the same
+   * shape as a Project Brain kind that has no bucket.
+   *
+   * EMPTY IS NOT UNKNOWN HERE, and it does not need to be: the count beside it
+   * carries the absence. `pendingApprovals: null` is "nobody counted"; an empty
+   * list beside a known count of zero is "nothing is gated".
+   */
+  readonly humanGates: readonly WonderlandHumanGate[];
   /** When this hydration was cut. Not when anything in it last changed. */
   readonly observedAtIso: string;
 }
@@ -246,6 +263,7 @@ export const WONDERLAND_HYDRATION_FIELDS = exactKeys<WonderlandHydration>()([
   'activity',
   'brain',
   'card',
+  'humanGates',
   'observedAtIso',
 ] as const);
 
@@ -267,6 +285,7 @@ export function wonderlandHydration(input: {
   readonly card: WonderlandCardScope;
   readonly observedAtIso: string;
   readonly worldSessionId?: string | null;
+  readonly humanGates?: readonly WonderlandHumanGate[];
 }): WonderlandHydration {
   return Object.freeze({
     schemaVersion: WONDERLAND_HYDRATION_SCHEMA_V1,
@@ -278,6 +297,10 @@ export function wonderlandHydration(input: {
     activity: input.activity,
     brain: input.brain,
     card: input.card,
+    // OPTIONAL, AND DEFAULTING TO EMPTY RATHER THAN TO UNKNOWN. The count on
+    // the run snapshot is what carries "nobody looked"; a caller that omits
+    // the list has described no gate, which is what an empty list says.
+    humanGates: Object.freeze([...(input.humanGates ?? [])]),
     observedAtIso: input.observedAtIso,
   });
 }
@@ -323,6 +346,14 @@ export function wonderlandHydrationVerdict(
     hydration.brain.projectId !== hydration.projectId
   ) {
     return 'inconsistent';
+  }
+  // EVERY GATE, NOT A SAMPLE. A hydration is adopted wholesale, so one foreign
+  // gate among correct ones would show a person being waited on for something
+  // this world cannot see — and nothing arriving later would withdraw it.
+  for (const gate of hydration.humanGates) {
+    if (!wonderlandHumanGateBelongs(gate, hydration.projectId, hydration.run.runId)) {
+      return 'inconsistent';
+    }
   }
   return 'accepted';
 }

@@ -119,9 +119,13 @@ suite('the Wonderland reader against a real PostgreSQL', () => {
         VALUES ('task-a3','${RUN_A}','CODING_AGENT','code','SUCCEEDED',3);
       INSERT INTO relay_wonderland.julius_tasks(task_id, run_id, role, task_type, state, ordinal, worker_id, lease_owner, lease_generation, lease_expires_at)
         VALUES ('task-b1','${RUN_B}','CODING_AGENT','code','ACTIVE',1,'worker-b','scheduler',1, now() + interval '10 minutes');
+      -- THE OPERATIONS ARE THE KERNEL'S OWN, not fixture words. The column is
+      -- free text, so a seed can hold anything; but a gate whose operation
+      -- JuliusPolicyOperation cannot produce proves nothing about the
+      -- projection, which narrows to that vocabulary. These are real members.
       INSERT INTO relay_wonderland.julius_approvals
         (approval_id, run_id, project_id, task_id, operation, policy_revision, reason_code, safe_rationale, state, requested_at, idempotency_key)
-        VALUES ('appr-a1','${RUN_A}','${A}','task-a1','tool.run','card:rev-7','GATE','A person is being waited on.','PENDING', now(), 'idem-a1');
+        VALUES ('appr-a1','${RUN_A}','${A}','task-a1','MUTATE_FILESYSTEM','card:rev-7','CARD_APPROVAL_REQUIRED','A person is being waited on.','PENDING', now(), 'idem-a1');
       -- A DECIDED one beside it, so 'PENDING' in the count is load-bearing.
       -- Without this the filter can be deleted with every test still green,
       -- and a world would show a gate that a person already answered. The
@@ -130,15 +134,15 @@ suite('the Wonderland reader against a real PostgreSQL', () => {
       -- saying an approval nobody can be named for is not an approval.
       INSERT INTO relay_wonderland.julius_approvals
         (approval_id, run_id, project_id, task_id, operation, policy_revision, reason_code, safe_rationale, state, requested_at, decided_at, decided_by, idempotency_key)
-        VALUES ('appr-a0','${RUN_A}','${A}','task-a1','tool.run','card:rev-7','GATE','Already answered.','APPROVED', now() - interval '1 hour', now() - interval '55 minutes', '${PLAYER_A}', 'idem-a0');
+        VALUES ('appr-a0','${RUN_A}','${A}','task-a1','ACCESS_NETWORK','card:rev-7','CARD_APPROVAL_REQUIRED','Already answered.','APPROVED', now() - interval '1 hour', now() - interval '55 minutes', '${PLAYER_A}', 'idem-a0');
       -- PENDING approvals on OTHER runs, one in this project and one in the
       -- foreign one, so the run scope on the count is load-bearing too. A world
       -- watching run-a must not be told a person is being waited on because
       -- somebody is being waited on somewhere else.
       INSERT INTO relay_wonderland.julius_approvals
         (approval_id, run_id, project_id, task_id, operation, policy_revision, reason_code, safe_rationale, state, requested_at, idempotency_key)
-        VALUES ('appr-a2-1','${RUN_A2}','${A}',NULL,'run.start','card:rev-7','GATE','A sibling run is waiting.','PENDING', now(), 'idem-a2-1'),
-               ('appr-b1','${RUN_B}','${B}',NULL,'run.start','card:rev-9','GATE','Another project is waiting.','PENDING', now(), 'idem-b1');
+        VALUES ('appr-a2-1','${RUN_A2}','${A}',NULL,'SPAWN_SUBAGENT','card:rev-7','CARD_APPROVAL_REQUIRED','A sibling run is waiting.','PENDING', now(), 'idem-a2-1'),
+               ('appr-b1','${RUN_B}','${B}',NULL,'ACCESS_NETWORK','card:rev-9','CARD_APPROVAL_REQUIRED','Another project is waiting.','PENDING', now(), 'idem-b1');
 
       -- ------------------------------------------------- the Project Brain
       --
@@ -871,6 +875,112 @@ suite('the Wonderland reader against a real PostgreSQL', () => {
         await pool.query(
           `DELETE FROM relay_wonderland.julius_context_snapshots WHERE context_id='ctx-a-future'`);
       }
+    });
+  });
+
+  /* ------------------------- what a person is being waited on for */
+
+  describe('the open human gates', () => {
+    it('describes the gates that produced the count, from one statement', () => {
+      // Read separately, the number and the list would be two views of a run
+      // that answered a gate between them: "2 waiting" beside one gate, with
+      // nothing saying which is right.
+      return reader.hydrate({ projectId: A, runId: RUN_A, worldSessionId: null })
+        .then((hydration) => {
+          expect(hydration!.run.pendingApprovals).toBe(1);
+          expect(hydration!.humanGates.length).toBe(1);
+          expect(hydration!.humanGates[0].gateId).toBe('appr-a1');
+          expect(hydration!.humanGates[0].taskId).toBe('task-a1');
+          expect(hydration!.humanGates[0].projectId).toBe(A);
+          expect(hydration!.humanGates[0].runId).toBe(RUN_A);
+        });
+    });
+
+    it('leaves out the approval a person already answered', () => {
+      // `appr-a0` is APPROVED on this same run. A world drawn from it would say
+      // somebody is being waited on for a decision that has been made.
+      return reader.hydrate({ projectId: A, runId: RUN_A, worldSessionId: null })
+        .then((hydration) => {
+          expect(hydration!.humanGates.map((g) => g.gateId)).not.toContain('appr-a0');
+        });
+    });
+
+    it('leaves out gates open on other runs and other projects', () => {
+      // `appr-a2-1` is PENDING on a sibling run in the same project, and
+      // `appr-b1` is PENDING in the foreign one. Either would tell a world
+      // watching run-a that a person is being waited on for something it
+      // cannot see.
+      return reader.hydrate({ projectId: A, runId: RUN_A, worldSessionId: null })
+        .then((hydration) => {
+          const ids = hydration!.humanGates.map((g) => g.gateId);
+          expect(ids).not.toContain('appr-a2-1');
+          expect(ids).not.toContain('appr-b1');
+          expect(ids).toEqual(['appr-a1']);
+        });
+    });
+
+    it('carries the operation and no sentence from the approval row', () => {
+      // `safe_rationale` is a real column on every seeded approval. Its absence
+      // here is the SELECT's narrowness working on real data.
+      return reader.hydrate({ projectId: A, runId: RUN_A, worldSessionId: null })
+        .then(async (hydration) => {
+          const planted = await pool.query<{ n: string }>(
+            `SELECT count(*)::text AS n FROM relay_wonderland.julius_approvals
+              WHERE run_id=$1 AND safe_rationale <> ''`, [RUN_A]);
+          expect(Number(planted.rows[0].n)).toBeGreaterThan(0);
+
+          const gate = hydration!.humanGates[0];
+          expect(gate.operation).toBe('MUTATE_FILESYSTEM');
+          expect(JSON.stringify(hydration!.humanGates)).not.toContain('waited on');
+          expect(JSON.stringify(hydration!.humanGates)).not.toContain(PLAYER_A);
+        });
+    });
+
+    it('says nothing is gated for a run with no pending approval', () => {
+      // RUN_B has one PENDING approval of its own; RUN_A2 has one too. The
+      // honest empty case is proven by decidng A2's gate and reading again.
+      return pool.query(
+        `UPDATE relay_wonderland.julius_approvals
+            SET state='APPROVED', decided_at=now(), decided_by=$1, decision_reason='answered'
+          WHERE approval_id='appr-a2-1'`, [PLAYER_A],
+      ).then(() => reader.hydrate({ projectId: A, runId: RUN_A2, worldSessionId: null }))
+        .then(async (hydration) => {
+          try {
+            expect(hydration!.humanGates).toEqual([]);
+            // AND THE COUNT AGREES, because both came from one statement.
+            expect(hydration!.run.pendingApprovals).toBe(0);
+          } finally {
+            await pool.query(
+              `UPDATE relay_wonderland.julius_approvals
+                  SET state='PENDING', decided_at=NULL, decided_by=NULL, decision_reason=NULL
+                WHERE approval_id='appr-a2-1'`);
+          }
+        });
+    });
+
+    it('counts a gate whose operation this build cannot name, and does not draw it', () => {
+      // `operation` is free text in the schema. A kernel that grows a
+      // fourteenth gated operation must not make a world show one gate fewer —
+      // that reads as a run which is merely slower, and a person would never
+      // be told they are being waited on.
+      return pool.query(
+        `INSERT INTO relay_wonderland.julius_approvals
+           (approval_id, run_id, project_id, task_id, operation, policy_revision,
+            reason_code, safe_rationale, state, requested_at, idempotency_key)
+         VALUES ('appr-a-future','${RUN_A}','${A}','task-a2','SUMMON_THE_FOUNDER','card:rev-7',
+                 'GATE','A gate from a later kernel.','PENDING', now(), 'idem-a-future')`,
+      ).then(() => reader.hydrate({ projectId: A, runId: RUN_A, worldSessionId: null }))
+        .then(async (hydration) => {
+          try {
+            // THE COUNT SEES IT; the list cannot describe it. The difference
+            // between them is the report.
+            expect(hydration!.run.pendingApprovals).toBe(2);
+            expect(hydration!.humanGates.length).toBe(1);
+          } finally {
+            await pool.query(
+              `DELETE FROM relay_wonderland.julius_approvals WHERE approval_id='appr-a-future'`);
+          }
+        });
     });
   });
 

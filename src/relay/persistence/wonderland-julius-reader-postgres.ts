@@ -22,6 +22,7 @@ import {
   projectWonderlandUsageFromAuthority,
 } from '../mission/wonderland/wonderland-usage-authority';
 import { isJuliusMissionState } from '../mission/wonderland/wonderland-julius-state';
+import { scopeWonderlandHumanGates } from '../mission/wonderland/wonderland-human-gate';
 
 /**
  * WHAT A WORLD READS OUT OF JULIUS.
@@ -119,6 +120,10 @@ export class WonderlandJuliusReaderPostgres {
       at_sequence: string | null;
       active_tasks: string;
       pending_approvals: string;
+      open_gates: readonly {
+        gate_id: string; task_id: string | null; operation: string;
+        reason_code: string; requested_at: string;
+      }[] | null;
       observed_at: string;
     }>(
       `SELECT r.state, r.version, r.mission_id, r.card_revision,
@@ -129,6 +134,24 @@ export class WonderlandJuliusReaderPostgres {
                 WHERE t.run_id=r.run_id AND t.state='ACTIVE') AS active_tasks,
               (SELECT count(*) FROM relay_wonderland.julius_approvals a
                 WHERE a.run_id=r.run_id AND a.state='PENDING') AS pending_approvals,
+              -- THE GATES THEMSELVES, IN THE SAME STATEMENT AS THEIR COUNT.
+              -- Read separately, the number and the list would be two views of
+              -- a run that answered a gate between them, and a world would show
+              -- "2 waiting" beside one gate with nothing saying which is right.
+              --
+              -- NO safe_rationale, NO decision_reason, NO decided_by. Those are
+              -- a sentence and a person's name, and this is the least trusted
+              -- process in the system; the OPERATION is what a world draws.
+              -- The narrowing function cannot be handed them either — see
+              -- WonderlandHumanGateInput.
+              (SELECT json_agg(json_build_object(
+                        'gate_id', a.approval_id, 'task_id', a.task_id,
+                        'operation', a.operation, 'reason_code', a.reason_code,
+                        'requested_at', a.requested_at)
+                      ORDER BY a.requested_at, a.approval_id)
+                 FROM relay_wonderland.julius_approvals a
+                WHERE a.run_id=r.run_id AND a.project_id=r.project_id
+                  AND a.state='PENDING') AS open_gates,
               -- THE DATABASE'S CLOCK, in the same statement as everything
               -- above it. Postgres now() is the transaction start time, so it
               -- names the instant this consistent read was taken; a Date() in
@@ -185,6 +208,21 @@ export class WonderlandJuliusReaderPostgres {
       // report `swarmEligible: false` — a C.A.R.D. that forbids a swarm — for a
       // record nothing has ever opened.
       card: scopeWonderlandCard({ cardRevision: row.card_revision }),
+      // NARROWED, NEVER COPIED. An operation this build cannot name is REFUSED
+      // by the scope rather than dropped, and the refusal is counted — a world
+      // showing one gate fewer would be drawing a run that is not waiting on
+      // anybody, which is the one error here that reads as normal.
+      humanGates: scopeWonderlandHumanGates(
+        (row.open_gates ?? []).map((gate) => ({
+          projectId: input.projectId,
+          runId: input.runId,
+          gateId: gate.gate_id,
+          taskId: gate.task_id,
+          operation: gate.operation,
+          reasonCode: gate.reason_code,
+          requestedAtIso: new Date(String(gate.requested_at)).toISOString(),
+        })),
+      ).gates,
       observedAtIso,
       worldSessionId: input.worldSessionId,
     });

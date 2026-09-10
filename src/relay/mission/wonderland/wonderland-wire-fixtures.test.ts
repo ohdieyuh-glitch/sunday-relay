@@ -17,6 +17,7 @@ import {
 } from '../../../../scripts/export-wonderland-wire-fixtures';
 import { WONDERLAND_BRAIN_KINDS } from './wonderland-brain-scope';
 import { WONDERLAND_AUTONOMY_LEVELS } from './wonderland-hydration';
+import { WONDERLAND_GATED_OPERATIONS } from './wonderland-human-gate';
 import { RELAY_UNKNOWN_REASONS } from '../../shared/llmops';
 import { JULIUS_ACTIVITY_SIGNALS } from './wonderland-julius-activity';
 
@@ -297,7 +298,7 @@ describe('the hydration fixtures — the payload a world adopts WHOLESALE', () =
     const full = rows.find((r) => r.name === 'hydration-full');
     expect(full).toBeDefined();
     expect(Object.keys(JSON.parse(full!.json) as object).sort()).toEqual([
-      'activity', 'brain', 'card', 'observedAtIso', 'projectId',
+      'activity', 'brain', 'card', 'humanGates', 'observedAtIso', 'projectId',
       'run', 'schemaVersion', 'usage', 'usageStatus', 'worldSessionId',
     ]);
   });
@@ -432,5 +433,92 @@ describe('the hydration fixtures — the payload a world adopts WHOLESALE', () =
         expect(value, `${row.name}.brain.${key} contains a sentence`).not.toMatch(/\.\s+[A-Z]/);
       }
     }
+  });
+});
+
+describe('the hydration fixtures — what a person is being waited on for', () => {
+  const rows = readFileSync(join(process.cwd(), WONDERLAND_WIRE_HYDRATIONS_PATH), 'utf8')
+    .split('\n')
+    .filter((line) => line.trim() !== '')
+    .map((line) => {
+      const [name, expect_, json] = line.split('\t');
+      return { name, expect: expect_, json };
+    });
+
+  it('exercises every operation C.A.R.D. can gate', () => {
+    // A gate this build cannot name is a person being waited on that a world
+    // would not draw — and the run would look merely slow, which is the one
+    // failure here that reads as normal. So the vocabulary crosses whole, and
+    // each member is exercised rather than assumed present from the enum.
+    for (const operation of WONDERLAND_GATED_OPERATIONS) {
+      expect(rows.some((r) => r.name === `hydration-gate-${operation}`), `no fixture for ${operation}`)
+        .toBe(true);
+    }
+  });
+
+  it('sends a gate on the RUN as well as one on a task', () => {
+    // `taskId` is nullable precisely because C.A.R.D. gates run-level
+    // operations, and a decoder that required the id would refuse the gate
+    // that stops the whole run.
+    const row = rows.find((r) => r.name === 'hydration-gate-run-level');
+    expect(row).toBeDefined();
+    const parsed = JSON.parse(row!.json) as { humanGates: { taskId: string | null }[] };
+    expect(parsed.humanGates[0].taskId).toBeNull();
+  });
+
+  it('refuses a gate belonging to another project or another run', () => {
+    for (const name of ['hydration-foreign-gate-project', 'hydration-foreign-gate-run']) {
+      const row = rows.find((r) => r.name === name);
+      expect(row, `no fixture named ${name}`).toBeDefined();
+      expect(row!.expect).toBe('identity_rejected');
+    }
+  });
+
+  it('refuses an operation outside the vocabulary, and the field being absent', () => {
+    expect(rows.find((r) => r.name === 'hydration-gate-unknown-operation')!.expect)
+      .toBe('unknown_token');
+    // A bridge that does not send gates is NOT a run waiting on nobody, and of
+    // the two this build must not guess the second.
+    expect(rows.find((r) => r.name === 'hydration-gates-absent')!.expect).toBe('missing_field');
+    expect(rows.find((r) => r.name === 'hydration-gates-not-an-array')!.expect).toBe('wrong_type');
+  });
+
+  it('carries no sentence a person could have written, on any gate', () => {
+    // `julius_approvals.safe_rationale` is a real column and a genuinely safe
+    // sentence, and it still does not cross. `reasonCode` is the one text field
+    // that does, and prose in it is dropped to empty rather than drawn — the
+    // fixture below plants a whole sentence and expects nothing.
+    const prose = rows.find((r) => r.name === 'hydration-gate-unrepeatable-reason');
+    expect(prose).toBeDefined();
+    const parsed = JSON.parse(prose!.json) as { humanGates: { reasonCode: string }[] };
+    expect(parsed.humanGates[0].reasonCode).toBe('');
+    expect(prose!.json).not.toContain('in person');
+
+    for (const row of rows.filter((r) => r.expect === 'ok')) {
+      const gates = (JSON.parse(row.json) as { humanGates: Record<string, unknown>[] }).humanGates;
+      for (const gate of gates) {
+        expect(Object.keys(gate)).not.toContain('safeRationale');
+        expect(Object.keys(gate)).not.toContain('decidedBy');
+        expect(Object.keys(gate)).not.toContain('decisionReason');
+        for (const [key, value] of Object.entries(gate)) {
+          if (typeof value !== 'string') continue;
+          expect(value.length, `${row.name}.${key} is long enough to be prose`).toBeLessThan(120);
+          expect(value, `${row.name}.${key} contains a sentence`).not.toMatch(/\.\s+[A-Z]/);
+        }
+      }
+    }
+  });
+
+  it('sends an ungated run beside the gated ones', () => {
+    // An empty list beside a KNOWN count of zero is "nothing is gated"; the
+    // count is what carries "nobody counted". Without this fixture a decoder
+    // that refused empty arrays would pass.
+    const row = rows.find((r) => r.name === 'hydration-gate-none');
+    expect(row).toBeDefined();
+    const parsed = JSON.parse(row!.json) as {
+      humanGates: unknown[]; run: { pendingApprovals: number | null };
+    };
+    expect(parsed.humanGates).toEqual([]);
+    expect(parsed.run.pendingApprovals).toBe(0);
   });
 });

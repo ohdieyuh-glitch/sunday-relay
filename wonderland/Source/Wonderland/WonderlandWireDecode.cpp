@@ -1343,6 +1343,41 @@ bool DecodeCardScopeObject(
 	return true;
 }
 
+// ONE OPEN GATE — what a run is waiting for a person to do.
+//
+// EVERY ELEMENT IS REFUSED OR DECODED, never skipped. A gate this build cannot
+// read is a person being waited on that a world would not draw, and the run
+// would look merely slow. The server has already narrowed the operation to a
+// closed vocabulary, so a token that fails here means the two sides have moved
+// apart — which must be loud.
+bool DecodeHumanGateObject(
+	const FJsonValue& Object,
+	FWonderlandWireRefusal& Refusal,
+	FWonderlandHumanGate& Out)
+{
+	FWonderlandHumanGate Gate;
+	FFieldReader Reader{ Object, Refusal };
+	Reader.RequiredString("schemaVersion", Gate.SchemaVersion);
+	Reader.RequiredIdentity("projectId", Gate.ProjectId);
+	Reader.RequiredIdentity("runId", Gate.RunId);
+	Reader.RequiredIdentity("gateId", Gate.GateId);
+	Reader.NullableText("taskId", Gate.TaskId);
+	// A CODE, NOT A SENTENCE — and it may be empty, which is the server saying
+	// it would not repeat the kernel's. Read as a plain string rather than an
+	// identity for exactly that reason.
+	Reader.RequiredString("reasonCode", Gate.ReasonCode);
+	Reader.RequiredString("requestedAtIso", Gate.RequestedAtIso);
+
+	uint8 Operation = 0;
+	Reader.RequiredEnum("operation", "EWonderlandGatedOperation", Operation);
+
+	if (Reader.bFailed) { return false; }
+
+	Gate.Operation = static_cast<EWonderlandGatedOperation>(Operation);
+	Out = Gate;
+	return true;
+}
+
 // One required nested object, or the refusal that names it.
 const FJsonValue* RequiredObject(
 	const FJsonValue& Root,
@@ -1412,6 +1447,34 @@ FWonderlandHydrationDecode WonderlandDecodeHydrationBytes(const char* Bytes, int
 	if (CardValue == nullptr) { return Result; }
 	if (!DecodeCardScopeObject(*CardValue, Result.Refusal, Hydration.Card)) { return Result; }
 
+	// THE GATES. Required as a FIELD and permitted to be EMPTY: an absent key
+	// is a bridge that does not send them, which this build cannot tell from a
+	// run that is waiting on nobody — and of the two that is the one it must
+	// not guess. An empty array beside a known PendingApprovals of zero is the
+	// honest "nothing is gated".
+	const FJsonValue* Gates = Field(Root, "humanGates");
+	if (Gates == nullptr)
+	{
+		Result.Refusal = { EWonderlandWireError::MissingField, FString("humanGates") };
+		return Result;
+	}
+	if (Gates->Kind != EJsonKind::Array)
+	{
+		Result.Refusal = { EWonderlandWireError::WrongType, FString("humanGates") };
+		return Result;
+	}
+	for (const FJsonValue& Item : Gates->Items)
+	{
+		if (Item.Kind != EJsonKind::Object)
+		{
+			Result.Refusal = { EWonderlandWireError::WrongType, FString("humanGates") };
+			return Result;
+		}
+		FWonderlandHumanGate Gate;
+		if (!DecodeHumanGateObject(Item, Result.Refusal, Gate)) { return Result; }
+		Hydration.HumanGates.Add(Gate);
+	}
+
 	// ─────────────────────────────────────────────────────────────────────
 	// EVERY HALF NAMES THE SAME RUN IN THE SAME PROJECT.
 	//
@@ -1441,6 +1504,23 @@ FWonderlandHydrationDecode WonderlandDecodeHydrationBytes(const char* Bytes, int
 	{
 		Result.Refusal = { EWonderlandWireError::IdentityRejected, FString("brain.projectId") };
 		return Result;
+	}
+	// EVERY GATE, NOT A SAMPLE. One foreign gate among correct ones would show a
+	// person being waited on for something this world cannot see, and nothing
+	// arriving afterwards would withdraw it.
+	for (int32 i = 0; i < Hydration.HumanGates.Num(); i += 1)
+	{
+		const FWonderlandHumanGate& Gate = Hydration.HumanGates[i];
+		if (!(Gate.ProjectId == Hydration.ProjectId))
+		{
+			Result.Refusal = { EWonderlandWireError::IdentityRejected, FString("humanGates.projectId") };
+			return Result;
+		}
+		if (!(Gate.RunId == Hydration.Run.RunId))
+		{
+			Result.Refusal = { EWonderlandWireError::IdentityRejected, FString("humanGates.runId") };
+			return Result;
+		}
 	}
 
 	Result.bOk = true;

@@ -408,6 +408,84 @@ struct FWonderlandCardScope
 	EWonderlandAutonomy Autonomy = EWonderlandAutonomy::Unobserved;
 };
 
+// Mirrors WONDERLAND_GATED_OPERATIONS, itself the kernel's JuliusPolicyOperation.
+//
+// WHAT C.A.R.D. CAN GATE. Safe to mirror because it is closed and it is OURS:
+// these are Relay's words for KINDS OF ACTION, not any provider's product names
+// and not anybody's prose.
+UENUM(BlueprintType)
+enum class EWonderlandGatedOperation : uint8
+{
+	// Ordinal 0. No operation occupies it, so a TArray element nobody wrote —
+	// or a token this build cannot name — never reads as a real gate.
+	Unobserved,
+	DispatchWorker,
+	UseCapability,
+	UseProvider,
+	UseTool,
+	ReadFilesystem,
+	ExecuteProcess,
+	AccessNetwork,
+	MutateFilesystem,
+	SpawnSubagent,
+	ContinueIterativeReview,
+	FallbackProvider,
+	AutomaticRetry,
+	UnchainedContinuation
+};
+
+// Mirrors WonderlandHumanGate. ONE THING A RUN IS WAITING FOR A PERSON TO DO.
+//
+// A WORKER NEVER PUT ANYTHING HERE. A worker asks C.A.R.D. whether an operation
+// is permitted — a question about a capability boundary — and Julius alone
+// turns REQUIRE_APPROVAL into a gate, owns the record and owns the resume.
+// Nothing a worker produced reaches this struct.
+//
+// AND IT CARRIES NO PROSE. `julius_approvals.safe_rationale` is a real column
+// and a genuinely safe sentence, and it still does not cross: a game client is
+// the least trusted process in the system, and a sentence is the one field on
+// this record that could be made to carry something a person wrote. The
+// OPERATION says what is gated, which is what a world draws.
+USTRUCT(BlueprintType)
+struct FWonderlandHumanGate
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Gate")
+	FString SchemaVersion;
+
+	// Its OWN identity, like the citation's. A hydration is adopted wholesale,
+	// so a gate assembled into an otherwise correct payload would put another
+	// run's held decision onto this world with nothing to contradict it.
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Gate")
+	FString ProjectId;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Gate")
+	FString RunId;
+
+	// Opaque handle. Grouped by, never parsed.
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Gate")
+	FString GateId;
+
+	// Absent for a gate on the RUN rather than on one task.
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Gate")
+	FWonderlandText TaskId;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Gate")
+	EWonderlandGatedOperation Operation = EWonderlandGatedOperation::Unobserved;
+
+	// The policy's machine name for why, e.g. CARD_APPROVAL_REQUIRED. A stable
+	// token a program compares, never a sentence — how a surface words it
+	// belongs to whatever draws it. EMPTY means the kernel reported a code the
+	// server would not repeat, which is an absence rather than a sentence.
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Gate")
+	FString ReasonCode;
+
+	// When the gate opened. How long a person has been waited on.
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Gate")
+	FString RequestedAtIso;
+};
+
 // Mirrors WonderlandHydration. Everything a world needs to draw itself cold.
 //
 // TWO KINDS OF THING TRAVEL ON THIS SEAM, and the split is the design.
@@ -462,6 +540,20 @@ struct FWonderlandHydration
 
 	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Hydration")
 	FWonderlandCardScope Card;
+
+	// WHAT A PERSON IS BEING WAITED ON FOR, typed.
+	//
+	// `Run.PendingApprovals` is the authority on HOW MANY; this says WHICH, and
+	// may carry fewer. Both are read in one statement so they cannot disagree
+	// about a moment, and where they disagree about a COUNT that difference is
+	// the report: a gate whose operation this build cannot name is counted and
+	// not described. Same shape as a Project Brain kind with no bucket.
+	//
+	// EMPTY IS NOT UNKNOWN HERE. The count beside it carries the absence — a
+	// PendingApprovals nobody could compute is an unknown carrier, while an
+	// empty list beside a known zero is "nothing is gated".
+	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Hydration")
+	TArray<FWonderlandHumanGate> HumanGates;
 
 	// When this was cut, not when anything in it last changed.
 	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Hydration")

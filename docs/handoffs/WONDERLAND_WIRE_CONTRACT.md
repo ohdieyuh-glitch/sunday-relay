@@ -31,7 +31,7 @@ The rules, as the contract names them:
 - `absence_carrier`
 - `enum_token`
 
-## Fields that need a carrier (91)
+## Fields that need a carrier (92)
 
 The JSON key is the TypeScript field name. Every one of these arrives as a
 bare value or `null` and must be widened into the carrier its struct declares.
@@ -51,6 +51,7 @@ bare value or `null` and must be widened into the carrier its struct declares.
 | `FWonderlandEnvelope` | `WonderlandEnvelope` | `juliusInstanceId`, `missionId`, `runId`, `sourceState`, `taskId`, `workerRole`, `worldSessionId` |
 | `FWonderlandFigure` | `WonderlandFigure` | `reason`, `value` |
 | `FWonderlandGve` | `WonderlandGve` | `backingLoopId`, `backingLoopState`, `captureBlockedReason` |
+| `FWonderlandHumanGate` | `WonderlandHumanGate` | `taskId` |
 | `FWonderlandHydration` | `WonderlandHydration` | `worldSessionId` |
 | `FWonderlandJuliusEmbodiment` | `JuliusEmbodiment` | `activity`, `agentId`, `attentionRequired`, `missionId`, `motion`, `observedAtIso`, `relayPhase`, `sourceState`, `stateSource`, `unobservedReason`, `visualState` |
 | `FWonderlandLinkStatus` | `WonderlandLinkStatus` | `lastSnapshotAtIso` |
@@ -65,7 +66,7 @@ bare value or `null` and must be widened into the carrier its struct declares.
 | `FWonderlandUsageMeter` | `WonderlandUsageMeter` | `tierId`, `tierLabel`, `unavailableReason`, `unitLabel` |
 | `FWonderlandWorld` | `WonderlandWorld` | `gve` |
 
-## Enum token mapping (41 enums)
+## Enum token mapping (42 enums)
 
 `nullable` means Relay can report nothing for it, so ordinal 0 is reachable
 and means exactly that. A token this table does not list is one Relay does
@@ -279,6 +280,26 @@ From `AQUALA_STATUS_VALUES.execution`. Nullable: **yes**. Zero member: `Unobserv
 | `completed` | `Completed` |
 | `failed` | `Failed` |
 | `cancelled` | `Cancelled` |
+
+### `EWonderlandGatedOperation`
+
+From `WONDERLAND_GATED_OPERATIONS`. Nullable: **yes**. Zero member: `Unobserved`.
+
+| wire token | C++ member |
+|---|---|
+| `DISPATCH_WORKER` | `DispatchWorker` |
+| `USE_CAPABILITY` | `UseCapability` |
+| `USE_PROVIDER` | `UseProvider` |
+| `USE_TOOL` | `UseTool` |
+| `READ_FILESYSTEM` | `ReadFilesystem` |
+| `EXECUTE_PROCESS` | `ExecuteProcess` |
+| `ACCESS_NETWORK` | `AccessNetwork` |
+| `MUTATE_FILESYSTEM` | `MutateFilesystem` |
+| `SPAWN_SUBAGENT` | `SpawnSubagent` |
+| `CONTINUE_ITERATIVE_REVIEW` | `ContinueIterativeReview` |
+| `FALLBACK_PROVIDER` | `FallbackProvider` |
+| `AUTOMATIC_RETRY` | `AutomaticRetry` |
+| `UNCHAINED_CONTINUATION` | `UnchainedContinuation` |
 
 ### `EWonderlandGveClass`
 
@@ -611,7 +632,7 @@ From `WONDERLAND_WORKER_ROLES`. Nullable: **yes**. Zero member: `Unobserved`.
 | `INDEPENDENT_REVIEWER` | `IndependentReviewer` |
 | `SPECIALIST` | `Specialist` |
 
-## Structs that cross whole (41)
+## Structs that cross whole (42)
 
 | C++ | TypeScript |
 |---|---|
@@ -632,6 +653,7 @@ From `WONDERLAND_WORKER_ROLES`. Nullable: **yes**. Zero member: `Unobserved`.
 | `FWonderlandEnvelope` | `WonderlandEnvelope` |
 | `FWonderlandFigure` | `WonderlandFigure` |
 | `FWonderlandGve` | `WonderlandGve` |
+| `FWonderlandHumanGate` | `WonderlandHumanGate` |
 | `FWonderlandHydration` | `WonderlandHydration` |
 | `FWonderlandJuliusEmbodiment` | `JuliusEmbodiment` |
 | `FWonderlandLinkStatus` | `WonderlandLinkStatus` |

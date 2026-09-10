@@ -119,6 +119,23 @@ static const FWonderlandWireToken EWonderlandBrainKindTokens[] = {
 	{ "EVIDENCE", static_cast<uint8>(EWonderlandBrainKind::Evidence) },
 };
 
+// EWonderlandGatedOperation — from WONDERLAND_GATED_OPERATIONS. Zero member: Unobserved.
+static const FWonderlandWireToken EWonderlandGatedOperationTokens[] = {
+	{ "DISPATCH_WORKER", static_cast<uint8>(EWonderlandGatedOperation::DispatchWorker) },
+	{ "USE_CAPABILITY", static_cast<uint8>(EWonderlandGatedOperation::UseCapability) },
+	{ "USE_PROVIDER", static_cast<uint8>(EWonderlandGatedOperation::UseProvider) },
+	{ "USE_TOOL", static_cast<uint8>(EWonderlandGatedOperation::UseTool) },
+	{ "READ_FILESYSTEM", static_cast<uint8>(EWonderlandGatedOperation::ReadFilesystem) },
+	{ "EXECUTE_PROCESS", static_cast<uint8>(EWonderlandGatedOperation::ExecuteProcess) },
+	{ "ACCESS_NETWORK", static_cast<uint8>(EWonderlandGatedOperation::AccessNetwork) },
+	{ "MUTATE_FILESYSTEM", static_cast<uint8>(EWonderlandGatedOperation::MutateFilesystem) },
+	{ "SPAWN_SUBAGENT", static_cast<uint8>(EWonderlandGatedOperation::SpawnSubagent) },
+	{ "CONTINUE_ITERATIVE_REVIEW", static_cast<uint8>(EWonderlandGatedOperation::ContinueIterativeReview) },
+	{ "FALLBACK_PROVIDER", static_cast<uint8>(EWonderlandGatedOperation::FallbackProvider) },
+	{ "AUTOMATIC_RETRY", static_cast<uint8>(EWonderlandGatedOperation::AutomaticRetry) },
+	{ "UNCHAINED_CONTINUATION", static_cast<uint8>(EWonderlandGatedOperation::UnchainedContinuation) },
+};
+
 const FWonderlandWireEnumTable WonderlandWireEnumTables[] = {
 	{ "EWonderlandJuliusState", EWonderlandJuliusStateTokens, 11, true },
 	{ "EWonderlandJuliusStateSource", EWonderlandJuliusStateSourceTokens, 3, true },
@@ -132,6 +149,7 @@ const FWonderlandWireEnumTable WonderlandWireEnumTables[] = {
 	{ "EWonderlandUsageReading", EWonderlandUsageReadingTokens, 4, false },
 	{ "EWonderlandAutonomy", EWonderlandAutonomyTokens, 3, true },
 	{ "EWonderlandBrainKind", EWonderlandBrainKindTokens, 9, true },
+	{ "EWonderlandGatedOperation", EWonderlandGatedOperationTokens, 13, true },
 };
 
-const int32 WonderlandWireEnumTableCount = 12;
+const int32 WonderlandWireEnumTableCount = 13;

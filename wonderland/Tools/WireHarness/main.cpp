@@ -625,9 +625,57 @@ int main(int argc, char** argv)
 						Check(R.Hydration.Card.EligibleSwarmRoles.Num() == 2, "and the roles it permits");
 						Check(R.Hydration.Card.Autonomy == EWonderlandAutonomy::Autonomous,
 							"the autonomy level decodes");
+
+						// THE GATES — what a person is being waited on for.
+						Check(R.Hydration.HumanGates.Num() == 2, "both open gates decode");
+						Check(R.Hydration.HumanGates[0].Operation == EWonderlandGatedOperation::SpawnSubagent,
+							"a gated operation lands on ITS OWN member");
+						CheckStr(R.Hydration.HumanGates[0].GateId, "gate-1", "the gate handle decodes");
+						Check(R.Hydration.HumanGates[0].TaskId.bKnown, "a task gate names its task");
+						CheckStr(R.Hydration.HumanGates[0].ReasonCode, "CARD_APPROVAL_REQUIRED",
+							"the reason CODE crosses");
+						// A RUN-LEVEL GATE HAS NO TASK, and that is an answer
+						// rather than an omission.
+						Check(!R.Hydration.HumanGates[1].TaskId.bKnown,
+							"a run-level gate reports no task at all");
+						Check(R.Hydration.HumanGates[1].Operation == EWonderlandGatedOperation::AccessNetwork,
+							"and its own operation");
+						// NO PROSE ON THIS RECORD. `safe_rationale` is a real
+						// column on the kernel's approval and it has no field
+						// here to arrive in.
+						CheckStr(R.Hydration.HumanGates[0].ProjectId, "project-alpha",
+							"a gate carries its own identity, so a foreign one is checkable");
+					}
+					else if (Name == "hydration-gate-run-level")
+					{
+						Check(R.Hydration.HumanGates.Num() == 1, "the run-level gate decodes");
+						Check(!R.Hydration.HumanGates[0].TaskId.bKnown, "with no task");
+						Check(R.Hydration.HumanGates[0].Operation
+								== EWonderlandGatedOperation::UnchainedContinuation,
+							"and the operation that stops a whole run");
+					}
+					else if (Name == "hydration-gate-none")
+					{
+						// NOBODY IS BEING WAITED ON, and somebody looked. The
+						// count beside it is what carries "nobody counted".
+						Check(R.Hydration.HumanGates.Num() == 0, "an ungated run has no gates");
+						Check(R.Hydration.Run.PendingApprovals.bKnown,
+							"and a KNOWN zero beside them, which is a different fact");
+						Check(R.Hydration.Run.PendingApprovals.Value == 0.0, "of zero");
+					}
+					else if (Name == "hydration-gate-unrepeatable-reason")
+					{
+						// A SENTENCE CANNOT REACH A GAME CLIENT THROUGH THIS
+						// FIELD. The server drops a reason that is not a machine
+						// name, and what arrives is an absence rather than prose.
+						Check(R.Hydration.HumanGates.Num() == 1, "the gate still decodes");
+						CheckStr(R.Hydration.HumanGates[0].ReasonCode, "",
+							"and its unrepeatable reason arrives EMPTY, not as a sentence");
 					}
 					else if (Name == "hydration-production-unknowns")
 					{
+						Check(R.Hydration.HumanGates.Num() == 0,
+							"a run nobody is waiting on carries no gates");
 						// THE SHAPE PRODUCTION ACTUALLY SERVES, and the one this
 						// whole file exists for: everything nobody reported must
 						// stay UNKNOWN rather than becoming a confident zero.
