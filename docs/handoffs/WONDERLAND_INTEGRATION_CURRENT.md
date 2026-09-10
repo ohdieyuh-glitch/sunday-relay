@@ -1592,6 +1592,135 @@ ledger directly rather than depending on that route.
 
 ---
 
+## EDITOR / LAPTOP BLOCKPOINT (2026-09-10)
+
+**Everything below this line needs a machine this session does not have.**
+Nothing above it is waiting on anything.
+
+### Where the work is
+
+| | |
+|---|---|
+| branch | `claude/julius-wonderland-integration-khaqs3` (pushed) |
+| continues | `relay/wonderland-integration` from `03fe982` |
+| base | `origin/main` at `b2dc9f2` — NOT rebased onto `5be73c5` |
+| working tree | clean |
+| merges with `origin/main`? | **YES, cleanly — tried and verified.** `git merge origin/main` auto-merged four files with no conflict; the merged tree typechecks and the whole Wonderland/persistence/bridge slice passes. It needs ONE follow-up: `npm run julius:harness:export`, because both sides changed the generated manifest. The probe branch was deleted; the merge has NOT been made on this branch, so the diff stays reviewable against `b2dc9f2`. |
+
+### What is proven in the cloud, and how
+
+| gate | result |
+|---|---|
+| `npm test` | **10,270 passing, 1 failing across 534 files** (261s). The failure is `executor-repair-regression.test.ts`, which passes **14/14 alone** and only fails under parallel load — a known pre-existing flake in a subtree this branch never touches (`git diff --name-only 03fe982..HEAD -- src/relay/workspace` is empty). |
+| `typecheck` | PASS (all four projects, `import.meta` bridge pass included) |
+| `build`, `relay:build`, `relay:bridge:build` | PASS |
+| `relay-repository-boundary.mjs` | PASS |
+| `relay-parity-gate.mjs` | PASS |
+| `relay:surface-parity:check:strict` | PASS |
+| `relay:cli:contract-verify` | PASS |
+| `relay:yc-demo:check` | READY FOR FOUNDER ACCEPTANCE |
+| `relay:persistence:contract-verify` | PASS (44 separate Node processes) |
+| `relay:persistence:recovery-drill` | DURABLE LOCAL RECOVERY VERIFIED |
+| `relay:workspace:verify` | PASS |
+| `relay:claude:contract-verify` | PASS |
+| `wonderland:cpp:syntax` | 32 files, all at baseline |
+| `wonderland:wire:verify` | **327 checks, 0 failures** |
+| `wonderland:julius:verify` | **90 checks** |
+| `wonderland:usage:verify` | 152 checks |
+| `wonderland:ordering:verify` | 450 checks over 26 generated cases |
+| `wonderland:geometry:verify` | 66 samples, worst deviation 1e-6 |
+| `:wire:check`, `:wire:fixtures:check`, `:geometry:check`, `:ordering:check` | all current |
+| REAL PostgreSQL 16.13 | **50 passing** — `wonderland-julius-reader-real-postgres.test.ts` (47) and `real-infra-julius.test.ts` (3 + 2 Docker-gated todo), migration chain from empty, two seeded projects, both writers on the shared events table |
+| `git diff --check` | clean |
+
+**Roughly 20 deliberate mutations were run across this session's code and every
+one was caught**, except three that were confirmed EQUIVALENT and are labelled
+as such in the source rather than left looking proven.
+
+### What is waiting for the editor
+
+**Compile-only (needs UE headers and UHT, no PIE):**
+
+- All 16 `.cpp` under `wonderland/Source/Wonderland/`. They are syntax-checked
+  and six of them are COMPILED AND EXECUTED here against stubbed engine types,
+  but never against real UE headers. Expect UHT to want `.generated.h` files
+  that are one-line stubs in this repository.
+- `WonderlandWireDecode.cpp` — the largest new surface. It parses its own JSON
+  and depends on nothing from the engine but `CoreMinimal`, so it is the file
+  most likely to compile unchanged and the one whose behaviour is already
+  pinned by 327 executed checks.
+- `WonderlandJuliusSubsystem.cpp` — `AdoptHydration` is new. 90 executed checks.
+
+**Compile AND runtime, but still no pixels (PIE, no art needed):**
+
+- `UWonderlandJuliusSubsystem` / `UWonderlandUsageSubsystem` as real
+  `UGameInstanceSubsystem`s. Everything about them is proven as plain C++ here;
+  what is NOT proven is that the engine constructs and finds them.
+- `AWonderlandHubGameMode` spawning the Dog as `DefaultPawnClass` (checklist 7).
+- The SSE socket. **The decoder is not the work** — `WonderlandWireReadSseData`
+  plus `WonderlandDecodeDeliveryBytes` is the whole read path. What is missing is
+  an HTTP client that holds a browser session token and pumps bytes into them.
+
+**Visual verification (needs a GPU and, for 9, art):**
+
+- `WonderlandUsageHudWidget.cpp` — **the only file on this seam never compiled
+  against real UMG.** The Slate paint is the single genuinely unproven thing in
+  the C++. The geometry underneath it is proven numerically (66 samples, 1e-6).
+- Checklist 9: the hub blockout with the founder's art direction.
+- A–M items G, H, I, L: animation following a phase, an accent riding on top
+  without changing the base clip, both meters drawing with a bigger tier as a
+  LONGER track, and the three endings drawn.
+
+**Blender / GPU dependency:** there is **no Blender dependency anywhere in this
+repository** — no file references it and nothing is blocked on a mesh. The GPU
+is needed for PIE and for the HUD paint, not for any contract. `.umap` and
+`.uasset` binaries are editor-authored and cannot be honestly written here;
+that is checklist steps 6 and 8 and is unchanged.
+
+### Exact laptop-only operations remaining
+
+1. UE 5.4 install → generate project files → build `WonderlandEditor`.
+2. Author `/Game/Wonderland/Maps/WonderlandHub` and the Enhanced Input assets.
+3. Run A–M in `docs/handoffs/WONDERLAND_UNREAL_HANDOFF.md`, including the new
+   **K2** (a cold join draws a COMPLETED run; a gated run shows its gate).
+4. Capture evidence into `docs/relay/WONDERLAND_SLICE_EVIDENCE.md`.
+
+### The one cloud thing that is NOT code
+
+**Set `DATABASE_URL` on the Railway bridge.** One environment variable; both
+world dependencies are built from one pool. Until then every `/wonderland/julius/*`
+route answers 503, which is correct rather than broken. This is an operator
+action and no session can do it without the founder's console.
+
+### The first action when the laptop arrives
+
+```
+git clone … && git checkout claude/julius-wonderland-integration-khaqs3
+npm ci
+npm run wonderland:wire:verify && npm run wonderland:julius:verify
+```
+
+**Run the harnesses BEFORE opening the editor.** They take seconds, need no
+engine, and if one fails the problem is the checkout rather than Unreal. Then
+right-click `Wonderland.uproject` → Generate project files → build
+`WonderlandEditor` (Development) and capture the build log: that is checklist
+step 3 and A in the evidence chain, and everything else is behind it.
+
+### Nothing else valuable remains cloud-only
+
+The hydration path is complete end to end — PostgreSQL → reader → route → wire
+JSON → C++ decoder → subsystem adoption — and every link is EXECUTED here rather
+than described. The remaining cloud-side item is a usage authority, which is a
+product decision rather than an integration gap and which does not block A–M;
+until there is one the meters draw UNKNOWN, which is the true reading.
+
+**TASK 3 IS NOT COMPLETE.** The cloud side of it is. Nothing on this seam has
+been driven by a live Julius mission, no Unreal build has ever run, and no GPU
+frame has ever been drawn — and no amount of further cloud work can change any
+of those three.
+
+---
+
 ## Final report (the brief's A–L)
 
 **A. Starting SHA** — `b2dc9f2` (`origin/main`, unchanged throughout; this
