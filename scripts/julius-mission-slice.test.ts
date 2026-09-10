@@ -1,8 +1,9 @@
 import { execFileSync } from 'node:child_process';
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
+import { PROBE_LIST_COMMAND, chooseProbeFile, parseTrackedPaths, resolveProbeFile } from './julius-live-probe-file';
 
 /**
  * THE SANDBOX RULE, EXERCISED RATHER THAN ASSERTED.
@@ -235,5 +236,92 @@ describe('the overlay carries a mission specification the repository does not ha
     // they disagree nobody should have to guess which won.
     expect(() => seedSlice({ 'src/relay/mission/julius/julius-trajectory.ts': 'export const hijacked = true;\n' }))
       .toThrow(/mission_seed_overlay_shadows_slice/u);
+  }, 30_000);
+});
+
+/**
+ * THE PREFLIGHT'S OWN REQUIREMENT, CHECKED AGAINST EVERY MISSION THAT EXISTS.
+ *
+ * The zero-spend preflight proves the host→sandbox hand-off by writing to a
+ * file in the mission's workspace and requiring the change to appear in a diff
+ * captured inside the sandbox. That needs a TRACKED, TEXT file — `git diff`
+ * reports nothing else — and until Mission 4 the preflight simply assumed the
+ * name `README.md`, which every throwaway-tree mission happened to ship and no
+ * slice mission does. Run 34433098911 died on ENOENT two seconds in.
+ *
+ * The preflight now discovers the file (`julius-live-probe-file.ts`). This is
+ * the other half: a mission whose workspace cannot satisfy that requirement at
+ * all now fails `npm test`, at the cost of nothing, instead of failing a
+ * dispatched workflow run — or, worse, passing the preflight and handing the
+ * Independent Reviewer an empty diff after the mission has already paid.
+ */
+describe('every mission workspace can satisfy the preflight hand-off probe', () => {
+  const MISSIONS = join(REPO, '.github/julius-missions');
+
+  /** The provisioner's two seed kinds, minus the parts that need root. */
+  const provision = (mission: string): string => {
+    const missionDir = join(MISSIONS, mission);
+    const dir = mkdtempSync(join(tmpdir(), 'julius-mission-'));
+    scratch.push(dir);
+    const sliceFile = join(missionDir, 'slice.txt');
+    if (existsSync(sliceFile)) {
+      const paths = readFileSync(sliceFile, 'utf8')
+        .split('\n').map((line) => line.replace(/#.*$/, '').trim()).filter((line) => line.length > 0);
+      const rev = git(REPO, 'rev-parse', 'HEAD').trim();
+      execFileSync('sh', ['-c', `git -C '${REPO}' archive --format=tar ${rev} -- ${paths.join(' ')} | tar -x -C '${dir}'`]);
+      mkdirSync(join(dir, '.julius'), { recursive: true });
+      for (const file of ['resolve.mjs', 'loader.mjs']) cpSync(join(HARNESS, file), join(dir, '.julius', file));
+      const overlay = join(missionDir, 'seed');
+      if (existsSync(overlay)) cpSync(overlay, dir, { recursive: true });
+    } else {
+      cpSync(join(missionDir, 'workspace'), dir, { recursive: true });
+    }
+    git(dir, 'init', '--quiet', '--initial-branch=main', '.');
+    git(dir, '-c', 'user.name=J', '-c', 'user.email=j@invalid', 'add', '-A');
+    git(dir, '-c', 'user.name=J', '-c', 'user.email=j@invalid', 'commit', '--quiet', '-m', 'seed');
+    return dir;
+  };
+
+  const missions = readdirSync(MISSIONS, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory()).map((entry) => entry.name).sort();
+
+  it('finds a mission to check — an empty list would make every case below vacuous', () => {
+    expect(missions.length).toBeGreaterThan(0);
+  });
+
+  /**
+   * THE PREFLIGHT'S OWN CALL, with its sandbox replaced by real git in the
+   * provisioned workspace. `resolveProbeFile` is the exact function
+   * `julius-live-preflight.ts` calls and `PROBE_LIST_COMMAND` the exact string
+   * it sends, so this drives the seam rather than a paraphrase of it.
+   */
+  const asSandbox = (dir: string) => async (command: string) => {
+    expect(command).toBe(PROBE_LIST_COMMAND);
+    const [, ...args] = command.split(' ');
+    return { status: 'SUCCEEDED', exitCode: 0, stdout: git(dir, ...args), stderr: '' };
+  };
+
+  it.each(missions)('%s: the probe can write to a tracked text file, and the marker reaches the diff', async (mission) => {
+    const dir = provision(mission);
+    const tracked = parseTrackedPaths(git(dir, '-c', 'core.quotePath=false', 'ls-files'));
+    const chosen = chooseProbeFile(tracked, (relative) => readFileSync(join(dir, relative)));
+    expect(chosen.ok, `${mission}: no tracked text file — the preflight would fail before any provider is reached`).toBe(true);
+    if (!chosen.ok) return;
+
+    // The seam the preflight actually uses reaches the same file.
+    const resolved = await resolveProbeFile(asSandbox(dir), (relative) => readFileSync(join(dir, relative)));
+    expect(resolved.ok).toBe(true);
+    if (!resolved.ok) return;
+    expect(resolved.path).toBe(chosen.path);
+    expect(resolved.tracked).toBe(tracked.length);
+
+    // Not merely chosen: it has to carry the marker the preflight looks for,
+    // and leave the workspace exactly as it was afterwards.
+    const marker = 'julius-live-preflight-probe';
+    const target = join(dir, chosen.path);
+    writeFileSync(target, Buffer.concat([chosen.content, Buffer.from(`\n${marker}\n`, 'utf8')]));
+    expect(git(dir, '--no-pager', 'diff')).toContain(marker);
+    writeFileSync(target, chosen.content);
+    expect(git(dir, 'status', '--porcelain=v1').trim()).toBe('');
   }, 30_000);
 });
