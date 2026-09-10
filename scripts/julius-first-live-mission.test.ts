@@ -577,8 +577,23 @@ describe('the mission itself is bounded and aimed away from this repository', ()
       const deliverables = deliverablesOf(mission);
       expect(deliverables.length, `${mission} must seed something to edit`).toBeGreaterThan(0);
       const contract = JSON.parse(read(`${MISSIONS_DIR}/${mission}/contract.json`)) as
-        { objective: string; requirements: string[] };
-      const asks = [contract.objective, ...contract.requirements].join(' ');
+        { objective: string; requirements: string[]; constraints?: string[] };
+      /**
+       * A SLICE MISSION LEGITIMATELY SEEDS FILES THE CODER MUST NOT EDIT.
+       *
+       * A throwaway tree contains only what the mission invented, so everything
+       * in it is a deliverable and the objective and requirements name it all. A
+       * slice also carries the modules the deliverable is TYPED AGAINST — the
+       * coder has to read them, and its instruction about them is "do not edit
+       * these", which belongs in the constraints. The rule is unchanged: every
+       * seeded file must be named by the contract that seeded it. Only where
+       * the naming may appear widens, and only for the seed kind that has
+       * somewhere else to put it.
+       */
+      const asks = [
+        contract.objective, ...contract.requirements,
+        ...(seedKindOf(mission) === 'slice' ? contract.constraints ?? [] : []),
+      ].join(' ');
       expect(asks, `${mission}: the contract must ask for edits, never for a new file`).not.toMatch(/\bCreate\b/u);
       for (const file of deliverables) {
         expect(asks, `${mission}: ${file} must be named by the contract it is seeded for`).toContain(file);

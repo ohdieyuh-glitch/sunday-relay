@@ -1,0 +1,92 @@
+{
+  "missionId": "mission:julius-live-4",
+  "markerNamespace": "julius-live-mission-4",
+  "projectId": "prj-julius-live-4",
+  "tenantId": "tenant",
+  "objective": "In this workspace, implement the Project Brain v2 trust core in `src/relay/mission/julius/julius-memory-trust.ts`. Every exported function there currently throws `memory_trust_not_implemented`; replace those bodies with real implementations that satisfy `src/relay/mission/julius/julius-memory-trust.test.ts`, which is already written and currently fails. The file already exists and is tracked by git — edit it in place. Edit only files inside this workspace.",
+  "requirements": [
+    "Edit `src/relay/mission/julius/julius-memory-trust.ts` so no exported function throws `memory_trust_not_implemented`. Keep every exported name, signature and type exactly as declared.",
+    "AUTO-GENERATE IS ALLOWED, AUTO-TRUST IS NOT. `admitJuliusMemoryCandidate` always admits at trust `UNVERIFIED`, whatever `requestedTrust` asks for. A caller requesting more is NOT refused for that reason — it is admitted at `UNVERIFIED`.",
+    "`admitJuliusMemoryCandidate` refuses (returns `{ outcome: 'REFUSED', reasonCode }`) a claim with an empty or blank `claimId`, `entryId` or `assertedBy`, or a `provenance` outside the declared vocabulary.",
+    "`promoteJuliusMemoryClaim` is verification-gated. Promotion to `VERIFIED` requires at least one evidence reference of kind `REVIEW` or `FINDING`, and the promoting authority `by` must not equal the claim's own `assertedBy`: a claim cannot verify itself.",
+    "Promotion to `APPROVED` requires at least one evidence reference of kind `DECISION`. Promotion to `SUPPORTED` requires at least one evidence reference of any kind that the asserter did not supply.",
+    "A claim whose trust is `CONTRADICTED` or `SUPERSEDED` can never be promoted again; `promoteJuliusMemoryClaim` refuses it.",
+    "`contradictJuliusMemoryClaims(a, b, at)` records the conflict on BOTH claims — each claim's `contradicts` gains the other's `claimId` — and neither claim is deleted. Both become `CONTRADICTED`, EXCEPT that a claim already at `APPROVED` keeps `APPROVED`: an adopted claim is not demoted by a bare assertion.",
+    "`supersedeJuliusMemoryClaim(existing, replacement, at)` marks `existing` as `SUPERSEDED` and sets the replacement's `supersedes` to the existing `claimId`. It refuses when the two claims are about different `entryId`s, and refuses a claim superseding itself.",
+    "`promoteJuliusMemoryClaim` only ever RAISES standing, in the ordering `UNVERIFIED < SUPPORTED < VERIFIED < APPROVED`. A target at or below the claim's current standing is refused, and `CONTRADICTED` and `SUPERSEDED` are never promotion targets — those are reached by `contradictJuliusMemoryClaims` and `supersedeJuliusMemoryClaim`, which record why.",
+    "`retrieveTrustedJuliusMemory(claims, { minimumTrust, role })` returns only claims whose trust is at or above `minimumTrust` in the declared ordering `UNVERIFIED < SUPPORTED < VERIFIED < APPROVED`, and NEVER returns a claim whose trust is `CONTRADICTED` or `SUPERSEDED`, whatever standing it once had.",
+    "Every function is pure: it must not mutate any argument. A claim handed in comes back unchanged, and results are new objects.",
+    "After your edits `node --import ./.julius/loader.mjs --test src/relay/mission/julius/julius-memory-trust.test.ts` must exit zero, with no network access and no third-party dependency."
+  ],
+  "constraints": [
+    "Edit `src/relay/mission/julius/julius-memory-trust.ts` in place. You have `Read`, `Glob`, `Grep` and `Edit`; you cannot create files or run commands, and you do not need to.",
+    "Do not edit `src/relay/mission/julius/julius-memory-trust.test.ts`. It is the specification you are implementing against, not part of the deliverable.",
+    "Do not edit `src/relay/mission/julius/julius-runtime.ts` or `src/relay/mission/julius/julius-repair-lineage.ts`. They are here so you can read the types you are writing against.",
+    "This is TypeScript run by Node's own type stripping. Use only erasable syntax: no `enum`, no `namespace`, and no parameter properties in a constructor.",
+    "Add no dependency and no import from outside this workspace; the sandbox that runs the test has no network access and no `node_modules`.",
+    "Keep the change to the one file named above. Do not touch `.julius/`."
+  ],
+  "acceptanceCriteria": [
+    {
+      "id": "criterion-implemented",
+      "text": "No exported function in `julius-memory-trust.ts` throws `memory_trust_not_implemented`, and every exported name, signature and type is unchanged.",
+      "blocking": true
+    },
+    {
+      "id": "criterion-no-auto-trust",
+      "text": "`admitJuliusMemoryCandidate` admits at `UNVERIFIED` for every possible `requestedTrust`, including `APPROVED` — auto-generation is allowed, auto-trust is not.",
+      "blocking": true
+    },
+    {
+      "id": "criterion-candidate-refusals",
+      "text": "A candidate with a blank `claimId`, `entryId` or `assertedBy`, or a provenance outside the vocabulary, is REFUSED rather than admitted.",
+      "blocking": true
+    },
+    {
+      "id": "criterion-no-self-verification",
+      "text": "Promotion to `VERIFIED` requires `REVIEW` or `FINDING` evidence AND an authority different from the claim's own `assertedBy`; a claim cannot verify itself, and promotion with no evidence or the wrong evidence kind is refused.",
+      "blocking": true
+    },
+    {
+      "id": "criterion-terminal-states",
+      "text": "A `CONTRADICTED` or `SUPERSEDED` claim is never promoted again.",
+      "blocking": true
+    },
+    {
+      "id": "criterion-contradiction",
+      "text": "Contradiction records the conflict on both claims and deletes neither; an `APPROVED` claim is not demoted by a conflicting bare assertion, which itself becomes `CONTRADICTED`.",
+      "blocking": true
+    },
+    {
+      "id": "criterion-supersession",
+      "text": "Supersession marks the existing claim `SUPERSEDED` and links the replacement's `supersedes`, and refuses a different `entryId` or a claim superseding itself.",
+      "blocking": true
+    },
+    {
+      "id": "criterion-monotonic-promotion",
+      "text": "Promotion only raises standing: a target at or below the claim's current trust is refused, and `CONTRADICTED`/`SUPERSEDED` are never promotion targets — so an `APPROVED` claim can never be quietly returned to `UNVERIFIED`.",
+      "blocking": true
+    },
+    {
+      "id": "criterion-retrieval",
+      "text": "Retrieval honours the trust ordering and never returns a `CONTRADICTED` or `SUPERSEDED` claim, whatever standing it once had.",
+      "blocking": true
+    },
+    {
+      "id": "criterion-purity",
+      "text": "No function mutates an argument; a claim handed in comes back unchanged.",
+      "blocking": true
+    },
+    {
+      "id": "criterion-test-passes",
+      "text": "The declared test command exits zero against the unmodified specification test.",
+      "blocking": true
+    }
+  ],
+  "testCommand": "node --import ./.julius/loader.mjs --test src/relay/mission/julius/julius-memory-trust.test.ts",
+  "workspacePath": "/tmp/julius-workspace/tenant/ws",
+  "limits": {
+    "spendUsd": 20,
+    "repairCycles": 3
+  }
+}

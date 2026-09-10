@@ -53,6 +53,23 @@ const MISSION_LIMITS = Object.freeze({
   // because a contract cannot grant itself a ceiling. That refusal was correct,
   // and the grant belongs here, named, where raising it is visible.
   'julius-live-mission-3': Object.freeze({ spendUsd: 20, repairCycles: 3 }),
+  // Campaign decision, 2026-09-10, under the founder's standing authorisation to
+  // run paid missions without asking per dispatch — bounded and named here
+  // rather than assumed, because that authorisation removed the per-run
+  // approval and not the ceiling.
+  //
+  // The same 20/3 as missions 2 and 3, and for the same reason: a mission that
+  // must exercise the repair loop needs more than one cycle to show a repair
+  // LINEAGE rather than a single retry. It is a BOUND, not a forecast — mission
+  // 2 spent $0.515 against this grant and mission 3 spent $0.609 — and the
+  // coder's own share is `floor(20 / (1 + 3))` = $5 under `julius-allocation.v1`,
+  // which is what actually limits the one worker that can spend at scale.
+  //
+  // Mission 4 is a harder task than mission 3 (a domain module with nine
+  // invariants, against a single resolver function), so more coder turns are
+  // plausible; $5 of headroom against a $0.61 precedent is deliberate slack, not
+  // an expectation.
+  'julius-live-mission-4': Object.freeze({ spendUsd: 20, repairCycles: 3 }),
 });
 
 /** The ceilings that apply to THIS contract, by its own declared namespace. */
