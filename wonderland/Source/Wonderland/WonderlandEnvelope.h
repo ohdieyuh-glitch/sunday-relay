@@ -383,12 +383,24 @@ struct FWonderlandCardScope
 	// MAY spawn a swarm, which is not "is running one" — that is `Swarming` on
 	// the activity axis. A world needs this one to leave room before any clone
 	// exists.
+	//
+	// A CARRIER, FOR THE SAME REASON THE THREE SLOTS ARE. It was a bare bool,
+	// and a reader that could not resolve the C.A.R.D. — which is every reader
+	// today, since C.A.R.D. policy is not persisted at all — reported `false`:
+	// "this run may not spawn a swarm", a confident claim nobody made, drawn
+	// beside three slots that correctly said UNKNOWN. `bKnown` false means
+	// nobody looked; only `bKnown && !bValue` is a C.A.R.D. that forbids one.
 	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Card")
-	bool bSwarmEligible = false;
+	FWonderlandFlag SwarmEligible;
 
 	// From the repository's own closed role vocabulary, safe to carry precisely
 	// because it is closed: these are Relay's words for functions, not anybody's
 	// product names.
+	//
+	// MEANINGLESS ON ITS OWN. Empty is both "permits no roles" and "nobody could
+	// look"; `SwarmEligible` is what tells them apart, and a renderer must read
+	// it first. There is no carrier for a TArray, so the distinction lives on
+	// the flag beside it rather than on the list.
 	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Card")
 	TArray<FString> EligibleSwarmRoles;
 

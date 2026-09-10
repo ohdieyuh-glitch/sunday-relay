@@ -27,18 +27,50 @@ interface Issued {
   readonly values: readonly unknown[];
 }
 
-/** A pool that answers each query from a matcher, and records what was asked. */
+/**
+ * A pool that answers each query from a matcher, and records what was asked.
+ *
+ * THE CITATION READ IS MATCHED FIRST, and that is not a convenience. A
+ * hydration issues three statements and the matchers below are written loosely
+ * — `/julius_runs r/` is meant for the run row, and the citation JOINs
+ * `julius_runs r` too. Checked in the caller's order, the citation query was
+ * answered with a RUN row, and the failure surfaced as a date parsed out of a
+ * column that was never a date. A test that answers the wrong statement proves
+ * something about a statement nobody issued.
+ *
+ * So a `julius_context_snapshots` answer goes to the front of the list, and a
+ * test that does not supply one gets the truthful default: nothing compiled
+ * yet.
+ */
 const pool = (answers: readonly { match: RegExp; rows: readonly unknown[] }[]) => {
   const issued: Issued[] = [];
+  const ordered = [
+    ...answers.filter((a) => a.match.source.includes('context_snapshots')),
+    { match: /julius_context_snapshots/, rows: [] as readonly unknown[] },
+    ...answers.filter((a) => !a.match.source.includes('context_snapshots')),
+  ];
   const fake = {
     query: async (sql: string, values: readonly unknown[] = []) => {
       issued.push({ sql, values });
-      const answer = answers.find((a) => a.match.test(sql));
+      const answer = ordered.find((a) => a.match.test(sql));
       return { rows: answer?.rows ?? [], rowCount: answer?.rows.length ?? 0 };
     },
   };
   return { issued, reader: new WonderlandJuliusReaderPostgres(fake as unknown as Pool) };
 };
+
+/** One context compilation, spelled the way `pg` hands the columns over. */
+const brainRow = (over: Record<string, unknown> = {}) => ({
+  task_id: 'task-1',
+  project_brain_revision: '12',
+  content_hash: 'sha256:6f1e',
+  character_count: '4096',
+  redaction_count: '2',
+  truncated: false,
+  created_at: AT,
+  kinds: ['DECISION', 'FINDING', 'DECISION'],
+  ...over,
+});
 
 const runRow = (over: Record<string, unknown> = {}) => ({
   state: 'EXECUTING',
@@ -241,7 +273,12 @@ describe('the activity fold', () => {
       { match: /julius_runs r/, rows: [runRow({ at_sequence: null })] },
     ]);
     await reader.hydrate({ projectId: PROJECT, runId: RUN, worldSessionId: null });
-    expect(issued.length).toBe(1);
+    // NO FOLD STATEMENT — asserted by the fold's OWN marker rather than by how
+    // many statements ran. Counting them made this test fail the moment the
+    // citation read arrived, a change it has no opinion about; and matching on
+    // `FROM relay_wonderland.events` would have matched the hydration itself,
+    // which reads MAX(sequence) from that table in a sub-select.
+    expect(issued.some((q) => q.sql.includes('sequence<=$3'))).toBe(false);
   });
 
   it('folds signals the run actually raised', async () => {
@@ -369,5 +406,191 @@ describe('reading the tail', () => {
     // row must not take down a whole page.
     expect(page.rows.length).toBe(1);
     expect(page.rows[0].payload).toEqual({});
+  });
+});
+
+/* ------------------------------------------------ the Project Brain citation */
+
+describe('citing the Project Brain', () => {
+  it('reads the LAST compilation, bounded by the hydration\'s own instant', async () => {
+    // A citation compiled after the snapshot was cut describes a retrieval the
+    // rest of the payload knows nothing about. The bound is the DATABASE's
+    // clock, taken in the statement that read the run, not this process's.
+    const { issued, reader } = pool([
+      { match: /julius_runs r/, rows: [runRow({ at_sequence: null })] },
+      { match: /julius_context_snapshots/, rows: [brainRow()] },
+    ]);
+    await reader.hydrate({ projectId: PROJECT, runId: RUN, worldSessionId: null });
+
+    const cite = issued.find((q) => q.sql.includes('julius_context_snapshots'));
+    expect(cite, 'no citation statement was issued').toBeDefined();
+    expect(cite!.values).toEqual([RUN, PROJECT, AT]);
+    expect(cite!.sql).toContain('s.created_at <= $3');
+    // NEWEST FIRST, with a deterministic tie-break: the table's uniqueness is
+    // (task_id, worker_id, content_hash), so two compilations can share an
+    // instant and "the last one" must not depend on the plan.
+    expect(cite!.sql).toContain('ORDER BY s.created_at DESC, s.context_id DESC');
+  });
+
+  it('is scoped by project as well as by run', async () => {
+    // `julius_context_snapshots` has no project_id of its own, so the join to
+    // `julius_runs` is what supplies one.
+    //
+    // ASSERTED ON THE STATEMENT'S SHAPE, AND SAYING SO. No data can reach this
+    // clause: `run_id` is a primary key, so the run row is found by run alone,
+    // and `hydrate` has already returned null for a run in another project
+    // before the citation is read at all. The clause is defence in depth
+    // against a future where run ids are not globally unique — the events
+    // table already has that shape, since `stream_id` carries no foreign key —
+    // and the only thing a test can prove about it today is that it is there.
+    //
+    // The whole join is matched, not the fragment: `AND (r.project_id = $2 OR
+    // TRUE)` neutralises the filter and still contains the fragment, and a
+    // mutation run proved that assertion passed over it.
+    const { issued, reader } = pool([
+      { match: /julius_runs r/, rows: [runRow({ at_sequence: null })] },
+      { match: /julius_context_snapshots/, rows: [brainRow()] },
+    ]);
+    await reader.hydrate({ projectId: PROJECT, runId: RUN, worldSessionId: null });
+    const cite = issued.find((q) => q.sql.includes('julius_context_snapshots'))!;
+    expect(cite.sql).toContain('ON r.run_id = s.run_id AND r.project_id = $2');
+  });
+
+  it('selects no entry text, and has nowhere to put any', async () => {
+    // `julius_brain_entries.safe_content` is the substance of somebody's work.
+    // The guarantee is the shape of the SELECT: the column is not in it, and
+    // the citation has no field that could hold it.
+    const { issued, reader } = pool([
+      { match: /julius_runs r/, rows: [runRow({ at_sequence: null })] },
+      { match: /julius_context_snapshots/, rows: [brainRow()] },
+    ]);
+    const hydration = await reader.hydrate({
+      projectId: PROJECT, runId: RUN, worldSessionId: null,
+    });
+    const cite = issued.find((q) => q.sql.includes('julius_context_snapshots'))!;
+    expect(cite.sql).not.toContain('safe_content');
+    expect(JSON.stringify(hydration!.brain)).not.toContain('safe_content');
+  });
+
+  it('counts each kind under its own name, and the total over all of them', async () => {
+    const { reader } = pool([
+      { match: /julius_runs r/, rows: [runRow({ at_sequence: null })] },
+      { match: /julius_context_snapshots/, rows: [brainRow()] },
+    ]);
+    const hydration = await reader.hydrate({
+      projectId: PROJECT, runId: RUN, worldSessionId: null,
+    });
+    expect(hydration!.brain.kindCounts.DECISION).toBe(2);
+    expect(hydration!.brain.kindCounts.FINDING).toBe(1);
+    expect(hydration!.brain.entryCount).toBe(3);
+    expect(hydration!.brain.brainRevision).toBe(12);
+    expect(hydration!.brain.redactionCount).toBe(2);
+    expect(hydration!.brain.contentHash).toBe('sha256:6f1e');
+  });
+
+  it('counts a kind the citation vocabulary has no bucket for, in NO bucket', async () => {
+    // `RESEARCH_NOTE` and `ACCEPTANCE_UPDATE` are kernel kinds with no
+    // counterpart here. Mapping one onto a nearby bucket would invent a fact
+    // about somebody's context; DROPPING it would report a smaller retrieval
+    // than happened. It goes into the total and nowhere else, and the gap
+    // between the total and the sum of the buckets is the documented signal.
+    const { reader } = pool([
+      { match: /julius_runs r/, rows: [runRow({ at_sequence: null })] },
+      {
+        match: /julius_context_snapshots/,
+        rows: [brainRow({ kinds: ['DECISION', 'RESEARCH_NOTE', 'ACCEPTANCE_UPDATE'] })],
+      },
+    ]);
+    const hydration = await reader.hydrate({
+      projectId: PROJECT, runId: RUN, worldSessionId: null,
+    });
+    const counts = hydration!.brain.kindCounts;
+    expect(Object.values(counts).reduce((a, b) => a + b, 0)).toBe(1);
+    expect(hydration!.brain.entryCount).toBe(3);
+    expect(Object.keys(counts)).not.toContain('RESEARCH_NOTE');
+  });
+
+  it('still counts an entry whose row has since gone', async () => {
+    // The LEFT JOIN keeps one row per id the packet cited, and an entry that
+    // has been deleted comes back `UNRESOLVED` — outside the vocabulary, so it
+    // lands in the total and in no bucket, exactly as an unknown kind does.
+    // Dropping the row instead would shrink a retrieval that already happened.
+    const { reader } = pool([
+      { match: /julius_runs r/, rows: [runRow({ at_sequence: null })] },
+      { match: /julius_context_snapshots/, rows: [brainRow({ kinds: ['DECISION', 'UNRESOLVED'] })] },
+    ]);
+    const hydration = await reader.hydrate({
+      projectId: PROJECT, runId: RUN, worldSessionId: null,
+    });
+    expect(hydration!.brain.entryCount).toBe(2);
+    expect(hydration!.brain.kindCounts.DECISION).toBe(1);
+  });
+
+  it('says NOBODY COMPILED rather than "compiled and found nothing"', async () => {
+    // The two are different facts that share every count. `contentHash` and
+    // `observedAtIso` being empty is what tells them apart, and a renderer must
+    // check one of them before drawing "0 entries retrieved".
+    const { reader } = pool([
+      { match: /julius_runs r/, rows: [runRow({ at_sequence: null })] },
+      { match: /julius_context_snapshots/, rows: [] },
+    ]);
+    const hydration = await reader.hydrate({
+      projectId: PROJECT, runId: RUN, worldSessionId: null,
+    });
+    expect(hydration!.brain.entryCount).toBe(0);
+    expect(hydration!.brain.contentHash).toBe('');
+    expect(hydration!.brain.observedAtIso).toBe('');
+  });
+
+  it('carries a compilation that retrieved nothing as a REPORTED nothing', async () => {
+    // The other side of the same coin: a real compilation with an empty packet
+    // has a hash and a time, and its zeroes are observations.
+    const { reader } = pool([
+      { match: /julius_runs r/, rows: [runRow({ at_sequence: null })] },
+      { match: /julius_context_snapshots/, rows: [brainRow({ kinds: null, character_count: '0' })] },
+    ]);
+    const hydration = await reader.hydrate({
+      projectId: PROJECT, runId: RUN, worldSessionId: null,
+    });
+    expect(hydration!.brain.entryCount).toBe(0);
+    expect(hydration!.brain.contentHash).toBe('sha256:6f1e');
+    expect(hydration!.brain.observedAtIso).toBe(AT);
+  });
+
+  it('names the project and run the hydration names', async () => {
+    // A citation from another run rendered under this one's name is the same
+    // mis-routing the wrapper's verdict refuses, arriving from underneath.
+    const { reader } = pool([
+      { match: /julius_runs r/, rows: [runRow({ at_sequence: null })] },
+      { match: /julius_context_snapshots/, rows: [brainRow()] },
+    ]);
+    const hydration = await reader.hydrate({
+      projectId: PROJECT, runId: RUN, worldSessionId: null,
+    });
+    expect(hydration!.brain.projectId).toBe(PROJECT);
+    expect(hydration!.brain.runId).toBe(RUN);
+  });
+});
+
+describe('what the reader refuses to claim about a C.A.R.D.', () => {
+  it('reports every judgement as UNKNOWN, swarm eligibility included', async () => {
+    // C.A.R.D. policy is not persisted at all: `julius_runs` stores a
+    // `card_revision` and nothing stores the policy that revision names. The
+    // revision is a real opaque handle and is carried; everything derived from
+    // the record is null, because nothing has ever opened it.
+    const { reader } = pool([
+      { match: /julius_runs r/, rows: [runRow({ at_sequence: null })] },
+    ]);
+    const hydration = await reader.hydrate({
+      projectId: PROJECT, runId: RUN, worldSessionId: null,
+    });
+    expect(hydration!.card.cardRevision).toBe('card:v3');
+    expect(hydration!.card.hasPromptArchitect).toBeNull();
+    expect(hydration!.card.hasCodingAgent).toBeNull();
+    expect(hydration!.card.hasIndependentReviewer).toBeNull();
+    expect(hydration!.card.autonomy).toBeNull();
+    // THE ONE THAT USED TO LIE. `false` here would draw "this run may not spawn
+    // a swarm" beside three slots that correctly said UNKNOWN.
+    expect(hydration!.card.swarmEligible).toBeNull();
   });
 });

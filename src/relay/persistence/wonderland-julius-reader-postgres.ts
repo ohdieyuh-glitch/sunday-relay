@@ -1,6 +1,10 @@
 import type { Pool } from 'pg';
 
-import { noWonderlandBrainCitation } from '../mission/wonderland/wonderland-brain-scope';
+import {
+  noWonderlandBrainCitation,
+  scopeWonderlandBrain,
+} from '../mission/wonderland/wonderland-brain-scope';
+import type { WonderlandBrainCitation } from '../mission/wonderland/wonderland-brain-scope';
 import {
   scopeWonderlandCard,
   wonderlandHydration,
@@ -57,22 +61,38 @@ import { isJuliusMissionState } from '../mission/wonderland/wonderland-julius-st
  *           meters project from an empty authority and draw UNKNOWN. That is
  *           the true reading, not a placeholder.
  *
- *   BRAIN   `relay_wonderland.julius_context_snapshots` holds almost exactly
- *           what a citation wants — revision, character count, redaction count,
- *           truncation, content hash — but its entry kinds come from
- *           `julius_brain_entries.entry_kind`, whose vocabulary is NOT the
- *           citation's: `RESEARCH_NOTE` and `ACCEPTANCE_UPDATE` have no
- *           counterpart, and `OBJECTIVE`, `REQUIREMENT` and `EVIDENCE` have no
- *           source. Citing with the overlap alone would report a smaller
- *           retrieval than happened, as a fact. Reconciling the two
- *           vocabularies is a contract decision and is recorded in the handoff
- *           rather than guessed at here.
+ *   C.A.R.D. POLICY  is not persisted AT ALL. `julius_runs` stores a
+ *           `card_revision` and nothing stores the policy that revision names
+ *           — `julius-events.ts` says so where it explains why
+ *           `autonomy.changed` is not an event type. So the revision is carried
+ *           (a real opaque handle) and every judgement about the record is
+ *           NULL: three slots, and swarm eligibility beside them.
  *
- *   C.A.R.D. SLOTS  `julius_runs.card_revision` is free text with no foreign
- *           key, and nothing in this layer reads `relay_wonderland.card_versions`.
- *           So the revision is carried — it is a real opaque handle — and the
- *           three slots are NULL, which the contract now expresses. Reporting
- *           them `false` would draw three unfilled roles as an observation.
+ * WHAT IT NOW DOES CLAIM, and did not: THE PROJECT BRAIN CITATION IS REAL.
+ *
+ * An earlier revision of this comment said the citation was blocked on a
+ * vocabulary mismatch — `julius_brain_entries.entry_kind` has `RESEARCH_NOTE`
+ * and `ACCEPTANCE_UPDATE`, which `WONDERLAND_BRAIN_KINDS` does not, and
+ * `OBJECTIVE`, `REQUIREMENT` and `EVIDENCE`, which the kernel cannot produce —
+ * so citing with the overlap would report a smaller retrieval than happened.
+ *
+ * THAT IS THE CASE `scopeWonderlandBrain` WAS BUILT FOR. An unrecognised kind is
+ * counted in `entryCount` and in NO bucket, by design and on purpose: the total
+ * stays truthful, and the gap between it and the sum of the buckets is the
+ * documented signal that the vocabularies have moved apart. Nothing here has to
+ * reconcile them, and nothing here may — a reader that mapped `RESEARCH_NOTE`
+ * onto some nearby bucket would be inventing a fact about somebody's context.
+ * The kinds this build cannot produce report a REPORTED ZERO, which is what
+ * they are.
+ *
+ * The three buckets with no source — `OBJECTIVE`, `REQUIREMENT`, `EVIDENCE` —
+ * therefore read zero, and that is true rather than a placeholder: no entry of
+ * those kinds reached the packet, because none can exist.
+ *
+ * NO ENTRY TEXT IS SELECTED. `julius_brain_entries.safe_content` is the
+ * substance of somebody's work and it has no column in this query, no field on
+ * the citation and nowhere to go. The citation carries counts, revisions and an
+ * opaque hash, and the shape of the SELECT is the guarantee.
  */
 export class WonderlandJuliusReaderPostgres {
   constructor(private readonly pool: Pool) {}
@@ -154,9 +174,16 @@ export class WonderlandJuliusReaderPostgres {
       usage: usage.hud,
       usageStatus: usage.status,
       activity: await this.foldActivity(input.projectId, input.runId, atSequence),
-      brain: noWonderlandBrainCitation({ projectId: input.projectId, runId: input.runId }),
-      // The revision is a real opaque handle; the slots are null because
-      // nothing here can resolve the record behind it. See the header.
+      brain: await this.citeBrain(input.projectId, input.runId, observedAtIso),
+      // The revision is a real opaque handle; every judgement about the record
+      // is null because C.A.R.D. policy is not persisted. See the header.
+      //
+      // NOTE THE ABSENT PROPERTIES. `capabilities` and the three slots are
+      // OMITTED rather than passed empty, because `scopeWonderlandCard` reads
+      // the omission: present-and-empty is "the record says nobody", absent is
+      // "I could not read the record". Passing `capabilities: []` here would
+      // report `swarmEligible: false` — a C.A.R.D. that forbids a swarm — for a
+      // record nothing has ever opened.
       card: scopeWonderlandCard({ cardRevision: row.card_revision }),
       observedAtIso,
       worldSessionId: input.worldSessionId,
@@ -228,6 +255,95 @@ export class WonderlandJuliusReaderPostgres {
         payload: parsePayload(row.payload),
       })),
     };
+  }
+
+  /**
+   * The LAST context compilation this run performed, as counts about it.
+   *
+   * BOUNDED BY THE HYDRATION'S OWN INSTANT, not merely by the run. A snapshot
+   * says what was true when it was cut, and a citation compiled a moment later
+   * describes a retrieval the rest of the payload knows nothing about — the
+   * world would draw a context that arrived after the state beside it. So the
+   * bound is `created_at <= observedAt`, and `observedAt` is the database's own
+   * clock from the statement above rather than this process's.
+   *
+   * SCOPED BY PROJECT AS WELL AS BY RUN. `julius_context_snapshots` has no
+   * `project_id` of its own, so the join to `julius_runs` is what supplies it.
+   * The route has already established that this run belongs to the authorised
+   * project; this makes the read incapable of leaving it regardless, which is
+   * the same defence-in-depth the route applies to the hydration it gets back.
+   *
+   * ONE ROW PER SOURCE ENTRY, KIND ONLY. `WITH ORDINALITY` over the packet's
+   * own `source_entry_ids` keeps one row per entry the packet actually cited,
+   * and the LEFT JOIN means an entry whose row has since gone still counts: it
+   * lands in `entryCount` and in no bucket, exactly as a kind this build cannot
+   * name does. Dropping it instead would report a smaller retrieval than
+   * happened.
+   *
+   * The `COALESCE` is for the TYPE, not for the count — `array_agg` keeps a
+   * NULL element, so the length is right either way, and a mutation removing
+   * the COALESCE changes no assertion. What it buys is that `kinds` really is
+   * an array of strings when it crosses into `scopeWonderlandBrain`, rather
+   * than one with a null in it that only happens to behave.
+   *
+   * `safe_content` IS NOT SELECTED, HERE OR ANYWHERE. See the header.
+   */
+  private async citeBrain(
+    projectId: string,
+    runId: string,
+    observedAtIso: string,
+  ): Promise<WonderlandBrainCitation> {
+    const result = await this.pool.query<{
+      task_id: string;
+      project_brain_revision: string;
+      content_hash: string;
+      character_count: string;
+      redaction_count: string;
+      truncated: boolean;
+      created_at: string;
+      kinds: string[] | null;
+    }>(
+      `SELECT s.task_id, s.project_brain_revision, s.content_hash,
+              s.character_count, s.redaction_count, s.truncated, s.created_at,
+              k.kinds
+         FROM relay_wonderland.julius_context_snapshots s
+         JOIN relay_wonderland.julius_runs r
+           ON r.run_id = s.run_id AND r.project_id = $2
+         LEFT JOIN LATERAL (
+              SELECT array_agg(COALESCE(b.entry_kind, 'UNRESOLVED') ORDER BY src.ord) AS kinds
+                FROM jsonb_array_elements_text(s.source_entry_ids)
+                     WITH ORDINALITY AS src(entry_id, ord)
+                LEFT JOIN relay_wonderland.julius_brain_entries b
+                       ON b.entry_id = src.entry_id AND b.run_id = s.run_id
+         ) k ON true
+        WHERE s.run_id = $1 AND s.created_at <= $3
+        ORDER BY s.created_at DESC, s.context_id DESC
+        LIMIT 1`,
+      [runId, projectId, observedAtIso],
+    );
+
+    const row = result.rows[0];
+    // NOTHING COMPILED YET, which is a different fact from a compilation that
+    // retrieved nothing. `noWonderlandBrainCitation` carries an EMPTY content
+    // hash and an empty observation time, and that pair is what a renderer must
+    // check before drawing "0 entries retrieved" — otherwise it would claim a
+    // retrieval happened and found nothing.
+    if (row === undefined) return noWonderlandBrainCitation({ projectId, runId });
+
+    return scopeWonderlandBrain({
+      projectId,
+      runId,
+      taskId: row.task_id,
+      projectBrainRevision: Number(row.project_brain_revision),
+      // Kinds ONLY. The narrowing function takes nothing else from an entry,
+      // which is why the text has nowhere to travel even by accident.
+      kinds: row.kinds ?? [],
+      characterCount: Number(row.character_count),
+      redactionCount: Number(row.redaction_count),
+      truncated: row.truncated,
+      contentHash: row.content_hash,
+      observedAtIso: new Date(String(row.created_at)).toISOString(),
+    });
   }
 
   /**

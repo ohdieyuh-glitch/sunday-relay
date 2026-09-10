@@ -128,6 +128,27 @@ describe('what a world may know about a C.A.R.D.', () => {
     expect(scope.eligibleSwarmRoles).toEqual([]);
   });
 
+  it('does NOT say a C.A.R.D. nobody read is ineligible', () => {
+    // The third answer, and the one this field used to get wrong. A reader that
+    // cannot resolve the record — which is every reader today, because C.A.R.D.
+    // policy is not persisted at all — omits `capabilities` and must get back
+    // "nobody looked", not "this run may not spawn a swarm". It was returning
+    // `false`, beside three role slots that correctly said UNKNOWN.
+    const scope = scopeWonderlandCard({ cardRevision: 'card:v3' });
+    expect(scope.swarmEligible).toBeNull();
+    // And the role list is empty either way, which is exactly why it cannot be
+    // read on its own: the flag beside it is what carries the distinction.
+    expect(scope.eligibleSwarmRoles).toEqual([]);
+  });
+
+  it('tells present-and-empty from absent, on the capability list too', () => {
+    // The same supplied-check the three slots use. `capabilities: []` is a
+    // record that was read and permits nothing; omitting it is a record that
+    // was never opened. `?? []` would have collapsed both into the first.
+    expect(scopeWonderlandCard({ cardRevision: 'c', capabilities: [] }).swarmEligible).toBe(false);
+    expect(scopeWonderlandCard({ cardRevision: 'c' }).swarmEligible).toBeNull();
+  });
+
   it('separates eligibility from activity', () => {
     // "May spawn a swarm" and "is running one" are different facts owned by
     // different systems. A world needs the first to leave room before any

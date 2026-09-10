@@ -43,6 +43,16 @@ const RUN_A2 = 'run-a2';
 const PLAYER_A = 'player-a';
 const PLAYER_B = 'player-b';
 const AT = '2026-09-08T00:00:00.000Z';
+/**
+ * A string planted in every Project Brain entry's `safe_content`.
+ *
+ * The citation's narrowness is claimed by the shape of a SELECT. This is how it
+ * is PROVEN: the text is really in the database, on rows the citation really
+ * reads, and the assertion is that no part of it reaches the hydration. A
+ * reader that grew a `summary` for the best of reasons fails here rather than
+ * in front of a player.
+ */
+const CANARY = 'PROJECT-BRAIN-CANARY-8f3a';
 
 let pool: Pool;
 let reader: WonderlandJuliusReaderPostgres;
@@ -129,6 +139,49 @@ suite('the Wonderland reader against a real PostgreSQL', () => {
         (approval_id, run_id, project_id, task_id, operation, policy_revision, reason_code, safe_rationale, state, requested_at, idempotency_key)
         VALUES ('appr-a2-1','${RUN_A2}','${A}',NULL,'run.start','card:rev-7','GATE','A sibling run is waiting.','PENDING', now(), 'idem-a2-1'),
                ('appr-b1','${RUN_B}','${B}',NULL,'run.start','card:rev-9','GATE','Another project is waiting.','PENDING', now(), 'idem-b1');
+
+      -- ------------------------------------------------- the Project Brain
+      --
+      -- Entries first, then the compilations that CITED them. Every one of
+      -- these carries safe_content, which is the substance of somebody's
+      -- work and must never leave this table: the citation reads entry_kind
+      -- and nothing else, and the canary below is how that is proven rather
+      -- than asserted.
+      --
+      -- THE KINDS ARE THE KERNEL'S, NOT THE CITATION'S, and that is the point.
+      -- RESEARCH_NOTE and ACCEPTANCE_UPDATE have no bucket in
+      -- WONDERLAND_BRAIN_KINDS; they must be counted in the total and nowhere
+      -- else, and a fixture with only mappable kinds could not tell a reader
+      -- that does that from one that silently drops them.
+      INSERT INTO relay_wonderland.julius_brain_entries
+        (entry_id, run_id, project_id, task_id, worker_id, entry_kind, safe_content, revision, created_at)
+        VALUES ('brain-a1','${RUN_A}','${A}','task-a1','worker-1','DECISION','${CANARY} decision',1, now() - interval '9 minutes'),
+               ('brain-a2','${RUN_A}','${A}','task-a1','worker-1','FINDING','${CANARY} finding',2, now() - interval '8 minutes'),
+               ('brain-a3','${RUN_A}','${A}','task-a1','worker-1','DECISION','${CANARY} again',3, now() - interval '7 minutes'),
+               ('brain-a4','${RUN_A}','${A}','task-a1','worker-1','RESEARCH_NOTE','${CANARY} note',4, now() - interval '6 minutes'),
+               ('brain-a5','${RUN_A}','${A}','task-a1','worker-1','ACCEPTANCE_UPDATE','${CANARY} update',5, now() - interval '5 minutes'),
+               ('brain-b1','${RUN_B}','${B}','task-b1','worker-b','DECISION','${CANARY} foreign',1, now() - interval '5 minutes');
+
+      -- TWO compilations on run A, so "the last one" is a real choice rather
+      -- than the only row. The earlier one cites fewer entries; a reader that
+      -- ordered the wrong way round would report a retrieval that has been
+      -- superseded, with counts that all look plausible.
+      INSERT INTO relay_wonderland.julius_context_snapshots
+        (context_id, run_id, task_id, worker_id, compiler_version, mission_contract_revision,
+         card_revision, project_brain_revision, source_entry_ids, content_hash,
+         character_count, truncated, created_at, worker_role, redaction_count)
+        VALUES ('ctx-a-old','${RUN_A}','task-a1','worker-1','julius-context.v1',1,'card:rev-7',2,
+                '["brain-a1"]','sha256:old',100,false, now() - interval '8 minutes','CODING_AGENT',0),
+               -- The current one: three mappable kinds, two the citation
+               -- vocabulary cannot name, and one id whose entry no longer
+               -- exists — which must still be counted, not dropped.
+               ('ctx-a-new','${RUN_A}','task-a1','worker-1','julius-context.v1',1,'card:rev-7',4,
+                '["brain-a1","brain-a2","brain-a3","brain-a4","brain-a5","brain-gone"]','sha256:new',4096,true,
+                now() - interval '4 minutes','CODING_AGENT',2),
+               -- A compilation in the FOREIGN project, on the foreign run. The
+               -- project scope on the citation read is what keeps it there.
+               ('ctx-b','${RUN_B}','task-b1','worker-b','julius-context.v1',1,'card:rev-9',2,
+                '["brain-b1"]','sha256:foreign',50,false, now() - interval '3 minutes','CODING_AGENT',0);
     `);
 
     // PROJECT A's timeline: a transition, then activity that does NOT bump
@@ -435,14 +488,21 @@ suite('the Wonderland reader against a real PostgreSQL', () => {
     expect(roles.rows.map((r) => r.role).sort()).toEqual(['CODING_AGENT', 'INDEPENDENT_REVIEWER']);
   });
 
-  it('G: usage stays UNKNOWN and the Brain stays uncited', async () => {
+  it('G: usage stays UNKNOWN, because no authority reports into it', async () => {
     const hydration = await reader.hydrate({ projectId: A, runId: RUN_A, worldSessionId: null });
     for (const meter of [hydration!.usage.compoundAgent, hydration!.usage.singleAgent]) {
       expect(meter.capacityUnits.known).toBe(false);
       expect(meter.usedUnits.known).toBe(false);
       expect(meter.remainingUnits.known).toBe(false);
     }
-    expect(hydration?.brain.contentHash).toBe('');
+    // THE BRAIN NO LONGER BELONGS IN THIS SENTENCE. It used to: the citation
+    // was withheld and this asserted the withholding. It is now read from
+    // `julius_context_snapshots`, so "uncited" is a fact about a run that has
+    // not compiled one rather than about every run — see the citation suite
+    // below, and this, which pins the honest half of the old assertion.
+    const uncompiled = await reader.hydrate({ projectId: A, runId: RUN_A2, worldSessionId: null });
+    expect(uncompiled?.brain.contentHash).toBe('');
+    expect(hydration?.brain.contentHash).not.toBe('');
   });
 
   it('H: card_revision is carried verbatim and joined to nothing', async () => {
@@ -697,4 +757,153 @@ suite('the Wonderland reader against a real PostgreSQL', () => {
     }
     expect(hydrations[hydrations.length - 1]!.run.state).toBe('VERIFYING');
   }, 30_000);
+
+  /* -------------------------------------- the Project Brain, on real rows */
+
+  describe('the Project Brain citation', () => {
+    it('cites the LAST compilation, not the first one it finds', async () => {
+      // Two compilations exist on this run. Ordered the wrong way round a
+      // reader reports a retrieval that has been superseded, and every count
+      // on it looks perfectly plausible.
+      const hydration = await reader.hydrate({
+        projectId: A, runId: RUN_A, worldSessionId: null,
+      });
+      expect(hydration!.brain.contentHash).toBe('sha256:new');
+      expect(hydration!.brain.brainRevision).toBe(4);
+      expect(hydration!.brain.characterCount).toBe(4096);
+      expect(hydration!.brain.redactionCount).toBe(2);
+      expect(hydration!.brain.truncated).toBe(true);
+      expect(hydration!.brain.taskId).toBe('task-a1');
+    });
+
+    it('counts every cited entry in the total, and only mappable ones in buckets', async () => {
+      // Six ids were cited: three of kinds this vocabulary names, two of kernel
+      // kinds it does not, and one whose entry row does not exist at all. All
+      // six are the retrieval that happened; three of them have a bucket.
+      const hydration = await reader.hydrate({
+        projectId: A, runId: RUN_A, worldSessionId: null,
+      });
+      const counts = hydration!.brain.kindCounts;
+      expect(hydration!.brain.entryCount).toBe(6);
+      expect(counts.DECISION).toBe(2);
+      expect(counts.FINDING).toBe(1);
+      expect(Object.values(counts).reduce((a, b) => a + b, 0)).toBe(3);
+      // THE GAP IS THE SIGNAL. Six cited, three bucketed: that difference is
+      // what says the kernel's vocabulary and the citation's have moved apart,
+      // and it is visible without a debugger.
+      expect(hydration!.brain.entryCount).toBeGreaterThan(3);
+    });
+
+    it('reports a REPORTED ZERO for the kinds this build cannot produce', async () => {
+      // `OBJECTIVE`, `REQUIREMENT` and `EVIDENCE` have no source in
+      // `julius_brain_entries` at all. Zero is true for them — no entry of
+      // that kind reached the packet, because none can exist — and the key
+      // being present is what makes it a report rather than an absence.
+      const hydration = await reader.hydrate({
+        projectId: A, runId: RUN_A, worldSessionId: null,
+      });
+      for (const kind of ['OBJECTIVE', 'REQUIREMENT', 'EVIDENCE'] as const) {
+        expect(Object.keys(hydration!.brain.kindCounts)).toContain(kind);
+        expect(hydration!.brain.kindCounts[kind]).toBe(0);
+      }
+    });
+
+    it('carries no entry text, proven against text that is really in the table', async () => {
+      // The canary is on every row this citation read. Its absence here is the
+      // SELECT's narrowness working on real data, not a fixture that politely
+      // omitted the column.
+      const planted = await pool.query<{ n: string }>(
+        `SELECT count(*)::text AS n FROM relay_wonderland.julius_brain_entries
+          WHERE safe_content LIKE $1`, [`%${CANARY}%`]);
+      expect(Number(planted.rows[0].n), 'the canary is not actually in the database').toBeGreaterThan(0);
+
+      const hydration = await reader.hydrate({
+        projectId: A, runId: RUN_A, worldSessionId: null,
+      });
+      expect(JSON.stringify(hydration!.brain)).not.toContain(CANARY);
+      // And nowhere else in the payload either — a citation is not the only
+      // field that could have grown a place to put it.
+      expect(JSON.stringify(hydration)).not.toContain(CANARY);
+    });
+
+    it('cannot reach another project\'s compilation', async () => {
+      // `julius_context_snapshots` has no project_id of its own. The join to
+      // `julius_runs` is the only thing scoping this read, and project B has a
+      // more recent compilation than project A does.
+      const hydration = await reader.hydrate({
+        projectId: B, runId: RUN_B, worldSessionId: null,
+      });
+      expect(hydration!.brain.contentHash).toBe('sha256:foreign');
+
+      // And asking for B's run under A's project returns nothing at all rather
+      // than a citation — the run read refuses first, as it must.
+      expect(await reader.hydrate({ projectId: A, runId: RUN_B, worldSessionId: null })).toBeNull();
+    });
+
+    it('says NOBODY COMPILED for a run that has never compiled one', async () => {
+      // Different from "compiled and retrieved nothing", and told apart by the
+      // empty hash rather than by the zeroes they share.
+      const hydration = await reader.hydrate({
+        projectId: A, runId: RUN_A2, worldSessionId: null,
+      });
+      expect(hydration!.brain.entryCount).toBe(0);
+      expect(hydration!.brain.contentHash).toBe('');
+      expect(hydration!.brain.observedAtIso).toBe('');
+    });
+
+    it('will not cite a compilation made after the snapshot was cut', async () => {
+      // A citation from after the hydration's instant describes a retrieval the
+      // rest of the payload knows nothing about. The bound is the database's
+      // own clock, read in the statement that read the run.
+      await pool.query(
+        `INSERT INTO relay_wonderland.julius_context_snapshots
+           (context_id, run_id, task_id, worker_id, compiler_version, mission_contract_revision,
+            card_revision, project_brain_revision, source_entry_ids, content_hash,
+            character_count, truncated, created_at, worker_role, redaction_count)
+         VALUES ('ctx-a-future','${RUN_A}','task-a1','worker-1','julius-context.v1',1,'card:rev-7',9,
+                 '["brain-a1"]','sha256:future',10,false, now() + interval '1 hour','CODING_AGENT',0)`);
+      try {
+        const hydration = await reader.hydrate({
+          projectId: A, runId: RUN_A, worldSessionId: null,
+        });
+        expect(hydration!.brain.contentHash).toBe('sha256:new');
+      } finally {
+        await pool.query(
+          `DELETE FROM relay_wonderland.julius_context_snapshots WHERE context_id='ctx-a-future'`);
+      }
+    });
+  });
+
+  describe('what the reader refuses to claim about a C.A.R.D., on a real row', () => {
+    it('carries the revision and nothing derived from it', async () => {
+      // `julius_runs.card_revision` is free text with no foreign key, and
+      // C.A.R.D. policy is not persisted anywhere. The handle is real; every
+      // judgement about the record is null, swarm eligibility included.
+      const hydration = await reader.hydrate({
+        projectId: A, runId: RUN_A, worldSessionId: null,
+      });
+      expect(hydration!.card.cardRevision).toBe('card:rev-7');
+      expect(hydration!.card.hasPromptArchitect).toBeNull();
+      expect(hydration!.card.hasCodingAgent).toBeNull();
+      expect(hydration!.card.hasIndependentReviewer).toBeNull();
+      expect(hydration!.card.swarmEligible).toBeNull();
+      expect(hydration!.card.autonomy).toBeNull();
+    });
+
+    it('does not infer a filled slot from the tasks that happen to exist', async () => {
+      // run-a HAS a CODING_AGENT task and an INDEPENDENT_REVIEWER task. That is
+      // "work of this kind was scheduled", not "the C.A.R.D. fills this slot",
+      // and a reader that read the first as the second would be a second
+      // authority for a record it has never opened.
+      const tasks = await pool.query<{ role: string }>(
+        `SELECT role FROM relay_wonderland.julius_tasks WHERE run_id=$1`, [RUN_A]);
+      expect(tasks.rows.map((r) => r.role)).toContain('CODING_AGENT');
+
+      const hydration = await reader.hydrate({
+        projectId: A, runId: RUN_A, worldSessionId: null,
+      });
+      expect(hydration!.card.hasCodingAgent).toBeNull();
+      expect(hydration!.card.hasIndependentReviewer).toBeNull();
+    });
+  });
 });

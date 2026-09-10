@@ -260,6 +260,9 @@ const CARD_SCOPE_NULLABLE = [
   'hasPromptArchitect',
   'hasCodingAgent',
   'hasIndependentReviewer',
+  // Nullable since the reader that cannot resolve a C.A.R.D. stopped reporting
+  // `false` — "this run may not spawn a swarm" — for a record nobody read.
+  'swarmEligible',
 ] as const;
 const _CardScopeNullableIsExact: SameKeys<
   (typeof CARD_SCOPE_NULLABLE)[number],

@@ -31,7 +31,7 @@ The rules, as the contract names them:
 - `absence_carrier`
 - `enum_token`
 
-## Fields that need a carrier (90)
+## Fields that need a carrier (91)
 
 The JSON key is the TypeScript field name. Every one of these arrives as a
 bare value or `null` and must be widened into the carrier its struct declares.
@@ -44,7 +44,7 @@ bare value or `null` and must be widened into the carrier its struct declares.
 | `FWonderlandAnimationPlan` | `WonderlandAnimationPlan` | `attentionRequired` |
 | `FWonderlandAttestation` | `WonderlandAttestation` | `requestedModel`, `servedModel`, `unattestedReason` |
 | `FWonderlandBrainWeather` | `WonderlandBrainWeather` | `projectId` |
-| `FWonderlandCardScope` | `WonderlandCardScope` | `autonomy`, `hasCodingAgent`, `hasIndependentReviewer`, `hasPromptArchitect` |
+| `FWonderlandCardScope` | `WonderlandCardScope` | `autonomy`, `hasCodingAgent`, `hasIndependentReviewer`, `hasPromptArchitect`, `swarmEligible` |
 | `FWonderlandCursor` | `WonderlandCursor` | `juliusInstanceId`, `lastAppliedAtIso`, `lastEventId`, `runId` |
 | `FWonderlandDogSkin` | `WonderlandDogSkin` | `chakraTier` |
 | `FWonderlandEntry` | `WonderlandEntry` | `admissionReason`, `admittedAtIso`, `presentationReason`, `presentingSinceIso`, `rendererId`, `rendererKind`, `sessionId` |

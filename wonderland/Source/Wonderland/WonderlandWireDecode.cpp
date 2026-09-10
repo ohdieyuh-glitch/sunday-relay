@@ -1309,7 +1309,7 @@ bool DecodeCardScopeObject(
 	Reader.NullableFlag("hasPromptArchitect", Card.HasPromptArchitect);
 	Reader.NullableFlag("hasCodingAgent", Card.HasCodingAgent);
 	Reader.NullableFlag("hasIndependentReviewer", Card.HasIndependentReviewer);
-	Reader.RequiredBool("swarmEligible", Card.bSwarmEligible);
+	Reader.NullableFlag("swarmEligible", Card.SwarmEligible);
 
 	uint8 Autonomy = 0;
 	Reader.NullableEnum("autonomy", "EWonderlandAutonomy", Autonomy);

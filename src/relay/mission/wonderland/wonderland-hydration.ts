@@ -99,19 +99,35 @@ export interface WonderlandCardScope {
   readonly hasCodingAgent: boolean | null;
   readonly hasIndependentReviewer: boolean | null;
   /**
-   * Whether this C.A.R.D. permits a swarm at all.
+   * Whether this C.A.R.D. permits a swarm at all, or NULL when nobody looked.
    *
    * Not "is one running" — that is `swarming` on the activity axis. This is
    * eligibility, which is what a world needs to know whether to leave room for
    * clones before any exist.
+   *
+   * NULLABLE FOR THE SAME REASON THE THREE SLOTS ARE, and it was not, which was
+   * a bug on this seam rather than a nicety. A reader that cannot resolve the
+   * C.A.R.D. behind a run — which is EVERY reader today, because C.A.R.D.
+   * policy is not persisted at all: `julius_runs` stores a `card_revision` and
+   * nothing stores the policy that revision names — passed no capabilities and
+   * got `false` back. A world then drew "this run may not spawn a swarm", a
+   * confident claim nobody made, and it drew it beside three role slots that
+   * correctly said UNKNOWN. Absence is now absence here too.
    */
-  readonly swarmEligible: boolean;
+  readonly swarmEligible: boolean | null;
   /**
    * Which swarm roles it permits, from the repository's own closed vocabulary.
    *
    * Safe to carry precisely because it IS closed: `researcher`, `architect`,
    * `implementer` and the rest are Relay's words for functions, not anybody's
    * product names.
+   *
+   * AN ARRAY, NEVER NULL, and therefore MEANINGLESS ON ITS OWN: empty is both
+   * "permits no roles" and "nobody could look". `swarmEligible` is what tells
+   * them apart, and a reader must consult it first — the same shape as the
+   * citation's `contentHash`, which is what tells a retrieval that found
+   * nothing from one that never happened. Kept as a bare list because a world
+   * iterates it, and there is no carrier for a TArray on the C++ side.
    */
   readonly eligibleSwarmRoles: readonly string[];
   /** Null when the record does not say. Never defaulted to a level. */
@@ -184,7 +200,11 @@ export function scopeWonderlandCard(input: WonderlandCardInput): WonderlandCardS
     hasPromptArchitect: slotFilled(input.promptArchitect, 'promptArchitect' in input),
     hasCodingAgent: slotFilled(input.codingAgent, 'codingAgent' in input),
     hasIndependentReviewer: slotFilled(input.reviewer, 'reviewer' in input),
-    swarmEligible: swarmRoles.length > 0,
+    // SAME SUPPLIED-CHECK AS THE SLOTS. A caller that read the record and found
+    // no swarm capability passes `capabilities: []` and gets `false`, a real
+    // answer. A caller that could not read it omits the property and gets
+    // `null`. `?? []` below would have collapsed both into "not eligible".
+    swarmEligible: 'capabilities' in input ? swarmRoles.length > 0 : null,
     eligibleSwarmRoles: Object.freeze([...new Set(swarmRoles)].sort()),
     autonomy: isAutonomy(input.autonomy) ? input.autonomy : null,
   });

@@ -437,6 +437,14 @@ hydrated('hydration-no-position', hydration({ run: runSnapshot({ atSequence: nul
 hydrated('hydration-card-resolved', hydration({ card: cardResolved }));
 hydrated('hydration-card-unresolved', hydration({ card: cardUnresolved }));
 
+// AND THE THIRD ANSWER ABOUT A SWARM, which is the one that makes the other two
+// mean anything: a record that WAS resolved and permits no swarm. `false` here
+// and `null` above are different facts that a bare bool cannot hold apart, and
+// with only one of them in the fixture set a decoder collapsing them would pass.
+hydrated('hydration-card-no-swarm', hydration({
+  card: scopeWonderlandCard({ cardRevision: 'card-rev-3', capabilities: ['tools:git'] }),
+}));
+
 // A citation nobody reported: mostly zeroes, and told apart from a real
 // retrieval of nothing by an empty content hash.
 hydrated('hydration-no-citation', hydration({

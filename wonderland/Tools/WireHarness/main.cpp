@@ -619,7 +619,9 @@ int main(int argc, char** argv)
 							"and knows about the reviewer slot");
 						Check(!R.Hydration.Card.HasIndependentReviewer.bValue,
 							"which the record says is EMPTY — a fact, not an absence");
-						Check(R.Hydration.Card.bSwarmEligible, "swarm eligibility decodes");
+						Check(R.Hydration.Card.SwarmEligible.bKnown,
+							"a resolved record KNOWS whether a swarm is permitted");
+						Check(R.Hydration.Card.SwarmEligible.bValue, "and this one permits one");
 						Check(R.Hydration.Card.EligibleSwarmRoles.Num() == 2, "and the roles it permits");
 						Check(R.Hydration.Card.Autonomy == EWonderlandAutonomy::Autonomous,
 							"the autonomy level decodes");
@@ -637,6 +639,13 @@ int main(int argc, char** argv)
 							"an unresolved C.A.R.D. does not claim the architect slot is empty");
 						Check(!R.Hydration.Card.HasCodingAgent.bKnown, "nor the coding agent slot");
 						Check(!R.Hydration.Card.HasIndependentReviewer.bKnown, "nor the reviewer slot");
+						// AND NOT SWARM ELIGIBILITY, which used to come back
+						// `false` here — "this run may not spawn a swarm", drawn
+						// beside three slots that correctly said UNKNOWN.
+						Check(!R.Hydration.Card.SwarmEligible.bKnown,
+							"nor whether a swarm is permitted");
+						Check(R.Hydration.Card.EligibleSwarmRoles.Num() == 0,
+							"and the role list is empty, which is why it cannot be read alone");
 						Check(R.Hydration.Card.Autonomy == EWonderlandAutonomy::Unobserved,
 							"and an unstated autonomy is NOT Supervised");
 						Check(!R.Hydration.Usage.CompoundAgent.CapacityUnits.bKnown,
@@ -654,6 +663,16 @@ int main(int argc, char** argv)
 							"null slots stay unknown");
 						Check(!R.Hydration.Card.HasCodingAgent.bValue,
 							"and carry no accidental true");
+					}
+					else if (Name == "hydration-card-no-swarm")
+					{
+						// THE THIRD ANSWER, and the one that makes the other two
+						// mean anything: the record WAS read, and it permits no
+						// swarm. Told from "nobody looked" only by bKnown.
+						Check(R.Hydration.Card.SwarmEligible.bKnown,
+							"a record that was read reports a real answer");
+						Check(!R.Hydration.Card.SwarmEligible.bValue,
+							"and this one permits no swarm");
 					}
 					else if (Name == "hydration-autonomy-absent")
 					{
