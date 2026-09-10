@@ -23,6 +23,7 @@
  * the store's `persist` and retains each full snapshot under its contextId.
  */
 
+import { classifyHostedFailure } from '../hosted-coding-agent/hosted-failure-reason';
 import { createHash } from 'node:crypto';
 import type { JuliusContractReviewCharge } from '../../src/relay/mission/julius/julius-task-contract';
 import {
@@ -342,11 +343,39 @@ const hostedCoderDiagnostics = (input: {
   readonly observed: HostedObservation | null;
   readonly limits: HostedLimits;
   readonly outcome: 'succeeded' | 'failed';
+  /**
+   * The runner's own classification of the error it caught, when it caught one.
+   * It is strictly better evidence than the final text: on
+   * `coder_provider_error_after_init` the runtime threw INSTEAD of finishing,
+   * so the cause is in the thrown error and the final text is whatever the
+   * stream had managed to emit before it.
+   */
+  readonly failureReason?: string | null;
 }): Record<string, unknown> => {
   const observed = input.observed;
   return {
     /** Stated, so a successful row is never read as a failure nobody classified. */
     outcome: input.outcome,
+    /**
+     * WHY IT FAILED, in a closed vocabulary — never the runtime's own words.
+     *
+     * Paid Mission 5's rerun stopped six turns into a twenty-six turn envelope
+     * with `is_error: true`, changed nothing, cost $0.885661, and the record
+     * said `coder_provider_error_after_init` and one fixed sentence. Nothing in
+     * any artifact said why, and the cause is now unrecoverable.
+     *
+     * `classifyHostedFailure` MATCHES the runtime's final text and returns a
+     * constant from its own vocabulary; no substring of that text can reach
+     * this row. The fixed sentence in `hosted-runner.ts` stays exactly as it is,
+     * for exactly the reason it gives.
+     *
+     * NULL ON SUCCESS, deliberately: a run that worked has no failure reason,
+     * and classifying a successful summary would read the word "error" in it as
+     * one.
+     */
+    failureReason: input.outcome === 'failed'
+      ? input.failureReason ?? classifyHostedFailure(observed?.finalText ?? null)
+      : null,
     // THE ROUND THAT SPENT THE MONEY. Fixing this to 'build' made a
     // repair round's cost refusal indistinguishable from the first
     // build's in the very artifact that exists to tell them apart.
@@ -967,6 +996,7 @@ export function createLiveHostedCodingAdapter(input: {
         const coderDiagnostics: Record<string, unknown> = hostedCoderDiagnostics({
           taskType: dispatch.taskType, requestedModel: input.requestedModel,
           observed, limits, outcome: 'failed',
+          failureReason: 'failureReason' in outcome ? outcome.failureReason ?? null : null,
         });
         if (outcome.kind === 'timed_out') throw new JuliusDispatchError('TIMEOUT', true, 'Hosted Coding Agent timed out.', 'coder_timed_out', { ...coderDiagnostics, timedOut: true });
         if (outcome.kind === 'cancelled') throw new JuliusDispatchError('CANCELLED', false, 'Hosted Coding Agent run was cancelled.', 'coder_cancelled', coderDiagnostics);

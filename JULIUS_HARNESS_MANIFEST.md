@@ -17,7 +17,7 @@ Julius is the provider-neutral, deterministic orchestration kernel that turns an
 
 Static import closure from the two roots over the TypeScript AST (value and type edges), stopping at the declared boundaries below; plus declared production modules not reached from the live root (flagged); plus path-loaded assets. Tests, fixtures, fakes and UI are refused by category. A drift gate fails the generator when a production file imports the Julius kernel or port without being reached, declared or explicitly excluded, or when a declaration no longer matches the wiring.
 
-Represented: **118 production files** across 20/20 subsystems (2 roots, 95 traced, 8 not composed by the live root, 13 path-loaded assets). Line and byte totals, the coverage estimate and the commit SHA are printed by the generator and recorded in the export header; they are kept out of this file so it changes only when the file set or its classification changes.
+Represented: **119 production files** across 20/20 subsystems (2 roots, 96 traced, 8 not composed by the live root, 13 path-loaded assets). Line and byte totals, the coverage estimate and the commit SHA are printed by the generator and recorded in the export header; they are kept out of this file so it changes only when the file set or its classification changes.
 
 ## Dependency direction (observed, between coarse groups)
 
@@ -34,7 +34,7 @@ Edges counted by the trace between included files; "type" = type-only imports, e
 | entrypoint (relay-bridge/julius-live-mission.ts) | Relay↔Julius port (src/relay/integration/julius/) | 1 | 0 |
 | executor + tool substrate (src/relay/workspace/julius-tools/) | kernel (src/relay/mission/julius/) | 10 | 8 |
 | executor + tool substrate (src/relay/workspace/julius-tools/) | persistence (src/relay/persistence/) | 1 | 0 |
-| live composition (relay-bridge/julius/) | bridge provider stacks (hosted Claude, Hermes, redaction) | 11 | 3 |
+| live composition (relay-bridge/julius/) | bridge provider stacks (hosted Claude, Hermes, redaction) | 12 | 3 |
 | live composition (relay-bridge/julius/) | connectors (gpt-architect, prompt-architect contracts) | 5 | 1 |
 | live composition (relay-bridge/julius/) | executor + tool substrate (src/relay/workspace/julius-tools/) | 2 | 0 |
 | live composition (relay-bridge/julius/) | kernel (src/relay/mission/julius/) | 7 | 3 |
@@ -143,6 +143,7 @@ The implementation role: one hosted Claude Agent SDK execution behind a pure saf
 | --- | --- | --- |
 | `relay-bridge/hosted-coding-agent/coder-envelope.ts` | traced | `relay-bridge/hosted-coding-agent/hosted-envelope.ts` |
 | `relay-bridge/hosted-coding-agent/hosted-envelope.ts` | traced | `relay-bridge/hosted-coding-agent/hosted-runner.ts` |
+| `relay-bridge/hosted-coding-agent/hosted-failure-reason.ts` | traced | `relay-bridge/julius/live-workers.ts` |
 | `relay-bridge/hosted-coding-agent/hosted-observation.ts` | traced | `relay-bridge/hosted-coding-agent/hosted-runner.ts` |
 | `relay-bridge/hosted-coding-agent/hosted-readiness.ts` | traced | `relay-bridge/hosted-coding-agent/hosted-runner.ts` |
 | `relay-bridge/hosted-coding-agent/hosted-runner.ts` | traced | `relay-bridge/julius/live-workers.ts` |

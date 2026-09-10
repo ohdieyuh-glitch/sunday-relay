@@ -155,6 +155,88 @@ describe('stopping a hosted run', () => {
 });
 
 /**
+ * PAID MISSION 5 STOPPED HERE AND THE RECORD COULD NOT SAY WHY.
+ *
+ * Its coder ran six of twenty-six turns, made five tool calls, changed nothing
+ * and cost $0.885661. `worker-diagnostics.tsv` carried every fact about the
+ * SHAPE of that failure and none about its cause, because the cause was in a
+ * thrown error the runner reduced to a fixed sentence — correctly, since a
+ * provider error can quote the request and the request can quote the
+ * credential.
+ *
+ * The fixed sentence stays. What is new is that the error is CLASSIFIED before
+ * it is dropped: matched against a pattern table that returns a constant, so
+ * the reason is recordable and the text still never leaves.
+ */
+describe('a provider error is classified on its way to being discarded', () => {
+  const throwsAfterInit = (message: string) => runHostedCodingAgent({
+    queryFn: () => (async function* () {
+      yield init();
+      throw new Error(message);
+    })(),
+    prompt: 'x', workspacePath: WS, apiKey: 'sk-ant-SECRET-VALUE', requestedModel: null, now: clock(),
+  });
+
+  it('names the reason a run stopped part-way, without repeating one character of it', async () => {
+    const outcome = await throwsAfterInit('API Error: 429 {"type":"rate_limit_error","message":"rate limit for sk-ant-api03-AAAABBBB"}');
+    expect(outcome.kind).toBe('refused');
+    if (outcome.kind !== 'refused') throw new Error('expected refused');
+    expect(outcome.refusalCode).toBe('coder_provider_error_after_init');
+    expect(outcome.failureReason).toBe('rate_limited');
+    const rendered = JSON.stringify(outcome);
+    for (const fragment of ['sk-ant', 'api03', 'AAAABBBB', 'rate_limit_error', '429']) {
+      expect(rendered.includes(fragment), `${fragment} escaped`).toBe(false);
+    }
+  });
+
+  it('distinguishes the ordinary long-run failures from one another', async () => {
+    const cases = [
+      ['API Error: 529 overloaded_error', 'provider_overloaded'],
+      ['prompt is too long: 300000 tokens > 200000 maximum', 'context_length_exceeded'],
+      ['terminated: stream disconnected after 6 turns', 'stream_interrupted'],
+    ] as const;
+    for (const [message, reason] of cases) {
+      const outcome = await throwsAfterInit(message);
+      if (outcome.kind !== 'refused') throw new Error('expected refused');
+      expect(outcome.failureReason, message).toBe(reason);
+    }
+  });
+
+  it('classifies a launch failure the same way, and still quotes nothing', async () => {
+    const outcome = await runHostedCodingAgent({
+      queryFn: () => (async function* () {
+        throw new Error('401 from https://api.anthropic.com with x-api-key sk-ant-LEAKED');
+      })(),
+      prompt: 'x', workspacePath: WS, apiKey: 'sk-ant-LEAKED', requestedModel: null, now: clock(),
+    });
+    expect(outcome.kind).toBe('launch_failed');
+    if (outcome.kind !== 'launch_failed') throw new Error('expected launch_failed');
+    expect(outcome.failureReason).toBe('provider_auth_rejected');
+    expect(JSON.stringify(outcome)).not.toContain('sk-ant');
+  });
+
+  it('says "no_message" when the throw carried no message at all', async () => {
+    // Unknown stays Unknown: a throw with nothing in it is not an execution
+    // error we recognised, and `unclassified` would claim we read something.
+    const outcome = await throwsAfterInit('');
+    if (outcome.kind !== 'refused') throw new Error('expected refused');
+    expect(outcome.failureReason).toBe('no_message');
+  });
+
+  it('gives a cancellation and a timeout no provider reason, because neither is one', async () => {
+    // The abort that Relay itself raised would classify as a broken stream and
+    // say something false beside `cancelled`.
+    const cancelled = await runHostedCodingAgent({
+      queryFn: () => (async function* () { yield init(); throw new Error('The operation was aborted'); })(),
+      prompt: 'x', workspacePath: WS, apiKey: 'k', requestedModel: null, now: clock(),
+      onCancel: (cancel) => cancel(),
+    });
+    expect(cancelled.kind).toBe('cancelled');
+    expect((cancelled as { failureReason?: unknown }).failureReason).toBeUndefined();
+  });
+});
+
+/**
  * DEFECT 1 (paid run 34037313976): the mission authorised $20 and the hosted
  * run was refused at 50 cents AFTER the work was done. The limit is now what
  * Julius reserved; these cases hold both ends of that seam.

@@ -46,6 +46,30 @@ export const safeFailureClass=(value:unknown):string|null=>typeof value==='strin
  */
 export const safeReasonCode=(value:unknown):string|null=>typeof value==='string'&&/^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(value)?value:null;
 /**
+ * WHY A HOSTED CODING AGENT FAILED, AS A CLOSED SET THE DOMAIN OWNS.
+ *
+ * The hosted runtime reports its failure as PROSE — free text from a provider,
+ * which can quote the request, which can quote the credential. `hosted-runner.ts`
+ * therefore emits one fixed sentence and nothing else, deliberately, and that is
+ * not being relaxed. So the adapter CLASSIFIES that text and sends a token; this
+ * is the set of tokens Julius will accept, and `safeEnum` refuses everything
+ * else.
+ *
+ * WHY A SHAPE TEST WOULD NOT DO. `safeReasonCode` and `safeToken` admit any
+ * token-shaped string, and a credential is token-shaped: `sk_ant_api03_...`
+ * satisfies both. Those helpers are right for `incompleteReason` and
+ * `providerStatus`, which are enums the PROVIDER already chose from its own
+ * closed set. Nothing here comes from such an enum, so membership is the only
+ * defensible test — and it means no adapter, however it is written or broken,
+ * can put a provider's characters in this column.
+ *
+ * The adapter declares its own copy (`HOSTED_FAILURE_REASONS`) because it may
+ * not import the mission projection; `hosted-failure-reason.test.ts` fails if
+ * the two ever disagree.
+ */
+export const JULIUS_HOSTED_FAILURE_REASONS=['rate_limited','context_length_exceeded','content_filtered','provider_overloaded','provider_auth_rejected','provider_bad_request','provider_server_error','stream_interrupted','execution_error','unclassified','no_message'] as const;
+export type JuliusHostedFailureReason=(typeof JULIUS_HOSTED_FAILURE_REASONS)[number];
+/**
  * THE CORROBORATING FACTS, NARROWED THE SAME WAY THE CLASS IS.
  *
  * A failure class says WHICH boundary broke. It cannot say the exit code, the
@@ -255,6 +279,18 @@ export const safeReviewDiagnostics=(value:unknown):JuliusSafeDiagnostics|null=>{
   permissionDenials:safeCount(v.permissionDenials),
   /** Whether an actionable implementation result existed at all. */
   implementationPresent:safeNullableBool(v.implementationPresent),
+  /**
+   * WHY THE BUILD FAILED, from {@link JULIUS_HOSTED_FAILURE_REASONS}, and null
+   * on every success.
+   *
+   * Paid Mission 5's rerun stopped six turns into a twenty-six turn envelope
+   * with `isError` true, changed nothing, and cost $0.885661. `failureShape`
+   * said `coder_provider_error_after_init` — which names the boundary and not
+   * the cause — and the cause is now unrecoverable, exactly as Mission 4
+   * attempt one's `incompleteReason` was before it had a column. This is the
+   * classified answer; the provider's own words never travel.
+   */
+  failureReason:safeEnum(v.failureReason,JULIUS_HOSTED_FAILURE_REASONS),
   /* --- Coding Agent cost, beside a refusal. Paid run 34037313976 was refused
    * for cost and the amount lived only in a message nothing persisted. --- */
   /** The runtime-reported cost in micro-dollars; null when the runtime reported none. */
