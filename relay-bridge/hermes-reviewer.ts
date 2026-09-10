@@ -19,7 +19,7 @@ import { dirname, join } from 'node:path';
 import { safeText } from './redact';
 import type { JuliusReviewCharge, JuliusReviewStage } from '../src/relay/mission/julius/julius-review-stage';
 import type { JuliusContractReviewCharge } from '../src/relay/mission/julius/julius-task-contract';
-import { parseUsageFile } from './reviewer-harness/hermes/runner';
+import { parseUsageFile, type HermesUsage } from './reviewer-harness/hermes/runner';
 
 export type HermesVerdict = 'approved' | 'changes_required' | 'unable_to_review';
 
@@ -61,7 +61,30 @@ export type HermesOutcome =
    * stated as such. `servedModel` is what the engine itself reported answered
    * — evidence, never inferred, never defaulted from `requestedModel`.
    */
-  | { kind: 'reviewed'; result: HermesReviewResult; startedAt: string; completedAt: string; requestedModel: string | null; servedModel: string | null; provider: string | null }
+  | {
+    kind: 'reviewed'; result: HermesReviewResult; startedAt: string; completedAt: string;
+    requestedModel: string | null; servedModel: string | null; provider: string | null;
+    /**
+     * THE SAME RECORD A FAILED REVIEW LEAVES, because a review that worked is
+     * the only thing a review that broke can be compared against.
+     *
+     * `review_incomplete` has carried diagnostics since paid run 34311556047
+     * and this member carried none, so Live Run 3 — which completed — produced
+     * an empty `worker-diagnostics.tsv`: no elapsed time, no timeout window, no
+     * packet size, no first-byte latency for a HEALTHY review. The repair that
+     * run 34311556047 needed was "is 400 s enough?", and the answer lives in
+     * the successful attempts nobody was recording.
+     */
+    diagnostics: HermesReviewDiagnostics;
+    /**
+     * WHAT HERMES WROTE TO ITS OWN USAGE FILE. Only `.model` was ever read from
+     * it; the tokens and the engine's `estimated_cost` were parsed and thrown
+     * away, which is why every reviewer reservation in Live Run 3 settled with
+     * no figure of any kind. The estimate is a harness's arithmetic and is
+     * never treated as spend — but recording nothing is not the alternative.
+     */
+    usage: HermesUsage;
+  }
   | { kind: 'launch_failed'; safeMessage: string }
   | { kind: 'review_incomplete'; safeMessage: string; shape: HermesReviewShape; diagnostics: HermesReviewDiagnostics; startedAt: string; completedAt: string };
 
@@ -172,6 +195,26 @@ export interface HermesReviewDiagnostics {
   readonly verdictValid: boolean;
   readonly summaryPresent: boolean;
   readonly failureShape: HermesReviewShape | null;
+  /**
+   * HOW THE ATTEMPT ENDED, from a closed pair.
+   *
+   * `failureShape` is null on a success AND on a failure nobody could
+   * classify, so its absence never meant "this went well" — and once
+   * successful attempts write rows too, that ambiguity would be the first
+   * thing a reader hit. `null` only when the caller did not say.
+   */
+  readonly outcome: 'succeeded' | 'failed' | null;
+  /**
+   * WHAT THIS PATH ASKED ITS ENGINE FOR — configuration, stated as such, and
+   * never a stand-in for `servedModel`.
+   *
+   * A failed review attests no served model by design (the usage report only
+   * exists once one finished), and until now it attested no requested model
+   * either — so a reviewer failure recorded which provider was configured and
+   * not which model was asked of it, which is half of what a rotation or an
+   * access change needs.
+   */
+  readonly requestedModel: string | null;
   /**
    * THE STATUS THE PROVIDER ACTUALLY RETURNED, when one was read.
    *
@@ -337,8 +380,11 @@ export function reviewStructureFacts(text: string | null): Pick<
 export function reviewDiagnostics(input: {
   readonly transport: HermesReviewDiagnostics['transport'];
   readonly shape: HermesReviewShape | null;
+  /** Omitted means "the caller did not say", which is not "it failed". */
+  readonly outcome?: 'succeeded' | 'failed' | null;
   readonly stage?: 'plan' | 'build' | null;
   readonly provider?: string | null;
+  readonly requestedModel?: string | null;
   readonly servedModel?: string | null;
   readonly processExitCode?: number | null;
   readonly timedOut?: boolean;
@@ -380,6 +426,10 @@ export function reviewDiagnostics(input: {
     serviceHttpStatus: input.serviceHttpStatus ?? null,
     ...reviewStructureFacts(input.text ?? null),
     failureShape: input.shape,
+    // A caller that named a shape described a failure; one that named neither
+    // said nothing, and `null` is that answer rather than a guess at it.
+    outcome: input.outcome ?? (input.shape === null ? null : 'failed'),
+    requestedModel: input.requestedModel ?? null,
     /* NULL IS THE DEFAULT, NOT FALSE. A caller that says nothing about the
        process did not watch one; writing `false` would turn "nobody looked"
        into "it never started", which is the exact confusion these fields were
@@ -1278,7 +1328,16 @@ export async function runHermesReview(input: {
      * process has — and none of that text travels, only what shape it was.
      */
     const localDiagnostics = (input: {
-      shape: HermesReviewShape;
+      /** `null` for the attempt that produced a review: there is no failure to shape. */
+      shape: HermesReviewShape | null;
+      /** Named explicitly so a successful attempt is a fact, not the absence of a shape. */
+      outcome: 'succeeded' | 'failed';
+      /**
+       * WHAT HERMES SAID ANSWERED. Read from the usage file, which only exists
+       * once a review really finished — so this is null on every failure path
+       * by construction, and the configured model never stands in for it.
+       */
+      servedModel?: string | null;
       exitCode: number | null;
       timedOut: boolean;
       /** Only ever `classifyHermesUpstreamFailure`'s own reading. */
@@ -1291,9 +1350,12 @@ export async function runHermesReview(input: {
       stage: null,
       transport: 'local',
       provider: cfg.provider ?? null,
+      // Configuration, and stated as configuration. It is the half of the model
+      // question a failed review can still answer.
+      requestedModel: cfg.model ?? null,
       // Read from the usage file only once a review really finished, so a
       // failed review attests no model rather than the configured one.
-      servedModel: null,
+      servedModel: input.servedModel ?? null,
       processExitCode: input.exitCode,
       timedOut: input.timedOut,
       outputBytesObserved: bytes,
@@ -1304,6 +1366,7 @@ export async function runHermesReview(input: {
       serviceHttpStatus: null,
       ...reviewStructureFacts(out),
       failureShape: input.shape,
+      outcome: input.outcome,
       /* WHAT THE PROCESS DID. Every one of these is something this function
          watched happen; none is inferred from another. */
       processStarted: true,
@@ -1390,7 +1453,7 @@ export async function runHermesReview(input: {
         // died on our signal reports no code of its own, and `null` is the
         // difference between "it did not exit" and "it exited 0".
         diagnostics: localDiagnostics({
-          shape: 'review_timeout', exitCode: null, timedOut: true,
+          shape: 'review_timeout', outcome: 'failed', exitCode: null, timedOut: true,
           cleanupCompleted: gone, completedAt,
         }),
         startedAt, completedAt,
@@ -1515,7 +1578,7 @@ export async function runHermesReview(input: {
             // A TIMEOUT IS A TIMEOUT WHICHEVER CLOCK CAUGHT IT. `signalSent`
             // stays null and an exit code is present when the engine reported
             // it, so the record still separates the two.
-            shape, exitCode: code ?? null, timedOut: engineTimedOut,
+            shape, outcome: 'failed', exitCode: code ?? null, timedOut: engineTimedOut,
             providerHttpStatus: upstream?.status ?? null,
             // IT EXITED BY ITSELF, so there is nothing left to clean up and no
             // signal was ever sent. That is a different fact from a timeout
@@ -1543,6 +1606,11 @@ export async function runHermesReview(input: {
         });
         return;
       }
+      // READ ONCE. `finish` deletes the scratch directory the usage file lives
+      // in, so a second `parseUsageFile` after this point reads nothing — and
+      // the model, the tokens and the engine's own cost estimate all come from
+      // this one file.
+      const usage = parseUsageFile(usageFilePath);
       finish({
         kind: 'reviewed',
         result: parsed,
@@ -1551,8 +1619,26 @@ export async function runHermesReview(input: {
         requestedModel: cfg.model ?? null,
         // What Hermes itself reported answered. Absent or malformed usage
         // stays null — the configured model never stands in for it.
-        servedModel: parseUsageFile(usageFilePath).model,
+        servedModel: usage.model,
         provider: cfg.provider ?? null,
+        usage,
+        /**
+         * THE HEALTHY ATTEMPT, ON THE RECORD.
+         *
+         * Every field here is one this process watched happen, and the reason
+         * they matter on the success path is that `elapsedMs` beside
+         * `timeoutMs`, and `firstOutputAfterMs` beside both, are how anyone
+         * answers "was the window big enough?" without buying a paid failure to
+         * find out. `shape: null` because there is no failure to shape; the
+         * outcome is stated instead of inferred from that absence.
+         */
+        diagnostics: localDiagnostics({
+          shape: null, outcome: 'succeeded', servedModel: usage.model,
+          exitCode: code ?? null, timedOut: false,
+          // Its own exit is what got us here, so nothing was signalled and
+          // nothing is left to clean up.
+          cleanupCompleted: true, completedAt,
+        }),
       });
     });
   });

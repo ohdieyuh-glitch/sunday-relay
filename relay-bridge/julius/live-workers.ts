@@ -49,12 +49,15 @@ import {
   type HostedRunOutcome,
 } from '../hosted-coding-agent/hosted-runner';
 import { DEFAULT_HOSTED_LIMITS, hostedLimitsForAllocation, type HostedLimits } from '../hosted-coding-agent/hosted-envelope';
+import type { HostedObservation } from '../hosted-coding-agent/hosted-observation';
 import {
   runHermesReview,
   type HermesConfig,
   type HermesOutcome,
+  type HermesReviewDiagnostics,
   type ReviewPacket,
 } from '../hermes-reviewer';
+import { UNKNOWN_USAGE, type HermesUsage } from '../reviewer-harness/hermes/runner';
 import type { ShellEffectPort } from './executor-effects';
 
 /* ------------------------------------------------------------- handoffs */
@@ -248,6 +251,180 @@ const reviewStageOfDispatch = (taskType: string | undefined): JuliusReviewStage 
   (taskType === undefined ? null : reviewStageOf(taskType));
 
 /**
+ * WHAT A HARNESS ESTIMATED, IN MICRO-DOLLARS, OR NOTHING.
+ *
+ * Hermes writes an `estimated_cost` to its usage file and `parseUsageFile`
+ * carries it as a STRING with its currency, deliberately, so nothing turns it
+ * into a computed figure Relay would then have to defend. The same narrowing
+ * `reviewerHarnessMeterAdapter` already applies is applied here — an integer
+ * micro amount in USD, or null — and the result is never written to a spend
+ * column. A price a harness worked out from its own table is not a bill.
+ */
+const harnessEstimateMicros = (usage: { costMicros: string | null; currency: string | null }): number | null =>
+  usage.costMicros !== null && usage.currency === 'USD'
+    && /^\d+$/.test(usage.costMicros) && Number(usage.costMicros) <= Number.MAX_SAFE_INTEGER
+    ? Number(usage.costMicros)
+    : null;
+
+/**
+ * THE JULIUS-SIDE REVIEWER RECORD: what the transport observed, plus what only
+ * the dispatch knows.
+ *
+ * The transport reports its own lifecycle and cannot know which STAGE Julius
+ * asked it to review or how many times Julius asked; the dispatch knows both
+ * and neither used to reach the durable row on a success. The two instants are
+ * carried explicitly rather than left to be recovered by subtracting an
+ * elapsed time from an event's `occurred_at` across two tables.
+ *
+ * `elapsedMs` is derived ONLY where the transport measured none — the remote
+ * and provider paths run no process and time nothing — and it is derived from
+ * two instants that are both on the same row, so the arithmetic is checkable
+ * instead of asserted.
+ */
+const reviewerDiagnostics = (input: {
+  /**
+   * `HermesOutcome` requires this, and the runner is INJECTABLE — so a harness
+   * or an older transport can still hand back an outcome without it. Throwing
+   * here would turn a review that was bought and answered into a dispatch
+   * failure, which is the most expensive possible way to report a missing
+   * field. Absent means "this transport observed nothing", so nothing is
+   * written for it and the evidence dump, which keys on `diag_transport`,
+   * skips the row rather than showing a wall of nulls.
+   */
+  readonly diagnostics: HermesReviewDiagnostics | undefined;
+  readonly stage: string;
+  readonly reviewAttempts: number;
+  readonly startedAt?: string;
+  readonly completedAt?: string;
+  readonly usage?: HermesUsage;
+}): Record<string, unknown> => {
+  const started = input.startedAt === undefined ? Number.NaN : Date.parse(input.startedAt);
+  const completed = input.completedAt === undefined ? Number.NaN : Date.parse(input.completedAt);
+  const estimated = input.usage === undefined ? null : harnessEstimateMicros(input.usage);
+  const observed = input.diagnostics !== null && typeof input.diagnostics === 'object' ? input.diagnostics : undefined;
+  return {
+    ...observed,
+    stage: input.stage,
+    reviewAttempts: input.reviewAttempts,
+    ...(input.startedAt === undefined ? {} : { startedAt: input.startedAt }),
+    ...(input.completedAt === undefined ? {} : { completedAt: input.completedAt }),
+    elapsedMs: observed?.elapsedMs
+      ?? (Number.isFinite(started) && Number.isFinite(completed) && completed >= started ? completed - started : null),
+    /* WHAT IT COST, AND ON WHOSE AUTHORITY. This transport is never billed
+       directly: Hermes talks to the provider and reports its own arithmetic, so
+       the strongest honest basis here is ESTIMATED — and UNKNOWN when even that
+       is absent. Neither is ever `PROVIDER_REPORTED`, and neither is zero. */
+    costBasis: estimated === null ? 'UNKNOWN' : 'ESTIMATED',
+    estimatedCostUsdMicros: estimated,
+    inputTokens: input.usage?.inputTokens ?? null,
+    outputTokens: input.usage?.outputTokens ?? null,
+  };
+};
+
+/**
+ * THE FACTS BESIDE A CODER'S ATTEMPT — the SAME facts whether it refused or
+ * finished.
+ *
+ * This used to be built inside the refusal branch, so a hosted session that
+ * completed left no diagnostics row at all: no turn count, no tool count, no
+ * permission denials, no served model, and — on the one worker that reports a
+ * real dollar figure — no `cost_source` saying the figure was the runtime's
+ * own. Live Run 3's coder succeeded and its whole lifecycle reached the bundle
+ * only as a sentence in `evidence.tsv`.
+ *
+ * Extracted rather than duplicated on purpose: a fact present on one ending and
+ * absent on the other reads as a bug in the record, and two hand-kept copies is
+ * how that happens.
+ */
+const hostedCoderDiagnostics = (input: {
+  readonly taskType: string | undefined;
+  readonly requestedModel: string | null;
+  readonly observed: HostedObservation | null;
+  readonly limits: HostedLimits;
+  readonly outcome: 'succeeded' | 'failed';
+}): Record<string, unknown> => {
+  const observed = input.observed;
+  return {
+    /** Stated, so a successful row is never read as a failure nobody classified. */
+    outcome: input.outcome,
+    // THE ROUND THAT SPENT THE MONEY. Fixing this to 'build' made a
+    // repair round's cost refusal indistinguishable from the first
+    // build's in the very artifact that exists to tell them apart.
+    stage: input.taskType === 'repair:build' ? 'repair:build' : 'build',
+    transport: 'hosted',
+    provider: 'anthropic',
+    requestedModel: input.requestedModel,
+    servedModel: observed?.actualModel ?? null,
+    responseId: observed?.sessionId ?? null,
+    numTurns: observed?.numTurns ?? null,
+    // INVOCATIONS, not distinct names: `toolsUsed` deduplicates, so ten
+    // edits and one read would have been reported as 2.
+    toolUseCount: observed?.toolInvocations ?? null,
+    /**
+     * ONLY WHEN A RESULT ARRIVED. `permissionDenials` starts at 0 and is
+     * populated by the result message alone, so reporting it after a
+     * timeout or a cancellation would assert that no denial occurred —
+     * evidence the envelope held — on precisely the runs where the
+     * terminal data never came. `resultSubtype` is null until that
+     * message, which is how this knows.
+     */
+    permissionDenials: observed?.resultSubtype === null || observed === null
+      ? null : observed.permissionDenials,
+    resultSubtype: observed?.resultSubtype ?? null,
+    isError: observed?.isError ?? null,
+    // A COUNT of the runtime's final text, never the text.
+    outputBytesObserved: observed?.finalText === null || observed?.finalText === undefined
+      ? null : Buffer.byteLength(observed.finalText, 'utf8'),
+    /**
+     * AN OBSERVED SUCCESSFUL RESULT, not merely a runtime that started.
+     * `initSeen && isError !== true` is true after a timeout or a
+     * provider exception — `isError` is still null then — so it claimed
+     * an implementation existed on exactly the partial runs these
+     * diagnostics exist to tell apart.
+     */
+    implementationPresent: observed === null || observed.isError === null
+      ? null : observed.isError === false,
+    /**
+     * THE MONEY, BESIDE THE REFUSAL. Paid run 34037313976 was refused for
+     * cost and the amount lived only in a message nothing persisted.
+     * Unknown stays Unknown: a runtime that reported no cost reads null
+     * with `costSource: unavailable`, never zero.
+     */
+    costUsdMicros: observed?.usage.totalCostUsd === null || observed?.usage.totalCostUsd === undefined
+      ? null : Math.round(observed.usage.totalCostUsd * 1_000_000),
+    costCeilingUsdMicros: input.limits.maxCostCents * 10_000,
+    costSource: observed?.usage.source ?? null,
+    /**
+     * DID THE RUNTIME EVER START? A run that never launched billed
+     * nothing; one that launched and was aborted — the timeout, which is
+     * the case a cost is LEAST likely to be reported for, because the
+     * SDK reports cost only in its final result message — billed an
+     * unknown amount. The ledger needs that difference to decide whether
+     * a hand-back may free the hold.
+     */
+    runtimeStarted: observed?.initSeen ?? false,
+    /**
+     * HOW THE COST CAME TO BE KNOWN, in the vocabulary all three roles answer
+     * in. `costSource` above is the hosted runtime's own word for itself
+     * (`runtime_reported` / `unavailable`) and says nothing a reviewer or an
+     * architect could also say. This is the one Live Run 3's ledger needed: it
+     * settled one component with a figure and three with nothing, and had no
+     * column to tell "billed $0.61" from "reported nothing".
+     *
+     * `PROVIDER_REPORTED` requires BOTH the runtime's own attestation and an
+     * actual figure. A basis without its number would assert a report nobody
+     * made, and every reader downstream would count the component as accounted
+     * for.
+     */
+    costBasis: observed?.usage.source === 'runtime_reported'
+      && observed.usage.totalCostUsd !== null && observed.usage.totalCostUsd !== undefined
+      ? 'PROVIDER_REPORTED' : 'UNKNOWN',
+    inputTokens: observed?.usage.inputTokens ?? null,
+    outputTokens: observed?.usage.outputTokens ?? null,
+  };
+};
+
+/**
  * THE SAFE FACTS BESIDE A PLAN FAILURE.
  *
  * `plan_validation_failed` named the boundary and nothing else, so paid attempt
@@ -266,7 +443,12 @@ const planDiagnostics = (input: {
   readonly validationClaimPhrase?: string | null;
   readonly attempts?: number | null;
   readonly outputBytes?: number | null;
+  /** Named, so a plan that VALIDATED is a fact rather than the absence of a reason code. */
+  readonly outcome?: 'succeeded' | 'failed';
+  readonly inputTokens?: number | null;
+  readonly outputTokens?: number | null;
 }): Record<string, unknown> => ({
+  outcome: input.outcome ?? 'failed',
   stage: 'plan',
   transport: 'openai',
   provider: 'openai',
@@ -283,6 +465,19 @@ const planDiagnostics = (input: {
   outputBytesObserved: input.outputBytes ?? null,
   /** How many provider calls this ONE dispatch bought, including the correction. */
   planAttempts: input.attempts ?? null,
+  /**
+   * THE ARCHITECT IS BILLED AND CANNOT SAY SO.
+   *
+   * Chat Completions reports tokens and never a price, so this role's honest
+   * basis is `UNKNOWN` — every time, including on the plans that worked. Live
+   * Run 3's architect reservation settled with no figure and the ledger could
+   * not distinguish that from a free call. The tokens are recorded because they
+   * are what a price recorded at the time would eventually measure; until such
+   * a table exists, inventing the dollars is exactly what is forbidden.
+   */
+  costBasis: 'UNKNOWN',
+  inputTokens: input.inputTokens ?? null,
+  outputTokens: input.outputTokens ?? null,
 });
 
 /**
@@ -529,10 +724,30 @@ export function createLiveArchitectAdapter(input: {
           artifactRef: planRef(snapshot.runId),
           occurredAt: nowIso(),
         }],
+        /**
+         * THE PLAN THAT VALIDATED, ON THE RECORD. `planDiagnostics` existed
+         * only to explain refusals, so a run whose architect answered correctly
+         * recorded no served model, no response id and no attempt count — and
+         * `planAttempts` on a success is the number that says whether a
+         * dispatch bought one provider call or two.
+         */
+        diagnostics: planDiagnostics({
+          requestedModel: input.config.model,
+          servedModel: outcome.actualModel ?? null,
+          responseId: outcome.responseId ?? null,
+          jsonParseable: true, validationPassed: true, outcome: 'succeeded',
+          attempts, outputBytes: Buffer.byteLength(outcome.outputText, 'utf8'),
+          inputTokens: outcome.usage.inputTokens ?? null,
+          outputTokens: outcome.usage.outputTokens ?? null,
+        }),
         usage: {
           inputTokens: outcome.usage.inputTokens ?? undefined,
           outputTokens: outcome.usage.outputTokens ?? undefined,
           toolCalls: 0,
+          // Tokens, never a price: this provider reports no cost, so the basis
+          // is UNKNOWN and the reservation stays held rather than settling at
+          // zero. Unknown is not free.
+          costBasis: 'UNKNOWN',
         },
       };
       }
@@ -692,64 +907,10 @@ export function createLiveHostedCodingAdapter(input: {
          * prompt, final text or provider body is among them.
          */
         const observed = 'observation' in outcome ? outcome.observation : null;
-        const coderDiagnostics: Record<string, unknown> = {
-          // THE ROUND THAT SPENT THE MONEY. Fixing this to 'build' made a
-          // repair round's cost refusal indistinguishable from the first
-          // build's in the very artifact that exists to tell them apart.
-          stage: dispatch.taskType === 'repair:build' ? 'repair:build' : 'build',
-          transport: 'hosted',
-          provider: 'anthropic',
-          requestedModel: input.requestedModel,
-          servedModel: observed?.actualModel ?? null,
-          responseId: observed?.sessionId ?? null,
-          numTurns: observed?.numTurns ?? null,
-          // INVOCATIONS, not distinct names: `toolsUsed` deduplicates, so ten
-          // edits and one read would have been reported as 2.
-          toolUseCount: observed?.toolInvocations ?? null,
-          /**
-           * ONLY WHEN A RESULT ARRIVED. `permissionDenials` starts at 0 and is
-           * populated by the result message alone, so reporting it after a
-           * timeout or a cancellation would assert that no denial occurred —
-           * evidence the envelope held — on precisely the runs where the
-           * terminal data never came. `resultSubtype` is null until that
-           * message, which is how this knows.
-           */
-          permissionDenials: observed?.resultSubtype === null || observed === null
-            ? null : observed.permissionDenials,
-          resultSubtype: observed?.resultSubtype ?? null,
-          isError: observed?.isError ?? null,
-          // A COUNT of the runtime's final text, never the text.
-          outputBytesObserved: observed?.finalText === null || observed?.finalText === undefined
-            ? null : Buffer.byteLength(observed.finalText, 'utf8'),
-          /**
-           * AN OBSERVED SUCCESSFUL RESULT, not merely a runtime that started.
-           * `initSeen && isError !== true` is true after a timeout or a
-           * provider exception — `isError` is still null then — so it claimed
-           * an implementation existed on exactly the partial runs these
-           * diagnostics exist to tell apart.
-           */
-          implementationPresent: observed === null || observed.isError === null
-            ? null : observed.isError === false,
-          /**
-           * THE MONEY, BESIDE THE REFUSAL. Paid run 34037313976 was refused for
-           * cost and the amount lived only in a message nothing persisted.
-           * Unknown stays Unknown: a runtime that reported no cost reads null
-           * with `costSource: unavailable`, never zero.
-           */
-          costUsdMicros: observed?.usage.totalCostUsd === null || observed?.usage.totalCostUsd === undefined
-            ? null : Math.round(observed.usage.totalCostUsd * 1_000_000),
-          costCeilingUsdMicros: limits.maxCostCents * 10_000,
-          costSource: observed?.usage.source ?? null,
-          /**
-           * DID THE RUNTIME EVER START? A run that never launched billed
-           * nothing; one that launched and was aborted — the timeout, which is
-           * the case a cost is LEAST likely to be reported for, because the
-           * SDK reports cost only in its final result message — billed an
-           * unknown amount. The ledger needs that difference to decide whether
-           * a hand-back may free the hold.
-           */
-          runtimeStarted: observed?.initSeen ?? false,
-        };
+        const coderDiagnostics: Record<string, unknown> = hostedCoderDiagnostics({
+          taskType: dispatch.taskType, requestedModel: input.requestedModel,
+          observed, limits, outcome: 'failed',
+        });
         if (outcome.kind === 'timed_out') throw new JuliusDispatchError('TIMEOUT', true, 'Hosted Coding Agent timed out.', 'coder_timed_out', { ...coderDiagnostics, timedOut: true });
         if (outcome.kind === 'cancelled') throw new JuliusDispatchError('CANCELLED', false, 'Hosted Coding Agent run was cancelled.', 'coder_cancelled', coderDiagnostics);
         if (outcome.kind === 'launch_failed') throw new JuliusDispatchError('AUTH_CONFIGURATION', false, `Hosted Coding Agent could not launch: ${safeClaim(outcome.safeMessage, 120)}.`, 'coder_launch_failed', coderDiagnostics);
@@ -802,11 +963,30 @@ export function createLiveHostedCodingAdapter(input: {
             occurredAt: nowIso(),
           },
         ],
+        /**
+         * THE SESSION THAT WORKED, ON THE RECORD — the same fields its refusal
+         * has carried since paid Mission #2, from the same builder so the two
+         * cannot drift apart. Live Run 3's coder finished, and its turn count,
+         * tool count, permission denials and served model reached the bundle
+         * only inside a prose sentence.
+         */
+        diagnostics: hostedCoderDiagnostics({
+          taskType: dispatch.taskType, requestedModel: input.requestedModel,
+          observed, limits, outcome: 'succeeded',
+        }),
         usage: {
           inputTokens: observed.usage.inputTokens ?? undefined,
           outputTokens: observed.usage.outputTokens ?? undefined,
           usdMicros: observed.usage.totalCostUsd === null ? undefined : Math.round(observed.usage.totalCostUsd * 1_000_000),
           toolCalls: observed.toolsUsed.length,
+          /**
+           * THE ONLY WORKER THAT CAN SAY `PROVIDER_REPORTED`, and only when its
+           * runtime actually reported. Anything else is UNKNOWN, which the
+           * ledger holds as an unreleased reservation rather than a settlement
+           * of zero.
+           */
+          costBasis: observed.usage.source === 'runtime_reported' && observed.usage.totalCostUsd !== null
+            ? 'PROVIDER_REPORTED' : 'UNKNOWN',
         },
       };
     },
@@ -1003,7 +1183,10 @@ export function createLiveHermesReviewerAdapter(input: {
          */
         throw new JuliusDispatchError(
           code, retryable, `Hermes review incomplete: ${safeClaim(outcome.safeMessage, 120)}.`, outcome.shape,
-          { ...outcome.diagnostics, stage, reviewAttempts },
+          reviewerDiagnostics({
+            diagnostics: outcome.diagnostics, stage, reviewAttempts,
+            startedAt: outcome.startedAt, completedAt: outcome.completedAt,
+          }),
         );
       }
       if (outcome.result.verdict === 'unable_to_review') {
@@ -1037,13 +1220,50 @@ export function createLiveHermesReviewerAdapter(input: {
             safeSummary: safeClaim(`[${finding.severity}] ${finding.requirement}: ${finding.explanation}`),
             occurredAt: nowIso(),
           }));
+      /**
+       * THE SAME REASON THE DIAGNOSTICS ARE OPTIONAL ABOVE: the runner is
+       * injectable, so a harness or an older transport can answer without a
+       * usage report. A review that was bought and answered must not become a
+       * dispatch failure over a missing field, and `UNKNOWN_USAGE` says exactly
+       * what is true of it — no tokens, no cost, `source: 'unavailable'`.
+       */
+      const reviewUsage: HermesUsage = outcome.usage !== null && typeof outcome.usage === 'object' ? outcome.usage : UNKNOWN_USAGE;
       return {
         workerId: input.worker.workerId,
         providerId: input.worker.providerId,
         status: 'SUCCEEDED',
         safeSummary: `Independent Hermes review completed: verdict ${outcome.result.verdict}, ${outcome.result.findings.length} findings (${blocking.length} blocking), served model ${safeClaim(outcome.servedModel ?? 'unknown', 80)}.`,
         evidence,
-        usage: { toolCalls: 0 },
+        /**
+         * THE REVIEW THAT WORKED, ON THE RECORD.
+         *
+         * Live Run 3 approved both stages and left `worker-diagnostics.tsv`
+         * empty, so the served model survived only because a prose evidence
+         * summary happened to name it, and the elapsed time of a healthy review
+         * — the number the next timeout has to be read against — survived
+         * nowhere at all.
+         */
+        diagnostics: reviewerDiagnostics({
+          diagnostics: outcome.diagnostics, stage, reviewAttempts,
+          startedAt: outcome.startedAt, completedAt: outcome.completedAt,
+          usage: reviewUsage,
+        }),
+        /**
+         * TOKENS AND AN ESTIMATE, NEVER A BILL.
+         *
+         * `{ toolCalls: 0 }` was the whole of this, so every reviewer
+         * reservation in Live Run 3 settled with no figure and the ledger read
+         * three unreported components exactly as it reads a free one. Hermes
+         * reports tokens and its own `estimated_cost`; both are recorded, and
+         * `usdMicros` stays absent because nothing here was billed to Relay.
+         */
+        usage: {
+          toolCalls: 0,
+          inputTokens: reviewUsage.inputTokens ?? undefined,
+          outputTokens: reviewUsage.outputTokens ?? undefined,
+          costBasis: harnessEstimateMicros(reviewUsage) === null ? 'UNKNOWN' : 'ESTIMATED',
+          estimatedUsdMicros: harnessEstimateMicros(reviewUsage) ?? undefined,
+        },
       };
     },
   };

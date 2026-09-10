@@ -143,8 +143,8 @@ describe('the eval summary', () => {
       trajectory({ kind: 'DISPATCH', usdMicros: 5_000, idempotencyKey: '1' }),
     ], 'julius-runtime.v1');
     expect(summary.verifiedCompletions).toBe(0);
-    expect(summary.totalUsdMicros).toBe(5_000);
-    expect(summary.costPerVerifiedCompletion).toBeNull();
+    expect(summary.knownUsdMicros).toBe(5_000);
+    expect(summary.knownCostPerVerifiedCompletion).toBeNull();
   });
 
   it('reports null average duration when nothing recorded one', () => {
@@ -156,7 +156,7 @@ describe('the eval summary', () => {
     const empty = summariseJuliusEvals([], 'julius-runtime.v1');
     expect(empty.runs).toBe(0);
     expect(empty.verifiedCompletionRate).toBe(0);
-    expect(empty.costPerVerifiedCompletion).toBeNull();
+    expect(empty.knownCostPerVerifiedCompletion).toBeNull();
   });
 
   it('computes a rate and a cost from a real mixed sample', () => {
@@ -172,17 +172,43 @@ describe('the eval summary', () => {
     expect(summary.runs).toBe(2);
     expect(summary.verifiedCompletions).toBe(1);
     expect(summary.verifiedCompletionRate).toBe(0.5);
-    expect(summary.totalUsdMicros).toBe(4_000);
-    expect(summary.costPerVerifiedCompletion).toBe(4_000);
+    expect(summary.knownUsdMicros).toBe(4_000);
+    expect(summary.knownCostPerVerifiedCompletion).toBe(4_000);
+    expect(summary.unknownCostComponents, 'both dispatches reported').toBe(0);
+    expect(summary.costComplete).toBe(true);
     expect(summary.averageDurationMs).toBe(300);
   });
 
-  it('omits an unknown cost from the total rather than counting it as free', () => {
+  /**
+   * THE LIVE RUN 3 SHAPE. One dispatch reported and one did not, and the old
+   * summary published `totalUsdMicros: 1000` — a floor wearing a total's name,
+   * which is exactly how a mission that cost at least $0.61 was reported as a
+   * mission that cost $0.61. Omitting the unknown from the SUM is right;
+   * omitting it from the SUMMARY is what made the number unquotable.
+   */
+  it('counts an unknown cost rather than dropping it, so a floor is never read as a total', () => {
     const summary = summariseJuliusEvals([
       trajectory({ kind: 'DISPATCH', usdMicros: 1_000, idempotencyKey: '1' }),
       trajectory({ kind: 'DISPATCH', usdMicros: null, idempotencyKey: '2' }),
     ], 'julius-runtime.v1');
-    expect(summary.totalUsdMicros).toBe(1_000);
+    expect(summary.knownUsdMicros, 'the unknown one is never added as zero').toBe(1_000);
+    expect(summary.unknownCostComponents, 'and it is never simply dropped either').toBe(1);
+    expect(summary.costComplete).toBe(false);
+  });
+
+  /**
+   * Only a DISPATCH can cost money. A RETRY or a COMPLETION row carries no cost
+   * by construction, so counting its absent cost as unmeasured would make every
+   * window incomplete forever and the flag would stop meaning anything.
+   */
+  it('counts only dispatches as cost components', () => {
+    const summary = summariseJuliusEvals([
+      trajectory({ kind: 'DISPATCH', usdMicros: 1_000, idempotencyKey: '1' }),
+      trajectory({ kind: 'RETRY', usdMicros: null, idempotencyKey: '2' }),
+      trajectory({ kind: 'COMPLETION', outcome: 'VERIFIED', usdMicros: null, idempotencyKey: '3' }),
+    ], 'julius-runtime.v1');
+    expect(summary.unknownCostComponents).toBe(0);
+    expect(summary.costComplete, 'the only dispatch reported its cost').toBe(true);
   });
 
   it('reports the version it summarised, so two are never confused', () => {

@@ -720,7 +720,7 @@ describe('the evidence dump names only tables and columns the migrations create'
     const dumps = queries();
     const everyDumpedFile = [...read('.github/julius-live-evidence-dump.sh').matchAll(/" ([a-z-]+\.tsv)$/gmu)].map((match) => match[1]).sort();
     expect(everyDumpedFile, 'every file the script writes, including the ones this regex cannot parse')
-      .toEqual(['budget.tsv', 'contract-events.tsv', 'decisions.tsv', 'evidence.tsv', 'failures.tsv', 'findings.tsv', 'project-brain.tsv', 'runs.tsv', 'sessions.tsv', 'task-contracts.tsv', 'tasks.tsv', 'tool-invocations.tsv', 'trajectory.tsv', 'worker-diagnostics.tsv']);
+      .toEqual(['budget.tsv', 'contract-events.tsv', 'cost-accounting.tsv', 'decisions.tsv', 'evidence.tsv', 'failures.tsv', 'findings.tsv', 'project-brain.tsv', 'runs.tsv', 'sessions.tsv', 'task-contracts.tsv', 'tasks.tsv', 'tool-invocations.tsv', 'trajectory.tsv', 'worker-diagnostics.tsv']);
     expect(dumps.map((dump) => dump.file).sort()).toEqual(['decisions.tsv', 'evidence.tsv', 'findings.tsv', 'project-brain.tsv', 'runs.tsv', 'sessions.tsv', 'task-contracts.tsv', 'tasks.tsv', 'tool-invocations.tsv', 'trajectory.tsv']);
     for (const dump of dumps) {
       const columns = tables.get(dump.table);
@@ -776,6 +776,20 @@ describe('the evidence dump names only tables and columns the migrations create'
       // by definition; a retry the artifact could not show would be a spend
       // nobody could account for.
       'planAttempts', 'reviewAttempts',
+      // THE ATTEMPT ITSELF. Live Run 3 COMPLETED and produced no rows here at
+      // all, because diagnostics were flattened onto the two failure events and
+      // onto nothing else. `outcome` is what lets a healthy attempt be filtered
+      // apart from a failure nobody classified — `failureShape` is null for
+      // both — and the two instants are what stop a reader reconstructing the
+      // start by subtracting an elapsed time from `occurred_at`.
+      'outcome', 'startedAt', 'completedAt',
+      // Which locked terms the attempt actually ran under, on the same row as
+      // the attempt. `trajectory.tsv` has them too; a diagnostics row that
+      // needs a join to say what bound it is one that gets read without it.
+      'contractRevision', 'contractBindingDigest',
+      // The cost vocabulary all three roles answer in. `costSource` is the
+      // hosted runtime's own word for itself and only the coder has one.
+      'costBasis', 'estimatedCostUsdMicros', 'inputTokens', 'outputTokens',
     ]) {
       expect(query, `the diagnostics dump must select ${key}`).toContain(`'diag_${key}'`);
     }
@@ -793,6 +807,55 @@ describe('the evidence dump names only tables and columns the migrations create'
       .toContain("e.payload->'facts'->>'diag_transport' IS NOT NULL");
     expect(query, 'and it never descends into a nested diagnostics object')
       .not.toContain("->'diagnostics'");
+    // The event type is the authority on which ending a row is. `diag_outcome`
+    // says the same thing from the adapter's side, and the two disagreeing is
+    // itself a finding — which needs both to be present to be visible.
+    expect(query, 'the event type is on the row, not inferred from the diagnostics')
+      .toContain('e.event_type');
+  });
+
+  /**
+   * WHAT THE MISSION COST, WITH THE UNKNOWN PART STILL VISIBLE.
+   *
+   * Live Run 3 settled one component with a runtime-reported $0.608861 and
+   * three with no amount at all, and `budget.tsv` had one column for both — so
+   * the honest answer ("at least $0.61, three components unreported") had to be
+   * worked out by hand from a TSV, which is exactly how the floor came to be
+   * quoted as the total. Hand-checked because the query GROUPs, which the
+   * simple SELECT/FROM parser above cannot read.
+   */
+  it('the cost rollup keeps billed, estimated and unknown on three separate axes', () => {
+    const query = read('.github/julius-live-evidence-dump.sh').split('\n').find((line) => line.includes('cost-accounting.tsv')) ?? '';
+    expect(query, 'the cost rollup must exist').not.toBe('');
+
+    // ONLY the two bases that describe money someone was charged. An estimate
+    // summed here would be a harness's price table presented as a bill.
+    expect(query, 'known cost is the spend bases and nothing else')
+      .toContain("IN ('PROVIDER_REPORTED','MEASURED_FROM_USAGE')");
+    expect(query, 'and the harness estimate is summed on its own axis')
+      .toContain("'estimatedUsdMicros'");
+    // NOT DROPPED, AND NOT ZERO. The count is the whole point: a sum that
+    // silently skips its nulls is a floor, and a floor without its count reads
+    // as a total.
+    expect(query, 'settlements that reported nothing are counted, never summed as zero')
+      .toContain("count(*) FILTER (WHERE e.payload->'facts'->>'usdMicros' IS NULL)");
+    expect(query, 'and it is per role, because the founder\'s question was per role')
+      .toContain("'role'");
+    expect(query, 'settlements only — a reservation is not a spend')
+      .toContain("e.event_type='julius.budget.settled'");
+    // No credential, no prose, no payload dump: the same rule every other query here obeys.
+    expect(query, 'the whole payload is never dumped').not.toMatch(/\bpayload\b(?!\s*(?:->|#>))/u);
+  });
+
+  /**
+   * A SETTLEMENT WITHOUT ITS BASIS IS THE DEFECT ITSELF. `budget.tsv` recorded
+   * `usdMicros` and could not say whether a blank meant free or unmeasured.
+   */
+  it('the budget dump carries the settlement basis beside the amount', () => {
+    const query = read('.github/julius-live-evidence-dump.sh').split('\n').find((line) => line.includes('budget.tsv')) ?? '';
+    for (const key of ['costBasis', 'estimatedUsdMicros', 'usdMicros', 'role']) {
+      expect(query, `the budget dump must select ${key}`).toContain(`'${key}'`);
+    }
   });
 
   /**
