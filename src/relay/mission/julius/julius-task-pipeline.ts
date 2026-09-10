@@ -36,6 +36,7 @@ import { decideJuliusContinuation } from './julius-continuation';
 import { JuliusExecutionCoordinator, type JuliusExecutionOutcome, type JuliusExecutionPorts, type JuliusExecutionClaim, type JuliusResourceRequest } from './julius-execution-coordinator';
 import { safeReasonCode, type JuliusProviderRouter } from './julius-router';
 import { juliusCostComponent } from './julius-cost-accounting';
+import { juliusContractDisposition, juliusContractDispositionFacts } from './julius-contract-disposition';
 import { createJuliusContextSnapshot } from './julius-context-snapshot';
 import { evaluateJuliusVerification, type JuliusReviewerFinding, type JuliusVerificationPolicy } from './julius-verification-runtime';
 import { planJuliusRepair } from './julius-repair-runtime';
@@ -1503,13 +1504,43 @@ async function verifyExecutedTask(input: {
    * the ids of the blocking findings — names, never the findings' prose — and
    * the announced facts carry counts and ids only.
    */
-  if (decision.action === 'REPAIR' && subject.role === 'PROMPT_ARCHITECT') {
-    const objections = [
-      decision.reasonCode,
-      ...(await deps.store.findingsForRun(run.runId, run.projectId))
+  /**
+   * AND THE OTHER HALF: WHAT THE EVALUATOR DECIDED, RECORDED EITHER WAY.
+   *
+   * Live Run 3 reached VERIFIED COMPLETION and the word "challenge" appears
+   * nowhere in its evidence bundle — no `contract.challenged` event, which was
+   * correct because nothing was challenged, and no record saying so either. A
+   * reader cannot tell "the evaluator examined the terms and had no objection"
+   * from "the challenge leg never ran", and on a paid run those are opposite
+   * conclusions: the first is the cycle working, the second is a hole in it.
+   * SILENCE IS NOT A DISPOSITION.
+   *
+   * So an ACCEPT on a Prompt Architect's work now walks the same contracts a
+   * REPAIR does and writes `NO_CHALLENGE` against each. One block for both
+   * branches on purpose: two blocks would drift, and the branch that drifts is
+   * always the quiet one.
+   *
+   * THE STATE TRANSITION STAYS ON THE CHALLENGE BRANCH ALONE. An accept changes
+   * no contract state — the terms are unchanged and still a DRAFT, and the LOCK
+   * above is what agrees them. `contract.disposition` says what the evaluator
+   * DECIDED; `contract.challenged` says the contract's state CHANGED. A
+   * challenge the store refused to write produces the first without the second,
+   * which is exactly what a reader chasing a stalled cycle needs to see.
+   */
+  if ((decision.action === 'REPAIR' || decision.action === 'ACCEPT') && subject.role === 'PROMPT_ARCHITECT') {
+    const challenging = decision.action === 'REPAIR';
+    /**
+     * THE IDS THE DISPOSITION POINTS AT — names, never the findings' prose.
+     * Empty on an accept because there is nothing to point at, and empty on a
+     * repair round admitted on the subject's own FAILED evidence, which has no
+     * findings by construction.
+     */
+    const findingIds = challenging
+      ? (await deps.store.findingsForRun(run.runId, run.projectId))
         .filter((finding) => finding.taskId === subject.taskId && finding.blocking && finding.status === 'OPEN')
-        .map((finding) => finding.findingId),
-    ];
+        .map((finding) => finding.findingId)
+      : [];
+    const objections = [decision.reasonCode, ...findingIds];
     const lineageRoot = repairLineageRootOf(subject, tasks);
     const governed = new Set(tasks
       .filter((value) => value.dependencyIds.includes(lineageRoot.taskId))
@@ -1518,6 +1549,27 @@ async function verifyExecutedTask(input: {
     for (const contractTaskId of governed) {
       const contract = await deps.store.loadTaskContract({ projectId: run.projectId, taskId: contractTaskId });
       if (contract === null || contract.state !== 'DRAFT') continue;
+
+      // THE ANSWER, FIRST AND ALWAYS. It is written before the state
+      // transition below so that a crash between the two leaves the evaluator's
+      // decision on the record rather than leaving the run unexplainable.
+      const disposition = juliusContractDisposition({
+        disposition: challenging ? 'CHALLENGE' : 'NO_CHALLENGE',
+        contractTaskId, contractId: contract.contractId,
+        contractRevision: contract.contractRevision,
+        evaluatorId: input.workerId,
+        reasonCode: decision.reasonCode,
+        evidenceIds: findingIds,
+      });
+      await ledger.event(disposition.outcome === 'RECORDED' ? 'contract.disposition' : 'contract.refused', {
+        taskId: subject.taskId, workerId: input.workerId,
+        facts: disposition.outcome === 'RECORDED'
+          ? juliusContractDispositionFacts(disposition.record)
+          : { reasonCode: disposition.reasonCode, contractTaskId },
+      });
+
+      // An accept argues with nothing, so there is no state to transition.
+      if (!challenging) continue;
       const verdict = challengeJuliusTaskContract(contract, { verdict: 'CHALLENGE', evaluatorId: input.workerId, objections });
       if (verdict.outcome !== 'CHALLENGED') {
         await ledger.event('contract.refused', {

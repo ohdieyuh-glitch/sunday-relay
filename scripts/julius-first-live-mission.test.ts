@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { mkdtempSync, readdirSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, realpathSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve, sep } from 'node:path';
 import { parseLiveMissionContract } from '../relay-bridge/julius-live-mission';
@@ -53,11 +53,39 @@ const MISSIONS_DIR = '.github/julius-missions';
 const MISSIONS = readdirSync(resolve(ROOT, MISSIONS_DIR))
   .filter((name) => statSync(resolve(ROOT, MISSIONS_DIR, name)).isDirectory())
   .sort();
-/** Files a mission seeds that are not scaffolding — the ones the agent edits. */
+/**
+ * WHICH SEED A MISSION DECLARES.
+ *
+ * `workspace/` is a throwaway tree the mission invented; `slice.txt` names paths
+ * of THIS repository to copy byte-for-byte, for a mission whose subject is
+ * Sunday Relay itself. Exactly one, and the workflow and the provisioner both
+ * refuse a mission that declares both — so the tests below can branch on it
+ * rather than assume the older mode.
+ */
+const seedKindOf = (mission: string): 'workspace' | 'slice' => {
+  const tree = existsSync(resolve(ROOT, MISSIONS_DIR, mission, 'workspace'));
+  const slice = existsSync(resolve(ROOT, MISSIONS_DIR, mission, 'slice.txt'));
+  expect(tree !== slice, `${mission} must declare exactly one of workspace/ and slice.txt`).toBe(true);
+  return tree ? 'workspace' : 'slice';
+};
+
+/**
+ * Files a mission seeds that are not scaffolding — the ones the agent edits.
+ *
+ * A SLICE MISSION'S DELIVERABLES ARE ITS PATHS, and they are repository paths,
+ * so the basename is what a contract can readably name. `.julius/` is never
+ * among them: the loader is harness, seeded beside the slice and outside every
+ * path a slice may declare.
+ */
 const deliverablesOf = (mission: string): string[] =>
-  readdirSync(resolve(ROOT, MISSIONS_DIR, mission, 'workspace'))
-    .filter((name) => !['package.json', 'README.md'].includes(name))
-    .sort();
+  seedKindOf(mission) === 'workspace'
+    ? readdirSync(resolve(ROOT, MISSIONS_DIR, mission, 'workspace'))
+      .filter((name) => !['package.json', 'README.md'].includes(name))
+      .sort()
+    : read(`${MISSIONS_DIR}/${mission}/slice.txt`)
+      .split('\n').map((line) => line.replace(/#.*$/u, '').trim()).filter((line) => line !== '')
+      .map((path) => path.slice(path.lastIndexOf('/') + 1))
+      .sort();
 
 /** The workflow's `on:` block, up to the next top-level key. */
 const triggerBlock = (): string => {
@@ -567,6 +595,12 @@ describe('the mission itself is bounded and aimed away from this repository', ()
       expect(contract.ok ? 'accepted' : contract.problem, mission).toBe('accepted');
       if (!contract.ok) continue;
 
+      // A SLICE MISSION HAS NO STUBS TO RUN HERE. Its seed is this repository's
+      // own files at a trusted SHA, which already pass their own tests — the
+      // thing that must fail until the work is done is the mission's NEW test,
+      // and `scripts/julius-mission-slice.test.ts` exercises slice provisioning
+      // end to end against the real files instead.
+      if (seedKindOf(mission) === 'slice') continue;
       const directory = mkdtempSync(join(tmpdir(), `julius-stubs-${mission}-`));
       for (const file of readdirSync(resolve(ROOT, MISSIONS_DIR, mission, 'workspace'))) {
         writeFileSync(join(directory, file), read(`${MISSIONS_DIR}/${mission}/workspace/${file}`));
@@ -844,6 +878,30 @@ describe('the evidence dump names only tables and columns the migrations create'
     expect(query, 'settlements only — a reservation is not a spend')
       .toContain("e.event_type='julius.budget.settled'");
     // No credential, no prose, no payload dump: the same rule every other query here obeys.
+    expect(query, 'the whole payload is never dumped').not.toMatch(/\bpayload\b(?!\s*(?:->|#>))/u);
+  });
+
+  /**
+   * SILENCE IS NOT A DISPOSITION. Live Run 3 completed and the word "challenge"
+   * appears nowhere in its bundle — no `contract.challenged` event, correctly,
+   * and no record of the evaluator having examined the terms and raised nothing
+   * either. The two readings are opposite and the bundle could not separate
+   * them, so the dump has to carry the answer as its own column.
+   */
+  it('the contract dump exports the evaluator disposition, on both branches', () => {
+    const query = read('.github/julius-live-evidence-dump.sh').split('\n').find((line) => line.includes('contract-events.tsv')) ?? '';
+    expect(query, 'the contract-events dump must exist').not.toBe('');
+    expect(query, 'a NO_CHALLENGE row has no other event type to arrive under')
+      .toContain("'julius.contract.disposition'");
+    for (const key of ['disposition', 'evaluatorId', 'evidenceCount', 'evidenceIds', 'reasonCode']) {
+      expect(query, `the contract dump must select ${key}`).toContain(`'${key}'`);
+    }
+    // The ids are this repository's own finding identifiers. No finding text,
+    // no plan, no review prose has a column here — because none has a key in
+    // the flattened record.
+    for (const forbidden of ['explanation', 'objectionText', 'reviewText', 'prompt']) {
+      expect(query.includes(forbidden), `the contract dump must not export ${forbidden}`).toBe(false);
+    }
     expect(query, 'the whole payload is never dumped').not.toMatch(/\bpayload\b(?!\s*(?:->|#>))/u);
   });
 

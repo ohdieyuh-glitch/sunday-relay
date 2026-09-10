@@ -220,6 +220,10 @@ const FILE_RULES = [
   // gate that decides whether coding may start at all. It belongs with the
   // task graph rather than the reviewer: the reviewer consumes it, Julius owns it.
   ['src/relay/mission/julius/julius-task-contract.ts', 'TASK GRAPH / SCHEDULER'],
+  // The evaluator supplies the verdict; JULIUS writes the record of it, on both
+  // branches. Same subsystem as the contract it is a disposition ON, for the
+  // same reason: a reviewer consuming terms does not own the account of them.
+  ['src/relay/mission/julius/julius-contract-disposition.ts', 'TASK GRAPH / SCHEDULER'],
   ['src/relay/mission/julius/julius-allocation-runtime.ts', 'LEASES / BUDGETS / PERMISSIONS'],
   // Allocation decides what a dispatch MAY spend; this decides what is known
   // about what it DID spend, and on whose authority. Same subsystem: both are

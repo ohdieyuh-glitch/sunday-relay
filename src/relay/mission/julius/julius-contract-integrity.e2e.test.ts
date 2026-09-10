@@ -738,6 +738,59 @@ describe('R1 seeded → R2 proposed → challenged → R3 proposed → accepted 
     expect((await harness.store.loadRun('run-1', 'prj-1'))?.state).toBe('COMPLETED');
   });
 
+  /**
+   * SILENCE IS NOT A DISPOSITION — the gap Live Run 3 left in its own bundle.
+   *
+   * That run reached VERIFIED COMPLETION and the word "challenge" appears
+   * nowhere in its evidence: no `contract.challenged` event, which was correct
+   * because nothing was challenged, and no record saying so either. "The
+   * evaluator examined the terms and had no objection" and "the challenge leg
+   * never ran" are opposite conclusions about a paid run, and nothing in the
+   * bundle could tell them apart.
+   */
+  it('an accepting plan review records NO_CHALLENGE, so the absence of a challenge is an answer', async () => {
+    const harness = build({ contracts: 'draft', reviewer: [REVIEW_ACCEPT, REVIEW_ACCEPT, REVIEW_ACCEPT] });
+    await drain(harness, 24);
+
+    const dispositions = harness.store.events().filter((event) => event.type === 'contract.disposition');
+    expect(dispositions.length, 'the evaluator answered about the terms it saw').toBeGreaterThanOrEqual(1);
+    const answer = dispositions[0]!;
+    expect(answer.facts).toMatchObject({
+      disposition: 'NO_CHALLENGE', contractTaskId: 'build-1', evidenceCount: 0, evidenceIds: '',
+    });
+    expect(answer.facts.evaluatorId, 'and the record names who answered').toBe(REVIEWER.workerId);
+    expect(typeof answer.facts.reasonCode, 'with a reason, never bare').toBe('string');
+    expect(String(answer.facts.reasonCode).length).toBeGreaterThan(0);
+
+    // AN ACCEPT ARGUES WITH NOTHING, so no contract state changed. The two are
+    // different facts and only one of them happened.
+    expect(harness.store.events().filter((event) => event.type === 'contract.challenged')).toEqual([]);
+    expect(harness.store.events().filter((event) => event.type === 'contract.refused')).toEqual([]);
+    expect((await harness.store.loadRun('run-1', 'prj-1'))?.state).toBe('COMPLETED');
+  });
+
+  /**
+   * AND THE OTHER BRANCH WRITES ONE TOO, from the same block — so a reader can
+   * filter one column instead of inferring a decision from which events are
+   * missing.
+   */
+  it('a rejecting plan review records CHALLENGE beside the state transition', async () => {
+    const harness = build({ contracts: 'draft', reviewer: [REVIEW_REJECT, REVIEW_ACCEPT, REVIEW_ACCEPT] });
+    await drain(harness, 24);
+
+    const answer = harness.store.events().find((event) => event.type === 'contract.disposition');
+    expect(answer?.facts).toMatchObject({ disposition: 'CHALLENGE', contractTaskId: 'build-1' });
+    expect(answer?.workerId).toBe(REVIEWER.workerId);
+
+    // THE ANSWER IS WRITTEN BEFORE THE STATE TRANSITION, so a crash between
+    // them leaves the evaluator's decision on the record rather than leaving
+    // the run unexplainable.
+    const order = harness.store.events().map((event) => event.type);
+    expect(order.indexOf('contract.disposition')).toBeGreaterThanOrEqual(0);
+    expect(order.indexOf('contract.disposition')).toBeLessThan(order.indexOf('contract.challenged'));
+    expect((await harness.store.loadRun('run-1', 'prj-1'))?.state).toBe('COMPLETED');
+  });
+
   it('a challenge with no revision offered: the accepted repair locks the challenged revision, and says so', async () => {
     const harness = build({ contracts: 'draft', reviewer: [REVIEW_REJECT, REVIEW_ACCEPT, REVIEW_ACCEPT] });
     await drain(harness, 24);

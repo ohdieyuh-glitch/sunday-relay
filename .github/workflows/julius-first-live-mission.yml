@@ -295,8 +295,18 @@ jobs:
           esac
           [ -f ".github/julius-missions/$MISSION/contract.json" ] || {
             echo "mission_contract_missing: .github/julius-missions/$MISSION/contract.json" >&2; exit 1; }
-          [ -d ".github/julius-missions/$MISSION/workspace" ] || {
-            echo "mission_workspace_seed_missing: .github/julius-missions/$MISSION/workspace" >&2; exit 1; }
+          # A MISSION MUST DECLARE EXACTLY ONE SEED. `workspace/` is a throwaway
+          # tree the mission invented; `slice.txt` names paths of THIS repository
+          # to copy byte-for-byte, for a mission whose subject is Sunday Relay
+          # itself. Neither is a fallback for the other, and a mission declaring
+          # both would leave nothing able to say what the coder was editing —
+          # so both cases are refused here, before the rig is built.
+          seed_dir=".github/julius-missions/$MISSION/workspace"
+          seed_slice=".github/julius-missions/$MISSION/slice.txt"
+          if [ -d "$seed_dir" ] && [ -f "$seed_slice" ]; then
+            echo "mission_seed_ambiguous: $MISSION declares both workspace/ and slice.txt" >&2; exit 1; fi
+          [ -d "$seed_dir" ] || [ -f "$seed_slice" ] || {
+            echo "mission_workspace_seed_missing: neither $seed_dir nor $seed_slice" >&2; exit 1; }
 
           # THE ACCOUNTING NAMESPACE IS THE CONTRACT'S, read from the contract
           # rather than assumed from the directory name: the marker artifacts a
@@ -451,6 +461,13 @@ jobs:
         env:
           # The seed tree is the MISSION's; the script is generic.
           JULIUS_MISSION_DIR: ${{ env.MISSION_DIR }}
+          # SLICE MODE READS A REVISION, NOT THE WORKING TREE. The checkout is
+          # already at this commit, so naming it changes nothing about WHAT is
+          # copied — it changes what could go wrong: an unexpectedly dirty
+          # runner cannot leak an uncommitted file into a paid mission, and the
+          # slice is provably the trusted tree rather than whatever is on disk.
+          # Ignored entirely by a mission that ships its own throwaway tree.
+          JULIUS_SLICE_REV: ${{ github.sha }}
         run: ./.github/julius-live-workspace.sh
 
       - name: Start PostgreSQL 16 and the independent executor
