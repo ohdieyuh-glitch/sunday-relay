@@ -34,6 +34,15 @@ import {
   emptyWonderlandUsageAuthority,
   projectWonderlandUsageFromAuthority,
 } from '../src/relay/mission/wonderland/wonderland-usage-authority';
+import { wonderlandRunSnapshot } from '../src/relay/mission/wonderland/wonderland-rehydration';
+import {
+  noWonderlandBrainCitation,
+  scopeWonderlandBrain,
+} from '../src/relay/mission/wonderland/wonderland-brain-scope';
+import {
+  scopeWonderlandCard,
+  wonderlandHydration,
+} from '../src/relay/mission/wonderland/wonderland-hydration';
 
 const AT = '2026-09-08T00:00:00.000Z';
 
@@ -67,6 +76,15 @@ const cases: Fixture[] = [];
 const deliveries: Fixture[] = [];
 /** The usage HUD, read by `UWonderlandUsageSubsystem::ApplyUsage`. */
 const usages: Fixture[] = [];
+/**
+ * The SNAPSHOT — what `GET /wonderland/julius/hydrate` answers.
+ *
+ * A FOURTH FILE rather than more lines in the third, for the same reason
+ * deliveries are their own: the C++ reads it through a different entry point,
+ * and a harness that had to guess which decoder a line wanted would be one
+ * mis-guess away from reporting a pass it never ran.
+ */
+const hydrations: Fixture[] = [];
 const ok = (name: string, value: unknown) =>
   cases.push({ name, expect: 'ok', json: JSON.stringify(value) });
 const refused = (name: string, expect: string, value: unknown) =>
@@ -320,6 +338,226 @@ usages.push({
   json: JSON.stringify(knownHud).replace('"value":186', '"value":1e400'),
 });
 
+/* ------------------------------------------------ what the snapshot carries */
+
+/**
+ * THE PAYLOAD A WORLD ADOPTS WHOLESALE, from the real constructors.
+ *
+ * Every part below is built by the function that owns it — `wonderlandHydration`
+ * assembles and narrows and computes nothing, exactly as the runtime does — so
+ * what the C++ reads here is the shape the bridge actually writes. The refusal
+ * cases are that payload with ONE thing changed, so a failure names the change.
+ */
+const runSnapshot = (over: Partial<Parameters<typeof wonderlandRunSnapshot>[0]> = {}) =>
+  wonderlandRunSnapshot({
+    projectId: 'project-alpha',
+    runId: 'run-1',
+    state: 'EXECUTING',
+    revision: 7,
+    atSequence: 42,
+    observedAtIso: AT,
+    juliusInstanceId: 'julius-1',
+    missionId: 'mission-1',
+    activeTasks: 3,
+    pendingApprovals: 0,
+    ...over,
+  });
+
+const brainCitation = scopeWonderlandBrain({
+  projectId: 'project-alpha',
+  runId: 'run-1',
+  taskId: 'task-1',
+  projectBrainRevision: 12,
+  kinds: ['OBJECTIVE', 'OBJECTIVE', 'CONSTRAINT', 'DECISION', 'EVIDENCE'],
+  characterCount: 4096,
+  redactionCount: 2,
+  truncated: true,
+  contentHash: 'sha256:6f1e',
+  observedAtIso: AT,
+});
+
+/** A C.A.R.D. whose record RESOLVED: three real answers about three slots. */
+const cardResolved = scopeWonderlandCard({
+  cardRevision: 'card-rev-3',
+  promptArchitect: 'slot-a',
+  codingAgent: 'slot-b',
+  reviewer: null,
+  capabilities: ['swarm:implementer', 'swarm:researcher', 'tools:git'],
+  autonomy: 'AUTONOMOUS',
+});
+
+/**
+ * A C.A.R.D. NOBODY COULD RESOLVE — which is every reader in this build, since
+ * `julius_runs.card_revision` is free text with no foreign key. All three slots
+ * come back `null`, and this is the fixture that proves the client keeps them
+ * unknown rather than drawing three empty roles as a fact.
+ */
+const cardUnresolved = scopeWonderlandCard({ cardRevision: 'card-rev-3' });
+
+const hydration = (over: Partial<Parameters<typeof wonderlandHydration>[0]> = {}) =>
+  wonderlandHydration({
+    run: runSnapshot(),
+    usage: knownHud,
+    usageStatus: projectWonderlandUsageFromAuthority(
+      emptyWonderlandUsageAuthority({ projectId: 'project-alpha' }), AT).status,
+    activity: activity({ signals: ['retrieving_context'], observedAtIso: AT }),
+    brain: brainCitation,
+    card: cardResolved,
+    observedAtIso: AT,
+    worldSessionId: 'world-1',
+    ...over,
+  });
+
+const hydrated = (name: string, value: unknown) =>
+  hydrations.push({ name, expect: 'ok', json: JSON.stringify(value) });
+const hydrationRefused = (name: string, expect: string, value: unknown) =>
+  hydrations.push({ name, expect, json: JSON.stringify(value) });
+
+hydrated('hydration-full', hydration());
+
+// THE PRODUCTION SHAPE TODAY, and the one that matters most: no authority
+// reports usage, no reader resolves a C.A.R.D., and no retrieval has been
+// cited. Everything a world cannot know stays UNKNOWN rather than becoming a
+// confident zero — three empty role slots and two empty meters would both be
+// claims nobody made.
+hydrated('hydration-production-unknowns', hydration({
+  usage: unknownHud,
+  card: cardUnresolved,
+  brain: noWonderlandBrainCitation({ projectId: 'project-alpha', runId: 'run-1' }),
+  run: runSnapshot({ atSequence: null, activeTasks: null, pendingApprovals: null }),
+  worldSessionId: null,
+}));
+
+// A run the reader could not place in the ledger. The world then asks for
+// everything it can get and lets ordering refuse what it already has.
+hydrated('hydration-no-position', hydration({ run: runSnapshot({ atSequence: null }) }));
+
+// Both C.A.R.D. answers, separately, so a decoder that collapsed the three-way
+// flag into a bool fails on exactly one of them.
+hydrated('hydration-card-resolved', hydration({ card: cardResolved }));
+hydrated('hydration-card-unresolved', hydration({ card: cardUnresolved }));
+
+// A citation nobody reported: mostly zeroes, and told apart from a real
+// retrieval of nothing by an empty content hash.
+hydrated('hydration-no-citation', hydration({
+  brain: noWonderlandBrainCitation({ projectId: 'project-alpha', runId: 'run-1' }),
+}));
+
+// Every autonomy level, because the level answers a question a founder actually
+// asks — "will it stop and ask me?" — and `null` must not become `SUPERVISED`.
+for (const autonomy of ['SUPERVISED', 'AUTONOMOUS', 'UNCHAINED']) {
+  hydrated(`hydration-autonomy-${autonomy}`, hydration({
+    card: scopeWonderlandCard({ cardRevision: 'card-rev-3', autonomy }),
+  }));
+}
+hydrated('hydration-autonomy-absent', hydration({
+  card: scopeWonderlandCard({ cardRevision: 'card-rev-3' }),
+}));
+
+/* ------------------------------- and what a world must refuse to adopt */
+
+// THE MIS-ROUTED HYDRATION, three ways. Each is adopted WHOLESALE if it gets
+// through, so nothing arriving afterwards would contradict it: the world would
+// simply watch the wrong run with every number on it real.
+hydrationRefused('hydration-foreign-run-project', 'identity_rejected',
+  { ...hydration(), run: runSnapshot({ projectId: 'project-beta' }) });
+hydrationRefused('hydration-foreign-activity-project', 'identity_rejected',
+  { ...hydration(), activity: activity({ projectId: 'project-beta' } as never) });
+hydrationRefused('hydration-foreign-activity-run', 'identity_rejected',
+  { ...hydration(), activity: activity({ runId: 'run-9' } as never) });
+hydrationRefused('hydration-foreign-brain-project', 'identity_rejected',
+  { ...hydration(), brain: noWonderlandBrainCitation({
+    projectId: 'project-beta', runId: 'run-1' }) });
+
+// THE SWAPPED METERS, inside a snapshot. The usage entry point refuses this
+// already; a hydration that composed the reader without the check would be
+// exactly as swappable, and the arcs would draw each other's spend.
+hydrationRefused('hydration-swapped-channels', 'identity_rejected', {
+  ...hydration(),
+  usage: { ...knownHud, compoundAgent: knownHud.singleAgent, singleAgent: knownHud.compoundAgent },
+});
+
+// A SCHEMA THIS BUILD DOES NOT IMPLEMENT. Every key below it may mean something
+// else, so it is refused rather than read against the fields this build knows.
+hydrationRefused('hydration-future-schema', 'schema_rejected',
+  { ...hydration(), schemaVersion: 'relay-wonderland-hydration.v2' });
+
+hydrationRefused('hydration-blank-project', 'identity_rejected',
+  { ...hydration(), projectId: '' });
+
+// Each half, absent. A hydration missing one of them is not a smaller
+// hydration: a world would draw the remaining halves and have no meters, no
+// citation or no roles with nothing saying why.
+for (const part of ['run', 'usage', 'usageStatus', 'activity', 'brain', 'card']) {
+  const damaged: Record<string, unknown> = { ...hydration() };
+  delete damaged[part];
+  hydrationRefused(`hydration-missing-${part}`, 'missing_field', damaged);
+}
+
+// A CARRIER THAT CAME BACK AS A BARE VALUE. `atSequence` is `number | null`;
+// a string there is a writer that is not Relay.
+hydrationRefused('hydration-stringly-sequence', 'wrong_type',
+  { ...hydration(), run: { ...runSnapshot(), atSequence: '42' } });
+hydrationRefused('hydration-fractional-sequence', 'number_not_integer',
+  { ...hydration(), run: { ...runSnapshot(), atSequence: 1.5 } });
+// A negative position would resume the world from before the beginning, and
+// every event of the replay that followed would look new.
+hydrationRefused('hydration-negative-sequence', 'number_out_of_range',
+  { ...hydration(), run: { ...runSnapshot(), atSequence: -1 } });
+hydrationRefused('hydration-negative-active-tasks', 'number_out_of_range',
+  { ...hydration(), run: { ...runSnapshot(), activeTasks: -1 } });
+
+// THE THREE-WAY FLAG, FLATTENED. A bool where the carrier belongs is how a
+// name-matching converter would send it, and accepting it would draw an empty
+// slot for a C.A.R.D. nobody resolved.
+hydrationRefused('hydration-card-slot-numeric', 'wrong_type',
+  { ...hydration(), card: { ...cardResolved, hasCodingAgent: 1 } });
+hydrationRefused('hydration-card-unknown-autonomy', 'unknown_token',
+  { ...hydration(), card: { ...cardResolved, autonomy: 'FEARLESS' } });
+
+// A KIND COUNT THAT IS NOT A COUNT, and a kind bucket that never arrived.
+hydrationRefused('hydration-brain-missing-kind', 'missing_field', {
+  ...hydration(),
+  brain: (() => {
+    const counts: Record<string, number> = { ...brainCitation.kindCounts };
+    delete counts.FINDING;
+    return { ...brainCitation, kindCounts: counts };
+  })(),
+});
+hydrationRefused('hydration-brain-negative-kind', 'number_out_of_range', {
+  ...hydration(),
+  brain: { ...brainCitation, kindCounts: { ...brainCitation.kindCounts, REPAIR: -1 } },
+});
+
+// AND THE ONE UNKNOWN TOKEN THIS DECODER TOLERATES. A kind the kernel learned
+// and this build has not is counted in `entryCount` and in no bucket; the
+// disagreement between the two IS the signal. Refusing would take a world dark
+// the moment Relay grew a tenth kind, which is the more expensive failure by a
+// wide margin.
+hydrated('hydration-brain-future-kind', {
+  ...hydration(),
+  brain: { ...brainCitation, kindCounts: { ...brainCitation.kindCounts, PREMONITION: 4 } },
+});
+
+// The usage verdict's own counters. A negative refusal count is a report from
+// something that is not the usage authority.
+hydrationRefused('hydration-negative-rejection-count', 'number_out_of_range', {
+  ...hydration(),
+  usageStatus: {
+    ...projectWonderlandUsageFromAuthority(
+      emptyWonderlandUsageAuthority({ projectId: 'project-alpha' }), AT).status,
+    foreignProjectReportsRejected: -1,
+  },
+});
+hydrationRefused('hydration-unknown-usage-reading', 'unknown_token', {
+  ...hydration(),
+  usageStatus: {
+    ...projectWonderlandUsageFromAuthority(
+      emptyWonderlandUsageAuthority({ projectId: 'project-alpha' }), AT).status,
+    reading: 'probably_fine',
+  },
+});
+
 /* --------------------------------------------------------- the writing */
 
 /**
@@ -331,6 +569,7 @@ usages.push({
 export const WONDERLAND_WIRE_FIXTURES_PATH = join('wonderland', 'Tools', 'WireHarness', 'fixtures.tsv');
 export const WONDERLAND_WIRE_DELIVERIES_PATH = join('wonderland', 'Tools', 'WireHarness', 'deliveries.tsv');
 export const WONDERLAND_WIRE_USAGES_PATH = join('wonderland', 'Tools', 'WireHarness', 'usages.tsv');
+export const WONDERLAND_WIRE_HYDRATIONS_PATH = join('wonderland', 'Tools', 'WireHarness', 'hydrations.tsv');
 
 const render = (items: readonly Fixture[]): string => {
   // A tab or a newline inside a payload would break the format silently, so it
@@ -348,6 +587,7 @@ const render = (items: readonly Fixture[]): string => {
 export function renderWonderlandWireFixtures(): string { return render(cases); }
 export function renderWonderlandWireDeliveries(): string { return render(deliveries); }
 export function renderWonderlandWireUsages(): string { return render(usages); }
+export function renderWonderlandWireHydrations(): string { return render(hydrations); }
 
 function main(): void {
   const root = process.cwd();
@@ -359,6 +599,7 @@ function main(): void {
     { path: join(root, WONDERLAND_WIRE_FIXTURES_PATH), body: renderWonderlandWireFixtures() },
     { path: join(root, WONDERLAND_WIRE_DELIVERIES_PATH), body: renderWonderlandWireDeliveries() },
     { path: join(root, WONDERLAND_WIRE_USAGES_PATH), body: renderWonderlandWireUsages() },
+    { path: join(root, WONDERLAND_WIRE_HYDRATIONS_PATH), body: renderWonderlandWireHydrations() },
   ];
   const path = artefacts[0].path;
   const body = artefacts.map((a) => a.body).join('');
@@ -377,7 +618,8 @@ function main(): void {
       process.exit(1);
     }
     console.log(
-      `wonderland wire fixtures current (${cases.length} + ${deliveries.length} + ${usages.length} cases)`);
+      'wonderland wire fixtures current ' +
+        `(${cases.length} + ${deliveries.length} + ${usages.length} + ${hydrations.length} cases)`);
     return;
   }
 
@@ -386,7 +628,8 @@ function main(): void {
   const accepted = cases.filter((c) => c.expect === 'ok').length;
   console.log(
     `wonderland wire fixtures -> ${cases.length} envelopes (${accepted} accepted), ` +
-      `${deliveries.length} deliveries, ${usages.length} usages`,
+      `${deliveries.length} deliveries, ${usages.length} usages, ` +
+      `${hydrations.length} hydrations`,
   );
 }
 

@@ -117,7 +117,19 @@ export function renderWonderlandWireContract(contract: WonderlandWireContract): 
   return `${lines.join('\n')}`;
 }
 
-/** Which enums the decoder actually needs a table for. */
+/**
+ * Which enums the decoder actually needs a table for.
+ *
+ * NOT every mirrored enum — only the ones a decoded payload can carry a token
+ * for. A table for an enum nothing decodes is dead weight that still has to be
+ * kept fresh, and the freshness gate cannot tell the difference.
+ *
+ * The last three are the HYDRATION's: the usage verdict's reading, the
+ * C.A.R.D.'s autonomy level, and the Project Brain kind that keys the citation's
+ * counts. They arrived with `WonderlandDecodeHydrationBytes` — a decoder path
+ * added without its tables refuses every token it reads, which is loud rather
+ * than silent, and was.
+ */
 const DECODED_ENUMS = [
   'EWonderlandJuliusState',
   'EWonderlandJuliusStateSource',
@@ -128,6 +140,9 @@ const DECODED_ENUMS = [
   'EWonderlandProvenance',
   'EWonderlandHudAnchor',
   'EWonderlandUnknownReason',
+  'EWonderlandUsageReading',
+  'EWonderlandAutonomy',
+  'EWonderlandBrainKind',
 ] as const;
 
 /**

@@ -8,11 +8,15 @@ import { wonderlandWireEnums } from './wonderland-wire-contract';
 import {
   WONDERLAND_WIRE_DELIVERIES_PATH,
   WONDERLAND_WIRE_FIXTURES_PATH,
+  WONDERLAND_WIRE_HYDRATIONS_PATH,
   WONDERLAND_WIRE_USAGES_PATH,
   renderWonderlandWireDeliveries,
   renderWonderlandWireFixtures,
+  renderWonderlandWireHydrations,
   renderWonderlandWireUsages,
 } from '../../../../scripts/export-wonderland-wire-fixtures';
+import { WONDERLAND_BRAIN_KINDS } from './wonderland-brain-scope';
+import { WONDERLAND_AUTONOMY_LEVELS } from './wonderland-hydration';
 import { RELAY_UNKNOWN_REASONS } from '../../shared/llmops';
 import { JULIUS_ACTIVITY_SIGNALS } from './wonderland-julius-activity';
 
@@ -62,6 +66,10 @@ describe('the fixture file', () => {
       readFileSync(join(process.cwd(), WONDERLAND_WIRE_USAGES_PATH), 'utf8'),
       'the usage fixtures are stale — run `npm run wonderland:wire:fixtures`',
     ).toBe(renderWonderlandWireUsages());
+    expect(
+      readFileSync(join(process.cwd(), WONDERLAND_WIRE_HYDRATIONS_PATH), 'utf8'),
+      'the hydration fixtures are stale — run `npm run wonderland:wire:fixtures`',
+    ).toBe(renderWonderlandWireHydrations());
   });
 
   it('parses as three columns on every line', () => {
@@ -267,6 +275,162 @@ describe('the usage fixtures — what the meters carry', () => {
     const everything = rows.map((r) => r.json).join(' ').toLowerCase();
     for (const name of ['gpt', 'claude', 'openai', 'anthropic', 'hermes']) {
       expect(everything, `a usage fixture mentions ${name}`).not.toContain(name);
+    }
+  });
+});
+
+describe('the hydration fixtures — the payload a world adopts WHOLESALE', () => {
+  const rows = readFileSync(join(process.cwd(), WONDERLAND_WIRE_HYDRATIONS_PATH), 'utf8')
+    .split('\n')
+    .filter((line) => line.trim() !== '')
+    .map((line) => {
+      const [name, expect_, json] = line.split('\t');
+      return { name, expect: expect_, json };
+    });
+
+  it('carries every half the wrapper wraps', () => {
+    // The envelope path decodes what CHANGED. This decodes what is TRUE NOW,
+    // and the reason it is one payload rather than four is that a world adopts
+    // it in one act: usage, Project Brain, C.A.R.D. and activity all replace
+    // themselves together, and nothing arriving afterwards contradicts any of
+    // them. A half missing here would be a half nothing proves.
+    const full = rows.find((r) => r.name === 'hydration-full');
+    expect(full).toBeDefined();
+    expect(Object.keys(JSON.parse(full!.json) as object).sort()).toEqual([
+      'activity', 'brain', 'card', 'observedAtIso', 'projectId',
+      'run', 'schemaVersion', 'usage', 'usageStatus', 'worldSessionId',
+    ]);
+  });
+
+  it('makes the PRODUCTION shape — everything unknown — a first-class case', () => {
+    // What the bridge actually serves today: no authority reports usage, no
+    // reader resolves a C.A.R.D., no retrieval has been cited. Every one of
+    // those must stay UNKNOWN across the seam. This is the case the whole
+    // decoder exists for, not the degenerate one.
+    const row = rows.find((r) => r.name === 'hydration-production-unknowns');
+    expect(row).toBeDefined();
+    const parsed = JSON.parse(row!.json) as {
+      run: Record<string, unknown>;
+      card: Record<string, unknown>;
+      usageStatus: { reading: string };
+      brain: { contentHash: string };
+      worldSessionId: string | null;
+    };
+    // NULL, not 0 and not false. Each of these is a fact nobody stated.
+    expect(parsed.run.atSequence).toBeNull();
+    expect(parsed.run.activeTasks).toBeNull();
+    expect(parsed.run.pendingApprovals).toBeNull();
+    expect(parsed.card.hasPromptArchitect).toBeNull();
+    expect(parsed.card.hasCodingAgent).toBeNull();
+    expect(parsed.card.hasIndependentReviewer).toBeNull();
+    expect(parsed.card.autonomy).toBeNull();
+    expect(parsed.worldSessionId).toBeNull();
+    expect(parsed.usageStatus.reading).toBe('not_reported');
+    // A citation nobody made is told from a retrieval that found nothing by
+    // its EMPTY HASH, never by its zeroes.
+    expect(parsed.brain.contentHash).toBe('');
+  });
+
+  it('sends a REPORTED zero beside the unknowns, so they cannot be confused', () => {
+    // `pendingApprovals: 0` and `pendingApprovals: null` are different facts
+    // that share a rendered digit. A fixture set with only one of them cannot
+    // tell a decoder that reads the carrier from one that reads the number.
+    const full = JSON.parse(rows.find((r) => r.name === 'hydration-full')!.json) as {
+      run: { pendingApprovals: number | null; activeTasks: number | null };
+    };
+    expect(full.run.pendingApprovals).toBe(0);
+    expect(full.run.activeTasks).toBe(3);
+  });
+
+  it('refuses every way one hydration can name another project or run', () => {
+    // The attack the wrapper is shaped around. A mis-routed snapshot replaces
+    // EVERYTHING at once with somebody else's picture, and every number on it
+    // is real — so there is no later evidence, and no downstream check that
+    // would notice.
+    for (const name of [
+      'hydration-foreign-run-project',
+      'hydration-foreign-activity-project',
+      'hydration-foreign-activity-run',
+      'hydration-foreign-brain-project',
+      'hydration-swapped-channels',
+    ]) {
+      const row = rows.find((r) => r.name === name);
+      expect(row, `no fixture named ${name}`).toBeDefined();
+      expect(row!.expect).toBe('identity_rejected');
+    }
+  });
+
+  it('refuses a schema this build does not implement', () => {
+    // Not pedantry: a payload naming another version may mean something else by
+    // every key in it, and reading it against the fields this build knows would
+    // be a guess made silently. Refusing is what lets bridge and client ship on
+    // different days.
+    const row = rows.find((r) => r.name === 'hydration-future-schema');
+    expect(row).toBeDefined();
+    expect(row!.expect).toBe('schema_rejected');
+  });
+
+  it('removes each half in turn, so no one of them is optional', () => {
+    for (const part of ['run', 'usage', 'usageStatus', 'activity', 'brain', 'card']) {
+      const row = rows.find((r) => r.name === `hydration-missing-${part}`);
+      expect(row, `no fixture removing ${part}`).toBeDefined();
+      expect(row!.expect).toBe('missing_field');
+    }
+  });
+
+  it('exercises every autonomy level AND its absence', () => {
+    // The level answers a question a founder actually asks — "will it stop and
+    // ask me?" — so `null` must not quietly become SUPERVISED. A fixture set
+    // carrying only the levels could not catch that.
+    for (const level of WONDERLAND_AUTONOMY_LEVELS) {
+      expect(rows.some((r) => r.name === `hydration-autonomy-${level}`), `no fixture for ${level}`)
+        .toBe(true);
+    }
+    expect(rows.some((r) => r.name === 'hydration-autonomy-absent')).toBe(true);
+  });
+
+  it('sends all nine Project Brain kinds, and one the kernel might learn next', () => {
+    // A missing known bucket is a refusal — Relay sends all nine every time, so
+    // an absent one would become a zero indistinguishable from a reported one.
+    // An UNKNOWN kind is tolerated instead: refusing would take a world dark the
+    // moment Relay grew a tenth kind, which is by far the more expensive
+    // failure. It lands in no bucket, and the gap between `entryCount` and the
+    // sum of the buckets is the signal that this build is behind.
+    const full = JSON.parse(rows.find((r) => r.name === 'hydration-full')!.json) as {
+      brain: { kindCounts: Record<string, number> };
+    };
+    expect(Object.keys(full.brain.kindCounts).sort()).toEqual([...WONDERLAND_BRAIN_KINDS].sort());
+
+    const missing = rows.find((r) => r.name === 'hydration-brain-missing-kind');
+    expect(missing!.expect).toBe('missing_field');
+    const future = rows.find((r) => r.name === 'hydration-brain-future-kind');
+    expect(future, 'no fixture for a kind the kernel learned next').toBeDefined();
+    expect(future!.expect, 'a future kind must be TOLERATED, not refused').toBe('ok');
+  });
+
+  it('carries no provider or model name, and no credential', () => {
+    // The C.A.R.D. is the side door this sweep exists for. `CardVersion` holds
+    // provider and model names beside the slots; the scope narrows them away,
+    // and a scope that stopped doing so would leak them onto the one surface a
+    // player can attach a debugger to.
+    const everything = rows.map((r) => r.json).join(' ').toLowerCase();
+    for (const name of ['gpt', 'claude', 'openai', 'anthropic', 'hermes', 'xai', 'gemini', 'codex']) {
+      expect(everything, `a hydration fixture mentions ${name}`).not.toContain(name);
+    }
+    expect(everything).not.toContain('apikey');
+  });
+
+  it('carries no Project Brain content, only counts about it', () => {
+    // The citation's whole design: a world learns THAT context was retrieved
+    // and how much of it, never what it said. There is no field on this shape
+    // for an entry's text, and this notices if one appears.
+    for (const row of rows.filter((r) => r.expect === 'ok')) {
+      const brain = (JSON.parse(row.json) as { brain: Record<string, unknown> }).brain;
+      for (const [key, value] of Object.entries(brain)) {
+        if (typeof value !== 'string') continue;
+        expect(value.length, `${row.name}.brain.${key} is long enough to be prose`).toBeLessThan(120);
+        expect(value, `${row.name}.brain.${key} contains a sentence`).not.toMatch(/\.\s+[A-Z]/);
+      }
     }
   });
 });

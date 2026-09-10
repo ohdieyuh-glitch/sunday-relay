@@ -68,7 +68,21 @@ enum class EWonderlandWireError : uint8
 	// Deeper, longer or larger than this decoder will read. A bound, not a bug.
 	TooLarge,
 	// The same key twice in one object. Ambiguous, and an override risk.
-	DuplicateKey
+	DuplicateKey,
+	// A payload naming a schema this build does not implement.
+	//
+	// LAST, so no ordinal above it moves — every generated table and every
+	// fixture's expected name is keyed on these, and renumbering them would
+	// change what a refusal MEANS without changing a line that mentions it.
+	//
+	// SEPARATE FROM UnknownToken, and the distinction is operational. An
+	// unknown token is one field this build cannot read; an unknown schema is a
+	// payload whose every field may mean something else, and the two want
+	// different things done about them. Coercing it would be guessing at the
+	// meaning of fields this build does not have — silently — and refusing is
+	// what lets a bridge and a client be deployed at different times without
+	// one of them inventing the other's contract.
+	SchemaRejected
 };
 
 // A refusal, with the field that caused it. The field name is one of OURS —
@@ -184,6 +198,57 @@ struct FWonderlandUsageDecode
 };
 
 FWonderlandUsageDecode WonderlandDecodeUsageBytes(const char* Bytes, int32 Length);
+
+/* ------------------------------------------------------ the hydration */
+
+// THE SNAPSHOT, WHOLE — what `GET /wonderland/julius/hydrate` answers.
+//
+// The envelope path decodes what CHANGED. This decodes what is TRUE NOW, and it
+// is the payload a world joining a run that has been going for an hour, or
+// coming back from a dropped link, starts from. A reconnect costs one of these
+// plus the tail after the sequence it names — never the transcript.
+//
+// WHY IT IS ITS OWN ENTRY POINT rather than four calls a client composes. A
+// hydration is adopted WHOLESALE: it replaces the run state, both meters, the
+// activity, the citation and the C.A.R.D. in one act, and nothing arriving
+// afterwards contradicts it. So the cross-field agreement — that the run, the
+// activity and the citation all name the project the hydration names, and that
+// each meter sits in its own slot — has to be decided BEFORE any of it is
+// visible. A client assembling it from parts would have every part decode
+// cleanly and the assembly still be a mis-routed picture of somebody else's
+// mission, and there would be no later evidence of it.
+//
+// EVERY HALF IS READ BY THE SAME CODE THAT READS IT ALONE. The activity here is
+// the delivery's activity reader; the usage here is the usage entry's reader.
+// A second implementation of either would be a second set of rules to drift,
+// and drift on this seam is silent by construction.
+struct FWonderlandHydrationDecode
+{
+	bool bOk = false;
+	FWonderlandWireRefusal Refusal;
+	FWonderlandHydration Hydration;
+};
+
+// Decode one hydration. On refusal the hydration is untouched and NOTHING may
+// be adopted from it — not the half that parsed, not the meters, not the run.
+FWonderlandHydrationDecode WonderlandDecodeHydrationBytes(const char* Bytes, int32 Length);
+
+// The schema this build implements. A payload naming another is refused with
+// `SchemaRejected` rather than read against the fields this build happens to
+// know — see the enum member for why that is not pedantry.
+extern const char* const WonderlandWireHydrationSchema;
+
+// How many members `EWonderlandBrainKind` has, `Unobserved` included.
+//
+// `FWonderlandBrainCitation::KindCounts` is INDEXED BY ORDINAL and sized to
+// this, so `KindCounts[(int32)EWonderlandBrainKind::Finding]` is that kind's
+// count with no arithmetic in the caller. An array of nine would need every
+// reader to subtract one, and an off-by-one there is exactly the class of
+// silent wrongness this file exists to refuse: it would report every kind's
+// count under its neighbour's name and look completely plausible.
+//
+// Slot 0 is `Unobserved`, which is not a kind, and is always zero.
+enum : int32 { WonderlandBrainKindSlots = 10 };
 
 /* ------------------------------------------------------- the SSE frame */
 

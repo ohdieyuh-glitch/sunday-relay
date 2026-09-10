@@ -407,6 +407,48 @@ struct FFieldReader
 		return true;
 	}
 
+	// A nullable whole number, into its carrier. Null is KNOWN-TO-BE-ABSENT and
+	// leaves the carrier's Value at zero WITH bKnown false — which is the whole
+	// reason the carrier exists. `activeTasks: null` is "nobody counted", and a
+	// decoder that wrote 0 with bKnown true would draw "no tasks are running",
+	// a different and confident claim.
+	bool NullableInteger(const char* Name, FWonderlandNumber& Out)
+	{
+		const FJsonValue* Value = Field(Object, Name);
+		if (Value == nullptr) { return Reject(EWonderlandWireError::MissingField, Name); }
+		if (Value->Kind == EJsonKind::Null) { Out.bKnown = false; Out.Value = 0.0; return true; }
+		if (Value->Kind != EJsonKind::Number) { return Reject(EWonderlandWireError::WrongType, Name); }
+		const double N = Value->Number;
+		if (!std::isfinite(N)) { return Reject(EWonderlandWireError::NumberNotFinite, Name); }
+		if (N != std::floor(N)) { return Reject(EWonderlandWireError::NumberNotInteger, Name); }
+		if (N > 9007199254740991.0 || N < -9007199254740991.0)
+		{
+			return Reject(EWonderlandWireError::NumberOutOfRange, Name);
+		}
+		Out.bKnown = true;
+		// The carrier holds a double. Assigned DIRECTLY rather than through an
+		// int64: the range check above is what makes the value exact, and a
+		// round trip through an integer type would add a second conversion with
+		// nothing to gain from it.
+		Out.Value = N;
+		return true;
+	}
+
+	// A nullable bool, into its carrier. THE THREE-WAY FIELD, and the one a
+	// name-matching converter destroys most quietly: `hasCodingAgent: null` is
+	// "nobody could resolve the C.A.R.D.", `false` is "the slot is empty", and
+	// a bool cannot hold both. Only bKnown && !bValue is an empty slot.
+	bool NullableFlag(const char* Name, FWonderlandFlag& Out)
+	{
+		const FJsonValue* Value = Field(Object, Name);
+		if (Value == nullptr) { return Reject(EWonderlandWireError::MissingField, Name); }
+		if (Value->Kind == EJsonKind::Null) { Out.bKnown = false; Out.bValue = false; return true; }
+		if (Value->Kind != EJsonKind::Bool) { return Reject(EWonderlandWireError::WrongType, Name); }
+		Out.bKnown = true;
+		Out.bValue = Value->bBool;
+		return true;
+	}
+
 	// An enum whose wire value may be null. Null means Relay reported nothing
 	// and lands on the zero member BY DESIGN; an unrecognised string does not.
 	bool NullableEnum(const char* Name, const char* EnumName, uint8& Out)
@@ -481,6 +523,7 @@ const char* WonderlandWireErrorName(EWonderlandWireError Error)
 		case EWonderlandWireError::IdentityRejected: return "identity_rejected";
 		case EWonderlandWireError::TooLarge: return "too_large";
 		case EWonderlandWireError::DuplicateKey: return "duplicate_key";
+		case EWonderlandWireError::SchemaRejected: return "schema_rejected";
 	}
 	return "none";
 }
@@ -603,6 +646,118 @@ FWonderlandEnvelopeDecode DecodeEnvelopeObject(const FJsonValue& Root)
 	return Result;
 }
 
+// The activity reading, from an object already parsed. ONE implementation,
+// shared by the delivery path and the hydration path — a second reader would be
+// a second set of rules, and the rules here (an unknown signal refuses rather
+// than being skipped) are exactly the kind that drift quietly.
+//
+// IT DOES NOT CHECK IDENTITY. Whose run this belongs to is a question about the
+// PAYLOAD AROUND IT — the envelope beside it, or the hydration above it — and
+// each caller answers it against what it actually has.
+bool DecodeActivityObject(
+	const FJsonValue& Object,
+	FWonderlandWireRefusal& Refusal,
+	FWonderlandActivityReading& Out)
+{
+	FWonderlandActivityReading Activity;
+	FFieldReader Reader{ Object, Refusal };
+	Reader.RequiredString("schemaVersion", Activity.SchemaVersion);
+	Reader.RequiredIdentity("projectId", Activity.ProjectId);
+	Reader.RequiredString("runId", Activity.RunId);
+	Reader.NullableText("observedAtIso", Activity.ObservedAtIso);
+
+	int64 ActiveSubagents = 0;
+	int64 SubagentsDenied = 0;
+	int64 UnusedEvents = 0;
+	Reader.RequiredInteger("activeSubagents", ActiveSubagents);
+	Reader.RequiredInteger("subagentsDenied", SubagentsDenied);
+	Reader.RequiredInteger("unusedEvents", UnusedEvents);
+
+	// SIGNALS. Every member is looked up, and an unknown one is refused rather
+	// than skipped: a signal Relay raised and this build cannot name is a world
+	// showing LESS than is true, which reads as a calm run.
+	const FJsonValue* Signals = Field(Object, "signals");
+	if (Signals == nullptr) { Reader.Reject(EWonderlandWireError::MissingField, "signals"); }
+	else if (Signals->Kind != EJsonKind::Array) { Reader.Reject(EWonderlandWireError::WrongType, "signals"); }
+	else
+	{
+		for (const FJsonValue& Item : Signals->Items)
+		{
+			if (Item.Kind != EJsonKind::String)
+			{
+				Reader.Reject(EWonderlandWireError::WrongType, "signals");
+				break;
+			}
+			uint8 Found = 0;
+			if (!WonderlandWireLookupToken("EWonderlandActivitySignal", FString(Item.Text.c_str()), Found))
+			{
+				Reader.Reject(EWonderlandWireError::UnknownToken, "signals");
+				break;
+			}
+			Activity.Signals.Add(static_cast<EWonderlandActivitySignal>(Found));
+		}
+	}
+
+	// WORKERS. The per-worker fold, same rule for its own signals.
+	const FJsonValue* Workers = Field(Object, "workers");
+	if (Workers == nullptr) { Reader.Reject(EWonderlandWireError::MissingField, "workers"); }
+	else if (Workers->Kind != EJsonKind::Array) { Reader.Reject(EWonderlandWireError::WrongType, "workers"); }
+	else
+	{
+		for (const FJsonValue& Item : Workers->Items)
+		{
+			if (Reader.bFailed) { break; }
+			if (Item.Kind != EJsonKind::Object)
+			{
+				Reader.Reject(EWonderlandWireError::WrongType, "workers");
+				break;
+			}
+			FWonderlandWorkerActivity Worker;
+			FFieldReader WorkerReader{ Item, Refusal };
+			WorkerReader.RequiredIdentity("workerId", Worker.WorkerId);
+			if (WorkerReader.bFailed) { Reader.bFailed = true; break; }
+
+			const FJsonValue* WorkerSignals = Field(Item, "signals");
+			if (WorkerSignals == nullptr || WorkerSignals->Kind != EJsonKind::Array)
+			{
+				Reader.Reject(EWonderlandWireError::MissingField, "workers.signals");
+				break;
+			}
+			for (const FJsonValue& Signal : WorkerSignals->Items)
+			{
+				if (Signal.Kind != EJsonKind::String)
+				{
+					Reader.Reject(EWonderlandWireError::WrongType, "workers.signals");
+					break;
+				}
+				uint8 Found = 0;
+				if (!WonderlandWireLookupToken("EWonderlandActivitySignal", FString(Signal.Text.c_str()), Found))
+				{
+					Reader.Reject(EWonderlandWireError::UnknownToken, "workers.signals");
+					break;
+				}
+				Worker.Signals.Add(static_cast<EWonderlandActivitySignal>(Found));
+			}
+			if (Reader.bFailed) { break; }
+			Activity.Workers.Add(Worker);
+		}
+	}
+
+	if (Reader.bFailed) { return false; }
+
+	// Counts are counts. A negative one is not a smaller number, it is a
+	// different kind of thing, and it would render as a subagent that unspawned.
+	if (ActiveSubagents < 0) { Refusal = { EWonderlandWireError::NumberOutOfRange, FString("activeSubagents") }; return false; }
+	if (SubagentsDenied < 0) { Refusal = { EWonderlandWireError::NumberOutOfRange, FString("subagentsDenied") }; return false; }
+	if (UnusedEvents < 0) { Refusal = { EWonderlandWireError::NumberOutOfRange, FString("unusedEvents") }; return false; }
+
+	Activity.ActiveSubagents = ActiveSubagents;
+	Activity.SubagentsDenied = SubagentsDenied;
+	Activity.UnusedEvents = UnusedEvents;
+	Out = Activity;
+	return true;
+}
+
 } // namespace
 
 FWonderlandEnvelopeDecode WonderlandDecodeEnvelopeBytes(const char* Bytes, int32 Length)
@@ -666,96 +821,7 @@ FWonderlandDeliveryDecode WonderlandDecodeDeliveryBytes(const char* Bytes, int32
 	}
 
 	FWonderlandActivityReading Activity;
-	FFieldReader Reader{ *ActivityValue, Result.Refusal };
-	Reader.RequiredString("schemaVersion", Activity.SchemaVersion);
-	Reader.RequiredIdentity("projectId", Activity.ProjectId);
-	Reader.RequiredString("runId", Activity.RunId);
-	Reader.NullableText("observedAtIso", Activity.ObservedAtIso);
-
-	int64 ActiveSubagents = 0;
-	int64 SubagentsDenied = 0;
-	int64 UnusedEvents = 0;
-	Reader.RequiredInteger("activeSubagents", ActiveSubagents);
-	Reader.RequiredInteger("subagentsDenied", SubagentsDenied);
-	Reader.RequiredInteger("unusedEvents", UnusedEvents);
-
-	// SIGNALS. Every member is looked up, and an unknown one is refused rather
-	// than skipped: a signal Relay raised and this build cannot name is a world
-	// showing LESS than is true, which reads as a calm run.
-	const FJsonValue* Signals = Field(*ActivityValue, "signals");
-	if (Signals == nullptr) { Reader.Reject(EWonderlandWireError::MissingField, "signals"); }
-	else if (Signals->Kind != EJsonKind::Array) { Reader.Reject(EWonderlandWireError::WrongType, "signals"); }
-	else
-	{
-		for (const FJsonValue& Item : Signals->Items)
-		{
-			if (Item.Kind != EJsonKind::String)
-			{
-				Reader.Reject(EWonderlandWireError::WrongType, "signals");
-				break;
-			}
-			uint8 Found = 0;
-			if (!WonderlandWireLookupToken("EWonderlandActivitySignal", FString(Item.Text.c_str()), Found))
-			{
-				Reader.Reject(EWonderlandWireError::UnknownToken, "signals");
-				break;
-			}
-			Activity.Signals.Add(static_cast<EWonderlandActivitySignal>(Found));
-		}
-	}
-
-	// WORKERS. The per-worker fold, same rule for its own signals.
-	const FJsonValue* Workers = Field(*ActivityValue, "workers");
-	if (Workers == nullptr) { Reader.Reject(EWonderlandWireError::MissingField, "workers"); }
-	else if (Workers->Kind != EJsonKind::Array) { Reader.Reject(EWonderlandWireError::WrongType, "workers"); }
-	else
-	{
-		for (const FJsonValue& Item : Workers->Items)
-		{
-			if (Reader.bFailed) { break; }
-			if (Item.Kind != EJsonKind::Object)
-			{
-				Reader.Reject(EWonderlandWireError::WrongType, "workers");
-				break;
-			}
-			FWonderlandWorkerActivity Worker;
-			FFieldReader WorkerReader{ Item, Result.Refusal };
-			WorkerReader.RequiredIdentity("workerId", Worker.WorkerId);
-			if (WorkerReader.bFailed) { Reader.bFailed = true; break; }
-
-			const FJsonValue* WorkerSignals = Field(Item, "signals");
-			if (WorkerSignals == nullptr || WorkerSignals->Kind != EJsonKind::Array)
-			{
-				Reader.Reject(EWonderlandWireError::MissingField, "workers.signals");
-				break;
-			}
-			for (const FJsonValue& Signal : WorkerSignals->Items)
-			{
-				if (Signal.Kind != EJsonKind::String)
-				{
-					Reader.Reject(EWonderlandWireError::WrongType, "workers.signals");
-					break;
-				}
-				uint8 Found = 0;
-				if (!WonderlandWireLookupToken("EWonderlandActivitySignal", FString(Signal.Text.c_str()), Found))
-				{
-					Reader.Reject(EWonderlandWireError::UnknownToken, "workers.signals");
-					break;
-				}
-				Worker.Signals.Add(static_cast<EWonderlandActivitySignal>(Found));
-			}
-			if (Reader.bFailed) { break; }
-			Activity.Workers.Add(Worker);
-		}
-	}
-
-	if (Reader.bFailed) { return Result; }
-
-	// Counts are counts. A negative one is not a smaller number, it is a
-	// different kind of thing, and it would render as a subagent that unspawned.
-	if (ActiveSubagents < 0) { Result.Refusal = { EWonderlandWireError::NumberOutOfRange, FString("activeSubagents") }; return Result; }
-	if (SubagentsDenied < 0) { Result.Refusal = { EWonderlandWireError::NumberOutOfRange, FString("subagentsDenied") }; return Result; }
-	if (UnusedEvents < 0) { Result.Refusal = { EWonderlandWireError::NumberOutOfRange, FString("unusedEvents") }; return Result; }
+	if (!DecodeActivityObject(*ActivityValue, Result.Refusal, Activity)) { return Result; }
 
 	// THE TWO HALVES MUST AGREE ABOUT WHOSE RUN THIS IS. A delivery whose
 	// activity named another project would push one run's signals onto another's
@@ -770,10 +836,6 @@ FWonderlandDeliveryDecode WonderlandDecodeDeliveryBytes(const char* Bytes, int32
 		Result.Refusal = { EWonderlandWireError::IdentityRejected, FString("activity.runId") };
 		return Result;
 	}
-
-	Activity.ActiveSubagents = ActiveSubagents;
-	Activity.SubagentsDenied = SubagentsDenied;
-	Activity.UnusedEvents = UnusedEvents;
 
 	Result.bOk = true;
 	Result.Envelope = Envelope.Envelope;
@@ -916,6 +978,52 @@ bool ReadMeter(const FJsonValue& Owner, const char* Name, FFieldReader& Reader, 
 	return true;
 }
 
+// The HUD, from an object already parsed. ONE implementation, shared by the
+// usage entry point and the hydration path.
+//
+// THE CHANNEL CHECK IS PART OF IT rather than of the caller. The two meters
+// are not interchangeable, and a hydration that composed the reader without
+// the check would be exactly as swappable as a bare payload — every number on
+// screen real, and every one attributed to the wrong instrument.
+bool DecodeUsageHudObject(
+	const FJsonValue& Object,
+	FWonderlandWireRefusal& Refusal,
+	FWonderlandUsageHud& Out)
+{
+	FWonderlandUsageHud Hud;
+	FFieldReader Reader{ Object, Refusal };
+	Reader.RequiredString("schemaVersion", Hud.SchemaVersion);
+	Reader.RequiredString("observedAtIso", Hud.ObservedAtIso);
+
+	uint8 Anchor = 0;
+	Reader.RequiredEnum("anchor", "EWonderlandHudAnchor", Anchor);
+
+	ReadMeter(Object, "compoundAgent", Reader, Hud.CompoundAgent);
+	ReadMeter(Object, "singleAgent", Reader, Hud.SingleAgent);
+
+	if (Reader.bFailed) { return false; }
+
+	// THE TWO METERS ARE NOT INTERCHANGEABLE, and this is the second line of
+	// defence for it — `wonderlandHydrationVerdict` is the first. Swapped, the
+	// green Compound arc would draw the single agent's spend and the blue one
+	// the compound's, and every number on screen would be real and attributed
+	// to the wrong instrument.
+	if (Hud.CompoundAgent.Channel != EWonderlandUsageChannel::CompoundAgent)
+	{
+		Refusal = { EWonderlandWireError::IdentityRejected, FString("compoundAgent.channel") };
+		return false;
+	}
+	if (Hud.SingleAgent.Channel != EWonderlandUsageChannel::SingleAgent)
+	{
+		Refusal = { EWonderlandWireError::IdentityRejected, FString("singleAgent.channel") };
+		return false;
+	}
+
+	Hud.Anchor = static_cast<EWonderlandHudAnchor>(Anchor);
+	Out = Hud;
+	return true;
+}
+
 } // namespace
 
 FWonderlandUsageDecode WonderlandDecodeUsageBytes(const char* Bytes, int32 Length)
@@ -931,36 +1039,411 @@ FWonderlandUsageDecode WonderlandDecodeUsageBytes(const char* Bytes, int32 Lengt
 	}
 
 	FWonderlandUsageHud Hud;
-	FFieldReader Reader{ Root, Result.Refusal };
-	Reader.RequiredString("schemaVersion", Hud.SchemaVersion);
-	Reader.RequiredString("observedAtIso", Hud.ObservedAtIso);
+	if (!DecodeUsageHudObject(Root, Result.Refusal, Hud)) { return Result; }
 
-	uint8 Anchor = 0;
-	Reader.RequiredEnum("anchor", "EWonderlandHudAnchor", Anchor);
-
-	ReadMeter(Root, "compoundAgent", Reader, Hud.CompoundAgent);
-	ReadMeter(Root, "singleAgent", Reader, Hud.SingleAgent);
-
-	if (Reader.bFailed) { return Result; }
-
-	// THE TWO METERS ARE NOT INTERCHANGEABLE, and this is the second line of
-	// defence for it — `wonderlandHydrationVerdict` is the first. Swapped, the
-	// green Compound arc would draw the single agent's spend and the blue one
-	// the compound's, and every number on screen would be real and attributed
-	// to the wrong instrument.
-	if (Hud.CompoundAgent.Channel != EWonderlandUsageChannel::CompoundAgent)
-	{
-		Result.Refusal = { EWonderlandWireError::IdentityRejected, FString("compoundAgent.channel") };
-		return Result;
-	}
-	if (Hud.SingleAgent.Channel != EWonderlandUsageChannel::SingleAgent)
-	{
-		Result.Refusal = { EWonderlandWireError::IdentityRejected, FString("singleAgent.channel") };
-		return Result;
-	}
-
-	Hud.Anchor = static_cast<EWonderlandHudAnchor>(Anchor);
 	Result.bOk = true;
 	Result.Hud = Hud;
+	return Result;
+}
+
+/* ------------------------------------------------------- the hydration */
+
+const char* const WonderlandWireHydrationSchema = "relay-wonderland-hydration.v1";
+
+namespace
+{
+
+// The run, from an object already parsed.
+//
+// `State` IS READ AS TEXT and that is deliberate: nothing in the world switches
+// on a thirteen-member run-state vocabulary, the drawable state rides on the
+// envelope, and a mirrored enum nobody reads is a migration cost with no
+// reader. Reading it as a token would also make a kernel that learned a
+// fourteenth state refuse a hydration it has no other reason to refuse.
+bool DecodeRunSnapshotObject(
+	const FJsonValue& Object,
+	FWonderlandWireRefusal& Refusal,
+	FWonderlandRunSnapshot& Out)
+{
+	FWonderlandRunSnapshot Run;
+	FFieldReader Reader{ Object, Refusal };
+	Reader.RequiredString("schemaVersion", Run.SchemaVersion);
+	Reader.RequiredIdentity("projectId", Run.ProjectId);
+	Reader.RequiredIdentity("runId", Run.RunId);
+	Reader.NullableText("juliusInstanceId", Run.JuliusInstanceId);
+	Reader.NullableText("missionId", Run.MissionId);
+	Reader.RequiredString("state", Run.State);
+	Reader.RequiredString("observedAtIso", Run.ObservedAtIso);
+
+	int64 Revision = 0;
+	Reader.RequiredInteger("revision", Revision);
+
+	// THE THREE CARRIERS, and every one of them is a place a name-matching
+	// converter would draw a confident zero. `atSequence: null` is "the reader
+	// could not say where this sits"; `activeTasks: null` is "nobody counted".
+	// Neither is a count of nothing.
+	Reader.NullableInteger("atSequence", Run.AtSequence);
+	Reader.NullableInteger("activeTasks", Run.ActiveTasks);
+	Reader.NullableInteger("pendingApprovals", Run.PendingApprovals);
+
+	if (Reader.bFailed) { return false; }
+
+	// Ranges after every field, so a refusal names the field that is wrong
+	// rather than the first one read.
+	if (Revision < 0)
+	{
+		Refusal = { EWonderlandWireError::NumberOutOfRange, FString("run.revision") };
+		return false;
+	}
+	// A NEGATIVE POSITION IS NOT A SMALL ONE. Adopted, it would make the world
+	// resume from before the beginning and replay a run it has already seen —
+	// and every event of that replay would look new.
+	if (Run.AtSequence.bKnown && Run.AtSequence.Value < 0.0)
+	{
+		Refusal = { EWonderlandWireError::NumberOutOfRange, FString("run.atSequence") };
+		return false;
+	}
+	if (Run.ActiveTasks.bKnown && Run.ActiveTasks.Value < 0.0)
+	{
+		Refusal = { EWonderlandWireError::NumberOutOfRange, FString("run.activeTasks") };
+		return false;
+	}
+	if (Run.PendingApprovals.bKnown && Run.PendingApprovals.Value < 0.0)
+	{
+		Refusal = { EWonderlandWireError::NumberOutOfRange, FString("run.pendingApprovals") };
+		return false;
+	}
+
+	Run.Revision = Revision;
+	Out = Run;
+	return true;
+}
+
+// How much to believe the meters. Relay's verdict, carried verbatim.
+//
+// THE COUNTERS ARE CARRIED, not summed into one. A mis-routed fan-out, a schema
+// drift and ordinary replay traffic are three problems, and one counter would
+// present them as one.
+bool DecodeUsageStatusObject(
+	const FJsonValue& Object,
+	FWonderlandWireRefusal& Refusal,
+	FWonderlandUsageAuthorityStatus& Out)
+{
+	FWonderlandUsageAuthorityStatus Status;
+	FFieldReader Reader{ Object, Refusal };
+
+	uint8 Reading = 0;
+	Reader.RequiredEnum("reading", "EWonderlandUsageReading", Reading);
+	Reader.NullableText("reason", Status.Reason);
+	Reader.NullableText("authorityId", Status.AuthorityId);
+
+	// AGE IS A DOUBLE ON THE WIRE — a fraction of a second is a legitimate age,
+	// unlike a sequence — so it is read as a figure rather than through the
+	// whole-number reader, which would refuse 1.5 as "not an integer".
+	const FJsonValue* Age = Field(Object, "ageSeconds");
+	if (Age == nullptr) { Reader.Reject(EWonderlandWireError::MissingField, "ageSeconds"); }
+	else if (Age->Kind == EJsonKind::Null) { Status.AgeSeconds.bKnown = false; Status.AgeSeconds.Value = 0.0; }
+	else if (Age->Kind != EJsonKind::Number) { Reader.Reject(EWonderlandWireError::WrongType, "ageSeconds"); }
+	else if (!std::isfinite(Age->Number)) { Reader.Reject(EWonderlandWireError::NumberNotFinite, "ageSeconds"); }
+	else if (Age->Number < 0.0) { Reader.Reject(EWonderlandWireError::NumberOutOfRange, "ageSeconds"); }
+	else { Status.AgeSeconds.bKnown = true; Status.AgeSeconds.Value = Age->Number; }
+
+	int64 Revision = 0;
+	int64 Foreign = 0;
+	int64 Stale = 0;
+	int64 Malformed = 0;
+	Reader.RequiredInteger("revision", Revision);
+	Reader.RequiredInteger("foreignProjectReportsRejected", Foreign);
+	Reader.RequiredInteger("staleRevisionsRejected", Stale);
+	Reader.RequiredInteger("malformedReportsRejected", Malformed);
+
+	if (Reader.bFailed) { return false; }
+
+	if (Revision < 0) { Refusal = { EWonderlandWireError::NumberOutOfRange, FString("usageStatus.revision") }; return false; }
+	if (Foreign < 0) { Refusal = { EWonderlandWireError::NumberOutOfRange, FString("usageStatus.foreignProjectReportsRejected") }; return false; }
+	if (Stale < 0) { Refusal = { EWonderlandWireError::NumberOutOfRange, FString("usageStatus.staleRevisionsRejected") }; return false; }
+	if (Malformed < 0) { Refusal = { EWonderlandWireError::NumberOutOfRange, FString("usageStatus.malformedReportsRejected") }; return false; }
+
+	Status.Reading = static_cast<EWonderlandUsageReading>(Reading);
+	Status.Revision = Revision;
+	Status.ForeignProjectReportsRejected = Foreign;
+	Status.StaleRevisionsRejected = Stale;
+	Status.MalformedReportsRejected = Malformed;
+	Out = Status;
+	return true;
+}
+
+// The Project Brain citation: counts, revisions and opaque handles.
+//
+// WHAT IS NOT HERE IS THE POINT. There is no entry text, no summary, no title
+// — the struct has nowhere to put one, and this reader has no expression that
+// could copy one if a bridge started sending it. A world learns THAT context
+// was retrieved and how much of it; the substance of somebody's work stays out
+// of the least trusted process in the system.
+bool DecodeBrainCitationObject(
+	const FJsonValue& Object,
+	FWonderlandWireRefusal& Refusal,
+	FWonderlandBrainCitation& Out)
+{
+	FWonderlandBrainCitation Brain;
+	FFieldReader Reader{ Object, Refusal };
+	Reader.RequiredString("schemaVersion", Brain.SchemaVersion);
+	Reader.RequiredIdentity("projectId", Brain.ProjectId);
+	Reader.RequiredString("runId", Brain.RunId);
+	Reader.RequiredString("taskId", Brain.TaskId);
+	Reader.RequiredString("contentHash", Brain.ContentHash);
+	Reader.RequiredString("observedAtIso", Brain.ObservedAtIso);
+	Reader.RequiredBool("truncated", Brain.bTruncated);
+
+	int64 BrainRevision = 0;
+	int64 EntryCount = 0;
+	int64 CharacterCount = 0;
+	int64 RedactionCount = 0;
+	Reader.RequiredInteger("brainRevision", BrainRevision);
+	Reader.RequiredInteger("entryCount", EntryCount);
+	Reader.RequiredInteger("characterCount", CharacterCount);
+	Reader.RequiredInteger("redactionCount", RedactionCount);
+
+	// THE KIND COUNTS, KEYED BY TOKEN AND STORED BY ORDINAL.
+	//
+	// A KNOWN KIND MUST BE PRESENT. Relay sends all of them, every time, so a
+	// zero is a REPORTED zero — and a missing key would otherwise become one
+	// indistinguishable from it.
+	//
+	// AN UNKNOWN KIND IS TOLERATED, and this is the one place in this file
+	// where an unrecognised token is not a refusal. A kind is a member of a
+	// vocabulary the kernel owns and may extend; refusing would take a world
+	// dark the moment Relay learned a tenth kind, which is by far the more
+	// expensive failure. It lands in no bucket, so `EntryCount` and the sum of
+	// the buckets disagree — which IS the signal, visible without a debugger,
+	// that this build's vocabulary is behind.
+	// Plain locals rather than TArrays: this is scratch, it is fixed-size, and
+	// `TArray<bool>` is a bit-packed vector in the offline stub whose elements
+	// cannot be bound by reference. Neither leaves this function.
+	int64 Counts[WonderlandBrainKindSlots] = { 0 };
+	bool Seen[WonderlandBrainKindSlots] = { false };
+
+	const FJsonValue* Kinds = Field(Object, "kindCounts");
+	if (Kinds == nullptr) { Reader.Reject(EWonderlandWireError::MissingField, "kindCounts"); }
+	else if (Kinds->Kind != EJsonKind::Object) { Reader.Reject(EWonderlandWireError::WrongType, "kindCounts"); }
+	else
+	{
+		for (size_t i = 0; i < Kinds->Keys.size() && !Reader.bFailed; i += 1)
+		{
+			const FJsonValue& Item = Kinds->Values[i];
+			if (Item.Kind != EJsonKind::Number)
+			{
+				Reader.Reject(EWonderlandWireError::WrongType, "kindCounts");
+				break;
+			}
+			if (!std::isfinite(Item.Number))
+			{
+				Reader.Reject(EWonderlandWireError::NumberNotFinite, "kindCounts");
+				break;
+			}
+			if (Item.Number != std::floor(Item.Number))
+			{
+				Reader.Reject(EWonderlandWireError::NumberNotInteger, "kindCounts");
+				break;
+			}
+			if (Item.Number < 0.0 || Item.Number > 9007199254740991.0)
+			{
+				Reader.Reject(EWonderlandWireError::NumberOutOfRange, "kindCounts");
+				break;
+			}
+			uint8 Kind = 0;
+			if (!WonderlandWireLookupToken("EWonderlandBrainKind", FString(Kinds->Keys[i].c_str()), Kind))
+			{
+				// The tolerated case. Counted nowhere, on purpose.
+				continue;
+			}
+			if (static_cast<int32>(Kind) >= WonderlandBrainKindSlots)
+			{
+				Reader.Reject(EWonderlandWireError::NumberOutOfRange, "kindCounts");
+				break;
+			}
+			Counts[static_cast<int32>(Kind)] = static_cast<int64>(Item.Number);
+			Seen[static_cast<int32>(Kind)] = true;
+		}
+		// Slot 0 is `Unobserved`, which is not a kind and is never sent.
+		for (int32 Slot = 1; Slot < WonderlandBrainKindSlots && !Reader.bFailed; Slot += 1)
+		{
+			if (!Seen[Slot]) { Reader.Reject(EWonderlandWireError::MissingField, "kindCounts"); }
+		}
+	}
+
+	if (Reader.bFailed) { return false; }
+
+	if (BrainRevision < 0) { Refusal = { EWonderlandWireError::NumberOutOfRange, FString("brain.brainRevision") }; return false; }
+	if (EntryCount < 0) { Refusal = { EWonderlandWireError::NumberOutOfRange, FString("brain.entryCount") }; return false; }
+	if (CharacterCount < 0) { Refusal = { EWonderlandWireError::NumberOutOfRange, FString("brain.characterCount") }; return false; }
+	if (RedactionCount < 0) { Refusal = { EWonderlandWireError::NumberOutOfRange, FString("brain.redactionCount") }; return false; }
+
+	Brain.BrainRevision = BrainRevision;
+	Brain.EntryCount = EntryCount;
+	Brain.CharacterCount = CharacterCount;
+	Brain.RedactionCount = RedactionCount;
+	for (int32 Slot = 0; Slot < WonderlandBrainKindSlots; Slot += 1)
+	{
+		Brain.KindCounts.Add(Counts[Slot]);
+	}
+	Out = Brain;
+	return true;
+}
+
+// What a world may know about a C.A.R.D., which is deliberately little.
+//
+// THE THREE SLOTS ARE FLAGS, NOT BOOLS, and that carrier is the whole reason
+// this cannot be a name-matching conversion. `null` is "nobody could resolve
+// the C.A.R.D. behind this run" — which is EVERY reader today — and a bool
+// would render it as three empty slots, a confident and wrong claim that this
+// run has no Prompt Architect, no Coding Agent and no Reviewer.
+bool DecodeCardScopeObject(
+	const FJsonValue& Object,
+	FWonderlandWireRefusal& Refusal,
+	FWonderlandCardScope& Out)
+{
+	FWonderlandCardScope Card;
+	FFieldReader Reader{ Object, Refusal };
+	Reader.RequiredString("cardRevision", Card.CardRevision);
+	Reader.NullableFlag("hasPromptArchitect", Card.HasPromptArchitect);
+	Reader.NullableFlag("hasCodingAgent", Card.HasCodingAgent);
+	Reader.NullableFlag("hasIndependentReviewer", Card.HasIndependentReviewer);
+	Reader.RequiredBool("swarmEligible", Card.bSwarmEligible);
+
+	uint8 Autonomy = 0;
+	Reader.NullableEnum("autonomy", "EWonderlandAutonomy", Autonomy);
+
+	// The role vocabulary is Relay's own words for FUNCTIONS, which is what
+	// makes it safe to carry at all. Read as strings rather than tokens because
+	// the swarm roles are a policy list rather than a mirrored enum — but every
+	// element must still BE a string: an object here would be a payload that
+	// did not come through Relay's scoping, and the one thing that must never
+	// cross on this field is a provider or model name.
+	const FJsonValue* Roles = Field(Object, "eligibleSwarmRoles");
+	if (Roles == nullptr) { Reader.Reject(EWonderlandWireError::MissingField, "eligibleSwarmRoles"); }
+	else if (Roles->Kind != EJsonKind::Array) { Reader.Reject(EWonderlandWireError::WrongType, "eligibleSwarmRoles"); }
+	else
+	{
+		for (const FJsonValue& Item : Roles->Items)
+		{
+			if (Item.Kind != EJsonKind::String)
+			{
+				Reader.Reject(EWonderlandWireError::WrongType, "eligibleSwarmRoles");
+				break;
+			}
+			Card.EligibleSwarmRoles.Add(FString(Item.Text.c_str()));
+		}
+	}
+
+	if (Reader.bFailed) { return false; }
+
+	Card.Autonomy = static_cast<EWonderlandAutonomy>(Autonomy);
+	Out = Card;
+	return true;
+}
+
+// One required nested object, or the refusal that names it.
+const FJsonValue* RequiredObject(
+	const FJsonValue& Root,
+	const char* Name,
+	FWonderlandWireRefusal& Refusal)
+{
+	const FJsonValue* Value = Field(Root, Name);
+	if (Value == nullptr) { Refusal = { EWonderlandWireError::MissingField, FString(Name) }; return nullptr; }
+	if (Value->Kind != EJsonKind::Object) { Refusal = { EWonderlandWireError::WrongType, FString(Name) }; return nullptr; }
+	return Value;
+}
+
+} // namespace
+
+FWonderlandHydrationDecode WonderlandDecodeHydrationBytes(const char* Bytes, int32 Length)
+{
+	FWonderlandHydrationDecode Result;
+
+	FJsonValue Root;
+	EWonderlandWireError Error = EWonderlandWireError::None;
+	if (!ParseDocument(Bytes, Length, Root, Error))
+	{
+		Result.Refusal.Error = Error;
+		return Result;
+	}
+
+	FWonderlandHydration Hydration;
+	FFieldReader Reader{ Root, Result.Refusal };
+	Reader.RequiredString("schemaVersion", Hydration.SchemaVersion);
+	Reader.RequiredIdentity("projectId", Hydration.ProjectId);
+	Reader.NullableText("worldSessionId", Hydration.WorldSessionId);
+	Reader.RequiredString("observedAtIso", Hydration.ObservedAtIso);
+	if (Reader.bFailed) { return Result; }
+
+	// THE SCHEMA, BEFORE ANY FIELD IS BELIEVED. A payload naming another
+	// version may mean something else by every key below, and reading it
+	// against the fields this build happens to know would be a guess made
+	// silently. Refusing is what lets a bridge and a client ship on different
+	// days without either inventing the other's contract.
+	if (!(Hydration.SchemaVersion == FString(WonderlandWireHydrationSchema)))
+	{
+		Result.Refusal = { EWonderlandWireError::SchemaRejected, FString("schemaVersion") };
+		return Result;
+	}
+
+	const FJsonValue* RunValue = RequiredObject(Root, "run", Result.Refusal);
+	if (RunValue == nullptr) { return Result; }
+	if (!DecodeRunSnapshotObject(*RunValue, Result.Refusal, Hydration.Run)) { return Result; }
+
+	const FJsonValue* UsageValue = RequiredObject(Root, "usage", Result.Refusal);
+	if (UsageValue == nullptr) { return Result; }
+	if (!DecodeUsageHudObject(*UsageValue, Result.Refusal, Hydration.Usage)) { return Result; }
+
+	const FJsonValue* StatusValue = RequiredObject(Root, "usageStatus", Result.Refusal);
+	if (StatusValue == nullptr) { return Result; }
+	if (!DecodeUsageStatusObject(*StatusValue, Result.Refusal, Hydration.UsageStatus)) { return Result; }
+
+	const FJsonValue* ActivityValue = RequiredObject(Root, "activity", Result.Refusal);
+	if (ActivityValue == nullptr) { return Result; }
+	if (!DecodeActivityObject(*ActivityValue, Result.Refusal, Hydration.Activity)) { return Result; }
+
+	const FJsonValue* BrainValue = RequiredObject(Root, "brain", Result.Refusal);
+	if (BrainValue == nullptr) { return Result; }
+	if (!DecodeBrainCitationObject(*BrainValue, Result.Refusal, Hydration.Brain)) { return Result; }
+
+	const FJsonValue* CardValue = RequiredObject(Root, "card", Result.Refusal);
+	if (CardValue == nullptr) { return Result; }
+	if (!DecodeCardScopeObject(*CardValue, Result.Refusal, Hydration.Card)) { return Result; }
+
+	// ─────────────────────────────────────────────────────────────────────
+	// EVERY HALF NAMES THE SAME RUN IN THE SAME PROJECT.
+	//
+	// This mirrors `wonderlandHydrationVerdict` deliberately rather than
+	// trusting it. A bridge that assembled correctly makes this redundant; a
+	// bridge that did not makes it the only thing standing between a world and
+	// a picture of somebody else's mission — and because a hydration is adopted
+	// WHOLESALE, nothing arriving afterwards would contradict it. The world
+	// would simply be watching the wrong run, with every number on it real.
+	// ─────────────────────────────────────────────────────────────────────
+	if (!(Hydration.Run.ProjectId == Hydration.ProjectId))
+	{
+		Result.Refusal = { EWonderlandWireError::IdentityRejected, FString("run.projectId") };
+		return Result;
+	}
+	if (!(Hydration.Activity.ProjectId == Hydration.ProjectId))
+	{
+		Result.Refusal = { EWonderlandWireError::IdentityRejected, FString("activity.projectId") };
+		return Result;
+	}
+	if (!(Hydration.Activity.RunId == Hydration.Run.RunId))
+	{
+		Result.Refusal = { EWonderlandWireError::IdentityRejected, FString("activity.runId") };
+		return Result;
+	}
+	if (!(Hydration.Brain.ProjectId == Hydration.ProjectId))
+	{
+		Result.Refusal = { EWonderlandWireError::IdentityRejected, FString("brain.projectId") };
+		return Result;
+	}
+
+	Result.bOk = true;
+	Result.Hydration = Hydration;
 	return Result;
 }

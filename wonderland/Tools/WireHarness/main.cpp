@@ -524,6 +524,185 @@ int main(int argc, char** argv)
 		}
 	}
 
+	/* ----------------------- the hydration, the payload adopted WHOLESALE */
+	if (argc > 4)
+	{
+		std::ifstream File(argv[4]);
+		if (!File)
+		{
+			std::printf("FAIL cannot open hydration file %s\n", argv[4]);
+			Failures += 1;
+		}
+		else
+		{
+			std::string Line;
+			int Cases = 0;
+			while (std::getline(File, Line))
+			{
+				if (Line.empty()) { continue; }
+				const size_t T1 = Line.find('\t');
+				const size_t T2 = Line.find('\t', T1 + 1);
+				if (T1 == std::string::npos || T2 == std::string::npos)
+				{
+					std::printf("FAIL malformed hydration line\n"); Failures += 1; continue;
+				}
+				const std::string Name = Line.substr(0, T1);
+				const std::string Expect = Line.substr(T1 + 1, T2 - T1 - 1);
+				const std::string Json = Line.substr(T2 + 1);
+				const FWonderlandHydrationDecode R =
+					WonderlandDecodeHydrationBytes(Json.c_str(), (int32)Json.size());
+				Cases += 1;
+				Checks += 1;
+				if (Expect == "ok")
+				{
+					if (!R.bOk)
+					{
+						Failures += 1;
+						std::printf("FAIL hydration %s refused as %s (%s)\n", Name.c_str(),
+							WonderlandWireErrorName(R.Refusal.Error), R.Refusal.Field.s.c_str());
+						continue;
+					}
+					// EVERY ACCEPTED CASE ASSERTS WHAT IT PRODUCED. A decoder
+					// that returned bOk over a zero-filled struct would pass a
+					// "did it refuse" harness completely, and look on screen
+					// exactly like a Relay reporting nothing.
+					if (Name == "hydration-full")
+					{
+						CheckStr(R.Hydration.ProjectId, "project-alpha", "the hydration's project decodes");
+						CheckStr(R.Hydration.Run.RunId, "run-1", "the run id decodes");
+						CheckStr(R.Hydration.Run.State, "EXECUTING", "the kernel's own word decodes as text");
+						Check(R.Hydration.Run.Revision == 7, "the revision decodes");
+						Check(R.Hydration.Run.AtSequence.bKnown, "a reported position is KNOWN");
+						Check(R.Hydration.Run.AtSequence.Value == 42.0, "and is the position Relay sent");
+						Check(R.Hydration.Run.ActiveTasks.bKnown, "a reported task count is known");
+						Check(R.Hydration.Run.ActiveTasks.Value == 3.0, "and is the count Relay sent");
+						// A REPORTED ZERO. `pendingApprovals: 0` is a real
+						// answer, and the carrier must not confuse it with the
+						// absence that shares its Value.
+						Check(R.Hydration.Run.PendingApprovals.bKnown, "a reported zero is KNOWN");
+						Check(R.Hydration.Run.PendingApprovals.Value == 0.0, "and is zero");
+						Check(R.Hydration.WorldSessionId.bKnown, "a scoped hydration knows its session");
+						CheckStr(R.Hydration.WorldSessionId.Value, "world-1", "and names it");
+
+						// The meters, in their own slots, with real figures.
+						Check(R.Hydration.Usage.CompoundAgent.Channel == EWonderlandUsageChannel::CompoundAgent,
+							"the compound meter is in the compound slot");
+						Check(R.Hydration.Usage.SingleAgent.Channel == EWonderlandUsageChannel::SingleAgent,
+							"the single meter is in the single slot");
+						Check(R.Hydration.Usage.CompoundAgent.CapacityUnits.bKnown,
+							"a reported capacity is known");
+						Check(R.Hydration.Usage.CompoundAgent.CapacityUnits.Value == 480.0,
+							"and is the capacity Relay sent");
+
+						// The citation: counts, and nothing that was written by
+						// a person. Indexed by ordinal, so no caller subtracts.
+						Check(R.Hydration.Brain.KindCounts.Num() == WonderlandBrainKindSlots,
+							"the citation carries one slot per kind ordinal");
+						Check(R.Hydration.Brain.KindCounts[(int32)EWonderlandBrainKind::Objective] == 2,
+							"a kind's count lands under ITS OWN ordinal");
+						Check(R.Hydration.Brain.KindCounts[(int32)EWonderlandBrainKind::Constraint] == 1,
+							"and its neighbour's under its own");
+						Check(R.Hydration.Brain.KindCounts[(int32)EWonderlandBrainKind::Repair] == 0,
+							"a kind nothing was retrieved for is a REPORTED zero");
+						Check(R.Hydration.Brain.KindCounts[(int32)EWonderlandBrainKind::Unobserved] == 0,
+							"and slot zero, which is not a kind, stays empty");
+						Check(R.Hydration.Brain.EntryCount == 5, "the entry count decodes");
+						Check(R.Hydration.Brain.RedactionCount == 2, "redactions are reported as a size");
+						Check(R.Hydration.Brain.bTruncated, "a truncated context says so");
+
+						// The C.A.R.D., resolved: two filled slots and one that
+						// the record says is genuinely empty.
+						Check(R.Hydration.Card.HasPromptArchitect.bKnown,
+							"a resolved record KNOWS about the architect slot");
+						Check(R.Hydration.Card.HasPromptArchitect.bValue, "and it is filled");
+						Check(R.Hydration.Card.HasIndependentReviewer.bKnown,
+							"and knows about the reviewer slot");
+						Check(!R.Hydration.Card.HasIndependentReviewer.bValue,
+							"which the record says is EMPTY — a fact, not an absence");
+						Check(R.Hydration.Card.bSwarmEligible, "swarm eligibility decodes");
+						Check(R.Hydration.Card.EligibleSwarmRoles.Num() == 2, "and the roles it permits");
+						Check(R.Hydration.Card.Autonomy == EWonderlandAutonomy::Autonomous,
+							"the autonomy level decodes");
+					}
+					else if (Name == "hydration-production-unknowns")
+					{
+						// THE SHAPE PRODUCTION ACTUALLY SERVES, and the one this
+						// whole file exists for: everything nobody reported must
+						// stay UNKNOWN rather than becoming a confident zero.
+						Check(!R.Hydration.Run.AtSequence.bKnown, "an unplaced run has NO position");
+						Check(!R.Hydration.Run.ActiveTasks.bKnown, "nobody counted the tasks");
+						Check(!R.Hydration.Run.PendingApprovals.bKnown, "nor the approvals");
+						Check(!R.Hydration.WorldSessionId.bKnown, "an unscoped hydration says so");
+						Check(!R.Hydration.Card.HasPromptArchitect.bKnown,
+							"an unresolved C.A.R.D. does not claim the architect slot is empty");
+						Check(!R.Hydration.Card.HasCodingAgent.bKnown, "nor the coding agent slot");
+						Check(!R.Hydration.Card.HasIndependentReviewer.bKnown, "nor the reviewer slot");
+						Check(R.Hydration.Card.Autonomy == EWonderlandAutonomy::Unobserved,
+							"and an unstated autonomy is NOT Supervised");
+						Check(!R.Hydration.Usage.CompoundAgent.CapacityUnits.bKnown,
+							"an unreported capacity draws a track and no remainder");
+						Check(R.Hydration.UsageStatus.Reading == EWonderlandUsageReading::NotReported,
+							"and the verdict says nobody reported");
+						// A citation nobody made is told from a retrieval that
+						// found nothing by its EMPTY HASH, not by its zeroes.
+						CheckStr(R.Hydration.Brain.ContentHash, "",
+							"an uncited retrieval carries no content hash");
+					}
+					else if (Name == "hydration-card-unresolved")
+					{
+						Check(!R.Hydration.Card.HasCodingAgent.bKnown,
+							"null slots stay unknown");
+						Check(!R.Hydration.Card.HasCodingAgent.bValue,
+							"and carry no accidental true");
+					}
+					else if (Name == "hydration-autonomy-absent")
+					{
+						Check(R.Hydration.Card.Autonomy == EWonderlandAutonomy::Unobserved,
+							"an absent autonomy lands on Unobserved, by design");
+					}
+					else if (Name == "hydration-autonomy-UNCHAINED")
+					{
+						Check(R.Hydration.Card.Autonomy == EWonderlandAutonomy::Unchained,
+							"a SCREAMING_SNAKE level maps to its PascalCase member");
+					}
+					else if (Name == "hydration-brain-future-kind")
+					{
+						// THE ONE TOLERATED UNKNOWN TOKEN. A kind the kernel
+						// learned and this build has not lands in no bucket, and
+						// the disagreement between the total and the sum IS the
+						// signal that the vocabulary moved.
+						int64 Sum = 0;
+						for (int32 Slot = 0; Slot < R.Hydration.Brain.KindCounts.Num(); Slot += 1)
+						{
+							Sum += R.Hydration.Brain.KindCounts[Slot];
+						}
+						Check(Sum == 5, "a kind this build cannot name lands in NO bucket");
+						Check(R.Hydration.Brain.EntryCount == 5,
+							"and the total is still what Relay reported");
+					}
+					else if (Name == "hydration-no-position")
+					{
+						Check(!R.Hydration.Run.AtSequence.bKnown,
+							"a run with no ledger position says so rather than resuming from 0");
+					}
+				}
+				else if (R.bOk)
+				{
+					Failures += 1;
+					std::printf("FAIL hydration %s accepted, wanted %s\n", Name.c_str(), Expect.c_str());
+				}
+				else if (Expect != WonderlandWireErrorName(R.Refusal.Error))
+				{
+					Failures += 1;
+					std::printf("FAIL hydration %s refused as %s, wanted %s\n", Name.c_str(),
+						WonderlandWireErrorName(R.Refusal.Error), Expect.c_str());
+				}
+			}
+			Check(Cases >= 20, "the generated hydration file carried cases");
+			std::printf("hydrations: %d\n", Cases);
+		}
+	}
+
 	std::printf("checks: %d failures: %d\n", Checks, Failures);
 	return Failures == 0 ? 0 : 1;
 }

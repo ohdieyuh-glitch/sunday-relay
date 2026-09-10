@@ -91,6 +91,34 @@ static const FWonderlandWireToken EWonderlandUnknownReasonTokens[] = {
 	{ "unreadable", static_cast<uint8>(EWonderlandUnknownReason::Unreadable) },
 };
 
+// EWonderlandUsageReading — from WONDERLAND_USAGE_READINGS. Zero member: not_reported.
+static const FWonderlandWireToken EWonderlandUsageReadingTokens[] = {
+	{ "not_reported", static_cast<uint8>(EWonderlandUsageReading::NotReported) },
+	{ "known", static_cast<uint8>(EWonderlandUsageReading::Known) },
+	{ "stale", static_cast<uint8>(EWonderlandUsageReading::Stale) },
+	{ "unavailable", static_cast<uint8>(EWonderlandUsageReading::Unavailable) },
+};
+
+// EWonderlandAutonomy — from WONDERLAND_AUTONOMY_LEVELS. Zero member: Unobserved.
+static const FWonderlandWireToken EWonderlandAutonomyTokens[] = {
+	{ "SUPERVISED", static_cast<uint8>(EWonderlandAutonomy::Supervised) },
+	{ "AUTONOMOUS", static_cast<uint8>(EWonderlandAutonomy::Autonomous) },
+	{ "UNCHAINED", static_cast<uint8>(EWonderlandAutonomy::Unchained) },
+};
+
+// EWonderlandBrainKind — from WONDERLAND_BRAIN_KINDS. Zero member: Unobserved.
+static const FWonderlandWireToken EWonderlandBrainKindTokens[] = {
+	{ "OBJECTIVE", static_cast<uint8>(EWonderlandBrainKind::Objective) },
+	{ "REQUIREMENT", static_cast<uint8>(EWonderlandBrainKind::Requirement) },
+	{ "CONSTRAINT", static_cast<uint8>(EWonderlandBrainKind::Constraint) },
+	{ "DECISION", static_cast<uint8>(EWonderlandBrainKind::Decision) },
+	{ "FINDING", static_cast<uint8>(EWonderlandBrainKind::Finding) },
+	{ "REPAIR", static_cast<uint8>(EWonderlandBrainKind::Repair) },
+	{ "HANDOFF", static_cast<uint8>(EWonderlandBrainKind::Handoff) },
+	{ "ARTIFACT", static_cast<uint8>(EWonderlandBrainKind::Artifact) },
+	{ "EVIDENCE", static_cast<uint8>(EWonderlandBrainKind::Evidence) },
+};
+
 const FWonderlandWireEnumTable WonderlandWireEnumTables[] = {
 	{ "EWonderlandJuliusState", EWonderlandJuliusStateTokens, 11, true },
 	{ "EWonderlandJuliusStateSource", EWonderlandJuliusStateSourceTokens, 3, true },
@@ -101,6 +129,9 @@ const FWonderlandWireEnumTable WonderlandWireEnumTables[] = {
 	{ "EWonderlandProvenance", EWonderlandProvenanceTokens, 4, false },
 	{ "EWonderlandHudAnchor", EWonderlandHudAnchorTokens, 4, false },
 	{ "EWonderlandUnknownReason", EWonderlandUnknownReasonTokens, 5, true },
+	{ "EWonderlandUsageReading", EWonderlandUsageReadingTokens, 4, false },
+	{ "EWonderlandAutonomy", EWonderlandAutonomyTokens, 3, true },
+	{ "EWonderlandBrainKind", EWonderlandBrainKindTokens, 9, true },
 };
 
-const int32 WonderlandWireEnumTableCount = 9;
+const int32 WonderlandWireEnumTableCount = 12;

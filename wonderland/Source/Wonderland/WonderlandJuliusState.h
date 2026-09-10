@@ -567,10 +567,17 @@ struct FWonderlandBrainCitation
 	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Brain")
 	int64 EntryCount = 0;
 
-	// Counts per kind, in EWonderlandBrainKind order, one entry per kind so a
-	// zero is a REPORTED zero. An entry of a kind this client does not know is
-	// counted in EntryCount and in no bucket — the disagreement between the two
-	// is the signal that the kernel's vocabulary moved.
+	// Counts per kind, INDEXED BY EWonderlandBrainKind ORDINAL, so a zero is a
+	// REPORTED zero and `KindCounts[(int32)EWonderlandBrainKind::Finding]` is
+	// that kind's count with no arithmetic anywhere. Slot 0 is `Unobserved`,
+	// which is not a kind, and stays zero. Sized to `WonderlandBrainKindSlots`
+	// by the decoder; EMPTY until one has run, which is not "all kinds zero".
+	//
+	// An entry of a kind this client does not know is counted in EntryCount and
+	// in no bucket — the disagreement between the two is the signal that the
+	// kernel's vocabulary moved, and it is a signal rather than a refusal on
+	// purpose: a world that went dark the moment Relay learned a tenth kind
+	// would be the more expensive failure by far.
 	UPROPERTY(BlueprintReadOnly, Category = "Wonderland|Brain")
 	TArray<int64> KindCounts;
 
