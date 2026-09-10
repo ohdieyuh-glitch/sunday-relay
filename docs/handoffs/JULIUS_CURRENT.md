@@ -2845,3 +2845,130 @@ not the work.
   refusal was correct; the grant is a named, reviewable edit, made under the
   founder's standing campaign authorisation, which removed the per-run approval
   and not the ceiling.
+
+## 00m. THE PREFLIGHT ASSUMED A FILENAME, AND THE FIRST SLICE MISSION HAD NO SUCH FILE (2026-09-10)
+
+**Mission 4's first zero-spend preflight failed in two seconds, at no cost, for
+a reason worth writing down.** Run `34433098911` on trusted main `d7af081b`,
+mission `julius-live-mission-4`, `confirm_live` empty. Steps 1–17 all green —
+including step 14, so slice mode and the seed overlay both work on a real
+runner. Step 18 failed:
+
+```
+PREFLIGHT FAILED: ENOENT: no such file or directory, open '/tmp/julius-workspace/tenant/ws/README.md'
+```
+
+Steps 19 onward were skipped. **No provider was contacted and nothing was
+spent** — which is what the gate is for.
+
+### What was actually wrong
+
+The preflight's decisive check writes a marker into a workspace file on the
+HOST and requires it to appear in a diff captured INSIDE the sandbox. That is
+the mission's own hand-off, and a break in it means the Independent Reviewer
+reviews nothing after an architect and a coding agent have already been paid.
+
+The check needs a file `git diff` will report — tracked, and text. It named one:
+the literal string `README.md`. Every mission seeded from a throwaway tree
+happens to ship a `README.md`, so the assumption survived three paid missions
+without ever being a stated requirement. **Mission 4 is the first slice
+mission**: its workspace is `git archive` of three real Relay files plus one
+overlaid spec, and it has no README. Measured across all four missions, with the
+old requirement applied:
+
+| Mission | tracked `README.md` | tracked files |
+|---|---|---|
+| `julius-first-live` | yes | 4 |
+| `julius-live-mission-2` | yes | 4 |
+| `julius-live-mission-3` | yes | 4 |
+| `julius-live-mission-4` | **no** | 6 |
+
+The `JULIUS_PROJECT_ID: prj-julius-first-live` in that job's env dump is **not**
+related — missions 2 and 3 also declare their own `projectId` and both ran. It
+scopes the preflight's disposable identity, not the mission's project.
+
+### The repair
+
+`scripts/julius-live-probe-file.ts` (new) picks the probe file from a list of
+tracked paths. Deterministic, in three tiers: `README.md` when git tracks it —
+so the three earlier missions probe exactly what they always probed — then
+ordinary paths, then `.julius/` tooling paths last, so a slice mission probes
+mission source rather than its import harness. It rejects, with a reason each,
+what git would not diff usefully: unreadable, larger than 1 MiB, containing a
+NUL byte, not valid UTF-8. It reads nothing itself; the reader is injected.
+
+`scripts/julius-live-preflight.ts` now asks the sandbox's own git
+(`git -c core.quotePath=false ls-files`) — the same view that will capture the
+mission's diff — hands the list to the chooser, names the file it picked in its
+output, restores it as **bytes** rather than a decoded string, and names it in
+every failure message. A workspace with nothing tracked and readable is a stated
+failure, not a skip.
+
+Chosen, against each real mission workspace:
+
+```
+julius-first-live       -> README.md (318B, examined 1/4)
+julius-live-mission-2   -> README.md (457B, examined 1/4)
+julius-live-mission-3   -> README.md (496B, examined 1/4)
+julius-live-mission-4   -> src/relay/mission/julius/julius-memory-trust.test.ts (9908B, examined 1/6)
+```
+
+### The seam, because the seam is what broke
+
+The chooser is pure and the preflight is a script with a database, an executor
+client and four credentials — so the code JOINING them is the one part neither a
+unit test nor a build reaches. That join is exactly what broke: the old
+preflight's entire probe-file logic was `join(workspace, 'README.md')`, fifteen
+untested characters between two well-tested things.
+
+So the join is a function too — `resolveProbeFile(run, read)` — with the sandbox
+injected. The preflight passes its real `runInSandbox`; the tests pass one that
+shells to real git in a real provisioned mission workspace. `PROBE_LIST_COMMAND`
+is exported and asserted, so the tests drive the seam rather than a paraphrase
+of it.
+
+### The guard that would have caught it
+
+`scripts/julius-mission-slice.test.ts` now provisions **every** mission in
+`.github/julius-missions/` the way the provisioner does — both seed kinds — and
+asserts the probe can be satisfied: a tracked text file is chosen, the marker
+reaches `git diff`, and restoring leaves `git status` clean. A future mission
+whose workspace cannot satisfy the preflight is now a red `npm test`, at the
+cost of nothing, rather than a dispatched workflow run.
+
+Mutation-tested, so the guard is known to have teeth:
+
+| Mutation | Result |
+|---|---|
+| restore the old hardcoded `README.md` behaviour | **1 failed** — precisely `julius-live-mission-4` |
+| drop the NUL-byte rejection | **3 failed** |
+| send the sandbox a different list command | **4 failed** |
+
+### What is NOT proven
+
+The repaired preflight has not been run against the real executor and sandbox.
+The repository trust gate requires `refs/heads/main` on EVERY dispatch, dry or
+paid ("the branch is exactly `main`, the ref is exactly `refs/heads/main`, THIS
+JOB'S OWN COMMIT is that frozen tip"), so a branch cannot be dry-run — correctly,
+and not something to weaken for convenience. Proven here: the chooser and the
+seam against real git in real provisioned workspaces, and a clean build of the
+preflight bundle. The executor round-trip mechanics are untouched; the change
+adds one `git ls-files` call through the identical `runInSandbox` helper that
+already carries `git rev-parse HEAD` and `git --no-pager diff`. The zero-spend
+preflight on the new trusted main is the first thing after this lands, and
+Mission 4 does not dispatch until it passes.
+
+The receipt-scope proof is no longer described by counting ("its third
+sandbox") in either the source comment or `docs/JULIUS_BETA_READINESS.md`: the
+repair adds a round-trip, and an ordinal that has already gone stale once should
+not be load-bearing. It is named by its role instead.
+
+### The lesson, stated generally
+
+Three paid missions passing did not make `README.md` a property of a mission
+workspace — it made it a coincidence nobody had had reason to notice. The
+preflight is the right gate and it fired correctly; what failed was an
+assumption *inside* it that no test asserted, because the thing it assumed had
+always happened to be true. `docs/JULIUS_MISSION_SANDBOX.md` now states the real
+requirement ("the one thing every mission workspace must contain") and the
+per-mission test enforces it.

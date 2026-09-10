@@ -135,6 +135,7 @@ Against `node:22`'s real behaviour and this repository's real files:
 | A mission specification seeded at a path main does not have | runs against the slice; its diff still applies |
 | An overlay shadowing a sliced file | refused |
 | A mistyped slice path | `git archive` exits 128 under `set -euo pipefail` — the mission fails loudly rather than seeding less than it declared |
+| Every mission's workspace can carry the preflight's hand-off probe | **yes, all four** — asserted per mission in `scripts/julius-mission-slice.test.ts` |
 
 ## The one syntax rule a slice must obey
 
@@ -151,6 +152,28 @@ anywhere. Of the ten files making up the Project Brain surface, exactly one
 A slice containing one of those five needs the mission's test command to reach
 the module some other way, or the file to be excluded. This is a real limit and
 it is written down rather than discovered during a paid run.
+
+## The one thing every mission workspace must contain
+
+At least one **tracked, text** file. Not a style preference — the zero-spend
+preflight proves the host→sandbox hand-off by writing a marker into a workspace
+file and requiring it to appear in a diff captured inside the sandbox, and
+`git diff` reports neither an untracked file nor a binary one. A workspace
+without such a file cannot prove the hand-off, and a mission that somehow ran
+anyway would hand the Independent Reviewer an empty diff after paying an
+architect and a coding agent.
+
+Every mission satisfies this for free — the deliverables must already be tracked
+for the coding agent to edit them at all (it is denied `Write`). It is written
+down because the preflight used to satisfy itself by assuming the *filename*
+`README.md`, which every throwaway-tree mission happened to ship and no slice
+mission does: Mission 4's first preflight died on `ENOENT` two seconds in
+(run `34433098911`). The preflight now asks git which files it tracks and picks
+one (`scripts/julius-live-probe-file.ts`), preferring mission source over the
+`.julius/` import harness, and restores it byte for byte. And
+`scripts/julius-mission-slice.test.ts` now provisions **every** mission in the
+repository and asserts the probe can be satisfied — so the next mission that
+cannot is a red `npm test`, not a wasted dispatch.
 
 ## What this does NOT give a mission
 
