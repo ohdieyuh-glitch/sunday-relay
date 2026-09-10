@@ -17,7 +17,7 @@ Julius is the provider-neutral, deterministic orchestration kernel that turns an
 
 Static import closure from the two roots over the TypeScript AST (value and type edges), stopping at the declared boundaries below; plus declared production modules not reached from the live root (flagged); plus path-loaded assets. Tests, fixtures, fakes and UI are refused by category. A drift gate fails the generator when a production file imports the Julius kernel or port without being reached, declared or explicitly excluded, or when a declaration no longer matches the wiring.
 
-Represented: **116 production files** across 20/20 subsystems (2 roots, 93 traced, 8 not composed by the live root, 13 path-loaded assets). Line and byte totals, the coverage estimate and the commit SHA are printed by the generator and recorded in the export header; they are kept out of this file so it changes only when the file set or its classification changes.
+Represented: **117 production files** across 20/20 subsystems (2 roots, 94 traced, 8 not composed by the live root, 13 path-loaded assets). Line and byte totals, the coverage estimate and the commit SHA are printed by the generator and recorded in the export header; they are kept out of this file so it changes only when the file set or its classification changes.
 
 ## Dependency direction (observed, between coarse groups)
 
@@ -82,6 +82,7 @@ The provider-neutral kernel: mission states and the transition table, tasks, evi
 | production source | role | reached from |
 | --- | --- | --- |
 | `src/relay/mission/julius/index.ts` | traced | `src/relay/persistence/julius-postgres.ts` |
+| `src/relay/mission/julius/julius-context-integrity.ts` | traced | `src/relay/mission/julius/index.ts` |
 | `src/relay/mission/julius/julius-context-snapshot.ts` | traced | `src/relay/mission/julius/index.ts` |
 | `src/relay/mission/julius/julius-memory-store.ts` | traced | `src/relay/mission/julius/index.ts` |
 | `src/relay/mission/julius/julius-memory-trust.ts` | traced | `src/relay/mission/julius/index.ts` |

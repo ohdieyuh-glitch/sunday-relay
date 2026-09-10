@@ -232,6 +232,15 @@ const FILE_RULES = [
   // Same subsystem as the Project Brain it qualifies: v1 entries keep their
   // text and scope, and this says who asserted them and how far that is checked.
   ['src/relay/mission/julius/julius-memory-trust.ts', 'DURABLE STATE / PROJECT BRAIN'],
+  // The context integrity layer: which of those memories may reach a worker's
+  // packet, in what order, and what happens when two of them cannot both be
+  // true. Seeded as a STUB for paid Live Mission 5, so nothing imports it yet
+  // and the trace does not reach it — declared now, for the same reason the
+  // trust core above is, so the landing that finally gives it a caller does not
+  // also trip the drift gate. Same subsystem as the Project Brain it reads and
+  // the compiler it will sit inside: `julius-runtime.ts` and
+  // `julius-context-snapshot.ts` are both already here.
+  ['src/relay/mission/julius/julius-context-integrity.ts', 'DURABLE STATE / PROJECT BRAIN'],
   ['src/relay/mission/julius/julius-allocation-runtime.ts', 'LEASES / BUDGETS / PERMISSIONS'],
   // Allocation decides what a dispatch MAY spend; this decides what is known
   // about what it DID spend, and on whose authority. Same subsystem: both are
