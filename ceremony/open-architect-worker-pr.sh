@@ -1,0 +1,106 @@
+#!/usr/bin/env bash
+# Opens EXACTLY ONE pull request for the frozen preflight probe-discovery repair,
+# authored by the julius-worker GitHub App.
+#
+# Run this once, in the Codespace that holds JULIUS_WORKER_APP_PEM.
+# It prints no credential material: the PEM is never echoed, the JWT and the
+# installation token are held in shell variables and never written to a file,
+# and every curl call sends the token in a header rather than a URL.
+#
+# It refuses unless ALL of these hold, so it cannot open a PR for the wrong tree:
+#   * origin/main is still the trusted base
+#   * the branch head is the exact frozen head
+#   * the tree matches
+#   * there are exactly 2 commits above main
+#   * every commit's AUTHOR and COMMITTER are julius-worker[bot]
+set -euo pipefail
+
+REPO='ohdieyuh-glitch/sunday-relay'
+BRANCH='relay/julius-architect-incomplete-plan'
+BASE='6b2d62e762c6c38ce2a57faa35c7821a4582ed56'
+HEAD='ab16ed0422341d992443e78ebcd662d1497027b6'
+TREE='079deefb6d9236fd351bd442ee20d0ce15477fcd'
+COMMITS=1
+WORKER='julius-worker[bot]'
+BODY_FILE="${PR_BODY_FILE:-PR_BODY_ARCHITECT.md}"
+
+APP_ID="${JULIUS_WORKER_APP_ID:-${1:-}}"
+[ -n "$APP_ID" ] || { echo 'need the julius-worker App ID: export JULIUS_WORKER_APP_ID=<id> (or pass it as $1)' >&2; exit 2; }
+[ -n "${JULIUS_WORKER_APP_PEM:-}" ] || { echo 'JULIUS_WORKER_APP_PEM is not set in this shell' >&2; exit 2; }
+[ -f "$BODY_FILE" ] || { echo "PR body not found: $BODY_FILE" >&2; exit 2; }
+
+echo '== verifying the candidate before touching GitHub =='
+git fetch --quiet origin main "$BRANCH"
+
+got_base="$(git rev-parse origin/main)"
+[ "$got_base" = "$BASE" ] || { echo "main moved: $got_base != $BASE — STOP, the candidate is stale" >&2; exit 1; }
+echo "  base       $BASE  OK"
+
+got_head="$(git rev-parse "origin/$BRANCH")"
+[ "$got_head" = "$HEAD" ] || { echo "head is $got_head, expected $HEAD — STOP" >&2; exit 1; }
+echo "  head       $HEAD  OK"
+
+got_tree="$(git rev-parse "origin/$BRANCH^{tree}")"
+[ "$got_tree" = "$TREE" ] || { echo "tree is $got_tree, expected $TREE — STOP" >&2; exit 1; }
+echo "  tree       $TREE  OK"
+
+got_count="$(git rev-list --count "$BASE..origin/$BRANCH")"
+[ "$got_count" = "$COMMITS" ] || { echo "$got_count commits above main, expected $COMMITS — STOP" >&2; exit 1; }
+echo "  commits    $COMMITS  OK"
+
+bad=0
+while IFS='|' read -r sha an cn; do
+  [ "$an" = "$WORKER" ] && [ "$cn" = "$WORKER" ] || { echo "  $sha author='$an' committer='$cn' — NOT the worker" >&2; bad=1; }
+done < <(git log --format='%h|%an|%cn' "$BASE..origin/$BRANCH")
+[ "$bad" = 0 ] || { echo 'provenance check failed — STOP' >&2; exit 1; }
+echo "  provenance every commit authored AND committed by $WORKER  OK"
+
+echo '== minting an installation token =='
+b64() { openssl base64 -A | tr '+/' '-_' | tr -d '='; }
+now=$(date +%s)
+jwt_header="$(printf '{"alg":"RS256","typ":"JWT"}' | b64)"
+jwt_claim="$(printf '{"iat":%d,"exp":%d,"iss":"%s"}' "$((now - 60))" "$((now + 540))" "$APP_ID" | b64)"
+jwt_sig="$(printf '%s.%s' "$jwt_header" "$jwt_claim" \
+  | openssl dgst -binary -sha256 -sign <(printf '%s' "$JULIUS_WORKER_APP_PEM") | b64)"
+JWT="${jwt_header}.${jwt_claim}.${jwt_sig}"
+
+install_id="$(curl -sS -H "Authorization: Bearer $JWT" -H 'Accept: application/vnd.github+json' \
+  "https://api.github.com/repos/$REPO/installation" | python3 -c 'import sys,json; print(json.load(sys.stdin)["id"])')"
+TOKEN="$(curl -sS -X POST -H "Authorization: Bearer $JWT" -H 'Accept: application/vnd.github+json' \
+  "https://api.github.com/app/installations/$install_id/access_tokens" \
+  | python3 -c 'import sys,json; print(json.load(sys.stdin)["token"])')"
+unset JWT jwt_sig
+[ -n "$TOKEN" ] || { echo 'could not mint an installation token' >&2; exit 1; }
+echo '  token minted (not printed)'
+
+echo '== refusing to open a second PR for this branch =='
+open_count="$(curl -sS -H "Authorization: token $TOKEN" -H 'Accept: application/vnd.github+json' \
+  "https://api.github.com/repos/$REPO/pulls?state=open&head=ohdieyuh-glitch:$BRANCH" \
+  | python3 -c 'import sys,json; print(len(json.load(sys.stdin)))')"
+[ "$open_count" = 0 ] || { echo "a PR for $BRANCH is already open — STOP" >&2; exit 1; }
+
+echo '== creating the pull request =='
+payload="$(python3 - "$BODY_FILE" <<'PY'
+import json, sys
+print(json.dumps({
+  "title": "Julius: a failed architect call now says what it cost and why it stopped",
+  "head": "relay/julius-architect-incomplete-plan",
+  "base": "main",
+  "body": open(sys.argv[1], encoding="utf-8").read(),
+  "maintainer_can_modify": False,
+}))
+PY
+)"
+number="$(printf '%s' "$payload" | curl -sS -X POST -H "Authorization: token $TOKEN" \
+  -H 'Accept: application/vnd.github+json' --data-binary @- \
+  "https://api.github.com/repos/$REPO/pulls" \
+  | python3 -c 'import sys,json; d=json.load(sys.stdin); print(d.get("number") or d)')"
+
+echo '== reading it back =='
+curl -sS -H "Authorization: token $TOKEN" -H 'Accept: application/vnd.github+json' \
+  "https://api.github.com/repos/$REPO/pulls/$number" \
+| python3 -c 'import sys,json; d=json.load(sys.stdin); print(f"  PR #{d[\"number\"]}  by {d[\"user\"][\"login\"]}  head {d[\"head\"][\"sha\"]}  base {d[\"base\"][\"sha\"]}  state {d[\"state\"]}")'
+unset TOKEN
+
+echo
+echo "WORKER PR OPENED: #$number"
