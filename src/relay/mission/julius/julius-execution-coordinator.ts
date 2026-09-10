@@ -1,5 +1,5 @@
 import type { JuliusCardPolicy } from './julius-policy';
-import { flattenDiagnostics, JuliusDispatchError, JuliusProviderRouter, type JuliusDispatchAllocation, type JuliusProviderResult } from './julius-router';
+import { flattenDiagnostics, JuliusDispatchError, JuliusProviderRouter, safeReviewDiagnostics, type JuliusDispatchAllocation, type JuliusProviderResult } from './julius-router';
 import type { JuliusEvidence, JuliusTask, JuliusWorker, JuliusWorkerRole } from './julius-runtime';
 import type { JuliusContractReviewCharge } from './julius-task-contract';
 
@@ -10,14 +10,61 @@ const reportedUsdMicros=(result:JuliusProviderResult|null):number|null=>{
  const value=(usage as Record<string,unknown>).usdMicros;
  return typeof value==='number'&&Number.isFinite(value)?value:null;
 };
+/**
+ * THE FACTS A SUCCESSFUL ATTEMPT LEAVES BEHIND.
+ *
+ * Failure has had this since paid run 34311556047: both catch-side endings
+ * flatten the error's diagnostics onto their event, so `task.failed` and
+ * `retry.scheduled` carry a reviewer's whole lifecycle. Success carried
+ * `{workerId, duplicate, evidenceCount}` — and Live Run 3, which completed,
+ * produced a `worker-diagnostics.tsv` with no rows at all. A clean attempt was
+ * less reconstructable than a broken one, so there was no healthy baseline to
+ * read the next timeout against.
+ *
+ * WHAT THE ADAPTER SAYS AND WHAT JULIUS SAYS ARE MERGED IN THAT ORDER, and the
+ * order is the point. The adapter reports what it observed — transport, served
+ * model, elapsed time, the process it ran. Julius reports what only Julius
+ * knows and what an adapter must never be able to overstate: that the attempt
+ * SUCCEEDED, and which locked contract revision and binding digest it ran
+ * under. An adapter claiming its own `contractBindingDigest` would be
+ * attesting to the thing the contract stack exists to prove independently of
+ * it, so Julius's values are written last and win.
+ *
+ * `null` when the adapter reported nothing: a row of nulls is not evidence,
+ * and the evidence dump keys on `diag_transport` precisely so that a worker
+ * with no lifecycle to report produces no row instead of an empty one.
+ */
+const successDiagnostics=(request:JuliusExecutionRequest,result:JuliusProviderResult):Record<string,string|number|boolean|null>=>{
+ const reported=result.diagnostics;
+ if(reported===undefined||reported===null||typeof reported!=='object'||Array.isArray(reported))return{};
+ return flattenDiagnostics(safeReviewDiagnostics({
+  ...reported as Record<string,unknown>,
+  outcome:'succeeded',
+  /* ALWAYS BOTH, EVEN WHEN THERE IS NO CONTRACT. Spreading them only when one
+   * exists would leave an unbound dispatch — a plan, which precedes the lock —
+   * carrying whatever the adapter happened to put in those keys, which is the
+   * one claim an adapter must never be able to make. Null here is the true
+   * answer: this dispatch was bound to nothing. */
+  contractRevision:request.contract===undefined?null:request.contract.binding.contractRevision,
+  contractBindingDigest:request.contract===undefined?null:request.contract.binding.bindingDigest,
+ }));
+};
 export interface JuliusExecutionClaim { readonly runId:string;readonly projectId:string;readonly taskId:string;readonly leaseOwner:string;readonly leaseGeneration:number;readonly task:JuliusTask;readonly capability:string;readonly contextId:string; }
 export interface JuliusResourceRequest { readonly usdMicros:number;readonly inputTokens:number;readonly outputTokens:number;readonly toolCalls:number;readonly runtimeMs:number; }
 export interface JuliusResourceReservation { readonly reservationId:string;readonly state:'RESERVED'|'DENIED';readonly denialReason:string|null; }
 export interface JuliusExecutionPorts {
   reserve(input:{claim:JuliusExecutionClaim;worker:JuliusWorker;request:JuliusResourceRequest;idempotencyKey:string}):Promise<JuliusResourceReservation>;
-  commit(input:{reservationId:string;result:JuliusProviderResult}):Promise<void>;
+  /**
+   * `claim` is WHOSE money this was. The settlement event carried a reservation
+   * id and nothing else, so `budget.tsv` could only attribute a component to a
+   * task by joining back through the reservation — and the founder's question
+   * after Live Run 3 was exactly per-role: what did the architect cost, what
+   * did the reviewer cost. The port already had the claim at every call site;
+   * only the signature refused to carry it.
+   */
+  commit(input:{claim:JuliusExecutionClaim;reservationId:string;result:JuliusProviderResult}):Promise<void>;
   /** `usdMicros` is what the failed attempt billed, when the boundary reported it. Spent money is charged, not released. */
-  release(input:{reservationId:string;reason:string;usdMicros?:number|null;spendUnknown?:boolean}):Promise<void>;
+  release(input:{claim:JuliusExecutionClaim;reservationId:string;reason:string;usdMicros?:number|null;spendUnknown?:boolean}):Promise<void>;
   persistEvidence(input:{claim:JuliusExecutionClaim;worker:JuliusWorker;evidence:readonly JuliusEvidence[]}):Promise<void>;
   acceptResult(input:{claim:JuliusExecutionClaim;worker:JuliusWorker;result:JuliusProviderResult;idempotencyKey:string}):Promise<{duplicate:boolean}>;
   /**
@@ -114,13 +161,13 @@ export class JuliusExecutionCoordinator {
       const evidence=normalizedEvidence(request.claim,worker,result);
       await this.ports.persistEvidence({claim:request.claim,worker,evidence});
       const receipt=await this.ports.acceptResult({claim:request.claim,worker,result,idempotencyKey:`${request.operationId}:result`});
-      await this.ports.commit({reservationId:reservation.reservationId,result});
-      await this.event(request,'worker.completed',{workerId:worker.workerId,duplicate:receipt.duplicate,evidenceCount:evidence.length});
+      await this.ports.commit({claim:request.claim,reservationId:reservation.reservationId,result});
+      await this.event(request,'worker.completed',{workerId:worker.workerId,duplicate:receipt.duplicate,evidenceCount:evidence.length,...successDiagnostics(request,result)});
       return{status:'COMPLETED',workerId:worker.workerId,duplicate:receipt.duplicate,...(result.contractProposal===undefined?{}:{contractProposal:result.contractProposal})};
     }catch(error){const failure=error instanceof JuliusDispatchError?error:new JuliusDispatchError('WORKER_EXECUTION_FAILURE',false,'Execution boundary failed.');const reported=reportedUsdMicros(answered);
      const billed=reported??(typeof failure.diagnostics?.costUsdMicros==='number'?failure.diagnostics.costUsdMicros:null);
      // A provider that ANSWERED ran, whatever the diagnostics say about it.
-     await this.ports.release({reservationId:reservation.reservationId,reason:failure.code,usdMicros:billed,spendUnknown:billed===null&&(answered!==null||failure.diagnostics?.runtimeStarted===true)});
+     await this.ports.release({claim:request.claim,reservationId:reservation.reservationId,reason:failure.code,usdMicros:billed,spendUnknown:billed===null&&(answered!==null||failure.diagnostics?.runtimeStarted===true)});
      /* The class travels with the code on BOTH endings. A retry that is later
       * abandoned and a failure taken at once must leave the same diagnosis
       * behind, or the durable record would explain only the failures that

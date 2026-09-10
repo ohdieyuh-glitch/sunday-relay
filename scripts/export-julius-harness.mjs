@@ -221,6 +221,10 @@ const FILE_RULES = [
   // task graph rather than the reviewer: the reviewer consumes it, Julius owns it.
   ['src/relay/mission/julius/julius-task-contract.ts', 'TASK GRAPH / SCHEDULER'],
   ['src/relay/mission/julius/julius-allocation-runtime.ts', 'LEASES / BUDGETS / PERMISSIONS'],
+  // Allocation decides what a dispatch MAY spend; this decides what is known
+  // about what it DID spend, and on whose authority. Same subsystem: both are
+  // the budget's own arithmetic, and neither is a worker's to state.
+  ['src/relay/mission/julius/julius-cost-accounting.ts', 'LEASES / BUDGETS / PERMISSIONS'],
   ['src/relay/mission/julius/julius-recovery.ts', 'RECOVERY / CONTINUATION'],
   ['src/relay/mission/julius/julius-continuation.ts', 'RECOVERY / CONTINUATION'],
   ['src/relay/mission/julius/julius-lease-protocol.ts', 'LEASES / BUDGETS / PERMISSIONS'],

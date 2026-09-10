@@ -1,5 +1,6 @@
 export * from './julius-runtime';
 export * from './julius-policy';
+export * from './julius-cost-accounting';
 export * from './julius-router';
 export * from './julius-bounded-runtime';
 export * from './julius-recovery';

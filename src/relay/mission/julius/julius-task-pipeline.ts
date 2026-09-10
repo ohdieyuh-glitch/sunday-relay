@@ -35,6 +35,7 @@ import { evaluateJuliusPolicy, type JuliusCardPolicy } from './julius-policy';
 import { decideJuliusContinuation } from './julius-continuation';
 import { JuliusExecutionCoordinator, type JuliusExecutionOutcome, type JuliusExecutionPorts, type JuliusExecutionClaim, type JuliusResourceRequest } from './julius-execution-coordinator';
 import { safeReasonCode, type JuliusProviderRouter } from './julius-router';
+import { juliusCostComponent } from './julius-cost-accounting';
 import { createJuliusContextSnapshot } from './julius-context-snapshot';
 import { evaluateJuliusVerification, type JuliusReviewerFinding, type JuliusVerificationPolicy } from './julius-verification-runtime';
 import { planJuliusRepair } from './julius-repair-runtime';
@@ -1093,7 +1094,7 @@ function executionPorts(
       });
       return { reservationId, state: result.state, denialReason: result.denialReason };
     },
-    commit: async ({ reservationId, result }) => {
+    commit: async ({ claim, reservationId, result }) => {
       const usage = (result.usage ?? {}) as Record<string, unknown>;
       const number = (key: string): number => (typeof usage[key] === 'number' && Number.isFinite(usage[key] as number) ? usage[key] as number : 0);
       /**
@@ -1110,24 +1111,58 @@ function executionPorts(
         outputTokens: number('outputTokens'), toolCalls: number('toolCalls'), runtimeMs: number('runtimeMs'),
         receiptId: typeof usage.receiptId === 'string' ? usage.receiptId : null, now: deps.clock.now(),
       });
+      /**
+       * WHOSE MONEY, AND ON WHOSE AUTHORITY.
+       *
+       * `taskId: null` and no basis is how Live Run 3's ledger came to read as
+       * a $0.608861 mission: one component reported a figure, three reported
+       * nothing, and the rows were indistinguishable from a $0 settlement
+       * except by joining back through the reservation id. The task and the
+       * role make each component attributable; the basis says whether the
+       * amount beside it is a bill, a harness's arithmetic, or an absence.
+       *
+       * `juliusCostComponent` decides, not the caller: a basis its own data
+       * cannot support is demoted to `UNKNOWN` rather than published, so an
+       * adapter cannot claim `PROVIDER_REPORTED` without a number.
+       */
+      const component = juliusCostComponent({
+        taskId: claim.taskId, role: claim.task.role,
+        basis: usage.costBasis, usdMicros,
+        estimatedUsdMicros: usage.estimatedUsdMicros,
+      });
       // The coordinator emits `budget.reserved` and `budget.denied` and has no
       // event for the settlement, so the amount actually spent had no
       // authoritative record. It does now, and it is the OBSERVED usage rather
       // than the estimate that was reserved — or `null`, which says the
       // boundary reported none rather than claiming it cost nothing.
       await ledger.event('budget.settled', {
-        taskId: null,
-        facts: { reservationId, usdMicros, inputTokens: number('inputTokens'), outputTokens: number('outputTokens') },
+        taskId: claim.taskId,
+        facts: {
+          reservationId, usdMicros, inputTokens: number('inputTokens'), outputTokens: number('outputTokens'),
+          role: claim.task.role, costBasis: component.basis,
+          // NEVER FOLDED INTO `usdMicros`. A price a harness worked out from its
+          // own table is not what anyone was charged, and one column for both
+          // is how an estimate becomes a bill.
+          estimatedUsdMicros: component.estimatedUsdMicros,
+        },
       });
     },
-    release: async ({ reservationId, reason, usdMicros, spendUnknown }) => {
+    release: async ({ claim, reservationId, reason, usdMicros, spendUnknown }) => {
       await deps.budget.release({ reservationId, reason, now: deps.clock.now(), usdMicros: usdMicros ?? null, spendUnknown });
       // A failed attempt that billed before it failed is a settlement, not a
       // hand-back, and the record has to be able to say so.
       if ((typeof usdMicros === 'number' && usdMicros > 0) || spendUnknown === true) {
         await ledger.event('budget.settled', {
-          taskId: null,
-          facts: { reservationId, usdMicros: typeof usdMicros === 'number' ? usdMicros : null, reason },
+          taskId: claim.taskId,
+          facts: {
+            reservationId, usdMicros: typeof usdMicros === 'number' ? usdMicros : null, reason,
+            role: claim.task.role,
+            // A failure that billed a number the boundary reported is a
+            // provider's own figure; one that billed an amount nobody could
+            // name is UNKNOWN, which is why the hold is not released.
+            costBasis: typeof usdMicros === 'number' ? 'PROVIDER_REPORTED' : 'UNKNOWN',
+            estimatedUsdMicros: null,
+          },
         });
       }
     },

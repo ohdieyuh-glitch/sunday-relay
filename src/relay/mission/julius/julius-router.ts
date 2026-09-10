@@ -1,4 +1,5 @@
 import type { JuliusContractReviewCharge } from './julius-task-contract';
+import { JULIUS_COST_BASES } from './julius-cost-accounting';
 import type{JuliusWorker,JuliusWorkerRegistry,JuliusWorkerRole}from'./julius-runtime';import{workerAllowedByCard,type JuliusCardPolicy}from'./julius-policy';
 export const JULIUS_ERROR_CODES=['RATE_LIMIT','TIMEOUT','AUTH_CONFIGURATION','PROVIDER_UNAVAILABLE','INVALID_REQUEST','WORKER_EXECUTION_FAILURE','POLICY_DENIED','BUDGET_DENIED','CANCELLED']as const;export type JuliusErrorCode=typeof JULIUS_ERROR_CODES[number];
 /**
@@ -130,6 +131,30 @@ const FIELD_PATH=/^[A-Za-z][A-Za-z0-9_]{0,31}(\.[A-Za-z][A-Za-z0-9_]{0,31}|\[(?:
 const safeFieldName=(value:unknown):string|null=>typeof value==='string'&&value.length<=160&&FIELD_PATH.test(value)?value:null;
 /** A provider response identifier: bounded, and refused when credential-shaped. */
 const safeResponseId=(value:unknown):string|null=>typeof value==='string'&&/^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(value)&&!CREDENTIAL_SHAPED.test(value)?value:null;
+/**
+ * AN INSTANT, AND NOTHING THAT MERELY CONTAINS ONE.
+ *
+ * `elapsedMs` alone cannot say WHEN an attempt ran, and a reader who wants the
+ * start has to subtract it from the durable row's `occurred_at` — arithmetic
+ * across two tables to recover a fact both ends of the attempt already knew.
+ * Live Run 3's reviewer attempts recorded neither, because the success path
+ * recorded nothing at all.
+ *
+ * The grammar is exactly the ISO-8601 UTC instant this runtime writes
+ * (`new Date().toISOString()`), optionally with sub-second digits, and it is
+ * parsed as well as matched so `2026-13-45T99:99:99Z` is refused rather than
+ * stored. No offset form, no local time, no date alone: a second grammar is a
+ * second thing to defend, and every producer here writes the same one.
+ */
+const INSTANT=/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?Z$/;
+const safeInstant=(value:unknown):string|null=>typeof value==='string'&&INSTANT.test(value)&&!Number.isNaN(Date.parse(value))?value:null;
+/**
+ * A DIGEST IN THIS REPOSITORY'S OWN FORM: `sha256:` and sixty-four lower-case
+ * hex characters, which is what {@link juliusTaskContractBinding} produces.
+ * Nothing else passes, so the column cannot come to hold a truncated digest, a
+ * digest of a different algorithm, or a sentence about one.
+ */
+const safeDigest=(value:unknown):string|null=>typeof value==='string'&&/^sha256:[0-9a-f]{64}$/.test(value)?value:null;
 export type JuliusSafeDiagnostics=Readonly<Record<string,string|number|boolean|null>>;
 export const safeReviewDiagnostics=(value:unknown):JuliusSafeDiagnostics|null=>{
  if(value===null||typeof value!=='object'||Array.isArray(value))return null;
@@ -240,6 +265,63 @@ export const safeReviewDiagnostics=(value:unknown):JuliusSafeDiagnostics|null=>{
   costSource:safeToken(v.costSource),
   /** Whether the provider runtime launched at all: the difference between spending nothing and spending an unknown amount. */
   runtimeStarted:safeNullableBool(v.runtimeStarted),
+  /* ------------------------------------------- the attempt itself ----
+   *
+   * EVERY FIELD ABOVE DESCRIBES A FAILURE, and until Live Run 3 that was the
+   * only kind of attempt this record had. `worker-diagnostics.tsv` came back
+   * from a COMPLETED paid mission with zero rows: the coordinator flattened
+   * diagnostics onto `task.failed` and `retry.scheduled` and onto nothing
+   * else, so a reviewer that answered correctly left less behind than one that
+   * timed out. There was no healthy row to read a pathological one against —
+   * which is precisely what the timeout repair of run 34311556047 needed and
+   * had to buy a paid run to get.
+   *
+   * These five are what a SUCCESSFUL attempt has to state on its own: that it
+   * succeeded (rather than being a failure whose shape nobody classified),
+   * when it started and ended, and which locked contract revision and binding
+   * digest it ran under. The last two are also in `trajectory.tsv`, and having
+   * them here is deliberate: a diagnostics row that has to be joined to prove
+   * what it was bound to is a row that gets read without the join. --- */
+  /**
+   * HOW THE ATTEMPT ENDED, from a closed pair.
+   *
+   * `failureShape` is null on a success AND on a failure nobody could classify,
+   * so its absence never meant "this went well". This says which, and it is the
+   * one column a reader can filter on to compare healthy attempts with sick
+   * ones.
+   */
+  outcome:safeEnum(v.outcome,['succeeded','failed'] as const),
+  /** When the attempt began, as the transport observed it. */
+  startedAt:safeInstant(v.startedAt),
+  /** When it ended. `elapsedMs` is the difference and is recorded beside it. */
+  completedAt:safeInstant(v.completedAt),
+  /** The LOCKED revision this dispatch ran under, or null for an unbound role. */
+  contractRevision:safeCount(v.contractRevision),
+  /** The binding digest it ran under — the fact the whole contract stack exists to prove. */
+  contractBindingDigest:safeDigest(v.contractBindingDigest),
+  /* ------------------------------------------ what the attempt cost ----
+   *
+   * `costUsdMicros` above answers "how much" and cannot answer "how do you
+   * know". Live Run 3 settled one component with a runtime-reported figure and
+   * three with nothing at all, and the ledger had one column for both — so a
+   * mission that cost at least $0.61 could be read as a mission that cost
+   * exactly $0.61. `costSource` already carried the hosted runtime's own two
+   * words (`runtime_reported` / `unavailable`); this is the cross-provider
+   * vocabulary every role answers in. --- */
+  /** `PROVIDER_REPORTED`, `MEASURED_FROM_USAGE`, `ESTIMATED` or `UNKNOWN`. Never absent. */
+  costBasis:safeEnum(v.costBasis,JULIUS_COST_BASES),
+  /**
+   * A HARNESS'S OWN ARITHMETIC, KEPT APART FROM WHAT A PROVIDER BILLED.
+   *
+   * Hermes writes an `estimated_cost` to its usage file, computed from token
+   * counts and its own price table. That is worth recording and is not a
+   * billing figure, so it never lands in `costUsdMicros` — the two are
+   * different claims and one column would make them the same one.
+   */
+  estimatedCostUsdMicros:safeCount(v.estimatedCostUsdMicros),
+  /** Tokens the boundary reported, which is what a later price table would measure. */
+  inputTokens:safeCount(v.inputTokens),
+  outputTokens:safeCount(v.outputTokens),
  });
 };
 /**
@@ -279,7 +361,22 @@ export class JuliusDispatchError extends Error{
  * (`validateJuliusTaskContract`) before any of it binds anyone. Optional, so a
  * worker that proposes nothing behaves exactly as before.
  */
-export interface JuliusProviderResult{readonly workerId:string;readonly providerId:string;readonly status:'SUCCEEDED'|'FAILED';readonly safeSummary:string;readonly evidence:readonly unknown[];readonly usage:unknown;readonly contractProposal?:unknown;}
+export interface JuliusProviderResult{readonly workerId:string;readonly providerId:string;readonly status:'SUCCEEDED'|'FAILED';readonly safeSummary:string;readonly evidence:readonly unknown[];readonly usage:unknown;readonly contractProposal?:unknown;
+/**
+ * WHAT THE ATTEMPT OBSERVED ABOUT ITSELF, ON THE PATH THAT SUCCEEDED.
+ *
+ * {@link JuliusDispatchError} has carried diagnostics since paid run
+ * 34311556047, so a reviewer that FAILED left a lifecycle behind and a
+ * reviewer that ANSWERED left none: there was nowhere on this type to put
+ * them. Live Run 3 completed and its `worker-diagnostics.tsv` was empty.
+ *
+ * `unknown` is the honest type for the same reason `usage` is: it comes from
+ * an adapter, and Julius rebuilds it from {@link safeReviewDiagnostics}'s
+ * allowlist before any of it reaches a durable row. Optional, so an adapter
+ * that reports none behaves exactly as before — and gets no row, rather than
+ * a row of nulls.
+ */
+readonly diagnostics?:unknown;}
 /**
  * WHAT JULIUS TELLS AN ADAPTER, and nothing more.
  *

@@ -193,10 +193,20 @@ export function summariseJuliusEvals(
   const scoped = events.filter((event) => event.runtimeVersion === runtimeVersion);
   const runs = new Set(scoped.map((event) => event.runId)).size;
   const verified = metrics.counters.julius_runs_completed;
-  const cost = scoped
+  /**
+   * THE DISPATCHES ARE THE COMPONENTS. Only a DISPATCH can cost money, so a
+   * missing cost on one is an unmeasured component; a missing cost on a RETRY
+   * or a COMPLETION row is simply a field that kind never carries, and counting
+   * those as unknown would make every window incomplete forever.
+   */
+  const dispatches = scoped.filter((event) => event.kind === 'DISPATCH');
+  const cost = dispatches
     .map((event) => event.usdMicros)
     .filter((value): value is number => typeof value === 'number' && Number.isFinite(value) && value >= 0);
-  const totalUsdMicros = cost.reduce((total, value) => total + value, 0);
+  const knownUsdMicros = cost.reduce((total, value) => total + value, 0);
+  // NOT DROPPED. A dispatch that reported nothing is the difference between a
+  // total and a floor, and it is counted rather than filtered away.
+  const unknownCostComponents = dispatches.length - cost.length;
   const durations = summariseSamples(scoped.map((event) => event.durationMs));
 
   return {
@@ -204,11 +214,15 @@ export function summariseJuliusEvals(
     runs,
     verifiedCompletions: verified,
     verifiedCompletionRate: runs === 0 ? 0 : verified / runs,
-    totalUsdMicros,
+    knownUsdMicros,
+    unknownCostComponents,
+    costComplete: unknownCostComponents === 0,
     // NOT ZERO. Nothing completed, so there is no cost PER completion — and
     // reporting zero would make the cheapest generation the one that never
-    // finished anything.
-    costPerVerifiedCompletion: verified === 0 ? null : totalUsdMicros / verified,
+    // finished anything. Named `known` for the second reason: with an
+    // incomplete cost it is a lower bound, and a field called
+    // `costPerVerifiedCompletion` was quoted as though it were not.
+    knownCostPerVerifiedCompletion: verified === 0 ? null : knownUsdMicros / verified,
     averageDurationMs: durations.count === 0 || durations.sum === null ? null : durations.sum / durations.count,
     retries: metrics.counters.julius_task_retries,
     fallbacks: metrics.counters.julius_fallbacks,

@@ -203,6 +203,25 @@ export async function runOpenAiReview(input: {
       requestedModel: input.config.model,
       servedModel: actualModel,
       provider: 'openai',
+      // This path owns its own HTTP, so unlike the local one it can say a
+      // request really reached the provider — and a 200 with a readable review
+      // is the strongest form of that. No process ran, so those stay null.
+      diagnostics: reviewDiagnostics({
+        transport: 'openai', shape: null, outcome: 'succeeded', provider: 'openai',
+        requestedModel: input.config.model, servedModel: actualModel,
+        outputBytesObserved: Buffer.byteLength(text, 'utf8'),
+        providerHttpStatus: response.status,
+        providerRequestStarted: true,
+        text,
+      }),
+      // Chat Completions reports tokens and never a price. Unknown cost is
+      // recorded as unknown; the tokens are what a price table would measure.
+      usage: {
+        inputTokens: null, outputTokens: null, totalTokens: null,
+        model: actualModel, apiCalls: 1,
+        costMicros: null, currency: null,
+        source: actualModel === null ? 'unavailable' : 'harness_reported',
+      },
     };
   } catch {
     return {

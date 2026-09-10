@@ -28,7 +28,8 @@ import type { GptRunOutcome } from '../../src/relay/connectors/gpt-architect';
 import { JuliusDispatchError, safeFailureClass } from '../../src/relay/mission/julius';
 import { compileHostedEnvelope } from '../hosted-coding-agent/hosted-envelope';
 import type { HostedQueryFn, HostedRunInput, HostedRunOutcome } from '../hosted-coding-agent/hosted-runner';
-import { loadHermesConfig, runHermesReview, type HermesOutcome, type ReviewPacket } from '../hermes-reviewer';
+import { loadHermesConfig, reviewDiagnostics, runHermesReview, type HermesOutcome, type ReviewPacket } from '../hermes-reviewer';
+import { UNKNOWN_USAGE } from '../reviewer-harness/hermes/runner';
 import { runRemoteHermesReview, type RemoteHermesConfig } from '../hermes-remote-review';
 import { repairTaskTypeFor, reviewStageOf } from '../../src/relay/mission/julius';
 import { DEFAULT_HOSTED_LIMITS, type HostedLimits } from '../hosted-coding-agent/hosted-envelope';
@@ -246,6 +247,12 @@ function fakeReviewer(log: FakeLog, packets: ReviewPacket[], verdicts: Array<'ap
       },
       startedAt, completedAt: new Date().toISOString(),
       requestedModel: 'grok-build-0.1', servedModel: 'grok-build-0.1', provider: 'xai',
+      diagnostics: reviewDiagnostics({
+        transport: 'local', shape: null, outcome: 'succeeded', provider: 'xai',
+        requestedModel: 'grok-build-0.1', servedModel: 'grok-build-0.1',
+        elapsedMs: 1_234, timeoutMs: 400_000, processStarted: true, exitObserved: true,
+      }),
+      usage: UNKNOWN_USAGE,
     } as HermesOutcome;
   };
 }
@@ -2275,7 +2282,86 @@ describe('DEFECT 2 — the live reviewer adapter reviews the stage it was dispat
     // and returns findings for Julius to record and decide on.
     expect(result.status).toBe('SUCCEEDED');
     expect(result.evidence.every((item) => (item as { type: string }).type === 'REVIEW_FINDING')).toBe(true);
-    expect(Object.keys(result).sort()).toEqual(['evidence', 'providerId', 'safeSummary', 'status', 'usage', 'workerId']);
+    // `diagnostics` is the reviewer's own lifecycle, narrowed by the domain
+    // allowlist before it reaches any durable row. It is listed here because
+    // this assertion is a LEAK check — a new key on this result is exactly what
+    // it exists to catch — and because the plan review's record must carry no
+    // more than the build review's does.
+    expect(Object.keys(result).sort()).toEqual(['diagnostics', 'evidence', 'providerId', 'safeSummary', 'status', 'usage', 'workerId']);
+    expect(JSON.stringify(result.diagnostics), 'and it quotes no part of the plan it read')
+      .not.toContain(VALID_PLAN.objectiveSummary);
+  });
+
+  /**
+   * THE GAP LIVE RUN 3 EXPOSED. Both of its reviews were APPROVED and its
+   * `worker-diagnostics.tsv` came back with zero rows — the adapter returned
+   * `usage: { toolCalls: 0 }` and nothing else on the succeeding path, so the
+   * served model survived only because a prose evidence summary happened to
+   * name it, and the elapsed time of a healthy review survived nowhere.
+   */
+  it('a review that SUCCEEDED carries the same lifecycle a failed one does', async () => {
+    const artifacts = createLiveArtifactExchange();
+    artifacts.put(planRef('run-live'), JSON.stringify(VALID_PLAN));
+    const packets: ReviewPacket[] = [];
+    const adapter = reviewerAdapterFor({ taskId: 'plan-1:review', artifacts, packets, log: { order: [] } });
+    const result = await adapter.dispatch({ taskId: 'plan-1:review', contextId: 'ctx-resume-1', taskType: 'review:plan' });
+    expect(result.status).toBe('SUCCEEDED');
+    const diagnostics = result.diagnostics as Record<string, unknown>;
+
+    // The evidence dump keys on transport, so this is the field that decides
+    // whether the attempt gets a row at all.
+    expect(diagnostics.transport).toBe('local');
+    expect(diagnostics.outcome, 'stated, never inferred from a null failure shape').toBe('succeeded');
+    expect(diagnostics.failureShape, 'and there is no failure to shape').toBeNull();
+    // Which review this was, and how many provider calls the dispatch bought —
+    // both known to the dispatch and to neither transport.
+    expect(diagnostics.stage).toBe('plan');
+    expect(diagnostics.reviewAttempts).toBe(1);
+    // The model that answered, on a row rather than inside a sentence.
+    expect(diagnostics.servedModel).toBe('grok-build-0.1');
+    expect(diagnostics.requestedModel).toBe('grok-build-0.1');
+    // The pair that answers "was the window big enough?" for free.
+    expect(diagnostics.elapsedMs).toBe(1_234);
+    expect(diagnostics.timeoutMs).toBe(400_000);
+    expect(typeof diagnostics.startedAt).toBe('string');
+    expect(typeof diagnostics.completedAt).toBe('string');
+    // Nothing was billed to Relay here and no harness estimate was reported, so
+    // the basis is UNKNOWN — which is not zero, and is why the reservation is
+    // held rather than settled.
+    expect(diagnostics.costBasis).toBe('UNKNOWN');
+    expect(diagnostics.estimatedCostUsdMicros).toBeNull();
+    expect((result.usage as { costBasis: string }).costBasis).toBe('UNKNOWN');
+  });
+
+  /**
+   * ELAPSED TIME IS DERIVED ONLY WHERE NOBODY MEASURED IT — the remote and
+   * provider transports run no process and time nothing — and it is derived
+   * from two instants that are both on the same row, so the arithmetic can be
+   * checked rather than trusted.
+   */
+  it('derives an elapsed time only when the transport measured none', async () => {
+    const artifacts = createLiveArtifactExchange();
+    artifacts.put(planRef('run-live'), JSON.stringify(VALID_PLAN));
+    const unmeasured = createLiveHermesReviewerAdapter({
+      worker: LIVE_REVIEWER_WORKER,
+      contexts: { snapshotFor: () => reviewSnapshot('plan-1:review') },
+      artifacts,
+      config: loadHermesConfig(LIVE_ENV as never),
+      testCommand: 'npm run mission-test',
+      run: (async () => ({
+        kind: 'reviewed',
+        result: { verdict: 'approved', summary: 'No blocking findings.', findings: [], requirementsChecked: [], parseRepaired: false },
+        startedAt: '2026-09-09T23:03:10.000Z', completedAt: '2026-09-09T23:06:36.500Z',
+        requestedModel: 'grok-build-0.1', servedModel: 'grok-build-0.1', provider: 'xai',
+        diagnostics: reviewDiagnostics({ transport: 'remote', shape: null, outcome: 'succeeded' }),
+        usage: UNKNOWN_USAGE,
+      })) as never,
+    });
+    const result = await unmeasured.dispatch({ taskId: 'plan-1:review', contextId: 'ctx-resume-1', taskType: 'review:plan' });
+    const diagnostics = result.diagnostics as Record<string, unknown>;
+    expect(diagnostics.elapsedMs, 'the difference between the two instants beside it').toBe(206_500);
+    expect(diagnostics.startedAt).toBe('2026-09-09T23:03:10.000Z');
+    expect(diagnostics.completedAt).toBe('2026-09-09T23:06:36.500Z');
   });
 
   it('a BUILD review is refused when no implementation exists to judge, and an EMPTY diff is no implementation', async () => {

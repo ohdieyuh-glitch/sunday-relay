@@ -1885,8 +1885,11 @@ fifty cents was refused, whatever budget the founder had authorised.
 **Stated as evidence rather than as inference**, because the tempting version of
 that sentence is not supported: *what mission 1's coder actually cost is not
 recorded anywhere.* The pre-`14741f7` bundles have no cost column, and
-`worker-diagnostics.tsv` only carries a row for a worker that FAILED — a
-succeeding coder writes none. So mission 1's build passing the ceiling means its
+`worker-diagnostics.tsv` at the time only carried a row for a worker that
+FAILED — a succeeding coder wrote none. **(No longer true of the code: since
+the Live Run 3 repair, all three adapters write a diagnostics record on the
+succeeding path too, and the coder's comes from the same builder its refusal
+uses. It remains true of every bundle up to and including 34414726976.)** So mission 1's build passing the ceiling means its
 reported cost was ≤50¢ **or was never reported at all**: `withinCostCeiling`
 treats an unknown cost as within bounds on purpose ("unknown cost is not a pass
 and not a failure"), so a run whose provider reports no cost is never refused.
@@ -2652,3 +2655,46 @@ gate again, so the refusal direction is read end to end on real rows too.
 So the answer to "what would a paid run newly prove" is not these rows: they are
 already proven on the production path. It is whether the binding holds against
 **real** worker output, which is the one thing a drill cannot stand in for.
+
+---
+
+## 00i. LIVE RUN 3 (2026-09-09) — THE FIRST CONTRACT-BOUND COMPLETION, AND THE TWO GAPS IT EXPOSED
+
+**Trusted main at dispatch: `4ce61f98829403f3905b19a88584f8e3414ff842`.** Actions
+run `34414726976`, durable run `run:132b1d96d9eebad0ecf386d5`, **COMPLETED**
+after 4 ticks with no founder rescue. Full record, read from the bundle rather
+than from the run status: **`docs/JULIUS_PAID_RUN_34414726976_LIVE_RUN_3.md`**.
+
+The central claim it established: the Coding Agent and the Independent Reviewer
+executed against **the same locked contract revision (2) and the same binding
+digest (`sha256:e35b6d88…`)**, visible in two independently-produced tables
+(`contract-events.tsv` and `trajectory.tsv`).
+
+**Four qualifications are recorded there and none of them is softened here.**
+Two are facts about the run (no contract CHALLENGE occurred and none was
+explained; the coder wrote correct code first time, so the reviewer never had a
+defect in front of it). Two were defects in the RECORD and were repaired in the
+same change that froze the document:
+
+- **Success-path diagnostics.** `worker-diagnostics.tsv` came back EMPTY from a
+  COMPLETED run: the coordinator flattened diagnostics onto `task.failed` and
+  `retry.scheduled` and onto nothing else. A clean reviewer attempt was less
+  reconstructable than a broken one, and there was no healthy baseline to read a
+  timeout against. `JuliusProviderResult` now carries a sanitised `diagnostics`,
+  `worker.completed` flattens it, and all three live adapters populate it —
+  including `outcome`, `startedAt`/`completedAt` and the locked
+  `contractRevision`/`contractBindingDigest`, which Julius writes and an adapter
+  cannot overstate.
+- **Cost accounting.** One component reported `$0.608861`; three settled with no
+  figure. `julius.budget.settled` now names its task, role and `costBasis` from
+  the closed four (`PROVIDER_REPORTED`, `MEASURED_FROM_USAGE`, `ESTIMATED`,
+  `UNKNOWN`), a basis its data cannot support is demoted rather than published,
+  a harness estimate is summed on its own axis, the bundle gains
+  `cost-accounting.tsv`, and `JuliusEvalSummary.totalUsdMicros` — which summed
+  the reporters and dropped the rest — is now `knownUsdMicros` beside
+  `unknownCostComponents` and `costComplete`, in the pure summary and its SQL
+  mirror alike.
+
+**The standing testing policy from this point on:** a provider-free run is not a
+Julius mission. Preflights, drills and e2e chains prove wiring; only a paid run
+against real worker output proves the system.
