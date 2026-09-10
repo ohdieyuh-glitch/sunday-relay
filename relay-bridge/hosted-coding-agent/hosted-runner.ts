@@ -117,6 +117,9 @@ export async function runHostedCodingAgent(input: HostedRunInput): Promise<Hoste
   const envelope = compileHostedEnvelope({
     workspacePath: input.workspacePath,
     requestedModel: input.requestedModel,
+    // The SAME limits the abort timer and the budget stop below use. Passing
+    // them is what makes `maxTurns` an operative limit rather than a field.
+    limits,
   });
   const startedAt = input.now();
 

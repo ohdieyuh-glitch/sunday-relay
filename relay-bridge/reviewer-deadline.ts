@@ -95,7 +95,13 @@ export const RECORDED_REVIEWER_OBSERVATIONS: readonly ReviewerDurationObservatio
  * and the ceiling moves, deterministically, and `julius-first-live-mission.yml`
  * is held to `JOB_BUDGET_MS` by a structural test so the two cannot drift.
  */
-export const JOB_BUDGET_MS = 90 * 60_000;
+/**
+ * 90 -> 120 when the coder got a share of its own. The reviewers may burn 50
+ * minutes worst case and the coder 30; the architect's own ceiling and the
+ * image builds, PostgreSQL, Hermes and the evidence dump need room beside them,
+ * and `coder-envelope.test.ts` proves the four add up inside this number.
+ */
+export const JOB_BUDGET_MS = 120 * 60_000;
 export const REVIEWER_JOB_SHARE_MS = 50 * 60_000;
 export const MAX_REVIEWER_ATTEMPTS = 6;
 

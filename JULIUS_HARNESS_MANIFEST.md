@@ -17,7 +17,7 @@ Julius is the provider-neutral, deterministic orchestration kernel that turns an
 
 Static import closure from the two roots over the TypeScript AST (value and type edges), stopping at the declared boundaries below; plus declared production modules not reached from the live root (flagged); plus path-loaded assets. Tests, fixtures, fakes and UI are refused by category. A drift gate fails the generator when a production file imports the Julius kernel or port without being reached, declared or explicitly excluded, or when a declaration no longer matches the wiring.
 
-Represented: **117 production files** across 20/20 subsystems (2 roots, 94 traced, 8 not composed by the live root, 13 path-loaded assets). Line and byte totals, the coverage estimate and the commit SHA are printed by the generator and recorded in the export header; they are kept out of this file so it changes only when the file set or its classification changes.
+Represented: **118 production files** across 20/20 subsystems (2 roots, 95 traced, 8 not composed by the live root, 13 path-loaded assets). Line and byte totals, the coverage estimate and the commit SHA are printed by the generator and recorded in the export header; they are kept out of this file so it changes only when the file set or its classification changes.
 
 ## Dependency direction (observed, between coarse groups)
 
@@ -141,6 +141,7 @@ The implementation role: one hosted Claude Agent SDK execution behind a pure saf
 
 | production source | role | reached from |
 | --- | --- | --- |
+| `relay-bridge/hosted-coding-agent/coder-envelope.ts` | traced | `relay-bridge/hosted-coding-agent/hosted-envelope.ts` |
 | `relay-bridge/hosted-coding-agent/hosted-envelope.ts` | traced | `relay-bridge/hosted-coding-agent/hosted-runner.ts` |
 | `relay-bridge/hosted-coding-agent/hosted-observation.ts` | traced | `relay-bridge/hosted-coding-agent/hosted-runner.ts` |
 | `relay-bridge/hosted-coding-agent/hosted-readiness.ts` | traced | `relay-bridge/hosted-coding-agent/hosted-runner.ts` |
@@ -154,7 +155,7 @@ The judgement role: the Hermes reviewer process runner in an isolated profile, p
 | --- | --- | --- |
 | `relay-bridge/hermes-reviewer.ts` | traced | `relay-bridge/julius/live-workers.ts` |
 | `relay-bridge/redact.ts` | traced | `relay-bridge/hermes-reviewer.ts` |
-| `relay-bridge/reviewer-deadline.ts` | traced | `relay-bridge/hermes-reviewer.ts` |
+| `relay-bridge/reviewer-deadline.ts` | traced | `relay-bridge/hosted-coding-agent/coder-envelope.ts` |
 | `relay-bridge/reviewer-harness/hermes/hermes-provider.ts` | traced | `relay-bridge/reviewer-harness/hermes/isolated-profile.ts` |
 | `relay-bridge/reviewer-harness/hermes/isolated-profile.ts` | traced | `relay-bridge/reviewer-harness/hermes/runner.ts` |
 | `relay-bridge/reviewer-harness/hermes/runner.ts` | traced | `relay-bridge/hermes-reviewer.ts` |
