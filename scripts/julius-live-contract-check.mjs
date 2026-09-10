@@ -78,6 +78,28 @@ const MISSION_LIMITS = Object.freeze({
   // plausible; $5 of headroom against a $0.61 precedent is deliberate slack, not
   // an expectation.
   'julius-live-mission-4': Object.freeze({ spendUsd: 20, repairCycles: 3 }),
+  //
+  // MISSION 5 IS THE FIRST RAISE ARGUED FROM MEASUREMENT RATHER THAN CAUTION.
+  //
+  // Mission 4 COMPLETED (run 34470535718) and settled a real provider-reported
+  // $1.390954 against its $5 coder share — 27.8% of it — for 110 added lines in
+  // one file, 10 acceptance tests, no repair cycle. That is the only paid
+  // datapoint for a mission of this shape, and it is one datapoint: it bounds
+  // nothing on its own.
+  //
+  // Mission 5 is materially larger on every axis that plausibly costs coder
+  // turns: THREE production modules instead of one, and two of them are
+  // existing files being integrated rather than a blank stub; 17 requirements
+  // against 12; 21 acceptance tests against 10; and a backward-compatibility
+  // obligation to a caller (`julius-task-pipeline.ts`) that is not even in the
+  // slice. `floor(30 / (1 + 3))` = $7.50 is the coder's share here, 1.5x
+  // Mission 4's against roughly three times the surface.
+  //
+  // Still a BOUND and not a forecast. If mission 5 spends like mission 4 it
+  // will use around a fifth of it, and the evidence bundle will say so either
+  // way. Three cycles for the same reason as missions 2 through 4: a repair
+  // LINEAGE needs more than one.
+  'julius-live-mission-5': Object.freeze({ spendUsd: 30, repairCycles: 3 }),
 });
 
 /** The ceilings that apply to THIS contract, by its own declared namespace. */

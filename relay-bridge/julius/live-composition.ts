@@ -17,6 +17,9 @@
  * is no partial composition and no fallback worker.
  */
 
+import { DEFAULT_HOSTED_LIMITS } from '../hosted-coding-agent/hosted-envelope';
+import { DEFAULT_TIMEOUT_MS as ARCHITECT_OPERATIVE_TIMEOUT_MS } from '../../src/relay/connectors/gpt-architect/config';
+import { reviewerOperativeTimeoutMs } from '../reviewer-deadline';
 import { randomUUID } from 'node:crypto';
 import {
   JuliusProviderHealthRegistry,
@@ -82,7 +85,14 @@ export const ARCHITECT_WORKER: JuliusWorker = {
   // its context, not to the Coding Agent. Paid run 34037313976 minted the
   // latter, and nobody could route it.
   capabilities: ['plan'], taskTypes: ['plan', 'repair:plan'],
-  concurrencyLimit: 1, timeoutMs: 300_000, maxRetries: 1, status: 'AVAILABLE',
+  /**
+   * DERIVED, not restated. This read `300_000`, which happened to equal the
+   * connector's `DEFAULT_TIMEOUT_MS` — the number that actually bounds the
+   * call. Equal by coincidence is not the same as equal by construction: two
+   * literals agreeing today is exactly the arrangement that let the reviewer's
+   * declared and operative deadlines drift 160 s apart unnoticed.
+   */
+  concurrencyLimit: 1, timeoutMs: ARCHITECT_OPERATIVE_TIMEOUT_MS, maxRetries: 1, status: 'AVAILABLE',
 };
 
 export const CODER_WORKER: JuliusWorker = {
@@ -96,7 +106,14 @@ export const CODER_WORKER: JuliusWorker = {
   // here halts the run with `REPAIR_UNROUTABLE` rather than spending an
   // attempt on `PROVIDER_UNAVAILABLE` (paid run 34037313976, tick 5).
   taskTypes: ['build', 'repair:build'],
-  concurrencyLimit: 1, timeoutMs: 600_000, maxRetries: 1, status: 'AVAILABLE',
+  /**
+   * THIS ONE WAS ACTUALLY WRONG, by four minutes. It declared `600_000` while
+   * `hosted-runner.ts` aborts the run at `DEFAULT_HOSTED_LIMITS.maxRuntimeMs`,
+   * which is 360_000. A reader of this composition root would have budgeted ten
+   * minutes for a coder the runtime kills at six. Same defect as the reviewer's,
+   * found by the same structural test, fixed the same way.
+   */
+  concurrencyLimit: 1, timeoutMs: DEFAULT_HOSTED_LIMITS.maxRuntimeMs, maxRetries: 1, status: 'AVAILABLE',
 };
 
 export const reviewerWorker = (providerId: string): JuliusWorker => ({
@@ -104,7 +121,16 @@ export const reviewerWorker = (providerId: string): JuliusWorker => ({
   adapterId: 'hermes-local-live', providerId,
   capabilities: ['review'],
   taskTypes: ['review:plan', 'review:build', 'review:repair:build', 'review:repair:plan'],
-  concurrencyLimit: 1, timeoutMs: 240_000, maxRetries: 1, status: 'AVAILABLE',
+  /**
+   * THE SAME CALL `loadHermesConfig` MAKES. This used to read `240_000`, a
+   * number nothing enforced, while the limit that actually cut a review off was
+   * 400_000 from the workflow environment — 160 s apart, with the inert one
+   * written here where a reader would look for it. Both now come from
+   * `resolveReviewerDeadline`, so the declared and the operative deadline are
+   * the same value by construction and `reviewer-deadline.test.ts` fails if a
+   * literal is ever put back.
+   */
+  concurrencyLimit: 1, timeoutMs: reviewerOperativeTimeoutMs(), maxRetries: 1, status: 'AVAILABLE',
 });
 
 export interface LiveRoleProblem {

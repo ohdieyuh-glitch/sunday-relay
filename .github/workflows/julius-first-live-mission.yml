@@ -80,7 +80,13 @@ jobs:
   first-live-mission:
     name: Preflight, then the live mission
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    # THE JOB BUDGET IS PART OF THE REVIEWER DEADLINE POLICY, not a taste. It is
+    # `JOB_BUDGET_MS` in relay-bridge/reviewer-deadline.ts and a structural test
+    # fails if the two disagree. It went 60 -> 90 because the reviewer share the
+    # policy needs (50 minutes: six attempts at the derived 480112 ms) no longer
+    # fits beside the architect, the coder, the image builds and the evidence
+    # dump inside an hour.
+    timeout-minutes: 90
     environment: julius-live-validation
     defaults:
       run:
@@ -133,18 +139,27 @@ jobs:
       # 90 s is a whole provider request for one review, which the control run
       # 34306850331 finished in far less — and if a review really needs more,
       # the engine now says so and the failure is retryable, with three
-      # attempts. 400 s is Relay's backstop, and it is bounded by the JOB, not
-      # by taste: `timeout-minutes: 60` above, and a run may spend at most six
-      # reviewer attempts (three on `review:plan`, three on `review:build`), so
-      # 6 x 400 s is forty minutes and leaves the architect, the coder and the
-      # evidence dump their room. Measured against the real engine, its give-up
-      # at a 90 s deadline lands near 250 s, well before Relay's cut.
+      # attempts.
+      #
+      # RELAY'S OWN BACKSTOP IS NO LONGER SET HERE. It was `400000`, chosen as
+      # `timeout-minutes: 60` divided by six reviewer attempts, and guarded
+      # against a modelled engine worst case of 360000 ms. Paid Mission 4's
+      # `review:plan` was cut off at 400093 ms and then SUCCEEDED at 381880 ms,
+      # so the model was optimistic by 21.9 s and the literal it was compared
+      # against was the tightest the job would allow. A literal here also meant
+      # the live composition's reviewer worker could declare a different number
+      # — it declared 240000, which nothing enforced.
+      #
+      # `scripts/julius-reviewer-deadline.mjs` now derives the window from the
+      # analytical model, the durations paid runs were actually observed to
+      # reach, an explicit headroom, and a ceiling owed to the job; the Hermes
+      # bootstrap exports the result and the bridge derives the identical value
+      # for both the transport and the declared worker deadline.
       #
       # Waiting longer buys no tokens — the provider bills for what it
       # generates whether or not Relay is still reading — and the attempt
       # ceiling is untouched, so this changes how long a failure takes to
       # become legible, not what a run may spend.
-      RELAY_HERMES_TIMEOUT_MS: '400000'
       HERMES_REQUEST_TIMEOUT_SECONDS: '90'
 
     steps:
