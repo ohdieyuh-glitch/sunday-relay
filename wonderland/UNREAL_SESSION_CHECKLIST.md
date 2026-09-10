@@ -57,6 +57,36 @@ is worth knowing before the paid hours start:
 So step 10's remaining work is a client that holds a session token and calls
 those two routes — and steps 1–9 and 11–12, which need the engine.
 
+### And the payload those routes return is now DECODED AND ADOPTED in C++
+
+Added 2026-09-10, and it changes what step 10 costs. An earlier revision of this
+file left "point the sync layer at a running Bridge" as an exercise that
+included writing a JSON reader. It does not any more:
+
+| you have | it does |
+|---|---|
+| `WonderlandDecodeHydrationBytes(bytes, len)` | the whole `/hydrate` payload → `FWonderlandHydration`, or a NAMED refusal and nothing applied |
+| `UWonderlandJuliusSubsystem::AdoptHydration(h)` | run, drawable state, folded activity and open gates, applied together or not at all. Returns false when refused |
+| `WonderlandDecodeDeliveryBytes(bytes, len)` | one SSE frame's `{envelope, activity}` → `ApplyEnvelope` |
+| `WonderlandWireReadSseData(frame, len, …)` | finds the data line; a heartbeat yields nothing without erroring |
+
+**Do not write a second JSON reader, and do not map Relay's tokens by name.**
+The decoder parses its own JSON precisely so the code that ships is the code
+this repository executes at -O0 and -O2 under ASan/UBSan — an engine JSON API
+could not have been run here and would have arrived unproven. Mapping by name
+is the failure this seam is shaped around: an unmatched token lands on ordinal
+0, which is `Unobserved` in every enum here, so a broken client looks exactly
+like a Relay that is reporting nothing.
+
+**Do not derive the drawable state from `Run.State`.** It is on the payload as
+`VisualState`. `Run.State` is the KERNEL's word, one of thirteen; what you draw
+is one of eleven; the mapping is Relay's and a second copy would agree until the
+day it did not.
+
+Run `npm run wonderland:wire:verify` and `npm run wonderland:julius:verify`
+before you conclude the engine broke something — 327 and 90 checks respectively,
+and both run without an engine.
+
 ## What cannot be prepared here, and why
 
 - **`.umap` / `.uasset` binaries** — editor-authored formats; writing them by
@@ -79,3 +109,10 @@ those two routes — and steps 1–9 and 11–12, which need the engine.
 - All C++ syntax-checked against stubbed engine types (2 of 3 translation units
   parse clean; the residue is UHT-generated symbols). That is NOT compilation
   and is claimed nowhere as such.
+- **Six offline harnesses that COMPILE AND EXECUTE the real C++** against
+  stubbed engine types, at two optimisation levels under ASan and UBSan, with
+  the builds required to agree: `wonderland:cpp:syntax`, `:wire:verify` (327),
+  `:julius:verify` (90), `:usage:verify` (152), `:ordering:verify` (450 over 26
+  generated cases), `:geometry:verify` (66 samples, worst deviation 1e-6).
+  **1,019 executable checks.** That is still not compilation against UE headers,
+  and step 3 remains step 3.
