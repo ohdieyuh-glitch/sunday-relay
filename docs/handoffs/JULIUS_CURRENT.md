@@ -2972,3 +2972,157 @@ assumption *inside* it that no test asserted, because the thing it assumed had
 always happened to be true. `docs/JULIUS_MISSION_SANDBOX.md` now states the real
 requirement ("the one thing every mission workspace must contain") and the
 per-mission test enforces it.
+
+## 00n. PAID LIVE MISSION 4, ATTEMPT ONE — THE ARCHITECT RAN OUT OF ROOM (2026-09-10)
+
+**The first paid dispatch of Mission 4 failed at the architect, and the run
+could not say why.** Run `34459684814` on trusted main `6b2d62e7`, mission
+`julius-live-mission-4`, `confirm_live = "RUN LIVE MISSION"`. Every preflight
+step passed, including step 18 on its first outing after the probe repair. The
+paid-attempt marker was recorded. Then:
+
+```
+run:5545869f03f9d6a0708d2383:plan [PROMPT_ARCHITECT/plan] → FAILED
+run:5545869f03f9d6a0708d2383:build [CODING_AGENT/build] → BLOCKED
+RESULT: FAILED after 1 ticks     verification decisions: none
+```
+
+`WORKER_EXECUTION_FAILURE` / `incomplete_response`, not retryable.
+
+### What the evidence said, and what it could not
+
+From `worker-diagnostics.tsv`: provider `openai`, served `gpt-5.6-sol`,
+`response_id resp_095917c6…` — **the provider answered**, so a real call was
+billed. `json_detected: false`, `json_parseable: false`, `plan_attempts: 1`.
+From `trajectory.tsv`: DISPATCH at 09:17:57.9, failure at 09:19:00.04 — **62
+seconds**. From `budget.tsv`: $0.30 allocated and reserved, never settled.
+`cost-accounting.tsv`: **0 rows**.
+
+And that is everything. No token counts, no ceiling, no reason. The cause had to
+be established by reading the connector's source, which is exactly the thing
+this campaign exists to stop.
+
+### What CANNOT be established, stated plainly
+
+**The `incomplete_details.reason` is unrecoverable.** Two independent reasons,
+either sufficient: Julius wrote it only into a free-text `message`, which the
+evidence allowlist withholds (correctly — a message is prose); and
+`gpt-runner.ts` sets `store: false`, so OpenAI never persisted the response and
+the `response_id` cannot be dereferenced. That lost causal evidence is itself
+the defect, and it is Finding B.
+
+**No paid run has ever recorded architect token usage.** Live Run 3's
+`worker-diagnostics.tsv` has **0 rows** — success-path diagnostics landed in
+#243, *after* it — and Mission 4's failure path discarded usage. There is no
+measurement anywhere in the corpus to size a ceiling from.
+
+### Finding A — capacity, and why it is a HYPOTHESIS and not a conclusion
+
+`DEFAULT_MAX_OUTPUT_TOKENS = 4_000`, and `RELAY_PROMPT_ARCHITECT_MAX_TOKENS` has
+never been set in any commit (`git log -S` finds none), so every paid mission ran
+at 4,000 via `live-composition.ts:138`. On the Responses API a reasoning model
+spends reasoning tokens against that same ceiling.
+
+**But the obvious story does not survive contact with Live Run 3.** Its architect
+produced **15,638 characters of raw `outputText`** (`live-workers.ts:752` uses
+`outcome.outputText.length`, so that is the model's own output and not a
+re-serialisation) and validated — under the *same* 4,000 ceiling. If Mission 4
+merely needed more room, the expected failure shape is **truncated JSON**. What
+happened was **no output at all** (`json_detected: false`), which means the
+budget was consumed before any visible token was emitted, or generation stopped
+at the very start. `content_filter` is the other documented reason for
+`status: incomplete` and cannot be ruled out.
+
+So capacity exhaustion is **consistent with everything and demonstrated by
+nothing**. It is recorded here as the leading hypothesis. Anyone restating it as
+the confirmed cause is overreading the evidence — which an earlier draft of this
+very section did.
+
+### The capacity change, governed rather than global
+
+Not a blanket environment bump. The ceiling is now
+`limits.architectMaxOutputTokens` in the **mission contract**, beside `spendUsd`
+and `repairCycles`. Optional: a mission that declares nothing keeps the
+connector default and behaves exactly as every mission before it did.
+
+**The bound is not a guess.** `fixedResourceEstimate` has always reserved
+**20,000 output tokens per dispatch** while the connector capped the architect at
+**4,000** — two numbers describing the same call, disagreeing five-fold, stated
+nowhere a mission author would look. `ARCHITECT_OUTPUT_TOKEN_RESERVATION` now
+names the reservation, the estimate uses it, and it is the maximum a contract may
+declare. That is the safety property the larger ceiling needs: **a mission cannot
+buy more output than the budget already reserves**, so a raised token limit can
+never outrun the mission's own `spendUsd` ceiling by arriving unbudgeted. Raising
+it further is a deliberate edit in both places, and a test holds the two
+constants to each other because the checker is dependency-free and must repeat
+the number.
+
+Mission 4 declares 20,000. 20,001 is refused, naming both numbers.
+
+### Finding B — a paid failure recorded nothing about what it cost
+
+The more valuable one. `GptRunFailure` **had no `usage` field at all**.
+`gpt-runner.ts` computed the provider's usage and then returned without it on
+every one of the four post-response failure paths — a refusal, an incomplete
+answer, a non-`completed` status and an empty output were all billed and all
+reported nothing. `costBasis` was then honestly `UNKNOWN`, but unknown *only
+because the answer had been discarded*, which is the one kind of unknown this
+system may not manufacture. `planDiagnostics` and the router allowlist had
+already been built to carry `inputTokens`/`outputTokens`; the connector simply
+never supplied them on failure.
+
+And `incomplete_details.reason` — the provider's own word for what went wrong —
+existed only inside the free-text `message`, which the evidence allowlist
+correctly withholds. Correctly: a message is prose. But the consequence was that
+"the plan was incomplete" and "the plan ran out of budget" were the same
+sentence, and only the second says what to change.
+
+Now carried: `usage` and a narrowed `incompleteReason` on every post-response
+failure, and `inputTokens`, `outputTokens`, `reasoningTokens`, `maxOutputTokens`
+and `incompleteReason` on the failed dispatch row. `reasoningTokens` because on
+a reasoning model it is the number that explains the exhaustion; the ceiling
+beside it so the comparison is checkable rather than asserted. `costBasis`
+remains `UNKNOWN` — this transport reports tokens and never a price, and one is
+still never inferred from the other.
+
+Also recorded now: `providerStatus`, `totalTokens` and `elapsedMs`.
+
+### Finding B2 — a failure before validation claimed a failed validation
+
+`validation_passed: false` on Mission 4's row said the plan had been validated
+and rejected. Nothing was validated: the connector returned first. Those are
+different sentences about a paid run and only one of them is true. It is `null`
+on that path now — "never reached", which is what happened.
+
+The same edit separates a distinction that was being collapsed: a provider that
+ANSWERED with no usable text records `jsonParseable: false`, a real observation;
+a call that never reached the provider records `null`, because nothing was
+observed and `false` would be a reading nobody took.
+
+Mutation-tested six ways, all caught: reverting the failure site to report no
+usage (the original defect) · dropping `incompleteReason` · removing
+`reasoningTokens` from the router allowlist · drifting the two reservation
+constants apart · making the estimate stop using the constant · reverting
+`validationPassed` to the masquerading `false`.
+
+### Finding C — NOT repaired here, and named so it is not discovered twice
+
+Writing the tests for B surfaced a third gap. On the **retryable** path the
+three `retry.scheduled` rows each carry the full 59-key diagnostic set, and the
+`task.failed` row written when the run's own autonomy declines to retry again
+carries **none** — `JuliusDispatchOutcome` returns the code and the class to
+`julius-task-pipeline.ts:916` but not the diagnostics, so the pipeline has
+nothing to write. The row that ENDS the task, and the row `failures.tsv` joins
+on, is the one with nothing in it.
+
+**It did not affect Mission 4**, whose architect failure was not retryable and
+whose terminal row carried all 59 keys. Repairing it means widening a core
+return type, which is its own change and its own risk. A test now pins the half
+that works, so a later repair can be measured against it.
+
+### The rule this run confirms
+
+A gate that fires cheaply is worth more than a gate that cannot explain itself.
+The preflight caught §00m for nothing; this run caught Finding A for the price
+of one architect call, and the reason it cost a second dispatch to understand
+was Finding B. Both are now cheaper than they were.

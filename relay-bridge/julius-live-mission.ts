@@ -86,7 +86,16 @@ export interface LiveMissionContractFile {
   readonly acceptanceCriteria: readonly { readonly id: string; readonly text: string; readonly blocking: boolean }[];
   readonly testCommand: string;
   readonly workspacePath: string;
-  readonly limits?: { readonly spendUsd?: number; readonly repairCycles?: number };
+  readonly limits?: {
+    readonly spendUsd?: number;
+    readonly repairCycles?: number;
+    /**
+     * The architect's output ceiling for THIS mission. Governed like the other
+     * two: declared in the contract, bounded by the reservation the run budget
+     * already makes, and refused by `julius-live-contract-check.mjs` otherwise.
+     */
+    readonly architectMaxOutputTokens?: number;
+  };
 }
 
 export function parseLiveMissionContract(raw: string): { ok: true; contract: LiveMissionContractFile } | { ok: false; problem: string } {
@@ -225,6 +234,7 @@ async function main(argv: readonly string[]): Promise<number> {
     env, projectId: contract.projectId, workspacePath: contract.workspacePath,
     testCommand: contract.testCommand,
     contexts: { snapshotFor: () => null }, artifacts, shell: null,
+    architectMaxOutputTokens: contract.limits?.architectMaxOutputTokens,
   });
 
   out('JULIUS LIVE MISSION — preflight');
@@ -309,6 +319,7 @@ async function main(argv: readonly string[]): Promise<number> {
     const resolution = resolveLiveWorkers({
       env, projectId: contract.projectId, workspacePath: contract.workspacePath,
       testCommand: contract.testCommand, contexts: handoffs.contexts, artifacts, shell,
+      architectMaxOutputTokens: contract.limits?.architectMaxOutputTokens,
     });
     if (!resolution.ok) {
       for (const problem of resolution.problems) out(`BLOCKED ${problem.role}: ${problem.missing.join(', ')}`);

@@ -2098,3 +2098,100 @@ describe('the budget dump explains what a mission was allowed to spend', () => {
     expect(pipeline).toContain('allocationPolicy: allocation.policyVersion');
   });
 });
+
+/**
+ * THE ARCHITECT'S OUTPUT CEILING IS GOVERNED, AND ITS BOUND IS NOT A GUESS.
+ *
+ * Paid Live Mission 4's first attempt (run 34459684814) died at the architect
+ * with `incomplete_response` and no output. The connector had always capped the
+ * architect at 4,000 output tokens while the run budget had always RESERVED
+ * 20,000 per dispatch — two numbers describing the same call, disagreeing by 5x,
+ * neither stated anywhere a mission author would look.
+ *
+ * The ceiling is now the mission's to raise, in its contract, beside `spendUsd`
+ * and `repairCycles`. The bound is the reservation itself: a mission may not buy
+ * more output than the budget already covers, which is what stops a raised token
+ * limit from outrunning the mission's own spend ceiling by arriving unbudgeted.
+ *
+ * The bound lives in two files — the composition owns it, and the contract
+ * checker is dependency-free and cannot import a bundled module, so it repeats
+ * the number. These hold the two to each other.
+ */
+describe('the architect output ceiling is bounded by the budget that reserves it', () => {
+  const checker = resolve(ROOT, 'scripts/julius-live-contract-check.mjs');
+  const runChecker = (contract: unknown): { code: number; output: string } => {
+    const file = join(mkdtempSync(join(realpathSync(tmpdir()), 'julius-ceiling-')), 'contract.json');
+    writeFileSync(file, JSON.stringify(contract));
+    try {
+      return { code: 0, output: execFileSync(process.execPath, [checker, file], { encoding: 'utf8' }) };
+    } catch (error) {
+      const failure = error as { status?: number; stdout?: string; stderr?: string };
+      return { code: failure.status ?? 1, output: `${failure.stdout ?? ''}${failure.stderr ?? ''}` };
+    }
+  };
+  const missionFour = () => JSON.parse(read(`${MISSIONS_DIR}/julius-live-mission-4/contract.json`)) as
+    { limits: { architectMaxOutputTokens?: number } };
+
+  /** The one number, read from each file that states it. */
+  const declared = (relative: string, pattern: RegExp): number => {
+    const match = pattern.exec(read(relative));
+    expect(match, `${relative} must state the reservation`).not.toBeNull();
+    return Number(match![1]!.replace(/_/gu, ''));
+  };
+
+  it('the composition and the contract checker name the SAME reservation', () => {
+    const composition = declared(
+      'relay-bridge/julius/live-composition.ts',
+      /export const ARCHITECT_OUTPUT_TOKEN_RESERVATION = ([0-9_]+)/u,
+    );
+    const script = declared(
+      'scripts/julius-live-contract-check.mjs',
+      /const ARCHITECT_OUTPUT_TOKEN_RESERVATION = ([0-9_]+)/u,
+    );
+    expect(script, 'a drift here would let a contract buy output the budget never reserved').toBe(composition);
+  });
+
+  it('the reservation is the number the run budget actually reserves per dispatch', () => {
+    const reservation = declared(
+      'relay-bridge/julius/live-composition.ts',
+      /export const ARCHITECT_OUTPUT_TOKEN_RESERVATION = ([0-9_]+)/u,
+    );
+    expect(
+      read('relay-bridge/julius/live-composition.ts'),
+      'the estimate must USE the constant, or the bound describes a reservation nobody makes',
+    ).toMatch(/outputTokens: ARCHITECT_OUTPUT_TOKEN_RESERVATION/u);
+    expect(reservation).toBeGreaterThan(0);
+  });
+
+  it('mission 4 declares a ceiling, and it passes its own checker', () => {
+    const contract = missionFour();
+    expect(contract.limits.architectMaxOutputTokens, 'the mission that needed it declares it').toBeGreaterThan(4_000);
+    expect(runChecker(contract).code, 'and the declared value is within the reservation').toBe(0);
+  });
+
+  it('refuses a ceiling above the reservation, naming both numbers', () => {
+    const reservation = declared(
+      'scripts/julius-live-contract-check.mjs',
+      /const ARCHITECT_OUTPUT_TOKEN_RESERVATION = ([0-9_]+)/u,
+    );
+    const contract = missionFour();
+    contract.limits.architectMaxOutputTokens = reservation + 1;
+    const result = runChecker(contract);
+    expect(result.code, 'a mission may not buy more output than the budget reserved').not.toBe(0);
+    expect(result.output).toMatch(/architectMaxOutputTokens is \d+, above the \d+ output tokens/u);
+  });
+
+  it('refuses a ceiling that is not a positive integer', () => {
+    for (const bad of [0, -1, 1.5]) {
+      const contract = missionFour();
+      contract.limits.architectMaxOutputTokens = bad;
+      expect(runChecker(contract).code, `${bad} is not a ceiling`).not.toBe(0);
+    }
+  });
+
+  it('leaves a mission that declares nothing on the connector default', () => {
+    const contract = missionFour();
+    delete contract.limits.architectMaxOutputTokens;
+    expect(runChecker(contract).code, 'the field is optional; silence is not a refusal').toBe(0);
+  });
+});

@@ -436,8 +436,15 @@ const planDiagnostics = (input: {
   readonly requestedModel: string | null;
   readonly servedModel?: string | null;
   readonly responseId?: string | null;
-  readonly jsonParseable: boolean;
-  readonly validationPassed: boolean;
+  readonly jsonParseable: boolean | null;
+  /**
+   * NULL MEANS VALIDATION WAS NEVER REACHED, and that is not the same claim as
+   * `false`. A connector failure returns before Julius validates anything, and
+   * writing `false` there says the plan was validated and rejected — a
+   * different, and untrue, sentence about a paid run. Mission 4's first attempt
+   * recorded exactly that.
+   */
+  readonly validationPassed: boolean | null;
   readonly validationReasonCode?: string | null;
   readonly validationField?: string | null;
   readonly validationClaimPhrase?: string | null;
@@ -447,6 +454,17 @@ const planDiagnostics = (input: {
   readonly outcome?: 'succeeded' | 'failed';
   readonly inputTokens?: number | null;
   readonly outputTokens?: number | null;
+  /** Reasoning models spend these against the SAME ceiling as visible output. */
+  readonly reasoningTokens?: number | null;
+  /** The ceiling that was in force, so "it ran out" is checkable, not asserted. */
+  readonly maxOutputTokens?: number | null;
+  /** The provider's own word for why it stopped early — `max_output_tokens`. */
+  readonly incompleteReason?: string | null;
+  /** The provider's own `status` when it answered at all. */
+  readonly providerStatus?: string | null;
+  readonly totalTokens?: number | null;
+  /** Wall clock across the provider call, measured by the adapter. */
+  readonly elapsedMs?: number | null;
 }): Record<string, unknown> => ({
   outcome: input.outcome ?? 'failed',
   stage: 'plan',
@@ -478,6 +496,24 @@ const planDiagnostics = (input: {
   costBasis: 'UNKNOWN',
   inputTokens: input.inputTokens ?? null,
   outputTokens: input.outputTokens ?? null,
+  /**
+   * A FAILED CALL WAS STILL BILLED, and until Mission 4's first attempt these
+   * three were only ever written on the SUCCESS path — the connector computed
+   * the provider's usage and dropped it one line later on every failure. The
+   * result was a paid architect call whose durable row said nothing about what
+   * it consumed, and a `max_output_tokens` exhaustion that could only be
+   * diagnosed by reading the connector's source. `reasoningTokens` is here
+   * because on a reasoning model it is spent against the SAME ceiling as the
+   * visible answer, so it is the number that explains the exhaustion; and the
+   * ceiling itself is recorded beside it, so "it ran out of room" is a
+   * comparison anyone can check rather than a claim they must take.
+   */
+  reasoningTokens: input.reasoningTokens ?? null,
+  totalTokens: input.totalTokens ?? null,
+  maxOutputTokens: input.maxOutputTokens ?? null,
+  incompleteReason: input.incompleteReason ?? null,
+  providerStatus: input.providerStatus ?? null,
+  elapsedMs: input.elapsedMs ?? null,
 });
 
 /**
@@ -610,6 +646,7 @@ export function createLiveArchitectAdapter(input: {
       let correction: string | null = null;
       for (;;) {
       attempts += 1;
+      const startedAtMs = Date.now();
       const outcome: GptRunOutcome = await run({
         apiKey: input.apiKey,
         config: input.config,
@@ -635,10 +672,30 @@ export function createLiveArchitectAdapter(input: {
          */
         // Nothing was generated, so nothing about a plan is claimed: no JSON,
         // no validation, no byte count.
+        /* THE PROVIDER EITHER ANSWERED OR IT DID NOT, and the two report
+         * different things. A response with no usable text is a real
+         * observation that no JSON was produced; a call that never reached the
+         * provider observed nothing at all, and `false` would be a reading
+         * nobody took. `validationPassed` is null either way: this path returns
+         * before Julius validates, so it never had a verdict to report. */
+        const responded = typeof outcome.responseId === 'string' && outcome.responseId.length > 0;
         const failed = planDiagnostics({
           requestedModel: input.config.model, servedModel: outcome.actualModel ?? null,
-          responseId: outcome.responseId ?? null, jsonParseable: false, validationPassed: false,
+          responseId: outcome.responseId ?? null,
+          jsonParseable: responded ? false : null,
+          validationPassed: null,
           attempts,
+          providerStatus: outcome.providerStatus ?? null,
+          totalTokens: outcome.usage?.totalTokens ?? null,
+          elapsedMs: Date.now() - startedAtMs,
+          // Absent when the call never reached the provider; never zero for a
+          // call that did. `undefined` here becomes null in the row, which is
+          // the honest reading of "no answer to report".
+          inputTokens: outcome.usage?.inputTokens ?? null,
+          outputTokens: outcome.usage?.outputTokens ?? null,
+          reasoningTokens: outcome.usage?.reasoningTokens ?? null,
+          maxOutputTokens: input.config.maxOutputTokens,
+          incompleteReason: outcome.incompleteReason ?? null,
         });
         switch (outcome.failureClass) {
           case 'authentication_failed':

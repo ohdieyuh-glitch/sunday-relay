@@ -1282,11 +1282,21 @@ describe('the live mission contract file', () => {
  * contacted by any case in this file.
  */
 describe('the first paid attempt, reproduced: a failing Prompt Architect', () => {
-  const architectFailure = (failureClass: GptRunOutcome extends { ok: false } ? never : string, message: string) =>
-    async (): Promise<GptRunOutcome> => ({ ok: false, failureClass: failureClass as never, message });
+  /** `extra` carries what a real post-response failure carries: the provider
+   *  answered, so it reported usage, and may have said why it stopped. */
+  const architectFailure = (
+    failureClass: GptRunOutcome extends { ok: false } ? never : string,
+    message: string,
+    extra: Partial<Extract<GptRunOutcome, { ok: false }>> = {},
+  ) =>
+    async (): Promise<GptRunOutcome> => ({ ok: false, failureClass: failureClass as never, message, ...extra });
 
-  const failedRun = async (failureClass: string, message = 'safe provider message') => {
-    const driven = await driveLiveMission(['approved'], undefined, architectFailure(failureClass as never, message));
+  const failedRun = async (
+    failureClass: string,
+    message = 'safe provider message',
+    extra: Partial<Extract<GptRunOutcome, { ok: false }>> = {},
+  ) => {
+    const driven = await driveLiveMission(['approved'], undefined, architectFailure(failureClass as never, message, extra));
     const tasks = await driven.memory.tasksForRun('run-live', 'prj-live');
     const failures = driven.memory.events().filter((event) => event.type === 'task.failed' || event.type === 'retry.scheduled');
     return { ...driven, tasks, failures };
@@ -1349,6 +1359,118 @@ describe('the first paid attempt, reproduced: a failing Prompt Architect', () =>
    * used to write no task id at all, so the two columns that say WHO stopped
    * were blank for exactly that run.
    */
+  /**
+   * PAID LIVE MISSION 4, ATTEMPT ONE, REPRODUCED — run 34459684814.
+   *
+   * The architect burned 62 seconds of `gpt-5.6-sol` and returned
+   * `status: incomplete` having emitted no JSON. Its durable row recorded the
+   * class and nothing else: no tokens, no ceiling, no reason. The connector had
+   * computed the provider's usage and dropped it one line later on every
+   * failure path, and the provider's own `incomplete_details.reason` survived
+   * only inside a free-text message the evidence allowlist withholds — so the
+   * cause could be established only by reading the connector's source.
+   *
+   * A paid failure has to be diagnosable and costable from its own evidence.
+   */
+  it('records what an incomplete plan consumed, the ceiling it consumed, and why it stopped', async () => {
+    const { failures } = await failedRun('incomplete_response', 'safe provider message', {
+      usage: { inputTokens: 4_210, cachedInputTokens: null, outputTokens: 4_000, reasoningTokens: 3_968, totalTokens: 8_210 },
+      incompleteReason: 'max_output_tokens',
+      providerStatus: 'incomplete',
+    });
+    const facts = failures.at(-1)!.facts;
+
+    expect(facts.failureClass, 'the class the run actually produced').toBe('incomplete_response');
+    // THE THREE THAT WERE MISSING.
+    expect(facts.diag_incompleteReason, 'the provider\'s own word for why it stopped').toBe('max_output_tokens');
+    expect(facts.diag_reasoningTokens, 'what the reasoning consumed — the number that explains it').toBe(3_968);
+    expect(facts.diag_maxOutputTokens, 'against the ceiling in force, so the comparison is checkable').toBe(4_000);
+    // AND WHAT IT COST, which a failed call was billed for either way.
+    expect(facts.diag_inputTokens).toBe(4_210);
+    expect(facts.diag_outputTokens).toBe(4_000);
+    // Still honestly UNKNOWN in dollars: this transport reports tokens, never a price.
+    expect(facts.diag_costBasis, 'tokens are not a price, and one is never inferred from the other').toBe('UNKNOWN');
+    // AND WHAT THE PROVIDER CALLED IT, plus the wall clock a reader would otherwise guess at.
+    expect(facts.diag_providerStatus).toBe('incomplete');
+    expect(facts.diag_totalTokens).toBe(8_210);
+    expect(typeof facts.diag_elapsedMs, 'the call took real time and the row says how much').toBe('number');
+  });
+
+  /**
+   * A FAILURE BEFORE VALIDATION MUST NOT REPORT FAILED VALIDATION.
+   *
+   * `validation_passed=false` on Mission 4's row said the plan was validated
+   * and rejected. Nothing was validated: the connector returned first. Those
+   * are different sentences about a paid run and only one of them is true.
+   */
+  it('does not claim a validation verdict it never reached', async () => {
+    const { failures } = await failedRun('incomplete_response', 'safe provider message', {
+      usage: { inputTokens: 10, cachedInputTokens: null, outputTokens: 0, reasoningTokens: 0, totalTokens: 10 },
+      incompleteReason: 'max_output_tokens',
+      providerStatus: 'incomplete',
+    });
+    const facts = failures.at(-1)!.facts;
+    expect(facts.diag_validationPassed, 'null is "never reached", which is what happened').toBeNull();
+    expect(facts.diag_validationReasonCode, 'and no reason, because there was no verdict').toBeNull();
+  });
+
+  /**
+   * THE PROVIDER ANSWERED WITH NOTHING vs NEVER ANSWERED — a real distinction.
+   * The first is an observation that no JSON was produced; the second observed
+   * nothing at all, and `false` there would be a reading nobody took.
+   */
+  it('separates "no JSON was produced" from "nothing was observed"', async () => {
+    const answered = await failedRun('incomplete_response', 'm', {
+      usage: { inputTokens: 1, cachedInputTokens: null, outputTokens: 0, reasoningTokens: 0, totalTokens: 1 },
+      responseId: 'resp_x', providerStatus: 'incomplete',
+    });
+    expect(answered.failures.at(-1)!.facts.diag_jsonParseable, 'it answered, and no JSON was in it').toBe(false);
+
+    const never = await failedRun('model_unavailable');
+    expect(never.failures.at(-1)!.facts.diag_jsonParseable, 'nothing was observed, so nothing is claimed').toBeNull();
+  });
+
+  /**
+   * ABSENT IS NOT ZERO. A failure raised BEFORE the provider answered has no
+   * usage to report, and writing 0 would be a measurement nobody took.
+   * `model_unavailable` is that shape and is not retryable, so the row that
+   * ends the task is the one carrying the diagnostics.
+   */
+  it('reports null, not zero, when the call never reached the provider', async () => {
+    const { failures } = await failedRun('model_unavailable');
+    const facts = failures.at(-1)!.facts;
+    expect(facts.diag_inputTokens).toBeNull();
+    expect(facts.diag_outputTokens).toBeNull();
+    expect(facts.diag_reasoningTokens).toBeNull();
+    expect(facts.diag_incompleteReason).toBeNull();
+    expect(facts.diag_maxOutputTokens, 'the ceiling is a fact of the request, so it is known even here').toBe(4_000);
+  });
+
+  /**
+   * A RETRYABLE FAILURE CARRIES ITS DIAGNOSTICS ON EVERY ATTEMPT IT SCHEDULES.
+   *
+   * Recorded because the retry path and the terminal path do not agree, and the
+   * disagreement is worth pinning rather than discovering twice: each
+   * `retry.scheduled` row carries the full diagnostic set, and the `task.failed`
+   * row written when the run's own autonomy declines to retry again carries
+   * none — `JuliusDispatchOutcome` returns the code and the class to the
+   * pipeline but not the diagnostics, so the pipeline has nothing to write.
+   *
+   * It did not affect Paid Live Mission 4, whose architect failure was NOT
+   * retryable and whose terminal row carried everything. Repairing it means
+   * widening a core return type, which is its own change; this test holds the
+   * half that works so a later repair can be measured against it.
+   */
+  it('carries the diagnostics on each scheduled retry', async () => {
+    const { failures } = await failedRun('rate_limited');
+    const scheduled = failures.filter((event) => event.type === 'retry.scheduled');
+    expect(scheduled.length, 'a retryable class must schedule at least one retry').toBeGreaterThan(0);
+    for (const event of scheduled) {
+      expect(event.facts.diag_maxOutputTokens, 'every scheduled retry says what ceiling it ran under').toBe(4_000);
+      expect(event.facts.diag_requestedModel).not.toBeUndefined();
+    }
+  });
+
   it('names the task on the failure row, so the evidence can name the role', async () => {
     const { failures } = await failedRun('provider_error');
     const last = failures.at(-1)!;

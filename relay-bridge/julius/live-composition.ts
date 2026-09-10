@@ -46,6 +46,23 @@ import { loadHermesConfig } from '../hermes-reviewer';
 import type { runGptArchitect } from '../../src/relay/connectors/gpt-architect';
 import type { runHostedCodingAgent, HostedQueryFn } from '../hosted-coding-agent/hosted-runner';
 import type { runHermesReview } from '../hermes-reviewer';
+
+/**
+ * THE OUTPUT TOKENS THE RUN BUDGET ALREADY RESERVES FOR ONE DISPATCH.
+ *
+ * `fixedResourceEstimate` has always reserved 20,000 output tokens per
+ * dispatch, and the connector has always capped the architect at 4,000
+ * (`DEFAULT_MAX_OUTPUT_TOKENS`). The two numbers describe the SAME call and did
+ * not agree: Julius was reserving budget for a request five times larger than
+ * the one it was willing to make.
+ *
+ * This is now the ceiling a mission may raise its architect to, and no higher.
+ * That is the whole safety property: a mission cannot buy more output than the
+ * reservation already covers, so a larger token limit can never outrun the
+ * mission's own `spendUsd` ceiling by arriving unbudgeted. Raising the ceiling
+ * beyond this would mean raising the reservation, deliberately, here.
+ */
+export const ARCHITECT_OUTPUT_TOKEN_RESERVATION = 20_000;
 import {
   createLiveArchitectAdapter,
   createLiveHermesReviewerAdapter,
@@ -124,6 +141,12 @@ export function resolveLiveWorkers(options: {
   readonly artifacts: LiveArtifactExchange;
   /** Absent shell = no executor = no coding agent. Never a local fallback. */
   readonly shell: ShellEffectPort | null;
+  /**
+   * The mission contract's `limits.architectMaxOutputTokens`, when it declares
+   * one. Bounded by `ARCHITECT_OUTPUT_TOKEN_RESERVATION`; absent means the
+   * environment's default stands.
+   */
+  readonly architectMaxOutputTokens?: number | null;
   /** Test seams: inject fakes here; production callers omit them. */
   readonly runners?: {
     readonly architect?: typeof runGptArchitect;
@@ -135,7 +158,24 @@ export function resolveLiveWorkers(options: {
   const problems: LiveRoleProblem[] = [];
   const entries: LiveWorkerEntry[] = [];
 
-  const architectConfig = readGptArchitectConfig(options.env);
+  /**
+   * THE MISSION MAY RAISE ITS OWN ARCHITECT CEILING, WITHIN THE RESERVATION.
+   *
+   * The environment supplies the default; the mission contract governs the
+   * exception, the same way it governs `spendUsd` and `repairCycles`. A
+   * declared value is bounded at parse time and again by
+   * `julius-live-contract-check.mjs`; anything absent or unusable leaves the
+   * environment's answer untouched, so a mission that says nothing behaves
+   * exactly as every mission did before.
+   */
+  const envArchitectConfig = readGptArchitectConfig(options.env);
+  const declaredCeiling = options.architectMaxOutputTokens;
+  const architectConfig = typeof declaredCeiling === 'number'
+      && Number.isInteger(declaredCeiling)
+      && declaredCeiling > 0
+      && declaredCeiling <= ARCHITECT_OUTPUT_TOKEN_RESERVATION
+    ? { ...envArchitectConfig, maxOutputTokens: declaredCeiling }
+    : envArchitectConfig;
   const architectReadiness = evaluateReadiness(architectConfig);
   const hermes = loadHermesConfig(options.env);
   const requested = {
@@ -390,7 +430,8 @@ export function assembleLiveJuliusRuntime(options: {
     clock: { now: () => new Date().toISOString() },
     ids: { next: (kind) => `${kind}:${randomUUID()}` },
     resources: fixedResourceEstimate({
-      usdMicros: 300_000, inputTokens: 50_000, outputTokens: 20_000, toolCalls: 10, runtimeMs: 300_000,
+      usdMicros: 300_000, inputTokens: 50_000, outputTokens: ARCHITECT_OUTPUT_TOKEN_RESERVATION,
+      toolCalls: 10, runtimeMs: 300_000,
     }),
     /**
      * THE MISSION CONTRACT GOVERNS THE CODING AGENT'S SPEND. The same two
