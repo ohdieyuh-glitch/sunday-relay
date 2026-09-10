@@ -87,6 +87,7 @@
   "workspacePath": "/tmp/julius-workspace/tenant/ws",
   "limits": {
     "spendUsd": 20,
-    "repairCycles": 3
+    "repairCycles": 3,
+    "architectMaxOutputTokens": 20000
   }
 }

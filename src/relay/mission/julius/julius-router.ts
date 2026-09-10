@@ -322,6 +322,24 @@ export const safeReviewDiagnostics=(value:unknown):JuliusSafeDiagnostics|null=>{
   /** Tokens the boundary reported, which is what a later price table would measure. */
   inputTokens:safeCount(v.inputTokens),
   outputTokens:safeCount(v.outputTokens),
+  /* ------------------------------- why an answer stopped early ----
+   *
+   * Mission 4's first paid attempt bought 62 seconds of a reasoning model and
+   * came back `incomplete`. `failureClass` said `incomplete_response`, which is
+   * true and does not say what to change. These three do: what the reasoning
+   * consumed, what ceiling it was consuming against, and the provider's own
+   * one-word reason. Without them the durable record cannot distinguish a plan
+   * that ran out of room from a plan the provider declined to finish. --- */
+  /** Spent against the SAME ceiling as visible output on a reasoning model. */
+  reasoningTokens:safeCount(v.reasoningTokens),
+  /** The ceiling in force for that call, so the comparison is checkable. */
+  maxOutputTokens:safeCount(v.maxOutputTokens),
+  /** The provider's own machine token, e.g. `max_output_tokens`. */
+  incompleteReason:safeReasonCode(v.incompleteReason),
+  /** The provider's own `status` when it answered — `incomplete`, `failed`. */
+  providerStatus:safeReasonCode(v.providerStatus),
+  /** Reported by the boundary; `null` when it reported none. */
+  totalTokens:safeCount(v.totalTokens),
  });
 };
 /**

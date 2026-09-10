@@ -36,6 +36,14 @@ import { resolve, sep } from 'node:path';
  * until someone notices.
  */
 const DEFAULT_LIMITS = Object.freeze({ spendUsd: 5, repairCycles: 1 });
+/**
+ * MIRRORS `ARCHITECT_OUTPUT_TOKEN_RESERVATION` in
+ * `relay-bridge/julius/live-composition.ts`. This script is dependency-free by
+ * design and cannot import a bundled module, so the number is repeated here and
+ * `scripts/julius-first-live-mission.test.ts` holds the two to each other — a
+ * silent drift would let a contract declare a ceiling the budget never reserved.
+ */
+const ARCHITECT_OUTPUT_TOKEN_RESERVATION = 20_000;
 const MISSION_LIMITS = Object.freeze({
   // Founder decision, 2026-09-06: mission 2 gets a larger bounded budget for
   // its paid rerun. Its first paid attempt entered LIVE and did not complete,
@@ -148,6 +156,24 @@ if (limits === undefined || limits === null || typeof limits !== 'object') {
   } else if (limits.repairCycles > MAX_REPAIR_CYCLES) {
     refuse(`limits.repairCycles is ${limits.repairCycles}, above the ${MAX_REPAIR_CYCLES} allowed for ${namespace ?? 'a mission with no declared namespace'}`);
   }
+  /*
+   * THE ARCHITECT'S OUTPUT CEILING IS OPTIONAL AND BOUNDED.
+   *
+   * Optional because a mission that says nothing keeps the connector's default
+   * and behaves exactly as every mission before it did. Bounded by the output
+   * tokens the run budget ALREADY reserves per dispatch
+   * (`ARCHITECT_OUTPUT_TOKEN_RESERVATION` in `relay-bridge/julius/live-composition.ts`),
+   * because that is what stops a raised token limit outrunning the mission's
+   * own spendUsd ceiling: a mission may not buy more output than the
+   * reservation covers. Raising it further is a deliberate edit in BOTH places.
+   */
+  if (limits.architectMaxOutputTokens !== undefined) {
+    if (!Number.isInteger(limits.architectMaxOutputTokens) || limits.architectMaxOutputTokens <= 0) {
+      refuse('limits.architectMaxOutputTokens must be a positive integer when declared');
+    } else if (limits.architectMaxOutputTokens > ARCHITECT_OUTPUT_TOKEN_RESERVATION) {
+      refuse(`limits.architectMaxOutputTokens is ${limits.architectMaxOutputTokens}, above the ${ARCHITECT_OUTPUT_TOKEN_RESERVATION} output tokens the run budget reserves per dispatch; raise the reservation deliberately or lower the ceiling`);
+    }
+  }
 }
 
 /* -------------------------------------------------- the workspace is not us */
@@ -175,6 +201,7 @@ out(`  workspace: ${contract.workspacePath ?? 'MISSING'}`);
 out(`  test command: ${contract.testCommand ?? 'MISSING'}`);
 out(`  acceptance criteria: ${Array.isArray(criteria) ? criteria.length : 0} (${Array.isArray(criteria) ? criteria.filter((c) => c && c.blocking).length : 0} blocking)`);
 out(`  spend ceiling: ${limits?.spendUsd ?? 'MISSING'} USD`);
+out(`  architect output ceiling: ${limits?.architectMaxOutputTokens ?? 'default (connector)'} of ${ARCHITECT_OUTPUT_TOKEN_RESERVATION} reserved`);
 out(`  repair ceiling: ${limits?.repairCycles ?? 'MISSING'} cycle(s)`);
 
 if (problems.length > 0) {
