@@ -26,7 +26,7 @@ export const RECORDED_REVIEWER_OBSERVATIONS = [
   { runId: '34470535718', taskId: 'run:c8910d0afb5608e0ea68aa72:build:review', stage: 'build', elapsedMs: 218_324, outcome: 'COMPLETED' },
 ];
 
-export const JOB_BUDGET_MS = 90 * 60_000;
+export const JOB_BUDGET_MS = 120 * 60_000;
 export const REVIEWER_JOB_SHARE_MS = 50 * 60_000;
 export const MAX_REVIEWER_ATTEMPTS = 6;
 export const REVIEWER_DEADLINE_HEADROOM_RATIO = 0.2;

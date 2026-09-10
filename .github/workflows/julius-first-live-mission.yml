@@ -80,13 +80,16 @@ jobs:
   first-live-mission:
     name: Preflight, then the live mission
     runs-on: ubuntu-24.04
-    # THE JOB BUDGET IS PART OF THE REVIEWER DEADLINE POLICY, not a taste. It is
-    # `JOB_BUDGET_MS` in relay-bridge/reviewer-deadline.ts and a structural test
-    # fails if the two disagree. It went 60 -> 90 because the reviewer share the
-    # policy needs (50 minutes: six attempts at the derived 480112 ms) no longer
-    # fits beside the architect, the coder, the image builds and the evidence
-    # dump inside an hour.
-    timeout-minutes: 90
+    # THE JOB BUDGET IS SHARED OUT, not a taste. It is `JOB_BUDGET_MS` in
+    # relay-bridge/reviewer-deadline.ts and a structural test fails if the two
+    # disagree. 60 -> 90 when the reviewer deadline was derived (50 minutes: six
+    # attempts at 480112 ms); 90 -> 120 when the coder got a derived share of its
+    # own (30 minutes: two attempts at 734386 ms), because Paid Mission 5 spent
+    # both the old 12-turn and 360000 ms ceilings with the work substantially
+    # done. `coder-envelope.test.ts` proves the reviewer share, the coder share,
+    # the architect's own ceiling and a stated infrastructure allowance all fit
+    # inside this number.
+    timeout-minutes: 120
     environment: julius-live-validation
     defaults:
       run:
