@@ -3700,3 +3700,117 @@ row for the reviewer timeout carried a full 59-key diagnostic payload.
 `julius-live-mission-4-completed` (10150135422) both exist for run
 34470535718. A further dispatch of mission 4 therefore still requires
 `acknowledge_rerun`, which is correct.
+
+## 00u. PAID LIVE MISSION 5 — VERIFIED COMPLETION, AND THE FIRST REPAIR ROUND THAT LANDED (2026-09-10)
+
+**Run 34529874100** (#45) on trusted main
+`ed81b12e834ce60015926dfc56500dd4b09d4c72`. Durable run
+`run:cecba99c779c967f128dd58c`. Evidence artifact **10174157554** (expires
+2026-09-24). **COMPLETED after 7 ticks**, 21:04:14Z → 21:32:39Z. Terminal
+trajectory event `COMPLETION / VERIFIED / MISSION_VERIFIED`, **6 tasks, 3
+decisions**. Zero-spend preflight `34529455464` (#44) passed first, on the same
+SHA.
+
+Full record: [`docs/JULIUS_PAID_RUN_34529874100_MISSION_5.md`](../JULIUS_PAID_RUN_34529874100_MISSION_5.md).
+
+### What is new relative to Mission 4
+
+Mission 4 was one file, no repair round, no failure. Mission 5 was **three
+production modules**, it took a blocking review and repaired, and a reviewer
+failed inside it and the run still completed.
+
+The Independent Reviewer refused the first plan with **three blocking
+findings** — integration (a module nothing calls is not an integration),
+backward compatibility (every new input optional; the integrity layer must not
+call `julius-memory-trust.ts`'s functions), and concreteness ("will integrate …
+while preserving …" is an intention, not an instruction). The architect's plan
+went 23,412 → **34,121 characters**, and the delta is exactly those three
+findings. The second review approved it. **This is the first paid mission where
+the repair loop ran and the mission still reached completion.**
+
+### The contract gate, hop by hop
+
+`DRAFT`(1) → proposed(2) → **`CHALLENGED`**(2, `BLOCKING_FINDINGS`, disposition
+`CHALLENGE` by `independent-reviewer-hermes`, 3 evidence ids) → proposed by the
+repair(3) → `CHALLENGED`(3, the resumed leg) → **`LOCKED`**(3) at 21:18:26.026
+by `independent-reviewer-hermes`. Digest
+`sha256:72f79d1bec984fc1c9f0cf0f48ced738d988bfa9f95466eff5b0f3ac6e066ae9` on the
+coder's claim (21:18:26.135, **109 ms after the lock**) and on both reviewer
+claims for the build.
+
+### Spend
+
+$30 ceiling, 3 repair cycles. Coder share exactly `floor(30/(1+3)) = $7.50`
+under `julius-allocation.v1`; settled **$5.177120 — 69.0% of its share**, versus
+Mission 4's 27.8% of $5.00. Three modules cost 3.7× one module. Architect ×2 and
+reviewer ×3 all settled **UNKNOWN**: those transports report tokens and never a
+price, and unknown stayed unknown. **Total known spend $5.177120 of $30.**
+
+### The reviewer failure, and which clock actually fired
+
+One row in `failures.tsv`: `:build:review`, `TIMEOUT` / `review_timeout`,
+retryable, retried, succeeded. The diagnostics make it reconstructable:
+`elapsed_ms = 94160` against `timeout_ms = 480112`, `first_output_after_ms =
+93901`, **110 bytes** of output, `json_detected false`, `process_exit_code 0`,
+**no signal sent**, `cleanup_completed true`.
+
+**Julius's deadline never fired.** What timed out was Hermes's *own* provider
+request — `isEngineReportedTimeout` matched the engine's line in those 110
+bytes. `hermes-reviewer.ts` records that with `timedOut: true`, an exit code
+present and `signalSent` null precisely so the two clocks stay
+distinguishable. **New finding G**: the reviewer's real failure mode on this
+workload is upstream, at ≈94 s, and a 480 s Julius ceiling cannot govern it.
+Only the retry can, and the retry is what saved this run.
+
+Finding D is improved but open: the plan review ran at **93.5%** of its deadline
+(449,140 / 480,112 ms), against Mission 4's 95.4%.
+
+### What Julius built, and what re-verification says
+
+Exactly three modified files, **+249 / −19**: every
+`context_integrity_not_implemented` stub replaced with a body — authority
+classification off provenance and standing rather than off the text, a fully
+deterministic ranking with a `claimId::entryId` tie-break, conflict resolution
+that fails closed on a genuine clash, an optional claim-qualified path through
+`compileJuliusContext` that leaves the claim-free path byte-for-byte the
+original, and a snapshot that carries `conflicts` / `excludedEntryIds` only when
+the layer ran.
+
+Re-verified **outside the sandbox** on a detached worktree of `ed81b12e`, with
+the seeded spec restored byte-identically from trusted main and the repository's
+own slice loader:
+
+| state | result |
+|---|---|
+| candidate not applied | **3 / 21 pass** |
+| candidate applied | **21 / 21 pass** |
+| reverted | **3 / 21 pass** |
+
+Plus `npm run typecheck` clean on all four projects and **689 vitest tests
+across 38 julius files** green with the candidate applied. The coder **never
+edited the specification** — the diff has no hunk for the test file. The
+candidate regenerated here differs from the bundle's in **6 bytes, all inside
+`index` lines** (git abbreviating blob SHAs to 7 characters in the sandbox and 8
+here); every content line is identical.
+
+The `DIFF` evidence says 25,338 characters and the exported `workspace.diff` is
+25,077 bytes. Nothing is missing: the executor runs
+`git --no-pager diff && git --no-pager diff --stat`, and the `--stat` block for
+these three files is exactly **261 bytes**. 25,077 + 261 = 25,338.
+
+### Marker state
+
+`julius-live-mission-5-attempted` (10173109349) and
+`julius-live-mission-5-completed` (10174152092) both exist for run
+34529874100, so a further dispatch of mission 5 still requires
+`acknowledge_rerun`. Correct.
+
+### Candidate
+
+Preserved byte-identically at
+`docs/candidates/julius-live-mission-5-candidate.diff`
+(`sha256:258830914fbb83d95f47546c552b669c2a27b4a30ff2f02a5ed4886e2764f051`,
+25,077 bytes) because the artifact expires. **Not merged, not endorsed, not
+scheduled to land.** Nothing in Relay passes `claims` to `compileJuliusContext`
+yet, so the claim-qualified path is reachable only from tests — the mission was
+scoped that way deliberately.

@@ -1,0 +1,350 @@
+diff --git a/src/relay/mission/julius/julius-context-integrity.ts b/src/relay/mission/julius/julius-context-integrity.ts
+index 7e09bf6..0571c8e 100644
+--- a/src/relay/mission/julius/julius-context-integrity.ts
++++ b/src/relay/mission/julius/julius-context-integrity.ts
+@@ -174,8 +174,32 @@ export type JuliusContextIntegrityOutcome =
+  * `ASSERTION` when an unverified derived candidate is what asserted it, and
+  * that is the whole of the poisoning defence.
+  */
+-export function classifyContextAuthority(_candidate: JuliusContextCandidate): JuliusContextAuthority {
+-  throw new Error('context_integrity_not_implemented');
++const JULIUS_TRUST_PRECEDENCE = [
++  'APPROVED', 'VERIFIED', 'SUPPORTED', 'UNVERIFIED', 'CONTRADICTED', 'SUPERSEDED',
++] as const;
++
++/** Trust standing order, strongest first. Read off the supplied claim, never re-derived. */
++const trustRank = (trust: JuliusMemoryTrustState): number =>
++  (JULIUS_TRUST_PRECEDENCE as readonly string[]).indexOf(trust);
++
++/** CONTRADICTED and SUPERSEDED are terminal: never current truth again. */
++const isTerminalTrust = (trust: JuliusMemoryTrustState): boolean =>
++  trust === 'CONTRADICTED' || trust === 'SUPERSEDED';
++
++/** Locale-independent, deterministic string order. */
++const compareText = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
++
++export function classifyContextAuthority(candidate: JuliusContextCandidate): JuliusContextAuthority {
++  const trust = candidate.claim.trust;
++  if (isTerminalTrust(trust)) return 'ASSERTION';
++  if (trust === 'APPROVED') {
++    if (candidate.contextType === 'CURRENT_CONTRACT') return 'LOCKED_CONTRACT';
++    if (candidate.claim.provenance === 'system_policy') return 'GOVERNANCE';
++    return 'APPROVED_DECISION';
++  }
++  if (trust === 'VERIFIED') return 'VERIFIED_EVIDENCE';
++  if (trust === 'SUPPORTED') return 'CORROBORATED_OBSERVATION';
++  return 'ASSERTION';
+ }
+ 
+ /**
+@@ -186,21 +210,103 @@ export function classifyContextAuthority(_candidate: JuliusContextCandidate): Ju
+  * always produce the SAME order: replay is a proof obligation, not a nicety.
+  */
+ export function rankContextCandidates(
+-  _candidates: readonly JuliusContextCandidate[],
+-  _input: { readonly role: JuliusWorkerRole; readonly taskId: string },
++  candidates: readonly JuliusContextCandidate[],
++  input: { readonly role: JuliusWorkerRole; readonly taskId: string },
+ ): readonly JuliusContextRanking[] {
+-  throw new Error('context_integrity_not_implemented');
++  const scored = candidates.map(candidate => {
++    const authority = classifyContextAuthority(candidate);
++    return {
++      ranking: {
++        entryId: candidate.entry.entryId,
++        claimId: candidate.claim.claimId,
++        authority,
++        authorityRank: JULIUS_CONTEXT_AUTHORITY.indexOf(authority),
++        trust: candidate.claim.trust,
++        evidenceCount: candidate.claim.evidence.length,
++        taskScoped: candidate.entry.taskIds.includes(input.taskId),
++        tieBreak: `${candidate.claim.claimId}::${candidate.entry.entryId}`,
++      },
++      roleScoped: candidate.entry.allowedRoles.includes(input.role),
++      recordedAt: candidate.recordedAt,
++    };
++  });
++  scored.sort((a, b) =>
++    a.ranking.authorityRank - b.ranking.authorityRank
++    || trustRank(a.ranking.trust) - trustRank(b.ranking.trust)
++    || b.ranking.evidenceCount - a.ranking.evidenceCount
++    || Number(b.ranking.taskScoped) - Number(a.ranking.taskScoped)
++    || Number(b.roleScoped) - Number(a.roleScoped)
++    || compareText(b.recordedAt, a.recordedAt)
++    || compareText(a.ranking.tieBreak, b.ranking.tieBreak));
++  return scored.map(item => item.ranking);
+ }
+ 
+ /**
+  * FIND EVERY PAIR THAT CANNOT BOTH BE CURRENT, and say how far each can be
+  * resolved. Nothing is dropped here; resolution is recorded, not applied.
+  */
++const resolveConflictPair = (
++  first: JuliusContextCandidate,
++  second: JuliusContextCandidate,
++  contractPresent: boolean,
++): JuliusContextConflict => {
++  const entryIds: readonly [string, string] = [first.entry.entryId, second.entry.entryId];
++  const claimIds: readonly [string, string] = [first.claim.claimId, second.claim.claimId];
++  if (first.claim.supersedes === second.claim.claimId) {
++    return { entryIds, claimIds, resolution: 'RESOLVED_BY_SUPERSESSION', keptClaimId: first.claim.claimId, reasonCode: 'SUPERSEDES_PRIOR_CLAIM' };
++  }
++  if (second.claim.supersedes === first.claim.claimId) {
++    return { entryIds, claimIds, resolution: 'RESOLVED_BY_SUPERSESSION', keptClaimId: second.claim.claimId, reasonCode: 'SUPERSEDES_PRIOR_CLAIM' };
++  }
++  const firstTerminal = isTerminalTrust(first.claim.trust);
++  const secondTerminal = isTerminalTrust(second.claim.trust);
++  if (firstTerminal && secondTerminal) {
++    return { entryIds, claimIds, resolution: 'RESOLVED_BY_TRUST', keptClaimId: null, reasonCode: 'NEITHER_CLAIM_CURRENT' };
++  }
++  if (firstTerminal !== secondTerminal) {
++    return { entryIds, claimIds, resolution: 'RESOLVED_BY_TRUST', keptClaimId: (firstTerminal ? second : first).claim.claimId, reasonCode: 'TERMINAL_TRUST_CANNOT_BE_CURRENT' };
++  }
++  const trustDelta = trustRank(first.claim.trust) - trustRank(second.claim.trust);
++  if (trustDelta !== 0) {
++    return { entryIds, claimIds, resolution: 'RESOLVED_BY_TRUST', keptClaimId: (trustDelta < 0 ? first : second).claim.claimId, reasonCode: 'HIGHER_TRUST_STANDING' };
++  }
++  const authorityDelta = JULIUS_CONTEXT_AUTHORITY.indexOf(classifyContextAuthority(first))
++    - JULIUS_CONTEXT_AUTHORITY.indexOf(classifyContextAuthority(second));
++  if (authorityDelta !== 0) {
++    return { entryIds, claimIds, resolution: 'RESOLVED_BY_AUTHORITY', keptClaimId: (authorityDelta < 0 ? first : second).claim.claimId, reasonCode: 'HIGHER_AUTHORITY' };
++  }
++  if (contractPresent) {
++    return { entryIds, claimIds, resolution: 'RESOLVED_BY_CONTRACT', keptClaimId: first.claim.claimId, reasonCode: 'SETTLED_UNDER_LOCKED_CONTRACT' };
++  }
++  return { entryIds, claimIds, resolution: 'UNRESOLVED', keptClaimId: null, reasonCode: 'UNRESOLVED_AUTHORITATIVE_CLASH' };
++};
++
+ export function detectContextConflicts(
+-  _candidates: readonly JuliusContextCandidate[],
+-  _input: { readonly contractEntryIds: readonly string[] },
++  candidates: readonly JuliusContextCandidate[],
++  input: { readonly contractEntryIds: readonly string[] },
+ ): readonly JuliusContextConflict[] {
+-  throw new Error('context_integrity_not_implemented');
++  const ordered = [...candidates].sort((a, b) =>
++    compareText(a.claim.claimId, b.claim.claimId) || compareText(a.entry.entryId, b.entry.entryId));
++  const contractPresent = ordered.some(candidate => input.contractEntryIds.includes(candidate.entry.entryId));
++  const conflicts: JuliusContextConflict[] = [];
++  const seenPairs = new Set<string>();
++  for (let i = 0; i < ordered.length; i += 1) {
++    for (let j = i + 1; j < ordered.length; j += 1) {
++      const first = ordered[i]!;
++      const second = ordered[j]!;
++      if (first.claim.claimId === second.claim.claimId) continue;
++      const linked = first.claim.supersedes === second.claim.claimId
++        || second.claim.supersedes === first.claim.claimId
++        || first.claim.contradicts.includes(second.claim.claimId)
++        || second.claim.contradicts.includes(first.claim.claimId);
++      if (!linked) continue;
++      const pairKey = `${first.claim.claimId}::${second.claim.claimId}`;
++      if (seenPairs.has(pairKey)) continue;
++      seenPairs.add(pairKey);
++      conflicts.push(resolveConflictPair(first, second, contractPresent));
++    }
++  }
++  return conflicts;
+ }
+ 
+ /**
+@@ -212,11 +318,36 @@ export function detectContextConflicts(
+  * behind it. Anything ranked but not admitted is reported in `evicted`.
+  */
+ export function selectContextUnderBudget(
+-  _ranked: readonly JuliusContextRanking[],
+-  _candidates: readonly JuliusContextCandidate[],
+-  _budgetCharacters: number,
++  ranked: readonly JuliusContextRanking[],
++  candidates: readonly JuliusContextCandidate[],
++  budgetCharacters: number,
+ ): JuliusContextSelection {
+-  throw new Error('context_integrity_not_implemented');
++  if (!Number.isFinite(budgetCharacters) || budgetCharacters < 1) throw new Error('invalid_context_budget');
++  const costByEntryId = new Map<string, number>();
++  for (const candidate of candidates) {
++    if (!costByEntryId.has(candidate.entry.entryId)) costByEntryId.set(candidate.entry.entryId, candidate.entry.text.length);
++  }
++  const admitted: JuliusContextRanking[] = [];
++  const evicted: JuliusContextRanking[] = [];
++  let usedCharacters = 0;
++  for (const row of ranked) {
++    const cost = costByEntryId.get(row.entryId);
++    if (cost === undefined || usedCharacters + cost > budgetCharacters) {
++      evicted.push(row);
++      continue;
++    }
++    admitted.push(row);
++    usedCharacters += cost;
++  }
++  return {
++    version: JULIUS_CONTEXT_INTEGRITY_VERSION,
++    admitted,
++    evicted,
++    conflicts: [],
++    excludedEntryIds: [],
++    budgetCharacters,
++    usedCharacters,
++  };
+ }
+ 
+ /**
+@@ -226,12 +357,43 @@ export function selectContextUnderBudget(
+  * or task scope), detects clashes, fails closed on an unresolved authoritative
+  * one, ranks what remains and spends the budget on it.
+  */
+-export function compileContextWithIntegrity(_input: {
++export function compileContextWithIntegrity(input: {
+   readonly candidates: readonly JuliusContextCandidate[];
+   readonly role: JuliusWorkerRole;
+   readonly taskId: string;
+   readonly contractEntryIds: readonly string[];
+   readonly budgetCharacters: number;
+ }): JuliusContextIntegrityOutcome {
+-  throw new Error('context_integrity_not_implemented');
++  if (!Number.isFinite(input.budgetCharacters) || input.budgetCharacters < 1) throw new Error('invalid_context_budget');
++  const inScope: JuliusContextCandidate[] = [];
++  const excluded = new Set<string>();
++  for (const candidate of input.candidates) {
++    const scoped = candidate.entry.sensitivity !== 'SECRET'
++      && candidate.entry.allowedRoles.includes(input.role)
++      && (candidate.entry.taskIds.length === 0 || candidate.entry.taskIds.includes(input.taskId));
++    if (scoped) inScope.push(candidate);
++    else excluded.add(candidate.entry.entryId);
++  }
++  const conflicts = detectContextConflicts(inScope, { contractEntryIds: input.contractEntryIds });
++  if (conflicts.some(conflict => conflict.resolution === 'UNRESOLVED')) {
++    return { outcome: 'FAIL_CLOSED', reasonCode: 'UNRESOLVED_AUTHORITATIVE_CLASH', conflicts };
++  }
++  const displacedClaimIds = new Set<string>();
++  for (const conflict of conflicts) {
++    for (const claimId of conflict.claimIds) {
++      if (claimId !== conflict.keptClaimId) displacedClaimIds.add(claimId);
++    }
++  }
++  const current: JuliusContextCandidate[] = [];
++  for (const candidate of inScope) {
++    if (isTerminalTrust(candidate.claim.trust) || displacedClaimIds.has(candidate.claim.claimId)) {
++      excluded.add(candidate.entry.entryId);
++    } else {
++      current.push(candidate);
++    }
++  }
++  const ranked = rankContextCandidates(current, { role: input.role, taskId: input.taskId });
++  const base = selectContextUnderBudget(ranked, current, input.budgetCharacters);
++  const excludedEntryIds = [...excluded].sort(compareText);
++  return { outcome: 'OK', selection: { ...base, conflicts, excludedEntryIds } };
+ }
+diff --git a/src/relay/mission/julius/julius-context-snapshot.ts b/src/relay/mission/julius/julius-context-snapshot.ts
+index 3b4b0a7..ba3305d 100644
+--- a/src/relay/mission/julius/julius-context-snapshot.ts
++++ b/src/relay/mission/julius/julius-context-snapshot.ts
+@@ -1,4 +1,6 @@
+ import{createHash}from'node:crypto';import{compileJuliusContext,type JuliusBrainEntry,type JuliusContextPacket,type JuliusTask,type JuliusWorker}from'./julius-runtime';
++import type{JuliusContextConflict,JuliusContextType}from'./julius-context-integrity';
++import type{JuliusMemoryClaim}from'./julius-memory-trust';
+ export const JULIUS_CONTEXT_COMPILER_VERSION='julius-context.v1' as const;export interface JuliusContextSnapshot{readonly contextId:string;readonly runId:string;readonly taskId:string;readonly workerId:string;readonly workerRole:string;readonly compilerVersion:typeof JULIUS_CONTEXT_COMPILER_VERSION;readonly missionContractRevision:number;readonly cardRevision:string;readonly projectBrainRevision:number;
+  /**
+   * THE AGREEMENT THIS PACKET WAS COMPILED UNDER, or null for a role that is not
+@@ -13,6 +15,20 @@ export const JULIUS_CONTEXT_COMPILER_VERSION='julius-context.v1' as const;export
+   * are.
+   */
+  readonly taskContractRevision:number|null;readonly taskContractDigest:string|null;
+- readonly sourceEntryIds:readonly string[];readonly dependencyTaskIds:readonly string[];readonly evidenceIds:readonly string[];readonly findingIds:readonly string[];readonly acceptanceCriterionIds:readonly string[];readonly contentHash:string;readonly characterCount:number;readonly redactionCount:number;readonly truncated:boolean;readonly packet:JuliusContextPacket;}
++ readonly sourceEntryIds:readonly string[];readonly dependencyTaskIds:readonly string[];readonly evidenceIds:readonly string[];readonly findingIds:readonly string[];readonly acceptanceCriterionIds:readonly string[];
++ /**
++  * WHAT THE INTEGRITY LAYER DECIDED, present ONLY when the packet was compiled
++  * from claim-qualified candidates. A legacy call that supplies no claims gets
++  * a snapshot without these keys and with unchanged hash material.
++  */
++ readonly conflicts?:readonly JuliusContextConflict[];readonly excludedEntryIds?:readonly string[];
++ readonly contentHash:string;readonly characterCount:number;readonly redactionCount:number;readonly truncated:boolean;readonly packet:JuliusContextPacket;}
+ const canonical=(value:unknown):string=>JSON.stringify(value,(_key,item)=>item&&typeof item==='object'&&!Array.isArray(item)?Object.fromEntries(Object.entries(item).sort(([a],[b])=>a.localeCompare(b))):item);
+-export function createJuliusContextSnapshot(input:{contextId:string;runId:string;task:JuliusTask;worker:JuliusWorker;entries:readonly JuliusBrainEntry[];maxCharacters:number;missionContractRevision:number;cardRevision:string;projectBrainRevision:number;taskContractRevision?:number|null;taskContractDigest?:string|null;dependencyTaskIds:readonly string[];evidenceIds:readonly string[];findingIds:readonly string[];acceptanceCriterionIds:readonly string[]}):JuliusContextSnapshot{const taskContractRevision=input.taskContractRevision??null;const taskContractDigest=input.taskContractDigest??null;const packet=compileJuliusContext({missionId:input.task.missionId,task:input.task,worker:input.worker,entries:input.entries,maxCharacters:input.maxCharacters});const text=packet.blocks.map(block=>block.text).join('');const redactionCount=(text.match(/\[REDACTED\]/g)??[]).length;const references={sourceEntryIds:packet.sourceEntryIds,dependencyTaskIds:[...new Set(input.dependencyTaskIds)].sort(),evidenceIds:[...new Set(input.evidenceIds)].sort(),findingIds:[...new Set(input.findingIds)].sort(),acceptanceCriterionIds:[...new Set(input.acceptanceCriterionIds)].sort()};const contentHash=`sha256:${createHash('sha256').update(canonical({packet,references,missionContractRevision:input.missionContractRevision,cardRevision:input.cardRevision,projectBrainRevision:input.projectBrainRevision,taskContractRevision,taskContractDigest,compilerVersion:JULIUS_CONTEXT_COMPILER_VERSION})).digest('hex')}`;return{contextId:input.contextId,runId:input.runId,taskId:input.task.taskId,workerId:input.worker.workerId,workerRole:input.worker.role,compilerVersion:JULIUS_CONTEXT_COMPILER_VERSION,missionContractRevision:input.missionContractRevision,cardRevision:input.cardRevision,projectBrainRevision:input.projectBrainRevision,taskContractRevision,taskContractDigest,...references,contentHash,characterCount:text.length,redactionCount,truncated:packet.truncated,packet};}
++const compareSnapshotText=(a:string,b:string):number=>a<b?-1:a>b?1:0;
++export function createJuliusContextSnapshot(input:{contextId:string;runId:string;task:JuliusTask;worker:JuliusWorker;entries:readonly JuliusBrainEntry[];maxCharacters:number;missionContractRevision:number;cardRevision:string;projectBrainRevision:number;taskContractRevision?:number|null;taskContractDigest?:string|null;dependencyTaskIds:readonly string[];evidenceIds:readonly string[];findingIds:readonly string[];acceptanceCriterionIds:readonly string[];claims?:readonly JuliusMemoryClaim[];contextTypes?:Readonly<Record<string,JuliusContextType>>;contractEntryIds?:readonly string[]}):JuliusContextSnapshot{const taskContractRevision=input.taskContractRevision??null;const taskContractDigest=input.taskContractDigest??null;const packet=compileJuliusContext({missionId:input.task.missionId,task:input.task,worker:input.worker,entries:input.entries,maxCharacters:input.maxCharacters,claims:input.claims,contextTypes:input.contextTypes,contractEntryIds:input.contractEntryIds});
++// CANONICAL INTEGRITY METADATA, present only when the compiler routed through
++// the integrity layer. Copies are sorted so equivalent decisions hash equally;
++// the caller's arrays are never mutated. When absent, the hash material and the
++// snapshot shape are exactly the legacy ones.
++const integrity=packet.integrity?{conflicts:[...packet.integrity.conflicts].sort((a,b)=>compareSnapshotText(a.claimIds[0],b.claimIds[0])||compareSnapshotText(a.claimIds[1],b.claimIds[1])||compareSnapshotText(a.resolution,b.resolution)||compareSnapshotText(a.keptClaimId??'',b.keptClaimId??'')),excludedEntryIds:[...packet.integrity.excludedEntryIds].sort(compareSnapshotText)}:null;
++const text=packet.blocks.map(block=>block.text).join('');const redactionCount=(text.match(/\[REDACTED\]/g)??[]).length;const references={sourceEntryIds:packet.sourceEntryIds,dependencyTaskIds:[...new Set(input.dependencyTaskIds)].sort(),evidenceIds:[...new Set(input.evidenceIds)].sort(),findingIds:[...new Set(input.findingIds)].sort(),acceptanceCriterionIds:[...new Set(input.acceptanceCriterionIds)].sort()};const contentHash=`sha256:${createHash('sha256').update(canonical({packet,references,missionContractRevision:input.missionContractRevision,cardRevision:input.cardRevision,projectBrainRevision:input.projectBrainRevision,taskContractRevision,taskContractDigest,compilerVersion:JULIUS_CONTEXT_COMPILER_VERSION,...(integrity?{integrity}:{})})).digest('hex')}`;return{contextId:input.contextId,runId:input.runId,taskId:input.task.taskId,workerId:input.worker.workerId,workerRole:input.worker.role,compilerVersion:JULIUS_CONTEXT_COMPILER_VERSION,missionContractRevision:input.missionContractRevision,cardRevision:input.cardRevision,projectBrainRevision:input.projectBrainRevision,taskContractRevision,taskContractDigest,...references,...(integrity?{conflicts:integrity.conflicts,excludedEntryIds:integrity.excludedEntryIds}:{}),contentHash,characterCount:text.length,redactionCount,truncated:packet.truncated,packet};}
+diff --git a/src/relay/mission/julius/julius-runtime.ts b/src/relay/mission/julius/julius-runtime.ts
+index 615a0d8..3d40181 100644
+--- a/src/relay/mission/julius/julius-runtime.ts
++++ b/src/relay/mission/julius/julius-runtime.ts
+@@ -1,6 +1,13 @@
+ /** Provider-neutral, deterministic Julius orchestration kernel. */
+ 
+ import { effectivelyAcceptedTaskIds } from './julius-repair-lineage';
++import {
++  compileContextWithIntegrity,
++  type JuliusContextCandidate,
++  type JuliusContextConflict,
++  type JuliusContextType,
++} from './julius-context-integrity';
++import type { JuliusMemoryClaim } from './julius-memory-trust';
+ 
+ export const JULIUS_RUNTIME_VERSION = 'julius-runtime.v1' as const;
+ 
+@@ -132,13 +139,58 @@ export function verifyTask(task: JuliusTask, evidence: readonly JuliusEvidence[]
+ }
+ 
+ export interface JuliusBrainEntry { readonly entryId: string; readonly kind: 'OBJECTIVE' | 'REQUIREMENT' | 'CONSTRAINT' | 'DECISION' | 'FINDING' | 'REPAIR' | 'HANDOFF' | 'ARTIFACT' | 'EVIDENCE'; readonly text: string; readonly taskIds: readonly string[]; readonly allowedRoles: readonly JuliusWorkerRole[]; readonly sensitivity: 'PUBLIC' | 'INTERNAL' | 'SECRET'; }
+-export interface JuliusContextPacket { readonly missionId: string; readonly taskId: string; readonly workerId: string; readonly sourceEntryIds: readonly string[]; readonly blocks: readonly { kind: JuliusBrainEntry['kind']; text: string }[]; readonly truncated: boolean; }
+-export function compileJuliusContext(input: { missionId: string; task: JuliusTask; worker: JuliusWorker; entries: readonly JuliusBrainEntry[]; maxCharacters: number }): JuliusContextPacket {
++/**
++ * WHAT THE INTEGRITY LAYER DECIDED, carried on the packet ONLY when the caller
++ * supplied claim-qualified candidates. A claim-free packet never has this key,
++ * so callers that predate the integrity layer see exactly the shape they always
++ * saw.
++ */
++export interface JuliusContextIntegrityRecord { readonly outcome: 'OK' | 'FAIL_CLOSED'; readonly reasonCode: string | null; readonly conflicts: readonly JuliusContextConflict[]; readonly excludedEntryIds: readonly string[]; }
++export interface JuliusContextPacket { readonly missionId: string; readonly taskId: string; readonly workerId: string; readonly sourceEntryIds: readonly string[]; readonly blocks: readonly { kind: JuliusBrainEntry['kind']; text: string }[]; readonly truncated: boolean; readonly integrity?: JuliusContextIntegrityRecord; }
++const redactJuliusCredentialText = (text: string): string => text.replace(/(?:api[_-]?key|token|secret)\s*[=:]\s*\S+/gi, '$1=[REDACTED]');
++export function compileJuliusContext(input: { missionId: string; task: JuliusTask; worker: JuliusWorker; entries: readonly JuliusBrainEntry[]; maxCharacters: number; claims?: readonly JuliusMemoryClaim[]; contextTypes?: Readonly<Record<string, JuliusContextType>>; contractEntryIds?: readonly string[] }): JuliusContextPacket {
+   if (input.maxCharacters < 1) throw new Error('invalid_context_budget');
++  if (input.claims !== undefined) {
++    // CLAIM-QUALIFIED PATH: route through the integrity layer. Redaction happens
++    // BEFORE selection so credential-shaped text never survives, whatever rank
++    // it earns; secret, role and task exclusion are re-enforced inside the layer.
++    const entryById = new Map(input.entries.map(entry => [entry.entryId, entry] as const));
++    const candidates: JuliusContextCandidate[] = [];
++    for (const claim of input.claims) {
++      const entry = entryById.get(claim.entryId);
++      if (!entry) continue;
++      candidates.push({
++        entry: { ...entry, text: redactJuliusCredentialText(entry.text) },
++        claim,
++        contextType: input.contextTypes?.[entry.entryId] ?? 'ASSUMPTION',
++        recordedAt: claim.assertedAt,
++      });
++    }
++    const outcome = compileContextWithIntegrity({
++      candidates, role: input.worker.role, taskId: input.task.taskId,
++      contractEntryIds: input.contractEntryIds ?? [], budgetCharacters: input.maxCharacters,
++    });
++    if (outcome.outcome === 'FAIL_CLOSED') {
++      return { missionId: input.missionId, taskId: input.task.taskId, workerId: input.worker.workerId, sourceEntryIds: [], blocks: [], truncated: false,
++        integrity: { outcome: 'FAIL_CLOSED', reasonCode: outcome.reasonCode, conflicts: outcome.conflicts, excludedEntryIds: [] } };
++    }
++    const candidateByEntryId = new Map(candidates.map(candidate => [candidate.entry.entryId, candidate] as const));
++    const blocks: { kind: JuliusBrainEntry['kind']; text: string }[] = [];
++    const sourceEntryIds: string[] = [];
++    for (const row of outcome.selection.admitted) {
++      const candidate = candidateByEntryId.get(row.entryId);
++      if (!candidate) continue;
++      blocks.push({ kind: candidate.entry.kind, text: candidate.entry.text });
++      sourceEntryIds.push(row.entryId);
++    }
++    return { missionId: input.missionId, taskId: input.task.taskId, workerId: input.worker.workerId, sourceEntryIds, blocks,
++      truncated: outcome.selection.evicted.length > 0,
++      integrity: { outcome: 'OK', reasonCode: null, conflicts: outcome.selection.conflicts, excludedEntryIds: outcome.selection.excludedEntryIds } };
++  }
+   const relevant = input.entries.filter(entry => entry.sensitivity !== 'SECRET' && entry.allowedRoles.includes(input.worker.role) &&
+     (entry.taskIds.length === 0 || entry.taskIds.includes(input.task.taskId)));
+   const blocks: { kind: JuliusBrainEntry['kind']; text: string }[] = []; const sourceEntryIds: string[] = []; let used = 0;
+-  for (const entry of relevant) { const sanitized = entry.text.replace(/(?:api[_-]?key|token|secret)\s*[=:]\s*\S+/gi, '$1=[REDACTED]');
++  for (const entry of relevant) { const sanitized = redactJuliusCredentialText(entry.text);
+     if (used + sanitized.length > input.maxCharacters) break; blocks.push({ kind: entry.kind, text: sanitized }); sourceEntryIds.push(entry.entryId); used += sanitized.length; }
+   return { missionId: input.missionId, taskId: input.task.taskId, workerId: input.worker.workerId, sourceEntryIds, blocks, truncated: sourceEntryIds.length < relevant.length };
+ }
