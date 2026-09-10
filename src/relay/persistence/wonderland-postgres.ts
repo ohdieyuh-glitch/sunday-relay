@@ -3,6 +3,7 @@ import { sanitizeText } from './redaction';
 import { join } from 'node:path';
 import { Pool, type PoolConfig, type QueryResultRow } from 'pg';
 import type { ProviderUsageReceipt, WonderlandExecutionSession } from '../mission/wonderland/wonderland-execution';
+import { WONDERLAND_EVENT_TYPES } from '../mission/wonderland/wonderland-backend';
 import type { Battle, WonderlandEvent } from '../mission/wonderland/wonderland-backend';
 import type { WonderlandRating } from '../mission/wonderland/wonderland-ratings';
 
@@ -170,9 +171,30 @@ class PostgresWonderlandTransaction implements WonderlandTransaction {
   async enqueueEvent(event: WonderlandEvent): Promise<void> {
     await this.client.query(`INSERT INTO relay_wonderland.outbox(outbox_id,event_id,project_id) VALUES($1,$2,$3)`, [`outbox:${event.eventId}`, event.eventId, event.projectId]);
   }
+  /**
+   * A project's world events, after a cursor.
+   *
+   * FILTERED TO THIS WRITER'S OWN VOCABULARY, and that is not tidiness.
+   * `relay_wonderland.events` is shared: `julius-event-postgres.ts` writes into
+   * the same table with `event_type = 'julius.…'` and a payload of an entirely
+   * different shape — `{schemaVersion:'relay-julius-event.v1', …}`, with no
+   * `eventId`, no `eventType` and no `sequence`. Unfiltered, this cast one
+   * straight to `WonderlandEvent` and handed a malformed object to a browser,
+   * where every field a surface reads is `undefined`.
+   *
+   * THE CLOSED LIST RATHER THAN `NOT LIKE 'julius.%'`. A prefix refuses the one
+   * writer we know about; the vocabulary refuses every writer that is not this
+   * one, including the next. It is also the safer of the two here because the
+   * two vocabularies OVERLAP: `subagent.spawned` is a member of both, bare on
+   * this side and prefixed on Julius's, so any match looser than an exact one
+   * has to get that distinction right by accident.
+   *
+   * The same pattern already exists in `julius-timeline-postgres.ts`, from the
+   * other side of the same table.
+   */
   async replay(projectId: string, afterSequence: number, limit: number): Promise<WonderlandEvent[]> {
     if (!Number.isSafeInteger(afterSequence) || afterSequence < 0 || !Number.isSafeInteger(limit) || limit < 1 || limit > 1000) throw new Error('invalid_replay_cursor');
-    const result = await this.client.query<{ payload: unknown }>(`SELECT payload FROM relay_wonderland.events WHERE project_id=$1 AND sequence>$2 ORDER BY sequence ASC LIMIT $3`, [projectId, afterSequence, limit]);
+    const result = await this.client.query<{ payload: unknown }>(`SELECT payload FROM relay_wonderland.events WHERE project_id=$1 AND sequence>$2 AND event_type = ANY($4) ORDER BY sequence ASC LIMIT $3`, [projectId, afterSequence, limit, [...WONDERLAND_EVENT_TYPES]]);
     return result.rows.map(row => parsed<WonderlandEvent>(row.payload));
   }
   async idempotent<T>(scope: string, commandId: string, requestHash: string, effect: () => Promise<T>): Promise<T> {
