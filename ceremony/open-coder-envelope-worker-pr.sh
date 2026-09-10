@@ -121,16 +121,19 @@ number="$(printf '%s' "$payload" | curl -sS -X POST -H "Authorization: token $TO
     echo 'the pull request was NOT created — nothing was changed on GitHub' >&2; exit 1; }
 
 echo '== reading it back =='
-curl -sS -H "Authorization: token $TOKEN" -H 'Accept: application/vnd.github+json' \
-  "https://api.github.com/repos/$REPO/pulls/$number" \
-| python3 <<'READBACK'
-import sys, json
-d = json.load(sys.stdin)
-print('  PR #%s  by %s' % (d['number'], d['user']['login']))
-print('  head %s' % d['head']['sha'])
-print('  base %s' % d['base']['sha'])
-print('  state %s' % d['state'])
-READBACK
+# NOT a heredoc. `python3 <<'X'` makes python read the PROGRAM from stdin, so the
+# curl output is consumed as source and json.load(sys.stdin) sees nothing —
+# JSONDecodeError, AFTER the pull request has already been created. That is what
+# killed the read-back on #247 (an f-string quoting fault) and again on #249.
+# Every GitHub response in this script now goes through the same FILE.
+readback="$(curl -sS -H "Authorization: token $TOKEN" -H 'Accept: application/vnd.github+json' \
+  "https://api.github.com/repos/$REPO/pulls/$number")"
+printf '  PR #%s  by %s\n' \
+  "$(printf '%s' "$readback" | field number 'reading back the number')" \
+  "$(printf '%s' "$readback" | field user.login 'reading back the author')"
+printf '  head  %s\n'  "$(printf '%s' "$readback" | field head.sha 'reading back the head')"
+printf '  base  %s\n'  "$(printf '%s' "$readback" | field base.sha 'reading back the base')"
+printf '  state %s\n'  "$(printf '%s' "$readback" | field state 'reading back the state')"
 unset TOKEN
 
 echo
