@@ -1,0 +1,16 @@
+# Paid Live Mission 4 — Project Brain v2, the trust core.
+#
+# THE DELIVERABLE. A real Sunday Relay file, sliced byte-identical, so the diff
+# this mission produces applies straight back to the repository.
+src/relay/mission/julius/julius-memory-trust.ts
+
+# WHAT IT IS TYPED AGAINST. `julius-memory-trust.ts` imports only a TYPE from
+# here, which type stripping erases — so nothing loads this file at runtime
+# today. It is sliced anyway for two reasons: the coder has to READ the role
+# union it is writing against, and the day anyone turns that into a value
+# import the module must already be present rather than failing inside a paid
+# run. Its own import of `julius-repair-lineage` is why that file is here too:
+# a slice whose import chain stops halfway is a sandbox that works until it
+# doesn't.
+src/relay/mission/julius/julius-runtime.ts
+src/relay/mission/julius/julius-repair-lineage.ts

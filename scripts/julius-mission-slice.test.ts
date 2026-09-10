@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
 
 /**
@@ -33,7 +33,20 @@ const SLICE = [
 ];
 
 const scratch: string[] = [];
-const seedSlice = (): string => {
+/**
+ * The provisioner's own order: extract the slice, lay the harness beside it,
+ * then the mission's overlay — and refuse an overlay that would shadow a sliced
+ * file, because a diff describing changes to a file the worker never saw the
+ * real version of is a diff that lies about what changed.
+ */
+const applyOverlay = (dir: string, overlay: Record<string, string>): void => {
+  for (const [rel, content] of Object.entries(overlay)) {
+    if (existsSync(join(dir, rel))) throw new Error(`mission_seed_overlay_shadows_slice: ${rel}`);
+    mkdirSync(dirname(join(dir, rel)), { recursive: true });
+    writeFileSync(join(dir, rel), content);
+  }
+};
+const seedSlice = (overlay: Record<string, string> = {}): string => {
   const dir = mkdtempSync(join(tmpdir(), 'julius-slice-'));
   scratch.push(dir);
   const rev = git(REPO, 'rev-parse', 'HEAD').trim();
@@ -42,6 +55,7 @@ const seedSlice = (): string => {
   execFileSync('sh', ['-c', `git -C '${REPO}' archive --format=tar ${rev} -- ${SLICE.join(' ')} | tar -x -C '${dir}'`]);
   mkdirSync(join(dir, '.julius'), { recursive: true });
   for (const file of ['resolve.mjs', 'loader.mjs']) cpSync(join(HARNESS, file), join(dir, '.julius', file));
+  applyOverlay(dir, overlay);
   git(dir, 'init', '--quiet', '--initial-branch=main', '.');
   git(dir, '-c', 'user.name=J', '-c', 'user.email=j@invalid', 'add', '-A');
   git(dir, '-c', 'user.name=J', '-c', 'user.email=j@invalid', 'commit', '--quiet', '-m', 'seed');
@@ -165,4 +179,61 @@ describe('the provisioner refuses what it cannot honestly seed', () => {
   it('preserves repository-relative paths, which is what makes the diff a patch', () => {
     expect(script).toMatch(/tar -x -C "\$WORKSPACE"/u);
   });
+
+  /**
+   * THE OVERLAY EXISTS BECAUSE A SLICE ALONE CANNOT CARRY A MISSION'S
+   * SPECIFICATION. A deliberately-failing test committed to Sunday Relay would
+   * break `npm test` on main; one that passes against a stub would let a
+   * mission satisfy its TEST evidence having implemented nothing. Neither is
+   * fixable by choosing different slice paths.
+   */
+  it('lets a slice mission seed its specification beside the slice', () => {
+    expect(script).toContain('SEED_OVERLAY');
+    expect(script, 'and reports how many files it laid down').toContain('seed_overlay_files');
+    expect(script, 'an empty overlay directory is a mistake, not a no-op').toContain('mission_seed_overlay_empty');
+  });
+
+  it('refuses an overlay that would shadow a sliced file or the harness', () => {
+    expect(script).toContain('mission_seed_overlay_shadows_slice');
+    expect(script, 'the harness is not a mission deliverable').toContain('mission_seed_overlay_reserved_path');
+  });
+});
+
+describe('the overlay carries a mission specification the repository does not have', () => {
+  const SPEC = 'src/relay/mission/julius/julius-slice-probe.test.ts';
+
+  it('seeds a new file at a repository path, and the diff still applies', () => {
+    // The shape Mission 4 needs: a test that does not exist on main, laid over
+    // real Relay source the coder edits.
+    const dir = seedSlice({
+      [SPEC]: [
+        "import { test } from 'node:test';",
+        "import assert from 'node:assert/strict';",
+        "import { summariseJuliusMissionCost } from './julius-cost-accounting';",
+        "test('the mission specification runs against the sliced source', () => {",
+        '  assert.equal(summariseJuliusMissionCost([]).complete, true);',
+        '});',
+        '',
+      ].join('\n'),
+    });
+    const out = execFileSync(process.execPath, ['--import', './.julius/loader.mjs', '--test', SPEC], { cwd: dir, encoding: 'utf8' });
+    expect(out).toMatch(/# pass 1/u);
+
+    // A NEW FILE IS STILL A PATCH AGAINST THE REPOSITORY. It is committed in the
+    // seed, so the mission's diff shows a worker's EDITS to it — and the branch
+    // that lands the mission adds it as a new file, which is ordinary.
+    const target = 'src/relay/mission/julius/julius-cost-accounting.ts';
+    const anchor = "/** A basis from the closed set, or `UNKNOWN`. A word nobody defined is not a basis. */";
+    writeFileSync(join(dir, target), readFileSync(join(dir, target), 'utf8').replace(anchor, `/* edit */\n${anchor}`));
+    const patch = join(dir, 'candidate.patch');
+    writeFileSync(patch, git(dir, 'diff'));
+    expect(() => git(REPO, 'apply', '--check', patch)).not.toThrow();
+  }, 30_000);
+
+  it('refuses to let a mission quietly replace real Relay source', () => {
+    // The slice is the repository's word; the overlay is the mission's. Where
+    // they disagree nobody should have to guess which won.
+    expect(() => seedSlice({ 'src/relay/mission/julius/julius-trajectory.ts': 'export const hijacked = true;\n' }))
+      .toThrow(/mission_seed_overlay_shadows_slice/u);
+  }, 30_000);
 });

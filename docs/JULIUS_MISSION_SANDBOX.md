@@ -76,6 +76,31 @@ with `git archive <trusted sha> -- <paths>`.
 - **Repository-relative paths are preserved.** This is the point of the mode:
   a diff taken in the sandbox names `src/relay/…` and applies to Sunday Relay.
 
+### The seed overlay — what a slice alone cannot carry
+
+A mission's DELIVERABLE is real repository source, which slicing supplies. Its
+SPECIFICATION — the test that must fail until the work is really done — cannot
+be: a deliberately-failing test committed to Sunday Relay would break `npm test`
+on main, and a test that passes against a stub would let a mission satisfy its
+TEST evidence having implemented nothing. Both are already refused elsewhere in
+this rig, for good reasons, and neither is fixable by choosing different slice
+paths.
+
+So a slice mission may also carry `seed/`, laid over the extracted slice at
+**repository-relative paths** — the same coordinates the slice uses, so the
+mission's diff still applies to Sunday Relay and a new file lands as a new file.
+
+**An overlay may not shadow a sliced file, and that is refused rather than
+resolved.** A mission quietly replacing real Relay source with its own copy
+would produce a diff describing changes to a file the worker never saw the real
+version of — a diff that lies about what changed. The slice is the repository's
+word; the overlay is the mission's; where they disagree, nobody should have to
+guess which won. `.julius/` is reserved for the same reason: the harness is not
+a mission deliverable.
+
+An overlay directory that exists but is empty is a mistake, not a no-op, and is
+refused.
+
 ### Why the sliced files are byte-identical, and what it buys
 
 A mission's entire output is `git diff` over its workspace. If provisioning
@@ -107,6 +132,9 @@ Against `node:22`'s real behaviour and this repository's real files:
 | The whole Julius production domain would fit | 517,031 bytes across 37 files |
 | The Project Brain surface would fit | ~283 KB across 10 files |
 | **A diff taken in the sandbox applies to Sunday Relay** | **`git apply --check` clean**, and correctly refused when reversed |
+| A mission specification seeded at a path main does not have | runs against the slice; its diff still applies |
+| An overlay shadowing a sliced file | refused |
+| A mistyped slice path | `git archive` exits 128 under `set -euo pipefail` — the mission fails loudly rather than seeding less than it declared |
 
 ## The one syntax rule a slice must obey
 

@@ -224,6 +224,14 @@ const FILE_RULES = [
   // branches. Same subsystem as the contract it is a disposition ON, for the
   // same reason: a reviewer consuming terms does not own the account of them.
   ['src/relay/mission/julius/julius-contract-disposition.ts', 'TASK GRAPH / SCHEDULER'],
+  // Project Brain v2's trust core: what a memory is worth, and on whose
+  // authority. Seeded as a STUB for paid Live Mission 4, so nothing imports it
+  // yet and the trace does not reach it — this rule is written now so that the
+  // day the mission's implementation lands and a caller appears, the file is
+  // already classified rather than tripping the drift gate on the landing.
+  // Same subsystem as the Project Brain it qualifies: v1 entries keep their
+  // text and scope, and this says who asserted them and how far that is checked.
+  ['src/relay/mission/julius/julius-memory-trust.ts', 'DURABLE STATE / PROJECT BRAIN'],
   ['src/relay/mission/julius/julius-allocation-runtime.ts', 'LEASES / BUDGETS / PERMISSIONS'],
   // Allocation decides what a dispatch MAY spend; this decides what is known
   // about what it DID spend, and on whose authority. Same subsystem: both are

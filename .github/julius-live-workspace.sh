@@ -170,9 +170,52 @@ if [ -f "$SLICE_FILE" ]; then
   mkdir -p "$WORKSPACE/.julius"
   cp "$GITHUB_WORKSPACE_DIR/.github/julius-mission-slice/resolve.mjs" \
      "$GITHUB_WORKSPACE_DIR/.github/julius-mission-slice/loader.mjs" "$WORKSPACE/.julius/"
+
+  # ------------------------------------------------------- the seed overlay
+  #
+  # WHAT A SLICE ALONE CANNOT EXPRESS, and the first slice mission needed it.
+  #
+  # A mission's deliverable is real repository source, which slicing supplies.
+  # Its SPECIFICATION — the test that must fail until the work is really done —
+  # cannot be: a deliberately-failing test committed to Sunday Relay would break
+  # `npm test` on main, and a test that passes against a stub would let a
+  # mission satisfy its TEST evidence having implemented nothing. Both are
+  # refused elsewhere in this rig for good reasons, and neither is fixable by
+  # choosing different slice paths.
+  #
+  # So a slice mission may carry `seed/`, whose contents are laid over the
+  # extracted slice at REPOSITORY-RELATIVE paths — the same coordinates the
+  # slice uses, so the mission's diff still applies to Sunday Relay and the new
+  # file lands as a new file.
+  #
+  # AN OVERLAY MAY NOT SHADOW A SLICED FILE. That is refused rather than
+  # resolved: a mission quietly replacing real Relay source with its own copy
+  # would produce a diff describing changes to a file the worker never saw the
+  # real version of — a diff that lies about what changed. The slice is the
+  # repository's word and the overlay is the mission's; where they disagree,
+  # nobody should have to guess which won.
+  SEED_OVERLAY="$MISSION_DIR/seed"
+  overlaid=0
+  if [ -d "$SEED_OVERLAY" ]; then
+    while IFS= read -r -d '' file; do
+      rel=${file#"$SEED_OVERLAY"/}
+      if [ -e "$WORKSPACE/$rel" ]; then
+        echo "mission_seed_overlay_shadows_slice: $rel is both sliced and seeded" >&2; exit 1
+      fi
+      case "$rel" in
+        .julius/*) echo "mission_seed_overlay_reserved_path: $rel" >&2; exit 1 ;;
+      esac
+      mkdir -p "$WORKSPACE/$(dirname "$rel")"
+      cp "$file" "$WORKSPACE/$rel"
+      overlaid=$((overlaid + 1))
+    done < <(find "$SEED_OVERLAY" -type f -print0)
+    [ "$overlaid" -gt 0 ] || { echo "mission_seed_overlay_empty: $SEED_OVERLAY" >&2; exit 1; }
+  fi
+
   echo "slice_rev=$slice_sha"
   echo "slice_paths=${#paths[@]}"
   echo "slice_bytes=$slice_bytes"
+  echo "seed_overlay_files=$overlaid"
 else
   # ------------------------------------------------------ throwaway-tree mode
   [ -d "$SEED_DIR" ] || { echo "mission_workspace_seed_missing: $SEED_DIR" >&2; exit 1; }

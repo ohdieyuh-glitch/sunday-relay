@@ -2783,3 +2783,65 @@ Reason codes pass the same narrowing every other durable reason code does, so
 prose, a URL or a credential cannot arrive dressed as one. Finding ids travel as
 a bounded comma-joined string beside an exact count, so a truncated list never
 reads as a complete one. The bundle's `contract-events.tsv` gains the columns.
+
+---
+
+## 00l. PAID LIVE MISSION 4 — PROJECT BRAIN v2, THE TRUST CORE (fixture, 2026-09-10)
+
+Design record: **`<scratchpad>/ceremony/MISSION_4_DESIGN.md`** (the reasoning) and
+this section (the shipped fixture).
+
+**Searched before building, and it changed the scope.** Project Brain v1 already
+does role- and task-scoped retrieval with sensitivity filtering, redaction and a
+bounded packet (`compileJuliusContext`), and its persistence was proven durable
+in Live Run 3. So two of the founder's fourteen capabilities are already
+production. What does not exist is the **trust core** — provenance, trust
+states, evidence references, candidates, verification-gated promotion,
+contradiction and supersession — and that is Mission 4.
+
+**Why not all fourteen: the envelope, not the ambition.** The coding agent is
+denied `Write`, so it can only edit files that were SEEDED; a mission needing a
+dozen new modules cannot be expressed at all. Scoping to one module is what the
+founder's own "bounded and auditable" rule requires. Memory classes and their
+retrieval semantics are Mission 4b/5, on a trust core that already holds.
+
+**The fixture, and each piece's job:**
+
+| Artifact | Job |
+|---|---|
+| `src/relay/mission/julius/julius-memory-trust.ts` | the DELIVERABLE — a real repository file, every export throwing `memory_trust_not_implemented` |
+| `.github/julius-missions/julius-live-mission-4/slice.txt` | 3 repository paths, 40,960 bytes against the 4 MiB ceiling |
+| `…/seed/src/relay/mission/julius/julius-memory-trust.test.ts` | the SPECIFICATION, seeded rather than committed |
+| `…/contract.json` | 10 acceptance criteria, all blocking |
+| `MISSION_LIMITS['julius-live-mission-4']` | $20 / 3 cycles, granted by a named edit |
+
+**The stub is committed but the spec is not**, and that asymmetry is the whole
+point: a deliberately-failing test on main would break `npm test`, and one that
+passed against the stub would let a mission satisfy its TEST evidence having
+implemented nothing. The seed overlay is what made this expressible — see
+`docs/JULIUS_MISSION_SANDBOX.md`.
+
+**Proven before any provider call**, by materialising the real sandbox: the
+slice extracts, the loader resolves Relay's extensionless imports, and the
+specification **fails 8 of 9 with exit 1**, every failure a
+`memory_trust_not_implemented`. The one passing case is the vocabulary
+assertion, which is correct — the closed vocabularies are the charge's given,
+not the work.
+
+**Traps closed while building it, each verified rather than assumed:**
+
+- `julius-runtime.ts` value-imports `julius-repair-lineage.ts`. The stub only
+  `import type`s, which stripping erases, so nothing loads it today — but a
+  slice whose import chain stops halfway is a sandbox that works until it
+  doesn't. Both are in the slice.
+- The harness FILE_RULES entry first named a subsystem that does not exist
+  (`PROJECT BRAIN / MEMORY`). The generator accepted it silently because the
+  stub was not yet reached; it is now `DURABLE STATE / PROJECT BRAIN`, correct
+  for the day the implementation lands and a caller appears.
+- A slice mission legitimately seeds files the coder must NOT edit, so the
+  "every seeded file is named by its contract" rule now also reads a slice
+  mission's constraints — where "do not edit these" belongs.
+- The contract checker refused the mission for granting itself a ceiling. That
+  refusal was correct; the grant is a named, reviewable edit, made under the
+  founder's standing campaign authorisation, which removed the per-run approval
+  and not the ceiling.
