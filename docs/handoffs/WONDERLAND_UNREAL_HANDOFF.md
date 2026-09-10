@@ -17,13 +17,16 @@ Read this first. Everything below it is the detail.
 
 | | |
 |---|---|
-| BRANCH | `relay/wonderland-integration`, also `claude/relay-wonderland-integration-ojr5x6` — same commits, two refs |
-| SHA | `bb880c3`+ (check `git log -1` — that is authoritative) |
+| BRANCH | `claude/julius-wonderland-integration-khaqs3`, continuing `relay/wonderland-integration` from `03fe982` |
+| SHA | check `git log -1` — that is authoritative |
 | WHAT HAS RUN LIVE | **nothing.** No provider call, no Julius mission, no Unreal build, no frame |
+| OFFLINE PROOF | **1,019 executable C++ checks** across six harnesses, plus a 66-sample geometry fixture. See "The offline harnesses" below |
 
 **The remaining work is compile, import, connect, display, drive, reconnect,
 capture — not invent.** Every contract on this seam exists, is mirrored into
-C++, and is held by a test. What is missing is an engine and one port.
+C++, is held by a test, and — as of 2026-09-10 — **is decoded and adopted by
+real C++ that this repository compiles and runs**. What is missing is an engine
+and one environment variable.
 
 ### Authorisation: BUILT. Read this before you assume otherwise.
 
@@ -104,8 +107,18 @@ placeholder:
 **Nothing cloud-side.** The remaining uncertainty on this seam is ENGINE
 EXECUTION: A–M below, none of which can be done without Unreal.
 
-The two open cloud-side DECISIONS, neither of which blocks A–M:
-the Project Brain kind vocabulary above, and an authority that reports usage.
+As of 2026-09-10 the hydration path is complete end to end — PostgreSQL →
+reader → route → wire JSON → C++ decoder → subsystem adoption — and every link
+is EXECUTED offline rather than described. The Project Brain kind vocabulary is
+no longer an open decision: the kernel's vocabulary and the citation's differ,
+an unrecognised kind is counted in the total and in no bucket, and the gap
+between them is the signal. **One cloud-side decision remains and it does not
+block A–M: an authority that reports usage.** Until there is one the meters draw
+UNKNOWN, which is the true reading rather than a stub.
+
+**One operator action remains, and it is not a code change:** set `DATABASE_URL`
+on the Railway bridge. Without it `/wonderland/julius/*` answers 503, which is
+correct rather than broken — see E below.
 
 ### The decode, which is BUILT — and how to run it
 
@@ -119,8 +132,9 @@ the proof is unusual and deliberate.
 | entry | `WonderlandDecodeDeliveryBytes` — an SSE `data:` payload, `{envelope, activity}` |
 | also | `WonderlandDecodeEnvelopeBytes` for a bare envelope; the same reader underneath |
 | usage | `WonderlandDecodeUsageBytes` — the HUD, for `UWonderlandUsageSubsystem::ApplyUsage` |
+| **snapshot** | **`WonderlandDecodeHydrationBytes`** — what `/wonderland/julius/hydrate` answers, WHOLE: run, drawable state, both meters, the usage verdict, the folded activity, the Project Brain citation, the C.A.R.D. scope and the open human gates |
 | framing | `WonderlandWireReadSseData` finds the data line; a heartbeat yields nothing, without erroring |
-| run it | `npm run wonderland:wire:verify` — 171 checks over 71 generated fixtures |
+| run it | `npm run wonderland:wire:verify` — **327 checks over 146 generated fixtures** |
 
 **The usage figures are the ones to be careful with.** Every one is
 `{ bKnown, Value, Reason }`, and the production reading today is ALL UNKNOWN —
@@ -138,7 +152,7 @@ thing this seam cannot do. The parser here is small, strict and dependency-free,
 so the code that ships is the code the harness runs at -O0 and -O2 under ASan
 and UBSan, with the two builds required to agree.
 
-**Nothing is defaulted.** Twelve named refusals cover malformed JSON, duplicate
+**Nothing is defaulted.** Thirteen named refusals cover malformed JSON, duplicate
 keys, trailing content, wrong types, unknown tokens, non-finite and fractional
 numbers, values past the exact-integer range, blank identity, and depth/size
 ceilings. `false` is not unknown, `zero` is not unknown, `missing` is not
@@ -182,11 +196,36 @@ engine open and hours on the clock.
 carrier field, every enum's token→member table, every struct that crosses. It
 is GENERATED from the same parity tables that hold the headers, so it cannot
 describe a seam the headers no longer have; `npm run wonderland:wire:check`
-fails when it drifts. The decoder covers the ENVELOPE, the ACTIVITY READING and the USAGE HUD — which
-is everything `ApplyEnvelope` and `ApplyUsage` take. The full hydration payload
-from `/wonderland/julius/hydrate` wraps those plus the Project Brain citation
-and the C.A.R.D. scope; decoding the wrapper is the remaining piece, and the
-same rules and the same generated tables apply to it.
+fails when it drifts. The decoder covers the ENVELOPE, the ACTIVITY READING, the
+USAGE HUD **and the whole HYDRATION WRAPPER** — everything `ApplyEnvelope`,
+`ApplyUsage` and `AdoptHydration` take. Nothing on this seam is left undecoded.
+
+### The snapshot decoder, and the one thing to hold in mind
+
+`WonderlandDecodeHydrationBytes` is ONE entry point rather than four calls you
+compose, and that is deliberate: a hydration is adopted WHOLESALE — the run,
+both meters, the activity, the citation, the C.A.R.D. and the gates replace
+themselves in one act, and nothing arriving afterwards contradicts any of them.
+So the cross-field agreement is decided BEFORE any of it is visible. Assembled
+from parts, every part would decode cleanly and the assembly could still be a
+mis-routed picture of somebody else's mission, with every number on it real.
+
+Three things in it are worth knowing before you read the code:
+
+- **`VisualState` and `bTerminal` are ON THE PAYLOAD.** `Run.State` is the
+  KERNEL's word — one of thirteen — and what you DRAW is one of eleven. Do not
+  map it yourself: that mapping is Relay's, an adapter may not own a mission
+  verdict, and a second copy would agree until the day it did not. `bTerminal`
+  cannot be recovered from the drawing either — `Blocked` and `Error` are drawn
+  differently and only one is terminal.
+- **`KindCounts` is INDEXED BY ORDINAL**, sized to `WonderlandBrainKindSlots`.
+  `KindCounts[(int32)EWonderlandBrainKind::Finding]` is that kind's count with
+  no arithmetic. Slot 0 is `Unobserved`, is not a kind, and stays zero. A kind
+  the kernel learned and this build cannot name is counted in `EntryCount` and
+  in NO bucket — the gap between them is the signal, not a bug.
+- **`HumanGates` may be empty and may NOT be absent.** An empty list beside a
+  KNOWN `Run.PendingApprovals` of zero is "nothing is gated"; the nullable
+  count beside it is what carries "nobody counted".
 
 ### The Unreal proof checklist (A–M)
 
@@ -207,7 +246,8 @@ this stream can tell you about it.
 | **H** | an accent rides on top | an activity reading with `AwaitingApproval` — the base clip must NOT change. Accent and phase are two axes and the second must not overwrite the first |
 | **I** | both meters draw | top left, GREEN Compound outside, BLUE Single nested behind. A bigger tier is a **LONGER track**, not a differently-shaded one: push two `FWonderlandUsageHud`s with different `ReferenceCapacityUnits` and watch the arc's physical length change. A default one draws tracks with no remainder and **no zero** |
 | **J** | disconnect and reconnect | drop the link mid-run and let Julius progress while it is down |
-| **K** | rehydration is proven | adopt a positioned hydration, replay the tail, land on the right state **without replaying the transcript**. Watch the event count: a reconnect costs one hydration plus the events after `atSequence`, and a run with four thousand events must not cost four thousand deliveries |
+| **K** | rehydration is proven | `WonderlandDecodeHydrationBytes` then `UWonderlandJuliusSubsystem::AdoptHydration` — ONE call, not four — then replay the tail from `GetResumeAfterSequence()` and land on the right state **without replaying the transcript**. Watch the event count: a reconnect costs one hydration plus the events after `atSequence`, and a run with four thousand events must not cost four thousand deliveries. `AdoptHydration` returns FALSE when it refused; nothing is partly applied |
+| **K2** | **a cold join draws, and a gated run says so** | hydrate a run that has already COMPLETED — it sends no further events, so this is the only thing that can ever draw it — and separately one with an open approval. The second must show the activity accent AND `GetHumanGates()` naming the operation C.A.R.D. gated. Both come from the hydration alone, with no envelope behind them |
 | **L** | the three endings drive | COMPLETE, BLOCKED and ERROR each reached and drawn. Note that `blocked` is drawn by BOTH a resumable PAUSED run and a terminal CANCELLED one — `terminal` comes from the kernel, never from the picture |
 | **M** | the evidence is captured | screenshots and video into `docs/relay/WONDERLAND_SLICE_EVIDENCE.md`, with hashes of the media files |
 
@@ -233,10 +273,42 @@ stays UNPROVEN, and this document says so in three places on purpose.**
                                         Without it the route answers 503, which
                                         is the only safe thing an unconfigured
                                         authorisation can do.
-4. UWonderlandJuliusSubsystem::BindProject / AdoptSnapshot / ApplyEnvelope
+4. UWonderlandJuliusSubsystem::BindProject
+     then, ON JOIN OR RECONNECT:
+       WonderlandDecodeHydrationBytes -> AdoptHydration   (one act; false = refused)
+     then, PER EVENT:
+       WonderlandDecodeDeliveryBytes  -> ApplyEnvelope
+   AdoptSnapshot remains for a bare `inspectRun` answer and needs an embodiment
+   you build; AdoptHydration does not, because the payload carries the drawable
+   state.
 5. UWonderlandUsageSubsystem::BindProject / ApplyUsage
+     the hydration's `Usage` and `UsageStatus` are the same shapes ApplyUsage
+     takes — decode once, feed both subsystems from the one payload.
 6. bind the HUD widget to OnUsageChanged
+7. read UWonderlandJuliusSubsystem::GetHumanGates() wherever a run can stop and
+   ask. A worker never commands the user: Julius owns the gate and the resume,
+   and this is the world REPORTING one, never requesting it.
 ```
+
+### The offline harnesses, and what each one already proves
+
+Run all of these before you conclude the engine broke something. Every one
+COMPILES AND EXECUTES the real C++ at -O0 and -O2 under ASan/UBSan, and the two
+builds are required to agree:
+
+| command | proves | checks |
+|---|---|---|
+| `npm run wonderland:cpp:syntax` | every source file parses | per-file, against a baseline |
+| `npm run wonderland:wire:verify` | the whole decoder, over fixtures the server generated | 327 |
+| `npm run wonderland:julius:verify` | the run subsystem: ordering, reconnect, adoption, project switch | 90 |
+| `npm run wonderland:usage:verify` | the usage subsystem: refusals, held state, snapshot adoption | 152 |
+| `npm run wonderland:ordering:verify` | the ordering rule, replayed from a TypeScript-generated table | 450 over 26 cases |
+| `npm run wonderland:geometry:verify` | the HUD sampler against the TypeScript, numerically | 66 samples, worst 1e-6 |
+
+**1,019 executable checks, plus the geometry fixture.** If one of these fails
+after you touch a header, the header moved and the generated artefact did not:
+`npm run wonderland:wire:export`, `:wire:fixtures`, `:geometry:export`,
+`:ordering:export` regenerate them, and a TypeScript test holds each fresh.
 
 ---
 
