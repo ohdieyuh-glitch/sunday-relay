@@ -8,14 +8,14 @@ continue from here alone.
 
 | | |
 |---|---|
-| SESSION | 2026-09-07 → **2026-09-08** — Relay's Wonderland **integration** stream (session 3 of 3) |
-| THE ONE MISSING PORT | a project-membership check. `/wonderland/julius/*` answers 503 without it, deliberately. See §31–37. |
+| SESSION | 2026-09-07 → 2026-09-08 → **2026-09-10** — Relay's Wonderland **integration** stream |
+| THE MISSING PORT | **CLOSED.** Membership is wired and the route authorises per request. See §31–37, and §45–49 for what came after. |
 | CHECKOUT | `/home/user/sunday-relay` (cloud session, fresh clone; no worktrees) |
-| BRANCH | `relay/wonderland-integration`, also pushed to `claude/relay-wonderland-integration-ojr5x6` (the harness's designated branch — same commits, two refs) |
-| BASE | `origin/main` at `b2dc9f2` |
-| SHA AT END | `075113e` — and check `git log -1 relay/wonderland-integration`, which is authoritative |
-| WHAT RAN LIVE | **Nothing.** No provider call, no Julius mission, no Unreal build, no GPU frame. Every figure in the HUD is a labelled simulated fixture. |
-| WHAT RUNS OFFLINE | **five harnesses that COMPILE AND EXECUTE the real C++**, reached by seven npm commands: `wonderland:cpp:syntax`, `:geometry:verify`, `:usage:verify`, `:ordering:verify`, `:julius:verify`, plus `:geometry:check` and `:ordering:check` for generated-artefact staleness. 652 checks (152 usage + 50 run + 450 ordering) and a 66-sample geometry fixture. |
+| BRANCH | `claude/julius-wonderland-integration-khaqs3`, continuing `relay/wonderland-integration` from `03fe982` |
+| BASE | `origin/main` at `b2dc9f2` (unchanged; main has since moved to `5be73c5` and this branch has NOT been rebased onto it) |
+| SHA AT END | check `git log -1 claude/julius-wonderland-integration-khaqs3`, which is authoritative |
+| WHAT RAN LIVE | **Nothing.** No provider call, no Julius mission, no Unreal build, no GPU frame. Every figure in the HUD is a labelled simulated fixture. **A real PostgreSQL 16.13 now runs in this environment** — that is a database, not a provider. |
+| WHAT RUNS OFFLINE | **five harnesses that COMPILE AND EXECUTE the real C++**, reached by nine npm commands: `wonderland:cpp:syntax`, `:geometry:verify`, `:usage:verify`, `:ordering:verify`, `:julius:verify`, `:wire:verify`, plus `:geometry:check`, `:ordering:check` and `:wire:fixtures:check` for generated-artefact staleness. **1,019 checks** (152 usage + 90 run + 450 ordering + 327 wire) and a 66-sample geometry fixture. |
 | WHAT IS STILL UNPROVEN | the Slate paint in `WonderlandUsageHudWidget.cpp`. It parses; no engine here can run it, and the file says so in its own header. |
 
 ---
@@ -1031,6 +1031,127 @@ construction path rather than a fixture that politely omitted one.
 
 ---
 
+### 45–49. The hydration path, end to end (session of 2026-09-10)
+
+The named remaining seam was "a decoder for the HYDRATION WRAPPER". It is
+written, and closing it exposed four more things that were wrong or missing on
+the same path. All five are done and all five are proven offline.
+
+#### 45. The wrapper decodes (`194906f`)
+
+`WonderlandDecodeHydrationBytes` — the snapshot, whole. The envelope, the
+activity and the usage HUD already decoded; this is those three plus the Project
+Brain citation and the C.A.R.D. scope, in ONE entry point rather than four calls
+a client composes, because a hydration is adopted WHOLESALE and the cross-field
+agreement has to be decided before any of it is visible.
+
+Two readers were EXTRACTED rather than rewritten, so the activity here is the
+delivery's and the usage here is the usage entry's. The refactor is
+behaviour-preserving: 171 checks before and after.
+
+Three carriers had no reader. `NullableInteger` (`atSequence: null` is "the
+reader could not say"; `activeTasks: null` is "nobody counted"), `NullableFlag`
+(the three-way C.A.R.D. slot), and `kindCounts` — an object keyed by kind,
+stored INDEXED BY ORDINAL so no caller subtracts one. **A known kind must be
+present; an unknown kind is TOLERATED**, the one place in the decoder where an
+unrecognised token is not a refusal, because a world that went dark the moment
+Relay learned a tenth kind is the more expensive failure.
+
+`SchemaRejected` is new and LAST in the enum, so no ordinal moved.
+
+Three enum tables were missing and are now generated — the usage reading, the
+autonomy level, the brain kind. A decoder path added without its tables refuses
+every token it reads.
+
+#### 46. The citation became real, and the C.A.R.D. stopped guessing (`c4e74f2`)
+
+The reader's own header said the citation was blocked on a vocabulary mismatch.
+**It was not.** `scopeWonderlandBrain` was built for exactly that case: an
+unrecognised kind is counted in `entryCount` and in NO bucket, and the gap
+between the total and the sum IS the documented signal. So
+`julius_context_snapshots` is read — revision, character count, redaction count,
+truncation, content hash, and one row per cited entry through `WITH ORDINALITY`
+over the packet's own `source_entry_ids`.
+
+**Bounded by the hydration's own instant**, from the database's clock in the
+statement that read the run. A compilation from a moment later describes a
+retrieval the rest of the payload knows nothing about.
+
+`safe_content` has no column in the query, no field on the citation and nowhere
+to go — proven with a canary planted in every seeded entry.
+
+And `swarmEligible` was a bare bool. C.A.R.D. policy is not persisted AT ALL —
+`julius_runs` stores a `card_revision` and nothing stores the policy that
+revision names, which `julius-events.ts` already says where it explains why
+`autonomy.changed` is not an event type. So a reader passed no capabilities and
+got `false`: "this run may not spawn a swarm", drawn beside three role slots
+that correctly said UNKNOWN. It is `boolean | null` now, `FWonderlandFlag` on the
+C++ side.
+
+#### 47. What a run is waiting for a PERSON to do (`a65c4a4`)
+
+The kernel already implements the whole intervention protocol — policy answers
+REQUIRE_APPROVAL, `requestApprovalAndBlock` writes the gate and blocks the run in
+one transaction, `decideApproval` records who decided, the run resumes. **What
+did not exist is the projection.** A world was told `pendingApprovals: 3` and
+shown `awaiting_approval`, and that was all: three of something, somewhere.
+
+`WonderlandHumanGate` carries the operation C.A.R.D. gated, the task (or none —
+run-level gates exist), the reason CODE and when the gate opened. It carries **no
+prose**: `safe_rationale` is a real column and a genuinely safe sentence and it
+still does not cross, and `decision_reason` and `decided_by` stay with it. The
+narrowing function cannot be handed them.
+
+**A gate this build cannot name is COUNTED, never dropped.** `run.pendingApprovals`
+stays the authority on how many; the list says which, and both come from ONE
+statement so they cannot disagree about a moment.
+
+`WONDERLAND_GATED_OPERATIONS` is held to `JuliusPolicyOperation` in both
+directions by a type assertion.
+
+#### 48. A world hydrating cold had nothing to draw (`1be473a`)
+
+`run.state` is the KERNEL's word — one of thirteen. What a world DRAWS is one of
+eleven. A TypeScript caller imports the mapping; **an Unreal client cannot**,
+because an adapter may not own a mission verdict. So a world was left to map
+thirteen kernel words in engine code nobody reviewed, or to wait for the first
+envelope — which for a COMPLETED run never comes.
+
+`visualState` and `terminal` are on the hydration now. `terminal` cannot be
+recovered from the drawing: `blocked` and `error` are drawn differently and only
+one is terminal. The verdict RECOMPUTES both rather than trusting them.
+
+#### 49. Adopting one, so a joining world is not deaf (`e7b81cc`)
+
+The decoder produced an `FWonderlandHydration` and **nothing could apply one**.
+`AdoptSnapshot` sets the run and nothing else, so a world that had just joined
+held a correct phase beside an EMPTY ACTIVITY — a run waiting on a person drew
+as a calm run. The server folds the activity precisely so a rejoining client
+need not replay the transcript, and nothing applied what it folded.
+
+`AdoptHydration` applies the run, the drawable state, the folded activity and the
+gates together or not at all. It takes no embodiment (the payload answers that
+now) and returns a verdict (a JOIN is a moment a caller waits on).
+
+**Two defects it found in itself**, both from mutation runs. Its first guard read
+`bStateApplied` to decide whether `AdoptSnapshot` had applied — but on a
+RECONNECT that flag is already true, so a refusal would have been invisible and
+another run's activity and gates would have gone on over the held ones. It
+compares the cursor's refusal counters now. And its inner-identity check is
+REDUNDANT today, which is labelled rather than left to look proven.
+
+#### What this session did NOT do
+
+- **No rebase onto the newer `main`.** This branch is still based on `b2dc9f2`
+  while `origin/main` is at `5be73c5` (12 Julius commits ahead). Nothing here
+  conflicts as far as this session can tell, but the merge has not been tried.
+- **The three gaps in §"the gaps this stream found and did NOT close" are still
+  open**, and item 3 (the Julius session's two persistence defects) is still the
+  one worth raising with them.
+- **No provider call, no Julius mission, no Unreal build, no GPU frame.**
+
+---
+
 ## What is REAL and what is not
 
 Read this table before saying anything about this stream out loud. The
@@ -1045,11 +1166,11 @@ distinction between the middle two rows is the one that gets misreported.
 | the envelope, ordering, rehydration and the composed session fold | **real**, tested; ordering verified by mutation on both axes |
 | visual-transition legality | **real**, DERIVED from the kernel's own guard rather than declared |
 | the ledger adapter | **real**, and tested against the persistence layer's actual payload shapes |
-| the usage accounting boundary | **real** contract; no authority attributes spend into it yet |
+| the usage accounting boundary | **real** contract; no authority attributes spend into it yet — STILL the case |
 | per-project isolation across many worlds | **real**, proven by referential identity, mutation-verified |
 | the entry contract (admission vs presentation) | **real**, and its honest answer today is `ADMITTED · NOTHING CAN SHOW IT` |
 | HUD geometry, palette, capacity model | **real** and shared with Unreal by bidirectional parity |
-| the usage authority (KNOWN / NOT-REPORTED / STALE / UNAVAILABLE) | **real** contract; **no authority reports into it** |
+| the usage authority (KNOWN / NOT-REPORTED / STALE / UNAVAILABLE) | **real** contract; **no authority reports into it** — STILL the case, and the one remaining placeholder in a hydration |
 | the numbers in the HUD | **NOTHING REPORTS THEM**, and the HUD is not a web surface at all — it belongs to the Unreal world. Component, stylesheet and fixture are all absent from the shipped bundle. |
 | the entry path (`ENTER WONDERLAND`) | **real** as far as `admitted`; the button runs the state machine and posts to the real bridge route |
 | the honesty ladder itself | **real and executable** — `verifyWonderlandCapture` grades a capture, and `real` is unreachable from it by construction |
@@ -1060,10 +1181,14 @@ distinction between the middle two rows is the one that gets misreported.
 | the Julius world routes | **real**, authorised per request against `project_members`, and READING through `WonderlandJuliusReaderPostgres` — proven end to end over real HTTP against a stubbed database |
 | the two world reads | **real**, mutation-verified, and RUN AGAINST A REAL PostgreSQL 16.13 — real migration chain from empty, two seeded projects, 30 tests |
 | the wire → USTRUCT decode contract | **real** and generated from the parity tables |
-| the wire DECODER | **real** — envelope, activity, usage HUD and SSE framing; 171 checks at -O0 and -O2 under ASan/UBSan, driven by 71 fixtures the TypeScript generated. Never compiled against Unreal |
+| the wire DECODER | **real** — envelope, activity, usage HUD, SSE framing AND THE HYDRATION WRAPPER; 327 checks at -O0 and -O2 under ASan/UBSan, driven by 146 fixtures the TypeScript generated. Never compiled against Unreal |
 | the Unreal ordering rule | **real**, replayed through 26 cases generated from the TypeScript, 450 checks |
-| the Project Brain scope | **real** contract, canary-tested; no authority cites into it yet |
+| the Project Brain scope | **real**, and CITED FROM A REAL DATABASE: `julius_context_snapshots` read per run, bounded by the hydration's instant, canary-tested against text really in the table. A kernel kind with no bucket is counted in the total and nowhere else |
 | Unreal DRAWING any of it | **not proven.** `WonderlandUsageHudWidget.cpp` parses and has never been compiled against real UMG headers or seen to put a pixel on a screen. |
+| the C.A.R.D. scope | **real** contract, and every judgement in it is honestly NULL — C.A.R.D. policy is not persisted anywhere, so there is nothing to resolve and nothing pretends otherwise |
+| the human-gate projection | **real**, read from `julius_approvals` in the same statement as its count, provider-free and prose-free, 6 tests against a real PostgreSQL |
+| the drawable state on a hydration | **real**, from Relay's own total mapping, proven for all thirteen kernel states |
+| adopting a whole hydration in C++ | **real**, 90 executable checks including the reconnect case that found an unsound guard |
 | a live Julius mission driving the world | **NO. Not once.** |
 
 **Do not describe this as "Julius is connected".** The honest word is
@@ -1429,29 +1554,33 @@ purpose and confirmed to fail:
 
 ## Exact next integration task
 
-**Still nothing cloud-side on this seam, and now with less taken on trust.**
-The reader has run against a real PostgreSQL; the decoder exists and is driven
-by fixtures the server generated. What remains is ENGINE EXECUTION — A–M in the
-Unreal handoff — plus the decoders for the structs the envelope path does not
-cover.
+**THE CLOUD SIDE OF THIS SEAM IS DONE.** As of 2026-09-10 the hydration path is
+complete end to end — PostgreSQL → reader → route → wire JSON → C++ decoder →
+subsystem adoption — and every link of it is executed offline rather than
+described. What remains is ENGINE EXECUTION and things that need a live run.
 
 In order:
 
 1. **Set `DATABASE_URL` on the Railway bridge.** One environment variable; both
    world dependencies are built from it. Without it the route answers 503,
-   which is correct rather than broken.
-2. **A decoder for the HYDRATION WRAPPER.** The envelope, the activity reading
-   and the usage HUD all decode — which is everything `ApplyEnvelope` and
-   `ApplyUsage` take. `/wonderland/julius/hydrate` wraps those plus the Project
-   Brain citation and the C.A.R.D. scope, and that wrapper is the remaining
-   piece. Same rules, same generated tables, same harness;
-   `WONDERLAND_WIRE_CONTRACT.md` lists every carrier field in it.
-3. **Run A–M.** Nothing about it can be done here.
-4. **Capture one real Julius event stream** and grade it with
+   which is correct rather than broken. **Not a code change — an operator's
+   action, and the only cloud item left.**
+2. **Run A–M** in the Unreal handoff. Nothing about it can be done here, and
+   everything cloud-side it depends on now exists and is tested.
+3. **Capture one real Julius event stream** and grade it with
    `verifyWonderlandCapture` — still the cheapest step up the honesty ladder and
-   the only one that moves anything off INTEGRATION-READY.
-5. **Two contract decisions**, neither blocking: the Project Brain kind
-   vocabulary (section 41) and an authority that reports usage.
+   the only one that moves anything off INTEGRATION-READY. Needs a live run, so
+   it needs the Julius session.
+4. **An authority that reports usage.** The last placeholder in a hydration: the
+   meters project from an empty authority and draw UNKNOWN, which is the true
+   reading and not a stub, but nothing reports into the contract. Not blocking.
+5. **Decide whether to rebase onto the newer `main`.** This branch is based on
+   `b2dc9f2`; `origin/main` is at `5be73c5`. Untried.
+
+The Project Brain kind vocabulary is NO LONGER an open decision (section 46):
+the kernel's vocabulary and the citation's differ, an unrecognised kind is
+counted in the total and in no bucket, and the gap between them is the signal.
+That is the design working rather than a decision deferred.
 
 ### The older next-task, still true and now second
 
