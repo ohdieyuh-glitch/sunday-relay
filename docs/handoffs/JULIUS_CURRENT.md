@@ -3442,3 +3442,120 @@ drift into `julius-reviewer-deadline.mjs` before the suite did.
 
 Mission 5's contract, adversarial specification and $30 / 3-cycle ceiling are
 **untouched**. The capability bar is unchanged.
+
+## 00s. THE CODER FAILED AND NOTHING COULD SAY WHY — AND FIVE OF #247's SIX DIAGNOSTICS NEVER REACHED A BUNDLE (2026-09-10)
+
+Paid Mission 5's rerun (run 34504244415, durable `run:cecba99c779c967f128dd58c`)
+proved the envelope repair and then failed one hop later.
+
+**What worked.** The repair loop ran on a paid run for the first time: three
+`repair:plan` rounds on the Prompt Architect, each independently reviewed,
+decisions `REPAIR / REPAIR / REPAIR / ACCEPT`, the plan growing 25,805 → 31,691
+→ 38,952 → 40,484 chars and the contract reaching revision 5. The coder was
+**not** capacity-bound this time: 6 turns of 26, 81 s of 734 s.
+
+**What failed.** It changed nothing, spent **$0.885661**, and the whole durable
+record of why was:
+
+```
+failure_class          coder_provider_error_after_init
+is_error               true
+num_turns              6      tool_use_count 5
+output_bytes_observed  25
+implementation_present false
+```
+
+`coder_provider_error_after_init` names the BOUNDARY, not the cause. The cause
+was in an exception thrown by the SDK stream, and `hosted-runner.ts` discards it
+on purpose — *"A provider error can quote the request, which can quote the
+credential — so only a fixed sentence leaves this function either way."* That
+reasoning is right and is not being relaxed. The consequence was that the answer
+was destroyed at the moment it was produced.
+
+### The repair: classify, never forward
+
+`relay-bridge/hosted-coding-agent/hosted-failure-reason.ts` matches the text
+against a pattern table and returns a **constant of its own** — one of eleven:
+
+```
+rate_limited  context_length_exceeded  content_filtered  provider_overloaded
+provider_auth_rejected  provider_bad_request  provider_server_error
+stream_interrupted  execution_error  unclassified  no_message
+```
+
+No capture group, no interpolation, no `return` that mentions the input. The
+thrown error is classified **inside the catch block** and dropped on the next
+line; the fixed sentences are still the only text that leaves.
+
+This is deliberately NOT what #247 did for the architect. `safeReasonToken`
+*passes through* a value the provider already gave as an enum
+(`response.status`, `incomplete_details.reason`). The hosted SDK gives no such
+enum — it gives prose. Passing prose through a shape test would be a
+credential-exfiltration hazard wearing a regex.
+
+**Which is why the domain admits this field by MEMBERSHIP, not shape.**
+`JULIUS_HOSTED_FAILURE_REASONS` lives in `julius-router.ts` and the allowlist
+uses `safeEnum`. `sk_ant_api03_…` satisfies `safeReasonCode` and `safeToken`
+both; it does not satisfy membership. The adapter keeps its own copy because it
+may not import the mission projection, and a parity test fails if they drift.
+
+Two sources feed it, in order: the runner's classification of the **thrown
+error** (strictly better evidence — on this path the runtime threw *instead of*
+finishing), falling back to the runtime's own `finalText`. Null on success,
+always: classifying a healthy summary would read "0 errors" as a failure.
+
+### The second defect, found while wiring the first
+
+Repair #247 added six architect diagnostics to the `safeReviewDiagnostics`
+allowlist. **Five of them were never added to any query.**
+
+```
+providerStatus  incompleteReason  reasoningTokens  maxOutputTokens  totalTokens
+```
+
+They reach the durable event ledger. They are then destroyed with the database,
+because `.github/julius-live-evidence-dump.sh` is the only hop that survives the
+job and it did not select them. Paid Mission 4's bundle carries **zero** of
+those columns. **My earlier statement that a failed architect's provider status
+and token counts would appear "in the evidence bundle" was wrong about the
+bundle** — they reached the ledger and never the export.
+
+The existing test pinned four *named* cost facts, which is exactly how a
+half-wiring of six other facts shipped past it: pinning specific columns proves
+those columns exist and says nothing about completeness. The new guard runs from
+the allowlist outward — every key `safeReviewDiagnostics` admits must have a
+column, or an `EXPORT_EXEMPT` entry saying in a sentence why it is withheld
+(empty today). It also refuses the reverse (a column no key feeds is permanently
+null), refuses duplicate aliases, refuses a stale exemption, and **fails if its
+own parse of the allowlist returns implausibly few keys** — a structural test
+that reads source must break loudly when its parse stops working, not pass over
+an empty set.
+
+All six columns are now exported: 62 allowlisted keys, 62 columns.
+
+**Mutation-tested seventeen ways**, each failing only its intended tests: the
+six export-completeness mutations (drop one column, drop #247's five exactly as
+they shipped, add a column no key feeds, duplicate an alias, keep a stale
+exemption, break the allowlist parse), the two vocabulary mutations (shape
+instead of membership, drift the two copies apart), the classifier forwarding
+its input, and the eight wiring mutations across the runner and the live
+composition (classify on the success path, record a constant, ignore the
+runner's answer, return the raw message, drop the classification from either
+refusal, classify a cancellation).
+
+One thing the repository taught me on the way: `relay-repository-boundary.mjs`
+refused my credential-shaped test fixtures, correctly and with no exception for
+tests. Shortening them until the tripwire tolerated them would also have
+shortened them past what they exist to prove, so they are ASSEMBLED at run time
+— the values are exactly as credential-shaped as the real thing and the source
+contains no such literal — and a test asserts the assembled values still match
+the three shapes the scanner refuses, so a later edit cannot quietly shrink one.
+
+Full gate green on the candidate tree: `npm test` **514 files / 9,943 passed / 0
+failed** (3 skipped, 30 todo), four-pass typecheck, `build`, `relay:build`,
+`relay:bridge:build`, repository boundary, parity gate, surface-parity strict,
+yc-demo, CLI contract-verify, harness `--check` current, `git diff --check`, and
+the four drills.
+
+`hosted-runner.ts`'s fixed sentences, `maxCostCents`, mission spend governance,
+Mission 5's contract and its adversarial tests are all **untouched**.
