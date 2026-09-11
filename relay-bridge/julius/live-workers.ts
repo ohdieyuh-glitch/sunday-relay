@@ -30,11 +30,13 @@ import {
   JuliusDispatchError,
   reviewChargeFor,
   reviewStageOf,
+  reviewSubjectTaskId,
   type JuliusContextSnapshot,
   type JuliusDispatchAllocation,
   type JuliusProviderAdapter,
   type JuliusProviderResult,
   type JuliusReviewStage,
+  type JuliusReviewRequirement,
   type JuliusWorker,
 } from '../../src/relay/mission/julius';
 import {
@@ -43,6 +45,8 @@ import {
   type GptRunOutcome,
 } from '../../src/relay/connectors/gpt-architect';
 import { validateArchitectPlan, type ArchitectPlanReasonCode } from '../../src/relay/mission/prompt-architect/prompt-architect-plan';
+import { sanitizeJuliusGuidanceProposal } from '../../src/relay/mission/julius/julius-continuous-lifecycle';
+import { ARCHITECT_GUIDANCE_SCHEMA, ARCHITECT_GUIDANCE_SCHEMA_NAME } from '../../src/relay/connectors/gpt-architect/guidance-schema';
 import {
   loadHostedQuery,
   runHostedCodingAgent,
@@ -90,6 +94,8 @@ export function createLiveArtifactExchange(): LiveArtifactExchange {
 }
 
 export const planRef = (runId: string): string => `plan:${runId}`;
+/** Per SUBJECT TASK, not per run: one mission can hold several guidance packets. */
+export const guidanceRef = (taskId: string): string => `guidance:${taskId}`;
 export const diffRef = (runId: string): string => `diff:${runId}`;
 export const baseRevisionRef = (runId: string): string => `base:${runId}`;
 export const testOutputRef = (runId: string): string => `test-output:${runId}`;
@@ -130,6 +136,62 @@ const missionText = (snapshot: JuliusContextSnapshot): string =>
   snapshot.packet.blocks.filter((block) => block.kind !== 'FINDING').map((block) => block.text).join('');
 
 const nowIso = (): string => new Date().toISOString();
+
+/**
+ * WHAT A POST-LOCK ARCHITECT IS ACTUALLY GIVEN.
+ *
+ * A guidance dispatch is worth nothing if the architect cannot see the state it
+ * is advising about, and ADR-021's proofs could not see that gap because they
+ * all assert that the ASK happened. Everything here is already typed mission
+ * state Julius owns:
+ *
+ *   - the compiled packet, which carries the objective, the requirements, the
+ *     constraints, the criteria AND the coder's question — the question travels
+ *     as an ordinary Project Brain HANDOFF entry scoped to this task, so there
+ *     is no prose side channel and no second compiler;
+ *   - the LOCKED TERMS, from the charge Julius proved at the gate and handed
+ *     down. The architect reads the agreement rather than being told about it;
+ *   - the plan the mission was built from, when this process still holds it.
+ *
+ * Nothing is fetched here and nothing is inferred. An adapter that reached into
+ * the store for context would be choosing what it is advising against, which is
+ * the same inversion the reviewer's charge exists to prevent.
+ */
+function guidanceInput(
+  snapshot: JuliusContextSnapshot,
+  dispatch: { readonly taskType?: string; readonly contract?: JuliusContractReviewCharge },
+  priorPlan: string | null,
+): string {
+  const charge = dispatch.contract;
+  const terms = charge === undefined ? [] : [
+    '--- THE LOCKED MISSION CONTRACT (these terms are closed; advise within them) ---',
+    `CONTRACT: ${charge.binding.contractId} revision ${charge.binding.contractRevision}`,
+    `BINDING DIGEST: ${charge.binding.bindingDigest}`,
+    `STAGE: ${charge.stage}`,
+    `OBJECTIVE: ${charge.objective}`,
+    `RESPONSIBILITY BOUNDARY: ${charge.responsibilityBoundary}`,
+    `STOPPING CONDITION: ${charge.stoppingCondition}`,
+    `IN SCOPE: ${charge.inScope.join(' | ') || '(none stated)'}`,
+    `OUT OF SCOPE: ${charge.outOfScope.join(' | ') || '(none stated)'}`,
+    `PERMITTED PATHS: ${charge.permittedPaths.join(' | ') || '(none stated)'}`,
+    `PROHIBITED ACTIONS: ${charge.prohibitedActions.join(' | ') || '(none stated)'}`,
+    `REQUIRED CHECKS: ${charge.requiredChecks.join(' | ') || '(none stated)'}`,
+    `REQUIRED EVIDENCE: ${charge.requiredEvidence.join(' | ') || '(none stated)'}`,
+    'BLOCKING ACCEPTANCE CRITERIA (affectedCriterionIds may name these and may invent none):',
+    ...charge.blockingCriteria.map((line) => `  ${line}`),
+    `FAILURE CONDITIONS: ${charge.failureConditions.join(' | ') || '(none stated)'}`,
+  ];
+  const plan = priorPlan === null ? [] : [
+    '--- THE ACCEPTED PLAN THIS MISSION IS BEING BUILT FROM (context, not terms) ---',
+    priorPlan,
+  ];
+  return [
+    packetText(snapshot),
+    ...(terms.length === 0 ? [] : [terms.join('\n')]),
+    ...plan,
+  ].join('\n\n');
+}
+
 
 /* ----------------------------------------------------- prompt architect */
 
@@ -179,6 +241,48 @@ const ARCHITECT_CHARTER = [
   'handoff.allowedFileScope must name at least one concrete path drawn from the mission context;',
   'an empty scope is an unbounded handoff and is refused.',
   'Architecture decisions are PROPOSALS: leave accepted false. Approval is not yours to give.',
+].join(' ');
+
+/**
+ * WHAT THE ARCHITECT MAY SAY AFTER THE CONTRACT IS LOCKED.
+ *
+ * A plan is written to become the agreement. Guidance is written UNDER one that
+ * is already closed, to a coder that is already working, and the difference is
+ * the whole charter: the terms are not on the table.
+ *
+ * THE SCHEMA ALREADY MAKES A CONTRACT AMENDMENT UNSAYABLE — there is no
+ * `objective` key, no `inScope`, no `permittedPaths`, no `budget` — so this text
+ * does not repeat the field list. It says the one thing a schema cannot: that
+ * discovering the agreement is wrong is a legitimate finding to REPORT, and
+ * never something to route around. `unresolvedQuestions` is where that goes, and
+ * Julius carries it into the formal revision path if it holds.
+ *
+ * It does not hand back the banned strings, for the reason
+ * `ARCHITECT_CHARTER` learned on two paid runs: a charter that quotes the
+ * phrases it refuses, beside a schema asking for prose, makes echoing them the
+ * most obedient possible answer.
+ */
+const ARCHITECT_GUIDANCE_CHARTER = [
+  'You are the Prompt Architect for a Relay mission run by Julius, the mission controller.',
+  'The Mission Contract below is LOCKED and a Coding Agent is already working under it.',
+  'You are being asked for GUIDANCE at a specific checkpoint, not for a plan and not for a revision.',
+  'Answer the question that was actually asked, using the mission state provided.',
+  'THE TERMS ARE NOT ON THE TABLE. You may not restate, widen, narrow, reinterpret or replace the',
+  'objective, the scope, the permitted paths, the acceptance criteria, the budget or any other',
+  'contract term; the output schema gives you nowhere to put one, and Julius refuses a packet that',
+  'tries. Advise on HOW to proceed within the agreement as it stands.',
+  'If the agreement itself looks wrong or insufficient, SAY SO in unresolvedQuestions and stop there.',
+  'That is a legitimate and useful finding. Julius decides whether it becomes a formal contract',
+  'revision, which is independently challenged and re-locked; you do not get to make that change',
+  'yourself, and advice written as though you had is worse than no advice.',
+  'affectedCriterionIds may NAME acceptance criteria the locked contract already carries.',
+  'It may not invent one — an id the contract does not hold is refused.',
+  'additionalProhibitions may only NARROW what the coder may do. A prohibition restricts; it can',
+  'never grant permission the agreement withheld.',
+  'Every reference must say WHERE you read something — a repository path, a specification section,',
+  'a document locator — and how well you corroborated it. Never quote a retrieved body back:',
+  'the locator and your judgement are what travel, not the source text.',
+  'Be concrete and bounded. Guidance a coder cannot act on is guidance that cost a dispatch for nothing.',
 ].join(' ');
 
 const ARCHITECT_REVISION_CHARTER = [
@@ -666,11 +770,33 @@ export function createLiveArchitectAdapter(input: {
        * revised plan replaces the artifact the Coding Agent will read.
        */
       const revising = dispatch.taskType === 'repair:plan';
-      const priorPlan = revising ? input.artifacts.get(planRef(snapshot.runId)) : null;
+      /**
+       * THE ARCHITECT'S SECOND JOB. `guidance` and `repair:guidance` arrive here
+       * because a guidance task is the architect's, and a repair of one inherits
+       * its subject's role and stage. Everything below that is not explicitly
+       * branched is shared with the plan path on purpose: one provider call
+       * site, one failure classification, one credential boundary.
+       */
+      const guiding = dispatch.taskType === 'guidance' || dispatch.taskType === 'repair:guidance';
+      const priorPlan = revising || guiding ? input.artifacts.get(planRef(snapshot.runId)) : null;
       if (revising && priorPlan === null) {
         throw new JuliusDispatchError('WORKER_EXECUTION_FAILURE', false, 'The prior architect plan is not available to this process; a plan revision without it is refused.', 'prior_plan_unavailable');
       }
-      const baseCharter = revising ? `${ARCHITECT_CHARTER} ${ARCHITECT_REVISION_CHARTER}` : ARCHITECT_CHARTER;
+      /**
+       * GUIDANCE IS REFUSED WITHOUT THE LOCKED TERMS.
+       *
+       * Julius hands the charge down because it proved the lock at the gate. An
+       * architect advising with no charge would be advising about an agreement
+       * it cannot see, and every word of the guidance charter is about staying
+       * inside terms it has to be able to read. Fail closed rather than write
+       * advice against a contract nobody showed us.
+       */
+      if (guiding && dispatch.contract === undefined) {
+        throw new JuliusDispatchError('WORKER_EXECUTION_FAILURE', false, 'Guidance was dispatched without the locked contract charge; advising against terms this process cannot read is refused.', 'guidance_contract_absent');
+      }
+      const baseCharter = guiding
+        ? ARCHITECT_GUIDANCE_CHARTER
+        : revising ? `${ARCHITECT_CHARTER} ${ARCHITECT_REVISION_CHARTER}` : ARCHITECT_CHARTER;
       let attempts = 0;
       let correction: string | null = null;
       for (;;) {
@@ -683,9 +809,14 @@ export function createLiveArchitectAdapter(input: {
         // not follow — not into the mission packet, which is Julius's own
         // compiled context and is not the place to record a model's mistake.
         instructions: correction === null ? baseCharter : `${baseCharter} ${correction}`,
-        input: revising
-          ? [packetText(snapshot), '--- PRIOR PLAN (rejected by the Independent Reviewer; revise it against the REVIEW FINDING entries above) ---', priorPlan].join('\n\n')
-          : packetText(snapshot),
+        // THE ANSWER'S SHAPE FOLLOWS THE JOB. Absent means the plan schema, so
+        // the plan path is byte-identical to what it was.
+        ...(guiding ? { schema: { name: ARCHITECT_GUIDANCE_SCHEMA_NAME, schema: ARCHITECT_GUIDANCE_SCHEMA } } : {}),
+        input: guiding
+          ? guidanceInput(snapshot, dispatch, priorPlan)
+          : revising
+            ? [packetText(snapshot), '--- PRIOR PLAN (rejected by the Independent Reviewer; revise it against the REVIEW FINDING entries above) ---', priorPlan].join('\n\n')
+            : packetText(snapshot),
         signal: dispatch.signal,
       });
       if (!outcome.ok) {
@@ -757,6 +888,67 @@ export function createLiveArchitectAdapter(input: {
             responseId: outcome.responseId, jsonParseable: false, validationPassed: false,
             outputBytes: Buffer.byteLength(outcome.outputText, 'utf8'), attempts,
           }));
+      }
+      /**
+       * THE DOMAIN'S OWN SANITIZER IS THE VALIDATOR.
+       *
+       * Asking `sanitizeJuliusGuidanceProposal` rather than writing a second
+       * set of rules here is what keeps the adapter and the domain from ever
+       * disagreeing about what a valid packet is — the failure
+       * `plan-schema-parity.test.ts` exists because the plan path had two
+       * readings and a paid run found the gap. The packet Julius stores is
+       * still the one the PIPELINE sanitizes: this call is for a legible
+       * refusal and a bounded correction, not for authority.
+       */
+      if (guiding) {
+        if (sanitizeJuliusGuidanceProposal(parsed) === null) {
+          if (attempts < PLAN_ATTEMPT_LIMIT && correctionAffordable(dispatch.allocation)) {
+            correction = 'CORRECTION — your previous answer was REFUSED: it did not form a usable guidance packet. Answer with exactly one JSON object conforming to the output schema. Every listed field must be present, every string must be substantive, and no field naming a Mission Contract term may appear.';
+            continue;
+          }
+          throw new JuliusDispatchError('WORKER_EXECUTION_FAILURE', false, 'Prompt Architect guidance failed validation.', 'guidance_validation_failed',
+            planDiagnostics({
+              requestedModel: input.config.model, servedModel: outcome.actualModel,
+              responseId: outcome.responseId, jsonParseable: true, validationPassed: false,
+              outputBytes: Buffer.byteLength(outcome.outputText, 'utf8'), attempts,
+            }));
+        }
+        input.artifacts.put(guidanceRef(dispatch.taskId), outcome.outputText);
+        return {
+          workerId: input.worker.workerId,
+          providerId: input.worker.providerId,
+          status: 'SUCCEEDED',
+          /**
+           * THE PARSED ANSWER, NOT A SANITISED ONE. Julius sanitises what it
+           * stores, exactly as it does for `contractProposal`: an adapter that
+           * pre-cleaned the packet would be deciding what the domain is allowed
+           * to refuse.
+           */
+          guidance: parsed,
+          safeSummary: `Prompt Architect guidance produced by observed model ${safeClaim(outcome.actualModel ?? 'unknown', 80)} (response ${safeClaim(outcome.responseId ?? 'unknown', 80)}).`,
+          evidence: [{
+            type: 'ARTIFACT',
+            status: 'PASSED',
+            safeSummary: `Validated guidance packet stored for this task (${outcome.outputText.length} chars, sha256:${sha256(outcome.outputText).slice(0, 16)}…).`,
+            artifactRef: guidanceRef(dispatch.taskId),
+            occurredAt: nowIso(),
+          }],
+          diagnostics: planDiagnostics({
+            requestedModel: input.config.model,
+            servedModel: outcome.actualModel ?? null,
+            responseId: outcome.responseId ?? null,
+            jsonParseable: true, validationPassed: true, outcome: 'succeeded',
+            attempts, outputBytes: Buffer.byteLength(outcome.outputText, 'utf8'),
+            inputTokens: outcome.usage.inputTokens ?? null,
+            outputTokens: outcome.usage.outputTokens ?? null,
+          }),
+          usage: {
+            inputTokens: outcome.usage.inputTokens ?? undefined,
+            outputTokens: outcome.usage.outputTokens ?? undefined,
+            toolCalls: 0,
+            costBasis: 'UNKNOWN',
+          },
+        };
       }
       const validation = validateArchitectPlan(parsed);
       if (!validation.ok) {
@@ -1112,7 +1304,56 @@ export function createLiveHermesReviewerAdapter(input: {
         throw new JuliusDispatchError('INVALID_REQUEST', false, 'The review dispatch names no known review stage; a review of an unknown stage is refused.', 'reviewer_stage_unknown');
       }
       const charge = reviewChargeFor(stage);
+      /**
+       * THE STAGE SAYS WHAT IT NEEDS, AND THIS CHECKS FOR EXACTLY THAT.
+       *
+       * `charge.requires` has named `['plan', 'guidance']` for a guidance
+       * review since the stage vocabulary was written, and this adapter read
+       * only `plan` and (for an implementation) `diff`. So a guidance review
+       * would have passed its own preconditions holding the plan and NOT the
+       * packet it exists to judge — a review of something it could not see,
+       * whose "approved" would release a continuation. Reading the requirement
+       * list rather than restating it means a stage that gains a requirement
+       * gains the check with it.
+       */
+      const subjectTaskId = reviewSubjectTaskId(dispatch.taskId ?? '');
+      const artifactFor = (requirement: JuliusReviewRequirement): string | null => {
+        if (requirement === 'plan') return input.artifacts.get(planRef(snapshot.runId));
+        if (requirement === 'diff') return input.artifacts.get(diffRef(snapshot.runId));
+        return subjectTaskId === null ? null : input.artifacts.get(guidanceRef(subjectTaskId));
+      };
+      const REQUIREMENT_REFUSAL: Readonly<Record<JuliusReviewRequirement, { readonly message: string; readonly shape: string }>> = {
+        plan: {
+          // The artifact exchange is same-process. After a restart the plan is
+          // gone even though its task succeeded durably, and a review dispatched
+          // without it would be a review of NOTHING whose approval could
+          // complete the mission. Refuse instead: a resumed run fails visibly
+          // rather than completing falsely. (Independent review finding F1.)
+          message: 'The architect plan artifact is not available to this process; an independent review of nothing is refused.',
+          shape: 'reviewer_plan_absent',
+        },
+        diff: {
+          // AN EMPTY DIFF IS NO DIFF. The exchange stores whatever `git diff`
+          // printed, so a coder that edited nothing leaves an empty string —
+          // which is not an implementation, and a review of it is the plan
+          // review's mistake in the other direction.
+          message: 'No workspace diff artifact is available to this process; an implementation review of nothing is refused.',
+          shape: 'reviewer_implementation_absent',
+        },
+        guidance: {
+          message: 'The guidance packet under review is not available to this process; a review of guidance nobody can read is refused.',
+          shape: 'reviewer_guidance_absent',
+        },
+      };
+      for (const requirement of charge.requires) {
+        const artifact = artifactFor(requirement);
+        if (artifact === null || artifact.trim() === '') {
+          const refusal = REQUIREMENT_REFUSAL[requirement];
+          throw new JuliusDispatchError('INVALID_REQUEST', false, refusal.message, refusal.shape);
+        }
+      }
       const planArtifact = input.artifacts.get(planRef(snapshot.runId));
+      const guidanceArtifact = charge.subject === 'GUIDANCE' ? artifactFor('guidance') : null;
       const diffArtifact = charge.subject === 'IMPLEMENTATION' ? input.artifacts.get(diffRef(snapshot.runId)) : null;
       if (planArtifact === null) {
         // The artifact exchange is same-process. After a restart the plan is
@@ -1161,6 +1402,11 @@ export function createLiveHermesReviewerAdapter(input: {
         // faithful to the request would be reading findings as the request.
         originalRequest: safeClaim(missionText(snapshot), 8_000),
         handoffJson: planArtifact,
+        // THE PACKET UNDER JUDGEMENT, for a guidance review and for no other
+        // stage. The plan stays beside it because guidance that contradicts
+        // the plan it supplements cannot be spotted from the packet alone —
+        // which is why `charge.requires` names both.
+        ...(guidanceArtifact === null ? {} : { guidanceJson: guidanceArtifact }),
         acceptanceCriteria: [...snapshot.acceptanceCriterionIds],
         priorFindings,
         baseRevision: input.artifacts.get(baseRevisionRef(snapshot.runId)) ?? 'unknown',

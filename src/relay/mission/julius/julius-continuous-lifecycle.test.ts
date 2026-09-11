@@ -87,7 +87,7 @@ describe('the vocabularies are closed, complete and ordered', () => {
       'CONTRACT_DRAFTED', 'CONTRACT_REVISION_PROPOSED', 'GUIDANCE_REQUESTED',
       'IMPLEMENTATION_MILESTONE', 'SUBSYSTEM_DISCOVERED', 'TEST_FAILED',
       'MATERIAL_EVIDENCE', 'SECURITY_SENSITIVE_CHANGE', 'REPAIR_ROUND_ENTERED',
-      'PRE_COMPLETION_VERIFICATION',
+      'PRE_COMPLETION_VERIFICATION', 'RESEARCH_REQUESTED',
     ]);
   });
 
@@ -464,7 +464,24 @@ describe('routing names an intention and performs none of it', () => {
     expect(reviewed.length).toBeGreaterThan(1);
   });
 
-  it('routes every trigger — the two lists partition the set, with no NO_ROUTE reachable', () => {
+  it('serves research itself, for whichever slot asked, without scheduling a worker', () => {
+    const asking = checkpoint({ trigger: 'RESEARCH_REQUESTED' });
+    const routing = route({ checkpoint: asking });
+    expect(routing).toEqual({ route: 'SERVE_RESEARCH', reasonCode: 'CHECKPOINT_RESEARCH_REQUESTED' });
+    // It is the one route with no `role`, because retrieval is Julius's own act
+    // rather than somebody else's turn.
+    expect('role' in routing).toBe(false);
+    // Any of the three may ask; the route does not read the origin.
+    for (const origin of ['PROMPT_ARCHITECT', 'CODING_AGENT', 'INDEPENDENT_REVIEWER'] as const) {
+      expect(route({ checkpoint: checkpoint({ trigger: 'RESEARCH_REQUESTED', origin }) }).route)
+        .toBe('SERVE_RESEARCH');
+    }
+    // And a reviewer verdict still outranks it: a run being halted does not get
+    // to spend another retrieval on the way down.
+    expect(route({ checkpoint: asking, verdict: verdictFor(asking, 'BLOCK', 'UNSAFE') }).route).toBe('HALT');
+  });
+
+  it('routes every trigger — the lists partition the set, with no NO_ROUTE reachable', () => {
     // A trigger in neither list would silently do nothing, which is exactly the
     // silence this module was built to end.
     for (const trigger of JULIUS_CHECKPOINT_TRIGGERS) {

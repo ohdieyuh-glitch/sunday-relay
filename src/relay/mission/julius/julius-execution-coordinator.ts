@@ -103,7 +103,7 @@ export interface JuliusExecutionRequest { readonly claim:JuliusExecutionClaim;re
  * every existing reader keeps working, and `null` means "not classified",
  * never "fine".
  */
-export type JuliusExecutionOutcome={readonly status:'COMPLETED';readonly workerId:string;readonly duplicate:boolean;/** What the worker proposed for its own task contract, unsanitised. Julius decides. */readonly contractProposal?:unknown;/** A coder's request for architect guidance, unsanitised. */readonly guidanceRequest?:unknown;/** An architect's guidance packet, unsanitised. */readonly guidance?:unknown}|{readonly status:'RETRY'|'FAILED'|'DENIED';readonly code:string;readonly failureClass?:string|null};
+export type JuliusExecutionOutcome={readonly status:'COMPLETED';readonly workerId:string;readonly duplicate:boolean;/** What the worker proposed for its own task contract, unsanitised. Julius decides. */readonly contractProposal?:unknown;/** A coder's request for architect guidance, unsanitised. */readonly guidanceRequest?:unknown;/** An architect's guidance packet, unsanitised. */readonly guidance?:unknown;/** What a continuation segment resumes from, unsanitised. Julius rebuilds it. */readonly segmentResume?:unknown;/** What a worker of any slot needs Julius to go and look at, unsanitised. */readonly researchAsks?:unknown}|{readonly status:'RETRY'|'FAILED'|'DENIED';readonly code:string;readonly failureClass?:string|null};
 
 const normalizedEvidence=(claim:JuliusExecutionClaim,worker:JuliusWorker,result:JuliusProviderResult):JuliusEvidence[]=>{
   if(result.workerId!==worker.workerId||result.providerId!==worker.providerId||!result.safeSummary.trim()||!Array.isArray(result.evidence))throw new JuliusDispatchError('INVALID_REQUEST',false,'Provider returned a malformed or mismatched result.');
@@ -140,7 +140,16 @@ export class JuliusExecutionCoordinator {
     await this.event(request,'worker.selected',{workerId:worker.workerId,providerId:worker.providerId});
     const reservation=await this.ports.reserve({claim:request.claim,worker,request:request.resources,idempotencyKey:`${request.operationId}:budget`});
     if(reservation.state==='DENIED'){await this.event(request,'budget.denied',{reason:reservation.denialReason});return{status:'DENIED',code:'BUDGET_DENIED'};}
-    await this.event(request,'budget.reserved',{reservationId:reservation.reservationId});
+    /**
+     * THE ROLE AND THE AMOUNT TRAVEL WITH THE RESERVATION ID.
+     *
+     * Without them the row says only that money moved, and the per-slot ledger
+     * — which is PROJECTED from these rows rather than stored — cannot say
+     * whose it was. Attribution guessed from the task id would be a second
+     * source of truth about money, which is the arrangement the cost-accounting
+     * module exists to end.
+     */
+    await this.event(request,'budget.reserved',{reservationId:reservation.reservationId,role:request.role,usdMicros:request.resources.usdMicros});
     /**
      * WHAT THE PROVIDER REPORTED, HELD WHERE THE CATCH CAN SEE IT.
      *
@@ -163,7 +172,9 @@ export class JuliusExecutionCoordinator {
       const receipt=await this.ports.acceptResult({claim:request.claim,worker,result,idempotencyKey:`${request.operationId}:result`});
       await this.ports.commit({claim:request.claim,reservationId:reservation.reservationId,result});
       await this.event(request,'worker.completed',{workerId:worker.workerId,duplicate:receipt.duplicate,evidenceCount:evidence.length,...successDiagnostics(request,result)});
-      return{status:'COMPLETED',workerId:worker.workerId,duplicate:receipt.duplicate,...(result.contractProposal===undefined?{}:{contractProposal:result.contractProposal}),...(result.guidanceRequest===undefined?{}:{guidanceRequest:result.guidanceRequest}),...(result.guidance===undefined?{}:{guidance:result.guidance})};
+      return{status:'COMPLETED',workerId:worker.workerId,duplicate:receipt.duplicate,...(result.contractProposal===undefined?{}:{contractProposal:result.contractProposal}),...(result.guidanceRequest===undefined?{}:{guidanceRequest:result.guidanceRequest}),...(result.guidance===undefined?{}:{guidance:result.guidance}),
+      ...(result.segmentResume===undefined?{}:{segmentResume:result.segmentResume}),
+      ...(result.researchAsks===undefined?{}:{researchAsks:result.researchAsks})};
     }catch(error){const failure=error instanceof JuliusDispatchError?error:new JuliusDispatchError('WORKER_EXECUTION_FAILURE',false,'Execution boundary failed.');const reported=reportedUsdMicros(answered);
      const billed=reported??(typeof failure.diagnostics?.costUsdMicros==='number'?failure.diagnostics.costUsdMicros:null);
      // A provider that ANSWERED ran, whatever the diagnostics say about it.

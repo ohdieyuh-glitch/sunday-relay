@@ -39,7 +39,12 @@ import {
   type JuliusRuntimeStore,
   type JuliusVerificationPolicy,
   type JuliusWorker,
+  noJuliusResearch,
+  type JuliusResearchPolicy,
 } from '../../src/relay/mission/julius';
+import { createJuliusResearchMediator, juliusResearchPortFrom } from './research-mediator';
+import type { JuliusTimelineReader } from '../../src/relay/mission/julius';
+import { createLiveReachService } from '../live-reach-service';
 import {
   evaluateReadiness,
   readGptArchitectConfig,
@@ -84,7 +89,17 @@ export const ARCHITECT_WORKER: JuliusWorker = {
   // stage, so a rejected plan comes back here with the reviewer's findings in
   // its context, not to the Coding Agent. Paid run 34037313976 minted the
   // latter, and nobody could route it.
-  capabilities: ['plan'], taskTypes: ['plan', 'repair:plan'],
+  /**
+   * `guidance` and `repair:guidance` are the continuous lifecycle's additions:
+   * the architect that ADVISES under a contract that is already locked, and its
+   * own repair. They are registered here only now that every step of the live
+   * path can genuinely serve one — the architect's guidance branch answers
+   * under the locked charge and refuses without it, the reviewer has a GUIDANCE
+   * rubric rather than the implementation one, and the reviewer's adapter
+   * refuses a guidance review whose packet it cannot read. Registering earlier
+   * would have minted a task whose review could approve something it never saw.
+   */
+  capabilities: ['plan'], taskTypes: ['plan', 'repair:plan', 'guidance', 'repair:guidance'],
   /**
    * DERIVED, not restated. This read `300_000`, which happened to equal the
    * connector's `DEFAULT_TIMEOUT_MS` — the number that actually bounds the
@@ -120,7 +135,20 @@ export const reviewerWorker = (providerId: string): JuliusWorker => ({
   workerId: 'independent-reviewer-hermes', role: 'INDEPENDENT_REVIEWER',
   adapterId: 'hermes-local-live', providerId,
   capabilities: ['review'],
-  taskTypes: ['review:plan', 'review:build', 'review:repair:build', 'review:repair:plan'],
+  /**
+   * EVERY STAGE THE DOMAIN DEFINES, and the two guidance stages arrive with
+   * the architect's. A `guidance` task nobody could re-review would be minted,
+   * dispatched, and then never accepted — and the continuation blocked on it
+   * would never release, which is a stalled mission rather than a refused one.
+   * The registrations are therefore added together or not at all, and
+   * `julius-live-composition.test.ts` holds this list against
+   * `JULIUS_REVIEW_STAGES` so a stage cannot be added to the domain without a
+   * reviewer for it.
+   */
+  taskTypes: [
+    'review:plan', 'review:build', 'review:guidance',
+    'review:repair:plan', 'review:repair:build', 'review:repair:guidance',
+  ],
   /**
    * THE SAME CALL `loadHermesConfig` MAKES. This used to read `240_000`, a
    * number nothing enforced, while the limit that actually cut a review off was
@@ -419,6 +447,19 @@ export function assembleLiveJuliusRuntime(options: {
    * rather than the truth.
    */
   readonly leaseMs?: number;
+  /**
+   * THE MISSION'S RESEARCH AUTHORITY, one sealed policy per mission.
+   *
+   * Absent, every mission gets `noJuliusResearch` — allowlist empty, no slot
+   * authorised, retrieval budget zero — and a research ask from any worker is
+   * refused as `research_not_authorized` before a socket can exist. That is the
+   * armed-and-inert state the arming stack is meant to reach: the door is
+   * built, governed and closed, and opening it for a mission is an act of
+   * mission authority rather than a code change.
+   */
+  readonly researchPolicyFor?: (missionId: string) => JuliusResearchPolicy;
+  /** Injected in tests so the whole mediated path runs without a network. */
+  readonly researchFetch?: typeof fetch;
 }): LiveJuliusRuntime {
   const registry = new JuliusWorkerRegistry();
   const adapters = new Map<string, JuliusProviderAdapter>();
@@ -469,6 +510,33 @@ export function assembleLiveJuliusRuntime(options: {
     allocation: juliusAllocationPolicy({
       ceilingUsdMicros: options.spendCeilingUsdMicros, authorizedRepairRounds: options.maxRepairRounds,
     }),
+    /**
+     * THE ONE GOVERNED DOOR TO THE OUTSIDE, and it starts closed.
+     *
+     * Bound rather than omitted so a research ask is refused for the true
+     * reason — this mission authorises none — instead of the weaker
+     * `RESEARCH_UNSERVED`, which says only that Julius has no way to look. It
+     * runs in the BRIDGE, never inside the executor: the sandbox keeps
+     * `--network none`, and mediation is what makes that compatible with a
+     * worker needing to read a specification.
+     */
+    research: juliusResearchPortFrom(createJuliusResearchMediator({
+      policyFor: options.researchPolicyFor ?? ((missionId) => noJuliusResearch(missionId)),
+      liveReach: createLiveReachService({
+        now: () => new Date().toISOString(),
+        nextEvidenceId: () => `evidence:${randomUUID()}`,
+        ...(options.researchFetch === undefined ? {} : { fetchImpl: options.researchFetch }),
+      }),
+      now: () => new Date().toISOString(),
+    })),
+    /**
+     * THE MONEY RECORD, READ BACK. The same store that writes `budget.reserved`
+     * and `budget.settled` reads them, so the per-slot ledger is projected from
+     * durable truth and a restarted process reaches the same accounts.
+     */
+    ...(typeof (options.store as { timeline?: unknown }).timeline === 'function'
+      ? { timeline: options.store as unknown as JuliusTimelineReader }
+      : {}),
     owner: options.owner ?? 'julius-live-mission',
     contextCharacterBudget: 24_000,
   };

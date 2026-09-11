@@ -38,18 +38,39 @@ import { safeReasonCode, type JuliusProviderRouter } from './julius-router';
 import { juliusCostComponent } from './julius-cost-accounting';
 import { juliusContractDisposition, juliusContractDispositionFacts } from './julius-contract-disposition';
 import { createJuliusContextSnapshot } from './julius-context-snapshot';
-import { evaluateJuliusVerification, type JuliusReviewerFinding, type JuliusVerificationPolicy } from './julius-verification-runtime';
+import { JULIUS_DEFAULT_MAX_CODER_SEGMENTS, evaluateJuliusVerification, type JuliusReviewerFinding, type JuliusVerificationPolicy } from './julius-verification-runtime';
 import { planJuliusRepair } from './julius-repair-runtime';
 import { repairLineageRootOf, repairRoundsBefore, repairTaskTypeFor } from './julius-repair-lineage';
 import { challengeJuliusTaskContract, evaluateJuliusBindingCurrency, evaluateJuliusSharedBinding, juliusContractReviewCharge, juliusTaskContractBinding, lockJuliusTaskContract, mayDispatchUnderContract, reviseJuliusTaskContract, sanitizeJuliusContractProposal, type JuliusTaskContract, type JuliusTaskContractBinding } from './julius-task-contract';
 import { evaluateJuliusRelease } from './julius-release-runtime';
-import { reviewStageOf, type JuliusReviewStage } from './julius-review-stage';
+import { boundStageForRole, reviewStageOf, workStageOf, type JuliusReviewStage } from './julius-review-stage';
 import {
+  juliusSegmentLineageRootOf, juliusSegmentTaskId, nextSegmentNumber, routeIsBarrier,
+  sanitizeJuliusSegmentState,
+} from './julius-segment-lineage';
+import {
+  JULIUS_CHECKPOINT_LIMITS,
   guidanceSubjectTaskId, issueJuliusGuidance, juliusCheckpointId, juliusGuidanceId, juliusGuidanceTaskId,
+  juliusResearchCheckpointId,
   recordJuliusCheckpoint, routeJuliusCheckpoint, sanitizeJuliusGuidanceProposal, sanitizeJuliusGuidanceRequest,
   type JuliusCheckpointOrigin,
 } from './julius-continuous-lifecycle';
-import { evaluateJuliusAllocation, type JuliusAllocationPolicy, type JuliusExecutionAllocation } from './julius-allocation-runtime';
+import { isJuliusResearchRole } from './julius-research-policy';
+import {
+  JULIUS_RESEARCH_ASK_VERSION, renderJuliusResearchResume, sanitizeJuliusResearchAsks,
+  type JuliusResearchObservationRecord, type JuliusResearchPort,
+} from './julius-research-protocol';
+import { evaluateJuliusAllocation, type JuliusAllocationPolicy } from './julius-allocation-runtime';
+import { JULIUS_SLOT_EFFORT_VERSION } from './julius-slot-effort';
+import {
+  JULIUS_SLOT_ENVELOPE_VERSION, evaluateJuliusSlotAllocation, slotEnvelopeUsdMicros,
+  slotRoundShareUsdMicros, type JuliusSlotEnvelopePolicy,
+} from './julius-slot-envelope';
+import {
+  projectJuliusSlotLedger, reserveJuliusSlotCapacity,
+  type JuliusBudgetRow, type JuliusMissionSlotLedger,
+} from './julius-slot-ledger';
+import type { JuliusTimelineReader } from './julius-runtime-api';
 import { JULIUS_RUNTIME_VERSION, type JuliusBrainEntry, type JuliusRecordedDecision, type JuliusTask, type JuliusVerificationDecision, type JuliusWorker, type JuliusWorkerRole } from './julius-runtime';
 import { validateJuliusEvent, type JuliusOperationalEvent, type JuliusOperationalEventType } from './julius-events';
 import { validateTrajectoryEvent, type JuliusTrajectoryEvent, type JuliusTrajectoryKind } from './julius-trajectory';
@@ -126,7 +147,26 @@ export interface JuliusPipelineDependencies {
    * Absent, every dispatch reserves its fixed estimate and the adapter keeps
    * its own conservative default — Mission 2's grant reaches nobody else.
    */
-  readonly allocation?: JuliusAllocationPolicy;
+  readonly allocation?: JuliusAllocationPolicy | JuliusSlotEnvelopePolicy;
+  /**
+   * HOW JULIUS GOES AND LOOKS, when the composition has bound one.
+   *
+   * Absent, a research ask from any slot is recorded and refused as
+   * `RESEARCH_UNSERVED` and the mission continues — the same safe default the
+   * guidance path takes when no worker serves `guidance`. A mission is never
+   * stalled on a question nothing can answer.
+   */
+  readonly research?: JuliusResearchPort;
+  /**
+   * THE DURABLE MONEY RECORD, READ BACK.
+   *
+   * The per-slot ledger is PROJECTED from `budget.reserved` and `budget.settled`
+   * rather than stored, so it cannot drift from the money record and survives a
+   * restart without a table. Absent, allocation v2 falls back to counting rounds
+   * off the task rows — a conservative lower bound that cannot tell an open
+   * reservation from one settled for less, and the basis it reports says so.
+   */
+  readonly timeline?: JuliusTimelineReader;
   /** Whoever holds the lease. Recorded on every event for attribution. */
   readonly owner: string;
   /** Context budget in characters. Compiling is bounded, never open-ended. */
@@ -534,8 +574,17 @@ export async function runClaimedTask(
    */
   const reviewStage = role === 'INDEPENDENT_REVIEWER' ? reviewStageOf(claim.taskType) : null;
   const chargeStage: JuliusReviewStage | null = reviewStage
-    ?? (preflight.contractBinding === null || role === 'INDEPENDENT_REVIEWER' ? null
-      : claim.taskType.startsWith('repair:') ? 'repair:build' : 'build');
+    ?? (preflight.contractBinding === null || role === 'INDEPENDENT_REVIEWER'
+      ? null
+      // READ OFF THE TASK FIRST, and fall back to the ROLE — never to a prefix.
+      // The old derivation asked "is it prefixed `repair:`?" and answered
+      // `repair:build` or `build`, which was correct only while the coder was
+      // the one bound non-review role. A guidance task took the `build` branch
+      // and its charge went on the record under the coder's stage. A sub-agent
+      // child names no stage at all (`spawnJuliusSubagent` takes the type from
+      // its caller, so it can be `audit`), and it still executes under its
+      // parent's contract — which is what the role fallback is for.
+      : workStageOf(claim.taskType) ?? boundStageForRole(role, claim.taskType));
   const contractCharge = preflight.contract !== null && chargeStage !== null
     ? juliusContractReviewCharge({ contract: preflight.contract, stage: chargeStage })
     : null;
@@ -821,7 +870,7 @@ export async function runClaimedTask(
    * and a mission with nothing left is denied HERE, before a provider is
    * reached, rather than by an adapter refusing work it already did.
    */
-  const allocation = await allocateFor({ deps, run, role, estimateUsdMicros: estimate.usdMicros });
+  const allocation = await allocateFor({ deps, run, role, taskId: claim.taskId, estimateUsdMicros: estimate.usdMicros });
   const resources: JuliusResourceRequest = allocation === null ? estimate : { ...estimate, usdMicros: allocation.usdMicros };
   const dispatchAllocation = allocation === null ? undefined
     : { usdMicros: allocation.usdMicros, policyVersion: allocation.policyVersion, basis: allocation.basis };
@@ -829,7 +878,9 @@ export async function runClaimedTask(
     await ledger.event('budget.allocated', { taskId: claim.taskId, facts: { role, ...allocationFacts(allocation) } });
   }
 
-  const coordinator = new JuliusExecutionCoordinator(deps.router, executionPorts(deps, run, ledger));
+  const coordinator = new JuliusExecutionCoordinator(
+    deps.router, executionPorts(deps, run, ledger, allocation?.usdMicros ?? null),
+  );
 
   /* ------------------------------------------------- reroute and fallback */
   /**
@@ -1010,10 +1061,16 @@ export async function runClaimedTask(
   }
 
   /* ------------------------------- 3b. the continuous three-worker lifecycle */
-  if (!outcome.duplicate && (outcome.guidanceRequest !== undefined || outcome.guidance !== undefined)) {
+  if (!outcome.duplicate && (
+    outcome.guidanceRequest !== undefined
+    || outcome.guidance !== undefined
+    || outcome.researchAsks !== undefined
+  )) {
     await driveContinuousLifecycle({
       deps, run, ledger, task, request, workerId: outcome.workerId,
       ...(outcome.guidanceRequest === undefined ? {} : { guidanceRequest: outcome.guidanceRequest }),
+      ...(outcome.segmentResume === undefined ? {} : { segmentResume: outcome.segmentResume }),
+      ...(outcome.researchAsks === undefined ? {} : { researchAsks: outcome.researchAsks }),
       ...(outcome.guidance === undefined ? {} : { guidance: outcome.guidance }),
     });
   }
@@ -1054,11 +1111,36 @@ async function driveContinuousLifecycle(input: {
   readonly workerId: string;
   readonly guidanceRequest?: unknown;
   readonly guidance?: unknown;
+  readonly segmentResume?: unknown;
+  readonly researchAsks?: unknown;
 }): Promise<void> {
   const { deps, run, ledger, task } = input;
 
   if (input.guidance !== undefined) {
     await issueGuidanceFromResult(input);
+  }
+
+  /**
+   * A DISPATCH YIELDS FOR ONE REASON, and research wins when both arrive.
+   *
+   * Julius can answer a research ask itself, immediately and cheaply; guidance
+   * costs the architect a turn. A worker holding both is usually a worker that
+   * will not need the second once it has the first, and minting two
+   * continuations for one subject would collide on the segment number and
+   * silently drop one of them. The guidance request is RECORDED as deferred
+   * rather than discarded, so the record says what the worker asked for.
+   */
+  if (input.researchAsks !== undefined) {
+    const yielded = await driveResearchCheckpoint(input);
+    if (yielded) {
+      if (input.guidanceRequest !== undefined) {
+        await ledger.event('guidance.deferred', {
+          taskId: task.taskId, workerId: input.workerId,
+          facts: { reasonCode: 'RESEARCH_YIELD_TOOK_THE_SEGMENT' },
+        });
+      }
+      return;
+    }
   }
 
   if (input.guidanceRequest === undefined) return;
@@ -1173,13 +1255,383 @@ async function driveContinuousLifecycle(input: {
     commandId: `guidance:${guidanceTask.taskId}`,
     runId: run.runId, projectId: run.projectId, task: guidanceTask,
   });
+
+  /**
+   * THE QUESTION HAS TO REACH THE ARCHITECT, and the only channel Julius owns
+   * is the Project Brain.
+   *
+   * Minting the task is not asking the question. A guidance task carries no
+   * payload of its own: what a worker sees is the packet Julius compiles for
+   * it, so a request that stops at the checkpoint's `safeSummary` would arrive
+   * as a task to write advice about nothing in particular. `blockedOn`,
+   * `attempted` and `relevantPaths` are exactly the difference between "the
+   * coder is stuck" and a question someone can answer.
+   *
+   * It goes through the ordinary brain write rather than beside it, so the
+   * architect reads it the way it reads the objective and the findings — no
+   * prose side channel, one context compiler, one redaction path, one
+   * provenance record. The entry is SCOPED TO THE GUIDANCE TASK, so it reaches
+   * that packet and no other: the coder does not get its own question read back
+   * to it, and the reviewer sees it only when reviewing the guidance.
+   *
+   * GUARDED BY THE TASK'S OWN WRITE, exactly as the decision entry is guarded
+   * by `appendDecision`: `addTask` is idempotent by command id, so a replayed
+   * tick writes neither the task nor the entry and the brain revision does not
+   * drift.
+   *
+   * Every value below has already passed `sanitizeJuliusGuidanceRequest`, which
+   * rebuilds the request from an allowlist with bounded lengths. No provider
+   * body reaches this row. When the request could not be read at all, the entry
+   * SAYS SO rather than being skipped — an architect told nothing cannot tell
+   * that it was told nothing.
+   */
+  if (created) {
+    const askText = request === null
+      ? 'A worker asked for guidance and its request could not be read. No question, blocking condition, attempt or path is available.'
+      : [
+        `QUESTION: ${request.question}`,
+        `BLOCKED ON: ${request.blockedOn.join(' | ') || '(none stated)'}`,
+        `ALREADY ATTEMPTED: ${request.attempted.join(' | ') || '(none stated)'}`,
+        `RELEVANT PATHS: ${request.relevantPaths.join(' | ') || '(none stated)'}`,
+      ].join('\n');
+    await deps.store.appendBrainEntry({
+      runId: run.runId,
+      projectId: run.projectId,
+      taskId: guidanceTask.taskId,
+      workerId: input.workerId,
+      entryId: `brain:guidance-request:${guidanceTask.taskId}`,
+      kind: 'HANDOFF',
+      safeText: askText,
+      evidenceIds: [],
+      occurredAt: deps.clock.now(),
+    });
+  }
+
+  /**
+   * THE BARRIER, AND IT NEEDS NO NEW MECHANISM.
+   *
+   * Minting a guidance task proves Julius ASKED. It does not stop the coder:
+   * the dispatch that carried the request has already resolved, so guidance
+   * written in answer would reach a worker that finished. Recording the ask and
+   * calling that continuous supervision is the failure this exists to prevent.
+   *
+   * The continuation is therefore a TASK THAT CANNOT RUN YET. It is created
+   * BLOCKED with a dependency on the guidance task, and `evaluateJuliusRelease`
+   * — the only thing in Julius that moves a task out of BLOCKED — releases it
+   * solely when that dependency is SUCCEEDED **and effectively accepted**. So:
+   *
+   *   - a BLOCK or a rejected guidance review is never effectively accepted,
+   *     and the continuation is never released. Segment B does not run because
+   *     there is nothing runnable, not because a model agreed to wait;
+   *   - a REPAIR holds it until the repair lineage itself reaches an accepted
+   *     state, which is the routing the founder asked for, unchanged;
+   *   - an ACCEPT releases it, and only then.
+   *
+   * Every one of those properties is already drilled on real PostgreSQL by the
+   * release and repair-loop drills. Inventing a pause primitive beside them
+   * would have re-earned all of it and been the weaker of the two.
+   *
+   * GUARDED BY THE GUIDANCE TASK'S OWN WRITE. `addTask` is idempotent by
+   * command id, so a replayed tick creates neither task, releases nothing twice
+   * and leaves the lineage unchanged.
+   */
+  let continuationTaskId: string | null = null;
+  /**
+   * THE CEILING, AND IT IS NOT THE REPAIR BOUND.
+   *
+   * The barrier made the coder stop; nothing yet made it stop stopping. A coder
+   * that asks at every segment mints a continuation forever and the mission
+   * never completes — the unbounded-loop twin of the unroutable repair task
+   * that sat RUNNABLE forever on paid run 34037313976. This was not a
+   * hypothesis: wiring the barrier turned six existing proofs red with seven
+   * and eight guidance tasks where one was expected.
+   *
+   * Counted separately from repairs on purpose. A repair means the work was
+   * REJECTED; a segment boundary means the coder needed something. Sharing one
+   * bound would let honest collaboration exhaust a ceiling set for failure.
+   */
+  // COUNTED AGAINST THE UNIT OF WORK, not against the most recent pause in it.
+  const segmentRoot = juliusSegmentLineageRootOf(task, tasks);
+  const segmentNumber = nextSegmentNumber(segmentRoot, tasks);
+  const segmentCeiling = input.request.verification.maxCoderSegments ?? JULIUS_DEFAULT_MAX_CODER_SEGMENTS;
+  if (created && routeIsBarrier(routing.route) && segmentNumber > segmentCeiling) {
+    await ledger.event('checkpoint.verdict', {
+      taskId: subjectTaskId, workerId: input.workerId,
+      facts: {
+        checkpointId: checkpoint.checkpointId, route: routing.route,
+        reasonCode: 'SEGMENT_CEILING_REACHED', guidanceTaskId: guidanceTask.taskId, created,
+        continuationTaskId: null, barrier: true, segment: segmentNumber, ceiling: segmentCeiling,
+      },
+    });
+    return;
+  }
+  if (created && routeIsBarrier(routing.route)) {
+    const resume = sanitizeJuliusSegmentState(input.segmentResume);
+    const continuation: JuliusTask = {
+      taskId: juliusSegmentTaskId(segmentRoot.taskId, segmentNumber),
+      missionId: task.missionId,
+      // The ROOT is the parent at every level, so the chain stays a chain and
+      // `segmentChildrenOf` can see every pause of one unit of work at once.
+      parentTaskId: segmentRoot.taskId,
+      // THE WHOLE BARRIER IS THIS ONE EDGE.
+      dependencyIds: [guidanceTask.taskId],
+      requiredEvidenceTypes: task.requiredEvidenceTypes,
+      // The same kind of work, so the coder needs no new registration and the
+      // charge keeps the subject's own stage.
+      taskType: task.taskType,
+      role: task.role,
+      ordinal: task.ordinal + 2,
+      state: 'BLOCKED',
+    };
+    const madeContinuation = await deps.store.addTask({
+      commandId: `segment:${continuation.taskId}`,
+      runId: run.runId, projectId: run.projectId, task: continuation,
+    });
+    if (madeContinuation) {
+      continuationTaskId = continuation.taskId;
+      /**
+       * WHAT THE CONTINUATION RESUMES FROM, on the same Project Brain channel
+       * the question travelled on and scoped the same way. A continuation told
+       * nothing about what its own earlier segment did would redo it; one told
+       * through a provider session handle would not survive a restart.
+       *
+       * An absent or unusable resume SAYS SO. The barrier holds either way —
+       * that is the point of making it structural — but a coder that cannot
+       * tell it was told nothing is the gap this whole change exists to close.
+       */
+      await deps.store.appendBrainEntry({
+        runId: run.runId,
+        projectId: run.projectId,
+        taskId: continuation.taskId,
+        workerId: input.workerId,
+        entryId: `brain:segment-resume:${continuation.taskId}`,
+        kind: 'HANDOFF',
+        safeText: resume === null
+          ? 'This segment resumes work paused at a checkpoint. No usable record of what the previous segment completed was supplied; re-establish the state from the workspace before continuing.'
+          : [
+            `RESUMING AFTER CHECKPOINT: ${checkpoint.checkpointId}`,
+            `COMPLETED IN THE PREVIOUS SEGMENT: ${resume.completedSoFar.join(' | ') || '(nothing stated)'}`,
+            `INTENDED NEXT: ${resume.nextIntent}`,
+          ].join('\n'),
+        evidenceIds: [],
+        occurredAt: deps.clock.now(),
+      });
+    }
+  }
+
   await ledger.event('checkpoint.verdict', {
     taskId: subjectTaskId, workerId: input.workerId,
     facts: {
       checkpointId: checkpoint.checkpointId, route: routing.route, reasonCode: routing.reasonCode,
       guidanceTaskId: guidanceTask.taskId, created,
+      // Null when the route was not a barrier, which is a different fact from
+      // a barrier that failed to mint one.
+      continuationTaskId, barrier: routeIsBarrier(routing.route),
     },
   });
+}
+
+/**
+ * JULIUS GOES AND LOOKS, ON BEHALF OF WHICHEVER SLOT ASKED.
+ *
+ * The only checkpoint route that schedules no worker, because retrieval is
+ * Julius's own act rather than somebody else's turn. It is still a BARRIER, and
+ * that is the whole reason it is here rather than on the result of the dispatch
+ * that asked: the asking dispatch has ENDED, the observation exists before the
+ * continuation is created, and the continuation is the only place the answer
+ * appears. An observation handed back to a worker that already finished would
+ * be a citation, not research, and every proof of "the worker asked" would pass
+ * while the property that matters was false.
+ *
+ * Returns true when this dispatch's yield was research — meaning a continuation
+ * exists and the guidance branch must not mint a second one for the same
+ * subject.
+ */
+async function driveResearchCheckpoint(input: {
+  readonly deps: JuliusPipelineDependencies;
+  readonly run: JuliusRunRow;
+  readonly ledger: RuntimeLedger;
+  readonly task: JuliusTask;
+  readonly request: JuliusPipelineRequest;
+  readonly workerId: string;
+  readonly researchAsks?: unknown;
+  readonly segmentResume?: unknown;
+}): Promise<boolean> {
+  const { deps, run, ledger, task } = input;
+  const subjectTaskId = task.taskId;
+  const tasks = await deps.store.tasksForRun(run.runId, run.projectId);
+
+  // The same durable counter the guidance path uses, read from the rows that
+  // exist rather than from a field a restart would lose, and counted against
+  // the unit of work rather than against the most recent pause in it.
+  const segmentRoot = juliusSegmentLineageRootOf(task, tasks);
+  const segmentNumber = nextSegmentNumber(segmentRoot, tasks);
+  const asks = sanitizeJuliusResearchAsks(input.researchAsks);
+
+  const contractTaskId = juliusContractSubjectTaskId(task, tasks);
+  const contract = contractTaskId === null
+    ? null
+    : await deps.store.loadTaskContract({ projectId: run.projectId, taskId: contractTaskId });
+  const binding = contract === null ? null : juliusTaskContractBinding(contract);
+
+  const recorded = recordJuliusCheckpoint({
+    checkpointId: juliusResearchCheckpointId(subjectTaskId, segmentNumber),
+    runId: run.runId,
+    taskId: subjectTaskId,
+    sequence: segmentNumber,
+    trigger: 'RESEARCH_REQUESTED',
+    origin: originForRole(task.role),
+    binding,
+    evidenceIds: [],
+    // The worker's own bounded words about what it needs to know. An unusable
+    // ask still gets a checkpoint, because "a worker asked for something Julius
+    // could not read" is a fact worth having in the record.
+    safeSummary: asks === null
+      ? 'A worker asked Julius to research something and its request could not be read.'
+      : asks.map((item) => item.purpose).join(' | ').slice(0, JULIUS_CHECKPOINT_LIMITS.summaryChars),
+    recordedAt: deps.clock.now(),
+  });
+  if (recorded.outcome === 'REFUSED') {
+    await ledger.event('research.refused', {
+      taskId: subjectTaskId, workerId: input.workerId,
+      facts: { reasonCode: recorded.reasonCode, stage: 'checkpoint' },
+    });
+    return false;
+  }
+  const checkpoint = recorded.checkpoint;
+  await ledger.event('checkpoint.recorded', {
+    taskId: subjectTaskId, workerId: input.workerId,
+    facts: {
+      checkpointId: checkpoint.checkpointId, trigger: checkpoint.trigger, origin: checkpoint.origin,
+      sequence: checkpoint.sequence, evidenceCount: 0,
+      contractRevision: binding?.contractRevision ?? null,
+      contractBindingDigest: binding?.bindingDigest ?? null,
+    },
+  });
+
+  const refuse = async (reasonCode: string): Promise<boolean> => {
+    await ledger.event('checkpoint.verdict', {
+      taskId: subjectTaskId, workerId: input.workerId,
+      facts: {
+        checkpointId: checkpoint.checkpointId, route: 'CONTINUE', reasonCode,
+        wouldHaveRouted: 'SERVE_RESEARCH', continuationTaskId: null, barrier: false,
+      },
+    });
+    return false;
+  };
+
+  if (asks === null) return refuse('RESEARCH_ASK_UNREADABLE');
+
+  const routing = routeJuliusCheckpoint({
+    checkpoint, verdict: null, guidanceInFlight: false, contractState: contract?.state ?? null,
+  });
+  if (routing.route !== 'SERVE_RESEARCH') return refuse(`RESEARCH_ROUTED_${routing.route}`);
+
+  /**
+   * NO PORT MEANS NO RESEARCH, RECORDED AND CARRIED PAST.
+   *
+   * The lesson `scheduleRepair` bought on paid run 34037313976: work minted for
+   * something nothing serves does not fail, it SITS. A mission is never stalled
+   * on a question Julius has no way to answer.
+   */
+  if (deps.research === undefined) return refuse('RESEARCH_UNSERVED');
+  if (!isJuliusResearchRole(task.role)) return refuse('RESEARCH_ROLE_UNSUPPORTED');
+
+  // The same ceiling the guidance barrier answers to, counted from the same
+  // rows. A worker that asks at every segment would otherwise mint a
+  // continuation forever and the mission would never complete.
+  const segmentCeiling = input.request.verification.maxCoderSegments ?? JULIUS_DEFAULT_MAX_CODER_SEGMENTS;
+  if (segmentNumber > segmentCeiling) return refuse('SEGMENT_CEILING_REACHED');
+
+  const observations = await deps.research.serve({
+    missionId: task.missionId,
+    projectId: run.projectId,
+    runId: run.runId,
+    taskId: subjectTaskId,
+    role: task.role,
+    asks,
+    requestedAt: deps.clock.now(),
+  });
+
+  const continuation: JuliusTask = {
+    taskId: juliusSegmentTaskId(segmentRoot.taskId, segmentNumber),
+    missionId: task.missionId,
+    parentTaskId: segmentRoot.taskId,
+    /**
+     * BLOCKED ON THE SUBJECT ITSELF, which is the only edge there is when no
+     * second worker is involved. It releases through `evaluateJuliusRelease`
+     * exactly as every other dependency does: when the yielded segment is
+     * SUCCEEDED and effectively accepted, and never while it is halted or
+     * being repaired. No new pause primitive, and nothing that depends on a
+     * model agreeing to wait.
+     */
+    dependencyIds: [subjectTaskId],
+    requiredEvidenceTypes: task.requiredEvidenceTypes,
+    taskType: task.taskType,
+    role: task.role,
+    ordinal: task.ordinal + 2,
+    state: 'BLOCKED',
+  };
+  const created = await deps.store.addTask({
+    commandId: `segment:${continuation.taskId}`,
+    runId: run.runId, projectId: run.projectId, task: continuation,
+  });
+
+  if (created) {
+    const resume = sanitizeJuliusSegmentState(input.segmentResume);
+    const answer = renderJuliusResearchResume({
+      version: JULIUS_RESEARCH_ASK_VERSION,
+      askedAtCheckpointId: checkpoint.checkpointId,
+      observations,
+    });
+    /**
+     * THE ANSWER TRAVELS THE PROJECT BRAIN, scoped to the continuation, exactly
+     * as the architect's question does. One context compiler, one redaction
+     * path, one provenance record, and no prose side channel — and the entry is
+     * guarded by the continuation's own idempotent write, so a replayed tick
+     * adds neither the task nor the entry and the brain revision does not drift.
+     */
+    await deps.store.appendBrainEntry({
+      runId: run.runId,
+      projectId: run.projectId,
+      taskId: continuation.taskId,
+      workerId: input.workerId,
+      entryId: `brain:research-answer:${continuation.taskId}`,
+      kind: 'HANDOFF',
+      safeText: [
+        resume === null
+          ? 'This segment resumes work paused to research something. No usable record of what the previous segment completed was supplied; re-establish the state from the workspace before continuing.'
+          : [
+            `RESUMING AFTER RESEARCH CHECKPOINT: ${checkpoint.checkpointId}`,
+            `COMPLETED IN THE PREVIOUS SEGMENT: ${resume.completedSoFar.join(' | ') || '(nothing stated)'}`,
+            `INTENDED NEXT: ${resume.nextIntent}`,
+          ].join('\n'),
+        '',
+        answer,
+      ].join('\n'),
+      evidenceIds: observations.flatMap(
+        (observation: JuliusResearchObservationRecord) => (observation.evidenceId === null ? [] : [observation.evidenceId]),
+      ),
+      occurredAt: deps.clock.now(),
+    });
+  }
+
+  await ledger.event('checkpoint.verdict', {
+    taskId: subjectTaskId, workerId: input.workerId,
+    facts: {
+      checkpointId: checkpoint.checkpointId, route: routing.route, reasonCode: routing.reasonCode,
+      continuationTaskId: created ? continuation.taskId : null,
+      barrier: true,
+      segment: segmentNumber,
+      asks: asks.length,
+      // Every outcome, in order, so the record distinguishes four observed
+      // pages from four refusals without reading the evidence.
+      outcomes: observations.map((observation) => observation.outcome).join(','),
+      evidence: observations.filter((observation) => observation.evidenceId !== null).length,
+      signalled: observations.filter((observation) => observation.injectionSignals.length > 0).length,
+    },
+  });
+  return true;
 }
 
 /** `PROMPT_ARCHITECT` → itself; anything Julius does not recognise observes as JULIUS. */
@@ -1361,6 +1813,8 @@ function executionPorts(
   deps: JuliusPipelineDependencies,
   run: JuliusRunRow,
   ledger: RuntimeLedger,
+  /** What Julius reserved for this dispatch, so the effort row can name it. */
+  allocated: number | null,
 ): JuliusExecutionPorts {
   return {
     reserve: async ({ claim, request, idempotencyKey }) => {
@@ -1375,6 +1829,8 @@ function executionPorts(
     commit: async ({ claim, reservationId, result }) => {
       const usage = (result.usage ?? {}) as Record<string, unknown>;
       const number = (key: string): number => (typeof usage[key] === 'number' && Number.isFinite(usage[key] as number) ? usage[key] as number : 0);
+      /** The same read WITHOUT the zero substitution, for anything diagnostic. */
+      const maybe = (key: string): number | null => (typeof usage[key] === 'number' && Number.isFinite(usage[key] as number) ? usage[key] as number : null);
       /**
        * UNKNOWN COST IS NOT ZERO COST, and it used to be. A worker that
        * reports no `usdMicros` — the hosted runtime is allowed to, and Relay
@@ -1418,10 +1874,64 @@ function executionPorts(
         facts: {
           reservationId, usdMicros, inputTokens: number('inputTokens'), outputTokens: number('outputTokens'),
           role: claim.task.role, costBasis: component.basis,
+          // A completed dispatch never releases: it either reported an amount
+          // or it did not, and neither answer hands the money back.
+          released: false,
           // NEVER FOLDED INTO `usdMicros`. A price a harness worked out from its
           // own table is not what anyone was charged, and one column for both
           // is how an estimate becomes a bill.
           estimatedUsdMicros: component.estimatedUsdMicros,
+        },
+      });
+      /**
+       * WHAT THIS SLOT ACTUALLY DID, reported rather than inferred.
+       *
+       * Deliberately NOT folded into `budget.settled`, which reads its numbers
+       * through a helper that substitutes zero for an absent field — correct
+       * for a ledger that must not over-hold, and fatal for a parity
+       * diagnostic, which would then call every worker whose provider reports
+       * no token counts "shallow" rather than "unmeasured". Here an unreported
+       * component is null, and `summarizeJuliusSlotEffort` counts it as
+       * unknown.
+       *
+       * `researchCalls` and `reasoningTokens` are read from the same usage
+       * object: an adapter that reports them is measured on them, and one that
+       * does not is not charged for the silence.
+       */
+      /**
+       * WHAT JULIUS ITSELF OBSERVED, beside what the provider reported.
+       *
+       * Only the dimensions this site can actually see are given a number.
+       * Evidence produced, repair participation, guidance written and reviewer
+       * verdicts are all visible HERE, from the claim and the result; the ones
+       * that are not instrumented yet stay ABSENT, which the reader turns into
+       * `unknown` rather than into a zero. A dimension nobody measured must
+       * never read as a dimension that was zero — the same rule money follows.
+       */
+      const evidence = Array.isArray(result.evidence) ? result.evidence : [];
+      const verdicts = claim.task.role === 'INDEPENDENT_REVIEWER'
+        ? evidence.filter((item) => (item as { type?: unknown }).type === 'REVIEW_FINDING').length
+        : 0;
+      await ledger.event('worker.effort', {
+        taskId: claim.taskId,
+        facts: {
+          role: claim.task.role, taskType: claim.task.taskType,
+          inputTokens: maybe('inputTokens'), outputTokens: maybe('outputTokens'),
+          reasoningTokens: maybe('reasoningTokens'), toolCalls: maybe('toolCalls'),
+          researchCalls: maybe('researchCalls'), activeMs: maybe('runtimeMs'),
+          providerCalls: maybe('providerCalls'), brainRetrievals: maybe('brainRetrievals'),
+          usdMicros,
+          // The two halves of the money question, on the same row: what Julius
+          // permitted, and what came back — with the basis, so an UNKNOWN
+          // settlement is legible as one rather than as a missing number.
+          allocatedUsdMicros: allocated,
+          settledUsdMicros: usdMicros,
+          settlementBasis: component.basis,
+          evidenceGenerated: evidence.length,
+          repairRounds: claim.task.taskType.startsWith('repair:') ? 1 : 0,
+          guidanceGenerated: result.guidance === undefined ? 0 : 1,
+          reviewerVerdicts: verdicts,
+          effortVersion: JULIUS_SLOT_EFFORT_VERSION,
         },
       });
     },
@@ -1429,20 +1939,35 @@ function executionPorts(
       await deps.budget.release({ reservationId, reason, now: deps.clock.now(), usdMicros: usdMicros ?? null, spendUnknown });
       // A failed attempt that billed before it failed is a settlement, not a
       // hand-back, and the record has to be able to say so.
-      if ((typeof usdMicros === 'number' && usdMicros > 0) || spendUnknown === true) {
-        await ledger.event('budget.settled', {
-          taskId: claim.taskId,
-          facts: {
-            reservationId, usdMicros: typeof usdMicros === 'number' ? usdMicros : null, reason,
-            role: claim.task.role,
-            // A failure that billed a number the boundary reported is a
-            // provider's own figure; one that billed an amount nobody could
-            // name is UNKNOWN, which is why the hold is not released.
-            costBasis: typeof usdMicros === 'number' ? 'PROVIDER_REPORTED' : 'UNKNOWN',
-            estimatedUsdMicros: null,
-          },
-        });
-      }
+      const billed = (typeof usdMicros === 'number' && usdMicros > 0) || spendUnknown === true;
+      /**
+       * A RELEASE CLOSES THE RESERVATION EITHER WAY, AND THE ROW SAYS WHICH.
+       *
+       * Previously only a BILLED failure wrote a row, so an attempt that never
+       * reached a provider left its reservation with no closing record at all.
+       * The durable ledger frees it; anything PROJECTED from the events sees a
+       * hold that never ends, and money a slot genuinely did not spend reads as
+       * spent forever. Conservative in the safe direction, and it would starve
+       * a mission whose first dispatch was rerouted.
+       *
+       * `released: true` is the discriminator, and it is the ONE case where an
+       * absent amount frees capacity. That is safe precisely because it is
+       * reached only when the boundary reported NO spend and did NOT report
+       * unknown spend — nothing was sent, so there is nothing to hold.
+       */
+      await ledger.event('budget.settled', {
+        taskId: claim.taskId,
+        facts: {
+          reservationId, usdMicros: typeof usdMicros === 'number' ? usdMicros : null, reason,
+          role: claim.task.role,
+          released: !billed,
+          // A failure that billed a number the boundary reported is a
+          // provider's own figure; one that billed an amount nobody could
+          // name is UNKNOWN, which is why the hold is not released.
+          costBasis: typeof usdMicros === 'number' ? 'PROVIDER_REPORTED' : 'UNKNOWN',
+          estimatedUsdMicros: null,
+        },
+      });
     },
     persistEvidence: async ({ claim, evidence }) => {
       for (const item of evidence) {
@@ -2063,7 +2588,7 @@ async function scheduleRepair(input: {
   // dispatch will be given, so admission and execution cannot disagree.
   const reservationId = `reservation:repair:${task.taskId}:${priorRounds + 1}`;
   const estimate = deps.resources.estimate({ taskId: task.taskId, taskType: repairTaskType, role: task.role, attempt: priorRounds + 1 });
-  const admission = await allocateFor({ deps, run, role: task.role, estimateUsdMicros: estimate.usdMicros });
+  const admission = await allocateFor({ deps, run, role: task.role, taskId: task.taskId, estimateUsdMicros: estimate.usdMicros });
   if (admission?.basis === 'EXHAUSTED') {
     await ledger.event('budget.denied', { taskId: task.taskId, facts: { reason: 'BUDGET_EXHAUSTED', forRepairRound: priorRounds + 1, ...allocationFacts(admission) } });
     await ledger.event('run.failed', { taskId: task.taskId, facts: { reasonCode: 'REPAIR_BUDGET_DENIED', forRepairRound: priorRounds + 1 } });
@@ -2154,19 +2679,223 @@ async function allocateFor(input: {
   deps: JuliusPipelineDependencies;
   run: JuliusRunRow;
   role: JuliusWorkerRole;
+  /** The dispatch being allocated, so its own row is not counted as a prior round. */
+  taskId: string;
   estimateUsdMicros: number;
-}): Promise<JuliusExecutionAllocation | null> {
+}): Promise<JuliusDispatchDecision | null> {
   const policy = input.deps.allocation;
   if (policy === undefined) return null;
   const remaining = input.deps.budget.available === undefined ? null
     : await input.deps.budget.available({ runId: input.run.runId, projectId: input.run.projectId, now: input.deps.clock.now() });
-  return evaluateJuliusAllocation({ policy, role: input.role, remainingUsdMicros: remaining, estimateUsdMicros: input.estimateUsdMicros });
+
+  if (policy.version !== JULIUS_SLOT_ENVELOPE_VERSION) {
+    const v1 = evaluateJuliusAllocation({
+      policy, role: input.role, remainingUsdMicros: remaining, estimateUsdMicros: input.estimateUsdMicros,
+    });
+    return { ...v1, slot: null, slotEnvelopeUsdMicros: null };
+  }
+
+  /**
+   * THE SLOT DIMENSION IS COUNTED IN ROUNDS, AND SAYS SO.
+   *
+   * `available` reports what the MISSION has left; no ledger here can report
+   * what one slot has left, and inventing a per-slot money figure out of a
+   * mission-wide one would be a number nobody measured. So a slot's remaining
+   * envelope is derived from the rows that exist: every dispatch of that slot
+   * was capped at one share, so `envelope - rounds × share` is a LOWER bound on
+   * what the slot still has. Under-allocating is the safe direction, and the
+   * global remainder — which is real money from the real ledger — is what
+   * reallocation draws on once a slot's envelope is spent.
+   *
+   * A store that can one day answer per-slot money passes it straight into the
+   * evaluator; nothing about the rule changes when it does.
+   */
+  /**
+   * THE REAL LEDGER FIRST. Projected from the run's own durable budget rows, so
+   * an open reservation, a settlement that reported less than it held and money
+   * another slot is holding are all visible — none of which a round count can
+   * see.
+   */
+  const ledger = await projectSlotLedger(input.deps, input.run, policy);
+  /**
+   * A RUN ALLOCATED UNDER v1 IS READ UNDER v1, whatever is deployed now. The
+   * ledger still projects — the money is the money — and the decision falls
+   * back rather than inventing a per-slot position that run never had.
+   */
+  if (ledger !== null && !ledger.historicalPolicyConflict) {
+    const verdict = reserveJuliusSlotCapacity({ ledger, slot: input.role });
+    const account = ledger.bySlot[input.role];
+    if (!verdict.ok) {
+      return {
+        usdMicros: 0,
+        basis: verdict.refusal === 'SLOT_NOT_A_PEER' ? 'ESTIMATE' : 'EXHAUSTED',
+        shareUsdMicros: account?.perRoundShareUsdMicros ?? null,
+        remainingUsdMicros: remaining,
+        policyVersion: policy.version,
+        slot: input.role,
+        slotEnvelopeUsdMicros: account?.envelopeUsdMicros ?? null,
+        slotRemainingUsdMicros: account?.remainingOwnEnvelopeUsdMicros ?? null,
+        slotRoundsUsed: account?.reservationsOpened ?? 0,
+        ledgerRevision: verdict.ledgerRevision,
+        slotOutstandingUsdMicros: account?.outstandingUsdMicros ?? null,
+        slotSettledKnownUsdMicros: account?.settledKnownUsdMicros ?? null,
+        slotSettledUnknownUsdMicros: account?.settledUnknownUsdMicros ?? null,
+        unallocatedUsdMicros: ledger.unallocatedUsdMicros,
+        slotRefusal: verdict.refusal,
+      };
+    }
+    return {
+      usdMicros: verdict.usdMicros,
+      basis: verdict.source,
+      shareUsdMicros: verdict.perRoundShareUsdMicros,
+      remainingUsdMicros: remaining,
+      policyVersion: policy.version,
+      slot: verdict.slot,
+      slotEnvelopeUsdMicros: account?.envelopeUsdMicros ?? null,
+      slotRemainingUsdMicros: verdict.remainingOwnEnvelopeUsdMicros,
+      slotRoundsUsed: account?.reservationsOpened ?? 0,
+      ledgerRevision: verdict.ledgerRevision,
+      slotOutstandingUsdMicros: account?.outstandingUsdMicros ?? null,
+      slotSettledKnownUsdMicros: account?.settledKnownUsdMicros ?? null,
+      slotSettledUnknownUsdMicros: account?.settledUnknownUsdMicros ?? null,
+      unallocatedUsdMicros: verdict.unallocatedUsdMicros,
+      // The ledger granted. Stated rather than left absent, so "no refusal" and
+      // "a rule with no refusals to give" do not read the same on the row.
+      slotRefusal: null,
+    };
+  }
+
+  /**
+   * NO TIMELINE READER: COUNT ROUNDS, AND SAY THAT IS WHAT WAS COUNTED.
+   *
+   * Every dispatch of a slot was capped at one share, so
+   * `envelope - rounds x share` is a LOWER bound on what the slot still has.
+   * Under-allocating is the safe direction. The basis carries an
+   * `_ESTIMATED_FROM_ROUNDS` suffix so a reader of the durable record can tell
+   * a decision made against the money from one made against a proxy for it.
+   */
+  const tasks = await input.deps.store.tasksForRun(input.run.runId, input.run.projectId);
+  const priorRounds = tasks.filter((row) => row.role === input.role
+    && row.taskId !== input.taskId
+    && (row.state === 'SUCCEEDED' || row.state === 'FAILED' || row.state === 'ACTIVE')).length;
+  const envelope = slotEnvelopeUsdMicros(policy, input.role);
+  const share = slotRoundShareUsdMicros(policy, input.role);
+  const slotRemaining = Math.max(0, envelope - (priorRounds * share));
+
+  const v2 = evaluateJuliusSlotAllocation({
+    policy, role: input.role,
+    slotRemainingUsdMicros: slotRemaining,
+    unreservedUsdMicros: remaining,
+    estimateUsdMicros: input.estimateUsdMicros,
+  });
+  return {
+    usdMicros: v2.usdMicros,
+    basis: `${v2.basis}_ESTIMATED_FROM_ROUNDS`,
+    shareUsdMicros: v2.slotShareUsdMicros,
+    remainingUsdMicros: v2.unreservedUsdMicros,
+    policyVersion: v2.policyVersion,
+    slot: v2.slot,
+    slotEnvelopeUsdMicros: v2.slotEnvelopeUsdMicros,
+    slotRemainingUsdMicros: v2.slotRemainingUsdMicros,
+    slotRoundsUsed: priorRounds,
+  };
 }
 
-const allocationFacts = (allocation: JuliusExecutionAllocation): Record<string, string | number | null> => ({
+/**
+ * READ EVERY BUDGET ROW THIS RUN HAS WRITTEN, and project the slot accounts.
+ *
+ * Null when no timeline reader is bound — an honest absence rather than an
+ * empty ledger, because an empty ledger would report a mission that has spent
+ * nothing and hand out the whole ceiling twice.
+ */
+async function projectSlotLedger(
+  deps: JuliusPipelineDependencies,
+  run: JuliusRunRow,
+  policy: JuliusSlotEnvelopePolicy,
+): Promise<JuliusMissionSlotLedger | null> {
+  if (deps.timeline === undefined) return null;
+  const rows: JuliusBudgetRow[] = [];
+  let sinceSequence = 0;
+  for (;;) {
+    const page = await deps.timeline.timeline({
+      runId: run.runId, projectId: run.projectId, sinceSequence, limit: 500,
+    });
+    for (const entry of page.entries) {
+      sinceSequence = Math.max(sinceSequence, entry.sequence);
+      if (entry.type === 'budget.allocated' || entry.type === 'budget.reserved' || entry.type === 'budget.settled') {
+        rows.push({ type: entry.type, taskId: entry.taskId, facts: entry.facts });
+      }
+    }
+    if (!page.hasMore || page.entries.length === 0) break;
+  }
+  return projectJuliusSlotLedger({
+    runId: run.runId,
+    policy,
+    policyVersion: policy.version,
+    ceilingUsdMicros: policy.ceilingUsdMicros,
+    rows,
+  });
+}
+
+/**
+ * ONE ALLOCATION SHAPE FOR BOTH POLICIES, so the pipeline reads the same
+ * fields whichever rule produced them and `EXHAUSTED` still means the same
+ * thing at the one place a dispatch is denied.
+ */
+interface JuliusDispatchDecision {
+  readonly usdMicros: number;
+  readonly basis: string;
+  readonly shareUsdMicros: number | null;
+  readonly remainingUsdMicros: number | null;
+  readonly policyVersion: string;
+  /** Which peer slot this draws against. Null under the v1 rule, which has none. */
+  readonly slot: JuliusWorkerRole | null;
+  readonly slotEnvelopeUsdMicros: number | null;
+  readonly slotRemainingUsdMicros?: number | null;
+  readonly slotRoundsUsed?: number;
+  /** The ledger revision this decision was made against, when there was one. */
+  readonly ledgerRevision?: number;
+  readonly slotOutstandingUsdMicros?: number | null;
+  readonly slotSettledKnownUsdMicros?: number | null;
+  readonly slotSettledUnknownUsdMicros?: number | null;
+  readonly unallocatedUsdMicros?: number | null;
+  /**
+   * WHY THE LEDGER SAID NO, in its own vocabulary.
+   *
+   * The decision collapses every refusal into `EXHAUSTED`, which is what the
+   * dispatch path needs, and collapsing it there loses the one distinction a
+   * reader afterwards actually needs: a slot refused because THE MISSION ran
+   * dry did not do less work for the same reason as one refused because it is
+   * not a peer of this policy. Null when the ledger granted; absent under v1,
+   * which has no per-slot ledger to refuse.
+   */
+  readonly slotRefusal?: string | null;
+}
+
+const allocationFacts = (allocation: JuliusDispatchDecision): Record<string, string | number | null> => ({
   allocatedUsdMicros: allocation.usdMicros, allocationBasis: allocation.basis,
   shareUsdMicros: allocation.shareUsdMicros, remainingUsdMicros: allocation.remainingUsdMicros,
   allocationPolicy: allocation.policyVersion,
+  // Null under v1 rather than absent: a reader comparing two missions should be
+  // able to see that one had no slot envelope at all.
+  slot: allocation.slot,
+  slotEnvelopeUsdMicros: allocation.slotEnvelopeUsdMicros,
+  slotRemainingUsdMicros: allocation.slotRemainingUsdMicros ?? null,
+  slotRoundsUsed: allocation.slotRoundsUsed ?? null,
+  // The per-slot position this decision was made against, so a reader can
+  // reconstruct WHY a dispatch got what it got without replaying the ledger.
+  slotOutstandingUsdMicros: allocation.slotOutstandingUsdMicros ?? null,
+  slotSettledKnownUsdMicros: allocation.slotSettledKnownUsdMicros ?? null,
+  slotSettledUnknownUsdMicros: allocation.slotSettledUnknownUsdMicros ?? null,
+  unallocatedUsdMicros: allocation.unallocatedUsdMicros ?? null,
+  ledgerRevision: allocation.ledgerRevision ?? null,
+  // ABSENT, NULL AND A CODE ARE THREE DIFFERENT ANSWERS, so the key is omitted
+  // rather than nulled when there is nothing to say. Absent is v1: no per-slot
+  // ledger exists, so no refusal was possible and the reader sees unknown.
+  // `null` is a ledger that GRANTED. A code is the ledger's own reason for
+  // refusing. Nulling the first would report v1 as a rule that considered this
+  // dispatch and allowed it, which is not something v1 ever did.
+  ...(allocation.slotRefusal === undefined ? {} : { slotRefusal: allocation.slotRefusal }),
 });
 
 /* ---------------------------------------------------- repair context */

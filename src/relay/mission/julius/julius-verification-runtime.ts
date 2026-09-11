@@ -1,7 +1,18 @@
 import { missionMayComplete, verifyTask, type JuliusEvidence, type JuliusRecordedDecision, type JuliusTask, type JuliusVerificationDecision } from './julius-runtime';
 export interface JuliusAcceptanceCriterion{readonly criterionId:string;readonly description:string;readonly requiredEvidenceTypes:readonly JuliusEvidence['type'][];}
 export interface JuliusReviewerFinding{readonly findingId:string;readonly runId:string;readonly taskId:string;readonly reviewerWorkerId:string;readonly severity:'INFO'|'LOW'|'MEDIUM'|'HIGH'|'CRITICAL';readonly category:string;readonly claim:string;readonly criterionId:string|null;readonly evidenceIds:readonly string[];readonly blocking:boolean;readonly status:'OPEN'|'RESOLVED'|'DISMISSED';readonly createdAt:string;}
-export interface JuliusVerificationPolicy{readonly revision:string;readonly reviewerRequired:boolean;readonly maxRepairRounds:number;}
+/**
+ * `maxCoderSegments` bounds how many times ONE unit of coder work may pause at
+ * a checkpoint and resume. It is not a repair bound and is counted separately:
+ * a repair means the work was rejected, a segment boundary means the coder
+ * needed something. Without it a coder that asks at every segment mints a
+ * continuation forever and the mission never completes — the unbounded-loop
+ * twin of the unroutable repair task that sat RUNNABLE forever on paid run
+ * 34037313976. Absent means the default below, never unbounded.
+ */
+export interface JuliusVerificationPolicy{readonly revision:string;readonly reviewerRequired:boolean;readonly maxRepairRounds:number;readonly maxCoderSegments?:number;}
+/** Enough for real mid-mission collaboration, far short of a loop. */
+export const JULIUS_DEFAULT_MAX_CODER_SEGMENTS=4;
 export type JuliusVerificationAction={readonly action:'SCHEDULE_REVIEW';readonly role:'INDEPENDENT_REVIEWER'}|{readonly action:'DECIDE';readonly decision:JuliusVerificationDecision;readonly criteriaSatisfied:readonly string[];readonly criteriaMissing:readonly string[];readonly missionCompletable:boolean};
 export function evaluateJuliusVerification(input:{task:JuliusTask;evidence:readonly JuliusEvidence[];criteria:readonly JuliusAcceptanceCriterion[];findings:readonly JuliusReviewerFinding[];policy:JuliusVerificationPolicy;reviewCompleted:boolean;allTasks:readonly JuliusTask[];priorDecisions:readonly JuliusRecordedDecision[]}):JuliusVerificationAction{
  if(input.policy.reviewerRequired&&!input.reviewCompleted)return{action:'SCHEDULE_REVIEW',role:'INDEPENDENT_REVIEWER'};

@@ -31,6 +31,52 @@ export function reviewStageOf(taskType: string): JuliusReviewStage | null {
 }
 
 /**
+ * THE STAGE A NON-REVIEW TASK EXECUTES UNDER — its own task type, when that
+ * type names a stage.
+ *
+ * The pipeline used to derive this by elimination: not a reviewer and bound to
+ * a contract meant the coder, so `repair:` prefixed meant `repair:build` and
+ * everything else meant `build`. That was true while the coder was the only
+ * bound non-review role. ADR-021 made the architect bound too, and the
+ * elimination then labelled a guidance task's contract charge `build` — a
+ * durable record saying the architect held the coder's charge.
+ *
+ * The content of a charge does not vary by stage, so nothing was withheld from
+ * anyone; what was wrong was the NAME on it, in the one record that exists to
+ * say which agreement a worker executed under.
+ *
+ * Returns null for a type that names no stage. A SUB-AGENT CHILD is exactly
+ * that case — `spawnJuliusSubagent` takes the task type from its caller, so a
+ * child can be `audit` or anything else — and it still executes under its
+ * parent's contract and still needs a charge. `boundStageForRole` below is that
+ * fallback, and it is keyed on the ROLE rather than on a prefix, because the
+ * role is what actually decides what a worker is doing.
+ */
+export function workStageOf(taskType: string): JuliusReviewStage | null {
+  if (taskType.startsWith('review:')) return null;
+  return (JULIUS_REVIEW_STAGES as readonly string[]).includes(taskType) ? taskType as JuliusReviewStage : null;
+}
+
+/**
+ * THE STAGE A BOUND TASK EXECUTES UNDER WHEN ITS TYPE NAMES NONE.
+ *
+ * Keyed on the role, and on nothing else. A bound CODING_AGENT task is a build
+ * round whatever its caller called it; a bound PROMPT_ARCHITECT task is
+ * guidance, because the architect that DRAFTS the terms is unbound by
+ * construction and only the one that ADVISES under them ever reaches here. A
+ * repair round of either keeps its own repair stage.
+ *
+ * The reviewer is deliberately absent: its stage comes from `reviewStageOf`,
+ * and an unrecognised `review:<something>` is not guessed at.
+ */
+export function boundStageForRole(role: string, taskType: string): JuliusReviewStage | null {
+  const repairing = taskType.startsWith('repair:');
+  if (role === 'CODING_AGENT') return repairing ? 'repair:build' : 'build';
+  if (role === 'PROMPT_ARCHITECT') return repairing ? 'repair:guidance' : 'guidance';
+  return null;
+}
+
+/**
  * An input a review of this stage cannot proceed without. Only what is
  * genuinely REQUIRED is listed: a repair review does not require prior
  * findings, because Julius admits a repair round on failed evidence as well as
@@ -144,4 +190,18 @@ const CHARGES: Readonly<Record<JuliusReviewStage, JuliusReviewCharge>> = Object.
 
 export function reviewChargeFor(stage: JuliusReviewStage): JuliusReviewCharge {
   return CHARGES[stage];
+}
+
+/**
+ * WHAT A REVIEW TASK IS ABOUT — `<subject>:review` read back.
+ *
+ * The pipeline mints review tasks as `${subject}:review`, and until now every
+ * consumer that needed the subject reconstructed it by slicing the string in
+ * place. Once a review needs an artifact belonging to its SUBJECT rather than
+ * to the run — a guidance packet does — that slice moves into an adapter,
+ * which is where a convention becomes a bug nobody can grep for. Null for
+ * anything that is not a review task.
+ */
+export function reviewSubjectTaskId(taskId: string): string | null {
+  return taskId.endsWith(':review') ? taskId.slice(0, -':review'.length) : null;
 }
