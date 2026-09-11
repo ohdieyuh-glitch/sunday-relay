@@ -91,7 +91,9 @@ sentence came from.
    adapter read only the plan, and the prompt branched PLAN-versus-everything so
    a GUIDANCE subject got the implementation rubric and an empty diff.
 
-**The bundle can now say what each slot DID, not only what it spent.**
+## What each slot DID, not only what it spent
+
+**The bundle could not say it.**
 `checkpoint.recorded`, `checkpoint.verdict` and `contract.disposition` have been
 written durably for some time and nothing read them back per slot, so a report
 could state precisely what a worker cost and not whether it had ever stopped,
