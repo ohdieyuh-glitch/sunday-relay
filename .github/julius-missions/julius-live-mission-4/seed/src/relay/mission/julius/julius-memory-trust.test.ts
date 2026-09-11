@@ -36,9 +36,16 @@ const candidate = (over: Record<string, unknown> = {}): JuliusMemoryClaim => ok<
   } as never) as never);
 
 test('the vocabularies are closed and complete', () => {
+  // `external_retrieved` was appended AFTER this mission reached verified
+  // completion, when governed research gave all three persistent workers a way
+  // to observe something outside Relay. Appending it does not change any
+  // invariant this mission was charged with — admission is still UNVERIFIED,
+  // trust is still earned — and the vocabulary is still closed. The assertion
+  // is updated here rather than left stale so this seeded spec keeps saying
+  // something true about the module it specifies.
   assert.deepEqual([...JULIUS_MEMORY_PROVENANCE], [
     'user_stated', 'repository_observed', 'tool_observed', 'run_observed',
-    'reviewer_verified', 'system_policy', 'derived_candidate',
+    'reviewer_verified', 'system_policy', 'derived_candidate', 'external_retrieved',
   ]);
   assert.deepEqual([...JULIUS_MEMORY_TRUST_STATES], [
     'UNVERIFIED', 'SUPPORTED', 'VERIFIED', 'APPROVED', 'CONTRADICTED', 'SUPERSEDED',

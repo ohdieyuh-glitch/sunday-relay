@@ -26,7 +26,22 @@ import type { JuliusWorkerRole } from './julius-runtime';
  * way every other Julius domain module takes it.
  */
 
-/** WHERE A CLAIM CAME FROM. Not how much it is believed — that is `trust`. */
+/**
+ * WHERE A CLAIM CAME FROM. Not how much it is believed — that is `trust`.
+ *
+ * `external_retrieved` is the newest member and the one that carries the most
+ * warning. It means a persistent worker's governed research observed this
+ * somewhere outside Relay: a real authority about that source's own subject,
+ * and a stranger about everything else. It is deliberately NOT folded into
+ * `tool_observed`, which means Relay's own tool ran and Relay saw the result.
+ * Collapsing the two would make a vendor's changelog and a forum post
+ * indistinguishable from `git log` in the one field whose entire job is to say
+ * where a sentence came from.
+ *
+ * It grants nothing. An externally retrieved claim is admitted `UNVERIFIED`
+ * like every other candidate, and `julius-research-policy` additionally refuses
+ * to let an injection-signalled observation settle a disagreement.
+ */
 export const JULIUS_MEMORY_PROVENANCE = [
   'user_stated',
   'repository_observed',
@@ -35,6 +50,7 @@ export const JULIUS_MEMORY_PROVENANCE = [
   'reviewer_verified',
   'system_policy',
   'derived_candidate',
+  'external_retrieved',
 ] as const;
 export type JuliusMemoryProvenance = (typeof JULIUS_MEMORY_PROVENANCE)[number];
 

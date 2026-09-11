@@ -38,3 +38,7 @@ export * from './julius-artifacts';
 export * from './julius-tool-lifecycle';
 export * from './julius-agent-turn-loop';
 export * from './julius-tool-settlement';
+export * from './julius-segment-lineage';
+export * from './julius-slot-envelope';
+export * from './julius-slot-effort';
+export * from './julius-research-policy';
