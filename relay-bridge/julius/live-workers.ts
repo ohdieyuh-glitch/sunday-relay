@@ -627,6 +627,60 @@ const hostedCoderDiagnostics = (input: {
  * only — a closed reason code, booleans, a byte count, and identifiers the
  * provider itself returned. No plan text, no prompt, no provider body.
  */
+/**
+ * EVERY FACT THE PROVIDER'S OWN ANSWER CARRIES, in one place, so that a call
+ * site reports all of them or none.
+ *
+ * `planDiagnostics` takes eighteen optional fields, and six call sites each
+ * chose a subset by hand. Only ONE — the connector-failure path — passed the
+ * whole provider picture. The three refusal sites (unparseable JSON, guidance
+ * invalid, plan invalid) passed no tokens at all, so a plan that was BOUGHT and
+ * then thrown away recorded nothing about what it cost; and both success sites
+ * omitted the elapsed time, the provider's status, the total and reasoning
+ * tokens and the ceiling, so a run that worked left THINNER evidence than one
+ * that failed. That is the wrong way round: the paid proof reads the successful
+ * run.
+ *
+ * Nothing here is new information. Every field was already on the outcome and
+ * already in scope at every site; what was missing was a reason each site could
+ * not quietly report a subset. Spreading one constructor is that reason, and
+ * `architect-diagnostics.test.ts` fails when a site stops doing it.
+ */
+const providerFacts = (
+  outcome: GptRunOutcome,
+  startedAtMs: number,
+  maxOutputTokens: number,
+): {
+  readonly servedModel: string | null;
+  readonly responseId: string | null;
+  readonly providerStatus: string | null;
+  readonly inputTokens: number | null;
+  readonly cachedInputTokens: number | null;
+  readonly outputTokens: number | null;
+  readonly reasoningTokens: number | null;
+  readonly totalTokens: number | null;
+  readonly maxOutputTokens: number;
+  readonly incompleteReason: string | null;
+  readonly elapsedMs: number;
+} => ({
+  // The response is the authority for what answered, never the request.
+  servedModel: outcome.actualModel ?? null,
+  responseId: outcome.responseId ?? null,
+  // A success carries the provider's `status` under its own name; a failure
+  // carries it as `providerStatus`, present only when the provider answered.
+  providerStatus: (outcome.ok ? outcome.status : outcome.providerStatus) ?? null,
+  inputTokens: outcome.usage?.inputTokens ?? null,
+  cachedInputTokens: outcome.usage?.cachedInputTokens ?? null,
+  outputTokens: outcome.usage?.outputTokens ?? null,
+  reasoningTokens: outcome.usage?.reasoningTokens ?? null,
+  totalTokens: outcome.usage?.totalTokens ?? null,
+  // The ceiling in force, so "it ran out" stays a comparison rather than a claim.
+  maxOutputTokens,
+  // A success is by definition not incomplete; null there is the true answer.
+  incompleteReason: outcome.ok ? null : outcome.incompleteReason ?? null,
+  elapsedMs: Date.now() - startedAtMs,
+});
+
 const planDiagnostics = (input: {
   readonly requestedModel: string | null;
   readonly servedModel?: string | null;
@@ -648,6 +702,8 @@ const planDiagnostics = (input: {
   /** Named, so a plan that VALIDATED is a fact rather than the absence of a reason code. */
   readonly outcome?: 'succeeded' | 'failed';
   readonly inputTokens?: number | null;
+  /** Billed at a different rate, so a token count without it is not the cost. */
+  readonly cachedInputTokens?: number | null;
   readonly outputTokens?: number | null;
   /** Reasoning models spend these against the SAME ceiling as visible output. */
   readonly reasoningTokens?: number | null;
@@ -690,6 +746,14 @@ const planDiagnostics = (input: {
    */
   costBasis: 'UNKNOWN',
   inputTokens: input.inputTokens ?? null,
+  /**
+   * CACHED INPUT IS BILLED DIFFERENTLY, and the connector has always read it
+   * (`input_tokens_details.cached_tokens`) into `GptUsage` — where it then
+   * reached no diagnostic at all. A row carrying `inputTokens` alone reports a
+   * quantity at one price when some of it was bought at another, which is a
+   * cost claim nobody can check.
+   */
+  cachedInputTokens: input.cachedInputTokens ?? null,
   outputTokens: input.outputTokens ?? null,
   /**
    * A FAILED CALL WAS STILL BILLED, and until Mission 4's first attempt these
@@ -913,22 +977,14 @@ export function createLiveArchitectAdapter(input: {
          * before Julius validates, so it never had a verdict to report. */
         const responded = typeof outcome.responseId === 'string' && outcome.responseId.length > 0;
         const failed = planDiagnostics({
-          requestedModel: input.config.model, servedModel: outcome.actualModel ?? null,
-          responseId: outcome.responseId ?? null,
+          // Absent when the call never reached the provider; never zero for a
+          // call that did. `undefined` becomes null in the row, which is the
+          // honest reading of "no answer to report".
+          ...providerFacts(outcome, startedAtMs, input.config.maxOutputTokens),
+          requestedModel: input.config.model,
           jsonParseable: responded ? false : null,
           validationPassed: null,
           attempts,
-          providerStatus: outcome.providerStatus ?? null,
-          totalTokens: outcome.usage?.totalTokens ?? null,
-          elapsedMs: Date.now() - startedAtMs,
-          // Absent when the call never reached the provider; never zero for a
-          // call that did. `undefined` here becomes null in the row, which is
-          // the honest reading of "no answer to report".
-          inputTokens: outcome.usage?.inputTokens ?? null,
-          outputTokens: outcome.usage?.outputTokens ?? null,
-          reasoningTokens: outcome.usage?.reasoningTokens ?? null,
-          maxOutputTokens: input.config.maxOutputTokens,
-          incompleteReason: outcome.incompleteReason ?? null,
         });
         switch (outcome.failureClass) {
           case 'authentication_failed':
@@ -957,8 +1013,8 @@ export function createLiveArchitectAdapter(input: {
         // came back was unusable, which is a different repair from a 500.
         throw new JuliusDispatchError('WORKER_EXECUTION_FAILURE', false, 'Prompt Architect output was not parseable JSON.', 'unparseable_plan_json',
           planDiagnostics({
-            requestedModel: input.config.model, servedModel: outcome.actualModel,
-            responseId: outcome.responseId, jsonParseable: false, validationPassed: false,
+            ...providerFacts(outcome, startedAtMs, input.config.maxOutputTokens),
+            requestedModel: input.config.model, jsonParseable: false, validationPassed: false,
             outputBytes: Buffer.byteLength(outcome.outputText, 'utf8'), attempts,
           }));
       }
@@ -981,8 +1037,8 @@ export function createLiveArchitectAdapter(input: {
           }
           throw new JuliusDispatchError('WORKER_EXECUTION_FAILURE', false, 'Prompt Architect guidance failed validation.', 'guidance_validation_failed',
             planDiagnostics({
-              requestedModel: input.config.model, servedModel: outcome.actualModel,
-              responseId: outcome.responseId, jsonParseable: true, validationPassed: false,
+              ...providerFacts(outcome, startedAtMs, input.config.maxOutputTokens),
+              requestedModel: input.config.model, jsonParseable: true, validationPassed: false,
               outputBytes: Buffer.byteLength(outcome.outputText, 'utf8'), attempts,
             }));
         }
@@ -1014,13 +1070,10 @@ export function createLiveArchitectAdapter(input: {
             occurredAt: nowIso(),
           }],
           diagnostics: planDiagnostics({
+            ...providerFacts(outcome, startedAtMs, input.config.maxOutputTokens),
             requestedModel: input.config.model,
-            servedModel: outcome.actualModel ?? null,
-            responseId: outcome.responseId ?? null,
             jsonParseable: true, validationPassed: true, outcome: 'succeeded',
             attempts, outputBytes: Buffer.byteLength(outcome.outputText, 'utf8'),
-            inputTokens: outcome.usage.inputTokens ?? null,
-            outputTokens: outcome.usage.outputTokens ?? null,
           }),
           usage: {
             inputTokens: outcome.usage.inputTokens ?? undefined,
@@ -1045,8 +1098,8 @@ export function createLiveArchitectAdapter(input: {
          */
         throw new JuliusDispatchError('WORKER_EXECUTION_FAILURE', false, `Prompt Architect plan failed validation: ${safeClaim(validation.reason, 120)}.`, 'plan_validation_failed',
           planDiagnostics({
-            requestedModel: input.config.model, servedModel: outcome.actualModel,
-            responseId: outcome.responseId, jsonParseable: true, validationPassed: false,
+            ...providerFacts(outcome, startedAtMs, input.config.maxOutputTokens),
+            requestedModel: input.config.model, jsonParseable: true, validationPassed: false,
             validationReasonCode: validation.reasonCode, validationField: validation.reasonField ?? null,
             validationClaimPhrase: validation.reasonClaim ?? null,
             outputBytes: Buffer.byteLength(outcome.outputText, 'utf8'), attempts,
@@ -1094,13 +1147,10 @@ export function createLiveArchitectAdapter(input: {
          * dispatch bought one provider call or two.
          */
         diagnostics: planDiagnostics({
+          ...providerFacts(outcome, startedAtMs, input.config.maxOutputTokens),
           requestedModel: input.config.model,
-          servedModel: outcome.actualModel ?? null,
-          responseId: outcome.responseId ?? null,
           jsonParseable: true, validationPassed: true, outcome: 'succeeded',
           attempts, outputBytes: Buffer.byteLength(outcome.outputText, 'utf8'),
-          inputTokens: outcome.usage.inputTokens ?? null,
-          outputTokens: outcome.usage.outputTokens ?? null,
         }),
         usage: {
           inputTokens: outcome.usage.inputTokens ?? undefined,

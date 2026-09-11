@@ -357,6 +357,17 @@ export const safeReviewDiagnostics=(value:unknown):JuliusSafeDiagnostics|null=>{
   estimatedCostUsdMicros:safeCount(v.estimatedCostUsdMicros),
   /** Tokens the boundary reported, which is what a later price table would measure. */
   inputTokens:safeCount(v.inputTokens),
+  /**
+   * CACHED INPUT IS BILLED AT A DIFFERENT RATE, so `inputTokens` alone is a
+   * quantity at one price when part of it was bought at another.
+   *
+   * The connector has always read this (`input_tokens_details.cached_tokens`)
+   * into `GptUsage`, where it reached no diagnostic at all. It could not have:
+   * a field absent from this allowlist is dropped on its way to the durable
+   * record without a word, which is why adding the column upstream is only
+   * half the repair.
+   */
+  cachedInputTokens:safeCount(v.cachedInputTokens),
   outputTokens:safeCount(v.outputTokens),
   /* ------------------------------- why an answer stopped early ----
    *
