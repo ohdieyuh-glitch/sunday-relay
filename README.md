@@ -28,6 +28,15 @@ PR for the branch is already open, takes its title from the body's `# ` heading
 rather than a literal, and prints no credential material. Its five pre-GitHub
 checks were dry-run against the pushed branch and all five pass.
 
+## Independent of the architect-envelope candidate
+
+`ceremony/architect-envelope-pr` is frozen on the SAME base and touches a
+disjoint set of files. The two may be opened and approved in either order.
+Whichever lands first moves `main`, at which point the other's opener will
+refuse (`main moved: … — STOP, the candidate is stale`) and that candidate is
+rebased and re-frozen before its ceremony is run. That refusal is the safety
+property working, not a fault.
+
 ## What this branch carries
 
 The salvage of #143 — mission ownership — re-audited and repaired against
