@@ -386,13 +386,67 @@ export interface MissionSummary {
   readonly completedAt: string | null;
 }
 
+/**
+ * WHO IS ASKING ABOUT A MISSION.
+ *
+ * Derived at the route from the AUTHENTICATED session — never from a request
+ * body. A browser is who its session says it is, because a mission id is
+ * caller-chosen and so proves nothing about who owns the mission behind it.
+ *
+ * `participantId: null` is a real, distinct identity, not "unknown": it is the
+ * unbound caller (a read-only session, or a control session paired before any
+ * participant was bound). It owns exactly the missions started with a null
+ * owner, and no others.
+ */
+export type MissionCaller =
+  | { readonly kind: 'operator' }
+  | { readonly kind: 'participant'; readonly participantId: string | null };
+
+/**
+ * MAY THIS CALLER SEE AND ACT ON A MISSION WITH THIS OWNER?
+ *
+ * The operator may act on any mission — that authority is deliberate and
+ * unchanged. A participant may act on their own missions and no others, by
+ * identity equality against `startedByParticipant`. The rule is the same one
+ * `listForParticipant` already applies to the history list; this is what makes
+ * the per-mission routes agree with it.
+ *
+ * This is the whole ownership predicate. It is a pure function on purpose: the
+ * route decides WHO is calling, the registry decides WHAT that permits, and
+ * neither can be satisfied by anything the caller sends.
+ */
+export function missionOwnerAdmits(
+  ownerParticipant: string | null,
+  caller: MissionCaller,
+): boolean {
+  if (caller.kind === 'operator') return true;
+  return ownerParticipant === caller.participantId;
+}
+
+/**
+ * THE OPERATOR, NAMED ONCE.
+ *
+ * For in-process callers that genuinely hold operator authority — the journey
+ * harness and the suites that drive the registry directly. Written out rather
+ * than defaulted, so operator authority is always something a call SAYS and
+ * never something it inherits by omitting an argument.
+ */
+export const MISSION_OPERATOR: MissionCaller = Object.freeze({ kind: 'operator' });
+
 export interface MissionRegistry {
   start(input: {
     missionId: string;
     objective: string;
-    /** The participant starting it, so it can appear in THEIR history and only
-     *  theirs. Null/absent for an operator or the controlled fixture. */
-    startedBy?: string | null;
+    /**
+     * WHO IS STARTING IT — the authenticated session, never the request body.
+     *
+     * This both stamps the owner (`startedByParticipant`: the participant's id,
+     * or null for an operator or the controlled fixture) and decides what
+     * happens when `missionId` names a mission that already exists. Mission ids
+     * are caller-chosen, so a collision is not necessarily the same caller
+     * returning: see the refusal in `start`.
+     */
+    caller: MissionCaller;
     /**
      * References the Mission is AUTHORISED to retrieve before planning.
      *
@@ -432,8 +486,15 @@ export interface MissionRegistry {
      * role selections, mode, review policy, requested permissions and limits.
      */
     config?: RelayMissionConfig;
-  }): LiveMissionUpdate;
-  get(missionId: string): LiveMissionUpdate | null;
+  }): LiveMissionUpdate | null;
+  /**
+   * ONE MISSION, IF IT IS THIS CALLER'S.
+   *
+   * Null for a mission that does not exist AND for one that exists but belongs
+   * to someone else — deliberately the same answer, so a caller cannot probe
+   * which mission ids are taken by reading two different refusals.
+   */
+  get(missionId: string, caller: MissionCaller): LiveMissionUpdate | null;
   /**
    * THIS PARTICIPANT'S MISSIONS, newest first — their history list.
    *
@@ -475,8 +536,13 @@ export interface MissionRegistry {
    */
   beginShip(missionId: string): boolean;
   endShip(missionId: string): void;
-  cancel(missionId: string): LiveMissionUpdate | null;
-  retry(missionId: string): LiveMissionUpdate | null;
+  /** Cancel a mission this caller owns. Null when it is not theirs or not
+   *  there — one answer, as `get`. */
+  cancel(missionId: string, caller: MissionCaller): LiveMissionUpdate | null;
+  /** Re-drive a mission this caller owns. Retry SPENDS, so the ownership check
+   *  is what stops one participant spending against another's mission. Null
+   *  when it is not theirs or not there. */
+  retry(missionId: string, caller: MissionCaller): LiveMissionUpdate | null;
 }
 
 /** Explicit path selection. Live execution is NEVER inferred from a credential
@@ -2447,9 +2513,27 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
   }
 
   return {
-    start({ missionId, objective, evidenceReferences, repositoryTarget, intendedWritePaths, config, startedBy }) {
+    start({ missionId, objective, evidenceReferences, repositoryTarget, intendedWritePaths, config, caller }) {
+      const startedBy = caller.kind === 'participant' ? caller.participantId : null;
       const existing = records.get(missionId);
-      if (existing) return toView(existing); // idempotent — one dispatch per mission id
+      if (existing) {
+        /**
+         * A COLLISION IS NOT PROOF OF OWNERSHIP.
+         *
+         * `start` is idempotent by mission id so a caller that retries the same
+         * request gets the same mission rather than a second dispatch. But the
+         * id comes from the request body, so "this id already exists" says
+         * nothing about who created it — and returning the existing view here
+         * handed a full mission record to anyone who guessed an id.
+         *
+         * Idempotency is therefore scoped to the owner: the same caller gets
+         * their mission back; anyone else gets null, which the route answers
+         * identically to a rejected id. The refusal is deliberately not
+         * "already exists", because that sentence is itself the leak.
+         */
+        if (!missionOwnerAdmits(existing.startedByParticipant, caller)) return null;
+        return toView(existing); // idempotent — one dispatch per mission id
+      }
       const request = safeText(objective) || 'Implement the controlled demo task.';
       const rec: MissionRecord = {
         missionId,
@@ -2506,9 +2590,11 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
       return mine.sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0));
     },
 
-    get(missionId) {
+    get(missionId, caller) {
       const rec = records.get(missionId);
-      return rec ? toView(rec) : null;
+      if (!rec) return null;
+      if (!missionOwnerAdmits(rec.startedByParticipant, caller)) return null;
+      return toView(rec);
     },
 
     shipContext(missionId) {
@@ -2547,9 +2633,10 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
       inFlightShips.delete(missionId);
     },
 
-    cancel(missionId) {
+    cancel(missionId, caller) {
       const rec = records.get(missionId);
       if (!rec) return null;
+      if (!missionOwnerAdmits(rec.startedByParticipant, caller)) return null;
       if (rec.running) {
         rec.cancelRequested = true;
         try {
@@ -2563,9 +2650,10 @@ export function createMissionRegistry(config: MissionRegistryConfig): MissionReg
       return toView(rec);
     },
 
-    retry(missionId) {
+    retry(missionId, caller) {
       const rec = records.get(missionId);
       if (!rec) return null;
+      if (!missionOwnerAdmits(rec.startedByParticipant, caller)) return null;
       if (rec.running) return toView(rec);
       if (rec.state !== 'failed') return toView(rec);
       if (rec.error && rec.error.retryable === false) return toView(rec);

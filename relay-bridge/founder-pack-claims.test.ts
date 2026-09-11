@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { createMissionRegistry } from './mission';
+import { createMissionRegistry, MISSION_OPERATOR } from './mission';
 import { FOUNDER_MISSIONS } from '../src/relay/mission/founder-pack/founder-missions';
 
 /**
@@ -63,20 +63,20 @@ describe('the pack says idempotency is keyed on the mission id', () => {
      * this can never pass by comparing two absences again.
      */
     const reg = registry();
-    const first = reg.start({ missionId: 'fm-5-probe', objective: 'Add the guard.' });
-    const second = reg.start({ missionId: 'fm-5-probe', objective: 'Something else entirely.' });
+    const first = reg.start({ caller: MISSION_OPERATOR, missionId: 'fm-5-probe', objective: 'Add the guard.' });
+    const second = reg.start({ caller: MISSION_OPERATOR, missionId: 'fm-5-probe', objective: 'Something else entirely.' });
 
-    expect(first.missionRevision).toBeDefined();
-    expect(second.missionRevision).toBeDefined();
+    expect(first?.missionRevision).toBeDefined();
+    expect(second?.missionRevision).toBeDefined();
     // The same run, not a new one. A second dispatch would have rederived the
     // revision from the second objective.
-    expect(second.missionRevision).toBe(first.missionRevision);
+    expect(second?.missionRevision).toBe(first?.missionRevision);
   });
 
   it('does not adopt the second call’s objective, which is what a restart would do', () => {
     const reg = registry();
-    reg.start({ missionId: 'fm-5-objective', objective: 'The first objective.' });
-    const second = reg.start({ missionId: 'fm-5-objective', objective: 'The second objective.' });
+    reg.start({ caller: MISSION_OPERATOR, missionId: 'fm-5-objective', objective: 'The first objective.' });
+    const second = reg.start({ caller: MISSION_OPERATOR, missionId: 'fm-5-objective', objective: 'The second objective.' });
     expect(JSON.stringify(second)).not.toContain('The second objective');
   });
 
@@ -84,21 +84,21 @@ describe('the pack says idempotency is keyed on the mission id', () => {
     // The other direction: idempotency that swallowed distinct missions would
     // be worse than none.
     const reg = registry();
-    const a = reg.start({ missionId: 'fm-5-a', objective: 'Add the guard.' });
-    const b = reg.start({ missionId: 'fm-5-b', objective: 'Add the guard.' });
-    expect(a.missionRevision).toBeDefined();
-    expect(b.missionRevision).toBeDefined();
+    const a = reg.start({ caller: MISSION_OPERATOR, missionId: 'fm-5-a', objective: 'Add the guard.' });
+    const b = reg.start({ caller: MISSION_OPERATOR, missionId: 'fm-5-b', objective: 'Add the guard.' });
+    expect(a?.missionRevision).toBeDefined();
+    expect(b?.missionRevision).toBeDefined();
     // Same objective, different id — so the revision must still differ, which
     // is what proves the id is part of it.
-    expect(b.missionRevision).not.toBe(a.missionRevision);
+    expect(b?.missionRevision).not.toBe(a?.missionRevision);
   });
 
   it('warns that the record is in memory, because it is', () => {
     // A fresh registry is a restarted bridge. The pack says so rather than
     // letting a founder discover it during a retry that spent twice.
     const before = registry();
-    before.start({ missionId: 'fm-5-restart', objective: 'Add the guard.' });
-    expect(registry().get('fm-5-restart')).toBeNull();
+    before.start({ caller: MISSION_OPERATOR, missionId: 'fm-5-restart', objective: 'Add the guard.' });
+    expect(registry().get('fm-5-restart', MISSION_OPERATOR)).toBeNull();
     expect(mission?.wouldFailIf).toContain('in memory');
   });
 });

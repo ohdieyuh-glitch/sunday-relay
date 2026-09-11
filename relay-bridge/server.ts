@@ -20,7 +20,7 @@ import { join } from 'node:path';
 import {
   loadBridgeConfig, productionConfigProblems, productionConfigWarnings, type BridgeConfig,
 } from './config';
-import { createMissionRegistry, type MissionRegistry } from './mission';
+import { createMissionRegistry, type MissionCaller, type MissionRegistry } from './mission';
 import {
   architectPreflight, loadArchitectConfig, verifyArchitectConnection,
 } from './openai-architect';
@@ -868,6 +868,24 @@ export function createBridgeServer(
           missionCaller = decision;
         }
 
+        /**
+         * THE MISSION FAMILY'S IDENTITY, in the registry's own terms.
+         *
+         * The operator keeps unscoped authority; a browser is the participant
+         * bound into its session at mint, and nothing else. This is computed
+         * ONCE, here, from the authenticated decision — the per-mission routes
+         * below pass it rather than re-deriving it, so there is one place where
+         * "who is calling" is decided and no route can quietly disagree.
+         *
+         * FAILS CLOSED. An absent decision — which the gate above makes
+         * unreachable for these paths — reads as the unbound participant, never
+         * as the operator, so a future route added outside the gate cannot
+         * inherit operator authority by accident.
+         */
+        const missionIdentity: MissionCaller = missionCaller?.kind === 'operator'
+          ? { kind: 'operator' }
+          : { kind: 'participant', participantId: missionCaller?.kind === 'browser' ? missionCaller.participantId : null };
+
         if (method === 'POST' && path === '/relay-api/mission/start') {
           const body = (await readBody(req)) as { missionId?: unknown; objective?: unknown } | undefined;
           const missionId = typeof body?.missionId === 'string' ? body.missionId : '';
@@ -1008,8 +1026,19 @@ export function createBridgeServer(
             missionId, objective, repositoryTarget, intendedWritePaths, config: configResult.value,
             // WHO started it — the verified session, never the body — so it lands
             // in this participant's history and only theirs. Operator: null.
-            startedBy: missionCaller?.kind === 'browser' ? missionCaller.participantId : null,
+            caller: missionIdentity,
           });
+          /**
+           * THE ID IS TAKEN BY SOMEONE ELSE. Mission ids are caller-chosen, so
+           * this is reachable by guessing; before the ownership check it
+           * returned the other participant's full mission view. The reply names
+           * the id as unavailable and says nothing about the mission behind it —
+           * not its state, not its objective, not that it is anyone's.
+           */
+          if (view === null) {
+            send(res, 409, { error: { kind: 'mission_id_unavailable', message: 'That mission id is not available.' } }, cors);
+            return;
+          }
           send(res, 200, { missionId, view }, cors);
           return;
         }
@@ -1037,12 +1066,14 @@ export function createBridgeServer(
           if (id === null) return send(res, 404, { error: 'mission not found' }, cors);
           const action = missionMatch[2];
           if (method === 'GET' && !action) {
-            const view = registry.get(id);
+            // Not found and not yours are ONE answer, so the 404 cannot be read
+            // as "this id exists, it just is not yours".
+            const view = registry.get(id, missionIdentity);
             if (!view) return send(res, 404, { error: 'mission not found' }, cors);
             return send(res, 200, { missionId: id, view }, cors);
           }
           if (method === 'POST' && action === 'cancel') {
-            const view = registry.cancel(id);
+            const view = registry.cancel(id, missionIdentity);
             if (!view) return send(res, 404, { error: 'mission not found' }, cors);
             return send(res, 200, { missionId: id, view }, cors);
           }
@@ -1067,7 +1098,7 @@ export function createBridgeServer(
               send(res, retryRefusal.status, retryRefusal.body, cors);
               return;
             }
-            const view = registry.retry(id);
+            const view = registry.retry(id, missionIdentity);
             if (!view) return send(res, 404, { error: 'mission not found' }, cors);
             return send(res, 200, { missionId: id, view }, cors);
           }

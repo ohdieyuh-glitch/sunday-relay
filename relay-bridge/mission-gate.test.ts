@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { createMissionRegistry } from './mission';
+import { createMissionRegistry, MISSION_OPERATOR } from './mission';
 
 /**
  * PRE-DISPATCH GATE.
@@ -41,10 +41,10 @@ describe('14. missing OpenAI configuration blocks every live role before dispatc
     globalThis.fetch = fetchSpy as unknown as typeof fetch;
 
     const registry = registryWith({});
-    registry.start({ missionId: 'm-gate-1', objective: 'Normalize project names' });
+    registry.start({ caller: MISSION_OPERATOR, missionId: 'm-gate-1', objective: 'Normalize project names' });
     await settle();
 
-    const view = registry.get('m-gate-1');
+    const view = registry.get('m-gate-1', MISSION_OPERATOR);
     expect(view?.state).toBe('failed');
     expect(view?.error?.code).toBe('architect_not_configured');
     expect(view?.error?.safeMessage).toContain('RELAY_PROMPT_ARCHITECT_MODE=live');
@@ -59,10 +59,10 @@ describe('14. missing OpenAI configuration blocks every live role before dispatc
     }) as unknown) as typeof fetch;
 
     const registry = registryWith({ OPENAI_API_KEY: 'FAKETESTNOTREAL-present-not-live' }); // relay-boundary:allow-fixture — presence sentinel, not a key
-    registry.start({ missionId: 'm-gate-2', objective: 'Normalize project names' });
+    registry.start({ caller: MISSION_OPERATOR, missionId: 'm-gate-2', objective: 'Normalize project names' });
     await settle();
 
-    const view = registry.get('m-gate-2');
+    const view = registry.get('m-gate-2', MISSION_OPERATOR);
     expect(view?.state).toBe('failed');
     // Nothing downstream of the architect ran.
     expect(view?.terminal).toBeUndefined();
@@ -77,29 +77,29 @@ describe('14. missing OpenAI configuration blocks every live role before dispatc
       OPENAI_API_KEY: 'k',
       OPENAI_PROMPT_ARCHITECT_MODEL: 'gpt-test',
     });
-    registry.start({ missionId: 'm-gate-3', objective: 'Normalize project names' });
+    registry.start({ caller: MISSION_OPERATOR, missionId: 'm-gate-3', objective: 'Normalize project names' });
     await settle();
 
-    const view = registry.get('m-gate-3');
+    const view = registry.get('m-gate-3', MISSION_OPERATOR);
     expect(view?.state).toBe('failed');
     expect(view?.error?.safeMessage).toContain('RELAY_PROMPT_ARCHITECT_MODE=live');
   });
 
   it('the block is not retryable, so a Start press cannot burn a run by retrying', async () => {
     const registry = registryWith({});
-    registry.start({ missionId: 'm-gate-4', objective: 'Normalize project names' });
+    registry.start({ caller: MISSION_OPERATOR, missionId: 'm-gate-4', objective: 'Normalize project names' });
     await settle();
-    expect(registry.get('m-gate-4')?.error?.retryable).toBe(false);
+    expect(registry.get('m-gate-4', MISSION_OPERATOR)?.error?.retryable).toBe(false);
   });
 
   it('the mission is idempotent while blocked — a second start never re-runs it', async () => {
     const registry = registryWith({});
-    registry.start({ missionId: 'm-gate-5', objective: 'Normalize project names' });
+    registry.start({ caller: MISSION_OPERATOR, missionId: 'm-gate-5', objective: 'Normalize project names' });
     await settle();
-    const first = registry.get('m-gate-5');
-    registry.start({ missionId: 'm-gate-5', objective: 'Normalize project names' });
+    const first = registry.get('m-gate-5', MISSION_OPERATOR);
+    registry.start({ caller: MISSION_OPERATOR, missionId: 'm-gate-5', objective: 'Normalize project names' });
     await settle();
-    const second = registry.get('m-gate-5');
+    const second = registry.get('m-gate-5', MISSION_OPERATOR);
     expect(second?.events.length).toBe(first?.events.length);
   });
 
@@ -108,9 +108,9 @@ describe('14. missing OpenAI configuration blocks every live role before dispatc
       OPENAI_API_KEY: 'sk-FAKETESTNOTREAL-supersecret', // relay-boundary:allow-fixture — synthetic, asserts the gate never serializes it
       RELAY_PROMPT_ARCHITECT_MODE: 'off',
     });
-    registry.start({ missionId: 'm-gate-6', objective: 'Normalize project names' });
+    registry.start({ caller: MISSION_OPERATOR, missionId: 'm-gate-6', objective: 'Normalize project names' });
     await settle();
-    const serialized = JSON.stringify(registry.get('m-gate-6'));
+    const serialized = JSON.stringify(registry.get('m-gate-6', MISSION_OPERATOR));
     expect(serialized).not.toContain('sk-FAKETESTNOTREAL-supersecret');
   });
 });

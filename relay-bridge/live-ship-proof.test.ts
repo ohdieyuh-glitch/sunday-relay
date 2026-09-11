@@ -228,9 +228,11 @@ describe('LIVE github.com ship proof (real GitHub App + proof repo required)', (
     }) as unknown as Record<string, (...a: unknown[]) => unknown>;
     const registry = {
       start: (i: unknown) => real.start(i),
-      get: (id: string) => real.get(id),
-      cancel: (id: string) => real.cancel(id),
-      retry: (id: string) => real.retry(id),
+      // The caller is forwarded, not dropped: these delegate to the REAL
+      // registry, whose reads and mutations are scoped by mission ownership.
+      get: (id: string, caller: unknown) => real.get(id, caller),
+      cancel: (id: string, caller: unknown) => real.cancel(id, caller),
+      retry: (id: string, caller: unknown) => real.retry(id, caller),
       shipContext: (id: string) =>
         id === SHIP_MISSION_ID && shipTarget !== null ? { target: shipTarget, worktreePath } : real.shipContext(id),
       recordShipOutcome: () => {}, beginShip: () => true, endShip: () => {},

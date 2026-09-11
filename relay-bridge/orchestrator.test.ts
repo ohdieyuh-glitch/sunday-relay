@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { createMissionRegistry, selectArchitectPath } from './mission';
+import { createMissionRegistry, MISSION_OPERATOR, selectArchitectPath } from './mission';
 import { resolveRoleSlots } from './role-slot-config';
 import { LIFECYCLE_SERVING } from '../relay-hermes-service/service';
 import type { MissionRoleDeps } from './mission';
@@ -380,11 +380,11 @@ const TERMINAL_STATES = new Set(['verified_complete', 'failed', 'cancelled']);
 
 async function settle(reg: ReturnType<typeof registry>, missionId: string, tries = 200): Promise<LiveMissionUpdate> {
   for (let i = 0; i < tries; i++) {
-    const view = reg.get(missionId);
+    const view = reg.get(missionId, MISSION_OPERATOR);
     if (view && TERMINAL_STATES.has(view.state)) return view;
     await new Promise((r) => setTimeout(r, 5));
   }
-  return reg.get(missionId) as LiveMissionUpdate;
+  return reg.get(missionId, MISSION_OPERATOR) as LiveMissionUpdate;
 }
 
 async function runMission(
@@ -392,7 +392,7 @@ async function runMission(
   claudeMode: 'live' | 'fake' = 'fake',
 ) {
   const reg = registry(h, env, claudeMode);
-  reg.start({ missionId, objective: 'Create a production-safe project-name normalization utility.' });
+  reg.start({ caller: MISSION_OPERATOR, missionId, objective: 'Create a production-safe project-name normalization utility.' });
   const view = await settle(reg, missionId);
   return { reg, view };
 }
@@ -881,14 +881,14 @@ describe('21-26. refresh, duplicate dispatch, uncertainty, and cancellation', ()
     const { reg, view } = await runMission(h, LIVE_ENV, 'm-refresh');
     expect(view.state).toBe('verified_complete');
 
-    for (let i = 0; i < 5; i++) reg.get('m-refresh');
-    reg.start({ missionId: 'm-refresh', objective: 'Create a production-safe project-name normalization utility.' });
+    for (let i = 0; i < 5; i++) reg.get('m-refresh', MISSION_OPERATOR);
+    reg.start({ caller: MISSION_OPERATOR, missionId: 'm-refresh', objective: 'Create a production-safe project-name normalization utility.' });
     await new Promise((r) => setTimeout(r, 25));
 
     expect(h.calls.architect).toBe(1);
     expect(h.calls.coding).toBe(1);
     expect(h.calls.reviewer).toBe(1);
-    const after = reg.get('m-refresh');
+    const after = reg.get('m-refresh', MISSION_OPERATOR);
     expect(after?.state).toBe('verified_complete');
     expect(after?.events.length).toBe(view.events.length);
   });
@@ -896,9 +896,9 @@ describe('21-26. refresh, duplicate dispatch, uncertainty, and cancellation', ()
   it('24. duplicate POSTs do not duplicate role calls', async () => {
     const h = harness();
     const reg = registry(h);
-    reg.start({ missionId: 'm-dupe', objective: 'Create a production-safe project-name normalization utility.' });
-    reg.start({ missionId: 'm-dupe', objective: 'Create a production-safe project-name normalization utility.' });
-    reg.start({ missionId: 'm-dupe', objective: 'Create a production-safe project-name normalization utility.' });
+    reg.start({ caller: MISSION_OPERATOR, missionId: 'm-dupe', objective: 'Create a production-safe project-name normalization utility.' });
+    reg.start({ caller: MISSION_OPERATOR, missionId: 'm-dupe', objective: 'Create a production-safe project-name normalization utility.' });
+    reg.start({ caller: MISSION_OPERATOR, missionId: 'm-dupe', objective: 'Create a production-safe project-name normalization utility.' });
     const view = await settle(reg, 'm-dupe');
     expect(view.state).toBe('verified_complete');
     expect(h.calls.architect).toBe(1);
@@ -913,14 +913,14 @@ describe('21-26. refresh, duplicate dispatch, uncertainty, and cancellation', ()
       },
     });
     const reg = registry(h);
-    reg.start({ missionId: 'm-uncertain', objective: 'Create a production-safe project-name normalization utility.' });
+    reg.start({ caller: MISSION_OPERATOR, missionId: 'm-uncertain', objective: 'Create a production-safe project-name normalization utility.' });
     const first = await settle(reg, 'm-uncertain');
     expect(first.state).toBe('failed');
     expect(h.calls.coding).toBe(1);
 
     // An explicit founder retry finds the dispatch outcome unknown and stops
     // there — it never redispatches the coding agent on its own.
-    reg.retry('m-uncertain');
+    reg.retry('m-uncertain', MISSION_OPERATOR);
     const second = await settle(reg, 'm-uncertain');
     expect(second.phase).toBe('dispatch_status_uncertain');
     expect(second.error?.retryable).toBe(false);
@@ -945,9 +945,9 @@ describe('21-26. refresh, duplicate dispatch, uncertainty, and cancellation', ()
       },
     });
     const reg = registry(h);
-    reg.start({ missionId: 'm-cancel', objective: 'Create a production-safe project-name normalization utility.' });
+    reg.start({ caller: MISSION_OPERATOR, missionId: 'm-cancel', objective: 'Create a production-safe project-name normalization utility.' });
     await new Promise((r) => setTimeout(r, 20));
-    reg.cancel('m-cancel');
+    reg.cancel('m-cancel', MISSION_OPERATOR);
     release();
     const view = await settle(reg, 'm-cancel');
 
@@ -1750,7 +1750,7 @@ describe('a hosted Coding Agent reaches its own surface, with no CLI on the host
       const h = harness();
       const built = { invoker: false };
       const reg = hostedRegistry(h, built);
-      reg.start({ missionId: 'm-hosted-no-cli', objective: 'Normalize project names.' });
+      reg.start({ caller: MISSION_OPERATOR, missionId: 'm-hosted-no-cli', objective: 'Normalize project names.' });
       const view = await settle(reg, 'm-hosted-no-cli');
       // The CLI probe's refusal is the thing that must NOT happen.
       expect(view.error?.code).not.toBe('coding_agent_not_ready');
@@ -1780,7 +1780,7 @@ describe('a hosted Coding Agent reaches its own surface, with no CLI on the host
         createHostedInvoker: () => { built.invoker = true; return async () => { throw new Error('x'); }; },
       },
     });
-    reg.start({ missionId: 'm-hosted-no-key', objective: 'Normalize project names.' });
+    reg.start({ caller: MISSION_OPERATOR, missionId: 'm-hosted-no-key', objective: 'Normalize project names.' });
     const view = await settle(reg, 'm-hosted-no-key');
     expect(view.state).toBe('failed');
     // Binding refuses first — the credential is declared configuration for
@@ -1855,7 +1855,7 @@ describe('the mission reviews through the transport its deployment configured', 
       },
     }), { status: 200, headers: { 'content-type': 'application/json' } }))) as unknown as typeof fetch;
     const reg = registry(h, REMOTE_ENV, 'fake');
-    reg.start({ missionId: 'msn-remote-1', objective: 'Normalize project names safely' });
+    reg.start({ caller: MISSION_OPERATOR, missionId: 'msn-remote-1', objective: 'Normalize project names safely' });
     await settle(reg, 'msn-remote-1');
 
     expect(remoteCalls).toBe(1);
@@ -1871,7 +1871,7 @@ describe('the mission reviews through the transport its deployment configured', 
       return approvedReview();
     };
     const reg = registry(h, LIVE_ENV, 'fake');
-    reg.start({ missionId: 'msn-local-1', objective: 'Normalize project names safely' });
+    reg.start({ caller: MISSION_OPERATOR, missionId: 'msn-local-1', objective: 'Normalize project names safely' });
     await settle(reg, 'msn-local-1');
 
     expect(h.calls.reviewer).toBe(1);
@@ -1886,7 +1886,7 @@ describe('the mission reviews through the transport its deployment configured', 
       return approvedReview();
     };
     const reg = registry(h, { ...REMOTE_ENV, RELAY_HERMES_SERVICE_TOKEN: '' }, 'fake');
-    reg.start({ missionId: 'msn-remote-broken', objective: 'Normalize project names safely' });
+    reg.start({ caller: MISSION_OPERATOR, missionId: 'msn-remote-broken', objective: 'Normalize project names safely' });
     const view = await settle(reg, 'msn-remote-broken');
 
     // No reviewer ran, of either kind, and the mission says why rather than
@@ -1935,6 +1935,7 @@ describe('a mission gathers evidence and the architect plans with it', () => {
     });
     const reg = registry(h, LIVE_ENV, 'fake');
     reg.start({
+      caller: MISSION_OPERATOR,
       missionId: 'msn-ev',
       objective: 'Normalize project names safely',
       evidenceReferences: [{ source: 'github', reference: 'https://github.com/example/repo/releases/tag/v2.0.0' }],
@@ -1983,6 +1984,7 @@ describe('a mission gathers evidence and the architect plans with it', () => {
     };
     const reg = registry(h, LIVE_ENV, 'fake');
     reg.start({
+      caller: MISSION_OPERATOR,
       missionId: 'msn-skill',
       objective: 'Check the release notes',
       evidenceReferences: [{ source: 'github', reference: 'https://example.com/x' }],
@@ -1993,7 +1995,7 @@ describe('a mission gathers evidence and the architect plans with it', () => {
     // retrieval happened.
     expect(gathers).toBe(1);
     // And no skill refusal was recorded, because there was none.
-    const events = reg.get('msn-skill')?.events ?? [];
+    const events = reg.get('msn-skill', MISSION_OPERATOR)?.events ?? [];
     expect(events.some((e) => (e.detail ?? '').includes('relay.evidence.gather'))).toBe(false);
   });
 
@@ -2008,7 +2010,7 @@ describe('a mission gathers evidence and the architect plans with it', () => {
       };
     };
     const reg = registry(h, LIVE_ENV, 'fake');
-    reg.start({ missionId: 'msn-none', objective: 'Normalize project names safely' });
+    reg.start({ caller: MISSION_OPERATOR, missionId: 'msn-none', objective: 'Normalize project names safely' });
     await settle(reg, 'msn-none');
     // A Mission does not decide on its own that it needs the internet.
     expect(gathers).toBe(0);
@@ -2024,6 +2026,7 @@ describe('a mission gathers evidence and the architect plans with it', () => {
     });
     const reg = registry(h, LIVE_ENV, 'fake');
     reg.start({
+      caller: MISSION_OPERATOR,
       missionId: 'msn-refused',
       objective: 'Normalize project names safely',
       evidenceReferences: [{ source: 'github', reference: 'https://example.com/x' }],
@@ -2050,6 +2053,7 @@ describe('a mission gathers evidence and the architect plans with it', () => {
     };
     const reg = registry(h, LIVE_ENV, 'fake');
     reg.start({
+      caller: MISSION_OPERATOR,
       missionId: 'msn-order',
       objective: 'Normalize project names safely',
       evidenceReferences: [{ source: 'github', reference: 'https://example.com/x' }],
@@ -2098,6 +2102,7 @@ describe('the mission view carries evidence references', () => {
     gatherOk(h);
     const reg = registry(h, LIVE_ENV, 'fake');
     reg.start({
+      caller: MISSION_OPERATOR,
       missionId: 'msn-ref',
       objective: 'Normalize project names safely',
       evidenceReferences: [{ source: 'github', reference: 'https://example.com/x' }],
@@ -2119,6 +2124,7 @@ describe('the mission view carries evidence references', () => {
     gatherOk(h);
     const reg = registry(h, LIVE_ENV, 'fake');
     reg.start({
+      caller: MISSION_OPERATOR,
       missionId: 'msn-ref',
       objective: 'Normalize project names safely',
       evidenceReferences: [{ source: 'github', reference: 'https://example.com/x' }],
@@ -2137,6 +2143,7 @@ describe('the mission view carries evidence references', () => {
     });
     const regA = registry(refused, LIVE_ENV, 'fake');
     regA.start({
+      caller: MISSION_OPERATOR,
       missionId: 'msn-empty',
       objective: 'Normalize project names safely',
       evidenceReferences: [{ source: 'github', reference: 'https://example.com/x' }],
@@ -2147,7 +2154,7 @@ describe('the mission view carries evidence references', () => {
 
     const none = harness();
     const regB = registry(none, LIVE_ENV, 'fake');
-    regB.start({ missionId: 'msn-unauth', objective: 'Normalize project names safely' });
+    regB.start({ caller: MISSION_OPERATOR, missionId: 'msn-unauth', objective: 'Normalize project names safely' });
     const unauthorised = await settle(regB, 'msn-unauth');
     // Authorised nothing — ABSENT. A different fact.
     expect(unauthorised.evidence).toBeUndefined();
@@ -2841,6 +2848,7 @@ describe('a Mission can target a real repository end to end', () => {
     const h = harness();
     const reg = registry(h, LIVE_ENV, 'fake');
     reg.start({
+      caller: MISSION_OPERATOR,
       missionId: 'm-real-repo',
       objective: 'Bump the version constant.',
       repositoryTarget: target,
@@ -2885,6 +2893,7 @@ describe('a Mission can target a real repository end to end', () => {
 
     const reg = registry(h, LIVE_ENV, 'fake');
     reg.start({
+      caller: MISSION_OPERATOR,
       missionId: 'm-real-full',
       objective: 'Bump the version constant.',
       repositoryTarget: targetFor(root),
@@ -2914,6 +2923,7 @@ describe('a Mission can target a real repository end to end', () => {
     delete (h.deps as { runCodingMission?: unknown }).runCodingMission;
     const reg = registry(h, LIVE_ENV, 'fake');
     reg.start({
+      caller: MISSION_OPERATOR,
       missionId: 'm-real-protected',
       objective: 'Disable CI.',
       repositoryTarget: targetFor(root),
@@ -2965,7 +2975,7 @@ describe('a Mission can target a real repository end to end', () => {
     // a state the real pipeline never produces; the target-carrying gate is
     // mutation-proven separately by the no-worktree/ready pair below.
     const { reg } = await runMission(harness(), LIVE_ENV, 'm-ship-no-target');
-    expect(reg.get('m-ship-no-target')?.state).toBe('verified_complete');
+    expect(reg.get('m-ship-no-target', MISSION_OPERATOR)?.state).toBe('verified_complete');
     expect(reg.shipContext('m-ship-no-target')).toBeNull();
   });
 
@@ -2975,6 +2985,7 @@ describe('a Mission can target a real repository end to end', () => {
     const target = targetFor(realProject());
     const reg = registry(harness(), LIVE_ENV, 'fake');
     reg.start({
+      caller: MISSION_OPERATOR,
       missionId: 'm-ship-no-wt',
       objective: 'Bump the version constant.',
       repositoryTarget: target,
@@ -2998,6 +3009,7 @@ describe('a Mission can target a real repository end to end', () => {
     });
     const reg = registry(h, LIVE_ENV, 'fake');
     reg.start({
+      caller: MISSION_OPERATOR,
       missionId: 'm-ship-ready',
       objective: 'Bump the version constant.',
       repositoryTarget: target,
@@ -3017,7 +3029,7 @@ describe('a Mission can target a real repository end to end', () => {
     expect(reg.shipContext('m-ship-ready')).toBeNull();
     // The mission itself is still verified_complete (recordShipOutcome does not
     // hijack the mission state machine); it simply stops being shippable.
-    expect(reg.get('m-ship-ready')?.state).toBe('verified_complete');
+    expect(reg.get('m-ship-ready', MISSION_OPERATOR)?.state).toBe('verified_complete');
   });
 });
 
@@ -3038,7 +3050,7 @@ describe('WP-4 the authorized agent-call cap halts before the next paid dispatch
   it('cap 0 blocks the architect — zero paid dispatches, budget_exhausted', async () => {
     const h = harness();
     const reg = registry(h);
-    reg.start({ missionId: 'm-cap0', objective: 'x', config: withAgentCalls(0) });
+    reg.start({ caller: MISSION_OPERATOR, missionId: 'm-cap0', objective: 'x', config: withAgentCalls(0) });
     const view = await settle(reg, 'm-cap0');
     expect(h.calls.architect + h.calls.fusion).toBe(0);
     expect(h.calls.coding).toBe(0);
@@ -3050,7 +3062,7 @@ describe('WP-4 the authorized agent-call cap halts before the next paid dispatch
   it('cap 1 allows only the architect — coding and reviewer never dispatch', async () => {
     const h = harness();
     const reg = registry(h);
-    reg.start({ missionId: 'm-cap1', objective: 'x', config: withAgentCalls(1) });
+    reg.start({ caller: MISSION_OPERATOR, missionId: 'm-cap1', objective: 'x', config: withAgentCalls(1) });
     const view = await settle(reg, 'm-cap1');
     expect(h.calls.architect + h.calls.fusion).toBe(1);
     expect(h.calls.coding).toBe(0);
@@ -3061,7 +3073,7 @@ describe('WP-4 the authorized agent-call cap halts before the next paid dispatch
   it('cap 2 allows architect + coding, blocks the reviewer', async () => {
     const h = harness();
     const reg = registry(h);
-    reg.start({ missionId: 'm-cap2', objective: 'x', config: withAgentCalls(2) });
+    reg.start({ caller: MISSION_OPERATOR, missionId: 'm-cap2', objective: 'x', config: withAgentCalls(2) });
     const view = await settle(reg, 'm-cap2');
     expect(h.calls.architect + h.calls.fusion).toBe(1);
     expect(h.calls.coding).toBe(1);
@@ -3072,10 +3084,10 @@ describe('WP-4 the authorized agent-call cap halts before the next paid dispatch
   it('a budget-halted mission is NOT retryable (the cap cannot be bypassed by retry)', async () => {
     const h = harness();
     const reg = registry(h);
-    reg.start({ missionId: 'm-cap-retry', objective: 'x', config: withAgentCalls(1) });
+    reg.start({ caller: MISSION_OPERATOR, missionId: 'm-cap-retry', objective: 'x', config: withAgentCalls(1) });
     await settle(reg, 'm-cap-retry');
     const before = h.calls.coding;
-    reg.retry('m-cap-retry');
+    reg.retry('m-cap-retry', MISSION_OPERATOR);
     const view = await settle(reg, 'm-cap-retry');
     expect(view.phase).toBe('budget_exhausted');
     expect(h.calls.coding).toBe(before); // retry dispatched nothing new
@@ -3084,7 +3096,7 @@ describe('WP-4 the authorized agent-call cap halts before the next paid dispatch
   it('an unset (null) cap does not interfere — the mission completes normally', async () => {
     const h = harness();
     const reg = registry(h);
-    reg.start({ missionId: 'm-cap-none', objective: 'x', config: withAgentCalls(null) });
+    reg.start({ caller: MISSION_OPERATOR, missionId: 'm-cap-none', objective: 'x', config: withAgentCalls(null) });
     const view = await settle(reg, 'm-cap-none');
     expect(view.state).toBe('verified_complete');
     expect(h.calls.reviewer).toBe(1);
