@@ -276,6 +276,15 @@ describe('every failure stays its own failure', () => {
     ).research(ask());
     expect(result.observation.outcome).toBe('policy_refused');
     expect(result.observation.refusal).toBe('network_policy_refused');
+    // A MUTATION FOUND THIS GAP. Nothing was sent — the resolver answered and
+    // Relay declined before opening a socket — so nothing may be charged. The
+    // test that existed here asserted only the refusal code, so a change that
+    // billed an SSRF-blocked name would have passed, and an unreachable host
+    // would have become a way to burn a mission's whole research allowance
+    // without a single request leaving the process.
+    expect(result.ledger.byRole.CODING_AGENT.counted).toBe(0);
+    expect(result.ledger.byRole.CODING_AGENT.unknownEffect).toBe(0);
+    expect(juliusMissionResearchMeter(result.ledger).counted).toBe(0);
   });
 
   it('refuses a redirect toward cloud metadata and charges the hop', async () => {
@@ -419,5 +428,37 @@ describe('the mediator as the domain port', () => {
     expect('content' in observations[0]!).toBe(false);
     expect(observations[0]!.rendered).toContain('<<<RELAY-EVIDENCE');
     expect(observations[0]!.mayCorroborate).toBe(true);
+  });
+});
+
+describe('the one limit, stated rather than hidden', () => {
+  it('forgets a mission\'s retrieval spend across a process, and the cap is therefore per process', async () => {
+    // NOT DURABLE, and saying so beats letting an operator discover it from a
+    // bill. The Live Reach meter carries the same honest limit. A cap enforced
+    // within a process is worth having — the alternative today is none — and it
+    // is a smaller claim than a durable store would make.
+    const first = mediator(() => Promise.resolve(page('ok')));
+    for (let i = 0; i < 4; i += 1) await first.research(ask());
+    const exhausted = await first.research(ask());
+    expect(exhausted.observation.outcome).toBe('budget_exhausted');
+
+    // A second mediator is a restarted bridge. Its ledger is empty.
+    const second = mediator(() => Promise.resolve(page('ok')));
+    expect(juliusMissionResearchMeter(second.ledgerFor('msn-1')).counted).toBe(0);
+    const afterRestart = await second.research(ask());
+    expect(afterRestart.observation.outcome, 'the cap does not survive the restart').toBe('observed');
+  });
+
+  it('re-seals to the same fingerprint, so a restarted process decides under the same policy', async () => {
+    // The POLICY does survive, because it is data rather than state: two seals
+    // of the same mission authority fingerprint identically, and a decision
+    // made after a restart is recorded against the same fingerprint as one made
+    // before it. That is what makes the record comparable across a restart.
+    const before = POLICY();
+    const after = POLICY();
+    expect(after.fingerprint).toBe(before.fingerprint);
+    const m = mediator(() => Promise.resolve(page('ok')), { policy: after });
+    const result = await m.research(ask());
+    expect(result.observation.policyFingerprint).toBe(before.fingerprint);
   });
 });

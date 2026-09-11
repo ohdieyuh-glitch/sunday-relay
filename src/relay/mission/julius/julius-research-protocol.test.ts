@@ -228,13 +228,30 @@ describe('a disagreement is settled by evidence, never by who brought it', () =>
     expect(verdict.claimIds).toEqual(['c-signalled', 'c-clean']);
   });
 
-  it('will not call an undated page the more current one', () => {
+  it('will not call an undated page the more current one, and says WHICH unknown it is', () => {
+    // A MUTATION FOUND THIS. Deleting the explicit `publishedAt === null` guard
+    // left the verdict unchanged, because `Date.parse(null)` is NaN and the
+    // next guard catches it — so the two branches were indistinguishable to
+    // every assertion here. They are not the same fact: a source that SAID
+    // NOTHING and a source whose date could not be READ are different things to
+    // whoever has to decide, and this repository's whole thesis is that
+    // Unknown is not collapsed. The detail is asserted, so the branches stay
+    // distinct and the guard stops being redundant-in-practice.
     const dated = claim({ claimId: 'c-dated' });
     const undated = claim({ claimId: 'c-undated', publishedAt: null, evidenceId: 'ev-b' });
-    const verdict = resolveJuliusResearchDisagreement(dated, undated);
-    expect(verdict.outcome).toBe('UNRESOLVED');
-    if (verdict.outcome !== 'UNRESOLVED') throw new Error('unreachable');
-    expect(verdict.reasonCode).toBe('PUBLICATION_UNKNOWN');
+    const silent = resolveJuliusResearchDisagreement(dated, undated);
+    expect(silent.outcome).toBe('UNRESOLVED');
+    if (silent.outcome !== 'UNRESOLVED') throw new Error('unreachable');
+    expect(silent.reasonCode).toBe('PUBLICATION_UNKNOWN');
+    expect(silent.detail).toContain('did not say when it was published');
+
+    const unreadable = resolveJuliusResearchDisagreement(
+      dated, claim({ claimId: 'c-garbled', publishedAt: 'the third of never', evidenceId: 'ev-c' }),
+    );
+    expect(unreadable.outcome).toBe('UNRESOLVED');
+    if (unreadable.outcome !== 'UNRESOLVED') throw new Error('unreachable');
+    expect(unreadable.reasonCode).toBe('PUBLICATION_UNKNOWN');
+    expect(unreadable.detail).toContain('could not be read');
   });
 
   it('prefers the newer publication only when everything else is level', () => {

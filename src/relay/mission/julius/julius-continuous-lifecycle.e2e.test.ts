@@ -1131,3 +1131,153 @@ describe('31 - Julius goes and looks before the work that needs the answer', () 
     expect(factsOf(harness, 'guidance.deferred')[0]!.reasonCode).toBe('RESEARCH_YIELD_TOOK_THE_SEGMENT');
   });
 });
+
+/**
+ * PROOF 32 — WHAT SURVIVES A REPLAY, AND WHAT HONESTLY DOES NOT.
+ *
+ * A tick that is driven twice must not mint a second continuation, write the
+ * answer into the Brain twice, or spend a second retrieval. The idempotency is
+ * not a new mechanism: `addTask` is idempotent by command id and the Brain
+ * write is guarded by the task's own creation, exactly as the guidance path is.
+ *
+ * And one limit is stated rather than hidden. The slot ledger lives in the
+ * bridge process, so a restart forgets what a slot has already retrieved and a
+ * research budget binds WITHIN a process rather than across one. That is worth
+ * having — the alternative today is no cap at all — and it is a smaller claim
+ * than a durable store would make. It is proven here so nobody has to discover
+ * it from a bill.
+ */
+describe('32 - a replayed drive changes nothing, and the one thing it does is said out loud', () => {
+  const ASKS = Object.freeze([{
+    source: 'web', capability: 'read_item',
+    reference: 'https://docs.python.org/3/library/asyncio.html',
+    purpose: 'Whether asyncio.timeout exists in the pinned interpreter.',
+  }]);
+  const RESUME = Object.freeze({ completedSoFar: ['read the reader'], nextIntent: 'write the normalizer' });
+
+  const countingPort = () => {
+    let served = 0;
+    return {
+      get served() { return served; },
+      async serve(input: Parameters<NonNullable<Parameters<typeof createJuliusHarness>[0]['research']>['serve']>[0]) {
+        served += 1;
+        return input.asks.map((ask) => ({
+          outcome: 'observed' as const,
+          reference: ask.reference, purpose: ask.purpose,
+          rendered: '<<<RELAY-EVIDENCE\nasyncio.timeout landed in 3.11.\nRELAY-EVIDENCE>>>',
+          detail: 'The source answered.', evidenceId: 'ev-research-1',
+          injectionSignals: [] as readonly string[], mayCorroborate: true,
+        }));
+      },
+    };
+  };
+
+  it('mints one continuation, writes one answer, and spends one retrieval across two drives', async () => {
+    const research = countingPort();
+    const harness = build({
+      research,
+      coderScript: [{ kind: 'succeed', researchAsks: ASKS, segmentResume: RESUME }, { kind: 'succeed' }],
+    });
+    await drain(harness);
+    const afterFirst = (await harness.store.tasksForRun('run-1', 'prj-1')).filter((row) => CONTINUATION.test(row.taskId));
+    await drain(harness);
+    const afterSecond = (await harness.store.tasksForRun('run-1', 'prj-1')).filter((row) => CONTINUATION.test(row.taskId));
+
+    expect(afterSecond.map((row) => row.taskId)).toEqual(afterFirst.map((row) => row.taskId));
+    const answers = (await harness.store.brainEntriesForRun('run-1', 'prj-1'))
+      .filter((row) => row.entryId.startsWith('brain:research-answer:'));
+    expect(answers, 'one ask, one row').toHaveLength(1);
+    expect(research.served, 'and one retrieval, not two').toBe(1);
+  });
+
+  it('derives the continuation id from durable rows, so a replay computes the same one', async () => {
+    // Not from a counter a restart would lose — the reason the repair ids are
+    // shaped the way they are, and the reason `repairRoundsBefore` counts rows.
+    const harness = build({
+      research: countingPort(),
+      coderScript: [{ kind: 'succeed', researchAsks: ASKS, segmentResume: RESUME }, { kind: 'succeed' }],
+    });
+    await drain(harness);
+    const verdicts = factsOf(harness, 'checkpoint.verdict');
+    expect(verdicts[0]!.checkpointId).toBe('checkpoint:research:build-1:2');
+    expect(verdicts[0]!.continuationTaskId).toBe('segment:build-1:2:task');
+    // The checkpoint id carries the segment number, so the same durable rows
+    // always produce the same id and a replay is a duplicate rather than a new
+    // question.
+    expect(verdicts[0]!.segment).toBe(2);
+  });
+
+  it('never releases the continuation while the segment that asked is unaccepted', async () => {
+    // The barrier under a hostile reviewer: the asking segment's own review
+    // refuses, so it is never effectively accepted and the continuation — which
+    // depends on it — never becomes runnable. An implementation that recorded
+    // the research and carried on would dispatch it here.
+    const harness = build({
+      research: countingPort(),
+      coderScript: [{ kind: 'succeed', researchAsks: ASKS, segmentResume: RESUME }, { kind: 'succeed' }],
+      reviewerScript: [{ kind: 'succeed', evidence: PASSED_REVIEW }, { kind: 'succeed', evidence: FAILED_REVIEW }],
+    });
+    await drain(harness);
+    const continuation = harness.store.taskRow('segment:build-1:2:task');
+    expect(continuation, 'the continuation was still created').not.toBeNull();
+    expect(continuation!.state, 'and it is still BLOCKED').toBe('BLOCKED');
+    expect(taskIds(harness)).not.toContain('segment:build-1:2:task');
+    const run = await harness.store.loadRun('run-1', 'prj-1');
+    expect(run?.state, 'and the mission cannot complete around it').not.toBe('COMPLETED');
+  });
+});
+
+/**
+ * PROOF 33 — THE MISSION IS INTERLEAVED, NOT THREE PHASES IN A ROW.
+ *
+ * "All three task types are routable" was never the standard. A mission where
+ * the architect plans, the coder builds and the reviewer grades is three phases
+ * with three specialists, and calling that a continuous three-worker
+ * architecture is a claim about the org chart rather than about the run.
+ *
+ * What is checked here is the ORDER of the real dispatches: after the coder has
+ * begun, the architect is asked something and the reviewer judges it, and only
+ * then does the coder's next segment run. Each slot takes a turn in the middle
+ * of the mission, and the turn it takes is a precondition of the work that
+ * follows it.
+ */
+describe('33 - all three slots take turns in the middle of one mission', () => {
+  it('puts the architect and the reviewer between the coder and its own next segment', async () => {
+    const harness = build({
+      coderScript: [{ kind: 'succeed', guidanceRequest: REQUEST }, { kind: 'succeed' }],
+      architectScript: [
+        { kind: 'succeed', evidence: PLAN_EVIDENCE },
+        { kind: 'succeed', evidence: PLAN_EVIDENCE, guidance: GUIDANCE },
+      ],
+    });
+    await drain(harness);
+
+    const order = taskIds(harness);
+    const at = (taskId: string) => order.indexOf(taskId);
+    const coderFirst = at('build-1');
+    const architectMid = at('guidance:build-1:1:task');
+    const reviewerMid = at('guidance:build-1:1:task:review');
+    const coderNext = at('segment:build-1:2:task');
+
+    for (const [label, index] of [
+      ['the coder started', coderFirst], ['the architect was asked mid-mission', architectMid],
+      ['the reviewer judged that answer', reviewerMid], ['the coder continued', coderNext],
+    ] as const) {
+      expect(index, label).toBeGreaterThanOrEqual(0);
+    }
+
+    // THE SHAPE THAT WOULD FAIL A PHASED RUN: two slots run BETWEEN the coder's
+    // first segment and its second, and the second cannot precede either.
+    expect(architectMid).toBeGreaterThan(coderFirst);
+    expect(reviewerMid).toBeGreaterThan(architectMid);
+    expect(coderNext).toBeGreaterThan(reviewerMid);
+
+    // And all three slots are represented on both sides of the middle, so this
+    // is not "plan, build, review" with a longer tail.
+    const roles = order.map((taskId) => harness.store.taskRow(taskId)?.role);
+    const firstHalf = new Set(roles.slice(0, coderNext));
+    expect(firstHalf, 'every slot has already worked before the coder resumes').toEqual(
+      new Set(['PROMPT_ARCHITECT', 'CODING_AGENT', 'INDEPENDENT_REVIEWER']),
+    );
+  });
+});
