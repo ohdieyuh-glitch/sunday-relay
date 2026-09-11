@@ -6,6 +6,7 @@ import {
   nextSegmentNumber, routeIsBarrier, sanitizeJuliusSegmentState, segmentChildrenOf, segmentNumberOf,
 } from './julius-segment-lineage';
 import type { JuliusTask } from './julius-runtime';
+import type { JuliusCheckpointRouting } from './julius-continuous-lifecycle';
 
 const task = (over: Partial<JuliusTask> & { taskId: string }): JuliusTask => ({
   missionId: 'mission-1', parentTaskId: null, dependencyIds: [], requiredEvidenceTypes: [],
@@ -75,11 +76,30 @@ describe('a yield is only a barrier when participation is actually required', ()
     expect(routeIsBarrier('WARNING')).toBe(false);
   });
 
-  it('every route that schedules work is a barrier', () => {
-    for (const route of ['REQUEST_GUIDANCE', 'REQUIRE_REVIEW', 'REPAIR', 'HALT']) {
-      expect(routeIsBarrier(route), `${route} must stop the coder`).toBe(true);
-    }
-    expect([...JULIUS_BARRIER_ROUTES].sort()).toEqual(['HALT', 'REPAIR', 'REQUEST_GUIDANCE', 'REQUIRE_REVIEW']);
+  it('every route that schedules work is a barrier, under the name it really has', () => {
+    // THIS TEST USED TO PASS WHILE PROVING NOTHING. It looped over the barrier
+    // list itself and asserted each member was a barrier, which is true of any
+    // list of any strings — and two of those strings (`REQUIRE_REVIEW`,
+    // `REPAIR`) were names no router produces, so the barriers they stood for
+    // were unreachable. The names are now read off the routing type, and the
+    // list is checked against a routing value rather than against itself.
+    const routes: readonly JuliusCheckpointRouting[] = [
+      { route: 'REQUEST_GUIDANCE', role: 'PROMPT_ARCHITECT', reasonCode: 'x' },
+      { route: 'REQUEST_REVIEW', role: 'INDEPENDENT_REVIEWER', reasonCode: 'x' },
+      { route: 'REQUIRE_REPAIR', reasonCode: 'x' },
+      { route: 'REQUIRE_CONTRACT_REVISION', reasonCode: 'x' },
+      { route: 'SERVE_RESEARCH', reasonCode: 'x' },
+      { route: 'HALT', reasonCode: 'x' },
+      { route: 'CONTINUE', reasonCode: 'x' },
+    ];
+    const barriers = routes.filter((routing) => routeIsBarrier(routing.route)).map((r) => r.route);
+    expect(barriers).toEqual([
+      'REQUEST_GUIDANCE', 'REQUEST_REVIEW', 'REQUIRE_REPAIR', 'REQUIRE_CONTRACT_REVISION',
+      'SERVE_RESEARCH', 'HALT',
+    ]);
+    // Every route the router can produce is classified — no route falls through
+    // into "not a barrier" merely because nobody thought about it.
+    expect(routes).toHaveLength(JULIUS_BARRIER_ROUTES.length + 1);
   });
 
   it('an unknown route is not silently treated as safe to continue through', () => {

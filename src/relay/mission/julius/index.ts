@@ -42,3 +42,4 @@ export * from './julius-segment-lineage';
 export * from './julius-slot-envelope';
 export * from './julius-slot-effort';
 export * from './julius-research-policy';
+export * from './julius-research-protocol';

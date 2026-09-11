@@ -81,6 +81,16 @@ export const JULIUS_CHECKPOINT_TRIGGERS = [
   'SECURITY_SENSITIVE_CHANGE',
   'REPAIR_ROUND_ENTERED',
   'PRE_COMPLETION_VERIFICATION',
+  /**
+   * A worker needs to know something it cannot know from the repository, and
+   * is asking Julius to go and look.
+   *
+   * Available to ALL THREE slots, which is the point: an Architect that must
+   * ask the Coder to check a version, or a Reviewer that can only grade what it
+   * was handed, is not a peer. It is the one trigger whose answer Julius can
+   * produce itself, so it schedules no worker — see `SERVE_RESEARCH`.
+   */
+  'RESEARCH_REQUESTED',
 ] as const;
 export type JuliusCheckpointTrigger = (typeof JULIUS_CHECKPOINT_TRIGGERS)[number];
 
@@ -741,6 +751,16 @@ export type JuliusCheckpointRouting =
   | { readonly route: 'REQUEST_REVIEW'; readonly role: JuliusWorkerRole; readonly reasonCode: string }
   | { readonly route: 'REQUIRE_REPAIR'; readonly reasonCode: string }
   | { readonly route: 'REQUIRE_CONTRACT_REVISION'; readonly reasonCode: string }
+  /**
+   * JULIUS GOES AND LOOKS, on behalf of the slot that asked.
+   *
+   * The only route that schedules no worker, because retrieval is Julius's own
+   * act rather than somebody else's turn. It is still a BARRIER: the asking
+   * worker's dispatch ends and its continuation carries the observation, which
+   * is what makes the answer arrive before the work that depends on it rather
+   * than after.
+   */
+  | { readonly route: 'SERVE_RESEARCH'; readonly reasonCode: string }
   | { readonly route: 'HALT'; readonly reasonCode: string };
 
 /**
@@ -793,6 +813,21 @@ export function routeJuliusCheckpoint(input: {
     return { route: 'CONTINUE', reasonCode: verdict.reasonCode };
   }
 
+  if (input.checkpoint.trigger === 'RESEARCH_REQUESTED') {
+    /**
+     * NO ANTI-SPAM GATE HERE, and that is deliberate rather than an oversight.
+     *
+     * Guidance is rate-limited by "one outstanding question per subject"
+     * because asking the architect twice about the same thing costs a worker's
+     * turn and adds nothing. Research is limited by the slot's own retrieval
+     * budget, which is a harder bound and a per-slot one: a worker that asks
+     * too often runs out, is told so by name, and cannot borrow a peer's share.
+     * Adding a second limiter on top would refuse a legitimate second question
+     * about a different page for no reason anyone could state.
+     */
+    return { route: 'SERVE_RESEARCH', reasonCode: 'CHECKPOINT_RESEARCH_REQUESTED' };
+  }
+
   if (GUIDANCE_TRIGGERS.includes(input.checkpoint.trigger)) {
     // ASKING TWICE IS PROMPT SPAM. One outstanding guidance task per subject is
     // the whole of the anti-spam rule: the next checkpoint of the same kind
@@ -810,7 +845,7 @@ export function routeJuliusCheckpoint(input: {
     return { route: 'REQUEST_REVIEW', role: 'INDEPENDENT_REVIEWER', reasonCode: `CHECKPOINT_${input.checkpoint.trigger}` };
   }
 
-  // Unreachable while the two lists partition the trigger set — held by test.
+  // Unreachable while research plus the two lists partition the trigger set.
   return { route: 'CONTINUE', reasonCode: 'NO_ROUTE' };
 }
 

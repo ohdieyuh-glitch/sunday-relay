@@ -31,6 +31,7 @@
  */
 
 import type { JuliusTask } from './julius-runtime';
+import type { JuliusCheckpointRouting } from './julius-continuous-lifecycle';
 import type { JuliusTaskContractBinding } from './julius-task-contract';
 
 export const JULIUS_SEGMENT_VERSION = 'julius-coder-segment.v1' as const;
@@ -182,8 +183,35 @@ export function sanitizeJuliusSegmentState(value: unknown): Omit<JuliusCoderSegm
  * the one place that decides which those are, so the pipeline and the tests
  * cannot hold different opinions.
  */
-export const JULIUS_BARRIER_ROUTES: readonly string[] = Object.freeze([
-  'REQUEST_GUIDANCE', 'REQUIRE_REVIEW', 'REPAIR', 'HALT',
+/**
+ * TYPED AGAINST THE ROUTES THAT EXIST, because the first version of this list
+ * was not and two of its four entries were names no router ever produced.
+ * `REQUIRE_REVIEW` and `REPAIR` are not routes — `REQUEST_REVIEW` and
+ * `REQUIRE_REPAIR` are — so those two barriers were unreachable, and a test
+ * that looped over this array asserting each one stops the coder passed while
+ * proving nothing. A `readonly string[]` will accept any sentence; this will
+ * not compile against a route that is not in `JuliusCheckpointRouting`.
+ */
+export type JuliusCheckpointRoute = JuliusCheckpointRouting['route'];
+
+/**
+ * `REQUIRE_CONTRACT_REVISION` belongs here and was missing entirely, which was
+ * the more serious half of the same mistake. The contract the coder is working
+ * under is the thing being changed; work produced past that point is bound to a
+ * revision that is about to stop being current, which is exactly the stale
+ * binding the contract lock exists to make impossible.
+ */
+export const JULIUS_BARRIER_ROUTES: readonly JuliusCheckpointRoute[] = Object.freeze([
+  'REQUEST_GUIDANCE',
+  'REQUEST_REVIEW',
+  'REQUIRE_REPAIR',
+  'REQUIRE_CONTRACT_REVISION',
+  // Julius goes and looks. No worker is scheduled, and the asking worker still
+  // stops — an observation that arrives after the code was written is a
+  // citation, not research.
+  'SERVE_RESEARCH',
+  'HALT',
 ]);
 
-export const routeIsBarrier = (route: string): boolean => JULIUS_BARRIER_ROUTES.includes(route);
+export const routeIsBarrier = (route: string): boolean =>
+  (JULIUS_BARRIER_ROUTES as readonly string[]).includes(route);
