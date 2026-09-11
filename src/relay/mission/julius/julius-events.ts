@@ -66,6 +66,12 @@ export const JULIUS_OPERATIONAL_EVENT_TYPES=[
   * outcome by outcome, because the observation belongs to the checkpoint that
   * asked for it. */
  'research.refused','guidance.deferred',
+ /* PERSISTENT-WORKER EFFORT. One row per completed dispatch, carrying what the
+  * provider actually reported and NOTHING inferred — an unreported token count
+  * is null here rather than the zero the budget path substitutes, because a
+  * parity diagnostic built on substituted zeros would call every silent worker
+  * shallow. */
+ 'worker.effort',
  /* bounded children */
  'subagent.spawned','subagent.denied','subagent.completed',
  /* budget */

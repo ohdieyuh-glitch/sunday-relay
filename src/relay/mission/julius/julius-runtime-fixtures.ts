@@ -31,6 +31,7 @@ import { fixedResourceEstimate, juliusContractSubjectTaskId, type JuliusPipeline
 import { JuliusRunLoop, type JuliusPolicySource, type JuliusRunLoopConfig } from './julius-run-loop';
 import type { JuliusBudgetPort, JuliusClock, JuliusIdFactory } from './julius-runtime-ports';
 import type { JuliusAllocationPolicy } from './julius-allocation-runtime';
+import type { JuliusSlotEnvelopePolicy } from './julius-slot-envelope';
 import type { JuliusResearchPort } from './julius-research-protocol';
 
 /* ---------------------------------------------------------------- clock */
@@ -272,8 +273,13 @@ export function createJuliusHarness(input: {
   readonly card?: JuliusCardPolicy;
   readonly verification?: JuliusVerificationPolicy;
   readonly budgetUsdMicros?: number;
-  /** An allocation policy for the pipeline; absent, dispatches reserve the fixed estimate. */
-  readonly allocation?: JuliusAllocationPolicy;
+  /**
+   * An allocation policy for the pipeline; absent, dispatches reserve the fixed
+   * estimate. Either rule: `julius-allocation.v1`, which funds the coder from
+   * the ceiling and hands the peers an estimate, or `julius-allocation.v2`,
+   * which gives all three slots an envelope out of the same ceiling.
+   */
+  readonly allocation?: JuliusAllocationPolicy | JuliusSlotEnvelopePolicy;
   /** How Julius goes and looks; absent, a research ask is recorded as unserved. */
   readonly research?: JuliusResearchPort;
   readonly config?: Partial<JuliusRunLoopConfig>;

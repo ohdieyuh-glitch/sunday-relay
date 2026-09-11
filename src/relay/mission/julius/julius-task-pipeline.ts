@@ -60,7 +60,12 @@ import {
   JULIUS_RESEARCH_ASK_VERSION, renderJuliusResearchResume, sanitizeJuliusResearchAsks,
   type JuliusResearchObservationRecord, type JuliusResearchPort,
 } from './julius-research-protocol';
-import { evaluateJuliusAllocation, type JuliusAllocationPolicy, type JuliusExecutionAllocation } from './julius-allocation-runtime';
+import { evaluateJuliusAllocation, type JuliusAllocationPolicy } from './julius-allocation-runtime';
+import { JULIUS_SLOT_EFFORT_VERSION } from './julius-slot-effort';
+import {
+  JULIUS_SLOT_ENVELOPE_VERSION, evaluateJuliusSlotAllocation, slotEnvelopeUsdMicros,
+  slotRoundShareUsdMicros, type JuliusSlotEnvelopePolicy,
+} from './julius-slot-envelope';
 import { JULIUS_RUNTIME_VERSION, type JuliusBrainEntry, type JuliusRecordedDecision, type JuliusTask, type JuliusVerificationDecision, type JuliusWorker, type JuliusWorkerRole } from './julius-runtime';
 import { validateJuliusEvent, type JuliusOperationalEvent, type JuliusOperationalEventType } from './julius-events';
 import { validateTrajectoryEvent, type JuliusTrajectoryEvent, type JuliusTrajectoryKind } from './julius-trajectory';
@@ -137,7 +142,7 @@ export interface JuliusPipelineDependencies {
    * Absent, every dispatch reserves its fixed estimate and the adapter keeps
    * its own conservative default — Mission 2's grant reaches nobody else.
    */
-  readonly allocation?: JuliusAllocationPolicy;
+  readonly allocation?: JuliusAllocationPolicy | JuliusSlotEnvelopePolicy;
   /**
    * HOW JULIUS GOES AND LOOKS, when the composition has bound one.
    *
@@ -850,7 +855,7 @@ export async function runClaimedTask(
    * and a mission with nothing left is denied HERE, before a provider is
    * reached, rather than by an adapter refusing work it already did.
    */
-  const allocation = await allocateFor({ deps, run, role, estimateUsdMicros: estimate.usdMicros });
+  const allocation = await allocateFor({ deps, run, role, taskId: claim.taskId, estimateUsdMicros: estimate.usdMicros });
   const resources: JuliusResourceRequest = allocation === null ? estimate : { ...estimate, usdMicros: allocation.usdMicros };
   const dispatchAllocation = allocation === null ? undefined
     : { usdMicros: allocation.usdMicros, policyVersion: allocation.policyVersion, basis: allocation.basis };
@@ -1805,6 +1810,8 @@ function executionPorts(
     commit: async ({ claim, reservationId, result }) => {
       const usage = (result.usage ?? {}) as Record<string, unknown>;
       const number = (key: string): number => (typeof usage[key] === 'number' && Number.isFinite(usage[key] as number) ? usage[key] as number : 0);
+      /** The same read WITHOUT the zero substitution, for anything diagnostic. */
+      const maybe = (key: string): number | null => (typeof usage[key] === 'number' && Number.isFinite(usage[key] as number) ? usage[key] as number : null);
       /**
        * UNKNOWN COST IS NOT ZERO COST, and it used to be. A worker that
        * reports no `usdMicros` — the hosted runtime is allowed to, and Relay
@@ -1852,6 +1859,32 @@ function executionPorts(
           // own table is not what anyone was charged, and one column for both
           // is how an estimate becomes a bill.
           estimatedUsdMicros: component.estimatedUsdMicros,
+        },
+      });
+      /**
+       * WHAT THIS SLOT ACTUALLY DID, reported rather than inferred.
+       *
+       * Deliberately NOT folded into `budget.settled`, which reads its numbers
+       * through a helper that substitutes zero for an absent field — correct
+       * for a ledger that must not over-hold, and fatal for a parity
+       * diagnostic, which would then call every worker whose provider reports
+       * no token counts "shallow" rather than "unmeasured". Here an unreported
+       * component is null, and `summarizeJuliusSlotEffort` counts it as
+       * unknown.
+       *
+       * `researchCalls` and `reasoningTokens` are read from the same usage
+       * object: an adapter that reports them is measured on them, and one that
+       * does not is not charged for the silence.
+       */
+      await ledger.event('worker.effort', {
+        taskId: claim.taskId,
+        facts: {
+          role: claim.task.role, taskType: claim.task.taskType,
+          inputTokens: maybe('inputTokens'), outputTokens: maybe('outputTokens'),
+          reasoningTokens: maybe('reasoningTokens'), toolCalls: maybe('toolCalls'),
+          researchCalls: maybe('researchCalls'), activeMs: maybe('runtimeMs'),
+          usdMicros,
+          effortVersion: JULIUS_SLOT_EFFORT_VERSION,
         },
       });
     },
@@ -2493,7 +2526,7 @@ async function scheduleRepair(input: {
   // dispatch will be given, so admission and execution cannot disagree.
   const reservationId = `reservation:repair:${task.taskId}:${priorRounds + 1}`;
   const estimate = deps.resources.estimate({ taskId: task.taskId, taskType: repairTaskType, role: task.role, attempt: priorRounds + 1 });
-  const admission = await allocateFor({ deps, run, role: task.role, estimateUsdMicros: estimate.usdMicros });
+  const admission = await allocateFor({ deps, run, role: task.role, taskId: task.taskId, estimateUsdMicros: estimate.usdMicros });
   if (admission?.basis === 'EXHAUSTED') {
     await ledger.event('budget.denied', { taskId: task.taskId, facts: { reason: 'BUDGET_EXHAUSTED', forRepairRound: priorRounds + 1, ...allocationFacts(admission) } });
     await ledger.event('run.failed', { taskId: task.taskId, facts: { reasonCode: 'REPAIR_BUDGET_DENIED', forRepairRound: priorRounds + 1 } });
@@ -2584,19 +2617,92 @@ async function allocateFor(input: {
   deps: JuliusPipelineDependencies;
   run: JuliusRunRow;
   role: JuliusWorkerRole;
+  /** The dispatch being allocated, so its own row is not counted as a prior round. */
+  taskId: string;
   estimateUsdMicros: number;
-}): Promise<JuliusExecutionAllocation | null> {
+}): Promise<JuliusDispatchDecision | null> {
   const policy = input.deps.allocation;
   if (policy === undefined) return null;
   const remaining = input.deps.budget.available === undefined ? null
     : await input.deps.budget.available({ runId: input.run.runId, projectId: input.run.projectId, now: input.deps.clock.now() });
-  return evaluateJuliusAllocation({ policy, role: input.role, remainingUsdMicros: remaining, estimateUsdMicros: input.estimateUsdMicros });
+
+  if (policy.version !== JULIUS_SLOT_ENVELOPE_VERSION) {
+    const v1 = evaluateJuliusAllocation({
+      policy, role: input.role, remainingUsdMicros: remaining, estimateUsdMicros: input.estimateUsdMicros,
+    });
+    return { ...v1, slot: null, slotEnvelopeUsdMicros: null };
+  }
+
+  /**
+   * THE SLOT DIMENSION IS COUNTED IN ROUNDS, AND SAYS SO.
+   *
+   * `available` reports what the MISSION has left; no ledger here can report
+   * what one slot has left, and inventing a per-slot money figure out of a
+   * mission-wide one would be a number nobody measured. So a slot's remaining
+   * envelope is derived from the rows that exist: every dispatch of that slot
+   * was capped at one share, so `envelope - rounds × share` is a LOWER bound on
+   * what the slot still has. Under-allocating is the safe direction, and the
+   * global remainder — which is real money from the real ledger — is what
+   * reallocation draws on once a slot's envelope is spent.
+   *
+   * A store that can one day answer per-slot money passes it straight into the
+   * evaluator; nothing about the rule changes when it does.
+   */
+  const tasks = await input.deps.store.tasksForRun(input.run.runId, input.run.projectId);
+  const priorRounds = tasks.filter((row) => row.role === input.role
+    && row.taskId !== input.taskId
+    && (row.state === 'SUCCEEDED' || row.state === 'FAILED' || row.state === 'ACTIVE')).length;
+  const envelope = slotEnvelopeUsdMicros(policy, input.role);
+  const share = slotRoundShareUsdMicros(policy, input.role);
+  const slotRemaining = Math.max(0, envelope - (priorRounds * share));
+
+  const v2 = evaluateJuliusSlotAllocation({
+    policy, role: input.role,
+    slotRemainingUsdMicros: slotRemaining,
+    unreservedUsdMicros: remaining,
+    estimateUsdMicros: input.estimateUsdMicros,
+  });
+  return {
+    usdMicros: v2.usdMicros,
+    basis: v2.basis,
+    shareUsdMicros: v2.slotShareUsdMicros,
+    remainingUsdMicros: v2.unreservedUsdMicros,
+    policyVersion: v2.policyVersion,
+    slot: v2.slot,
+    slotEnvelopeUsdMicros: v2.slotEnvelopeUsdMicros,
+    slotRemainingUsdMicros: v2.slotRemainingUsdMicros,
+    slotRoundsUsed: priorRounds,
+  };
 }
 
-const allocationFacts = (allocation: JuliusExecutionAllocation): Record<string, string | number | null> => ({
+/**
+ * ONE ALLOCATION SHAPE FOR BOTH POLICIES, so the pipeline reads the same
+ * fields whichever rule produced them and `EXHAUSTED` still means the same
+ * thing at the one place a dispatch is denied.
+ */
+interface JuliusDispatchDecision {
+  readonly usdMicros: number;
+  readonly basis: string;
+  readonly shareUsdMicros: number | null;
+  readonly remainingUsdMicros: number | null;
+  readonly policyVersion: string;
+  /** Which peer slot this draws against. Null under the v1 rule, which has none. */
+  readonly slot: JuliusWorkerRole | null;
+  readonly slotEnvelopeUsdMicros: number | null;
+  readonly slotRemainingUsdMicros?: number | null;
+  readonly slotRoundsUsed?: number;
+}
+
+const allocationFacts = (allocation: JuliusDispatchDecision): Record<string, string | number | null> => ({
   allocatedUsdMicros: allocation.usdMicros, allocationBasis: allocation.basis,
   shareUsdMicros: allocation.shareUsdMicros, remainingUsdMicros: allocation.remainingUsdMicros,
   allocationPolicy: allocation.policyVersion,
+  // Null under v1 rather than absent: a reader comparing two missions should be
+  // able to see that one had no slot envelope at all.
+  slot: allocation.slot,
+  slotEnvelopeUsdMicros: allocation.slotEnvelopeUsdMicros,
+  slotRemainingUsdMicros: allocation.slotRemainingUsdMicros ?? null,
+  slotRoundsUsed: allocation.slotRoundsUsed ?? null,
 });
 
 /* ---------------------------------------------------- repair context */

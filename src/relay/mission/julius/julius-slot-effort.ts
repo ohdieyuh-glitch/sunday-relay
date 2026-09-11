@@ -129,6 +129,43 @@ function effectiveEffortOf(slot: Omit<JuliusSlotEffort, 'effectiveEffort'>): num
     + slot.researchCalls.total * WEIGHTS.researchCall;
 }
 
+/**
+ * READ AN OBSERVATION OUT OF A LEDGER ROW.
+ *
+ * One mapping, used by the pipeline that WRITES `worker.effort` and by whoever
+ * later summarises it. Two copies of this would drift, and the drift would be
+ * invisible: a field the writer names `toolCalls` and the reader looks for as
+ * `tool_calls` produces a report that is confidently wrong rather than absent.
+ *
+ * ABSENT IS NULL, NEVER ZERO. `measured` and `unknown` exist precisely so a
+ * slot that reported nothing is not indistinguishable from one that did nothing.
+ */
+export function juliusSlotEffortObservation(
+  facts: Readonly<Record<string, unknown>>,
+): JuliusSlotEffortObservation | null {
+  const role = facts.role;
+  if (typeof role !== 'string') return null;
+  const nullable = (key: string): number | null => {
+    const value = facts[key];
+    return typeof value === 'number' && Number.isFinite(value) ? value : null;
+  };
+  const count = (key: string): number => nullable(key) ?? 0;
+  return {
+    role: role as JuliusWorkerRole,
+    inputTokens: nullable('inputTokens'),
+    outputTokens: nullable('outputTokens'),
+    reasoningTokens: nullable('reasoningTokens'),
+    toolCalls: nullable('toolCalls'),
+    researchCalls: nullable('researchCalls'),
+    activeMs: nullable('activeMs'),
+    costUsdMicros: nullable('usdMicros'),
+    checkpoints: count('checkpoints'),
+    challenges: count('challenges'),
+    evidenceCount: count('evidenceCount'),
+    retries: count('retries'),
+  };
+}
+
 export function summarizeJuliusSlotEffort(
   observations: readonly JuliusSlotEffortObservation[],
 ): JuliusSlotEffortReport {
