@@ -807,17 +807,6 @@ describe('29 - the contract charge names the stage the task actually is', () => 
  * wait; there is simply nothing runnable.
  */
 describe('30 - a checkpoint is a barrier, not a note taken afterwards', () => {
-  const REFUSING_REVIEW = Object.freeze({
-    verdict: 'changes_required',
-    summary: 'The guidance is unsupported.',
-    findings: [{
-      findingId: 'f-block', severity: 'blocking', requirement: 'guidance must cite evidence',
-      file: 'n/a', line: 0, explanation: 'No citation for the claim.', evidence: 'none',
-      recommendedAction: 'Cite or withdraw.',
-    }],
-    requirementsChecked: [],
-  });
-
   const dispatchOrder = (harness: JuliusHarness): string[] => taskIds(harness);
 
   it('creates the continuation BLOCKED on the guidance task — the barrier is an edge, not a promise', async () => {
@@ -856,7 +845,7 @@ describe('30 - a checkpoint is a barrier, not a note taken afterwards', () => {
       coderScript: [{ kind: 'succeed', guidanceRequest: REQUEST }, { kind: 'succeed' }],
       // The plan review accepts (so the contract locks); every review after it
       // refuses, which is the guidance review.
-      reviewerScript: [{ kind: 'succeed', evidence: PASSED_REVIEW }, { kind: 'succeed', evidence: REFUSING_REVIEW }],
+      reviewerScript: [{ kind: 'succeed', evidence: PASSED_REVIEW }, { kind: 'succeed', evidence: FAILED_REVIEW }],
     });
     await drain(harness);
     const continuation = harness.store.taskRow('segment:build-1:2:task');
@@ -875,7 +864,7 @@ describe('30 - a checkpoint is a barrier, not a note taken afterwards', () => {
   it('a mission with an unreleased continuation cannot reach COMPLETED', async () => {
     const harness = build({
       coderScript: [{ kind: 'succeed', guidanceRequest: REQUEST }, { kind: 'succeed' }],
-      reviewerScript: [{ kind: 'succeed', evidence: PASSED_REVIEW }, { kind: 'succeed', evidence: REFUSING_REVIEW }],
+      reviewerScript: [{ kind: 'succeed', evidence: PASSED_REVIEW }, { kind: 'succeed', evidence: FAILED_REVIEW }],
     });
     await drain(harness);
     const run = await harness.store.loadRun('run-1', 'prj-1');
