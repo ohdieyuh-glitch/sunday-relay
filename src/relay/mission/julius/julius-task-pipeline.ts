@@ -38,12 +38,15 @@ import { safeReasonCode, type JuliusProviderRouter } from './julius-router';
 import { juliusCostComponent } from './julius-cost-accounting';
 import { juliusContractDisposition, juliusContractDispositionFacts } from './julius-contract-disposition';
 import { createJuliusContextSnapshot } from './julius-context-snapshot';
-import { evaluateJuliusVerification, type JuliusReviewerFinding, type JuliusVerificationPolicy } from './julius-verification-runtime';
+import { JULIUS_DEFAULT_MAX_CODER_SEGMENTS, evaluateJuliusVerification, type JuliusReviewerFinding, type JuliusVerificationPolicy } from './julius-verification-runtime';
 import { planJuliusRepair } from './julius-repair-runtime';
 import { repairLineageRootOf, repairRoundsBefore, repairTaskTypeFor } from './julius-repair-lineage';
 import { challengeJuliusTaskContract, evaluateJuliusBindingCurrency, evaluateJuliusSharedBinding, juliusContractReviewCharge, juliusTaskContractBinding, lockJuliusTaskContract, mayDispatchUnderContract, reviseJuliusTaskContract, sanitizeJuliusContractProposal, type JuliusTaskContract, type JuliusTaskContractBinding } from './julius-task-contract';
 import { evaluateJuliusRelease } from './julius-release-runtime';
 import { boundStageForRole, reviewStageOf, workStageOf, type JuliusReviewStage } from './julius-review-stage';
+import {
+  juliusSegmentTaskId, nextSegmentNumber, routeIsBarrier, sanitizeJuliusSegmentState,
+} from './julius-segment-lineage';
 import {
   guidanceSubjectTaskId, issueJuliusGuidance, juliusCheckpointId, juliusGuidanceId, juliusGuidanceTaskId,
   recordJuliusCheckpoint, routeJuliusCheckpoint, sanitizeJuliusGuidanceProposal, sanitizeJuliusGuidanceRequest,
@@ -1023,6 +1026,7 @@ export async function runClaimedTask(
     await driveContinuousLifecycle({
       deps, run, ledger, task, request, workerId: outcome.workerId,
       ...(outcome.guidanceRequest === undefined ? {} : { guidanceRequest: outcome.guidanceRequest }),
+      ...(outcome.segmentResume === undefined ? {} : { segmentResume: outcome.segmentResume }),
       ...(outcome.guidance === undefined ? {} : { guidance: outcome.guidance }),
     });
   }
@@ -1063,6 +1067,7 @@ async function driveContinuousLifecycle(input: {
   readonly workerId: string;
   readonly guidanceRequest?: unknown;
   readonly guidance?: unknown;
+  readonly segmentResume?: unknown;
 }): Promise<void> {
   const { deps, run, ledger, task } = input;
 
@@ -1234,11 +1239,122 @@ async function driveContinuousLifecycle(input: {
     });
   }
 
+  /**
+   * THE BARRIER, AND IT NEEDS NO NEW MECHANISM.
+   *
+   * Minting a guidance task proves Julius ASKED. It does not stop the coder:
+   * the dispatch that carried the request has already resolved, so guidance
+   * written in answer would reach a worker that finished. Recording the ask and
+   * calling that continuous supervision is the failure this exists to prevent.
+   *
+   * The continuation is therefore a TASK THAT CANNOT RUN YET. It is created
+   * BLOCKED with a dependency on the guidance task, and `evaluateJuliusRelease`
+   * — the only thing in Julius that moves a task out of BLOCKED — releases it
+   * solely when that dependency is SUCCEEDED **and effectively accepted**. So:
+   *
+   *   - a BLOCK or a rejected guidance review is never effectively accepted,
+   *     and the continuation is never released. Segment B does not run because
+   *     there is nothing runnable, not because a model agreed to wait;
+   *   - a REPAIR holds it until the repair lineage itself reaches an accepted
+   *     state, which is the routing the founder asked for, unchanged;
+   *   - an ACCEPT releases it, and only then.
+   *
+   * Every one of those properties is already drilled on real PostgreSQL by the
+   * release and repair-loop drills. Inventing a pause primitive beside them
+   * would have re-earned all of it and been the weaker of the two.
+   *
+   * GUARDED BY THE GUIDANCE TASK'S OWN WRITE. `addTask` is idempotent by
+   * command id, so a replayed tick creates neither task, releases nothing twice
+   * and leaves the lineage unchanged.
+   */
+  let continuationTaskId: string | null = null;
+  /**
+   * THE CEILING, AND IT IS NOT THE REPAIR BOUND.
+   *
+   * The barrier made the coder stop; nothing yet made it stop stopping. A coder
+   * that asks at every segment mints a continuation forever and the mission
+   * never completes — the unbounded-loop twin of the unroutable repair task
+   * that sat RUNNABLE forever on paid run 34037313976. This was not a
+   * hypothesis: wiring the barrier turned six existing proofs red with seven
+   * and eight guidance tasks where one was expected.
+   *
+   * Counted separately from repairs on purpose. A repair means the work was
+   * REJECTED; a segment boundary means the coder needed something. Sharing one
+   * bound would let honest collaboration exhaust a ceiling set for failure.
+   */
+  const segmentNumber = nextSegmentNumber(task, tasks);
+  const segmentCeiling = input.request.verification.maxCoderSegments ?? JULIUS_DEFAULT_MAX_CODER_SEGMENTS;
+  if (created && routeIsBarrier(routing.route) && segmentNumber > segmentCeiling) {
+    await ledger.event('checkpoint.verdict', {
+      taskId: subjectTaskId, workerId: input.workerId,
+      facts: {
+        checkpointId: checkpoint.checkpointId, route: routing.route,
+        reasonCode: 'SEGMENT_CEILING_REACHED', guidanceTaskId: guidanceTask.taskId, created,
+        continuationTaskId: null, barrier: true, segment: segmentNumber, ceiling: segmentCeiling,
+      },
+    });
+    return;
+  }
+  if (created && routeIsBarrier(routing.route)) {
+    const resume = sanitizeJuliusSegmentState(input.segmentResume);
+    const continuation: JuliusTask = {
+      taskId: juliusSegmentTaskId(subjectTaskId, segmentNumber),
+      missionId: task.missionId,
+      parentTaskId: subjectTaskId,
+      // THE WHOLE BARRIER IS THIS ONE EDGE.
+      dependencyIds: [guidanceTask.taskId],
+      requiredEvidenceTypes: task.requiredEvidenceTypes,
+      // The same kind of work, so the coder needs no new registration and the
+      // charge keeps the subject's own stage.
+      taskType: task.taskType,
+      role: task.role,
+      ordinal: task.ordinal + 2,
+      state: 'BLOCKED',
+    };
+    const madeContinuation = await deps.store.addTask({
+      commandId: `segment:${continuation.taskId}`,
+      runId: run.runId, projectId: run.projectId, task: continuation,
+    });
+    if (madeContinuation) {
+      continuationTaskId = continuation.taskId;
+      /**
+       * WHAT THE CONTINUATION RESUMES FROM, on the same Project Brain channel
+       * the question travelled on and scoped the same way. A continuation told
+       * nothing about what its own earlier segment did would redo it; one told
+       * through a provider session handle would not survive a restart.
+       *
+       * An absent or unusable resume SAYS SO. The barrier holds either way —
+       * that is the point of making it structural — but a coder that cannot
+       * tell it was told nothing is the gap this whole change exists to close.
+       */
+      await deps.store.appendBrainEntry({
+        runId: run.runId,
+        projectId: run.projectId,
+        taskId: continuation.taskId,
+        workerId: input.workerId,
+        entryId: `brain:segment-resume:${continuation.taskId}`,
+        kind: 'HANDOFF',
+        safeText: resume === null
+          ? 'This segment resumes work paused at a checkpoint. No usable record of what the previous segment completed was supplied; re-establish the state from the workspace before continuing.'
+          : [
+            `RESUMING AFTER CHECKPOINT: ${checkpoint.checkpointId}`,
+            `COMPLETED IN THE PREVIOUS SEGMENT: ${resume.completedSoFar.join(' | ') || '(nothing stated)'}`,
+            `INTENDED NEXT: ${resume.nextIntent}`,
+          ].join('\n'),
+        evidenceIds: [],
+        occurredAt: deps.clock.now(),
+      });
+    }
+  }
+
   await ledger.event('checkpoint.verdict', {
     taskId: subjectTaskId, workerId: input.workerId,
     facts: {
       checkpointId: checkpoint.checkpointId, route: routing.route, reasonCode: routing.reasonCode,
       guidanceTaskId: guidanceTask.taskId, created,
+      // Null when the route was not a barrier, which is a different fact from
+      // a barrier that failed to mint one.
+      continuationTaskId, barrier: routeIsBarrier(routing.route),
     },
   });
 }

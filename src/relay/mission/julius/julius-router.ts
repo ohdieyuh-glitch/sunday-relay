@@ -443,6 +443,14 @@ readonly diagnostics?:unknown;
  * moments at which one may be ASKED something.
  */
 readonly guidanceRequest?:unknown;
+ /**
+  * WHAT A CONTINUATION SEGMENT RESUMES FROM. Present when a coder ended a
+  * segment at a barrier. Julius rebuilds it from an allowlist, and it never
+  * carries a provider session id, a transcript or hidden reasoning: a resume
+  * that depended on provider-side state would make the provider the memory
+  * authority and would not survive the restart it exists to survive.
+  */
+ readonly segmentResume?:unknown;
 readonly guidance?:unknown;}
 /**
  * WHAT JULIUS TELLS AN ADAPTER, and nothing more.

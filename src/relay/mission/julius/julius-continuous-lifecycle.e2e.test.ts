@@ -139,7 +139,7 @@ const taskIds = (harness: JuliusHarness): string[] => harness.store.trajectory()
 describe('1 — the architect remains callable after LOCK, without mutating the contract', () => {
   it('a guidance task is dispatched under the locked contract and the terms do not move', async () => {
     const harness = build({
-      coderScript: [{ kind: 'succeed', guidanceRequest: REQUEST }],
+      coderScript: [{ kind: 'succeed', guidanceRequest: REQUEST }, { kind: 'succeed' }],
       architectScript: [
         { kind: 'succeed', evidence: PLAN_EVIDENCE },
         { kind: 'succeed', evidence: PLAN_EVIDENCE, guidance: GUIDANCE },
@@ -171,7 +171,7 @@ describe('1 — the architect remains callable after LOCK, without mutating the 
 describe('2 — the coder can request additional architect guidance mid-mission', () => {
   it('a request becomes a checkpoint, a route, and a real task on the architect', async () => {
     const harness = build({
-      coderScript: [{ kind: 'succeed', guidanceRequest: REQUEST }],
+      coderScript: [{ kind: 'succeed', guidanceRequest: REQUEST }, { kind: 'succeed' }],
       architectScript: [
         { kind: 'succeed', evidence: PLAN_EVIDENCE },
         { kind: 'succeed', evidence: PLAN_EVIDENCE, guidance: GUIDANCE },
@@ -196,7 +196,7 @@ describe('2 — the coder can request additional architect guidance mid-mission'
   });
 
   it('refuses a request that names a contract term — a scope change wearing a question mark', async () => {
-    const harness = build({ coderScript: [{ kind: 'succeed', guidanceRequest: { ...REQUEST, inScope: ['everything'] } }] });
+    const harness = build({ coderScript: [{ kind: 'succeed', guidanceRequest: { ...REQUEST, inScope: ['everything'] } }, { kind: 'succeed' }] });
     await drain(harness);
     // The checkpoint is still recorded — a worker asked, and that is a fact —
     // but Julius wrote its own sentence rather than the worker's.
@@ -253,7 +253,7 @@ describe('2b — Julius honours the route it computed, and declines out loud', (
   it('only a REQUEST_GUIDANCE route ever names a guidance task', async () => {
     const harness = build({
       architectScript: [{ kind: 'succeed', evidence: PLAN_EVIDENCE, guidanceRequest: REQUEST }],
-      coderScript: [{ kind: 'succeed', guidanceRequest: REQUEST }],
+      coderScript: [{ kind: 'succeed', guidanceRequest: REQUEST }, { kind: 'succeed' }],
     });
     await drain(harness);
     for (const facts of factsOf(harness, 'checkpoint.verdict')) {
@@ -318,7 +318,7 @@ describe('2b — Julius honours the route it computed, and declines out loud', (
 describe('3 — architect guidance is versioned and contract-bound', () => {
   it('records the packet digest, its revision and the exact contract it was written under', async () => {
     const harness = build({
-      coderScript: [{ kind: 'succeed', guidanceRequest: REQUEST }],
+      coderScript: [{ kind: 'succeed', guidanceRequest: REQUEST }, { kind: 'succeed' }],
       architectScript: [
         { kind: 'succeed', evidence: PLAN_EVIDENCE },
         { kind: 'succeed', evidence: PLAN_EVIDENCE, guidance: GUIDANCE },
@@ -338,7 +338,7 @@ describe('3 — architect guidance is versioned and contract-bound', () => {
 
   it('records counts and identifiers, never the advice itself', async () => {
     const harness = build({
-      coderScript: [{ kind: 'succeed', guidanceRequest: REQUEST }],
+      coderScript: [{ kind: 'succeed', guidanceRequest: REQUEST }, { kind: 'succeed' }],
       architectScript: [
         { kind: 'succeed', evidence: PLAN_EVIDENCE },
         { kind: 'succeed', evidence: PLAN_EVIDENCE, guidance: GUIDANCE },
@@ -357,7 +357,7 @@ describe('3 — architect guidance is versioned and contract-bound', () => {
 describe('4 — the reviewer reviews architect guidance', () => {
   it('schedules review:guidance through the ordinary review machinery', async () => {
     const harness = build({
-      coderScript: [{ kind: 'succeed', guidanceRequest: REQUEST }],
+      coderScript: [{ kind: 'succeed', guidanceRequest: REQUEST }, { kind: 'succeed' }],
       architectScript: [
         { kind: 'succeed', evidence: PLAN_EVIDENCE },
         { kind: 'succeed', evidence: PLAN_EVIDENCE, guidance: GUIDANCE },
@@ -374,7 +374,7 @@ describe('4 — the reviewer reviews architect guidance', () => {
     // The shared-binding guard, inherited rather than rebuilt: a reviewer whose
     // binding differs from the work's is refused REVIEW_CONTRACT_MISMATCH.
     const harness = build({
-      coderScript: [{ kind: 'succeed', guidanceRequest: REQUEST }],
+      coderScript: [{ kind: 'succeed', guidanceRequest: REQUEST }, { kind: 'succeed' }],
       architectScript: [
         { kind: 'succeed', evidence: PLAN_EVIDENCE },
         { kind: 'succeed', evidence: PLAN_EVIDENCE, guidance: GUIDANCE },
@@ -393,7 +393,7 @@ describe('4 — the reviewer reviews architect guidance', () => {
 describe('5 — the reviewer receives multiple execution checkpoints, not only the final output', () => {
   it('reviews the plan, the guidance and the build within one mission', async () => {
     const harness = build({
-      coderScript: [{ kind: 'succeed', guidanceRequest: REQUEST }],
+      coderScript: [{ kind: 'succeed', guidanceRequest: REQUEST }, { kind: 'succeed' }],
       architectScript: [
         { kind: 'succeed', evidence: PLAN_EVIDENCE },
         { kind: 'succeed', evidence: PLAN_EVIDENCE, guidance: GUIDANCE },
@@ -411,7 +411,7 @@ describe('5 — the reviewer receives multiple execution checkpoints, not only t
 describe('6 — the reviewer can force repair during execution', () => {
   it('a blocking finding on the guidance repairs the GUIDANCE, on the architect', async () => {
     const harness = build({
-      coderScript: [{ kind: 'succeed', guidanceRequest: REQUEST }],
+      coderScript: [{ kind: 'succeed', guidanceRequest: REQUEST }, { kind: 'succeed' }],
       architectScript: [
         { kind: 'succeed', evidence: PLAN_EVIDENCE },
         { kind: 'succeed', evidence: PLAN_EVIDENCE, guidance: GUIDANCE },
@@ -442,7 +442,7 @@ describe('6 — the reviewer can force repair during execution', () => {
 describe('7 — guidance cannot alter locked scope or acceptance criteria', () => {
   it('refuses a packet that names a contract term, and the contract is untouched', async () => {
     const harness = build({
-      coderScript: [{ kind: 'succeed', guidanceRequest: REQUEST }],
+      coderScript: [{ kind: 'succeed', guidanceRequest: REQUEST }, { kind: 'succeed' }],
       architectScript: [
         { kind: 'succeed', evidence: PLAN_EVIDENCE },
         { kind: 'succeed', evidence: PLAN_EVIDENCE, guidance: { ...GUIDANCE, inScope: ['the whole repository'], blockingAcceptanceCriteria: [] } },
@@ -462,7 +462,7 @@ describe('7 — guidance cannot alter locked scope or acceptance criteria', () =
 
   it('refuses a packet that invents an acceptance criterion', async () => {
     const harness = build({
-      coderScript: [{ kind: 'succeed', guidanceRequest: REQUEST }],
+      coderScript: [{ kind: 'succeed', guidanceRequest: REQUEST }, { kind: 'succeed' }],
       architectScript: [
         { kind: 'succeed', evidence: PLAN_EVIDENCE },
         { kind: 'succeed', evidence: PLAN_EVIDENCE, guidance: { ...GUIDANCE, affectedCriterionIds: ['ac-invented'] } },
@@ -477,7 +477,7 @@ describe('7 — guidance cannot alter locked scope or acceptance criteria', () =
 describe('8 — a contract-affecting discovery needs a reviewed and re-locked revision', () => {
   it('a proposal against a LOCKED contract is refused, and the revision does not move', async () => {
     const harness = build({
-      coderScript: [{ kind: 'succeed', guidanceRequest: REQUEST }],
+      coderScript: [{ kind: 'succeed', guidanceRequest: REQUEST }, { kind: 'succeed' }],
       architectScript: [
         { kind: 'succeed', evidence: PLAN_EVIDENCE },
         // The architect tries to amend the agreement from inside a guidance
@@ -509,7 +509,7 @@ describe('8 — a contract-affecting discovery needs a reviewed and re-locked re
 describe('9 — stale guidance and stale handoffs are rejected after a contract revision', () => {
   it('guidance written under revision N reads STALE at revision N+1, and is never rebound', async () => {
     const harness = build({
-      coderScript: [{ kind: 'succeed', guidanceRequest: REQUEST }],
+      coderScript: [{ kind: 'succeed', guidanceRequest: REQUEST }, { kind: 'succeed' }],
       architectScript: [
         { kind: 'succeed', evidence: PLAN_EVIDENCE },
         { kind: 'succeed', evidence: PLAN_EVIDENCE, guidance: GUIDANCE },
@@ -534,7 +534,7 @@ describe('9 — stale guidance and stale handoffs are rejected after a contract 
   it('a guidance task whose subject has no locked contract is refused rather than guessed', async () => {
     // No lock, no agreement to advise under.
     const harness = build({
-      coderScript: [{ kind: 'succeed', guidanceRequest: REQUEST }],
+      coderScript: [{ kind: 'succeed', guidanceRequest: REQUEST }, { kind: 'succeed' }],
       reviewerScript: [{ kind: 'succeed', evidence: FAILED_REVIEW }],
     });
     await drain(harness);
@@ -549,7 +549,7 @@ describe('9 — stale guidance and stale handoffs are rejected after a contract 
 describe('10 — Julius retains final mission authority', () => {
   it('no verdict, guidance or request ever writes a decision; every decision is Julius\'s', async () => {
     const harness = build({
-      coderScript: [{ kind: 'succeed', guidanceRequest: REQUEST }],
+      coderScript: [{ kind: 'succeed', guidanceRequest: REQUEST }, { kind: 'succeed' }],
       architectScript: [
         { kind: 'succeed', evidence: PLAN_EVIDENCE },
         { kind: 'succeed', evidence: PLAN_EVIDENCE, guidance: GUIDANCE },
@@ -574,7 +574,7 @@ describe('10 — Julius retains final mission authority', () => {
 describe('11 — a worker failure does not silently bypass the reviewer or the architect', () => {
   it('a failed guidance task leaves the mission incomplete rather than proceeding as if advised', async () => {
     const harness = build({
-      coderScript: [{ kind: 'succeed', guidanceRequest: REQUEST }],
+      coderScript: [{ kind: 'succeed', guidanceRequest: REQUEST }, { kind: 'succeed' }],
       architectScript: [
         { kind: 'succeed', evidence: PLAN_EVIDENCE },
         // The guidance dispatch fails, permanently.
@@ -591,7 +591,7 @@ describe('11 — a worker failure does not silently bypass the reviewer or the a
 
   it('a failed guidance REVIEW does not count as a review that happened', async () => {
     const harness = build({
-      coderScript: [{ kind: 'succeed', guidanceRequest: REQUEST }],
+      coderScript: [{ kind: 'succeed', guidanceRequest: REQUEST }, { kind: 'succeed' }],
       architectScript: [
         { kind: 'succeed', evidence: PLAN_EVIDENCE },
         { kind: 'succeed', evidence: PLAN_EVIDENCE, guidance: GUIDANCE },
@@ -684,7 +684,7 @@ describe('28 - a guidance request reaches the architect through the Project Brai
       .filter((entry) => entry.entryId.startsWith('brain:guidance-request:'));
 
   it('writes one HANDOFF entry scoped to the guidance task, and to no other packet', async () => {
-    const harness = build({ coderScript: [{ kind: 'succeed', guidanceRequest: REQUEST }] });
+    const harness = build({ coderScript: [{ kind: 'succeed', guidanceRequest: REQUEST }, { kind: 'succeed' }] });
     await drain(harness);
     const guidance = harness.store.taskRow('guidance:build-1:1:task');
     expect(guidance, 'a guidance task must have been minted').toBeDefined();
@@ -696,7 +696,7 @@ describe('28 - a guidance request reaches the architect through the Project Brai
   });
 
   it('carries the three structured fields the checkpoint summary drops', async () => {
-    const harness = build({ coderScript: [{ kind: 'succeed', guidanceRequest: REQUEST }] });
+    const harness = build({ coderScript: [{ kind: 'succeed', guidanceRequest: REQUEST }, { kind: 'succeed' }] });
     await drain(harness);
     const text = (await asks(harness))[0].text;
     expect(text).toContain(REQUEST.question);
@@ -707,7 +707,7 @@ describe('28 - a guidance request reaches the architect through the Project Brai
 
   /** A replayed tick writes neither the task nor the entry: one ask, one row. */
   it('does not duplicate on a replayed drive', async () => {
-    const harness = build({ coderScript: [{ kind: 'succeed', guidanceRequest: REQUEST }] });
+    const harness = build({ coderScript: [{ kind: 'succeed', guidanceRequest: REQUEST }, { kind: 'succeed' }] });
     await drain(harness);
     await drain(harness);
     expect(await asks(harness)).toHaveLength(1);
@@ -730,7 +730,7 @@ describe('28 - a guidance request reaches the architect through the Project Brai
  */
 describe('29 - the contract charge names the stage the task actually is', () => {
   it('a guidance dispatch carries stage "guidance", bound to the locked revision', async () => {
-    const harness = build({ coderScript: [{ kind: 'succeed', guidanceRequest: REQUEST }] });
+    const harness = build({ coderScript: [{ kind: 'succeed', guidanceRequest: REQUEST }, { kind: 'succeed' }] });
     await drain(harness);
     const guidanceClaim = harness.store.events()
       .find((event) => event.type === 'task.claimed' && event.taskId === 'guidance:build-1:1:task');
@@ -782,5 +782,118 @@ describe('29 - the contract charge names the stage the task actually is', () => 
       expect(workStageOf(type), `${type} must not be labelled a coder stage`).not.toBe('build');
       expect(workStageOf(type), `${type} must not be labelled a coder stage`).not.toBe('repair:build');
     }
+  });
+});
+
+/**
+ * 30 — THE FALSIFICATION TEST: "Julius can LOOK continuously supervised while
+ * the coder actually runs ahead."
+ *
+ * This is the proof the whole barrier exists for, and it is written to FAIL if
+ * the barrier is behavioural rather than structural. It does not ask whether a
+ * checkpoint was recorded — ADR-021's 27 proofs already asserted that, and all
+ * 27 passed while the coder was finishing before anyone answered it.
+ *
+ * It asks about ORDER and about EXISTENCE:
+ *
+ *   - segment B is dispatched AFTER the guidance that the checkpoint asked for;
+ *   - when the guidance is refused, segment B is never dispatched AT ALL.
+ *
+ * The second is the load-bearing one. A system that merely sequenced work would
+ * still run segment B eventually; this one cannot, because segment B is created
+ * BLOCKED on the guidance task and `evaluateJuliusRelease` — the only thing in
+ * Julius that moves a task out of BLOCKED — releases it solely when that
+ * dependency is SUCCEEDED and effectively accepted. Nothing trusts a model to
+ * wait; there is simply nothing runnable.
+ */
+describe('30 - a checkpoint is a barrier, not a note taken afterwards', () => {
+  const REFUSING_REVIEW = Object.freeze({
+    verdict: 'changes_required',
+    summary: 'The guidance is unsupported.',
+    findings: [{
+      findingId: 'f-block', severity: 'blocking', requirement: 'guidance must cite evidence',
+      file: 'n/a', line: 0, explanation: 'No citation for the claim.', evidence: 'none',
+      recommendedAction: 'Cite or withdraw.',
+    }],
+    requirementsChecked: [],
+  });
+
+  const dispatchOrder = (harness: JuliusHarness): string[] => taskIds(harness);
+
+  it('creates the continuation BLOCKED on the guidance task — the barrier is an edge, not a promise', async () => {
+    const harness = build({ coderScript: [{ kind: 'succeed', guidanceRequest: REQUEST }, { kind: 'succeed' }] });
+    await drain(harness);
+    const continuation = harness.store.taskRow('segment:build-1:2:task');
+    expect(continuation, 'a continuation segment exists').not.toBeNull();
+    expect(continuation!.dependencyIds, 'and it waits on the guidance task')
+      .toEqual(['guidance:build-1:1:task']);
+    expect(continuation!.parentTaskId).toBe('build-1');
+    expect(continuation!.role).toBe('CODING_AGENT');
+    // The same kind of work, so no new registration is needed and the charge
+    // keeps the subject's own stage.
+    expect(continuation!.taskType).toBe('build');
+  });
+
+  it('segment B is dispatched only AFTER the guidance it waited for', async () => {
+    const harness = build({ coderScript: [{ kind: 'succeed', guidanceRequest: REQUEST }, { kind: 'succeed' }] });
+    await drain(harness);
+    const order = dispatchOrder(harness);
+    const guidanceAt = order.indexOf('guidance:build-1:1:task');
+    const segmentAt = order.indexOf('segment:build-1:2:task');
+    expect(guidanceAt, 'the guidance ran').toBeGreaterThanOrEqual(0);
+    expect(segmentAt, 'the continuation ran').toBeGreaterThanOrEqual(0);
+    expect(segmentAt, 'segment B must not precede the guidance it asked for').toBeGreaterThan(guidanceAt);
+  });
+
+  /**
+   * THE ONE THAT WOULD CATCH A FAKE. With the guidance review refusing, the
+   * guidance task is never effectively accepted, so the continuation is never
+   * released and NEVER DISPATCHES. An implementation that recorded the
+   * checkpoint and carried on would dispatch it here.
+   */
+  it('a refused guidance review means segment B never executes at all', async () => {
+    const harness = build({
+      coderScript: [{ kind: 'succeed', guidanceRequest: REQUEST }, { kind: 'succeed' }],
+      // The plan review accepts (so the contract locks); every review after it
+      // refuses, which is the guidance review.
+      reviewerScript: [{ kind: 'succeed', evidence: PASSED_REVIEW }, { kind: 'succeed', evidence: REFUSING_REVIEW }],
+    });
+    await drain(harness);
+    const continuation = harness.store.taskRow('segment:build-1:2:task');
+    expect(continuation, 'the continuation was still created').not.toBeNull();
+    expect(continuation!.state, 'and it is still BLOCKED').toBe('BLOCKED');
+    expect(dispatchOrder(harness), 'segment B must never have been dispatched')
+      .not.toContain('segment:build-1:2:task');
+  });
+
+  /**
+   * AND THE MISSION DOES NOT QUIETLY COMPLETE AROUND IT. A blocked continuation
+   * is a non-terminal task, and `targetRunState` completes only when every task
+   * is terminal, so a refused guidance cannot be laundered into a finished
+   * mission.
+   */
+  it('a mission with an unreleased continuation cannot reach COMPLETED', async () => {
+    const harness = build({
+      coderScript: [{ kind: 'succeed', guidanceRequest: REQUEST }, { kind: 'succeed' }],
+      reviewerScript: [{ kind: 'succeed', evidence: PASSED_REVIEW }, { kind: 'succeed', evidence: REFUSING_REVIEW }],
+    });
+    await drain(harness);
+    const run = await harness.store.loadRun('run-1', 'prj-1');
+    expect(run?.state, 'the run must not claim completion').not.toBe('COMPLETED');
+  });
+
+  /** A coder that asks forever is bounded, and the bound is not the repair bound. */
+  it('yielding is bounded by its own ceiling, and spends no repair round', async () => {
+    const harness = build({
+      // This coder asks at EVERY segment — the loop the barrier made possible.
+      coderScript: [{ kind: 'succeed', guidanceRequest: REQUEST }],
+      maxRepairRounds: 2,
+    });
+    await drain(harness, 60);
+    const all = await harness.store.tasksForRun('run-1', 'prj-1');
+    const segments = all.filter((t) => t.taskId.startsWith('segment:build-1:'));
+    expect(segments.length, 'continuations are bounded').toBeLessThanOrEqual(4);
+    const repairs = all.filter((t) => t.taskType.startsWith('repair:') && t.parentTaskId === 'build-1');
+    expect(repairs, 'yielding is not repairing').toHaveLength(0);
   });
 });

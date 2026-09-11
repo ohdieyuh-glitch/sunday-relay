@@ -155,6 +155,8 @@ export type ScriptedOutcome =
     readonly guidanceRequest?: unknown;
     /** An architect answering, after the contract locked. Unsanitised, for the same reason. */
     readonly guidance?: unknown;
+    /** What a coder's next segment resumes from. Unsanitised, for the same reason. */
+    readonly segmentResume?: unknown;
   }
   /** `costUsdMicros` is what the boundary billed before it failed, as its diagnostics would carry. */
   | {
@@ -221,6 +223,7 @@ export function scriptedAdapter(
         ...(step.contractProposal === undefined ? {} : { contractProposal: step.contractProposal }),
         ...(step.guidanceRequest === undefined ? {} : { guidanceRequest: step.guidanceRequest }),
         ...(step.guidance === undefined ? {} : { guidance: step.guidance }),
+        ...(step.segmentResume === undefined ? {} : { segmentResume: step.segmentResume }),
       };
       return result;
     },
