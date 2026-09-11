@@ -1055,6 +1055,20 @@ export async function runClaimedTask(
         await ledger.event('task.failed', {
           taskId: claim.taskId,
           facts: {
+            /**
+             * WHAT THE BOUNDARY SAW, ON THE ROW THAT ENDS THE TASK.
+             *
+             * The coordinator flattened these onto its own `retry.scheduled`
+             * and then had nowhere to put them: its outcome carried the code
+             * and the class alone. So the terminal row — the one a reader opens
+             * first to ask why a paid mission ended — named neither the served
+             * model, nor the response id, nor the tokens, nor what a coder had
+             * already spent before it timed out, while all of it sat one event
+             * earlier under a different type. Spread FIRST so nothing below can
+             * be overwritten by a `diag_` key; the prefix already makes a
+             * collision impossible, and the order says so.
+             */
+            ...(outcome.diagnostics ?? {}),
             code: outcome.code, reasonCode: carryOn.reasonCode, awaitingHuman: carryOn.awaitingHuman,
             // UNKNOWN IS NULL, NOT ABSENT. A reader asking "why did this task
             // fail" must be able to tell "the connector did not classify it"
