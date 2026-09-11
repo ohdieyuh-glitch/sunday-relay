@@ -554,6 +554,26 @@ const hostedCoderDiagnostics = (input: {
       ? 'PROVIDER_REPORTED' : 'UNKNOWN',
     inputTokens: observed?.usage.inputTokens ?? null,
     outputTokens: observed?.usage.outputTokens ?? null,
+    /**
+     * AND WHAT THE STREAM SAID BEFORE IT WAS CUT OFF.
+     *
+     * The four columns above come from the runtime's terminal result, which a
+     * run Relay aborts at its own ceiling never reaches. Paid run 34485676189
+     * attempt 1 spent 363 seconds and twelve tool calls and reported null for
+     * every one of them — "we paid and cannot say how much."
+     *
+     * Every assistant turn carried its own usage block the whole time. These
+     * are the sum over the turns actually observed: a FLOOR, never the total,
+     * never a cost, and deliberately named apart so no reader can mistake one
+     * for the other. `costBasis` above is unchanged and still UNKNOWN on these
+     * runs, because a token floor is not a provider's bill.
+     */
+    streamUsageMessages: observed?.streamUsage.messages ?? null,
+    streamAbortedMessages: observed?.streamUsage.abortedMessages ?? null,
+    streamInputTokens: observed?.streamUsage.inputTokens ?? null,
+    streamOutputTokens: observed?.streamUsage.outputTokens ?? null,
+    streamCacheReadInputTokens: observed?.streamUsage.cacheReadInputTokens ?? null,
+    streamCacheCreationInputTokens: observed?.streamUsage.cacheCreationInputTokens ?? null,
   };
 };
 

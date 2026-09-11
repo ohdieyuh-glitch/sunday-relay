@@ -66,8 +66,18 @@ export const RECORDED_CODER_OBSERVATIONS: readonly CoderRunObservation[] = [
     turns: 11, toolCalls: 10, elapsedMs: 134_000, outcome: 'COMPLETED', costUsdMicros: 1_390_954,
   },
   // Paid Mission 5 attempt 1. Relay's own abort timer fired at the 360000 ms
-  // runtime ceiling. A timed-out hosted run reports no usage at all, so what it
-  // spent is UNKNOWN and stays null — we paid and cannot say how much.
+  // runtime ceiling, and its COST is UNKNOWN: the runtime reports what it
+  // charged only in the terminal result message, which an aborted run never
+  // reaches, so this row stays null and always will.
+  //
+  // Its token usage was a different matter, and this row is the reason that is
+  // now past tense. Every assistant turn had reported its own usage the whole
+  // time and Relay read none of it, so the record said the run reported
+  // nothing when what it had was a parser that asked only the last message.
+  // `HostedStreamUsage` now folds the turns as they arrive, and a run cut off
+  // like this one carries a FLOOR — tokens, never dollars, never a cost basis.
+  // This row keeps its null because the instrumentation postdates it; there is
+  // no bundle to read the floor back out of.
   {
     runId: '34485676189', taskId: 'run:cecba99c779c967f128dd58c:build',
     turns: null, toolCalls: 12, elapsedMs: 363_000, outcome: 'RUNTIME_CUT_OFF', costUsdMicros: null,
