@@ -878,7 +878,9 @@ export async function runClaimedTask(
     await ledger.event('budget.allocated', { taskId: claim.taskId, facts: { role, ...allocationFacts(allocation) } });
   }
 
-  const coordinator = new JuliusExecutionCoordinator(deps.router, executionPorts(deps, run, ledger));
+  const coordinator = new JuliusExecutionCoordinator(
+    deps.router, executionPorts(deps, run, ledger, allocation?.usdMicros ?? null),
+  );
 
   /* ------------------------------------------------- reroute and fallback */
   /**
@@ -1811,6 +1813,8 @@ function executionPorts(
   deps: JuliusPipelineDependencies,
   run: JuliusRunRow,
   ledger: RuntimeLedger,
+  /** What Julius reserved for this dispatch, so the effort row can name it. */
+  allocated: number | null,
 ): JuliusExecutionPorts {
   return {
     reserve: async ({ claim, request, idempotencyKey }) => {
@@ -1894,6 +1898,20 @@ function executionPorts(
        * object: an adapter that reports them is measured on them, and one that
        * does not is not charged for the silence.
        */
+      /**
+       * WHAT JULIUS ITSELF OBSERVED, beside what the provider reported.
+       *
+       * Only the dimensions this site can actually see are given a number.
+       * Evidence produced, repair participation, guidance written and reviewer
+       * verdicts are all visible HERE, from the claim and the result; the ones
+       * that are not instrumented yet stay ABSENT, which the reader turns into
+       * `unknown` rather than into a zero. A dimension nobody measured must
+       * never read as a dimension that was zero — the same rule money follows.
+       */
+      const evidence = Array.isArray(result.evidence) ? result.evidence : [];
+      const verdicts = claim.task.role === 'INDEPENDENT_REVIEWER'
+        ? evidence.filter((item) => (item as { type?: unknown }).type === 'REVIEW_FINDING').length
+        : 0;
       await ledger.event('worker.effort', {
         taskId: claim.taskId,
         facts: {
@@ -1901,7 +1919,18 @@ function executionPorts(
           inputTokens: maybe('inputTokens'), outputTokens: maybe('outputTokens'),
           reasoningTokens: maybe('reasoningTokens'), toolCalls: maybe('toolCalls'),
           researchCalls: maybe('researchCalls'), activeMs: maybe('runtimeMs'),
+          providerCalls: maybe('providerCalls'), brainRetrievals: maybe('brainRetrievals'),
           usdMicros,
+          // The two halves of the money question, on the same row: what Julius
+          // permitted, and what came back — with the basis, so an UNKNOWN
+          // settlement is legible as one rather than as a missing number.
+          allocatedUsdMicros: allocated,
+          settledUsdMicros: usdMicros,
+          settlementBasis: component.basis,
+          evidenceGenerated: evidence.length,
+          repairRounds: claim.task.taskType.startsWith('repair:') ? 1 : 0,
+          guidanceGenerated: result.guidance === undefined ? 0 : 1,
+          reviewerVerdicts: verdicts,
           effortVersion: JULIUS_SLOT_EFFORT_VERSION,
         },
       });
@@ -2688,7 +2717,12 @@ async function allocateFor(input: {
    * see.
    */
   const ledger = await projectSlotLedger(input.deps, input.run, policy);
-  if (ledger !== null) {
+  /**
+   * A RUN ALLOCATED UNDER v1 IS READ UNDER v1, whatever is deployed now. The
+   * ledger still projects — the money is the money — and the decision falls
+   * back rather than inventing a per-slot position that run never had.
+   */
+  if (ledger !== null && !ledger.historicalPolicyConflict) {
     const verdict = reserveJuliusSlotCapacity({ ledger, slot: input.role });
     const account = ledger.bySlot[input.role];
     if (!verdict.ok) {
@@ -2784,7 +2818,7 @@ async function projectSlotLedger(
     });
     for (const entry of page.entries) {
       sinceSequence = Math.max(sinceSequence, entry.sequence);
-      if (entry.type === 'budget.reserved' || entry.type === 'budget.settled') {
+      if (entry.type === 'budget.allocated' || entry.type === 'budget.reserved' || entry.type === 'budget.settled') {
         rows.push({ type: entry.type, taskId: entry.taskId, facts: entry.facts });
       }
     }

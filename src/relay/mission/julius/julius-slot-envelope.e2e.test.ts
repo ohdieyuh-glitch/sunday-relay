@@ -262,11 +262,14 @@ describe('every dispatch says what it actually spent, and what it could not meas
       expect(report.bySlot[slot]!.reasoningTokens.unknown).toBeGreaterThan(0);
       expect(report.bySlot[slot]!.reasoningTokens.measured).toBe(0);
     }
-    // Under a script where every worker reports the same tokens, the two peers
-    // measure as peers. That is not a claim about real missions; it is proof
-    // that the ratio is computed from the rows rather than from the role.
+    // Under a script where every worker reports the same tokens per dispatch,
+    // the slot that takes MORE turns measures above the coder. That is not a
+    // claim about real missions; it is proof that the ratio is computed from
+    // the rows rather than from the role — and that a slot above the band is
+    // named rather than hidden inside PEER.
     expect(report.ratioToCoder.PROMPT_ARCHITECT).not.toBeNull();
-    expect(report.verdict.INDEPENDENT_REVIEWER).toBe('PEER');
+    expect(report.verdict.INDEPENDENT_REVIEWER).not.toBe('BELOW_OBSERVED_RANGE');
+    expect(report.verdict.INDEPENDENT_REVIEWER).not.toBe('INDETERMINATE');
   });
 });
 

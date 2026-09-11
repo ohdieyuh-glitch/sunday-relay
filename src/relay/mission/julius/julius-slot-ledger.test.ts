@@ -321,3 +321,52 @@ describe('a slot outside the envelope still spends, and is still counted', () =>
     expect(ledger.unallocatedUsdMicros).toBe(CEILING - 400_000);
   });
 });
+
+describe('a historical run is not reinterpreted under a rule it never ran beneath', () => {
+  const allocated = (policyVersion: string): JuliusBudgetRow =>
+    ({ type: 'budget.allocated', taskId: 't', facts: { role: 'CODING_AGENT', allocationPolicy: policyVersion } });
+
+  it('records every policy the run\'s own rows name', () => {
+    const ledger = project([allocated('julius-allocation.v2'), reserved('r1', 'CODING_AGENT', 1_000)]);
+    expect(ledger.recordedPolicyVersions).toEqual(['julius-allocation.v2']);
+    expect(ledger.historicalPolicyConflict).toBe(false);
+  });
+
+  it('flags a v1 run read under v2, and still projects the money', () => {
+    // The money is the money: a v1 run's spend is real and must not vanish.
+    // What may not happen is a v2 DECISION made from accounts that run never had.
+    const ledger = project([
+      allocated('julius-allocation.v1'),
+      reserved('r1', 'CODING_AGENT', 7_500_000),
+      settledKnown('r1', 'CODING_AGENT', 5_177_120),
+    ]);
+    expect(ledger.recordedPolicyVersions).toEqual(['julius-allocation.v1']);
+    expect(ledger.historicalPolicyConflict).toBe(true);
+    expect(ledger.bySlot.CODING_AGENT!.settledKnownUsdMicros).toBe(5_177_120);
+    expect(ledger.unallocatedUsdMicros).toBe(CEILING - 5_177_120);
+  });
+
+  it('refuses to reserve against a conflicted ledger, by name', () => {
+    const ledger = project([allocated('julius-allocation.v1'), reserved('r1', 'CODING_AGENT', 1_000)]);
+    const verdict = reserveJuliusSlotCapacity({ ledger, slot: 'CODING_AGENT' });
+    expect(verdict.ok).toBe(false);
+    if (verdict.ok) throw new Error('unreachable');
+    expect(verdict.refusal).toBe('HISTORICAL_POLICY_CONFLICT');
+    expect(verdict.detail).toContain('julius-allocation.v1');
+  });
+
+  it('catches a run that changed rule mid-flight, which is nobody\'s intention', () => {
+    const ledger = project([allocated('julius-allocation.v1'), allocated('julius-allocation.v2')]);
+    expect(ledger.recordedPolicyVersions).toEqual(['julius-allocation.v1', 'julius-allocation.v2']);
+    expect(ledger.historicalPolicyConflict).toBe(true);
+  });
+
+  it('does not let an allocation row move the revision reservations are pinned to', () => {
+    // An allocation is a decision recorded beside the money, not a movement of
+    // it. Counting it would make every decision stale the moment another
+    // dispatch was merely considered.
+    const withDecision = project([allocated('julius-allocation.v2'), reserved('r1', 'CODING_AGENT', 1_000)]);
+    const without = project([reserved('r1', 'CODING_AGENT', 1_000)]);
+    expect(withDecision.revision).toBe(without.revision);
+  });
+});

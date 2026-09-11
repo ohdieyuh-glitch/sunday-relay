@@ -285,6 +285,13 @@ const FILE_RULES = [
   // peers. Same subsystem as the v1 rule they extend.
   ['src/relay/mission/julius/julius-slot-envelope.ts', 'LEASES / BUDGETS / PERMISSIONS'],
   ['src/relay/mission/julius/julius-slot-effort.ts', 'LEASES / BUDGETS / PERMISSIONS'],
+  // What each slot HOLDS and has SPENT, projected from the durable budget rows
+  // rather than stored. The same subsystem as the rule it is the state for.
+  ['src/relay/mission/julius/julius-slot-ledger.ts', 'LEASES / BUDGETS / PERMISSIONS'],
+  // The per-slot mission record a paid run is read against afterwards: money,
+  // work, and the rows behind both. EVENTS, because it is assembled from the
+  // run's own timeline and answers what happened rather than what may be spent.
+  ['src/relay/mission/julius/julius-slot-report.ts', 'EVENTS / TRAJECTORIES'],
   /*
    * GOVERNED RESEARCH pulled a subtree into Julius's harness, and it belongs
    * there: binding the mediator in the live composition means these files are

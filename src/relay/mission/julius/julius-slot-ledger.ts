@@ -56,6 +56,11 @@ export const JULIUS_SLOT_RESERVE_REFUSALS = [
   /** Not one of the three peer slots; a specialist draws its fixed estimate. */
   'SLOT_NOT_A_PEER',
   'AMOUNT_INVALID',
+  /**
+   * The run's own rows name a different allocation policy. Its evidence is not
+   * reinterpreted under a rule it never ran beneath.
+   */
+  'HISTORICAL_POLICY_CONFLICT',
 ] as const;
 export type JuliusSlotReserveRefusal = (typeof JULIUS_SLOT_RESERVE_REFUSALS)[number];
 
@@ -114,6 +119,25 @@ export interface JuliusMissionSlotLedger {
    * other spend.
    */
   readonly unallocatedUsdMicros: number;
+  /**
+   * EVERY ALLOCATION POLICY THIS RUN'S OWN ROWS NAME, in the order first seen.
+   *
+   * A run records the governing policy on every `budget.allocated` row, so the
+   * durable record states which rule produced each number and nobody has to
+   * infer it from the code that happens to be deployed today.
+   */
+  readonly recordedPolicyVersions: readonly string[];
+  /**
+   * TRUE WHEN THE ROWS DISAGREE WITH THE POLICY BEING APPLIED.
+   *
+   * A historical run allocated under `julius-allocation.v1` has no slot
+   * envelopes, and reading its rows as if it did would invent a per-slot
+   * position nobody ever decided — evidence migrated silently, which is the
+   * thing the founder's directive forbids by name. The projection still builds
+   * (the money is the money) and the flag says the accounts must not be used to
+   * MAKE a v2 decision.
+   */
+  readonly historicalPolicyConflict: boolean;
   /**
    * How many durable budget rows this ledger was built from. A reservation
    * pinned to a stale revision is refused, which is what makes two concurrent
@@ -175,6 +199,7 @@ export function projectJuliusSlotLedger(input: {
   const accounts = new Map<string, JuliusSlotAccount>();
   for (const slot of JULIUS_BUDGET_SLOTS) accounts.set(slot, emptyAccount(slot, input.policy));
   const open = new Map<string, JuliusSlotReservation>();
+  const recordedPolicies: string[] = [];
   let revision = 0;
 
   const accountFor = (slot: string): JuliusSlotAccount => {
@@ -190,6 +215,14 @@ export function projectJuliusSlotLedger(input: {
   };
 
   for (const row of input.rows) {
+    if (row.type === 'budget.allocated') {
+      // NOT A MOVEMENT. An allocation is a decision recorded beside the money,
+      // so it names the rule without touching the revision the reservations
+      // are pinned to.
+      const recorded = text(row.facts.allocationPolicy);
+      if (recorded !== null && !recordedPolicies.includes(recorded)) recordedPolicies.push(recorded);
+      continue;
+    }
     if (row.type === 'budget.reserved') {
       const reservationId = text(row.facts.reservationId);
       const slot = text(row.facts.role);
@@ -274,6 +307,8 @@ export function projectJuliusSlotLedger(input: {
     bySlot: Object.freeze(bySlot),
     openReservations: Object.freeze(Object.fromEntries(open)),
     unallocatedUsdMicros: Math.max(0, input.ceilingUsdMicros - committed),
+    recordedPolicyVersions: Object.freeze([...recordedPolicies]),
+    historicalPolicyConflict: recordedPolicies.some((recorded) => recorded !== input.policyVersion),
     revision,
   });
 }
@@ -334,6 +369,14 @@ export function reserveJuliusSlotCapacity(input: {
   const refuse = (refusal: JuliusSlotReserveRefusal, detail: string): JuliusSlotReserveVerdict =>
     ({ ok: false, refusal, detail, ledgerRevision: ledger.revision });
 
+  if (ledger.historicalPolicyConflict) {
+    return refuse(
+      'HISTORICAL_POLICY_CONFLICT',
+      `This run's own rows were allocated under ${ledger.recordedPolicyVersions.join(', ')} and this decision `
+      + `would be made under ${ledger.policyVersion}. A historical run is not reinterpreted under a rule it `
+      + 'never ran beneath.',
+    );
+  }
   if (input.ifRevision !== undefined && input.ifRevision !== ledger.revision) {
     return refuse(
       'LEDGER_REVISION_STALE',

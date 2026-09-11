@@ -31,22 +31,56 @@ import type { JuliusWorkerRole } from './julius-runtime';
 
 export const JULIUS_SLOT_EFFORT_VERSION = 'julius-slot-effort.v1' as const;
 
-/** One dispatch's observable effort, exactly as the diagnostics carry it. */
+/**
+ * One dispatch's observable effort, exactly as the diagnostics carry it.
+ *
+ * EVERY DIMENSION IS SEPARATE AND EVERY ONE IS AUTHORITATIVE. The single
+ * `effectiveEffort` figure below is a DERIVED reading for one diagnostic
+ * question; it is not what a reader should reason from about what a worker did.
+ * A slot that made three research calls, read eleven evidence artifacts and
+ * answered two checkpoints did work that no token count describes, and
+ * collapsing that into one number would hide precisely the thing the paid proof
+ * needs to answer.
+ *
+ * `null` MEANS NOBODY MEASURED IT. Not zero. A provider that reports no
+ * reasoning tokens has not told us it used none.
+ */
 export interface JuliusSlotEffortObservation {
   readonly role: JuliusWorkerRole;
   readonly inputTokens: number | null;
   readonly outputTokens: number | null;
   readonly reasoningTokens: number | null;
-  readonly toolCalls: number | null;
-  readonly researchCalls: number | null;
   readonly activeMs: number | null;
+  /** Calls made to the provider for this one dispatch, corrections included. */
+  readonly providerCalls: number | null;
+  readonly toolCalls: number | null;
+  /** Governed research requests this dispatch made. */
+  readonly researchCalls: number | null;
+  /** Project Brain entries compiled into this dispatch's packet, where countable. */
+  readonly brainRetrievals: number | null;
   readonly costUsdMicros: number | null;
+  /** What Julius reserved for this dispatch. */
+  readonly allocatedUsdMicros: number | null;
+  /** What settled, and on whose authority. `null` amount with a basis of UNKNOWN. */
+  readonly settledUsdMicros: number | null;
+  readonly settlementBasis: string | null;
   /** Checkpoints this dispatch took part in — asked, answered or judged. */
-  readonly checkpoints: number;
+  readonly checkpoints: number | null;
+  /** Guidance packets this dispatch WROTE. */
+  readonly guidanceGenerated: number | null;
+  /** Guidance packets this dispatch READ. */
+  readonly guidanceConsumed: number | null;
+  /** Verdicts a reviewer recorded. Zero for the other two slots. */
+  readonly reviewerVerdicts: number | null;
   /** Repair rounds entered, or challenges raised. */
-  readonly challenges: number;
-  readonly evidenceCount: number;
-  readonly retries: number;
+  readonly challenges: number | null;
+  /** Repair-shaped dispatches this slot performed. */
+  readonly repairRounds: number | null;
+  /** Evidence this dispatch PRODUCED. */
+  readonly evidenceGenerated: number | null;
+  /** Evidence this dispatch was SHOWN. */
+  readonly evidenceInspected: number | null;
+  readonly retries: number | null;
 }
 
 /** A total that knows the difference between zero and unmeasured. */
@@ -64,14 +98,33 @@ export interface JuliusSlotEffort {
   readonly inputTokens: JuliusMeasuredTotal;
   readonly outputTokens: JuliusMeasuredTotal;
   readonly reasoningTokens: JuliusMeasuredTotal;
+  readonly activeMs: JuliusMeasuredTotal;
+  readonly providerCalls: JuliusMeasuredTotal;
   readonly toolCalls: JuliusMeasuredTotal;
   readonly researchCalls: JuliusMeasuredTotal;
-  readonly activeMs: JuliusMeasuredTotal;
+  readonly brainRetrievals: JuliusMeasuredTotal;
   readonly costUsdMicros: JuliusMeasuredTotal;
-  readonly checkpoints: number;
-  readonly challenges: number;
-  readonly evidenceCount: number;
-  readonly retries: number;
+  readonly allocatedUsdMicros: JuliusMeasuredTotal;
+  readonly settledUsdMicros: JuliusMeasuredTotal;
+  /** How many dispatches settled on each basis. An UNKNOWN count is a finding. */
+  readonly settlementBases: Readonly<Record<string, number>>;
+  /**
+   * PARTICIPATION, MEASURED THE SAME WAY MONEY IS.
+   *
+   * These were plain counters, which made "nobody recorded it" and "it did not
+   * happen" the same number — the exact confusion this module exists to end,
+   * one axis over. A slot whose guidance consumption is not instrumented must
+   * not read as a slot that consumed no guidance.
+   */
+  readonly checkpoints: JuliusMeasuredTotal;
+  readonly guidanceGenerated: JuliusMeasuredTotal;
+  readonly guidanceConsumed: JuliusMeasuredTotal;
+  readonly reviewerVerdicts: JuliusMeasuredTotal;
+  readonly challenges: JuliusMeasuredTotal;
+  readonly repairRounds: JuliusMeasuredTotal;
+  readonly evidenceGenerated: JuliusMeasuredTotal;
+  readonly evidenceInspected: JuliusMeasuredTotal;
+  readonly retries: JuliusMeasuredTotal;
   /**
    * A single comparable figure, built ONLY from components this slot actually
    * reported. Tokens dominate because they are the one thing every provider
@@ -84,11 +137,27 @@ export interface JuliusSlotEffort {
   readonly effectiveEffort: number | null;
 }
 
+/**
+ * WHAT THE RATIO OBSERVES — and it observes, it does not judge.
+ *
+ * These are deliberately not GOOD and BAD. The band is a DIAGNOSTIC target and
+ * nothing reads these verdicts to gate a mission, so a state that sounded like
+ * a grade would invite exactly the behaviour the founder forbade: extra model
+ * calls, manufactured research, or reasoning extended to burn tokens.
+ *
+ * `ABOVE_OBSERVED_RANGE` exists because calling it PEER would hide it and
+ * calling it a fault would be wrong. A worker above 1.2x is not inefficient; it
+ * is a worker the mission asked more of, and whether that is right is a
+ * question for whoever reads the raw dimensions beside it.
+ *
+ * `BELOW_OBSERVED_RANGE` says what was measured, not that the worker
+ * underperformed. A slot that finished legitimate work efficiently lands here
+ * too, and the raw dimensions are what tell the two apart.
+ */
 export type JuliusEffortVerdict =
-  /** Both non-coder slots sit inside the band, or above it. */
   | 'PEER'
-  /** A slot is below the band and the mission was complex enough to notice. */
-  | 'SHALLOW'
+  | 'ABOVE_OBSERVED_RANGE'
+  | 'BELOW_OBSERVED_RANGE'
   /** Not enough was measured to say. Never reported as healthy. */
   | 'INDETERMINATE';
 
@@ -149,20 +218,30 @@ export function juliusSlotEffortObservation(
     const value = facts[key];
     return typeof value === 'number' && Number.isFinite(value) ? value : null;
   };
-  const count = (key: string): number => nullable(key) ?? 0;
+  const basis = facts.settlementBasis;
   return {
     role: role as JuliusWorkerRole,
     inputTokens: nullable('inputTokens'),
     outputTokens: nullable('outputTokens'),
     reasoningTokens: nullable('reasoningTokens'),
+    activeMs: nullable('activeMs'),
+    providerCalls: nullable('providerCalls'),
     toolCalls: nullable('toolCalls'),
     researchCalls: nullable('researchCalls'),
-    activeMs: nullable('activeMs'),
+    brainRetrievals: nullable('brainRetrievals'),
     costUsdMicros: nullable('usdMicros'),
-    checkpoints: count('checkpoints'),
-    challenges: count('challenges'),
-    evidenceCount: count('evidenceCount'),
-    retries: count('retries'),
+    allocatedUsdMicros: nullable('allocatedUsdMicros'),
+    settledUsdMicros: nullable('settledUsdMicros'),
+    settlementBasis: typeof basis === 'string' && basis.length > 0 ? basis : null,
+    checkpoints: nullable('checkpoints'),
+    guidanceGenerated: nullable('guidanceGenerated'),
+    guidanceConsumed: nullable('guidanceConsumed'),
+    reviewerVerdicts: nullable('reviewerVerdicts'),
+    challenges: nullable('challenges'),
+    repairRounds: nullable('repairRounds'),
+    evidenceGenerated: nullable('evidenceGenerated'),
+    evidenceInspected: nullable('evidenceInspected'),
+    retries: nullable('retries'),
   };
 }
 
@@ -173,24 +252,44 @@ export function summarizeJuliusSlotEffort(
   for (const observation of observations) {
     const current = slots.get(observation.role) ?? {
       slot: observation.role, dispatches: 0,
-      inputTokens: EMPTY, outputTokens: EMPTY, reasoningTokens: EMPTY, toolCalls: EMPTY,
-      researchCalls: EMPTY, activeMs: EMPTY, costUsdMicros: EMPTY,
-      checkpoints: 0, challenges: 0, evidenceCount: 0, retries: 0,
+      inputTokens: EMPTY, outputTokens: EMPTY, reasoningTokens: EMPTY, activeMs: EMPTY,
+      providerCalls: EMPTY, toolCalls: EMPTY, researchCalls: EMPTY, brainRetrievals: EMPTY,
+      costUsdMicros: EMPTY, allocatedUsdMicros: EMPTY, settledUsdMicros: EMPTY,
+      settlementBases: {} as Readonly<Record<string, number>>,
+      checkpoints: EMPTY, guidanceGenerated: EMPTY, guidanceConsumed: EMPTY, reviewerVerdicts: EMPTY,
+      challenges: EMPTY, repairRounds: EMPTY, evidenceGenerated: EMPTY, evidenceInspected: EMPTY,
+      retries: EMPTY,
     };
+    const bases: Record<string, number> = { ...current.settlementBases };
+    // A dispatch whose settlement basis nobody recorded is counted as UNKNOWN
+    // rather than skipped: a bundle that silently omitted it would report a
+    // mission whose costs were better understood than they were.
+    const basisKey = observation.settlementBasis ?? 'UNKNOWN';
+    bases[basisKey] = (bases[basisKey] ?? 0) + 1;
     slots.set(observation.role, {
       slot: observation.role,
       dispatches: current.dispatches + 1,
       inputTokens: add(current.inputTokens, observation.inputTokens),
       outputTokens: add(current.outputTokens, observation.outputTokens),
       reasoningTokens: add(current.reasoningTokens, observation.reasoningTokens),
+      activeMs: add(current.activeMs, observation.activeMs),
+      providerCalls: add(current.providerCalls, observation.providerCalls),
       toolCalls: add(current.toolCalls, observation.toolCalls),
       researchCalls: add(current.researchCalls, observation.researchCalls),
-      activeMs: add(current.activeMs, observation.activeMs),
+      brainRetrievals: add(current.brainRetrievals, observation.brainRetrievals),
       costUsdMicros: add(current.costUsdMicros, observation.costUsdMicros),
-      checkpoints: current.checkpoints + observation.checkpoints,
-      challenges: current.challenges + observation.challenges,
-      evidenceCount: current.evidenceCount + observation.evidenceCount,
-      retries: current.retries + observation.retries,
+      allocatedUsdMicros: add(current.allocatedUsdMicros, observation.allocatedUsdMicros),
+      settledUsdMicros: add(current.settledUsdMicros, observation.settledUsdMicros),
+      settlementBases: bases,
+      checkpoints: add(current.checkpoints, observation.checkpoints),
+      guidanceGenerated: add(current.guidanceGenerated, observation.guidanceGenerated),
+      guidanceConsumed: add(current.guidanceConsumed, observation.guidanceConsumed),
+      reviewerVerdicts: add(current.reviewerVerdicts, observation.reviewerVerdicts),
+      challenges: add(current.challenges, observation.challenges),
+      repairRounds: add(current.repairRounds, observation.repairRounds),
+      evidenceGenerated: add(current.evidenceGenerated, observation.evidenceGenerated),
+      evidenceInspected: add(current.evidenceInspected, observation.evidenceInspected),
+      retries: add(current.retries, observation.retries),
     });
   }
 
@@ -212,7 +311,14 @@ export function summarizeJuliusSlotEffort(
     ratioToCoder[role] = ratio;
     verdict[role] = role === 'CODING_AGENT'
       ? 'PEER'
-      : ratio === null ? 'INDETERMINATE' : ratio < JULIUS_EFFORT_BAND.min ? 'SHALLOW' : 'PEER';
+      : ratio === null
+        ? 'INDETERMINATE'
+        : ratio < JULIUS_EFFORT_BAND.min
+          ? 'BELOW_OBSERVED_RANGE'
+          // ABOVE IS NOT A FAULT. A worker the mission asked more of lands here,
+          // and nothing reads this to penalise it — the raw dimensions beside
+          // it are what say whether the extra work was warranted.
+          : ratio > JULIUS_EFFORT_BAND.max ? 'ABOVE_OBSERVED_RANGE' : 'PEER';
   }
 
   return Object.freeze({
