@@ -309,6 +309,9 @@ export function createJuliusHarness(input: {
     resources: fixedResourceEstimate({ usdMicros: 2_000, inputTokens: 100, outputTokens: 100, toolCalls: 1, runtimeMs: 1_000 }),
     ...(input.allocation === undefined ? {} : { allocation: input.allocation }),
     ...(input.research === undefined ? {} : { research: input.research }),
+    // THE MEMORY STORE IS ALSO THE TIMELINE READER, so the harness exercises
+    // the real projected slot ledger rather than the rounds fallback.
+    timeline: store,
     owner: input.owner ?? 'worker-a',
     contextCharacterBudget: 4_000,
   };

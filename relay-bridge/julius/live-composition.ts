@@ -43,6 +43,7 @@ import {
   type JuliusResearchPolicy,
 } from '../../src/relay/mission/julius';
 import { createJuliusResearchMediator, juliusResearchPortFrom } from './research-mediator';
+import type { JuliusTimelineReader } from '../../src/relay/mission/julius';
 import { createLiveReachService } from '../live-reach-service';
 import {
   evaluateReadiness,
@@ -528,6 +529,14 @@ export function assembleLiveJuliusRuntime(options: {
       }),
       now: () => new Date().toISOString(),
     })),
+    /**
+     * THE MONEY RECORD, READ BACK. The same store that writes `budget.reserved`
+     * and `budget.settled` reads them, so the per-slot ledger is projected from
+     * durable truth and a restarted process reaches the same accounts.
+     */
+    ...(typeof (options.store as { timeline?: unknown }).timeline === 'function'
+      ? { timeline: options.store as unknown as JuliusTimelineReader }
+      : {}),
     owner: options.owner ?? 'julius-live-mission',
     contextCharacterBudget: 24_000,
   };

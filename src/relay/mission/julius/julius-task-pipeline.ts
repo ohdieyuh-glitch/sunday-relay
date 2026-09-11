@@ -66,6 +66,11 @@ import {
   JULIUS_SLOT_ENVELOPE_VERSION, evaluateJuliusSlotAllocation, slotEnvelopeUsdMicros,
   slotRoundShareUsdMicros, type JuliusSlotEnvelopePolicy,
 } from './julius-slot-envelope';
+import {
+  projectJuliusSlotLedger, reserveJuliusSlotCapacity,
+  type JuliusBudgetRow, type JuliusMissionSlotLedger,
+} from './julius-slot-ledger';
+import type { JuliusTimelineReader } from './julius-runtime-api';
 import { JULIUS_RUNTIME_VERSION, type JuliusBrainEntry, type JuliusRecordedDecision, type JuliusTask, type JuliusVerificationDecision, type JuliusWorker, type JuliusWorkerRole } from './julius-runtime';
 import { validateJuliusEvent, type JuliusOperationalEvent, type JuliusOperationalEventType } from './julius-events';
 import { validateTrajectoryEvent, type JuliusTrajectoryEvent, type JuliusTrajectoryKind } from './julius-trajectory';
@@ -152,6 +157,16 @@ export interface JuliusPipelineDependencies {
    * stalled on a question nothing can answer.
    */
   readonly research?: JuliusResearchPort;
+  /**
+   * THE DURABLE MONEY RECORD, READ BACK.
+   *
+   * The per-slot ledger is PROJECTED from `budget.reserved` and `budget.settled`
+   * rather than stored, so it cannot drift from the money record and survives a
+   * restart without a table. Absent, allocation v2 falls back to counting rounds
+   * off the task rows — a conservative lower bound that cannot tell an open
+   * reservation from one settled for less, and the basis it reports says so.
+   */
+  readonly timeline?: JuliusTimelineReader;
   /** Whoever holds the lease. Recorded on every event for attribution. */
   readonly owner: string;
   /** Context budget in characters. Compiling is bounded, never open-ended. */
@@ -1855,6 +1870,9 @@ function executionPorts(
         facts: {
           reservationId, usdMicros, inputTokens: number('inputTokens'), outputTokens: number('outputTokens'),
           role: claim.task.role, costBasis: component.basis,
+          // A completed dispatch never releases: it either reported an amount
+          // or it did not, and neither answer hands the money back.
+          released: false,
           // NEVER FOLDED INTO `usdMicros`. A price a harness worked out from its
           // own table is not what anyone was charged, and one column for both
           // is how an estimate becomes a bill.
@@ -1892,20 +1910,35 @@ function executionPorts(
       await deps.budget.release({ reservationId, reason, now: deps.clock.now(), usdMicros: usdMicros ?? null, spendUnknown });
       // A failed attempt that billed before it failed is a settlement, not a
       // hand-back, and the record has to be able to say so.
-      if ((typeof usdMicros === 'number' && usdMicros > 0) || spendUnknown === true) {
-        await ledger.event('budget.settled', {
-          taskId: claim.taskId,
-          facts: {
-            reservationId, usdMicros: typeof usdMicros === 'number' ? usdMicros : null, reason,
-            role: claim.task.role,
-            // A failure that billed a number the boundary reported is a
-            // provider's own figure; one that billed an amount nobody could
-            // name is UNKNOWN, which is why the hold is not released.
-            costBasis: typeof usdMicros === 'number' ? 'PROVIDER_REPORTED' : 'UNKNOWN',
-            estimatedUsdMicros: null,
-          },
-        });
-      }
+      const billed = (typeof usdMicros === 'number' && usdMicros > 0) || spendUnknown === true;
+      /**
+       * A RELEASE CLOSES THE RESERVATION EITHER WAY, AND THE ROW SAYS WHICH.
+       *
+       * Previously only a BILLED failure wrote a row, so an attempt that never
+       * reached a provider left its reservation with no closing record at all.
+       * The durable ledger frees it; anything PROJECTED from the events sees a
+       * hold that never ends, and money a slot genuinely did not spend reads as
+       * spent forever. Conservative in the safe direction, and it would starve
+       * a mission whose first dispatch was rerouted.
+       *
+       * `released: true` is the discriminator, and it is the ONE case where an
+       * absent amount frees capacity. That is safe precisely because it is
+       * reached only when the boundary reported NO spend and did NOT report
+       * unknown spend — nothing was sent, so there is nothing to hold.
+       */
+      await ledger.event('budget.settled', {
+        taskId: claim.taskId,
+        facts: {
+          reservationId, usdMicros: typeof usdMicros === 'number' ? usdMicros : null, reason,
+          role: claim.task.role,
+          released: !billed,
+          // A failure that billed a number the boundary reported is a
+          // provider's own figure; one that billed an amount nobody could
+          // name is UNKNOWN, which is why the hold is not released.
+          costBasis: typeof usdMicros === 'number' ? 'PROVIDER_REPORTED' : 'UNKNOWN',
+          estimatedUsdMicros: null,
+        },
+      });
     },
     persistEvidence: async ({ claim, evidence }) => {
       for (const item of evidence) {
@@ -2648,6 +2681,61 @@ async function allocateFor(input: {
    * A store that can one day answer per-slot money passes it straight into the
    * evaluator; nothing about the rule changes when it does.
    */
+  /**
+   * THE REAL LEDGER FIRST. Projected from the run's own durable budget rows, so
+   * an open reservation, a settlement that reported less than it held and money
+   * another slot is holding are all visible — none of which a round count can
+   * see.
+   */
+  const ledger = await projectSlotLedger(input.deps, input.run, policy);
+  if (ledger !== null) {
+    const verdict = reserveJuliusSlotCapacity({ ledger, slot: input.role });
+    const account = ledger.bySlot[input.role];
+    if (!verdict.ok) {
+      return {
+        usdMicros: 0,
+        basis: verdict.refusal === 'SLOT_NOT_A_PEER' ? 'ESTIMATE' : 'EXHAUSTED',
+        shareUsdMicros: account?.perRoundShareUsdMicros ?? null,
+        remainingUsdMicros: remaining,
+        policyVersion: policy.version,
+        slot: input.role,
+        slotEnvelopeUsdMicros: account?.envelopeUsdMicros ?? null,
+        slotRemainingUsdMicros: account?.remainingOwnEnvelopeUsdMicros ?? null,
+        slotRoundsUsed: account?.reservationsOpened ?? 0,
+        ledgerRevision: verdict.ledgerRevision,
+        slotOutstandingUsdMicros: account?.outstandingUsdMicros ?? null,
+        slotSettledKnownUsdMicros: account?.settledKnownUsdMicros ?? null,
+        slotSettledUnknownUsdMicros: account?.settledUnknownUsdMicros ?? null,
+        unallocatedUsdMicros: ledger.unallocatedUsdMicros,
+      };
+    }
+    return {
+      usdMicros: verdict.usdMicros,
+      basis: verdict.source,
+      shareUsdMicros: verdict.perRoundShareUsdMicros,
+      remainingUsdMicros: remaining,
+      policyVersion: policy.version,
+      slot: verdict.slot,
+      slotEnvelopeUsdMicros: account?.envelopeUsdMicros ?? null,
+      slotRemainingUsdMicros: verdict.remainingOwnEnvelopeUsdMicros,
+      slotRoundsUsed: account?.reservationsOpened ?? 0,
+      ledgerRevision: verdict.ledgerRevision,
+      slotOutstandingUsdMicros: account?.outstandingUsdMicros ?? null,
+      slotSettledKnownUsdMicros: account?.settledKnownUsdMicros ?? null,
+      slotSettledUnknownUsdMicros: account?.settledUnknownUsdMicros ?? null,
+      unallocatedUsdMicros: verdict.unallocatedUsdMicros,
+    };
+  }
+
+  /**
+   * NO TIMELINE READER: COUNT ROUNDS, AND SAY THAT IS WHAT WAS COUNTED.
+   *
+   * Every dispatch of a slot was capped at one share, so
+   * `envelope - rounds x share` is a LOWER bound on what the slot still has.
+   * Under-allocating is the safe direction. The basis carries an
+   * `_ESTIMATED_FROM_ROUNDS` suffix so a reader of the durable record can tell
+   * a decision made against the money from one made against a proxy for it.
+   */
   const tasks = await input.deps.store.tasksForRun(input.run.runId, input.run.projectId);
   const priorRounds = tasks.filter((row) => row.role === input.role
     && row.taskId !== input.taskId
@@ -2664,7 +2752,7 @@ async function allocateFor(input: {
   });
   return {
     usdMicros: v2.usdMicros,
-    basis: v2.basis,
+    basis: `${v2.basis}_ESTIMATED_FROM_ROUNDS`,
     shareUsdMicros: v2.slotShareUsdMicros,
     remainingUsdMicros: v2.unreservedUsdMicros,
     policyVersion: v2.policyVersion,
@@ -2673,6 +2761,42 @@ async function allocateFor(input: {
     slotRemainingUsdMicros: v2.slotRemainingUsdMicros,
     slotRoundsUsed: priorRounds,
   };
+}
+
+/**
+ * READ EVERY BUDGET ROW THIS RUN HAS WRITTEN, and project the slot accounts.
+ *
+ * Null when no timeline reader is bound — an honest absence rather than an
+ * empty ledger, because an empty ledger would report a mission that has spent
+ * nothing and hand out the whole ceiling twice.
+ */
+async function projectSlotLedger(
+  deps: JuliusPipelineDependencies,
+  run: JuliusRunRow,
+  policy: JuliusSlotEnvelopePolicy,
+): Promise<JuliusMissionSlotLedger | null> {
+  if (deps.timeline === undefined) return null;
+  const rows: JuliusBudgetRow[] = [];
+  let sinceSequence = 0;
+  for (;;) {
+    const page = await deps.timeline.timeline({
+      runId: run.runId, projectId: run.projectId, sinceSequence, limit: 500,
+    });
+    for (const entry of page.entries) {
+      sinceSequence = Math.max(sinceSequence, entry.sequence);
+      if (entry.type === 'budget.reserved' || entry.type === 'budget.settled') {
+        rows.push({ type: entry.type, taskId: entry.taskId, facts: entry.facts });
+      }
+    }
+    if (!page.hasMore || page.entries.length === 0) break;
+  }
+  return projectJuliusSlotLedger({
+    runId: run.runId,
+    policy,
+    policyVersion: policy.version,
+    ceilingUsdMicros: policy.ceilingUsdMicros,
+    rows,
+  });
 }
 
 /**
@@ -2691,6 +2815,12 @@ interface JuliusDispatchDecision {
   readonly slotEnvelopeUsdMicros: number | null;
   readonly slotRemainingUsdMicros?: number | null;
   readonly slotRoundsUsed?: number;
+  /** The ledger revision this decision was made against, when there was one. */
+  readonly ledgerRevision?: number;
+  readonly slotOutstandingUsdMicros?: number | null;
+  readonly slotSettledKnownUsdMicros?: number | null;
+  readonly slotSettledUnknownUsdMicros?: number | null;
+  readonly unallocatedUsdMicros?: number | null;
 }
 
 const allocationFacts = (allocation: JuliusDispatchDecision): Record<string, string | number | null> => ({
@@ -2703,6 +2833,13 @@ const allocationFacts = (allocation: JuliusDispatchDecision): Record<string, str
   slotEnvelopeUsdMicros: allocation.slotEnvelopeUsdMicros,
   slotRemainingUsdMicros: allocation.slotRemainingUsdMicros ?? null,
   slotRoundsUsed: allocation.slotRoundsUsed ?? null,
+  // The per-slot position this decision was made against, so a reader can
+  // reconstruct WHY a dispatch got what it got without replaying the ledger.
+  slotOutstandingUsdMicros: allocation.slotOutstandingUsdMicros ?? null,
+  slotSettledKnownUsdMicros: allocation.slotSettledKnownUsdMicros ?? null,
+  slotSettledUnknownUsdMicros: allocation.slotSettledUnknownUsdMicros ?? null,
+  unallocatedUsdMicros: allocation.unallocatedUsdMicros ?? null,
+  ledgerRevision: allocation.ledgerRevision ?? null,
 });
 
 /* ---------------------------------------------------- repair context */

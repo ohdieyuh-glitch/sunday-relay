@@ -140,7 +140,16 @@ export class JuliusExecutionCoordinator {
     await this.event(request,'worker.selected',{workerId:worker.workerId,providerId:worker.providerId});
     const reservation=await this.ports.reserve({claim:request.claim,worker,request:request.resources,idempotencyKey:`${request.operationId}:budget`});
     if(reservation.state==='DENIED'){await this.event(request,'budget.denied',{reason:reservation.denialReason});return{status:'DENIED',code:'BUDGET_DENIED'};}
-    await this.event(request,'budget.reserved',{reservationId:reservation.reservationId});
+    /**
+     * THE ROLE AND THE AMOUNT TRAVEL WITH THE RESERVATION ID.
+     *
+     * Without them the row says only that money moved, and the per-slot ledger
+     * — which is PROJECTED from these rows rather than stored — cannot say
+     * whose it was. Attribution guessed from the task id would be a second
+     * source of truth about money, which is the arrangement the cost-accounting
+     * module exists to end.
+     */
+    await this.event(request,'budget.reserved',{reservationId:reservation.reservationId,role:request.role,usdMicros:request.resources.usdMicros});
     /**
      * WHAT THE PROVIDER REPORTED, HELD WHERE THE CATCH CAN SEE IT.
      *
