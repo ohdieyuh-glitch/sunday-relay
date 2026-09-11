@@ -451,6 +451,12 @@ readonly guidanceRequest?:unknown;
   * authority and would not survive the restart it exists to survive.
   */
  readonly segmentResume?:unknown;
+ /**
+  * WHAT THIS WORKER NEEDS TO LOOK AT, unsanitised. Available to all three
+  * slots and rebuilt by Julius from a four-field allowlist, so a worker cannot
+  * name a host, a budget, a role or a header here however it phrases it.
+  */
+ readonly researchAsks?:unknown;
 readonly guidance?:unknown;}
 /**
  * WHAT JULIUS TELLS AN ADAPTER, and nothing more.

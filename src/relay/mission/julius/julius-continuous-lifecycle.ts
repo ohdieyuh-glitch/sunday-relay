@@ -867,6 +867,18 @@ export const juliusGuidanceTaskId = (subjectTaskId: string, revision: number): s
 export const juliusCheckpointId = (subjectTaskId: string, sequence: number): string =>
   `checkpoint:${subjectTaskId}:${sequence}`;
 
+/**
+ * A RESEARCH CHECKPOINT LIVES IN ITS OWN NAMESPACE.
+ *
+ * Both lineages number their yields from the subject's durable segment rows, so
+ * without the `research:` segment a research checkpoint and a guidance
+ * checkpoint of the same subject would eventually claim the same id — and the
+ * one that arrived second would be recorded as a duplicate of a question it has
+ * nothing to do with.
+ */
+export const juliusResearchCheckpointId = (subjectTaskId: string, sequence: number): string =>
+  `checkpoint:research:${subjectTaskId}:${sequence}`;
+
 export const juliusGuidanceId = (subjectTaskId: string, revision: number): string =>
   `guidance:${subjectTaskId}:${revision}`;
 

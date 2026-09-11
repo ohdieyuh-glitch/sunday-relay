@@ -59,6 +59,13 @@ export const JULIUS_OPERATIONAL_EVENT_TYPES=[
   * recorded only boundaries — a task started, a task ended — and a mission's
   * whole middle was unwritten. */
  'checkpoint.recorded','checkpoint.verdict','guidance.issued','guidance.refused',
+ /* GOVERNED RESEARCH. `research.refused` is Julius unable to read what a worker
+  * asked for; `guidance.deferred` is a worker that asked for two things in one
+  * dispatch and got the cheaper one, recorded rather than dropped so the record
+  * says what it wanted. What research OBSERVED is on `checkpoint.verdict`,
+  * outcome by outcome, because the observation belongs to the checkpoint that
+  * asked for it. */
+ 'research.refused','guidance.deferred',
  /* bounded children */
  'subagent.spawned','subagent.denied','subagent.completed',
  /* budget */

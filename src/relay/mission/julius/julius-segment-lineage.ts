@@ -144,6 +144,29 @@ export function segmentNumberOf(taskId: string): number {
 }
 
 /**
+ * THE HEAD OF THIS UNIT OF WORK — the task the whole segment chain belongs to.
+ *
+ * A CHAIN, NOT A TREE, and the difference is the ceiling. Segment 2 asking
+ * again would otherwise become the subject of its own lineage
+ * (`segment:segment:build-1:2:task:2:task`), each level starting its count from
+ * one, and the bound would never bind: a worker that asks at every segment
+ * would nest forever while the number at every level stayed at two. The ceiling
+ * was written against exactly that loop, so it has to be counted against the
+ * work rather than against the most recent pause in it.
+ *
+ * Read back from the id, which is why the id shape is a contract: a row that
+ * did not come from `juliusSegmentTaskId` cannot name itself part of a lineage.
+ */
+export function juliusSegmentLineageRootOf(task: JuliusTask, tasks: readonly JuliusTask[]): JuliusTask {
+  const subjectId = juliusSegmentSubjectTaskId(task.taskId);
+  if (subjectId === null) return task;
+  const subject = tasks.find((row) => row.taskId === subjectId);
+  // A continuation whose subject row is missing is its own root rather than
+  // nothing: refusing to answer here would stop a mission over a lost row.
+  return subject === undefined ? task : juliusSegmentLineageRootOf(subject, tasks);
+}
+
+/**
  * THE NEXT SEGMENT NUMBER for a subject, counted from durable task rows.
  *
  * Counted from the rows and never from a field, for the reason

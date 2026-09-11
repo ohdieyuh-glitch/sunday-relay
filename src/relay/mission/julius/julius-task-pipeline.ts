@@ -45,13 +45,21 @@ import { challengeJuliusTaskContract, evaluateJuliusBindingCurrency, evaluateJul
 import { evaluateJuliusRelease } from './julius-release-runtime';
 import { boundStageForRole, reviewStageOf, workStageOf, type JuliusReviewStage } from './julius-review-stage';
 import {
-  juliusSegmentTaskId, nextSegmentNumber, routeIsBarrier, sanitizeJuliusSegmentState,
+  juliusSegmentLineageRootOf, juliusSegmentTaskId, nextSegmentNumber, routeIsBarrier,
+  sanitizeJuliusSegmentState,
 } from './julius-segment-lineage';
 import {
+  JULIUS_CHECKPOINT_LIMITS,
   guidanceSubjectTaskId, issueJuliusGuidance, juliusCheckpointId, juliusGuidanceId, juliusGuidanceTaskId,
+  juliusResearchCheckpointId,
   recordJuliusCheckpoint, routeJuliusCheckpoint, sanitizeJuliusGuidanceProposal, sanitizeJuliusGuidanceRequest,
   type JuliusCheckpointOrigin,
 } from './julius-continuous-lifecycle';
+import { isJuliusResearchRole } from './julius-research-policy';
+import {
+  JULIUS_RESEARCH_ASK_VERSION, renderJuliusResearchResume, sanitizeJuliusResearchAsks,
+  type JuliusResearchObservationRecord, type JuliusResearchPort,
+} from './julius-research-protocol';
 import { evaluateJuliusAllocation, type JuliusAllocationPolicy, type JuliusExecutionAllocation } from './julius-allocation-runtime';
 import { JULIUS_RUNTIME_VERSION, type JuliusBrainEntry, type JuliusRecordedDecision, type JuliusTask, type JuliusVerificationDecision, type JuliusWorker, type JuliusWorkerRole } from './julius-runtime';
 import { validateJuliusEvent, type JuliusOperationalEvent, type JuliusOperationalEventType } from './julius-events';
@@ -130,6 +138,15 @@ export interface JuliusPipelineDependencies {
    * its own conservative default — Mission 2's grant reaches nobody else.
    */
   readonly allocation?: JuliusAllocationPolicy;
+  /**
+   * HOW JULIUS GOES AND LOOKS, when the composition has bound one.
+   *
+   * Absent, a research ask from any slot is recorded and refused as
+   * `RESEARCH_UNSERVED` and the mission continues — the same safe default the
+   * guidance path takes when no worker serves `guidance`. A mission is never
+   * stalled on a question nothing can answer.
+   */
+  readonly research?: JuliusResearchPort;
   /** Whoever holds the lease. Recorded on every event for attribution. */
   readonly owner: string;
   /** Context budget in characters. Compiling is bounded, never open-ended. */
@@ -1022,11 +1039,16 @@ export async function runClaimedTask(
   }
 
   /* ------------------------------- 3b. the continuous three-worker lifecycle */
-  if (!outcome.duplicate && (outcome.guidanceRequest !== undefined || outcome.guidance !== undefined)) {
+  if (!outcome.duplicate && (
+    outcome.guidanceRequest !== undefined
+    || outcome.guidance !== undefined
+    || outcome.researchAsks !== undefined
+  )) {
     await driveContinuousLifecycle({
       deps, run, ledger, task, request, workerId: outcome.workerId,
       ...(outcome.guidanceRequest === undefined ? {} : { guidanceRequest: outcome.guidanceRequest }),
       ...(outcome.segmentResume === undefined ? {} : { segmentResume: outcome.segmentResume }),
+      ...(outcome.researchAsks === undefined ? {} : { researchAsks: outcome.researchAsks }),
       ...(outcome.guidance === undefined ? {} : { guidance: outcome.guidance }),
     });
   }
@@ -1068,11 +1090,35 @@ async function driveContinuousLifecycle(input: {
   readonly guidanceRequest?: unknown;
   readonly guidance?: unknown;
   readonly segmentResume?: unknown;
+  readonly researchAsks?: unknown;
 }): Promise<void> {
   const { deps, run, ledger, task } = input;
 
   if (input.guidance !== undefined) {
     await issueGuidanceFromResult(input);
+  }
+
+  /**
+   * A DISPATCH YIELDS FOR ONE REASON, and research wins when both arrive.
+   *
+   * Julius can answer a research ask itself, immediately and cheaply; guidance
+   * costs the architect a turn. A worker holding both is usually a worker that
+   * will not need the second once it has the first, and minting two
+   * continuations for one subject would collide on the segment number and
+   * silently drop one of them. The guidance request is RECORDED as deferred
+   * rather than discarded, so the record says what the worker asked for.
+   */
+  if (input.researchAsks !== undefined) {
+    const yielded = await driveResearchCheckpoint(input);
+    if (yielded) {
+      if (input.guidanceRequest !== undefined) {
+        await ledger.event('guidance.deferred', {
+          taskId: task.taskId, workerId: input.workerId,
+          facts: { reasonCode: 'RESEARCH_YIELD_TOOK_THE_SEGMENT' },
+        });
+      }
+      return;
+    }
   }
 
   if (input.guidanceRequest === undefined) return;
@@ -1282,7 +1328,9 @@ async function driveContinuousLifecycle(input: {
    * REJECTED; a segment boundary means the coder needed something. Sharing one
    * bound would let honest collaboration exhaust a ceiling set for failure.
    */
-  const segmentNumber = nextSegmentNumber(task, tasks);
+  // COUNTED AGAINST THE UNIT OF WORK, not against the most recent pause in it.
+  const segmentRoot = juliusSegmentLineageRootOf(task, tasks);
+  const segmentNumber = nextSegmentNumber(segmentRoot, tasks);
   const segmentCeiling = input.request.verification.maxCoderSegments ?? JULIUS_DEFAULT_MAX_CODER_SEGMENTS;
   if (created && routeIsBarrier(routing.route) && segmentNumber > segmentCeiling) {
     await ledger.event('checkpoint.verdict', {
@@ -1298,9 +1346,11 @@ async function driveContinuousLifecycle(input: {
   if (created && routeIsBarrier(routing.route)) {
     const resume = sanitizeJuliusSegmentState(input.segmentResume);
     const continuation: JuliusTask = {
-      taskId: juliusSegmentTaskId(subjectTaskId, segmentNumber),
+      taskId: juliusSegmentTaskId(segmentRoot.taskId, segmentNumber),
       missionId: task.missionId,
-      parentTaskId: subjectTaskId,
+      // The ROOT is the parent at every level, so the chain stays a chain and
+      // `segmentChildrenOf` can see every pause of one unit of work at once.
+      parentTaskId: segmentRoot.taskId,
       // THE WHOLE BARRIER IS THIS ONE EDGE.
       dependencyIds: [guidanceTask.taskId],
       requiredEvidenceTypes: task.requiredEvidenceTypes,
@@ -1357,6 +1407,209 @@ async function driveContinuousLifecycle(input: {
       continuationTaskId, barrier: routeIsBarrier(routing.route),
     },
   });
+}
+
+/**
+ * JULIUS GOES AND LOOKS, ON BEHALF OF WHICHEVER SLOT ASKED.
+ *
+ * The only checkpoint route that schedules no worker, because retrieval is
+ * Julius's own act rather than somebody else's turn. It is still a BARRIER, and
+ * that is the whole reason it is here rather than on the result of the dispatch
+ * that asked: the asking dispatch has ENDED, the observation exists before the
+ * continuation is created, and the continuation is the only place the answer
+ * appears. An observation handed back to a worker that already finished would
+ * be a citation, not research, and every proof of "the worker asked" would pass
+ * while the property that matters was false.
+ *
+ * Returns true when this dispatch's yield was research — meaning a continuation
+ * exists and the guidance branch must not mint a second one for the same
+ * subject.
+ */
+async function driveResearchCheckpoint(input: {
+  readonly deps: JuliusPipelineDependencies;
+  readonly run: JuliusRunRow;
+  readonly ledger: RuntimeLedger;
+  readonly task: JuliusTask;
+  readonly request: JuliusPipelineRequest;
+  readonly workerId: string;
+  readonly researchAsks?: unknown;
+  readonly segmentResume?: unknown;
+}): Promise<boolean> {
+  const { deps, run, ledger, task } = input;
+  const subjectTaskId = task.taskId;
+  const tasks = await deps.store.tasksForRun(run.runId, run.projectId);
+
+  // The same durable counter the guidance path uses, read from the rows that
+  // exist rather than from a field a restart would lose, and counted against
+  // the unit of work rather than against the most recent pause in it.
+  const segmentRoot = juliusSegmentLineageRootOf(task, tasks);
+  const segmentNumber = nextSegmentNumber(segmentRoot, tasks);
+  const asks = sanitizeJuliusResearchAsks(input.researchAsks);
+
+  const contractTaskId = juliusContractSubjectTaskId(task, tasks);
+  const contract = contractTaskId === null
+    ? null
+    : await deps.store.loadTaskContract({ projectId: run.projectId, taskId: contractTaskId });
+  const binding = contract === null ? null : juliusTaskContractBinding(contract);
+
+  const recorded = recordJuliusCheckpoint({
+    checkpointId: juliusResearchCheckpointId(subjectTaskId, segmentNumber),
+    runId: run.runId,
+    taskId: subjectTaskId,
+    sequence: segmentNumber,
+    trigger: 'RESEARCH_REQUESTED',
+    origin: originForRole(task.role),
+    binding,
+    evidenceIds: [],
+    // The worker's own bounded words about what it needs to know. An unusable
+    // ask still gets a checkpoint, because "a worker asked for something Julius
+    // could not read" is a fact worth having in the record.
+    safeSummary: asks === null
+      ? 'A worker asked Julius to research something and its request could not be read.'
+      : asks.map((item) => item.purpose).join(' | ').slice(0, JULIUS_CHECKPOINT_LIMITS.summaryChars),
+    recordedAt: deps.clock.now(),
+  });
+  if (recorded.outcome === 'REFUSED') {
+    await ledger.event('research.refused', {
+      taskId: subjectTaskId, workerId: input.workerId,
+      facts: { reasonCode: recorded.reasonCode, stage: 'checkpoint' },
+    });
+    return false;
+  }
+  const checkpoint = recorded.checkpoint;
+  await ledger.event('checkpoint.recorded', {
+    taskId: subjectTaskId, workerId: input.workerId,
+    facts: {
+      checkpointId: checkpoint.checkpointId, trigger: checkpoint.trigger, origin: checkpoint.origin,
+      sequence: checkpoint.sequence, evidenceCount: 0,
+      contractRevision: binding?.contractRevision ?? null,
+      contractBindingDigest: binding?.bindingDigest ?? null,
+    },
+  });
+
+  const refuse = async (reasonCode: string): Promise<boolean> => {
+    await ledger.event('checkpoint.verdict', {
+      taskId: subjectTaskId, workerId: input.workerId,
+      facts: {
+        checkpointId: checkpoint.checkpointId, route: 'CONTINUE', reasonCode,
+        wouldHaveRouted: 'SERVE_RESEARCH', continuationTaskId: null, barrier: false,
+      },
+    });
+    return false;
+  };
+
+  if (asks === null) return refuse('RESEARCH_ASK_UNREADABLE');
+
+  const routing = routeJuliusCheckpoint({
+    checkpoint, verdict: null, guidanceInFlight: false, contractState: contract?.state ?? null,
+  });
+  if (routing.route !== 'SERVE_RESEARCH') return refuse(`RESEARCH_ROUTED_${routing.route}`);
+
+  /**
+   * NO PORT MEANS NO RESEARCH, RECORDED AND CARRIED PAST.
+   *
+   * The lesson `scheduleRepair` bought on paid run 34037313976: work minted for
+   * something nothing serves does not fail, it SITS. A mission is never stalled
+   * on a question Julius has no way to answer.
+   */
+  if (deps.research === undefined) return refuse('RESEARCH_UNSERVED');
+  if (!isJuliusResearchRole(task.role)) return refuse('RESEARCH_ROLE_UNSUPPORTED');
+
+  // The same ceiling the guidance barrier answers to, counted from the same
+  // rows. A worker that asks at every segment would otherwise mint a
+  // continuation forever and the mission would never complete.
+  const segmentCeiling = input.request.verification.maxCoderSegments ?? JULIUS_DEFAULT_MAX_CODER_SEGMENTS;
+  if (segmentNumber > segmentCeiling) return refuse('SEGMENT_CEILING_REACHED');
+
+  const observations = await deps.research.serve({
+    missionId: task.missionId,
+    projectId: run.projectId,
+    runId: run.runId,
+    taskId: subjectTaskId,
+    role: task.role,
+    asks,
+    requestedAt: deps.clock.now(),
+  });
+
+  const continuation: JuliusTask = {
+    taskId: juliusSegmentTaskId(segmentRoot.taskId, segmentNumber),
+    missionId: task.missionId,
+    parentTaskId: segmentRoot.taskId,
+    /**
+     * BLOCKED ON THE SUBJECT ITSELF, which is the only edge there is when no
+     * second worker is involved. It releases through `evaluateJuliusRelease`
+     * exactly as every other dependency does: when the yielded segment is
+     * SUCCEEDED and effectively accepted, and never while it is halted or
+     * being repaired. No new pause primitive, and nothing that depends on a
+     * model agreeing to wait.
+     */
+    dependencyIds: [subjectTaskId],
+    requiredEvidenceTypes: task.requiredEvidenceTypes,
+    taskType: task.taskType,
+    role: task.role,
+    ordinal: task.ordinal + 2,
+    state: 'BLOCKED',
+  };
+  const created = await deps.store.addTask({
+    commandId: `segment:${continuation.taskId}`,
+    runId: run.runId, projectId: run.projectId, task: continuation,
+  });
+
+  if (created) {
+    const resume = sanitizeJuliusSegmentState(input.segmentResume);
+    const answer = renderJuliusResearchResume({
+      version: JULIUS_RESEARCH_ASK_VERSION,
+      askedAtCheckpointId: checkpoint.checkpointId,
+      observations,
+    });
+    /**
+     * THE ANSWER TRAVELS THE PROJECT BRAIN, scoped to the continuation, exactly
+     * as the architect's question does. One context compiler, one redaction
+     * path, one provenance record, and no prose side channel — and the entry is
+     * guarded by the continuation's own idempotent write, so a replayed tick
+     * adds neither the task nor the entry and the brain revision does not drift.
+     */
+    await deps.store.appendBrainEntry({
+      runId: run.runId,
+      projectId: run.projectId,
+      taskId: continuation.taskId,
+      workerId: input.workerId,
+      entryId: `brain:research-answer:${continuation.taskId}`,
+      kind: 'HANDOFF',
+      safeText: [
+        resume === null
+          ? 'This segment resumes work paused to research something. No usable record of what the previous segment completed was supplied; re-establish the state from the workspace before continuing.'
+          : [
+            `RESUMING AFTER RESEARCH CHECKPOINT: ${checkpoint.checkpointId}`,
+            `COMPLETED IN THE PREVIOUS SEGMENT: ${resume.completedSoFar.join(' | ') || '(nothing stated)'}`,
+            `INTENDED NEXT: ${resume.nextIntent}`,
+          ].join('\n'),
+        '',
+        answer,
+      ].join('\n'),
+      evidenceIds: observations.flatMap(
+        (observation: JuliusResearchObservationRecord) => (observation.evidenceId === null ? [] : [observation.evidenceId]),
+      ),
+      occurredAt: deps.clock.now(),
+    });
+  }
+
+  await ledger.event('checkpoint.verdict', {
+    taskId: subjectTaskId, workerId: input.workerId,
+    facts: {
+      checkpointId: checkpoint.checkpointId, route: routing.route, reasonCode: routing.reasonCode,
+      continuationTaskId: created ? continuation.taskId : null,
+      barrier: true,
+      segment: segmentNumber,
+      asks: asks.length,
+      // Every outcome, in order, so the record distinguishes four observed
+      // pages from four refusals without reading the evidence.
+      outcomes: observations.map((observation) => observation.outcome).join(','),
+      evidence: observations.filter((observation) => observation.evidenceId !== null).length,
+      signalled: observations.filter((observation) => observation.injectionSignals.length > 0).length,
+    },
+  });
+  return true;
 }
 
 /** `PROMPT_ARCHITECT` → itself; anything Julius does not recognise observes as JULIUS. */

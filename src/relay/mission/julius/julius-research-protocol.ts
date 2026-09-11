@@ -189,6 +189,35 @@ export function renderJuliusResearchResume(resume: JuliusResearchResume): string
   return lines.join('\n').trimEnd();
 }
 
+/* ------------------------------------------------------------- the port */
+
+/**
+ * HOW JULIUS GOES AND LOOKS, declared by the domain and supplied by whoever
+ * composes the runtime.
+ *
+ * The domain names the shape it needs and a composition root binds Live Reach
+ * to it — the same inversion every connector already uses, and the reason this
+ * module has no network, no clock and no Node in it. An implementation is
+ * OPTIONAL on purpose: with none registered, a research ask is recorded and
+ * refused as `RESEARCH_UNSERVED` and the mission carries on, exactly as an
+ * unroutable guidance task is recorded and carried past rather than left
+ * RUNNABLE forever.
+ *
+ * IT RETURNS OBSERVATIONS, NEVER BODIES. An implementation that handed back raw
+ * retrieved text would have no field to put it in.
+ */
+export interface JuliusResearchPort {
+  serve(input: {
+    readonly missionId: string;
+    readonly projectId: string;
+    readonly runId: string;
+    readonly taskId: string;
+    readonly role: JuliusResearchRole;
+    readonly asks: readonly JuliusResearchAsk[];
+    readonly requestedAt: string;
+  }): Promise<readonly JuliusResearchObservationRecord[]>;
+}
+
 /* --------------------------------------------------- when sources disagree */
 
 /**

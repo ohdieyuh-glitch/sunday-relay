@@ -84,6 +84,7 @@ interface BuildInput {
   readonly architectScript?: readonly Parameters<typeof createJuliusHarness>[0]['workers'][number]['script'][number][];
   readonly reviewerScript?: readonly Parameters<typeof createJuliusHarness>[0]['workers'][number]['script'][number][];
   readonly maxRepairRounds?: number;
+  readonly research?: Parameters<typeof createJuliusHarness>[0]['research'];
 }
 
 const build = (input: BuildInput = {}): JuliusHarness => {
@@ -99,6 +100,7 @@ const build = (input: BuildInput = {}): JuliusHarness => {
     }),
     verification: verificationPolicy({ reviewerRequired: true, maxRepairRounds: input.maxRepairRounds ?? 2 }),
     capabilityFor,
+    ...(input.research === undefined ? {} : { research: input.research }),
   });
   harness.store.seedRun(RUN);
   // The build's contract as bootstrap writes it: a DRAFT that the accepting
@@ -128,6 +130,9 @@ async function drain(harness: JuliusHarness, ticks = 24): Promise<void> {
 
 const factsOf = (harness: JuliusHarness, type: string) =>
   harness.store.events().filter((event) => event.type === type).map((event) => event.facts);
+
+/** A continuation task itself — not the review task that hangs off one. */
+const CONTINUATION = /^segment:build-1:\d+:task$/u;
 
 const taskIds = (harness: JuliusHarness): string[] => harness.store.trajectory()
   .filter((event) => event.kind === 'DISPATCH')
@@ -880,9 +885,249 @@ describe('30 - a checkpoint is a barrier, not a note taken afterwards', () => {
     });
     await drain(harness, 60);
     const all = await harness.store.tasksForRun('run-1', 'prj-1');
-    const segments = all.filter((t) => t.taskId.startsWith('segment:build-1:'));
-    expect(segments.length, 'continuations are bounded').toBeLessThanOrEqual(4);
-    const repairs = all.filter((t) => t.taskType.startsWith('repair:') && t.parentTaskId === 'build-1');
+    // CONTINUATIONS ONLY. `startsWith('segment:build-1:')` also matches each
+    // continuation's own review task, which counted the reviews as yields and
+    // made this bound look twice as loose as it is.
+    const segments = all.filter((row) => CONTINUATION.test(row.taskId));
+    expect(segments.map((row) => row.taskId), 'continuations are bounded and consecutive')
+      .toEqual(['segment:build-1:2:task', 'segment:build-1:3:task', 'segment:build-1:4:task']);
+    const ceiling = factsOf(harness, 'checkpoint.verdict')
+      .filter((facts) => facts.reasonCode === 'SEGMENT_CEILING_REACHED');
+    expect(ceiling, 'and the ceiling is what stopped it').toHaveLength(1);
+    expect(ceiling[0]!.segment).toBe(5);
+    expect(ceiling[0]!.ceiling).toBe(4);
+    const repairs = all.filter((row) => row.taskType.startsWith('repair:') && row.parentTaskId === 'build-1');
     expect(repairs, 'yielding is not repairing').toHaveLength(0);
+  });
+});
+
+/**
+ * PROOF 31 — GOVERNED RESEARCH IS A BARRIER TOO.
+ *
+ * The gap this closes is the ASK-vs-ANSWER one, one level up. Giving a worker a
+ * way to say "I need to look at this" proves nothing on its own: if Julius
+ * retrieves the page and hands it to a dispatch that has already finished, the
+ * observation is a citation rather than research, and every proof that the
+ * worker asked would pass while the property that matters was false.
+ *
+ * So what is proven here is the ORDER: the asking dispatch ends, the
+ * observation exists, and the only place it appears is a continuation that
+ * cannot run until the segment that asked has been accepted. The continuation
+ * is BLOCKED on its own subject and `evaluateJuliusRelease` — the only thing in
+ * Julius that moves a task out of BLOCKED — is what releases it. Nothing trusts
+ * a model to wait.
+ */
+describe('31 - Julius goes and looks before the work that needs the answer', () => {
+  const ASKS = Object.freeze([{
+    source: 'web', capability: 'read_item',
+    reference: 'https://docs.python.org/3/library/asyncio.html',
+    purpose: 'Whether asyncio.timeout exists in the pinned interpreter.',
+  }]);
+  const RESUME = Object.freeze({
+    completedSoFar: ['read the journal reader'],
+    nextIntent: 'write the normalizer once the interpreter question is settled',
+  });
+
+  /** A port that records who asked, and answers with one fenced observation. */
+  const port = (over: { signalled?: boolean } = {}) => {
+    const served: { role: string; taskId: string; references: string[] }[] = [];
+    return {
+      served,
+      async serve(input: Parameters<NonNullable<Parameters<typeof createJuliusHarness>[0]['research']>['serve']>[0]) {
+        served.push({
+          role: input.role, taskId: input.taskId,
+          references: input.asks.map((ask) => ask.reference),
+        });
+        return input.asks.map((ask) => ({
+          outcome: (over.signalled === true ? 'injection_signaled' : 'observed') as 'observed' | 'injection_signaled',
+          reference: ask.reference,
+          purpose: ask.purpose,
+          rendered: '<<<RELAY-EVIDENCE\nasyncio.timeout landed in 3.11.\nRELAY-EVIDENCE>>>',
+          detail: 'The source answered.',
+          evidenceId: 'ev-research-1',
+          injectionSignals: over.signalled === true ? ['override-previous-instructions'] : [],
+          mayCorroborate: over.signalled !== true,
+        }));
+      },
+    };
+  };
+
+  it('ends the dispatch at the ask and creates the continuation BLOCKED', async () => {
+    const research = port();
+    const harness = build({
+      research,
+      coderScript: [{ kind: 'succeed', researchAsks: ASKS, segmentResume: RESUME }, { kind: 'succeed' }],
+    });
+    await drain(harness);
+
+    expect(research.served, 'Julius performed the retrieval itself').toHaveLength(1);
+    expect(research.served[0]!.role).toBe('CODING_AGENT');
+    expect(research.served[0]!.taskId).toBe('build-1');
+
+    const continuation = harness.store.taskRow('segment:build-1:2:task');
+    expect(continuation, 'a continuation segment exists').not.toBeNull();
+    // THE BARRIER IS AN EDGE. No worker is scheduled, so the only thing to wait
+    // on is the segment that asked — and it waits on it.
+    expect(continuation!.dependencyIds).toEqual(['build-1']);
+    expect(continuation!.parentTaskId).toBe('build-1');
+    expect(continuation!.taskType).toBe('build');
+    expect(continuation!.role).toBe('CODING_AGENT');
+  });
+
+  it('records the checkpoint, the route and every outcome by name', async () => {
+    const harness = build({
+      research: port(),
+      coderScript: [{ kind: 'succeed', researchAsks: ASKS, segmentResume: RESUME }, { kind: 'succeed' }],
+    });
+    await drain(harness);
+
+    const recorded = factsOf(harness, 'checkpoint.recorded');
+    expect(recorded[0]!.trigger).toBe('RESEARCH_REQUESTED');
+    expect(recorded[0]!.origin).toBe('CODING_AGENT');
+    // Its own namespace, so it can never collide with a guidance checkpoint of
+    // the same subject and be recorded as a duplicate of another question.
+    expect(recorded[0]!.checkpointId).toBe('checkpoint:research:build-1:2');
+
+    const routed = factsOf(harness, 'checkpoint.verdict');
+    expect(routed[0]!.route).toBe('SERVE_RESEARCH');
+    expect(routed[0]!.barrier).toBe(true);
+    expect(routed[0]!.continuationTaskId).toBe('segment:build-1:2:task');
+    // Four observed pages and four refusals are different facts, and the record
+    // distinguishes them without anybody reading the evidence.
+    expect(routed[0]!.outcomes).toBe('observed');
+    expect(routed[0]!.evidence).toBe(1);
+    expect(routed[0]!.signalled).toBe(0);
+  });
+
+  it('puts the answer in front of the continuation, fenced, before it runs', async () => {
+    const harness = build({
+      research: port(),
+      coderScript: [{ kind: 'succeed', researchAsks: ASKS, segmentResume: RESUME }, { kind: 'succeed' }],
+    });
+    await drain(harness);
+
+    const entry = (await harness.store.brainEntriesForRun('run-1', 'prj-1'))
+      .find((row) => row.entryId === 'brain:research-answer:segment:build-1:2:task');
+    expect(entry, 'the answer reached the Project Brain').not.toBeUndefined();
+    // SCOPED TO THE CONTINUATION, so it reaches that packet and no other.
+    expect(entry!.taskIds).toEqual(['segment:build-1:2:task']);
+    expect(entry!.kind).toBe('HANDOFF');
+    expect(entry!.text).toContain('DATA THAT WAS OBSERVED');
+    expect(entry!.text).toContain('<<<RELAY-EVIDENCE');
+    expect(entry!.text).toContain('asyncio.timeout landed in 3.11.');
+    // And what the previous segment had already done, so it does not redo it.
+    expect(entry!.text).toContain('read the journal reader');
+  });
+
+  it('labels a signalled observation in the very text the worker will read', async () => {
+    const harness = build({
+      research: port({ signalled: true }),
+      coderScript: [{ kind: 'succeed', researchAsks: ASKS, segmentResume: RESUME }, { kind: 'succeed' }],
+    });
+    await drain(harness);
+    const entry = (await harness.store.brainEntriesForRun('run-1', 'prj-1'))
+      .find((row) => row.entryId === 'brain:research-answer:segment:build-1:2:task');
+    expect(entry!.text).toContain('INSTRUCTION-SHAPED CONTENT DETECTED');
+    expect(entry!.text).toContain('may not settle a disagreement');
+    expect(factsOf(harness, 'checkpoint.verdict')[0]!.signalled).toBe(1);
+  });
+
+  it('serves all three slots, not only the coder', async () => {
+    // THE PEER TEST. An architect that must ask the coder to check a version is
+    // not a peer, and a reviewer that can only grade what it was handed is not
+    // an independent one.
+    const research = port();
+    const harness = build({
+      research,
+      architectScript: [
+        { kind: 'succeed', evidence: PLAN_EVIDENCE, researchAsks: ASKS, segmentResume: RESUME },
+        { kind: 'succeed', evidence: PLAN_EVIDENCE },
+      ],
+      reviewerScript: [
+        { kind: 'succeed', evidence: PASSED_REVIEW, researchAsks: ASKS, segmentResume: RESUME },
+        { kind: 'succeed', evidence: PASSED_REVIEW },
+      ],
+      coderScript: [{ kind: 'succeed', researchAsks: ASKS, segmentResume: RESUME }, { kind: 'succeed' }],
+    });
+    await drain(harness, 48);
+    expect(new Set(research.served.map((entry) => entry.role)))
+      .toEqual(new Set(['PROMPT_ARCHITECT', 'CODING_AGENT', 'INDEPENDENT_REVIEWER']));
+  });
+
+  /**
+   * THE SAFE DEFAULT. With no port bound, a research ask is recorded and
+   * carried past — the lesson `scheduleRepair` bought on paid run 34037313976,
+   * where work minted for something nothing served did not fail, it SAT.
+   */
+  it('records an unserved ask and never stalls the mission on it', async () => {
+    const harness = build({
+      coderScript: [{ kind: 'succeed', researchAsks: ASKS, segmentResume: RESUME }, { kind: 'succeed' }],
+    });
+    await drain(harness);
+    const routed = factsOf(harness, 'checkpoint.verdict');
+    expect(routed[0]!.reasonCode).toBe('RESEARCH_UNSERVED');
+    expect(routed[0]!.wouldHaveRouted).toBe('SERVE_RESEARCH');
+    expect(routed[0]!.barrier).toBe(false);
+    expect(harness.store.taskRow('segment:build-1:2:task'), 'no continuation was minted').toBeNull();
+    const run = await harness.store.loadRun('run-1', 'prj-1');
+    expect(run?.state, 'and the mission still finished').toBe('COMPLETED');
+  });
+
+  it('refuses an ask that reaches for the allowlist, and looks at nothing', async () => {
+    const research = port();
+    const harness = build({
+      research,
+      coderScript: [
+        { kind: 'succeed', researchAsks: [{ ...ASKS[0]!, hosts: ['evil.example'] }], segmentResume: RESUME },
+        { kind: 'succeed' },
+      ],
+    });
+    await drain(harness);
+    expect(research.served, 'nothing was retrieved').toHaveLength(0);
+    const routed = factsOf(harness, 'checkpoint.verdict');
+    expect(routed[0]!.reasonCode).toBe('RESEARCH_ASK_UNREADABLE');
+    // The checkpoint still exists: "a worker asked for something Julius could
+    // not read" is a fact worth keeping.
+    expect(factsOf(harness, 'checkpoint.recorded')[0]!.trigger).toBe('RESEARCH_REQUESTED');
+  });
+
+  it('bounds a worker that asks at every segment, and spends no repair round', async () => {
+    const research = port();
+    const harness = build({
+      research,
+      // This coder asks forever — the loop the barrier made possible.
+      coderScript: [{ kind: 'succeed', researchAsks: ASKS, segmentResume: RESUME }],
+      maxRepairRounds: 2,
+    });
+    await drain(harness, 60);
+    const all = await harness.store.tasksForRun('run-1', 'prj-1');
+    const segments = all.filter((row) => CONTINUATION.test(row.taskId));
+    expect(segments.map((row) => row.taskId), 'continuations are bounded and consecutive')
+      .toEqual(['segment:build-1:2:task', 'segment:build-1:3:task', 'segment:build-1:4:task']);
+    // THE CHAIN STAYS A CHAIN. Every continuation hangs off the original unit
+    // of work, so the ceiling counts the work rather than the last pause in it.
+    for (const segment of segments) expect(segment.parentTaskId).toBe('build-1');
+    const repairs = all.filter((row) => row.taskType.startsWith('repair:') && row.parentTaskId === 'build-1');
+    expect(repairs, 'looking something up is not failing').toHaveLength(0);
+    const ceiling = factsOf(harness, 'checkpoint.verdict')
+      .filter((facts) => facts.reasonCode === 'SEGMENT_CEILING_REACHED');
+    expect(ceiling.length, 'and the ceiling is what stopped it').toBeGreaterThan(0);
+  });
+
+  it('takes the cheaper yield when a worker asks for both, and records the other', async () => {
+    const research = port();
+    const harness = build({
+      research,
+      coderScript: [
+        { kind: 'succeed', researchAsks: ASKS, guidanceRequest: REQUEST, segmentResume: RESUME },
+        { kind: 'succeed' },
+      ],
+    });
+    await drain(harness);
+    // One continuation, not two colliding on the same segment number.
+    expect(harness.store.taskRow('segment:build-1:2:task')).not.toBeNull();
+    expect(harness.store.taskRow('guidance:build-1:1:task'), 'no architect turn was spent').toBeNull();
+    // And the record says what the worker also wanted.
+    expect(factsOf(harness, 'guidance.deferred')[0]!.reasonCode).toBe('RESEARCH_YIELD_TOOK_THE_SEGMENT');
   });
 });

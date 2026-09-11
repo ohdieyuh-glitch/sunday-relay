@@ -31,6 +31,7 @@ import { fixedResourceEstimate, juliusContractSubjectTaskId, type JuliusPipeline
 import { JuliusRunLoop, type JuliusPolicySource, type JuliusRunLoopConfig } from './julius-run-loop';
 import type { JuliusBudgetPort, JuliusClock, JuliusIdFactory } from './julius-runtime-ports';
 import type { JuliusAllocationPolicy } from './julius-allocation-runtime';
+import type { JuliusResearchPort } from './julius-research-protocol';
 
 /* ---------------------------------------------------------------- clock */
 
@@ -157,6 +158,8 @@ export type ScriptedOutcome =
     readonly guidance?: unknown;
     /** What a coder's next segment resumes from. Unsanitised, for the same reason. */
     readonly segmentResume?: unknown;
+    /** What this worker needs Julius to go and look at. Unsanitised, for the same reason. */
+    readonly researchAsks?: unknown;
   }
   /** `costUsdMicros` is what the boundary billed before it failed, as its diagnostics would carry. */
   | {
@@ -224,6 +227,7 @@ export function scriptedAdapter(
         ...(step.guidanceRequest === undefined ? {} : { guidanceRequest: step.guidanceRequest }),
         ...(step.guidance === undefined ? {} : { guidance: step.guidance }),
         ...(step.segmentResume === undefined ? {} : { segmentResume: step.segmentResume }),
+        ...(step.researchAsks === undefined ? {} : { researchAsks: step.researchAsks }),
       };
       return result;
     },
@@ -270,6 +274,8 @@ export function createJuliusHarness(input: {
   readonly budgetUsdMicros?: number;
   /** An allocation policy for the pipeline; absent, dispatches reserve the fixed estimate. */
   readonly allocation?: JuliusAllocationPolicy;
+  /** How Julius goes and looks; absent, a research ask is recorded as unserved. */
+  readonly research?: JuliusResearchPort;
   readonly config?: Partial<JuliusRunLoopConfig>;
   readonly owner?: string;
   readonly capabilityFor?: (task: { taskId: string; taskType: string; role: string }) => string;
@@ -296,6 +302,7 @@ export function createJuliusHarness(input: {
     store, router, budget, clock, ids,
     resources: fixedResourceEstimate({ usdMicros: 2_000, inputTokens: 100, outputTokens: 100, toolCalls: 1, runtimeMs: 1_000 }),
     ...(input.allocation === undefined ? {} : { allocation: input.allocation }),
+    ...(input.research === undefined ? {} : { research: input.research }),
     owner: input.owner ?? 'worker-a',
     contextCharacterBudget: 4_000,
   };
