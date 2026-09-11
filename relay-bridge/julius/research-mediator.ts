@@ -213,7 +213,11 @@ export interface JuliusResearchResult {
 export interface JuliusResearchMediator {
   research(request: JuliusResearchRequest): Promise<JuliusResearchResult>;
   /** What each slot has spent so far. Empty for a mission that has asked nothing. */
-  ledgerFor(missionId: string): JuliusResearchLedger;
+  /**
+   * The spend so far. Async because it may be a projection over durable rows
+   * rather than a lookup in this process — which is the whole point.
+   */
+  ledgerFor(missionId: string): Promise<JuliusResearchLedger>;
 }
 
 export interface JuliusResearchMediatorDeps {
@@ -226,6 +230,15 @@ export interface JuliusResearchMediatorDeps {
   readonly liveReach: LiveReachService;
   readonly now: () => string;
   /** Deployment readiness and settings, passed through unchanged. */
+  /**
+   * The spend, read back from durable truth instead of from this process.
+   *
+   * Supplied by the composition, which is the only thing that has both the
+   * mission and the store. Absent keeps the in-memory Map, so a caller that has
+   * no durable substrate still gets a cap — just one that ends with the process,
+   * and says so.
+   */
+  readonly durableLedger?: (request: JuliusResearchRequest) => Promise<JuliusResearchLedger>;
   readonly retrievalContext?: (request: JuliusResearchRequest) => {
     readonly settings?: Parameters<LiveReachService['retrieve']>[0]['settings'];
     readonly probes?: Parameters<LiveReachService['retrieve']>[0]['probes'];
@@ -237,18 +250,33 @@ export function createJuliusResearchMediator(
   deps: JuliusResearchMediatorDeps,
 ): JuliusResearchMediator {
   /**
-   * Per-mission ledgers, held for the process lifetime.
+   * Per-mission ledgers.
    *
-   * NOT DURABLE, and the consequence is stated rather than hidden: a bridge
-   * restart forgets what a slot has already spent, so a research budget binds
-   * within a process rather than across one. That is the same honest limit the
-   * Live Reach meter already carries, and it is worth more than no cap at all.
+   * IN MEMORY ONLY WHEN NOTHING DURABLE IS BOUND, and that case is now the
+   * fallback rather than the design. A Map held for the process lifetime meant
+   * a bridge restart forgot what every slot had already spent and the budget
+   * began again at zero — a budget that binds within a process is not a budget,
+   * it is a rate limit on one machine's uptime.
+   *
+   * When `durableLedger` is supplied the spend is PROJECTED from the run's own
+   * `research.retrieved` rows, which is the same shape the slot ledger already
+   * uses for money: no second table to drift, and a restarted process replays
+   * to the same position because the rows are the position.
    */
   const ledgers = new Map<string, JuliusResearchLedger>();
-  const ledgerFor = (missionId: string): JuliusResearchLedger =>
-    ledgers.get(missionId) ?? emptyJuliusResearchLedger(missionId);
+  /**
+   * The spend for the mission this request belongs to.
+   *
+   * It takes the REQUEST rather than the mission id because a durable
+   * projection needs the run and the project to read the ledger at all — the
+   * event stream is per run, and a mission id alone cannot address it.
+   */
+  const ledgerForRequest = async (request: JuliusResearchRequest): Promise<JuliusResearchLedger> => {
+    if (deps.durableLedger !== undefined) return deps.durableLedger(request);
+    return ledgers.get(request.missionId) ?? emptyJuliusResearchLedger(request.missionId);
+  };
 
-  const settle = (
+  const settle = async (
     request: JuliusResearchRequest,
     outcome: JuliusResearchOutcome,
     parts: {
@@ -262,10 +290,10 @@ export function createJuliusResearchMediator(
       /** What Live Reach actually charged, when Live Reach ran at all. */
       readonly charged?: MeteredOutcome;
     },
-  ): JuliusResearchResult => {
+  ): Promise<JuliusResearchResult> => {
     const artifact = parts.artifact ?? null;
     const metered = parts.charged ?? OUTCOME_METER[outcome];
-    const ledger = recordJuliusResearch(ledgerFor(request.missionId), request.role, {
+    const ledger = recordJuliusResearch(await ledgerForRequest(request), request.role, {
       source: request.source,
       outcome: metered,
       bytes: parts.bytes ?? null,
@@ -300,12 +328,16 @@ export function createJuliusResearchMediator(
   };
 
   return {
-    ledgerFor,
+    // The in-memory view, for a caller with no durable substrate. A durable
+    // deployment reads the rows instead and this stays empty, which is honest:
+    // nothing was kept here.
+    ledgerFor: async (missionId: string) =>
+      ledgers.get(missionId) ?? emptyJuliusResearchLedger(missionId),
 
     async research(request) {
       const policy = deps.policyFor(request.missionId);
       const verdict = authorizeJuliusResearch({
-        request, policy, ledger: ledgerFor(request.missionId),
+        request, policy, ledger: await ledgerForRequest(request),
       });
 
       if (!verdict.ok) {

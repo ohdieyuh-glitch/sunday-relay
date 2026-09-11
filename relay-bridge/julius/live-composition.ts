@@ -27,7 +27,7 @@ import {
   JuliusRunLoop,
   JuliusWorkerRegistry,
   fixedResourceEstimate,
-  juliusAllocationPolicy,
+  juliusSharedCeilingPolicy,
   type JuliusBudgetPort,
   type JuliusCardPolicy,
   type JuliusClaimedTask,
@@ -43,8 +43,40 @@ import {
   type JuliusResearchPolicy,
 } from '../../src/relay/mission/julius';
 import { createJuliusResearchMediator, juliusResearchPortFrom } from './research-mediator';
+import type { MeteredOutcome } from '../../src/relay/mission/live-reach';
+
+/**
+ * What a recorded research outcome COST, rebuilt from the durable row.
+ *
+ * Deliberately conservative: only the two outcomes that provably never left the
+ * process — a policy refusal and an exhausted budget — are free. Everything
+ * else reached something, and a projection that guessed otherwise would let a
+ * restarted mission re-spend a budget it had already used. An outcome this
+ * build does not recognise is charged rather than ignored, for the same reason.
+ */
+export function meteredFromJuliusOutcome(outcome: unknown): MeteredOutcome {
+  switch (outcome) {
+    case 'policy_refused':
+    case 'budget_exhausted':
+      return 'not_attempted';
+    case 'observed':
+    // A signalled page was still fetched. The signal is about trust, not cost.
+    case 'injection_signaled':
+      return 'observed';
+    case 'throttled': return 'throttled';
+    case 'unauthenticated': return 'unauthenticated';
+    case 'unsupported_content': return 'answered_unusable';
+    case 'unreachable': return 'unreachable';
+    default: return 'unreachable';
+  }
+}
+import {
+  emptyJuliusResearchLedger, isJuliusResearchRole, recordJuliusResearch,
+  type JuliusResearchRequest,
+} from '../../src/relay/mission/julius';
 import type { JuliusTimelineReader } from '../../src/relay/mission/julius';
 import { createLiveReachService } from '../live-reach-service';
+import type { BackendProbe } from '../../src/relay/mission/live-reach';
 import {
   evaluateReadiness,
   readGptArchitectConfig,
@@ -460,6 +492,25 @@ export function assembleLiveJuliusRuntime(options: {
   readonly researchPolicyFor?: (missionId: string) => JuliusResearchPolicy;
   /** Injected in tests so the whole mediated path runs without a network. */
   readonly researchFetch?: typeof fetch;
+  /**
+   * WHICH BACKENDS HAVE ACTUALLY BEEN SEEN TO ANSWER, which is a different
+   * question from what this mission is allowed to read.
+   *
+   * Live Reach refuses a capability no backend has been OBSERVED serving —
+   * `capability_unavailable`, decided before the mission allowlist is even
+   * consulted. That gate is right: "this mission authorises reading a page"
+   * and "Relay has a backend that can read a page" are separate facts, and a
+   * mission may not assert the second by wanting the first.
+   *
+   * It was also, until this was wired, unconditional: the composition never
+   * supplied probes, so EVERY governed retrieval was refused whatever the
+   * mission authorised. The seam existed on the mediator and only a test ever
+   * reached it.
+   *
+   * Absent still means refused — the default stays closed, and an operator
+   * supplying an observed probe is asserting something they have seen.
+   */
+  readonly researchProbes?: readonly BackendProbe[];
 }): LiveJuliusRuntime {
   const registry = new JuliusWorkerRegistry();
   const adapters = new Map<string, JuliusProviderAdapter>();
@@ -501,13 +552,27 @@ export function assembleLiveJuliusRuntime(options: {
       toolCalls: 10, runtimeMs: 300_000,
     }),
     /**
-     * THE MISSION CONTRACT GOVERNS THE CODING AGENT'S SPEND. The same two
-     * contract fields that seed the run budget and the repair bound derive
-     * the per-dispatch allocation: each Coding Agent round may spend an equal
-     * share of `spendUsd` over the build and every authorised repair round,
-     * never more than remains. See docs/JULIUS_PAID_RUN_34037313976_REPAIRS.md.
+     * THE MISSION CONTRACT GOVERNS EVERY SLOT'S SPEND, not just the coder's.
+     *
+     * The same two contract fields still derive it — `spendUsd` is the ceiling
+     * and `repairCycles` the authorised repair rounds — but the rule is now v3:
+     * each peer holds a protected floor no other slot may take, everything
+     * above the floors is one shared pool, and a dispatch draws its own unspent
+     * floor plus whatever of that pool is genuinely free.
+     *
+     * WHY NOT v1: it has no per-slot dimension at all, so the coder drew an
+     * equal share of the whole ceiling and the peers took a flat estimate out
+     * of the same pot — one worker with two commentators.
+     *
+     * WHY NOT v2: it capped every dispatch at one per-round share of a per-slot
+     * envelope. On this repository's own figures that cap is 2,499,750 and
+     * Mission 5's first dispatch really settled 5,177,120, so v2 would have
+     * refused to fund work that actually happened while peer money sat unspent
+     * and out of reach.
+     *
+     * See docs/JULIUS_PAID_RUN_34037313976_REPAIRS.md for the original rule.
      */
-    allocation: juliusAllocationPolicy({
+    allocation: juliusSharedCeilingPolicy({
       ceilingUsdMicros: options.spendCeilingUsdMicros, authorizedRepairRounds: options.maxRepairRounds,
     }),
     /**
@@ -528,6 +593,54 @@ export function assembleLiveJuliusRuntime(options: {
         ...(options.researchFetch === undefined ? {} : { fetchImpl: options.researchFetch }),
       }),
       now: () => new Date().toISOString(),
+      /**
+       * THE RESEARCH SPEND, READ BACK FROM THE RUN'S OWN ROWS.
+       *
+       * Bound only when the store can serve a timeline; otherwise the mediator
+       * keeps its in-process Map and says so. The projection is a left fold of
+       * `recordJuliusResearch` over the `research.retrieved` rows, which is the
+       * same function the live path charges with — one rule, two readers, so
+       * they cannot disagree. A restarted process replays to the same position
+       * because the rows ARE the position.
+       */
+      ...(typeof (options.store as { timeline?: unknown }).timeline === 'function'
+        ? {
+          durableLedger: async (request: JuliusResearchRequest) => {
+            const reader = options.store as unknown as JuliusTimelineReader;
+            let ledger = emptyJuliusResearchLedger(request.missionId);
+            let sinceSequence = 0;
+            for (;;) {
+              const page = await reader.timeline({
+                runId: request.runId, projectId: request.projectId, sinceSequence, limit: 500,
+              });
+              for (const entry of page.entries) {
+                sinceSequence = Math.max(sinceSequence, entry.sequence);
+                if (entry.type !== 'research.retrieved') continue;
+                const role = entry.facts.role;
+                if (typeof role !== 'string' || !isJuliusResearchRole(role)) continue;
+                ledger = recordJuliusResearch(ledger, role, {
+                  source: 'web',
+                  outcome: meteredFromJuliusOutcome(entry.facts.outcome),
+                  // The row does not carry a byte count, and a projection must
+                  // not invent one. Null is "not measured", which is exactly
+                  // what makes a byte budget report itself unenforceable rather
+                  // than silently pass.
+                  bytes: null,
+                  at: entry.occurredAt,
+                });
+              }
+              if (page.entries.length === 0 || !page.hasMore) break;
+            }
+            return ledger;
+          },
+        }
+        : {}),
+      // READINESS, NOT AUTHORITY. Handed through unchanged; the mission's own
+      // allowlist is decided separately and afterwards, so a probe can never
+      // widen what a mission may read.
+      ...(options.researchProbes === undefined
+        ? {}
+        : { retrievalContext: () => ({ probes: options.researchProbes }) }),
     })),
     /**
      * THE MONEY RECORD, READ BACK. The same store that writes `budget.reserved`

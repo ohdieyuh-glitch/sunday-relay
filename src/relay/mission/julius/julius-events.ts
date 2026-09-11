@@ -64,8 +64,15 @@ export const JULIUS_OPERATIONAL_EVENT_TYPES=[
   * dispatch and got the cheaper one, recorded rather than dropped so the record
   * says what it wanted. What research OBSERVED is on `checkpoint.verdict`,
   * outcome by outcome, because the observation belongs to the checkpoint that
-  * asked for it. */
- 'research.refused','guidance.deferred',
+  * asked for it.
+  *
+  * `research.retrieved` is the CHARGE, one row per observation, and it exists
+  * because the meter that enforces a research budget lived only in process
+  * memory: a bridge restart forgot what every slot had already spent and the
+  * budget began again from zero. The outcome names on `checkpoint.verdict` are
+  * an aggregate for a reader; these rows are what the ledger is rebuilt from,
+  * so they carry the role, the source and the metered outcome separately. */
+ 'research.refused','research.retrieved','guidance.deferred',
  /* PERSISTENT-WORKER EFFORT. One row per completed dispatch, carrying what the
   * provider actually reported and NOTHING inferred — an unreported token count
   * is null here rather than the zero the budget path substitutes, because a

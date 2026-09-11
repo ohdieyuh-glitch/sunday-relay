@@ -70,6 +70,10 @@ import {
   projectJuliusSlotLedger, reserveJuliusSlotCapacity,
   type JuliusBudgetRow, type JuliusMissionSlotLedger,
 } from './julius-slot-ledger';
+import {
+  JULIUS_SHARED_CEILING_VERSION, juliusSharedCeilingDraw, juliusSharedCeilingSourceFor,
+  type JuliusSharedCeilingPolicy,
+} from './julius-shared-ceiling';
 import type { JuliusTimelineReader } from './julius-runtime-api';
 import { JULIUS_RUNTIME_VERSION, type JuliusBrainEntry, type JuliusRecordedDecision, type JuliusTask, type JuliusVerificationDecision, type JuliusWorker, type JuliusWorkerRole } from './julius-runtime';
 import { validateJuliusEvent, type JuliusOperationalEvent, type JuliusOperationalEventType } from './julius-events';
@@ -147,7 +151,7 @@ export interface JuliusPipelineDependencies {
    * Absent, every dispatch reserves its fixed estimate and the adapter keeps
    * its own conservative default — Mission 2's grant reaches nobody else.
    */
-  readonly allocation?: JuliusAllocationPolicy | JuliusSlotEnvelopePolicy;
+  readonly allocation?: JuliusAllocationPolicy | JuliusSlotEnvelopePolicy | JuliusSharedCeilingPolicy;
   /**
    * HOW JULIUS GOES AND LOOKS, when the composition has bound one.
    *
@@ -670,6 +674,13 @@ export async function runClaimedTask(
   }
 
   let contextId: string | null = null;
+  /**
+   * WHAT JULIUS HANDED THIS DISPATCH, measured where it is known and carried to
+   * where it is recorded. Null until a context is compiled — a dispatch with no
+   * packet was handed nothing MEASURED, which is not the same as being handed
+   * nothing, so it stays unknown rather than becoming zero.
+   */
+  let handed: { brainRetrievals: number; evidenceInspected: number } | null = null;
   if (worker !== null) {
     // WORKER_SELECTED and PROVIDER_SELECTED were declared trajectory kinds
     // that nothing emitted, so an eval could not tell WHICH worker or provider
@@ -730,6 +741,30 @@ export async function runClaimedTask(
       findingIds: (priorFindings.length > 0 ? priorFindings : findings.filter((value) => value.taskId === task.taskId)).map((value) => value.findingId),
       acceptanceCriterionIds: criteria.map((value) => value.criterionId),
     });
+    /**
+     * WHAT THIS DISPATCH WAS ACTUALLY HANDED — the two effort dimensions Julius
+     * can measure itself, and the only point in the runtime that knows them.
+     *
+     * `maybe()` at the effort row reads `result.usage`, which is the PROVIDER's
+     * self-report. Neither of these is a provider fact: what reached a worker's
+     * packet is Julius's own act, so wiring them to `usage` left them permanently
+     * null. They are threaded to the effort row the way `allocated` already is.
+     *
+     * `brainRetrievals` counts the Project Brain entries that SURVIVED the
+     * character budget — `sourceEntryIds` is what fit, not what was offered —
+     * intersected with the brain array, because `entries` also carries the
+     * repair FINDING entries compiled beside it and those are not retrievals.
+     *
+     * `evidenceInspected` is a REFERENCE count, not a read receipt: evidence
+     * reaches a packet as a list of ids rather than as text, so this is
+     * "evidence this dispatch was shown", which is what the dimension claims
+     * and no more.
+     */
+    const brainEntryIds = new Set(brain.map((entry) => entry.entryId));
+    handed = {
+      brainRetrievals: snapshot.sourceEntryIds.filter((id) => brainEntryIds.has(id)).length,
+      evidenceInspected: snapshot.evidenceIds.length,
+    };
     /**
      * A REPAIR THAT CANNOT SEE ITS FINDINGS IS NOT A REPAIR.
      *
@@ -871,7 +906,13 @@ export async function runClaimedTask(
    * reached, rather than by an adapter refusing work it already did.
    */
   const allocation = await allocateFor({ deps, run, role, taskId: claim.taskId, estimateUsdMicros: estimate.usdMicros });
-  const resources: JuliusResourceRequest = allocation === null ? estimate : { ...estimate, usdMicros: allocation.usdMicros };
+  /**
+   * WHAT IS HELD, which is not always what is permitted. A rule that separates
+   * them says so with `reserveUsdMicros`; the rules that do not are unchanged.
+   */
+  const resources: JuliusResourceRequest = allocation === null
+    ? estimate
+    : { ...estimate, usdMicros: allocation.reserveUsdMicros ?? allocation.usdMicros };
   const dispatchAllocation = allocation === null ? undefined
     : { usdMicros: allocation.usdMicros, policyVersion: allocation.policyVersion, basis: allocation.basis };
   if (allocation !== null) {
@@ -879,7 +920,8 @@ export async function runClaimedTask(
   }
 
   const coordinator = new JuliusExecutionCoordinator(
-    deps.router, executionPorts(deps, run, ledger, allocation?.usdMicros ?? null),
+    deps.router,
+    executionPorts(deps, run, ledger, allocation?.usdMicros ?? null, handed),
   );
 
   /* ------------------------------------------------- reroute and fallback */
@@ -1543,6 +1585,23 @@ async function driveResearchCheckpoint(input: {
   const segmentCeiling = input.request.verification.maxCoderSegments ?? JULIUS_DEFAULT_MAX_CODER_SEGMENTS;
   if (segmentNumber > segmentCeiling) return refuse('SEGMENT_CEILING_REACHED');
 
+  /**
+   * THE CONTINUATION'S ID, DETERMINISTIC AND COMPUTED ONCE.
+   *
+   * A GUARD THAT WAS WRITTEN HERE AND REMOVED. It compared this id against the
+   * durable task rows to skip a retrieval that had already been served — and it
+   * could never fire, because `nextSegmentNumber` is the highest existing
+   * segment plus one, so the id is new by construction every time. Shipping it
+   * would have meant a comment claiming a protection the code did not provide.
+   *
+   * What the crash window between `serve()` and `addTask` actually costs is
+   * stated instead: a process that dies there has retrieved and been charged,
+   * and the restarted process asks again. Both retrievals happened and both are
+   * on the record as `research.retrieved` rows, so the budget counts two — which
+   * is the truth. Making it cost one would require the retrieval itself to be
+   * keyed and deduplicated at the transport, which Live Reach has no identity
+   * for today.
+   */
   const observations = await deps.research.serve({
     missionId: task.missionId,
     projectId: run.projectId,
@@ -1552,6 +1611,36 @@ async function driveResearchCheckpoint(input: {
     asks,
     requestedAt: deps.clock.now(),
   });
+
+  /**
+   * THE CHARGE, DURABLY, one row per observation.
+   *
+   * The research meter enforcing per-role and per-mission budgets lived in a
+   * Map on the mediator, keyed by mission and held for the process lifetime. A
+   * bridge restart forgot every retrieval a slot had made and the budget began
+   * again at zero — a budget that binds within a process is not a budget.
+   *
+   * These rows are the durable truth the meter is rebuilt from. `counted` is
+   * the metered outcome rather than the success: a retrieval that reached a
+   * host and was refused by it still spent something, and pretending otherwise
+   * is how a budget is exceeded while every individual read looks free.
+   */
+  for (const [index, observation] of observations.entries()) {
+    await ledger.event('research.retrieved', {
+      taskId: subjectTaskId, workerId: input.workerId,
+      facts: {
+        role: task.role,
+        // DETERMINISTIC, so a replayed row is recognisably the same retrieval
+        // rather than a second one.
+        requestKey: `${juliusSegmentTaskId(segmentRoot.taskId, segmentNumber)}:${index}`,
+        outcome: observation.outcome,
+        counted: observation.outcome === 'observed',
+        evidenceId: observation.evidenceId,
+        signalled: observation.injectionSignals.length,
+        segment: segmentNumber,
+      },
+    });
+  }
 
   const continuation: JuliusTask = {
     taskId: juliusSegmentTaskId(segmentRoot.taskId, segmentNumber),
@@ -1815,6 +1904,12 @@ function executionPorts(
   ledger: RuntimeLedger,
   /** What Julius reserved for this dispatch, so the effort row can name it. */
   allocated: number | null,
+  /**
+   * What Julius HANDED this dispatch. Measured at the context compile, which is
+   * the only place that knows it; absent for a caller that did not compile one,
+   * and absent reads as unknown rather than as zero.
+   */
+  handed: { readonly brainRetrievals: number; readonly evidenceInspected: number } | null,
 ): JuliusExecutionPorts {
   return {
     reserve: async ({ claim, request, idempotencyKey }) => {
@@ -1919,7 +2014,12 @@ function executionPorts(
           inputTokens: maybe('inputTokens'), outputTokens: maybe('outputTokens'),
           reasoningTokens: maybe('reasoningTokens'), toolCalls: maybe('toolCalls'),
           researchCalls: maybe('researchCalls'), activeMs: maybe('runtimeMs'),
-          providerCalls: maybe('providerCalls'), brainRetrievals: maybe('brainRetrievals'),
+          providerCalls: maybe('providerCalls'),
+          // JULIUS'S OWN MEASUREMENTS, not the provider's. Null when no context
+          // was compiled for this dispatch — never zero, which would claim the
+          // worker was handed nothing.
+          brainRetrievals: handed === null ? null : handed.brainRetrievals,
+          evidenceInspected: handed === null ? null : handed.evidenceInspected,
           usdMicros,
           // The two halves of the money question, on the same row: what Julius
           // permitted, and what came back — with the basis, so an UNKNOWN
@@ -2688,6 +2788,103 @@ async function allocateFor(input: {
   const remaining = input.deps.budget.available === undefined ? null
     : await input.deps.budget.available({ runId: input.run.runId, projectId: input.run.projectId, now: input.deps.clock.now() });
 
+  /**
+   * v3 — ONE SHARED CEILING WITH PROTECTED FLOORS.
+   *
+   * The ledger is REQUIRED here rather than preferred: this rule decides
+   * against what every slot currently holds, and a round count cannot see an
+   * outstanding reservation or a settlement that reported less than it held.
+   * With no timeline reader bound there is nothing honest to decide from, so it
+   * reports the estimate under its own basis rather than inventing a position.
+   */
+  if (policy.version === JULIUS_SHARED_CEILING_VERSION) {
+    const ledger = await projectSlotLedgerFor(input.deps, input.run, policy.ceilingUsdMicros, policy.version);
+    if (ledger === null || ledger.historicalPolicyConflict) {
+      return {
+        usdMicros: input.estimateUsdMicros, basis: 'ESTIMATE_NO_LEDGER',
+        shareUsdMicros: null, remainingUsdMicros: remaining,
+        policyVersion: policy.version, slot: input.role, slotEnvelopeUsdMicros: null,
+      };
+    }
+    const held: Record<string, number> = {};
+    for (const [slot, account] of Object.entries(ledger.bySlot)) {
+      held[slot] = account.outstandingUsdMicros
+        + account.settledKnownUsdMicros + account.settledUnknownUsdMicros;
+    }
+    const runTasks = await input.deps.store.tasksForRun(input.run.runId, input.run.projectId);
+    // COUNTED FROM THE RUN'S OWN ROWS, never from a field, so a restarted
+    // process reaches the same number.
+    const repairRoundsUsed = runTasks.filter((task) => task.taskType.startsWith('repair:')).length;
+    const draw = juliusSharedCeilingDraw({
+      policy, slot: input.role, heldBySlot: held,
+      unallocatedUsdMicros: ledger.unallocatedUsdMicros, repairRoundsUsed,
+    });
+    /**
+     * THE DRAW IS THE GRANT, and deliberately not the estimate.
+     *
+     * `resources` is a FIXED estimate — one number, 300,000, for every role in
+     * the live composition. It is a placeholder for the shape of a request, not
+     * a model of what a dispatch costs, and Mission 5's coder settled seventeen
+     * times it. Binding the grant to that number reintroduces exactly the
+     * starvation v3 exists to end, from a different direction: not a per-round
+     * cap, but a per-estimate one.
+     *
+     * So a slot is permitted what the mission can actually lend it right now.
+     * The costs of that are stated rather than hidden:
+     *
+     *   - a provider that REPORTS its cost closes the difference on settlement,
+     *     because a known settlement releases the unheld remainder;
+     *   - a provider that stays SILENT is charged the whole reservation, which
+     *     is the conservative rule this repository already runs under, and it
+     *     means a silent slot spends its draw whether or not it did the work.
+     *
+     * The second is why PERMISSION AND RESERVATION ARE SEPARATED HERE, and they
+     * were conflated in one line before this: `resources.usdMicros` became the
+     * allocation, so whatever a dispatch was permitted was also held, and
+     * whatever was held was what a silent provider consumed. Granting a peer
+     * its whole draw then cost the mission a third of its ceiling on one
+     * planning dispatch that reported nothing — which a test caught by asking
+     * whether the peers still had anything protected by the time the coder ran.
+     *
+     * So: `usdMicros` is what this dispatch may SPEND, bounded by what the
+     * mission can lend; `reserveUsdMicros` is what Julius HOLDS against it,
+     * which stays the estimate. A provider that reports closes the difference
+     * on settlement; a silent one consumes only what was actually held. Neither
+     * can exceed the mission, because the spend ceiling itself is the draw.
+     */
+    const granted = Math.floor(draw.maxDrawUsdMicros);
+    const reserved = Math.floor(Math.min(Math.max(0, input.estimateUsdMicros), draw.maxDrawUsdMicros));
+    const shared = {
+      sharedPoolUsdMicros: draw.sharedPoolUsdMicros,
+      protectedForPeersUsdMicros: draw.protectedForPeersUsdMicros,
+      repairReserveUsdMicros: draw.repairReserveUsdMicros,
+    };
+    if (granted <= 0) {
+      return {
+        usdMicros: 0, basis: 'EXHAUSTED', shareUsdMicros: draw.ownFloorRemainingUsdMicros,
+        remainingUsdMicros: remaining, policyVersion: policy.version, slot: input.role,
+        slotEnvelopeUsdMicros: draw.ownFloorRemainingUsdMicros,
+        unallocatedUsdMicros: ledger.unallocatedUsdMicros, ledgerRevision: ledger.revision,
+        slotRefusal: 'SHARED_CEILING_EXHAUSTED', ...shared,
+      };
+    }
+    return {
+      usdMicros: granted,
+      basis: juliusSharedCeilingSourceFor(granted, draw),
+      shareUsdMicros: draw.ownFloorRemainingUsdMicros,
+      remainingUsdMicros: remaining,
+      policyVersion: policy.version,
+      slot: input.role,
+      slotEnvelopeUsdMicros: draw.ownFloorRemainingUsdMicros,
+      slotRemainingUsdMicros: draw.ownFloorRemainingUsdMicros,
+      unallocatedUsdMicros: ledger.unallocatedUsdMicros,
+      ledgerRevision: ledger.revision,
+      slotRefusal: null,
+      reserveUsdMicros: reserved,
+      ...shared,
+    };
+  }
+
   if (policy.version !== JULIUS_SLOT_ENVELOPE_VERSION) {
     const v1 = evaluateJuliusAllocation({
       policy, role: input.role, remainingUsdMicros: remaining, estimateUsdMicros: input.estimateUsdMicros,
@@ -2813,6 +3010,25 @@ async function projectSlotLedger(
   run: JuliusRunRow,
   policy: JuliusSlotEnvelopePolicy,
 ): Promise<JuliusMissionSlotLedger | null> {
+  return projectSlotLedgerFor(deps, run, policy.ceilingUsdMicros, policy.version, policy);
+}
+
+/**
+ * The same projection for any policy version.
+ *
+ * v3 has no per-slot envelope of its own — its floors are a different shape —
+ * so it passes no policy and reads the accounts for what they are: what each
+ * slot holds, settled and unsettled. The envelope fields on those accounts are
+ * then zero, which is correct rather than missing: under v3 a slot's capacity
+ * is not an envelope.
+ */
+async function projectSlotLedgerFor(
+  deps: JuliusPipelineDependencies,
+  run: JuliusRunRow,
+  ceilingUsdMicros: number,
+  policyVersion: string,
+  policy: JuliusSlotEnvelopePolicy | null = null,
+): Promise<JuliusMissionSlotLedger | null> {
   if (deps.timeline === undefined) return null;
   const rows: JuliusBudgetRow[] = [];
   let sinceSequence = 0;
@@ -2831,8 +3047,8 @@ async function projectSlotLedger(
   return projectJuliusSlotLedger({
     runId: run.runId,
     policy,
-    policyVersion: policy.version,
-    ceilingUsdMicros: policy.ceilingUsdMicros,
+    policyVersion,
+    ceilingUsdMicros,
     rows,
   });
 }
@@ -2870,6 +3086,16 @@ interface JuliusDispatchDecision {
    * which has no per-slot ledger to refuse.
    */
   readonly slotRefusal?: string | null;
+  /**
+   * What Julius HOLDS for this dispatch, when that differs from what it may
+   * spend. Absent means the two are the same, which is what every rule before
+   * v3 assumed.
+   */
+  readonly reserveUsdMicros?: number;
+  /** v3 only: what was free, what was protected, what repairs still hold. */
+  readonly sharedPoolUsdMicros?: number;
+  readonly protectedForPeersUsdMicros?: number;
+  readonly repairReserveUsdMicros?: number;
 }
 
 const allocationFacts = (allocation: JuliusDispatchDecision): Record<string, string | number | null> => ({
@@ -2896,6 +3122,15 @@ const allocationFacts = (allocation: JuliusDispatchDecision): Record<string, str
   // refusing. Nulling the first would report v1 as a rule that considered this
   // dispatch and allowed it, which is not something v1 ever did.
   ...(allocation.slotRefusal === undefined ? {} : { slotRefusal: allocation.slotRefusal }),
+  ...(allocation.reserveUsdMicros === undefined ? {} : { reserveUsdMicros: allocation.reserveUsdMicros }),
+  // v3's three numbers, absent under the rules that do not have them — so a
+  // reader can tell "this rule protects peer capacity and here is how much"
+  // from "this rule has no such concept".
+  ...(allocation.sharedPoolUsdMicros === undefined ? {} : { sharedPoolUsdMicros: allocation.sharedPoolUsdMicros }),
+  ...(allocation.protectedForPeersUsdMicros === undefined
+    ? {} : { protectedForPeersUsdMicros: allocation.protectedForPeersUsdMicros }),
+  ...(allocation.repairReserveUsdMicros === undefined
+    ? {} : { repairReserveUsdMicros: allocation.repairReserveUsdMicros }),
 });
 
 /* ---------------------------------------------------- repair context */

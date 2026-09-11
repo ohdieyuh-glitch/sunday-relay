@@ -38,6 +38,8 @@ export interface JuliusSlotDispatchRow {
   readonly role: string;
   readonly taskType: string | null;
   readonly facts: Readonly<Record<string, unknown>>;
+  /** The ledger position of this dispatch, absent when the row carried none. */
+  readonly sequence?: number;
 }
 
 /**
@@ -71,6 +73,25 @@ export interface JuliusSlotParticipation {
   readonly rows: readonly JuliusReportRow[];
 }
 
+/**
+ * WHEN THIS SLOT WAS ACTUALLY WORKING, as ledger positions in order.
+ *
+ * The question the paid proof has to answer is not "did this worker appear"
+ * but "did it participate THROUGHOUT" — and a set of totals cannot tell a slot
+ * that did everything in the first two minutes from one that kept re-entering
+ * as the mission evolved. A sorted list of positions can.
+ *
+ * `positions` is one entry per dispatch. `span` is the first and last, so a
+ * reader sees the reach without scanning. Both are EMPTY, never zero-filled,
+ * for a slot whose rows carried no sequence.
+ */
+export interface JuliusSlotChronology {
+  readonly positions: readonly number[];
+  readonly span: { readonly first: number; readonly last: number } | null;
+  /** Dispatches whose row carried no ledger position, so nothing is invented. */
+  readonly unpositioned: number;
+}
+
 export interface JuliusSlotReportEntry {
   readonly slot: string;
   /** Money: envelope, rounds, outstanding, settled, remaining, borrowed. */
@@ -79,6 +100,8 @@ export interface JuliusSlotReportEntry {
   readonly effort: JuliusSlotEffort | null;
   /** Participation: what this slot asked for, and what Julius did about it. */
   readonly participation: JuliusSlotParticipation;
+  /** When this slot worked, in ledger order. */
+  readonly chronology: JuliusSlotChronology;
   /** The rows the totals were built from. */
   readonly dispatches: readonly JuliusSlotDispatchRow[];
 }
@@ -121,6 +144,24 @@ export interface JuliusSlotMissionReport {
    */
   readonly unattributedCheckpoints: readonly JuliusReportRow[];
   /**
+   * THE MISSION, READ END TO END — every dispatch in ledger order, with the
+   * slot that made it.
+   *
+   * This is the shape the founder's claim is argued from: `A R C A R C R` is a
+   * mission three peers worked through together; `A A A R C C C` is a mission
+   * where the architect front-loaded and left. The totals are identical in both
+   * and only this can tell them apart.
+   *
+   * Dispatches whose row carried no ledger position are NOT placed here — they
+   * are counted per slot as `unpositioned`, because a guessed position would be
+   * indistinguishable from a measured one.
+   */
+  readonly interleaving: readonly {
+    readonly slot: string;
+    readonly sequence: number;
+    readonly taskId: string | null;
+  }[];
+  /**
    * THE DERIVED READING, AND IT IS DERIVED. Kept beside the raw dimensions
    * rather than instead of them, and named so nobody mistakes it for a grade.
    */
@@ -135,6 +176,23 @@ export interface JuliusReportRow {
   readonly type: string;
   readonly taskId: string | null;
   readonly facts: Readonly<Record<string, unknown>>;
+  /**
+   * THE LEDGER'S OWN POSITION FOR THIS ROW, and the reason this report can say
+   * anything about WHEN.
+   *
+   * `JuliusTimelineEntry.sequence` has always carried it — a per-run monotonic
+   * counter the event ledger allocates on append, `UNIQUE(stream_id, sequence)`
+   * in PostgreSQL and the same contract in memory. It is emphatically NOT
+   * `occurredAt`: several events routinely share a millisecond under the
+   * production clock, so a wall-clock sort has no deterministic tiebreak and
+   * cannot answer "which came first" at all.
+   *
+   * Optional because a caller handing over rows from somewhere other than the
+   * timeline genuinely has no position, and an ABSENT position must read as
+   * unknown rather than as zero — a row at "position 0" would sort before
+   * everything and silently invent a history.
+   */
+  readonly sequence?: number;
 }
 
 /**
@@ -185,6 +243,7 @@ export function buildJuliusSlotMissionReport(input: {
       role,
       taskType: typeof row.facts.taskType === 'string' ? row.facts.taskType : null,
       facts: row.facts,
+      ...(row.sequence === undefined ? {} : { sequence: row.sequence }),
     });
     dispatchesBySlot.set(role, list);
     if (row.taskId !== null) roleByTaskId.set(row.taskId, role);
@@ -246,16 +305,24 @@ export function buildJuliusSlotMissionReport(input: {
     ...Object.keys(ledger.bySlot),
     ...dispatchesBySlot.keys(),
   ]);
+  const interleaving: { slot: string; sequence: number; taskId: string | null }[] = [];
   const bySlot: Record<string, JuliusSlotReportEntry> = {};
   for (const slot of slots) {
+    const dispatches = dispatchesBySlot.get(slot) ?? [];
+    for (const dispatch of dispatches) {
+      if (dispatch.sequence === undefined) continue;
+      interleaving.push({ slot, sequence: dispatch.sequence, taskId: dispatch.taskId });
+    }
     bySlot[slot] = Object.freeze({
       slot,
       ledger: ledger.bySlot[slot] ?? null,
       effort: effort.bySlot[slot] ?? null,
       participation: summarizeParticipation(participationRows.get(slot) ?? []),
-      dispatches: Object.freeze(dispatchesBySlot.get(slot) ?? []),
+      chronology: summarizeChronology(dispatches),
+      dispatches: Object.freeze(dispatches),
     });
   }
+  interleaving.sort((a, b) => a.sequence - b.sequence);
 
   return Object.freeze({
     version: JULIUS_SLOT_REPORT_VERSION,
@@ -277,6 +344,7 @@ export function buildJuliusSlotMissionReport(input: {
       rows: Object.freeze(dispositionRows),
     }),
     unattributedCheckpoints: Object.freeze(unattributedCheckpoints),
+    interleaving: Object.freeze(interleaving),
     parity: Object.freeze({
       ratioToCoder: effort.ratioToCoder,
       observed: effort.verdict,
@@ -324,5 +392,30 @@ function summarizeParticipation(rows: readonly JuliusReportRow[]): JuliusSlotPar
     barriers,
     continuations,
     rows: Object.freeze([...rows]),
+  });
+}
+
+/**
+ * One slot's dispatch positions, in order.
+ *
+ * Sorted rather than trusted in arrival order: the rows reach this function
+ * grouped by slot, and grouping is not ordering.
+ */
+function summarizeChronology(dispatches: readonly JuliusSlotDispatchRow[]): JuliusSlotChronology {
+  const positions: number[] = [];
+  let unpositioned = 0;
+  for (const dispatch of dispatches) {
+    if (dispatch.sequence === undefined) { unpositioned += 1; continue; }
+    positions.push(dispatch.sequence);
+  }
+  positions.sort((a, b) => a - b);
+  return Object.freeze({
+    positions: Object.freeze(positions),
+    // NULL, NOT {first:0,last:0}. A slot nobody could place has no span, and a
+    // zeroed one would read as a slot that worked at the very beginning.
+    span: positions.length === 0
+      ? null
+      : Object.freeze({ first: positions[0]!, last: positions[positions.length - 1]! }),
+    unpositioned,
   });
 }

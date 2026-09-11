@@ -327,7 +327,7 @@ describe('the envelope has a cost, and here is exactly what it is', () => {
     expect(v2Share * (1 + REPAIR_ROUNDS)).toBeLessThan(CEILING);
   });
 
-  it('keeps the live composition on v1 until that decision is made', async () => {
+  it('has moved the live composition to v3, and to neither of its predecessors', async () => {
     const { assembleLiveJuliusRuntime } = await import('../../../../relay-bridge/julius/live-composition');
     expect(typeof assembleLiveJuliusRuntime, 'the live composition root exists').toBe('function');
     // Read as source rather than by running the assembler, which needs a store,
@@ -336,8 +336,14 @@ describe('the envelope has a cost, and here is exactly what it is', () => {
     const source = readFileSync(
       new URL('../../../../relay-bridge/julius/live-composition.ts', import.meta.url), 'utf8',
     );
-    expect(source, 'the live path still allocates under v1').toContain('juliusAllocationPolicy({');
-    expect(source, 'and has not silently switched to v2').not.toContain('juliusSlotEnvelopePolicy({');
+    // v3 FUNDS THE WORK v2 WOULD HAVE REFUSED. The figures two tests above are
+    // the reason: v2's per-dispatch cap sits below Mission 5's real first
+    // dispatch, and no amount of unspent peer money could reach it.
+    expect(source, 'the live path allocates under v3').toContain('juliusSharedCeilingPolicy({');
+    expect(source, 'and not under v1, which has no per-slot dimension at all')
+      .not.toContain('juliusAllocationPolicy({');
+    expect(source, 'and not under v2, whose per-dispatch cap is the starvation')
+      .not.toContain('juliusSlotEnvelopePolicy({');
   });
 });
 
