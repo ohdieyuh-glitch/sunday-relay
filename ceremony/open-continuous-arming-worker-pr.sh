@@ -11,16 +11,16 @@
 #   * origin/main is still the trusted base
 #   * the branch head is the exact frozen head
 #   * the tree matches
-#   * there are exactly 17 commits above main
+#   * there are exactly 21 commits above main
 #   * every commit's AUTHOR and COMMITTER are julius-worker[bot]
 set -euo pipefail
 
 REPO='ohdieyuh-glitch/sunday-relay'
 BRANCH='relay/julius-continuous-arming'
 BASE='9eab011735130ab382868854ed05b24756765da3'
-HEAD='b0c0a83db00ec1bd2b6d353dc483782f997459f9'
-TREE='427736bef2794578a236cbf3e53cd464af7e7afb'
-COMMITS=17
+HEAD='19245fff7e3d61f9954c35ab64007f845a119d9b'
+TREE='b3bb5d77a5bf520b81ffde50ffc9cbe08508920b'
+COMMITS=21
 WORKER='julius-worker[bot]'
 # RESOLVED AGAINST THE SCRIPT, NOT THE WORKING DIRECTORY. The README says to run
 # this as `bash ceremony/open-...-pr.sh` from the repository root, where a bare
