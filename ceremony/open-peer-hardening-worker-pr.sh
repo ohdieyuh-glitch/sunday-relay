@@ -108,13 +108,27 @@ open_count="$(curl -sS -H "Authorization: token $TOKEN" -H 'Accept: application/
 [ "$open_count" = 0 ] || { echo "a PR for $BRANCH is already open — STOP" >&2; exit 1; }
 
 echo '== creating the pull request =='
-payload="$(python3 - "$BODY_FILE" <<'PY'
-import json, sys
+# THE TITLE COMES FROM THE BODY'S OWN HEADING, never from a literal here.
+#
+# A literal is what a copied opener carries forward silently. This one did:
+# the peer-hardening ceremony opened its PR titled "the continuous-worker
+# architecture, armed" — the PREVIOUS candidate's title — because the SHAs and
+# the body filename were re-pinned and the title was not. Nothing verified it,
+# because nothing could: a title is not a SHA. Deriving it from the first `# `
+# line of the body makes the two unable to disagree.
+#
+# The branch comes from $BRANCH for the same reason: one place to re-pin.
+payload="$(BRANCH="$BRANCH" python3 - "$BODY_FILE" <<'PY'
+import json, os, sys
+body = open(sys.argv[1], encoding="utf-8").read()
+title = next((line[2:].strip() for line in body.splitlines() if line.startswith("# ")), None)
+if not title:
+    sys.exit("PR body has no `# ` heading to take a title from — STOP")
 print(json.dumps({
-  "title": "Julius: the continuous-worker architecture, armed",
-  "head": "relay/julius-peer-hardening",
+  "title": title,
+  "head": os.environ["BRANCH"],
   "base": "main",
-  "body": open(sys.argv[1], encoding="utf-8").read(),
+  "body": body,
   "maintainer_can_modify": False,
 }))
 PY
