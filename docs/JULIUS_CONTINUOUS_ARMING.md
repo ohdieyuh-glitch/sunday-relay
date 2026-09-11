@@ -92,6 +92,36 @@ specification.
 
 ## 4. Two findings that are decisions, not bugs
 
+### 4.0 The money is now wired, and the wiring found a 67% overspend
+
+Allocation v2 decides against the run's own durable budget rows rather than a
+proxy for them: `budget.reserved` carries its role and amount, `budget.settled`
+says whether the hold was RELEASED, and the per-slot accounts are **projected**
+from those rows — no table, no drift from the money record, and a restarted
+process re-reads the same events and reaches the same accounts. Where no
+timeline reader is bound the round-counting fallback remains and reports an
+`_ESTIMATED_FROM_ROUNDS` basis, so a reader can tell a decision made against the
+money from one made against a proxy.
+
+**An unknown settlement is not a refund.** It converts the hold rather than
+releasing it — the money leaves `outstanding` and enters `settledUnknown`, where
+it is still gone. The cost is stated: a slot whose provider is silent is charged
+what it RESERVED, which over-charges the mission's own accounting and never
+under-charges it. `RESERVED_UNSETTLED` joins the cost vocabulary for money held
+and not yet accounted for.
+
+**A ceiling test found a 67% overspend.** Every slot settling UNKNOWN for forty
+rounds committed 49,998,000 against a 30,000,000 ceiling. The reserve rule
+checked mission capacity only when BORROWING — on the reasoning that the
+envelopes sum to the ceiling, so a slot inside its own envelope cannot overspend.
+That is false the moment anyone borrows: the borrower spends an envelope some
+other slot has not started, and that slot's `remainingOwnEnvelope`, a per-slot
+view, still counts the same dollar as its own. Every grant is now bounded by
+what the MISSION has left.
+
+A historical run is read under the rule it ran beneath. The ledger records every
+policy the run's own rows name and refuses to make a v2 decision over v1 rows.
+
 ### 4.1 Allocation v2 would have starved Mission 5's coder
 
 Under v1 the Coding Agent's share is the **whole** ceiling divided by its
@@ -165,7 +195,21 @@ path reads the verdict, so nothing here can cause synthetic work.
   production cannot serve passes while proving something else, which is the
   most expensive kind of green. Verified by mutation: adding `review:cleanup`
   to one drill fails the guard by name.
-- **Mutation campaign**: 24 mutations across the research policy, the protocol,
+- **Budget and telemetry mutations**: 25 across the slot ledger, the effort
+  summariser, the report and the pipeline — v1/v2 confusion, slot
+  misclassification, unknown cost read as zero, double borrowing, the
+  concurrency race, a stale reservation after a restart, one slot taking
+  another's hold, the export dropping a slot, null metrics coerced to zero, a
+  ratio with a missing denominator, and a historical run reinterpreted under v2.
+  **23 killed.** The two survivors were proven EQUIVALENT rather than missed, by
+  applying each and diffing the output: dropping the `accounts.set` inside
+  `accountFor` (the caller sets the account on the same row) and removing
+  `JULIUS_BUDGET_SLOTS` from the report's slot set (the projection seeds all
+  three peers regardless). Byte-identical both times. Six earlier survivors were
+  real test gaps and were closed — the worst was a ceiling proof that passed
+  only because its fixture's borrowing landed on exactly zero, where the outer
+  refusal already stops everything.
+- **Research mutations**: 24 across the research policy, the protocol,
   the segment lineage, the slot envelope, the reviewer adapter, the Live Reach
   service and the pipeline. 22 caught on the first pass; both survivors were
   investigated and were real test gaps:

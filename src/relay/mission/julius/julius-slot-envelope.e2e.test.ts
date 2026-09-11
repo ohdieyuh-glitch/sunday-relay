@@ -239,6 +239,19 @@ describe('every dispatch says what it actually spent, and what it could not meas
       expect(row.facts.reasoningTokens).toBeNull();
       expect(row.facts.researchCalls).toBeNull();
     }
+
+    // WHAT JULIUS PERMITTED IS NOT WHAT CAME BACK, and the row keeps them
+    // apart. A mutation that copied one into the other survived every earlier
+    // assertion, because nothing compared them on a REAL dispatch — and a
+    // bundle that conflated them would report every mission as having spent
+    // exactly its allocation.
+    const coderRow = rows.find((row) => row.facts.role === 'CODING_AGENT');
+    expect(coderRow, 'the coder dispatched').toBeDefined();
+    const allocation = harness.store.events()
+      .find((event) => event.type === 'budget.allocated' && event.facts.role === 'CODING_AGENT');
+    expect(coderRow!.facts.allocatedUsdMicros).toBe(allocation!.facts.allocatedUsdMicros);
+    expect(coderRow!.facts.allocatedUsdMicros).not.toBe(coderRow!.facts.settledUsdMicros);
+    expect(coderRow!.facts.settlementBasis).toBe('PROVIDER_REPORTED');
   });
 
   it('summarises those rows through the one mapping that wrote them', async () => {
@@ -324,5 +337,98 @@ describe('the envelope has a cost, and here is exactly what it is', () => {
     );
     expect(source, 'the live path still allocates under v1').toContain('juliusAllocationPolicy({');
     expect(source, 'and has not silently switched to v2').not.toContain('juliusSlotEnvelopePolicy({');
+  });
+});
+
+/**
+ * TWO PIPELINE-LEVEL CASES SURVIVING MUTATIONS EXPOSED.
+ *
+ * Both guards live in the pipeline rather than in the pure ledger, and neither
+ * had a test that ran the pipeline — so each could be deleted with every suite
+ * still green.
+ */
+describe('the pipeline refuses to reinterpret a run it did not allocate', () => {
+  it('falls back rather than deciding v2 against a run whose rows say v1', async () => {
+    const harness = build(juliusSlotEnvelopePolicy({
+      ceilingUsdMicros: CEILING, authorizedRepairRounds: REPAIR_ROUNDS, maxCoderSegments: SEGMENTS,
+    }));
+    // A row from this run's own history, naming the rule it actually ran under.
+    await harness.store.appendEvent({
+      eventId: 'legacy-allocation', runId: 'run-1', projectId: 'prj-1',
+      type: 'budget.allocated', taskId: 'build-1', workerId: null,
+      correlationId: 'legacy', causationId: null, occurredAt: '2026-08-01T00:00:00.000Z',
+      facts: { role: 'CODING_AGENT', allocationPolicy: 'julius-allocation.v1' },
+    });
+    await drain(harness);
+
+    const allocated = harness.store.events().filter((event) => event.type === 'budget.allocated'
+      && event.eventId !== 'legacy-allocation');
+    expect(allocated.length).toBeGreaterThan(0);
+    for (const event of allocated) {
+      // THE TELL. A ledger-backed decision reports a SOURCE — SLOT_SHARE,
+      // SLOT_REMAINDER or REALLOCATED. A fallback reports the round-counted
+      // basis, and says so in its own name rather than looking identical.
+      expect(String(event.facts.allocationBasis), 'the decision did not come from the v1 run\'s ledger')
+        .toMatch(/_ESTIMATED_FROM_ROUNDS$/u);
+    }
+  });
+});
+
+describe('a dispatch that never reached a provider gives its money back', () => {
+  it('states the disposition on every closing row, and a run that billed releases nothing', async () => {
+    const harness = build(juliusSlotEnvelopePolicy({
+      ceilingUsdMicros: CEILING, authorizedRepairRounds: REPAIR_ROUNDS, maxCoderSegments: SEGMENTS,
+    }));
+    await drain(harness);
+
+    const settled = harness.store.events().filter((event) => event.type === 'budget.settled');
+    expect(settled.length, 'every reservation closed').toBeGreaterThan(0);
+    for (const event of settled) {
+      // EVERY settlement says whether it handed the money back. Without the
+      // field, anything projected from these rows sees holds that never end.
+      expect(typeof event.facts.released, `${String(event.taskId)} states its disposition`).toBe('boolean');
+    }
+    // A completed dispatch never releases: it either reported an amount or it
+    // did not, and neither answer hands the money back.
+    expect(settled.every((event) => event.facts.released === false)).toBe(true);
+  });
+
+  it('frees the hold when the attempt never billed, and keeps it when it did', async () => {
+    const failing = createJuliusHarness({
+      workers: [
+        { worker: ARCHITECT, script: [PLAN_OK] },
+        { worker: CODER, script: [{ kind: 'fail', code: 'PROVIDER_UNAVAILABLE' }, BUILD_OK] },
+        { worker: REVIEWER, script: [REVIEW_OK] },
+      ],
+      card: cardPolicy({
+        allowedProviders: ['openai', 'anthropic', 'hermes'],
+        capabilities: ['plan', 'implement', 'review'], concurrency: 1,
+      }),
+      verification: verificationPolicy({ reviewerRequired: true, maxRepairRounds: REPAIR_ROUNDS }),
+      capabilityFor,
+      budgetUsdMicros: CEILING,
+      allocation: juliusSlotEnvelopePolicy({
+        ceilingUsdMicros: CEILING, authorizedRepairRounds: REPAIR_ROUNDS, maxCoderSegments: SEGMENTS,
+      }),
+    });
+    failing.store.seedRun(RUN);
+    seedTaskContractInto(failing.store, { runId: 'run-1', projectId: 'prj-1', taskId: 'build-1' });
+    failing.store.seedTask('run-1', task({ taskId: 'plan-1', ordinal: 0, role: 'PROMPT_ARCHITECT', taskType: 'plan', requiredEvidenceTypes: ['ARTIFACT'] }));
+    failing.store.seedTask('run-1', task({
+      taskId: 'build-1', ordinal: 1, role: 'CODING_AGENT', taskType: 'build',
+      state: 'BLOCKED', dependencyIds: ['plan-1'], requiredEvidenceTypes: ['TEST'],
+    }));
+    failing.store.seedCriteria('run-1', [{ criterionId: 'ac-1', description: 'The suite passes.', requiredEvidenceTypes: ['TEST'] }]);
+    await drain(failing);
+
+    const released = failing.store.events()
+      .filter((event) => event.type === 'budget.settled' && event.facts.released === true);
+    expect(released.length, 'the unbilled attempt handed its money back').toBeGreaterThan(0);
+    expect(released[0]!.facts.usdMicros, 'and it billed nothing').toBeNull();
+    // The dispatch that DID bill kept its hold: a release and a settlement are
+    // different closing rows, and the failure must not free the success's money.
+    const billed = failing.store.events()
+      .filter((event) => event.type === 'budget.settled' && event.facts.released === false);
+    expect(billed.length, 'the billed dispatch closed without a release').toBeGreaterThan(0);
   });
 });

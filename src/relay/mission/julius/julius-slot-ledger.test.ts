@@ -370,3 +370,74 @@ describe('a historical run is not reinterpreted under a rule it never ran beneat
     expect(withDecision.revision).toBe(without.revision);
   });
 });
+
+/**
+ * THE CASES SIX SURVIVING MUTATIONS EXPOSED.
+ *
+ * Each one below exists because a guard could be deleted without any assertion
+ * noticing. Two further mutations survived and were EQUIVALENT rather than
+ * missed: dropping the `accounts.set` inside `accountFor` (the caller sets the
+ * account on the same row, so the map ends identical), and removing
+ * `JULIUS_BUDGET_SLOTS` from the report's slot set (the projection seeds all
+ * three peers regardless, so the key set is unchanged). Neither changes
+ * behaviour, and inventing an assertion to kill them would be a test that
+ * proves nothing about the product.
+ */
+describe('the mission bound bites on a remainder, not only on an exact zero', () => {
+  it('caps a slot with a full envelope at what the MISSION has left', () => {
+    // The first ceiling proof was fixture-lucky: the architect's borrowing
+    // landed unallocated on exactly zero, where the outer `missionRoom <= 0`
+    // refusal already stops everything. The bound only bites when a PARTIAL
+    // remainder is left, and that is where the double-count lives — a slot's
+    // own envelope still counts a dollar somebody else has already borrowed.
+    const coder = project([]).bySlot.CODING_AGENT!;
+    const architect = project([]).bySlot.PROMPT_ARCHITECT!;
+    const reviewer = project([]).bySlot.INDEPENDENT_REVIEWER!;
+    const remainder = 40_000;
+    // The architect spends its own envelope, the reviewer spends its own, and
+    // then the architect BORROWS nearly all of the coder's untouched envelope.
+    const borrowed = CEILING - architect.envelopeUsdMicros - reviewer.envelopeUsdMicros - remainder;
+    const ledger = project([
+      reserved('r1', 'PROMPT_ARCHITECT', architect.envelopeUsdMicros),
+      settledKnown('r1', 'PROMPT_ARCHITECT', architect.envelopeUsdMicros),
+      reserved('r2', 'INDEPENDENT_REVIEWER', reviewer.envelopeUsdMicros),
+      settledKnown('r2', 'INDEPENDENT_REVIEWER', reviewer.envelopeUsdMicros),
+      reserved('r3', 'PROMPT_ARCHITECT', borrowed),
+      settledKnown('r3', 'PROMPT_ARCHITECT', borrowed),
+    ]);
+    expect(ledger.unallocatedUsdMicros, 'a partial remainder, not zero').toBe(remainder);
+
+    // THE DOUBLE-COUNT, MADE VISIBLE. The coder has held nothing, so its own
+    // envelope still reports its full share available — over money the
+    // architect has already borrowed and spent. The mission says otherwise,
+    // and the mission wins.
+    expect(ledger.bySlot.CODING_AGENT!.remainingOwnEnvelopeUsdMicros).toBe(coder.envelopeUsdMicros);
+    expect(ledger.bySlot.PROMPT_ARCHITECT!.borrowedUsdMicros).toBe(borrowed);
+    const verdict = reserveJuliusSlotCapacity({ ledger, slot: 'CODING_AGENT' });
+    expect(verdict.ok).toBe(true);
+    if (!verdict.ok) throw new Error('unreachable');
+    expect(verdict.usdMicros, 'capped at the remainder, not at the share').toBe(remainder);
+    expect(verdict.usdMicros).toBeLessThan(coder.perRoundShareUsdMicros);
+  });
+});
+
+describe('a settlement moves the ledger too, not only a reservation', () => {
+  it('makes a decision stale when money SETTLED under it', () => {
+    // The concurrency guard was only proven against a reservation arriving. A
+    // settlement changes what every slot may draw — it is what turns an
+    // outstanding hold into spent money — so a decision taken before one is
+    // just as stale, and a revision that ignored settlements would let it
+    // through.
+    const rows = [reserved('r1', 'CODING_AGENT', 2_000_000)];
+    const before = project(rows);
+    rows.push(settledKnown('r1', 'CODING_AGENT', 2_000_000));
+    const after = project(rows);
+    expect(after.revision).toBeGreaterThan(before.revision);
+    const stale = reserveJuliusSlotCapacity({
+      ledger: after, slot: 'CODING_AGENT', ifRevision: before.revision,
+    });
+    expect(stale.ok).toBe(false);
+    if (stale.ok) throw new Error('unreachable');
+    expect(stale.refusal).toBe('LEDGER_REVISION_STALE');
+  });
+});

@@ -175,3 +175,80 @@ describe('the bundle answers what each persistent worker did', () => {
     }
   });
 });
+
+/**
+ * FOUR MORE CASES FOUR SURVIVING MUTATIONS EXPOSED.
+ *
+ * Each names a guard that could be deleted without any assertion noticing.
+ */
+describe('the bundle distinguishes what was permitted from what was spent', () => {
+  it('never reports the allocation as if it were the settlement', () => {
+    // A mutation that copied `allocatedUsdMicros` from the settled amount
+    // survived: the coder happened to settle a number, so both fields agreed
+    // and no assertion could tell them apart. They answer different questions —
+    // what Julius PERMITTED and what came BACK — and a bundle that conflated
+    // them would report every mission as having spent exactly its allocation.
+    const report = buildJuliusSlotMissionReport({
+      runId: 'run-1', policy: POLICY(), policyVersion: 'julius-allocation.v2',
+      ceilingUsdMicros: CEILING,
+      rows: [
+        {
+          type: 'worker.effort', taskId: 'build-1',
+          facts: {
+            role: 'CODING_AGENT', taskType: 'build', inputTokens: 10,
+            allocatedUsdMicros: 2_499_750, settledUsdMicros: 5_177_120,
+            usdMicros: 5_177_120, settlementBasis: 'PROVIDER_REPORTED',
+          },
+        },
+        {
+          type: 'worker.effort', taskId: 'plan-1',
+          facts: {
+            role: 'PROMPT_ARCHITECT', taskType: 'plan', inputTokens: 10,
+            allocatedUsdMicros: 1_250_250, settledUsdMicros: null,
+            usdMicros: null, settlementBasis: 'UNKNOWN',
+          },
+        },
+      ],
+    });
+    const coder = report.bySlot.CODING_AGENT!.effort!;
+    expect(coder.allocatedUsdMicros.total).toBe(2_499_750);
+    expect(coder.settledUsdMicros.total).toBe(5_177_120);
+    expect(coder.allocatedUsdMicros.total).not.toBe(coder.settledUsdMicros.total);
+
+    // The architect was PERMITTED a real amount and SETTLED nothing anybody
+    // could name. Both facts survive, and neither becomes the other.
+    const architect = report.bySlot.PROMPT_ARCHITECT!.effort!;
+    expect(architect.allocatedUsdMicros).toEqual({ total: 1_250_250, measured: 1, unknown: 0 });
+    expect(architect.settledUsdMicros).toEqual({ total: 0, measured: 0, unknown: 1 });
+  });
+
+  it('counts a dispatch whose settlement basis nobody recorded as UNKNOWN', () => {
+    // Skipping it would report a mission whose costs were better understood
+    // than they were.
+    const report = buildJuliusSlotMissionReport({
+      runId: 'run-1', policy: POLICY(), policyVersion: 'julius-allocation.v2',
+      ceilingUsdMicros: CEILING,
+      rows: [{
+        type: 'worker.effort', taskId: 'build-1',
+        facts: { role: 'CODING_AGENT', taskType: 'build', inputTokens: 10 },
+      }],
+    });
+    expect(report.bySlot.CODING_AGENT!.effort!.settlementBases).toEqual({ UNKNOWN: 1 });
+  });
+
+  it('reports a v1 run under v1 and says the accounts are descriptive', () => {
+    const report = buildJuliusSlotMissionReport({
+      runId: 'run-1', policy: POLICY(), policyVersion: 'julius-allocation.v2',
+      ceilingUsdMicros: CEILING,
+      rows: [
+        { type: 'budget.allocated', taskId: 'build-1', facts: { role: 'CODING_AGENT', allocationPolicy: 'julius-allocation.v1' } },
+        { type: 'budget.reserved', taskId: 'build-1', facts: { reservationId: 'r1', role: 'CODING_AGENT', usdMicros: 7_500_000 } },
+        { type: 'budget.settled', taskId: 'build-1', facts: { reservationId: 'r1', role: 'CODING_AGENT', usdMicros: 5_177_120, costBasis: 'PROVIDER_REPORTED', released: false } },
+      ],
+    });
+    expect(report.allocation.recordedPolicyVersions).toEqual(['julius-allocation.v1']);
+    expect(report.allocation.historicalPolicyConflict).toBe(true);
+    // The money is still reported — a historical run's spend is real.
+    expect(report.bySlot.CODING_AGENT!.ledger!.settledKnownUsdMicros).toBe(5_177_120);
+  });
+});
