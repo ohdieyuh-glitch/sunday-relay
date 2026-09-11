@@ -216,6 +216,15 @@ const FILE_RULES = [
   ['src/relay/mission/julius/julius-repair-lineage.ts', 'REPAIR'],
   ['src/relay/mission/julius/julius-release-runtime.ts', 'TASK GRAPH / SCHEDULER'],
   ['src/relay/mission/julius/julius-review-stage.ts', 'INDEPENDENT REVIEWER'],
+  // The continuous three-worker lifecycle: when a checkpoint is warranted, what
+  // the architect may say after LOCK, what the reviewer may say about a moment,
+  // and which of Julius's own machinery each answer routes into. Classified
+  // under the SCHEDULER rather than under either worker because it belongs to
+  // NEITHER — it is the coordinator's vocabulary for deciding when a worker is
+  // asked anything, and filing it under one of the two slots it schedules would
+  // read as that slot owning the cadence. It performs nothing: every function
+  // returns a named intention the pipeline then executes.
+  ['src/relay/mission/julius/julius-continuous-lifecycle.ts', 'TASK GRAPH / SCHEDULER'],
   // The task/sprint contract is the SUBJECT a review is applied to, and the
   // gate that decides whether coding may start at all. It belongs with the
   // task graph rather than the reviewer: the reviewer consumes it, Julius owns it.

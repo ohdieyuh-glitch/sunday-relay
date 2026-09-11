@@ -430,7 +430,20 @@ export interface JuliusProviderResult{readonly workerId:string;readonly provider
  * that reports none behaves exactly as before — and gets no row, rather than
  * a row of nulls.
  */
-readonly diagnostics?:unknown;}
+readonly diagnostics?:unknown;
+/**
+ * WHAT A CODER ASKED THE ARCHITECT FOR, MID-MISSION, and what an architect
+ * answered with. Both `unknown` for the same reason `contractProposal` is: they
+ * come from a provider, and Julius rebuilds each from an allowlist before any
+ * of it is recorded.
+ *
+ * They are the continuous lifecycle's only new adapter surface. The seam is
+ * otherwise untouched — still one promise in and one result out — because the
+ * point was never to interrupt a running worker. It was to give a mission more
+ * moments at which one may be ASKED something.
+ */
+readonly guidanceRequest?:unknown;
+readonly guidance?:unknown;}
 /**
  * WHAT JULIUS TELLS AN ADAPTER, and nothing more.
  *
