@@ -89,7 +89,7 @@ dump "SELECT e.stream_id AS run_id,e.sequence,e.payload->>'taskId' AS task_id,t.
 # only in a message nothing persisted. The mission contract now derives a bounded
 # allocation per Coding Agent dispatch (`julius-allocation.v1`); these are the
 # rows that prove which round was granted what, and what the ledger settled.
-dump "SELECT e.stream_id AS run_id,e.sequence,e.payload->>'taskId' AS task_id,e.event_type,e.payload->'facts'->>'role' AS role,e.payload->'facts'->>'allocatedUsdMicros' AS allocated_usd_micros,e.payload->'facts'->>'allocationBasis' AS allocation_basis,e.payload->'facts'->>'shareUsdMicros' AS share_usd_micros,e.payload->'facts'->>'remainingUsdMicros' AS remaining_usd_micros,e.payload->'facts'->>'allocationPolicy' AS allocation_policy,e.payload->'facts'->>'usdMicros' AS settled_usd_micros,e.payload->'facts'->>'costBasis' AS cost_basis,e.payload->'facts'->>'estimatedUsdMicros' AS estimated_usd_micros,e.payload->'facts'->>'reason' AS reason,e.payload->'facts'->>'reservationId' AS reservation_id,e.occurred_at FROM relay_wonderland.events e WHERE e.event_type IN ('julius.budget.allocated','julius.budget.reserved','julius.budget.settled','julius.budget.denied') ORDER BY e.stream_id,e.sequence" budget.tsv
+dump "SELECT e.stream_id AS run_id,e.sequence,e.payload->>'taskId' AS task_id,e.event_type,e.payload->'facts'->>'role' AS role,e.payload->'facts'->>'allocatedUsdMicros' AS allocated_usd_micros,e.payload->'facts'->>'allocationBasis' AS allocation_basis,e.payload->'facts'->>'shareUsdMicros' AS share_usd_micros,e.payload->'facts'->>'remainingUsdMicros' AS remaining_usd_micros,e.payload->'facts'->>'allocationPolicy' AS allocation_policy,e.payload->'facts'->>'usdMicros' AS settled_usd_micros,e.payload->'facts'->>'costBasis' AS cost_basis,e.payload->'facts'->>'estimatedUsdMicros' AS estimated_usd_micros,e.payload->'facts'->>'reason' AS reason,e.payload->'facts'->>'slotRefusal' AS slot_refusal,e.payload->'facts'->>'reservationId' AS reservation_id,e.occurred_at FROM relay_wonderland.events e WHERE e.event_type IN ('julius.budget.allocated','julius.budget.reserved','julius.budget.settled','julius.budget.denied') ORDER BY e.stream_id,e.sequence" budget.tsv
 
 # WHAT THE MISSION COST, PER ROLE, WITH THE UNKNOWN PART STILL VISIBLE.
 #
@@ -208,4 +208,54 @@ dump "SELECT e.stream_id AS run_id,e.sequence,e.payload->>'taskId' AS task_id,e.
 # digest it ran under. Without it the bundle can show what a run ENDED as and not the path it
 # took there; a paid rerun's repair path and cost are these rows. `safe_facts` is the closed
 # vocabulary the runtime writes, never prose.
+# WHAT EACH WORKER DID, AND WHEN — the rows the paid proof's own questions are
+# answered from.
+#
+# §6.5 of `docs/JULIUS_CONTINUOUS_ARMING.md` names, for each of the eight
+# questions the paid run exists to answer, the FIELD that answers it. Five of
+# those fields are carried by three event types, and not one of the three was
+# exported: `worker.effort`, the checkpoint pair, and the research pair reached
+# the durable ledger and were destroyed with the database, because this script
+# is the only hop that survives the job. This is the same defect #250 repaired
+# for the architect diagnostics — "they reached the durable ledger and were
+# destroyed with the database" — arriving again one layer up, and it is why a
+# bundle could have been collected, ordered correctly, published, and still
+# answered none of A, C, E or G.
+#
+# NAMED FACT KEYS ONLY, as everywhere else here. Every value is a count, a
+# digest, a closed-union token or one of this repository's own identifiers:
+# `role` and `taskType` are source literals, `outcome` is one of eight research
+# outcomes, `settlementBasis` one of five cost bases, `trigger` / `origin` /
+# `route` / `reasonCode` are closed unions, `requestKey` is a task id with an
+# index, and every `*Digest` is a hash Julius computed. No prose, no packet, no
+# provider text and no whole payload has a column in any of them.
+
+# EFFORT. Every dimension is nullable on purpose and a blank means UNKNOWN, never
+# zero: `brainRetrievals` and `evidenceInspected` are Julius's own measurements
+# and are null when no context was compiled, and `checkpoints` and
+# `guidanceConsumed` are not on the row at all because nothing in the runtime
+# knows them. A reader must be able to tell "the provider reported nothing" from
+# "the provider reported none", which is the whole reason these are separate
+# columns rather than a rollup.
+dump "SELECT e.stream_id AS run_id,e.sequence,e.payload->>'taskId' AS task_id,e.payload->'facts'->>'role' AS role,e.payload->'facts'->>'taskType' AS task_type,e.payload->'facts'->>'inputTokens' AS input_tokens,e.payload->'facts'->>'outputTokens' AS output_tokens,e.payload->'facts'->>'reasoningTokens' AS reasoning_tokens,e.payload->'facts'->>'toolCalls' AS tool_calls,e.payload->'facts'->>'researchCalls' AS research_calls,e.payload->'facts'->>'activeMs' AS active_ms,e.payload->'facts'->>'providerCalls' AS provider_calls,e.payload->'facts'->>'brainRetrievals' AS brain_retrievals,e.payload->'facts'->>'evidenceInspected' AS evidence_inspected,e.payload->'facts'->>'allocatedUsdMicros' AS allocated_usd_micros,e.payload->'facts'->>'settledUsdMicros' AS settled_usd_micros,e.payload->'facts'->>'settlementBasis' AS settlement_basis,e.payload->'facts'->>'evidenceGenerated' AS evidence_generated,e.payload->'facts'->>'repairRounds' AS repair_rounds,e.payload->'facts'->>'guidanceGenerated' AS guidance_generated,e.payload->'facts'->>'reviewerVerdicts' AS reviewer_verdicts,e.payload->'facts'->>'effortVersion' AS effort_version,e.occurred_at FROM relay_wonderland.events e WHERE e.event_type='julius.worker.effort' ORDER BY e.stream_id,e.sequence" effort.tsv
+
+# PARTICIPATION — whether a worker ever STOPPED, asked, and was made to wait.
+# A checkpoint that minted no continuation stopped a worker without giving it
+# anywhere to resume, which is a stall rather than a barrier working, so the
+# route and its reason are exported beside the checkpoint itself. The
+# checkpoint's own `sequence` is its position within one dispatch and is NOT the
+# ledger's; it is exported as `checkpoint_sequence` so the two can never be read
+# as the same number.
+dump "SELECT e.stream_id AS run_id,e.sequence,e.payload->>'taskId' AS task_id,e.event_type,e.payload->'facts'->>'checkpointId' AS checkpoint_id,e.payload->'facts'->>'trigger' AS trigger,e.payload->'facts'->>'origin' AS origin,e.payload->'facts'->>'sequence' AS checkpoint_sequence,e.payload->'facts'->>'evidenceCount' AS evidence_count,e.payload->'facts'->>'route' AS route,e.payload->'facts'->>'reasonCode' AS reason_code,e.payload->'facts'->>'wouldHaveRouted' AS would_have_routed,e.payload->'facts'->>'stage' AS stage,e.payload->'facts'->>'guidanceId' AS guidance_id,e.payload->'facts'->>'guidanceRevision' AS guidance_revision,e.payload->'facts'->>'guidanceDigest' AS guidance_digest,e.payload->'facts'->>'recommendedActions' AS recommended_actions,e.payload->'facts'->>'additionalProhibitions' AS additional_prohibitions,e.payload->'facts'->>'references' AS reference_count,e.payload->'facts'->>'contractRevision' AS contract_revision,e.payload->'facts'->>'contractBindingDigest' AS contract_binding_digest,e.occurred_at FROM relay_wonderland.events e WHERE e.event_type IN ('julius.checkpoint.recorded','julius.checkpoint.verdict','julius.guidance.issued','julius.guidance.refused','julius.guidance.deferred') ORDER BY e.stream_id,e.sequence" participation.tsv
+
+# RESEARCH. These rows are the research budget's durable truth — the mediator
+# PROJECTS its per-role meter by folding them — so a bundle without them cannot
+# show that a restart remembered what a slot had already spent, and cannot show
+# that all three slots were able to reach the outside world at all. The eight
+# outcomes are never collapsed into "no evidence": a refusal, an exhausted
+# budget, a throttle, an unreachable host and a page that signalled injection
+# are five different facts. `counted` is whether the ask was CHARGED, which is
+# not the same as whether it succeeded.
+dump "SELECT e.stream_id AS run_id,e.sequence,e.payload->>'taskId' AS task_id,e.event_type,e.payload->'facts'->>'role' AS role,e.payload->'facts'->>'requestKey' AS request_key,e.payload->'facts'->>'outcome' AS outcome,e.payload->'facts'->>'counted' AS counted,e.payload->'facts'->>'evidenceId' AS evidence_id,e.payload->'facts'->>'signalled' AS injection_signals,e.payload->'facts'->>'segment' AS segment,e.payload->'facts'->>'reasonCode' AS reason_code,e.payload->'facts'->>'stage' AS stage,e.occurred_at FROM relay_wonderland.events e WHERE e.event_type IN ('julius.research.retrieved','julius.research.refused') ORDER BY e.stream_id,e.sequence" research.tsv
+
 dump "SELECT event_kind,task_id,worker_id,provider_id,outcome,usd_micros,duration_ms,input_tokens,output_tokens,safe_facts,occurred_at FROM relay_wonderland.julius_trajectory_events ORDER BY occurred_at,trajectory_event_id" trajectory.tsv

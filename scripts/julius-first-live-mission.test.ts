@@ -769,7 +769,7 @@ describe('the evidence dump names only tables and columns the migrations create'
     const dumps = queries();
     const everyDumpedFile = [...read('.github/julius-live-evidence-dump.sh').matchAll(/" ([a-z-]+\.tsv)$/gmu)].map((match) => match[1]).sort();
     expect(everyDumpedFile, 'every file the script writes, including the ones this regex cannot parse')
-      .toEqual(['budget.tsv', 'contract-events.tsv', 'cost-accounting.tsv', 'decisions.tsv', 'evidence.tsv', 'failures.tsv', 'findings.tsv', 'project-brain.tsv', 'runs.tsv', 'sessions.tsv', 'task-contracts.tsv', 'tasks.tsv', 'tool-invocations.tsv', 'trajectory.tsv', 'worker-diagnostics.tsv']);
+      .toEqual(['budget.tsv', 'contract-events.tsv', 'cost-accounting.tsv', 'decisions.tsv', 'effort.tsv', 'evidence.tsv', 'failures.tsv', 'findings.tsv', 'participation.tsv', 'project-brain.tsv', 'research.tsv', 'runs.tsv', 'sessions.tsv', 'task-contracts.tsv', 'tasks.tsv', 'tool-invocations.tsv', 'trajectory.tsv', 'worker-diagnostics.tsv']);
     expect(dumps.map((dump) => dump.file).sort()).toEqual(['decisions.tsv', 'evidence.tsv', 'findings.tsv', 'project-brain.tsv', 'runs.tsv', 'sessions.tsv', 'task-contracts.tsv', 'tasks.tsv', 'tool-invocations.tsv', 'trajectory.tsv']);
     for (const dump of dumps) {
       const columns = tables.get(dump.table);
@@ -2340,7 +2340,8 @@ describe('the event dumps are ordered by the ledger position, not by the wall cl
 
   it('covers every chronological event dump, so a new one cannot arrive unordered', () => {
     expect(eventDumps().map(named).sort())
-      .toEqual(['budget.tsv', 'contract-events.tsv', 'failures.tsv', 'worker-diagnostics.tsv']);
+      .toEqual(['budget.tsv', 'contract-events.tsv', 'effort.tsv', 'failures.tsv',
+        'participation.tsv', 'research.tsv', 'worker-diagnostics.tsv']);
   });
 
   it('carries the position the ledger allocated, and the stream it is a position within', () => {
@@ -2404,3 +2405,156 @@ describe('the event dumps are ordered by the ledger position, not by the wall cl
   });
 });
 
+/**
+ * THE ROWS THE PAID PROOF'S OWN QUESTIONS ARE ANSWERED FROM.
+ *
+ * §6.5 of `docs/JULIUS_CONTINUOUS_ARMING.md` names, for each of the eight
+ * questions the paid run exists to answer, the FIELD that answers it. Five of
+ * those fields are carried by three event types — `worker.effort`, the
+ * checkpoint pair and the research pair — and not one of the three had a query
+ * here. They were written durably and destroyed with the database, because this
+ * script is the only hop that survives the job.
+ *
+ * It is the same defect #250 repaired one layer down, where six architect
+ * diagnostics were allowlisted and five of them added to no query at all. A
+ * bundle can be complete, correctly ordered, scanned and published and still
+ * answer none of A, C, E or G, and nothing would have said so.
+ *
+ * THE COMPLETENESS RULE RUNS FROM THE EMISSION OUTWARD. Listing the columns and
+ * checking they parse proves the columns exist; it says nothing about a key the
+ * pipeline writes and nobody exports. These read the `facts` object out of the
+ * production source and require a column for every key in it. An exemption is
+ * allowed and has to be written down with its reason.
+ */
+describe('every fact the peer telemetry writes reaches the exported bundle', () => {
+  const pipeline = () => read('src/relay/mission/julius/julius-task-pipeline.ts');
+
+  /** The `facts: { … }` object of one `ledger.event(<type>, …)` call, brace-matched. */
+  const factKeys = (source: string, type: string, nth = 0): readonly string[] => {
+    let from = -1;
+    for (let seen = 0; seen <= nth; seen += 1) from = source.indexOf(`event('${type}'`, from + 1);
+    expect(from, `${type} must be emitted by the pipeline`).toBeGreaterThan(-1);
+    const open = source.indexOf('facts: {', from);
+    expect(open, `${type} must carry a facts object`).toBeGreaterThan(-1);
+    let depth = 0;
+    let end = open + 'facts: '.length;
+    for (; end < source.length; end += 1) {
+      if (source[end] === '{') depth += 1;
+      else if (source[end] === '}') { depth -= 1; if (depth === 0) break; }
+    }
+    const body = source.slice(open + 'facts: {'.length, end);
+    // Top-level keys only: a nested object's keys are not facts of their own.
+    let nesting = 0;
+    const keys: string[] = [];
+    for (const match of body.matchAll(/[{}]|(?:^|[,{]\s*)([A-Za-z][A-Za-z0-9]*)\s*[:,]/gu)) {
+      if (match[0] === '{') nesting += 1;
+      else if (match[0] === '}') nesting -= 1;
+      else if (nesting === 0 && match[1] !== undefined) keys.push(match[1]);
+    }
+    expect(keys.length, `${type} facts must be readable`).toBeGreaterThan(0);
+    return keys;
+  };
+
+  const dump = (file: string): string => read('.github/julius-live-evidence-dump.sh').split('\n')
+    .find((line) => line.startsWith('dump "SELECT') && line.includes(file)) ?? '';
+
+  /**
+   * Keys deliberately NOT given a column, each with the reason it is not a loss.
+   * An entry here is a decision on the record, not a way to make a case pass.
+   */
+  const EXEMPT: Readonly<Record<string, string>> = {
+    // The row writes the same number twice — `usdMicros,` in shorthand and
+    // `settledUsdMicros: usdMicros` beside it. One column carries both.
+    'worker.effort:usdMicros': 'identical to settledUsdMicros on the same row',
+  };
+
+  it('exports every fact on the effort row, the row that says what a worker DID', () => {
+    const query = dump('effort.tsv');
+    expect(query, 'the effort dump must exist').not.toBe('');
+    for (const key of factKeys(pipeline(), 'worker.effort')) {
+      if (EXEMPT[`worker.effort:${key}`] !== undefined) continue;
+      expect(query, `worker.effort writes ${key} and the bundle drops it`).toContain(`'${key}'`);
+    }
+    // UNKNOWN MUST STAY UNKNOWN. These four are nullable at the source and a
+    // blank cell has to be readable as "not measured" rather than as zero, which
+    // is why each has its own column instead of being folded into a total.
+    for (const key of ['brainRetrievals', 'evidenceInspected', 'researchCalls', 'settlementBasis']) {
+      expect(query, `${key} must be exported on its own axis`).toContain(`'${key}'`);
+    }
+  });
+
+  it('exports every fact on both checkpoint rows, which are the barrier evidence', () => {
+    const query = dump('participation.tsv');
+    expect(query, 'the participation dump must exist').not.toBe('');
+    for (const type of ['checkpoint.recorded', 'checkpoint.verdict']) {
+      for (const key of factKeys(pipeline(), type)) {
+        expect(query, `${type} writes ${key} and the bundle drops it`).toContain(`'${key}'`);
+      }
+    }
+    // A barrier that minted no continuation is a stall, not a barrier working,
+    // so the route and its reason travel with the checkpoint that raised it.
+    for (const key of ['route', 'reasonCode']) {
+      expect(query, `${key} is what separates a barrier from a stall`).toContain(`'${key}'`);
+    }
+  });
+
+  it('exports every fact on both research rows, which are the budget\'s durable truth', () => {
+    const query = dump('research.tsv');
+    expect(query, 'the research dump must exist').not.toBe('');
+    for (const type of ['research.retrieved', 'research.refused']) {
+      for (const key of factKeys(pipeline(), type)) {
+        expect(query, `${type} writes ${key} and the bundle drops it`).toContain(`'${key}'`);
+      }
+    }
+    // The mediator PROJECTS its per-role meter by folding these rows, so a
+    // bundle without `outcome` and `counted` cannot show that a restart
+    // remembered what a slot had already spent.
+    for (const key of ['outcome', 'counted', 'requestKey']) {
+      expect(query, `${key} is how the durable research ledger is read back`).toContain(`'${key}'`);
+    }
+  });
+
+  it('names only event types the catalogue actually emits', () => {
+    const catalogue = read('src/relay/mission/julius/julius-events.ts');
+    for (const [file, types] of [
+      ['effort.tsv', ['worker.effort']],
+      ['participation.tsv', ['checkpoint.recorded', 'checkpoint.verdict', 'guidance.issued',
+        'guidance.refused', 'guidance.deferred']],
+      ['research.tsv', ['research.retrieved', 'research.refused']],
+    ] as const) {
+      const query = dump(file);
+      for (const type of types) {
+        expect(catalogue, `${type} must be a real event type`).toContain(`'${type}'`);
+        expect(query, `${file} must select julius.${type}`).toContain(`'julius.${type}'`);
+      }
+    }
+  });
+
+  /**
+   * QUESTION G, which #252 added a field for and no query selected. The dispatch
+   * path collapses every ledger refusal into `EXHAUSTED`; `slotRefusal` keeps the
+   * ledger's own reason, so a slot the rule refused as not-a-peer is
+   * distinguishable from a mission that simply ran out.
+   */
+  it('exports the ledger\'s own refusal reason beside the collapsed one', () => {
+    const query = dump('budget.tsv');
+    expect(query, 'EXHAUSTED alone cannot answer G').toContain("'slotRefusal'");
+    expect(query, 'and the share it was refused against').toContain("'shareUsdMicros'");
+    // Which rule was in force. A run reading `julius-allocation.v3` and one
+    // reading v1 are not comparable, and the bundle has to say which it was.
+    expect(query, 'the policy the numbers were decided under').toContain("'allocationPolicy'");
+  });
+
+  /**
+   * The whole payload is never exported from any of them — a worker's own text
+   * would ride out inside it.
+   */
+  it('never exports a whole payload from the new dumps', () => {
+    for (const file of ['effort.tsv', 'participation.tsv', 'research.tsv']) {
+      const query = dump(file);
+      expect(query, `${file} must select named keys only`).not.toMatch(/->'facts'(?!->>)/u);
+      expect(query, `${file} must never select the payload itself`)
+        .not.toMatch(/SELECT[^"]*\be\.payload\b\s*(?:,|AS|FROM)/u);
+    }
+  });
+});

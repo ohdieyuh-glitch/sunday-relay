@@ -246,7 +246,7 @@ Three of the eight needed work to become answerable. They are marked.
 
 | | Question | Answered from | State |
 |---|---|---|---|
-| **A** | Did all three slots perform meaningful work throughout? | `bySlot[*].effort.dispatches`, every dimension's `measured`/`unknown` split, `participation`, `ledger.reservationsOpened` | **Partly.** "Did work" is answerable per slot. "THROUGHOUT" is not: the report carries no position, so a slot that did everything in the first two minutes and nothing after reads identically to one that worked evenly. See the gap below. |
+| **A** | Did all three slots perform meaningful work throughout? | `bySlot[*].effort.dispatches`, every dimension's `measured`/`unknown` split, `participation`, `ledger.reservationsOpened`, and each row's `sequence` | **Now yes.** Both halves took a change after this document was written. "THROUGHOUT" needed a position: `JuliusReportRow` carries `sequence`, each slot a `chronology`, the mission an ordered `interleaving`, and a row nobody can place is counted as unplaced rather than given position zero. The bundle needed the rows at all — see below. |
 | **B** | Was the Architect substantially more active than in Mission 5? | `bySlot.PROMPT_ARCHITECT.effort` against the Mission 5 replay control (§5) | Yes. The control is a historical record, not a target — Mission 5 was valid under the architecture it ran beneath. |
 | **C** | Did the Coder research independently when useful? | `bySlot.CODING_AGENT.effort.researchCalls`, and the mediator's own observation outcomes | Yes. `researchCalls` is emitted per dispatch and is `unknown` — never `0` — when the adapter reported nothing. |
 | **D** | Did the Reviewer independently research and challenge rather than trust the Architect? | `dispositions.byVerdict` / `byEvaluator`, plus the reviewer's own `researchCalls` | **Now yes.** `contract.disposition` rows were durable already and the report discarded them. It reports the evaluator by ID, not by role: the row names an `evaluatorId` and nothing in it says what role that id holds. |
@@ -261,13 +261,34 @@ Three of the eight needed work to become answerable. They are marked.
 is not inefficient and a worker below it is not asked to burn tokens. What is
 being checked is comparable CAPABILITY and available EFFORT, not equal output.
 
-**The one gap this leaves (A).** The report is a set of totals and the rows
-behind them, with no sequence. Answering "throughout" needs a position per row
-— the timeline's own append order, which `JuliusReportRow` currently drops. It
-is a small change and it is deliberately not in this one: it alters the row
-contract every reader shares, and there is no run yet whose shape would make it
-worth reading. It is named here so the paid run is not dispatched in the belief
-that A is answerable.
+**How this table was wrong, and what closed it.** Two things, found after it was
+written, and both between the runtime and the artifact rather than in the
+runtime.
+
+*No position.* The report was totals and the rows behind them, with no sequence,
+so a slot that did everything in the first two minutes read identically to one
+that worked evenly. `JuliusReportRow` now carries the timeline's own append
+order, and the bundle's event dumps select and sort by the same
+`relay_wonderland.events.sequence` — the position the ledger allocates inside a
+SERIALIZABLE transaction, `UNIQUE(stream_id,sequence)` behind it, and
+emphatically not `occurred_at`, which several events of one mission routinely
+share.
+
+*Five of the eight fields above never reached the bundle.* `worker.effort`, the
+checkpoint pair and the research pair were written durably and destroyed with
+the database, because `.github/julius-live-evidence-dump.sh` is the only hop
+that survives the job and none of the three had a query in it. `slotRefusal` —
+added for G — was on the row and in no SELECT. A bundle could have been
+collected, correctly ordered, scanned and published and still answered none of
+A, C, E or G. It is the same defect #250 repaired one layer down, where six
+architect diagnostics were allowlisted and five added to no query at all; the
+completeness guard now runs from each emission outward, so a fact key the
+pipeline writes and nobody exports fails by name.
+
+**What is still true of this table.** `buildJuliusSlotMissionReport` has no
+production caller. The report is the SHAPE the questions are asked in; the paid
+job publishes the durable rows the report projects from, not the report. Reading
+A–H off a bundle means folding those rows the way the report does.
 
 ## 7. What has NOT been done
 
