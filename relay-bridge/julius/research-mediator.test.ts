@@ -310,9 +310,9 @@ describe('provenance is kept per slot, and the mission total is derived', () => 
     expect(last.ledger.byRole.CODING_AGENT.counted).toBe(2);
     expect(last.ledger.byRole.INDEPENDENT_REVIEWER.counted).toBe(1);
     expect(juliusMissionResearchMeter(last.ledger).counted).toBe(4);
-    expect(m.ledgerFor('msn-1').byRole.CODING_AGENT.counted).toBe(2);
+    expect((await m.ledgerFor('msn-1')).byRole.CODING_AGENT.counted).toBe(2);
     // A mission that has asked nothing reports an empty ledger, not nothing.
-    expect(juliusMissionResearchMeter(m.ledgerFor('msn-other')).counted).toBe(0);
+    expect(juliusMissionResearchMeter(await m.ledgerFor('msn-other')).counted).toBe(0);
   });
 
   it('gives all three slots the same capability, not a hierarchy', async () => {
@@ -444,7 +444,7 @@ describe('the one limit, stated rather than hidden', () => {
 
     // A second mediator is a restarted bridge. Its ledger is empty.
     const second = mediator(() => Promise.resolve(page('ok')));
-    expect(juliusMissionResearchMeter(second.ledgerFor('msn-1')).counted).toBe(0);
+    expect(juliusMissionResearchMeter(await second.ledgerFor('msn-1')).counted).toBe(0);
     const afterRestart = await second.research(ask());
     expect(afterRestart.observation.outcome, 'the cap does not survive the restart').toBe('observed');
   });

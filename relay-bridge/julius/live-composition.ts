@@ -43,6 +43,37 @@ import {
   type JuliusResearchPolicy,
 } from '../../src/relay/mission/julius';
 import { createJuliusResearchMediator, juliusResearchPortFrom } from './research-mediator';
+import type { MeteredOutcome } from '../../src/relay/mission/live-reach';
+
+/**
+ * What a recorded research outcome COST, rebuilt from the durable row.
+ *
+ * Deliberately conservative: only the two outcomes that provably never left the
+ * process — a policy refusal and an exhausted budget — are free. Everything
+ * else reached something, and a projection that guessed otherwise would let a
+ * restarted mission re-spend a budget it had already used. An outcome this
+ * build does not recognise is charged rather than ignored, for the same reason.
+ */
+function meteredFromJuliusOutcome(outcome: unknown): MeteredOutcome {
+  switch (outcome) {
+    case 'policy_refused':
+    case 'budget_exhausted':
+      return 'not_attempted';
+    case 'observed':
+    // A signalled page was still fetched. The signal is about trust, not cost.
+    case 'injection_signaled':
+      return 'observed';
+    case 'throttled': return 'throttled';
+    case 'unauthenticated': return 'unauthenticated';
+    case 'unsupported_content': return 'answered_unusable';
+    case 'unreachable': return 'unreachable';
+    default: return 'unreachable';
+  }
+}
+import {
+  emptyJuliusResearchLedger, isJuliusResearchRole, recordJuliusResearch,
+  type JuliusResearchRequest,
+} from '../../src/relay/mission/julius';
 import type { JuliusTimelineReader } from '../../src/relay/mission/julius';
 import { createLiveReachService } from '../live-reach-service';
 import type { BackendProbe } from '../../src/relay/mission/live-reach';
@@ -562,6 +593,48 @@ export function assembleLiveJuliusRuntime(options: {
         ...(options.researchFetch === undefined ? {} : { fetchImpl: options.researchFetch }),
       }),
       now: () => new Date().toISOString(),
+      /**
+       * THE RESEARCH SPEND, READ BACK FROM THE RUN'S OWN ROWS.
+       *
+       * Bound only when the store can serve a timeline; otherwise the mediator
+       * keeps its in-process Map and says so. The projection is a left fold of
+       * `recordJuliusResearch` over the `research.retrieved` rows, which is the
+       * same function the live path charges with — one rule, two readers, so
+       * they cannot disagree. A restarted process replays to the same position
+       * because the rows ARE the position.
+       */
+      ...(typeof (options.store as { timeline?: unknown }).timeline === 'function'
+        ? {
+          durableLedger: async (request: JuliusResearchRequest) => {
+            const reader = options.store as unknown as JuliusTimelineReader;
+            let ledger = emptyJuliusResearchLedger(request.missionId);
+            let sinceSequence = 0;
+            for (;;) {
+              const page = await reader.timeline({
+                runId: request.runId, projectId: request.projectId, sinceSequence, limit: 500,
+              });
+              for (const entry of page.entries) {
+                sinceSequence = Math.max(sinceSequence, entry.sequence);
+                if (entry.type !== 'research.retrieved') continue;
+                const role = entry.facts.role;
+                if (typeof role !== 'string' || !isJuliusResearchRole(role)) continue;
+                ledger = recordJuliusResearch(ledger, role, {
+                  source: 'web',
+                  outcome: meteredFromJuliusOutcome(entry.facts.outcome),
+                  // The row does not carry a byte count, and a projection must
+                  // not invent one. Null is "not measured", which is exactly
+                  // what makes a byte budget report itself unenforceable rather
+                  // than silently pass.
+                  bytes: null,
+                  at: entry.occurredAt,
+                });
+              }
+              if (page.entries.length === 0 || !page.hasMore) break;
+            }
+            return ledger;
+          },
+        }
+        : {}),
       // READINESS, NOT AUTHORITY. Handed through unchanged; the mission's own
       // allowlist is decided separately and afterwards, so a probe can never
       // widen what a mission may read.

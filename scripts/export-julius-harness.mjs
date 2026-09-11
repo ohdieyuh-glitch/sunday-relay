@@ -288,6 +288,7 @@ const FILE_RULES = [
   // What each slot HOLDS and has SPENT, projected from the durable budget rows
   // rather than stored. The same subsystem as the rule it is the state for.
   ['src/relay/mission/julius/julius-slot-ledger.ts', 'LEASES / BUDGETS / PERMISSIONS'],
+  ['src/relay/mission/julius/julius-shared-ceiling.ts', 'LEASES / BUDGETS / PERMISSIONS'],
   // The per-slot mission record a paid run is read against afterwards: money,
   // work, and the rows behind both. EVENTS, because it is assembled from the
   // run's own timeline and answers what happened rather than what may be spent.

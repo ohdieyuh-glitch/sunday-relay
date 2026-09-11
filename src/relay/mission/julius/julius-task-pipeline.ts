@@ -1585,6 +1585,34 @@ async function driveResearchCheckpoint(input: {
   const segmentCeiling = input.request.verification.maxCoderSegments ?? JULIUS_DEFAULT_MAX_CODER_SEGMENTS;
   if (segmentNumber > segmentCeiling) return refuse('SEGMENT_CEILING_REACHED');
 
+  /**
+   * A REPLAY MUST NOT RE-RETRIEVE, AND MUST NOT RE-CHARGE.
+   *
+   * `serve()` reached the outside world BEFORE the idempotent `addTask` below,
+   * so a tick replayed after a crash — or after the same outcome was handled
+   * twice — fetched every ask again, charged the research budget again, and
+   * then found `created === false` and threw the answer away. The retrieval was
+   * the one step in this function that was not idempotent, and it is the only
+   * step that costs money and touches a third party.
+   *
+   * The continuation's id is deterministic, so its EXISTENCE is the record that
+   * this ask was already served. Checked against the durable task rows loaded
+   * at the top of this function, before anything leaves the process.
+   */
+  const continuationTaskId = juliusSegmentTaskId(segmentRoot.taskId, segmentNumber);
+  if (tasks.some((row) => row.taskId === continuationTaskId)) {
+    await ledger.event('checkpoint.verdict', {
+      taskId: subjectTaskId, workerId: input.workerId,
+      facts: {
+        checkpointId: checkpoint.checkpointId, route: routing.route,
+        reasonCode: 'RESEARCH_ALREADY_SERVED',
+        continuationTaskId, barrier: true, segment: segmentNumber,
+        asks: asks.length, outcomes: '', evidence: 0, signalled: 0,
+      },
+    });
+    return true;
+  }
+
   const observations = await deps.research.serve({
     missionId: task.missionId,
     projectId: run.projectId,
@@ -1595,8 +1623,38 @@ async function driveResearchCheckpoint(input: {
     requestedAt: deps.clock.now(),
   });
 
+  /**
+   * THE CHARGE, DURABLY, one row per observation.
+   *
+   * The research meter enforcing per-role and per-mission budgets lived in a
+   * Map on the mediator, keyed by mission and held for the process lifetime. A
+   * bridge restart forgot every retrieval a slot had made and the budget began
+   * again at zero — a budget that binds within a process is not a budget.
+   *
+   * These rows are the durable truth the meter is rebuilt from. `counted` is
+   * the metered outcome rather than the success: a retrieval that reached a
+   * host and was refused by it still spent something, and pretending otherwise
+   * is how a budget is exceeded while every individual read looks free.
+   */
+  for (const [index, observation] of observations.entries()) {
+    await ledger.event('research.retrieved', {
+      taskId: subjectTaskId, workerId: input.workerId,
+      facts: {
+        role: task.role,
+        // DETERMINISTIC, so a replayed row is recognisably the same retrieval
+        // rather than a second one.
+        requestKey: `${continuationTaskId}:${index}`,
+        outcome: observation.outcome,
+        counted: observation.outcome === 'observed',
+        evidenceId: observation.evidenceId,
+        signalled: observation.injectionSignals.length,
+        segment: segmentNumber,
+      },
+    });
+  }
+
   const continuation: JuliusTask = {
-    taskId: juliusSegmentTaskId(segmentRoot.taskId, segmentNumber),
+    taskId: continuationTaskId,
     missionId: task.missionId,
     parentTaskId: segmentRoot.taskId,
     /**

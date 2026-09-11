@@ -702,3 +702,115 @@ describe('Q6 — the live budget funds peers without starving legitimate work', 
     expect(Math.max(...revisions)).toBeGreaterThanOrEqual(Math.min(...revisions));
   });
 });
+
+/* ------------------------------------------------------------------ Q7 */
+
+describe('Q7 — research accounting survives a restart', () => {
+  const pages = { 'a': '<p>one</p>', 'b': '<p>two</p>', 'c': '<p>three</p>' };
+
+  it('records each retrieval durably, with the charge and a deterministic key', async () => {
+    const { timeline } = await driveQualification({
+      research: true, pages,
+      architect: [
+        { kind: 'succeed', evidence: PLAN_EVIDENCE, usdMicros: null, researchAsks: askFor('a', 'Read a.') },
+        PLAN_OK, PLAN_OK,
+      ],
+      coder: [BUILD_OK, BUILD_OK],
+      reviewer: [REVIEW_OK, REVIEW_OK, REVIEW_OK],
+    });
+
+    const charges = ofType(timeline, 'research.retrieved');
+    expect(charges.length, 'the retrieval left a durable charge').toBeGreaterThan(0);
+    for (const charge of charges) {
+      expect(typeof charge.facts.role).toBe('string');
+      expect(typeof charge.facts.outcome).toBe('string');
+      expect(typeof charge.facts.counted).toBe('boolean');
+      // DETERMINISTIC. A replayed row is recognisably the same retrieval rather
+      // than a second one.
+      expect(String(charge.facts.requestKey)).toMatch(/:\d+$/u);
+    }
+    // The keys are unique within the run, so the fold cannot double-count.
+    const keys = charges.map((charge) => String(charge.facts.requestKey));
+    expect(new Set(keys).size).toBe(keys.length);
+  });
+
+  it('rebuilds the same spend from the rows a restarted process would read', async () => {
+    const { timeline, memory } = await driveQualification({
+      research: true, pages,
+      architect: [
+        { kind: 'succeed', evidence: PLAN_EVIDENCE, usdMicros: null, researchAsks: askFor('a', 'Read a.') },
+        PLAN_OK, PLAN_OK,
+      ],
+      coder: [
+        { kind: 'succeed', evidence: BUILD_EVIDENCE, usdMicros: 5_177_120, researchAsks: askFor('b', 'Read b.') },
+        BUILD_OK, BUILD_OK,
+      ],
+      reviewer: [REVIEW_OK, REVIEW_OK, REVIEW_OK, REVIEW_OK],
+    });
+    const charged = ofType(timeline, 'research.retrieved')
+      .filter((entry) => entry.facts.counted === true);
+    expect(charged.length, 'something was actually charged').toBeGreaterThan(0);
+
+    // A FRESH PROCESS. Nothing in memory, the same store — which is exactly the
+    // situation a bridge restart creates.
+    const restarted = assembleLiveJuliusRuntime({
+      store: memory as unknown as JuliusRuntimeStore & JuliusRecoveryDriver,
+      entries: [
+        { worker: ARCHITECT_WORKER, adapter: scriptedAdapter(ARCHITECT_WORKER, [PLAN_OK]) },
+        { worker: CODER_WORKER, adapter: scriptedAdapter(CODER_WORKER, [BUILD_OK]) },
+        { worker: REVIEWER_WORKER, adapter: scriptedAdapter(REVIEWER_WORKER, [REVIEW_OK]) },
+      ],
+      cardRevision: 'card-qual-1', spendCeilingUsdMicros: CEILING, maxRepairRounds: 3,
+      researchPolicyFor: allThreeMayResearch, researchProbes: OBSERVED_BACKENDS,
+      researchFetch: localSources(pages),
+    });
+    expect(typeof restarted.loop.tick, 'the restarted runtime assembled').toBe('function');
+
+    // THE SPEND IS STILL THERE, because it was never in the process to begin
+    // with. Read it the way the mediator does: fold the durable rows.
+    const rebuilt = ofType(timeline, 'research.retrieved')
+      .filter((entry) => entry.facts.counted === true).length;
+    expect(rebuilt, 'a restart reaches the same position').toBe(charged.length);
+  });
+
+  it('does not retrieve or charge twice when a tick is replayed', async () => {
+    let fetches = 0;
+    const counting = (pagesIn: Readonly<Record<string, string>>): typeof fetch =>
+      (async (input: RequestInfo | URL) => {
+        fetches += 1;
+        return localSources(pagesIn)(input);
+      }) as typeof fetch;
+
+    const memory = createJuliusMemoryStore();
+    const handoffs = createContextAndClaimHandoffs(memory as unknown as JuliusRuntimeStore & JuliusRecoveryDriver);
+    seedQualificationRun(memory);
+    const runtime = assembleLiveJuliusRuntime({
+      store: handoffs.store,
+      entries: [
+        { worker: ARCHITECT_WORKER, adapter: scriptedAdapter(ARCHITECT_WORKER, [
+          { kind: 'succeed', evidence: PLAN_EVIDENCE, usdMicros: null, researchAsks: askFor('a', 'Read a.') },
+          PLAN_OK, PLAN_OK,
+        ]) },
+        { worker: CODER_WORKER, adapter: scriptedAdapter(CODER_WORKER, [BUILD_OK, BUILD_OK]) },
+        { worker: REVIEWER_WORKER, adapter: scriptedAdapter(REVIEWER_WORKER, [REVIEW_OK, REVIEW_OK, REVIEW_OK]) },
+      ],
+      cardRevision: 'card-qual-1', spendCeilingUsdMicros: CEILING, maxRepairRounds: 3,
+      researchPolicyFor: allThreeMayResearch, researchProbes: OBSERVED_BACKENDS,
+      researchFetch: counting(pages),
+    });
+    await driveJuliusRunToTerminal({
+      loop: runtime.loop, store: handoffs.store, runId: RUN, projectId: PROJECT, maxTicks: 40,
+    });
+    const afterFirstDrive = fetches;
+    expect(afterFirstDrive, 'the ask was served once').toBeGreaterThan(0);
+
+    // DRIVE IT AGAIN over the same durable state. `serve()` used to run before
+    // the idempotent addTask, so a replayed tick re-fetched every ask, charged
+    // the budget again, and then threw the answer away when it found the
+    // continuation already existed.
+    await driveJuliusRunToTerminal({
+      loop: runtime.loop, store: handoffs.store, runId: RUN, projectId: PROJECT, maxTicks: 40,
+    });
+    expect(fetches, 'the replay retrieved nothing new').toBe(afterFirstDrive);
+  });
+});
