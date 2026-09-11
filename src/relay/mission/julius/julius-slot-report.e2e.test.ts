@@ -252,3 +252,166 @@ describe('the bundle distinguishes what was permitted from what was spent', () =
     expect(report.bySlot.CODING_AGENT!.ledger!.settledKnownUsdMicros).toBe(5_177_120);
   });
 });
+
+/**
+ * PARTICIPATION — the half of "what did this slot do" that is not a token count.
+ *
+ * Questions D and E of the paid-proof design ("did the reviewer independently
+ * challenge rather than trust the architect", "did causal checkpoint barriers
+ * actually affect coder progression") are answerable ONLY from rows the report
+ * used to discard. `checkpoint.recorded`, `checkpoint.verdict` and
+ * `contract.disposition` have been written durably for some time; nothing read
+ * them back per slot, so the bundle could say precisely what a slot spent and
+ * not whether it had ever stopped, asked, or been made to wait.
+ */
+describe('a checkpoint is attributed to the slot that raised it', () => {
+  async function driveWithCheckpoint() {
+    const harness = createJuliusHarness({
+      workers: [
+        { worker: ARCHITECT, script: [PLAN_NO_COST, { ...PLAN_NO_COST, guidance: {
+          subObjective: 'Reuse the existing reader.', relevantRequirements: ['R1'],
+          constraints: ['no second buffer'], doNot: ['add a dependency'],
+        } }] },
+        // THE CODER ASKS, and then finishes on the continuation.
+        { worker: CODER, script: [{ ...BUILD_OK, guidanceRequest: {
+          question: 'Should the normalizer reuse the journal reader?',
+          blockedOn: ['the 8KiB boundary case'],
+          attempted: ['a second buffer, which double-buffers'],
+          relevantPaths: ['src/relay/persistence/journal.ts'],
+        } }, BUILD_OK] },
+        { worker: REVIEWER, script: [REVIEW_NO_COST] },
+      ],
+      card: cardPolicy({
+        allowedProviders: ['openai', 'anthropic', 'hermes'],
+        capabilities: ['plan', 'implement', 'review'], concurrency: 1,
+      }),
+      verification: verificationPolicy({ reviewerRequired: true, maxRepairRounds: 3 }),
+      capabilityFor: (item: { role: string }) =>
+        (item.role === 'PROMPT_ARCHITECT' ? 'plan' : item.role === 'INDEPENDENT_REVIEWER' ? 'review' : 'implement'),
+      allocation: POLICY(),
+      budgetUsdMicros: CEILING,
+    });
+    harness.store.seedRun(RUN);
+    seedTaskContractInto(harness.store, { runId: 'run-1', projectId: 'prj-1', taskId: 'build-1' });
+    harness.store.seedTask('run-1', task({ taskId: 'plan-1', ordinal: 0, role: 'PROMPT_ARCHITECT', taskType: 'plan', requiredEvidenceTypes: ['ARTIFACT'] }));
+    harness.store.seedTask('run-1', task({
+      taskId: 'build-1', ordinal: 1, role: 'CODING_AGENT', taskType: 'build',
+      state: 'BLOCKED', dependencyIds: ['plan-1'], requiredEvidenceTypes: ['TEST'],
+    }));
+    harness.store.seedCriteria('run-1', [{ criterionId: 'ac-1', description: 'The suite passes.', requiredEvidenceTypes: ['TEST'] }]);
+    for (let index = 0; index < 24; index += 1) {
+      const report = await harness.loop.tick(scope);
+      if (report.claimed === 0) {
+        const advance = await harness.loop.advanceRun('run-1', 'prj-1');
+        if (advance === null || (!advance.changed && advance.resumedVerifications === 0)) break;
+      }
+    }
+    const rows: JuliusReportRow[] = harness.store.events()
+      .map((event) => ({ type: event.type, taskId: event.taskId, facts: event.facts }));
+    return {
+      harness,
+      report: buildJuliusSlotMissionReport({
+        runId: 'run-1', policy: POLICY(), policyVersion: 'julius-allocation.v2',
+        ceilingUsdMicros: CEILING, rows,
+      }),
+    };
+  }
+
+  it('reads the coder asking, and the route Julius chose, off the run itself', async () => {
+    const { harness, report } = await driveWithCheckpoint();
+    // The run really did record one — otherwise this proves nothing about the
+    // reader, only that zero equals zero.
+    const recorded = harness.store.events().filter((event) => event.type === 'checkpoint.recorded');
+    expect(recorded.length, 'the drive raised a checkpoint').toBeGreaterThan(0);
+
+    const coder = report.bySlot.CODING_AGENT!.participation;
+    expect(coder.checkpointsRaised, 'attributed to the slot that asked').toBe(recorded.length);
+    expect(Object.keys(coder.routes).length, 'and Julius ruled on it').toBeGreaterThan(0);
+    expect(coder.rows.length).toBeGreaterThan(0);
+
+    // NOT TO THE PEERS. The subject task is the asker's; a reader that
+    // attributed by "whoever was dispatched nearby" would land here.
+    expect(report.bySlot.PROMPT_ARCHITECT!.participation.checkpointsRaised).toBe(0);
+    expect(report.bySlot.INDEPENDENT_REVIEWER!.participation.checkpointsRaised).toBe(0);
+    expect(report.unattributedCheckpoints, 'every checkpoint found its slot').toEqual([]);
+  });
+
+  it('counts a barrier and the continuation it minted, from the row that says so', async () => {
+    const { harness, report } = await driveWithCheckpoint();
+    const verdicts = harness.store.events().filter((event) => event.type === 'checkpoint.verdict');
+    const barriers = verdicts.filter((event) => event.facts.barrier === true);
+    const minted = verdicts.filter((event) => typeof event.facts.continuationTaskId === 'string'
+      && String(event.facts.continuationTaskId).length > 0);
+
+    const coder = report.bySlot.CODING_AGENT!.participation;
+    expect(coder.barriers).toBe(barriers.length);
+    expect(coder.continuations).toBe(minted.length);
+    // E, ANSWERED FROM THE BUNDLE: the barrier stopped the coder AND gave it
+    // somewhere to resume. A barrier that minted nothing is a stall, and these
+    // are two counts rather than one so the difference is visible.
+    expect(coder.barriers, 'the coder was actually made to wait').toBeGreaterThan(0);
+    expect(coder.continuations, 'and the wait produced work to come back to').toBeGreaterThan(0);
+  });
+});
+
+describe('the report will not guess whose act a row was', () => {
+  const effortRow = (taskId: string, role: string): JuliusReportRow => ({
+    type: 'worker.effort', taskId, facts: { role, taskType: 'build', effortVersion: 'julius-slot-effort.v1' },
+  });
+  const build = (rows: readonly JuliusReportRow[]) => buildJuliusSlotMissionReport({
+    runId: 'run-1', policy: POLICY(), policyVersion: 'julius-allocation.v2',
+    ceilingUsdMicros: CEILING, rows,
+  });
+
+  it('reports a checkpoint whose subject never recorded a dispatch, rather than placing it', () => {
+    const report = build([
+      effortRow('build-1', 'CODING_AGENT'),
+      // A task that died before emitting an effort row. Its checkpoint is real.
+      { type: 'checkpoint.recorded', taskId: 'build-9', facts: { checkpointId: 'cp-9' } },
+    ]);
+    expect(report.unattributedCheckpoints.length, 'surfaced, not dropped').toBe(1);
+    for (const slot of Object.values(report.bySlot)) {
+      expect(slot.participation.checkpointsRaised, `${slot.slot} was not handed it`).toBe(0);
+    }
+  });
+
+  it('does not credit the subject slot with the evaluator\'s disposition', () => {
+    const report = build([
+      effortRow('build-1', 'CODING_AGENT'),
+      effortRow('review-1', 'INDEPENDENT_REVIEWER'),
+      // WRITTEN AGAINST THE SUBJECT TASK, which is the coder's. Attributing by
+      // task id would report the coder as having challenged its own contract.
+      { type: 'contract.disposition', taskId: 'build-1', facts: { disposition: 'CHALLENGE', evaluatorId: 'reviewer' } },
+      { type: 'contract.disposition', taskId: 'build-1', facts: { disposition: 'NO_CHALLENGE', evaluatorId: 'reviewer' } },
+    ]);
+    expect(report.dispositions.byVerdict).toEqual({ CHALLENGE: 1, NO_CHALLENGE: 1 });
+    expect(report.dispositions.byEvaluator.reviewer).toEqual({ CHALLENGE: 1, NO_CHALLENGE: 1 });
+    expect(report.dispositions.rows.length).toBe(2);
+    // The evaluator is reported by ID, never as a role: nothing in these rows
+    // says what role `reviewer` holds, and the report does not invent one.
+    expect(Object.keys(report.dispositions.byEvaluator)).toEqual(['reviewer']);
+  });
+
+  it('counts each checkpoint once however often its row is replayed', () => {
+    const report = build([
+      effortRow('build-1', 'CODING_AGENT'),
+      { type: 'checkpoint.recorded', taskId: 'build-1', facts: { checkpointId: 'cp-1' } },
+      { type: 'checkpoint.recorded', taskId: 'build-1', facts: { checkpointId: 'cp-1' } },
+      { type: 'checkpoint.recorded', taskId: 'build-1', facts: { checkpointId: 'cp-2' } },
+    ]);
+    expect(report.bySlot.CODING_AGENT!.participation.checkpointsRaised).toBe(2);
+  });
+
+  it('records a routing decision that stated no barrier without calling it one', () => {
+    const report = build([
+      effortRow('build-1', 'CODING_AGENT'),
+      { type: 'checkpoint.recorded', taskId: 'build-1', facts: { checkpointId: 'cp-1' } },
+      // The early-return verdict path writes route and reason and no `barrier`.
+      { type: 'checkpoint.verdict', taskId: 'build-1', facts: { checkpointId: 'cp-1', route: 'CONTINUE', reasonCode: 'no_question' } },
+    ]);
+    const coder = report.bySlot.CODING_AGENT!.participation;
+    expect(coder.routes, 'the decision is on the record').toEqual({ CONTINUE: 1 });
+    expect(coder.barriers, 'an absent flag is not a barrier').toBe(0);
+    expect(coder.continuations, 'and minted nothing').toBe(0);
+  });
+});

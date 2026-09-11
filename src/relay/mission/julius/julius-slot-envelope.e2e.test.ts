@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { juliusAllocationPolicy } from './julius-allocation-runtime';
 import { juliusSlotEnvelopePolicy, slotEnvelopeUsdMicros, slotRoundShareUsdMicros } from './julius-slot-envelope';
+import { projectJuliusSlotLedger, reserveJuliusSlotCapacity } from './julius-slot-ledger';
 import { juliusSlotEffortObservation, summarizeJuliusSlotEffort } from './julius-slot-effort';
 import {
   cardPolicy, createJuliusHarness, seedTaskContractInto, task, verificationPolicy, worker,
@@ -430,5 +431,85 @@ describe('a dispatch that never reached a provider gives its money back', () => 
     const billed = failing.store.events()
       .filter((event) => event.type === 'budget.settled' && event.facts.released === false);
     expect(billed.length, 'the billed dispatch closed without a release').toBeGreaterThan(0);
+  });
+});
+
+/**
+ * WHY A SLOT WENT SHORT, ON THE ROW ITSELF.
+ *
+ * The dispatch path needs one answer — allowed or exhausted — and collapses
+ * every ledger refusal into `EXHAUSTED` to get it. That collapse loses the
+ * distinction the paid proof most needs afterwards: a slot that did little
+ * because THE MISSION ran dry did not do little for the same reason as one
+ * refused because the rule does not treat it as a peer. Both would have read
+ * as `BUDGET_EXHAUSTED` and been indistinguishable from a mission that simply
+ * needed less work.
+ */
+describe('a denied dispatch says which rule denied it', () => {
+  it('carries the ledger\'s own refusal code, not only that something was exhausted', async () => {
+    const harness = build(juliusSlotEnvelopePolicy({
+      ceilingUsdMicros: CEILING, authorizedRepairRounds: REPAIR_ROUNDS, maxCoderSegments: SEGMENTS,
+    }));
+    await drain(harness);
+
+    const allocated = harness.store.events().filter((event) => event.type === 'budget.allocated');
+    expect(allocated.length, 'the run allocated').toBeGreaterThan(0);
+    for (const event of allocated) {
+      // A GRANT SAYS SO EXPLICITLY. `null` is "the ledger considered this and
+      // allowed it"; a missing key would be indistinguishable from a rule that
+      // has no ledger at all.
+      expect(event.facts.slotRefusal, `${String(event.taskId)} was granted`).toBeNull();
+    }
+  });
+
+  it('carries the ledger\'s reason all the way onto the denial row, through the pipeline', async () => {
+    const harness = build(juliusSlotEnvelopePolicy({
+      ceilingUsdMicros: CEILING, authorizedRepairRounds: REPAIR_ROUNDS, maxCoderSegments: SEGMENTS,
+    }));
+    // THE MISSION'S WHOLE CEILING, held and then settled UNKNOWN — spent, and
+    // not recoverable by anyone. The next dispatch has nowhere to draw from.
+    await harness.store.appendEvent({
+      eventId: 'spent-reserve', runId: 'run-1', projectId: 'prj-1',
+      type: 'budget.reserved', taskId: 'prior-1', workerId: null,
+      correlationId: 'prior', causationId: null, occurredAt: '2026-09-01T00:00:00.000Z',
+      facts: { role: 'CODING_AGENT', usdMicros: CEILING, reservationId: 'r-prior', allocationPolicy: 'julius-allocation.v2' },
+    });
+    await harness.store.appendEvent({
+      eventId: 'spent-settle', runId: 'run-1', projectId: 'prj-1',
+      type: 'budget.settled', taskId: 'prior-1', workerId: null,
+      correlationId: 'prior', causationId: null, occurredAt: '2026-09-01T00:00:01.000Z',
+      facts: { role: 'CODING_AGENT', usdMicros: null, reservationId: 'r-prior', released: false, settlementBasis: 'UNKNOWN' },
+    });
+    await drain(harness);
+
+    const denied = harness.store.events().filter((event) => event.type === 'budget.denied');
+    expect(denied.length, 'the run was denied').toBeGreaterThan(0);
+    // THE POINT OF THE FIELD. `reason` is BUDGET_EXHAUSTED for every denial the
+    // dispatch path produces; `slotRefusal` is the only thing on the row that
+    // says the MISSION ran dry rather than this slot being ineligible.
+    expect(denied[0]!.facts.reason).toBe('BUDGET_EXHAUSTED');
+    expect(denied[0]!.facts.slotRefusal).toBe('MISSION_CAPACITY_EXHAUSTED');
+  });
+
+  it('names MISSION_CAPACITY_EXHAUSTED rather than a generic exhaustion', () => {
+    // Read against the ledger directly: the pipeline reaches this only when a
+    // whole mission's capacity is gone, which a green fixture never does.
+    const ledger = projectJuliusSlotLedger({
+      runId: 'run-1',
+      policy: juliusSlotEnvelopePolicy({
+        ceilingUsdMicros: CEILING, authorizedRepairRounds: REPAIR_ROUNDS, maxCoderSegments: SEGMENTS,
+      }),
+      policyVersion: 'julius-allocation.v2',
+      ceilingUsdMicros: CEILING,
+      // One reservation that takes the whole mission, settled UNKNOWN so the
+      // money is spent and unrecoverable rather than released.
+      rows: [
+        { type: 'budget.reserved', taskId: 'build-1', facts: { role: 'CODING_AGENT', usdMicros: CEILING, reservationId: 'r-1', allocationPolicy: 'julius-allocation.v2' } },
+        { type: 'budget.settled', taskId: 'build-1', facts: { role: 'CODING_AGENT', usdMicros: null, reservationId: 'r-1', released: false, settlementBasis: 'UNKNOWN' } },
+      ],
+    });
+    const verdict = reserveJuliusSlotCapacity({ ledger, slot: 'PROMPT_ARCHITECT' });
+    expect(verdict.ok).toBe(false);
+    expect(verdict.ok ? null : verdict.refusal).toBe('MISSION_CAPACITY_EXHAUSTED');
   });
 });

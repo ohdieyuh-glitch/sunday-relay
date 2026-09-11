@@ -195,6 +195,17 @@ path reads the verdict, so nothing here can cause synthetic work.
   production cannot serve passes while proving something else, which is the
   most expensive kind of green. Verified by mutation: adding `review:cleanup`
   to one drill fails the guard by name.
+- **Participation and refusal mutations**: 9 across the report's attribution and
+  the denial row. 8 died on the first pass; the survivor was a real gap — every
+  ledger refusal could be rewritten to one generic code with the suite still
+  green, because nothing drove the pipeline to an actual refusal. A test that
+  spends the whole ceiling and reads the denial row closes it. The other eight:
+  a checkpoint silently dropped instead of reported unattributed, `barrier`
+  counted unless explicitly false, raised-checkpoints not deduplicated, verdict
+  rows counted as raises, dispositions attributed to the subject's slot, every
+  verdict counted as a continuation, a grant omitting its refusal field instead
+  of stating `null`, and the mission-capacity guard removed entirely — which is
+  the 67% overspend, reintroduced, and it fails two tests by name.
 - **Budget and telemetry mutations**: 25 across the slot ledger, the effort
   summariser, the report and the pipeline — v1/v2 confusion, slot
   misclassification, unknown cost read as zero, double borrowing, the
@@ -222,8 +233,55 @@ path reads the verdict, so nothing here can cause synthetic work.
     whole research allowance without a request leaving the process.
   Both tests were strengthened and both mutations then died. 24/24.
 
+## 6.5 What the paid proof has to be able to answer, and from which field
+
+The paid continuous-Julius run has not been designed as "run it and look at the
+logs". Eight questions were named in advance; each one is answered by a NAMED
+FIELD of `julius-slot-report.v1` or it is not answered at all. Designing this
+before the run is the point — a question nobody can answer from the bundle
+afterwards is a question the run was never instrumented for, and by then the
+money is spent.
+
+Three of the eight needed work to become answerable. They are marked.
+
+| | Question | Answered from | State |
+|---|---|---|---|
+| **A** | Did all three slots perform meaningful work throughout? | `bySlot[*].effort.dispatches`, every dimension's `measured`/`unknown` split, `participation`, `ledger.reservationsOpened` | **Partly.** "Did work" is answerable per slot. "THROUGHOUT" is not: the report carries no position, so a slot that did everything in the first two minutes and nothing after reads identically to one that worked evenly. See the gap below. |
+| **B** | Was the Architect substantially more active than in Mission 5? | `bySlot.PROMPT_ARCHITECT.effort` against the Mission 5 replay control (§5) | Yes. The control is a historical record, not a target — Mission 5 was valid under the architecture it ran beneath. |
+| **C** | Did the Coder research independently when useful? | `bySlot.CODING_AGENT.effort.researchCalls`, and the mediator's own observation outcomes | Yes. `researchCalls` is emitted per dispatch and is `unknown` — never `0` — when the adapter reported nothing. |
+| **D** | Did the Reviewer independently research and challenge rather than trust the Architect? | `dispositions.byVerdict` / `byEvaluator`, plus the reviewer's own `researchCalls` | **Now yes.** `contract.disposition` rows were durable already and the report discarded them. It reports the evaluator by ID, not by role: the row names an `evaluatorId` and nothing in it says what role that id holds. |
+| **E** | Did causal checkpoint barriers actually affect coder progression? | `bySlot[*].participation.checkpointsRaised` / `routes` / `barriers` / `continuations` | **Now yes.** `barriers` and `continuations` are counted separately on purpose: a barrier that minted no continuation stopped a worker without giving it anywhere to resume, which is a stall and not a barrier working. |
+| **F** | Did all three have sufficient budget? | `bySlot[*].ledger` — `remainingOwnEnvelope`, `borrowed`, `outstanding`, `settledKnown`, `settledUnknown` — and the `budget.denied` rows | Yes, with §4.0's caveat: a slot whose provider never reported is charged what it RESERVED, so its figure is an upper bound on what it actually cost. |
+| **G** | Did any slot stay shallow because of architecture or budget rather than because the mission needed less? | `budget.denied.slotRefusal` beside `shareUsdMicros` and `allocationBasis` | **Now yes.** The dispatch path collapses every ledger refusal into `EXHAUSTED`; `slotRefusal` preserves the ledger's own reason, so `MISSION_CAPACITY_EXHAUSTED` is distinguishable from a slot the rule does not treat as a peer, and both from a slot that was simply granted a small share. |
+| **H** | Cost per VERIFIED successful mission? | `bySlot[*].ledger.settledKnown` + `settledUnknown`, against the run's verification decision | Yes — as a RANGE, not a number. Known settlements are the floor; unknown ones are held at what was reserved. A single figure would have to guess which. |
+
+**Equal tokens are not required and are not measured for.** The parity band
+(§5) stays diagnostic: `PEER`, `ABOVE_OBSERVED_RANGE`, `BELOW_OBSERVED_RANGE`,
+`INDETERMINATE`, and no success path reads the verdict. A worker above the band
+is not inefficient and a worker below it is not asked to burn tokens. What is
+being checked is comparable CAPABILITY and available EFFORT, not equal output.
+
+**The one gap this leaves (A).** The report is a set of totals and the rows
+behind them, with no sequence. Answering "throughout" needs a position per row
+— the timeline's own append order, which `JuliusReportRow` currently drops. It
+is a small change and it is deliberately not in this one: it alters the row
+contract every reader shares, and there is no run yet whose shape would make it
+worth reading. It is named here so the paid run is not dispatched in the belief
+that A is answerable.
+
 ## 7. What has NOT been done
 
 - No provider call. No paid dispatch. No mission has a research policy.
-- The live composition still allocates under v1 (§4.1).
+- The live composition still allocates under v1 (§4.1). It now binds the
+  timeline reader the v2 ledger projects from, but the allocation DECISION is
+  unchanged.
 - The paid qualification has not been dispatched.
+- Four effort dimensions — `brainRetrievals`, `checkpoints`, `guidanceConsumed`
+  and `evidenceInspected` — are declared and carried but not instrumented. They
+  arrive ABSENT and read as unknown. None of them reads as zero. (`checkpoints`
+  as a per-dispatch counter is superseded in practice by §6.5's `participation`,
+  which counts the same thing off the durable checkpoint rows instead.)
+- Per-slot attribution on PostgreSQL is projected through the timeline reader
+  rather than served by a dedicated table. That is deliberate — it cannot drift
+  from the money record — but the projection pages the event log.
+- Question A of §6.5 is not answerable: the report carries no row ordering.

@@ -2741,6 +2741,7 @@ async function allocateFor(input: {
         slotSettledKnownUsdMicros: account?.settledKnownUsdMicros ?? null,
         slotSettledUnknownUsdMicros: account?.settledUnknownUsdMicros ?? null,
         unallocatedUsdMicros: ledger.unallocatedUsdMicros,
+        slotRefusal: verdict.refusal,
       };
     }
     return {
@@ -2758,6 +2759,9 @@ async function allocateFor(input: {
       slotSettledKnownUsdMicros: account?.settledKnownUsdMicros ?? null,
       slotSettledUnknownUsdMicros: account?.settledUnknownUsdMicros ?? null,
       unallocatedUsdMicros: verdict.unallocatedUsdMicros,
+      // The ledger granted. Stated rather than left absent, so "no refusal" and
+      // "a rule with no refusals to give" do not read the same on the row.
+      slotRefusal: null,
     };
   }
 
@@ -2855,6 +2859,17 @@ interface JuliusDispatchDecision {
   readonly slotSettledKnownUsdMicros?: number | null;
   readonly slotSettledUnknownUsdMicros?: number | null;
   readonly unallocatedUsdMicros?: number | null;
+  /**
+   * WHY THE LEDGER SAID NO, in its own vocabulary.
+   *
+   * The decision collapses every refusal into `EXHAUSTED`, which is what the
+   * dispatch path needs, and collapsing it there loses the one distinction a
+   * reader afterwards actually needs: a slot refused because THE MISSION ran
+   * dry did not do less work for the same reason as one refused because it is
+   * not a peer of this policy. Null when the ledger granted; absent under v1,
+   * which has no per-slot ledger to refuse.
+   */
+  readonly slotRefusal?: string | null;
 }
 
 const allocationFacts = (allocation: JuliusDispatchDecision): Record<string, string | number | null> => ({
@@ -2874,6 +2889,13 @@ const allocationFacts = (allocation: JuliusDispatchDecision): Record<string, str
   slotSettledUnknownUsdMicros: allocation.slotSettledUnknownUsdMicros ?? null,
   unallocatedUsdMicros: allocation.unallocatedUsdMicros ?? null,
   ledgerRevision: allocation.ledgerRevision ?? null,
+  // ABSENT, NULL AND A CODE ARE THREE DIFFERENT ANSWERS, so the key is omitted
+  // rather than nulled when there is nothing to say. Absent is v1: no per-slot
+  // ledger exists, so no refusal was possible and the reader sees unknown.
+  // `null` is a ledger that GRANTED. A code is the ledger's own reason for
+  // refusing. Nulling the first would report v1 as a rule that considered this
+  // dispatch and allowed it, which is not something v1 ever did.
+  ...(allocation.slotRefusal === undefined ? {} : { slotRefusal: allocation.slotRefusal }),
 });
 
 /* ---------------------------------------------------- repair context */
