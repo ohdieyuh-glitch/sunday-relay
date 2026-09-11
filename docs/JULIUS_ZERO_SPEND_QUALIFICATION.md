@@ -210,10 +210,19 @@ as free; an unrecognised outcome charged wrongly.
 
 - **No paid run happened.** Everything here is provider-free; the qualification
   says the architecture can support the proof, not that the proof succeeded.
-- **Question A of §6.5 in the arming record is now answerable** (blocker 4), but
-  the evidence bundle's shell exporter still orders its event dumps by
-  `occurred_at` and never selects `sequence`. The projection exists; the TSV
-  export has not been moved onto it.
+- **Question A of §6.5 in the arming record is now answerable** (blocker 4), and
+  so are C, E and G — but not by anything in this change. Following the exporter
+  gap named here turned up a sixth blocker, one layer further out: the report
+  this qualification hardened has **no production caller**, and the script that
+  does run on a paid mission exported none of `worker.effort`, the checkpoint
+  pair or the research pair. Five of the eight fields §6.5 names as the answers
+  to A–H, plus `slotRefusal`, reached the durable ledger and were destroyed with
+  the database. The follow-up adds `effort.tsv`, `participation.tsv` and
+  `research.tsv`, puts `slotRefusal` on `budget.tsv`, and moves every event dump
+  onto `e.stream_id,e.sequence` — so the bundle carries the rows AND their order.
+  Two files stay on a wall clock and say why: `julius_trajectory_events` has no
+  sequence column at all, and `cost-accounting.tsv` is an aggregate whose order
+  is its grouping.
 - **Effort parity stays diagnostic.** No success path reads the ratio. Equal
   tokens are not required and are not measured for. The three slots are
   peer-grade in capability and authority, not in arithmetic.
