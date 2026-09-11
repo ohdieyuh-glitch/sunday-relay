@@ -1173,6 +1173,58 @@ async function driveContinuousLifecycle(input: {
     commandId: `guidance:${guidanceTask.taskId}`,
     runId: run.runId, projectId: run.projectId, task: guidanceTask,
   });
+
+  /**
+   * THE QUESTION HAS TO REACH THE ARCHITECT, and the only channel Julius owns
+   * is the Project Brain.
+   *
+   * Minting the task is not asking the question. A guidance task carries no
+   * payload of its own: what a worker sees is the packet Julius compiles for
+   * it, so a request that stops at the checkpoint's `safeSummary` would arrive
+   * as a task to write advice about nothing in particular. `blockedOn`,
+   * `attempted` and `relevantPaths` are exactly the difference between "the
+   * coder is stuck" and a question someone can answer.
+   *
+   * It goes through the ordinary brain write rather than beside it, so the
+   * architect reads it the way it reads the objective and the findings — no
+   * prose side channel, one context compiler, one redaction path, one
+   * provenance record. The entry is SCOPED TO THE GUIDANCE TASK, so it reaches
+   * that packet and no other: the coder does not get its own question read back
+   * to it, and the reviewer sees it only when reviewing the guidance.
+   *
+   * GUARDED BY THE TASK'S OWN WRITE, exactly as the decision entry is guarded
+   * by `appendDecision`: `addTask` is idempotent by command id, so a replayed
+   * tick writes neither the task nor the entry and the brain revision does not
+   * drift.
+   *
+   * Every value below has already passed `sanitizeJuliusGuidanceRequest`, which
+   * rebuilds the request from an allowlist with bounded lengths. No provider
+   * body reaches this row. When the request could not be read at all, the entry
+   * SAYS SO rather than being skipped — an architect told nothing cannot tell
+   * that it was told nothing.
+   */
+  if (created) {
+    const askText = request === null
+      ? 'A worker asked for guidance and its request could not be read. No question, blocking condition, attempt or path is available.'
+      : [
+        `QUESTION: ${request.question}`,
+        `BLOCKED ON: ${request.blockedOn.join(' | ') || '(none stated)'}`,
+        `ALREADY ATTEMPTED: ${request.attempted.join(' | ') || '(none stated)'}`,
+        `RELEVANT PATHS: ${request.relevantPaths.join(' | ') || '(none stated)'}`,
+      ].join('\n');
+    await deps.store.appendBrainEntry({
+      runId: run.runId,
+      projectId: run.projectId,
+      taskId: guidanceTask.taskId,
+      workerId: input.workerId,
+      entryId: `brain:guidance-request:${guidanceTask.taskId}`,
+      kind: 'HANDOFF',
+      safeText: askText,
+      evidenceIds: [],
+      occurredAt: deps.clock.now(),
+    });
+  }
+
   await ledger.event('checkpoint.verdict', {
     taskId: subjectTaskId, workerId: input.workerId,
     facts: {

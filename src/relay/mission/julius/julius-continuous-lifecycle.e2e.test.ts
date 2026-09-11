@@ -666,3 +666,50 @@ describe('12 — the prior guarantees do not regress', () => {
     expect(guidanceSubjectTaskId('guidance:build-1:1:task')).toBe('build-1');
   });
 });
+
+/**
+ * 28 — THE QUESTION REACHES THE ARCHITECT, NOT JUST THE LEDGER.
+ *
+ * ADR-021 minted the guidance task and recorded the checkpoint, and that was
+ * enough to prove Julius had ASKED. It was not enough to prove the architect
+ * could ANSWER: a guidance task carries no payload of its own, so what a worker
+ * sees is the packet Julius compiles for it. A request that stopped at the
+ * checkpoint's `safeSummary` would arrive as a task to write advice about
+ * nothing in particular, and `blockedOn`, `attempted` and `relevantPaths` are
+ * the difference between "the coder is stuck" and a question someone can answer.
+ */
+describe('28 - a guidance request reaches the architect through the Project Brain', () => {
+  const asks = async (harness: JuliusHarness) =>
+    (await harness.store.brainEntriesForRun('run-1', 'prj-1'))
+      .filter((entry) => entry.entryId.startsWith('brain:guidance-request:'));
+
+  it('writes one HANDOFF entry scoped to the guidance task, and to no other packet', async () => {
+    const harness = build({ coderScript: [{ kind: 'succeed', guidanceRequest: REQUEST }] });
+    await drain(harness);
+    const guidance = harness.store.taskRow('guidance:build-1:1:task');
+    expect(guidance, 'a guidance task must have been minted').toBeDefined();
+
+    const rows = await asks(harness);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].kind).toBe('HANDOFF');
+    expect(rows[0].taskIds).toEqual(['guidance:build-1:1:task']);
+  });
+
+  it('carries the three structured fields the checkpoint summary drops', async () => {
+    const harness = build({ coderScript: [{ kind: 'succeed', guidanceRequest: REQUEST }] });
+    await drain(harness);
+    const text = (await asks(harness))[0].text;
+    expect(text).toContain(REQUEST.question);
+    for (const line of [...REQUEST.blockedOn, ...REQUEST.attempted, ...REQUEST.relevantPaths]) {
+      expect(text, 'the architect must be able to read: ' + line).toContain(line);
+    }
+  });
+
+  /** A replayed tick writes neither the task nor the entry: one ask, one row. */
+  it('does not duplicate on a replayed drive', async () => {
+    const harness = build({ coderScript: [{ kind: 'succeed', guidanceRequest: REQUEST }] });
+    await drain(harness);
+    await drain(harness);
+    expect(await asks(harness)).toHaveLength(1);
+  });
+});
