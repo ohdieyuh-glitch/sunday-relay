@@ -39,7 +39,11 @@ import {
   type JuliusRuntimeStore,
   type JuliusVerificationPolicy,
   type JuliusWorker,
+  noJuliusResearch,
+  type JuliusResearchPolicy,
 } from '../../src/relay/mission/julius';
+import { createJuliusResearchMediator, juliusResearchPortFrom } from './research-mediator';
+import { createLiveReachService } from '../live-reach-service';
 import {
   evaluateReadiness,
   readGptArchitectConfig,
@@ -442,6 +446,19 @@ export function assembleLiveJuliusRuntime(options: {
    * rather than the truth.
    */
   readonly leaseMs?: number;
+  /**
+   * THE MISSION'S RESEARCH AUTHORITY, one sealed policy per mission.
+   *
+   * Absent, every mission gets `noJuliusResearch` — allowlist empty, no slot
+   * authorised, retrieval budget zero — and a research ask from any worker is
+   * refused as `research_not_authorized` before a socket can exist. That is the
+   * armed-and-inert state the arming stack is meant to reach: the door is
+   * built, governed and closed, and opening it for a mission is an act of
+   * mission authority rather than a code change.
+   */
+  readonly researchPolicyFor?: (missionId: string) => JuliusResearchPolicy;
+  /** Injected in tests so the whole mediated path runs without a network. */
+  readonly researchFetch?: typeof fetch;
 }): LiveJuliusRuntime {
   const registry = new JuliusWorkerRegistry();
   const adapters = new Map<string, JuliusProviderAdapter>();
@@ -492,6 +509,25 @@ export function assembleLiveJuliusRuntime(options: {
     allocation: juliusAllocationPolicy({
       ceilingUsdMicros: options.spendCeilingUsdMicros, authorizedRepairRounds: options.maxRepairRounds,
     }),
+    /**
+     * THE ONE GOVERNED DOOR TO THE OUTSIDE, and it starts closed.
+     *
+     * Bound rather than omitted so a research ask is refused for the true
+     * reason — this mission authorises none — instead of the weaker
+     * `RESEARCH_UNSERVED`, which says only that Julius has no way to look. It
+     * runs in the BRIDGE, never inside the executor: the sandbox keeps
+     * `--network none`, and mediation is what makes that compatible with a
+     * worker needing to read a specification.
+     */
+    research: juliusResearchPortFrom(createJuliusResearchMediator({
+      policyFor: options.researchPolicyFor ?? ((missionId) => noJuliusResearch(missionId)),
+      liveReach: createLiveReachService({
+        now: () => new Date().toISOString(),
+        nextEvidenceId: () => `evidence:${randomUUID()}`,
+        ...(options.researchFetch === undefined ? {} : { fetchImpl: options.researchFetch }),
+      }),
+      now: () => new Date().toISOString(),
+    })),
     owner: options.owner ?? 'julius-live-mission',
     contextCharacterBudget: 24_000,
   };

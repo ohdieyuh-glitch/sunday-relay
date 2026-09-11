@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { createJuliusResearchMediator } from './research-mediator';
+import { createJuliusResearchMediator, juliusResearchPortFrom } from './research-mediator';
 import { createLiveReachService } from '../live-reach-service';
 import type { BackendProbe } from '../../src/relay/mission/live-reach';
 import {
@@ -357,5 +357,67 @@ describe('the mission is the only authority the fetch layer hears', () => {
       source: 'web',
       capability: 'read_item',
     });
+  });
+});
+
+describe('the mediator as the domain port', () => {
+  it('serves asks in order so the second sees what the first spent', async () => {
+    const seen: string[] = [];
+    const fetchImpl = vi.fn((url: unknown) => {
+      seen.push(String(url));
+      return Promise.resolve(page('ok'));
+    });
+    const m = mediator(fetchImpl, {
+      policy: sealJuliusResearchPolicy({
+        missionId: 'msn-1',
+        roles: [...JULIUS_RESEARCH_ROLES],
+        allowances: [{ source: 'web', capabilities: ['read_item'], hosts: ['*.python.org'] }],
+        missionBudget: { maxRetrievals: 9, maxBytes: null },
+        // Two permitted retrievals, three asks: the third must see the budget
+        // the first two spent, which only holds if they are served in order.
+        roleBudget: { maxRetrievals: 2, maxBytes: null },
+      }),
+    });
+    const port = juliusResearchPortFrom(m);
+    const observations = await port.serve({
+      missionId: 'msn-1', projectId: 'prj-1', runId: 'run-1', taskId: 'task-1',
+      role: 'CODING_AGENT',
+      asks: [1, 2, 3].map((n) => ({
+        source: 'web' as const, capability: 'read_item' as const,
+        reference: `https://docs.python.org/3/library/a${String(n)}.html`,
+        purpose: `question ${String(n)}`,
+      })),
+      requestedAt: '2026-09-11T10:00:00.000Z',
+    });
+
+    // A REFUSAL DOES NOT END THE LIST, and each ask keeps its own outcome.
+    expect(observations.map((observation) => observation.outcome))
+      .toEqual(['observed', 'observed', 'budget_exhausted']);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(seen).toEqual([
+      'https://docs.python.org/3/library/a1.html',
+      'https://docs.python.org/3/library/a2.html',
+    ]);
+    // And the third answer is a sentence, not silence.
+    expect(observations[2]!.detail).toContain('allowance');
+    expect(observations[2]!.rendered).toBeNull();
+  });
+
+  it('hands the pipeline observations and never a body', async () => {
+    const port = juliusResearchPortFrom(mediator(() => Promise.resolve(page('a page about pythons'))));
+    const observations = await port.serve({
+      missionId: 'msn-1', projectId: 'prj-1', runId: 'run-1', taskId: 'task-1',
+      role: 'INDEPENDENT_REVIEWER',
+      asks: [{
+        source: 'web', capability: 'read_item',
+        reference: 'https://docs.python.org/3/library/asyncio.html',
+        purpose: 'the reviewer checks a claim for itself',
+      }],
+      requestedAt: '2026-09-11T10:00:00.000Z',
+    });
+    expect(observations).toHaveLength(1);
+    expect('content' in observations[0]!).toBe(false);
+    expect(observations[0]!.rendered).toContain('<<<RELAY-EVIDENCE');
+    expect(observations[0]!.mayCorroborate).toBe(true);
   });
 });

@@ -269,3 +269,57 @@ describe('every dispatch says what it actually spent, and what it could not meas
     expect(report.verdict.INDEPENDENT_REVIEWER).toBe('PEER');
   });
 });
+
+/**
+ * WHY v2 IS BUILT, PROVEN AND NOT YET THE LIVE DEFAULT.
+ *
+ * A finding, pinned so it is reproducible rather than a claim. Under v1 the
+ * Coding Agent's share is the WHOLE ceiling divided by its rounds; under v2 it
+ * is a THIRD of the ceiling divided by its rounds. So a slot envelope that
+ * funds three peers necessarily cuts the one worker that currently spends real
+ * money, and the hosted adapter is handed its allocation as a hard limit.
+ *
+ * Mission 5's coder settled $5.177120 against a v1 share of $7.50. Under v2's
+ * default equal-third split and this round derivation its first dispatch is
+ * capped at $2.50 — below what that mission actually cost — and the money the
+ * architect and reviewer will not spend is unreachable to it, because
+ * reallocation only opens once a slot's OWN envelope is exhausted, which takes
+ * four rounds.
+ *
+ * The founder's directive says Julius optimises cost per VERIFIED SUCCESSFUL
+ * mission and that the envelope must never cause synthetic work. An envelope
+ * that starves a first build round serves neither, so the rule wants a change
+ * — a dispatch drawing from its slot's REMAINING envelope rather than from one
+ * round's share — and that trades against having anything left for repairs.
+ * That is a decision with evidence behind it, not one to make silently inside
+ * a test, so the live composition keeps v1 until it is made.
+ */
+describe('the envelope has a cost, and here is exactly what it is', () => {
+  it('funds the peers by cutting the coder\'s per-round share below what Mission 5 spent', () => {
+    const MISSION_5_COST = 5_177_120;
+    const v1Share = CEILING / (1 + REPAIR_ROUNDS);
+    const v2Share = slotRoundShareUsdMicros(juliusSlotEnvelopePolicy({
+      ceilingUsdMicros: CEILING, authorizedRepairRounds: REPAIR_ROUNDS, maxCoderSegments: SEGMENTS,
+    }), 'CODING_AGENT');
+
+    expect(v1Share).toBeGreaterThan(MISSION_5_COST);
+    expect(v2Share, 'the finding: v2 would have capped that build below its real cost')
+      .toBeLessThan(MISSION_5_COST);
+    // And the unused peer money is out of reach on that first round, because
+    // reallocation opens only after a slot's own envelope is spent.
+    expect(v2Share * (1 + REPAIR_ROUNDS)).toBeLessThan(CEILING);
+  });
+
+  it('keeps the live composition on v1 until that decision is made', async () => {
+    const { assembleLiveJuliusRuntime } = await import('../../../../relay-bridge/julius/live-composition');
+    expect(typeof assembleLiveJuliusRuntime, 'the live composition root exists').toBe('function');
+    // Read as source rather than by running the assembler, which needs a store,
+    // a router and a budget: what is pinned is which rule the live path names.
+    const { readFileSync } = await import('node:fs');
+    const source = readFileSync(
+      new URL('../../../../relay-bridge/julius/live-composition.ts', import.meta.url), 'utf8',
+    );
+    expect(source, 'the live path still allocates under v1').toContain('juliusAllocationPolicy({');
+    expect(source, 'and has not silently switched to v2').not.toContain('juliusSlotEnvelopePolicy({');
+  });
+});

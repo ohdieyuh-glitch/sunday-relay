@@ -265,6 +265,53 @@ const FILE_RULES = [
   ['src/relay/mission/julius/julius-metrics.ts', 'EVENTS / TRAJECTORIES'],
   ['src/relay/mission/julius/julius-run-loop.ts', 'COMPLETION AUTHORITY'],
   ['src/relay/mission/julius/julius-runtime-api.ts', 'COMPLETION AUTHORITY'],
+  // A unit of coder work that pauses at a checkpoint and resumes as a bounded
+  // continuation. The SCHEDULER's, for the same reason the lifecycle above is:
+  // it is the coordinator's account of when work stops, and filing it under the
+  // Coding Agent would read as that slot owning its own barrier.
+  ['src/relay/mission/julius/julius-segment-lineage.ts', 'TASK GRAPH / SCHEDULER'],
+  // What a worker may ask Julius to look at, and what it receives back. Sits
+  // with the lifecycle vocabulary rather than with evidence: the ASK is a
+  // checkpoint and the ANSWER arrives as a continuation, both of which are the
+  // scheduler's. The artifact it produces is classified under evidence, below.
+  ['src/relay/mission/julius/julius-research-protocol.ts', 'TASK GRAPH / SCHEDULER'],
+  // The mission's authority over what any worker may retrieve, and each slot's
+  // retrieval budget. A PERMISSION with a cap on it, which is exactly this
+  // subsystem — the allowlist is mission authority and the budget is the
+  // ledger's, and neither is a worker's to state.
+  ['src/relay/mission/julius/julius-research-policy.ts', 'LEASES / BUDGETS / PERMISSIONS'],
+  // Allocation v2: three peer slots drawing envelopes out of one ceiling, and
+  // the per-dispatch effort telemetry that says whether they were funded like
+  // peers. Same subsystem as the v1 rule they extend.
+  ['src/relay/mission/julius/julius-slot-envelope.ts', 'LEASES / BUDGETS / PERMISSIONS'],
+  ['src/relay/mission/julius/julius-slot-effort.ts', 'LEASES / BUDGETS / PERMISSIONS'],
+  /*
+   * GOVERNED RESEARCH pulled a subtree into Julius's harness, and it belongs
+   * there: binding the mediator in the live composition means these files are
+   * production code on the paid path. They are classified by what they DO for
+   * Julius rather than by which directory they live in.
+   *
+   * Live Reach and the evidence normalizer are how an observation becomes an
+   * attributable artifact; the MCP policy modules are the SSRF controls and the
+   * redactor that observation passes through; `protocol/` is reached only as the
+   * id and error primitives those MCP types are built from. All four answer the
+   * same question — what Relay OBSERVED and how much of it can be trusted — so
+   * all four are ARTIFACTS / EVIDENCE.
+   */
+  ['src/relay/mission/evidence/', 'ARTIFACTS / EVIDENCE'],
+  ['src/relay/mission/live-reach/', 'ARTIFACTS / EVIDENCE'],
+  ['src/relay/connectors/live-reach/', 'ARTIFACTS / EVIDENCE'],
+  ['src/relay/mcp/policy/', 'ARTIFACTS / EVIDENCE'],
+  ['src/relay/mcp/domain/', 'ARTIFACTS / EVIDENCE'],
+  ['src/relay/protocol/', 'ARTIFACTS / EVIDENCE'],
+  // Reached through the evidence-to-Brain link: the shapes a durable memory
+  // takes, which is the Project Brain's own vocabulary.
+  ['src/relay/shared/llmops/', 'DURABLE STATE / PROJECT BRAIN'],
+  // Money types reached through the same link. The budget's arithmetic, as
+  // `julius-cost-accounting.ts` above is.
+  ['src/relay/mission/economics/', 'LEASES / BUDGETS / PERMISSIONS'],
+  // Canonicalization and hashing for the trace record.
+  ['src/relay/mission/trace/', 'EVENTS / TRAJECTORIES'],
   // Bridge-side composition.
   ['relay-bridge/julius-live-mission.ts', 'MISSION CONTRACT / BOOTSTRAP'],
   ['relay-bridge/julius/bootstrap.ts', 'MISSION CONTRACT / BOOTSTRAP'],
@@ -273,6 +320,11 @@ const FILE_RULES = [
   ['relay-bridge/julius/executor-effects.ts', 'TOOLS'],
   ['relay-bridge/julius/sandbox-limits.ts', 'TOOLS'],
   ['relay-bridge/julius/live-composition.ts', 'LIVE PROVIDER COMPOSITION'],
+  // The one place the sealed mission policy and Live Reach's bounded fetch
+  // meet, and the service it wraps. Composition, both of them: the domain has
+  // no network and the connector may not import `/mission`.
+  ['relay-bridge/julius/research-mediator.ts', 'LIVE PROVIDER COMPOSITION'],
+  ['relay-bridge/live-reach-service.ts', 'LIVE PROVIDER COMPOSITION'],
   ['relay-bridge/julius/live-workers.ts', 'LIVE PROVIDER COMPOSITION'],
   ['relay-bridge/hosted-coding-agent/', 'CODING AGENT'],
   ['relay-bridge/hermes-reviewer.ts', 'INDEPENDENT REVIEWER'],

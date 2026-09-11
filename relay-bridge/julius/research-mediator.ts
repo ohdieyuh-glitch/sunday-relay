@@ -9,6 +9,8 @@ import {
   type JuliusResearchRefusal,
   type JuliusResearchRequest,
   type JuliusResearchRole,
+  type JuliusResearchObservationRecord,
+  type JuliusResearchPort,
 } from '../../src/relay/mission/julius';
 import { renderForPrompt, type EvidenceArtifact } from '../../src/relay/mission/evidence';
 import type { MeteredOutcome } from '../../src/relay/mission/live-reach';
@@ -371,6 +373,59 @@ export function createJuliusResearchMediator(
         events: result.events,
         diagnostic: `${String(result.bytes)} bytes from ${verdict.host}, freshness ${artifact.age.freshness}`,
       });
+    },
+  };
+}
+
+/**
+ * THE MEDIATOR AS THE DOMAIN'S PORT.
+ *
+ * `JuliusResearchPort` is what the pipeline declares it needs — a list of asks
+ * in, a list of observations out — and this is the one place the mediator is
+ * shaped to it. Written here rather than in the composition root so there is
+ * exactly one mapping between "what a worker asked" and "what Julius did about
+ * it", and so the ordering rule below has somewhere to be stated.
+ *
+ * ASKS ARE SERVED IN ORDER, ONE AT A TIME, DELIBERATELY. Each retrieval spends
+ * the slot's budget, and a budget decided against a ledger that three
+ * concurrent retrievals are still writing is a budget enforced by luck. Serial
+ * is slower and it is the only way the second ask sees what the first spent.
+ *
+ * A REFUSAL DOES NOT END THE LIST. A worker that asked three questions and had
+ * the first refused still gets answers to the other two, each carrying its own
+ * outcome — which is the whole point of eight distinguishable failures rather
+ * than one.
+ */
+export function juliusResearchPortFrom(mediator: JuliusResearchMediator): JuliusResearchPort {
+  return {
+    async serve(input) {
+      const observations: JuliusResearchObservationRecord[] = [];
+      for (const ask of input.asks) {
+        const result = await mediator.research({
+          missionId: input.missionId,
+          projectId: input.projectId,
+          runId: input.runId,
+          taskId: input.taskId,
+          role: input.role,
+          source: ask.source,
+          capability: ask.capability,
+          reference: ask.reference,
+          purpose: ask.purpose,
+          requestedAt: input.requestedAt,
+        });
+        const observed = result.observation;
+        observations.push({
+          outcome: observed.outcome,
+          reference: observed.reference,
+          purpose: observed.purpose,
+          rendered: observed.rendered,
+          detail: observed.detail,
+          evidenceId: observed.evidenceId,
+          injectionSignals: observed.injectionSignals,
+          mayCorroborate: observed.mayCorroborate,
+        });
+      }
+      return observations;
     },
   };
 }
