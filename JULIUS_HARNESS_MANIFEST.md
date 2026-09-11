@@ -26,7 +26,7 @@ Edges counted by the trace between included files; "type" = type-only imports, e
 | from | to | edges | type |
 | --- | --- | --- | --- |
 | bridge provider stacks (hosted Claude, Hermes, redaction) | connectors (gpt-architect, prompt-architect contracts) | 1 | 0 |
-| bridge provider stacks (hosted Claude, Hermes, redaction) | kernel (src/relay/mission/julius/) | 2 | 2 |
+| bridge provider stacks (hosted Claude, Hermes, redaction) | kernel (src/relay/mission/julius/) | 3 | 2 |
 | bridge provider stacks (hosted Claude, Hermes, redaction) | other | 4 | 0 |
 | C.A.R.D. record (src/relay/integration/compound-agent/, entitlement) | kernel (src/relay/mission/julius/) | 1 | 0 |
 | C.A.R.D. record (src/relay/integration/compound-agent/, entitlement) | Relay vocabulary (mission/contracts.ts, protocol/enums.ts) | 1 | 1 |
