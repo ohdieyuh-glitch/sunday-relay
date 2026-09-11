@@ -28,13 +28,14 @@ PR for the branch is already open, takes its title from the body's `# ` heading
 rather than a literal, and prints no credential material. Its five pre-GitHub
 checks were dry-run against the pushed branch and all five pass.
 
-## Independent of the participant-isolation candidate
+## Three candidates, one base, disjoint files
 
-`ceremony/participant-isolation-pr` is frozen on the SAME base and touches a
-disjoint set of files. The two may be opened and approved in either order.
-Whichever lands first moves `main`, at which point the other's opener will
-refuse (`main moved: … — STOP, the candidate is stale`) and that candidate is
-rebased and re-frozen before its ceremony is run. That refusal is the safety
+`ceremony/participant-isolation-pr`, `ceremony/architect-envelope-pr` and
+`ceremony/ending-diagnostics-pr` are all frozen on the SAME base and touch file
+sets disjoint from one another. Any order works.
+Whichever lands first moves `main`, at which point the others' openers refuse
+(`main moved: … — STOP, the candidate is stale`) and those candidates are
+rebased and re-frozen before their ceremonies run. That refusal is the safety
 property working, not a fault.
 
 ## What this branch carries
