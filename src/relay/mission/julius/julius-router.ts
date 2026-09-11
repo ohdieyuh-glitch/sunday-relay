@@ -301,6 +301,28 @@ export const safeReviewDiagnostics=(value:unknown):JuliusSafeDiagnostics|null=>{
   costSource:safeToken(v.costSource),
   /** Whether the provider runtime launched at all: the difference between spending nothing and spending an unknown amount. */
   runtimeStarted:safeNullableBool(v.runtimeStarted),
+  /* --- WHAT THE STREAM ITSELF REPORTED, TURN BY TURN. A FLOOR. ---
+   *
+   * `costUsdMicros` and `inputTokens`/`outputTokens` above come from the
+   * runtime's terminal result, and a run Relay aborts at its own ceiling never
+   * produces one: paid run 34485676189 attempt 1 was cut off at 360 000 ms and
+   * every one of those columns is null. We paid and could not say how much.
+   *
+   * Every assistant turn had already reported its own usage and all of it was
+   * discarded, so "the runtime reported nothing" was a fact about the parser.
+   * These columns are the sum over the turns actually seen — a LOWER BOUND,
+   * which is why they are named apart from the totals and why no basis is
+   * derived from them. `costBasis` stays UNKNOWN: a floor in tokens is not a
+   * provider's report in dollars, and the ledger must keep holding the
+   * reservation rather than settle against a number nobody billed. --- */
+  /** Assistant turns whose usage block was readable. 0 means the floor is empty, not that nothing ran. */
+  streamUsageMessages:safeCount(v.streamUsageMessages),
+  /** Turns the runtime itself marked aborted — its own word for what Relay's timer did. */
+  streamAbortedMessages:safeCount(v.streamAbortedMessages),
+  streamInputTokens:safeCount(v.streamInputTokens),
+  streamOutputTokens:safeCount(v.streamOutputTokens),
+  streamCacheReadInputTokens:safeCount(v.streamCacheReadInputTokens),
+  streamCacheCreationInputTokens:safeCount(v.streamCacheCreationInputTokens),
   /* ------------------------------------------- the attempt itself ----
    *
    * EVERY FIELD ABOVE DESCRIBES A FAILURE, and until Live Run 3 that was the
