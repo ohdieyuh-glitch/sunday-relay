@@ -16,17 +16,17 @@
 set -euo pipefail
 
 REPO='ohdieyuh-glitch/sunday-relay'
-BRANCH='relay/julius-peer-hardening'
-BASE='ca77604a7197be0937c0ae82f968987496c82513'
-HEAD='00aa547dbb30d29a6ffb28d9f33005a2075369ff'
-TREE='0f7e2a2522f8a90d7866b707dd1edf7c5902d775'
-COMMITS=4
+BRANCH='relay/julius-evidence-completeness'
+BASE='482e6a05161c1619514742519f393688ffdcb230'
+HEAD='7b0950d41d7a345e38aff482d061782cc7402df4'
+TREE='8c8e3d206ebe063e6e017c69c97270c289567f2d'
+COMMITS=2
 WORKER='julius-worker[bot]'
 # RESOLVED AGAINST THE SCRIPT, NOT THE WORKING DIRECTORY. The README says to run
 # this as `bash ceremony/open-...-pr.sh` from the repository root, where a bare
 # filename resolves to `./PR_BODY_...md` and is not there. Same class of fault as
 # the inline-Python trap: a runbook that does not match its own script.
-BODY_FILE="${PR_BODY_FILE:-$(dirname "$0")/PR_BODY_PEER_HARDENING.md}"
+BODY_FILE="${PR_BODY_FILE:-$(dirname "$0")/PR_BODY_EVIDENCE_COMPLETENESS.md}"
 
 APP_ID="${JULIUS_WORKER_APP_ID:-${1:-}}"
 [ -n "$APP_ID" ] || { echo 'need the julius-worker App ID: export JULIUS_WORKER_APP_ID=<id> (or pass it as $1)' >&2; exit 2; }
