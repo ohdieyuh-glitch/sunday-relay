@@ -147,9 +147,24 @@ path reads the verdict, so nothing here can cause synthetic work.
   and charged.
 - **The protocol**: 49 cases, including the nine-permutation role-swap
   invariance proof.
-- **End to end**: proofs 31 and 32 — the barrier edge, the fenced answer
-  reaching the continuation before it runs, all three slots served, the
-  unserved default that never stalls a mission, the ceiling, the replay.
+- **End to end**: proofs 31–34 — the barrier edge, the fenced answer reaching
+  the continuation before it runs, all three slots served, the unserved default
+  that never stalls a mission, the ceiling, the replay, true interleaving
+  (proof 33 checks the ORDER of real dispatches: the architect is asked and the
+  reviewer judges that answer BETWEEN the coder's first segment and its second,
+  so a phased plan/build/review run fails it), and the founder's security list
+  checked as a DIFF rather than by inspection (proof 34: against a page asking
+  for admin access, a raised budget, a widened allowlist, a completion claim, a
+  VERIFIED promotion, a skipped reviewer and a hidden task, the contract, the
+  task set, every decision and the run state are byte-identical to a benign
+  retrieval — and the hostile text is still kept, fenced and labelled).
+- **Drill parity**: the three PostgreSQL drills keep their own worker tables,
+  because each scripts its own adapters. `julius-drill-worker-parity.test.ts`
+  holds them to SUBSET-not-equality against the production registrations: a
+  drill may be narrower, never wider or different. A drill registering a route
+  production cannot serve passes while proving something else, which is the
+  most expensive kind of green. Verified by mutation: adding `review:cleanup`
+  to one drill fails the guard by name.
 - **Mutation campaign**: 24 mutations across the research policy, the protocol,
   the segment lineage, the slot envelope, the reviewer adapter, the Live Reach
   service and the pipeline. 22 caught on the first pass; both survivors were
