@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import { ARCHITECT_WORKER, CODER_WORKER, reviewerWorker } from '../relay-bridge/julius/live-composition';
+import { architectWorker, CODER_WORKER, reviewerWorker } from '../relay-bridge/julius/live-composition';
 
 /**
  * THE DRILL WORKER TABLES ARE COPIES, AND A COPY THAT DRIFTS PROVES SOMETHING
@@ -28,7 +28,7 @@ const DRILLS = [
 ] as const;
 
 const PRODUCTION: Readonly<Record<string, readonly string[]>> = Object.freeze({
-  PROMPT_ARCHITECT: ARCHITECT_WORKER.taskTypes,
+  PROMPT_ARCHITECT: architectWorker({}).taskTypes,
   CODING_AGENT: CODER_WORKER.taskTypes,
   INDEPENDENT_REVIEWER: reviewerWorker('xai').taskTypes,
 });

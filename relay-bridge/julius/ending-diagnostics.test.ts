@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { createLiveArtifactExchange, createLiveArchitectAdapter } from './live-workers';
-import { ARCHITECT_WORKER } from './live-composition';
+import { architectWorker } from './live-composition';
 import { JULIUS_CONTEXT_COMPILER_VERSION } from '../../src/relay/mission/julius';
 import type { JuliusContextSnapshot } from '../../src/relay/mission/julius';
 import type { GptRunOutcome } from '../../src/relay/connectors/gpt-architect';
@@ -111,7 +111,7 @@ function planSnapshot(taskId: string): JuliusContextSnapshot {
     contacted and nothing is spent; these assert the RECORD, never a real run. */
 const architect = (outcome: GptRunOutcome, artifacts = createLiveArtifactExchange()) =>
   createLiveArchitectAdapter({
-    worker: ARCHITECT_WORKER,
+    worker: architectWorker({}),
     contexts: { snapshotFor: () => planSnapshot('plan-1:task') },
     artifacts,
     config: { liveMode: true, model: 'gpt-5.6-sol', maxOutputTokens: 4_000 } as never,

@@ -18,7 +18,7 @@
  */
 
 import { DEFAULT_HOSTED_LIMITS } from '../hosted-coding-agent/hosted-envelope';
-import { DEFAULT_TIMEOUT_MS as ARCHITECT_OPERATIVE_TIMEOUT_MS } from '../../src/relay/connectors/gpt-architect/config';
+import { architectOperativeTimeoutMs } from '../../src/relay/connectors/gpt-architect/config';
 import { reviewerOperativeTimeoutMs } from '../reviewer-deadline';
 import { randomUUID } from 'node:crypto';
 import {
@@ -114,7 +114,13 @@ import type { ShellEffectPort, TaskClaimSource } from './executor-effects';
 
 /* ------------------------------------------------------- role resolution */
 
-export const ARCHITECT_WORKER: JuliusWorker = {
+/**
+ * A FUNCTION OF THE ENVIRONMENT, like `reviewerWorker` is a function of the
+ * provider, and for the same reason: the one field that is not a constant is
+ * the deadline, and a constant deadline is how a declaration stops describing
+ * the call it declares.
+ */
+export const architectWorker = (env: Record<string, string | undefined>): JuliusWorker => ({
   workerId: 'prompt-architect-openai', role: 'PROMPT_ARCHITECT',
   adapterId: 'openai-architect-live', providerId: 'openai',
   // `repair:plan` is a PLAN REVISION: a repair inherits its subject's role and
@@ -133,14 +139,33 @@ export const ARCHITECT_WORKER: JuliusWorker = {
    */
   capabilities: ['plan'], taskTypes: ['plan', 'repair:plan', 'guidance', 'repair:guidance'],
   /**
-   * DERIVED, not restated. This read `300_000`, which happened to equal the
-   * connector's `DEFAULT_TIMEOUT_MS` — the number that actually bounds the
-   * call. Equal by coincidence is not the same as equal by construction: two
-   * literals agreeing today is exactly the arrangement that let the reviewer's
-   * declared and operative deadlines drift 160 s apart unnoticed.
+   * RESOLVED, not merely derived. This first read `300_000`, a literal that
+   * happened to equal the connector's default; the literal was then replaced by
+   * `DEFAULT_TIMEOUT_MS` itself, which looked like a derivation and was still
+   * one step short — the number that bounds the call is
+   * `readGptArchitectConfig(env).timeoutMs`, and `RELAY_PROMPT_ARCHITECT_TIMEOUT_MS`
+   * moves it. So setting that variable moved the operative deadline and left
+   * this declaration behind, which is precisely the drift the previous comment
+   * claimed to have ended. Reading through the same resolver the adapter's
+   * config comes from makes the two incapable of disagreeing under ANY
+   * environment, rather than under the empty one.
    */
-  concurrencyLimit: 1, timeoutMs: ARCHITECT_OPERATIVE_TIMEOUT_MS, maxRetries: 1, status: 'AVAILABLE',
-};
+  concurrencyLimit: 1, timeoutMs: architectOperativeTimeoutMs(env), maxRetries: 1, status: 'AVAILABLE',
+});
+
+/**
+ * WHAT THE ARCHITECT MAY SPEND OF THE JOB, worst case — its RESOLVED deadline
+ * times every attempt the run loop will make.
+ *
+ * Exported because the job-budget proof in `coder-envelope.test.ts` needs this
+ * number and used to compute it from `DEFAULT_TIMEOUT_MS * 2`: the connector's
+ * fallback times a literal. Both factors were restatements, so raising the
+ * architect's real deadline in the workflow would have raised the real worst
+ * case while the proof that the four shares fit inside `JOB_BUDGET_MS` stayed
+ * where it was and kept passing.
+ */
+export const architectWorstCaseSpendMs = (env: Record<string, string | undefined>): number =>
+  architectOperativeTimeoutMs(env) * (architectWorker(env).maxRetries + 1);
 
 export const CODER_WORKER: JuliusWorker = {
   workerId: 'coding-agent-claude-hosted', role: 'CODING_AGENT',
@@ -274,10 +299,14 @@ export function resolveLiveWorkers(options: {
   if (!architectReadiness.ready) {
     problems.push({ role: 'PROMPT_ARCHITECT', reason: 'live_config_missing', missing: architectReadiness.missing });
   } else {
+    // ONE worker object for the registration and the adapter, exactly as the
+    // reviewer does it below. Two calls would be two resolutions of the same
+    // environment — equal today, and the shape that drifts.
+    const worker = architectWorker(options.env);
     entries.push({
-      worker: ARCHITECT_WORKER,
+      worker,
       adapter: createLiveArchitectAdapter({
-        worker: ARCHITECT_WORKER, contexts: options.contexts, artifacts: options.artifacts,
+        worker, contexts: options.contexts, artifacts: options.artifacts,
         config: architectConfig, apiKey: options.env.OPENAI_API_KEY ?? '',
         run: options.runners?.architect,
       }),
