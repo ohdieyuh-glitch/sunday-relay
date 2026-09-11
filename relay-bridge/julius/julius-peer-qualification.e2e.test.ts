@@ -9,7 +9,7 @@
  * WHAT MAKES THIS DIFFERENT FROM THE UNIT SUITE. Nothing here re-runs a domain
  * test. The runtime under drive is `assembleLiveJuliusRuntime` — the ONE live
  * composition root — with the REAL production worker registrations
- * (`ARCHITECT_WORKER`, `CODER_WORKER`, `reviewerWorker`), the real registry,
+ * (`architectWorker`, `CODER_WORKER`, `reviewerWorker`), the real registry,
  * router, budget port, research mediator and run loop. The only fakes are at
  * two genuine boundaries: the provider adapter, and `fetch`. A registration
  * missing from the production tables fails here; a route the production wiring
@@ -41,7 +41,7 @@ import {
 } from '../../src/relay/mission/julius';
 import type { BackendProbe } from '../../src/relay/mission/live-reach';
 import {
-  ARCHITECT_WORKER,
+  architectWorker,
   CODER_WORKER,
   assembleLiveJuliusRuntime,
   createContextAndClaimHandoffs,
@@ -180,14 +180,14 @@ async function driveQualification(script: QualificationScript) {
   seedQualificationRun(memory);
 
   const adapters = {
-    architect: scriptedAdapter(ARCHITECT_WORKER, script.architect),
+    architect: scriptedAdapter(architectWorker({}), script.architect),
     coder: scriptedAdapter(CODER_WORKER, script.coder),
     reviewer: scriptedAdapter(REVIEWER_WORKER, script.reviewer),
   };
   const runtime = assembleLiveJuliusRuntime({
     store: handoffs.store,
     entries: [
-      { worker: ARCHITECT_WORKER, adapter: adapters.architect },
+      { worker: architectWorker({}), adapter: adapters.architect },
       { worker: CODER_WORKER, adapter: adapters.coder },
       { worker: REVIEWER_WORKER, adapter: adapters.reviewer },
     ],
@@ -371,7 +371,7 @@ describe('Q3 — all three slots can research, and the mission governs every one
     const runtime = assembleLiveJuliusRuntime({
       store: handoffs.store,
       entries: [
-        { worker: ARCHITECT_WORKER, adapter: scriptedAdapter(ARCHITECT_WORKER, [
+        { worker: architectWorker({}), adapter: scriptedAdapter(architectWorker({}), [
           { kind: 'succeed', evidence: PLAN_EVIDENCE, usdMicros: null,
             researchAsks: [{
               source: 'web', capability: 'read_item',
@@ -774,7 +774,7 @@ describe('Q7 — research accounting survives a restart', () => {
     const restarted = assembleLiveJuliusRuntime({
       store: memory as unknown as JuliusRuntimeStore & JuliusRecoveryDriver,
       entries: [
-        { worker: ARCHITECT_WORKER, adapter: scriptedAdapter(ARCHITECT_WORKER, [PLAN_OK]) },
+        { worker: architectWorker({}), adapter: scriptedAdapter(architectWorker({}), [PLAN_OK]) },
         { worker: CODER_WORKER, adapter: scriptedAdapter(CODER_WORKER, [BUILD_OK]) },
         { worker: REVIEWER_WORKER, adapter: scriptedAdapter(REVIEWER_WORKER, [REVIEW_OK]) },
       ],
@@ -830,7 +830,7 @@ describe('Q7 — research accounting survives a restart', () => {
     const runtime = assembleLiveJuliusRuntime({
       store: handoffs.store,
       entries: [
-        { worker: ARCHITECT_WORKER, adapter: scriptedAdapter(ARCHITECT_WORKER, [
+        { worker: architectWorker({}), adapter: scriptedAdapter(architectWorker({}), [
           { kind: 'succeed', evidence: PLAN_EVIDENCE, usdMicros: null, researchAsks: askFor('a', 'Read a.') },
           PLAN_OK, PLAN_OK,
         ]) },
@@ -911,7 +911,7 @@ describe('Q8b — a fresh process inherits the spend, because it never held it',
     assembleLiveJuliusRuntime({
       store,
       entries: [
-        { worker: ARCHITECT_WORKER, adapter: scriptedAdapter(ARCHITECT_WORKER, [
+        { worker: architectWorker({}), adapter: scriptedAdapter(architectWorker({}), [
           { kind: 'succeed', evidence: PLAN_EVIDENCE, usdMicros: null, researchAsks: askFor('a', 'Read a.') },
           { kind: 'succeed', evidence: PLAN_EVIDENCE, usdMicros: null, researchAsks: askFor('a', 'Read a again.') },
           PLAN_OK, PLAN_OK,

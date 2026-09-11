@@ -43,7 +43,7 @@ import {
   planRef,
 } from './live-workers';
 import {
-  ARCHITECT_WORKER,
+  architectWorker,
   CODER_WORKER,
   reviewerWorker,
   assembleLiveJuliusRuntime,
@@ -1362,7 +1362,7 @@ describe('the live mission contract file', () => {
       requiredCapabilities: entry.worker.capabilities,
     })), 'card-test-1');
     expect(request.workers.map((worker) => worker.adapterId)).toEqual([
-      ARCHITECT_WORKER.adapterId, CODER_WORKER.adapterId, 'hermes-local-live',
+      architectWorker({}).adapterId, CODER_WORKER.adapterId, 'hermes-local-live',
     ]);
   });
 });
@@ -2863,7 +2863,7 @@ describe('a coder failure records WHY, in a closed vocabulary, and quotes nothin
  * one hand-maintained array away from the same failure.
  */
 describe('every repair the planner can mint has a registered worker', () => {
-  const registrations = () => [ARCHITECT_WORKER, CODER_WORKER, reviewerWorker('xai')];
+  const registrations = () => [architectWorker({}), CODER_WORKER, reviewerWorker('xai')];
 
   it('the seeded graph\'s two task types can each be repaired by their own role', () => {
     // A repair inherits its subject's ROLE and STAGE, so these are exactly the
@@ -2883,7 +2883,7 @@ describe('every repair the planner can mint has a registered worker', () => {
   it('the Coding Agent does NOT take a plan repair — the shape the paid run minted', () => {
     expect(CODER_WORKER.taskTypes).not.toContain('repair:plan');
     expect(CODER_WORKER.taskTypes).toContain('repair:build');
-    expect(ARCHITECT_WORKER.taskTypes).toContain('repair:plan');
+    expect(architectWorker({}).taskTypes).toContain('repair:plan');
   });
 
   /**
@@ -2909,7 +2909,7 @@ describe('every repair the planner can mint has a registered worker', () => {
   });
 
   it('every work stage a worker may be asked for has exactly one taker', () => {
-    const registrations = [ARCHITECT_WORKER, CODER_WORKER, reviewerWorker('xai')];
+    const registrations = [architectWorker({}), CODER_WORKER, reviewerWorker('xai')];
     // The stages that are WORK rather than review, each with the role that owns
     // it. A repair inherits its subject's role and stage, so the repair of each
     // is the same worker's.
@@ -2933,7 +2933,7 @@ describe('every repair the planner can mint has a registered worker', () => {
     // is a stalled mission rather than a refused one, which is worse: the
     // routability preflight catches an unroutable task, and nothing catches an
     // unreviewable one.
-    const architectGuides = ARCHITECT_WORKER.taskTypes.includes('guidance');
+    const architectGuides = architectWorker({}).taskTypes.includes('guidance');
     const reviewerJudges = reviewerWorker('xai').taskTypes.includes('review:guidance');
     expect(architectGuides, 'the two registrations move together').toBe(reviewerJudges);
   });
@@ -2979,7 +2979,7 @@ describe('the architect revises a rejected plan', () => {
 
   const architectAdapter = (input: { artifacts: ReturnType<typeof createLiveArtifactExchange>; seen: Array<Record<string, unknown>>; snapshot?: JuliusContextSnapshot }) =>
     createLiveArchitectAdapter({
-      worker: ARCHITECT_WORKER,
+      worker: architectWorker({}),
       contexts: { snapshotFor: () => input.snapshot ?? reviewSnapshot('repair:plan-1:1:task') },
       artifacts: input.artifacts,
       config: { liveMode: true, model: 'gpt-5.6-sol', maxOutputTokens: 4_000 } as never,

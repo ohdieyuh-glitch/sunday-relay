@@ -85,14 +85,39 @@ export interface OpenAiArchitectConfig {
   timeoutMs?: number;
 }
 
+/**
+ * THE RELAY DEMO MISSION'S ARCHITECT ENVELOPE — smaller than Julius's, on
+ * purpose, and NOT the same number by a different name.
+ *
+ * This path asks for one compact handoff; Julius's connector
+ * (`src/relay/connectors/gpt-architect/config.ts`) asks for a full plan and
+ * defaults to 4,000 tokens and 300 s. A smaller answer needs less wall clock,
+ * so the two envelopes are proportionate rather than accidentally different,
+ * and unifying them would widen this path's deadline more than three-fold for
+ * no reason anyone has given.
+ *
+ * WHAT IS NOT PROPORTIONATE IS THE KNOB. `RELAY_PROMPT_ARCHITECT_TIMEOUT_MS`
+ * and `RELAY_PROMPT_ARCHITECT_MAX_TOKENS` are read by BOTH modules, so setting
+ * either to tune Julius silently retunes this path as well, and vice versa.
+ * Neither default referenced the other before — both arrived in one commit,
+ * 97106c56 — so a reader of either file learned half the truth. That coupling
+ * is now stated at both definitions and asserted in
+ * `architect-envelope.test.ts`, which enumerates every reader of both
+ * variables in the tree, pins every default, and proves one variable moves
+ * both paths. Splitting the variables is a configuration-surface change and is
+ * deliberately not made here.
+ */
+export const BRIDGE_ARCHITECT_DEFAULT_TIMEOUT_MS = 90_000;
+export const BRIDGE_ARCHITECT_DEFAULT_MAX_TOKENS = 1_200;
+
 /** Reads config WITHOUT exposing values. Live requires the explicit mode. */
 export function loadArchitectConfig(env: NodeJS.ProcessEnv = process.env): OpenAiArchitectConfig {
   return {
     apiKey: env.OPENAI_API_KEY,
     model: env.OPENAI_PROMPT_ARCHITECT_MODEL,
     mode: env.RELAY_PROMPT_ARCHITECT_MODE,
-    maxOutputTokens: Number(env.RELAY_PROMPT_ARCHITECT_MAX_TOKENS ?? 1200),
-    timeoutMs: Number(env.RELAY_PROMPT_ARCHITECT_TIMEOUT_MS ?? 90_000),
+    maxOutputTokens: Number(env.RELAY_PROMPT_ARCHITECT_MAX_TOKENS ?? BRIDGE_ARCHITECT_DEFAULT_MAX_TOKENS),
+    timeoutMs: Number(env.RELAY_PROMPT_ARCHITECT_TIMEOUT_MS ?? BRIDGE_ARCHITECT_DEFAULT_TIMEOUT_MS),
   };
 }
 
