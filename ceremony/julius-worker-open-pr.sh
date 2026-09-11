@@ -37,7 +37,14 @@ EXPECT_HEAD="${CEREMONY_HEAD:-4a775e89e7c68f68ebe2c1274316352505c99b9f}"
 EXPECT_TREE="${CEREMONY_TREE:-6da3f6db2f7a2dc44392557ef56bee72a4d99bc6}"
 EXPECT_COMMITS="${CEREMONY_COMMITS:-1}"
 PR_TITLE="${CEREMONY_TITLE:-Julius: the public identity is Julius 3.3, i.Wonder and Wonderland}"
-PR_BODY_FILE="${CEREMONY_BODY_FILE:-}"
+# THE DEFECT THIS LINE ONCE WAS. It read `${CEREMONY_BODY_FILE:-}` — an empty
+# default — while this directory shipped a prepared pr-body.md and a README that
+# said the body was prepared. PR #255 was opened with `"body":""` and GitHub
+# reported it as null. Nothing failed; the package simply did not do what it
+# said. The default is now the prepared body sitting beside this script, and an
+# empty or missing body REFUSES rather than posting silence.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PR_BODY_FILE="${CEREMONY_BODY_FILE:-$SCRIPT_DIR/pr-body.md}"
 
 WORKER_LOGIN='julius-worker[bot]'
 WORKER_EMAIL='325202980+julius-worker[bot]@users.noreply.github.com'
@@ -45,9 +52,27 @@ ALLOWED_FILES='README.md
 docs/documentation-contract.test.ts'
 
 OPEN_PR=0
-[ "${1:-}" = "--open-pr" ] && OPEN_PR=1
+SET_BODY_PR=""
+case "${1:-}" in
+  --open-pr)  OPEN_PR=1 ;;
+  --set-body) SET_BODY_PR="${2:?--set-body needs a pull-request number}" ;;
+  "")         : ;;
+  *)          printf 'usage: %s [--open-pr | --set-body <pr-number>]\n' "$0" >&2; exit 2 ;;
+esac
 
 die() { printf '\n  REFUSED: %s\n' "$*" >&2; exit 1; }
+
+# A body is not optional. Silence posted into a review record is worse than a
+# refusal, because it reads as "the author had nothing to say".
+body_json() {
+  [ -f "$PR_BODY_FILE" ] || die "no PR body at $PR_BODY_FILE. A pull request is
+           a review record; this script will not post an empty one."
+  [ -s "$PR_BODY_FILE" ] || die "the PR body at $PR_BODY_FILE is empty."
+  python3 -c 'import json,sys
+text=open(sys.argv[1],encoding="utf-8").read()
+if not text.strip(): raise SystemExit("empty body")
+print("\"body\":"+json.dumps(text))' "$PR_BODY_FILE"
+}
 ok()  { printf '  [ok]   %s\n' "$*"; }
 
 printf '\nJULIUS WORKER CEREMONY — %s/%s\n  branch %s\n\n' "$OWNER" "$REPO" "$BRANCH"
@@ -111,11 +136,28 @@ git diff "$EXPECT_BASE..$CAND" -- package.json | grep -q . \
   && die "package.json changed — repository metadata is not part of this candidate"
 ok "no repository-metadata change in the squash"
 
-if [ "$OPEN_PR" -eq 0 ]; then
+if [ "$OPEN_PR" -eq 0 ] && [ -z "$SET_BODY_PR" ]; then
   printf '\nVERIFY-ONLY. Everything above passed.\n'
-  printf 'To open the pull request as %s, re-run with:\n\n    %s --open-pr\n\n' "$WORKER_LOGIN" "$0"
+  printf 'To open the pull request as %s:      %s --open-pr\n' "$WORKER_LOGIN" "$0"
+  printf 'To correct an open PR body as %s:    %s --set-body <pr-number>\n\n' "$WORKER_LOGIN" "$0"
   exit 0
 fi
+
+# ---------------------------------------------------------------- 4b. the body
+# BEFORE ANY CREDENTIAL IS TOUCHED. This check is free, and it is the one that
+# was missing when #255 went out empty. A run that cannot produce a body should
+# fail here, not after minting a token.
+printf '\nPULL REQUEST BODY\n'
+BODY_ARG=$(body_json)
+ok "prepared body present and non-empty  ($(wc -c < "$PR_BODY_FILE") bytes, $PR_BODY_FILE)"
+for marker in 'P1' 'critical' 'high'; do
+  if grep -qiE "\b${marker}\b" "$PR_BODY_FILE"; then
+    die "the body contains the review-currency blocking marker '${marker}'.
+           scripts/julius-review-currency.mjs reads P1 / critical / high as a
+           BLOCKING finding; a PR body carrying one invites a false blocker."
+  fi
+done
+ok "body is free of the review-currency blocking markers (P1 / critical / high)"
 
 # ------------------------------------------------- 5. authenticate AS THE APP
 : "${JULIUS_WORKER_APP_ID:?JULIUS_WORKER_APP_ID is not set in this environment}"
@@ -163,12 +205,59 @@ TOKEN=$(curl -sS -X POST -H "Authorization: Bearer $APP_JWT" \
 [ -n "$TOKEN" ] || die "could not mint an installation access token"
 ok "installation access token minted (not printed)"
 
-# ------------------------------------------------------------ 6. open the PR
-printf '\nOPENING THE PULL REQUEST\n'
-BODY_ARG='"body":""'
-if [ -n "$PR_BODY_FILE" ] && [ -f "$PR_BODY_FILE" ]; then
-  BODY_ARG=$(python3 -c 'import json,sys;print("\"body\":"+json.dumps(open(sys.argv[1],encoding="utf-8").read()))' "$PR_BODY_FILE")
+# ------------------------------------------- 6a. correct an existing PR body
+#
+# METADATA ONLY. This never pushes a commit, never moves head or base, never
+# touches the title, and never approves or merges. It exists because PR #255
+# was opened with an empty body by the defect recorded at the top of this file,
+# and the correction has to carry the WORKER's identity — not the founder's,
+# who is the separate approver and must not also be the author of the record
+# they approve.
+if [ -n "$SET_BODY_PR" ]; then
+  API="https://api.github.com/repos/$OWNER/$REPO/pulls/$SET_BODY_PR"
+  gh_get() { curl -sS -H "Authorization: Bearer $TOKEN" -H 'Accept: application/vnd.github+json' "$1"; }
+  field() { python3 -c 'import json,sys;d=json.load(sys.stdin)
+k=sys.argv[1:]
+for key in k: d=d[key] if isinstance(d,dict) else d
+print("" if d is None else d)' "$@"; }
+
+  printf '\nPULL REQUEST #%s — BEFORE\n' "$SET_BODY_PR"
+  BEFORE=$(gh_get "$API")
+  PR_HEAD=$(printf '%s' "$BEFORE" | field head sha)
+  PR_BASE=$(printf '%s' "$BEFORE" | field base sha)
+  PR_USER=$(printf '%s' "$BEFORE" | field user login)
+  PR_TITLE_NOW=$(printf '%s' "$BEFORE" | field title)
+  [ "$PR_HEAD" = "$EXPECT_HEAD" ] || die "PR head $PR_HEAD != frozen head $EXPECT_HEAD"
+  [ "$PR_BASE" = "$EXPECT_BASE" ] || die "PR base $PR_BASE != frozen base $EXPECT_BASE"
+  [ "$PR_USER" = "$WORKER_LOGIN" ] || die "PR author is $PR_USER, not $WORKER_LOGIN"
+  ok "head, base and author match the frozen candidate"
+
+  PATCH=$(printf '{%s}' "$(body_json)")
+  curl -sS -X PATCH -H "Authorization: Bearer $TOKEN" \
+    -H 'Accept: application/vnd.github+json' "$API" -d "$PATCH" > /dev/null
+
+  printf '\nPULL REQUEST #%s — AFTER\n' "$SET_BODY_PR"
+  AFTER=$(gh_get "$API")
+  printf '%s' "$AFTER" | python3 -c '
+import json,sys
+pr=json.load(sys.stdin)
+want=open(sys.argv[1],encoding="utf-8").read()
+got=pr.get("body")
+assert got, "body is still empty or null"
+assert got.replace("\r\n","\n")==want, "body does not match the prepared file byte-for-byte"
+print("  [ok]   body is non-empty and exactly the prepared body")
+print(f"  [ok]   title preserved: {pr[\"title\"]}")
+print(f"  [ok]   head unchanged:  {pr[\"head\"][\"sha\"]}")
+print(f"  [ok]   base unchanged:  {pr[\"base\"][\"sha\"]}")
+print(f"  [ok]   author:          {pr[\"user\"][\"login\"]}")
+' "$PR_BODY_FILE" || die "post-update verification failed"
+  [ "$(printf '%s' "$AFTER" | field title)" = "$PR_TITLE_NOW" ] || die "title changed"
+  printf '\n  BODY CORRECTED on #%s, as %s. No commit pushed, no head or base moved.\n\n' "$SET_BODY_PR" "$WORKER_LOGIN"
+  exit 0
 fi
+
+# ------------------------------------------------------------ 6b. open the PR
+printf '\nOPENING THE PULL REQUEST\n'
 PAYLOAD=$(printf '{"title":%s,"head":"%s","base":"main",%s}' \
   "$(python3 -c 'import json,sys;print(json.dumps(sys.argv[1]))' "$PR_TITLE")" "$BRANCH" "$BODY_ARG")
 

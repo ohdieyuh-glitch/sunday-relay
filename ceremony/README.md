@@ -13,6 +13,29 @@ locating, pasting or handling a token by hand.
 | commits | 1, authored **and** committed by `julius-worker[bot]` |
 | changes | `README.md`, `docs/documentation-contract.test.ts` — nothing else |
 
+## Defect found on PR #255, and fixed here
+
+The first version of `julius-worker-open-pr.sh` defaulted `PR_BODY_FILE` to the
+empty string while this directory shipped a prepared `pr-body.md` and this file
+claimed the body was prepared. **PR #255 was opened with `"body":""`, and GitHub
+reported it as null.** Nothing errored; the package simply did not do what it
+said.
+
+Three changes so it cannot recur:
+
+1. The body now defaults to `pr-body.md` beside the script, not to nothing.
+2. A missing or empty body **refuses**, before any credential is touched — a
+   pull request is a review record, and posting silence into one is worse than
+   stopping.
+3. A body carrying `P1`, `critical` or `high` refuses too. Those are
+   `scripts/julius-review-currency.mjs`'s `BLOCKING_MARKERS`, and a body
+   carrying one invites a false blocker.
+
+`--set-body <pr-number>` repairs an already-open PR's body **as the worker
+App**, which is why the correction is not simply made by hand: the founder is
+the separate approver and must not also author the record they approve. It
+moves no commit, no head and no base, and leaves the title alone.
+
 ## Run it
 
 In the trusted Codespace, which already holds `JULIUS_WORKER_APP_ID` and
@@ -21,6 +44,7 @@ In the trusted Codespace, which already holds `JULIUS_WORKER_APP_ID` and
 ```bash
 ./ceremony/julius-worker-open-pr.sh                       # verify only — default
 ./ceremony/julius-worker-open-pr.sh --open-pr             # opens the PR as julius-worker[bot]
+./ceremony/julius-worker-open-pr.sh --set-body 255        # repairs #255's empty body as julius-worker[bot]
 ```
 
 The PEM is never printed, never written to disk and never asked for: it is read

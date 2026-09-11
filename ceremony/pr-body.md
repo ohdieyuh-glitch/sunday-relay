@@ -61,8 +61,11 @@ documentation worker. Commits are authored **and** committed by
 
 ## Files Changed
 
-- `README.md` — full rewrite (+530 / −276 across both files)
-- `docs/documentation-contract.test.ts` — two stale pins replaced, one check widened
+2 files changed, **+539 / −276**:
+
+- `README.md` — full rewrite (+479 / −270)
+- `docs/documentation-contract.test.ts` — two stale pins replaced, one check
+  widened (+60 / −6)
 
 ## Tests
 
