@@ -1930,6 +1930,7 @@ describe('a mission gathers evidence and the architect plans with it', () => {
       ok: true as const,
       artifact: artifactFor('The legacy adapter was removed in v2.0.0.'),
       attempt: artifactFor('x').attempt,
+      bytes: 42,
       events: [],
     });
     const reg = registry(h, LIVE_ENV, 'fake');
@@ -1976,6 +1977,7 @@ describe('a mission gathers evidence and the architect plans with it', () => {
         ok: true as const,
         artifact: artifactFor('observed'),
         attempt: artifactFor('x').attempt,
+        bytes: 42,
         events: [],
       };
     };
@@ -2000,7 +2002,10 @@ describe('a mission gathers evidence and the architect plans with it', () => {
     let gathers = 0;
     h.deps.gatherEvidence = async () => {
       gathers += 1;
-      return { ok: false as const, refusal: 'not_ready' as const, detail: 'x', attempt: null, events: [] };
+      return {
+        ok: false as const, refusal: 'not_ready' as const, detail: 'x', attempt: null,
+        charged: 'not_attempted' as const, retryAfter: null, events: [],
+      };
     };
     const reg = registry(h, LIVE_ENV, 'fake');
     reg.start({ missionId: 'msn-none', objective: 'Normalize project names safely' });
@@ -2014,7 +2019,8 @@ describe('a mission gathers evidence and the architect plans with it', () => {
     const h = harness();
     h.deps.gatherEvidence = async () => ({
       ok: false as const, refusal: 'capability_disabled' as const,
-      detail: 'switched off', attempt: null, events: [],
+      detail: 'switched off', attempt: null,
+      charged: 'not_attempted' as const, retryAfter: null, events: [],
     });
     const reg = registry(h, LIVE_ENV, 'fake');
     reg.start({
@@ -2039,7 +2045,7 @@ describe('a mission gathers evidence and the architect plans with it', () => {
       h.order.push('evidence');
       return {
         ok: true as const, artifact: artifactFor('current'),
-        attempt: artifactFor('x').attempt, events: [],
+        attempt: artifactFor('x').attempt, bytes: 42, events: [],
       };
     };
     const reg = registry(h, LIVE_ENV, 'fake');
@@ -2083,7 +2089,7 @@ describe('the mission view carries evidence references', () => {
           startedAt: '2026-08-10T12:00:00.000Z', completedAt: '2026-08-10T12:00:01.000Z',
         },
       });
-      return { ok: true as const, artifact, attempt: artifact.attempt, events: [] };
+      return { ok: true as const, artifact, attempt: artifact.attempt, bytes: 46, events: [] };
     };
   };
 
@@ -2126,7 +2132,8 @@ describe('the mission view carries evidence references', () => {
   it('distinguishes authorised-and-retrieved-none from authorised-nothing', async () => {
     const refused = harness();
     refused.deps.gatherEvidence = async () => ({
-      ok: false as const, refusal: 'not_ready' as const, detail: 'x', attempt: null, events: [],
+      ok: false as const, refusal: 'not_ready' as const, detail: 'x', attempt: null,
+      charged: 'not_attempted' as const, retryAfter: null, events: [],
     });
     const regA = registry(refused, LIVE_ENV, 'fake');
     regA.start({

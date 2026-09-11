@@ -155,6 +155,20 @@ export const JULIUS_RESEARCH_REFUSALS = [
   'capability_not_allowed',
   'host_not_allowed',
   'policy_tampered',
+  /**
+   * The mission allowlisted this host and Relay's ADDRESS policy still refused
+   * it — a name that resolves to a private, loopback, link-local or cloud
+   * metadata address, or a redirect toward one. Mission authority names hosts;
+   * it has never been able to authorize an address class, and this is the code
+   * that says which of the two said no.
+   */
+  'network_policy_refused',
+  /**
+   * The source or capability is not switched on, not ready, or has no backend
+   * in this deployment. Nothing about the mission's policy is wrong; the
+   * machinery underneath it cannot serve the request today.
+   */
+  'capability_unavailable',
   'mission_budget_exhausted',
   'role_budget_exhausted',
   'byte_budget_unenforceable',
@@ -493,6 +507,7 @@ export function juliusMissionResearchMeter(ledger: JuliusResearchLedger): Retrie
  */
 export interface JuliusResearchRequest {
   readonly missionId: string;
+  readonly projectId: string;
   readonly runId: string;
   readonly taskId: string;
   readonly role: JuliusResearchRole;

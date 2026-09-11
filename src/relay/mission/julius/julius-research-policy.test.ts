@@ -42,6 +42,7 @@ const policy = (): JuliusResearchPolicy => sealJuliusResearchPolicy({
 
 const request = (over: Partial<JuliusResearchRequest> = {}): JuliusResearchRequest => ({
   missionId: 'mission-1',
+  projectId: 'prj-1',
   runId: 'run-1',
   taskId: 'task-1',
   role: 'CODING_AGENT',

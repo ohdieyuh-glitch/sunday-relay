@@ -314,5 +314,12 @@ export const LIVE_REACH_REFUSALS = [
    */
   'byte_budget_unenforceable',
   'byte_budget_exhausted',
+  /**
+   * The host answered with something Relay will not put in front of a model.
+   * Not a failure of the source and not a policy refusal of the request — the
+   * document simply is not text Relay reads, and the reference survives so a
+   * human can open what the model could not.
+   */
+  'unsupported_content',
 ] as const;
 export type LiveReachRefusal = (typeof LIVE_REACH_REFUSALS)[number];
