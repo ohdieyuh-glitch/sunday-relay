@@ -33,6 +33,18 @@ export interface GptRunRequest {
   readonly instructions: string;
   /** The user's requested work plus bounded context. */
   readonly input: string;
+  /**
+   * WHICH ANSWER IS BEING ASKED FOR. The architect has two jobs and they have
+   * different shapes: a PLAN before the contract locks, and a GUIDANCE PACKET
+   * after it. Both are strict json_schema answers through this one runner, so
+   * there is still exactly one place a provider call is made, one place a
+   * failure is classified, and one place a credential could leak from.
+   *
+   * Absent means the plan schema, because every caller that predates guidance
+   * asked for a plan and a default that silently changed shape would be the
+   * worst of both.
+   */
+  readonly schema?: { readonly name: string; readonly schema: Record<string, unknown> };
   readonly signal?: AbortSignal;
 }
 
@@ -169,8 +181,8 @@ export async function runGptArchitect(request: GptRunRequest): Promise<GptRunOut
         text: {
           format: {
             type: 'json_schema',
-            name: ARCHITECT_PLAN_SCHEMA_NAME,
-            schema: ARCHITECT_PLAN_SCHEMA,
+            name: request.schema?.name ?? ARCHITECT_PLAN_SCHEMA_NAME,
+            schema: request.schema?.schema ?? ARCHITECT_PLAN_SCHEMA,
             strict: true,
           },
         },

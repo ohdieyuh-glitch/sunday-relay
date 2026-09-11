@@ -1,5 +1,8 @@
 export { ARCHITECT_PLAN_SCHEMA, ARCHITECT_PLAN_SCHEMA_NAME } from './plan-schema';
 export {
+  ARCHITECT_GUIDANCE_KEYS, ARCHITECT_GUIDANCE_SCHEMA, ARCHITECT_GUIDANCE_SCHEMA_NAME,
+} from './guidance-schema';
+export {
   DEFAULT_MAX_OUTPUT_TOKENS, DEFAULT_TIMEOUT_MS, evaluateReadiness, readGptArchitectConfig,
 } from './config';
 export type { GptArchitectConfig, GptArchitectReadiness } from './config';
