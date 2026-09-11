@@ -45,6 +45,7 @@ import {
 import { createJuliusResearchMediator, juliusResearchPortFrom } from './research-mediator';
 import type { JuliusTimelineReader } from '../../src/relay/mission/julius';
 import { createLiveReachService } from '../live-reach-service';
+import type { BackendProbe } from '../../src/relay/mission/live-reach';
 import {
   evaluateReadiness,
   readGptArchitectConfig,
@@ -460,6 +461,25 @@ export function assembleLiveJuliusRuntime(options: {
   readonly researchPolicyFor?: (missionId: string) => JuliusResearchPolicy;
   /** Injected in tests so the whole mediated path runs without a network. */
   readonly researchFetch?: typeof fetch;
+  /**
+   * WHICH BACKENDS HAVE ACTUALLY BEEN SEEN TO ANSWER, which is a different
+   * question from what this mission is allowed to read.
+   *
+   * Live Reach refuses a capability no backend has been OBSERVED serving —
+   * `capability_unavailable`, decided before the mission allowlist is even
+   * consulted. That gate is right: "this mission authorises reading a page"
+   * and "Relay has a backend that can read a page" are separate facts, and a
+   * mission may not assert the second by wanting the first.
+   *
+   * It was also, until this was wired, unconditional: the composition never
+   * supplied probes, so EVERY governed retrieval was refused whatever the
+   * mission authorised. The seam existed on the mediator and only a test ever
+   * reached it.
+   *
+   * Absent still means refused — the default stays closed, and an operator
+   * supplying an observed probe is asserting something they have seen.
+   */
+  readonly researchProbes?: readonly BackendProbe[];
 }): LiveJuliusRuntime {
   const registry = new JuliusWorkerRegistry();
   const adapters = new Map<string, JuliusProviderAdapter>();
@@ -528,6 +548,12 @@ export function assembleLiveJuliusRuntime(options: {
         ...(options.researchFetch === undefined ? {} : { fetchImpl: options.researchFetch }),
       }),
       now: () => new Date().toISOString(),
+      // READINESS, NOT AUTHORITY. Handed through unchanged; the mission's own
+      // allowlist is decided separately and afterwards, so a probe can never
+      // widen what a mission may read.
+      ...(options.researchProbes === undefined
+        ? {}
+        : { retrievalContext: () => ({ probes: options.researchProbes }) }),
     })),
     /**
      * THE MONEY RECORD, READ BACK. The same store that writes `budget.reserved`
