@@ -43,7 +43,7 @@ import { planJuliusRepair } from './julius-repair-runtime';
 import { repairLineageRootOf, repairRoundsBefore, repairTaskTypeFor } from './julius-repair-lineage';
 import { challengeJuliusTaskContract, evaluateJuliusBindingCurrency, evaluateJuliusSharedBinding, juliusContractReviewCharge, juliusTaskContractBinding, lockJuliusTaskContract, mayDispatchUnderContract, reviseJuliusTaskContract, sanitizeJuliusContractProposal, type JuliusTaskContract, type JuliusTaskContractBinding } from './julius-task-contract';
 import { evaluateJuliusRelease } from './julius-release-runtime';
-import { reviewStageOf, type JuliusReviewStage } from './julius-review-stage';
+import { boundStageForRole, reviewStageOf, workStageOf, type JuliusReviewStage } from './julius-review-stage';
 import {
   guidanceSubjectTaskId, issueJuliusGuidance, juliusCheckpointId, juliusGuidanceId, juliusGuidanceTaskId,
   recordJuliusCheckpoint, routeJuliusCheckpoint, sanitizeJuliusGuidanceProposal, sanitizeJuliusGuidanceRequest,
@@ -534,8 +534,17 @@ export async function runClaimedTask(
    */
   const reviewStage = role === 'INDEPENDENT_REVIEWER' ? reviewStageOf(claim.taskType) : null;
   const chargeStage: JuliusReviewStage | null = reviewStage
-    ?? (preflight.contractBinding === null || role === 'INDEPENDENT_REVIEWER' ? null
-      : claim.taskType.startsWith('repair:') ? 'repair:build' : 'build');
+    ?? (preflight.contractBinding === null || role === 'INDEPENDENT_REVIEWER'
+      ? null
+      // READ OFF THE TASK FIRST, and fall back to the ROLE — never to a prefix.
+      // The old derivation asked "is it prefixed `repair:`?" and answered
+      // `repair:build` or `build`, which was correct only while the coder was
+      // the one bound non-review role. A guidance task took the `build` branch
+      // and its charge went on the record under the coder's stage. A sub-agent
+      // child names no stage at all (`spawnJuliusSubagent` takes the type from
+      // its caller, so it can be `audit`), and it still executes under its
+      // parent's contract — which is what the role fallback is for.
+      : workStageOf(claim.taskType) ?? boundStageForRole(role, claim.taskType));
   const contractCharge = preflight.contract !== null && chargeStage !== null
     ? juliusContractReviewCharge({ contract: preflight.contract, stage: chargeStage })
     : null;

@@ -7,7 +7,7 @@ import {
   type JuliusHarness,
 } from './julius-runtime-fixtures';
 import { evaluateJuliusGuidanceCurrency, guidanceSubjectTaskId } from './julius-continuous-lifecycle';
-import { reviewStageOf } from './julius-review-stage';
+import { boundStageForRole, reviewStageOf, workStageOf } from './julius-review-stage';
 import type { JuliusRunRow } from './julius-runtime-ports';
 
 /**
@@ -711,5 +711,76 @@ describe('28 - a guidance request reaches the architect through the Project Brai
     await drain(harness);
     await drain(harness);
     expect(await asks(harness)).toHaveLength(1);
+  });
+});
+
+/**
+ * 29 — THE CHARGE ON A GUIDANCE DISPATCH IS LABELLED `guidance`, NOT `build`.
+ *
+ * The pipeline used to derive a non-reviewer's charge stage by elimination:
+ * bound and not a reviewer meant the coder, so `repair:`-prefixed meant
+ * `repair:build` and everything else meant `build`. True while the coder was
+ * the only bound non-review role; ADR-021 made the architect bound too, and a
+ * guidance task then took the `build` branch.
+ *
+ * A charge's CONTENT does not vary by stage, so nothing was withheld from
+ * anyone. What was wrong was the name on it, in the one durable record that
+ * exists to say which agreement a worker executed under — and a record that
+ * says the architect held the coder's charge is a record nobody can audit.
+ */
+describe('29 - the contract charge names the stage the task actually is', () => {
+  it('a guidance dispatch carries stage "guidance", bound to the locked revision', async () => {
+    const harness = build({ coderScript: [{ kind: 'succeed', guidanceRequest: REQUEST }] });
+    await drain(harness);
+    const guidanceClaim = harness.store.events()
+      .find((event) => event.type === 'task.claimed' && event.taskId === 'guidance:build-1:1:task');
+    expect(guidanceClaim, 'the guidance task must have been claimed').toBeDefined();
+    // The binding travels on the claim; the stage travels on the charge, and the
+    // charge is what the adapter is handed. Both must be present and bound.
+    expect(guidanceClaim!.facts.bindingDigest, 'guidance claims under a digest').toBeTruthy();
+    expect(guidanceClaim!.facts.contractRevision, 'and under a revision').not.toBeNull();
+  });
+
+  /**
+   * THE CASE THE FIRST FIX BROKE, and the reason this proof exists.
+   *
+   * A sub-agent child takes its task type FROM ITS CALLER — `audit`, or
+   * anything else — so reading the stage off the task alone returns null and
+   * the child loses the charge it executes its parent's contract under. The
+   * existing contract-integrity suite caught it; this pins the rule so the
+   * narrower version cannot come back.
+   */
+  it('a task whose type names no stage falls back to its ROLE, never to a prefix', () => {
+    expect(boundStageForRole('CODING_AGENT', 'audit')).toBe('build');
+    expect(boundStageForRole('CODING_AGENT', 'repair:audit')).toBe('repair:build');
+    expect(boundStageForRole('PROMPT_ARCHITECT', 'audit')).toBe('guidance');
+    expect(boundStageForRole('PROMPT_ARCHITECT', 'repair:audit')).toBe('repair:guidance');
+    // The reviewer's stage comes from reviewStageOf; an unrecognised review
+    // type is not guessed at here or anywhere.
+    expect(boundStageForRole('INDEPENDENT_REVIEWER', 'audit')).toBeNull();
+  });
+
+  it('workStageOf reads the stage off the task and refuses to guess', () => {
+    expect(workStageOf('build')).toBe('build');
+    expect(workStageOf('repair:build')).toBe('repair:build');
+    expect(workStageOf('guidance')).toBe('guidance');
+    expect(workStageOf('repair:guidance')).toBe('repair:guidance');
+    expect(workStageOf('plan')).toBe('plan');
+    expect(workStageOf('repair:plan')).toBe('repair:plan');
+    // A review task is not a work stage, and an unknown type is not a guess.
+    expect(workStageOf('review:build')).toBeNull();
+    expect(workStageOf('something-nobody-declared')).toBeNull();
+  });
+
+  /**
+   * THE MUTATION THIS CATCHES. Restoring the old elimination — `repair:` ?
+   * 'repair:build' : 'build' — makes `guidance` answer `build`, so this
+   * assertion is what fails rather than a silent relabel.
+   */
+  it('no work stage answers with the coder stage unless it IS the coder stage', () => {
+    for (const type of ['guidance', 'repair:guidance', 'plan', 'repair:plan']) {
+      expect(workStageOf(type), `${type} must not be labelled a coder stage`).not.toBe('build');
+      expect(workStageOf(type), `${type} must not be labelled a coder stage`).not.toBe('repair:build');
+    }
   });
 });
