@@ -126,6 +126,14 @@ function fakeCoder(log: FakeLog, prompts: string[]) {
         reportedTools: ['Read', 'Glob', 'Grep', 'Edit'], toolTargets: [], toolsUsed: ['Edit'], toolInvocations: 3,
         permissionDenials: 0, numTurns: 3, durationMs: 10,
         usage: { inputTokens: 500, outputTokens: 200, totalCostUsd: 0.02, source: 'runtime_reported' },
+        // A COMPLETED run whose stream also reported per-turn usage. The two
+        // are different numbers about different things: the terminal total,
+        // and the floor the turns established on the way there.
+        streamUsage: {
+          messages: 3, abortedMessages: 0,
+          inputTokens: 480, outputTokens: 190,
+          cacheReadInputTokens: 0, cacheCreationInputTokens: 0,
+        },
         resultSubtype: 'success', isError: false, finalText: `done (${SECRET_CANARY})`,
         thinkingBlocksOmitted: 0, unknownMessageCount: 0,
       },
