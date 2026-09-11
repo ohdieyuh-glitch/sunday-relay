@@ -46,6 +46,7 @@ import {
   assembleLiveJuliusRuntime,
   createContextAndClaimHandoffs,
   driveJuliusRunToTerminal,
+  meteredFromJuliusOutcome,
   reviewerWorker,
 } from './live-composition';
 
@@ -773,6 +774,31 @@ describe('Q7 — research accounting survives a restart', () => {
     expect(rebuilt, 'a restart reaches the same position').toBe(charged.length);
   });
 
+  it('charges every retrieval that really happened, including one a crash caused twice', async () => {
+    // THE CRASH WINDOW, STATED RATHER THAN PAPERED OVER. A process that dies
+    // between `serve()` and the continuation's creation has already retrieved
+    // and already been charged; the restarted process asks again. Two
+    // retrievals happened, and the durable record says two — which is what
+    // keeps a budget honest. A ledger that forgot the first would hand a
+    // restarted mission its allowance back.
+    const { timeline } = await driveQualification({
+      research: true, pages,
+      coder: [
+        { kind: 'succeed', evidence: BUILD_EVIDENCE, usdMicros: 5_177_120, researchAsks: askFor('a', 'Read a.') },
+        { kind: 'succeed', evidence: BUILD_EVIDENCE, usdMicros: 5_177_120, researchAsks: askFor('a', 'Read a again.') },
+        BUILD_OK, BUILD_OK,
+      ],
+      architect: [PLAN_OK, PLAN_OK, PLAN_OK],
+      reviewer: [REVIEW_OK, REVIEW_OK, REVIEW_OK, REVIEW_OK],
+    });
+    const charges = ofType(timeline, 'research.retrieved');
+    expect(charges.length, 'both retrievals are charged').toBeGreaterThanOrEqual(2);
+    // Distinct keys, so the fold counts two rather than deduplicating a real
+    // second retrieval into the first.
+    const keys = new Set(charges.map((entry) => String(entry.facts.requestKey)));
+    expect(keys.size).toBe(charges.length);
+  });
+
   it('does not retrieve or charge twice when a tick is replayed', async () => {
     let fetches = 0;
     const counting = (pagesIn: Readonly<Record<string, string>>): typeof fetch =>
@@ -812,5 +838,119 @@ describe('Q7 — research accounting survives a restart', () => {
       loop: runtime.loop, store: handoffs.store, runId: RUN, projectId: PROJECT, maxTicks: 40,
     });
     expect(fetches, 'the replay retrieved nothing new').toBe(afterFirstDrive);
+  });
+});
+
+/* ------------------------------------------------------------------ Q8 */
+
+describe('Q8 — rebuilding the research spend charges what was really spent', () => {
+  it('charges every outcome that left the process, and only frees the two that did not', () => {
+    // FREE, because nothing was attempted: the policy said no, or the budget was
+    // already gone. Both are decided before a socket exists.
+    expect(meteredFromJuliusOutcome('policy_refused')).toBe('not_attempted');
+    expect(meteredFromJuliusOutcome('budget_exhausted')).toBe('not_attempted');
+
+    // CHARGED, because something was reached. A host that answered with a
+    // throttle, a challenge or an unusable body still saw the request.
+    expect(meteredFromJuliusOutcome('observed')).toBe('observed');
+    expect(meteredFromJuliusOutcome('throttled')).toBe('throttled');
+    expect(meteredFromJuliusOutcome('unauthenticated')).toBe('unauthenticated');
+    expect(meteredFromJuliusOutcome('unsupported_content')).toBe('answered_unusable');
+    expect(meteredFromJuliusOutcome('unreachable')).toBe('unreachable');
+  });
+
+  it('charges a signalled page — the signal is about trust, not about cost', () => {
+    // THE ONE THAT LOOKS LIKE A REFUSAL AND IS NOT. A page carrying an injection
+    // attempt was fetched: bytes crossed, the host answered, the budget moved.
+    // Recording it free would let a hostile source be read again and again for
+    // nothing, which is the cheapest possible way to attack a research budget.
+    expect(meteredFromJuliusOutcome('injection_signaled')).toBe('observed');
+  });
+
+  it('charges an outcome this build does not recognise rather than ignoring it', () => {
+    // A row written by a newer build, restored from a backup, or edited by hand.
+    // Unknown must never be free: that is how a restarted mission gets its
+    // allowance back.
+    expect(meteredFromJuliusOutcome('something_this_build_never_heard_of')).toBe('unreachable');
+    expect(meteredFromJuliusOutcome(null)).toBe('unreachable');
+    expect(meteredFromJuliusOutcome(undefined)).toBe('unreachable');
+  });
+});
+
+describe('Q8b — a fresh process inherits the spend, because it never held it', () => {
+  /** One retrieval per role, so the second ask is decided by the ledger alone. */
+  const oneEach = (missionId: string) => sealJuliusResearchPolicy({
+    missionId,
+    allowances: [{ source: 'web', capabilities: ['read_item'], hosts: [ALLOWED_HOST] }],
+    roles: ['PROMPT_ARCHITECT', 'CODING_AGENT', 'INDEPENDENT_REVIEWER'],
+    missionBudget: { maxRetrievals: 9, maxBytes: null },
+    roleBudget: { maxRetrievals: 1, maxBytes: null },
+  });
+
+  const build = (
+    store: JuliusRuntimeStore & JuliusRecoveryDriver,
+    fetches: () => void,
+  ) =>
+    assembleLiveJuliusRuntime({
+      store,
+      entries: [
+        { worker: ARCHITECT_WORKER, adapter: scriptedAdapter(ARCHITECT_WORKER, [
+          { kind: 'succeed', evidence: PLAN_EVIDENCE, usdMicros: null, researchAsks: askFor('a', 'Read a.') },
+          { kind: 'succeed', evidence: PLAN_EVIDENCE, usdMicros: null, researchAsks: askFor('a', 'Read a again.') },
+          PLAN_OK, PLAN_OK,
+        ]) },
+        { worker: CODER_WORKER, adapter: scriptedAdapter(CODER_WORKER, [BUILD_OK, BUILD_OK, BUILD_OK]) },
+        { worker: REVIEWER_WORKER, adapter: scriptedAdapter(REVIEWER_WORKER, [REVIEW_OK, REVIEW_OK, REVIEW_OK, REVIEW_OK]) },
+      ],
+      cardRevision: 'card-qual-1', spendCeilingUsdMicros: CEILING, maxRepairRounds: 3,
+      researchPolicyFor: oneEach, researchProbes: OBSERVED_BACKENDS,
+      researchFetch: (async (input: RequestInfo | URL) => {
+        fetches();
+        return localSources({ a: '<p>one</p>' })(input);
+      }) as typeof fetch,
+    });
+
+  it('refuses a second retrieval in a NEW runtime whose memory never saw the first', async () => {
+    let fetched = 0;
+    const memory = createJuliusMemoryStore();
+    const handoffs = createContextAndClaimHandoffs(memory as unknown as JuliusRuntimeStore & JuliusRecoveryDriver);
+    seedQualificationRun(memory);
+
+    // First process: enough ticks for the architect to spend its one retrieval,
+    // and deliberately not enough to finish the mission.
+    const store = handoffs.store as unknown as JuliusRuntimeStore & JuliusRecoveryDriver;
+    const first = build(store, () => { fetched += 1; });
+    for (let tick = 0; tick < 3; tick += 1) {
+      const report = await first.loop.tick({ projectId: PROJECT });
+      if (report.claimed === 0) await first.loop.advanceRun(RUN, PROJECT);
+    }
+    expect(fetched, 'the first process spent the allowance').toBe(1);
+
+    // THE RESTART. A brand new runtime — new mediator, new Map, empty — over the
+    // same durable store. Everything this process knows about the spend, it has
+    // to read back.
+    const second = build(store, () => { fetched += 1; });
+    await driveJuliusRunToTerminal({
+      loop: second.loop, store: handoffs.store, runId: RUN, projectId: PROJECT, maxTicks: 40,
+    });
+
+    // THE POINT OF THE WHOLE BLOCKER. With the ledger in a Map this is 2: the
+    // fresh process found an empty meter and handed the allowance back. Reading
+    // it from the run's own rows, the second ask is refused.
+    expect(fetched, 'the restarted process did not re-spend the allowance').toBe(1);
+
+    const entries: JuliusTimelineEntry[] = [];
+    let sinceSequence = 0;
+    for (;;) {
+      const page = await memory.timeline({ runId: RUN, projectId: PROJECT, sinceSequence, limit: 500 });
+      entries.push(...page.entries);
+      if (page.entries.length === 0 || !page.hasMore) break;
+      sinceSequence = Math.max(...page.entries.map((entry) => entry.sequence));
+    }
+    // And the refusal names the budget rather than something vaguer.
+    const refused = ofType(entries, 'checkpoint.verdict')
+      .filter((entry) => entry.facts.route === 'SERVE_RESEARCH')
+      .filter((entry) => String(entry.facts.outcomes).includes('budget_exhausted'));
+    expect(refused.length, 'the second ask was refused for budget').toBeGreaterThan(0);
   });
 });

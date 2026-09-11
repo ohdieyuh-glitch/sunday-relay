@@ -54,7 +54,7 @@ import type { MeteredOutcome } from '../../src/relay/mission/live-reach';
  * restarted mission re-spend a budget it had already used. An outcome this
  * build does not recognise is charged rather than ignored, for the same reason.
  */
-function meteredFromJuliusOutcome(outcome: unknown): MeteredOutcome {
+export function meteredFromJuliusOutcome(outcome: unknown): MeteredOutcome {
   switch (outcome) {
     case 'policy_refused':
     case 'budget_exhausted':

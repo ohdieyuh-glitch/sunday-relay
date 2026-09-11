@@ -1586,33 +1586,22 @@ async function driveResearchCheckpoint(input: {
   if (segmentNumber > segmentCeiling) return refuse('SEGMENT_CEILING_REACHED');
 
   /**
-   * A REPLAY MUST NOT RE-RETRIEVE, AND MUST NOT RE-CHARGE.
+   * THE CONTINUATION'S ID, DETERMINISTIC AND COMPUTED ONCE.
    *
-   * `serve()` reached the outside world BEFORE the idempotent `addTask` below,
-   * so a tick replayed after a crash — or after the same outcome was handled
-   * twice — fetched every ask again, charged the research budget again, and
-   * then found `created === false` and threw the answer away. The retrieval was
-   * the one step in this function that was not idempotent, and it is the only
-   * step that costs money and touches a third party.
+   * A GUARD THAT WAS WRITTEN HERE AND REMOVED. It compared this id against the
+   * durable task rows to skip a retrieval that had already been served — and it
+   * could never fire, because `nextSegmentNumber` is the highest existing
+   * segment plus one, so the id is new by construction every time. Shipping it
+   * would have meant a comment claiming a protection the code did not provide.
    *
-   * The continuation's id is deterministic, so its EXISTENCE is the record that
-   * this ask was already served. Checked against the durable task rows loaded
-   * at the top of this function, before anything leaves the process.
+   * What the crash window between `serve()` and `addTask` actually costs is
+   * stated instead: a process that dies there has retrieved and been charged,
+   * and the restarted process asks again. Both retrievals happened and both are
+   * on the record as `research.retrieved` rows, so the budget counts two — which
+   * is the truth. Making it cost one would require the retrieval itself to be
+   * keyed and deduplicated at the transport, which Live Reach has no identity
+   * for today.
    */
-  const continuationTaskId = juliusSegmentTaskId(segmentRoot.taskId, segmentNumber);
-  if (tasks.some((row) => row.taskId === continuationTaskId)) {
-    await ledger.event('checkpoint.verdict', {
-      taskId: subjectTaskId, workerId: input.workerId,
-      facts: {
-        checkpointId: checkpoint.checkpointId, route: routing.route,
-        reasonCode: 'RESEARCH_ALREADY_SERVED',
-        continuationTaskId, barrier: true, segment: segmentNumber,
-        asks: asks.length, outcomes: '', evidence: 0, signalled: 0,
-      },
-    });
-    return true;
-  }
-
   const observations = await deps.research.serve({
     missionId: task.missionId,
     projectId: run.projectId,
@@ -1643,7 +1632,7 @@ async function driveResearchCheckpoint(input: {
         role: task.role,
         // DETERMINISTIC, so a replayed row is recognisably the same retrieval
         // rather than a second one.
-        requestKey: `${continuationTaskId}:${index}`,
+        requestKey: `${juliusSegmentTaskId(segmentRoot.taskId, segmentNumber)}:${index}`,
         outcome: observation.outcome,
         counted: observation.outcome === 'observed',
         evidenceId: observation.evidenceId,
@@ -1654,7 +1643,7 @@ async function driveResearchCheckpoint(input: {
   }
 
   const continuation: JuliusTask = {
-    taskId: continuationTaskId,
+    taskId: juliusSegmentTaskId(segmentRoot.taskId, segmentNumber),
     missionId: task.missionId,
     parentTaskId: segmentRoot.taskId,
     /**

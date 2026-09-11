@@ -93,22 +93,26 @@ on the mediator, held for the process lifetime. A bridge restart forgot what
 every slot had spent and the budget began again at zero. A budget that binds
 within a process is not a budget.
 
-Worse, `serve()` reached the outside world BEFORE the idempotent `addTask`, so a
-replayed tick re-fetched every ask, re-charged the budget, then found the
-continuation already existed and threw the answer away. The retrieval was the
-one step in that function that was not idempotent, and the only one that costs
-money and touches a third party.
-
 **Fixed.** `research.retrieved` joins the event catalogue — one durable row per
 observation carrying the role, the outcome and a deterministic request key — and
 the mediator projects its ledger from those rows by folding the same
 `recordJuliusResearch` the live path charges with. One rule, two readers, so they
-cannot disagree. The replay guard checks the continuation's deterministic id
-against the durable task rows before anything leaves the process.
+cannot disagree.
 
 The projection is conservative: only a policy refusal and an exhausted budget
 are free, because only they provably never left the process. An outcome the
 build does not recognise is charged rather than ignored.
+
+**What is NOT fixed, and is not hidden.** `serve()` still reaches the outside
+world before the continuation is created, so a process that dies in that window
+has already retrieved and been charged, and the restarted process asks again. A
+guard was written for this and removed: it compared the continuation's
+deterministic id against the durable task rows, and `nextSegmentNumber` is the
+highest existing segment plus one, so the id is new by construction every time
+and the comparison could never match. Two retrievals really happen and the
+durable rows now count two — which is the truth, and is what keeps the budget
+honest. Making it cost one would require the retrieval itself to be keyed and
+deduplicated at the transport, and Live Reach has no request identity today.
 
 ### 4. The bundle could not say WHEN anyone worked
 
@@ -162,6 +166,45 @@ dispatch's context. Neither was invented.
 | 10 | Does every deterministic gate pass on the final head? | See the report accompanying this document. |
 
 ---
+
+## The mutation campaign
+
+**17 run, 17 killed** — three of them only after the campaign exposed something
+the tests had been asserting vacuously.
+
+Allocation (6): the pool no longer excluding the asker's own floor (the
+double-count, reintroduced); peer floors no longer protected; mission room no
+longer bounding the draw (the 67% overspend guard); the repair reserve never
+held back; a coder-dominant split accepted instead of refused; a split leaving
+no pool accepted.
+
+Pipeline and report (5): reservation and permission conflated again; the grant
+bound to the estimate again (the starvation, from the new direction); the
+durable research charge never written; the report dropping `sequence` again; an
+unplaced dispatch given position zero.
+
+Composition and research accounting (6): probes no longer reaching Live Reach;
+the durable ledger ignored in favour of the Map; the composition no longer
+binding it; a signalled page recorded as free; an unrecognised outcome treated
+as free; an unrecognised outcome charged wrongly.
+
+**The three that taught something:**
+
+- **A replay guard that could never fire.** It compared the continuation's
+  deterministic id against the durable task rows to skip an already-served
+  retrieval — and `nextSegmentNumber` is the highest existing segment plus one,
+  so the id is new by construction every time. Removing the guard was the fix;
+  shipping it would have meant a comment claiming a protection the code did not
+  provide. What the crash window really costs is now written down instead: both
+  retrievals happened, both are charged, and the budget counts two.
+- **Nothing proved the durable ledger was USED.** Deleting the branch that reads
+  it left the suite green. The test that closes it drives three ticks in one
+  runtime, then builds a brand new one over the same store and asserts the
+  second ask is refused for budget — which is 2 fetches with a Map and 1 with
+  the projection.
+- **A signalled page recorded as free.** Nothing tested the outcome-to-charge
+  mapping, and recording an injection attempt as costless is the cheapest
+  possible way to attack a research budget.
 
 ## What this does NOT qualify
 
