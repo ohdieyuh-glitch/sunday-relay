@@ -8,9 +8,9 @@ import {
   resolveReviewerDeadline, reviewerHighWater, reviewerOperativeTimeoutMs,
 } from './reviewer-deadline';
 import { loadHermesConfig } from './hermes-reviewer';
-import { ARCHITECT_WORKER, CODER_WORKER, reviewerWorker } from './julius/live-composition';
+import { architectWorker, CODER_WORKER, reviewerWorker } from './julius/live-composition';
 import { DEFAULT_HOSTED_LIMITS } from './hosted-coding-agent/hosted-envelope';
-import { DEFAULT_TIMEOUT_MS as ARCHITECT_OPERATIVE_TIMEOUT_MS } from '../src/relay/connectors/gpt-architect/config';
+import { architectOperativeTimeoutMs } from '../src/relay/connectors/gpt-architect/config';
 
 // NOT `import.meta`: the bridge tsconfig forbids it, and `npm run typecheck`
 // runs a second pass over relay-bridge that is easy to miss locally.
@@ -45,9 +45,21 @@ describe('the reviewer deadline is derived once and nothing keeps a private copy
    * against a runtime that aborts at 360_000, and the architect restated
    * `300_000` as a second literal beside the connector default it happened to
    * match. A number that agrees by coincidence is one edit from disagreeing.
+   *
+   * THE ARCHITECT ROW WAS ITSELF STILL VACUOUS, and stayed so through this
+   * file's own repair. It compared the declared deadline against
+   * `DEFAULT_TIMEOUT_MS` — the connector's FALLBACK — while the number that
+   * bounds the call is `readGptArchitectConfig(env).timeoutMs`, which
+   * `RELAY_PROMPT_ARCHITECT_TIMEOUT_MS` moves. So it asserted equality under
+   * the empty environment and could never have observed the drift it is named
+   * after. It now resolves both sides from the SAME environment, and
+   * `architect-envelope.test.ts` sweeps environments that actually set the
+   * variable.
    */
   it('declares, for every role, exactly the deadline that role is actually bounded by', () => {
-    expect(ARCHITECT_WORKER.timeoutMs).toBe(ARCHITECT_OPERATIVE_TIMEOUT_MS);
+    const env = { RELAY_PROMPT_ARCHITECT_TIMEOUT_MS: '412000' };
+    expect(architectWorker(env).timeoutMs).toBe(architectOperativeTimeoutMs(env));
+    expect(architectWorker({}).timeoutMs).toBe(architectOperativeTimeoutMs({}));
     expect(CODER_WORKER.timeoutMs).toBe(DEFAULT_HOSTED_LIMITS.maxRuntimeMs);
     expect(reviewerWorker('xai').timeoutMs).toBe(reviewerOperativeTimeoutMs());
   });
