@@ -27,7 +27,7 @@ import {
   JuliusRunLoop,
   JuliusWorkerRegistry,
   fixedResourceEstimate,
-  juliusAllocationPolicy,
+  juliusSharedCeilingPolicy,
   type JuliusBudgetPort,
   type JuliusCardPolicy,
   type JuliusClaimedTask,
@@ -521,13 +521,27 @@ export function assembleLiveJuliusRuntime(options: {
       toolCalls: 10, runtimeMs: 300_000,
     }),
     /**
-     * THE MISSION CONTRACT GOVERNS THE CODING AGENT'S SPEND. The same two
-     * contract fields that seed the run budget and the repair bound derive
-     * the per-dispatch allocation: each Coding Agent round may spend an equal
-     * share of `spendUsd` over the build and every authorised repair round,
-     * never more than remains. See docs/JULIUS_PAID_RUN_34037313976_REPAIRS.md.
+     * THE MISSION CONTRACT GOVERNS EVERY SLOT'S SPEND, not just the coder's.
+     *
+     * The same two contract fields still derive it — `spendUsd` is the ceiling
+     * and `repairCycles` the authorised repair rounds — but the rule is now v3:
+     * each peer holds a protected floor no other slot may take, everything
+     * above the floors is one shared pool, and a dispatch draws its own unspent
+     * floor plus whatever of that pool is genuinely free.
+     *
+     * WHY NOT v1: it has no per-slot dimension at all, so the coder drew an
+     * equal share of the whole ceiling and the peers took a flat estimate out
+     * of the same pot — one worker with two commentators.
+     *
+     * WHY NOT v2: it capped every dispatch at one per-round share of a per-slot
+     * envelope. On this repository's own figures that cap is 2,499,750 and
+     * Mission 5's first dispatch really settled 5,177,120, so v2 would have
+     * refused to fund work that actually happened while peer money sat unspent
+     * and out of reach.
+     *
+     * See docs/JULIUS_PAID_RUN_34037313976_REPAIRS.md for the original rule.
      */
-    allocation: juliusAllocationPolicy({
+    allocation: juliusSharedCeilingPolicy({
       ceilingUsdMicros: options.spendCeilingUsdMicros, authorizedRepairRounds: options.maxRepairRounds,
     }),
     /**

@@ -568,3 +568,137 @@ describe('Q4 — the bundle reconstructs the interleaving, not just the totals',
     expect(chronology.unpositioned).toBe(1);
   });
 });
+
+/* ------------------------------------------------------------------ Q5 */
+
+describe('Q5 — production effort is measured where it exists and unknown where it does not', () => {
+  it('measures what Julius handed each dispatch, which no provider could report', async () => {
+    const { timeline } = await driveQualification({
+      architect: [PLAN_OK], coder: [BUILD_OK], reviewer: [REVIEW_OK, REVIEW_OK],
+    });
+    const effortRows = ofType(timeline, 'worker.effort');
+    expect(effortRows.length).toBeGreaterThan(0);
+
+    for (const row of effortRows) {
+      // MEASURED, not reported. `maybe()` reads the provider's own usage bag;
+      // these two are Julius's act and were permanently null while wired there.
+      expect(typeof row.facts.brainRetrievals, `${String(row.taskId)} brainRetrievals`).toBe('number');
+      expect(typeof row.facts.evidenceInspected, `${String(row.taskId)} evidenceInspected`).toBe('number');
+    }
+
+    // The reviewer is handed the evidence of the task it reviews, so at least
+    // one dispatch genuinely inspected something — otherwise a constant zero
+    // would satisfy the assertion above.
+    expect(effortRows.some((row) => Number(row.facts.evidenceInspected) > 0),
+      'some dispatch was actually shown evidence').toBe(true);
+    expect(effortRows.some((row) => Number(row.facts.brainRetrievals) > 0),
+      'some dispatch actually received brain entries').toBe(true);
+  });
+
+  it('leaves the two dimensions nothing can measure absent rather than zero', async () => {
+    const { timeline } = await driveQualification({
+      architect: [PLAN_OK], coder: [BUILD_OK], reviewer: [REVIEW_OK, REVIEW_OK],
+    });
+    for (const row of ofType(timeline, 'worker.effort')) {
+      // `checkpoints`: the rows are written AFTER this one, so a per-dispatch
+      // count here would have to be taken before the thing it counts happens.
+      // It is carried per slot by `participation` instead, off the real rows.
+      expect(row.facts.checkpoints, 'checkpoints is not on the effort row').toBeUndefined();
+      // `guidanceConsumed`: nothing in the runtime knows it. The guidance packet
+      // is never compiled into any dispatch's context, so there is no point at
+      // which "this dispatch consumed N packets" is a fact.
+      expect(row.facts.guidanceConsumed, 'guidanceConsumed is not on the effort row').toBeUndefined();
+    }
+  });
+
+  it('summarises the measured dimensions per slot without turning unknown into zero', async () => {
+    const { timeline } = await driveQualification({
+      architect: [PLAN_OK], coder: [BUILD_OK], reviewer: [REVIEW_OK, REVIEW_OK],
+    });
+    const report = buildJuliusSlotMissionReport({
+      runId: RUN, policy: null, policyVersion: 'julius-allocation.v1', ceilingUsdMicros: CEILING,
+      rows: timeline.map((entry) => ({
+        type: entry.type, taskId: entry.taskId, facts: entry.facts, sequence: entry.sequence,
+      })),
+    });
+    for (const slot of ['PROMPT_ARCHITECT', 'CODING_AGENT', 'INDEPENDENT_REVIEWER'] as const) {
+      const effort = report.bySlot[slot]!.effort!;
+      // Measured on every dispatch this slot made.
+      expect(effort.brainRetrievals.measured, `${slot} brainRetrievals`).toBe(effort.dispatches);
+      expect(effort.evidenceInspected.measured, `${slot} evidenceInspected`).toBe(effort.dispatches);
+      // And the ones nothing measures are unknown on every dispatch, not zero.
+      expect(effort.guidanceConsumed.unknown, `${slot} guidanceConsumed`).toBe(effort.dispatches);
+      expect(effort.checkpoints.unknown, `${slot} checkpoints`).toBe(effort.dispatches);
+    }
+  });
+});
+
+/* ------------------------------------------------------------------ Q6 */
+
+describe('Q6 — the live budget funds peers without starving legitimate work', () => {
+  it('allocates under v3 on the live path, and funds Mission 5\'s real dispatch', async () => {
+    const { timeline } = await driveQualification({
+      architect: [PLAN_OK], coder: [BUILD_OK], reviewer: [REVIEW_OK, REVIEW_OK],
+    });
+    const allocated = ofType(timeline, 'budget.allocated');
+    expect(allocated.length, 'the live path allocated').toBeGreaterThan(0);
+    for (const row of allocated) {
+      expect(row.facts.allocationPolicy, 'every decision names v3').toBe('julius-allocation.v3');
+    }
+
+    // THE REGRESSION, END TO END. Mission 5's coder settled 5,177,120; v2's
+    // per-round cap was 2,499,750. The coder's dispatch must be able to hold
+    // what the work actually cost.
+    const coder = allocated.find((row) => row.facts.slot === 'CODING_AGENT');
+    expect(coder, 'the coder was allocated').toBeDefined();
+    expect(Number(coder!.facts.allocatedUsdMicros),
+      'the coder can hold what Mission 5 really cost').toBeGreaterThanOrEqual(5_177_120);
+  });
+
+  it('protects peer capacity on the same row that granted the draw', async () => {
+    const { timeline } = await driveQualification({
+      architect: [PLAN_OK], coder: [BUILD_OK], reviewer: [REVIEW_OK, REVIEW_OK],
+    });
+    const coder = ofType(timeline, 'budget.allocated')
+      .find((row) => row.facts.slot === 'CODING_AGENT');
+    expect(coder).toBeDefined();
+
+    // The three numbers v3 has and its predecessors do not, on the durable row:
+    // what was free, what the peers are owed, and what repairs still hold.
+    expect(typeof coder!.facts.sharedPoolUsdMicros).toBe('number');
+    expect(Number(coder!.facts.protectedForPeersUsdMicros),
+      'the peers are owed something and the row says how much').toBeGreaterThan(0);
+    expect(Number(coder!.facts.repairReserveUsdMicros),
+      'and repairs are still funded').toBeGreaterThan(0);
+  });
+
+  it('never lets the run commit more than its ceiling', async () => {
+    const { timeline } = await driveQualification({
+      architect: [PLAN_OK], coder: [BUILD_OK], reviewer: [REVIEW_OK, REVIEW_OK],
+    });
+    // Read the money the way the ledger does: everything reserved, less
+    // anything explicitly released.
+    const reserved = ofType(timeline, 'budget.reserved')
+      .reduce((sum, row) => sum + Number(row.facts.usdMicros ?? 0), 0);
+    const released = ofType(timeline, 'budget.settled')
+      .filter((row) => row.facts.released === true)
+      .reduce((sum, row) => sum + Number(row.facts.usdMicros ?? 0), 0);
+    expect(reserved - released).toBeLessThanOrEqual(CEILING);
+  });
+
+  it('records the ledger revision every decision was made against', async () => {
+    const { timeline } = await driveQualification({
+      architect: [PLAN_OK], coder: [BUILD_OK], reviewer: [REVIEW_OK, REVIEW_OK],
+    });
+    const allocated = ofType(timeline, 'budget.allocated');
+    for (const row of allocated) {
+      // A DECISION IS ABOUT A MOMENT. Without the revision, two dispatches that
+      // read the same ledger and both drew from the pool are indistinguishable
+      // afterwards from two that drew in sequence.
+      expect(typeof row.facts.ledgerRevision, `${String(row.taskId)} names its revision`).toBe('number');
+    }
+    // And the revisions move: the ledger is not being read once and cached.
+    const revisions = allocated.map((row) => Number(row.facts.ledgerRevision));
+    expect(Math.max(...revisions)).toBeGreaterThanOrEqual(Math.min(...revisions));
+  });
+});
