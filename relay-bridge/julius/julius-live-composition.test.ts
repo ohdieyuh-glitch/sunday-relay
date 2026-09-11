@@ -28,10 +28,10 @@ import type { GptRunOutcome } from '../../src/relay/connectors/gpt-architect';
 import { JuliusDispatchError, safeFailureClass, safeReviewDiagnostics } from '../../src/relay/mission/julius';
 import { compileHostedEnvelope } from '../hosted-coding-agent/hosted-envelope';
 import type { HostedQueryFn, HostedRunInput, HostedRunOutcome } from '../hosted-coding-agent/hosted-runner';
-import { loadHermesConfig, reviewDiagnostics, runHermesReview, type HermesOutcome, type ReviewPacket } from '../hermes-reviewer';
+import { buildReviewPrompt, loadHermesConfig, reviewDiagnostics, runHermesReview, type HermesOutcome, type ReviewPacket } from '../hermes-reviewer';
 import { UNKNOWN_USAGE } from '../reviewer-harness/hermes/runner';
 import { runRemoteHermesReview, type RemoteHermesConfig } from '../hermes-remote-review';
-import { repairTaskTypeFor, reviewStageOf } from '../../src/relay/mission/julius';
+import { JULIUS_REVIEW_STAGES, repairTaskTypeFor, reviewChargeFor, reviewStageOf } from '../../src/relay/mission/julius';
 import { DEFAULT_HOSTED_LIMITS, type HostedLimits } from '../hosted-coding-agent/hosted-envelope';
 import {
   createLiveArtifactExchange,
@@ -39,6 +39,7 @@ import {
   createLiveHermesReviewerAdapter,
   createLiveHostedCodingAdapter,
   diffRef,
+  guidanceRef,
   planRef,
 } from './live-workers';
 import {
@@ -978,6 +979,71 @@ describe('a resumed process cannot produce a vacuous review or a planless build'
     await expect(adapter.dispatch({ taskId: 'build-1:review', contextId: 'ctx-resume-1' }))
       .rejects.toMatchObject({ code: 'INVALID_REQUEST', failureClass: 'reviewer_stage_unknown' });
     expect(log.order).toEqual([]);
+  });
+
+  it('the reviewer refuses a guidance review whose packet it cannot read, before Hermes runs', async () => {
+    // THE GAP THIS CLOSES. `charge.requires` has named the guidance packet
+    // since the stage vocabulary was written, and this adapter read only the
+    // plan — so a guidance review would have passed its own preconditions
+    // holding the plan and NOT the thing it exists to judge, and its
+    // "approved" would have released a continuation.
+    const log: FakeLog = { order: [] };
+    const artifacts = createLiveArtifactExchange();
+    artifacts.put(planRef('run-live'), JSON.stringify(VALID_PLAN));
+    const adapter = createLiveHermesReviewerAdapter({
+      worker: {
+        workerId: 'independent-reviewer-hermes', role: 'INDEPENDENT_REVIEWER',
+        adapterId: 'hermes-local-live', providerId: 'xai', capabilities: ['review'],
+        taskTypes: ['review:guidance'], concurrencyLimit: 1, timeoutMs: 1_000, maxRetries: 1, status: 'AVAILABLE',
+      },
+      contexts, artifacts,
+      config: loadHermesConfig(LIVE_ENV as never),
+      testCommand: 'npm run mission-test',
+      run: fakeReviewer(log, [], ['approved']) as never,
+    });
+    await expect(adapter.dispatch({
+      taskId: 'guidance:build-1:1:task:review', contextId: 'ctx-resume-1', taskType: 'review:guidance',
+    })).rejects.toMatchObject({ code: 'INVALID_REQUEST', failureClass: 'reviewer_guidance_absent' });
+    expect(log.order, 'Hermes must never have been invoked').toEqual([]);
+  });
+
+  it('a guidance review is prompted as GUIDANCE, carries the packet, and demands no diff', async () => {
+    const log: FakeLog = { order: [] };
+    const packets: ReviewPacket[] = [];
+    const artifacts = createLiveArtifactExchange();
+    artifacts.put(planRef('run-live'), JSON.stringify(VALID_PLAN));
+    artifacts.put(guidanceRef('guidance:build-1:1:task'), '{"subObjective":"Reuse the existing reader."}');
+    const adapter = createLiveHermesReviewerAdapter({
+      worker: {
+        workerId: 'independent-reviewer-hermes', role: 'INDEPENDENT_REVIEWER',
+        adapterId: 'hermes-local-live', providerId: 'xai', capabilities: ['review'],
+        taskTypes: ['review:guidance'], concurrencyLimit: 1, timeoutMs: 1_000, maxRetries: 1, status: 'AVAILABLE',
+      },
+      contexts, artifacts,
+      config: loadHermesConfig(LIVE_ENV as never),
+      testCommand: 'npm run mission-test',
+      run: fakeReviewer(log, packets, ['approved']) as never,
+    });
+    const result = await adapter.dispatch({
+      taskId: 'guidance:build-1:1:task:review', contextId: 'ctx-resume-1', taskType: 'review:guidance',
+    });
+    expect(result.status).toBe('SUCCEEDED');
+    expect(packets).toHaveLength(1);
+    expect(packets[0]!.stage).toBe('guidance');
+    expect(packets[0]!.charge?.subject).toBe('GUIDANCE');
+    expect(packets[0]!.guidanceJson).toContain('Reuse the existing reader.');
+
+    // AND THE PROMPT ASKS THE RIGHT QUESTION. Before the GUIDANCE branch
+    // existed this fell through to the implementation rubric: a reviewer told
+    // it was judging an implementation, shown an empty diff, and never shown
+    // the packet at all.
+    const prompt = buildReviewPrompt(packets[0]!);
+    expect(prompt).toContain('INDEPENDENT reviewer of GUIDANCE');
+    expect(prompt).toContain('THE GUIDANCE UNDER REVIEW');
+    expect(prompt).toContain('Reuse the existing reader.');
+    expect(prompt).toContain('never widen scope');
+    expect(prompt).not.toContain('UNIFIED DIFF:');
+    expect(prompt).not.toContain('REVIEW of an implementation');
   });
 
   it('the coder refuses a dispatch when the plan artifact is unavailable, before any effect or SDK load', async () => {
@@ -2781,6 +2847,72 @@ describe('every repair the planner can mint has a registered worker', () => {
     expect(CODER_WORKER.taskTypes).not.toContain('repair:plan');
     expect(CODER_WORKER.taskTypes).toContain('repair:build');
     expect(ARCHITECT_WORKER.taskTypes).toContain('repair:plan');
+  });
+
+  /**
+   * THE TABLE THAT KEEPS A MISSION ALIVE, DERIVED RATHER THAN RESTATED.
+   *
+   * The cases above enumerate the two repairs the seeded graph produces, which
+   * was true when the graph had two stages. The domain now defines six review
+   * stages and the architect takes two more task types, and a list written by
+   * hand goes stale the moment somebody adds a seventh. These read the domain's
+   * own vocabularies, so a stage added there fails here until a worker takes it.
+   */
+  it('every review stage the domain defines has a registered reviewer', () => {
+    const reviewer = reviewerWorker('xai');
+    for (const stage of JULIUS_REVIEW_STAGES) {
+      expect(reviewer.taskTypes, `review:${stage} must be routable`).toContain(`review:${stage}`);
+    }
+    // And nothing is registered that the domain does not define, which is how a
+    // typo in this array becomes a task type nothing ever produces.
+    for (const taskType of reviewer.taskTypes) {
+      expect(reviewStageOf(taskType), `${taskType} names a real stage`).not.toBeNull();
+    }
+    expect(reviewer.taskTypes).toHaveLength(JULIUS_REVIEW_STAGES.length);
+  });
+
+  it('every work stage a worker may be asked for has exactly one taker', () => {
+    const registrations = [ARCHITECT_WORKER, CODER_WORKER, reviewerWorker('xai')];
+    // The stages that are WORK rather than review, each with the role that owns
+    // it. A repair inherits its subject's role and stage, so the repair of each
+    // is the same worker's.
+    const owners = [
+      ['PROMPT_ARCHITECT', 'plan'], ['PROMPT_ARCHITECT', 'repair:plan'],
+      ['PROMPT_ARCHITECT', 'guidance'], ['PROMPT_ARCHITECT', 'repair:guidance'],
+      ['CODING_AGENT', 'build'], ['CODING_AGENT', 'repair:build'],
+    ] as const;
+    for (const [role, taskType] of owners) {
+      const takers = registrations.filter((item) => item.role === role && item.taskTypes.includes(taskType));
+      expect(takers.map((item) => item.workerId), `${role} ${taskType}`).toHaveLength(1);
+    }
+    // Every work stage the domain defines is in that table — so a stage added
+    // to `JULIUS_REVIEW_STAGES` cannot be quietly left without an owner.
+    expect(new Set(owners.map(([, taskType]) => taskType))).toEqual(new Set(JULIUS_REVIEW_STAGES));
+  });
+
+  it('a guidance task and its review are registered together, or the mission stalls', () => {
+    // A `guidance` task nobody can re-review is minted, dispatched, and then
+    // never accepted — and the continuation BLOCKED on it never releases. That
+    // is a stalled mission rather than a refused one, which is worse: the
+    // routability preflight catches an unroutable task, and nothing catches an
+    // unreviewable one.
+    const architectGuides = ARCHITECT_WORKER.taskTypes.includes('guidance');
+    const reviewerJudges = reviewerWorker('xai').taskTypes.includes('review:guidance');
+    expect(architectGuides, 'the two registrations move together').toBe(reviewerJudges);
+  });
+
+  it('a guidance review is charged as GUIDANCE and requires the packet itself', () => {
+    // The gap this closes: `charge.requires` has named the packet since the
+    // stage vocabulary was written, and the live adapter read only the plan —
+    // so a guidance review could pass its own preconditions holding the plan
+    // and not the thing it exists to judge.
+    for (const stage of ['guidance', 'repair:guidance'] as const) {
+      const charge = reviewChargeFor(stage);
+      expect(charge.subject).toBe('GUIDANCE');
+      expect(charge.requires).toContain('guidance');
+      expect(charge.requires).toContain('plan');
+      expect(charge.requires, 'guidance has no diff to demand').not.toContain('diff');
+    }
   });
 
   it('a repair of a repair is still its stage, so one registration covers every round', () => {

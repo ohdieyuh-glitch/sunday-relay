@@ -84,7 +84,17 @@ export const ARCHITECT_WORKER: JuliusWorker = {
   // stage, so a rejected plan comes back here with the reviewer's findings in
   // its context, not to the Coding Agent. Paid run 34037313976 minted the
   // latter, and nobody could route it.
-  capabilities: ['plan'], taskTypes: ['plan', 'repair:plan'],
+  /**
+   * `guidance` and `repair:guidance` are the continuous lifecycle's additions:
+   * the architect that ADVISES under a contract that is already locked, and its
+   * own repair. They are registered here only now that every step of the live
+   * path can genuinely serve one — the architect's guidance branch answers
+   * under the locked charge and refuses without it, the reviewer has a GUIDANCE
+   * rubric rather than the implementation one, and the reviewer's adapter
+   * refuses a guidance review whose packet it cannot read. Registering earlier
+   * would have minted a task whose review could approve something it never saw.
+   */
+  capabilities: ['plan'], taskTypes: ['plan', 'repair:plan', 'guidance', 'repair:guidance'],
   /**
    * DERIVED, not restated. This read `300_000`, which happened to equal the
    * connector's `DEFAULT_TIMEOUT_MS` — the number that actually bounds the
@@ -120,7 +130,20 @@ export const reviewerWorker = (providerId: string): JuliusWorker => ({
   workerId: 'independent-reviewer-hermes', role: 'INDEPENDENT_REVIEWER',
   adapterId: 'hermes-local-live', providerId,
   capabilities: ['review'],
-  taskTypes: ['review:plan', 'review:build', 'review:repair:build', 'review:repair:plan'],
+  /**
+   * EVERY STAGE THE DOMAIN DEFINES, and the two guidance stages arrive with
+   * the architect's. A `guidance` task nobody could re-review would be minted,
+   * dispatched, and then never accepted — and the continuation blocked on it
+   * would never release, which is a stalled mission rather than a refused one.
+   * The registrations are therefore added together or not at all, and
+   * `julius-live-composition.test.ts` holds this list against
+   * `JULIUS_REVIEW_STAGES` so a stage cannot be added to the domain without a
+   * reviewer for it.
+   */
+  taskTypes: [
+    'review:plan', 'review:build', 'review:guidance',
+    'review:repair:plan', 'review:repair:build', 'review:repair:guidance',
+  ],
   /**
    * THE SAME CALL `loadHermesConfig` MAKES. This used to read `240_000`, a
    * number nothing enforced, while the limit that actually cut a review off was

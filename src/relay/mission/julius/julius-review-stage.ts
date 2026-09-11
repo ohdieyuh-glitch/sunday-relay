@@ -191,3 +191,17 @@ const CHARGES: Readonly<Record<JuliusReviewStage, JuliusReviewCharge>> = Object.
 export function reviewChargeFor(stage: JuliusReviewStage): JuliusReviewCharge {
   return CHARGES[stage];
 }
+
+/**
+ * WHAT A REVIEW TASK IS ABOUT — `<subject>:review` read back.
+ *
+ * The pipeline mints review tasks as `${subject}:review`, and until now every
+ * consumer that needed the subject reconstructed it by slicing the string in
+ * place. Once a review needs an artifact belonging to its SUBJECT rather than
+ * to the run — a guidance packet does — that slice moves into an adapter,
+ * which is where a convention becomes a bug nobody can grep for. Null for
+ * anything that is not a review task.
+ */
+export function reviewSubjectTaskId(taskId: string): string | null {
+  return taskId.endsWith(':review') ? taskId.slice(0, -':review'.length) : null;
+}

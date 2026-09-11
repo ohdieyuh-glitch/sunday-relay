@@ -30,11 +30,13 @@ import {
   JuliusDispatchError,
   reviewChargeFor,
   reviewStageOf,
+  reviewSubjectTaskId,
   type JuliusContextSnapshot,
   type JuliusDispatchAllocation,
   type JuliusProviderAdapter,
   type JuliusProviderResult,
   type JuliusReviewStage,
+  type JuliusReviewRequirement,
   type JuliusWorker,
 } from '../../src/relay/mission/julius';
 import {
@@ -1302,7 +1304,56 @@ export function createLiveHermesReviewerAdapter(input: {
         throw new JuliusDispatchError('INVALID_REQUEST', false, 'The review dispatch names no known review stage; a review of an unknown stage is refused.', 'reviewer_stage_unknown');
       }
       const charge = reviewChargeFor(stage);
+      /**
+       * THE STAGE SAYS WHAT IT NEEDS, AND THIS CHECKS FOR EXACTLY THAT.
+       *
+       * `charge.requires` has named `['plan', 'guidance']` for a guidance
+       * review since the stage vocabulary was written, and this adapter read
+       * only `plan` and (for an implementation) `diff`. So a guidance review
+       * would have passed its own preconditions holding the plan and NOT the
+       * packet it exists to judge — a review of something it could not see,
+       * whose "approved" would release a continuation. Reading the requirement
+       * list rather than restating it means a stage that gains a requirement
+       * gains the check with it.
+       */
+      const subjectTaskId = reviewSubjectTaskId(dispatch.taskId ?? '');
+      const artifactFor = (requirement: JuliusReviewRequirement): string | null => {
+        if (requirement === 'plan') return input.artifacts.get(planRef(snapshot.runId));
+        if (requirement === 'diff') return input.artifacts.get(diffRef(snapshot.runId));
+        return subjectTaskId === null ? null : input.artifacts.get(guidanceRef(subjectTaskId));
+      };
+      const REQUIREMENT_REFUSAL: Readonly<Record<JuliusReviewRequirement, { readonly message: string; readonly shape: string }>> = {
+        plan: {
+          // The artifact exchange is same-process. After a restart the plan is
+          // gone even though its task succeeded durably, and a review dispatched
+          // without it would be a review of NOTHING whose approval could
+          // complete the mission. Refuse instead: a resumed run fails visibly
+          // rather than completing falsely. (Independent review finding F1.)
+          message: 'The architect plan artifact is not available to this process; an independent review of nothing is refused.',
+          shape: 'reviewer_plan_absent',
+        },
+        diff: {
+          // AN EMPTY DIFF IS NO DIFF. The exchange stores whatever `git diff`
+          // printed, so a coder that edited nothing leaves an empty string —
+          // which is not an implementation, and a review of it is the plan
+          // review's mistake in the other direction.
+          message: 'No workspace diff artifact is available to this process; an implementation review of nothing is refused.',
+          shape: 'reviewer_implementation_absent',
+        },
+        guidance: {
+          message: 'The guidance packet under review is not available to this process; a review of guidance nobody can read is refused.',
+          shape: 'reviewer_guidance_absent',
+        },
+      };
+      for (const requirement of charge.requires) {
+        const artifact = artifactFor(requirement);
+        if (artifact === null || artifact.trim() === '') {
+          const refusal = REQUIREMENT_REFUSAL[requirement];
+          throw new JuliusDispatchError('INVALID_REQUEST', false, refusal.message, refusal.shape);
+        }
+      }
       const planArtifact = input.artifacts.get(planRef(snapshot.runId));
+      const guidanceArtifact = charge.subject === 'GUIDANCE' ? artifactFor('guidance') : null;
       const diffArtifact = charge.subject === 'IMPLEMENTATION' ? input.artifacts.get(diffRef(snapshot.runId)) : null;
       if (planArtifact === null) {
         // The artifact exchange is same-process. After a restart the plan is
@@ -1351,6 +1402,11 @@ export function createLiveHermesReviewerAdapter(input: {
         // faithful to the request would be reading findings as the request.
         originalRequest: safeClaim(missionText(snapshot), 8_000),
         handoffJson: planArtifact,
+        // THE PACKET UNDER JUDGEMENT, for a guidance review and for no other
+        // stage. The plan stays beside it because guidance that contradicts
+        // the plan it supplements cannot be spotted from the packet alone —
+        // which is why `charge.requires` names both.
+        ...(guidanceArtifact === null ? {} : { guidanceJson: guidanceArtifact }),
         acceptanceCriteria: [...snapshot.acceptanceCriterionIds],
         priorFindings,
         baseRevision: input.artifacts.get(baseRevisionRef(snapshot.runId)) ?? 'unknown',

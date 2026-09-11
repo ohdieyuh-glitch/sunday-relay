@@ -816,6 +816,17 @@ interface ReviewPacketFields {
   originalRequest: string;
   /** The exact validated Prompt Architect handoff (serialized). */
   handoffJson: string;
+  /**
+   * THE GUIDANCE PACKET UNDER REVIEW, for a `guidance` or `repair:guidance`
+   * stage. Optional because no other stage has one.
+   *
+   * Its absence was a real hole rather than a missing feature: the prompt
+   * branched on PLAN versus everything-else, so a GUIDANCE subject fell into
+   * the implementation rubric and a reviewer was asked to judge an empty diff
+   * while the packet it was supposed to read was never in the prompt at all. A
+   * review of nothing that can still return "approved" is worse than no review.
+   */
+  guidanceJson?: string;
   acceptanceCriteria?: string[];
   allowedFiles?: string[];
   prohibitedFiles?: string[];
@@ -880,7 +891,29 @@ export function buildReviewPrompt(p: ReviewPacket): string {
       ...(findings.length > 0 ? findings.map((finding) => `- ${finding}`)
         : ['- (none recorded: this repair was admitted by failed evidence rather than by a reviewer finding, so judge the repaired work and its evidence)']), '']
     : [];
-  const head = charge.subject === 'PLAN'
+  /**
+   * THREE SUBJECTS, THREE RUBRICS. This used to be two: `PLAN` and everything
+   * else. `GUIDANCE` is not an implementation, has no diff and no test output
+   * by construction, and judging it against the implementation rubric produces
+   * findings that demand things the stage forbids demanding — the paid run's
+   * own defect in a third place.
+   */
+  const head = charge.subject === 'GUIDANCE'
+    ? [
+      'You are an INDEPENDENT reviewer of GUIDANCE issued to a coding agent',
+      'mid-mission, under a contract that is already LOCKED. Judge the guidance',
+      'itself. You have no write access and must not attempt to modify anything.',
+      '',
+      `THIS IS A ${stage.toUpperCase()} REVIEW. No new implementation exists for it yet, by design.`,
+      `Do NOT demand, and do NOT penalise the absence of: ${charge.mustNotDemand.join(', ')}.`,
+      'The single most important question is whether this guidance stays INSIDE',
+      'the locked contract. Guidance may narrow, clarify and prohibit; it may',
+      'never widen scope, relax a criterion, grant a permission the contract',
+      'withheld, or change what the mission is for. Guidance that does any of',
+      'those is a scope change wearing the word "advice", and saying so is a',
+      'blocking finding.',
+    ]
+    : charge.subject === 'PLAN'
     ? [
       'You are an INDEPENDENT reviewer of a PLAN. Review the plan below strictly',
       'against the founder\'s request, the acceptance criteria and the mission',
@@ -902,7 +935,20 @@ export function buildReviewPrompt(p: ReviewPacket): string {
       '',
       `THIS IS A ${stage.toUpperCase()} REVIEW of an implementation.`,
     ];
-  const body = charge.subject === 'PLAN'
+  const body = charge.subject === 'GUIDANCE'
+    ? [
+      'THE GUIDANCE UNDER REVIEW (what the Prompt Architect told the coding agent):',
+      p.guidanceJson ?? '(none supplied)',
+      '',
+      'THE PLAN IT SUPPLEMENTS (for contradiction, not for re-review):',
+      p.handoffJson,
+      '',
+      `ACCEPTANCE CRITERIA:\n${(p.acceptanceCriteria ?? []).map((c) => `- ${c}`).join('\n') || '- (none stated)'}`,
+      '',
+      ...priorFindingsBlock,
+      `RELAY VERIFICATION EVIDENCE:\n${p.relayEvidence.map((e) => `- ${e}`).join('\n') || '- (none)'}`,
+    ]
+    : charge.subject === 'PLAN'
     ? [
       'THE PLAN UNDER REVIEW (the validated Prompt Architect handoff):',
       p.handoffJson,
