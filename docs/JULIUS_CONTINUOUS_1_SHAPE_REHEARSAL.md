@@ -75,3 +75,32 @@ ceiling has real headroom rather than being a guess dressed as a number.
   that if it asks, the machinery carries the question and brings back an answer.
 - **Not a substitute for the preconditions recheck**, which must run against
   trusted main after the candidates land.
+
+---
+
+# The six preconditions, rechecked on the same stack
+
+Audited against trusted main `9f155b91` alone, two of these were FALSE in
+production and two more sat unshipped in frozen candidates. Rechecked here with
+every candidate applied — the state the qualification would actually run in.
+
+| # | precondition | verdict | the proof, named |
+|---|---|---|---|
+| 1 | the ledger sequence is the canonical timeline for the paid evidence | **PASS** | all seven event dumps order on `e.stream_id AS run_id, e.sequence`; and `createJuliusPostgresRuntimeStore` now returns `JuliusTimelineReader`, so the production store can serve the timeline it is asked for. Both halves are needed: before the second, the reader existed with no production caller. |
+| 2 | the mission SEALS a governed research policy rather than relying on ambient authority | **PASS** | the live entrypoint passes `researchPolicyFor: (id) => sealLiveMissionResearchPolicy(id, researchClause)`; with no clause the composition falls to `noJuliusResearch`. A contract cannot grant itself: the checker refuses a clause with no entry in the deployment's own table. |
+| 3 | all three slots get tool/research capability under Julius policy | **SPLIT — say which half** | TRUE of the policy and the mediator: a governed retrieval is served for the architect, the coder and the reviewer alike, and each is bounded by the same per-role budget. FALSE of the live transport for two of the three: only the Coding Agent has a channel through which an ask reaches Julius, because the architect and the reviewer answer with fixed schemas. `julius-continuous-1` grants `CODING_AGENT` only, so the mission claims exactly what is true. Closing the other two is its own change. |
+| 4 | allocation v3 active on the qualification path | **PASS** | `julius-allocation.v3` is the shared-ceiling policy the live budget wires, and the qualification drive allocates under it and funds a real dispatch. |
+| 5 | research consumption restart-durable | **PASS** | a second runtime — new mediator, empty meter — over the same durable store does not re-spend the allowance, and the refusal names the budget rather than something vaguer. |
+| 6 | UNKNOWN telemetry stays unknown | **PASS** | by named proofs rather than by grep: a component nobody reported is unknown and never zero; a dispatch whose settlement basis nobody recorded counts as UNKNOWN; an unavailable dump reads as unknown and never as empty; a run with no observed final message reports every participation fact as unknown, not as "did not ask". |
+
+Suites re-run on the stack for this table: the zero-spend qualification e2e, the
+research-authority cases, the fixture's own proofs, and the live-timeline
+binding — 102 cases, 0 failed. The `julius-continuous-1` contract passes the
+real checker on this stack and reports `research: 1 allowance(s) for
+CODING_AGENT`.
+
+**The dispatch decision, stated in advance:** on this stack five preconditions
+pass outright and the sixth passes for the one slot the mission actually grants.
+Nothing here authorises a paid run — that waits on the candidates landing on
+trusted main and on the same checks passing there — but the answer will not have
+to be worked out at that point.
