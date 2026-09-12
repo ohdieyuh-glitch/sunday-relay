@@ -88,7 +88,7 @@ every candidate applied — the state the qualification would actually run in.
 |---|---|---|---|
 | 1 | the ledger sequence is the canonical timeline for the paid evidence | **PASS** | all seven event dumps order on `e.stream_id AS run_id, e.sequence`; and `createJuliusPostgresRuntimeStore` now returns `JuliusTimelineReader`, so the production store can serve the timeline it is asked for. Both halves are needed: before the second, the reader existed with no production caller. |
 | 2 | the mission SEALS a governed research policy rather than relying on ambient authority | **PASS** | the live entrypoint passes `researchPolicyFor: (id) => sealLiveMissionResearchPolicy(id, researchClause)`; with no clause the composition falls to `noJuliusResearch`. A contract cannot grant itself: the checker refuses a clause with no entry in the deployment's own table. |
-| 3 | all three slots get tool/research capability under Julius policy | **PASS**, after the repair below | It read SPLIT when this table was first written: TRUE of the policy and the mediator, FALSE of the live transport for two of the three, because only the Coding Agent had a channel through which an ask reaches Julius. That is now closed — `relay/julius-architect-reviewer-participation` gives the Prompt Architect the ask as a required field of its own strict schema, on the plan branch and the guidance branch, and the Independent Reviewer the same field in its review object. One vocabulary, one set of bounds, one sanitizer for all three. |
+| 3 | all three slots get tool/research capability under Julius policy | **PASS**, after two repairs — see the correction below | It read SPLIT when this table was first written: TRUE of the policy and the mediator, FALSE of the live transport for two of the three, because only the Coding Agent had a channel through which an ask reaches Julius. That is now closed — `relay/julius-architect-reviewer-participation` gives the Prompt Architect the ask as a required field of its own strict schema, on the plan branch and the guidance branch, and the Independent Reviewer the same field in its review object. One vocabulary, one set of bounds, one sanitizer for all three. The second repair is the grant: the channel is useless on a mission that refuses it by name, and `julius-continuous-1` did until `26ee83c2`. |
 | 4 | allocation v3 active on the qualification path | **PASS** | `julius-allocation.v3` is the shared-ceiling policy the live budget wires, and the qualification drive allocates under it and funds a real dispatch. |
 | 5 | research consumption restart-durable | **PASS** | a second runtime — new mediator, empty meter — over the same durable store does not re-spend the allowance, and the refusal names the budget rather than something vaguer. |
 | 6 | UNKNOWN telemetry stays unknown | **PASS** | by named proofs rather than by grep: a component nobody reported is unknown and never zero; a dispatch whose settlement basis nobody recorded counts as UNKNOWN; an unavailable dump reads as unknown and never as empty; a run with no observed final message reports every participation fact as unknown, not as "did not ask". |
@@ -97,7 +97,7 @@ Suites re-run on the stack for this table: the zero-spend qualification e2e, the
 research-authority cases, the fixture's own proofs, and the live-timeline
 binding — 102 cases, 0 failed. The `julius-continuous-1` contract passes the
 real checker on this stack and reports `research: 1 allowance(s) for
-CODING_AGENT`.
+PROMPT_ARCHITECT, CODING_AGENT, INDEPENDENT_REVIEWER`.
 
 **The dispatch decision, stated in advance:** on this stack all six pass. It was
 five-and-a-half when this was first written, and the half was not a rounding
@@ -105,9 +105,44 @@ error — the qualification's own required sequence opens with the Architect doi
 serious pre-lock investigation, which a slot with no way to ask cannot do. That
 is why the repair was made rather than worked around.
 
-`julius-continuous-1` still grants `CODING_AGENT` only. The grant describes what
-the mission needs, not the widest thing now possible; widening it is a separate
-deliberate edit, which is the whole point of the grant table.
+## The correction: precondition 3 did not pass when this table first said it did
+
+This section used to end here, with a paragraph defending the narrow grant:
+
+> `julius-continuous-1` still grants `CODING_AGENT` only. The grant describes
+> what the mission needs, not the widest thing now possible; widening it is a
+> separate deliberate edit, which is the whole point of the grant table.
+
+That reasoning was wrong, and wrong in a way the paragraph directly above it
+should have caught. What the mission needs is fixed by §3 of the campaign
+specification, and §3 opens with the Architect doing serious pre-lock
+investigation. A grant of one role does not merely decline to widen: it refuses
+by name the exact ask the channel was built to carry. The two paragraphs
+contradicted each other and I did not notice, because each was true about a
+different layer — the channel existed, and the authority did not.
+
+Measured on the integrated stack rather than argued: an architect research
+request for the one allowlisted host was refused `role_not_authorized`; the
+reviewer's identical request likewise; the coder's identical request was
+allowed. A refused ask is not fatal — the pipeline routes CONTINUE and records
+the reason — so the run would have completed, spent its budget and produced a
+record showing the Architect never investigated, on the mission specified to
+demonstrate that it does.
+
+Repaired in the fixture candidate, re-frozen at `26ee83c2`: both halves of the
+grant, the contract clause and the deployment table, now name all three slots.
+The widening bought no new authority — the budget was already three slots' worth
+(two retrievals each against a mission ceiling of six), so the same six
+retrievals are reachable by three slots on the same one host with the same one
+read capability. Re-measured after: all three allowed; an unlisted host still
+refused for every slot. Four mutations killed, and the tripwire that pinned the
+granted roles corrected rather than deleted — its property was never "one role",
+it was "no slot may be granted research it cannot ask for".
+
+So precondition 3 now passes on both layers. It did not when this table first
+claimed it, and the table claimed it because it checked the channel and not the
+grant.
+
 Nothing here authorises a paid run — that waits on the candidates landing on
 trusted main and on the same checks passing there — but the answer will not have
 to be worked out at that point.
