@@ -561,6 +561,26 @@ const LIVENESS_TIMEOUT_MS = 60_000;
  * classified and discarded rather than surfaced: it can quote the request, and
  * callers get a category instead of a vendor's prose.
  */
+/**
+ * THE UPSTREAM STATUSES THAT CLEAR ON THEIR OWN.
+ *
+ * ONE LIST, BOTH TRANSPORTS. The remote reviewer has always answered 429 and
+ * 503 with `review_service_unavailable` — retryable, because capacity clears as
+ * runs finish and a drain ends when the deploy lands. The LOCAL path, which is
+ * the one the live Julius composition actually uses, answered every upstream
+ * status with `review_provider_http_error` — final. So the same provider
+ * hiccup was a transient condition down one transport and a dead mission down
+ * the other, and the comment in `live-workers.ts` explaining why a 503 may be
+ * re-asked governed a shape the live path could not produce.
+ *
+ * DELIBERATELY JUST THESE TWO. 500, 502 and 504 stay final: the remote path has
+ * never treated them as transient, nothing observed says they clear by
+ * themselves, and widening the set on a hunch would be spending a paid
+ * dispatch to find out. A status added here is a decision with evidence behind
+ * it, not a default.
+ */
+export const HERMES_TRANSIENT_UPSTREAM_STATUSES: readonly number[] = Object.freeze([429, 503]);
+
 export function classifyHermesUpstreamFailure(
   text: string,
 ): { kind: 'authentication' | 'upstream'; status: number | null } | null {
@@ -1650,6 +1670,10 @@ export async function runHermesReview(input: {
           && isEngineReportedTimeout(out);
         const shape: HermesReviewShape =
           upstream?.kind === 'authentication' ? 'review_authentication_failed'
+            // A TRANSIENT STATUS IS NOT A VERDICT. Same two statuses, same
+            // answer, whichever transport carried the review.
+            : upstream !== null && upstream.status !== null
+              && HERMES_TRANSIENT_UPSTREAM_STATUSES.includes(upstream.status) ? 'review_service_unavailable'
             : upstream !== null ? 'review_provider_http_error'
               // THE ENGINE SAID IT TIMED OUT, so this is a timeout that exited
               // rather than one Relay had to kill. Same shape, same retryable
