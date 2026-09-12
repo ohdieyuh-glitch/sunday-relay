@@ -887,3 +887,90 @@ export function guidanceSubjectTaskId(taskId: string): string | null {
   const match = /^guidance:(.+):([1-9]\d*):task$/u.exec(taskId);
   return match === null ? null : match[1]!;
 }
+
+/**
+ * THE ADVICE, AS THE WORKER IT WAS WRITTEN FOR WILL READ IT.
+ *
+ * THE GAP THIS CLOSES. A guidance packet was stored as an artifact and read by
+ * exactly one consumer — the Independent Reviewer, so it could judge the
+ * advice. The Coding Agent it was written FOR was handed nothing: its
+ * continuation resumed carrying `brain:segment-resume`, which is what the coder
+ * itself said before it paused. A mission could buy an architect dispatch and a
+ * review of its output, and the worker that asked the question never saw a word
+ * of the answer. `guidanceConsumed` stayed UNKNOWN for the plainest possible
+ * reason: nothing consumed guidance.
+ *
+ * Research already closed this loop — `renderJuliusResearchResume` puts the
+ * observations on the continuation's own Project Brain channel. This is the
+ * same shape for the other kind of answer, and deliberately so: one channel,
+ * one redaction path, one provenance record, and no prose side channel.
+ *
+ * BOUNDED, AND TRUNCATION SAYS SO. A packet cut silently would leave a coder
+ * reasoning from advice it believes it read in full, which is worse than
+ * shorter advice and much worse than being told.
+ *
+ * IT CARRIES NO AUTHORITY IT DID NOT HAVE. The packet is already refused if it
+ * names a contract term; this renders what survived that refusal, and says in
+ * the text itself that the agreement is elsewhere and unchanged.
+ */
+export const JULIUS_GUIDANCE_HANDOFF_CHARS = 6_000;
+
+export function renderJuliusGuidanceHandoff(packet: JuliusGuidancePacket): string {
+  const header = [
+    `GUIDANCE FROM THE PROMPT ARCHITECT (revision ${String(packet.revision)}, `
+    + `for checkpoint ${packet.triggeringCheckpointId})`,
+    'It is ADVICE. The Mission Contract is unchanged and remains the agreement you are held to;'
+    + ' nothing below may widen it, and a prohibition here only ever narrows what you may do.',
+    '',
+    `SUB-OBJECTIVE: ${packet.subObjective}`,
+  ];
+
+  const sections: { readonly title: string; readonly items: readonly string[] }[] = [
+    { title: 'RECOMMENDED ACTIONS', items: packet.recommendedActions },
+    { title: 'ADDITIONAL PROHIBITIONS (narrowing only)', items: packet.additionalProhibitions },
+    { title: 'RELEVANT REQUIREMENTS', items: packet.relevantRequirements },
+    { title: 'RELEVANT CONSTRAINTS', items: packet.relevantConstraints },
+    { title: 'WHAT THE ARCHITECT FOUND IN THE REPOSITORY', items: packet.repositoryFindings },
+    { title: 'WHAT THE ARCHITECT FOUND AT RUNTIME', items: packet.runtimeFindings },
+    {
+      title: 'REFERENCES',
+      items: packet.references.map((reference) =>
+        `[${reference.kind}/${reference.trust}] ${reference.locator}`),
+    },
+    /* LAST, AND KEPT. What the architect could NOT settle is the part a coder
+       most needs to know it is deciding for itself. */
+    { title: 'STILL UNRESOLVED — the architect could not settle these', items: packet.unresolvedQuestions },
+  ];
+
+  const lines = [...header];
+  let budget = JULIUS_GUIDANCE_HANDOFF_CHARS - header.join('\n').length;
+  let dropped = 0;
+  for (const section of sections) {
+    if (section.items.length === 0) continue;
+    const block = [`${section.title}:`, ...section.items.map((item) => `  - ${item}`)].join('\n');
+    if (block.length > budget) { dropped += section.items.length; continue; }
+    budget -= block.length;
+    lines.push('', block);
+  }
+  if (dropped > 0) {
+    lines.push('', `${String(dropped)} further guidance item(s) did not fit this packet and were not included. `
+      + 'They are in the durable record; ask again for a specific one if you need it.');
+  }
+  return lines.join('\n').trimEnd();
+}
+
+/**
+ * THE ENTRY ID A DELIVERED GUIDANCE PACKET TAKES ON THE CONTINUATION'S BRAIN.
+ *
+ * The REVISION is in the id, and that is the whole point: `appendBrainEntry` is
+ * idempotent per id, so a second packet for the same continuation must be a
+ * different entry or the coder would be handed the first advice forever while
+ * the record said a second was issued. Revisions are monotonic per subject, so
+ * two packets are always ordered and both are readable.
+ */
+export const juliusGuidanceHandoffEntryId = (continuationTaskId: string, revision: number): string =>
+  `brain:guidance-answer:${continuationTaskId}:r${String(revision)}`;
+
+/** Is this one of them? Used to count what a compiled packet actually carried. */
+export const isJuliusGuidanceHandoffEntryId = (entryId: string): boolean =>
+  /^brain:guidance-answer:.+:r[1-9]\d*$/u.test(entryId);

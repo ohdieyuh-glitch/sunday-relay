@@ -137,6 +137,37 @@ export function segmentChildrenOf(subject: JuliusTask, tasks: readonly JuliusTas
     .sort((a, b) => segmentNumberOf(a.taskId) - segmentNumberOf(b.taskId));
 }
 
+/**
+ * THE SEGMENT THAT IS WAITING ON THIS TASK, or null when none is.
+ *
+ * A barrier mints exactly one continuation and leaves it BLOCKED on the task
+ * that must finish first — the SUBJECT for a research pause, the ARCHITECT'S
+ * GUIDANCE TASK for a guidance pause, which is the edge that stops the coder
+ * resuming before the advice exists. Whatever answers the pause has to reach
+ * that continuation, because the dispatch which asked has already ended and the
+ * continuation is the only place an answer can appear.
+ *
+ * IT IS FOUND, NOT COMPUTED. `nextSegmentNumber` gives the number the NEXT
+ * barrier would use, which after the continuation exists is one too high — the
+ * same off-by-construction that made an earlier guard unfireable. Reading the
+ * rows says which segment is actually waiting.
+ *
+ * MORE THAN ONE WAITING SEGMENT IS NOT A CHOICE TO MAKE. A subject pauses once
+ * at a time, so two would mean a shape nobody has built; picking the likelier
+ * one would be Julius guessing which pause an answer belonged to. Null, and the
+ * caller records that nothing could be delivered.
+ */
+export function pendingSegmentFor(
+  blockedOnTaskId: string,
+  tasks: readonly JuliusTask[],
+): JuliusTask | null {
+  const waiting = tasks.filter((item) =>
+    item.state === 'BLOCKED'
+    && item.dependencyIds.includes(blockedOnTaskId)
+    && juliusSegmentSubjectTaskId(item.taskId) !== null);
+  return waiting.length === 1 ? waiting[0]! : null;
+}
+
 /** The `n` in `segment:<subject>:<n>:task`, or 0 for anything else. */
 export function segmentNumberOf(taskId: string): number {
   const match = /^segment:.+:([1-9]\d*):task$/u.exec(taskId);
