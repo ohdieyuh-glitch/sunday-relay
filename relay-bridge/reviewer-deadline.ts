@@ -250,3 +250,60 @@ export function resolveReviewerDeadline(input: {
  * the operative limit are now incapable of disagreeing.
  */
 export const reviewerOperativeTimeoutMs = (): number => resolveReviewerDeadline().operativeTimeoutMs;
+
+/**
+ * ONE BOUNDED RE-ASK FOR A TRANSIENT UPSTREAM CONDITION, INSIDE THE SAME DEADLINE.
+ *
+ * A review stage gets exactly one pipeline attempt (`REVIEW_TASK_ATTEMPTS`),
+ * and `review_service_unavailable` — a 429 or a 503 from the provider — is
+ * `retryable: true`. Those two facts met on the live path and produced a third:
+ * the retryable shape reached a pipeline that had no attempt left to spend on
+ * it, so the first provider hiccup on any of a mission's review dispatches was
+ * FINAL. The qualification dispatches the reviewer five times.
+ *
+ * The rule the pipeline enforces is right — a second task attempt is a blind
+ * retry of the same packet against the same wall — and it is not what this is.
+ * A transient status is an answer that never arrived; asking once more is the
+ * adapter's business, and it is bounded here in the two ways that make it
+ * something other than a retry: ONCE (`REVIEW_TRANSIENT_REASK_LIMIT`), and only
+ * when the declared deadline still has room for a whole review after what the
+ * first ask consumed. The second engine run is handed the REMAINING window, not
+ * the full one, so the adapter still stops before the deadline Julius enforces
+ * around the dispatch.
+ *
+ * UNKNOWN IS NOT ZERO. A first ask whose duration cannot be established from
+ * its own two instants is not treated as having consumed nothing; it is refused
+ * the re-ask, and the transient failure surfaces exactly as it did before this
+ * existed.
+ */
+export const REVIEW_TRANSIENT_REASK_LIMIT = 1;
+/** A rate limit clears in seconds; a drain in about as long. Short, and fixed. */
+export const REVIEW_TRANSIENT_REASK_BACKOFF_MS = 5_000;
+
+export type ReviewerReaskRefusal = 'CONSUMED_UNKNOWN' | 'INSUFFICIENT_REMAINING';
+
+export type ReviewerReaskDecision =
+  | { readonly allowed: true; readonly remainingMs: number; readonly floorMs: number }
+  | { readonly allowed: false; readonly remainingMs: number | null; readonly floorMs: number; readonly reason: ReviewerReaskRefusal };
+
+export function reviewerReaskWithinDeadline(input: {
+  /** The deadline the dispatch was declared under — `HermesConfig.timeoutMs`. */
+  readonly deadlineMs: number;
+  /** Wall clock the asks so far consumed, or null when it cannot be established. */
+  readonly consumedMs: number | null;
+  readonly backoffMs?: number;
+  /** The largest duration the policy believes a review can need. */
+  readonly floorMs?: number;
+}): ReviewerReaskDecision {
+  const floorMs = input.floorMs ?? resolveReviewerDeadline().floorMs;
+  const backoffMs = input.backoffMs ?? REVIEW_TRANSIENT_REASK_BACKOFF_MS;
+  if (!Number.isSafeInteger(input.deadlineMs) || input.deadlineMs <= 0) throw new Error('invalid_reask_deadline');
+  if (!Number.isSafeInteger(backoffMs) || backoffMs < 0) throw new Error('invalid_reask_backoff');
+  if (!Number.isSafeInteger(floorMs) || floorMs <= 0) throw new Error('invalid_reask_floor');
+  if (input.consumedMs === null || !Number.isFinite(input.consumedMs) || input.consumedMs < 0) {
+    return { allowed: false, remainingMs: null, floorMs, reason: 'CONSUMED_UNKNOWN' };
+  }
+  const remainingMs = input.deadlineMs - Math.ceil(input.consumedMs) - backoffMs;
+  if (remainingMs < floorMs) return { allowed: false, remainingMs, floorMs, reason: 'INSUFFICIENT_REMAINING' };
+  return { allowed: true, remainingMs, floorMs };
+}
