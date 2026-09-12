@@ -104,6 +104,13 @@ const DECLARED_NOT_COMPOSED = [
   { path: 'src/relay/persistence/julius-repair-postgres.ts', reason: 'durable repair-cycle scheduling against julius_tasks and julius_repair_cycles; the live root reaches repair through the store aggregate, not this repository' },
   { path: 'src/relay/persistence/julius-timeline-postgres.ts', reason: 'the safe timeline read from the event ledger (JuliusTimelineReader); a read model no live surface consumes yet' },
   { path: 'src/relay/workspace/julius-tools/registry.ts', reason: 'the default tool catalogue (DEFAULT_JULIUS_TOOL_IDS, createDefaultJuliusToolRegistry); the live root routes tool effects through the executor shell port and does not build a registry' },
+  // The two deliverables of lab evaluation mission 1 (`julius-lab-eval-1`),
+  // seeded as STUBS whose every function throws. They import the kernel's cost
+  // module, so the drift gate sees them; nothing composes them until the
+  // mission's implementation lands and a caller appears, and this entry is
+  // written now so that landing does not also trip the gate.
+  { path: 'src/relay/mission/julius/julius-run-comparison.ts', reason: 'the pure comparator of two paid runs (julius-run-comparison.v1), the deliverable of lab evaluation mission 1; a stub until the mission implements it, and no caller yet' },
+  { path: 'src/relay/mission/julius/julius-run-comparison-text.ts', reason: 'the renderer of that comparison (julius-run-comparison-text.v1), the second deliverable of lab evaluation mission 1; a stub until the mission implements it, and no caller yet' },
   { path: 'src/relay/workspace/julius-tools/local-artifact-store.ts', reason: 'the durable staged→finalized artifact store (StagedArtifactStorePort); the live root uses an in-process artifact exchange, recorded as debt in docs/JULIUS_BETA_READINESS.md' },
 ];
 
@@ -255,6 +262,12 @@ const FILE_RULES = [
   // about what it DID spend, and on whose authority. Same subsystem: both are
   // the budget's own arithmetic, and neither is a worker's to state.
   ['src/relay/mission/julius/julius-cost-accounting.ts', 'LEASES / BUDGETS / PERMISSIONS'],
+  // The same arithmetic applied ACROSS two runs: what may honestly be called a
+  // delta of cost, and what is a floor, an unknown or two different policies.
+  // Seeded as STUBS for lab evaluation mission 1 and declared not composed;
+  // same subsystem as the cost module they import, for the same reason.
+  ['src/relay/mission/julius/julius-run-comparison.ts', 'LEASES / BUDGETS / PERMISSIONS'],
+  ['src/relay/mission/julius/julius-run-comparison-text.ts', 'LEASES / BUDGETS / PERMISSIONS'],
   ['src/relay/mission/julius/julius-recovery.ts', 'RECOVERY / CONTINUATION'],
   ['src/relay/mission/julius/julius-continuation.ts', 'RECOVERY / CONTINUATION'],
   ['src/relay/mission/julius/julius-lease-protocol.ts', 'LEASES / BUDGETS / PERMISSIONS'],

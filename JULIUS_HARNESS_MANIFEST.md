@@ -17,7 +17,7 @@ Julius is the provider-neutral, deterministic orchestration kernel that turns an
 
 Static import closure from the two roots over the TypeScript AST (value and type edges), stopping at the declared boundaries below; plus declared production modules not reached from the live root (flagged); plus path-loaded assets. Tests, fixtures, fakes and UI are refused by category. A drift gate fails the generator when a production file imports the Julius kernel or port without being reached, declared or explicitly excluded, or when a declaration no longer matches the wiring.
 
-Represented: **159 production files** across 20/20 subsystems (2 roots, 136 traced, 8 not composed by the live root, 13 path-loaded assets). Line and byte totals, the coverage estimate and the commit SHA are printed by the generator and recorded in the export header; they are kept out of this file so it changes only when the file set or its classification changes.
+Represented: **161 production files** across 20/20 subsystems (2 roots, 136 traced, 10 not composed by the live root, 13 path-loaded assets). Line and byte totals, the coverage estimate and the commit SHA are printed by the generator and recorded in the export header; they are kept out of this file so it changes only when the file set or its classification changes.
 
 ## Dependency direction (observed, between coarse groups)
 
@@ -290,6 +290,8 @@ The durable lease protocol (generation fencing, heartbeat, expiry, admission), a
 | `src/relay/mission/julius/julius-lease-protocol.ts` | traced | `src/relay/mission/julius/index.ts` |
 | `src/relay/mission/julius/julius-lifecycle-runtime.ts` | traced | `src/relay/mission/julius/index.ts` |
 | `src/relay/mission/julius/julius-research-policy.ts` | traced | `src/relay/mission/julius/julius-task-pipeline.ts` |
+| `src/relay/mission/julius/julius-run-comparison-text.ts` | not composed by the live root | — |
+| `src/relay/mission/julius/julius-run-comparison.ts` | not composed by the live root | — |
 | `src/relay/mission/julius/julius-shared-ceiling.ts` | traced | `src/relay/mission/julius/julius-task-pipeline.ts` |
 | `src/relay/mission/julius/julius-slot-effort.ts` | traced | `src/relay/mission/julius/julius-task-pipeline.ts` |
 | `src/relay/mission/julius/julius-slot-envelope.ts` | traced | `src/relay/mission/julius/julius-task-pipeline.ts` |
@@ -409,6 +411,8 @@ Production Julius modules that implement a Julius port but are not reached from 
 | `src/relay/persistence/julius-repair-postgres.ts` | durable repair-cycle scheduling against julius_tasks and julius_repair_cycles; the live root reaches repair through the store aggregate, not this repository |
 | `src/relay/persistence/julius-timeline-postgres.ts` | the safe timeline read from the event ledger (JuliusTimelineReader); a read model no live surface consumes yet |
 | `src/relay/workspace/julius-tools/registry.ts` | the default tool catalogue (DEFAULT_JULIUS_TOOL_IDS, createDefaultJuliusToolRegistry); the live root routes tool effects through the executor shell port and does not build a registry |
+| `src/relay/mission/julius/julius-run-comparison.ts` | the pure comparator of two paid runs (julius-run-comparison.v1), the deliverable of lab evaluation mission 1; a stub until the mission implements it, and no caller yet |
+| `src/relay/mission/julius/julius-run-comparison-text.ts` | the renderer of that comparison (julius-run-comparison-text.v1), the second deliverable of lab evaluation mission 1; a stub until the mission implements it, and no caller yet |
 | `src/relay/workspace/julius-tools/local-artifact-store.ts` | the durable staged→finalized artifact store (StagedArtifactStorePort); the live root uses an in-process artifact exchange, recorded as debt in docs/JULIUS_BETA_READINESS.md |
 
 ## External packages observed

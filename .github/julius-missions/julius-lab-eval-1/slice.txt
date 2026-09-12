@@ -1,0 +1,16 @@
+# Lab evaluation mission 1 — two paid runs, one honest comparison.
+#
+# THE DELIVERABLES. Two real Sunday Relay files, sliced byte-identical, so the
+# diff this mission produces applies straight back to the repository. Both are
+# committed stubs whose every function throws; the seeded specifications are
+# written and currently fail. The second depends on the first, so the two must
+# be implemented in dependency order.
+src/relay/mission/julius/julius-run-comparison.ts
+src/relay/mission/julius/julius-run-comparison-text.ts
+
+# THE DEPENDENCY. The authority on what a run cost and whether the figure is
+# complete. It is sliced so the comparator can import it — and so the seeded
+# specifications can build their inputs with the repository's own functions
+# rather than an imitation of them. It is not a deliverable and it is not to
+# be edited; its own header states the rule that settles the stale note.
+src/relay/mission/julius/julius-cost-accounting.ts
