@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Opens EXACTLY ONE pull request for the frozen reviewer-envelope-pr candidate,
+# Opens EXACTLY ONE pull request for the frozen reviewer-envelope candidate,
 # authored by the julius-worker GitHub App.
 #
 # Run this once, in the Codespace that holds JULIUS_WORKER_APP_PEM.
@@ -17,9 +17,9 @@ set -euo pipefail
 
 REPO='ohdieyuh-glitch/sunday-relay'
 BRANCH='relay/julius-reviewer-envelope'
-BASE='9f155b919b0243e20fc3af132e9ea9176fd470ba'
-HEAD='8b294c481d20a5367f487d7950bd4dcb24f971a7'
-TREE='cce26bbdc16f44ce8903a5490da352ef6cb76383'
+BASE='74b9ee52cf42e499f88320836bf01b5ed348be10'
+HEAD='fa194b583db7e56b10ef9051a0c78a206e7fd610'
+TREE='9ae2b5265a111d7f18f866d19afc92929b23e0ed'
 COMMITS=1
 WORKER='julius-worker[bot]'
 # RESOLVED AGAINST THE SCRIPT, NOT THE WORKING DIRECTORY. The README says to run
