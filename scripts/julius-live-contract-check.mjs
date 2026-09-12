@@ -100,6 +100,24 @@ const MISSION_LIMITS = Object.freeze({
   // way. Three cycles for the same reason as missions 2 through 4: a repair
   // LINEAGE needs more than one.
   'julius-live-mission-5': Object.freeze({ spendUsd: 30, repairCycles: 3 }),
+  //
+  // THE FIRST CONTINUOUS QUALIFICATION. Smaller than Mission 5 on every axis of
+  // CODE — one pure module of about 200 lines against three integrated files —
+  // and larger on dispatches, which is what actually spends.
+  //
+  // Missions 2 through 5 bought plan → build → review. This one is specified to
+  // buy plan → review → LOCK → build → pause → guidance → review of the
+  // guidance → resume → review, plus a repair round if one is justified. That is
+  // roughly twice the dispatches at a fraction of the per-dispatch surface.
+  //
+  // ARGUED FROM THE TWO PAID DATAPOINTS, not from caution. Mission 4 settled
+  // $1.390954 for one file; Mission 5 settled $5.177120 for three integrated
+  // ones. One file at Mission 4's rate with double the dispatches is on the
+  // order of $3; $25 is a bound with real slack for a run shape nobody has
+  // observed yet, and the evidence bundle will say what it actually cost.
+  // Three cycles for the same reason as every mission before it: a repair
+  // LINEAGE needs more than one.
+  'julius-continuous-1': Object.freeze({ spendUsd: 25, repairCycles: 3 }),
 });
 
 /** The ceilings that apply to THIS contract, by its own declared namespace. */
@@ -142,7 +160,53 @@ const NO_RESEARCH = Object.freeze({
   roleBudget: Object.freeze({ maxRetrievals: 0, maxBytes: 0 }),
 });
 const MISSION_RESEARCH = Object.freeze({
-  /* No mission has been granted research authority. */
+  /**
+   * THE FIRST MISSION GRANTED RESEARCH, AND THE FIRST EVER.
+   *
+   * Every paid mission before this one ran under `noJuliusResearch`. This grant
+   * is the deliberate act that table was built to require: it names the mission,
+   * the source, the read capability, the exact host and the retrieval budget,
+   * and it grants nothing else.
+   *
+   * WHY THIS MISSION AND WHY THIS HOST. The mission turns on one question its
+   * own workspace cannot answer — what the evidence exporter writes for a SQL
+   * NULL — and the authoritative general answer is PostgreSQL's own
+   * documentation of unaligned output. One host, one read capability, no
+   * search: a worker may fetch a documentation page and nothing else.
+   *
+   * ALL THREE ROLES, BECAUSE ALL THREE CAN NOW ASK. This entry first named
+   * only the Coding Agent, on the ground that the Prompt Architect and the
+   * Independent Reviewer answered with fixed schemas and had no channel
+   * through which a research ask could reach Julius. That is no longer true:
+   * their schemas carry `researchAsks` as a required field, so both slots ask
+   * on every turn. Leaving the grant at one role would have refused those asks
+   * `role_not_authorized` while the mission's own charter asks the Architect to
+   * investigate before the contract locks — the mission would have bought a
+   * record proving the opposite of what it set out to demonstrate.
+   *
+   * THE BUDGET IS DELIBERATELY TIGHT, AND WAS ALREADY SIZED FOR THREE. Two
+   * retrievals per slot and six for the mission: exactly three slots' worth,
+   * which is why widening the roles adds no retrieval, no host and no
+   * capability. That is enough to read a page and check a second, and not
+   * enough to browse. A slot that needs more is a slot whose question was not
+   * the one this mission is about, and the refusal will say so on the record.
+   *
+   * IT AUTHORISES NOTHING ELSE. No other mission is named here, so every other
+   * mission still gets `noJuliusResearch`. Adding a second entry is a second
+   * deliberate act.
+   */
+  'julius-continuous-1': Object.freeze({
+    roles: Object.freeze(['PROMPT_ARCHITECT', 'CODING_AGENT', 'INDEPENDENT_REVIEWER']),
+    allowances: Object.freeze([
+      Object.freeze({
+        source: 'web',
+        capabilities: Object.freeze(['read_item']),
+        hosts: Object.freeze(['www.postgresql.org']),
+      }),
+    ]),
+    missionBudget: Object.freeze({ maxRetrievals: 6, maxBytes: 400_000 }),
+    roleBudget: Object.freeze({ maxRetrievals: 2, maxBytes: 200_000 }),
+  }),
 });
 
 /** The research grant that applies to THIS contract, by its own namespace. */
