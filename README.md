@@ -9,14 +9,17 @@ whole sequence actually performed, end to end, with the gate run on the result.
 ## The order, and what each step costs
 
 Each candidate is one commit, so a rebase is a cherry-pick. Steps are listed in
-the order they were rehearsed; the first three are the ones the paid
-qualification needs, and they land clean.
+the order they were rehearsed, which is ordered to minimise conflicts — NOT to
+unblock anything. The minimum path to the paid qualification is five of these
+fourteen and is set out under "The five the paid qualification actually needs"
+below; a founder working this table top to bottom would run thirteen ceremonies
+before reaching the last one that mission requires.
 
 | # | candidate | frozen head | conflicts |
 |---|---|---|---|
 | 1 | `relay/julius-research-authority` | `bdcd6b04` | none |
 | 2 | `relay/julius-coder-participation` | `1519cae3` | none |
-| 3 | `relay/julius-continuous-1-fixture` | `9b924a31` | none |
+| 3 | `relay/julius-continuous-1-fixture` | `26ee83c2` | none |
 | 4 | `relay/julius-reviewer-envelope` | `8b294c48` | none |
 | 5 | `relay/julius-worker-deadline` | `79824e98` | none |
 | 6 | `relay/julius-ending-diagnostics` | `9fd7ca33` | **two files** |
@@ -40,6 +43,72 @@ more than a documented stack does. Each must be rebased onto the
 post-landing `main` and **re-frozen worker-authored** before its own PR can be
 opened, and its opener's `BASE`, `HEAD` and `TREE` constants updated to match.
 That is true of every candidate after the first one to land, stacked or not.
+
+## The five the paid qualification actually needs
+
+The heartbeat names two separate requirements, and between them they pick out
+five candidates rather than the three this file used to claim:
+
+* §4 — no paid provider call until **participant isolation** is accepted on
+  main. That is step 12 here, purely because it conflicts with nothing and so
+  sorted late. It blocks the run outright.
+* §3 — the required sequence opens with *Architect serious pre-lock
+  investigation/research*, and asks that all three slots get research under
+  governed policy. That needs **research-authority** (the seam),
+  **coder-participation** and **architect-reviewer-participation** (the three
+  ask channels) and the **q1 fixture** (the mission that grants any of it).
+
+| order | candidate | why | conflicts |
+|---|---|---|---|
+| 1 | `relay/julius-participant-isolation` | §4 precondition; overlaps nothing else | none |
+| 2 | `relay/julius-research-authority` | the research seam | none |
+| 3 | `relay/julius-coder-participation` | the coder's ask channel | none |
+| 4 | `relay/julius-continuous-1-fixture` | the mission, and the only research grant | stacked on 2 |
+| 5 | `relay/julius-architect-reviewer-participation` | the other two ask channels | stacked on 3 |
+
+Steps 1–3 are independent of each other and of the remaining nine: they may be
+opened in any order and each lands clean. Steps 4 and 5 are the two held
+candidates in this set and each needs its rebase, re-freeze and a written
+ceremony once its parent lands.
+
+Nothing here says the other nine do not matter. It says the paid qualification
+does not wait on them.
+
+## The grant and the channel disagreed, and the mission would have bought the wrong record
+
+Worth recording because it survived a rehearsal, a six-precondition audit and a
+provider-free drive to COMPLETED without anything noticing.
+
+The q1 fixture sealed its research grant naming **one** role, and said why in
+its own comment: only the Coding Agent had a channel through which an ask could
+reach Julius, and granting the other two would have been authority no run could
+spend. That was true when it was written. `architect-reviewer-participation`
+then gave the Prompt Architect and the Independent Reviewer exactly such a
+channel — `researchAsks` as a REQUIRED field on both their schemas — and the
+grant was never revisited.
+
+So on the integrated stack both slots asked on every turn and every ask was
+refused `role_not_authorized`, on the one mission whose charter asks the
+Architect to investigate BEFORE the contract locks. A refused ask does not fail
+the run: it routes CONTINUE with the reason on the record. The mission would
+have completed, spent its budget, and produced evidence proving the opposite of
+what it was specified to demonstrate.
+
+Measured rather than reasoned, against the integrated stack: architect refused,
+reviewer refused, identical coder request allowed. Repaired in the fixture
+candidate (frozen head `26ee83c2`) by naming all three slots in both halves of
+the grant. It bought no new authority — the budget was already three slots'
+worth, two retrievals each against a mission ceiling of six — so the same six
+retrievals are now reachable by three slots on the same one host with the same
+one read capability. Re-measured after: all three allowed, an unlisted host
+still refused for every slot. Four mutations, all killed.
+
+The general lesson, which is the reason this is written down: a permission
+narrowed because a capability was missing has to be revisited when the
+capability arrives, and nothing in this repository was watching that pair. The
+tripwire that pinned the granted roles now states the property it always meant
+— no slot may be granted research it cannot ask for — against a named list, so
+the next slot has to be argued for rather than inherited.
 
 ## The three real conflicts, and how each resolves
 
@@ -94,7 +163,7 @@ before pushing, not only the suite.
 All fourteen applied in this order, with the four resolutions above and nothing
 else. The combined stack then passed the full gate:
 
-    npm test                      10,643 passing across 543 files, 0 failed
+    npm test                      10,644 passing across 543 files, 0 failed
     typecheck, build              0
     relay:build, relay:bridge:build             0
     relay-repository-boundary.mjs, relay-parity-gate.mjs   0
@@ -107,7 +176,11 @@ else. The combined stack then passed the full gate:
     julius:harness:check                        OK
     git diff --check                            0
 
-Rehearsal head `cb3a8b65`, on `rehearsal/landing-order`.
+Rehearsal head `cb3a8b65`, on `rehearsal/landing-order`, for the fourteen as
+they were first frozen. The q1 fixture has since been re-frozen at `26ee83c2`
+(the grant repair above), so re-running the recipe now produces a different head
+and one more test — 10,644 rather than 10,643. The head above is kept as the
+record of what was actually rehearsed, not as a target to reproduce.
 
 **That branch is deliberately NOT pushed.** Fifteen commits carrying every
 candidate's change, authored by `julius-worker[bot]`, would look exactly like a
