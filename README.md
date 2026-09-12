@@ -31,6 +31,7 @@ before reaching the last one that mission requires.
 | 12 | `relay/julius-participant-isolation` | `88f5df6e` | none |
 | 13 | `relay/julius-architect-reviewer-participation` | `f00b58ec` | none from git — same rename, see below |
 | 14 | `relay/julius-reviewer-transient-upstream` | `0311fcef` | none |
+| 15 | `relay/julius-reviewer-transient-reask` | `3b78b4d7` | `reviewer-deadline.ts` (both append), `live-workers.ts` (participation), the evidence dump (same resolver) — frozen on main, rehearsed LAST |
 
 Steps 3, 5, 13 and 14 are STACKED: the fixture is frozen on
 `research-authority`'s head, `worker-deadline` on `reviewer-envelope`'s,
@@ -43,6 +44,25 @@ more than a documented stack does. Each must be rebased onto the
 post-landing `main` and **re-frozen worker-authored** before its own PR can be
 opened, and its opener's `BASE`, `HEAD` and `TREE` constants updated to match.
 That is true of every candidate after the first one to land, stacked or not.
+
+## The fifteenth candidate, and why the minimum path is nine
+
+`reviewer-transient-upstream` (14) makes the live reviewer answer a 429/503 with
+the RETRYABLE shape; `reviewer-envelope` (4) gives a review stage ONE pipeline
+attempt. Integrated, the retryable shape reaches a pipeline with nothing left to
+spend on it, and the first provider hiccup on any of the qualification's five
+review dispatches ends the paid mission. Candidate 15 —
+`relay/julius-reviewer-transient-reask` @ `3b78b4d7`, ceremony
+`ceremony/reviewer-transient-reask-pr` — is the bounded adapter-internal re-ask
+inside the same declared deadline: once, after 5 s, only when the remaining
+window still holds the policy's floor, the second run given the remainder, the
+reason on the record as `review_reask_shape`. Rehearsed on top of all fourteen
+(2026-09-12): typecheck clean, harness current, qualification suites 215/215.
+
+The founder's canonical policies (one attempt per normal review stage; a
+Julius-owned watchdog) put 4, 5 and 14 on the paid path as well, so the honest
+minimum is the five below plus 4, 5, 14 and 15 — nine — landed in that order,
+15 last because it answers the gap 4 and 14 open together.
 
 ## The five the paid qualification actually needs
 
