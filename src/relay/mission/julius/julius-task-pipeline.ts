@@ -43,7 +43,7 @@ import { planJuliusRepair } from './julius-repair-runtime';
 import { repairLineageRootOf, repairRoundsBefore, repairTaskTypeFor } from './julius-repair-lineage';
 import { challengeJuliusTaskContract, evaluateJuliusBindingCurrency, evaluateJuliusSharedBinding, juliusContractReviewCharge, juliusTaskContractBinding, lockJuliusTaskContract, mayDispatchUnderContract, reviseJuliusTaskContract, sanitizeJuliusContractProposal, type JuliusTaskContract, type JuliusTaskContractBinding } from './julius-task-contract';
 import { evaluateJuliusRelease } from './julius-release-runtime';
-import { boundStageForRole, reviewStageOf, workStageOf, type JuliusReviewStage } from './julius-review-stage';
+import { REVIEW_TASK_ATTEMPTS, boundStageForRole, reviewStageOf, workStageOf, type JuliusReviewStage } from './julius-review-stage';
 import {
   juliusSegmentLineageRootOf, juliusSegmentTaskId, nextSegmentNumber, routeIsBarrier,
   sanitizeJuliusSegmentState,
@@ -110,6 +110,30 @@ import {
  * bounded by {@link MAX_TASK_RECOVERIES} instead, on its own counter.
  */
 export const MAX_TASK_ATTEMPTS = 3;
+
+/**
+ * THE CEILING THIS TASK ACTUALLY GETS — and the one place anything may ask.
+ *
+ * A REVIEW IS NOT RETRIED. `MAX_TASK_ATTEMPTS` gives every task three, which
+ * for a review is three provider calls against the same packet, the same
+ * engine deadline and the same prompt. The reviewer's observed failure mode is
+ * a request that outran the engine's own per-request timeout; repeating it
+ * verbatim reaches the same wall, so the second and third attempts buy nothing
+ * and spend the job's reviewer share doing it.
+ *
+ * This is the number `reviewer-deadline.ts` budgets against, read from here
+ * rather than restated there — `MAX_REVIEWER_ATTEMPTS` was a modelling constant
+ * the dispatch path never consulted, still describing the two review stages
+ * that existed when it was written, and its arithmetic was the only thing
+ * keeping an understated deadline looking affordable.
+ *
+ * A repair after `changes_required` is a NEW task with its own ceiling. It is
+ * not another attempt at the review, and counting it as one would make a
+ * reviewer doing its job indistinguishable from a reviewer failing at it.
+ */
+export function taskAttemptCeiling(taskType: string): number {
+  return reviewStageOf(taskType) === null ? MAX_TASK_ATTEMPTS : REVIEW_TASK_ATTEMPTS;
+}
 
 /**
  * HOW MUCH A TASK IS EXPECTED TO COST.
@@ -1023,7 +1047,8 @@ export async function runClaimedTask(
     if (outcome.status === 'RETRY') {
       const carryOn = decideJuliusContinuation(request.policy, {
         kind: 'RETRY', attempt: claim.attempt,
-        maxAttempts: MAX_TASK_ATTEMPTS, errorCode: outcome.code as never,
+        // The ceiling this TASK gets, which for a review is one.
+        maxAttempts: taskAttemptCeiling(claim.taskType), errorCode: outcome.code as never,
       });
       requeue = carryOn.proceed;
       if (!carryOn.proceed) {

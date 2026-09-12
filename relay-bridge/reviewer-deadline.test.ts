@@ -93,17 +93,39 @@ describe('the derivation is deterministic, bounded and says what it is standing 
    * be recovered, so it is a lower bound. Reporting it as a measurement would
    * understate exactly the thing it is evidence of.
    */
-  it('reports a cut-off high water as CENSORED, not as a measurement', () => {
+  /**
+   * THE MODEL NOW DOMINATES, AND THAT IS THE REPAIR. Correcting
+   * `requestsPerReview` from an asserted 2 to the observed floor of 5 raised
+   * `analyticalWorstCaseMs` to 630 000 — above the 400 093 ms high water — so
+   * the default basis is ANALYTICAL. It was `OBSERVED_CENSORED` only because
+   * the model understated the engine, which is precisely how the understatement
+   * stayed invisible: the number that should have exposed it was covering it.
+   *
+   * The censoring rule itself is unchanged and is proven below against a model
+   * small enough for an observation to bind, which is the only arrangement in
+   * which the rule is observable at all.
+   */
+  const TINY_MODEL = { requestTimeoutSeconds: 10, requestsPerReview: 2, engineOverheadMs: 0 } as const;
+
+  it('still reports the cut-off high water, and reports it as a lower bound', () => {
     const deadline = resolveReviewerDeadline();
     expect(deadline.observedHighWaterMs).toBe(400_093);
     expect(deadline.observedHighWaterCensored).toBe(true);
-    expect(deadline.basis).toBe('OBSERVED_CENSORED');
+    expect(deadline.basis, 'the corrected model now exceeds every observation').toBe('ANALYTICAL');
     const censored = RECORDED_REVIEWER_OBSERVATIONS.find(o => o.elapsedMs === 400_093);
     expect(censored?.outcome).toBe('CUT_OFF');
   });
 
+  it('reports a cut-off high water as CENSORED when it is what binds', () => {
+    const deadline = resolveReviewerDeadline({ model: TINY_MODEL });
+    expect(deadline.observedHighWaterMs).toBe(400_093);
+    expect(deadline.observedHighWaterCensored).toBe(true);
+    expect(deadline.basis).toBe('OBSERVED_CENSORED');
+  });
+
   it('says OBSERVED_COMPLETED when the high water is a real measurement', () => {
     const deadline = resolveReviewerDeadline({
+      model: TINY_MODEL,
       observations: RECORDED_REVIEWER_OBSERVATIONS.filter(o => o.outcome === 'COMPLETED'),
     });
     expect(deadline.observedHighWaterMs).toBe(381_880);
@@ -123,9 +145,12 @@ describe('the derivation is deterministic, bounded and says what it is standing 
 
   it('learns from a longer observation instead of ignoring it', () => {
     const longer = resolveReviewerDeadline({
-      observations: [{ runId: 'r', taskId: 't', stage: 'plan', elapsedMs: 410_000, outcome: 'COMPLETED' }],
+      // Longer than the corrected analytical worst case, so the observation is
+      // what binds — the point of the test, at the scale the policy now runs at.
+      observations: [{ runId: 'r', taskId: 't', stage: 'plan', elapsedMs: 700_000, outcome: 'COMPLETED' }],
     });
     expect(longer.operativeTimeoutMs).toBeGreaterThan(resolveReviewerDeadline().operativeTimeoutMs);
+    expect(longer.basis).toBe('OBSERVED_COMPLETED');
   });
 
   /**
@@ -134,10 +159,10 @@ describe('the derivation is deterministic, bounded and says what it is standing 
    */
   it('refuses rather than clamping when the floor cannot fit under the job ceiling', () => {
     expect(() => resolveReviewerDeadline({
-      observations: [{ runId: 'r', taskId: 't', stage: 'plan', elapsedMs: 10 * 60_000, outcome: 'COMPLETED' }],
+      observations: [{ runId: 'r', taskId: 't', stage: 'plan', elapsedMs: 20 * 60_000, outcome: 'COMPLETED' }],
     })).toThrow(ReviewerDeadlineUnsatisfiable);
     try {
-      resolveReviewerDeadline({ observations: [{ runId: 'r', taskId: 't', stage: 'plan', elapsedMs: 10 * 60_000, outcome: 'COMPLETED' }] });
+      resolveReviewerDeadline({ observations: [{ runId: 'r', taskId: 't', stage: 'plan', elapsedMs: 20 * 60_000, outcome: 'COMPLETED' }] });
       expect.unreachable();
     } catch (error) {
       expect((error as Error).message).toContain('reviewer_deadline_unsatisfiable');

@@ -176,7 +176,14 @@ deadline_floor_ms="$(node scripts/julius-reviewer-deadline.mjs floorMs)"
 # first and every distinct provider fault reaches the record as one shape again.
 # What changed is that Relay's window is now derived from the worst thing any
 # paid run was ever seen to do, not from a model that Paid Mission 4 outran.
-engine_deadline_ms=$(( HERMES_REQUEST_TIMEOUT_SECONDS * 2 * 1000 ))
+# THE REQUEST COUNT COMES FROM THE POLICY, NOT FROM A `2` WRITTEN HERE.
+# `x 2` was the same assertion `DEFAULT_ANALYTICAL_MODEL` made, and Mission 4's
+# own COMPLETED review falsifies it: a 381 880 ms review at 90 s per request
+# with no engine retries made at least five. The literal made this check pass
+# with 300 s of margin that did not exist.
+requests_per_review="$(node scripts/julius-reviewer-deadline.mjs requestsPerReview)" || {
+  echo "reviewer_deadline_policy_refused" >&2; exit 1; }
+engine_deadline_ms=$(( HERMES_REQUEST_TIMEOUT_SECONDS * requests_per_review * 1000 ))
 if [ "$engine_deadline_ms" -ge "$RELAY_HERMES_TIMEOUT_MS" ]; then
   echo "hermes_engine_deadline_not_inside_relay_window:${engine_deadline_ms}ms_vs_${RELAY_HERMES_TIMEOUT_MS}ms" >&2
   exit 1
