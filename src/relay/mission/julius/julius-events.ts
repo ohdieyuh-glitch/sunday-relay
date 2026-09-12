@@ -73,6 +73,14 @@ export const JULIUS_OPERATIONAL_EVENT_TYPES=[
   * an aggregate for a reader; these rows are what the ledger is rebuilt from,
   * so they carry the role, the source and the metered outcome separately. */
  'research.refused','research.retrieved','guidance.deferred',
+ /* `research.attempted` is the INTENT, written before the socket can exist and
+  * carrying the attempt's deterministic key. It exists because the charge row
+  * above is written AFTER the retrieval returns: a process that died in between
+  * had spent with nothing on the record, and the restart spent again while the
+  * rebuilt ledger counted one. This row is what makes that loss visible — an
+  * attempt with no retrieval beside it is a retrieval nobody can vouch for, and
+  * Julius refuses rather than replays it. */
+ 'research.attempted',
  /* PERSISTENT-WORKER EFFORT. One row per completed dispatch, carrying what the
   * provider actually reported and NOTHING inferred — an unreported token count
   * is null here rather than the zero the budget path substitutes, because a
