@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
-  DogAnimator, GAIT, gaitPose, idlePose, shapePhase, shortestAngle, springStep,
-  type DogIntent,
+  DOG_STEP_SECONDS, DogAnimator, GAIT, NEUTRAL_POSE, SteppedDogAnimator, gaitPose, idlePose, shapePhase,
+  shortestAngle, springStep,
+  type DogIntent, type DogPose,
 } from './dog-rig';
 
 /**
@@ -207,5 +208,57 @@ describe('the animator', () => {
         expect(Number.isFinite(value), `${key} at frame ${i}`).toBe(true);
       }
     }
+  });
+});
+
+describe('the clock', () => {
+  const worstDifference = (a: Readonly<DogPose>, b: Readonly<DogPose>): number =>
+    Math.max(...(Object.keys(a) as (keyof DogPose)[]).map((key) => Math.abs(a[key] - b[key])));
+
+  it('draws the shipped animator’s own 30Hz steps, unaltered', () => {
+    // The clock decides only WHEN the animator steps. On a 30Hz display it must
+    // draw exactly the poses DogAnimator produces at 1/30s, one step behind,
+    // through every state and a pointer that comes and goes.
+    const stepped = new SteppedDogAnimator();
+    const reference = new DogAnimator();
+    let expected: Readonly<DogPose> = NEUTRAL_POSE;
+    for (let i = 0; i < 30 * 40; i += 1) {
+      const next = intent({
+        state: (['IDLE', 'LOOK', 'WALK', 'TURN', 'REACT', 'PAUSE'] as const)[Math.floor(i / 120) % 6],
+        x: 5 + (Math.floor(i / 240) % 2) * 1.5,
+        yaw: Math.sin(i / 90) * 0.6,
+        look: i % 150 < 60 ? null : { x: Math.sin(i / 17), y: Math.cos(i / 23) },
+      });
+      const drawn = stepped.update(DOG_STEP_SECONDS, next);
+      expect(worstDifference(drawn, expected), `frame ${i}`).toBeLessThan(1e-12);
+      expected = reference.update(DOG_STEP_SECONDS, next);
+    }
+  });
+
+  it('moves the same way on a 60Hz and a 165Hz display', () => {
+    // Stepped once per display frame, the same Dog swayed its head through a
+    // wider arc the faster the screen: glancing at 30Hz, turning away at 60,
+    // circling at 165. The clock is what makes the screen irrelevant.
+    const envelope = (fps: number) => {
+      const dog = new SteppedDogAnimator();
+      let yaw = 0;
+      let pitch = 0;
+      let minX = Infinity;
+      let maxX = -Infinity;
+      for (let i = 0; i < fps * 60; i += 1) {
+        const pose = dog.update(1 / fps, intent({ state: 'IDLE', x: 5 }));
+        if (i < fps * 10) continue;
+        yaw = Math.max(yaw, Math.abs(pose.headYaw));
+        pitch = Math.max(pitch, Math.abs(pose.headPitch));
+        minX = Math.min(minX, pose.rootX);
+        maxX = Math.max(maxX, pose.rootX);
+      }
+      return { yaw, pitch, sway: maxX - minX };
+    };
+    const at60 = envelope(60);
+    const at165 = envelope(165);
+    expect(Math.abs(at60.yaw - at165.yaw)).toBeLessThan(0.01);
+    expect(Math.abs(at60.pitch - at165.pitch)).toBeLessThan(0.01);
+    expect(Math.abs(at60.sway - at165.sway)).toBeLessThan(0.05);
   });
 });
