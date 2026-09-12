@@ -45,13 +45,14 @@ import { challengeJuliusTaskContract, evaluateJuliusBindingCurrency, evaluateJul
 import { evaluateJuliusRelease } from './julius-release-runtime';
 import { boundStageForRole, reviewStageOf, workStageOf, type JuliusReviewStage } from './julius-review-stage';
 import {
-  juliusSegmentLineageRootOf, juliusSegmentTaskId, nextSegmentNumber, routeIsBarrier,
+  juliusSegmentLineageRootOf, juliusSegmentTaskId, nextSegmentNumber, pendingSegmentFor, routeIsBarrier,
   sanitizeJuliusSegmentState,
 } from './julius-segment-lineage';
 import {
   JULIUS_CHECKPOINT_LIMITS,
-  guidanceSubjectTaskId, issueJuliusGuidance, juliusCheckpointId, juliusGuidanceId, juliusGuidanceTaskId,
-  juliusResearchCheckpointId,
+  guidanceSubjectTaskId, isJuliusGuidanceHandoffEntryId, issueJuliusGuidance, juliusCheckpointId,
+  juliusGuidanceHandoffEntryId, juliusGuidanceId, juliusGuidanceTaskId,
+  juliusResearchCheckpointId, renderJuliusGuidanceHandoff,
   recordJuliusCheckpoint, routeJuliusCheckpoint, sanitizeJuliusGuidanceProposal, sanitizeJuliusGuidanceRequest,
   type JuliusCheckpointOrigin,
 } from './julius-continuous-lifecycle';
@@ -680,7 +681,7 @@ export async function runClaimedTask(
    * packet was handed nothing MEASURED, which is not the same as being handed
    * nothing, so it stays unknown rather than becoming zero.
    */
-  let handed: { brainRetrievals: number; evidenceInspected: number } | null = null;
+  let handed: { brainRetrievals: number; evidenceInspected: number; guidanceConsumed: number } | null = null;
   if (worker !== null) {
     // WORKER_SELECTED and PROVIDER_SELECTED were declared trajectory kinds
     // that nothing emitted, so an eval could not tell WHICH worker or provider
@@ -764,6 +765,20 @@ export async function runClaimedTask(
     handed = {
       brainRetrievals: snapshot.sourceEntryIds.filter((id) => brainEntryIds.has(id)).length,
       evidenceInspected: snapshot.evidenceIds.length,
+      /**
+       * GUIDANCE THIS PACKET ACTUALLY CARRIED.
+       *
+       * Counted the same way `brainRetrievals` is — off the entries the
+       * compiler ADMITTED, not the entries that existed — so a packet whose
+       * character budget dropped the advice reports that it carried none, which
+       * is the truth about what the worker was shown.
+       *
+       * It stayed UNKNOWN until now for the plainest reason: nothing delivered
+       * guidance to a worker, so nothing could count it. The number is a
+       * consequence of the delivery above rather than a dimension invented to
+       * fill a column.
+       */
+      guidanceConsumed: snapshot.sourceEntryIds.filter(isJuliusGuidanceHandoffEntryId).length,
     };
     /**
      * A REPAIR THAT CANNOT SEE ITS FINDINGS IS NOT A REPAIR.
@@ -1788,15 +1803,59 @@ async function issueGuidanceFromResult(input: {
   if (issued.outcome === 'REFUSED') return refuse(issued.reasonCode);
 
   const packet = issued.packet;
-  // COUNTS AND IDENTIFIERS, never the advice itself. The packet's own text
-  // travels to the coder the way the plan does — as an artifact the composition
-  // owns — and the ledger records that it existed, under which agreement, and
-  // how much of it there was.
+
+  /**
+   * THE ADVICE REACHES THE WORKER IT WAS WRITTEN FOR.
+   *
+   * IT DID NOT, BEFORE THIS. The packet was stored as an artifact whose only
+   * consumer is the Independent Reviewer — so a mission bought an architect
+   * dispatch, bought a review of its output, and handed the Coding Agent that
+   * asked the question nothing but `brain:segment-resume`, which is what the
+   * coder itself said before it paused. The comment that used to sit here said
+   * the text "travels to the coder the way the plan does"; the plan has a
+   * reader and this did not.
+   *
+   * ON THE CONTINUATION'S OWN CHANNEL, exactly as a research answer travels:
+   * one Project Brain, one redaction path, one provenance record, and no prose
+   * side channel. The dispatch that asked has ended, so the continuation is the
+   * only place an answer can appear.
+   *
+   * UNDELIVERED SAYS SO. Where no segment is waiting — nothing paused on this
+   * subject, or a shape with two waiting segments that nobody has built —
+   * `deliveredTo` is null on the row below rather than absent, so guidance that
+   * reached no one is legible as that instead of as guidance that was read.
+   */
+  /* WAITING ON THIS GUIDANCE TASK, which is the edge the barrier actually is:
+     the continuation depends on the architect's task, not on the coder's, so
+     that it cannot run before the advice exists. Looking for a segment blocked
+     on the SUBJECT would find the research barrier's shape and miss this one. */
+  const waiting = pendingSegmentFor(task.taskId, await deps.store.tasksForRun(run.runId, run.projectId));
+  if (waiting !== null) {
+    await deps.store.appendBrainEntry({
+      runId: run.runId,
+      projectId: run.projectId,
+      taskId: waiting.taskId,
+      workerId: input.workerId,
+      entryId: juliusGuidanceHandoffEntryId(waiting.taskId, packet.revision),
+      kind: 'HANDOFF',
+      safeText: renderJuliusGuidanceHandoff(packet),
+      evidenceIds: [],
+      occurredAt: deps.clock.now(),
+    });
+  }
+
+  // COUNTS AND IDENTIFIERS, never the advice itself. The advice is on the
+  // Project Brain above, where the context compiler redacts it and the packet
+  // records what was handed over; the ledger records that it existed, under
+  // which agreement, how much of it there was, and who it reached.
   await ledger.event('guidance.issued', {
     taskId: subjectTaskId, workerId: input.workerId,
     facts: {
       guidanceId: packet.guidanceId, guidanceRevision: packet.revision,
       guidanceDigest: packet.packetDigest,
+      /* THE WORKER THE ADVICE ACTUALLY REACHED, or null when none was waiting.
+         Absent would be a third state nobody can read. */
+      deliveredTo: waiting === null ? null : waiting.taskId,
       contractRevision: binding.contractRevision, contractBindingDigest: binding.bindingDigest,
       recommendedActions: packet.recommendedActions.length,
       additionalProhibitions: packet.additionalProhibitions.length,
@@ -1909,7 +1968,7 @@ function executionPorts(
    * the only place that knows it; absent for a caller that did not compile one,
    * and absent reads as unknown rather than as zero.
    */
-  handed: { readonly brainRetrievals: number; readonly evidenceInspected: number } | null,
+  handed: { readonly brainRetrievals: number; readonly evidenceInspected: number; readonly guidanceConsumed: number } | null,
 ): JuliusExecutionPorts {
   return {
     reserve: async ({ claim, request, idempotencyKey }) => {
@@ -2020,6 +2079,7 @@ function executionPorts(
           // worker was handed nothing.
           brainRetrievals: handed === null ? null : handed.brainRetrievals,
           evidenceInspected: handed === null ? null : handed.evidenceInspected,
+          guidanceConsumed: handed === null ? null : handed.guidanceConsumed,
           usdMicros,
           // The two halves of the money question, on the same row: what Julius
           // permitted, and what came back — with the basis, so an UNKNOWN

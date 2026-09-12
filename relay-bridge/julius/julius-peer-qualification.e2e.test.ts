@@ -596,7 +596,7 @@ describe('Q5 — production effort is measured where it exists and unknown where
       'some dispatch actually received brain entries').toBe(true);
   });
 
-  it('leaves the two dimensions nothing can measure absent rather than zero', async () => {
+  it('leaves the one dimension nothing can measure absent rather than zero', async () => {
     const { timeline } = await driveQualification({
       architect: [PLAN_OK], coder: [BUILD_OK], reviewer: [REVIEW_OK, REVIEW_OK],
     });
@@ -605,10 +605,20 @@ describe('Q5 — production effort is measured where it exists and unknown where
       // count here would have to be taken before the thing it counts happens.
       // It is carried per slot by `participation` instead, off the real rows.
       expect(row.facts.checkpoints, 'checkpoints is not on the effort row').toBeUndefined();
-      // `guidanceConsumed`: nothing in the runtime knows it. The guidance packet
-      // is never compiled into any dispatch's context, so there is no point at
-      // which "this dispatch consumed N packets" is a fact.
-      expect(row.facts.guidanceConsumed, 'guidanceConsumed is not on the effort row').toBeUndefined();
+      /**
+       * `guidanceConsumed` USED TO BE THE SECOND ONE, and the reason it gave
+       * was true: "the guidance packet is never compiled into any dispatch's
+       * context, so there is no point at which this dispatch consumed N packets
+       * is a fact." That was a statement about a packet nobody delivered, not
+       * about a dimension nobody could measure — the architect's advice reached
+       * the reviewer that judged it and never the coder it was written for.
+       *
+       * Now it is delivered on the continuation's own Project Brain channel, so
+       * the compiled packet either carries it or does not, and either answer is
+       * a measurement. Zero here means this dispatch was shown no guidance,
+       * which is the truth about this run: it has no guidance round.
+       */
+      expect(typeof row.facts.guidanceConsumed, `${String(row.taskId)} guidanceConsumed`).toBe('number');
     }
   });
 
@@ -627,8 +637,11 @@ describe('Q5 — production effort is measured where it exists and unknown where
       // Measured on every dispatch this slot made.
       expect(effort.brainRetrievals.measured, `${slot} brainRetrievals`).toBe(effort.dispatches);
       expect(effort.evidenceInspected.measured, `${slot} evidenceInspected`).toBe(effort.dispatches);
-      // And the ones nothing measures are unknown on every dispatch, not zero.
-      expect(effort.guidanceConsumed.unknown, `${slot} guidanceConsumed`).toBe(effort.dispatches);
+      // Guidance joined them: measured on every dispatch, and legitimately zero
+      // on a run with no guidance round.
+      expect(effort.guidanceConsumed.measured, `${slot} guidanceConsumed`).toBe(effort.dispatches);
+      expect(effort.guidanceConsumed.total, `${slot} guidanceConsumed total`).toBe(0);
+      // And the one nothing measures is unknown on every dispatch, not zero.
       expect(effort.checkpoints.unknown, `${slot} checkpoints`).toBe(effort.dispatches);
     }
   });
