@@ -1066,7 +1066,7 @@ describe('Q8 — a live Coding Agent can ask, and the ask reaches the mission', 
     const runtime = assembleLiveJuliusRuntime({
       store: handoffs.store,
       entries: [
-        { worker: ARCHITECT_WORKER, adapter: scriptedAdapter(ARCHITECT_WORKER, input.architect) },
+        { worker: architectWorker({}), adapter: scriptedAdapter(architectWorker({}), input.architect) },
         { worker: CODER_WORKER, adapter: coder },
         { worker: REVIEWER_WORKER, adapter: scriptedAdapter(REVIEWER_WORKER, input.reviewer) },
       ],

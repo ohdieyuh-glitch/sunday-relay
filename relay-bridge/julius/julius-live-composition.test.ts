@@ -3211,7 +3211,7 @@ describe('the architect and the reviewer can ask, through their own answers', ()
 
   const architectFor = (output: unknown, seen: Array<Record<string, unknown>>, taskType = 'plan') => ({
     adapter: createLiveArchitectAdapter({
-      worker: ARCHITECT_WORKER,
+      worker: architectWorker({}),
       contexts: { snapshotFor: () => reviewSnapshot('plan-1') },
       artifacts: (() => { const a = createLiveArtifactExchange(); a.put(planRef('run-live'), JSON.stringify(VALID_PLAN)); return a; })(),
       config: { liveMode: true, model: 'gpt-5.6-sol', maxOutputTokens: 4_000 } as never,
