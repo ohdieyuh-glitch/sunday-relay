@@ -26,9 +26,11 @@ qualification needs, and they land clean.
 | 10 | `relay/julius-live-timeline` | `1afe7810` | **the generated manifest** |
 | 11 | `relay/julius-architect-envelope` | `9f7a2013` | none from git — see below |
 | 12 | `relay/julius-participant-isolation` | `88f5df6e` | none |
+| 13 | `relay/julius-architect-reviewer-participation` | `f00b58ec` | none from git — same rename, see below |
 
-Steps 3 and 5 are STACKED: the fixture is frozen on `research-authority`'s head
-and `worker-deadline` on `reviewer-envelope`'s. Each must be rebased onto the
+Steps 3, 5 and 13 are STACKED: the fixture is frozen on `research-authority`'s
+head, `worker-deadline` on `reviewer-envelope`'s, and
+`architect-reviewer-participation` on `coder-participation`'s. Each must be rebased onto the
 post-landing `main` and **re-frozen worker-authored** before its own PR can be
 opened, and its opener's `BASE`, `HEAD` and `TREE` constants updated to match.
 That is true of every candidate after the first one to land, stacked or not.
@@ -71,20 +73,22 @@ one side:
 lines that merge **cleanly**, so git reports no conflict at all and the stack
 compiles only until `tsc` runs. Three references, in two files:
 
-    relay-bridge/julius/ending-diagnostics.test.ts        (import + one use)
+    relay-bridge/julius/ending-diagnostics.test.ts             (import + one use)
     relay-bridge/julius/julius-peer-qualification.e2e.test.ts  (one use)
+    relay-bridge/julius/julius-live-composition.test.ts        (one use, step 13)
 
-Each becomes `architectWorker({})`. **`npm run typecheck` is the only gate that
+Each becomes `architectWorker({})`. Step 13 reproduced this exactly: the
+cherry-pick reported CLEAN and `tsc` then named the one reference. **`npm run typecheck` is the only gate that
 catches this** — vitest transforms with esbuild and does not type-check — so
 whoever lands `architect-envelope` after either of those two must run typecheck
 before pushing, not only the suite.
 
 ## What the rehearsal proves
 
-All twelve applied in this order, with the four resolutions above and nothing
+All thirteen applied in this order, with the four resolutions above and nothing
 else. The combined stack then passed the full gate:
 
-    npm test                      10,605 passing across 541 files, 0 failed
+    npm test                      10,628 passing across 542 files, 0 failed
     typecheck, build              0
     relay:build, relay:bridge:build             0
     relay-repository-boundary.mjs, relay-parity-gate.mjs   0
@@ -97,12 +101,12 @@ else. The combined stack then passed the full gate:
     julius:harness:check                        OK
     git diff --check                            0
 
-Rehearsal head `45dee6a0`, tree `12c25099`, on `rehearsal/landing-order`.
+Rehearsal head `ebc772ab`, tree `e9d52236`, on `rehearsal/landing-order`.
 
-**That branch is deliberately NOT pushed.** Thirteen commits carrying every
+**That branch is deliberately NOT pushed.** Fourteen commits carrying every
 candidate's change, authored by `julius-worker[bot]`, would look exactly like a
-shortcut past the ceremony — one PR instead of twelve, one approval instead of
-twelve, and no provenance binding any of them. Julius does not write trusted
+shortcut past the ceremony — one PR instead of thirteen, one approval instead of
+thirteen, and no provenance binding any of them. Julius does not write trusted
 main except one reviewed candidate at a time. The recipe above is
 deterministic: re-run it and the head and tree come out the same.
 
@@ -133,12 +137,13 @@ opener and compared to the pushed branch:
     ceremony/ending-diagnostics-pr        ceremony/reviewer-envelope-pr
     ceremony/guidance-delivery-pr         ceremony/live-timeline-pr
 
-Ten of the twelve candidates. The other two are **held** and have no published
-ceremony on purpose, because each is frozen on another candidate's head rather
-than on main and its opener's base check could never pass:
+Ten of the thirteen candidates. The other three are **held** and have no
+published ceremony on purpose, because each is frozen on another candidate's
+head rather than on main and its opener's base check could never pass:
 
-    relay/julius-worker-deadline          stacked on reviewer-envelope
-    relay/julius-continuous-1-fixture     stacked on research-authority
+    relay/julius-worker-deadline                    stacked on reviewer-envelope
+    relay/julius-continuous-1-fixture               stacked on research-authority
+    relay/julius-architect-reviewer-participation   stacked on coder-participation
 
 Each needs a rebase onto the post-landing `main` and a re-freeze
 worker-authored before its ceremony can be written.
