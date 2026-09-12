@@ -4,7 +4,9 @@
 > repository evidence does not. Update it whenever meaningful state changes and
 > before ending a session. Never rely on `/resume` as the sole record.
 
-**Most recent session:** 2026-09-08, the **Claude Code cloud session**. Read
+**Most recent session:** 2026-09-12, the **local Windows session** (`C:\dev\iwonder`). Read **§000** first: the fifteenth candidate, the rehearsal of all fifteen, and the three founder-side blockers that stop this machine from landing or dispatching anything. The 2026-09-08 cloud record follows unchanged.
+
+**Earlier:** 2026-09-08, the **Claude Code cloud session**. Read
 **§00** first: it holds the current branch, the commits it added, a security
 finding about the merge-provenance credential, and the founder-only actions
 that gate everything else. **§00h** is the newest work: stale-handoff
@@ -20,6 +22,124 @@ Everything from §0a onward is the earlier local record.
 **HEAD:** see §8 for the current commit list (the branch is rebuilt as work lands)
 **Base:** `origin/main` = `b2dc9f239eeb54764beca97a2966afa24c7cc3a4` (#233)
 **Working tree:** clean; ahead of `origin/main`, **not pushed**.
+
+---
+
+## 000. LOCAL SESSION 2026-09-12 — THE FIFTEENTH CANDIDATE, AND WHY NOTHING LANDED
+
+**`origin/main` = `9f155b919b0243e20fc3af132e9ea9176fd470ba`** (PR #254), unchanged
+all day. Accepted-main checkpoint for it exists (2026-09-11T16:34Z). No paid
+mission was dispatched. No provider was contacted. **Provider calls made this
+session: zero.** No `julius-continuous-1` marker exists (0 attempted, 0 completed).
+
+### What the previous session actually left
+
+Fourteen frozen worker-authored candidates on `origin`, none landed, rehearsed
+end to end on `origin/ceremony/landing-order` (README there is the recipe).
+Ten have ceremony transports pinned to base `9f155b91`; four are stacked and
+held. The heartbeat's "minimum path to the paid qualification" was five
+(participant-isolation, research-authority, coder-participation,
+continuous-1-fixture, architect-reviewer-participation). The founder's canonical
+reviewer/worker policies add reviewer-envelope (3 stages × 1 attempt),
+worker-deadline (the Julius-owned watchdog) and reviewer-transient-upstream —
+so the honest minimum is **eight**, plus the one below.
+
+The open-findings list was already fully repaired or frozen; Mission 5 is
+VERIFIED COMPLETE and was not touched.
+
+### The gap the fourteen open together — repaired as candidate fifteen
+
+`reviewer-transient-upstream` makes the live reviewer path answer a 429/503 with
+`review_service_unavailable` (retryable). `reviewer-envelope` gives a review
+stage exactly ONE pipeline attempt. Integrated, the retryable shape reaches a
+pipeline with nothing to spend on it: the first provider hiccup on any of the
+qualification's FIVE review dispatches ends the mission after it has bought a
+plan, a lock and a build. The transient candidate's own message said the attempt
+question was "left alone here rather than guessed at".
+
+**`relay/julius-reviewer-transient-reask` @ `3b78b4d7d7144cd0e59dc9fc3f85385f10d583a3`**
+(tree `87d557c99bcf25d4313adf64436e424894abaf85`, one commit over `9f155b91`,
+authored AND committed by `julius-worker[bot]`; ceremony transport
+`origin/ceremony/reviewer-transient-reask-pr`). The bounded, adapter-internal,
+same-deadline re-ask the founder's policy permits:
+
+- once (`REVIEW_TRANSIENT_REASK_LIMIT = 1`), after a fixed 5 s backoff;
+- only when `reviewerReaskWithinDeadline` — pure, in `reviewer-deadline.ts` —
+  says the declared deadline still holds the policy's own floor (630,000 ms)
+  after what the asks so far consumed, read from the runner's own instants;
+- the second engine run gets the REMAINING window, so the adapter still stops
+  before the Julius watchdog; two asks + backoff fit the deadline exactly;
+- unknown consumed time refuses the re-ask (never zero); a cancellation before
+  or during the backoff buys nothing more;
+- `reviewReaskShape` (allowlisted, dumped as `review_reask_shape`) says WHY the
+  second call was bought, beside `reviewAttempts` which says how many.
+
+Thirteen proofs (`relay-bridge/julius/reviewer-transient-reask.test.ts`); ten
+mutations, ten killed. One existing composition case corrected, not deleted:
+"a 503 is never re-asked" was reasoned from the three-attempt era.
+
+### The rehearsal, all fifteen
+
+Local worktree `C:\dev\iwonder\julius-stack` (`local/julius-stack`): the fourteen
+cherry-picked in the landing-order README's sequence with its four documented
+resolutions (both `merge-dump.py` conflicts, the coordinator's two blocks, the
+generated manifest, the `architectWorker({})` rename in three tests), then the
+fifteenth. `npm run typecheck` clean; `julius:harness:check` current;
+`git diff --check` clean. Full suite: 10,458 passed / 173 failed — and a clean
+`origin/main` worktree on this same machine fails **170 of the same tests in the
+same files** (Windows: layering path checkers, `spawnSync npx ENOENT`,
+backslash `import()` URLs, bash-spawn timeouts). The three stack-only failures
+are the same Windows classes (`research-authority` #22 spawnSync npx,
+`reviewer-envelope` #7 import URL, `parity-bypass` passes in isolation). The
+qualification-critical suites — peer qualification e2e, continuous qualification,
+live composition, ending diagnostics, the re-ask proofs — 215/215 on the stack.
+
+### Preconditions for the paid run, as they stand
+
+All six of `docs/JULIUS_CONTINUOUS_1_SHAPE_REHEARSAL.md` pass ON THE STACK; on
+`main` two are false because the candidates have not landed. Environment
+`julius-live-validation` holds `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`,
+`XAI_API_KEY` (no variables). Contract `julius-continuous-1`: ceiling **$25**
+(unchanged), 3 repair rounds, v3 floors 25/25/25 % + 15 % repair reserve, so a
+single coder draw is bounded at ≈ $8.75 and the mission at $25 across all three
+providers — inside the ≈ $20 the founder placed on each account; nothing was
+raised. Paid runs 4 and 5 took 21–28 min of the 120-min job.
+
+### Three blockers this machine cannot cross — founder actions
+
+1. **`JULIUS_WORKER_APP_ID` is not set here** (the PEM is). The app is private:
+   `gh api apps/julius-worker` → 404, `/user/installations` → 403. Every opener
+   refuses without it. It is the small number on the app settings page, never
+   `325202980`.
+2. **The auto-mode classifier denies `gh workflow run`** ("Production Deploy"),
+   including the provider-free preflight, and denies any command that reads the
+   PEM ("Credential Materialization"). A Bash permission rule is the remedy the
+   denial names; nothing was worked around.
+3. **Approval.** Provenance requires an `APPROVED` review by `ohdieyuh-glitch` at
+   the exact head; the runbook says never approve or merge from a coding
+   environment with that login, and this shell IS that login. #250–#254 were each
+   approved 1–2 min before merge with "Approved for landing at the exact frozen
+   head …". Whether the founder approves each of the nine by hand, or authorises
+   this session to run the approve+merge step on this machine, is theirs to say.
+
+### The order to land, once unblocked
+
+participant-isolation → research-authority → coder-participation →
+continuous-1-fixture (rebase, re-freeze) → architect-reviewer-participation
+(rebase, re-freeze) → reviewer-envelope → worker-deadline (rebase, re-freeze) →
+reviewer-transient-upstream (rebase, re-freeze) → **reviewer-transient-reask**
+(rebase, re-freeze). Each: open via its `ceremony/*` opener, CI, approve at head,
+`gh pr merge --squash --match-head-commit`, `Julius accept main`. Then the
+provider-free preflight (`confirm_live` empty, `mission=julius-continuous-1`),
+then the paid dispatch with `RUN LIVE MISSION`.
+
+### Worktrees left on this machine (all with deps installed)
+
+`julius-stack` (rehearsal, 3 local rehearsal commits on top of the fifteen —
+never push), `julius-reask` (the candidate, pushed), `julius-ceremony` (transport,
+pushed), `julius-main-baseline` (detached `origin/main`), `julius-handoff` (this
+branch), `julius-landing-order`, `julius-continuation` (primary session checkout,
+untouched).
 
 ---
 
