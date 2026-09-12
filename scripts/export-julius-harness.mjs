@@ -275,6 +275,11 @@ const FILE_RULES = [
   // checkpoint and the ANSWER arrives as a continuation, both of which are the
   // scheduler's. The artifact it produces is classified under evidence, below.
   ['src/relay/mission/julius/julius-research-protocol.ts', 'TASK GRAPH / SCHEDULER'],
+  // How a worker with no output schema reaches the three channels above. It is
+  // a TRANSPORT and it decides nothing: every request it reads is handed on
+  // untouched for the domain sanitizers to refuse. Filed with the lifecycle it
+  // feeds, because what it carries is checkpoints and continuations.
+  ['src/relay/mission/julius/julius-worker-participation.ts', 'TASK GRAPH / SCHEDULER'],
   // The mission's authority over what any worker may retrieve, and each slot's
   // retrieval budget. A PERMISSION with a cap on it, which is exactly this
   // subsystem — the allowlist is mission authority and the budget is the
