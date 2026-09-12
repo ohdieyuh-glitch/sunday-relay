@@ -55,6 +55,17 @@ import {
   driveJuliusRunToTerminal,
   resolveLiveWorkers,
 } from './julius/live-composition';
+import { sealJuliusResearchPolicy, type JuliusResearchPolicy } from '../src/relay/mission/julius';
+import {
+  LIVE_REACH_ACTION_CAPABILITIES,
+  LIVE_REACH_READ_CAPABILITIES,
+  allSources,
+  resolveReadiness,
+  type BackendProbe,
+  type LiveReachCapability,
+  type LiveReachReadiness,
+  type LiveReachSource,
+} from '../src/relay/mission/live-reach';
 
 /* ------------------------------------------------------------- contract */
 
@@ -96,6 +107,199 @@ export interface LiveMissionContractFile {
      */
     readonly architectMaxOutputTokens?: number;
   };
+  /**
+   * THE MISSION'S RESEARCH AUTHORITY, SEALED BY THE CONTRACT THAT GRANTS IT.
+   *
+   * ABSENT MEANS NO RESEARCH, and absent is the default. Without this clause a
+   * mission gets `noJuliusResearch` — allowlist empty, no slot authorised,
+   * retrieval budget zero — and a research ask from any worker is refused as
+   * `research_not_authorized` before a socket can exist. That was the state of
+   * EVERY paid mission before this field existed: the governed-research seam
+   * reached `assembleLiveJuliusRuntime` and stopped there, because this
+   * entrypoint had nothing to pass it.
+   *
+   * WHAT THIS IS NOT. It does not assert that Relay can reach anything. A
+   * mission saying it may read `docs.python.org` and Relay having a backend
+   * observed to serve that read are separate facts, and Live Reach refuses a
+   * capability no backend has been OBSERVED serving whatever this says. That
+   * observation is an operator's to make, not a contract's, so it arrives
+   * through the environment instead (see `JULIUS_RESEARCH_OBSERVED_BACKENDS`).
+   * A contract that authorised its own observation would be the mission
+   * asserting the one thing it is not in a position to know.
+   */
+  readonly research?: LiveMissionResearchClause;
+}
+
+/**
+ * The contract's own words for a research policy, before sealing.
+ *
+ * Deliberately the SHAPE `sealJuliusResearchPolicy` takes and no more: the
+ * domain owns what a valid policy is — host syntax, wildcard rules, budget
+ * bounds, the closed role and capability vocabularies — and this is a JSON
+ * spelling of its draft. Re-validating any of it here would be a second
+ * opinion about the allowlist, which is exactly the sort of thing an allowlist
+ * must not have.
+ */
+export interface LiveMissionResearchClause {
+  readonly roles: readonly string[];
+  readonly allowances: readonly {
+    readonly source: string;
+    readonly capabilities: readonly string[];
+    readonly hosts: readonly string[];
+  }[];
+  readonly missionBudget: { readonly maxRetrievals: number; readonly maxBytes?: number | null };
+  readonly roleBudget: { readonly maxRetrievals: number; readonly maxBytes?: number | null };
+}
+
+/**
+ * THE CONTRACT'S WORDS, SEALED BY THE DOMAIN. One place, so the parser and the
+ * dispatch cannot seal the same clause two ways.
+ */
+export function sealLiveMissionResearchPolicy(
+  missionId: string,
+  clause: LiveMissionResearchClause,
+): JuliusResearchPolicy {
+  return sealJuliusResearchPolicy({
+    missionId,
+    // Cast, not validate: the domain refuses an unknown source, capability or
+    // role by name, and a check here would be a second opinion about a closed
+    // vocabulary it owns.
+    allowances: clause.allowances as never,
+    roles: clause.roles as never,
+    missionBudget: { maxRetrievals: clause.missionBudget.maxRetrievals, maxBytes: clause.missionBudget.maxBytes ?? null },
+    roleBudget: { maxRetrievals: clause.roleBudget.maxRetrievals, maxBytes: clause.roleBudget.maxBytes ?? null },
+  });
+}
+
+/**
+ * WHAT AN OPERATOR HAS SEEN A BACKEND SERVE — never what a mission wants.
+ *
+ * Live Reach refuses a capability no backend has been OBSERVED serving, and
+ * that gate is right: "this mission authorises reading a page" and "Relay has a
+ * backend that can read a page" are separate facts. The first is the
+ * contract's to state; the second is an observation, and a contract asserting
+ * its own observation would be the mission vouching for the one thing it
+ * cannot know.
+ *
+ * So it arrives through the environment, as a compact `backendId:capability`
+ * list, and ABSENT MEANS NONE — every governed retrieval is then refused
+ * `capability_unavailable`, which is the state every paid mission has run in
+ * so far and the honest default.
+ *
+ * EVERY CLAIM IS CHECKED AGAINST THE REGISTRY, and a claim that fails refuses
+ * the run rather than being dropped. `resolveReadiness` consults a probe only
+ * when the backend id and the capability both match a real candidate, so a
+ * typo does not produce a weaker observation — it produces NO observation, and
+ * the mission then runs with research silently inert while the operator
+ * believes they armed it. Refusing is the only way that mistake is visible
+ * before the money is spent.
+ */
+export type ObservedResearchBackends =
+  | { readonly ok: true; readonly probes: readonly BackendProbe[] }
+  | { readonly ok: false; readonly problem: string };
+
+/** Every backend the registry models, by id, with what it implements. */
+const registryBackends = (): ReadonlyMap<string, readonly LiveReachCapability[]> => {
+  const byId = new Map<string, readonly LiveReachCapability[]>();
+  for (const source of allSources()) {
+    for (const backend of source.backends) {
+      // A backend may serve several sources; its operations are its own.
+      if (!byId.has(backend.backendId)) byId.set(backend.backendId, backend.operations);
+    }
+  }
+  return byId;
+};
+
+export function observedResearchBackends(
+  env: Record<string, string | undefined>,
+): ObservedResearchBackends {
+  const raw = env.JULIUS_RESEARCH_OBSERVED_BACKENDS?.trim();
+  if (raw === undefined || raw === '') return { ok: true, probes: [] };
+
+  const backends = registryBackends();
+  const probes: BackendProbe[] = [];
+  const seen = new Set<string>();
+
+  for (const entry of raw.split(',')) {
+    const claim = entry.trim();
+    if (claim === '') continue;
+    const parts = claim.split(':');
+    if (parts.length !== 2 || parts[0].trim() === '' || parts[1].trim() === '') {
+      return { ok: false, problem: `research_observation_malformed: "${claim}" is not backendId:capability.` };
+    }
+    const backendId = parts[0].trim();
+    const capability = parts[1].trim();
+
+    if ((LIVE_REACH_ACTION_CAPABILITIES as readonly string[]).includes(capability)) {
+      // Research is looking. An operator vouching for Relay's ability to POST
+      // is asserting something true or false, but it is not a research
+      // observation and nothing on this path would ever consult it.
+      return { ok: false, problem: `research_observation_action_capability: "${capability}" is an action, not a read.` };
+    }
+    if (!(LIVE_REACH_READ_CAPABILITIES as readonly string[]).includes(capability)) {
+      return { ok: false, problem: `research_observation_capability_unknown: "${capability}".` };
+    }
+
+    const operations = backends.get(backendId);
+    if (operations === undefined) {
+      return { ok: false, problem: `research_observation_backend_unknown: "${backendId}" is in no Live Reach source.` };
+    }
+    if (!operations.includes(capability as LiveReachCapability)) {
+      // The registry says this backend does not implement it, so the probe
+      // could never be the one `resolveReadiness` consults. An operator
+      // asserting it has seen an operation the backend does not have has seen
+      // something else.
+      return { ok: false, problem: `research_observation_backend_cannot: "${backendId}" does not implement "${capability}".` };
+    }
+
+    if (seen.has(claim)) {
+      return { ok: false, problem: `research_observation_duplicated: "${claim}".` };
+    }
+    seen.add(claim);
+
+    probes.push({
+      backendId,
+      capability: capability as LiveReachCapability,
+      result: 'observed',
+      /* NULL, NOT NOW. The operator asserts they have seen this; Relay has not
+         probed it in this process, and stamping the current instant would date
+         an observation nobody made here. */
+      probedAt: null,
+    });
+  }
+  return { ok: true, probes };
+}
+
+/**
+ * WHICH OF THE MISSION'S OWN ALLOWANCES ANY BACKEND HAS BEEN OBSERVED TO SERVE.
+ *
+ * Reported, never enforced. A mission may authorise more than Relay can
+ * currently reach — that is a legitimate contract, and Live Reach refuses the
+ * unreachable part honestly at request time. What is NOT acceptable is an
+ * operator believing a clause is live when every retrieval under it will be
+ * refused, so the entrypoint prints this before the run and the reader decides.
+ *
+ * It asks the same question the runtime will ask, through the same function.
+ */
+export function researchReachSummary(
+  clause: LiveMissionResearchClause,
+  probes: readonly BackendProbe[],
+): readonly { readonly source: string; readonly capability: string; readonly readiness: LiveReachReadiness }[] {
+  const rows: { source: string; capability: string; readiness: LiveReachReadiness }[] = [];
+  for (const allowance of clause.allowances) {
+    for (const capability of allowance.capabilities) {
+      rows.push({
+        source: allowance.source,
+        capability,
+        readiness: resolveReadiness({
+          source: allowance.source as LiveReachSource,
+          capability: capability as LiveReachCapability,
+          probes,
+        }),
+      });
+    }
+  }
+  return rows;
 }
 
 export function parseLiveMissionContract(raw: string): { ok: true; contract: LiveMissionContractFile } | { ok: false; problem: string } {
@@ -127,6 +331,35 @@ export function parseLiveMissionContract(raw: string): { ok: true; contract: Liv
     }
   }
   const list = (field: string): readonly string[] => Array.isArray(value[field]) ? (value[field] as unknown[]).map(String) : [];
+
+  /**
+   * THE RESEARCH CLAUSE IS SEALED HERE, OR THE CONTRACT IS REFUSED.
+   *
+   * Sealing at PARSE time rather than at dispatch is the whole point: a
+   * malformed allowlist, an unknown role, a budget the domain will not accept
+   * — every one of them stops the mission before a provider is contacted, with
+   * the domain's own reason code. A policy first sealed at dispatch would be a
+   * contract that looked valid right up until it had already been paid for.
+   *
+   * `sealJuliusResearchPolicy` throws named errors; they are caught and
+   * reported rather than allowed to crash the CLI, because a bad contract is a
+   * refusal with a reason, not an exception.
+   */
+  let research: LiveMissionResearchClause | undefined;
+  if (value.research !== undefined) {
+    if (value.research === null || typeof value.research !== 'object' || Array.isArray(value.research)) {
+      return { ok: false, problem: 'The contract field "research" must be an object when present.' };
+    }
+    const clause = value.research as LiveMissionResearchClause;
+    try {
+      sealLiveMissionResearchPolicy(value.missionId as string, clause);
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : 'research_policy_invalid';
+      return { ok: false, problem: `The contract's research clause was refused: ${reason}.` };
+    }
+    research = clause;
+  }
+
   return {
     ok: true,
     contract: {
@@ -137,6 +370,7 @@ export function parseLiveMissionContract(raw: string): { ok: true; contract: Liv
       acceptanceCriteria: criteria as LiveMissionContractFile['acceptanceCriteria'],
       testCommand: value.testCommand as string, workspacePath: value.workspacePath as string,
       limits: typeof value.limits === 'object' && value.limits !== null ? value.limits as LiveMissionContractFile['limits'] : undefined,
+      ...(research === undefined ? {} : { research }),
     },
   };
 }
@@ -221,6 +455,23 @@ async function main(argv: readonly string[]): Promise<number> {
 
   const env = process.env as Record<string, string | undefined>;
   const cardRevision = env.RELAY_JULIUS_CARD_REVISION?.trim() || 'card:julius-live:1';
+
+  /**
+   * THE OPERATOR'S OBSERVATIONS, CHECKED BEFORE ANYTHING IS SUBMITTED.
+   *
+   * Read here rather than at the assembly below so a mistyped claim refuses
+   * the run while there is still no run: after `bootstrap.submit` there is a
+   * durable record and a state to reconcile, and refusing then would leave one
+   * behind for a typo. It is validated even when the contract authorises no
+   * research at all — a false belief about what Relay can reach is worth
+   * correcting whether or not this mission would have used it.
+   */
+  const observed = observedResearchBackends(env);
+  if (!observed.ok) {
+    out(`JULIUS_RESEARCH_OBSERVED_BACKENDS refused: ${observed.problem}`);
+    out('RESULT: BLOCKED — nothing was submitted and no provider was contacted.');
+    return 2;
+  }
 
   /* Executor material — resolved before any adapter exists, fail closed. */
   const executorMissing = EXECUTOR_ENV.filter((name) => !env[name]);
@@ -361,13 +612,39 @@ async function main(argv: readonly string[]): Promise<number> {
     }
     out(`Run ${submitted.runId} accepted in state ${submitted.state}; driving the Julius run loop.`);
 
+    /**
+     * THE TWO HALVES OF RESEARCH AUTHORITY, SUPPLIED SEPARATELY BECAUSE THEY
+     * ARE SEPARATE FACTS.
+     *
+     * The contract says what this mission is AUTHORISED to read; the
+     * environment says what an operator has OBSERVED a backend serve. Absent
+     * either one, nothing is retrievable: no clause means `noJuliusResearch`,
+     * and no probe means `capability_unavailable` whatever the clause says.
+     * Both absent is the state every paid mission has run in so far, and it
+     * stays the default.
+     */
+    const researchClause = contract.research;
     const runtime = assembleLiveJuliusRuntime({
       store: handoffs.store,
       entries: resolution.entries,
       cardRevision,
       spendCeilingUsdMicros: Math.round((contract.limits?.spendUsd ?? 5) * 1_000_000),
       maxRepairRounds: contract.limits?.repairCycles ?? 1,
+      ...(researchClause === undefined ? {} : {
+        researchPolicyFor: (missionId: string) => sealLiveMissionResearchPolicy(missionId, researchClause),
+        researchProbes: observed.probes,
+      }),
     });
+    if (researchClause === undefined) {
+      out('  research: NOT AUTHORISED (no contract clause) — every ask is refused research_not_authorized');
+    } else {
+      out(`  research: authorised for ${[...researchClause.roles].join(', ')} across ${researchClause.allowances.length} allowance(s); ${observed.probes.length} observed backend(s)`);
+      /* WHAT THE CLAUSE CAN ACTUALLY REACH, said before the money is spent
+         rather than discovered one refusal at a time in the evidence. */
+      for (const row of researchReachSummary(researchClause, observed.probes)) {
+        out(`    ${row.source}/${row.capability}: ${row.readiness}${row.readiness === 'ready' ? '' : ' — retrieval will be refused'}`);
+      }
+    }
     const outcome = await driveJuliusRunToTerminal({
       loop: runtime.loop, store: handoffs.store,
       runId: submitted.runId, projectId: contract.projectId,

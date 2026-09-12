@@ -110,6 +110,47 @@ const ceilingsFor = (namespace) =>
 
 const MAX_ACCEPTANCE_CRITERIA = 12;
 
+/**
+ * RESEARCH AUTHORITY IS GRANTED HERE, PER MISSION, OR IT IS NOT GRANTED.
+ *
+ * The live entrypoint will seal whatever research clause a contract carries —
+ * the domain checks that the allowlist is WELL FORMED, which is a different
+ * question from whether this mission was ever authorised to read the outside
+ * world at all. Without this table a mission document could grant itself the
+ * internet by editing its own file, which is the exact mistake the spend
+ * ceilings above exist to prevent: run 34396331071 refused mission 3's
+ * self-declared 20/3 for the same reason, and the grant belongs here, named,
+ * where raising it is visible.
+ *
+ * THE TABLE IS EMPTY, AND THAT IS THE CURRENT STATE OF THE PRODUCT: no mission
+ * has been authorised to research, every paid mission so far has run with
+ * `noJuliusResearch`, and a contract declaring a `research` clause is refused
+ * until a human writes its grant in here. Authorising one is a deliberate,
+ * reviewable edit naming the mission, the sources, the read capabilities, the
+ * hosts and the retrieval budget — not a side effect of shipping the plumbing.
+ *
+ * A grant is a CEILING, exactly like spendUsd: the contract states what it
+ * wants and this refuses anything the grant does not cover. It never widens a
+ * contract, and it never asserts Relay can reach any of it — reachability is
+ * an operator observation (`JULIUS_RESEARCH_OBSERVED_BACKENDS`) and is a third,
+ * separate fact.
+ */
+const NO_RESEARCH = Object.freeze({
+  roles: Object.freeze([]),
+  allowances: Object.freeze([]),
+  missionBudget: Object.freeze({ maxRetrievals: 0, maxBytes: 0 }),
+  roleBudget: Object.freeze({ maxRetrievals: 0, maxBytes: 0 }),
+});
+const MISSION_RESEARCH = Object.freeze({
+  /* No mission has been granted research authority. */
+});
+
+/** The research grant that applies to THIS contract, by its own namespace. */
+const researchGrantFor = (namespace) =>
+  (typeof namespace === 'string' && Object.hasOwn(MISSION_RESEARCH, namespace))
+    ? MISSION_RESEARCH[namespace]
+    : NO_RESEARCH;
+
 const problems = [];
 const refuse = (problem) => problems.push(problem);
 
@@ -198,6 +239,77 @@ if (limits === undefined || limits === null || typeof limits !== 'object') {
   }
 }
 
+/* ------------------------------------------------------- research authority */
+
+/**
+ * A contract may ask for research. It may not grant itself research.
+ *
+ * Every refusal below names the exact clause that exceeded the grant, because
+ * "research refused" at request time reads like the mission working as
+ * intended rather than like a mission document asking for something nobody
+ * authorised.
+ */
+const research = contract.research;
+if (research !== undefined) {
+  const grant = researchGrantFor(namespace);
+  if (grant === NO_RESEARCH) {
+    refuse(`research is declared but no research grant exists for ${namespace ?? 'a mission with no declared namespace'}; a contract cannot grant itself research authority`);
+  } else if (research === null || typeof research !== 'object' || Array.isArray(research)) {
+    refuse('research must be an object when declared');
+  } else {
+    const roles = Array.isArray(research.roles) ? research.roles : null;
+    if (roles === null) refuse('research.roles must be an array');
+    else for (const role of roles) {
+      if (!grant.roles.includes(role)) refuse(`research.roles names "${role}", which this mission's grant does not cover`);
+    }
+
+    const allowances = Array.isArray(research.allowances) ? research.allowances : null;
+    if (allowances === null) refuse('research.allowances must be an array');
+    else for (const [index, allowance] of allowances.entries()) {
+      if (!allowance || typeof allowance !== 'object') { refuse(`research.allowances[${index}] must be an object`); continue; }
+      const granted = grant.allowances.find((entry) => entry.source === allowance.source);
+      if (granted === undefined) {
+        refuse(`research.allowances[${index}] names source "${allowance.source}", which this mission's grant does not cover`);
+        continue;
+      }
+      const capabilities = Array.isArray(allowance.capabilities) ? allowance.capabilities : [];
+      for (const capability of capabilities) {
+        if (!granted.capabilities.includes(capability)) {
+          refuse(`research.allowances[${index}] asks for "${capability}" on "${allowance.source}", which this mission's grant does not cover`);
+        }
+      }
+      const hosts = Array.isArray(allowance.hosts) ? allowance.hosts : [];
+      for (const host of hosts) {
+        // Exact pattern match against the granted list, deliberately: deciding
+        // whether `*.python.org` is "covered by" some other pattern is host
+        // matching, and a second implementation of host matching in a gate
+        // script is precisely the sort of thing that opens a hole.
+        if (!granted.hosts.includes(String(host).trim().toLowerCase())) {
+          refuse(`research.allowances[${index}] asks for host "${host}" on "${allowance.source}", which is not one of this mission's granted hosts`);
+        }
+      }
+    }
+
+    for (const [name, ceiling] of [['missionBudget', grant.missionBudget], ['roleBudget', grant.roleBudget]]) {
+      const budget = research[name];
+      if (!budget || typeof budget !== 'object') { refuse(`research.${name} must be an object stating maxRetrievals`); continue; }
+      if (!Number.isInteger(budget.maxRetrievals) || budget.maxRetrievals < 0) {
+        refuse(`research.${name}.maxRetrievals must be a non-negative integer`);
+      } else if (budget.maxRetrievals > ceiling.maxRetrievals) {
+        refuse(`research.${name}.maxRetrievals is ${budget.maxRetrievals}, above the ${ceiling.maxRetrievals} this mission is granted`);
+      }
+      if (budget.maxBytes === undefined || budget.maxBytes === null) {
+        // Null is "no byte cap". Permitted only where the grant itself has none.
+        if (ceiling.maxBytes !== null) refuse(`research.${name}.maxBytes must state a byte cap; this mission is granted at most ${ceiling.maxBytes}`);
+      } else if (!Number.isInteger(budget.maxBytes) || budget.maxBytes < 0) {
+        refuse(`research.${name}.maxBytes must be a non-negative integer or null`);
+      } else if (ceiling.maxBytes !== null && budget.maxBytes > ceiling.maxBytes) {
+        refuse(`research.${name}.maxBytes is ${budget.maxBytes}, above the ${ceiling.maxBytes} this mission is granted`);
+      }
+    }
+  }
+}
+
 /* -------------------------------------------------- the workspace is not us */
 
 if (typeof contract.workspacePath === 'string' && contract.workspacePath.trim() !== '') {
@@ -225,6 +337,9 @@ out(`  acceptance criteria: ${Array.isArray(criteria) ? criteria.length : 0} (${
 out(`  spend ceiling: ${limits?.spendUsd ?? 'MISSING'} USD`);
 out(`  architect output ceiling: ${limits?.architectMaxOutputTokens ?? 'default (connector)'} of ${ARCHITECT_OUTPUT_TOKEN_RESERVATION} reserved`);
 out(`  repair ceiling: ${limits?.repairCycles ?? 'MISSING'} cycle(s)`);
+out(`  research: ${research === undefined
+  ? 'NONE — every ask is refused research_not_authorized'
+  : `${Array.isArray(research.allowances) ? research.allowances.length : 0} allowance(s) for ${Array.isArray(research.roles) ? research.roles.join(', ') : 'no role'}`}`);
 
 if (problems.length > 0) {
   out('CONTRACT REFUSED:');
