@@ -46,6 +46,12 @@ import {
 } from '../../src/relay/connectors/gpt-architect';
 import { validateArchitectPlan, type ArchitectPlanReasonCode } from '../../src/relay/mission/prompt-architect/prompt-architect-plan';
 import { sanitizeJuliusGuidanceProposal } from '../../src/relay/mission/julius/julius-continuous-lifecycle';
+import {
+  JULIUS_PARTICIPATION_CHANNELS,
+  juliusParticipationProtocol,
+  readJuliusParticipationBlock,
+  type JuliusParticipationReading,
+} from '../../src/relay/mission/julius/julius-worker-participation';
 import { ARCHITECT_GUIDANCE_SCHEMA, ARCHITECT_GUIDANCE_SCHEMA_NAME } from '../../src/relay/connectors/gpt-architect/guidance-schema';
 import {
   loadHostedQuery,
@@ -457,6 +463,21 @@ const hostedCoderDiagnostics = (input: {
   readonly failureReason?: string | null;
 }): Record<string, unknown> => {
   const observed = input.observed;
+  /**
+   * WHETHER THE WORKER ASKED, ON BOTH ENDINGS.
+   *
+   * Read here rather than at the call sites so a success and a failure cannot
+   * disagree about it — the same reason this function exists. A dispatch with
+   * no observed final message never gave the worker a place to ask, so every
+   * field below is UNKNOWN rather than false: "did not ask" and "had no way to"
+   * are different facts and one column for both would erase the second.
+   */
+  const participation: JuliusParticipationReading | null =
+    observed === null || observed.finalText === null ? null : readJuliusParticipationBlock(observed.finalText);
+  const asked = (channel: (typeof JULIUS_PARTICIPATION_CHANNELS)[number]): boolean | null =>
+    participation === null ? null
+      : participation.present && participation.readable ? participation.channels.includes(channel)
+        : false;
   return {
     /** Stated, so a successful row is never read as a failure nobody classified. */
     outcome: input.outcome,
@@ -536,6 +557,14 @@ const hostedCoderDiagnostics = (input: {
      * a hand-back may free the hold.
      */
     runtimeStarted: observed?.initSeen ?? false,
+    /* ------------------------------- what the worker asked Julius for ---- */
+    participationPresent: participation === null ? null : participation.present,
+    participationReadable: participation === null || !participation.present ? null : participation.readable,
+    participationRefusal: participation !== null && participation.present && !participation.readable
+      ? participation.reasonCode : null,
+    participationAskedGuidance: asked('guidanceRequest'),
+    participationAskedResearch: asked('researchAsks'),
+    participationAskedResume: asked('segmentResume'),
     /**
      * HOW THE COST CAME TO BE KNOWN, in the vocabulary all three roles answer
      * in. `costSource` above is the hosted runtime's own word for itself
@@ -1165,6 +1194,13 @@ export function createLiveHostedCodingAdapter(input: {
           // a composition that ran the coder without a contract, which the
           // dispatch gate no longer permits on the live path.
           ...(dispatch.contract === undefined ? [] : [coderContractBrief(dispatch.contract)]),
+          /**
+           * A CHANNEL NOBODY WAS TOLD ABOUT IS A CHANNEL NOBODY USES, which is
+           * how the continuous lifecycle came to be unreachable on the paid
+           * path. Last, deliberately: it is what to do INSTEAD of guessing, and
+           * it should be the most recent thing read before the work starts.
+           */
+          juliusParticipationProtocol(),
         ].join('\n\n'),
         workspacePath: input.workspacePath,
         apiKey: input.apiKey,
@@ -1219,10 +1255,34 @@ export function createLiveHostedCodingAdapter(input: {
       input.artifacts.put(testOutputRef(snapshot.runId), `exit=${test.exitCode ?? 'unknown'}\n${test.stdout}\n${test.stderr}`);
 
       const observed = outcome.observation;
+      /**
+       * WHAT THE WORKER ASKED FOR, HANDED ON EXACTLY AS IT WROTE IT.
+       *
+       * Julius sanitises — `sanitizeJuliusGuidanceRequest`,
+       * `sanitizeJuliusResearchAsks`, `sanitizeJuliusSegmentState` — and this
+       * does not, for the reason the architect's `contractProposal` gives one
+       * function above: an adapter that pre-cleaned a request would be deciding
+       * what the domain is allowed to refuse, and a request refused before the
+       * pipeline saw it leaves no `RESEARCH_ASK_UNREADABLE` row behind.
+       *
+       * A BLOCK THAT COULD NOT BE READ DOES NOT FAIL THE DISPATCH. The work is
+       * in the diff and the tests already ran; failing a run over the shape of
+       * its closing message would throw away what it paid for. The refusal is
+       * on the diagnostics instead, where it is exported and readable.
+       */
+      const participation = readJuliusParticipationBlock(observed.finalText);
+      const channels = participation.present && participation.readable
+        ? {
+            ...('guidanceRequest' in participation ? { guidanceRequest: participation.guidanceRequest } : {}),
+            ...('researchAsks' in participation ? { researchAsks: participation.researchAsks } : {}),
+            ...('segmentResume' in participation ? { segmentResume: participation.segmentResume } : {}),
+          }
+        : {};
       return {
         workerId: input.worker.workerId,
         providerId: input.worker.providerId,
         status: 'SUCCEEDED',
+        ...channels,
         safeSummary: `Hosted Coding Agent session completed (observed model ${safeClaim(observed.actualModel ?? 'unknown', 80)}, ${observed.numTurns ?? 'unknown'} turns); tests ${test.status === 'SUCCEEDED' ? 'passed' : 'failed'} under the independent executor.`,
         evidence: [
           {

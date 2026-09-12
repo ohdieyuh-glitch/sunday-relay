@@ -376,6 +376,33 @@ export const safeReviewDiagnostics=(value:unknown):JuliusSafeDiagnostics|null=>{
   providerStatus:safeReasonCode(v.providerStatus),
   /** Reported by the boundary; `null` when it reported none. */
   totalTokens:safeCount(v.totalTokens),
+  /* --------------------------- whether the worker asked for anything ----
+   *
+   * The continuous lifecycle could not start on a paid run: no live adapter
+   * carried `guidanceRequest`, `researchAsks` or `segmentResume`, so a Coding
+   * Agent's only way to be stuck was to finish anyway. These four say what the
+   * worker's own final message asked for, and — the half that matters — say
+   * when it asked and could not be understood, which is otherwise
+   * indistinguishable from a worker that asked for nothing. UNKNOWN WHEN
+   * UNKNOWN: a dispatch with no observed result message never gave the worker
+   * a place to ask, so all four read null rather than false. --- */
+  /** Did the final message carry a participation block at all? */
+  participationPresent:safeNullableBool(v.participationPresent),
+  /** Could it be read? `null` when none was present, or when nothing was observed. */
+  participationReadable:safeNullableBool(v.participationReadable),
+  /** Which of the module's closed refusals applied. Never the block's own text. */
+  participationRefusal:safeReasonCode(v.participationRefusal),
+  /**
+   * ONE FLAG PER CHANNEL, rather than one column holding a list.
+   *
+   * A joined list would need a second grammar to defend and would read as text
+   * in a TSV cell; these are the same closed set as
+   * `JULIUS_PARTICIPATION_CHANNELS`, held equal to it by test, so a channel
+   * added without a column fails rather than exporting silently.
+   */
+  participationAskedGuidance:safeNullableBool(v.participationAskedGuidance),
+  participationAskedResearch:safeNullableBool(v.participationAskedResearch),
+  participationAskedResume:safeNullableBool(v.participationAskedResume),
  });
 };
 /**

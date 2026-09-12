@@ -25,7 +25,7 @@ import {
   type JuliusRuntimeStore,
 } from '../../src/relay/mission/julius';
 import type { GptRunOutcome } from '../../src/relay/connectors/gpt-architect';
-import { JuliusDispatchError, safeFailureClass, safeReviewDiagnostics } from '../../src/relay/mission/julius';
+import { JULIUS_PARTICIPATION_CHANNELS, JULIUS_PARTICIPATION_MARKER, JuliusDispatchError, safeFailureClass, safeReviewDiagnostics } from '../../src/relay/mission/julius';
 import { compileHostedEnvelope } from '../hosted-coding-agent/hosted-envelope';
 import type { HostedQueryFn, HostedRunInput, HostedRunOutcome } from '../hosted-coding-agent/hosted-runner';
 import { buildReviewPrompt, loadHermesConfig, reviewDiagnostics, runHermesReview, type HermesOutcome, type ReviewPacket } from '../hermes-reviewer';
@@ -2996,5 +2996,149 @@ describe('the architect revises a rejected plan', () => {
       .rejects.toMatchObject({ code: 'WORKER_EXECUTION_FAILURE', failureClass: 'prior_plan_unavailable' });
     expect(seen, 'no provider was reached').toEqual([]);
     expect(artifacts.get(planRef('run-live'))).toBeNull();
+  });
+});
+
+/**
+ * WHAT THE CODER ASKED FOR, AND WHAT THE RECORD SAYS ABOUT ASKING.
+ *
+ * The channel itself is proved in the domain (`julius-worker-participation`)
+ * and end to end through the production composition (`Q8` in the peer
+ * qualification). These are the adapter's own obligations at the seam: the
+ * request is handed on exactly as written, an unreadable one neither fails the
+ * dispatch nor vanishes, the worker's prose never becomes a durable value, and
+ * "did not ask" is never confused with "had no way to".
+ */
+describe('a coder’s request crosses the adapter without being cleaned or lost', () => {
+  const coderWithFinalText = (input: { runs: HostedRunInput[]; finalText?: string | null; refuse?: boolean }) => {
+    const log: FakeLog = { order: [] };
+    const artifacts = createLiveArtifactExchange();
+    artifacts.put(planRef('run-live'), JSON.stringify(VALID_PLAN));
+    const run = async (runInput: HostedRunInput): Promise<HostedRunOutcome> => {
+      input.runs.push(runInput);
+      const completed = await fakeCoder(log, [])(runInput) as Extract<HostedRunOutcome, { kind: 'completed' }>;
+      const observation = { ...completed.observation, finalText: 'finalText' in input ? input.finalText ?? null : completed.observation.finalText };
+      if (input.refuse) {
+        return {
+          kind: 'refused', refusalCode: 'coder_provider_error_after_init',
+          safeMessage: 'The hosted run failed after it started.',
+          observation, envelope: completed.envelope, startedAt: completed.startedAt, completedAt: completed.completedAt,
+        } as HostedRunOutcome;
+      }
+      return { ...completed, observation };
+    };
+    return createLiveHostedCodingAdapter({
+      worker: {
+        workerId: 'coding-agent-claude-hosted', role: 'CODING_AGENT', adapterId: 'claude-agent-sdk-hosted-live', providerId: 'anthropic',
+        capabilities: ['implement'], taskTypes: ['build'], concurrencyLimit: 1, timeoutMs: 1_000, maxRetries: 1, status: 'AVAILABLE',
+      },
+      contexts: { snapshotFor: () => reviewSnapshot('build-1') }, artifacts, projectId: 'prj-live',
+      apiKey: 'FAKETESTNOTREAL-anthropic', requestedModel: 'claude-fable-5',
+      workspacePath: '/workspace/mission', testCommand: 'npm run mission-test',
+      shell: fakeShell(log, []), run: run as never, queryLoader: async () => fakeQuery,
+    });
+  };
+
+  const succeed = async (finalText: string | null) => {
+    const runs: HostedRunInput[] = [];
+    const result = await coderWithFinalText({ runs, finalText })
+      .dispatch({ taskId: 'build-1', contextId: 'ctx-resume-1', taskType: 'build' });
+    return { result, runs, diagnostics: result.diagnostics as Record<string, unknown> };
+  };
+
+  const ask = (body: Record<string, unknown>, prose = 'I am blocked.'): string =>
+    `${prose}\n${JULIUS_PARTICIPATION_MARKER}\n${JSON.stringify(body)}\n`;
+
+  it('the dispatch prompt carries the protocol, so the channel is one the worker was told about', async () => {
+    const { runs } = await succeed('Done.');
+    expect(runs[0]!.prompt).toContain(JULIUS_PARTICIPATION_MARKER);
+    expect(runs[0]!.prompt).toContain('no block is the ordinary case');
+  });
+
+  it('hands the request on exactly as written — the adapter does not sanitise', async () => {
+    const request = { question: 'Which reading does the exporter support?', blockedOn: ['the exporter is off-slice'] };
+    const { result, diagnostics } = await succeed(ask({ guidanceRequest: request }));
+    expect(result.guidanceRequest).toEqual(request);
+    expect(diagnostics.participationAskedGuidance).toBe(true);
+    expect(diagnostics.participationReadable).toBe(true);
+    expect(diagnostics.participationRefusal).toBeNull();
+  });
+
+  /**
+   * A REQUEST THE DOMAIN WILL REFUSE STILL HAS TO REACH IT. `researchAsks: 'please'`
+   * is unusable, and the pipeline's `RESEARCH_ASK_UNREADABLE` row is the only
+   * evidence the worker tried. An adapter that filtered it would erase that.
+   */
+  it('carries a request the domain will refuse, rather than dropping it here', async () => {
+    const { result } = await succeed(ask({ researchAsks: 'please look this up' }));
+    expect(result.researchAsks).toBe('please look this up');
+  });
+
+  it('a block that could not be read neither fails the dispatch nor vanishes from the record', async () => {
+    const doubled = `${ask({ guidanceRequest: { question: 'first' } })}\n${ask({ guidanceRequest: { question: 'second' } })}`;
+    const { result, diagnostics } = await succeed(doubled);
+    expect(result.status).toBe('SUCCEEDED');
+    expect('guidanceRequest' in result, 'no channel is invented from an ambiguous block').toBe(false);
+    expect(diagnostics.participationPresent).toBe(true);
+    expect(diagnostics.participationReadable).toBe(false);
+    expect(diagnostics.participationRefusal).toBe('PARTICIPATION_REPEATED');
+    // And the refusal survives the domain allowlist, which is the only hop that
+    // decides what a durable row may contain.
+    expect(safeReviewDiagnostics(diagnostics)?.participationRefusal).toBe('PARTICIPATION_REPEATED');
+  });
+
+  it('a worker that asked for nothing is recorded as present:false, not as unknown', async () => {
+    const { diagnostics } = await succeed('Implemented the change; the suite is green.');
+    expect(diagnostics.participationPresent).toBe(false);
+    expect(diagnostics.participationReadable).toBeNull();
+    expect(diagnostics.participationAskedGuidance).toBe(false);
+  });
+
+  /**
+   * UNKNOWN IS NOT FALSE. A run whose runtime never produced a final message
+   * gave the worker nowhere to ask. Reporting `false` there would assert that
+   * it chose not to — on precisely the runs where nobody can know.
+   */
+  it('a run with no final message reports UNKNOWN for every participation fact', async () => {
+    const { diagnostics } = await succeed(null);
+    for (const key of ['participationPresent', 'participationReadable', 'participationRefusal',
+      'participationAskedGuidance', 'participationAskedResearch', 'participationAskedResume']) {
+      expect(diagnostics[key], `${key} must be unknown, not false`).toBeNull();
+    }
+  });
+
+  /**
+   * THE SAME FACTS ON BOTH ENDINGS. A column present on a success and absent on
+   * a failure reads as a bug in the record — the reason `hostedCoderDiagnostics`
+   * is one function.
+   */
+  it('a failed dispatch carries the same participation facts a successful one does', async () => {
+    const runs: HostedRunInput[] = [];
+    const failure = await coderWithFinalText({ runs, finalText: ask({ guidanceRequest: { question: 'why' } }), refuse: true })
+      .dispatch({ taskId: 'build-1', contextId: 'ctx-resume-1', taskType: 'build' })
+      .then(() => null)
+      .catch((error: unknown) => error as { diagnostics?: Record<string, unknown> });
+    const diagnostics = failure!.diagnostics ?? {};
+    expect(diagnostics.participationPresent).toBe(true);
+    expect(diagnostics.participationAskedGuidance).toBe(true);
+  });
+
+  it('carries no fragment of the worker’s own prose into any durable value', async () => {
+    const prose = 'I think the exporter probably writes NULL as the literal word NULL, sk-ant-api03-SECRET.';
+    const { diagnostics } = await succeed(ask({ guidanceRequest: { question: prose } }, prose));
+    const rendered = JSON.stringify(safeReviewDiagnostics(diagnostics));
+    for (const fragment of ['probably', 'sk-ant', 'api03', 'SECRET', 'literal word']) {
+      expect(rendered.includes(fragment), `${fragment} reached a durable row`).toBe(false);
+    }
+  });
+
+  /**
+   * ONE FLAG PER CHANNEL, held to the channel list itself: a channel added
+   * without an exported column would otherwise be invisible in every bundle.
+   */
+  it('the diagnostics carry exactly one flag per declared channel', async () => {
+    const { diagnostics } = await succeed('Done.');
+    const flags = Object.keys(diagnostics).filter((key) => key.startsWith('participationAsked'));
+    expect(flags).toHaveLength(JULIUS_PARTICIPATION_CHANNELS.length);
   });
 });
