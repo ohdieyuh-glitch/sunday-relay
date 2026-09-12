@@ -2,9 +2,9 @@
 > **This PR must be squash-merged.**
 > **Do not merge without founder authorization.**
 
-Base SHA: `9f155b919b0243e20fc3af132e9ea9176fd470ba`
-Head SHA: `4a775e89e7c68f68ebe2c1274316352505c99b9f`
-Tree: `6da3f6db2f7a2dc44392557ef56bee72a4d99bc6`
+Base SHA: `7982593526ffe9c86676991715201d84a096cfa2`
+Head SHA: `03d79b92334be277d4d6f4053e11b944f278bc26`
+Tree: `487a25f783ddddc60df994e554efdd8b48f25fb4`
 
 ## Relay Product Scope
 
@@ -69,7 +69,7 @@ documentation worker. Commits are authored **and** committed by
 
 ## Tests
 
-`npm test` — **10,337 passed, 0 failed**, 529 files passed, 3 skipped, 30 todo.
+`npm test` — **10,378 passed, 0 failed**, 530 files passed, 3 skipped, 30 todo.
 `docs/documentation-contract.test.ts` re-run after `npm run relay:build`:
 **47 passed, 0 failed**.
 
@@ -162,9 +162,9 @@ the previous string:
   provider — it has not performed a real customer-repository push, PR creation
   or merge — explicitly distinguished from this repository's own worker-App
   provenance pull requests, which are real.
-- Replayed onto `9f155b91` (#254) rather than merged from an older base, and
-  re-checked against it: the zero-spend qualification now records a sixth
-  blocker found one layer further out, so the documentation table says so.
+- Replayed onto `79825935` (#256) rather than merged from an older base, and
+  re-checked against it. The documentation table records the sixth blocker the
+  zero-spend follow-up found one layer further out, added by #254.
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
 

@@ -27,14 +27,15 @@ set -euo pipefail
 
 OWNER=ohdieyuh-glitch
 REPO=sunday-relay
-# FROZEN 2026-09-11, after replaying onto trusted main 9f155b91 (the squash of
-# #254). These are the exact objects the founder approves against; they are
+# FROZEN 2026-09-12, after replaying onto trusted main 79825935 (the squash of
+# #256). Re-pinned once already: main moved under the candidate while it sat
+# open, which is exactly what the stale-base refusal below exists to catch. These are the exact objects the founder approves against; they are
 # overridable only so the script can be re-pinned if main moves again, which is
 # the one event that invalidates this candidate.
 BRANCH="${CEREMONY_BRANCH:-claude/sunday-relay-brand-docs-imb2bk}"
-EXPECT_BASE="${CEREMONY_BASE:-9f155b919b0243e20fc3af132e9ea9176fd470ba}"
-EXPECT_HEAD="${CEREMONY_HEAD:-4a775e89e7c68f68ebe2c1274316352505c99b9f}"
-EXPECT_TREE="${CEREMONY_TREE:-6da3f6db2f7a2dc44392557ef56bee72a4d99bc6}"
+EXPECT_BASE="${CEREMONY_BASE:-7982593526ffe9c86676991715201d84a096cfa2}"
+EXPECT_HEAD="${CEREMONY_HEAD:-03d79b92334be277d4d6f4053e11b944f278bc26}"
+EXPECT_TREE="${CEREMONY_TREE:-487a25f783ddddc60df994e554efdd8b48f25fb4}"
 EXPECT_COMMITS="${CEREMONY_COMMITS:-1}"
 PR_TITLE="${CEREMONY_TITLE:-Julius: the public identity is Julius 3.3, i.Wonder and Wonderland}"
 # THE DEFECT THIS LINE ONCE WAS. It read `${CEREMONY_BODY_FILE:-}` — an empty

@@ -7,9 +7,9 @@ locating, pasting or handling a token by hand.
 | | |
 |---|---|
 | candidate branch | `claude/sunday-relay-brand-docs-imb2bk` |
-| trusted base | `9f155b919b0243e20fc3af132e9ea9176fd470ba` (squash of #254) |
-| frozen head | `4a775e89e7c68f68ebe2c1274316352505c99b9f` |
-| frozen tree | `6da3f6db2f7a2dc44392557ef56bee72a4d99bc6` |
+| trusted base | `7982593526ffe9c86676991715201d84a096cfa2` (squash of #256) |
+| frozen head | `03d79b92334be277d4d6f4053e11b944f278bc26` |
+| frozen tree | `487a25f783ddddc60df994e554efdd8b48f25fb4` |
 | commits | 1, authored **and** committed by `julius-worker[bot]` |
 | changes | `README.md`, `docs/documentation-contract.test.ts` — nothing else |
 
@@ -35,6 +35,14 @@ Three changes so it cannot recur:
 App**, which is why the correction is not simply made by hand: the founder is
 the separate approver and must not also author the record they approve. It
 moves no commit, no head and no base, and leaves the title alone.
+
+## Re-pinned 2026-09-12
+
+Main moved under the candidate while PR #255 sat open — #256 landed on
+`9f155b91` and made it `79825935`. The candidate was replayed onto the new
+trusted main (never merged from the stale base), fully re-gated, and re-frozen;
+these SHAs and the PR body's Base/Head/Tree lines were re-pinned to match. That
+drift is exactly what this script's stale-base refusal exists to catch.
 
 ## Run it
 
