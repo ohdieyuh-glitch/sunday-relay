@@ -122,6 +122,95 @@ export function sanitizeJuliusResearchAsks(value: unknown): readonly JuliusResea
 /** The allowlist, exported so a test can hold it disjoint from the forbidden list. */
 export const JULIUS_RESEARCH_ASK_FIELDS: readonly string[] = Object.freeze([...ASK_FIELDS]);
 
+/* ------------------------------------------- asking, for a worker with a schema */
+
+/**
+ * THE SAME ASK, AS A FIELD.
+ *
+ * The Coding Agent has no output schema: it is an agentic session whose only
+ * structured return is the text of its final message, so it asks through a
+ * marker block. The Prompt Architect answers one JSON object against a strict
+ * schema and the Independent Reviewer returns a review object, so for both of
+ * them an ask is a FIELD — the same typed ask, the same sanitizer, the same
+ * policy. A transport difference, not an authority one.
+ *
+ * WHY IT IS REQUIRED RATHER THAN OPTIONAL. The Responses API's strict mode
+ * rejects a schema whose `required` array does not name every property, so the
+ * field cannot be optional there — and that turns out to be the better shape
+ * anyway: an empty list is a worker SAYING it needs nothing, which is a
+ * different fact from a worker that did not mention the subject. The domain's
+ * sanitizer still refuses an empty list, so nothing downstream changes: an
+ * empty array is read as no ask at all.
+ */
+export const JULIUS_RESEARCH_ASK_JSON_SCHEMA: Record<string, unknown> = Object.freeze({
+  type: 'array',
+  maxItems: JULIUS_RESEARCH_ASK_LIMITS.asks,
+  items: Object.freeze({
+    type: 'object',
+    additionalProperties: false,
+    required: [...ASK_FIELDS],
+    properties: Object.freeze({
+      source: Object.freeze({ type: 'string', enum: [...LIVE_REACH_SOURCES] }),
+      capability: Object.freeze({ type: 'string', enum: [...LIVE_REACH_READ_CAPABILITIES] }),
+      reference: Object.freeze({ type: 'string' }),
+      purpose: Object.freeze({ type: 'string' }),
+    }),
+  }),
+});
+
+/**
+ * Add the ask to a worker's own output schema, without editing the connector
+ * that owns it.
+ *
+ * The boundary forbids a connector importing the mission domain, so the schema
+ * fragment cannot live beside the plan schema. A composition root holds both
+ * and joins them here — the sanctioned inversion, and the reason the connector
+ * file is untouched by this change.
+ *
+ * STRICT MODE NEEDS BOTH HALVES: the property AND its name in `required`. A
+ * schema that added the property alone is rejected by the API, which is a
+ * failure that would only appear on a paid call.
+ */
+export function withJuliusResearchAsks(schema: Record<string, unknown>): Record<string, unknown> {
+  const properties = schema.properties;
+  if (properties === null || typeof properties !== 'object' || Array.isArray(properties)) {
+    throw new Error('julius_research_schema_has_no_properties');
+  }
+  const required = Array.isArray(schema.required) ? schema.required : [];
+  if (required.includes(RESEARCH_ASKS_FIELD)) return schema;
+  return {
+    ...schema,
+    properties: { ...(properties as Record<string, unknown>), [RESEARCH_ASKS_FIELD]: JULIUS_RESEARCH_ASK_JSON_SCHEMA },
+    required: [...required, RESEARCH_ASKS_FIELD],
+  };
+}
+
+/** The one name the pipeline reads an ask off a result by. */
+export const RESEARCH_ASKS_FIELD = 'researchAsks' as const;
+
+/**
+ * WHAT A SCHEMA-BEARING WORKER IS TOLD ABOUT THE FIELD.
+ *
+ * Bounded by the same constants the sanitizer enforces, so the instruction and
+ * the refusal cannot describe different rules. The Coding Agent's marker-block
+ * protocol states the same bounds in its own shape; a case holds the two to the
+ * same numbers rather than to each other's wording.
+ */
+export function juliusResearchAskFieldGuidance(): string {
+  return [
+    `ASKING JULIUS TO GO AND READ SOMETHING. Your answer carries a "${RESEARCH_ASKS_FIELD}" field.`,
+    'Use it when a fact you need is outside what you were given and you would otherwise be guessing.',
+    'Julius retrieves on your behalf and the answer reaches you before the work that depends on it — so ask rather than assume, and rather than writing that someone should check later.',
+    `At most ${JULIUS_RESEARCH_ASK_LIMITS.asks} per answer, each with:`,
+    `  "source": one of ${LIVE_REACH_SOURCES.join(', ')}`,
+    `  "capability": one of ${LIVE_REACH_READ_CAPABILITIES.join(', ')}`,
+    `  "reference": what to read, up to ${JULIUS_RESEARCH_ASK_LIMITS.referenceChars} characters`,
+    `  "purpose": why you need it, up to ${JULIUS_RESEARCH_ASK_LIMITS.purposeChars} characters`,
+    'Julius decides whether this mission is authorised to read it. An unauthorised ask is refused and recorded; it is never served quietly.',
+    'An EMPTY list is the ordinary answer and means you need nothing. Never name a budget, a host, an allowlist, a role or an identifier in an ask: the whole ask is refused if you do.',
+  ].join('\n');
+}
+
 /* ------------------------------------------------------------- the answer */
 
 /**

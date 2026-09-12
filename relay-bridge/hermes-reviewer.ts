@@ -18,6 +18,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { safeText } from './redact';
+import { juliusResearchAskFieldGuidance } from '../src/relay/mission/julius/julius-research-protocol';
 import type { JuliusReviewCharge, JuliusReviewStage } from '../src/relay/mission/julius/julius-review-stage';
 import type { JuliusContractReviewCharge } from '../src/relay/mission/julius/julius-task-contract';
 import { parseUsageFile, type HermesUsage } from './reviewer-harness/hermes/runner';
@@ -45,6 +46,15 @@ export interface HermesReviewResult {
    * itself is the reviewer's; this records that the bytes were not.
    */
   parseRepaired: boolean;
+  /**
+   * WHAT THE REVIEWER ASKED JULIUS TO GO AND READ, exactly as it wrote it.
+   *
+   * Unsanitised on purpose: the domain's `sanitizeJuliusResearchAsks` decides
+   * what a usable ask is, and a harness that pre-cleaned one would be choosing
+   * what the domain may refuse. Absent when the reviewer asked for nothing,
+   * which is the ordinary case — an empty list never reaches here.
+   */
+  researchAsks?: unknown;
 }
 
 export type HermesOutcome =
@@ -1020,7 +1030,18 @@ export function buildReviewPrompt(p: ReviewPacket): string {
     '"findings":[{"findingId":string,"severity":"blocking"|"major"|"minor"|"informational",',
     '"requirement":string,"file":string,"line":number,"explanation":string,"evidence":string,',
     '"recommendedAction":string}],',
-    '"requirementsChecked":[{"requirement":string,"status":"passed"|"failed"|"uncertain","evidence":string}]}',
+    '"requirementsChecked":[{"requirement":string,"status":"passed"|"failed"|"uncertain","evidence":string}],',
+    '"researchAsks":[{"source":string,"capability":string,"reference":string,"purpose":string}]}',
+    '',
+    /**
+     * THE REVIEWER GETS THE SAME DOOR AS THE OTHER TWO SLOTS.
+     *
+     * An independent reviewer that cannot check a claim against anything
+     * outside the packet has to either accept it or refuse it on suspicion.
+     * The bounds are the domain's own, so the instruction and the sanitizer
+     * cannot state different rules.
+     */
+    juliusResearchAskFieldGuidance(),
     '',
     `MISSION: ${p.missionId}`,
     `MISSION REVISION: ${p.missionRevision ?? '(unversioned)'}`,
@@ -1271,7 +1292,15 @@ export function validateHermesReview(text: string): HermesReviewResult | null {
       })
     : [];
 
-  return { verdict, summary: safeText(o.summary), findings, requirementsChecked, parseRepaired };
+  /**
+   * EMPTY IS NOT AN ASK. The instruction says an empty list is the ordinary
+   * answer, so carrying one on would open a checkpoint for a question nobody
+   * posed and record a refusal against a reviewer that did as it was told.
+   */
+  const asks = (o as Record<string, unknown>).researchAsks;
+  const researchAsks = asks === undefined || (Array.isArray(asks) && asks.length === 0)
+    ? {} : { researchAsks: asks };
+  return { verdict, summary: safeText(o.summary), findings, requirementsChecked, parseRepaired, ...researchAsks };
 }
 
 export function hasBlockingFinding(r: HermesReviewResult): boolean {

@@ -25,7 +25,7 @@ import {
   type JuliusRuntimeStore,
 } from '../../src/relay/mission/julius';
 import type { GptRunOutcome } from '../../src/relay/connectors/gpt-architect';
-import { JULIUS_PARTICIPATION_CHANNELS, JULIUS_PARTICIPATION_MARKER, JuliusDispatchError, safeFailureClass, safeReviewDiagnostics } from '../../src/relay/mission/julius';
+import { JULIUS_PARTICIPATION_CHANNELS, JULIUS_PARTICIPATION_MARKER, JuliusDispatchError, safeFailureClass, safeReviewDiagnostics, sanitizeJuliusResearchAsks } from '../../src/relay/mission/julius';
 import { compileHostedEnvelope } from '../hosted-coding-agent/hosted-envelope';
 import type { HostedQueryFn, HostedRunInput, HostedRunOutcome } from '../hosted-coding-agent/hosted-runner';
 import { buildReviewPrompt, loadHermesConfig, reviewDiagnostics, runHermesReview, type HermesOutcome, type ReviewPacket } from '../hermes-reviewer';
@@ -3177,5 +3177,194 @@ describe('a coder’s request crosses the adapter without being cleaned or lost'
     const { diagnostics } = await succeed('Done.');
     const flags = Object.keys(diagnostics).filter((key) => key.startsWith('participationAsked'));
     expect(flags).toHaveLength(JULIUS_PARTICIPATION_CHANNELS.length);
+  });
+});
+
+/**
+ * THE OTHER TWO SLOTS GET THE SAME DOOR.
+ *
+ * `julius-worker-participation` gave the Coding Agent a way to ask, through the
+ * only structured thing an agentic session returns. The Prompt Architect and
+ * the Independent Reviewer answer with objects, so for them an ask is a FIELD —
+ * the same typed ask, the same sanitizer, the same policy. Until this, the
+ * paid qualification's own required sequence began with something impossible:
+ * "Architect serious pre-lock investigation/research".
+ */
+describe('the architect and the reviewer can ask, through their own answers', () => {
+  const ASK = {
+    source: 'web', capability: 'read_item',
+    reference: 'https://docs.example.test/spec',
+    purpose: 'Establish a fact the mission packet does not carry.',
+  };
+
+  /** The locked terms a guidance dispatch is refused without. */
+  const CONTRACT_CHARGE = Object.freeze({
+    stage: 'build' as const,
+    binding: { contractId: 'contract:run-live:build-1', taskId: 'build-1', contractRevision: 1, bindingDigest: `sha256:${'a'.repeat(64)}` },
+    objective: 'Normalize the mission label.',
+    responsibilityBoundary: 'Only the one module.',
+    inScope: ['src/slug.ts'], outOfScope: [], permittedPaths: ['src/slug.ts'],
+    prohibitedActions: [], blockingCriteria: ['AC-1'], contractReviewCriteria: ['AC-1 holds'],
+    requiredEvidence: ['TEST'] as const, requiredChecks: ['npm test'], failureConditions: [],
+    stoppingCondition: 'The suite is green.',
+  });
+
+  const architectFor = (output: unknown, seen: Array<Record<string, unknown>>, taskType = 'plan') => ({
+    adapter: createLiveArchitectAdapter({
+      worker: ARCHITECT_WORKER,
+      contexts: { snapshotFor: () => reviewSnapshot('plan-1') },
+      artifacts: (() => { const a = createLiveArtifactExchange(); a.put(planRef('run-live'), JSON.stringify(VALID_PLAN)); return a; })(),
+      config: { liveMode: true, model: 'gpt-5.6-sol', maxOutputTokens: 4_000 } as never,
+      apiKey: 'FAKETESTNOTREAL-openai',
+      run: (async (call: Record<string, unknown>) => {
+        seen.push(call);
+        return {
+          ok: true, actualModel: 'gpt-5.6-sol', responseId: 'resp_ask_1', status: 'completed',
+          outputText: JSON.stringify(output),
+          usage: { inputTokens: 100, cachedInputTokens: 0, outputTokens: 50, reasoningTokens: 0, totalTokens: 150 },
+        };
+      }) as never,
+    }),
+    taskType,
+  });
+
+  const planWith = (asks: unknown) => ({ ...VALID_PLAN, researchAsks: asks });
+
+  /**
+   * THE SCHEMA IS WHAT MAKES THE MODEL ANSWER. Strict mode needs the property
+   * AND its name in `required`; a schema carrying only the first is rejected by
+   * the API, and that rejection would arrive on a paid call.
+   */
+  it('the plan dispatch now sends a schema, and that schema requires the ask', async () => {
+    const seen: Array<Record<string, unknown>> = [];
+    const { adapter } = architectFor(planWith([]), seen);
+    await adapter.dispatch({ taskId: 'plan-1', contextId: 'ctx-resume-1', taskType: 'plan' });
+    const schema = (seen[0]!.schema as { schema: Record<string, unknown> }).schema;
+    expect(Object.keys(schema.properties as object)).toContain('researchAsks');
+    expect(schema.required).toContain('researchAsks');
+    // And it did not lose what the plan schema already demanded.
+    expect(schema.required).toContain('objectiveSummary');
+  });
+
+  it('the guidance dispatch carries it too — a post-lock question is still a question', async () => {
+    const seen: Array<Record<string, unknown>> = [];
+    const { adapter } = architectFor({
+      subObjective: 'Do the thing.', relevantRequirements: ['R'], relevantConstraints: ['C'],
+      repositoryFindings: ['F'], runtimeFindings: ['F'], references: [],
+      recommendedActions: ['A'], additionalProhibitions: [], affectedCriterionIds: [], unresolvedQuestions: [],
+      researchAsks: [ASK],
+    }, seen);
+    const result = await adapter.dispatch({
+      taskId: 'guidance:build-1:1:task', contextId: 'ctx-resume-1', taskType: 'guidance',
+      contract: CONTRACT_CHARGE,
+    });
+    const schema = (seen[0]!.schema as { schema: Record<string, unknown> }).schema;
+    expect(schema.required).toContain('researchAsks');
+    expect(result.researchAsks).toEqual([ASK]);
+  });
+
+  it('the charter tells the architect what the field is — a field nobody was told about is unused', async () => {
+    const seen: Array<Record<string, unknown>> = [];
+    const { adapter } = architectFor(planWith([]), seen);
+    await adapter.dispatch({ taskId: 'plan-1', contextId: 'ctx-resume-1', taskType: 'plan' });
+    const instructions = String(seen[0]!.instructions);
+    expect(instructions).toContain('"researchAsks"');
+    expect(instructions).toContain('before the work that depends on it');
+    // The role charter is still there; the ask is added beside it, not instead.
+    expect(instructions).toContain('You are the Prompt Architect');
+  });
+
+  it('a pre-lock ask reaches the pipeline untouched, and the domain sanitizer accepts it', async () => {
+    const seen: Array<Record<string, unknown>> = [];
+    const { adapter } = architectFor(planWith([ASK]), seen);
+    const result = await adapter.dispatch({ taskId: 'plan-1', contextId: 'ctx-resume-1', taskType: 'plan' });
+    expect(result.researchAsks).toEqual([ASK]);
+    expect(sanitizeJuliusResearchAsks(result.researchAsks)).toHaveLength(1);
+    // The plan still validated: the new field does not break the fifteen rules.
+    expect(result.status).toBe('SUCCEEDED');
+    expect(result.contractProposal).toBeDefined();
+  });
+
+  /**
+   * AN EMPTY LIST IS AN ANSWER, NOT AN ASK. The schema makes the field
+   * required, so `[]` is what a worker that needs nothing must write. Carrying
+   * it on would open a checkpoint for a question nobody posed and record a
+   * refusal against a worker that did exactly as instructed.
+   */
+  it('an empty list is not carried, so needing nothing costs no checkpoint', async () => {
+    const seen: Array<Record<string, unknown>> = [];
+    const { adapter } = architectFor(planWith([]), seen);
+    const result = await adapter.dispatch({ taskId: 'plan-1', contextId: 'ctx-resume-1', taskType: 'plan' });
+    expect('researchAsks' in result).toBe(false);
+  });
+
+  it('an ask the domain will refuse is still carried, rather than cleaned here', async () => {
+    const seen: Array<Record<string, unknown>> = [];
+    const { adapter } = architectFor(planWith([{ ...ASK, hosts: ['evil.example'] }]), seen);
+    const result = await adapter.dispatch({ taskId: 'plan-1', contextId: 'ctx-resume-1', taskType: 'plan' });
+    expect(result.researchAsks).toBeDefined();
+    expect(sanitizeJuliusResearchAsks(result.researchAsks), 'the DOMAIN refuses it, not the adapter').toBeNull();
+  });
+
+  /* ------------------------------------------------------------- reviewer */
+
+  const reviewText = (asks: unknown): string => JSON.stringify({
+    verdict: 'approved', summary: 'No blocking findings.', findings: [],
+    requirementsChecked: [{ requirement: 'AC-1', status: 'passed', evidence: 'diff reviewed' }],
+    ...(asks === undefined ? {} : { researchAsks: asks }),
+  });
+
+  const reviewerFor = (text: string, packets: ReviewPacket[]) => {
+    const log: FakeLog = { order: [] };
+    const artifacts = createLiveArtifactExchange();
+    artifacts.put(planRef('run-live'), JSON.stringify(VALID_PLAN));
+    return createLiveHermesReviewerAdapter({
+      worker: {
+        workerId: 'independent-reviewer-hermes', role: 'INDEPENDENT_REVIEWER',
+        adapterId: 'hermes-local-live', providerId: 'xai', capabilities: ['review'],
+        taskTypes: ['review:plan'], concurrencyLimit: 1, timeoutMs: 1_000, maxRetries: 1, status: 'AVAILABLE',
+      },
+      contexts: { snapshotFor: () => reviewSnapshot('plan-1:review') },
+      artifacts,
+      config: loadHermesConfig(LIVE_ENV as never),
+      testCommand: 'npm run mission-test',
+      run: textReviewer(log, packets, [text]) as never,
+    });
+  };
+
+  it('the review prompt declares the field and states the same bounds', async () => {
+    const packets: ReviewPacket[] = [];
+    await reviewerFor(reviewText([]), packets)
+      .dispatch({ taskId: 'plan-1:review', contextId: 'ctx-resume-1', taskType: 'review:plan' });
+    expect(packets).toHaveLength(1);
+    const prompt = buildReviewPrompt(packets[0]!);
+    /**
+     * THE DECLARED SHAPE, not merely the word somewhere in the prompt. The
+     * guidance paragraph also names the field, so `toContain('"researchAsks"')`
+     * passes with the shape declaration deleted — and a reviewer told what the
+     * field means but not that its answer may carry it would have nowhere to
+     * put one.
+     */
+    expect(prompt).toContain('"researchAsks":[{"source":string,"capability":string,"reference":string,"purpose":string}]}');
+    expect(prompt).toContain('Julius decides whether this mission is authorised');
+    expect(prompt).toContain('At most 3 per answer');
+  });
+
+  it('a reviewer’s ask survives the REAL parser and reaches the dispatch result', async () => {
+    const packets: ReviewPacket[] = [];
+    const result = await reviewerFor(reviewText([ASK]), packets)
+      .dispatch({ taskId: 'plan-1:review', contextId: 'ctx-resume-1', taskType: 'review:plan' });
+    expect(result.researchAsks).toEqual([ASK]);
+    expect(sanitizeJuliusResearchAsks(result.researchAsks)).toHaveLength(1);
+  });
+
+  it('a reviewer that asked for nothing carries nothing, and a review with no field is unchanged', async () => {
+    for (const text of [reviewText([]), reviewText(undefined)]) {
+      const packets: ReviewPacket[] = [];
+      const result = await reviewerFor(text, packets)
+        .dispatch({ taskId: 'plan-1:review', contextId: 'ctx-resume-1', taskType: 'review:plan' });
+      expect('researchAsks' in result).toBe(false);
+      expect(result.status).toBe('SUCCEEDED');
+    }
   });
 });
