@@ -5,9 +5,9 @@ Orphan branch. It shares no history with `main` and must never be merged.
 | | |
 |---|---|
 | branch | `relay/julius-research-authority` |
-| base | `9f155b919b0243e20fc3af132e9ea9176fd470ba` |
-| head | `bdcd6b04deec79be5088b84bca15df78b0a3cea0` |
-| tree | `ef9a88ae8c7c480b38582d818fd6bde9fc66711e` |
+| base | `7982593526ffe9c86676991715201d84a096cfa2` |
+| head | `6c3a4e7431a8c2d5d6e69bfa206e199090ce2c57` |
+| tree | `0fb53fa92ee8859c308d016d265c4bc710141087` |
 | commits | 1, authored AND committed by `julius-worker[bot]` |
 
 ## Use
@@ -71,3 +71,7 @@ would check `origin/main` against that branch's head and could never pass.
 Without it, proofs 9 and 10 die with `MODULE_NOT_FOUND` for
 `scripts/julius-main-monotonicity.mjs`, because it resolves that path from the
 working directory and a ceremony worktree has no `scripts/`.
+
+## Re-frozen 2026-09-12
+
+Rebased onto `7982593526ffe9c86676991715201d84a096cfa2` (PR #256, participant-isolation) and re-authored as `julius-worker[bot]`. The change is patch-identical to the original frozen head `bdcd6b04` (`git patch-id --stable` b58189c0 on both); only the base moved. The paragraph above about four independent candidates on `9f155b91` describes the state before #256 landed.
