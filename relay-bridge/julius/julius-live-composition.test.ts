@@ -1690,10 +1690,13 @@ describe('an incomplete review reaches Julius as the failure it actually was', (
           fetchImpl: fetchImpl as typeof fetch,
         },
       })) as never,
+      // A transient status is re-asked once after a backoff; the proof of that
+      // lives in reviewer-transient-reask.test.ts and nothing here waits it out.
+      sleep: () => Promise.resolve(),
     });
     return adapter.dispatch({ taskId: 'build-1:review', contextId: 'ctx-resume-1', taskType: 'review:plan' })
       .then(() => { throw new Error('the dispatch was expected to fail'); })
-      .catch((error: unknown) => error as { code: string; retryable: boolean; failureClass: string | null });
+      .catch((error: unknown) => error as { code: string; retryable: boolean; failureClass: string | null; diagnostics?: Record<string, unknown> });
   };
 
   it('a review the service timed out is a TIMEOUT that may be re-asked, never a process exit', async () => {
@@ -1715,6 +1718,10 @@ describe('an incomplete review reaches Julius as the failure it actually was', (
       expect(failure.failureClass, kind).toBe('review_service_unavailable');
       expect(failure.code).toBe('PROVIDER_UNAVAILABLE');
       expect(failure.retryable, 'capacity clears as runs finish; a drain ends when the deploy lands').toBe(true);
+      // A service still full after the one bounded re-ask is the same failure,
+      // and the record says two calls were bought and why.
+      expect(failure.diagnostics?.reviewAttempts, kind).toBe(2);
+      expect(failure.diagnostics?.reviewReaskShape, kind).toBe('review_service_unavailable');
     }
   });
 
@@ -1825,6 +1832,7 @@ describe('an incomplete review reaches Julius as the failure it actually was', (
         packet: input.packet, config: REMOTE_CFG, runId: 'run-live',
         deps: { now: () => '2026-09-04T00:00:00.000Z', sleep: () => Promise.resolve(), fetchImpl: fetchImpl as typeof fetch },
       })) as never,
+      sleep: () => Promise.resolve(),
     });
     return adapter.dispatch({ taskId: 'build-1:review', contextId: 'ctx-resume-1', taskType: 'review:plan' });
   };
@@ -1926,14 +1934,13 @@ describe('an incomplete review reaches Julius as the failure it actually was', (
     expect(result.status).toBe('SUCCEEDED');
   });
 
-  it('a failure that is NOT a shape defect is never re-asked', async () => {
-    // A timeout, a 503 and a refused credential describe an answer that did not
-    // arrive. Two of them are already retryable at the TASK level, where the
-    // attempt ceiling and the spend budget govern; re-asking here would spend
-    // inside a dispatch for a defect no instruction can fix.
+  it('a failure that is NOT a shape defect is never CORRECTED', async () => {
+    // A timeout and a refused credential describe an answer that did not
+    // arrive, and no instruction can fix either: the timeout is retryable at
+    // the TASK level and the credential needs a person. Re-asking inside the
+    // dispatch would spend for nothing.
     for (const [kind, body, status] of [
       ['timed out', { runId: 'run-live', status: 'timed_out', failureKind: 'timed_out' }, 200],
-      ['capacity', { failureKind: 'capacity_exhausted' }, 503],
       ['dead credential', { failureKind: 'authentication_failed' }, 401],
     ] as const) {
       let calls = 0;
@@ -1946,6 +1953,19 @@ describe('an incomplete review reaches Julius as the failure it actually was', (
         .catch((error: unknown) => error as { diagnostics?: Record<string, unknown> });
       expect(failure.diagnostics?.reviewAttempts, `${kind} is asked exactly once`).toBe(1);
     }
+    // A 503 USED TO BE ON THAT LIST, on the reasoning that it was "already
+    // retryable at the TASK level, where the attempt ceiling governs". The
+    // attempt ceiling for a review is now ONE, so the retryable shape reached a
+    // pipeline with nothing left to spend on it and a single 503 ended a paid
+    // mission. It is re-asked once here, inside the same declared deadline —
+    // proven in reviewer-transient-reask.test.ts — and a service still full
+    // after that is final, with both calls on the record.
+    const stillFull = vi.fn(async () => jsonRes({ failureKind: 'capacity_exhausted' }, 503));
+    const failure = await resultFrom(stillFull)
+      .then(() => { throw new Error('the dispatch was expected to fail'); })
+      .catch((error: unknown) => error as { diagnostics?: Record<string, unknown> });
+    expect(failure.diagnostics?.reviewAttempts, 'capacity is re-asked exactly once, never more').toBe(2);
+    expect(failure.diagnostics?.reviewReaskShape).toBe('review_service_unavailable');
   });
 });
 

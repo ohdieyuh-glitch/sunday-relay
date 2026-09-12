@@ -825,6 +825,9 @@ describe('the evidence dump names only tables and columns the migrations create'
       // by definition; a retry the artifact could not show would be a spend
       // nobody could account for.
       'planAttempts', 'reviewAttempts',
+      // And WHICH kind of second review call it was: a correction of a shape
+      // defect, or one transient re-ask inside the same deadline.
+      'reviewReaskShape',
       // THE ATTEMPT ITSELF. Live Run 3 COMPLETED and produced no rows here at
       // all, because diagnostics were flattened onto the two failure events and
       // onto nothing else. `outcome` is what lets a healthy attempt be filtered
