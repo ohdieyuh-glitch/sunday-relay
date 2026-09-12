@@ -53,6 +53,12 @@ import {
   type JuliusParticipationReading,
 } from '../../src/relay/mission/julius/julius-worker-participation';
 import { ARCHITECT_GUIDANCE_SCHEMA, ARCHITECT_GUIDANCE_SCHEMA_NAME } from '../../src/relay/connectors/gpt-architect/guidance-schema';
+import { ARCHITECT_PLAN_SCHEMA, ARCHITECT_PLAN_SCHEMA_NAME } from '../../src/relay/connectors/gpt-architect';
+import {
+  RESEARCH_ASKS_FIELD,
+  juliusResearchAskFieldGuidance,
+  withJuliusResearchAsks,
+} from '../../src/relay/mission/julius/julius-research-protocol';
 import {
   loadHostedQuery,
   runHostedCodingAgent,
@@ -248,6 +254,33 @@ const ARCHITECT_CHARTER = [
   'an empty scope is an unbounded handoff and is refused.',
   'Architecture decisions are PROPOSALS: leave accepted false. Approval is not yours to give.',
 ].join(' ');
+
+/**
+ * THE ASK, FOR THE TWO SLOTS THAT ANSWER WITH A SCHEMA.
+ *
+ * Separated from the charters so the architect's plan, the architect's guidance
+ * and the reviewer's review are all told the same thing, in the same words,
+ * from the domain's own bounds. A slot told a different rule from the one its
+ * sanitizer enforces is the drift `HostedLimits.maxTurns` was.
+ */
+const RESEARCH_FIELD_GUIDANCE = juliusResearchAskFieldGuidance();
+
+/**
+ * READ THE ASK OFF A WORKER'S OWN ANSWER, and carry it or nothing.
+ *
+ * ABSENT AND EMPTY ARE THE SAME THING HERE, deliberately: the schema makes the
+ * field required, so the ordinary answer is `[]` — a worker saying it needs
+ * nothing. Passing an empty list on would open a checkpoint for a question
+ * nobody asked, and the pipeline would record a refusal against a worker that
+ * did exactly what it was told. Anything else goes through untouched.
+ */
+function researchAsksFrom(parsed: unknown): { researchAsks?: unknown } {
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+  const asks = (parsed as Record<string, unknown>)[RESEARCH_ASKS_FIELD];
+  if (asks === undefined) return {};
+  if (Array.isArray(asks) && asks.length === 0) return {};
+  return { researchAsks: asks };
+}
 
 /**
  * WHAT THE ARCHITECT MAY SAY AFTER THE CONTRACT IS LOCKED.
@@ -823,9 +856,12 @@ export function createLiveArchitectAdapter(input: {
       if (guiding && dispatch.contract === undefined) {
         throw new JuliusDispatchError('WORKER_EXECUTION_FAILURE', false, 'Guidance was dispatched without the locked contract charge; advising against terms this process cannot read is refused.', 'guidance_contract_absent');
       }
-      const baseCharter = guiding
+      const roleCharter = guiding
         ? ARCHITECT_GUIDANCE_CHARTER
         : revising ? `${ARCHITECT_CHARTER} ${ARCHITECT_REVISION_CHARTER}` : ARCHITECT_CHARTER;
+      // A FIELD NOBODY WAS TOLD ABOUT IS A FIELD NOBODY USES. The schema makes
+      // the architect answer it; this is what it means.
+      const baseCharter = `${roleCharter}\n\n${RESEARCH_FIELD_GUIDANCE}`;
       let attempts = 0;
       let correction: string | null = null;
       for (;;) {
@@ -840,7 +876,15 @@ export function createLiveArchitectAdapter(input: {
         instructions: correction === null ? baseCharter : `${baseCharter} ${correction}`,
         // THE ANSWER'S SHAPE FOLLOWS THE JOB. Absent means the plan schema, so
         // the plan path is byte-identical to what it was.
-        ...(guiding ? { schema: { name: ARCHITECT_GUIDANCE_SCHEMA_NAME, schema: ARCHITECT_GUIDANCE_SCHEMA } } : {}),
+        /**
+         * BOTH BRANCHES NOW SUPPLY A SCHEMA, because both carry the ask.
+         * `withJuliusResearchAsks` adds the property AND its name to
+         * `required` — strict mode rejects a schema that adds only the first,
+         * and that rejection would arrive on a paid call.
+         */
+        schema: guiding
+          ? { name: ARCHITECT_GUIDANCE_SCHEMA_NAME, schema: withJuliusResearchAsks(ARCHITECT_GUIDANCE_SCHEMA) }
+          : { name: ARCHITECT_PLAN_SCHEMA_NAME, schema: withJuliusResearchAsks(ARCHITECT_PLAN_SCHEMA) },
         input: guiding
           ? guidanceInput(snapshot, dispatch, priorPlan)
           : revising
@@ -954,6 +998,13 @@ export function createLiveArchitectAdapter(input: {
            * to refuse.
            */
           guidance: parsed,
+          /**
+           * WHAT IT ASKED FOR, UNTOUCHED. Julius sanitises with
+           * `sanitizeJuliusResearchAsks`; an adapter that pre-cleaned the ask
+           * would be deciding what the domain may refuse, and a refusal nobody
+           * recorded is a worker that believes it asked.
+           */
+          ...researchAsksFrom(parsed),
           safeSummary: `Prompt Architect guidance produced by observed model ${safeClaim(outcome.actualModel ?? 'unknown', 80)} (response ${safeClaim(outcome.responseId ?? 'unknown', 80)}).`,
           evidence: [{
             type: 'ARTIFACT',
@@ -1023,6 +1074,10 @@ export function createLiveArchitectAdapter(input: {
          * a DRAFT that the plan review then challenges or accepts.
          */
         contractProposal: contractProposalFromPlan(parsed),
+        // The PRE-LOCK ask. Everything the architect could not settle from the
+        // mission packet, raised before the plan becomes the agreement rather
+        // than as a question nobody answers.
+        ...researchAsksFrom(parsed),
         safeSummary: `Prompt Architect plan produced by observed model ${safeClaim(outcome.actualModel ?? 'unknown', 80)} (response ${safeClaim(outcome.responseId ?? 'unknown', 80)}).`,
         evidence: [{
           type: 'ARTIFACT',
@@ -1625,6 +1680,14 @@ export function createLiveHermesReviewerAdapter(input: {
         workerId: input.worker.workerId,
         providerId: input.worker.providerId,
         status: 'SUCCEEDED',
+        /**
+         * WHAT THE REVIEWER COULD NOT CHECK FROM THE PACKET ALONE.
+         *
+         * A reviewer with no way to look anything up has to accept a claim or
+         * refuse it on suspicion; this is the third door, and it is the same
+         * door the other two slots have.
+         */
+        ...(outcome.result.researchAsks === undefined ? {} : { researchAsks: outcome.result.researchAsks }),
         safeSummary: `Independent Hermes review completed: verdict ${outcome.result.verdict}, ${outcome.result.findings.length} findings (${blocking.length} blocking), served model ${safeClaim(outcome.servedModel ?? 'unknown', 80)}.`,
         evidence,
         /**

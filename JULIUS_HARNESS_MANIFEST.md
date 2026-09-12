@@ -26,7 +26,7 @@ Edges counted by the trace between included files; "type" = type-only imports, e
 | from | to | edges | type |
 | --- | --- | --- | --- |
 | bridge provider stacks (hosted Claude, Hermes, redaction) | connectors (gpt-architect, prompt-architect contracts) | 1 | 0 |
-| bridge provider stacks (hosted Claude, Hermes, redaction) | kernel (src/relay/mission/julius/) | 2 | 2 |
+| bridge provider stacks (hosted Claude, Hermes, redaction) | kernel (src/relay/mission/julius/) | 3 | 2 |
 | bridge provider stacks (hosted Claude, Hermes, redaction) | other | 4 | 0 |
 | C.A.R.D. record (src/relay/integration/compound-agent/, entitlement) | kernel (src/relay/mission/julius/) | 1 | 0 |
 | C.A.R.D. record (src/relay/integration/compound-agent/, entitlement) | Relay vocabulary (mission/contracts.ts, protocol/enums.ts) | 1 | 1 |
@@ -39,9 +39,9 @@ Edges counted by the trace between included files; "type" = type-only imports, e
 | executor + tool substrate (src/relay/workspace/julius-tools/) | persistence (src/relay/persistence/) | 1 | 0 |
 | kernel (src/relay/mission/julius/) | other | 5 | 0 |
 | live composition (relay-bridge/julius/) | bridge provider stacks (hosted Claude, Hermes, redaction) | 14 | 4 |
-| live composition (relay-bridge/julius/) | connectors (gpt-architect, prompt-architect contracts) | 6 | 1 |
+| live composition (relay-bridge/julius/) | connectors (gpt-architect, prompt-architect contracts) | 7 | 1 |
 | live composition (relay-bridge/julius/) | executor + tool substrate (src/relay/workspace/julius-tools/) | 2 | 0 |
-| live composition (relay-bridge/julius/) | kernel (src/relay/mission/julius/) | 12 | 4 |
+| live composition (relay-bridge/julius/) | kernel (src/relay/mission/julius/) | 13 | 4 |
 | live composition (relay-bridge/julius/) | other | 5 | 3 |
 | live composition (relay-bridge/julius/) | persistence (src/relay/persistence/) | 10 | 2 |
 | live composition (relay-bridge/julius/) | Relay↔Julius port (src/relay/integration/julius/) | 1 | 0 |
