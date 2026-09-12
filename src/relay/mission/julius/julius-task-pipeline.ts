@@ -1586,22 +1586,38 @@ async function driveResearchCheckpoint(input: {
   if (segmentNumber > segmentCeiling) return refuse('SEGMENT_CEILING_REACHED');
 
   /**
-   * THE CONTINUATION'S ID, DETERMINISTIC AND COMPUTED ONCE.
+   * THE ATTEMPT, WRITTEN BEFORE THE SPEND.
    *
-   * A GUARD THAT WAS WRITTEN HERE AND REMOVED. It compared this id against the
-   * durable task rows to skip a retrieval that had already been served — and it
-   * could never fire, because `nextSegmentNumber` is the highest existing
-   * segment plus one, so the id is new by construction every time. Shipping it
-   * would have meant a comment claiming a protection the code did not provide.
+   * WHAT USED TO HAPPEN HERE. `serve()` is awaited and the `research.retrieved`
+   * rows are appended after it returns; the mediator's own settlement is an
+   * in-process Map that writes nothing durable. So a process that died between
+   * the two had RETRIEVED AND BEEN CHARGED with nothing at all on the record —
+   * and, because the checkpoint is driven once per accepted result and never
+   * re-entered, nothing ever asked again either. The retrieval was paid for,
+   * its answer was lost, the mission carried on without it, and the durable
+   * ledger — rebuilt from rows, and the only budget that survives a restart —
+   * counted one retrieval fewer than were bought. A budget that over-counts is
+   * pessimistic; one that UNDER-counts can be exceeded.
    *
-   * What the crash window between `serve()` and `addTask` actually costs is
-   * stated instead: a process that dies there has retrieved and been charged,
-   * and the restarted process asks again. Both retrievals happened and both are
-   * on the record as `research.retrieved` rows, so the budget counts two — which
-   * is the truth. Making it cost one would require the retrieval itself to be
-   * keyed and deduplicated at the transport, which Live Reach has no identity
-   * for today.
+   * THIS ROW IS THE SCAR. It is written before a socket can exist, so an
+   * attempt with no retrieval beside it is exactly the loss above, visible in
+   * the bundle rather than inferred from a gap nobody can see. It carries the
+   * checkpoint's own id, which is what pairs it with the charges it produced.
+   *
+   * WHAT IT IS NOT. It does not make the retrieval recoverable and it does not
+   * re-ask: this path CANNOT re-enter — the dispatch that asked has ended, and
+   * `driveContinuousLifecycle` runs only on a result that was not a duplicate.
+   * An earlier guard here compared the CONTINUATION's id against the task rows
+   * and was removed because it could never fire; a re-entry guard would be the
+   * same mistake in a new place, because there is no re-entry to guard. What is
+   * repaired is the silence, which was the part that could not be noticed.
    */
+  const attemptKey = checkpoint.checkpointId;
+  await ledger.event('research.attempted', {
+    taskId: subjectTaskId, workerId: input.workerId,
+    facts: { role: task.role, attemptKey, segment: segmentNumber, askCount: asks.length },
+  });
+
   const observations = await deps.research.serve({
     missionId: task.missionId,
     projectId: run.projectId,
@@ -1630,9 +1646,16 @@ async function driveResearchCheckpoint(input: {
       taskId: subjectTaskId, workerId: input.workerId,
       facts: {
         role: task.role,
-        // DETERMINISTIC, so a replayed row is recognisably the same retrieval
-        // rather than a second one.
+        /* PER OBSERVATION, and derived rather than arbitrary so two rows for
+           the same retrieval are recognisable as such by a reader. It does NOT
+           deduplicate: the only consumer folds every row, which is right —
+           where two rows carry one key, two retrievals genuinely happened. */
         requestKey: `${juliusSegmentTaskId(segmentRoot.taskId, segmentNumber)}:${index}`,
+        /* THE ATTEMPT THIS ANSWERS. One key per serve, shared by every
+           observation it produced, so a reader pairs a charge with the attempt
+           that authorised it. An attempt with no row carrying its key is a
+           retrieval that was bought and never accounted for. */
+        attemptKey,
         outcome: observation.outcome,
         counted: observation.outcome === 'observed',
         evidenceId: observation.evidenceId,
