@@ -92,7 +92,7 @@
   "testCommand": "node --import ./.julius/loader.mjs --test src/relay/mission/julius/julius-bundle-cell.test.ts",
   "workspacePath": "/tmp/julius-workspace/tenant/ws",
   "limits": {
-    "spendUsd": 25,
+    "spendUsd": 60,
     "repairCycles": 3,
     "architectMaxOutputTokens": 20000
   },

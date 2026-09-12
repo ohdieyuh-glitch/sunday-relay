@@ -53,7 +53,7 @@ describe('the qualification asks for ceilings a deployment granted it, and nobod
   it('parses through the live entrypoint and states its own ceilings', () => {
     const parsed = parseLiveMissionContract(contractSource);
     expect(parsed.ok, parsed.ok ? '' : parsed.problem).toBe(true);
-    expect(contract.limits).toEqual({ spendUsd: 25, repairCycles: 3, architectMaxOutputTokens: 20_000 });
+    expect(contract.limits).toEqual({ spendUsd: 60, repairCycles: 3, architectMaxOutputTokens: 20_000 });
   });
 
   const runCheck = (document: unknown): { code: number; output: string } => {

@@ -117,7 +117,25 @@ const MISSION_LIMITS = Object.freeze({
   // observed yet, and the evidence bundle will say what it actually cost.
   // Three cycles for the same reason as every mission before it: a repair
   // LINEAGE needs more than one.
-  'julius-continuous-1': Object.freeze({ spendUsd: 25, repairCycles: 3 }),
+  //
+  // $60 IS THIS QUALIFICATION'S NUMBER, NOT JULIUS'S CAP. Set 2026-09-12 on the
+  // founder's written authorization: the three provider accounts held roughly
+  // $20 each, and the founder does not want an internal dollar ceiling whose
+  // purpose is protecting that prepaid credit. A run cannot be charged $60
+  // before a provider refuses, so the provider's balance is the limit that binds.
+  //
+  // `spendUsd` exists here for SCHEMA AND ALLOCATION COMPATIBILITY: the contract
+  // must state a finite figure, and allocation v3 divides it into each slot's
+  // protected floor, the shared pool and the repair reserve. It is not founder
+  // cost protection. BEFORE ANY FUTURE PAID RUN, refresh it to the provider
+  // budget that is actually funded and available at that time; a stale figure
+  // here would starve the allocator or misstate what the mission may draw.
+  //
+  // Nothing that is not money is loosened by it: three repair rounds, one
+  // attempt per review stage and every worker deadline are unchanged, and no
+  // model, participation, research, verification or repair budget is reduced
+  // to preserve unused credit.
+  'julius-continuous-1': Object.freeze({ spendUsd: 60, repairCycles: 3 }),
 });
 
 /** The ceilings that apply to THIS contract, by its own declared namespace. */
