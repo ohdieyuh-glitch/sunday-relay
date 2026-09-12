@@ -3368,3 +3368,78 @@ describe('the architect and the reviewer can ask, through their own answers', ()
     }
   });
 });
+
+/**
+ * A PROVIDER HICCUP MUST NOT END A PAID MISSION.
+ *
+ * `review_service_unavailable` is the retryable shape and the mapping below has
+ * always existed — but until now only `hermes-remote-review.ts` could produce
+ * it, and the live composition runs the LOCAL path. So the reasoning attached
+ * to the retry ("capacity clears as runs finish") governed a shape this adapter
+ * could never see, and a 503 ended the review task for good.
+ */
+describe('the live reviewer adapter treats a transient upstream status as retryable', () => {
+  const reviewerEmitting = (text: string, packets: ReviewPacket[]) => {
+    const log: FakeLog = { order: [] };
+    const artifacts = createLiveArtifactExchange();
+    artifacts.put(planRef('run-live'), JSON.stringify(VALID_PLAN));
+    return createLiveHermesReviewerAdapter({
+      worker: {
+        workerId: 'independent-reviewer-hermes', role: 'INDEPENDENT_REVIEWER',
+        adapterId: 'hermes-local-live', providerId: 'xai', capabilities: ['review'],
+        taskTypes: ['review:plan'], concurrencyLimit: 1, timeoutMs: 1_000, maxRetries: 1, status: 'AVAILABLE',
+      },
+      contexts: { snapshotFor: () => reviewSnapshot('plan-1:review') },
+      artifacts,
+      config: loadHermesConfig(LIVE_ENV as never),
+      testCommand: 'npm run mission-test',
+      run: textReviewer(log, packets, [text]) as never,
+    });
+  };
+
+  const failureFor = async (text: string) => {
+    const packets: ReviewPacket[] = [];
+    return reviewerEmitting(text, packets)
+      .dispatch({ taskId: 'plan-1:review', contextId: 'ctx-resume-1', taskType: 'review:plan' })
+      .then(() => null)
+      .catch((error: unknown) => error as { code: string; retryable: boolean; failureClass?: string });
+  };
+
+  it('a 503 fails RETRYABLY, so the mission can ask again instead of dying', async () => {
+    const failure = await failureFor('HTTP 503: service unavailable\n');
+    expect(failure).not.toBeNull();
+    expect(failure!.failureClass).toBe('review_service_unavailable');
+    expect(failure!.code).toBe('PROVIDER_UNAVAILABLE');
+    expect(failure!.retryable, 'capacity clears by itself; this is not a verdict').toBe(true);
+  }, 30_000);
+
+  it('a 429 does too', async () => {
+    const failure = await failureFor('HTTP 429: slow down\n');
+    expect(failure!.failureClass).toBe('review_service_unavailable');
+    expect(failure!.retryable).toBe(true);
+  }, 30_000);
+
+  /**
+   * AND THE FINAL FAILURES STAY FINAL. Making every upstream error retryable
+   * would re-buy reviews against a provider that is genuinely broken — the
+   * opposite defect, and more expensive.
+   */
+  it('a 500 stays final, and a refused credential still needs a human', async () => {
+    const broken = await failureFor('HTTP 500: internal error\n');
+    expect(broken!.failureClass).toBe('review_provider_http_error');
+    expect(broken!.retryable).toBe(false);
+
+    const unauthorised = await failureFor('HTTP 401: unauthorized\n');
+    expect(unauthorised!.code).toBe('AUTH_CONFIGURATION');
+    expect(unauthorised!.retryable).toBe(false);
+  }, 30_000);
+
+  /**
+   * THE STATUS REACHES THE DURABLE ROW EITHER WAY. A retryable classification
+   * that lost the number would trade one opacity for another.
+   */
+  it('carries the provider status into the diagnostics the allowlist admits', async () => {
+    const failure = await failureFor('HTTP 503: service unavailable\n') as unknown as { diagnostics?: Record<string, unknown> };
+    expect(safeReviewDiagnostics(failure.diagnostics)?.providerHttpStatus).toBe(503);
+  }, 30_000);
+});
