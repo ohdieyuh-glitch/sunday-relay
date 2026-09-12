@@ -102,7 +102,6 @@ const DECLARED_NOT_COMPOSED = [
   { path: 'src/relay/persistence/julius-lifecycle-postgres.ts', reason: 'durable approvals and lifecycle facts (JuliusLifecycleStore / JuliusApprovalStore) for julius-lifecycle-runtime; the live root does not yet compose an operator lifecycle channel' },
   { path: 'src/relay/persistence/julius-subagent-postgres.ts', reason: 'durable sub-agent grants (JuliusSubagentStore) for julius-subagent-runtime; the live C.A.R.D. policy sets subagents.allowed=false' },
   { path: 'src/relay/persistence/julius-repair-postgres.ts', reason: 'durable repair-cycle scheduling against julius_tasks and julius_repair_cycles; the live root reaches repair through the store aggregate, not this repository' },
-  { path: 'src/relay/persistence/julius-timeline-postgres.ts', reason: 'the safe timeline read from the event ledger (JuliusTimelineReader); a read model no live surface consumes yet' },
   { path: 'src/relay/workspace/julius-tools/registry.ts', reason: 'the default tool catalogue (DEFAULT_JULIUS_TOOL_IDS, createDefaultJuliusToolRegistry); the live root routes tool effects through the executor shell port and does not build a registry' },
   { path: 'src/relay/workspace/julius-tools/local-artifact-store.ts', reason: 'the durable staged→finalized artifact store (StagedArtifactStorePort); the live root uses an in-process artifact exchange, recorded as debt in docs/JULIUS_BETA_READINESS.md' },
 ];
