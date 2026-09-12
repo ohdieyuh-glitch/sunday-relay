@@ -269,6 +269,15 @@ export const safeReviewDiagnostics=(value:unknown):JuliusSafeDiagnostics|null=>{
    * makes no such attempt.
    */
   reviewAttempts:safeCount(v.reviewAttempts),
+  /**
+   * WHY THE SECOND REVIEW CALL WAS BOUGHT, as the closed shape token of the
+   * answer that caused it: a correctable shape defect, or the transient
+   * `review_service_unavailable` re-asked once inside the same deadline. A
+   * count of two calls that could not say which kind of second call it was
+   * would leave a paid re-ask indistinguishable from a paid correction. Null
+   * when the dispatch asked once, and for every other role.
+   */
+  reviewReaskShape:safeToken(v.reviewReaskShape),
   /* --- Coding Agent (build stage). Null for the other two roles. --- */
   /** The runtime's own result subtype, e.g. `success` / `error_max_turns`. */
   resultSubtype:safeToken(v.resultSubtype),

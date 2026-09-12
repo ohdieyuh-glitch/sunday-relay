@@ -75,6 +75,7 @@ import {
   type ReviewPacket,
 } from '../hermes-reviewer';
 import { UNKNOWN_USAGE, type HermesUsage } from '../reviewer-harness/hermes/runner';
+import { REVIEW_TRANSIENT_REASK_BACKOFF_MS, REVIEW_TRANSIENT_REASK_LIMIT, reviewerReaskWithinDeadline } from '../reviewer-deadline';
 import type { ShellEffectPort } from './executor-effects';
 
 /* ------------------------------------------------------------- handoffs */
@@ -355,6 +356,17 @@ const ARCHITECT_REVISION_CHARTER = [
  * behaves as it always has: Julius did not bound this dispatch, and inventing a
  * bound here would be this file deciding a budget it cannot see.
  */
+/** Whether a dispatch's own signal has fired, read through a call so flow analysis cannot cache an answer from before an await. */
+const signalAborted = (signal: AbortSignal | undefined): boolean => signal?.aborted === true;
+
+/** A wait that ends early on the dispatch's own cancellation, so a cut never waits out a backoff. */
+const abortableSleep = (ms: number, signal?: AbortSignal): Promise<void> => new Promise((resolve) => {
+  if (signal?.aborted === true) { resolve(); return; }
+  const onAbort = (): void => { clearTimeout(timer); resolve(); };
+  const timer = setTimeout(() => { signal?.removeEventListener('abort', onAbort); resolve(); }, ms);
+  signal?.addEventListener('abort', onAbort, { once: true });
+});
+
 const correctionAffordable = (allocation: JuliusDispatchAllocation | undefined): boolean =>
   allocation === undefined || allocation.usdMicros > 0;
 
@@ -438,6 +450,13 @@ const reviewerDiagnostics = (input: {
   readonly diagnostics: HermesReviewDiagnostics | undefined;
   readonly stage: string;
   readonly reviewAttempts: number;
+  /**
+   * WHY A SECOND CALL WAS BOUGHT, as the closed shape token of the answer that
+   * caused it — a correctable shape defect, or `review_service_unavailable`.
+   * `reviewAttempts` says how many calls; this says what the first one was.
+   * Null when the dispatch asked once.
+   */
+  readonly reviewReaskShape: string | null;
   readonly startedAt?: string;
   readonly completedAt?: string;
   readonly usage?: HermesUsage;
@@ -450,6 +469,7 @@ const reviewerDiagnostics = (input: {
     ...observed,
     stage: input.stage,
     reviewAttempts: input.reviewAttempts,
+    reviewReaskShape: input.reviewReaskShape,
     ...(input.startedAt === undefined ? {} : { startedAt: input.startedAt }),
     ...(input.completedAt === undefined ? {} : { completedAt: input.completedAt }),
     elapsedMs: observed?.elapsedMs
@@ -1466,11 +1486,25 @@ export function createLiveHermesReviewerAdapter(input: {
   readonly config: HermesConfig;
   readonly testCommand: string;
   readonly run?: typeof runHermesReview;
+  /** The backoff before a transient re-ask. Injectable so a proof does not wait it out. */
+  readonly sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
+  /**
+   * How many transient re-asks one dispatch may buy. `REVIEW_TRANSIENT_REASK_LIMIT`
+   * unless a proof says otherwise; production never passes it. It is an input
+   * so the deadline arithmetic ACROSS re-asks can be observed at all — under
+   * the policy's own limit of one, nothing reads the consumed time after the
+   * one backoff, and an accounting error there would be invisible until the
+   * day the limit changed.
+   */
+  readonly transientReaskLimit?: number;
 }): JuliusProviderAdapter {
   if (!input.config.executable || !input.config.model || !input.config.provider) {
     throw new Error('hermes_reviewer_adapter_requires_live_config');
   }
   const run = input.run ?? runHermesReview;
+  const sleep = input.sleep ?? abortableSleep;
+  const transientReaskLimit = input.transientReaskLimit ?? REVIEW_TRANSIENT_REASK_LIMIT;
+  if (!Number.isSafeInteger(transientReaskLimit) || transientReaskLimit < 0) throw new Error('hermes_reviewer_adapter_reask_limit_invalid');
   return {
     adapterId: input.worker.adapterId,
     async dispatch(dispatch): Promise<JuliusProviderResult> {
@@ -1625,13 +1659,62 @@ export function createLiveHermesReviewerAdapter(input: {
        */
       let reviewAttempts = 0;
       let reviewCorrection: string | undefined;
+      let reviewReaskShape: string | null = null;
+      /**
+       * ONE BOUNDED RE-ASK FOR A TRANSIENT STATUS, INSIDE THE SAME DEADLINE.
+       *
+       * `review_service_unavailable` is `retryable: true` and a review stage
+       * gets ONE pipeline attempt, so on the live path the retryable shape
+       * reached a pipeline with nothing left to spend on it and a single 429
+       * ended the mission. The pipeline's rule stands — a second task attempt
+       * is a blind retry — and this is not one: the answer never arrived, the
+       * adapter asks once more after a short backoff, and only when the
+       * declared deadline still holds a whole review after what the first ask
+       * consumed. The second run is given the REMAINING window, so the adapter
+       * still stops before the deadline Julius enforces around the dispatch.
+       *
+       * The time consumed is read from the runner's own two instants on each
+       * incomplete outcome, and a duration that cannot be established refuses
+       * the re-ask rather than counting as nothing.
+       */
+      let transientReasks = 0;
+      let consumedMs: number | null = 0;
+      let runConfig: HermesConfig = input.config;
       let outcome: HermesOutcome;
       for (;;) {
       reviewAttempts += 1;
-      outcome = await run({ packet: { ...packet, ...(reviewCorrection === undefined ? {} : { correction: reviewCorrection }) }, config: input.config });
-      if (outcome.kind === 'review_incomplete' && reviewAttempts < REVIEW_ATTEMPT_LIMIT && correctionAffordable(dispatch.allocation)) {
-        const remedy = reviewCorrectionFor(outcome.shape);
-        if (remedy !== null) { reviewCorrection = remedy; continue; }
+      outcome = await run({ packet: { ...packet, ...(reviewCorrection === undefined ? {} : { correction: reviewCorrection }) }, config: runConfig });
+      if (outcome.kind === 'review_incomplete') {
+        const started = Date.parse(outcome.startedAt);
+        const completed = Date.parse(outcome.completedAt);
+        consumedMs = consumedMs !== null && Number.isFinite(started) && Number.isFinite(completed) && completed >= started
+          ? consumedMs + (completed - started)
+          : null;
+      }
+      if (outcome.kind === 'review_incomplete' && correctionAffordable(dispatch.allocation)) {
+        if (reviewAttempts < REVIEW_ATTEMPT_LIMIT) {
+          const remedy = reviewCorrectionFor(outcome.shape);
+          if (remedy !== null) { reviewCorrection = remedy; reviewReaskShape = outcome.shape; continue; }
+        }
+        if (outcome.shape === 'review_service_unavailable' && transientReasks < transientReaskLimit && dispatch.signal?.aborted !== true) {
+          const decision = reviewerReaskWithinDeadline({ deadlineMs: input.config.timeoutMs, consumedMs, backoffMs: REVIEW_TRANSIENT_REASK_BACKOFF_MS });
+          if (decision.allowed) {
+            transientReasks += 1;
+            reviewReaskShape = outcome.shape;
+            await sleep(REVIEW_TRANSIENT_REASK_BACKOFF_MS, dispatch.signal);
+            // A cancellation that landed during the backoff wins: the transient
+            // failure surfaces as it is, and nothing further is bought. Read
+            // through a call, because flow analysis still believes the signal
+            // it checked before the await.
+            if (signalAborted(dispatch.signal)) break;
+            // What the dispatch has consumed so far: what the decision was made
+            // against plus the backoff just waited out — read back off the
+            // decision rather than restated beside it.
+            consumedMs = input.config.timeoutMs - decision.remainingMs;
+            runConfig = { ...input.config, timeoutMs: decision.remainingMs };
+            continue;
+          }
+        }
       }
       break;
       }
@@ -1702,7 +1785,7 @@ export function createLiveHermesReviewerAdapter(input: {
         throw new JuliusDispatchError(
           code, retryable, `Hermes review incomplete: ${safeClaim(outcome.safeMessage, 120)}.`, outcome.shape,
           reviewerDiagnostics({
-            diagnostics: outcome.diagnostics, stage, reviewAttempts,
+            diagnostics: outcome.diagnostics, stage, reviewAttempts, reviewReaskShape,
             startedAt: outcome.startedAt, completedAt: outcome.completedAt,
           }),
         );
@@ -1770,7 +1853,7 @@ export function createLiveHermesReviewerAdapter(input: {
          * nowhere at all.
          */
         diagnostics: reviewerDiagnostics({
-          diagnostics: outcome.diagnostics, stage, reviewAttempts,
+          diagnostics: outcome.diagnostics, stage, reviewAttempts, reviewReaskShape,
           startedAt: outcome.startedAt, completedAt: outcome.completedAt,
           usage: reviewUsage,
         }),
