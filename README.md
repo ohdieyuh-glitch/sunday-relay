@@ -116,3 +116,44 @@ the rehearsal says where the work is, not that it can be skipped.
 `generated/JULIUS_HARNESS_SOURCE.txt` is gitignored and per-checkout. A fresh
 worktree reports it stale until `npm run julius:harness:export` runs there;
 that is not a conflict and not a manifest problem.
+
+## Which ceremonies are actually runnable right now
+
+Every opener re-verifies `origin/main == BASE` before it touches GitHub, so a
+ceremony pinned to a base that has since moved REFUSES rather than opening a PR
+for a stale tree. That is the safety property working. Audited against the
+remote at 2026-09-12 07:40Z, with `BASE`, `HEAD` and `TREE` read out of each
+opener and compared to the pushed branch:
+
+**Ready — base is trusted main `9f155b91`, head and tree match:**
+
+    ceremony/architect-envelope-pr        ceremony/participant-isolation-pr
+    ceremony/coder-participation-pr       ceremony/research-attempt-pr
+    ceremony/coder-stream-usage-pr        ceremony/research-authority-pr
+    ceremony/ending-diagnostics-pr        ceremony/reviewer-envelope-pr
+    ceremony/guidance-delivery-pr         ceremony/live-timeline-pr
+
+Ten of the twelve candidates. The other two are **held** and have no published
+ceremony on purpose, because each is frozen on another candidate's head rather
+than on main and its opener's base check could never pass:
+
+    relay/julius-worker-deadline          stacked on reviewer-envelope
+    relay/julius-continuous-1-fixture     stacked on research-authority
+
+Each needs a rebase onto the post-landing `main` and a re-freeze
+worker-authored before its ceremony can be written.
+
+**Spent — pinned to an older base; do not run these.** Their openers will
+refuse, and the refusal is correct:
+
+    ceremony/evidence-completeness-pr   base 482e6a05   PR #254, merged 16:32Z
+    ceremony/peer-hardening-pr          base ca77604a   PR #253, merged 10:12Z
+    ceremony/continuous-arming-pr       base 9eab0117
+    ceremony/coder-diagnostics-pr       base 5909ae00
+    ceremony/coder-envelope-pr          base 6b2d62e7
+    ceremony/mission5-pr                base 6b2d62e7
+    ceremony/probefix-pr                base 6b2d62e7
+
+After the FIRST of the ten lands, `main` moves and the remaining nine are all
+pinned to a stale base — every one of them then needs the rebase and re-freeze
+described above, in the order this file gives.
