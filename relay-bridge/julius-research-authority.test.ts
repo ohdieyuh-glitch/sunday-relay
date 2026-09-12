@@ -449,28 +449,75 @@ describe('E — a contract may ask for research; it may not grant itself researc
     expect(result.output).toContain('a contract cannot grant itself research authority');
   });
 
-  it('25. the grant table is EMPTY, so shipping this authorises nothing', () => {
-    // The state of the product, asserted rather than described: no mission has
-    // been granted research, and authorising one is a deliberate, reviewable
-    // edit naming the mission, its sources, its capabilities, its hosts and
-    // its retrieval budget. If this case ever fails, someone granted research
-    // — which is allowed, and is exactly the moment a human should look.
+  /**
+   * 25. THE TRIPWIRE, ARMED RATHER THAN REMOVED.
+   *
+   * This case used to assert the grant table was EMPTY, and said in its comment
+   * that a failure would mean someone granted research — which is allowed, and
+   * is exactly the moment a human should look. Someone did: the first
+   * continuous qualification. So the case now names WHO, and fires again on the
+   * second grant for the same reason it fired on the first.
+   */
+  const GRANTED: readonly string[] = ['julius-continuous-1'];
+
+  it('25. exactly the missions named here are granted research, and no others', () => {
     const source = readFileSync(join(process.cwd(), CHECK), 'utf8');
     const table = source.slice(source.indexOf('const MISSION_RESEARCH = Object.freeze({'));
-    const body = table.slice(table.indexOf('{'), table.indexOf('});') + 1);
-    expect(body).not.toContain(':');
+    const body = table.slice(table.indexOf('{'), table.indexOf('\n});') + 1);
+    const keys = [...body.matchAll(/^ {2}'([a-z0-9-]+)':/gmu)].map((match) => match[1]);
+    expect(keys, 'granting a mission research is a deliberate, reviewable edit — name it here').toEqual([...GRANTED]);
   });
 
-  it('26. no mission contract in the repository asks for research today', () => {
+  /**
+   * 26. A GRANT AND A CLAUSE ARE TWO HALVES AND BOTH MUST EXIST.
+   *
+   * A contract declaring research with no grant is refused by the checker
+   * (case 24). The other direction has no gate: a grant naming a mission whose
+   * contract asks for nothing is standing authority nobody reads, which is
+   * worse than none because it survives review by being invisible.
+   */
+  it('26. every granted mission asks for research, and every mission that asks is granted', () => {
     const root = join(process.cwd(), '.github/julius-missions');
     const namespaces = readdirSync(root, { withFileTypes: true }).filter((entry) => entry.isDirectory());
     expect(namespaces.length).toBeGreaterThan(0);
+    const asking: string[] = [];
     for (const namespace of namespaces) {
       const path = join(root, namespace.name, 'contract.json');
       let raw: string;
       try { raw = readFileSync(path, 'utf8'); } catch { continue; }
       const contract = JSON.parse(raw) as Record<string, unknown>;
-      expect(contract.research, `${namespace.name} declares research`).toBeUndefined();
+      if (contract.research !== undefined) asking.push(namespace.name);
+    }
+    expect(asking.sort(), 'a clause with no grant, or a grant with no clause').toEqual([...GRANTED].sort());
+  });
+
+  /**
+   * 27. A GRANT MAY NOT NAME A SLOT THAT CANNOT ASK.
+   *
+   * The property has not changed; the set of slots that can ask has. This case
+   * read `['CODING_AGENT']` for as long as the Coding Agent was the only slot
+   * with a channel to Julius — the architect and the reviewer answered with
+   * fixed schemas and had nowhere to put a request. Both now carry
+   * `researchAsks` as a REQUIRED schema field and ask on every turn, so a
+   * grant naming them describes authority a run can really spend, and a grant
+   * WITHHOLDING it refuses an ask the schema compels the worker to make.
+   *
+   * NAMED, NOT DERIVED — for the same reason `GRANTED` above is. Deriving this
+   * from the role enum would make it pass automatically for a fourth slot that
+   * has no channel yet, which is precisely the divergence this case exists to
+   * catch. Widening it stays a deliberate, reviewable edit.
+   */
+  const ASKING_SLOTS: readonly string[] = ['CODING_AGENT', 'INDEPENDENT_REVIEWER', 'PROMPT_ARCHITECT'];
+
+  it('27. every granted role is one that can actually make an ask', () => {
+    const source = readFileSync(join(process.cwd(), CHECK), 'utf8');
+    const table = source.slice(source.indexOf('const MISSION_RESEARCH = Object.freeze({'));
+    const body = table.slice(table.indexOf('{'), table.indexOf('\n});') + 1);
+    const roles = [...body.matchAll(/roles: Object\.freeze\(\[([^\]]*)\]\)/gu)]
+      .flatMap((match) => [...match[1]!.matchAll(/'([A-Z_]+)'/gu)].map((role) => role[1]));
+    expect(roles.length, 'at least one grant states its roles').toBeGreaterThan(0);
+    for (const role of [...new Set(roles)].sort()) {
+      expect(ASKING_SLOTS, `${role} is granted research but has no channel to ask`).toContain(role);
     }
   });
 });
