@@ -356,6 +356,9 @@ const ARCHITECT_REVISION_CHARTER = [
  * behaves as it always has: Julius did not bound this dispatch, and inventing a
  * bound here would be this file deciding a budget it cannot see.
  */
+/** Whether a dispatch's own signal has fired, read through a call so flow analysis cannot cache an answer from before an await. */
+const signalAborted = (signal: AbortSignal | undefined): boolean => signal?.aborted === true;
+
 /** A wait that ends early on the dispatch's own cancellation, so a cut never waits out a backoff. */
 const abortableSleep = (ms: number, signal?: AbortSignal): Promise<void> => new Promise((resolve) => {
   if (signal?.aborted === true) { resolve(); return; }
@@ -1700,9 +1703,14 @@ export function createLiveHermesReviewerAdapter(input: {
             reviewReaskShape = outcome.shape;
             await sleep(REVIEW_TRANSIENT_REASK_BACKOFF_MS, dispatch.signal);
             // A cancellation that landed during the backoff wins: the transient
-            // failure surfaces as it is, and nothing further is bought.
-            if (dispatch.signal?.aborted === true) break;
-            consumedMs += REVIEW_TRANSIENT_REASK_BACKOFF_MS;
+            // failure surfaces as it is, and nothing further is bought. Read
+            // through a call, because flow analysis still believes the signal
+            // it checked before the await.
+            if (signalAborted(dispatch.signal)) break;
+            // What the dispatch has consumed so far: what the decision was made
+            // against plus the backoff just waited out — read back off the
+            // decision rather than restated beside it.
+            consumedMs = input.config.timeoutMs - decision.remainingMs;
             runConfig = { ...input.config, timeoutMs: decision.remainingMs };
             continue;
           }
