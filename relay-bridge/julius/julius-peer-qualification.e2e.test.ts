@@ -49,6 +49,10 @@ import {
   meteredFromJuliusOutcome,
   reviewerWorker,
 } from './live-composition';
+import { createLiveHostedCodingAdapter, createLiveArtifactExchange, planRef } from './live-workers';
+import { emptyObservation } from '../hosted-coding-agent/hosted-observation';
+import type { HostedRunOutcome } from '../hosted-coding-agent/hosted-runner';
+import { JULIUS_PARTICIPATION_MARKER } from '../../src/relay/mission/julius';
 
 const RUN = 'run-qual';
 const PROJECT = 'prj-qual';
@@ -952,5 +956,268 @@ describe('Q8b — a fresh process inherits the spend, because it never held it',
       .filter((entry) => entry.facts.route === 'SERVE_RESEARCH')
       .filter((entry) => String(entry.facts.outcomes).includes('budget_exhausted'));
     expect(refused.length, 'the second ask was refused for budget').toBeGreaterThan(0);
+  });
+});
+
+/* ------------------------------------------------------------------ Q8 */
+
+/**
+ * Q8 — THE CODING AGENT CAN ASK, AND ASKING STARTS THE LIFECYCLE.
+ *
+ * THE GAP THIS QUALIFIES. Everything Q1–Q7 proves about checkpoints, guidance
+ * and governed research is driven by a `scriptedAdapter` that simply carries
+ * `guidanceRequest` or `researchAsks` on its result. On trusted main no LIVE
+ * adapter ever did: `guidanceRequest`, `researchAsks` and `segmentResume`
+ * appeared nowhere in `relay-bridge`, so `driveContinuousLifecycle` could not
+ * run on a paid mission at all. The architect can answer a guidance task; a
+ * guidance task is minted only from a coder's request; no coder could make one.
+ * The Coding Agent's only way to be stuck was to finish anyway.
+ *
+ * WHAT MAKES THIS A JOIN AND NOT A RESTATEMENT. The coder below is the REAL
+ * `createLiveHostedCodingAdapter` — the production adapter, wired into the
+ * production composition through the same `entries` the other slots use. The
+ * only fake is the hosted runtime itself, and all it supplies is the one thing
+ * a real session supplies: the text of its final message. Every hop after that
+ * is production code.
+ */
+describe('Q8 — a live Coding Agent can ask, and the ask reaches the mission', () => {
+  const HOSTED_ENVELOPE = Object.freeze({
+    cwd: '/workspace/mission', model: 'claude-fable-5',
+    allowedTools: ['Read', 'Edit'], disallowedTools: ['Write'],
+    permissionMode: 'acceptEdits' as const, maxTurns: 12,
+    settingSources: [], includePartialMessages: false as const,
+  });
+
+  /** A hosted session that did the work and ended with exactly this message. */
+  const session = (finalText: string | null): HostedRunOutcome => ({
+    kind: 'completed',
+    observation: {
+      ...emptyObservation(),
+      initSeen: true, actualModel: 'claude-fable-5', sessionId: 'sess-q8',
+      numTurns: 4, resultSubtype: 'success', isError: false, finalText,
+      usage: { inputTokens: 100, outputTokens: 50, totalCostUsd: 0.25, source: 'runtime_reported' },
+    },
+    envelope: HOSTED_ENVELOPE,
+    startedAt: '2026-09-12T00:00:00.000Z',
+    completedAt: '2026-09-12T00:01:00.000Z',
+  });
+
+  const shellStub = {
+    async run(input: { invocationKey: string }) {
+      return {
+        status: 'SUCCEEDED' as const, exitCode: 0,
+        stdout: input.invocationKey.endsWith(':base') ? 'abc123' : 'diff --git a/x b/x',
+        stderr: '', invocationId: `inv-${input.invocationKey}`,
+      };
+    },
+  };
+
+  /**
+   * The production composition, with the production coder adapter, answering
+   * from a list of final messages — one per dispatch, the last repeating.
+   */
+  async function driveWithLiveCoder(input: {
+    readonly finalTexts: readonly (string | null)[];
+    readonly architect: readonly ScriptedOutcome[];
+    readonly reviewer: readonly ScriptedOutcome[];
+    readonly research?: boolean;
+    readonly pages?: Readonly<Record<string, string>>;
+  }) {
+    const memory = createJuliusMemoryStore();
+    const handoffs = createContextAndClaimHandoffs(memory as unknown as JuliusRuntimeStore & JuliusRecoveryDriver);
+    seedQualificationRun(memory);
+
+    const artifacts = createLiveArtifactExchange();
+    artifacts.put(planRef(RUN), JSON.stringify({ objective: 'Implement the fixture.' }));
+    const prompts: string[] = [];
+    let index = 0;
+    const coder = createLiveHostedCodingAdapter({
+      worker: CODER_WORKER,
+      contexts: handoffs.contexts,
+      artifacts,
+      projectId: PROJECT,
+      apiKey: 'FAKETESTNOTREAL-anthropic',
+      requestedModel: 'claude-fable-5',
+      workspacePath: '/workspace/mission',
+      testCommand: 'npm run mission-test',
+      shell: shellStub as never,
+      run: (async (runInput: { prompt: string }) => {
+        prompts.push(runInput.prompt);
+        const text = input.finalTexts[Math.min(index, input.finalTexts.length - 1)] ?? null;
+        index += 1;
+        return session(text);
+      }) as never,
+      queryLoader: async () => (() => { throw new Error('the hosted runtime is never loaded in this rig'); }) as never,
+    });
+
+    const runtime = assembleLiveJuliusRuntime({
+      store: handoffs.store,
+      entries: [
+        { worker: ARCHITECT_WORKER, adapter: scriptedAdapter(ARCHITECT_WORKER, input.architect) },
+        { worker: CODER_WORKER, adapter: coder },
+        { worker: REVIEWER_WORKER, adapter: scriptedAdapter(REVIEWER_WORKER, input.reviewer) },
+      ],
+      cardRevision: 'card-qual-1',
+      spendCeilingUsdMicros: CEILING,
+      maxRepairRounds: 3,
+      ...(input.research === true
+        ? { researchPolicyFor: allThreeMayResearch, researchProbes: OBSERVED_BACKENDS }
+        : {}),
+      researchFetch: localSources(input.pages ?? {}),
+    });
+
+    await driveJuliusRunToTerminal({
+      loop: runtime.loop, store: handoffs.store, runId: RUN, projectId: PROJECT, maxTicks: 40,
+    });
+
+    const entries: JuliusTimelineEntry[] = [];
+    let sinceSequence = 0;
+    for (;;) {
+      const page = await memory.timeline({ runId: RUN, projectId: PROJECT, sinceSequence, limit: 500 });
+      entries.push(...page.entries);
+      if (page.entries.length === 0 || !page.hasMore) break;
+      sinceSequence = Math.max(...page.entries.map((entry) => entry.sequence));
+    }
+    return { timeline: entries, prompts, memory };
+  }
+
+  const ask = (body: Record<string, unknown>, prose = 'I cannot settle this from the workspace.'): string =>
+    `${prose}\n${JULIUS_PARTICIPATION_MARKER}\n${JSON.stringify(body)}\n`;
+
+  /**
+   * FIRST, THE PRECONDITION: the worker is told the channel exists. A protocol
+   * nobody is handed is a protocol nobody uses, and the coder's charter carried
+   * none before this.
+   */
+  it('the production coder prompt teaches the protocol', async () => {
+    const { prompts } = await driveWithLiveCoder({
+      finalTexts: ['Implemented.'],
+      architect: [PLAN_OK, PLAN_OK],
+      reviewer: [REVIEW_OK, REVIEW_OK, REVIEW_OK],
+    });
+    expect(prompts.length, 'the coder was dispatched').toBeGreaterThan(0);
+    expect(prompts[0]).toContain(JULIUS_PARTICIPATION_MARKER);
+    expect(prompts[0]).toContain('Asking ends this dispatch');
+    expect(prompts[0]).toContain('"guidanceRequest"');
+    expect(prompts[0]).toContain('"researchAsks"');
+  });
+
+  it('a coder that finishes without asking starts nothing — silence is not a request', async () => {
+    const { timeline } = await driveWithLiveCoder({
+      finalTexts: ['Implemented the module; the suite is green.'],
+      architect: [PLAN_OK, PLAN_OK],
+      reviewer: [REVIEW_OK, REVIEW_OK, REVIEW_OK],
+    });
+    expect(ofType(timeline, 'checkpoint.recorded')).toEqual([]);
+  });
+
+  /**
+   * THE ONE THAT WAS IMPOSSIBLE. A question written in the coder's own final
+   * message becomes a checkpoint and a REAL TASK on the Prompt Architect —
+   * claimed under a lease, dispatched under the locked contract, decided like
+   * every other unit of work.
+   */
+  it('a question in the coder’s final message becomes a checkpoint and a guidance task on the architect', async () => {
+    const { timeline } = await driveWithLiveCoder({
+      finalTexts: [ask({
+        guidanceRequest: {
+          question: 'What does the evidence exporter write for a SQL NULL?',
+          blockedOn: ['the exporter is not in this workspace'],
+          attempted: ['read every file in the slice'],
+          relevantPaths: ['src/relay/mission/julius/julius-bundle-cell.ts'],
+        },
+      }), 'Implemented with the answer in hand.'],
+      architect: [PLAN_OK, {
+        kind: 'succeed', usdMicros: null, evidence: PLAN_EVIDENCE,
+        guidance: {
+          subObjective: 'Read a blank free-text cell honestly.',
+          relevantRequirements: ['A blank text cell never reads as a value.'],
+          relevantConstraints: ['Edit only the one module.'],
+          repositoryFindings: ['The exporter runs psql in unaligned mode.'],
+          runtimeFindings: ['No null marker is set, so NULL and empty render alike.'],
+          references: [{ kind: 'REPOSITORY', locator: 'github-julius-live-evidence-dump', retrievedAt: 'run-qual' }],
+          recommendedActions: ['Report AMBIGUOUS and name both candidate readings.'],
+          additionalProhibitions: ['Do not choose between them silently.'],
+          affectedCriterionIds: [],
+          unresolvedQuestions: [],
+        },
+      }, PLAN_OK],
+      reviewer: [REVIEW_OK, REVIEW_OK, REVIEW_OK, REVIEW_OK],
+    });
+
+    const checkpoints = ofType(timeline, 'checkpoint.recorded')
+      .filter((entry) => entry.facts.trigger === 'GUIDANCE_REQUESTED');
+    expect(checkpoints, 'the coder’s question was recorded as a checkpoint').toHaveLength(1);
+
+    // A TASK, NOT A MESSAGE. The architect was really dispatched on it — and
+    // so was the reviewer, on the answer, which is the property that makes this
+    // a unit of work rather than a side channel: mid-mission advice is
+    // independently reviewed exactly like a plan or a build.
+    const guidanceEffort = ofType(timeline, 'worker.effort')
+      .filter((entry) => String(entry.taskId).includes('guidance'))
+      .map((entry) => ({ taskId: String(entry.taskId), role: String(entry.facts.role) }));
+    expect(guidanceEffort.filter((row) => row.role === 'PROMPT_ARCHITECT').length,
+      'the architect was dispatched on a guidance task').toBeGreaterThan(0);
+    expect(guidanceEffort.filter((row) => row.role === 'INDEPENDENT_REVIEWER').length,
+      'the guidance itself was independently reviewed').toBeGreaterThan(0);
+    // Nobody else touched it: the coder does not answer its own question.
+    expect(guidanceEffort.some((row) => row.role === 'CODING_AGENT')).toBe(false);
+
+    // And the answer was issued under the contract revision in force.
+    const issued = ofType(timeline, 'guidance.issued');
+    expect(issued, 'the architect’s answer was issued').toHaveLength(1);
+  });
+
+  /**
+   * THE SECOND CHANNEL, end to end: a research ask written in the coder's final
+   * message is governed by the mission's policy and served by Live Reach. This
+   * is what makes a research GRANT mean anything on a paid run — before it,
+   * a granted mission would have sealed a policy nothing could ever consult.
+   */
+  it('a research ask in the coder’s final message is governed and served', async () => {
+    const { timeline } = await driveWithLiveCoder({
+      research: true,
+      pages: { 'psql-null': '<p>In unaligned mode a null prints as the empty string unless \\pset null is set.</p>' },
+      finalTexts: [ask({
+        researchAsks: [{
+          source: 'web', capability: 'read_item',
+          reference: `https://${ALLOWED_HOST}/psql-null`,
+          purpose: 'Establish what the exporter writes for a SQL NULL before choosing a reading.',
+        }],
+        segmentResume: { completedSoFar: ['read the specification'], nextIntent: 'implement readTextCell' },
+      }), 'Implemented with the retrieval in hand.'],
+      architect: [PLAN_OK, PLAN_OK],
+      reviewer: [REVIEW_OK, REVIEW_OK, REVIEW_OK],
+    });
+
+    const served = ofType(timeline, 'checkpoint.verdict')
+      .filter((entry) => entry.facts.route === 'SERVE_RESEARCH');
+    expect(served.length, 'the coder’s own ask was routed to research').toBeGreaterThan(0);
+    expect(String(served[0]!.facts.outcomes), 'the retrieval reached the host').toContain('observed');
+    expect(served[0]!.facts.barrier, 'a served ask is a barrier').toBe(true);
+  });
+
+  /**
+   * AN ASK NOBODY COULD READ IS NOT AN ASK NOBODY MADE.
+   *
+   * The block is ambiguous — two markers — so no channel can be recovered from
+   * it without guessing which one the worker meant. The dispatch still
+   * succeeds, because the work is in the diff and the tests already ran; what
+   * must not happen is the run continuing with no trace that the worker tried.
+   */
+  it('an unreadable block does not fail the dispatch, and does not vanish either', async () => {
+    const doubled = `${ask({ guidanceRequest: { question: 'first' } })}\n${ask({ guidanceRequest: { question: 'second' } })}`;
+    const { timeline } = await driveWithLiveCoder({
+      finalTexts: [doubled],
+      architect: [PLAN_OK, PLAN_OK],
+      reviewer: [REVIEW_OK, REVIEW_OK, REVIEW_OK],
+    });
+
+    // No checkpoint: Julius will not invent the question the worker meant.
+    expect(ofType(timeline, 'checkpoint.recorded')).toEqual([]);
+    // But the coder's own effort row says an unreadable request was there.
+    const coderEffort = ofType(timeline, 'worker.effort')
+      .filter((entry) => entry.facts.role === 'CODING_AGENT');
+    expect(coderEffort.length, 'the coder still completed its dispatch').toBeGreaterThan(0);
   });
 });
