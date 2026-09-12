@@ -5,9 +5,9 @@ Orphan branch. It shares no history with `main` and must never be merged.
 | | |
 |---|---|
 | branch | `relay/julius-coder-participation` |
-| base | `9f155b919b0243e20fc3af132e9ea9176fd470ba` |
-| head | `1519cae3d67febb2a45ddf7a5dca078d32567116` |
-| tree | `e94857d87ef6ba8179ab6370e392cf259b24dff9` |
+| base | `f3fa988b03c3561208f42d7c3ea18df0e855c348` |
+| head | `12d8efa2b884c9b69a1d945ce19bb2033742e3e2` |
+| tree | `bb85c22e478dc060745ff4328529b96c05d40851` |
 | commits | 1, authored AND committed by `julius-worker[bot]` |
 
 ## Use
@@ -98,3 +98,7 @@ both sides.
 
 built from `ceremony/build-evidence.py` and `ceremony/github-field.py`. All ten
 checks must read PASS; an absent field reads INDETERMINATE and never PASS.
+
+## Re-frozen 2026-09-12
+
+Rebased onto `f3fa988b03c3561208f42d7c3ea18df0e855c348` (after #256 participant-isolation and #257 research-authority) and re-authored as `julius-worker[bot]`. Patch-identical to the original frozen head `1519cae3` (`git patch-id --stable`); only the base moved. Any text above naming base `9f155b91` describes the state before those landings.
