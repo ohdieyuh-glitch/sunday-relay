@@ -68,6 +68,7 @@ import { githubAppConfigFromEnv } from './repository-credential';
 import {
   authorizeReviewerCall, handleBrowserSessionRoute, isBrowserSessionRoute, sessionTokenFrom,
 } from './browser-session/routes';
+import type { MissionOwnershipScope } from './mission';
 import { WonderlandBackend } from '../src/relay/mission/wonderland/wonderland-backend';
 import { handleWonderlandRoute, isWonderlandRoute } from './wonderland-routes';
 
@@ -868,6 +869,20 @@ export function createBridgeServer(
           missionCaller = decision;
         }
 
+        /**
+         * THE OWNERSHIP SCOPE, derived ONCE from the decision above and from
+         * nothing else.
+         *
+         * `undefined` for the operator credential — unscoped, and every operator
+         * behaviour below is byte-for-byte what it was. For a browser it is the
+         * participant bound into the session at mint, which for a read-only
+         * session is null. It is deliberately NOT read from the request body:
+         * the body is what a caller CLAIMS, and this decides what they may see.
+         */
+        const missionScope: MissionOwnershipScope | undefined = missionCaller?.kind === 'browser'
+          ? { participantId: missionCaller.participantId }
+          : undefined;
+
         if (method === 'POST' && path === '/relay-api/mission/start') {
           const body = (await readBody(req)) as { missionId?: unknown; objective?: unknown } | undefined;
           const missionId = typeof body?.missionId === 'string' ? body.missionId : '';
@@ -1009,7 +1024,18 @@ export function createBridgeServer(
             // WHO started it — the verified session, never the body — so it lands
             // in this participant's history and only theirs. Operator: null.
             startedBy: missionCaller?.kind === 'browser' ? missionCaller.participantId : null,
+            scope: missionScope,
           });
+          if (view === null) {
+            /**
+             * The id is already held by a mission this caller cannot see. Mission
+             * ids are caller-chosen, so this is reachable by guessing — and the
+             * answer must not distinguish "taken by you" from "taken by someone
+             * else", nor name whose it is.
+             */
+            send(res, 409, { error: { kind: 'mission_id_unavailable', message: 'That mission id is not available.' } }, cors);
+            return;
+          }
           send(res, 200, { missionId, view }, cors);
           return;
         }
@@ -1037,12 +1063,12 @@ export function createBridgeServer(
           if (id === null) return send(res, 404, { error: 'mission not found' }, cors);
           const action = missionMatch[2];
           if (method === 'GET' && !action) {
-            const view = registry.get(id);
+            const view = registry.get(id, missionScope);
             if (!view) return send(res, 404, { error: 'mission not found' }, cors);
             return send(res, 200, { missionId: id, view }, cors);
           }
           if (method === 'POST' && action === 'cancel') {
-            const view = registry.cancel(id);
+            const view = registry.cancel(id, missionScope);
             if (!view) return send(res, 404, { error: 'mission not found' }, cors);
             return send(res, 200, { missionId: id, view }, cors);
           }
@@ -1067,7 +1093,7 @@ export function createBridgeServer(
               send(res, retryRefusal.status, retryRefusal.body, cors);
               return;
             }
-            const view = registry.retry(id);
+            const view = registry.retry(id, missionScope);
             if (!view) return send(res, 404, { error: 'mission not found' }, cors);
             return send(res, 200, { missionId: id, view }, cors);
           }
