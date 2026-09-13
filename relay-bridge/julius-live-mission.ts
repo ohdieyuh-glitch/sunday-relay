@@ -859,6 +859,11 @@ async function main(argv: readonly string[]): Promise<number> {
       cardRevision,
       spendCeilingUsdMicros: Math.round((contract.limits?.spendUsd ?? 5) * 1_000_000),
       maxRepairRounds: contract.limits?.repairCycles ?? 1,
+      // A PAID MISSION NEVER SPENDS AT THE ESTIMATE. With no readable spend
+      // ledger every dispatch is refused before a provider is reached, rather
+      // than handed the fixed thirty-cent figure that stopped Lab run
+      // 34739303313's coder after two turns of a twenty-dollar mission.
+      allocationWithoutLedger: 'DENY',
       ...(researchClause === undefined ? {} : {
         researchPolicyFor: (missionId: string) => sealLiveMissionResearchPolicy(missionId, researchClause),
         researchProbes: observed.probes,
