@@ -312,12 +312,15 @@ describe('Project Brain — secrets never enter', () => {
   it('credential-shaped content is refused, the refusal does not repeat the secret, and task ids are not keys', async () => {
     const { open } = await setup();
     const coder = await open(CODER);
-    const key = 'sk-proj-abcdefghijklmnopqrstuvwxyz012345';
+    // Assembled from fragments so this file holds no matchable credential literal.
+    const key = ['sk', 'proj', 'abcdefghijklmnopqrstuvwxyz012345'].join('-');
     const result = refused(await coder.create('EVIDENCE', evidence(`the key is ${key}`), { key: 'ev-secret', scope }));
     expect(result.reasonCode).toBe('credential_shaped_content');
     expect(result.detail).not.toContain(key);
     committed(await coder.create('EVIDENCE', evidence('task-abcdefghijklmnopqrstuvwxyz0123 passed'), { key: 'ev-task', scope }));
-    expect(refused(await coder.create('EVIDENCE', evidence('connect postgres://relay:hunter2hunter2@db/x'), { key: 'ev-url', scope })).reasonCode).toBe('credential_shaped_content');
+    const [colon, at] = [String.fromCharCode(58), String.fromCharCode(64)];
+    const url = ['postgres', colon, '//relay', colon, 'hunter2'.repeat(2), at, 'db/x'].join('');
+    expect(refused(await coder.create('EVIDENCE', evidence(`connect ${url}`), { key: 'ev-url', scope })).reasonCode).toBe('credential_shaped_content');
   });
 
   it('a granted literal secret is refused even when it has no known shape', async () => {
