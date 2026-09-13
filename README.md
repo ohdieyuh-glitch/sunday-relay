@@ -4,20 +4,20 @@ Orphan branch. It shares no history with `main` and must never be merged.
 
 | | |
 |---|---|
-| branch | `relay/julius-reviewer-failure-truth` |
-| base | `8afb872d7a9e91569d9cb70457773bef887a5c56` |
-| head | `628527d3b8dacef33c4af199ff2d703cd2996a5d` |
-| tree | `e68d2922d9f825b935b6b851c365797e0c4e7724` |
-| commits | 1, authored AND committed by `julius-worker[bot]` |
+| branch | `relay/julius-research-batch` |
+| base | `2110e2c5127532025d5affcd62070e6fe522ced9` |
+| head | `b21d48a6f077a6ade50b0cadf52faf98d1c144d0` |
+| tree | `423349b4a729e54ea7572e672c03dfd9674c78fc` |
+| commits | 4, authored AND committed by `julius-worker[bot]` |
 
 ## Use
 
-    git fetch origin ceremony/reviewer-failure-truth-pr
-    git checkout origin/ceremony/reviewer-failure-truth-pr -- ceremony/
+    git fetch origin ceremony/research-batch-pr
+    git checkout origin/ceremony/research-batch-pr -- ceremony/
     export JULIUS_WORKER_APP_ID=<the App ID>
     # JULIUS_WORKER_APP_PEM must already be in the shell
-    bash ceremony/open-reviewer-failure-truth-worker-pr.sh
+    bash ceremony/open-research-batch-worker-pr.sh
 
 ## What this branch carries
 
-Amended in place for PR #265: the stream-watchdog and request-timeout repair added after the zero-cost reproduction. The PR already exists, so this opener will refuse; the pins record what the founder approves.
+Supersedes #266. One critical blocker exception (commit 1) plus the founder's three-improvement research batch (commits 2–4).
