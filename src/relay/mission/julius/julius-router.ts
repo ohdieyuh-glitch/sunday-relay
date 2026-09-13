@@ -32,6 +32,18 @@ export const JULIUS_ERROR_CODES=['RATE_LIMIT','TIMEOUT','AUTH_CONFIGURATION','PR
  * literal-VALUE scan already exists to catch, `$DB_PASSWORD` being in its
  * needle list. This function is the first layer, not the only one.
  */
+/**
+ * EVERY WAY THE INDEPENDENT EXECUTOR CAN REFUSE A WORKER'S TOOL EFFECT, closed.
+ * The executor answers over HTTP with its own codes; `classifyExecutorRefusal`
+ * (relay-bridge/julius/executor-effects.ts) maps each onto exactly one of these.
+ */
+export const JULIUS_EXECUTOR_REFUSALS=[
+ 'executor_unavailable','executor_request_invalid','executor_identity_invalid','executor_scope_refused',
+ 'executor_authorization_refused','executor_identity_conflict','executor_outcome_unknown','executor_security_failure',
+ 'executor_terminal_failure','executor_response_invalid','executor_claim_missing','executor_invocation_unauthorized',
+ 'executor_dispatch_unclaimed','executor_refused_unclassified',
+] as const;
+export type JuliusExecutorRefusal=typeof JULIUS_EXECUTOR_REFUSALS[number];
 export const safeFailureClass=(value:unknown):string|null=>typeof value==='string'&&/^[a-z][a-z0-9_]{0,63}$/.test(value)?value:null;
 /**
  * THE SAME NARROWING FOR REASON CODES, WHICH USE BOTH CONVENTIONS.
@@ -274,6 +286,26 @@ export const safeReviewDiagnostics=(value:unknown):JuliusSafeDiagnostics|null=>{
    * own usage file — written on failure too. Null when no report existed.
    */
   engineApiCalls:safeCount(v.engineApiCalls),
+  /* --- The independent executor, for a worker whose tool effect it refused. --- */
+  /**
+   * WHICH TOOL EFFECT THE EXECUTOR REFUSED: the base revision read, the diff
+   * capture or the test run. Null when no effect was refused.
+   */
+  executorStep:safeEnum(v.executorStep,['base','diff','test'] as const),
+  /**
+   * WHAT THE EXECUTOR SAID, as a closed class. Paid qualification 34757974058's
+   * second coder repair was refused `INVALID_REQUEST:execution_envelope_invalid:executionIdentity`
+   * and the durable row said only WORKER_EXECUTION_FAILURE with no class, because
+   * the refusal was an untyped Error the coordinator could not name. Null when
+   * no effect was refused.
+   */
+  executorRefusal:safeEnum(v.executorRefusal,JULIUS_EXECUTOR_REFUSALS),
+  /**
+   * THE ENVELOPE OR REQUEST FIELD THE EXECUTOR NAMED, snake-cased, when it named
+   * one (`execution_identity`, `task_id`). A field name from the executor's own
+   * validator, never a value. Null otherwise.
+   */
+  executorRefusalField:safeToken(v.executorRefusalField),
   /**
    * WHY THE SECOND REVIEW CALL WAS BOUGHT, as the closed shape token of the
    * answer that caused it: a correctable shape defect, or the transient
