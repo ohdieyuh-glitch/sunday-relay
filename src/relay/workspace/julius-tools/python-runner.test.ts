@@ -17,6 +17,7 @@ import {
 } from '../../mission/julius/julius-python-contracts';
 import { createJuliusPythonExecutionMemoryStore, createJuliusPythonExecutionService } from '../../mission/julius/julius-python-service';
 import { cardPolicy } from '../../mission/julius/julius-runtime-fixtures';
+import type { JuliusBudgetPort } from '../../mission/julius/julius-runtime-ports';
 import { LocalJuliusBrainContentStore } from '../../persistence/julius-brain-content-store';
 import { NodeJuliusPythonRunner, StaticJuliusPythonEnvironmentRegistry, discoverJuliusPythonExecutable, resolveJuliusPythonSdkRoot } from './python-runner';
 
@@ -47,7 +48,7 @@ const ok = (result: JuliusBrainCommitResult): string => {
 };
 
 let counter = 0;
-async function harness(options: { capabilities?: string[]; runnerWrap?: (runner: JuliusPythonRunnerPort) => JuliusPythonRunnerPort; secrets?: Record<string, string> } = {}) {
+async function harness(options: { capabilities?: string[]; runnerWrap?: (runner: JuliusPythonRunnerPort) => JuliusPythonRunnerPort; secrets?: Record<string, string>; budget?: JuliusBudgetPort } = {}) {
   const clock = { now: () => new Date().toISOString() };
   const brains = createJuliusBrainMemoryStore();
   const brainService = createJuliusProjectBrainService({ store: brains, clock });
@@ -72,7 +73,7 @@ async function harness(options: { capabilities?: string[]; runnerWrap?: (runner:
     environments: new StaticJuliusPythonEnvironmentRegistry(new Map([['system-python', python!]])),
     secrets: { has: (id) => id in secretMap, resolve: async (id) => secretMap[id] ?? null },
     policies: { cardFor: async () => cardPolicy({ capabilities: options.capabilities ?? ['python', 'process', 'secret:analytics-token'], network: false }) },
-    schema: juliusBrainSchemaDocument(), clock, hostInstanceId: 'host-a', cancelPollMs: 50,
+    schema: juliusBrainSchemaDocument(), clock, hostInstanceId: 'host-a', cancelPollMs: 50, budget: options.budget,
   });
   const request = (source: string, overrides: Partial<JuliusPythonExecutionRequest> = {}): JuliusPythonExecutionRequest => {
     counter += 1;
@@ -162,6 +163,30 @@ suite('Python as a governed Julius tool', () => {
     expect(h.runs()).toBe(0);
     const [execution] = await h.julius.current('PYTHON_EXECUTION');
     expect(execution!.body).toMatchObject({ state: 'DENIED', reasonCode: 'CARD_TOOL_DENIED', exitCode: null, durationMs: null });
+  }, 60_000);
+
+  it('a budgeted execution reserves its timeout as runtime and commits what it actually used', async () => {
+    const calls: { op: string; input: Record<string, unknown> }[] = [];
+    const budget: JuliusBudgetPort = {
+      reserve: async (input) => { calls.push({ op: 'reserve', input }); return { state: 'RESERVED', denialReason: null }; },
+      commit: async (input) => { calls.push({ op: 'commit', input }); },
+      release: async (input) => { calls.push({ op: 'release', input }); },
+    };
+    const h = await harness({ budget });
+    const record = await h.service.execute(h.request('print("counted")\n', { runId: 'run-7', limits: { ...JULIUS_PYTHON_DEFAULT_LIMITS, timeoutMs: 20_000 } }));
+    expect(record.state).toBe('SUCCEEDED');
+    expect(calls.map((call) => call.op)).toEqual(['reserve', 'commit']);
+    expect(calls[0]!.input).toMatchObject({ runId: 'run-7', toolCalls: 1, runtimeMs: 20_000, usdMicros: 0 });
+    expect(calls[1]!.input).toMatchObject({ toolCalls: 1, usdMicros: 0, runtimeMs: record.outcome!.durationMs, receiptId: record.executionId });
+  }, 60_000);
+
+  it('a refused budget denies the execution before anything runs', async () => {
+    const h = await harness({ budget: { reserve: async () => ({ state: 'DENIED', denialReason: 'tool calls exhausted' }), commit: async () => { throw new Error('no commit'); }, release: async () => undefined } });
+    const record = await h.service.execute(h.request('print("never")\n', { runId: 'run-7' }));
+    expect(record).toMatchObject({ state: 'DENIED', outcome: { reasonCode: 'TOOL_BUDGET_DENIED', detail: 'tool calls exhausted' } });
+    expect(h.runs()).toBe(0);
+    const withoutRun = await harness({ budget: { reserve: async () => { throw new Error('not reached'); }, commit: async () => undefined, release: async () => undefined } });
+    expect((await withoutRun.service.execute(withoutRun.request('print(1)\n'))).outcome?.reasonCode).toBe('BUDGET_RUN_REQUIRED');
   }, 60_000);
 
   it('denies an unsatisfied dependency pin before running anything', async () => {

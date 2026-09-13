@@ -136,7 +136,8 @@ when `pg_postmaster_start_time()` actually moved.
 2. **Production isolation for Python.** The executor sandbox image has no
    Python and the Docker path runs bash only; `python.run` is not in
    `JuliusToolId`. Hostile-code isolation requires that path.
-3. **Budget.** Python executions do not reserve tool-call budget yet.
+3. **Budget.** The service reserves and commits tool budget through
+   `JuliusBudgetPort` when given one; the live ledger is not yet passed in.
 4. **Bridge routes.** `handleJuliusBrainApi` is not mounted in `relay-bridge`.
 5. **Semantic retrieval.** Evaluated and available; on the labelled fixture
    no candidate beat the keyword baseline on MRR, so it is not adopted.

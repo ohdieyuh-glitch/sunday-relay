@@ -32,7 +32,7 @@ import {
   type JuliusPythonStructuredResult,
   type JuliusPythonUsage,
 } from './julius-python-contracts';
-import type { JuliusClock } from './julius-runtime-ports';
+import type { JuliusBudgetPort, JuliusClock } from './julius-runtime-ports';
 
 /**
  * THE PYTHON EXECUTION SERVICE: REQUEST → AUTHORISE → RUN → SETTLE.
@@ -159,6 +159,13 @@ export interface JuliusPythonServiceDeps {
   readonly clock: JuliusClock;
   readonly hostInstanceId: string;
   readonly julius?: JuliusBrainPrincipal;
+  /**
+   * The run's tool budget. When present, an execution reserves one tool call
+   * and its timeout as runtime before it starts, commits the observed runtime
+   * when it settles, and is DENIED without running when the ledger refuses.
+   * A local execution calls no provider, so its spend is a known zero.
+   */
+  readonly budget?: JuliusBudgetPort;
   readonly cancelPollMs?: number;
   /** Beyond timeout + this, an in-flight execution's host is presumed gone. */
   readonly disconnectGraceMs?: number;
@@ -290,8 +297,23 @@ export function createJuliusPythonExecutionService(deps: JuliusPythonServiceDeps
       if (!authorization.allowed) {
         return settleWithoutRun(request, ['REQUESTED'], baseOutcome('DENIED', { reasonCode: authorization.reasonCode, detail: authorization.detail }), environment);
       }
+      const reservationId = `python:${request.projectId}:${request.executionId}`;
+      if (deps.budget !== undefined) {
+        // The ledger is per run; an execution outside a run has nothing to charge against.
+        if (request.runId === null) {
+          return settleWithoutRun(request, ['REQUESTED'], baseOutcome('DENIED', { reasonCode: 'BUDGET_RUN_REQUIRED', detail: 'A budgeted execution must belong to a run.' }), environment);
+        }
+        const reserved = await deps.budget.reserve({
+          reservationId, runId: request.runId, projectId: request.projectId, taskId: request.taskId,
+          usdMicros: 0, inputTokens: 0, outputTokens: 0, toolCalls: 1, runtimeMs: request.limits.timeoutMs, now: deps.clock.now(),
+        });
+        if (reserved.state === 'DENIED') {
+          return settleWithoutRun(request, ['REQUESTED'], baseOutcome('DENIED', { reasonCode: 'TOOL_BUDGET_DENIED', detail: reserved.denialReason }), environment);
+        }
+      }
       const startedAt = deps.clock.now();
       if (!(await deps.store.start({ executionId: request.executionId, projectId: request.projectId, hostInstanceId: deps.hostInstanceId, startedAt, decisions: authorization.decisions }))) {
+        await deps.budget?.release({ reservationId, reason: 'PYTHON_EXECUTION_NOT_STARTED', now: deps.clock.now(), usdMicros: 0 });
         return (await deps.store.load(request.executionId, request.projectId))!;
       }
 
@@ -397,6 +419,11 @@ export function createJuliusPythonExecutionService(deps: JuliusPythonServiceDeps
           return { terminal: outcome.state, groups, outcome: (brain) => withBrain(outcome, request, brain, refusal) };
         },
       });
+      if (deps.budget !== undefined) {
+        // A process that never started consumed nothing; one that ran used its observed time.
+        if (run.termination === 'SPAWN_FAILED') await deps.budget.release({ reservationId, reason: 'PYTHON_SPAWN_FAILED', now: completedAt, usdMicros: 0 });
+        else await deps.budget.commit({ reservationId, usdMicros: 0, inputTokens: 0, outputTokens: 0, toolCalls: 1, runtimeMs: run.durationMs, receiptId: request.executionId, now: completedAt });
+      }
       return settled.record ?? (await deps.store.load(request.executionId, request.projectId))!;
     },
 
