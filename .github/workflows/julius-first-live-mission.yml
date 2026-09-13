@@ -222,8 +222,11 @@ jobs:
     # both the old 12-turn and 360000 ms ceilings with the work substantially
     # done. `coder-envelope.test.ts` proves the reviewer share, the coder share,
     # the architect's own ceiling and a stated infrastructure allowance all fit
-    # inside this number.
-    timeout-minutes: 120
+    # inside this number. 120 -> 280 when repair rounds were priced: three rounds,
+    # each a coder dispatch at its derived worst case plus a re-review, beside a
+    # 45-minute coder share derived from Mission 5's completed 21-turn build.
+    # Below the admission job's 350-minute wait bound and the 360-minute cap.
+    timeout-minutes: 280
     environment: julius-live-validation
     defaults:
       run:

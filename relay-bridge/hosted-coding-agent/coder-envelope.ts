@@ -89,6 +89,18 @@ export const RECORDED_CODER_OBSERVATIONS: readonly CoderRunObservation[] = [
     runId: '34485676189', taskId: 'run:cecba99c779c967f128dd58c:build',
     turns: 13, toolCalls: 16, elapsedMs: 306_000, outcome: 'TURNS_EXHAUSTED', costUsdMicros: 2_936_176,
   },
+  // Paid Mission 5, the rerun that COMPLETED. 21 turns and 20 tool calls, and
+  // the build was accepted: the first measured answer to how many turns that
+  // mission really needed, which attempt 2 could only bound from below. It was
+  // never recorded here, so the envelope went on deriving 26 turns from 13 and
+  // Mission 5's own success sat at 81% of it. The elapsed time is read off the
+  // executor receipts that bracket the session — `build:base` at 21:18:26.74
+  // and `build:diff` at 21:27:35.45 in the run's trajectory — so it slightly
+  // OVERSTATES the session, which is the safe direction for a floor.
+  {
+    runId: '34529874100', taskId: 'run:cecba99c779c967f128dd58c:build',
+    turns: 21, toolCalls: 20, elapsedMs: 548_710, outcome: 'COMPLETED', costUsdMicros: 5_177_120,
+  },
 ];
 
 /**
@@ -99,7 +111,11 @@ export const RECORDED_CODER_OBSERVATIONS: readonly CoderRunObservation[] = [
  * it by a test, and a second test proves the reviewer and coder shares fit
  * inside it with room for the architect, the image builds and the evidence dump.
  */
-export const CODER_JOB_SHARE_MS = 30 * 60_000;
+/**
+ * 30 -> 45 minutes when Mission 5's completed 21-turn build was recorded: the
+ * derived attempt grew to 1 186 316 ms and two attempts no longer fit 30.
+ */
+export const CODER_JOB_SHARE_MS = 45 * 60_000;
 /** `CODER_WORKER.maxRetries` is 1, so a dispatch may burn two attempts. */
 export const MAX_CODER_ATTEMPTS = 2;
 
@@ -114,7 +130,13 @@ export const MAX_CODER_ATTEMPTS = 2;
  * is a guard for the case observation has not shown us, which is exactly what a
  * hard bound is for.
  */
-export const CODER_TURN_HARD_CEILING = 32;
+/**
+ * 32 -> 64 for long-horizon missions. The founder's beta-readiness policy gives
+ * the Coding Agent extended turns, and Mission 6 edits a 3 300-line pipeline plus
+ * five other files. Still a backstop, never the operative number: the
+ * observations derive the ceiling, and the clock binds before this does.
+ */
+export const CODER_TURN_HARD_CEILING = 64;
 
 /**
  * A CENSORED TURN OBSERVATION EARNS MORE HEADROOM THAN A MEASURED ONE.

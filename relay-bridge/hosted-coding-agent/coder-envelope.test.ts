@@ -9,7 +9,7 @@ import {
 } from './coder-envelope';
 import { DEFAULT_HOSTED_LIMITS, compileHostedEnvelope, hostedLimitsForAllocation } from './hosted-envelope';
 import { runHostedCodingAgent, type HostedQueryFn } from './hosted-runner';
-import { REVIEWER_JOB_SHARE_MS } from '../reviewer-deadline';
+import { JOB_REPAIR_ROUNDS_BUDGETED, REVIEWER_JOB_SHARE_MS, resolveReviewerDeadline } from '../reviewer-deadline';
 import { CODER_WORKER, architectWorker, architectWorstCaseSpendMs } from '../julius/live-composition';
 import { architectOperativeTimeoutMs } from '../../src/relay/connectors/gpt-architect/config';
 
@@ -134,12 +134,29 @@ describe('the derivation is deterministic, bounded and honest about censoring', 
    * thing it is evidence of.
    */
   it('treats an exhausted turn count as a lower bound, not a measurement', () => {
-    const envelope = resolveCoderEnvelope();
+    const envelope = resolveCoderEnvelope({
+      observations: RECORDED_CODER_OBSERVATIONS.filter((o) => o.runId !== '34529874100'),
+    });
     expect(envelope.observedTurnsHighWater).toBe(13);
     expect(envelope.observedTurnsCensored).toBe(true);
     expect(envelope.basis).toBe('OBSERVED_CENSORED');
     const censored = RECORDED_CODER_OBSERVATIONS.find((o) => o.turns === 13);
     expect(censored?.outcome).toBe('TURNS_EXHAUSTED');
+  });
+
+  /**
+   * THE BOUND, ANSWERED. Mission 5's completed rerun measured what attempt 2
+   * could only bound: 21 turns. It is now the high water, and it is a
+   * measurement rather than a floor.
+   */
+  it('derives from Mission 5’s completed build once it is recorded', () => {
+    const envelope = resolveCoderEnvelope();
+    expect(envelope.observedTurnsHighWater).toBe(21);
+    expect(envelope.observedTurnsCensored).toBe(false);
+    expect(envelope.maxTurns).toBe(42);
+    expect(envelope.maxTurns).toBeLessThan(CODER_TURN_HARD_CEILING);
+    const success = RECORDED_CODER_OBSERVATIONS.find((o) => o.runId === '34529874100');
+    expect(success).toMatchObject({ turns: 21, toolCalls: 20, outcome: 'COMPLETED', costUsdMicros: 5_177_120 });
   });
 
   /** UNKNOWN STAYS UNKNOWN: a timed-out run reported no usage, so cost is null. */
@@ -155,7 +172,7 @@ describe('the derivation is deterministic, bounded and honest about censoring', 
     });
     expect(envelope.basis).toBe('OBSERVED_COMPLETED');
     expect(envelope.observedTurnsCensored).toBe(false);
-    expect(envelope.observedTurnsHighWater).toBe(11);
+    expect(envelope.observedTurnsHighWater).toBe(21);
   });
 
   /**
@@ -196,7 +213,7 @@ describe('the derivation is deterministic, bounded and honest about censoring', 
 
   it('learns from a longer observation instead of ignoring it', () => {
     const longer = resolveCoderEnvelope({
-      observations: [{ runId: 'r', taskId: 't', turns: 20, toolCalls: 1, elapsedMs: 400_000, outcome: 'TURNS_EXHAUSTED', costUsdMicros: null }],
+      observations: [{ runId: 'r', taskId: 't', turns: 30, toolCalls: 1, elapsedMs: 400_000, outcome: 'TURNS_EXHAUSTED', costUsdMicros: null }],
     });
     expect(longer.maxTurns).toBeGreaterThan(resolveCoderEnvelope().maxTurns);
   });
@@ -248,10 +265,35 @@ describe('the job budget is shared out, and the shares add up', () => {
     expect(ARCHITECT_WORST_CASE_MS).toBe(architectOperativeTimeoutMs(architectEnv) * ARCHITECT_ATTEMPTS);
   });
 
-  it('fits the reviewer, coder, architect and infrastructure inside JOB_BUDGET_MS', () => {
-    const claimed = REVIEWER_JOB_SHARE_MS + CODER_JOB_SHARE_MS + ARCHITECT_WORST_CASE_MS + INFRASTRUCTURE_ALLOWANCE_MS;
+  /**
+   * A REPAIR ROUND IS ONE CODER DISPATCH AND ONE RE-REVIEW, each at the worst
+   * case the runtime would actually permit: the coder envelope's two attempts,
+   * and the reviewer's operative deadline. Derived, not restated, so a longer
+   * observation that raises either one re-prices every round here.
+   */
+  const REPAIR_ROUND_WORST_CASE_MS = resolveCoderEnvelope().worstCaseRuntimeSpendMs + resolveReviewerDeadline().operativeTimeoutMs;
+
+  it('fits the reviewer, coder, architect, infrastructure AND every budgeted repair round inside JOB_BUDGET_MS', () => {
+    const claimed = REVIEWER_JOB_SHARE_MS + CODER_JOB_SHARE_MS + ARCHITECT_WORST_CASE_MS + INFRASTRUCTURE_ALLOWANCE_MS
+      + JOB_REPAIR_ROUNDS_BUDGETED * REPAIR_ROUND_WORST_CASE_MS;
     expect(claimed, `claims ${claimed} ms of a ${JOB_BUDGET_MS_FOR_SHARES} ms job`)
       .toBeLessThanOrEqual(JOB_BUDGET_MS_FOR_SHARES);
+  });
+
+  it('stays below the admission wait bound and the hosted cap, so a queued run can outwait it', () => {
+    const workflow = read('.github/workflows/julius-first-live-mission.yml');
+    const admission = workflow.slice(workflow.indexOf('\n  paid-slot:\n'), workflow.indexOf('\n  first-live-mission:\n'));
+    const wait = /^\s*timeout-minutes:\s*(\d+)\s*$/m.exec(admission);
+    expect(wait, 'the admission job declares its wait bound').not.toBeNull();
+    expect(JOB_BUDGET_MS_FOR_SHARES).toBeLessThan(Number(wait![1]) * 60_000);
+    expect(JOB_BUDGET_MS_FOR_SHARES).toBeLessThan(360 * 60_000);
+  });
+
+  it('affords every repair round a mission contract may authorise', () => {
+    const checker = read('scripts/julius-live-contract-check.mjs');
+    const granted = [...checker.matchAll(/repairCycles:\s*(\d+)/gu)].map((match) => Number(match[1]));
+    expect(granted.length, 'the checker grants repair cycles').toBeGreaterThan(0);
+    expect(Math.max(...granted)).toBeLessThanOrEqual(JOB_REPAIR_ROUNDS_BUDGETED);
   });
 
   it('keeps the coder worst case inside its own share', () => {
