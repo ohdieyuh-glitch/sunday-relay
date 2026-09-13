@@ -62,17 +62,21 @@ def _distributions_for(module_names):
 EXIT_HOST_GONE = 96
 
 
-def _watch_parent():
+def _watch_parent(host_pid=None):
     """End this execution when the host that started it dies.
 
     A host that crashed can never settle this execution, so continuing would
     only spend resources on output nobody can admit. Everything needed is
     resolved here, before the audit hook is armed, so the watch itself never
     asks the hook for permission.
+
+    The host names its own pid. On Windows a virtual environment's python.exe
+    is a redirector that starts the real interpreter as ITS child, so the
+    parent this process sees is the redirector, which outlives a dead host.
     """
     import threading
 
-    parent = os.getppid()
+    parent = int(host_pid) if host_pid else os.getppid()
     if sys.platform == "win32":
         import ctypes
         from ctypes import wintypes
@@ -95,9 +99,14 @@ def _watch_parent():
     else:
         def watch():
             import time as _time
-            while os.getppid() == parent:
+            while True:
+                try:
+                    os.kill(parent, 0)
+                except ProcessLookupError:
+                    os._exit(EXIT_HOST_GONE)
+                except PermissionError:
+                    pass
                 _time.sleep(0.5)
-            os._exit(EXIT_HOST_GONE)
 
     threading.Thread(target=watch, name="julius-host-watch", daemon=True).start()
     return "PARENT_WATCH"
@@ -158,7 +167,7 @@ def main(argv):
 
     peak_reader, enforcement = _limits.apply(control["limits"])
     usage["enforcement"].update(enforcement)
-    usage["enforcement"]["hostLiveness"] = _watch_parent()
+    usage["enforcement"]["hostLiveness"] = _watch_parent(control.get("hostPid"))
 
     unsatisfied = _unsatisfied(control.get("requirements", []))
     if unsatisfied:

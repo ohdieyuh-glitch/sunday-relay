@@ -182,6 +182,7 @@ export class NodeJuliusPythonRunner implements JuliusPythonRunnerPort {
         limits: { memoryBytes: request.limits.memoryBytes, maxArtifactBytes: request.limits.maxArtifactBytes },
         network: request.network,
         requirements: request.environment.requirements,
+        hostPid: process.pid,
       };
       await writeFile(control.contextPath, JSON.stringify(input.context));
       await writeFile(control.schemaPath, JSON.stringify(input.schema));

@@ -117,6 +117,7 @@ const DECLARED_NOT_COMPOSED = [
   { path: 'src/relay/mission/julius/julius-python-contracts.ts', reason: 'the governed Python execution tool: request, C.A.R.D. authorisation, untrusted-output parsing and proposal→Brain-draft conversion; not yet composed by the live root, and the executor sandbox image has no Python' },
   { path: 'src/relay/mission/julius/julius-python-service.ts', reason: 'the governed Python execution tool: request → authorise → run → atomic settlement into the Project Brain, cancellation and disconnection; not yet composed by the live root' },
   { path: 'src/relay/workspace/julius-tools/python-runner.ts', reason: 'the local host runner for governed Python executions (scrubbed environment, tree kill, bounded hashed redacted streams, content-addressed artifacts, interpreter probing); not composed by the live root, which routes tool effects through the independent executor' },
+  { path: 'src/relay/workspace/julius-tools/python-environments.ts', reason: 'explicit Python environments: a spec-hash-named virtualenv installed offline from a declared wheelhouse with exact pins, verified by probe and locked; never the base interpreter; not yet composed by the live root' },
   { path: 'src/relay/persistence/julius-python-postgres.ts', reason: 'durable governed Python executions (migration 025) whose settlement commits the execution state and its Project Brain records in one transaction; proven across processes, a server restart, cross-process cancellation and a crashed host by scripts/julius-brain-python-flow-drill.ts; not yet composed by the live root' },
   { path: 'src/relay/persistence/julius-brain-postgres.ts', reason: 'Project Brain v2: the durable PostgreSQL store (migration 024), proven by scripts/julius-project-brain-drill.ts across separate processes and a server restart; not yet composed by the live root' },
 ];
@@ -280,6 +281,7 @@ const FILE_RULES = [
   ['src/relay/mission/julius/julius-python-contracts.ts', 'TOOLS'],
   ['src/relay/mission/julius/julius-python-service.ts', 'TOOLS'],
   ['src/relay/workspace/julius-tools/python-runner.ts', 'TOOLS'],
+  ['src/relay/workspace/julius-tools/python-environments.ts', 'TOOLS'],
   ['src/relay/persistence/julius-python-postgres.ts', 'PERSISTENCE'],
   ['src/relay/persistence/julius-brain-postgres.ts', 'DURABLE STATE / PROJECT BRAIN'],
   ['src/relay/mission/julius/julius-allocation-runtime.ts', 'LEASES / BUDGETS / PERMISSIONS'],

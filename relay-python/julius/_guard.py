@@ -138,6 +138,10 @@ class Guard:
             elif event in _PROCESS_EVENTS:
                 if event in ("os.kill", "os.killpg") and len(args) > 0 and args[0] == os.getpid():
                     return
+                # Signal 0 delivers nothing: it only asks whether a process
+                # exists, which is how the host-liveness watch works.
+                if event == "os.kill" and len(args) > 1 and args[1] == 0:
+                    return
                 self._deny(event, "process creation and signalling are denied")
             elif event in _NATIVE_EVENTS:
                 self._deny(event, "loading native libraries through ctypes is denied")
