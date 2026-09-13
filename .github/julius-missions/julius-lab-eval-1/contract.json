@@ -1,0 +1,125 @@
+{
+  "missionId": "mission:julius-lab-eval-1",
+  "markerNamespace": "julius-lab-eval-1",
+  "projectId": "prj-julius-lab-eval-1",
+  "tenantId": "tenant",
+  "objective": "In this workspace, implement every exported function in TWO modules, in dependency order: first `src/relay/mission/julius/julius-run-comparison.ts`, a pure comparator that puts two paid Julius runs side by side and refuses to manufacture a number where one cannot honestly be had; then `src/relay/mission/julius/julius-run-comparison-text.ts`, a pure renderer that prints such a comparison in a form that cannot be misread. Both specifications are already written — `julius-run-comparison.test.ts` and `julius-run-comparison-text.test.ts` beside the modules — and both currently fail. Edit the modules in place.\n\nTHE MODULES BUILD ON `src/relay/mission/julius/julius-cost-accounting.ts`, which is in this workspace and is the authority on what a run cost and whether that figure is complete. Import it; do not copy its vocabulary.\n\nA STALE NOTE IS IN THE WORKSPACE. `src/relay/mission/julius/RUN_COMPARISON_NOTES.md` predates the cost accounting module and is wrong on more than one point. The specifications and the cost module's own header are the authority, not the note. Identify each rule in the note that the module and the specification contradict, correct those sentences in the note so the file no longer contradicts the code, and record in the comparator's comments which rules you rejected and why.\n\nONE RULE IS NOT DECIDED FOR YOU. When one run settled a role's cost as PROVIDER_REPORTED and the other run settled the same role's cost as MEASURED_FROM_USAGE — both spend bases, two different authorities — the specification does not say whether the two known figures are comparable. Decide, record the decision and its reason in the plan and in a comment at the point in the comparator where it takes effect, and implement what you decided. A comparator that never mentions the question has not decided it.",
+  "requirements": [
+    "Implement every exported function in both modules so none throws `run_comparison_not_implemented` or `run_comparison_text_not_implemented`. Keep every exported name, signature, type and vocabulary exactly as declared.",
+    "A known cost that is not complete on either side is UNKNOWN, never a delta: the difference of two floors is not a difference. The count of unknown components stays comparable, because it is a count and not money. Estimated cost is its own axis: it is compared whenever money is comparable and is never added to the known total.",
+    "Money settled under two different allocation policies is NOT_COMPARABLE, even when both figures are complete, and the reason names both policies. An unknown policy on either side is NOT_COMPARABLE too. Counts and ticks are not money and stay comparable.",
+    "A role absent from one run is UNKNOWN on every metric for that run's side and names the side. It is never a cost of zero and never a dispatch count of zero.",
+    "Ticks that were not recorded are UNKNOWN and name the side. Never 0.",
+    "Every delta is `after - before`, and every direction is read against the metric's declared polarity: money, unknown components and ticks are better lower; a dispatch count that changed is NEUTRAL, neither better nor worse.",
+    "An UNKNOWN or NOT_COMPARABLE metric carries no `delta`, `before`, `after` or `direction` at all, so a reader cannot get a number out of it by accident.",
+    "The renderer computes nothing: it prints a DELTA with its sign and direction, an UNKNOWN with its reason and the words `unknown is not zero`, and a NOT_COMPARABLE with its reason and no number, in exactly the forms the specification states.",
+    "THE STALE NOTE. Correct every sentence in `RUN_COMPARISON_NOTES.md` that the specification or `julius-cost-accounting.ts` contradicts, so the note agrees with the code, and say in a comment in the comparator which of the note's rules you rejected and on what authority.",
+    "THE ONE YOU MUST DECIDE. State, at the point in the comparator where it takes effect, whether PROVIDER_REPORTED and MEASURED_FROM_USAGE figures for the same role are comparable, and why. Implement what you stated. The specification deliberately tests neither answer.",
+    "PURITY. No clock, no Node API, no filesystem, no network, no randomness, no mutation of any argument. Time, where it were ever needed, arrives as an injected string.",
+    "NO HIDDEN REASONING IS EVER PERSISTED. Do not write model reasoning, internal monologue or scratchpad text into any exported value, comment or structure.",
+    "After your edits `node --import ./.julius/loader.mjs --test src/relay/mission/julius/julius-run-comparison.test.ts src/relay/mission/julius/julius-run-comparison-text.test.ts` must exit zero, with no network access and no third-party dependency."
+  ],
+  "constraints": [
+    "Edit `julius-run-comparison.ts`, `julius-run-comparison-text.ts` and `RUN_COMPARISON_NOTES.md` in place. You have `Read`, `Glob`, `Grep` and `Edit`; you cannot create files or run commands, and you do not need to.",
+    "Do not edit `julius-cost-accounting.ts`. It is the dependency, sliced byte for byte from the repository, and it is not part of the deliverable.",
+    "Do not edit either specification. They are what you are implementing against, not part of the deliverable.",
+    "This is TypeScript run by Node's own type stripping. Use only erasable syntax: no `enum`, no `namespace`, no parameter properties in a constructor, no `satisfies`.",
+    "Add no dependency. The only imports the two modules may carry are from each other and from `./julius-cost-accounting`; the sandbox has no `node_modules` and no network.",
+    "Do not weaken a specification to make it pass. Every case is a property the product depends on."
+  ],
+  "acceptanceCriteria": [
+    {
+      "id": "criterion-implemented",
+      "text": "No exported function in either module throws its not-implemented sentinel, and every exported name, signature, type and vocabulary is unchanged.",
+      "blocking": true
+    },
+    {
+      "id": "criterion-tests",
+      "text": "`node --import ./.julius/loader.mjs --test src/relay/mission/julius/julius-run-comparison.test.ts src/relay/mission/julius/julius-run-comparison-text.test.ts` exits zero.",
+      "blocking": true
+    },
+    {
+      "id": "criterion-floors",
+      "text": "An incomplete known cost on either side reads UNKNOWN and never a delta; the unknown-component count and the estimated cost remain DELTAs on their own axes.",
+      "blocking": true
+    },
+    {
+      "id": "criterion-policies",
+      "text": "Money under differing or unknown allocation policies reads NOT_COMPARABLE with a reason naming the policies, while counts and ticks remain comparable.",
+      "blocking": true
+    },
+    {
+      "id": "criterion-absence",
+      "text": "A role absent from one run, and ticks that were not recorded, read UNKNOWN naming the side, and are never zero.",
+      "blocking": true
+    },
+    {
+      "id": "criterion-polarity",
+      "text": "Every delta is after minus before and every direction follows the declared polarity table, with a changed dispatch count reading NEUTRAL.",
+      "blocking": true
+    },
+    {
+      "id": "criterion-renderer",
+      "text": "The renderer prints every DELTA, UNKNOWN and NOT_COMPARABLE in exactly the specified forms, hedges once at the end when anything is unknown or not comparable, and computes nothing of its own.",
+      "blocking": true
+    },
+    {
+      "id": "criterion-dependency",
+      "text": "The comparator imports `julius-cost-accounting` rather than copying its vocabulary, and the renderer imports the comparator rather than recomputing it.",
+      "blocking": true
+    },
+    {
+      "id": "criterion-stale-note",
+      "text": "Every rule in `RUN_COMPARISON_NOTES.md` that the code contradicts is corrected in the note, and the comparator's comments name the rejected rules and the authority for rejecting them.",
+      "blocking": true
+    },
+    {
+      "id": "criterion-decided",
+      "text": "The comparator states, where it takes effect, whether PROVIDER_REPORTED and MEASURED_FROM_USAGE figures for one role are comparable and why, and the plan records the same decision.",
+      "blocking": true
+    },
+    {
+      "id": "criterion-purity",
+      "text": "No clock, Node API, filesystem, network or randomness is used, no argument is mutated, and no model reasoning appears in any exported value or comment.",
+      "blocking": true
+    },
+    {
+      "id": "criterion-scope",
+      "text": "Only the two modules and the note are edited.",
+      "blocking": false
+    }
+  ],
+  "testCommand": "node --import ./.julius/loader.mjs --test src/relay/mission/julius/julius-run-comparison.test.ts src/relay/mission/julius/julius-run-comparison-text.test.ts",
+  "workspacePath": "/tmp/julius-workspace/tenant/ws",
+  "limits": {
+    "spendUsd": 60,
+    "repairCycles": 3,
+    "architectMaxOutputTokens": 20000
+  },
+  "research": {
+    "roles": [
+      "PROMPT_ARCHITECT",
+      "CODING_AGENT",
+      "INDEPENDENT_REVIEWER"
+    ],
+    "allowances": [
+      {
+        "source": "web",
+        "capabilities": [
+          "read_item"
+        ],
+        "hosts": [
+          "nodejs.org"
+        ]
+      }
+    ],
+    "missionBudget": {
+      "maxRetrievals": 6,
+      "maxBytes": 400000
+    },
+    "roleBudget": {
+      "maxRetrievals": 2,
+      "maxBytes": 200000
+    }
+  }
+}
