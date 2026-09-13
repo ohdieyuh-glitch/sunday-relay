@@ -1,0 +1,18 @@
+# Lab evaluation mission 2 — regression under change: terms a contract never had.
+#
+# THE DELIVERABLES. Two real Sunday Relay files, sliced byte-identical, so the
+# diff this mission produces applies straight back to the repository. Both are
+# LIVE code: the contract module is on every paid run's dispatch path, and the
+# store model is what every other Julius test composes. Neither is a stub. The
+# new behaviour is specified in a seeded specification that fails against them;
+# the existing behaviour — including rows they have already written — is
+# specified in another that passes against them and must still pass.
+src/relay/mission/julius/julius-task-contract.ts
+src/relay/mission/julius/julius-memory-store.ts
+
+# THE STORE'S DEPENDENCIES, which close the slice. Not deliverables, and not to
+# be edited. `julius-task-contract.ts` imports nothing at runtime beyond
+# `node:crypto`.
+src/relay/mission/julius/julius-runtime.ts
+src/relay/mission/julius/julius-recovery.ts
+src/relay/mission/julius/julius-repair-lineage.ts
