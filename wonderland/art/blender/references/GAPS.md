@@ -334,3 +334,21 @@ The world had balloons, clouds, gold keys and teacups in the air, and not one is
 so any kit tower foot stands on one exactly as it stands on the world's ground, and whose underside is
 a main rock mass with a ring of smaller hanging masses, declared through `excavates` so the validator
 holds the depth to the centimetre.
+
+## GAP 17 — the city had towers and houses, and the Bible's city is palaces
+
+**What the Bible shows** (BOARD_1 "Architecture Detail References" and "Depth & Scale References"): between
+the garden and the needles stand long ivory palace fronts -- an arcaded, rusticated ground storey, a piano
+nobile of tall round-headed windows between gilded pilasters, a cornice and a balustrade -- under steep
+lilac and rose mansards with dormers and gold cresting, broken by taller pavilions, and over them a great
+ribbed dome on a columned drum. The founder's private-beta list (2026-09-13) asks for exactly this: "more
+domes", "layered palace/city architecture".
+
+**What the kit had.** 6 m houses, towers, walls and one small ribbed dome crown on the L rung. A palace
+front spelled from houses is a terrace; a tower scaled into a drum has windows the size of doors.
+
+**Answered by** `families/palace.py`: `WL_Palace_Wing` (24 x 12 m, five bays, joins end to end),
+`WL_Palace_Pavilion` (14 m square, one storey taller, tall roof and lantern) and `WL_Palace_Dome_Grand`
+(34 m podium with portico and corner turrets, a 16-window columned drum, a ribbed pointed dome whose
+shell is its own part so a layer lays it in lilac, rose, blue or gold). The three share one order --
+ground 0-5.2 m, nobile 5.4-11.4 m, parapet 12.4 m -- so wings, pavilions and the dome's podium line up.

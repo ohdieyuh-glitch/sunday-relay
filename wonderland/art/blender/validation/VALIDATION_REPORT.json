@@ -1,5 +1,5 @@
 {
-  "checked_assets": 105,
+  "checked_assets": 108,
   "failures": 0,
   "material_check": "59 MI_V2_* names parsed from materials_v2.py",
   "per_asset": {
@@ -99,6 +99,9 @@
     "WL_Sky_Island_Medium": [],
     "WL_Sky_Island_Large": [],
     "WL_Object_PocketClock": [],
+    "WL_Palace_Wing": [],
+    "WL_Palace_Pavilion": [],
+    "WL_Palace_Dome_Grand": [],
     "WL_Wall_Curtain_Run__aged": [],
     "WL_Wall_Mural_Tower__ruined": [],
     "WL_Tower_Base_Buttressed__aged": [],
@@ -127,6 +130,7 @@
     "hero",
     "sky",
     "objects",
+    "palace",
     "variants"
   ],
   "mesh_hashes": {
@@ -616,6 +620,28 @@
     "WL_Object_PocketClock": {
       "enamel": "9c2920b73248a0f5f19a72aa18cba115db8696ce70e6caf52dcb163ddd5cdced",
       "gold": "efa65b6d328058608c1c7dab88713e8faab83dbc71a21437a9edd148b043f6de"
+    },
+    "WL_Palace_Wing": {
+      "glass": "6fe648cb3cca42a6a3e83e84f1075ec34aba864a87c59735185177fd287dabd6",
+      "gold": "29aaa868a736000805f38f7c2d84f1a3d8fa1a9a3da073b3b167cc77e9442654",
+      "roof_alt": "f4b84ecab56a79875feeb676ddf0ee809f40a328a8f6163cec3d867adc3f2edb",
+      "stone": "fce5fe6bab8b2096efee92324eaf18614593c1cb69c1229177cd4e2235aa0568",
+      "stone_dark": "1c37ccfc43df7ca27bf92e679cd30e30f1f532d7b54bde1a3090abdd600d43ef"
+    },
+    "WL_Palace_Pavilion": {
+      "glass": "c6008744a699f87b84b929dbeea5cc31b72e351382fadc7f47ce55b2899e4b84",
+      "gold": "c63126f962754ea21743450f801c2e7691bc458101e0399425e08df18558a486",
+      "roof": "89e6cacac72423aaf25f6f52a5dbab9d93e79e234127d4ecfd8fe25af84e6b55",
+      "stone": "de593d4e7003fef31782be565db2b23f60fe1e3667e156b3c14564e6236d2bb9",
+      "stone_dark": "76aa957df56a8861b8ee917a13d348487f545ce868f015bcaa0a012c45187dcc"
+    },
+    "WL_Palace_Dome_Grand": {
+      "glass": "aeb38eff56e8a869e6193a602a200a4e40aac806cf1d9ef7c3c65700e67a4f6b",
+      "gold": "fc05f510768c547aa9751a87615a532e380107478b8a3cd83aa126f05eaaad1b",
+      "roof": "ca336e6c0dc7db29210dfd2e76f183c69ab1428464f88c56e60a68a9e1e5e5d4",
+      "roof_alt": "64e114a6ac28f2dc5c5dd221a3676a0dddcc48a38587284172dbee4ff7619d90",
+      "stone": "c57c0682a273815d10a9f87414d5fcfc31ebb29ea9b0002b424bd86739353fb2",
+      "stone_dark": "d7d3088823f703c507c13c68af556aeed208c0fa95658855a95952aa18c2c3b2"
     },
     "WL_Wall_Curtain_Run__aged": {
       "stone": "3e34a655658a4cdf79504a8cebfff2158e5f65b1152f5b8dd0084de428e63d5a",

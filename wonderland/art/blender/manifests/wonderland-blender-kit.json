@@ -1,7 +1,7 @@
 {
   "schema": "wonderland-blender-kit/1",
   "kit_version": "1.0.0",
-  "generated_utc": "2026-09-13T17:19:33+00:00",
+  "generated_utc": "2026-09-13T19:15:00+00:00",
   "generator": "wonderland/art/blender/scripts/build_assets.py",
   "blender": "4.5.13 LTS",
   "conventions": {
@@ -22,9 +22,9 @@
       "provenance": "measured",
       "unknown_is": "null, and it renders as Unknown -- never 0",
       "observed": {
-        "n": 105,
+        "n": 108,
         "min": 0.153,
-        "median": 0.846,
+        "median": 0.845,
         "max": 1.0,
         "unknown": 0
       }
@@ -36,9 +36,9 @@
       "provenance": "measured",
       "unknown_is": "null, and it renders as Unknown -- never 0",
       "observed": {
-        "n": 105,
+        "n": 108,
         "min": 0.0,
-        "median": 0.37,
+        "median": 0.378,
         "max": 1.0,
         "unknown": 0
       }
@@ -50,7 +50,7 @@
       "provenance": "measured",
       "unknown_is": "null, and it renders as Unknown -- never 0",
       "observed": {
-        "n": 105,
+        "n": 108,
         "min": 0.557,
         "median": 0.999,
         "max": 1.0,
@@ -64,9 +64,9 @@
       "provenance": "measured",
       "unknown_is": "null, and it renders as Unknown -- never 0",
       "observed": {
-        "n": 105,
+        "n": 108,
         "min": 0.0,
-        "median": 0.976,
+        "median": 0.975,
         "max": 1.0,
         "unknown": 0
       }
@@ -78,7 +78,7 @@
       "provenance": "declared",
       "unknown_is": "null, and it renders as Unknown -- never 0",
       "observed": {
-        "n": 105,
+        "n": 108,
         "min": 0.0,
         "median": 0.0,
         "max": 0.7,
@@ -92,7 +92,7 @@
       "provenance": "derived",
       "unknown_is": "null, and it renders as Unknown -- never 0",
       "observed": {
-        "n": 102,
+        "n": 105,
         "min": 0.083,
         "median": 0.675,
         "max": 0.917,
@@ -106,7 +106,7 @@
       "provenance": "derived",
       "unknown_is": "null, and it renders as Unknown -- never 0",
       "observed": {
-        "n": 105,
+        "n": 108,
         "min": 0.05,
         "median": 0.5,
         "max": 0.7,
@@ -203,12 +203,12 @@
     }
   },
   "counts": {
-    "assets": 105,
-    "meshes": 327,
-    "triangles": 359632,
+    "assets": 108,
+    "meshes": 343,
+    "triangles": 451942,
     "by_role": {
       "foot": 5,
-      "body": 12,
+      "body": 14,
       "crown": 7,
       "needle": 5,
       "threshold": 10,
@@ -217,7 +217,7 @@
       "detail": 17,
       "route": 11,
       "terrace": 17,
-      "hero": 5
+      "hero": 6
     },
     "legal_tower_stacks_up_to_3_bodies": 865,
     "rung_coverage": {
@@ -33841,6 +33841,1586 @@
         }
       },
       "part_count": 2
+    },
+    {
+      "asset_id": "WL_Palace_Wing",
+      "kit_version": "1.0.0",
+      "family": "palace",
+      "family_group": "palace",
+      "category": "structure",
+      "silhouette_role": "body",
+      "note": "five-bay palace front: rusticated arcade, piano nobile between gilded pilasters, cornice and balustrade, lilac mansard with dormers and gold cresting; 24 x 12 m, joins end to end",
+      "districts": [
+        "city",
+        "castle",
+        "plaza",
+        "royal_garden"
+      ],
+      "params": {
+        "plan_m": [
+          24.0,
+          12.0
+        ],
+        "bays": 5,
+        "parapet_z_m": 12.4
+      },
+      "origin_rule": "z = 0 is the GROUND DATUM; +X is the module front. excavation_uu is how far the module is cut in below it.",
+      "excavation_uu": 0.0,
+      "mounts_on": null,
+      "variant_of": null,
+      "units": {
+        "authored": "metres",
+        "manifest": "unreal units (cm)",
+        "uu_per_metre": 100.0
+      },
+      "height_uu": 1928.0,
+      "bbox_min_uu": [
+        -1255.0,
+        -655.0,
+        0.0
+      ],
+      "bbox_max_uu": [
+        1255.0,
+        655.0,
+        1928.0
+      ],
+      "size_uu": [
+        2510.0,
+        1310.0,
+        1928.0
+      ],
+      "style": {
+        "slender_broad": 0.827,
+        "low_monumental": 0.643,
+        "open_solid": 1.0,
+        "gold_stone": 0.022,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.675,
+        "ceremonial_residential": 0.525
+      },
+      "base_z_uu": 0.0,
+      "profile_uu": [
+        1375.23,
+        1347.01,
+        1347.01,
+        1375.23,
+        1375.23,
+        1253.34,
+        1371.47,
+        1415.64,
+        1381.21,
+        991.76,
+        991.76,
+        501.0
+      ],
+      "radius_uu": 1255.0,
+      "tris_total": 15988,
+      "tri_budget": 60000,
+      "over_budget": false,
+      "nanite_recommended": true,
+      "nanite_rule": "recommended when the module is >= 5000 triangles and the builder has not opted out",
+      "collision_recommended": true,
+      "uv": "planar-world-2m (not a lightmap unwrap)",
+      "sockets": [
+        {
+          "name": "bottom",
+          "kind": "ground",
+          "z_uu": 0.0,
+          "radius_uu": 1200.0,
+          "rung": null,
+          "note": ""
+        },
+        {
+          "name": "eaves",
+          "kind": "bridge_end",
+          "z_uu": 1240.0,
+          "radius_uu": 1200.0,
+          "rung": null,
+          "note": "parapet at 12.40 m; the balustrade walk"
+        },
+        {
+          "name": "end_a",
+          "kind": "pier",
+          "z_uu": 0.0,
+          "radius_uu": 600.0,
+          "rung": null,
+          "note": "plain butt wall at x = -12.00 m; a pavilion or a wing joins here"
+        },
+        {
+          "name": "end_b",
+          "kind": "pier",
+          "z_uu": 0.0,
+          "radius_uu": 600.0,
+          "rung": null,
+          "note": "plain butt wall at x = +12.00 m; a pavilion or a wing joins here"
+        }
+      ],
+      "parts": {
+        "glass": {
+          "verts": 128,
+          "faces": 96,
+          "tris": 192,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_GlassAmber"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -1026.5,
+            -608.0,
+            595.0
+          ],
+          "bbox_max_uu": [
+            1026.5,
+            608.0,
+            1423.0
+          ],
+          "size_uu": [
+            2053.0,
+            1216.0,
+            828.0
+          ],
+          "height_m": 8.28,
+          "base_z_uu": 595.0,
+          "normals": {
+            "faces": 96,
+            "shells": 16,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 16,
+            "zero_normal_faces": 0
+          },
+          "profile_uu": [
+            1193.05,
+            1193.05,
+            1193.05,
+            1193.05,
+            1193.05,
+            1193.05,
+            1193.05,
+            1193.05,
+            1193.05,
+            1193.05,
+            939.67,
+            939.67
+          ],
+          "material": "MI_V2_GlassAmber",
+          "mesh_name": "WL_Palace_Wing_glass",
+          "glb": "exports\\glb\\WL_Palace_Wing_glass.glb",
+          "fbx": "exports\\fbx\\WL_Palace_Wing_glass.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_GlassAmber"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -10.265000343322754,
+              5.949999809265137,
+              -6.080000400543213
+            ],
+            "max_yup": [
+              10.265000343322754,
+              14.229999542236328,
+              6.080000877380371
+            ],
+            "bytes": 14912
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 595.0,
+            "stored_z_max": 1423.0
+          }
+        },
+        "gold": {
+          "verts": 1054,
+          "faces": 1014,
+          "tris": 1964,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_Gold"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -1225.0,
+            -646.0,
+            542.0
+          ],
+          "bbox_max_uu": [
+            1225.0,
+            646.0,
+            1928.0
+          ],
+          "size_uu": [
+            2450.0,
+            1292.0,
+            1386.0
+          ],
+          "height_m": 13.86,
+          "base_z_uu": 542.0,
+          "normals": {
+            "faces": 1014,
+            "shells": 37,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 3,
+            "zero_normal_faces": 0
+          },
+          "profile_uu": [
+            1375.23,
+            1375.23,
+            1375.23,
+            1375.23,
+            1371.47,
+            1371.47,
+            1371.47,
+            959.22,
+            959.22,
+            959.22,
+            501.0,
+            498.93
+          ],
+          "material": "MI_V2_Gold",
+          "mesh_name": "WL_Palace_Wing_gold",
+          "glb": "exports\\glb\\WL_Palace_Wing_gold.glb",
+          "fbx": "exports\\fbx\\WL_Palace_Wing_gold.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_Gold"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -12.25,
+              5.420000076293945,
+              -6.460000038146973
+            ],
+            "max_yup": [
+              12.25,
+              19.280000686645508,
+              6.460000991821289
+            ],
+            "bytes": 99320
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 542.0,
+            "stored_z_max": 1928.0001220703125
+          }
+        },
+        "roof_alt": {
+          "verts": 162,
+          "faces": 139,
+          "tris": 264,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_RoofLilac"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -1110.0,
+            -532.0,
+            1238.0
+          ],
+          "bbox_max_uu": [
+            1110.0,
+            532.0,
+            1787.0
+          ],
+          "size_uu": [
+            2220.0,
+            1064.0,
+            549.0
+          ],
+          "height_m": 5.49,
+          "base_z_uu": 1238.0,
+          "normals": {
+            "faces": 139,
+            "shells": 15,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 1,
+            "zero_normal_faces": 0
+          },
+          "profile_uu": [
+            1221.56,
+            1221.56,
+            1221.56,
+            1221.56,
+            1221.56,
+            991.76,
+            991.76,
+            987.86,
+            987.86,
+            987.86,
+            987.86,
+            484.32
+          ],
+          "material": "MI_V2_RoofLilac",
+          "mesh_name": "WL_Palace_Wing_roof_alt",
+          "glb": "exports\\glb\\WL_Palace_Wing_roof_alt.glb",
+          "fbx": "exports\\fbx\\WL_Palace_Wing_roof_alt.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_RoofLilac"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -11.100000381469727,
+              12.380000114440918,
+              -5.320000171661377
+            ],
+            "max_yup": [
+              11.100000381469727,
+              17.8700008392334,
+              5.320000171661377
+            ],
+            "bytes": 20200
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 1238.0,
+            "stored_z_max": 1787.0001220703125
+          }
+        },
+        "stone": {
+          "verts": 7272,
+          "faces": 7612,
+          "tris": 13448,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_IvoryStone"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -1255.0,
+            -655.0,
+            0.0
+          ],
+          "bbox_max_uu": [
+            1255.0,
+            655.0,
+            1468.0
+          ],
+          "size_uu": [
+            2510.0,
+            1310.0,
+            1468.0
+          ],
+          "height_m": 14.68,
+          "base_z_uu": 0.0,
+          "normals": {
+            "faces": 7612,
+            "shells": 274,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 19,
+            "zero_normal_faces": 0
+          },
+          "profile_uu": [
+            1375.23,
+            1347.01,
+            1347.01,
+            1347.01,
+            1372.54,
+            1372.54,
+            1372.54,
+            1253.34,
+            1357.19,
+            1415.64,
+            1415.64,
+            1381.21
+          ],
+          "material": "MI_V2_IvoryStone",
+          "mesh_name": "WL_Palace_Wing",
+          "glb": "exports\\glb\\WL_Palace_Wing.glb",
+          "fbx": "exports\\fbx\\WL_Palace_Wing.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_IvoryStone"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -12.550000190734863,
+              0,
+              -6.550000190734863
+            ],
+            "max_yup": [
+              12.550000190734863,
+              14.679999351501465,
+              6.550000190734863
+            ],
+            "bytes": 631964
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 0.0,
+            "stored_z_max": 1467.9998779296875
+          }
+        },
+        "stone_dark": {
+          "verts": 80,
+          "faces": 60,
+          "tris": 120,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_Stone"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -1085.0,
+            -606.5,
+            55.0
+          ],
+          "bbox_max_uu": [
+            1085.0,
+            606.5,
+            494.0
+          ],
+          "size_uu": [
+            2170.0,
+            1213.0,
+            439.0
+          ],
+          "height_m": 4.39,
+          "base_z_uu": 55.0,
+          "normals": {
+            "faces": 60,
+            "shells": 10,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 10,
+            "zero_normal_faces": 0
+          },
+          "profile_uu": [
+            1243.01,
+            1243.01,
+            1243.01,
+            1243.01,
+            1243.01,
+            1243.01,
+            1243.01,
+            1243.01,
+            1243.01,
+            1243.01,
+            1243.01,
+            1243.01
+          ],
+          "material": "MI_V2_Stone",
+          "mesh_name": "WL_Palace_Wing_stone_dark",
+          "glb": "exports\\glb\\WL_Palace_Wing_stone_dark.glb",
+          "fbx": "exports\\fbx\\WL_Palace_Wing_stone_dark.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_Stone"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -10.850000381469727,
+              0.550000011920929,
+              -6.065000057220459
+            ],
+            "max_yup": [
+              10.850000381469727,
+              4.940000057220459,
+              6.065001010894775
+            ],
+            "bytes": 9668
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 55.0,
+            "stored_z_max": 494.0
+          }
+        }
+      },
+      "part_count": 5
+    },
+    {
+      "asset_id": "WL_Palace_Pavilion",
+      "kit_version": "1.0.0",
+      "family": "palace",
+      "family_group": "palace",
+      "category": "structure",
+      "silhouette_role": "body",
+      "note": "14 m square pavilion: the palace order plus an upper storey, corner quoins, a tall rose roof with dormers, a lantern under a gold bell; closes and punctuates a run of wings",
+      "districts": [
+        "city",
+        "castle",
+        "plaza",
+        "royal_garden"
+      ],
+      "params": {
+        "plan_m": [
+          14.0,
+          14.0
+        ],
+        "bays_per_face": 3,
+        "parapet_z_m": 16.8
+      },
+      "origin_rule": "z = 0 is the GROUND DATUM; +X is the module front. excavation_uu is how far the module is cut in below it.",
+      "excavation_uu": 0.0,
+      "mounts_on": null,
+      "variant_of": null,
+      "units": {
+        "authored": "metres",
+        "manifest": "unreal units (cm)",
+        "uu_per_metre": 100.0
+      },
+      "height_uu": 3133.0,
+      "bbox_min_uu": [
+        -755.0,
+        -755.0,
+        0.0
+      ],
+      "bbox_max_uu": [
+        755.0,
+        755.0,
+        3133.0
+      ],
+      "size_uu": [
+        1510.0,
+        1510.0,
+        3133.0
+      ],
+      "style": {
+        "slender_broad": 0.427,
+        "low_monumental": 0.796,
+        "open_solid": 1.0,
+        "gold_stone": 0.0,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.675,
+        "ceremonial_residential": 0.525
+      },
+      "base_z_uu": 0.0,
+      "profile_uu": [
+        1025.3,
+        1015.41,
+        1025.3,
+        938.72,
+        930.93,
+        1029.72,
+        1067.73,
+        582.76,
+        582.76,
+        314.52,
+        291.46,
+        39.0
+      ],
+      "radius_uu": 755.0,
+      "tris_total": 17214,
+      "tri_budget": 60000,
+      "over_budget": false,
+      "nanite_recommended": true,
+      "nanite_rule": "recommended when the module is >= 5000 triangles and the builder has not opted out",
+      "collision_recommended": true,
+      "uv": "planar-world-2m (not a lightmap unwrap)",
+      "sockets": [
+        {
+          "name": "bottom",
+          "kind": "ground",
+          "z_uu": 0.0,
+          "radius_uu": 700.0,
+          "rung": null,
+          "note": ""
+        },
+        {
+          "name": "end_a",
+          "kind": "pier",
+          "z_uu": 0.0,
+          "radius_uu": 700.0,
+          "rung": null,
+          "note": "wall at x = -7.00 m; a wing's end butts here"
+        },
+        {
+          "name": "end_b",
+          "kind": "pier",
+          "z_uu": 0.0,
+          "radius_uu": 700.0,
+          "rung": null,
+          "note": "wall at x = +7.00 m; a wing's end butts here"
+        }
+      ],
+      "parts": {
+        "glass": {
+          "verts": 256,
+          "faces": 192,
+          "tris": 384,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_GlassAmber"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -708.0,
+            -708.0,
+            595.0
+          ],
+          "bbox_max_uu": [
+            708.0,
+            708.0,
+            2588.0
+          ],
+          "size_uu": [
+            1416.0,
+            1416.0,
+            1993.0
+          ],
+          "height_m": 19.93,
+          "base_z_uu": 595.0,
+          "normals": {
+            "faces": 192,
+            "shells": 32,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 32,
+            "zero_normal_faces": 0
+          },
+          "profile_uu": [
+            886.3,
+            886.3,
+            886.3,
+            877.95,
+            877.95,
+            877.95,
+            575.45,
+            575.45,
+            575.45,
+            575.45,
+            575.45,
+            200.63
+          ],
+          "material": "MI_V2_GlassAmber",
+          "mesh_name": "WL_Palace_Pavilion_glass",
+          "glb": "exports\\glb\\WL_Palace_Pavilion_glass.glb",
+          "fbx": "exports\\fbx\\WL_Palace_Pavilion_glass.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_GlassAmber"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -7.080000400543213,
+              5.949999809265137,
+              -7.080000400543213
+            ],
+            "max_yup": [
+              7.080000400543213,
+              25.880001068115234,
+              7.080000400543213
+            ],
+            "bytes": 28360
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 595.0,
+            "stored_z_max": 2588.0
+          }
+        },
+        "gold": {
+          "verts": 1284,
+          "faces": 1193,
+          "tris": 2350,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_Gold"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -746.0,
+            -746.0,
+            542.0
+          ],
+          "bbox_max_uu": [
+            746.0,
+            746.0,
+            3133.0
+          ],
+          "size_uu": [
+            1492.0,
+            1492.0,
+            2591.0
+          ],
+          "height_m": 25.91,
+          "base_z_uu": 542.0,
+          "normals": {
+            "faces": 1193,
+            "shells": 55,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 2,
+            "zero_normal_faces": 0
+          },
+          "profile_uu": [
+            1025.3,
+            1025.3,
+            878.09,
+            878.09,
+            1029.72,
+            1021.06,
+            582.03,
+            582.03,
+            314.52,
+            291.46,
+            251.82,
+            35.15
+          ],
+          "material": "MI_V2_Gold",
+          "mesh_name": "WL_Palace_Pavilion_gold",
+          "glb": "exports\\glb\\WL_Palace_Pavilion_gold.glb",
+          "fbx": "exports\\fbx\\WL_Palace_Pavilion_gold.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_Gold"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -7.460000514984131,
+              5.420000076293945,
+              -7.460000038146973
+            ],
+            "max_yup": [
+              7.460000514984131,
+              31.329999923706055,
+              7.460000514984131
+            ],
+            "bytes": 132644
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 542.0,
+            "stored_z_max": 3133.0
+          }
+        },
+        "roof": {
+          "verts": 76,
+          "faces": 74,
+          "tris": 132,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_RoofRose"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -610.0,
+            -610.0,
+            1678.0
+          ],
+          "bbox_max_uu": [
+            610.0,
+            610.0,
+            2398.0
+          ],
+          "size_uu": [
+            1220.0,
+            1220.0,
+            720.0
+          ],
+          "height_m": 7.2,
+          "base_z_uu": 1678.0,
+          "normals": {
+            "faces": 74,
+            "shells": 5,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 0,
+            "zero_normal_faces": 0
+          },
+          "profile_uu": [
+            862.67,
+            862.67,
+            862.67,
+            571.14,
+            549.63,
+            512.89,
+            500.0,
+            500.0,
+            500.0,
+            500.0,
+            500.0,
+            293.31
+          ],
+          "material": "MI_V2_RoofRose",
+          "mesh_name": "WL_Palace_Pavilion_roof",
+          "glb": "exports\\glb\\WL_Palace_Pavilion_roof.glb",
+          "fbx": "exports\\fbx\\WL_Palace_Pavilion_roof.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_RoofRose"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -6.099999904632568,
+              16.780000686645508,
+              -6.099999904632568
+            ],
+            "max_yup": [
+              6.099999904632568,
+              23.979999542236328,
+              6.099999904632568
+            ],
+            "bytes": 11020
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 1678.0001220703125,
+            "stored_z_max": 2398.0
+          }
+        },
+        "stone": {
+          "verts": 7720,
+          "faces": 7798,
+          "tris": 14204,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_IvoryStone"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -755.0,
+            -755.0,
+            0.0
+          ],
+          "bbox_max_uu": [
+            755.0,
+            755.0,
+            2688.0
+          ],
+          "size_uu": [
+            1510.0,
+            1510.0,
+            2688.0
+          ],
+          "height_m": 26.88,
+          "base_z_uu": 0.0,
+          "normals": {
+            "faces": 7798,
+            "shells": 309,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 23,
+            "zero_normal_faces": 0
+          },
+          "profile_uu": [
+            1025.3,
+            995.61,
+            1022.48,
+            1022.48,
+            938.72,
+            930.93,
+            1014.28,
+            1067.73,
+            1020.26,
+            1020.26,
+            272.09,
+            272.09
+          ],
+          "material": "MI_V2_IvoryStone",
+          "mesh_name": "WL_Palace_Pavilion",
+          "glb": "exports\\glb\\WL_Palace_Pavilion.glb",
+          "fbx": "exports\\fbx\\WL_Palace_Pavilion.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_IvoryStone"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -7.550000190734863,
+              0,
+              -7.550000190734863
+            ],
+            "max_yup": [
+              7.550000190734863,
+              26.880001068115234,
+              7.550000190734863
+            ],
+            "bytes": 732252
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 0.0,
+            "stored_z_max": 2688.0
+          }
+        },
+        "stone_dark": {
+          "verts": 96,
+          "faces": 72,
+          "tris": 144,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_Stone"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -706.5,
+            -706.5,
+            55.0
+          ],
+          "bbox_max_uu": [
+            706.5,
+            706.5,
+            494.0
+          ],
+          "size_uu": [
+            1413.0,
+            1413.0,
+            439.0
+          ],
+          "height_m": 4.39,
+          "base_z_uu": 55.0,
+          "normals": {
+            "faces": 72,
+            "shells": 12,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 12,
+            "zero_normal_faces": 0
+          },
+          "profile_uu": [
+            921.53,
+            921.53,
+            921.53,
+            921.53,
+            921.53,
+            921.53,
+            921.53,
+            921.53,
+            921.53,
+            921.53,
+            921.53,
+            921.53
+          ],
+          "material": "MI_V2_Stone",
+          "mesh_name": "WL_Palace_Pavilion_stone_dark",
+          "glb": "exports\\glb\\WL_Palace_Pavilion_stone_dark.glb",
+          "fbx": "exports\\fbx\\WL_Palace_Pavilion_stone_dark.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_Stone"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -7.065000534057617,
+              0.550000011920929,
+              -7.065000057220459
+            ],
+            "max_yup": [
+              7.065000534057617,
+              4.940000057220459,
+              7.065000534057617
+            ],
+            "bytes": 11356
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 55.0,
+            "stored_z_max": 494.0
+          }
+        }
+      },
+      "part_count": 5
+    },
+    {
+      "asset_id": "WL_Palace_Dome_Grand",
+      "kit_version": "1.0.0",
+      "family": "palace",
+      "family_group": "palace",
+      "category": "landmark",
+      "silhouette_role": "hero",
+      "note": "the great dome: 34 m arcaded podium with corner turrets and a six-column portico, a 16-window columned drum, a ribbed pointed dome (roof_alt shell: a layer chooses lilac, rose, blue or gold) with a gold springing band, lantern and finial",
+      "districts": [
+        "castle",
+        "city",
+        "plaza"
+      ],
+      "params": {
+        "podium_m": 34.0,
+        "drum_radius_m": 12.0,
+        "dome_rise_m": 14.0,
+        "ribs": 16
+      },
+      "origin_rule": "z = 0 is the GROUND DATUM; +X is the module front. excavation_uu is how far the module is cut in below it.",
+      "excavation_uu": 0.0,
+      "mounts_on": null,
+      "variant_of": null,
+      "units": {
+        "authored": "metres",
+        "manifest": "unreal units (cm)",
+        "uu_per_metre": 100.0
+      },
+      "height_uu": 4625.0,
+      "bbox_min_uu": [
+        -1755.0,
+        -1755.0,
+        0.0
+      ],
+      "bbox_max_uu": [
+        1755.0,
+        2370.0,
+        4625.0
+      ],
+      "size_uu": [
+        3510.0,
+        4125.0,
+        4625.0
+      ],
+      "style": {
+        "slender_broad": 0.675,
+        "low_monumental": 0.918,
+        "open_solid": 0.986,
+        "gold_stone": 0.0,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.85,
+        "ceremonial_residential": 0.05
+      },
+      "base_z_uu": 0.0,
+      "profile_uu": [
+        2528.1,
+        2439.52,
+        2443.75,
+        2481.94,
+        2339.32,
+        2286.76,
+        2153.21,
+        2136.2,
+        882.58,
+        327.07,
+        260.0,
+        48.67
+      ],
+      "radius_uu": 2370.0,
+      "tris_total": 59108,
+      "tri_budget": 160000,
+      "over_budget": false,
+      "nanite_recommended": true,
+      "nanite_rule": "recommended when the module is >= 5000 triangles and the builder has not opted out",
+      "collision_recommended": true,
+      "uv": "planar-world-2m (not a lightmap unwrap)",
+      "sockets": [
+        {
+          "name": "bottom",
+          "kind": "ground",
+          "z_uu": 0.0,
+          "radius_uu": 1700.0,
+          "rung": null,
+          "note": "the podium's plinth"
+        }
+      ],
+      "parts": {
+        "glass": {
+          "verts": 512,
+          "faces": 378,
+          "tris": 780,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_GlassAmber"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -1708.0,
+            -1708.0,
+            595.0
+          ],
+          "bbox_max_uu": [
+            1708.0,
+            1708.0,
+            3945.0
+          ],
+          "size_uu": [
+            3416.0,
+            3416.0,
+            3350.0
+          ],
+          "height_m": 33.5,
+          "base_z_uu": 595.0,
+          "normals": {
+            "faces": 378,
+            "shells": 61,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 60,
+            "zero_normal_faces": 0
+          },
+          "profile_uu": [
+            2288.83,
+            2288.83,
+            2288.83,
+            2318.51,
+            1209.46,
+            1209.46,
+            1209.46,
+            1209.46,
+            1209.46,
+            1209.46,
+            175.0,
+            175.0
+          ],
+          "material": "MI_V2_GlassAmber",
+          "mesh_name": "WL_Palace_Dome_Grand_glass",
+          "glb": "exports\\glb\\WL_Palace_Dome_Grand_glass.glb",
+          "fbx": "exports\\fbx\\WL_Palace_Dome_Grand_glass.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_GlassAmber"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -17.080001831054688,
+              5.949999809265137,
+              -17.079999923706055
+            ],
+            "max_yup": [
+              17.080001831054688,
+              39.45000076293945,
+              17.080001831054688
+            ],
+            "bytes": 55324
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 595.0,
+            "stored_z_max": 3945.0
+          }
+        },
+        "gold": {
+          "verts": 4274,
+          "faces": 4012,
+          "tris": 7800,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_Gold"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -1746.0,
+            -1746.0,
+            542.0
+          ],
+          "bbox_max_uu": [
+            1746.0,
+            2175.0,
+            4625.0
+          ],
+          "size_uu": [
+            3492.0,
+            3921.0,
+            4083.0
+          ],
+          "height_m": 40.83,
+          "base_z_uu": 542.0,
+          "normals": {
+            "faces": 4012,
+            "shells": 114,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 19,
+            "zero_normal_faces": 0
+          },
+          "profile_uu": [
+            2439.52,
+            2443.75,
+            2177.78,
+            2177.78,
+            1275.0,
+            1262.6,
+            2153.21,
+            1008.77,
+            717.06,
+            19.51,
+            240.0,
+            48.67
+          ],
+          "material": "MI_V2_Gold",
+          "mesh_name": "WL_Palace_Dome_Grand_gold",
+          "glb": "exports\\glb\\WL_Palace_Dome_Grand_gold.glb",
+          "fbx": "exports\\fbx\\WL_Palace_Dome_Grand_gold.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_Gold"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -17.46000099182129,
+              5.420000076293945,
+              -21.75
+            ],
+            "max_yup": [
+              17.46000099182129,
+              46.25,
+              17.46000099182129
+            ],
+            "bytes": 337648
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 542.0,
+            "stored_z_max": 4625.0
+          }
+        },
+        "roof": {
+          "verts": 452,
+          "faces": 452,
+          "tris": 888,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_RoofRose"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -1715.0,
+            -1715.0,
+            1835.0
+          ],
+          "bbox_max_uu": [
+            1715.0,
+            1715.0,
+            2615.0
+          ],
+          "size_uu": [
+            3430.0,
+            3430.0,
+            780.0
+          ],
+          "height_m": 7.8,
+          "base_z_uu": 1835.0,
+          "normals": {
+            "faces": 452,
+            "shells": 4,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 0,
+            "zero_normal_faces": 0
+          },
+          "profile_uu": [
+            2336.32,
+            2286.76,
+            2286.76,
+            2242.67,
+            2242.67,
+            2204.36,
+            2172.24,
+            2172.24,
+            2146.88,
+            2146.88,
+            2129.19,
+            2121.32
+          ],
+          "material": "MI_V2_RoofRose",
+          "mesh_name": "WL_Palace_Dome_Grand_roof",
+          "glb": "exports\\glb\\WL_Palace_Dome_Grand_roof.glb",
+          "fbx": "exports\\fbx\\WL_Palace_Dome_Grand_roof.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_RoofRose"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -17.149999618530273,
+              18.350000381469727,
+              -17.149999618530273
+            ],
+            "max_yup": [
+              17.149999618530273,
+              26.149999618530273,
+              17.149999618530273
+            ],
+            "bytes": 25872
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 1835.0,
+            "stored_z_max": 2615.0
+          }
+        },
+        "roof_alt": {
+          "verts": 1153,
+          "faces": 1152,
+          "tris": 2240,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_RoofLilac"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -1235.0,
+            -1235.0,
+            2195.0
+          ],
+          "bbox_max_uu": [
+            1235.0,
+            1235.0,
+            3595.0
+          ],
+          "size_uu": [
+            2470.0,
+            2470.0,
+            1400.0
+          ],
+          "height_m": 14.0,
+          "base_z_uu": 2195.0,
+          "normals": {
+            "faces": 1152,
+            "shells": 1,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 0,
+            "zero_normal_faces": 0
+          },
+          "profile_uu": [
+            1235.0,
+            1225.52,
+            1196.82,
+            1175.02,
+            1148.03,
+            1077.49,
+            1033.25,
+            924.22,
+            781.87,
+            694.38,
+            469.12,
+            310.78
+          ],
+          "material": "MI_V2_RoofLilac",
+          "mesh_name": "WL_Palace_Dome_Grand_roof_alt",
+          "glb": "exports\\glb\\WL_Palace_Dome_Grand_roof_alt.glb",
+          "fbx": "exports\\fbx\\WL_Palace_Dome_Grand_roof_alt.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_RoofLilac"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -12.350000381469727,
+              21.950000762939453,
+              -12.350000381469727
+            ],
+            "max_yup": [
+              12.350000381469727,
+              35.95000076293945,
+              12.350000381469727
+            ],
+            "bytes": 55152
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 2195.0,
+            "stored_z_max": 3595.0
+          }
+        },
+        "stone": {
+          "verts": 25261,
+          "faces": 24225,
+          "tris": 47064,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_IvoryStone"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -1755.0,
+            -1755.0,
+            0.0
+          ],
+          "bbox_max_uu": [
+            1755.0,
+            2370.0,
+            3995.0
+          ],
+          "size_uu": [
+            3510.0,
+            4125.0,
+            3995.0
+          ],
+          "height_m": 39.95,
+          "base_z_uu": 0.0,
+          "normals": {
+            "faces": 24225,
+            "shells": 816,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 23,
+            "zero_normal_faces": 0
+          },
+          "profile_uu": [
+            2528.1,
+            2436.69,
+            2343.36,
+            2481.94,
+            2434.12,
+            2339.32,
+            1339.58,
+            1339.58,
+            1339.58,
+            1339.58,
+            265.0,
+            260.0
+          ],
+          "material": "MI_V2_IvoryStone",
+          "mesh_name": "WL_Palace_Dome_Grand",
+          "glb": "exports\\glb\\WL_Palace_Dome_Grand.glb",
+          "fbx": "exports\\fbx\\WL_Palace_Dome_Grand.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_IvoryStone"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -17.549999237060547,
+              0,
+              -23.700000762939453
+            ],
+            "max_yup": [
+              17.549999237060547,
+              39.95000076293945,
+              17.549999237060547
+            ],
+            "bytes": 2200944
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 0.0,
+            "stored_z_max": 3995.0
+          }
+        },
+        "stone_dark": {
+          "verts": 224,
+          "faces": 168,
+          "tris": 336,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_Stone"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -1706.5,
+            -1706.5,
+            55.0
+          ],
+          "bbox_max_uu": [
+            1706.5,
+            1706.5,
+            494.0
+          ],
+          "size_uu": [
+            3413.0,
+            3413.0,
+            439.0
+          ],
+          "height_m": 4.39,
+          "base_z_uu": 55.0,
+          "normals": {
+            "faces": 168,
+            "shells": 28,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 28,
+            "zero_normal_faces": 0
+          },
+          "profile_uu": [
+            2327.08,
+            2327.08,
+            2327.08,
+            2327.08,
+            2327.08,
+            2327.08,
+            2327.08,
+            2327.08,
+            2327.08,
+            2327.08,
+            2327.08,
+            2327.08
+          ],
+          "material": "MI_V2_Stone",
+          "mesh_name": "WL_Palace_Dome_Grand_stone_dark",
+          "glb": "exports\\glb\\WL_Palace_Dome_Grand_stone_dark.glb",
+          "fbx": "exports\\fbx\\WL_Palace_Dome_Grand_stone_dark.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_Stone"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -17.065000534057617,
+              0.550000011920929,
+              -17.065000534057617
+            ],
+            "max_yup": [
+              17.065000534057617,
+              4.940000057220459,
+              17.065000534057617
+            ],
+            "bytes": 24808
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 55.0,
+            "stored_z_max": 494.0
+          }
+        }
+      },
+      "part_count": 6
     },
     {
       "asset_id": "WL_Wall_Curtain_Run__aged",
