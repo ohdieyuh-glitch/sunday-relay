@@ -250,6 +250,41 @@ describe('a host cannot write into a worker through its own headers', () => {
   });
 });
 
+/**
+ * A DOCUMENTATION LINK IS USUALLY CITED WITH ITS ANCHOR, and a fragment is never
+ * sent to the server. Live Reach's URL policy is the MCP endpoint policy, which
+ * refuses any URL carrying one, so a granted page asked for as
+ * `…/app-psql.html#APP-PSQL-META-COMMANDS` came back `policy_refused`, telling
+ * the worker "This mission does not authorize that retrieval" about a host the
+ * mission had granted.
+ */
+describe('a granted page cited with an anchor is read, not refused', () => {
+  it('fetches the page without the fragment and observes it', async () => {
+    const seen: string[] = [];
+    const result = await mediator((url: unknown) => {
+      seen.push(String(url));
+      return Promise.resolve(page('asyncio.timeout landed in 3.11.'));
+    }).research(ask({ reference: 'https://docs.python.org/3/library/asyncio-task.html#asyncio.timeout' }));
+    expect(result.observation.outcome).toBe('observed');
+    expect(result.observation.refusal).toBeNull();
+    expect(seen).toEqual(['https://docs.python.org/3/library/asyncio-task.html']);
+    // What the worker asked for is still what the observation says it answered.
+    expect(result.observation.reference).toBe('https://docs.python.org/3/library/asyncio-task.html#asyncio.timeout');
+  });
+
+  it('keeps the query, which IS sent, and still refuses a host off the allowlist with an anchor', async () => {
+    const seen: string[] = [];
+    const m = mediator((url: unknown) => { seen.push(String(url)); return Promise.resolve(page('ok')); });
+    const queried = await m.research(ask({ reference: 'https://docs.python.org/3/search.html?q=timeout#results' }));
+    expect(queried.observation.outcome).toBe('observed');
+    expect(seen).toEqual(['https://docs.python.org/3/search.html?q=timeout']);
+
+    const offList = await m.research(ask({ reference: 'https://evil.example/x#y' }));
+    expect(offList.observation.refusal).toBe('host_not_allowed');
+    expect(seen).toHaveLength(1);
+  });
+});
+
 describe('every failure stays its own failure', () => {
   const cases: readonly (readonly [string, () => Response | Promise<Response>, string])[] = [
     ['a 429', () => new Response('slow down', { status: 429, headers: { 'retry-after': '120' } }), 'throttled'],
