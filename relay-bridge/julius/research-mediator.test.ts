@@ -250,6 +250,80 @@ describe('a host cannot write into a worker through its own headers', () => {
   });
 });
 
+/**
+ * A DOCUMENTATION LINK IS USUALLY CITED WITH ITS ANCHOR, and a fragment is never
+ * sent to the server. Live Reach's URL policy is the MCP endpoint policy, which
+ * refuses any URL carrying one, so a granted page asked for as
+ * `…/app-psql.html#APP-PSQL-META-COMMANDS` came back `policy_refused`, telling
+ * the worker "This mission does not authorize that retrieval" about a host the
+ * mission had granted.
+ */
+describe('a granted page cited with an anchor is read, not refused', () => {
+  it('fetches the page without the fragment and observes it', async () => {
+    const seen: string[] = [];
+    const result = await mediator((url: unknown) => {
+      seen.push(String(url));
+      return Promise.resolve(page('asyncio.timeout landed in 3.11.'));
+    }).research(ask({ reference: 'https://docs.python.org/3/library/asyncio-task.html#asyncio.timeout' }));
+    expect(result.observation.outcome).toBe('observed');
+    expect(result.observation.refusal).toBeNull();
+    expect(seen).toEqual(['https://docs.python.org/3/library/asyncio-task.html']);
+    // What the worker asked for is still what the observation says it answered.
+    expect(result.observation.reference).toBe('https://docs.python.org/3/library/asyncio-task.html#asyncio.timeout');
+  });
+
+  it('keeps the query, which IS sent, and still refuses a host off the allowlist with an anchor', async () => {
+    const seen: string[] = [];
+    const m = mediator((url: unknown) => { seen.push(String(url)); return Promise.resolve(page('ok')); });
+    const queried = await m.research(ask({ reference: 'https://docs.python.org/3/search.html?q=timeout#results' }));
+    expect(queried.observation.outcome).toBe('observed');
+    expect(seen).toEqual(['https://docs.python.org/3/search.html?q=timeout']);
+
+    const offList = await m.research(ask({ reference: 'https://evil.example/x#y' }));
+    expect(offList.observation.refusal).toBe('host_not_allowed');
+    expect(seen).toHaveLength(1);
+  });
+
+  /**
+   * DROPPING THE ANCHOR OPENS NOTHING ELSE. Each control below held before the
+   * fragment was dropped; each is asked again here WITH an anchor, so a later
+   * normalization that did more than drop it would have to get past all of them.
+   */
+  describe('and every other control still holds for an anchored reference', () => {
+    const mustNotFetch = () => { throw new Error('an anchored refusal must not reach the network'); };
+
+    it('a granted name that resolves to a private address is refused by the address layer, uncharged', async () => {
+      const result = await mediator(mustNotFetch, { resolver: { resolve: async () => ['10.0.0.5'] } })
+        .research(ask({ reference: 'https://docs.python.org/3/library/asyncio.html#asyncio.run' }));
+      expect(result.observation.outcome).toBe('policy_refused');
+      expect(result.observation.refusal).toBe('network_policy_refused');
+      expect(result.ledger.byRole.CODING_AGENT.counted).toBe(0);
+    });
+
+    it('a granted page that redirects toward cloud metadata is refused, and the hop is charged', async () => {
+      const result = await mediator(() => Promise.resolve(new Response(null, {
+        status: 302, headers: { location: 'https://169.254.169.254/latest/meta-data#x' },
+      }))).research(ask({ reference: 'https://docs.python.org/3/library/asyncio.html#asyncio.run' }));
+      expect(result.observation.outcome).toBe('policy_refused');
+      expect(result.observation.refusal).toBe('network_policy_refused');
+      expect(result.ledger.byRole.CODING_AGENT.counted).toBe(1);
+    });
+
+    it.each([
+      ['plain http', 'http://docs.python.org/3/library/asyncio.html#asyncio.run', 'scheme_not_allowed'],
+      ['inline credentials', 'https://user:pass@docs.python.org/3/library/asyncio.html#asyncio.run', 'reference_unparsable'],
+      ['an address literal', 'https://127.0.0.1/admin#x', 'host_not_allowed'],
+      ['a lookalike host', 'https://docs.python.org.evil.example/#docs.python.org', 'host_not_allowed'],
+      ['a host carried only in the fragment', 'https://evil.example/#https://docs.python.org/3/', 'host_not_allowed'],
+    ] as const)('%s is still refused before any socket', async (_label, reference, refusal) => {
+      const result = await mediator(mustNotFetch).research(ask({ reference }));
+      expect(result.observation.outcome).toBe('policy_refused');
+      expect(result.observation.refusal).toBe(refusal);
+      expect(juliusMissionResearchMeter(result.ledger).counted).toBe(0);
+    });
+  });
+});
+
 describe('every failure stays its own failure', () => {
   const cases: readonly (readonly [string, () => Response | Promise<Response>, string])[] = [
     ['a 429', () => new Response('slow down', { status: 429, headers: { 'retry-after': '120' } }), 'throttled'],
