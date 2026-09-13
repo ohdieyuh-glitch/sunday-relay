@@ -34,6 +34,10 @@ const ALLOWED = [
   // How the review packet reaches Hermes. The roles check refuses anything but
   // `file`, and the bundle has to be able to show which one a run was given.
   /^  reviewer_prompt_transport: (argv|file|unrecognised)$/u,
+  // WHETHER THE LIVE LEDGER WAS BOUND. The roles check refuses the run unless
+  // it says BOUND, and a receipt has to be able to show that from the bundle:
+  // qualification 34753589938's preflight-roles evidence withheld this line.
+  /^  live_ledger: (BOUND|UNBOUND|UNKNOWN)$/u,
   /^  [A-Z][A-Z0-9_]*: (SET|MISSING)$/u,
   /^  BLOCKED [a-z_ ]+: .+$/iu,
   /^RESULT: [A-Z_]+( \(stalled before terminal state\))?( after \d+ ticks)?$/u,
