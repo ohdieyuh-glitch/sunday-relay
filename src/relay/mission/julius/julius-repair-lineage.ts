@@ -1,4 +1,5 @@
 import type { JuliusRecordedDecision, JuliusTask } from './julius-runtime';
+import { juliusSegmentLineageRootOf, juliusYieldContinuationOf } from './julius-segment-lineage';
 
 /**
  * REPAIR LINEAGE — what a repair IS, stated once.
@@ -67,15 +68,54 @@ export function repairLineageRootOf(task: JuliusTask, tasks: readonly JuliusTask
 }
 
 /**
- * HOW MANY REPAIR ROUNDS PRECEDE A NEW ROUND ON THIS SUBJECT: the rounds above
- * it in its lineage plus the rounds already minted beneath it. Computed from
- * task rows alone, so a store that never wrote a repair-cycle row (the live
- * path) still bounds the lineage honestly.
+ * THE UNIT OF WORK A TASK BELONGS TO: the task every repair and every
+ * continuation of it descends from.
+ *
+ * A unit is one piece of work (a build, a plan, a guidance packet), and two
+ * lineages grow from it: repairs, when its work was refused, and segments, when
+ * a dispatch paused. They interleave. A build pauses, its last segment is
+ * refused, the repair of that segment pauses, and its last segment is refused
+ * again. Walking only repair links stops at the first segment, and walking only
+ * segment links stops at the first repair, so either walk alone names a
+ * different root at every pause. This walks both until neither moves.
+ */
+export function juliusWorkUnitRootOf(task: JuliusTask, tasks: readonly JuliusTask[]): JuliusTask {
+  const seen = new Set<string>();
+  let current = task;
+  while (!seen.has(current.taskId)) {
+    seen.add(current.taskId);
+    const next = juliusSegmentLineageRootOf(repairLineageRootOf(current, tasks), tasks);
+    if (next.taskId === current.taskId) return current;
+    current = next;
+  }
+  return current;
+}
+
+/**
+ * HOW MANY REPAIR ROUNDS THIS UNIT OF WORK HAS ALREADY SPENT: every repair task
+ * minted anywhere in the unit, counted from task rows alone, so a store that
+ * never wrote a repair-cycle row (the live path) still bounds the unit honestly.
+ *
+ * THE UNIT, NOT THE HOP, AND NOT THE SEGMENT. The contract authorises "one build
+ * plus `repairCycles` repair rounds" (JULIUS_PAID_RUN_34037313976_REPAIRS.md),
+ * allocation divides the spend by exactly that many dispatches, and the paid job
+ * prices exactly that many rounds. Counting only the repair ancestors of the
+ * subject stopped at every segment, because a continuation is not a repair.
+ * Qualification attempt 3 (run 34766115321) therefore restarted the count at
+ * round 1 after each pause, and ran five repair chains of up to three rounds
+ * under a three-round contract. Segments still spend no round: they are walked
+ * through to find the unit, and never counted.
+ *
+ * A replayed decision still counts the repair it already minted, so a replay
+ * computes the next round and the idempotent ids keep it from being minted twice.
  */
 export function repairRoundsBefore(subject: JuliusTask, tasks: readonly JuliusTask[]): number {
-  const above = repairAncestorsOf(subject, tasks).length;
-  const below = tasks.filter((item) => isJuliusRepairOf(subject, item)).length;
-  return above + below;
+  const byId = new Map(tasks.map((item) => [item.taskId, item]));
+  const unit = juliusWorkUnitRootOf(subject, tasks).taskId;
+  return tasks.filter((item) => {
+    const parent = item.parentTaskId === null ? undefined : byId.get(item.parentTaskId);
+    return parent !== undefined && isJuliusRepairOf(parent, item) && juliusWorkUnitRootOf(item, tasks).taskId === unit;
+  }).length;
 }
 
 /**
@@ -83,8 +123,9 @@ export function repairRoundsBefore(subject: JuliusTask, tasks: readonly JuliusTa
  *
  * A task is effectively accepted when its CURRENT decision is accepting, or is
  * REPAIR and some SUCCEEDED repair child of it is itself effectively accepted.
- * A HALT, or a REPAIR nobody repaired, is never accepted. Tasks with no
- * decision are not in the result at all.
+ * A HALT, or a REPAIR nobody repaired, is never accepted. A task with no
+ * decision is in the result only when it YIELDED and the segment it yielded to
+ * is itself effectively accepted; any other undecided task is not.
  */
 export function effectivelyAcceptedTaskIds(
   tasks: readonly JuliusTask[],
@@ -106,7 +147,19 @@ export function effectivelyAcceptedTaskIds(
   const accepted = new Set<string>();
   const walk = (taskId: string, walking: Set<string>): boolean => {
     const decision = current.get(taskId);
-    if (decision === undefined) return false;
+    if (decision === undefined) {
+      /**
+       * A YIELDED DISPATCH IS JUDGED THROUGH ITS CONTINUATION. It was never
+       * reviewed, because it was never finished; the segment it yielded to
+       * carries the unit's work, so the dispatch is accepted exactly when that
+       * segment is. Any other undecided task is not accepted.
+       */
+      const subject = byId.get(taskId);
+      const continuation = subject === undefined ? null : juliusYieldContinuationOf(subject, tasks);
+      if (continuation === null || continuation.state !== 'SUCCEEDED' || walking.has(taskId)) return false;
+      walking.add(taskId);
+      return walk(continuation.taskId, walking);
+    }
     if (acceptingActions.includes(decision.action)) return true;
     if (decision.action !== 'REPAIR') return false;
     if (walking.has(taskId)) return false;
@@ -115,5 +168,8 @@ export function effectivelyAcceptedTaskIds(
       .some((child) => child.state === 'SUCCEEDED' && walk(child.taskId, walking));
   };
   for (const taskId of current.keys()) if (walk(taskId, new Set())) accepted.add(taskId);
+  for (const task of tasks) {
+    if (!current.has(task.taskId) && walk(task.taskId, new Set())) accepted.add(task.taskId);
+  }
   return accepted;
 }

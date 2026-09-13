@@ -28,6 +28,7 @@ import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
 import {
   JuliusDispatchError,
+  type JuliusExecutorRefusal,
   type JuliusSandboxLimits,
   type JuliusSandboxPolicy,
   type SandboxExecutionPort,
@@ -134,6 +135,86 @@ export function executorInvocationId(invocationKey: string, leaseGeneration: num
   return compact;
 }
 
+/**
+ * THE TASK ID THE EXECUTOR IS SHOWN — bounded, whatever the task.
+ *
+ * The executor validates the task id as an identifier too (`request.taskId`,
+ * `identity.taskId`), to the same {@link EXECUTOR_IDENTIFIER_MAX_LENGTH}.
+ * Bounding the invocation id was not enough: paid qualification attempt 3
+ * (run 34766115321) grew a coder repair task through repair and segment
+ * prefixes to 134 characters, and the executor refused its sandbox with
+ * `INVALID_REQUEST:executor_operation_invalid:identity.taskId`.
+ *
+ * UNCHANGED WHERE IT FITS, as every id so far has. Past the bound: `t-` + 128
+ * bits of SHA-256 over the full task id — deterministic, so a retried lease
+ * reaches the same sandbox scope. ONLY the executor sees it. Julius's own rows
+ * (the task binding, the durable tool invocation) keep the full task id, and
+ * the request the executor digests and signs is the one Julius recorded the
+ * digest of, so nothing on either side compares the two forms.
+ */
+export function executorTaskId(taskId: string): string {
+  if (taskId.length === 0) throw new Error('executor_task_id_empty');
+  if (taskId.length <= EXECUTOR_IDENTIFIER_MAX_LENGTH) return taskId;
+  return `t-${sha(taskId).slice(0, 32)}`;
+}
+
+/* ------------------------------------------------ what the executor said */
+
+export interface ExecutorRefusalClass {
+  readonly refusal: JuliusExecutorRefusal;
+  /** The envelope or request field the executor named, snake-cased, or null. */
+  readonly field: string | null;
+}
+
+const snake = (name: string): string | null => {
+  const token = name.replace(/([a-z0-9])([A-Z])/gu, '$1_$2').replace(/[.-]/gu, '_').toLowerCase();
+  return /^[a-z][a-z0-9_]{0,63}$/u.test(token) ? token : null;
+};
+
+/**
+ * WHAT A REFUSED TOOL EFFECT WAS, from the error the executor client raised.
+ *
+ * The client (`remote-executor-control-plane.ts`) turns every non-2xx answer
+ * into an untyped `Error` — a 400 for an invalid request included, as
+ * `EXECUTOR_UNAVAILABLE:<executor code>` — and the coordinator could only say
+ * "Execution boundary failed." with no class. This names it. It reads codes and
+ * field names only, never a value, and anything it does not recognise is
+ * `executor_refused_unclassified`, never silence.
+ */
+export function classifyExecutorRefusal(error: unknown): ExecutorRefusalClass {
+  const message = error instanceof Error ? error.message : typeof error === 'string' ? error : '';
+  const fieldOf = (pattern: RegExp): string | null => {
+    const match = pattern.exec(message);
+    return match?.[1] === undefined ? null : snake(match[1]);
+  };
+  if (/^EXECUTOR_UNAVAILABLE:INVALID_REQUEST:execution_envelope_(?:invalid:executionIdentity|identity_mismatch)\b/u.test(message)) {
+    return { refusal: 'executor_identity_invalid', field: 'execution_identity' };
+  }
+  if (/^EXECUTOR_UNAVAILABLE:INVALID_REQUEST:/u.test(message)) {
+    return { refusal: 'executor_request_invalid', field: fieldOf(/:(?:execution_envelope_invalid|execution_request|execution_payload|executor_[a-z_]+?):([A-Za-z][A-Za-z0-9_.]{0,63})$/u) };
+  }
+  if (message === 'EXECUTOR_UNAVAILABLE' || /^EXECUTOR_UNAVAILABLE(?::|$)/u.test(message)) return { refusal: 'executor_unavailable', field: null };
+  if (message === 'executor_authorization_refused') return { refusal: 'executor_authorization_refused', field: null };
+  if (message.startsWith('executor_scope_not_held:') || message === 'execution_envelope_scope_refused') return { refusal: 'executor_scope_refused', field: null };
+  if (message === 'executor_identity_conflict') return { refusal: 'executor_identity_conflict', field: null };
+  if (message === 'STARTED_UNKNOWN_OUTCOME') return { refusal: 'executor_outcome_unknown', field: null };
+  if (message.startsWith('SECURITY_FAILURE:')) return { refusal: 'executor_security_failure', field: null };
+  if (message.startsWith('TERMINAL_FAILURE:')) return { refusal: 'executor_terminal_failure', field: null };
+  if (/^executor_response_(?:missing|too_large|malformed)$/u.test(message)) return { refusal: 'executor_response_invalid', field: null };
+  return { refusal: 'executor_refused_unclassified', field: null };
+}
+
+const stepOf = (invocationKey: string): 'base' | 'diff' | 'test' | null => {
+  const tail = invocationKey.slice(invocationKey.lastIndexOf(':') + 1);
+  return tail === 'base' || tail === 'diff' || tail === 'test' ? tail : null;
+};
+
+/** One refused effect as the error Julius records: a class, the step, the field — never the executor's text. */
+const refused = (refusal: JuliusExecutorRefusal, invocationKey: string, field: string | null, safeMessage: string): JuliusDispatchError =>
+  new JuliusDispatchError('WORKER_EXECUTION_FAILURE', false, safeMessage, refusal, {
+    executorStep: stepOf(invocationKey), executorRefusal: refusal, executorRefusalField: field,
+  });
+
 /* ------------------------------------------------------------ live port */
 
 /*
@@ -169,7 +250,7 @@ export function createExecutorShellPort(config: {
     async run(input): Promise<ShellEffectResult> {
       const claim = config.claims.claimFor(input.taskId);
       if (claim === null) {
-        throw new JuliusDispatchError('WORKER_EXECUTION_FAILURE', false, 'No recorded task claim exists for this tool effect, so it cannot be authorized.');
+        throw refused('executor_claim_missing', input.invocationKey, null, 'No recorded task claim exists for this tool effect, so it cannot be authorized.');
       }
       const invocationId = executorInvocationId(input.invocationKey, claim.leaseGeneration);
       const now = () => new Date().toISOString();
@@ -187,7 +268,7 @@ export function createExecutorShellPort(config: {
       );
 
       const request: ToolInvocationRequest = {
-        invocationId, runId: input.runId, taskId: input.taskId, projectId: input.projectId,
+        invocationId, runId: input.runId, taskId: executorTaskId(input.taskId), projectId: input.projectId,
         workerId: input.workerId, toolId: 'shell.bash', toolVersion: '1',
         arguments: { command: input.command }, cwd: '.',
         idempotencyKey: invocationId, timeoutMs: input.timeoutMs, expectedMutation: 'WORKSPACE',
@@ -206,7 +287,7 @@ export function createExecutorShellPort(config: {
         budgetReservationId: `budget:${invocationId}`, authorizedAt: now(),
       });
       if (!authorized) {
-        throw new JuliusDispatchError('WORKER_EXECUTION_FAILURE', false, `Tool invocation ${invocationId} could not be authorized.`);
+        throw refused('executor_invocation_unauthorized', input.invocationKey, null, `Tool invocation ${invocationId} could not be authorized.`);
       }
       const claimed = await config.tools.claimDispatch({
         claimedBy: config.callerId, now: now(),
@@ -214,12 +295,12 @@ export function createExecutorShellPort(config: {
       });
       const dispatch = claimed.find((entry) => entry.invocation.invocationId === invocationId);
       if (dispatch === undefined) {
-        throw new JuliusDispatchError('WORKER_EXECUTION_FAILURE', false, `Tool invocation ${invocationId} was authorized but its dispatch could not be claimed.`);
+        throw refused('executor_dispatch_unclaimed', input.invocationKey, null, `Tool invocation ${invocationId} was authorized but its dispatch could not be claimed.`);
       }
 
       const identity = {
         sandboxId: invocationId, invocationId, tenantId: config.tenantId,
-        projectId: input.projectId, runId: input.runId, taskId: input.taskId,
+        projectId: input.projectId, runId: input.runId, taskId: executorTaskId(input.taskId),
         leaseGeneration: claim.leaseGeneration, policyRevision: config.policyRevision,
         createdAt: now(), expiresAt: new Date(Date.now() + input.timeoutMs + 600_000).toISOString(),
       };
@@ -236,6 +317,12 @@ export function createExecutorShellPort(config: {
           executionTokenHash: sha(`token:${invocationId}`),
           effectClassification: 'NON_IDEMPOTENT_MUTATION', request,
         });
+      } catch (error) {
+        // NAMED, NOT RETHROWN BARE. The step, the class and the field survive
+        // into the durable failure; the executor's own text does not.
+        if (error instanceof JuliusDispatchError) throw error;
+        const { refusal, field } = classifyExecutorRefusal(error);
+        throw refused(refusal, input.invocationKey, field, `The independent executor refused the ${stepOf(input.invocationKey) ?? 'tool'} effect (${refusal}).`);
       } finally {
         await config.client.destroySandbox({
           sandboxId: invocationId, expectedLeaseGeneration: claim.leaseGeneration,

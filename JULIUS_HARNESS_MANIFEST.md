@@ -107,13 +107,13 @@ One claimed task all the way through: policy, budget reservation, context compil
 
 | production source | role | reached from |
 | --- | --- | --- |
-| `src/relay/mission/julius/julius-continuous-lifecycle.ts` | traced | `src/relay/mission/julius/index.ts` |
+| `src/relay/mission/julius/julius-continuous-lifecycle.ts` | traced | `src/relay/mission/julius/julius-segment-lineage.ts` |
 | `src/relay/mission/julius/julius-contract-disposition.ts` | traced | `src/relay/mission/julius/index.ts` |
 | `src/relay/mission/julius/julius-execution-coordinator.ts` | traced | `src/relay/mission/julius/index.ts` |
 | `src/relay/mission/julius/julius-release-runtime.ts` | traced | `src/relay/mission/julius/index.ts` |
 | `src/relay/mission/julius/julius-research-protocol.ts` | traced | `src/relay/mission/julius/julius-task-pipeline.ts` |
-| `src/relay/mission/julius/julius-segment-lineage.ts` | traced | `src/relay/mission/julius/julius-task-pipeline.ts` |
-| `src/relay/mission/julius/julius-task-contract.ts` | traced | `src/relay/mission/julius/julius-router.ts` |
+| `src/relay/mission/julius/julius-segment-lineage.ts` | traced | `src/relay/mission/julius/julius-repair-lineage.ts` |
+| `src/relay/mission/julius/julius-task-contract.ts` | traced | `src/relay/mission/julius/julius-continuous-lifecycle.ts` |
 | `src/relay/mission/julius/julius-task-pipeline.ts` | traced | `src/relay/mission/julius/index.ts` |
 | `src/relay/mission/julius/julius-worker-participation.ts` | traced | `src/relay/mission/julius/index.ts` |
 

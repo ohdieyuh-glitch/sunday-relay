@@ -222,8 +222,8 @@ const MISSION_RESEARCH = Object.freeze({
         hosts: Object.freeze(['www.postgresql.org']),
       }),
     ]),
-    missionBudget: Object.freeze({ maxRetrievals: 6, maxBytes: 400_000 }),
-    roleBudget: Object.freeze({ maxRetrievals: 2, maxBytes: 200_000 }),
+    missionBudget: Object.freeze({ maxRetrievals: 9, maxBytes: 900_000 }),
+    roleBudget: Object.freeze({ maxRetrievals: 3, maxBytes: 300_000 }),
   }),
 });
 

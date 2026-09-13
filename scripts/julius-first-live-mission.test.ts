@@ -837,6 +837,10 @@ describe('the evidence dump names only tables and columns the migrations create'
       'reviewReaskShape',
       // The engine's own call count, on failed reviews too.
       'engineApiCalls',
+      // What the independent executor refused, for a worker whose tool effect it refused.
+      'executorStep',
+      'executorRefusal',
+      'executorRefusalField',
       // THE ATTEMPT ITSELF. Live Run 3 COMPLETED and produced no rows here at
       // all, because diagnostics were flattened onto the two failure events and
       // onto nothing else. `outcome` is what lets a healthy attempt be filtered

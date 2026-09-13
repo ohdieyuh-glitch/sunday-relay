@@ -3,7 +3,7 @@
   "markerNamespace": "julius-continuous-1",
   "projectId": "prj-julius-continuous-1",
   "tenantId": "tenant",
-  "objective": "In this workspace, implement every exported function in `src/relay/mission/julius/julius-bundle-cell.ts`. It is a pure reader for the TSV evidence bundles every paid Julius run exports, and its whole purpose is the distinction the product rests on: an ABSENCE is not a value, and an AMBIGUITY is not an absence. `src/relay/mission/julius/julius-bundle-cell.test.ts` is already written, is the specification, and currently fails. Edit the module in place.\n\nONE REQUIREMENT CANNOT BE SETTLED FROM THIS WORKSPACE. `readTextCell('')` is compatible with two facts — the exporter wrote a SQL NULL, or it wrote an empty string — and which one it means is a property of the exporter, `.github/julius-live-evidence-dump.sh`, which is NOT in this workspace, which you cannot read, and whose behaviour is not stated anywhere you can see. Do not guess it. Establish it, say where the answer came from, and implement what you established.",
+  "objective": "In this workspace, implement every exported function in `src/relay/mission/julius/julius-bundle-cell.ts`. It is a pure reader for the TSV evidence bundles every paid Julius run exports, and its whole purpose is the distinction the product rests on: an ABSENCE is not a value, and an AMBIGUITY is not an absence. `src/relay/mission/julius/julius-bundle-cell.test.ts` is already written, is the specification, and currently fails. Edit the module in place.\n\nONE REQUIREMENT CANNOT BE SETTLED FROM THIS WORKSPACE. `readTextCell('')` is compatible with two facts — the exporter wrote a SQL NULL, or it wrote an empty string — and which one it means is a property of the exporter, `.github/julius-live-evidence-dump.sh`, which is NOT in this workspace and which you cannot read. You are told how it is invoked, and nothing about how that invocation renders a NULL. Do not guess it. Establish it, say where the answer came from, and implement what you established.",
   "requirements": [
     "Implement every exported function so none throws `bundle_cell_not_implemented`. Keep every exported name, signature, type and vocabulary exactly as declared.",
     "A blank NUMERIC cell is UNKNOWN. A number is never the empty string, so there is nothing for a blank to be confused with — and it is never 0, which would report a run as having spent nothing.",
@@ -11,6 +11,7 @@
     "A token cell is read against a CLOSED vocabulary. A token outside it is UNREADABLE; it is never matched loosely to the nearest member.",
     "A BLANK token cell is UNKNOWN even when the vocabulary itself contains a member named `UNKNOWN`. Those are different facts: no row was exported, versus a row that reported nothing. Collapsing them makes an unexported settlement indistinguishable from an unreported cost.",
     "A blank boolean is UNKNOWN, never `false`. `timed_out` blank does not mean the run did not time out.",
+    "HOW THE EXPORTER IS INVOKED, AND NOTHING MORE. `.github/julius-live-evidence-dump.sh` writes every bundle file by running `psql -A -F $'\\t' -c \"<query>\"` against the PostgreSQL database (connection flags omitted) and writing its standard output to the file unchanged. How that invocation renders a SQL NULL is deliberately not stated anywhere you can see: establish it from PostgreSQL's own documentation, which this mission authorises you to read on www.postgresql.org, and cite the page you relied on.",
     "THE ONE YOU MUST ESTABLISH RATHER THAN DECIDE. `readTextCell('')` must never read as VALUE. Whether it reads as AMBIGUOUS (naming both candidate readings) or as UNKNOWN depends entirely on what the exporter writes for a SQL NULL — and the exporter is not in this workspace. Establish what it actually does before choosing, and record in a comment where the answer came from.",
     "`readBundleRow` reads every DECLARED column. A declared column absent from the row is UNKNOWN rather than an error: a bundle written before a fact was instrumented genuinely does not carry it, and refusing the whole row would make an older bundle unreadable rather than partially readable.",
     "A row is `scorable` only when no column it was asked for is ambiguous or unreadable. A gate that scored an ambiguous row would publish a number it cannot defend.",
@@ -114,12 +115,12 @@
       }
     ],
     "missionBudget": {
-      "maxRetrievals": 6,
-      "maxBytes": 400000
+      "maxRetrievals": 9,
+      "maxBytes": 900000
     },
     "roleBudget": {
-      "maxRetrievals": 2,
-      "maxBytes": 200000
+      "maxRetrievals": 3,
+      "maxBytes": 300000
     }
   }
 }
