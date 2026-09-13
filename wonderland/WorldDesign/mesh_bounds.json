@@ -1,0 +1,1970 @@
+{
+ "name": "039_mesh_bounds",
+ "started": "2026-09-13 01:08:44",
+ "status": "done",
+ "meshes": {
+  "SM_bridge_arc": {
+   "path": "/Game/WonderlandV2/Architecture/Bridges/SM_bridge_arc",
+   "origin": [
+    0.0,
+    0.0,
+    185.0
+   ],
+   "ext": [
+    1450.0,
+    460.0,
+    635.0
+   ],
+   "slots": 1
+  },
+  "SM_castle_bridge": {
+   "path": "/Game/WonderlandV2/Architecture/Bridges/SM_castle_bridge",
+   "origin": [
+    0.0,
+    0.0,
+    -68.6
+   ],
+   "ext": [
+    459.0,
+    66.0,
+    212.2
+   ],
+   "slots": 1
+  },
+  "SM_floating_stair": {
+   "path": "/Game/WonderlandV2/Architecture/Bridges/SM_floating_stair",
+   "origin": [
+    663.8,
+    2955.0,
+    6231.2
+   ],
+   "ext": [
+    1463.8,
+    3705.0,
+    6231.2
+   ],
+   "slots": 1
+  },
+  "SM_arch_stone": {
+   "path": "/Game/WonderlandV2/Architecture/Castle/SM_arch_stone",
+   "origin": [
+    0.0,
+    0.0,
+    432.5
+   ],
+   "ext": [
+    550.0,
+    72.0,
+    432.5
+   ],
+   "slots": 1
+  },
+  "SM_balcony_ring": {
+   "path": "/Game/WonderlandV2/Architecture/Castle/SM_balcony_ring",
+   "origin": [
+    0.0,
+    0.0,
+    78.5
+   ],
+   "ext": [
+    330.0,
+    330.0,
+    78.5
+   ],
+   "slots": 1
+  },
+  "SM_castle_arcade": {
+   "path": "/Game/WonderlandV2/Architecture/Castle/SM_castle_arcade",
+   "origin": [
+    0.0,
+    0.0,
+    210.0
+   ],
+   "ext": [
+    330.0,
+    60.0,
+    210.0
+   ],
+   "slots": 1
+  },
+  "SM_castle_dome": {
+   "path": "/Game/WonderlandV2/Architecture/Castle/SM_castle_dome",
+   "origin": [
+    0.0,
+    0.0,
+    352.0
+   ],
+   "ext": [
+    310.5,
+    310.5,
+    352.0
+   ],
+   "slots": 1
+  },
+  "SM_castle_hall": {
+   "path": "/Game/WonderlandV2/Architecture/Castle/SM_castle_hall",
+   "origin": [
+    0.0,
+    4.0,
+    500.0
+   ],
+   "ext": [
+    630.0,
+    434.0,
+    500.0
+   ],
+   "slots": 1
+  },
+  "SM_castle_tower": {
+   "path": "/Game/WonderlandV2/Architecture/Castle/SM_castle_tower",
+   "origin": [
+    0.0,
+    0.0,
+    850.0
+   ],
+   "ext": [
+    288.0,
+    288.0,
+    850.0
+   ],
+   "slots": 1
+  },
+  "SM_castle_tower_octagon": {
+   "path": "/Game/WonderlandV2/Architecture/Castle/SM_castle_tower_octagon",
+   "origin": [
+    0.0,
+    0.0,
+    900.0
+   ],
+   "ext": [
+    345.0,
+    345.0,
+    900.0
+   ],
+   "slots": 1
+  },
+  "SM_castle_tower_slender": {
+   "path": "/Game/WonderlandV2/Architecture/Castle/SM_castle_tower_slender",
+   "origin": [
+    0.0,
+    0.0,
+    1000.0
+   ],
+   "ext": [
+    134.0,
+    134.0,
+    1000.0
+   ],
+   "slots": 1
+  },
+  "SM_castle_tower_square": {
+   "path": "/Game/WonderlandV2/Architecture/Castle/SM_castle_tower_square",
+   "origin": [
+    0.0,
+    0.0,
+    862.5
+   ],
+   "ext": [
+    280.0,
+    280.0,
+    862.5
+   ],
+   "slots": 1
+  },
+  "SM_cloister_square": {
+   "path": "/Game/WonderlandV2/Architecture/Castle/SM_cloister_square",
+   "origin": [
+    0.0,
+    0.0,
+    1010.0
+   ],
+   "ext": [
+    1460.2,
+    1460.2,
+    1010.0
+   ],
+   "slots": 1
+  },
+  "SM_column_ornate": {
+   "path": "/Game/WonderlandV2/Architecture/Castle/SM_column_ornate",
+   "origin": [
+    0.0,
+    0.0,
+    475.0
+   ],
+   "ext": [
+    88.4,
+    88.4,
+    475.0
+   ],
+   "slots": 1
+  },
+  "SM_facade_panel": {
+   "path": "/Game/WonderlandV2/Architecture/Castle/SM_facade_panel",
+   "origin": [
+    0.0,
+    -24.5,
+    315.0
+   ],
+   "ext": [
+    220.0,
+    61.5,
+    315.0
+   ],
+   "slots": 1
+  },
+  "SM_finial_spire": {
+   "path": "/Game/WonderlandV2/Architecture/Castle/SM_finial_spire",
+   "origin": [
+    0.0,
+    0.0,
+    150.0
+   ],
+   "ext": [
+    28.0,
+    28.0,
+    150.0
+   ],
+   "slots": 1
+  },
+  "SM_roof_bell": {
+   "path": "/Game/WonderlandV2/Architecture/Castle/SM_roof_bell",
+   "origin": [
+    0.0,
+    0.0,
+    346.0
+   ],
+   "ext": [
+    336.6,
+    336.6,
+    350.0
+   ],
+   "slots": 1
+  },
+  "SM_roof_cone_steep": {
+   "path": "/Game/WonderlandV2/Architecture/Castle/SM_roof_cone_steep",
+   "origin": [
+    0.0,
+    0.0,
+    297.9
+   ],
+   "ext": [
+    200.0,
+    200.0,
+    302.1
+   ],
+   "slots": 1
+  },
+  "SM_roof_flat_crenellated": {
+   "path": "/Game/WonderlandV2/Architecture/Castle/SM_roof_flat_crenellated",
+   "origin": [
+    0.0,
+    0.0,
+    52.0
+   ],
+   "ext": [
+    260.0,
+    260.0,
+    52.0
+   ],
+   "slots": 1
+  },
+  "SM_roof_hip": {
+   "path": "/Game/WonderlandV2/Architecture/Castle/SM_roof_hip",
+   "origin": [
+    0.0,
+    0.0,
+    206.0
+   ],
+   "ext": [
+    650.0,
+    450.0,
+    214.0
+   ],
+   "slots": 1
+  },
+  "SM_roof_ogee": {
+   "path": "/Game/WonderlandV2/Architecture/Castle/SM_roof_ogee",
+   "origin": [
+    -0.0,
+    -0.3,
+    405.8
+   ],
+   "ext": [
+    310.6,
+    310.5,
+    414.0
+   ],
+   "slots": 1
+  },
+  "SM_spire_great": {
+   "path": "/Game/WonderlandV2/Architecture/Castle/SM_spire_great",
+   "origin": [
+    0.0,
+    0.0,
+    9000.0
+   ],
+   "ext": [
+    5161.9,
+    5161.9,
+    9000.0
+   ],
+   "slots": 1
+  },
+  "SM_spire_halo_ring": {
+   "path": "/Game/WonderlandV2/Architecture/Castle/SM_spire_halo_ring",
+   "origin": [
+    0.0,
+    0.0,
+    156.1
+   ],
+   "ext": [
+    1048.0,
+    1046.0,
+    199.9
+   ],
+   "slots": 1
+  },
+  "SM_spire_signature": {
+   "path": "/Game/WonderlandV2/Architecture/Castle/SM_spire_signature",
+   "origin": [
+    0.0,
+    0.0,
+    5835.0
+   ],
+   "ext": [
+    880.0,
+    880.0,
+    5835.0
+   ],
+   "slots": 1
+  },
+  "SM_tower_capped": {
+   "path": "/Game/WonderlandV2/Architecture/Castle/SM_tower_capped",
+   "origin": [
+    0.0,
+    0.0,
+    550.0
+   ],
+   "ext": [
+    178.0,
+    178.0,
+    550.0
+   ],
+   "slots": 1
+  },
+  "SM_tower_clock": {
+   "path": "/Game/WonderlandV2/Architecture/Castle/SM_tower_clock",
+   "origin": [
+    0.0,
+    0.0,
+    595.0
+   ],
+   "ext": [
+    176.0,
+    176.0,
+    595.0
+   ],
+   "slots": 1
+  },
+  "SM_tower_district": {
+   "path": "/Game/WonderlandV2/Architecture/Castle/SM_tower_district",
+   "origin": [
+    0.0,
+    0.0,
+    3365.0
+   ],
+   "ext": [
+    776.0,
+    776.0,
+    3365.0
+   ],
+   "slots": 1
+  },
+  "SM_floral_arch": {
+   "path": "/Game/WonderlandV2/Architecture/Garden/SM_floral_arch",
+   "origin": [
+    5.8,
+    -0.5,
+    343.7
+   ],
+   "ext": [
+    545.2,
+    111.7,
+    346.1
+   ],
+   "slots": 1
+  },
+  "SM_floral_arch_trellis": {
+   "path": "/Game/WonderlandV2/Architecture/Garden/SM_floral_arch_trellis",
+   "origin": [
+    0.0,
+    0.0,
+    310.0
+   ],
+   "ext": [
+    520.0,
+    50.0,
+    310.0
+   ],
+   "slots": 1
+  },
+  "SM_garden_arch_stone": {
+   "path": "/Game/WonderlandV2/Architecture/Garden/SM_garden_arch_stone",
+   "origin": [
+    0.0,
+    0.0,
+    361.5
+   ],
+   "ext": [
+    410.0,
+    60.0,
+    361.5
+   ],
+   "slots": 1
+  },
+  "SM_glass_screen": {
+   "path": "/Game/WonderlandV2/Architecture/Garden/SM_glass_screen",
+   "origin": [
+    0.0,
+    0.0,
+    1197.0
+   ],
+   "ext": [
+    1040.0,
+    230.0,
+    1197.0
+   ],
+   "slots": 1
+  },
+  "SM_glass_screen_panes": {
+   "path": "/Game/WonderlandV2/Architecture/Garden/SM_glass_screen_panes",
+   "origin": [
+    0.0,
+    0.0,
+    1036.0
+   ],
+   "ext": [
+    666.0,
+    149.7,
+    706.0
+   ],
+   "slots": 1
+  },
+  "SM_garden_wall": {
+   "path": "/Game/WonderlandV2/Architecture/Gates/SM_garden_wall",
+   "origin": [
+    0.0,
+    0.0,
+    131.1
+   ],
+   "ext": [
+    255.0,
+    50.0,
+    131.1
+   ],
+   "slots": 1
+  },
+  "SM_gate_arch_gold": {
+   "path": "/Game/WonderlandV2/Architecture/Gates/SM_gate_arch_gold",
+   "origin": [
+    1.7,
+    0.0,
+    693.6
+   ],
+   "ext": [
+    191.8,
+    9.0,
+    134.6
+   ],
+   "slots": 1
+  },
+  "SM_gate_finial_ball": {
+   "path": "/Game/WonderlandV2/Architecture/Gates/SM_gate_finial_ball",
+   "origin": [
+    0.0,
+    0.0,
+    63.3
+   ],
+   "ext": [
+    40.0,
+    40.0,
+    64.7
+   ],
+   "slots": 1
+  },
+  "SM_gate_finial_heart": {
+   "path": "/Game/WonderlandV2/Architecture/Gates/SM_gate_finial_heart",
+   "origin": [
+    0.0,
+    0.0,
+    63.0
+   ],
+   "ext": [
+    41.6,
+    56.0,
+    63.0
+   ],
+   "slots": 1
+  },
+  "SM_gate_leaf": {
+   "path": "/Game/WonderlandV2/Architecture/Gates/SM_gate_leaf",
+   "origin": [
+    200.0,
+    0.0,
+    285.0
+   ],
+   "ext": [
+    200.0,
+    10.0,
+    285.0
+   ],
+   "slots": 1
+  },
+  "SM_gate_pier": {
+   "path": "/Game/WonderlandV2/Architecture/Gates/SM_gate_pier",
+   "origin": [
+    0.0,
+    0.0,
+    325.0
+   ],
+   "ext": [
+    88.0,
+    88.0,
+    325.0
+   ],
+   "slots": 1
+  },
+  "SM_gatehouse_district": {
+   "path": "/Game/WonderlandV2/Architecture/Gates/SM_gatehouse_district",
+   "origin": [
+    0.0,
+    0.0,
+    1418.0
+   ],
+   "ext": [
+    560.0,
+    1460.0,
+    1418.0
+   ],
+   "slots": 1
+  },
+  "SM_gatehouse_glass": {
+   "path": "/Game/WonderlandV2/Architecture/Gates/SM_gatehouse_glass",
+   "origin": [
+    0.0,
+    0.0,
+    1182.9
+   ],
+   "ext": [
+    450.0,
+    960.0,
+    647.9
+   ],
+   "slots": 1
+  },
+  "SM_retaining_wall": {
+   "path": "/Game/WonderlandV2/Architecture/Gates/SM_retaining_wall",
+   "origin": [
+    -0.0,
+    -0.0,
+    42.0
+   ],
+   "ext": [
+    205.0,
+    35.0,
+    42.1
+   ],
+   "slots": 1
+  },
+  "SM_balustrade": {
+   "path": "/Game/WonderlandV2/Architecture/Stairs/SM_balustrade",
+   "origin": [
+    0.0,
+    0.0,
+    62.5
+   ],
+   "ext": [
+    175.0,
+    18.0,
+    62.5
+   ],
+   "slots": 1
+  },
+  "SM_path_steps": {
+   "path": "/Game/WonderlandV2/Architecture/Stairs/SM_path_steps",
+   "origin": [
+    -0.0,
+    134.0,
+    30.0
+   ],
+   "ext": [
+    232.0,
+    136.0,
+    30.3
+   ],
+   "slots": 1
+  },
+  "SM_side_steps": {
+   "path": "/Game/WonderlandV2/Architecture/Stairs/SM_side_steps",
+   "origin": [
+    0.0,
+    90.0,
+    30.0
+   ],
+   "ext": [
+    200.0,
+    90.0,
+    30.3
+   ],
+   "slots": 1
+  },
+  "SM_stairs_broad": {
+   "path": "/Game/WonderlandV2/Architecture/Stairs/SM_stairs_broad",
+   "origin": [
+    0.0,
+    173.1,
+    91.1
+   ],
+   "ext": [
+    350.9,
+    177.1,
+    91.3
+   ],
+   "slots": 1
+  },
+  "SM_terrace_platform": {
+   "path": "/Game/WonderlandV2/Architecture/Stairs/SM_terrace_platform",
+   "origin": [
+    0.0,
+    0.0,
+    70.0
+   ],
+   "ext": [
+    720.0,
+    370.0,
+    70.0
+   ],
+   "slots": 1
+  },
+  "SM_clock_grand": {
+   "path": "/Game/WonderlandV2/Props/Clocks/SM_clock_grand",
+   "origin": [
+    -110.0,
+    0.0,
+    2720.0
+   ],
+   "ext": [
+    1145.0,
+    1280.0,
+    2720.0
+   ],
+   "slots": 1
+  },
+  "SM_clock_ornate": {
+   "path": "/Game/WonderlandV2/Props/Clocks/SM_clock_ornate",
+   "origin": [
+    -14.0,
+    0.0,
+    1.6
+   ],
+   "ext": [
+    14.0,
+    78.0,
+    79.6
+   ],
+   "slots": 1
+  },
+  "SM_gear_monument": {
+   "path": "/Game/WonderlandV2/Props/Clocks/SM_gear_monument",
+   "origin": [
+    266.3,
+    0.0,
+    1550.0
+   ],
+   "ext": [
+    1714.0,
+    986.0,
+    1550.0
+   ],
+   "slots": 1
+  },
+  "SM_orrery_gold": {
+   "path": "/Game/WonderlandV2/Props/Clocks/SM_orrery_gold",
+   "origin": [
+    0.0,
+    0.0,
+    1319.0
+   ],
+   "ext": [
+    761.0,
+    822.0,
+    1319.0
+   ],
+   "slots": 1
+  },
+  "SM_fountain_basin": {
+   "path": "/Game/WonderlandV2/Props/Garden/SM_fountain_basin",
+   "origin": [
+    0.0,
+    0.0,
+    150.1
+   ],
+   "ext": [
+    297.5,
+    297.5,
+    150.1
+   ],
+   "slots": 1
+  },
+  "SM_fountain_finial": {
+   "path": "/Game/WonderlandV2/Props/Garden/SM_fountain_finial",
+   "origin": [
+    0.0,
+    0.0,
+    82.0
+   ],
+   "ext": [
+    30.0,
+    30.0,
+    82.0
+   ],
+   "slots": 1
+  },
+  "SM_fountain_grand": {
+   "path": "/Game/WonderlandV2/Props/Garden/SM_fountain_grand",
+   "origin": [
+    0.0,
+    0.0,
+    793.0
+   ],
+   "ext": [
+    667.0,
+    667.0,
+    793.0
+   ],
+   "slots": 1
+  },
+  "SM_fountain_grand_water": {
+   "path": "/Game/WonderlandV2/Props/Garden/SM_fountain_grand_water",
+   "origin": [
+    0.0,
+    0.0,
+    920.4
+   ],
+   "ext": [
+    562.0,
+    562.0,
+    780.4
+   ],
+   "slots": 1
+  },
+  "SM_fountain_water": {
+   "path": "/Game/WonderlandV2/Props/Garden/SM_fountain_water",
+   "origin": [
+    0.0,
+    0.0,
+    99.0
+   ],
+   "ext": [
+    234.7,
+    234.7,
+    3.0
+   ],
+   "slots": 1
+  },
+  "SM_garden_bench": {
+   "path": "/Game/WonderlandV2/Props/Garden/SM_garden_bench",
+   "origin": [
+    1.0,
+    0.0,
+    56.5
+   ],
+   "ext": [
+    38.0,
+    86.0,
+    58.5
+   ],
+   "slots": 1
+  },
+  "SM_garden_urn": {
+   "path": "/Game/WonderlandV2/Props/Garden/SM_garden_urn",
+   "origin": [
+    0.0,
+    0.0,
+    98.8
+   ],
+   "ext": [
+    107.0,
+    80.0,
+    101.2
+   ],
+   "slots": 1
+  },
+  "SM_glass_pavilion": {
+   "path": "/Game/WonderlandV2/Props/Garden/SM_glass_pavilion",
+   "origin": [
+    0.0,
+    0.0,
+    2700.0
+   ],
+   "ext": [
+    1170.0,
+    1170.0,
+    2700.0
+   ],
+   "slots": 1
+  },
+  "SM_glass_pavilion_lights": {
+   "path": "/Game/WonderlandV2/Props/Garden/SM_glass_pavilion_lights",
+   "origin": [
+    0.0,
+    0.0,
+    2470.0
+   ],
+   "ext": [
+    845.8,
+    845.8,
+    1710.0
+   ],
+   "slots": 1
+  },
+  "SM_lantern_strange": {
+   "path": "/Game/WonderlandV2/Props/Garden/SM_lantern_strange",
+   "origin": [
+    241.0,
+    12.0,
+    1080.1
+   ],
+   "ext": [
+    453.0,
+    208.0,
+    1080.1
+   ],
+   "slots": 1
+  },
+  "SM_lantern_strange_glass": {
+   "path": "/Game/WonderlandV2/Props/Garden/SM_lantern_strange_glass",
+   "origin": [
+    470.0,
+    12.0,
+    1404.0
+   ],
+   "ext": [
+    178.7,
+    177.7,
+    290.0
+   ],
+   "slots": 1
+  },
+  "SM_lantern_swag": {
+   "path": "/Game/WonderlandV2/Props/Garden/SM_lantern_swag",
+   "origin": [
+    0.0,
+    0.0,
+    625.0
+   ],
+   "ext": [
+    1630.0,
+    130.0,
+    625.0
+   ],
+   "slots": 1
+  },
+  "SM_lantern_swag_glass": {
+   "path": "/Game/WonderlandV2/Props/Garden/SM_lantern_swag_glass",
+   "origin": [
+    0.0,
+    0.0,
+    491.6
+   ],
+   "ext": [
+    1268.0,
+    68.0,
+    221.6
+   ],
+   "slots": 1
+  },
+  "SM_pedestal_finial": {
+   "path": "/Game/WonderlandV2/Props/Garden/SM_pedestal_finial",
+   "origin": [
+    0.0,
+    0.0,
+    62.0
+   ],
+   "ext": [
+    40.0,
+    40.0,
+    62.0
+   ],
+   "slots": 1
+  },
+  "SM_planter_box": {
+   "path": "/Game/WonderlandV2/Props/Garden/SM_planter_box",
+   "origin": [
+    0.0,
+    0.0,
+    35.0
+   ],
+   "ext": [
+    105.0,
+    105.0,
+    35.0
+   ],
+   "slots": 1
+  },
+  "SM_signpost": {
+   "path": "/Game/WonderlandV2/Props/Garden/SM_signpost",
+   "origin": [
+    31.7,
+    -4.4,
+    131.0
+   ],
+   "ext": [
+    88.6,
+    98.3,
+    131.0
+   ],
+   "slots": 1
+  },
+  "SM_waymarker": {
+   "path": "/Game/WonderlandV2/Props/Garden/SM_waymarker",
+   "origin": [
+    0.0,
+    0.0,
+    483.0
+   ],
+   "ext": [
+    110.9,
+    110.9,
+    483.0
+   ],
+   "slots": 1
+  },
+  "SM_waymarker_lamp": {
+   "path": "/Game/WonderlandV2/Props/Garden/SM_waymarker_lamp",
+   "origin": [
+    0.0,
+    0.0,
+    653.0
+   ],
+   "ext": [
+    76.0,
+    74.1,
+    83.0
+   ],
+   "slots": 1
+  },
+  "SM_key_colossal": {
+   "path": "/Game/WonderlandV2/Props/Keys/SM_key_colossal",
+   "origin": [
+    0.0,
+    0.0,
+    4200.0
+   ],
+   "ext": [
+    1315.0,
+    1360.0,
+    4200.0
+   ],
+   "slots": 1
+  },
+  "SM_key_ornate": {
+   "path": "/Game/WonderlandV2/Props/Keys/SM_key_ornate",
+   "origin": [
+    0.0,
+    8.2,
+    46.3
+   ],
+   "ext": [
+    20.8,
+    17.8,
+    79.3
+   ],
+   "slots": 1
+  },
+  "SM_tea_cup": {
+   "path": "/Game/WonderlandV2/Props/Tea/SM_tea_cup",
+   "origin": [
+    49.5,
+    0.0,
+    129.4
+   ],
+   "ext": [
+    183.5,
+    134.0,
+    132.6
+   ],
+   "slots": 1
+  },
+  "SM_tea_cup_small": {
+   "path": "/Game/WonderlandV2/Props/Tea/SM_tea_cup_small",
+   "origin": [
+    25.0,
+    0.0,
+    106.3
+   ],
+   "ext": [
+    155.0,
+    130.0,
+    109.7
+   ],
+   "slots": 1
+  },
+  "SM_tea_heart": {
+   "path": "/Game/WonderlandV2/Props/Tea/SM_tea_heart",
+   "origin": [
+    0.0,
+    0.0,
+    -4.2
+   ],
+   "ext": [
+    25.6,
+    5.0,
+    23.3
+   ],
+   "slots": 1
+  },
+  "SM_tea_plinth": {
+   "path": "/Game/WonderlandV2/Props/Tea/SM_tea_plinth",
+   "origin": [
+    -0.0,
+    0.0,
+    48.0
+   ],
+   "ext": [
+    200.0,
+    200.0,
+    48.4
+   ],
+   "slots": 1
+  },
+  "SM_tea_pot": {
+   "path": "/Game/WonderlandV2/Props/Tea/SM_tea_pot",
+   "origin": [
+    -27.9,
+    0.0,
+    151.2
+   ],
+   "ext": [
+    210.1,
+    138.0,
+    154.8
+   ],
+   "slots": 1
+  },
+  "SM_tea_saucer": {
+   "path": "/Game/WonderlandV2/Props/Tea/SM_tea_saucer",
+   "origin": [
+    0.0,
+    0.0,
+    29.4
+   ],
+   "ext": [
+    260.0,
+    260.0,
+    32.8
+   ],
+   "slots": 1
+  },
+  "SM_teapot_pavilion": {
+   "path": "/Game/WonderlandV2/Props/Tea/SM_teapot_pavilion",
+   "origin": [
+    720.0,
+    0.0,
+    2409.5
+   ],
+   "ext": [
+    3820.0,
+    1700.0,
+    2410.5
+   ],
+   "slots": 1
+  },
+  "SM_blossom_cluster": {
+   "path": "/Game/WonderlandV2/Vegetation/Flowers/SM_blossom_cluster",
+   "origin": [
+    -0.8,
+    1.8,
+    41.0
+   ],
+   "ext": [
+    102.7,
+    118.8,
+    80.3
+   ],
+   "slots": 1
+  },
+  "SM_flower_bed_base_0": {
+   "path": "/Game/WonderlandV2/Vegetation/Flowers/SM_flower_bed_base_0",
+   "origin": [
+    8.0,
+    -5.4,
+    9.2
+   ],
+   "ext": [
+    97.3,
+    76.9,
+    38.3
+   ],
+   "slots": 1
+  },
+  "SM_flower_bed_base_1": {
+   "path": "/Game/WonderlandV2/Vegetation/Flowers/SM_flower_bed_base_1",
+   "origin": [
+    -3.1,
+    1.2,
+    9.0
+   ],
+   "ext": [
+    113.3,
+    68.9,
+    39.9
+   ],
+   "slots": 1
+  },
+  "SM_flower_bed_base_2": {
+   "path": "/Game/WonderlandV2/Vegetation/Flowers/SM_flower_bed_base_2",
+   "origin": [
+    2.2,
+    -1.4,
+    8.6
+   ],
+   "ext": [
+    110.1,
+    65.9,
+    41.1
+   ],
+   "slots": 1
+  },
+  "SM_flower_bed_base_3": {
+   "path": "/Game/WonderlandV2/Vegetation/Flowers/SM_flower_bed_base_3",
+   "origin": [
+    2.0,
+    -0.5,
+    9.7
+   ],
+   "ext": [
+    92.0,
+    73.9,
+    39.1
+   ],
+   "slots": 1
+  },
+  "SM_flower_bed_blooms_0": {
+   "path": "/Game/WonderlandV2/Vegetation/Flowers/SM_flower_bed_blooms_0",
+   "origin": [
+    0.4,
+    3.0,
+    32.1
+   ],
+   "ext": [
+    94.5,
+    73.2,
+    29.6
+   ],
+   "slots": 1
+  },
+  "SM_flower_bed_blooms_1": {
+   "path": "/Game/WonderlandV2/Vegetation/Flowers/SM_flower_bed_blooms_1",
+   "origin": [
+    4.1,
+    -1.1,
+    29.8
+   ],
+   "ext": [
+    90.3,
+    70.7,
+    29.7
+   ],
+   "slots": 1
+  },
+  "SM_flower_bed_blooms_2": {
+   "path": "/Game/WonderlandV2/Vegetation/Flowers/SM_flower_bed_blooms_2",
+   "origin": [
+    4.6,
+    0.4,
+    29.3
+   ],
+   "ext": [
+    103.2,
+    63.8,
+    28.9
+   ],
+   "slots": 1
+  },
+  "SM_flower_bed_blooms_3": {
+   "path": "/Game/WonderlandV2/Vegetation/Flowers/SM_flower_bed_blooms_3",
+   "origin": [
+    1.5,
+    0.4,
+    29.1
+   ],
+   "ext": [
+    88.6,
+    76.0,
+    29.8
+   ],
+   "slots": 1
+  },
+  "SM_flower_cluster": {
+   "path": "/Game/WonderlandV2/Vegetation/Flowers/SM_flower_cluster",
+   "origin": [
+    -0.0,
+    0.4,
+    6.0
+   ],
+   "ext": [
+    90.2,
+    82.9,
+    66.2
+   ],
+   "slots": 1
+  },
+  "SM_flower_colossal": {
+   "path": "/Game/WonderlandV2/Vegetation/Flowers/SM_flower_colossal",
+   "origin": [
+    0.0,
+    0.0,
+    1244.5
+   ],
+   "ext": [
+    1195.0,
+    465.1,
+    1245.5
+   ],
+   "slots": 1
+  },
+  "SM_flower_colossal_bloom": {
+   "path": "/Game/WonderlandV2/Vegetation/Flowers/SM_flower_colossal_bloom",
+   "origin": [
+    148.9,
+    0.0,
+    2341.4
+   ],
+   "ext": [
+    1033.9,
+    1060.5,
+    558.6
+   ],
+   "slots": 1
+  },
+  "SM_ground_blooms": {
+   "path": "/Game/WonderlandV2/Vegetation/Flowers/SM_ground_blooms",
+   "origin": [
+    11.0,
+    3.7,
+    17.5
+   ],
+   "ext": [
+    83.4,
+    90.4,
+    18.5
+   ],
+   "slots": 1
+  },
+  "SM_ground_flowers": {
+   "path": "/Game/WonderlandV2/Vegetation/Flowers/SM_ground_flowers",
+   "origin": [
+    -0.1,
+    5.0,
+    -4.0
+   ],
+   "ext": [
+    94.8,
+    88.5,
+    24.9
+   ],
+   "slots": 1
+  },
+  "SM_lavender_heads": {
+   "path": "/Game/WonderlandV2/Vegetation/Flowers/SM_lavender_heads",
+   "origin": [
+    -1.7,
+    -0.7,
+    76.5
+   ],
+   "ext": [
+    31.1,
+    33.7,
+    25.9
+   ],
+   "slots": 1
+  },
+  "SM_lavender_stems": {
+   "path": "/Game/WonderlandV2/Vegetation/Flowers/SM_lavender_stems",
+   "origin": [
+    1.3,
+    -3.0,
+    38.8
+   ],
+   "ext": [
+    44.5,
+    40.5,
+    39.8
+   ],
+   "slots": 1
+  },
+  "SM_ivy_drape": {
+   "path": "/Game/WonderlandV2/Vegetation/Ivy/SM_ivy_drape",
+   "origin": [
+    9.2,
+    4.8,
+    -210.5
+   ],
+   "ext": [
+    130.7,
+    113.2,
+    243.4
+   ],
+   "slots": 1
+  },
+  "SM_vine_wall": {
+   "path": "/Game/WonderlandV2/Vegetation/Ivy/SM_vine_wall",
+   "origin": [
+    8.8,
+    -18.0,
+    100.1
+   ],
+   "ext": [
+    181.5,
+    25.7,
+    122.9
+   ],
+   "slots": 1
+  },
+  "SM_rose_bloom": {
+   "path": "/Game/WonderlandV2/Vegetation/Roses/SM_rose_bloom",
+   "origin": [
+    4.7,
+    -2.1,
+    67.4
+   ],
+   "ext": [
+    45.9,
+    52.1,
+    68.5
+   ],
+   "slots": 1
+  },
+  "SM_rose_bush": {
+   "path": "/Game/WonderlandV2/Vegetation/Roses/SM_rose_bush",
+   "origin": [
+    3.6,
+    -4.5,
+    83.4
+   ],
+   "ext": [
+    98.2,
+    105.6,
+    67.2
+   ],
+   "slots": 1
+  },
+  "SM_hedge_block": {
+   "path": "/Game/WonderlandV2/Vegetation/Shrubs/SM_hedge_block",
+   "origin": [
+    -1.3,
+    0.9,
+    66.4
+   ],
+   "ext": [
+    176.6,
+    75.2,
+    63.8
+   ],
+   "slots": 1
+  },
+  "SM_hedge_mass": {
+   "path": "/Game/WonderlandV2/Vegetation/Shrubs/SM_hedge_mass",
+   "origin": [
+    -4.8,
+    -17.4,
+    135.9
+   ],
+   "ext": [
+    334.0,
+    270.7,
+    126.4
+   ],
+   "slots": 1
+  },
+  "SM_shrub_flowering": {
+   "path": "/Game/WonderlandV2/Vegetation/Shrubs/SM_shrub_flowering",
+   "origin": [
+    1.6,
+    1.8,
+    119.4
+   ],
+   "ext": [
+    179.3,
+    170.8,
+    95.9
+   ],
+   "slots": 1
+  },
+  "SM_heart_topiary": {
+   "path": "/Game/WonderlandV2/Vegetation/Topiary/SM_heart_topiary",
+   "origin": [
+    -6.5,
+    -6.1,
+    403.5
+   ],
+   "ext": [
+    588.2,
+    198.6,
+    541.0
+   ],
+   "slots": 1
+  },
+  "SM_topiary_ball": {
+   "path": "/Game/WonderlandV2/Vegetation/Topiary/SM_topiary_ball",
+   "origin": [
+    2.5,
+    -1.3,
+    74.6
+   ],
+   "ext": [
+    93.6,
+    92.3,
+    74.6
+   ],
+   "slots": 1
+  },
+  "SM_topiary_cone_plain": {
+   "path": "/Game/WonderlandV2/Vegetation/Topiary/SM_topiary_cone_plain",
+   "origin": [
+    -2.8,
+    3.9,
+    159.3
+   ],
+   "ext": [
+    115.7,
+    119.7,
+    159.3
+   ],
+   "slots": 1
+  },
+  "SM_topiary_cone_roses": {
+   "path": "/Game/WonderlandV2/Vegetation/Topiary/SM_topiary_cone_roses",
+   "origin": [
+    4.3,
+    -5.4,
+    249.0
+   ],
+   "ext": [
+    147.1,
+    147.5,
+    249.0
+   ],
+   "slots": 1
+  },
+  "SM_topiary_spiral": {
+   "path": "/Game/WonderlandV2/Vegetation/Topiary/SM_topiary_spiral",
+   "origin": [
+    1.2,
+    2.0,
+    170.2
+   ],
+   "ext": [
+    112.9,
+    117.0,
+    170.2
+   ],
+   "slots": 1
+  },
+  "SM_canopy_large": {
+   "path": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_large",
+   "origin": [
+    1.7,
+    0.1,
+    118.0
+   ],
+   "ext": [
+    574.8,
+    529.5,
+    413.5
+   ],
+   "slots": 1
+  },
+  "SM_canopy_medium": {
+   "path": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium",
+   "origin": [
+    -8.3,
+    13.9,
+    36.9
+   ],
+   "ext": [
+    327.2,
+    288.7,
+    215.2
+   ],
+   "slots": 1
+  },
+  "SM_tree_clock_trunk": {
+   "path": "/Game/WonderlandV2/Vegetation/Trees/SM_tree_clock_trunk",
+   "origin": [
+    95.0,
+    -17.5,
+    1027.2
+   ],
+   "ext": [
+    461.3,
+    397.5,
+    1109.0
+   ],
+   "slots": 1
+  },
+  "SM_tree_mature_trunk": {
+   "path": "/Game/WonderlandV2/Vegetation/Trees/SM_tree_mature_trunk",
+   "origin": [
+    -63.4,
+    -16.5,
+    702.1
+   ],
+   "ext": [
+    375.8,
+    324.4,
+    783.7
+   ],
+   "slots": 1
+  },
+  "SM_tree_slender_trunk": {
+   "path": "/Game/WonderlandV2/Vegetation/Trees/SM_tree_slender_trunk",
+   "origin": [
+    36.6,
+    -2.0,
+    409.8
+   ],
+   "ext": [
+    225.0,
+    212.0,
+    491.4
+   ],
+   "slots": 1
+  },
+  "SM_vine_hanging": {
+   "path": "/Game/WonderlandV2/Vegetation/Vines/SM_vine_hanging",
+   "origin": [
+    10.1,
+    4.2,
+    -335.0
+   ],
+   "ext": [
+    123.3,
+    113.1,
+    335.7
+   ],
+   "slots": 1
+  },
+  "SM_cobble_slab_0": {
+   "path": "/Game/WonderlandV2/Ground/Cobblestone/SM_cobble_slab_0",
+   "origin": [
+    3.1,
+    -1.1,
+    7.6
+   ],
+   "ext": [
+    42.7,
+    46.4,
+    7.5
+   ],
+   "slots": 1
+  },
+  "SM_cobble_slab_1": {
+   "path": "/Game/WonderlandV2/Ground/Cobblestone/SM_cobble_slab_1",
+   "origin": [
+    -1.0,
+    -1.6,
+    7.5
+   ],
+   "ext": [
+    44.5,
+    45.1,
+    7.3
+   ],
+   "slots": 1
+  },
+  "SM_cobble_slab_2": {
+   "path": "/Game/WonderlandV2/Ground/Cobblestone/SM_cobble_slab_2",
+   "origin": [
+    -1.2,
+    1.5,
+    7.0
+   ],
+   "ext": [
+    45.7,
+    44.2,
+    7.7
+   ],
+   "slots": 1
+  },
+  "SM_cobble_slab_3": {
+   "path": "/Game/WonderlandV2/Ground/Cobblestone/SM_cobble_slab_3",
+   "origin": [
+    -1.1,
+    2.0,
+    7.0
+   ],
+   "ext": [
+    43.7,
+    44.2,
+    7.4
+   ],
+   "slots": 1
+  },
+  "SM_kerb_stone": {
+   "path": "/Game/WonderlandV2/Ground/Cobblestone/SM_kerb_stone",
+   "origin": [
+    -0.0,
+    0.0,
+    14.0
+   ],
+   "ext": [
+    60.0,
+    18.1,
+    14.1
+   ],
+   "slots": 1
+  },
+  "SM_path_flag_0": {
+   "path": "/Game/WonderlandV2/Ground/Cobblestone/SM_path_flag_0",
+   "origin": [
+    -1.0,
+    0.7,
+    5.5
+   ],
+   "ext": [
+    45.2,
+    35.6,
+    5.5
+   ],
+   "slots": 1
+  },
+  "SM_path_flag_1": {
+   "path": "/Game/WonderlandV2/Ground/Cobblestone/SM_path_flag_1",
+   "origin": [
+    -0.5,
+    -0.3,
+    5.5
+   ],
+   "ext": [
+    30.4,
+    35.8,
+    5.5
+   ],
+   "slots": 1
+  },
+  "SM_path_flag_2": {
+   "path": "/Game/WonderlandV2/Ground/Cobblestone/SM_path_flag_2",
+   "origin": [
+    -0.9,
+    0.3,
+    5.5
+   ],
+   "ext": [
+    60.0,
+    35.5,
+    5.5
+   ],
+   "slots": 1
+  },
+  "SM_path_flag_3": {
+   "path": "/Game/WonderlandV2/Ground/Cobblestone/SM_path_flag_3",
+   "origin": [
+    -0.1,
+    -0.1,
+    5.5
+   ],
+   "ext": [
+    44.2,
+    36.4,
+    5.5
+   ],
+   "slots": 1
+  },
+  "SM_path_flag_4": {
+   "path": "/Game/WonderlandV2/Ground/Cobblestone/SM_path_flag_4",
+   "origin": [
+    -1.1,
+    -0.0,
+    5.5
+   ],
+   "ext": [
+    30.6,
+    36.8,
+    5.5
+   ],
+   "slots": 1
+  },
+  "SM_path_flag_5": {
+   "path": "/Game/WonderlandV2/Ground/Cobblestone/SM_path_flag_5",
+   "origin": [
+    0.4,
+    0.3,
+    5.5
+   ],
+   "ext": [
+    60.0,
+    36.4,
+    5.5
+   ],
+   "slots": 1
+  },
+  "SM_plaza_slab_0": {
+   "path": "/Game/WonderlandV2/Ground/Cobblestone/SM_plaza_slab_0",
+   "origin": [
+    0.3,
+    -0.8,
+    6.5
+   ],
+   "ext": [
+    64.5,
+    61.7,
+    6.5
+   ],
+   "slots": 1
+  },
+  "SM_plaza_slab_1": {
+   "path": "/Game/WonderlandV2/Ground/Cobblestone/SM_plaza_slab_1",
+   "origin": [
+    1.1,
+    1.8,
+    6.5
+   ],
+   "ext": [
+    45.6,
+    61.1,
+    6.5
+   ],
+   "slots": 1
+  },
+  "SM_plaza_slab_2": {
+   "path": "/Game/WonderlandV2/Ground/Cobblestone/SM_plaza_slab_2",
+   "origin": [
+    0.6,
+    -0.3,
+    6.5
+   ],
+   "ext": [
+    99.4,
+    62.7,
+    6.5
+   ],
+   "slots": 1
+  },
+  "SM_plaza_slab_3": {
+   "path": "/Game/WonderlandV2/Ground/Cobblestone/SM_plaza_slab_3",
+   "origin": [
+    -0.1,
+    -0.1,
+    6.5
+   ],
+   "ext": [
+    65.1,
+    64.4,
+    6.5
+   ],
+   "slots": 1
+  },
+  "SM_plaza_slab_4": {
+   "path": "/Game/WonderlandV2/Ground/Cobblestone/SM_plaza_slab_4",
+   "origin": [
+    0.2,
+    0.5,
+    6.5
+   ],
+   "ext": [
+    47.0,
+    62.7,
+    6.5
+   ],
+   "slots": 1
+  },
+  "SM_plaza_slab_5": {
+   "path": "/Game/WonderlandV2/Ground/Cobblestone/SM_plaza_slab_5",
+   "origin": [
+    0.0,
+    1.5,
+    6.5
+   ],
+   "ext": [
+    101.2,
+    61.6,
+    6.5
+   ],
+   "slots": 1
+  },
+  "SM_plaza_slab_6": {
+   "path": "/Game/WonderlandV2/Ground/Cobblestone/SM_plaza_slab_6",
+   "origin": [
+    0.3,
+    0.2,
+    6.5
+   ],
+   "ext": [
+    64.5,
+    61.9,
+    6.5
+   ],
+   "slots": 1
+  },
+  "SM_plaza_slab_7": {
+   "path": "/Game/WonderlandV2/Ground/Cobblestone/SM_plaza_slab_7",
+   "origin": [
+    0.5,
+    1.2,
+    6.5
+   ],
+   "ext": [
+    46.6,
+    62.0,
+    6.5
+   ],
+   "slots": 1
+  },
+  "SM_plaza_slab_8": {
+   "path": "/Game/WonderlandV2/Ground/Cobblestone/SM_plaza_slab_8",
+   "origin": [
+    0.0,
+    -0.5,
+    6.5
+   ],
+   "ext": [
+    101.3,
+    63.4,
+    6.5
+   ],
+   "slots": 1
+  },
+  "SM_garden_lawn": {
+   "path": "/Game/WonderlandV2/Ground/Terrain/SM_garden_lawn",
+   "origin": [
+    0.0,
+    -0.0,
+    -12.0
+   ],
+   "ext": [
+    3000.0,
+    3600.0,
+    11.5
+   ],
+   "slots": 1
+  },
+  "SM_mushroom_giant": {
+   "path": "/Game/WonderlandV2/Mushrooms/Landmark/SM_mushroom_giant",
+   "origin": [
+    29.3,
+    -0.9,
+    757.5
+   ],
+   "ext": [
+    1006.9,
+    1008.8,
+    799.8
+   ],
+   "slots": 1
+  },
+  "SM_mushroom_giant_gills": {
+   "path": "/Game/WonderlandV2/Mushrooms/Landmark/SM_mushroom_giant_gills",
+   "origin": [
+    30.0,
+    0.0,
+    1202.0
+   ],
+   "ext": [
+    840.0,
+    840.0,
+    13.8
+   ],
+   "slots": 1
+  },
+  "SM_mushroom_giant_rim": {
+   "path": "/Game/WonderlandV2/Mushrooms/Landmark/SM_mushroom_giant_rim",
+   "origin": [
+    30.0,
+    0.0,
+    1154.2
+   ],
+   "ext": [
+    1001.0,
+    1001.0,
+    16.0
+   ],
+   "slots": 1
+  },
+  "SM_mushroom_giant_spots": {
+   "path": "/Game/WonderlandV2/Mushrooms/Landmark/SM_mushroom_giant_spots",
+   "origin": [
+    -95.8,
+    -111.5,
+    1492.1
+   ],
+   "ext": [
+    650.0,
+    727.3,
+    160.1
+   ],
+   "slots": 1
+  },
+  "SM_mushroom_landmark": {
+   "path": "/Game/WonderlandV2/Mushrooms/Landmark/SM_mushroom_landmark",
+   "origin": [
+    147.3,
+    0.5,
+    865.0
+   ],
+   "ext": [
+    654.3,
+    654.2,
+    878.4
+   ],
+   "slots": 1
+  },
+  "SM_stone_ring_base": {
+   "path": "/Game/WonderlandV2/Mushrooms/Landmark/SM_stone_ring_base",
+   "origin": [
+    -0.1,
+    -0.4,
+    37.9
+   ],
+   "ext": [
+    254.2,
+    254.0,
+    38.4
+   ],
+   "slots": 1
+  },
+  "SM_mushroom_medium": {
+   "path": "/Game/WonderlandV2/Mushrooms/Medium/SM_mushroom_medium",
+   "origin": [
+    78.0,
+    -0.9,
+    303.2
+   ],
+   "ext": [
+    262.1,
+    261.9,
+    315.2
+   ],
+   "slots": 1
+  },
+  "SM_mushroom_small": {
+   "path": "/Game/WonderlandV2/Mushrooms/Small/SM_mushroom_small",
+   "origin": [
+    38.6,
+    0.7,
+    148.4
+   ],
+   "ext": [
+    119.4,
+    119.3,
+    159.8
+   ],
+   "slots": 1
+  }
+ },
+ "finished": "2026-09-13 01:08:45",
+ "seconds": 0.92,
+ "log": ""
+}

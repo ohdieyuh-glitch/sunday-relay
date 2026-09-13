@@ -137,11 +137,14 @@ def _tick_body():
     try:
         now = time.time()
         _state["ticks"] += 1
-        if now - _state["last_poll"] > 0.25:
+        # ONE JOB AT A TIME. Two PIE jobs started together: one ended PIE under the other.
+        if now - _state["last_poll"] > 0.25 and not _state["jobs"]:
             _state["last_poll"] = now
             for entry in sorted(os.listdir(INBOX)):
                 if entry.endswith(".py"):
                     _start(os.path.join(INBOX, entry))
+                    if _state["jobs"]:
+                        break
         for job in list(_state["jobs"]):
             if _step(job, now):
                 _state["jobs"].remove(job)

@@ -4,6 +4,8 @@
 import os
 
 CAMERAS = globals().get("CAMERAS", ["HeroCam_V2_MarbleReference", "PlayerCam01", "PathCam02", "ReverseCam03"])
+# Ad-hoc poses as (name, x, y, z, pitch, yaw, fov): a PIE copy of SkylineCam06 is moved to each.
+POSES = globals().get("POSES", [])
 TAG = globals().get("TAG", "shot")
 HIDE_PAWN = globals().get("HIDE_PAWN", True)
 SETTLE = globals().get("SETTLE", 2.5)
@@ -38,6 +40,18 @@ def job():
         path = os.path.join(SHOTS, "%s__%s.png" % (name, TAG))
         ok = unreal.WonderlandUiTestLibrary.capture_game_viewport(path)
         shots.append({"camera": name, "path": path, "ok": bool(ok)})
+    if POSES:
+        rover = cams["SkylineCam06"]
+        comp = rover.get_editor_property("camera_component")
+        comp.set_editor_property("constrain_aspect_ratio", False)
+        for (name, x, y, z, pitch, yaw, fov) in POSES:
+            rover.set_actor_location_and_rotation(unreal.Vector(x, y, z), unreal.Rotator(roll=0.0, pitch=pitch, yaw=yaw), False, True)
+            comp.set_editor_property("field_of_view", fov)
+            pc.set_view_target_with_blend(rover, 0.0)
+            yield SETTLE
+            path = os.path.join(SHOTS, "%s__%s.png" % (name, TAG))
+            ok = unreal.WonderlandUiTestLibrary.capture_game_viewport(path)
+            shots.append({"camera": name, "path": path, "ok": bool(ok)})
     f0 = unreal.SystemLibrary.get_frame_count()
     import time
     t0 = time.time()
