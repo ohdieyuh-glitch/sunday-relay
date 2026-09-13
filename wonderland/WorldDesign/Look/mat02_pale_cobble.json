@@ -1,0 +1,10 @@
+{
+ "look": "MAT02",
+ "title": "Pale sandy cobbles for the city streets",
+ "chosen_from": "material_variants.py round mat2, variant v2_pale_cobble, judged on South_StreetHero34, SW_NarrowStreet43 and East_QuarterStreet58 on 2026-09-13",
+ "why": "The southern and western streets read grey and gritty: the cobble tint (linear 0.41/0.39/0.39) over a dark cobble texture made the streets look like asphalt. The reference's ground is pale and sandy.",
+ "materials": {
+  "MI_V2_Cobble": {"BaseColor": {"before": [0.411, 0.391, 0.391, 1.0], "after": [0.72, 0.64, 0.52, 1.0]}},
+  "MI_V2_CobbleHero": {"BaseColor": {"before": [0.411, 0.379, 0.353, 1.0], "after": [0.72, 0.64, 0.52, 1.0]}}
+ }
+}
