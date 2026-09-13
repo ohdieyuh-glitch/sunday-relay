@@ -179,6 +179,22 @@ const safeInstant=(value:unknown):string|null=>typeof value==='string'&&INSTANT.
  * digest of a different algorithm, or a sentence about one.
  */
 const safeDigest=(value:unknown):string|null=>typeof value==='string'&&/^sha256:[0-9a-f]{64}$/.test(value)?value:null;
+/**
+ * A PER-MODEL USAGE LINE IN THE ONE GRAMMAR THE HOSTED ADAPTER WRITES:
+ * `model:in=N,out=N,cr=N,cc=N,usd=D` per model, `;`-joined, `?` for an
+ * unreported figure, at most eight models and an optional final `+N`. Every
+ * model id must also pass {@link safeModel}, so a credential-shaped key is
+ * refused here even though the grammar would admit its characters.
+ */
+const MODEL_USAGE_ENTRY=/^([A-Za-z0-9][A-Za-z0-9._:@-]{0,79}):in=(\d{1,15}|\?),out=(\d{1,15}|\?),cr=(\d{1,15}|\?),cc=(\d{1,15}|\?),usd=(\d{1,9}\.\d{6}|\?)$/;
+const safeModelUsage=(value:unknown):string|null=>{
+ if(typeof value!=='string'||value.length===0||value.length>1_600)return null;
+ const parts=value.split(';');
+ if(parts.length>1&&/^\+\d{1,4}$/.test(parts[parts.length-1]!))parts.pop();
+ if(parts.length===0||parts.length>8)return null;
+ for(const part of parts){const match=MODEL_USAGE_ENTRY.exec(part);if(match===null||safeModel(match[1])===null)return null;}
+ return value;
+};
 export type JuliusSafeDiagnostics=Readonly<Record<string,string|number|boolean|null>>;
 export const safeReviewDiagnostics=(value:unknown):JuliusSafeDiagnostics|null=>{
  if(value===null||typeof value!=='object'||Array.isArray(value))return null;
@@ -337,6 +353,11 @@ export const safeReviewDiagnostics=(value:unknown):JuliusSafeDiagnostics|null=>{
   streamOutputTokens:safeCount(v.streamOutputTokens),
   streamCacheReadInputTokens:safeCount(v.streamCacheReadInputTokens),
   streamCacheCreationInputTokens:safeCount(v.streamCacheCreationInputTokens),
+  /** The hosted result's own cache counts: the input `inputTokens` leaves out. */
+  resultCacheReadInputTokens:safeCount(v.resultCacheReadInputTokens),
+  resultCacheCreationInputTokens:safeCount(v.resultCacheCreationInputTokens),
+  /** One line per model from the hosted result's `modelUsage`, in its closed grammar. */
+  modelUsage:safeModelUsage(v.modelUsage),
   /* ------------------------------------------- the attempt itself ----
    *
    * EVERY FIELD ABOVE DESCRIBES A FAILURE, and until Live Run 3 that was the

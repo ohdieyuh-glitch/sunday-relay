@@ -24,13 +24,43 @@
 export interface HostedUsage {
   readonly inputTokens: number | null;
   readonly outputTokens: number | null;
+  /**
+   * THE RESULT'S OWN CACHE COUNTS. `inputTokens` is the runtime's UNCACHED
+   * input, so a coder that read most of its context from the prompt cache —
+   * every long run does — reported 32 input tokens over 21 turns on Mission 5,
+   * and a receipt could say nothing truer. These are the tokens read from the
+   * cache and written to it, as the terminal result stated them.
+   */
+  readonly cacheReadInputTokens: number | null;
+  readonly cacheCreationInputTokens: number | null;
   readonly totalCostUsd: number | null;
   readonly source: 'runtime_reported' | 'unavailable';
 }
 
 export const UNKNOWN_HOSTED_USAGE: HostedUsage = Object.freeze({
-  inputTokens: null, outputTokens: null, totalCostUsd: null, source: 'unavailable',
+  inputTokens: null, outputTokens: null, cacheReadInputTokens: null, cacheCreationInputTokens: null,
+  totalCostUsd: null, source: 'unavailable',
 });
+
+/**
+ * ONE MODEL'S SHARE OF A RUN, as the result's `modelUsage` stated it.
+ *
+ * WHY IT IS READ AT ALL. The runtime's own cost guide says to account from
+ * `total_cost_usd` or `modelUsage` rather than `usage`: `usage` counts only the
+ * top-level loop, and on `error_max_budget_usd` it leaves out the response that
+ * crossed the budget while the other two include it. Lab run 34739303313 is
+ * that case — a coder that spent $0.369044 with `usage` reading 0 in and 0 out.
+ * `costUsd` is the runtime's client-side estimate, as `total_cost_usd` is, and
+ * never a provider's bill.
+ */
+export interface HostedModelUsage {
+  readonly model: string;
+  readonly inputTokens: number | null;
+  readonly outputTokens: number | null;
+  readonly cacheReadInputTokens: number | null;
+  readonly cacheCreationInputTokens: number | null;
+  readonly costUsd: number | null;
+}
 
 /**
  * WHAT THE STREAM ITSELF REPORTED, TURN BY TURN — a FLOOR, never a total.
@@ -120,6 +150,8 @@ export interface HostedObservation {
    * needed it.
    */
   readonly streamUsage: HostedStreamUsage;
+  /** Per-model usage from the result, in model-id order; empty when none was reported. */
+  readonly modelUsage: readonly HostedModelUsage[];
   readonly resultSubtype: string | null;
   readonly isError: boolean | null;
   readonly finalText: string | null;
@@ -132,7 +164,7 @@ const EMPTY: HostedObservation = {
   initSeen: false, sessionId: null, actualModel: null, runtimeVersion: null, apiKeySource: null,
   reportedCwd: null, reportedTools: [], toolTargets: [], toolsUsed: [], toolInvocations: 0,
   permissionDenials: 0, numTurns: null, durationMs: null, usage: UNKNOWN_HOSTED_USAGE,
-  streamUsage: NO_HOSTED_STREAM_USAGE,
+  streamUsage: NO_HOSTED_STREAM_USAGE, modelUsage: [],
   resultSubtype: null, isError: null, finalText: null,
   thinkingBlocksOmitted: 0, unknownMessageCount: 0,
 };
@@ -140,6 +172,55 @@ const EMPTY: HostedObservation = {
 const PATH_KEYS = ['file_path', 'path', 'notebook_path', 'pattern', 'glob'];
 const num = (v: unknown): number | null =>
   typeof v === 'number' && Number.isFinite(v) ? v : null;
+
+/** A count or an amount the runtime reported: finite and not negative, or unknown. */
+const nonNegative = (v: unknown): number | null =>
+  typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : null;
+
+/** A model id as the runtime writes one. A key that is not one is not recorded. */
+const MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._:@-]{0,79}$/u;
+
+/**
+ * READ `modelUsage` WITHOUT TRUSTING ITS SHAPE. The runtime is a separate
+ * process and its final message is input: an entry needs a model-id key and an
+ * object value, and every figure in it is recorded only when it is a finite,
+ * non-negative number. Only the four token counts and the cost are kept.
+ */
+export function readHostedModelUsage(raw: unknown): readonly HostedModelUsage[] {
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return [];
+  const entries: HostedModelUsage[] = [];
+  for (const [model, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (!MODEL_ID.test(model) || value === null || typeof value !== 'object' || Array.isArray(value)) continue;
+    const figures = value as Record<string, unknown>;
+    entries.push({
+      model,
+      inputTokens: nonNegative(figures.inputTokens),
+      outputTokens: nonNegative(figures.outputTokens),
+      cacheReadInputTokens: nonNegative(figures.cacheReadInputTokens),
+      cacheCreationInputTokens: nonNegative(figures.cacheCreationInputTokens),
+      costUsd: nonNegative(figures.costUSD),
+    });
+  }
+  return entries.sort((a, b) => (a.model < b.model ? -1 : a.model > b.model ? 1 : 0));
+}
+
+/** The most models a summary names. A run that used more says how many it left out. */
+export const HOSTED_MODEL_USAGE_SUMMARY_LIMIT = 8;
+
+/**
+ * ONE LINE A DIAGNOSTICS COLUMN CAN CARRY: `model:in=N,out=N,cr=N,cc=N,usd=D`
+ * per model, joined by `;`, with `?` for a figure the runtime did not report and
+ * a final `+N` when more models than the limit were used. Null when the result
+ * named no model. A closed grammar, so the allowlist can refuse anything else.
+ */
+export function summariseHostedModelUsage(entries: readonly HostedModelUsage[]): string | null {
+  if (entries.length === 0) return null;
+  const count = (value: number | null): string => (value === null ? '?' : String(Math.round(value)));
+  const parts = entries.slice(0, HOSTED_MODEL_USAGE_SUMMARY_LIMIT).map((entry) =>
+    `${entry.model}:in=${count(entry.inputTokens)},out=${count(entry.outputTokens)},cr=${count(entry.cacheReadInputTokens)},cc=${count(entry.cacheCreationInputTokens)},usd=${entry.costUsd === null ? '?' : entry.costUsd.toFixed(6)}`);
+  if (entries.length > HOSTED_MODEL_USAGE_SUMMARY_LIMIT) parts.push(`+${entries.length - HOSTED_MODEL_USAGE_SUMMARY_LIMIT}`);
+  return parts.join(';');
+}
 
 /** Add an observed component to a running floor. Null + null stays null. */
 const addObserved = (running: number | null, seen: number | null): number | null =>
@@ -264,6 +345,8 @@ export function foldHostedMessage(
     const usageRaw = m.usage as Record<string, unknown> | undefined;
     const inputTokens = num(usageRaw?.input_tokens);
     const outputTokens = num(usageRaw?.output_tokens);
+    const cacheReadInputTokens = nonNegative(usageRaw?.cache_read_input_tokens);
+    const cacheCreationInputTokens = nonNegative(usageRaw?.cache_creation_input_tokens);
     const cost = num(m.total_cost_usd);
     return {
       ...state,
@@ -296,9 +379,11 @@ export function foldHostedMessage(
       durationMs: num(m.duration_ms),
       permissionDenials: Array.isArray(m.permission_denials) ? m.permission_denials.length : 0,
       usage: inputTokens === null && outputTokens === null && cost === null
+        && cacheReadInputTokens === null && cacheCreationInputTokens === null
         // Unreported usage stays Unknown. It never becomes zero.
         ? UNKNOWN_HOSTED_USAGE
-        : { inputTokens, outputTokens, totalCostUsd: cost, source: 'runtime_reported' },
+        : { inputTokens, outputTokens, cacheReadInputTokens, cacheCreationInputTokens, totalCostUsd: cost, source: 'runtime_reported' },
+      modelUsage: readHostedModelUsage(m.modelUsage),
     };
   }
 

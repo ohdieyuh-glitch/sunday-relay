@@ -34,10 +34,10 @@ export type {
 } from './hosted-readiness';
 
 export {
-  UNKNOWN_HOSTED_USAGE, emptyObservation, foldHostedMessage,
-  hostedStreamIsUsable, observeHostedMessages,
+  HOSTED_MODEL_USAGE_SUMMARY_LIMIT, UNKNOWN_HOSTED_USAGE, emptyObservation, foldHostedMessage,
+  hostedStreamIsUsable, observeHostedMessages, readHostedModelUsage, summariseHostedModelUsage,
 } from './hosted-observation';
-export type { HostedObservation, HostedUsage } from './hosted-observation';
+export type { HostedModelUsage, HostedObservation, HostedUsage } from './hosted-observation';
 
 export {
   HOSTED_RUN_ADAPTER_ID, loadHostedQuery, runHostedCodingAgent,

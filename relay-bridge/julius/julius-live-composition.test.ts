@@ -127,7 +127,8 @@ function fakeCoder(log: FakeLog, prompts: string[]) {
         runtimeVersion: 'test', apiKeySource: 'env', reportedCwd: input.workspacePath,
         reportedTools: ['Read', 'Glob', 'Grep', 'Edit'], toolTargets: [], toolsUsed: ['Edit'], toolInvocations: 3,
         permissionDenials: 0, numTurns: 3, durationMs: 10,
-        usage: { inputTokens: 500, outputTokens: 200, totalCostUsd: 0.02, source: 'runtime_reported' },
+        usage: { inputTokens: 500, outputTokens: 200, cacheReadInputTokens: null, cacheCreationInputTokens: null, totalCostUsd: 0.02, source: 'runtime_reported' },
+        modelUsage: [],
         // A COMPLETED run whose stream also reported per-turn usage. The two
         // are different numbers about different things: the terminal total,
         // and the floor the turns established on the way there.

@@ -66,7 +66,7 @@ import {
   type HostedRunOutcome,
 } from '../hosted-coding-agent/hosted-runner';
 import { DEFAULT_HOSTED_LIMITS, hostedLimitsForAllocation, type HostedLimits } from '../hosted-coding-agent/hosted-envelope';
-import type { HostedObservation } from '../hosted-coding-agent/hosted-observation';
+import { summariseHostedModelUsage, type HostedObservation } from '../hosted-coding-agent/hosted-observation';
 import {
   runHermesReview,
   type HermesConfig,
@@ -733,6 +733,18 @@ const hostedCoderDiagnostics = (input: {
     streamOutputTokens: observed?.streamUsage.outputTokens ?? null,
     streamCacheReadInputTokens: observed?.streamUsage.cacheReadInputTokens ?? null,
     streamCacheCreationInputTokens: observed?.streamUsage.cacheCreationInputTokens ?? null,
+    /**
+     * AND WHAT THE RESULT ITSELF SAID ABOUT THE CACHE AND ABOUT EACH MODEL.
+     *
+     * `inputTokens` above is the result's uncached input, so a cache-heavy run
+     * reads as almost no input at all. These are the result's own cache
+     * counts, and one line per model from `modelUsage`, which also carries the
+     * response a budget stop leaves out of `usage`. Null when the result did
+     * not report them, never zero.
+     */
+    resultCacheReadInputTokens: observed?.usage.cacheReadInputTokens ?? null,
+    resultCacheCreationInputTokens: observed?.usage.cacheCreationInputTokens ?? null,
+    modelUsage: observed === null || observed === undefined ? null : summariseHostedModelUsage(observed.modelUsage),
   };
 };
 
