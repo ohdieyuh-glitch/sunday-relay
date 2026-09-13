@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { dispatchArgs, dispatchKey, dispatchOnce, keyState, runPaidDispatch } from './julius-paid-dispatch.mjs';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { MAX_PAID_RUNS_AHEAD, dispatchArgs, dispatchKey, dispatchOnce, keyState, paidRunsAhead, runPaidDispatch } from './julius-paid-dispatch.mjs';
 
 /**
  * ONE ATTEMPT, ONE PAID RUN — however the network behaves.
@@ -16,6 +18,7 @@ const PAID_KEY = `julius-continuous-1@${SHA.slice(0, 12)}#qualification#a1`;
 const PREFLIGHT_KEY = `${PAID_KEY}#preflight`;
 
 interface FakeRun { id: number; status: string; conclusion: string | null; title: string; headSha: string }
+interface QueueRun { id: number; createdAt: string; status: string; title: string; slotJob: { status: string; conclusion: string | null } | null }
 
 function fakeGitHub(options: {
   runs?: FakeRun[];
@@ -26,16 +29,30 @@ function fakeGitHub(options: {
   listingLag?: number;
   /** How a created run ends when polled. */
   finishAs?: 'success' | 'failure';
+  /** What each read of the paid queue returns, in order; the last one repeats. A thrown Error is an unreadable queue. */
+  queue?: Array<QueueRun[] | Error>;
+  /** What each read of main returns, in order; the last one repeats. */
+  mains?: string[];
 }) {
   const runs: FakeRun[] = [...(options.runs ?? [])];
   const pending: Array<{ run: FakeRun; visibleAfter: number }> = [];
   let polls = 0;
   let nextId = 1000;
   const dispatched: string[][] = [];
+  let queueReads = 0;
+  let mainReads = 0;
   return {
     dispatched,
+    queueReads: () => queueReads,
     github: {
-      mainSha: () => SHA,
+      mainSha: () => { const mains = options.mains ?? [SHA]; mainReads += 1; return mains[Math.min(mainReads - 1, mains.length - 1)]!; },
+      queueRuns: () => {
+        const snapshots = options.queue ?? [[]];
+        queueReads += 1;
+        const snapshot = snapshots[Math.min(queueReads - 1, snapshots.length - 1)]!;
+        if (snapshot instanceof Error) throw snapshot;
+        return snapshot.map((run) => ({ ...run }));
+      },
       acceptedCheckpoints: () => options.checkpoints ?? 1,
       runs: () => {
         polls += 1;
@@ -125,6 +142,70 @@ describe('an ambiguous dispatch never becomes two runs', () => {
   it('a completed key is consumed: a retry must bump the attempt', () => {
     const runs = [{ id: 6, status: 'completed', conclusion: 'failure', headSha: SHA, title: `julius mission=julius-continuous-1 lane=qualification mode=paid key=${PAID_KEY}` }];
     expect(keyState(runs, PAID_KEY).state).toBe('CONSUMED');
+  });
+});
+
+const PREFLIGHT_DONE: FakeRun = { id: 70, status: 'completed', conclusion: 'success', headSha: SHA, title: `julius mission=julius-live-mission-6 lane=lab mode=preflight key=julius-live-mission-6@${SHA.slice(0, 12)}#lab#a1#preflight` };
+const queued = (id: number, lane: string, state: 'holding' | 'waiting', createdAt = '2026-09-13T10:00:00Z'): QueueRun => ({
+  id, createdAt, status: 'in_progress', title: `julius mission=m${id} lane=${lane} mode=paid key=m${id}@${SHA.slice(0, 12)}#${lane}#a1`,
+  slotJob: state === 'holding' ? { status: 'completed', conclusion: 'success' } : { status: 'in_progress', conclusion: null },
+});
+const paidRequests = (fake: { dispatched: string[][] }) => fake.dispatched.filter((args) => args.includes('confirm_live=RUN LIVE MISSION'));
+const mission6 = { mission: 'julius-live-mission-6', lane: 'lab', paid: true, holdPollMs: 5 * 60_000, maxHoldMs: 30 * 60_000 };
+
+describe('a paid run joins the queue only when it can outwait what is ahead of it', () => {
+  it('the depth limit is what the workflow’s two timeouts allow: the admission wait fits one whole paid job', () => {
+    const workflow = readFileSync(join(process.cwd(), '.github/workflows/julius-first-live-mission.yml'), 'utf8');
+    const slot = workflow.slice(workflow.indexOf('\n  paid-slot:\n'), workflow.indexOf('\n  first-live-mission:\n'));
+    const paid = workflow.slice(workflow.indexOf('\n  first-live-mission:\n'));
+    const minutes = (text: string) => Number(/^\s*timeout-minutes:\s*(\d+)\s*$/mu.exec(text)![1]);
+    expect(Math.floor(minutes(slot) / minutes(paid))).toBe(MAX_PAID_RUNS_AHEAD);
+  });
+
+  it('TWO runs ahead: the paid request is never made, and the hold ends in a refusal that spent nothing', async () => {
+    const fake = fakeGitHub({ runs: [PREFLIGHT_DONE], queue: [[queued(1, 'lab', 'holding'), queued(2, 'lab', 'waiting')]] });
+    const result = await runPaidDispatch(mission6, deps(fake.github));
+    expect(result).toMatchObject({ outcome: 'REFUSED', reason: 'queue_still_too_deep', ahead: 2 });
+    expect(paidRequests(fake)).toHaveLength(0);
+    expect(fake.queueReads()).toBe(7);
+  });
+
+  it('ONE run ahead: the paid request is made', async () => {
+    const fake = fakeGitHub({ runs: [PREFLIGHT_DONE], queue: [[queued(1, 'qualification', 'holding')]] });
+    const result = await runPaidDispatch(mission6, deps(fake.github));
+    expect(result.outcome).toBe('DISPATCHED');
+    expect(paidRequests(fake)).toHaveLength(1);
+  });
+
+  it('a queue that drains while the dispatch is held is joined as soon as it can be', async () => {
+    const deep = [queued(1, 'lab', 'holding'), queued(2, 'lab', 'waiting')];
+    const fake = fakeGitHub({ runs: [PREFLIGHT_DONE], queue: [deep, deep, [queued(2, 'lab', 'holding')]] });
+    const result = await runPaidDispatch(mission6, deps(fake.github));
+    expect(result.outcome).toBe('DISPATCHED');
+    expect(fake.queueReads()).toBe(3);
+    expect(paidRequests(fake)).toHaveLength(1);
+  });
+
+  it('a waiting run of a lower-priority lane is not ahead: a qualification dispatch counts only the holder', () => {
+    const runs = [queued(1, 'lab', 'holding'), queued(2, 'lab', 'waiting'), queued(3, 'regression', 'waiting')];
+    expect(paidRunsAhead(runs, 'qualification')).toEqual({ ahead: 1, holders: [1], waiting: [] });
+    expect(paidRunsAhead(runs, 'lab')).toEqual({ ahead: 2, holders: [1], waiting: [2] });
+    expect(paidRunsAhead(runs, 'regression')).toEqual({ ahead: 3, holders: [1], waiting: [2, 3] });
+  });
+
+  it('main moving during the hold refuses, because the preflight proved the older rig', async () => {
+    const deep = [queued(1, 'lab', 'holding'), queued(2, 'lab', 'waiting')];
+    const fake = fakeGitHub({ runs: [PREFLIGHT_DONE], queue: [deep, [queued(2, 'lab', 'holding')]], mains: [SHA, 'e'.repeat(40)] });
+    const result = await runPaidDispatch(mission6, deps(fake.github));
+    expect(result).toMatchObject({ outcome: 'REFUSED', reason: 'main_moved_while_holding' });
+    expect(paidRequests(fake)).toHaveLength(0);
+  });
+
+  it('an unreadable queue holds rather than dispatching', async () => {
+    const fake = fakeGitHub({ runs: [PREFLIGHT_DONE], queue: [new Error('github_queue_unreadable')] });
+    const result = await runPaidDispatch(mission6, deps(fake.github));
+    expect(result).toMatchObject({ outcome: 'REFUSED', reason: 'queue_unreadable_while_holding' });
+    expect(paidRequests(fake)).toHaveLength(0);
   });
 });
 
