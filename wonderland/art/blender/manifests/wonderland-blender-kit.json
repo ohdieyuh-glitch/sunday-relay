@@ -1,7 +1,7 @@
 {
   "schema": "wonderland-blender-kit/1",
   "kit_version": "1.0.0",
-  "generated_utc": "2026-09-13T19:15:00+00:00",
+  "generated_utc": "2026-09-13T22:35:56+00:00",
   "generator": "wonderland/art/blender/scripts/build_assets.py",
   "blender": "4.5.13 LTS",
   "conventions": {
@@ -22,9 +22,9 @@
       "provenance": "measured",
       "unknown_is": "null, and it renders as Unknown -- never 0",
       "observed": {
-        "n": 108,
+        "n": 111,
         "min": 0.153,
-        "median": 0.845,
+        "median": 0.846,
         "max": 1.0,
         "unknown": 0
       }
@@ -36,9 +36,9 @@
       "provenance": "measured",
       "unknown_is": "null, and it renders as Unknown -- never 0",
       "observed": {
-        "n": 108,
+        "n": 111,
         "min": 0.0,
-        "median": 0.378,
+        "median": 0.37,
         "max": 1.0,
         "unknown": 0
       }
@@ -50,9 +50,9 @@
       "provenance": "measured",
       "unknown_is": "null, and it renders as Unknown -- never 0",
       "observed": {
-        "n": 108,
+        "n": 111,
         "min": 0.557,
-        "median": 0.999,
+        "median": 1.0,
         "max": 1.0,
         "unknown": 0
       }
@@ -64,9 +64,9 @@
       "provenance": "measured",
       "unknown_is": "null, and it renders as Unknown -- never 0",
       "observed": {
-        "n": 108,
+        "n": 111,
         "min": 0.0,
-        "median": 0.975,
+        "median": 0.976,
         "max": 1.0,
         "unknown": 0
       }
@@ -78,7 +78,7 @@
       "provenance": "declared",
       "unknown_is": "null, and it renders as Unknown -- never 0",
       "observed": {
-        "n": 108,
+        "n": 111,
         "min": 0.0,
         "median": 0.0,
         "max": 0.7,
@@ -92,7 +92,7 @@
       "provenance": "derived",
       "unknown_is": "null, and it renders as Unknown -- never 0",
       "observed": {
-        "n": 105,
+        "n": 108,
         "min": 0.083,
         "median": 0.675,
         "max": 0.917,
@@ -106,7 +106,7 @@
       "provenance": "derived",
       "unknown_is": "null, and it renders as Unknown -- never 0",
       "observed": {
-        "n": 108,
+        "n": 111,
         "min": 0.05,
         "median": 0.5,
         "max": 0.7,
@@ -197,15 +197,19 @@
       "unreal": "MI_V2_Lawn",
       "use": "the sward on a floating island: the ground a castle foot stands on"
     },
+    "moss": {
+      "unreal": "MI_V2_Moss",
+      "use": "the moss bed under a flagstone field's joints"
+    },
     "kerb": {
       "unreal": "MI_V2_Kerb",
       "use": "kerbs, gutters, tree surrounds -- the edge of the made surface"
     }
   },
   "counts": {
-    "assets": 108,
-    "meshes": 343,
-    "triangles": 451942,
+    "assets": 111,
+    "meshes": 355,
+    "triangles": 457382,
     "by_role": {
       "foot": 5,
       "body": 14,
@@ -214,7 +218,7 @@
       "threshold": 10,
       "screen": 11,
       "span": 5,
-      "detail": 17,
+      "detail": 20,
       "route": 11,
       "terrace": 17,
       "hero": 6
@@ -35421,6 +35425,1254 @@
         }
       },
       "part_count": 6
+    },
+    {
+      "asset_id": "WL_Ground_Flagstone_A",
+      "kit_version": "1.0.0",
+      "family": "paving",
+      "family_group": "paving",
+      "category": "prop",
+      "silhouette_role": "detail",
+      "note": "4 m flagstone field: 61 chamfered stones in running bond, three tints in a loose checker, 1.6 cm joints over a moss bed, 5.0-5.9 cm proud",
+      "districts": [
+        "plaza",
+        "royal_garden",
+        "cloister",
+        "city",
+        "castle"
+      ],
+      "params": {
+        "size_m": 4.0,
+        "stones": 61,
+        "joint_m": 0.016,
+        "seed": 1801
+      },
+      "origin_rule": "z = 0 is the GROUND DATUM; +X is the module front. excavation_uu is how far the module is cut in below it.",
+      "excavation_uu": 0.0,
+      "mounts_on": null,
+      "variant_of": null,
+      "units": {
+        "authored": "metres",
+        "manifest": "unreal units (cm)",
+        "uu_per_metre": 100.0
+      },
+      "height_uu": 5.89,
+      "bbox_min_uu": [
+        -200.0,
+        -200.0,
+        0.0
+      ],
+      "bbox_max_uu": [
+        200.0,
+        200.0,
+        5.89
+      ],
+      "size_uu": [
+        400.0,
+        400.0,
+        5.89
+      ],
+      "style": {
+        "slender_broad": 1.0,
+        "low_monumental": 0.0,
+        "open_solid": 1.0,
+        "gold_stone": 1.0,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.64,
+        "ceremonial_residential": 0.7
+      },
+      "base_z_uu": 0.0,
+      "profile_uu": [
+        282.84,
+        282.84,
+        282.84,
+        281.71,
+        167.68,
+        167.68,
+        244.21,
+        281.71,
+        281.71,
+        241.27,
+        279.44,
+        279.94
+      ],
+      "radius_uu": 200.0,
+      "tris_total": 1720,
+      "tri_budget": 6000,
+      "over_budget": false,
+      "nanite_recommended": false,
+      "nanite_rule": "recommended when the module is >= 5000 triangles and the builder has not opted out",
+      "collision_recommended": false,
+      "uv": "planar-world-2m (not a lightmap unwrap)",
+      "sockets": [
+        {
+          "name": "bottom",
+          "kind": "ground",
+          "z_uu": 0.0,
+          "radius_uu": 200.0,
+          "rung": null,
+          "note": "laid on the old paving's top"
+        },
+        {
+          "name": "edge",
+          "kind": "edge",
+          "z_uu": 5.89,
+          "radius_uu": 200.0,
+          "rung": null,
+          "note": "the stones' tops; a kerb or a border course butts to it"
+        }
+      ],
+      "parts": {
+        "moss": {
+          "verts": 8,
+          "faces": 6,
+          "tris": 12,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_Moss"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -200.0,
+            -200.0,
+            0.0
+          ],
+          "bbox_max_uu": [
+            200.0,
+            200.0,
+            1.2
+          ],
+          "size_uu": [
+            400.0,
+            400.0,
+            1.2
+          ],
+          "height_m": 0.012,
+          "base_z_uu": 0.0,
+          "normals": {
+            "faces": 6,
+            "shells": 1,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 1,
+            "zero_normal_faces": 0
+          },
+          "profile_uu": [
+            282.84,
+            282.84,
+            282.84,
+            282.84,
+            282.84,
+            282.84,
+            282.84,
+            282.84,
+            282.84,
+            282.84,
+            282.84,
+            282.84
+          ],
+          "material": "MI_V2_Moss",
+          "mesh_name": "WL_Ground_Flagstone_A_moss",
+          "glb": "exports\\glb\\WL_Ground_Flagstone_A_moss.glb",
+          "fbx": "exports\\fbx\\WL_Ground_Flagstone_A_moss.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_Moss"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -2,
+              0,
+              -2
+            ],
+            "max_yup": [
+              2,
+              0.012000000104308128,
+              2
+            ],
+            "bytes": 2020
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 0.0,
+            "stored_z_max": 1.2000000476837158
+          }
+        },
+        "paving": {
+          "verts": 240,
+          "faces": 210,
+          "tris": 420,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_PlazaCream"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -199.2,
+            -199.2,
+            0.0
+          ],
+          "bbox_max_uu": [
+            199.2,
+            199.2,
+            5.89
+          ],
+          "size_uu": [
+            398.4,
+            398.4,
+            5.89
+          ],
+          "height_m": 0.0589,
+          "base_z_uu": 0.0,
+          "normals": {
+            "faces": 210,
+            "shells": 15,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 0,
+            "zero_normal_faces": 0
+          },
+          "profile_uu": [
+            279.34,
+            279.34,
+            225.62,
+            281.71,
+            281.71,
+            281.71,
+            244.21,
+            281.71,
+            223.11,
+            225.62,
+            279.34,
+            242.36
+          ],
+          "material": "MI_V2_PlazaCream",
+          "mesh_name": "WL_Ground_Flagstone_A_paving",
+          "glb": "exports\\glb\\WL_Ground_Flagstone_A_paving.glb",
+          "fbx": "exports\\fbx\\WL_Ground_Flagstone_A_paving.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_PlazaCream"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -1.9919999837875366,
+              0,
+              -1.9919999837875366
+            ],
+            "max_yup": [
+              1.9920001029968262,
+              0.058916810899972916,
+              1.9919999837875366
+            ],
+            "bytes": 30664
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 0.0,
+            "stored_z_max": 5.89168119430542
+          }
+        },
+        "paving_shade": {
+          "verts": 400,
+          "faces": 350,
+          "tris": 700,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_PlazaShade"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -199.2,
+            -199.2,
+            0.0
+          ],
+          "bbox_max_uu": [
+            199.2,
+            199.2,
+            5.88
+          ],
+          "size_uu": [
+            398.4,
+            398.4,
+            5.88
+          ],
+          "height_m": 0.0588,
+          "base_z_uu": 0.0,
+          "normals": {
+            "faces": 350,
+            "shells": 25,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 0,
+            "zero_normal_faces": 0
+          },
+          "profile_uu": [
+            279.86,
+            279.86,
+            281.71,
+            281.71,
+            167.68,
+            167.68,
+            231.35,
+            281.71,
+            281.71,
+            241.27,
+            279.44,
+            279.86
+          ],
+          "material": "MI_V2_PlazaShade",
+          "mesh_name": "WL_Ground_Flagstone_A_paving_shade",
+          "glb": "exports\\glb\\WL_Ground_Flagstone_A_paving_shade.glb",
+          "fbx": "exports\\fbx\\WL_Ground_Flagstone_A_paving_shade.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_PlazaShade"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -1.9919999837875366,
+              0,
+              -1.9919999837875366
+            ],
+            "max_yup": [
+              1.9919999837875366,
+              0.058765191584825516,
+              1.9919999837875366
+            ],
+            "bytes": 50296
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 0.0,
+            "stored_z_max": 5.876519203186035
+          }
+        },
+        "paving_warm": {
+          "verts": 336,
+          "faces": 294,
+          "tris": 588,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_PlazaWarm"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -199.2,
+            -199.2,
+            0.0
+          ],
+          "bbox_max_uu": [
+            199.2,
+            117.65,
+            5.89
+          ],
+          "size_uu": [
+            398.4,
+            316.85,
+            5.89
+          ],
+          "height_m": 0.0589,
+          "base_z_uu": 0.0,
+          "normals": {
+            "faces": 294,
+            "shells": 21,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 0,
+            "zero_normal_faces": 0
+          },
+          "profile_uu": [
+            279.94,
+            279.94,
+            281.71,
+            252.46,
+            252.46,
+            252.46,
+            90.44,
+            225.62,
+            281.71,
+            210.52,
+            223.6,
+            279.94
+          ],
+          "material": "MI_V2_PlazaWarm",
+          "mesh_name": "WL_Ground_Flagstone_A_paving_warm",
+          "glb": "exports\\glb\\WL_Ground_Flagstone_A_paving_warm.glb",
+          "fbx": "exports\\fbx\\WL_Ground_Flagstone_A_paving_warm.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_PlazaWarm"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -1.9920001029968262,
+              0,
+              -1.1765109300613403
+            ],
+            "max_yup": [
+              1.9919999837875366,
+              0.05890307575464249,
+              1.9919999837875366
+            ],
+            "bytes": 42448
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 0.0,
+            "stored_z_max": 5.890307426452637
+          }
+        }
+      },
+      "part_count": 4
+    },
+    {
+      "asset_id": "WL_Ground_Flagstone_B",
+      "kit_version": "1.0.0",
+      "family": "paving",
+      "family_group": "paving",
+      "category": "prop",
+      "silhouette_role": "detail",
+      "note": "4 m flagstone field: 68 chamfered stones in running bond, three tints in a loose checker, 1.6 cm joints over a moss bed, 5.0-5.9 cm proud",
+      "districts": [
+        "plaza",
+        "royal_garden",
+        "cloister",
+        "city",
+        "castle"
+      ],
+      "params": {
+        "size_m": 4.0,
+        "stones": 68,
+        "joint_m": 0.016,
+        "seed": 1802
+      },
+      "origin_rule": "z = 0 is the GROUND DATUM; +X is the module front. excavation_uu is how far the module is cut in below it.",
+      "excavation_uu": 0.0,
+      "mounts_on": null,
+      "variant_of": null,
+      "units": {
+        "authored": "metres",
+        "manifest": "unreal units (cm)",
+        "uu_per_metre": 100.0
+      },
+      "height_uu": 5.9,
+      "bbox_min_uu": [
+        -200.0,
+        -200.0,
+        0.0
+      ],
+      "bbox_max_uu": [
+        200.0,
+        200.0,
+        5.9
+      ],
+      "size_uu": [
+        400.0,
+        400.0,
+        5.9
+      ],
+      "style": {
+        "slender_broad": 1.0,
+        "low_monumental": 0.0,
+        "open_solid": 1.0,
+        "gold_stone": 1.0,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.64,
+        "ceremonial_residential": 0.7
+      },
+      "base_z_uu": 0.0,
+      "profile_uu": [
+        282.84,
+        282.84,
+        282.84,
+        281.71,
+        233.62,
+        233.62,
+        258.68,
+        281.71,
+        281.71,
+        233.62,
+        279.84,
+        279.52
+      ],
+      "radius_uu": 200.0,
+      "tris_total": 1916,
+      "tri_budget": 6000,
+      "over_budget": false,
+      "nanite_recommended": false,
+      "nanite_rule": "recommended when the module is >= 5000 triangles and the builder has not opted out",
+      "collision_recommended": false,
+      "uv": "planar-world-2m (not a lightmap unwrap)",
+      "sockets": [
+        {
+          "name": "bottom",
+          "kind": "ground",
+          "z_uu": 0.0,
+          "radius_uu": 200.0,
+          "rung": null,
+          "note": "laid on the old paving's top"
+        },
+        {
+          "name": "edge",
+          "kind": "edge",
+          "z_uu": 5.9,
+          "radius_uu": 200.0,
+          "rung": null,
+          "note": "the stones' tops; a kerb or a border course butts to it"
+        }
+      ],
+      "parts": {
+        "moss": {
+          "verts": 8,
+          "faces": 6,
+          "tris": 12,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_Moss"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -200.0,
+            -200.0,
+            0.0
+          ],
+          "bbox_max_uu": [
+            200.0,
+            200.0,
+            1.2
+          ],
+          "size_uu": [
+            400.0,
+            400.0,
+            1.2
+          ],
+          "height_m": 0.012,
+          "base_z_uu": 0.0,
+          "normals": {
+            "faces": 6,
+            "shells": 1,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 1,
+            "zero_normal_faces": 0
+          },
+          "profile_uu": [
+            282.84,
+            282.84,
+            282.84,
+            282.84,
+            282.84,
+            282.84,
+            282.84,
+            282.84,
+            282.84,
+            282.84,
+            282.84,
+            282.84
+          ],
+          "material": "MI_V2_Moss",
+          "mesh_name": "WL_Ground_Flagstone_B_moss",
+          "glb": "exports\\glb\\WL_Ground_Flagstone_B_moss.glb",
+          "fbx": "exports\\fbx\\WL_Ground_Flagstone_B_moss.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_Moss"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -2,
+              0,
+              -2
+            ],
+            "max_yup": [
+              2,
+              0.012000000104308128,
+              2
+            ],
+            "bytes": 2020
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 0.0,
+            "stored_z_max": 1.2000000476837158
+          }
+        },
+        "paving": {
+          "verts": 432,
+          "faces": 378,
+          "tris": 756,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_PlazaCream"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -199.2,
+            -199.2,
+            0.0
+          ],
+          "bbox_max_uu": [
+            199.2,
+            199.2,
+            5.85
+          ],
+          "size_uu": [
+            398.4,
+            398.4,
+            5.85
+          ],
+          "height_m": 0.0585,
+          "base_z_uu": 0.0,
+          "normals": {
+            "faces": 378,
+            "shells": 27,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 0,
+            "zero_normal_faces": 0
+          },
+          "profile_uu": [
+            279.34,
+            279.34,
+            258.68,
+            281.71,
+            204.53,
+            204.53,
+            258.68,
+            281.71,
+            255.19,
+            147.11,
+            256.8,
+            279.34
+          ],
+          "material": "MI_V2_PlazaCream",
+          "mesh_name": "WL_Ground_Flagstone_B_paving",
+          "glb": "exports\\glb\\WL_Ground_Flagstone_B_paving.glb",
+          "fbx": "exports\\fbx\\WL_Ground_Flagstone_B_paving.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_PlazaCream"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -1.9920001029968262,
+              0,
+              -1.9919999837875366
+            ],
+            "max_yup": [
+              1.9920001029968262,
+              0.05846342071890831,
+              1.9919999837875366
+            ],
+            "bytes": 54184
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 0.0,
+            "stored_z_max": 5.846342086791992
+          }
+        },
+        "paving_shade": {
+          "verts": 384,
+          "faces": 336,
+          "tris": 672,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_PlazaShade"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -199.2,
+            -199.2,
+            0.0
+          ],
+          "bbox_max_uu": [
+            199.2,
+            199.2,
+            5.9
+          ],
+          "size_uu": [
+            398.4,
+            398.4,
+            5.9
+          ],
+          "height_m": 0.059,
+          "base_z_uu": 0.0,
+          "normals": {
+            "faces": 336,
+            "shells": 24,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 0,
+            "zero_normal_faces": 0
+          },
+          "profile_uu": [
+            279.52,
+            279.52,
+            249.22,
+            281.71,
+            233.62,
+            233.62,
+            233.62,
+            281.71,
+            281.71,
+            202.46,
+            252.7,
+            279.52
+          ],
+          "material": "MI_V2_PlazaShade",
+          "mesh_name": "WL_Ground_Flagstone_B_paving_shade",
+          "glb": "exports\\glb\\WL_Ground_Flagstone_B_paving_shade.glb",
+          "fbx": "exports\\fbx\\WL_Ground_Flagstone_B_paving_shade.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_PlazaShade"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -1.9920001029968262,
+              0,
+              -1.9919999837875366
+            ],
+            "max_yup": [
+              1.9919999837875366,
+              0.058962855488061905,
+              1.9919999837875366
+            ],
+            "bytes": 48336
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 0.0,
+            "stored_z_max": 5.896285533905029
+          }
+        },
+        "paving_warm": {
+          "verts": 272,
+          "faces": 238,
+          "tris": 476,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_PlazaWarm"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -199.2,
+            -199.2,
+            0.0
+          ],
+          "bbox_max_uu": [
+            199.2,
+            199.2,
+            5.83
+          ],
+          "size_uu": [
+            398.4,
+            398.4,
+            5.83
+          ],
+          "height_m": 0.0583,
+          "base_z_uu": 0.0,
+          "normals": {
+            "faces": 238,
+            "shells": 17,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 0,
+            "zero_normal_faces": 0
+          },
+          "profile_uu": [
+            279.84,
+            279.84,
+            281.71,
+            252.97,
+            218.29,
+            218.29,
+            218.29,
+            281.71,
+            217.76,
+            233.62,
+            279.84,
+            231.91
+          ],
+          "material": "MI_V2_PlazaWarm",
+          "mesh_name": "WL_Ground_Flagstone_B_paving_warm",
+          "glb": "exports\\glb\\WL_Ground_Flagstone_B_paving_warm.glb",
+          "fbx": "exports\\fbx\\WL_Ground_Flagstone_B_paving_warm.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_PlazaWarm"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -1.9919999837875366,
+              0,
+              -1.9919999837875366
+            ],
+            "max_yup": [
+              1.9919999837875366,
+              0.05831334739923477,
+              1.9919999837875366
+            ],
+            "bytes": 34608
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 0.0,
+            "stored_z_max": 5.831334590911865
+          }
+        }
+      },
+      "part_count": 4
+    },
+    {
+      "asset_id": "WL_Ground_Flagstone_C",
+      "kit_version": "1.0.0",
+      "family": "paving",
+      "family_group": "paving",
+      "category": "prop",
+      "silhouette_role": "detail",
+      "note": "4 m flagstone field: 64 chamfered stones in running bond, three tints in a loose checker, 1.6 cm joints over a moss bed, 5.0-5.9 cm proud",
+      "districts": [
+        "plaza",
+        "royal_garden",
+        "cloister",
+        "city",
+        "castle"
+      ],
+      "params": {
+        "size_m": 4.0,
+        "stones": 64,
+        "joint_m": 0.016,
+        "seed": 1803
+      },
+      "origin_rule": "z = 0 is the GROUND DATUM; +X is the module front. excavation_uu is how far the module is cut in below it.",
+      "excavation_uu": 0.0,
+      "mounts_on": null,
+      "variant_of": null,
+      "units": {
+        "authored": "metres",
+        "manifest": "unreal units (cm)",
+        "uu_per_metre": 100.0
+      },
+      "height_uu": 5.88,
+      "bbox_min_uu": [
+        -200.0,
+        -200.0,
+        0.0
+      ],
+      "bbox_max_uu": [
+        200.0,
+        200.0,
+        5.88
+      ],
+      "size_uu": [
+        400.0,
+        400.0,
+        5.88
+      ],
+      "style": {
+        "slender_broad": 1.0,
+        "low_monumental": 0.0,
+        "open_solid": 1.0,
+        "gold_stone": 1.0,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.64,
+        "ceremonial_residential": 0.7
+      },
+      "base_z_uu": 0.0,
+      "profile_uu": [
+        282.84,
+        282.84,
+        282.84,
+        281.71,
+        229.85,
+        229.85,
+        281.71,
+        281.71,
+        281.71,
+        229.85,
+        279.43,
+        279.39
+      ],
+      "radius_uu": 200.0,
+      "tris_total": 1804,
+      "tri_budget": 6000,
+      "over_budget": false,
+      "nanite_recommended": false,
+      "nanite_rule": "recommended when the module is >= 5000 triangles and the builder has not opted out",
+      "collision_recommended": false,
+      "uv": "planar-world-2m (not a lightmap unwrap)",
+      "sockets": [
+        {
+          "name": "bottom",
+          "kind": "ground",
+          "z_uu": 0.0,
+          "radius_uu": 200.0,
+          "rung": null,
+          "note": "laid on the old paving's top"
+        },
+        {
+          "name": "edge",
+          "kind": "edge",
+          "z_uu": 5.88,
+          "radius_uu": 200.0,
+          "rung": null,
+          "note": "the stones' tops; a kerb or a border course butts to it"
+        }
+      ],
+      "parts": {
+        "moss": {
+          "verts": 8,
+          "faces": 6,
+          "tris": 12,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_Moss"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -200.0,
+            -200.0,
+            0.0
+          ],
+          "bbox_max_uu": [
+            200.0,
+            200.0,
+            1.2
+          ],
+          "size_uu": [
+            400.0,
+            400.0,
+            1.2
+          ],
+          "height_m": 0.012,
+          "base_z_uu": 0.0,
+          "normals": {
+            "faces": 6,
+            "shells": 1,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 1,
+            "zero_normal_faces": 0
+          },
+          "profile_uu": [
+            282.84,
+            282.84,
+            282.84,
+            282.84,
+            282.84,
+            282.84,
+            282.84,
+            282.84,
+            282.84,
+            282.84,
+            282.84,
+            282.84
+          ],
+          "material": "MI_V2_Moss",
+          "mesh_name": "WL_Ground_Flagstone_C_moss",
+          "glb": "exports\\glb\\WL_Ground_Flagstone_C_moss.glb",
+          "fbx": "exports\\fbx\\WL_Ground_Flagstone_C_moss.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_Moss"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -2,
+              0,
+              -2
+            ],
+            "max_yup": [
+              2,
+              0.012000000104308128,
+              2
+            ],
+            "bytes": 2020
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 0.0,
+            "stored_z_max": 1.2000000476837158
+          }
+        },
+        "paving": {
+          "verts": 288,
+          "faces": 252,
+          "tris": 504,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_PlazaCream"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -199.2,
+            -199.2,
+            0.0
+          ],
+          "bbox_max_uu": [
+            199.2,
+            199.2,
+            5.84
+          ],
+          "size_uu": [
+            398.4,
+            398.4,
+            5.84
+          ],
+          "height_m": 0.0584,
+          "base_z_uu": 0.0,
+          "normals": {
+            "faces": 252,
+            "shells": 18,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 0,
+            "zero_normal_faces": 0
+          },
+          "profile_uu": [
+            252.13,
+            252.13,
+            254.09,
+            254.09,
+            254.09,
+            254.09,
+            254.09,
+            233.83,
+            254.09,
+            127.81,
+            231.55,
+            252.13
+          ],
+          "material": "MI_V2_PlazaCream",
+          "mesh_name": "WL_Ground_Flagstone_C_paving",
+          "glb": "exports\\glb\\WL_Ground_Flagstone_C_paving.glb",
+          "fbx": "exports\\fbx\\WL_Ground_Flagstone_C_paving.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_PlazaCream"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -1.9919999837875366,
+              0,
+              -1.9919999837875366
+            ],
+            "max_yup": [
+              1.9919999837875366,
+              0.05835805833339691,
+              1.9919999837875366
+            ],
+            "bytes": 36544
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 0.0,
+            "stored_z_max": 5.835805892944336
+          }
+        },
+        "paving_shade": {
+          "verts": 512,
+          "faces": 448,
+          "tris": 896,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_PlazaShade"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -199.2,
+            -199.2,
+            0.0
+          ],
+          "bbox_max_uu": [
+            199.2,
+            199.2,
+            5.88
+          ],
+          "size_uu": [
+            398.4,
+            398.4,
+            5.88
+          ],
+          "height_m": 0.0588,
+          "base_z_uu": 0.0,
+          "normals": {
+            "faces": 448,
+            "shells": 32,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 0,
+            "zero_normal_faces": 0
+          },
+          "profile_uu": [
+            279.43,
+            279.43,
+            229.85,
+            281.71,
+            229.85,
+            229.85,
+            281.71,
+            281.71,
+            281.71,
+            229.85,
+            279.43,
+            279.39
+          ],
+          "material": "MI_V2_PlazaShade",
+          "mesh_name": "WL_Ground_Flagstone_C_paving_shade",
+          "glb": "exports\\glb\\WL_Ground_Flagstone_C_paving_shade.glb",
+          "fbx": "exports\\fbx\\WL_Ground_Flagstone_C_paving_shade.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_PlazaShade"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -1.9919999837875366,
+              0,
+              -1.9919999837875366
+            ],
+            "max_yup": [
+              1.9920001029968262,
+              0.05876070633530617,
+              1.9919999837875366
+            ],
+            "bytes": 64016
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 0.0,
+            "stored_z_max": 5.876070499420166
+          }
+        },
+        "paving_warm": {
+          "verts": 224,
+          "faces": 196,
+          "tris": 392,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_PlazaWarm"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -199.2,
+            -199.2,
+            0.0
+          ],
+          "bbox_max_uu": [
+            150.32,
+            199.2,
+            5.88
+          ],
+          "size_uu": [
+            349.52,
+            398.4,
+            5.88
+          ],
+          "height_m": 0.0588,
+          "base_z_uu": 0.0,
+          "normals": {
+            "faces": 196,
+            "shells": 14,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 0,
+            "zero_normal_faces": 0
+          },
+          "profile_uu": [
+            279.03,
+            279.03,
+            178.94,
+            281.71,
+            281.71,
+            281.71,
+            281.71,
+            239.92,
+            203.56,
+            178.94,
+            279.03,
+            237.39
+          ],
+          "material": "MI_V2_PlazaWarm",
+          "mesh_name": "WL_Ground_Flagstone_C_paving_warm",
+          "glb": "exports\\glb\\WL_Ground_Flagstone_C_paving_warm.glb",
+          "fbx": "exports\\fbx\\WL_Ground_Flagstone_C_paving_warm.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_PlazaWarm"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -1.9920001029968262,
+              0,
+              -1.9919999837875366
+            ],
+            "max_yup": [
+              1.5032093524932861,
+              0.05875324085354805,
+              1.9919999837875366
+            ],
+            "bytes": 28724
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 0.0,
+            "stored_z_max": 5.875324249267578
+          }
+        }
+      },
+      "part_count": 4
     },
     {
       "asset_id": "WL_Wall_Curtain_Run__aged",

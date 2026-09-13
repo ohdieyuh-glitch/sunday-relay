@@ -352,3 +352,17 @@ front spelled from houses is a terrace; a tower scaled into a drum has windows t
 (34 m podium with portico and corner turrets, a 16-window columned drum, a ribbed pointed dome whose
 shell is its own part so a layer lays it in lilac, rose, blue or gold). The three share one order --
 ground 0-5.2 m, nobile 5.4-11.4 m, parapet 12.4 m -- so wings, pavilions and the dome's podium line up.
+
+## GAP 18 — the walked ground was a tinted sheet
+
+**What the quality reference shows** (founder, 2026-09-13, `WorldDesign/Reference/environment_quality_reference_2026-09-13.png`
+in the world repo): a plaza of chunky individual stones in a loose light/dark checker, each bevelled and a little
+proud or sunk against its neighbours, with deep joints and moss in them -- relief the low sun finds.
+
+**What the world had.** The V2 plaza slab: one smooth tile shape on a grid, hairline joints, every top in one plane.
+However good its material, a plaza of it reads as one tinted sheet.
+
+**Answered by** `families/paving.py`: three 4 m flagstone fields (A/B/C, different seeds) laid over existing
+paving -- courses of stones in running bond (course depths 36-56 cm, stones 34-72 cm), every stone a chamfered block
+of its own height (5.0-5.9 cm) and chamfer, three tints in a loose checker (~40% dark), 1.6 cm joints over a moss
+bed. No collision: the paving under it carries the walk.

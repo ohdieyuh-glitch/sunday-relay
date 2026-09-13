@@ -321,6 +321,12 @@ MATERIALS = {
         "unreal": "MI_V2_Lawn", "rgb": (0.18, 0.25, 0.12),
         "metallic": 0.0, "roughness": 0.86, "emissive": 0.0,
         "use": "the sward on a floating island: the ground a castle foot stands on"},
+    # MOSS in the joints of a flagstone field (families/paving.py): MI_V2_Moss is the world's own moss, so the
+    # joints read dark and green instead of showing the old slab under them.
+    "moss": {
+        "unreal": "MI_V2_Moss", "rgb": (0.14, 0.19, 0.11),
+        "metallic": 0.0, "roughness": 0.82, "emissive": 0.0,
+        "use": "the moss bed under a flagstone field's joints"},
     "kerb": {
         "unreal": "MI_V2_Kerb", "rgb": (0.46, 0.42, 0.35),
         "metallic": 0.0, "roughness": 0.80, "emissive": 0.0,

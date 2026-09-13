@@ -1,5 +1,5 @@
 {
-  "checked_assets": 108,
+  "checked_assets": 111,
   "failures": 0,
   "material_check": "59 MI_V2_* names parsed from materials_v2.py",
   "per_asset": {
@@ -102,6 +102,9 @@
     "WL_Palace_Wing": [],
     "WL_Palace_Pavilion": [],
     "WL_Palace_Dome_Grand": [],
+    "WL_Ground_Flagstone_A": [],
+    "WL_Ground_Flagstone_B": [],
+    "WL_Ground_Flagstone_C": [],
     "WL_Wall_Curtain_Run__aged": [],
     "WL_Wall_Mural_Tower__ruined": [],
     "WL_Tower_Base_Buttressed__aged": [],
@@ -131,6 +134,7 @@
     "sky",
     "objects",
     "palace",
+    "paving",
     "variants"
   ],
   "mesh_hashes": {
@@ -642,6 +646,24 @@
       "roof_alt": "64e114a6ac28f2dc5c5dd221a3676a0dddcc48a38587284172dbee4ff7619d90",
       "stone": "c57c0682a273815d10a9f87414d5fcfc31ebb29ea9b0002b424bd86739353fb2",
       "stone_dark": "d7d3088823f703c507c13c68af556aeed208c0fa95658855a95952aa18c2c3b2"
+    },
+    "WL_Ground_Flagstone_A": {
+      "moss": "1642617a3b6883f7c1ad36ebd85aa93035abfb1de3268148f196bbb0bb4ab5c3",
+      "paving": "c20b10e26f2011db03b1b9004776ed843378beb14e0a8d8b5faa02aaca3616c1",
+      "paving_shade": "af57cc586fbbbe4b23a71b512a01ff6b1eb3ef35584d0135604fad79e8d3e256",
+      "paving_warm": "c9c6095ff38dac379de79649fbc595fe2aec24c82dadd73a7536f44faac31e1a"
+    },
+    "WL_Ground_Flagstone_B": {
+      "moss": "1642617a3b6883f7c1ad36ebd85aa93035abfb1de3268148f196bbb0bb4ab5c3",
+      "paving": "eb35f6e6b33ad728cecca9cf3150ae764773275fcdcb3ef8cc00e446debeedb8",
+      "paving_shade": "c10125bcc9400f5c1d30d9b83a5ede468e9bb9642c25462ee2e2b4dc90cda24f",
+      "paving_warm": "19c9d33a11cb0da82dfccb7b3ea90a13647b9fb7fa1a64de3aba356baed2c87a"
+    },
+    "WL_Ground_Flagstone_C": {
+      "moss": "1642617a3b6883f7c1ad36ebd85aa93035abfb1de3268148f196bbb0bb4ab5c3",
+      "paving": "54d382cf11ea62a76190710119d19705246c65041ba33aa05ea2eef3fbcac0b9",
+      "paving_shade": "71a50c9a9c0fde49014f4f29314344e46d9a29f95167dc934526db3505aa3cd3",
+      "paving_warm": "37fbeca38e6d6bf18724a882add7874401e81740199285f14e97834385011e1b"
     },
     "WL_Wall_Curtain_Run__aged": {
       "stone": "3e34a655658a4cdf79504a8cebfff2158e5f65b1152f5b8dd0084de428e63d5a",
