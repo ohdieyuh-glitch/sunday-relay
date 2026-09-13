@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { join, resolve, sep } from 'node:path';
 
 import {
   OFFICIAL_RELAY_DOG_HEIGHT,
@@ -87,6 +87,11 @@ const WONDERLAND_NULLABLE_FIELDS: Readonly<Record<string, readonly string[]>> = 
 const ROOT = resolve(__dirname, '..', '..', '..', '..');
 const CPP_DIR_RELATIVE = join('wonderland', 'Source', 'Wonderland');
 const CPP_DIR = join(ROOT, CPP_DIR_RELATIVE);
+// `git ls-files` reports POSIX separators on EVERY platform, including Windows.
+// `join` reports the host's, so the tracked-file check below must compare
+// against this form rather than CPP_DIR_RELATIVE — on Windows the backslashes
+// match nothing and every source file reads as untracked.
+const CPP_DIR_POSIX = CPP_DIR_RELATIVE.split(sep).join('/');
 
 /* ------------------------------------------------------------ allowlists */
 
@@ -109,6 +114,12 @@ const CPP_ONLY_STRUCTS: Readonly<Record<string, string>> = {
     'a hub-level authoring description. Level layout is Unreal\'s own business and Relay holds no opinion about it.',
   FWonderlandUsagePalette:
     'the channel palette converted to linear at export time. The contract states these colours as CSS, which the browser renders directly; a TypeScript mirror of the converted form would be an interface nothing in the browser would ever read.',
+  FRelayDogLeg:
+    'engine-side locomotion state for the walking Dog: the hip and shin pivots RelayDogCharacter finds by name on BP_RelayDog at BeginPlay and writes a pose onto every frame. Transient, never authored, and never part of any world document.',
+  FRelayDogArm:
+    'engine-side locomotion state for the walking Dog: the shoulder and forearm pivots found by name at BeginPlay. Transient, never authored, and never part of any world document.',
+  FRelayDogRouteLeg:
+    'one leg of the scripted route the Dog walks under -wldemo or -wlexplore, so a world review or capture can be repeated. Unreal-side capture authoring; Relay neither sends nor reads a route.',
 };
 
 /**
@@ -468,7 +479,7 @@ describe('the C++ side is present and readable', () => {
       (file) => file.endsWith('.h') || file.endsWith('.cpp'),
     );
     const untracked = sources
-      .map((file) => `${CPP_DIR_RELATIVE}/${file}`)
+      .map((file) => `${CPP_DIR_POSIX}/${file}`)
       .filter((path) => !tracked.has(path));
     expect(
       untracked,

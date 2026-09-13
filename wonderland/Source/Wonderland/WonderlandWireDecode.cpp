@@ -36,7 +36,14 @@ namespace
 
 enum class EJsonKind : uint8 { Null, Bool, Number, String, Array, Object };
 
-struct FJsonValue
+// NAMED FOR WONDERLAND, DELIBERATELY. The engine's shared editor PCH
+// (UnrealEdSharedPCH -> EngineSharedPCH -> Dom/JsonValue.h) puts Unreal's own
+// ::FJsonValue in every translation unit of this module, and UBT force-includes
+// that PCH, so the collision cannot be avoided by managing includes here. An
+// anonymous-namespace type is visible in the global scope it sits in, so a bare
+// `FJsonValue` below would be ambiguous against Unreal's (MSVC C2872) in exactly
+// the functions this file exports. The prefix is what keeps this parser private.
+struct FWonderlandJsonValue
 {
 	EJsonKind Kind = EJsonKind::Null;
 	bool bBool = false;
@@ -46,9 +53,9 @@ struct FJsonValue
 	// the duplicate check below is explicit rather than a side effect of
 	// insertion losing one.
 	std::vector<std::string> Keys;
-	std::vector<FJsonValue> Values;
+	std::vector<FWonderlandJsonValue> Values;
 	// Arrays only.
-	std::vector<FJsonValue> Items;
+	std::vector<FWonderlandJsonValue> Items;
 };
 
 struct FParser
@@ -235,7 +242,7 @@ struct FParser
 		return true;
 	}
 
-	bool ReadValue(FJsonValue& Out)
+	bool ReadValue(FWonderlandJsonValue& Out)
 	{
 		if (Depth >= WonderlandWireMaxDepth) { return Fail(EWonderlandWireError::TooLarge); }
 		SkipSpace();
@@ -256,7 +263,7 @@ struct FParser
 			if (At < Length && Data[At] == ']') { At += 1; Depth -= 1; return true; }
 			while (true)
 			{
-				FJsonValue Item;
+				FWonderlandJsonValue Item;
 				if (!ReadValue(Item)) { return false; }
 				Out.Items.push_back(Item);
 				SkipSpace();
@@ -288,7 +295,7 @@ struct FParser
 				SkipSpace();
 				if (At >= Length || Data[At] != ':') { return Fail(EWonderlandWireError::NotJson); }
 				At += 1;
-				FJsonValue Value;
+				FWonderlandJsonValue Value;
 				if (!ReadValue(Value)) { return false; }
 				Out.Keys.push_back(Key);
 				Out.Values.push_back(Value);
@@ -303,7 +310,7 @@ struct FParser
 	}
 };
 
-const FJsonValue* Field(const FJsonValue& Object, const char* Name)
+const FWonderlandJsonValue* Field(const FWonderlandJsonValue& Object, const char* Name)
 {
 	for (size_t i = 0; i < Object.Keys.size(); i += 1)
 	{
@@ -316,7 +323,7 @@ const FJsonValue* Field(const FJsonValue& Object, const char* Name)
 
 struct FFieldReader
 {
-	const FJsonValue& Object;
+	const FWonderlandJsonValue& Object;
 	FWonderlandWireRefusal& Refusal;
 	bool bFailed = false;
 
@@ -340,7 +347,7 @@ struct FFieldReader
 	// how MISSING stays different from EMPTY.
 	bool RequiredString(const char* Name, FString& Out)
 	{
-		const FJsonValue* Value = Field(Object, Name);
+		const FWonderlandJsonValue* Value = Field(Object, Name);
 		if (Value == nullptr) { return Reject(EWonderlandWireError::MissingField, Name); }
 		if (Value->Kind != EJsonKind::String) { return Reject(EWonderlandWireError::WrongType, Name); }
 		Out = FString(Value->Text.c_str());
@@ -356,7 +363,7 @@ struct FFieldReader
 		// trimming in either build. Whitespace-only is rejected as well as
 		// empty: a world scoped to "   " is scoped to nothing, and the space
 		// would make it look scoped in every log that printed it.
-		const FJsonValue* Value = Field(Object, Name);
+		const FWonderlandJsonValue* Value = Field(Object, Name);
 		bool bHasContent = false;
 		for (char C : Value->Text)
 		{
@@ -370,7 +377,7 @@ struct FFieldReader
 	// missing key is a malformed envelope, and the two are not the same.
 	bool NullableText(const char* Name, FWonderlandText& Out)
 	{
-		const FJsonValue* Value = Field(Object, Name);
+		const FWonderlandJsonValue* Value = Field(Object, Name);
 		if (Value == nullptr) { return Reject(EWonderlandWireError::MissingField, Name); }
 		if (Value->Kind == EJsonKind::Null) { Out.bKnown = false; Out.Value = FString(""); return true; }
 		if (Value->Kind != EJsonKind::String) { return Reject(EWonderlandWireError::WrongType, Name); }
@@ -381,7 +388,7 @@ struct FFieldReader
 
 	bool RequiredBool(const char* Name, bool& Out)
 	{
-		const FJsonValue* Value = Field(Object, Name);
+		const FWonderlandJsonValue* Value = Field(Object, Name);
 		if (Value == nullptr) { return Reject(EWonderlandWireError::MissingField, Name); }
 		if (Value->Kind != EJsonKind::Bool) { return Reject(EWonderlandWireError::WrongType, Name); }
 		Out = Value->bBool;
@@ -393,7 +400,7 @@ struct FFieldReader
 	// to its neighbour and ordering would stop working — refused instead.
 	bool RequiredInteger(const char* Name, int64& Out)
 	{
-		const FJsonValue* Value = Field(Object, Name);
+		const FWonderlandJsonValue* Value = Field(Object, Name);
 		if (Value == nullptr) { return Reject(EWonderlandWireError::MissingField, Name); }
 		if (Value->Kind != EJsonKind::Number) { return Reject(EWonderlandWireError::WrongType, Name); }
 		const double N = Value->Number;
@@ -414,7 +421,7 @@ struct FFieldReader
 	// a different and confident claim.
 	bool NullableInteger(const char* Name, FWonderlandNumber& Out)
 	{
-		const FJsonValue* Value = Field(Object, Name);
+		const FWonderlandJsonValue* Value = Field(Object, Name);
 		if (Value == nullptr) { return Reject(EWonderlandWireError::MissingField, Name); }
 		if (Value->Kind == EJsonKind::Null) { Out.bKnown = false; Out.Value = 0.0; return true; }
 		if (Value->Kind != EJsonKind::Number) { return Reject(EWonderlandWireError::WrongType, Name); }
@@ -440,7 +447,7 @@ struct FFieldReader
 	// a bool cannot hold both. Only bKnown && !bValue is an empty slot.
 	bool NullableFlag(const char* Name, FWonderlandFlag& Out)
 	{
-		const FJsonValue* Value = Field(Object, Name);
+		const FWonderlandJsonValue* Value = Field(Object, Name);
 		if (Value == nullptr) { return Reject(EWonderlandWireError::MissingField, Name); }
 		if (Value->Kind == EJsonKind::Null) { Out.bKnown = false; Out.bValue = false; return true; }
 		if (Value->Kind != EJsonKind::Bool) { return Reject(EWonderlandWireError::WrongType, Name); }
@@ -453,7 +460,7 @@ struct FFieldReader
 	// and lands on the zero member BY DESIGN; an unrecognised string does not.
 	bool NullableEnum(const char* Name, const char* EnumName, uint8& Out)
 	{
-		const FJsonValue* Value = Field(Object, Name);
+		const FWonderlandJsonValue* Value = Field(Object, Name);
 		if (Value == nullptr) { return Reject(EWonderlandWireError::MissingField, Name); }
 		if (Value->Kind == EJsonKind::Null) { Out = 0; return true; }
 		if (Value->Kind != EJsonKind::String) { return Reject(EWonderlandWireError::WrongType, Name); }
@@ -471,7 +478,7 @@ struct FFieldReader
 	// that Relay said nothing when in fact Relay said something unreadable.
 	bool RequiredEnum(const char* Name, const char* EnumName, uint8& Out)
 	{
-		const FJsonValue* Value = Field(Object, Name);
+		const FWonderlandJsonValue* Value = Field(Object, Name);
 		if (Value == nullptr) { return Reject(EWonderlandWireError::MissingField, Name); }
 		if (Value->Kind != EJsonKind::String) { return Reject(EWonderlandWireError::WrongType, Name); }
 		uint8 Found = 0;
@@ -534,7 +541,7 @@ namespace
 {
 
 // Parse bytes into one JSON value, with every document-level rule applied.
-bool ParseDocument(const char* Bytes, int32 Length, FJsonValue& Out, EWonderlandWireError& Error)
+bool ParseDocument(const char* Bytes, int32 Length, FWonderlandJsonValue& Out, EWonderlandWireError& Error)
 {
 	if (Bytes == nullptr || Length <= 0) { Error = EWonderlandWireError::NotJson; return false; }
 	if (Length > WonderlandWireMaxBytes) { Error = EWonderlandWireError::TooLarge; return false; }
@@ -553,7 +560,7 @@ bool ParseDocument(const char* Bytes, int32 Length, FJsonValue& Out, EWonderland
 // The envelope, from an object already parsed. ONE implementation, used by both
 // the bare-envelope entry point and the delivery one — a second reader would be
 // a second set of rules to drift.
-FWonderlandEnvelopeDecode DecodeEnvelopeObject(const FJsonValue& Root)
+FWonderlandEnvelopeDecode DecodeEnvelopeObject(const FWonderlandJsonValue& Root)
 {
 	FWonderlandEnvelopeDecode Result;
 	FWonderlandEnvelope Envelope;
@@ -594,14 +601,14 @@ FWonderlandEnvelopeDecode DecodeEnvelopeObject(const FJsonValue& Root)
 	// Relay's sanitiser is the first. A nested object or array here is a payload
 	// that did not come through the sanitiser, and it is refused rather than
 	// flattened into something a renderer would print.
-	const FJsonValue* Metadata = Field(Root, "metadata");
+	const FWonderlandJsonValue* Metadata = Field(Root, "metadata");
 	if (Metadata == nullptr) { Reader.Reject(EWonderlandWireError::MissingField, "metadata"); }
 	else if (Metadata->Kind != EJsonKind::Object) { Reader.Reject(EWonderlandWireError::WrongType, "metadata"); }
 	else
 	{
 		for (size_t i = 0; i < Metadata->Keys.size() && !Reader.bFailed; i += 1)
 		{
-			const FJsonValue& Item = Metadata->Values[i];
+			const FWonderlandJsonValue& Item = Metadata->Values[i];
 			if (Item.Kind == EJsonKind::Array || Item.Kind == EJsonKind::Object)
 			{
 				Reader.Reject(EWonderlandWireError::WrongType, "metadata");
@@ -655,7 +662,7 @@ FWonderlandEnvelopeDecode DecodeEnvelopeObject(const FJsonValue& Root)
 // PAYLOAD AROUND IT — the envelope beside it, or the hydration above it — and
 // each caller answers it against what it actually has.
 bool DecodeActivityObject(
-	const FJsonValue& Object,
+	const FWonderlandJsonValue& Object,
 	FWonderlandWireRefusal& Refusal,
 	FWonderlandActivityReading& Out)
 {
@@ -676,12 +683,12 @@ bool DecodeActivityObject(
 	// SIGNALS. Every member is looked up, and an unknown one is refused rather
 	// than skipped: a signal Relay raised and this build cannot name is a world
 	// showing LESS than is true, which reads as a calm run.
-	const FJsonValue* Signals = Field(Object, "signals");
+	const FWonderlandJsonValue* Signals = Field(Object, "signals");
 	if (Signals == nullptr) { Reader.Reject(EWonderlandWireError::MissingField, "signals"); }
 	else if (Signals->Kind != EJsonKind::Array) { Reader.Reject(EWonderlandWireError::WrongType, "signals"); }
 	else
 	{
-		for (const FJsonValue& Item : Signals->Items)
+		for (const FWonderlandJsonValue& Item : Signals->Items)
 		{
 			if (Item.Kind != EJsonKind::String)
 			{
@@ -699,12 +706,12 @@ bool DecodeActivityObject(
 	}
 
 	// WORKERS. The per-worker fold, same rule for its own signals.
-	const FJsonValue* Workers = Field(Object, "workers");
+	const FWonderlandJsonValue* Workers = Field(Object, "workers");
 	if (Workers == nullptr) { Reader.Reject(EWonderlandWireError::MissingField, "workers"); }
 	else if (Workers->Kind != EJsonKind::Array) { Reader.Reject(EWonderlandWireError::WrongType, "workers"); }
 	else
 	{
-		for (const FJsonValue& Item : Workers->Items)
+		for (const FWonderlandJsonValue& Item : Workers->Items)
 		{
 			if (Reader.bFailed) { break; }
 			if (Item.Kind != EJsonKind::Object)
@@ -717,13 +724,13 @@ bool DecodeActivityObject(
 			WorkerReader.RequiredIdentity("workerId", Worker.WorkerId);
 			if (WorkerReader.bFailed) { Reader.bFailed = true; break; }
 
-			const FJsonValue* WorkerSignals = Field(Item, "signals");
+			const FWonderlandJsonValue* WorkerSignals = Field(Item, "signals");
 			if (WorkerSignals == nullptr || WorkerSignals->Kind != EJsonKind::Array)
 			{
 				Reader.Reject(EWonderlandWireError::MissingField, "workers.signals");
 				break;
 			}
-			for (const FJsonValue& Signal : WorkerSignals->Items)
+			for (const FWonderlandJsonValue& Signal : WorkerSignals->Items)
 			{
 				if (Signal.Kind != EJsonKind::String)
 				{
@@ -763,7 +770,7 @@ bool DecodeActivityObject(
 FWonderlandEnvelopeDecode WonderlandDecodeEnvelopeBytes(const char* Bytes, int32 Length)
 {
 	FWonderlandEnvelopeDecode Result;
-	FJsonValue Root;
+	FWonderlandJsonValue Root;
 	EWonderlandWireError Error = EWonderlandWireError::None;
 	if (!ParseDocument(Bytes, Length, Root, Error))
 	{
@@ -779,7 +786,7 @@ FWonderlandDeliveryDecode WonderlandDecodeDeliveryBytes(const char* Bytes, int32
 {
 	FWonderlandDeliveryDecode Result;
 
-	FJsonValue Root;
+	FWonderlandJsonValue Root;
 	EWonderlandWireError Error = EWonderlandWireError::None;
 	if (!ParseDocument(Bytes, Length, Root, Error))
 	{
@@ -787,7 +794,7 @@ FWonderlandDeliveryDecode WonderlandDecodeDeliveryBytes(const char* Bytes, int32
 		return Result;
 	}
 
-	const FJsonValue* EnvelopeValue = Field(Root, "envelope");
+	const FWonderlandJsonValue* EnvelopeValue = Field(Root, "envelope");
 	if (EnvelopeValue == nullptr)
 	{
 		Result.Refusal = { EWonderlandWireError::MissingField, FString("envelope") };
@@ -808,7 +815,7 @@ FWonderlandDeliveryDecode WonderlandDecodeDeliveryBytes(const char* Bytes, int32
 		return Result;
 	}
 
-	const FJsonValue* ActivityValue = Field(Root, "activity");
+	const FWonderlandJsonValue* ActivityValue = Field(Root, "activity");
 	if (ActivityValue == nullptr)
 	{
 		Result.Refusal = { EWonderlandWireError::MissingField, FString("activity") };
@@ -883,9 +890,9 @@ namespace
 
 // A figure, with its absence and the REASON for it. Three fields, and getting
 // any of them wrong draws a number the founder does not have.
-bool ReadFigure(const FJsonValue& Owner, const char* Name, FFieldReader& Reader, FWonderlandFigure& Out)
+bool ReadFigure(const FWonderlandJsonValue& Owner, const char* Name, FFieldReader& Reader, FWonderlandFigure& Out)
 {
-	const FJsonValue* Value = Field(Owner, Name);
+	const FWonderlandJsonValue* Value = Field(Owner, Name);
 	if (Value == nullptr) { return Reader.Reject(EWonderlandWireError::MissingField, Name); }
 	if (Value->Kind != EJsonKind::Object) { return Reader.Reject(EWonderlandWireError::WrongType, Name); }
 
@@ -893,7 +900,7 @@ bool ReadFigure(const FJsonValue& Owner, const char* Name, FFieldReader& Reader,
 	bool bKnown = false;
 	if (!Inner.RequiredBool("known", bKnown)) { Reader.bFailed = true; return false; }
 
-	const FJsonValue* Number = Field(*Value, "value");
+	const FWonderlandJsonValue* Number = Field(*Value, "value");
 	if (Number == nullptr) { return Reader.Reject(EWonderlandWireError::MissingField, Name); }
 
 	if (bKnown)
@@ -937,9 +944,9 @@ bool ReadFigure(const FJsonValue& Owner, const char* Name, FFieldReader& Reader,
 	return true;
 }
 
-bool ReadMeter(const FJsonValue& Owner, const char* Name, FFieldReader& Reader, FWonderlandUsageMeter& Out)
+bool ReadMeter(const FWonderlandJsonValue& Owner, const char* Name, FFieldReader& Reader, FWonderlandUsageMeter& Out)
 {
-	const FJsonValue* Value = Field(Owner, Name);
+	const FWonderlandJsonValue* Value = Field(Owner, Name);
 	if (Value == nullptr) { return Reader.Reject(EWonderlandWireError::MissingField, Name); }
 	if (Value->Kind != EJsonKind::Object) { return Reader.Reject(EWonderlandWireError::WrongType, Name); }
 
@@ -986,7 +993,7 @@ bool ReadMeter(const FJsonValue& Owner, const char* Name, FFieldReader& Reader, 
 // the check would be exactly as swappable as a bare payload — every number on
 // screen real, and every one attributed to the wrong instrument.
 bool DecodeUsageHudObject(
-	const FJsonValue& Object,
+	const FWonderlandJsonValue& Object,
 	FWonderlandWireRefusal& Refusal,
 	FWonderlandUsageHud& Out)
 {
@@ -1030,7 +1037,7 @@ FWonderlandUsageDecode WonderlandDecodeUsageBytes(const char* Bytes, int32 Lengt
 {
 	FWonderlandUsageDecode Result;
 
-	FJsonValue Root;
+	FWonderlandJsonValue Root;
 	EWonderlandWireError Error = EWonderlandWireError::None;
 	if (!ParseDocument(Bytes, Length, Root, Error))
 	{
@@ -1061,7 +1068,7 @@ namespace
 // reader. Reading it as a token would also make a kernel that learned a
 // fourteenth state refuse a hydration it has no other reason to refuse.
 bool DecodeRunSnapshotObject(
-	const FJsonValue& Object,
+	const FWonderlandJsonValue& Object,
 	FWonderlandWireRefusal& Refusal,
 	FWonderlandRunSnapshot& Out)
 {
@@ -1125,7 +1132,7 @@ bool DecodeRunSnapshotObject(
 // drift and ordinary replay traffic are three problems, and one counter would
 // present them as one.
 bool DecodeUsageStatusObject(
-	const FJsonValue& Object,
+	const FWonderlandJsonValue& Object,
 	FWonderlandWireRefusal& Refusal,
 	FWonderlandUsageAuthorityStatus& Out)
 {
@@ -1140,7 +1147,7 @@ bool DecodeUsageStatusObject(
 	// AGE IS A DOUBLE ON THE WIRE — a fraction of a second is a legitimate age,
 	// unlike a sequence — so it is read as a figure rather than through the
 	// whole-number reader, which would refuse 1.5 as "not an integer".
-	const FJsonValue* Age = Field(Object, "ageSeconds");
+	const FWonderlandJsonValue* Age = Field(Object, "ageSeconds");
 	if (Age == nullptr) { Reader.Reject(EWonderlandWireError::MissingField, "ageSeconds"); }
 	else if (Age->Kind == EJsonKind::Null) { Status.AgeSeconds.bKnown = false; Status.AgeSeconds.Value = 0.0; }
 	else if (Age->Kind != EJsonKind::Number) { Reader.Reject(EWonderlandWireError::WrongType, "ageSeconds"); }
@@ -1181,7 +1188,7 @@ bool DecodeUsageStatusObject(
 // was retrieved and how much of it; the substance of somebody's work stays out
 // of the least trusted process in the system.
 bool DecodeBrainCitationObject(
-	const FJsonValue& Object,
+	const FWonderlandJsonValue& Object,
 	FWonderlandWireRefusal& Refusal,
 	FWonderlandBrainCitation& Out)
 {
@@ -1223,14 +1230,14 @@ bool DecodeBrainCitationObject(
 	int64 Counts[WonderlandBrainKindSlots] = { 0 };
 	bool Seen[WonderlandBrainKindSlots] = { false };
 
-	const FJsonValue* Kinds = Field(Object, "kindCounts");
+	const FWonderlandJsonValue* Kinds = Field(Object, "kindCounts");
 	if (Kinds == nullptr) { Reader.Reject(EWonderlandWireError::MissingField, "kindCounts"); }
 	else if (Kinds->Kind != EJsonKind::Object) { Reader.Reject(EWonderlandWireError::WrongType, "kindCounts"); }
 	else
 	{
 		for (size_t i = 0; i < Kinds->Keys.size() && !Reader.bFailed; i += 1)
 		{
-			const FJsonValue& Item = Kinds->Values[i];
+			const FWonderlandJsonValue& Item = Kinds->Values[i];
 			if (Item.Kind != EJsonKind::Number)
 			{
 				Reader.Reject(EWonderlandWireError::WrongType, "kindCounts");
@@ -1299,7 +1306,7 @@ bool DecodeBrainCitationObject(
 // would render it as three empty slots, a confident and wrong claim that this
 // run has no Prompt Architect, no Coding Agent and no Reviewer.
 bool DecodeCardScopeObject(
-	const FJsonValue& Object,
+	const FWonderlandJsonValue& Object,
 	FWonderlandWireRefusal& Refusal,
 	FWonderlandCardScope& Out)
 {
@@ -1320,12 +1327,12 @@ bool DecodeCardScopeObject(
 	// element must still BE a string: an object here would be a payload that
 	// did not come through Relay's scoping, and the one thing that must never
 	// cross on this field is a provider or model name.
-	const FJsonValue* Roles = Field(Object, "eligibleSwarmRoles");
+	const FWonderlandJsonValue* Roles = Field(Object, "eligibleSwarmRoles");
 	if (Roles == nullptr) { Reader.Reject(EWonderlandWireError::MissingField, "eligibleSwarmRoles"); }
 	else if (Roles->Kind != EJsonKind::Array) { Reader.Reject(EWonderlandWireError::WrongType, "eligibleSwarmRoles"); }
 	else
 	{
-		for (const FJsonValue& Item : Roles->Items)
+		for (const FWonderlandJsonValue& Item : Roles->Items)
 		{
 			if (Item.Kind != EJsonKind::String)
 			{
@@ -1351,7 +1358,7 @@ bool DecodeCardScopeObject(
 // closed vocabulary, so a token that fails here means the two sides have moved
 // apart — which must be loud.
 bool DecodeHumanGateObject(
-	const FJsonValue& Object,
+	const FWonderlandJsonValue& Object,
 	FWonderlandWireRefusal& Refusal,
 	FWonderlandHumanGate& Out)
 {
@@ -1379,12 +1386,12 @@ bool DecodeHumanGateObject(
 }
 
 // One required nested object, or the refusal that names it.
-const FJsonValue* RequiredObject(
-	const FJsonValue& Root,
+const FWonderlandJsonValue* RequiredObject(
+	const FWonderlandJsonValue& Root,
 	const char* Name,
 	FWonderlandWireRefusal& Refusal)
 {
-	const FJsonValue* Value = Field(Root, Name);
+	const FWonderlandJsonValue* Value = Field(Root, Name);
 	if (Value == nullptr) { Refusal = { EWonderlandWireError::MissingField, FString(Name) }; return nullptr; }
 	if (Value->Kind != EJsonKind::Object) { Refusal = { EWonderlandWireError::WrongType, FString(Name) }; return nullptr; }
 	return Value;
@@ -1396,7 +1403,7 @@ FWonderlandHydrationDecode WonderlandDecodeHydrationBytes(const char* Bytes, int
 {
 	FWonderlandHydrationDecode Result;
 
-	FJsonValue Root;
+	FWonderlandJsonValue Root;
 	EWonderlandWireError Error = EWonderlandWireError::None;
 	if (!ParseDocument(Bytes, Length, Root, Error))
 	{
@@ -1423,7 +1430,7 @@ FWonderlandHydrationDecode WonderlandDecodeHydrationBytes(const char* Bytes, int
 		return Result;
 	}
 
-	const FJsonValue* RunValue = RequiredObject(Root, "run", Result.Refusal);
+	const FWonderlandJsonValue* RunValue = RequiredObject(Root, "run", Result.Refusal);
 	if (RunValue == nullptr) { return Result; }
 	if (!DecodeRunSnapshotObject(*RunValue, Result.Refusal, Hydration.Run)) { return Result; }
 
@@ -1438,23 +1445,23 @@ FWonderlandHydrationDecode WonderlandDecodeHydrationBytes(const char* Bytes, int
 		Hydration.VisualState = static_cast<EWonderlandJuliusState>(Visual);
 	}
 
-	const FJsonValue* UsageValue = RequiredObject(Root, "usage", Result.Refusal);
+	const FWonderlandJsonValue* UsageValue = RequiredObject(Root, "usage", Result.Refusal);
 	if (UsageValue == nullptr) { return Result; }
 	if (!DecodeUsageHudObject(*UsageValue, Result.Refusal, Hydration.Usage)) { return Result; }
 
-	const FJsonValue* StatusValue = RequiredObject(Root, "usageStatus", Result.Refusal);
+	const FWonderlandJsonValue* StatusValue = RequiredObject(Root, "usageStatus", Result.Refusal);
 	if (StatusValue == nullptr) { return Result; }
 	if (!DecodeUsageStatusObject(*StatusValue, Result.Refusal, Hydration.UsageStatus)) { return Result; }
 
-	const FJsonValue* ActivityValue = RequiredObject(Root, "activity", Result.Refusal);
+	const FWonderlandJsonValue* ActivityValue = RequiredObject(Root, "activity", Result.Refusal);
 	if (ActivityValue == nullptr) { return Result; }
 	if (!DecodeActivityObject(*ActivityValue, Result.Refusal, Hydration.Activity)) { return Result; }
 
-	const FJsonValue* BrainValue = RequiredObject(Root, "brain", Result.Refusal);
+	const FWonderlandJsonValue* BrainValue = RequiredObject(Root, "brain", Result.Refusal);
 	if (BrainValue == nullptr) { return Result; }
 	if (!DecodeBrainCitationObject(*BrainValue, Result.Refusal, Hydration.Brain)) { return Result; }
 
-	const FJsonValue* CardValue = RequiredObject(Root, "card", Result.Refusal);
+	const FWonderlandJsonValue* CardValue = RequiredObject(Root, "card", Result.Refusal);
 	if (CardValue == nullptr) { return Result; }
 	if (!DecodeCardScopeObject(*CardValue, Result.Refusal, Hydration.Card)) { return Result; }
 
@@ -1463,7 +1470,7 @@ FWonderlandHydrationDecode WonderlandDecodeHydrationBytes(const char* Bytes, int
 	// run that is waiting on nobody — and of the two that is the one it must
 	// not guess. An empty array beside a known PendingApprovals of zero is the
 	// honest "nothing is gated".
-	const FJsonValue* Gates = Field(Root, "humanGates");
+	const FWonderlandJsonValue* Gates = Field(Root, "humanGates");
 	if (Gates == nullptr)
 	{
 		Result.Refusal = { EWonderlandWireError::MissingField, FString("humanGates") };
@@ -1474,7 +1481,7 @@ FWonderlandHydrationDecode WonderlandDecodeHydrationBytes(const char* Bytes, int
 		Result.Refusal = { EWonderlandWireError::WrongType, FString("humanGates") };
 		return Result;
 	}
-	for (const FJsonValue& Item : Gates->Items)
+	for (const FWonderlandJsonValue& Item : Gates->Items)
 	{
 		if (Item.Kind != EJsonKind::Object)
 		{
