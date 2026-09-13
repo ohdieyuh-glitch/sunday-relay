@@ -25,8 +25,16 @@ and any captures go to `<channel dir>/../captures/`.
 | `apply_layer.py` | editor | applies an authored layer (`wonderland/WorldDesign/**.json`), tagged `WL_PASS_<id>`; re-apply is exact, `REMOVE_ONLY` removes it |
 | `grade_variants.py` | PIE | look/lighting variants on the PIE copy, captured side by side; nothing saved |
 | `apply_look.py` | editor | applies a look (`wonderland/WorldDesign/Look/*.json`) over recorded before-values; `REVERT = True` restores them |
+| `import_kit.py` | editor | imports the Blender forge kit from its import plan: no material assets, V2 instance in slot 0, Nanite and collision enforced, resumable, read back |
+| `skyline_profile.py` | editor, read-only, concurrent | horizon elevation per degree of azimuth from a camera, with the nearest dominant piece |
+| `reload_channel.py` | editor | swaps the running listener for the repo's current `editor_channel.py` without restarting the editor |
 
 Rules the jobs follow, each learned in a real run:
+- The founder may be using the same editor and may start Play-In-Editor at any time. EditorAssetLibrary and
+  EditorActorSubsystem refuse every call during PIE (`does_asset_exist` answers False for real assets), so asset
+  and map jobs wait for `get_game_world() is None`; read-only jobs read the editor world through
+  `unreal.find_object(None, <map object path>)` and `GameplayStatics`, and declare `CONCURRENT = True` so they can
+  start beside a running job. A job that saves the map must not save someone else's unsaved edits.
 - A synthetic Ctrl+T must hold Ctrl across frames; the game's chord reads key state when it processes the press.
 - Never send Escape unless a panel is open: with no panel, the editor takes Escape and ends PIE.
 - Anything that saves or loads pumps Slate; the channel guards against re-entering a running job.

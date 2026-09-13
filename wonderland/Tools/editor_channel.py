@@ -81,6 +81,14 @@ def _start(path):
     _finish(job)
 
 
+def _declares_concurrent(path):
+    try:
+        with open(path, encoding="utf-8") as f:
+            return any(line.strip() == "CONCURRENT = True" for line in f)
+    except OSError:
+        return False
+
+
 def _schedule(job, yielded, now):
     if yielded is None:
         job["wait_until"] = now
@@ -138,13 +146,21 @@ def _tick_body():
         now = time.time()
         _state["ticks"] += 1
         # ONE JOB AT A TIME. Two PIE jobs started together: one ended PIE under the other.
-        if now - _state["last_poll"] > 0.25 and not _state["jobs"]:
+        # The exception is a job that declares a top-level line `CONCURRENT = True`: a READ-ONLY job
+        # (a census, a profile) that may start beside a running one -- so a job waiting for the
+        # founder to stop playing does not also block every measurement.
+        if now - _state["last_poll"] > 0.25:
             _state["last_poll"] = now
+            busy = bool(_state["jobs"])
             for entry in sorted(os.listdir(INBOX)):
-                if entry.endswith(".py"):
-                    _start(os.path.join(INBOX, entry))
-                    if _state["jobs"]:
-                        break
+                if not entry.endswith(".py"):
+                    continue
+                path = os.path.join(INBOX, entry)
+                if busy and not _declares_concurrent(path):
+                    continue
+                _start(path)
+                if _state["jobs"] and not busy:
+                    break
         for job in list(_state["jobs"]):
             if _step(job, now):
                 _state["jobs"].remove(job)
