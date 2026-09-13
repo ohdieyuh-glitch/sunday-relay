@@ -106,8 +106,24 @@ export const RECORDED_REVIEWER_OBSERVATIONS: readonly ReviewerDurationObservatio
  * minutes worst case and the coder 30; the architect's own ceiling and the
  * image builds, PostgreSQL, Hermes and the evidence dump need room beside them,
  * and `coder-envelope.test.ts` proves the four add up inside this number.
+ *
+ * 120 -> 280 when REPAIR ROUNDS were priced. The budget used to cover the
+ * healthy path only, so a mission that used the repair cycles its contract
+ * authorises could run the job out of time while its repair was working. It
+ * now also affords `JOB_REPAIR_ROUNDS_BUDGETED` rounds, each one coder dispatch
+ * at its derived worst case plus one re-review at the operative deadline, and
+ * the same test proves all five claims fit. Still below the admission job's
+ * 350-minute wait bound, so a run queued behind this one can outwait it, and
+ * below the 360-minute hosted cap.
  */
-export const JOB_BUDGET_MS = 120 * 60_000;
+export const JOB_BUDGET_MS = 280 * 60_000;
+
+/**
+ * THE REPAIR ROUNDS ONE PAID JOB CAN AFFORD, and therefore the most a mission
+ * contract may authorise: `julius-live-contract-check.mjs` grants no mission
+ * more, and a test holds the two together.
+ */
+export const JOB_REPAIR_ROUNDS_BUDGETED = 3;
 export const REVIEWER_JOB_SHARE_MS = 50 * 60_000;
 
 /**

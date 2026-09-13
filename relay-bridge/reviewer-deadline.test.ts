@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
-  DEFAULT_ANALYTICAL_MODEL, JOB_BUDGET_MS, MAX_REVIEWER_ATTEMPTS, RECORDED_REVIEWER_OBSERVATIONS,
+  DEFAULT_ANALYTICAL_MODEL, JOB_BUDGET_MS, JOB_REPAIR_ROUNDS_BUDGETED, MAX_REVIEWER_ATTEMPTS, RECORDED_REVIEWER_OBSERVATIONS,
   REVIEWER_DEADLINE_HEADROOM_RATIO, REVIEWER_JOB_SHARE_MS, ReviewerDeadlineUnsatisfiable,
   resolveReviewerDeadline, reviewerHighWater, reviewerOperativeTimeoutMs,
 } from './reviewer-deadline';
@@ -248,6 +248,7 @@ describe('the shell-side mirror cannot drift from the TypeScript derivation', ()
     const mirror = await import(join(ROOT, 'scripts/julius-reviewer-deadline.mjs'));
     expect(mirror.RECORDED_REVIEWER_OBSERVATIONS).toEqual(RECORDED_REVIEWER_OBSERVATIONS);
     expect(mirror.JOB_BUDGET_MS).toBe(JOB_BUDGET_MS);
+    expect(mirror.JOB_REPAIR_ROUNDS_BUDGETED).toBe(JOB_REPAIR_ROUNDS_BUDGETED);
     expect(mirror.REVIEWER_JOB_SHARE_MS).toBe(REVIEWER_JOB_SHARE_MS);
     expect(mirror.MAX_REVIEWER_ATTEMPTS).toBe(MAX_REVIEWER_ATTEMPTS);
     expect(mirror.REVIEWER_DEADLINE_HEADROOM_RATIO).toBe(REVIEWER_DEADLINE_HEADROOM_RATIO);
