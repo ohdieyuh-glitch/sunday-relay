@@ -2,18 +2,20 @@ import {
   authorizeJuliusResearch,
   emptyJuliusResearchLedger,
   juliusResearchMayCorroborate,
+  juliusResearchRequestedHost,
   recordJuliusResearch,
   type JuliusResearchLedger,
   type JuliusResearchOutcome,
   type JuliusResearchPolicy,
   type JuliusResearchRefusal,
   type JuliusResearchRequest,
+  type JuliusResearchRequestedClass,
   type JuliusResearchRole,
   type JuliusResearchObservationRecord,
   type JuliusResearchPort,
 } from '../../src/relay/mission/julius';
 import { renderForPrompt, type EvidenceArtifact } from '../../src/relay/mission/evidence';
-import type { MeteredOutcome } from '../../src/relay/mission/live-reach';
+import type { LiveReachRefusal, MeteredOutcome } from '../../src/relay/mission/live-reach';
 import { detectInjectionSignals, redactText } from '../../src/relay/mcp/policy/mcp-sanitize';
 import type { LiveReachEvent, LiveReachResult, LiveReachService } from '../live-reach-service';
 
@@ -205,6 +207,14 @@ export interface JuliusResearchResult {
   readonly artifact: EvidenceArtifact | null;
   /** The connector's own words, redacted and bounded. For operators. */
   readonly diagnostic: string;
+  /** What the ask reached for: closed vocabularies and a host name, never the worker's path or purpose. */
+  readonly requested: JuliusResearchRequestedClass;
+  /**
+   * Live Reach's own refusal when Live Reach ran and refused, else null.
+   * `readRefusal` folds most of these into `capability_unavailable`, which is
+   * the right thing to tell a worker and the wrong thing to be all a record says.
+   */
+  readonly reachRefusal: LiveReachRefusal | null;
   readonly events: readonly LiveReachEvent[];
   /** The slot ledger AFTER this request. The caller owns the storage. */
   readonly ledger: JuliusResearchLedger;
@@ -289,6 +299,7 @@ export function createJuliusResearchMediator(
       readonly retryAfter?: string | null;
       /** What Live Reach actually charged, when Live Reach ran at all. */
       readonly charged?: MeteredOutcome;
+      readonly reachRefusal?: LiveReachRefusal;
     },
   ): Promise<JuliusResearchResult> => {
     const artifact = parts.artifact ?? null;
@@ -322,6 +333,12 @@ export function createJuliusResearchMediator(
       },
       artifact,
       diagnostic: safeText(parts.diagnostic ?? OUTCOME_SENTENCE[outcome]),
+      requested: {
+        source: request.source,
+        capability: request.capability,
+        host: juliusResearchRequestedHost(request.reference),
+      },
+      reachRefusal: parts.reachRefusal ?? null,
       events: parts.events ?? [],
       ledger,
     };
@@ -379,6 +396,7 @@ export function createJuliusResearchMediator(
           events: result.events,
           charged: result.charged,
           retryAfter: result.retryAfter,
+          reachRefusal: result.refusal,
         });
       }
 
@@ -455,6 +473,10 @@ export function juliusResearchPortFrom(mediator: JuliusResearchMediator): Julius
           evidenceId: observed.evidenceId,
           injectionSignals: observed.injectionSignals,
           mayCorroborate: observed.mayCorroborate,
+          // For the durable row only; the resume renders none of these.
+          refusal: observed.refusal,
+          reachRefusal: result.reachRefusal,
+          requested: result.requested,
         });
       }
       return observations;
