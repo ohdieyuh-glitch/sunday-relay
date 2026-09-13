@@ -2770,7 +2770,7 @@ describe('the research a contract grants is observed before the run, through Rel
     }
     for (const line of [
       'research_observation source=web capability=read_item host=www.postgresql.org backend=relay_http_fetch result=observed Authorization: Bearer abc',
-      'research_not_granted: sk-ant-ABCDEFGHIJKLMNOPQRSTUVWXYZ',
+      'research_not_granted: sk-ant-FAKETESTNOTREAL',
       'JULIUS_RESEARCH_OBSERVED_BACKENDS=relay_http_fetch:read_item OPENAI_API_KEY=x',
     ]) {
       expect(kept.test(line), line).toBe(false);

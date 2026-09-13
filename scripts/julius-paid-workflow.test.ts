@@ -191,7 +191,7 @@ describe('provider readiness fails before spending, and never exposes a key', ()
       '#!/usr/bin/env bash',
       'config=$(cat)',
       // Record whether any key ever arrived as an argument — it must not.
-      'for arg in "$@"; do case "$arg" in *sk-test*) echo LEAK >> "$FAKE_DIR/leak";; esac; done',
+      'for arg in "$@"; do case "$arg" in *FAKETESTNOTREAL*) echo LEAK >> "$FAKE_DIR/leak";; esac; done',
       'url="${@: -1}"',
       'case "$url" in',
       `  *api.openai.com*) printf '%s' "${statuses.openai}";;`,
@@ -213,7 +213,7 @@ describe('provider readiness fails before spending, and never exposes a key', ()
           ...process.env,
           PATH: `${dir}${delimiter}${process.env.PATH ?? ''}`,
           FAKE_DIR: dir,
-          OPENAI_API_KEY: 'sk-test-openai', ANTHROPIC_API_KEY: 'sk-test-anthropic', XAI_API_KEY: 'sk-test-xai',
+          OPENAI_API_KEY: 'FAKETESTNOTREAL-openai', ANTHROPIC_API_KEY: 'FAKETESTNOTREAL-anthropic', XAI_API_KEY: 'FAKETESTNOTREAL-xai',
           OPENAI_PROMPT_ARCHITECT_MODEL: 'gpt-5.6-sol', RELAY_HOSTED_CODING_MODEL: 'claude-fable-5',
           RELAY_HERMES_PROVIDER: 'xai', RELAY_HERMES_MODEL: 'grok-build-0.1',
           ...env,
@@ -234,7 +234,7 @@ describe('provider readiness fails before spending, and never exposes a key', ()
     expect(run.output.match(/result=AUTHENTICATED_MODEL_AVAILABLE/gu)?.length).toBe(3);
     expect(run.output).toContain('provider_balance=UNKNOWN');
     expect(run.leak).toBe('');
-    expect(run.output).not.toContain('sk-test');
+    expect(run.output).not.toContain('FAKETESTNOTREAL');
   }, 30_000);
 
   it('a refused credential, a missing model or an unreachable provider fails the job', () => {
