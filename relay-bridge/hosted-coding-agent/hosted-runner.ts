@@ -227,6 +227,31 @@ export async function runHostedCodingAgent(input: HostedRunInput): Promise<Hoste
      * so only a fixed sentence leaves this function either way.
      */
     if (observation.initSeen) {
+      /**
+       * THE RUNTIME'S OWN TERMINAL RESULT OUTRANKS THE ERROR THAT FOLLOWED IT.
+       *
+       * Paid run 34739303313: the runtime emitted its result message with
+       * subtype `error_max_budget_usd` — it had stopped itself at the ceiling
+       * Julius handed it — and the SDK then threw. This path used to report
+       * `coder_provider_error_after_init`, classified `execution_error`, so the
+       * durable record blamed the provider for Julius's own spend ceiling and
+       * hid the one fact that mattered: the coder had been granted too little.
+       *
+       * The non-throwing path below already refuses this subtype as
+       * `coder_cost_exceeded`. The same fact must produce the same refusal
+       * whichever way the stream ended, and the observation already holds it.
+       * Only the budget stop is read this way: it is the runtime's statement
+       * about Julius's ceiling, not about the provider, so there is no error
+       * text to classify and nothing a provider wrote reaches the record.
+       */
+      if (observation.resultSubtype === 'error_max_budget_usd') {
+        return {
+          kind: 'refused',
+          refusalCode: 'coder_cost_exceeded',
+          safeMessage: `The hosted runtime stopped at its ${limits.maxCostCents}¢ budget ceiling.`,
+          observation, envelope, startedAt, completedAt,
+        };
+      }
       return {
         kind: 'refused',
         // The runtime started and then failed: its own error, after init.
