@@ -108,9 +108,16 @@ describe('only a human dispatch can start the live mission', () => {
   });
 
   it('runs one LIVE mission at a time and never cancels one in flight', () => {
-    // Dry runs get a per-run group (see the F6 cases); paid runs share one.
+    // REPAIRED, NOT DELETED. This pinned one shared WORKFLOW-level group for
+    // live runs — the arrangement in which GitHub keeps a single pending run
+    // and a third paid dispatch cancels the one waiting. One-at-a-time is now
+    // two lines: the `paid-slot` admission job, and a job-level group on the
+    // paid job itself. Both are asserted here; neither may ever cancel.
+    expect(workflow, 'the workflow-level group is per run, so it can hold no pending paid run')
+      .toMatch(/^concurrency:\s*\n\s*group:\s*julius-first-live-mission-\$\{\{ github\.run_id \}\}\s*\n\s*cancel-in-progress:\s*false/mu);
     expect(workflow, 'two concurrent live missions would race for one workspace and one executor')
-      .toMatch(/concurrency:\s*\n\s*group:\s*julius-first-live-mission-\$\{\{ inputs\.confirm_live == 'RUN LIVE MISSION' && 'live' \|\| github\.run_id \}\}\s*\n\s*cancel-in-progress:\s*false/u);
+      .toMatch(/concurrency:\s*\n\s*group:\s*\$\{\{ inputs\.confirm_live == 'RUN LIVE MISSION' && 'julius-paid-provider-slot' \|\| format\('julius-preflight-\{0\}', github\.run_id\) \}\}\s*\n\s*cancel-in-progress:\s*false/u);
+    expect(workflow, 'nothing in the paid workflow may ever cancel a run').not.toMatch(/cancel-in-progress:\s*true/u);
   });
 
   it('isolates the provider credentials in a dedicated GitHub Environment', () => {
@@ -1531,7 +1538,24 @@ describe('F9 — dispatch inputs are validated before anything is built', () => 
   it('refuses a mistyped confirmation instead of silently running a dry run', () => {
     expect(runGate({ ...base, CONFIRM_LIVE: 'run live mission' })).not.toBe(0);
     expect(runGate({ ...base, CONFIRM_LIVE: 'RUN LIVE MISSION ' })).not.toBe(0);
-    expect(runGate({ ...base, CONFIRM_LIVE: 'RUN LIVE MISSION' })).toBe(0);
+    // A correctly typed confirmation must also claim a paid-run lane: the queue
+    // orders by it and the contract check holds it to the mission's grant.
+    expect(runGate({ ...base, CONFIRM_LIVE: 'RUN LIVE MISSION', LANE: 'regression' })).toBe(0);
+  });
+
+  it('refuses a paid run that claims no lane, or a lane outside the vocabulary', () => {
+    expect(runGate({ ...base, CONFIRM_LIVE: 'RUN LIVE MISSION' }), 'a paid run with no lane cannot be queued').not.toBe(0);
+    expect(runGate({ ...base, CONFIRM_LIVE: 'RUN LIVE MISSION', LANE: 'urgent' })).not.toBe(0);
+    expect(runGate({ ...base, LANE: 'Lab' }), 'the vocabulary is exact').not.toBe(0);
+    expect(runGate({ ...base }), 'a dry run may claim no lane').toBe(0);
+    expect(runGate({ ...base, LANE: 'lab' }), 'a dry run may claim one').toBe(0);
+  });
+
+  it('refuses a malformed dispatch key, and accepts the shape the dispatch client writes', () => {
+    expect(runGate({ ...base, DISPATCH_KEY: 'short' })).not.toBe(0);
+    expect(runGate({ ...base, DISPATCH_KEY: 'has space in it' })).not.toBe(0);
+    expect(runGate({ ...base, DISPATCH_KEY: 'x'.repeat(97) })).not.toBe(0);
+    expect(runGate({ ...base, DISPATCH_KEY: 'julius-continuous-1@0845c593a8eb#qualification#a1' })).toBe(0);
   });
 
   it('refuses a mutable Hermes ref', () => {
@@ -1545,11 +1569,19 @@ describe('F6 — a paid mission cannot be run twice by accident', () => {
   const GATE = "'Gate: no paid mission has been attempted or completed for THIS contract'";
   const ATTEMPT_STEP = "'Record that a paid mission was attempted (before any provider can be reached)'";
 
-  it('live dispatches share one concurrency group; dry runs do not', () => {
-    const group = /concurrency:\s*\n\s*group:\s*(.+)/u.exec(workflow)?.[1] ?? '';
-    expect(group, 'live runs must serialise').toContain("'live'");
-    expect(group, 'dry runs must stay unlimited and parallel').toContain('github.run_id');
-    expect(workflow, 'a live run must never be cancelled mid-flight').toMatch(/cancel-in-progress:\s*false/u);
+  it('live dispatches serialise through admission and one job-level group; dry runs do not', () => {
+    // REPAIRED, NOT DELETED: the property is unchanged — paid runs one at a
+    // time, dry runs unlimited and parallel, nothing cancelled — and it no
+    // longer rests on the workflow-level group that evicted waiting paid runs.
+    const groups = [...workflow.matchAll(/concurrency:\s*\n\s*group:\s*(.+)/gu)].map((match) => match[1]);
+    expect(groups.length, 'one workflow-level group and one on the paid job').toBe(2);
+    expect(groups[0], 'the workflow-level group is per run').toContain('github.run_id');
+    expect(groups[0], 'the workflow-level group must not be the shared live slot').not.toContain("'live'");
+    expect(groups[1], 'paid jobs serialise on one group').toContain("'julius-paid-provider-slot'");
+    expect(groups[1], 'dry runs stay unlimited and parallel').toContain('github.run_id');
+    const cancels = [...workflow.matchAll(/cancel-in-progress:\s*(\S+)/gu)].map((match) => match[1]);
+    expect(cancels.length).toBe(2);
+    expect(cancels.every((value) => value === 'false'), 'a live run must never be cancelled mid-flight').toBe(true);
   });
 
   it('a completed paid run publishes a marker carrying no secret', () => {
@@ -1931,9 +1963,13 @@ describe('the trust gate runs before anything the candidate controls', () => {
   });
 
   it('the verifier is a SEPARATE checkout from the candidate', () => {
-    // Two checkouts, and only the verifier carries a pinned ref and a path.
+    // Two checkouts PER JOB, and only the verifier carries a pinned ref and a
+    // path. The `paid-slot` admission job proves the same commit the same way
+    // before it runs its queue script, so the file holds two pairs.
     const checkouts = workflow.split('- uses: actions/checkout').length - 1;
-    expect(checkouts, 'the candidate and the verifier are two different checkouts').toBe(2);
+    expect(checkouts, 'the candidate and the verifier are two different checkouts, in each of the two jobs').toBe(4);
+    const pinned = workflow.split('ref: f131098cc4e8f35d7231cf2e9693b83c05dab75c').length - 1;
+    expect(pinned, 'each job checks out the pinned verifier exactly once').toBe(2);
     expect(verifierCheckout()).toContain('path: .julius-trusted-verifier');
     expect(verifierCheckout(), 'a token in the verifier checkout would ride into the container')
       .toContain('persist-credentials: false');
