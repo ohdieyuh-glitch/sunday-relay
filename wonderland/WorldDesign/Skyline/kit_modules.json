@@ -1,0 +1,6237 @@
+{
+ "schema": "wonderland-kit-modules/1",
+ "kit_version": "1.0.0",
+ "generated_utc": "2026-09-08T01:55:10+00:00",
+ "radius_ladder_uu": {
+  "XL": 680.0,
+  "L": 460.0,
+  "M": 300.0,
+  "S": 180.0
+ },
+ "modules": {
+  "WL_Tower_Base_Battered": {
+   "family": "tower_base",
+   "group": "towers",
+   "role": "foot",
+   "height": 920.0,
+   "radius": 939.2,
+   "size": [
+    1878.4,
+    1878.4,
+    920.0
+   ],
+   "bbox_min": [
+    -939.2,
+    -939.2,
+    0.0
+   ],
+   "bbox_max": [
+    939.2,
+    939.2,
+    920.0
+   ],
+   "tris": 1124,
+   "sockets": {
+    "bottom": {
+     "kind": "ground",
+     "z": 0.0,
+     "rung": null,
+     "radius": 911.2
+    },
+    "top": {
+     "kind": "tower",
+     "z": 920.0,
+     "rung": "XL",
+     "radius": 680.0
+    }
+   },
+   "parts": [
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Base_Battered.WL_Tower_Base_Battered",
+     "material": "MI_V2_IvoryStone"
+    },
+    {
+     "part": "stone_dark",
+     "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Base_Battered_stone_dark.WL_Tower_Base_Battered_stone_dark",
+     "material": "MI_V2_Stone"
+    }
+   ]
+  },
+  "WL_Tower_Base_Arcaded": {
+   "family": "tower_base",
+   "group": "towers",
+   "role": "foot",
+   "height": 1240.0,
+   "radius": 949.15,
+   "size": [
+    1898.3,
+    1898.3,
+    1240.0
+   ],
+   "bbox_min": [
+    -949.15,
+    -949.15,
+    0.0
+   ],
+   "bbox_max": [
+    949.15,
+    949.15,
+    1240.0
+   ],
+   "tris": 8388,
+   "sockets": {
+    "bottom": {
+     "kind": "ground",
+     "z": 0.0,
+     "rung": null,
+     "radius": 929.15
+    },
+    "top": {
+     "kind": "tower",
+     "z": 1240.0,
+     "rung": "XL",
+     "radius": 680.0
+    }
+   },
+   "parts": [
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Base_Arcaded.WL_Tower_Base_Arcaded",
+     "material": "MI_V2_IvoryStone"
+    },
+    {
+     "part": "stone_dark",
+     "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Base_Arcaded_stone_dark.WL_Tower_Base_Arcaded_stone_dark",
+     "material": "MI_V2_Stone"
+    }
+   ]
+  },
+  "WL_Tower_Base_Buttressed": {
+   "family": "tower_base",
+   "group": "towers",
+   "role": "foot",
+   "height": 1080.0,
+   "radius": 914.8,
+   "size": [
+    1829.6,
+    1668.0,
+    1080.0
+   ],
+   "bbox_min": [
+    -914.8,
+    -834.0,
+    0.0
+   ],
+   "bbox_max": [
+    914.8,
+    834.0,
+    1080.0
+   ],
+   "tris": 1020,
+   "sockets": {
+    "bottom": {
+     "kind": "ground",
+     "z": 0.0,
+     "rung": null,
+     "radius": 1088.0
+    },
+    "top": {
+     "kind": "tower",
+     "z": 1080.0,
+     "rung": "XL",
+     "radius": 680.0
+    }
+   },
+   "parts": [
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Base_Buttressed.WL_Tower_Base_Buttressed",
+     "material": "MI_V2_IvoryStone"
+    },
+    {
+     "part": "stone_dark",
+     "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Base_Buttressed_stone_dark.WL_Tower_Base_Buttressed_stone_dark",
+     "material": "MI_V2_Stone"
+    }
+   ]
+  },
+  "WL_Tower_Base_Terraced": {
+   "family": "tower_base",
+   "group": "towers",
+   "role": "foot",
+   "height": 760.0,
+   "radius": 1242.4,
+   "size": [
+    2484.8,
+    2484.8,
+    760.0
+   ],
+   "bbox_min": [
+    -1242.4,
+    -1242.4,
+    0.0
+   ],
+   "bbox_max": [
+    1242.4,
+    1242.4,
+    760.0
+   ],
+   "tris": 3712,
+   "sockets": {
+    "bottom": {
+     "kind": "ground",
+     "z": 0.0,
+     "rung": null,
+     "radius": 1305.6
+    },
+    "top": {
+     "kind": "tower",
+     "z": 760.0,
+     "rung": "XL",
+     "radius": 680.0
+    }
+   },
+   "parts": [
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Base_Terraced.WL_Tower_Base_Terraced",
+     "material": "MI_V2_IvoryStone"
+    }
+   ]
+  },
+  "WL_Tower_Mid_Ashlar": {
+   "family": "tower_mid",
+   "group": "towers",
+   "role": "body",
+   "height": 1460.0,
+   "radius": 694.53,
+   "size": [
+    1389.06,
+    1386.4,
+    1460.0
+   ],
+   "bbox_min": [
+    -694.53,
+    -693.2,
+    0.0
+   ],
+   "bbox_max": [
+    694.53,
+    693.2,
+    1460.0
+   ],
+   "tris": 1648,
+   "sockets": {
+    "bottom": {
+     "kind": "tower",
+     "z": 0.0,
+     "rung": "XL",
+     "radius": 680.0
+    },
+    "top": {
+     "kind": "tower",
+     "z": 1460.0,
+     "rung": "XL",
+     "radius": 680.0
+    }
+   },
+   "parts": [
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Mid_Ashlar.WL_Tower_Mid_Ashlar",
+     "material": "MI_V2_IvoryStone"
+    }
+   ]
+  },
+  "WL_Tower_Mid_Arcade": {
+   "family": "tower_mid",
+   "group": "towers",
+   "role": "body",
+   "height": 1320.0,
+   "radius": 707.98,
+   "size": [
+    1415.96,
+    1415.96,
+    1320.0
+   ],
+   "bbox_min": [
+    -707.98,
+    -707.98,
+    0.0
+   ],
+   "bbox_max": [
+    707.98,
+    707.98,
+    1320.0
+   ],
+   "tris": 10488,
+   "sockets": {
+    "bottom": {
+     "kind": "tower",
+     "z": 0.0,
+     "rung": "XL",
+     "radius": 680.0
+    },
+    "top": {
+     "kind": "tower",
+     "z": 1320.0,
+     "rung": "L",
+     "radius": 460.0
+    }
+   },
+   "parts": [
+    {
+     "part": "glass",
+     "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Mid_Arcade_glass.WL_Tower_Mid_Arcade_glass",
+     "material": "MI_V2_GlassAmber"
+    },
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Mid_Arcade.WL_Tower_Mid_Arcade",
+     "material": "MI_V2_IvoryStone"
+    }
+   ]
+  },
+  "WL_Tower_Mid_Ribbed": {
+   "family": "tower_mid",
+   "group": "towers",
+   "role": "body",
+   "height": 1640.0,
+   "radius": 477.4,
+   "size": [
+    954.8,
+    932.8,
+    1640.0
+   ],
+   "bbox_min": [
+    -477.4,
+    -466.4,
+    0.0
+   ],
+   "bbox_max": [
+    477.4,
+    466.4,
+    1640.0
+   ],
+   "tris": 1848,
+   "sockets": {
+    "bottom": {
+     "kind": "tower",
+     "z": 0.0,
+     "rung": "L",
+     "radius": 460.0
+    },
+    "top": {
+     "kind": "tower",
+     "z": 1640.0,
+     "rung": "L",
+     "radius": 460.0
+    }
+   },
+   "parts": [
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Mid_Ribbed.WL_Tower_Mid_Ribbed",
+     "material": "MI_V2_IvoryStone"
+    }
+   ]
+  },
+  "WL_Tower_Mid_Balconied": {
+   "family": "tower_mid",
+   "group": "towers",
+   "role": "body",
+   "height": 1280.0,
+   "radius": 541.9,
+   "size": [
+    1083.8,
+    1083.8,
+    1280.0
+   ],
+   "bbox_min": [
+    -541.9,
+    -541.9,
+    0.0
+   ],
+   "bbox_max": [
+    541.9,
+    541.9,
+    1280.0
+   ],
+   "tris": 5380,
+   "sockets": {
+    "bottom": {
+     "kind": "tower",
+     "z": 0.0,
+     "rung": "L",
+     "radius": 460.0
+    },
+    "top": {
+     "kind": "tower",
+     "z": 1280.0,
+     "rung": "M",
+     "radius": 300.0
+    }
+   },
+   "parts": [
+    {
+     "part": "glass",
+     "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Mid_Balconied_glass.WL_Tower_Mid_Balconied_glass",
+     "material": "MI_V2_GlassAmber"
+    },
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Mid_Balconied.WL_Tower_Mid_Balconied",
+     "material": "MI_V2_IvoryStone"
+    }
+   ]
+  },
+  "WL_Tower_Mid_Lantern": {
+   "family": "tower_mid",
+   "group": "towers",
+   "role": "body",
+   "height": 900.0,
+   "radius": 330.0,
+   "size": [
+    660.0,
+    653.28,
+    900.0
+   ],
+   "bbox_min": [
+    -330.0,
+    -326.64,
+    0.0
+   ],
+   "bbox_max": [
+    330.0,
+    326.64,
+    900.0
+   ],
+   "tris": 1128,
+   "sockets": {
+    "bottom": {
+     "kind": "tower",
+     "z": 0.0,
+     "rung": "M",
+     "radius": 300.0
+    },
+    "top": {
+     "kind": "tower",
+     "z": 900.0,
+     "rung": "M",
+     "radius": 300.0
+    }
+   },
+   "parts": [
+    {
+     "part": "glass",
+     "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Mid_Lantern_glass.WL_Tower_Mid_Lantern_glass",
+     "material": "MI_V2_GlassAmber"
+    },
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Mid_Lantern.WL_Tower_Mid_Lantern",
+     "material": "MI_V2_IvoryStone"
+    }
+   ]
+  },
+  "WL_Tower_Mid_Fluted": {
+   "family": "tower_mid",
+   "group": "towers",
+   "role": "body",
+   "height": 1680.0,
+   "radius": 324.0,
+   "size": [
+    648.0,
+    648.0,
+    1680.0
+   ],
+   "bbox_min": [
+    -324.0,
+    -324.0,
+    0.0
+   ],
+   "bbox_max": [
+    324.0,
+    324.0,
+    1680.0
+   ],
+   "tris": 1660,
+   "sockets": {
+    "bottom": {
+     "kind": "tower",
+     "z": 0.0,
+     "rung": "M",
+     "radius": 300.0
+    },
+    "top": {
+     "kind": "tower",
+     "z": 1680.0,
+     "rung": "M",
+     "radius": 300.0
+    }
+   },
+   "parts": [
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Mid_Fluted.WL_Tower_Mid_Fluted",
+     "material": "MI_V2_IvoryStone"
+    }
+   ]
+  },
+  "WL_Tower_Mid_Oriel": {
+   "family": "tower_mid",
+   "group": "towers",
+   "role": "body",
+   "height": 1340.0,
+   "radius": 584.36,
+   "size": [
+    1071.12,
+    1046.1,
+    1340.0
+   ],
+   "bbox_min": [
+    -498.49,
+    -584.36,
+    0.0
+   ],
+   "bbox_max": [
+    572.63,
+    461.74,
+    1340.0
+   ],
+   "tris": 1706,
+   "sockets": {
+    "bottom": {
+     "kind": "tower",
+     "z": 0.0,
+     "rung": "L",
+     "radius": 460.0
+    },
+    "top": {
+     "kind": "tower",
+     "z": 1340.0,
+     "rung": "L",
+     "radius": 460.0
+    }
+   },
+   "parts": [
+    {
+     "part": "glass",
+     "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Mid_Oriel_glass.WL_Tower_Mid_Oriel_glass",
+     "material": "MI_V2_GlassAmber"
+    },
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Mid_Oriel.WL_Tower_Mid_Oriel",
+     "material": "MI_V2_IvoryStone"
+    }
+   ]
+  },
+  "WL_Tower_Mid_Machicolated": {
+   "family": "tower_mid",
+   "group": "towers",
+   "role": "body",
+   "height": 940.0,
+   "radius": 756.8,
+   "size": [
+    1513.6,
+    1498.86,
+    940.0
+   ],
+   "bbox_min": [
+    -756.8,
+    -749.43,
+    0.0
+   ],
+   "bbox_max": [
+    756.8,
+    749.43,
+    940.0
+   ],
+   "tris": 6130,
+   "sockets": {
+    "bottom": {
+     "kind": "tower",
+     "z": 0.0,
+     "rung": "XL",
+     "radius": 680.0
+    },
+    "top": {
+     "kind": "tower",
+     "z": 940.0,
+     "rung": "M",
+     "radius": 300.0
+    }
+   },
+   "parts": [
+    {
+     "part": "gold",
+     "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Mid_Machicolated_gold.WL_Tower_Mid_Machicolated_gold",
+     "material": "MI_V2_Gold"
+    },
+    {
+     "part": "roof",
+     "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Mid_Machicolated_roof.WL_Tower_Mid_Machicolated_roof",
+     "material": "MI_V2_RoofRose"
+    },
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Mid_Machicolated.WL_Tower_Mid_Machicolated",
+     "material": "MI_V2_IvoryStone"
+    }
+   ]
+  },
+  "WL_Tower_Crown_Cone": {
+   "family": "tower_crown",
+   "group": "towers",
+   "role": "crown",
+   "height": 1560.0,
+   "radius": 329.0,
+   "size": [
+    658.0,
+    658.0,
+    1560.0
+   ],
+   "bbox_min": [
+    -329.0,
+    -329.0,
+    0.0
+   ],
+   "bbox_max": [
+    329.0,
+    329.0,
+    1560.0
+   ],
+   "tris": 2086,
+   "sockets": {
+    "bottom": {
+     "kind": "tower",
+     "z": 0.0,
+     "rung": "M",
+     "radius": 300.0
+    },
+    "top": {
+     "kind": "crown",
+     "z": 1560.0,
+     "rung": null,
+     "radius": 0.0
+    }
+   },
+   "parts": [
+    {
+     "part": "gold",
+     "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Crown_Cone_gold.WL_Tower_Crown_Cone_gold",
+     "material": "MI_V2_Gold"
+    },
+    {
+     "part": "roof",
+     "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Crown_Cone_roof.WL_Tower_Crown_Cone_roof",
+     "material": "MI_V2_RoofRose"
+    },
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Crown_Cone.WL_Tower_Crown_Cone",
+     "material": "MI_V2_IvoryStone"
+    }
+   ]
+  },
+  "WL_Tower_Crown_Tiered": {
+   "family": "tower_crown",
+   "group": "towers",
+   "role": "crown",
+   "height": 1106.1,
+   "radius": 314.7,
+   "size": [
+    629.4,
+    629.4,
+    1106.1
+   ],
+   "bbox_min": [
+    -314.7,
+    -314.7,
+    0.0
+   ],
+   "bbox_max": [
+    314.7,
+    314.7,
+    1106.1
+   ],
+   "tris": 2154,
+   "sockets": {
+    "bottom": {
+     "kind": "tower",
+     "z": 0.0,
+     "rung": "M",
+     "radius": 300.0
+    },
+    "top": {
+     "kind": "crown",
+     "z": 1106.1,
+     "rung": null,
+     "radius": 0.0
+    }
+   },
+   "parts": [
+    {
+     "part": "gold",
+     "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Crown_Tiered_gold.WL_Tower_Crown_Tiered_gold",
+     "material": "MI_V2_Gold"
+    },
+    {
+     "part": "roof_alt",
+     "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Crown_Tiered_roof_alt.WL_Tower_Crown_Tiered_roof_alt",
+     "material": "MI_V2_RoofLilac"
+    },
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Crown_Tiered.WL_Tower_Crown_Tiered",
+     "material": "MI_V2_IvoryStone"
+    }
+   ]
+  },
+  "WL_Tower_Crown_Onion": {
+   "family": "tower_crown",
+   "group": "towers",
+   "role": "crown",
+   "height": 1420.0,
+   "radius": 547.05,
+   "size": [
+    1094.1,
+    1094.1,
+    1420.0
+   ],
+   "bbox_min": [
+    -547.05,
+    -547.05,
+    0.0
+   ],
+   "bbox_max": [
+    547.05,
+    547.05,
+    1420.0
+   ],
+   "tris": 4246,
+   "sockets": {
+    "bottom": {
+     "kind": "tower",
+     "z": 0.0,
+     "rung": "L",
+     "radius": 460.0
+    },
+    "top": {
+     "kind": "crown",
+     "z": 1420.0,
+     "rung": null,
+     "radius": 0.0
+    }
+   },
+   "parts": [
+    {
+     "part": "glass",
+     "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Crown_Onion_glass.WL_Tower_Crown_Onion_glass",
+     "material": "MI_V2_GlassAmber"
+    },
+    {
+     "part": "gold",
+     "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Crown_Onion_gold.WL_Tower_Crown_Onion_gold",
+     "material": "MI_V2_Gold"
+    },
+    {
+     "part": "roof",
+     "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Crown_Onion_roof.WL_Tower_Crown_Onion_roof",
+     "material": "MI_V2_RoofRose"
+    },
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Crown_Onion.WL_Tower_Crown_Onion",
+     "material": "MI_V2_IvoryStone"
+    }
+   ]
+  },
+  "WL_Tower_Crown_Belvedere": {
+   "family": "tower_crown",
+   "group": "towers",
+   "role": "crown",
+   "height": 1510.0,
+   "radius": 526.0,
+   "size": [
+    1052.0,
+    1052.0,
+    1510.0
+   ],
+   "bbox_min": [
+    -526.0,
+    -526.0,
+    0.0
+   ],
+   "bbox_max": [
+    526.0,
+    526.0,
+    1510.0
+   ],
+   "tris": 9718,
+   "sockets": {
+    "bottom": {
+     "kind": "tower",
+     "z": 0.0,
+     "rung": "L",
+     "radius": 460.0
+    },
+    "top": {
+     "kind": "crown",
+     "z": 1510.0,
+     "rung": null,
+     "radius": 0.0
+    }
+   },
+   "parts": [
+    {
+     "part": "gold",
+     "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Crown_Belvedere_gold.WL_Tower_Crown_Belvedere_gold",
+     "material": "MI_V2_Gold"
+    },
+    {
+     "part": "roof",
+     "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Crown_Belvedere_roof.WL_Tower_Crown_Belvedere_roof",
+     "material": "MI_V2_RoofRose"
+    },
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Crown_Belvedere.WL_Tower_Crown_Belvedere",
+     "material": "MI_V2_IvoryStone"
+    }
+   ]
+  },
+  "WL_Tower_Crown_Cap": {
+   "family": "tower_crown",
+   "group": "towers",
+   "role": "crown",
+   "height": 955.0,
+   "radius": 618.0,
+   "size": [
+    1236.0,
+    1229.22,
+    955.0
+   ],
+   "bbox_min": [
+    -618.0,
+    -614.61,
+    0.0
+   ],
+   "bbox_max": [
+    618.0,
+    614.61,
+    955.0
+   ],
+   "tris": 3668,
+   "sockets": {
+    "bottom": {
+     "kind": "tower",
+     "z": 0.0,
+     "rung": "M",
+     "radius": 300.0
+    },
+    "top": {
+     "kind": "crown",
+     "z": 955.0,
+     "rung": null,
+     "radius": 0.0
+    }
+   },
+   "parts": [
+    {
+     "part": "gold",
+     "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Crown_Cap_gold.WL_Tower_Crown_Cap_gold",
+     "material": "MI_V2_Gold"
+    },
+    {
+     "part": "roof",
+     "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Crown_Cap_roof.WL_Tower_Crown_Cap_roof",
+     "material": "MI_V2_RoofRose"
+    },
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Crown_Cap.WL_Tower_Crown_Cap",
+     "material": "MI_V2_IvoryStone"
+    }
+   ]
+  },
+  "WL_Tower_Crown_Pavilion": {
+   "family": "tower_crown",
+   "group": "towers",
+   "role": "crown",
+   "height": 1380.0,
+   "radius": 856.8,
+   "size": [
+    1713.6,
+    1713.6,
+    1380.0
+   ],
+   "bbox_min": [
+    -856.8,
+    -856.8,
+    0.0
+   ],
+   "bbox_max": [
+    856.8,
+    856.8,
+    1380.0
+   ],
+   "tris": 5062,
+   "sockets": {
+    "bottom": {
+     "kind": "tower",
+     "z": 0.0,
+     "rung": "XL",
+     "radius": 680.0
+    },
+    "top": {
+     "kind": "crown",
+     "z": 1380.0,
+     "rung": null,
+     "radius": 0.0
+    }
+   },
+   "parts": [
+    {
+     "part": "glass",
+     "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Crown_Pavilion_glass.WL_Tower_Crown_Pavilion_glass",
+     "material": "MI_V2_GlassAmber"
+    },
+    {
+     "part": "gold",
+     "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Crown_Pavilion_gold.WL_Tower_Crown_Pavilion_gold",
+     "material": "MI_V2_Gold"
+    },
+    {
+     "part": "roof",
+     "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Crown_Pavilion_roof.WL_Tower_Crown_Pavilion_roof",
+     "material": "MI_V2_RoofRose"
+    },
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Crown_Pavilion.WL_Tower_Crown_Pavilion",
+     "material": "MI_V2_IvoryStone"
+    }
+   ]
+  },
+  "WL_Tower_Crown_Ribbed": {
+   "family": "tower_crown",
+   "group": "towers",
+   "role": "crown",
+   "height": 1135.0,
+   "radius": 501.36,
+   "size": [
+    1002.72,
+    1002.72,
+    1135.0
+   ],
+   "bbox_min": [
+    -501.36,
+    -501.36,
+    0.0
+   ],
+   "bbox_max": [
+    501.36,
+    501.36,
+    1135.0
+   ],
+   "tris": 2822,
+   "sockets": {
+    "bottom": {
+     "kind": "tower",
+     "z": 0.0,
+     "rung": "L",
+     "radius": 460.0
+    },
+    "top": {
+     "kind": "crown",
+     "z": 1135.0,
+     "rung": null,
+     "radius": 0.0
+    }
+   },
+   "parts": [
+    {
+     "part": "gold",
+     "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Crown_Ribbed_gold.WL_Tower_Crown_Ribbed_gold",
+     "material": "MI_V2_Gold"
+    },
+    {
+     "part": "roof_alt",
+     "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Crown_Ribbed_roof_alt.WL_Tower_Crown_Ribbed_roof_alt",
+     "material": "MI_V2_RoofLilac"
+    },
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Crown_Ribbed.WL_Tower_Crown_Ribbed",
+     "material": "MI_V2_IvoryStone"
+    }
+   ]
+  },
+  "WL_Spire_Needle": {
+   "family": "spire",
+   "group": "towers",
+   "role": "needle",
+   "height": 2460.0,
+   "radius": 300.0,
+   "size": [
+    600.0,
+    590.88,
+    2460.0
+   ],
+   "bbox_min": [
+    -300.0,
+    -295.44,
+    0.0
+   ],
+   "bbox_max": [
+    300.0,
+    295.44,
+    2460.0
+   ],
+   "tris": 982,
+   "sockets": {
+    "bottom": {
+     "kind": "tower",
+     "z": 0.0,
+     "rung": "M",
+     "radius": 300.0
+    },
+    "top": {
+     "kind": "crown",
+     "z": 2460.0,
+     "rung": null,
+     "radius": 0.0
+    }
+   },
+   "parts": [
+    {
+     "part": "gold",
+     "mesh": "/Game/WonderlandV2/Kit/towers/WL_Spire_Needle_gold.WL_Spire_Needle_gold",
+     "material": "MI_V2_Gold"
+    },
+    {
+     "part": "roof",
+     "mesh": "/Game/WonderlandV2/Kit/towers/WL_Spire_Needle_roof.WL_Spire_Needle_roof",
+     "material": "MI_V2_RoofRose"
+    },
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/towers/WL_Spire_Needle.WL_Spire_Needle",
+     "material": "MI_V2_IvoryStone"
+    }
+   ]
+  },
+  "WL_Spire_Barbed": {
+   "family": "spire",
+   "group": "towers",
+   "role": "needle",
+   "height": 2110.0,
+   "radius": 318.0,
+   "size": [
+    636.0,
+    626.34,
+    2110.0
+   ],
+   "bbox_min": [
+    -318.0,
+    -313.17,
+    0.0
+   ],
+   "bbox_max": [
+    318.0,
+    313.17,
+    2110.0
+   ],
+   "tris": 3342,
+   "sockets": {
+    "bottom": {
+     "kind": "tower",
+     "z": 0.0,
+     "rung": "M",
+     "radius": 300.0
+    },
+    "top": {
+     "kind": "crown",
+     "z": 2110.0,
+     "rung": null,
+     "radius": 0.0
+    }
+   },
+   "parts": [
+    {
+     "part": "gold",
+     "mesh": "/Game/WonderlandV2/Kit/towers/WL_Spire_Barbed_gold.WL_Spire_Barbed_gold",
+     "material": "MI_V2_Gold"
+    },
+    {
+     "part": "roof",
+     "mesh": "/Game/WonderlandV2/Kit/towers/WL_Spire_Barbed_roof.WL_Spire_Barbed_roof",
+     "material": "MI_V2_RoofRose"
+    },
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/towers/WL_Spire_Barbed.WL_Spire_Barbed",
+     "material": "MI_V2_IvoryStone"
+    }
+   ]
+  },
+  "WL_Spire_Twisted": {
+   "family": "spire",
+   "group": "towers",
+   "role": "needle",
+   "height": 2285.0,
+   "radius": 300.0,
+   "size": [
+    600.0,
+    590.88,
+    2285.0
+   ],
+   "bbox_min": [
+    -300.0,
+    -295.44,
+    0.0
+   ],
+   "bbox_max": [
+    300.0,
+    295.44,
+    2285.0
+   ],
+   "tris": 838,
+   "sockets": {
+    "bottom": {
+     "kind": "tower",
+     "z": 0.0,
+     "rung": "M",
+     "radius": 300.0
+    },
+    "top": {
+     "kind": "crown",
+     "z": 2285.0,
+     "rung": null,
+     "radius": 0.0
+    }
+   },
+   "parts": [
+    {
+     "part": "gold",
+     "mesh": "/Game/WonderlandV2/Kit/towers/WL_Spire_Twisted_gold.WL_Spire_Twisted_gold",
+     "material": "MI_V2_Gold"
+    },
+    {
+     "part": "roof",
+     "mesh": "/Game/WonderlandV2/Kit/towers/WL_Spire_Twisted_roof.WL_Spire_Twisted_roof",
+     "material": "MI_V2_RoofRose"
+    },
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/towers/WL_Spire_Twisted.WL_Spire_Twisted",
+     "material": "MI_V2_IvoryStone"
+    }
+   ]
+  },
+  "WL_Spire_Ringed": {
+   "family": "spire",
+   "group": "towers",
+   "role": "needle",
+   "height": 2020.0,
+   "radius": 300.0,
+   "size": [
+    600.0,
+    590.88,
+    2020.0
+   ],
+   "bbox_min": [
+    -300.0,
+    -295.44,
+    0.0
+   ],
+   "bbox_max": [
+    300.0,
+    295.44,
+    2020.0
+   ],
+   "tris": 1334,
+   "sockets": {
+    "bottom": {
+     "kind": "tower",
+     "z": 0.0,
+     "rung": "M",
+     "radius": 300.0
+    },
+    "top": {
+     "kind": "crown",
+     "z": 2020.0,
+     "rung": null,
+     "radius": 0.0
+    }
+   },
+   "parts": [
+    {
+     "part": "gold",
+     "mesh": "/Game/WonderlandV2/Kit/towers/WL_Spire_Ringed_gold.WL_Spire_Ringed_gold",
+     "material": "MI_V2_Gold"
+    },
+    {
+     "part": "roof_alt",
+     "mesh": "/Game/WonderlandV2/Kit/towers/WL_Spire_Ringed_roof_alt.WL_Spire_Ringed_roof_alt",
+     "material": "MI_V2_RoofLilac"
+    },
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/towers/WL_Spire_Ringed.WL_Spire_Ringed",
+     "material": "MI_V2_IvoryStone"
+    }
+   ]
+  },
+  "WL_Spire_Cluster": {
+   "family": "spire",
+   "group": "towers",
+   "role": "needle",
+   "height": 1835.0,
+   "radius": 336.0,
+   "size": [
+    672.0,
+    672.0,
+    1835.0
+   ],
+   "bbox_min": [
+    -336.0,
+    -336.0,
+    0.0
+   ],
+   "bbox_max": [
+    336.0,
+    336.0,
+    1835.0
+   ],
+   "tris": 3984,
+   "sockets": {
+    "bottom": {
+     "kind": "tower",
+     "z": 0.0,
+     "rung": "M",
+     "radius": 300.0
+    },
+    "top": {
+     "kind": "crown",
+     "z": 1835.0,
+     "rung": null,
+     "radius": 0.0
+    }
+   },
+   "parts": [
+    {
+     "part": "gold",
+     "mesh": "/Game/WonderlandV2/Kit/towers/WL_Spire_Cluster_gold.WL_Spire_Cluster_gold",
+     "material": "MI_V2_Gold"
+    },
+    {
+     "part": "roof",
+     "mesh": "/Game/WonderlandV2/Kit/towers/WL_Spire_Cluster_roof.WL_Spire_Cluster_roof",
+     "material": "MI_V2_RoofRose"
+    },
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/towers/WL_Spire_Cluster.WL_Spire_Cluster",
+     "material": "MI_V2_IvoryStone"
+    }
+   ]
+  },
+  "WL_Arch_Ceremonial": {
+   "family": "arch",
+   "group": "thresholds",
+   "role": "threshold",
+   "height": 2973.2,
+   "radius": 1155.0,
+   "size": [
+    2310.0,
+    776.2,
+    2973.2
+   ],
+   "bbox_min": [
+    -1155.0,
+    -388.1,
+    0.0
+   ],
+   "bbox_max": [
+    1155.0,
+    388.1,
+    2973.2
+   ],
+   "tris": 9896,
+   "sockets": {
+    "bottom": {
+     "kind": "ground",
+     "z": 0.0,
+     "rung": null,
+     "radius": 1070.0
+    },
+    "passage": {
+     "kind": "pier",
+     "z": 0.0,
+     "rung": null,
+     "radius": 650.0
+    }
+   },
+   "parts": [
+    {
+     "part": "gold",
+     "mesh": "/Game/WonderlandV2/Kit/thresholds/WL_Arch_Ceremonial_gold.WL_Arch_Ceremonial_gold",
+     "material": "MI_V2_Gold"
+    },
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/thresholds/WL_Arch_Ceremonial.WL_Arch_Ceremonial",
+     "material": "MI_V2_IvoryStone"
+    },
+    {
+     "part": "veg_anchor",
+     "mesh": "/Game/WonderlandV2/Kit/thresholds/WL_Arch_Ceremonial_veg_anchor.WL_Arch_Ceremonial_veg_anchor",
+     "material": "MI_V2_LeafMid"
+    }
+   ]
+  },
+  "WL_Arch_Garden_Rose": {
+   "family": "arch",
+   "group": "thresholds",
+   "role": "threshold",
+   "height": 900.0,
+   "radius": 313.5,
+   "size": [
+    627.0,
+    87.0,
+    900.0
+   ],
+   "bbox_min": [
+    -313.5,
+    -43.5,
+    0.0
+   ],
+   "bbox_max": [
+    313.5,
+    43.5,
+    900.0
+   ],
+   "tris": 1976,
+   "sockets": {
+    "bottom": {
+     "kind": "ground",
+     "z": 0.0,
+     "rung": null,
+     "radius": 310.0
+    },
+    "passage": {
+     "kind": "pier",
+     "z": 0.0,
+     "rung": null,
+     "radius": 270.0
+    }
+   },
+   "parts": [
+    {
+     "part": "gold",
+     "mesh": "/Game/WonderlandV2/Kit/thresholds/WL_Arch_Garden_Rose_gold.WL_Arch_Garden_Rose_gold",
+     "material": "MI_V2_Gold"
+    },
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/thresholds/WL_Arch_Garden_Rose.WL_Arch_Garden_Rose",
+     "material": "MI_V2_IvoryStone"
+    },
+    {
+     "part": "veg_anchor",
+     "mesh": "/Game/WonderlandV2/Kit/thresholds/WL_Arch_Garden_Rose_veg_anchor.WL_Arch_Garden_Rose_veg_anchor",
+     "material": "MI_V2_LeafMid"
+    }
+   ]
+  },
+  "WL_Arch_Trefoil_Screen": {
+   "family": "arch",
+   "group": "thresholds",
+   "role": "threshold",
+   "height": 903.2,
+   "radius": 350.0,
+   "size": [
+    700.0,
+    134.0,
+    903.2
+   ],
+   "bbox_min": [
+    -350.0,
+    -67.0,
+    0.0
+   ],
+   "bbox_max": [
+    350.0,
+    67.0,
+    903.2
+   ],
+   "tris": 3260,
+   "sockets": {
+    "bottom": {
+     "kind": "ground",
+     "z": 0.0,
+     "rung": null,
+     "radius": 340.0
+    },
+    "passage": {
+     "kind": "pier",
+     "z": 0.0,
+     "rung": null,
+     "radius": 230.0
+    }
+   },
+   "parts": [
+    {
+     "part": "gold",
+     "mesh": "/Game/WonderlandV2/Kit/thresholds/WL_Arch_Trefoil_Screen_gold.WL_Arch_Trefoil_Screen_gold",
+     "material": "MI_V2_Gold"
+    },
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/thresholds/WL_Arch_Trefoil_Screen.WL_Arch_Trefoil_Screen",
+     "material": "MI_V2_IvoryStone"
+    }
+   ]
+  },
+  "WL_Arch_Twin_Tiered": {
+   "family": "arch",
+   "group": "thresholds",
+   "role": "threshold",
+   "height": 2106.2,
+   "radius": 745.0,
+   "size": [
+    1490.0,
+    540.0,
+    2106.2
+   ],
+   "bbox_min": [
+    -745.0,
+    -270.0,
+    0.0
+   ],
+   "bbox_max": [
+    745.0,
+    270.0,
+    2106.2
+   ],
+   "tris": 6600,
+   "sockets": {
+    "bottom": {
+     "kind": "ground",
+     "z": 0.0,
+     "rung": null,
+     "radius": 710.0
+    },
+    "passage": {
+     "kind": "pier",
+     "z": 0.0,
+     "rung": null,
+     "radius": 450.0
+    }
+   },
+   "parts": [
+    {
+     "part": "gold",
+     "mesh": "/Game/WonderlandV2/Kit/thresholds/WL_Arch_Twin_Tiered_gold.WL_Arch_Twin_Tiered_gold",
+     "material": "MI_V2_Gold"
+    },
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/thresholds/WL_Arch_Twin_Tiered.WL_Arch_Twin_Tiered",
+     "material": "MI_V2_IvoryStone"
+    },
+    {
+     "part": "stone_dark",
+     "mesh": "/Game/WonderlandV2/Kit/thresholds/WL_Arch_Twin_Tiered_stone_dark.WL_Arch_Twin_Tiered_stone_dark",
+     "material": "MI_V2_Stone"
+    }
+   ]
+  },
+  "WL_Gatehouse_Twin": {
+   "family": "gatehouse",
+   "group": "thresholds",
+   "role": "threshold",
+   "height": 2605.0,
+   "radius": 1416.0,
+   "size": [
+    2832.0,
+    1032.0,
+    2605.0
+   ],
+   "bbox_min": [
+    -1416.0,
+    -516.0,
+    0.0
+   ],
+   "bbox_max": [
+    1416.0,
+    516.0,
+    2605.0
+   ],
+   "tris": 13048,
+   "sockets": {
+    "bottom": {
+     "kind": "ground",
+     "z": 0.0,
+     "rung": null,
+     "radius": 1416.0
+    },
+    "passage": {
+     "kind": "pier",
+     "z": 0.0,
+     "rung": null,
+     "radius": 400.0
+    }
+   },
+   "parts": [
+    {
+     "part": "glass",
+     "mesh": "/Game/WonderlandV2/Kit/thresholds/WL_Gatehouse_Twin_glass.WL_Gatehouse_Twin_glass",
+     "material": "MI_V2_GlassAmber"
+    },
+    {
+     "part": "gold",
+     "mesh": "/Game/WonderlandV2/Kit/thresholds/WL_Gatehouse_Twin_gold.WL_Gatehouse_Twin_gold",
+     "material": "MI_V2_Gold"
+    },
+    {
+     "part": "roof",
+     "mesh": "/Game/WonderlandV2/Kit/thresholds/WL_Gatehouse_Twin_roof.WL_Gatehouse_Twin_roof",
+     "material": "MI_V2_RoofRose"
+    },
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/thresholds/WL_Gatehouse_Twin.WL_Gatehouse_Twin",
+     "material": "MI_V2_IvoryStone"
+    },
+    {
+     "part": "stone_dark",
+     "mesh": "/Game/WonderlandV2/Kit/thresholds/WL_Gatehouse_Twin_stone_dark.WL_Gatehouse_Twin_stone_dark",
+     "material": "MI_V2_Stone"
+    }
+   ]
+  },
+  "WL_Gatehouse_Screen": {
+   "family": "gatehouse",
+   "group": "thresholds",
+   "role": "threshold",
+   "height": 1464.8,
+   "radius": 609.05,
+   "size": [
+    1218.1,
+    188.1,
+    1464.8
+   ],
+   "bbox_min": [
+    -609.05,
+    -94.05,
+    0.0
+   ],
+   "bbox_max": [
+    609.05,
+    94.05,
+    1464.8
+   ],
+   "tris": 6940,
+   "sockets": {
+    "bottom": {
+     "kind": "ground",
+     "z": 0.0,
+     "rung": null,
+     "radius": 600.0
+    },
+    "passage": {
+     "kind": "pier",
+     "z": 0.0,
+     "rung": null,
+     "radius": 215.0
+    }
+   },
+   "parts": [
+    {
+     "part": "gold",
+     "mesh": "/Game/WonderlandV2/Kit/thresholds/WL_Gatehouse_Screen_gold.WL_Gatehouse_Screen_gold",
+     "material": "MI_V2_Gold"
+    },
+    {
+     "part": "gold_aged",
+     "mesh": "/Game/WonderlandV2/Kit/thresholds/WL_Gatehouse_Screen_gold_aged.WL_Gatehouse_Screen_gold_aged",
+     "material": "MI_V2_GoldAged"
+    },
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/thresholds/WL_Gatehouse_Screen.WL_Gatehouse_Screen",
+     "material": "MI_V2_IvoryStone"
+    },
+    {
+     "part": "veg_anchor",
+     "mesh": "/Game/WonderlandV2/Kit/thresholds/WL_Gatehouse_Screen_veg_anchor.WL_Gatehouse_Screen_veg_anchor",
+     "material": "MI_V2_LeafMid"
+    }
+   ]
+  },
+  "WL_Colonnade_Straight": {
+   "family": "colonnade",
+   "group": "civic",
+   "role": "screen",
+   "height": 779.0,
+   "radius": 1125.0,
+   "size": [
+    2250.0,
+    330.0,
+    779.0
+   ],
+   "bbox_min": [
+    -1125.0,
+    -165.0,
+    0.0
+   ],
+   "bbox_max": [
+    1125.0,
+    165.0,
+    779.0
+   ],
+   "tris": 6896,
+   "sockets": {
+    "bottom": {
+     "kind": "ground",
+     "z": 0.0,
+     "rung": null,
+     "radius": 1050.0
+    },
+    "end_a": {
+     "kind": "pier",
+     "z": 0.0,
+     "rung": null,
+     "radius": 165.0
+    },
+    "end_b": {
+     "kind": "pier",
+     "z": 0.0,
+     "rung": null,
+     "radius": 165.0
+    }
+   },
+   "parts": [
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/civic/WL_Colonnade_Straight.WL_Colonnade_Straight",
+     "material": "MI_V2_IvoryStone"
+    }
+   ]
+  },
+  "WL_Colonnade_Arcade": {
+   "family": "colonnade",
+   "group": "civic",
+   "role": "screen",
+   "height": 993.0,
+   "radius": 1150.0,
+   "size": [
+    2300.0,
+    420.0,
+    993.0
+   ],
+   "bbox_min": [
+    -1150.0,
+    -210.0,
+    0.0
+   ],
+   "bbox_max": [
+    1150.0,
+    210.0,
+    993.0
+   ],
+   "tris": 9790,
+   "sockets": {
+    "bottom": {
+     "kind": "ground",
+     "z": 0.0,
+     "rung": null,
+     "radius": 1080.0
+    },
+    "deck": {
+     "kind": "bridge_end",
+     "z": 805.0,
+     "rung": null,
+     "radius": 1080.0
+    },
+    "end_a": {
+     "kind": "pier",
+     "z": 0.0,
+     "rung": null,
+     "radius": 190.0
+    },
+    "end_b": {
+     "kind": "pier",
+     "z": 0.0,
+     "rung": null,
+     "radius": 190.0
+    }
+   },
+   "parts": [
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/civic/WL_Colonnade_Arcade.WL_Colonnade_Arcade",
+     "material": "MI_V2_IvoryStone"
+    },
+    {
+     "part": "stone_dark",
+     "mesh": "/Game/WonderlandV2/Kit/civic/WL_Colonnade_Arcade_stone_dark.WL_Colonnade_Arcade_stone_dark",
+     "material": "MI_V2_Stone"
+    }
+   ]
+  },
+  "WL_Colonnade_Curved": {
+   "family": "colonnade",
+   "group": "civic",
+   "role": "screen",
+   "height": 738.0,
+   "radius": 2575.0,
+   "size": [
+    688.09,
+    2729.08,
+    738.0
+   ],
+   "bbox_min": [
+    1886.91,
+    -1364.54,
+    0.0
+   ],
+   "bbox_max": [
+    2575.0,
+    1364.54,
+    738.0
+   ],
+   "tris": 7808,
+   "sockets": {
+    "bottom": {
+     "kind": "ground",
+     "z": 0.0,
+     "rung": null,
+     "radius": 2590.0
+    },
+    "end_a": {
+     "kind": "pier",
+     "z": 0.0,
+     "rung": null,
+     "radius": 190.0
+    },
+    "end_b": {
+     "kind": "pier",
+     "z": 0.0,
+     "rung": null,
+     "radius": 190.0
+    }
+   },
+   "parts": [
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/civic/WL_Colonnade_Curved.WL_Colonnade_Curved",
+     "material": "MI_V2_IvoryStone"
+    }
+   ]
+  },
+  "WL_Bridge_Arc": {
+   "family": "bridge",
+   "group": "civic",
+   "role": "span",
+   "height": 765.0,
+   "radius": 1250.0,
+   "size": [
+    2500.0,
+    680.0,
+    765.0
+   ],
+   "bbox_min": [
+    -1250.0,
+    -340.0,
+    0.0
+   ],
+   "bbox_max": [
+    1250.0,
+    340.0,
+    765.0
+   ],
+   "tris": 4168,
+   "sockets": {
+    "bottom": {
+     "kind": "ground",
+     "z": 0.0,
+     "rung": null,
+     "radius": 1250.0
+    },
+    "end_a": {
+     "kind": "bridge_end",
+     "z": 530.0,
+     "rung": null,
+     "radius": 260.0
+    },
+    "end_b": {
+     "kind": "bridge_end",
+     "z": 530.0,
+     "rung": null,
+     "radius": 260.0
+    }
+   },
+   "parts": [
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/civic/WL_Bridge_Arc.WL_Bridge_Arc",
+     "material": "MI_V2_IvoryStone"
+    },
+    {
+     "part": "stone_dark",
+     "mesh": "/Game/WonderlandV2/Kit/civic/WL_Bridge_Arc_stone_dark.WL_Bridge_Arc_stone_dark",
+     "material": "MI_V2_Stone"
+    }
+   ]
+  },
+  "WL_Bridge_Sky": {
+   "family": "bridge",
+   "group": "civic",
+   "role": "span",
+   "height": 1200.83,
+   "radius": 1618.0,
+   "size": [
+    3236.0,
+    490.0,
+    1200.83
+   ],
+   "bbox_min": [
+    -1618.0,
+    -245.0,
+    1.17
+   ],
+   "bbox_max": [
+    1618.0,
+    245.0,
+    1202.0
+   ],
+   "tris": 3378,
+   "sockets": {
+    "end_a": {
+     "kind": "bridge_end",
+     "z": 402.0,
+     "rung": null,
+     "radius": 170.0
+    },
+    "end_b": {
+     "kind": "bridge_end",
+     "z": 402.0,
+     "rung": null,
+     "radius": 170.0
+    },
+    "lantern": {
+     "kind": "crown",
+     "z": 1202.0,
+     "rung": null,
+     "radius": 0.0
+    }
+   },
+   "parts": [
+    {
+     "part": "glass",
+     "mesh": "/Game/WonderlandV2/Kit/civic/WL_Bridge_Sky_glass.WL_Bridge_Sky_glass",
+     "material": "MI_V2_GlassAmber"
+    },
+    {
+     "part": "gold",
+     "mesh": "/Game/WonderlandV2/Kit/civic/WL_Bridge_Sky_gold.WL_Bridge_Sky_gold",
+     "material": "MI_V2_Gold"
+    },
+    {
+     "part": "roof",
+     "mesh": "/Game/WonderlandV2/Kit/civic/WL_Bridge_Sky_roof.WL_Bridge_Sky_roof",
+     "material": "MI_V2_RoofRose"
+    },
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/civic/WL_Bridge_Sky.WL_Bridge_Sky",
+     "material": "MI_V2_IvoryStone"
+    }
+   ]
+  },
+  "WL_Bridge_Flying": {
+   "family": "bridge",
+   "group": "civic",
+   "role": "span",
+   "height": 1830.0,
+   "radius": 1355.0,
+   "size": [
+    1420.0,
+    310.0,
+    1830.0
+   ],
+   "bbox_min": [
+    -65.0,
+    -155.0,
+    0.0
+   ],
+   "bbox_max": [
+    1355.0,
+    155.0,
+    1830.0
+   ],
+   "tris": 1170,
+   "sockets": {
+    "bottom": {
+     "kind": "ground",
+     "z": 0.0,
+     "rung": null,
+     "radius": 160.0
+    },
+    "back": {
+     "kind": "bridge_end",
+     "z": 0.0,
+     "rung": null,
+     "radius": 105.0
+    }
+   },
+   "parts": [
+    {
+     "part": "gold",
+     "mesh": "/Game/WonderlandV2/Kit/civic/WL_Bridge_Flying_gold.WL_Bridge_Flying_gold",
+     "material": "MI_V2_Gold"
+    },
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/civic/WL_Bridge_Flying.WL_Bridge_Flying",
+     "material": "MI_V2_IvoryStone"
+    }
+   ]
+  },
+  "WL_Wall_Curtain_Run": {
+   "family": "wall",
+   "group": "walls",
+   "role": "screen",
+   "height": 807.0,
+   "radius": 680.0,
+   "size": [
+    1360.0,
+    450.0,
+    807.0
+   ],
+   "bbox_min": [
+    -680.0,
+    -225.0,
+    0.0
+   ],
+   "bbox_max": [
+    680.0,
+    225.0,
+    807.0
+   ],
+   "tris": 762,
+   "sockets": {
+    "bottom": {
+     "kind": "ground",
+     "z": 0.0,
+     "rung": "XL",
+     "radius": 680.0
+    },
+    "walk": {
+     "kind": "bridge_end",
+     "z": 620.0,
+     "rung": "XL",
+     "radius": 680.0
+    },
+    "end_a": {
+     "kind": "pier",
+     "z": 0.0,
+     "rung": null,
+     "radius": 170.0
+    },
+    "end_b": {
+     "kind": "pier",
+     "z": 0.0,
+     "rung": null,
+     "radius": 170.0
+    }
+   },
+   "parts": [
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/walls/WL_Wall_Curtain_Run.WL_Wall_Curtain_Run",
+     "material": "MI_V2_IvoryStone"
+    },
+    {
+     "part": "stone_dark",
+     "mesh": "/Game/WonderlandV2/Kit/walls/WL_Wall_Curtain_Run_stone_dark.WL_Wall_Curtain_Run_stone_dark",
+     "material": "MI_V2_Stone"
+    }
+   ]
+  },
+  "WL_Wall_Mural_Tower": {
+   "family": "wall",
+   "group": "walls",
+   "role": "screen",
+   "height": 1955.0,
+   "radius": 528.0,
+   "size": [
+    1021.65,
+    1049.72,
+    1955.0
+   ],
+   "bbox_min": [
+    -493.65,
+    -524.86,
+    0.0
+   ],
+   "bbox_max": [
+    528.0,
+    524.86,
+    1955.0
+   ],
+   "tris": 2262,
+   "sockets": {
+    "bottom": {
+     "kind": "ground",
+     "z": 0.0,
+     "rung": null,
+     "radius": 528.0
+    },
+    "walk": {
+     "kind": "bridge_end",
+     "z": 620.0,
+     "rung": null,
+     "radius": 528.0
+    },
+    "end_a": {
+     "kind": "pier",
+     "z": 0.0,
+     "rung": null,
+     "radius": 170.0
+    },
+    "end_b": {
+     "kind": "pier",
+     "z": 0.0,
+     "rung": null,
+     "radius": 170.0
+    }
+   },
+   "parts": [
+    {
+     "part": "glass",
+     "mesh": "/Game/WonderlandV2/Kit/walls/WL_Wall_Mural_Tower_glass.WL_Wall_Mural_Tower_glass",
+     "material": "MI_V2_GlassAmber"
+    },
+    {
+     "part": "gold",
+     "mesh": "/Game/WonderlandV2/Kit/walls/WL_Wall_Mural_Tower_gold.WL_Wall_Mural_Tower_gold",
+     "material": "MI_V2_Gold"
+    },
+    {
+     "part": "roof",
+     "mesh": "/Game/WonderlandV2/Kit/walls/WL_Wall_Mural_Tower_roof.WL_Wall_Mural_Tower_roof",
+     "material": "MI_V2_RoofRose"
+    },
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/walls/WL_Wall_Mural_Tower.WL_Wall_Mural_Tower",
+     "material": "MI_V2_IvoryStone"
+    },
+    {
+     "part": "stone_dark",
+     "mesh": "/Game/WonderlandV2/Kit/walls/WL_Wall_Mural_Tower_stone_dark.WL_Wall_Mural_Tower_stone_dark",
+     "material": "MI_V2_Stone"
+    }
+   ]
+  },
+  "WL_Wall_Postern_Gate": {
+   "family": "wall",
+   "group": "walls",
+   "role": "threshold",
+   "height": 1075.8,
+   "radius": 680.0,
+   "size": [
+    1360.0,
+    450.0,
+    1075.8
+   ],
+   "bbox_min": [
+    -680.0,
+    -225.0,
+    0.0
+   ],
+   "bbox_max": [
+    680.0,
+    225.0,
+    1075.8
+   ],
+   "tris": 2212,
+   "sockets": {
+    "bottom": {
+     "kind": "ground",
+     "z": 0.0,
+     "rung": "XL",
+     "radius": 680.0
+    },
+    "passage": {
+     "kind": "pier",
+     "z": 0.0,
+     "rung": null,
+     "radius": 160.0
+    },
+    "walk": {
+     "kind": "bridge_end",
+     "z": 620.0,
+     "rung": "XL",
+     "radius": 680.0
+    },
+    "end_a": {
+     "kind": "pier",
+     "z": 0.0,
+     "rung": null,
+     "radius": 170.0
+    },
+    "end_b": {
+     "kind": "pier",
+     "z": 0.0,
+     "rung": null,
+     "radius": 170.0
+    }
+   },
+   "parts": [
+    {
+     "part": "gold",
+     "mesh": "/Game/WonderlandV2/Kit/walls/WL_Wall_Postern_Gate_gold.WL_Wall_Postern_Gate_gold",
+     "material": "MI_V2_Gold"
+    },
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/walls/WL_Wall_Postern_Gate.WL_Wall_Postern_Gate",
+     "material": "MI_V2_IvoryStone"
+    },
+    {
+     "part": "stone_dark",
+     "mesh": "/Game/WonderlandV2/Kit/walls/WL_Wall_Postern_Gate_stone_dark.WL_Wall_Postern_Gate_stone_dark",
+     "material": "MI_V2_Stone"
+    }
+   ]
+  },
+  "WL_Wall_Corner_Bastion": {
+   "family": "wall",
+   "group": "walls",
+   "role": "screen",
+   "height": 1165.4,
+   "radius": 690.0,
+   "size": [
+    915.0,
+    1241.0,
+    1165.4
+   ],
+   "bbox_min": [
+    -225.0,
+    -551.0,
+    0.0
+   ],
+   "bbox_max": [
+    690.0,
+    690.0,
+    1165.4
+   ],
+   "tris": 1735,
+   "sockets": {
+    "bottom": {
+     "kind": "ground",
+     "z": 0.0,
+     "rung": null,
+     "radius": 800.0
+    },
+    "walk": {
+     "kind": "bridge_end",
+     "z": 620.0,
+     "rung": null,
+     "radius": 800.0
+    },
+    "end_a": {
+     "kind": "pier",
+     "z": 0.0,
+     "rung": null,
+     "radius": 170.0
+    },
+    "end_b": {
+     "kind": "pier",
+     "z": 0.0,
+     "rung": null,
+     "radius": 170.0
+    }
+   },
+   "parts": [
+    {
+     "part": "gold",
+     "mesh": "/Game/WonderlandV2/Kit/walls/WL_Wall_Corner_Bastion_gold.WL_Wall_Corner_Bastion_gold",
+     "material": "MI_V2_Gold"
+    },
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/walls/WL_Wall_Corner_Bastion.WL_Wall_Corner_Bastion",
+     "material": "MI_V2_IvoryStone"
+    },
+    {
+     "part": "stone_dark",
+     "mesh": "/Game/WonderlandV2/Kit/walls/WL_Wall_Corner_Bastion_stone_dark.WL_Wall_Corner_Bastion_stone_dark",
+     "material": "MI_V2_Stone"
+    }
+   ]
+  },
+  "WL_Wall_Stair_Flight": {
+   "family": "wall",
+   "group": "walls",
+   "role": "detail",
+   "height": 830.0,
+   "radius": 786.0,
+   "size": [
+    801.0,
+    338.0,
+    830.0
+   ],
+   "bbox_min": [
+    -15.0,
+    0.0,
+    0.0
+   ],
+   "bbox_max": [
+    786.0,
+    338.0,
+    830.0
+   ],
+   "tris": 1868,
+   "sockets": {
+    "bottom": {
+     "kind": "ground",
+     "z": 0.0,
+     "rung": null,
+     "radius": 360.0
+    },
+    "back": {
+     "kind": "bridge_end",
+     "z": 0.0,
+     "rung": null,
+     "radius": 360.0
+    },
+    "walk": {
+     "kind": "bridge_end",
+     "z": 620.0,
+     "rung": null,
+     "radius": 60.0
+    }
+   },
+   "parts": [
+    {
+     "part": "gold",
+     "mesh": "/Game/WonderlandV2/Kit/walls/WL_Wall_Stair_Flight_gold.WL_Wall_Stair_Flight_gold",
+     "material": "MI_V2_Gold"
+    },
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/walls/WL_Wall_Stair_Flight.WL_Wall_Stair_Flight",
+     "material": "MI_V2_IvoryStone"
+    }
+   ]
+  },
+  "WL_House_Gabled": {
+   "family": "house",
+   "group": "roofscape",
+   "role": "body",
+   "height": 1057.0,
+   "radius": 357.0,
+   "size": [
+    714.0,
+    627.2,
+    1057.0
+   ],
+   "bbox_min": [
+    -357.0,
+    -313.6,
+    0.0
+   ],
+   "bbox_max": [
+    357.0,
+    313.6,
+    1057.0
+   ],
+   "tris": 2760,
+   "sockets": {
+    "bottom": {
+     "kind": "ground",
+     "z": 0.0,
+     "rung": null,
+     "radius": 320.0
+    },
+    "eaves": {
+     "kind": "bridge_end",
+     "z": 610.0,
+     "rung": null,
+     "radius": 320.0
+    },
+    "end_a": {
+     "kind": "pier",
+     "z": 0.0,
+     "rung": null,
+     "radius": 260.0
+    },
+    "end_b": {
+     "kind": "pier",
+     "z": 0.0,
+     "rung": null,
+     "radius": 260.0
+    }
+   },
+   "parts": [
+    {
+     "part": "glass",
+     "mesh": "/Game/WonderlandV2/Kit/roofscape/WL_House_Gabled_glass.WL_House_Gabled_glass",
+     "material": "MI_V2_GlassAmber"
+    },
+    {
+     "part": "gold",
+     "mesh": "/Game/WonderlandV2/Kit/roofscape/WL_House_Gabled_gold.WL_House_Gabled_gold",
+     "material": "MI_V2_Gold"
+    },
+    {
+     "part": "roof",
+     "mesh": "/Game/WonderlandV2/Kit/roofscape/WL_House_Gabled_roof.WL_House_Gabled_roof",
+     "material": "MI_V2_RoofRose"
+    },
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/roofscape/WL_House_Gabled.WL_House_Gabled",
+     "material": "MI_V2_IvoryStone"
+    }
+   ]
+  },
+  "WL_House_Hipped": {
+   "family": "house",
+   "group": "roofscape",
+   "role": "body",
+   "height": 1257.0,
+   "radius": 356.0,
+   "size": [
+    712.0,
+    627.2,
+    1257.0
+   ],
+   "bbox_min": [
+    -356.0,
+    -313.6,
+    0.0
+   ],
+   "bbox_max": [
+    356.0,
+    313.6,
+    1257.0
+   ],
+   "tris": 3404,
+   "sockets": {
+    "bottom": {
+     "kind": "ground",
+     "z": 0.0,
+     "rung": null,
+     "radius": 320.0
+    },
+    "eaves": {
+     "kind": "bridge_end",
+     "z": 915.0,
+     "rung": null,
+     "radius": 320.0
+    },
+    "end_a": {
+     "kind": "pier",
+     "z": 0.0,
+     "rung": null,
+     "radius": 260.0
+    },
+    "end_b": {
+     "kind": "pier",
+     "z": 0.0,
+     "rung": null,
+     "radius": 260.0
+    }
+   },
+   "parts": [
+    {
+     "part": "glass",
+     "mesh": "/Game/WonderlandV2/Kit/roofscape/WL_House_Hipped_glass.WL_House_Hipped_glass",
+     "material": "MI_V2_GlassAmber"
+    },
+    {
+     "part": "gold",
+     "mesh": "/Game/WonderlandV2/Kit/roofscape/WL_House_Hipped_gold.WL_House_Hipped_gold",
+     "material": "MI_V2_Gold"
+    },
+    {
+     "part": "roof_alt",
+     "mesh": "/Game/WonderlandV2/Kit/roofscape/WL_House_Hipped_roof_alt.WL_House_Hipped_roof_alt",
+     "material": "MI_V2_RoofLilac"
+    },
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/roofscape/WL_House_Hipped.WL_House_Hipped",
+     "material": "MI_V2_IvoryStone"
+    }
+   ]
+  },
+  "WL_House_Jettied": {
+   "family": "house",
+   "group": "roofscape",
+   "role": "body",
+   "height": 1303.0,
+   "radius": 369.5,
+   "size": [
+    739.0,
+    627.2,
+    1303.0
+   ],
+   "bbox_min": [
+    -369.5,
+    -313.6,
+    0.0
+   ],
+   "bbox_max": [
+    369.5,
+    313.6,
+    1303.0
+   ],
+   "tris": 3476,
+   "sockets": {
+    "bottom": {
+     "kind": "ground",
+     "z": 0.0,
+     "rung": null,
+     "radius": 320.0
+    },
+    "eaves": {
+     "kind": "bridge_end",
+     "z": 915.0,
+     "rung": null,
+     "radius": 320.0
+    },
+    "end_a": {
+     "kind": "pier",
+     "z": 0.0,
+     "rung": null,
+     "radius": 260.0
+    },
+    "end_b": {
+     "kind": "pier",
+     "z": 0.0,
+     "rung": null,
+     "radius": 260.0
+    }
+   },
+   "parts": [
+    {
+     "part": "glass",
+     "mesh": "/Game/WonderlandV2/Kit/roofscape/WL_House_Jettied_glass.WL_House_Jettied_glass",
+     "material": "MI_V2_GlassAmber"
+    },
+    {
+     "part": "gold",
+     "mesh": "/Game/WonderlandV2/Kit/roofscape/WL_House_Jettied_gold.WL_House_Jettied_gold",
+     "material": "MI_V2_Gold"
+    },
+    {
+     "part": "roof",
+     "mesh": "/Game/WonderlandV2/Kit/roofscape/WL_House_Jettied_roof.WL_House_Jettied_roof",
+     "material": "MI_V2_RoofRose"
+    },
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/roofscape/WL_House_Jettied.WL_House_Jettied",
+     "material": "MI_V2_IvoryStone"
+    },
+    {
+     "part": "stone_dark",
+     "mesh": "/Game/WonderlandV2/Kit/roofscape/WL_House_Jettied_stone_dark.WL_House_Jettied_stone_dark",
+     "material": "MI_V2_Stone"
+    }
+   ]
+  },
+  "WL_Roof_Dormer": {
+   "family": "roof",
+   "group": "roofscape",
+   "role": "detail",
+   "height": 258.0,
+   "radius": 142.62,
+   "size": [
+    187.0,
+    230.02,
+    258.0
+   ],
+   "bbox_min": [
+    -93.5,
+    -142.62,
+    0.0
+   ],
+   "bbox_max": [
+    93.5,
+    87.4,
+    258.0
+   ],
+   "tris": 240,
+   "sockets": {
+    "back": {
+     "kind": "bridge_end",
+     "z": 0.0,
+     "rung": null,
+     "radius": 77.5
+    }
+   },
+   "parts": [
+    {
+     "part": "glass",
+     "mesh": "/Game/WonderlandV2/Kit/roofscape/WL_Roof_Dormer_glass.WL_Roof_Dormer_glass",
+     "material": "MI_V2_GlassAmber"
+    },
+    {
+     "part": "roof",
+     "mesh": "/Game/WonderlandV2/Kit/roofscape/WL_Roof_Dormer_roof.WL_Roof_Dormer_roof",
+     "material": "MI_V2_RoofRose"
+    },
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/roofscape/WL_Roof_Dormer.WL_Roof_Dormer",
+     "material": "MI_V2_IvoryStone"
+    }
+   ]
+  },
+  "WL_Roof_Chimney": {
+   "family": "roof",
+   "group": "roofscape",
+   "role": "detail",
+   "height": 436.0,
+   "radius": 105.92,
+   "size": [
+    211.84,
+    211.84,
+    436.0
+   ],
+   "bbox_min": [
+    -105.92,
+    -105.92,
+    0.0
+   ],
+   "bbox_max": [
+    105.92,
+    105.92,
+    436.0
+   ],
+   "tris": 592,
+   "sockets": {
+    "back": {
+     "kind": "bridge_end",
+     "z": 0.0,
+     "rung": null,
+     "radius": 80.6
+    }
+   },
+   "parts": [
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/roofscape/WL_Roof_Chimney.WL_Roof_Chimney",
+     "material": "MI_V2_IvoryStone"
+    },
+    {
+     "part": "stone_dark",
+     "mesh": "/Game/WonderlandV2/Kit/roofscape/WL_Roof_Chimney_stone_dark.WL_Roof_Chimney_stone_dark",
+     "material": "MI_V2_Stone"
+    }
+   ]
+  },
+  "WL_House_Shopfront": {
+   "family": "house",
+   "group": "roofscape",
+   "role": "detail",
+   "height": 342.0,
+   "radius": 347.55,
+   "size": [
+    695.1,
+    144.72,
+    342.0
+   ],
+   "bbox_min": [
+    -347.55,
+    -12.0,
+    0.0
+   ],
+   "bbox_max": [
+    347.55,
+    132.72,
+    342.0
+   ],
+   "tris": 3452,
+   "sockets": {
+    "back": {
+     "kind": "bridge_end",
+     "z": 0.0,
+     "rung": null,
+     "radius": 320.0
+    }
+   },
+   "parts": [
+    {
+     "part": "glass",
+     "mesh": "/Game/WonderlandV2/Kit/roofscape/WL_House_Shopfront_glass.WL_House_Shopfront_glass",
+     "material": "MI_V2_GlassAmber"
+    },
+    {
+     "part": "gold",
+     "mesh": "/Game/WonderlandV2/Kit/roofscape/WL_House_Shopfront_gold.WL_House_Shopfront_gold",
+     "material": "MI_V2_Gold"
+    },
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/roofscape/WL_House_Shopfront.WL_House_Shopfront",
+     "material": "MI_V2_IvoryStone"
+    },
+    {
+     "part": "stone_dark",
+     "mesh": "/Game/WonderlandV2/Kit/roofscape/WL_House_Shopfront_stone_dark.WL_House_Shopfront_stone_dark",
+     "material": "MI_V2_Stone"
+    }
+   ]
+  },
+  "WL_Stair_Straight_T2": {
+   "family": "stair",
+   "group": "stairs",
+   "role": "route",
+   "height": 479.0,
+   "radius": 380.0,
+   "size": [
+    392.5,
+    424.0,
+    479.0
+   ],
+   "bbox_min": [
+    -12.5,
+    -212.0,
+    0.0
+   ],
+   "bbox_max": [
+    380.0,
+    212.0,
+    479.0
+   ],
+   "tris": 1288,
+   "sockets": {
+    "bottom_route": {
+     "kind": "route",
+     "z": 0.0,
+     "rung": null,
+     "radius": 170.0
+    },
+    "top_route": {
+     "kind": "route",
+     "z": 310.0,
+     "rung": null,
+     "radius": 170.0
+    },
+    "edge_l": {
+     "kind": "edge",
+     "z": 0.0,
+     "rung": null,
+     "radius": 191.0
+    },
+    "edge_r": {
+     "kind": "edge",
+     "z": 0.0,
+     "rung": null,
+     "radius": 191.0
+    }
+   },
+   "parts": [
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/stairs/WL_Stair_Straight_T2.WL_Stair_Straight_T2",
+     "material": "MI_V2_IvoryStone"
+    }
+   ]
+  },
+  "WL_Stair_Straight_T3": {
+   "family": "stair",
+   "group": "stairs",
+   "role": "route",
+   "height": 895.0,
+   "radius": 766.0,
+   "size": [
+    807.0,
+    500.0,
+    895.0
+   ],
+   "bbox_min": [
+    -41.0,
+    -250.0,
+    0.0
+   ],
+   "bbox_max": [
+    766.0,
+    250.0,
+    895.0
+   ],
+   "tris": 4256,
+   "sockets": {
+    "bottom_route": {
+     "kind": "route",
+     "z": 0.0,
+     "rung": null,
+     "radius": 190.0
+    },
+    "top_route": {
+     "kind": "route",
+     "z": 620.0,
+     "rung": null,
+     "radius": 190.0
+    },
+    "edge_l": {
+     "kind": "edge",
+     "z": 0.0,
+     "rung": null,
+     "radius": 214.0
+    },
+    "edge_r": {
+     "kind": "edge",
+     "z": 0.0,
+     "rung": null,
+     "radius": 214.0
+    }
+   },
+   "parts": [
+    {
+     "part": "gold",
+     "mesh": "/Game/WonderlandV2/Kit/stairs/WL_Stair_Straight_T3_gold.WL_Stair_Straight_T3_gold",
+     "material": "MI_V2_Gold"
+    },
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/stairs/WL_Stair_Straight_T3.WL_Stair_Straight_T3",
+     "material": "MI_V2_IvoryStone"
+    }
+   ]
+  },
+  "WL_Stair_Quarter_Landing": {
+   "family": "stair",
+   "group": "stairs",
+   "role": "route",
+   "height": 479.0,
+   "radius": 545.0,
+   "size": [
+    557.5,
+    565.0,
+    479.0
+   ],
+   "bbox_min": [
+    -12.5,
+    -190.0,
+    0.0
+   ],
+   "bbox_max": [
+    545.0,
+    375.0,
+    479.0
+   ],
+   "tris": 1404,
+   "sockets": {
+    "bottom_route": {
+     "kind": "route",
+     "z": 0.0,
+     "rung": null,
+     "radius": 145.0
+    },
+    "landing": {
+     "kind": "route",
+     "z": 155.0,
+     "rung": null,
+     "radius": 175.0
+    },
+    "top_route": {
+     "kind": "route",
+     "z": 310.0,
+     "rung": null,
+     "radius": 145.0
+    }
+   },
+   "parts": [
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/stairs/WL_Stair_Quarter_Landing.WL_Stair_Quarter_Landing",
+     "material": "MI_V2_IvoryStone"
+    },
+    {
+     "part": "stone_dark",
+     "mesh": "/Game/WonderlandV2/Kit/stairs/WL_Stair_Quarter_Landing_stone_dark.WL_Stair_Quarter_Landing_stone_dark",
+     "material": "MI_V2_Stone"
+    }
+   ]
+  },
+  "WL_Stair_HalfTurn": {
+   "family": "stair",
+   "group": "stairs",
+   "role": "route",
+   "height": 789.0,
+   "radius": 585.0,
+   "size": [
+    623.0,
+    669.0,
+    789.0
+   ],
+   "bbox_min": [
+    -38.0,
+    -183.0,
+    0.0
+   ],
+   "bbox_max": [
+    585.0,
+    486.0,
+    789.0
+   ],
+   "tris": 2136,
+   "sockets": {
+    "bottom_route": {
+     "kind": "route",
+     "z": 0.0,
+     "rung": null,
+     "radius": 130.0
+    },
+    "landing": {
+     "kind": "route",
+     "z": 310.0,
+     "rung": null,
+     "radius": 105.0
+    },
+    "top_route": {
+     "kind": "route",
+     "z": 620.0,
+     "rung": null,
+     "radius": 130.0
+    },
+    "wall_join": {
+     "kind": "pier",
+     "z": 0.0,
+     "rung": null,
+     "radius": 22.0
+    }
+   },
+   "parts": [
+    {
+     "part": "gold",
+     "mesh": "/Game/WonderlandV2/Kit/stairs/WL_Stair_HalfTurn_gold.WL_Stair_HalfTurn_gold",
+     "material": "MI_V2_Gold"
+    },
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/stairs/WL_Stair_HalfTurn.WL_Stair_HalfTurn",
+     "material": "MI_V2_IvoryStone"
+    },
+    {
+     "part": "stone_dark",
+     "mesh": "/Game/WonderlandV2/Kit/stairs/WL_Stair_HalfTurn_stone_dark.WL_Stair_HalfTurn_stone_dark",
+     "material": "MI_V2_Stone"
+    }
+   ]
+  },
+  "WL_Stair_Curved": {
+   "family": "stair",
+   "group": "stairs",
+   "role": "route",
+   "height": 478.0,
+   "radius": 894.5,
+   "size": [
+    621.36,
+    747.49,
+    478.0
+   ],
+   "bbox_min": [
+    273.14,
+    -12.5,
+    0.0
+   ],
+   "bbox_max": [
+    894.5,
+    734.99,
+    478.0
+   ],
+   "tris": 4012,
+   "sockets": {
+    "bottom_route": {
+     "kind": "route",
+     "z": 0.0,
+     "rung": null,
+     "radius": 170.0
+    },
+    "top_route": {
+     "kind": "route",
+     "z": 310.0,
+     "rung": null,
+     "radius": 170.0
+    },
+    "edge_l": {
+     "kind": "edge",
+     "z": 0.0,
+     "rung": null,
+     "radius": 498.0
+    },
+    "edge_r": {
+     "kind": "edge",
+     "z": 0.0,
+     "rung": null,
+     "radius": 882.0
+    }
+   },
+   "parts": [
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/stairs/WL_Stair_Curved.WL_Stair_Curved",
+     "material": "MI_V2_IvoryStone"
+    }
+   ]
+  },
+  "WL_Stair_Ceremonial": {
+   "family": "stair",
+   "group": "stairs",
+   "role": "route",
+   "height": 505.0,
+   "radius": 975.0,
+   "size": [
+    1030.0,
+    1540.0,
+    505.0
+   ],
+   "bbox_min": [
+    -55.0,
+    -770.0,
+    0.0
+   ],
+   "bbox_max": [
+    975.0,
+    770.0,
+    505.0
+   ],
+   "tris": 1792,
+   "sockets": {
+    "bottom_route": {
+     "kind": "route",
+     "z": 0.0,
+     "rung": null,
+     "radius": 650.0
+    },
+    "top_route": {
+     "kind": "route",
+     "z": 155.0,
+     "rung": null,
+     "radius": 650.0
+    },
+    "edge_l": {
+     "kind": "edge",
+     "z": 0.0,
+     "rung": null,
+     "radius": 705.0
+    },
+    "edge_r": {
+     "kind": "edge",
+     "z": 0.0,
+     "rung": null,
+     "radius": 705.0
+    }
+   },
+   "parts": [
+    {
+     "part": "gold",
+     "mesh": "/Game/WonderlandV2/Kit/stairs/WL_Stair_Ceremonial_gold.WL_Stair_Ceremonial_gold",
+     "material": "MI_V2_Gold"
+    },
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/stairs/WL_Stair_Ceremonial.WL_Stair_Ceremonial",
+     "material": "MI_V2_IvoryStone"
+    }
+   ]
+  },
+  "WL_Stair_Garden": {
+   "family": "stair",
+   "group": "stairs",
+   "role": "route",
+   "height": 189.0,
+   "radius": 220.0,
+   "size": [
+    230.0,
+    332.0,
+    189.0
+   ],
+   "bbox_min": [
+    -10.0,
+    -166.0,
+    0.0
+   ],
+   "bbox_max": [
+    220.0,
+    166.0,
+    189.0
+   ],
+   "tris": 188,
+   "sockets": {
+    "bottom_route": {
+     "kind": "route",
+     "z": 0.0,
+     "rung": null,
+     "radius": 110.0
+    },
+    "top_route": {
+     "kind": "route",
+     "z": 155.0,
+     "rung": null,
+     "radius": 110.0
+    },
+    "edge_l": {
+     "kind": "edge",
+     "z": 0.0,
+     "rung": null,
+     "radius": 138.0
+    },
+    "edge_r": {
+     "kind": "edge",
+     "z": 0.0,
+     "rung": null,
+     "radius": 138.0
+    }
+   },
+   "parts": [
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/stairs/WL_Stair_Garden.WL_Stair_Garden",
+     "material": "MI_V2_IvoryStone"
+    },
+    {
+     "part": "veg_anchor",
+     "mesh": "/Game/WonderlandV2/Kit/stairs/WL_Stair_Garden_veg_anchor.WL_Stair_Garden_veg_anchor",
+     "material": "MI_V2_LeafMid"
+    }
+   ]
+  },
+  "WL_Ramp_Terrace": {
+   "family": "stair",
+   "group": "stairs",
+   "role": "route",
+   "height": 207.0,
+   "radius": 1880.0,
+   "size": [
+    1890.0,
+    352.0,
+    207.0
+   ],
+   "bbox_min": [
+    -10.0,
+    -176.0,
+    0.0
+   ],
+   "bbox_max": [
+    1880.0,
+    176.0,
+    207.0
+   ],
+   "tris": 48,
+   "sockets": {
+    "bottom_route": {
+     "kind": "route",
+     "z": 0.0,
+     "rung": null,
+     "radius": 150.0
+    },
+    "top_route": {
+     "kind": "route",
+     "z": 155.0,
+     "rung": null,
+     "radius": 150.0
+    },
+    "edge_l": {
+     "kind": "edge",
+     "z": 0.0,
+     "rung": null,
+     "radius": 163.0
+    },
+    "edge_r": {
+     "kind": "edge",
+     "z": 0.0,
+     "rung": null,
+     "radius": 163.0
+    }
+   },
+   "parts": [
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/stairs/WL_Ramp_Terrace.WL_Ramp_Terrace",
+     "material": "MI_V2_IvoryStone"
+    },
+    {
+     "part": "stone_dark",
+     "mesh": "/Game/WonderlandV2/Kit/stairs/WL_Ramp_Terrace_stone_dark.WL_Ramp_Terrace_stone_dark",
+     "material": "MI_V2_Stone"
+    }
+   ]
+  },
+  "WL_Garden_Retaining_Run": {
+   "family": "garden",
+   "group": "gardens",
+   "role": "terrace",
+   "height": 310.0,
+   "radius": 400.0,
+   "size": [
+    800.0,
+    154.0,
+    310.0
+   ],
+   "bbox_min": [
+    -400.0,
+    -87.0,
+    0.0
+   ],
+   "bbox_max": [
+    400.0,
+    67.0,
+    310.0
+   ],
+   "tris": 128,
+   "sockets": {
+    "bottom": {
+     "kind": "ground",
+     "z": 0.0,
+     "rung": null,
+     "radius": 400.0
+    },
+    "top_route": {
+     "kind": "route",
+     "z": 310.0,
+     "rung": null,
+     "radius": 400.0
+    },
+    "edge": {
+     "kind": "edge",
+     "z": 310.0,
+     "rung": null,
+     "radius": 400.0
+    },
+    "end_a": {
+     "kind": "pier",
+     "z": 0.0,
+     "rung": null,
+     "radius": 55.0
+    },
+    "end_b": {
+     "kind": "pier",
+     "z": 0.0,
+     "rung": null,
+     "radius": 55.0
+    }
+   },
+   "parts": [
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/gardens/WL_Garden_Retaining_Run.WL_Garden_Retaining_Run",
+     "material": "MI_V2_IvoryStone"
+    },
+    {
+     "part": "stone_dark",
+     "mesh": "/Game/WonderlandV2/Kit/gardens/WL_Garden_Retaining_Run_stone_dark.WL_Garden_Retaining_Run_stone_dark",
+     "material": "MI_V2_Stone"
+    },
+    {
+     "part": "veg_anchor",
+     "mesh": "/Game/WonderlandV2/Kit/gardens/WL_Garden_Retaining_Run_veg_anchor.WL_Garden_Retaining_Run_veg_anchor",
+     "material": "MI_V2_LeafMid"
+    }
+   ]
+  },
+  "WL_Garden_Retaining_Corner_In": {
+   "family": "garden",
+   "group": "gardens",
+   "role": "terrace",
+   "height": 310.0,
+   "radius": 555.0,
+   "size": [
+    642.0,
+    642.0,
+    310.0
+   ],
+   "bbox_min": [
+    -87.0,
+    -87.0,
+    0.0
+   ],
+   "bbox_max": [
+    555.0,
+    555.0,
+    310.0
+   ],
+   "tris": 250,
+   "sockets": {
+    "bottom": {
+     "kind": "ground",
+     "z": 0.0,
+     "rung": null,
+     "radius": 610.0
+    },
+    "top_route": {
+     "kind": "route",
+     "z": 310.0,
+     "rung": null,
+     "radius": 500.0
+    },
+    "edge": {
+     "kind": "edge",
+     "z": 310.0,
+     "rung": null,
+     "radius": 500.0
+    },
+    "end_a": {
+     "kind": "pier",
+     "z": 0.0,
+     "rung": null,
+     "radius": 55.0
+    },
+    "end_b": {
+     "kind": "pier",
+     "z": 0.0,
+     "rung": null,
+     "radius": 55.0
+    }
+   },
+   "parts": [
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/gardens/WL_Garden_Retaining_Corner_In.WL_Garden_Retaining_Corner_In",
+     "material": "MI_V2_IvoryStone"
+    },
+    {
+     "part": "stone_dark",
+     "mesh": "/Game/WonderlandV2/Kit/gardens/WL_Garden_Retaining_Corner_In_stone_dark.WL_Garden_Retaining_Corner_In_stone_dark",
+     "material": "MI_V2_Stone"
+    },
+    {
+     "part": "veg_anchor",
+     "mesh": "/Game/WonderlandV2/Kit/gardens/WL_Garden_Retaining_Corner_In_veg_anchor.WL_Garden_Retaining_Corner_In_veg_anchor",
+     "material": "MI_V2_LeafMid"
+    }
+   ]
+  },
+  "WL_Garden_Retaining_Corner_Out": {
+   "family": "garden",
+   "group": "gardens",
+   "role": "terrace",
+   "height": 428.0,
+   "radius": 555.0,
+   "size": [
+    642.0,
+    642.0,
+    428.0
+   ],
+   "bbox_min": [
+    -555.0,
+    -87.0,
+    0.0
+   ],
+   "bbox_max": [
+    87.0,
+    555.0,
+    428.0
+   ],
+   "tris": 568,
+   "sockets": {
+    "bottom": {
+     "kind": "ground",
+     "z": 0.0,
+     "rung": null,
+     "radius": 610.0
+    },
+    "top_route": {
+     "kind": "route",
+     "z": 310.0,
+     "rung": null,
+     "radius": 500.0
+    },
+    "edge": {
+     "kind": "edge",
+     "z": 310.0,
+     "rung": null,
+     "radius": 500.0
+    },
+    "end_a": {
+     "kind": "pier",
+     "z": 0.0,
+     "rung": null,
+     "radius": 55.0
+    },
+    "end_b": {
+     "kind": "pier",
+     "z": 0.0,
+     "rung": null,
+     "radius": 55.0
+    }
+   },
+   "parts": [
+    {
+     "part": "gold",
+     "mesh": "/Game/WonderlandV2/Kit/gardens/WL_Garden_Retaining_Corner_Out_gold.WL_Garden_Retaining_Corner_Out_gold",
+     "material": "MI_V2_Gold"
+    },
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/gardens/WL_Garden_Retaining_Corner_Out.WL_Garden_Retaining_Corner_Out",
+     "material": "MI_V2_IvoryStone"
+    },
+    {
+     "part": "stone_dark",
+     "mesh": "/Game/WonderlandV2/Kit/gardens/WL_Garden_Retaining_Corner_Out_stone_dark.WL_Garden_Retaining_Corner_Out_stone_dark",
+     "material": "MI_V2_Stone"
+    },
+    {
+     "part": "veg_anchor",
+     "mesh": "/Game/WonderlandV2/Kit/gardens/WL_Garden_Retaining_Corner_Out_veg_anchor.WL_Garden_Retaining_Corner_Out_veg_anchor",
+     "material": "MI_V2_LeafMid"
+    }
+   ]
+  },
+  "WL_Garden_Retaining_Curved": {
+   "family": "garden",
+   "group": "gardens",
+   "role": "terrace",
+   "height": 310.0,
+   "radius": 1189.0,
+   "size": [
+    232.78,
+    910.02,
+    310.0
+   ],
+   "bbox_min": [
+    956.22,
+    -455.01,
+    0.0
+   ],
+   "bbox_max": [
+    1189.0,
+    455.01,
+    310.0
+   ],
+   "tris": 532,
+   "sockets": {
+    "bottom": {
+     "kind": "ground",
+     "z": 0.0,
+     "rung": null,
+     "radius": 1180.83
+    },
+    "top_route": {
+     "kind": "route",
+     "z": 310.0,
+     "rung": null,
+     "radius": 1100.0
+    },
+    "edge": {
+     "kind": "edge",
+     "z": 310.0,
+     "rung": null,
+     "radius": 1155.0
+    },
+    "end_a": {
+     "kind": "pier",
+     "z": 0.0,
+     "rung": null,
+     "radius": 55.0
+    },
+    "end_b": {
+     "kind": "pier",
+     "z": 0.0,
+     "rung": null,
+     "radius": 55.0
+    }
+   },
+   "parts": [
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/gardens/WL_Garden_Retaining_Curved.WL_Garden_Retaining_Curved",
+     "material": "MI_V2_IvoryStone"
+    },
+    {
+     "part": "stone_dark",
+     "mesh": "/Game/WonderlandV2/Kit/gardens/WL_Garden_Retaining_Curved_stone_dark.WL_Garden_Retaining_Curved_stone_dark",
+     "material": "MI_V2_Stone"
+    },
+    {
+     "part": "veg_anchor",
+     "mesh": "/Game/WonderlandV2/Kit/gardens/WL_Garden_Retaining_Curved_veg_anchor.WL_Garden_Retaining_Curved_veg_anchor",
+     "material": "MI_V2_LeafMid"
+    }
+   ]
+  },
+  "WL_Garden_Planter_Wall": {
+   "family": "garden",
+   "group": "gardens",
+   "role": "detail",
+   "height": 103.0,
+   "radius": 317.0,
+   "size": [
+    634.0,
+    194.0,
+    103.0
+   ],
+   "bbox_min": [
+    -317.0,
+    -97.0,
+    0.0
+   ],
+   "bbox_max": [
+    317.0,
+    97.0,
+    103.0
+   ],
+   "tris": 248,
+   "sockets": {
+    "bottom": {
+     "kind": "ground",
+     "z": 0.0,
+     "rung": "M",
+     "radius": 300.0
+    },
+    "top_route": {
+     "kind": "route",
+     "z": 93.0,
+     "rung": "M",
+     "radius": 300.0
+    },
+    "end_a": {
+     "kind": "pier",
+     "z": 0.0,
+     "rung": null,
+     "radius": 80.0
+    },
+    "end_b": {
+     "kind": "pier",
+     "z": 0.0,
+     "rung": null,
+     "radius": 80.0
+    }
+   },
+   "parts": [
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/gardens/WL_Garden_Planter_Wall.WL_Garden_Planter_Wall",
+     "material": "MI_V2_IvoryStone"
+    },
+    {
+     "part": "stone_dark",
+     "mesh": "/Game/WonderlandV2/Kit/gardens/WL_Garden_Planter_Wall_stone_dark.WL_Garden_Planter_Wall_stone_dark",
+     "material": "MI_V2_Stone"
+    },
+    {
+     "part": "veg_anchor",
+     "mesh": "/Game/WonderlandV2/Kit/gardens/WL_Garden_Planter_Wall_veg_anchor.WL_Garden_Planter_Wall_veg_anchor",
+     "material": "MI_V2_LeafMid"
+    }
+   ]
+  },
+  "WL_Garden_Overlook": {
+   "family": "garden",
+   "group": "gardens",
+   "role": "terrace",
+   "height": 632.0,
+   "radius": 433.0,
+   "size": [
+    473.0,
+    866.0,
+    632.0
+   ],
+   "bbox_min": [
+    -43.0,
+    -433.0,
+    0.0
+   ],
+   "bbox_max": [
+    430.0,
+    433.0,
+    632.0
+   ],
+   "tris": 2908,
+   "sockets": {
+    "bottom": {
+     "kind": "ground",
+     "z": 0.0,
+     "rung": null,
+     "radius": 430.0
+    },
+    "top_route": {
+     "kind": "route",
+     "z": 310.0,
+     "rung": null,
+     "radius": 366.0
+    },
+    "edge": {
+     "kind": "edge",
+     "z": 310.0,
+     "rung": null,
+     "radius": 400.0
+    },
+    "end_a": {
+     "kind": "pier",
+     "z": 0.0,
+     "rung": null,
+     "radius": 55.0
+    },
+    "end_b": {
+     "kind": "pier",
+     "z": 0.0,
+     "rung": null,
+     "radius": 55.0
+    }
+   },
+   "parts": [
+    {
+     "part": "gold",
+     "mesh": "/Game/WonderlandV2/Kit/gardens/WL_Garden_Overlook_gold.WL_Garden_Overlook_gold",
+     "material": "MI_V2_Gold"
+    },
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/gardens/WL_Garden_Overlook.WL_Garden_Overlook",
+     "material": "MI_V2_IvoryStone"
+    },
+    {
+     "part": "stone_dark",
+     "mesh": "/Game/WonderlandV2/Kit/gardens/WL_Garden_Overlook_stone_dark.WL_Garden_Overlook_stone_dark",
+     "material": "MI_V2_Stone"
+    }
+   ]
+  },
+  "WL_Garden_Gate_Threshold": {
+   "family": "garden",
+   "group": "gardens",
+   "role": "threshold",
+   "height": 489.2,
+   "radius": 400.0,
+   "size": [
+    800.0,
+    155.98,
+    489.2
+   ],
+   "bbox_min": [
+    -400.0,
+    -88.98,
+    0.0
+   ],
+   "bbox_max": [
+    400.0,
+    67.0,
+    489.2
+   ],
+   "tris": 1644,
+   "sockets": {
+    "bottom": {
+     "kind": "ground",
+     "z": 0.0,
+     "rung": null,
+     "radius": 400.0
+    },
+    "passage": {
+     "kind": "pier",
+     "z": 0.0,
+     "rung": null,
+     "radius": 120.0
+    },
+    "top_route": {
+     "kind": "route",
+     "z": 310.0,
+     "rung": null,
+     "radius": 400.0
+    },
+    "edge": {
+     "kind": "edge",
+     "z": 310.0,
+     "rung": null,
+     "radius": 400.0
+    },
+    "end_a": {
+     "kind": "pier",
+     "z": 0.0,
+     "rung": null,
+     "radius": 55.0
+    },
+    "end_b": {
+     "kind": "pier",
+     "z": 0.0,
+     "rung": null,
+     "radius": 55.0
+    }
+   },
+   "parts": [
+    {
+     "part": "gold",
+     "mesh": "/Game/WonderlandV2/Kit/gardens/WL_Garden_Gate_Threshold_gold.WL_Garden_Gate_Threshold_gold",
+     "material": "MI_V2_Gold"
+    },
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/gardens/WL_Garden_Gate_Threshold.WL_Garden_Gate_Threshold",
+     "material": "MI_V2_IvoryStone"
+    },
+    {
+     "part": "stone_dark",
+     "mesh": "/Game/WonderlandV2/Kit/gardens/WL_Garden_Gate_Threshold_stone_dark.WL_Garden_Gate_Threshold_stone_dark",
+     "material": "MI_V2_Stone"
+    },
+    {
+     "part": "veg_anchor",
+     "mesh": "/Game/WonderlandV2/Kit/gardens/WL_Garden_Gate_Threshold_veg_anchor.WL_Garden_Gate_Threshold_veg_anchor",
+     "material": "MI_V2_LeafMid"
+    }
+   ]
+  },
+  "WL_Garden_Pavilion_Base": {
+   "family": "garden",
+   "group": "gardens",
+   "role": "terrace",
+   "height": 404.0,
+   "radius": 481.47,
+   "size": [
+    962.94,
+    962.94,
+    404.0
+   ],
+   "bbox_min": [
+    -481.47,
+    -481.47,
+    0.0
+   ],
+   "bbox_max": [
+    481.47,
+    481.47,
+    404.0
+   ],
+   "tris": 412,
+   "sockets": {
+    "bottom": {
+     "kind": "ground",
+     "z": 0.0,
+     "rung": null,
+     "radius": 492.0
+    },
+    "top_route": {
+     "kind": "route",
+     "z": 310.0,
+     "rung": null,
+     "radius": 450.0
+    },
+    "top": {
+     "kind": "tower",
+     "z": 310.0,
+     "rung": "XL",
+     "radius": 680.0
+    },
+    "edge": {
+     "kind": "edge",
+     "z": 310.0,
+     "rung": null,
+     "radius": 450.0
+    }
+   },
+   "parts": [
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/gardens/WL_Garden_Pavilion_Base.WL_Garden_Pavilion_Base",
+     "material": "MI_V2_IvoryStone"
+    },
+    {
+     "part": "stone_dark",
+     "mesh": "/Game/WonderlandV2/Kit/gardens/WL_Garden_Pavilion_Base_stone_dark.WL_Garden_Pavilion_Base_stone_dark",
+     "material": "MI_V2_Stone"
+    }
+   ]
+  },
+  "WL_Ground_Kerb_Run": {
+   "family": "ground",
+   "group": "ground",
+   "role": "terrace",
+   "height": 31.0,
+   "radius": 400.0,
+   "size": [
+    800.0,
+    319.0,
+    31.0
+   ],
+   "bbox_min": [
+    -400.0,
+    -62.0,
+    0.0
+   ],
+   "bbox_max": [
+    400.0,
+    257.0,
+    31.0
+   ],
+   "tris": 148,
+   "sockets": {
+    "bottom": {
+     "kind": "ground",
+     "z": 0.0,
+     "rung": null,
+     "radius": 400.0
+    },
+    "walk": {
+     "kind": "route",
+     "z": 31.0,
+     "rung": null,
+     "radius": 120.0
+    },
+    "edge": {
+     "kind": "edge",
+     "z": 31.0,
+     "rung": null,
+     "radius": 400.0
+    },
+    "end_a": {
+     "kind": "pier",
+     "z": 0.0,
+     "rung": null,
+     "radius": 30.0
+    },
+    "end_b": {
+     "kind": "pier",
+     "z": 0.0,
+     "rung": null,
+     "radius": 30.0
+    }
+   },
+   "parts": [
+    {
+     "part": "kerb",
+     "mesh": "/Game/WonderlandV2/Kit/ground/WL_Ground_Kerb_Run_kerb.WL_Ground_Kerb_Run_kerb",
+     "material": "MI_V2_Kerb"
+    },
+    {
+     "part": "paving",
+     "mesh": "/Game/WonderlandV2/Kit/ground/WL_Ground_Kerb_Run_paving.WL_Ground_Kerb_Run_paving",
+     "material": "MI_V2_PlazaCream"
+    },
+    {
+     "part": "paving_shade",
+     "mesh": "/Game/WonderlandV2/Kit/ground/WL_Ground_Kerb_Run_paving_shade.WL_Ground_Kerb_Run_paving_shade",
+     "material": "MI_V2_PlazaShade"
+    },
+    {
+     "part": "paving_warm",
+     "mesh": "/Game/WonderlandV2/Kit/ground/WL_Ground_Kerb_Run_paving_warm.WL_Ground_Kerb_Run_paving_warm",
+     "material": "MI_V2_PlazaWarm"
+    }
+   ]
+  },
+  "WL_Ground_Kerb_Corner": {
+   "family": "ground",
+   "group": "ground",
+   "role": "terrace",
+   "height": 31.0,
+   "radius": 400.0,
+   "size": [
+    417.0,
+    417.0,
+    31.0
+   ],
+   "bbox_min": [
+    -17.0,
+    -17.0,
+    0.0
+   ],
+   "bbox_max": [
+    400.0,
+    400.0,
+    31.0
+   ],
+   "tris": 252,
+   "sockets": {
+    "bottom": {
+     "kind": "ground",
+     "z": 0.0,
+     "rung": null,
+     "radius": 620.0
+    },
+    "walk": {
+     "kind": "route",
+     "z": 31.0,
+     "rung": null,
+     "radius": 120.0
+    },
+    "end_a": {
+     "kind": "pier",
+     "z": 0.0,
+     "rung": null,
+     "radius": 30.0
+    },
+    "end_b": {
+     "kind": "pier",
+     "z": 0.0,
+     "rung": null,
+     "radius": 30.0
+    }
+   },
+   "parts": [
+    {
+     "part": "kerb",
+     "mesh": "/Game/WonderlandV2/Kit/ground/WL_Ground_Kerb_Corner_kerb.WL_Ground_Kerb_Corner_kerb",
+     "material": "MI_V2_Kerb"
+    },
+    {
+     "part": "paving",
+     "mesh": "/Game/WonderlandV2/Kit/ground/WL_Ground_Kerb_Corner_paving.WL_Ground_Kerb_Corner_paving",
+     "material": "MI_V2_PlazaCream"
+    },
+    {
+     "part": "paving_shade",
+     "mesh": "/Game/WonderlandV2/Kit/ground/WL_Ground_Kerb_Corner_paving_shade.WL_Ground_Kerb_Corner_paving_shade",
+     "material": "MI_V2_PlazaShade"
+    }
+   ]
+  },
+  "WL_Ground_Step_Single": {
+   "family": "ground",
+   "group": "ground",
+   "role": "route",
+   "height": 63.5,
+   "radius": 400.0,
+   "size": [
+    800.0,
+    484.0,
+    63.5
+   ],
+   "bbox_min": [
+    -400.0,
+    -242.0,
+    0.0
+   ],
+   "bbox_max": [
+    400.0,
+    242.0,
+    63.5
+   ],
+   "tris": 160,
+   "sockets": {
+    "bottom": {
+     "kind": "ground",
+     "z": 0.0,
+     "rung": null,
+     "radius": 400.0
+    },
+    "bottom_route": {
+     "kind": "route",
+     "z": 31.0,
+     "rung": null,
+     "radius": 400.0
+    },
+    "top_route": {
+     "kind": "route",
+     "z": 62.0,
+     "rung": null,
+     "radius": 400.0
+    },
+    "end_a": {
+     "kind": "pier",
+     "z": 0.0,
+     "rung": null,
+     "radius": 22.0
+    },
+    "end_b": {
+     "kind": "pier",
+     "z": 0.0,
+     "rung": null,
+     "radius": 22.0
+    }
+   },
+   "parts": [
+    {
+     "part": "kerb",
+     "mesh": "/Game/WonderlandV2/Kit/ground/WL_Ground_Step_Single_kerb.WL_Ground_Step_Single_kerb",
+     "material": "MI_V2_Kerb"
+    },
+    {
+     "part": "paving",
+     "mesh": "/Game/WonderlandV2/Kit/ground/WL_Ground_Step_Single_paving.WL_Ground_Step_Single_paving",
+     "material": "MI_V2_PlazaCream"
+    },
+    {
+     "part": "paving_shade",
+     "mesh": "/Game/WonderlandV2/Kit/ground/WL_Ground_Step_Single_paving_shade.WL_Ground_Step_Single_paving_shade",
+     "material": "MI_V2_PlazaShade"
+    },
+    {
+     "part": "paving_warm",
+     "mesh": "/Game/WonderlandV2/Kit/ground/WL_Ground_Step_Single_paving_warm.WL_Ground_Step_Single_paving_warm",
+     "material": "MI_V2_PlazaWarm"
+    }
+   ]
+  },
+  "WL_Ground_Steps_Broad": {
+   "family": "ground",
+   "group": "ground",
+   "role": "route",
+   "height": 124.0,
+   "radius": 410.0,
+   "size": [
+    800.0,
+    756.0,
+    124.0
+   ],
+   "bbox_min": [
+    -400.0,
+    -410.0,
+    0.0
+   ],
+   "bbox_max": [
+    400.0,
+    346.0,
+    124.0
+   ],
+   "tris": 240,
+   "sockets": {
+    "bottom": {
+     "kind": "ground",
+     "z": 0.0,
+     "rung": null,
+     "radius": 400.0
+    },
+    "bottom_route": {
+     "kind": "route",
+     "z": 31.0,
+     "rung": null,
+     "radius": 400.0
+    },
+    "top_route": {
+     "kind": "route",
+     "z": 124.0,
+     "rung": null,
+     "radius": 400.0
+    },
+    "end_a": {
+     "kind": "pier",
+     "z": 0.0,
+     "rung": null,
+     "radius": 45.0
+    },
+    "end_b": {
+     "kind": "pier",
+     "z": 0.0,
+     "rung": null,
+     "radius": 45.0
+    }
+   },
+   "parts": [
+    {
+     "part": "kerb",
+     "mesh": "/Game/WonderlandV2/Kit/ground/WL_Ground_Steps_Broad_kerb.WL_Ground_Steps_Broad_kerb",
+     "material": "MI_V2_Kerb"
+    },
+    {
+     "part": "paving",
+     "mesh": "/Game/WonderlandV2/Kit/ground/WL_Ground_Steps_Broad_paving.WL_Ground_Steps_Broad_paving",
+     "material": "MI_V2_PlazaCream"
+    },
+    {
+     "part": "paving_shade",
+     "mesh": "/Game/WonderlandV2/Kit/ground/WL_Ground_Steps_Broad_paving_shade.WL_Ground_Steps_Broad_paving_shade",
+     "material": "MI_V2_PlazaShade"
+    },
+    {
+     "part": "paving_warm",
+     "mesh": "/Game/WonderlandV2/Kit/ground/WL_Ground_Steps_Broad_paving_warm.WL_Ground_Steps_Broad_paving_warm",
+     "material": "MI_V2_PlazaWarm"
+    }
+   ]
+  },
+  "WL_Ground_Plaza_Medallion": {
+   "family": "ground",
+   "group": "ground",
+   "role": "detail",
+   "height": 10.0,
+   "radius": 450.0,
+   "size": [
+    900.0,
+    900.0,
+    10.0
+   ],
+   "bbox_min": [
+    -450.0,
+    -450.0,
+    0.0
+   ],
+   "bbox_max": [
+    450.0,
+    450.0,
+    10.0
+   ],
+   "tris": 1396,
+   "sockets": {
+    "bottom": {
+     "kind": "ground",
+     "z": 0.0,
+     "rung": null,
+     "radius": 450.0
+    },
+    "edge": {
+     "kind": "edge",
+     "z": 10.0,
+     "rung": null,
+     "radius": 450.0
+    }
+   },
+   "parts": [
+    {
+     "part": "gold",
+     "mesh": "/Game/WonderlandV2/Kit/ground/WL_Ground_Plaza_Medallion_gold.WL_Ground_Plaza_Medallion_gold",
+     "material": "MI_V2_Gold"
+    },
+    {
+     "part": "kerb",
+     "mesh": "/Game/WonderlandV2/Kit/ground/WL_Ground_Plaza_Medallion_kerb.WL_Ground_Plaza_Medallion_kerb",
+     "material": "MI_V2_Kerb"
+    },
+    {
+     "part": "paving",
+     "mesh": "/Game/WonderlandV2/Kit/ground/WL_Ground_Plaza_Medallion_paving.WL_Ground_Plaza_Medallion_paving",
+     "material": "MI_V2_PlazaCream"
+    },
+    {
+     "part": "paving_shade",
+     "mesh": "/Game/WonderlandV2/Kit/ground/WL_Ground_Plaza_Medallion_paving_shade.WL_Ground_Plaza_Medallion_paving_shade",
+     "material": "MI_V2_PlazaShade"
+    },
+    {
+     "part": "paving_warm",
+     "mesh": "/Game/WonderlandV2/Kit/ground/WL_Ground_Plaza_Medallion_paving_warm.WL_Ground_Plaza_Medallion_paving_warm",
+     "material": "MI_V2_PlazaWarm"
+    }
+   ]
+  },
+  "WL_Ground_Verge_Run": {
+   "family": "ground",
+   "group": "ground",
+   "role": "terrace",
+   "height": 31.0,
+   "radius": 400.0,
+   "size": [
+    800.0,
+    236.0,
+    31.0
+   ],
+   "bbox_min": [
+    -400.0,
+    -118.0,
+    0.0
+   ],
+   "bbox_max": [
+    400.0,
+    118.0,
+    31.0
+   ],
+   "tris": 80,
+   "sockets": {
+    "bottom": {
+     "kind": "ground",
+     "z": 0.0,
+     "rung": null,
+     "radius": 400.0
+    },
+    "edge": {
+     "kind": "edge",
+     "z": 31.0,
+     "rung": null,
+     "radius": 118.0
+    },
+    "end_a": {
+     "kind": "pier",
+     "z": 0.0,
+     "rung": null,
+     "radius": 118.0
+    },
+    "end_b": {
+     "kind": "pier",
+     "z": 0.0,
+     "rung": null,
+     "radius": 118.0
+    }
+   },
+   "parts": [
+    {
+     "part": "kerb",
+     "mesh": "/Game/WonderlandV2/Kit/ground/WL_Ground_Verge_Run_kerb.WL_Ground_Verge_Run_kerb",
+     "material": "MI_V2_Kerb"
+    },
+    {
+     "part": "paving_shade",
+     "mesh": "/Game/WonderlandV2/Kit/ground/WL_Ground_Verge_Run_paving_shade.WL_Ground_Verge_Run_paving_shade",
+     "material": "MI_V2_PlazaShade"
+    },
+    {
+     "part": "veg_anchor",
+     "mesh": "/Game/WonderlandV2/Kit/ground/WL_Ground_Verge_Run_veg_anchor.WL_Ground_Verge_Run_veg_anchor",
+     "material": "MI_V2_LeafMid"
+    }
+   ]
+  },
+  "WL_Ground_Drain_Channel": {
+   "family": "ground",
+   "group": "ground",
+   "role": "terrace",
+   "height": 31.0,
+   "radius": 400.0,
+   "size": [
+    800.0,
+    486.0,
+    31.0
+   ],
+   "bbox_min": [
+    -400.0,
+    -243.0,
+    0.0
+   ],
+   "bbox_max": [
+    400.0,
+    243.0,
+    31.0
+   ],
+   "tris": 360,
+   "sockets": {
+    "bottom": {
+     "kind": "ground",
+     "z": 0.0,
+     "rung": null,
+     "radius": 400.0
+    },
+    "walk": {
+     "kind": "route",
+     "z": 31.0,
+     "rung": null,
+     "radius": 400.0
+    },
+    "end_a": {
+     "kind": "pier",
+     "z": 0.0,
+     "rung": null,
+     "radius": 17.0
+    },
+    "end_b": {
+     "kind": "pier",
+     "z": 0.0,
+     "rung": null,
+     "radius": 17.0
+    }
+   },
+   "parts": [
+    {
+     "part": "metal",
+     "mesh": "/Game/WonderlandV2/Kit/ground/WL_Ground_Drain_Channel_metal.WL_Ground_Drain_Channel_metal",
+     "material": "MI_V2_Bronze"
+    },
+    {
+     "part": "paving",
+     "mesh": "/Game/WonderlandV2/Kit/ground/WL_Ground_Drain_Channel_paving.WL_Ground_Drain_Channel_paving",
+     "material": "MI_V2_PlazaCream"
+    },
+    {
+     "part": "paving_shade",
+     "mesh": "/Game/WonderlandV2/Kit/ground/WL_Ground_Drain_Channel_paving_shade.WL_Ground_Drain_Channel_paving_shade",
+     "material": "MI_V2_PlazaShade"
+    },
+    {
+     "part": "paving_warm",
+     "mesh": "/Game/WonderlandV2/Kit/ground/WL_Ground_Drain_Channel_paving_warm.WL_Ground_Drain_Channel_paving_warm",
+     "material": "MI_V2_PlazaWarm"
+    }
+   ]
+  },
+  "WL_Ground_Tree_Grate": {
+   "family": "ground",
+   "group": "ground",
+   "role": "detail",
+   "height": 31.0,
+   "radius": 340.0,
+   "size": [
+    680.0,
+    240.0,
+    31.0
+   ],
+   "bbox_min": [
+    -340.0,
+    -120.0,
+    0.0
+   ],
+   "bbox_max": [
+    340.0,
+    120.0,
+    31.0
+   ],
+   "tris": 208,
+   "sockets": {
+    "bottom": {
+     "kind": "ground",
+     "z": 0.0,
+     "rung": null,
+     "radius": 340.0
+    },
+    "walk": {
+     "kind": "route",
+     "z": 31.0,
+     "rung": null,
+     "radius": 120.0
+    },
+    "edge": {
+     "kind": "edge",
+     "z": 31.0,
+     "rung": null,
+     "radius": 120.0
+    }
+   },
+   "parts": [
+    {
+     "part": "kerb",
+     "mesh": "/Game/WonderlandV2/Kit/ground/WL_Ground_Tree_Grate_kerb.WL_Ground_Tree_Grate_kerb",
+     "material": "MI_V2_Kerb"
+    },
+    {
+     "part": "paving",
+     "mesh": "/Game/WonderlandV2/Kit/ground/WL_Ground_Tree_Grate_paving.WL_Ground_Tree_Grate_paving",
+     "material": "MI_V2_PlazaCream"
+    },
+    {
+     "part": "paving_shade",
+     "mesh": "/Game/WonderlandV2/Kit/ground/WL_Ground_Tree_Grate_paving_shade.WL_Ground_Tree_Grate_paving_shade",
+     "material": "MI_V2_PlazaShade"
+    },
+    {
+     "part": "paving_warm",
+     "mesh": "/Game/WonderlandV2/Kit/ground/WL_Ground_Tree_Grate_paving_warm.WL_Ground_Tree_Grate_paving_warm",
+     "material": "MI_V2_PlazaWarm"
+    },
+    {
+     "part": "veg_anchor",
+     "mesh": "/Game/WonderlandV2/Kit/ground/WL_Ground_Tree_Grate_veg_anchor.WL_Ground_Tree_Grate_veg_anchor",
+     "material": "MI_V2_LeafMid"
+    }
+   ]
+  },
+  "WL_Hero_Water_Court": {
+   "family": "water",
+   "group": "water",
+   "role": "hero",
+   "height": 666.0,
+   "radius": 2117.0,
+   "size": [
+    4089.0,
+    1604.0,
+    666.0
+   ],
+   "bbox_min": [
+    -1972.0,
+    -802.0,
+    -55.0
+   ],
+   "bbox_max": [
+    2117.0,
+    802.0,
+    611.0
+   ],
+   "tris": 21152,
+   "sockets": {
+    "bottom": {
+     "kind": "ground",
+     "z": 0.0,
+     "rung": null,
+     "radius": 2200.0
+    },
+    "water_surface": {
+     "kind": "edge",
+     "z": 19.0,
+     "rung": null,
+     "radius": 1700.0
+    },
+    "head_route": {
+     "kind": "route",
+     "z": 155.0,
+     "rung": null,
+     "radius": 340.0
+    },
+    "foot_route": {
+     "kind": "route",
+     "z": 62.0,
+     "rung": null,
+     "radius": 110.0
+    },
+    "walk_l": {
+     "kind": "route",
+     "z": 31.0,
+     "rung": null,
+     "radius": 110.0
+    },
+    "walk_r": {
+     "kind": "route",
+     "z": 31.0,
+     "rung": null,
+     "radius": 110.0
+    }
+   },
+   "parts": [
+    {
+     "part": "gold",
+     "mesh": "/Game/WonderlandV2/Kit/water/WL_Hero_Water_Court_gold.WL_Hero_Water_Court_gold",
+     "material": "MI_V2_Gold"
+    },
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/water/WL_Hero_Water_Court.WL_Hero_Water_Court",
+     "material": "MI_V2_IvoryStone"
+    },
+    {
+     "part": "stone_dark",
+     "mesh": "/Game/WonderlandV2/Kit/water/WL_Hero_Water_Court_stone_dark.WL_Hero_Water_Court_stone_dark",
+     "material": "MI_V2_Stone"
+    },
+    {
+     "part": "water",
+     "mesh": "/Game/WonderlandV2/Kit/water/WL_Hero_Water_Court_water.WL_Hero_Water_Court_water",
+     "material": "MI_V2_Water"
+    },
+    {
+     "part": "water_lit",
+     "mesh": "/Game/WonderlandV2/Kit/water/WL_Hero_Water_Court_water_lit.WL_Hero_Water_Court_water_lit",
+     "material": "MI_V2_GlassTeal"
+    }
+   ]
+  },
+  "WL_Water_Cascade_Stair": {
+   "family": "water",
+   "group": "water",
+   "role": "route",
+   "height": 533.0,
+   "radius": 426.0,
+   "size": [
+    806.0,
+    648.0,
+    533.0
+   ],
+   "bbox_min": [
+    -426.0,
+    -324.0,
+    -55.0
+   ],
+   "bbox_max": [
+    380.0,
+    324.0,
+    478.0
+   ],
+   "tris": 1768,
+   "sockets": {
+    "bottom_route": {
+     "kind": "route",
+     "z": 0.0,
+     "rung": null,
+     "radius": 280.0
+    },
+    "top_route": {
+     "kind": "route",
+     "z": 310.0,
+     "rung": null,
+     "radius": 280.0
+    },
+    "water_surface": {
+     "kind": "edge",
+     "z": 19.0,
+     "rung": null,
+     "radius": 160.0
+    },
+    "edge_l": {
+     "kind": "edge",
+     "z": 0.0,
+     "rung": null,
+     "radius": 302.0
+    },
+    "edge_r": {
+     "kind": "edge",
+     "z": 0.0,
+     "rung": null,
+     "radius": 302.0
+    }
+   },
+   "parts": [
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/water/WL_Water_Cascade_Stair.WL_Water_Cascade_Stair",
+     "material": "MI_V2_IvoryStone"
+    },
+    {
+     "part": "stone_dark",
+     "mesh": "/Game/WonderlandV2/Kit/water/WL_Water_Cascade_Stair_stone_dark.WL_Water_Cascade_Stair_stone_dark",
+     "material": "MI_V2_Stone"
+    },
+    {
+     "part": "water",
+     "mesh": "/Game/WonderlandV2/Kit/water/WL_Water_Cascade_Stair_water.WL_Water_Cascade_Stair_water",
+     "material": "MI_V2_Water"
+    },
+    {
+     "part": "water_lit",
+     "mesh": "/Game/WonderlandV2/Kit/water/WL_Water_Cascade_Stair_water_lit.WL_Water_Cascade_Stair_water_lit",
+     "material": "MI_V2_GlassTeal"
+    }
+   ]
+  },
+  "WL_Water_Canal_Run": {
+   "family": "water",
+   "group": "water",
+   "role": "terrace",
+   "height": 87.5,
+   "radius": 440.0,
+   "size": [
+    880.0,
+    820.0,
+    87.5
+   ],
+   "bbox_min": [
+    -440.0,
+    -410.0,
+    -55.0
+   ],
+   "bbox_max": [
+    440.0,
+    410.0,
+    32.5
+   ],
+   "tris": 264,
+   "sockets": {
+    "bottom": {
+     "kind": "ground",
+     "z": 0.0,
+     "rung": null,
+     "radius": 400.0
+    },
+    "water_surface": {
+     "kind": "edge",
+     "z": 19.0,
+     "rung": null,
+     "radius": 400.0
+    },
+    "walk_l": {
+     "kind": "route",
+     "z": 31.0,
+     "rung": null,
+     "radius": 105.0
+    },
+    "walk_r": {
+     "kind": "route",
+     "z": 31.0,
+     "rung": null,
+     "radius": 105.0
+    },
+    "end_a": {
+     "kind": "pier",
+     "z": 0.0,
+     "rung": null,
+     "radius": 160.0
+    },
+    "end_b": {
+     "kind": "pier",
+     "z": 0.0,
+     "rung": null,
+     "radius": 160.0
+    }
+   },
+   "parts": [
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/water/WL_Water_Canal_Run.WL_Water_Canal_Run",
+     "material": "MI_V2_IvoryStone"
+    },
+    {
+     "part": "stone_dark",
+     "mesh": "/Game/WonderlandV2/Kit/water/WL_Water_Canal_Run_stone_dark.WL_Water_Canal_Run_stone_dark",
+     "material": "MI_V2_Stone"
+    },
+    {
+     "part": "water",
+     "mesh": "/Game/WonderlandV2/Kit/water/WL_Water_Canal_Run_water.WL_Water_Canal_Run_water",
+     "material": "MI_V2_Water"
+    }
+   ]
+  },
+  "WL_Water_Canal_Crossing": {
+   "family": "water",
+   "group": "water",
+   "role": "span",
+   "height": 354.0,
+   "radius": 440.0,
+   "size": [
+    880.0,
+    820.0,
+    354.0
+   ],
+   "bbox_min": [
+    -440.0,
+    -410.0,
+    -55.0
+   ],
+   "bbox_max": [
+    440.0,
+    410.0,
+    299.0
+   ],
+   "tris": 3744,
+   "sockets": {
+    "bottom": {
+     "kind": "ground",
+     "z": 0.0,
+     "rung": null,
+     "radius": 400.0
+    },
+    "water_surface": {
+     "kind": "edge",
+     "z": 19.0,
+     "rung": null,
+     "radius": 400.0
+    },
+    "deck_route": {
+     "kind": "route",
+     "z": 124.0,
+     "rung": "S",
+     "radius": 180.0
+    },
+    "walk_l": {
+     "kind": "route",
+     "z": 31.0,
+     "rung": null,
+     "radius": 105.0
+    },
+    "walk_r": {
+     "kind": "route",
+     "z": 31.0,
+     "rung": null,
+     "radius": 105.0
+    },
+    "end_a": {
+     "kind": "pier",
+     "z": 0.0,
+     "rung": null,
+     "radius": 160.0
+    },
+    "end_b": {
+     "kind": "pier",
+     "z": 0.0,
+     "rung": null,
+     "radius": 160.0
+    }
+   },
+   "parts": [
+    {
+     "part": "gold",
+     "mesh": "/Game/WonderlandV2/Kit/water/WL_Water_Canal_Crossing_gold.WL_Water_Canal_Crossing_gold",
+     "material": "MI_V2_Gold"
+    },
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/water/WL_Water_Canal_Crossing.WL_Water_Canal_Crossing",
+     "material": "MI_V2_IvoryStone"
+    },
+    {
+     "part": "stone_dark",
+     "mesh": "/Game/WonderlandV2/Kit/water/WL_Water_Canal_Crossing_stone_dark.WL_Water_Canal_Crossing_stone_dark",
+     "material": "MI_V2_Stone"
+    },
+    {
+     "part": "water",
+     "mesh": "/Game/WonderlandV2/Kit/water/WL_Water_Canal_Crossing_water.WL_Water_Canal_Crossing_water",
+     "material": "MI_V2_Water"
+    }
+   ]
+  },
+  "WL_Water_Pavilion": {
+   "family": "water",
+   "group": "water",
+   "role": "hero",
+   "height": 1276.0,
+   "radius": 776.0,
+   "size": [
+    1552.0,
+    1552.0,
+    1276.0
+   ],
+   "bbox_min": [
+    -776.0,
+    -776.0,
+    -55.0
+   ],
+   "bbox_max": [
+    776.0,
+    776.0,
+    1221.0
+   ],
+   "tris": 7758,
+   "sockets": {
+    "bottom": {
+     "kind": "ground",
+     "z": 0.0,
+     "rung": null,
+     "radius": 776.0
+    },
+    "water_surface": {
+     "kind": "edge",
+     "z": 19.0,
+     "rung": null,
+     "radius": 730.0
+    },
+    "floor_route": {
+     "kind": "route",
+     "z": 124.0,
+     "rung": null,
+     "radius": 312.0
+    },
+    "top": {
+     "kind": "crown",
+     "z": 1221.0,
+     "rung": null,
+     "radius": 0.0
+    }
+   },
+   "parts": [
+    {
+     "part": "glass",
+     "mesh": "/Game/WonderlandV2/Kit/water/WL_Water_Pavilion_glass.WL_Water_Pavilion_glass",
+     "material": "MI_V2_GlassAmber"
+    },
+    {
+     "part": "gold",
+     "mesh": "/Game/WonderlandV2/Kit/water/WL_Water_Pavilion_gold.WL_Water_Pavilion_gold",
+     "material": "MI_V2_Gold"
+    },
+    {
+     "part": "roof",
+     "mesh": "/Game/WonderlandV2/Kit/water/WL_Water_Pavilion_roof.WL_Water_Pavilion_roof",
+     "material": "MI_V2_RoofRose"
+    },
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/water/WL_Water_Pavilion.WL_Water_Pavilion",
+     "material": "MI_V2_IvoryStone"
+    },
+    {
+     "part": "stone_dark",
+     "mesh": "/Game/WonderlandV2/Kit/water/WL_Water_Pavilion_stone_dark.WL_Water_Pavilion_stone_dark",
+     "material": "MI_V2_Stone"
+    },
+    {
+     "part": "water",
+     "mesh": "/Game/WonderlandV2/Kit/water/WL_Water_Pavilion_water.WL_Water_Pavilion_water",
+     "material": "MI_V2_Water"
+    }
+   ]
+  },
+  "WL_Water_Spillway_Wall": {
+   "family": "water",
+   "group": "water",
+   "role": "terrace",
+   "height": 365.0,
+   "radius": 503.0,
+   "size": [
+    996.0,
+    678.0,
+    365.0
+   ],
+   "bbox_min": [
+    -498.0,
+    -503.0,
+    -55.0
+   ],
+   "bbox_max": [
+    498.0,
+    175.0,
+    310.0
+   ],
+   "tris": 354,
+   "sockets": {
+    "bottom": {
+     "kind": "ground",
+     "z": 0.0,
+     "rung": null,
+     "radius": 400.0
+    },
+    "top_route": {
+     "kind": "route",
+     "z": 310.0,
+     "rung": null,
+     "radius": 400.0
+    },
+    "edge": {
+     "kind": "edge",
+     "z": 310.0,
+     "rung": null,
+     "radius": 400.0
+    },
+    "water_surface": {
+     "kind": "edge",
+     "z": 19.0,
+     "rung": null,
+     "radius": 400.0
+    },
+    "end_a": {
+     "kind": "pier",
+     "z": 0.0,
+     "rung": null,
+     "radius": 55.0
+    },
+    "end_b": {
+     "kind": "pier",
+     "z": 0.0,
+     "rung": null,
+     "radius": 55.0
+    }
+   },
+   "parts": [
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/water/WL_Water_Spillway_Wall.WL_Water_Spillway_Wall",
+     "material": "MI_V2_IvoryStone"
+    },
+    {
+     "part": "stone_dark",
+     "mesh": "/Game/WonderlandV2/Kit/water/WL_Water_Spillway_Wall_stone_dark.WL_Water_Spillway_Wall_stone_dark",
+     "material": "MI_V2_Stone"
+    },
+    {
+     "part": "water",
+     "mesh": "/Game/WonderlandV2/Kit/water/WL_Water_Spillway_Wall_water.WL_Water_Spillway_Wall_water",
+     "material": "MI_V2_Water"
+    },
+    {
+     "part": "water_lit",
+     "mesh": "/Game/WonderlandV2/Kit/water/WL_Water_Spillway_Wall_water_lit.WL_Water_Spillway_Wall_water_lit",
+     "material": "MI_V2_GlassTeal"
+    }
+   ]
+  },
+  "WL_Water_Sunken_Pool": {
+   "family": "water",
+   "group": "water",
+   "role": "terrace",
+   "height": 177.0,
+   "radius": 866.0,
+   "size": [
+    1732.0,
+    1732.0,
+    177.0
+   ],
+   "bbox_min": [
+    -866.0,
+    -866.0,
+    -175.0
+   ],
+   "bbox_max": [
+    866.0,
+    866.0,
+    2.0
+   ],
+   "tris": 1594,
+   "sockets": {
+    "bottom": {
+     "kind": "ground",
+     "z": 0.0,
+     "rung": null,
+     "radius": 870.0
+    },
+    "floor_route": {
+     "kind": "route",
+     "z": -124.0,
+     "rung": null,
+     "radius": 650.0
+    },
+    "water_surface": {
+     "kind": "edge",
+     "z": -137.0,
+     "rung": null,
+     "radius": 550.0
+    },
+    "edge": {
+     "kind": "edge",
+     "z": 0.0,
+     "rung": null,
+     "radius": 860.0
+    }
+   },
+   "parts": [
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/water/WL_Water_Sunken_Pool.WL_Water_Sunken_Pool",
+     "material": "MI_V2_IvoryStone"
+    },
+    {
+     "part": "stone_dark",
+     "mesh": "/Game/WonderlandV2/Kit/water/WL_Water_Sunken_Pool_stone_dark.WL_Water_Sunken_Pool_stone_dark",
+     "material": "MI_V2_Stone"
+    },
+    {
+     "part": "water",
+     "mesh": "/Game/WonderlandV2/Kit/water/WL_Water_Sunken_Pool_water.WL_Water_Sunken_Pool_water",
+     "material": "MI_V2_Water"
+    }
+   ]
+  },
+  "WL_Market_Awning": {
+   "family": "market",
+   "group": "market",
+   "role": "detail",
+   "height": 78.54,
+   "radius": 320.0,
+   "size": [
+    640.0,
+    258.0,
+    78.54
+   ],
+   "bbox_min": [
+    -320.0,
+    -2.0,
+    192.46
+   ],
+   "bbox_max": [
+    320.0,
+    256.0,
+    271.0
+   ],
+   "tris": 824,
+   "sockets": {
+    "back": {
+     "kind": "bridge_end",
+     "z": 0.0,
+     "rung": null,
+     "radius": 320.0
+    },
+    "edge": {
+     "kind": "edge",
+     "z": 205.0,
+     "rung": null,
+     "radius": 320.0
+    }
+   },
+   "parts": [
+    {
+     "part": "metal",
+     "mesh": "/Game/WonderlandV2/Kit/market/WL_Market_Awning_metal.WL_Market_Awning_metal",
+     "material": "MI_V2_Bronze"
+    },
+    {
+     "part": "roof",
+     "mesh": "/Game/WonderlandV2/Kit/market/WL_Market_Awning_roof.WL_Market_Awning_roof",
+     "material": "MI_V2_RoofRose"
+    },
+    {
+     "part": "roof_alt",
+     "mesh": "/Game/WonderlandV2/Kit/market/WL_Market_Awning_roof_alt.WL_Market_Awning_roof_alt",
+     "material": "MI_V2_RoofLilac"
+    },
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/market/WL_Market_Awning.WL_Market_Awning",
+     "material": "MI_V2_IvoryStone"
+    }
+   ]
+  },
+  "WL_Market_Canopy": {
+   "family": "market",
+   "group": "market",
+   "role": "detail",
+   "height": 450.0,
+   "radius": 306.0,
+   "size": [
+    612.0,
+    492.0,
+    450.0
+   ],
+   "bbox_min": [
+    -306.0,
+    -246.0,
+    0.0
+   ],
+   "bbox_max": [
+    306.0,
+    246.0,
+    450.0
+   ],
+   "tris": 1388,
+   "sockets": {
+    "bottom": {
+     "kind": "ground",
+     "z": 0.0,
+     "rung": null,
+     "radius": 260.0
+    },
+    "passage": {
+     "kind": "route",
+     "z": 0.0,
+     "rung": null,
+     "radius": 260.0
+    },
+    "counter": {
+     "kind": "edge",
+     "z": 102.0,
+     "rung": null,
+     "radius": 260.0
+    }
+   },
+   "parts": [
+    {
+     "part": "gold",
+     "mesh": "/Game/WonderlandV2/Kit/market/WL_Market_Canopy_gold.WL_Market_Canopy_gold",
+     "material": "MI_V2_Gold"
+    },
+    {
+     "part": "metal",
+     "mesh": "/Game/WonderlandV2/Kit/market/WL_Market_Canopy_metal.WL_Market_Canopy_metal",
+     "material": "MI_V2_Bronze"
+    },
+    {
+     "part": "roof",
+     "mesh": "/Game/WonderlandV2/Kit/market/WL_Market_Canopy_roof.WL_Market_Canopy_roof",
+     "material": "MI_V2_RoofRose"
+    },
+    {
+     "part": "roof_alt",
+     "mesh": "/Game/WonderlandV2/Kit/market/WL_Market_Canopy_roof_alt.WL_Market_Canopy_roof_alt",
+     "material": "MI_V2_RoofLilac"
+    },
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/market/WL_Market_Canopy.WL_Market_Canopy",
+     "material": "MI_V2_IvoryStone"
+    }
+   ]
+  },
+  "WL_Market_Arcade_Insert": {
+   "family": "market",
+   "group": "market",
+   "role": "screen",
+   "height": 459.0,
+   "radius": 360.0,
+   "size": [
+    709.6,
+    360.0,
+    459.0
+   ],
+   "bbox_min": [
+    -354.8,
+    0.0,
+    0.0
+   ],
+   "bbox_max": [
+    354.8,
+    360.0,
+    459.0
+   ],
+   "tris": 3764,
+   "sockets": {
+    "back": {
+     "kind": "bridge_end",
+     "z": 0.0,
+     "rung": null,
+     "radius": 320.0
+    },
+    "walk": {
+     "kind": "route",
+     "z": 31.0,
+     "rung": null,
+     "radius": 320.0
+    },
+    "deck_route": {
+     "kind": "route",
+     "z": 341.0,
+     "rung": null,
+     "radius": 320.0
+    },
+    "end_a": {
+     "kind": "pier",
+     "z": 0.0,
+     "rung": null,
+     "radius": 165.0
+    },
+    "end_b": {
+     "kind": "pier",
+     "z": 0.0,
+     "rung": null,
+     "radius": 165.0
+    }
+   },
+   "parts": [
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/market/WL_Market_Arcade_Insert.WL_Market_Arcade_Insert",
+     "material": "MI_V2_IvoryStone"
+    },
+    {
+     "part": "stone_dark",
+     "mesh": "/Game/WonderlandV2/Kit/market/WL_Market_Arcade_Insert_stone_dark.WL_Market_Arcade_Insert_stone_dark",
+     "material": "MI_V2_Stone"
+    }
+   ]
+  },
+  "WL_Market_Hanging_Sign": {
+   "family": "market",
+   "group": "market",
+   "role": "detail",
+   "height": 133.0,
+   "radius": 174.0,
+   "size": [
+    191.0,
+    33.36,
+    133.0
+   ],
+   "bbox_min": [
+    -17.0,
+    -5.0,
+    220.0
+   ],
+   "bbox_max": [
+    174.0,
+    28.36,
+    353.0
+   ],
+   "tris": 336,
+   "sockets": {
+    "back": {
+     "kind": "bridge_end",
+     "z": 0.0,
+     "rung": null,
+     "radius": 20.0
+    },
+    "board": {
+     "kind": "edge",
+     "z": 220.0,
+     "rung": null,
+     "radius": 48.0
+    }
+   },
+   "parts": [
+    {
+     "part": "gold",
+     "mesh": "/Game/WonderlandV2/Kit/market/WL_Market_Hanging_Sign_gold.WL_Market_Hanging_Sign_gold",
+     "material": "MI_V2_Gold"
+    },
+    {
+     "part": "metal",
+     "mesh": "/Game/WonderlandV2/Kit/market/WL_Market_Hanging_Sign_metal.WL_Market_Hanging_Sign_metal",
+     "material": "MI_V2_Bronze"
+    },
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/market/WL_Market_Hanging_Sign.WL_Market_Hanging_Sign",
+     "material": "MI_V2_IvoryStone"
+    }
+   ]
+  },
+  "WL_Market_Covered_Passage": {
+   "family": "market",
+   "group": "market",
+   "role": "threshold",
+   "height": 465.0,
+   "radius": 379.12,
+   "size": [
+    500.0,
+    758.24,
+    465.0
+   ],
+   "bbox_min": [
+    -250.0,
+    -379.12,
+    0.0
+   ],
+   "bbox_max": [
+    250.0,
+    379.12,
+    465.0
+   ],
+   "tris": 1112,
+   "sockets": {
+    "bottom": {
+     "kind": "ground",
+     "z": 0.0,
+     "rung": null,
+     "radius": 250.0
+    },
+    "passage": {
+     "kind": "route",
+     "z": 0.0,
+     "rung": null,
+     "radius": 160.0
+    },
+    "end_a": {
+     "kind": "pier",
+     "z": 0.0,
+     "rung": null,
+     "radius": 250.0
+    },
+    "end_b": {
+     "kind": "pier",
+     "z": 0.0,
+     "rung": null,
+     "radius": 250.0
+    },
+    "deck_route": {
+     "kind": "route",
+     "z": 465.0,
+     "rung": null,
+     "radius": 250.0
+    }
+   },
+   "parts": [
+    {
+     "part": "glass",
+     "mesh": "/Game/WonderlandV2/Kit/market/WL_Market_Covered_Passage_glass.WL_Market_Covered_Passage_glass",
+     "material": "MI_V2_GlassAmber"
+    },
+    {
+     "part": "gold",
+     "mesh": "/Game/WonderlandV2/Kit/market/WL_Market_Covered_Passage_gold.WL_Market_Covered_Passage_gold",
+     "material": "MI_V2_Gold"
+    },
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/market/WL_Market_Covered_Passage.WL_Market_Covered_Passage",
+     "material": "MI_V2_IvoryStone"
+    },
+    {
+     "part": "stone_dark",
+     "mesh": "/Game/WonderlandV2/Kit/market/WL_Market_Covered_Passage_stone_dark.WL_Market_Covered_Passage_stone_dark",
+     "material": "MI_V2_Stone"
+    }
+   ]
+  },
+  "WL_Market_Corner_Storefront": {
+   "family": "market",
+   "group": "market",
+   "role": "detail",
+   "height": 443.0,
+   "radius": 459.21,
+   "size": [
+    578.42,
+    578.42,
+    443.0
+   ],
+   "bbox_min": [
+    -119.21,
+    -119.21,
+    0.0
+   ],
+   "bbox_max": [
+    459.21,
+    459.21,
+    443.0
+   ],
+   "tris": 466,
+   "sockets": {
+    "bottom": {
+     "kind": "ground",
+     "z": 0.0,
+     "rung": null,
+     "radius": 255.0
+    },
+    "back_a": {
+     "kind": "bridge_end",
+     "z": 0.0,
+     "rung": null,
+     "radius": 170.0
+    },
+    "back_b": {
+     "kind": "bridge_end",
+     "z": 0.0,
+     "rung": null,
+     "radius": 170.0
+    },
+    "shopfront": {
+     "kind": "edge",
+     "z": 30.0,
+     "rung": null,
+     "radius": 113.14
+    }
+   },
+   "parts": [
+    {
+     "part": "glass",
+     "mesh": "/Game/WonderlandV2/Kit/market/WL_Market_Corner_Storefront_glass.WL_Market_Corner_Storefront_glass",
+     "material": "MI_V2_GlassAmber"
+    },
+    {
+     "part": "gold",
+     "mesh": "/Game/WonderlandV2/Kit/market/WL_Market_Corner_Storefront_gold.WL_Market_Corner_Storefront_gold",
+     "material": "MI_V2_Gold"
+    },
+    {
+     "part": "roof",
+     "mesh": "/Game/WonderlandV2/Kit/market/WL_Market_Corner_Storefront_roof.WL_Market_Corner_Storefront_roof",
+     "material": "MI_V2_RoofRose"
+    },
+    {
+     "part": "roof_alt",
+     "mesh": "/Game/WonderlandV2/Kit/market/WL_Market_Corner_Storefront_roof_alt.WL_Market_Corner_Storefront_roof_alt",
+     "material": "MI_V2_RoofLilac"
+    },
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/market/WL_Market_Corner_Storefront.WL_Market_Corner_Storefront",
+     "material": "MI_V2_IvoryStone"
+    },
+    {
+     "part": "stone_dark",
+     "mesh": "/Game/WonderlandV2/Kit/market/WL_Market_Corner_Storefront_stone_dark.WL_Market_Corner_Storefront_stone_dark",
+     "material": "MI_V2_Stone"
+    }
+   ]
+  },
+  "WL_Detail_Balustrade_Run": {
+   "family": "balustrade",
+   "group": "details",
+   "role": "detail",
+   "height": 137.0,
+   "radius": 415.0,
+   "size": [
+    830.0,
+    72.0,
+    137.0
+   ],
+   "bbox_min": [
+    -415.0,
+    -36.0,
+    0.0
+   ],
+   "bbox_max": [
+    415.0,
+    36.0,
+    137.0
+   ],
+   "tris": 3192,
+   "sockets": {
+    "bottom": {
+     "kind": "ground",
+     "z": 0.0,
+     "rung": null,
+     "radius": 400.0
+    },
+    "end_a": {
+     "kind": "pier",
+     "z": 0.0,
+     "rung": null,
+     "radius": 36.0
+    },
+    "end_b": {
+     "kind": "pier",
+     "z": 0.0,
+     "rung": null,
+     "radius": 36.0
+    }
+   },
+   "parts": [
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/details/WL_Detail_Balustrade_Run.WL_Detail_Balustrade_Run",
+     "material": "MI_V2_IvoryStone"
+    }
+   ]
+  },
+  "WL_Detail_Newel_Urn": {
+   "family": "balustrade",
+   "group": "details",
+   "role": "detail",
+   "height": 292.0,
+   "radius": 58.2,
+   "size": [
+    116.4,
+    111.14,
+    292.0
+   ],
+   "bbox_min": [
+    -58.2,
+    -55.57,
+    0.0
+   ],
+   "bbox_max": [
+    58.2,
+    55.57,
+    292.0
+   ],
+   "tris": 668,
+   "sockets": {
+    "bottom": {
+     "kind": "ground",
+     "z": 0.0,
+     "rung": null,
+     "radius": 53.0
+    },
+    "wall_join": {
+     "kind": "pier",
+     "z": 0.0,
+     "rung": null,
+     "radius": 40.0
+    }
+   },
+   "parts": [
+    {
+     "part": "gold",
+     "mesh": "/Game/WonderlandV2/Kit/details/WL_Detail_Newel_Urn_gold.WL_Detail_Newel_Urn_gold",
+     "material": "MI_V2_Gold"
+    },
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/details/WL_Detail_Newel_Urn.WL_Detail_Newel_Urn",
+     "material": "MI_V2_IvoryStone"
+    }
+   ]
+  },
+  "WL_Detail_Screen_Filigree": {
+   "family": "screen",
+   "group": "details",
+   "role": "screen",
+   "height": 639.0,
+   "radius": 305.0,
+   "size": [
+    610.0,
+    90.0,
+    639.0
+   ],
+   "bbox_min": [
+    -305.0,
+    -45.0,
+    0.0
+   ],
+   "bbox_max": [
+    305.0,
+    45.0,
+    639.0
+   ],
+   "tris": 2508,
+   "sockets": {
+    "bottom": {
+     "kind": "ground",
+     "z": 0.0,
+     "rung": null,
+     "radius": 260.0
+    },
+    "end_a": {
+     "kind": "pier",
+     "z": 0.0,
+     "rung": null,
+     "radius": 45.0
+    },
+    "end_b": {
+     "kind": "pier",
+     "z": 0.0,
+     "rung": null,
+     "radius": 45.0
+    }
+   },
+   "parts": [
+    {
+     "part": "gold",
+     "mesh": "/Game/WonderlandV2/Kit/details/WL_Detail_Screen_Filigree_gold.WL_Detail_Screen_Filigree_gold",
+     "material": "MI_V2_Gold"
+    },
+    {
+     "part": "gold_aged",
+     "mesh": "/Game/WonderlandV2/Kit/details/WL_Detail_Screen_Filigree_gold_aged.WL_Detail_Screen_Filigree_gold_aged",
+     "material": "MI_V2_GoldAged"
+    },
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/details/WL_Detail_Screen_Filigree.WL_Detail_Screen_Filigree",
+     "material": "MI_V2_IvoryStone"
+    },
+    {
+     "part": "veg_anchor",
+     "mesh": "/Game/WonderlandV2/Kit/details/WL_Detail_Screen_Filigree_veg_anchor.WL_Detail_Screen_Filigree_veg_anchor",
+     "material": "MI_V2_LeafMid"
+    }
+   ]
+  },
+  "WL_Detail_Balcony_Bracket": {
+   "family": "balcony",
+   "group": "details",
+   "role": "detail",
+   "height": 248.0,
+   "radius": 242.0,
+   "size": [
+    484.0,
+    252.0,
+    248.0
+   ],
+   "bbox_min": [
+    -242.0,
+    -12.0,
+    0.0
+   ],
+   "bbox_max": [
+    242.0,
+    240.0,
+    248.0
+   ],
+   "tris": 2090,
+   "sockets": {
+    "back": {
+     "kind": "bridge_end",
+     "z": 0.0,
+     "rung": null,
+     "radius": 230.0
+    }
+   },
+   "parts": [
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/details/WL_Detail_Balcony_Bracket.WL_Detail_Balcony_Bracket",
+     "material": "MI_V2_IvoryStone"
+    }
+   ]
+  },
+  "WL_Detail_Pinnacle_Grand": {
+   "family": "pinnacle",
+   "group": "details",
+   "role": "detail",
+   "height": 940.0,
+   "radius": 135.0,
+   "size": [
+    270.0,
+    270.0,
+    940.0
+   ],
+   "bbox_min": [
+    -135.0,
+    -135.0,
+    0.0
+   ],
+   "bbox_max": [
+    135.0,
+    135.0,
+    940.0
+   ],
+   "tris": 3378,
+   "sockets": {
+    "bottom": {
+     "kind": "ground",
+     "z": 0.0,
+     "rung": null,
+     "radius": 120.0
+    }
+   },
+   "parts": [
+    {
+     "part": "gold",
+     "mesh": "/Game/WonderlandV2/Kit/details/WL_Detail_Pinnacle_Grand_gold.WL_Detail_Pinnacle_Grand_gold",
+     "material": "MI_V2_Gold"
+    },
+    {
+     "part": "roof",
+     "mesh": "/Game/WonderlandV2/Kit/details/WL_Detail_Pinnacle_Grand_roof.WL_Detail_Pinnacle_Grand_roof",
+     "material": "MI_V2_RoofRose"
+    },
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/details/WL_Detail_Pinnacle_Grand.WL_Detail_Pinnacle_Grand",
+     "material": "MI_V2_IvoryStone"
+    }
+   ]
+  },
+  "WL_Detail_Oriel_Bay": {
+   "family": "oriel",
+   "group": "details",
+   "role": "detail",
+   "height": 640.0,
+   "radius": 201.0,
+   "size": [
+    352.0,
+    328.13,
+    640.0
+   ],
+   "bbox_min": [
+    -176.0,
+    -127.13,
+    0.0
+   ],
+   "bbox_max": [
+    176.0,
+    201.0,
+    640.0
+   ],
+   "tris": 596,
+   "sockets": {
+    "back": {
+     "kind": "bridge_end",
+     "z": 0.0,
+     "rung": null,
+     "radius": 160.0
+    }
+   },
+   "parts": [
+    {
+     "part": "glass",
+     "mesh": "/Game/WonderlandV2/Kit/details/WL_Detail_Oriel_Bay_glass.WL_Detail_Oriel_Bay_glass",
+     "material": "MI_V2_GlassAmber"
+    },
+    {
+     "part": "gold",
+     "mesh": "/Game/WonderlandV2/Kit/details/WL_Detail_Oriel_Bay_gold.WL_Detail_Oriel_Bay_gold",
+     "material": "MI_V2_Gold"
+    },
+    {
+     "part": "roof_alt",
+     "mesh": "/Game/WonderlandV2/Kit/details/WL_Detail_Oriel_Bay_roof_alt.WL_Detail_Oriel_Bay_roof_alt",
+     "material": "MI_V2_RoofLilac"
+    },
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/details/WL_Detail_Oriel_Bay.WL_Detail_Oriel_Bay",
+     "material": "MI_V2_IvoryStone"
+    }
+   ]
+  },
+  "WL_Hero_GreatSpire": {
+   "family": "hero",
+   "group": "hero",
+   "role": "hero",
+   "height": 11820.0,
+   "radius": 1545.47,
+   "size": [
+    3090.94,
+    3090.94,
+    11820.0
+   ],
+   "bbox_min": [
+    -1545.47,
+    -1545.47,
+    0.0
+   ],
+   "bbox_max": [
+    1545.47,
+    1545.47,
+    11820.0
+   ],
+   "tris": 38972,
+   "sockets": {
+    "bottom": {
+     "kind": "ground",
+     "z": 0.0,
+     "rung": null,
+     "radius": 1640.0
+    },
+    "portal": {
+     "kind": "pier",
+     "z": 360.0,
+     "rung": null,
+     "radius": 1160.0
+    },
+    "gallery": {
+     "kind": "bridge_end",
+     "z": 5240.0,
+     "rung": null,
+     "radius": 1060.0
+    },
+    "top": {
+     "kind": "crown",
+     "z": 11820.0,
+     "rung": null,
+     "radius": 0.0
+    }
+   },
+   "parts": [
+    {
+     "part": "glass",
+     "mesh": "/Game/WonderlandV2/Kit/hero/WL_Hero_GreatSpire_glass.WL_Hero_GreatSpire_glass",
+     "material": "MI_V2_GlassAmber"
+    },
+    {
+     "part": "glass_cool",
+     "mesh": "/Game/WonderlandV2/Kit/hero/WL_Hero_GreatSpire_glass_cool.WL_Hero_GreatSpire_glass_cool",
+     "material": "MI_V2_GlassTeal"
+    },
+    {
+     "part": "gold",
+     "mesh": "/Game/WonderlandV2/Kit/hero/WL_Hero_GreatSpire_gold.WL_Hero_GreatSpire_gold",
+     "material": "MI_V2_Gold"
+    },
+    {
+     "part": "gold_aged",
+     "mesh": "/Game/WonderlandV2/Kit/hero/WL_Hero_GreatSpire_gold_aged.WL_Hero_GreatSpire_gold_aged",
+     "material": "MI_V2_GoldAged"
+    },
+    {
+     "part": "roof",
+     "mesh": "/Game/WonderlandV2/Kit/hero/WL_Hero_GreatSpire_roof.WL_Hero_GreatSpire_roof",
+     "material": "MI_V2_RoofRose"
+    },
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/hero/WL_Hero_GreatSpire.WL_Hero_GreatSpire",
+     "material": "MI_V2_IvoryStone"
+    },
+    {
+     "part": "stone_dark",
+     "mesh": "/Game/WonderlandV2/Kit/hero/WL_Hero_GreatSpire_stone_dark.WL_Hero_GreatSpire_stone_dark",
+     "material": "MI_V2_Stone"
+    }
+   ]
+  },
+  "WL_Hero_Gate_Royal": {
+   "family": "hero",
+   "group": "hero",
+   "role": "hero",
+   "height": 4890.0,
+   "radius": 1860.0,
+   "size": [
+    3720.0,
+    1165.4,
+    4890.0
+   ],
+   "bbox_min": [
+    -1860.0,
+    -582.7,
+    0.0
+   ],
+   "bbox_max": [
+    1860.0,
+    582.7,
+    4890.0
+   ],
+   "tris": 15212,
+   "sockets": {
+    "bottom": {
+     "kind": "ground",
+     "z": 0.0,
+     "rung": null,
+     "radius": 1740.0
+    },
+    "passage": {
+     "kind": "pier",
+     "z": 0.0,
+     "rung": null,
+     "radius": 1100.0
+    },
+    "top": {
+     "kind": "crown",
+     "z": 4890.0,
+     "rung": null,
+     "radius": 0.0
+    }
+   },
+   "parts": [
+    {
+     "part": "glass",
+     "mesh": "/Game/WonderlandV2/Kit/hero/WL_Hero_Gate_Royal_glass.WL_Hero_Gate_Royal_glass",
+     "material": "MI_V2_GlassAmber"
+    },
+    {
+     "part": "gold",
+     "mesh": "/Game/WonderlandV2/Kit/hero/WL_Hero_Gate_Royal_gold.WL_Hero_Gate_Royal_gold",
+     "material": "MI_V2_Gold"
+    },
+    {
+     "part": "roof",
+     "mesh": "/Game/WonderlandV2/Kit/hero/WL_Hero_Gate_Royal_roof.WL_Hero_Gate_Royal_roof",
+     "material": "MI_V2_RoofRose"
+    },
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/hero/WL_Hero_Gate_Royal.WL_Hero_Gate_Royal",
+     "material": "MI_V2_IvoryStone"
+    },
+    {
+     "part": "stone_dark",
+     "mesh": "/Game/WonderlandV2/Kit/hero/WL_Hero_Gate_Royal_stone_dark.WL_Hero_Gate_Royal_stone_dark",
+     "material": "MI_V2_Stone"
+    },
+    {
+     "part": "veg_anchor",
+     "mesh": "/Game/WonderlandV2/Kit/hero/WL_Hero_Gate_Royal_veg_anchor.WL_Hero_Gate_Royal_veg_anchor",
+     "material": "MI_V2_LeafMid"
+    }
+   ]
+  },
+  "WL_Wall_Curtain_Run__aged": {
+   "family": "wall",
+   "group": "variants",
+   "role": "screen",
+   "height": 810.8,
+   "radius": 681.98,
+   "size": [
+    1363.24,
+    450.0,
+    810.8
+   ],
+   "bbox_min": [
+    -681.26,
+    -225.0,
+    0.0
+   ],
+   "bbox_max": [
+    681.98,
+    225.0,
+    810.8
+   ],
+   "tris": 774,
+   "sockets": {
+    "bottom": {
+     "kind": "ground",
+     "z": 0.0,
+     "rung": "XL",
+     "radius": 680.0
+    },
+    "walk": {
+     "kind": "bridge_end",
+     "z": 620.0,
+     "rung": "XL",
+     "radius": 680.0
+    },
+    "end_a": {
+     "kind": "pier",
+     "z": 0.0,
+     "rung": null,
+     "radius": 170.0
+    },
+    "end_b": {
+     "kind": "pier",
+     "z": 0.0,
+     "rung": null,
+     "radius": 170.0
+    }
+   },
+   "parts": [
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/variants/Weathered/WL_Wall_Curtain_Run__aged.WL_Wall_Curtain_Run__aged",
+     "material": "MI_V2_IvoryStone"
+    },
+    {
+     "part": "stone_dark",
+     "mesh": "/Game/WonderlandV2/Kit/variants/Weathered/WL_Wall_Curtain_Run__aged_stone_dark.WL_Wall_Curtain_Run__aged_stone_dark",
+     "material": "MI_V2_Stone"
+    },
+    {
+     "part": "veg_anchor",
+     "mesh": "/Game/WonderlandV2/Kit/variants/Weathered/WL_Wall_Curtain_Run__aged_veg_anchor.WL_Wall_Curtain_Run__aged_veg_anchor",
+     "material": "MI_V2_LeafMid"
+    }
+   ]
+  },
+  "WL_Wall_Mural_Tower__ruined": {
+   "family": "wall",
+   "group": "variants",
+   "role": "screen",
+   "height": 1242.23,
+   "radius": 528.75,
+   "size": [
+    1022.93,
+    1051.66,
+    1242.23
+   ],
+   "bbox_min": [
+    -494.18,
+    -525.83,
+    0.0
+   ],
+   "bbox_max": [
+    528.75,
+    525.83,
+    1242.23
+   ],
+   "tris": 800,
+   "sockets": {
+    "bottom": {
+     "kind": "ground",
+     "z": 0.0,
+     "rung": null,
+     "radius": 528.0
+    },
+    "walk": {
+     "kind": "bridge_end",
+     "z": 620.0,
+     "rung": null,
+     "radius": 528.0
+    },
+    "end_a": {
+     "kind": "pier",
+     "z": 0.0,
+     "rung": null,
+     "radius": 170.0
+    },
+    "end_b": {
+     "kind": "pier",
+     "z": 0.0,
+     "rung": null,
+     "radius": 170.0
+    }
+   },
+   "parts": [
+    {
+     "part": "glass",
+     "mesh": "/Game/WonderlandV2/Kit/variants/Weathered/WL_Wall_Mural_Tower__ruined_glass.WL_Wall_Mural_Tower__ruined_glass",
+     "material": "MI_V2_GlassAmber"
+    },
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/variants/Weathered/WL_Wall_Mural_Tower__ruined.WL_Wall_Mural_Tower__ruined",
+     "material": "MI_V2_IvoryStone"
+    },
+    {
+     "part": "stone_dark",
+     "mesh": "/Game/WonderlandV2/Kit/variants/Weathered/WL_Wall_Mural_Tower__ruined_stone_dark.WL_Wall_Mural_Tower__ruined_stone_dark",
+     "material": "MI_V2_Stone"
+    },
+    {
+     "part": "veg_anchor",
+     "mesh": "/Game/WonderlandV2/Kit/variants/Weathered/WL_Wall_Mural_Tower__ruined_veg_anchor.WL_Wall_Mural_Tower__ruined_veg_anchor",
+     "material": "MI_V2_LeafMid"
+    }
+   ]
+  },
+  "WL_Tower_Base_Buttressed__aged": {
+   "family": "tower_base",
+   "group": "variants",
+   "role": "foot",
+   "height": 1080.0,
+   "radius": 915.16,
+   "size": [
+    1829.76,
+    1668.42,
+    1080.0
+   ],
+   "bbox_min": [
+    -914.6,
+    -834.14,
+    0.0
+   ],
+   "bbox_max": [
+    915.16,
+    834.28,
+    1080.0
+   ],
+   "tris": 1152,
+   "sockets": {
+    "bottom": {
+     "kind": "ground",
+     "z": 0.0,
+     "rung": null,
+     "radius": 1088.0
+    },
+    "top": {
+     "kind": "tower",
+     "z": 1080.0,
+     "rung": "XL",
+     "radius": 680.0
+    }
+   },
+   "parts": [
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/variants/Weathered/WL_Tower_Base_Buttressed__aged.WL_Tower_Base_Buttressed__aged",
+     "material": "MI_V2_IvoryStone"
+    },
+    {
+     "part": "stone_dark",
+     "mesh": "/Game/WonderlandV2/Kit/variants/Weathered/WL_Tower_Base_Buttressed__aged_stone_dark.WL_Tower_Base_Buttressed__aged_stone_dark",
+     "material": "MI_V2_Stone"
+    },
+    {
+     "part": "veg_anchor",
+     "mesh": "/Game/WonderlandV2/Kit/variants/Weathered/WL_Tower_Base_Buttressed__aged_veg_anchor.WL_Tower_Base_Buttressed__aged_veg_anchor",
+     "material": "MI_V2_LeafMid"
+    }
+   ]
+  },
+  "WL_Gatehouse_Twin__aged": {
+   "family": "gatehouse",
+   "group": "variants",
+   "role": "threshold",
+   "height": 2602.47,
+   "radius": 1416.0,
+   "size": [
+    2832.0,
+    1033.08,
+    2602.47
+   ],
+   "bbox_min": [
+    -1416.0,
+    -517.08,
+    0.0
+   ],
+   "bbox_max": [
+    1416.0,
+    516.0,
+    2602.47
+   ],
+   "tris": 14116,
+   "sockets": {
+    "bottom": {
+     "kind": "ground",
+     "z": 0.0,
+     "rung": null,
+     "radius": 1416.0
+    },
+    "passage": {
+     "kind": "pier",
+     "z": 0.0,
+     "rung": null,
+     "radius": 400.0
+    }
+   },
+   "parts": [
+    {
+     "part": "glass",
+     "mesh": "/Game/WonderlandV2/Kit/variants/Weathered/WL_Gatehouse_Twin__aged_glass.WL_Gatehouse_Twin__aged_glass",
+     "material": "MI_V2_GlassAmber"
+    },
+    {
+     "part": "gold",
+     "mesh": "/Game/WonderlandV2/Kit/variants/Weathered/WL_Gatehouse_Twin__aged_gold.WL_Gatehouse_Twin__aged_gold",
+     "material": "MI_V2_Gold"
+    },
+    {
+     "part": "roof",
+     "mesh": "/Game/WonderlandV2/Kit/variants/Weathered/WL_Gatehouse_Twin__aged_roof.WL_Gatehouse_Twin__aged_roof",
+     "material": "MI_V2_RoofRose"
+    },
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/variants/Weathered/WL_Gatehouse_Twin__aged.WL_Gatehouse_Twin__aged",
+     "material": "MI_V2_IvoryStone"
+    },
+    {
+     "part": "stone_dark",
+     "mesh": "/Game/WonderlandV2/Kit/variants/Weathered/WL_Gatehouse_Twin__aged_stone_dark.WL_Gatehouse_Twin__aged_stone_dark",
+     "material": "MI_V2_Stone"
+    },
+    {
+     "part": "veg_anchor",
+     "mesh": "/Game/WonderlandV2/Kit/variants/Weathered/WL_Gatehouse_Twin__aged_veg_anchor.WL_Gatehouse_Twin__aged_veg_anchor",
+     "material": "MI_V2_LeafMid"
+    }
+   ]
+  },
+  "WL_Colonnade_Arcade__ruined": {
+   "family": "colonnade",
+   "group": "variants",
+   "role": "screen",
+   "height": 845.39,
+   "radius": 1151.04,
+   "size": [
+    2301.79,
+    420.82,
+    845.39
+   ],
+   "bbox_min": [
+    -1150.75,
+    -210.0,
+    0.0
+   ],
+   "bbox_max": [
+    1151.04,
+    210.82,
+    845.39
+   ],
+   "tris": 5901,
+   "sockets": {
+    "bottom": {
+     "kind": "ground",
+     "z": 0.0,
+     "rung": null,
+     "radius": 1080.0
+    },
+    "end_a": {
+     "kind": "pier",
+     "z": 0.0,
+     "rung": null,
+     "radius": 190.0
+    },
+    "end_b": {
+     "kind": "pier",
+     "z": 0.0,
+     "rung": null,
+     "radius": 190.0
+    }
+   },
+   "parts": [
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/variants/Weathered/WL_Colonnade_Arcade__ruined.WL_Colonnade_Arcade__ruined",
+     "material": "MI_V2_IvoryStone"
+    },
+    {
+     "part": "stone_dark",
+     "mesh": "/Game/WonderlandV2/Kit/variants/Weathered/WL_Colonnade_Arcade__ruined_stone_dark.WL_Colonnade_Arcade__ruined_stone_dark",
+     "material": "MI_V2_Stone"
+    },
+    {
+     "part": "veg_anchor",
+     "mesh": "/Game/WonderlandV2/Kit/variants/Weathered/WL_Colonnade_Arcade__ruined_veg_anchor.WL_Colonnade_Arcade__ruined_veg_anchor",
+     "material": "MI_V2_LeafMid"
+    }
+   ]
+  },
+  "WL_Bridge_Arc__aged": {
+   "family": "bridge",
+   "group": "variants",
+   "role": "span",
+   "height": 768.03,
+   "radius": 1250.41,
+   "size": [
+    2500.45,
+    681.42,
+    768.03
+   ],
+   "bbox_min": [
+    -1250.04,
+    -340.81,
+    0.0
+   ],
+   "bbox_max": [
+    1250.41,
+    340.61,
+    768.03
+   ],
+   "tris": 4252,
+   "sockets": {
+    "bottom": {
+     "kind": "ground",
+     "z": 0.0,
+     "rung": null,
+     "radius": 1250.0
+    },
+    "end_a": {
+     "kind": "bridge_end",
+     "z": 530.0,
+     "rung": null,
+     "radius": 260.0
+    },
+    "end_b": {
+     "kind": "bridge_end",
+     "z": 530.0,
+     "rung": null,
+     "radius": 260.0
+    }
+   },
+   "parts": [
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/variants/Weathered/WL_Bridge_Arc__aged.WL_Bridge_Arc__aged",
+     "material": "MI_V2_IvoryStone"
+    },
+    {
+     "part": "stone_dark",
+     "mesh": "/Game/WonderlandV2/Kit/variants/Weathered/WL_Bridge_Arc__aged_stone_dark.WL_Bridge_Arc__aged_stone_dark",
+     "material": "MI_V2_Stone"
+    },
+    {
+     "part": "veg_anchor",
+     "mesh": "/Game/WonderlandV2/Kit/variants/Weathered/WL_Bridge_Arc__aged_veg_anchor.WL_Bridge_Arc__aged_veg_anchor",
+     "material": "MI_V2_LeafMid"
+    }
+   ]
+  },
+  "WL_House_Jettied__overgrown": {
+   "family": "house",
+   "group": "variants",
+   "role": "body",
+   "height": 1303.16,
+   "radius": 371.07,
+   "size": [
+    741.15,
+    628.78,
+    1303.16
+   ],
+   "bbox_min": [
+    -370.08,
+    -314.52,
+    0.0
+   ],
+   "bbox_max": [
+    371.07,
+    314.26,
+    1303.16
+   ],
+   "tris": 3572,
+   "sockets": {
+    "bottom": {
+     "kind": "ground",
+     "z": 0.0,
+     "rung": null,
+     "radius": 320.0
+    },
+    "eaves": {
+     "kind": "bridge_end",
+     "z": 915.0,
+     "rung": null,
+     "radius": 320.0
+    },
+    "end_a": {
+     "kind": "pier",
+     "z": 0.0,
+     "rung": null,
+     "radius": 260.0
+    },
+    "end_b": {
+     "kind": "pier",
+     "z": 0.0,
+     "rung": null,
+     "radius": 260.0
+    }
+   },
+   "parts": [
+    {
+     "part": "glass",
+     "mesh": "/Game/WonderlandV2/Kit/variants/Weathered/WL_House_Jettied__overgrown_glass.WL_House_Jettied__overgrown_glass",
+     "material": "MI_V2_GlassAmber"
+    },
+    {
+     "part": "gold",
+     "mesh": "/Game/WonderlandV2/Kit/variants/Weathered/WL_House_Jettied__overgrown_gold.WL_House_Jettied__overgrown_gold",
+     "material": "MI_V2_Gold"
+    },
+    {
+     "part": "roof",
+     "mesh": "/Game/WonderlandV2/Kit/variants/Weathered/WL_House_Jettied__overgrown_roof.WL_House_Jettied__overgrown_roof",
+     "material": "MI_V2_RoofRose"
+    },
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/variants/Weathered/WL_House_Jettied__overgrown.WL_House_Jettied__overgrown",
+     "material": "MI_V2_IvoryStone"
+    },
+    {
+     "part": "stone_dark",
+     "mesh": "/Game/WonderlandV2/Kit/variants/Weathered/WL_House_Jettied__overgrown_stone_dark.WL_House_Jettied__overgrown_stone_dark",
+     "material": "MI_V2_Stone"
+    },
+    {
+     "part": "veg_anchor",
+     "mesh": "/Game/WonderlandV2/Kit/variants/Weathered/WL_House_Jettied__overgrown_veg_anchor.WL_House_Jettied__overgrown_veg_anchor",
+     "material": "MI_V2_LeafMid"
+    }
+   ]
+  },
+  "WL_Garden_Retaining_Run__overgrown": {
+   "family": "garden",
+   "group": "variants",
+   "role": "terrace",
+   "height": 311.43,
+   "radius": 401.41,
+   "size": [
+    802.67,
+    155.98,
+    311.43
+   ],
+   "bbox_min": [
+    -401.41,
+    -87.57,
+    0.0
+   ],
+   "bbox_max": [
+    401.26,
+    68.41,
+    311.43
+   ],
+   "tris": 140,
+   "sockets": {
+    "bottom": {
+     "kind": "ground",
+     "z": 0.0,
+     "rung": null,
+     "radius": 400.0
+    },
+    "top_route": {
+     "kind": "route",
+     "z": 310.0,
+     "rung": null,
+     "radius": 400.0
+    },
+    "edge": {
+     "kind": "edge",
+     "z": 310.0,
+     "rung": null,
+     "radius": 400.0
+    },
+    "end_a": {
+     "kind": "pier",
+     "z": 0.0,
+     "rung": null,
+     "radius": 55.0
+    },
+    "end_b": {
+     "kind": "pier",
+     "z": 0.0,
+     "rung": null,
+     "radius": 55.0
+    }
+   },
+   "parts": [
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/variants/Weathered/WL_Garden_Retaining_Run__overgrown.WL_Garden_Retaining_Run__overgrown",
+     "material": "MI_V2_IvoryStone"
+    },
+    {
+     "part": "stone_dark",
+     "mesh": "/Game/WonderlandV2/Kit/variants/Weathered/WL_Garden_Retaining_Run__overgrown_stone_dark.WL_Garden_Retaining_Run__overgrown_stone_dark",
+     "material": "MI_V2_Stone"
+    },
+    {
+     "part": "veg_anchor",
+     "mesh": "/Game/WonderlandV2/Kit/variants/Weathered/WL_Garden_Retaining_Run__overgrown_veg_anchor.WL_Garden_Retaining_Run__overgrown_veg_anchor",
+     "material": "MI_V2_LeafMid"
+    }
+   ]
+  },
+  "WL_Detail_Balustrade_Run__broken": {
+   "family": "balustrade",
+   "group": "variants",
+   "role": "detail",
+   "height": 155.41,
+   "radius": 415.59,
+   "size": [
+    830.59,
+    74.13,
+    155.41
+   ],
+   "bbox_min": [
+    -415.59,
+    -37.43,
+    0.0
+   ],
+   "bbox_max": [
+    415.0,
+    36.7,
+    155.41
+   ],
+   "tris": 1852,
+   "sockets": {
+    "bottom": {
+     "kind": "ground",
+     "z": 0.0,
+     "rung": null,
+     "radius": 400.0
+    },
+    "end_a": {
+     "kind": "pier",
+     "z": 0.0,
+     "rung": null,
+     "radius": 36.0
+    },
+    "end_b": {
+     "kind": "pier",
+     "z": 0.0,
+     "rung": null,
+     "radius": 36.0
+    }
+   },
+   "parts": [
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/variants/Weathered/WL_Detail_Balustrade_Run__broken.WL_Detail_Balustrade_Run__broken",
+     "material": "MI_V2_IvoryStone"
+    }
+   ]
+  }
+ }
+}

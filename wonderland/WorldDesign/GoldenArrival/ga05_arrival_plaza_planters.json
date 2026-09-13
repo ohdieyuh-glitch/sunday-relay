@@ -1,0 +1,750 @@
+{
+ "pass": "GA05",
+ "title": "Arrival plaza planters: flowers beside the visitor, central lane clear",
+ "folder": "Wonderland/Authored/GA05",
+ "tags": [
+  "V2_Arrival"
+ ],
+ "actors": [
+  {
+   "id": "PlanterL0",
+   "mesh": "/Game/WonderlandV2/Props/Garden/SM_planter_box.SM_planter_box",
+   "loc": [
+    470.0,
+    -370.0,
+    12.0
+   ],
+   "rot": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "scale": [
+    0.78,
+    1.7,
+    0.95
+   ],
+   "materials": [
+    "MI_V2_IvoryStone"
+   ],
+   "collision": "block"
+  },
+  {
+   "id": "PlanterL0_GoldLip",
+   "mesh": "/Game/WonderlandV2/Ground/Cobblestone/SM_kerb_stone.SM_kerb_stone",
+   "loc": [
+    386.0,
+    -370.0,
+    72.5
+   ],
+   "rot": [
+    0.0,
+    90.0,
+    0.0
+   ],
+   "scale": [
+    2.9,
+    0.35,
+    0.4
+   ],
+   "materials": [
+    "MI_V2_Gold"
+   ],
+   "collision": "none"
+  },
+  {
+   "id": "PlanterL1",
+   "mesh": "/Game/WonderlandV2/Props/Garden/SM_planter_box.SM_planter_box",
+   "loc": [
+    470.0,
+    420.0,
+    12.0
+   ],
+   "rot": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "scale": [
+    0.78,
+    1.7,
+    0.95
+   ],
+   "materials": [
+    "MI_V2_IvoryStone"
+   ],
+   "collision": "block"
+  },
+  {
+   "id": "PlanterL1_GoldLip",
+   "mesh": "/Game/WonderlandV2/Ground/Cobblestone/SM_kerb_stone.SM_kerb_stone",
+   "loc": [
+    386.0,
+    420.0,
+    72.5
+   ],
+   "rot": [
+    0.0,
+    90.0,
+    0.0
+   ],
+   "scale": [
+    2.9,
+    0.35,
+    0.4
+   ],
+   "materials": [
+    "MI_V2_Gold"
+   ],
+   "collision": "none"
+  },
+  {
+   "id": "PlanterR0",
+   "mesh": "/Game/WonderlandV2/Props/Garden/SM_planter_box.SM_planter_box",
+   "loc": [
+    -470.0,
+    -370.0,
+    12.0
+   ],
+   "rot": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "scale": [
+    0.78,
+    1.7,
+    0.95
+   ],
+   "materials": [
+    "MI_V2_IvoryStone"
+   ],
+   "collision": "block"
+  },
+  {
+   "id": "PlanterR0_GoldLip",
+   "mesh": "/Game/WonderlandV2/Ground/Cobblestone/SM_kerb_stone.SM_kerb_stone",
+   "loc": [
+    -386.0,
+    -370.0,
+    72.5
+   ],
+   "rot": [
+    0.0,
+    90.0,
+    0.0
+   ],
+   "scale": [
+    2.9,
+    0.35,
+    0.4
+   ],
+   "materials": [
+    "MI_V2_Gold"
+   ],
+   "collision": "none"
+  },
+  {
+   "id": "PlanterR1",
+   "mesh": "/Game/WonderlandV2/Props/Garden/SM_planter_box.SM_planter_box",
+   "loc": [
+    -470.0,
+    420.0,
+    12.0
+   ],
+   "rot": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "scale": [
+    0.78,
+    1.7,
+    0.95
+   ],
+   "materials": [
+    "MI_V2_IvoryStone"
+   ],
+   "collision": "block"
+  },
+  {
+   "id": "PlanterR1_GoldLip",
+   "mesh": "/Game/WonderlandV2/Ground/Cobblestone/SM_kerb_stone.SM_kerb_stone",
+   "loc": [
+    -386.0,
+    420.0,
+    72.5
+   ],
+   "rot": [
+    0.0,
+    90.0,
+    0.0
+   ],
+   "scale": [
+    2.9,
+    0.35,
+    0.4
+   ],
+   "materials": [
+    "MI_V2_Gold"
+   ],
+   "collision": "none"
+  }
+ ],
+ "batches": [
+  {
+   "id": "PlanterBlooms_PetalPink",
+   "mesh": "/Game/WonderlandV2/Vegetation/Flowers/SM_flower_bed_blooms_0.SM_flower_bed_blooms_0",
+   "material": "MI_V2_PetalPink",
+   "instances": [
+    [
+     470.0,
+     -480.0,
+     60.5,
+     0.0,
+     94.6,
+     0.0,
+     0.72,
+     0.62,
+     0.9
+    ],
+    [
+     470.0,
+     530.0,
+     60.5,
+     0.0,
+     84.8,
+     0.0,
+     0.72,
+     0.62,
+     0.9
+    ],
+    [
+     -470.0,
+     -480.0,
+     60.5,
+     0.0,
+     93.6,
+     0.0,
+     0.72,
+     0.62,
+     0.9
+    ],
+    [
+     -470.0,
+     530.0,
+     60.5,
+     0.0,
+     87.9,
+     0.0,
+     0.72,
+     0.62,
+     0.9
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "PlanterBlooms_RoseRed",
+   "mesh": "/Game/WonderlandV2/Vegetation/Flowers/SM_flower_bed_blooms_3.SM_flower_bed_blooms_3",
+   "material": "MI_V2_RoseRed",
+   "instances": [
+    [
+     470.0,
+     -370.0,
+     60.5,
+     0.0,
+     94.4,
+     0.0,
+     0.72,
+     0.62,
+     0.9
+    ],
+    [
+     470.0,
+     310.0,
+     60.5,
+     0.0,
+     90.6,
+     0.0,
+     0.72,
+     0.62,
+     0.9
+    ],
+    [
+     -470.0,
+     -370.0,
+     60.5,
+     0.0,
+     87.8,
+     0.0,
+     0.72,
+     0.62,
+     0.9
+    ],
+    [
+     -470.0,
+     310.0,
+     60.5,
+     0.0,
+     89.6,
+     0.0,
+     0.72,
+     0.62,
+     0.9
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "PlanterBlooms_PetalViolet",
+   "mesh": "/Game/WonderlandV2/Vegetation/Flowers/SM_flower_bed_blooms_0.SM_flower_bed_blooms_0",
+   "material": "MI_V2_PetalViolet",
+   "instances": [
+    [
+     470.0,
+     -260.0,
+     60.5,
+     0.0,
+     91.4,
+     0.0,
+     0.72,
+     0.62,
+     0.9
+    ],
+    [
+     470.0,
+     420.0,
+     60.5,
+     0.0,
+     95.9,
+     0.0,
+     0.72,
+     0.62,
+     0.9
+    ],
+    [
+     -470.0,
+     -260.0,
+     60.5,
+     0.0,
+     87.6,
+     0.0,
+     0.72,
+     0.62,
+     0.9
+    ],
+    [
+     -470.0,
+     420.0,
+     60.5,
+     0.0,
+     89.4,
+     0.0,
+     0.72,
+     0.62,
+     0.9
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "PlanterBlossom_PetalViolet",
+   "mesh": "/Game/WonderlandV2/Vegetation/Flowers/SM_blossom_cluster.SM_blossom_cluster",
+   "material": "MI_V2_PetalViolet",
+   "instances": [
+    [
+     510.0,
+     -490.0,
+     66.5,
+     0.0,
+     329.7,
+     0.0,
+     0.48,
+     0.48,
+     0.48
+    ],
+    [
+     510.0,
+     -250.0,
+     66.5,
+     0.0,
+     56.4,
+     0.0,
+     0.426,
+     0.426,
+     0.426
+    ],
+    [
+     510.0,
+     420.0,
+     66.5,
+     0.0,
+     57.2,
+     0.0,
+     0.452,
+     0.452,
+     0.452
+    ],
+    [
+     -510.0,
+     -490.0,
+     66.5,
+     0.0,
+     43.0,
+     0.0,
+     0.436,
+     0.436,
+     0.436
+    ],
+    [
+     -510.0,
+     -250.0,
+     66.5,
+     0.0,
+     88.3,
+     0.0,
+     0.436,
+     0.436,
+     0.436
+    ],
+    [
+     -510.0,
+     420.0,
+     66.5,
+     0.0,
+     135.3,
+     0.0,
+     0.461,
+     0.461,
+     0.461
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "PlanterBlossom_PetalPink",
+   "mesh": "/Game/WonderlandV2/Vegetation/Flowers/SM_blossom_cluster.SM_blossom_cluster",
+   "material": "MI_V2_PetalPink",
+   "instances": [
+    [
+     510.0,
+     -370.0,
+     66.5,
+     0.0,
+     289.3,
+     0.0,
+     0.428,
+     0.428,
+     0.428
+    ],
+    [
+     510.0,
+     300.0,
+     66.5,
+     0.0,
+     46.5,
+     0.0,
+     0.413,
+     0.413,
+     0.413
+    ],
+    [
+     510.0,
+     540.0,
+     66.5,
+     0.0,
+     150.8,
+     0.0,
+     0.43,
+     0.43,
+     0.43
+    ],
+    [
+     -510.0,
+     -370.0,
+     66.5,
+     0.0,
+     112.8,
+     0.0,
+     0.435,
+     0.435,
+     0.435
+    ],
+    [
+     -510.0,
+     300.0,
+     66.5,
+     0.0,
+     67.6,
+     0.0,
+     0.437,
+     0.437,
+     0.437
+    ],
+    [
+     -510.0,
+     540.0,
+     66.5,
+     0.0,
+     217.5,
+     0.0,
+     0.479,
+     0.479,
+     0.479
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "PlanterRoses_RosePink",
+   "mesh": "/Game/WonderlandV2/Vegetation/Roses/SM_rose_bloom.SM_rose_bloom",
+   "material": "MI_V2_RosePink",
+   "instances": [
+    [
+     453.1,
+     -510.0,
+     48.5,
+     0.0,
+     212.3,
+     0.0,
+     0.434,
+     0.434,
+     0.434
+    ],
+    [
+     433.5,
+     -370.0,
+     48.5,
+     0.0,
+     307.4,
+     0.0,
+     0.444,
+     0.444,
+     0.444
+    ],
+    [
+     439.9,
+     -230.0,
+     48.5,
+     0.0,
+     80.8,
+     0.0,
+     0.456,
+     0.456,
+     0.456
+    ],
+    [
+     422.4,
+     280.0,
+     48.5,
+     0.0,
+     197.0,
+     0.0,
+     0.456,
+     0.456,
+     0.456
+    ],
+    [
+     441.5,
+     420.0,
+     48.5,
+     0.0,
+     49.4,
+     0.0,
+     0.518,
+     0.518,
+     0.518
+    ],
+    [
+     422.3,
+     560.0,
+     48.5,
+     0.0,
+     223.4,
+     0.0,
+     0.474,
+     0.474,
+     0.474
+    ],
+    [
+     -420.1,
+     -510.0,
+     48.5,
+     0.0,
+     271.9,
+     0.0,
+     0.479,
+     0.479,
+     0.479
+    ],
+    [
+     -423.8,
+     -370.0,
+     48.5,
+     0.0,
+     260.6,
+     0.0,
+     0.475,
+     0.475,
+     0.475
+    ],
+    [
+     -433.8,
+     -230.0,
+     48.5,
+     0.0,
+     3.0,
+     0.0,
+     0.433,
+     0.433,
+     0.433
+    ],
+    [
+     -447.6,
+     280.0,
+     48.5,
+     0.0,
+     47.4,
+     0.0,
+     0.524,
+     0.524,
+     0.524
+    ],
+    [
+     -432.4,
+     420.0,
+     48.5,
+     0.0,
+     286.0,
+     0.0,
+     0.505,
+     0.505,
+     0.505
+    ],
+    [
+     -453.3,
+     560.0,
+     48.5,
+     0.0,
+     350.4,
+     0.0,
+     0.541,
+     0.541,
+     0.541
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "PlanterRoses_RoseRed",
+   "mesh": "/Game/WonderlandV2/Vegetation/Roses/SM_rose_bloom.SM_rose_bloom",
+   "material": "MI_V2_RoseRed",
+   "instances": [
+    [
+     425.0,
+     -440.0,
+     48.5,
+     0.0,
+     309.8,
+     0.0,
+     0.448,
+     0.448,
+     0.448
+    ],
+    [
+     431.6,
+     -300.0,
+     48.5,
+     0.0,
+     226.1,
+     0.0,
+     0.451,
+     0.451,
+     0.451
+    ],
+    [
+     426.6,
+     350.0,
+     48.5,
+     0.0,
+     201.0,
+     0.0,
+     0.425,
+     0.425,
+     0.425
+    ],
+    [
+     421.1,
+     490.0,
+     48.5,
+     0.0,
+     182.2,
+     0.0,
+     0.441,
+     0.441,
+     0.441
+    ],
+    [
+     -428.7,
+     -440.0,
+     48.5,
+     0.0,
+     130.9,
+     0.0,
+     0.425,
+     0.425,
+     0.425
+    ],
+    [
+     -432.1,
+     -300.0,
+     48.5,
+     0.0,
+     180.7,
+     0.0,
+     0.468,
+     0.468,
+     0.468
+    ],
+    [
+     -441.8,
+     350.0,
+     48.5,
+     0.0,
+     203.8,
+     0.0,
+     0.522,
+     0.522,
+     0.522
+    ],
+    [
+     -447.4,
+     490.0,
+     48.5,
+     0.0,
+     305.9,
+     0.0,
+     0.466,
+     0.466,
+     0.466
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false
+  }
+ ]
+}

@@ -21,7 +21,8 @@
 # plan's Nanite flag is enforced after import as well; a part that asked for collision but has no
 # simple shapes collides complex-as-simple, so arches and arcades stay walkable; one part per tick,
 # skipping parts already correct, so a stopped run resumes; everything is read back from the engine.
-# Globals: PLAN (path), RESULT_PATH (path), FORCE (re-import existing), LIMIT (max parts this run).
+# Globals: PLAN (path), RESULT_PATH (path), FORCE (re-import existing), LIMIT (max parts this run),
+# ONLY (asset paths to limit the run to).
 import json
 import os
 
@@ -29,6 +30,7 @@ PLAN = globals().get("PLAN", r"C:/dev/iwonder/wonderland-blender-forge/wonderlan
 RESULT_PATH = globals().get("RESULT_PATH", r"C:/dev/iwonder/recovery/evidence/kit-import-result.json")
 FORCE = globals().get("FORCE", False)
 LIMIT = globals().get("LIMIT", 100000)
+ONLY = set(globals().get("ONLY", ()))   # asset paths; when set, every other part is left alone
 EAL = unreal.EditorAssetLibrary
 
 
@@ -115,6 +117,8 @@ def job():
             RESULT["waiting_for_pie_to_end"] = True
             yield 5.0
         asset_path = part["asset_path"]
+        if ONLY and asset_path not in ONLY:
+            continue
         record = {"asset_id": asset["asset_id"], "part": part["part"], "asset_path": asset_path}
         existing = EAL.does_asset_exist(asset_path) and not FORCE
         if existing and _readback(asset_path, part["material_path"]).get("slot0_ok"):
@@ -184,7 +188,7 @@ def job():
     summary = {"imported_this_run": done, "already_present": skipped, "failed": failed,
                "stray_materials_deleted": deleted, "readback_failures": readback_fail, "nanite_mismatches": nanite_mismatch,
                "collision_missing": collision_missing,
-               "complete": done + skipped == len(parts) and not (readback_fail or nanite_mismatch or collision_missing)}
+               "complete": done + skipped == (len(ONLY) if ONLY else len(parts)) and not (readback_fail or nanite_mismatch or collision_missing)}
     RESULT.update(summary)
     os.makedirs(os.path.dirname(RESULT_PATH), exist_ok=True)
     with open(RESULT_PATH, "w", encoding="utf-8") as f:

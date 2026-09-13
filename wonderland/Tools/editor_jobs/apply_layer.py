@@ -6,12 +6,17 @@
 # REMOVE_ONLY = True. A layer never edits or deletes generator actors.
 #
 # Set SPEC to the layer JSON before queueing (the copy step prepends it). SAVE=False to preview.
+#
+# THE FOUNDER MAY BE EDITING THIS MAP. A save writes every unsaved change in the map, not only this
+# layer's, so a layer refuses to save when the map already had unsaved changes before it touched
+# anything (MAP_WAS_DIRTY_OK = True overrides, e.g. after this session's own preview).
 import json
 import os
 
 SPEC = globals().get("SPEC")
 SAVE = globals().get("SAVE", True)
 REMOVE_ONLY = globals().get("REMOVE_ONLY", False)
+MAP_WAS_DIRTY_OK = globals().get("MAP_WAS_DIRTY_OK", False)
 MAP = "/Game/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2"
 
 
@@ -34,6 +39,12 @@ def job():
         raise RuntimeError("PIE is running; layers apply to the editor world only")
     with open(SPEC, encoding="utf-8") as f:
         spec = json.load(f)
+    dirty_before = [p.get_name() for p in unreal.EditorLoadingAndSavingUtils.get_dirty_map_packages()]
+    RESULT["map_dirty_before"] = dirty_before
+    save = SAVE
+    if SAVE and dirty_before and not MAP_WAS_DIRTY_OK:
+        save = False
+        RESULT["save_refused"] = "the map had unsaved changes before this layer: " + ", ".join(dirty_before)
     pass_tag = "WL_PASS_" + spec["pass"]
     folder = spec.get("folder", "Wonderland/Authored/" + spec["pass"])
     base_tags = [unreal.Name(t) for t in spec.get("tags", [])] + [unreal.Name("WL_AUTHORED"), unreal.Name(pass_tag)]
@@ -47,7 +58,7 @@ def job():
     RESULT["removed"] = removed
     yield 0.2
     if REMOVE_ONLY:
-        if SAVE:
+        if save:
             RESULT["saved"] = bool(unreal.EditorLoadingAndSavingUtils.save_map(ues.get_editor_world(), MAP))
         RESULT["status"] = "done"
         return
@@ -132,7 +143,7 @@ def job():
 
     RESULT.update({"pass": spec["pass"], "actors": placed, "batches": batches, "instances": instances, "hovers": hovers})
     yield 0.5
-    if SAVE:
+    if save:
         RESULT["saved"] = bool(unreal.EditorLoadingAndSavingUtils.save_map(ues.get_editor_world(), MAP))
     RESULT["status"] = "done"
     emit("applied", spec["pass"], placed, "actors", batches, "batches", instances, "instances")
