@@ -1,0 +1,1511 @@
+{
+ "pass": "GA03",
+ "title": "Palace entrance: gold portal with doors on a dais, forecourt paving, columns, urns, gold cornices, vines, roses",
+ "folder": "Wonderland/Authored/GA03",
+ "tags": [
+  "V2_Castle"
+ ],
+ "actors": [
+  {
+   "id": "Dais",
+   "mesh": "/Game/WonderlandV2/Architecture/Stairs/SM_terrace_platform.SM_terrace_platform",
+   "loc": [
+    300.0,
+    10410.0,
+    -14.0
+   ],
+   "rot": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "scale": [
+    1.0,
+    0.52,
+    0.3
+   ],
+   "materials": [
+    "MI_V2_PlazaCream"
+   ],
+   "collision": "block"
+  },
+  {
+   "id": "DaisSteps",
+   "mesh": "/Game/WonderlandV2/Architecture/Stairs/SM_path_steps.SM_path_steps",
+   "loc": [
+    300.0,
+    9972.8,
+    -14.0
+   ],
+   "rot": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "scale": [
+    1.6,
+    0.9,
+    0.75
+   ],
+   "materials": [
+    "MI_V2_PlazaCream"
+   ],
+   "collision": "block"
+  },
+  {
+   "id": "PortalArch",
+   "mesh": "/Game/WonderlandV2/Architecture/Garden/SM_garden_arch_stone.SM_garden_arch_stone",
+   "loc": [
+    300.0,
+    10480.0,
+    28.0
+   ],
+   "rot": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "scale": [
+    1.5,
+    1.5,
+    1.5
+   ],
+   "materials": [
+    "MI_V2_Gold"
+   ],
+   "collision": "none"
+  },
+  {
+   "id": "PortalCrown",
+   "mesh": "/Game/WonderlandV2/Architecture/Gates/SM_gate_finial_heart.SM_gate_finial_heart",
+   "loc": [
+    300.0,
+    10480.0,
+    1092.5
+   ],
+   "rot": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "scale": [
+    2.2,
+    2.2,
+    2.2
+   ],
+   "materials": [
+    "MI_V2_Gold"
+   ],
+   "collision": "none"
+  },
+  {
+   "id": "DoorLeft",
+   "mesh": "/Game/WonderlandV2/Architecture/Gates/SM_gate_leaf.SM_gate_leaf",
+   "loc": [
+    -68.0,
+    10582.0,
+    28.0
+   ],
+   "rot": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "scale": [
+    0.92,
+    1.0,
+    1.35
+   ],
+   "materials": [
+    "MI_V2_Gold"
+   ],
+   "collision": "block"
+  },
+  {
+   "id": "DoorRight",
+   "mesh": "/Game/WonderlandV2/Architecture/Gates/SM_gate_leaf.SM_gate_leaf",
+   "loc": [
+    668.0,
+    10582.0,
+    28.0
+   ],
+   "rot": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "scale": [
+    -0.92,
+    1.0,
+    1.35
+   ],
+   "materials": [
+    "MI_V2_Gold"
+   ],
+   "collision": "block"
+  },
+  {
+   "id": "ColumnL",
+   "mesh": "/Game/WonderlandV2/Architecture/Castle/SM_column_ornate.SM_column_ornate",
+   "loc": [
+    -480.0,
+    10340.0,
+    -14.0
+   ],
+   "rot": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "scale": [
+    1.0,
+    1.0,
+    1.08
+   ],
+   "materials": [
+    "MI_V2_IvoryStone"
+   ],
+   "collision": "block"
+  },
+  {
+   "id": "ColumnL_Finial",
+   "mesh": "/Game/WonderlandV2/Architecture/Gates/SM_gate_finial_ball.SM_gate_finial_ball",
+   "loc": [
+    -480.0,
+    10340.0,
+    1012.0
+   ],
+   "rot": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "scale": [
+    1.5,
+    1.5,
+    1.5
+   ],
+   "materials": [
+    "MI_V2_Gold"
+   ],
+   "collision": "none"
+  },
+  {
+   "id": "UrnL",
+   "mesh": "/Game/WonderlandV2/Props/Garden/SM_garden_urn.SM_garden_urn",
+   "loc": [
+    -183.6,
+    9840.0,
+    -14.0
+   ],
+   "rot": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "scale": [
+    1.05,
+    1.05,
+    1.05
+   ],
+   "materials": [
+    "MI_V2_Ceramic"
+   ],
+   "collision": "block"
+  },
+  {
+   "id": "ColumnR",
+   "mesh": "/Game/WonderlandV2/Architecture/Castle/SM_column_ornate.SM_column_ornate",
+   "loc": [
+    1080.0,
+    10340.0,
+    -14.0
+   ],
+   "rot": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "scale": [
+    1.0,
+    1.0,
+    1.08
+   ],
+   "materials": [
+    "MI_V2_IvoryStone"
+   ],
+   "collision": "block"
+  },
+  {
+   "id": "ColumnR_Finial",
+   "mesh": "/Game/WonderlandV2/Architecture/Gates/SM_gate_finial_ball.SM_gate_finial_ball",
+   "loc": [
+    1080.0,
+    10340.0,
+    1012.0
+   ],
+   "rot": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "scale": [
+    1.5,
+    1.5,
+    1.5
+   ],
+   "materials": [
+    "MI_V2_Gold"
+   ],
+   "collision": "none"
+  },
+  {
+   "id": "UrnR",
+   "mesh": "/Game/WonderlandV2/Props/Garden/SM_garden_urn.SM_garden_urn",
+   "loc": [
+    783.6,
+    9840.0,
+    -14.0
+   ],
+   "rot": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "scale": [
+    1.05,
+    1.05,
+    1.05
+   ],
+   "materials": [
+    "MI_V2_Ceramic"
+   ],
+   "collision": "block"
+  },
+  {
+   "id": "CorniceGold0",
+   "mesh": "/Game/WonderlandV2/Ground/Cobblestone/SM_kerb_stone.SM_kerb_stone",
+   "loc": [
+    300.0,
+    10588.0,
+    1110.0
+   ],
+   "rot": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "scale": [
+    14.9,
+    0.7,
+    0.8
+   ],
+   "materials": [
+    "MI_V2_Gold"
+   ],
+   "collision": "none"
+  },
+  {
+   "id": "CorniceGold1",
+   "mesh": "/Game/WonderlandV2/Ground/Cobblestone/SM_kerb_stone.SM_kerb_stone",
+   "loc": [
+    300.0,
+    10588.0,
+    686.0
+   ],
+   "rot": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "scale": [
+    14.9,
+    0.7,
+    0.8
+   ],
+   "materials": [
+    "MI_V2_Gold"
+   ],
+   "collision": "none"
+  },
+  {
+   "id": "Vine0",
+   "mesh": "/Game/WonderlandV2/Vegetation/Ivy/SM_vine_wall.SM_vine_wall",
+   "loc": [
+    -470.0,
+    10570.0,
+    26.0
+   ],
+   "rot": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "scale": [
+    1.3,
+    1.0,
+    1.9
+   ],
+   "materials": [
+    "MI_V2_LeafMid"
+   ],
+   "collision": "none"
+  },
+  {
+   "id": "Vine3",
+   "mesh": "/Game/WonderlandV2/Vegetation/Ivy/SM_vine_wall.SM_vine_wall",
+   "loc": [
+    1070.0,
+    10570.0,
+    26.0
+   ],
+   "rot": [
+    0.0,
+    0.0,
+    0.0
+   ],
+   "scale": [
+    1.3,
+    1.0,
+    1.9
+   ],
+   "materials": [
+    "MI_V2_LeafMid"
+   ],
+   "collision": "none"
+  }
+ ],
+ "batches": [
+  {
+   "id": "UrnBlooms",
+   "mesh": "/Game/WonderlandV2/Vegetation/Flowers/SM_blossom_cluster.SM_blossom_cluster",
+   "material": "MI_V2_PetalRose",
+   "instances": [
+    [
+     -145.6,
+     9840.0,
+     171.0,
+     0.0,
+     245.7,
+     0.0,
+     0.579,
+     0.579,
+     0.579
+    ],
+    [
+     -171.9,
+     9876.1,
+     171.0,
+     0.0,
+     313.3,
+     0.0,
+     0.613,
+     0.613,
+     0.613
+    ],
+    [
+     -214.3,
+     9862.3,
+     171.0,
+     0.0,
+     181.6,
+     0.0,
+     0.513,
+     0.513,
+     0.513
+    ],
+    [
+     -214.3,
+     9817.7,
+     171.0,
+     0.0,
+     212.4,
+     0.0,
+     0.604,
+     0.604,
+     0.604
+    ],
+    [
+     -171.9,
+     9803.9,
+     171.0,
+     0.0,
+     217.1,
+     0.0,
+     0.579,
+     0.579,
+     0.579
+    ],
+    [
+     821.6,
+     9840.0,
+     171.0,
+     0.0,
+     220.5,
+     0.0,
+     0.588,
+     0.588,
+     0.588
+    ],
+    [
+     795.3,
+     9876.1,
+     171.0,
+     0.0,
+     62.3,
+     0.0,
+     0.529,
+     0.529,
+     0.529
+    ],
+    [
+     752.9,
+     9862.3,
+     171.0,
+     0.0,
+     229.9,
+     0.0,
+     0.532,
+     0.532,
+     0.532
+    ],
+    [
+     752.9,
+     9817.7,
+     171.0,
+     0.0,
+     229.3,
+     0.0,
+     0.596,
+     0.596,
+     0.596
+    ],
+    [
+     795.3,
+     9803.9,
+     171.0,
+     0.0,
+     145.8,
+     0.0,
+     0.564,
+     0.564,
+     0.564
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "WallRoseBushes",
+   "mesh": "/Game/WonderlandV2/Vegetation/Roses/SM_rose_bush.SM_rose_bush",
+   "material": "MI_V2_LeafDark",
+   "instances": [
+    [
+     -580.0,
+     10505.0,
+     -14.0,
+     0.0,
+     174.4,
+     0.0,
+     0.513,
+     0.513,
+     0.513
+    ],
+    [
+     -470.0,
+     10505.0,
+     -14.0,
+     0.0,
+     244.8,
+     0.0,
+     0.56,
+     0.56,
+     0.56
+    ],
+    [
+     -360.0,
+     10505.0,
+     -14.0,
+     0.0,
+     17.5,
+     0.0,
+     0.508,
+     0.508,
+     0.508
+    ],
+    [
+     -250.0,
+     10505.0,
+     -14.0,
+     0.0,
+     325.1,
+     0.0,
+     0.526,
+     0.526,
+     0.526
+    ],
+    [
+     850.0,
+     10505.0,
+     -14.0,
+     0.0,
+     220.6,
+     0.0,
+     0.57,
+     0.57,
+     0.57
+    ],
+    [
+     960.0,
+     10505.0,
+     -14.0,
+     0.0,
+     322.6,
+     0.0,
+     0.558,
+     0.558,
+     0.558
+    ],
+    [
+     1070.0,
+     10505.0,
+     -14.0,
+     0.0,
+     42.4,
+     0.0,
+     0.522,
+     0.522,
+     0.522
+    ],
+    [
+     1180.0,
+     10505.0,
+     -14.0,
+     0.0,
+     358.3,
+     0.0,
+     0.585,
+     0.585,
+     0.585
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "WallRoses_RoseRed",
+   "mesh": "/Game/WonderlandV2/Vegetation/Roses/SM_rose_bloom.SM_rose_bloom",
+   "material": "MI_V2_RoseRed",
+   "instances": [
+    [
+     -564.7,
+     10490.0,
+     36.0,
+     0.0,
+     171.5,
+     0.0,
+     0.527,
+     0.527,
+     0.527
+    ],
+    [
+     -450.2,
+     10490.0,
+     36.0,
+     0.0,
+     11.0,
+     0.0,
+     0.572,
+     0.572,
+     0.572
+    ],
+    [
+     -225.1,
+     10490.0,
+     36.0,
+     0.0,
+     211.4,
+     0.0,
+     0.567,
+     0.567,
+     0.567
+    ],
+    [
+     827.7,
+     10490.0,
+     36.0,
+     0.0,
+     77.7,
+     0.0,
+     0.586,
+     0.586,
+     0.586
+    ],
+    [
+     1053.3,
+     10490.0,
+     36.0,
+     0.0,
+     305.9,
+     0.0,
+     0.6,
+     0.6,
+     0.6
+    ],
+    [
+     1157.9,
+     10490.0,
+     36.0,
+     0.0,
+     138.7,
+     0.0,
+     0.557,
+     0.557,
+     0.557
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "WallRoses_RosePink",
+   "mesh": "/Game/WonderlandV2/Vegetation/Roses/SM_rose_bloom.SM_rose_bloom",
+   "material": "MI_V2_RosePink",
+   "instances": [
+    [
+     -383.8,
+     10490.0,
+     36.0,
+     0.0,
+     341.2,
+     0.0,
+     0.549,
+     0.549,
+     0.549
+    ],
+    [
+     935.9,
+     10490.0,
+     36.0,
+     0.0,
+     122.7,
+     0.0,
+     0.514,
+     0.514,
+     0.514
+    ]
+   ],
+   "collides": false,
+   "cast_shadow": true,
+   "affect_df": false
+  },
+  {
+   "id": "ForecourtSlabs_slab3_PlazaGrey",
+   "mesh": "/Game/WonderlandV2/Ground/Cobblestone/SM_plaza_slab_3.SM_plaza_slab_3",
+   "material": "MI_V2_PlazaGrey",
+   "instances": [
+    [
+     -600.0,
+     9380.0,
+     -13.5,
+     0.0,
+     180.0,
+     0.0,
+     0.985,
+     0.985,
+     0.985
+    ],
+    [
+     -280.0,
+     9508.0,
+     -13.5,
+     0.0,
+     180.0,
+     0.0,
+     0.985,
+     0.985,
+     0.985
+    ]
+   ],
+   "collides": true,
+   "cast_shadow": true,
+   "affect_df": true
+  },
+  {
+   "id": "ForecourtSlabs_slab6_PlazaWarm",
+   "mesh": "/Game/WonderlandV2/Ground/Cobblestone/SM_plaza_slab_6.SM_plaza_slab_6",
+   "material": "MI_V2_PlazaWarm",
+   "instances": [
+    [
+     -472.0,
+     9380.0,
+     -13.5,
+     0.0,
+     0.0,
+     0.0,
+     0.985,
+     0.985,
+     0.985
+    ],
+    [
+     -88.0,
+     9380.0,
+     -13.5,
+     0.0,
+     180.0,
+     0.0,
+     0.985,
+     0.985,
+     0.985
+    ],
+    [
+     -152.0,
+     9508.0,
+     -13.5,
+     0.0,
+     180.0,
+     0.0,
+     0.985,
+     0.985,
+     0.985
+    ],
+    [
+     424.0,
+     9636.0,
+     -13.5,
+     0.0,
+     0.0,
+     0.0,
+     0.985,
+     0.985,
+     0.985
+    ],
+    [
+     1192.0,
+     9636.0,
+     -13.5,
+     0.0,
+     180.0,
+     0.0,
+     0.985,
+     0.985,
+     0.985
+    ],
+    [
+     -408.0,
+     9764.0,
+     -13.5,
+     0.0,
+     0.0,
+     0.0,
+     0.985,
+     0.985,
+     0.985
+    ],
+    [
+     360.0,
+     9764.0,
+     -13.5,
+     0.0,
+     0.0,
+     0.0,
+     0.985,
+     0.985,
+     0.985
+    ],
+    [
+     1128.0,
+     9764.0,
+     -13.5,
+     0.0,
+     180.0,
+     0.0,
+     0.985,
+     0.985,
+     0.985
+    ]
+   ],
+   "collides": true,
+   "cast_shadow": true,
+   "affect_df": true
+  },
+  {
+   "id": "ForecourtSlabs_slab0_PlazaWarm",
+   "mesh": "/Game/WonderlandV2/Ground/Cobblestone/SM_plaza_slab_0.SM_plaza_slab_0",
+   "material": "MI_V2_PlazaWarm",
+   "instances": [
+    [
+     -344.0,
+     9380.0,
+     -13.5,
+     0.0,
+     180.0,
+     0.0,
+     0.985,
+     0.985,
+     0.985
+    ],
+    [
+     -408.0,
+     9508.0,
+     -13.5,
+     0.0,
+     0.0,
+     0.0,
+     0.985,
+     0.985,
+     0.985
+    ],
+    [
+     1128.0,
+     9508.0,
+     -13.5,
+     0.0,
+     180.0,
+     0.0,
+     0.985,
+     0.985,
+     0.985
+    ],
+    [
+     552.0,
+     9636.0,
+     -13.5,
+     0.0,
+     0.0,
+     0.0,
+     0.985,
+     0.985,
+     0.985
+    ],
+    [
+     104.0,
+     9764.0,
+     -13.5,
+     0.0,
+     180.0,
+     0.0,
+     0.985,
+     0.985,
+     0.985
+    ],
+    [
+     488.0,
+     9764.0,
+     -13.5,
+     0.0,
+     180.0,
+     0.0,
+     0.985,
+     0.985,
+     0.985
+    ],
+    [
+     -88.0,
+     9892.0,
+     -13.5,
+     0.0,
+     0.0,
+     0.0,
+     0.985,
+     0.985,
+     0.985
+    ]
+   ],
+   "collides": true,
+   "cast_shadow": true,
+   "affect_df": true
+  },
+  {
+   "id": "ForecourtSlabs_slab3_PlazaCream",
+   "mesh": "/Game/WonderlandV2/Ground/Cobblestone/SM_plaza_slab_3.SM_plaza_slab_3",
+   "material": "MI_V2_PlazaCream",
+   "instances": [
+    [
+     -216.0,
+     9380.0,
+     -13.5,
+     0.0,
+     180.0,
+     0.0,
+     0.985,
+     0.985,
+     0.985
+    ],
+    [
+     168.0,
+     9380.0,
+     -13.5,
+     0.0,
+     0.0,
+     0.0,
+     0.985,
+     0.985,
+     0.985
+    ],
+    [
+     552.0,
+     9380.0,
+     -13.5,
+     0.0,
+     180.0,
+     0.0,
+     0.985,
+     0.985,
+     0.985
+    ],
+    [
+     936.0,
+     9380.0,
+     -13.5,
+     0.0,
+     180.0,
+     0.0,
+     0.985,
+     0.985,
+     0.985
+    ],
+    [
+     488.0,
+     9508.0,
+     -13.5,
+     0.0,
+     180.0,
+     0.0,
+     0.985,
+     0.985,
+     0.985
+    ],
+    [
+     872.0,
+     9508.0,
+     -13.5,
+     0.0,
+     0.0,
+     0.0,
+     0.985,
+     0.985,
+     0.985
+    ],
+    [
+     -472.0,
+     9636.0,
+     -13.5,
+     0.0,
+     180.0,
+     0.0,
+     0.985,
+     0.985,
+     0.985
+    ],
+    [
+     -88.0,
+     9636.0,
+     -13.5,
+     0.0,
+     0.0,
+     0.0,
+     0.985,
+     0.985,
+     0.985
+    ],
+    [
+     296.0,
+     9636.0,
+     -13.5,
+     0.0,
+     0.0,
+     0.0,
+     0.985,
+     0.985,
+     0.985
+    ],
+    [
+     680.0,
+     9636.0,
+     -13.5,
+     0.0,
+     180.0,
+     0.0,
+     0.985,
+     0.985,
+     0.985
+    ],
+    [
+     1064.0,
+     9636.0,
+     -13.5,
+     0.0,
+     180.0,
+     0.0,
+     0.985,
+     0.985,
+     0.985
+    ],
+    [
+     -536.0,
+     9764.0,
+     -13.5,
+     0.0,
+     0.0,
+     0.0,
+     0.985,
+     0.985,
+     0.985
+    ],
+    [
+     -152.0,
+     9764.0,
+     -13.5,
+     0.0,
+     0.0,
+     0.0,
+     0.985,
+     0.985,
+     0.985
+    ],
+    [
+     232.0,
+     9764.0,
+     -13.5,
+     0.0,
+     0.0,
+     0.0,
+     0.985,
+     0.985,
+     0.985
+    ],
+    [
+     616.0,
+     9764.0,
+     -13.5,
+     0.0,
+     180.0,
+     0.0,
+     0.985,
+     0.985,
+     0.985
+    ],
+    [
+     424.0,
+     9892.0,
+     -13.5,
+     0.0,
+     180.0,
+     0.0,
+     0.985,
+     0.985,
+     0.985
+    ],
+    [
+     1192.0,
+     9892.0,
+     -13.5,
+     0.0,
+     180.0,
+     0.0,
+     0.985,
+     0.985,
+     0.985
+    ]
+   ],
+   "collides": true,
+   "cast_shadow": true,
+   "affect_df": true
+  },
+  {
+   "id": "ForecourtSlabs_slab0_PlazaCream",
+   "mesh": "/Game/WonderlandV2/Ground/Cobblestone/SM_plaza_slab_0.SM_plaza_slab_0",
+   "material": "MI_V2_PlazaCream",
+   "instances": [
+    [
+     40.0,
+     9380.0,
+     -13.5,
+     0.0,
+     180.0,
+     0.0,
+     0.985,
+     0.985,
+     0.985
+    ],
+    [
+     1192.0,
+     9380.0,
+     -13.5,
+     0.0,
+     180.0,
+     0.0,
+     0.985,
+     0.985,
+     0.985
+    ],
+    [
+     -600.0,
+     9636.0,
+     -13.5,
+     0.0,
+     0.0,
+     0.0,
+     0.985,
+     0.985,
+     0.985
+    ],
+    [
+     -216.0,
+     9636.0,
+     -13.5,
+     0.0,
+     0.0,
+     0.0,
+     0.985,
+     0.985,
+     0.985
+    ],
+    [
+     936.0,
+     9636.0,
+     -13.5,
+     0.0,
+     0.0,
+     0.0,
+     0.985,
+     0.985,
+     0.985
+    ],
+    [
+     -280.0,
+     9764.0,
+     -13.5,
+     0.0,
+     180.0,
+     0.0,
+     0.985,
+     0.985,
+     0.985
+    ],
+    [
+     872.0,
+     9764.0,
+     -13.5,
+     0.0,
+     0.0,
+     0.0,
+     0.985,
+     0.985,
+     0.985
+    ],
+    [
+     -472.0,
+     9892.0,
+     -13.5,
+     0.0,
+     0.0,
+     0.0,
+     0.985,
+     0.985,
+     0.985
+    ],
+    [
+     680.0,
+     9892.0,
+     -13.5,
+     0.0,
+     180.0,
+     0.0,
+     0.985,
+     0.985,
+     0.985
+    ],
+    [
+     1064.0,
+     9892.0,
+     -13.5,
+     0.0,
+     0.0,
+     0.0,
+     0.985,
+     0.985,
+     0.985
+    ]
+   ],
+   "collides": true,
+   "cast_shadow": true,
+   "affect_df": true
+  },
+  {
+   "id": "ForecourtSlabs_slab6_PlazaCream",
+   "mesh": "/Game/WonderlandV2/Ground/Cobblestone/SM_plaza_slab_6.SM_plaza_slab_6",
+   "material": "MI_V2_PlazaCream",
+   "instances": [
+    [
+     296.0,
+     9380.0,
+     -13.5,
+     0.0,
+     0.0,
+     0.0,
+     0.985,
+     0.985,
+     0.985
+    ],
+    [
+     1064.0,
+     9380.0,
+     -13.5,
+     0.0,
+     0.0,
+     0.0,
+     0.985,
+     0.985,
+     0.985
+    ],
+    [
+     -536.0,
+     9508.0,
+     -13.5,
+     0.0,
+     180.0,
+     0.0,
+     0.985,
+     0.985,
+     0.985
+    ],
+    [
+     616.0,
+     9508.0,
+     -13.5,
+     0.0,
+     180.0,
+     0.0,
+     0.985,
+     0.985,
+     0.985
+    ],
+    [
+     1000.0,
+     9508.0,
+     -13.5,
+     0.0,
+     0.0,
+     0.0,
+     0.985,
+     0.985,
+     0.985
+    ],
+    [
+     -344.0,
+     9636.0,
+     -13.5,
+     0.0,
+     0.0,
+     0.0,
+     0.985,
+     0.985,
+     0.985
+    ],
+    [
+     808.0,
+     9636.0,
+     -13.5,
+     0.0,
+     180.0,
+     0.0,
+     0.985,
+     0.985,
+     0.985
+    ],
+    [
+     -24.0,
+     9764.0,
+     -13.5,
+     0.0,
+     180.0,
+     0.0,
+     0.985,
+     0.985,
+     0.985
+    ],
+    [
+     744.0,
+     9764.0,
+     -13.5,
+     0.0,
+     180.0,
+     0.0,
+     0.985,
+     0.985,
+     0.985
+    ],
+    [
+     -600.0,
+     9892.0,
+     -13.5,
+     0.0,
+     0.0,
+     0.0,
+     0.985,
+     0.985,
+     0.985
+    ],
+    [
+     168.0,
+     9892.0,
+     -13.5,
+     0.0,
+     0.0,
+     0.0,
+     0.985,
+     0.985,
+     0.985
+    ],
+    [
+     936.0,
+     9892.0,
+     -13.5,
+     0.0,
+     180.0,
+     0.0,
+     0.985,
+     0.985,
+     0.985
+    ]
+   ],
+   "collides": true,
+   "cast_shadow": true,
+   "affect_df": true
+  },
+  {
+   "id": "ForecourtSlabs_slab0_PlazaGrey",
+   "mesh": "/Game/WonderlandV2/Ground/Cobblestone/SM_plaza_slab_0.SM_plaza_slab_0",
+   "material": "MI_V2_PlazaGrey",
+   "instances": [
+    [
+     424.0,
+     9380.0,
+     -13.5,
+     0.0,
+     180.0,
+     0.0,
+     0.985,
+     0.985,
+     0.985
+    ],
+    [
+     360.0,
+     9508.0,
+     -13.5,
+     0.0,
+     180.0,
+     0.0,
+     0.985,
+     0.985,
+     0.985
+    ],
+    [
+     296.0,
+     9892.0,
+     -13.5,
+     0.0,
+     0.0,
+     0.0,
+     0.985,
+     0.985,
+     0.985
+    ]
+   ],
+   "collides": true,
+   "cast_shadow": true,
+   "affect_df": true
+  },
+  {
+   "id": "ForecourtSlabs_slab3_PlazaWarm",
+   "mesh": "/Game/WonderlandV2/Ground/Cobblestone/SM_plaza_slab_3.SM_plaza_slab_3",
+   "material": "MI_V2_PlazaWarm",
+   "instances": [
+    [
+     1000.0,
+     9764.0,
+     -13.5,
+     0.0,
+     180.0,
+     0.0,
+     0.985,
+     0.985,
+     0.985
+    ],
+    [
+     -344.0,
+     9892.0,
+     -13.5,
+     0.0,
+     0.0,
+     0.0,
+     0.985,
+     0.985,
+     0.985
+    ],
+    [
+     40.0,
+     9892.0,
+     -13.5,
+     0.0,
+     180.0,
+     0.0,
+     0.985,
+     0.985,
+     0.985
+    ],
+    [
+     808.0,
+     9892.0,
+     -13.5,
+     0.0,
+     180.0,
+     0.0,
+     0.985,
+     0.985,
+     0.985
+    ]
+   ],
+   "collides": true,
+   "cast_shadow": true,
+   "affect_df": true
+  },
+  {
+   "id": "ForecourtSlabs_slab6_PlazaGrey",
+   "mesh": "/Game/WonderlandV2/Ground/Cobblestone/SM_plaza_slab_6.SM_plaza_slab_6",
+   "material": "MI_V2_PlazaGrey",
+   "instances": [
+    [
+     -216.0,
+     9892.0,
+     -13.5,
+     0.0,
+     180.0,
+     0.0,
+     0.985,
+     0.985,
+     0.985
+    ],
+    [
+     552.0,
+     9892.0,
+     -13.5,
+     0.0,
+     180.0,
+     0.0,
+     0.985,
+     0.985,
+     0.985
+    ]
+   ],
+   "collides": true,
+   "cast_shadow": true,
+   "affect_df": true
+  }
+ ]
+}
