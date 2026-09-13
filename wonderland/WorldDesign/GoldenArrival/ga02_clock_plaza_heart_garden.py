@@ -126,19 +126,22 @@ def build():
     # paving runs up to a planter instead of stopping in a ragged hole (GA02a left 64 holes).
     planters = []
     for (ox, oy, orad, zmin, zmax, mesh) in obstacles:
-        if math.hypot(ox - cx, oy - cy) < PLAZA_R - 60 and zmax < 200 and zmin < 80 and orad < 180 and mesh not in ("SM_garden_urn",):
+        # Upright plantings only (zmax >= 60): flat ground flowers sit happily on paving. A walk test
+        # found six planters plus the cone topiaries jamming the Dog on the plaza's east side.
+        if math.hypot(ox - cx, oy - cy) < PLAZA_R - 60 and 60 <= zmax < 200 and zmin < 80 and orad < 180 and mesh not in ("SM_garden_urn",):
             planters.append((ox, oy))
     kept_planters = []
     for (px, py) in planters:
         if all(math.hypot(px - qx, py - qy) > 150 for (qx, qy) in kept_planters):
             kept_planters.append((px, py))
     for k, (px, py) in enumerate(kept_planters):
-        instance("PlazaPlanterRings", "ring_base", "MI_V2_IvoryStone", (px, py, GROUND), (0.36, 0.36, 0.42), rng.uniform(0, 360), collides=True)
+        # Walk-through decoration: a 32 cm stone ring is a trip hazard, not a wall.
+        instance("PlazaPlanterRings", "ring_base", "MI_V2_IvoryStone", (px, py, GROUND), (0.36, 0.36, 0.42), rng.uniform(0, 360), collides=False)
 
     def solid_clear(x, y, radius, margin):
         for (ox, oy, orad, zmin, zmax, mesh) in obstacles:
             if zmin > 150 or zmax < 200:
-                continue      # low plantings are handled by planters; raised pieces do not touch the ground
+                continue      # low plantings sit in planters or on paving; raised pieces do not touch the ground
             if math.hypot(x - ox, y - oy) < orad * 0.72 + radius + margin:
                 return False
         return all(math.hypot(x - px, y - py) > 92 + radius for (px, py) in kept_planters)
