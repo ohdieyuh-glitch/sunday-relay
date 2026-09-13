@@ -26,7 +26,8 @@ now impossible to do it for the builder and not for the validator.
 
 from . import weathering as WX
 from .families import (civic, details, gardens, ground, hero, market,
-                       roofscape, sky, stairs, thresholds, towers, walls, water)
+                       objects, roofscape, sky, stairs, thresholds, towers, walls,
+                       water)
 
 #: (group name, module). Group name reaches the manifest as `family_group` and
 #: names the contact sheet, the Unreal destination folder and the proof pack.
@@ -44,6 +45,7 @@ FAMILIES = (
     ("details", details),
     ("hero", hero),
     ("sky", sky),
+    ("objects", objects),
 )
 
 #: The weathered variants, and the ONE list of them.

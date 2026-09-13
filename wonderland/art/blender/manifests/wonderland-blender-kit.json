@@ -1,7 +1,7 @@
 {
   "schema": "wonderland-blender-kit/1",
   "kit_version": "1.0.0",
-  "generated_utc": "2026-09-13T14:09:23+00:00",
+  "generated_utc": "2026-09-13T15:33:14+00:00",
   "generator": "wonderland/art/blender/scripts/build_assets.py",
   "blender": "4.5.13 LTS",
   "conventions": {
@@ -22,9 +22,9 @@
       "provenance": "measured",
       "unknown_is": "null, and it renders as Unknown -- never 0",
       "observed": {
-        "n": 104,
+        "n": 105,
         "min": 0.153,
-        "median": 0.846,
+        "median": 0.845,
         "max": 1.0,
         "unknown": 0
       }
@@ -36,9 +36,9 @@
       "provenance": "measured",
       "unknown_is": "null, and it renders as Unknown -- never 0",
       "observed": {
-        "n": 104,
+        "n": 105,
         "min": 0.0,
-        "median": 0.37,
+        "median": 0.369,
         "max": 1.0,
         "unknown": 0
       }
@@ -50,7 +50,7 @@
       "provenance": "measured",
       "unknown_is": "null, and it renders as Unknown -- never 0",
       "observed": {
-        "n": 104,
+        "n": 105,
         "min": 0.557,
         "median": 0.999,
         "max": 1.0,
@@ -64,9 +64,9 @@
       "provenance": "measured",
       "unknown_is": "null, and it renders as Unknown -- never 0",
       "observed": {
-        "n": 104,
+        "n": 105,
         "min": 0.0,
-        "median": 0.982,
+        "median": 0.976,
         "max": 1.0,
         "unknown": 0
       }
@@ -78,7 +78,7 @@
       "provenance": "declared",
       "unknown_is": "null, and it renders as Unknown -- never 0",
       "observed": {
-        "n": 104,
+        "n": 105,
         "min": 0.0,
         "median": 0.0,
         "max": 0.7,
@@ -92,7 +92,7 @@
       "provenance": "derived",
       "unknown_is": "null, and it renders as Unknown -- never 0",
       "observed": {
-        "n": 101,
+        "n": 102,
         "min": 0.083,
         "median": 0.675,
         "max": 0.917,
@@ -106,7 +106,7 @@
       "provenance": "derived",
       "unknown_is": "null, and it renders as Unknown -- never 0",
       "observed": {
-        "n": 104,
+        "n": 105,
         "min": 0.05,
         "median": 0.5,
         "max": 0.7,
@@ -189,6 +189,10 @@
       "unreal": "MI_V2_PlazaShade",
       "use": "the dark inlay: a medallion's band, a runnel's floor, a joint"
     },
+    "enamel": {
+      "unreal": "MI_V2_Ceramic",
+      "use": "a clock dial: the pale face inside a gold case"
+    },
     "lawn": {
       "unreal": "MI_V2_Lawn",
       "use": "the sward on a floating island: the ground a castle foot stands on"
@@ -199,9 +203,9 @@
     }
   },
   "counts": {
-    "assets": 104,
-    "meshes": 322,
-    "triangles": 353854,
+    "assets": 105,
+    "meshes": 324,
+    "triangles": 356108,
     "by_role": {
       "foot": 5,
       "body": 12,
@@ -213,7 +217,7 @@
       "detail": 17,
       "route": 11,
       "terrace": 17,
-      "hero": 4
+      "hero": 5
     },
     "legal_tower_stacks_up_to_3_bodies": 865,
     "rung_coverage": {
@@ -33354,6 +33358,252 @@
         }
       },
       "part_count": 3
+    },
+    {
+      "asset_id": "WL_Object_PocketClock",
+      "kit_version": "1.0.0",
+      "family": "pocket_clock",
+      "family_group": "objects",
+      "category": "landmark",
+      "silhouette_role": "hero",
+      "note": "3 m gold pocket clock on its edge: gold case, bezel, crown and bow, enamel dial with gold marks and hands",
+      "districts": [
+        "plaza",
+        "royal_garden",
+        "clock"
+      ],
+      "params": {
+        "case_radius_m": 1.5,
+        "time": "10:10"
+      },
+      "origin_rule": "z = 0 is the GROUND DATUM; +X is the module front. excavation_uu is how far the module is cut in below it.",
+      "excavation_uu": 0.0,
+      "mounts_on": null,
+      "variant_of": null,
+      "units": {
+        "authored": "metres",
+        "manifest": "unreal units (cm)",
+        "uu_per_metre": 100.0
+      },
+      "height_uu": 412.5,
+      "bbox_min_uu": [
+        -33.0,
+        -153.0,
+        0.0
+      ],
+      "bbox_max_uu": [
+        26.0,
+        153.0,
+        412.5
+      ],
+      "size_uu": [
+        59.0,
+        306.0,
+        412.5
+      ],
+      "style": {
+        "slender_broad": 0.601,
+        "low_monumental": 0.158,
+        "open_solid": 1.0,
+        "gold_stone": 0.0,
+        "pristine_aged": 0.0,
+        "garden_urban": 0.583,
+        "ceremonial_residential": 0.05
+      },
+      "base_z_uu": 0.0,
+      "profile_uu": [
+        93.27,
+        121.38,
+        141.35,
+        151.69,
+        153.0,
+        151.69,
+        141.35,
+        121.38,
+        77.37,
+        25.44,
+        40.31,
+        39.32
+      ],
+      "radius_uu": 153.0,
+      "tris_total": 2254,
+      "tri_budget": 9000,
+      "over_budget": false,
+      "nanite_recommended": false,
+      "nanite_rule": "recommended when the module is >= 5000 triangles and the builder has not opted out",
+      "collision_recommended": true,
+      "uv": "planar-world-2m (not a lightmap unwrap)",
+      "sockets": [
+        {
+          "name": "bottom",
+          "kind": "ground",
+          "z_uu": 0.0,
+          "radius_uu": 30.0,
+          "rung": null,
+          "note": "stands on its case edge; a pedestal or the ground carries it"
+        }
+      ],
+      "parts": {
+        "enamel": {
+          "verts": 98,
+          "faces": 144,
+          "tris": 192,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_Ceramic"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            8.0,
+            -134.25,
+            18.75
+          ],
+          "bbox_max_uu": [
+            13.0,
+            134.25,
+            287.25
+          ],
+          "size_uu": [
+            5.0,
+            268.5,
+            268.5
+          ],
+          "height_m": 2.685,
+          "base_z_uu": 18.75,
+          "normals": {
+            "faces": 144,
+            "shells": 1,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 1,
+            "zero_normal_faces": 0
+          },
+          "profile_uu": [
+            68.37,
+            95.82,
+            116.99,
+            124.71,
+            130.33,
+            134.88,
+            133.73,
+            130.33,
+            124.71,
+            116.99,
+            95.82,
+            68.37
+          ],
+          "material": "MI_V2_Ceramic",
+          "mesh_name": "WL_Object_PocketClock_enamel",
+          "glb": "exports\\glb\\WL_Object_PocketClock_enamel.glb",
+          "fbx": "exports\\fbx\\WL_Object_PocketClock_enamel.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_Ceramic"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              0.0799998939037323,
+              0.1875,
+              -1.3424999713897705
+            ],
+            "max_yup": [
+              0.13000009953975677,
+              2.872499942779541,
+              1.3424999713897705
+            ],
+            "bytes": 11704
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 18.75,
+            "stored_z_max": 287.25
+          }
+        },
+        "gold": {
+          "verts": 1044,
+          "faces": 1023,
+          "tris": 2062,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_Gold"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -33.0,
+            -153.0,
+            0.0
+          ],
+          "bbox_max_uu": [
+            26.0,
+            153.0,
+            412.5
+          ],
+          "size_uu": [
+            59.0,
+            306.0,
+            412.5
+          ],
+          "height_m": 4.125,
+          "base_z_uu": 0.0,
+          "normals": {
+            "faces": 1023,
+            "shells": 24,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 3,
+            "zero_normal_faces": 0
+          },
+          "profile_uu": [
+            93.27,
+            121.38,
+            141.35,
+            151.69,
+            153.0,
+            151.69,
+            141.35,
+            121.38,
+            77.37,
+            25.44,
+            40.31,
+            39.32
+          ],
+          "material": "MI_V2_Gold",
+          "mesh_name": "WL_Object_PocketClock_gold",
+          "glb": "exports\\glb\\WL_Object_PocketClock_gold.glb",
+          "fbx": "exports\\fbx\\WL_Object_PocketClock_gold.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_Gold"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -0.33000001311302185,
+              0,
+              -1.5299999713897705
+            ],
+            "max_yup": [
+              0.25999999046325684,
+              4.125,
+              1.5299999713897705
+            ],
+            "bytes": 86064
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": 0.0,
+            "stored_z_max": 412.5
+          }
+        }
+      },
+      "part_count": 2
     },
     {
       "asset_id": "WL_Wall_Curtain_Run__aged",

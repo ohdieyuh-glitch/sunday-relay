@@ -309,6 +309,12 @@ MATERIALS = {
         "unreal": "MI_V2_PlazaShade", "rgb": (0.30, 0.28, 0.24),
         "metallic": 0.0, "roughness": 0.78, "emissive": 0.0,
         "use": "the dark inlay: a medallion's band, a runnel's floor, a joint"},
+    # ENAMEL: a clock dial (families/objects.py). MI_V2_Ceramic is the glaze the world's teacups wear, so a
+    # gold clock's face reads as a glazed face against its gold case at any distance.
+    "enamel": {
+        "unreal": "MI_V2_Ceramic", "rgb": (0.90, 0.87, 0.82),
+        "metallic": 0.0, "roughness": 0.22, "emissive": 0.0,
+        "use": "a clock dial: the pale face inside a gold case"},
     # THE LAWN a floating island's castle stands on (families/sky.py). MI_V2_Lawn is the world's own
     # garden sward, so an island's grass is the same grass as the garden under it.
     "lawn": {
