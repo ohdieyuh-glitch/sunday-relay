@@ -141,6 +141,10 @@ const MISSION_LIMITS = Object.freeze({
   // a stale note to reconcile and one rule the architect must decide. Sized
   // like the continuous qualification; a bound, not a forecast.
   'julius-lab-eval-1': Object.freeze({ spendUsd: 60, repairCycles: 3 }),
+  // Lab evaluation mission 2, 2026-09-12: regression under change. The task
+  // contract gains two terms while contracts already written must keep their
+  // digests; the obvious change stops runs in flight. Same bound.
+  'julius-lab-eval-2': Object.freeze({ spendUsd: 60, repairCycles: 3 }),
 });
 
 /** The ceilings that apply to THIS contract, by its own declared namespace. */
@@ -239,6 +243,22 @@ const MISSION_RESEARCH = Object.freeze({
    * not enough to browse.
    */
   'julius-lab-eval-1': Object.freeze({
+    roles: Object.freeze(['PROMPT_ARCHITECT', 'CODING_AGENT', 'INDEPENDENT_REVIEWER']),
+    allowances: Object.freeze([
+      Object.freeze({
+        source: 'web',
+        capabilities: Object.freeze(['read_item']),
+        hosts: Object.freeze(['nodejs.org']),
+      }),
+    ]),
+    missionBudget: Object.freeze({ maxRetrievals: 6, maxBytes: 400_000 }),
+    roleBudget: Object.freeze({ maxRetrievals: 2, maxBytes: 200_000 }),
+  }),
+  /**
+   * LAB EVALUATION MISSION 2. The same grant: the change is only correct in
+   * the syntax Node's type stripping erases, and that is documented there.
+   */
+  'julius-lab-eval-2': Object.freeze({
     roles: Object.freeze(['PROMPT_ARCHITECT', 'CODING_AGENT', 'INDEPENDENT_REVIEWER']),
     allowances: Object.freeze([
       Object.freeze({
