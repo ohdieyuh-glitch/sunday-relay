@@ -1,0 +1,12 @@
+{
+ "look": "MAT01",
+ "title": "Blush ivory: warmer castle stone, blush marble, stronger pink roofs",
+ "chosen_from": "material_variants.py round mat1, variant v2_blush_ivory, judged on HeroCam_V2_MarbleReference, the palace forecourt, East_QuarterStreet58 and a corridor aerial on 2026-09-13",
+ "why": "The reference's castle city is warm ivory and pastel pink; the recovered stone was a neutral grey-white (linear 0.58/0.57/0.56). A warmer plaza stone was tried too (v3) and rejected: the paving went yellow-brown.",
+ "materials": {
+  "MI_V2_IvoryStone": {"BaseColor": {"before": [0.5760869383811951, 0.5652788281440735, 0.5545286536216736, 1.0], "after": [0.70, 0.63, 0.575, 1.0]}},
+  "MI_V2_MarblePale": {"BaseColor": {"before": [0.5978260636329651, 0.5870203375816345, 0.5654017329216003, 1.0], "after": [0.72, 0.66, 0.60, 1.0]}},
+  "MI_V2_MarbleBlush": {"BaseColor": {"before": [0.6086956262588501, 0.5652788281440735, 0.5654017329216003, 1.0], "after": [0.75, 0.60, 0.60, 1.0]}},
+  "MI_V2_RoofPink": {"BaseColor": {"before": [0.72636479139328, 0.45065343379974365, 0.47382670640945435, 1.0], "after": [0.80, 0.42, 0.48, 1.0]}}
+ }
+}
