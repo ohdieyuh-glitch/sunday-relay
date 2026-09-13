@@ -29,7 +29,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { safeText } from './redact';
-import { juliusResearchAskFieldGuidance } from '../src/relay/mission/julius/julius-research-protocol';
+import { RESEARCH_AUTHORITY_NOT_STATED, juliusResearchAskFieldGuidance } from '../src/relay/mission/julius/julius-research-protocol';
 import type { JuliusReviewCharge, JuliusReviewStage } from '../src/relay/mission/julius/julius-review-stage';
 import type { JuliusContractReviewCharge } from '../src/relay/mission/julius/julius-task-contract';
 import { parseUsageFile, type HermesUsage } from './reviewer-harness/hermes/runner';
@@ -945,6 +945,12 @@ interface ReviewPacketFields {
    */
   guidanceJson?: string;
   acceptanceCriteria?: string[];
+  /**
+   * WHAT RESEARCH THIS MISSION AUTHORISES, rendered by Julius from the sealed
+   * policy the mediator decides with (`renderJuliusResearchAuthority`). Absent
+   * when the composition handed the adapter no policy, and the prompt says so.
+   */
+  researchAuthority?: string;
   allowedFiles?: string[];
   prohibitedFiles?: string[];
   baseRevision: string;
@@ -1159,6 +1165,7 @@ export function buildReviewPrompt(p: ReviewPacket): string {
      * cannot state different rules.
      */
     juliusResearchAskFieldGuidance(),
+    p.researchAuthority ?? RESEARCH_AUTHORITY_NOT_STATED,
     '',
     `MISSION: ${p.missionId}`,
     `MISSION REVISION: ${p.missionRevision ?? '(unversioned)'}`,

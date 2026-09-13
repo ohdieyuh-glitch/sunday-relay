@@ -360,6 +360,19 @@ describe('D — the entrypoint actually hands both halves to the runtime', () =>
     expect(body).toContain('researchProbes:');
   });
 
+  it('19b. the workers are TOLD from the same sealed-policy function the mediator DECIDES with', () => {
+    // Qualification attempt 2 had all four research asks refused while no
+    // prompt named the grant. The paid run's workers now receive it, and from
+    // one function: the dispatching resolution and the runtime both get
+    // `researchPolicyOf`, so the sentence and the decision cannot diverge.
+    const dispatching = ENTRY.slice(ENTRY.indexOf('const resolution = resolveLiveWorkers({'));
+    expect(callBody(dispatching, 'resolveLiveWorkers')).toContain('researchPolicyFor: researchPolicyOf,');
+    expect(callBody(ENTRY, 'assembleLiveJuliusRuntime')).toContain('researchPolicyFor: researchPolicyOf,');
+    const source = ENTRY.slice(ENTRY.indexOf('const researchPolicyOf = '), ENTRY.indexOf('const resolution = resolveLiveWorkers({'));
+    expect(source).toContain('noJuliusResearch(missionId)');
+    expect(source).toContain('sealLiveMissionResearchPolicy(missionId, researchClause)');
+  });
+
   it('20. both sit behind the clause, so an absent clause passes neither', () => {
     const body = callBody(ENTRY, 'assembleLiveJuliusRuntime');
     const guard = body.indexOf('researchClause === undefined ? {} : {');

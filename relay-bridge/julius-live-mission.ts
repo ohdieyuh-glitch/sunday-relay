@@ -62,7 +62,7 @@ import {
   driveJuliusRunToTerminal,
   resolveLiveWorkers,
 } from './julius/live-composition';
-import { sealJuliusResearchPolicy, type JuliusResearchPolicy } from '../src/relay/mission/julius';
+import { noJuliusResearch, sealJuliusResearchPolicy, type JuliusResearchPolicy } from '../src/relay/mission/julius';
 import {
   LIVE_REACH_ACTION_CAPABILITIES,
   LIVE_REACH_READ_CAPABILITIES,
@@ -837,10 +837,21 @@ async function main(argv: readonly string[]): Promise<number> {
       executionId,
       workspaceSourceRef: contract.workspacePath,
     });
+    /**
+     * THE SEALED RESEARCH POLICY, ONCE, FOR BOTH OF ITS READERS. The workers are
+     * told what it authorises and the mediator decides every ask against it, so
+     * the sentence and the decision come from one function. With no clause both
+     * see `noJuliusResearch`, which is what the composition defaults to anyway.
+     */
+    const researchClause = contract.research;
+    const researchPolicyOf = (missionId: string): JuliusResearchPolicy => (researchClause === undefined
+      ? noJuliusResearch(missionId)
+      : sealLiveMissionResearchPolicy(missionId, researchClause));
     const resolution = resolveLiveWorkers({
       env, projectId: contract.projectId, workspacePath: contract.workspacePath,
       testCommand: contract.testCommand, contexts: handoffs.contexts, artifacts, shell,
       architectMaxOutputTokens: contract.limits?.architectMaxOutputTokens,
+      researchPolicyFor: researchPolicyOf,
     });
     if (!resolution.ok) {
       for (const problem of resolution.problems) out(`BLOCKED ${problem.role}: ${problem.missing.join(', ')}`);
@@ -893,7 +904,6 @@ async function main(argv: readonly string[]): Promise<number> {
      * Both absent is the state every paid mission has run in so far, and it
      * stays the default.
      */
-    const researchClause = contract.research;
     const runtime = assembleLiveJuliusRuntime({
       store: handoffs.store,
       entries: resolution.entries,
@@ -901,7 +911,7 @@ async function main(argv: readonly string[]): Promise<number> {
       spendCeilingUsdMicros: Math.round((contract.limits?.spendUsd ?? 5) * 1_000_000),
       maxRepairRounds: contract.limits?.repairCycles ?? 1,
       ...(researchClause === undefined ? {} : {
-        researchPolicyFor: (missionId: string) => sealLiveMissionResearchPolicy(missionId, researchClause),
+        researchPolicyFor: researchPolicyOf,
         researchProbes: observed.probes,
       }),
     });
