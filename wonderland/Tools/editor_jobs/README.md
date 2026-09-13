@@ -2,6 +2,10 @@
 
 Scripts that drive a live Unreal Editor session through `wonderland/Tools/editor_channel.py`.
 
+**Visual authority:** captures are judged against the GPT Wonderland Bible boards, not the Marble image
+(`wonderland/WorldDesign/VISUAL_AUTHORITY.md`, founder ruling 2026-09-13). The Marble scaffold and
+`HeroCam_V2_MarbleReference` remain as historical source and as a useful camera pose.
+
 Launch the editor with the channel once:
 
     UnrealEditor.exe Wonderland.uproject /Game/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2 ^
@@ -17,7 +21,7 @@ and any captures go to `<channel dir>/../captures/`.
 | `place_anchors.py` | editor | places/moves `AWonderlandTravelAnchor` actors from `done/anchors_search.json`, saves the map |
 | `ui_tests.py` | PIE | 32 checks: usage HUD, Julius 3.3 terminal (Ctrl+T), world map (M) and teleport, PIE restart |
 | `camera_census.py` | editor | every CameraActor (label, pose, FOV) and the Marble scaffold placement |
-| `reference_suite.py` | PIE | each suite camera twice: the authored world, and the Marble reference scaffold alone |
+| `reference_suite.py` | PIE | each suite camera twice: the authored world, and the Marble scaffold alone (historical source, not the target) |
 | `camera_shots.py` | PIE | authored captures from named cameras (`CAMERAS`, `TAG`), plus a frame-rate sample |
 | `topdown.py` | PIE | orthographic plans of the corridor (cm per pixel = ortho width / viewport height) |
 | `corridor_census.py` | editor | actors and batch instances along the Golden Arrival corridor; how the generator used hero meshes |

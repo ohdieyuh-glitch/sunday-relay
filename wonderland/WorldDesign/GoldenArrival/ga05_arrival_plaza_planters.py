@@ -11,6 +11,9 @@ framing the view up the garden path. The central lane (x +/-390) and the portal 
 
 MEASURED INPUTS. obstacles_arrival_plaza.json; the spawn V2_ArrivalSpawn is at (0, -1460) yaw 90;
 plaza slab tops are z ~+12 (arrival anchor probe); planter box 210 x 210 x 70 at 1x.
+
+JUDGED AGAINST (historical): this pass was judged against the Marble image, the authority at the time.
+The current authority is the GPT Wonderland Bible boards (WorldDesign/VISUAL_AUTHORITY.md, 2026-09-13).
 """
 import json
 import math

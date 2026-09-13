@@ -14,6 +14,9 @@ about z 325, SM_heart_topiary 588 x 199 x 541 about z 404).
 
 Run:  python wonderland/WorldDesign/GoldenArrival/ga01_hero_view.py   (writes ga01_hero_view.json)
 Apply with wonderland/Tools/editor_jobs/apply_layer.py.
+
+JUDGED AGAINST (historical): this pass was judged against the Marble image, the authority at the time.
+The current authority is the GPT Wonderland Bible boards (WorldDesign/VISUAL_AUTHORITY.md, 2026-09-13).
 """
 import json
 import math

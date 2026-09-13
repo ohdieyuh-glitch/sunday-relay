@@ -9,6 +9,9 @@ WHAT THIS LAYER ADDS. Floating props on AWonderlandHoverProp (slow bob and sway)
 the corridor: large gold keys over the heart garden and palace, rose orbs among the spires, a gold
 clock over the Clock Plaza, and a flight of teacups by the palace. Heights keep them above every
 roof they are near; nothing collides.
+
+JUDGED AGAINST (historical): this pass was judged against the Marble image, the authority at the time.
+The current authority is the GPT Wonderland Bible boards (WorldDesign/VISUAL_AUTHORITY.md, 2026-09-13).
 """
 import json
 import random

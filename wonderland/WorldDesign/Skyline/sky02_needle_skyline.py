@@ -2,8 +2,9 @@
 """SKY02 -- needles in the skyline the visitor actually sees.
 
 WHAT WAS THERE. Above the arrival garden the skyline is the castle city: drums under wide onion
-roofs. The Marble reference's skyline is NEEDLES -- slender shafts under very tall thin roofs, packed
-at several heights (forge references/GAPS.md, GAP 1, the largest single difference between the two).
+roofs. The Wonderland Bible boards' skyline (VISUAL_AUTHORITY.md; BOARD_1 centre, BOARD_4 panel 08)
+is hundreds of slender ivory towers under tall pink, lavender and pale-blue cones, packed at several
+heights -- forge references/GAPS.md named the same gap (GAP 1) from the older Marble image.
 
 WHAT THE FIRST ATTEMPT TAUGHT (2026-09-13, SKY02a, previewed and never saved). Stands of seven kit
 towers on the forge recipe, placed on the clearest ground 470-560 m out, were invisible from every

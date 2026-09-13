@@ -1,4 +1,6 @@
 # PIE job: the reference-comparison suite. Every chosen world camera is captured twice from the
+# HISTORICAL: the Marble scaffold is recovered source material, not the visual target. Judge captures
+# against the Bible boards (wonderland/WorldDesign/VISUAL_AUTHORITY.md, founder ruling 2026-09-13).
 # same pose -- the AUTHORED world as a visitor sees it, and the MARBLE reference scaffold alone --
 # so the gap between them can be judged image against image instead of from memory.
 # Nothing is saved: visibility changes happen in the PIE copy of the world only.
