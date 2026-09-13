@@ -10,7 +10,8 @@ MAP_OBJECT = "/Game/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2.WL_V2_GoldenArriva
 BOX = globals().get("BOX", (-5000.0, 5000.0, -2500.0, 12000.0))
 MIN_TOP = globals().get("MIN_TOP", 450.0)
 OUT = globals().get("OUT", r"C:/Users/Kaisi/.claude/jobs/ec4f540e/tmp/vegetation_census.json")
-WORDS = ("canopy", "tree", "blossom", "hedge_mass", "topiary", "vine_hanging", "bush", "shrub", "willow", "cypress")
+# WORDS (mesh-name fragments) defaults to tall vegetation; a declutter census passes prop meshes instead.
+WORDS = tuple(globals().get("WORDS", ("canopy", "tree", "blossom", "hedge_mass", "topiary", "vine_hanging", "bush", "shrub", "willow", "cypress")))
 
 
 def job():

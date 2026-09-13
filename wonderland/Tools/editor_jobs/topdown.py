@@ -5,7 +5,7 @@ import os
 SHOTS = os.path.join(os.path.dirname(CHANNEL), "captures", "topdown")
 TAG = globals().get("PASS_TAG", "baseline")
 # (name, centre x, centre y, ortho width). Camera yaw 0: screen right = +Y (toward the castle), screen up = +X.
-PLANS = [("arrival_path", 0.0, 2500.0, 9500.0), ("castle_approach", 0.0, 11500.0, 9500.0), ("arrival_close", 0.0, 1200.0, 4200.0)]
+PLANS = globals().get("PLANS") or [("arrival_path", 0.0, 2500.0, 9500.0), ("castle_approach", 0.0, 11500.0, 9500.0), ("arrival_close", 0.0, 1200.0, 4200.0)]
 
 
 def job():

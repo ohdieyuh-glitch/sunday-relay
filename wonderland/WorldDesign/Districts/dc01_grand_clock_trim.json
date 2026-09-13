@@ -1,0 +1,238 @@
+{
+ "pass": "DC01_TRIM",
+ "title": "The Grand Clock: clutter sunk out of the arrival view (reversible)",
+ "trims": [
+  {
+   "name": "WonderlandInstancedBatch_278",
+   "label": "V2Batch_balustrade_MI_V2_IvoryStone",
+   "mesh": "SM_balustrade",
+   "index": 62,
+   "why": "balustrade fragment across the promenade, 5 m ahead, left",
+   "before": [
+    11019.087,
+    -655.554,
+    0.0,
+    0.0,
+    -5.0,
+    0.0,
+    0.915,
+    0.915,
+    0.915
+   ],
+   "after": [
+    11019.087,
+    -655.554,
+    -100000.0,
+    0.0,
+    -5.0,
+    0.0,
+    0.915,
+    0.915,
+    0.915
+   ]
+  },
+  {
+   "name": "WonderlandInstancedBatch_278",
+   "label": "V2Batch_balustrade_MI_V2_IvoryStone",
+   "mesh": "SM_balustrade",
+   "index": 63,
+   "why": "balustrade fragment across the promenade, 5 m ahead, right",
+   "before": [
+    10965.508,
+    -1267.964,
+    0.0,
+    0.0,
+    -5.0,
+    0.0,
+    1.07,
+    1.07,
+    1.07
+   ],
+   "after": [
+    10965.508,
+    -1267.964,
+    -100000.0,
+    0.0,
+    -5.0,
+    0.0,
+    1.07,
+    1.07,
+    1.07
+   ]
+  },
+  {
+   "name": "WonderlandInstancedBatch_306",
+   "label": "V2Batch_column_ornate_MI_V2_IvoryStone",
+   "mesh": "SM_column_ornate",
+   "index": 13,
+   "why": "lone ornate column on the promenade edge, 10 m ahead",
+   "before": [
+    11562.203,
+    -1225.5,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.841,
+    0.841,
+    0.841
+   ],
+   "after": [
+    11562.203,
+    -1225.5,
+    -100000.0,
+    0.0,
+    0.0,
+    0.0,
+    0.841,
+    0.841,
+    0.841
+   ]
+  },
+  {
+   "name": "WonderlandInstancedBatch_184",
+   "label": "V2Batch_gate_finial_ball_MI_V2_Gold",
+   "mesh": "SM_gate_finial_ball",
+   "index": 72,
+   "why": "its gold ball",
+   "before": [
+    11562.203,
+    -1225.5,
+    656.217,
+    0.0,
+    0.0,
+    0.0,
+    0.431,
+    0.431,
+    0.431
+   ],
+   "after": [
+    11562.203,
+    -1225.5,
+    -99343.783,
+    0.0,
+    0.0,
+    0.0,
+    0.431,
+    0.431,
+    0.431
+   ]
+  },
+  {
+   "name": "WonderlandInstancedBatch_306",
+   "label": "V2Batch_column_ornate_MI_V2_IvoryStone",
+   "mesh": "SM_column_ornate",
+   "index": 14,
+   "why": "lone ornate column by the road, 6 m ahead",
+   "before": [
+    11109.13,
+    -1872.556,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.841,
+    0.841,
+    0.841
+   ],
+   "after": [
+    11109.13,
+    -1872.556,
+    -100000.0,
+    0.0,
+    0.0,
+    0.0,
+    0.841,
+    0.841,
+    0.841
+   ]
+  },
+  {
+   "name": "WonderlandInstancedBatch_184",
+   "label": "V2Batch_gate_finial_ball_MI_V2_Gold",
+   "mesh": "SM_gate_finial_ball",
+   "index": 73,
+   "why": "its gold ball",
+   "before": [
+    11109.13,
+    -1872.556,
+    656.217,
+    0.0,
+    0.0,
+    0.0,
+    0.431,
+    0.431,
+    0.431
+   ],
+   "after": [
+    11109.13,
+    -1872.556,
+    -99343.783,
+    0.0,
+    0.0,
+    0.0,
+    0.431,
+    0.431,
+    0.431
+   ]
+  },
+  {
+   "name": "WonderlandInstancedBatch_306",
+   "label": "V2Batch_column_ornate_MI_V2_IvoryStone",
+   "mesh": "SM_column_ornate",
+   "index": 22,
+   "why": "lone ornate column by the road, 10 m ahead",
+   "before": [
+    11487.927,
+    -1932.637,
+    0.0,
+    0.0,
+    85.0,
+    0.0,
+    1.007,
+    1.007,
+    1.007
+   ],
+   "after": [
+    11487.927,
+    -1932.637,
+    -100000.0,
+    0.0,
+    85.0,
+    0.0,
+    1.007,
+    1.007,
+    1.007
+   ]
+  },
+  {
+   "name": "WonderlandInstancedBatch_304",
+   "label": "V2Batch_garden_wall_MI_V2_IvoryStone",
+   "mesh": "SM_garden_wall",
+   "index": 120,
+   "why": "garden-wall stub standing across the promenade, 12 m ahead",
+   "before": [
+    11792.102,
+    -995.078,
+    0.0,
+    0.0,
+    197.997,
+    0.0,
+    1.185,
+    1.0,
+    0.7
+   ],
+   "after": [
+    11792.102,
+    -995.078,
+    -100000.0,
+    0.0,
+    197.997,
+    0.0,
+    1.185,
+    1.0,
+    0.7
+   ]
+  }
+ ]
+}
