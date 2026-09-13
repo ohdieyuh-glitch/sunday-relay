@@ -980,9 +980,10 @@ export async function runClaimedTask(
    * quietly try three providers before telling anyone.
    */
   const tried: string[] = [];
-  let outcome: JuliusExecutionOutcome = allocation?.basis === 'EXHAUSTED'
+  const denial = denialReasonOf(allocation);
+  let outcome: JuliusExecutionOutcome = denial !== null && allocation !== null
     ? await (async (): Promise<JuliusExecutionOutcome> => {
-      await ledger.event('budget.denied', { taskId: claim.taskId, facts: { reason: 'BUDGET_EXHAUSTED', ...allocationFacts(allocation) } });
+      await ledger.event('budget.denied', { taskId: claim.taskId, facts: { reason: denial, ...allocationFacts(allocation) } });
       return { status: 'DENIED', code: 'BUDGET_DENIED' };
     })()
     : await coordinator.execute({
@@ -2811,10 +2812,16 @@ async function scheduleRepair(input: {
   const reservationId = `reservation:repair:${task.taskId}:${priorRounds + 1}`;
   const estimate = deps.resources.estimate({ taskId: task.taskId, taskType: repairTaskType, role: task.role, attempt: priorRounds + 1 });
   const admission = await allocateFor({ deps, run, role: task.role, taskId: task.taskId, estimateUsdMicros: estimate.usdMicros });
-  if (admission?.basis === 'EXHAUSTED') {
-    await ledger.event('budget.denied', { taskId: task.taskId, facts: { reason: 'BUDGET_EXHAUSTED', forRepairRound: priorRounds + 1, ...allocationFacts(admission) } });
+  const admissionDenial = denialReasonOf(admission);
+  if (admissionDenial !== null && admission !== null) {
+    await ledger.event('budget.denied', { taskId: task.taskId, facts: { reason: admissionDenial, forRepairRound: priorRounds + 1, ...allocationFacts(admission) } });
     await ledger.event('run.failed', { taskId: task.taskId, facts: { reasonCode: 'REPAIR_BUDGET_DENIED', forRepairRound: priorRounds + 1 } });
-    return { kind: 'HALTED', taskId: task.taskId, reasonCode: 'REPAIR_BUDGET_DENIED', safeSummary: 'A repair round was required and the mission budget is exhausted.' };
+    return {
+      kind: 'HALTED', taskId: task.taskId, reasonCode: 'REPAIR_BUDGET_DENIED',
+      safeSummary: admissionDenial === 'BUDGET_EXHAUSTED'
+        ? 'A repair round was required and the mission budget is exhausted.'
+        : 'A repair round was required and the spend ledger for this mission could not be read, so nothing was allocated to it.',
+    };
   }
   const reservation = await deps.budget.reserve({
     reservationId, runId: run.runId, projectId: run.projectId, taskId: task.taskId,
@@ -2922,6 +2929,25 @@ async function allocateFor(input: {
   if (policy.version === JULIUS_SHARED_CEILING_VERSION) {
     const ledger = await projectSlotLedgerFor(input.deps, input.run, policy.ceilingUsdMicros, policy.version);
     if (ledger === null || ledger.historicalPolicyConflict) {
+      /**
+       * A PAID MISSION DOES NOT SPEND AT A FIGURE NOBODY CHOSE.
+       *
+       * The estimate below is one fixed number for every role, and a coder
+       * handed it is stopped by the runtime after a couple of turns while the
+       * mission authorised dollars. So a policy that says DENY funds nothing
+       * here: the dispatch is refused before any provider is reached, and the
+       * refusal names which half of the ledger was missing — no reader at all,
+       * or rows written under a different rule that this one must not
+       * reinterpret.
+       */
+      if (policy.withoutLedger === 'DENY') {
+        return {
+          usdMicros: 0, basis: 'NO_LEDGER_DENIED',
+          shareUsdMicros: null, remainingUsdMicros: remaining,
+          policyVersion: policy.version, slot: input.role, slotEnvelopeUsdMicros: null,
+          slotRefusal: ledger === null ? 'SPEND_LEDGER_UNAVAILABLE' : 'SPEND_LEDGER_POLICY_CONFLICT',
+        };
+      }
       return {
         usdMicros: input.estimateUsdMicros, basis: 'ESTIMATE_NO_LEDGER',
         shareUsdMicros: null, remainingUsdMicros: remaining,
@@ -3219,6 +3245,23 @@ interface JuliusDispatchDecision {
   readonly protectedForPeersUsdMicros?: number;
   readonly repairReserveUsdMicros?: number;
 }
+
+/**
+ * WHY A DECISION DENIES ITS DISPATCH, or null when it does not.
+ *
+ * Two bases deny, for different reasons, and the denial row keeps them apart:
+ * `EXHAUSTED` read the ledger and found nothing left to lend;
+ * `NO_LEDGER_DENIED` could not read the ledger under a policy that forbids
+ * spending without it. Both stop the dispatch before a provider is reached.
+ * Reporting the second as `BUDGET_EXHAUSTED` would tell a reader the mission ran
+ * dry when nobody knew what it had spent — Unknown written down as zero.
+ */
+const denialReasonOf = (allocation: JuliusDispatchDecision | null): 'BUDGET_EXHAUSTED' | 'SPEND_LEDGER_REQUIRED' | null => {
+  if (allocation === null) return null;
+  if (allocation.basis === 'EXHAUSTED') return 'BUDGET_EXHAUSTED';
+  if (allocation.basis === 'NO_LEDGER_DENIED') return 'SPEND_LEDGER_REQUIRED';
+  return null;
+};
 
 const allocationFacts = (allocation: JuliusDispatchDecision): Record<string, string | number | null> => ({
   allocatedUsdMicros: allocation.usdMicros, allocationBasis: allocation.basis,

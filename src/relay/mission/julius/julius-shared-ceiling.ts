@@ -86,6 +86,29 @@ export const JULIUS_DEFAULT_FLOORS_BPS: Readonly<Record<JuliusWorkerRole, number
 export const JULIUS_DEFAULT_REPAIR_RESERVE_BPS = 1_500 as const;
 export const JULIUS_REPAIR_RESERVE_MAX_BPS = 4_000 as const;
 
+/**
+ * WHAT A DISPATCH IS GIVEN WHEN THE SPEND LEDGER CANNOT BE READ.
+ *
+ * This rule decides against what every slot currently holds, and only the
+ * ledger can say that. With no ledger there are two answers, and which one is
+ * honest depends on what the composition is for:
+ *
+ *   ESTIMATE  hold the fixed per-dispatch estimate, under a basis that names
+ *             the absence (`ESTIMATE_NO_LEDGER`). An in-memory composition
+ *             with no timeline relies on it, and until now it was the only
+ *             behaviour.
+ *   DENY      fund nothing, so no provider is reached. A paid mission needs
+ *             this: the estimate is thirty cents, and Lab run 34739303313's
+ *             coder was stopped by exactly that ceiling after two turns while
+ *             the mission had authorised twenty dollars. A paid run that cannot
+ *             read its own ledger must not spend at a figure nobody chose.
+ *
+ * POLICY DATA, defaulting to ESTIMATE, so every composition that builds this
+ * policy without saying keeps the behaviour it was written against.
+ */
+export const JULIUS_WITHOUT_LEDGER_RULES = ['ESTIMATE', 'DENY'] as const;
+export type JuliusWithoutLedgerRule = (typeof JULIUS_WITHOUT_LEDGER_RULES)[number];
+
 export interface JuliusSharedCeilingPolicy {
   readonly version: typeof JULIUS_SHARED_CEILING_VERSION;
   readonly rule: typeof JULIUS_SHARED_CEILING_RULE;
@@ -93,6 +116,8 @@ export interface JuliusSharedCeilingPolicy {
   readonly authorizedRepairRounds: number;
   readonly floorsBps: Readonly<Record<JuliusWorkerRole, number>>;
   readonly repairReserveBps: number;
+  /** What a dispatch is given when the ledger cannot be read. */
+  readonly withoutLedger: JuliusWithoutLedgerRule;
 }
 
 const isCount = (value: number): boolean => Number.isSafeInteger(value) && value >= 0;
@@ -102,6 +127,7 @@ export function juliusSharedCeilingPolicy(input: {
   readonly authorizedRepairRounds: number;
   readonly floorsBps?: Readonly<Record<JuliusWorkerRole, number>>;
   readonly repairReserveBps?: number;
+  readonly withoutLedger?: JuliusWithoutLedgerRule;
 }): JuliusSharedCeilingPolicy {
   if (!isCount(input.ceilingUsdMicros)) throw new Error('shared_ceiling_ceiling_invalid');
   if (!isCount(input.authorizedRepairRounds)) throw new Error('shared_ceiling_repair_rounds_invalid');
@@ -131,6 +157,13 @@ export function juliusSharedCeilingPolicy(input: {
     throw new Error('shared_ceiling_leaves_no_shared_pool');
   }
 
+  const withoutLedger = input.withoutLedger ?? 'ESTIMATE';
+  // REFUSED, NEVER DEFAULTED. A misspelt DENY silently read as ESTIMATE would
+  // put a paid mission straight back on the thirty-cent figure.
+  if (!(JULIUS_WITHOUT_LEDGER_RULES as readonly string[]).includes(withoutLedger)) {
+    throw new Error('shared_ceiling_without_ledger_invalid');
+  }
+
   return Object.freeze({
     version: JULIUS_SHARED_CEILING_VERSION,
     rule: JULIUS_SHARED_CEILING_RULE,
@@ -138,6 +171,7 @@ export function juliusSharedCeilingPolicy(input: {
     authorizedRepairRounds: input.authorizedRepairRounds,
     floorsBps: Object.freeze({ ...floorsBps }),
     repairReserveBps,
+    withoutLedger,
   });
 }
 

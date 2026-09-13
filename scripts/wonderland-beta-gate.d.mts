@@ -13,8 +13,30 @@
  */
 export type BetaVerdict = 'PASS' | 'CAPABILITY PROVEN' | 'FAIL' | 'NOT BUILT';
 
-/** WHAT DID THIS RUN PROVE? Read only from the mission's own durable rows. */
-export type BetaMissionProof = 'EXERCISED' | 'FAILED' | 'NOT EXERCISED' | 'UNKNOWN' | 'NOT BUILT';
+/**
+ * WHAT DID THIS RUN PROVE? Read only from the mission's own durable rows.
+ * `INADMISSIBLE` is a row the run exercised while at least one of its
+ * dispatches was funded at the fixed estimate because no spend ledger was
+ * readable: it happened, and it is not full-capability evidence. A FAILED row
+ * is never made inadmissible.
+ */
+export type BetaMissionProof = 'EXERCISED' | 'FAILED' | 'NOT EXERCISED' | 'UNKNOWN' | 'INADMISSIBLE' | 'NOT BUILT';
+
+/** How this run's dispatches were funded, read only from `budget.tsv`. */
+export type BetaAllocationState =
+  | 'LEDGER' | 'ESTIMATE_NO_LEDGER' | 'NO_LEDGER_DENIED' | 'EARLIER_RULE'
+  | 'UNRECOGNISED' | 'NONE' | 'UNKNOWN' | 'NO_EVIDENCE';
+
+export interface BetaAllocationValidity {
+  readonly state: BetaAllocationState;
+  /** The rows the state was read from, in words. */
+  readonly basis: string;
+  readonly allocations: number;
+  /** Allocations funded at the fixed estimate because no ledger was readable. */
+  readonly estimated: number;
+  /** Allocations refused because no ledger was readable under a policy that forbids spending without one. */
+  readonly denied: number;
+}
 
 /**
  * WHAT IS JULIUS READY TO DO? Read only from a recorded drill attestation.
@@ -47,11 +69,13 @@ export interface BetaCapabilityResult {
 
 export interface BetaGateSummary {
   readonly total: number;
-  /** WHAT THIS RUN PROVED, four disjoint counts over the mission axis. */
+  /** WHAT THIS RUN PROVED, five disjoint counts over the mission axis. */
   readonly exercised: number;
   readonly failed: number;
   readonly notExercised: number;
   readonly unknown: number;
+  /** Exercised by a run that is not full-capability evidence. */
+  readonly inadmissible: number;
   /** WHAT JULIUS IS READY TO DO, four disjoint counts over the verdict. */
   readonly provenByMission: number;
   readonly provenByDrill: number;
@@ -65,6 +89,8 @@ export interface BetaGateReport {
   readonly evidenceNote: string | null;
   /** Where an admissible-looking drill ledger was read from, or null. */
   readonly capabilitySource: string | null;
+  /** Whether this run was funded by its mission or by a placeholder. */
+  readonly allocation: BetaAllocationValidity;
   readonly results: readonly BetaCapabilityResult[];
   /** At most three, creation-path capabilities first, in declared order. */
   readonly gaps: readonly BetaCapabilityResult[];
@@ -78,6 +104,13 @@ export interface BetaGateReport {
  * drifted apart.
  */
 export declare const CAPABILITY_PROOF_COLUMNS: readonly string[];
+
+/** The basis a v3 allocation writes when it funded a dispatch at the estimate for want of a ledger. */
+export declare const ALLOCATION_WITHOUT_LEDGER_BASIS: 'ESTIMATE_NO_LEDGER';
+/** The basis a v3 allocation writes when it refused a dispatch for want of a ledger. */
+export declare const ALLOCATION_DENIED_WITHOUT_LEDGER_BASIS: 'NO_LEDGER_DENIED';
+export declare const LEDGER_ALLOCATION_POLICY: 'julius-allocation.v3';
+export declare const LEDGER_DECIDED_BASES: readonly string[];
 
 export interface BetaGateOptions {
   /**

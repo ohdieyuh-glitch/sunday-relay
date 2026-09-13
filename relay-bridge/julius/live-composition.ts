@@ -39,6 +39,7 @@ import {
   type JuliusRuntimeStore,
   type JuliusVerificationPolicy,
   type JuliusWorker,
+  type JuliusWithoutLedgerRule,
   noJuliusResearch,
   type JuliusResearchPolicy,
 } from '../../src/relay/mission/julius';
@@ -497,6 +498,13 @@ export function assembleLiveJuliusRuntime(options: {
   readonly cardRevision: string;
   readonly spendCeilingUsdMicros: number;
   readonly maxRepairRounds: number;
+  /**
+   * WHAT A DISPATCH IS GIVEN WHEN THE SPEND LEDGER CANNOT BE READ. The paid
+   * entrypoint says `DENY`, so a paid mission never spends at the fixed
+   * estimate. Absent keeps `ESTIMATE`, which an in-memory composition with no
+   * timeline relies on. See `JULIUS_WITHOUT_LEDGER_RULES`.
+   */
+  readonly allocationWithoutLedger?: JuliusWithoutLedgerRule;
   readonly owner?: string;
   readonly budget?: JuliusBudgetPort;
   /**
@@ -603,6 +611,7 @@ export function assembleLiveJuliusRuntime(options: {
      */
     allocation: juliusSharedCeilingPolicy({
       ceilingUsdMicros: options.spendCeilingUsdMicros, authorizedRepairRounds: options.maxRepairRounds,
+      ...(options.allocationWithoutLedger === undefined ? {} : { withoutLedger: options.allocationWithoutLedger }),
     }),
     /**
      * THE ONE GOVERNED DOOR TO THE OUTSIDE, and it starts closed.
