@@ -23,9 +23,9 @@ suite('the Brain + Python drill across processes', () => {
     try { await admin.query(`CREATE DATABASE ${database}`); } finally { await admin.end(); }
     const url = new URL(process.env.DATABASE_URL!);
     url.pathname = `/${database}`;
-    await run('npm', ['run', 'julius:brain:python-drill:build', '--silent'], { shell: process.platform === 'win32', timeout: 180_000 });
-    const out = await run(process.execPath, ['dist-relay-bridge/julius-brain-python-flow-drill.cjs'], {
-      env: { ...process.env, DATABASE_URL: url.toString() }, timeout: 900_000, maxBuffer: 32 * 1024 * 1024,
+    // The npm script builds the drill and runs it, as the other drills' tests do.
+    const out = await run('npm', ['run', '--silent', 'julius:brain:python-drill'], {
+      env: { ...process.env, DATABASE_URL: url.toString() }, timeout: 900_000, maxBuffer: 32 * 1024 * 1024, shell: process.platform === 'win32',
     }).catch((error: { stdout?: string; stderr?: string }) => { throw new Error(`drill failed:\n${error.stdout ?? ''}\n${error.stderr ?? ''}`); });
     expect(out.stdout).toContain('JULIUS BRAIN + PYTHON DRILL VERIFIED');
     const report = JSON.parse(out.stdout.slice(0, out.stdout.lastIndexOf('JULIUS BRAIN + PYTHON DRILL')));

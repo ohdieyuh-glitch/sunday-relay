@@ -17,7 +17,7 @@ Julius is the provider-neutral, deterministic orchestration kernel that turns an
 
 Static import closure from the two roots over the TypeScript AST (value and type edges), stopping at the declared boundaries below; plus declared production modules not reached from the live root (flagged); plus path-loaded assets. Tests, fixtures, fakes and UI are refused by category. A drift gate fails the generator when a production file imports the Julius kernel or port without being reached, declared or explicitly excluded, or when a declaration no longer matches the wiring.
 
-Represented: **179 production files** across 20/20 subsystems (2 roots, 140 traced, 22 not composed by the live root, 15 path-loaded assets). Line and byte totals, the coverage estimate and the commit SHA are printed by the generator and recorded in the export header; they are kept out of this file so it changes only when the file set or its classification changes.
+Represented: **181 production files** across 20/20 subsystems (2 roots, 140 traced, 24 not composed by the live root, 15 path-loaded assets). Line and byte totals, the coverage estimate and the commit SHA are printed by the generator and recorded in the export header; they are kept out of this file so it changes only when the file set or its classification changes.
 
 ## Dependency direction (observed, between coarse groups)
 
@@ -90,7 +90,9 @@ The provider-neutral kernel: mission states and the transition table, tasks, evi
 | production source | role | reached from |
 | --- | --- | --- |
 | `src/relay/mission/julius/index.ts` | traced | `src/relay/persistence/julius-postgres.ts` |
+| `src/relay/mission/julius/julius-brain-api.ts` | not composed by the live root | — |
 | `src/relay/mission/julius/julius-brain-contracts.ts` | not composed by the live root | — |
+| `src/relay/mission/julius/julius-brain-environment.ts` | not composed by the live root | — |
 | `src/relay/mission/julius/julius-brain-export.ts` | not composed by the live root | — |
 | `src/relay/mission/julius/julius-brain-legacy.ts` | not composed by the live root | — |
 | `src/relay/mission/julius/julius-brain-policy.ts` | not composed by the live root | — |
@@ -438,6 +440,8 @@ Production Julius modules that implement a Julius port but are not reached from 
 | `src/relay/mission/julius/julius-brain-query.ts` | Project Brain v2: deterministic, budgeted relevant-context retrieval and the bridge into v1 context entries; not yet composed by the live root |
 | `src/relay/mission/julius/julius-brain-export.ts` | Project Brain v2: the complete, self-verifying, secret-redacting export; safe restore; resume verification; and the scoped, hashed evaluation-context snapshots a Python execution or a future GVE consumes; not yet composed by the live root |
 | `src/relay/mission/julius/julius-brain-legacy.ts` | Project Brain v2: the JuliusBrainWriter decorator that mirrors the live pipeline's v1 entries into the typed ledger, and its backfill; a composition root wraps the store with it once the qualification permits wiring changes |
+| `src/relay/mission/julius/julius-brain-api.ts` | Project Brain v2: the transport-agnostic API contract for a future editable Brain UI and the bridge — overview with per-caller editability, history, provenance, context, governed user edits, export; not yet mounted |
+| `src/relay/mission/julius/julius-brain-environment.ts` | Project Brain v2: evaluation sessions — the scoped snapshot, grants and submission checks a future GVE environment uses; not yet composed |
 | `src/relay/mission/julius/julius-brain-retrieval.ts` | Project Brain v2: the optional fuzzy retrieval tier — a typed retriever interface, a keyword baseline, BM25/trigram/fusion candidates and the eval that adopts a candidate only on measured marginal value; not yet composed by the live root |
 | `src/relay/mission/julius/julius-brain-schema-document.ts` | Project Brain v2: the language-independent schema document committed at relay-python/julius/brain_schema.json and handed to every Python execution |
 | `src/relay/mission/julius/julius-python-contracts.ts` | the governed Python execution tool: request, C.A.R.D. authorisation, untrusted-output parsing and proposal→Brain-draft conversion; not yet composed by the live root, and the executor sandbox image has no Python |

@@ -151,9 +151,9 @@ suite('Project Brain on a real PostgreSQL', () => {
 
   it('process A writes and exits; process B reconstructs the same Brain, provenance and artifacts', async () => {
     const url = await freshDatabase('drill');
-    await run('npm', ['run', 'julius:brain:drill:build', '--silent'], { shell: process.platform === 'win32', timeout: 180_000 });
-    const out = await run(process.execPath, ['dist-relay-bridge/julius-project-brain-drill.cjs'], {
-      env: { ...process.env, DATABASE_URL: url }, timeout: 600_000, maxBuffer: 16 * 1024 * 1024,
+    // The npm script builds the drill and runs it, as the other drills' tests do.
+    const out = await run('npm', ['run', '--silent', 'julius:brain:drill'], {
+      env: { ...process.env, DATABASE_URL: url }, timeout: 600_000, maxBuffer: 16 * 1024 * 1024, shell: process.platform === 'win32',
     }).catch((error: { stdout?: string; stderr?: string }) => { throw new Error(`drill failed:\n${error.stdout ?? ''}\n${error.stderr ?? ''}`); });
     expect(out.stdout).toContain('JULIUS PROJECT BRAIN DURABILITY VERIFIED');
     const report = JSON.parse(out.stdout.slice(0, out.stdout.lastIndexOf('JULIUS PROJECT BRAIN')));
