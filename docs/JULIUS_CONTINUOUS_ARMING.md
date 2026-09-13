@@ -64,9 +64,12 @@ observation on the requesting worker's continuation
   policy is frozen and fingerprinted, and one the mission did not seal is
   refused as `policy_tampered`. There is no `allowHost`, no `addSource` and no
   `widen*` verb in the module's surface.
-- **Eight distinguishable outcomes**, never collapsed into "no evidence":
-  `observed`, `injection_signaled`, `policy_refused`, `budget_exhausted`,
-  `unreachable`, `unauthenticated`, `throttled`, `unsupported_content`.
+- **Nine distinguishable outcomes**, never collapsed into "no evidence":
+  `observed`, `injection_signaled`, `policy_refused`, `unavailable`,
+  `budget_exhausted`, `unreachable`, `unauthenticated`, `throttled`,
+  `unsupported_content`. `unavailable` is an ask the mission authorized and the
+  deployment could not serve — never `policy_refused`, which means the mission
+  said no.
 - **`injection_signaled` is a success**, not a failure: the observation is kept
   so a Reviewer can see hostile text was present, and refused only the power to
   TIP a disagreement.
