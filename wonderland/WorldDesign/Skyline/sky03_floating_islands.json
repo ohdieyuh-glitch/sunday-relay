@@ -1,0 +1,2975 @@
+{
+ "pass": "SKY03",
+ "title": "Floating islands with small castles over the arrival skyline",
+ "folder": "Wonderland/Authored/SKY03",
+ "tags": [
+  "V2_Skyline"
+ ],
+ "actors": [],
+ "batches": [],
+ "hovers": [
+  {
+   "id": "IslandRight_lawn",
+   "mesh": "/Game/WonderlandV2/Kit/sky/WL_Sky_Island_Large_lawn.WL_Sky_Island_Large_lawn",
+   "material": "MI_V2_Lawn",
+   "loc": [
+    -14539.0,
+    21405.0,
+    11000.4
+   ],
+   "rot": [
+    0.0,
+    304.0,
+    0.0
+   ],
+   "scale": [
+    2.2,
+    2.2,
+    2.2
+   ],
+   "amp": 129.3,
+   "period": 18.36,
+   "sway": 0.0,
+   "phase": 0.664
+  },
+  {
+   "id": "IslandRight_stone",
+   "mesh": "/Game/WonderlandV2/Kit/sky/WL_Sky_Island_Large.WL_Sky_Island_Large",
+   "material": "MI_V2_IvoryStone",
+   "loc": [
+    -14539.0,
+    21405.0,
+    11000.4
+   ],
+   "rot": [
+    0.0,
+    304.0,
+    0.0
+   ],
+   "scale": [
+    2.2,
+    2.2,
+    2.2
+   ],
+   "amp": 129.3,
+   "period": 18.36,
+   "sway": 0.0,
+   "phase": 0.664
+  },
+  {
+   "id": "IslandRight_stone_dark",
+   "mesh": "/Game/WonderlandV2/Kit/sky/WL_Sky_Island_Large_stone_dark.WL_Sky_Island_Large_stone_dark",
+   "material": "MI_V2_Soil",
+   "loc": [
+    -14539.0,
+    21405.0,
+    11000.4
+   ],
+   "rot": [
+    0.0,
+    304.0,
+    0.0
+   ],
+   "scale": [
+    2.2,
+    2.2,
+    2.2
+   ],
+   "amp": 129.3,
+   "period": 18.36,
+   "sway": 0.0,
+   "phase": 0.664
+  },
+  {
+   "id": "IslandRight_T0_Tower_Base_Arcaded_stone",
+   "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Base_Arcaded.WL_Tower_Base_Arcaded",
+   "material": "MI_V2_IvoryStone",
+   "loc": [
+    -14539.0,
+    21405.0,
+    10976.2
+   ],
+   "rot": [
+    0.0,
+    124.0,
+    0.0
+   ],
+   "scale": [
+    1.21,
+    1.21,
+    1.21
+   ],
+   "amp": 129.3,
+   "period": 18.36,
+   "sway": 0.0,
+   "phase": 0.664
+  },
+  {
+   "id": "IslandRight_T0_Tower_Base_Arcaded_stone_dark",
+   "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Base_Arcaded_stone_dark.WL_Tower_Base_Arcaded_stone_dark",
+   "material": "MI_V2_Stone",
+   "loc": [
+    -14539.0,
+    21405.0,
+    10976.2
+   ],
+   "rot": [
+    0.0,
+    124.0,
+    0.0
+   ],
+   "scale": [
+    1.21,
+    1.21,
+    1.21
+   ],
+   "amp": 129.3,
+   "period": 18.36,
+   "sway": 0.0,
+   "phase": 0.664
+  },
+  {
+   "id": "IslandRight_T0_Tower_Mid_Arcade_glass",
+   "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Mid_Arcade_glass.WL_Tower_Mid_Arcade_glass",
+   "material": "MI_V2_GlassAmber",
+   "loc": [
+    -14539.0,
+    21405.0,
+    12476.6
+   ],
+   "rot": [
+    0.0,
+    124.0,
+    0.0
+   ],
+   "scale": [
+    1.21,
+    1.21,
+    1.21
+   ],
+   "amp": 129.3,
+   "period": 18.36,
+   "sway": 0.0,
+   "phase": 0.664
+  },
+  {
+   "id": "IslandRight_T0_Tower_Mid_Arcade_stone",
+   "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Mid_Arcade.WL_Tower_Mid_Arcade",
+   "material": "MI_V2_IvoryStone",
+   "loc": [
+    -14539.0,
+    21405.0,
+    12476.6
+   ],
+   "rot": [
+    0.0,
+    124.0,
+    0.0
+   ],
+   "scale": [
+    1.21,
+    1.21,
+    1.21
+   ],
+   "amp": 129.3,
+   "period": 18.36,
+   "sway": 0.0,
+   "phase": 0.664
+  },
+  {
+   "id": "IslandRight_T0_Tower_Mid_Ribbed_stone",
+   "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Mid_Ribbed.WL_Tower_Mid_Ribbed",
+   "material": "MI_V2_IvoryStone",
+   "loc": [
+    -14539.0,
+    21405.0,
+    14073.8
+   ],
+   "rot": [
+    0.0,
+    124.0,
+    0.0
+   ],
+   "scale": [
+    1.21,
+    1.21,
+    1.21
+   ],
+   "amp": 129.3,
+   "period": 18.36,
+   "sway": 0.0,
+   "phase": 0.664
+  },
+  {
+   "id": "IslandRight_T0_Tower_Mid_Balconied_glass",
+   "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Mid_Balconied_glass.WL_Tower_Mid_Balconied_glass",
+   "material": "MI_V2_GlassAmber",
+   "loc": [
+    -14539.0,
+    21405.0,
+    16058.2
+   ],
+   "rot": [
+    0.0,
+    124.0,
+    0.0
+   ],
+   "scale": [
+    1.21,
+    1.21,
+    1.21
+   ],
+   "amp": 129.3,
+   "period": 18.36,
+   "sway": 0.0,
+   "phase": 0.664
+  },
+  {
+   "id": "IslandRight_T0_Tower_Mid_Balconied_stone",
+   "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Mid_Balconied.WL_Tower_Mid_Balconied",
+   "material": "MI_V2_IvoryStone",
+   "loc": [
+    -14539.0,
+    21405.0,
+    16058.2
+   ],
+   "rot": [
+    0.0,
+    124.0,
+    0.0
+   ],
+   "scale": [
+    1.21,
+    1.21,
+    1.21
+   ],
+   "amp": 129.3,
+   "period": 18.36,
+   "sway": 0.0,
+   "phase": 0.664
+  },
+  {
+   "id": "IslandRight_T0_Spire_Needle_gold",
+   "mesh": "/Game/WonderlandV2/Kit/towers/WL_Spire_Needle_gold.WL_Spire_Needle_gold",
+   "material": "MI_V2_Gold",
+   "loc": [
+    -14539.0,
+    21405.0,
+    17607.0
+   ],
+   "rot": [
+    0.0,
+    124.0,
+    0.0
+   ],
+   "scale": [
+    1.21,
+    1.21,
+    1.21
+   ],
+   "amp": 129.3,
+   "period": 18.36,
+   "sway": 0.0,
+   "phase": 0.664
+  },
+  {
+   "id": "IslandRight_T0_Spire_Needle_roof",
+   "mesh": "/Game/WonderlandV2/Kit/towers/WL_Spire_Needle_roof.WL_Spire_Needle_roof",
+   "material": "MI_V2_RoofRose",
+   "loc": [
+    -14539.0,
+    21405.0,
+    17607.0
+   ],
+   "rot": [
+    0.0,
+    124.0,
+    0.0
+   ],
+   "scale": [
+    1.21,
+    1.21,
+    1.21
+   ],
+   "amp": 129.3,
+   "period": 18.36,
+   "sway": 0.0,
+   "phase": 0.664
+  },
+  {
+   "id": "IslandRight_T0_Spire_Needle_stone",
+   "mesh": "/Game/WonderlandV2/Kit/towers/WL_Spire_Needle.WL_Spire_Needle",
+   "material": "MI_V2_IvoryStone",
+   "loc": [
+    -14539.0,
+    21405.0,
+    17607.0
+   ],
+   "rot": [
+    0.0,
+    124.0,
+    0.0
+   ],
+   "scale": [
+    1.21,
+    1.21,
+    1.21
+   ],
+   "amp": 129.3,
+   "period": 18.36,
+   "sway": 0.0,
+   "phase": 0.664
+  },
+  {
+   "id": "IslandRight_T1_Tower_Base_Buttressed_stone",
+   "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Base_Buttressed.WL_Tower_Base_Buttressed",
+   "material": "MI_V2_IvoryStone",
+   "loc": [
+    -16180.5,
+    20297.8,
+    10984.5
+   ],
+   "rot": [
+    0.0,
+    34.0,
+    0.0
+   ],
+   "scale": [
+    0.792,
+    0.792,
+    0.792
+   ],
+   "amp": 129.3,
+   "period": 18.36,
+   "sway": 0.0,
+   "phase": 0.664
+  },
+  {
+   "id": "IslandRight_T1_Tower_Base_Buttressed_stone_dark",
+   "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Base_Buttressed_stone_dark.WL_Tower_Base_Buttressed_stone_dark",
+   "material": "MI_V2_Stone",
+   "loc": [
+    -16180.5,
+    20297.8,
+    10984.5
+   ],
+   "rot": [
+    0.0,
+    34.0,
+    0.0
+   ],
+   "scale": [
+    0.792,
+    0.792,
+    0.792
+   ],
+   "amp": 129.3,
+   "period": 18.36,
+   "sway": 0.0,
+   "phase": 0.664
+  },
+  {
+   "id": "IslandRight_T1_Tower_Mid_Arcade_glass",
+   "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Mid_Arcade_glass.WL_Tower_Mid_Arcade_glass",
+   "material": "MI_V2_GlassAmber",
+   "loc": [
+    -16180.5,
+    20297.8,
+    11839.9
+   ],
+   "rot": [
+    0.0,
+    34.0,
+    0.0
+   ],
+   "scale": [
+    0.792,
+    0.792,
+    0.792
+   ],
+   "amp": 129.3,
+   "period": 18.36,
+   "sway": 0.0,
+   "phase": 0.664
+  },
+  {
+   "id": "IslandRight_T1_Tower_Mid_Arcade_stone",
+   "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Mid_Arcade.WL_Tower_Mid_Arcade",
+   "material": "MI_V2_IvoryStone",
+   "loc": [
+    -16180.5,
+    20297.8,
+    11839.9
+   ],
+   "rot": [
+    0.0,
+    34.0,
+    0.0
+   ],
+   "scale": [
+    0.792,
+    0.792,
+    0.792
+   ],
+   "amp": 129.3,
+   "period": 18.36,
+   "sway": 0.0,
+   "phase": 0.664
+  },
+  {
+   "id": "IslandRight_T1_Tower_Mid_Ribbed_stone",
+   "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Mid_Ribbed.WL_Tower_Mid_Ribbed",
+   "material": "MI_V2_IvoryStone",
+   "loc": [
+    -16180.5,
+    20297.8,
+    12885.3
+   ],
+   "rot": [
+    0.0,
+    34.0,
+    0.0
+   ],
+   "scale": [
+    0.792,
+    0.792,
+    0.792
+   ],
+   "amp": 129.3,
+   "period": 18.36,
+   "sway": 0.0,
+   "phase": 0.664
+  },
+  {
+   "id": "IslandRight_T1_Tower_Mid_Balconied_glass",
+   "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Mid_Balconied_glass.WL_Tower_Mid_Balconied_glass",
+   "material": "MI_V2_GlassAmber",
+   "loc": [
+    -16180.5,
+    20297.8,
+    14184.2
+   ],
+   "rot": [
+    0.0,
+    34.0,
+    0.0
+   ],
+   "scale": [
+    0.792,
+    0.792,
+    0.792
+   ],
+   "amp": 129.3,
+   "period": 18.36,
+   "sway": 0.0,
+   "phase": 0.664
+  },
+  {
+   "id": "IslandRight_T1_Tower_Mid_Balconied_stone",
+   "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Mid_Balconied.WL_Tower_Mid_Balconied",
+   "material": "MI_V2_IvoryStone",
+   "loc": [
+    -16180.5,
+    20297.8,
+    14184.2
+   ],
+   "rot": [
+    0.0,
+    34.0,
+    0.0
+   ],
+   "scale": [
+    0.792,
+    0.792,
+    0.792
+   ],
+   "amp": 129.3,
+   "period": 18.36,
+   "sway": 0.0,
+   "phase": 0.664
+  },
+  {
+   "id": "IslandRight_T1_Spire_Twisted_gold",
+   "mesh": "/Game/WonderlandV2/Kit/towers/WL_Spire_Twisted_gold.WL_Spire_Twisted_gold",
+   "material": "MI_V2_Gold",
+   "loc": [
+    -16180.5,
+    20297.8,
+    15198.0
+   ],
+   "rot": [
+    0.0,
+    34.0,
+    0.0
+   ],
+   "scale": [
+    0.792,
+    0.792,
+    0.792
+   ],
+   "amp": 129.3,
+   "period": 18.36,
+   "sway": 0.0,
+   "phase": 0.664
+  },
+  {
+   "id": "IslandRight_T1_Spire_Twisted_roof",
+   "mesh": "/Game/WonderlandV2/Kit/towers/WL_Spire_Twisted_roof.WL_Spire_Twisted_roof",
+   "material": "MI_V2_RoofRose",
+   "loc": [
+    -16180.5,
+    20297.8,
+    15198.0
+   ],
+   "rot": [
+    0.0,
+    34.0,
+    0.0
+   ],
+   "scale": [
+    0.792,
+    0.792,
+    0.792
+   ],
+   "amp": 129.3,
+   "period": 18.36,
+   "sway": 0.0,
+   "phase": 0.664
+  },
+  {
+   "id": "IslandRight_T1_Spire_Twisted_stone",
+   "mesh": "/Game/WonderlandV2/Kit/towers/WL_Spire_Twisted.WL_Spire_Twisted",
+   "material": "MI_V2_IvoryStone",
+   "loc": [
+    -16180.5,
+    20297.8,
+    15198.0
+   ],
+   "rot": [
+    0.0,
+    34.0,
+    0.0
+   ],
+   "scale": [
+    0.792,
+    0.792,
+    0.792
+   ],
+   "amp": 129.3,
+   "period": 18.36,
+   "sway": 0.0,
+   "phase": 0.664
+  },
+  {
+   "id": "IslandRight_T2_Tower_Base_Arcaded_stone",
+   "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Base_Arcaded.WL_Tower_Base_Arcaded",
+   "material": "MI_V2_IvoryStone",
+   "loc": [
+    -12897.5,
+    22512.2,
+    10984.5
+   ],
+   "rot": [
+    0.0,
+    34.0,
+    0.0
+   ],
+   "scale": [
+    0.792,
+    0.792,
+    0.792
+   ],
+   "amp": 129.3,
+   "period": 18.36,
+   "sway": 0.0,
+   "phase": 0.664
+  },
+  {
+   "id": "IslandRight_T2_Tower_Base_Arcaded_stone_dark",
+   "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Base_Arcaded_stone_dark.WL_Tower_Base_Arcaded_stone_dark",
+   "material": "MI_V2_Stone",
+   "loc": [
+    -12897.5,
+    22512.2,
+    10984.5
+   ],
+   "rot": [
+    0.0,
+    34.0,
+    0.0
+   ],
+   "scale": [
+    0.792,
+    0.792,
+    0.792
+   ],
+   "amp": 129.3,
+   "period": 18.36,
+   "sway": 0.0,
+   "phase": 0.664
+  },
+  {
+   "id": "IslandRight_T2_Tower_Mid_Ashlar_stone",
+   "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Mid_Ashlar.WL_Tower_Mid_Ashlar",
+   "material": "MI_V2_IvoryStone",
+   "loc": [
+    -12897.5,
+    22512.2,
+    11966.6
+   ],
+   "rot": [
+    0.0,
+    34.0,
+    0.0
+   ],
+   "scale": [
+    0.792,
+    0.792,
+    0.792
+   ],
+   "amp": 129.3,
+   "period": 18.36,
+   "sway": 0.0,
+   "phase": 0.664
+  },
+  {
+   "id": "IslandRight_T2_Tower_Mid_Arcade_glass",
+   "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Mid_Arcade_glass.WL_Tower_Mid_Arcade_glass",
+   "material": "MI_V2_GlassAmber",
+   "loc": [
+    -12897.5,
+    22512.2,
+    13122.9
+   ],
+   "rot": [
+    0.0,
+    34.0,
+    0.0
+   ],
+   "scale": [
+    0.792,
+    0.792,
+    0.792
+   ],
+   "amp": 129.3,
+   "period": 18.36,
+   "sway": 0.0,
+   "phase": 0.664
+  },
+  {
+   "id": "IslandRight_T2_Tower_Mid_Arcade_stone",
+   "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Mid_Arcade.WL_Tower_Mid_Arcade",
+   "material": "MI_V2_IvoryStone",
+   "loc": [
+    -12897.5,
+    22512.2,
+    13122.9
+   ],
+   "rot": [
+    0.0,
+    34.0,
+    0.0
+   ],
+   "scale": [
+    0.792,
+    0.792,
+    0.792
+   ],
+   "amp": 129.3,
+   "period": 18.36,
+   "sway": 0.0,
+   "phase": 0.664
+  },
+  {
+   "id": "IslandRight_T2_Tower_Mid_Balconied_glass",
+   "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Mid_Balconied_glass.WL_Tower_Mid_Balconied_glass",
+   "material": "MI_V2_GlassAmber",
+   "loc": [
+    -12897.5,
+    22512.2,
+    14168.4
+   ],
+   "rot": [
+    0.0,
+    34.0,
+    0.0
+   ],
+   "scale": [
+    0.792,
+    0.792,
+    0.792
+   ],
+   "amp": 129.3,
+   "period": 18.36,
+   "sway": 0.0,
+   "phase": 0.664
+  },
+  {
+   "id": "IslandRight_T2_Tower_Mid_Balconied_stone",
+   "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Mid_Balconied.WL_Tower_Mid_Balconied",
+   "material": "MI_V2_IvoryStone",
+   "loc": [
+    -12897.5,
+    22512.2,
+    14168.4
+   ],
+   "rot": [
+    0.0,
+    34.0,
+    0.0
+   ],
+   "scale": [
+    0.792,
+    0.792,
+    0.792
+   ],
+   "amp": 129.3,
+   "period": 18.36,
+   "sway": 0.0,
+   "phase": 0.664
+  },
+  {
+   "id": "IslandRight_T2_Spire_Needle_gold",
+   "mesh": "/Game/WonderlandV2/Kit/towers/WL_Spire_Needle_gold.WL_Spire_Needle_gold",
+   "material": "MI_V2_Gold",
+   "loc": [
+    -12897.5,
+    22512.2,
+    15182.1
+   ],
+   "rot": [
+    0.0,
+    34.0,
+    0.0
+   ],
+   "scale": [
+    0.792,
+    0.792,
+    0.792
+   ],
+   "amp": 129.3,
+   "period": 18.36,
+   "sway": 0.0,
+   "phase": 0.664
+  },
+  {
+   "id": "IslandRight_T2_Spire_Needle_roof",
+   "mesh": "/Game/WonderlandV2/Kit/towers/WL_Spire_Needle_roof.WL_Spire_Needle_roof",
+   "material": "MI_V2_RoofRose",
+   "loc": [
+    -12897.5,
+    22512.2,
+    15182.1
+   ],
+   "rot": [
+    0.0,
+    34.0,
+    0.0
+   ],
+   "scale": [
+    0.792,
+    0.792,
+    0.792
+   ],
+   "amp": 129.3,
+   "period": 18.36,
+   "sway": 0.0,
+   "phase": 0.664
+  },
+  {
+   "id": "IslandRight_T2_Spire_Needle_stone",
+   "mesh": "/Game/WonderlandV2/Kit/towers/WL_Spire_Needle.WL_Spire_Needle",
+   "material": "MI_V2_IvoryStone",
+   "loc": [
+    -12897.5,
+    22512.2,
+    15182.1
+   ],
+   "rot": [
+    0.0,
+    34.0,
+    0.0
+   ],
+   "scale": [
+    0.792,
+    0.792,
+    0.792
+   ],
+   "amp": 129.3,
+   "period": 18.36,
+   "sway": 0.0,
+   "phase": 0.664
+  },
+  {
+   "id": "IslandRight_TreeTrunk0",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_tree_slender_trunk.SM_tree_slender_trunk",
+   "material": "MI_V2_Bark",
+   "loc": [
+    -14646.4,
+    19262.7,
+    11000.4
+   ],
+   "rot": [
+    0.0,
+    19.1,
+    0.0
+   ],
+   "scale": [
+    1.443,
+    1.443,
+    1.443
+   ],
+   "amp": 129.3,
+   "period": 18.36,
+   "sway": 0.0,
+   "phase": 0.664
+  },
+  {
+   "id": "IslandRight_TreeCrown0",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafLight",
+   "loc": [
+    -14646.4,
+    19262.7,
+    12183.9
+   ],
+   "rot": [
+    0.0,
+    261.6,
+    0.0
+   ],
+   "scale": [
+    1.804,
+    1.804,
+    1.804
+   ],
+   "amp": 129.3,
+   "period": 18.36,
+   "sway": 0.0,
+   "phase": 0.664
+  },
+  {
+   "id": "IslandRight_TreeTrunk1",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_tree_slender_trunk.SM_tree_slender_trunk",
+   "material": "MI_V2_Bark",
+   "loc": [
+    -12512.5,
+    20702.0,
+    11000.4
+   ],
+   "rot": [
+    0.0,
+    225.9,
+    0.0
+   ],
+   "scale": [
+    1.567,
+    1.567,
+    1.567
+   ],
+   "amp": 129.3,
+   "period": 18.36,
+   "sway": 0.0,
+   "phase": 0.664
+  },
+  {
+   "id": "IslandRight_TreeCrown1",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafMid",
+   "loc": [
+    -12512.5,
+    20702.0,
+    12285.4
+   ],
+   "rot": [
+    0.0,
+    275.6,
+    0.0
+   ],
+   "scale": [
+    1.959,
+    1.959,
+    1.959
+   ],
+   "amp": 129.3,
+   "period": 18.36,
+   "sway": 0.0,
+   "phase": 0.664
+  },
+  {
+   "id": "IslandRight_TreeTrunk2",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_tree_slender_trunk.SM_tree_slender_trunk",
+   "material": "MI_V2_Bark",
+   "loc": [
+    -16248.5,
+    22149.3,
+    11000.4
+   ],
+   "rot": [
+    0.0,
+    22.1,
+    0.0
+   ],
+   "scale": [
+    1.493,
+    1.493,
+    1.493
+   ],
+   "amp": 129.3,
+   "period": 18.36,
+   "sway": 0.0,
+   "phase": 0.664
+  },
+  {
+   "id": "IslandRight_TreeCrown2",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafLight",
+   "loc": [
+    -16248.5,
+    22149.3,
+    12224.6
+   ],
+   "rot": [
+    0.0,
+    1.2,
+    0.0
+   ],
+   "scale": [
+    1.866,
+    1.866,
+    1.866
+   ],
+   "amp": 129.3,
+   "period": 18.36,
+   "sway": 0.0,
+   "phase": 0.664
+  },
+  {
+   "id": "IslandRight_TreeTrunk3",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_tree_slender_trunk.SM_tree_slender_trunk",
+   "material": "MI_V2_Bark",
+   "loc": [
+    -14588.8,
+    23268.8,
+    11000.4
+   ],
+   "rot": [
+    0.0,
+    170.0,
+    0.0
+   ],
+   "scale": [
+    1.603,
+    1.603,
+    1.603
+   ],
+   "amp": 129.3,
+   "period": 18.36,
+   "sway": 0.0,
+   "phase": 0.664
+  },
+  {
+   "id": "IslandRight_TreeCrown3",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafMid",
+   "loc": [
+    -14588.8,
+    23268.8,
+    12314.6
+   ],
+   "rot": [
+    0.0,
+    202.8,
+    0.0
+   ],
+   "scale": [
+    2.003,
+    2.003,
+    2.003
+   ],
+   "amp": 129.3,
+   "period": 18.36,
+   "sway": 0.0,
+   "phase": 0.664
+  },
+  {
+   "id": "IslandRight_Topiary0",
+   "mesh": "/Game/WonderlandV2/Vegetation/Topiary/SM_topiary_cone_plain.SM_topiary_cone_plain",
+   "material": "MI_V2_LeafDark",
+   "loc": [
+    -13550.5,
+    23733.9,
+    11000.4
+   ],
+   "rot": [
+    0.0,
+    239.2,
+    0.0
+   ],
+   "scale": [
+    1.76,
+    1.76,
+    1.76
+   ],
+   "amp": 129.3,
+   "period": 18.36,
+   "sway": 0.0,
+   "phase": 0.664
+  },
+  {
+   "id": "IslandRight_Topiary1",
+   "mesh": "/Game/WonderlandV2/Vegetation/Topiary/SM_topiary_cone_plain.SM_topiary_cone_plain",
+   "material": "MI_V2_LeafDark",
+   "loc": [
+    -15193.8,
+    23848.8,
+    11000.4
+   ],
+   "rot": [
+    0.0,
+    342.9,
+    0.0
+   ],
+   "scale": [
+    1.76,
+    1.76,
+    1.76
+   ],
+   "amp": 129.3,
+   "period": 18.36,
+   "sway": 0.0,
+   "phase": 0.664
+  },
+  {
+   "id": "IslandRight_Topiary2",
+   "mesh": "/Game/WonderlandV2/Vegetation/Topiary/SM_topiary_cone_plain.SM_topiary_cone_plain",
+   "material": "MI_V2_LeafDark",
+   "loc": [
+    -16559.6,
+    22927.6,
+    11000.4
+   ],
+   "rot": [
+    0.0,
+    129.5,
+    0.0
+   ],
+   "scale": [
+    1.76,
+    1.76,
+    1.76
+   ],
+   "amp": 129.3,
+   "period": 18.36,
+   "sway": 0.0,
+   "phase": 0.664
+  },
+  {
+   "id": "IslandRight_Topiary3",
+   "mesh": "/Game/WonderlandV2/Vegetation/Topiary/SM_topiary_cone_plain.SM_topiary_cone_plain",
+   "material": "MI_V2_LeafDark",
+   "loc": [
+    -17068.6,
+    21360.8,
+    11000.4
+   ],
+   "rot": [
+    0.0,
+    142.0,
+    0.0
+   ],
+   "scale": [
+    1.76,
+    1.76,
+    1.76
+   ],
+   "amp": 129.3,
+   "period": 18.36,
+   "sway": 0.0,
+   "phase": 0.664
+  },
+  {
+   "id": "IslandRight_Cloud",
+   "mesh": "/Game/WonderlandV2/Sky/SM_cloud_cumulus_c.SM_cloud_cumulus_c",
+   "material": "MI_V2_Cloud",
+   "loc": [
+    -14539.0,
+    21405.0,
+    6659.1
+   ],
+   "rot": [
+    0.0,
+    34.0,
+    0.0
+   ],
+   "scale": [
+    0.606,
+    0.606,
+    0.606
+   ],
+   "amp": 129.3,
+   "period": 18.36,
+   "sway": 0.0,
+   "phase": 0.664
+  },
+  {
+   "id": "IslandLeft_lawn",
+   "mesh": "/Game/WonderlandV2/Kit/sky/WL_Sky_Island_Medium_lawn.WL_Sky_Island_Medium_lawn",
+   "material": "MI_V2_Lawn",
+   "loc": [
+    12718.1,
+    20203.2,
+    11060.4
+   ],
+   "rot": [
+    0.0,
+    238.0,
+    0.0
+   ],
+   "scale": [
+    2.0,
+    2.0,
+    2.0
+   ],
+   "amp": 128.4,
+   "period": 18.82,
+   "sway": 0.0,
+   "phase": 0.347
+  },
+  {
+   "id": "IslandLeft_stone",
+   "mesh": "/Game/WonderlandV2/Kit/sky/WL_Sky_Island_Medium.WL_Sky_Island_Medium",
+   "material": "MI_V2_IvoryStone",
+   "loc": [
+    12718.1,
+    20203.2,
+    11060.4
+   ],
+   "rot": [
+    0.0,
+    238.0,
+    0.0
+   ],
+   "scale": [
+    2.0,
+    2.0,
+    2.0
+   ],
+   "amp": 128.4,
+   "period": 18.82,
+   "sway": 0.0,
+   "phase": 0.347
+  },
+  {
+   "id": "IslandLeft_stone_dark",
+   "mesh": "/Game/WonderlandV2/Kit/sky/WL_Sky_Island_Medium_stone_dark.WL_Sky_Island_Medium_stone_dark",
+   "material": "MI_V2_Soil",
+   "loc": [
+    12718.1,
+    20203.2,
+    11060.4
+   ],
+   "rot": [
+    0.0,
+    238.0,
+    0.0
+   ],
+   "scale": [
+    2.0,
+    2.0,
+    2.0
+   ],
+   "amp": 128.4,
+   "period": 18.82,
+   "sway": 0.0,
+   "phase": 0.347
+  },
+  {
+   "id": "IslandLeft_T0_Tower_Base_Buttressed_stone",
+   "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Base_Buttressed.WL_Tower_Base_Buttressed",
+   "material": "MI_V2_IvoryStone",
+   "loc": [
+    12718.1,
+    20203.2,
+    11040.4
+   ],
+   "rot": [
+    0.0,
+    328.0,
+    0.0
+   ],
+   "scale": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "amp": 128.4,
+   "period": 18.82,
+   "sway": 0.0,
+   "phase": 0.347
+  },
+  {
+   "id": "IslandLeft_T0_Tower_Base_Buttressed_stone_dark",
+   "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Base_Buttressed_stone_dark.WL_Tower_Base_Buttressed_stone_dark",
+   "material": "MI_V2_Stone",
+   "loc": [
+    12718.1,
+    20203.2,
+    11040.4
+   ],
+   "rot": [
+    0.0,
+    328.0,
+    0.0
+   ],
+   "scale": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "amp": 128.4,
+   "period": 18.82,
+   "sway": 0.0,
+   "phase": 0.347
+  },
+  {
+   "id": "IslandLeft_T0_Tower_Mid_Arcade_glass",
+   "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Mid_Arcade_glass.WL_Tower_Mid_Arcade_glass",
+   "material": "MI_V2_GlassAmber",
+   "loc": [
+    12718.1,
+    20203.2,
+    12120.4
+   ],
+   "rot": [
+    0.0,
+    328.0,
+    0.0
+   ],
+   "scale": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "amp": 128.4,
+   "period": 18.82,
+   "sway": 0.0,
+   "phase": 0.347
+  },
+  {
+   "id": "IslandLeft_T0_Tower_Mid_Arcade_stone",
+   "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Mid_Arcade.WL_Tower_Mid_Arcade",
+   "material": "MI_V2_IvoryStone",
+   "loc": [
+    12718.1,
+    20203.2,
+    12120.4
+   ],
+   "rot": [
+    0.0,
+    328.0,
+    0.0
+   ],
+   "scale": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "amp": 128.4,
+   "period": 18.82,
+   "sway": 0.0,
+   "phase": 0.347
+  },
+  {
+   "id": "IslandLeft_T0_Tower_Mid_Balconied_glass",
+   "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Mid_Balconied_glass.WL_Tower_Mid_Balconied_glass",
+   "material": "MI_V2_GlassAmber",
+   "loc": [
+    12718.1,
+    20203.2,
+    13440.4
+   ],
+   "rot": [
+    0.0,
+    328.0,
+    0.0
+   ],
+   "scale": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "amp": 128.4,
+   "period": 18.82,
+   "sway": 0.0,
+   "phase": 0.347
+  },
+  {
+   "id": "IslandLeft_T0_Tower_Mid_Balconied_stone",
+   "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Mid_Balconied.WL_Tower_Mid_Balconied",
+   "material": "MI_V2_IvoryStone",
+   "loc": [
+    12718.1,
+    20203.2,
+    13440.4
+   ],
+   "rot": [
+    0.0,
+    328.0,
+    0.0
+   ],
+   "scale": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "amp": 128.4,
+   "period": 18.82,
+   "sway": 0.0,
+   "phase": 0.347
+  },
+  {
+   "id": "IslandLeft_T0_Tower_Mid_Fluted_stone",
+   "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Mid_Fluted.WL_Tower_Mid_Fluted",
+   "material": "MI_V2_IvoryStone",
+   "loc": [
+    12718.1,
+    20203.2,
+    14720.4
+   ],
+   "rot": [
+    0.0,
+    328.0,
+    0.0
+   ],
+   "scale": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "amp": 128.4,
+   "period": 18.82,
+   "sway": 0.0,
+   "phase": 0.347
+  },
+  {
+   "id": "IslandLeft_T0_Spire_Needle_gold",
+   "mesh": "/Game/WonderlandV2/Kit/towers/WL_Spire_Needle_gold.WL_Spire_Needle_gold",
+   "material": "MI_V2_Gold",
+   "loc": [
+    12718.1,
+    20203.2,
+    16400.4
+   ],
+   "rot": [
+    0.0,
+    328.0,
+    0.0
+   ],
+   "scale": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "amp": 128.4,
+   "period": 18.82,
+   "sway": 0.0,
+   "phase": 0.347
+  },
+  {
+   "id": "IslandLeft_T0_Spire_Needle_roof",
+   "mesh": "/Game/WonderlandV2/Kit/towers/WL_Spire_Needle_roof.WL_Spire_Needle_roof",
+   "material": "MI_V2_RoofRose",
+   "loc": [
+    12718.1,
+    20203.2,
+    16400.4
+   ],
+   "rot": [
+    0.0,
+    328.0,
+    0.0
+   ],
+   "scale": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "amp": 128.4,
+   "period": 18.82,
+   "sway": 0.0,
+   "phase": 0.347
+  },
+  {
+   "id": "IslandLeft_T0_Spire_Needle_stone",
+   "mesh": "/Game/WonderlandV2/Kit/towers/WL_Spire_Needle.WL_Spire_Needle",
+   "material": "MI_V2_IvoryStone",
+   "loc": [
+    12718.1,
+    20203.2,
+    16400.4
+   ],
+   "rot": [
+    0.0,
+    328.0,
+    0.0
+   ],
+   "scale": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "amp": 128.4,
+   "period": 18.82,
+   "sway": 0.0,
+   "phase": 0.347
+  },
+  {
+   "id": "IslandLeft_TreeTrunk0",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_tree_slender_trunk.SM_tree_slender_trunk",
+   "material": "MI_V2_Bark",
+   "loc": [
+    11598.7,
+    19770.6,
+    11060.4
+   ],
+   "rot": [
+    0.0,
+    10.2,
+    0.0
+   ],
+   "scale": [
+    1.364,
+    1.364,
+    1.364
+   ],
+   "amp": 128.4,
+   "period": 18.82,
+   "sway": 0.0,
+   "phase": 0.347
+  },
+  {
+   "id": "IslandLeft_TreeCrown0",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafLight",
+   "loc": [
+    11598.7,
+    19770.6,
+    12179.1
+   ],
+   "rot": [
+    0.0,
+    80.4,
+    0.0
+   ],
+   "scale": [
+    1.705,
+    1.705,
+    1.705
+   ],
+   "amp": 128.4,
+   "period": 18.82,
+   "sway": 0.0,
+   "phase": 0.347
+  },
+  {
+   "id": "IslandLeft_TreeTrunk1",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_tree_slender_trunk.SM_tree_slender_trunk",
+   "material": "MI_V2_Bark",
+   "loc": [
+    12819.9,
+    19007.5,
+    11060.4
+   ],
+   "rot": [
+    0.0,
+    330.8,
+    0.0
+   ],
+   "scale": [
+    1.304,
+    1.304,
+    1.304
+   ],
+   "amp": 128.4,
+   "period": 18.82,
+   "sway": 0.0,
+   "phase": 0.347
+  },
+  {
+   "id": "IslandLeft_TreeCrown1",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafMid",
+   "loc": [
+    12819.9,
+    19007.5,
+    12129.5
+   ],
+   "rot": [
+    0.0,
+    53.1,
+    0.0
+   ],
+   "scale": [
+    1.63,
+    1.63,
+    1.63
+   ],
+   "amp": 128.4,
+   "period": 18.82,
+   "sway": 0.0,
+   "phase": 0.347
+  },
+  {
+   "id": "IslandLeft_Topiary0",
+   "mesh": "/Game/WonderlandV2/Vegetation/Topiary/SM_topiary_spiral.SM_topiary_spiral",
+   "material": "MI_V2_LeafDark",
+   "loc": [
+    13939.7,
+    20647.8,
+    11060.4
+   ],
+   "rot": [
+    0.0,
+    49.5,
+    0.0
+   ],
+   "scale": [
+    1.6,
+    1.6,
+    1.6
+   ],
+   "amp": 128.4,
+   "period": 18.82,
+   "sway": 0.0,
+   "phase": 0.347
+  },
+  {
+   "id": "IslandLeft_Topiary1",
+   "mesh": "/Game/WonderlandV2/Vegetation/Topiary/SM_topiary_spiral.SM_topiary_spiral",
+   "material": "MI_V2_LeafDark",
+   "loc": [
+    13407.0,
+    21305.6,
+    11060.4
+   ],
+   "rot": [
+    0.0,
+    277.6,
+    0.0
+   ],
+   "scale": [
+    1.6,
+    1.6,
+    1.6
+   ],
+   "amp": 128.4,
+   "period": 18.82,
+   "sway": 0.0,
+   "phase": 0.347
+  },
+  {
+   "id": "IslandLeft_Topiary2",
+   "mesh": "/Game/WonderlandV2/Vegetation/Topiary/SM_topiary_spiral.SM_topiary_spiral",
+   "material": "MI_V2_LeafDark",
+   "loc": [
+    12582.2,
+    21496.0,
+    11060.4
+   ],
+   "rot": [
+    0.0,
+    187.4,
+    0.0
+   ],
+   "scale": [
+    1.6,
+    1.6,
+    1.6
+   ],
+   "amp": 128.4,
+   "period": 18.82,
+   "sway": 0.0,
+   "phase": 0.347
+  },
+  {
+   "id": "IslandLeft_Cloud",
+   "mesh": "/Game/WonderlandV2/Sky/SM_cloud_cumulus_c.SM_cloud_cumulus_c",
+   "material": "MI_V2_Cloud",
+   "loc": [
+    12718.1,
+    20203.2,
+    8447.1
+   ],
+   "rot": [
+    0.0,
+    328.0,
+    0.0
+   ],
+   "scale": [
+    0.339,
+    0.339,
+    0.339
+   ],
+   "amp": 128.4,
+   "period": 18.82,
+   "sway": 0.0,
+   "phase": 0.347
+  },
+  {
+   "id": "IslandFarRight_lawn",
+   "mesh": "/Game/WonderlandV2/Kit/sky/WL_Sky_Island_Small_lawn.WL_Sky_Island_Small_lawn",
+   "material": "MI_V2_Lawn",
+   "loc": [
+    -25266.9,
+    22600.4,
+    14919.5
+   ],
+   "rot": [
+    0.0,
+    318.0,
+    0.0
+   ],
+   "scale": [
+    1.8,
+    1.8,
+    1.8
+   ],
+   "amp": 130.4,
+   "period": 15.56,
+   "sway": 0.0,
+   "phase": 0.794
+  },
+  {
+   "id": "IslandFarRight_stone",
+   "mesh": "/Game/WonderlandV2/Kit/sky/WL_Sky_Island_Small.WL_Sky_Island_Small",
+   "material": "MI_V2_IvoryStone",
+   "loc": [
+    -25266.9,
+    22600.4,
+    14919.5
+   ],
+   "rot": [
+    0.0,
+    318.0,
+    0.0
+   ],
+   "scale": [
+    1.8,
+    1.8,
+    1.8
+   ],
+   "amp": 130.4,
+   "period": 15.56,
+   "sway": 0.0,
+   "phase": 0.794
+  },
+  {
+   "id": "IslandFarRight_stone_dark",
+   "mesh": "/Game/WonderlandV2/Kit/sky/WL_Sky_Island_Small_stone_dark.WL_Sky_Island_Small_stone_dark",
+   "material": "MI_V2_Soil",
+   "loc": [
+    -25266.9,
+    22600.4,
+    14919.5
+   ],
+   "rot": [
+    0.0,
+    318.0,
+    0.0
+   ],
+   "scale": [
+    1.8,
+    1.8,
+    1.8
+   ],
+   "amp": 130.4,
+   "period": 15.56,
+   "sway": 0.0,
+   "phase": 0.794
+  },
+  {
+   "id": "IslandFarRight_T0_Tower_Base_Battered_stone",
+   "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Base_Battered.WL_Tower_Base_Battered",
+   "material": "MI_V2_IvoryStone",
+   "loc": [
+    -25266.9,
+    22600.4,
+    14906.5
+   ],
+   "rot": [
+    0.0,
+    228.0,
+    0.0
+   ],
+   "scale": [
+    0.648,
+    0.648,
+    0.648
+   ],
+   "amp": 130.4,
+   "period": 15.56,
+   "sway": 0.0,
+   "phase": 0.794
+  },
+  {
+   "id": "IslandFarRight_T0_Tower_Base_Battered_stone_dark",
+   "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Base_Battered_stone_dark.WL_Tower_Base_Battered_stone_dark",
+   "material": "MI_V2_Stone",
+   "loc": [
+    -25266.9,
+    22600.4,
+    14906.5
+   ],
+   "rot": [
+    0.0,
+    228.0,
+    0.0
+   ],
+   "scale": [
+    0.648,
+    0.648,
+    0.648
+   ],
+   "amp": 130.4,
+   "period": 15.56,
+   "sway": 0.0,
+   "phase": 0.794
+  },
+  {
+   "id": "IslandFarRight_T0_Tower_Mid_Arcade_glass",
+   "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Mid_Arcade_glass.WL_Tower_Mid_Arcade_glass",
+   "material": "MI_V2_GlassAmber",
+   "loc": [
+    -25266.9,
+    22600.4,
+    15502.7
+   ],
+   "rot": [
+    0.0,
+    228.0,
+    0.0
+   ],
+   "scale": [
+    0.648,
+    0.648,
+    0.648
+   ],
+   "amp": 130.4,
+   "period": 15.56,
+   "sway": 0.0,
+   "phase": 0.794
+  },
+  {
+   "id": "IslandFarRight_T0_Tower_Mid_Arcade_stone",
+   "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Mid_Arcade.WL_Tower_Mid_Arcade",
+   "material": "MI_V2_IvoryStone",
+   "loc": [
+    -25266.9,
+    22600.4,
+    15502.7
+   ],
+   "rot": [
+    0.0,
+    228.0,
+    0.0
+   ],
+   "scale": [
+    0.648,
+    0.648,
+    0.648
+   ],
+   "amp": 130.4,
+   "period": 15.56,
+   "sway": 0.0,
+   "phase": 0.794
+  },
+  {
+   "id": "IslandFarRight_T0_Tower_Mid_Balconied_glass",
+   "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Mid_Balconied_glass.WL_Tower_Mid_Balconied_glass",
+   "material": "MI_V2_GlassAmber",
+   "loc": [
+    -25266.9,
+    22600.4,
+    16358.0
+   ],
+   "rot": [
+    0.0,
+    228.0,
+    0.0
+   ],
+   "scale": [
+    0.648,
+    0.648,
+    0.648
+   ],
+   "amp": 130.4,
+   "period": 15.56,
+   "sway": 0.0,
+   "phase": 0.794
+  },
+  {
+   "id": "IslandFarRight_T0_Tower_Mid_Balconied_stone",
+   "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Mid_Balconied.WL_Tower_Mid_Balconied",
+   "material": "MI_V2_IvoryStone",
+   "loc": [
+    -25266.9,
+    22600.4,
+    16358.0
+   ],
+   "rot": [
+    0.0,
+    228.0,
+    0.0
+   ],
+   "scale": [
+    0.648,
+    0.648,
+    0.648
+   ],
+   "amp": 130.4,
+   "period": 15.56,
+   "sway": 0.0,
+   "phase": 0.794
+  },
+  {
+   "id": "IslandFarRight_T0_Tower_Mid_Fluted_stone",
+   "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Mid_Fluted.WL_Tower_Mid_Fluted",
+   "material": "MI_V2_IvoryStone",
+   "loc": [
+    -25266.9,
+    22600.4,
+    17187.5
+   ],
+   "rot": [
+    0.0,
+    228.0,
+    0.0
+   ],
+   "scale": [
+    0.648,
+    0.648,
+    0.648
+   ],
+   "amp": 130.4,
+   "period": 15.56,
+   "sway": 0.0,
+   "phase": 0.794
+  },
+  {
+   "id": "IslandFarRight_T0_Spire_Needle_gold",
+   "mesh": "/Game/WonderlandV2/Kit/towers/WL_Spire_Needle_gold.WL_Spire_Needle_gold",
+   "material": "MI_V2_Gold",
+   "loc": [
+    -25266.9,
+    22600.4,
+    18276.1
+   ],
+   "rot": [
+    0.0,
+    228.0,
+    0.0
+   ],
+   "scale": [
+    0.648,
+    0.648,
+    0.648
+   ],
+   "amp": 130.4,
+   "period": 15.56,
+   "sway": 0.0,
+   "phase": 0.794
+  },
+  {
+   "id": "IslandFarRight_T0_Spire_Needle_roof",
+   "mesh": "/Game/WonderlandV2/Kit/towers/WL_Spire_Needle_roof.WL_Spire_Needle_roof",
+   "material": "MI_V2_RoofRose",
+   "loc": [
+    -25266.9,
+    22600.4,
+    18276.1
+   ],
+   "rot": [
+    0.0,
+    228.0,
+    0.0
+   ],
+   "scale": [
+    0.648,
+    0.648,
+    0.648
+   ],
+   "amp": 130.4,
+   "period": 15.56,
+   "sway": 0.0,
+   "phase": 0.794
+  },
+  {
+   "id": "IslandFarRight_T0_Spire_Needle_stone",
+   "mesh": "/Game/WonderlandV2/Kit/towers/WL_Spire_Needle.WL_Spire_Needle",
+   "material": "MI_V2_IvoryStone",
+   "loc": [
+    -25266.9,
+    22600.4,
+    18276.1
+   ],
+   "rot": [
+    0.0,
+    228.0,
+    0.0
+   ],
+   "scale": [
+    0.648,
+    0.648,
+    0.648
+   ],
+   "amp": 130.4,
+   "period": 15.56,
+   "sway": 0.0,
+   "phase": 0.794
+  },
+  {
+   "id": "IslandFarRight_Topiary0",
+   "mesh": "/Game/WonderlandV2/Vegetation/Topiary/SM_topiary_ball.SM_topiary_ball",
+   "material": "MI_V2_LeafDark",
+   "loc": [
+    -25681.6,
+    22973.8,
+    14919.5
+   ],
+   "rot": [
+    0.0,
+    170.8,
+    0.0
+   ],
+   "scale": [
+    1.44,
+    1.44,
+    1.44
+   ],
+   "amp": 130.4,
+   "period": 15.56,
+   "sway": 0.0,
+   "phase": 0.794
+  },
+  {
+   "id": "IslandFarLeft_lawn",
+   "mesh": "/Game/WonderlandV2/Kit/sky/WL_Sky_Island_Small_lawn.WL_Sky_Island_Small_lawn",
+   "material": "MI_V2_Lawn",
+   "loc": [
+    22229.1,
+    22868.9,
+    12000.0
+   ],
+   "rot": [
+    0.0,
+    226.0,
+    0.0
+   ],
+   "scale": [
+    1.8,
+    1.8,
+    1.8
+   ],
+   "amp": 139.9,
+   "period": 15.82,
+   "sway": 0.0,
+   "phase": 0.122
+  },
+  {
+   "id": "IslandFarLeft_stone",
+   "mesh": "/Game/WonderlandV2/Kit/sky/WL_Sky_Island_Small.WL_Sky_Island_Small",
+   "material": "MI_V2_IvoryStone",
+   "loc": [
+    22229.1,
+    22868.9,
+    12000.0
+   ],
+   "rot": [
+    0.0,
+    226.0,
+    0.0
+   ],
+   "scale": [
+    1.8,
+    1.8,
+    1.8
+   ],
+   "amp": 139.9,
+   "period": 15.82,
+   "sway": 0.0,
+   "phase": 0.122
+  },
+  {
+   "id": "IslandFarLeft_stone_dark",
+   "mesh": "/Game/WonderlandV2/Kit/sky/WL_Sky_Island_Small_stone_dark.WL_Sky_Island_Small_stone_dark",
+   "material": "MI_V2_Soil",
+   "loc": [
+    22229.1,
+    22868.9,
+    12000.0
+   ],
+   "rot": [
+    0.0,
+    226.0,
+    0.0
+   ],
+   "scale": [
+    1.8,
+    1.8,
+    1.8
+   ],
+   "amp": 139.9,
+   "period": 15.82,
+   "sway": 0.0,
+   "phase": 0.122
+  },
+  {
+   "id": "IslandFarLeft_T0_Tower_Base_Arcaded_stone",
+   "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Base_Arcaded.WL_Tower_Base_Arcaded",
+   "material": "MI_V2_IvoryStone",
+   "loc": [
+    22229.1,
+    22868.9,
+    11987.0
+   ],
+   "rot": [
+    0.0,
+    46.0,
+    0.0
+   ],
+   "scale": [
+    0.648,
+    0.648,
+    0.648
+   ],
+   "amp": 139.9,
+   "period": 15.82,
+   "sway": 0.0,
+   "phase": 0.122
+  },
+  {
+   "id": "IslandFarLeft_T0_Tower_Base_Arcaded_stone_dark",
+   "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Base_Arcaded_stone_dark.WL_Tower_Base_Arcaded_stone_dark",
+   "material": "MI_V2_Stone",
+   "loc": [
+    22229.1,
+    22868.9,
+    11987.0
+   ],
+   "rot": [
+    0.0,
+    46.0,
+    0.0
+   ],
+   "scale": [
+    0.648,
+    0.648,
+    0.648
+   ],
+   "amp": 139.9,
+   "period": 15.82,
+   "sway": 0.0,
+   "phase": 0.122
+  },
+  {
+   "id": "IslandFarLeft_T0_Tower_Mid_Arcade_glass",
+   "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Mid_Arcade_glass.WL_Tower_Mid_Arcade_glass",
+   "material": "MI_V2_GlassAmber",
+   "loc": [
+    22229.1,
+    22868.9,
+    12790.6
+   ],
+   "rot": [
+    0.0,
+    46.0,
+    0.0
+   ],
+   "scale": [
+    0.648,
+    0.648,
+    0.648
+   ],
+   "amp": 139.9,
+   "period": 15.82,
+   "sway": 0.0,
+   "phase": 0.122
+  },
+  {
+   "id": "IslandFarLeft_T0_Tower_Mid_Arcade_stone",
+   "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Mid_Arcade.WL_Tower_Mid_Arcade",
+   "material": "MI_V2_IvoryStone",
+   "loc": [
+    22229.1,
+    22868.9,
+    12790.6
+   ],
+   "rot": [
+    0.0,
+    46.0,
+    0.0
+   ],
+   "scale": [
+    0.648,
+    0.648,
+    0.648
+   ],
+   "amp": 139.9,
+   "period": 15.82,
+   "sway": 0.0,
+   "phase": 0.122
+  },
+  {
+   "id": "IslandFarLeft_T0_Tower_Mid_Ribbed_stone",
+   "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Mid_Ribbed.WL_Tower_Mid_Ribbed",
+   "material": "MI_V2_IvoryStone",
+   "loc": [
+    22229.1,
+    22868.9,
+    13645.9
+   ],
+   "rot": [
+    0.0,
+    46.0,
+    0.0
+   ],
+   "scale": [
+    0.648,
+    0.648,
+    0.648
+   ],
+   "amp": 139.9,
+   "period": 15.82,
+   "sway": 0.0,
+   "phase": 0.122
+  },
+  {
+   "id": "IslandFarLeft_T0_Tower_Mid_Balconied_glass",
+   "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Mid_Balconied_glass.WL_Tower_Mid_Balconied_glass",
+   "material": "MI_V2_GlassAmber",
+   "loc": [
+    22229.1,
+    22868.9,
+    14708.6
+   ],
+   "rot": [
+    0.0,
+    46.0,
+    0.0
+   ],
+   "scale": [
+    0.648,
+    0.648,
+    0.648
+   ],
+   "amp": 139.9,
+   "period": 15.82,
+   "sway": 0.0,
+   "phase": 0.122
+  },
+  {
+   "id": "IslandFarLeft_T0_Tower_Mid_Balconied_stone",
+   "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Mid_Balconied.WL_Tower_Mid_Balconied",
+   "material": "MI_V2_IvoryStone",
+   "loc": [
+    22229.1,
+    22868.9,
+    14708.6
+   ],
+   "rot": [
+    0.0,
+    46.0,
+    0.0
+   ],
+   "scale": [
+    0.648,
+    0.648,
+    0.648
+   ],
+   "amp": 139.9,
+   "period": 15.82,
+   "sway": 0.0,
+   "phase": 0.122
+  },
+  {
+   "id": "IslandFarLeft_T0_Spire_Needle_gold",
+   "mesh": "/Game/WonderlandV2/Kit/towers/WL_Spire_Needle_gold.WL_Spire_Needle_gold",
+   "material": "MI_V2_Gold",
+   "loc": [
+    22229.1,
+    22868.9,
+    15538.1
+   ],
+   "rot": [
+    0.0,
+    46.0,
+    0.0
+   ],
+   "scale": [
+    0.648,
+    0.648,
+    0.648
+   ],
+   "amp": 139.9,
+   "period": 15.82,
+   "sway": 0.0,
+   "phase": 0.122
+  },
+  {
+   "id": "IslandFarLeft_T0_Spire_Needle_roof",
+   "mesh": "/Game/WonderlandV2/Kit/towers/WL_Spire_Needle_roof.WL_Spire_Needle_roof",
+   "material": "MI_V2_RoofRose",
+   "loc": [
+    22229.1,
+    22868.9,
+    15538.1
+   ],
+   "rot": [
+    0.0,
+    46.0,
+    0.0
+   ],
+   "scale": [
+    0.648,
+    0.648,
+    0.648
+   ],
+   "amp": 139.9,
+   "period": 15.82,
+   "sway": 0.0,
+   "phase": 0.122
+  },
+  {
+   "id": "IslandFarLeft_T0_Spire_Needle_stone",
+   "mesh": "/Game/WonderlandV2/Kit/towers/WL_Spire_Needle.WL_Spire_Needle",
+   "material": "MI_V2_IvoryStone",
+   "loc": [
+    22229.1,
+    22868.9,
+    15538.1
+   ],
+   "rot": [
+    0.0,
+    46.0,
+    0.0
+   ],
+   "scale": [
+    0.648,
+    0.648,
+    0.648
+   ],
+   "amp": 139.9,
+   "period": 15.82,
+   "sway": 0.0,
+   "phase": 0.122
+  },
+  {
+   "id": "IslandFarLeft_Topiary0",
+   "mesh": "/Game/WonderlandV2/Vegetation/Topiary/SM_topiary_ball.SM_topiary_ball",
+   "material": "MI_V2_LeafDark",
+   "loc": [
+    22616.7,
+    23270.3,
+    12000.0
+   ],
+   "rot": [
+    0.0,
+    226.4,
+    0.0
+   ],
+   "scale": [
+    1.44,
+    1.44,
+    1.44
+   ],
+   "amp": 139.9,
+   "period": 15.82,
+   "sway": 0.0,
+   "phase": 0.122
+  },
+  {
+   "id": "IslandHigh_lawn",
+   "mesh": "/Game/WonderlandV2/Kit/sky/WL_Sky_Island_Medium_lawn.WL_Sky_Island_Medium_lawn",
+   "material": "MI_V2_Lawn",
+   "loc": [
+    -7250.7,
+    37151.8,
+    26145.8
+   ],
+   "rot": [
+    0.0,
+    281.0,
+    0.0
+   ],
+   "scale": [
+    2.0,
+    2.0,
+    2.0
+   ],
+   "amp": 152.5,
+   "period": 18.59,
+   "sway": 0.0,
+   "phase": 0.627
+  },
+  {
+   "id": "IslandHigh_stone",
+   "mesh": "/Game/WonderlandV2/Kit/sky/WL_Sky_Island_Medium.WL_Sky_Island_Medium",
+   "material": "MI_V2_IvoryStone",
+   "loc": [
+    -7250.7,
+    37151.8,
+    26145.8
+   ],
+   "rot": [
+    0.0,
+    281.0,
+    0.0
+   ],
+   "scale": [
+    2.0,
+    2.0,
+    2.0
+   ],
+   "amp": 152.5,
+   "period": 18.59,
+   "sway": 0.0,
+   "phase": 0.627
+  },
+  {
+   "id": "IslandHigh_stone_dark",
+   "mesh": "/Game/WonderlandV2/Kit/sky/WL_Sky_Island_Medium_stone_dark.WL_Sky_Island_Medium_stone_dark",
+   "material": "MI_V2_Soil",
+   "loc": [
+    -7250.7,
+    37151.8,
+    26145.8
+   ],
+   "rot": [
+    0.0,
+    281.0,
+    0.0
+   ],
+   "scale": [
+    2.0,
+    2.0,
+    2.0
+   ],
+   "amp": 152.5,
+   "period": 18.59,
+   "sway": 0.0,
+   "phase": 0.627
+  },
+  {
+   "id": "IslandHigh_T0_Tower_Base_Arcaded_stone",
+   "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Base_Arcaded.WL_Tower_Base_Arcaded",
+   "material": "MI_V2_IvoryStone",
+   "loc": [
+    -7250.7,
+    37151.8,
+    26127.4
+   ],
+   "rot": [
+    0.0,
+    101.0,
+    0.0
+   ],
+   "scale": [
+    0.92,
+    0.92,
+    0.92
+   ],
+   "amp": 152.5,
+   "period": 18.59,
+   "sway": 0.0,
+   "phase": 0.627
+  },
+  {
+   "id": "IslandHigh_T0_Tower_Base_Arcaded_stone_dark",
+   "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Base_Arcaded_stone_dark.WL_Tower_Base_Arcaded_stone_dark",
+   "material": "MI_V2_Stone",
+   "loc": [
+    -7250.7,
+    37151.8,
+    26127.4
+   ],
+   "rot": [
+    0.0,
+    101.0,
+    0.0
+   ],
+   "scale": [
+    0.92,
+    0.92,
+    0.92
+   ],
+   "amp": 152.5,
+   "period": 18.59,
+   "sway": 0.0,
+   "phase": 0.627
+  },
+  {
+   "id": "IslandHigh_T0_Tower_Mid_Ashlar_stone",
+   "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Mid_Ashlar.WL_Tower_Mid_Ashlar",
+   "material": "MI_V2_IvoryStone",
+   "loc": [
+    -7250.7,
+    37151.8,
+    27268.2
+   ],
+   "rot": [
+    0.0,
+    101.0,
+    0.0
+   ],
+   "scale": [
+    0.92,
+    0.92,
+    0.92
+   ],
+   "amp": 152.5,
+   "period": 18.59,
+   "sway": 0.0,
+   "phase": 0.627
+  },
+  {
+   "id": "IslandHigh_T0_Tower_Mid_Arcade_glass",
+   "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Mid_Arcade_glass.WL_Tower_Mid_Arcade_glass",
+   "material": "MI_V2_GlassAmber",
+   "loc": [
+    -7250.7,
+    37151.8,
+    28611.4
+   ],
+   "rot": [
+    0.0,
+    101.0,
+    0.0
+   ],
+   "scale": [
+    0.92,
+    0.92,
+    0.92
+   ],
+   "amp": 152.5,
+   "period": 18.59,
+   "sway": 0.0,
+   "phase": 0.627
+  },
+  {
+   "id": "IslandHigh_T0_Tower_Mid_Arcade_stone",
+   "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Mid_Arcade.WL_Tower_Mid_Arcade",
+   "material": "MI_V2_IvoryStone",
+   "loc": [
+    -7250.7,
+    37151.8,
+    28611.4
+   ],
+   "rot": [
+    0.0,
+    101.0,
+    0.0
+   ],
+   "scale": [
+    0.92,
+    0.92,
+    0.92
+   ],
+   "amp": 152.5,
+   "period": 18.59,
+   "sway": 0.0,
+   "phase": 0.627
+  },
+  {
+   "id": "IslandHigh_T0_Tower_Mid_Balconied_glass",
+   "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Mid_Balconied_glass.WL_Tower_Mid_Balconied_glass",
+   "material": "MI_V2_GlassAmber",
+   "loc": [
+    -7250.7,
+    37151.8,
+    29825.8
+   ],
+   "rot": [
+    0.0,
+    101.0,
+    0.0
+   ],
+   "scale": [
+    0.92,
+    0.92,
+    0.92
+   ],
+   "amp": 152.5,
+   "period": 18.59,
+   "sway": 0.0,
+   "phase": 0.627
+  },
+  {
+   "id": "IslandHigh_T0_Tower_Mid_Balconied_stone",
+   "mesh": "/Game/WonderlandV2/Kit/towers/WL_Tower_Mid_Balconied.WL_Tower_Mid_Balconied",
+   "material": "MI_V2_IvoryStone",
+   "loc": [
+    -7250.7,
+    37151.8,
+    29825.8
+   ],
+   "rot": [
+    0.0,
+    101.0,
+    0.0
+   ],
+   "scale": [
+    0.92,
+    0.92,
+    0.92
+   ],
+   "amp": 152.5,
+   "period": 18.59,
+   "sway": 0.0,
+   "phase": 0.627
+  },
+  {
+   "id": "IslandHigh_T0_Spire_Needle_gold",
+   "mesh": "/Game/WonderlandV2/Kit/towers/WL_Spire_Needle_gold.WL_Spire_Needle_gold",
+   "material": "MI_V2_Gold",
+   "loc": [
+    -7250.7,
+    37151.8,
+    31003.4
+   ],
+   "rot": [
+    0.0,
+    101.0,
+    0.0
+   ],
+   "scale": [
+    0.92,
+    0.92,
+    0.92
+   ],
+   "amp": 152.5,
+   "period": 18.59,
+   "sway": 0.0,
+   "phase": 0.627
+  },
+  {
+   "id": "IslandHigh_T0_Spire_Needle_roof",
+   "mesh": "/Game/WonderlandV2/Kit/towers/WL_Spire_Needle_roof.WL_Spire_Needle_roof",
+   "material": "MI_V2_RoofRose",
+   "loc": [
+    -7250.7,
+    37151.8,
+    31003.4
+   ],
+   "rot": [
+    0.0,
+    101.0,
+    0.0
+   ],
+   "scale": [
+    0.92,
+    0.92,
+    0.92
+   ],
+   "amp": 152.5,
+   "period": 18.59,
+   "sway": 0.0,
+   "phase": 0.627
+  },
+  {
+   "id": "IslandHigh_T0_Spire_Needle_stone",
+   "mesh": "/Game/WonderlandV2/Kit/towers/WL_Spire_Needle.WL_Spire_Needle",
+   "material": "MI_V2_IvoryStone",
+   "loc": [
+    -7250.7,
+    37151.8,
+    31003.4
+   ],
+   "rot": [
+    0.0,
+    101.0,
+    0.0
+   ],
+   "scale": [
+    0.92,
+    0.92,
+    0.92
+   ],
+   "amp": 152.5,
+   "period": 18.59,
+   "sway": 0.0,
+   "phase": 0.627
+  },
+  {
+   "id": "IslandHigh_TreeTrunk0",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_tree_slender_trunk.SM_tree_slender_trunk",
+   "material": "MI_V2_Bark",
+   "loc": [
+    -7774.3,
+    36072.1,
+    26145.8
+   ],
+   "rot": [
+    0.0,
+    125.7,
+    0.0
+   ],
+   "scale": [
+    1.492,
+    1.492,
+    1.492
+   ],
+   "amp": 152.5,
+   "period": 18.59,
+   "sway": 0.0,
+   "phase": 0.627
+  },
+  {
+   "id": "IslandHigh_TreeCrown0",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafLight",
+   "loc": [
+    -7774.3,
+    36072.1,
+    27369.3
+   ],
+   "rot": [
+    0.0,
+    197.8,
+    0.0
+   ],
+   "scale": [
+    1.865,
+    1.865,
+    1.865
+   ],
+   "amp": 152.5,
+   "period": 18.59,
+   "sway": 0.0,
+   "phase": 0.627
+  },
+  {
+   "id": "IslandHigh_TreeTrunk1",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_tree_slender_trunk.SM_tree_slender_trunk",
+   "material": "MI_V2_Bark",
+   "loc": [
+    -6360.8,
+    36346.9,
+    26145.8
+   ],
+   "rot": [
+    0.0,
+    138.9,
+    0.0
+   ],
+   "scale": [
+    1.443,
+    1.443,
+    1.443
+   ],
+   "amp": 152.5,
+   "period": 18.59,
+   "sway": 0.0,
+   "phase": 0.627
+  },
+  {
+   "id": "IslandHigh_TreeCrown1",
+   "mesh": "/Game/WonderlandV2/Vegetation/Trees/SM_canopy_medium.SM_canopy_medium",
+   "material": "MI_V2_LeafMid",
+   "loc": [
+    -6360.8,
+    36346.9,
+    27329.5
+   ],
+   "rot": [
+    0.0,
+    247.4,
+    0.0
+   ],
+   "scale": [
+    1.804,
+    1.804,
+    1.804
+   ],
+   "amp": 152.5,
+   "period": 18.59,
+   "sway": 0.0,
+   "phase": 0.627
+  },
+  {
+   "id": "IslandHigh_Topiary0",
+   "mesh": "/Game/WonderlandV2/Vegetation/Topiary/SM_topiary_spiral.SM_topiary_spiral",
+   "material": "MI_V2_LeafDark",
+   "loc": [
+    -6660.6,
+    38310.1,
+    26145.8
+   ],
+   "rot": [
+    0.0,
+    23.4,
+    0.0
+   ],
+   "scale": [
+    1.6,
+    1.6,
+    1.6
+   ],
+   "amp": 152.5,
+   "period": 18.59,
+   "sway": 0.0,
+   "phase": 0.627
+  },
+  {
+   "id": "IslandHigh_Topiary1",
+   "mesh": "/Game/WonderlandV2/Vegetation/Topiary/SM_topiary_spiral.SM_topiary_spiral",
+   "material": "MI_V2_LeafDark",
+   "loc": [
+    -7498.8,
+    38427.9,
+    26145.8
+   ],
+   "rot": [
+    0.0,
+    339.4,
+    0.0
+   ],
+   "scale": [
+    1.6,
+    1.6,
+    1.6
+   ],
+   "amp": 152.5,
+   "period": 18.59,
+   "sway": 0.0,
+   "phase": 0.627
+  },
+  {
+   "id": "IslandHigh_Topiary2",
+   "mesh": "/Game/WonderlandV2/Vegetation/Topiary/SM_topiary_spiral.SM_topiary_spiral",
+   "material": "MI_V2_LeafDark",
+   "loc": [
+    -8231.9,
+    38004.7,
+    26145.8
+   ],
+   "rot": [
+    0.0,
+    146.9,
+    0.0
+   ],
+   "scale": [
+    1.6,
+    1.6,
+    1.6
+   ],
+   "amp": 152.5,
+   "period": 18.59,
+   "sway": 0.0,
+   "phase": 0.627
+  },
+  {
+   "id": "IslandHigh_Cloud",
+   "mesh": "/Game/WonderlandV2/Sky/SM_cloud_cumulus_c.SM_cloud_cumulus_c",
+   "material": "MI_V2_Cloud",
+   "loc": [
+    -7250.7,
+    37151.8,
+    23532.5
+   ],
+   "rot": [
+    0.0,
+    11.0,
+    0.0
+   ],
+   "scale": [
+    0.339,
+    0.339,
+    0.339
+   ],
+   "amp": 152.5,
+   "period": 18.59,
+   "sway": 0.0,
+   "phase": 0.627
+  }
+ ],
+ "islands": [
+  {
+   "id": "IslandRight",
+   "size": "large",
+   "at": [
+    -14539,
+    21405
+   ],
+   "bearing": 124.0,
+   "distance_m": 260,
+   "top_z": 11000,
+   "city_silhouette_z": 5540,
+   "motion": {
+    "amp": 129.3,
+    "period": 18.36,
+    "sway": 0.0,
+    "phase": 0.664
+   },
+   "towers": [
+    {
+     "stack": [
+      "WL_Tower_Base_Arcaded",
+      "WL_Tower_Mid_Arcade",
+      "WL_Tower_Mid_Ribbed",
+      "WL_Tower_Mid_Balconied",
+      "WL_Spire_Needle"
+     ],
+     "scale": 1.2100000000000002,
+     "height_uu": 9607
+    },
+    {
+     "stack": [
+      "WL_Tower_Base_Buttressed",
+      "WL_Tower_Mid_Arcade",
+      "WL_Tower_Mid_Ribbed",
+      "WL_Tower_Mid_Balconied",
+      "WL_Spire_Twisted"
+     ],
+     "scale": 0.792,
+     "height_uu": 6023
+    },
+    {
+     "stack": [
+      "WL_Tower_Base_Arcaded",
+      "WL_Tower_Mid_Ashlar",
+      "WL_Tower_Mid_Arcade",
+      "WL_Tower_Mid_Balconied",
+      "WL_Spire_Needle"
+     ],
+     "scale": 0.792,
+     "height_uu": 6146
+    }
+   ]
+  },
+  {
+   "id": "IslandLeft",
+   "size": "medium",
+   "at": [
+    12718,
+    20203
+   ],
+   "bearing": 58.0,
+   "distance_m": 240,
+   "top_z": 11060,
+   "city_silhouette_z": 7160,
+   "motion": {
+    "amp": 128.4,
+    "period": 18.82,
+    "sway": 0.0,
+    "phase": 0.347
+   },
+   "towers": [
+    {
+     "stack": [
+      "WL_Tower_Base_Buttressed",
+      "WL_Tower_Mid_Arcade",
+      "WL_Tower_Mid_Balconied",
+      "WL_Tower_Mid_Fluted",
+      "WL_Spire_Needle"
+     ],
+     "scale": 1.0,
+     "height_uu": 7820
+    }
+   ]
+  },
+  {
+   "id": "IslandFarRight",
+   "size": "small",
+   "at": [
+    -25267,
+    22600
+   ],
+   "bearing": 138.0,
+   "distance_m": 340,
+   "top_z": 14919,
+   "city_silhouette_z": 12069,
+   "motion": {
+    "amp": 130.4,
+    "period": 15.56,
+    "sway": 0.0,
+    "phase": 0.794
+   },
+   "towers": [
+    {
+     "stack": [
+      "WL_Tower_Base_Battered",
+      "WL_Tower_Mid_Arcade",
+      "WL_Tower_Mid_Balconied",
+      "WL_Tower_Mid_Fluted",
+      "WL_Spire_Needle"
+     ],
+     "scale": 0.648,
+     "height_uu": 4964
+    }
+   ]
+  },
+  {
+   "id": "IslandFarLeft",
+   "size": "small",
+   "at": [
+    22229,
+    22869
+   ],
+   "bearing": 46.0,
+   "distance_m": 320,
+   "top_z": 12000,
+   "city_silhouette_z": 8060,
+   "motion": {
+    "amp": 139.9,
+    "period": 15.82,
+    "sway": 0.0,
+    "phase": 0.122
+   },
+   "towers": [
+    {
+     "stack": [
+      "WL_Tower_Base_Arcaded",
+      "WL_Tower_Mid_Arcade",
+      "WL_Tower_Mid_Ribbed",
+      "WL_Tower_Mid_Balconied",
+      "WL_Spire_Needle"
+     ],
+     "scale": 0.648,
+     "height_uu": 5145
+    }
+   ]
+  },
+  {
+   "id": "IslandHigh",
+   "size": "medium",
+   "at": [
+    -7251,
+    37152
+   ],
+   "bearing": 101.0,
+   "distance_m": 380,
+   "top_z": 26146,
+   "city_silhouette_z": 22246,
+   "motion": {
+    "amp": 152.5,
+    "period": 18.59,
+    "sway": 0.0,
+    "phase": 0.627
+   },
+   "towers": [
+    {
+     "stack": [
+      "WL_Tower_Base_Arcaded",
+      "WL_Tower_Mid_Ashlar",
+      "WL_Tower_Mid_Arcade",
+      "WL_Tower_Mid_Balconied",
+      "WL_Spire_Needle"
+     ],
+     "scale": 0.92,
+     "height_uu": 7139
+    }
+   ]
+  }
+ ]
+}

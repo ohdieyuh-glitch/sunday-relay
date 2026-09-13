@@ -1,7 +1,7 @@
 {
  "schema": "wonderland-kit-modules/1",
  "kit_version": "1.0.0",
- "generated_utc": "2026-09-08T01:55:10+00:00",
+ "generated_utc": "2026-09-13T14:09:23+00:00",
  "radius_ladder_uu": {
   "XL": 680.0,
   "L": 460.0,
@@ -5647,6 +5647,168 @@
      "part": "veg_anchor",
      "mesh": "/Game/WonderlandV2/Kit/hero/WL_Hero_Gate_Royal_veg_anchor.WL_Hero_Gate_Royal_veg_anchor",
      "material": "MI_V2_LeafMid"
+    }
+   ]
+  },
+  "WL_Sky_Island_Small": {
+   "family": "sky_island",
+   "group": "sky",
+   "role": "terrace",
+   "height": 790.0,
+   "radius": 506.0,
+   "size": [
+    1012.0,
+    1012.0,
+    790.0
+   ],
+   "bbox_min": [
+    -506.0,
+    -506.0,
+    -750.0
+   ],
+   "bbox_max": [
+    506.0,
+    506.0,
+    40.0
+   ],
+   "tris": 992,
+   "sockets": {
+    "bottom": {
+     "kind": "ground",
+     "z": 0.0,
+     "rung": "L",
+     "radius": 460.0
+    },
+    "edge": {
+     "kind": "edge",
+     "z": 40.0,
+     "rung": null,
+     "radius": 506.0
+    }
+   },
+   "parts": [
+    {
+     "part": "lawn",
+     "mesh": "/Game/WonderlandV2/Kit/sky/WL_Sky_Island_Small_lawn.WL_Sky_Island_Small_lawn",
+     "material": "MI_V2_Lawn"
+    },
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/sky/WL_Sky_Island_Small.WL_Sky_Island_Small",
+     "material": "MI_V2_IvoryStone"
+    },
+    {
+     "part": "stone_dark",
+     "mesh": "/Game/WonderlandV2/Kit/sky/WL_Sky_Island_Small_stone_dark.WL_Sky_Island_Small_stone_dark",
+     "material": "MI_V2_Stone"
+    }
+   ]
+  },
+  "WL_Sky_Island_Medium": {
+   "family": "sky_island",
+   "group": "sky",
+   "role": "terrace",
+   "height": 1240.0,
+   "radius": 846.0,
+   "size": [
+    1692.0,
+    1692.0,
+    1240.0
+   ],
+   "bbox_min": [
+    -846.0,
+    -846.0,
+    -1200.0
+   ],
+   "bbox_max": [
+    846.0,
+    846.0,
+    40.0
+   ],
+   "tris": 1082,
+   "sockets": {
+    "bottom": {
+     "kind": "ground",
+     "z": 0.0,
+     "rung": null,
+     "radius": 800.0
+    },
+    "edge": {
+     "kind": "edge",
+     "z": 40.0,
+     "rung": null,
+     "radius": 846.0
+    }
+   },
+   "parts": [
+    {
+     "part": "lawn",
+     "mesh": "/Game/WonderlandV2/Kit/sky/WL_Sky_Island_Medium_lawn.WL_Sky_Island_Medium_lawn",
+     "material": "MI_V2_Lawn"
+    },
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/sky/WL_Sky_Island_Medium.WL_Sky_Island_Medium",
+     "material": "MI_V2_IvoryStone"
+    },
+    {
+     "part": "stone_dark",
+     "mesh": "/Game/WonderlandV2/Kit/sky/WL_Sky_Island_Medium_stone_dark.WL_Sky_Island_Medium_stone_dark",
+     "material": "MI_V2_Stone"
+    }
+   ]
+  },
+  "WL_Sky_Island_Large": {
+   "family": "sky_island",
+   "group": "sky",
+   "role": "terrace",
+   "height": 1840.0,
+   "radius": 1346.0,
+   "size": [
+    2692.0,
+    2692.0,
+    1840.0
+   ],
+   "bbox_min": [
+    -1346.0,
+    -1346.0,
+    -1800.0
+   ],
+   "bbox_max": [
+    1346.0,
+    1346.0,
+    40.0
+   ],
+   "tris": 1262,
+   "sockets": {
+    "bottom": {
+     "kind": "ground",
+     "z": 0.0,
+     "rung": null,
+     "radius": 1300.0
+    },
+    "edge": {
+     "kind": "edge",
+     "z": 40.0,
+     "rung": null,
+     "radius": 1346.0
+    }
+   },
+   "parts": [
+    {
+     "part": "lawn",
+     "mesh": "/Game/WonderlandV2/Kit/sky/WL_Sky_Island_Large_lawn.WL_Sky_Island_Large_lawn",
+     "material": "MI_V2_Lawn"
+    },
+    {
+     "part": "stone",
+     "mesh": "/Game/WonderlandV2/Kit/sky/WL_Sky_Island_Large.WL_Sky_Island_Large",
+     "material": "MI_V2_IvoryStone"
+    },
+    {
+     "part": "stone_dark",
+     "mesh": "/Game/WonderlandV2/Kit/sky/WL_Sky_Island_Large_stone_dark.WL_Sky_Island_Large_stone_dark",
+     "material": "MI_V2_Stone"
     }
    ]
   },
