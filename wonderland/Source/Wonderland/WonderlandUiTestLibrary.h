@@ -60,4 +60,15 @@ public:
 	 */
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|Test", meta = (WorldContext = "WorldContextObject"))
 	static bool ApplySimulatedUsageScene(UObject* WorldContextObject, FName Scene, bool bLargeTier);
+
+	/**
+	 * Editor only: keep the editor (and PIE) ticking at full rate while it is behind another
+	 * window, so a script can measure frame time. Behind another window the editor otherwise
+	 * throttles to a few frames a second ("Use Less CPU when in Background"), and that setting is
+	 * neither visible to Python nor settable with `set` in the editor. Nothing is written to the
+	 * user's settings: this registers the editor's own ShouldDisableCPUThrottling hook for this
+	 * session. False outside the editor.
+	 */
+	UFUNCTION(BlueprintCallable, Category = "Wonderland|Test")
+	static bool SetBackgroundThrottleSuspended(bool bSuspended);
 };

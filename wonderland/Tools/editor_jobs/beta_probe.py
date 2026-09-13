@@ -2,9 +2,9 @@
 #
 # 1. RUNTIME COMPLETENESS (gate 4). WL_V2_GoldenArrival_WP2 is a single persistent level (world_audit.py: no
 #    World Partition object), so PIE should hold every authored actor the editor holds. Counted per pass.
-# 2. FRAME TIME (gate 10). The editor behind another window throttles PIE to ~3 fps, and that throttle cannot be
-#    lifted from Python, so every sample records whether the editor held the foreground; only those samples are
-#    measurements. Each pose is settled (Lumen and shader compiles), then frames are counted over SECONDS. These
+# 2. FRAME TIME (gate 10). The editor behind another window throttles PIE to ~3 fps; the job lifts that for its own
+#    run (WonderlandUiTestLibrary.SetBackgroundThrottleSuspended) and still records whether the editor held the
+#    foreground. Each pose is settled (Lumen and shader compiles), then frames are counted over SECONDS. These
 #    are PIE-in-editor numbers: the editor's own UI costs are included, so a packaged game runs faster, not slower.
 # 3. LIGHTING VARIANTS (gate 6). The world has four directional lights: the sun and three unshadowed fills
 #    (world_audit.py). Unshadowed directional light reaches every surface facing it -- under arches, inside
@@ -44,11 +44,14 @@ def job():
     while ues.get_game_world() is not None:
         yield 5.0
     os.makedirs(SHOTS, exist_ok=True)
+    # Behind another window the editor throttles PIE to a few frames a second; this session-only hook lifts that.
+    RESULT["throttle_suspended"] = bool(unreal.WonderlandUiTestLibrary.set_background_throttle_suspended(True))
     try:
         yield from _probe(ues, les)
     finally:
         if ues.get_game_world() is not None:
             les.editor_request_end_play()
+        unreal.WonderlandUiTestLibrary.set_background_throttle_suspended(False)
     RESULT["status"] = "done"
 
 

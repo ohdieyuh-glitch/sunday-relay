@@ -273,12 +273,14 @@ int32 UWonderlandUsageHudWidget::NativePaint(
 	// the art rather than pushing the words out of view.
 	const FVector2f Size = FVector2f(AllottedGeometry.GetLocalSize());
 	const FWonderlandUsageViewport& Window = WonderlandUsageViewport();
-	const FSlateFontInfo LabelFont = WonderlandUi::Sans(10, true, 150);
+	// THE PERCENT IS THE READING, so it is the largest thing in the readout (founder, 2026-09-13: the
+	// 17 px figures were correct but too small to read over the bright world).
+	const FSlateFontInfo LabelFont = WonderlandUi::Sans(12, true, 150);
 	const FSlateFontInfo FigureFont = WonderlandUi::Mono(10);
-	const FSlateFontInfo PercentFont = WonderlandUi::Sans(17, true, 40);
-	const FSlateFontInfo NoteFont = WonderlandUi::Sans(8, false, 110);
-	const float RowHeight = 27.0f;
-	const float NoteHeight = 15.0f;
+	const FSlateFontInfo PercentFont = WonderlandUi::Sans(30, true, 30);
+	const FSlateFontInfo NoteFont = WonderlandUi::Sans(9, false, 110);
+	const float RowHeight = 42.0f;
+	const float NoteHeight = 17.0f;
 	const int32 Notes = (ProvenanceLine.IsEmpty() ? 0 : 1) + (ReasonLine.IsEmpty() ? 0 : 1);
 	const float ReadoutHeight = RowHeight * 2.0f + 6.0f + NoteHeight * 2.0f;
 	const float ArtScale = (Window.Width > 0.0 && Window.Height > 0.0)
@@ -346,14 +348,20 @@ int32 UWonderlandUsageHudWidget::NativePaint(
 		// LABEL left in the channel's hue; the PERCENT right, large, in the channel's bright tone, so
 		// each arc's fullness reads at a glance; the unit figure small beside it, and only when the
 		// units are real usage (a development preview's 100 units are not).
-		const float BaseLine = Y + RowHeight - 17.0f;
+		const float BaseLine = Y + RowHeight - 21.0f;
 		PaintText(Row.Label, LabelFont, Row.Palette->Accent, FVector2f(2.0f, BaseLine + 1.0f), AllottedGeometry, OutDrawElements, Layer);
 		float ValueRight = Right;
 		if (!Row.Percent->IsEmpty())
 		{
 			const float PercentWidth = static_cast<float>(Measure->Measure(*Row.Percent, PercentFont).X);
-			PaintText(*Row.Percent, PercentFont, Row.Palette->Bright, FVector2f(Right - PercentWidth, Y + RowHeight - 29.0f), AllottedGeometry, OutDrawElements, Layer);
-			ValueRight = Right - PercentWidth - 10.0f;
+			// A darker halo first, so a 30 px figure holds its edge against ivory stone and white cloud.
+			const FVector2f At(Right - PercentWidth, Y + RowHeight - 44.0f);
+			for (const FVector2f& Halo : {FVector2f(-1.5f, 0.0f), FVector2f(1.5f, 0.0f), FVector2f(0.0f, -1.5f), FVector2f(0.0f, 2.5f)})
+			{
+				PaintText(*Row.Percent, PercentFont, FLinearColor(0.0f, 0.02f, 0.04f, 0.55f), At + Halo, AllottedGeometry, OutDrawElements, Layer);
+			}
+			PaintText(*Row.Percent, PercentFont, Row.Palette->Bright, At, AllottedGeometry, OutDrawElements, Layer + 2);
+			ValueRight = Right - PercentWidth - 12.0f;
 		}
 		if (!bPreviewReading || Row.Percent->IsEmpty())
 		{
@@ -366,7 +374,7 @@ int32 UWonderlandUsageHudWidget::NativePaint(
 	PaintText(ProvenanceLine, NoteFont, FLinearColor(0.913f, 0.941f, 1.0f, 0.82f), FVector2f(2.0f, Y), AllottedGeometry, OutDrawElements, Layer);
 	Y += ProvenanceLine.IsEmpty() ? 0.0f : NoteHeight;
 	PaintText(ReasonLine, NoteFont, FLinearColor(0.913f, 0.941f, 1.0f, 0.66f), FVector2f(2.0f, Y), AllottedGeometry, OutDrawElements, Layer);
-	Layer += 2;
+	Layer += 4;   // the percent figures paint up to Layer + 3
 
 	return Layer;
 }

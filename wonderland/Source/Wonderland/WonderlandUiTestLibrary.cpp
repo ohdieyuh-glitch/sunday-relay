@@ -17,6 +17,10 @@
 #include "WonderlandUiSubsystem.h"
 #include "WonderlandUsageSubsystem.h"
 
+#if WITH_EDITOR
+#include "Editor/EditorEngine.h"
+#endif
+
 namespace
 {
 	bool SendKey(const FKey& Key, bool bDown, bool bControl, uint32 Character = 0)
@@ -255,4 +259,31 @@ bool UWonderlandUiTestLibrary::ApplySimulatedUsageScene(UObject* WorldContextObj
 	Authority.AuthorityId = KnownText(TEXT("development-fixture"));
 	Authority.Revision = Usage->GetAppliedRevision() + 1;
 	return Usage->ApplyUsage(Project, Hud, Authority) == EWonderlandOrderingVerdict::Applied;
+}
+
+namespace
+{
+	bool GWonderlandBackgroundThrottleSuspended = false;
+	bool GWonderlandThrottleHookInstalled = false;
+}
+
+bool UWonderlandUiTestLibrary::SetBackgroundThrottleSuspended(bool bSuspended)
+{
+#if WITH_EDITOR
+	UEditorEngine* Editor = Cast<UEditorEngine>(GEngine);
+	if (Editor == nullptr)
+	{
+		return false;
+	}
+	if (!GWonderlandThrottleHookInstalled)
+	{
+		Editor->ShouldDisableCPUThrottlingDelegates.Add(
+			UEditorEngine::FShouldDisableCPUThrottling::CreateLambda([]() { return GWonderlandBackgroundThrottleSuspended; }));
+		GWonderlandThrottleHookInstalled = true;
+	}
+	GWonderlandBackgroundThrottleSuspended = bSuspended;
+	return true;
+#else
+	return false;
+#endif
 }

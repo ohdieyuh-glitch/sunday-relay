@@ -75,7 +75,7 @@ void UWonderlandUiSubsystem::Attach(APlayerController* Controller)
 		UsageHud->SetAnchorsInViewport(FAnchors(0.0f, 0.0f, 0.0f, 0.0f));
 		UsageHud->SetAlignmentInViewport(FVector2D(0.0, 0.0));
 		UsageHud->SetPositionInViewport(FVector2D(30.0, 22.0), true);
-		UsageHud->SetDesiredSizeInViewport(FVector2D(360.0, 390.0));
+		UsageHud->SetDesiredSizeInViewport(FVector2D(400.0, 470.0));
 		++UsageHudCreations;
 	}
 	UE_LOG(LogWonderlandUi, Log, TEXT("WLUI attached to %s (usage HUD %s%s, Ctrl+T terminal, M map)"),

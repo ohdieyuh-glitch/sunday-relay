@@ -8,7 +8,8 @@
 #   - frame rate over FPS_SECONDS facing the arrival view;
 #   - a trap check: hold W for WALK_SECONDS in each of the four facings from the landing point, and record how far
 #     the Dog got (a landing it cannot leave is a collision trap).
-# A frame rate counts only when the editor held the foreground (behind another window PIE is throttled).
+# The editor's background throttle is lifted for the run (SetBackgroundThrottleSuspended); each frame rate also
+# records whether the editor held the foreground.
 # Waits for any other PIE to end.
 # Globals: ONLY (list of destination ids, default all offered), TAG, WALK_SECONDS, FPS_SECONDS.
 import math
@@ -30,11 +31,14 @@ def job():
     while ues.get_game_world() is not None:
         yield 5.0
     os.makedirs(SHOTS, exist_ok=True)
+    # Behind another window the editor throttles PIE to a few frames a second; this session-only hook lifts that.
+    RESULT["throttle_suspended"] = bool(unreal.WonderlandUiTestLibrary.set_background_throttle_suspended(True))
     try:
         yield from _tour(ues, les)
     finally:
         if ues.get_game_world() is not None:
             les.editor_request_end_play()
+        unreal.WonderlandUiTestLibrary.set_background_throttle_suspended(False)
     yield (lambda: ues.get_game_world() is None, 60)
     RESULT["status"] = "done"
 

@@ -33,5 +33,11 @@ public class Wonderland : ModuleRules
 			"Slate",
 			"SlateCore"
 		});
+
+		if (Target.bBuildEditor)
+		{
+			// Editor-only test hooks (WonderlandUiTestLibrary::SetBackgroundThrottleSuspended).
+			PrivateDependencyModuleNames.Add("UnrealEd");
+		}
 	}
 }
