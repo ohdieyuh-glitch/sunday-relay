@@ -276,7 +276,7 @@ function harness(
             reason: 'The Hermes reviewer is not available. Missing: hermes provider authentication.',
             executable: 'hermes',
             oneShotSupported: true,
-            readOnlySupported: true,
+            safeModeSupported: true,
             model: null,
             provider: null,
             authenticatedProviders: [],
@@ -288,7 +288,7 @@ function harness(
             missing: [],
             executable: 'hermes',
             oneShotSupported: true,
-            readOnlySupported: true,
+            safeModeSupported: true,
             model: 'claude-opus-4-8',
             provider: 'Anthropic',
             authenticatedProviders: ['Nous Portal'],
@@ -1103,6 +1103,34 @@ describe('the reviewer preflight proves the reviewer can actually answer', () =>
     expect(result.missing.join(' ')).not.toContain('produced no output');
   });
 
+  /**
+   * `--safe-mode` IS NOT READ-ONLY, so the check must not call it that.
+   *
+   * Measured on the pinned Hermes, `hermes -z --safe-mode` under a profile that
+   * disables nothing handed the reviewer terminal, write_file and execute_code.
+   * The flag keeps plugins, shell hooks and MCP servers out; the profile decides
+   * the tools. This check used to report the flag as "hermes read-only mode" and
+   * set `readOnlySupported`, which is a claim no `--help` text can support.
+   */
+  it('names --safe-mode for what it does, and reports nothing about read-only', () => {
+    const noSafeMode = 'usage: hermes [-h] [-z PROMPT] [--provider PROVIDER] [--usage-file PATH]';
+    const result = hermesPreflight(
+      { executable: 'hermes', timeoutMs: 1000, maxOutputBytes: 4096, model: 'grok-build-0.1', provider: 'xai' },
+      {
+        probe: (_exe: string, args: string[]) => {
+          if (args[0] === '--help') return { ok: true, text: noSafeMode };
+          if (args[0] === 'status') return { ok: true, text: PREFLIGHT_STATUS };
+          return { ok: true, text: 'OK' };
+        },
+      },
+    );
+    expect(result.ready).toBe(false);
+    expect(result.safeModeSupported).toBe(false);
+    expect(result.missing).toContain('hermes safe mode (--safe-mode), which keeps plugins, shell hooks and MCP servers out of the review');
+    expect(result.missing.join(' ')).not.toMatch(/read-only/iu);
+    expect(Object.keys(result)).not.toContain('readOnlySupported');
+  });
+
   it('reads the real execution configuration and confirms liveness', () => {
     const seen = { args: [] as string[][] };
     const result = hermesPreflight(
@@ -1111,7 +1139,7 @@ describe('the reviewer preflight proves the reviewer can actually answer', () =>
     );
     expect(result.ready).toBe(true);
     expect(result.oneShotSupported).toBe(true);
-    expect(result.readOnlySupported).toBe(true);
+    expect(result.safeModeSupported).toBe(true);
     expect(result.model).toBe('claude-opus-4-8');
     expect(result.provider).toBe('Anthropic');
     /**
@@ -1838,7 +1866,7 @@ describe('the mission reviews through the transport its deployment configured', 
         missing: [],
         executable: 'hermes',
         oneShotSupported: true,
-        readOnlySupported: true,
+        safeModeSupported: true,
         model: 'hermes-3',
         provider: 'test-provider',
         authenticatedProviders: [],

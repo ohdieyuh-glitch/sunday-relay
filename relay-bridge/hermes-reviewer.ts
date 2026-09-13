@@ -2,9 +2,20 @@
  * REVIEWER — Hermes (Nous Research Hermes Agent CLI).
  *
  * Hermes is the reviewer RUNTIME; its underlying provider/model is captured
- * separately and reported truthfully. The review is independent and READ-ONLY:
- * the packet is passed inline on the prompt, the process runs in an empty temp
- * cwd (so it has no path into the controlled project), and `--safe-mode` is set.
+ * separately and reported truthfully. The review is independent: the packet is
+ * passed inline on the prompt, the process runs in an empty temp cwd (so it has
+ * no path into the controlled project), and `--safe-mode` is set.
+ *
+ * WHAT MAKES IT READ-ONLY IS THE PROFILE, NOT A FLAG ON THIS COMMAND LINE.
+ * `--safe-mode` keeps plugins, shell hooks and MCP servers out of the review.
+ * It does not take tools away: measured on the pinned Hermes (2ea39dae), the
+ * one-shot path still enables whatever toolsets the profile under HOME allows,
+ * and it auto-approves their use. A profile that names no disabled toolsets
+ * gave this command terminal, file-writing, code-execution and web tools. The
+ * paid path's profile disables every toolset, and `.github/julius-live-hermes.sh`
+ * proves the resulting agent holds no tool before a mission may start
+ * (`scripts/julius-reviewer-isolation.mjs`). A reviewer run against an
+ * operator's own profile is read-only only if that profile makes it so.
  *
  * Invoked exactly once via the installed one-shot flag (`-z/--oneshot`, proven
  * from local --help). Output is strictly validated — unparseable or malformed
@@ -513,8 +524,8 @@ export function loadHermesConfig(env: NodeJS.ProcessEnv = process.env): HermesCo
 /**
  * Reviewer availability, proven before a single paid request is made.
  *
- * Three local, read-only probes: `--help` (does this build support the one-shot
- * and read-only flags Relay depends on?), `status` (which provider and model
+ * Three local, read-only probes: `--help` (does this build support the one-shot,
+ * safe-mode and usage-file flags Relay depends on?), `status` (which provider and model
  * does the real Hermes configuration resolve to?), and ONE minimal generation
  * that proves the configured provider actually answers.
  *
@@ -633,7 +644,16 @@ export interface HermesPreflightResult {
   reason?: string;
   executable: string;
   oneShotSupported: boolean;
-  readOnlySupported: boolean;
+  /**
+   * `--safe-mode` appears in this build's help: plugins, shell hooks and MCP
+   * servers can be kept out of the review.
+   *
+   * This field was `readOnlySupported`, derived from the same help text, and it
+   * claimed more than the flag does. Safe mode does not remove a single tool
+   * from the one-shot path; the profile's disabled toolsets do. No `--help`
+   * probe can see a profile, so nothing here reports read-only at all.
+   */
+  safeModeSupported: boolean;
   /** Resolved from the real Hermes execution configuration. */
   model: string | null;
   provider: string | null;
@@ -712,11 +732,13 @@ export function hermesPreflight(
 
   const help = probe(cfg.executable, ['--help']);
   const oneShotSupported = /(^|\s)-z(\s|,)/.test(help.text) || help.text.includes('-z PROMPT');
-  const readOnlySupported = help.text.includes('--safe-mode');
+  const safeModeSupported = help.text.includes('--safe-mode');
   if (!help.ok && !help.text.trim()) missing.push('hermes executable (not runnable on PATH)');
   else {
     if (!oneShotSupported) missing.push('hermes one-shot mode (-z)');
-    if (!readOnlySupported) missing.push('hermes read-only mode (--safe-mode)');
+    // Named for what the flag does. It was "read-only mode", which the flag is
+    // not: see `safeModeSupported`.
+    if (!safeModeSupported) missing.push('hermes safe mode (--safe-mode), which keeps plugins, shell hooks and MCP servers out of the review');
     /**
      * THE FLAG THE PROBE AND THE MISSION BOTH PASS, checked beside the other
      * two rather than discovered by a probe that produces no output.
@@ -796,7 +818,7 @@ export function hermesPreflight(
     reason: missing.length ? `The Hermes reviewer is not available. Missing: ${missing.join(', ')}.` : undefined,
     executable: cfg.executable,
     oneShotSupported,
-    readOnlySupported,
+    safeModeSupported,
     model,
     provider,
     authenticatedProviders: parsed.authenticatedProviders,
@@ -1327,7 +1349,11 @@ export function hasBlockingFinding(r: HermesReviewResult): boolean {
   return r.verdict === 'changes_required' || r.findings.some((f) => f.severity === 'blocking');
 }
 
-/** Runs the reviewer exactly once. Read-only: empty temp cwd + --safe-mode. */
+/**
+ * Runs the reviewer exactly once, from an empty temp cwd with `--safe-mode`.
+ * Whether it holds any tool is decided by the profile the executable runs
+ * under, not by these arguments; see the note at the top of this file.
+ */
 export async function runHermesReview(input: {
   packet: ReviewPacket;
   config: HermesConfig;
