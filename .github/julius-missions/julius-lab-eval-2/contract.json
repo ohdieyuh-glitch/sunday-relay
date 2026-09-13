@@ -1,0 +1,121 @@
+{
+  "missionId": "mission:julius-lab-eval-2",
+  "markerNamespace": "julius-lab-eval-2",
+  "projectId": "prj-julius-lab-eval-2",
+  "tenantId": "tenant",
+  "objective": "In this workspace, add two terms to Julius's task contract without breaking a single contract that already exists. Every Prompt Architect plan states the assumptions it rests on and the questions it could not resolve, and neither reaches the task contract, so a coder is bound to an agreement that silently rests on unstated premises and a contract can lock while its own author said a question was open. Add `assumptions` and `openQuestions` as contract terms: a worker may propose both, a revision carries them, they are part of the agreement, the reviewer is charged with the assumptions, and an agreement with an open question may not lock — neither through the domain gate nor at the store — until a revision answers it. The request and the operational facts it touches are in `src/relay/mission/julius/CONTRACT_TERMS_BRIEF.md`.\n\nTHE WORK IS IN TWO LIVE MODULES, both sliced byte-identical from the repository: `src/relay/mission/julius/julius-task-contract.ts`, on every paid run's dispatch path, and `src/relay/mission/julius/julius-memory-store.ts`, the store's reference model. The new behaviour is specified in `julius-task-contract.terms.test.ts`, which fails today.\n\nTHE BEHAVIOUR THAT MUST NOT CHANGE is specified in `julius-task-contract.existing.test.ts`, which passes today and must pass when you are done. Half of it is about `julius-task-contract.stored-rows.json`: contract rows exactly as the store held them before this change, with the digests the code that wrote them computed.\n\nTHE PLAN MUST FORESEE THE INTERACTION. Before any code is written, the plan must name which existing guarantees the new terms touch, how the obvious way of adding them would break each one, and how the implementation will keep each one. A plan that treats two new fields as a pure addition has not understood what a contract is.",
+  "requirements": [
+    "Implement the new terms so every case in `julius-task-contract.terms.test.ts` passes: the proposal sanitiser admits `assumptions` and `openQuestions` under the existing list bounds, a revision carries them, the lock gate refuses an open question as `contract_has_open_questions`, validation refuses a LOCKED contract carrying one as `locked_contract_has_open_questions`, the review charge carries `assumptions`, and the store model refuses to lock an open question as `contract_has_open_questions`. Keep every existing exported name, signature, type and vocabulary.",
+    "AN AGREEMENT WITH AN OPEN QUESTION IS NOT AN AGREEMENT. Neither the domain gate nor the store locks one, whatever the evaluator's verdict and whatever digest the caller supplies. A revision that leaves no question open makes the agreement lockable, and the answer may be kept as an assumption.",
+    "THE NEW TERMS ARE PART OF THE AGREEMENT. Changing either list, or the order of either, changes the binding digest of a contract that carries them.",
+    "EXISTING CONTRACTS KEEP WORKING. Every case in `julius-task-contract.existing.test.ts` still passes. Each stored row still validates, still locks or re-derives to the digest it was stored with, still reads back through the store, is still CURRENT to a binding recorded against it, is still charged to a reviewer and can still be revised; the same mission still seeds the same contract, and a replayed seed is still a replay rather than a conflict.",
+    "THE PLAN NAMES THE INTERACTION. The Prompt Architect's plan states which existing guarantees the new terms touch and how the implementation preserves each, and records that compatibility decision as a decision of the plan. The Independent Reviewer verifies the plan does this before the build is admitted.",
+    "COMPLETION IS BOTH. The evidence for completion is the mission's test command exiting zero with both specifications, and the Independent Reviewer grades the build against both, including the stored rows, not against the new terms alone.",
+    "PURITY. No clock, no network, no randomness and no new Node API; `node:crypto` is already used by the contract module and remains the only one. No argument is mutated.",
+    "NO HIDDEN REASONING IS EVER PERSISTED. Do not write model reasoning, internal monologue or scratchpad text into any exported value, comment or structure.",
+    "After your edits `node --import ./.julius/loader.mjs --test src/relay/mission/julius/julius-task-contract.existing.test.ts src/relay/mission/julius/julius-task-contract.terms.test.ts` must exit zero, with no network access and no third-party dependency."
+  ],
+  "constraints": [
+    "Edit `julius-task-contract.ts` and `julius-memory-store.ts` in place. You have `Read`, `Glob`, `Grep` and `Edit`; you cannot create files or run commands, and you do not need to.",
+    "Do not edit `julius-runtime.ts`, `julius-recovery.ts`, `julius-repair-lineage.ts` or `julius-segment-lineage.ts`. They are the store's dependencies, sliced byte for byte, and are not part of the deliverable.",
+    "Do not edit either specification, `julius-task-contract.stored-rows.json` or the brief. They are what you are implementing against, not part of the deliverable.",
+    "This is TypeScript run by Node's own type stripping. Use only erasable syntax: no `enum`, no `namespace`, no parameter properties in a constructor.",
+    "Add no import. The sandbox has no `node_modules` and no network.",
+    "Do not weaken a specification or edit a stored row to make a case pass. Every case is a property a paid run depends on."
+  ],
+  "acceptanceCriteria": [
+    {
+      "id": "criterion-implemented",
+      "text": "The new terms are proposable, carried by revisions, gated at lock in the domain and in the store, refused on a LOCKED record and charged to the reviewer, and every existing exported name, signature, type and vocabulary is unchanged.",
+      "blocking": true
+    },
+    {
+      "id": "criterion-tests",
+      "text": "`node --import ./.julius/loader.mjs --test src/relay/mission/julius/julius-task-contract.existing.test.ts src/relay/mission/julius/julius-task-contract.terms.test.ts` exits zero.",
+      "blocking": true
+    },
+    {
+      "id": "criterion-stored-rows",
+      "text": "Every stored row still validates, locks or re-derives to the digest it was stored with, reads back through the store, stays CURRENT to a recorded binding, is charged to a reviewer and can be revised.",
+      "blocking": true
+    },
+    {
+      "id": "criterion-replay",
+      "text": "The same mission still seeds a contract with the same digest, and replaying that seed into a store that holds the stored one is a replay, not a conflict.",
+      "blocking": true
+    },
+    {
+      "id": "criterion-open-questions",
+      "text": "An open question refuses a lock with `contract_has_open_questions` in the domain gate and in the store, whatever the verdict or digest, and a revision that answers it locks.",
+      "blocking": true
+    },
+    {
+      "id": "criterion-agreement",
+      "text": "The assumptions and open questions a contract carries are part of its binding digest, including their order.",
+      "blocking": true
+    },
+    {
+      "id": "criterion-charge",
+      "text": "A reviewer is charged with the contract's assumptions in order, and with an empty list when the agreement states none.",
+      "blocking": true
+    },
+    {
+      "id": "criterion-plan-interaction",
+      "text": "The plan names the existing guarantees the new terms touch and how each is preserved, and records that as a decision; the plan review verifies this before the build is admitted.",
+      "blocking": true
+    },
+    {
+      "id": "criterion-evidence-both",
+      "text": "Completion evidence covers both specifications under one test command, and the build review grades against the stored rows as well as the new terms.",
+      "blocking": true
+    },
+    {
+      "id": "criterion-purity",
+      "text": "No clock, network, randomness or new Node API is used, no argument is mutated, and no model reasoning appears in any exported value or comment.",
+      "blocking": true
+    },
+    {
+      "id": "criterion-unweakened",
+      "text": "No specification, stored row or brief is edited, and no existing reason code or vocabulary is renamed.",
+      "blocking": true
+    },
+    {
+      "id": "criterion-scope",
+      "text": "Only `julius-task-contract.ts` and `julius-memory-store.ts` are edited.",
+      "blocking": false
+    }
+  ],
+  "testCommand": "node --import ./.julius/loader.mjs --test src/relay/mission/julius/julius-task-contract.existing.test.ts src/relay/mission/julius/julius-task-contract.terms.test.ts",
+  "workspacePath": "/tmp/julius-workspace/tenant/ws",
+  "limits": {
+    "spendUsd": 60,
+    "repairCycles": 3,
+    "architectMaxOutputTokens": 20000
+  },
+  "research": {
+    "roles": [
+      "PROMPT_ARCHITECT",
+      "CODING_AGENT",
+      "INDEPENDENT_REVIEWER"
+    ],
+    "allowances": [
+      {
+        "source": "web",
+        "capabilities": [
+          "read_item"
+        ],
+        "hosts": [
+          "nodejs.org"
+        ]
+      }
+    ],
+    "missionBudget": {
+      "maxRetrievals": 6,
+      "maxBytes": 400000
+    },
+    "roleBudget": {
+      "maxRetrievals": 2,
+      "maxBytes": 200000
+    }
+  }
+}
