@@ -1,7 +1,7 @@
 {
  "schema": "wonderland-kit-modules/1",
  "kit_version": "1.0.0",
- "generated_utc": "2026-09-13T14:09:23+00:00",
+ "generated_utc": "2026-09-13T17:19:33+00:00",
  "radius_ladder_uu": {
   "XL": 680.0,
   "L": 460.0,
@@ -5654,24 +5654,24 @@
    "family": "sky_island",
    "group": "sky",
    "role": "terrace",
-   "height": 790.0,
-   "radius": 506.0,
+   "height": 820.0,
+   "radius": 560.72,
    "size": [
-    1012.0,
-    1012.0,
-    790.0
+    1093.7,
+    1118.32,
+    820.0
    ],
    "bbox_min": [
-    -506.0,
-    -506.0,
+    -547.3,
+    -560.72,
     -750.0
    ],
    "bbox_max": [
-    506.0,
-    506.0,
-    40.0
+    546.4,
+    557.6,
+    70.0
    ],
-   "tris": 992,
+   "tris": 1668,
    "sockets": {
     "bottom": {
      "kind": "ground",
@@ -5681,9 +5681,9 @@
     },
     "edge": {
      "kind": "edge",
-     "z": 40.0,
+     "z": 70.0,
      "rung": null,
-     "radius": 506.0
+     "radius": 540.0
     }
    },
    "parts": [
@@ -5701,6 +5701,11 @@
      "part": "stone_dark",
      "mesh": "/Game/WonderlandV2/Kit/sky/WL_Sky_Island_Small_stone_dark.WL_Sky_Island_Small_stone_dark",
      "material": "MI_V2_Stone"
+    },
+    {
+     "part": "veg_anchor",
+     "mesh": "/Game/WonderlandV2/Kit/sky/WL_Sky_Island_Small_veg_anchor.WL_Sky_Island_Small_veg_anchor",
+     "material": "MI_V2_LeafMid"
     }
    ]
   },
@@ -5708,24 +5713,24 @@
    "family": "sky_island",
    "group": "sky",
    "role": "terrace",
-   "height": 1240.0,
-   "radius": 846.0,
+   "height": 1270.0,
+   "radius": 906.95,
    "size": [
-    1692.0,
-    1692.0,
-    1240.0
+    1783.54,
+    1792.59,
+    1270.0
    ],
    "bbox_min": [
-    -846.0,
-    -846.0,
+    -887.41,
+    -885.64,
     -1200.0
    ],
    "bbox_max": [
-    846.0,
-    846.0,
-    40.0
+    896.13,
+    906.95,
+    70.0
    ],
-   "tris": 1082,
+   "tris": 2198,
    "sockets": {
     "bottom": {
      "kind": "ground",
@@ -5735,9 +5740,9 @@
     },
     "edge": {
      "kind": "edge",
-     "z": 40.0,
+     "z": 70.0,
      "rung": null,
-     "radius": 846.0
+     "radius": 880.0
     }
    },
    "parts": [
@@ -5755,6 +5760,11 @@
      "part": "stone_dark",
      "mesh": "/Game/WonderlandV2/Kit/sky/WL_Sky_Island_Medium_stone_dark.WL_Sky_Island_Medium_stone_dark",
      "material": "MI_V2_Stone"
+    },
+    {
+     "part": "veg_anchor",
+     "mesh": "/Game/WonderlandV2/Kit/sky/WL_Sky_Island_Medium_veg_anchor.WL_Sky_Island_Medium_veg_anchor",
+     "material": "MI_V2_LeafMid"
     }
    ]
   },
@@ -5762,24 +5772,24 @@
    "family": "sky_island",
    "group": "sky",
    "role": "terrace",
-   "height": 1840.0,
-   "radius": 1346.0,
+   "height": 1870.0,
+   "radius": 1414.75,
    "size": [
-    2692.0,
-    2692.0,
-    1840.0
+    2817.72,
+    2781.75,
+    1870.0
    ],
    "bbox_min": [
-    -1346.0,
-    -1346.0,
+    -1402.97,
+    -1394.08,
     -1800.0
    ],
    "bbox_max": [
-    1346.0,
-    1346.0,
-    40.0
+    1414.75,
+    1387.67,
+    70.0
    ],
-   "tris": 1262,
+   "tris": 2994,
    "sockets": {
     "bottom": {
      "kind": "ground",
@@ -5789,9 +5799,9 @@
     },
     "edge": {
      "kind": "edge",
-     "z": 40.0,
+     "z": 70.0,
      "rung": null,
-     "radius": 1346.0
+     "radius": 1380.0
     }
    },
    "parts": [
@@ -5809,6 +5819,54 @@
      "part": "stone_dark",
      "mesh": "/Game/WonderlandV2/Kit/sky/WL_Sky_Island_Large_stone_dark.WL_Sky_Island_Large_stone_dark",
      "material": "MI_V2_Stone"
+    },
+    {
+     "part": "veg_anchor",
+     "mesh": "/Game/WonderlandV2/Kit/sky/WL_Sky_Island_Large_veg_anchor.WL_Sky_Island_Large_veg_anchor",
+     "material": "MI_V2_LeafMid"
+    }
+   ]
+  },
+  "WL_Object_PocketClock": {
+   "family": "pocket_clock",
+   "group": "objects",
+   "role": "hero",
+   "height": 412.5,
+   "radius": 153.0,
+   "size": [
+    59.0,
+    306.0,
+    412.5
+   ],
+   "bbox_min": [
+    -33.0,
+    -153.0,
+    0.0
+   ],
+   "bbox_max": [
+    26.0,
+    153.0,
+    412.5
+   ],
+   "tris": 2254,
+   "sockets": {
+    "bottom": {
+     "kind": "ground",
+     "z": 0.0,
+     "rung": null,
+     "radius": 30.0
+    }
+   },
+   "parts": [
+    {
+     "part": "enamel",
+     "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_PocketClock_enamel.WL_Object_PocketClock_enamel",
+     "material": "MI_V2_Ceramic"
+    },
+    {
+     "part": "gold",
+     "mesh": "/Game/WonderlandV2/Kit/objects/WL_Object_PocketClock_gold.WL_Object_PocketClock_gold",
+     "material": "MI_V2_Gold"
     }
    ]
   },

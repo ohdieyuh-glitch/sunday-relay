@@ -44,21 +44,32 @@ TREE = {"trunk": V2 + "Vegetation/Trees/SM_tree_slender_trunk.SM_tree_slender_tr
 # SKY03a (previewed 2026-09-13, not saved) read as grey saucers carrying toy towers under cumulus as big as
 # the islands. So each island group is scaled up as ONE body (island, castle, trees, offsets), the underside
 # takes a warm rock instead of the ashlar grey, trees break the rim, and the cloud is a wisp under it.
-GROUP_SCALE = {"small": 1.8, "medium": 2.0, "large": 2.2}
-PART_MATERIAL = {"stone_dark": "MI_V2_Soil"}      # PathWarm (SKY03b) still read grey from below
+GROUP_SCALE = {"small": 1.8, "medium": 2.0, "large": 2.2, "landmark": 3.0}
+# SKY03c's Soil still read grey from below; MI_V2_IslandRock (a warm rose-brown instance of MI_V2_Stone's
+# material, made 2026-09-13) is the Bible's island rock. The forge's new rim fringe (veg_anchor) keeps its
+# LeafMid.
+PART_MATERIAL = {"stone_dark": "MI_V2_IslandRock"}
 HERO = sky02.EYES["hero"]
 
 SIZES = {"small": ("WL_Sky_Island_Small", 460.0, 750.0),
          "medium": ("WL_Sky_Island_Medium", 800.0, 1200.0),
-         "large": ("WL_Sky_Island_Large", 1300.0, 1800.0)}
+         "large": ("WL_Sky_Island_Large", 1300.0, 1800.0),
+         "landmark": ("WL_Sky_Island_Large", 1300.0, 1800.0)}
 
 # (id, size, bearing deg from the hero, distance uu, authored top z, castle: [(lateral offset uu, scale, height rank)])
 # SKY03b put islands 30-50 degrees up, where the eye sees mostly underside. The Bible sees islands
 # nearly side-on, so the flank islands go where the city silhouette is LOW (wide bearings) and take the
 # lowest height that still clears it: their authored top is a floor, and the census clearance decides.
 ISLANDS = [
-    ("IslandRight", "large", 124.0, 26000.0, 9000.0, [(0.0, 0.55, 0), (-900.0, 0.36, 2), (900.0, 0.36, 1)]),
-    ("IslandLeft", "medium", 58.0, 24000.0, 9000.0, [(0.0, 0.50, 0)]),
+    # THE LANDMARK (founder, 2026-09-13: "at least one or two islands should read unmistakably from ordinary
+    # ground-level player views"): the large island at 3x, brought in to the right of the Great Spire where
+    # the trimmed garden leaves sky over the path, its castle scaled with it.
+    # At bearing 110 it sat 36 degrees up, above an ordinary frame (captures islands_v4); at 128 degrees and 210 m
+    # the North Reach district tower (91 m) stood inside it. 118 degrees at 300 m is the clear spot a search of
+    # the right flank found (underside 15.5 degrees up, nothing under it taller than the underside); the left
+    # landmark's authored floor clears a 84 m finial spire below it.
+    ("IslandLandmark", "landmark", 118.0, 30000.0, 9000.0, [(0.0, 0.45, 0), (-900.0, 0.30, 2), (900.0, 0.30, 1)]),
+    ("IslandLandmarkLeft", "landmark", 54.0, 22000.0, 14200.0, [(0.0, 0.42, 1), (900.0, 0.28, 0)]),
     ("IslandFarRight", "small", 138.0, 34000.0, 12000.0, [(0.0, 0.36, 1)]),
     ("IslandFarLeft", "small", 46.0, 32000.0, 12000.0, [(0.0, 0.36, 0)]),
     ("IslandHigh", "medium", 101.0, 38000.0, 24500.0, [(0.0, 0.46, 1)]),
@@ -116,18 +127,18 @@ def build():
         # Front pair at (+/-0.45 r, +0.60 r) and back pair at (+/-0.35 r, -0.55 r) clear every foot: on the
         # large island the nearest is a flank foot at 1850 uu against its 750 uu radius. A small island has
         # no room beside its single foot, so it keeps only its topiary.
-        n_trees = {"small": 0, "medium": 2, "large": 4}[size]
+        n_trees = {"small": 0, "medium": 4, "large": 6, "landmark": 8}[size]
         for j in range(n_trees):
-            lat = (-1.0 if j % 2 == 0 else 1.0) * top_r * (0.45 if j < 2 else 0.35)
-            fwd = top_r * (0.60 if j < 2 else -0.55)
+            lat = (-1.0 if j % 2 == 0 else 1.0) * top_r * (0.45, 0.35, 0.80, 0.62)[(j // 2) % 4]
+            fwd = top_r * (0.60, -0.55, 0.45, -0.25)[(j // 2) % 4]
             tx = x + side[0] * lat + math.cos(math.radians(face)) * fwd
             ty = y + side[1] * lat + math.sin(math.radians(face)) * fwd
-            ts = G * rng.uniform(0.55, 0.75)
+            ts = G * rng.uniform(0.65, 0.90)
             hover("TreeTrunk%d" % j, TREE["trunk"], "MI_V2_Bark", (tx, ty, top_z), ts, rng.uniform(0, 360))
             hover("TreeCrown%d" % j, TREE["crown"], "MI_V2_LeafMid" if j % 2 else "MI_V2_LeafLight",
                   (tx, ty, top_z + 820.0 * ts), ts * 1.25, rng.uniform(0, 360))
-        n_top = {"small": 1, "medium": 3, "large": 4}[size]
-        kind = {"small": "ball", "medium": "spiral", "large": "cone"}[size]
+        n_top = {"small": 1, "medium": 3, "large": 4, "landmark": 5}[size]
+        kind = {"small": "ball", "medium": "spiral", "large": "cone", "landmark": "cone"}[size]
         for j in range(n_top):
             ang = face + 180.0 + (j - (n_top - 1) / 2.0) * 38.0
             r = top_r - 150.0 * G
