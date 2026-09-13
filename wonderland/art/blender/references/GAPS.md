@@ -319,3 +319,18 @@ GAP 11. What is left:
    has lead, copper and thatch in its middle distance and the palette has room.
 5. **Night.** `glass` and `water_lit` are emissive in V2 and no module has been
    composed for the dark.
+
+## GAP 16 — the sky has islands in it, and ours had none
+
+**The reference changed.** Since 2026-09-13 the visual authority is the founder-approved Wonderland
+Bible boards (`wonderland/v2/reference/boards/BOARD_1`-`BOARD_6`), not the Marble image this document
+was first written against. Every one of the six boards puts FLOATING ISLANDS over the skyline: a disc
+of lawn in a stone lip, a rock underside hanging to points, and a small castle on top.
+
+The world had balloons, clouds, gold keys and teacups in the air, and not one island. Nothing in
+`assets_v2` or this kit becomes one by scaling: a tower foot with a cone under it reads as exactly that.
+
+**Answered by** `families/sky.py`: three islands (9, 16 and 26 m across) whose datum is their own lawn,
+so any kit tower foot stands on one exactly as it stands on the world's ground, and whose underside is
+a main rock mass with a ring of smaller hanging masses, declared through `excavates` so the validator
+holds the depth to the centimetre.

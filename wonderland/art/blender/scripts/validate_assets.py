@@ -869,7 +869,7 @@ def main():
         "mesh_hashes": hashes,
     }
     os.makedirs(os.path.dirname(args.json), exist_ok=True)
-    with open(args.json, "w", encoding="utf-8") as fh:
+    with open(args.json, "w", encoding="utf-8", newline="\n") as fh:   # LF on Windows too
         json.dump(report, fh, indent=2)
         fh.write("\n")
 

@@ -1,7 +1,7 @@
 {
   "schema": "wonderland-blender-kit/1",
   "kit_version": "1.0.0",
-  "generated_utc": "2026-09-08T01:55:10+00:00",
+  "generated_utc": "2026-09-13T14:09:23+00:00",
   "generator": "wonderland/art/blender/scripts/build_assets.py",
   "blender": "4.5.13 LTS",
   "conventions": {
@@ -22,9 +22,9 @@
       "provenance": "measured",
       "unknown_is": "null, and it renders as Unknown -- never 0",
       "observed": {
-        "n": 101,
+        "n": 104,
         "min": 0.153,
-        "median": 0.845,
+        "median": 0.846,
         "max": 1.0,
         "unknown": 0
       }
@@ -36,9 +36,9 @@
       "provenance": "measured",
       "unknown_is": "null, and it renders as Unknown -- never 0",
       "observed": {
-        "n": 101,
+        "n": 104,
         "min": 0.0,
-        "median": 0.369,
+        "median": 0.37,
         "max": 1.0,
         "unknown": 0
       }
@@ -50,7 +50,7 @@
       "provenance": "measured",
       "unknown_is": "null, and it renders as Unknown -- never 0",
       "observed": {
-        "n": 101,
+        "n": 104,
         "min": 0.557,
         "median": 0.999,
         "max": 1.0,
@@ -64,9 +64,9 @@
       "provenance": "measured",
       "unknown_is": "null, and it renders as Unknown -- never 0",
       "observed": {
-        "n": 101,
+        "n": 104,
         "min": 0.0,
-        "median": 0.975,
+        "median": 0.982,
         "max": 1.0,
         "unknown": 0
       }
@@ -78,7 +78,7 @@
       "provenance": "declared",
       "unknown_is": "null, and it renders as Unknown -- never 0",
       "observed": {
-        "n": 101,
+        "n": 104,
         "min": 0.0,
         "median": 0.0,
         "max": 0.7,
@@ -96,7 +96,7 @@
         "min": 0.083,
         "median": 0.675,
         "max": 0.917,
-        "unknown": 0
+        "unknown": 3
       }
     },
     {
@@ -106,7 +106,7 @@
       "provenance": "derived",
       "unknown_is": "null, and it renders as Unknown -- never 0",
       "observed": {
-        "n": 101,
+        "n": 104,
         "min": 0.05,
         "median": 0.5,
         "max": 0.7,
@@ -189,15 +189,19 @@
       "unreal": "MI_V2_PlazaShade",
       "use": "the dark inlay: a medallion's band, a runnel's floor, a joint"
     },
+    "lawn": {
+      "unreal": "MI_V2_Lawn",
+      "use": "the sward on a floating island: the ground a castle foot stands on"
+    },
     "kerb": {
       "unreal": "MI_V2_Kerb",
       "use": "kerbs, gutters, tree surrounds -- the edge of the made surface"
     }
   },
   "counts": {
-    "assets": 101,
-    "meshes": 313,
-    "triangles": 350518,
+    "assets": 104,
+    "meshes": 322,
+    "triangles": 353854,
     "by_role": {
       "foot": 5,
       "body": 12,
@@ -208,7 +212,7 @@
       "span": 5,
       "detail": 17,
       "route": 11,
-      "terrace": 14,
+      "terrace": 17,
       "hero": 4
     },
     "legal_tower_stacks_up_to_3_bodies": 865,
@@ -376,8 +380,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_Tower_Base_Battered",
-          "glb": "exports/glb/WL_Tower_Base_Battered.glb",
-          "fbx": "exports/fbx/WL_Tower_Base_Battered.fbx",
+          "glb": "exports\\glb\\WL_Tower_Base_Battered.glb",
+          "fbx": "exports\\fbx\\WL_Tower_Base_Battered.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"
@@ -455,8 +459,8 @@
           ],
           "material": "MI_V2_Stone",
           "mesh_name": "WL_Tower_Base_Battered_stone_dark",
-          "glb": "exports/glb/WL_Tower_Base_Battered_stone_dark.glb",
-          "fbx": "exports/fbx/WL_Tower_Base_Battered_stone_dark.fbx",
+          "glb": "exports\\glb\\WL_Tower_Base_Battered_stone_dark.glb",
+          "fbx": "exports\\fbx\\WL_Tower_Base_Battered_stone_dark.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Stone"
@@ -630,8 +634,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_Tower_Base_Arcaded",
-          "glb": "exports/glb/WL_Tower_Base_Arcaded.glb",
-          "fbx": "exports/fbx/WL_Tower_Base_Arcaded.fbx",
+          "glb": "exports\\glb\\WL_Tower_Base_Arcaded.glb",
+          "fbx": "exports\\fbx\\WL_Tower_Base_Arcaded.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"
@@ -709,8 +713,8 @@
           ],
           "material": "MI_V2_Stone",
           "mesh_name": "WL_Tower_Base_Arcaded_stone_dark",
-          "glb": "exports/glb/WL_Tower_Base_Arcaded_stone_dark.glb",
-          "fbx": "exports/fbx/WL_Tower_Base_Arcaded_stone_dark.fbx",
+          "glb": "exports\\glb\\WL_Tower_Base_Arcaded_stone_dark.glb",
+          "fbx": "exports\\fbx\\WL_Tower_Base_Arcaded_stone_dark.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Stone"
@@ -883,8 +887,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_Tower_Base_Buttressed",
-          "glb": "exports/glb/WL_Tower_Base_Buttressed.glb",
-          "fbx": "exports/fbx/WL_Tower_Base_Buttressed.fbx",
+          "glb": "exports\\glb\\WL_Tower_Base_Buttressed.glb",
+          "fbx": "exports\\fbx\\WL_Tower_Base_Buttressed.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"
@@ -962,8 +966,8 @@
           ],
           "material": "MI_V2_Stone",
           "mesh_name": "WL_Tower_Base_Buttressed_stone_dark",
-          "glb": "exports/glb/WL_Tower_Base_Buttressed_stone_dark.glb",
-          "fbx": "exports/fbx/WL_Tower_Base_Buttressed_stone_dark.fbx",
+          "glb": "exports\\glb\\WL_Tower_Base_Buttressed_stone_dark.glb",
+          "fbx": "exports\\fbx\\WL_Tower_Base_Buttressed_stone_dark.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Stone"
@@ -1137,8 +1141,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_Tower_Base_Terraced",
-          "glb": "exports/glb/WL_Tower_Base_Terraced.glb",
-          "fbx": "exports/fbx/WL_Tower_Base_Terraced.fbx",
+          "glb": "exports\\glb\\WL_Tower_Base_Terraced.glb",
+          "fbx": "exports\\fbx\\WL_Tower_Base_Terraced.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"
@@ -1313,8 +1317,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_Tower_Mid_Ashlar",
-          "glb": "exports/glb/WL_Tower_Mid_Ashlar.glb",
-          "fbx": "exports/fbx/WL_Tower_Mid_Ashlar.fbx",
+          "glb": "exports\\glb\\WL_Tower_Mid_Ashlar.glb",
+          "fbx": "exports\\fbx\\WL_Tower_Mid_Ashlar.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"
@@ -1488,8 +1492,8 @@
           ],
           "material": "MI_V2_GlassAmber",
           "mesh_name": "WL_Tower_Mid_Arcade_glass",
-          "glb": "exports/glb/WL_Tower_Mid_Arcade_glass.glb",
-          "fbx": "exports/fbx/WL_Tower_Mid_Arcade_glass.fbx",
+          "glb": "exports\\glb\\WL_Tower_Mid_Arcade_glass.glb",
+          "fbx": "exports\\fbx\\WL_Tower_Mid_Arcade_glass.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_GlassAmber"
@@ -1567,8 +1571,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_Tower_Mid_Arcade",
-          "glb": "exports/glb/WL_Tower_Mid_Arcade.glb",
-          "fbx": "exports/fbx/WL_Tower_Mid_Arcade.fbx",
+          "glb": "exports\\glb\\WL_Tower_Mid_Arcade.glb",
+          "fbx": "exports\\fbx\\WL_Tower_Mid_Arcade.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"
@@ -1741,8 +1745,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_Tower_Mid_Ribbed",
-          "glb": "exports/glb/WL_Tower_Mid_Ribbed.glb",
-          "fbx": "exports/fbx/WL_Tower_Mid_Ribbed.fbx",
+          "glb": "exports\\glb\\WL_Tower_Mid_Ribbed.glb",
+          "fbx": "exports\\fbx\\WL_Tower_Mid_Ribbed.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"
@@ -1917,8 +1921,8 @@
           ],
           "material": "MI_V2_GlassAmber",
           "mesh_name": "WL_Tower_Mid_Balconied_glass",
-          "glb": "exports/glb/WL_Tower_Mid_Balconied_glass.glb",
-          "fbx": "exports/fbx/WL_Tower_Mid_Balconied_glass.fbx",
+          "glb": "exports\\glb\\WL_Tower_Mid_Balconied_glass.glb",
+          "fbx": "exports\\fbx\\WL_Tower_Mid_Balconied_glass.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_GlassAmber"
@@ -1996,8 +2000,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_Tower_Mid_Balconied",
-          "glb": "exports/glb/WL_Tower_Mid_Balconied.glb",
-          "fbx": "exports/fbx/WL_Tower_Mid_Balconied.fbx",
+          "glb": "exports\\glb\\WL_Tower_Mid_Balconied.glb",
+          "fbx": "exports\\fbx\\WL_Tower_Mid_Balconied.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"
@@ -2172,8 +2176,8 @@
           ],
           "material": "MI_V2_GlassAmber",
           "mesh_name": "WL_Tower_Mid_Lantern_glass",
-          "glb": "exports/glb/WL_Tower_Mid_Lantern_glass.glb",
-          "fbx": "exports/fbx/WL_Tower_Mid_Lantern_glass.fbx",
+          "glb": "exports\\glb\\WL_Tower_Mid_Lantern_glass.glb",
+          "fbx": "exports\\fbx\\WL_Tower_Mid_Lantern_glass.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_GlassAmber"
@@ -2251,8 +2255,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_Tower_Mid_Lantern",
-          "glb": "exports/glb/WL_Tower_Mid_Lantern.glb",
-          "fbx": "exports/fbx/WL_Tower_Mid_Lantern.fbx",
+          "glb": "exports\\glb\\WL_Tower_Mid_Lantern.glb",
+          "fbx": "exports\\fbx\\WL_Tower_Mid_Lantern.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"
@@ -2427,8 +2431,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_Tower_Mid_Fluted",
-          "glb": "exports/glb/WL_Tower_Mid_Fluted.glb",
-          "fbx": "exports/fbx/WL_Tower_Mid_Fluted.fbx",
+          "glb": "exports\\glb\\WL_Tower_Mid_Fluted.glb",
+          "fbx": "exports\\fbx\\WL_Tower_Mid_Fluted.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"
@@ -2601,8 +2605,8 @@
           ],
           "material": "MI_V2_GlassAmber",
           "mesh_name": "WL_Tower_Mid_Oriel_glass",
-          "glb": "exports/glb/WL_Tower_Mid_Oriel_glass.glb",
-          "fbx": "exports/fbx/WL_Tower_Mid_Oriel_glass.fbx",
+          "glb": "exports\\glb\\WL_Tower_Mid_Oriel_glass.glb",
+          "fbx": "exports\\fbx\\WL_Tower_Mid_Oriel_glass.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_GlassAmber"
@@ -2680,8 +2684,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_Tower_Mid_Oriel",
-          "glb": "exports/glb/WL_Tower_Mid_Oriel.glb",
-          "fbx": "exports/fbx/WL_Tower_Mid_Oriel.fbx",
+          "glb": "exports\\glb\\WL_Tower_Mid_Oriel.glb",
+          "fbx": "exports\\fbx\\WL_Tower_Mid_Oriel.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"
@@ -2855,8 +2859,8 @@
           ],
           "material": "MI_V2_Gold",
           "mesh_name": "WL_Tower_Mid_Machicolated_gold",
-          "glb": "exports/glb/WL_Tower_Mid_Machicolated_gold.glb",
-          "fbx": "exports/fbx/WL_Tower_Mid_Machicolated_gold.fbx",
+          "glb": "exports\\glb\\WL_Tower_Mid_Machicolated_gold.glb",
+          "fbx": "exports\\fbx\\WL_Tower_Mid_Machicolated_gold.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Gold"
@@ -2934,8 +2938,8 @@
           ],
           "material": "MI_V2_RoofRose",
           "mesh_name": "WL_Tower_Mid_Machicolated_roof",
-          "glb": "exports/glb/WL_Tower_Mid_Machicolated_roof.glb",
-          "fbx": "exports/fbx/WL_Tower_Mid_Machicolated_roof.fbx",
+          "glb": "exports\\glb\\WL_Tower_Mid_Machicolated_roof.glb",
+          "fbx": "exports\\fbx\\WL_Tower_Mid_Machicolated_roof.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_RoofRose"
@@ -3013,8 +3017,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_Tower_Mid_Machicolated",
-          "glb": "exports/glb/WL_Tower_Mid_Machicolated.glb",
-          "fbx": "exports/fbx/WL_Tower_Mid_Machicolated.fbx",
+          "glb": "exports\\glb\\WL_Tower_Mid_Machicolated.glb",
+          "fbx": "exports\\fbx\\WL_Tower_Mid_Machicolated.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"
@@ -3191,8 +3195,8 @@
           ],
           "material": "MI_V2_Gold",
           "mesh_name": "WL_Tower_Crown_Cone_gold",
-          "glb": "exports/glb/WL_Tower_Crown_Cone_gold.glb",
-          "fbx": "exports/fbx/WL_Tower_Crown_Cone_gold.fbx",
+          "glb": "exports\\glb\\WL_Tower_Crown_Cone_gold.glb",
+          "fbx": "exports\\fbx\\WL_Tower_Crown_Cone_gold.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Gold"
@@ -3270,8 +3274,8 @@
           ],
           "material": "MI_V2_RoofRose",
           "mesh_name": "WL_Tower_Crown_Cone_roof",
-          "glb": "exports/glb/WL_Tower_Crown_Cone_roof.glb",
-          "fbx": "exports/fbx/WL_Tower_Crown_Cone_roof.fbx",
+          "glb": "exports\\glb\\WL_Tower_Crown_Cone_roof.glb",
+          "fbx": "exports\\fbx\\WL_Tower_Crown_Cone_roof.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_RoofRose"
@@ -3349,8 +3353,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_Tower_Crown_Cone",
-          "glb": "exports/glb/WL_Tower_Crown_Cone.glb",
-          "fbx": "exports/fbx/WL_Tower_Crown_Cone.fbx",
+          "glb": "exports\\glb\\WL_Tower_Crown_Cone.glb",
+          "fbx": "exports\\fbx\\WL_Tower_Crown_Cone.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"
@@ -3524,8 +3528,8 @@
           ],
           "material": "MI_V2_Gold",
           "mesh_name": "WL_Tower_Crown_Tiered_gold",
-          "glb": "exports/glb/WL_Tower_Crown_Tiered_gold.glb",
-          "fbx": "exports/fbx/WL_Tower_Crown_Tiered_gold.fbx",
+          "glb": "exports\\glb\\WL_Tower_Crown_Tiered_gold.glb",
+          "fbx": "exports\\fbx\\WL_Tower_Crown_Tiered_gold.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Gold"
@@ -3603,8 +3607,8 @@
           ],
           "material": "MI_V2_RoofLilac",
           "mesh_name": "WL_Tower_Crown_Tiered_roof_alt",
-          "glb": "exports/glb/WL_Tower_Crown_Tiered_roof_alt.glb",
-          "fbx": "exports/fbx/WL_Tower_Crown_Tiered_roof_alt.fbx",
+          "glb": "exports\\glb\\WL_Tower_Crown_Tiered_roof_alt.glb",
+          "fbx": "exports\\fbx\\WL_Tower_Crown_Tiered_roof_alt.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_RoofLilac"
@@ -3682,8 +3686,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_Tower_Crown_Tiered",
-          "glb": "exports/glb/WL_Tower_Crown_Tiered.glb",
-          "fbx": "exports/fbx/WL_Tower_Crown_Tiered.fbx",
+          "glb": "exports\\glb\\WL_Tower_Crown_Tiered.glb",
+          "fbx": "exports\\fbx\\WL_Tower_Crown_Tiered.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"
@@ -3858,8 +3862,8 @@
           ],
           "material": "MI_V2_GlassAmber",
           "mesh_name": "WL_Tower_Crown_Onion_glass",
-          "glb": "exports/glb/WL_Tower_Crown_Onion_glass.glb",
-          "fbx": "exports/fbx/WL_Tower_Crown_Onion_glass.fbx",
+          "glb": "exports\\glb\\WL_Tower_Crown_Onion_glass.glb",
+          "fbx": "exports\\fbx\\WL_Tower_Crown_Onion_glass.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_GlassAmber"
@@ -3937,8 +3941,8 @@
           ],
           "material": "MI_V2_Gold",
           "mesh_name": "WL_Tower_Crown_Onion_gold",
-          "glb": "exports/glb/WL_Tower_Crown_Onion_gold.glb",
-          "fbx": "exports/fbx/WL_Tower_Crown_Onion_gold.fbx",
+          "glb": "exports\\glb\\WL_Tower_Crown_Onion_gold.glb",
+          "fbx": "exports\\fbx\\WL_Tower_Crown_Onion_gold.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Gold"
@@ -4016,8 +4020,8 @@
           ],
           "material": "MI_V2_RoofRose",
           "mesh_name": "WL_Tower_Crown_Onion_roof",
-          "glb": "exports/glb/WL_Tower_Crown_Onion_roof.glb",
-          "fbx": "exports/fbx/WL_Tower_Crown_Onion_roof.fbx",
+          "glb": "exports\\glb\\WL_Tower_Crown_Onion_roof.glb",
+          "fbx": "exports\\fbx\\WL_Tower_Crown_Onion_roof.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_RoofRose"
@@ -4095,8 +4099,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_Tower_Crown_Onion",
-          "glb": "exports/glb/WL_Tower_Crown_Onion.glb",
-          "fbx": "exports/fbx/WL_Tower_Crown_Onion.fbx",
+          "glb": "exports\\glb\\WL_Tower_Crown_Onion.glb",
+          "fbx": "exports\\fbx\\WL_Tower_Crown_Onion.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"
@@ -4271,8 +4275,8 @@
           ],
           "material": "MI_V2_Gold",
           "mesh_name": "WL_Tower_Crown_Belvedere_gold",
-          "glb": "exports/glb/WL_Tower_Crown_Belvedere_gold.glb",
-          "fbx": "exports/fbx/WL_Tower_Crown_Belvedere_gold.fbx",
+          "glb": "exports\\glb\\WL_Tower_Crown_Belvedere_gold.glb",
+          "fbx": "exports\\fbx\\WL_Tower_Crown_Belvedere_gold.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Gold"
@@ -4350,8 +4354,8 @@
           ],
           "material": "MI_V2_RoofRose",
           "mesh_name": "WL_Tower_Crown_Belvedere_roof",
-          "glb": "exports/glb/WL_Tower_Crown_Belvedere_roof.glb",
-          "fbx": "exports/fbx/WL_Tower_Crown_Belvedere_roof.fbx",
+          "glb": "exports\\glb\\WL_Tower_Crown_Belvedere_roof.glb",
+          "fbx": "exports\\fbx\\WL_Tower_Crown_Belvedere_roof.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_RoofRose"
@@ -4429,8 +4433,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_Tower_Crown_Belvedere",
-          "glb": "exports/glb/WL_Tower_Crown_Belvedere.glb",
-          "fbx": "exports/fbx/WL_Tower_Crown_Belvedere.fbx",
+          "glb": "exports\\glb\\WL_Tower_Crown_Belvedere.glb",
+          "fbx": "exports\\fbx\\WL_Tower_Crown_Belvedere.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"
@@ -4605,8 +4609,8 @@
           ],
           "material": "MI_V2_Gold",
           "mesh_name": "WL_Tower_Crown_Cap_gold",
-          "glb": "exports/glb/WL_Tower_Crown_Cap_gold.glb",
-          "fbx": "exports/fbx/WL_Tower_Crown_Cap_gold.fbx",
+          "glb": "exports\\glb\\WL_Tower_Crown_Cap_gold.glb",
+          "fbx": "exports\\fbx\\WL_Tower_Crown_Cap_gold.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Gold"
@@ -4684,8 +4688,8 @@
           ],
           "material": "MI_V2_RoofRose",
           "mesh_name": "WL_Tower_Crown_Cap_roof",
-          "glb": "exports/glb/WL_Tower_Crown_Cap_roof.glb",
-          "fbx": "exports/fbx/WL_Tower_Crown_Cap_roof.fbx",
+          "glb": "exports\\glb\\WL_Tower_Crown_Cap_roof.glb",
+          "fbx": "exports\\fbx\\WL_Tower_Crown_Cap_roof.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_RoofRose"
@@ -4763,8 +4767,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_Tower_Crown_Cap",
-          "glb": "exports/glb/WL_Tower_Crown_Cap.glb",
-          "fbx": "exports/fbx/WL_Tower_Crown_Cap.fbx",
+          "glb": "exports\\glb\\WL_Tower_Crown_Cap.glb",
+          "fbx": "exports\\fbx\\WL_Tower_Crown_Cap.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"
@@ -4940,8 +4944,8 @@
           ],
           "material": "MI_V2_GlassAmber",
           "mesh_name": "WL_Tower_Crown_Pavilion_glass",
-          "glb": "exports/glb/WL_Tower_Crown_Pavilion_glass.glb",
-          "fbx": "exports/fbx/WL_Tower_Crown_Pavilion_glass.fbx",
+          "glb": "exports\\glb\\WL_Tower_Crown_Pavilion_glass.glb",
+          "fbx": "exports\\fbx\\WL_Tower_Crown_Pavilion_glass.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_GlassAmber"
@@ -5019,8 +5023,8 @@
           ],
           "material": "MI_V2_Gold",
           "mesh_name": "WL_Tower_Crown_Pavilion_gold",
-          "glb": "exports/glb/WL_Tower_Crown_Pavilion_gold.glb",
-          "fbx": "exports/fbx/WL_Tower_Crown_Pavilion_gold.fbx",
+          "glb": "exports\\glb\\WL_Tower_Crown_Pavilion_gold.glb",
+          "fbx": "exports\\fbx\\WL_Tower_Crown_Pavilion_gold.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Gold"
@@ -5098,8 +5102,8 @@
           ],
           "material": "MI_V2_RoofRose",
           "mesh_name": "WL_Tower_Crown_Pavilion_roof",
-          "glb": "exports/glb/WL_Tower_Crown_Pavilion_roof.glb",
-          "fbx": "exports/fbx/WL_Tower_Crown_Pavilion_roof.fbx",
+          "glb": "exports\\glb\\WL_Tower_Crown_Pavilion_roof.glb",
+          "fbx": "exports\\fbx\\WL_Tower_Crown_Pavilion_roof.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_RoofRose"
@@ -5177,8 +5181,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_Tower_Crown_Pavilion",
-          "glb": "exports/glb/WL_Tower_Crown_Pavilion.glb",
-          "fbx": "exports/fbx/WL_Tower_Crown_Pavilion.fbx",
+          "glb": "exports\\glb\\WL_Tower_Crown_Pavilion.glb",
+          "fbx": "exports\\fbx\\WL_Tower_Crown_Pavilion.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"
@@ -5352,8 +5356,8 @@
           ],
           "material": "MI_V2_Gold",
           "mesh_name": "WL_Tower_Crown_Ribbed_gold",
-          "glb": "exports/glb/WL_Tower_Crown_Ribbed_gold.glb",
-          "fbx": "exports/fbx/WL_Tower_Crown_Ribbed_gold.fbx",
+          "glb": "exports\\glb\\WL_Tower_Crown_Ribbed_gold.glb",
+          "fbx": "exports\\fbx\\WL_Tower_Crown_Ribbed_gold.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Gold"
@@ -5431,8 +5435,8 @@
           ],
           "material": "MI_V2_RoofLilac",
           "mesh_name": "WL_Tower_Crown_Ribbed_roof_alt",
-          "glb": "exports/glb/WL_Tower_Crown_Ribbed_roof_alt.glb",
-          "fbx": "exports/fbx/WL_Tower_Crown_Ribbed_roof_alt.fbx",
+          "glb": "exports\\glb\\WL_Tower_Crown_Ribbed_roof_alt.glb",
+          "fbx": "exports\\fbx\\WL_Tower_Crown_Ribbed_roof_alt.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_RoofLilac"
@@ -5510,8 +5514,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_Tower_Crown_Ribbed",
-          "glb": "exports/glb/WL_Tower_Crown_Ribbed.glb",
-          "fbx": "exports/fbx/WL_Tower_Crown_Ribbed.fbx",
+          "glb": "exports\\glb\\WL_Tower_Crown_Ribbed.glb",
+          "fbx": "exports\\fbx\\WL_Tower_Crown_Ribbed.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"
@@ -5687,8 +5691,8 @@
           ],
           "material": "MI_V2_Gold",
           "mesh_name": "WL_Spire_Needle_gold",
-          "glb": "exports/glb/WL_Spire_Needle_gold.glb",
-          "fbx": "exports/fbx/WL_Spire_Needle_gold.fbx",
+          "glb": "exports\\glb\\WL_Spire_Needle_gold.glb",
+          "fbx": "exports\\fbx\\WL_Spire_Needle_gold.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Gold"
@@ -5766,8 +5770,8 @@
           ],
           "material": "MI_V2_RoofRose",
           "mesh_name": "WL_Spire_Needle_roof",
-          "glb": "exports/glb/WL_Spire_Needle_roof.glb",
-          "fbx": "exports/fbx/WL_Spire_Needle_roof.fbx",
+          "glb": "exports\\glb\\WL_Spire_Needle_roof.glb",
+          "fbx": "exports\\fbx\\WL_Spire_Needle_roof.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_RoofRose"
@@ -5845,8 +5849,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_Spire_Needle",
-          "glb": "exports/glb/WL_Spire_Needle.glb",
-          "fbx": "exports/fbx/WL_Spire_Needle.fbx",
+          "glb": "exports\\glb\\WL_Spire_Needle.glb",
+          "fbx": "exports\\fbx\\WL_Spire_Needle.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"
@@ -6019,8 +6023,8 @@
           ],
           "material": "MI_V2_Gold",
           "mesh_name": "WL_Spire_Barbed_gold",
-          "glb": "exports/glb/WL_Spire_Barbed_gold.glb",
-          "fbx": "exports/fbx/WL_Spire_Barbed_gold.fbx",
+          "glb": "exports\\glb\\WL_Spire_Barbed_gold.glb",
+          "fbx": "exports\\fbx\\WL_Spire_Barbed_gold.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Gold"
@@ -6098,8 +6102,8 @@
           ],
           "material": "MI_V2_RoofRose",
           "mesh_name": "WL_Spire_Barbed_roof",
-          "glb": "exports/glb/WL_Spire_Barbed_roof.glb",
-          "fbx": "exports/fbx/WL_Spire_Barbed_roof.fbx",
+          "glb": "exports\\glb\\WL_Spire_Barbed_roof.glb",
+          "fbx": "exports\\fbx\\WL_Spire_Barbed_roof.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_RoofRose"
@@ -6177,8 +6181,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_Spire_Barbed",
-          "glb": "exports/glb/WL_Spire_Barbed.glb",
-          "fbx": "exports/fbx/WL_Spire_Barbed.fbx",
+          "glb": "exports\\glb\\WL_Spire_Barbed.glb",
+          "fbx": "exports\\fbx\\WL_Spire_Barbed.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"
@@ -6351,8 +6355,8 @@
           ],
           "material": "MI_V2_Gold",
           "mesh_name": "WL_Spire_Twisted_gold",
-          "glb": "exports/glb/WL_Spire_Twisted_gold.glb",
-          "fbx": "exports/fbx/WL_Spire_Twisted_gold.fbx",
+          "glb": "exports\\glb\\WL_Spire_Twisted_gold.glb",
+          "fbx": "exports\\fbx\\WL_Spire_Twisted_gold.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Gold"
@@ -6430,8 +6434,8 @@
           ],
           "material": "MI_V2_RoofRose",
           "mesh_name": "WL_Spire_Twisted_roof",
-          "glb": "exports/glb/WL_Spire_Twisted_roof.glb",
-          "fbx": "exports/fbx/WL_Spire_Twisted_roof.fbx",
+          "glb": "exports\\glb\\WL_Spire_Twisted_roof.glb",
+          "fbx": "exports\\fbx\\WL_Spire_Twisted_roof.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_RoofRose"
@@ -6509,8 +6513,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_Spire_Twisted",
-          "glb": "exports/glb/WL_Spire_Twisted.glb",
-          "fbx": "exports/fbx/WL_Spire_Twisted.fbx",
+          "glb": "exports\\glb\\WL_Spire_Twisted.glb",
+          "fbx": "exports\\fbx\\WL_Spire_Twisted.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"
@@ -6684,8 +6688,8 @@
           ],
           "material": "MI_V2_Gold",
           "mesh_name": "WL_Spire_Ringed_gold",
-          "glb": "exports/glb/WL_Spire_Ringed_gold.glb",
-          "fbx": "exports/fbx/WL_Spire_Ringed_gold.fbx",
+          "glb": "exports\\glb\\WL_Spire_Ringed_gold.glb",
+          "fbx": "exports\\fbx\\WL_Spire_Ringed_gold.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Gold"
@@ -6763,8 +6767,8 @@
           ],
           "material": "MI_V2_RoofLilac",
           "mesh_name": "WL_Spire_Ringed_roof_alt",
-          "glb": "exports/glb/WL_Spire_Ringed_roof_alt.glb",
-          "fbx": "exports/fbx/WL_Spire_Ringed_roof_alt.fbx",
+          "glb": "exports\\glb\\WL_Spire_Ringed_roof_alt.glb",
+          "fbx": "exports\\fbx\\WL_Spire_Ringed_roof_alt.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_RoofLilac"
@@ -6842,8 +6846,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_Spire_Ringed",
-          "glb": "exports/glb/WL_Spire_Ringed.glb",
-          "fbx": "exports/fbx/WL_Spire_Ringed.fbx",
+          "glb": "exports\\glb\\WL_Spire_Ringed.glb",
+          "fbx": "exports\\fbx\\WL_Spire_Ringed.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"
@@ -7017,8 +7021,8 @@
           ],
           "material": "MI_V2_Gold",
           "mesh_name": "WL_Spire_Cluster_gold",
-          "glb": "exports/glb/WL_Spire_Cluster_gold.glb",
-          "fbx": "exports/fbx/WL_Spire_Cluster_gold.fbx",
+          "glb": "exports\\glb\\WL_Spire_Cluster_gold.glb",
+          "fbx": "exports\\fbx\\WL_Spire_Cluster_gold.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Gold"
@@ -7096,8 +7100,8 @@
           ],
           "material": "MI_V2_RoofRose",
           "mesh_name": "WL_Spire_Cluster_roof",
-          "glb": "exports/glb/WL_Spire_Cluster_roof.glb",
-          "fbx": "exports/fbx/WL_Spire_Cluster_roof.fbx",
+          "glb": "exports\\glb\\WL_Spire_Cluster_roof.glb",
+          "fbx": "exports\\fbx\\WL_Spire_Cluster_roof.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_RoofRose"
@@ -7175,8 +7179,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_Spire_Cluster",
-          "glb": "exports/glb/WL_Spire_Cluster.glb",
-          "fbx": "exports/fbx/WL_Spire_Cluster.fbx",
+          "glb": "exports\\glb\\WL_Spire_Cluster.glb",
+          "fbx": "exports\\fbx\\WL_Spire_Cluster.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"
@@ -7352,8 +7356,8 @@
           ],
           "material": "MI_V2_Gold",
           "mesh_name": "WL_Arch_Ceremonial_gold",
-          "glb": "exports/glb/WL_Arch_Ceremonial_gold.glb",
-          "fbx": "exports/fbx/WL_Arch_Ceremonial_gold.fbx",
+          "glb": "exports\\glb\\WL_Arch_Ceremonial_gold.glb",
+          "fbx": "exports\\fbx\\WL_Arch_Ceremonial_gold.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Gold"
@@ -7431,8 +7435,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_Arch_Ceremonial",
-          "glb": "exports/glb/WL_Arch_Ceremonial.glb",
-          "fbx": "exports/fbx/WL_Arch_Ceremonial.fbx",
+          "glb": "exports\\glb\\WL_Arch_Ceremonial.glb",
+          "fbx": "exports\\fbx\\WL_Arch_Ceremonial.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"
@@ -7510,8 +7514,8 @@
           ],
           "material": "MI_V2_LeafMid",
           "mesh_name": "WL_Arch_Ceremonial_veg_anchor",
-          "glb": "exports/glb/WL_Arch_Ceremonial_veg_anchor.glb",
-          "fbx": "exports/fbx/WL_Arch_Ceremonial_veg_anchor.fbx",
+          "glb": "exports\\glb\\WL_Arch_Ceremonial_veg_anchor.glb",
+          "fbx": "exports\\fbx\\WL_Arch_Ceremonial_veg_anchor.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_LeafMid"
@@ -7686,8 +7690,8 @@
           ],
           "material": "MI_V2_Gold",
           "mesh_name": "WL_Arch_Garden_Rose_gold",
-          "glb": "exports/glb/WL_Arch_Garden_Rose_gold.glb",
-          "fbx": "exports/fbx/WL_Arch_Garden_Rose_gold.fbx",
+          "glb": "exports\\glb\\WL_Arch_Garden_Rose_gold.glb",
+          "fbx": "exports\\fbx\\WL_Arch_Garden_Rose_gold.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Gold"
@@ -7765,8 +7769,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_Arch_Garden_Rose",
-          "glb": "exports/glb/WL_Arch_Garden_Rose.glb",
-          "fbx": "exports/fbx/WL_Arch_Garden_Rose.fbx",
+          "glb": "exports\\glb\\WL_Arch_Garden_Rose.glb",
+          "fbx": "exports\\fbx\\WL_Arch_Garden_Rose.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"
@@ -7844,8 +7848,8 @@
           ],
           "material": "MI_V2_LeafMid",
           "mesh_name": "WL_Arch_Garden_Rose_veg_anchor",
-          "glb": "exports/glb/WL_Arch_Garden_Rose_veg_anchor.glb",
-          "fbx": "exports/fbx/WL_Arch_Garden_Rose_veg_anchor.fbx",
+          "glb": "exports\\glb\\WL_Arch_Garden_Rose_veg_anchor.glb",
+          "fbx": "exports\\fbx\\WL_Arch_Garden_Rose_veg_anchor.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_LeafMid"
@@ -8020,8 +8024,8 @@
           ],
           "material": "MI_V2_Gold",
           "mesh_name": "WL_Arch_Trefoil_Screen_gold",
-          "glb": "exports/glb/WL_Arch_Trefoil_Screen_gold.glb",
-          "fbx": "exports/fbx/WL_Arch_Trefoil_Screen_gold.fbx",
+          "glb": "exports\\glb\\WL_Arch_Trefoil_Screen_gold.glb",
+          "fbx": "exports\\fbx\\WL_Arch_Trefoil_Screen_gold.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Gold"
@@ -8099,8 +8103,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_Arch_Trefoil_Screen",
-          "glb": "exports/glb/WL_Arch_Trefoil_Screen.glb",
-          "fbx": "exports/fbx/WL_Arch_Trefoil_Screen.fbx",
+          "glb": "exports\\glb\\WL_Arch_Trefoil_Screen.glb",
+          "fbx": "exports\\fbx\\WL_Arch_Trefoil_Screen.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"
@@ -8276,8 +8280,8 @@
           ],
           "material": "MI_V2_Gold",
           "mesh_name": "WL_Arch_Twin_Tiered_gold",
-          "glb": "exports/glb/WL_Arch_Twin_Tiered_gold.glb",
-          "fbx": "exports/fbx/WL_Arch_Twin_Tiered_gold.fbx",
+          "glb": "exports\\glb\\WL_Arch_Twin_Tiered_gold.glb",
+          "fbx": "exports\\fbx\\WL_Arch_Twin_Tiered_gold.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Gold"
@@ -8355,8 +8359,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_Arch_Twin_Tiered",
-          "glb": "exports/glb/WL_Arch_Twin_Tiered.glb",
-          "fbx": "exports/fbx/WL_Arch_Twin_Tiered.fbx",
+          "glb": "exports\\glb\\WL_Arch_Twin_Tiered.glb",
+          "fbx": "exports\\fbx\\WL_Arch_Twin_Tiered.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"
@@ -8434,8 +8438,8 @@
           ],
           "material": "MI_V2_Stone",
           "mesh_name": "WL_Arch_Twin_Tiered_stone_dark",
-          "glb": "exports/glb/WL_Arch_Twin_Tiered_stone_dark.glb",
-          "fbx": "exports/fbx/WL_Arch_Twin_Tiered_stone_dark.fbx",
+          "glb": "exports\\glb\\WL_Arch_Twin_Tiered_stone_dark.glb",
+          "fbx": "exports\\fbx\\WL_Arch_Twin_Tiered_stone_dark.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Stone"
@@ -8609,8 +8613,8 @@
           ],
           "material": "MI_V2_GlassAmber",
           "mesh_name": "WL_Gatehouse_Twin_glass",
-          "glb": "exports/glb/WL_Gatehouse_Twin_glass.glb",
-          "fbx": "exports/fbx/WL_Gatehouse_Twin_glass.fbx",
+          "glb": "exports\\glb\\WL_Gatehouse_Twin_glass.glb",
+          "fbx": "exports\\fbx\\WL_Gatehouse_Twin_glass.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_GlassAmber"
@@ -8688,8 +8692,8 @@
           ],
           "material": "MI_V2_Gold",
           "mesh_name": "WL_Gatehouse_Twin_gold",
-          "glb": "exports/glb/WL_Gatehouse_Twin_gold.glb",
-          "fbx": "exports/fbx/WL_Gatehouse_Twin_gold.fbx",
+          "glb": "exports\\glb\\WL_Gatehouse_Twin_gold.glb",
+          "fbx": "exports\\fbx\\WL_Gatehouse_Twin_gold.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Gold"
@@ -8767,8 +8771,8 @@
           ],
           "material": "MI_V2_RoofRose",
           "mesh_name": "WL_Gatehouse_Twin_roof",
-          "glb": "exports/glb/WL_Gatehouse_Twin_roof.glb",
-          "fbx": "exports/fbx/WL_Gatehouse_Twin_roof.fbx",
+          "glb": "exports\\glb\\WL_Gatehouse_Twin_roof.glb",
+          "fbx": "exports\\fbx\\WL_Gatehouse_Twin_roof.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_RoofRose"
@@ -8846,8 +8850,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_Gatehouse_Twin",
-          "glb": "exports/glb/WL_Gatehouse_Twin.glb",
-          "fbx": "exports/fbx/WL_Gatehouse_Twin.fbx",
+          "glb": "exports\\glb\\WL_Gatehouse_Twin.glb",
+          "fbx": "exports\\fbx\\WL_Gatehouse_Twin.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"
@@ -8925,8 +8929,8 @@
           ],
           "material": "MI_V2_Stone",
           "mesh_name": "WL_Gatehouse_Twin_stone_dark",
-          "glb": "exports/glb/WL_Gatehouse_Twin_stone_dark.glb",
-          "fbx": "exports/fbx/WL_Gatehouse_Twin_stone_dark.fbx",
+          "glb": "exports\\glb\\WL_Gatehouse_Twin_stone_dark.glb",
+          "fbx": "exports\\fbx\\WL_Gatehouse_Twin_stone_dark.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Stone"
@@ -9102,8 +9106,8 @@
           ],
           "material": "MI_V2_Gold",
           "mesh_name": "WL_Gatehouse_Screen_gold",
-          "glb": "exports/glb/WL_Gatehouse_Screen_gold.glb",
-          "fbx": "exports/fbx/WL_Gatehouse_Screen_gold.fbx",
+          "glb": "exports\\glb\\WL_Gatehouse_Screen_gold.glb",
+          "fbx": "exports\\fbx\\WL_Gatehouse_Screen_gold.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Gold"
@@ -9181,8 +9185,8 @@
           ],
           "material": "MI_V2_GoldAged",
           "mesh_name": "WL_Gatehouse_Screen_gold_aged",
-          "glb": "exports/glb/WL_Gatehouse_Screen_gold_aged.glb",
-          "fbx": "exports/fbx/WL_Gatehouse_Screen_gold_aged.fbx",
+          "glb": "exports\\glb\\WL_Gatehouse_Screen_gold_aged.glb",
+          "fbx": "exports\\fbx\\WL_Gatehouse_Screen_gold_aged.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_GoldAged"
@@ -9260,8 +9264,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_Gatehouse_Screen",
-          "glb": "exports/glb/WL_Gatehouse_Screen.glb",
-          "fbx": "exports/fbx/WL_Gatehouse_Screen.fbx",
+          "glb": "exports\\glb\\WL_Gatehouse_Screen.glb",
+          "fbx": "exports\\fbx\\WL_Gatehouse_Screen.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"
@@ -9339,8 +9343,8 @@
           ],
           "material": "MI_V2_LeafMid",
           "mesh_name": "WL_Gatehouse_Screen_veg_anchor",
-          "glb": "exports/glb/WL_Gatehouse_Screen_veg_anchor.glb",
-          "fbx": "exports/fbx/WL_Gatehouse_Screen_veg_anchor.fbx",
+          "glb": "exports\\glb\\WL_Gatehouse_Screen_veg_anchor.glb",
+          "fbx": "exports\\fbx\\WL_Gatehouse_Screen_veg_anchor.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_LeafMid"
@@ -9524,8 +9528,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_Colonnade_Straight",
-          "glb": "exports/glb/WL_Colonnade_Straight.glb",
-          "fbx": "exports/fbx/WL_Colonnade_Straight.fbx",
+          "glb": "exports\\glb\\WL_Colonnade_Straight.glb",
+          "fbx": "exports\\fbx\\WL_Colonnade_Straight.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"
@@ -9717,8 +9721,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_Colonnade_Arcade",
-          "glb": "exports/glb/WL_Colonnade_Arcade.glb",
-          "fbx": "exports/fbx/WL_Colonnade_Arcade.fbx",
+          "glb": "exports\\glb\\WL_Colonnade_Arcade.glb",
+          "fbx": "exports\\fbx\\WL_Colonnade_Arcade.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"
@@ -9796,8 +9800,8 @@
           ],
           "material": "MI_V2_Stone",
           "mesh_name": "WL_Colonnade_Arcade_stone_dark",
-          "glb": "exports/glb/WL_Colonnade_Arcade_stone_dark.glb",
-          "fbx": "exports/fbx/WL_Colonnade_Arcade_stone_dark.fbx",
+          "glb": "exports\\glb\\WL_Colonnade_Arcade_stone_dark.glb",
+          "fbx": "exports\\fbx\\WL_Colonnade_Arcade_stone_dark.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Stone"
@@ -9980,8 +9984,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_Colonnade_Curved",
-          "glb": "exports/glb/WL_Colonnade_Curved.glb",
-          "fbx": "exports/fbx/WL_Colonnade_Curved.fbx",
+          "glb": "exports\\glb\\WL_Colonnade_Curved.glb",
+          "fbx": "exports\\fbx\\WL_Colonnade_Curved.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"
@@ -10165,8 +10169,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_Bridge_Arc",
-          "glb": "exports/glb/WL_Bridge_Arc.glb",
-          "fbx": "exports/fbx/WL_Bridge_Arc.fbx",
+          "glb": "exports\\glb\\WL_Bridge_Arc.glb",
+          "fbx": "exports\\fbx\\WL_Bridge_Arc.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"
@@ -10244,8 +10248,8 @@
           ],
           "material": "MI_V2_Stone",
           "mesh_name": "WL_Bridge_Arc_stone_dark",
-          "glb": "exports/glb/WL_Bridge_Arc_stone_dark.glb",
-          "fbx": "exports/fbx/WL_Bridge_Arc_stone_dark.fbx",
+          "glb": "exports\\glb\\WL_Bridge_Arc_stone_dark.glb",
+          "fbx": "exports\\fbx\\WL_Bridge_Arc_stone_dark.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Stone"
@@ -10430,8 +10434,8 @@
           ],
           "material": "MI_V2_GlassAmber",
           "mesh_name": "WL_Bridge_Sky_glass",
-          "glb": "exports/glb/WL_Bridge_Sky_glass.glb",
-          "fbx": "exports/fbx/WL_Bridge_Sky_glass.fbx",
+          "glb": "exports\\glb\\WL_Bridge_Sky_glass.glb",
+          "fbx": "exports\\fbx\\WL_Bridge_Sky_glass.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_GlassAmber"
@@ -10509,8 +10513,8 @@
           ],
           "material": "MI_V2_Gold",
           "mesh_name": "WL_Bridge_Sky_gold",
-          "glb": "exports/glb/WL_Bridge_Sky_gold.glb",
-          "fbx": "exports/fbx/WL_Bridge_Sky_gold.fbx",
+          "glb": "exports\\glb\\WL_Bridge_Sky_gold.glb",
+          "fbx": "exports\\fbx\\WL_Bridge_Sky_gold.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Gold"
@@ -10588,8 +10592,8 @@
           ],
           "material": "MI_V2_RoofRose",
           "mesh_name": "WL_Bridge_Sky_roof",
-          "glb": "exports/glb/WL_Bridge_Sky_roof.glb",
-          "fbx": "exports/fbx/WL_Bridge_Sky_roof.fbx",
+          "glb": "exports\\glb\\WL_Bridge_Sky_roof.glb",
+          "fbx": "exports\\fbx\\WL_Bridge_Sky_roof.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_RoofRose"
@@ -10667,8 +10671,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_Bridge_Sky",
-          "glb": "exports/glb/WL_Bridge_Sky.glb",
-          "fbx": "exports/fbx/WL_Bridge_Sky.fbx",
+          "glb": "exports\\glb\\WL_Bridge_Sky.glb",
+          "fbx": "exports\\fbx\\WL_Bridge_Sky.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"
@@ -10842,8 +10846,8 @@
           ],
           "material": "MI_V2_Gold",
           "mesh_name": "WL_Bridge_Flying_gold",
-          "glb": "exports/glb/WL_Bridge_Flying_gold.glb",
-          "fbx": "exports/fbx/WL_Bridge_Flying_gold.fbx",
+          "glb": "exports\\glb\\WL_Bridge_Flying_gold.glb",
+          "fbx": "exports\\fbx\\WL_Bridge_Flying_gold.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Gold"
@@ -10921,8 +10925,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_Bridge_Flying",
-          "glb": "exports/glb/WL_Bridge_Flying.glb",
-          "fbx": "exports/fbx/WL_Bridge_Flying.fbx",
+          "glb": "exports\\glb\\WL_Bridge_Flying.glb",
+          "fbx": "exports\\fbx\\WL_Bridge_Flying.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"
@@ -11115,8 +11119,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_Wall_Curtain_Run",
-          "glb": "exports/glb/WL_Wall_Curtain_Run.glb",
-          "fbx": "exports/fbx/WL_Wall_Curtain_Run.fbx",
+          "glb": "exports\\glb\\WL_Wall_Curtain_Run.glb",
+          "fbx": "exports\\fbx\\WL_Wall_Curtain_Run.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"
@@ -11194,8 +11198,8 @@
           ],
           "material": "MI_V2_Stone",
           "mesh_name": "WL_Wall_Curtain_Run_stone_dark",
-          "glb": "exports/glb/WL_Wall_Curtain_Run_stone_dark.glb",
-          "fbx": "exports/fbx/WL_Wall_Curtain_Run_stone_dark.fbx",
+          "glb": "exports\\glb\\WL_Wall_Curtain_Run_stone_dark.glb",
+          "fbx": "exports\\fbx\\WL_Wall_Curtain_Run_stone_dark.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Stone"
@@ -11386,8 +11390,8 @@
           ],
           "material": "MI_V2_GlassAmber",
           "mesh_name": "WL_Wall_Mural_Tower_glass",
-          "glb": "exports/glb/WL_Wall_Mural_Tower_glass.glb",
-          "fbx": "exports/fbx/WL_Wall_Mural_Tower_glass.fbx",
+          "glb": "exports\\glb\\WL_Wall_Mural_Tower_glass.glb",
+          "fbx": "exports\\fbx\\WL_Wall_Mural_Tower_glass.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_GlassAmber"
@@ -11465,8 +11469,8 @@
           ],
           "material": "MI_V2_Gold",
           "mesh_name": "WL_Wall_Mural_Tower_gold",
-          "glb": "exports/glb/WL_Wall_Mural_Tower_gold.glb",
-          "fbx": "exports/fbx/WL_Wall_Mural_Tower_gold.fbx",
+          "glb": "exports\\glb\\WL_Wall_Mural_Tower_gold.glb",
+          "fbx": "exports\\fbx\\WL_Wall_Mural_Tower_gold.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Gold"
@@ -11544,8 +11548,8 @@
           ],
           "material": "MI_V2_RoofRose",
           "mesh_name": "WL_Wall_Mural_Tower_roof",
-          "glb": "exports/glb/WL_Wall_Mural_Tower_roof.glb",
-          "fbx": "exports/fbx/WL_Wall_Mural_Tower_roof.fbx",
+          "glb": "exports\\glb\\WL_Wall_Mural_Tower_roof.glb",
+          "fbx": "exports\\fbx\\WL_Wall_Mural_Tower_roof.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_RoofRose"
@@ -11623,8 +11627,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_Wall_Mural_Tower",
-          "glb": "exports/glb/WL_Wall_Mural_Tower.glb",
-          "fbx": "exports/fbx/WL_Wall_Mural_Tower.fbx",
+          "glb": "exports\\glb\\WL_Wall_Mural_Tower.glb",
+          "fbx": "exports\\fbx\\WL_Wall_Mural_Tower.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"
@@ -11702,8 +11706,8 @@
           ],
           "material": "MI_V2_Stone",
           "mesh_name": "WL_Wall_Mural_Tower_stone_dark",
-          "glb": "exports/glb/WL_Wall_Mural_Tower_stone_dark.glb",
-          "fbx": "exports/fbx/WL_Wall_Mural_Tower_stone_dark.fbx",
+          "glb": "exports\\glb\\WL_Wall_Mural_Tower_stone_dark.glb",
+          "fbx": "exports\\fbx\\WL_Wall_Mural_Tower_stone_dark.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Stone"
@@ -11903,8 +11907,8 @@
           ],
           "material": "MI_V2_Gold",
           "mesh_name": "WL_Wall_Postern_Gate_gold",
-          "glb": "exports/glb/WL_Wall_Postern_Gate_gold.glb",
-          "fbx": "exports/fbx/WL_Wall_Postern_Gate_gold.fbx",
+          "glb": "exports\\glb\\WL_Wall_Postern_Gate_gold.glb",
+          "fbx": "exports\\fbx\\WL_Wall_Postern_Gate_gold.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Gold"
@@ -11982,8 +11986,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_Wall_Postern_Gate",
-          "glb": "exports/glb/WL_Wall_Postern_Gate.glb",
-          "fbx": "exports/fbx/WL_Wall_Postern_Gate.fbx",
+          "glb": "exports\\glb\\WL_Wall_Postern_Gate.glb",
+          "fbx": "exports\\fbx\\WL_Wall_Postern_Gate.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"
@@ -12061,8 +12065,8 @@
           ],
           "material": "MI_V2_Stone",
           "mesh_name": "WL_Wall_Postern_Gate_stone_dark",
-          "glb": "exports/glb/WL_Wall_Postern_Gate_stone_dark.glb",
-          "fbx": "exports/fbx/WL_Wall_Postern_Gate_stone_dark.fbx",
+          "glb": "exports\\glb\\WL_Wall_Postern_Gate_stone_dark.glb",
+          "fbx": "exports\\fbx\\WL_Wall_Postern_Gate_stone_dark.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Stone"
@@ -12253,8 +12257,8 @@
           ],
           "material": "MI_V2_Gold",
           "mesh_name": "WL_Wall_Corner_Bastion_gold",
-          "glb": "exports/glb/WL_Wall_Corner_Bastion_gold.glb",
-          "fbx": "exports/fbx/WL_Wall_Corner_Bastion_gold.fbx",
+          "glb": "exports\\glb\\WL_Wall_Corner_Bastion_gold.glb",
+          "fbx": "exports\\fbx\\WL_Wall_Corner_Bastion_gold.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Gold"
@@ -12332,8 +12336,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_Wall_Corner_Bastion",
-          "glb": "exports/glb/WL_Wall_Corner_Bastion.glb",
-          "fbx": "exports/fbx/WL_Wall_Corner_Bastion.fbx",
+          "glb": "exports\\glb\\WL_Wall_Corner_Bastion.glb",
+          "fbx": "exports\\fbx\\WL_Wall_Corner_Bastion.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"
@@ -12411,8 +12415,8 @@
           ],
           "material": "MI_V2_Stone",
           "mesh_name": "WL_Wall_Corner_Bastion_stone_dark",
-          "glb": "exports/glb/WL_Wall_Corner_Bastion_stone_dark.glb",
-          "fbx": "exports/fbx/WL_Wall_Corner_Bastion_stone_dark.fbx",
+          "glb": "exports\\glb\\WL_Wall_Corner_Bastion_stone_dark.glb",
+          "fbx": "exports\\fbx\\WL_Wall_Corner_Bastion_stone_dark.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Stone"
@@ -12598,8 +12602,8 @@
           ],
           "material": "MI_V2_Gold",
           "mesh_name": "WL_Wall_Stair_Flight_gold",
-          "glb": "exports/glb/WL_Wall_Stair_Flight_gold.glb",
-          "fbx": "exports/fbx/WL_Wall_Stair_Flight_gold.fbx",
+          "glb": "exports\\glb\\WL_Wall_Stair_Flight_gold.glb",
+          "fbx": "exports\\fbx\\WL_Wall_Stair_Flight_gold.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Gold"
@@ -12677,8 +12681,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_Wall_Stair_Flight",
-          "glb": "exports/glb/WL_Wall_Stair_Flight.glb",
-          "fbx": "exports/fbx/WL_Wall_Stair_Flight.fbx",
+          "glb": "exports\\glb\\WL_Wall_Stair_Flight.glb",
+          "fbx": "exports\\fbx\\WL_Wall_Stair_Flight.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"
@@ -12874,8 +12878,8 @@
           ],
           "material": "MI_V2_GlassAmber",
           "mesh_name": "WL_House_Gabled_glass",
-          "glb": "exports/glb/WL_House_Gabled_glass.glb",
-          "fbx": "exports/fbx/WL_House_Gabled_glass.fbx",
+          "glb": "exports\\glb\\WL_House_Gabled_glass.glb",
+          "fbx": "exports\\fbx\\WL_House_Gabled_glass.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_GlassAmber"
@@ -12953,8 +12957,8 @@
           ],
           "material": "MI_V2_Gold",
           "mesh_name": "WL_House_Gabled_gold",
-          "glb": "exports/glb/WL_House_Gabled_gold.glb",
-          "fbx": "exports/fbx/WL_House_Gabled_gold.fbx",
+          "glb": "exports\\glb\\WL_House_Gabled_gold.glb",
+          "fbx": "exports\\fbx\\WL_House_Gabled_gold.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Gold"
@@ -13032,8 +13036,8 @@
           ],
           "material": "MI_V2_RoofRose",
           "mesh_name": "WL_House_Gabled_roof",
-          "glb": "exports/glb/WL_House_Gabled_roof.glb",
-          "fbx": "exports/fbx/WL_House_Gabled_roof.fbx",
+          "glb": "exports\\glb\\WL_House_Gabled_roof.glb",
+          "fbx": "exports\\fbx\\WL_House_Gabled_roof.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_RoofRose"
@@ -13111,8 +13115,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_House_Gabled",
-          "glb": "exports/glb/WL_House_Gabled.glb",
-          "fbx": "exports/fbx/WL_House_Gabled.fbx",
+          "glb": "exports\\glb\\WL_House_Gabled.glb",
+          "fbx": "exports\\fbx\\WL_House_Gabled.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"
@@ -13308,8 +13312,8 @@
           ],
           "material": "MI_V2_GlassAmber",
           "mesh_name": "WL_House_Hipped_glass",
-          "glb": "exports/glb/WL_House_Hipped_glass.glb",
-          "fbx": "exports/fbx/WL_House_Hipped_glass.fbx",
+          "glb": "exports\\glb\\WL_House_Hipped_glass.glb",
+          "fbx": "exports\\fbx\\WL_House_Hipped_glass.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_GlassAmber"
@@ -13387,8 +13391,8 @@
           ],
           "material": "MI_V2_Gold",
           "mesh_name": "WL_House_Hipped_gold",
-          "glb": "exports/glb/WL_House_Hipped_gold.glb",
-          "fbx": "exports/fbx/WL_House_Hipped_gold.fbx",
+          "glb": "exports\\glb\\WL_House_Hipped_gold.glb",
+          "fbx": "exports\\fbx\\WL_House_Hipped_gold.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Gold"
@@ -13466,8 +13470,8 @@
           ],
           "material": "MI_V2_RoofLilac",
           "mesh_name": "WL_House_Hipped_roof_alt",
-          "glb": "exports/glb/WL_House_Hipped_roof_alt.glb",
-          "fbx": "exports/fbx/WL_House_Hipped_roof_alt.fbx",
+          "glb": "exports\\glb\\WL_House_Hipped_roof_alt.glb",
+          "fbx": "exports\\fbx\\WL_House_Hipped_roof_alt.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_RoofLilac"
@@ -13545,8 +13549,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_House_Hipped",
-          "glb": "exports/glb/WL_House_Hipped.glb",
-          "fbx": "exports/fbx/WL_House_Hipped.fbx",
+          "glb": "exports\\glb\\WL_House_Hipped.glb",
+          "fbx": "exports\\fbx\\WL_House_Hipped.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"
@@ -13742,8 +13746,8 @@
           ],
           "material": "MI_V2_GlassAmber",
           "mesh_name": "WL_House_Jettied_glass",
-          "glb": "exports/glb/WL_House_Jettied_glass.glb",
-          "fbx": "exports/fbx/WL_House_Jettied_glass.fbx",
+          "glb": "exports\\glb\\WL_House_Jettied_glass.glb",
+          "fbx": "exports\\fbx\\WL_House_Jettied_glass.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_GlassAmber"
@@ -13821,8 +13825,8 @@
           ],
           "material": "MI_V2_Gold",
           "mesh_name": "WL_House_Jettied_gold",
-          "glb": "exports/glb/WL_House_Jettied_gold.glb",
-          "fbx": "exports/fbx/WL_House_Jettied_gold.fbx",
+          "glb": "exports\\glb\\WL_House_Jettied_gold.glb",
+          "fbx": "exports\\fbx\\WL_House_Jettied_gold.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Gold"
@@ -13900,8 +13904,8 @@
           ],
           "material": "MI_V2_RoofRose",
           "mesh_name": "WL_House_Jettied_roof",
-          "glb": "exports/glb/WL_House_Jettied_roof.glb",
-          "fbx": "exports/fbx/WL_House_Jettied_roof.fbx",
+          "glb": "exports\\glb\\WL_House_Jettied_roof.glb",
+          "fbx": "exports\\fbx\\WL_House_Jettied_roof.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_RoofRose"
@@ -13979,8 +13983,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_House_Jettied",
-          "glb": "exports/glb/WL_House_Jettied.glb",
-          "fbx": "exports/fbx/WL_House_Jettied.fbx",
+          "glb": "exports\\glb\\WL_House_Jettied.glb",
+          "fbx": "exports\\fbx\\WL_House_Jettied.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"
@@ -14058,8 +14062,8 @@
           ],
           "material": "MI_V2_Stone",
           "mesh_name": "WL_House_Jettied_stone_dark",
-          "glb": "exports/glb/WL_House_Jettied_stone_dark.glb",
-          "fbx": "exports/fbx/WL_House_Jettied_stone_dark.fbx",
+          "glb": "exports\\glb\\WL_House_Jettied_stone_dark.glb",
+          "fbx": "exports\\fbx\\WL_House_Jettied_stone_dark.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Stone"
@@ -14226,8 +14230,8 @@
           ],
           "material": "MI_V2_GlassAmber",
           "mesh_name": "WL_Roof_Dormer_glass",
-          "glb": "exports/glb/WL_Roof_Dormer_glass.glb",
-          "fbx": "exports/fbx/WL_Roof_Dormer_glass.fbx",
+          "glb": "exports\\glb\\WL_Roof_Dormer_glass.glb",
+          "fbx": "exports\\fbx\\WL_Roof_Dormer_glass.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_GlassAmber"
@@ -14305,8 +14309,8 @@
           ],
           "material": "MI_V2_RoofRose",
           "mesh_name": "WL_Roof_Dormer_roof",
-          "glb": "exports/glb/WL_Roof_Dormer_roof.glb",
-          "fbx": "exports/fbx/WL_Roof_Dormer_roof.fbx",
+          "glb": "exports\\glb\\WL_Roof_Dormer_roof.glb",
+          "fbx": "exports\\fbx\\WL_Roof_Dormer_roof.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_RoofRose"
@@ -14384,8 +14388,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_Roof_Dormer",
-          "glb": "exports/glb/WL_Roof_Dormer.glb",
-          "fbx": "exports/fbx/WL_Roof_Dormer.fbx",
+          "glb": "exports\\glb\\WL_Roof_Dormer.glb",
+          "fbx": "exports\\fbx\\WL_Roof_Dormer.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"
@@ -14553,8 +14557,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_Roof_Chimney",
-          "glb": "exports/glb/WL_Roof_Chimney.glb",
-          "fbx": "exports/fbx/WL_Roof_Chimney.fbx",
+          "glb": "exports\\glb\\WL_Roof_Chimney.glb",
+          "fbx": "exports\\fbx\\WL_Roof_Chimney.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"
@@ -14632,8 +14636,8 @@
           ],
           "material": "MI_V2_Stone",
           "mesh_name": "WL_Roof_Chimney_stone_dark",
-          "glb": "exports/glb/WL_Roof_Chimney_stone_dark.glb",
-          "fbx": "exports/fbx/WL_Roof_Chimney_stone_dark.fbx",
+          "glb": "exports\\glb\\WL_Roof_Chimney_stone_dark.glb",
+          "fbx": "exports\\fbx\\WL_Roof_Chimney_stone_dark.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Stone"
@@ -14801,8 +14805,8 @@
           ],
           "material": "MI_V2_GlassAmber",
           "mesh_name": "WL_House_Shopfront_glass",
-          "glb": "exports/glb/WL_House_Shopfront_glass.glb",
-          "fbx": "exports/fbx/WL_House_Shopfront_glass.fbx",
+          "glb": "exports\\glb\\WL_House_Shopfront_glass.glb",
+          "fbx": "exports\\fbx\\WL_House_Shopfront_glass.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_GlassAmber"
@@ -14880,8 +14884,8 @@
           ],
           "material": "MI_V2_Gold",
           "mesh_name": "WL_House_Shopfront_gold",
-          "glb": "exports/glb/WL_House_Shopfront_gold.glb",
-          "fbx": "exports/fbx/WL_House_Shopfront_gold.fbx",
+          "glb": "exports\\glb\\WL_House_Shopfront_gold.glb",
+          "fbx": "exports\\fbx\\WL_House_Shopfront_gold.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Gold"
@@ -14959,8 +14963,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_House_Shopfront",
-          "glb": "exports/glb/WL_House_Shopfront.glb",
-          "fbx": "exports/fbx/WL_House_Shopfront.fbx",
+          "glb": "exports\\glb\\WL_House_Shopfront.glb",
+          "fbx": "exports\\fbx\\WL_House_Shopfront.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"
@@ -15038,8 +15042,8 @@
           ],
           "material": "MI_V2_Stone",
           "mesh_name": "WL_House_Shopfront_stone_dark",
-          "glb": "exports/glb/WL_House_Shopfront_stone_dark.glb",
-          "fbx": "exports/fbx/WL_House_Shopfront_stone_dark.fbx",
+          "glb": "exports\\glb\\WL_House_Shopfront_stone_dark.glb",
+          "fbx": "exports\\fbx\\WL_House_Shopfront_stone_dark.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Stone"
@@ -15237,8 +15241,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_Stair_Straight_T2",
-          "glb": "exports/glb/WL_Stair_Straight_T2.glb",
-          "fbx": "exports/fbx/WL_Stair_Straight_T2.fbx",
+          "glb": "exports\\glb\\WL_Stair_Straight_T2.glb",
+          "fbx": "exports\\fbx\\WL_Stair_Straight_T2.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"
@@ -15433,8 +15437,8 @@
           ],
           "material": "MI_V2_Gold",
           "mesh_name": "WL_Stair_Straight_T3_gold",
-          "glb": "exports/glb/WL_Stair_Straight_T3_gold.glb",
-          "fbx": "exports/fbx/WL_Stair_Straight_T3_gold.fbx",
+          "glb": "exports\\glb\\WL_Stair_Straight_T3_gold.glb",
+          "fbx": "exports\\fbx\\WL_Stair_Straight_T3_gold.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Gold"
@@ -15512,8 +15516,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_Stair_Straight_T3",
-          "glb": "exports/glb/WL_Stair_Straight_T3.glb",
-          "fbx": "exports/fbx/WL_Stair_Straight_T3.fbx",
+          "glb": "exports\\glb\\WL_Stair_Straight_T3.glb",
+          "fbx": "exports\\fbx\\WL_Stair_Straight_T3.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"
@@ -15699,8 +15703,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_Stair_Quarter_Landing",
-          "glb": "exports/glb/WL_Stair_Quarter_Landing.glb",
-          "fbx": "exports/fbx/WL_Stair_Quarter_Landing.fbx",
+          "glb": "exports\\glb\\WL_Stair_Quarter_Landing.glb",
+          "fbx": "exports\\fbx\\WL_Stair_Quarter_Landing.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"
@@ -15778,8 +15782,8 @@
           ],
           "material": "MI_V2_Stone",
           "mesh_name": "WL_Stair_Quarter_Landing_stone_dark",
-          "glb": "exports/glb/WL_Stair_Quarter_Landing_stone_dark.glb",
-          "fbx": "exports/fbx/WL_Stair_Quarter_Landing_stone_dark.fbx",
+          "glb": "exports\\glb\\WL_Stair_Quarter_Landing_stone_dark.glb",
+          "fbx": "exports\\fbx\\WL_Stair_Quarter_Landing_stone_dark.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Stone"
@@ -15974,8 +15978,8 @@
           ],
           "material": "MI_V2_Gold",
           "mesh_name": "WL_Stair_HalfTurn_gold",
-          "glb": "exports/glb/WL_Stair_HalfTurn_gold.glb",
-          "fbx": "exports/fbx/WL_Stair_HalfTurn_gold.fbx",
+          "glb": "exports\\glb\\WL_Stair_HalfTurn_gold.glb",
+          "fbx": "exports\\fbx\\WL_Stair_HalfTurn_gold.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Gold"
@@ -16053,8 +16057,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_Stair_HalfTurn",
-          "glb": "exports/glb/WL_Stair_HalfTurn.glb",
-          "fbx": "exports/fbx/WL_Stair_HalfTurn.fbx",
+          "glb": "exports\\glb\\WL_Stair_HalfTurn.glb",
+          "fbx": "exports\\fbx\\WL_Stair_HalfTurn.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"
@@ -16132,8 +16136,8 @@
           ],
           "material": "MI_V2_Stone",
           "mesh_name": "WL_Stair_HalfTurn_stone_dark",
-          "glb": "exports/glb/WL_Stair_HalfTurn_stone_dark.glb",
-          "fbx": "exports/fbx/WL_Stair_HalfTurn_stone_dark.fbx",
+          "glb": "exports\\glb\\WL_Stair_HalfTurn_stone_dark.glb",
+          "fbx": "exports\\fbx\\WL_Stair_HalfTurn_stone_dark.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Stone"
@@ -16329,8 +16333,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_Stair_Curved",
-          "glb": "exports/glb/WL_Stair_Curved.glb",
-          "fbx": "exports/fbx/WL_Stair_Curved.fbx",
+          "glb": "exports\\glb\\WL_Stair_Curved.glb",
+          "fbx": "exports\\fbx\\WL_Stair_Curved.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"
@@ -16526,8 +16530,8 @@
           ],
           "material": "MI_V2_Gold",
           "mesh_name": "WL_Stair_Ceremonial_gold",
-          "glb": "exports/glb/WL_Stair_Ceremonial_gold.glb",
-          "fbx": "exports/fbx/WL_Stair_Ceremonial_gold.fbx",
+          "glb": "exports\\glb\\WL_Stair_Ceremonial_gold.glb",
+          "fbx": "exports\\fbx\\WL_Stair_Ceremonial_gold.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Gold"
@@ -16605,8 +16609,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_Stair_Ceremonial",
-          "glb": "exports/glb/WL_Stair_Ceremonial.glb",
-          "fbx": "exports/fbx/WL_Stair_Ceremonial.fbx",
+          "glb": "exports\\glb\\WL_Stair_Ceremonial.glb",
+          "fbx": "exports\\fbx\\WL_Stair_Ceremonial.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"
@@ -16802,8 +16806,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_Stair_Garden",
-          "glb": "exports/glb/WL_Stair_Garden.glb",
-          "fbx": "exports/fbx/WL_Stair_Garden.fbx",
+          "glb": "exports\\glb\\WL_Stair_Garden.glb",
+          "fbx": "exports\\fbx\\WL_Stair_Garden.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"
@@ -16881,8 +16885,8 @@
           ],
           "material": "MI_V2_LeafMid",
           "mesh_name": "WL_Stair_Garden_veg_anchor",
-          "glb": "exports/glb/WL_Stair_Garden_veg_anchor.glb",
-          "fbx": "exports/fbx/WL_Stair_Garden_veg_anchor.fbx",
+          "glb": "exports\\glb\\WL_Stair_Garden_veg_anchor.glb",
+          "fbx": "exports\\fbx\\WL_Stair_Garden_veg_anchor.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_LeafMid"
@@ -17077,8 +17081,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_Ramp_Terrace",
-          "glb": "exports/glb/WL_Ramp_Terrace.glb",
-          "fbx": "exports/fbx/WL_Ramp_Terrace.fbx",
+          "glb": "exports\\glb\\WL_Ramp_Terrace.glb",
+          "fbx": "exports\\fbx\\WL_Ramp_Terrace.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"
@@ -17156,8 +17160,8 @@
           ],
           "material": "MI_V2_Stone",
           "mesh_name": "WL_Ramp_Terrace_stone_dark",
-          "glb": "exports/glb/WL_Ramp_Terrace_stone_dark.glb",
-          "fbx": "exports/fbx/WL_Ramp_Terrace_stone_dark.fbx",
+          "glb": "exports\\glb\\WL_Ramp_Terrace_stone_dark.glb",
+          "fbx": "exports\\fbx\\WL_Ramp_Terrace_stone_dark.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Stone"
@@ -17361,8 +17365,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_Garden_Retaining_Run",
-          "glb": "exports/glb/WL_Garden_Retaining_Run.glb",
-          "fbx": "exports/fbx/WL_Garden_Retaining_Run.fbx",
+          "glb": "exports\\glb\\WL_Garden_Retaining_Run.glb",
+          "fbx": "exports\\fbx\\WL_Garden_Retaining_Run.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"
@@ -17440,8 +17444,8 @@
           ],
           "material": "MI_V2_Stone",
           "mesh_name": "WL_Garden_Retaining_Run_stone_dark",
-          "glb": "exports/glb/WL_Garden_Retaining_Run_stone_dark.glb",
-          "fbx": "exports/fbx/WL_Garden_Retaining_Run_stone_dark.fbx",
+          "glb": "exports\\glb\\WL_Garden_Retaining_Run_stone_dark.glb",
+          "fbx": "exports\\fbx\\WL_Garden_Retaining_Run_stone_dark.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Stone"
@@ -17519,8 +17523,8 @@
           ],
           "material": "MI_V2_LeafMid",
           "mesh_name": "WL_Garden_Retaining_Run_veg_anchor",
-          "glb": "exports/glb/WL_Garden_Retaining_Run_veg_anchor.glb",
-          "fbx": "exports/fbx/WL_Garden_Retaining_Run_veg_anchor.fbx",
+          "glb": "exports\\glb\\WL_Garden_Retaining_Run_veg_anchor.glb",
+          "fbx": "exports\\fbx\\WL_Garden_Retaining_Run_veg_anchor.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_LeafMid"
@@ -17722,8 +17726,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_Garden_Retaining_Corner_In",
-          "glb": "exports/glb/WL_Garden_Retaining_Corner_In.glb",
-          "fbx": "exports/fbx/WL_Garden_Retaining_Corner_In.fbx",
+          "glb": "exports\\glb\\WL_Garden_Retaining_Corner_In.glb",
+          "fbx": "exports\\fbx\\WL_Garden_Retaining_Corner_In.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"
@@ -17801,8 +17805,8 @@
           ],
           "material": "MI_V2_Stone",
           "mesh_name": "WL_Garden_Retaining_Corner_In_stone_dark",
-          "glb": "exports/glb/WL_Garden_Retaining_Corner_In_stone_dark.glb",
-          "fbx": "exports/fbx/WL_Garden_Retaining_Corner_In_stone_dark.fbx",
+          "glb": "exports\\glb\\WL_Garden_Retaining_Corner_In_stone_dark.glb",
+          "fbx": "exports\\fbx\\WL_Garden_Retaining_Corner_In_stone_dark.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Stone"
@@ -17880,8 +17884,8 @@
           ],
           "material": "MI_V2_LeafMid",
           "mesh_name": "WL_Garden_Retaining_Corner_In_veg_anchor",
-          "glb": "exports/glb/WL_Garden_Retaining_Corner_In_veg_anchor.glb",
-          "fbx": "exports/fbx/WL_Garden_Retaining_Corner_In_veg_anchor.fbx",
+          "glb": "exports\\glb\\WL_Garden_Retaining_Corner_In_veg_anchor.glb",
+          "fbx": "exports\\fbx\\WL_Garden_Retaining_Corner_In_veg_anchor.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_LeafMid"
@@ -18084,8 +18088,8 @@
           ],
           "material": "MI_V2_Gold",
           "mesh_name": "WL_Garden_Retaining_Corner_Out_gold",
-          "glb": "exports/glb/WL_Garden_Retaining_Corner_Out_gold.glb",
-          "fbx": "exports/fbx/WL_Garden_Retaining_Corner_Out_gold.fbx",
+          "glb": "exports\\glb\\WL_Garden_Retaining_Corner_Out_gold.glb",
+          "fbx": "exports\\fbx\\WL_Garden_Retaining_Corner_Out_gold.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Gold"
@@ -18163,8 +18167,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_Garden_Retaining_Corner_Out",
-          "glb": "exports/glb/WL_Garden_Retaining_Corner_Out.glb",
-          "fbx": "exports/fbx/WL_Garden_Retaining_Corner_Out.fbx",
+          "glb": "exports\\glb\\WL_Garden_Retaining_Corner_Out.glb",
+          "fbx": "exports\\fbx\\WL_Garden_Retaining_Corner_Out.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"
@@ -18242,8 +18246,8 @@
           ],
           "material": "MI_V2_Stone",
           "mesh_name": "WL_Garden_Retaining_Corner_Out_stone_dark",
-          "glb": "exports/glb/WL_Garden_Retaining_Corner_Out_stone_dark.glb",
-          "fbx": "exports/fbx/WL_Garden_Retaining_Corner_Out_stone_dark.fbx",
+          "glb": "exports\\glb\\WL_Garden_Retaining_Corner_Out_stone_dark.glb",
+          "fbx": "exports\\fbx\\WL_Garden_Retaining_Corner_Out_stone_dark.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Stone"
@@ -18321,8 +18325,8 @@
           ],
           "material": "MI_V2_LeafMid",
           "mesh_name": "WL_Garden_Retaining_Corner_Out_veg_anchor",
-          "glb": "exports/glb/WL_Garden_Retaining_Corner_Out_veg_anchor.glb",
-          "fbx": "exports/fbx/WL_Garden_Retaining_Corner_Out_veg_anchor.fbx",
+          "glb": "exports\\glb\\WL_Garden_Retaining_Corner_Out_veg_anchor.glb",
+          "fbx": "exports\\fbx\\WL_Garden_Retaining_Corner_Out_veg_anchor.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_LeafMid"
@@ -18524,8 +18528,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_Garden_Retaining_Curved",
-          "glb": "exports/glb/WL_Garden_Retaining_Curved.glb",
-          "fbx": "exports/fbx/WL_Garden_Retaining_Curved.fbx",
+          "glb": "exports\\glb\\WL_Garden_Retaining_Curved.glb",
+          "fbx": "exports\\fbx\\WL_Garden_Retaining_Curved.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"
@@ -18603,8 +18607,8 @@
           ],
           "material": "MI_V2_Stone",
           "mesh_name": "WL_Garden_Retaining_Curved_stone_dark",
-          "glb": "exports/glb/WL_Garden_Retaining_Curved_stone_dark.glb",
-          "fbx": "exports/fbx/WL_Garden_Retaining_Curved_stone_dark.fbx",
+          "glb": "exports\\glb\\WL_Garden_Retaining_Curved_stone_dark.glb",
+          "fbx": "exports\\fbx\\WL_Garden_Retaining_Curved_stone_dark.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Stone"
@@ -18682,8 +18686,8 @@
           ],
           "material": "MI_V2_LeafMid",
           "mesh_name": "WL_Garden_Retaining_Curved_veg_anchor",
-          "glb": "exports/glb/WL_Garden_Retaining_Curved_veg_anchor.glb",
-          "fbx": "exports/fbx/WL_Garden_Retaining_Curved_veg_anchor.fbx",
+          "glb": "exports\\glb\\WL_Garden_Retaining_Curved_veg_anchor.glb",
+          "fbx": "exports\\fbx\\WL_Garden_Retaining_Curved_veg_anchor.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_LeafMid"
@@ -18877,8 +18881,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_Garden_Planter_Wall",
-          "glb": "exports/glb/WL_Garden_Planter_Wall.glb",
-          "fbx": "exports/fbx/WL_Garden_Planter_Wall.fbx",
+          "glb": "exports\\glb\\WL_Garden_Planter_Wall.glb",
+          "fbx": "exports\\fbx\\WL_Garden_Planter_Wall.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"
@@ -18956,8 +18960,8 @@
           ],
           "material": "MI_V2_Stone",
           "mesh_name": "WL_Garden_Planter_Wall_stone_dark",
-          "glb": "exports/glb/WL_Garden_Planter_Wall_stone_dark.glb",
-          "fbx": "exports/fbx/WL_Garden_Planter_Wall_stone_dark.fbx",
+          "glb": "exports\\glb\\WL_Garden_Planter_Wall_stone_dark.glb",
+          "fbx": "exports\\fbx\\WL_Garden_Planter_Wall_stone_dark.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Stone"
@@ -19035,8 +19039,8 @@
           ],
           "material": "MI_V2_LeafMid",
           "mesh_name": "WL_Garden_Planter_Wall_veg_anchor",
-          "glb": "exports/glb/WL_Garden_Planter_Wall_veg_anchor.glb",
-          "fbx": "exports/fbx/WL_Garden_Planter_Wall_veg_anchor.fbx",
+          "glb": "exports\\glb\\WL_Garden_Planter_Wall_veg_anchor.glb",
+          "fbx": "exports\\fbx\\WL_Garden_Planter_Wall_veg_anchor.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_LeafMid"
@@ -19237,8 +19241,8 @@
           ],
           "material": "MI_V2_Gold",
           "mesh_name": "WL_Garden_Overlook_gold",
-          "glb": "exports/glb/WL_Garden_Overlook_gold.glb",
-          "fbx": "exports/fbx/WL_Garden_Overlook_gold.fbx",
+          "glb": "exports\\glb\\WL_Garden_Overlook_gold.glb",
+          "fbx": "exports\\fbx\\WL_Garden_Overlook_gold.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Gold"
@@ -19316,8 +19320,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_Garden_Overlook",
-          "glb": "exports/glb/WL_Garden_Overlook.glb",
-          "fbx": "exports/fbx/WL_Garden_Overlook.fbx",
+          "glb": "exports\\glb\\WL_Garden_Overlook.glb",
+          "fbx": "exports\\fbx\\WL_Garden_Overlook.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"
@@ -19395,8 +19399,8 @@
           ],
           "material": "MI_V2_Stone",
           "mesh_name": "WL_Garden_Overlook_stone_dark",
-          "glb": "exports/glb/WL_Garden_Overlook_stone_dark.glb",
-          "fbx": "exports/fbx/WL_Garden_Overlook_stone_dark.fbx",
+          "glb": "exports\\glb\\WL_Garden_Overlook_stone_dark.glb",
+          "fbx": "exports\\fbx\\WL_Garden_Overlook_stone_dark.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Stone"
@@ -19606,8 +19610,8 @@
           ],
           "material": "MI_V2_Gold",
           "mesh_name": "WL_Garden_Gate_Threshold_gold",
-          "glb": "exports/glb/WL_Garden_Gate_Threshold_gold.glb",
-          "fbx": "exports/fbx/WL_Garden_Gate_Threshold_gold.fbx",
+          "glb": "exports\\glb\\WL_Garden_Gate_Threshold_gold.glb",
+          "fbx": "exports\\fbx\\WL_Garden_Gate_Threshold_gold.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Gold"
@@ -19685,8 +19689,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_Garden_Gate_Threshold",
-          "glb": "exports/glb/WL_Garden_Gate_Threshold.glb",
-          "fbx": "exports/fbx/WL_Garden_Gate_Threshold.fbx",
+          "glb": "exports\\glb\\WL_Garden_Gate_Threshold.glb",
+          "fbx": "exports\\fbx\\WL_Garden_Gate_Threshold.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"
@@ -19764,8 +19768,8 @@
           ],
           "material": "MI_V2_Stone",
           "mesh_name": "WL_Garden_Gate_Threshold_stone_dark",
-          "glb": "exports/glb/WL_Garden_Gate_Threshold_stone_dark.glb",
-          "fbx": "exports/fbx/WL_Garden_Gate_Threshold_stone_dark.fbx",
+          "glb": "exports\\glb\\WL_Garden_Gate_Threshold_stone_dark.glb",
+          "fbx": "exports\\fbx\\WL_Garden_Gate_Threshold_stone_dark.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Stone"
@@ -19843,8 +19847,8 @@
           ],
           "material": "MI_V2_LeafMid",
           "mesh_name": "WL_Garden_Gate_Threshold_veg_anchor",
-          "glb": "exports/glb/WL_Garden_Gate_Threshold_veg_anchor.glb",
-          "fbx": "exports/fbx/WL_Garden_Gate_Threshold_veg_anchor.fbx",
+          "glb": "exports\\glb\\WL_Garden_Gate_Threshold_veg_anchor.glb",
+          "fbx": "exports\\fbx\\WL_Garden_Gate_Threshold_veg_anchor.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_LeafMid"
@@ -20038,8 +20042,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_Garden_Pavilion_Base",
-          "glb": "exports/glb/WL_Garden_Pavilion_Base.glb",
-          "fbx": "exports/fbx/WL_Garden_Pavilion_Base.fbx",
+          "glb": "exports\\glb\\WL_Garden_Pavilion_Base.glb",
+          "fbx": "exports\\fbx\\WL_Garden_Pavilion_Base.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"
@@ -20117,8 +20121,8 @@
           ],
           "material": "MI_V2_Stone",
           "mesh_name": "WL_Garden_Pavilion_Base_stone_dark",
-          "glb": "exports/glb/WL_Garden_Pavilion_Base_stone_dark.glb",
-          "fbx": "exports/fbx/WL_Garden_Pavilion_Base_stone_dark.fbx",
+          "glb": "exports\\glb\\WL_Garden_Pavilion_Base_stone_dark.glb",
+          "fbx": "exports\\fbx\\WL_Garden_Pavilion_Base_stone_dark.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Stone"
@@ -20320,8 +20324,8 @@
           ],
           "material": "MI_V2_Kerb",
           "mesh_name": "WL_Ground_Kerb_Run_kerb",
-          "glb": "exports/glb/WL_Ground_Kerb_Run_kerb.glb",
-          "fbx": "exports/fbx/WL_Ground_Kerb_Run_kerb.fbx",
+          "glb": "exports\\glb\\WL_Ground_Kerb_Run_kerb.glb",
+          "fbx": "exports\\fbx\\WL_Ground_Kerb_Run_kerb.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Kerb"
@@ -20399,8 +20403,8 @@
           ],
           "material": "MI_V2_PlazaCream",
           "mesh_name": "WL_Ground_Kerb_Run_paving",
-          "glb": "exports/glb/WL_Ground_Kerb_Run_paving.glb",
-          "fbx": "exports/fbx/WL_Ground_Kerb_Run_paving.fbx",
+          "glb": "exports\\glb\\WL_Ground_Kerb_Run_paving.glb",
+          "fbx": "exports\\fbx\\WL_Ground_Kerb_Run_paving.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_PlazaCream"
@@ -20478,8 +20482,8 @@
           ],
           "material": "MI_V2_PlazaShade",
           "mesh_name": "WL_Ground_Kerb_Run_paving_shade",
-          "glb": "exports/glb/WL_Ground_Kerb_Run_paving_shade.glb",
-          "fbx": "exports/fbx/WL_Ground_Kerb_Run_paving_shade.fbx",
+          "glb": "exports\\glb\\WL_Ground_Kerb_Run_paving_shade.glb",
+          "fbx": "exports\\fbx\\WL_Ground_Kerb_Run_paving_shade.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_PlazaShade"
@@ -20557,8 +20561,8 @@
           ],
           "material": "MI_V2_PlazaWarm",
           "mesh_name": "WL_Ground_Kerb_Run_paving_warm",
-          "glb": "exports/glb/WL_Ground_Kerb_Run_paving_warm.glb",
-          "fbx": "exports/fbx/WL_Ground_Kerb_Run_paving_warm.fbx",
+          "glb": "exports\\glb\\WL_Ground_Kerb_Run_paving_warm.glb",
+          "fbx": "exports\\fbx\\WL_Ground_Kerb_Run_paving_warm.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_PlazaWarm"
@@ -20750,8 +20754,8 @@
           ],
           "material": "MI_V2_Kerb",
           "mesh_name": "WL_Ground_Kerb_Corner_kerb",
-          "glb": "exports/glb/WL_Ground_Kerb_Corner_kerb.glb",
-          "fbx": "exports/fbx/WL_Ground_Kerb_Corner_kerb.fbx",
+          "glb": "exports\\glb\\WL_Ground_Kerb_Corner_kerb.glb",
+          "fbx": "exports\\fbx\\WL_Ground_Kerb_Corner_kerb.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Kerb"
@@ -20829,8 +20833,8 @@
           ],
           "material": "MI_V2_PlazaCream",
           "mesh_name": "WL_Ground_Kerb_Corner_paving",
-          "glb": "exports/glb/WL_Ground_Kerb_Corner_paving.glb",
-          "fbx": "exports/fbx/WL_Ground_Kerb_Corner_paving.fbx",
+          "glb": "exports\\glb\\WL_Ground_Kerb_Corner_paving.glb",
+          "fbx": "exports\\fbx\\WL_Ground_Kerb_Corner_paving.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_PlazaCream"
@@ -20908,8 +20912,8 @@
           ],
           "material": "MI_V2_PlazaShade",
           "mesh_name": "WL_Ground_Kerb_Corner_paving_shade",
-          "glb": "exports/glb/WL_Ground_Kerb_Corner_paving_shade.glb",
-          "fbx": "exports/fbx/WL_Ground_Kerb_Corner_paving_shade.fbx",
+          "glb": "exports\\glb\\WL_Ground_Kerb_Corner_paving_shade.glb",
+          "fbx": "exports\\fbx\\WL_Ground_Kerb_Corner_paving_shade.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_PlazaShade"
@@ -21111,8 +21115,8 @@
           ],
           "material": "MI_V2_Kerb",
           "mesh_name": "WL_Ground_Step_Single_kerb",
-          "glb": "exports/glb/WL_Ground_Step_Single_kerb.glb",
-          "fbx": "exports/fbx/WL_Ground_Step_Single_kerb.fbx",
+          "glb": "exports\\glb\\WL_Ground_Step_Single_kerb.glb",
+          "fbx": "exports\\fbx\\WL_Ground_Step_Single_kerb.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Kerb"
@@ -21190,8 +21194,8 @@
           ],
           "material": "MI_V2_PlazaCream",
           "mesh_name": "WL_Ground_Step_Single_paving",
-          "glb": "exports/glb/WL_Ground_Step_Single_paving.glb",
-          "fbx": "exports/fbx/WL_Ground_Step_Single_paving.fbx",
+          "glb": "exports\\glb\\WL_Ground_Step_Single_paving.glb",
+          "fbx": "exports\\fbx\\WL_Ground_Step_Single_paving.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_PlazaCream"
@@ -21269,8 +21273,8 @@
           ],
           "material": "MI_V2_PlazaShade",
           "mesh_name": "WL_Ground_Step_Single_paving_shade",
-          "glb": "exports/glb/WL_Ground_Step_Single_paving_shade.glb",
-          "fbx": "exports/fbx/WL_Ground_Step_Single_paving_shade.fbx",
+          "glb": "exports\\glb\\WL_Ground_Step_Single_paving_shade.glb",
+          "fbx": "exports\\fbx\\WL_Ground_Step_Single_paving_shade.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_PlazaShade"
@@ -21348,8 +21352,8 @@
           ],
           "material": "MI_V2_PlazaWarm",
           "mesh_name": "WL_Ground_Step_Single_paving_warm",
-          "glb": "exports/glb/WL_Ground_Step_Single_paving_warm.glb",
-          "fbx": "exports/fbx/WL_Ground_Step_Single_paving_warm.fbx",
+          "glb": "exports\\glb\\WL_Ground_Step_Single_paving_warm.glb",
+          "fbx": "exports\\fbx\\WL_Ground_Step_Single_paving_warm.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_PlazaWarm"
@@ -21552,8 +21556,8 @@
           ],
           "material": "MI_V2_Kerb",
           "mesh_name": "WL_Ground_Steps_Broad_kerb",
-          "glb": "exports/glb/WL_Ground_Steps_Broad_kerb.glb",
-          "fbx": "exports/fbx/WL_Ground_Steps_Broad_kerb.fbx",
+          "glb": "exports\\glb\\WL_Ground_Steps_Broad_kerb.glb",
+          "fbx": "exports\\fbx\\WL_Ground_Steps_Broad_kerb.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Kerb"
@@ -21631,8 +21635,8 @@
           ],
           "material": "MI_V2_PlazaCream",
           "mesh_name": "WL_Ground_Steps_Broad_paving",
-          "glb": "exports/glb/WL_Ground_Steps_Broad_paving.glb",
-          "fbx": "exports/fbx/WL_Ground_Steps_Broad_paving.fbx",
+          "glb": "exports\\glb\\WL_Ground_Steps_Broad_paving.glb",
+          "fbx": "exports\\fbx\\WL_Ground_Steps_Broad_paving.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_PlazaCream"
@@ -21710,8 +21714,8 @@
           ],
           "material": "MI_V2_PlazaShade",
           "mesh_name": "WL_Ground_Steps_Broad_paving_shade",
-          "glb": "exports/glb/WL_Ground_Steps_Broad_paving_shade.glb",
-          "fbx": "exports/fbx/WL_Ground_Steps_Broad_paving_shade.fbx",
+          "glb": "exports\\glb\\WL_Ground_Steps_Broad_paving_shade.glb",
+          "fbx": "exports\\fbx\\WL_Ground_Steps_Broad_paving_shade.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_PlazaShade"
@@ -21789,8 +21793,8 @@
           ],
           "material": "MI_V2_PlazaWarm",
           "mesh_name": "WL_Ground_Steps_Broad_paving_warm",
-          "glb": "exports/glb/WL_Ground_Steps_Broad_paving_warm.glb",
-          "fbx": "exports/fbx/WL_Ground_Steps_Broad_paving_warm.fbx",
+          "glb": "exports\\glb\\WL_Ground_Steps_Broad_paving_warm.glb",
+          "fbx": "exports\\fbx\\WL_Ground_Steps_Broad_paving_warm.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_PlazaWarm"
@@ -21966,8 +21970,8 @@
           ],
           "material": "MI_V2_Gold",
           "mesh_name": "WL_Ground_Plaza_Medallion_gold",
-          "glb": "exports/glb/WL_Ground_Plaza_Medallion_gold.glb",
-          "fbx": "exports/fbx/WL_Ground_Plaza_Medallion_gold.fbx",
+          "glb": "exports\\glb\\WL_Ground_Plaza_Medallion_gold.glb",
+          "fbx": "exports\\fbx\\WL_Ground_Plaza_Medallion_gold.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Gold"
@@ -22045,8 +22049,8 @@
           ],
           "material": "MI_V2_Kerb",
           "mesh_name": "WL_Ground_Plaza_Medallion_kerb",
-          "glb": "exports/glb/WL_Ground_Plaza_Medallion_kerb.glb",
-          "fbx": "exports/fbx/WL_Ground_Plaza_Medallion_kerb.fbx",
+          "glb": "exports\\glb\\WL_Ground_Plaza_Medallion_kerb.glb",
+          "fbx": "exports\\fbx\\WL_Ground_Plaza_Medallion_kerb.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Kerb"
@@ -22124,8 +22128,8 @@
           ],
           "material": "MI_V2_PlazaCream",
           "mesh_name": "WL_Ground_Plaza_Medallion_paving",
-          "glb": "exports/glb/WL_Ground_Plaza_Medallion_paving.glb",
-          "fbx": "exports/fbx/WL_Ground_Plaza_Medallion_paving.fbx",
+          "glb": "exports\\glb\\WL_Ground_Plaza_Medallion_paving.glb",
+          "fbx": "exports\\fbx\\WL_Ground_Plaza_Medallion_paving.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_PlazaCream"
@@ -22203,8 +22207,8 @@
           ],
           "material": "MI_V2_PlazaShade",
           "mesh_name": "WL_Ground_Plaza_Medallion_paving_shade",
-          "glb": "exports/glb/WL_Ground_Plaza_Medallion_paving_shade.glb",
-          "fbx": "exports/fbx/WL_Ground_Plaza_Medallion_paving_shade.fbx",
+          "glb": "exports\\glb\\WL_Ground_Plaza_Medallion_paving_shade.glb",
+          "fbx": "exports\\fbx\\WL_Ground_Plaza_Medallion_paving_shade.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_PlazaShade"
@@ -22282,8 +22286,8 @@
           ],
           "material": "MI_V2_PlazaWarm",
           "mesh_name": "WL_Ground_Plaza_Medallion_paving_warm",
-          "glb": "exports/glb/WL_Ground_Plaza_Medallion_paving_warm.glb",
-          "fbx": "exports/fbx/WL_Ground_Plaza_Medallion_paving_warm.fbx",
+          "glb": "exports\\glb\\WL_Ground_Plaza_Medallion_paving_warm.glb",
+          "fbx": "exports\\fbx\\WL_Ground_Plaza_Medallion_paving_warm.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_PlazaWarm"
@@ -22476,8 +22480,8 @@
           ],
           "material": "MI_V2_Kerb",
           "mesh_name": "WL_Ground_Verge_Run_kerb",
-          "glb": "exports/glb/WL_Ground_Verge_Run_kerb.glb",
-          "fbx": "exports/fbx/WL_Ground_Verge_Run_kerb.fbx",
+          "glb": "exports\\glb\\WL_Ground_Verge_Run_kerb.glb",
+          "fbx": "exports\\fbx\\WL_Ground_Verge_Run_kerb.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Kerb"
@@ -22555,8 +22559,8 @@
           ],
           "material": "MI_V2_PlazaShade",
           "mesh_name": "WL_Ground_Verge_Run_paving_shade",
-          "glb": "exports/glb/WL_Ground_Verge_Run_paving_shade.glb",
-          "fbx": "exports/fbx/WL_Ground_Verge_Run_paving_shade.fbx",
+          "glb": "exports\\glb\\WL_Ground_Verge_Run_paving_shade.glb",
+          "fbx": "exports\\fbx\\WL_Ground_Verge_Run_paving_shade.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_PlazaShade"
@@ -22634,8 +22638,8 @@
           ],
           "material": "MI_V2_LeafMid",
           "mesh_name": "WL_Ground_Verge_Run_veg_anchor",
-          "glb": "exports/glb/WL_Ground_Verge_Run_veg_anchor.glb",
-          "fbx": "exports/fbx/WL_Ground_Verge_Run_veg_anchor.fbx",
+          "glb": "exports\\glb\\WL_Ground_Verge_Run_veg_anchor.glb",
+          "fbx": "exports\\fbx\\WL_Ground_Verge_Run_veg_anchor.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_LeafMid"
@@ -22827,8 +22831,8 @@
           ],
           "material": "MI_V2_Bronze",
           "mesh_name": "WL_Ground_Drain_Channel_metal",
-          "glb": "exports/glb/WL_Ground_Drain_Channel_metal.glb",
-          "fbx": "exports/fbx/WL_Ground_Drain_Channel_metal.fbx",
+          "glb": "exports\\glb\\WL_Ground_Drain_Channel_metal.glb",
+          "fbx": "exports\\fbx\\WL_Ground_Drain_Channel_metal.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Bronze"
@@ -22906,8 +22910,8 @@
           ],
           "material": "MI_V2_PlazaCream",
           "mesh_name": "WL_Ground_Drain_Channel_paving",
-          "glb": "exports/glb/WL_Ground_Drain_Channel_paving.glb",
-          "fbx": "exports/fbx/WL_Ground_Drain_Channel_paving.fbx",
+          "glb": "exports\\glb\\WL_Ground_Drain_Channel_paving.glb",
+          "fbx": "exports\\fbx\\WL_Ground_Drain_Channel_paving.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_PlazaCream"
@@ -22985,8 +22989,8 @@
           ],
           "material": "MI_V2_PlazaShade",
           "mesh_name": "WL_Ground_Drain_Channel_paving_shade",
-          "glb": "exports/glb/WL_Ground_Drain_Channel_paving_shade.glb",
-          "fbx": "exports/fbx/WL_Ground_Drain_Channel_paving_shade.fbx",
+          "glb": "exports\\glb\\WL_Ground_Drain_Channel_paving_shade.glb",
+          "fbx": "exports\\fbx\\WL_Ground_Drain_Channel_paving_shade.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_PlazaShade"
@@ -23064,8 +23068,8 @@
           ],
           "material": "MI_V2_PlazaWarm",
           "mesh_name": "WL_Ground_Drain_Channel_paving_warm",
-          "glb": "exports/glb/WL_Ground_Drain_Channel_paving_warm.glb",
-          "fbx": "exports/fbx/WL_Ground_Drain_Channel_paving_warm.fbx",
+          "glb": "exports\\glb\\WL_Ground_Drain_Channel_paving_warm.glb",
+          "fbx": "exports\\fbx\\WL_Ground_Drain_Channel_paving_warm.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_PlazaWarm"
@@ -23250,8 +23254,8 @@
           ],
           "material": "MI_V2_Kerb",
           "mesh_name": "WL_Ground_Tree_Grate_kerb",
-          "glb": "exports/glb/WL_Ground_Tree_Grate_kerb.glb",
-          "fbx": "exports/fbx/WL_Ground_Tree_Grate_kerb.fbx",
+          "glb": "exports\\glb\\WL_Ground_Tree_Grate_kerb.glb",
+          "fbx": "exports\\fbx\\WL_Ground_Tree_Grate_kerb.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Kerb"
@@ -23329,8 +23333,8 @@
           ],
           "material": "MI_V2_PlazaCream",
           "mesh_name": "WL_Ground_Tree_Grate_paving",
-          "glb": "exports/glb/WL_Ground_Tree_Grate_paving.glb",
-          "fbx": "exports/fbx/WL_Ground_Tree_Grate_paving.fbx",
+          "glb": "exports\\glb\\WL_Ground_Tree_Grate_paving.glb",
+          "fbx": "exports\\fbx\\WL_Ground_Tree_Grate_paving.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_PlazaCream"
@@ -23408,8 +23412,8 @@
           ],
           "material": "MI_V2_PlazaShade",
           "mesh_name": "WL_Ground_Tree_Grate_paving_shade",
-          "glb": "exports/glb/WL_Ground_Tree_Grate_paving_shade.glb",
-          "fbx": "exports/fbx/WL_Ground_Tree_Grate_paving_shade.fbx",
+          "glb": "exports\\glb\\WL_Ground_Tree_Grate_paving_shade.glb",
+          "fbx": "exports\\fbx\\WL_Ground_Tree_Grate_paving_shade.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_PlazaShade"
@@ -23487,8 +23491,8 @@
           ],
           "material": "MI_V2_PlazaWarm",
           "mesh_name": "WL_Ground_Tree_Grate_paving_warm",
-          "glb": "exports/glb/WL_Ground_Tree_Grate_paving_warm.glb",
-          "fbx": "exports/fbx/WL_Ground_Tree_Grate_paving_warm.fbx",
+          "glb": "exports\\glb\\WL_Ground_Tree_Grate_paving_warm.glb",
+          "fbx": "exports\\fbx\\WL_Ground_Tree_Grate_paving_warm.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_PlazaWarm"
@@ -23566,8 +23570,8 @@
           ],
           "material": "MI_V2_LeafMid",
           "mesh_name": "WL_Ground_Tree_Grate_veg_anchor",
-          "glb": "exports/glb/WL_Ground_Tree_Grate_veg_anchor.glb",
-          "fbx": "exports/fbx/WL_Ground_Tree_Grate_veg_anchor.fbx",
+          "glb": "exports\\glb\\WL_Ground_Tree_Grate_veg_anchor.glb",
+          "fbx": "exports\\fbx\\WL_Ground_Tree_Grate_veg_anchor.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_LeafMid"
@@ -23781,8 +23785,8 @@
           ],
           "material": "MI_V2_Gold",
           "mesh_name": "WL_Hero_Water_Court_gold",
-          "glb": "exports/glb/WL_Hero_Water_Court_gold.glb",
-          "fbx": "exports/fbx/WL_Hero_Water_Court_gold.fbx",
+          "glb": "exports\\glb\\WL_Hero_Water_Court_gold.glb",
+          "fbx": "exports\\fbx\\WL_Hero_Water_Court_gold.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Gold"
@@ -23860,8 +23864,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_Hero_Water_Court",
-          "glb": "exports/glb/WL_Hero_Water_Court.glb",
-          "fbx": "exports/fbx/WL_Hero_Water_Court.fbx",
+          "glb": "exports\\glb\\WL_Hero_Water_Court.glb",
+          "fbx": "exports\\fbx\\WL_Hero_Water_Court.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"
@@ -23939,8 +23943,8 @@
           ],
           "material": "MI_V2_Stone",
           "mesh_name": "WL_Hero_Water_Court_stone_dark",
-          "glb": "exports/glb/WL_Hero_Water_Court_stone_dark.glb",
-          "fbx": "exports/fbx/WL_Hero_Water_Court_stone_dark.fbx",
+          "glb": "exports\\glb\\WL_Hero_Water_Court_stone_dark.glb",
+          "fbx": "exports\\fbx\\WL_Hero_Water_Court_stone_dark.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Stone"
@@ -24018,8 +24022,8 @@
           ],
           "material": "MI_V2_Water",
           "mesh_name": "WL_Hero_Water_Court_water",
-          "glb": "exports/glb/WL_Hero_Water_Court_water.glb",
-          "fbx": "exports/fbx/WL_Hero_Water_Court_water.fbx",
+          "glb": "exports\\glb\\WL_Hero_Water_Court_water.glb",
+          "fbx": "exports\\fbx\\WL_Hero_Water_Court_water.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Water"
@@ -24097,8 +24101,8 @@
           ],
           "material": "MI_V2_GlassTeal",
           "mesh_name": "WL_Hero_Water_Court_water_lit",
-          "glb": "exports/glb/WL_Hero_Water_Court_water_lit.glb",
-          "fbx": "exports/fbx/WL_Hero_Water_Court_water_lit.fbx",
+          "glb": "exports\\glb\\WL_Hero_Water_Court_water_lit.glb",
+          "fbx": "exports\\fbx\\WL_Hero_Water_Court_water_lit.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_GlassTeal"
@@ -24300,8 +24304,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_Water_Cascade_Stair",
-          "glb": "exports/glb/WL_Water_Cascade_Stair.glb",
-          "fbx": "exports/fbx/WL_Water_Cascade_Stair.fbx",
+          "glb": "exports\\glb\\WL_Water_Cascade_Stair.glb",
+          "fbx": "exports\\fbx\\WL_Water_Cascade_Stair.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"
@@ -24379,8 +24383,8 @@
           ],
           "material": "MI_V2_Stone",
           "mesh_name": "WL_Water_Cascade_Stair_stone_dark",
-          "glb": "exports/glb/WL_Water_Cascade_Stair_stone_dark.glb",
-          "fbx": "exports/fbx/WL_Water_Cascade_Stair_stone_dark.fbx",
+          "glb": "exports\\glb\\WL_Water_Cascade_Stair_stone_dark.glb",
+          "fbx": "exports\\fbx\\WL_Water_Cascade_Stair_stone_dark.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Stone"
@@ -24458,8 +24462,8 @@
           ],
           "material": "MI_V2_Water",
           "mesh_name": "WL_Water_Cascade_Stair_water",
-          "glb": "exports/glb/WL_Water_Cascade_Stair_water.glb",
-          "fbx": "exports/fbx/WL_Water_Cascade_Stair_water.fbx",
+          "glb": "exports\\glb\\WL_Water_Cascade_Stair_water.glb",
+          "fbx": "exports\\fbx\\WL_Water_Cascade_Stair_water.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Water"
@@ -24537,8 +24541,8 @@
           ],
           "material": "MI_V2_GlassTeal",
           "mesh_name": "WL_Water_Cascade_Stair_water_lit",
-          "glb": "exports/glb/WL_Water_Cascade_Stair_water_lit.glb",
-          "fbx": "exports/fbx/WL_Water_Cascade_Stair_water_lit.fbx",
+          "glb": "exports\\glb\\WL_Water_Cascade_Stair_water_lit.glb",
+          "fbx": "exports\\fbx\\WL_Water_Cascade_Stair_water_lit.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_GlassTeal"
@@ -24748,8 +24752,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_Water_Canal_Run",
-          "glb": "exports/glb/WL_Water_Canal_Run.glb",
-          "fbx": "exports/fbx/WL_Water_Canal_Run.fbx",
+          "glb": "exports\\glb\\WL_Water_Canal_Run.glb",
+          "fbx": "exports\\fbx\\WL_Water_Canal_Run.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"
@@ -24827,8 +24831,8 @@
           ],
           "material": "MI_V2_Stone",
           "mesh_name": "WL_Water_Canal_Run_stone_dark",
-          "glb": "exports/glb/WL_Water_Canal_Run_stone_dark.glb",
-          "fbx": "exports/fbx/WL_Water_Canal_Run_stone_dark.fbx",
+          "glb": "exports\\glb\\WL_Water_Canal_Run_stone_dark.glb",
+          "fbx": "exports\\fbx\\WL_Water_Canal_Run_stone_dark.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Stone"
@@ -24906,8 +24910,8 @@
           ],
           "material": "MI_V2_Water",
           "mesh_name": "WL_Water_Canal_Run_water",
-          "glb": "exports/glb/WL_Water_Canal_Run_water.glb",
-          "fbx": "exports/fbx/WL_Water_Canal_Run_water.fbx",
+          "glb": "exports\\glb\\WL_Water_Canal_Run_water.glb",
+          "fbx": "exports\\fbx\\WL_Water_Canal_Run_water.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Water"
@@ -25126,8 +25130,8 @@
           ],
           "material": "MI_V2_Gold",
           "mesh_name": "WL_Water_Canal_Crossing_gold",
-          "glb": "exports/glb/WL_Water_Canal_Crossing_gold.glb",
-          "fbx": "exports/fbx/WL_Water_Canal_Crossing_gold.fbx",
+          "glb": "exports\\glb\\WL_Water_Canal_Crossing_gold.glb",
+          "fbx": "exports\\fbx\\WL_Water_Canal_Crossing_gold.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Gold"
@@ -25205,8 +25209,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_Water_Canal_Crossing",
-          "glb": "exports/glb/WL_Water_Canal_Crossing.glb",
-          "fbx": "exports/fbx/WL_Water_Canal_Crossing.fbx",
+          "glb": "exports\\glb\\WL_Water_Canal_Crossing.glb",
+          "fbx": "exports\\fbx\\WL_Water_Canal_Crossing.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"
@@ -25284,8 +25288,8 @@
           ],
           "material": "MI_V2_Stone",
           "mesh_name": "WL_Water_Canal_Crossing_stone_dark",
-          "glb": "exports/glb/WL_Water_Canal_Crossing_stone_dark.glb",
-          "fbx": "exports/fbx/WL_Water_Canal_Crossing_stone_dark.fbx",
+          "glb": "exports\\glb\\WL_Water_Canal_Crossing_stone_dark.glb",
+          "fbx": "exports\\fbx\\WL_Water_Canal_Crossing_stone_dark.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Stone"
@@ -25363,8 +25367,8 @@
           ],
           "material": "MI_V2_Water",
           "mesh_name": "WL_Water_Canal_Crossing_water",
-          "glb": "exports/glb/WL_Water_Canal_Crossing_water.glb",
-          "fbx": "exports/fbx/WL_Water_Canal_Crossing_water.fbx",
+          "glb": "exports\\glb\\WL_Water_Canal_Crossing_water.glb",
+          "fbx": "exports\\fbx\\WL_Water_Canal_Crossing_water.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Water"
@@ -25556,8 +25560,8 @@
           ],
           "material": "MI_V2_GlassAmber",
           "mesh_name": "WL_Water_Pavilion_glass",
-          "glb": "exports/glb/WL_Water_Pavilion_glass.glb",
-          "fbx": "exports/fbx/WL_Water_Pavilion_glass.fbx",
+          "glb": "exports\\glb\\WL_Water_Pavilion_glass.glb",
+          "fbx": "exports\\fbx\\WL_Water_Pavilion_glass.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_GlassAmber"
@@ -25635,8 +25639,8 @@
           ],
           "material": "MI_V2_Gold",
           "mesh_name": "WL_Water_Pavilion_gold",
-          "glb": "exports/glb/WL_Water_Pavilion_gold.glb",
-          "fbx": "exports/fbx/WL_Water_Pavilion_gold.fbx",
+          "glb": "exports\\glb\\WL_Water_Pavilion_gold.glb",
+          "fbx": "exports\\fbx\\WL_Water_Pavilion_gold.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Gold"
@@ -25714,8 +25718,8 @@
           ],
           "material": "MI_V2_RoofRose",
           "mesh_name": "WL_Water_Pavilion_roof",
-          "glb": "exports/glb/WL_Water_Pavilion_roof.glb",
-          "fbx": "exports/fbx/WL_Water_Pavilion_roof.fbx",
+          "glb": "exports\\glb\\WL_Water_Pavilion_roof.glb",
+          "fbx": "exports\\fbx\\WL_Water_Pavilion_roof.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_RoofRose"
@@ -25793,8 +25797,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_Water_Pavilion",
-          "glb": "exports/glb/WL_Water_Pavilion.glb",
-          "fbx": "exports/fbx/WL_Water_Pavilion.fbx",
+          "glb": "exports\\glb\\WL_Water_Pavilion.glb",
+          "fbx": "exports\\fbx\\WL_Water_Pavilion.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"
@@ -25872,8 +25876,8 @@
           ],
           "material": "MI_V2_Stone",
           "mesh_name": "WL_Water_Pavilion_stone_dark",
-          "glb": "exports/glb/WL_Water_Pavilion_stone_dark.glb",
-          "fbx": "exports/fbx/WL_Water_Pavilion_stone_dark.fbx",
+          "glb": "exports\\glb\\WL_Water_Pavilion_stone_dark.glb",
+          "fbx": "exports\\fbx\\WL_Water_Pavilion_stone_dark.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Stone"
@@ -25951,8 +25955,8 @@
           ],
           "material": "MI_V2_Water",
           "mesh_name": "WL_Water_Pavilion_water",
-          "glb": "exports/glb/WL_Water_Pavilion_water.glb",
-          "fbx": "exports/fbx/WL_Water_Pavilion_water.fbx",
+          "glb": "exports\\glb\\WL_Water_Pavilion_water.glb",
+          "fbx": "exports\\fbx\\WL_Water_Pavilion_water.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Water"
@@ -26161,8 +26165,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_Water_Spillway_Wall",
-          "glb": "exports/glb/WL_Water_Spillway_Wall.glb",
-          "fbx": "exports/fbx/WL_Water_Spillway_Wall.fbx",
+          "glb": "exports\\glb\\WL_Water_Spillway_Wall.glb",
+          "fbx": "exports\\fbx\\WL_Water_Spillway_Wall.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"
@@ -26240,8 +26244,8 @@
           ],
           "material": "MI_V2_Stone",
           "mesh_name": "WL_Water_Spillway_Wall_stone_dark",
-          "glb": "exports/glb/WL_Water_Spillway_Wall_stone_dark.glb",
-          "fbx": "exports/fbx/WL_Water_Spillway_Wall_stone_dark.fbx",
+          "glb": "exports\\glb\\WL_Water_Spillway_Wall_stone_dark.glb",
+          "fbx": "exports\\fbx\\WL_Water_Spillway_Wall_stone_dark.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Stone"
@@ -26319,8 +26323,8 @@
           ],
           "material": "MI_V2_Water",
           "mesh_name": "WL_Water_Spillway_Wall_water",
-          "glb": "exports/glb/WL_Water_Spillway_Wall_water.glb",
-          "fbx": "exports/fbx/WL_Water_Spillway_Wall_water.fbx",
+          "glb": "exports\\glb\\WL_Water_Spillway_Wall_water.glb",
+          "fbx": "exports\\fbx\\WL_Water_Spillway_Wall_water.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Water"
@@ -26398,8 +26402,8 @@
           ],
           "material": "MI_V2_GlassTeal",
           "mesh_name": "WL_Water_Spillway_Wall_water_lit",
-          "glb": "exports/glb/WL_Water_Spillway_Wall_water_lit.glb",
-          "fbx": "exports/fbx/WL_Water_Spillway_Wall_water_lit.fbx",
+          "glb": "exports\\glb\\WL_Water_Spillway_Wall_water_lit.glb",
+          "fbx": "exports\\fbx\\WL_Water_Spillway_Wall_water_lit.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_GlassTeal"
@@ -26592,8 +26596,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_Water_Sunken_Pool",
-          "glb": "exports/glb/WL_Water_Sunken_Pool.glb",
-          "fbx": "exports/fbx/WL_Water_Sunken_Pool.fbx",
+          "glb": "exports\\glb\\WL_Water_Sunken_Pool.glb",
+          "fbx": "exports\\fbx\\WL_Water_Sunken_Pool.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"
@@ -26671,8 +26675,8 @@
           ],
           "material": "MI_V2_Stone",
           "mesh_name": "WL_Water_Sunken_Pool_stone_dark",
-          "glb": "exports/glb/WL_Water_Sunken_Pool_stone_dark.glb",
-          "fbx": "exports/fbx/WL_Water_Sunken_Pool_stone_dark.fbx",
+          "glb": "exports\\glb\\WL_Water_Sunken_Pool_stone_dark.glb",
+          "fbx": "exports\\fbx\\WL_Water_Sunken_Pool_stone_dark.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Stone"
@@ -26750,8 +26754,8 @@
           ],
           "material": "MI_V2_Water",
           "mesh_name": "WL_Water_Sunken_Pool_water",
-          "glb": "exports/glb/WL_Water_Sunken_Pool_water.glb",
-          "fbx": "exports/fbx/WL_Water_Sunken_Pool_water.fbx",
+          "glb": "exports\\glb\\WL_Water_Sunken_Pool_water.glb",
+          "fbx": "exports\\fbx\\WL_Water_Sunken_Pool_water.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Water"
@@ -26929,8 +26933,8 @@
           ],
           "material": "MI_V2_Bronze",
           "mesh_name": "WL_Market_Awning_metal",
-          "glb": "exports/glb/WL_Market_Awning_metal.glb",
-          "fbx": "exports/fbx/WL_Market_Awning_metal.fbx",
+          "glb": "exports\\glb\\WL_Market_Awning_metal.glb",
+          "fbx": "exports\\fbx\\WL_Market_Awning_metal.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Bronze"
@@ -27008,8 +27012,8 @@
           ],
           "material": "MI_V2_RoofRose",
           "mesh_name": "WL_Market_Awning_roof",
-          "glb": "exports/glb/WL_Market_Awning_roof.glb",
-          "fbx": "exports/fbx/WL_Market_Awning_roof.fbx",
+          "glb": "exports\\glb\\WL_Market_Awning_roof.glb",
+          "fbx": "exports\\fbx\\WL_Market_Awning_roof.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_RoofRose"
@@ -27087,8 +27091,8 @@
           ],
           "material": "MI_V2_RoofLilac",
           "mesh_name": "WL_Market_Awning_roof_alt",
-          "glb": "exports/glb/WL_Market_Awning_roof_alt.glb",
-          "fbx": "exports/fbx/WL_Market_Awning_roof_alt.fbx",
+          "glb": "exports\\glb\\WL_Market_Awning_roof_alt.glb",
+          "fbx": "exports\\fbx\\WL_Market_Awning_roof_alt.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_RoofLilac"
@@ -27166,8 +27170,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_Market_Awning",
-          "glb": "exports/glb/WL_Market_Awning.glb",
-          "fbx": "exports/fbx/WL_Market_Awning.fbx",
+          "glb": "exports\\glb\\WL_Market_Awning.glb",
+          "fbx": "exports\\fbx\\WL_Market_Awning.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"
@@ -27355,8 +27359,8 @@
           ],
           "material": "MI_V2_Gold",
           "mesh_name": "WL_Market_Canopy_gold",
-          "glb": "exports/glb/WL_Market_Canopy_gold.glb",
-          "fbx": "exports/fbx/WL_Market_Canopy_gold.fbx",
+          "glb": "exports\\glb\\WL_Market_Canopy_gold.glb",
+          "fbx": "exports\\fbx\\WL_Market_Canopy_gold.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Gold"
@@ -27434,8 +27438,8 @@
           ],
           "material": "MI_V2_Bronze",
           "mesh_name": "WL_Market_Canopy_metal",
-          "glb": "exports/glb/WL_Market_Canopy_metal.glb",
-          "fbx": "exports/fbx/WL_Market_Canopy_metal.fbx",
+          "glb": "exports\\glb\\WL_Market_Canopy_metal.glb",
+          "fbx": "exports\\fbx\\WL_Market_Canopy_metal.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Bronze"
@@ -27513,8 +27517,8 @@
           ],
           "material": "MI_V2_RoofRose",
           "mesh_name": "WL_Market_Canopy_roof",
-          "glb": "exports/glb/WL_Market_Canopy_roof.glb",
-          "fbx": "exports/fbx/WL_Market_Canopy_roof.fbx",
+          "glb": "exports\\glb\\WL_Market_Canopy_roof.glb",
+          "fbx": "exports\\fbx\\WL_Market_Canopy_roof.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_RoofRose"
@@ -27592,8 +27596,8 @@
           ],
           "material": "MI_V2_RoofLilac",
           "mesh_name": "WL_Market_Canopy_roof_alt",
-          "glb": "exports/glb/WL_Market_Canopy_roof_alt.glb",
-          "fbx": "exports/fbx/WL_Market_Canopy_roof_alt.fbx",
+          "glb": "exports\\glb\\WL_Market_Canopy_roof_alt.glb",
+          "fbx": "exports\\fbx\\WL_Market_Canopy_roof_alt.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_RoofLilac"
@@ -27671,8 +27675,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_Market_Canopy",
-          "glb": "exports/glb/WL_Market_Canopy.glb",
-          "fbx": "exports/fbx/WL_Market_Canopy.fbx",
+          "glb": "exports\\glb\\WL_Market_Canopy.glb",
+          "fbx": "exports\\fbx\\WL_Market_Canopy.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"
@@ -27875,8 +27879,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_Market_Arcade_Insert",
-          "glb": "exports/glb/WL_Market_Arcade_Insert.glb",
-          "fbx": "exports/fbx/WL_Market_Arcade_Insert.fbx",
+          "glb": "exports\\glb\\WL_Market_Arcade_Insert.glb",
+          "fbx": "exports\\fbx\\WL_Market_Arcade_Insert.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"
@@ -27954,8 +27958,8 @@
           ],
           "material": "MI_V2_Stone",
           "mesh_name": "WL_Market_Arcade_Insert_stone_dark",
-          "glb": "exports/glb/WL_Market_Arcade_Insert_stone_dark.glb",
-          "fbx": "exports/fbx/WL_Market_Arcade_Insert_stone_dark.fbx",
+          "glb": "exports\\glb\\WL_Market_Arcade_Insert_stone_dark.glb",
+          "fbx": "exports\\fbx\\WL_Market_Arcade_Insert_stone_dark.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Stone"
@@ -28134,8 +28138,8 @@
           ],
           "material": "MI_V2_Gold",
           "mesh_name": "WL_Market_Hanging_Sign_gold",
-          "glb": "exports/glb/WL_Market_Hanging_Sign_gold.glb",
-          "fbx": "exports/fbx/WL_Market_Hanging_Sign_gold.fbx",
+          "glb": "exports\\glb\\WL_Market_Hanging_Sign_gold.glb",
+          "fbx": "exports\\fbx\\WL_Market_Hanging_Sign_gold.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Gold"
@@ -28213,8 +28217,8 @@
           ],
           "material": "MI_V2_Bronze",
           "mesh_name": "WL_Market_Hanging_Sign_metal",
-          "glb": "exports/glb/WL_Market_Hanging_Sign_metal.glb",
-          "fbx": "exports/fbx/WL_Market_Hanging_Sign_metal.fbx",
+          "glb": "exports\\glb\\WL_Market_Hanging_Sign_metal.glb",
+          "fbx": "exports\\fbx\\WL_Market_Hanging_Sign_metal.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Bronze"
@@ -28292,8 +28296,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_Market_Hanging_Sign",
-          "glb": "exports/glb/WL_Market_Hanging_Sign.glb",
-          "fbx": "exports/fbx/WL_Market_Hanging_Sign.fbx",
+          "glb": "exports\\glb\\WL_Market_Hanging_Sign.glb",
+          "fbx": "exports\\fbx\\WL_Market_Hanging_Sign.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"
@@ -28495,8 +28499,8 @@
           ],
           "material": "MI_V2_GlassAmber",
           "mesh_name": "WL_Market_Covered_Passage_glass",
-          "glb": "exports/glb/WL_Market_Covered_Passage_glass.glb",
-          "fbx": "exports/fbx/WL_Market_Covered_Passage_glass.fbx",
+          "glb": "exports\\glb\\WL_Market_Covered_Passage_glass.glb",
+          "fbx": "exports\\fbx\\WL_Market_Covered_Passage_glass.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_GlassAmber"
@@ -28574,8 +28578,8 @@
           ],
           "material": "MI_V2_Gold",
           "mesh_name": "WL_Market_Covered_Passage_gold",
-          "glb": "exports/glb/WL_Market_Covered_Passage_gold.glb",
-          "fbx": "exports/fbx/WL_Market_Covered_Passage_gold.fbx",
+          "glb": "exports\\glb\\WL_Market_Covered_Passage_gold.glb",
+          "fbx": "exports\\fbx\\WL_Market_Covered_Passage_gold.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Gold"
@@ -28653,8 +28657,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_Market_Covered_Passage",
-          "glb": "exports/glb/WL_Market_Covered_Passage.glb",
-          "fbx": "exports/fbx/WL_Market_Covered_Passage.fbx",
+          "glb": "exports\\glb\\WL_Market_Covered_Passage.glb",
+          "fbx": "exports\\fbx\\WL_Market_Covered_Passage.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"
@@ -28732,8 +28736,8 @@
           ],
           "material": "MI_V2_Stone",
           "mesh_name": "WL_Market_Covered_Passage_stone_dark",
-          "glb": "exports/glb/WL_Market_Covered_Passage_stone_dark.glb",
-          "fbx": "exports/fbx/WL_Market_Covered_Passage_stone_dark.fbx",
+          "glb": "exports\\glb\\WL_Market_Covered_Passage_stone_dark.glb",
+          "fbx": "exports\\fbx\\WL_Market_Covered_Passage_stone_dark.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Stone"
@@ -28927,8 +28931,8 @@
           ],
           "material": "MI_V2_GlassAmber",
           "mesh_name": "WL_Market_Corner_Storefront_glass",
-          "glb": "exports/glb/WL_Market_Corner_Storefront_glass.glb",
-          "fbx": "exports/fbx/WL_Market_Corner_Storefront_glass.fbx",
+          "glb": "exports\\glb\\WL_Market_Corner_Storefront_glass.glb",
+          "fbx": "exports\\fbx\\WL_Market_Corner_Storefront_glass.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_GlassAmber"
@@ -29006,8 +29010,8 @@
           ],
           "material": "MI_V2_Gold",
           "mesh_name": "WL_Market_Corner_Storefront_gold",
-          "glb": "exports/glb/WL_Market_Corner_Storefront_gold.glb",
-          "fbx": "exports/fbx/WL_Market_Corner_Storefront_gold.fbx",
+          "glb": "exports\\glb\\WL_Market_Corner_Storefront_gold.glb",
+          "fbx": "exports\\fbx\\WL_Market_Corner_Storefront_gold.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Gold"
@@ -29085,8 +29089,8 @@
           ],
           "material": "MI_V2_RoofRose",
           "mesh_name": "WL_Market_Corner_Storefront_roof",
-          "glb": "exports/glb/WL_Market_Corner_Storefront_roof.glb",
-          "fbx": "exports/fbx/WL_Market_Corner_Storefront_roof.fbx",
+          "glb": "exports\\glb\\WL_Market_Corner_Storefront_roof.glb",
+          "fbx": "exports\\fbx\\WL_Market_Corner_Storefront_roof.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_RoofRose"
@@ -29164,8 +29168,8 @@
           ],
           "material": "MI_V2_RoofLilac",
           "mesh_name": "WL_Market_Corner_Storefront_roof_alt",
-          "glb": "exports/glb/WL_Market_Corner_Storefront_roof_alt.glb",
-          "fbx": "exports/fbx/WL_Market_Corner_Storefront_roof_alt.fbx",
+          "glb": "exports\\glb\\WL_Market_Corner_Storefront_roof_alt.glb",
+          "fbx": "exports\\fbx\\WL_Market_Corner_Storefront_roof_alt.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_RoofLilac"
@@ -29243,8 +29247,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_Market_Corner_Storefront",
-          "glb": "exports/glb/WL_Market_Corner_Storefront.glb",
-          "fbx": "exports/fbx/WL_Market_Corner_Storefront.fbx",
+          "glb": "exports\\glb\\WL_Market_Corner_Storefront.glb",
+          "fbx": "exports\\fbx\\WL_Market_Corner_Storefront.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"
@@ -29322,8 +29326,8 @@
           ],
           "material": "MI_V2_Stone",
           "mesh_name": "WL_Market_Corner_Storefront_stone_dark",
-          "glb": "exports/glb/WL_Market_Corner_Storefront_stone_dark.glb",
-          "fbx": "exports/fbx/WL_Market_Corner_Storefront_stone_dark.fbx",
+          "glb": "exports\\glb\\WL_Market_Corner_Storefront_stone_dark.glb",
+          "fbx": "exports\\fbx\\WL_Market_Corner_Storefront_stone_dark.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Stone"
@@ -29508,8 +29512,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_Detail_Balustrade_Run",
-          "glb": "exports/glb/WL_Detail_Balustrade_Run.glb",
-          "fbx": "exports/fbx/WL_Detail_Balustrade_Run.fbx",
+          "glb": "exports\\glb\\WL_Detail_Balustrade_Run.glb",
+          "fbx": "exports\\fbx\\WL_Detail_Balustrade_Run.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"
@@ -29683,8 +29687,8 @@
           ],
           "material": "MI_V2_Gold",
           "mesh_name": "WL_Detail_Newel_Urn_gold",
-          "glb": "exports/glb/WL_Detail_Newel_Urn_gold.glb",
-          "fbx": "exports/fbx/WL_Detail_Newel_Urn_gold.fbx",
+          "glb": "exports\\glb\\WL_Detail_Newel_Urn_gold.glb",
+          "fbx": "exports\\fbx\\WL_Detail_Newel_Urn_gold.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Gold"
@@ -29762,8 +29766,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_Detail_Newel_Urn",
-          "glb": "exports/glb/WL_Detail_Newel_Urn.glb",
-          "fbx": "exports/fbx/WL_Detail_Newel_Urn.fbx",
+          "glb": "exports\\glb\\WL_Detail_Newel_Urn.glb",
+          "fbx": "exports\\fbx\\WL_Detail_Newel_Urn.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"
@@ -29945,8 +29949,8 @@
           ],
           "material": "MI_V2_Gold",
           "mesh_name": "WL_Detail_Screen_Filigree_gold",
-          "glb": "exports/glb/WL_Detail_Screen_Filigree_gold.glb",
-          "fbx": "exports/fbx/WL_Detail_Screen_Filigree_gold.fbx",
+          "glb": "exports\\glb\\WL_Detail_Screen_Filigree_gold.glb",
+          "fbx": "exports\\fbx\\WL_Detail_Screen_Filigree_gold.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Gold"
@@ -30024,8 +30028,8 @@
           ],
           "material": "MI_V2_GoldAged",
           "mesh_name": "WL_Detail_Screen_Filigree_gold_aged",
-          "glb": "exports/glb/WL_Detail_Screen_Filigree_gold_aged.glb",
-          "fbx": "exports/fbx/WL_Detail_Screen_Filigree_gold_aged.fbx",
+          "glb": "exports\\glb\\WL_Detail_Screen_Filigree_gold_aged.glb",
+          "fbx": "exports\\fbx\\WL_Detail_Screen_Filigree_gold_aged.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_GoldAged"
@@ -30103,8 +30107,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_Detail_Screen_Filigree",
-          "glb": "exports/glb/WL_Detail_Screen_Filigree.glb",
-          "fbx": "exports/fbx/WL_Detail_Screen_Filigree.fbx",
+          "glb": "exports\\glb\\WL_Detail_Screen_Filigree.glb",
+          "fbx": "exports\\fbx\\WL_Detail_Screen_Filigree.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"
@@ -30182,8 +30186,8 @@
           ],
           "material": "MI_V2_LeafMid",
           "mesh_name": "WL_Detail_Screen_Filigree_veg_anchor",
-          "glb": "exports/glb/WL_Detail_Screen_Filigree_veg_anchor.glb",
-          "fbx": "exports/fbx/WL_Detail_Screen_Filigree_veg_anchor.fbx",
+          "glb": "exports\\glb\\WL_Detail_Screen_Filigree_veg_anchor.glb",
+          "fbx": "exports\\fbx\\WL_Detail_Screen_Filigree_veg_anchor.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_LeafMid"
@@ -30350,8 +30354,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_Detail_Balcony_Bracket",
-          "glb": "exports/glb/WL_Detail_Balcony_Bracket.glb",
-          "fbx": "exports/fbx/WL_Detail_Balcony_Bracket.fbx",
+          "glb": "exports\\glb\\WL_Detail_Balcony_Bracket.glb",
+          "fbx": "exports\\fbx\\WL_Detail_Balcony_Bracket.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"
@@ -30517,8 +30521,8 @@
           ],
           "material": "MI_V2_Gold",
           "mesh_name": "WL_Detail_Pinnacle_Grand_gold",
-          "glb": "exports/glb/WL_Detail_Pinnacle_Grand_gold.glb",
-          "fbx": "exports/fbx/WL_Detail_Pinnacle_Grand_gold.fbx",
+          "glb": "exports\\glb\\WL_Detail_Pinnacle_Grand_gold.glb",
+          "fbx": "exports\\fbx\\WL_Detail_Pinnacle_Grand_gold.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Gold"
@@ -30596,8 +30600,8 @@
           ],
           "material": "MI_V2_RoofRose",
           "mesh_name": "WL_Detail_Pinnacle_Grand_roof",
-          "glb": "exports/glb/WL_Detail_Pinnacle_Grand_roof.glb",
-          "fbx": "exports/fbx/WL_Detail_Pinnacle_Grand_roof.fbx",
+          "glb": "exports\\glb\\WL_Detail_Pinnacle_Grand_roof.glb",
+          "fbx": "exports\\fbx\\WL_Detail_Pinnacle_Grand_roof.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_RoofRose"
@@ -30675,8 +30679,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_Detail_Pinnacle_Grand",
-          "glb": "exports/glb/WL_Detail_Pinnacle_Grand.glb",
-          "fbx": "exports/fbx/WL_Detail_Pinnacle_Grand.fbx",
+          "glb": "exports\\glb\\WL_Detail_Pinnacle_Grand.glb",
+          "fbx": "exports\\fbx\\WL_Detail_Pinnacle_Grand.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"
@@ -30843,8 +30847,8 @@
           ],
           "material": "MI_V2_GlassAmber",
           "mesh_name": "WL_Detail_Oriel_Bay_glass",
-          "glb": "exports/glb/WL_Detail_Oriel_Bay_glass.glb",
-          "fbx": "exports/fbx/WL_Detail_Oriel_Bay_glass.fbx",
+          "glb": "exports\\glb\\WL_Detail_Oriel_Bay_glass.glb",
+          "fbx": "exports\\fbx\\WL_Detail_Oriel_Bay_glass.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_GlassAmber"
@@ -30922,8 +30926,8 @@
           ],
           "material": "MI_V2_Gold",
           "mesh_name": "WL_Detail_Oriel_Bay_gold",
-          "glb": "exports/glb/WL_Detail_Oriel_Bay_gold.glb",
-          "fbx": "exports/fbx/WL_Detail_Oriel_Bay_gold.fbx",
+          "glb": "exports\\glb\\WL_Detail_Oriel_Bay_gold.glb",
+          "fbx": "exports\\fbx\\WL_Detail_Oriel_Bay_gold.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Gold"
@@ -31001,8 +31005,8 @@
           ],
           "material": "MI_V2_RoofLilac",
           "mesh_name": "WL_Detail_Oriel_Bay_roof_alt",
-          "glb": "exports/glb/WL_Detail_Oriel_Bay_roof_alt.glb",
-          "fbx": "exports/fbx/WL_Detail_Oriel_Bay_roof_alt.fbx",
+          "glb": "exports\\glb\\WL_Detail_Oriel_Bay_roof_alt.glb",
+          "fbx": "exports\\fbx\\WL_Detail_Oriel_Bay_roof_alt.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_RoofLilac"
@@ -31080,8 +31084,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_Detail_Oriel_Bay",
-          "glb": "exports/glb/WL_Detail_Oriel_Bay.glb",
-          "fbx": "exports/fbx/WL_Detail_Oriel_Bay.fbx",
+          "glb": "exports\\glb\\WL_Detail_Oriel_Bay.glb",
+          "fbx": "exports\\fbx\\WL_Detail_Oriel_Bay.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"
@@ -31274,8 +31278,8 @@
           ],
           "material": "MI_V2_GlassAmber",
           "mesh_name": "WL_Hero_GreatSpire_glass",
-          "glb": "exports/glb/WL_Hero_GreatSpire_glass.glb",
-          "fbx": "exports/fbx/WL_Hero_GreatSpire_glass.fbx",
+          "glb": "exports\\glb\\WL_Hero_GreatSpire_glass.glb",
+          "fbx": "exports\\fbx\\WL_Hero_GreatSpire_glass.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_GlassAmber"
@@ -31353,8 +31357,8 @@
           ],
           "material": "MI_V2_GlassTeal",
           "mesh_name": "WL_Hero_GreatSpire_glass_cool",
-          "glb": "exports/glb/WL_Hero_GreatSpire_glass_cool.glb",
-          "fbx": "exports/fbx/WL_Hero_GreatSpire_glass_cool.fbx",
+          "glb": "exports\\glb\\WL_Hero_GreatSpire_glass_cool.glb",
+          "fbx": "exports\\fbx\\WL_Hero_GreatSpire_glass_cool.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_GlassTeal"
@@ -31432,8 +31436,8 @@
           ],
           "material": "MI_V2_Gold",
           "mesh_name": "WL_Hero_GreatSpire_gold",
-          "glb": "exports/glb/WL_Hero_GreatSpire_gold.glb",
-          "fbx": "exports/fbx/WL_Hero_GreatSpire_gold.fbx",
+          "glb": "exports\\glb\\WL_Hero_GreatSpire_gold.glb",
+          "fbx": "exports\\fbx\\WL_Hero_GreatSpire_gold.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Gold"
@@ -31511,8 +31515,8 @@
           ],
           "material": "MI_V2_GoldAged",
           "mesh_name": "WL_Hero_GreatSpire_gold_aged",
-          "glb": "exports/glb/WL_Hero_GreatSpire_gold_aged.glb",
-          "fbx": "exports/fbx/WL_Hero_GreatSpire_gold_aged.fbx",
+          "glb": "exports\\glb\\WL_Hero_GreatSpire_gold_aged.glb",
+          "fbx": "exports\\fbx\\WL_Hero_GreatSpire_gold_aged.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_GoldAged"
@@ -31590,8 +31594,8 @@
           ],
           "material": "MI_V2_RoofRose",
           "mesh_name": "WL_Hero_GreatSpire_roof",
-          "glb": "exports/glb/WL_Hero_GreatSpire_roof.glb",
-          "fbx": "exports/fbx/WL_Hero_GreatSpire_roof.fbx",
+          "glb": "exports\\glb\\WL_Hero_GreatSpire_roof.glb",
+          "fbx": "exports\\fbx\\WL_Hero_GreatSpire_roof.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_RoofRose"
@@ -31669,8 +31673,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_Hero_GreatSpire",
-          "glb": "exports/glb/WL_Hero_GreatSpire.glb",
-          "fbx": "exports/fbx/WL_Hero_GreatSpire.fbx",
+          "glb": "exports\\glb\\WL_Hero_GreatSpire.glb",
+          "fbx": "exports\\fbx\\WL_Hero_GreatSpire.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"
@@ -31748,8 +31752,8 @@
           ],
           "material": "MI_V2_Stone",
           "mesh_name": "WL_Hero_GreatSpire_stone_dark",
-          "glb": "exports/glb/WL_Hero_GreatSpire_stone_dark.glb",
-          "fbx": "exports/fbx/WL_Hero_GreatSpire_stone_dark.fbx",
+          "glb": "exports\\glb\\WL_Hero_GreatSpire_stone_dark.glb",
+          "fbx": "exports\\fbx\\WL_Hero_GreatSpire_stone_dark.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Stone"
@@ -31932,8 +31936,8 @@
           ],
           "material": "MI_V2_GlassAmber",
           "mesh_name": "WL_Hero_Gate_Royal_glass",
-          "glb": "exports/glb/WL_Hero_Gate_Royal_glass.glb",
-          "fbx": "exports/fbx/WL_Hero_Gate_Royal_glass.fbx",
+          "glb": "exports\\glb\\WL_Hero_Gate_Royal_glass.glb",
+          "fbx": "exports\\fbx\\WL_Hero_Gate_Royal_glass.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_GlassAmber"
@@ -32011,8 +32015,8 @@
           ],
           "material": "MI_V2_Gold",
           "mesh_name": "WL_Hero_Gate_Royal_gold",
-          "glb": "exports/glb/WL_Hero_Gate_Royal_gold.glb",
-          "fbx": "exports/fbx/WL_Hero_Gate_Royal_gold.fbx",
+          "glb": "exports\\glb\\WL_Hero_Gate_Royal_gold.glb",
+          "fbx": "exports\\fbx\\WL_Hero_Gate_Royal_gold.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Gold"
@@ -32090,8 +32094,8 @@
           ],
           "material": "MI_V2_RoofRose",
           "mesh_name": "WL_Hero_Gate_Royal_roof",
-          "glb": "exports/glb/WL_Hero_Gate_Royal_roof.glb",
-          "fbx": "exports/fbx/WL_Hero_Gate_Royal_roof.fbx",
+          "glb": "exports\\glb\\WL_Hero_Gate_Royal_roof.glb",
+          "fbx": "exports\\fbx\\WL_Hero_Gate_Royal_roof.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_RoofRose"
@@ -32169,8 +32173,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_Hero_Gate_Royal",
-          "glb": "exports/glb/WL_Hero_Gate_Royal.glb",
-          "fbx": "exports/fbx/WL_Hero_Gate_Royal.fbx",
+          "glb": "exports\\glb\\WL_Hero_Gate_Royal.glb",
+          "fbx": "exports\\fbx\\WL_Hero_Gate_Royal.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"
@@ -32248,8 +32252,8 @@
           ],
           "material": "MI_V2_Stone",
           "mesh_name": "WL_Hero_Gate_Royal_stone_dark",
-          "glb": "exports/glb/WL_Hero_Gate_Royal_stone_dark.glb",
-          "fbx": "exports/fbx/WL_Hero_Gate_Royal_stone_dark.fbx",
+          "glb": "exports\\glb\\WL_Hero_Gate_Royal_stone_dark.glb",
+          "fbx": "exports\\fbx\\WL_Hero_Gate_Royal_stone_dark.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Stone"
@@ -32327,8 +32331,8 @@
           ],
           "material": "MI_V2_LeafMid",
           "mesh_name": "WL_Hero_Gate_Royal_veg_anchor",
-          "glb": "exports/glb/WL_Hero_Gate_Royal_veg_anchor.glb",
-          "fbx": "exports/fbx/WL_Hero_Gate_Royal_veg_anchor.fbx",
+          "glb": "exports\\glb\\WL_Hero_Gate_Royal_veg_anchor.glb",
+          "fbx": "exports\\fbx\\WL_Hero_Gate_Royal_veg_anchor.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_LeafMid"
@@ -32354,6 +32358,1002 @@
         }
       },
       "part_count": 6
+    },
+    {
+      "asset_id": "WL_Sky_Island_Small",
+      "kit_version": "1.0.0",
+      "family": "sky_island",
+      "family_group": "sky",
+      "category": "landmark",
+      "silhouette_role": "terrace",
+      "note": "9 m lawn in a stone lip over a hanging rock underside; one tower's footing",
+      "districts": [
+        "sky"
+      ],
+      "params": {
+        "top_radius_m": 4.6,
+        "underside_depth_m": 7.5,
+        "hanging_masses": 4
+      },
+      "origin_rule": "z = 0 is the GROUND DATUM; +X is the module front. excavation_uu is how far the module is cut in below it.",
+      "excavation_uu": 750.0,
+      "mounts_on": null,
+      "variant_of": null,
+      "units": {
+        "authored": "metres",
+        "manifest": "unreal units (cm)",
+        "uu_per_metre": 100.0
+      },
+      "height_uu": 790.0,
+      "bbox_min_uu": [
+        -506.0,
+        -506.0,
+        -750.0
+      ],
+      "bbox_max_uu": [
+        506.0,
+        506.0,
+        40.0
+      ],
+      "size_uu": [
+        1012.0,
+        1012.0,
+        790.0
+      ],
+      "style": {
+        "slender_broad": 0.821,
+        "low_monumental": 0.362,
+        "open_solid": 1.0,
+        "gold_stone": 1.0,
+        "pristine_aged": 0.0,
+        "garden_urban": null,
+        "ceremonial_residential": 0.3
+      },
+      "base_z_uu": -750.0,
+      "profile_uu": [
+        28.33,
+        28.33,
+        72.21,
+        228.56,
+        257.12,
+        275.96,
+        300.4,
+        350.01,
+        356.55,
+        391.8,
+        506.0,
+        498.0
+      ],
+      "radius_uu": 506.0,
+      "tris_total": 992,
+      "tri_budget": 6000,
+      "over_budget": false,
+      "nanite_recommended": false,
+      "nanite_rule": "recommended when the module is >= 5000 triangles and the builder has not opted out",
+      "collision_recommended": false,
+      "uv": "planar-world-2m (not a lightmap unwrap)",
+      "sockets": [
+        {
+          "name": "bottom",
+          "kind": "ground",
+          "z_uu": 0.0,
+          "radius_uu": 460.0,
+          "rung": "L",
+          "note": "the island's own lawn: a kit foot stands here as on the world's ground"
+        },
+        {
+          "name": "edge",
+          "kind": "edge",
+          "z_uu": 40.0,
+          "radius_uu": 506.0,
+          "rung": null,
+          "note": "the stone lip"
+        }
+      ],
+      "parts": {
+        "lawn": {
+          "verts": 58,
+          "faces": 84,
+          "tris": 112,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_Lawn"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -460.0,
+            -460.0,
+            -30.0
+          ],
+          "bbox_max_uu": [
+            460.0,
+            460.0,
+            0.0
+          ],
+          "size_uu": [
+            920.0,
+            920.0,
+            30.0
+          ],
+          "height_m": 0.3,
+          "base_z_uu": -30.0,
+          "normals": {
+            "faces": 84,
+            "shells": 1,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 1,
+            "zero_normal_faces": 0
+          },
+          "profile_uu": [
+            460.0,
+            460.0,
+            460.0,
+            460.0,
+            460.0,
+            460.0,
+            460.0,
+            460.0,
+            460.0,
+            460.0,
+            460.0,
+            460.0
+          ],
+          "material": "MI_V2_Lawn",
+          "mesh_name": "WL_Sky_Island_Small_lawn",
+          "glb": "exports\\glb\\WL_Sky_Island_Small_lawn.glb",
+          "fbx": "exports\\fbx\\WL_Sky_Island_Small_lawn.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_Lawn"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -4.599999904632568,
+              -0.30000001192092896,
+              -4.599999904632568
+            ],
+            "max_yup": [
+              4.599999904632568,
+              0,
+              4.599999904632568
+            ],
+            "bytes": 5816
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": -30.000001907348633,
+            "stored_z_max": 0.0
+          }
+        },
+        "stone": {
+          "verts": 168,
+          "faces": 140,
+          "tris": 280,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_IvoryStone"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -506.0,
+            -506.0,
+            -75.0
+          ],
+          "bbox_max_uu": [
+            506.0,
+            506.0,
+            40.0
+          ],
+          "size_uu": [
+            1012.0,
+            1012.0,
+            115.0
+          ],
+          "height_m": 1.15,
+          "base_z_uu": -75.0,
+          "normals": {
+            "faces": 140,
+            "shells": 1,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 0,
+            "zero_normal_faces": 0
+          },
+          "profile_uu": [
+            498.0,
+            498.0,
+            498.0,
+            506.0,
+            506.0,
+            506.0,
+            506.0,
+            506.0,
+            506.0,
+            506.0,
+            506.0,
+            498.0
+          ],
+          "material": "MI_V2_IvoryStone",
+          "mesh_name": "WL_Sky_Island_Small",
+          "glb": "exports\\glb\\WL_Sky_Island_Small.glb",
+          "fbx": "exports\\fbx\\WL_Sky_Island_Small.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_IvoryStone"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -5.059999942779541,
+              -0.75,
+              -5.059999942779541
+            ],
+            "max_yup": [
+              5.059999942779541,
+              0.4000000059604645,
+              5.059999942779541
+            ],
+            "bytes": 17268
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": -75.0,
+            "stored_z_max": 40.0
+          }
+        },
+        "stone_dark": {
+          "verts": 333,
+          "faces": 328,
+          "tris": 600,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_Stone"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -469.2,
+            -469.2,
+            -750.0
+          ],
+          "bbox_max_uu": [
+            469.2,
+            469.2,
+            -55.0
+          ],
+          "size_uu": [
+            938.4,
+            938.4,
+            695.0
+          ],
+          "height_m": 6.95,
+          "base_z_uu": -750.0,
+          "normals": {
+            "faces": 328,
+            "shells": 5,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 0,
+            "zero_normal_faces": 0
+          },
+          "profile_uu": [
+            28.33,
+            28.33,
+            28.33,
+            228.56,
+            257.12,
+            244.52,
+            275.96,
+            300.4,
+            327.53,
+            350.01,
+            391.8,
+            469.2
+          ],
+          "material": "MI_V2_Stone",
+          "mesh_name": "WL_Sky_Island_Small_stone_dark",
+          "glb": "exports\\glb\\WL_Sky_Island_Small_stone_dark.glb",
+          "fbx": "exports\\fbx\\WL_Sky_Island_Small_stone_dark.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_Stone"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -4.691999912261963,
+              -7.5,
+              -4.691999912261963
+            ],
+            "max_yup": [
+              4.691999912261963,
+              -0.550000011920929,
+              4.691999912261963
+            ],
+            "bytes": 45068
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": -750.0,
+            "stored_z_max": -55.0
+          }
+        }
+      },
+      "part_count": 3
+    },
+    {
+      "asset_id": "WL_Sky_Island_Medium",
+      "kit_version": "1.0.0",
+      "family": "sky_island",
+      "family_group": "sky",
+      "category": "landmark",
+      "silhouette_role": "terrace",
+      "note": "16 m lawn over a 12 m rock underside; a small castle's footing",
+      "districts": [
+        "sky"
+      ],
+      "params": {
+        "top_radius_m": 8.0,
+        "underside_depth_m": 12.0,
+        "hanging_masses": 5
+      },
+      "origin_rule": "z = 0 is the GROUND DATUM; +X is the module front. excavation_uu is how far the module is cut in below it.",
+      "excavation_uu": 1200.0,
+      "mounts_on": null,
+      "variant_of": null,
+      "units": {
+        "authored": "metres",
+        "manifest": "unreal units (cm)",
+        "uu_per_metre": 100.0
+      },
+      "height_uu": 1240.0,
+      "bbox_min_uu": [
+        -846.0,
+        -846.0,
+        -1200.0
+      ],
+      "bbox_max_uu": [
+        846.0,
+        846.0,
+        40.0
+      ],
+      "size_uu": [
+        1692.0,
+        1692.0,
+        1240.0
+      ],
+      "style": {
+        "slender_broad": 0.846,
+        "low_monumental": 0.504,
+        "open_solid": 1.0,
+        "gold_stone": 1.0,
+        "pristine_aged": 0.0,
+        "garden_urban": null,
+        "ceremonial_residential": 0.3
+      },
+      "base_z_uu": -1200.0,
+      "profile_uu": [
+        49.26,
+        49.26,
+        125.58,
+        346.51,
+        460.23,
+        476.22,
+        511.09,
+        556.33,
+        608.72,
+        681.4,
+        838.0,
+        846.0
+      ],
+      "radius_uu": 846.0,
+      "tris_total": 1082,
+      "tri_budget": 6000,
+      "over_budget": false,
+      "nanite_recommended": false,
+      "nanite_rule": "recommended when the module is >= 5000 triangles and the builder has not opted out",
+      "collision_recommended": false,
+      "uv": "planar-world-2m (not a lightmap unwrap)",
+      "sockets": [
+        {
+          "name": "bottom",
+          "kind": "ground",
+          "z_uu": 0.0,
+          "radius_uu": 800.0,
+          "rung": null,
+          "note": "the island's own lawn: a kit foot stands here as on the world's ground"
+        },
+        {
+          "name": "edge",
+          "kind": "edge",
+          "z_uu": 40.0,
+          "radius_uu": 846.0,
+          "rung": null,
+          "note": "the stone lip"
+        }
+      ],
+      "parts": {
+        "lawn": {
+          "verts": 58,
+          "faces": 84,
+          "tris": 112,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_Lawn"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -800.0,
+            -800.0,
+            -30.0
+          ],
+          "bbox_max_uu": [
+            800.0,
+            800.0,
+            0.0
+          ],
+          "size_uu": [
+            1600.0,
+            1600.0,
+            30.0
+          ],
+          "height_m": 0.3,
+          "base_z_uu": -30.0,
+          "normals": {
+            "faces": 84,
+            "shells": 1,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 1,
+            "zero_normal_faces": 0
+          },
+          "profile_uu": [
+            800.0,
+            800.0,
+            800.0,
+            800.0,
+            800.0,
+            800.0,
+            800.0,
+            800.0,
+            800.0,
+            800.0,
+            800.0,
+            800.0
+          ],
+          "material": "MI_V2_Lawn",
+          "mesh_name": "WL_Sky_Island_Medium_lawn",
+          "glb": "exports\\glb\\WL_Sky_Island_Medium_lawn.glb",
+          "fbx": "exports\\fbx\\WL_Sky_Island_Medium_lawn.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_Lawn"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -8,
+              -0.30000001192092896,
+              -8
+            ],
+            "max_yup": [
+              8,
+              0,
+              8
+            ],
+            "bytes": 5752
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": -30.000001907348633,
+            "stored_z_max": 0.0
+          }
+        },
+        "stone": {
+          "verts": 168,
+          "faces": 140,
+          "tris": 280,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_IvoryStone"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -846.0,
+            -846.0,
+            -75.0
+          ],
+          "bbox_max_uu": [
+            846.0,
+            846.0,
+            40.0
+          ],
+          "size_uu": [
+            1692.0,
+            1692.0,
+            115.0
+          ],
+          "height_m": 1.15,
+          "base_z_uu": -75.0,
+          "normals": {
+            "faces": 140,
+            "shells": 1,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 0,
+            "zero_normal_faces": 0
+          },
+          "profile_uu": [
+            838.0,
+            838.0,
+            838.0,
+            846.0,
+            846.0,
+            846.0,
+            846.0,
+            846.0,
+            846.0,
+            846.0,
+            846.0,
+            838.0
+          ],
+          "material": "MI_V2_IvoryStone",
+          "mesh_name": "WL_Sky_Island_Medium",
+          "glb": "exports\\glb\\WL_Sky_Island_Medium.glb",
+          "fbx": "exports\\fbx\\WL_Sky_Island_Medium.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_IvoryStone"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -8.460000038146973,
+              -0.75,
+              -8.460000038146973
+            ],
+            "max_yup": [
+              8.460000038146973,
+              0.4000000059604645,
+              8.460000038146973
+            ],
+            "bytes": 17272
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": -75.0,
+            "stored_z_max": 40.0
+          }
+        },
+        "stone_dark": {
+          "verts": 384,
+          "faces": 378,
+          "tris": 690,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_Stone"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -816.0,
+            -816.0,
+            -1200.0
+          ],
+          "bbox_max_uu": [
+            816.0,
+            816.0,
+            -55.0
+          ],
+          "size_uu": [
+            1632.0,
+            1632.0,
+            1145.0
+          ],
+          "height_m": 11.45,
+          "base_z_uu": -1200.0,
+          "normals": {
+            "faces": 378,
+            "shells": 6,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 0,
+            "zero_normal_faces": 0
+          },
+          "profile_uu": [
+            49.26,
+            49.26,
+            49.26,
+            125.58,
+            346.51,
+            460.23,
+            496.65,
+            543.91,
+            556.33,
+            608.72,
+            681.4,
+            816.0
+          ],
+          "material": "MI_V2_Stone",
+          "mesh_name": "WL_Sky_Island_Medium_stone_dark",
+          "glb": "exports\\glb\\WL_Sky_Island_Medium_stone_dark.glb",
+          "fbx": "exports\\fbx\\WL_Sky_Island_Medium_stone_dark.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_Stone"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -8.15999984741211,
+              -12,
+              -8.15999984741211
+            ],
+            "max_yup": [
+              8.15999984741211,
+              -0.550000011920929,
+              8.15999984741211
+            ],
+            "bytes": 51688
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": -1200.0,
+            "stored_z_max": -55.0
+          }
+        }
+      },
+      "part_count": 3
+    },
+    {
+      "asset_id": "WL_Sky_Island_Large",
+      "kit_version": "1.0.0",
+      "family": "sky_island",
+      "family_group": "sky",
+      "category": "landmark",
+      "silhouette_role": "terrace",
+      "note": "26 m lawn over an 18 m rock underside; a castle group's footing",
+      "districts": [
+        "sky"
+      ],
+      "params": {
+        "top_radius_m": 13.0,
+        "underside_depth_m": 18.0,
+        "hanging_masses": 7
+      },
+      "origin_rule": "z = 0 is the GROUND DATUM; +X is the module front. excavation_uu is how far the module is cut in below it.",
+      "excavation_uu": 1800.0,
+      "mounts_on": null,
+      "variant_of": null,
+      "units": {
+        "authored": "metres",
+        "manifest": "unreal units (cm)",
+        "uu_per_metre": 100.0
+      },
+      "height_uu": 1840.0,
+      "bbox_min_uu": [
+        -1346.0,
+        -1346.0,
+        -1800.0
+      ],
+      "bbox_max_uu": [
+        1346.0,
+        1346.0,
+        40.0
+      ],
+      "size_uu": [
+        2692.0,
+        2692.0,
+        1840.0
+      ],
+      "style": {
+        "slender_broad": 0.874,
+        "low_monumental": 0.628,
+        "open_solid": 1.0,
+        "gold_stone": 1.0,
+        "pristine_aged": 0.0,
+        "garden_urban": null,
+        "ceremonial_residential": 0.3
+      },
+      "base_z_uu": -1800.0,
+      "profile_uu": [
+        80.05,
+        80.05,
+        204.06,
+        204.06,
+        690.77,
+        587.88,
+        750.41,
+        827.79,
+        989.17,
+        1107.27,
+        1008.78,
+        1346.0
+      ],
+      "radius_uu": 1346.0,
+      "tris_total": 1262,
+      "tri_budget": 6000,
+      "over_budget": false,
+      "nanite_recommended": false,
+      "nanite_rule": "recommended when the module is >= 5000 triangles and the builder has not opted out",
+      "collision_recommended": false,
+      "uv": "planar-world-2m (not a lightmap unwrap)",
+      "sockets": [
+        {
+          "name": "bottom",
+          "kind": "ground",
+          "z_uu": 0.0,
+          "radius_uu": 1300.0,
+          "rung": null,
+          "note": "the island's own lawn: a kit foot stands here as on the world's ground"
+        },
+        {
+          "name": "edge",
+          "kind": "edge",
+          "z_uu": 40.0,
+          "radius_uu": 1346.0,
+          "rung": null,
+          "note": "the stone lip"
+        }
+      ],
+      "parts": {
+        "lawn": {
+          "verts": 58,
+          "faces": 84,
+          "tris": 112,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_Lawn"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -1300.0,
+            -1300.0,
+            -30.0
+          ],
+          "bbox_max_uu": [
+            1300.0,
+            1300.0,
+            0.0
+          ],
+          "size_uu": [
+            2600.0,
+            2600.0,
+            30.0
+          ],
+          "height_m": 0.3,
+          "base_z_uu": -30.0,
+          "normals": {
+            "faces": 84,
+            "shells": 1,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 1,
+            "zero_normal_faces": 0
+          },
+          "profile_uu": [
+            1300.0,
+            1300.0,
+            1300.0,
+            1300.0,
+            1300.0,
+            1300.0,
+            1300.0,
+            1300.0,
+            1300.0,
+            1300.0,
+            1300.0,
+            1300.0
+          ],
+          "material": "MI_V2_Lawn",
+          "mesh_name": "WL_Sky_Island_Large_lawn",
+          "glb": "exports\\glb\\WL_Sky_Island_Large_lawn.glb",
+          "fbx": "exports\\fbx\\WL_Sky_Island_Large_lawn.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_Lawn"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -13,
+              -0.30000001192092896,
+              -13
+            ],
+            "max_yup": [
+              13,
+              0,
+              13
+            ],
+            "bytes": 5756
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": -30.000001907348633,
+            "stored_z_max": 0.0
+          }
+        },
+        "stone": {
+          "verts": 168,
+          "faces": 140,
+          "tris": 280,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_IvoryStone"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -1346.0,
+            -1346.0,
+            -75.0
+          ],
+          "bbox_max_uu": [
+            1346.0,
+            1346.0,
+            40.0
+          ],
+          "size_uu": [
+            2692.0,
+            2692.0,
+            115.0
+          ],
+          "height_m": 1.15,
+          "base_z_uu": -75.0,
+          "normals": {
+            "faces": 140,
+            "shells": 1,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 0,
+            "zero_normal_faces": 0
+          },
+          "profile_uu": [
+            1338.0,
+            1338.0,
+            1338.0,
+            1346.0,
+            1346.0,
+            1346.0,
+            1346.0,
+            1346.0,
+            1346.0,
+            1346.0,
+            1346.0,
+            1338.0
+          ],
+          "material": "MI_V2_IvoryStone",
+          "mesh_name": "WL_Sky_Island_Large",
+          "glb": "exports\\glb\\WL_Sky_Island_Large.glb",
+          "fbx": "exports\\fbx\\WL_Sky_Island_Large.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_IvoryStone"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -13.460000038146973,
+              -0.75,
+              -13.460000038146973
+            ],
+            "max_yup": [
+              13.460000038146973,
+              0.4000000059604645,
+              13.460000038146973
+            ],
+            "bytes": 17272
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": -75.0,
+            "stored_z_max": 40.0
+          }
+        },
+        "stone_dark": {
+          "verts": 486,
+          "faces": 478,
+          "tris": 870,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_Stone"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -1326.0,
+            -1326.0,
+            -1800.0
+          ],
+          "bbox_max_uu": [
+            1326.0,
+            1326.0,
+            -55.0
+          ],
+          "size_uu": [
+            2652.0,
+            2652.0,
+            1745.0
+          ],
+          "height_m": 17.45,
+          "base_z_uu": -1800.0,
+          "normals": {
+            "faces": 478,
+            "shells": 8,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 0,
+            "zero_normal_faces": 0
+          },
+          "profile_uu": [
+            80.05,
+            80.05,
+            80.05,
+            204.06,
+            538.14,
+            690.77,
+            750.41,
+            827.79,
+            848.36,
+            989.17,
+            1107.27,
+            1326.0
+          ],
+          "material": "MI_V2_Stone",
+          "mesh_name": "WL_Sky_Island_Large_stone_dark",
+          "glb": "exports\\glb\\WL_Sky_Island_Large_stone_dark.glb",
+          "fbx": "exports\\fbx\\WL_Sky_Island_Large_stone_dark.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_Stone"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -13.260000228881836,
+              -18,
+              -13.260000228881836
+            ],
+            "max_yup": [
+              13.260000228881836,
+              -0.550000011920929,
+              13.260000228881836
+            ],
+            "bytes": 64932
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": -1800.0,
+            "stored_z_max": -55.0
+          }
+        }
+      },
+      "part_count": 3
     },
     {
       "asset_id": "WL_Wall_Curtain_Run__aged",
@@ -32528,8 +33528,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_Wall_Curtain_Run__aged",
-          "glb": "exports/glb/WL_Wall_Curtain_Run__aged.glb",
-          "fbx": "exports/fbx/WL_Wall_Curtain_Run__aged.fbx",
+          "glb": "exports\\glb\\WL_Wall_Curtain_Run__aged.glb",
+          "fbx": "exports\\fbx\\WL_Wall_Curtain_Run__aged.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"
@@ -32607,8 +33607,8 @@
           ],
           "material": "MI_V2_Stone",
           "mesh_name": "WL_Wall_Curtain_Run__aged_stone_dark",
-          "glb": "exports/glb/WL_Wall_Curtain_Run__aged_stone_dark.glb",
-          "fbx": "exports/fbx/WL_Wall_Curtain_Run__aged_stone_dark.fbx",
+          "glb": "exports\\glb\\WL_Wall_Curtain_Run__aged_stone_dark.glb",
+          "fbx": "exports\\fbx\\WL_Wall_Curtain_Run__aged_stone_dark.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Stone"
@@ -32686,8 +33686,8 @@
           ],
           "material": "MI_V2_LeafMid",
           "mesh_name": "WL_Wall_Curtain_Run__aged_veg_anchor",
-          "glb": "exports/glb/WL_Wall_Curtain_Run__aged_veg_anchor.glb",
-          "fbx": "exports/fbx/WL_Wall_Curtain_Run__aged_veg_anchor.fbx",
+          "glb": "exports\\glb\\WL_Wall_Curtain_Run__aged_veg_anchor.glb",
+          "fbx": "exports\\fbx\\WL_Wall_Curtain_Run__aged_veg_anchor.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_LeafMid"
@@ -32885,8 +33885,8 @@
           ],
           "material": "MI_V2_GlassAmber",
           "mesh_name": "WL_Wall_Mural_Tower__ruined_glass",
-          "glb": "exports/glb/WL_Wall_Mural_Tower__ruined_glass.glb",
-          "fbx": "exports/fbx/WL_Wall_Mural_Tower__ruined_glass.fbx",
+          "glb": "exports\\glb\\WL_Wall_Mural_Tower__ruined_glass.glb",
+          "fbx": "exports\\fbx\\WL_Wall_Mural_Tower__ruined_glass.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_GlassAmber"
@@ -32964,8 +33964,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_Wall_Mural_Tower__ruined",
-          "glb": "exports/glb/WL_Wall_Mural_Tower__ruined.glb",
-          "fbx": "exports/fbx/WL_Wall_Mural_Tower__ruined.fbx",
+          "glb": "exports\\glb\\WL_Wall_Mural_Tower__ruined.glb",
+          "fbx": "exports\\fbx\\WL_Wall_Mural_Tower__ruined.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"
@@ -33043,8 +34043,8 @@
           ],
           "material": "MI_V2_Stone",
           "mesh_name": "WL_Wall_Mural_Tower__ruined_stone_dark",
-          "glb": "exports/glb/WL_Wall_Mural_Tower__ruined_stone_dark.glb",
-          "fbx": "exports/fbx/WL_Wall_Mural_Tower__ruined_stone_dark.fbx",
+          "glb": "exports\\glb\\WL_Wall_Mural_Tower__ruined_stone_dark.glb",
+          "fbx": "exports\\fbx\\WL_Wall_Mural_Tower__ruined_stone_dark.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Stone"
@@ -33122,8 +34122,8 @@
           ],
           "material": "MI_V2_LeafMid",
           "mesh_name": "WL_Wall_Mural_Tower__ruined_veg_anchor",
-          "glb": "exports/glb/WL_Wall_Mural_Tower__ruined_veg_anchor.glb",
-          "fbx": "exports/fbx/WL_Wall_Mural_Tower__ruined_veg_anchor.fbx",
+          "glb": "exports\\glb\\WL_Wall_Mural_Tower__ruined_veg_anchor.glb",
+          "fbx": "exports\\fbx\\WL_Wall_Mural_Tower__ruined_veg_anchor.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_LeafMid"
@@ -33303,8 +34303,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_Tower_Base_Buttressed__aged",
-          "glb": "exports/glb/WL_Tower_Base_Buttressed__aged.glb",
-          "fbx": "exports/fbx/WL_Tower_Base_Buttressed__aged.fbx",
+          "glb": "exports\\glb\\WL_Tower_Base_Buttressed__aged.glb",
+          "fbx": "exports\\fbx\\WL_Tower_Base_Buttressed__aged.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"
@@ -33382,8 +34382,8 @@
           ],
           "material": "MI_V2_Stone",
           "mesh_name": "WL_Tower_Base_Buttressed__aged_stone_dark",
-          "glb": "exports/glb/WL_Tower_Base_Buttressed__aged_stone_dark.glb",
-          "fbx": "exports/fbx/WL_Tower_Base_Buttressed__aged_stone_dark.fbx",
+          "glb": "exports\\glb\\WL_Tower_Base_Buttressed__aged_stone_dark.glb",
+          "fbx": "exports\\fbx\\WL_Tower_Base_Buttressed__aged_stone_dark.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Stone"
@@ -33461,8 +34461,8 @@
           ],
           "material": "MI_V2_LeafMid",
           "mesh_name": "WL_Tower_Base_Buttressed__aged_veg_anchor",
-          "glb": "exports/glb/WL_Tower_Base_Buttressed__aged_veg_anchor.glb",
-          "fbx": "exports/fbx/WL_Tower_Base_Buttressed__aged_veg_anchor.fbx",
+          "glb": "exports\\glb\\WL_Tower_Base_Buttressed__aged_veg_anchor.glb",
+          "fbx": "exports\\fbx\\WL_Tower_Base_Buttressed__aged_veg_anchor.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_LeafMid"
@@ -33643,8 +34643,8 @@
           ],
           "material": "MI_V2_GlassAmber",
           "mesh_name": "WL_Gatehouse_Twin__aged_glass",
-          "glb": "exports/glb/WL_Gatehouse_Twin__aged_glass.glb",
-          "fbx": "exports/fbx/WL_Gatehouse_Twin__aged_glass.fbx",
+          "glb": "exports\\glb\\WL_Gatehouse_Twin__aged_glass.glb",
+          "fbx": "exports\\fbx\\WL_Gatehouse_Twin__aged_glass.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_GlassAmber"
@@ -33722,8 +34722,8 @@
           ],
           "material": "MI_V2_Gold",
           "mesh_name": "WL_Gatehouse_Twin__aged_gold",
-          "glb": "exports/glb/WL_Gatehouse_Twin__aged_gold.glb",
-          "fbx": "exports/fbx/WL_Gatehouse_Twin__aged_gold.fbx",
+          "glb": "exports\\glb\\WL_Gatehouse_Twin__aged_gold.glb",
+          "fbx": "exports\\fbx\\WL_Gatehouse_Twin__aged_gold.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Gold"
@@ -33801,8 +34801,8 @@
           ],
           "material": "MI_V2_RoofRose",
           "mesh_name": "WL_Gatehouse_Twin__aged_roof",
-          "glb": "exports/glb/WL_Gatehouse_Twin__aged_roof.glb",
-          "fbx": "exports/fbx/WL_Gatehouse_Twin__aged_roof.fbx",
+          "glb": "exports\\glb\\WL_Gatehouse_Twin__aged_roof.glb",
+          "fbx": "exports\\fbx\\WL_Gatehouse_Twin__aged_roof.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_RoofRose"
@@ -33880,8 +34880,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_Gatehouse_Twin__aged",
-          "glb": "exports/glb/WL_Gatehouse_Twin__aged.glb",
-          "fbx": "exports/fbx/WL_Gatehouse_Twin__aged.fbx",
+          "glb": "exports\\glb\\WL_Gatehouse_Twin__aged.glb",
+          "fbx": "exports\\fbx\\WL_Gatehouse_Twin__aged.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"
@@ -33959,8 +34959,8 @@
           ],
           "material": "MI_V2_Stone",
           "mesh_name": "WL_Gatehouse_Twin__aged_stone_dark",
-          "glb": "exports/glb/WL_Gatehouse_Twin__aged_stone_dark.glb",
-          "fbx": "exports/fbx/WL_Gatehouse_Twin__aged_stone_dark.fbx",
+          "glb": "exports\\glb\\WL_Gatehouse_Twin__aged_stone_dark.glb",
+          "fbx": "exports\\fbx\\WL_Gatehouse_Twin__aged_stone_dark.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Stone"
@@ -34038,8 +35038,8 @@
           ],
           "material": "MI_V2_LeafMid",
           "mesh_name": "WL_Gatehouse_Twin__aged_veg_anchor",
-          "glb": "exports/glb/WL_Gatehouse_Twin__aged_veg_anchor.glb",
-          "fbx": "exports/fbx/WL_Gatehouse_Twin__aged_veg_anchor.fbx",
+          "glb": "exports\\glb\\WL_Gatehouse_Twin__aged_veg_anchor.glb",
+          "fbx": "exports\\fbx\\WL_Gatehouse_Twin__aged_veg_anchor.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_LeafMid"
@@ -34233,8 +35233,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_Colonnade_Arcade__ruined",
-          "glb": "exports/glb/WL_Colonnade_Arcade__ruined.glb",
-          "fbx": "exports/fbx/WL_Colonnade_Arcade__ruined.fbx",
+          "glb": "exports\\glb\\WL_Colonnade_Arcade__ruined.glb",
+          "fbx": "exports\\fbx\\WL_Colonnade_Arcade__ruined.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"
@@ -34312,8 +35312,8 @@
           ],
           "material": "MI_V2_Stone",
           "mesh_name": "WL_Colonnade_Arcade__ruined_stone_dark",
-          "glb": "exports/glb/WL_Colonnade_Arcade__ruined_stone_dark.glb",
-          "fbx": "exports/fbx/WL_Colonnade_Arcade__ruined_stone_dark.fbx",
+          "glb": "exports\\glb\\WL_Colonnade_Arcade__ruined_stone_dark.glb",
+          "fbx": "exports\\fbx\\WL_Colonnade_Arcade__ruined_stone_dark.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Stone"
@@ -34391,8 +35391,8 @@
           ],
           "material": "MI_V2_LeafMid",
           "mesh_name": "WL_Colonnade_Arcade__ruined_veg_anchor",
-          "glb": "exports/glb/WL_Colonnade_Arcade__ruined_veg_anchor.glb",
-          "fbx": "exports/fbx/WL_Colonnade_Arcade__ruined_veg_anchor.fbx",
+          "glb": "exports\\glb\\WL_Colonnade_Arcade__ruined_veg_anchor.glb",
+          "fbx": "exports\\fbx\\WL_Colonnade_Arcade__ruined_veg_anchor.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_LeafMid"
@@ -34583,8 +35583,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_Bridge_Arc__aged",
-          "glb": "exports/glb/WL_Bridge_Arc__aged.glb",
-          "fbx": "exports/fbx/WL_Bridge_Arc__aged.fbx",
+          "glb": "exports\\glb\\WL_Bridge_Arc__aged.glb",
+          "fbx": "exports\\fbx\\WL_Bridge_Arc__aged.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"
@@ -34662,8 +35662,8 @@
           ],
           "material": "MI_V2_Stone",
           "mesh_name": "WL_Bridge_Arc__aged_stone_dark",
-          "glb": "exports/glb/WL_Bridge_Arc__aged_stone_dark.glb",
-          "fbx": "exports/fbx/WL_Bridge_Arc__aged_stone_dark.fbx",
+          "glb": "exports\\glb\\WL_Bridge_Arc__aged_stone_dark.glb",
+          "fbx": "exports\\fbx\\WL_Bridge_Arc__aged_stone_dark.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Stone"
@@ -34741,8 +35741,8 @@
           ],
           "material": "MI_V2_LeafMid",
           "mesh_name": "WL_Bridge_Arc__aged_veg_anchor",
-          "glb": "exports/glb/WL_Bridge_Arc__aged_veg_anchor.glb",
-          "fbx": "exports/fbx/WL_Bridge_Arc__aged_veg_anchor.fbx",
+          "glb": "exports\\glb\\WL_Bridge_Arc__aged_veg_anchor.glb",
+          "fbx": "exports\\fbx\\WL_Bridge_Arc__aged_veg_anchor.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_LeafMid"
@@ -34945,8 +35945,8 @@
           ],
           "material": "MI_V2_GlassAmber",
           "mesh_name": "WL_House_Jettied__overgrown_glass",
-          "glb": "exports/glb/WL_House_Jettied__overgrown_glass.glb",
-          "fbx": "exports/fbx/WL_House_Jettied__overgrown_glass.fbx",
+          "glb": "exports\\glb\\WL_House_Jettied__overgrown_glass.glb",
+          "fbx": "exports\\fbx\\WL_House_Jettied__overgrown_glass.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_GlassAmber"
@@ -35024,8 +36024,8 @@
           ],
           "material": "MI_V2_Gold",
           "mesh_name": "WL_House_Jettied__overgrown_gold",
-          "glb": "exports/glb/WL_House_Jettied__overgrown_gold.glb",
-          "fbx": "exports/fbx/WL_House_Jettied__overgrown_gold.fbx",
+          "glb": "exports\\glb\\WL_House_Jettied__overgrown_gold.glb",
+          "fbx": "exports\\fbx\\WL_House_Jettied__overgrown_gold.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Gold"
@@ -35103,8 +36103,8 @@
           ],
           "material": "MI_V2_RoofRose",
           "mesh_name": "WL_House_Jettied__overgrown_roof",
-          "glb": "exports/glb/WL_House_Jettied__overgrown_roof.glb",
-          "fbx": "exports/fbx/WL_House_Jettied__overgrown_roof.fbx",
+          "glb": "exports\\glb\\WL_House_Jettied__overgrown_roof.glb",
+          "fbx": "exports\\fbx\\WL_House_Jettied__overgrown_roof.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_RoofRose"
@@ -35182,8 +36182,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_House_Jettied__overgrown",
-          "glb": "exports/glb/WL_House_Jettied__overgrown.glb",
-          "fbx": "exports/fbx/WL_House_Jettied__overgrown.fbx",
+          "glb": "exports\\glb\\WL_House_Jettied__overgrown.glb",
+          "fbx": "exports\\fbx\\WL_House_Jettied__overgrown.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"
@@ -35261,8 +36261,8 @@
           ],
           "material": "MI_V2_Stone",
           "mesh_name": "WL_House_Jettied__overgrown_stone_dark",
-          "glb": "exports/glb/WL_House_Jettied__overgrown_stone_dark.glb",
-          "fbx": "exports/fbx/WL_House_Jettied__overgrown_stone_dark.fbx",
+          "glb": "exports\\glb\\WL_House_Jettied__overgrown_stone_dark.glb",
+          "fbx": "exports\\fbx\\WL_House_Jettied__overgrown_stone_dark.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Stone"
@@ -35340,8 +36340,8 @@
           ],
           "material": "MI_V2_LeafMid",
           "mesh_name": "WL_House_Jettied__overgrown_veg_anchor",
-          "glb": "exports/glb/WL_House_Jettied__overgrown_veg_anchor.glb",
-          "fbx": "exports/fbx/WL_House_Jettied__overgrown_veg_anchor.fbx",
+          "glb": "exports\\glb\\WL_House_Jettied__overgrown_veg_anchor.glb",
+          "fbx": "exports\\fbx\\WL_House_Jettied__overgrown_veg_anchor.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_LeafMid"
@@ -35552,8 +36552,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_Garden_Retaining_Run__overgrown",
-          "glb": "exports/glb/WL_Garden_Retaining_Run__overgrown.glb",
-          "fbx": "exports/fbx/WL_Garden_Retaining_Run__overgrown.fbx",
+          "glb": "exports\\glb\\WL_Garden_Retaining_Run__overgrown.glb",
+          "fbx": "exports\\fbx\\WL_Garden_Retaining_Run__overgrown.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"
@@ -35631,8 +36631,8 @@
           ],
           "material": "MI_V2_Stone",
           "mesh_name": "WL_Garden_Retaining_Run__overgrown_stone_dark",
-          "glb": "exports/glb/WL_Garden_Retaining_Run__overgrown_stone_dark.glb",
-          "fbx": "exports/fbx/WL_Garden_Retaining_Run__overgrown_stone_dark.fbx",
+          "glb": "exports\\glb\\WL_Garden_Retaining_Run__overgrown_stone_dark.glb",
+          "fbx": "exports\\fbx\\WL_Garden_Retaining_Run__overgrown_stone_dark.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_Stone"
@@ -35710,8 +36710,8 @@
           ],
           "material": "MI_V2_LeafMid",
           "mesh_name": "WL_Garden_Retaining_Run__overgrown_veg_anchor",
-          "glb": "exports/glb/WL_Garden_Retaining_Run__overgrown_veg_anchor.glb",
-          "fbx": "exports/fbx/WL_Garden_Retaining_Run__overgrown_veg_anchor.fbx",
+          "glb": "exports\\glb\\WL_Garden_Retaining_Run__overgrown_veg_anchor.glb",
+          "fbx": "exports\\fbx\\WL_Garden_Retaining_Run__overgrown_veg_anchor.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_LeafMid"
@@ -35903,8 +36903,8 @@
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_Detail_Balustrade_Run__broken",
-          "glb": "exports/glb/WL_Detail_Balustrade_Run__broken.glb",
-          "fbx": "exports/fbx/WL_Detail_Balustrade_Run__broken.fbx",
+          "glb": "exports\\glb\\WL_Detail_Balustrade_Run__broken.glb",
+          "fbx": "exports\\fbx\\WL_Detail_Balustrade_Run__broken.fbx",
           "glb_read": {
             "materials": [
               "MI_V2_IvoryStone"

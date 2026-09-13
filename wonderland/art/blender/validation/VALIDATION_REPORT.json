@@ -1,5 +1,5 @@
 {
-  "checked_assets": 101,
+  "checked_assets": 104,
   "failures": 0,
   "material_check": "59 MI_V2_* names parsed from materials_v2.py",
   "per_asset": {
@@ -95,6 +95,9 @@
     "WL_Detail_Oriel_Bay": [],
     "WL_Hero_GreatSpire": [],
     "WL_Hero_Gate_Royal": [],
+    "WL_Sky_Island_Small": [],
+    "WL_Sky_Island_Medium": [],
+    "WL_Sky_Island_Large": [],
     "WL_Wall_Curtain_Run__aged": [],
     "WL_Wall_Mural_Tower__ruined": [],
     "WL_Tower_Base_Buttressed__aged": [],
@@ -121,6 +124,7 @@
     "market",
     "details",
     "hero",
+    "sky",
     "variants"
   ],
   "mesh_hashes": {
@@ -553,7 +557,7 @@
       "stone": "dc4c5f3693257d9af87efa82acafe12c5c6637a9d61081dbb0fe67810789f290"
     },
     "WL_Detail_Screen_Filigree": {
-      "gold": "25e32b82894bf94779c6e1b1e50deadb91e6a1938b76235b7d95802233f6934e",
+      "gold": "de86cde66bbbc08490a2261ecb5ae3a6796569b092d33fa96cbfa373472c8b5f",
       "gold_aged": "554d9328eb6af37db2a5d97d7b98955c77aef5ddd43f991783c8179c0fbe1764",
       "stone": "44b968c7923c12db773407795402f21718170dca193b76c9d8803495b163cfce",
       "veg_anchor": "f65e885d5911a1ef988ba613182eba77895d5b909e59a1d76c10c1ba01134035"
@@ -588,6 +592,21 @@
       "stone": "1db36fa09c6ce290acfcf214485651244cbf2e1e5edc3e73b3775a09f5ebffe9",
       "stone_dark": "3fd251122d176ad0c97e9cec9ea13ac06213a66ad8e37f14950cc09010f14674",
       "veg_anchor": "d171cba98f4005c560389bc1c689daf7b61ca45a62a4539e13332f912d438b1a"
+    },
+    "WL_Sky_Island_Small": {
+      "lawn": "4dfeba3157e0b07087d3dd3382d9f7299883e220adf2b5e0b0777a0a546c5ef1",
+      "stone": "f2c8193d709d3777acf7770240df5eb4e59de72306a866e4c1c5d619fc90398d",
+      "stone_dark": "abbb2534037a014633f573c010c54679d0916029250a70d11e1b810f256a15e6"
+    },
+    "WL_Sky_Island_Medium": {
+      "lawn": "2ae6f156230d48540f61b8cebdb917e9b36a7e8ce0d87a83ab11422a4f6f37ed",
+      "stone": "2f5c6ad3856f0338a9627ca99968008cca3e90f17bba6a94450da398445eb9a3",
+      "stone_dark": "b3a703362198f92a30426dc1eb559e97870d5ec9c6fbf1fdf3ae7ca6afcc9fa2"
+    },
+    "WL_Sky_Island_Large": {
+      "lawn": "1982dc8e5d6033696eb7358119c53509a4d358dd9ebcf6b1699f24f964a2a7ed",
+      "stone": "90dee444fe73c7b479c939de88ecde2a8e6b7bdd14a224b8b41746ed37be2059",
+      "stone_dark": "c89c0dd6ebbf11a10c22122111092438c26270949cf65558bcb46f788f311550"
     },
     "WL_Wall_Curtain_Run__aged": {
       "stone": "3e34a655658a4cdf79504a8cebfff2158e5f65b1152f5b8dd0084de428e63d5a",

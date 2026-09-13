@@ -324,7 +324,7 @@ def main():
         "assets": records,
     }
     path = os.path.join(MANIFESTS, "wonderland-blender-kit.json")
-    with open(path, "w", encoding="utf-8") as fh:
+    with open(path, "w", encoding="utf-8", newline="\n") as fh:   # LF on Windows too: no CRLF churn in git
         json.dump(manifest, fh, indent=2, sort_keys=False)
         fh.write("\n")
     print("\nmanifest -> %s" % os.path.relpath(path, ROOT))

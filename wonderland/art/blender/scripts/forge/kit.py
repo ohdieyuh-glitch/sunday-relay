@@ -309,6 +309,12 @@ MATERIALS = {
         "unreal": "MI_V2_PlazaShade", "rgb": (0.30, 0.28, 0.24),
         "metallic": 0.0, "roughness": 0.78, "emissive": 0.0,
         "use": "the dark inlay: a medallion's band, a runnel's floor, a joint"},
+    # THE LAWN a floating island's castle stands on (families/sky.py). MI_V2_Lawn is the world's own
+    # garden sward, so an island's grass is the same grass as the garden under it.
+    "lawn": {
+        "unreal": "MI_V2_Lawn", "rgb": (0.18, 0.25, 0.12),
+        "metallic": 0.0, "roughness": 0.86, "emissive": 0.0,
+        "use": "the sward on a floating island: the ground a castle foot stands on"},
     "kerb": {
         "unreal": "MI_V2_Kerb", "rgb": (0.46, 0.42, 0.35),
         "metallic": 0.0, "roughness": 0.80, "emissive": 0.0,
