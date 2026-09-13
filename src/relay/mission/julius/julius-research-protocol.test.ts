@@ -4,14 +4,27 @@ import {
   JULIUS_RESEARCH_ASK_FIELDS,
   JULIUS_RESEARCH_ASK_FORBIDDEN_FIELDS,
   JULIUS_RESEARCH_ASK_LIMITS,
+  JULIUS_RESEARCH_AUTHORITY_LIMITS,
   JULIUS_RESEARCH_BASES,
+  RESEARCH_AUTHORITY_NOT_STATED,
+  juliusResearchAskFieldGuidance,
+  renderJuliusResearchAuthority,
   renderJuliusResearchResume,
   resolveJuliusResearchDisagreement,
   sanitizeJuliusResearchAsks,
   type JuliusResearchClaim,
   type JuliusResearchObservationRecord,
 } from './julius-research-protocol';
-import { JULIUS_RESEARCH_ROLES, type JuliusResearchRole } from './julius-research-policy';
+import {
+  JULIUS_RESEARCH_ROLES,
+  authorizeJuliusResearch,
+  emptyJuliusResearchLedger,
+  juliusResearchPolicyIntact,
+  noJuliusResearch,
+  sealJuliusResearchPolicy,
+  type JuliusResearchPolicy,
+  type JuliusResearchRole,
+} from './julius-research-policy';
 
 const ask = (over: Record<string, unknown> = {}): Record<string, unknown> => ({
   source: 'web',
@@ -272,5 +285,136 @@ describe('a disagreement is settled by evidence, never by who brought it', () =>
     if (verdict.outcome !== 'UNRESOLVED') throw new Error('unreachable');
     expect(verdict.reasonCode).toBe('EQUAL_STANDING');
     expect(verdict.detail).toContain('a finding for a reviewer');
+  });
+});
+
+/* ============================================ what this mission authorises */
+
+/**
+ * QUALIFICATION ATTEMPT 2 (run 34757974058) asked for research four times and was
+ * refused four times. Its contract granted exactly this, and no worker was told.
+ */
+const CONTINUOUS_1 = (): JuliusResearchPolicy => sealJuliusResearchPolicy({
+  missionId: 'mission:julius-continuous-1',
+  roles: ['PROMPT_ARCHITECT', 'CODING_AGENT', 'INDEPENDENT_REVIEWER'],
+  allowances: [{ source: 'web', capabilities: ['read_item'], hosts: ['www.postgresql.org'] }],
+  missionBudget: { maxRetrievals: 6, maxBytes: 400_000 },
+  roleBudget: { maxRetrievals: 2, maxBytes: 200_000 },
+});
+
+describe('a worker is told the research its mission authorises, from the sealed policy', () => {
+  it('names the source, the capability, the host and both allowances of qualification attempt 2\'s grant', () => {
+    const policy = CONTINUOUS_1();
+    const text = renderJuliusResearchAuthority({ policy, role: 'PROMPT_ARCHITECT' });
+    expect(text).toContain('RESEARCH THIS MISSION AUTHORISES, read from its sealed research policy');
+    expect(text).toContain(policy.fingerprint.slice(0, 24));
+    expect(text).toContain('Your slot (PROMPT_ARCHITECT) may ask.');
+    expect(text).toContain('source "web", capability "read_item", on: www.postgresql.org');
+    expect(text).toContain('at most 2 retrieval(s) and 200000 bytes for your slot; at most 6 retrieval(s) and 400000 bytes for the whole mission');
+    expect(text).toContain('absolute https:// URL');
+  });
+
+  it('a mission with no grant is told NONE, truthfully, and told not to ask', () => {
+    const text = renderJuliusResearchAuthority({ policy: noJuliusResearch('mission:none'), role: 'CODING_AGENT' });
+    expect(text).toContain('RESEARCH THIS MISSION AUTHORISES: NONE.');
+    expect(text).toContain('grants no research source to any slot');
+    expect(text).toContain('do not ask');
+    expect(text).not.toContain('source "');
+  });
+
+  it('renders only a SEALED policy: contents changed after sealing are rendered as nothing authorised', () => {
+    // A policy object whose allowances were widened after the seal. The
+    // authorizer refuses every ask under it, so the worker must not be told the
+    // widened list, or the original one, is available.
+    const sealed = CONTINUOUS_1();
+    const widened = {
+      ...sealed,
+      allowances: [{ source: 'web', capabilities: ['read_item'], hosts: ['www.postgresql.org', 'github.com'] }],
+    } as JuliusResearchPolicy;
+    expect(juliusResearchPolicyIntact(widened)).toBe(false);
+    const text = renderJuliusResearchAuthority({ policy: widened, role: 'CODING_AGENT' });
+    expect(text).toContain('RESEARCH THIS MISSION AUTHORISES: NONE.');
+    expect(text).toContain('does not match its own seal');
+    expect(text).not.toContain('github.com');
+    expect(text).not.toContain('www.postgresql.org');
+    // And the authorizer agrees with what the worker was told.
+    const verdict = authorizeJuliusResearch({
+      request: {
+        missionId: widened.missionId, projectId: 'p', runId: 'r', taskId: 't', role: 'CODING_AGENT',
+        source: 'web', capability: 'read_item', reference: 'https://www.postgresql.org/docs/', purpose: 'x',
+        requestedAt: '2026-09-13T00:00:00.000Z',
+      },
+      policy: widened,
+      ledger: emptyJuliusResearchLedger(widened.missionId),
+    });
+    expect(!verdict.ok && verdict.refusal).toBe('policy_tampered');
+  });
+
+  it('a slot the mission does not authorise is told it may NOT ask, and by whom research is authorised', () => {
+    const policy = sealJuliusResearchPolicy({
+      missionId: 'm', roles: ['CODING_AGENT'],
+      allowances: [{ source: 'web', capabilities: ['read_item'], hosts: ['nodejs.org'] }],
+      missionBudget: { maxRetrievals: 2, maxBytes: null }, roleBudget: { maxRetrievals: 2, maxBytes: null },
+    });
+    const text = renderJuliusResearchAuthority({ policy, role: 'INDEPENDENT_REVIEWER' });
+    expect(text).toContain('Your slot (INDEPENDENT_REVIEWER) may NOT ask: this mission authorises research by CODING_AGENT only');
+    expect(text).toContain('at most 2 retrieval(s) for your slot');
+  });
+
+  it('bounds the host list and COUNTS what it left out, never dropping it silently', () => {
+    const hosts = Array.from({ length: 15 }, (_unused, index) => `h${String(index).padStart(2, '0')}.example.org`);
+    const policy = sealJuliusResearchPolicy({
+      missionId: 'm', roles: ['CODING_AGENT'],
+      allowances: [{ source: 'web', capabilities: ['read_item', 'search'], hosts }],
+      missionBudget: { maxRetrievals: 2, maxBytes: null }, roleBudget: { maxRetrievals: 2, maxBytes: null },
+    });
+    const text = renderJuliusResearchAuthority({ policy, role: 'CODING_AGENT' });
+    const sealedHosts = policy.allowances[0]!.hosts;
+    for (const host of sealedHosts.slice(0, JULIUS_RESEARCH_AUTHORITY_LIMITS.hostsPerSource)) expect(text).toContain(host);
+    for (const host of sealedHosts.slice(JULIUS_RESEARCH_AUTHORITY_LIMITS.hostsPerSource)) expect(text).not.toContain(host);
+    expect(text).toContain('(and 3 more host(s) not listed here)');
+    expect(text).toContain('capability "read_item" or "search"');
+  });
+
+  it('adds no authority: every ask outside the grant is refused exactly as before, and the policy is untouched', () => {
+    const policy = CONTINUOUS_1();
+    const request = (reference: string, over: Record<string, unknown> = {}) => ({
+      missionId: policy.missionId, projectId: 'p', runId: 'r', taskId: 't', role: 'CODING_AGENT' as const,
+      source: 'web' as const, capability: 'read_item' as const, reference, purpose: 'x',
+      requestedAt: '2026-09-13T00:00:00.000Z', ...over,
+    });
+    const outside = [
+      request('https://github.com/NousResearch/hermes-agent'),
+      request('https://postgresql.org/docs/'),
+      request('https://www.postgresql.org/docs/', { capability: 'search' }),
+      request('https://www.postgresql.org/docs/', { source: 'github' }),
+    ];
+    const decide = () => outside.map((asked) => authorizeJuliusResearch({
+      request: asked as never, policy, ledger: emptyJuliusResearchLedger(policy.missionId),
+    }));
+    const before = decide();
+    const fingerprint = policy.fingerprint;
+    for (const role of ['PROMPT_ARCHITECT', 'CODING_AGENT', 'INDEPENDENT_REVIEWER']) renderJuliusResearchAuthority({ policy, role });
+    expect(decide()).toEqual(before);
+    expect(before.map((verdict) => !verdict.ok && verdict.refusal))
+      .toEqual(['host_not_allowed', 'host_not_allowed', 'capability_not_allowed', 'source_not_allowed']);
+    expect(policy.fingerprint).toBe(fingerprint);
+    expect(juliusResearchPolicyIntact(policy)).toBe(true);
+  });
+
+  it('the ask guidance no longer forbids naming the host a worker was just told, and a hosts FIELD is still refused', () => {
+    const guidance = juliusResearchAskFieldGuidance();
+    expect(guidance).not.toContain('Never name a budget, a host');
+    expect(guidance).toContain('Never add a field of your own');
+    expect(guidance).toContain('A host belongs only inside "reference"');
+    // The rule the wording now describes, unchanged.
+    expect(sanitizeJuliusResearchAsks([ask({ reference: 'https://www.postgresql.org/docs/current/app-psql.html' })])).toHaveLength(1);
+    expect(sanitizeJuliusResearchAsks([ask({ hosts: ['www.postgresql.org'] })])).toBeNull();
+    expect(sanitizeJuliusResearchAsks([ask({ allowlist: [] })])).toBeNull();
+  });
+
+  it('a prompt handed no policy says so, rather than claiming NONE about a contract nobody read', () => {
+    expect(RESEARCH_AUTHORITY_NOT_STATED).toContain('not stated to this dispatch');
+    expect(RESEARCH_AUTHORITY_NOT_STATED).not.toContain('NONE');
   });
 });
