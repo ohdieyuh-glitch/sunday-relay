@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { effectivelyAcceptedTaskIds, isJuliusRepairOf, repairRoundsBefore } from './julius-repair-lineage';
+import { effectivelyAcceptedTaskIds, isJuliusRepairOf, juliusWorkUnitRootOf, repairAncestorsOf, repairRoundsBefore } from './julius-repair-lineage';
 import { canStillBeAccepted } from './julius-release-runtime';
 import {
   JULIUS_BARRIER_ROUTES, isJuliusSegmentOf, juliusSegmentSubjectTaskId, juliusSegmentTaskId,
@@ -211,5 +211,56 @@ describe('acceptance and liveness reach a yielded dispatch only through its cont
     expect(canStillBeAccepted([yielded, seg(2, { state: 'BLOCKED' })], [])('build-1')).toBe(true);
     expect(canStillBeAccepted([yielded, seg(2, { state: 'RUNNABLE' })], [])('build-1')).toBe(true);
     expect(canStillBeAccepted([yielded, seg(2, { state: 'FAILED' })], [])('build-1'), 'nothing else can ever decide it').toBe(false);
+  });
+});
+
+/**
+ * THE REPAIR BOUND IS THE UNIT'S, WHATEVER PAUSED IN BETWEEN.
+ *
+ * Qualification attempt 3 (run 34766115321) ran five repair chains of up to three
+ * rounds under a three-round contract, because counting stopped at every segment
+ * and a repair of a segment began again at round 1.
+ */
+describe('repair rounds are counted across the whole unit of work, through its pauses', () => {
+  const repairOf = (parent: string, round: number, over: Partial<JuliusTask> = {}): JuliusTask =>
+    task({ taskId: `repair:${parent}:${round}:task`, parentTaskId: parent, taskType: 'repair:build', state: 'SUCCEEDED', ...over });
+  const segmentOf = (root: string, n: number, over: Partial<JuliusTask> = {}): JuliusTask =>
+    task({ taskId: juliusSegmentTaskId(root, n), parentTaskId: root, taskType: root === 'build-1' ? 'build' : 'repair:build', state: 'SUCCEEDED', ...over });
+
+  it('a plain repair chain counts exactly as it always did', () => {
+    const r1 = repairOf('build-1', 1);
+    const r2 = repairOf(r1.taskId, 2);
+    const rows = [SUBJECT, r1, r2];
+    expect(repairRoundsBefore(SUBJECT, [SUBJECT])).toBe(0);
+    expect(repairRoundsBefore(r1, [SUBJECT, r1])).toBe(1);
+    expect(repairRoundsBefore(r2, rows)).toBe(2);
+    expect(juliusWorkUnitRootOf(r2, rows).taskId).toBe('build-1');
+  });
+
+  it('ATTEMPT 3\'S SHAPE: pause, refuse the continuation, repair it, pause, refuse again — one unit, rounds keep counting', () => {
+    // build-1 pauses -> segment 2 is refused -> repair round 1 of segment 2
+    // pauses -> its segment 2 is refused -> repair round 2 of THAT segment.
+    const s2 = segmentOf('build-1', 2);
+    const r1 = repairOf(s2.taskId, 1);
+    const r1s2 = segmentOf(r1.taskId, 2);
+    const r2 = repairOf(r1s2.taskId, 2);
+    const rows = [SUBJECT, s2, r1, r1s2, r2];
+    for (const row of rows) expect(juliusWorkUnitRootOf(row, rows).taskId, `${row.taskId} belongs to build-1`).toBe('build-1');
+    expect(repairRoundsBefore(r1s2, rows), 'the refused continuation of round 1 is already two rounds into the unit').toBe(2);
+    // The old counter, repair ancestors only, would have said 0 and 1 here.
+    expect(repairAncestorsOf(r1s2, rows)).toHaveLength(0);
+  });
+
+  it('pauses alone still spend nothing, and another unit\'s repairs are not this unit\'s', () => {
+    const plan = task({ taskId: 'plan-1', taskType: 'plan', role: 'PROMPT_ARCHITECT' });
+    const planRepair = task({ taskId: 'repair:plan-1:1:task', parentTaskId: 'plan-1', taskType: 'repair:plan', role: 'PROMPT_ARCHITECT' });
+    const rows = [plan, planRepair, SUBJECT, segmentOf('build-1', 2), segmentOf('build-1', 3)];
+    expect(repairRoundsBefore(segmentOf('build-1', 3), rows)).toBe(0);
+    expect(repairRoundsBefore(plan, rows)).toBe(1);
+  });
+
+  it('an impostor repair-shaped row under another parent does not spend this unit\'s rounds', () => {
+    const impostor = task({ taskId: 'repair:build-1:1:task', parentTaskId: 'build-9', taskType: 'repair:build' });
+    expect(repairRoundsBefore(SUBJECT, [SUBJECT, impostor])).toBe(0);
   });
 });

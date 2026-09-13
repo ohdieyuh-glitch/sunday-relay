@@ -1559,3 +1559,53 @@ describe('35 — a yield is not verified as finished work; the segment that ends
     expect(harness.store.taskRow('segment:build-1:4:task:review'), 'the segment that could not yield is reviewed').not.toBeNull();
   });
 });
+
+/**
+ * PROOF 36 — THE REPAIR BOUND BINDS THE UNIT, THROUGH EVERY PAUSE.
+ *
+ * Qualification attempt 3 restarted its repair count at every segment and ran
+ * five chains of up to three rounds under a three-round contract. Here a coder
+ * pauses at the start of every round and a reviewer refuses every finished
+ * segment. The unit gets exactly its authorised rounds, and the next is refused.
+ */
+describe('36 — the repair bound binds the unit of work, however often it paused', () => {
+  const ASKS = Object.freeze([{
+    source: 'web', capability: 'read_item',
+    reference: 'https://docs.python.org/3/library/asyncio.html',
+    purpose: 'Whether asyncio.timeout exists in the pinned interpreter.',
+  }]);
+  const RESUME = Object.freeze({ completedSoFar: ['read the reader'], nextIntent: 'write the normalizer' });
+  const servingPort = () => ({
+    async serve(input: Parameters<NonNullable<Parameters<typeof createJuliusHarness>[0]['research']>['serve']>[0]) {
+      return input.asks.map((ask) => ({
+        outcome: 'observed' as const, reference: ask.reference, purpose: ask.purpose,
+        rendered: '<<<RELAY-EVIDENCE\nobserved.\nRELAY-EVIDENCE>>>', detail: 'The source answered.',
+        evidenceId: 'ev-research-1', injectionSignals: [] as readonly string[], mayCorroborate: true,
+      }));
+    },
+  });
+
+  it('a coder that pauses every round is given exactly maxRepairRounds repairs, then the unit is refused a third', async () => {
+    const pause = { kind: 'succeed' as const, researchAsks: ASKS, segmentResume: RESUME };
+    const finish = { kind: 'succeed' as const };
+    const harness = build({
+      research: servingPort(),
+      maxRepairRounds: 2,
+      coderScript: [pause, finish, pause, finish, pause, finish],
+      reviewerScript: [{ kind: 'succeed', evidence: PASSED_REVIEW }, { kind: 'succeed', evidence: FAILED_REVIEW }],
+    });
+    await drain(harness, 60);
+    const all = await harness.store.tasksForRun('run-1', 'prj-1');
+    const repairs = all.filter((row) => row.taskId.startsWith('repair:') && row.taskType === 'repair:build');
+    expect(repairs.map((row) => row.taskId), 'two repair rounds for the one build, not two per pause').toEqual([
+      'repair:segment:build-1:2:task:1:task',
+      'repair:segment:repair:segment:build-1:2:task:1:task:2:task:2:task',
+    ]);
+    const limit = factsOf(harness, 'run.failed').filter((facts) => facts.reasonCode === 'repair_round_limit');
+    expect(limit, 'and the third round is refused, once').toHaveLength(1);
+    const reviewedYields = all.filter((row) => row.taskId.endsWith(':review'))
+      .map((row) => row.taskId.slice(0, -':review'.length))
+      .filter((subject) => ['build-1', 'repair:segment:build-1:2:task:1:task', 'repair:segment:repair:segment:build-1:2:task:1:task:2:task:2:task'].includes(subject));
+    expect(reviewedYields, 'and no dispatch that paused was reviewed').toEqual([]);
+  });
+});
