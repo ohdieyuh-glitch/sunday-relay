@@ -18,8 +18,8 @@ set -euo pipefail
 REPO='ohdieyuh-glitch/sunday-relay'
 BRANCH='relay/julius-reviewer-failure-truth'
 BASE='8afb872d7a9e91569d9cb70457773bef887a5c56'
-HEAD='9a6d994e02ed9da6908ad28eaeab2686004d14d7'
-TREE='d0308b976a9c85fc19c12366ab9197ee4072ad48'
+HEAD='628527d3b8dacef33c4af199ff2d703cd2996a5d'
+TREE='e68d2922d9f825b935b6b851c365797e0c4e7724'
 COMMITS=1
 WORKER='julius-worker[bot]'
 # RESOLVED AGAINST THE SCRIPT, NOT THE WORKING DIRECTORY. The README says to run
