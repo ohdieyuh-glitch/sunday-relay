@@ -8,18 +8,21 @@ import {
 } from '../mission/julius/julius-brain-contracts';
 import {
   juliusBrainPlanDependencies,
-  planJuliusBrainAppend,
+  planJuliusBrainGroups,
   projectJuliusBrain,
   verifyJuliusBrainLedger,
   type JuliusBrainEntityState,
   type JuliusBrainIdempotencyHit,
-  type JuliusBrainPlan,
 } from '../mission/julius/julius-brain-projection';
 import {
   JULIUS_BRAIN_READ_LIMIT,
+  juliusBrainSingleGroup,
+  juliusBrainUngroupResult,
   validateJuliusBrainIdentity,
   type JuliusBrainCommitInput,
   type JuliusBrainCommitResult,
+  type JuliusBrainGroupCommitInput,
+  type JuliusBrainGroupCommitResult,
   type JuliusBrainEntityFilter,
   type JuliusBrainRecordQuery,
   type JuliusBrainRestoreResult,
@@ -54,6 +57,94 @@ type Queryable = Pick<PoolClient, 'query'>;
 const num = (value: unknown): number => Number(value);
 const parsed = <T>(value: unknown): T => (typeof value === 'string' ? JSON.parse(value) as T : value as T);
 
+/**
+ * THE COMMIT, INSIDE A TRANSACTION SOMEONE ELSE OWNS. Takes the Brain row lock,
+ * plans every group against the committed state, and persists the result. On a
+ * refusal it has written nothing and the caller must roll back; on success the
+ * caller commits — together with whatever else it changed in that transaction
+ * (a Python execution's state, for one).
+ */
+export async function commitJuliusBrainGroupWithin(client: Queryable, input: JuliusBrainGroupCommitInput): Promise<JuliusBrainGroupCommitResult> {
+  const brainRow = await client.query(
+    'SELECT identity,head_sequence,head_chain_hash FROM relay_wonderland.julius_brains WHERE brain_id=$1 AND project_id=$2 FOR UPDATE',
+    [input.brainId, input.projectId],
+  );
+  if (brainRow.rows.length === 0) {
+    return { outcome: 'REFUSED', index: 0, group: 0, reasonCode: 'brain_not_found', detail: `${input.brainId} is not a Brain of ${input.projectId}.` };
+  }
+  const brain = parsed<JuliusBrainIdentity>(brainRow.rows[0].identity);
+  const head: JuliusBrainHead = { sequence: num(brainRow.rows[0].head_sequence), chainHash: String(brainRow.rows[0].head_chain_hash) };
+  const drafts = input.groups.flatMap((group) => group.drafts);
+
+  const entities = new Map<string, JuliusBrainEntityState | null>();
+  for (let round = 0; round < 3; round += 1) {
+    const needed = juliusBrainPlanDependencies(brain.brainId, drafts, entities);
+    if (needed.length === 0) break;
+    const found = await client.query('SELECT entity_id,state FROM relay_wonderland.julius_brain_entities WHERE brain_id=$1 AND entity_id=ANY($2::text[])', [brain.brainId, needed]);
+    const byId = new Map(found.rows.map((row) => [String(row.entity_id), parsed<JuliusBrainEntityState>(row.state)]));
+    for (const id of needed) entities.set(id, byId.get(id) ?? null);
+  }
+  const keys = [...new Set(drafts.map((draft) => draft.idempotencyKey).filter((key): key is string => typeof key === 'string'))];
+  const hits = await client.query(
+    'SELECT idempotency_key,record_id,fingerprint,entity_id,entity_version,sequence,kind FROM relay_wonderland.julius_brain_records WHERE brain_id=$1 AND idempotency_key=ANY($2::text[])',
+    [brain.brainId, keys],
+  );
+  const idempotency = new Map<string, JuliusBrainIdempotencyHit | null>(keys.map((key) => [key, null]));
+  for (const row of hits.rows) {
+    idempotency.set(String(row.idempotency_key), {
+      recordId: String(row.record_id), fingerprint: String(row.fingerprint), entityId: String(row.entity_id),
+      entityVersion: num(row.entity_version), sequence: num(row.sequence), kind: row.kind,
+    });
+  }
+  const grantUsage = new Map<string, number>();
+  for (const group of input.groups) {
+    if (group.grant === null || grantUsage.has(group.grant.grantId)) continue;
+    const usage = await client.query('SELECT count(*) AS n FROM relay_wonderland.julius_brain_records WHERE brain_id=$1 AND grant_id=$2', [brain.brainId, group.grant.grantId]);
+    grantUsage.set(group.grant.grantId, num(usage.rows[0]?.n ?? 0));
+  }
+  const plan = planJuliusBrainGroups({ brain, head, recordedAt: input.recordedAt, groups: input.groups, entities, idempotency, grantUsage });
+  if (plan.outcome === 'REFUSED') return plan;
+  if (plan.records.length > 0) {
+    await persistJuliusBrainRows(client, input.projectId, plan.records, plan.entities);
+    const moved = await client.query(
+      'UPDATE relay_wonderland.julius_brains SET head_sequence=$3,head_chain_hash=$4 WHERE brain_id=$1 AND project_id=$2 AND head_sequence=$5',
+      [input.brainId, input.projectId, plan.head.sequence, plan.head.chainHash, head.sequence],
+    );
+    if (moved.rowCount !== 1) throw new Error('julius_brain_head_moved_under_lock');
+  }
+  return { outcome: 'COMMITTED', receipts: plan.receipts, head: plan.head };
+}
+
+async function persistJuliusBrainRows(client: Queryable, projectId: string, records: readonly JuliusBrainRecord[], entities: readonly JuliusBrainEntityState[]): Promise<void> {
+  for (const record of records) {
+    await client.query(
+      `INSERT INTO relay_wonderland.julius_brain_records(brain_id,project_id,sequence,record_id,entity_id,entity_version,kind,op,idempotency_key,fingerprint,content_hash,chain_hash,principal_kind,principal_id,grant_id,mission_id,run_id,task_id,record,occurred_at,recorded_at)
+       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19::jsonb,$20,$21)`,
+      [record.brainId, projectId, record.sequence, record.recordId, record.entityId, record.entityVersion, record.kind, record.op, record.idempotencyKey,
+        record.fingerprint, record.contentHash, record.chainHash, record.principal.kind, record.principal.id, record.principal.grantId,
+        record.scope.missionId, record.scope.runId, record.scope.taskId, JSON.stringify(record), record.occurredAt, record.recordedAt],
+    );
+    for (const link of record.links) {
+      await client.query(
+        `INSERT INTO relay_wonderland.julius_brain_links(brain_id,project_id,sequence,source_entity_id,relation,target_entity_id,target_version)
+         VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT DO NOTHING`,
+        [record.brainId, projectId, record.sequence, record.entityId, link.relation, link.target, link.targetVersion],
+      );
+    }
+  }
+  for (const state of entities) {
+    await client.query(
+      `INSERT INTO relay_wonderland.julius_brain_entities(brain_id,project_id,entity_id,kind,version,lifecycle,status,mission_id,task_id,created_sequence,updated_sequence,state)
+       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb)
+       ON CONFLICT(brain_id,entity_id) DO UPDATE SET version=EXCLUDED.version,lifecycle=EXCLUDED.lifecycle,status=EXCLUDED.status,
+         updated_sequence=EXCLUDED.updated_sequence,state=EXCLUDED.state`,
+      [state.brainId, projectId, state.entityId, state.kind, state.version, state.lifecycle,
+        typeof state.body.status === 'string' ? state.body.status : null, state.scope.missionId, state.scope.taskId,
+        state.createdSequence, state.updatedSequence, JSON.stringify(state)],
+    );
+  }
+}
+
 export class JuliusBrainPostgresStore implements JuliusBrainStore {
   constructor(private readonly pool: Pool) {}
 
@@ -87,27 +178,13 @@ export class JuliusBrainPostgresStore implements JuliusBrainStore {
   }
 
   async commit(input: JuliusBrainCommitInput): Promise<JuliusBrainCommitResult> {
-    return this.transaction<JuliusBrainCommitResult>(async (client) => {
-      const brainRow = await client.query(
-        'SELECT identity,head_sequence,head_chain_hash FROM relay_wonderland.julius_brains WHERE brain_id=$1 AND project_id=$2 FOR UPDATE',
-        [input.brainId, input.projectId],
-      );
-      if (brainRow.rows.length === 0) {
-        return { rollback: true, value: { outcome: 'REFUSED', index: 0, reasonCode: 'brain_not_found', detail: `${input.brainId} is not a Brain of ${input.projectId}.` } };
-      }
-      const plan = await this.plan(client, input, parsed<JuliusBrainIdentity>(brainRow.rows[0].identity), {
-        sequence: num(brainRow.rows[0].head_sequence), chainHash: String(brainRow.rows[0].head_chain_hash),
-      });
-      if (plan.outcome === 'REFUSED') return { rollback: true, value: plan };
-      if (plan.records.length > 0) {
-        await this.persist(client, input.projectId, plan.records, plan.entities);
-        const moved = await client.query(
-          'UPDATE relay_wonderland.julius_brains SET head_sequence=$3,head_chain_hash=$4 WHERE brain_id=$1 AND project_id=$2 AND head_sequence=$5',
-          [input.brainId, input.projectId, plan.head.sequence, plan.head.chainHash, num(brainRow.rows[0].head_sequence)],
-        );
-        if (moved.rowCount !== 1) throw new Error('julius_brain_head_moved_under_lock');
-      }
-      return { rollback: false, value: { outcome: 'COMMITTED', receipts: plan.receipts, head: plan.head } };
+    return juliusBrainUngroupResult(await this.commitGroup(juliusBrainSingleGroup(input)));
+  }
+
+  async commitGroup(input: JuliusBrainGroupCommitInput): Promise<JuliusBrainGroupCommitResult> {
+    return this.transaction<JuliusBrainGroupCommitResult>(async (client) => {
+      const result = await commitJuliusBrainGroupWithin(client, input);
+      return { rollback: result.outcome === 'REFUSED', value: result };
     });
   }
 
@@ -160,73 +237,9 @@ export class JuliusBrainPostgresStore implements JuliusBrainStore {
       if (inserted.rowCount !== 1) {
         return { rollback: true, value: { outcome: 'REFUSED' as const, reasonCode: 'brain_exists', detail: 'A restore never merges into an existing Brain.' } };
       }
-      await this.persist(client, identity.projectId, records, [...projection.entities.values()]);
+      await persistJuliusBrainRows(client, identity.projectId, records, [...projection.entities.values()]);
       return { rollback: false, value: { outcome: 'RESTORED' as const, head: projection.head, entityCount: projection.entities.size } };
     });
-  }
-
-  /* -------------------------------------------------------------- private */
-
-  private async plan(client: Queryable, input: JuliusBrainCommitInput, brain: JuliusBrainIdentity, head: JuliusBrainHead): Promise<JuliusBrainPlan> {
-    const entities = new Map<string, JuliusBrainEntityState | null>();
-    for (let round = 0; round < 3; round += 1) {
-      const needed = juliusBrainPlanDependencies(brain.brainId, input.drafts, entities);
-      if (needed.length === 0) break;
-      const found = await client.query('SELECT entity_id,state FROM relay_wonderland.julius_brain_entities WHERE brain_id=$1 AND entity_id=ANY($2::text[])', [brain.brainId, needed]);
-      const byId = new Map(found.rows.map((row) => [String(row.entity_id), parsed<JuliusBrainEntityState>(row.state)]));
-      for (const id of needed) entities.set(id, byId.get(id) ?? null);
-    }
-    const keys = [...new Set(input.drafts.map((draft) => draft.idempotencyKey).filter((key): key is string => typeof key === 'string'))];
-    const hits = await client.query(
-      'SELECT idempotency_key,record_id,fingerprint,entity_id,entity_version,sequence,kind FROM relay_wonderland.julius_brain_records WHERE brain_id=$1 AND idempotency_key=ANY($2::text[])',
-      [brain.brainId, keys],
-    );
-    const idempotency = new Map<string, JuliusBrainIdempotencyHit | null>(keys.map((key) => [key, null]));
-    for (const row of hits.rows) {
-      idempotency.set(String(row.idempotency_key), {
-        recordId: String(row.record_id), fingerprint: String(row.fingerprint), entityId: String(row.entity_id),
-        entityVersion: num(row.entity_version), sequence: num(row.sequence), kind: row.kind,
-      });
-    }
-    let grantUsage = 0;
-    if (input.grant !== null) {
-      const usage = await client.query('SELECT count(*) AS n FROM relay_wonderland.julius_brain_records WHERE brain_id=$1 AND grant_id=$2', [brain.brainId, input.grant.grantId]);
-      grantUsage = num(usage.rows[0]?.n ?? 0);
-    }
-    return planJuliusBrainAppend({
-      brain, head, principal: input.principal, drafts: input.drafts, grant: input.grant, recordedAt: input.recordedAt,
-      entities, idempotency, grantUsage, secretLiterals: input.secretLiterals,
-    });
-  }
-
-  private async persist(client: Queryable, projectId: string, records: readonly JuliusBrainRecord[], entities: readonly JuliusBrainEntityState[]): Promise<void> {
-    for (const record of records) {
-      await client.query(
-        `INSERT INTO relay_wonderland.julius_brain_records(brain_id,project_id,sequence,record_id,entity_id,entity_version,kind,op,idempotency_key,fingerprint,content_hash,chain_hash,principal_kind,principal_id,grant_id,mission_id,run_id,task_id,record,occurred_at,recorded_at)
-         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19::jsonb,$20,$21)`,
-        [record.brainId, projectId, record.sequence, record.recordId, record.entityId, record.entityVersion, record.kind, record.op, record.idempotencyKey,
-          record.fingerprint, record.contentHash, record.chainHash, record.principal.kind, record.principal.id, record.principal.grantId,
-          record.scope.missionId, record.scope.runId, record.scope.taskId, JSON.stringify(record), record.occurredAt, record.recordedAt],
-      );
-      for (const link of record.links) {
-        await client.query(
-          `INSERT INTO relay_wonderland.julius_brain_links(brain_id,project_id,sequence,source_entity_id,relation,target_entity_id,target_version)
-           VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT DO NOTHING`,
-          [record.brainId, projectId, record.sequence, record.entityId, link.relation, link.target, link.targetVersion],
-        );
-      }
-    }
-    for (const state of entities) {
-      await client.query(
-        `INSERT INTO relay_wonderland.julius_brain_entities(brain_id,project_id,entity_id,kind,version,lifecycle,status,mission_id,task_id,created_sequence,updated_sequence,state)
-         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb)
-         ON CONFLICT(brain_id,entity_id) DO UPDATE SET version=EXCLUDED.version,lifecycle=EXCLUDED.lifecycle,status=EXCLUDED.status,
-           updated_sequence=EXCLUDED.updated_sequence,state=EXCLUDED.state`,
-        [state.brainId, projectId, state.entityId, state.kind, state.version, state.lifecycle,
-          typeof state.body.status === 'string' ? state.body.status : null, state.scope.missionId, state.scope.taskId,
-          state.createdSequence, state.updatedSequence, JSON.stringify(state)],
-      );
-    }
   }
 
   private async transaction<T>(effect: (client: PoolClient) => Promise<{ rollback: boolean; value: T }>): Promise<T> {

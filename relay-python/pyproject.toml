@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "julius-brain-sdk"
+version = "0.1.0"
+description = "Julius Project Brain SDK and the governed Python execution runner. Standard library only."
+requires-python = ">=3.11"
+# DELIBERATELY EMPTY. The SDK runs inside a governed, network-denied execution
+# whose dependency environment is declared per execution and verified by
+# Julius; the SDK itself must never be the reason a dependency is installed.
+dependencies = []
+
+[tool.setuptools.packages.find]
+include = ["julius*"]
+
+[tool.setuptools.package-data]
+julius = ["brain_schema.json"]

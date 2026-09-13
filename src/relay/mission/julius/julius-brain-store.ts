@@ -14,9 +14,10 @@ import {
 import type { JuliusBrainWriteGrant } from './julius-brain-policy';
 import {
   juliusBrainPlanDependencies,
-  planJuliusBrainAppend,
+  planJuliusBrainGroups,
   projectJuliusBrain,
   verifyJuliusBrainLedger,
+  type JuliusBrainCommitGroup,
   type JuliusBrainEntityState,
   type JuliusBrainIdempotencyHit,
   type JuliusBrainLifecycle,
@@ -72,6 +73,28 @@ export type JuliusBrainCommitResult =
   | { readonly outcome: 'COMMITTED'; readonly receipts: readonly JuliusBrainReceipt[]; readonly head: JuliusBrainHead }
   | JuliusBrainRefusal;
 
+export interface JuliusBrainGroupCommitInput {
+  readonly brainId: string;
+  readonly projectId: string;
+  readonly recordedAt: string;
+  readonly groups: readonly JuliusBrainCommitGroup[];
+}
+
+export type JuliusBrainGroupCommitResult =
+  | { readonly outcome: 'COMMITTED'; readonly receipts: readonly (readonly JuliusBrainReceipt[])[]; readonly head: JuliusBrainHead }
+  | (JuliusBrainRefusal & { readonly group: number });
+
+/** A single-principal commit as a one-group commit. */
+export const juliusBrainSingleGroup = (input: JuliusBrainCommitInput): JuliusBrainGroupCommitInput => ({
+  brainId: input.brainId, projectId: input.projectId, recordedAt: input.recordedAt,
+  groups: [{ principal: input.principal, grant: input.grant, drafts: input.drafts, secretLiterals: input.secretLiterals }],
+});
+
+export function juliusBrainUngroupResult(result: JuliusBrainGroupCommitResult): JuliusBrainCommitResult {
+  if (result.outcome === 'REFUSED') return { outcome: 'REFUSED', index: result.index, reasonCode: result.reasonCode, detail: result.detail };
+  return { outcome: 'COMMITTED', receipts: result.receipts[0] ?? [], head: result.head };
+}
+
 export type JuliusBrainRestoreResult =
   | { readonly outcome: 'RESTORED'; readonly head: JuliusBrainHead; readonly entityCount: number }
   | { readonly outcome: 'REFUSED'; readonly reasonCode: string; readonly detail: string };
@@ -84,6 +107,8 @@ export interface JuliusBrainStore {
   head(brainId: string, projectId: string): Promise<JuliusBrainHead | null>;
   /** All-or-nothing. A refusal writes nothing. */
   commit(input: JuliusBrainCommitInput): Promise<JuliusBrainCommitResult>;
+  /** Several principals' drafts as one all-or-nothing write, planned in group order. */
+  commitGroup(input: JuliusBrainGroupCommitInput): Promise<JuliusBrainGroupCommitResult>;
   records(brainId: string, projectId: string, query: JuliusBrainRecordQuery): Promise<{ readonly records: readonly JuliusBrainRecord[]; readonly hasMore: boolean }>;
   entities(brainId: string, projectId: string, filter: JuliusBrainEntityFilter): Promise<readonly JuliusBrainEntityState[]>;
   /** Restore a verified ledger into a Brain id that does not exist yet. */
@@ -143,6 +168,8 @@ const byEntityId = (a: JuliusBrainEntityState, b: JuliusBrainEntityState): numbe
 export interface JuliusBrainMemoryStore extends JuliusBrainStore {
   /** Test inspection: whether the materialised rows still equal the projection of the ledger. */
   verify(brainId: string): { ok: boolean; problems: readonly string[] };
+  /** The group commit, synchronously — for another in-memory model to pair with its own state change. */
+  commitGroupSync(input: JuliusBrainGroupCommitInput): JuliusBrainGroupCommitResult;
 }
 
 export function createJuliusBrainMemoryStore(): JuliusBrainMemoryStore {
@@ -161,6 +188,39 @@ export function createJuliusBrainMemoryStore(): JuliusBrainMemoryStore {
     const row = brains.get(brainId);
     return row !== undefined && row.identity.projectId === projectId ? row : null;
   };
+
+  /**
+   * SYNCHRONOUS, START TO FINISH. JavaScript cannot interleave another task
+   * inside it, which is this model's stand-in for the brain row lock — and what
+   * lets a caller pair it with its own synchronous state change atomically.
+   */
+  function commitGroupSync(input: JuliusBrainGroupCommitInput): JuliusBrainGroupCommitResult {
+    const row = owned(input.brainId, input.projectId);
+    if (row === null) return { outcome: 'REFUSED', index: 0, group: 0, reasonCode: 'brain_not_found', detail: `${input.brainId} is not a Brain of ${input.projectId}.` };
+    const groups = copy(input.groups);
+    const allDrafts = groups.flatMap((group) => group.drafts);
+    const entities = new Map<string, JuliusBrainEntityState | null>();
+    for (let round = 0; round < 3; round += 1) {
+      const needed = juliusBrainPlanDependencies(row.identity.brainId, allDrafts, entities);
+      if (needed.length === 0) break;
+      for (const id of needed) entities.set(id, row.entities.get(id) ?? null);
+    }
+    const idempotency = new Map<string, JuliusBrainIdempotencyHit | null>();
+    for (const draft of allDrafts) idempotency.set(draft.idempotencyKey, row.keys.get(draft.idempotencyKey) ?? null);
+    const grantUsage = new Map<string, number>();
+    for (const group of groups) {
+      if (group.grant !== null) grantUsage.set(group.grant.grantId, row.records.filter((record) => record.principal.grantId === group.grant!.grantId).length);
+    }
+    const plan = planJuliusBrainGroups({ brain: row.identity, head: row.head, recordedAt: input.recordedAt, groups, entities, idempotency, grantUsage });
+    if (plan.outcome === 'REFUSED') return plan;
+    for (const record of plan.records) {
+      row.records.push(copy(record));
+      row.keys.set(record.idempotencyKey, { recordId: record.recordId, fingerprint: record.fingerprint, entityId: record.entityId, entityVersion: record.entityVersion, sequence: record.sequence, kind: record.kind });
+    }
+    for (const state of plan.entities) row.entities.set(state.entityId, copy(state));
+    row.head = plan.head;
+    return { outcome: 'COMMITTED', receipts: plan.receipts, head: plan.head };
+  }
 
   return {
     async createBrain(identity) {
@@ -194,33 +254,14 @@ export function createJuliusBrainMemoryStore(): JuliusBrainMemoryStore {
     },
 
     async commit(input) {
-      const row = owned(input.brainId, input.projectId);
-      if (row === null) return { outcome: 'REFUSED', index: 0, reasonCode: 'brain_not_found', detail: `${input.brainId} is not a Brain of ${input.projectId}.` };
-      const drafts = copy(input.drafts);
-      // Synchronous from here to the end: JavaScript cannot interleave another
-      // commit, which is this model's stand-in for the brain row lock.
-      const entities = new Map<string, JuliusBrainEntityState | null>();
-      for (let round = 0; round < 3; round += 1) {
-        const needed = juliusBrainPlanDependencies(row.identity.brainId, drafts, entities);
-        if (needed.length === 0) break;
-        for (const id of needed) entities.set(id, row.entities.get(id) ?? null);
-      }
-      const idempotency = new Map<string, JuliusBrainIdempotencyHit | null>();
-      for (const draft of drafts) idempotency.set(draft.idempotencyKey, row.keys.get(draft.idempotencyKey) ?? null);
-      const grantUsage = input.grant === null ? 0 : row.records.filter((record) => record.principal.grantId === input.grant!.grantId).length;
-      const plan = planJuliusBrainAppend({
-        brain: row.identity, head: row.head, principal: input.principal, drafts, grant: input.grant,
-        recordedAt: input.recordedAt, entities, idempotency, grantUsage, secretLiterals: input.secretLiterals,
-      });
-      if (plan.outcome === 'REFUSED') return plan;
-      for (const record of plan.records) {
-        row.records.push(copy(record));
-        row.keys.set(record.idempotencyKey, { recordId: record.recordId, fingerprint: record.fingerprint, entityId: record.entityId, entityVersion: record.entityVersion, sequence: record.sequence, kind: record.kind });
-      }
-      for (const state of plan.entities) row.entities.set(state.entityId, copy(state));
-      row.head = plan.head;
-      return { outcome: 'COMMITTED', receipts: plan.receipts, head: plan.head };
+      return juliusBrainUngroupResult(commitGroupSync(juliusBrainSingleGroup(input)));
     },
+
+    async commitGroup(input) {
+      return commitGroupSync(input);
+    },
+
+    commitGroupSync,
 
     async records(brainId, projectId, query) {
       const row = owned(brainId, projectId);

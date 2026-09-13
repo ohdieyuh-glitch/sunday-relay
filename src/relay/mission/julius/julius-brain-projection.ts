@@ -264,6 +264,69 @@ export function planJuliusBrainAppend(input: JuliusBrainPlanInput): JuliusBrainP
   return { outcome: 'APPLY', records, entities, receipts, head };
 }
 
+/* ----------------------------------------------------------------- groups */
+
+export interface JuliusBrainCommitGroup {
+  readonly principal: JuliusBrainPrincipal;
+  readonly grant: JuliusBrainWriteGrant | null;
+  readonly drafts: readonly JuliusBrainDraft[];
+  readonly secretLiterals?: readonly string[];
+}
+
+export type JuliusBrainGroupPlan =
+  | {
+    readonly outcome: 'APPLY';
+    readonly records: readonly JuliusBrainRecord[];
+    readonly entities: readonly JuliusBrainEntityState[];
+    /** Receipts per group, in group order. */
+    readonly receipts: readonly (readonly JuliusBrainReceipt[])[];
+    readonly head: JuliusBrainHead;
+  }
+  | (JuliusBrainRefusal & { readonly group: number });
+
+/**
+ * SEVERAL PRINCIPALS, ONE ATOMIC WRITE. Each group is planned by the ordinary
+ * single-principal planner against the state the groups before it produced,
+ * so a later group may link to what an earlier one created, and any refusal
+ * refuses everything. This is how a Python settlement writes Julius's own
+ * execution record and the tool's proposals together.
+ */
+export function planJuliusBrainGroups(input: {
+  readonly brain: JuliusBrainIdentity;
+  readonly head: JuliusBrainHead;
+  readonly recordedAt: string;
+  readonly groups: readonly JuliusBrainCommitGroup[];
+  readonly entities: ReadonlyMap<string, JuliusBrainEntityState | null>;
+  readonly idempotency: ReadonlyMap<string, JuliusBrainIdempotencyHit | null>;
+  readonly grantUsage: ReadonlyMap<string, number>;
+}): JuliusBrainGroupPlan {
+  if (input.groups.length === 0) return { ...refuse(0, 'empty_batch', 'A commit carries at least one group.'), group: 0 };
+  let head = input.head;
+  const entities = new Map(input.entities);
+  const idempotency = new Map(input.idempotency);
+  const grantUsage = new Map(input.grantUsage);
+  const records: JuliusBrainRecord[] = [];
+  const changed = new Map<string, JuliusBrainEntityState>();
+  const receipts: (readonly JuliusBrainReceipt[])[] = [];
+  for (let group = 0; group < input.groups.length; group += 1) {
+    const { principal, grant, drafts, secretLiterals } = input.groups[group]!;
+    const plan = planJuliusBrainAppend({
+      brain: input.brain, head, principal, drafts, grant, recordedAt: input.recordedAt, entities, idempotency,
+      grantUsage: grant === null ? 0 : grantUsage.get(grant.grantId) ?? 0, secretLiterals,
+    });
+    if (plan.outcome === 'REFUSED') return { ...plan, group };
+    records.push(...plan.records);
+    for (const state of plan.entities) { entities.set(state.entityId, state); changed.set(state.entityId, state); }
+    for (const record of plan.records) {
+      idempotency.set(record.idempotencyKey, { recordId: record.recordId, fingerprint: record.fingerprint, entityId: record.entityId, entityVersion: record.entityVersion, sequence: record.sequence, kind: record.kind });
+    }
+    if (grant !== null) grantUsage.set(grant.grantId, (grantUsage.get(grant.grantId) ?? 0) + plan.records.length);
+    receipts.push(plan.receipts);
+    head = plan.head;
+  }
+  return { outcome: 'APPLY', records, entities: [...changed.values()].sort((a, b) => (a.entityId < b.entityId ? -1 : a.entityId > b.entityId ? 1 : 0)), receipts, head };
+}
+
 /* ------------------------------------------------------------------- fold */
 
 export interface JuliusBrainEntityAccess {

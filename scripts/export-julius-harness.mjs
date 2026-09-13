@@ -112,6 +112,10 @@ const DECLARED_NOT_COMPOSED = [
   { path: 'src/relay/mission/julius/julius-brain-query.ts', reason: 'Project Brain v2: deterministic, budgeted relevant-context retrieval and the bridge into v1 context entries; not yet composed by the live root' },
   { path: 'src/relay/mission/julius/julius-brain-export.ts', reason: 'Project Brain v2: the complete, self-verifying, secret-redacting export; safe restore; resume verification; and the scoped, hashed evaluation-context snapshots a Python execution or a future GVE consumes; not yet composed by the live root' },
   { path: 'src/relay/mission/julius/julius-brain-legacy.ts', reason: 'Project Brain v2: the JuliusBrainWriter decorator that mirrors the live pipeline\'s v1 entries into the typed ledger, and its backfill; a composition root wraps the store with it once the qualification permits wiring changes' },
+  { path: 'src/relay/mission/julius/julius-brain-schema-document.ts', reason: 'Project Brain v2: the language-independent schema document committed at relay-python/julius/brain_schema.json and handed to every Python execution' },
+  { path: 'src/relay/mission/julius/julius-python-contracts.ts', reason: 'the governed Python execution tool: request, C.A.R.D. authorisation, untrusted-output parsing and proposal→Brain-draft conversion; not yet composed by the live root, and the executor sandbox image has no Python' },
+  { path: 'src/relay/mission/julius/julius-python-service.ts', reason: 'the governed Python execution tool: request → authorise → run → atomic settlement into the Project Brain, cancellation and disconnection; not yet composed by the live root' },
+  { path: 'src/relay/workspace/julius-tools/python-runner.ts', reason: 'the local host runner for governed Python executions (scrubbed environment, tree kill, bounded hashed redacted streams, content-addressed artifacts, interpreter probing); not composed by the live root, which routes tool effects through the independent executor' },
   { path: 'src/relay/persistence/julius-brain-postgres.ts', reason: 'Project Brain v2: the durable PostgreSQL store (migration 024), proven by scripts/julius-project-brain-drill.ts across separate processes and a server restart; not yet composed by the live root' },
 ];
 
@@ -269,6 +273,10 @@ const FILE_RULES = [
   ['src/relay/mission/julius/julius-brain-query.ts', 'DURABLE STATE / PROJECT BRAIN'],
   ['src/relay/mission/julius/julius-brain-export.ts', 'DURABLE STATE / PROJECT BRAIN'],
   ['src/relay/mission/julius/julius-brain-legacy.ts', 'DURABLE STATE / PROJECT BRAIN'],
+  ['src/relay/mission/julius/julius-brain-schema-document.ts', 'DURABLE STATE / PROJECT BRAIN'],
+  ['src/relay/mission/julius/julius-python-contracts.ts', 'TOOLS'],
+  ['src/relay/mission/julius/julius-python-service.ts', 'TOOLS'],
+  ['src/relay/workspace/julius-tools/python-runner.ts', 'TOOLS'],
   ['src/relay/persistence/julius-brain-postgres.ts', 'DURABLE STATE / PROJECT BRAIN'],
   ['src/relay/mission/julius/julius-allocation-runtime.ts', 'LEASES / BUDGETS / PERMISSIONS'],
   // Allocation decides what a dispatch MAY spend; this decides what is known

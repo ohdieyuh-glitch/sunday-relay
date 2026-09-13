@@ -51,10 +51,18 @@ const literalPatterns = (literals: readonly string[]): RegExp[] =>
     .sort((a, b) => b.length - a.length)
     .map((value) => new RegExp(escapeLiteral(value), 'g'));
 
+/**
+ * `SOURCE` scans program text for credential LITERALS only. The `assignment`
+ * shape (`token = …`) is a heuristic for prose and process output; in source
+ * code `token = os.environ["X"]` is how a secret is correctly NOT embedded.
+ */
+export type JuliusSecretProfile = 'TEXT' | 'SOURCE';
+
 /** Which credential shapes (and how many exact secret values) appear in `text`. */
-export function scanJuliusSecrets(text: string, literals: readonly string[] = []): JuliusSecretScan {
+export function scanJuliusSecrets(text: string, literals: readonly string[] = [], profile: JuliusSecretProfile = 'TEXT'): JuliusSecretScan {
   const shapes: string[] = [];
   for (const { name, pattern } of SHAPES) {
+    if (profile === 'SOURCE' && name === 'assignment') continue;
     pattern.lastIndex = 0;
     if (pattern.test(text)) shapes.push(name);
     pattern.lastIndex = 0;
@@ -64,8 +72,8 @@ export function scanJuliusSecrets(text: string, literals: readonly string[] = []
   return { shapes, literalMatches };
 }
 
-export function containsJuliusSecret(text: string, literals: readonly string[] = []): boolean {
-  const scan = scanJuliusSecrets(text, literals);
+export function containsJuliusSecret(text: string, literals: readonly string[] = [], profile: JuliusSecretProfile = 'TEXT'): boolean {
+  const scan = scanJuliusSecrets(text, literals, profile);
   return scan.shapes.length > 0 || scan.literalMatches > 0;
 }
 

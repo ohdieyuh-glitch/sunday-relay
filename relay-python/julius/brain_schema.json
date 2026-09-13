@@ -1,0 +1,1165 @@
+{
+  "format": "julius-project-brain-schema.v1",
+  "schemaVersion": "julius-project-brain.v1",
+  "recordKinds": [
+    "MISSION",
+    "OBJECTIVE",
+    "MISSION_STATE",
+    "REQUIREMENT",
+    "ACCEPTANCE_CRITERION",
+    "CONSTRAINT",
+    "PROHIBITION",
+    "ASSUMPTION",
+    "OPEN_QUESTION",
+    "ARCHITECTURE_COMPONENT",
+    "ARCHITECTURE_INTERFACE",
+    "DECISION",
+    "RESEARCH",
+    "EVIDENCE",
+    "EVAL",
+    "FINDING",
+    "REPAIR",
+    "HANDOFF",
+    "ARTIFACT",
+    "MEMORY_FACT",
+    "TRACE",
+    "PYTHON_EXECUTION",
+    "CHECKPOINT"
+  ],
+  "observationKinds": [
+    "EVIDENCE",
+    "EVAL",
+    "FINDING",
+    "ARTIFACT",
+    "TRACE",
+    "MEMORY_FACT"
+  ],
+  "linkRelations": [
+    "SUPERSEDES",
+    "CONTRADICTS",
+    "SUPPORTS",
+    "DERIVED_FROM",
+    "RESOLVES",
+    "REPAIRS",
+    "EVIDENCED_BY",
+    "ANSWERS",
+    "PRODUCED_BY",
+    "RELATES_TO"
+  ],
+  "evidenceClasses": [
+    "MEASUREMENT",
+    "COMPARISON",
+    "ASSERTION",
+    "EVALUATION_RESULT",
+    "ARTIFACT_RESULT",
+    "FAILURE",
+    "METRIC_SERIES",
+    "EXPERIMENT_RESULT",
+    "TABLE",
+    "OBSERVATION",
+    "TEST_RESULT",
+    "COMMAND_EXECUTION",
+    "REVIEW"
+  ],
+  "artifactClasses": [
+    "CODE",
+    "PATCH",
+    "PLAN",
+    "REPORT",
+    "STRUCTURED_OUTPUT",
+    "SCREENSHOT",
+    "LOG",
+    "DATASET",
+    "GENERATED_FILE",
+    "PYTHON_OUTPUT"
+  ],
+  "retire": {
+    "reason": {
+      "type": "string",
+      "maxLength": 8000
+    },
+    "disposition": {
+      "type": "string",
+      "enum": [
+        "WITHDRAWN",
+        "INVALIDATED",
+        "REVERSED",
+        "STALE",
+        "COMPLETED"
+      ],
+      "maxLength": 512
+    }
+  },
+  "kinds": {
+    "MISSION": {
+      "missionId": {
+        "type": "string",
+        "maxLength": 512
+      },
+      "title": {
+        "type": "string",
+        "maxLength": 512
+      },
+      "status": {
+        "type": "string",
+        "enum": [
+          "PROPOSED",
+          "ACTIVE",
+          "PAUSED",
+          "COMPLETED",
+          "FAILED",
+          "CANCELLED"
+        ],
+        "maxLength": 512
+      },
+      "missionContract": {
+        "type": "object",
+        "nullable": true,
+        "fields": {
+          "missionId": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "revision": {
+            "type": "number",
+            "nullable": true,
+            "integer": true,
+            "min": 1
+          },
+          "canonicalHash": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 512
+          }
+        }
+      },
+      "parentProjectId": {
+        "type": "string",
+        "nullable": true,
+        "maxLength": 512
+      }
+    },
+    "OBJECTIVE": {
+      "statement": {
+        "type": "string",
+        "maxLength": 8000
+      },
+      "successMeasure": {
+        "type": "string",
+        "nullable": true,
+        "maxLength": 8000
+      }
+    },
+    "MISSION_STATE": {
+      "phase": {
+        "type": "string",
+        "maxLength": 512
+      },
+      "activeTaskIds": {
+        "type": "string[]",
+        "maxItems": 256,
+        "maxLength": 512
+      },
+      "dependencies": {
+        "type": "object[]",
+        "maxItems": 256,
+        "fields": {
+          "taskId": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "dependsOn": {
+            "type": "string[]",
+            "maxItems": 64,
+            "maxLength": 512
+          }
+        }
+      },
+      "waitingOn": {
+        "type": "string[]",
+        "maxItems": 64,
+        "maxLength": 512
+      },
+      "humanBoundaries": {
+        "type": "string[]",
+        "maxItems": 64,
+        "maxLength": 512
+      },
+      "repairRound": {
+        "type": "number",
+        "nullable": true,
+        "integer": true,
+        "min": 0
+      },
+      "retryState": {
+        "type": "scalarMap",
+        "maxEntries": 32
+      },
+      "budget": {
+        "type": "object",
+        "nullable": true,
+        "fields": {
+          "spentUsdMicros": {
+            "type": "number",
+            "nullable": true,
+            "integer": true,
+            "min": 0
+          },
+          "limitUsdMicros": {
+            "type": "number",
+            "nullable": true,
+            "integer": true,
+            "min": 0
+          }
+        }
+      }
+    },
+    "REQUIREMENT": {
+      "requirementClass": {
+        "type": "string",
+        "enum": [
+          "FUNCTIONAL",
+          "NON_FUNCTIONAL",
+          "UNCLASSIFIED"
+        ],
+        "maxLength": 512
+      },
+      "statement": {
+        "type": "string",
+        "maxLength": 8000
+      },
+      "priority": {
+        "type": "string",
+        "nullable": true,
+        "enum": [
+          "MUST",
+          "SHOULD",
+          "COULD"
+        ]
+      },
+      "status": {
+        "type": "string",
+        "enum": [
+          "PROPOSED",
+          "ACTIVE",
+          "SATISFIED",
+          "WAIVED"
+        ],
+        "maxLength": 512
+      }
+    },
+    "ACCEPTANCE_CRITERION": {
+      "statement": {
+        "type": "string",
+        "maxLength": 8000
+      },
+      "blocking": {
+        "type": "boolean"
+      },
+      "requiredEvidenceClasses": {
+        "type": "string[]",
+        "maxItems": 16,
+        "enum": [
+          "MEASUREMENT",
+          "COMPARISON",
+          "ASSERTION",
+          "EVALUATION_RESULT",
+          "ARTIFACT_RESULT",
+          "FAILURE",
+          "METRIC_SERIES",
+          "EXPERIMENT_RESULT",
+          "TABLE",
+          "OBSERVATION",
+          "TEST_RESULT",
+          "COMMAND_EXECUTION",
+          "REVIEW"
+        ]
+      },
+      "status": {
+        "type": "string",
+        "enum": [
+          "PROPOSED",
+          "ACTIVE",
+          "SATISFIED",
+          "UNSATISFIED",
+          "WAIVED"
+        ],
+        "maxLength": 512
+      }
+    },
+    "CONSTRAINT": {
+      "statement": {
+        "type": "string",
+        "maxLength": 8000
+      },
+      "status": {
+        "type": "string",
+        "enum": [
+          "PROPOSED",
+          "ACTIVE"
+        ],
+        "maxLength": 512
+      }
+    },
+    "PROHIBITION": {
+      "statement": {
+        "type": "string",
+        "maxLength": 8000
+      },
+      "status": {
+        "type": "string",
+        "enum": [
+          "PROPOSED",
+          "ACTIVE"
+        ],
+        "maxLength": 512
+      }
+    },
+    "ASSUMPTION": {
+      "statement": {
+        "type": "string",
+        "maxLength": 8000
+      },
+      "status": {
+        "type": "string",
+        "enum": [
+          "OPEN",
+          "VALIDATED",
+          "INVALIDATED"
+        ],
+        "maxLength": 512
+      }
+    },
+    "OPEN_QUESTION": {
+      "question": {
+        "type": "string",
+        "maxLength": 8000
+      },
+      "blocking": {
+        "type": "boolean"
+      },
+      "status": {
+        "type": "string",
+        "enum": [
+          "OPEN",
+          "ANSWERED",
+          "WITHDRAWN"
+        ],
+        "maxLength": 512
+      },
+      "answer": {
+        "type": "string",
+        "nullable": true,
+        "maxLength": 8000
+      }
+    },
+    "ARCHITECTURE_COMPONENT": {
+      "name": {
+        "type": "string",
+        "maxLength": 512
+      },
+      "responsibility": {
+        "type": "string",
+        "maxLength": 8000
+      },
+      "interfaces": {
+        "type": "string[]",
+        "maxItems": 64,
+        "maxLength": 512
+      },
+      "dependsOn": {
+        "type": "string[]",
+        "maxItems": 64,
+        "maxLength": 512
+      },
+      "constraints": {
+        "type": "string[]",
+        "maxItems": 64,
+        "maxLength": 8000
+      }
+    },
+    "ARCHITECTURE_INTERFACE": {
+      "name": {
+        "type": "string",
+        "maxLength": 512
+      },
+      "providedBy": {
+        "type": "string",
+        "maxLength": 512
+      },
+      "consumers": {
+        "type": "string[]",
+        "maxItems": 64,
+        "maxLength": 512
+      },
+      "contract": {
+        "type": "string",
+        "maxLength": 8000
+      }
+    },
+    "DECISION": {
+      "decisionClass": {
+        "type": "string",
+        "enum": [
+          "MISSION",
+          "ARCHITECTURE",
+          "IMPLEMENTATION",
+          "VERIFICATION",
+          "REPAIR",
+          "PROCESS"
+        ],
+        "maxLength": 512
+      },
+      "statement": {
+        "type": "string",
+        "maxLength": 8000
+      },
+      "rationale": {
+        "type": "string",
+        "maxLength": 8000
+      },
+      "alternatives": {
+        "type": "object[]",
+        "maxItems": 16,
+        "fields": {
+          "option": {
+            "type": "string",
+            "maxLength": 8000
+          },
+          "reasonRejected": {
+            "type": "string",
+            "maxLength": 8000
+          }
+        }
+      },
+      "status": {
+        "type": "string",
+        "enum": [
+          "ACTIVE",
+          "REVERSED"
+        ],
+        "maxLength": 512
+      }
+    },
+    "RESEARCH": {
+      "question": {
+        "type": "string",
+        "maxLength": 8000
+      },
+      "findings": {
+        "type": "object[]",
+        "maxItems": 64,
+        "fields": {
+          "statement": {
+            "type": "string",
+            "maxLength": 8000
+          },
+          "confidence": {
+            "type": "number",
+            "nullable": true,
+            "min": 0,
+            "max": 1
+          }
+        }
+      },
+      "sources": {
+        "type": "object[]",
+        "maxItems": 64,
+        "fields": {
+          "sourceKind": {
+            "type": "string",
+            "enum": [
+              "REPOSITORY",
+              "URL",
+              "DOCUMENT",
+              "TOOL",
+              "WORKER",
+              "BRAIN",
+              "USER"
+            ],
+            "maxLength": 512
+          },
+          "reference": {
+            "type": "string",
+            "maxLength": 2048
+          },
+          "retrievedAt": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 64
+          }
+        }
+      },
+      "contradictions": {
+        "type": "string[]",
+        "maxItems": 32,
+        "maxLength": 8000
+      },
+      "unresolved": {
+        "type": "string[]",
+        "maxItems": 32,
+        "maxLength": 8000
+      },
+      "status": {
+        "type": "string",
+        "enum": [
+          "OPEN",
+          "CONCLUDED"
+        ],
+        "maxLength": 512
+      }
+    },
+    "EVIDENCE": {
+      "evidenceClass": {
+        "type": "string",
+        "enum": [
+          "MEASUREMENT",
+          "COMPARISON",
+          "ASSERTION",
+          "EVALUATION_RESULT",
+          "ARTIFACT_RESULT",
+          "FAILURE",
+          "METRIC_SERIES",
+          "EXPERIMENT_RESULT",
+          "TABLE",
+          "OBSERVATION",
+          "TEST_RESULT",
+          "COMMAND_EXECUTION",
+          "REVIEW"
+        ],
+        "maxLength": 512
+      },
+      "claim": {
+        "type": "string",
+        "maxLength": 8000
+      },
+      "summary": {
+        "type": "string",
+        "maxLength": 8000
+      },
+      "status": {
+        "type": "string",
+        "enum": [
+          "PASSED",
+          "FAILED",
+          "INCONCLUSIVE"
+        ],
+        "maxLength": 512
+      },
+      "verification": {
+        "type": "string",
+        "enum": [
+          "UNVERIFIED",
+          "VERIFIED",
+          "REFUTED"
+        ],
+        "maxLength": 512
+      },
+      "data": {
+        "type": "json",
+        "nullable": true,
+        "maxBytes": 64000
+      },
+      "juliusEvidenceId": {
+        "type": "string",
+        "nullable": true,
+        "maxLength": 512
+      }
+    },
+    "EVAL": {
+      "evaluationName": {
+        "type": "string",
+        "maxLength": 512
+      },
+      "target": {
+        "type": "object",
+        "fields": {
+          "targetKind": {
+            "type": "string",
+            "enum": [
+              "ENTITY",
+              "ARTIFACT",
+              "COMMIT",
+              "WORKER",
+              "MODEL",
+              "PROMPT",
+              "DATASET",
+              "OTHER"
+            ],
+            "maxLength": 512
+          },
+          "reference": {
+            "type": "string",
+            "maxLength": 2048
+          }
+        }
+      },
+      "inputs": {
+        "type": "object[]",
+        "maxItems": 64,
+        "fields": {
+          "name": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "reference": {
+            "type": "string",
+            "maxLength": 2048
+          },
+          "contentHash": {
+            "type": "string",
+            "nullable": true,
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          }
+        }
+      },
+      "outcome": {
+        "type": "string",
+        "enum": [
+          "PASS",
+          "FAIL",
+          "REFUSED",
+          "ERROR",
+          "INCONCLUSIVE"
+        ],
+        "maxLength": 512
+      },
+      "score": {
+        "type": "number",
+        "nullable": true
+      },
+      "maxScore": {
+        "type": "number",
+        "nullable": true
+      },
+      "metrics": {
+        "type": "object[]",
+        "maxItems": 128,
+        "fields": {
+          "name": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "value": {
+            "type": "number",
+            "nullable": true
+          },
+          "unit": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 64
+          }
+        }
+      },
+      "evaluator": {
+        "type": "string",
+        "maxLength": 512
+      },
+      "reproducibility": {
+        "type": "object",
+        "fields": {
+          "seed": {
+            "type": "number",
+            "nullable": true,
+            "integer": true
+          },
+          "codeHash": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 512
+          },
+          "inputsHash": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 512
+          },
+          "environmentHash": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 512
+          },
+          "commit": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 512
+          },
+          "command": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 2048
+          },
+          "environmentRunId": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 512
+          }
+        }
+      }
+    },
+    "FINDING": {
+      "findingClass": {
+        "type": "string",
+        "enum": [
+          "DEFECT",
+          "AMBIGUITY",
+          "RISK",
+          "INCONSISTENCY",
+          "REVIEWER_FINDING",
+          "UNRESOLVED_ISSUE"
+        ],
+        "maxLength": 512
+      },
+      "severity": {
+        "type": "string",
+        "enum": [
+          "INFO",
+          "LOW",
+          "MEDIUM",
+          "HIGH",
+          "CRITICAL"
+        ],
+        "maxLength": 512
+      },
+      "statement": {
+        "type": "string",
+        "maxLength": 8000
+      },
+      "blocking": {
+        "type": "boolean"
+      },
+      "status": {
+        "type": "string",
+        "enum": [
+          "OPEN",
+          "RESOLVED",
+          "DISMISSED",
+          "STALE"
+        ],
+        "maxLength": 512
+      },
+      "juliusFindingId": {
+        "type": "string",
+        "nullable": true,
+        "maxLength": 512
+      }
+    },
+    "REPAIR": {
+      "reason": {
+        "type": "string",
+        "maxLength": 8000
+      },
+      "status": {
+        "type": "string",
+        "enum": [
+          "REQUESTED",
+          "IN_PROGRESS",
+          "IMPLEMENTED",
+          "VERIFIED",
+          "REJECTED",
+          "ABANDONED"
+        ],
+        "maxLength": 512
+      },
+      "implementation": {
+        "type": "string",
+        "nullable": true,
+        "maxLength": 8000
+      },
+      "verification": {
+        "type": "string",
+        "enum": [
+          "NOT_RUN",
+          "PASSED",
+          "FAILED"
+        ],
+        "maxLength": 512
+      },
+      "reviewerDisposition": {
+        "type": "string",
+        "nullable": true,
+        "enum": [
+          "PENDING",
+          "ACCEPTED",
+          "REJECTED"
+        ]
+      },
+      "resultingState": {
+        "type": "string",
+        "nullable": true,
+        "maxLength": 8000
+      },
+      "juliusRepairId": {
+        "type": "string",
+        "nullable": true,
+        "maxLength": 512
+      }
+    },
+    "HANDOFF": {
+      "handoffClass": {
+        "type": "string",
+        "enum": [
+          "ARCHITECT_TO_CODER",
+          "CODER_TO_REVIEWER",
+          "REVIEWER_TO_JULIUS",
+          "JULIUS_CONTINUATION",
+          "RESEARCH_ANSWER",
+          "REPAIR_GUIDANCE",
+          "OTHER"
+        ],
+        "maxLength": 512
+      },
+      "fromRole": {
+        "type": "string",
+        "maxLength": 512
+      },
+      "toRole": {
+        "type": "string",
+        "maxLength": 512
+      },
+      "summary": {
+        "type": "string",
+        "maxLength": 8000
+      },
+      "openQuestions": {
+        "type": "string[]",
+        "maxItems": 32,
+        "maxLength": 8000
+      }
+    },
+    "ARTIFACT": {
+      "artifactClass": {
+        "type": "string",
+        "enum": [
+          "CODE",
+          "PATCH",
+          "PLAN",
+          "REPORT",
+          "STRUCTURED_OUTPUT",
+          "SCREENSHOT",
+          "LOG",
+          "DATASET",
+          "GENERATED_FILE",
+          "PYTHON_OUTPUT"
+        ],
+        "maxLength": 512
+      },
+      "name": {
+        "type": "string",
+        "maxLength": 512
+      },
+      "contentType": {
+        "type": "string",
+        "maxLength": 512
+      },
+      "byteSize": {
+        "type": "number",
+        "integer": true,
+        "min": 0
+      },
+      "contentHash": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      },
+      "storageRef": {
+        "type": "string",
+        "maxLength": 2048
+      },
+      "commit": {
+        "type": "string",
+        "nullable": true,
+        "maxLength": 512
+      }
+    },
+    "MEMORY_FACT": {
+      "statement": {
+        "type": "string",
+        "maxLength": 8000
+      },
+      "trust": {
+        "type": "string",
+        "enum": [
+          "UNVERIFIED",
+          "SUPPORTED",
+          "VERIFIED",
+          "APPROVED"
+        ],
+        "maxLength": 512
+      },
+      "expiresAt": {
+        "type": "string",
+        "nullable": true,
+        "maxLength": 64
+      }
+    },
+    "TRACE": {
+      "traceClass": {
+        "type": "string",
+        "enum": [
+          "ACTION",
+          "WORKER_ACTION",
+          "TOOL_INVOCATION",
+          "STATE_TRANSITION",
+          "LIFECYCLE",
+          "FAILURE",
+          "RECOVERY"
+        ],
+        "maxLength": 512
+      },
+      "summary": {
+        "type": "string",
+        "maxLength": 8000
+      },
+      "facts": {
+        "type": "scalarMap",
+        "maxEntries": 32
+      }
+    },
+    "PYTHON_EXECUTION": {
+      "executionId": {
+        "type": "string",
+        "maxLength": 512
+      },
+      "state": {
+        "type": "string",
+        "enum": [
+          "SUCCEEDED",
+          "FAILED",
+          "TIMED_OUT",
+          "CANCELLED",
+          "DENIED",
+          "DISCONNECTED"
+        ],
+        "maxLength": 512
+      },
+      "reasonCode": {
+        "type": "string",
+        "nullable": true,
+        "maxLength": 512
+      },
+      "requestedBy": {
+        "type": "string",
+        "maxLength": 512
+      },
+      "purpose": {
+        "type": "string",
+        "maxLength": 2048
+      },
+      "scriptHash": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      },
+      "requestDigest": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      },
+      "inputsHash": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      },
+      "contextSnapshotHash": {
+        "type": "string",
+        "nullable": true,
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      },
+      "environmentId": {
+        "type": "string",
+        "maxLength": 512
+      },
+      "environmentHash": {
+        "type": "string",
+        "nullable": true,
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      },
+      "interpreter": {
+        "type": "object",
+        "nullable": true,
+        "fields": {
+          "version": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "implementation": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "platform": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "executableHash": {
+            "type": "string",
+            "nullable": true,
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          }
+        }
+      },
+      "requirements": {
+        "type": "object[]",
+        "maxItems": 256,
+        "fields": {
+          "name": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "version": {
+            "type": "string",
+            "maxLength": 512
+          }
+        }
+      },
+      "dependencies": {
+        "type": "json",
+        "nullable": true,
+        "maxBytes": 32000
+      },
+      "exitCode": {
+        "type": "number",
+        "nullable": true,
+        "integer": true
+      },
+      "durationMs": {
+        "type": "number",
+        "nullable": true,
+        "integer": true,
+        "min": 0
+      },
+      "cpuSeconds": {
+        "type": "number",
+        "nullable": true,
+        "min": 0
+      },
+      "peakMemoryBytes": {
+        "type": "number",
+        "nullable": true,
+        "integer": true,
+        "min": 0
+      },
+      "network": {
+        "type": "string",
+        "enum": [
+          "DENY",
+          "ALLOWLIST"
+        ],
+        "maxLength": 512
+      },
+      "networkDestinations": {
+        "type": "string[]",
+        "maxItems": 32,
+        "maxLength": 512
+      },
+      "enforcement": {
+        "type": "scalarMap",
+        "maxEntries": 16
+      },
+      "denialCount": {
+        "type": "number",
+        "nullable": true,
+        "integer": true,
+        "min": 0
+      },
+      "stdoutHash": {
+        "type": "string",
+        "nullable": true,
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      },
+      "stderrHash": {
+        "type": "string",
+        "nullable": true,
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      },
+      "stdoutBytes": {
+        "type": "number",
+        "nullable": true,
+        "integer": true,
+        "min": 0
+      },
+      "stderrBytes": {
+        "type": "number",
+        "nullable": true,
+        "integer": true,
+        "min": 0
+      },
+      "outputTruncated": {
+        "type": "boolean"
+      },
+      "structuredOutput": {
+        "type": "string",
+        "enum": [
+          "VALID",
+          "INVALID",
+          "ABSENT"
+        ],
+        "maxLength": 512
+      },
+      "structuredOutputErrors": {
+        "type": "string[]",
+        "maxItems": 16,
+        "maxLength": 512
+      },
+      "proposalsStaged": {
+        "type": "number",
+        "nullable": true,
+        "integer": true,
+        "min": 0
+      },
+      "proposalsAdmitted": {
+        "type": "number",
+        "integer": true,
+        "min": 0
+      },
+      "artifactCount": {
+        "type": "number",
+        "integer": true,
+        "min": 0
+      },
+      "redactions": {
+        "type": "number",
+        "integer": true,
+        "min": 0
+      },
+      "cancellation": {
+        "type": "object",
+        "nullable": true,
+        "fields": {
+          "requestedBy": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "requestedAt": {
+            "type": "string",
+            "maxLength": 64
+          },
+          "confirmedBy": {
+            "type": "string",
+            "enum": [
+              "KILLED",
+              "EXITED",
+              "NEVER_STARTED"
+            ],
+            "maxLength": 512
+          }
+        }
+      }
+    },
+    "CHECKPOINT": {
+      "label": {
+        "type": "string",
+        "maxLength": 512
+      },
+      "throughSequence": {
+        "type": "number",
+        "integer": true,
+        "min": 0
+      },
+      "stateHash": {
+        "type": "string",
+        "pattern": "^sha256:[0-9a-f]{64}$"
+      },
+      "entityCount": {
+        "type": "number",
+        "integer": true,
+        "min": 0
+      }
+    }
+  }
+}

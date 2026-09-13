@@ -29,3 +29,7 @@ julius-capability-proofs/
 # The live-mission evidence bundle name, so a local dry run of the workflow's
 # collection step or the dump script does not leave one in the working tree.
 julius-live-evidence/
+
+# Python bytecode caches (the SDK runs with -B inside executions; local test runs still write them).
+__pycache__/
+*.pyc
