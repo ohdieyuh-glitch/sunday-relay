@@ -336,6 +336,98 @@ const failed = (basis) => ({ mission: 'FAILED', basis });
 const notExercised = (basis) => ({ mission: 'NOT EXERCISED', basis });
 const unknown = (basis) => ({ mission: 'UNKNOWN', basis });
 
+/* --------------------------------------------------- allocation validity */
+
+/**
+ * WAS THIS RUN FUNDED BY ITS MISSION, OR BY A PLACEHOLDER?
+ *
+ * Allocation v3 decides what a dispatch may spend against the spend ledger.
+ * When no ledger could be read, a composition that did not forbid it handed
+ * every dispatch the fixed resource estimate instead — 300,000 micro-dollars
+ * in the live composition — under the basis `ESTIMATE_NO_LEDGER`. Lab run
+ * 34739303313 is what that looks like: a twenty-dollar mission whose coder the
+ * runtime stopped after two turns at thirty cents, and which recorded the stop
+ * as a provider failure.
+ *
+ * A run like that did happen, and its rows are true. What it cannot be is
+ * FULL-CAPABILITY EVIDENCE: every worker ran under a ceiling nobody chose, so a
+ * capability it exercised was exercised at a fraction of what the mission
+ * authorised. So one allocation at the estimate makes the run's mission proof
+ * INADMISSIBLE, and the report says why on every row it touches.
+ *
+ * THE STATES, each read only from `budget.tsv`:
+ *
+ *   LEDGER              every allocation was a v3 grant or refusal decided
+ *                       against the ledger
+ *   ESTIMATE_NO_LEDGER  at least one dispatch was funded at the estimate, so
+ *                       the run is inadmissible
+ *   NO_LEDGER_DENIED    a dispatch was refused because no ledger was readable
+ *                       and the policy forbids spending without one. Nothing
+ *                       was funded blind; the run failed honestly and its own
+ *                       rows already say so, so nothing is set aside
+ *   EARLIER_RULE        at least one allocation was made under an earlier
+ *                       rule (v1 or v2), which does not decide against the
+ *                       per-slot ledger. Reported as it ran and not set aside:
+ *                       those runs predate the requirement, and Mission 5's
+ *                       verified completion is one of them
+ *   UNRECOGNISED        a v3 allocation carries a basis this gate does not
+ *                       know. Named, never guessed at, and not set aside
+ *   NONE                the bundle has a budget dump with no allocation in it
+ *   UNKNOWN             the bundle carries no readable budget dump, so this
+ *                       cannot be said either way. Reported, never assumed
+ *                       valid, and never used to discard rows a run proved:
+ *                       older bundles and the test fixtures carry no dump
+ *   NO_EVIDENCE         there is no bundle at all
+ */
+export const ALLOCATION_WITHOUT_LEDGER_BASIS = 'ESTIMATE_NO_LEDGER';
+export const ALLOCATION_DENIED_WITHOUT_LEDGER_BASIS = 'NO_LEDGER_DENIED';
+/** The policy that decides against the ledger, and the bases its ledger path writes. */
+export const LEDGER_ALLOCATION_POLICY = 'julius-allocation.v3';
+export const LEDGER_DECIDED_BASES = Object.freeze(['OWN_FLOOR', 'SHARED_POOL', 'EXHAUSTED']);
+
+function allocationValidity(ev) {
+  const none = { allocations: 0, estimated: 0, denied: 0 };
+  if (!ev.present) return { state: 'NO_EVIDENCE', basis: 'no live evidence bundle', ...none };
+  if (ev.file('budget.tsv') === null) {
+    return { state: 'UNKNOWN', basis: 'this bundle carries no readable budget dump, so whether each dispatch was funded against the spend ledger is unknown', ...none };
+  }
+  const allocations = ev.rows('budget.tsv')
+    .filter((row) => row.event_type === 'julius.budget.allocated' || row.event_type === 'budget.allocated');
+  if (allocations.length === 0) return { state: 'NONE', basis: 'the budget dump records no dispatch allocation', ...none };
+  const roles = (rows) => [...new Set(rows.map((row) => row.role || 'unknown role'))].join(', ');
+  const estimated = allocations.filter((row) => row.allocation_basis === ALLOCATION_WITHOUT_LEDGER_BASIS);
+  const denied = allocations.filter((row) => row.allocation_basis === ALLOCATION_DENIED_WITHOUT_LEDGER_BASIS);
+  const counts = { allocations: allocations.length, estimated: estimated.length, denied: denied.length };
+  if (estimated.length > 0) {
+    return {
+      state: 'ESTIMATE_NO_LEDGER', ...counts,
+      basis: `${estimated.length} of ${allocations.length} dispatch allocation(s) were the fixed estimate because no spend ledger was readable (${roles(estimated)}), so this run is not full-capability evidence`,
+    };
+  }
+  if (denied.length > 0) {
+    return {
+      state: 'NO_LEDGER_DENIED', ...counts,
+      basis: `${denied.length} of ${allocations.length} dispatch allocation(s) were refused before any provider was reached because no spend ledger was readable (${roles(denied)}); nothing was funded at the estimate`,
+    };
+  }
+  const list = (values) => [...new Set(values)].sort().join(', ');
+  const earlier = allocations.filter((row) => row.allocation_policy !== LEDGER_ALLOCATION_POLICY);
+  if (earlier.length > 0) {
+    return {
+      state: 'EARLIER_RULE', ...counts,
+      basis: `${earlier.length} of ${allocations.length} dispatch allocation(s) were made under ${list(earlier.map((row) => row.allocation_policy || 'no recorded policy'))} (bases ${list(earlier.map((row) => row.allocation_basis || 'none'))}), which does not decide against the per-slot spend ledger`,
+    };
+  }
+  const unrecognised = allocations.filter((row) => !LEDGER_DECIDED_BASES.includes(row.allocation_basis));
+  if (unrecognised.length > 0) {
+    return {
+      state: 'UNRECOGNISED', ...counts,
+      basis: `${unrecognised.length} of ${allocations.length} v3 allocation(s) carry a basis this gate does not recognise (${list(unrecognised.map((row) => row.allocation_basis || 'none'))})`,
+    };
+  }
+  return { state: 'LEDGER', ...counts, basis: `all ${allocations.length} dispatch allocation(s) were v3 decisions made against the spend ledger` };
+}
+
 /**
  * THE OPERATOR IDENTITY, WHICH IS NOT AN ACCOUNT.
  *
@@ -738,6 +830,8 @@ function verdictOf(mission, capability, admissible) {
 export function evaluate(evidenceDir, options = {}) {
   const ev = loadEvidence(evidenceDir);
   const proofs = loadProofs(ev, options.capabilityDir ?? null);
+  const allocation = allocationValidity(ev);
+  const inadmissible = allocation.state === ALLOCATION_WITHOUT_LEDGER_BASIS;
   const results = CAPABILITIES.map((capability) => {
     const probed = probe(capability);
     // `implementedBy` is reported, not merely used: a drill has to exercise
@@ -754,7 +848,19 @@ export function evaluate(evidenceDir, options = {}) {
         basis: probed.where, capabilityBasis: 'nothing is built to have been drilled',
       };
     }
-    const { mission, basis } = capability.prove(ev);
+    const proven = capability.prove(ev);
+    /**
+     * AN ESTIMATE-FUNDED RUN PROVES NOTHING FOR BETA, AND RESCUES NOTHING.
+     *
+     * Only what the run EXERCISED is set aside: that success happened under a
+     * ceiling nobody chose. A FAILED row stays FAILED. A gate that turned a
+     * broken capability into an inadmissible one would let a drill lift it,
+     * which is exactly the laundering the verdict rule forbids. Silent rows
+     * were silent anyway.
+     */
+    const { mission, basis } = inadmissible && proven.mission === 'EXERCISED'
+      ? { mission: 'INADMISSIBLE', basis: `${proven.basis}; inadmissible as full-capability evidence: ${allocation.basis}` }
+      : proven;
     // The proof is looked up even where it is inadmissible, so a ledger that
     // claims a mission-required capability is REPORTED as inadmissible rather
     // than silently ignored. A gate that quietly drops evidence teaches whoever
@@ -775,7 +881,7 @@ export function evaluate(evidenceDir, options = {}) {
       // as one sentence is the same substitution the Unknown rule forbids
       // everywhere else in this product.
       basis: verdict === 'CAPABILITY PROVEN'
-        ? `${mission === 'NOT EXERCISED' ? 'NOT EXERCISED THIS MISSION' : 'THIS MISSION CANNOT SAY WHETHER IT WAS EXERCISED'} — ${basis}; proven instead by a drill: ${proof.basis}`
+        ? `${mission === 'NOT EXERCISED' ? 'NOT EXERCISED THIS MISSION' : mission === 'INADMISSIBLE' ? 'WHAT THIS MISSION EXERCISED IS INADMISSIBLE' : 'THIS MISSION CANNOT SAY WHETHER IT WAS EXERCISED'} — ${basis}; proven instead by a drill: ${proof.basis}`
         : (admissible && proof.state === 'STALE' ? `${basis}; the drill that once proved it is stale: ${proof.basis}` : basis),
     };
   });
@@ -795,6 +901,7 @@ export function evaluate(evidenceDir, options = {}) {
     evidence: ev.present ? ev.source : null,
     evidenceNote: ev.source,
     capabilitySource: proofs.rows.length > 0 ? proofs.source : null,
+    allocation,
     results,
     gaps,
     summary: {
@@ -803,6 +910,7 @@ export function evaluate(evidenceDir, options = {}) {
       failed: count('mission', 'FAILED'),
       notExercised: count('mission', 'NOT EXERCISED'),
       unknown: count('mission', 'UNKNOWN'),
+      inadmissible: count('mission', 'INADMISSIBLE'),
       provenByMission: count('verdict', 'PASS'),
       provenByDrill: count('verdict', 'CAPABILITY PROVEN'),
       unproven: count('verdict', 'FAIL'),
@@ -823,6 +931,7 @@ function main() {
     out('WONDERLAND BETA GATE');
     out(`  evidence:   ${report.evidence ?? `NONE (${report.evidenceNote ?? 'no --evidence given'})`}`);
     out(`  capability: ${report.capabilitySource ?? 'NONE (no drill attestation was supplied)'}`);
+    out(`  allocation: ${report.allocation.state} — ${report.allocation.basis}`);
     out('  PASS = this run exercised it and it worked. CAPABILITY PROVEN = this run did not exercise it,');
     out('  a drill on the real production path did. FAIL = neither. NOT BUILT = no implementation exists.');
     out('');
@@ -836,7 +945,10 @@ function main() {
     for (const [index, gap] of report.gaps.entries()) out(`  ${index + 1}. ${gap.id} — ${gap.verdict}: ${gap.basis}`);
     out('');
     out('RESULT');
-    out(`  WHAT THIS RUN PROVED:       ${s.exercised} of ${s.total} exercised and working; ${s.failed} exercised and broken; ${s.notExercised} never reached; ${s.unknown} the bundle cannot say.`);
+    out(`  WHAT THIS RUN PROVED:       ${s.exercised} of ${s.total} exercised and working; ${s.failed} exercised and broken; ${s.notExercised} never reached; ${s.unknown} the bundle cannot say; ${s.inadmissible} exercised and inadmissible.`);
+    if (report.allocation.state === ALLOCATION_WITHOUT_LEDGER_BASIS) {
+      out(`  RUN VALIDITY:               INVALID AS FULL-CAPABILITY EVIDENCE — ${report.allocation.basis}.`);
+    }
     out(`  WHAT JULIUS IS READY TO DO: ${s.provenByMission + s.provenByDrill} of ${s.total} proven — ${s.provenByMission} by this mission, ${s.provenByDrill} by drill; ${s.unproven} unproven; ${s.notBuilt} not built.`);
     out(`  BETA: ${s.provenByMission + s.provenByDrill === s.total ? 'READY' : 'NOT READY'}`);
   }
