@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import { isJuliusRepairOf, repairRoundsBefore } from './julius-repair-lineage';
+import { effectivelyAcceptedTaskIds, isJuliusRepairOf, repairRoundsBefore } from './julius-repair-lineage';
+import { canStillBeAccepted } from './julius-release-runtime';
 import {
   JULIUS_BARRIER_ROUTES, isJuliusSegmentOf, juliusSegmentSubjectTaskId, juliusSegmentTaskId,
-  nextSegmentNumber, routeIsBarrier, sanitizeJuliusSegmentState, segmentChildrenOf, segmentNumberOf,
+  juliusYieldContinuationOf, nextSegmentNumber, routeIsBarrier, sanitizeJuliusSegmentState, segmentChildrenOf, segmentNumberOf,
 } from './julius-segment-lineage';
-import type { JuliusTask } from './julius-runtime';
+import type { JuliusRecordedDecision, JuliusTask } from './julius-runtime';
 import type { JuliusCheckpointRouting } from './julius-continuous-lifecycle';
 
 const task = (over: Partial<JuliusTask> & { taskId: string }): JuliusTask => ({
@@ -146,5 +147,69 @@ describe('resume state is rebuilt from an allowlist, never trusted as sent', () 
     });
     expect(sanitized).not.toBeNull();
     expect(Object.keys(sanitized as object).sort()).toEqual(['completedSoFar', 'nextIntent']);
+  });
+});
+
+/**
+ * WHAT A DISPATCH YIELDED TO — the edge that carries its review obligation.
+ * Qualification attempt 3 reviewed every yielded dispatch; the verification now
+ * asks this helper first, and acceptance and liveness follow the edge it names.
+ */
+describe('a yielded dispatch is found by the continuation its barrier minted', () => {
+  it('the root yields to segment 2, and segment n to segment n + 1', () => {
+    const rows = [SUBJECT, seg(2, { state: 'SUCCEEDED' }), seg(3)];
+    expect(juliusYieldContinuationOf(SUBJECT, rows)?.taskId).toBe('segment:build-1:2:task');
+    expect(juliusYieldContinuationOf(rows[1]!, rows)?.taskId).toBe('segment:build-1:3:task');
+    expect(juliusYieldContinuationOf(rows[2]!, rows), 'the newest segment has not yielded').toBeNull();
+  });
+
+  it('a task that never paused has no continuation, and an impostor row names none', () => {
+    expect(juliusYieldContinuationOf(SUBJECT, [SUBJECT])).toBeNull();
+    const impostor = seg(2, { role: 'PROMPT_ARCHITECT' });
+    expect(juliusYieldContinuationOf(SUBJECT, [SUBJECT, impostor]), 'wrong role').toBeNull();
+    const wrongParent = seg(2, { parentTaskId: 'build-9' });
+    expect(juliusYieldContinuationOf(SUBJECT, [SUBJECT, wrongParent]), 'wrong parent').toBeNull();
+  });
+
+  it('a repair is its own unit: its pause continues it, not the task it repairs', () => {
+    const repair = task({ taskId: 'repair:build-1:1:task', parentTaskId: 'build-1', taskType: 'repair:build', state: 'SUCCEEDED' });
+    const repairSegment = task({ taskId: juliusSegmentTaskId('repair:build-1:1:task', 2), parentTaskId: 'repair:build-1:1:task', taskType: 'repair:build' });
+    const rows = [SUBJECT, repair, repairSegment];
+    expect(juliusYieldContinuationOf(repair, rows)?.taskId).toBe('segment:repair:build-1:1:task:2:task');
+    expect(juliusYieldContinuationOf(SUBJECT, rows), 'the repaired build did not yield').toBeNull();
+  });
+});
+
+describe('acceptance and liveness reach a yielded dispatch only through its continuation', () => {
+  const decision = (taskId: string, action: string) => ({
+    decisionId: `d:${taskId}`, runId: 'run-1', taskId, action, reasonCode: 'X', evidenceIds: [], safeSummary: 'x',
+  }) as unknown as JuliusRecordedDecision;
+
+  it('accepted when its continuation is accepted, and not before', () => {
+    const yielded = task({ taskId: 'build-1', state: 'SUCCEEDED' });
+    const continuation = seg(2, { state: 'SUCCEEDED' });
+    const rows = [yielded, continuation];
+    expect(effectivelyAcceptedTaskIds(rows, []).has('build-1'), 'nothing decided yet').toBe(false);
+    expect(effectivelyAcceptedTaskIds(rows, [decision('segment:build-1:2:task', 'REPAIR')]).has('build-1')).toBe(false);
+    expect(effectivelyAcceptedTaskIds(rows, [decision('segment:build-1:2:task', 'ACCEPT')]).has('build-1')).toBe(true);
+    // An undecided task that never yielded is still never accepted.
+    expect(effectivelyAcceptedTaskIds([task({ taskId: 'build-2', state: 'SUCCEEDED' })], []).has('build-2')).toBe(false);
+  });
+
+  it('a REPAIR is superseded by a repair that yielded to an accepted continuation', () => {
+    const build = task({ taskId: 'build-1', state: 'SUCCEEDED' });
+    const repair = task({ taskId: 'repair:build-1:1:task', parentTaskId: 'build-1', taskType: 'repair:build', state: 'SUCCEEDED' });
+    const repairSegment = task({ taskId: juliusSegmentTaskId('repair:build-1:1:task', 2), parentTaskId: 'repair:build-1:1:task', taskType: 'repair:build', state: 'SUCCEEDED' });
+    const accepted = effectivelyAcceptedTaskIds([build, repair, repairSegment], [
+      decision('build-1', 'REPAIR'), decision('segment:repair:build-1:1:task:2:task', 'ACCEPT'),
+    ]);
+    expect(accepted.has('build-1')).toBe(true);
+  });
+
+  it('live while its continuation is waiting or running, dead when the continuation failed', () => {
+    const yielded = task({ taskId: 'build-1', state: 'SUCCEEDED' });
+    expect(canStillBeAccepted([yielded, seg(2, { state: 'BLOCKED' })], [])('build-1')).toBe(true);
+    expect(canStillBeAccepted([yielded, seg(2, { state: 'RUNNABLE' })], [])('build-1')).toBe(true);
+    expect(canStillBeAccepted([yielded, seg(2, { state: 'FAILED' })], [])('build-1'), 'nothing else can ever decide it').toBe(false);
   });
 });
