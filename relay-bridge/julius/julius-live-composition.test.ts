@@ -1254,12 +1254,13 @@ describe('the durable completion rule after a repair', () => {
     expect(decisions.some((decision) => decision.action === 'ACCEPT' && decision.taskId === 'repair:build-1:1:task')).toBe(true);
   });
 
-  it('a run that still honestly parks names its cause: a REPAIR whose round the budget refused', async () => {
-    // The park routes that survive the effective-verification semantics are
-    // narrower, so the operator-facing cause line must stay pinned. Deny the
-    // repair-admission reservation specifically: the blocking review appends
-    // the REPAIR decision, the round cannot be admitted, every task ends
-    // terminal, and the run parks in VERIFYING with the cause named.
+  it('a REPAIR whose round the budget refused ENDS the run, FAILED, with the cause on the record', async () => {
+    // Deny the repair-admission reservation specifically: the blocking review
+    // appends the REPAIR decision and the round cannot be admitted. This used to
+    // park the run in VERIFYING, with `run.failed` written beside a run that had
+    // not failed. Qualification attempt 3 (run 34766115321) showed where that
+    // leads: a `repair_round_limit` at 16:09 and twenty more minutes of paid work.
+    // A refused repair round is terminal now, and the run says so durably.
     const ceiling = createRunSpendBudget(5_000_000);
     const budget: typeof ceiling = {
       reserve: async (input) => input.reservationId.startsWith('reservation:repair:')
@@ -1268,10 +1269,12 @@ describe('the durable completion rule after a repair', () => {
       commit: (input) => ceiling.commit(input),
       release: (input) => ceiling.release(input),
     };
-    const { outcome } = await driveLiveMission(['approved', 'changes_required'], budget);
-    expect(outcome.state).toBe('VERIFYING');
-    expect(outcome.stalled).toBe(true);
-    expect(outcome.haltCause ?? '').toContain('REPAIR');
+    const { outcome, memory } = await driveLiveMission(['approved', 'changes_required'], budget);
+    expect(outcome.state).toBe('FAILED');
+    expect(outcome.stalled).toBe(false);
+    const failed = memory.events().filter((event) => event.type === 'run.failed');
+    expect(failed.map((event) => event.facts.reasonCode), 'the cause, once, after the run moved').toEqual(['REPAIR_BUDGET_DENIED']);
+    expect((await memory.loadRun('run-live', 'prj-live'))?.state).toBe('FAILED');
   });
 });
 

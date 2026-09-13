@@ -43,6 +43,7 @@ import { planJuliusRepair } from './julius-repair-runtime';
 import { repairLineageRootOf, repairRoundsBefore, repairTaskTypeFor } from './julius-repair-lineage';
 import { challengeJuliusTaskContract, evaluateJuliusBindingCurrency, evaluateJuliusSharedBinding, juliusContractReviewCharge, juliusTaskContractBinding, lockJuliusTaskContract, mayDispatchUnderContract, reviseJuliusTaskContract, sanitizeJuliusContractProposal, type JuliusTaskContract, type JuliusTaskContractBinding } from './julius-task-contract';
 import { evaluateJuliusRelease } from './julius-release-runtime';
+import { planRunStatePath } from './julius-state-path';
 import { REVIEW_TASK_ATTEMPTS, boundStageForRole, reviewStageOf, workStageOf, type JuliusReviewStage } from './julius-review-stage';
 import {
   juliusSegmentLineageRootOf, juliusSegmentTaskId, juliusYieldContinuationOf, nextSegmentNumber, pendingSegmentFor, routeIsBarrier,
@@ -76,7 +77,7 @@ import {
   type JuliusSharedCeilingPolicy,
 } from './julius-shared-ceiling';
 import type { JuliusTimelineReader } from './julius-runtime-api';
-import { JULIUS_RUNTIME_VERSION, type JuliusBrainEntry, type JuliusRecordedDecision, type JuliusTask, type JuliusVerificationDecision, type JuliusWorker, type JuliusWorkerRole } from './julius-runtime';
+import { JULIUS_RUNTIME_VERSION, type JuliusBrainEntry, type JuliusMissionState, type JuliusRecordedDecision, type JuliusTask, type JuliusVerificationDecision, type JuliusWorker, type JuliusWorkerRole } from './julius-runtime';
 import { validateJuliusEvent, type JuliusOperationalEvent, type JuliusOperationalEventType } from './julius-events';
 import { validateTrajectoryEvent, type JuliusTrajectoryEvent, type JuliusTrajectoryKind } from './julius-trajectory';
 import {
@@ -471,6 +472,19 @@ export async function prepareClaimedTask(
 
   const correlationId = `${claim.taskId}:${claim.leaseGeneration}`;
   const ledger = new RuntimeLedger(deps, run, correlationId);
+
+  /**
+   * A RUN THAT HAS ENDED DISPATCHES NOTHING MORE. The claim query offers no task
+   * of a terminal run, but a tick claims several tasks before it runs them, and a
+   * task earlier in the same tick can end the run (`haltRunTerminally`). The
+   * task is CANCELLED and its lease closed here, before admission, so it spends
+   * no attempt and reaches no provider.
+   */
+  if (TERMINAL_RUN_STATES.includes(run.state)) {
+    await deps.store.finishTask({ taskId: claim.taskId, owner: deps.owner, leaseGeneration: claim.leaseGeneration, state: 'CANCELLED', now: deps.clock.now() });
+    await ledger.event('task.cancelled', { taskId: claim.taskId, facts: { reasonCode: 'RUN_TERMINAL', runState: run.state } });
+    return { kind: 'REFUSED', outcome: { kind: 'HALTED', taskId: claim.taskId, reasonCode: 'RUN_TERMINAL', safeSummary: `The run is ${run.state}, so this task was not dispatched.` } };
+  }
 
   const role = resolveWorkerRole(claim.role);
   if (role === null) {
@@ -2816,6 +2830,65 @@ async function verifyExecutedTask(input: {
 
 /* ------------------------------------------------------------ the repair */
 
+const TERMINAL_RUN_STATES: readonly JuliusMissionState[] = Object.freeze(['COMPLETED', 'FAILED', 'CANCELLED']);
+
+/**
+ * A HALT THAT ENDS THE RUN, ANNOUNCED ONLY ONCE IT HAS.
+ *
+ * A repair round the run cannot have — its bound is spent, no worker can take
+ * it, or the budget is gone — used to write `run.failed` and return, and
+ * nothing moved the run. Qualification attempt 3 (run 34766115321) recorded
+ * `repair_round_limit` as `run.failed` at 16:09, and then kept claiming and
+ * paying for the other chains' work for twenty more minutes while `runs.tsv`
+ * still read READY. An event that says the run failed while the run carries on
+ * is the announcement of an intention.
+ *
+ * The run is now moved to FAILED first, through the same legal path the run
+ * loop walks, and `run.failed` is written only when that durable write has
+ * landed. A FAILED run is not claimable, and a task already claimed in the same
+ * tick is refused before admission (`prepareClaimedTask`), so nothing else in
+ * the run is dispatched. A lost version race is re-read and walked again. A run
+ * that still cannot be moved says so, and is not called failed.
+ */
+async function haltRunTerminally(input: {
+  readonly deps: JuliusPipelineDependencies;
+  readonly run: JuliusRunRow;
+  readonly ledger: RuntimeLedger;
+  readonly taskId: string;
+  readonly reasonCode: string;
+  readonly safeSummary: string;
+  readonly facts: Record<string, string | number | boolean | null>;
+}): Promise<JuliusTaskOutcome> {
+  const { deps, run, ledger } = input;
+  let current = (await deps.store.loadRun(run.runId, run.projectId)) ?? run;
+  for (let attempt = 0; attempt < 3 && !TERMINAL_RUN_STATES.includes(current.state); attempt += 1) {
+    const path = planRunStatePath(current.state, 'FAILED');
+    if (path.length === 0) break;
+    try {
+      for (const [index, step] of path.entries()) {
+        const last = index === path.length - 1;
+        current = await deps.store.transition({
+          commandId: `halt:${run.runId}:${current.version}:${step}`,
+          runId: run.runId, projectId: run.projectId, expectedVersion: current.version, to: step,
+          reasonCode: last ? input.reasonCode : 'PASSED_THROUGH',
+          safeSummary: last ? input.safeSummary : `Run passed through ${step} on the way to FAILED.`,
+          evidenceIds: [], occurredAt: deps.clock.now(),
+        });
+      }
+    } catch {
+      current = (await deps.store.loadRun(run.runId, run.projectId)) ?? current;
+    }
+  }
+  if (current.state === 'FAILED') {
+    await ledger.event('run.failed', { taskId: input.taskId, facts: { ...input.facts, reasonCode: input.reasonCode } });
+    await ledger.trajectory('COMPLETION', {
+      taskId: input.taskId, policyRevision: run.cardRevision, outcome: 'FAILED',
+      facts: { reasonCode: input.reasonCode },
+    });
+  }
+  return { kind: 'HALTED', taskId: input.taskId, reasonCode: input.reasonCode, safeSummary: input.safeSummary };
+}
+
 async function scheduleRepair(input: {
   request: JuliusPipelineRequest;
   deps: JuliusPipelineDependencies;
@@ -2849,14 +2922,11 @@ async function scheduleRepair(input: {
   if (capability !== undefined) {
     const routes = deps.router.eligibleWorkerIds({ role: task.role, taskType: repairTaskType, capability, policy: input.request.policy });
     if (routes.length === 0) {
-      await ledger.event('run.failed', {
-        taskId: task.taskId,
-        facts: { reasonCode: 'REPAIR_UNROUTABLE', repairRole: task.role, repairTaskType, forRepairRound: priorRounds + 1 },
-      });
-      return {
-        kind: 'HALTED', taskId: task.taskId, reasonCode: 'REPAIR_UNROUTABLE',
+      return haltRunTerminally({
+        deps, run, ledger, taskId: task.taskId, reasonCode: 'REPAIR_UNROUTABLE',
+        facts: { repairRole: task.role, repairTaskType, forRepairRound: priorRounds + 1 },
         safeSummary: `A repair round was required and no registered worker accepts ${task.role} ${repairTaskType}.`,
-      };
+      });
     }
   }
 
@@ -2869,8 +2939,10 @@ async function scheduleRepair(input: {
   const admission = await allocateFor({ deps, run, role: task.role, taskId: task.taskId, estimateUsdMicros: estimate.usdMicros });
   if (admission?.basis === 'EXHAUSTED') {
     await ledger.event('budget.denied', { taskId: task.taskId, facts: { reason: 'BUDGET_EXHAUSTED', forRepairRound: priorRounds + 1, ...allocationFacts(admission) } });
-    await ledger.event('run.failed', { taskId: task.taskId, facts: { reasonCode: 'REPAIR_BUDGET_DENIED', forRepairRound: priorRounds + 1 } });
-    return { kind: 'HALTED', taskId: task.taskId, reasonCode: 'REPAIR_BUDGET_DENIED', safeSummary: 'A repair round was required and the mission budget is exhausted.' };
+    return haltRunTerminally({
+      deps, run, ledger, taskId: task.taskId, reasonCode: 'REPAIR_BUDGET_DENIED', facts: { forRepairRound: priorRounds + 1 },
+      safeSummary: 'A repair round was required and the mission budget is exhausted.',
+    });
   }
   const reservation = await deps.budget.reserve({
     reservationId, runId: run.runId, projectId: run.projectId, taskId: task.taskId,
@@ -2879,8 +2951,10 @@ async function scheduleRepair(input: {
   });
   if (reservation.state === 'DENIED') {
     await ledger.event('budget.denied', { taskId: task.taskId, facts: { reason: reservation.denialReason, forRepairRound: priorRounds + 1 } });
-    await ledger.event('run.failed', { taskId: task.taskId, facts: { reasonCode: 'REPAIR_BUDGET_DENIED', forRepairRound: priorRounds + 1 } });
-    return { kind: 'HALTED', taskId: task.taskId, reasonCode: 'REPAIR_BUDGET_DENIED', safeSummary: 'A repair round was required and the budget did not permit it.' };
+    return haltRunTerminally({
+      deps, run, ledger, taskId: task.taskId, reasonCode: 'REPAIR_BUDGET_DENIED', facts: { forRepairRound: priorRounds + 1 },
+      safeSummary: 'A repair round was required and the budget did not permit it.',
+    });
   }
 
   let plan;
@@ -2907,8 +2981,10 @@ async function scheduleRepair(input: {
     // matched to the column's vocabulary. A future producer that routes an
     // upper-case cause here is then recorded rather than silently generalised.
     const reasonCode = safeReasonCode(error instanceof Error ? error.message : null) ?? 'repair_not_plannable';
-    await ledger.event('run.failed', { taskId: task.taskId, facts: { reasonCode } });
-    return { kind: 'HALTED', taskId: task.taskId, reasonCode, safeSummary: 'A repair round was required and could not be planned.' };
+    return haltRunTerminally({
+      deps, run, ledger, taskId: task.taskId, reasonCode, facts: { forRepairRound: priorRounds + 1 },
+      safeSummary: 'A repair round was required and could not be planned.',
+    });
   }
 
   const created = await deps.store.addTask({
