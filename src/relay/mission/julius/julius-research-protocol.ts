@@ -6,7 +6,13 @@ import {
   type LiveReachRefusal,
   type LiveReachSource,
 } from '../live-reach';
-import type { JuliusResearchOutcome, JuliusResearchRefusal, JuliusResearchRole } from './julius-research-policy';
+import {
+  juliusResearchPolicyIntact,
+  type JuliusResearchOutcome,
+  type JuliusResearchPolicy,
+  type JuliusResearchRefusal,
+  type JuliusResearchRole,
+} from './julius-research-policy';
 
 /**
  * WHAT A WORKER MAY ASK FOR, AND WHAT COMES BACK.
@@ -208,8 +214,88 @@ export function juliusResearchAskFieldGuidance(): string {
     `  "reference": what to read, up to ${JULIUS_RESEARCH_ASK_LIMITS.referenceChars} characters`,
     `  "purpose": why you need it, up to ${JULIUS_RESEARCH_ASK_LIMITS.purposeChars} characters`,
     'Julius decides whether this mission is authorised to read it. An unauthorised ask is refused and recorded; it is never served quietly.',
-    'An EMPTY list is the ordinary answer and means you need nothing. Never name a budget, a host, an allowlist, a role or an identifier in an ask: the whole ask is refused if you do.',
+    'An EMPTY list is the ordinary answer and means you need nothing.',
+    'An ask carries exactly those four fields. Never add a field of your own — no budget, hosts, allowlist, role or identifier field: the whole ask is refused if you do. A host belongs only inside "reference", as part of the URL you want read.',
   ].join('\n');
+}
+
+/* ------------------------------------------- what this mission authorises */
+
+/**
+ * WHAT A PROMPT SAYS WHEN THE COMPOSITION HANDED IT NO POLICY. Not "none": that
+ * would be a claim about a contract nobody read. Every production composition
+ * hands one; this exists so a gap reads as a gap.
+ */
+export const RESEARCH_AUTHORITY_NOT_STATED = 'RESEARCH THIS MISSION AUTHORISES: not stated to this dispatch. Julius still decides every ask against the Mission Contract when it is made.';
+
+/** Bounds on the rendering, so a wide grant cannot crowd the packet it sits in. */
+export const JULIUS_RESEARCH_AUTHORITY_LIMITS = Object.freeze({
+  /** Hosts listed per source; the rest are counted, never silently dropped. */
+  hostsPerSource: 12,
+});
+
+const budgetPhrase = (budget: { readonly maxRetrievals: number | null; readonly maxBytes: number | null }): string => {
+  const retrievals = budget.maxRetrievals === null ? 'no stated retrieval cap' : `at most ${String(budget.maxRetrievals)} retrieval(s)`;
+  return budget.maxBytes === null ? retrievals : `${retrievals} and ${String(budget.maxBytes)} bytes`;
+};
+
+/**
+ * THE RESEARCH A MISSION AUTHORISES, TOLD TO THE SLOT THAT MAY ASK.
+ *
+ * Qualification attempt 2 (run 34757974058) sent four research asks and had all
+ * four refused. Its contract granted `web` / `read_item` on www.postgresql.org
+ * alone, and no worker had been told so: every slot was shown the nine sources
+ * and six capabilities Relay has vocabulary for, and never the one grant its
+ * mission holds. A worker cannot ask correctly for a host nobody named to it.
+ *
+ * INFORMATION ABOUT AUTHORITY, NEVER AUTHORITY. This renders a SEALED policy —
+ * the same object `authorizeJuliusResearch` decides against — and nothing it
+ * writes is read back by anything that grants: an ask outside the grant is
+ * refused exactly as before. A policy whose fingerprint does not match its
+ * contents is rendered as authorising nothing, because the authorizer refuses
+ * every ask under it (`policy_tampered`), and the worker is told what will
+ * happen rather than what the policy claims.
+ *
+ * BOUNDED. At most `hostsPerSource` hosts per source are listed, and the rest
+ * are counted on the same line, so a truncated grant says it is truncated.
+ *
+ * Pure: the same policy and role give the same text.
+ */
+export function renderJuliusResearchAuthority(input: {
+  readonly policy: JuliusResearchPolicy;
+  readonly role: string;
+}): string {
+  const { policy } = input;
+  const none = (why: string): string => [
+    'RESEARCH THIS MISSION AUTHORISES: NONE.',
+    `${why} Every research ask is refused before any request is made, so do not ask: work from what you were given, and say plainly what you could not establish.`,
+  ].join('\n');
+
+  if (!juliusResearchPolicyIntact(policy)) {
+    return none('This dispatch\'s research policy does not match its own seal, and Julius authorises nothing under a policy it cannot vouch for.');
+  }
+  if (policy.allowances.length === 0 || policy.roles.length === 0) {
+    return none('The Mission Contract grants no research source to any slot.');
+  }
+  const slotMayAsk = (policy.roles as readonly string[]).includes(input.role);
+  const lines = [
+    `RESEARCH THIS MISSION AUTHORISES, read from its sealed research policy (${policy.fingerprint.slice(0, 24)}). This is authority that already exists: nothing you write can widen it, and an ask outside it is refused before any request is made.`,
+    slotMayAsk
+      ? `  Your slot (${input.role}) may ask.`
+      : `  Your slot (${input.role}) may NOT ask: this mission authorises research by ${policy.roles.join(', ')} only, so any ask you make is refused.`,
+  ];
+  for (const allowance of policy.allowances) {
+    const listed = allowance.hosts.slice(0, JULIUS_RESEARCH_AUTHORITY_LIMITS.hostsPerSource);
+    const unlisted = allowance.hosts.length - listed.length;
+    const capabilities = allowance.capabilities.map((capability) => `"${capability}"`).join(' or ');
+    const more = unlisted > 0 ? ` (and ${String(unlisted)} more host(s) not listed here)` : '';
+    lines.push(`  source "${allowance.source}", capability ${capabilities}, on: ${listed.join(', ')}${more}`);
+  }
+  lines.push(
+    '  A reference is an absolute https:// URL on one of those hosts. An exact host matches only itself; "*.example.org" matches its subdomains and never example.org itself.',
+    `  Allowance: ${budgetPhrase(policy.roleBudget)} for your slot; ${budgetPhrase(policy.missionBudget)} for the whole mission.`,
+  );
+  return lines.join('\n');
 }
 
 /* ------------------------------------------------------------- the answer */

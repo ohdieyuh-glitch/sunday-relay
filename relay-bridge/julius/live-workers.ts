@@ -35,6 +35,7 @@ import {
   type JuliusDispatchAllocation,
   type JuliusProviderAdapter,
   type JuliusProviderResult,
+  type JuliusResearchPolicy,
   type JuliusReviewStage,
   type JuliusReviewRequirement,
   type JuliusWorker,
@@ -56,7 +57,9 @@ import { ARCHITECT_GUIDANCE_SCHEMA, ARCHITECT_GUIDANCE_SCHEMA_NAME } from '../..
 import { ARCHITECT_PLAN_SCHEMA, ARCHITECT_PLAN_SCHEMA_NAME } from '../../src/relay/connectors/gpt-architect';
 import {
   RESEARCH_ASKS_FIELD,
+  RESEARCH_AUTHORITY_NOT_STATED,
   juliusResearchAskFieldGuidance,
+  renderJuliusResearchAuthority,
   withJuliusResearchAsks,
 } from '../../src/relay/mission/julius/julius-research-protocol';
 import {
@@ -265,6 +268,17 @@ const ARCHITECT_CHARTER = [
  * sanitizer enforces is the drift `HostedLimits.maxTurns` was.
  */
 const RESEARCH_FIELD_GUIDANCE = juliusResearchAskFieldGuidance();
+
+/**
+ * WHAT THIS DISPATCH MAY RESEARCH, from the SAME sealed policy the research
+ * mediator decides with: the composition hands both the one `researchPolicyFor`,
+ * so the sentence a worker reads and the decision its ask meets cannot come from
+ * two readings of the contract. Rendering grants nothing; the mediator never
+ * reads this text.
+ */
+export type ResearchPolicySource = (missionId: string) => JuliusResearchPolicy;
+const researchAuthorityFor = (source: ResearchPolicySource | undefined, missionId: string, role: string): string =>
+  (source === undefined ? RESEARCH_AUTHORITY_NOT_STATED : renderJuliusResearchAuthority({ policy: source(missionId), role }));
 
 /**
  * READ THE ASK OFF A WORKER'S OWN ANSWER, and carry it or nothing.
@@ -927,6 +941,8 @@ export function createLiveArchitectAdapter(input: {
   readonly artifacts: LiveArtifactExchange;
   readonly config: GptArchitectConfig;
   readonly apiKey: string;
+  /** The mission's sealed research policy, the same source the mediator decides with. */
+  readonly researchPolicyFor?: ResearchPolicySource;
   /** Injectable for offline tests; defaults to the real connector. */
   readonly run?: typeof runGptArchitect;
 }): JuliusProviderAdapter {
@@ -975,7 +991,7 @@ export function createLiveArchitectAdapter(input: {
         : revising ? `${ARCHITECT_CHARTER} ${ARCHITECT_REVISION_CHARTER}` : ARCHITECT_CHARTER;
       // A FIELD NOBODY WAS TOLD ABOUT IS A FIELD NOBODY USES. The schema makes
       // the architect answer it; this is what it means.
-      const baseCharter = `${roleCharter}\n\n${RESEARCH_FIELD_GUIDANCE}`;
+      const baseCharter = `${roleCharter}\n\n${RESEARCH_FIELD_GUIDANCE}\n\n${researchAuthorityFor(input.researchPolicyFor, snapshot.packet.missionId, input.worker.role)}`;
       let attempts = 0;
       let correction: string | null = null;
       for (;;) {
@@ -1270,6 +1286,8 @@ export function createLiveHostedCodingAdapter(input: {
   readonly testCommand: string;
   /** Tool effects go through the independent executor, never a local shell. */
   readonly shell: ShellEffectPort;
+  /** The mission's sealed research policy, the same source the mediator decides with. */
+  readonly researchPolicyFor?: ResearchPolicySource;
   readonly run?: typeof runHostedCodingAgent;
   readonly queryLoader?: () => Promise<HostedQueryFn>;
 }): JuliusProviderAdapter {
@@ -1356,6 +1374,8 @@ export function createLiveHostedCodingAdapter(input: {
            * it should be the most recent thing read before the work starts.
            */
           juliusParticipationProtocol(),
+          // AND WHAT THE MISSION LETS THIS SLOT ASK FOR, right beside the door.
+          researchAuthorityFor(input.researchPolicyFor, snapshot.packet.missionId, input.worker.role),
         ].join('\n\n'),
         workspacePath: input.workspacePath,
         apiKey: input.apiKey,
@@ -1495,6 +1515,8 @@ export function createLiveHermesReviewerAdapter(input: {
   readonly artifacts: LiveArtifactExchange;
   readonly config: HermesConfig;
   readonly testCommand: string;
+  /** The mission's sealed research policy, the same source the mediator decides with. */
+  readonly researchPolicyFor?: ResearchPolicySource;
   readonly run?: typeof runHermesReview;
   /** The backoff before a transient re-ask. Injectable so a proof does not wait it out. */
   readonly sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
@@ -1624,6 +1646,9 @@ export function createLiveHermesReviewerAdapter(input: {
          */
         ...(dispatch.contract === undefined ? {} : { contract: dispatch.contract }),
         missionId: snapshot.packet.missionId,
+        ...(input.researchPolicyFor === undefined ? {} : {
+          researchAuthority: researchAuthorityFor(input.researchPolicyFor, snapshot.packet.missionId, input.worker.role),
+        }),
         // THE FINDINGS ARE NOT THE FOUNDER'S REQUEST. `packetText` joins every
         // block, so the FINDING entries Julius compiled for a repair review
         // would appear under "FOUNDER'S ORIGINAL REQUEST" as well as under the

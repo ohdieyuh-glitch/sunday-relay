@@ -109,6 +109,7 @@ import {
   createLiveHostedCodingAdapter,
   type CompiledContextSource,
   type LiveArtifactExchange,
+  type ResearchPolicySource,
 } from './live-workers';
 import type { ShellEffectPort, TaskClaimSource } from './executor-effects';
 
@@ -258,6 +259,12 @@ export function resolveLiveWorkers(options: {
    * environment's default stands.
    */
   readonly architectMaxOutputTokens?: number | null;
+  /**
+   * The mission's sealed research policy, handed to every worker so each is TOLD
+   * what it may ask for. The entrypoint passes the same function to the research
+   * mediator, which is what DECIDES; absent, each prompt says it was not told.
+   */
+  readonly researchPolicyFor?: ResearchPolicySource;
   /** Test seams: inject fakes here; production callers omit them. */
   readonly runners?: {
     readonly architect?: typeof runGptArchitect;
@@ -308,6 +315,7 @@ export function resolveLiveWorkers(options: {
       adapter: createLiveArchitectAdapter({
         worker, contexts: options.contexts, artifacts: options.artifacts,
         config: architectConfig, apiKey: options.env.OPENAI_API_KEY ?? '',
+        ...(options.researchPolicyFor === undefined ? {} : { researchPolicyFor: options.researchPolicyFor }),
         run: options.runners?.architect,
       }),
     });
@@ -329,6 +337,7 @@ export function resolveLiveWorkers(options: {
         projectId: options.projectId, apiKey: options.env[HOSTED_API_KEY_ENV] ?? '',
         requestedModel: requested.codingModel ?? '', workspacePath: options.workspacePath,
         testCommand: options.testCommand, shell: options.shell as ShellEffectPort,
+        ...(options.researchPolicyFor === undefined ? {} : { researchPolicyFor: options.researchPolicyFor }),
         run: options.runners?.coder, queryLoader: options.runners?.queryLoader,
       }),
     });
@@ -352,6 +361,7 @@ export function resolveLiveWorkers(options: {
       adapter: createLiveHermesReviewerAdapter({
         worker, contexts: options.contexts, artifacts: options.artifacts,
         config: hermes, testCommand: options.testCommand,
+        ...(options.researchPolicyFor === undefined ? {} : { researchPolicyFor: options.researchPolicyFor }),
         run: options.runners?.reviewer,
       }),
     });
