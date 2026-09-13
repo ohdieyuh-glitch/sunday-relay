@@ -38,7 +38,7 @@ export const REVIEW_TASK_ATTEMPTS = 1;
 export const MAX_REVIEWER_ATTEMPTS = JULIUS_NORMAL_REVIEW_STAGES.length * REVIEW_TASK_ATTEMPTS;
 
 export const REVIEWER_DEADLINE_HEADROOM_RATIO = 0.2;
-export const REVIEWER_REQUEST_TIMEOUT_SECONDS = 90;
+export const REVIEWER_REQUEST_TIMEOUT_SECONDS = 480;
 export const MEASURED_ENGINE_STARTUP_MS = 18_000;
 
 /** A FLOOR read off the durations we have watched — see the TypeScript for why

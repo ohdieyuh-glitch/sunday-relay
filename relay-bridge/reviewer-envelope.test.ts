@@ -160,11 +160,14 @@ describe('5 · a deterministic failure does not repeat itself', () => {
 describe('6–7 · the share admits the normal path, and the constant is the enforced one', () => {
   it('6 · the corrected deadline fits three attempts inside the 50-minute share', () => {
     const deadline = resolveReviewerDeadline();
-    expect(deadline.operativeTimeoutMs).toBe(756_000);
+    // 756 000 at a 90 s request; 792 000 since the tool-less reviewer's request
+    // became 480 s (paid qualification 34753589938): 1 request x 480 s + 180 s
+    // overhead = 660 000, plus 20% headroom.
+    expect(deadline.operativeTimeoutMs).toBe(792_000);
     expect(deadline.hardCeilingMs).toBe(Math.floor(REVIEWER_JOB_SHARE_MS / MAX_REVIEWER_ATTEMPTS));
     expect(deadline.operativeTimeoutMs).toBeLessThanOrEqual(deadline.hardCeilingMs);
     // The whole normal review path, worst case, against the share it is given.
-    expect(deadline.worstCaseReviewerSpendMs).toBe(756_000 * 3);
+    expect(deadline.worstCaseReviewerSpendMs).toBe(792_000 * 3);
     expect(deadline.worstCaseReviewerSpendMs).toBeLessThanOrEqual(REVIEWER_JOB_SHARE_MS);
     // And it went UP: the old 480 112 ms was affordable only because the model
     // under it was wrong.
@@ -172,14 +175,19 @@ describe('6–7 · the share admits the normal path, and the constant is the enf
   });
 
   it('7 · both constants are derived, and the engine guard reads the derivation', () => {
-    // The request count comes from what we watched…
-    expect(impliedRequestsPerReview()).toBe(5);
+    // The request count comes from what we watched, AT THE REQUEST SIZE IN FORCE…
+    expect(impliedRequestsPerReview()).toBe(1);
+    expect(impliedRequestsPerReview(90), 'at the old 90 s request the same observations implied five').toBe(5);
     expect(DEFAULT_ANALYTICAL_MODEL.requestsPerReview).toBe(impliedRequestsPerReview());
-    // …and two requests provably cannot account for the review that completed.
+    // …and ONE request at that size holds every review ever watched, the one
+    // cut off still running included: a tool-less review is one request, and
+    // the cap no longer ends a review that is merely long.
     const completed = RECORDED_REVIEWER_OBSERVATIONS.find(o => o.elapsedMs === 381_880)!;
     expect(completed.outcome).toBe('COMPLETED');
-    expect(MEASURED_ENGINE_STARTUP_MS + 2 * REVIEWER_REQUEST_TIMEOUT_SECONDS * 1000)
-      .toBeLessThan(completed.elapsedMs);
+    for (const observation of RECORDED_REVIEWER_OBSERVATIONS) {
+      expect(MEASURED_ENGINE_STARTUP_MS + REVIEWER_REQUEST_TIMEOUT_SECONDS * 1000, `${observation.elapsedMs} ms`)
+        .toBeGreaterThanOrEqual(observation.elapsedMs);
+    }
 
     // The attempt ceiling comes from what the pipeline enforces.
     expect(MAX_REVIEWER_ATTEMPTS).toBe(JULIUS_NORMAL_REVIEW_STAGES.length * REVIEW_TASK_ATTEMPTS);
@@ -223,9 +231,10 @@ describe('8 · the review itself is not made smaller to fit', () => {
     }
     // The deadline each review gets went UP by more than half.
     expect(resolveReviewerDeadline().operativeTimeoutMs / 480_112).toBeGreaterThan(1.5);
-    // The engine keeps its per-request room, and the reviewer its in-adapter
-    // correction; neither was shaved to make the share arithmetic work.
-    expect(REVIEWER_REQUEST_TIMEOUT_SECONDS).toBe(90);
+    // The engine's per-request room went UP, not down: a tool-less review is one
+    // request that reasons and writes the whole verdict, and 90 s was sized for a
+    // loop of short tool calls. The reviewer keeps its in-adapter correction.
+    expect(REVIEWER_REQUEST_TIMEOUT_SECONDS).toBe(480);
     expect(read('relay-bridge/julius/live-workers.ts')).toContain('const REVIEW_ATTEMPT_LIMIT = 2;');
     // Reviewer depth is untouched in the packet the reviewer is handed: the
     // stage rubric, the findings and the evidence contract are all unchanged.

@@ -113,6 +113,17 @@ def _install():
             record["model"] = getattr(self, "model", None)
             record["request_timeout_seconds"] = get_provider_request_timeout(self.provider, self.model)
             record["stale_timeout_seconds"] = get_provider_stale_timeout(self.provider, self.model)
+            # The stream watchdogs Hermes reads from its environment (loaded from
+            # the profile .env) — as the agent will see them, or None if unset.
+            for key, env_name in (
+                ("codex_event_stale_timeout_seconds", "HERMES_CODEX_EVENT_STALE_TIMEOUT_SECONDS"),
+                ("codex_ttfb_timeout_seconds", "HERMES_CODEX_TTFB_TIMEOUT_SECONDS"),
+            ):
+                raw = os.environ.get(env_name)
+                try:
+                    record[key] = None if raw is None else float(raw)
+                except ValueError:
+                    record[key] = None
             record["api_attempts"] = getattr(self, "_api_max_retries", None)
             record["max_iterations"] = getattr(self, "max_iterations", None)
             record["safe_mode"] = os.environ.get("HERMES_SAFE_MODE") == "1"

@@ -151,8 +151,18 @@ export interface ReviewerAnalyticalModel {
 }
 
 /** The per-request deadline the bootstrap writes into the engine's profile.
- *  `reviewer-deadline.test.ts` holds the workflow to this exact number. */
-export const REVIEWER_REQUEST_TIMEOUT_SECONDS = 90;
+ *  `reviewer-deadline.test.ts` holds the workflow to this exact number.
+ *
+ *  90 -> 480 AFTER PAID QUALIFICATION 34753589938. The reviewer holds no tool,
+ *  so a review is ONE request that reasons and then writes the whole verdict;
+ *  90 s was sized for a loop of short tool calls, and that run's first attempt
+ *  outran it. 480 s is the longest review ever watched (400 093 ms, cut off
+ *  still running) with a fifth again beside it, so one request may take as long
+ *  as a whole review has. The bootstrap ties the engine's two stream watchdogs
+ *  to this same number, and the operative deadline is re-derived from it —
+ *  and comes out unchanged (792 000 ms), because it was already sized for the
+ *  longest review. */
+export const REVIEWER_REQUEST_TIMEOUT_SECONDS = 480;
 
 /**
  * THE FIXED LOCAL STARTUP BEFORE A PROVIDER IS CONTACTED, MEASURED.

@@ -835,6 +835,8 @@ describe('the evidence dump names only tables and columns the migrations create'
       // And WHICH kind of second review call it was: a correction of a shape
       // defect, or one transient re-ask inside the same deadline.
       'reviewReaskShape',
+      // The engine's own call count, on failed reviews too.
+      'engineApiCalls',
       // THE ATTEMPT ITSELF. Live Run 3 COMPLETED and produced no rows here at
       // all, because diagnostics were flattened onto the two failure events and
       // onto nothing else. `outcome` is what lets a healthy attempt be filtered

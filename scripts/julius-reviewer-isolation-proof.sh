@@ -61,7 +61,7 @@ run_case() { # name, expectation (PROVEN or a refusal prefix)
   env -i PATH="$PATH" HOME=/root \
     HERMES_PROFILE_HOME="/tmp/profile-$name" HERMES_WRAPPER_DIR="/tmp/bin-$name" \
     HERMES_BOOTSTRAP_EVIDENCE="$evidence" XAI_API_KEY=proof-placeholder \
-    HERMES_REQUEST_TIMEOUT_SECONDS=90 RELAY_HERMES_PROVIDER=xai RELAY_HERMES_MODEL=grok-build-0.1 \
+    HERMES_REQUEST_TIMEOUT_SECONDS=480 RELAY_HERMES_PROVIDER=xai RELAY_HERMES_MODEL=grok-build-0.1 \
     bash .github/julius-live-hermes.sh < /dev/null > "$log" 2>&1
   local code=$?
   if [ "$expectation" = PROVEN ]; then

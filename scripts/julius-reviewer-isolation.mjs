@@ -68,7 +68,8 @@ export const REVIEWER_API_ATTEMPTS = 1;
 export const REVIEWER_ISOLATION_RECORD_FIELDS = Object.freeze([
   'reached', 'network_guard_verified', 'model_visible_tools', 'valid_tool_names',
   'agent_enabled_toolsets', 'resolved_cli_toolsets', 'safe_mode', 'shell_hooks_registered',
-  'api_attempts', 'request_timeout_seconds', 'stale_timeout_seconds', 'provider', 'model',
+  'api_attempts', 'request_timeout_seconds', 'stale_timeout_seconds',
+  'codex_event_stale_timeout_seconds', 'codex_ttfb_timeout_seconds', 'provider', 'model',
   'max_iterations', 'network_refused',
 ]);
 
@@ -174,7 +175,13 @@ export function verifyReviewerIsolation(record, expected, sideRecords = []) {
   if (record.api_attempts !== REVIEWER_API_ATTEMPTS) {
     return refuse(`reviewer_api_attempts:${Number.isInteger(record.api_attempts) ? record.api_attempts : 'unknown'}_expected_${REVIEWER_API_ATTEMPTS}`);
   }
-  for (const field of ['request_timeout_seconds', 'stale_timeout_seconds']) {
+  /**
+   * THE STREAM WATCHDOGS ARE THE REQUEST DEADLINE, OR THE REVIEW IS KILLED EARLY.
+   * Unset means the engine's size-scaled default — 12 s of silence below ~10k
+   * tokens — which ended paid qualification 34753589938's reviewer. So unset is
+   * refused exactly like a wrong number.
+   */
+  for (const field of ['request_timeout_seconds', 'stale_timeout_seconds', 'codex_event_stale_timeout_seconds', 'codex_ttfb_timeout_seconds']) {
     if (record[field] !== seconds) {
       return refuse(`reviewer_${field}:${typeof record[field] === 'number' ? record[field] : 'unknown'}_expected_${seconds}`);
     }
@@ -198,6 +205,8 @@ export function verifyReviewerIsolation(record, expected, sideRecords = []) {
       `api_attempts=${REVIEWER_API_ATTEMPTS}`,
       `request_timeout_s=${seconds}`,
       `stale_timeout_s=${seconds}`,
+      `codex_event_stale_timeout_s=${seconds}`,
+      `codex_ttfb_timeout_s=${seconds}`,
       `max_iterations=${maxIterations}`,
       `proof_network_refusals=${record.network_refused.length + childRefusals}`,
       '(hermes -z through the wrapper, network closed, no model asked)',

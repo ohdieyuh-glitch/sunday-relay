@@ -120,6 +120,20 @@ mkdir -p "$HERMES_PROFILE_HOME/.hermes"
 chmod 0700 "$HERMES_PROFILE_HOME/.hermes"
 umask 077
 printf '%s=%s\n' 'XAI_API_KEY' "$XAI_API_KEY" > "$HERMES_PROFILE_HOME/.hermes/.env"
+# THE STREAM WATCHDOGS, TIED TO THE ONE REQUEST DEADLINE.
+#
+# Hermes loads this file into its environment, and for a responses-mode stream
+# it applies two watchdogs of its own beside the request timeout
+# (agent/chat_completion_helpers.py at the pinned commit): no first byte within
+# HERMES_CODEX_TTFB_TIMEOUT_SECONDS (default 120 s), and no SSE event for
+# HERMES_CODEX_EVENT_STALE_TIMEOUT_SECONDS after the first byte — a default that
+# scales with request size and is 12 s below ~10k tokens. A reasoning model
+# streams nothing while it thinks, so paid qualification 34753589938's tool-less
+# reviewer was killed at 12 s and the record read "prose". Both are set to the
+# request timeout: silence is allowed exactly as long as a whole request is, and
+# never longer. Not secrets; they share the file because Hermes reads it first.
+printf '%s=%s\n' 'HERMES_CODEX_EVENT_STALE_TIMEOUT_SECONDS' "$HERMES_REQUEST_TIMEOUT_SECONDS" >> "$HERMES_PROFILE_HOME/.hermes/.env"
+printf '%s=%s\n' 'HERMES_CODEX_TTFB_TIMEOUT_SECONDS' "$HERMES_REQUEST_TIMEOUT_SECONDS" >> "$HERMES_PROFILE_HOME/.hermes/.env"
 chmod 0600 "$HERMES_PROFILE_HOME/.hermes/.env"
 
 # THE ENGINE GETS A DEADLINE OF ITS OWN, INSIDE RELAY'S.

@@ -270,6 +270,11 @@ export const safeReviewDiagnostics=(value:unknown):JuliusSafeDiagnostics|null=>{
    */
   reviewAttempts:safeCount(v.reviewAttempts),
   /**
+   * PROVIDER CALLS THE REVIEW ENGINE REPORTED for its last attempt, from its
+   * own usage file — written on failure too. Null when no report existed.
+   */
+  engineApiCalls:safeCount(v.engineApiCalls),
+  /**
    * WHY THE SECOND REVIEW CALL WAS BOUGHT, as the closed shape token of the
    * answer that caused it: a correctable shape defect, or the transient
    * `review_service_unavailable` re-asked once inside the same deadline. A

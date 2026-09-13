@@ -35,6 +35,7 @@ const PROVEN = {
   model_visible_tools: [], network_guard_verified: true, network_refused: ["getaddrinfo:'models.dev'"],
   prompt_bytes: 15, provider: 'xai', reached: true, request_timeout_seconds: 90.0, resolved_cli_toolsets: [],
   safe_mode: true, shell_hooks_registered: 0, stale_timeout_seconds: 90.0, valid_tool_names: [],
+  codex_event_stale_timeout_seconds: 90.0, codex_ttfb_timeout_seconds: 90.0,
 };
 
 /** The profile the paid path wrote before this change: a deadline and nothing about tools. Observed, 2026-09-13. */
@@ -90,7 +91,8 @@ describe('the verdict on what the proof observed', () => {
     expect(verdict).toEqual({
       ok: true,
       evidence: 'hermes_reviewer_isolation=PROVEN model_visible_tools=0 toolsets=0 safe_mode=on shell_hooks=0 '
-        + `api_attempts=${REVIEWER_API_ATTEMPTS} request_timeout_s=90 stale_timeout_s=90 max_iterations=90 proof_network_refusals=1 `
+        + `api_attempts=${REVIEWER_API_ATTEMPTS} request_timeout_s=90 stale_timeout_s=90 `
+        + 'codex_event_stale_timeout_s=90 codex_ttfb_timeout_s=90 max_iterations=90 proof_network_refusals=1 '
         + '(hermes -z through the wrapper, network closed, no model asked)',
     });
   });
@@ -113,6 +115,12 @@ describe('the verdict on what the proof observed', () => {
   it('refuses retries and deadlines other than the ones configured', () => {
     expect(refusal({ ...PROVEN, api_attempts: 3 })).toBe('reviewer_api_attempts:3_expected_1');
     expect(refusal({ ...PROVEN, request_timeout_seconds: 60, stale_timeout_seconds: 60 })).toBe('reviewer_request_timeout_seconds:60_expected_90');
+    // THE STREAM WATCHDOGS: unset is the engine's size-scaled default (12 s of
+    // silence below ~10k tokens), which killed paid qualification 34753589938's
+    // reviewer. Unset and wrong are refused alike.
+    expect(refusal({ ...PROVEN, codex_event_stale_timeout_seconds: null })).toBe('reviewer_codex_event_stale_timeout_seconds:unknown_expected_90');
+    expect(refusal({ ...PROVEN, codex_event_stale_timeout_seconds: 12 })).toBe('reviewer_codex_event_stale_timeout_seconds:12_expected_90');
+    expect(refusal({ ...PROVEN, codex_ttfb_timeout_seconds: null })).toBe('reviewer_codex_ttfb_timeout_seconds:unknown_expected_90');
     expect(refusal({ ...PROVEN, stale_timeout_seconds: null })).toBe('reviewer_stale_timeout_seconds:unknown_expected_90');
   });
 
@@ -191,6 +199,17 @@ describe('the bootstrap proves isolation on the path the review takes', () => {
   it('finds the proof it is about to hold to account', () => {
     expect(PROOF_START).toBeGreaterThan(-1);
     expect(PROOF_END).toBeGreaterThan(PROOF_START);
+  });
+
+  it('ties both stream watchdogs to the request deadline in the profile the wrapper hands Hermes', () => {
+    const envFile = '"$HERMES_PROFILE_HOME/.hermes/.env"';
+    for (const name of ['HERMES_CODEX_EVENT_STALE_TIMEOUT_SECONDS', 'HERMES_CODEX_TTFB_TIMEOUT_SECONDS']) {
+      const line = `printf '%s=%s\\n' '${name}' "$HERMES_REQUEST_TIMEOUT_SECONDS" >> ${envFile}`;
+      expect(bootstrap, name).toContain(line);
+      expect(bootstrap.indexOf(line), `${name} is written before the proof reads it`).toBeLessThan(proofAt);
+    }
+    // Appended after the credential line, which truncates the file.
+    expect(bootstrap.indexOf("'HERMES_CODEX_EVENT_STALE_TIMEOUT_SECONDS'")).toBeGreaterThan(bootstrap.indexOf("'XAI_API_KEY' \"$XAI_API_KEY\" >"));
   });
 
   it('renders the profile from the policy module instead of a heredoc of its own', () => {
@@ -440,6 +459,9 @@ describe('the proof hook', () => {
         SYSTEMROOT: process.env.SYSTEMROOT ?? '',
         PYTHONPATH: [hook, hermes].join(delimiter),
         FAKE_CONVERSATION_MARK: mark,
+        // What the bootstrap's profile .env puts in Hermes's environment.
+        HERMES_CODEX_EVENT_STALE_TIMEOUT_SECONDS: '90',
+        HERMES_CODEX_TTFB_TIMEOUT_SECONDS: '90',
         ...(withRecordVariable ? { RELAY_REVIEWER_ISOLATION_RECORD: record } : {}),
         ...env,
       },
@@ -461,6 +483,7 @@ describe('the proof hook', () => {
       model_visible_tools: ['terminal', 'write_file'], valid_tool_names: ['terminal', 'write_file'],
       agent_enabled_toolsets: ['file', 'terminal'], resolved_cli_toolsets: ['file', 'terminal'],
       api_attempts: 1, request_timeout_seconds: 90, stale_timeout_seconds: 90, provider: 'xai', model: 'grok-build-0.1',
+      codex_event_stale_timeout_seconds: 90, codex_ttfb_timeout_seconds: 90,
     });
     expect(verifyReviewerIsolation(record, EXPECTED)).toEqual({ ok: false, reason: 'reviewer_holds_tools:terminal,write_file' });
   }, 30_000);
@@ -475,6 +498,13 @@ describe('the proof hook', () => {
     const { sideRecords } = readIsolationRecords(join(dir, 'record.json'));
     expect(sideRecords).toEqual([{ network_refused: ["getaddrinfo:'localhost'"] }, { network_refused: ["getaddrinfo:'localhost'"] }]);
     expect(verifyReviewerIsolation(record, EXPECTED, sideRecords)).toMatchObject({ ok: true });
+  }, 30_000);
+
+  it('records the stream watchdogs as the agent sees them, and an unreadable one as unknown', () => {
+    const { record } = runHook({ HERMES_CODEX_EVENT_STALE_TIMEOUT_SECONDS: '240', HERMES_CODEX_TTFB_TIMEOUT_SECONDS: 'twelve' });
+    expect(record?.codex_event_stale_timeout_seconds).toBe(240);
+    expect(record?.codex_ttfb_timeout_seconds).toBeNull();
+    expect(verifyReviewerIsolation(record, EXPECTED)).toEqual({ ok: false, reason: 'reviewer_codex_event_stale_timeout_seconds:240_expected_90' });
   }, 30_000);
 
   it('reads safe mode from the environment Hermes set, so a run without the flag says so', () => {
