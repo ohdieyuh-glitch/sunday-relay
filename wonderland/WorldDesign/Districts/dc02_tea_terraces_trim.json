@@ -1,0 +1,209 @@
+{
+ "pass": "DC02_TRIM",
+ "title": "Tea Terraces: loose walls, bench and lamp post sunk out of the arrival view (reversible)",
+ "trims": [
+  {
+   "name": "WonderlandInstancedBatch_304",
+   "label": "V2Batch_garden_wall_MI_V2_IvoryStone",
+   "mesh": "SM_garden_wall",
+   "index": 83,
+   "why": "garden-wall stub 3.5 m left of the visitor",
+   "before": [
+    -11674.16,
+    -3266.801,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.792,
+    1.0,
+    0.46
+   ],
+   "after": [
+    -11674.16,
+    -3266.801,
+    -100000.0,
+    0.0,
+    0.0,
+    0.0,
+    0.792,
+    1.0,
+    0.46
+   ]
+  },
+  {
+   "name": "WonderlandInstancedBatch_304",
+   "label": "V2Batch_garden_wall_MI_V2_IvoryStone",
+   "mesh": "SM_garden_wall",
+   "index": 82,
+   "why": "garden-wall stub 5 m ahead, left",
+   "before": [
+    -11112.694,
+    -3266.801,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.792,
+    1.0,
+    0.46
+   ],
+   "after": [
+    -11112.694,
+    -3266.801,
+    -100000.0,
+    0.0,
+    0.0,
+    0.0,
+    0.792,
+    1.0,
+    0.46
+   ]
+  },
+  {
+   "name": "WonderlandInstancedBatch_304",
+   "label": "V2Batch_garden_wall_MI_V2_IvoryStone",
+   "mesh": "SM_garden_wall",
+   "index": 89,
+   "why": "its duplicate on the same spot",
+   "before": [
+    -11112.694,
+    -3266.801,
+    0.0,
+    0.0,
+    90.0,
+    0.0,
+    0.792,
+    1.0,
+    0.46
+   ],
+   "after": [
+    -11112.694,
+    -3266.801,
+    -100000.0,
+    0.0,
+    90.0,
+    0.0,
+    0.792,
+    1.0,
+    0.46
+   ]
+  },
+  {
+   "name": "WonderlandInstancedBatch_304",
+   "label": "V2Batch_garden_wall_MI_V2_IvoryStone",
+   "mesh": "SM_garden_wall",
+   "index": 88,
+   "why": "garden-wall stub 11 m left",
+   "before": [
+    -11112.694,
+    -3828.267,
+    0.0,
+    0.0,
+    90.0,
+    0.0,
+    0.792,
+    1.0,
+    0.46
+   ],
+   "after": [
+    -11112.694,
+    -3828.267,
+    -100000.0,
+    0.0,
+    90.0,
+    0.0,
+    0.792,
+    1.0,
+    0.46
+   ]
+  },
+  {
+   "name": "WonderlandInstancedBatch_294",
+   "label": "V2Batch_garden_bench_MI_V2_IvoryStone",
+   "mesh": "SM_garden_bench",
+   "index": 19,
+   "why": "blocky stone bench 6 m ahead, left",
+   "before": [
+    -11151.524,
+    -3023.593,
+    0.0,
+    0.0,
+    -128.434,
+    0.0,
+    1.154,
+    1.154,
+    1.154
+   ],
+   "after": [
+    -11151.524,
+    -3023.593,
+    -100000.0,
+    0.0,
+    -128.434,
+    0.0,
+    1.154,
+    1.154,
+    1.154
+   ]
+  },
+  {
+   "name": "WonderlandInstancedBatch_397",
+   "label": "V2Batch_waymarker_MI_V2_IvoryStone",
+   "mesh": "SM_waymarker",
+   "index": 171,
+   "why": "lamp post planted 6 m ahead, right of centre",
+   "before": [
+    -11343.219,
+    -2410.94,
+    0.0,
+    0.0,
+    -101.218,
+    0.0,
+    0.75,
+    0.75,
+    0.75
+   ],
+   "after": [
+    -11343.219,
+    -2410.94,
+    -100000.0,
+    0.0,
+    -101.218,
+    0.0,
+    0.75,
+    0.75,
+    0.75
+   ]
+  },
+  {
+   "name": "WonderlandInstancedBatch_400",
+   "label": "V2Batch_waymarker_lamp_MI_V2_GlassRose",
+   "mesh": "SM_waymarker_lamp",
+   "index": 44,
+   "why": "its lamp",
+   "before": [
+    -11343.219,
+    -2410.94,
+    0.0,
+    0.0,
+    -101.218,
+    0.0,
+    0.75,
+    0.75,
+    0.75
+   ],
+   "after": [
+    -11343.219,
+    -2410.94,
+    -100000.0,
+    0.0,
+    -101.218,
+    0.0,
+    0.75,
+    0.75,
+    0.75
+   ]
+  }
+ ]
+}
