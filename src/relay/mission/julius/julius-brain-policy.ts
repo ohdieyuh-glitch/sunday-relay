@@ -1,5 +1,5 @@
 import type { JuliusBrainDraft, JuliusBrainPrincipal, JuliusBrainRecordKind, JuliusBrainScope, JuliusBrainSection } from './julius-brain-contracts';
-import { JULIUS_BRAIN_KIND_SECTION, JULIUS_BRAIN_RECORD_KINDS } from './julius-brain-contracts';
+import { JULIUS_BRAIN_KIND_SECTION, JULIUS_BRAIN_RECORD_KINDS, canonicalJuliusBrainJson } from './julius-brain-contracts';
 
 /**
  * WHO MAY WRITE WHAT INTO THE PROJECT BRAIN.
@@ -149,8 +149,14 @@ export interface JuliusBrainAuthorizationSubject {
 const sameAuthor = (a: JuliusBrainPrincipal, b: JuliusBrainPrincipal): boolean =>
   a.kind === b.kind && a.id === b.id && a.role === b.role;
 
+/**
+ * CANONICAL comparison. `JSON.stringify` depends on key order, and PostgreSQL
+ * `jsonb` returns object keys in its own order — so a reviewer changing only
+ * `verification` looked, on a real database, as if it had also changed `data`.
+ */
 const changedFields = (before: Readonly<Record<string, unknown>>, after: Readonly<Record<string, unknown>>): string[] =>
-  [...new Set([...Object.keys(before), ...Object.keys(after)])].filter((key) => JSON.stringify(before[key]) !== JSON.stringify(after[key]));
+  [...new Set([...Object.keys(before), ...Object.keys(after)])]
+    .filter((key) => canonicalJuliusBrainJson(before[key] ?? null) !== canonicalJuliusBrainJson(after[key] ?? null));
 
 function withinScope(grant: { missionId: string | null; taskId: string | null }, scope: JuliusBrainScope): boolean {
   if (grant.missionId !== null && scope.missionId !== grant.missionId) return false;

@@ -109,6 +109,8 @@ const DECLARED_NOT_COMPOSED = [
   { path: 'src/relay/mission/julius/julius-brain-projection.ts', reason: 'Project Brain v2: the pure planner and the ledger→current-state fold every Brain store shares; not yet composed by the live root' },
   { path: 'src/relay/mission/julius/julius-brain-store.ts', reason: 'Project Brain v2: the store port and its in-memory semantic model; not yet composed by the live root' },
   { path: 'src/relay/mission/julius/julius-brain-service.ts', reason: 'Project Brain v2: the governed, principal-bound Brain API; not yet composed by the live root' },
+  { path: 'src/relay/mission/julius/julius-brain-query.ts', reason: 'Project Brain v2: deterministic, budgeted relevant-context retrieval and the bridge into v1 context entries; not yet composed by the live root' },
+  { path: 'src/relay/persistence/julius-brain-postgres.ts', reason: 'Project Brain v2: the durable PostgreSQL store (migration 024), proven by scripts/julius-project-brain-drill.ts across separate processes and a server restart; not yet composed by the live root' },
 ];
 
 /** Directories the trace does not enter. Crossing edges are reported, never hidden. */
@@ -262,6 +264,8 @@ const FILE_RULES = [
   ['src/relay/mission/julius/julius-brain-secrets.ts', 'DURABLE STATE / PROJECT BRAIN'],
   ['src/relay/mission/julius/julius-brain-store.ts', 'DURABLE STATE / PROJECT BRAIN'],
   ['src/relay/mission/julius/julius-brain-service.ts', 'DURABLE STATE / PROJECT BRAIN'],
+  ['src/relay/mission/julius/julius-brain-query.ts', 'DURABLE STATE / PROJECT BRAIN'],
+  ['src/relay/persistence/julius-brain-postgres.ts', 'DURABLE STATE / PROJECT BRAIN'],
   ['src/relay/mission/julius/julius-allocation-runtime.ts', 'LEASES / BUDGETS / PERMISSIONS'],
   // Allocation decides what a dispatch MAY spend; this decides what is known
   // about what it DID spend, and on whose authority. Same subsystem: both are

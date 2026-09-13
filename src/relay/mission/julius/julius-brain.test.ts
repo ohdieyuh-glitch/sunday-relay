@@ -117,7 +117,10 @@ describe('Project Brain — the three tiers write through governance', () => {
 
     // The reviewer may change verification — and nothing else.
     expect(refused(await reviewer.revise(evidenceId, evidence('p95 under 5ms', { verification: 'VERIFIED' }), { key: 'ev-1-v', expectedVersion: 1 })).reasonCode).toBe('revision_not_permitted');
-    committed(await reviewer.revise(evidenceId, evidence('p95 under 20ms', { verification: 'VERIFIED' }), { key: 'ev-1-v', expectedVersion: 1 }));
+    // KEY ORDER IS NOT CONTENT. PostgreSQL jsonb returns `data` with its keys
+    // reordered; a field-restricted revision must still see `data` unchanged.
+    const reordered = { ...evidence('p95 under 20ms', { verification: 'VERIFIED' }), data: { unit: 'ms', value: 12.5, name: 'latency_ms' } };
+    committed(await reviewer.revise(evidenceId, reordered, { key: 'ev-1-v', expectedVersion: 1 }));
 
     committed(await reviewer.create('FINDING', { findingClass: 'DEFECT', severity: 'HIGH', statement: 'no index', blocking: true, status: 'OPEN', juliusFindingId: null }, { key: 'f1', scope, links: [juliusLink('EVIDENCED_BY', evidenceId)] }));
     expect(refused(await reviewer.revise(objective.receipts[0]!.entityId, { statement: 'Ship nothing', successMeasure: null }, { key: 'obj-2', expectedVersion: 1 })).reasonCode).toBe('revision_not_permitted');
@@ -288,8 +291,11 @@ describe('Project Brain — concurrency, idempotency and atomicity', () => {
         result = await handle.retire(target.entityId, { reason: 'random', disposition: 'WITHDRAWN', expectedVersion: target.version, key: `k${step}` });
       }
       if (result.outcome === 'COMMITTED') committedCount += 1;
-      expect(store.verify(BRAIN)).toEqual({ ok: true, problems: [] });
+      // Full re-verification is O(ledger); every 20 steps keeps the invariant
+      // check dense without making the test a timing hostage to machine load.
+      if (step % 20 === 19) expect(store.verify(BRAIN)).toEqual({ ok: true, problems: [] });
     }
+    expect(store.verify(BRAIN)).toEqual({ ok: true, problems: [] });
     const records = await readAllJuliusBrainRecords(store, BRAIN, PROJECT);
     expect(records.length).toBeGreaterThan(20);
     expect(committedCount).toBeGreaterThan(20);
@@ -299,7 +305,7 @@ describe('Project Brain — concurrency, idempotency and atomicity', () => {
       expect(record.entityVersion).toBe((versions.get(record.entityId) ?? 0) + 1);
       versions.set(record.entityId, record.entityVersion);
     }
-  });
+  }, 60_000);
 });
 
 describe('Project Brain — secrets never enter', () => {

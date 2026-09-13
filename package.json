@@ -34,6 +34,8 @@
     "julius:failure-recovery-drill": "npm run julius:failure-recovery-drill:build --silent && node dist-relay-bridge/julius-failure-recovery-drill.cjs",
     "julius:repair-loop-drill:build": "esbuild scripts/julius-repair-loop-drill-main.ts --bundle --platform=node --format=cjs --outfile=dist-relay-bridge/julius-repair-loop-drill.cjs --external:pg --log-level=warning",
     "julius:repair-loop-drill": "npm run julius:repair-loop-drill:build --silent && node dist-relay-bridge/julius-repair-loop-drill.cjs",
+    "julius:brain:drill:build": "esbuild scripts/julius-project-brain-drill-main.ts --bundle --platform=node --format=cjs --outfile=dist-relay-bridge/julius-project-brain-drill.cjs --external:pg --log-level=warning",
+    "julius:brain:drill": "npm run julius:brain:drill:build --silent && node dist-relay-bridge/julius-project-brain-drill.cjs",
     "relay:julius:preflight": "npm run relay:julius:preflight:build --silent && node dist-relay-bridge/julius-live-preflight.cjs",
     "julius:review-currency": "node scripts/julius-review-currency.mjs",
     "julius:main-provenance": "node scripts/julius-main-provenance.mjs",

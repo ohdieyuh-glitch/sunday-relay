@@ -481,7 +481,11 @@ export function validateJuliusBrainDraft(draft: JuliusBrainDraft): string[] {
   }
   errors.push(...validateJuliusBrainObject(draft.op === 'RETIRE' ? JULIUS_BRAIN_RETIRE_SCHEMA : JULIUS_BRAIN_BODY_SCHEMAS[draft.kind], draft.body));
   try {
-    if (canonicalJuliusBrainJson(draft).length > LIMITS.draftBytes) errors.push(`draft: larger than ${LIMITS.draftBytes} bytes`);
+    const encoded = canonicalJuliusBrainJson(draft);
+    if (encoded.length > LIMITS.draftBytes) errors.push(`draft: larger than ${LIMITS.draftBytes} bytes`);
+    // PostgreSQL text and jsonb both refuse NUL. Refusing it here keeps the
+    // in-memory model from accepting a record production would reject.
+    if (encoded.includes('\\u0000')) errors.push('draft: contains a NUL character');
   } catch {
     errors.push('draft: not finite JSON');
   }
