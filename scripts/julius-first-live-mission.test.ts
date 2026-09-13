@@ -1330,6 +1330,21 @@ describe('F5 — evidence is built by allowlist, and secrets cannot ride along',
     expect(output).toContain('julius_exit=0');
   });
 
+  it('keeps the live ledger answer the roles check enforced, in its exact shape only', () => {
+    // Qualification 34753589938 required `live_ledger: BOUND` in the step log and
+    // its bundle could not show it: the allowlist withheld the line.
+    for (const state of ['BOUND', 'UNBOUND', 'UNKNOWN']) {
+      expect(buildEvidence(`  live_ledger: ${state}
+`)).toContain(`  live_ledger: ${state}`);
+    }
+    for (const refused of ['live_ledger: BOUND', '  live_ledger: BOUND extra', '  live_ledger: bound']) {
+      expect(buildEvidence(`${refused}
+`), refused).not.toContain('live_ledger');
+    }
+    expect(workflow, 'the roles check still enforces the line it keeps')
+      .toContain("grep -qx '  live_ledger: BOUND' preflight-roles.log");
+  }, 30_000);
+
   it('keeps the failure outcomes — the runs that most need evidence', () => {
     // A paid mission that is BLOCKED or crashes must state its outcome in its
     // own artifact; the first cut of the allowlist kept only success shapes.
