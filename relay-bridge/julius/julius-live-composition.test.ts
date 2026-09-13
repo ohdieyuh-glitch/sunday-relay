@@ -3554,3 +3554,73 @@ describe('the live reviewer adapter treats a transient upstream status as retrya
     expect(safeReviewDiagnostics(failure.diagnostics)?.providerHttpStatus).toBe(503);
   }, 30_000);
 });
+
+/**
+ * A REPAIR ROUND IS SHOWN THE TEST RUN IT IS REPAIRING.
+ *
+ * The coder has no command tool, so the executor's test output after a round is
+ * the only account of what failed. It went to the reviewer and to nobody else;
+ * a repair was dispatched with the reviewer's findings and none of the runner's
+ * own words. Driven through the real composition: the first test run fails with
+ * a node:test report, the reviewer sends the build back, and the repair prompt
+ * must quote the failing case with its expected and actual values.
+ */
+describe('a repair round is shown the test run it is repairing', () => {
+  const FAILING_RUN = [
+    'TAP version 13',
+    'not ok 1 - parses a row that starts with a byte-order mark',
+    '  ---',
+    "  error: 'Expected values to be strictly equal'",
+    "  expected: 'id'",
+    "  actual: '\uFEFFid'",
+    '  ...',
+    'ok 2 - parses a plain row',
+    '# tests 2',
+    '# pass 1',
+    '# fail 1',
+  ].join('\n');
+
+  function failingThenPassingShell(log: { order: string[] }): ShellEffectPort {
+    let tests = 0;
+    let n = 0;
+    return {
+      async run(input) {
+        n += 1;
+        const kind = input.command.includes('rev-parse') ? 'base' : input.command.includes('diff') ? 'diff' : 'test';
+        log.order.push(`shell:${kind}`);
+        if (kind === 'base') return { status: 'SUCCEEDED', exitCode: 0, stdout: 'abc123def\n', stderr: '', invocationId: `inv-${n}` };
+        if (kind === 'diff') return { status: 'SUCCEEDED', exitCode: 0, stdout: DIFF_TEXT, stderr: '', invocationId: `inv-${n}` };
+        tests += 1;
+        return tests === 1
+          ? { status: 'FAILED', exitCode: 1, stdout: FAILING_RUN, stderr: '', invocationId: `inv-${n}` }
+          : { status: 'SUCCEEDED', exitCode: 0, stdout: '# tests 2\n# pass 2\n# fail 0\n', stderr: '', invocationId: `inv-${n}` };
+      },
+    };
+  }
+
+  it('quotes the failing case, its expected and actual values and the counts in the repair prompt, and nothing in the first build’s', async () => {
+    const memory = createJuliusMemoryStore();
+    const handoffs = createContextAndClaimHandoffs(memory as unknown as JuliusRuntimeStore & JuliusRecoveryDriver);
+    const log = { order: [] as string[] };
+    const fakes = liveResolution({ verdicts: ['approved', 'changes_required', 'approved'], contexts: handoffs.contexts, shell: failingThenPassingShell(log) });
+    expect(fakes.resolution.ok).toBe(true);
+    seedMissionRun(memory);
+    const runtime = assembleLiveJuliusRuntime({
+      store: handoffs.store, entries: fakes.resolution.entries,
+      cardRevision: 'card-test-1', spendCeilingUsdMicros: 5_000_000, maxRepairRounds: 1,
+    });
+    await driveJuliusRunToTerminal({ loop: runtime.loop, store: handoffs.store, runId: 'run-live', projectId: 'prj-live', maxTicks: 24 });
+
+    expect(fakes.prompts.length, 'a build and its repair were both dispatched').toBeGreaterThanOrEqual(2);
+    expect(fakes.prompts[0]).not.toContain('PREVIOUS TEST RUN');
+    const repair = fakes.prompts[1]!;
+    expect(repair).toContain('--- PREVIOUS TEST RUN (the round you are repairing; exit=1) ---');
+    expect(repair).toContain('not ok 1 - parses a row that starts with a byte-order mark');
+    expect(repair).toContain("expected: 'id'");
+    expect(repair).toContain("actual: '\uFEFFid'");
+    expect(repair).toContain('# fail 1');
+    expect(repair).not.toContain('ok 2 - parses a plain row');
+    // The brief sits before the participation protocol, which stays last.
+    expect(repair.indexOf('PREVIOUS TEST RUN')).toBeLessThan(repair.lastIndexOf(JULIUS_PARTICIPATION_MARKER));
+  });
+});

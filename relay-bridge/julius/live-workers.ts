@@ -113,6 +113,73 @@ export const diffRef = (runId: string): string => `diff:${runId}`;
 export const baseRevisionRef = (runId: string): string => `base:${runId}`;
 export const testOutputRef = (runId: string): string => `test-output:${runId}`;
 
+/** The most failing tests a repair brief quotes, and the detail lines kept for each. */
+export const PRIOR_TEST_RUN_MAX_FAILURES = 20;
+export const PRIOR_TEST_RUN_MAX_DETAIL_LINES = 8;
+/** The whole brief, in characters, and the tail kept when the output is not a test-runner report. */
+export const PRIOR_TEST_RUN_MAX_CHARACTERS = 12_000;
+export const PRIOR_TEST_RUN_TAIL_CHARACTERS = 4_000;
+
+/**
+ * WHAT THE LAST TEST RUN SAID, for a coder sent back to repair.
+ *
+ * A repair round exists because verification rejected the work, and the coder
+ * asked to fix it cannot run a command: its tools are Read, Glob, Grep and Edit.
+ * The mission's test command ran under the executor after the previous round,
+ * and its output went to the independent reviewer and to nobody else. So a
+ * repair was told why the work failed only through the reviewer's one-line
+ * findings, and a specification that failed eleven cases, each with its own
+ * expected and actual values, reached the worker who had to satisfy it as a
+ * paraphrase.
+ *
+ * The brief is what the reviewer already saw, reduced to what a repair needs:
+ * the exit status, the runner's summary counts, and each failing test with its
+ * error, expected and actual lines. Output that is not a test-runner report is
+ * kept as its tail. It is bounded, so a pathological run cannot crowd the plan
+ * and the contract out of the prompt. Null when there is no previous run.
+ */
+/**
+ * THE SECTION A CODER'S PROMPT GETS: the brief for a repair round, and nothing
+ * for any other dispatch. A first build has no previous run of its own, and
+ * quoting another task's output to it would be a finding about work it never did.
+ */
+export function priorTestRunSectionFor(input: { readonly taskType: string | null; readonly testOutput: string | null }): string[] {
+  if (input.taskType === null || !input.taskType.startsWith('repair:')) return [];
+  const brief = coderPriorTestRunBrief(input.testOutput);
+  return brief === null ? [] : [brief];
+}
+
+export function coderPriorTestRunBrief(testOutput: string | null): string | null {
+  if (testOutput === null || testOutput.trim() === '') return null;
+  const lines = testOutput.split(/\r?\n/u);
+  const exit = /^exit=(\S+)$/u.exec(lines[0] ?? '')?.[1] ?? 'unknown';
+  const summary = lines.filter((line) => /^# (tests|suites|pass|fail|cancelled|skipped|todo) \d+$/u.test(line.trim()));
+  const failures: string[] = [];
+  let failing = 0;
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index]!;
+    if (!/^\s*not ok \d+/u.test(line)) continue;
+    failing += 1;
+    if (failures.length >= PRIOR_TEST_RUN_MAX_FAILURES) continue;
+    const detail: string[] = [];
+    for (let next = index + 1; next < lines.length && detail.length < PRIOR_TEST_RUN_MAX_DETAIL_LINES; next += 1) {
+      const candidate = lines[next]!;
+      if (/^\s*(not )?ok \d+/u.test(candidate) || /^# (tests|suites|pass|fail)/u.test(candidate.trim())) break;
+      if (/^\s*(error|expected|actual|operator|failureType|code|name):/u.test(candidate)) detail.push(candidate.trim());
+    }
+    failures.push([line.trim(), ...detail.map((value) => `    ${value}`)].join('\n'));
+  }
+  const body = failures.length > 0
+    ? [...failures, ...(failing > failures.length ? [`… and ${failing - failures.length} more failing test(s)`] : [])].join('\n')
+    : testOutput.slice(-PRIOR_TEST_RUN_TAIL_CHARACTERS);
+  const brief = [
+    `--- PREVIOUS TEST RUN (the round you are repairing; exit=${exit}) ---`,
+    ...summary.map((value) => value.trim()),
+    body,
+  ].join('\n');
+  return brief.length <= PRIOR_TEST_RUN_MAX_CHARACTERS ? brief : `${brief.slice(0, PRIOR_TEST_RUN_MAX_CHARACTERS - 1)}…`;
+}
+
 /* -------------------------------------------------------------- helpers */
 
 const sha256 = (value: string): string => createHash('sha256').update(value).digest('hex');
@@ -1349,6 +1416,16 @@ export function createLiveHostedCodingAdapter(input: {
           // a composition that ran the coder without a contract, which the
           // dispatch gate no longer permits on the live path.
           ...(dispatch.contract === undefined ? [] : [coderContractBrief(dispatch.contract)]),
+          /**
+           * A REPAIR SEES THE TEST RUN IT IS REPAIRING. Read before this
+           * dispatch's own test run overwrites it, and only for a repair round:
+           * a first build has no previous run of its own, and quoting another
+           * task's output to it would be a finding about work it never did.
+           */
+          ...priorTestRunSectionFor({
+            taskType: dispatch.taskType ?? null,
+            testOutput: input.artifacts.get(testOutputRef(snapshot.runId)),
+          }),
           /**
            * A CHANNEL NOBODY WAS TOLD ABOUT IS A CHANNEL NOBODY USES, which is
            * how the continuous lifecycle came to be unreachable on the paid
