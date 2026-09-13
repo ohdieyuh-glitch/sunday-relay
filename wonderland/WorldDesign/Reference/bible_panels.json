@@ -1,0 +1,19 @@
+{
+ "schema": "wonderland-bible-panels/1",
+ "why": "Named crops of the GPT Wonderland Bible boards (the visual authority, VISUAL_AUTHORITY.md) so every capture can be compared with the panel it is trying to reach. Rectangles are [x, y, width, height] in board pixels.",
+ "boards_dir": "C:/dev/iwonder/wonderland-blender-forge/wonderland/v2/reference/boards",
+ "boards_git": "commit 18ea1b37: wonderland/v2/reference/boards",
+ "panels": {
+  "hero_b1": {"board": "BOARD_1_golden-arrival-overall-world-reference.png", "rect": [432, 8, 720, 456], "shows": "Golden Arrival overall world reference: path, gates, heart topiary, mushrooms, dense spire city, floating islands"},
+  "hero_b2": {"board": "BOARD_2_visual-world-reference-mood-style-material-landmarks-scale.png", "rect": [408, 5, 850, 478], "shows": "hero composition with clocks, gold gate, heart arch, city"},
+  "hero_b3": {"board": "BOARD_3_visual-reference-bible.png", "rect": [260, 8, 944, 346], "shows": "Visual Reference Bible hero"},
+  "hero_b4": {"board": "BOARD_4_world-building-reference-bible-2026-08-30.png", "rect": [8, 68, 762, 298], "shows": "primary world bible composition"},
+  "hero_b6": {"board": "BOARD_6_complete-world-reference-2026-08-30.png", "rect": [0, 60, 832, 340], "shows": "complete world reference hero"},
+  "skyline_b4": {"board": "BOARD_4_world-building-reference-bible-2026-08-30.png", "rect": [1078, 388, 450, 192], "shows": "distant city / skyline language"},
+  "scale_depth_b2": {"board": "BOARD_2_visual-world-reference-mood-style-material-landmarks-scale.png", "rect": [408, 508, 850, 202], "shows": "scale and depth strategy: 0-50 m hero, 50-200 m midground, 200 m+ distant skyline"},
+  "sky_b3": {"board": "BOARD_3_visual-reference-bible.png", "rect": [545, 777, 280, 180], "shows": "sky and atmosphere: floating islands with castles"},
+  "paths_b4": {"board": "BOARD_4_world-building-reference-bible-2026-08-30.png", "rect": [724, 388, 344, 250], "shows": "paths, plazas and stonework"},
+  "paths_b5": {"board": "BOARD_5_visual-world-reference-complete-2026-08-30.png", "rect": [993, 435, 310, 175], "shows": "stone paths and plaza designs"},
+  "mushrooms_b4": {"board": "BOARD_4_world-building-reference-bible-2026-08-30.png", "rect": [1290, 68, 240, 295], "shows": "giant mushroom landmarks"}
+ }
+}

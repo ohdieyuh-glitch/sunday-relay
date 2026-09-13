@@ -1,7 +1,7 @@
 {
  "look": "MAT03",
  "title": "Bible palette: soft rose-pink mushroom caps, periwinkle and pale-blue roofs instead of navy",
- "chosen_from": "material_variants.py round mat03 (v1_control, v2_rose, v3_soft_pink) judged on HeroCam_V2_MarbleReference, PlazaHigh and MushroomGroveCam14 on 2026-09-13 against the Wonderland Bible boards: mushroom caps from v3_soft_pink, roofs from v2_rose",
+ "chosen_from": "material_variants.py round mat03 (v1_control, v2_rose, v3_soft_pink) judged on HeroCam_GoldenArrivalBible (then labelled HeroCam_V2_MarbleReference), PlazaHigh and MushroomGroveCam14 on 2026-09-13 against the Wonderland Bible boards: mushroom caps from v3_soft_pink, roofs from v2_rose",
  "why": "The Bible's giant mushrooms (BOARD_1 'Giant Mushrooms', BOARD_4 panel 04, BOARD_5 'Giant Mushrooms', BOARD_6 'Mushroom Landmarks') wear dusty-rose and pink caps; ours were terracotta orange. The Bible's roofs are pink, lavender and pale blue with no near-black; ours had navy domes. v2's mauve caps read muddy in shade, and v3's lavender roofs only repeated the lavender domes already present, so each material takes the variant that answered it.",
  "materials": {
   "MI_V2_MushRed": {"BaseColor": {"before": [0.6309148073196411, 0.2605014741420746, 0.21734406054019928, 1.0], "after": [0.84, 0.56, 0.60, 1.0]}},

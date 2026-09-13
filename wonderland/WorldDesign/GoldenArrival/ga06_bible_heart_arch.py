@@ -6,7 +6,7 @@ centre and "Heart Arches", BOARD_4 panel 01, BOARD_5 panel 1, BOARD_6 hero) the 
 arches -- a green HEART-SHAPED topiary arch, a gold arch beyond it, the castle beyond that -- with an ornate
 GOLD GATE / screen on the other side, rising out of the planting.
 
-WHAT WAS THERE. From HeroCam_V2_MarbleReference the garden path runs between low walls (x +/-250) and
+WHAT WAS THERE. From HeroCam_GoldenArrivalBible the garden path runs between low walls (x +/-250) and
 hedge blocks (x +/-330) toward the gold garden arch (GA01, y 3200). Two heart topiaries exist, both off to
 the right behind 3.2 m hedge masses (GA01 at (-1021, 2230) and the generator's at (-903, 2655)); neither
 reads from the hero pose. There is no gold screen on the path at all.

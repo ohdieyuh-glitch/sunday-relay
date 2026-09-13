@@ -17,7 +17,7 @@ import math
 CONCURRENT = True
 
 EYE = globals().get("EYE", (0.0, -150.0, 262.0))
-FROM_CAMERA = globals().get("FROM_CAMERA", "HeroCam_V2_MarbleReference")
+FROM_CAMERA = globals().get("FROM_CAMERA", "HeroCam_GoldenArrivalBible")
 MIN_DIST = globals().get("MIN_DIST", 3000.0)
 MAP_OBJECT = "/Game/WonderlandV2/Maps/WL_V2_GoldenArrival_WP2.WL_V2_GoldenArrival_WP2"
 OUT = globals().get("OUT")

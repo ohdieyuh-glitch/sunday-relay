@@ -3,7 +3,7 @@
 # HIDE_PAWN (default True), SETTLE (seconds per camera, default 2.5).
 import os
 
-CAMERAS = globals().get("CAMERAS", ["HeroCam_V2_MarbleReference", "PlayerCam01", "PathCam02", "ReverseCam03"])
+CAMERAS = globals().get("CAMERAS", ["HeroCam_GoldenArrivalBible", "PlayerCam01", "PathCam02", "ReverseCam03"])
 # Ad-hoc poses as (name, x, y, z, pitch, yaw, fov): a PIE copy of SkylineCam06 is moved to each.
 POSES = globals().get("POSES", [])
 TAG = globals().get("TAG", "shot")

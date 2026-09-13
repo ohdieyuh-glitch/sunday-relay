@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """GA01 -- Golden Arrival hero view: the first authored layer over the recovered world.
 
-WHAT IT ANSWERS. Seen from HeroCam_V2_MarbleReference, the Marble reference shows a path running
+WHAT IT ANSWERS. Seen from HeroCam_GoldenArrivalBible (then HeroCam_V2_MarbleReference), the historical Marble image showed a path running
 into a GOLDEN ARCH, a big HEART TOPIARY to the right, red-capped GIANT MUSHROOMS framing the left,
 and flower beds on the path's low stone edging. The authored world had the path and the castle,
 a pink floral arch, a heart hidden behind a tree, and bare kerbs.

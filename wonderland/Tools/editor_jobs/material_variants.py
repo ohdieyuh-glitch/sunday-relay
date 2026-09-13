@@ -5,7 +5,7 @@
 import os
 
 VARIANTS = globals().get("VARIANTS", [])
-CAMERAS = globals().get("CAMERAS", ["HeroCam_V2_MarbleReference"])
+CAMERAS = globals().get("CAMERAS", ["HeroCam_GoldenArrivalBible"])
 POSES = globals().get("POSES", [])
 TAG = globals().get("TAG", "mat")
 SHOTS = os.path.join(os.path.dirname(CHANNEL), "captures", "material")

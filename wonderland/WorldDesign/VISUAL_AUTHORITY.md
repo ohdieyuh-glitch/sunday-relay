@@ -27,8 +27,8 @@ composition came from, not what the world is judged against.
 
 ## The Marble image, now
 
-`wonderland/v2/reference/marble-royal-garden-*` and the in-map `V2_MarbleWorld_Scaffold` /
-`HeroCam_V2_MarbleReference` stay as HISTORICAL SOURCE MATERIAL: provenance for the recovered layout, a
+`wonderland/v2/reference/marble-royal-garden-*` and the hidden in-map `V2_MarbleWorld_Scaffold` stay as
+HISTORICAL SOURCE MATERIAL: provenance for the recovered layout, a
 camera pose that is useful to reuse, and a record of earlier passes (GA01-GA05, LOOK01, MAT01-MAT02 were
 judged against it). Inspect them when useful. Never optimise toward them.
 
@@ -73,5 +73,7 @@ judged against it). Inspect them when useful. Never optimise toward them.
 
 - Put the relevant board panel beside the capture in every before/after sheet
   (`wonderland/Tools/contact-sheet.ps1`), and name the board and panel in the pass's docstring.
-- Existing camera poses (including `HeroCam_V2_MarbleReference`) remain useful viewpoints; the comparison
-  target for any of them is the Bible.
+- The hero camera is `HeroCam_GoldenArrivalBible` (renamed from `HeroCam_V2_MarbleReference`, 2026-09-13).
+  Active tooling uses Bible names only; the old name survives only where a record says what it was called.
+- Build comparison sheets with `wonderland/Tools/bible-compare.ps1` and the named panels in
+  `WorldDesign/Reference/bible_panels.json` (hero_b1..hero_b6, skyline_b4, scale_depth_b2, sky_b3, paths_b4/b5, ...).

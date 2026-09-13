@@ -7,7 +7,7 @@
 import os
 
 SHOTS = os.path.join(os.path.dirname(CHANNEL), "captures", "reference")
-SUITE = ["HeroCam_V2_MarbleReference", "PlayerCam01", "PathCam02", "ReverseCam03", "GardenLeft04",
+SUITE = ["HeroCam_GoldenArrivalBible", "PlayerCam01", "PathCam02", "ReverseCam03", "GardenLeft04",
          "GardenRight05", "SkylineCam06", "ScaleCam07", "FlankLeftCam08", "FlankRightCam09",
          "ClockQuarterCam13", "MushroomGroveCam14", "TeaTerraceCam16"]
 SKY_WORDS = ("cloud", "sky", "balloon", "sun", "atmosphere", "fog")
@@ -69,7 +69,7 @@ def job():
         scaffold.set_actor_hidden_in_game(False)
         RESULT["hidden_for_marble"] = len(hidden)
         yield 3.0
-        yield from capture_pass("marble")
+        yield from capture_pass("historical_scaffold")
 
     les.editor_request_end_play()
     yield (lambda: ues.get_game_world() is None, 60)

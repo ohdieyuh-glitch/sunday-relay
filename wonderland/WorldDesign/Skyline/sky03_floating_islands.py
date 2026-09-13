@@ -10,7 +10,7 @@ drifting under it.
 WHAT WAS THERE. Balloons, cumulus, gold keys, teacups and a clock in the air (SKY01) -- and no island.
 The Blender forge now has three (families/sky.py: WL_Sky_Island_Small/Medium/Large, 9/16/26 m).
 
-WHAT THIS LAYER ADDS. Five islands on bearings that flank the castle from HeroCam_V2_MarbleReference,
+WHAT THIS LAYER ADDS. Five islands on bearings that flank the castle from HeroCam_GoldenArrivalBible,
 from 200 to 360 m out. Each carries a castle spelled from the kit's own tower grammar (kitstack.py) at a
 reduced scale, topiary at the lip, and a cumulus under the underside. Every piece of one island is an
 AWonderlandHoverProp with the SAME amplitude, period and phase and NO sway, so the island, its castle and

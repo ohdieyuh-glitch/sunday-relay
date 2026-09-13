@@ -3,7 +3,7 @@
 # separate, reviewed edit.
 import os
 
-CAMERAS = globals().get("CAMERAS", ["HeroCam_V2_MarbleReference", "FlankLeftCam08"])
+CAMERAS = globals().get("CAMERAS", ["HeroCam_GoldenArrivalBible", "FlankLeftCam08"])
 TAG = globals().get("TAG", "grade")
 SHOTS = os.path.join(os.path.dirname(CHANNEL), "captures", "grade")
 VARIANTS = globals().get("VARIANTS", [

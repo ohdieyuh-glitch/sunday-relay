@@ -39,7 +39,7 @@ PASS = "SKY02"
 CENSUS = json.loads((HERE / "census_north_2026-09-13.json").read_text(encoding="utf-8"))
 GROUND_Z = -14.0                    # V2_GroundSlab top at every traced site (2026-09-13)
 
-EYES = {"hero": (0.0, -150.0, 262.0),          # HeroCam_V2_MarbleReference
+EYES = {"hero": (0.0, -150.0, 262.0),          # HeroCam_GoldenArrivalBible
         "arrival": (0.0, -1460.0, 180.0)}      # V2_ArrivalSpawn, eye height
 SHOW_UU = 1400.0                    # a tower must clear what is in front of it by 14 m (a storey and a roof)
 TALL_MARGIN_UU = 150.0              # foot to the nearest existing piece

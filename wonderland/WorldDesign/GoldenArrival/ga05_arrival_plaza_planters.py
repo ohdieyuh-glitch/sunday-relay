@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """GA05 -- flowers at the visitor's feet on the arrival plaza.
 
-WHAT WAS THERE. From HeroCam_V2_MarbleReference the lower 40 percent of the frame is empty pale
+WHAT WAS THERE. From HeroCam_GoldenArrivalBible the lower 40 percent of the frame is empty pale
 paving; the Marble reference puts flower beds right beside the viewer. The plaza is the spawn and
 the first thing every visitor walks across, so the middle stays open.
 
