@@ -471,7 +471,7 @@ describe('E — a contract may ask for research; it may not grant itself researc
    * continuous qualification. So the case now names WHO, and fires again on the
    * second grant for the same reason it fired on the first.
    */
-  const GRANTED: readonly string[] = ['julius-continuous-1'];
+  const GRANTED: readonly string[] = ['julius-continuous-1', 'julius-live-mission-6'];
 
   it('25. exactly the missions named here are granted research, and no others', () => {
     const source = readFileSync(join(process.cwd(), CHECK), 'utf8');

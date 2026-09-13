@@ -136,6 +136,18 @@ const MISSION_LIMITS = Object.freeze({
   // model, participation, research, verification or repair budget is reduced
   // to preserve unused credit.
   'julius-continuous-1': Object.freeze({ spendUsd: 60, repairCycles: 3 }),
+  //
+  // OFFICIAL MISSION 6, THE LEARNING LOOP, the first mission after the
+  // continuous-worker qualification. Its surface is the largest yet: one new
+  // module plus five kernel seams, driven through the real pipeline, where
+  // Mission 5 integrated three files. It is expected to need at least one
+  // genuine repair round, because a naive resolution of findings breaks the
+  // repository's own verdict history and the must-not-change specification
+  // says so. $60 and three cycles, the same finite figure as the
+  // qualification and for the same reason: `spendUsd` is what allocation v3
+  // divides into floors, the shared pool and the repair reserve, not a founder
+  // cost ceiling. Refresh it to funded capacity before the paid run.
+  'julius-live-mission-6': Object.freeze({ spendUsd: 60, repairCycles: 3 }),
 });
 
 /** The ceilings that apply to THIS contract, by its own declared namespace. */
@@ -225,6 +237,26 @@ const MISSION_RESEARCH = Object.freeze({
     missionBudget: Object.freeze({ maxRetrievals: 9, maxBytes: 900_000 }),
     roleBudget: Object.freeze({ maxRetrievals: 3, maxBytes: 300_000 }),
   }),
+  /**
+   * OFFICIAL MISSION 6. The same shape as the qualification's grant: one
+   * source, one read capability, one host, three slots, two retrievals each.
+   * The host is the Node documentation, because the specifications run under
+   * `--experimental-transform-types` rather than plain type stripping, and
+   * what that flag does and does not accept is documented there and nowhere
+   * in the workspace. Enough to check a rule; not enough to browse.
+   */
+  'julius-live-mission-6': Object.freeze({
+    roles: Object.freeze(['PROMPT_ARCHITECT', 'CODING_AGENT', 'INDEPENDENT_REVIEWER']),
+    allowances: Object.freeze([
+      Object.freeze({
+        source: 'web',
+        capabilities: Object.freeze(['read_item']),
+        hosts: Object.freeze(['nodejs.org']),
+      }),
+    ]),
+    missionBudget: Object.freeze({ maxRetrievals: 6, maxBytes: 400_000 }),
+    roleBudget: Object.freeze({ maxRetrievals: 2, maxBytes: 200_000 }),
+  }),
 });
 
 /**
@@ -258,6 +290,11 @@ const MISSION_LANES = Object.freeze({
   // take the head of the queue. `qualification-repair` is its paid rerun after a
   // repair, which still outranks every lab experiment.
   'julius-continuous-1': Object.freeze(['qualification', 'qualification-repair']),
+  // OFFICIAL MISSION 6 runs through the Live Lab's lane: the formal lane makes
+  // the architecture trusted and lands it, the lab runs the paid mission. Named
+  // rather than left to the default, because an official mission's priority is
+  // a decision and a default is not.
+  'julius-live-mission-6': Object.freeze(['lab']),
 });
 
 /** The lanes THIS contract may claim, by its own declared namespace. */
