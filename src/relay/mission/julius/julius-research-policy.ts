@@ -86,7 +86,7 @@ export const isJuliusResearchRole = (value: string): value is JuliusResearchRole
 /* --------------------------------------------------------- the outcomes */
 
 /**
- * WHAT HAPPENED TO A RESEARCH REQUEST — eight answers, never collapsed into
+ * WHAT HAPPENED TO A RESEARCH REQUEST — nine answers, never collapsed into
  * "no evidence".
  *
  * The distinction is not bookkeeping. Each one implies a different next move,
@@ -103,6 +103,15 @@ export const isJuliusResearchRole = (value: string): value is JuliusResearchRole
  *                        refuse to let it settle a disagreement.
  *   policy_refused       the mission never authorized this. Retrying is
  *                        pointless; asking the mission is the move.
+ *   unavailable          the mission DID authorize this, and the machinery
+ *                        underneath cannot serve it in this deployment today —
+ *                        a source or capability that is switched off, has no
+ *                        backend, or has never been observed answering. Nothing
+ *                        was attempted and nothing is charged. Neither the
+ *                        worker nor the mission can fix it from inside a run:
+ *                        asking the mission for authority it already granted
+ *                        is the wrong move, and this answer exists so no worker
+ *                        is told to make it.
  *   budget_exhausted     authorized, but this slot or this mission has spent
  *                        its retrieval allowance. Later in this mission will
  *                        not help either.
@@ -120,6 +129,7 @@ export const JULIUS_RESEARCH_OUTCOMES = [
   'observed',
   'injection_signaled',
   'policy_refused',
+  'unavailable',
   'budget_exhausted',
   'unreachable',
   'unauthenticated',

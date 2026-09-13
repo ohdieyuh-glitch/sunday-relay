@@ -251,10 +251,10 @@ dump "SELECT e.stream_id AS run_id,e.sequence,e.payload->>'taskId' AS task_id,e.
 # RESEARCH. These rows are the research budget's durable truth — the mediator
 # PROJECTS its per-role meter by folding them — so a bundle without them cannot
 # show that a restart remembered what a slot had already spent, and cannot show
-# that all three slots were able to reach the outside world at all. The eight
-# outcomes are never collapsed into "no evidence": a refusal, an exhausted
-# budget, a throttle, an unreachable host and a page that signalled injection
-# are five different facts. `counted` is whether the ask was CHARGED, which is
+# that all three slots were able to reach the outside world at all. The nine
+# outcomes are never collapsed into "no evidence": a refusal, an unavailable
+# capability, an exhausted budget, a throttle, an unreachable host and a page
+# that signalled injection are six different facts. `counted` is whether the ask was CHARGED, which is
 # not the same as whether it succeeded.
 dump "SELECT e.stream_id AS run_id,e.sequence,e.payload->>'taskId' AS task_id,e.event_type,e.payload->'facts'->>'role' AS role,e.payload->'facts'->>'requestKey' AS request_key,e.payload->'facts'->>'outcome' AS outcome,e.payload->'facts'->>'counted' AS counted,e.payload->'facts'->>'evidenceId' AS evidence_id,e.payload->'facts'->>'signalled' AS injection_signals,e.payload->'facts'->>'segment' AS segment,e.payload->'facts'->>'reasonCode' AS reason_code,e.payload->'facts'->>'stage' AS stage,e.occurred_at FROM relay_wonderland.events e WHERE e.event_type IN ('julius.research.retrieved','julius.research.refused') ORDER BY e.stream_id,e.sequence" research.tsv
 
