@@ -4,6 +4,7 @@
 #include "Components/InstancedStaticMeshComponent.h"
 #include "Components/SceneComponent.h"
 #include "Engine/StaticMesh.h"
+#include "Engine/World.h"
 #include "Materials/MaterialInterface.h"
 #include "Materials/MaterialInstance.h"
 
@@ -63,11 +64,7 @@ int32 AWonderlandInstancedBatch::BuildInstances()
 	}
 
 	// The hard reference first; the path only if nothing was wired.
-	UStaticMesh* MeshAsset = Mesh;
-	if (MeshAsset == nullptr && !MeshPath.IsEmpty())
-	{
-		MeshAsset = LoadObject<UStaticMesh>(nullptr, *MeshPath);
-	}
+	UStaticMesh* MeshAsset = ResolveMesh();
 	if (MeshAsset == nullptr)
 	{
 		UE_LOG(LogTemp, Error,
@@ -95,11 +92,7 @@ int32 AWonderlandInstancedBatch::BuildInstances()
 	Instances->SetMobility(bStaticMobility ? EComponentMobility::Static
 										   : EComponentMobility::Movable);
 	Instances->SetStaticMesh(MeshAsset);
-	UMaterialInterface* MaterialAsset = Material;
-	if (MaterialAsset == nullptr && !MaterialPath.IsEmpty())
-	{
-		MaterialAsset = LoadObject<UMaterialInterface>(nullptr, *MaterialPath);
-	}
+	UMaterialInterface* MaterialAsset = ResolveMaterial();
 	if (MaterialAsset != nullptr || !MaterialPath.IsEmpty())
 	{
 		if (MaterialAsset == nullptr)
@@ -258,20 +251,10 @@ int32 AWonderlandInstancedBatch::BuildInstances()
 	}
 
 	Instances->PreAllocateInstancesMemory(Declared);
-	for (int32 Index = 0; Index < Declared; ++Index)
+	TArray<FTransform> Locals;
+	AppendInstanceTransforms(Locals);
+	for (const FTransform& Local : Locals)
 	{
-		const int32 Base = Index * WonderlandFloatsPerInstance;
-		// Named rotator fields, in the generator's own order (pitch, yaw, roll).
-		// FRotator's positional constructor has already mis-aimed a hero camera
-		// and the sun in this project; the ordering is written out here so the
-		// same mistake cannot be made silently on the way in.
-		const FRotator Rotation(Transforms[Base + 3],   // pitch
-								Transforms[Base + 4],   // yaw
-								Transforms[Base + 5]);  // roll
-		const FTransform Local(
-			Rotation,
-			FVector(Transforms[Base + 0], Transforms[Base + 1], Transforms[Base + 2]),
-			FVector(Transforms[Base + 6], Transforms[Base + 7], Transforms[Base + 8]));
 		Instances->AddInstance(Local);
 	}
 	BuiltInstances = Instances->GetInstanceCount();
@@ -284,3 +267,120 @@ int32 AWonderlandInstancedBatch::BuildInstances()
 	}
 	return BuiltInstances;
 }
+
+UStaticMesh* AWonderlandInstancedBatch::ResolveMesh() const
+{
+	UStaticMesh* MeshAsset = Mesh;
+	if (MeshAsset == nullptr && !MeshPath.IsEmpty())
+	{
+		MeshAsset = LoadObject<UStaticMesh>(nullptr, *MeshPath);
+	}
+	return MeshAsset;
+}
+
+UMaterialInterface* AWonderlandInstancedBatch::ResolveMaterial() const
+{
+	UMaterialInterface* MaterialAsset = Material;
+	if (MaterialAsset == nullptr && !MaterialPath.IsEmpty())
+	{
+		MaterialAsset = LoadObject<UMaterialInterface>(nullptr, *MaterialPath);
+	}
+	return MaterialAsset;
+}
+
+void AWonderlandInstancedBatch::AppendInstanceTransforms(TArray<FTransform>& OutTransforms) const
+{
+	const int32 Declared = DeclaredInstanceCount();
+	OutTransforms.Reserve(OutTransforms.Num() + Declared);
+	for (int32 Index = 0; Index < Declared; ++Index)
+	{
+		const int32 Base = Index * WonderlandFloatsPerInstance;
+		// Named rotator fields, in the generator's own order (pitch, yaw, roll).
+		// FRotator's positional constructor has already mis-aimed a hero camera
+		// and the sun in this project; the ordering is written out here so the
+		// same mistake cannot be made silently on the way in.
+		const FRotator Rotation(Transforms[Base + 3],   // pitch
+								Transforms[Base + 4],   // yaw
+								Transforms[Base + 5]);  // roll
+		OutTransforms.Emplace(
+			Rotation,
+			FVector(Transforms[Base + 0], Transforms[Base + 1], Transforms[Base + 2]),
+			FVector(Transforms[Base + 6], Transforms[Base + 7], Transforms[Base + 8]));
+	}
+}
+
+int32 AWonderlandInstancedBatch::EditorPreviewInstanceCount() const
+{
+#if WITH_EDITORONLY_DATA
+	return EditorPreview != nullptr ? EditorPreview->GetInstanceCount() : 0;
+#else
+	return 0;
+#endif
+}
+
+#if WITH_EDITOR
+void AWonderlandInstancedBatch::PostRegisterAllComponents()
+{
+	Super::PostRegisterAllComponents();
+	RefreshEditorPreview(false);
+}
+
+void AWonderlandInstancedBatch::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent)
+{
+	Super::PostEditChangeProperty(PropertyChangedEvent);
+	RefreshEditorPreview(true);
+}
+
+void AWonderlandInstancedBatch::RefreshEditorPreview(bool bRebuild)
+{
+	const UWorld* World = GetWorld();
+	// Editor worlds only. A PIE or game world builds the real instances in BeginPlay;
+	// an asset-preview world and a class default have no business drawing the map.
+	if (World == nullptr || World->WorldType != EWorldType::Editor || IsTemplate())
+	{
+		return;
+	}
+	if (EditorPreview != nullptr)
+	{
+		if (!bRebuild)
+		{
+			return;
+		}
+		EditorPreview->DestroyComponent();
+		EditorPreview = nullptr;
+	}
+
+	const int32 Declared = DeclaredInstanceCount();
+	if (Declared <= 0 || Transforms.Num() % WonderlandFloatsPerInstance != 0)
+	{
+		return;   // BuildInstances reports a malformed batch loudly at runtime
+	}
+	UStaticMesh* MeshAsset = ResolveMesh();
+	if (MeshAsset == nullptr)
+	{
+		return;
+	}
+
+	EditorPreview = NewObject<UInstancedStaticMeshComponent>(this, NAME_None,
+		RF_Transient | RF_TextExportTransient | RF_DuplicateTransient);
+	EditorPreview->bIsEditorOnly = true;
+	EditorPreview->SetupAttachment(GetRootComponent());
+	EditorPreview->SetMobility(bStaticMobility ? EComponentMobility::Static : EComponentMobility::Movable);
+	EditorPreview->SetStaticMesh(MeshAsset);
+	EditorPreview->SetCollisionProfileName(TEXT("NoCollision"));
+	EditorPreview->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	EditorPreview->SetCanEverAffectNavigation(false);
+	EditorPreview->SetGenerateOverlapEvents(false);
+	EditorPreview->SetCastShadow(bCastShadow);
+	EditorPreview->bAffectDistanceFieldLighting = bAffectDistanceFieldLighting;
+	EditorPreview->RegisterComponent();
+	// After registration, for the reason BuildInstances gives.
+	if (UMaterialInterface* MaterialAsset = ResolveMaterial())
+	{
+		EditorPreview->SetMaterial(0, MaterialAsset);
+	}
+	TArray<FTransform> Locals;
+	AppendInstanceTransforms(Locals);
+	EditorPreview->AddInstances(Locals, /*bShouldReturnIndices*/ false, /*bWorldSpace*/ false, /*bUpdateNavigation*/ false);
+}
+#endif

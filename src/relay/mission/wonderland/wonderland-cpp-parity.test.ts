@@ -120,6 +120,8 @@ const CPP_ONLY_STRUCTS: Readonly<Record<string, string>> = {
     'engine-side locomotion state for the walking Dog: the shoulder and forearm pivots found by name at BeginPlay. Transient, never authored, and never part of any world document.',
   FRelayDogRouteLeg:
     'one leg of the scripted route the Dog walks under -wldemo or -wlexplore, so a world review or capture can be repeated. Unreal-side capture authoring; Relay neither sends nor reads a route.',
+  FWonderlandTravelDestination:
+    'one row of the in-world travel registry in DefaultGame.ini: a developed place the world map may offer and the anchor a visitor arrives at. Unreal-side world authoring; Relay neither sends nor reads a destination.',
 };
 
 /**
@@ -128,6 +130,10 @@ const CPP_ONLY_STRUCTS: Readonly<Record<string, string>> = {
 const CPP_ONLY_ENUMS: Readonly<Record<string, string>> = {
   EWonderlandHubZoneKind:
     'hub-level authoring vocabulary. Purely presentational, and deliberately not part of the contract.',
+  EWonderlandTravelStatus:
+    'whether the in-world map may offer a place, set from a density audit of the recovered map. World-authoring vocabulary, deliberately not part of the contract.',
+  EWonderlandTravelKind:
+    'which glyph the in-world map draws for a place. Presentational world-authoring vocabulary, deliberately not part of the contract.',
 };
 
 /**

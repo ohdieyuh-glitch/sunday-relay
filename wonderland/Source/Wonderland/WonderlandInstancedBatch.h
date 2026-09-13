@@ -173,6 +173,42 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Wonderland|Batch")
 	int32 BuildInstances();
 
+	/** Instances the editor preview is drawing, 0 outside an editor world. */
+	UFUNCTION(BlueprintPure, Category = "Wonderland|Batch")
+	int32 EditorPreviewInstanceCount() const;
+
 protected:
 	virtual void BeginPlay() override;
+
+#if WITH_EDITOR
+	// THE EDITOR SHOWS THE WORLD PIE SHOWS.
+	//
+	// Instances are built in BeginPlay, so an editor viewport used to draw only the
+	// 16,218 plain actors: every kerb, hedge, flower bed and gold trim living in a
+	// batch -- 32,963 pieces -- was missing until Play, and the world read as sparse
+	// and wrong to anyone judging it in the editor. The preview draws the same
+	// transforms with the same mesh and material in editor worlds only.
+	//
+	// IT IS NEVER SAVED AND NEVER PLAYED. The component is transient, duplicate-
+	// transient and editor-only, so it is not written into the map, not copied into
+	// a PIE world (which builds its own in BeginPlay), and not cooked. It has no
+	// collision: the preview is a picture, and gameplay collision stays exactly what
+	// BuildInstances decides at runtime.
+	virtual void PostRegisterAllComponents() override;
+	virtual void PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) override;
+#endif
+
+private:
+	UStaticMesh* ResolveMesh() const;
+	UMaterialInterface* ResolveMaterial() const;
+	void AppendInstanceTransforms(TArray<FTransform>& OutTransforms) const;
+
+#if WITH_EDITOR
+	void RefreshEditorPreview(bool bRebuild);
+#endif
+
+#if WITH_EDITORONLY_DATA
+	UPROPERTY(Transient, DuplicateTransient, TextExportTransient)
+	TObjectPtr<UInstancedStaticMeshComponent> EditorPreview;
+#endif
 };

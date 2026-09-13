@@ -98,13 +98,39 @@ private:
 
 	void RebuildBands();
 
-	/** Paint one band. Does nothing when the band is empty, which is the point. */
+	/**
+	 * Paint one band into the art box. Does nothing when the band is empty, which is the point.
+	 *
+	 * Positions leave here in RENDER space. MakeCustomVerts draws exactly the coordinates
+	 * it is given, with no widget transform applied; the first engine run of this widget
+	 * passed widget-local coordinates and the swoosh was painted from the corner of the
+	 * editor window instead of the HUD's own corner, so only a sliver ever showed.
+	 */
 	void PaintBand(
 		const TArray<FVector2D>& Unit,
 		const FLinearColor& Colour,
 		const FGeometry& AllottedGeometry,
+		const FVector2f& ArtOrigin,
+		float ArtScale,
+		const FVector2f& Offset,
 		FSlateWindowElementList& OutDrawElements,
 		int32 LayerId) const;
+
+	/** One line of the readout, with the soft shadow the web HUD gives its text. */
+	void PaintText(
+		const FString& Text,
+		const FSlateFontInfo& Font,
+		const FLinearColor& Colour,
+		const FVector2f& At,
+		const FGeometry& AllottedGeometry,
+		FSlateWindowElementList& OutDrawElements,
+		int32 LayerId) const;
+
+	/** The readout, rebuilt with the bands: exactly what the web HUD prints for the same reading. */
+	FString CompoundFigure;
+	FString SingleFigure;
+	FString ProvenanceLine;
+	FString ReasonLine;
 
 	FWonderlandMeterBands CompoundBands;
 	FWonderlandMeterBands SingleBands;
