@@ -104,6 +104,11 @@ const DECLARED_NOT_COMPOSED = [
   { path: 'src/relay/persistence/julius-repair-postgres.ts', reason: 'durable repair-cycle scheduling against julius_tasks and julius_repair_cycles; the live root reaches repair through the store aggregate, not this repository' },
   { path: 'src/relay/workspace/julius-tools/registry.ts', reason: 'the default tool catalogue (DEFAULT_JULIUS_TOOL_IDS, createDefaultJuliusToolRegistry); the live root routes tool effects through the executor shell port and does not build a registry' },
   { path: 'src/relay/workspace/julius-tools/local-artifact-store.ts', reason: 'the durable staged→finalized artifact store (StagedArtifactStorePort); the live root uses an in-process artifact exchange, recorded as debt in docs/JULIUS_BETA_READINESS.md' },
+  { path: 'src/relay/mission/julius/julius-brain-contracts.ts', reason: 'Project Brain v2: the typed, hash-chained record ledger (kinds, body schemas, principals, links, provenance); built in the Project Brain + Python lane and not yet composed by the live root, which still feeds context from the v1 julius_brain_entries' },
+  { path: 'src/relay/mission/julius/julius-brain-policy.ts', reason: 'Project Brain v2: who may create, revise, retire or supersede each record kind, tool/environment write grants and read grants; not yet composed by the live root' },
+  { path: 'src/relay/mission/julius/julius-brain-projection.ts', reason: 'Project Brain v2: the pure planner and the ledger→current-state fold every Brain store shares; not yet composed by the live root' },
+  { path: 'src/relay/mission/julius/julius-brain-store.ts', reason: 'Project Brain v2: the store port and its in-memory semantic model; not yet composed by the live root' },
+  { path: 'src/relay/mission/julius/julius-brain-service.ts', reason: 'Project Brain v2: the governed, principal-bound Brain API; not yet composed by the live root' },
 ];
 
 /** Directories the trace does not enter. Crossing edges are reported, never hidden. */
@@ -249,6 +254,14 @@ const FILE_RULES = [
   // the compiler it will sit inside: `julius-runtime.ts` and
   // `julius-context-snapshot.ts` are both already here.
   ['src/relay/mission/julius/julius-context-integrity.ts', 'DURABLE STATE / PROJECT BRAIN'],
+  // Project Brain v2: the typed, hash-chained ledger and its governed API.
+  // Declared rather than reached until the live root composes it.
+  ['src/relay/mission/julius/julius-brain-contracts.ts', 'DURABLE STATE / PROJECT BRAIN'],
+  ['src/relay/mission/julius/julius-brain-policy.ts', 'DURABLE STATE / PROJECT BRAIN'],
+  ['src/relay/mission/julius/julius-brain-projection.ts', 'DURABLE STATE / PROJECT BRAIN'],
+  ['src/relay/mission/julius/julius-brain-secrets.ts', 'DURABLE STATE / PROJECT BRAIN'],
+  ['src/relay/mission/julius/julius-brain-store.ts', 'DURABLE STATE / PROJECT BRAIN'],
+  ['src/relay/mission/julius/julius-brain-service.ts', 'DURABLE STATE / PROJECT BRAIN'],
   ['src/relay/mission/julius/julius-allocation-runtime.ts', 'LEASES / BUDGETS / PERMISSIONS'],
   // Allocation decides what a dispatch MAY spend; this decides what is known
   // about what it DID spend, and on whose authority. Same subsystem: both are
