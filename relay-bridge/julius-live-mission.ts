@@ -3,6 +3,13 @@
  * a Mission Contract file to a durable, provider-live Julius run.
  *
  *   node dist-relay-bridge/julius-live-mission.cjs run --contract <file> [--confirm-live]
+ *   node dist-relay-bridge/julius-live-mission.cjs observe-research --contract <file>
+ *
+ * `observe-research` starts no run, opens no database and contacts no model
+ * provider. It makes the one observation `run` refuses to invent — whether a
+ * backend is seen serving the research the contract grants — through Relay's
+ * own bounded fetch, and prints it in the form `run` reads. See
+ * `observeResearchCommand` below.
  *
  * WHY THIS LIVES IN THE BRIDGE TREE AND NOT THE CLI. The three live provider
  * implementations sit on both sides of a structural boundary: the GPT
@@ -65,7 +72,9 @@ import {
   type LiveReachCapability,
   type LiveReachReadiness,
   type LiveReachSource,
+  backendCandidates,
 } from '../src/relay/mission/live-reach';
+import { probeReachability, type LiveFetchRequest } from '../src/relay/connectors/live-reach/live-fetch';
 
 /* ------------------------------------------------------------- contract */
 
@@ -430,6 +439,215 @@ function presence(env: Record<string, string | undefined>, names: readonly strin
   return names.map((name) => `  ${name}: ${env[name] ? 'SET' : 'MISSING'}`).join('\n');
 }
 
+/* --------------------------------------------------- research observation */
+
+/**
+ * THE VOCABULARY A RESEARCH OBSERVATION MAY REPORT — `probeReachability`'s own,
+ * and nothing wider.
+ *
+ * Only `observed` becomes a claim. The other four are printed so an operator
+ * reads WHY a host was not observed, and none of them is ever rounded up: a
+ * throttled host answered, but it did not serve, and a claim built from it
+ * would be the operator vouching for a read nobody saw succeed.
+ */
+export const RESEARCH_OBSERVATION_RESULTS = ['observed', 'unreachable', 'throttled', 'unauthenticated', 'unconfigured'] as const;
+export type ResearchObservationResult = (typeof RESEARCH_OBSERVATION_RESULTS)[number];
+
+export interface ResearchObservationRow {
+  readonly source: string;
+  readonly capability: string;
+  readonly host: string;
+  /** The backend that would serve this read, or `none` when the registry has no candidate. */
+  readonly backendId: string;
+  readonly result: ResearchObservationResult;
+}
+
+/**
+ * INJECTED SO THE WHOLE PATH IS TESTABLE WITHOUT A NETWORK, and absent in
+ * production on purpose: absent means the real `fetch`, and no resolver —
+ * which is exactly how the live composition's research retrieval is built
+ * (`createLiveReachService` with neither). An observation made through a
+ * DIFFERENT network path from the one that will serve the retrieval would be an
+ * observation of something else.
+ */
+export interface ResearchObservationDeps {
+  readonly fetchImpl?: typeof fetch;
+  readonly resolver?: LiveFetchRequest['resolver'];
+  readonly timeoutMs?: number;
+}
+
+/**
+ * PROBE EVERY (source, capability, host) THE ALLOWANCES NAME, AND SAY WHAT WAS SEEN.
+ *
+ * WHY A REAL PROBE AND NOT A DECLARATION. Live Reach refuses a capability no
+ * backend has been OBSERVED serving, and the paid workflow never set
+ * `JULIUS_RESEARCH_OBSERVED_BACKENDS` — so a mission granted research would
+ * have run with every ask refused `capability_unavailable` and still been
+ * able to complete, proving the opposite of what it was dispatched to show.
+ * Hard-coding the variable in the workflow would repair the symptom by making
+ * the claim a bare assertion again. This makes the claim EARNED: one
+ * side-effect-free GET per host, through `probeReachability` — the same
+ * `liveFetch`, network policy, redirect checks and content-type rule the
+ * retrieval itself will use.
+ *
+ * THE BACKEND IS THE REGISTRY'S ANSWER, not this file's: `backendCandidates`,
+ * preferred first, the same choice `LiveReachService.probe` makes. A source
+ * the registry has no candidate for is reported `none` and never probed —
+ * there is nothing the probe could be a probe OF.
+ *
+ * NEVER AN ACTION. The sealed policy already refuses an action capability, and
+ * this function is still handed raw allowances by its tests, so it refuses one
+ * again at the only place a request could be made: reported, not probed, never
+ * claimed. A probe that could post is not a probe.
+ *
+ * A WILDCARD HOST IS A PATTERN, NOT AN ADDRESS. `*.python.org` names no host a
+ * GET could reach, and inventing one (`www.`? the apex, which the policy says
+ * the pattern does not even include?) would observe a host the contract did
+ * not name. It is reported `unconfigured` — an operator who wants it observed
+ * names an exact host — and never probed.
+ *
+ * UNKNOWN IS NOT ZERO, AND AN EXCEPTION IS NOT AN ANSWER. `liveFetch` turns a
+ * failed request into `unreachable` itself, but a throw from anywhere else on
+ * the path (a resolver, a body read) would otherwise escape as a crash — or,
+ * worse, be caught by a caller that defaults the row to something. It is
+ * `unreachable` here, and only a returned `observed` counts.
+ */
+export async function observeResearchAllowances(
+  allowances: LiveMissionResearchClause['allowances'],
+  deps: ResearchObservationDeps = {},
+): Promise<{ readonly rows: readonly ResearchObservationRow[]; readonly pairs: readonly string[] }> {
+  const rows: ResearchObservationRow[] = [];
+  const pairs: string[] = [];
+  const probed = new Set<string>();
+
+  for (const allowance of allowances) {
+    for (const capability of allowance.capabilities) {
+      for (const host of allowance.hosts) {
+        // The same triple twice is one observation, not two GETs of one page.
+        const key = `${allowance.source} ${capability} ${host}`;
+        if (probed.has(key)) continue;
+        probed.add(key);
+
+        const row = (backendId: string, result: ResearchObservationResult): void => {
+          rows.push({ source: allowance.source, capability, host, backendId, result });
+        };
+
+        if (!(LIVE_REACH_READ_CAPABILITIES as readonly string[]).includes(capability)) {
+          // An action capability, or a word that is no capability at all.
+          row('none', 'unconfigured');
+          continue;
+        }
+        const candidates = backendCandidates(allowance.source as LiveReachSource, capability as LiveReachCapability);
+        const backendId = candidates[0]?.backendId ?? 'none';
+        if (candidates.length === 0 || host.startsWith('*.')) {
+          row(backendId, 'unconfigured');
+          continue;
+        }
+
+        let result: ResearchObservationResult;
+        try {
+          result = await probeReachability({
+            url: `https://${host}/`,
+            ...(deps.fetchImpl === undefined ? {} : { fetchImpl: deps.fetchImpl }),
+            ...(deps.resolver === undefined ? {} : { resolver: deps.resolver }),
+            ...(deps.timeoutMs === undefined ? {} : { timeoutMs: deps.timeoutMs }),
+          });
+        } catch {
+          result = 'unreachable';
+        }
+        // A value outside the vocabulary is not a sixth answer; it is no answer.
+        if (!(RESEARCH_OBSERVATION_RESULTS as readonly string[]).includes(result)) result = 'unreachable';
+        row(backendId, result);
+
+        const pair = `${backendId}:${capability}`;
+        if (result === 'observed' && !pairs.includes(pair)) pairs.push(pair);
+      }
+    }
+  }
+  return { rows, pairs };
+}
+
+/** The machine line `run` reads back, and the only one the workflow exports. */
+export const RESEARCH_OBSERVED_ENV_PREFIX = 'JULIUS_RESEARCH_OBSERVED_BACKENDS=';
+export const RESEARCH_NOT_GRANTED_LINE = 'research_not_granted: the contract has no research clause, so there is nothing to observe.';
+
+/**
+ * `observe-research --contract <file>` — THE OPERATOR'S OBSERVATION, MADE BY RELAY.
+ *
+ * The contract says what a mission may read; this says whether Relay was just
+ * seen able to read it. The two stay separate facts — the contract is not
+ * consulted about reachability, only about WHICH hosts to look at — and the
+ * output is the environment line an operator would otherwise have typed.
+ *
+ * THE CONTRACT IS READ BY `parseLiveMissionContract` AND SEALED BY
+ * `sealLiveMissionResearchPolicy`, the exact pair `run` uses, so this cannot
+ * observe a clause `run` would have refused or normalised differently.
+ *
+ * FAILS CLOSED. A contract granting research of which NOTHING was observed
+ * exits 1: a mission whose every research ask will be refused must not be
+ * dispatched and allowed to "complete" without it. PARTIAL observation exits 0
+ * — a contract may legitimately authorise more than Relay can reach, and Live
+ * Reach refuses the unreachable part honestly at request time — but every
+ * unobserved host is printed, so nobody mistakes partial for whole.
+ *
+ * Prints no response body and no header: a row is five closed-vocabulary
+ * fields. The claim line is checked against `observedResearchBackends` before
+ * it is printed, so a line this command emits is a line `run` accepts.
+ *
+ * Exit: 0 observed (or no research granted), 1 unobservable, 2 usage / an
+ * unreadable or refused contract.
+ */
+export async function observeResearchCommand(input: {
+  readonly contractPath: string | null;
+  readonly out: (line: string) => void;
+  readonly err: (line: string) => void;
+  readonly readFile?: (path: string) => string;
+} & ResearchObservationDeps): Promise<number> {
+  const { out, err } = input;
+  if (input.contractPath === null) {
+    out('Usage: julius-live-mission observe-research --contract <mission.json>');
+    return 2;
+  }
+  let raw: string;
+  try {
+    raw = (input.readFile ?? ((path: string) => readFileSync(path, 'utf8')))(input.contractPath);
+  } catch {
+    out(`The contract file could not be read: ${input.contractPath}`);
+    return 2;
+  }
+  const parsed = parseLiveMissionContract(raw);
+  if (!parsed.ok) { out(`Mission Contract refused: ${parsed.problem}`); return 2; }
+  const clause = parsed.contract.research;
+  if (clause === undefined) {
+    out(RESEARCH_NOT_GRANTED_LINE);
+    return 0;
+  }
+
+  const policy = sealLiveMissionResearchPolicy(parsed.contract.missionId, clause);
+  const { rows, pairs } = await observeResearchAllowances(policy.allowances, input);
+  for (const row of rows) {
+    out(`research_observation source=${row.source} capability=${row.capability} host=${row.host} backend=${row.backendId} result=${row.result}`);
+  }
+  const observedRows = rows.filter((row) => row.result === 'observed').length;
+  out(`research_observation_summary observed=${String(observedRows)} of=${String(rows.length)}`);
+
+  if (pairs.length === 0) {
+    err(`research_unobservable: no backend was observed serving any of the ${String(rows.length)} research probe(s) the contract grants; refusing to dispatch a mission whose research would all be refused.`);
+    return 1;
+  }
+
+  const line = `${RESEARCH_OBSERVED_ENV_PREFIX}${pairs.join(',')}`;
+  const readBack = observedResearchBackends({ JULIUS_RESEARCH_OBSERVED_BACKENDS: line.slice(RESEARCH_OBSERVED_ENV_PREFIX.length) });
+  if (!readBack.ok || readBack.probes.length !== pairs.length) {
+    // Unreachable while the registry and the parser agree — and if they ever
+    // stop agreeing, the mission must not be armed with a claim `run` refuses.
+    err(`research_observation_inconsistent: ${readBack.ok ? 'the claim did not read back whole' : readBack.problem}`);
+    return 1;
+  }
+  out(line);
+  return 0;
+}
+
 /* ------------------------------------------------------------------ main */
 
 async function main(argv: readonly string[]): Promise<number> {
@@ -440,6 +658,17 @@ async function main(argv: readonly string[]): Promise<number> {
     return index >= 0 && argv[index + 1] !== undefined ? argv[index + 1] : null;
   };
 
+  /* A SECOND COMMAND, NOT A LOOSER FIRST ONE. `observe-research` is matched
+   * exactly and returns before anything below exists; `run`'s own check is
+   * untouched, so every argv that reached `run` before still does, and every
+   * one it refused is still refused with the same line. */
+  if (argv[0] === 'observe-research') {
+    return observeResearchCommand({
+      contractPath: option('contract'),
+      out,
+      err: (line) => { process.stderr.write(`${line}\n`); },
+    });
+  }
   if (argv[0] !== 'run' || option('contract') === null) {
     out('Usage: julius-live-mission run --contract <mission.json> [--confirm-live] [--max-ticks N]');
     return 2;
