@@ -25,7 +25,7 @@ import {
   type JuliusRuntimeStore,
 } from '../../src/relay/mission/julius';
 import type { GptRunOutcome } from '../../src/relay/connectors/gpt-architect';
-import { JULIUS_PARTICIPATION_CHANNELS, JULIUS_PARTICIPATION_MARKER, JuliusDispatchError, safeFailureClass, safeReviewDiagnostics, sanitizeJuliusResearchAsks } from '../../src/relay/mission/julius';
+import { JULIUS_PARTICIPATION_CHANNELS, JULIUS_PARTICIPATION_MARKER, JuliusDispatchError, RESEARCH_AUTHORITY_NOT_STATED, noJuliusResearch, safeFailureClass, safeReviewDiagnostics, sanitizeJuliusResearchAsks, sealJuliusResearchPolicy } from '../../src/relay/mission/julius';
 import { compileHostedEnvelope } from '../hosted-coding-agent/hosted-envelope';
 import type { HostedQueryFn, HostedRunInput, HostedRunOutcome } from '../hosted-coding-agent/hosted-runner';
 import { buildReviewPrompt, loadHermesConfig, reviewDiagnostics, runHermesReview, type HermesConfig, type HermesOutcome, type ReviewPacket } from '../hermes-reviewer';
@@ -41,6 +41,7 @@ import {
   diffRef,
   guidanceRef,
   planRef,
+  type ResearchPolicySource,
 } from './live-workers';
 import {
   architectWorker,
@@ -324,6 +325,8 @@ const fakeQuery: HostedQueryFn = () => (async function* () { /* never yields */ 
 
 function liveResolution(overrides: {
   env?: Record<string, string | undefined>;
+  /** The mission's sealed research policy, handed to every worker's prompt. */
+  researchPolicyFor?: ResearchPolicySource;
   verdicts?: Array<'approved' | 'changes_required'>;
   shell?: ShellEffectPort | null;
   contexts?: Parameters<typeof resolveLiveWorkers>[0]['contexts'];
@@ -346,6 +349,7 @@ function liveResolution(overrides: {
     projectId: 'prj-live', workspacePath: '/workspace/mission', testCommand: 'npm run mission-test',
     contexts: overrides.contexts ?? { snapshotFor: () => null },
     artifacts, shell,
+    ...(overrides.researchPolicyFor === undefined ? {} : { researchPolicyFor: overrides.researchPolicyFor }),
     runners: {
       architect: (overrides.architect ?? fakeArchitect(log)) as never,
       coder: fakeCoder(log, prompts) as never,
@@ -567,12 +571,13 @@ async function driveLiveMission(
   reviewerTexts?: readonly string[],
   reviewerHangsFirst?: number,
   reviewerEngineTimesOutFirst?: number,
+  researchPolicyFor?: ResearchPolicySource,
 ) {
   const memory = createJuliusMemoryStore();
   // Not narrowed to JuliusRuntimeStore: the drive loop runs the recovery sweep,
   // and the memory store is the recovery driver as well as the store.
   const handoffs = createContextAndClaimHandoffs(memory as unknown as JuliusRuntimeStore & JuliusRecoveryDriver);
-  const fakes = liveResolution({ verdicts, contexts: handoffs.contexts, architect, reviewerTexts, reviewerHangsFirst, reviewerEngineTimesOutFirst });
+  const fakes = liveResolution({ verdicts, contexts: handoffs.contexts, architect, reviewerTexts, reviewerHangsFirst, reviewerEngineTimesOutFirst, researchPolicyFor });
   expect(fakes.resolution.ok).toBe(true);
   seedMissionRun(memory);
   const runtime = assembleLiveJuliusRuntime({
@@ -3459,6 +3464,79 @@ describe('the architect and the reviewer can ask, through their own answers', ()
     expect(prompt).toContain('"researchAsks":[{"source":string,"capability":string,"reference":string,"purpose":string}]}');
     expect(prompt).toContain('Julius decides whether this mission is authorised');
     expect(prompt).toContain('At most 3 per answer');
+  });
+
+  /* ------------------------------------- what each worker is told it may ask */
+
+  /**
+   * QUALIFICATION ATTEMPT 2 (run 34757974058) had all four research asks refused
+   * while its contract granted web / read_item on www.postgresql.org, and no
+   * prompt ever said so. Every slot now reads the grant from the SAME sealed
+   * policy function the mediator decides with.
+   */
+  const GRANT_HOST = 'www.postgresql.org';
+  const grantFor: ResearchPolicySource = (missionId) => sealJuliusResearchPolicy({
+    missionId,
+    roles: ['PROMPT_ARCHITECT', 'CODING_AGENT', 'INDEPENDENT_REVIEWER'],
+    allowances: [{ source: 'web', capabilities: ['read_item'], hosts: [GRANT_HOST] }],
+    missionBudget: { maxRetrievals: 6, maxBytes: 400_000 },
+    roleBudget: { maxRetrievals: 2, maxBytes: 200_000 },
+  });
+  const grantLine = `source "web", capability "read_item", on: ${GRANT_HOST}`;
+
+  it('ALL THREE SLOTS, through resolveLiveWorkers and a real drive, are told the one grant', async () => {
+    const calls: Array<Record<string, unknown>> = [];
+    const log: FakeLog = { order: [] };
+    const capturing = (async (call: Record<string, unknown>) => {
+      calls.push(call);
+      return fakeArchitect(log)();
+    }) as never;
+    const { fakes, outcome } = await driveLiveMission(['approved'], undefined, capturing, undefined, undefined, undefined, grantFor);
+    expect(outcome.state).toBe('COMPLETED');
+
+    expect(calls.length).toBeGreaterThan(0);
+    for (const call of calls) {
+      expect(String(call.instructions)).toContain(grantLine);
+      expect(String(call.instructions)).toContain('Your slot (PROMPT_ARCHITECT) may ask.');
+    }
+    expect(fakes.prompts.length).toBeGreaterThan(0);
+    for (const prompt of fakes.prompts) {
+      expect(prompt).toContain(grantLine);
+      expect(prompt).toContain('Your slot (CODING_AGENT) may ask.');
+      // Beside the door it describes, after the protocol.
+      expect(prompt.indexOf('RESEARCH THIS MISSION AUTHORISES')).toBeGreaterThan(prompt.indexOf('ASKING JULIUS FOR SOMETHING, MID-MISSION.'));
+    }
+    expect(fakes.packets.length).toBeGreaterThan(0);
+    for (const packet of fakes.packets) {
+      const prompt = buildReviewPrompt(packet);
+      expect(prompt).toContain(grantLine);
+      expect(prompt).toContain('Your slot (INDEPENDENT_REVIEWER) may ask.');
+      // THE REVIEWER IS STILL TOOL-FREE, and still told so.
+      expect(prompt).toContain('You have NO tools in this review');
+    }
+  });
+
+  it('a mission with no research clause tells every slot NONE, which is what the mediator enforces', async () => {
+    const calls: Array<Record<string, unknown>> = [];
+    const log: FakeLog = { order: [] };
+    const capturing = (async (call: Record<string, unknown>) => { calls.push(call); return fakeArchitect(log)(); }) as never;
+    const { fakes } = await driveLiveMission(['approved'], undefined, capturing, undefined, undefined, undefined, (missionId) => noJuliusResearch(missionId));
+    const none = 'RESEARCH THIS MISSION AUTHORISES: NONE.';
+    expect(String(calls[0]!.instructions)).toContain(none);
+    expect(fakes.prompts[0]).toContain(none);
+    expect(buildReviewPrompt(fakes.packets[0]!)).toContain(none);
+    expect(buildReviewPrompt(fakes.packets[0]!)).not.toContain(GRANT_HOST);
+  });
+
+  it('a composition that hands no policy says it was not told, never NONE and never a host', async () => {
+    const seen: Array<Record<string, unknown>> = [];
+    const { adapter } = architectFor(planWith([]), seen);
+    await adapter.dispatch({ taskId: 'plan-1', contextId: 'ctx-resume-1', taskType: 'plan' });
+    expect(String(seen[0]!.instructions)).toContain(RESEARCH_AUTHORITY_NOT_STATED);
+    const packets: ReviewPacket[] = [];
+    await reviewerFor(reviewText([]), packets)
+      .dispatch({ taskId: 'plan-1:review', contextId: 'ctx-resume-1', taskType: 'review:plan' });
+    expect(buildReviewPrompt(packets[0]!)).toContain(RESEARCH_AUTHORITY_NOT_STATED);
   });
 
   it('a reviewer’s ask survives the REAL parser and reaches the dispatch result', async () => {

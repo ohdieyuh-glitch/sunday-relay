@@ -9,6 +9,7 @@ import {
   juliusResearchMayCorroborate,
   juliusResearchPolicyIntact,
   juliusResearchProducedEvidence,
+  juliusResearchRequestedHost,
   noJuliusResearch,
   recordJuliusResearch,
   sealJuliusResearchPolicy,
@@ -144,6 +145,44 @@ describe('the wildcard does exactly what it says', () => {
     ['nodejs.org', 'evilnodejs.org', false],
   ])('%s vs %s is %s', (pattern, host, expected) => {
     expect(juliusResearchHostMatches(pattern, host)).toBe(expected);
+  });
+});
+
+describe('the authorized URL is the one a fetch can carry', () => {
+  it('drops the fragment, which is never sent, and keeps everything that is', () => {
+    const verdict = authorizeJuliusResearch({
+      request: request({ reference: 'https://docs.python.org/3/library/asyncio-task.html?x=1#asyncio.timeout' }),
+      policy: policy(),
+      ledger: emptyJuliusResearchLedger('mission-1'),
+    });
+    expect(verdict.ok && verdict.url).toBe('https://docs.python.org/3/library/asyncio-task.html?x=1');
+    expect(verdict.ok && verdict.host).toBe('docs.python.org');
+  });
+});
+
+describe('the host an ask reached for is recorded as a name and nothing else', () => {
+  it.each([
+    ['https://www.postgresql.org/docs/current/app-psql.html', 'www.postgresql.org'],
+    ['https://WWW.PostgreSQL.org./docs?x=1#y', 'www.postgresql.org'],
+    ['http://github.com/owner/repo', 'github.com'],
+    ['https://user:pass@docs.python.org/3/', 'docs.python.org'],
+    ['https://xn--bcher-kva.example/', 'xn--bcher-kva.example'],
+    ['https://127.0.0.1/', null],
+    ['https://[::1]/', null],
+    ['https://localhost/', null],
+    ['the psql manual', null],
+    ['', null],
+    [`https://${'a'.repeat(64)}.example/`, null],
+  ] as const)('%s records %s', (reference, host) => {
+    expect(juliusResearchRequestedHost(reference)).toBe(host);
+  });
+
+  it('is the host the policy compared, so a recorded refusal names what was refused', () => {
+    const asked = request({ reference: 'https://Evil.Example./a/b?c' });
+    const verdict = authorizeJuliusResearch({ request: asked, policy: policy(), ledger: emptyJuliusResearchLedger('mission-1') });
+    expect(verdict.ok).toBe(false);
+    expect(!verdict.ok && verdict.refusal).toBe('host_not_allowed');
+    expect(!verdict.ok && verdict.detail).toContain(`${juliusResearchRequestedHost(asked.reference)!} is not on`);
   });
 });
 

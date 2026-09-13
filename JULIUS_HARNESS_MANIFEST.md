@@ -43,7 +43,7 @@ Edges counted by the trace between included files; "type" = type-only imports, e
 | kernel (src/relay/mission/julius/) | other | 5 | 0 |
 | live composition (relay-bridge/julius/) | bridge provider stacks (hosted Claude, Hermes, redaction) | 15 | 4 |
 | live composition (relay-bridge/julius/) | connectors (gpt-architect, prompt-architect contracts) | 7 | 1 |
-| live composition (relay-bridge/julius/) | executor + tool substrate (src/relay/workspace/julius-tools/) | 2 | 0 |
+| live composition (relay-bridge/julius/) | executor + tool substrate (src/relay/workspace/julius-tools/) | 3 | 0 |
 | live composition (relay-bridge/julius/) | kernel (src/relay/mission/julius/) | 13 | 4 |
 | live composition (relay-bridge/julius/) | other | 5 | 3 |
 | live composition (relay-bridge/julius/) | persistence (src/relay/persistence/) | 11 | 2 |

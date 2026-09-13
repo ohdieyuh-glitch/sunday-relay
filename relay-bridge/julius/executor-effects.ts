@@ -36,6 +36,7 @@ import {
 } from '../../src/relay/mission/julius';
 import type { JuliusToolPostgresRepository } from '../../src/relay/persistence/julius-tool-postgres';
 import type { JuliusToolSettlementPostgresRepository } from '../../src/relay/persistence/julius-tool-settlement-postgres';
+import { EXECUTOR_IDENTIFIER_MAX_LENGTH } from '../../src/relay/workspace/julius-tools/executor-schema';
 import { safeClaim } from './live-workers';
 import { EXECUTOR_SANDBOX_LIMITS, EXECUTOR_SANDBOX_POLICY } from './sandbox-limits';
 
@@ -80,6 +81,59 @@ const stable = (value: unknown): string => value === null || typeof value !== 'o
     : `{${Object.keys(value as Record<string, unknown>).sort().map((key) => `${JSON.stringify(key)}:${stable((value as Record<string, unknown>)[key])}`).join(',')}}`;
 export const digestOf = (value: unknown): string => sha(stable(value));
 
+/* ------------------------------------------------- the executor identity */
+
+/**
+ * THE LONGEST DISPATCH GENERATION THE IDENTITY BUDGET RESERVES ROOM FOR, in
+ * decimal digits. A dispatch generation is a small counter; ten digits is
+ * already four billion redispatches of one invocation.
+ */
+const DISPATCH_GENERATION_DIGITS = 10;
+
+/**
+ * THE LONGEST INVOCATION ID WHOSE EXECUTION IDENTITY STILL FITS.
+ *
+ * The executor composes `executionIdentity = invocationId:dispatchGeneration:sandboxId`
+ * (remote-executor-control-plane.ts) and refuses any identifier longer than
+ * {@link EXECUTOR_IDENTIFIER_MAX_LENGTH}; this port uses the invocation id as
+ * the sandbox id, so the invocation id appears TWICE in it.
+ */
+export const EXECUTOR_INVOCATION_ID_MAX_LENGTH = Math.floor((EXECUTOR_IDENTIFIER_MAX_LENGTH - 2 - DISPATCH_GENERATION_DIGITS) / 2);
+
+/**
+ * THE INVOCATION ID FOR ONE TOOL EFFECT OF ONE LEASE — bounded, whatever the task.
+ *
+ * It was `${invocationKey}:g${leaseGeneration}`, and the key is `${taskId}:${step}`.
+ * Task ids grow with every repair and segment prefix, so the id grew with them:
+ * paid qualification 34757974058's second coder repair,
+ * `repair:repair:run:5408584e00ffb49fd1c011a1:build:1:task:2:task`, gave a
+ * 70-character invocation id and a 143-character execution identity, the
+ * executor refused it `execution_envelope_invalid:executionIdentity`, and the
+ * mission failed with two of its three repair cycles unspent. Every mission
+ * that needs a second coder repair failed the same way.
+ *
+ * UNCHANGED WHERE IT FITS. Every id this port has ever issued inside the bound
+ * is issued identically, so nothing recorded so far changes meaning.
+ *
+ * BOUNDED WHERE IT DOES NOT: `x-` + 128 bits of SHA-256 over the full key, then
+ * the step and the lease generation. Deterministic — the same key and lease give
+ * the same id, so the outbox deduplicates a retried attempt exactly as before —
+ * and collision-resistant. The full task id is not lost: the durable invocation
+ * row, the request the executor digests and signs over, and the evidence
+ * summary all still carry it.
+ */
+export function executorInvocationId(invocationKey: string, leaseGeneration: number): string {
+  if (invocationKey.length === 0) throw new Error('executor_invocation_key_empty');
+  if (!Number.isSafeInteger(leaseGeneration) || leaseGeneration < 1) throw new Error('executor_lease_generation_invalid');
+  const natural = `${invocationKey}:g${leaseGeneration}`;
+  if (natural.length <= EXECUTOR_INVOCATION_ID_MAX_LENGTH) return natural;
+  const tail = invocationKey.slice(invocationKey.lastIndexOf(':') + 1);
+  const step = /^[a-z]{1,8}$/u.test(tail) ? tail : 'fx';
+  const compact = `x-${sha(invocationKey).slice(0, 32)}:${step}:g${leaseGeneration}`;
+  if (compact.length > EXECUTOR_INVOCATION_ID_MAX_LENGTH) throw new Error('executor_invocation_id_unbounded');
+  return compact;
+}
+
 /* ------------------------------------------------------------ live port */
 
 /*
@@ -117,7 +171,7 @@ export function createExecutorShellPort(config: {
       if (claim === null) {
         throw new JuliusDispatchError('WORKER_EXECUTION_FAILURE', false, 'No recorded task claim exists for this tool effect, so it cannot be authorized.');
       }
-      const invocationId = `${input.invocationKey}:g${claim.leaseGeneration}`;
+      const invocationId = executorInvocationId(input.invocationKey, claim.leaseGeneration);
       const now = () => new Date().toISOString();
 
       // The outbox claim matches only when the ACTIVE task row names the
