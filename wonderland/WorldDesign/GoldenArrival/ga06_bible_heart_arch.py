@@ -17,6 +17,12 @@ WHAT THIS LAYER ADDS.
                the hedge blocks at y 1640 -- and sunk so its lower point is below the paving, it leaves a
                walk-through opening wider than the 5 m path with the two lobes rising above the walker.
                No collision: its simple collision is a box that would seal the path.
+  GOLD CLOCK   the Bible's big gold pocket clock on the left of the hero path (BOARD_2 and BOARD_6 hero,
+               BOARD_3 centre), on a stone pedestal rising out of the flowers at the far end of GA05's left
+               planter -- inside the planter's footprint, so it takes no walking room and leaves the plaza's
+               central lane (x +/-390) clear. The world's SM_clock_ornate is one gold slot, dial included,
+               and at 2x it read as crumpled gold foil from both sides (GA06b, not saved); the forge's
+               WL_Object_PocketClock (families/objects.py) has a ceramic dial with gold marks and hands.
   GOLD SCREENS two WL_Detail_Screen_Filigree runs (kit, 6.1 m x 6.3 m, gold filigree in an ivory frame,
                complex-as-simple collision) butted end to end along the path's left side at x +620, rising
                out of the hedge masses, facing the path.
@@ -36,6 +42,9 @@ V2 = "/Game/WonderlandV2/"
 HEART = V2 + "Vegetation/Topiary/SM_heart_topiary.SM_heart_topiary"
 SCREEN = V2 + "Kit/details/WL_Detail_Screen_Filigree.WL_Detail_Screen_Filigree"
 SCREEN_GOLD = V2 + "Kit/details/WL_Detail_Screen_Filigree_gold.WL_Detail_Screen_Filigree_gold"
+CLOCK_ENAMEL = V2 + "Kit/objects/WL_Object_PocketClock_enamel.WL_Object_PocketClock_enamel"
+CLOCK_GOLD = V2 + "Kit/objects/WL_Object_PocketClock_gold.WL_Object_PocketClock_gold"
+PEDESTAL = V2 + "Props/Garden/SM_pedestal_finial.SM_pedestal_finial"
 
 HEART_SCALE = 1.05
 HEART_TIP_Z = 403.5 - 541.0          # local z of the heart's lower point
@@ -57,6 +66,15 @@ def build():
     for k, y in enumerate((2050.0, 2660.0)):
         actor("GoldScreen%d_Frame" % k, SCREEN, (620.0, y, GROUND), ["MI_V2_IvoryStone"], 1.0, yaw=90.0)
         actor("GoldScreen%d_Gold" % k, SCREEN_GOLD, (620.0, y, GROUND), ["MI_V2_Gold"], 1.0, yaw=90.0, collision="none")
+
+    # GA05 left planter: centre (470, 420), 164 x 357 cm, top z 12 + 70 * 0.95. The kit clock's dial faces
+    # its +X; yaw -90 turns it toward the arrival. Case radius 150 cm at 1x; it stands on its case edge at z 0.
+    planter_top = 12.0 + 70.0 * 0.95
+    pedestal_scale, clock_scale = 1.0, 0.8
+    actor("ClockPedestal", PEDESTAL, (470.0, 560.0, planter_top - 10.0), ["MI_V2_MarblePale"], pedestal_scale, collision="none")
+    clock_base = planter_top - 10.0 + 124.0 * pedestal_scale - 6.0
+    actor("PocketClock_Dial", CLOCK_ENAMEL, (470.0, 560.0, clock_base), ["MI_V2_Ceramic"], clock_scale, yaw=-90.0, collision="none")
+    actor("PocketClock_Gold", CLOCK_GOLD, (470.0, 560.0, clock_base), ["MI_V2_Gold"], clock_scale, yaw=-90.0, collision="none")
 
     return {"pass": PASS, "title": "Bible hero path: walk-through heart arch and gold filigree screens",
             "folder": "Wonderland/Authored/GA06", "tags": ["V2_Garden"], "actors": actors, "batches": [],

@@ -56,7 +56,8 @@ def build():
             # A gold lip on the planter's plaza-facing edge.
             actor("Planter%s%d_GoldLip" % (side, k), "kerb", (sx - math.copysign(84.0, sx), py, top - 6.0), ["MI_V2_Gold"], (2.9, 0.35, 0.4), yaw=90.0, collision="none")
             for j, dy in enumerate((-110.0, 0.0, 110.0)):
-                bloom_material = ["MI_V2_PetalPink", "MI_V2_RoseRed", "MI_V2_PetalViolet"][(j + k) % 3]
+                # Violet-led, as the Bible's beds are (VISUAL_AUTHORITY.md): two violet beds to one pink.
+                bloom_material = ["MI_V2_PetalViolet", "MI_V2_PetalPink", "MI_V2_PetalViolet"][(j + k) % 3]
                 instance("PlanterBlooms", "blooms0" if j % 2 == 0 else "blooms3", bloom_material, (sx, py + dy, top - 18.0), (0.72, 0.62, 0.9), 90.0 + rng.uniform(-6, 6))
             # GA05a planted SM_lavender_heads here: heads with no stems read as white spikes floating
             # half a metre over the soil. Blossom clusters sit on the soil and carry the lavender tone.

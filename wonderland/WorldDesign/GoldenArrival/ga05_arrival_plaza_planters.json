@@ -193,9 +193,9 @@
  ],
  "batches": [
   {
-   "id": "PlanterBlooms_PetalPink",
+   "id": "PlanterBlooms_PetalViolet",
    "mesh": "/Game/WonderlandV2/Vegetation/Flowers/SM_flower_bed_blooms_0.SM_flower_bed_blooms_0",
-   "material": "MI_V2_PetalPink",
+   "material": "MI_V2_PetalViolet",
    "instances": [
     [
      470.0,
@@ -203,6 +203,28 @@
      60.5,
      0.0,
      94.6,
+     0.0,
+     0.72,
+     0.62,
+     0.9
+    ],
+    [
+     470.0,
+     -260.0,
+     60.5,
+     0.0,
+     91.4,
+     0.0,
+     0.72,
+     0.62,
+     0.9
+    ],
+    [
+     470.0,
+     420.0,
+     60.5,
+     0.0,
+     95.9,
      0.0,
      0.72,
      0.62,
@@ -232,6 +254,28 @@
     ],
     [
      -470.0,
+     -260.0,
+     60.5,
+     0.0,
+     87.6,
+     0.0,
+     0.72,
+     0.62,
+     0.9
+    ],
+    [
+     -470.0,
+     420.0,
+     60.5,
+     0.0,
+     89.4,
+     0.0,
+     0.72,
+     0.62,
+     0.9
+    ],
+    [
+     -470.0,
      530.0,
      60.5,
      0.0,
@@ -247,9 +291,9 @@
    "affect_df": false
   },
   {
-   "id": "PlanterBlooms_RoseRed",
+   "id": "PlanterBlooms_PetalPink",
    "mesh": "/Game/WonderlandV2/Vegetation/Flowers/SM_flower_bed_blooms_3.SM_flower_bed_blooms_3",
-   "material": "MI_V2_RoseRed",
+   "material": "MI_V2_PetalPink",
    "instances": [
     [
      470.0,
@@ -290,60 +334,6 @@
      60.5,
      0.0,
      89.6,
-     0.0,
-     0.72,
-     0.62,
-     0.9
-    ]
-   ],
-   "collides": false,
-   "cast_shadow": true,
-   "affect_df": false
-  },
-  {
-   "id": "PlanterBlooms_PetalViolet",
-   "mesh": "/Game/WonderlandV2/Vegetation/Flowers/SM_flower_bed_blooms_0.SM_flower_bed_blooms_0",
-   "material": "MI_V2_PetalViolet",
-   "instances": [
-    [
-     470.0,
-     -260.0,
-     60.5,
-     0.0,
-     91.4,
-     0.0,
-     0.72,
-     0.62,
-     0.9
-    ],
-    [
-     470.0,
-     420.0,
-     60.5,
-     0.0,
-     95.9,
-     0.0,
-     0.72,
-     0.62,
-     0.9
-    ],
-    [
-     -470.0,
-     -260.0,
-     60.5,
-     0.0,
-     87.6,
-     0.0,
-     0.72,
-     0.62,
-     0.9
-    ],
-    [
-     -470.0,
-     420.0,
-     60.5,
-     0.0,
-     89.4,
      0.0,
      0.72,
      0.62,
