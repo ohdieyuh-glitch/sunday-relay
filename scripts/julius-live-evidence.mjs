@@ -31,6 +31,9 @@ const ALLOWED = [
   /^JULIUS LIVE MISSION — preflight$/u,
   /^  mission: [\w:.-]+ \(project [\w:.-]+\)$/u,
   /^  requested models: architect=\S+ coder=\S+ reviewer=\S+$/u,
+  // How the review packet reaches Hermes. The roles check refuses anything but
+  // `file`, and the bundle has to be able to show which one a run was given.
+  /^  reviewer_prompt_transport: (argv|file|unrecognised)$/u,
   /^  [A-Z][A-Z0-9_]*: (SET|MISSING)$/u,
   /^  BLOCKED [a-z_ ]+: .+$/iu,
   /^RESULT: [A-Z_]+( \(stalled before terminal state\))?( after \d+ ticks)?$/u,

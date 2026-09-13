@@ -835,6 +835,7 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           JULIUS_SCOPED_CREDENTIALS: ${{ steps.identity.outputs.scoped }}
           RELAY_HERMES_EXECUTABLE: /tmp/julius-hermes-bin/hermes
+          RELAY_HERMES_PROMPT_TRANSPORT: file
         run: |
           set -uo pipefail
           # No `--confirm-live`. The entrypoint resolves every role, reports
@@ -857,6 +858,11 @@ jobs:
           grep -q 'architect=gpt-5.6-sol' preflight-roles.log || { echo 'architect_model_unexpected' >&2; exit 1; }
           grep -q 'coder=claude-fable-5' preflight-roles.log || { echo 'coding_model_unexpected' >&2; exit 1; }
           grep -q 'reviewer=xai/grok-build-0.1' preflight-roles.log || { echo 'reviewer_model_unexpected' >&2; exit 1; }
+          # THE PACKET TRAVELS IN A FILE. On argv a review packet of 131,072 bytes
+          # or more is refused by the kernel before the reviewer exists; the file
+          # transport has no such ceiling, and the bootstrap proved it on the real
+          # binary with a larger prompt than that.
+          grep -qx '  reviewer_prompt_transport: file' preflight-roles.log || { echo 'reviewer_prompt_transport_not_file' >&2; exit 1; }
           # THE LIVE LEDGER IS BOUND, OR THE PAID RUN DOES NOT START. Without it every
           # dispatch is allocated a flat estimate (paid run 34739303313: a $0.30
           # coder stopped after two turns). The entrypoint prints the answer from
@@ -942,6 +948,10 @@ jobs:
           # live Claude coding agent, which is a child of this same process
           # and holds Read/Glob/Grep.
           RELAY_HERMES_EXECUTABLE: /tmp/julius-hermes-bin/hermes
+          # The review packet reaches Hermes in a 0600 file in the reviewer's own
+          # scratch directory, read by the launcher the bootstrap installed. As an
+          # argument it is refused past 131,072 bytes, on the largest reviews.
+          RELAY_HERMES_PROMPT_TRANSPORT: file
           MAX_TICKS: ${{ inputs.max_ticks }}
         run: |
           set -uo pipefail
@@ -1160,6 +1170,9 @@ jobs:
           docker rm -f julius-executor julius-postgres 2>/dev/null || true
           # The reviewer profile holds the xAI credential; it never outlives
           # the job.
+          # The wrapper directory is read-only by design, so write access comes
+          # back first or `rm -rf` leaves the wrapper and the launcher behind.
+          chmod -R u+w /tmp/julius-hermes-bin 2>/dev/null || true
           rm -rf /tmp/julius-hermes-home /tmp/julius-hermes-bin 2>/dev/null || true
           rm -rf /opt/hermes-venv /opt/hermes-src 2>/dev/null || true
           # The signing key and the ledger lived inside the executor container's

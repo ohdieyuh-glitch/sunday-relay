@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * THE THREE WAYS `scripts/julius-reviewer-isolation-proof.sh` BREAKS THE BOOTSTRAP.
+ * THE WAYS `scripts/julius-reviewer-isolation-proof.sh` BREAKS THE BOOTSTRAP.
  *
  * The container proof runs `.github/julius-live-hermes.sh` unmodified, which
  * must pass, and then once per mutation below, which must each be refused for
@@ -70,6 +70,37 @@ export const ISOLATION_PROOF_MUTATIONS = Object.freeze([
       return replaceOnce(this.name, text,
         '--safe-mode --usage-file "$isolation_cwd/relay-hermes-usage.json"',
         '--usage-file "$isolation_cwd/relay-hermes-usage.json"');
+    },
+  }),
+  Object.freeze({
+    name: 'prompt-as-argument',
+    file: '.github/julius-live-hermes.sh',
+    refusal: 'reviewer_isolation_unproven:no_record',
+    /**
+     * The same 300,000-byte prompt passed as the `-z` argument instead of the
+     * file. The kernel refuses the exec before Python starts, so no record is
+     * ever written: the ceiling the file transport exists for, shown on the
+     * real path.
+     */
+    apply(text) {
+      return replaceOnce(this.name, text,
+        '"$HERMES_WRAPPER_DIR/hermes" --relay-prompt-file "$isolation_cwd/relay-hermes-prompt.txt"',
+        '"$HERMES_WRAPPER_DIR/hermes" -z "$(cat "$isolation_cwd/relay-hermes-prompt.txt")"');
+    },
+  }),
+  Object.freeze({
+    name: 'launcher-missing',
+    file: '.github/julius-live-hermes.sh',
+    refusal: 'reviewer_isolation_unproven:hermes_never_built_an_agent',
+    /**
+     * A wrapper pointing at a launcher that is not there. Python starts and the
+     * recorder loads with it, then Python cannot open the launcher, so the
+     * record says Hermes never built an agent. Observed, 2026-09-13.
+     */
+    apply(text) {
+      return replaceOnce(this.name, text,
+        '"$HERMES_PYTHON" -P "$HERMES_LAUNCHER" "$HERMES_BIN"',
+        '"$HERMES_PYTHON" -P "$HERMES_WRAPPER_DIR/absent-launcher.py" "$HERMES_BIN"');
     },
   }),
 ]);

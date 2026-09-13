@@ -10,8 +10,10 @@
  * payload termination, secret non-persistence — not provider behaviour.
  */
 
+import { spawn } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { Readable } from 'node:stream';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
@@ -377,7 +379,7 @@ describe('C.A.R.D. role resolution', () => {
     expect(byRole.get('INDEPENDENT_REVIEWER')?.worker.providerId).toBe('xai');
     expect(resolution.requested).toEqual({
       architectModel: 'gpt-5.6-sol', codingModel: 'claude-fable-5',
-      reviewerProvider: 'xai', reviewerModel: 'grok-build-0.1',
+      reviewerProvider: 'xai', reviewerModel: 'grok-build-0.1', reviewerPromptTransport: 'argv',
     });
     // Every adapter answers for exactly one worker; none holds another adapter.
     for (const entry of resolution.entries) {
@@ -406,6 +408,19 @@ describe('C.A.R.D. role resolution', () => {
       expect(problem!.missing.join(' '), `${role} refusal must name ${variable}`).toContain(variable);
       expect(log.order, 'no provider fake may have been called').toEqual([]);
     }
+  });
+
+  it('reports the reviewer prompt transport, and refuses one it does not recognise rather than falling back to argv', () => {
+    const file = liveResolution({ env: { ...LIVE_ENV, RELAY_HERMES_PROMPT_TRANSPORT: 'file' } }).resolution;
+    expect(file.ok).toBe(true);
+    expect(file.requested.reviewerPromptTransport).toBe('file');
+    const { resolution, log } = liveResolution({ env: { ...LIVE_ENV, RELAY_HERMES_PROMPT_TRANSPORT: 'stdin' } });
+    expect(resolution.ok).toBe(false);
+    expect(resolution.entries).toEqual([]);
+    expect(resolution.requested.reviewerPromptTransport).toBe('unrecognised');
+    const reviewer = resolution.problems.find((problem) => problem.role === 'INDEPENDENT_REVIEWER');
+    expect(reviewer?.missing).toContain('RELAY_HERMES_PROMPT_TRANSPORT (argv or file)');
+    expect(log.order).toEqual([]);
   });
 
   it('refuses a reviewer that shares the Coding Agent vendor', () => {
@@ -1718,6 +1733,69 @@ describe('the first paid attempt, reproduced: a failing Prompt Architect', () =>
  * the shape, to the Julius code and the retryable flag the coordinator
  * persists. No provider, no network, no Hermes.
  */
+/**
+ * A PACKET THE TRANSPORT COULD NOT CARRY REACHES JULIUS BY ITS NAME.
+ *
+ * Both used to be `launch_failed`, recorded as `reviewer_launch_failed`, which
+ * reads as a missing binary. These drive the REAL local runner, with a spawn
+ * the operating system refuses or a wrapper that is not there, into the REAL
+ * adapter, and hold the code, the retryable flag, the class and the packet size
+ * the coordinator persists. Neither is re-asked: the same packet over the same
+ * transport is refused the same way.
+ */
+describe('a review the prompt transport could not carry is named, not a launch failure', () => {
+  const worker = {
+    workerId: 'independent-reviewer-hermes', role: 'INDEPENDENT_REVIEWER' as const,
+    adapterId: 'hermes-local-live', providerId: 'xai', capabilities: ['review'],
+    taskTypes: ['review:plan'], concurrencyLimit: 1, timeoutMs: 1_000, maxRetries: 1,
+    status: 'AVAILABLE' as const,
+  };
+  const failureFrom = async (config: HermesConfig, spawnImpl: unknown) => {
+    const artifacts = createLiveArtifactExchange();
+    artifacts.put(planRef('run-live'), JSON.stringify(VALID_PLAN));
+    const runs: number[] = [];
+    const adapter = createLiveHermesReviewerAdapter({
+      worker,
+      contexts: { snapshotFor: () => reviewSnapshot('build-1:review') },
+      artifacts, config, testCommand: 'npm run mission-test',
+      run: (async (input: { packet: ReviewPacket; config: HermesConfig }) => {
+        runs.push(1);
+        return runHermesReview({ packet: input.packet, config: input.config, spawnImpl: spawnImpl as never });
+      }) as never,
+      sleep: () => Promise.resolve(),
+    });
+    const failure = await adapter.dispatch({ taskId: 'build-1:review', contextId: 'ctx-resume-1', taskType: 'review:plan' })
+      .then(() => { throw new Error('the dispatch was expected to fail'); })
+      .catch((error: unknown) => error as { code: string; retryable: boolean; failureClass: string | null; diagnostics?: Record<string, unknown> });
+    return { failure, runs: runs.length };
+  };
+
+  it('an argument list the operating system refuses is review_packet_too_large, with the packet size, asked once', async () => {
+    const refusing = () => { throw Object.assign(new Error('spawn E2BIG'), { code: 'E2BIG' }); };
+    const { failure, runs } = await failureFrom(loadHermesConfig(LIVE_ENV as never), refusing);
+    expect(failure.failureClass).toBe('review_packet_too_large');
+    expect(failure.failureClass).not.toBe('reviewer_launch_failed');
+    expect(failure.code).toBe('WORKER_EXECUTION_FAILURE');
+    expect(failure.retryable).toBe(false);
+    expect(typeof failure.diagnostics?.packetBytes).toBe('number');
+    expect(failure.diagnostics?.packetBytes as number).toBeGreaterThan(0);
+    expect(failure.diagnostics?.processStarted).toBe(false);
+    expect(runs, 'a refused packet is not asked for again').toBe(1);
+  });
+
+  it('a missing wrapper on the file transport is review_transport_unavailable, asked once', async () => {
+    const missingWrapper = ((_exe: string, args: string[], options: object) =>
+      spawn(join(tmpdir(), 'relay-no-such-wrapper', 'hermes'), args, options)) as unknown;
+    const config = loadHermesConfig({ ...LIVE_ENV, RELAY_HERMES_PROMPT_TRANSPORT: 'file' } as never);
+    const { failure, runs } = await failureFrom(config, missingWrapper);
+    expect(failure.failureClass).toBe('review_transport_unavailable');
+    expect(failure.code).toBe('PROVIDER_UNAVAILABLE');
+    expect(failure.retryable).toBe(false);
+    expect(typeof failure.diagnostics?.packetBytes).toBe('number');
+    expect(runs).toBe(1);
+  });
+});
+
 describe('an incomplete review reaches Julius as the failure it actually was', () => {
   const REMOTE_CFG: RemoteHermesConfig = {
     serviceUrl: 'https://hermes.example.com',

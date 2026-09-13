@@ -734,6 +734,9 @@ async function main(argv: readonly string[]): Promise<number> {
   out('JULIUS LIVE MISSION — preflight');
   out(`  mission: ${contract.missionId} (project ${contract.projectId})`);
   out(`  requested models: architect=${preflight.requested.architectModel ?? 'MISSING'} coder=${preflight.requested.codingModel ?? 'MISSING'} reviewer=${preflight.requested.reviewerProvider ?? 'MISSING'}/${preflight.requested.reviewerModel ?? 'MISSING'}`);
+  // How the review packet will reach Hermes. The paid workflow requires `file`,
+  // the only transport that carries a packet past one argument's size ceiling.
+  out(`  reviewer_prompt_transport: ${preflight.requested.reviewerPromptTransport}`);
   out(presence(env, ['OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'XAI_API_KEY', 'DATABASE_URL', ...EXECUTOR_ENV]));
   out('  note: the local Hermes reviewer bills through the hermes profile of this operator account; XAI_API_KEY presence is reported for the record.');
   for (const problem of preflight.problems.filter((entry) => entry.role !== 'CODING_AGENT' || !entry.missing.some((name) => name.startsWith('executor shell')))) {

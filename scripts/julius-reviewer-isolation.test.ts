@@ -7,18 +7,20 @@ import {
   DISABLED_TOOLSETS, WRITE_CAPABLE_TOOLSETS, isolatedConfigYaml,
 } from '../relay-bridge/reviewer-harness/hermes/isolated-profile';
 import {
-  REVIEWER_API_ATTEMPTS, REVIEWER_DISABLED_TOOLSETS, REVIEWER_ISOLATION_RECORD_FIELDS,
+  LINUX_MAX_ARG_STRLEN, REVIEWER_API_ATTEMPTS, REVIEWER_DISABLED_TOOLSETS, REVIEWER_ISOLATION_RECORD_FIELDS,
   readIsolationRecords, reviewerProfileConfigYaml, verifyReviewerIsolation,
 } from './julius-reviewer-isolation.mjs';
 import { ISOLATION_PROOF_MUTATIONS, PROFILE_HEREDOC_BEFORE_ISOLATION } from './julius-reviewer-isolation-proof-mutations.mjs';
+import { HERMES_PROMPT_FILE_NAME, hermesReviewArgs } from '../relay-bridge/hermes-reviewer';
 
 /**
  * THE PAID REVIEWER HOLDS NO TOOL.
  *
  * The records below were written by `.github/julius-live-hermes-isolation/sitecustomize.py`
- * running the pinned Hermes (2ea39dae, v0.18.2) through a wrapper built as the
- * bootstrap builds it, with the flags `runHermesReview` passes. They are what
- * the proof actually observed, not a description of what it should observe.
+ * during the real bootstrap, running the pinned Hermes (2ea39dae, v0.18.2)
+ * through the wrapper and its prompt-file launcher with a 300,000-byte prompt
+ * file and the flags `runHermesReview` passes on the file transport. They are
+ * what the proof actually observed, not a description of what it should observe.
  */
 
 const ROOT = resolve(import.meta.dirname, '..');
@@ -27,13 +29,13 @@ const BOOTSTRAP = '.github/julius-live-hermes.sh';
 const HOOK = '.github/julius-live-hermes-isolation/sitecustomize.py';
 const MODULE = join(ROOT, 'scripts/julius-reviewer-isolation.mjs');
 
-const EXPECTED = { provider: 'xai', model: 'grok-build-0.1', requestTimeoutSeconds: 90 } as const;
+const EXPECTED = { provider: 'xai', model: 'grok-build-0.1', requestTimeoutSeconds: 90, promptBytes: 300_000 } as const;
 
 /** The profile this change writes: every toolset disabled. Observed, 2026-09-13. */
 const PROVEN = {
   agent_enabled_toolsets: [], api_attempts: 1, max_iterations: 90, model: 'grok-build-0.1',
   model_visible_tools: [], network_guard_verified: true, network_refused: ["getaddrinfo:'models.dev'"],
-  prompt_bytes: 15, provider: 'xai', reached: true, request_timeout_seconds: 90.0, resolved_cli_toolsets: [],
+  prompt_bytes: 300000, provider: 'xai', reached: true, request_timeout_seconds: 90.0, resolved_cli_toolsets: [],
   safe_mode: true, shell_hooks_registered: 0, stale_timeout_seconds: 90.0, valid_tool_names: [],
   codex_event_stale_timeout_seconds: 90.0, codex_ttfb_timeout_seconds: 90.0,
 };
@@ -92,8 +94,8 @@ describe('the verdict on what the proof observed', () => {
       ok: true,
       evidence: 'hermes_reviewer_isolation=PROVEN model_visible_tools=0 toolsets=0 safe_mode=on shell_hooks=0 '
         + `api_attempts=${REVIEWER_API_ATTEMPTS} request_timeout_s=90 stale_timeout_s=90 `
-        + 'codex_event_stale_timeout_s=90 codex_ttfb_timeout_s=90 max_iterations=90 proof_network_refusals=1 '
-        + '(hermes -z through the wrapper, network closed, no model asked)',
+        + 'codex_event_stale_timeout_s=90 codex_ttfb_timeout_s=90 max_iterations=90 prompt_bytes=300000 proof_network_refusals=1 '
+        + '(hermes -z through the wrapper and its prompt-file launcher, network closed, no model asked)',
     });
   });
 
@@ -122,6 +124,15 @@ describe('the verdict on what the proof observed', () => {
     expect(refusal({ ...PROVEN, codex_event_stale_timeout_seconds: 12 })).toBe('reviewer_codex_event_stale_timeout_seconds:12_expected_90');
     expect(refusal({ ...PROVEN, codex_ttfb_timeout_seconds: null })).toBe('reviewer_codex_ttfb_timeout_seconds:unknown_expected_90');
     expect(refusal({ ...PROVEN, stale_timeout_seconds: null })).toBe('reviewer_stale_timeout_seconds:unknown_expected_90');
+  });
+
+  it('refuses a prompt that did not arrive whole, and a proof prompt one argument could have carried', () => {
+    expect(refusal({ ...PROVEN, prompt_bytes: 131_071 })).toBe('reviewer_prompt_bytes:131071_expected_300000');
+    expect(refusal({ ...PROVEN, prompt_bytes: 300_001 })).toBe('reviewer_prompt_bytes:300001_expected_300000');
+    expect(refusal({ ...PROVEN, prompt_bytes: undefined })).toBe('reviewer_prompt_bytes:unknown_expected_300000');
+    expect(() => verifyReviewerIsolation(PROVEN, { ...EXPECTED, promptBytes: LINUX_MAX_ARG_STRLEN - 1 }))
+      .toThrow('reviewer_isolation_prompt_bytes_within_argv_ceiling');
+    expect(verifyReviewerIsolation({ ...PROVEN, prompt_bytes: LINUX_MAX_ARG_STRLEN }, { ...EXPECTED, promptBytes: LINUX_MAX_ARG_STRLEN }).ok).toBe(true);
   });
 
   it('refuses an agent built for a different provider or model', () => {
@@ -166,18 +177,18 @@ describe('the command the bootstrap runs', () => {
     writeFileSync(join(dir, 'record.json'), JSON.stringify(PROVEN));
     writeFileSync(join(dir, 'record.json.child-4242'), JSON.stringify({ network_refused: ["getaddrinfo:'x'"] }));
     expect(readIsolationRecords(join(dir, 'record.json')).sideRecords).toHaveLength(1);
-    const proven = run(['verify', join(dir, 'record.json'), 'xai', 'grok-build-0.1', '90']);
+    const proven = run(['verify', join(dir, 'record.json'), 'xai', 'grok-build-0.1', '90', '300000']);
     expect(proven.status).toBe(0);
     expect(proven.stdout).toContain('hermes_reviewer_isolation=PROVEN');
     expect(proven.stdout).toContain('proof_network_refusals=2');
 
-    const missing = run(['verify', join(dir, 'absent.json'), 'xai', 'grok-build-0.1', '90']);
+    const missing = run(['verify', join(dir, 'absent.json'), 'xai', 'grok-build-0.1', '90', '300000']);
     expect(missing.status).toBe(1);
     expect(missing.stdout).toBe('');
     expect(missing.stderr.trim()).toBe('reviewer_isolation_unproven:no_record');
 
     writeFileSync(join(dir, 'before.json'), JSON.stringify(BEFORE));
-    const before = run(['verify', join(dir, 'before.json'), 'xai', 'grok-build-0.1', '90']);
+    const before = run(['verify', join(dir, 'before.json'), 'xai', 'grok-build-0.1', '90', '300000']);
     expect(before.status).toBe(1);
     expect(before.stderr).toContain('reviewer_holds_tools:clarify,delegate_task,execute_code');
   });
@@ -193,7 +204,7 @@ const withoutComments = (text: string): string => text.split('\n').filter((line)
 describe('the bootstrap proves isolation on the path the review takes', () => {
   const bootstrap = bootstrapText;
   const reviewer = read('relay-bridge/hermes-reviewer.ts');
-  const proofAt = bootstrap.indexOf('"$HERMES_WRAPPER_DIR/hermes" -z');
+  const proofAt = bootstrap.indexOf('"$HERMES_WRAPPER_DIR/hermes" --relay-prompt-file');
   const proofBlock = PROOF_BLOCK;
 
   it('finds the proof it is about to hold to account', () => {
@@ -235,17 +246,32 @@ describe('the bootstrap proves isolation on the path the review takes', () => {
     expect(new Set(assignments)).toEqual(new Set(['PATH', 'HOME', 'PYTHONPATH', 'RELAY_REVIEWER_ISOLATION_RECORD']));
   });
 
-  it('passes the flags runHermesReview passes, from an empty scratch directory, with the record outside it', () => {
-    expect(reviewer).toContain("const args = ['-z', prompt, '--safe-mode', '--usage-file', usageFilePath];");
+  it('passes the file-transport arguments runHermesReview builds, from a scratch directory holding only the prompt, with the record outside it', () => {
+    // The arguments come from the reviewer's own builder, with the shell's
+    // variables standing where the review's paths and configuration stand.
+    const expected = hermesReviewArgs({
+      transport: 'file', prompt: 'unused on the file transport',
+      promptFilePath: `"$isolation_cwd/${HERMES_PROMPT_FILE_NAME}"`,
+      usageFilePath: '"$isolation_cwd/relay-hermes-usage.json"',
+      model: '"$RELAY_HERMES_MODEL"', provider: '"$HERMES_PROVIDER"',
+    });
     expect(reviewer).toContain("const usageFilePath = join(cwd, 'relay-hermes-usage.json');");
-    expect(reviewer).toContain("if (cfg.model) args.push('-m', cfg.model);");
-    expect(reviewer).toContain("if (cfg.provider) args.push('--provider', cfg.provider);");
-    expect(proofBlock).toContain('--safe-mode --usage-file "$isolation_cwd/relay-hermes-usage.json"');
-    expect(proofBlock).toContain('-m "$RELAY_HERMES_MODEL" --provider "$HERMES_PROVIDER"');
+    expect(reviewer).toContain('promptFilePath = join(cwd, HERMES_PROMPT_FILE_NAME);');
+    const invocation = proofBlock.slice(proofBlock.indexOf('"$HERMES_WRAPPER_DIR/hermes"'), proofBlock.indexOf(') >/dev/null 2>&1'));
+    const words = invocation.replace(/\\\n\s*/gu, ' ').trim().split(/\s+/u).slice(1);
+    expect(words).toEqual(expected);
     expect(proofBlock).toContain('isolation_cwd="$(mktemp -d)"');
     expect(proofBlock).toContain('cd "$isolation_cwd"');
     expect(proofBlock).toContain('RELAY_REVIEWER_ISOLATION_RECORD="$isolation_dir/record.json"');
     expect(bootstrap).toMatch(/^: "\$\{RELAY_HERMES_MODEL:\?missing RELAY_HERMES_MODEL\}"$/mu);
+  });
+
+  it('writes a proof prompt past one argument\'s ceiling, 0600, and makes the verdict require every byte of it', () => {
+    const bytes = Number(/^isolation_prompt_bytes=(\d+)$/mu.exec(proofBlock)?.[1]);
+    expect(bytes).toBeGreaterThanOrEqual(LINUX_MAX_ARG_STRLEN);
+    expect(proofBlock).toContain(`head -c "$isolation_prompt_bytes" /dev/zero | tr '\\0' 'x' > "$isolation_cwd/${HERMES_PROMPT_FILE_NAME}"`);
+    expect(proofBlock).toContain(`chmod 0600 "$isolation_cwd/${HERMES_PROMPT_FILE_NAME}"`);
+    expect(proofBlock).toMatch(/verify "\$isolation_dir\/record\.json" \\\n\s+"\$HERMES_PROVIDER" "\$RELAY_HERMES_MODEL" "\$HERMES_REQUEST_TIMEOUT_SECONDS" "\$isolation_prompt_bytes"\)"/u);
   });
 
   it('loads a hook that exists, reads the record variable the bootstrap sets, and records every fact the verdict reads', () => {
@@ -277,7 +303,7 @@ describe('the recorder can never reach the paid review', () => {
   it('the wrapper Julius spawns for real reviews sets HOME and HERMES_HOME and nothing else', () => {
     expect(wrapperStart).toBeGreaterThan(-1);
     const execLines = wrapper.split('\n').filter((line) => line.startsWith('exec '));
-    expect(execLines).toEqual(['exec env HOME="$HERMES_PROFILE_HOME" HERMES_HOME="$HERMES_PROFILE_HOME/.hermes" "$HERMES_BIN" "\\$@"']);
+    expect(execLines).toEqual(['exec env HOME="$HERMES_PROFILE_HOME" HERMES_HOME="$HERMES_PROFILE_HOME/.hermes" "$HERMES_PYTHON" -P "$HERMES_LAUNCHER" "$HERMES_BIN" "\\$@"']);
     for (const forbidden of ['PYTHONPATH', 'RELAY_REVIEWER_ISOLATION', 'sitecustomize', 'isolation']) {
       expect(wrapper, `the wrapper must not mention ${forbidden}`).not.toContain(forbidden);
     }
@@ -312,13 +338,83 @@ describe('the recorder can never reach the paid review', () => {
     expect(PROOF_BLOCK).toContain('cp "$isolation_hook_source" "$isolation_dir/hook/sitecustomize.py"');
     expect(PROOF_BLOCK).toContain('PYTHONPATH="$isolation_dir/hook"');
     const assignments = PROOF_BLOCK.split('\n').filter((line) => /^isolation_[a-z_]+=/u.test(line));
-    expect(assignments.length).toBe(3);
+    expect(assignments.length).toBe(4);
     for (const line of assignments) {
       expect(line, 'no proof path may be derived from the profile').not.toContain('HERMES_PROFILE_HOME');
       expect(line, 'or from the wrapper directory').not.toContain('HERMES_WRAPPER_DIR');
     }
     expect(PROOF_BLOCK.match(/rm -rf "\$isolation_dir" "\$isolation_cwd"/gu), 'on refusal and on success').toHaveLength(2);
     expect(withoutComments(PROOF_BLOCK)).not.toMatch(/HERMES_PROFILE_HOME/u);
+  });
+});
+
+/**
+ * THE PROMPT-FILE TRANSPORT, AS THE PAID WORKFLOW WIRES IT.
+ *
+ * The launcher is committed, copied beside the wrapper, and both are made
+ * read-only in a directory no mission can write, before anything that runs a
+ * model exists. The review and the roles check are both told to use it, the
+ * roles check refuses unless the entrypoint says it will, and cleanup can still
+ * remove what it made read-only.
+ */
+describe('the paid reviewer carries its packet in a file', () => {
+  const workflow = read('.github/workflows/julius-first-live-mission.yml');
+  const step = (name: string): string => {
+    const rest = workflow.slice(workflow.indexOf(`- name: ${name}`));
+    return rest.slice(0, rest.indexOf('\n      - ', 1));
+  };
+  const wrapperStart = bootstrapText.indexOf('HERMES_PYTHON=/opt/hermes-venv/bin/python');
+  const wrapperBlock = bootstrapText.slice(wrapperStart, bootstrapText.indexOf('# Prove the credential is resolvable', wrapperStart));
+
+  it('installs the committed launcher beside the wrapper and runs it with the Hermes virtualenv\'s Python', () => {
+    expect(existsSync(join(ROOT, '.github/julius-live-hermes-launcher.py'))).toBe(true);
+    expect(wrapperBlock).toContain('HERMES_LAUNCHER="$HERMES_WRAPPER_DIR/relay-hermes-launcher.py"');
+    expect(wrapperBlock).toContain('cp .github/julius-live-hermes-launcher.py "$HERMES_LAUNCHER"');
+    expect(wrapperBlock.indexOf('cp .github/julius-live-hermes-launcher.py')).toBeLessThan(wrapperBlock.indexOf('cat > "$HERMES_WRAPPER_DIR/hermes" <<WRAPPER'));
+  });
+
+  it('makes the wrapper, the launcher and their directory read-only, checks it, and refuses a wrapper inside a writable tree', () => {
+    for (const line of [
+      'chmod 0444 "$HERMES_LAUNCHER"',
+      'chmod 0555 "$HERMES_WRAPPER_DIR/hermes"',
+      'chmod 0555 "$HERMES_WRAPPER_DIR"',
+      'for writable_tree in "${JULIUS_WORKSPACE:-}" "$(pwd -P)"; do',
+      "echo 'hermes_wrapper_not_read_only' >&2; exit 1",
+    ]) expect(wrapperBlock, line).toContain(line);
+    expect(wrapperBlock).toMatch(/"\$writable_tree_real"\/\*\) echo "hermes_wrapper_inside_writable_tree:\$writable_tree_real" >&2; exit 1;;/u);
+    // Before the proof and before anything else runs through the wrapper.
+    expect(wrapperStart).toBeLessThan(PROOF_START);
+    expect(workflow).toMatch(/JULIUS_WORKSPACE: \/tmp\/julius-workspace\/tenant\/ws/u);
+    expect(workflow).toMatch(/HERMES_WRAPPER_DIR: \/tmp\/julius-hermes-bin/u);
+  });
+
+  it('tells the roles check and the paid review to use the file transport, and the roles check requires it', () => {
+    const roles = step("'Preflight: all three roles resolve to the expected models, nothing dispatched'");
+    const live = step("'LIVE: run the first real Julius mission'");
+    for (const [name, body] of [['roles', roles], ['live', live]] as const) {
+      expect(body, name).toContain('RELAY_HERMES_EXECUTABLE: /tmp/julius-hermes-bin/hermes');
+      expect(body, name).toMatch(/^\s+RELAY_HERMES_PROMPT_TRANSPORT: file$/mu);
+    }
+    expect(roles).toContain("grep -qx '  reviewer_prompt_transport: file' preflight-roles.log || { echo 'reviewer_prompt_transport_not_file' >&2; exit 1; }");
+    expect(read('relay-bridge/julius-live-mission.ts')).toContain('out(`  reviewer_prompt_transport: ${preflight.requested.reviewerPromptTransport}`);');
+  });
+
+  it('keeps the transport line in the roles evidence, and only in its exact shape', () => {
+    const buildEvidence = (log: string): string => execFileSync(
+      process.execPath, [join(ROOT, 'scripts/julius-live-evidence.mjs'), '-'], { input: log, encoding: 'utf8', cwd: ROOT },
+    );
+    const kept = buildEvidence('JULIUS LIVE MISSION — preflight\n  reviewer_prompt_transport: file\n');
+    expect(kept).toContain('  reviewer_prompt_transport: file');
+    for (const refused of ['  reviewer_prompt_transport: file sk-canary-must-never-appear', 'reviewer_prompt_transport: file', '  reviewer_prompt_transport: pipe']) {
+      expect(buildEvidence(`${refused}\n`), refused).not.toContain('reviewer_prompt_transport');
+    }
+  });
+
+  it('restores write access before cleanup removes the read-only wrapper directory', () => {
+    const cleanup = step('Destroy everything this job created');
+    const restore = cleanup.indexOf('chmod -R u+w /tmp/julius-hermes-bin');
+    expect(restore).toBeGreaterThan(-1);
+    expect(restore).toBeLessThan(cleanup.indexOf('rm -rf /tmp/julius-hermes-home /tmp/julius-hermes-bin'));
   });
 });
 
@@ -436,7 +532,7 @@ describe('the proof hook', () => {
       'if os.environ.get("FAKE_NEVER_BUILDS"):',
       '    sys.exit(3)',
       'from run_agent import AIAgent',
-      'print(AIAgent().run_conversation("proof")["final_response"])',
+      'print(AIAgent().run_conversation("x" * int(os.environ.get("FAKE_PROMPT_BYTES", "5")))["final_response"])',
       '# A Python child that outlives the capture must not overwrite the record.',
       'subprocess.run(child, check=True)',
     ].join('\n'));
@@ -489,7 +585,7 @@ describe('the proof hook', () => {
   }, 30_000);
 
   it('closes the network, and a Python child it starts can neither reach it nor overwrite the record', () => {
-    const { result, record, dir } = runHook({});
+    const { result, record, dir } = runHook({ FAKE_PROMPT_BYTES: String(EXPECTED.promptBytes) });
     expect(result.stdout).toContain('network refused: _NetworkRefused');
     expect(result.stdout).not.toContain('NETWORK OPEN');
     expect(record?.network_refused).toEqual(["create_connection:('127.0.0.1', 9)"]);
@@ -550,7 +646,7 @@ describe('the container proof breaks what it says it breaks', () => {
     expect(PROFILE_HEREDOC_BEFORE_ISOLATION).not.toContain('disabled_toolsets');
     expect(mutated).not.toContain('julius-reviewer-isolation.mjs config');
     expect(mutated).toContain('node scripts/julius-reviewer-isolation.mjs verify');
-    expect(mutated).toContain('"$HERMES_WRAPPER_DIR/hermes" -z');
+    expect(mutated).toContain('"$HERMES_WRAPPER_DIR/hermes" --relay-prompt-file');
     expect(mutated).toContain('chmod 0600 "$HERMES_PROFILE_HOME/.hermes/config.yaml"');
   });
 
@@ -568,6 +664,23 @@ describe('the container proof breaks what it says it breaks', () => {
     const mutated = withoutSafeMode.apply(original);
     expect(original.split('--safe-mode').length - mutated.split('--safe-mode').length).toBe(1);
     expect(mutated).toContain('--usage-file "$isolation_cwd/relay-hermes-usage.json"');
+  });
+
+  it('passes the proof prompt as an argument instead of the file, and only there', () => {
+    const argument = mutation('prompt-as-argument');
+    const original = read(argument.file);
+    const mutated = argument.apply(original);
+    expect(mutated).toContain(`"$HERMES_WRAPPER_DIR/hermes" -z "$(cat "$isolation_cwd/${HERMES_PROMPT_FILE_NAME}")"`);
+    expect(mutated).not.toContain(`"$HERMES_WRAPPER_DIR/hermes" --relay-prompt-file`);
+    expect(mutated).toContain('head -c "$isolation_prompt_bytes" /dev/zero');
+  });
+
+  it('points the wrapper at a launcher that is not there, leaving everything else', () => {
+    const missing = mutation('launcher-missing');
+    const original = read(missing.file);
+    const mutated = missing.apply(original);
+    expect(mutated).toContain('"$HERMES_PYTHON" -P "$HERMES_WRAPPER_DIR/absent-launcher.py" "$HERMES_BIN"');
+    expect(mutated).toContain('cp .github/julius-live-hermes-launcher.py "$HERMES_LAUNCHER"');
   });
 
   it('refuses to apply when its anchor is gone', () => {

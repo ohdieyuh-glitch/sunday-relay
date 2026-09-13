@@ -83,7 +83,7 @@ import {
   readGptArchitectConfig,
 } from '../../src/relay/connectors/gpt-architect';
 import { HOSTED_API_KEY_ENV, HOSTED_MODEL_ENV } from '../hosted-coding-agent/hosted-readiness';
-import { loadHermesConfig } from '../hermes-reviewer';
+import { loadHermesConfig, type HermesPromptTransport } from '../hermes-reviewer';
 import type { runGptArchitect } from '../../src/relay/connectors/gpt-architect';
 import type { runHostedCodingAgent, HostedQueryFn } from '../hosted-coding-agent/hosted-runner';
 import type { runHermesReview } from '../hermes-reviewer';
@@ -241,6 +241,12 @@ export interface LiveWorkerResolution {
     readonly codingModel: string | null;
     readonly reviewerProvider: string | null;
     readonly reviewerModel: string | null;
+    /**
+     * How the review packet reaches Hermes: `argv`, `file`, or `unrecognised`
+     * (which blocks the reviewer). Printed by the entrypoint's preflight so the
+     * paid workflow can require the file transport before anything is spent.
+     */
+    readonly reviewerPromptTransport: HermesPromptTransport;
   };
 }
 
@@ -295,6 +301,7 @@ export function resolveLiveWorkers(options: {
     codingModel: options.env[HOSTED_MODEL_ENV]?.trim() || null,
     reviewerProvider: hermes.provider ?? null,
     reviewerModel: hermes.model ?? null,
+    reviewerPromptTransport: hermes.promptTransport ?? 'argv',
   };
 
   if (!architectReadiness.ready) {
@@ -339,6 +346,9 @@ export function resolveLiveWorkers(options: {
   if (!hermes.executable) reviewerMissing.push('RELAY_HERMES_EXECUTABLE');
   if (!hermes.provider) reviewerMissing.push('RELAY_HERMES_PROVIDER');
   if (!hermes.model) reviewerMissing.push('RELAY_HERMES_MODEL');
+  // A transport setting nobody recognises is not quietly treated as argv: the
+  // packet would then take the path whose size ceiling the setting was for.
+  if (hermes.promptTransport === 'unrecognised') reviewerMissing.push('RELAY_HERMES_PROMPT_TRANSPORT (argv or file)');
   if (reviewerMissing.length > 0) {
     problems.push({ role: 'INDEPENDENT_REVIEWER', reason: 'live_config_missing', missing: reviewerMissing });
   } else if (hermes.provider === CODER_WORKER.providerId) {

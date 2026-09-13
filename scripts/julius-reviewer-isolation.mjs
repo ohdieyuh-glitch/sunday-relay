@@ -42,6 +42,12 @@
  *
  * The toolset list MIRRORS the harness's `DISABLED_TOOLSETS`, and
  * `julius-reviewer-isolation.test.ts` fails if the two differ by a name.
+ *
+ * THE PROOF ALSO CARRIES THE PROMPT THE WAY THE REVIEW DOES. The paid reviewer
+ * reads its packet from a file (`RELAY_HERMES_PROMPT_TRANSPORT=file`), because
+ * as an argument Linux refuses it at 131,072 bytes. The proof's prompt is
+ * larger than that, and the verdict requires the agent to have received every
+ * byte of it, so the same run proves the transport on the pinned binary.
  */
 
 import { readFileSync, readdirSync, realpathSync } from 'node:fs';
@@ -64,13 +70,16 @@ export const REVIEWER_DISABLED_TOOLSETS = Object.freeze([
  */
 export const REVIEWER_API_ATTEMPTS = 1;
 
+/** Linux's MAX_ARG_STRLEN: execve refuses any single argument this long or longer. */
+export const LINUX_MAX_ARG_STRLEN = 131_072;
+
 /** What the proof's record must carry for each named fact. */
 export const REVIEWER_ISOLATION_RECORD_FIELDS = Object.freeze([
   'reached', 'network_guard_verified', 'model_visible_tools', 'valid_tool_names',
   'agent_enabled_toolsets', 'resolved_cli_toolsets', 'safe_mode', 'shell_hooks_registered',
   'api_attempts', 'request_timeout_seconds', 'stale_timeout_seconds',
   'codex_event_stale_timeout_seconds', 'codex_ttfb_timeout_seconds', 'provider', 'model',
-  'max_iterations', 'network_refused',
+  'max_iterations', 'network_refused', 'prompt_bytes',
 ]);
 
 const PROVIDER_PATTERN = /^[a-z][a-z0-9_-]{0,39}$/u;
@@ -136,7 +145,8 @@ const isNameList = (value) => Array.isArray(value) && value.every((item) => type
  * evidence line on success states every fact the record established.
  *
  * `expected` is what the bootstrap was configured with: the provider and model
- * Julius will pass and the request deadline the profile carries.
+ * Julius will pass, the request deadline the profile carries, and the size of
+ * the prompt file the proof wrote, which must exceed one argument's ceiling.
  * `sideRecords` are the network refusals Hermes's own child processes wrote.
  */
 export function verifyReviewerIsolation(record, expected, sideRecords = []) {
@@ -144,6 +154,9 @@ export function verifyReviewerIsolation(record, expected, sideRecords = []) {
   const provider = requireProvider(expected?.provider);
   if (typeof expected?.model !== 'string' || !MODEL_PATTERN.test(expected.model)) throw new Error('reviewer_isolation_model_invalid');
   const seconds = requirePositiveInteger(expected?.requestTimeoutSeconds, 'reviewer_isolation_timeout_invalid');
+  const promptBytes = requirePositiveInteger(expected?.promptBytes, 'reviewer_isolation_prompt_bytes_invalid');
+  // A proof prompt one argument could carry would prove nothing about the transport.
+  if (promptBytes < LINUX_MAX_ARG_STRLEN) throw new Error('reviewer_isolation_prompt_bytes_within_argv_ceiling');
 
   if (record === null || typeof record !== 'object' || Array.isArray(record)) {
     return refuse('reviewer_isolation_unproven:no_record');
@@ -189,6 +202,11 @@ export function verifyReviewerIsolation(record, expected, sideRecords = []) {
   if (record.provider !== provider || record.model !== expected.model) {
     return refuse(`reviewer_identity:${safeName(record.provider)}/${safeName(record.model)}_expected_${provider}/${expected.model}`);
   }
+  // EVERY BYTE, OR THE TRANSPORT IS NOT PROVEN. Short means the prompt was cut
+  // somewhere between the file and the agent; long means something was added.
+  if (record.prompt_bytes !== promptBytes) {
+    return refuse(`reviewer_prompt_bytes:${Number.isInteger(record.prompt_bytes) ? record.prompt_bytes : 'unknown'}_expected_${promptBytes}`);
+  }
   if (!isNameList(record.network_refused)) return refuse('reviewer_isolation_unproven:network_record_unreadable');
 
   const childRefusals = sideRecords.reduce(
@@ -208,8 +226,9 @@ export function verifyReviewerIsolation(record, expected, sideRecords = []) {
       `codex_event_stale_timeout_s=${seconds}`,
       `codex_ttfb_timeout_s=${seconds}`,
       `max_iterations=${maxIterations}`,
+      `prompt_bytes=${promptBytes}`,
       `proof_network_refusals=${record.network_refused.length + childRefusals}`,
-      '(hermes -z through the wrapper, network closed, no model asked)',
+      '(hermes -z through the wrapper and its prompt-file launcher, network closed, no model asked)',
     ].join(' '),
   };
 }
@@ -237,10 +256,10 @@ function main(argv) {
       process.stdout.write(reviewerProfileConfigYaml({ provider: rest[0], requestTimeoutSeconds: rest[1] }));
       return 0;
     }
-    if (command === 'verify' && rest.length === 4) {
-      const [recordPath, provider, model, requestTimeoutSeconds] = rest;
+    if (command === 'verify' && rest.length === 5) {
+      const [recordPath, provider, model, requestTimeoutSeconds, promptBytes] = rest;
       const { record, sideRecords } = readIsolationRecords(recordPath);
-      const verdict = verifyReviewerIsolation(record, { provider, model, requestTimeoutSeconds }, sideRecords);
+      const verdict = verifyReviewerIsolation(record, { provider, model, requestTimeoutSeconds, promptBytes }, sideRecords);
       if (!verdict.ok) {
         process.stderr.write(`${verdict.reason}\n`);
         return 1;
@@ -253,7 +272,7 @@ function main(argv) {
     return 1;
   }
   process.stderr.write('usage: julius-reviewer-isolation.mjs config <provider> <requestTimeoutSeconds>\n'
-    + '       julius-reviewer-isolation.mjs verify <record.json> <provider> <model> <requestTimeoutSeconds>\n');
+    + '       julius-reviewer-isolation.mjs verify <record.json> <provider> <model> <requestTimeoutSeconds> <promptBytes>\n');
   return 2;
 }
 

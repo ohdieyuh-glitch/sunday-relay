@@ -17,6 +17,12 @@
 #                          -> reviewer_toolsets_enabled:kanban
 #   without-safe-mode      the proof run without the flag the review passes
 #                          -> reviewer_safe_mode_off
+#   prompt-as-argument     the 300,000-byte proof prompt passed as `-z` instead
+#                          of the file: the kernel refuses the exec
+#                          -> reviewer_isolation_unproven:no_record
+#   launcher-missing       a wrapper whose launcher is not there: Python and
+#                          the recorder start, Hermes does not
+#                          -> reviewer_isolation_unproven:hermes_never_built_an_agent
 #
 # The container needs the network for what the bootstrap itself fetches: the
 # pinned Hermes source from github.com and its Python dependencies. The proof
@@ -37,6 +43,7 @@ trap 'rm -rf "$WS"' EXIT
 # Exactly the files the bootstrap reads, plus the mutations, copied from the working tree.
 for path in \
   .github/julius-live-hermes.sh \
+  .github/julius-live-hermes-launcher.py \
   .github/julius-live-hermes-isolation/sitecustomize.py \
   scripts/julius-reviewer-isolation.mjs \
   scripts/julius-reviewer-deadline.mjs \

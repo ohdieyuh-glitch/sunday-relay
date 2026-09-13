@@ -1873,7 +1873,15 @@ export function createLiveHermesReviewerAdapter(input: {
                     ? ['PROVIDER_UNAVAILABLE', false] as const
                     : outcome.shape === 'review_engine_context_exceeded'
                       ? ['INVALID_REQUEST', false] as const
-                      : ['WORKER_EXECUTION_FAILURE', false] as const;
+                      : outcome.shape === 'review_transport_unavailable'
+                        // The same code a reviewer that could not launch has always
+                        // carried: nothing can review until the wrapper is fixed, and
+                        // the shape now says it was the transport rather than a binary.
+                        ? ['PROVIDER_UNAVAILABLE', false] as const
+                        // `review_packet_too_large` stays here on purpose. The same
+                        // packet over the same transport is refused the same way, the
+                        // repair is the transport, and cutting the packet is not one.
+                        : ['WORKER_EXECUTION_FAILURE', false] as const;
         /**
          * THE SHAPE, AND THE FACTS THAT LET SOMEONE DEBUG THE SHAPE.
          *

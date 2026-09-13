@@ -218,13 +218,47 @@ fi
 # The wrapper is what Julius spawns. `runHermesReview` forwards {PATH, HOME}
 # only, so redirecting HOME here — and nowhere else — is what keeps the
 # credential away from the coding agent that shares the parent process.
+#
+# AND THE WRAPPER CARRIES THE PROMPT IN A FILE. `hermes -z` takes its prompt only
+# as an argument, and Linux refuses any single argument of 131,072 bytes or more
+# before the reviewer exists; Mission 5's packet was 80 KB. The wrapper runs the
+# committed launcher (`.github/julius-live-hermes-launcher.py`) with the Hermes
+# virtualenv's own Python. With `--relay-prompt-file` first, the launcher reads
+# the prompt `runHermesReview` wrote into its scratch directory and calls the
+# entry point the `hermes` console script calls, with the argument list the argv
+# transport would have passed, built in memory. Without the flag every argument
+# passes through unchanged. `-P` keeps the launcher's own directory off Python's
+# import path, as the console script's directory effectively is.
+#
+# NEITHER FILE CAN BE CHANGED BY WHAT IT SERVES. The wrapper directory lies
+# outside the mission workspace and the checkout (refused below otherwise), and
+# the wrapper, the launcher and their directory are all made read-only here,
+# before anything that runs a model exists. Cleanup restores write access to
+# remove them.
+HERMES_PYTHON=/opt/hermes-venv/bin/python
+HERMES_LAUNCHER="$HERMES_WRAPPER_DIR/relay-hermes-launcher.py"
 mkdir -p "$HERMES_WRAPPER_DIR"
+cp .github/julius-live-hermes-launcher.py "$HERMES_LAUNCHER"
 cat > "$HERMES_WRAPPER_DIR/hermes" <<WRAPPER
 #!/usr/bin/env bash
-# Gives the Independent Reviewer, and only it, the ephemeral profile.
-exec env HOME="$HERMES_PROFILE_HOME" HERMES_HOME="$HERMES_PROFILE_HOME/.hermes" "$HERMES_BIN" "\$@"
+# Gives the Independent Reviewer, and only it, the ephemeral profile, and its prompt from a file.
+exec env HOME="$HERMES_PROFILE_HOME" HERMES_HOME="$HERMES_PROFILE_HOME/.hermes" "$HERMES_PYTHON" -P "$HERMES_LAUNCHER" "$HERMES_BIN" "\$@"
 WRAPPER
-chmod 0755 "$HERMES_WRAPPER_DIR/hermes"
+chmod 0444 "$HERMES_LAUNCHER"
+chmod 0555 "$HERMES_WRAPPER_DIR/hermes"
+chmod 0555 "$HERMES_WRAPPER_DIR"
+wrapper_dir_real="$(realpath "$HERMES_WRAPPER_DIR")"
+for writable_tree in "${JULIUS_WORKSPACE:-}" "$(pwd -P)"; do
+  [ -n "$writable_tree" ] || continue
+  writable_tree_real="$(realpath -m "$writable_tree")"
+  case "$wrapper_dir_real/" in
+    "$writable_tree_real"/*) echo "hermes_wrapper_inside_writable_tree:$writable_tree_real" >&2; exit 1;;
+  esac
+done
+if [ "$(stat -c '%a' "$HERMES_WRAPPER_DIR")" != 555 ] || [ "$(stat -c '%a' "$HERMES_WRAPPER_DIR/hermes")" != 555 ] \
+  || [ "$(stat -c '%a' "$HERMES_LAUNCHER")" != 444 ]; then
+  echo 'hermes_wrapper_not_read_only' >&2; exit 1
+fi
 
 # Prove the credential is resolvable on the REAL path — HERMES_HOME unset,
 # exactly as Julius will spawn it — rather than trusting that a file exists.
@@ -258,10 +292,16 @@ fi
 # AND THE REVIEWER'S ISOLATION IS PROVEN ON THE PATH THE REVIEW TAKES.
 #
 # A profile that says "no tools" is a hope about how Hermes reads it. This runs
-# the wrapper above, which runs the real `hermes -z`, with the flags
-# `runHermesReview` passes, from an empty scratch directory, under exactly the
-# environment Julius gives the reviewer child: `PATH` and `HOME`, which the
-# wrapper then points at the profile. Two variables are added and nothing else.
+# the wrapper above, which runs the launcher and the real `hermes -z`, with the
+# flags `runHermesReview` passes on the file transport, from a scratch directory
+# holding only the prompt file, under exactly the environment Julius gives the
+# reviewer child: `PATH` and `HOME`, which the wrapper then points at the
+# profile. Two variables are added and nothing else.
+#
+# THE PROMPT IS LARGER THAN ONE ARGUMENT MAY BE: 300,000 bytes against Linux's
+# 131,072. The verdict requires Hermes's agent to have received exactly that
+# many bytes, so the same run proves on the pinned binary that the file
+# transport carries what argv cannot, and that it carries all of it.
 # `PYTHONPATH` loads `.github/julius-live-hermes-isolation/sitecustomize.py`,
 # which closes the network and, when Hermes asks its agent for a conversation,
 # writes down what that agent was built with and returns instead of asking a
@@ -269,8 +309,9 @@ fi
 #
 # `scripts/julius-reviewer-isolation.mjs verify` then refuses the job unless the
 # agent held no tool and no toolset, `--safe-mode` took effect, no shell hook
-# was registered, each provider call gets one attempt, and the provider and
-# model are the ones configured with this deadline on both timeouts. Hermes's
+# was registered, each provider call gets one attempt, the provider and model
+# are the ones configured with this deadline on both timeouts, and the agent
+# received the whole prompt. Hermes's
 # exit status is not the judge: a run that never built an agent writes a record
 # saying so, and that record is refused.
 #
@@ -292,13 +333,16 @@ isolation_dir="$(mktemp -d)"
 isolation_cwd="$(mktemp -d)"
 mkdir "$isolation_dir/hook"
 cp "$isolation_hook_source" "$isolation_dir/hook/sitecustomize.py"
+isolation_prompt_bytes=300000
+head -c "$isolation_prompt_bytes" /dev/zero | tr '\0' 'x' > "$isolation_cwd/relay-hermes-prompt.txt"
+chmod 0600 "$isolation_cwd/relay-hermes-prompt.txt"
 ( cd "$isolation_cwd" && exec env -i PATH="$PATH" HOME="$HOME" \
     PYTHONPATH="$isolation_dir/hook" RELAY_REVIEWER_ISOLATION_RECORD="$isolation_dir/record.json" \
-    "$HERMES_WRAPPER_DIR/hermes" -z 'Relay reviewer isolation proof: the network is closed and no model is asked.' \
+    "$HERMES_WRAPPER_DIR/hermes" --relay-prompt-file "$isolation_cwd/relay-hermes-prompt.txt" \
     --safe-mode --usage-file "$isolation_cwd/relay-hermes-usage.json" \
     -m "$RELAY_HERMES_MODEL" --provider "$HERMES_PROVIDER" ) >/dev/null 2>&1 || true
 reviewer_isolation="$(node scripts/julius-reviewer-isolation.mjs verify "$isolation_dir/record.json" \
-  "$HERMES_PROVIDER" "$RELAY_HERMES_MODEL" "$HERMES_REQUEST_TIMEOUT_SECONDS")" || {
+  "$HERMES_PROVIDER" "$RELAY_HERMES_MODEL" "$HERMES_REQUEST_TIMEOUT_SECONDS" "$isolation_prompt_bytes")" || {
   rm -rf "$isolation_dir" "$isolation_cwd"
   echo 'hermes_reviewer_isolation_refused' >&2; exit 1; }
 rm -rf "$isolation_dir" "$isolation_cwd"

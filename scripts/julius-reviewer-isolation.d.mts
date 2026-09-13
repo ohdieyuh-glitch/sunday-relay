@@ -10,6 +10,7 @@
 export declare const REVIEWER_ISOLATION_POLICY_VERSION: string;
 export declare const REVIEWER_DISABLED_TOOLSETS: readonly string[];
 export declare const REVIEWER_API_ATTEMPTS: number;
+export declare const LINUX_MAX_ARG_STRLEN: number;
 export declare const REVIEWER_ISOLATION_RECORD_FIELDS: readonly string[];
 
 export declare function reviewerProfileConfigYaml(input: {
@@ -21,6 +22,8 @@ export interface ReviewerIsolationExpectation {
   readonly provider: string;
   readonly model: string;
   readonly requestTimeoutSeconds: number | string;
+  /** The proof prompt file's size, which must be at least LINUX_MAX_ARG_STRLEN. */
+  readonly promptBytes: number | string;
 }
 
 export type ReviewerIsolationVerdict =

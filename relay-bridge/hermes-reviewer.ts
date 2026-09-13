@@ -3,8 +3,10 @@
  *
  * Hermes is the reviewer RUNTIME; its underlying provider/model is captured
  * separately and reported truthfully. The review is independent: the packet is
- * passed inline on the prompt, the process runs in an empty temp cwd (so it has
- * no path into the controlled project), and `--safe-mode` is set.
+ * passed as the `-z` argument, or on the file transport in a 0600 file inside
+ * the reviewer's own scratch directory (`RELAY_HERMES_PROMPT_TRANSPORT`); the
+ * process runs in that otherwise empty temp cwd (so it has no path into the
+ * controlled project), and `--safe-mode` is set.
  *
  * WHAT MAKES IT READ-ONLY IS THE PROFILE, NOT A FLAG ON THIS COMMAND LINE.
  * `--safe-mode` keeps plugins, shell hooks and MCP servers out of the review.
@@ -25,9 +27,9 @@
 
 import { reviewerOperativeTimeoutMs } from './reviewer-deadline';
 import { spawn, spawnSync } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
 import { safeText } from './redact';
 import { juliusResearchAskFieldGuidance } from '../src/relay/mission/julius/julius-research-protocol';
 import type { JuliusReviewCharge, JuliusReviewStage } from '../src/relay/mission/julius/julius-review-stage';
@@ -194,7 +196,32 @@ export type HermesReviewShape =
    * the validator refused. It is kept as the canary for that invariant
    * breaking, and named for what it would mean.
    */
-  | 'review_classifier_disagreement';
+  | 'review_classifier_disagreement'
+  /**
+   * THE PACKET NEVER LEFT: the operating system refused to start the reviewer
+   * with an argument that large.
+   *
+   * On the argv transport the whole review packet is one argument, and Linux
+   * refuses any single argument of 131,072 bytes or more (MAX_ARG_STRLEN) with
+   * E2BIG; Windows refuses a long command line with ENAMETOOLONG. Both used to
+   * surface as `launch_failed`, which reads as a missing binary, on exactly the
+   * largest and most valuable reviews. Nothing ran and nothing was spent. The
+   * repair is the transport (`RELAY_HERMES_PROMPT_TRANSPORT=file`), never a
+   * shorter packet: review depth is not cut to fit. `packetBytes` says how
+   * large the packet was.
+   */
+  | 'review_packet_too_large'
+  /**
+   * THE PROMPT TRANSPORT COULD NOT CARRY THE REVIEW, so no review began.
+   *
+   * The file transport needs a wrapper that understands `--relay-prompt-file`
+   * and a prompt file it can read. A missing or unrunnable wrapper, a prompt
+   * file that could not be written, the launcher refusing the file, or a
+   * transport setting this build does not recognise all land here instead of
+   * `launch_failed`, because each is a configuration of the transport, not a
+   * reviewer that failed to start for reasons of its own.
+   */
+  | 'review_transport_unavailable';
 
 /**
  * THE SAFE CORROBORATING FACTS BESIDE THE SHAPE.
@@ -514,6 +541,87 @@ export interface HermesConfig {
    * of waiting out the production grace.
    */
   killGraceMs?: number;
+  /**
+   * HOW THE REVIEW PACKET REACHES HERMES.
+   *
+   * `argv` passes it as the `-z` argument, which is what a stock `hermes`
+   * understands and what an operator's own install runs. It cannot carry a
+   * packet of 131,072 bytes or more on Linux (see `review_packet_too_large`).
+   *
+   * `file` writes the packet to a 0600 file in the reviewer's own scratch
+   * directory and passes `--relay-prompt-file <path>` in the `-z` slot. The
+   * executable must be a wrapper that understands the flag: the paid path's
+   * wrapper runs `.github/julius-live-hermes-launcher.py`, which reads the file
+   * and hands Hermes the argument list the argv transport would have.
+   *
+   * `unrecognised` is a setting this build does not know. It is not silently
+   * treated as either: the review is refused as `review_transport_unavailable`.
+   * Absent means `argv`, so no existing configuration changes meaning.
+   */
+  promptTransport?: HermesPromptTransport;
+}
+
+export type HermesPromptTransport = 'argv' | 'file' | 'unrecognised';
+
+/** The flag that takes the `-z` slot on the file transport. */
+export const HERMES_PROMPT_FILE_FLAG = '--relay-prompt-file';
+/**
+ * The prompt file's name inside the scratch directory. Not a name Hermes reads
+ * as project context (`.hermes.md`, `AGENTS.md`, `CLAUDE.md`, `.cursorrules`),
+ * because the one-shot path injects those from its working directory.
+ */
+export const HERMES_PROMPT_FILE_NAME = 'relay-hermes-prompt.txt';
+/** The exit status the launcher uses, and only it, when it refuses the transport. */
+export const HERMES_PROMPT_TRANSPORT_EXIT_CODE = 97;
+/** The stderr marker the launcher prints beside that exit status. */
+export const HERMES_PROMPT_TRANSPORT_MARKER = 'relay_hermes_prompt_transport_unavailable';
+
+/** Reads `RELAY_HERMES_PROMPT_TRANSPORT`. Unset is `argv`; anything unknown is `unrecognised`, never a guess. */
+export function hermesPromptTransportFrom(value: string | undefined): HermesPromptTransport {
+  if (value === undefined || value === '' || value === 'argv') return 'argv';
+  return value === 'file' ? 'file' : 'unrecognised';
+}
+
+/**
+ * THE REVIEWER'S ARGUMENTS, BUILT IN ONE PLACE for the review, the liveness
+ * probe and (by a test that compares them) the bootstrap's isolation proof.
+ *
+ * The file transport differs from the argv transport in exactly the first two
+ * arguments. Everything after them is the same list in the same order, so the
+ * usage file, the safe-mode flag and the model and provider selection cannot
+ * drift between the two.
+ */
+export function hermesReviewArgs(input: {
+  readonly transport: 'argv' | 'file';
+  readonly prompt: string;
+  readonly promptFilePath: string | null;
+  readonly usageFilePath: string;
+  readonly model?: string;
+  readonly provider?: string;
+}): string[] {
+  if (input.transport === 'file' && input.promptFilePath === null) {
+    throw new Error('hermes_prompt_file_path_required');
+  }
+  const args = input.transport === 'file'
+    ? [HERMES_PROMPT_FILE_FLAG, input.promptFilePath as string]
+    : ['-z', input.prompt];
+  args.push('--safe-mode', '--usage-file', input.usageFilePath);
+  if (input.model) args.push('-m', input.model);
+  if (input.provider) args.push('--provider', input.provider);
+  return args;
+}
+
+/**
+ * WHETHER A SPAWN FAILED BECAUSE THE ARGUMENTS WERE TOO LONG.
+ *
+ * Node throws these synchronously from `spawn`, before any process exists:
+ * E2BIG where the kernel refuses an argument (Linux, macOS), ENAMETOOLONG where
+ * Windows refuses the command line. ENAMETOOLONG means something else on POSIX
+ * (a path component), so it counts only on Windows.
+ */
+export function isArgumentListTooLong(error: unknown, platform: NodeJS.Platform = process.platform): boolean {
+  const code = (error as { code?: unknown } | null)?.code;
+  return code === 'E2BIG' || (platform === 'win32' && code === 'ENAMETOOLONG');
 }
 
 /**
@@ -544,6 +652,7 @@ export function loadHermesConfig(env: NodeJS.ProcessEnv = process.env): HermesCo
      */
     timeoutMs: reviewerOperativeTimeoutMs(),
     maxOutputBytes: Number(env.RELAY_HERMES_MAX_OUTPUT ?? 512 * 1024),
+    promptTransport: hermesPromptTransportFrom(env.RELAY_HERMES_PROMPT_TRANSPORT),
   };
 }
 
@@ -845,9 +954,11 @@ export function hermesPreflight(
    * does not read the file, it proves the binary accepts the argument.
    */
   let livenessVerified = false;
+  const transport = cfg.promptTransport ?? 'argv';
+  if (transport === 'unrecognised') missing.push('hermes prompt transport (RELAY_HERMES_PROMPT_TRANSPORT must be argv or file)');
   if (missing.length === 0) {
-    const probeUsagePath = join(mkdtempSync(join(tmpdir(), 'relay-hermes-probe-')), 'usage.json');
-    const args = ['-z', LIVENESS_PROMPT, '--safe-mode', '--usage-file', probeUsagePath];
+    const probeDir = mkdtempSync(join(tmpdir(), 'relay-hermes-probe-'));
+    const probeUsagePath = join(probeDir, 'usage.json');
     /**
      * `try/finally`, not a call after the branch.
      *
@@ -857,11 +968,35 @@ export function hermesPreflight(
      * directory goes with the probe on every path, including a throw.
      */
     try {
-      if (cfg.model) args.push('-m', cfg.model);
-      if (cfg.provider) args.push('--provider', cfg.provider);
-      const live = probe(cfg.executable, args, Math.min(cfg.timeoutMs, LIVENESS_TIMEOUT_MS));
-      const failure = classifyHermesUpstreamFailure(live.text);
-      if (failure !== null) {
+      /**
+       * THE PROBE TAKES THE TRANSPORT THE REVIEW WILL TAKE. On the file
+       * transport that means a prompt file beside the usage file, written the
+       * way `runHermesReview` writes one, and the same argument builder.
+       */
+      const probeTransport = transport === 'file' ? 'file' : 'argv';
+      let promptFilePath: string | null = null;
+      if (probeTransport === 'file') {
+        promptFilePath = join(probeDir, HERMES_PROMPT_FILE_NAME);
+        try {
+          writeFileSync(promptFilePath, LIVENESS_PROMPT, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
+        } catch {
+          promptFilePath = null;
+        }
+      }
+      const args = probeTransport === 'file' && promptFilePath === null ? null : hermesReviewArgs({
+        transport: probeTransport, prompt: LIVENESS_PROMPT, promptFilePath, usageFilePath: probeUsagePath,
+        model: cfg.model, provider: cfg.provider,
+      });
+      const live = args === null ? null : probe(cfg.executable, args, Math.min(cfg.timeoutMs, LIVENESS_TIMEOUT_MS));
+      const failure = live === null ? null : classifyHermesUpstreamFailure(live.text);
+      if (live === null) {
+        missing.push('hermes prompt-file transport (the probe could not write its prompt file)');
+      } else if (probeTransport === 'file' && live.text.includes(HERMES_PROMPT_TRANSPORT_MARKER)) {
+        // The wrapper answered, and what it said was that it could not carry
+        // the prompt. Naming the transport sends an operator to the wrapper,
+        // not to the model or the credential.
+        missing.push(`hermes prompt-file transport (the reviewer executable refused ${HERMES_PROMPT_FILE_FLAG})`);
+      } else if (failure !== null) {
         missing.push(
           failure.kind === 'authentication'
             ? 'hermes provider authentication (the configured provider rejected the reviewer credential)'
@@ -873,7 +1008,7 @@ export function hermesPreflight(
         livenessVerified = true;
       }
     } finally {
-      try { rmSync(dirname(probeUsagePath), { recursive: true, force: true }); } catch { /* best effort */ }
+      try { rmSync(probeDir, { recursive: true, force: true }); } catch { /* best effort */ }
     }
   }
 
@@ -1471,10 +1606,6 @@ export async function runHermesReview(input: {
     try { rmSync(cwd, { recursive: true, force: true }); } catch { /* best effort */ }
   };
 
-  const args = ['-z', prompt, '--safe-mode', '--usage-file', usageFilePath];
-  if (cfg.model) args.push('-m', cfg.model);
-  if (cfg.provider) args.push('--provider', cfg.provider);
-
   const startedAt = now();
   /**
    * ELAPSED TIME COMES FROM THE INJECTED CLOCK, not from `Date.now()`.
@@ -1490,6 +1621,65 @@ export async function runHermesReview(input: {
     return Number.isFinite(from) && Number.isFinite(to) ? to - from : null;
   };
   const killGraceMs = cfg.killGraceMs ?? DEFAULT_KILL_GRACE_MS;
+  const transport = cfg.promptTransport ?? 'argv';
+
+  /**
+   * A REVIEW THE TRANSPORT REFUSED BEFORE ANY PROCESS EXISTED.
+   *
+   * These used to be `launch_failed`, which carries no shape and no diagnostics
+   * and reads as a missing binary. The packet size, the window and the fact
+   * that nothing started are all known here, so they are recorded. No process
+   * means no provider request, so `providerRequestStarted` is a fact on this
+   * path rather than the unknowable it is once Hermes owns the socket.
+   */
+  const refusedBeforeSpawn = (
+    shape: 'review_packet_too_large' | 'review_transport_unavailable',
+    safeMessage: string,
+  ): HermesOutcome => {
+    const completedAt = now();
+    return {
+      kind: 'review_incomplete',
+      shape,
+      safeMessage,
+      diagnostics: reviewDiagnostics({
+        transport: 'local', shape, outcome: 'failed',
+        provider: cfg.provider ?? null, requestedModel: cfg.model ?? null,
+        outputByteLimit: cfg.maxOutputBytes,
+        processStarted: false, processPidObserved: false, firstOutputObserved: false,
+        elapsedMs: sinceStart(completedAt), timeoutMs: cfg.timeoutMs,
+        cleanupCompleted: true, providerRequestStarted: false, packetBytes,
+      }),
+      startedAt,
+      completedAt,
+    };
+  };
+
+  if (transport === 'unrecognised') {
+    discardScratch();
+    return refusedBeforeSpawn('review_transport_unavailable', 'The Hermes reviewer prompt transport is set to a value this build does not recognise.');
+  }
+  /**
+   * THE FILE TRANSPORT'S PROMPT, written where the usage file already lives.
+   *
+   * The scratch directory is this review's own `mkdtemp` directory, so the file
+   * goes when `discardScratch` removes it, on every path. 0600 and exclusive
+   * create: nothing else on the host reads it and nothing already there is
+   * trusted. The bytes are the UTF-8 Node would have put in argv, so the
+   * launcher hands Hermes the same string.
+   */
+  let promptFilePath: string | null = null;
+  if (transport === 'file') {
+    promptFilePath = join(cwd, HERMES_PROMPT_FILE_NAME);
+    try {
+      writeFileSync(promptFilePath, prompt, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
+    } catch {
+      discardScratch();
+      return refusedBeforeSpawn('review_transport_unavailable', 'The Hermes reviewer prompt file could not be written.');
+    }
+  }
+  const args = hermesReviewArgs({
+    transport, prompt, promptFilePath, usageFilePath, model: cfg.model, provider: cfg.provider,
+  });
 
   return await new Promise<HermesOutcome>((resolve) => {
     let child: ReturnType<typeof spawn>;
@@ -1500,10 +1690,12 @@ export async function runHermesReview(input: {
         stdio: ['ignore', 'pipe', 'pipe'],
         env: { PATH: process.env.PATH ?? '', HOME: process.env.HOME ?? '' },
       });
-    } catch {
+    } catch (error) {
       // Nothing ran, so there is nothing to read out of the scratch directory.
       discardScratch();
-      resolve({ kind: 'launch_failed', safeMessage: 'The Hermes reviewer could not be started.' });
+      resolve(isArgumentListTooLong(error)
+        ? refusedBeforeSpawn('review_packet_too_large', `The review packet (${String(packetBytes)} bytes) is larger than this operating system accepts as a process argument.`)
+        : { kind: 'launch_failed', safeMessage: 'The Hermes reviewer could not be started.' });
       return;
     }
 
@@ -1682,15 +1874,39 @@ export async function runHermesReview(input: {
       // cause is our own ceiling. The overflow is remembered instead.
       if (bytes <= cfg.maxOutputBytes) out += c.toString('utf8'); else truncated = true;
     });
-    child.stderr?.on('data', () => { /* never surfaced verbatim */ });
-    child.on('error', () => {
+    /**
+     * STDERR IS NEVER SURFACED, and on the file transport one fixed marker is
+     * looked for in its first few kilobytes: the launcher's own refusal. Only
+     * whether the marker appeared is kept, never the text around it.
+     */
+    let stderrHead = '';
+    let transportRefusalSeen = false;
+    child.stderr?.on('data', (c: Buffer) => {
+      if (transport !== 'file' || transportRefusalSeen || stderrHead.length >= 4096) return;
+      stderrHead = (stderrHead + c.toString('utf8')).slice(0, 4096);
+      if (stderrHead.includes(HERMES_PROMPT_TRANSPORT_MARKER)) {
+        transportRefusalSeen = true;
+        stderrHead = '';
+      }
+    });
+    child.on('error', (error) => {
       // NOT AFTER A TIMEOUT. `error` can arrive while Relay is killing the
       // child — a signal the runtime could not deliver — and reporting
       // `launch_failed` for a process that ran for the whole window would name
       // the wrong repair entirely. The timeout owns the outcome from the moment
       // it fires; `finish` is a no-op once settled, and this covers the gap
       // before it settles.
-      if (!timedOut) finish({ kind: 'launch_failed', safeMessage: 'The Hermes reviewer could not be started.' });
+      if (timedOut) return;
+      const code = (error as { code?: unknown }).code;
+      if (isArgumentListTooLong(error)) {
+        finish(refusedBeforeSpawn('review_packet_too_large', `The review packet (${String(packetBytes)} bytes) is larger than this operating system accepts as a process argument.`));
+      } else if (transport === 'file' && (code === 'ENOENT' || code === 'EACCES')) {
+        // ON THE FILE TRANSPORT THE EXECUTABLE IS THE WRAPPER that carries the
+        // prompt, so a missing or unrunnable one is the transport missing.
+        finish(refusedBeforeSpawn('review_transport_unavailable', 'The Hermes reviewer wrapper that carries the prompt file is missing or cannot be run.'));
+      } else {
+        finish({ kind: 'launch_failed', safeMessage: 'The Hermes reviewer could not be started.' });
+      }
     });
     child.on('close', (code) => {
       exitObserved = true;
@@ -1717,6 +1933,27 @@ export async function runHermesReview(input: {
        */
       if (timedOut) return;
       const completedAt = now();
+      /**
+       * THE LAUNCHER REFUSED THE PROMPT FILE, so Hermes never ran.
+       *
+       * Both halves are required, the launcher's exit status and its marker,
+       * so a Hermes that happened to exit 97 is still read as a process exit.
+       * Nothing the reviewer said is parsed: nothing was asked.
+       */
+      if (transport === 'file' && code === HERMES_PROMPT_TRANSPORT_EXIT_CODE && transportRefusalSeen) {
+        finish({
+          kind: 'review_incomplete',
+          shape: 'review_transport_unavailable',
+          safeMessage: 'The Hermes reviewer wrapper refused the prompt file, so no review began.',
+          diagnostics: localDiagnostics({
+            shape: 'review_transport_unavailable', outcome: 'failed', exitCode: code, timedOut: false,
+            cleanupCompleted: true, completedAt,
+          }),
+          startedAt,
+          completedAt,
+        });
+        return;
+      }
       /**
        * A TRUNCATED ANSWER IS NEVER A VERDICT, even when the part that arrived
        * parses.
