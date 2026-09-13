@@ -1,0 +1,982 @@
+{
+ "pass": "VEG01",
+ "title": "Sightline trim: path-side tree crowns lowered so the city reads through the garden",
+ "trims": [
+  {
+   "name": "WonderlandInstancedBatch_117",
+   "label": "V2Batch_canopy_large_MI_V2_LeafMid",
+   "batch": "V2_canopy_large",
+   "mesh": "SM_canopy_large",
+   "index": 0,
+   "at": [
+    1960,
+    1000
+   ],
+   "factor": 0.829,
+   "score": 191,
+   "top_before": 1932,
+   "before": [
+    1960.0,
+    1000.0,
+    1640.0,
+    0.0,
+    0.0,
+    0.0,
+    1.5,
+    1.5,
+    0.55
+   ],
+   "after": [
+    1960.0,
+    1000.0,
+    1357.166,
+    0.0,
+    0.0,
+    0.0,
+    1.2435,
+    1.2435,
+    0.456
+   ]
+  },
+  {
+   "name": "WonderlandInstancedBatch_117",
+   "label": "V2Batch_canopy_large_MI_V2_LeafMid",
+   "batch": "V2_canopy_large",
+   "mesh": "SM_canopy_large",
+   "index": 2,
+   "at": [
+    -2050,
+    4400
+   ],
+   "factor": 0.75,
+   "score": 522,
+   "top_before": 2138,
+   "before": [
+    -2050.0,
+    4400.0,
+    1500.0,
+    0.0,
+    44.0,
+    0.0,
+    1.2,
+    1.2,
+    1.2
+   ],
+   "after": [
+    -2050.0,
+    4400.0,
+    1121.5,
+    0.0,
+    44.0,
+    0.0,
+    0.9,
+    0.9,
+    0.9
+   ]
+  },
+  {
+   "name": "WonderlandInstancedBatch_117",
+   "label": "V2Batch_canopy_large_MI_V2_LeafMid",
+   "batch": "V2_canopy_large",
+   "mesh": "SM_canopy_large",
+   "index": 3,
+   "at": [
+    -2050,
+    7400
+   ],
+   "factor": 0.75,
+   "score": 650,
+   "top_before": 2138,
+   "before": [
+    -2050.0,
+    7400.0,
+    1500.0,
+    0.0,
+    132.0,
+    0.0,
+    1.2,
+    1.2,
+    1.2
+   ],
+   "after": [
+    -2050.0,
+    7400.0,
+    1121.5,
+    0.0,
+    132.0,
+    0.0,
+    0.9,
+    0.9,
+    0.9
+   ]
+  },
+  {
+   "name": "WonderlandInstancedBatch_122",
+   "label": "V2Batch_tree_mature_trunk_MI_V2_Bark",
+   "batch": "V2_tree_mature_trunk",
+   "mesh": "SM_tree_mature_trunk",
+   "index": 0,
+   "at": [
+    1350,
+    2300
+   ],
+   "factor": 0.59,
+   "score": 1338,
+   "top_before": 1709,
+   "before": [
+    1350.0,
+    2300.0,
+    0.0,
+    0.0,
+    180.0,
+    0.0,
+    1.15,
+    1.15,
+    1.15
+   ],
+   "after": [
+    1350.0,
+    2300.0,
+    -5.74,
+    0.0,
+    180.0,
+    0.0,
+    0.6785,
+    0.6785,
+    0.6785
+   ]
+  },
+  {
+   "name": "WonderlandInstancedBatch_122",
+   "label": "V2Batch_tree_mature_trunk_MI_V2_Bark",
+   "batch": "V2_tree_mature_trunk",
+   "mesh": "SM_tree_mature_trunk",
+   "index": 2,
+   "at": [
+    2050,
+    2900
+   ],
+   "factor": 0.75,
+   "score": 618,
+   "top_before": 1709,
+   "before": [
+    2050.0,
+    2900.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    1.15,
+    1.15,
+    1.15
+   ],
+   "after": [
+    2050.0,
+    2900.0,
+    -3.5,
+    0.0,
+    0.0,
+    0.0,
+    0.8625,
+    0.8625,
+    0.8625
+   ]
+  },
+  {
+   "name": "WonderlandInstancedBatch_122",
+   "label": "V2Batch_tree_mature_trunk_MI_V2_Bark",
+   "batch": "V2_tree_mature_trunk",
+   "mesh": "SM_tree_mature_trunk",
+   "index": 3,
+   "at": [
+    -2050,
+    4400
+   ],
+   "factor": 0.75,
+   "score": 522,
+   "top_before": 1709,
+   "before": [
+    -2050.0,
+    4400.0,
+    0.0,
+    0.0,
+    31.0,
+    0.0,
+    1.15,
+    1.15,
+    1.15
+   ],
+   "after": [
+    -2050.0,
+    4400.0,
+    -3.5,
+    0.0,
+    31.0,
+    0.0,
+    0.8625,
+    0.8625,
+    0.8625
+   ]
+  },
+  {
+   "name": "WonderlandInstancedBatch_122",
+   "label": "V2Batch_tree_mature_trunk_MI_V2_Bark",
+   "batch": "V2_tree_mature_trunk",
+   "mesh": "SM_tree_mature_trunk",
+   "index": 4,
+   "at": [
+    2050,
+    5900
+   ],
+   "factor": 0.75,
+   "score": 585,
+   "top_before": 1709,
+   "before": [
+    2050.0,
+    5900.0,
+    0.0,
+    0.0,
+    62.0,
+    0.0,
+    1.15,
+    1.15,
+    1.15
+   ],
+   "after": [
+    2050.0,
+    5900.0,
+    -3.5,
+    0.0,
+    62.0,
+    0.0,
+    0.8625,
+    0.8625,
+    0.8625
+   ]
+  },
+  {
+   "name": "WonderlandInstancedBatch_122",
+   "label": "V2Batch_tree_mature_trunk_MI_V2_Bark",
+   "batch": "V2_tree_mature_trunk",
+   "mesh": "SM_tree_mature_trunk",
+   "index": 5,
+   "at": [
+    -2050,
+    7400
+   ],
+   "factor": 0.75,
+   "score": 650,
+   "top_before": 1709,
+   "before": [
+    -2050.0,
+    7400.0,
+    0.0,
+    0.0,
+    93.0,
+    0.0,
+    1.15,
+    1.15,
+    1.15
+   ],
+   "after": [
+    -2050.0,
+    7400.0,
+    -3.5,
+    0.0,
+    93.0,
+    0.0,
+    0.8625,
+    0.8625,
+    0.8625
+   ]
+  },
+  {
+   "name": "WonderlandInstancedBatch_122",
+   "label": "V2Batch_tree_mature_trunk_MI_V2_Bark",
+   "batch": "V2_tree_mature_trunk",
+   "mesh": "SM_tree_mature_trunk",
+   "index": 31,
+   "at": [
+    4622,
+    5312
+   ],
+   "factor": 0.784,
+   "score": 171,
+   "top_before": 1585,
+   "before": [
+    4621.582,
+    5311.613,
+    0.0,
+    0.0,
+    294.461,
+    0.0,
+    1.067,
+    1.067,
+    1.067
+   ],
+   "after": [
+    4621.582,
+    5311.613,
+    -3.024,
+    0.0,
+    294.461,
+    0.0,
+    0.8365,
+    0.8365,
+    0.8365
+   ]
+  },
+  {
+   "name": "WonderlandInstancedBatch_122",
+   "label": "V2Batch_tree_mature_trunk_MI_V2_Bark",
+   "batch": "V2_tree_mature_trunk",
+   "mesh": "SM_tree_mature_trunk",
+   "index": 32,
+   "at": [
+    4316,
+    7010
+   ],
+   "factor": 0.602,
+   "score": 362,
+   "top_before": 2067,
+   "before": [
+    4315.738,
+    7009.99,
+    0.0,
+    0.0,
+    189.983,
+    0.0,
+    1.392,
+    1.392,
+    1.392
+   ],
+   "after": [
+    4315.738,
+    7009.99,
+    -5.572,
+    0.0,
+    189.983,
+    0.0,
+    0.838,
+    0.838,
+    0.838
+   ]
+  },
+  {
+   "name": "WonderlandInstancedBatch_122",
+   "label": "V2Batch_tree_mature_trunk_MI_V2_Bark",
+   "batch": "V2_tree_mature_trunk",
+   "mesh": "SM_tree_mature_trunk",
+   "index": 39,
+   "at": [
+    -3929,
+    5882
+   ],
+   "factor": 0.604,
+   "score": 383,
+   "top_before": 2062,
+   "before": [
+    -3929.084,
+    5882.467,
+    0.0,
+    0.0,
+    223.228,
+    0.0,
+    1.388,
+    1.388,
+    1.388
+   ],
+   "after": [
+    -3929.084,
+    5882.467,
+    -5.544,
+    0.0,
+    223.228,
+    0.0,
+    0.8384,
+    0.8384,
+    0.8384
+   ]
+  },
+  {
+   "name": "WonderlandInstancedBatch_123",
+   "label": "V2Batch_canopy_large_MI_V2_PetalWhite",
+   "batch": "V2_canopy_large",
+   "mesh": "SM_canopy_large",
+   "index": 0,
+   "at": [
+    1350,
+    2300
+   ],
+   "factor": 0.59,
+   "score": 1338,
+   "top_before": 2297,
+   "before": [
+    1350.0,
+    2300.0,
+    1500.0,
+    0.0,
+    0.0,
+    0.0,
+    1.5,
+    1.5,
+    1.5
+   ],
+   "after": [
+    1350.0,
+    2300.0,
+    879.26,
+    0.0,
+    0.0,
+    0.0,
+    0.885,
+    0.885,
+    0.885
+   ]
+  },
+  {
+   "name": "WonderlandInstancedBatch_124",
+   "label": "V2Batch_canopy_large_MI_V2_RosePink",
+   "batch": "V2_canopy_large",
+   "mesh": "SM_canopy_large",
+   "index": 0,
+   "at": [
+    1000,
+    2550
+   ],
+   "factor": 0.689,
+   "score": 964,
+   "top_before": 1965,
+   "before": [
+    1000.0,
+    2550.0,
+    1380.0,
+    0.0,
+    130.0,
+    0.0,
+    1.1,
+    1.1,
+    1.1
+   ],
+   "after": [
+    1000.0,
+    2550.0,
+    946.466,
+    0.0,
+    130.0,
+    0.0,
+    0.7579,
+    0.7579,
+    0.7579
+   ]
+  },
+  {
+   "name": "WonderlandInstancedBatch_124",
+   "label": "V2Batch_canopy_large_MI_V2_RosePink",
+   "batch": "V2_canopy_large",
+   "mesh": "SM_canopy_large",
+   "index": 1,
+   "at": [
+    4622,
+    5312
+   ],
+   "factor": 0.784,
+   "score": 171,
+   "top_before": 2044,
+   "before": [
+    4621.582,
+    5311.613,
+    1408.484,
+    0.0,
+    213.581,
+    0.0,
+    1.195,
+    1.195,
+    1.195
+   ],
+   "after": [
+    4621.582,
+    5311.613,
+    1101.227,
+    0.0,
+    213.581,
+    0.0,
+    0.9369,
+    0.9369,
+    0.9369
+   ]
+  },
+  {
+   "name": "WonderlandInstancedBatch_125",
+   "label": "V2Batch_canopy_large_MI_V2_PetalPink",
+   "batch": "V2_canopy_large",
+   "mesh": "SM_canopy_large",
+   "index": 0,
+   "at": [
+    1750,
+    2150
+   ],
+   "factor": 0.865,
+   "score": 458,
+   "top_before": 1852,
+   "before": [
+    1750.0,
+    2150.0,
+    1320.0,
+    0.0,
+    250.0,
+    0.0,
+    1.0,
+    1.0,
+    1.0
+   ],
+   "after": [
+    1750.0,
+    2150.0,
+    1139.91,
+    0.0,
+    250.0,
+    0.0,
+    0.865,
+    0.865,
+    0.865
+   ]
+  },
+  {
+   "name": "WonderlandInstancedBatch_126",
+   "label": "V2Batch_canopy_medium_MI_V2_LeafCream",
+   "batch": "V2_canopy_medium",
+   "mesh": "SM_canopy_medium",
+   "index": 0,
+   "at": [
+    1200,
+    2000
+   ],
+   "factor": 0.93,
+   "score": 349,
+   "top_before": 1453,
+   "before": [
+    1200.0,
+    2000.0,
+    1150.0,
+    0.0,
+    60.0,
+    0.0,
+    1.2,
+    1.2,
+    1.2
+   ],
+   "after": [
+    1200.0,
+    2000.0,
+    1068.52,
+    0.0,
+    60.0,
+    0.0,
+    1.116,
+    1.116,
+    1.116
+   ]
+  },
+  {
+   "name": "WonderlandInstancedBatch_133",
+   "label": "V2Batch_tree_slender_trunk_MI_V2_Bark",
+   "batch": "V2_tree_slender_trunk",
+   "mesh": "SM_tree_slender_trunk",
+   "index": 12,
+   "at": [
+    2176,
+    3041
+   ],
+   "factor": 0.75,
+   "score": 618,
+   "top_before": 856,
+   "before": [
+    2175.985,
+    3041.484,
+    0.0,
+    0.0,
+    141.113,
+    0.0,
+    0.95,
+    0.95,
+    0.95
+   ],
+   "after": [
+    2175.985,
+    3041.484,
+    -3.5,
+    0.0,
+    141.113,
+    0.0,
+    0.7125,
+    0.7125,
+    0.7125
+   ]
+  },
+  {
+   "name": "WonderlandInstancedBatch_139",
+   "label": "V2Batch_canopy_large_MI_V2_PetalViolet",
+   "batch": "V2_canopy_large",
+   "mesh": "SM_canopy_large",
+   "index": 0,
+   "at": [
+    -2100,
+    1950
+   ],
+   "factor": 0.893,
+   "score": 643,
+   "top_before": 1794,
+   "before": [
+    -2100.0,
+    1950.0,
+    1050.0,
+    0.0,
+    0.0,
+    0.0,
+    1.4,
+    1.4,
+    1.4
+   ],
+   "after": [
+    -2100.0,
+    1950.0,
+    936.152,
+    0.0,
+    0.0,
+    0.0,
+    1.2502,
+    1.2502,
+    1.2502
+   ]
+  },
+  {
+   "name": "WonderlandInstancedBatch_140",
+   "label": "V2Batch_canopy_large_MI_V2_Lavender",
+   "batch": "V2_canopy_large",
+   "mesh": "SM_canopy_large",
+   "index": 0,
+   "at": [
+    -1600,
+    2100
+   ],
+   "factor": 0.875,
+   "score": 726,
+   "top_before": 1545,
+   "before": [
+    -1600.0,
+    2100.0,
+    960.0,
+    0.0,
+    140.0,
+    0.0,
+    1.1,
+    1.1,
+    1.1
+   ],
+   "after": [
+    -1600.0,
+    2100.0,
+    838.25,
+    0.0,
+    140.0,
+    0.0,
+    0.9625,
+    0.9625,
+    0.9625
+   ]
+  },
+  {
+   "name": "WonderlandInstancedBatch_146",
+   "label": "V2Batch_canopy_large_MI_V2_LeafLight",
+   "batch": "V2_canopy_large",
+   "mesh": "SM_canopy_large",
+   "index": 1,
+   "at": [
+    2050,
+    2900
+   ],
+   "factor": 0.75,
+   "score": 618,
+   "top_before": 2138,
+   "before": [
+    2050.0,
+    2900.0,
+    1500.0,
+    0.0,
+    0.0,
+    0.0,
+    1.2,
+    1.2,
+    1.2
+   ],
+   "after": [
+    2050.0,
+    2900.0,
+    1121.5,
+    0.0,
+    0.0,
+    0.0,
+    0.9,
+    0.9,
+    0.9
+   ]
+  },
+  {
+   "name": "WonderlandInstancedBatch_146",
+   "label": "V2Batch_canopy_large_MI_V2_LeafLight",
+   "batch": "V2_canopy_large",
+   "mesh": "SM_canopy_large",
+   "index": 2,
+   "at": [
+    2050,
+    5900
+   ],
+   "factor": 0.75,
+   "score": 585,
+   "top_before": 2138,
+   "before": [
+    2050.0,
+    5900.0,
+    1500.0,
+    0.0,
+    88.0,
+    0.0,
+    1.2,
+    1.2,
+    1.2
+   ],
+   "after": [
+    2050.0,
+    5900.0,
+    1121.5,
+    0.0,
+    88.0,
+    0.0,
+    0.9,
+    0.9,
+    0.9
+   ]
+  },
+  {
+   "name": "WonderlandInstancedBatch_272",
+   "label": "V2Batch_canopy_medium_MI_V2_LeafDark",
+   "batch": "V2_canopy_medium",
+   "mesh": "SM_canopy_medium",
+   "index": 0,
+   "at": [
+    2176,
+    3041
+   ],
+   "factor": 0.75,
+   "score": 618,
+   "top_before": 1070,
+   "before": [
+    2175.985,
+    3041.484,
+    780.0,
+    0.0,
+    221.981,
+    0.0,
+    1.15,
+    1.15,
+    1.15
+   ],
+   "after": [
+    2175.985,
+    3041.484,
+    581.5,
+    0.0,
+    221.981,
+    0.0,
+    0.8625,
+    0.8625,
+    0.8625
+   ]
+  },
+  {
+   "name": "WonderlandInstancedBatch_325",
+   "label": "V2Batch_tree_mature_trunk_MI_V2_Bark",
+   "batch": "V2_tree_mature_trunk",
+   "mesh": "SM_tree_mature_trunk",
+   "index": 122,
+   "at": [
+    4339,
+    10537
+   ],
+   "factor": 0.696,
+   "score": 326,
+   "top_before": 1716,
+   "before": [
+    4338.749,
+    10536.853,
+    0.0,
+    0.0,
+    317.0,
+    0.0,
+    1.155,
+    1.155,
+    1.155
+   ],
+   "after": [
+    4338.749,
+    10536.853,
+    -4.256,
+    0.0,
+    317.0,
+    0.0,
+    0.8039,
+    0.8039,
+    0.8039
+   ]
+  },
+  {
+   "name": "WonderlandInstancedBatch_354",
+   "label": "V2Batch_canopy_large_MI_V2_LeafDark",
+   "batch": "V2_canopy_large",
+   "mesh": "SM_canopy_large",
+   "index": 52,
+   "at": [
+    4003,
+    10768
+   ],
+   "factor": 0.813,
+   "score": 173,
+   "top_before": 1972,
+   "before": [
+    4002.749,
+    10767.853,
+    1386.0,
+    0.0,
+    130.0,
+    0.0,
+    1.102,
+    1.102,
+    1.102
+   ],
+   "after": [
+    4002.749,
+    10767.853,
+    1124.2,
+    0.0,
+    130.0,
+    0.0,
+    0.8959,
+    0.8959,
+    0.8959
+   ]
+  },
+  {
+   "name": "WonderlandInstancedBatch_371",
+   "label": "V2Batch_canopy_large_MI_V2_LeafMid",
+   "batch": "V2_canopy_large",
+   "mesh": "SM_canopy_large",
+   "index": 43,
+   "at": [
+    4339,
+    10537
+   ],
+   "factor": 0.696,
+   "score": 326,
+   "top_before": 2304,
+   "before": [
+    4338.749,
+    10536.853,
+    1522.5,
+    0.0,
+    0.0,
+    0.0,
+    1.47,
+    1.47,
+    1.47
+   ],
+   "after": [
+    4338.749,
+    10536.853,
+    1055.404,
+    0.0,
+    0.0,
+    0.0,
+    1.0231,
+    1.0231,
+    1.0231
+   ]
+  },
+  {
+   "name": "WonderlandInstancedBatch_393",
+   "label": "V2Batch_canopy_large_MI_V2_LeafCream",
+   "batch": "V2_canopy_large",
+   "mesh": "SM_canopy_large",
+   "index": 1,
+   "at": [
+    4316,
+    7010
+   ],
+   "factor": 0.602,
+   "score": 362,
+   "top_before": 2666,
+   "before": [
+    4315.738,
+    7009.99,
+    1836.807,
+    0.0,
+    109.111,
+    0.0,
+    1.559,
+    1.559,
+    1.559
+   ],
+   "after": [
+    4315.738,
+    7009.99,
+    1100.186,
+    0.0,
+    109.111,
+    0.0,
+    0.9385,
+    0.9385,
+    0.9385
+   ]
+  },
+  {
+   "name": "WonderlandInstancedBatch_395",
+   "label": "V2Batch_canopy_large_MI_V2_LeafGrey",
+   "batch": "V2_canopy_large",
+   "mesh": "SM_canopy_large",
+   "index": 0,
+   "at": [
+    -3929,
+    5882
+   ],
+   "factor": 0.604,
+   "score": 383,
+   "top_before": 2658,
+   "before": [
+    -3929.084,
+    5882.467,
+    1832.021,
+    0.0,
+    142.356,
+    0.0,
+    1.554,
+    1.554,
+    1.554
+   ],
+   "after": [
+    -3929.084,
+    5882.467,
+    1100.997,
+    0.0,
+    142.356,
+    0.0,
+    0.9386,
+    0.9386,
+    0.9386
+   ]
+  }
+ ],
+ "summary": {
+  "trees": 16,
+  "instances": 27
+ }
+}
