@@ -44,6 +44,7 @@ export * from './julius-slot-envelope';
 export * from './julius-slot-effort';
 export * from './julius-research-policy';
 export * from './julius-research-protocol';
+export * from './julius-usage-pricing';
 export * from './julius-slot-ledger';
 export * from './julius-shared-ceiling';
 export * from './julius-slot-report';
