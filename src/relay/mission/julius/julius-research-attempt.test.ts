@@ -398,3 +398,84 @@ describe('D — the attempt reaches the bundle', () => {
     expect(pipeline).not.toContain('researchAttemptUnconfirmed');
   });
 });
+
+/* ================================================ E why a refusal was refused */
+
+/**
+ * PAID RUN 34757974058 wrote four `research.retrieved` rows reading
+ * `policy_refused` with an empty `reason_code` and no target. The mediator knew
+ * which wall each ask hit; the row did not carry it. These cases hold the row
+ * to what the port said, and to null where the port said nothing.
+ */
+describe('E — a refused ask\'s row says why and at what', () => {
+  const refusingPort = (record: Record<string, unknown>) => ({
+    async serve(input: Parameters<NonNullable<ServePort>['serve']>[0]) {
+      return input.asks.map((ask) => ({
+        outcome: 'policy_refused' as const,
+        reference: ask.reference, purpose: ask.purpose,
+        rendered: null,
+        detail: 'This mission does not authorize that retrieval.',
+        evidenceId: null,
+        injectionSignals: [],
+        mayCorroborate: false,
+        ...record,
+      }));
+    },
+  });
+
+  it('17. the row carries the refusal, Live Reach\'s own reason and the ask\'s class and host', async () => {
+    const harness = build({
+      research: refusingPort({
+        refusal: 'capability_unavailable',
+        reachRefusal: 'not_ready',
+        requested: { source: 'web', capability: 'read_item', host: 'docs.python.org' },
+      }),
+    });
+    await drain(harness);
+    const retrieved = factsOf(harness, 'research.retrieved');
+    expect(retrieved).toHaveLength(1);
+    expect(retrieved[0]).toMatchObject({
+      outcome: 'policy_refused',
+      counted: false,
+      reasonCode: 'capability_unavailable',
+      reachRefusal: 'not_ready',
+      requestedSource: 'web',
+      requestedCapability: 'read_item',
+      requestedHost: 'docs.python.org',
+    });
+  });
+
+  it('18. a port that does not say leaves every one of them null, never a guessed reason', async () => {
+    const harness = build({ research: refusingPort({}) });
+    await drain(harness);
+    const retrieved = factsOf(harness, 'research.retrieved');
+    expect(retrieved).toHaveLength(1);
+    for (const fact of ['reasonCode', 'reachRefusal', 'requestedSource', 'requestedCapability', 'requestedHost']) {
+      expect(retrieved[0]![fact], fact).toBeNull();
+    }
+  });
+
+  it('19. no part of the worker\'s reference beyond its host, and not its purpose, reaches the row', async () => {
+    const harness = build({
+      research: refusingPort({
+        refusal: 'host_not_allowed', reachRefusal: null,
+        requested: { source: 'web', capability: 'read_item', host: 'docs.python.org' },
+      }),
+    });
+    await drain(harness);
+    const row = JSON.stringify(factsOf(harness, 'research.retrieved'));
+    expect(row).not.toContain('asyncio-task');
+    expect(row).not.toContain(ASKS[0]!.purpose);
+  });
+
+  it('20. the evidence dump exports all five', () => {
+    const dump = readFileSync(resolve(import.meta.dirname, '../../../..', '.github/julius-live-evidence-dump.sh'), 'utf8');
+    const query = dump.split('\n').find((line) => line.startsWith('dump "SELECT') && line.includes('research.tsv')) ?? '';
+    for (const [fact, column] of [
+      ['reasonCode', 'reason_code'], ['reachRefusal', 'reach_refusal'], ['requestedSource', 'requested_source'],
+      ['requestedCapability', 'requested_capability'], ['requestedHost', 'requested_host'],
+    ] as const) {
+      expect(query, `${fact} must reach research.tsv as ${column}`).toContain(`'facts'->>'${fact}' AS ${column},`);
+    }
+  });
+});

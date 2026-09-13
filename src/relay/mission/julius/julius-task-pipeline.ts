@@ -1715,6 +1715,18 @@ async function driveResearchCheckpoint(input: {
         evidenceId: observation.evidenceId,
         signalled: observation.injectionSignals.length,
         segment: segmentNumber,
+        reasonCode: observation.refusal ?? null,
+        reachRefusal: observation.reachRefusal ?? null,
+        requestedSource: observation.requested?.source ?? null,
+        requestedCapability: observation.requested?.capability ?? null,
+        requestedHost: observation.requested?.host ?? null,
+        /* THE LAST FIVE: WHY, AND AT WHAT. Paid run 34757974058 wrote four
+           refusals with an empty reason and no target, so a worker asking for
+           a host the mission never granted and Relay refusing one it had were
+           the same empty row. Relay's own refusal code, Live Reach's when it
+           ran, and the ask's source, capability and HOST NAME ONLY — never the
+           path, query or purpose, which are the worker's own text. Null where
+           the port did not say: unknown, never a guessed reason. */
       },
     });
   }
