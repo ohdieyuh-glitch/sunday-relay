@@ -297,7 +297,18 @@ jobs:
       # generates whether or not Relay is still reading — and the attempt
       # ceiling is untouched, so this changes how long a failure takes to
       # become legible, not what a run may spend.
-      HERMES_REQUEST_TIMEOUT_SECONDS: '90'
+      #
+      # 90 -> 480 AFTER PAID QUALIFICATION 34753589938. The reviewer now holds no
+      # tool, so a review is ONE request that must reason and then write the
+      # whole JSON verdict — not a loop of short tool calls, which is what 90 s
+      # was sized against. That run's first attempt hit this cap and its re-ask
+      # was killed by the engine's 12 s stream-idle watchdog while the model
+      # reasoned in silence. 480 is the longest review ever watched (400 s, cut
+      # off still running) plus a fifth, so one request may last as long as a
+      # whole review has. The bootstrap ties both codex watchdogs to this same
+      # number, and the reviewer deadline is re-derived from it (792 000 ms,
+      # unchanged).
+      HERMES_REQUEST_TIMEOUT_SECONDS: '480'
 
     steps:
       # Pinned to immutable commit SHAs. A mutable tag can be repointed by the

@@ -108,7 +108,20 @@ export type HermesOutcome =
     usage: HermesUsage;
   }
   | { kind: 'launch_failed'; safeMessage: string }
-  | { kind: 'review_incomplete'; safeMessage: string; shape: HermesReviewShape; diagnostics: HermesReviewDiagnostics; startedAt: string; completedAt: string };
+  | {
+    kind: 'review_incomplete'; safeMessage: string; shape: HermesReviewShape; diagnostics: HermesReviewDiagnostics; startedAt: string; completedAt: string;
+    /**
+     * WHAT HERMES WROTE TO ITS USAGE FILE, EVEN THOUGH THE REVIEW FAILED.
+     *
+     * Hermes writes the file "even on failure so callers can always account
+     * for spend" (hermes_cli/oneshot.py), and this path read it only on
+     * success. Paid qualification 34753589938's reviewer failed twice and left
+     * no token count, no call count and no served model, so the record could
+     * not say whether a paid provider was ever asked. Absent when no process
+     * finished and wrote one (a kill, a launch failure).
+     */
+    usage?: HermesUsage;
+  };
 
 /**
  * WHY A REVIEW WAS UNREADABLE, as a machine token.
@@ -159,6 +172,21 @@ export type HermesReviewShape =
   | 'review_summary_missing'
   | 'review_summary_invalid'
   | 'review_json_ambiguous'
+  /**
+   * THE ENGINE GAVE UP AND SAID WHY, in one of its own fixed sentences.
+   *
+   * Hermes answers several failures with an ordinary final response and exit
+   * status 0 (`agent/conversation_loop.py` at the pinned commit), so each used
+   * to classify as `review_json_absent` — a model that "wrote prose" — which
+   * sent the repair toward the reviewer's rubric when the cause was elsewhere.
+   * Paid qualification 34753589938 ended exactly so: 111 bytes, exit 0, no
+   * JSON, no status. See `classifyEngineGiveUp` for the literal each names.
+   */
+  | 'review_engine_invalid_tool_call'
+  | 'review_engine_billing_exhausted'
+  | 'review_engine_output_limit'
+  | 'review_engine_context_exceeded'
+  | 'review_engine_gave_up'
   /**
    * UNREACHABLE UNLESS THE TWO READERS DRIFT APART. The classifier applies the
    * validator's own rules to the validator's own slice, so a review it calls
@@ -635,7 +663,44 @@ export function isEngineReportedTimeout(text: string): boolean {
      against an endpoint that accepted the connection and never answered:
      the first is its request deadline, the second its stale-stream abort. */
   return /(^|\n)\s*API call failed after \d+ retr(?:y|ies)\s*:[^\n]*\btimed? ?out\b/i.test(text)
-    || /(^|\n)\s*Provider has been unresponsive\b[^\n]*\bstale attempts\b/i.test(text);
+    || /(^|\n)\s*Provider has been unresponsive\b[^\n]*\bstale attempts\b/i.test(text)
+    /* THE STREAM WATCHDOGS' OWN SENTENCES, which say neither "timed out" nor
+       "timeout" and so read as prose until now. Paid qualification 34753589938's
+       re-ask died on the first: 111 bytes, exit 0, `review_json_absent`. */
+    || /(^|\n)\s*API call failed after \d+ retr(?:y|ies)\s*:\s*Codex stream produced no (?:SSE events|bytes)\b/i.test(text)
+    || /(^|\n)\s*API call failed after \d+ retr(?:y|ies)\s*:\s*Codex Responses stream did not emit a terminal response\b/i.test(text);
+}
+
+/**
+ * WHICH OF HERMES'S OWN GIVE-UP SENTENCES A NON-REVIEW ANSWER IS, IF ANY.
+ *
+ * Every literal below is copied from the pinned Hermes source
+ * (`agent/conversation_loop.py` at 2ea39daeb1f6), where each is returned as
+ * the run's `final_response` — printed to stdout with exit status 0. Matched
+ * only at the START of the answer, only by its fixed prefix, and only where
+ * the caller has already found no verdict-bearing object, so a reviewer that
+ * quotes one of these lines inside its own review is still read as a review.
+ *
+ * NARROW, AND ORDERED BY WHAT TO DO NEXT. A tool call a tool-less reviewer
+ * attempted is correctable by saying so; exhausted credits need the account;
+ * an output or context ceiling needs the request or the configuration changed;
+ * anything else the engine gave up on is the provider's. Timeouts and HTTP
+ * statuses are classified before this is consulted.
+ */
+export function classifyEngineGiveUp(text: string): HermesReviewShape | null {
+  const answer = text.replace(/^\s+/u, '');
+  if (/^Model generated invalid tool call: /u.test(answer)) return 'review_engine_invalid_tool_call';
+  if (/^Billing or credits exhausted: /u.test(answer)) return 'review_engine_billing_exhausted';
+  if (/^(?:Response truncated due to output length limit|First response truncated due to output length limit|max_tokens exceeds the provider's output cap for this model|\u26a0\ufe0f \*\*Thinking Budget Exhausted\*\*)/u.test(answer)) {
+    return 'review_engine_output_limit';
+  }
+  if (/^(?:Context length exceeded|Request payload too large|Context overflow and auto-compaction is disabled)/u.test(answer)) {
+    return 'review_engine_context_exceeded';
+  }
+  if (/^(?:API call failed after \d+ retr(?:y|ies): |Invalid API response after \d+ retr(?:y|ies): |I apologize, but I encountered repeated errors: |Stream repeatedly dropped mid tool-call)/u.test(answer)) {
+    return 'review_engine_gave_up';
+  }
+  return null;
 }
 
 export interface HermesPreflightResult {
@@ -1067,6 +1132,16 @@ export function buildReviewPrompt(p: ReviewPacket): string {
   return [
     ...head,
     '',
+    /**
+     * THE REVIEWER HAS NO TOOLS, AND IS TOLD SO.
+     *
+     * The paid reviewer's profile disables every toolset — proven on every
+     * dispatch by the bootstrap — so a review can only judge what this packet
+     * carries. A model trained to look things up that is not told this may try
+     * a tool anyway, and the engine answers that by giving up
+     * (`review_engine_invalid_tool_call`). Saying it costs one sentence.
+     */
+    'You have NO tools in this review: no file access, no shell, no code execution and no web. Everything you may judge is in this packet. Do not attempt any tool call; if something you need is missing, say so in a finding or use researchAsks.',
     'Respond with ONE JSON object and nothing else:',
     '{"verdict":"approved"|"changes_required"|"unable_to_review","summary":string,',
     '"findings":[{"findingId":string,"severity":"blocking"|"major"|"minor"|"informational",',
@@ -1694,6 +1769,14 @@ export async function runHermesReview(input: {
         const engineTimedOut = upstream === null
           && scanReviewJson(out).withVerdict.length === 0
           && isEngineReportedTimeout(out);
+        const engineGaveUp = upstream === null && !engineTimedOut
+          && scanReviewJson(out).withVerdict.length === 0
+          ? classifyEngineGiveUp(out)
+          : null;
+        // READ BEFORE `finish`, which removes the scratch directory the file
+        // lives in. Hermes writes it on failure too; this is what lets a failed
+        // review still prove, or disprove, that a paid provider was asked.
+        const failedUsage = parseUsageFile(usageFilePath);
         const shape: HermesReviewShape =
           upstream?.kind === 'authentication' ? 'review_authentication_failed'
             // A TRANSIENT STATUS IS NOT A VERDICT. Same two statuses, same
@@ -1705,6 +1788,9 @@ export async function runHermesReview(input: {
               // rather than one Relay had to kill. Same shape, same retryable
               // verdict; the lifecycle facts below say which clock fired.
               : engineTimedOut ? 'review_timeout'
+                // THE ENGINE'S OWN GIVE-UP SENTENCE, before the exit code: it
+                // names the cause, and Hermes returns 0 for most of them.
+                : engineGaveUp !== null ? engineGaveUp
                 : code !== 0 ? 'review_process_exit'
                   : truncated ? 'review_output_too_large'
                     : classifyUnreadableReview(out);
@@ -1716,6 +1802,7 @@ export async function runHermesReview(input: {
             // stays null and an exit code is present when the engine reported
             // it, so the record still separates the two.
             shape, outcome: 'failed', exitCode: code ?? null, timedOut: engineTimedOut,
+            servedModel: failedUsage.model,
             providerHttpStatus: upstream?.status ?? null,
             // IT EXITED BY ITSELF, so there is nothing left to clean up and no
             // signal was ever sent. That is a different fact from a timeout
@@ -1729,6 +1816,8 @@ export async function runHermesReview(input: {
                 ? `The Hermes reviewer's provider returned HTTP ${String(upstream.status ?? 0)}.`
                 : engineTimedOut
                   ? 'The Hermes reviewer reported that its own provider request timed out.'
+                : engineGaveUp !== null
+                  ? `The Hermes engine gave up (${engineGaveUp}).`
                   : code !== 0
                     ? `The Hermes reviewer exited without a valid review (code ${code ?? 'unknown'}).`
                   : truncated
@@ -1740,6 +1829,7 @@ export async function runHermesReview(input: {
                     : `The Hermes reviewer returned no valid structured review. ${describeUnreadableReview(out)}`,
           startedAt,
           completedAt,
+          usage: failedUsage,
         });
         return;
       }

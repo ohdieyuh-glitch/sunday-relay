@@ -392,6 +392,8 @@ function reviewCorrectionFor(shape: string): string | null {
       return 'CORRECTION — your previous answer contained JSON with no verdict. Emit exactly one JSON object whose "verdict" is one of "approved", "changes_required" or "unable_to_review".';
     case 'review_verdict_invalid':
       return 'CORRECTION — your previous answer carried a verdict outside the permitted set. The "verdict" must be exactly one of "approved", "changes_required" or "unable_to_review", spelled in lower case.';
+    case 'review_engine_invalid_tool_call':
+      return 'CORRECTION — your previous answer tried to call a tool. This review has NO tools of any kind. Do not call any tool; judge only what is in this packet, and emit exactly one JSON object in the shape given above.';
     case 'review_summary_missing':
     case 'review_summary_invalid':
       return 'CORRECTION — your previous answer had no usable "summary". Emit exactly one JSON object whose "summary" is a non-empty string stating what you reviewed and what you concluded.';
@@ -469,6 +471,14 @@ const reviewerDiagnostics = (input: {
     ...observed,
     stage: input.stage,
     reviewAttempts: input.reviewAttempts,
+    /**
+     * HOW MANY PROVIDER CALLS THE ENGINE SAYS IT MADE for the LAST attempt,
+     * from its own usage file. On a failed review this is the difference
+     * between "a paid provider was asked and the answer was unusable" and "no
+     * request ever left" — a distinction paid qualification 34753589938 could
+     * not draw. Null when the engine wrote no usage report.
+     */
+    engineApiCalls: input.usage?.apiCalls ?? null,
     reviewReaskShape: input.reviewReaskShape,
     ...(input.startedAt === undefined ? {} : { startedAt: input.startedAt }),
     ...(input.completedAt === undefined ? {} : { completedAt: input.completedAt }),
@@ -1776,7 +1786,17 @@ export function createLiveHermesReviewerAdapter(input: {
                   // The request is what has to change, so repeating it verbatim
                   // only spends the attempt. Never the provider's fault.
                   ? ['INVALID_REQUEST', false] as const
-                  : ['WORKER_EXECUTION_FAILURE', false] as const;
+                  // THE ENGINE'S OWN GIVE-UPS, each named for what clears it.
+                  // Exhausted credits and a provider the engine already retried
+                  // are the provider's; a context ceiling is the request's. None
+                  // is re-asked blindly — the invalid tool call is corrected in
+                  // the loop above, and reaches here only if that correction was
+                  // not affordable or also failed.
+                  : outcome.shape === 'review_engine_billing_exhausted' || outcome.shape === 'review_engine_gave_up'
+                    ? ['PROVIDER_UNAVAILABLE', false] as const
+                    : outcome.shape === 'review_engine_context_exceeded'
+                      ? ['INVALID_REQUEST', false] as const
+                      : ['WORKER_EXECUTION_FAILURE', false] as const;
         /**
          * THE SHAPE, AND THE FACTS THAT LET SOMEONE DEBUG THE SHAPE.
          *
@@ -1791,6 +1811,9 @@ export function createLiveHermesReviewerAdapter(input: {
           reviewerDiagnostics({
             diagnostics: outcome.diagnostics, stage, reviewAttempts, reviewReaskShape,
             startedAt: outcome.startedAt, completedAt: outcome.completedAt,
+            // A FAILED REVIEW STILL ACCOUNTS FOR WHAT IT BOUGHT: tokens, calls
+            // and the served model, from the file Hermes writes on failure too.
+            ...(outcome.usage === undefined ? {} : { usage: outcome.usage }),
           }),
         );
       }
