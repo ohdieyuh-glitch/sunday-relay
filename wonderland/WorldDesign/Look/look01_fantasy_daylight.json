@@ -1,0 +1,15 @@
+{
+ "look": "LOOK01",
+ "title": "Fantasy daylight: deeper sky, warmer and brighter sun, richer colour",
+ "chosen_from": "grade2 round, variant v10, judged against HeroCam_V2_MarbleReference and FlankLeftCam08 captures on 2026-09-13",
+ "why": "The Marble reference reads as saturated fantasy daylight under a deep blue sky; the recovered world read flat and pale. Lowering the sky luminance alone deepened the sky but darkened everything the sky light fills, so the sky light and sun were raised to keep the bright daylight.",
+ "exposure_note": "Exposure stays pinned at EV100 13.5 (PostProcessVolume min = max); nothing here touches it.",
+ "settings": {
+  "post_process": {"before": {"override_color_saturation": false, "override_color_contrast": false, "override_white_temp": false, "white_temp": 6500.0},
+                   "after": {"override_color_saturation": true, "color_saturation": 1.16, "override_color_contrast": true, "color_contrast": 1.07, "override_white_temp": true, "white_temp": 6800.0}},
+  "sun": {"label": "V2_Sun", "before": {"pitch": -58.0, "temperature": 5350.0, "intensity": 60000.0},
+          "after": {"pitch": -52.0, "temperature": 5200.0, "intensity": 70000.0}},
+  "sky_light": {"before": {"intensity": 1.6}, "after": {"intensity": 2.0}},
+  "sky_atmosphere": {"before": {"sky_luminance_factor": [2.0, 2.0, 2.0]}, "after": {"sky_luminance_factor": [1.2, 1.4, 1.85]}}
+ }
+}
