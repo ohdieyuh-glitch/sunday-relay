@@ -431,6 +431,99 @@ describe('the mediator as the domain port', () => {
   });
 });
 
+/**
+ * PAID RUN 34757974058: four research asks came back `policy_refused` in 6–13
+ * ms with an empty reason and no target, so nobody could say whether the
+ * workers asked for a host the mission never granted or Relay refused one it
+ * had. Every wall an ask can hit is driven here through the real mediator and
+ * the real port, and each must reach the pipeline as a DIFFERENT record.
+ */
+describe('a refused ask reaches the record with its reason and its target', () => {
+  const serveOne = async (
+    m: ReturnType<typeof mediator>,
+    over: Partial<{ source: 'web' | 'github'; capability: 'read_item' | 'search'; reference: string; purpose: string }> = {},
+  ) => {
+    const observations = await juliusResearchPortFrom(m).serve({
+      missionId: 'msn-1', projectId: 'prj-1', runId: 'run-1', taskId: 'task-1',
+      role: 'PROMPT_ARCHITECT',
+      asks: [{
+        source: 'web', capability: 'read_item',
+        reference: 'https://docs.python.org/3/library/asyncio.html?q=private-query#frag',
+        purpose: 'a purpose sentence the record must never carry',
+        ...over,
+      }],
+      requestedAt: '2026-09-11T10:00:00.000Z',
+    });
+    expect(observations).toHaveLength(1);
+    return observations[0]!;
+  };
+  const mustNotFetch = () => { throw new Error('must not reach the network'); };
+
+  const walls = [
+    ['a host the mission never granted', { reference: 'https://GitHub.com./owner/repo/blob/main/x.sh' },
+      { outcome: 'policy_refused', refusal: 'host_not_allowed', reachRefusal: null, requested: { source: 'web', capability: 'read_item', host: 'github.com' } }],
+    ['a capability the mission never granted', { capability: 'search' },
+      { outcome: 'policy_refused', refusal: 'capability_not_allowed', reachRefusal: null, requested: { source: 'web', capability: 'search', host: 'docs.python.org' } }],
+    ['a source the mission never granted', { source: 'github', reference: 'https://github.com/owner/repo' },
+      { outcome: 'policy_refused', refusal: 'source_not_allowed', reachRefusal: null, requested: { source: 'github', capability: 'read_item', host: 'github.com' } }],
+    ['a reference that is not a URL', { reference: 'the psql manual' },
+      { outcome: 'policy_refused', refusal: 'reference_unparsable', reachRefusal: null, requested: { source: 'web', capability: 'read_item', host: null } }],
+    ['plain http', { reference: 'http://docs.python.org/3/' },
+      { outcome: 'policy_refused', refusal: 'scheme_not_allowed', reachRefusal: null, requested: { source: 'web', capability: 'read_item', host: 'docs.python.org' } }],
+  ] as const;
+
+  it.each(walls)('%s', async (_label, over, expected) => {
+    const record = await serveOne(mediator(mustNotFetch), over);
+    expect({
+      outcome: record.outcome, refusal: record.refusal, reachRefusal: record.reachRefusal, requested: record.requested,
+    }).toEqual(expected);
+  });
+
+  it('a granted host the address layer refused names Live Reach as the wall', async () => {
+    const record = await serveOne(mediator(mustNotFetch, { resolver: { resolve: async () => ['10.0.0.5'] } }));
+    expect(record.outcome).toBe('policy_refused');
+    expect(record.refusal).toBe('network_policy_refused');
+    expect(record.reachRefusal).toBe('network_policy_refused');
+    expect(record.requested).toEqual({ source: 'web', capability: 'read_item', host: 'docs.python.org' });
+  });
+
+  it('a granted ask no backend was observed serving keeps Live Reach\'s own reason', async () => {
+    // The case the mapping folds: to the worker it is `capability_unavailable`,
+    // and without `reachRefusal` the record could not tell it from a mission
+    // allowlist refusal at all, because both read `policy_refused`.
+    const unprobed = createJuliusResearchMediator({
+      policyFor: () => POLICY(),
+      liveReach: createLiveReachService({
+        now: () => '2026-09-11T10:00:00.000Z', nextEvidenceId: () => 'ev-1', fetchImpl: mustNotFetch as unknown as typeof fetch,
+      }),
+      now: () => '2026-09-11T10:00:00.000Z',
+    });
+    const record = await serveOne(unprobed as ReturnType<typeof mediator>);
+    expect(record.outcome).toBe('policy_refused');
+    expect(record.refusal).toBe('capability_unavailable');
+    expect(record.reachRefusal).toBe('not_ready');
+    expect(record.requested).toEqual({ source: 'web', capability: 'read_item', host: 'docs.python.org' });
+  });
+
+  it('an observed ask records no reason and still names its target', async () => {
+    const record = await serveOne(mediator(() => Promise.resolve(page('a page'))), { reference: 'https://docs.python.org/3/library/asyncio.html' });
+    expect([record.outcome, record.refusal, record.reachRefusal]).toEqual(['observed', null, null]);
+    expect(record.refusal).toBeNull();
+    expect(record.reachRefusal).toBeNull();
+    expect(record.requested).toEqual({ source: 'web', capability: 'read_item', host: 'docs.python.org' });
+  });
+
+  it('the recorded target is a host name and never the worker\'s path, query or purpose', async () => {
+    for (const over of [{}, { reference: 'https://evil.example/secret-path?token-like=abc' }]) {
+      const record = await serveOne(mediator(mustNotFetch, { resolver: { resolve: async () => ['10.0.0.5'] } }), over);
+      const recorded = JSON.stringify([record.refusal, record.reachRefusal, record.requested]);
+      for (const leak of ['/3/library', 'private-query', 'frag', 'purpose sentence', 'secret-path', 'token-like']) {
+        expect(recorded, `${leak} must not reach the record`).not.toContain(leak);
+      }
+    }
+  });
+});
+
 describe('the one limit, stated rather than hidden', () => {
   it('forgets a mission\'s retrieval spend across a process, and the cap is therefore per process', async () => {
     // NOT DURABLE, and saying so beats letting an operator discover it from a

@@ -3,9 +3,10 @@ import {
   LIVE_REACH_READ_CAPABILITIES,
   LIVE_REACH_SOURCES,
   type LiveReachReadCapability,
+  type LiveReachRefusal,
   type LiveReachSource,
 } from '../live-reach';
-import type { JuliusResearchOutcome, JuliusResearchRole } from './julius-research-policy';
+import type { JuliusResearchOutcome, JuliusResearchRefusal, JuliusResearchRole } from './julius-research-policy';
 
 /**
  * WHAT A WORKER MAY ASK FOR, AND WHAT COMES BACK.
@@ -230,6 +231,37 @@ export interface JuliusResearchObservationRecord {
   readonly evidenceId: string | null;
   readonly injectionSignals: readonly string[];
   readonly mayCorroborate: boolean;
+  /**
+   * WHY, AND AT WHAT, FOR THE DURABLE ROW. Never rendered to a worker.
+   *
+   * Paid run 34757974058 recorded four `policy_refused` rows with an empty
+   * reason and no target, because this record carried the outcome and nothing
+   * else: the mediator knew `host_not_allowed` from `capability_unavailable`,
+   * and the port dropped it on the way to the pipeline. With these the row says
+   * which wall an ask hit and what it was reaching for, so "the worker asked
+   * for the wrong host" and "Relay refused a host the mission granted" are
+   * different rows instead of the same empty one.
+   *
+   * OPTIONAL because the port is declared by the domain and supplied by the
+   * composition: an implementation that does not know leaves them absent, and
+   * the pipeline writes null — unknown, never a guessed reason.
+   */
+  readonly refusal?: JuliusResearchRefusal | null;
+  /** Live Reach's own refusal, when Live Reach ran and refused; the mapping to `refusal` loses it. */
+  readonly reachRefusal?: LiveReachRefusal | null;
+  readonly requested?: JuliusResearchRequestedClass;
+}
+
+/**
+ * WHAT AN ASK REACHED FOR, reduced to what a record may safely hold: the
+ * source and capability from Relay's closed vocabularies, and the reference's
+ * host name only (`juliusResearchRequestedHost`). Never a path, a query or
+ * the purpose, which are the worker's own text.
+ */
+export interface JuliusResearchRequestedClass {
+  readonly source: LiveReachSource;
+  readonly capability: LiveReachReadCapability;
+  readonly host: string | null;
 }
 
 export interface JuliusResearchResume {
