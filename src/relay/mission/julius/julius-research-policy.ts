@@ -683,6 +683,17 @@ export function authorizeJuliusResearch(input: {
     );
   }
 
+  /**
+   * THE FRAGMENT IS NOT PART OF WHAT IS FETCHED. A client never sends it, so a
+   * page cited as `…/app-psql.html#APP-PSQL-META-COMMANDS` and the page itself
+   * are the same retrieval. Live Reach's URL policy is the MCP endpoint policy,
+   * which refuses any URL carrying one, so passing the anchor through turned
+   * every anchored documentation link on a granted host into `policy_refused`,
+   * and told the worker the mission had not authorized it. Dropped here, where
+   * the URL the fetch is bound to is decided. The query is sent and is kept.
+   */
+  url.hash = '';
+
   return {
     ok: true,
     role: request.role,
