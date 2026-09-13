@@ -1,7 +1,7 @@
 {
   "schema": "wonderland-blender-kit/1",
   "kit_version": "1.0.0",
-  "generated_utc": "2026-09-13T15:33:14+00:00",
+  "generated_utc": "2026-09-13T17:19:33+00:00",
   "generator": "wonderland/art/blender/scripts/build_assets.py",
   "blender": "4.5.13 LTS",
   "conventions": {
@@ -24,7 +24,7 @@
       "observed": {
         "n": 105,
         "min": 0.153,
-        "median": 0.845,
+        "median": 0.846,
         "max": 1.0,
         "unknown": 0
       }
@@ -38,7 +38,7 @@
       "observed": {
         "n": 105,
         "min": 0.0,
-        "median": 0.369,
+        "median": 0.37,
         "max": 1.0,
         "unknown": 0
       }
@@ -204,8 +204,8 @@
   },
   "counts": {
     "assets": 105,
-    "meshes": 324,
-    "triangles": 356108,
+    "meshes": 327,
+    "triangles": 359632,
     "by_role": {
       "foot": 5,
       "body": 12,
@@ -32388,25 +32388,25 @@
         "manifest": "unreal units (cm)",
         "uu_per_metre": 100.0
       },
-      "height_uu": 790.0,
+      "height_uu": 820.0,
       "bbox_min_uu": [
-        -506.0,
-        -506.0,
+        -547.3,
+        -560.72,
         -750.0
       ],
       "bbox_max_uu": [
-        506.0,
-        506.0,
-        40.0
+        546.4,
+        557.6,
+        70.0
       ],
       "size_uu": [
-        1012.0,
-        1012.0,
-        790.0
+        1093.7,
+        1118.32,
+        820.0
       ],
       "style": {
-        "slender_broad": 0.821,
-        "low_monumental": 0.362,
+        "slender_broad": 0.846,
+        "low_monumental": 0.374,
         "open_solid": 1.0,
         "gold_stone": 1.0,
         "pristine_aged": 0.0,
@@ -32418,18 +32418,18 @@
         28.33,
         28.33,
         72.21,
-        228.56,
         257.12,
-        275.96,
-        300.4,
-        350.01,
-        356.55,
-        391.8,
-        506.0,
-        498.0
+        515.82,
+        518.68,
+        538.98,
+        541.86,
+        537.96,
+        564.52,
+        469.2,
+        530.0
       ],
-      "radius_uu": 506.0,
-      "tris_total": 992,
+      "radius_uu": 560.72,
+      "tris_total": 1668,
       "tri_budget": 6000,
       "over_budget": false,
       "nanite_recommended": false,
@@ -32448,8 +32448,8 @@
         {
           "name": "edge",
           "kind": "edge",
-          "z_uu": 40.0,
-          "radius_uu": 506.0,
+          "z_uu": 70.0,
+          "radius_uu": 540.0,
           "rung": null,
           "note": "the stone lip"
         }
@@ -32535,9 +32535,9 @@
           }
         },
         "stone": {
-          "verts": 168,
-          "faces": 140,
-          "tris": 280,
+          "verts": 224,
+          "faces": 192,
+          "tris": 384,
           "degenerate_faces": 0,
           "loose_verts": 0,
           "materials": [
@@ -32548,24 +32548,24 @@
             "UVMap"
           ],
           "bbox_min_uu": [
-            -506.0,
-            -506.0,
-            -75.0
+            -540.0,
+            -540.0,
+            -110.0
           ],
           "bbox_max_uu": [
-            506.0,
-            506.0,
-            40.0
+            540.0,
+            540.0,
+            70.0
           ],
           "size_uu": [
-            1012.0,
-            1012.0,
-            115.0
+            1080.0,
+            1080.0,
+            180.0
           ],
-          "height_m": 1.15,
-          "base_z_uu": -75.0,
+          "height_m": 1.8,
+          "base_z_uu": -110.0,
           "normals": {
-            "faces": 140,
+            "faces": 192,
             "shells": 1,
             "inverted_shells": 0,
             "inverted_faces": 0,
@@ -32573,18 +32573,18 @@
             "zero_normal_faces": 0
           },
           "profile_uu": [
-            498.0,
-            498.0,
-            498.0,
-            506.0,
-            506.0,
-            506.0,
-            506.0,
-            506.0,
-            506.0,
-            506.0,
-            506.0,
-            498.0
+            515.0,
+            515.0,
+            540.0,
+            540.0,
+            540.0,
+            540.0,
+            540.0,
+            540.0,
+            540.0,
+            530.0,
+            530.0,
+            505.0
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_Sky_Island_Small",
@@ -32596,21 +32596,21 @@
             ],
             "meshes": 1,
             "min_yup": [
-              -5.059999942779541,
-              -0.75,
-              -5.059999942779541
+              -5.400000095367432,
+              -1.100000023841858,
+              -5.400000095367432
             ],
             "max_yup": [
-              5.059999942779541,
-              0.4000000059604645,
-              5.059999942779541
+              5.400000095367432,
+              0.699999988079071,
+              5.400000095367432
             ],
-            "bytes": 17268
+            "bytes": 26100
           },
           "fbx_read": {
             "unit_scale_factor": 0.9999999776482582,
-            "stored_z_min": -75.0,
-            "stored_z_max": 40.0
+            "stored_z_min": -110.0,
+            "stored_z_max": 70.0
           }
         },
         "stone_dark": {
@@ -32691,9 +32691,88 @@
             "stored_z_min": -750.0,
             "stored_z_max": -55.0
           }
+        },
+        "veg_anchor": {
+          "verts": 338,
+          "faces": 338,
+          "tris": 572,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_LeafMid"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -547.3,
+            -560.72,
+            -419.87
+          ],
+          "bbox_max_uu": [
+            546.4,
+            557.6,
+            -95.0
+          ],
+          "size_uu": [
+            1093.7,
+            1118.32,
+            324.87
+          ],
+          "height_m": 3.2487,
+          "base_z_uu": -419.875,
+          "normals": {
+            "faces": 338,
+            "shells": 26,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 0,
+            "zero_normal_faces": 0
+          },
+          "profile_uu": [
+            515.82,
+            508.8,
+            518.68,
+            518.19,
+            511.55,
+            539.19,
+            541.86,
+            538.74,
+            537.96,
+            527.54,
+            527.54,
+            564.52
+          ],
+          "material": "MI_V2_LeafMid",
+          "mesh_name": "WL_Sky_Island_Small_veg_anchor",
+          "glb": "exports\\glb\\WL_Sky_Island_Small_veg_anchor.glb",
+          "fbx": "exports\\fbx\\WL_Sky_Island_Small_veg_anchor.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_LeafMid"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -5.473005294799805,
+              -4.19874906539917,
+              -5.576024532318115
+            ],
+            "max_yup": [
+              5.464018821716309,
+              -0.949999988079071,
+              5.607206344604492
+            ],
+            "bytes": 28016
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": -419.8749084472656,
+            "stored_z_max": -95.0
+          }
         }
       },
-      "part_count": 3
+      "part_count": 4
     },
     {
       "asset_id": "WL_Sky_Island_Medium",
@@ -32720,25 +32799,25 @@
         "manifest": "unreal units (cm)",
         "uu_per_metre": 100.0
       },
-      "height_uu": 1240.0,
+      "height_uu": 1270.0,
       "bbox_min_uu": [
-        -846.0,
-        -846.0,
+        -887.41,
+        -885.64,
         -1200.0
       ],
       "bbox_max_uu": [
-        846.0,
-        846.0,
-        40.0
+        896.13,
+        906.95,
+        70.0
       ],
       "size_uu": [
-        1692.0,
-        1692.0,
-        1240.0
+        1783.54,
+        1792.59,
+        1270.0
       ],
       "style": {
-        "slender_broad": 0.846,
-        "low_monumental": 0.504,
+        "slender_broad": 0.86,
+        "low_monumental": 0.511,
         "open_solid": 1.0,
         "gold_stone": 1.0,
         "pristine_aged": 0.0,
@@ -32752,16 +32831,16 @@
         125.58,
         346.51,
         460.23,
-        476.22,
-        511.09,
-        556.33,
-        608.72,
-        681.4,
-        838.0,
-        846.0
+        496.65,
+        856.05,
+        864.4,
+        889.03,
+        892.71,
+        915.68,
+        870.0
       ],
-      "radius_uu": 846.0,
-      "tris_total": 1082,
+      "radius_uu": 906.95,
+      "tris_total": 2198,
       "tri_budget": 6000,
       "over_budget": false,
       "nanite_recommended": false,
@@ -32780,8 +32859,8 @@
         {
           "name": "edge",
           "kind": "edge",
-          "z_uu": 40.0,
-          "radius_uu": 846.0,
+          "z_uu": 70.0,
+          "radius_uu": 880.0,
           "rung": null,
           "note": "the stone lip"
         }
@@ -32867,9 +32946,9 @@
           }
         },
         "stone": {
-          "verts": 168,
-          "faces": 140,
-          "tris": 280,
+          "verts": 224,
+          "faces": 192,
+          "tris": 384,
           "degenerate_faces": 0,
           "loose_verts": 0,
           "materials": [
@@ -32880,24 +32959,24 @@
             "UVMap"
           ],
           "bbox_min_uu": [
-            -846.0,
-            -846.0,
-            -75.0
+            -880.0,
+            -880.0,
+            -110.0
           ],
           "bbox_max_uu": [
-            846.0,
-            846.0,
-            40.0
+            880.0,
+            880.0,
+            70.0
           ],
           "size_uu": [
-            1692.0,
-            1692.0,
-            115.0
+            1760.0,
+            1760.0,
+            180.0
           ],
-          "height_m": 1.15,
-          "base_z_uu": -75.0,
+          "height_m": 1.8,
+          "base_z_uu": -110.0,
           "normals": {
-            "faces": 140,
+            "faces": 192,
             "shells": 1,
             "inverted_shells": 0,
             "inverted_faces": 0,
@@ -32905,18 +32984,18 @@
             "zero_normal_faces": 0
           },
           "profile_uu": [
-            838.0,
-            838.0,
-            838.0,
-            846.0,
-            846.0,
-            846.0,
-            846.0,
-            846.0,
-            846.0,
-            846.0,
-            846.0,
-            838.0
+            855.0,
+            855.0,
+            880.0,
+            880.0,
+            880.0,
+            880.0,
+            880.0,
+            880.0,
+            880.0,
+            870.0,
+            870.0,
+            845.0
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_Sky_Island_Medium",
@@ -32928,21 +33007,21 @@
             ],
             "meshes": 1,
             "min_yup": [
-              -8.460000038146973,
-              -0.75,
-              -8.460000038146973
+              -8.800000190734863,
+              -1.100000023841858,
+              -8.800000190734863
             ],
             "max_yup": [
-              8.460000038146973,
-              0.4000000059604645,
-              8.460000038146973
+              8.800000190734863,
+              0.699999988079071,
+              8.800000190734863
             ],
-            "bytes": 17272
+            "bytes": 26100
           },
           "fbx_read": {
             "unit_scale_factor": 0.9999999776482582,
-            "stored_z_min": -75.0,
-            "stored_z_max": 40.0
+            "stored_z_min": -110.0,
+            "stored_z_max": 70.0
           }
         },
         "stone_dark": {
@@ -33023,9 +33102,88 @@
             "stored_z_min": -1200.0,
             "stored_z_max": -55.0
           }
+        },
+        "veg_anchor": {
+          "verts": 598,
+          "faces": 598,
+          "tris": 1012,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_LeafMid"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -887.41,
+            -885.64,
+            -464.3
+          ],
+          "bbox_max_uu": [
+            896.13,
+            906.95,
+            -95.0
+          ],
+          "size_uu": [
+            1783.54,
+            1792.59,
+            369.3
+          ],
+          "height_m": 3.693,
+          "base_z_uu": -464.297,
+          "normals": {
+            "faces": 598,
+            "shells": 46,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 0,
+            "zero_normal_faces": 0
+          },
+          "profile_uu": [
+            856.05,
+            863.42,
+            864.4,
+            858.45,
+            864.64,
+            877.89,
+            889.03,
+            892.71,
+            890.92,
+            883.79,
+            883.79,
+            915.68
+          ],
+          "material": "MI_V2_LeafMid",
+          "mesh_name": "WL_Sky_Island_Medium_veg_anchor",
+          "glb": "exports\\glb\\WL_Sky_Island_Medium_veg_anchor.glb",
+          "fbx": "exports\\fbx\\WL_Sky_Island_Medium_veg_anchor.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_LeafMid"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -8.874125480651855,
+              -4.642971992492676,
+              -9.069534301757812
+            ],
+            "max_yup": [
+              8.961322784423828,
+              -0.949999988079071,
+              8.856412887573242
+            ],
+            "bytes": 48584
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": -464.2972106933594,
+            "stored_z_max": -95.0
+          }
         }
       },
-      "part_count": 3
+      "part_count": 4
     },
     {
       "asset_id": "WL_Sky_Island_Large",
@@ -33052,25 +33210,25 @@
         "manifest": "unreal units (cm)",
         "uu_per_metre": 100.0
       },
-      "height_uu": 1840.0,
+      "height_uu": 1870.0,
       "bbox_min_uu": [
-        -1346.0,
-        -1346.0,
+        -1402.97,
+        -1394.08,
         -1800.0
       ],
       "bbox_max_uu": [
-        1346.0,
-        1346.0,
-        40.0
+        1414.75,
+        1387.67,
+        70.0
       ],
       "size_uu": [
-        2692.0,
-        2692.0,
-        1840.0
+        2817.72,
+        2781.75,
+        1870.0
       ],
       "style": {
-        "slender_broad": 0.874,
-        "low_monumental": 0.628,
+        "slender_broad": 0.886,
+        "low_monumental": 0.633,
         "open_solid": 1.0,
         "gold_stone": 1.0,
         "pristine_aged": 0.0,
@@ -33084,16 +33242,16 @@
         204.06,
         204.06,
         690.77,
-        587.88,
-        750.41,
-        827.79,
-        989.17,
-        1107.27,
-        1008.78,
-        1346.0
+        628.35,
+        779.34,
+        848.36,
+        1363.67,
+        1389.68,
+        1415.16,
+        1380.0
       ],
-      "radius_uu": 1346.0,
-      "tris_total": 1262,
+      "radius_uu": 1414.75,
+      "tris_total": 2994,
       "tri_budget": 6000,
       "over_budget": false,
       "nanite_recommended": false,
@@ -33112,8 +33270,8 @@
         {
           "name": "edge",
           "kind": "edge",
-          "z_uu": 40.0,
-          "radius_uu": 1346.0,
+          "z_uu": 70.0,
+          "radius_uu": 1380.0,
           "rung": null,
           "note": "the stone lip"
         }
@@ -33199,9 +33357,9 @@
           }
         },
         "stone": {
-          "verts": 168,
-          "faces": 140,
-          "tris": 280,
+          "verts": 224,
+          "faces": 192,
+          "tris": 384,
           "degenerate_faces": 0,
           "loose_verts": 0,
           "materials": [
@@ -33212,24 +33370,24 @@
             "UVMap"
           ],
           "bbox_min_uu": [
-            -1346.0,
-            -1346.0,
-            -75.0
+            -1380.0,
+            -1380.0,
+            -110.0
           ],
           "bbox_max_uu": [
-            1346.0,
-            1346.0,
-            40.0
+            1380.0,
+            1380.0,
+            70.0
           ],
           "size_uu": [
-            2692.0,
-            2692.0,
-            115.0
+            2760.0,
+            2760.0,
+            180.0
           ],
-          "height_m": 1.15,
-          "base_z_uu": -75.0,
+          "height_m": 1.8,
+          "base_z_uu": -110.0,
           "normals": {
-            "faces": 140,
+            "faces": 192,
             "shells": 1,
             "inverted_shells": 0,
             "inverted_faces": 0,
@@ -33237,18 +33395,18 @@
             "zero_normal_faces": 0
           },
           "profile_uu": [
-            1338.0,
-            1338.0,
-            1338.0,
-            1346.0,
-            1346.0,
-            1346.0,
-            1346.0,
-            1346.0,
-            1346.0,
-            1346.0,
-            1346.0,
-            1338.0
+            1355.0,
+            1355.0,
+            1380.0,
+            1380.0,
+            1380.0,
+            1380.0,
+            1380.0,
+            1380.0,
+            1380.0,
+            1370.0,
+            1370.0,
+            1345.0
           ],
           "material": "MI_V2_IvoryStone",
           "mesh_name": "WL_Sky_Island_Large",
@@ -33260,21 +33418,21 @@
             ],
             "meshes": 1,
             "min_yup": [
-              -13.460000038146973,
-              -0.75,
-              -13.460000038146973
+              -13.800000190734863,
+              -1.100000023841858,
+              -13.800000190734863
             ],
             "max_yup": [
-              13.460000038146973,
-              0.4000000059604645,
-              13.460000038146973
+              13.800000190734863,
+              0.699999988079071,
+              13.800000190734863
             ],
-            "bytes": 17272
+            "bytes": 26104
           },
           "fbx_read": {
             "unit_scale_factor": 0.9999999776482582,
-            "stored_z_min": -75.0,
-            "stored_z_max": 40.0
+            "stored_z_min": -110.0,
+            "stored_z_max": 70.0
           }
         },
         "stone_dark": {
@@ -33355,9 +33513,88 @@
             "stored_z_min": -1800.0,
             "stored_z_max": -55.0
           }
+        },
+        "veg_anchor": {
+          "verts": 962,
+          "faces": 962,
+          "tris": 1628,
+          "degenerate_faces": 0,
+          "loose_verts": 0,
+          "materials": [
+            "MI_V2_LeafMid"
+          ],
+          "material_slots": 1,
+          "uv_layers": [
+            "UVMap"
+          ],
+          "bbox_min_uu": [
+            -1402.97,
+            -1394.08,
+            -531.49
+          ],
+          "bbox_max_uu": [
+            1414.75,
+            1387.67,
+            -95.0
+          ],
+          "size_uu": [
+            2817.72,
+            2781.74,
+            436.49
+          ],
+          "height_m": 4.3649,
+          "base_z_uu": -531.49,
+          "normals": {
+            "faces": 962,
+            "shells": 74,
+            "inverted_shells": 0,
+            "inverted_faces": 0,
+            "open_shells": 0,
+            "zero_normal_faces": 0
+          },
+          "profile_uu": [
+            1356.28,
+            1363.67,
+            1363.6,
+            1359.78,
+            1355.14,
+            1378.21,
+            1389.68,
+            1382.82,
+            1388.31,
+            1385.97,
+            1385.97,
+            1415.16
+          ],
+          "material": "MI_V2_LeafMid",
+          "mesh_name": "WL_Sky_Island_Large_veg_anchor",
+          "glb": "exports\\glb\\WL_Sky_Island_Large_veg_anchor.glb",
+          "fbx": "exports\\fbx\\WL_Sky_Island_Large_veg_anchor.fbx",
+          "glb_read": {
+            "materials": [
+              "MI_V2_LeafMid"
+            ],
+            "meshes": 1,
+            "min_yup": [
+              -14.029693603515625,
+              -5.31489896774292,
+              -13.876666069030762
+            ],
+            "max_yup": [
+              14.147526741027832,
+              -0.949999988079071,
+              13.940766334533691
+            ],
+            "bytes": 77372
+          },
+          "fbx_read": {
+            "unit_scale_factor": 0.9999999776482582,
+            "stored_z_min": -531.4898681640625,
+            "stored_z_max": -95.0
+          }
         }
       },
-      "part_count": 3
+      "part_count": 4
     },
     {
       "asset_id": "WL_Object_PocketClock",

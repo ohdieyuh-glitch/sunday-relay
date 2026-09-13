@@ -34,10 +34,23 @@ def _island(f, asset_id, top_r, depth, lobes, seed, note):
     # THE LAWN: a shallow drum whose top is the datum. Its walls sit inside the lip.
     lawn.lathe([(0.0, -0.30), (top_r, -0.30), (top_r, 0.0), (0.0, 0.0)], segments=28, smooth=True)
 
-    # THE LIP: a low stone kerb around the lawn, the retained edge of the terrace.
-    lip.lathe([(top_r - 0.02, -0.75), (top_r + 0.38, -0.75), (top_r + 0.46, -0.40),
-               (top_r + 0.38, 0.32), (top_r + 0.10, 0.40), (top_r - 0.02, 0.40)],
-              segments=28, smooth=False, cap_bottom=False, cap_top=False)
+    # THE LIP: a stone kerb that stands proud of the lawn and overhangs the rock -- the Bible's islands read
+    # by their rim, so it is taller and wider than a garden kerb.
+    lip.lathe([(top_r - 0.02, -1.10), (top_r + 0.55, -1.10), (top_r + 0.80, -0.70), (top_r + 0.70, 0.35),
+               (top_r + 0.45, 0.62), (top_r + 0.10, 0.70), (top_r - 0.02, 0.62)],
+              segments=32, smooth=False, cap_bottom=False, cap_top=False)
+
+    # HANGING GREEN: points of planting that fall from under the lip all round, so from below an island is
+    # green at its edge rather than a stone saucer. Each point is a small inverted cone at its own depth.
+    fringe = f.part("veg_anchor")
+    count = int(round(2.0 * math.pi * top_r / 1.1))
+    for k in range(count):
+        ang = 2.0 * math.pi * (k + 0.5 * M.rnd(k, seed, 7)) / count
+        r0 = top_r + M.rrange(0.30, 0.65, k, seed, 8)
+        drop = M.rrange(0.9, 2.6, k, seed, 9) * (1.0 + top_r / 20.0)
+        width = M.rrange(0.35, 0.60, k, seed, 10)
+        fringe.lathe([(0.0, -1.05 - drop), (width * 0.55, -1.05 - drop * 0.55), (width, -0.95)], segments=6, smooth=True,
+                     cap_top=True, matrix=M.xform((r0 * math.cos(ang), r0 * math.sin(ang), 0.0)))
 
     # THE MAIN MASS: tapers from just under the lip to the deepest point, with two ledges.
     prof = [(0.0, -depth)]
@@ -69,7 +82,7 @@ def _island(f, asset_id, top_r, depth, lobes, seed, note):
         asset_id, "sky_island", "landmark", "terrace",
         f.emit(asset_id),
         [K.Socket("bottom", 0.0, top_r, "ground", "the island's own lawn: a kit foot stands here as on the world's ground"),
-         K.Socket("edge", 0.40, top_r + 0.46, "edge", "the stone lip")],
+         K.Socket("edge", 0.70, top_r + 0.80, "edge", "the stone lip")],
         districts=("sky",),
         note=note,
         params={"top_radius_m": top_r, "underside_depth_m": depth, "hanging_masses": lobes},
