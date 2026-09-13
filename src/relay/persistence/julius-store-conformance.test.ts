@@ -228,6 +228,22 @@ describe('the Julius runtime ports and the PostgreSQL repositories agree', () =>
       .not.toMatch(/&& !expired\) return false;/u);
   });
 
+  /**
+   * KNOWN GAPS, NAMED, EACH A RATCHET.
+   *
+   * An optional port method the memory store implements and the PostgreSQL
+   * composition does not yet, on purpose and for a stated reason. The runtime
+   * must REPORT the absence rather than skip it silently, which the mission
+   * that builds the method specifies. The composition case below excuses an
+   * entry; the case after it fails the day PostgreSQL gains the method, so
+   * the entry has to be removed and the method held to conformance like every
+   * other. Before Mission 6 lands neither store has `resolveFindings`, and the
+   * ratchet already holds.
+   */
+  const POSTGRES_KNOWN_GAPS: Readonly<Record<string, string>> = Object.freeze({
+    resolveFindings: 'Mission 6 (the learning loop) resolves findings in the memory store and the pipeline; PostgreSQL parity is the follow-up, and until it lands a paid run records learning.unavailable.',
+  });
+
   it('composes a complete runtime store from the real repositories', () => {
     // The assignment above is the assertion; this proves the composition is a
     // real object with every method the runtime will call, so a missing one is
@@ -236,10 +252,19 @@ describe('the Julius runtime ports and the PostgreSQL repositories agree', () =>
     const required = Object.keys(memory).filter((key) =>
       !['seedRun', 'seedTask', 'seedCriteria', 'seedFinding', 'seedBrain',
         'taskRow', 'events', 'trajectory', 'contexts', 'results', 'restart',
-        'lifecycleOf', 'timeline'].includes(key));
+        'lifecycleOf', 'timeline'].includes(key)
+      && !Object.hasOwn(POSTGRES_KNOWN_GAPS, key));
     expect(required.length).toBeGreaterThan(15);
     for (const method of required) {
       expect(typeof (composed as unknown as Record<string, unknown>)[method], method).toBe('function');
+    }
+  });
+
+  it('a named PostgreSQL gap is still a gap: the day it closes, the entry must go', () => {
+    for (const method of Object.keys(POSTGRES_KNOWN_GAPS)) {
+      expect(typeof (composed as unknown as Record<string, unknown>)[method],
+        `${method} now exists on the PostgreSQL composition: remove it from POSTGRES_KNOWN_GAPS so conformance holds it`)
+        .toBe('undefined');
     }
   });
 

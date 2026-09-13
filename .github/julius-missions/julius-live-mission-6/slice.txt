@@ -1,0 +1,52 @@
+# Mission 6 — the learning loop.
+#
+# THE DELIVERABLES: the new module and the five kernel seams the loop runs
+# through. All six are real Sunday Relay files, sliced byte-identical, so the
+# diff this mission produces applies straight back to the repository.
+src/relay/mission/julius/julius-events.ts
+src/relay/mission/julius/julius-learning-loop.ts
+src/relay/mission/julius/julius-memory-store.ts
+src/relay/mission/julius/julius-runtime-ports.ts
+src/relay/mission/julius/julius-task-pipeline.ts
+src/relay/mission/julius/julius-verification-runtime.ts
+
+# THE KERNEL THE SPECIFICATIONS RUN, which closes the slice. Read-only. Both
+# specifications drive the real scheduler, context compiler, verification,
+# repair planner and Project Brain writer through the in-memory harness, and
+# these are every module those import at runtime.
+src/relay/mission/evidence/evidence-brain-link.ts
+src/relay/mission/evidence/evidence-contracts.ts
+src/relay/mission/evidence/evidence-normalizer.ts
+src/relay/mission/evidence/index.ts
+src/relay/mission/julius/julius-allocation-runtime.ts
+src/relay/mission/julius/julius-context-snapshot.ts
+src/relay/mission/julius/julius-continuation.ts
+src/relay/mission/julius/julius-continuous-lifecycle.ts
+src/relay/mission/julius/julius-contract-disposition.ts
+src/relay/mission/julius/julius-cost-accounting.ts
+src/relay/mission/julius/julius-execution-coordinator.ts
+src/relay/mission/julius/julius-policy.ts
+src/relay/mission/julius/julius-recovery.ts
+src/relay/mission/julius/julius-release-runtime.ts
+src/relay/mission/julius/julius-repair-lineage.ts
+src/relay/mission/julius/julius-repair-runtime.ts
+src/relay/mission/julius/julius-research-policy.ts
+src/relay/mission/julius/julius-research-protocol.ts
+src/relay/mission/julius/julius-review-stage.ts
+src/relay/mission/julius/julius-router.ts
+src/relay/mission/julius/julius-run-loop.ts
+src/relay/mission/julius/julius-runtime-fixtures.ts
+src/relay/mission/julius/julius-runtime.ts
+src/relay/mission/julius/julius-segment-lineage.ts
+src/relay/mission/julius/julius-shared-ceiling.ts
+src/relay/mission/julius/julius-slot-effort.ts
+src/relay/mission/julius/julius-slot-envelope.ts
+src/relay/mission/julius/julius-slot-ledger.ts
+src/relay/mission/julius/julius-state-path.ts
+src/relay/mission/julius/julius-task-contract.ts
+src/relay/mission/julius/julius-trajectory.ts
+src/relay/mission/live-reach/index.ts
+src/relay/mission/live-reach/live-reach-contracts.ts
+src/relay/mission/live-reach/live-reach-metering.ts
+src/relay/mission/live-reach/live-reach-permissions.ts
+src/relay/mission/live-reach/live-reach-registry.ts
