@@ -8,6 +8,7 @@
 #include "Styling/SlateTypes.h"
 #include "Brushes/SlateRoundedBoxBrush.h"
 #include "WonderlandUiStyle.h"
+#include "WonderlandUsagePreview.h"
 #include "WonderlandUsageSubsystem.h"
 
 namespace
@@ -31,9 +32,28 @@ namespace
 			static_cast<int64>(FMath::RoundToDouble(Meter.CapacityUnits.Value)), *Unit);
 	}
 
+	/** The meter's stated fullness, "100%". Empty when the reading does not state it -- never a guessed 0. */
+	FString PercentText(const FWonderlandUsageMeter& Meter)
+	{
+		if (!Meter.RemainingFraction.bKnown)
+		{
+			return FString();
+		}
+		return FString::Printf(TEXT("%d%%"), FMath::RoundToInt(FMath::Clamp(Meter.RemainingFraction.Value, 0.0, 1.0) * 100.0));
+	}
+
+	bool IsPreview(const FWonderlandUsageAuthorityStatus& Authority)
+	{
+		return Authority.AuthorityId.bKnown && Authority.AuthorityId.Value == WonderlandUsagePreview::AuthorityId;
+	}
+
 	/** The authority's own word outranks the provenance line, as on the web. Empty for a current real reading. */
 	FString ProvenanceText(const FWonderlandUsageHud& Hud, const FWonderlandUsageAuthorityStatus& Authority)
 	{
+		if (IsPreview(Authority))
+		{
+			return TEXT("DEVELOPMENT PREVIEW \u00B7 NOT JULIUS USAGE");
+		}
 		switch (Authority.Reading)
 		{
 		case EWonderlandUsageReading::NotReported: return TEXT("NO USAGE AUTHORITY REPORTING");
@@ -111,6 +131,9 @@ void UWonderlandUsageHudWidget::RebuildBands()
 
 	CompoundFigure = FigureText(Hud.CompoundAgent);
 	SingleFigure = FigureText(Hud.SingleAgent);
+	CompoundPercent = PercentText(Hud.CompoundAgent);
+	SinglePercent = PercentText(Hud.SingleAgent);
+	bPreviewReading = IsPreview(Authority);
 	ProvenanceLine = ProvenanceText(Hud, Authority);
 	ReasonLine = Authority.Reason.bKnown ? Authority.Reason.Value
 		: (Hud.CompoundAgent.UnavailableReason.bKnown ? Hud.CompoundAgent.UnavailableReason.Value : FString());
@@ -251,9 +274,10 @@ int32 UWonderlandUsageHudWidget::NativePaint(
 	const FVector2f Size = FVector2f(AllottedGeometry.GetLocalSize());
 	const FWonderlandUsageViewport& Window = WonderlandUsageViewport();
 	const FSlateFontInfo LabelFont = WonderlandUi::Sans(10, true, 150);
-	const FSlateFontInfo FigureFont = WonderlandUi::Mono(11);
+	const FSlateFontInfo FigureFont = WonderlandUi::Mono(10);
+	const FSlateFontInfo PercentFont = WonderlandUi::Sans(17, true, 40);
 	const FSlateFontInfo NoteFont = WonderlandUi::Sans(8, false, 110);
-	const float RowHeight = 19.0f;
+	const float RowHeight = 27.0f;
 	const float NoteHeight = 15.0f;
 	const int32 Notes = (ProvenanceLine.IsEmpty() ? 0 : 1) + (ReasonLine.IsEmpty() ? 0 : 1);
 	const float ReadoutHeight = RowHeight * 2.0f + 6.0f + NoteHeight * 2.0f;
@@ -309,18 +333,33 @@ int32 UWonderlandUsageHudWidget::NativePaint(
 	{
 		const TCHAR* Label;
 		const FString* Value;
+		const FString* Percent;
 		const FWonderlandUsagePalette* Palette;
 	};
 	const FRow Rows[] = {
-		{CompoundLabel, &CompoundFigure, &WonderlandCompoundPalette()},
-		{SingleLabel, &SingleFigure, &WonderlandSinglePalette()},
+		{CompoundLabel, &CompoundFigure, &CompoundPercent, &WonderlandCompoundPalette()},
+		{SingleLabel, &SingleFigure, &SinglePercent, &WonderlandSinglePalette()},
 	};
 	++Layer;
 	for (const FRow& Row : Rows)
 	{
-		PaintText(Row.Label, LabelFont, Row.Palette->Accent, FVector2f(2.0f, Y + 1.0f), AllottedGeometry, OutDrawElements, Layer);
-		const float ValueWidth = static_cast<float>(Measure->Measure(*Row.Value, FigureFont).X);
-		PaintText(*Row.Value, FigureFont, Figure, FVector2f(Right - ValueWidth, Y), AllottedGeometry, OutDrawElements, Layer);
+		// LABEL left in the channel's hue; the PERCENT right, large, in the channel's bright tone, so
+		// each arc's fullness reads at a glance; the unit figure small beside it, and only when the
+		// units are real usage (a development preview's 100 units are not).
+		const float BaseLine = Y + RowHeight - 17.0f;
+		PaintText(Row.Label, LabelFont, Row.Palette->Accent, FVector2f(2.0f, BaseLine + 1.0f), AllottedGeometry, OutDrawElements, Layer);
+		float ValueRight = Right;
+		if (!Row.Percent->IsEmpty())
+		{
+			const float PercentWidth = static_cast<float>(Measure->Measure(*Row.Percent, PercentFont).X);
+			PaintText(*Row.Percent, PercentFont, Row.Palette->Bright, FVector2f(Right - PercentWidth, Y + RowHeight - 29.0f), AllottedGeometry, OutDrawElements, Layer);
+			ValueRight = Right - PercentWidth - 10.0f;
+		}
+		if (!bPreviewReading || Row.Percent->IsEmpty())
+		{
+			const float ValueWidth = static_cast<float>(Measure->Measure(*Row.Value, FigureFont).X);
+			PaintText(*Row.Value, FigureFont, FLinearColor(Figure.R, Figure.G, Figure.B, 0.72f), FVector2f(ValueRight - ValueWidth, BaseLine + 1.0f), AllottedGeometry, OutDrawElements, Layer);
+		}
 		Y += RowHeight;
 	}
 	Y += 6.0f;

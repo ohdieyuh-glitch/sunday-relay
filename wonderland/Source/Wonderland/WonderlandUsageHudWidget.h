@@ -129,6 +129,16 @@ private:
 	/** The readout, rebuilt with the bands: exactly what the web HUD prints for the same reading. */
 	FString CompoundFigure;
 	FString SingleFigure;
+
+	/**
+	 * Each meter's fullness as the reading states it (RemainingFraction), e.g. "100%". Empty when the
+	 * reading does not know it. Read from the contract, never computed from the drawn arc.
+	 */
+	FString CompoundPercent;
+	FString SinglePercent;
+
+	/** The held reading is the development preview (WonderlandUsagePreview.h): its unit figures are not usage. */
+	bool bPreviewReading = false;
 	FString ProvenanceLine;
 	FString ReasonLine;
 

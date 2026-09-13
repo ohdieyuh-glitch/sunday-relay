@@ -122,6 +122,8 @@ const CPP_ONLY_STRUCTS: Readonly<Record<string, string>> = {
     'one leg of the scripted route the Dog walks under -wldemo or -wlexplore, so a world review or capture can be repeated. Unreal-side capture authoring; Relay neither sends nor reads a route.',
   FWonderlandTravelDestination:
     'one row of the in-world travel registry in DefaultGame.ini: a developed place the world map may offer and the anchor a visitor arrives at. Unreal-side world authoring; Relay neither sends nor reads a destination.',
+  FWonderlandUsagePreviewState:
+    'the usage HUD development preview figures in DefaultGame.ini, applied locally through the ordinary usage contract and labelled DEVELOPMENT PREVIEW. Unreal-side configuration; Relay neither sends nor reads it, and a real Julius usage authority replaces it.',
 };
 
 /**
@@ -134,6 +136,8 @@ const CPP_ONLY_ENUMS: Readonly<Record<string, string>> = {
     'whether the in-world map may offer a place, set from a density audit of the recovered map. World-authoring vocabulary, deliberately not part of the contract.',
   EWonderlandTravelKind:
     'which glyph the in-world map draws for a place. Presentational world-authoring vocabulary, deliberately not part of the contract.',
+  EWonderlandUsageSource:
+    'which local source feeds the usage HUD in an Unreal build (the Julius usage authority, or the labelled development preview). Engine-side configuration, deliberately not part of the contract.',
 };
 
 /**

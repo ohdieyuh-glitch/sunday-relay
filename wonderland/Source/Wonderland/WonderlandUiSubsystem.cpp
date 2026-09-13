@@ -10,6 +10,7 @@
 #include "WonderlandLiveTerminal.h"
 #include "WonderlandTravel.h"
 #include "WonderlandUsageHudWidget.h"
+#include "WonderlandUsagePreview.h"
 #include "WonderlandWorldMap.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogWonderlandUi, Log, All);
@@ -60,6 +61,10 @@ void UWonderlandUiSubsystem::Attach(APlayerController* Controller)
 	UiInput->BindKey(EKeys::M, IE_Pressed, this, &UWonderlandUiSubsystem::ToggleWorldMap);
 	Controller->PushInputComponent(UiInput);
 
+	// Before the HUD exists, so its first paint already shows the configured source. With the source
+	// set to JuliusUsageAuthority this applies nothing and the HUD shows what the authority reports.
+	const bool bPreview = WonderlandUsagePreview::ApplyIfConfigured(Controller->GetGameInstance());
+
 	UsageHud = CreateWidget<UWonderlandUsageHudWidget>(Controller, UWonderlandUsageHudWidget::StaticClass());
 	if (UsageHud != nullptr)
 	{
@@ -73,8 +78,8 @@ void UWonderlandUiSubsystem::Attach(APlayerController* Controller)
 		UsageHud->SetDesiredSizeInViewport(FVector2D(360.0, 390.0));
 		++UsageHudCreations;
 	}
-	UE_LOG(LogWonderlandUi, Log, TEXT("WLUI attached to %s (usage HUD %s, Ctrl+T terminal, M map)"),
-		*Controller->GetName(), UsageHud != nullptr ? TEXT("on screen") : TEXT("FAILED"));
+	UE_LOG(LogWonderlandUi, Log, TEXT("WLUI attached to %s (usage HUD %s%s, Ctrl+T terminal, M map)"),
+		*Controller->GetName(), UsageHud != nullptr ? TEXT("on screen") : TEXT("FAILED"), bPreview ? TEXT(", DEVELOPMENT PREVIEW reading") : TEXT(""));
 }
 
 void UWonderlandUiSubsystem::Detach()

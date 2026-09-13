@@ -89,7 +89,58 @@ def job():
 
     # ---------------------------------------------------------------- HUD
     record("T01", "usage HUD on screen once after PIE start", ui.is_usage_hud_on_screen() and ui.get_usage_hud_creations() == 1,
-           on_screen=ui.is_usage_hud_on_screen(), creations=ui.get_usage_hud_creations(), capture=shot("01_hud_no_usage_authority.png"))
+           on_screen=ui.is_usage_hud_on_screen(), creations=ui.get_usage_hud_creations(), capture=shot("01_hud_at_start.png"))
+
+    # The configured source (DefaultGame.ini [WonderlandUsageHudSettings]). With DevelopmentPreview the
+    # HUD must hold the preview reading, labelled as such, at the configured fullness.
+    # The settings class is not BlueprintType, so Python sees only UDeveloperSettings: read the source
+    # and preview figures from the config file the class loads (DefaultGame.ini).
+    import re
+    ini = open(os.path.join(unreal.Paths.project_config_dir(), "DefaultGame.ini"), encoding="utf-8").read()
+    marker = "[/Script/Wonderland.WonderlandUsageHudSettings]"
+    section = ini.split(marker, 1)[1].split("\n[", 1)[0] if marker in ini else ""
+    m_source = re.search(r"^UsageSource=(\w+)", section, re.M)
+    source = {"DevelopmentPreview": "DEVELOPMENT_PREVIEW", "JuliusUsageAuthority": "JULIUS_USAGE_AUTHORITY"}.get(m_source.group(1) if m_source else "", "JULIUS_USAGE_AUTHORITY")
+    m_c = re.search(r"CompoundAgentPercent=([0-9.]+)", section)
+    m_s = re.search(r"SingleAgentPercent=([0-9.]+)", section)
+    preview_c = float(m_c.group(1)) if m_c else 100.0
+    preview_s = float(m_s.group(1)) if m_s else 100.0
+    usage = next((u for u in unreal.ObjectIterator(unreal.WonderlandUsageSubsystem)
+                  if u.get_world() == ctx["world"]), None)
+    reading = usage.get_usage() if usage else None
+    authority = usage.get_authority() if usage else None
+    def fraction(meter):
+        f = meter.get_editor_property("remaining_fraction")
+        return f.get_editor_property("value") if f.get_editor_property("known") else None
+    compound = fraction(reading.get_editor_property("compound_agent")) if reading else None
+    single = fraction(reading.get_editor_property("single_agent")) if reading else None
+    authority_id = authority.get_editor_property("authority_id").get_editor_property("value") if authority else None
+    if source == "DEVELOPMENT_PREVIEW":
+        want_c = preview_c / 100.0
+        want_s = preview_s / 100.0
+        record("T00", "HUD source is the labelled DEVELOPMENT PREVIEW at the configured fullness",
+               authority_id == "development-preview" and compound is not None and single is not None
+               and abs(compound - want_c) < 1e-6 and abs(single - want_s) < 1e-6,
+               source=source, authority_id=authority_id, compound_fraction=compound, single_fraction=single,
+               capture=shot("00_hud_development_preview.png"))
+        # Stable while moving: one HUD, still on screen, the reading unchanged, through a walk and a run.
+        L.focus_game_viewport()
+        p0 = loc()
+        L.set_key_held("W", True)
+        yield 1.2
+        L.set_key_held("LeftShift", True)
+        yield 1.4
+        run_shot = shot("00b_hud_preview_while_running.png")
+        L.set_key_held("LeftShift", False)
+        L.set_key_held("W", False)
+        yield 0.5
+        after = usage.get_usage()
+        record("T00b", "the preview HUD stays single, on screen and unchanged while walking and running",
+               ui.is_usage_hud_on_screen() and ui.get_usage_hud_creations() == 1 and math.dist(p0, loc()) > 150.0
+               and fraction(after.get_editor_property("compound_agent")) == compound and fraction(after.get_editor_property("single_agent")) == single,
+               moved_cm=round(math.dist(p0, loc()), 1), creations=ui.get_usage_hud_creations(), capture=run_shot)
+    else:
+        RESULT["hud_source"] = source
     ok_typical = L.apply_simulated_usage_scene(ctx["world"], "typical", True)
     yield 0.6
     record("T02", "simulated TYPICAL scene on the larger tiers", ok_typical, capture=shot("02_hud_typical_large_tier.png"))
@@ -331,7 +382,8 @@ def job():
     L.press_key("M", False)
     yield 0.4
     record("M19", "after a PIE restart: one HUD, a fresh terminal, a full map", t_ok and m_ok and ui.get_usage_hud_creations() == 1 and ui.get_overlays_in_viewport() == 0,
-           terminal_ok=t_ok, map_ok=m_ok, creations=ui.get_usage_hud_creations(), overlays=ui.get_overlays_in_viewport())
+           terminal_ok=t_ok, map_ok=m_ok, creations=ui.get_usage_hud_creations(), overlays=ui.get_overlays_in_viewport(),
+           capture=shot("19_after_restart_hud.png"))
 
     les.editor_request_end_play()
     yield (lambda: ues.get_game_world() is None, 60)
