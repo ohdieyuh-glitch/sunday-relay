@@ -25,6 +25,31 @@ That commit's message said "primary authority stays the panorama". **That is sup
 carry the caption "canonical Marble royal-garden reference"; the caption records where the district's first
 composition came from, not what the world is judged against.
 
+## The environment quality reference (founder, 2026-09-13)
+
+`WorldDesign/Reference/environment_quality_reference_2026-09-13.png` is an ADDITIONAL reference for the
+WORLD ONLY -- ground, paths, buildings, gardens, architecture, materials, lighting, density, surface definition.
+Ignore the characters in it. It does **not** replace the Bible: the Bible decides what Wonderland looks like;
+this image sets how finished it should feel -- the level of detail, material definition, texture richness, depth
+and realism to move toward, progressively and visibly, never in one jump.
+
+What it shows, read for production:
+- **Ground.** A plaza of chunky individual stones in a loose light/dark checker, each stone bevelled and a little
+  worn, deep seams with moss in them, height variation you can see in the sunlight; flowers spill over its edges
+  and a raised stone course borders it. Not flat tiles, not a texture on a plane.
+- **Gold.** Wrought scrollwork that reads as polished metal: continuous curves, bright specular edges, dark
+  interiors. Never crumpled foil.
+- **Materials.** Mushroom caps and stems are different materials; teacups are glazed with painted and gilded
+  bands; stone pillars carry ivy; bark is bark.
+- **Planting.** Layered: ground cover and daisies at the path edge, lavender spikes and flower masses behind,
+  topiary and rose-covered arches above; the heart topiary is dense leaf with roses in it.
+- **Light.** Warm low sun that rakes across surfaces and reveals their relief, saturated violet-blue sky, deep
+  but not black shadows. Bright, magical, immaculate -- never gritty or ruined.
+
+Practice: judge every material and ground pass against BOTH -- the Bible for identity (palette, landmarks,
+composition), this image for finish. Distance strategy: 0-50 m hero materials and geometry, 50-200 m dense
+controlled architecture with material and silhouette variation, 200 m+ skyline silhouettes and atmosphere.
+
 ## The Marble image, now
 
 `wonderland/v2/reference/marble-royal-garden-*` and the hidden in-map `V2_MarbleWorld_Scaffold` stay as
